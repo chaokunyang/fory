@@ -110,8 +110,8 @@ public class UnexistedClassSerializersTest extends FuryTestBase {
           // ubuntu22 and jdk11/17. It's a jvm bug, see:
           // https://github.com/alipay/fury/pull/923#issuecomment-1745035339
           // Workaround by disable cache.
-          Struct.createNumberStructClass("TestSkipUnexistedClass2", 2, false),
-          Struct.createStructClass("TestSkipUnexistedClass2", 2, false)
+          Struct.createNumberStructClass("TestSkipUnexistedClass2", 2, true),
+          Struct.createStructClass("TestSkipUnexistedClass2", 2, true)
         }) {
       Object pojo = Struct.createPOJO(structClass);
       MetaContext context1 = new MetaContext();

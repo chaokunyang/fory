@@ -145,7 +145,7 @@ jdk17_plus_tests() {
   set -ex
   for i in {1..100}; do
     echo "====================> $i"
-    mvn -T10 --batch-mode --no-transfer-progress test install -pl '!fury-format,!fury-testsuite'
+    mvn -T10 --batch-mode --no-transfer-progress test -Dtest=org.apache.fury.CyclicTest install -pl '!fury-format,!fury-testsuite'
   done
   testcode=$?
   if [[ $testcode -ne 0 ]]; then

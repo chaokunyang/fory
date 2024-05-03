@@ -54,7 +54,5 @@ jobs:
         with:
           java-version: ${{ matrix.java-version }}
           distribution: 'temurin'
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3
       - name: Run CI with Maven
         run: ./ci/run_ci.sh java${{ matrix.java-version }}

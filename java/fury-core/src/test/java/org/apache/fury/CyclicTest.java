@@ -65,7 +65,7 @@ public class CyclicTest extends FuryTestBase {
         .toArray(Object[][]::new);
   }
 
-  @Test
+  @Test(dataProvider = "fury")
   public void testBean(FuryBuilder builder) {
     Fury fury = builder.withMetaContextShare(false).withRefTracking(true).build();
     for (Object[] objects : beans()) {
@@ -87,7 +87,7 @@ public class CyclicTest extends FuryTestBase {
     }
   }
 
-  @Test
+  @Test(dataProvider = "fury")
   public void testBeanMetaShared(FuryBuilder builder) {
     Fury fury = builder.withMetaContextShare(true).withRefTracking(true).build();
     for (Object[] objects : beans()) {

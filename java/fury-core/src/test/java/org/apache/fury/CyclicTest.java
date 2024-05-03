@@ -26,6 +26,7 @@ import java.util.List;
 import org.apache.fury.config.CompatibleMode;
 import org.apache.fury.config.FuryBuilder;
 import org.apache.fury.config.Language;
+import org.apache.fury.resolver.MetaContext;
 import org.apache.fury.test.bean.Cyclic;
 import org.apache.fury.test.bean.FinalCyclic;
 import org.testng.Assert;
@@ -92,8 +93,22 @@ public class CyclicTest extends FuryTestBase {
     for (Object[] objects : beans()) {
       Object notCyclic = objects[0];
       Object cyclic = objects[1];
-      Assert.assertEquals(notCyclic, serDeMetaShared(fury, notCyclic));
-      Assert.assertEquals(cyclic, serDeMetaShared(fury, cyclic));
+      {
+        MetaContext context = new MetaContext();
+        fury.getSerializationContext().setMetaContext(context);
+        byte[] bytes = fury.serialize(notCyclic);
+        fury.getSerializationContext().setMetaContext(context);
+        Object notCyclic1 = fury.deserialize(bytes);
+        Assert.assertEquals(notCyclic, notCyclic1);
+      }
+      {
+        MetaContext context = new MetaContext();
+        fury.getSerializationContext().setMetaContext(context);
+        byte[] bytes = fury.serialize(cyclic);
+        fury.getSerializationContext().setMetaContext(context);
+        Object c = fury.deserialize(bytes);
+        Assert.assertEquals(cyclic, c);
+      }
       Object[] arr = new Object[2];
       arr[0] = arr;
       arr[1] = cyclic;

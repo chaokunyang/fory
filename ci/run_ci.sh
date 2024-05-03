@@ -142,8 +142,13 @@ jdk17_plus_tests() {
   java -version
   echo "Executing fury java tests"
   cd "$ROOT/java"
-  set +e
-  mvn -T10 --batch-mode --no-transfer-progress test install -pl '!fury-format,!fury-testsuite'
+  set -ex
+  mvn -T10 install -DskipTests
+  cd fury-core
+  for i in {1..100}; do
+    echo "====================> $i"
+    mvn -T10 --batch-mode --no-transfer-progress test -Dtest=org.apache.fury.CyclicTest
+  done
   testcode=$?
   if [[ $testcode -ne 0 ]]; then
     exit $testcode

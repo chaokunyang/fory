@@ -225,6 +225,8 @@ public class ZeroCopySuite {
       }
       kryo.setReferences(references);
       kryo.register(ArraysData.class);
+      kryo.register(boolean[].class);
+      kryo.register(ArrayList.class);
       kryo.writeClassAndObject(output, data);
       Object newObj = kryo.readClassAndObject(input);
       Preconditions.checkArgument(data.equals(newObj));

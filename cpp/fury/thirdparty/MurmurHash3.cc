@@ -15,6 +15,7 @@
 // Microsoft Visual Studio
 
 #if defined(_MSC_VER)
+#include <intrin.h>
 
 #define FORCE_INLINE __forceinline
 

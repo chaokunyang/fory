@@ -98,7 +98,6 @@ public final class Fury implements BaseFury {
   private static final byte isOutOfBandFlag = 1 << 3;
   private static final boolean isLittleEndian = ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN;
   private static final byte BITMAP = isLittleEndian ? isLittleEndianFlag : 0;
-  private static final int BUFFER_SIZE_LIMIT = 128 * 1024;
   private static final short MAGIC_NUMBER = 0x62D4;
 
   private final Config config;
@@ -330,8 +329,8 @@ public final class Fury implements BaseFury {
 
   public void resetBuffer() {
     MemoryBuffer buf = buffer;
-    if (buf != null && buf.size() > BUFFER_SIZE_LIMIT) {
-      buffer = MemoryBuffer.newHeapBuffer(BUFFER_SIZE_LIMIT);
+    if (buf != null && buf.size() > config.bufferSizeLimitBytes()) {
+      buffer = MemoryBuffer.newHeapBuffer(config.bufferSizeLimitBytes());
     }
   }
 
@@ -761,8 +760,9 @@ public final class Fury implements BaseFury {
       if ((bitmap & isNilFlag) == isNilFlag) {
         return null;
       }
-      boolean isLittleEndian = (bitmap & isLittleEndianFlag) == isLittleEndianFlag;
-      Preconditions.checkArgument(Fury.isLittleEndian, isLittleEndian);
+      Preconditions.checkArgument(
+          Fury.isLittleEndian,
+          "Non-Little-Endian format detected. Only Little-Endian is supported.");
       boolean isTargetXLang = (bitmap & isCrossLanguageFlag) == isCrossLanguageFlag;
       if (isTargetXLang) {
         peerLanguage = Language.values()[buffer.readByte()];

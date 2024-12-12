@@ -100,7 +100,7 @@ public class Example {
 | `timeRefIgnored`                    | Whether to ignore reference tracking of all time types registered in `TimeSerializers` and subclasses of those types when ref tracking is enabled. If ignored, ref tracking of every time type can be enabled by invoking `Fury#registerSerializer(Class, Serializer)`. For example, `fury.registerSerializer(Date.class, new DateSerializer(fury, true))`. Note that enabling ref tracking should happen before serializer codegen of any types which contain time fields. Otherwise, those fields will still skip ref tracking. | `true`                                                         |
 | `compressInt`                       | Enables or disables int compression for smaller size.                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `true`                                                         |
 | `compressLong`                      | Enables or disables long compression for smaller size.                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `true`                                                         |
-| `compressString`                    | Enables or disables string compression for smaller size.                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | `true`                                                         |
+| `compressString`                    | Enables or disables string compression for smaller size.                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | `false`                                                        |
 | `classLoader`                       | The classloader should not be updated; Fury caches class metadata. Use `LoaderBinding` or `ThreadSafeFury` for classloader updates.                                                                                                                                                                                                                                                                                                                                                                                               | `Thread.currentThread().getContextClassLoader()`               |
 | `compatibleMode`                    | Type forward/backward compatibility config. Also Related to `checkClassVersion` config. `SCHEMA_CONSISTENT`: Class schema must be consistent between serialization peer and deserialization peer. `COMPATIBLE`: Class schema can be different between serialization peer and deserialization peer. They can add/delete fields independently.                                                                                                                                                                                      | `CompatibleMode.SCHEMA_CONSISTENT`                             |
 | `checkClassVersion`                 | Determines whether to check the consistency of the class schema. If enabled, Fury checks, writes, and checks consistency using the `classVersionHash`. It will be automatically disabled when `CompatibleMode#COMPATIBLE` is enabled. Disabling is not recommended unless you can ensure the class won't evolve.                                                                                                                                                                                                                  | `false`                                                        |
@@ -116,6 +116,7 @@ public class Example {
 | `asyncCompilationEnabled`           | If enabled, serialization uses interpreter mode first and switches to JIT serialization after async serializer JIT for a class is finished.                                                                                                                                                                                                                                                                                                                                                                                       | `false`                                                        |
 | `scalaOptimizationEnabled`          | Enables or disables Scala-specific serialization optimization.                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | `false`                                                        |
 | `copyRef`                           | When disabled, the copy performance will be better. But fury deep copy will ignore circular and shared reference. Same reference of an object graph will be copied into different objects in one `Fury#copy`.                                                                                                                                                                                                                                                                                                                     | `true`                                                         |
+| `serializeEnumByName`               | When Enabled, fury serialize enum by name instead of ordinal.                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `false`                                                        |
 
 ## Advanced Usage
 
@@ -320,7 +321,7 @@ Or implement `java.io.Externalizable` for a class.
 ```java
 import org.apache.fury.*;
 import org.apache.fury.config.*;
-import org.apache.fury.serializers.BufferObject;
+import org.apache.fury.serializer.BufferObject;
 import org.apache.fury.memory.MemoryBuffer;
 
 import java.util.*;
@@ -396,6 +397,57 @@ losing any information.
 
 If metadata sharing is not enabled, the new class data will be skipped and an `NonexistentSkipClass` stub object will be
 returned.
+
+### Coping/Mapping object from one type to another type
+
+Fury support mapping object from one type to another type.
+> Notes:
+>
+> 1. This mapping will execute a deep copy, all mapped fields are serialized into binary and
+deserialized from that binary to map into another type.
+> 2. All struct types must be registered with same ID, otherwise Fury can not mapping to correct struct type.
+> Be careful when you use `Fury#register(Class)`, because fury will allocate an auto-grown ID which might be
+> inconsistent if you register classes with different order between Fury instance.
+
+```java
+public class StructMappingExample {
+  static class Struct1 {
+    int f1;
+    String f2;
+
+    public Struct1(int f1, String f2) {
+      this.f1 = f1;
+      this.f2 = f2;
+    }
+  }
+
+  static class Struct2 {
+    int f1;
+    String f2;
+    double f3;
+  }
+
+  static ThreadSafeFury fury1 = Fury.builder()
+    .withCompatibleMode(CompatibleMode.COMPATIBLE).buildThreadSafeFury();
+  static ThreadSafeFury fury2 = Fury.builder()
+    .withCompatibleMode(CompatibleMode.COMPATIBLE).buildThreadSafeFury();
+
+  static {
+    fury1.register(Struct1.class);
+    fury2.register(Struct2.class);
+  }
+
+  public static void main(String[] args) {
+    Struct1 struct1 = new Struct1(10, "abc");
+    Struct2 struct2 = (Struct2) fury2.deserialize(fury1.serialize(struct1));
+    Assert.assertEquals(struct2.f1, struct1.f1);
+    Assert.assertEquals(struct2.f2, struct1.f2);
+    struct1 = (Struct1) fury1.deserialize(fury2.serialize(struct2));
+    Assert.assertEquals(struct1.f1, struct2.f1);
+    Assert.assertEquals(struct1.f2, struct2.f2);
+  }
+}
+```
 
 ## Migration
 

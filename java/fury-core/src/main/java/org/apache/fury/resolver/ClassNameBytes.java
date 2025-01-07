@@ -17,16 +17,28 @@
  * under the License.
  */
 
-#pragma once
+package org.apache.fury.resolver;
 
-#include <string>
+class ClassNameBytes {
+  private final long packageHash;
+  private final long classNameHash;
 
-namespace fury {
+  ClassNameBytes(long packageHash, long classNameHash) {
+    this.packageHash = packageHash;
+    this.classNameHash = classNameHash;
+  }
 
-bool isLatin(const std::string &str);
+  @Override
+  public boolean equals(Object o) {
+    // ClassNameBytes is used internally, skip
+    ClassNameBytes that = (ClassNameBytes) o;
+    return packageHash == that.packageHash && classNameHash == that.classNameHash;
+  }
 
-std::string utf16ToUtf8(const std::u16string &utf16, bool is_little_endian);
-
-std::u16string utf8ToUtf16(const std::string &utf8, bool is_little_endian);
-
-} // namespace fury
+  @Override
+  public int hashCode() {
+    int result = 31 + (int) (packageHash ^ (packageHash >>> 32));
+    result = result * 31 + (int) (classNameHash ^ (classNameHash >>> 32));
+    return result;
+  }
+}

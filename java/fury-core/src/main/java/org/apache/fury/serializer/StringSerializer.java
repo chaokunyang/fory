@@ -41,7 +41,6 @@ import org.apache.fury.memory.LittleEndian;
 import org.apache.fury.memory.MemoryBuffer;
 import org.apache.fury.memory.Platform;
 import org.apache.fury.reflect.ReflectionUtils;
-import org.apache.fury.type.Type;
 import org.apache.fury.util.MathUtils;
 import org.apache.fury.util.Preconditions;
 import org.apache.fury.util.StringEncodingUtils;
@@ -116,11 +115,6 @@ public final class StringSerializer extends ImmutableSerializer<String> {
   }
 
   @Override
-  public short getXtypeId() {
-    return Type.STRING.getId();
-  }
-
-  @Override
   public void write(MemoryBuffer buffer, String value) {
     writeJavaString(buffer, value);
   }
@@ -182,7 +176,11 @@ public final class StringSerializer extends ImmutableSerializer<String> {
   public Expression readStringExpr(Expression strSerializer, Expression buffer) {
     if (isJava) {
       if (STRING_VALUE_FIELD_IS_BYTES) {
-        return new Invoke(strSerializer, "readBytesString", STRING_TYPE, buffer);
+        if (compressString) {
+          return new Invoke(strSerializer, "readCompressedBytesString", STRING_TYPE, buffer);
+        } else {
+          return new Invoke(strSerializer, "readBytesString", STRING_TYPE, buffer);
+        }
       } else {
         if (!STRING_VALUE_FIELD_IS_CHARS) {
           throw new UnsupportedOperationException();

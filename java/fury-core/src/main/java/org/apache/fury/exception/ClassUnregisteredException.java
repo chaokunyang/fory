@@ -17,16 +17,15 @@
  * under the License.
  */
 
-#pragma once
+package org.apache.fury.exception;
 
-#include <string>
+public class ClassUnregisteredException extends FuryException {
 
-namespace fury {
+  public ClassUnregisteredException(Class<?> cls) {
+    this(cls.getName());
+  }
 
-bool isLatin(const std::string &str);
-
-std::string utf16ToUtf8(const std::u16string &utf16, bool is_little_endian);
-
-std::u16string utf8ToUtf16(const std::string &utf8, bool is_little_endian);
-
-} // namespace fury
+  public ClassUnregisteredException(String qualifiedName) {
+    super(String.format("Class %s is not registered", qualifiedName));
+  }
+}

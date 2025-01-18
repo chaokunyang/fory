@@ -24,6 +24,7 @@
 #include <random>
 
 #include "fury/util/logging.h"
+#include "platform.h"
 #include "string_util.h"
 #include "gtest/gtest.h"
 
@@ -45,7 +46,7 @@ std::string generateRandomString(size_t length) {
   return result;
 }
 
-bool isLatin_BaseLine(const std::string &str) {
+bool isAscii_BaseLine(const std::string &str) {
   for (char c : str) {
     if (static_cast<unsigned char>(c) >= 128) {
       return false;
@@ -54,10 +55,10 @@ bool isLatin_BaseLine(const std::string &str) {
   return true;
 }
 
-TEST(StringUtilTest, TestIsLatinFunctions) {
+TEST(StringUtilTest, TestisAsciiFunctions) {
   std::string testStr = generateRandomString(100000);
   auto start_time = std::chrono::high_resolution_clock::now();
-  bool result = isLatin_BaseLine(testStr);
+  bool result = isAscii_BaseLine(testStr);
   auto end_time = std::chrono::high_resolution_clock::now();
   auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(
                       end_time - start_time)
@@ -65,7 +66,7 @@ TEST(StringUtilTest, TestIsLatinFunctions) {
   FURY_LOG(INFO) << "BaseLine Running Time: " << duration << " ns.";
 
   start_time = std::chrono::high_resolution_clock::now();
-  result = isLatin(testStr);
+  result = isAscii(testStr);
   end_time = std::chrono::high_resolution_clock::now();
   duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end_time -
                                                                   start_time)
@@ -75,29 +76,61 @@ TEST(StringUtilTest, TestIsLatinFunctions) {
   EXPECT_TRUE(result);
 }
 
-TEST(StringUtilTest, TestIsLatinLogic) {
+TEST(StringUtilTest, TestisAsciiLogic) {
   // Test strings with only Latin characters
-  EXPECT_TRUE(isLatin("Fury"));
-  EXPECT_TRUE(isLatin(generateRandomString(80)));
+  EXPECT_TRUE(isAscii("Fury"));
+  EXPECT_TRUE(isAscii(generateRandomString(80)));
 
   // Test unaligned strings with only Latin characters
-  EXPECT_TRUE(isLatin(generateRandomString(80) + "1"));
-  EXPECT_TRUE(isLatin(generateRandomString(80) + "12"));
-  EXPECT_TRUE(isLatin(generateRandomString(80) + "123"));
+  EXPECT_TRUE(isAscii(generateRandomString(80) + "1"));
+  EXPECT_TRUE(isAscii(generateRandomString(80) + "12"));
+  EXPECT_TRUE(isAscii(generateRandomString(80) + "123"));
 
   // Test strings with non-Latin characters
-  EXPECT_FALSE(isLatin("你好, Fury"));
-  EXPECT_FALSE(isLatin(generateRandomString(80) + "你好"));
-  EXPECT_FALSE(isLatin(generateRandomString(80) + "1你好"));
-  EXPECT_FALSE(isLatin(generateRandomString(11) + "你"));
-  EXPECT_FALSE(isLatin(generateRandomString(10) + "你好"));
-  EXPECT_FALSE(isLatin(generateRandomString(9) + "性能好"));
-  EXPECT_FALSE(isLatin("\u1234"));
-  EXPECT_FALSE(isLatin("a\u1234"));
-  EXPECT_FALSE(isLatin("ab\u1234"));
-  EXPECT_FALSE(isLatin("abc\u1234"));
-  EXPECT_FALSE(isLatin("abcd\u1234"));
-  EXPECT_FALSE(isLatin("Javaone Keynote\u1234"));
+  EXPECT_FALSE(isAscii("你好, Fury"));
+  EXPECT_FALSE(isAscii(generateRandomString(80) + "你好"));
+  EXPECT_FALSE(isAscii(generateRandomString(80) + "1你好"));
+  EXPECT_FALSE(isAscii(generateRandomString(11) + "你"));
+  EXPECT_FALSE(isAscii(generateRandomString(10) + "你好"));
+  EXPECT_FALSE(isAscii(generateRandomString(9) + "性能好"));
+  EXPECT_FALSE(isAscii("\u1234"));
+  EXPECT_FALSE(isAscii("a\u1234"));
+  EXPECT_FALSE(isAscii("ab\u1234"));
+  EXPECT_FALSE(isAscii("abc\u1234"));
+  EXPECT_FALSE(isAscii("abcd\u1234"));
+  EXPECT_FALSE(isAscii("Javaone Keynote\u1234"));
+
+  for (size_t i = 1; i < 256; i++) {
+    EXPECT_TRUE(isAscii(std::string(i, '.') + "Fury"));
+    EXPECT_FALSE(isAscii(std::string(i, '.') + "序列化"));
+  }
+}
+
+TEST(StringUtilTest, TestisLatin1) {
+  // Test strings with only Latin characters
+  EXPECT_TRUE(isLatin1(u"Fury"));
+  EXPECT_TRUE(isLatin1(u"\xE9")); // é in Latin-1
+  EXPECT_TRUE(isLatin1(u"\xF1")); // ñ in Latin-1
+  // Test strings with non-Latin characters
+  EXPECT_FALSE(isLatin1(u"你好, Fury"));
+  EXPECT_FALSE(isLatin1(u"a\u1234"));
+  EXPECT_FALSE(isLatin1(u"ab\u1234"));
+  EXPECT_FALSE(isLatin1(u"abc\u1234"));
+  EXPECT_FALSE(isLatin1(u"abcd\u1234"));
+  EXPECT_FALSE(isLatin1(u"Javaone Keynote\u1234"));
+  EXPECT_TRUE(isLatin1(u"a\xFF")); // ÿ in Latin-1
+  EXPECT_TRUE(isLatin1(u"\x80"));  //  in Latin-1
+  const uint16_t str[] = {256, 256};
+  EXPECT_FALSE(isLatin1(str, 2)); // Ā (not in Latin-1)
+
+  for (size_t i = 1; i < 256; i++) {
+    EXPECT_TRUE(isLatin1(std::u16string(i, '.') + u"Fury"));
+    EXPECT_FALSE(isLatin1(std::u16string(i, '.') + u"序列化"));
+    EXPECT_TRUE(isLatin1(std::u16string(i, '.') + u"a\xFF")); // ÿ in Latin-1
+    EXPECT_TRUE(isLatin1(std::u16string(i, '.') + u"\x80"));  //  in Latin-1
+    EXPECT_FALSE(isLatin1(std::u16string(i, '.') +
+                          std::u16string({256}))); // Ā (not in Latin-1)
+  }
 }
 
 // Generate random UTF-16 string ensuring valid surrogate pairs
@@ -122,32 +155,23 @@ std::u16string generateRandomUTF16String(size_t length) {
   return str;
 }
 
-// Basic implementation
-
-// Swap bytes to convert from big endian to little endian
-inline uint16_t swapBytes(uint16_t value) {
-  return (value >> 8) | (value << 8);
-}
-
-inline void utf16ToUtf8(uint16_t code_unit, char *&output) {
-  if (code_unit < 0x80) {
-    *output++ = static_cast<char>(code_unit);
-  } else if (code_unit < 0x800) {
-    *output++ = static_cast<char>(0xC0 | (code_unit >> 6));
-    *output++ = static_cast<char>(0x80 | (code_unit & 0x3F));
-  } else {
-    *output++ = static_cast<char>(0xE0 | (code_unit >> 12));
-    *output++ = static_cast<char>(0x80 | ((code_unit >> 6) & 0x3F));
-    *output++ = static_cast<char>(0x80 | (code_unit & 0x3F));
-  }
-}
-
-inline void utf16SurrogatePairToUtf8(uint16_t high, uint16_t low, char *&utf8) {
-  uint32_t code_point = 0x10000 + ((high - 0xD800) << 10) + (low - 0xDC00);
-  *utf8++ = static_cast<char>((code_point >> 18) | 0xF0);
-  *utf8++ = static_cast<char>(((code_point >> 12) & 0x3F) | 0x80);
-  *utf8++ = static_cast<char>(((code_point >> 6) & 0x3F) | 0x80);
-  *utf8++ = static_cast<char>((code_point & 0x3F) | 0x80);
+TEST(StringUtilTest, TestUtf16HasSurrogatePairs) {
+  EXPECT_FALSE(utf16HasSurrogatePairs(std::u16string({0x99, 0x100})));
+  std::u16string utf16 = {0xD83D, 0xDE00}; // 😀 emoji
+  EXPECT_TRUE(utf16HasSurrogatePairs(utf16));
+  EXPECT_TRUE(utf16HasSurrogatePairs(generateRandomUTF16String(3) + u"性能好"));
+  EXPECT_TRUE(
+      utf16HasSurrogatePairs(generateRandomUTF16String(10) + u"性能好"));
+  EXPECT_TRUE(
+      utf16HasSurrogatePairs(generateRandomUTF16String(30) + u"性能好"));
+  EXPECT_TRUE(
+      utf16HasSurrogatePairs(generateRandomUTF16String(60) + u"性能好"));
+  EXPECT_TRUE(
+      utf16HasSurrogatePairs(generateRandomUTF16String(120) + u"性能好"));
+  EXPECT_TRUE(
+      utf16HasSurrogatePairs(generateRandomUTF16String(200) + u"性能好"));
+  EXPECT_TRUE(
+      utf16HasSurrogatePairs(generateRandomUTF16String(300) + u"性能好"));
 }
 
 std::string utf16ToUtf8BaseLine(const std::u16string &utf16,

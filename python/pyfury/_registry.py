@@ -199,6 +199,7 @@ class ClassResolver:
 
     def _initialize_xlang(self):
         register = functools.partial(self._register_type, internal=True)
+        register(None, type_id=TypeId.NA, serializer=NoneSerializer)
         register(bool, type_id=TypeId.BOOL, serializer=BooleanSerializer)
         register(Int8Type, type_id=TypeId.INT8, serializer=ByteSerializer)
         register(Int16Type, type_id=TypeId.INT16, serializer=Int16Serializer)
@@ -555,6 +556,12 @@ class ClassResolver:
             if typeinfo is None:
                 ns = ns_metabytes.decode(self.namespace_decoder)
                 typename = type_metabytes.decode(self.typename_decoder)
+                typeinfo = self._named_type_to_classinfo.get((ns, typename))
+                if typeinfo is not None:
+                    self._ns_type_to_classinfo[
+                        (ns_metabytes, type_metabytes)
+                    ] = typeinfo
+                    return typeinfo
                 # TODO(chaokunyang) generate a dynamic class and serializer
                 #  when meta share is enabled.
                 name = ns + "." + typename if ns else typename

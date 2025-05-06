@@ -71,6 +71,7 @@ class Language(enum.Enum):
     GO = 4
     JAVA_SCRIPT = 5
     RUST = 6
+    DART = 7
 
 
 class BufferObject(ABC):
@@ -96,6 +97,7 @@ class BufferObject(ABC):
 class Fury:
     __slots__ = (
         "language",
+        "is_py",
         "ref_tracking",
         "ref_resolver",
         "class_resolver",
@@ -130,6 +132,7 @@ class Fury:
           you disable this option.
         """
         self.language = language
+        self.is_py = language == Language.PYTHON
         self.require_class_registration = (
             _ENABLE_CLASS_REGISTRATION_FORCIBLY or require_class_registration
         )
@@ -291,7 +294,7 @@ class Fury:
             return
         else:
             classinfo = self.class_resolver.get_classinfo(cls)
-            self.class_resolver.write_classinfo(buffer, classinfo)
+            self.class_resolver.write_typeinfo(buffer, classinfo)
             classinfo.serializer.write(buffer, obj)
 
     def xserialize_ref(self, buffer, obj, serializer=None):
@@ -428,7 +431,7 @@ class Fury:
     def read_buffer_object(self, buffer) -> Buffer:
         in_band = buffer.read_bool()
         if in_band:
-            size = buffer.read_varint32()
+            size = buffer.read_varuint32()
             buf = buffer.slice(buffer.reader_index, size)
             buffer.reader_index += size
             return buf
@@ -459,7 +462,7 @@ class Fury:
             return
         if classinfo is None:
             classinfo = self.class_resolver.get_classinfo(type(value))
-        self.class_resolver.write_classinfo(buffer, classinfo)
+        self.class_resolver.write_typeinfo(buffer, classinfo)
         classinfo.serializer.write(buffer, value)
 
     def read_ref_pyobject(self, buffer):
@@ -469,6 +472,7 @@ class Fury:
         self.ref_resolver.reset_write()
         self.class_resolver.reset_write()
         self.serialization_context.reset()
+        self.metastring_resolver.reset_write()
         self.pickler.clear_memo()
         self._buffer_callback = None
         self._unsupported_callback = None
@@ -477,6 +481,7 @@ class Fury:
         self.ref_resolver.reset_read()
         self.class_resolver.reset_read()
         self.serialization_context.reset()
+        self.metastring_resolver.reset_write()
         self.unpickler = None
         self._buffers = None
         self._unsupported_objects = None

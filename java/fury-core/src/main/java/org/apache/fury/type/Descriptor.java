@@ -43,6 +43,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.fury.annotation.Expose;
+import org.apache.fury.annotation.FuryField;
 import org.apache.fury.annotation.Ignore;
 import org.apache.fury.annotation.Internal;
 import org.apache.fury.collection.Tuple2;
@@ -78,11 +79,13 @@ public class Descriptor {
   private Class<?> type;
   private final String typeName;
   private final String name;
+  private String snakeCaseName;
   private final int modifier;
   private final String declaringClass;
   private final Field field;
   private final Method readMethod;
   private final Method writeMethod;
+  private final FuryField furyField;
 
   public Descriptor(Field field, TypeRef<?> typeRef, Method readMethod, Method writeMethod) {
     this.field = field;
@@ -93,6 +96,7 @@ public class Descriptor {
     this.readMethod = readMethod;
     this.writeMethod = writeMethod;
     this.typeRef = typeRef;
+    this.furyField = this.field.getAnnotation(FuryField.class);
   }
 
   public Descriptor(TypeRef<?> typeRef, String name, int modifier, String declaringClass) {
@@ -104,6 +108,7 @@ public class Descriptor {
     this.typeRef = typeRef;
     this.readMethod = null;
     this.writeMethod = null;
+    this.furyField = null;
   }
 
   private Descriptor(Field field, Method readMethod) {
@@ -115,6 +120,7 @@ public class Descriptor {
     this.readMethod = readMethod;
     this.writeMethod = null;
     this.typeRef = null;
+    this.furyField = this.field.getAnnotation(FuryField.class);
   }
 
   private Descriptor(
@@ -134,6 +140,7 @@ public class Descriptor {
     this.field = field;
     this.readMethod = readMethod;
     this.writeMethod = writeMethod;
+    this.furyField = this.field == null ? null : this.field.getAnnotation(FuryField.class);
   }
 
   public Descriptor copy(Method readMethod, Method writeMethod) {
@@ -152,6 +159,13 @@ public class Descriptor {
 
   public String getName() {
     return name;
+  }
+
+  public String getSnakeCaseName() {
+    if (snakeCaseName == null) {
+      snakeCaseName = StringUtils.lowerCamelToLowerUnderscore(name);
+    }
+    return snakeCaseName;
   }
 
   public int getModifiers() {
@@ -176,6 +190,10 @@ public class Descriptor {
 
   public String getTypeName() {
     return typeName;
+  }
+
+  public FuryField getFuryField() {
+    return furyField;
   }
 
   /** Try not use {@link TypeRef#getRawType()} since it's expensive. */
@@ -206,7 +224,7 @@ public class Descriptor {
     sb.append(", name=").append(name);
     sb.append(", modifier=").append(modifier);
     if (field != null) {
-      sb.append(", field=").append(field.getDeclaringClass().getSimpleName()).append('.');
+      sb.append(", declaringClass=").append(field.getDeclaringClass().getSimpleName());
     }
     if (readMethod != null) {
       sb.append(", readMethod=").append(readMethod);
@@ -214,6 +232,10 @@ public class Descriptor {
     if (writeMethod != null) {
       sb.append(", writeMethod=").append(writeMethod);
     }
+    if (typeRef != null) {
+      sb.append(", typeRef=").append(typeRef);
+    }
+    sb.append(", furyField=").append(furyField);
     sb.append('}');
     return sb.toString();
   }

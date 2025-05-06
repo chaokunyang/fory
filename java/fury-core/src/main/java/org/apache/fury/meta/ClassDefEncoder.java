@@ -30,7 +30,6 @@ import static org.apache.fury.util.MathUtils.toInt;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -44,7 +43,6 @@ import org.apache.fury.meta.ClassDef.FieldInfo;
 import org.apache.fury.meta.ClassDef.FieldType;
 import org.apache.fury.reflect.ReflectionUtils;
 import org.apache.fury.resolver.ClassResolver;
-import org.apache.fury.type.Descriptor;
 import org.apache.fury.type.DescriptorGrouper;
 import org.apache.fury.util.MurmurHash3;
 
@@ -55,16 +53,12 @@ import org.apache.fury.util.MurmurHash3;
  */
 class ClassDefEncoder {
   static List<Field> buildFields(Fury fury, Class<?> cls, boolean resolveParent) {
-    Comparator<Descriptor> comparator =
-        DescriptorGrouper.getPrimitiveComparator(fury.compressInt(), fury.compressLong());
     DescriptorGrouper descriptorGrouper =
-        new DescriptorGrouper(
-            fury.getClassResolver()::isMonomorphic,
-            fury.getClassResolver().getAllDescriptorsMap(cls, resolveParent).values(),
-            false,
-            Function.identity(),
-            comparator,
-            DescriptorGrouper.COMPARATOR_BY_TYPE_AND_NAME);
+        fury.getClassResolver()
+            .createDescriptorGrouper(
+                fury.getClassResolver().getAllDescriptorsMap(cls, resolveParent).values(),
+                false,
+                Function.identity());
     List<Field> fields = new ArrayList<>();
     descriptorGrouper
         .getPrimitiveDescriptors()
@@ -141,16 +135,25 @@ class ClassDefEncoder {
       // | num fields + register flag | header + package name | header + class name
       // | header + type id + field name | next field info | ... |
       int currentClassHeader = (fields.size() << 1);
-      if (classResolver.isRegistered(type)) {
+      if (classResolver.isRegisteredById(type)) {
         currentClassHeader |= 1;
         classDefBuf.writeVarUint32Small7(currentClassHeader);
         classDefBuf.writeVarUint32Small7(classResolver.getRegisteredClassId(type));
       } else {
         classDefBuf.writeVarUint32Small7(currentClassHeader);
         Class<?> currentType = getType(type, className);
-        Tuple2<String, String> encoded = Encoders.encodePkgAndClass(currentType);
-        writePkgName(classDefBuf, encoded.f0);
-        writeTypeName(classDefBuf, encoded.f1);
+        String ns, typename;
+        if (classResolver.isRegisteredByName(type)) {
+          Tuple2<String, String> nameTuple = classResolver.getRegisteredNameTuple(type);
+          ns = nameTuple.f0;
+          typename = nameTuple.f1;
+        } else {
+          Tuple2<String, String> encoded = Encoders.encodePkgAndClass(currentType);
+          ns = encoded.f0;
+          typename = encoded.f1;
+        }
+        writePkgName(classDefBuf, ns);
+        writeTypeName(classDefBuf, typename);
       }
       writeFieldsInfo(classDefBuf, fields);
     }
@@ -250,6 +253,7 @@ class ClassDefEncoder {
       // `3 bits size + 2 bits field name encoding + polymorphism flag + nullability flag + ref
       // tracking flag`
       int header = ((fieldType.isMonomorphic() ? 1 : 0) << 2);
+      header |= ((fieldType.trackingRef() ? 1 : 0));
       // Encoding `UTF8/ALL_TO_LOWER_SPECIAL/LOWER_UPPER_DIGIT_SPECIAL/TAG_ID`
       MetaString metaString = Encoders.encodeFieldName(fieldInfo.getFieldName());
       int encodingFlags = fieldNameEncodingsList.indexOf(metaString.getEncoding());

@@ -869,7 +869,6 @@ Key Points:
    - `onMapWrite`, `onMapRead`, `onMapCopy` are not used
    - Can throw `UnsupportedOperationException`
    - Only `write` and `read` are important
-   - No need to implement view pattern
 
 When to Use: this approach is best when
 

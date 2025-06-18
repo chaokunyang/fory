@@ -326,6 +326,8 @@ For collection serializer, this is a special parameter `supportCodegenHook` need
 
 #### Implement Collection Serializer with JIT support
 
+When implementing a Collection serializer with JIT support, you can leverage Fory's existing binary format and collection serialization infrastructure. The key is to properly implement the `onCollectionWrite` and `newCollection` methods to handle metadata while letting Fory handle the element serialization.
+
 Here's an example:
 
 ```java
@@ -354,6 +356,8 @@ public class CustomCollectionSerializer<T extends Collection> extends Collection
     }
 }
 ```
+
+Note that please invoke `setNumElements` when implementing `newCollection` to let fory know how many elements to deserialize.
 
 #### Implement a totally-customzied Collection Serializer without JIT
 
@@ -478,7 +482,7 @@ class IntListSerializer extends AbstractCollectionSerializer<IntList> {
 }
 ```
 
-Key Points
+Key Points:
 
 1. **Primitive Array Storage**:
    - Uses `int[]` for direct storage
@@ -511,7 +515,7 @@ When to Use: this approach is best when:
 - Want to minimize memory overhead
 - Have special serialization requirements
 
-Usage Example
+Usage Example:
 
 ```java
 // Create and populate list
@@ -712,6 +716,8 @@ Similiar to collection serializer, this is a special parameter `supportCodegenHo
 
 #### Implement Map Serializer with JIT support
 
+When implementing a Map serializer with JIT support, you can leverage Fory's existing chunk-based binary format and map serialization infrastructure. The key is to properly implement the `onMapWrite` and `newMap` methods to handle metadata while letting Fory handle the map key-value serialization.
+
 Here's an example of implementing a custom map serializer:
 
 ```java
@@ -742,19 +748,7 @@ public class CustomMapSerializer<T extends Map> extends MapSerializer<T> {
 }
 ```
 
-The `supportCodegenHook` parameter is crucial for map serialization:
-
-- When `true`:
-  - Enables JIT compilation for better performance
-  - Uses codegen to directly call map's put/get methods
-  - Recommended for most maps.
-  - Provides significant performance gains for standard map implementations
-
-- When `false`:
-  - Uses reflection-based serialization
-  - More flexible but slower
-  - Required for maps with custom serialization logic
-  - Better for complex map implementations with special requirements
+Note that please invoke `setNumElements` when implementing `newMap` to let fory know how many elements to deserialize.
 
 #### Implement a totally-customzied Map Serializer without JIT
 
@@ -851,7 +845,7 @@ class FixedValueMapSerializer extends AbstractMapSerializer<FixedValueMap> {
 }        
 ```
 
-Key Points
+Key Points:
 
 1. **Disable Codegen**:
    - Set `supportCodegenHook=false` in constructor

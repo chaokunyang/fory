@@ -120,3 +120,18 @@ npm run test
 
 - node 14+
 - npm 8+
+
+### Lint Markdown Docs
+
+```bash
+# Install prettier globally
+npm install -g prettier
+
+# Fix markdown files
+prettier --write "**/*.md"
+```
+
+#### Environment Requirements
+
+- node 14+
+- npm 8+

@@ -305,9 +305,26 @@ Fory fory = getFory();
 fory.registerSerializer(Foo.class, new FooSerializer(fory));
 ```
 
-### Implement Collection Serializer with JIT support
+### Implement Collection Serializer
 
-Similar to maps, when implementing a serializer for a custom Collection type, you must extend `CollectionSerializer` or `AbstractCollectionSerializer`. The key difference between these two is that `AbstractCollectionSerializer` can serialize a class which has a collection-like structure but is not a java Collection subtype.
+Similar to maps, when implementing a serializer for a custom Collection type, you must extend `CollectionSerializer` or `AbstractCollectionSerializer`.
+The key difference between these two is that `AbstractCollectionSerializer` can serialize a class which has a collection-like structure but is not a java Collection subtype.
+
+For collection serializer, this is a special parameter `supportCodegenHook` needs be configured:
+
+- When `true`:
+  - Enables optimized access to collection elements and JIT compilation for better performance
+  - Direct serialization invocation and inline for map key-value items without dynamic serializer dispatch cost.
+  - Better performance for standard collection types
+  - Recommended for most collections
+
+- When `false`:
+  - Uses interfaced-based element access and dynamic serializer dispatch for elements, which have higer cost
+  - More flexible for custom collection types
+  - Required when collection has special serialization needs
+  - Handles complex collection implementations
+
+#### Implement Collection Serializer with JIT support
 
 Here's an example:
 
@@ -338,23 +355,10 @@ public class CustomCollectionSerializer<T extends Collection> extends Collection
 }
 ```
 
-The `supportCodegenHook` parameter for collections works similarly to maps:
+#### Implement a totally-customzied Collection Serializer without JIT
 
-- When `true`:
-  - Enables optimized access to collection elements and JIT compilation for better performance
-  - Uses codegen to direct call instead of reflection
-  - Better performance for standard collection types
-  - Recommended for most collections
-
-- When `false`:
-  - Uses interfaced-based element access
-  - More flexible for custom collection types
-  - Required when collection has special serialization needs
-  - Handles complex collection implementations
-
-### Implement a totally-customzied Collection Serializer without JIT
-
-Sometimes you need to serialize a collection-like type that uses primitive arrays or has special requirements. In such cases, you can implement a serializer with JIT disabled and directly override the `write` and `read` methods.
+Sometimes you need to serialize a collection type that uses primitive arrays or has special requirements.
+In such cases, you can implement a serializer with JIT disabled and directly override the `write` and `read` methods.
 
 This approach:
 
@@ -474,7 +478,7 @@ class IntListSerializer extends AbstractCollectionSerializer<IntList> {
 }
 ```
 
-#### Key Points
+Key Points
 
 1. **Primitive Array Storage**:
    - Uses `int[]` for direct storage
@@ -500,16 +504,14 @@ class IntListSerializer extends AbstractCollectionSerializer<IntList> {
    - Skip collection view pattern
    - Full control over serialization format
 
-#### When to Use
-
-This approach is best when:
+When to Use: this approach is best when:
 
 - Working with primitive types
 - Need maximum performance
 - Want to minimize memory overhead
 - Have special serialization requirements
 
-#### Usage Example
+Usage Example
 
 ```java
 // Create and populate list
@@ -534,7 +536,7 @@ This implementation is particularly efficient for scenarios where:
 
 Remember that while this approach gives up some of Fory's optimizations, it can provide better performance for specific use cases involving primitive types and direct array access.
 
-### Implement Serializer for Collection-like Types
+#### Implement Serializer for Collection-like Types
 
 Sometimes you may want to implement a serializer for a type that behaves like a collection but isn't a standard Java Collection. This section demonstrates how to implement a serializer for such types.
 
@@ -690,9 +692,25 @@ Key takeways:
 
 Note that this implementation provides better performance at the cost of flexibility. Consider your specific use case when choosing this approach.
 
-### Implement Map Serializer with JIT support
+### Implement Map Serializer
 
 When implementing a serializer for a custom Map type, you must extend `MapSerializer` or `AbstractMapSerializer`. The key difference between these two is that `AbstractMapSerializer` can serialize a class which has a map-like structure but is not a java Map subtype.
+
+Similiar to collection serializer, this is a special parameter `supportCodegenHook` needs be configured:
+
+- When `true`:
+  - Enables optimized access to map elements and JIT compilation for better performance
+  - Direct serialization invocation and inline for map key-value items without dynamic serializer dispatch cost.
+  - Better performance for standard map types
+  - Recommended for most maps
+
+- When `false`:
+  - Uses interfaced-based element access and dynamic serializer dispatch for elements, which have higer cost
+  - More flexible for custom map types
+  - Required when map has special serialization needs
+  - Handles complex map implementations
+
+#### Implement Map Serializer with JIT support
 
 Here's an example of implementing a custom map serializer:
 
@@ -738,7 +756,7 @@ The `supportCodegenHook` parameter is crucial for map serialization:
   - Required for maps with custom serialization logic
   - Better for complex map implementations with special requirements
 
-### Implement a totally-customzied Map Serializer without JIT
+#### Implement a totally-customzied Map Serializer without JIT
 
 Sometimes you may need complete control over the serialization process, or your map type might have special requirements that don't fit the standard patterns. In such cases, you can implement a serializer with `supportCodegenHook=false` and directly override the `write` and `read` methods.
 
@@ -833,7 +851,7 @@ class FixedValueMapSerializer extends AbstractMapSerializer<FixedValueMap> {
 }        
 ```
 
-#### Key Points
+Key Points
 
 1. **Disable Codegen**:
    - Set `supportCodegenHook=false` in constructor
@@ -859,26 +877,14 @@ class FixedValueMapSerializer extends AbstractMapSerializer<FixedValueMap> {
    - Only `write` and `read` are important
    - No need to implement view pattern
 
-#### When to Use
-
-This approach is best when:
+When to Use: this approach is best when
 
 - Map has custom fields or metadata
 - Special serialization format is needed
 - Complete control over binary format is required
 - Standard map patterns don't fit
 
-#### Register Custom Serializer
-
-```java
-Fory fory = Fory.builder()
-    .withLanguage(Language.JAVA)
-    .build();
-
-fory.registerSerializer(SpecialMap.class, new SpecialMapSerializer(fory));
-```
-
-#### Trade-offs
+Trade-offs
 
 1. **Advantages**:
    - Complete control over serialization
@@ -894,7 +900,7 @@ fory.registerSerializer(SpecialMap.class, new SpecialMapSerializer(fory));
 
 Remember that disabling codegen means giving up some performance optimizations that Fory provides. Only use this approach when the standard map serialization pattern doesn't meet your needs.
 
-### Implement Serializer for Map-like Types
+#### Implement Serializer for Map-like Types
 
 Sometimes you may want to implement a serializer for a type that behaves like a map but isn't a standard Java map. This section demonstrates how to implement a serializer for such types.
 

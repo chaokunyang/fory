@@ -1,4 +1,3 @@
-
 ## Testing Approach
 
 The test suite is inspired by Fory Java's testing approach and includes:

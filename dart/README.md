@@ -93,35 +93,35 @@ fory.register($EnumFoo, "example.EnumFoo");
 
 Fory Dart currently supports the following type mappings in XLANG mode:
 
-| Fory Type                  | Dart Type                                       |
-|----------------------------|------------------------------------------------|
-| bool                       | bool                                            |
-| int8                       | fory.Int8                                       |
-| int16                      | fory.Int16                                      |
-| int32                      | fory.Int32                                      |
-| var_int32                  | fory.Int32                                      |
-| int64                      | int                                             |
-| var_int64                  | int                                             |
-| sli_int64                  | int                                             |
-| float32                    | fory.Float32                                    |
-| float64                    | double                                          |
-| string                     | String                                          |
-| enum                       | Enum                                            |
-| named_enum                 | Enum                                            |
-| named_struct               | class                                           |
-| list                       | List                                            |
-| set                        | Set (LinkedHashSet, HashSet, SplayTreeSet)      |
-| map                        | Map (LinkedHashMap, HashMap, SplayTreeMap)      |
-| timestamp                  | fory.TimeStamp                                  |
-| local_date                 | fory.LocalDate                                  |
-| binary                     | Uint8List                                       |
-| bool_array                 | BoolList                                        |
-| int8_array                 | Int8List                                        |
-| int16_array                | Int16List                                       |
-| int32_array                | Int32List                                       |
-| int64_array                | Int64List                                       |
-| float32_array              | Float32List                                     |
-| float64_array              | Float64List                                     |
+| Fory Type     | Dart Type                                  |
+| ------------- | ------------------------------------------ |
+| bool          | bool                                       |
+| int8          | fory.Int8                                  |
+| int16         | fory.Int16                                 |
+| int32         | fory.Int32                                 |
+| var_int32     | fory.Int32                                 |
+| int64         | int                                        |
+| var_int64     | int                                        |
+| sli_int64     | int                                        |
+| float32       | fory.Float32                               |
+| float64       | double                                     |
+| string        | String                                     |
+| enum          | Enum                                       |
+| named_enum    | Enum                                       |
+| named_struct  | class                                      |
+| list          | List                                       |
+| set           | Set (LinkedHashSet, HashSet, SplayTreeSet) |
+| map           | Map (LinkedHashMap, HashMap, SplayTreeMap) |
+| timestamp     | fory.TimeStamp                             |
+| local_date    | fory.LocalDate                             |
+| binary        | Uint8List                                  |
+| bool_array    | BoolList                                   |
+| int8_array    | Int8List                                   |
+| int16_array   | Int16List                                  |
+| int32_array   | Int32List                                  |
+| int64_array   | Int64List                                  |
+| float32_array | Float32List                                |
+| float64_array | Float64List                                |
 
 ## Project Structure
 

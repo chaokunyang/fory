@@ -34,7 +34,7 @@
 In addition to cross-language serialization, Fory also features at:
 
 - Drop-in replace Java serialization frameworks such as JDK/Kryo/Hessian, but 100x faster at most, which can greatly improve
- the efficiency of high-performance RPC calls, data transfer, and object persistence.
+  the efficiency of high-performance RPC calls, data transfer, and object persistence.
 - **100% compatible** with JDK serialization API with much faster implementation: supporting JDK `writeObject`/`readObject`/`writeReplace`/`readResolve`/`readObjectNoData`/`Externalizable` API.
 - Supports **Java 8~21**, Java 17+ `record` is supported too.
 - Supports [AOT compilation serialization](docs/guide/graalvm_guide.md) for **GraalVM native image**, and no reflection/serialization json config are needed.
@@ -417,7 +417,7 @@ Static serialization is relatively secure. But dynamic serialization such as For
 For example, the deserialization may invoke `init` constructor or `equals`/`hashCode` method, if the method body contains malicious code, the system will be at risk.
 
 Fory provides a class registration option that is enabled by default for such protocols, allowing only deserialization of trusted registered types or built-in types.
- **Do not disable class registration unless you can ensure your environment is secure**.
+**Do not disable class registration unless you can ensure your environment is secure**.
 
 If this option is disabled, you are responsible for serialization security. You can configure `org.apache.fory.resolver.ClassChecker` by
 `ClassResolver#setClassChecker` to control which classes are allowed for serialization.

@@ -40,4 +40,4 @@ java/python debugging.
 - If debugging doesn't work, please select correct debug/run options:
   <img src="images/vscode_select_debug_run.png" alt="select correct debug/run options" width="50%" height="50%" />
 - Debug will jump to source files in bazel generated directory, we need to return raw files in source tree
-for debugging again: <img src="images/jmp_generate_file.png" alt="jump to generated files" width="50%" height="50%" />
+  for debugging again: <img src="images/jmp_generate_file.png" alt="jump to generated files" width="50%" height="50%" />

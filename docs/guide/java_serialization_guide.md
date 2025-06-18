@@ -19,8 +19,6 @@ license: |
   limitations under the License.
 ---
 
-## Java object graph serialization
-
 When only java object serialization needed, this mode will have better performance compared to cross-language object
 graph serialization.
 
@@ -213,7 +211,7 @@ class metadata.
 To further reduce metadata costs, Fory introduces a class metadata sharing mechanism, which allows the metadata to be
 sent to the deserialization process only once. For more details, please refer to the [Meta Sharing](https://fory.apache.org/docs/specification/fory_java_serialization_spec#meta-share) specification.
 
-### Smaller size
+### Compression
 
 `ForyBuilder#withIntCompressed`/`ForyBuilder#withLongCompressed` can be used to compress int/long for smaller size.
 Normally compress int is enough.
@@ -1097,6 +1095,8 @@ Note that when implementing custom map or collection serializers:
 3. Properly handle reference tracking if needed
 4. Implement proper size management using `setNumElements` and `getAndClearNumElements` when `supportCodegenHook` is `true`
 
+Besides registering serializes, one can also implement `java.io.Externalizable` for a class to customize serialization logic, such type will be serialized by fory `ExternalizableSerializer`.
+
 ### Security & Class Registration
 
 `ForyBuilder#requireClassRegistration` can be used to disable class registration, this will allow to deserialize objects
@@ -1161,12 +1161,6 @@ If there are no duplicate name for type, `namespace` can be left as empty to red
 
 **Do not use this API to register class since it will increase serialized size a lot compared to register
 class by id**
-
-### Serializer Registration
-
-You can also register a custom serializer for a class by `Fory#registerSerializer` API.
-
-Or implement `java.io.Externalizable` for a class.
 
 ### Zero-Copy Serialization
 
@@ -1250,17 +1244,17 @@ losing any information.
 If metadata sharing is not enabled, the new class data will be skipped and an `NonexistentSkipClass` stub object will be
 returned.
 
-### Coping/Mapping object from one type to another type
+### Copy/Map object from one type to another type
 
 Fory support mapping object from one type to another type.
 
 > Notes:
 >
 > 1. This mapping will execute a deep copy, all mapped fields are serialized into binary and
-> deserialized from that binary to map into another type.
+>    deserialized from that binary to map into another type.
 > 2. All struct types must be registered with same ID, otherwise Fory can not mapping to correct struct type.
-> Be careful when you use `Fory#register(Class)`, because fory will allocate an auto-grown ID which might be
-> inconsistent if you register classes with different order between Fory instance.
+>    Be careful when you use `Fory#register(Class)`, because fory will allocate an auto-grown ID which might be
+>    inconsistent if you register classes with different order between Fory instance.
 
 ```java
 public class StructMappingExample {

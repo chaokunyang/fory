@@ -1028,4 +1028,24 @@ public class MapSerializersTest extends ForyTestBase {
     Object object = fory2.deserialize(bytes);
     assertEquals(object, o);
   }
+
+  @Data
+  @AllArgsConstructor
+  public static class State<K extends Comparable<K>, V> {
+    Map<K, V[]> map;
+  }
+
+  @Test
+  public void testChunkArrayGeneric() {
+    Fory fory = Fory.builder().withLanguage(Language.JAVA).requireClassRegistration(false).build();
+    State original = new State(ofHashMap("foo", new String[] {"bar"}));
+    State state = serDe(fory, original);
+    Assert.assertEquals(state.map.get("foo"), new String[] {"bar"});
+
+    State state1 = new State(ofHashMap("foo", null, "bar", new String[] {"bar"}));
+    byte[] bytes = fory.serialize(state1);
+    Fory fory2 = builder().withCodegen(false).build();
+    State state2 = (State) fory2.deserialize(bytes);
+    Assert.assertEquals(state2.map.get("bar"), new String[] {"bar"});
+  }
 }

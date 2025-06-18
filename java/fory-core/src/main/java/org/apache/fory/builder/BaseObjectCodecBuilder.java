@@ -666,9 +666,17 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     String name =
         namesForSharedGenericTypeFields.computeIfAbsent(
             typeRef,
-            k ->
-                StringUtils.uncapitalize(typeRef.getRawType().getSimpleName())
-                    + namesForSharedGenericTypeFields.size());
+            k -> {
+              String prefix;
+              if (typeRef.getRawType().isArray()) {
+                Tuple2<Class<?>, Integer> info =
+                    TypeUtils.getArrayComponentInfo(typeRef.getRawType());
+                prefix = info.f0.getSimpleName() + "_arr" + info.f1;
+              } else {
+                prefix = typeRef.getRawType().getSimpleName();
+              }
+              return StringUtils.uncapitalize(prefix) + namesForSharedGenericTypeFields.size();
+            });
 
     return getOrCreateField(
         false,

@@ -266,10 +266,8 @@ SomeClass copied = fory.copy(a);
 ### Implement a customized serializer
 
 In some cases, you may want to implement a serializer for your type, especially some class customize serialization by
-JDK
-writeObject/writeReplace/readObject/readResolve, which is very inefficient. For example, you don't want
-following `Foo#writeObject`
-got invoked, you can take following `FooSerializer` as an example:
+JDK `writeObject/writeReplace/readObject/readResolve`, which is very inefficient. For example, if you don't want
+following `Foo#writeObject` got invoked, you can take following `FooSerializer` as an example:
 
 ```java
 class Foo {
@@ -306,6 +304,450 @@ Register serializer:
 Fory fory = getFory();
 fory.registerSerializer(Foo.class, new FooSerializer(fory));
 ```
+
+### Implement Collection Serializer
+
+Similar to maps, when implementing a serializer for a custom Collection type, you must extend `CollectionSerializer` or `AbstractCollectionSerializer`. The key difference between these two is that `AbstractCollectionSerializer` can serialize a class which has a collection-like structure but is not a java Collection subtype.
+
+Here's an example:
+
+```java
+public class CustomCollectionSerializer<T extends Collection> extends CollectionSerializer<T> {
+    public CustomCollectionSerializer(Fory fory, Class<T> cls) {
+        // supportCodegenHook controls whether to use JIT compilation
+        super(fory, cls, true);
+    }
+
+    @Override
+    public Collection onCollectionWrite(MemoryBuffer buffer, T value) {
+        // Write collection size
+        buffer.writeVarUint32Small7(value.size());
+        // Write any additional collection metadata
+        return value;
+    }
+
+    @Override
+    public Collection newCollection(MemoryBuffer buffer) {
+        // Create new collection instance
+        Collection collection = super.newCollection(buffer);
+        // Read and set collection size
+        int numElements = getAndClearNumElements();
+        setNumElements(numElements);
+        return collection;
+    }
+}
+```
+
+The `supportCodegenHook` parameter for collections works similarly to maps:
+
+- When `true`:
+  - Enables optimized access to collection elements and JIT compilation for better performance
+  - Uses codegen to direct call instead of reflection
+  - Better performance for standard collection types
+  - Recommended for most collections
+
+- When `false`:
+  - Uses interfaced-based element access
+  - More flexible for custom collection types
+  - Required when collection has special serialization needs
+  - Handles complex collection implementations
+
+### Implement Serializer for Collection-like Types
+
+Sometimes you may want to implement a serializer for a type that behaves like a collection but isn't a standard Java Collection. This section demonstrates how to implement a serializer for such types.
+
+The key principles for collection-like type serialization are:
+
+1. Extend `AbstractCollectionSerializer` for custom collection-like types
+2. Enable JIT optimization with `supportCodegenHook`
+3. Provide efficient element access through views
+4. Maintain proper size tracking
+
+Here's an example:
+
+```java
+class CustomCollectionLike {
+    private final Object[] elements;
+    private final int size;
+    
+    public CustomCollectionLike(int size) {
+        this.elements = new Object[size];
+        this.size = size;
+    }
+    
+    // Constructor for wrapping existing array
+    public CustomCollectionLike(Object[] elements, int size) {
+        this.elements = elements;
+        this.size = size;
+    }
+    
+    public Object get(int index) {
+        if (index >= size) {
+            throw new IndexOutOfBoundsException();
+        }
+        return elements[index];
+    }
+    
+    public int size() {
+        return size;
+    }
+    
+    public Object[] getElements() {
+        return elements;
+    }
+}
+
+// A view class that extends AbstractCollection for simpler implementation
+class CollectionView extends AbstractCollection<Object> {
+    private final Object[] elements;
+    private final int size;
+    private int writeIndex;
+    
+    // Constructor for serialization (wrapping existing array)
+    public CollectionView(CustomCollectionLike collection) {
+        this.elements = collection.getElements();
+        this.size = collection.size();
+    }
+    
+    // Constructor for deserialization
+    public CollectionView(int size) {
+        this.size = size;
+        this.elements = new Object[size];
+    }
+    
+    @Override
+    public Iterator<Object> iterator() {
+        return new Iterator<Object>() {
+            private int index = 0;
+            
+            @Override
+            public boolean hasNext() {
+                return index < size;
+            }
+            
+            @Override
+            public Object next() {
+                if (!hasNext()) {
+                    throw new NoSuchElementException();
+                }
+                return elements[index++];
+            }
+        };
+    }
+    
+    @Override
+    public boolean add(Object element) {
+        if (writeIndex >= size) {
+            throw new IllegalStateException("Collection is full");
+        }
+        elements[writeIndex++] = element;
+        return true;
+    }
+    
+    @Override
+    public int size() {
+        return size;
+    }
+    
+    public Object[] getElements() {
+        return elements;
+    }
+}
+
+class CustomCollectionSerializer extends AbstractCollectionSerializer<CustomCollectionLike> {
+    public CustomCollectionSerializer(Fory fory) {
+        super(fory, CustomCollectionLike.class, true);
+    }
+
+    @Override
+    public Collection onCollectionWrite(MemoryBuffer buffer, CustomCollectionLike value) {
+        buffer.writeVarUint32Small7(value.size());
+        return new CollectionView(value);
+    }
+
+    @Override
+    public Collection newCollection(MemoryBuffer buffer) {
+        int numElements = buffer.readVarUint32Small7();
+        setNumElements(numElements);
+        return new CollectionView(numElements);
+    }
+
+    @Override
+    public CustomCollectionLike onCollectionRead(Collection collection) {
+        CollectionView view = (CollectionView) collection;
+        return new CustomCollectionLike(view.getElements(), view.size());
+    }
+}
+```
+
+Key takeways:
+
+1. **Collection Structure**:
+   - Array-based storage for elements
+   - Fixed size after creation
+   - Direct element access
+   - Size tracking
+
+2. **View Implementation**:
+   - Extends `AbstractCollection` for simplicity
+   - Provides iterator for element access
+   - Implements `add()` for deserialization
+   - Shares array reference with original type
+
+3. **Serializer Features**:
+   - Uses `supportCodegenHook=true` for JIT optimization
+   - Shares array references when possible
+   - Maintains proper size tracking
+   - Uses view pattern for serialization
+
+4. **Performance Aspects**:
+   - Direct array access
+   - Minimal object creation
+   - Array sharing between instances
+   - Efficient iteration
+
+Note that this implementation provides better performance at the cost of flexibility. Consider your specific use case when choosing this approach.
+
+### Implement Map Serializer
+
+When implementing a serializer for a custom Map type, you must extend `MapSerializer` or `AbstractMapSerializer`. The key difference between these two is that `AbstractMapSerializer` can serialize a class which has a map-like structure but is not a java Map subtype.
+
+Here's an example of implementing a custom map serializer:
+
+```java
+public class CustomMapSerializer<T extends Map> extends MapSerializer<T> {
+    public CustomMapSerializer(Fory fory, Class<T> cls) {
+        // supportCodegenHook is a critical parameter that determines serialization behavior
+        super(fory, cls, true);  
+    }
+
+    @Override
+    public Map onMapWrite(MemoryBuffer buffer, T value) {
+        // Write map size
+        buffer.writeVarUint32Small7(value.size());
+        // Write any additional map metadata here
+        return value;
+    }
+
+    @Override
+    public Map newMap(MemoryBuffer buffer) {
+        // Read map size
+        int numElements = buffer.readVarUint32Small7();
+        setNumElements(numElements);
+        // Create and return new map instance
+        T map = (T) new HashMap(numElements);
+        fory.getRefResolver().reference(map);
+        return map;
+    }
+}
+```
+
+The `supportCodegenHook` parameter is crucial for map serialization:
+
+- When `true`:
+  - Enables JIT compilation for better performance
+  - Uses codegen to directly call map's put/get methods
+  - Recommended for most maps.
+  - Provides significant performance gains for standard map implementations
+
+- When `false`:
+  - Uses reflection-based serialization
+  - More flexible but slower
+  - Required for maps with custom serialization logic
+  - Better for complex map implementations with special requirements
+
+### Implement Serializer for Map-like Types
+
+Sometimes you may want to implement a serializer for a type that behaves like a map but isn't a standard Java map. This section demonstrates how to implement a serializer for such types.
+
+The key principles for map-like type serialization are:
+
+1. Extend `AbstractMapSerializer` for custom collection-like types
+2. Enable JIT optimization with `supportCodegenHook`
+3. Provide efficient element access through views
+4. Maintain proper size tracking
+
+Here's a complete example:
+
+```java
+// It's better to make it to implements the java.util.Map interface, in this way we don't have to implement such serializers by ourself.
+class CustomMapLike {
+    private final Object[] keyArray;
+    private final Object[] valueArray;
+    private final int size;
+    
+    // Constructor for creating new instance
+    public CustomMapLike(int initialCapacity) {
+        this.keyArray = new Object[initialCapacity];
+        this.valueArray = new Object[initialCapacity];
+        this.size = 0;
+    }
+    
+    // Constructor for wrapping existing arrays
+    public CustomMapLike(Object[] keyArray, Object[] valueArray, int size) {
+        this.keyArray = keyArray;
+        this.valueArray = valueArray;
+        this.size = size;
+    }
+    
+    public Integer get(String key) {
+        for (int i = 0; i < size; i++) {
+            if (key.equals(keyArray[i])) {
+                return (Integer) valueArray[i];
+            }
+        }
+        return null;
+    }
+    
+    public int size() {
+        return size;
+    }
+    
+    public Object[] getKeyArray() {
+        return keyArray;
+    }
+    
+    public Object[] getValueArray() {
+        return valueArray;
+    }
+}
+
+class MapView extends AbstractMap<Object, Object> {
+    private final Object[] keyArray;
+    private final Object[] valueArray;
+    private final int size;
+    private int writeIndex;
+    
+    // Constructor for serialization (wrapping existing CustomMapLike)
+    public MapView(CustomMapLike mapLike) {
+        this.size = mapLike.size();
+        this.keyArray = mapLike.getKeyArray();
+        this.valueArray = mapLike.getValueArray();
+    }
+    
+    // Constructor for deserialization
+    public MapView(int size) {
+        this.size = size;
+        this.keyArray = new Object[size];
+        this.valueArray = new Object[size];
+    }
+    
+    @Override
+    public Set<Entry<Object, Object>> entrySet() {
+        return new AbstractSet<Entry<Object, Object>>() {
+            @Override
+            public Iterator<Entry<Object, Object>> iterator() {
+                return new Iterator<Entry<Object, Object>>() {
+                    private int index = 0;
+                    
+                    @Override
+                    public boolean hasNext() {
+                        return index < size;
+                    }
+                    
+                    @Override
+                    public Entry<Object, Object> next() {
+                        if (!hasNext()) {
+                            throw new NoSuchElementException();
+                        }
+                        final int currentIndex = index++;
+                        return new SimpleEntry<>(
+                            keyArray[currentIndex], 
+                            valueArray[currentIndex]
+                        );
+                    }
+                };
+            }
+            
+            @Override
+            public int size() {
+                return size;
+            }
+        };
+    }
+    
+    @Override
+    public Object put(Object key, Object value) {
+        if (writeIndex >= size) {
+            throw new IllegalStateException("Map is full");
+        }
+        keyArray[writeIndex] = key;
+        valueArray[writeIndex] = value;
+        writeIndex++;
+        return null;
+    }
+    
+    public Object[] getKeyArray() {
+        return keyArray;
+    }
+    
+    public Object[] getValueArray() {
+        return valueArray;
+    }
+    
+    public int size() {
+        return size;
+    }
+}
+
+class CustomMapLikeSerializer extends AbstractMapSerializer<CustomMapLike> {
+    public CustomMapLikeSerializer(Fory fory) {
+        super(fory, CustomMapLike.class, true);
+    }
+
+    @Override
+    public Map onMapWrite(MemoryBuffer buffer, CustomMapLike value) {
+        buffer.writeVarUint32Small7(value.size());
+        // Return a zero-copy view using the same underlying arrays
+        return new MapView(value);
+    }
+
+    @Override
+    public Map newMap(MemoryBuffer buffer) {
+        int numElements = buffer.readVarUint32Small7();
+        setNumElements(numElements);
+        // Create a view with new arrays for deserialization
+        return new MapView(numElements);
+    }
+
+    @Override
+    public CustomMapLike onMapRead(Map map) {
+        MapView view = (MapView) map;
+        // Just pass the arrays directly - no copying needed
+        return new CustomMapLike(view.getKeyArray(), view.getValueArray(), view.size());
+    }
+
+    @Override
+    public CustomMapLike onMapCopy(Map map) {
+        MapView view = (MapView) map;
+        // Just pass the arrays directly - no copying needed
+        return new CustomMapLike(view.getKeyArray(), view.getValueArray(), view.size());
+    }
+}
+```
+
+### Register Custom Serializers
+
+After implementing your custom serializer, register it with Fory:
+
+```java
+Fory fory = Fory.builder()
+    .withLanguage(Language.JAVA)
+    .build();
+
+// Register map serializer
+fory.registerSerializer(CustomMap.class, new CustomMapSerializer<>(fory, CustomMap.class));
+
+// Register collection serializer
+fory.registerSerializer(CustomCollection.class, new CustomCollectionSerializer<>(fory, CustomCollection.class));
+```
+
+Note that when implementing custom map or collection serializers:
+
+1. Always extend the appropriate base class (`MapSerializer`/`AbstractMapSerializer` for maps, `CollectionSerializer`/`AbstractCollectionSerializer` for collections)
+2. Consider the impact of `supportCodegenHook` on performance and functionality
+3. Properly handle reference tracking if needed
+4. Implement proper size management using `setNumElements` and `getAndClearNumElements` when `supportCodegenHook` is `true`
 
 ### Security & Class Registration
 

@@ -108,10 +108,10 @@ public class Example {
 }
 ```
 
-## ForyBuilder  options
+## ForyBuilder options
 
 | Option Name                         | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Default Value                                                  |
-|-------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------|
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
 | `timeRefIgnored`                    | Whether to ignore reference tracking of all time types registered in `TimeSerializers` and subclasses of those types when ref tracking is enabled. If ignored, ref tracking of every time type can be enabled by invoking `Fory#registerSerializer(Class, Serializer)`. For example, `fory.registerSerializer(Date.class, new DateSerializer(fory, true))`. Note that enabling ref tracking should happen before serializer codegen of any types which contain time fields. Otherwise, those fields will still skip ref tracking. | `true`                                                         |
 | `compressInt`                       | Enables or disables int compression for smaller size.                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `true`                                                         |
 | `compressLong`                      | Enables or disables long compression for smaller size.                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `true`                                                         |
@@ -233,9 +233,9 @@ For long compression, fory support two encoding:
   - Otherwise write as 9 bytes: `| 0b1 | little-endian 8bytes long |`
 - Fory PVL(Progressive Variable-length Long) Encoding:
   - First bit in every byte indicate whether has next byte. if first bit is set, then next byte will be read util
-      first bit of next byte is unset.
+    first bit of next byte is unset.
   - Negative number will be converted to positive number by `(v << 1) ^ (v >> 63)` to reduce cost of small negative
-      numbers.
+    numbers.
 
 If a number are `long` type, it can't be represented by smaller bytes mostly, the compression won't get good enough
 result,
@@ -312,6 +312,7 @@ The key difference between these two is that `AbstractCollectionSerializer` can 
 For collection serializer, this is a special parameter `supportCodegenHook` needs be configured:
 
 - When `true`:
+
   - Enables optimized access to collection elements and JIT compilation for better performance
   - Direct serialization invocation and inline for map key-value items without dynamic serializer dispatch cost.
   - Better performance for standard collection types
@@ -376,27 +377,27 @@ Here's an example of a custom integer list backed by a primitive array:
 class IntList extends AbstractCollection<Integer> {
     private final int[] elements;
     private final int size;
-    
+
     public IntList(int size) {
         this.elements = new int[size];
         this.size = size;
     }
-    
+
     public IntList(int[] elements, int size) {
         this.elements = elements;
         this.size = size;
     }
-    
+
     @Override
     public Iterator<Integer> iterator() {
         return new Iterator<Integer>() {
             private int index = 0;
-            
+
             @Override
             public boolean hasNext() {
                 return index < size;
             }
-            
+
             @Override
             public Integer next() {
                 if (!hasNext()) {
@@ -406,26 +407,26 @@ class IntList extends AbstractCollection<Integer> {
             }
         };
     }
-    
+
     @Override
     public int size() {
         return size;
     }
-    
+
     public int get(int index) {
         if (index >= size) {
             throw new IndexOutOfBoundsException();
         }
         return elements[index];
     }
-    
+
     public void set(int index, int value) {
         if (index >= size) {
             throw new IndexOutOfBoundsException();
         }
         elements[index] = value;
     }
-    
+
     public int[] getElements() {
         return elements;
     }
@@ -441,7 +442,7 @@ class IntListSerializer extends AbstractCollectionSerializer<IntList> {
     public void write(MemoryBuffer buffer, IntList value) {
         // Write size
         buffer.writeVarUint32Small7(value.size());
-        
+
         // Write elements directly as primitive ints
         int[] elements = value.getElements();
         for (int i = 0; i < value.size(); i++) {
@@ -453,13 +454,13 @@ class IntListSerializer extends AbstractCollectionSerializer<IntList> {
     public IntList read(MemoryBuffer buffer) {
         // Read size
         int size = buffer.readVarUint32Small7();
-        
+
         // Create array and read elements
         int[] elements = new int[size];
         for (int i = 0; i < size; i++) {
             elements[i] = buffer.readVarInt32();
         }
-        
+
         return new IntList(elements, size);
     }
 
@@ -484,18 +485,21 @@ class IntListSerializer extends AbstractCollectionSerializer<IntList> {
 Key Points:
 
 1. **Primitive Array Storage**:
+
    - Uses `int[]` for direct storage
    - Avoids boxing/unboxing overhead
    - Provides efficient memory layout
    - Enables direct array access
 
 2. **Direct Serialization**:
+
    - Write size first
    - Write primitive values directly
    - No iteration overhead
    - No boxing/unboxing during serialization
 
 3. **Direct Deserialization**:
+
    - Read size first
    - Create primitive array
    - Read values directly into array
@@ -556,29 +560,29 @@ Here's an example:
 class CustomCollectionLike {
     private final Object[] elements;
     private final int size;
-    
+
     public CustomCollectionLike(int size) {
         this.elements = new Object[size];
         this.size = size;
     }
-    
+
     // Constructor for wrapping existing array
     public CustomCollectionLike(Object[] elements, int size) {
         this.elements = elements;
         this.size = size;
     }
-    
+
     public Object get(int index) {
         if (index >= size) {
             throw new IndexOutOfBoundsException();
         }
         return elements[index];
     }
-    
+
     public int size() {
         return size;
     }
-    
+
     public Object[] getElements() {
         return elements;
     }
@@ -589,29 +593,29 @@ class CollectionView extends AbstractCollection<Object> {
     private final Object[] elements;
     private final int size;
     private int writeIndex;
-    
+
     // Constructor for serialization (wrapping existing array)
     public CollectionView(CustomCollectionLike collection) {
         this.elements = collection.getElements();
         this.size = collection.size();
     }
-    
+
     // Constructor for deserialization
     public CollectionView(int size) {
         this.size = size;
         this.elements = new Object[size];
     }
-    
+
     @Override
     public Iterator<Object> iterator() {
         return new Iterator<Object>() {
             private int index = 0;
-            
+
             @Override
             public boolean hasNext() {
                 return index < size;
             }
-            
+
             @Override
             public Object next() {
                 if (!hasNext()) {
@@ -621,7 +625,7 @@ class CollectionView extends AbstractCollection<Object> {
             }
         };
     }
-    
+
     @Override
     public boolean add(Object element) {
         if (writeIndex >= size) {
@@ -630,12 +634,12 @@ class CollectionView extends AbstractCollection<Object> {
         elements[writeIndex++] = element;
         return true;
     }
-    
+
     @Override
     public int size() {
         return size;
     }
-    
+
     public Object[] getElements() {
         return elements;
     }
@@ -670,18 +674,21 @@ class CustomCollectionSerializer extends AbstractCollectionSerializer<CustomColl
 Key takeways:
 
 1. **Collection Structure**:
+
    - Array-based storage for elements
    - Fixed size after creation
    - Direct element access
    - Size tracking
 
 2. **View Implementation**:
+
    - Extends `AbstractCollection` for simplicity
    - Provides iterator for element access
    - Implements `add()` for deserialization
    - Shares array reference with original type
 
 3. **Serializer Features**:
+
    - Uses `supportCodegenHook=true` for JIT optimization
    - Shares array references when possible
    - Maintains proper size tracking
@@ -702,6 +709,7 @@ When implementing a serializer for a custom Map type, you must extend `MapSerial
 Similiar to collection serializer, this is a special parameter `supportCodegenHook` needs be configured:
 
 - When `true`:
+
   - Enables optimized access to map elements and JIT compilation for better performance
   - Direct serialization invocation and inline for map key-value items without dynamic serializer dispatch cost.
   - Better performance for standard map types
@@ -723,7 +731,7 @@ Here's an example of implementing a custom map serializer:
 public class CustomMapSerializer<T extends Map> extends MapSerializer<T> {
     public CustomMapSerializer(Fory fory, Class<T> cls) {
         // supportCodegenHook is a critical parameter that determines serialization behavior
-        super(fory, cls, true);  
+        super(fory, cls, true);
     }
 
     @Override
@@ -841,24 +849,27 @@ class FixedValueMapSerializer extends AbstractMapSerializer<FixedValueMap> {
     public FixedValueMap onMapCopy(Map map) {
         throw new UnsupportedOperationException();
     }
-}        
+}
 ```
 
 Key Points:
 
 1. **Disable Codegen**:
+
    - Set `supportCodegenHook=false` in constructor
    - Fory will use your `write`/`read` methods directly
    - No JIT optimization will be applied
    - Full control over serialization format
 
 2. **Write Method**:
+
    - Handle all serialization manually
    - Write custom fields first
    - Write map entries in your preferred format
    - Control the exact binary layout
 
 3. **Read Method**:
+
    - Handle all deserialization manually
    - Read in same order as written
    - Create and populate map instance
@@ -879,6 +890,7 @@ When to Use: this approach is best when
 Trade-offs
 
 1. **Advantages**:
+
    - Complete control over serialization
    - Custom binary format possible
    - Simpler implementation for special cases
@@ -911,21 +923,21 @@ class CustomMapLike {
     private final Object[] keyArray;
     private final Object[] valueArray;
     private final int size;
-    
+
     // Constructor for creating new instance
     public CustomMapLike(int initialCapacity) {
         this.keyArray = new Object[initialCapacity];
         this.valueArray = new Object[initialCapacity];
         this.size = 0;
     }
-    
+
     // Constructor for wrapping existing arrays
     public CustomMapLike(Object[] keyArray, Object[] valueArray, int size) {
         this.keyArray = keyArray;
         this.valueArray = valueArray;
         this.size = size;
     }
-    
+
     public Integer get(String key) {
         for (int i = 0; i < size; i++) {
             if (key.equals(keyArray[i])) {
@@ -934,15 +946,15 @@ class CustomMapLike {
         }
         return null;
     }
-    
+
     public int size() {
         return size;
     }
-    
+
     public Object[] getKeyArray() {
         return keyArray;
     }
-    
+
     public Object[] getValueArray() {
         return valueArray;
     }
@@ -953,21 +965,21 @@ class MapView extends AbstractMap<Object, Object> {
     private final Object[] valueArray;
     private final int size;
     private int writeIndex;
-    
+
     // Constructor for serialization (wrapping existing CustomMapLike)
     public MapView(CustomMapLike mapLike) {
         this.size = mapLike.size();
         this.keyArray = mapLike.getKeyArray();
         this.valueArray = mapLike.getValueArray();
     }
-    
+
     // Constructor for deserialization
     public MapView(int size) {
         this.size = size;
         this.keyArray = new Object[size];
         this.valueArray = new Object[size];
     }
-    
+
     @Override
     public Set<Entry<Object, Object>> entrySet() {
         return new AbstractSet<Entry<Object, Object>>() {
@@ -975,12 +987,12 @@ class MapView extends AbstractMap<Object, Object> {
             public Iterator<Entry<Object, Object>> iterator() {
                 return new Iterator<Entry<Object, Object>>() {
                     private int index = 0;
-                    
+
                     @Override
                     public boolean hasNext() {
                         return index < size;
                     }
-                    
+
                     @Override
                     public Entry<Object, Object> next() {
                         if (!hasNext()) {
@@ -988,20 +1000,20 @@ class MapView extends AbstractMap<Object, Object> {
                         }
                         final int currentIndex = index++;
                         return new SimpleEntry<>(
-                            keyArray[currentIndex], 
+                            keyArray[currentIndex],
                             valueArray[currentIndex]
                         );
                     }
                 };
             }
-            
+
             @Override
             public int size() {
                 return size;
             }
         };
     }
-    
+
     @Override
     public Object put(Object key, Object value) {
         if (writeIndex >= size) {
@@ -1012,15 +1024,15 @@ class MapView extends AbstractMap<Object, Object> {
         writeIndex++;
         return null;
     }
-    
+
     public Object[] getKeyArray() {
         return keyArray;
     }
-    
+
     public Object[] getValueArray() {
         return valueArray;
     }
-    
+
     public int size() {
         return size;
     }
@@ -1241,13 +1253,16 @@ returned.
 ### Coping/Mapping object from one type to another type
 
 Fory support mapping object from one type to another type.
+
 > Notes:
 >
 > 1. This mapping will execute a deep copy, all mapped fields are serialized into binary and
+
      deserialized from that binary to map into another type.
+
 > 2. All struct types must be registered with same ID, otherwise Fory can not mapping to correct struct type.
-     > Be careful when you use `Fory#register(Class)`, because fory will allocate an auto-grown ID which might be
-     > inconsistent if you register classes with different order between Fory instance.
+>    Be careful when you use `Fory#register(Class)`, because fory will allocate an auto-grown ID which might be
+>    inconsistent if you register classes with different order between Fory instance.
 
 ```java
 public class StructMappingExample {

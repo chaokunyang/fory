@@ -211,8 +211,7 @@ sophisticated compression techniques to minimize overhead, there is still some a
 class metadata.
 
 To further reduce metadata costs, Fory introduces a class metadata sharing mechanism, which allows the metadata to be
-sent to the deserialization process only once. For more details, please refer to the [Meta Sharing](#MetaSharing)
-section.
+sent to the deserialization process only once. For more details, please refer to the [Meta Sharing](https://fory.apache.org/docs/specification/fory_java_serialization_spec#meta-share) specification.
 
 ### Smaller size
 

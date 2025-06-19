@@ -31,8 +31,8 @@ import java.util.Set;
 import org.apache.fory.Fory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.serializer.Serializer;
-import org.apache.fory.serializer.collection.AbstractCollectionSerializer;
-import org.apache.fory.serializer.collection.AbstractMapSerializer;
+import org.apache.fory.serializer.collection.CollectionSerializer;
+import org.apache.fory.serializer.collection.MapSerializer;
 import org.testng.annotations.Test;
 
 public class ResolverValidateSerializerTest {
@@ -75,7 +75,7 @@ public class ResolverValidateSerializerTest {
       return 0;
     }
 
-    public static final class ValidListSerializer extends AbstractCollectionSerializer<ValidList> {
+    public static final class ValidListSerializer extends CollectionSerializer<ValidList> {
       public ValidListSerializer(Fory fory) {
         super(fory, ValidList.class);
       }
@@ -126,7 +126,7 @@ public class ResolverValidateSerializerTest {
       return Collections.emptySet();
     }
 
-    public static final class ValidMapSerializer extends AbstractMapSerializer<ValidMap> {
+    public static final class ValidMapSerializer extends MapSerializer<ValidMap> {
       public ValidMapSerializer(Fory fory) {
         super(fory, ValidMap.class);
       }

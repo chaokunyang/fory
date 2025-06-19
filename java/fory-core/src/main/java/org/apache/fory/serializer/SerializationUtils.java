@@ -25,8 +25,8 @@ import org.apache.fory.Fory;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.resolver.ClassInfo;
 import org.apache.fory.resolver.TypeResolver;
-import org.apache.fory.serializer.collection.AbstractCollectionSerializer;
-import org.apache.fory.serializer.collection.AbstractMapSerializer;
+import org.apache.fory.serializer.collection.CollectionSerializer;
+import org.apache.fory.serializer.collection.MapSerializer;
 
 @Internal
 public class SerializationUtils {
@@ -59,7 +59,7 @@ public class SerializationUtils {
   }
 
   public static void validate(Class<?> type, Class<? extends Serializer> serializerClass) {
-    validateSerializer(type, serializerClass, Collection.class, AbstractCollectionSerializer.class);
-    validateSerializer(type, serializerClass, Map.class, AbstractMapSerializer.class);
+    validateSerializer(type, serializerClass, Collection.class, CollectionSerializer.class);
+    validateSerializer(type, serializerClass, Map.class, MapSerializer.class);
   }
 }

@@ -25,6 +25,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import org.apache.fory.Fory;
@@ -43,7 +44,9 @@ public final class LoaderBinding {
   // circular reference between ClassLoader and Fory.
   private final HashMap<ClassLoader, Fory> foryMap = new HashMap<>();
   private final Map<ClassLoader, SoftReference<Fory>> forySoftMap =
-      new MapMaker().weakKeys().makeMap();
+      GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE
+          ? new ConcurrentHashMap<>()
+          : new MapMaker().weakKeys().makeMap();
   private Consumer<Fory> bindingCallback = f -> {};
   private ClassLoader loader;
   private Fory fory;

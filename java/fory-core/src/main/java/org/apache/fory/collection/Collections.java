@@ -19,14 +19,18 @@
 
 package org.apache.fory.collection;
 
+import com.google.common.collect.MapMaker;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
+import org.apache.fory.util.GraalvmSupport;
 
 @SuppressWarnings({"rawtypes", "unchecked"})
 public class Collections {
@@ -184,5 +188,13 @@ public class Collections {
       map.put(kv[i], kv[i + 1]);
     }
     return map;
+  }
+
+  public static <T> Map<Class<?>, T> newClassKeyCacheMap() {
+    if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
+      return new ConcurrentHashMap<>();
+    } else {
+      return new MapMaker().weakKeys().makeMap();
+    }
   }
 }

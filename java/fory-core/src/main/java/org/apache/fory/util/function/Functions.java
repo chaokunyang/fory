@@ -78,12 +78,12 @@ public class Functions {
   }
 
   private static final Map<Tuple2<Method, Class<?>>, Object> graalvmCache =
-      GraalvmSupport.isGraalBuildtime() ? new ConcurrentHashMap<>() : null;
+      GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE ? new ConcurrentHashMap<>() : null;
   private static final MultiKeyWeakMap<Object> weakCache =
-      GraalvmSupport.isGraalBuildtime() ? null : new MultiKeyWeakMap<>();
+      GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE ? null : new MultiKeyWeakMap<>();
 
   public static Object makeGetterFunction(Method method) {
-    if (GraalvmSupport.isGraalBuildtime()) {
+    if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
       return graalvmCache.computeIfAbsent(
           Tuple2.of(method, Object.class),
           k -> {
@@ -121,7 +121,7 @@ public class Functions {
   }
 
   public static Object makeGetterFunction(Method method, Class<?> returnType) {
-    if (GraalvmSupport.isGraalBuildtime()) {
+    if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
       return graalvmCache.computeIfAbsent(
           Tuple2.of(method, returnType),
           k -> {

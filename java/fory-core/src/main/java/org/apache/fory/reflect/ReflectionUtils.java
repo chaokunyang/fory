@@ -22,7 +22,6 @@ package org.apache.fory.reflect;
 import static org.apache.fory.type.TypeUtils.OBJECT_TYPE;
 import static org.apache.fory.type.TypeUtils.getRawType;
 
-import com.google.common.collect.MapMaker;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
@@ -840,7 +839,7 @@ public class ReflectionUtils {
   }
 
   private static final Map<Class<?>, Boolean> scalaSingletonObjectCache =
-      new MapMaker().weakKeys().makeMap();
+      org.apache.fory.collection.Collections.newClassKeyCacheMap();
 
   /** Returns true if a class is a scala `object` singleton. */
   public static boolean isScalaSingletonObject(Class<?> cls) {

@@ -23,7 +23,6 @@ import static org.apache.fory.util.Preconditions.checkArgument;
 
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
-import com.google.common.collect.MapMaker;
 import java.lang.reflect.Field;
 import java.lang.reflect.Member;
 import java.lang.reflect.Method;
@@ -47,6 +46,7 @@ import org.apache.fory.annotation.Expose;
 import org.apache.fory.annotation.ForyField;
 import org.apache.fory.annotation.Ignore;
 import org.apache.fory.annotation.Internal;
+import org.apache.fory.collection.Collections;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.reflect.TypeRef;
@@ -64,7 +64,7 @@ public class Descriptor {
   private static Cache<
           Class<?>, Tuple2<SortedMap<Member, Descriptor>, SortedMap<Member, Descriptor>>>
       descCache = CacheBuilder.newBuilder().weakKeys().softValues().concurrencyLevel(64).build();
-  private static final Map<Class<?>, AtomicBoolean> flags = new MapMaker().weakKeys().makeMap();
+  private static final Map<Class<?>, AtomicBoolean> flags = Collections.newClassKeyCacheMap();
 
   @Internal
   public static void clearDescriptorCache() {

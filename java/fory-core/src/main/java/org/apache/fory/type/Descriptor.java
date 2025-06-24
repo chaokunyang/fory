@@ -23,13 +23,13 @@ import static org.apache.fory.util.Preconditions.checkArgument;
 
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
+import com.google.common.collect.MapMaker;
 import java.lang.reflect.Field;
 import java.lang.reflect.Member;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -39,7 +39,6 @@ import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.TreeSet;
-import java.util.WeakHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ForkJoinPool;
@@ -65,8 +64,7 @@ public class Descriptor {
   private static Cache<
           Class<?>, Tuple2<SortedMap<Member, Descriptor>, SortedMap<Member, Descriptor>>>
       descCache = CacheBuilder.newBuilder().weakKeys().softValues().concurrencyLevel(64).build();
-  private static final Map<Class<?>, AtomicBoolean> flags =
-      Collections.synchronizedMap(new WeakHashMap<>());
+  private static final Map<Class<?>, AtomicBoolean> flags = new MapMaker().weakKeys().makeMap();
 
   @Internal
   public static void clearDescriptorCache() {

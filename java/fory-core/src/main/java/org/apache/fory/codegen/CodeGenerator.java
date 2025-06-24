@@ -19,6 +19,7 @@
 
 package org.apache.fory.codegen;
 
+import com.google.common.collect.MapMaker;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -480,8 +481,8 @@ public class CodeGenerator {
     return sb;
   }
 
-  private static final WeakHashMap<Class<?>, Boolean> sourcePublicLevelAccessible =
-      new WeakHashMap<>();
+  private static final Map<Class<?>, Boolean> sourcePublicLevelAccessible =
+      new MapMaker().weakKeys().makeMap();
 
   public static Class<?> getSourcePublicAccessibleParentClass(Class<?> clz) {
     while (!sourcePublicAccessible(clz)) {
@@ -506,8 +507,8 @@ public class CodeGenerator {
     return sourcePkgLevelAccessible(clz);
   }
 
-  private static final WeakHashMap<Class<?>, Boolean> sourcePkgLevelAccessible =
-      new WeakHashMap<>();
+  private static final Map<Class<?>, Boolean> sourcePkgLevelAccessible =
+      new MapMaker().weakKeys().makeMap();
 
   /** Returns true if class is package level accessible from source. */
   public static boolean sourcePkgLevelAccessible(Class<?> clz) {

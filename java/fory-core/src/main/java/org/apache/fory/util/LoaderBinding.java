@@ -19,11 +19,12 @@
 
 package org.apache.fory.util;
 
+import com.google.common.collect.MapMaker;
 import java.lang.ref.SoftReference;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
-import java.util.WeakHashMap;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import org.apache.fory.Fory;
@@ -41,7 +42,8 @@ public final class LoaderBinding {
   // which cause
   // circular reference between ClassLoader and Fory.
   private final HashMap<ClassLoader, Fory> foryMap = new HashMap<>();
-  private final WeakHashMap<ClassLoader, SoftReference<Fory>> forySoftMap = new WeakHashMap<>();
+  private final Map<ClassLoader, SoftReference<Fory>> forySoftMap =
+      new MapMaker().weakKeys().makeMap();
   private Consumer<Fory> bindingCallback = f -> {};
   private ClassLoader loader;
   private Fory fory;

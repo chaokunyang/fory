@@ -19,6 +19,7 @@
 
 package org.apache.fory.util.function;
 
+import com.google.common.collect.MapMaker;
 import java.io.Serializable;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
@@ -27,7 +28,6 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
 import org.apache.fory.collection.Tuple2;
@@ -78,7 +78,9 @@ public class Functions {
   }
 
   private static final Map<Tuple2<Method, Class<?>>, Object> map =
-      GraalvmSupport.isGraalBuildtime() ? new ConcurrentHashMap<>() : new WeakHashMap<>();
+      GraalvmSupport.isGraalBuildtime()
+          ? new ConcurrentHashMap<>()
+          : new MapMaker().weakKeys().makeMap();
 
   public static Object makeGetterFunction(Method method) {
     return map.computeIfAbsent(

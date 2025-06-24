@@ -1394,6 +1394,15 @@ public class ClassResolver implements TypeResolver {
   }
 
   private void createSerializerAhead(Class<?> cls) {
+    try {
+      fory.getJITContext().lock();
+      createSerializer0(cls);
+    } finally {
+      fory.getJITContext().unlock();
+    }
+  }
+
+  private void createSerializer0(Class<?> cls) {
     ClassInfo classInfo = getClassInfo(cls);
     ClassInfo deserializationClassInfo;
     if (metaContextShareEnabled && needToWriteClassDef(classInfo.serializer)) {

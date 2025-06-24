@@ -24,10 +24,14 @@ import static org.testng.Assert.assertTrue;
 
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import lombok.Data;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
+import org.apache.fory.ThreadSafeFory;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.Language;
 import org.apache.fory.logging.Logger;
@@ -165,6 +169,41 @@ public class JITContextTest extends ForyTestBase {
     assertTrue(ReflectionUtils.getObjectFieldValue(serializer, "serializer") instanceof Generated);
     assertTrue(ReflectionUtils.getObjectFieldValue(serializer, "serializer1") instanceof Generated);
     serDeCheck(fory, o);
+  }
+
+  @Test(timeOut = 60000)
+  public void testThreadSafetyWithManyForyInstances() throws Exception {
+    final int threadCount = 1000;
+    final CountDownLatch latch = new CountDownLatch(threadCount);
+    final List<Throwable> errors = Collections.synchronizedList(new ArrayList<>());
+
+    for (int i = 0; i < threadCount; i++) {
+      new Thread(
+              () -> {
+                try {
+                  ThreadSafeFory fory =
+                      Fory.builder()
+                          .withLanguage(Language.JAVA)
+                          .requireClassRegistration(true)
+                          .withAsyncCompilation(true)
+                          .withCompatibleMode(CompatibleMode.COMPATIBLE)
+                          .buildThreadSafeForyPool(2, 4, 1, java.util.concurrent.TimeUnit.MINUTES);
+                  fory.register(BeanB.class, true);
+                  // fory.register(BeanA.class, true);
+                } catch (Throwable t) {
+                  errors.add(t);
+                } finally {
+                  latch.countDown();
+                }
+              })
+          .start();
+    }
+    latch.await();
+    // print stack trace in errors
+    for (Throwable error : errors) {
+      error.printStackTrace();
+    }
+    assertTrue(errors.isEmpty(), "No exceptions should be thrown: " + errors);
   }
 
   @Data

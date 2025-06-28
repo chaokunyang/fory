@@ -42,7 +42,7 @@ pub fn derive_row(ast: &syn::DeriveInput) -> TokenStream {
     let getter_exprs = fields.iter().enumerate().map(|(index, field)| {
         let ty = &field.ty;
         let ident = field.ident.as_ref().expect("field should provide ident");
-        let getter_name: proc_macro2::Ident = syn::Ident::new(&format!("{}", ident), ident.span());
+        let getter_name: proc_macro2::Ident = syn::Ident::new(&format!("{ident}"), ident.span());
 
         quote! {
             pub fn #getter_name(&self) -> <#ty as fory_core::row::Row<'a>>::ReadResult {
@@ -52,8 +52,7 @@ pub fn derive_row(ast: &syn::DeriveInput) -> TokenStream {
         }
     });
 
-    let getter: proc_macro2::Ident =
-        syn::Ident::new(&format!("{}ForyRowGetter", name), name.span());
+    let getter: proc_macro2::Ident = syn::Ident::new(&format!("{name}ForyRowGetter"), name.span());
 
     let num_fields = fields.len();
 

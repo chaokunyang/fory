@@ -150,5 +150,5 @@ fn encode_to_obin() {
         f10: HashMap::from([(1, 1.0), (2, 2.0)]),
     });
 
-    print!("{:?}", bin);
+    print!("{bin:?}");
 }

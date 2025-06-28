@@ -25,19 +25,19 @@ fn test_to_utf8() {
     println!("==========init utf16:");
     let utf16_strings: Vec<String> = utf16_bytes
         .iter()
-        .map(|&byte| format!("0x{:04x}", byte))
+        .map(|&byte| format!("0x{byte:04x}"))
         .collect();
     println!("{}", utf16_strings.join(","));
     let utf8_bytes = to_utf8(&utf16_bytes, is_little_endian).unwrap();
     println!("==========utf8:");
     let utf8_strings: Vec<String> = utf8_bytes
         .iter()
-        .map(|&byte| format!("0x{:02x}", byte))
+        .map(|&byte| format!("0x{byte:02x}"))
         .collect();
     println!("{}", utf8_strings.join(","));
     // final UTF-8 string
     let final_string = String::from_utf8(utf8_bytes.clone()).unwrap();
-    println!("final string: {}", final_string);
+    println!("final string: {final_string}");
     assert_eq!(s, final_string);
 }
 

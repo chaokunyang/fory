@@ -19,9 +19,7 @@ license: |
   limitations under the License.
 ---
 
-## Row format protocol
-
-### Java
+## Java
 
 ```java
 public class Bar {
@@ -68,7 +66,7 @@ Bar newBar = barEncoder.fromRow(barStruct);
 Bar newBar2 = barEncoder.fromRow(binaryArray4.getStruct(20));
 ```
 
-### Python
+## Python
 
 ```python
 @dataclass
@@ -82,13 +80,13 @@ class Foo:
     f3: Dict[str, pa.int32]
     f4: List[Bar]
 
-encoder = pyfury.encoder(Foo)
+encoder = pyfory.encoder(Foo)
 foo = Foo(f1=10, f2=list(range(1000_000)),
          f3={f"k{i}": i for i in range(1000_000)},
          f4=[Bar(f1=f"s{i}", f2=list(range(10))) for i in range(1000_000)])
 binary: bytes = encoder.to_row(foo).to_bytes()
 print(f"start: {datetime.datetime.now()}")
-foo_row = pyfury.RowData(encoder.schema, binary)
+foo_row = pyfory.RowData(encoder.schema, binary)
 print(foo_row.f2[100000], foo_row.f4[100000].f1, foo_row.f4[200000].f2[5])
 print(f"end: {datetime.datetime.now()}")
 
@@ -101,7 +99,7 @@ print(f"pickle end: {datetime.datetime.now()}")
 
 ### Apache Arrow Support
 
-Fury Format also supports automatic conversion from/to Arrow Table/RecordBatch.
+Fory Format also supports automatic conversion from/to Arrow Table/RecordBatch.
 
 Java:
 
@@ -116,11 +114,64 @@ for (int i = 0; i < 10; i++) {
 return arrowWriter.finishAsRecordBatch();
 ```
 
+## Support for Interface and Extension Types
+
+Fury now supports row format mapping for Java `interface` types and subclassed (`extends`) types, enabling more dynamic and flexible data schemas.
+
+These enhancements were introduced in [#2243](https://github.com/apache/fury/pull/2243), [#2250](https://github.com/apache/fury/pull/2250), and [#2256](https://github.com/apache/fury/pull/2256).
+
+### Example: Interface Mapping with RowEncoder
+
+```java
+public interface Animal {
+  String speak();
+}
+
+public class Dog implements Animal {
+  public String name;
+
+  @Override
+  public String speak() {
+    return "Woof";
+  }
+}
+
+// Encode and decode using RowEncoder with interface type
+RowEncoder<Animal> encoder = Encoders.bean(Animal.class);
+Dog dog = new Dog();
+dog.name = "Bingo";
+BinaryRow row = encoder.toRow(dog);
+Animal decoded = encoder.fromRow(row);
+System.out.println(decoded.speak()); // Woof
+
+```
+
+### Example: Extension Type with RowEncoder
+
+```java
+public class Parent {
+    public String parentField;
+}
+
+public class Child extends Parent {
+    public String childField;
+}
+
+// Encode and decode using RowEncoder with parent class type
+RowEncoder<Parent> encoder = Encoders.bean(Parent.class);
+Child child = new Child();
+child.parentField = "Hello";
+child.childField = "World";
+BinaryRow row = encoder.toRow(child);
+Parent decoded = encoder.fromRow(row);
+
+```
+
 Python:
 
 ```python
-import pyfury
-encoder = pyfury.encoder(Foo)
+import pyfory
+encoder = pyfory.encoder(Foo)
 encoder.to_arrow_record_batch([foo] * 10000)
 encoder.to_arrow_table([foo] * 10000)
 ```

@@ -1,0 +1,99 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+[build-system]
+requires = [
+    "setuptools>=45",
+    "wheel",
+    "Cython>=0.29",
+    "numpy",
+    "pyarrow==15.0.0; python_version<'3.13'",
+    "pyarrow==18.0.0; python_version>='3.13'",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyfory"
+dynamic = ["version"]
+description = "Apache Fory™(incubating) is a blazingly fast multi-language serialization framework powered by jit and zero-copy"
+authors = [
+    {name = "chaokunyang", email = "shawn.ck.yang@gmail.com"},
+]
+maintainers = [
+    {name = "https://github.com/chaokunyang", email = "shawn.ck.yang@gmail.com"},
+]
+readme = "README.md"
+license = {file = "LICENSE"}
+classifiers = [
+    "License :: OSI Approved :: Apache Software License",
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: Implementation :: CPython",
+]
+keywords = ["fory", "serialization", "multi-language", "fast", "row-format", "jit", "codegen", "polymorphic", "zero-copy"]
+dependencies = [
+    "cloudpickle",
+]
+
+[project.optional-dependencies]
+format = ["pyarrow"]
+all = ["pyarrow"]
+dev = ["ruff"]
+
+[tool.setuptools]
+packages = ["pyfory", "pyfory.format", "pyfory.lib", "pyfory.meta"]
+include-package-data = true
+zip-safe = false
+
+[tool.setuptools.package-data]
+"pyfory" = ["**/*.pxd", "**/*.pyx", "**/*.pxd", "*.so", "*.dylib", "*.dll", "*.pyd"]
+"pyfory.format" = ["**/*.pxd", "**/*.pyx", "**/*.pxd", "*.so", "*.dylib", "*.dll", "*.pyd"]
+"pyfory.lib.mmh3" = ["**/*.pxd", "**/*.pyx", "**/*.pxd", "*.so", "*.dylib", "*.dll", "*.pyd"]
+
+[tool.setuptools.dynamic]
+version = {attr = "pyfory.__version__"}
+
+[tool.ruff]
+# Replaces settings from .flake8 and format.sh
+line-length = 150
+exclude = [
+    "python/build/",
+    "python/.eggs/",
+    "examples/*",
+]
+
+[tool.ruff.lint]
+# Replicates the `ignore` list from the .flake8 file.
+ignore = [
+    "C408", "E203", "E225", "E226", "E227", "E402", "E24",
+    "W605", "I", "N", "B002", "B003", "B004", "B005",
+    "B007", "B008", "B009", "B010", "B011", "B012", "B013", "B014", "B015", "B016", "B017",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Replicates the FLAKE8_PYX_IGNORES for Cython files from format.sh.
+"*.pyx" = ["C408", "E211", "E225", "E226", "E227", "E24", "E402", "W605"]
+"*.pxd" = ["C408", "E211", "E225", "E226", "E227", "E24", "E402", "W605"]
+"*.pxi" = ["C408", "E211", "E225", "E226", "E227", "E24", "E402", "W605"]
+
+[tool.ruff.format]
+# Replicates the `inline-quotes` setting from .flake8
+quote-style = "double"

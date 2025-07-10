@@ -15,7 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-name: Fury CI
+name: Fory CI
 
 on:
   push:
@@ -46,7 +46,7 @@ jobs:
       MY_VAR: "PATH"
     strategy:
       matrix:
-        java-version: ["8", "11", "17", "21"]
+        java-version: ["8", "11", "17", "21", "24"]
     steps:
       - uses: actions/checkout@v4
       - name: Set up JDK ${{ matrix.java-version }}
@@ -62,10 +62,17 @@ jobs:
         run: ./ci/run_ci.sh install_bazel
       - name: Install python
         run: ./ci/run_ci.sh install_python
-      - name: Install pyfury
-        run: ./ci/run_ci.sh install_pyfury
+      - name: Install pyfory
+        run: ./ci/run_ci.sh install_pyfory
       - name: Run CI with Maven
         run: ./ci/run_ci.sh java${{ matrix.java-version }}
+      - name: Upload Test Report
+        uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: surefire-reports-${{ matrix.java-version }}
+          path: "**/target/surefire-reports/**"
+
   openj9:
     name: Openj9 Java CI
     runs-on: ubuntu-latest
@@ -73,7 +80,7 @@ jobs:
       MY_VAR: "PATH"
     strategy:
       matrix:
-        # String in openj9 1.8 share byte array by offset, fury doesn't allow it.
+        # String in openj9 1.8 share byte array by offset, fory doesn't allow it.
         java-version: ["21"]
     steps:
       - uses: actions/checkout@v4
@@ -90,8 +97,8 @@ jobs:
         run: ./ci/run_ci.sh install_bazel
       - name: Install python
         run: ./ci/run_ci.sh install_python
-      - name: Install pyfury
-        run: ./ci/run_ci.sh install_pyfury
+      - name: Install pyfory
+        run: ./ci/run_ci.sh install_pyfory
       - name: Run CI with Maven
         run: ./ci/run_ci.sh java${{ matrix.java-version }}
 
@@ -151,7 +158,7 @@ jobs:
         with:
           java-version: ${{ matrix.java-version }}
           distribution: "temurin"
-      - name: Install fury java
+      - name: Install fory java
         run: cd java && mvn -T10 --no-transfer-progress clean install -DskipTests && cd -
       - name: Run Kotlin CI
         run: ./ci/run_ci.sh kotlin
@@ -166,20 +173,12 @@ jobs:
         with:
           java-version: 11
           distribution: "temurin"
-      - name: Install fury java
+          cache: sbt
+      - uses: sbt/setup-sbt@v1
+      - name: Install fory java
         run: cd java && mvn -T10 --no-transfer-progress clean install -DskipTests && cd -
       - name: Test
         run: |
-          sudo apt-get update
-          sudo apt-get install apt-transport-https curl gnupg -yqq
-          echo "deb https://repo.scala-sbt.org/scalasbt/debian all main" | sudo tee /etc/apt/sources.list.d/sbt.list
-          echo "deb https://repo.scala-sbt.org/scalasbt/debian /" | sudo tee /etc/apt/sources.list.d/sbt_old.list
-          curl -sL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x2EE0EA64E40A89B84B2DF73499E82A75642AC823" | sudo -H gpg --no-default-keyring --keyring gnupg-ring:/etc/apt/trusted.gpg.d/scalasbt-release.gpg --import
-          sudo chmod 644 /etc/apt/trusted.gpg.d/scalasbt-release.gpg
-          sudo apt-get update
-          sudo apt-get install sbt
-          # Avoid sbt download jackson-databind error
-          rm -rf /home/runner/.m2/repository/com/fasterxml/jackson/
           cd scala && sbt +test && cd -
 
   integration_tests:
@@ -199,7 +198,7 @@ jobs:
     name: JavaScript CI
     strategy:
       matrix:
-        node-version: [14.x, 16.x, 18.x, 20.x]
+        node-version: [16.x, 18.x, 20.x]
         os: [ubuntu-latest, macos-13, windows-2022]
     runs-on: ${{ matrix.os }}
     steps:
@@ -226,7 +225,7 @@ jobs:
     name: Rust CI
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-13, macos-14] # macos-13: x86, macos-14: arm64
+        os: [ubuntu-latest, macos-13, macos-14]  # macos-13: x86, macos-14: arm64
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     steps:
@@ -242,7 +241,7 @@ jobs:
     name: C++ CI
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-13, macos-14, windows-2022] # macos-13: x86, macos-14: arm64
+        os: [ubuntu-latest, macos-13, macos-14, windows-2022]  # macos-13: x86, macos-14: arm64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -254,13 +253,11 @@ jobs:
         run: python ./ci/run_ci.py cpp
   python:
     name: Python CI
-    # Fix python 3.6 install issue, see
-    # https://github.com/rwth-i6/returnn/commit/38ecab17d781c4b74db6a174c8097187380b4ddc
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        python-version: [3.8, 3.12, 3.13]
-        os: [ubuntu-latest, macos-13, macos-14, windows-2022]
+        python-version: [3.8, 3.12, 3.13.3]
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-13, macos-14, windows-2022]
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python ${{ matrix.python-version }}
@@ -301,8 +298,8 @@ jobs:
         run: ./ci/run_ci.sh install_bazel
       - name: Install python
         run: ./ci/run_ci.sh install_python
-      - name: Install pyfury
-        run: ./ci/run_ci.sh install_pyfury
+      - name: Install pyfory
+        run: ./ci/run_ci.sh install_pyfory
       - name: Run Golang CI
         run: ./ci/run_ci.sh go
 
@@ -322,5 +319,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: 3.8
+      - name: Use Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
       - name: Check code style
         run: ./ci/run_ci.sh format

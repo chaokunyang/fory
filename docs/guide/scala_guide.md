@@ -201,14 +201,6 @@ This feature is automatically enabled when:
 
 No additional configuration is required.
 
-### Limitations
-
-- **Parameter Name Matching**: The field-to-parameter mapping relies on parameter names being preserved during compilation. This requires the `-parameters` compiler flag to be enabled for optimal results.
-
-- **Companion Object Access**: The feature requires access to the companion object class. If the companion object is not accessible due to visibility modifiers, default values cannot be retrieved.
-
-- **Method Handle Creation**: The feature uses Java method handles to invoke default value methods. This requires appropriate access permissions.
-
 ### Example Test
 
 ```scala
@@ -228,17 +220,3 @@ val deserialized = fory.deserialize(serialized)
 // deserialized.x will be 1 (default)
 // deserialized.y will be 2.0 (default)
 ```
-
-### Implementation Details
-
-The implementation consists of:
-
-1. **`ScalaCaseClassUtils`**: Utility class for detecting Scala case classes and retrieving default values from companion object methods.
-
-2. **`MetaSharedSerializer`**: Modified to cache default value field information and apply default values to missing fields just before returning the deserialized object.
-
-3. **`ScalaDefaultValueField`**: Internal field info class that caches field accessors and default values for efficient application during deserialization.
-
-4. **Cached Processing**: During serializer initialization, default values are discovered and cached. During deserialization, cached default values are applied to any null fields that have corresponding default parameters.
-
-This feature enhances Fury's compatibility with Scala case classes and provides better support for evolving schemas with default parameters.

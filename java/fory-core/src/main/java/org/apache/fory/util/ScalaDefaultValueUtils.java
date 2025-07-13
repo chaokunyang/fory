@@ -38,8 +38,8 @@ import org.apache.fory.util.unsafe._JDKAccess;
 /**
  * Utility class for detecting Scala classes with default values and their default value methods.
  *
- * <p>Scala classes (including case classes) with default parameters generate companion objects with methods like
- * `apply$default$1`, `apply$default$2`, etc. that return the default values.
+ * <p>Scala classes (including case classes) with default parameters generate companion objects with
+ * methods like `apply$default$1`, `apply$default$2`, etc. that return the default values.
  */
 @Internal
 public class ScalaDefaultValueUtils {
@@ -227,7 +227,8 @@ public class ScalaDefaultValueUtils {
   public static MethodHandle getDefaultValueMethod(Class<?> cls, int paramIndex) {
     Preconditions.checkNotNull(cls, "Class must not be null");
     Preconditions.checkArgument(
-        isScalaClassWithDefaults(cls), "Class is not a Scala class with defaults: " + cls.getName());
+        isScalaClassWithDefaults(cls),
+        "Class is not a Scala class with defaults: " + cls.getName());
 
     Map<Integer, MethodHandle> methods = defaultValueMethodCache.getIfPresent(cls);
     if (methods == null) {
@@ -245,22 +246,22 @@ public class ScalaDefaultValueUtils {
    * @param paramIndex the parameter index (1-based)
    * @return the default value, or null if not found
    */
-    public static Object getDefaultValue(Class<?> cls, int paramIndex) {
+  public static Object getDefaultValue(Class<?> cls, int paramIndex) {
     Preconditions.checkNotNull(cls, "Class must not be null");
-    
+
     // Only proceed if it's a Scala class with defaults
     if (!isScalaClassWithDefaults(cls)) {
       return null;
     }
-    
+
     // Get or create all default values for this class
     Map<Integer, Object> allDefaults = getAllDefaultValues(cls);
     return allDefaults.get(paramIndex);
   }
 
   /**
-   * Gets all default values for a Scala class. This method caches all default values at the
-   * class level for better performance.
+   * Gets all default values for a Scala class. This method caches all default values at the class
+   * level for better performance.
    *
    * @param cls the Scala class
    * @return a map from parameter index to default value (null if no default)
@@ -280,14 +281,14 @@ public class ScalaDefaultValueUtils {
     // Find all default value methods for this class
     Map<Integer, MethodHandle> methods = findDefaultValueMethods(cls);
 
-        // Get the companion object instance
+    // Get the companion object instance
     Object companionInstance = getCompanionObject(cls);
-    
+
     // Invoke each method and cache the result
     for (Map.Entry<Integer, MethodHandle> entry : methods.entrySet()) {
       int paramIndex = entry.getKey();
       MethodHandle methodHandle = entry.getValue();
-      
+
       try {
         Object result = methodHandle.invokeWithArguments(companionInstance);
         allDefaults.put(paramIndex, result);
@@ -304,8 +305,8 @@ public class ScalaDefaultValueUtils {
   }
 
   /**
-   * Gets the default value for a specific field name in a Scala class. This method attempts to
-   * map field names to parameter indices.
+   * Gets the default value for a specific field name in a Scala class. This method attempts to map
+   * field names to parameter indices.
    *
    * @param cls the Scala class
    * @param fieldName the field name
@@ -315,7 +316,8 @@ public class ScalaDefaultValueUtils {
     Preconditions.checkNotNull(cls, "Class must not be null");
     Preconditions.checkNotNull(fieldName, "Field name must not be null");
     Preconditions.checkArgument(
-        isScalaClassWithDefaults(cls), "Class is not a Scala class with defaults: " + cls.getName());
+        isScalaClassWithDefaults(cls),
+        "Class is not a Scala class with defaults: " + cls.getName());
 
     try {
       String companionClassName = cls.getName() + "$";
@@ -386,8 +388,8 @@ public class ScalaDefaultValueUtils {
   }
 
   /**
-   * Checks if a class is a Scala class with default values by looking for the companion object and checking for
-   * the presence of `apply` method and default value methods.
+   * Checks if a class is a Scala class with default values by looking for the companion object and
+   * checking for the presence of `apply` method and default value methods.
    */
   private static boolean checkIsScalaClassWithDefaults(Class<?> cls) {
     try {
@@ -399,7 +401,7 @@ public class ScalaDefaultValueUtils {
       Method[] methods = companionClass.getDeclaredMethods();
       boolean hasApplyMethod = false;
       boolean hasDefaultMethods = false;
-      
+
       for (Method method : methods) {
         if ("apply".equals(method.getName())) {
           hasApplyMethod = true;
@@ -408,7 +410,7 @@ public class ScalaDefaultValueUtils {
           hasDefaultMethods = true;
         }
       }
-      
+
       // A Scala class with defaults should have both apply method and default value methods
       return hasApplyMethod && hasDefaultMethods;
     } catch (ClassNotFoundException | NoClassDefFoundError e) {
@@ -419,7 +421,8 @@ public class ScalaDefaultValueUtils {
   }
 
   /**
-   * Gets the companion object instance for a Scala class, supporting both top-level and nested classes.
+   * Gets the companion object instance for a Scala class, supporting both top-level and nested
+   * classes.
    *
    * @param cls the Scala class
    * @return the companion object instance
@@ -446,16 +449,17 @@ public class ScalaDefaultValueUtils {
                 return field.get(null);
               }
             }
-            
+
             // If no field found, try to create an instance of the companion class
             // This works for some nested case classes where the companion is accessible
             try {
               return companionClass.newInstance();
             } catch (Exception ex) {
               // Try to find a constructor that takes the enclosing instance
-              for (java.lang.reflect.Constructor<?> constructor : companionClass.getDeclaredConstructors()) {
-                if (constructor.getParameterCount() == 1 && 
-                    constructor.getParameterTypes()[0].equals(enclosingClass)) {
+              for (java.lang.reflect.Constructor<?> constructor :
+                  companionClass.getDeclaredConstructors()) {
+                if (constructor.getParameterCount() == 1
+                    && constructor.getParameterTypes()[0].equals(enclosingClass)) {
                   constructor.setAccessible(true);
                   // Try to get an instance of the enclosing class
                   Object enclosingInstance = getEnclosingInstance(enclosingClass);
@@ -469,12 +473,13 @@ public class ScalaDefaultValueUtils {
             // Continue to next approach
           }
         }
-        
-        // For some nested case classes, the companion object might be accessible via a different pattern
+
+        // For some nested case classes, the companion object might be accessible via a different
+        // pattern
         // Try to find any static field that returns the companion class
         for (java.lang.reflect.Field field : companionClass.getDeclaredFields()) {
-          if (field.getType().equals(companionClass) && 
-              java.lang.reflect.Modifier.isStatic(field.getModifiers())) {
+          if (field.getType().equals(companionClass)
+              && java.lang.reflect.Modifier.isStatic(field.getModifiers())) {
             field.setAccessible(true);
             try {
               return field.get(null);
@@ -483,13 +488,16 @@ public class ScalaDefaultValueUtils {
             }
           }
         }
-        
+
         // Last resort: try to create an instance without parameters
         try {
           return companionClass.newInstance();
         } catch (Exception ex) {
-          throw new RuntimeException("Cannot access companion object for " + cls.getName() + 
-              " (nested case class not supported)", ex);
+          throw new RuntimeException(
+              "Cannot access companion object for "
+                  + cls.getName()
+                  + " (nested case class not supported)",
+              ex);
         }
       }
     } catch (ClassNotFoundException e) {
@@ -500,20 +508,20 @@ public class ScalaDefaultValueUtils {
   }
 
   /**
-   * Attempts to get an instance of the enclosing class for a nested class.
-   * This is a best-effort approach and may not work in all cases.
+   * Attempts to get an instance of the enclosing class for a nested class. This is a best-effort
+   * approach and may not work in all cases.
    */
   private static Object getEnclosingInstance(Class<?> enclosingClass) {
     try {
       // Try to get a static instance if available
       for (java.lang.reflect.Field field : enclosingClass.getDeclaredFields()) {
-        if (field.getType().equals(enclosingClass) && 
-            java.lang.reflect.Modifier.isStatic(field.getModifiers())) {
+        if (field.getType().equals(enclosingClass)
+            && java.lang.reflect.Modifier.isStatic(field.getModifiers())) {
           field.setAccessible(true);
           return field.get(null);
         }
       }
-      
+
       // Try to create a new instance if there's a no-arg constructor
       try {
         return enclosingClass.newInstance();

@@ -91,10 +91,11 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
     DescriptorGrouper grouper = fory.getClassResolver().createDescriptorGrouper(descriptors, false);
     objectCodecOptimizer =
         new ObjectCodecOptimizer(beanClass, grouper, !fory.isBasicTypesRefIgnored(), ctx);
-    
+
     // Check if this is a Scala case class and build default value fields
     this.isScalaCaseClass =
-        fory.getConfig().isScalaOptimizationEnabled() && ScalaDefaultValueUtils.isScalaCaseClass(beanClass);
+        fory.getConfig().isScalaOptimizationEnabled()
+            && ScalaDefaultValueUtils.isScalaCaseClass(beanClass);
     this.scalaDefaultValueFields =
         ScalaDefaultValueUtils.buildScalaDefaultValueFields(
             fory, beanClass, grouper.getSortedDescriptors());
@@ -218,18 +219,18 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
     if (scalaDefaultValueFields.length == 0) {
       return bean;
     }
-  
+
     Expression.ListExpression setDefaultsExpr = new Expression.ListExpression();
     setDefaultsExpr.add(bean);
     for (ScalaDefaultValueUtils.ScalaDefaultValueField defaultField : scalaDefaultValueFields) {
       Object defaultValue = defaultField.getDefaultValue();
       short classId = defaultField.getClassId();
-      
-      Expression setDefaultExpr = createSetDefaultValueExpression(
-          bean, defaultField.getFieldName(), defaultValue, classId);
+
+      Expression setDefaultExpr =
+          createSetDefaultValueExpression(bean, defaultField.getFieldName(), defaultValue, classId);
       setDefaultsExpr.add(setDefaultExpr);
     }
-      
+
     return setDefaultsExpr;
   }
 
@@ -241,14 +242,14 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
         methodInfo.methodName,
         PRIMITIVE_VOID_TYPE,
         bean,
-        Literal.ofLong(getFieldOffset(fieldName)),  
+        Literal.ofLong(getFieldOffset(fieldName)),
         new Literal(defaultValue, methodInfo.type));
   }
 
   private static class PlatformMethodInfo {
     final String methodName;
     final TypeRef<?> type;
-    
+
     PlatformMethodInfo(String methodName, TypeRef<?> type) {
       this.methodName = methodName;
       this.type = type;

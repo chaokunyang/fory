@@ -29,70 +29,92 @@ object NestedCases {
 }
 
 class ScalaDefaultValueTest extends AnyWordSpec with Matchers {
-  def fory: Fory = Fory.builder()
+  
+  // Test both runtime mode (MetaSharedSerializer) and codegen mode (MetaSharedCodecBuilder)
+  val testModes = Seq(
+    ("Runtime Mode", false),
+    ("Codegen Mode", true)
+  )
+
+  def createFory(codegen: Boolean): Fory = Fory.builder()
     .withLanguage(Language.JAVA)
     .withRefTracking(true)
     .withScalaOptimizationEnabled(true)
     .requireClassRegistration(false)
     .suppressClassRegistrationWarnings(false)
-    .withCodegen(false)
+    .withCodegen(codegen)
     .build()
 
   "Fury Scala default value support" should {
-    "serialize/deserialize case class with default values" in {
-      val original = CaseClassWithDefaults("test", 42)
-      val serialized = fory.serialize(original)
-      val deserialized = fory.deserialize(serialized).asInstanceOf[CaseClassWithDefaults]
-      deserialized shouldEqual original
-      deserialized.x shouldEqual 42
-    }
-    "handle missing fields with default values during deserialization" in {
-      val original = CaseClassWithDefaults("test")
-      val serialized = fory.serialize(original)
-      val deserialized = fory.deserialize(serialized).asInstanceOf[CaseClassWithDefaults]
-      deserialized shouldEqual original
-      deserialized.x shouldEqual 1
-    }
-    "handle multiple default values" in {
-      val original = CaseClassMultipleDefaults("test")
-      val serialized = fory.serialize(original)
-      val deserialized = fory.deserialize(serialized).asInstanceOf[CaseClassMultipleDefaults]
-      deserialized shouldEqual original
-      deserialized.x shouldEqual 1
-      deserialized.y shouldEqual 2.0
-    }
-    "work with complex default values" in {
-      val original = CaseClassComplexDefaults("test")
-      val serialized = fory.serialize(original)
-      val deserialized = fory.deserialize(serialized).asInstanceOf[CaseClassComplexDefaults]
-      deserialized shouldEqual original
-      deserialized.list shouldEqual List(1, 2, 3)
-    }
-    "handle schema evolution with default values" in {
-      val original = CaseClassMultipleDefaults("test", 42, 3.14)
-      val serialized = fory.serialize(original)
-      val deserialized = fory.deserialize(serialized).asInstanceOf[CaseClassMultipleDefaults]
-      deserialized.v shouldEqual "test"
-      deserialized.x shouldEqual 42
-      deserialized.y shouldEqual 3.14
-    }
-    "serialize/deserialize nested case class with default values" in {
-      import NestedCases._
-      val original = NestedCaseClass("nestedTest", 123)
-      val serialized = fory.serialize(original)
-      val deserialized = fory.deserialize(serialized).asInstanceOf[NestedCaseClass]
-      deserialized shouldEqual original
-      deserialized.b shouldEqual 123
-      deserialized.c shouldEqual Some("nested")
-    }
-    "handle missing fields with default values in nested case class" in {
-      import NestedCases._
-      val original = NestedCaseClass("nestedTest") // b=99, c=Some("nested")
-      val serialized = fory.serialize(original)
-      val deserialized = fory.deserialize(serialized).asInstanceOf[NestedCaseClass]
-      deserialized shouldEqual original
-      deserialized.b shouldEqual 99
-      deserialized.c shouldEqual Some("nested")
+    testModes.foreach { case (modeName, codegen) =>
+      s"serialize/deserialize case class with default values in $modeName" in {
+        val fory = createFory(codegen)
+        val original = CaseClassWithDefaults("test", 42)
+        val serialized = fory.serialize(original)
+        val deserialized = fory.deserialize(serialized).asInstanceOf[CaseClassWithDefaults]
+        deserialized shouldEqual original
+        deserialized.x shouldEqual 42
+      }
+
+      s"handle missing fields with default values during deserialization in $modeName" in {
+        val fory = createFory(codegen)
+        val original = CaseClassWithDefaults("test")
+        val serialized = fory.serialize(original)
+        val deserialized = fory.deserialize(serialized).asInstanceOf[CaseClassWithDefaults]
+        deserialized shouldEqual original
+        deserialized.x shouldEqual 1
+      }
+
+      s"handle multiple default values in $modeName" in {
+        val fory = createFory(codegen)
+        val original = CaseClassMultipleDefaults("test")
+        val serialized = fory.serialize(original)
+        val deserialized = fory.deserialize(serialized).asInstanceOf[CaseClassMultipleDefaults]
+        deserialized shouldEqual original
+        deserialized.x shouldEqual 1
+        deserialized.y shouldEqual 2.0
+      }
+
+      s"work with complex default values in $modeName" in {
+        val fory = createFory(codegen)
+        val original = CaseClassComplexDefaults("test")
+        val serialized = fory.serialize(original)
+        val deserialized = fory.deserialize(serialized).asInstanceOf[CaseClassComplexDefaults]
+        deserialized shouldEqual original
+        deserialized.list shouldEqual List(1, 2, 3)
+      }
+
+      s"handle schema evolution with default values in $modeName" in {
+        val fory = createFory(codegen)
+        val original = CaseClassMultipleDefaults("test", 42, 3.14)
+        val serialized = fory.serialize(original)
+        val deserialized = fory.deserialize(serialized).asInstanceOf[CaseClassMultipleDefaults]
+        deserialized.v shouldEqual "test"
+        deserialized.x shouldEqual 42
+        deserialized.y shouldEqual 3.14
+      }
+
+      s"serialize/deserialize nested case class with default values in $modeName" in {
+        val fory = createFory(codegen)
+        import NestedCases._
+        val original = NestedCaseClass("nestedTest", 123)
+        val serialized = fory.serialize(original)
+        val deserialized = fory.deserialize(serialized).asInstanceOf[NestedCaseClass]
+        deserialized shouldEqual original
+        deserialized.b shouldEqual 123
+        deserialized.c shouldEqual Some("nested")
+      }
+
+      s"handle missing fields with default values in nested case class in $modeName" in {
+        val fory = createFory(codegen)
+        import NestedCases._
+        val original = NestedCaseClass("nestedTest") // b=99, c=Some("nested")
+        val serialized = fory.serialize(original)
+        val deserialized = fory.deserialize(serialized).asInstanceOf[NestedCaseClass]
+        deserialized shouldEqual original
+        deserialized.b shouldEqual 99
+        deserialized.c shouldEqual Some("nested")
+      }
     }
   }
 }

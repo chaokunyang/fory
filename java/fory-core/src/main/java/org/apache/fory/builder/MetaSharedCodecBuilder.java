@@ -20,6 +20,7 @@
 package org.apache.fory.builder;
 
 import static org.apache.fory.builder.Generated.GeneratedMetaSharedSerializer.SERIALIZER_FIELD_NAME;
+import static org.apache.fory.type.TypeUtils.PRIMITIVE_VOID_TYPE;
 
 import java.util.Collection;
 import java.util.Map;
@@ -30,11 +31,14 @@ import org.apache.fory.builder.Generated.GeneratedMetaSharedSerializer;
 import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.codegen.Expression;
 import org.apache.fory.codegen.Expression.Literal;
+import org.apache.fory.codegen.Expression.StaticInvoke;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.memory.Platform;
 import org.apache.fory.meta.ClassDef;
 import org.apache.fory.reflect.TypeRef;
+import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.serializer.CodegenSerializer;
 import org.apache.fory.serializer.MetaSharedSerializer;
 import org.apache.fory.serializer.ObjectSerializer;
@@ -45,6 +49,7 @@ import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.util.ExceptionUtils;
 import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.Preconditions;
+import org.apache.fory.util.ScalaCaseClassUtils;
 import org.apache.fory.util.StringUtils;
 import org.apache.fory.util.record.RecordComponent;
 import org.apache.fory.util.record.RecordUtils;
@@ -67,6 +72,8 @@ import org.apache.fory.util.record.RecordUtils;
  */
 public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
   private final ClassDef classDef;
+  private final boolean isScalaCaseClass;
+  private final ScalaCaseClassUtils.ScalaDefaultValueField[] scalaDefaultValueFields;
 
   public MetaSharedCodecBuilder(TypeRef<?> beanType, Fory fory, ClassDef classDef) {
     super(beanType, fory, GeneratedMetaSharedSerializer.class);
@@ -84,6 +91,13 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
     DescriptorGrouper grouper = fory.getClassResolver().createDescriptorGrouper(descriptors, false);
     objectCodecOptimizer =
         new ObjectCodecOptimizer(beanClass, grouper, !fory.isBasicTypesRefIgnored(), ctx);
+    
+    // Check if this is a Scala case class and build default value fields
+    this.isScalaCaseClass =
+        fory.getConfig().isScalaOptimizationEnabled() && ScalaCaseClassUtils.isScalaCaseClass(beanClass);
+    this.scalaDefaultValueFields =
+        ScalaCaseClassUtils.buildScalaDefaultValueFields(
+            fory, beanClass, grouper.getSortedDescriptors());
   }
 
   // Must be static to be shared across the whole process life.
@@ -140,6 +154,7 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
   protected void addCommonImports() {
     super.addCommonImports();
     ctx.addImport(GeneratedMetaSharedSerializer.class);
+    ctx.addImport(ScalaCaseClassUtils.class);
   }
 
   // Invoked by JIT.
@@ -195,5 +210,89 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
       return new Expression.StaticInvoke(ExceptionUtils.class, "ignore", value);
     }
     return super.setFieldValue(bean, descriptor, value);
+  }
+
+  @Override
+  protected Expression newBean() {
+    Expression bean = super.newBean();
+    if (scalaDefaultValueFields.length == 0) {
+      return bean;
+    }
+  
+    Expression.ListExpression setDefaultsExpr = new Expression.ListExpression();
+    setDefaultsExpr.add(bean);
+    for (ScalaCaseClassUtils.ScalaDefaultValueField defaultField : scalaDefaultValueFields) {
+      Object defaultValue = defaultField.getDefaultValue();
+      short classId = defaultField.getClassId();
+      
+      Expression setDefaultExpr = createSetDefaultValueExpression(
+          bean, defaultField.getFieldName(), defaultValue, classId);
+      setDefaultsExpr.add(setDefaultExpr);
+    }
+      
+    return setDefaultsExpr;
+  }
+
+  private Expression createSetDefaultValueExpression(
+      Expression bean, String fieldName, Object defaultValue, short classId) {
+    PlatformMethodInfo methodInfo = getPlatformMethodInfo(classId);
+    return new StaticInvoke(
+        Platform.class,
+        methodInfo.methodName,
+        PRIMITIVE_VOID_TYPE,
+        bean,
+        Literal.ofLong(getFieldOffset(fieldName)),  
+        new Literal(defaultValue, methodInfo.type));
+  }
+
+  private static class PlatformMethodInfo {
+    final String methodName;
+    final TypeRef<?> type;
+    
+    PlatformMethodInfo(String methodName, TypeRef<?> type) {
+      this.methodName = methodName;
+      this.type = type;
+    }
+  }
+
+  private PlatformMethodInfo getPlatformMethodInfo(short classId) {
+    switch (classId) {
+      case ClassResolver.PRIMITIVE_BOOLEAN_CLASS_ID:
+      case ClassResolver.BOOLEAN_CLASS_ID:
+        return new PlatformMethodInfo("putBoolean", TypeRef.of(boolean.class));
+      case ClassResolver.PRIMITIVE_BYTE_CLASS_ID:
+      case ClassResolver.BYTE_CLASS_ID:
+        return new PlatformMethodInfo("putByte", TypeRef.of(byte.class));
+      case ClassResolver.PRIMITIVE_CHAR_CLASS_ID:
+      case ClassResolver.CHAR_CLASS_ID:
+        return new PlatformMethodInfo("putChar", TypeRef.of(char.class));
+      case ClassResolver.PRIMITIVE_SHORT_CLASS_ID:
+      case ClassResolver.SHORT_CLASS_ID:
+        return new PlatformMethodInfo("putShort", TypeRef.of(short.class));
+      case ClassResolver.PRIMITIVE_INT_CLASS_ID:
+      case ClassResolver.INTEGER_CLASS_ID:
+        return new PlatformMethodInfo("putInt", TypeRef.of(int.class));
+      case ClassResolver.PRIMITIVE_LONG_CLASS_ID:
+      case ClassResolver.LONG_CLASS_ID:
+        return new PlatformMethodInfo("putLong", TypeRef.of(long.class));
+      case ClassResolver.PRIMITIVE_FLOAT_CLASS_ID:
+      case ClassResolver.FLOAT_CLASS_ID:
+        return new PlatformMethodInfo("putFloat", TypeRef.of(float.class));
+      case ClassResolver.PRIMITIVE_DOUBLE_CLASS_ID:
+      case ClassResolver.DOUBLE_CLASS_ID:
+        return new PlatformMethodInfo("putDouble", TypeRef.of(double.class));
+      default:
+        return new PlatformMethodInfo("putObject", TypeRef.of(Object.class));
+    }
+  }
+
+  private long getFieldOffset(String fieldName) {
+    try {
+      java.lang.reflect.Field field = beanClass.getDeclaredField(fieldName);
+      return Platform.objectFieldOffset(field);
+    } catch (NoSuchFieldException e) {
+      // Field not found, return 0 (this should not happen in practice)
+      return 0;
+    }
   }
 }

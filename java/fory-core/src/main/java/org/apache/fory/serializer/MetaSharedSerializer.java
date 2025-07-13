@@ -41,7 +41,7 @@ import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.type.Generics;
 import org.apache.fory.util.Preconditions;
-import org.apache.fory.util.ScalaCaseClassUtils;
+import org.apache.fory.util.ScalaDefaultValueUtils;
 import org.apache.fory.util.record.RecordInfo;
 import org.apache.fory.util.record.RecordUtils;
 
@@ -79,7 +79,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
   private final ClassInfoHolder classInfoHolder;
   private final SerializationBinding binding;
   private final boolean isScalaCaseClass;
-  private final ScalaCaseClassUtils.ScalaDefaultValueField[] scalaDefaultValueFields;
+  private final ScalaDefaultValueUtils.ScalaDefaultValueField[] scalaDefaultValueFields;
 
   public MetaSharedSerializer(Fory fory, Class<T> type, ClassDef classDef) {
     super(fory, type);
@@ -115,9 +115,9 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
     }
     binding = SerializationBinding.createBinding(fory);
     isScalaCaseClass =
-        fory.getConfig().isScalaOptimizationEnabled() && ScalaCaseClassUtils.isScalaCaseClass(type);
+        fory.getConfig().isScalaOptimizationEnabled() && ScalaDefaultValueUtils.isScalaCaseClass(type);
     scalaDefaultValueFields =
-        ScalaCaseClassUtils.buildScalaDefaultValueFields(
+        ScalaDefaultValueUtils.buildScalaDefaultValueFields(
             fory, type, descriptorGrouper.getSortedDescriptors());
   }
 
@@ -211,7 +211,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
 
     // Set default values for missing fields in Scala case classes
     if (isScalaCaseClass) {
-      ScalaCaseClassUtils.setScalaDefaultValues(obj, scalaDefaultValueFields);
+      ScalaDefaultValueUtils.setScalaDefaultValues(obj, scalaDefaultValueFields);
     }
 
     return obj;

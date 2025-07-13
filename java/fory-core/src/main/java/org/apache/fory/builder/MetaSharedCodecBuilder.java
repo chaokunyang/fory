@@ -49,7 +49,7 @@ import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.util.ExceptionUtils;
 import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.Preconditions;
-import org.apache.fory.util.ScalaCaseClassUtils;
+import org.apache.fory.util.ScalaDefaultValueUtils;
 import org.apache.fory.util.StringUtils;
 import org.apache.fory.util.record.RecordComponent;
 import org.apache.fory.util.record.RecordUtils;
@@ -73,7 +73,7 @@ import org.apache.fory.util.record.RecordUtils;
 public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
   private final ClassDef classDef;
   private final boolean isScalaCaseClass;
-  private final ScalaCaseClassUtils.ScalaDefaultValueField[] scalaDefaultValueFields;
+  private final ScalaDefaultValueUtils.ScalaDefaultValueField[] scalaDefaultValueFields;
 
   public MetaSharedCodecBuilder(TypeRef<?> beanType, Fory fory, ClassDef classDef) {
     super(beanType, fory, GeneratedMetaSharedSerializer.class);
@@ -94,9 +94,9 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
     
     // Check if this is a Scala case class and build default value fields
     this.isScalaCaseClass =
-        fory.getConfig().isScalaOptimizationEnabled() && ScalaCaseClassUtils.isScalaCaseClass(beanClass);
+        fory.getConfig().isScalaOptimizationEnabled() && ScalaDefaultValueUtils.isScalaCaseClass(beanClass);
     this.scalaDefaultValueFields =
-        ScalaCaseClassUtils.buildScalaDefaultValueFields(
+        ScalaDefaultValueUtils.buildScalaDefaultValueFields(
             fory, beanClass, grouper.getSortedDescriptors());
   }
 
@@ -154,7 +154,7 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
   protected void addCommonImports() {
     super.addCommonImports();
     ctx.addImport(GeneratedMetaSharedSerializer.class);
-    ctx.addImport(ScalaCaseClassUtils.class);
+    ctx.addImport(ScalaDefaultValueUtils.class);
   }
 
   // Invoked by JIT.
@@ -221,7 +221,7 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
   
     Expression.ListExpression setDefaultsExpr = new Expression.ListExpression();
     setDefaultsExpr.add(bean);
-    for (ScalaCaseClassUtils.ScalaDefaultValueField defaultField : scalaDefaultValueFields) {
+    for (ScalaDefaultValueUtils.ScalaDefaultValueField defaultField : scalaDefaultValueFields) {
       Object defaultValue = defaultField.getDefaultValue();
       short classId = defaultField.getClassId();
       

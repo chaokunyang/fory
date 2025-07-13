@@ -42,7 +42,7 @@ import org.apache.fory.util.unsafe._JDKAccess;
  * `apply$default$1`, `apply$default$2`, etc. that return the default values.
  */
 @Internal
-public class ScalaCaseClassUtils {
+public class ScalaDefaultValueUtils {
 
   private static final Cache<Class<?>, Boolean> isScalaClassWithDefaultsCache =
       Collections.newClassKeySoftCache(32);

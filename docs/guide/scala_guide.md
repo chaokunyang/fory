@@ -163,13 +163,13 @@ val opt1: Option[Long] = None
 println(fory.deserialize(fory.serialize(opt1)))
 ```
 
-## Scala Case Class Default Values Support
+## Scala Class Default Values Support
 
-Fory now supports Scala case class default values during deserialization when using meta-shared serialization mode. This feature allows for forward/backward compatibility when case classes have default parameters.
+Fory now supports Scala  class default values during deserialization when using meta-shared serialization mode. This feature allows for forward/backward compatibility when case classes have default parameters.
 
 ### Overview
 
-When a Scala case class has default parameters, the Scala compiler generates companion object methods like `apply$default$1`, `apply$default$2`, etc. that return the default values. Fory can now detect these methods and use them when deserializing objects where certain fields are missing from the serialized data.
+When a Scala class has default parameters, the Scala compiler generates companion object methods like `apply$default$1`, `apply$default$2`, etc. that return the default values. Fory can now detect these methods and use them when deserializing objects where certain fields are missing from the serialized data.
 
 ### Example
 

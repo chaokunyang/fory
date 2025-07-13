@@ -28,6 +28,26 @@ object NestedCases {
   case class NestedCaseClass(a: String, b: Int = 99, c: Option[String] = Some("nested"))
 }
 
+// Regular Scala class with default values (not a case class)
+class RegularScalaClass(val name: String, val age: Int = 25, val city: String = "Unknown") {
+  override def equals(obj: Any): Boolean = obj match {
+    case that: RegularScalaClass => 
+      this.name == that.name && this.age == that.age && this.city == that.city
+    case _ => false
+  }
+  
+  override def hashCode(): Int = {
+    val prime = 31
+    var result = 1
+    result = prime * result + (if (name == null) 0 else name.hashCode)
+    result = prime * result + age
+    result = prime * result + (if (city == null) 0 else city.hashCode)
+    result
+  }
+  
+  override def toString: String = s"RegularScalaClass($name, $age, $city)"
+}
+
 class ScalaDefaultValueTest extends AnyWordSpec with Matchers {
   
   // Test both runtime mode (MetaSharedSerializer) and codegen mode (MetaSharedCodecBuilder)
@@ -114,6 +134,39 @@ class ScalaDefaultValueTest extends AnyWordSpec with Matchers {
         deserialized shouldEqual original
         deserialized.b shouldEqual 99
         deserialized.c shouldEqual Some("nested")
+      }
+
+      s"serialize/deserialize regular Scala class with default values in $modeName" in {
+        val fory = createFory(codegen)
+        val original = new RegularScalaClass("John", 30, "New York")
+        val serialized = fory.serialize(original)
+        val deserialized = fory.deserialize(serialized).asInstanceOf[RegularScalaClass]
+        deserialized shouldEqual original
+        deserialized.name shouldEqual "John"
+        deserialized.age shouldEqual 30
+        deserialized.city shouldEqual "New York"
+      }
+
+      s"handle missing fields with default values in regular Scala class in $modeName" in {
+        val fory = createFory(codegen)
+        val original = new RegularScalaClass("Jane") // age=25, city="Unknown"
+        val serialized = fory.serialize(original)
+        val deserialized = fory.deserialize(serialized).asInstanceOf[RegularScalaClass]
+        deserialized shouldEqual original
+        deserialized.name shouldEqual "Jane"
+        deserialized.age shouldEqual 25
+        deserialized.city shouldEqual "Unknown"
+      }
+
+      s"handle partial default values in regular Scala class in $modeName" in {
+        val fory = createFory(codegen)
+        val original = new RegularScalaClass("Bob", 35) // city="Unknown"
+        val serialized = fory.serialize(original)
+        val deserialized = fory.deserialize(serialized).asInstanceOf[RegularScalaClass]
+        deserialized shouldEqual original
+        deserialized.name shouldEqual "Bob"
+        deserialized.age shouldEqual 35
+        deserialized.city shouldEqual "Unknown"
       }
     }
   }

@@ -36,15 +36,15 @@ import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.util.unsafe._JDKAccess;
 
 /**
- * Utility class for detecting Scala case classes and their default value methods.
+ * Utility class for detecting Scala classes with default values and their default value methods.
  *
- * <p>Scala case classes with default parameters generate companion objects with methods like
+ * <p>Scala classes (including case classes) with default parameters generate companion objects with methods like
  * `apply$default$1`, `apply$default$2`, etc. that return the default values.
  */
 @Internal
 public class ScalaCaseClassUtils {
 
-  private static final Cache<Class<?>, Boolean> isScalaCaseClassCache =
+  private static final Cache<Class<?>, Boolean> isScalaClassWithDefaultsCache =
       Collections.newClassKeySoftCache(32);
   private static final Cache<Class<?>, Map<Integer, MethodHandle>> defaultValueMethodCache =
       Collections.newClassKeySoftCache(32);
@@ -94,7 +94,7 @@ public class ScalaCaseClassUtils {
    */
   public static ScalaDefaultValueField[] buildScalaDefaultValueFields(
       Fory fory, Class<?> type, java.util.List<org.apache.fory.type.Descriptor> descriptors) {
-    if (!isScalaCaseClass(type)) {
+    if (!isScalaClassWithDefaults(type)) {
       return new ScalaDefaultValueField[0];
     }
 
@@ -198,26 +198,36 @@ public class ScalaCaseClassUtils {
    * @return true if the class is a Scala case class, false otherwise
    */
   public static boolean isScalaCaseClass(Class<?> cls) {
-    Preconditions.checkNotNull(cls, "Class must not be null");
-    Boolean isScalaCaseClass = isScalaCaseClassCache.getIfPresent(cls);
-    if (isScalaCaseClass == null) {
-      isScalaCaseClass = checkIsScalaCaseClass(cls);
-      isScalaCaseClassCache.put(cls, isScalaCaseClass);
-    }
-    return isScalaCaseClass;
+    return isScalaClassWithDefaults(cls);
   }
 
   /**
-   * Gets the default value method handle for a specific parameter index in a Scala case class.
+   * Checks if a class is a Scala class with default values.
    *
-   * @param cls the Scala case class
+   * @param cls the class to check
+   * @return true if the class is a Scala class with default values, false otherwise
+   */
+  public static boolean isScalaClassWithDefaults(Class<?> cls) {
+    Preconditions.checkNotNull(cls, "Class must not be null");
+    Boolean isScalaClassWithDefaults = isScalaClassWithDefaultsCache.getIfPresent(cls);
+    if (isScalaClassWithDefaults == null) {
+      isScalaClassWithDefaults = checkIsScalaClassWithDefaults(cls);
+      isScalaClassWithDefaultsCache.put(cls, isScalaClassWithDefaults);
+    }
+    return isScalaClassWithDefaults;
+  }
+
+  /**
+   * Gets the default value method handle for a specific parameter index in a Scala class.
+   *
+   * @param cls the Scala class
    * @param paramIndex the parameter index (1-based, as Scala uses 1-based indexing)
    * @return the method handle for the default value method, or null if not found
    */
   public static MethodHandle getDefaultValueMethod(Class<?> cls, int paramIndex) {
     Preconditions.checkNotNull(cls, "Class must not be null");
     Preconditions.checkArgument(
-        isScalaCaseClass(cls), "Class is not a Scala case class: " + cls.getName());
+        isScalaClassWithDefaults(cls), "Class is not a Scala class with defaults: " + cls.getName());
 
     Map<Integer, MethodHandle> methods = defaultValueMethodCache.getIfPresent(cls);
     if (methods == null) {
@@ -229,17 +239,17 @@ public class ScalaCaseClassUtils {
   }
 
   /**
-   * Gets the default value for a specific parameter in a Scala case class.
+   * Gets the default value for a specific parameter in a Scala class.
    *
-   * @param cls the Scala case class
+   * @param cls the Scala class
    * @param paramIndex the parameter index (1-based)
    * @return the default value, or null if not found
    */
     public static Object getDefaultValue(Class<?> cls, int paramIndex) {
     Preconditions.checkNotNull(cls, "Class must not be null");
     
-    // Only proceed if it's a Scala case class
-    if (!isScalaCaseClass(cls)) {
+    // Only proceed if it's a Scala class with defaults
+    if (!isScalaClassWithDefaults(cls)) {
       return null;
     }
     
@@ -249,10 +259,10 @@ public class ScalaCaseClassUtils {
   }
 
   /**
-   * Gets all default values for a Scala case class. This method caches all default values at the
+   * Gets all default values for a Scala class. This method caches all default values at the
    * class level for better performance.
    *
-   * @param cls the Scala case class
+   * @param cls the Scala class
    * @return a map from parameter index to default value (null if no default)
    */
   public static Map<Integer, Object> getAllDefaultValues(Class<?> cls) {
@@ -294,10 +304,10 @@ public class ScalaCaseClassUtils {
   }
 
   /**
-   * Gets the default value for a specific field name in a Scala case class. This method attempts to
+   * Gets the default value for a specific field name in a Scala class. This method attempts to
    * map field names to parameter indices.
    *
-   * @param cls the Scala case class
+   * @param cls the Scala class
    * @param fieldName the field name
    * @return the default value, or null if not found
    */
@@ -305,7 +315,7 @@ public class ScalaCaseClassUtils {
     Preconditions.checkNotNull(cls, "Class must not be null");
     Preconditions.checkNotNull(fieldName, "Field name must not be null");
     Preconditions.checkArgument(
-        isScalaCaseClass(cls), "Class is not a Scala case class: " + cls.getName());
+        isScalaClassWithDefaults(cls), "Class is not a Scala class with defaults: " + cls.getName());
 
     try {
       String companionClassName = cls.getName() + "$";
@@ -376,33 +386,42 @@ public class ScalaCaseClassUtils {
   }
 
   /**
-   * Checks if a class is a Scala case class by looking for the companion object and checking for
-   * the presence of `apply` method.
+   * Checks if a class is a Scala class with default values by looking for the companion object and checking for
+   * the presence of `apply` method and default value methods.
    */
-  private static boolean checkIsScalaCaseClass(Class<?> cls) {
+  private static boolean checkIsScalaClassWithDefaults(Class<?> cls) {
     try {
-      // Scala case classes have a companion object with the same name + "$"
+      // Scala classes with default values have a companion object with the same name + "$"
       String companionClassName = cls.getName() + "$";
       Class<?> companionClass = Class.forName(companionClassName, false, cls.getClassLoader());
 
       // Check if the companion class has an `apply` method
       Method[] methods = companionClass.getDeclaredMethods();
+      boolean hasApplyMethod = false;
+      boolean hasDefaultMethods = false;
+      
       for (Method method : methods) {
         if ("apply".equals(method.getName())) {
-          return true;
+          hasApplyMethod = true;
+        }
+        if (method.getName().startsWith("apply$default$")) {
+          hasDefaultMethods = true;
         }
       }
+      
+      // A Scala class with defaults should have both apply method and default value methods
+      return hasApplyMethod && hasDefaultMethods;
     } catch (ClassNotFoundException | NoClassDefFoundError e) {
-      // Not a Scala case class if companion object doesn't exist
+      // Not a Scala class with defaults if companion object doesn't exist
     }
 
     return false;
   }
 
   /**
-   * Gets the companion object instance for a Scala case class, supporting both top-level and nested case classes.
+   * Gets the companion object instance for a Scala class, supporting both top-level and nested classes.
    *
-   * @param cls the Scala case class
+   * @param cls the Scala class
    * @return the companion object instance
    * @throws RuntimeException if the companion object cannot be accessed
    */
@@ -481,7 +500,7 @@ public class ScalaCaseClassUtils {
   }
 
   /**
-   * Attempts to get an instance of the enclosing class for a nested case class.
+   * Attempts to get an instance of the enclosing class for a nested class.
    * This is a best-effort approach and may not work in all cases.
    */
   private static Object getEnclosingInstance(Class<?> enclosingClass) {
@@ -508,9 +527,9 @@ public class ScalaCaseClassUtils {
   }
 
   /**
-   * Finds all default value methods for a Scala case class.
+   * Finds all default value methods for a Scala class.
    *
-   * @param cls the Scala case class
+   * @param cls the Scala class
    * @return a map from parameter index to method handle
    */
   private static Map<Integer, MethodHandle> findDefaultValueMethods(Class<?> cls) {

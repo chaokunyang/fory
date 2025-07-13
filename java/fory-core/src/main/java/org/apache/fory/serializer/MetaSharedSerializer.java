@@ -41,6 +41,7 @@ import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.type.Generics;
 import org.apache.fory.util.Preconditions;
+import org.apache.fory.util.ScalaCaseClassUtils;
 import org.apache.fory.util.record.RecordInfo;
 import org.apache.fory.util.record.RecordUtils;
 
@@ -77,6 +78,8 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
   private Serializer<T> serializer;
   private final ClassInfoHolder classInfoHolder;
   private final SerializationBinding binding;
+  private final boolean isScalaCaseClass;
+  private final ScalaCaseClassUtils.ScalaDefaultValueField[] scalaDefaultValueFields;
 
   public MetaSharedSerializer(Fory fory, Class<T> type, ClassDef classDef) {
     super(fory, type);
@@ -111,6 +114,9 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
       recordInfo = null;
     }
     binding = SerializationBinding.createBinding(fory);
+    isScalaCaseClass = fory.getConfig().isScalaOptimizationEnabled() && ScalaCaseClassUtils.isScalaCaseClass(type);
+    scalaDefaultValueFields =
+        ScalaCaseClassUtils.buildScalaDefaultValueFields(fory, type, descriptorGrouper.getSortedDescriptors());
   }
 
   @Override
@@ -134,6 +140,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
           new Object[finalFields.length + otherFields.length + containerFields.length];
       readFields(buffer, fieldValues);
       fieldValues = RecordUtils.remapping(recordInfo, fieldValues);
+
       try {
         T t = (T) constructor.invokeWithArguments(fieldValues);
         Arrays.fill(recordInfo.getRecordComponents(), null);
@@ -171,6 +178,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
           fieldAccessor.putObject(obj, fieldValue);
         }
       } else {
+        // Skip the field value from buffer since it doesn't exist in current class
         if (skipPrimitiveFieldValueFailed(fory, fieldInfo.classId, buffer)) {
           if (fieldInfo.classInfo == null) {
             // TODO(chaokunyang) support registered serializer in peer with ref tracking disabled.
@@ -198,6 +206,12 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
         fieldAccessor.putObject(obj, fieldValue);
       }
     }
+
+    // Set default values for missing fields in Scala case classes
+    if (isScalaCaseClass) {
+      ScalaCaseClassUtils.setScalaDefaultValues(obj, scalaDefaultValueFields);
+    }
+
     return obj;
   }
 
@@ -231,6 +245,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
           fields[counter++] = fieldValue;
         }
       } else {
+        // Skip the field value from buffer since it doesn't exist in current class
         if (skipPrimitiveFieldValueFailed(fory, fieldInfo.classId, buffer)) {
           if (fieldInfo.classInfo == null) {
             // TODO(chaokunyang) support registered serializer in peer with ref tracking disabled.

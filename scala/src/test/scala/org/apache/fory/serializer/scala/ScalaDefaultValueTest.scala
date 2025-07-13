@@ -37,29 +37,10 @@ object NestedCases {
 }
 
 // Regular Scala classes WITHOUT default values for serialization
-class RegularScalaClassNoDefaults(val name: String, val age: Int, val city: String) {
+class RegularScalaClassNoDefaults(val name: String) {
   override def equals(obj: Any): Boolean = obj match {
     case that: RegularScalaClassNoDefaults => 
-      this.name == that.name && this.age == that.age && this.city == that.city
-    case _ => false
-  }
-  
-  override def hashCode(): Int = {
-    val prime = 31
-    var result = 1
-    result = prime * result + (if (name == null) 0 else name.hashCode)
-    result = prime * result + age
-    result = prime * result + (if (city == null) 0 else city.hashCode)
-    result
-  }
-  
-  override def toString: String = s"RegularScalaClassNoDefaults($name, $age, $city)"
-}
-
-// Simple regular Scala class with only one field for testing missing fields
-class SimpleRegularScalaClass(val name: String) {
-  override def equals(obj: Any): Boolean = obj match {
-    case that: SimpleRegularScalaClass => this.name == that.name
+      this.name == that.name
     case _ => false
   }
   
@@ -70,7 +51,7 @@ class SimpleRegularScalaClass(val name: String) {
     result
   }
   
-  override def toString: String = s"SimpleRegularScalaClass($name)"
+  override def toString: String = s"RegularScalaClassNoDefaults($name)"
 }
 
 // Regular Scala classes WITH default values for deserialization
@@ -181,11 +162,11 @@ class ScalaDefaultValueTest extends AnyWordSpec with Matchers {
 
       s"handle missing fields with default values in regular Scala class in $modeName" in {
         val fory = createFory(codegen)
-        // Serialize a simple regular Scala class with only one field
-        val original = new SimpleRegularScalaClass("Jane")
+        // Serialize object WITHOUT default values (missing age and city fields)
+        val original = new RegularScalaClassNoDefaults("Jane")
         val serialized = fory.serializeJavaObject(original)
         
-        // Deserialize into class WITH default values for age and city
+        // Deserialize into class WITH default values
         val deserialized = fory.deserializeJavaObject(serialized, classOf[RegularScalaClassWithDefaults])
         deserialized.name shouldEqual "Jane"
         deserialized.age shouldEqual 25 // Should use default value
@@ -194,11 +175,11 @@ class ScalaDefaultValueTest extends AnyWordSpec with Matchers {
 
       s"handle partial missing fields with default values in regular Scala class in $modeName" in {
         val fory = createFory(codegen)
-        // Serialize a simple regular Scala class with only one field
-        val original = new SimpleRegularScalaClass("Bob")
+        // Serialize object with only name field, missing age and city
+        val original = new RegularScalaClassNoDefaults("Bob")
         val serialized = fory.serializeJavaObject(original)
         
-        // Deserialize into class WITH default values for age and city
+        // Deserialize into class WITH default values
         val deserialized = fory.deserializeJavaObject(serialized, classOf[RegularScalaClassWithDefaults])
         deserialized.name shouldEqual "Bob"
         deserialized.age shouldEqual 25 // Should use default value

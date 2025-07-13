@@ -116,7 +116,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
     binding = SerializationBinding.createBinding(fory);
     isScalaCaseClass =
         fory.getConfig().isScalaOptimizationEnabled()
-            && ScalaDefaultValueUtils.isScalaCaseClass(type);
+            && ScalaDefaultValueUtils.hasScalaDefaultValues(type);
     scalaDefaultValueFields =
         ScalaDefaultValueUtils.buildScalaDefaultValueFields(
             fory, type, descriptorGrouper.getSortedDescriptors());

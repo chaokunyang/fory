@@ -95,7 +95,7 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
     // Check if this is a Scala case class and build default value fields
     this.isScalaCaseClass =
         fory.getConfig().isScalaOptimizationEnabled()
-            && ScalaDefaultValueUtils.isScalaCaseClass(beanClass);
+            && ScalaDefaultValueUtils.hasScalaDefaultValues(beanClass);
     this.scalaDefaultValueFields =
         ScalaDefaultValueUtils.buildScalaDefaultValueFields(
             fory, beanClass, grouper.getSortedDescriptors());

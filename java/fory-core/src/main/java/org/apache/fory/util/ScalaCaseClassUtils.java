@@ -48,6 +48,8 @@ public class ScalaCaseClassUtils {
       Collections.newClassKeySoftCache(32);
   private static final Cache<Class<?>, Map<Integer, MethodHandle>> defaultValueMethodCache =
       Collections.newClassKeySoftCache(32);
+  private static final Cache<Class<?>, Map<Integer, Object>> allDefaultValuesCache =
+      Collections.newClassKeySoftCache(32);
 
   /** Field info for Scala case class fields with default values. */
   public static final class ScalaDefaultValueField {
@@ -196,6 +198,7 @@ public class ScalaCaseClassUtils {
    * @return true if the class is a Scala case class, false otherwise
    */
   public static boolean isScalaCaseClass(Class<?> cls) {
+    Preconditions.checkNotNull(cls, "Class must not be null");
     Boolean isScalaCaseClass = isScalaCaseClassCache.getIfPresent(cls);
     if (isScalaCaseClass == null) {
       isScalaCaseClass = checkIsScalaCaseClass(cls);
@@ -212,9 +215,9 @@ public class ScalaCaseClassUtils {
    * @return the method handle for the default value method, or null if not found
    */
   public static MethodHandle getDefaultValueMethod(Class<?> cls, int paramIndex) {
-    if (!isScalaCaseClass(cls)) {
-      return null;
-    }
+    Preconditions.checkNotNull(cls, "Class must not be null");
+    Preconditions.checkArgument(
+        isScalaCaseClass(cls), "Class is not a Scala case class: " + cls.getName());
 
     Map<Integer, MethodHandle> methods = defaultValueMethodCache.getIfPresent(cls);
     if (methods == null) {
@@ -232,18 +235,62 @@ public class ScalaCaseClassUtils {
    * @param paramIndex the parameter index (1-based)
    * @return the default value, or null if not found
    */
-  public static Object getDefaultValue(Class<?> cls, int paramIndex) {
-    MethodHandle methodHandle = getDefaultValueMethod(cls, paramIndex);
-    if (methodHandle == null) {
+    public static Object getDefaultValue(Class<?> cls, int paramIndex) {
+    Preconditions.checkNotNull(cls, "Class must not be null");
+    
+    // Only proceed if it's a Scala case class
+    if (!isScalaCaseClass(cls)) {
       return null;
+    }
+    
+    // Get or create all default values for this class
+    Map<Integer, Object> allDefaults = getAllDefaultValues(cls);
+    return allDefaults.get(paramIndex);
+  }
+
+  /**
+   * Gets all default values for a Scala case class. This method caches all default values at the
+   * class level for better performance.
+   *
+   * @param cls the Scala case class
+   * @return a map from parameter index to default value (null if no default)
+   */
+  public static Map<Integer, Object> getAllDefaultValues(Class<?> cls) {
+    Preconditions.checkNotNull(cls, "Class must not be null");
+
+    // Check cache first
+    Map<Integer, Object> cached = allDefaultValuesCache.getIfPresent(cls);
+    if (cached != null) {
+      return cached;
     }
 
-    try {
-      return methodHandle.invoke();
-    } catch (Throwable e) {
-      Platform.throwException(e);
-      return null;
+    // Load all default values for this class
+    Map<Integer, Object> allDefaults = new HashMap<>();
+
+    // Find all default value methods for this class
+    Map<Integer, MethodHandle> methods = findDefaultValueMethods(cls);
+
+        // Get the companion object instance
+    Object companionInstance = getCompanionObject(cls);
+    
+    // Invoke each method and cache the result
+    for (Map.Entry<Integer, MethodHandle> entry : methods.entrySet()) {
+      int paramIndex = entry.getKey();
+      MethodHandle methodHandle = entry.getValue();
+      
+      try {
+        Object result = methodHandle.invokeWithArguments(companionInstance);
+        allDefaults.put(paramIndex, result);
+      } catch (Throwable e) {
+        throw new RuntimeException(
+            "Error invoking default value method for " + cls.getName() + " param " + paramIndex, e);
+      }
     }
+
+    // Cache all default values for this class
+    allDefaultValuesCache.put(cls, allDefaults);
+
+    return allDefaults;
   }
 
   /**
@@ -255,45 +302,47 @@ public class ScalaCaseClassUtils {
    * @return the default value, or null if not found
    */
   public static Object getDefaultValueForField(Class<?> cls, String fieldName) {
-    if (!isScalaCaseClass(cls)) {
-      return null;
-    }
+    Preconditions.checkNotNull(cls, "Class must not be null");
+    Preconditions.checkNotNull(fieldName, "Field name must not be null");
+    Preconditions.checkArgument(
+        isScalaCaseClass(cls), "Class is not a Scala case class: " + cls.getName());
 
-    // Try to find the parameter index by looking at the constructor parameters
     try {
       String companionClassName = cls.getName() + "$";
       Class<?> companionClass = Class.forName(companionClassName, false, cls.getClassLoader());
-
-      // Find the apply method with the most parameters (the main constructor)
       Method[] methods = companionClass.getDeclaredMethods();
       Method applyMethod = null;
       int maxParams = 0;
-
       for (Method method : methods) {
         if ("apply".equals(method.getName()) && method.getParameterCount() > maxParams) {
           applyMethod = method;
           maxParams = method.getParameterCount();
         }
       }
-
       if (applyMethod != null) {
-        // Try to match field name with parameter names
-        // This is a simplified approach - in practice, we might need more sophisticated matching
         for (int i = 0; i < applyMethod.getParameterCount(); i++) {
-          // Try to get parameter name (this might not work in all cases due to compilation
-          // settings)
           String paramName = getParameterName(applyMethod, i);
           if (fieldName.equals(paramName)) {
-            // Found matching parameter, get its default value
             return getDefaultValue(cls, i + 1); // Scala uses 1-based indexing
           }
         }
+        try {
+          java.lang.reflect.Field[] fields = cls.getDeclaredFields();
+          for (int i = 0; i < fields.length && i < applyMethod.getParameterCount(); i++) {
+            if (fieldName.equals(fields[i].getName())) {
+              return getDefaultValue(cls, i + 1);
+            }
+          }
+        } catch (Exception e) {
+          throw new RuntimeException("Error accessing fields for class " + cls.getName(), e);
+        }
       }
     } catch (Exception e) {
-      // If anything goes wrong, return null
+      throw new RuntimeException(
+          "Error getting default value for field " + fieldName + " in " + cls.getName(), e);
     }
-
-    return null;
+    throw new RuntimeException(
+        "No default value found for field " + fieldName + " in " + cls.getName());
   }
 
   /**
@@ -348,6 +397,114 @@ public class ScalaCaseClassUtils {
     }
 
     return false;
+  }
+
+  /**
+   * Gets the companion object instance for a Scala case class, supporting both top-level and nested case classes.
+   *
+   * @param cls the Scala case class
+   * @return the companion object instance
+   * @throws RuntimeException if the companion object cannot be accessed
+   */
+  private static Object getCompanionObject(Class<?> cls) {
+    // Try the standard approach for top-level case classes
+    String companionClassName = cls.getName() + "$";
+    try {
+      Class<?> companionClass = Class.forName(companionClassName, false, cls.getClassLoader());
+      try {
+        // Try to get the MODULE$ field (works for top-level objects)
+        return companionClass.getField("MODULE$").get(null);
+      } catch (NoSuchFieldException e) {
+        // For nested case classes, try to find the companion object through the enclosing class
+        Class<?> enclosingClass = cls.getEnclosingClass();
+        if (enclosingClass != null) {
+          // Try to get the companion object from the enclosing class
+          try {
+            // Look for a field in the enclosing class that holds the companion object
+            for (java.lang.reflect.Field field : enclosingClass.getDeclaredFields()) {
+              if (field.getType().equals(companionClass)) {
+                field.setAccessible(true);
+                return field.get(null);
+              }
+            }
+            
+            // If no field found, try to create an instance of the companion class
+            // This works for some nested case classes where the companion is accessible
+            try {
+              return companionClass.newInstance();
+            } catch (Exception ex) {
+              // Try to find a constructor that takes the enclosing instance
+              for (java.lang.reflect.Constructor<?> constructor : companionClass.getDeclaredConstructors()) {
+                if (constructor.getParameterCount() == 1 && 
+                    constructor.getParameterTypes()[0].equals(enclosingClass)) {
+                  constructor.setAccessible(true);
+                  // Try to get an instance of the enclosing class
+                  Object enclosingInstance = getEnclosingInstance(enclosingClass);
+                  if (enclosingInstance != null) {
+                    return constructor.newInstance(enclosingInstance);
+                  }
+                }
+              }
+            }
+          } catch (Exception ex) {
+            // Continue to next approach
+          }
+        }
+        
+        // For some nested case classes, the companion object might be accessible via a different pattern
+        // Try to find any static field that returns the companion class
+        for (java.lang.reflect.Field field : companionClass.getDeclaredFields()) {
+          if (field.getType().equals(companionClass) && 
+              java.lang.reflect.Modifier.isStatic(field.getModifiers())) {
+            field.setAccessible(true);
+            try {
+              return field.get(null);
+            } catch (Exception ex) {
+              // Continue to next field
+            }
+          }
+        }
+        
+        // Last resort: try to create an instance without parameters
+        try {
+          return companionClass.newInstance();
+        } catch (Exception ex) {
+          throw new RuntimeException("Cannot access companion object for " + cls.getName() + 
+              " (nested case class not supported)", ex);
+        }
+      }
+    } catch (ClassNotFoundException e) {
+      throw new RuntimeException("Companion class not found for " + cls.getName(), e);
+    } catch (Exception e) {
+      throw new RuntimeException("Error accessing companion object for " + cls.getName(), e);
+    }
+  }
+
+  /**
+   * Attempts to get an instance of the enclosing class for a nested case class.
+   * This is a best-effort approach and may not work in all cases.
+   */
+  private static Object getEnclosingInstance(Class<?> enclosingClass) {
+    try {
+      // Try to get a static instance if available
+      for (java.lang.reflect.Field field : enclosingClass.getDeclaredFields()) {
+        if (field.getType().equals(enclosingClass) && 
+            java.lang.reflect.Modifier.isStatic(field.getModifiers())) {
+          field.setAccessible(true);
+          return field.get(null);
+        }
+      }
+      
+      // Try to create a new instance if there's a no-arg constructor
+      try {
+        return enclosingClass.newInstance();
+      } catch (Exception e) {
+        // Cannot create instance
+        return null;
+      }
+    } catch (Exception e) {
+      return null;
+    }
   }
 
   /**

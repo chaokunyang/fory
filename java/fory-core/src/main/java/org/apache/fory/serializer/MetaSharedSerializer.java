@@ -114,9 +114,11 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
       recordInfo = null;
     }
     binding = SerializationBinding.createBinding(fory);
-    isScalaCaseClass = fory.getConfig().isScalaOptimizationEnabled() && ScalaCaseClassUtils.isScalaCaseClass(type);
+    isScalaCaseClass =
+        fory.getConfig().isScalaOptimizationEnabled() && ScalaCaseClassUtils.isScalaCaseClass(type);
     scalaDefaultValueFields =
-        ScalaCaseClassUtils.buildScalaDefaultValueFields(fory, type, descriptorGrouper.getSortedDescriptors());
+        ScalaCaseClassUtils.buildScalaDefaultValueFields(
+            fory, type, descriptorGrouper.getSortedDescriptors());
   }
 
   @Override
@@ -149,7 +151,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
         Platform.throwException(e);
       }
     }
-    T obj = newBean();
+    T obj = newInstance();
     Fory fory = this.fory;
     RefResolver refResolver = this.refResolver;
     ClassResolver classResolver = this.classResolver;
@@ -213,6 +215,13 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
     }
 
     return obj;
+  }
+
+  private T newInstance() {
+    if (!isScalaCaseClass) {
+      return newBean();
+    }
+    return Platform.newInstance(type);
   }
 
   @Override

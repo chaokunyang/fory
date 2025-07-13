@@ -95,27 +95,35 @@ public class ScalaDefaultValueUtils {
   public static ScalaDefaultValueField[] buildScalaDefaultValueFields(
       Fory fory, Class<?> type, java.util.List<org.apache.fory.type.Descriptor> descriptors) {
     if (!isScalaClassWithDefaults(type)) {
+      System.out.println(
+          "DEBUG: " + type.getName() + " is not detected as a Scala class with defaults");
       return new ScalaDefaultValueField[0];
     }
 
+    System.out.println("DEBUG: " + type.getName() + " is detected as a Scala class with defaults");
+
     try {
-      // Extract fields from descriptors
-      java.util.Set<java.lang.reflect.Field> serializedFields = new java.util.HashSet<>();
+      // Extract field names from descriptors
+      java.util.Set<String> serializedFieldNames = new java.util.HashSet<>();
       for (org.apache.fory.type.Descriptor descriptor : descriptors) {
         java.lang.reflect.Field field = descriptor.getField();
         if (field != null) {
-          serializedFields.add(field);
+          serializedFieldNames.add(field.getName());
         }
       }
+
+      System.out.println("DEBUG: Serialized field names: " + serializedFieldNames);
 
       java.lang.reflect.Field[] allFields = type.getDeclaredFields();
       List<ScalaDefaultValueField> defaultFields = new ArrayList<>();
 
       for (java.lang.reflect.Field field : allFields) {
         // Only include fields that are not in the serialized data
-        if (!serializedFields.contains(field)) {
+        if (!serializedFieldNames.contains(field.getName())) {
           String fieldName = field.getName();
+          System.out.println("DEBUG: Field " + fieldName + " is missing from serialized data");
           Object defaultValue = getDefaultValueForField(type, fieldName);
+          System.out.println("DEBUG: Default value for " + fieldName + ": " + defaultValue);
           if (defaultValue != null) {
             FieldAccessor fieldAccessor = FieldAccessor.createAccessor(field);
             Short classId = fory.getClassResolver().getRegisteredClassId(field.getType());
@@ -129,8 +137,11 @@ public class ScalaDefaultValueUtils {
         }
       }
 
+      System.out.println("DEBUG: Found " + defaultFields.size() + " default value fields");
       return defaultFields.toArray(new ScalaDefaultValueField[0]);
     } catch (Exception e) {
+      System.out.println("DEBUG: Exception in buildScalaDefaultValueFields: " + e.getMessage());
+      e.printStackTrace();
       // Ignore exceptions and return empty array
       return new ScalaDefaultValueField[0];
     }
@@ -275,32 +286,104 @@ public class ScalaDefaultValueUtils {
       return cached;
     }
 
-    // Load all default values for this class
     Map<Integer, Object> allDefaults = new HashMap<>();
 
-    // Find all default value methods for this class
-    Map<Integer, MethodHandle> methods = findDefaultValueMethods(cls);
+    // Check if this is a regular Scala class with static default methods
+    boolean isRegularScalaClass = false;
+    Method[] methods = cls.getDeclaredMethods();
+    for (Method method : methods) {
+      if (method.getName().startsWith("$lessinit$greater$default$")) {
+        isRegularScalaClass = true;
+        break;
+      }
+    }
 
-    // Get the companion object instance
+    if (isRegularScalaClass) {
+      // Use classic reflection for each possible parameter index
+      try {
+        java.lang.reflect.Constructor<?>[] constructors = cls.getDeclaredConstructors();
+        if (constructors.length > 0) {
+          java.lang.reflect.Constructor<?> constructor = constructors[0];
+          int paramCount = constructor.getParameterCount();
+          for (int i = 1; i <= paramCount; i++) {
+            try {
+              Method m = cls.getDeclaredMethod("$lessinit$greater$default$" + i);
+              m.setAccessible(true);
+              Object result = m.invoke(null);
+              System.out.println(
+                  "DEBUG: Reflection invoke (static) for param " + i + " returned: " + result);
+              allDefaults.put(i, result);
+            } catch (NoSuchMethodException nsme) {
+              // No default for this parameter
+            }
+          }
+        }
+      } catch (Exception ex) {
+        throw new RuntimeException(
+            "Error getting default values for regular Scala class: " + cls.getName(), ex);
+      }
+      allDefaultValuesCache.put(cls, allDefaults);
+      return allDefaults;
+    }
+
+    // Otherwise, use the method handle approach for case classes
+    Map<Integer, MethodHandle> methodsMap = findDefaultValueMethods(cls);
     Object companionInstance = getCompanionObject(cls);
-
-    // Invoke each method and cache the result
-    for (Map.Entry<Integer, MethodHandle> entry : methods.entrySet()) {
+    for (Map.Entry<Integer, MethodHandle> entry : methodsMap.entrySet()) {
       int paramIndex = entry.getKey();
       MethodHandle methodHandle = entry.getValue();
-
       try {
-        Object result = methodHandle.invokeWithArguments(companionInstance);
+        Object result = null;
+        boolean needsFallback = false;
+        try {
+          result = methodHandle.invokeWithArguments(companionInstance);
+          System.out.println(
+              "DEBUG: MethodHandle.invokeWithArguments for param "
+                  + paramIndex
+                  + " returned: "
+                  + result);
+          if (result == null) {
+            needsFallback = true;
+          } else if (result instanceof Integer && ((Integer) result) == 0) {
+            needsFallback = true;
+          } else if (result instanceof String && ((String) result).isEmpty()) {
+            needsFallback = true;
+          }
+        } catch (Throwable t) {
+          System.out.println(
+              "DEBUG: Exception in MethodHandle.invokeWithArguments for param "
+                  + paramIndex
+                  + ": "
+                  + t.getMessage());
+          needsFallback = true;
+        }
+        if (needsFallback) {
+          try {
+            Method m =
+                companionInstance.getClass().getDeclaredMethod("apply$default$" + paramIndex);
+            m.setAccessible(true);
+            result = m.invoke(companionInstance);
+            System.out.println(
+                "DEBUG: Reflection invoke (companion) for param "
+                    + paramIndex
+                    + " returned: "
+                    + result);
+          } catch (Exception ex) {
+            System.out.println(
+                "DEBUG: Reflection fallback (companion) failed for param "
+                    + paramIndex
+                    + ": "
+                    + ex.getMessage());
+            throw ex;
+          }
+        }
         allDefaults.put(paramIndex, result);
       } catch (Throwable e) {
         throw new RuntimeException(
             "Error invoking default value method for " + cls.getName() + " param " + paramIndex, e);
       }
     }
-
-    // Cache all default values for this class
     allDefaultValuesCache.put(cls, allDefaults);
-
     return allDefaults;
   }
 
@@ -319,8 +402,78 @@ public class ScalaDefaultValueUtils {
         isScalaClassWithDefaults(cls),
         "Class is not a Scala class with defaults: " + cls.getName());
 
+    // First check if this is a regular Scala class with default values
     try {
-      String companionClassName = cls.getName() + "$";
+      Method[] methods = cls.getDeclaredMethods();
+      System.out.println(
+          "DEBUG: Checking methods in " + cls.getName() + " for regular Scala class defaults");
+      for (Method method : methods) {
+        System.out.println("DEBUG: Method: " + method.getName());
+        if (method.getName().startsWith("$lessinit$greater$default$")) {
+          // Extract the parameter index from the method name
+          String indexStr = method.getName().substring("$lessinit$greater$default$".length());
+          int paramIndex = Integer.parseInt(indexStr);
+          System.out.println(
+              "DEBUG: Found default method: "
+                  + method.getName()
+                  + " for parameter index: "
+                  + paramIndex);
+          // This is a regular Scala class with default values
+          // For regular Scala classes, we need to map field names to constructor parameters
+          // Try to find the constructor and map field names to parameter indices
+          java.lang.reflect.Constructor<?>[] constructors = cls.getDeclaredConstructors();
+          System.out.println("DEBUG: Found " + constructors.length + " constructors");
+          if (constructors.length > 0) {
+            java.lang.reflect.Constructor<?> constructor =
+                constructors[0]; // Use the first constructor
+            System.out.println(
+                "DEBUG: Constructor parameter count: " + constructor.getParameterCount());
+
+            // Try to match by parameter name first
+            for (int i = 0; i < constructor.getParameterCount(); i++) {
+              String paramName = getParameterName(constructor, i);
+              System.out.println("DEBUG: Parameter " + i + " name: " + paramName);
+              if (fieldName.equals(paramName)) {
+                System.out.println("DEBUG: Found parameter match for field: " + fieldName);
+                // Use getAllDefaultValues to get the default value for this parameter
+                Map<Integer, Object> allDefaults = getAllDefaultValues(cls);
+                return allDefaults.get(i + 1); // Scala uses 1-based indexing
+              }
+            }
+
+            // Fallback: match by field order
+            try {
+              java.lang.reflect.Field[] fields = cls.getDeclaredFields();
+              System.out.println(
+                  "DEBUG: Fields in class: "
+                      + java.util.Arrays.toString(
+                          java.util.Arrays.stream(fields)
+                              .map(java.lang.reflect.Field::getName)
+                              .toArray()));
+              for (int i = 0; i < fields.length && i < constructor.getParameterCount(); i++) {
+                if (fieldName.equals(fields[i].getName())) {
+                  System.out.println(
+                      "DEBUG: Found field match for field: " + fieldName + " at index " + i);
+                  // Use getAllDefaultValues to get the default value for this parameter
+                  Map<Integer, Object> allDefaults = getAllDefaultValues(cls);
+                  return allDefaults.get(i + 1);
+                }
+              }
+            } catch (Exception ex) {
+              throw new RuntimeException("Error accessing fields for class " + cls.getName(), ex);
+            }
+          }
+          break; // Found default methods, no need to continue
+        }
+      }
+    } catch (Exception ex) {
+      System.out.println("DEBUG: Exception in regular Scala class check: " + ex.getMessage());
+      // Ignore exceptions and continue to case class check
+    }
+
+    // If not a regular Scala class, try case classes with companion objects
+    String companionClassName = cls.getName() + "$";
+    try {
       Class<?> companionClass = Class.forName(companionClassName, false, cls.getClassLoader());
       Method[] methods = companionClass.getDeclaredMethods();
       Method applyMethod = null;
@@ -332,12 +485,14 @@ public class ScalaDefaultValueUtils {
         }
       }
       if (applyMethod != null) {
+        // Try to match by parameter name first
         for (int i = 0; i < applyMethod.getParameterCount(); i++) {
           String paramName = getParameterName(applyMethod, i);
           if (fieldName.equals(paramName)) {
             return getDefaultValue(cls, i + 1); // Scala uses 1-based indexing
           }
         }
+        // Fallback: match by field order
         try {
           java.lang.reflect.Field[] fields = cls.getDeclaredFields();
           for (int i = 0; i < fields.length && i < applyMethod.getParameterCount(); i++) {
@@ -348,6 +503,54 @@ public class ScalaDefaultValueUtils {
         } catch (Exception e) {
           throw new RuntimeException("Error accessing fields for class " + cls.getName(), e);
         }
+      }
+    } catch (ClassNotFoundException e) {
+      // For nested case classes, try to find the companion object in the enclosing class
+      try {
+        Class<?> enclosingClass = cls.getEnclosingClass();
+        if (enclosingClass != null) {
+          for (java.lang.reflect.Field field : enclosingClass.getDeclaredFields()) {
+            if (field.getType().getName().equals(companionClassName)) {
+              field.setAccessible(true);
+              Object companionInstance = field.get(null);
+              if (companionInstance != null) {
+                Method[] methods = companionInstance.getClass().getDeclaredMethods();
+                Method applyMethod = null;
+                int maxParams = 0;
+                for (Method method : methods) {
+                  if ("apply".equals(method.getName()) && method.getParameterCount() > maxParams) {
+                    applyMethod = method;
+                    maxParams = method.getParameterCount();
+                  }
+                }
+                if (applyMethod != null) {
+                  // Try to match by parameter name first
+                  for (int i = 0; i < applyMethod.getParameterCount(); i++) {
+                    String paramName = getParameterName(applyMethod, i);
+                    if (fieldName.equals(paramName)) {
+                      return getDefaultValue(cls, i + 1); // Scala uses 1-based indexing
+                    }
+                  }
+                  // Fallback: match by field order
+                  try {
+                    java.lang.reflect.Field[] fields = cls.getDeclaredFields();
+                    for (int i = 0; i < fields.length && i < applyMethod.getParameterCount(); i++) {
+                      if (fieldName.equals(fields[i].getName())) {
+                        return getDefaultValue(cls, i + 1);
+                      }
+                    }
+                  } catch (Exception ex) {
+                    throw new RuntimeException(
+                        "Error accessing fields for class " + cls.getName(), ex);
+                  }
+                }
+                break; // Found the companion object, no need to continue
+              }
+            }
+          }
+        }
+      } catch (Exception ex) {
+        // Ignore exceptions for nested class detection
       }
     } catch (Exception e) {
       throw new RuntimeException(
@@ -388,10 +591,41 @@ public class ScalaDefaultValueUtils {
   }
 
   /**
+   * Attempts to get the parameter name for a constructor parameter. This may not work if parameter
+   * names are not preserved during compilation.
+   */
+  private static String getParameterName(
+      java.lang.reflect.Constructor<?> constructor, int paramIndex) {
+    try {
+      // Try to get parameter names using reflection
+      // Note: This requires -parameters compiler flag to work
+      java.lang.reflect.Parameter[] parameters = constructor.getParameters();
+      if (paramIndex < parameters.length && parameters[paramIndex].isNamePresent()) {
+        return parameters[paramIndex].getName();
+      }
+    } catch (Exception e) {
+      // Ignore exceptions
+    }
+
+    // Fallback: try to infer from field names
+    try {
+      java.lang.reflect.Field[] fields = constructor.getDeclaringClass().getDeclaredFields();
+      if (paramIndex < fields.length) {
+        return fields[paramIndex].getName();
+      }
+    } catch (Exception e) {
+      // Ignore exceptions
+    }
+
+    return null;
+  }
+
+  /**
    * Checks if a class is a Scala class with default values by looking for the companion object and
    * checking for the presence of `apply` method and default value methods.
    */
   private static boolean checkIsScalaClassWithDefaults(Class<?> cls) {
+    // First check for case classes with companion objects
     try {
       // Scala classes with default values have a companion object with the same name + "$"
       String companionClassName = cls.getName() + "$";
@@ -412,9 +646,66 @@ public class ScalaDefaultValueUtils {
       }
 
       // A Scala class with defaults should have both apply method and default value methods
-      return hasApplyMethod && hasDefaultMethods;
+      if (hasApplyMethod && hasDefaultMethods) {
+        return true;
+      }
     } catch (ClassNotFoundException | NoClassDefFoundError e) {
-      // Not a Scala class with defaults if companion object doesn't exist
+      // Not a case class with companion object, continue to check for regular Scala class
+    }
+
+    // For nested case classes, try to find the companion object in the enclosing class
+    try {
+      Class<?> enclosingClass = cls.getEnclosingClass();
+      if (enclosingClass != null) {
+        // Look for a companion object field in the enclosing class
+        for (java.lang.reflect.Field field : enclosingClass.getDeclaredFields()) {
+          if (field.getType().getName().equals(cls.getName() + "$")) {
+            // Found a companion object field, check if it has default methods
+            field.setAccessible(true);
+            Object companionInstance = field.get(null);
+            if (companionInstance != null) {
+              Method[] companionMethods = companionInstance.getClass().getDeclaredMethods();
+              boolean hasApplyMethod = false;
+              boolean hasDefaultMethods = false;
+
+              for (Method method : companionMethods) {
+                if ("apply".equals(method.getName())) {
+                  hasApplyMethod = true;
+                }
+                if (method.getName().startsWith("apply$default$")) {
+                  hasDefaultMethods = true;
+                }
+              }
+
+              if (hasApplyMethod && hasDefaultMethods) {
+                return true;
+              }
+            }
+          }
+        }
+      }
+    } catch (Exception e) {
+      // Ignore exceptions for nested class detection
+    }
+
+    // Check for regular Scala classes with default values (not case classes)
+    // These have $lessinit$greater$default$N methods in the class itself
+    try {
+      Method[] methods = cls.getDeclaredMethods();
+      boolean hasDefaultMethods = false;
+
+      for (Method method : methods) {
+        if (method.getName().startsWith("$lessinit$greater$default$")) {
+          hasDefaultMethods = true;
+          break;
+        }
+      }
+
+      if (hasDefaultMethods) {
+        return true;
+      }
+    } catch (Exception e) {
+      // Ignore exceptions
     }
 
     return false;
@@ -501,6 +792,37 @@ public class ScalaDefaultValueUtils {
         }
       }
     } catch (ClassNotFoundException e) {
+      // For nested case classes, try to find the companion object in the enclosing class
+      try {
+        Class<?> enclosingClass = cls.getEnclosingClass();
+        if (enclosingClass != null) {
+          // Look for a companion object field in the enclosing class
+          for (java.lang.reflect.Field field : enclosingClass.getDeclaredFields()) {
+            if (field.getType().getName().equals(companionClassName)) {
+              field.setAccessible(true);
+              return field.get(null);
+            }
+          }
+        }
+      } catch (Exception ex) {
+        // Ignore exceptions for nested class detection
+      }
+
+      // Check if this is a regular Scala class with default values
+      // For regular Scala classes, we return the class itself as the "companion object"
+      try {
+        Method[] methods = cls.getDeclaredMethods();
+        for (Method method : methods) {
+          if (method.getName().startsWith("$lessinit$greater$default$")) {
+            // This is a regular Scala class with default values
+            // Return the class itself as the companion object
+            return cls;
+          }
+        }
+      } catch (Exception ex) {
+        // Ignore exceptions
+      }
+
       throw new RuntimeException("Companion class not found for " + cls.getName(), e);
     } catch (Exception e) {
       throw new RuntimeException("Error accessing companion object for " + cls.getName(), e);
@@ -542,9 +864,10 @@ public class ScalaDefaultValueUtils {
    */
   private static Map<Integer, MethodHandle> findDefaultValueMethods(Class<?> cls) {
     Map<Integer, MethodHandle> methods = new HashMap<>();
+    String companionClassName = cls.getName() + "$";
 
+    // First try case classes with companion objects
     try {
-      String companionClassName = cls.getName() + "$";
       Class<?> companionClass = Class.forName(companionClassName, false, cls.getClassLoader());
 
       MethodHandles.Lookup lookup = _JDKAccess._trustedLookup(companionClass);
@@ -567,7 +890,93 @@ public class ScalaDefaultValueUtils {
           }
         }
       }
+
+      // If we found methods, return them
+      if (!methods.isEmpty()) {
+        return methods;
+      }
+    } catch (ClassNotFoundException e) {
+      // For nested case classes, try to find the companion object in the enclosing class
+      try {
+        Class<?> enclosingClass = cls.getEnclosingClass();
+        if (enclosingClass != null) {
+          // Look for a companion object field in the enclosing class
+          for (java.lang.reflect.Field field : enclosingClass.getDeclaredFields()) {
+            if (field.getType().getName().equals(companionClassName)) {
+              field.setAccessible(true);
+              Object companionInstance = field.get(null);
+              if (companionInstance != null) {
+                MethodHandles.Lookup lookup =
+                    _JDKAccess._trustedLookup(companionInstance.getClass());
+
+                // Look for methods named `apply$default$1`, `apply$default$2`, etc.
+                Method[] companionMethods = companionInstance.getClass().getDeclaredMethods();
+                for (Method method : companionMethods) {
+                  String methodName = method.getName();
+                  if (methodName.startsWith("apply$default$")) {
+                    try {
+                      // Extract the parameter index from the method name
+                      String indexStr = methodName.substring("apply$default$".length());
+                      int paramIndex = Integer.parseInt(indexStr);
+
+                      // Create method handle for the default value method
+                      MethodHandle methodHandle = lookup.unreflect(method);
+                      methods.put(paramIndex, methodHandle);
+                    } catch (NumberFormatException ex) {
+                      // Skip if we can't parse the parameter index
+                    }
+                  }
+                }
+                if (!methods.isEmpty()) {
+                  return methods;
+                }
+                break; // Found the companion object, no need to continue
+              }
+            }
+          }
+        }
+      } catch (Exception ex) {
+        // If anything goes wrong, continue to next approach
+      }
     } catch (Exception e) {
+      // If anything goes wrong, continue to next approach
+    }
+
+    // Check for regular Scala classes with default values (not case classes)
+    // These have $lessinit$greater$default$N methods in the class itself
+    try {
+      MethodHandles.Lookup lookup = _JDKAccess._trustedLookup(cls);
+      Method[] classMethods = cls.getDeclaredMethods();
+
+      System.out.println("DEBUG: Checking for default methods in " + cls.getName());
+      for (Method method : classMethods) {
+        String methodName = method.getName();
+        System.out.println("DEBUG: Checking method: " + methodName);
+        if (methodName.startsWith("$lessinit$greater$default$")) {
+          try {
+            // Extract the parameter index from the method name
+            String indexStr = methodName.substring("$lessinit$greater$default$".length());
+            int paramIndex = Integer.parseInt(indexStr);
+            System.out.println(
+                "DEBUG: Found default method: "
+                    + methodName
+                    + " for parameter index: "
+                    + paramIndex);
+
+            // Create method handle for the default value method
+            MethodHandle methodHandle = lookup.unreflect(method);
+            methods.put(paramIndex, methodHandle);
+          } catch (NumberFormatException e) {
+            System.out.println("DEBUG: Could not parse parameter index from method: " + methodName);
+            // Skip if we can't parse the parameter index
+          }
+        }
+      }
+      System.out.println(
+          "DEBUG: Found " + methods.size() + " default methods: " + methods.keySet());
+    } catch (Exception e) {
+      System.out.println("DEBUG: Exception in findDefaultValueMethods: " + e.getMessage());
+      e.printStackTrace();
       // If anything goes wrong, return empty map
     }
 

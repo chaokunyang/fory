@@ -17,6 +17,7 @@
 
 import array
 import itertools
+import logging
 import os
 import pickle
 import typing
@@ -305,14 +306,17 @@ class DataClassSerializer(Serializer):
             self._serializers = [None] * len(self._field_names)
             visitor = ComplexTypeVisitor(fory)
             for index, key in enumerate(self._field_names):
-                # Changed from self.fory.infer_field to infer_field
                 serializer = infer_field(key, self._type_hints[key], visitor, types_path=[])
                 self._serializers[index] = serializer
             self._serializers, self._field_names = _sort_fields(fory.type_resolver, self._field_names, self._serializers)
             self._hash = 0  # Will be computed on first xwrite/xread
+            self._generated_xwrite_method = self._gen_xwrite_method()
+            self._generated_xread_method = self._gen_xread_method()
+            if _ENABLE_FORY_PYTHON_JIT:
+                # don't use `__slots__`, which will make the instance method read-only
+                self.xwrite = self._generated_xwrite_method
+                self.xread = self._generated_xread_method
             if self.fory.language == Language.PYTHON:
-                import logging  # Import here to avoid circular dependency
-
                 logger = logging.getLogger(__name__)
                 logger.warning(
                     "Type of class %s shouldn't be serialized using cross-language serializer",
@@ -410,6 +414,93 @@ class DataClassSerializer(Serializer):
         stmts.append(f"return {obj}")
         self._read_method_code, func = compile_function(
             f"read_{self.type_.__module__}_{self.type_.__qualname__}".replace(".", "_"),
+            [buffer],
+            stmts,
+            context,
+        )
+        return func
+
+    def _gen_xwrite_method(self):
+        context = {}
+        counter = itertools.count(0)
+        buffer, fory, value, value_dict = "buffer", "fory", "value", "value_dict"
+        get_hash_func = "_get_hash"
+        context[fory] = self.fory
+        context[get_hash_func] = _get_hash
+        context["_field_names"] = self._field_names
+        context["_type_hints"] = self._type_hints
+        context["_serializers"] = self._serializers
+        # Compute hash at generation time since we're in xlang mode
+        if self._hash == 0:
+            self._hash = _get_hash(self.fory, self._field_names, self._type_hints)
+        stmts = [
+            f'"""xwrite method for {self.type_}"""',
+            f"{buffer}.write_int32({self._hash})",
+        ]
+        if not self._has_slots:
+            stmts.append(f"{value_dict} = {value}.__dict__")
+        for index, field_name in enumerate(self._field_names):
+            field_value = f"field_value{next(counter)}"
+            serializer_var = f"serializer{index}"
+            context[serializer_var] = self._serializers[index]
+            if not self._has_slots:
+                stmts.append(f"{field_value} = {value_dict}['{field_name}']")
+            else:
+                stmts.append(f"{field_value} = {value}.{field_name}")
+            stmts.append(f"{fory}.xserialize_ref({buffer}, {field_value}, serializer={serializer_var})")
+        self._xwrite_method_code, func = compile_function(
+            f"xwrite_{self.type_.__module__}_{self.type_.__qualname__}".replace(".", "_"),
+            [buffer, value],
+            stmts,
+            context,
+        )
+        return func
+
+    def _gen_xread_method(self):
+        context = dict(_jit_context)
+        buffer, fory, obj_class, obj, obj_dict = (
+            "buffer",
+            "fory",
+            "obj_class",
+            "obj",
+            "obj_dict",
+        )
+        ref_resolver = "ref_resolver"
+        get_hash_func = "_get_hash"
+        context[fory] = self.fory
+        context[obj_class] = self.type_
+        context[ref_resolver] = self.fory.ref_resolver
+        context[get_hash_func] = _get_hash
+        context["_field_names"] = self._field_names
+        context["_type_hints"] = self._type_hints
+        context["_serializers"] = self._serializers
+        # Compute hash at generation time since we're in xlang mode
+        if self._hash == 0:
+            self._hash = _get_hash(self.fory, self._field_names, self._type_hints)
+        stmts = [
+            f'"""xread method for {self.type_}"""',
+            f"read_hash = {buffer}.read_int32()",
+            f"if read_hash != {self._hash}:",
+            f"""   raise TypeNotCompatibleError(
+            f"Hash {{read_hash}} is not consistent with {self._hash} for type {self.type_}")""",
+            f"{obj} = {obj_class}.__new__({obj_class})",
+            f"{ref_resolver}.reference({obj})",
+        ]
+        if not self._has_slots:
+            stmts.append(f"{obj_dict} = {obj}.__dict__")
+
+        for index, field_name in enumerate(self._field_names):
+            serializer_var = f"serializer{index}"
+            context[serializer_var] = self._serializers[index]
+            field_value = f"field_value{index}"
+            stmts.append(f"{field_value} = {fory}.xdeserialize_ref({buffer}, serializer={serializer_var})")
+            if not self._has_slots:
+                stmts.append(f"{obj_dict}['{field_name}'] = {field_value}")
+            else:
+                stmts.append(f"{obj}.{field_name} = {field_value}")
+        stmts.append(f"return {obj}")
+        self._xread_method_code, func = compile_function(
+            f"xread_{self.type_.__module__}_{self.type_.__qualname__}".replace(".", "_"),
             [buffer],
             stmts,
             context,
@@ -747,6 +838,106 @@ class StatefulSerializer(CrossLanguageCompatibleSerializer):
         if state:
             obj.__setstate__(state)
         return obj
+
+
+class ReduceSerializer(CrossLanguageCompatibleSerializer):
+    """
+    Serializer for objects that support __reduce__ or __reduce_ex__.
+    Uses Fory's native serialization for better cross-language support.
+    Has higher precedence than StatefulSerializer.
+    """
+
+    def __init__(self, fory, cls):
+        super().__init__(fory, cls)
+        self.cls = cls
+        # Cache the method references as fields in the serializer.
+        self._reduce_ex = getattr(cls, "__reduce_ex__", None)
+        self._reduce = getattr(cls, "__reduce__", None)
+        self._getnewargs_ex = getattr(cls, "__getnewargs_ex__", None)
+        self._getnewargs = getattr(cls, "__getnewargs__", None)
+
+    def write(self, buffer, value):
+        # Try __reduce_ex__ first (with protocol 2), then __reduce__
+        # Check if the object has a custom __reduce_ex__ method (not just the default from object)
+        if hasattr(value, "__reduce_ex__") and value.__class__.__reduce_ex__ is not object.__reduce_ex__:
+            try:
+                reduce_result = value.__reduce_ex__(2)
+            except TypeError:
+                # Some objects don't support protocol argument
+                reduce_result = value.__reduce_ex__()
+        elif hasattr(value, "__reduce__"):
+            reduce_result = value.__reduce__()
+        else:
+            raise ValueError(f"Object {value} has no __reduce__ or __reduce_ex__ method")
+
+        # Handle different __reduce__ return formats
+        if isinstance(reduce_result, str):
+            # Case 1: Just a global name (simple case)
+            self.fory.serialize_ref(buffer, ("global", reduce_result, None, None, None))
+        elif isinstance(reduce_result, tuple):
+            if len(reduce_result) == 2:
+                # Case 2: (callable, args)
+                callable_obj, args = reduce_result
+                self.fory.serialize_ref(buffer, ("callable", callable_obj, args, None, None))
+            elif len(reduce_result) == 3:
+                # Case 3: (callable, args, state)
+                callable_obj, args, state = reduce_result
+                self.fory.serialize_ref(buffer, ("callable", callable_obj, args, state, None))
+            elif len(reduce_result) == 4:
+                # Case 4: (callable, args, state, listitems)
+                callable_obj, args, state, listitems = reduce_result
+                self.fory.serialize_ref(buffer, ("callable", callable_obj, args, state, listitems))
+            elif len(reduce_result) == 5:
+                # Case 5: (callable, args, state, listitems, dictitems)
+                callable_obj, args, state, listitems, dictitems = reduce_result
+                self.fory.serialize_ref(buffer, ("callable", callable_obj, args, state, listitems, dictitems))
+            else:
+                raise ValueError(f"Invalid __reduce__ result length: {len(reduce_result)}")
+        else:
+            raise ValueError(f"Invalid __reduce__ result type: {type(reduce_result)}")
+
+    def read(self, buffer):
+        reduce_data = self.fory.deserialize_ref(buffer)
+
+        if reduce_data[0] == "global":
+            # Case 1: Global name
+            global_name = reduce_data[1]
+            # Import and return the global object
+            module_name, obj_name = global_name.rsplit(".", 1)
+            module = __import__(module_name, fromlist=[obj_name])
+            return getattr(module, obj_name)
+        elif reduce_data[0] == "callable":
+            # Case 2-5: Callable with args and optional state/items
+            callable_obj = reduce_data[1]
+            args = reduce_data[2] or ()
+            state = reduce_data[3]
+            listitems = reduce_data[4]
+            dictitems = reduce_data[5] if len(reduce_data) > 5 else None
+
+            # Create the object using the callable and args
+            obj = callable_obj(*args)
+
+            # Restore state if present
+            if state is not None:
+                if hasattr(obj, "__setstate__"):
+                    obj.__setstate__(state)
+                else:
+                    # Fallback: update __dict__ directly
+                    if hasattr(obj, "__dict__"):
+                        obj.__dict__.update(state)
+
+            # Restore list items if present
+            if listitems is not None:
+                obj.extend(listitems)
+
+            # Restore dict items if present
+            if dictitems is not None:
+                for key, value in dictitems:
+                    obj[key] = value
+
+            return obj
+        else:
+            raise ValueError(f"Invalid reduce data format: {reduce_data[0]}")
 
 
 class PickleSerializer(Serializer):

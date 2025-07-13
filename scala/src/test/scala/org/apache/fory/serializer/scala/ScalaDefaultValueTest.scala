@@ -65,7 +65,7 @@ class ScalaDefaultValueTest extends AnyWordSpec with Matchers {
     .withCodegen(codegen)
     .build()
 
-  "Fury Scala default value support" should {
+  "Fory Scala default value support" should {
     testModes.foreach { case (modeName, codegen) =>
       s"serialize/deserialize case class with default values in $modeName" in {
         val fory = createFory(codegen)

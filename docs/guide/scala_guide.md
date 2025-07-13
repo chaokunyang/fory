@@ -165,11 +165,11 @@ println(fory.deserialize(fory.serialize(opt1)))
 
 ## Scala Case Class Default Values Support
 
-Fury now supports Scala case class default values during deserialization when using meta-shared serialization mode. This feature allows for forward/backward compatibility when case classes have default parameters.
+Fory now supports Scala case class default values during deserialization when using meta-shared serialization mode. This feature allows for forward/backward compatibility when case classes have default parameters.
 
 ### Overview
 
-When a Scala case class has default parameters, the Scala compiler generates companion object methods like `apply$default$1`, `apply$default$2`, etc. that return the default values. Fury can now detect these methods and use them when deserializing objects where certain fields are missing from the serialized data.
+When a Scala case class has default parameters, the Scala compiler generates companion object methods like `apply$default$1`, `apply$default$2`, etc. that return the default values. Fory can now detect these methods and use them when deserializing objects where certain fields are missing from the serialized data.
 
 ### Example
 
@@ -179,17 +179,17 @@ Consider a Scala case class with default values:
 case class SomeClass(v: List[IdAnyVal], x: Int = 1)
 ```
 
-When this class is serialized and then deserialized in a context where the `x` field is missing from the serialized data, Fury will automatically use the default value `1` for the `x` field.
+When this class is serialized and then deserialized in a context where the `x` field is missing from the serialized data, Fory will automatically use the default value `1` for the `x` field.
 
 ### How It Works
 
-1. **Detection**: Fury detects if a class is a Scala case class by looking for its companion object (class name + "$") and checking for the presence of an `apply` method.
+1. **Detection**: Fory detects if a class is a Scala case class by looking for its companion object (class name + "$") and checking for the presence of an `apply` method.
 
-2. **Default Value Discovery**: Fury scans the companion object for methods named `apply$default$1`, `apply$default$2`, etc., which correspond to default values for parameters.
+2. **Default Value Discovery**: Fory scans the companion object for methods named `apply$default$1`, `apply$default$2`, etc., which correspond to default values for parameters.
 
-3. **Field Mapping**: During deserialization, Fury identifies fields that exist in the target class but are missing from the serialized data.
+3. **Field Mapping**: During deserialization, Fory identifies fields that exist in the target class but are missing from the serialized data.
 
-4. **Value Application**: After reading all available fields from the serialized data, Fury applies default values to any missing fields just before returning the deserialized object.
+4. **Value Application**: After reading all available fields from the serialized data, Fory applies default values to any missing fields just before returning the deserialized object.
 
 ### Usage
 

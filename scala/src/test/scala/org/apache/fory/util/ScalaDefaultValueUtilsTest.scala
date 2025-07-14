@@ -25,6 +25,7 @@ import org.apache.fory.`type`.Descriptor
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 import org.scalatest.Succeeded
+import org.scalatest.matchers.should.Matchers._
 import java.util.{List => JavaList, ArrayList}
 import scala.jdk.CollectionConverters._
 
@@ -150,6 +151,22 @@ class ScalaDefaultValueUtilsTest extends AnyWordSpec with Matchers {
     .suppressClassRegistrationWarnings(false)
     .build()
 
+  /**
+   * Helper function to get default values as a Scala Map for easier testing
+   */
+  def getDefaultValuesAsScalaMap[T](cls: Class[T]): Map[String, Object] = {
+    ScalaDefaultValueUtils.getAllDefaultValues(cls).asScala.toMap
+  }
+
+  /**
+   * Helper function to build Scala default value fields for easier testing
+   */
+  def buildDefaultValueFields[T](cls: Class[T]): Array[ScalaDefaultValueUtils.ScalaDefaultValueField] = {
+    val fory = createFory()
+    val descriptors = new ArrayList[Descriptor]()
+    ScalaDefaultValueUtils.buildScalaDefaultValueFields(fory, cls, descriptors)
+  }
+
   "ScalaDefaultValueUtils" should {
 
     "detect Scala classes with default values correctly" in {
@@ -174,27 +191,27 @@ class ScalaDefaultValueUtilsTest extends AnyWordSpec with Matchers {
 
     "get all default values for Scala classes" in {
        // Test case class with defaults
-       val caseClassDefaults = ScalaDefaultValueUtils.getAllDefaultValues(classOf[TestCaseClassWithDefaults])
+       val caseClassDefaults = getDefaultValuesAsScalaMap(classOf[TestCaseClassWithDefaults])
        caseClassDefaults should not be empty
-       caseClassDefaults.get("age") shouldEqual 25
-       caseClassDefaults.get("city") shouldEqual "Unknown"
-       caseClassDefaults.get("active") shouldEqual true
-       caseClassDefaults.get("score") shouldEqual 0.0
-       caseClassDefaults.get("tags") shouldEqual List("default")
+       caseClassDefaults("age") shouldEqual 25
+       caseClassDefaults("city") shouldEqual "Unknown"
+       caseClassDefaults("active") shouldEqual true
+       caseClassDefaults("score") shouldEqual 0.0
+       caseClassDefaults("tags") shouldEqual List("default")
        
        // Test case class with multiple defaults
-       val multipleDefaults = ScalaDefaultValueUtils.getAllDefaultValues(classOf[TestCaseClassMultipleDefaults])
+       val multipleDefaults = getDefaultValuesAsScalaMap(classOf[TestCaseClassMultipleDefaults])
        multipleDefaults should not be empty
-       multipleDefaults.get("name") shouldEqual "default"
-       multipleDefaults.get("description") shouldEqual "no description"
-       multipleDefaults.get("count") shouldEqual 0
-       multipleDefaults.get("enabled") shouldEqual false
+       multipleDefaults("name") shouldEqual "default"
+       multipleDefaults("description") shouldEqual "no description"
+       multipleDefaults("count") shouldEqual 0
+       multipleDefaults("enabled") shouldEqual false
        
        // Test case class with complex defaults
-       val complexDefaults = ScalaDefaultValueUtils.getAllDefaultValues(classOf[TestCaseClassComplexDefaults])
+       val complexDefaults = getDefaultValuesAsScalaMap(classOf[TestCaseClassComplexDefaults])
        complexDefaults should not be empty
        // Handle the metadata map - it might be a Scala Map or Java Map
-       val metadataValue = complexDefaults.get("metadata")
+       val metadataValue = complexDefaults("metadata")
        metadataValue should not be null
        // Check if it's a Scala Map or Java Map and handle accordingly
        metadataValue match {
@@ -205,29 +222,25 @@ class ScalaDefaultValueUtilsTest extends AnyWordSpec with Matchers {
          case _ =>
            fail(s"Unexpected metadata type: ${metadataValue.getClass}")
        }
-       complexDefaults.get("numbers") shouldEqual List(1, 2, 3)
-       complexDefaults.get("optional") shouldEqual Some("default")
+       complexDefaults("numbers") shouldEqual List(1, 2, 3)
+       complexDefaults("optional") shouldEqual Some("default")
        
        // Test regular Scala class with defaults
-       val regularDefaults = ScalaDefaultValueUtils.getAllDefaultValues(classOf[TestRegularScalaClassWithDefaults])
+       val regularDefaults = getDefaultValuesAsScalaMap(classOf[TestRegularScalaClassWithDefaults])
        regularDefaults should not be empty
-       regularDefaults.get("age") shouldEqual 30
-       regularDefaults.get("city") shouldEqual "DefaultCity"
-       regularDefaults.get("active") shouldEqual false
+       regularDefaults("age") shouldEqual 30
+       regularDefaults("city") shouldEqual "DefaultCity"
+       regularDefaults("active") shouldEqual false
        
        // Test classes without defaults
-       ScalaDefaultValueUtils.getAllDefaultValues(classOf[TestCaseClassNoDefaults]).size shouldEqual 0
-       ScalaDefaultValueUtils.getAllDefaultValues(classOf[TestRegularScalaClassNoDefaults]).size shouldEqual 0
-       ScalaDefaultValueUtils.getAllDefaultValues(classOf[TestJavaClass]).size shouldEqual 0
+       getDefaultValuesAsScalaMap(classOf[TestCaseClassNoDefaults]) shouldBe empty
+       getDefaultValuesAsScalaMap(classOf[TestRegularScalaClassNoDefaults]) shouldBe empty
+       getDefaultValuesAsScalaMap(classOf[TestJavaClass]) shouldBe empty
      }
 
     "build Scala default value fields correctly" in {
-       val fory = createFory()
-       
        // Test with case class that has defaults
-       val descriptors = new ArrayList[Descriptor]() // Empty descriptors to simulate missing fields
-       val fields = ScalaDefaultValueUtils.buildScalaDefaultValueFields(
-         fory, classOf[TestCaseClassWithDefaults], descriptors)
+       val fields = buildDefaultValueFields(classOf[TestCaseClassWithDefaults])
        
        fields should not be empty
        fields.foreach { field =>
@@ -237,14 +250,12 @@ class ScalaDefaultValueUtilsTest extends AnyWordSpec with Matchers {
        }
        
        // Test with case class without defaults
-       val noDefaultFields = ScalaDefaultValueUtils.buildScalaDefaultValueFields(
-         fory, classOf[TestCaseClassNoDefaults], descriptors)
-       noDefaultFields.length shouldEqual 0
+       val noDefaultFields = buildDefaultValueFields(classOf[TestCaseClassNoDefaults])
+       noDefaultFields shouldBe empty
        
        // Test with Java class
-       val javaFields = ScalaDefaultValueUtils.buildScalaDefaultValueFields(
-         fory, classOf[TestJavaClass], descriptors)
-       javaFields.length shouldEqual 0
+       val javaFields = buildDefaultValueFields(classOf[TestJavaClass])
+       javaFields shouldBe empty
      }
 
     "set Scala default values on objects correctly" in {
@@ -291,18 +302,14 @@ class ScalaDefaultValueUtilsTest extends AnyWordSpec with Matchers {
     }
 
     "handle different field types correctly" in {
-       val fory = createFory()
-       val descriptors = new ArrayList[Descriptor]()
-       
        // Test with different field types
-       val fields = ScalaDefaultValueUtils.buildScalaDefaultValueFields(
-         fory, classOf[TestCaseClassWithDefaults], descriptors)
+       val fields = buildDefaultValueFields(classOf[TestCaseClassWithDefaults])
        
        fields.foreach { field =>
          field.getDefaultValue should not be null
          field.getFieldName should not be null
          field.getFieldAccessor should not be null
-         field.getClassId should be >= 0.toShort
+         field.getClassId.toInt should be >= 0
        }
      }
 
@@ -311,9 +318,9 @@ class ScalaDefaultValueUtilsTest extends AnyWordSpec with Matchers {
        // Nested case classes with default values should be detected
        ScalaDefaultValueUtils.hasScalaDefaultValues(classOf[NestedCaseClass]) shouldEqual true
        
-       val nestedDefaults = ScalaDefaultValueUtils.getAllDefaultValues(classOf[NestedCaseClass])
+       val nestedDefaults = getDefaultValuesAsScalaMap(classOf[NestedCaseClass])
        nestedDefaults should not be empty
-       nestedDefaults.get("inner") shouldEqual TestCaseClassWithDefaults("nested")
+       nestedDefaults("inner") shouldEqual TestCaseClassWithDefaults("nested")
      }
 
      "work with deeply nested case classes" in {
@@ -321,10 +328,10 @@ class ScalaDefaultValueUtilsTest extends AnyWordSpec with Matchers {
        // Deeply nested case classes with default values should be detected
        ScalaDefaultValueUtils.hasScalaDefaultValues(classOf[DeeplyNestedCaseClass]) shouldEqual true
        
-       val deepDefaults = ScalaDefaultValueUtils.getAllDefaultValues(classOf[DeeplyNestedCaseClass])
+       val deepDefaults = getDefaultValuesAsScalaMap(classOf[DeeplyNestedCaseClass])
        deepDefaults should not be empty
-       deepDefaults.get("level2") shouldEqual NestedCaseClass("level2", TestCaseClassWithDefaults("deep"))
-       deepDefaults.get("level3") shouldEqual TestCaseClassMultipleDefaults(999, "deep3")
+       deepDefaults("level2") shouldEqual NestedCaseClass("level2", TestCaseClassWithDefaults("deep"))
+       deepDefaults("level3") shouldEqual TestCaseClassMultipleDefaults(999, "deep3")
      }
 
      "work with nested case classes without defaults" in {
@@ -332,8 +339,8 @@ class ScalaDefaultValueUtilsTest extends AnyWordSpec with Matchers {
        // Nested case classes without default values should not be detected
        ScalaDefaultValueUtils.hasScalaDefaultValues(classOf[NestedCaseClassNoDefaults]) shouldEqual false
        
-       val nestedDefaults = ScalaDefaultValueUtils.getAllDefaultValues(classOf[NestedCaseClassNoDefaults])
-       nestedDefaults.size shouldEqual 0
+       val nestedDefaults = getDefaultValuesAsScalaMap(classOf[NestedCaseClassNoDefaults])
+       nestedDefaults shouldBe empty
      }
 
     "handle error cases gracefully" in {
@@ -360,22 +367,16 @@ class ScalaDefaultValueUtilsTest extends AnyWordSpec with Matchers {
        // Test the getter methods of ScalaDefaultValueField
        // We can't create instances directly due to private constructor,
        // but we can test the getters if we get an instance from the utility methods
-       val fory = createFory()
-       val descriptors = new ArrayList[Descriptor]()
        
        // Try to get fields from a class with defaults
-       val fields = ScalaDefaultValueUtils.buildScalaDefaultValueFields(
-         fory, classOf[TestCaseClassWithDefaults], descriptors)
+       val fields = buildDefaultValueFields(classOf[TestCaseClassWithDefaults])
        
        if (fields.nonEmpty) {
          val field = fields(0)
          field.getFieldName should not be null
          field.getDefaultValue should not be null
          field.getFieldAccessor should not be null
-         field.getClassId should be >= 0.toShort
-       } else {
-         // If no fields are returned, that's also valid
-         fields.length shouldEqual 0
+         field.getClassId.toInt should be >= 0
        }
      }
   }

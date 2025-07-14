@@ -72,7 +72,6 @@ import org.apache.fory.util.record.RecordUtils;
  */
 public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
   private final ClassDef classDef;
-  private final boolean isScalaCaseClass;
   private final ScalaDefaultValueUtils.ScalaDefaultValueField[] scalaDefaultValueFields;
 
   public MetaSharedCodecBuilder(TypeRef<?> beanType, Fory fory, ClassDef classDef) {
@@ -92,13 +91,14 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
     objectCodecOptimizer =
         new ObjectCodecOptimizer(beanClass, grouper, !fory.isBasicTypesRefIgnored(), ctx);
 
-    // Check if this is a Scala case class and build default value fields
-    this.isScalaCaseClass =
-        fory.getConfig().isScalaOptimizationEnabled()
-            && ScalaDefaultValueUtils.hasScalaDefaultValues(beanClass);
-    this.scalaDefaultValueFields =
+    if (fory.getConfig().isScalaOptimizationEnabled()) {
+      // Check if this is a Scala case class and build default value fields
+      this.scalaDefaultValueFields =
         ScalaDefaultValueUtils.buildScalaDefaultValueFields(
             fory, beanClass, grouper.getSortedDescriptors());
+    } else {
+      this.scalaDefaultValueFields = new ScalaDefaultValueUtils.ScalaDefaultValueField[0];
+    }
   }
 
   // Must be static to be shared across the whole process life.

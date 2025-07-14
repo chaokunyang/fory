@@ -78,7 +78,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
   private Serializer<T> serializer;
   private final ClassInfoHolder classInfoHolder;
   private final SerializationBinding binding;
-  private final boolean isScalaCaseClass;
+  private final boolean hasScalaDefaultValues;
   private final ScalaDefaultValueUtils.ScalaDefaultValueField[] scalaDefaultValueFields;
 
   public MetaSharedSerializer(Fory fory, Class<T> type, ClassDef classDef) {
@@ -114,12 +114,15 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
       recordInfo = null;
     }
     binding = SerializationBinding.createBinding(fory);
-    isScalaCaseClass =
-        fory.getConfig().isScalaOptimizationEnabled()
-            && ScalaDefaultValueUtils.hasScalaDefaultValues(type);
-    scalaDefaultValueFields =
-        ScalaDefaultValueUtils.buildScalaDefaultValueFields(
-            fory, type, descriptorGrouper.getSortedDescriptors());
+    if (fory.getConfig().isScalaOptimizationEnabled()) {
+      hasScalaDefaultValues = ScalaDefaultValueUtils.hasScalaDefaultValues(type);
+      scalaDefaultValueFields =
+          ScalaDefaultValueUtils.buildScalaDefaultValueFields(
+              fory, type, descriptorGrouper.getSortedDescriptors());
+    } else {
+      hasScalaDefaultValues = false;
+      scalaDefaultValueFields = new ScalaDefaultValueUtils.ScalaDefaultValueField[0];
+    }
   }
 
   @Override
@@ -211,7 +214,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
     }
 
     // Set default values for missing fields in Scala case classes
-    if (isScalaCaseClass) {
+    if (hasScalaDefaultValues) {
       ScalaDefaultValueUtils.setScalaDefaultValues(obj, scalaDefaultValueFields);
     }
 
@@ -219,7 +222,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
   }
 
   private T newInstance() {
-    if (!isScalaCaseClass) {
+    if (!hasScalaDefaultValues) {
       return newBean();
     }
     return Platform.newInstance(type);

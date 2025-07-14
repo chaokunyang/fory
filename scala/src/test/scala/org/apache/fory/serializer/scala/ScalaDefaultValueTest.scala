@@ -78,9 +78,8 @@ class ScalaDefaultValueTest extends AnyWordSpec with Matchers {
   
   // Test both runtime mode (MetaSharedSerializer) and codegen mode (MetaSharedCodecBuilder)
   val testModes = Seq(
-    ("Runtime Mode", false)
-    // Temporarily disable codegen mode due to JVM crash
-    // ("Codegen Mode", true)
+    ("Runtime Mode", false),
+    ("Codegen Mode", true)
   )
 
   def createFory(codegen: Boolean): Fory = Fory.builder()

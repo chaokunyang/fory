@@ -23,6 +23,7 @@ import static org.apache.fory.builder.Generated.GeneratedMetaSharedSerializer.SE
 import static org.apache.fory.type.TypeUtils.OBJECT_TYPE;
 import static org.apache.fory.type.TypeUtils.STRING_TYPE;
 
+import java.lang.reflect.Member;
 import java.util.Collection;
 import java.util.Map;
 import java.util.SortedMap;
@@ -37,7 +38,6 @@ import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.ClassDef;
-import java.lang.reflect.Member;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.serializer.CodegenSerializer;
 import org.apache.fory.serializer.MetaSharedSerializer;
@@ -94,8 +94,8 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
     if (fory.getConfig().isScalaOptimizationEnabled()) {
       // Check if this is a Scala case class and build default value fields
       this.scalaDefaultValueFields =
-        ScalaDefaultValueUtils.buildScalaDefaultValueFields(
-            fory, beanClass, grouper.getSortedDescriptors());
+          ScalaDefaultValueUtils.buildScalaDefaultValueFields(
+              fory, beanClass, grouper.getSortedDescriptors());
     } else {
       this.scalaDefaultValueFields = new ScalaDefaultValueUtils.ScalaDefaultValueField[0];
     }
@@ -228,15 +228,25 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
       Member member = defaultField.getFieldAccessor().getField();
       Descriptor descriptor = descriptors.get(member);
       TypeRef<?> typeRef = descriptor.getTypeRef();
-      Expression defaultValueExpr;  
+      Expression defaultValueExpr;
       if (typeRef.unwrap().isPrimitive() || typeRef.equals(STRING_TYPE)) {
-         defaultValueExpr = new Literal(defaultValue, typeRef);
+        defaultValueExpr = new Literal(defaultValue, typeRef);
       } else {
-        defaultValueExpr = getOrCreateField(true, typeRef.getRawType(), member.getName(), 
-        () -> {
-          Expression expr = new StaticInvoke(ScalaDefaultValueUtils.class, "getDefaultValue", OBJECT_TYPE, staticBeanClassExpr(), Literal.ofString(member.getName()));
-          return new Expression.Cast(expr, typeRef);
-        });
+        defaultValueExpr =
+            getOrCreateField(
+                true,
+                typeRef.getRawType(),
+                member.getName(),
+                () -> {
+                  Expression expr =
+                      new StaticInvoke(
+                          ScalaDefaultValueUtils.class,
+                          "getDefaultValue",
+                          OBJECT_TYPE,
+                          staticBeanClassExpr(),
+                          Literal.ofString(member.getName()));
+                  return new Expression.Cast(expr, typeRef);
+                });
       }
       setDefaultsExpr.add(super.setFieldValue(bean, descriptor, defaultValueExpr));
     }

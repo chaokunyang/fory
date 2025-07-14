@@ -796,7 +796,8 @@ public final class Fory implements BaseFory {
   @SuppressWarnings("unchecked")
   @Override
   public <T> T deserialize(byte[] bytes, Class<T> type) {
-    if (!crossLanguage) {
+    MemoryBuffer buffer = MemoryUtils.wrap(bytes);
+    if (!crossLanguage && shareMeta) {
       byte bitmap = buffer.readByte();
       if ((bitmap & isNilFlag) == isNilFlag) {
         return null;
@@ -807,7 +808,7 @@ public final class Fory implements BaseFory {
     }
     generics.pushGenericType(classResolver.buildGenericType(type));
     try {
-      return (T) deserialize(MemoryUtils.wrap(bytes), null);
+      return (T) deserialize(buffer, null);
     } finally {
       generics.popGenericType();
     }

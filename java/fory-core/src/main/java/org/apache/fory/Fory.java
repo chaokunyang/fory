@@ -796,6 +796,15 @@ public final class Fory implements BaseFory {
   @SuppressWarnings("unchecked")
   @Override
   public <T> T deserialize(byte[] bytes, Class<T> type) {
+    if (!crossLanguage) {
+      byte bitmap = buffer.readByte();
+      if ((bitmap & isNilFlag) == isNilFlag) {
+        return null;
+      }
+      boolean peerOutOfBandEnabled = (bitmap & isOutOfBandFlag) == isOutOfBandFlag;
+      assert !peerOutOfBandEnabled : "Out of band buffers not passed in when deserializing";
+      return deserializeJavaObject(buffer, type);
+    }
     generics.pushGenericType(classResolver.buildGenericType(type));
     try {
       return (T) deserialize(MemoryUtils.wrap(bytes), null);

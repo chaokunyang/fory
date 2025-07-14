@@ -22,8 +22,8 @@ package org.apache.fory.util;
 import com.google.common.cache.Cache;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
-import java.lang.reflect.Method;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -31,14 +31,14 @@ import java.util.Map;
 import org.apache.fory.Fory;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.collection.Collections;
+import org.apache.fory.logging.Logger;
+import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.resolver.ClassResolver;
-import org.apache.fory.util.unsafe._JDKAccess;
 import org.apache.fory.type.ScalaTypes;
 import org.apache.fory.type.TypeUtils;
-import org.apache.fory.logging.Logger;
-import org.apache.fory.logging.LoggerFactory;
+import org.apache.fory.util.unsafe._JDKAccess;
 
 /**
  * Utility class for detecting Scala classes with default values and their default value methods.
@@ -126,7 +126,8 @@ public class ScalaDefaultValueUtils {
           String fieldName = field.getName();
           Object defaultValue = allDefaults.get(fieldName);
 
-          if (defaultValue != null && TypeUtils.wrap(field.getType()).isAssignableFrom(defaultValue.getClass())) {
+          if (defaultValue != null
+              && TypeUtils.wrap(field.getType()).isAssignableFrom(defaultValue.getClass())) {
             FieldAccessor fieldAccessor = FieldAccessor.createAccessor(field);
             Short classId = fory.getClassResolver().getRegisteredClassId(field.getType());
             defaultFields.add(
@@ -141,7 +142,11 @@ public class ScalaDefaultValueUtils {
       defaultFieldsArray = defaultFields.toArray(new ScalaDefaultValueField[0]);
       defaultValueFieldsCache.put(type, defaultFieldsArray);
     } catch (Exception e) {
-      LOG.warn("Error {} building Scala default value fields for {}, default values support is disabled when deserializing object of type {}", e.getMessage(), type.getName(), type.getName()); 
+      LOG.warn(
+          "Error {} building Scala default value fields for {}, default values support is disabled when deserializing object of type {}",
+          e.getMessage(),
+          type.getName(),
+          type.getName());
       // Ignore exceptions and return empty array
       defaultValueFieldsCache.put(type, new ScalaDefaultValueField[0]);
     }
@@ -203,7 +208,6 @@ public class ScalaDefaultValueUtils {
     }
   }
 
-
   /**
    * Gets all default values for a Scala class. This method caches all default values at the class
    * level for better performance.
@@ -224,24 +228,25 @@ public class ScalaDefaultValueUtils {
     // Find the constructor with the most parameters (assuming it's the primary constructor)
     Constructor<?> primaryConstructor = null;
     for (Constructor<?> constructor : constructors) {
-        if (primaryConstructor == null || constructor.getParameterCount() > primaryConstructor.getParameterCount()) {
-            primaryConstructor = constructor;
-        }
+      if (primaryConstructor == null
+          || constructor.getParameterCount() > primaryConstructor.getParameterCount()) {
+        primaryConstructor = constructor;
+      }
     }
-    Preconditions.checkNotNull(primaryConstructor, "Primary constructor not found for class " + cls.getName());
+    Preconditions.checkNotNull(
+        primaryConstructor, "Primary constructor not found for class " + cls.getName());
     Map<Integer, Object> defaultValues = getDefaultValuesForClass(cls);
     int paramCount = primaryConstructor.getParameterCount();
     for (int i = 0; i < paramCount; i++) {
       String paramName = primaryConstructor.getParameters()[i].getName();
       Object defaultValue = defaultValues.get(i + 1); // +1 because default values are 1-indexed
-      if(defaultValue != null) {
+      if (defaultValue != null) {
         allDefaults.put(paramName, defaultValue);
-      } 
+      }
     }
     allDefaultValuesCache.put(cls, allDefaults);
     return allDefaults;
   }
-
 
   /**
    * Finds all default value methods for a Scala class.
@@ -250,7 +255,7 @@ public class ScalaDefaultValueUtils {
    * @return a map from parameter index to method handle
    */
   private static Map<Integer, Object> getDefaultValuesForClass(Class<?> cls) {
-    if(cachedCtrDefaultValues.getIfPresent(cls) != null) {
+    if (cachedCtrDefaultValues.getIfPresent(cls) != null) {
       return cachedCtrDefaultValues.getIfPresent(cls);
     }
     Map<Integer, Object> defaultValueMethods;
@@ -282,7 +287,11 @@ public class ScalaDefaultValueUtils {
             try {
               companionInstance = field.get(null);
             } catch (Exception e1) {
-              LOG.warn("Error {} accessing companion object for {}, default values support is disabled when deserializing object of type {}", e1.getMessage(), cls.getName(), cls.getName());
+              LOG.warn(
+                  "Error {} accessing companion object for {}, default values support is disabled when deserializing object of type {}",
+                  e1.getMessage(),
+                  cls.getName(),
+                  cls.getName());
               return values;
             }
             if (companionInstance != null) {
@@ -294,7 +303,10 @@ public class ScalaDefaultValueUtils {
       }
     }
     if (companionClass == null) {
-      LOG.warn("Companion class not found for {}, default values support is disabled when deserializing object of type {}", cls.getName(), cls.getName());
+      LOG.warn(
+          "Companion class not found for {}, default values support is disabled when deserializing object of type {}",
+          cls.getName(),
+          cls.getName());
       return values;
     }
     MethodHandles.Lookup lookup = _JDKAccess._trustedLookup(companionClass);
@@ -306,14 +318,19 @@ public class ScalaDefaultValueUtils {
       if (methodName.contains("$default$")) {
         try {
           // Extract the parameter index from the method name
-          String indexStr = methodName.substring(methodName.lastIndexOf("$default$") + "$default$".length());
+          String indexStr =
+              methodName.substring(methodName.lastIndexOf("$default$") + "$default$".length());
           int paramIndex = Integer.parseInt(indexStr);
           // Create method handle for the default value method
           MethodHandle methodHandle = lookup.unreflect(method);
           Object defaultValue = methodHandle.invoke(companionInstance);
           values.put(paramIndex, defaultValue);
         } catch (Throwable e) {
-          LOG.warn("Error: {} finding default value methods for {}, default values support is disabled when deserializing object of type {}", e.getMessage(), cls.getName(), cls.getName());
+          LOG.warn(
+              "Error: {} finding default value methods for {}, default values support is disabled when deserializing object of type {}",
+              e.getMessage(),
+              cls.getName(),
+              cls.getName());
           return values;
         }
       }
@@ -331,7 +348,8 @@ public class ScalaDefaultValueUtils {
         if (methodName.contains("$default$")) {
           try {
             // Extract the parameter index from the method name
-            String indexStr = methodName.substring(methodName.lastIndexOf("$default$") + "$default$".length());
+            String indexStr =
+                methodName.substring(methodName.lastIndexOf("$default$") + "$default$".length());
             int paramIndex = Integer.parseInt(indexStr);
             // Create method handle for the default value method
             MethodHandle methodHandle = lookup.unreflect(method);
@@ -340,13 +358,21 @@ public class ScalaDefaultValueUtils {
             Object defaultValue = methodHandle.invoke();
             values.put(paramIndex, defaultValue);
           } catch (Throwable e) {
-            LOG.warn("Error {} finding default value for {}, default values support is disabled when deserializing object of type {}", e.getMessage(), cls.getName(), cls.getName());
+            LOG.warn(
+                "Error {} finding default value for {}, default values support is disabled when deserializing object of type {}",
+                e.getMessage(),
+                cls.getName(),
+                cls.getName());
             return values;
           }
         }
       }
     } catch (Exception e) {
-      LOG.warn("Error {} finding default value for {}, default values support is disabled when deserializing object of type {}", e.getMessage(), cls.getName(), cls.getName());
+      LOG.warn(
+          "Error {} finding default value for {}, default values support is disabled when deserializing object of type {}",
+          e.getMessage(),
+          cls.getName(),
+          cls.getName());
       return values;
     }
     return values;

@@ -165,58 +165,149 @@ println(fory.deserialize(fory.serialize(opt1)))
 
 ## Scala Class Default Values Support
 
-Fory now supports Scala  class default values during deserialization when using meta-shared serialization mode. This feature allows for forward/backward compatibility when case classes have default parameters.
+Fory supports Scala class default values during deserialization when using compatible mode. This feature enables forward/backward compatibility when case classes or regular Scala classes have default parameters.
 
 ### Overview
 
-When a Scala class has default parameters, the Scala compiler generates companion object methods like `apply$default$1`, `apply$default$2`, etc. that return the default values. Fory can now detect these methods and use them when deserializing objects where certain fields are missing from the serialized data.
+When a Scala class has default parameters, the Scala compiler generates methods in the companion object (for case classes) or in the class itself (for regular Scala classes) like `apply$default$1`, `apply$default$2`, etc. that return the default values. Fory can detect these methods and use them when deserializing objects where certain fields are missing from the serialized data.
 
-### Example
+### Supported Class Types
 
-Consider a Scala case class with default values:
+Fory supports default values for:
 
-```scala
-case class SomeClass(v: List[IdAnyVal], x: Int = 1)
-```
-
-When this class is serialized and then deserialized in a context where the `x` field is missing from the serialized data, Fory will automatically use the default value `1` for the `x` field.
+- **Case classes** with default parameters
+- **Regular Scala classes** with default parameters in their primary constructor
+- **Nested case classes** with default parameters
+- **Deeply nested case classes** with default parameters
 
 ### How It Works
 
-1. **Detection**: Fory detects if a class is a Scala case class by looking for its companion object (class name + "$") and checking for the presence of an `apply` method.
+1. **Detection**: Fory detects if a class is a Scala class by checking for the presence of default value methods (`apply$default$N` or `$default$N`).
 
-2. **Default Value Discovery**: Fory scans the companion object for methods named `apply$default$1`, `apply$default$2`, etc., which correspond to default values for parameters.
+2. **Default Value Discovery**:
+   - For case classes: Fory scans the companion object for methods named `apply$default$1`, `apply$default$2`, etc.
+   - For regular Scala classes: Fory scans the class itself for methods named `$default$1`, `$default$2`, etc.
 
 3. **Field Mapping**: During deserialization, Fory identifies fields that exist in the target class but are missing from the serialized data.
 
-4. **Value Application**: After reading all available fields from the serialized data, Fory applies default values to any missing fields just before returning the deserialized object.
+4. **Value Application**: After reading all available fields from the serialized data, Fory applies default values to any missing fields using direct field access for optimal performance.
 
 ### Usage
 
 This feature is automatically enabled when:
 
-- Meta-shared serialization is enabled (`withMetaShare(true)`)
-- The target class is detected as a Scala case class
+- Compatible mode is enabled (`withCompatibleMode(CompatibleMode.COMPATIBLE)`)
+- The target class is detected as a Scala class with default values
 - A field is missing from the serialized data but exists in the target class
 
 No additional configuration is required.
 
-### Example Test
+### Examples
+
+#### Case Class with Default Values
 
 ```scala
-case class TestClass(v: String, x: Int = 1, y: Double = 2.0)
+// Class WITHOUT default values (for serialization)
+case class PersonNoDefaults(name: String)
+
+// Class WITH default values (for deserialization)
+case class PersonWithDefaults(name: String, age: Int = 25, city: String = "Unknown")
 
 val fory = Fory.builder()
-  .withMetaShare(true)
+  .withCompatibleMode(CompatibleMode.COMPATIBLE)
   .withScalaOptimizationEnabled(true)
   .build()
 
-// Serialize with all fields
-val original = TestClass("test", 42, 3.14)
+// Serialize using class without default values
+val original = PersonNoDefaults("John")
 val serialized = fory.serialize(original)
 
-// Deserialize - missing fields will use default values
-val deserialized = fory.deserialize(serialized)
-// deserialized.x will be 1 (default)
-// deserialized.y will be 2.0 (default)
+// Deserialize into class with default values - missing fields will use defaults
+val deserialized = fory.deserialize(serialized, classOf[PersonWithDefaults])
+// deserialized.name will be "John"
+// deserialized.age will be 25 (default)
+// deserialized.city will be "Unknown" (default)
+```
+
+#### Regular Scala Class with Default Values
+
+```scala
+// Class WITHOUT default values (for serialization)
+class EmployeeNoDefaults(val name: String)
+
+// Class WITH default values (for deserialization)
+class EmployeeWithDefaults(val name: String, val age: Int = 30, val department: String = "Engineering")
+
+val fory = Fory.builder()
+  .withCompatibleMode(CompatibleMode.COMPATIBLE)
+  .withScalaOptimizationEnabled(true)
+  .build()
+
+// Serialize using class without default values
+val original = new EmployeeNoDefaults("Jane")
+val serialized = fory.serialize(original)
+
+// Deserialize into class with default values - missing fields will use defaults
+val deserialized = fory.deserialize(serialized, classOf[EmployeeWithDefaults])
+// deserialized.name will be "Jane"
+// deserialized.age will be 30 (default)
+// deserialized.department will be "Engineering" (default)
+```
+
+#### Complex Default Values
+
+```scala
+// Class WITHOUT default values (for serialization)
+case class ConfigurationNoDefaults(name: String)
+
+// Class WITH default values (for deserialization)
+case class ConfigurationWithDefaults(
+  name: String,
+  settings: Map[String, String] = Map("default" -> "value"),
+  tags: List[String] = List("default"),
+  enabled: Boolean = true
+)
+
+val fory = Fory.builder()
+  .withCompatibleMode(CompatibleMode.COMPATIBLE)
+  .withScalaOptimizationEnabled(true)
+  .build()
+
+// Serialize using class without default values
+val original = ConfigurationNoDefaults("myConfig")
+val serialized = fory.serialize(original)
+
+// Deserialize into class with default values - missing fields will use defaults
+val deserialized = fory.deserialize(serialized, classOf[ConfigurationWithDefaults])
+// deserialized.name will be "myConfig"
+// deserialized.settings will be Map("default" -> "value")
+// deserialized.tags will be List("default")
+// deserialized.enabled will be true
+```
+
+#### Nested Case Classes
+
+```scala
+object NestedClasses {
+  // Class WITHOUT default values (for serialization)
+  case class SimplePerson(name: String)
+  
+  // Class WITH default values (for deserialization)
+  case class Address(street: String, city: String = "DefaultCity")
+  case class PersonWithDefaults(name: String, address: Address = Address("DefaultStreet"))
+}
+
+val fory = Fory.builder()
+  .withCompatibleMode(CompatibleMode.COMPATIBLE)
+  .withScalaOptimizationEnabled(true)
+  .build()
+
+// Serialize using class without default values
+val original = NestedClasses.SimplePerson("Alice")
+val serialized = fory.serialize(original)
+
+// Deserialize into class with default values - missing address field will use default
+val deserialized = fory.deserialize(serialized, classOf[NestedClasses.PersonWithDefaults])
+// deserialized.name will be "Alice"
+// deserialized.address will be Address("DefaultStreet", "DefaultCity")
 ```

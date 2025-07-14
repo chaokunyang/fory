@@ -99,10 +99,10 @@ class ScalaDefaultValueTest extends AnyWordSpec with Matchers {
         val fory = createFory(codegen)
         // Serialize object WITHOUT the x field (it doesn't exist in source class)
         val original = CaseClassNoDefaults("test")
-        val serialized = fory.serializeJavaObject(original)
+        val serialized = fory.serialize(original)
         
         // Deserialize into class WITH default values for x
-        val deserialized = fory.deserializeJavaObject(serialized, classOf[CaseClassWithDefaults])
+        val deserialized = fory.deserialize(serialized, classOf[CaseClassWithDefaults])
         deserialized.v shouldEqual "test"
         deserialized.x shouldEqual 1 // Should use default value
       }
@@ -111,10 +111,10 @@ class ScalaDefaultValueTest extends AnyWordSpec with Matchers {
         val fory = createFory(codegen)
         // Serialize object WITHOUT x and y fields (they don't exist in source class)
         val original = CaseClassMultipleDefaultsNoDefaults("test")
-        val serialized = fory.serializeJavaObject(original)
+        val serialized = fory.serialize(original)
         
         // Deserialize into class WITH default values for x and y
-        val deserialized = fory.deserializeJavaObject(serialized, classOf[CaseClassMultipleDefaultsWithDefaults])
+        val deserialized = fory.deserialize(serialized, classOf[CaseClassMultipleDefaultsWithDefaults])
         deserialized.v shouldEqual "test"
         deserialized.x shouldEqual 1 // Should use default value
         deserialized.y shouldEqual 2.0 // Should use default value
@@ -124,10 +124,10 @@ class ScalaDefaultValueTest extends AnyWordSpec with Matchers {
         val fory = createFory(codegen)
         // Serialize object WITHOUT the list field (it doesn't exist in source class)
         val original = CaseClassComplexDefaultsNoDefaults("test")
-        val serialized = fory.serializeJavaObject(original)
+        val serialized = fory.serialize(original)
         
         // Deserialize into class WITH default values for list
-        val deserialized = fory.deserializeJavaObject(serialized, classOf[CaseClassComplexDefaultsWithDefaults])
+        val deserialized = fory.deserialize(serialized, classOf[CaseClassComplexDefaultsWithDefaults])
         deserialized.v shouldEqual "test"
         deserialized.list shouldEqual List(1, 2, 3) // Should use default value
       }
@@ -137,10 +137,10 @@ class ScalaDefaultValueTest extends AnyWordSpec with Matchers {
         // This test case needs to be updated since we can't have partial fields
         // For now, we'll test with a different approach - serialize with one field missing
         val original = CaseClassNoDefaults("test") // Only has v field
-        val serialized = fory.serializeJavaObject(original)
+        val serialized = fory.serialize(original)
         
         // Deserialize into class WITH default values for x
-        val deserialized = fory.deserializeJavaObject(serialized, classOf[CaseClassWithDefaults])
+        val deserialized = fory.deserialize(serialized, classOf[CaseClassWithDefaults])
         deserialized.v shouldEqual "test"
         deserialized.x shouldEqual 1 // Should use default value
       }
@@ -151,10 +151,10 @@ class ScalaDefaultValueTest extends AnyWordSpec with Matchers {
         // Create a case class with only the first field, simulating missing b and c fields
         // We'll use a different approach - serialize a simpler object and deserialize into a more complex one
         val original = SimpleNestedCase("nestedTest")
-        val serialized = fory.serializeJavaObject(original)
+        val serialized = fory.serialize(original)
         
         // Deserialize into class WITH default values for b and c
-        val deserialized = fory.deserializeJavaObject(serialized, classOf[NestedCaseClassWithDefaults])
+        val deserialized = fory.deserialize(serialized, classOf[NestedCaseClassWithDefaults])
         deserialized.a shouldEqual "nestedTest"
         deserialized.b shouldEqual 99 // Should use default value
         deserialized.c shouldEqual Some("nested") // Should use default value
@@ -164,10 +164,10 @@ class ScalaDefaultValueTest extends AnyWordSpec with Matchers {
         val fory = createFory(codegen)
         // Serialize object WITHOUT default values (missing age and city fields)
         val original = new RegularScalaClassNoDefaults("Jane")
-        val serialized = fory.serializeJavaObject(original)
+        val serialized = fory.serialize(original)
         
         // Deserialize into class WITH default values
-        val deserialized = fory.deserializeJavaObject(serialized, classOf[RegularScalaClassWithDefaults])
+        val deserialized = fory.deserialize(serialized, classOf[RegularScalaClassWithDefaults])
         deserialized.name shouldEqual "Jane"
         deserialized.age shouldEqual 25 // Should use default value
         deserialized.city shouldEqual "Unknown" // Should use default value
@@ -177,10 +177,10 @@ class ScalaDefaultValueTest extends AnyWordSpec with Matchers {
         val fory = createFory(codegen)
         // Serialize object with only name field, missing age and city
         val original = new RegularScalaClassNoDefaults("Bob")
-        val serialized = fory.serializeJavaObject(original)
+        val serialized = fory.serialize(original)
         
         // Deserialize into class WITH default values
-        val deserialized = fory.deserializeJavaObject(serialized, classOf[RegularScalaClassWithDefaults])
+        val deserialized = fory.deserialize(serialized, classOf[RegularScalaClassWithDefaults])
         deserialized.name shouldEqual "Bob"
         deserialized.age shouldEqual 25 // Should use default value
         deserialized.city shouldEqual "Unknown" // Should use default value

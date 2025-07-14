@@ -216,9 +216,9 @@ class ScalaDefaultValueUtilsTest extends AnyWordSpec with Matchers {
        regularDefaults.get("active") shouldEqual false
        
        // Test classes without defaults
-       ScalaDefaultValueUtils.getAllDefaultValues(classOf[TestCaseClassNoDefaults]) shouldEqual empty
-       ScalaDefaultValueUtils.getAllDefaultValues(classOf[TestRegularScalaClassNoDefaults]) shouldEqual empty
-       ScalaDefaultValueUtils.getAllDefaultValues(classOf[TestJavaClass]) shouldEqual empty
+       ScalaDefaultValueUtils.getAllDefaultValues(classOf[TestCaseClassNoDefaults]).size shouldEqual 0
+       ScalaDefaultValueUtils.getAllDefaultValues(classOf[TestRegularScalaClassNoDefaults]).size shouldEqual 0
+       ScalaDefaultValueUtils.getAllDefaultValues(classOf[TestJavaClass]).size shouldEqual 0
      }
 
     "build Scala default value fields correctly" in {
@@ -239,12 +239,12 @@ class ScalaDefaultValueUtilsTest extends AnyWordSpec with Matchers {
        // Test with case class without defaults
        val noDefaultFields = ScalaDefaultValueUtils.buildScalaDefaultValueFields(
          fory, classOf[TestCaseClassNoDefaults], descriptors)
-       noDefaultFields shouldEqual empty
+       noDefaultFields.length shouldEqual 0
        
        // Test with Java class
        val javaFields = ScalaDefaultValueUtils.buildScalaDefaultValueFields(
          fory, classOf[TestJavaClass], descriptors)
-       javaFields shouldEqual empty
+       javaFields.length shouldEqual 0
      }
 
     "set Scala default values on objects correctly" in {
@@ -333,7 +333,7 @@ class ScalaDefaultValueUtilsTest extends AnyWordSpec with Matchers {
        ScalaDefaultValueUtils.hasScalaDefaultValues(classOf[NestedCaseClassNoDefaults]) shouldEqual false
        
        val nestedDefaults = ScalaDefaultValueUtils.getAllDefaultValues(classOf[NestedCaseClassNoDefaults])
-       nestedDefaults shouldEqual empty
+       nestedDefaults.size shouldEqual 0
      }
 
     "handle error cases gracefully" in {
@@ -375,7 +375,7 @@ class ScalaDefaultValueUtilsTest extends AnyWordSpec with Matchers {
          field.getClassId should be >= 0.toShort
        } else {
          // If no fields are returned, that's also valid
-         fields shouldEqual empty
+         fields.length shouldEqual 0
        }
      }
   }

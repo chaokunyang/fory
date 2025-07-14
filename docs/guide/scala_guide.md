@@ -185,6 +185,7 @@ Fory supports default values for:
 1. **Detection**: Fory detects if a class is a Scala class by checking for the presence of default value methods (`apply$default$N` or `$default$N`).
 
 2. **Default Value Discovery**:
+
    - For case classes: Fory scans the companion object for methods named `apply$default$1`, `apply$default$2`, etc.
    - For regular Scala classes: Fory scans the class itself for methods named `$default$1`, `$default$2`, etc.
 
@@ -291,7 +292,7 @@ val deserialized = fory.deserialize(serialized, classOf[ConfigurationWithDefault
 object NestedClasses {
   // Class WITHOUT default values (for serialization)
   case class SimplePerson(name: String)
-  
+
   // Class WITH default values (for deserialization)
   case class Address(street: String, city: String = "DefaultCity")
   case class PersonWithDefaults(name: String, address: Address = Address("DefaultStreet"))

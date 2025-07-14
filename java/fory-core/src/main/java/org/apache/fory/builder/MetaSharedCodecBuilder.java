@@ -20,7 +20,8 @@
 package org.apache.fory.builder;
 
 import static org.apache.fory.builder.Generated.GeneratedMetaSharedSerializer.SERIALIZER_FIELD_NAME;
-import static org.apache.fory.type.TypeUtils.PRIMITIVE_VOID_TYPE;
+import static org.apache.fory.type.TypeUtils.OBJECT_TYPE;
+import static org.apache.fory.type.TypeUtils.STRING_TYPE;
 
 import java.util.Collection;
 import java.util.Map;
@@ -35,11 +36,9 @@ import org.apache.fory.codegen.Expression.StaticInvoke;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.memory.Platform;
 import org.apache.fory.meta.ClassDef;
 import java.lang.reflect.Member;
 import org.apache.fory.reflect.TypeRef;
-import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.serializer.CodegenSerializer;
 import org.apache.fory.serializer.MetaSharedSerializer;
 import org.apache.fory.serializer.ObjectSerializer;
@@ -228,8 +227,18 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
       Object defaultValue = defaultField.getDefaultValue();
       Member member = defaultField.getFieldAccessor().getField();
       Descriptor descriptor = descriptors.get(member);
-      Expression defaultValueExpr = new Literal(defaultValue, descriptor.getTypeRef());
-      setDefaultsExpr.add(setFieldValue(bean, descriptor, defaultValueExpr));
+      TypeRef<?> typeRef = descriptor.getTypeRef();
+      Expression defaultValueExpr;  
+      if (typeRef.unwrap().isPrimitive() || typeRef.equals(STRING_TYPE)) {
+         defaultValueExpr = new Literal(defaultValue, typeRef);
+      } else {
+        defaultValueExpr = getOrCreateField(true, typeRef.getRawType(), member.getName(), 
+        () -> {
+          Expression expr = new StaticInvoke(ScalaDefaultValueUtils.class, "getDefaultValue", OBJECT_TYPE, staticBeanClassExpr(), Literal.ofString(member.getName()));
+          return new Expression.Cast(expr, typeRef);
+        });
+      }
+      setDefaultsExpr.add(super.setFieldValue(bean, descriptor, defaultValueExpr));
     }
     setDefaultsExpr.add(bean);
     return setDefaultsExpr;

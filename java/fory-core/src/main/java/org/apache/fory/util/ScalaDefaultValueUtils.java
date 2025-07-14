@@ -208,6 +208,11 @@ public class ScalaDefaultValueUtils {
     }
   }
 
+  public static Object getDefaultValue(Class<?> cls, String fieldName) {
+    Map<String, Object> allDefaults = getAllDefaultValues(cls);
+    return allDefaults.get(fieldName);
+  }
+
   /**
    * Gets all default values for a Scala class. This method caches all default values at the class
    * level for better performance.

@@ -79,7 +79,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
   private final ClassInfoHolder classInfoHolder;
   private final SerializationBinding binding;
   private final boolean hasScalaDefaultValues;
-  private final DefaultValueUtils.DefaultValueField[] scalaDefaultValueFields;
+  private final DefaultValueUtils.DefaultValueField[] defaultValueFields;
 
   public MetaSharedSerializer(Fory fory, Class<T> type, ClassDef classDef) {
     super(fory, type);
@@ -117,12 +117,12 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
     if (fory.getConfig().isScalaOptimizationEnabled()) {
       hasScalaDefaultValues =
           DefaultValueUtils.getScalaDefaultValueSupport().hasDefaultValues(type);
-      scalaDefaultValueFields =
+      defaultValueFields =
           DefaultValueUtils.getScalaDefaultValueSupport()
               .buildDefaultValueFields(fory, type, descriptorGrouper.getSortedDescriptors());
     } else {
       hasScalaDefaultValues = false;
-      scalaDefaultValueFields = new DefaultValueUtils.DefaultValueField[0];
+      defaultValueFields = new DefaultValueUtils.DefaultValueField[0];
     }
   }
 
@@ -216,7 +216,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
 
     // Set default values for missing fields in Scala case classes
     if (hasScalaDefaultValues) {
-      DefaultValueUtils.setDefaultValues(obj, scalaDefaultValueFields);
+      DefaultValueUtils.setDefaultValues(obj, defaultValueFields);
     }
 
     return obj;

@@ -105,7 +105,7 @@ public class DefaultValueUtils {
      * @param descriptors list of descriptors that are present in the serialized data
      * @return array of DefaultValueField objects
      */
-    public DefaultValueField[] buildDefaultValueFields(
+    public final DefaultValueField[] buildDefaultValueFields(
         Fory fory, Class<?> type, java.util.List<org.apache.fory.type.Descriptor> descriptors) {
       DefaultValueField[] defaultFieldsArray = defaultValueFieldsCache.getIfPresent(type);
       if (defaultFieldsArray != null) {

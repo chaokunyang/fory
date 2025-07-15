@@ -35,6 +35,7 @@ import org.apache.fory.ThreadSafeFory;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.serializer.collection.CollectionSerializers;
 import org.apache.fory.serializer.collection.MapSerializers;
+import org.apache.fory.util.DefaultValueUtils;
 
 /** KotlinSerializers provide default serializers for kotlin. */
 @SuppressWarnings({"rawtypes", "unchecked"})
@@ -46,6 +47,7 @@ public class KotlinSerializers {
   }
 
   public static void registerSerializers(Fory fory) {
+    DefaultValueUtils.setKotlinDefaultValueSupport(new KotlinDefaultValueSupport());
     ClassResolver resolver = fory.getClassResolver();
 
     // UByte

@@ -78,7 +78,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
   private Serializer<T> serializer;
   private final ClassInfoHolder classInfoHolder;
   private final SerializationBinding binding;
-  private final boolean hasScalaDefaultValues;
+  private final boolean hasDefaultValues;
   private final DefaultValueUtils.DefaultValueField[] defaultValueFields;
 
   public MetaSharedSerializer(Fory fory, Class<T> type, ClassDef classDef) {
@@ -114,16 +114,31 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
       recordInfo = null;
     }
     binding = SerializationBinding.createBinding(fory);
+    boolean hasDefaultValues = false;
+    DefaultValueUtils.DefaultValueField[] defaultValueFields =
+        new DefaultValueUtils.DefaultValueField[0];
+    DefaultValueUtils.DefaultValueSupport defaultValueSupport = null;
     if (fory.getConfig().isScalaOptimizationEnabled()) {
-      hasScalaDefaultValues =
-          DefaultValueUtils.getScalaDefaultValueSupport().hasDefaultValues(type);
-      defaultValueFields =
-          DefaultValueUtils.getScalaDefaultValueSupport()
-              .buildDefaultValueFields(fory, type, descriptorGrouper.getSortedDescriptors());
-    } else {
-      hasScalaDefaultValues = false;
-      defaultValueFields = new DefaultValueUtils.DefaultValueField[0];
+      defaultValueSupport = DefaultValueUtils.getScalaDefaultValueSupport();
+      if (defaultValueSupport != null) {
+        hasDefaultValues = defaultValueSupport.hasDefaultValues(type);
+        defaultValueFields =
+            defaultValueSupport.buildDefaultValueFields(
+                fory, type, descriptorGrouper.getSortedDescriptors());
+      }
     }
+    if (!hasDefaultValues) {
+      DefaultValueUtils.DefaultValueSupport kotlinDefaultValueSupport =
+          DefaultValueUtils.getKotlinDefaultValueSupport();
+      if (kotlinDefaultValueSupport != null) {
+        hasDefaultValues = kotlinDefaultValueSupport.hasDefaultValues(type);
+        defaultValueFields =
+            kotlinDefaultValueSupport.buildDefaultValueFields(
+                fory, type, descriptorGrouper.getSortedDescriptors());
+      }
+    }
+    this.hasDefaultValues = hasDefaultValues;
+    this.defaultValueFields = defaultValueFields;
   }
 
   @Override
@@ -215,7 +230,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
     }
 
     // Set default values for missing fields in Scala case classes
-    if (hasScalaDefaultValues) {
+    if (hasDefaultValues) {
       DefaultValueUtils.setDefaultValues(obj, defaultValueFields);
     }
 
@@ -223,7 +238,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
   }
 
   private T newInstance() {
-    if (!hasScalaDefaultValues) {
+    if (!hasDefaultValues) {
       return newBean();
     }
     return Platform.newInstance(type);

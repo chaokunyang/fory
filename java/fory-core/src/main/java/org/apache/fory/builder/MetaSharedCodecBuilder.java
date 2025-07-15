@@ -93,7 +93,8 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
         new ObjectCodecOptimizer(beanClass, grouper, !fory.isBasicTypesRefIgnored(), ctx);
 
     String defaultValueLanguage = "None";
-    DefaultValueUtils.DefaultValueField[] defaultValueFields = new DefaultValueUtils.DefaultValueField[0];
+    DefaultValueUtils.DefaultValueField[] defaultValueFields =
+        new DefaultValueUtils.DefaultValueField[0];
     if (fory.getConfig().isScalaOptimizationEnabled()) {
       // Check if this is a Scala case class and build default value fields
       defaultValueFields =
@@ -104,7 +105,7 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
       }
     }
     if (defaultValueFields.length == 0) {
-    DefaultValueUtils.DefaultValueSupport kotlinDefaultValueSupport =
+      DefaultValueUtils.DefaultValueSupport kotlinDefaultValueSupport =
           DefaultValueUtils.getKotlinDefaultValueSupport();
       if (kotlinDefaultValueSupport != null) {
         defaultValueFields =

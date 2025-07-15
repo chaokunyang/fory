@@ -46,10 +46,10 @@ import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.Serializers;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
+import org.apache.fory.util.DefaultValueUtils;
 import org.apache.fory.util.ExceptionUtils;
 import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.Preconditions;
-import org.apache.fory.util.ScalaDefaultValueUtils;
 import org.apache.fory.util.StringUtils;
 import org.apache.fory.util.record.RecordComponent;
 import org.apache.fory.util.record.RecordUtils;
@@ -72,7 +72,7 @@ import org.apache.fory.util.record.RecordUtils;
  */
 public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
   private final ClassDef classDef;
-  private final ScalaDefaultValueUtils.ScalaDefaultValueField[] scalaDefaultValueFields;
+  private final DefaultValueUtils.DefaultValueField[] scalaDefaultValueFields;
 
   public MetaSharedCodecBuilder(TypeRef<?> beanType, Fory fory, ClassDef classDef) {
     super(beanType, fory, GeneratedMetaSharedSerializer.class);
@@ -94,10 +94,10 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
     if (fory.getConfig().isScalaOptimizationEnabled()) {
       // Check if this is a Scala case class and build default value fields
       this.scalaDefaultValueFields =
-          ScalaDefaultValueUtils.buildScalaDefaultValueFields(
-              fory, beanClass, grouper.getSortedDescriptors());
+          DefaultValueUtils.getScalaDefaultValueSupport()
+              .buildDefaultValueFields(fory, beanClass, grouper.getSortedDescriptors());
     } else {
-      this.scalaDefaultValueFields = new ScalaDefaultValueUtils.ScalaDefaultValueField[0];
+      this.scalaDefaultValueFields = new DefaultValueUtils.DefaultValueField[0];
     }
   }
 
@@ -155,7 +155,7 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
   protected void addCommonImports() {
     super.addCommonImports();
     ctx.addImport(GeneratedMetaSharedSerializer.class);
-    ctx.addImport(ScalaDefaultValueUtils.class);
+    ctx.addImport(DefaultValueUtils.class);
   }
 
   // Invoked by JIT.
@@ -223,7 +223,7 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
     Expression.ListExpression setDefaultsExpr = new Expression.ListExpression();
     setDefaultsExpr.add(bean);
     Map<Member, Descriptor> descriptors = Descriptor.getAllDescriptorsMap(beanClass);
-    for (ScalaDefaultValueUtils.ScalaDefaultValueField defaultField : scalaDefaultValueFields) {
+    for (DefaultValueUtils.DefaultValueField defaultField : scalaDefaultValueFields) {
       Object defaultValue = defaultField.getDefaultValue();
       Member member = defaultField.getFieldAccessor().getField();
       Descriptor descriptor = descriptors.get(member);
@@ -240,8 +240,8 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
                 () -> {
                   Expression expr =
                       new StaticInvoke(
-                          ScalaDefaultValueUtils.class,
-                          "getDefaultValue",
+                          DefaultValueUtils.class,
+                          "getScalaDefaultValue",
                           OBJECT_TYPE,
                           staticBeanClassExpr(),
                           Literal.ofString(member.getName()));

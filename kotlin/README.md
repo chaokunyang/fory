@@ -92,11 +92,11 @@ fun main() {
     KotlinSerializers.registerSerializers(fory)
     fory.register(User::class.java)
     fory.register(UserV2::class.java)
-    
+
     // Serialize with old schema
     val oldUser = User("John", 30)
     val serialized = fory.serialize(oldUser)
-    
+
     // Deserialize with new schema - missing field gets default value
     val newUser = fory.deserialize(serialized, UserV2::class.java)
     println(newUser) // UserV2(name=John, age=30, email=default@example.com)

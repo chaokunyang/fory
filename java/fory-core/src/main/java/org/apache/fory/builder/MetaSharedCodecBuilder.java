@@ -93,29 +93,30 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
         new ObjectCodecOptimizer(beanClass, grouper, !fory.isBasicTypesRefIgnored(), ctx);
 
     String defaultValueLanguage = "None";
+    DefaultValueUtils.DefaultValueField[] defaultValueFields = new DefaultValueUtils.DefaultValueField[0];
     if (fory.getConfig().isScalaOptimizationEnabled()) {
       // Check if this is a Scala case class and build default value fields
-      this.defaultValueFields =
+      defaultValueFields =
           DefaultValueUtils.getScalaDefaultValueSupport()
               .buildDefaultValueFields(fory, beanClass, grouper.getSortedDescriptors());
-      if (this.defaultValueFields.length > 0) {
+      if (defaultValueFields.length > 0) {
         defaultValueLanguage = "Scala";
       }
-    } else {
-      DefaultValueUtils.DefaultValueSupport kotlinDefaultValueSupport =
+    }
+    if (defaultValueFields.length == 0) {
+    DefaultValueUtils.DefaultValueSupport kotlinDefaultValueSupport =
           DefaultValueUtils.getKotlinDefaultValueSupport();
       if (kotlinDefaultValueSupport != null) {
-        this.defaultValueFields =
+        defaultValueFields =
             kotlinDefaultValueSupport.buildDefaultValueFields(
                 fory, beanClass, grouper.getSortedDescriptors());
-        if (this.defaultValueFields.length > 0) {
+        if (defaultValueFields.length > 0) {
           defaultValueLanguage = "Kotlin";
         }
-      } else {
-        this.defaultValueFields = new DefaultValueUtils.DefaultValueField[0];
       }
     }
     this.defaultValueLanguage = defaultValueLanguage;
+    this.defaultValueFields = defaultValueFields;
   }
 
   // Must be static to be shared across the whole process life.

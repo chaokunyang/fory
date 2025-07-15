@@ -104,7 +104,6 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
     } else {
       DefaultValueUtils.DefaultValueSupport kotlinDefaultValueSupport =
           DefaultValueUtils.getKotlinDefaultValueSupport();
-      System.out.println("kotlinDefaultValueSupport: " + kotlinDefaultValueSupport);
       if (kotlinDefaultValueSupport != null) {
         this.defaultValueFields =
             kotlinDefaultValueSupport.buildDefaultValueFields(
@@ -173,7 +172,6 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
   protected void addCommonImports() {
     super.addCommonImports();
     ctx.addImport(GeneratedMetaSharedSerializer.class);
-    ctx.addImport(DefaultValueUtils.class);
   }
 
   // Invoked by JIT.

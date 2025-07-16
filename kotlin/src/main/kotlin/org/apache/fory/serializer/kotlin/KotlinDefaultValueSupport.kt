@@ -24,6 +24,7 @@ import kotlin.reflect.KParameter
 import kotlin.reflect.full.memberProperties
 import kotlin.reflect.full.primaryConstructor
 import kotlin.reflect.jvm.javaType
+import org.apache.fory.collection.ClassValueCache
 import org.apache.fory.logging.Logger
 import org.apache.fory.logging.LoggerFactory
 import org.apache.fory.memory.Platform
@@ -38,22 +39,24 @@ import org.apache.fory.util.DefaultValueUtils
  */
 internal class KotlinDefaultValueSupport : DefaultValueUtils.DefaultValueSupport() {
   private val LOG: Logger = LoggerFactory.getLogger(KotlinDefaultValueSupport::class.java)
+  private val cachedKotlinDataClassDefaultValues =
+    ClassValueCache.newClassKeyCache<Map<String, Any>>(32)
 
   override fun hasDefaultValues(cls: Class<*>): Boolean {
-    return try {
-      if (!isKotlinDataClass(cls)) {
-        return false
-      }
-      getAllDefaultValues(cls).isNotEmpty()
-    } catch (e: Exception) {
-      LOG.warn("Error checking default values for class ${cls.name}: ${e.message}")
-      false
+    if (!isKotlinDataClass(cls)) {
+      return false
+    } else {
+      return getAllDefaultValues(cls).isNotEmpty()
     }
   }
 
   override fun getAllDefaultValues(cls: Class<*>): Map<String, Any> {
+    cachedKotlinDataClassDefaultValues.getIfPresent(cls)?.let {
+      return it
+    }
     return try {
       if (!isKotlinDataClass(cls)) {
+        cachedKotlinDataClassDefaultValues.put(cls, emptyMap())
         return emptyMap()
       }
 
@@ -68,6 +71,7 @@ internal class KotlinDefaultValueSupport : DefaultValueUtils.DefaultValueSupport
           if (defaultValue != null) {
             argsMap[parameter] = defaultValue
           } else {
+            cachedKotlinDataClassDefaultValues.put(cls, emptyMap())
             // If we can't provide a default for a required parameter, we can't get any defaults
             return emptyMap()
           }
@@ -89,34 +93,24 @@ internal class KotlinDefaultValueSupport : DefaultValueUtils.DefaultValueSupport
           }
         }
       }
+      cachedKotlinDataClassDefaultValues.put(cls, defaultValues)
       defaultValues
     } catch (e: Exception) {
       LOG.info("Error getting default values for class ${cls.name}: ${e.message}")
+      cachedKotlinDataClassDefaultValues.put(cls, emptyMap())
       emptyMap()
     }
   }
 
   override fun getDefaultValue(cls: Class<*>, fieldName: String): Any? {
-    return try {
-      if (!isKotlinDataClass(cls)) {
-        return null
-      }
-      getAllDefaultValues(cls)[fieldName]
-    } catch (e: Exception) {
-      LOG.info(
-        "Error getting default value for field $fieldName in class ${cls.name}: ${e.message}"
-      )
-      null
+    if (!isKotlinDataClass(cls)) {
+      return null
     }
+    return getAllDefaultValues(cls)[fieldName]
   }
 
   private fun isKotlinDataClass(cls: Class<*>): Boolean {
-    return try {
-      cls.kotlin.isData
-    } catch (e: Exception) {
-      LOG.info("Error checking if class ${cls.name} is a Kotlin data class: ${e.message}")
-      false
-    }
+    return cls.kotlin.isData
   }
 
   private fun getDefaultValueForType(type: Type): Any? {

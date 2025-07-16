@@ -19,7 +19,6 @@
 
 package org.apache.fory.util;
 
-import com.google.common.cache.Cache;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Constructor;
@@ -30,7 +29,7 @@ import java.util.List;
 import java.util.Map;
 import org.apache.fory.Fory;
 import org.apache.fory.annotation.Internal;
-import org.apache.fory.collection.Collections;
+import org.apache.fory.collection.ClassValueCache;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.Platform;
@@ -50,12 +49,12 @@ import org.apache.fory.util.unsafe._JDKAccess;
 public class DefaultValueUtils {
   private static final Logger LOG = LoggerFactory.getLogger(DefaultValueUtils.class);
 
-  private static final Cache<Class<?>, Map<Integer, Object>> cachedCtrDefaultValues =
-      Collections.newClassKeySoftCache(32);
-  private static final Cache<Class<?>, DefaultValueField[]> defaultValueFieldsCache =
-      Collections.newClassKeySoftCache(32);
-  private static final Cache<Class<?>, Map<String, Object>> allDefaultValuesCache =
-      Collections.newClassKeySoftCache(32);
+  private static final ClassValueCache<Map<Integer, Object>> cachedCtrDefaultValues =
+      ClassValueCache.newClassKeySoftCache(32);
+  private static final ClassValueCache<DefaultValueField[]> defaultValueFieldsCache =
+      ClassValueCache.newClassKeySoftCache(32);
+  private static final ClassValueCache<Map<String, Object>> allDefaultValuesCache =
+      ClassValueCache.newClassKeySoftCache(32);
 
   /** Field info for scala/kotlin class fields with default values. */
   public static final class DefaultValueField {

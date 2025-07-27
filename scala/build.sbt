@@ -28,7 +28,6 @@ lazy val root = Project(id = "fory-scala", base = file("."))
     name := "fory-scala",
     apacheSonatypeLicenseFile := baseDirectory.value / ".." / "LICENSE",
     apacheSonatypeNoticeFile := baseDirectory.value / ".." / "NOTICE",
-    apacheSonatypeDisclaimerFile := Some(baseDirectory.value / ".." / "DISCLAIMER"),
     description := "Apache Fory is a blazingly fast multi-language serialization framework powered by JIT and zero-copy.",
     homepage := Some(url("https://fory.apache.org/")),
     startYear := Some(2024),

@@ -240,6 +240,9 @@ def run_release():
     """Release to Maven Central."""
     logging.info(f"Starting release to Maven Central with Java")
     install_jdks()
+    java_home = os.path.join(common.PROJECT_ROOT_DIR, JDKS["8"])
+    os.environ["JAVA_HOME"] = java_home
+    os.environ["PATH"] = f"{java_home}/bin:{os.environ.get('PATH', '')}"
     common.cd_project_subdir("java")
     
     # Clean and install without tests first

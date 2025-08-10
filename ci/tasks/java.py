@@ -92,6 +92,11 @@ def create_toolchains_xml(jdk_mappings):
         jdk_path = os.path.join(common.PROJECT_ROOT_DIR, jdk_name)
         logging.info(f"  JDK {version}: {jdk_path}")
 
+def install_fory():
+    """Install Fory."""
+    common.cd_project_subdir("java")
+    common.exec_cmd("mvn -T16 --batch-mode --no-transfer-progress install -DskipTests")
+
 
 def run_java8():
     """Run Java 8 tests."""
@@ -248,8 +253,12 @@ def run_release():
     logging.info("Release to Maven Central completed successfully")
 
 
-def run(java_version=None, release=False):
+def run(java_version=None, release=False, install_jdks=False, install_fory=False):
     """Run Java CI tasks based on the specified Java version."""
+    if install_jdks:
+        install_jdks()
+    if install_fory:
+        install_fory()
     if release:
         logging.info("Release mode enabled - will release to Maven Central")
         run_release()

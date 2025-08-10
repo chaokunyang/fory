@@ -172,7 +172,17 @@ def parse_args():
         action="store_true",
         help="Release to Maven Central",
     )
-    java_parser.set_defaults(func=lambda version, release: java.run(version, release))
+    java_parser.add_argument(
+        "--install-jdks",
+        action="store_true",
+        help="Install JDKs",
+    )
+    java_parser.add_argument(
+        "--install-fory",
+        action="store_true",
+        help="Install Fory",
+    )
+    java_parser.set_defaults(func=java.run)
 
     # Kotlin subparser
     kotlin_parser = subparsers.add_parser(

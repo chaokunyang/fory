@@ -55,7 +55,7 @@ JDKS = {
     "11": "zulu11.66.15-ca-jdk11.0.20-linux_x64",
     "17": "zulu17.44.17-ca-crac-jdk17.0.8-linux_x64",
     "21": "zulu21.28.85-ca-jdk21.0.0-linux_x64",
-    "24": "zulu24.29.11-ca-jdk24.0.0-linux_x64",
+    "24": "zulu24.32.13-ca-fx-jdk24.0.2-linux_x64",
 }
 
 

@@ -328,6 +328,3 @@ def run(version=None, release=False, install_jdks=False, install_fory=False):
         run_integration_tests()
     elif version == "graalvm":
         run_graalvm_test()
-    else:
-        # Default to Java 17 if no version specified
-        run_jdk17_plus("17")

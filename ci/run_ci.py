@@ -164,7 +164,7 @@ def parse_args():
             "integration_tests",
             "graalvm",
         ],
-        default="17",
+        default=None,
         help="Java version to use for testing",
     )
     java_parser.add_argument(
@@ -235,21 +235,25 @@ def parse_args():
     # Call the appropriate function with the remaining arguments
     if command == "java":
         if USE_PYTHON_JAVA:
-            func(arg_dict.get("version"), arg_dict.get("release", False))
+            func(**arg_dict)
         else:
+            
+            if not arg_dict.get("version"):
+                func(**arg_dict)
+                return
             # Map Python version argument to shell script command
             version = arg_dict.get("version", "17")
             release = arg_dict.get("release", False)
             
             if release:
                 logging.info("Release mode requested - using Python implementation")
-                func(version, release)
+                func(**arg_dict)
             # For windows_java21 on Windows, use the Python implementation directly
             elif version == "windows_java21" and is_windows():
                 logging.info(
                     "Using Python implementation for windows_java21 on Windows"
                 )
-                func(version, release)
+                func(**arg_dict)
             elif version == "integration_tests":
                 run_shell_script("integration_tests")
             elif version == "windows_java21":

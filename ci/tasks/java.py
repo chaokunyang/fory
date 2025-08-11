@@ -17,6 +17,7 @@
 
 import logging
 import os
+import sys
 from . import common
 
 # JDK versions
@@ -88,7 +89,7 @@ def create_toolchains_xml(jdk_mappings):
     
     logging.info(f"Created toolchains.xml at {toolchains_path}")
     logging.info("Toolchains configuration:")
-    for version, jdk_name in jdk_mappings:
+    for version, jdk_name in jdk_mappings.items():
         jdk_path = os.path.join(common.PROJECT_ROOT_DIR, jdk_name)
         logging.info(f"  JDK {version}: {jdk_path}")
 
@@ -256,30 +257,30 @@ def run_release():
     logging.info("Release to Maven Central completed successfully")
 
 
-def run(java_version=None, release=False, install_jdks=False, install_fory=False):
+def run(version=None, release=False, install_jdks=False, install_fory=False):
     """Run Java CI tasks based on the specified Java version."""
     if install_jdks:
-        install_jdks()
+        globals()["install_jdks"]()
     if install_fory:
         install_fory()
     if release:
         logging.info("Release mode enabled - will release to Maven Central")
         run_release()
-    elif java_version == "8":
+    elif version == "8":
         run_java8()
-    elif java_version == "11":
+    elif version == "11":
         run_java11()
-    elif java_version == "17":
+    elif version == "17":
         run_jdk17_plus("17")
-    elif java_version == "21":
+    elif version == "21":
         run_jdk17_plus("21")
-    elif java_version == "24":
+    elif version == "24":
         run_jdk17_plus("24")
-    elif java_version == "windows_java21":
+    elif version == "windows_java21":
         run_windows_java21()
-    elif java_version == "integration_tests":
+    elif version == "integration_tests":
         run_integration_tests()
-    elif java_version == "graalvm":
+    elif version == "graalvm":
         run_graalvm_test()
     else:
         # Default to Java 17 if no version specified

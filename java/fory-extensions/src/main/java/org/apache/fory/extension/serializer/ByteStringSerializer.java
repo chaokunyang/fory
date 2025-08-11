@@ -17,7 +17,7 @@
  * under the License.
  */
 
-package org.apache.fory.serializer;
+package org.apache.fory.extension.serializer;
 
 import com.google.protobuf.ByteString;
 import org.apache.fory.Fory;

@@ -263,7 +263,7 @@ def run(version=None, release=False, install_jdks=False, install_fory=False):
     if install_jdks:
         globals()["install_jdks"]()
     if install_fory:
-        install_fory()
+        globals()["install_fory"]()
     if release:
         logging.info("Release mode enabled - will release to Maven Central")
         run_release()

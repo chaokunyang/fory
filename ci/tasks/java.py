@@ -294,7 +294,7 @@ def run_release():
     
     # Deploy to Maven Central
     logging.info("Deploying to Maven Central")
-    common.exec_cmd("mvn deploy -Dgpg.skip -DskipTests -Papache-release")
+    common.exec_cmd("mvn -T10 -B --no-transfer-progress clean deploy -Dgpg.skip -DskipTests -Papache-release")
     
     logging.info("Release to Maven Central completed successfully")
 

@@ -22,11 +22,11 @@ from . import common
 
 # JDK versions
 JDKS = {
-    "8": "zulu21.28.85-ca-jdk21.0.0-linux_x64",
-    "11": "zulu17.44.17-ca-crac-jdk17.0.8-linux_x64",
-    "17": "zulu15.46.17-ca-jdk15.0.10-linux_x64",
-    "21": "zulu13.54.17-ca-jdk13.0.14-linux_x64",
-    "24": "zulu11.66.15-ca-jdk11.0.20-linux_x64",
+    "8": "zulu8.72.0.17-ca-jdk8.0.382-linux_x64",
+    "11": "zulu11.66.15-ca-jdk11.0.20-linux_x64",
+    "17": "zulu17.44.17-ca-crac-jdk17.0.8-linux_x64",
+    "21": "zulu21.28.85-ca-jdk21.0.0-linux_x64",
+    "24": "zulu24.29.11-ca-jdk24.0.0-linux_x64",
 }
 
 
@@ -74,7 +74,7 @@ def create_toolchains_xml(jdk_mappings):
         # Set configuration
         configuration = ET.SubElement(toolchain, "configuration")
         jdk_home = ET.SubElement(configuration, "jdkHome")
-        jdk_home.text = os.path.join(common.PROJECT_ROOT_DIR, jdk_name)
+        jdk_home.text = os.path.abspath(os.path.join(common.PROJECT_ROOT_DIR, jdk_name))
     
     # Create pretty XML string
     rough_string = ET.tostring(toolchains, 'unicode')

@@ -32,13 +32,16 @@ JDKS = {
 
 def install_jdks():
     """Download and install JDKs."""
+    logging.info("Downloading and installing JDKs")
     common.cd_project_subdir("")  # Go to the project root
     for jdk in JDKS.values():
         common.exec_cmd(
             f"wget -q https://cdn.azul.com/zulu/bin/{jdk}.tar.gz -O {jdk}.tar.gz"
         )
         common.exec_cmd(f"tar zxf {jdk}.tar.gz")
+    logging.info("Creating toolchains.xml")
     create_toolchains_xml(JDKS)
+    logging.info("JDKs downloaded and installed successfully")
 
 
 def create_toolchains_xml(jdk_mappings):
@@ -92,6 +95,9 @@ def create_toolchains_xml(jdk_mappings):
     for version, jdk_name in jdk_mappings.items():
         jdk_path = os.path.join(common.PROJECT_ROOT_DIR, jdk_name)
         logging.info(f"  JDK {version}: {jdk_path}")
+    # print toolchains.xml
+    with open(toolchains_path, 'r', encoding='utf-8') as f:
+        logging.info(f.read())
 
 def install_fory():
     """Install Fory."""

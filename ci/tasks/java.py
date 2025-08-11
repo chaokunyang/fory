@@ -18,7 +18,36 @@
 import logging
 import os
 import sys
+import subprocess
+import re
 from . import common
+
+
+def get_jdk_major_version():
+    try:
+        # Run the 'java -version' command
+        result = subprocess.run(['java', '-version'], capture_output=True, text=True)
+        output = result.stderr  # java -version outputs to stderr
+
+        # Use regex to find the version string
+        match = re.search(r'version "([^"]+)"', output)
+        if not match:
+            return None
+
+        version_string = match.group(1)
+
+        # Parse the version string
+        version_parts = version_string.split('.')
+        if version_parts[0] == '1':
+            # Java 8 or earlier
+            return int(version_parts[1])
+        else:
+            # Java 9 or later
+            return int(version_parts[0])
+
+    except Exception:
+        return None
+
 
 # JDK versions
 JDKS = {
@@ -35,6 +64,9 @@ def install_jdks():
     logging.info("Downloading and installing JDKs")
     common.cd_project_subdir("")  # Go to the project root
     for jdk in JDKS.values():
+        if os.path.exists(os.path.join(common.PROJECT_ROOT_DIR, jdk)):
+            logging.info(f"JDK {jdk} already exists")
+            continue
         common.exec_cmd(
             f"wget -q https://cdn.azul.com/zulu/bin/{jdk}.tar.gz -O {jdk}.tar.gz"
         )
@@ -99,8 +131,12 @@ def create_toolchains_xml(jdk_mappings):
     with open(toolchains_path, 'r', encoding='utf-8') as f:
         logging.info(f.read())
 
+
 def install_fory():
     """Install Fory."""
+    # install jdks if jdk version is 8
+    if get_jdk_major_version() == 8:
+        install_jdks()
     common.cd_project_subdir("java")
     common.exec_cmd("mvn -T16 --batch-mode --no-transfer-progress install -DskipTests")
 

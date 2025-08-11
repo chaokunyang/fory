@@ -145,7 +145,7 @@ def run_java8():
     logging.info("Executing fory java tests with Java 8")
     install_jdks()
     common.cd_project_subdir("java")
-    common.exec_cmd("mvn -T16 --batch-mode --no-transfer-progress test")
+    common.exec_cmd("mvn -T16 --batch-mode --no-transfer-progress test -Duse.toolchains=true")
     logging.info("Executing fory java tests succeeds")
 
 

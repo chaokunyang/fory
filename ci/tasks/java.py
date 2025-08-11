@@ -134,11 +134,10 @@ def create_toolchains_xml(jdk_mappings):
 
 def install_fory():
     """Install Fory."""
-    # install jdks if jdk version is 8
-    if get_jdk_major_version() == 8:
-        install_jdks()
+    # Always install jdks and create toolchains.xml to ensure proper JDK environment
+    install_jdks()
     common.cd_project_subdir("java")
-    common.exec_cmd("mvn -T16 --batch-mode --no-transfer-progress install -DskipTests")
+    common.exec_cmd("mvn -T16 --batch-mode --no-transfer-progress install -DskipTests -Duse.toolchains=true")
 
 
 def run_java8():

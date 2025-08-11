@@ -286,10 +286,6 @@ def run_graalvm_test():
 def run_release():
     """Release to Maven Central."""
     logging.info(f"Starting release to Maven Central with Java")
-    install_jdks()
-    java_home = os.path.join(common.PROJECT_ROOT_DIR, JDKS["8"])
-    os.environ["JAVA_HOME"] = java_home
-    os.environ["PATH"] = f"{java_home}/bin:{os.environ.get('PATH', '')}"
     common.cd_project_subdir("java")
     
     # Clean and install without tests first
@@ -310,7 +306,7 @@ def run(version=None, release=False, install_jdks=False, install_fory=False):
     if install_fory:
         globals()["install_fory"]()
     if release:
-        logging.info("Release mode enabled - will release to Maven Central")
+        logging.info("Release mode enabled - will release to Maven Repository")
         run_release()
     elif version == "8":
         run_java8()

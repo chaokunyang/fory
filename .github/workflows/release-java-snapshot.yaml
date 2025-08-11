@@ -32,7 +32,7 @@ jobs:
       - name: Set up Maven Central Repository
         uses: actions/setup-java@v4
         with:
-          java-version: "8"
+          java-version: "11"
           distribution: "adopt"
           architecture: x64
           cache: maven
@@ -40,7 +40,7 @@ jobs:
           server-username: NEXUS_USERNAME
           server-password: NEXUS_PASSWORD
       - name: Publish Fory Java Snapshot
-        run: python ./ci/run_ci.py java --version 8 --release
+        run: python ./ci/run_ci.py java --version 11 --release
         env:
           NEXUS_USERNAME: ${{ secrets.NEXUS_USER }}
           NEXUS_PASSWORD: ${{ secrets.NEXUS_PW }}

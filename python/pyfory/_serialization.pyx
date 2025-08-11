@@ -455,6 +455,17 @@ cdef class TypeResolver:
         for typeinfo in self._resolver._types_info.values():
             self._populate_typeinfo(typeinfo)
 
+    def register(
+        self,
+        cls: Union[type, TypeVar],
+        *,
+        type_id: int = None,
+        namespace: str = None,
+        typename: str = None,
+        serializer=None,
+    ):
+        self.register_type(cls, type_id=type_id, namespace=namespace, typename=typename, serializer=serializer)
+
     def register_type(
             self,
             cls: Union[type, TypeVar],

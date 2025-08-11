@@ -166,9 +166,17 @@ class Fory:
         self._unsupported_callback = None
         self._unsupported_objects = None
         self._peer_language = None
-
-    def register_serializer(self, cls: type, serializer):
-        self.type_resolver.register_serializer(cls, serializer)
+    
+    def register(
+        self,
+        cls: Union[type, TypeVar],
+        *,
+        type_id: int = None,
+        namespace: str = None,
+        typename: str = None,
+        serializer=None,
+    ):
+        self.register_type(cls, type_id=type_id, namespace=namespace, typename=typename, serializer=serializer)
 
     # `Union[type, TypeVar]` is not supported in py3.6
     def register_type(
@@ -187,6 +195,9 @@ class Fory:
             typename=typename,
             serializer=serializer,
         )
+
+    def register_serializer(self, cls: type, serializer):
+        self.type_resolver.register_serializer(cls, serializer)
 
     def serialize(
         self,

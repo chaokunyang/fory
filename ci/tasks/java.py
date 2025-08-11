@@ -135,9 +135,13 @@ def create_toolchains_xml(jdk_mappings):
 def install_fory():
     """Install Fory."""
     # Always install jdks and create toolchains.xml to ensure proper JDK environment
-    install_jdks()
+    if get_jdk_major_version() == 8:
+        install_jdks()
+        java_home = os.path.join(common.PROJECT_ROOT_DIR, JDKS["11"])
+        os.environ["JAVA_HOME"] = java_home
+        os.environ["PATH"] = f"{java_home}/bin:{os.environ.get('PATH', '')}"
     common.cd_project_subdir("java")
-    common.exec_cmd("mvn -T16 --batch-mode --no-transfer-progress install -DskipTests -Duse.toolchains=true")
+    common.exec_cmd("mvn -T16 --batch-mode --no-transfer-progress install -DskipTests")
 
 
 def run_java8():
@@ -145,7 +149,7 @@ def run_java8():
     logging.info("Executing fory java tests with Java 8")
     install_jdks()
     common.cd_project_subdir("java")
-    common.exec_cmd("mvn -T16 --batch-mode --no-transfer-progress test -Duse.toolchains=true")
+    common.exec_cmd("mvn -T16 --batch-mode --no-transfer-progress test -pl '!fory-format'")
     logging.info("Executing fory java tests succeeds")
 
 

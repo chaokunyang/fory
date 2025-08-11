@@ -261,47 +261,4 @@
       </plugin>
     </plugins>
   </build>
-  
-  <profiles>
-    <profile>
-      <id>use-toolchains</id>
-      <activation>
-        <property>
-          <name>use.toolchains</name>
-          <value>true</value>
-        </property>
-      </activation>
-      <build>
-        <pluginManagement>
-          <plugins>
-            <plugin>
-              <groupId>org.apache.maven.plugins</groupId>
-              <artifactId>maven-toolchains-plugin</artifactId>
-              <version>3.1.0</version>
-              <executions>
-                <execution>
-                  <goals>
-                    <goal>toolchain</goal>
-                  </goals>
-                </execution>
-              </executions>
-              <configuration>
-                <toolchains>
-                  <jdk>
-                    <version>${maven.compiler.target}</version>
-                  </jdk>
-                </toolchains>
-              </configuration>
-            </plugin>
-          </plugins>
-        </pluginManagement>
-        <plugins>
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-toolchains-plugin</artifactId>
-          </plugin>
-        </plugins>
-      </build>
-    </profile>
-  </profiles>
 </project>

@@ -87,7 +87,7 @@ class ClassDefDecoder {
           classSpec = new ClassSpec(NonexistentClass.NonexistentMetaShared.class);
           className = classSpec.entireClassName;
         } else {
-          Class<?> cls = resolver.getClassInfo(registeredId).getCls();
+          Class<?> cls = resolver.getRegisteredClass(registeredId);
           className = cls.getName();
           classSpec = new ClassSpec(cls);
         }

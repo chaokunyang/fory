@@ -274,6 +274,7 @@ public class ClassResolver implements TypeResolver {
     private final IdentityMap<Type, GenericType> genericTypes = new IdentityMap<>();
     private final Map<Class, Map<String, GenericType>> classGenericTypes = new HashMap<>();
     private final Map<List<ClassLoader>, CodeGenerator> codeGeneratorMap = new HashMap<>();
+    private final Set<ClassInfo> initialClassInfos = new HashSet<>();
   }
 
   public ClassResolver(Fory fory) {
@@ -331,6 +332,14 @@ public class ClassResolver implements TypeResolver {
     addDefaultSerializers();
     shimDispatcher.initialize();
     innerEndClassId = extRegistry.classIdGenerator;
+    if (GraalvmSupport.isGraalBuildtime()) {
+      classInfoMap.forEach(
+          (cls, classInfo) -> {
+            if (classInfo.serializer != null) {
+              extRegistry.initialClassInfos.add(classInfo);
+            }
+          });
+    }
   }
 
   private void addDefaultSerializers() {
@@ -2195,6 +2204,32 @@ public class ClassResolver implements TypeResolver {
   @Override
   public Fory getFory() {
     return fory;
+  }
+
+  /**
+   * Ensure all compilation for serializers and accessors even for lazy initialized serializers.
+   * This method will block until all compilation is done.
+   */
+  public void ensureSerializersCompiled() {
+    try {
+      classInfoMap.forEach(
+          (cls, classInfo) -> {
+            if (classInfo.serializer == null) {
+              getSerializer(classInfo.cls, isSerializable(classInfo.cls));
+            }
+          });
+      if (GraalvmSupport.isGraalBuildtime()) {
+        classInfoMap.forEach(
+            (cls, classInfo) -> {
+              if (classInfo.serializer != null
+                  && !extRegistry.initialClassInfos.contains(classInfo)) {
+                classInfo.serializer = null;
+              }
+            });
+      }
+    } finally {
+      fory.getJITContext().unlock();
+    }
   }
 
   private static final ConcurrentMap<Integer, GraalvmClassRegistry> GRAALVM_REGISTRY =

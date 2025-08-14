@@ -308,8 +308,8 @@ fory.registerSerializer(Foo.class, new FooSerializer(fory));
 
 ### Implement Collection Serializer
 
-Similar to maps, when implementing a serializer for a custom Collection type, you must extend `CollectionSerializer` or `AbstractCollectionSerializer`.
-The key difference between these two is that `AbstractCollectionSerializer` can serialize a class which has a collection-like structure but is not a java Collection subtype.
+Similar to maps, when implementing a serializer for a custom Collection type, you must extend `CollectionSerializer` or `CollectionLikeSerializer`.
+The key difference between these two is that `CollectionLikeSerializer` can serialize a class which has a collection-like structure but is not a java Collection subtype.
 
 For collection serializer, this is a special parameter `supportCodegenHook` needs be configured:
 
@@ -433,7 +433,7 @@ class IntList extends AbstractCollection<Integer> {
     }
 }
 
-class IntListSerializer extends AbstractCollectionSerializer<IntList> {
+class IntListSerializer extends CollectionLikeSerializer<IntList> {
     public IntListSerializer(Fory fory) {
         // Disable JIT since we're handling serialization directly
         super(fory, IntList.class, false);
@@ -547,7 +547,7 @@ Sometimes you may want to implement a serializer for a type that behaves like a 
 
 The key principles for collection-like type serialization are:
 
-1. Extend `AbstractCollectionSerializer` for custom collection-like types
+1. Extend `CollectionLikeSerializer` for custom collection-like types
 2. Enable JIT optimization with `supportCodegenHook`
 3. Provide efficient element access through views
 4. Maintain proper size tracking
@@ -643,7 +643,7 @@ class CollectionView extends AbstractCollection<Object> {
     }
 }
 
-class CustomCollectionSerializer extends AbstractCollectionSerializer<CustomCollectionLike> {
+class CustomCollectionSerializer extends CollectionLikeSerializer<CustomCollectionLike> {
     public CustomCollectionSerializer(Fory fory) {
         super(fory, CustomCollectionLike.class, true);
     }
@@ -699,7 +699,7 @@ Note that this implementation provides better performance at the cost of flexibi
 
 ### Implement Map Serializer
 
-When implementing a serializer for a custom Map type, you must extend `MapSerializer` or `AbstractMapSerializer`. The key difference between these two is that `AbstractMapSerializer` can serialize a class which has a map-like structure but is not a java Map subtype.
+When implementing a serializer for a custom Map type, you must extend `MapSerializer` or `MapLikeSerializer`. The key difference between these two is that `MapLikeSerializer` can serialize a class which has a map-like structure but is not a java Map subtype.
 
 Similar to collection serializer, this is a special parameter `supportCodegenHook` needs be configured:
 
@@ -797,7 +797,7 @@ class FixedValueMap extends AbstractMap<String, Integer> {
     }
 }
 
-class FixedValueMapSerializer extends AbstractMapSerializer<FixedValueMap> {
+class FixedValueMapSerializer extends MapLikeSerializer<FixedValueMap> {
     public FixedValueMapSerializer(Fory fory) {
         // Disable codegen since we're handling serialization directly
         super(fory, FixedValueMap.class, false);
@@ -900,7 +900,7 @@ Sometimes you may want to implement a serializer for a type that behaves like a 
 
 The key principles for map-like type serialization are:
 
-1. Extend `AbstractMapSerializer` for custom collection-like types
+1. Extend `MapLikeSerializer` for custom collection-like types
 2. Enable JIT optimization with `supportCodegenHook`
 3. Provide efficient element access through views
 4. Maintain proper size tracking
@@ -1028,7 +1028,7 @@ class MapView extends AbstractMap<Object, Object> {
     }
 }
 
-class CustomMapLikeSerializer extends AbstractMapSerializer<CustomMapLike> {
+class CustomMapLikeSerializer extends MapLikeSerializer<CustomMapLike> {
     public CustomMapLikeSerializer(Fory fory) {
         super(fory, CustomMapLike.class, true);
     }
@@ -1082,7 +1082,7 @@ fory.registerSerializer(CustomCollection.class, new CustomCollectionSerializer<>
 
 Note that when implementing custom map or collection serializers:
 
-1. Always extend the appropriate base class (`MapSerializer`/`AbstractMapSerializer` for maps, `CollectionSerializer`/`AbstractCollectionSerializer` for collections)
+1. Always extend the appropriate base class (`MapSerializer`/`MapLikeSerializer` for maps, `CollectionSerializer`/`CollectionLikeSerializer` for collections)
 2. Consider the impact of `supportCodegenHook` on performance and functionality
 3. Properly handle reference tracking if needed
 4. Implement proper size management using `setNumElements` and `getAndClearNumElements` when `supportCodegenHook` is `true`

@@ -46,11 +46,11 @@ import static org.apache.fory.codegen.ExpressionUtils.subtract;
 import static org.apache.fory.codegen.ExpressionUtils.uninline;
 import static org.apache.fory.collection.Collections.ofHashSet;
 import static org.apache.fory.serializer.CodegenSerializer.LazyInitBeanSerializer;
-import static org.apache.fory.serializer.collection.AbstractMapSerializer.MAX_CHUNK_SIZE;
 import static org.apache.fory.serializer.collection.MapFlags.KEY_DECL_TYPE;
 import static org.apache.fory.serializer.collection.MapFlags.TRACKING_KEY_REF;
 import static org.apache.fory.serializer.collection.MapFlags.TRACKING_VALUE_REF;
 import static org.apache.fory.serializer.collection.MapFlags.VALUE_DECL_TYPE;
+import static org.apache.fory.serializer.collection.MapLikeSerializer.MAX_CHUNK_SIZE;
 import static org.apache.fory.type.TypeUtils.CLASS_TYPE;
 import static org.apache.fory.type.TypeUtils.COLLECTION_TYPE;
 import static org.apache.fory.type.TypeUtils.ITERATOR_TYPE;
@@ -115,9 +115,9 @@ import org.apache.fory.serializer.ObjectSerializer;
 import org.apache.fory.serializer.PrimitiveSerializers.LongSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.StringSerializer;
-import org.apache.fory.serializer.collection.AbstractCollectionSerializer;
-import org.apache.fory.serializer.collection.AbstractMapSerializer;
 import org.apache.fory.serializer.collection.CollectionFlags;
+import org.apache.fory.serializer.collection.CollectionLikeSerializer;
+import org.apache.fory.serializer.collection.MapLikeSerializer;
 import org.apache.fory.type.GenericType;
 import org.apache.fory.type.TypeUtils;
 import org.apache.fory.util.GraalvmSupport;
@@ -140,8 +140,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
   private static final TypeRef<?> STRING_SERIALIZER_TYPE_TOKEN = TypeRef.of(StringSerializer.class);
   private static final TypeRef<?> SERIALIZER_TYPE = TypeRef.of(Serializer.class);
   private static final TypeRef<?> COLLECTION_SERIALIZER_TYPE =
-      TypeRef.of(AbstractCollectionSerializer.class);
-  private static final TypeRef<?> MAP_SERIALIZER_TYPE = TypeRef.of(AbstractMapSerializer.class);
+      TypeRef.of(CollectionLikeSerializer.class);
+  private static final TypeRef<?> MAP_SERIALIZER_TYPE = TypeRef.of(MapLikeSerializer.class);
   private static final TypeRef<?> GENERIC_TYPE = TypeRef.of(GenericType.class);
 
   protected final Reference refResolverRef;
@@ -330,7 +330,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     ctx.addImports(LazyInitBeanSerializer.class, EnumSerializer.class);
     ctx.addImports(Serializer.class, StringSerializer.class);
     ctx.addImports(ObjectSerializer.class, CompatibleSerializer.class);
-    ctx.addImports(AbstractCollectionSerializer.class, AbstractMapSerializer.class);
+    ctx.addImports(CollectionLikeSerializer.class, MapLikeSerializer.class);
   }
 
   /**
@@ -618,11 +618,11 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
         }
       }
       if (useCollectionSerialization(cls)
-          && !AbstractCollectionSerializer.class.isAssignableFrom(serializerClass)) {
-        serializerClass = AbstractCollectionSerializer.class;
+          && !CollectionLikeSerializer.class.isAssignableFrom(serializerClass)) {
+        serializerClass = CollectionLikeSerializer.class;
       } else if (useMapSerialization(cls)
-          && !AbstractMapSerializer.class.isAssignableFrom(serializerClass)) {
-        serializerClass = AbstractMapSerializer.class;
+          && !MapLikeSerializer.class.isAssignableFrom(serializerClass)) {
+        serializerClass = MapLikeSerializer.class;
       }
       TypeRef<? extends Serializer> serializerTypeRef = TypeRef.of(serializerClass);
       Expression fieldTypeExpr = getClassExpr(cls);
@@ -829,9 +829,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
                 "writeCollectionClassInfo",
                 false);
       }
-    } else if (!TypeRef.of(AbstractCollectionSerializer.class).isSupertypeOf(serializer.type())) {
-      serializer =
-          cast(serializer, TypeRef.of(AbstractCollectionSerializer.class), "colSerializer");
+    } else if (!TypeRef.of(CollectionLikeSerializer.class).isSupertypeOf(serializer.type())) {
+      serializer = cast(serializer, TypeRef.of(CollectionLikeSerializer.class), "colSerializer");
     }
     TypeRef<?> elementType = getElementType(typeRef);
     // write collection data.
@@ -954,7 +953,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
 
   /**
    * Write collection elements header: flags and maybe elements classinfo. Keep this consistent with
-   * `AbstractCollectionSerializer#writeElementsHeader`.
+   * `CollectionLikeSerializer#writeElementsHeader`.
    *
    * @return Tuple(flags, Nullable ( element serializer))
    */
@@ -1140,8 +1139,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
             invokeGenerated(
                 ctx, ofHashSet(buffer, map), writeClassAction, "writeMapClassInfo", false);
       }
-    } else if (!AbstractMapSerializer.class.isAssignableFrom(serializer.type().getRawType())) {
-      serializer = cast(serializer, TypeRef.of(AbstractMapSerializer.class), "mapSerializer");
+    } else if (!MapLikeSerializer.class.isAssignableFrom(serializer.type().getRawType())) {
+      serializer = cast(serializer, TypeRef.of(MapLikeSerializer.class), "mapSerializer");
     }
     Expression write =
         new If(
@@ -1472,7 +1471,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     if (!inline) {
       expressions.add(new Return(entry));
       // method too big, spilt it into a new method.
-      // Generate similar signature as `AbstractMapSerializer.writeJavaChunk`(
+      // Generate similar signature as `MapLikeSerializer.writeJavaChunk`(
       //   MemoryBuffer buffer,
       //   Entry<Object, Object> entry,
       //   Iterator<Entry<Object, Object>> iterator,
@@ -1679,8 +1678,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       }
     } else {
       checkArgument(
-          AbstractCollectionSerializer.class.isAssignableFrom(serializer.type().getRawType()),
-          "Expected AbstractCollectionSerializer but got %s",
+          CollectionLikeSerializer.class.isAssignableFrom(serializer.type().getRawType()),
+          "Expected CollectionLikeSerializer but got %s",
           serializer.type());
     }
     Invoke supportHook = inlineInvoke(serializer, "supportCodegenHook", PRIMITIVE_BOOLEAN_TYPE);
@@ -1901,8 +1900,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       }
     } else {
       checkArgument(
-          AbstractMapSerializer.class.isAssignableFrom(serializer.type().getRawType()),
-          "Expected AbstractMapSerializer but got %s",
+          MapLikeSerializer.class.isAssignableFrom(serializer.type().getRawType()),
+          "Expected MapLikeSerializer but got %s",
           serializer.type());
     }
     Expression mapSerializer = serializer;
@@ -2103,7 +2102,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
               new Return(ofInt(0)));
       expressions.add(returnSizeAndHeader);
       // method too big, spilt it into a new method.
-      // Generate similar signature as `AbstractMapSerializer.writeJavaChunk`(
+      // Generate similar signature as `MapLikeSerializer.writeJavaChunk`(
       //   MemoryBuffer buffer,
       //   long size,
       //   int chunkHeader,

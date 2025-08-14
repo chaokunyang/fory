@@ -64,7 +64,6 @@ import static org.apache.fory.type.TypeUtils.PRIMITIVE_INT_TYPE;
 import static org.apache.fory.type.TypeUtils.PRIMITIVE_LONG_TYPE;
 import static org.apache.fory.type.TypeUtils.PRIMITIVE_VOID_TYPE;
 import static org.apache.fory.type.TypeUtils.SET_TYPE;
-import static org.apache.fory.type.TypeUtils.getElementType;
 import static org.apache.fory.type.TypeUtils.getRawType;
 import static org.apache.fory.type.TypeUtils.isBoxed;
 import static org.apache.fory.type.TypeUtils.isPrimitive;
@@ -484,19 +483,19 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
   }
 
   protected boolean useCollectionSerialization(TypeRef<?> typeRef) {
-    return fory(f -> f.getClassResolver().isCollection(TypeUtils.getRawType(typeRef)));
+    return useCollectionSerialization(TypeUtils.getRawType(typeRef));
   }
 
   protected boolean useCollectionSerialization(Class<?> type) {
-    return fory(f -> f.getClassResolver().isCollection(TypeUtils.getRawType(type)));
+    return fory(f -> f.getClassResolver().isCollection(type));
   }
 
   protected boolean useMapSerialization(TypeRef<?> typeRef) {
-    return fory(f -> f.getClassResolver().isMap(TypeUtils.getRawType(typeRef)));
+    return useMapSerialization(TypeUtils.getRawType(typeRef));
   }
 
   protected boolean useMapSerialization(Class<?> type) {
-    return fory(f -> f.getClassResolver().isMap(TypeUtils.getRawType(type)));
+    return fory(f -> f.getClassResolver().isMap(type));
   }
 
   /**
@@ -834,12 +833,13 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       serializer =
           cast(serializer, TypeRef.of(AbstractCollectionSerializer.class), "colSerializer");
     }
+    TypeRef<?> elementType = getElementType(typeRef);
     // write collection data.
     ListExpression actions = new ListExpression();
     Expression write =
         new If(
             inlineInvoke(serializer, "supportCodegenHook", PRIMITIVE_BOOLEAN_TYPE),
-            writeCollectionData(buffer, collection, serializer, getElementType(typeRef)),
+            writeCollectionData(buffer, collection, serializer, elementType),
             new Invoke(serializer, "write", buffer, collection));
     actions.add(write);
     if (generateNewMethod) {
@@ -847,6 +847,14 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
           ctx, ofHashSet(buffer, collection, serializer), actions, "writeCollection", false);
     }
     return actions;
+  }
+
+  private TypeRef<?> getElementType(TypeRef<?> typeRef) {
+    TypeRef<?> elementType = TypeUtils.getElementType(typeRef);
+    if (elementType.equals(typeRef)) {
+      elementType = OBJECT_TYPE;
+    }
+    return elementType;
   }
 
   protected Expression writeCollectionData(
@@ -1146,9 +1154,22 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     return write;
   }
 
+  private Tuple2<TypeRef<?>, TypeRef<?>> getMapKeyValueType(TypeRef<?> typeRef) {
+    Tuple2<TypeRef<?>, TypeRef<?>> keyValueType = TypeUtils.getMapKeyValueType(typeRef);
+    TypeRef<?> keyType = keyValueType.f0;
+    TypeRef<?> valueType = keyValueType.f1;
+    if (keyType.equals(typeRef)) {
+      keyType = OBJECT_TYPE;
+    }
+    if (valueType.equals(typeRef)) {
+      valueType = OBJECT_TYPE;
+    }
+    return Tuple2.of(keyType, valueType);
+  }
+
   private Expression jitWriteMap(
       Expression buffer, Expression map, Expression serializer, TypeRef<?> typeRef) {
-    Tuple2<TypeRef<?>, TypeRef<?>> keyValueType = TypeUtils.getMapKeyValueType(typeRef);
+    Tuple2<TypeRef<?>, TypeRef<?>> keyValueType = getMapKeyValueType(typeRef);
     TypeRef<?> keyType = keyValueType.f0;
     TypeRef<?> valueType = keyValueType.f1;
     map = new Invoke(serializer, "onMapWrite", TypeUtils.mapOf(keyType, valueType), buffer, map);
@@ -1867,7 +1888,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
    */
   protected Expression deserializeForMap(
       Expression buffer, TypeRef<?> typeRef, Expression serializer, InvokeHint invokeHint) {
-    Tuple2<TypeRef<?>, TypeRef<?>> keyValueType = TypeUtils.getMapKeyValueType(typeRef);
+    Tuple2<TypeRef<?>, TypeRef<?>> keyValueType = getMapKeyValueType(typeRef);
     TypeRef<?> keyType = keyValueType.f0;
     TypeRef<?> valueType = keyValueType.f1;
     if (serializer == null) {

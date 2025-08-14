@@ -184,7 +184,7 @@ public class RowEncoderBuilder extends BaseBinaryEncoderBuilder {
   @Override
   public Expression buildEncodeExpression() {
     Reference inputObject = new Reference(ROOT_OBJECT_NAME, TypeUtils.OBJECT_TYPE, false);
-    Expression bean = new Expression.Cast(inputObject, beanType, ctx.newName(beanClass));
+    Expression bean = tryCastIfPublic(inputObject, beanType);
     Reference writer = new Reference(ROOT_ROW_WRITER_NAME, rowWriterTypeToken, false);
     Reference schemaExpr = new Reference(SCHEMA_NAME, schemaTypeToken, false);
 

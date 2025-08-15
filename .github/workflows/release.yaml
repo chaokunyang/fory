@@ -125,6 +125,7 @@ jobs:
         with:
           repository-url: https://test.pypi.org/legacy/
           skip-existing: true
+          verbose: true
           verify-metadata: false
           packages-dir: downloaded_wheels
       - name: Publish to PyPI

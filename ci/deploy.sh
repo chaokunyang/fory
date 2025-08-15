@@ -72,6 +72,18 @@ build_pyfory() {
   # Fix strange installed deps not found
   pip install setuptools -U
 
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    MACOS_VERSION=$(sw_vers -productVersion | cut -d. -f1-2)
+    echo "MACOS_VERSION: $MACOS_VERSION"
+    echo "MACOSX_DEPLOYMENT_TARGET: $MACOSX_DEPLOYMENT_TARGET"
+    if [[ "$MACOS_VERSION" == "14"* ]]; then
+      export MACOSX_DEPLOYMENT_TARGET=14.0
+    fi
+    if [[ "$MACOS_VERSION" == "13"* ]]; then
+      export MACOSX_DEPLOYMENT_TARGET=13.0
+    fi
+  fi
+
   python setup.py bdist_wheel --dist-dir=../dist
   ls -l ../dist
 

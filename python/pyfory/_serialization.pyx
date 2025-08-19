@@ -650,14 +650,26 @@ cdef class Fory:
     def register_serializer(self, cls: Union[type, TypeVar], Serializer serializer):
         self.type_resolver.register_serializer(cls, serializer)
 
+    def register(
+        self,
+        cls: Union[type, TypeVar],
+        *,
+        type_id: int = None,
+        namespace: str = None,
+        typename: str = None,
+        serializer=None,
+    ):
+        self.type_resolver.register_type(
+            cls, type_id=type_id, namespace=namespace, typename=typename, serializer=serializer)
+
     def register_type(
-            self,
-            cls: Union[type, TypeVar],
-            *,
-            type_id: int = None,
-            namespace: str = None,
-            typename: str = None,
-            serializer=None,
+        self,
+        cls: Union[type, TypeVar],
+        *,
+        type_id: int = None,
+        namespace: str = None,
+        typename: str = None,
+        serializer=None,
     ):
         self.type_resolver.register_type(
             cls, type_id=type_id, namespace=namespace, typename=typename, serializer=serializer)

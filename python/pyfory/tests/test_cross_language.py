@@ -202,9 +202,7 @@ def test_record_batch(data_file_path):
         record_batch_bytes = f.read()
         buf = pa.py_buffer(record_batch_bytes)
         reader = pa.ipc.open_stream(buf)
-        foo_schema_without_meta = pa.schema(
-            [pa.field(f.name, f.type, f.nullable) for f in create_foo_schema()]
-        )
+        foo_schema_without_meta = pa.schema([pa.field(f.name, f.type, f.nullable) for f in create_foo_schema()])
         assert reader.schema == foo_schema_without_meta
         # debug_print(f"reader.schema {reader.schema}")
         batches = [batch for batch in reader]
@@ -404,9 +402,7 @@ def test_serialize_arrow_out_of_band(int_band_file, out_of_band_file):
     objects = fory.deserialize(in_band_buffer, buffers=buffers)
     assert objects == [batch, table]
     buffer_objects = []
-    in_band_buffer = fory.serialize(
-        [batch, table], buffer_callback=buffer_objects.append
-    )
+    in_band_buffer = fory.serialize([batch, table], buffer_callback=buffer_objects.append)
     buffers = [o.to_buffer() for o in buffer_objects]
     with open(int_band_file, "wb+") as f:
         f.write(in_band_buffer)
@@ -584,9 +580,7 @@ class ComplexObject1Serializer(pyfory.serializer.Serializer):
         self.fory.xserialize_ref(buffer, value.f3)
 
     def xread(self, buffer):
-        obj = ComplexObject1(
-            *([None] * len(typing.get_type_hints(ComplexObject1).keys()))
-        )
+        obj = ComplexObject1(*([None] * len(typing.get_type_hints(ComplexObject1).keys())))
         self.fory.ref_resolver.reference(obj)
         obj.f1 = self.fory.xdeserialize_ref(buffer)
         obj.f2 = self.fory.xdeserialize_ref(buffer)
@@ -660,10 +654,7 @@ def test_oob_buffer(in_band_file_path, out_of_band_file_path):
     # in_band_bytes size may be different because it may contain language-specific meta.
     debug_print(f"{len(serialized), len(in_band_bytes)}")
     debug_print(f"deserialized from other language {new_obj}")
-    debug_print(
-        f"deserialized from python "
-        f"{fory.deserialize(serialized, [o.to_buffer() for o in buffer_objects])}"
-    )
+    debug_print(f"deserialized from python {fory.deserialize(serialized, [o.to_buffer() for o in buffer_objects])}")
     fory.deserialize(serialized, [o.to_buffer() for o in buffer_objects])
     with open(in_band_file_path, "wb+") as f:
         f.write(serialized)
@@ -676,6 +667,12 @@ def test_oob_buffer(in_band_file_path, out_of_band_file_path):
 
 
 if __name__ == "__main__":
+    """This file will be executed by CrossLanguageTest.java in fory-core/fory-format module and
+    fory_xlang_test.go in go/fory module
+    The test cases in this file are used to test the cross-language serialization and deserialization
+    functionality.
+    """
+
     import sys
 
     print(f"Execute {sys.argv}")

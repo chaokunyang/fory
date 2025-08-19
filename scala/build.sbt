@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-val foryVersion = "0.12.0-SNAPSHOT"
+val foryVersion = "0.13.0-SNAPSHOT"
 val scala213Version = "2.13.15"
 ThisBuild / apacheSonatypeProjectProfile := "fory"
 version := foryVersion
@@ -28,14 +28,13 @@ lazy val root = Project(id = "fory-scala", base = file("."))
     name := "fory-scala",
     apacheSonatypeLicenseFile := baseDirectory.value / ".." / "LICENSE",
     apacheSonatypeNoticeFile := baseDirectory.value / ".." / "NOTICE",
-    apacheSonatypeDisclaimerFile := Some(baseDirectory.value / ".." / "DISCLAIMER"),
-    description := "Apache Fory(Incubating) is a blazingly fast multi-language serialization framework powered by JIT and zero-copy.",
+    description := "Apache Fory is a blazingly fast multi-language serialization framework powered by JIT and zero-copy.",
     homepage := Some(url("https://fory.apache.org/")),
     startYear := Some(2024),
     developers := List(
       Developer(
         "fory-contributors",
-        "Apache Fory(Incubating) Contributors",
+        "Apache Fory Contributors",
         "dev@fory.apache.org",
         url("https://github.com/apache/fory/graphs/contributors"))))
 

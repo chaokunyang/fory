@@ -30,7 +30,7 @@
 
     <groupId>org.apache.fory</groupId>
     <artifactId>fory-kotlin</artifactId>
-    <version>0.12.0-SNAPSHOT</version>
+    <version>0.13.0-SNAPSHOT</version>
     <modelVersion>4.0.0</modelVersion>
 
     <properties>
@@ -103,7 +103,7 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-shade-plugin</artifactId>
-                    <version>3.2.1</version>
+                    <version>3.6.0</version>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
@@ -217,6 +217,11 @@
         <dependency>
             <groupId>org.jetbrains.kotlin</groupId>
             <artifactId>kotlin-stdlib</artifactId>
+            <version>${kotlin.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.jetbrains.kotlin</groupId>
+            <artifactId>kotlin-reflect</artifactId>
             <version>${kotlin.version}</version>
         </dependency>
     </dependencies>

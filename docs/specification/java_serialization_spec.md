@@ -369,7 +369,7 @@ Which encoding to choose:
 
 ### Collection
 
-> All collection serializers must extend `AbstractCollectionSerializer`.
+> All collection serializers must extend `CollectionLikeSerializer`.
 
 Format:
 
@@ -393,7 +393,7 @@ which will be encoded by elements header, each use one bit:
 - If the collection has null, use the second bit `0b10` of the header to flag it. If ref tracking is enabled for this
   element type, this flag is invalid.
 - If the collection element types are not declared type, use the 3rd bit `0b100` of the header to flag it.
-- If the collection element types are different, use the 4rd bit `0b1000` header to flag it.
+- If the collection element types are different, use the 4th bit `0b1000` header to flag it.
 
 By default, all bits are unset, which means all elements won't track ref, all elements are same type, not null and
 the actual element is the declared type in the custom class field.
@@ -425,7 +425,7 @@ type.
 
 ### Map
 
-> All Map serializers must extend `AbstractMapSerializer`.
+> All Map serializers must extend `MapLikeSerializer`.
 
 Format:
 

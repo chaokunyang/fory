@@ -40,6 +40,7 @@ import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.type.Generics;
+import org.apache.fory.util.DefaultValueUtils;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.record.RecordInfo;
 import org.apache.fory.util.record.RecordUtils;
@@ -77,6 +78,8 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
   private Serializer<T> serializer;
   private final ClassInfoHolder classInfoHolder;
   private final SerializationBinding binding;
+  private final boolean hasDefaultValues;
+  private final DefaultValueUtils.DefaultValueField[] defaultValueFields;
 
   public MetaSharedSerializer(Fory fory, Class<T> type, ClassDef classDef) {
     super(fory, type);
@@ -111,6 +114,31 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
       recordInfo = null;
     }
     binding = SerializationBinding.createBinding(fory);
+    boolean hasDefaultValues = false;
+    DefaultValueUtils.DefaultValueField[] defaultValueFields =
+        new DefaultValueUtils.DefaultValueField[0];
+    DefaultValueUtils.DefaultValueSupport defaultValueSupport = null;
+    if (fory.getConfig().isScalaOptimizationEnabled()) {
+      defaultValueSupport = DefaultValueUtils.getScalaDefaultValueSupport();
+      if (defaultValueSupport != null) {
+        hasDefaultValues = defaultValueSupport.hasDefaultValues(type);
+        defaultValueFields =
+            defaultValueSupport.buildDefaultValueFields(
+                fory, type, descriptorGrouper.getSortedDescriptors());
+      }
+    }
+    if (!hasDefaultValues) {
+      DefaultValueUtils.DefaultValueSupport kotlinDefaultValueSupport =
+          DefaultValueUtils.getKotlinDefaultValueSupport();
+      if (kotlinDefaultValueSupport != null) {
+        hasDefaultValues = kotlinDefaultValueSupport.hasDefaultValues(type);
+        defaultValueFields =
+            kotlinDefaultValueSupport.buildDefaultValueFields(
+                fory, type, descriptorGrouper.getSortedDescriptors());
+      }
+    }
+    this.hasDefaultValues = hasDefaultValues;
+    this.defaultValueFields = defaultValueFields;
   }
 
   @Override
@@ -134,6 +162,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
           new Object[finalFields.length + otherFields.length + containerFields.length];
       readFields(buffer, fieldValues);
       fieldValues = RecordUtils.remapping(recordInfo, fieldValues);
+
       try {
         T t = (T) constructor.invokeWithArguments(fieldValues);
         Arrays.fill(recordInfo.getRecordComponents(), null);
@@ -142,7 +171,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
         Platform.throwException(e);
       }
     }
-    T obj = newBean();
+    T obj = newInstance();
     Fory fory = this.fory;
     RefResolver refResolver = this.refResolver;
     ClassResolver classResolver = this.classResolver;
@@ -171,6 +200,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
           fieldAccessor.putObject(obj, fieldValue);
         }
       } else {
+        // Skip the field value from buffer since it doesn't exist in current class
         if (skipPrimitiveFieldValueFailed(fory, fieldInfo.classId, buffer)) {
           if (fieldInfo.classInfo == null) {
             // TODO(chaokunyang) support registered serializer in peer with ref tracking disabled.
@@ -198,7 +228,20 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
         fieldAccessor.putObject(obj, fieldValue);
       }
     }
+
+    // Set default values for missing fields in Scala case classes
+    if (hasDefaultValues) {
+      DefaultValueUtils.setDefaultValues(obj, defaultValueFields);
+    }
+
     return obj;
+  }
+
+  private T newInstance() {
+    if (!hasDefaultValues) {
+      return newBean();
+    }
+    return Platform.newInstance(type);
   }
 
   @Override
@@ -231,6 +274,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
           fields[counter++] = fieldValue;
         }
       } else {
+        // Skip the field value from buffer since it doesn't exist in current class
         if (skipPrimitiveFieldValueFailed(fory, fieldInfo.classId, buffer)) {
           if (fieldInfo.classInfo == null) {
             // TODO(chaokunyang) support registered serializer in peer with ref tracking disabled.

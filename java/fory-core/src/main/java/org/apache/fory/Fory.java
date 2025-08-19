@@ -796,9 +796,19 @@ public final class Fory implements BaseFory {
   @SuppressWarnings("unchecked")
   @Override
   public <T> T deserialize(byte[] bytes, Class<T> type) {
+    MemoryBuffer buffer = MemoryUtils.wrap(bytes);
+    if (!crossLanguage && shareMeta) {
+      byte bitmap = buffer.readByte();
+      if ((bitmap & isNilFlag) == isNilFlag) {
+        return null;
+      }
+      boolean peerOutOfBandEnabled = (bitmap & isOutOfBandFlag) == isOutOfBandFlag;
+      assert !peerOutOfBandEnabled : "Out of band buffers not passed in when deserializing";
+      return deserializeJavaObject(buffer, type);
+    }
     generics.pushGenericType(classResolver.buildGenericType(type));
     try {
-      return (T) deserialize(MemoryUtils.wrap(bytes), null);
+      return (T) deserialize(buffer, null);
     } finally {
       generics.popGenericType();
     }
@@ -1608,6 +1618,11 @@ public final class Fory implements BaseFory {
         String.format(
             "Nested call Fory.deserializeXXX is not allowed when deserializing, Please use %s instead",
             method));
+  }
+
+  @Override
+  public void ensureSerializersCompiled() {
+    classResolver.ensureSerializersCompiled();
   }
 
   public JITContext getJITContext() {

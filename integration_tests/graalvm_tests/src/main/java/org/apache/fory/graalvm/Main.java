@@ -35,6 +35,7 @@ public class Main {
     ThreadSafeExample.main(args);
     CompatibleThreadSafeExample.main(args);
     ProxyExample.main(args);
+    ObjectStreamExample.main(args);
     Benchmark.main(args);
     CollectionExample.main(args);
   }

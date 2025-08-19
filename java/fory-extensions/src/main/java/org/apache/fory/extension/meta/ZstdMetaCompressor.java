@@ -17,11 +17,12 @@
  * under the License.
  */
 
-package org.apache.fory.meta;
+package org.apache.fory.extension.meta;
 
 import com.github.luben.zstd.Zstd;
 import com.github.luben.zstd.ZstdException;
 import java.util.Arrays;
+import org.apache.fory.meta.MetaCompressor;
 
 public class ZstdMetaCompressor implements MetaCompressor {
 

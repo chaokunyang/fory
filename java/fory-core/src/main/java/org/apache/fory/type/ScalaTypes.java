@@ -34,6 +34,7 @@ public class ScalaTypes {
   private static volatile Class<?> SCALA_ITERABLE_TYPE;
   private static volatile java.lang.reflect.Type SCALA_ITERATOR_RETURN_TYPE;
   private static volatile java.lang.reflect.Type SCALA_NEXT_RETURN_TYPE;
+  private static volatile Class<?> SCALA_PRODUCT_TYPE;
 
   public static Class<?> getScalaMapType() {
     if (SCALA_MAP_TYPE == null) {
@@ -102,5 +103,16 @@ public class ScalaTypes {
     ParameterizedType type = (ParameterizedType) kvTupleType.getType();
     Type[] types = type.getActualTypeArguments();
     return Tuple2.of(TypeRef.of(types[0]), TypeRef.of(types[1]));
+  }
+
+  public static Class<?> getScalaProductType() {
+    if (SCALA_PRODUCT_TYPE == null) {
+      SCALA_PRODUCT_TYPE = ReflectionUtils.loadClass("scala.Product");
+    }
+    return SCALA_PRODUCT_TYPE;
+  }
+
+  public static boolean isScalaProductType(Class<?> cls) {
+    return getScalaProductType().isAssignableFrom(cls);
   }
 }

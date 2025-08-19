@@ -17,7 +17,7 @@
  * under the License.
  */
 
-package org.apache.fory.meta;
+package org.apache.fory.extension.meta;
 
 import static org.apache.fory.meta.ClassDefEncoder.buildFieldsInfo;
 import static org.apache.fory.meta.ClassDefEncoder.getClassFields;
@@ -25,6 +25,8 @@ import static org.apache.fory.meta.ClassDefEncoder.getClassFields;
 import java.util.List;
 import org.apache.fory.Fory;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.meta.ClassDef;
+import org.apache.fory.meta.ClassDefEncoder;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 

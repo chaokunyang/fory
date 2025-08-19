@@ -105,6 +105,15 @@ public interface BaseFory {
 
   void setSerializerFactory(SerializerFactory serializerFactory);
 
+  /**
+   * Ensure all compilation for serializers and accessors even for lazy initialized serializers.
+   * This method will block until all compilation is done.
+   *
+   * <p>This method is mainly used for graalvm native image build time and trigger compilation ahead
+   * for online service ahead to avoid cold start.
+   */
+  void ensureSerializersCompiled();
+
   /** Return serialized <code>obj</code> as a byte array. */
   byte[] serialize(Object obj);
 

@@ -64,6 +64,9 @@ public final class MemoryBuffer {
   private static final Unsafe UNSAFE = Platform.UNSAFE;
   private static final boolean LITTLE_ENDIAN = (ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN);
 
+  // Global allocator instance that can be customized
+  private static volatile MemoryAllocator globalAllocator = new DefaultMemoryAllocator();
+
   // If the data in on the heap, `heapMemory` will be non-null, and its' the object relative to
   // which we access the memory.
   // If we have this buffer, we must never void this reference, or the memory buffer will point
@@ -1233,25 +1236,15 @@ public final class MemoryBuffer {
   public void grow(int neededSize) {
     int length = writerIndex + neededSize;
     if (length > size) {
-      growBuffer(length);
+      globalAllocator.grow(this, length);
     }
   }
 
   /** For off-heap buffer, this will make a heap buffer internally. */
   public void ensure(int length) {
     if (length > size) {
-      growBuffer(length);
+      globalAllocator.grow(this, length);
     }
-  }
-
-  private void growBuffer(int length) {
-    int newSize =
-        length < BUFFER_GROW_STEP_THRESHOLD
-            ? length << 2
-            : (int) Math.min(length * 1.5d, Integer.MAX_VALUE - 8);
-    byte[] data = new byte[newSize];
-    copyToUnsafe(0, data, Platform.BYTE_ARRAY_OFFSET, size());
-    initHeapBuffer(data, 0, data.length);
   }
 
   // -------------------------------------------------------------------------
@@ -1654,7 +1647,7 @@ public final class MemoryBuffer {
     }
   }
 
-  /** Reads the 1-5 byte as a varint on a little endian mache. */
+  /** Reads the 1-5 byte as a varint on a little endian machine. */
   @CodegenInvoke
   // CHECKSTYLE.OFF:MethodName
   public int _readVarInt32OnLE() {
@@ -1697,7 +1690,7 @@ public final class MemoryBuffer {
     return (result >>> 1) ^ -(result & 1);
   }
 
-  /** Reads the 1-5 byte as a varint on a big endian mache. */
+  /** Reads the 1-5 byte as a varint on a big endian machine. */
   @CodegenInvoke
   // CHECKSTYLE.OFF:MethodName
   public int _readVarInt32OnBE() {
@@ -2362,7 +2355,7 @@ public final class MemoryBuffer {
     final char[] chars = new char[numBytes >> 1];
     // use subtract to avoid overflow
     if (readerIdx > size - numBytes) {
-      streamReader.readToUnsafe(chars, 0, numBytes);
+      streamReader.readToUnsafe(chars, Platform.CHAR_ARRAY_OFFSET, numBytes);
       return chars;
     }
     Platform.copyMemory(
@@ -2389,7 +2382,7 @@ public final class MemoryBuffer {
     final char[] arr = new char[numBytes >> 1];
     // use subtract to avoid overflow
     if (readerIdx > size - numBytes) {
-      streamReader.readToUnsafe(arr, 0, numBytes);
+      streamReader.readToUnsafe(arr, Platform.CHAR_ARRAY_OFFSET, numBytes);
       return arr;
     }
     Platform.UNSAFE.copyMemory(
@@ -2409,7 +2402,7 @@ public final class MemoryBuffer {
     final long[] longs = new long[numElements];
     // use subtract to avoid overflow
     if (readerIdx > size - numBytes) {
-      streamReader.readToUnsafe(longs, 0, numElements);
+      streamReader.readToUnsafe(longs, Platform.LONG_ARRAY_OFFSET, numBytes);
       return longs;
     }
     Platform.copyMemory(
@@ -2607,6 +2600,59 @@ public final class MemoryBuffer {
         + '}';
   }
 
+  // ------------------------------------------------------------------------
+  // Memory Allocator Support
+  // ------------------------------------------------------------------------
+
+  /** Default memory allocator that uses the original heap-based allocation strategy. */
+  private static final class DefaultMemoryAllocator implements MemoryAllocator {
+    @Override
+    public MemoryBuffer allocate(int initialSize) {
+      return fromByteArray(new byte[initialSize]);
+    }
+
+    @Override
+    public MemoryBuffer grow(MemoryBuffer buffer, int newCapacity) {
+      if (newCapacity <= buffer.size()) {
+        return buffer;
+      }
+
+      int newSize =
+          newCapacity < BUFFER_GROW_STEP_THRESHOLD
+              ? newCapacity << 1
+              : (int) Math.min(newCapacity * 1.5d, Integer.MAX_VALUE - 8);
+
+      byte[] data = new byte[newSize];
+      buffer.copyToUnsafe(0, data, Platform.BYTE_ARRAY_OFFSET, buffer.size());
+      buffer.initHeapBuffer(data, 0, data.length);
+
+      return buffer;
+    }
+  }
+
+  /**
+   * Sets the global memory allocator. This affects all new MemoryBuffer allocations and growth
+   * operations.
+   *
+   * @param allocator the new global allocator to use
+   * @throws NullPointerException if allocator is null
+   */
+  public static void setGlobalAllocator(MemoryAllocator allocator) {
+    if (allocator == null) {
+      throw new NullPointerException("Memory allocator cannot be null");
+    }
+    globalAllocator = allocator;
+  }
+
+  /**
+   * Gets the current global memory allocator.
+   *
+   * @return the current global allocator
+   */
+  public static MemoryAllocator getGlobalAllocator() {
+    return globalAllocator;
+  }
+
   /** Point this buffer to a new byte array. */
   public void pointTo(byte[] buffer, int offset, int length) {
     initHeapBuffer(buffer, offset, length);
@@ -2663,6 +2709,6 @@ public final class MemoryBuffer {
    * enough.
    */
   public static MemoryBuffer newHeapBuffer(int initialSize) {
-    return fromByteArray(new byte[initialSize]);
+    return globalAllocator.allocate(initialSize);
   }
 }

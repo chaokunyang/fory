@@ -28,11 +28,11 @@ jobs:
     runs-on: ubuntu-latest
     if: github.repository == 'apache/fory'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Set up Maven Central Repository
         uses: actions/setup-java@v4
         with:
-          java-version: "8"
+          java-version: "11"
           distribution: "adopt"
           architecture: x64
           cache: maven
@@ -40,7 +40,7 @@ jobs:
           server-username: NEXUS_USERNAME
           server-password: NEXUS_PASSWORD
       - name: Publish Fory Java Snapshot
-        run: cd java && mvn deploy -Dgpg.skip -DskipTests -Papache-release
+        run: python ./ci/run_ci.py java --version 11 --release
         env:
           NEXUS_USERNAME: ${{ secrets.NEXUS_USER }}
           NEXUS_PASSWORD: ${{ secrets.NEXUS_PW }}

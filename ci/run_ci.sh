@@ -17,6 +17,21 @@
 # specific language governing permissions and limitations
 # under the License.
 
+# NOTE: This script is being gradually migrated to Python (run_ci.py).
+# It can be called directly or from run_ci.py as a fallback.
+# To control which languages use the Python implementation, set environment variables:
+#   USE_PYTHON_CPP=0        # Use shell script for C++
+#   USE_PYTHON_RUST=0       # Use shell script for Rust
+#   USE_PYTHON_JAVASCRIPT=0 # Use shell script for JavaScript
+#   USE_PYTHON_JAVA=0       # Use shell script for Java
+#   USE_PYTHON_KOTLIN=0     # Use shell script for Kotlin
+#   USE_PYTHON_PYTHON=0     # Use shell script for Python
+#   USE_PYTHON_GO=0         # Use shell script for Go
+#   USE_PYTHON_FORMAT=0     # Use shell script for Format
+#
+# By default, JavaScript, Rust, and C++ use the Python implementation,
+# while Java, Kotlin, Python, Go, and Format use the shell script implementation.
+
 set -e
 set -x
 
@@ -29,12 +44,11 @@ export FORY_CI=true
 install_python() {
   wget -q https://repo.anaconda.com/miniconda/Miniconda3-py38_23.5.2-0-Linux-x86_64.sh -O Miniconda3.sh
   bash Miniconda3.sh -b -p $HOME/miniconda && rm -f miniconda.*
-  which python
-  echo "Python version $(python -V), path $(which python)"
+  echo "$(python -V), path $(which python)"
 }
 
 install_pyfory() {
-  echo "Python version $(python -V), path $(which python)"
+  echo "$(python -V), path $(which python)"
   "$ROOT"/ci/deploy.sh install_pyarrow
   pip install Cython wheel pytest
   pushd "$ROOT/python"
@@ -75,15 +89,15 @@ install_bazel() {
   esac
 
   BAZEL_VERSION=$(get_bazel_version)
-  BAZEL_DIR="/usr/local/bin"
+  BAZEL_DIR="$HOME/.local/bin"
+  mkdir -p "$BAZEL_DIR"
 
   # Construct platform-specific URL
   BINARY_URL="https://github.com/bazelbuild/bazel/releases/download/${BAZEL_VERSION}/bazel-${BAZEL_VERSION}-${OS}-${ARCH}"
 
   echo "Downloading bazel from: $BINARY_URL"
-  sudo wget -q -O "$BAZEL_DIR/bazel" "$BINARY_URL" || { echo "Failed to download bazel"; exit 1; }
-
-  sudo chmod +x "$BAZEL_DIR/bazel"
+  curl -L -sSf -o "$BAZEL_DIR/bazel" "$BINARY_URL" || { echo "Failed to download bazel"; exit 1; }
+  chmod +x "$BAZEL_DIR/bazel"
 
   # Add to current shell's PATH
   export PATH="$BAZEL_DIR:$PATH"
@@ -93,7 +107,7 @@ install_bazel() {
   bazel version || { echo "Bazel installation verification failed"; exit 1; }
 
   # Configure number of jobs based on memory
-  if [[ "$MACHINE" == linux ]]; then
+  if [[ "$OS" == linux ]]; then
     MEM=$(grep MemTotal < /proc/meminfo | awk '{print $2}')
     JOBS=$(( MEM / 1024 / 1024 / 3 ))
     echo "build --jobs=$JOBS" >> ~/.bazelrc

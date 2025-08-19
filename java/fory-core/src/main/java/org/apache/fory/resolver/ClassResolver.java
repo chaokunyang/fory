@@ -274,6 +274,7 @@ public class ClassResolver implements TypeResolver {
     private final IdentityMap<Type, GenericType> genericTypes = new IdentityMap<>();
     private final Map<Class, Map<String, GenericType>> classGenericTypes = new HashMap<>();
     private final Map<List<ClassLoader>, CodeGenerator> codeGeneratorMap = new HashMap<>();
+    private final Set<ClassInfo> initialClassInfos = new HashSet<>();
   }
 
   public ClassResolver(Fory fory) {
@@ -331,6 +332,14 @@ public class ClassResolver implements TypeResolver {
     addDefaultSerializers();
     shimDispatcher.initialize();
     innerEndClassId = extRegistry.classIdGenerator;
+    if (GraalvmSupport.isGraalBuildtime()) {
+      classInfoMap.forEach(
+          (cls, classInfo) -> {
+            if (classInfo.serializer != null) {
+              extRegistry.initialClassInfos.add(classInfo);
+            }
+          });
+    }
   }
 
   private void addDefaultSerializers() {
@@ -1478,7 +1487,7 @@ public class ClassResolver implements TypeResolver {
     }
   }
 
-  // The jit-compiled native code fot this method will be too big for inline, so we generated
+  // The jit-compiled native code for this method will be too big for inline, so we generated
   // `getClassInfo`
   // in fory-jit, see `BaseSeqCodecBuilder#writeAndGetClassInfo`
   // public ClassInfo writeClassInfo(MemoryBuffer buffer, Class<?> cls, ClassInfoHolder
@@ -1767,24 +1776,24 @@ public class ClassResolver implements TypeResolver {
    * <p>See `already compiled into a big method` in <a
    * href="https://wiki.openjdk.org/display/HotSpot/Server+Compiler+Inlining+Messages">Server+Compiler+Inlining+Messages</a>
    */
-  // Note: Thread safe fot jit thread to call.
+  // Note: Thread safe for jit thread to call.
   public Expression writeClassExpr(
       Expression classResolverRef, Expression buffer, Expression classInfo) {
     return new Invoke(classResolverRef, "writeClassInfo", buffer, classInfo);
   }
 
-  // Note: Thread safe fot jit thread to call.
+  // Note: Thread safe for jit thread to call.
   public Expression writeClassExpr(Expression buffer, short classId) {
     Preconditions.checkArgument(classId != NO_CLASS_ID);
     return writeClassExpr(buffer, Literal.ofShort(classId));
   }
 
-  // Note: Thread safe fot jit thread to call.
+  // Note: Thread safe for jit thread to call.
   public Expression writeClassExpr(Expression buffer, Expression classId) {
     return new Invoke(buffer, "writeVarUint32", new Expression.BitShift("<<", classId, 1));
   }
 
-  // Note: Thread safe fot jit thread to call.
+  // Note: Thread safe for jit thread to call.
   public Expression skipRegisteredClassExpr(Expression buffer) {
     return new Invoke(buffer, "readVarUint32Small14");
   }
@@ -2195,6 +2204,32 @@ public class ClassResolver implements TypeResolver {
   @Override
   public Fory getFory() {
     return fory;
+  }
+
+  /**
+   * Ensure all compilation for serializers and accessors even for lazy initialized serializers.
+   * This method will block until all compilation is done.
+   */
+  public void ensureSerializersCompiled() {
+    try {
+      classInfoMap.forEach(
+          (cls, classInfo) -> {
+            if (classInfo.serializer == null) {
+              getSerializer(classInfo.cls, isSerializable(classInfo.cls));
+            }
+          });
+      if (GraalvmSupport.isGraalBuildtime()) {
+        classInfoMap.forEach(
+            (cls, classInfo) -> {
+              if (classInfo.serializer != null
+                  && !extRegistry.initialClassInfos.contains(classInfo)) {
+                classInfo.serializer = null;
+              }
+            });
+      }
+    } finally {
+      fory.getJITContext().unlock();
+    }
   }
 
   private static final ConcurrentMap<Integer, GraalvmClassRegistry> GRAALVM_REGISTRY =

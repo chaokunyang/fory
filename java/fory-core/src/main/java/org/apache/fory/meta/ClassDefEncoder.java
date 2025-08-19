@@ -35,6 +35,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import org.apache.fory.Fory;
+import org.apache.fory.annotation.Internal;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
@@ -51,7 +52,8 @@ import org.apache.fory.util.MurmurHash3;
  * docs/specification/java_serialization_spec.md <a
  * href="https://fory.apache.org/docs/specification/fory_java_serialization_spec">...</a>
  */
-class ClassDefEncoder {
+@Internal
+public class ClassDefEncoder {
   // a flag to mark a type is not struct.
   static final int NUM_CLASS_THRESHOLD = 0b1111;
 
@@ -82,11 +84,11 @@ class ClassDefEncoder {
     return fields;
   }
 
-  static List<FieldInfo> buildFieldsInfo(ClassResolver resolver, Class<?> cls) {
+  public static List<FieldInfo> buildFieldsInfo(ClassResolver resolver, Class<?> cls) {
     return buildFieldsInfo(resolver, buildFields(resolver.getFory(), cls, true));
   }
 
-  static List<FieldInfo> buildFieldsInfo(TypeResolver resolver, List<Field> fields) {
+  public static List<FieldInfo> buildFieldsInfo(TypeResolver resolver, List<Field> fields) {
     List<FieldInfo> fieldInfos = new ArrayList<>();
     for (Field field : fields) {
       FieldInfo fieldInfo =
@@ -126,7 +128,7 @@ class ClassDefEncoder {
 
   // see spec documentation: docs/specification/java_serialization_spec.md
   // https://fory.apache.org/docs/specification/fory_java_serialization_spec
-  static MemoryBuffer encodeClassDef(
+  public static MemoryBuffer encodeClassDef(
       ClassResolver classResolver,
       Class<?> type,
       Map<String, List<FieldInfo>> classLayers,
@@ -217,7 +219,8 @@ class ClassDefEncoder {
         String.format("Class %s doesn't have %s as super class", c, type));
   }
 
-  static Map<String, List<FieldInfo>> getClassFields(Class<?> type, List<FieldInfo> fieldsInfo) {
+  public static Map<String, List<FieldInfo>> getClassFields(
+      Class<?> type, List<FieldInfo> fieldsInfo) {
     Map<String, List<FieldInfo>> sortedClassFields = new LinkedHashMap<>();
     if (fieldsInfo.isEmpty()) {
       sortedClassFields.put(type.getName(), new ArrayList<>());

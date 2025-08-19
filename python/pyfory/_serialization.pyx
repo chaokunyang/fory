@@ -455,6 +455,17 @@ cdef class TypeResolver:
         for typeinfo in self._resolver._types_info.values():
             self._populate_typeinfo(typeinfo)
 
+    def register(
+        self,
+        cls: Union[type, TypeVar],
+        *,
+        type_id: int = None,
+        namespace: str = None,
+        typename: str = None,
+        serializer=None,
+    ):
+        self.register_type(cls, type_id=type_id, namespace=namespace, typename=typename, serializer=serializer)
+
     def register_type(
             self,
             cls: Union[type, TypeVar],
@@ -543,14 +554,17 @@ cdef class TypeResolver:
     cpdef inline TypeInfo read_typeinfo(self, Buffer buffer):
         cdef:
             int32_t type_id = buffer.read_varuint32()
+        if type_id < 0:
+            type_id = -type_id
+        if type_id > self._c_registered_id_to_type_info.size():
+            raise ValueError(f"Unexpected type_id {type_id}")
+        cdef:
             int32_t internal_type_id = type_id & 0xFF
-        cdef MetaStringBytes namespace_bytes, typename_bytes
+            MetaStringBytes namespace_bytes, typename_bytes
         if IsNamespacedType(internal_type_id):
             namespace_bytes = self.metastring_resolver.read_meta_string_bytes(buffer)
             typename_bytes = self.metastring_resolver.read_meta_string_bytes(buffer)
             return self._load_bytes_to_typeinfo(type_id, namespace_bytes, typename_bytes)
-        if type_id < 0 or type_id > self._c_registered_id_to_type_info.size():
-            raise ValueError(f"Unexpected type_id {type_id}")
         typeinfo_ptr = self._c_registered_id_to_type_info[type_id]
         if typeinfo_ptr == NULL:
             raise ValueError(f"Unexpected type_id {type_id}")

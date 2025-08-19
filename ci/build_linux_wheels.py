@@ -67,11 +67,11 @@ export PATH=$OLD_PATH
 '''
 
 DEFAULT_X86_IMAGES = [
+    "quay.io/pypa/musllinux_1_2_x86_64:latest",
     "quay.io/pypa/manylinux2014_x86_64:latest",
     # "quay.io/pypa/manylinux_2_28_x86_64:latest",
 
     # bazel binaries do not work with musl
-    # "quay.io/pypa/musllinux_1_2_x86_64:latest",
 ]
 
 DEFAULT_AARCH64_IMAGES = [
@@ -79,7 +79,7 @@ DEFAULT_AARCH64_IMAGES = [
     # "quay.io/pypa/manylinux_2_28_aarch64:latest",
 
     # bazel binaries do not work with musl
-    # "quay.io/pypa/musllinux_1_2_aarch64:latest",
+    "quay.io/pypa/musllinux_1_2_aarch64:latest",
 ]
 
 ARCH_ALIASES = {

@@ -46,7 +46,7 @@ print(fory.deserialize(data))
 
 ### Cross-language Serialization
 
-Fory excels at cross-language serialization. You can serialize data in Python and deserialize it in another language like Java or Go, and vice-versa.
+Apache Fory excels at cross-language serialization. You can serialize data in Python and deserialize it in another language like Java or Go, and vice-versa.
 
 Here's an example of how to serialize an object in Python and deserialize it in Java:
 
@@ -93,6 +93,80 @@ public class ReferenceExample {
     System.out.println(fory.deserialize(bytes));
   }
 }
+```
+
+### Row Format Zero-Copy Partial Serialzation
+
+Apache Fory provide a random-access row format, which supports map a typed nested struct into a binary and read its nested element without deserializing the whole binary. This can be used to minimize teh deserialization overhead for huge objects in the case where you only needs to access part of the data. You can even encode huge objects into binary and write to file, then mmap that file into memory to reduce memory overhead too.
+
+**Python**
+
+```python
+@dataclass
+class Bar:
+    f1: str
+    f2: List[pa.int64]
+@dataclass
+class Foo:
+    f1: pa.int32
+    f2: List[pa.int32]
+    f3: Dict[str, pa.int32]
+    f4: List[Bar]
+
+encoder = pyfory.encoder(Foo)
+foo = Foo(f1=10, f2=list(range(1000_000)),
+         f3={f"k{i}": i for i in range(1000_000)},
+         f4=[Bar(f1=f"s{i}", f2=list(range(10))) for i in range(1000_000)])
+binary: bytes = encoder.to_row(foo).to_bytes()
+foo_row = pyfory.RowData(encoder.schema, binary)
+print(foo_row.f2[100000], foo_row.f4[100000].f1, foo_row.f4[200000].f2[5])
+```
+
+**Java**
+
+```java
+public class Bar {
+  String f1;
+  List<Long> f2;
+}
+
+public class Foo {
+  int f1;
+  List<Integer> f2;
+  Map<String, Integer> f3;
+  List<Bar> f4;
+}
+
+RowEncoder<Foo> encoder = Encoders.bean(Foo.class);
+Foo foo = new Foo();
+foo.f1 = 10;
+foo.f2 = IntStream.range(0, 1000000).boxed().collect(Collectors.toList());
+foo.f3 = IntStream.range(0, 1000000).boxed().collect(Collectors.toMap(i -> "k"+i, i->i));
+List<Bar> bars = new ArrayList<>(1000000);
+for (int i = 0; i < 1000000; i++) {
+  Bar bar = new Bar();
+  bar.f1 = "s"+i;
+  bar.f2 = LongStream.range(0, 10).boxed().collect(Collectors.toList());
+  bars.add(bar);
+}
+foo.f4 = bars;
+// Can be zero-copy read by python
+BinaryRow binaryRow = encoder.toRow(foo);
+// can be data from python
+Foo newFoo = encoder.fromRow(binaryRow);
+// zero-copy read List<Integer> f2
+BinaryArray binaryArray2 = binaryRow.getArray(1);
+// zero-copy read List<Bar> f4
+BinaryArray binaryArray4 = binaryRow.getArray(3);
+// zero-copy read 11th element of `readList<Bar> f4`
+BinaryRow barStruct = binaryArray4.getStruct(10);
+
+// zero-copy read 6th of f2 of 11th element of `readList<Bar> f4`
+barStruct.getArray(1).getInt64(5);
+RowEncoder<Bar> barEncoder = Encoders.bean(Bar.class);
+// deserialize part of data.
+Bar newBar = barEncoder.fromRow(barStruct);
+Bar newBar2 = barEncoder.fromRow(binaryArray4.getStruct(20));
 ```
 
 ## Useful Links

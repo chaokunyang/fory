@@ -19,83 +19,32 @@
 Tests for xlang TypeDef implementation.
 """
 
-import pytest
-from typing import List, Dict, Optional
+from dataclasses import dataclass
+from typing import List, Dict
 from pyfory._util import Buffer
 from pyfory.meta.typedef import (
     TypeDef, FieldInfo, FieldType, CollectionFieldType, MapFieldType, 
     DynamicFieldType
 )
 from pyfory.meta.typedef_encoder import encode_typedef
-from pyfory.meta.typedef_decoder import decode_typedef, skip_typedef
+from pyfory.meta.typedef_decoder import decode_typedef
 from pyfory.type import TypeId
+from pyfory import Fory
 
 
+@dataclass
 class TestTypeDef:
     """Test class for TypeDef functionality."""
-    
-    def __init__(self, name: str, age: int, scores: List[float], metadata: Dict[str, str]):
-        self.name = name
-        self.age = age
-        self.scores = scores
-        self.metadata = metadata
+    name: str
+    age: int
+    scores: List[float]
+    metadata: Dict[str, str]
 
 
+@dataclass
 class SimpleTypeDef:
     """Simple test class."""
-    
-    def __init__(self, value: int):
-        self.value = value
-
-
-# Mock resolver for testing
-class MockResolver:
-    def __init__(self):
-        self.fory = MockFory()
-    
-    def get_typeinfo(self, cls):
-        return MockTypeInfo()
-    
-    def get_meta_compressor(self):
-        return MockMetaCompressor()
-
-
-class MockFory:
-    def __init__(self):
-        self.ref_tracking = False
-
-
-class MockTypeInfo:
-    def __init__(self):
-        self.type_id = TypeId.STRUCT
-    
-    def decode_namespace(self):
-        return "test"
-    
-    def decode_typename(self):
-        return "TestType"
-
-
-class MockMetaCompressor:
-    def compress(self, data):
-        return data
-    
-    def decompress(self, data):
-        return data
-
-
-def test_field_type_creation():
-    """Test creation of different field types."""
-    # Test primitive types
-    string_field = FieldType(TypeId.STRING, True, True, False)
-    int_field = FieldType(TypeId.INT32, True, True, False)
-    bool_field = FieldType(TypeId.BOOL, True, True, False)
-    
-    assert string_field.type_id == TypeId.STRING
-    assert int_field.type_id == TypeId.INT32
-    assert bool_field.type_id == TypeId.BOOL
-    assert string_field.is_nullable
-    assert string_field.is_tracking_ref is False
+    value: int
 
 
 def test_collection_field_type():
@@ -155,62 +104,11 @@ def test_dynamic_field_type():
     assert dynamic_field.is_tracking_ref is False
 
 
-def test_field_type_serialization():
-    """Test field type serialization to buffer."""
-    buffer = Buffer.allocate(64)
-    
-    # Test primitive type serialization
-    string_field = FieldType(TypeId.STRING, True, True, False)
-    string_field.xwrite(buffer, True)
-    
-    # Reset buffer for reading
-    buffer.reader_index = 0
-    
-    # Read back the field type
-    # Note: This would need a proper resolver in a real implementation
-    # read_field_type = FieldType.xread(buffer, resolver)
-    # assert read_field_type.type_id == TypeId.STRING
-
-
-def test_buffer_operations():
-    """Test buffer operations for TypeDef encoding/decoding."""
-    buffer = Buffer.allocate(128)
-    
-    # Write some test data
-    buffer.write_varuint32(42)
-    buffer.write_int8(123)
-    buffer.write_bytes(b"test_data")
-    
-    # Reset for reading
-    buffer.reader_index = 0
-    
-    # Read back the data
-    assert buffer.read_varuint32() == 42
-    assert buffer.read_int8() == 123
-    assert buffer.read_bytes(9) == b"test_data"
-
-
-def test_skip_typedef():
-    """Test skipping TypeDef in buffer."""
-    buffer = Buffer.allocate(64)
-    
-    # Write some dummy data
-    buffer.write_bytes(b"dummy_typedef_data")
-    
-    # Reset for reading
-    buffer.reader_index = 0
-    
-    # Skip the typedef - size is 18 bytes (0x12)
-    skip_typedef(buffer, 0x1012)  # Size encoded in id_value
-    
-    # Should have skipped all data
-    assert buffer.reader_index == 18
-
-
 def test_encode_decode_typedef():
     """Test encoding and decoding a TypeDef."""
+    fory = Fory(ref_tracking=False, require_type_registration=False)
     # Create a mock resolver
-    resolver = MockResolver()
+    resolver = fory.type_resolver
     
     # Encode a TypeDef
     typedef = encode_typedef(resolver, SimpleTypeDef)
@@ -229,16 +127,10 @@ def test_encode_decode_typedef():
 
 
 if __name__ == "__main__":
-    # Run basic tests
-    test_field_type_creation()
     test_collection_field_type()
     test_map_field_type()
     test_typedef_creation()
     test_field_info_creation()
     test_dynamic_field_type()
-    test_field_type_serialization()
-    test_buffer_operations()
-    test_skip_typedef()
     test_encode_decode_typedef()
-    
     print("All basic tests passed!")

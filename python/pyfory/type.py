@@ -356,6 +356,20 @@ def is_map_type(type_):
         return issubclass(type_, typing.Dict)
     except TypeError:
         return False
+    
+
+_polymorphic_type_ids = {
+    TypeId.STRUCT,
+    TypeId.COMPATIBLE_STRUCT,
+    TypeId.NAMED_STRUCT,
+    TypeId.NAMED_COMPATIBLE_STRUCT,
+    TypeId.EXT,
+    TypeId.NAMED_EXT,
+    -1,
+}
+
+def is_polymorphic_type(type_id: int) -> bool:
+    return type_id in _polymorphic_type_ids
 
 
 def is_subclass(from_type, to_type):

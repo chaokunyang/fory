@@ -118,7 +118,8 @@ class FieldType:
             return FieldType(xtype_id, False, is_nullable, is_tracking_ref)
 
     def create_serializer(self, resolver):
-        if self.type_id == [TypeId.UNKNOWN, TypeId.STRUCT, TypeId.NAMED_STRUCT]:
+        if self.type_id in [TypeId.EXT, TypeId.STRUCT, TypeId.NAMED_STRUCT,
+                            TypeId.COMPATIBLE_STRUCT, TypeId.NAMED_COMPATIBLE_STRUCT]:
             return None
         return resolver.get_serializer(self.type_id)
 
@@ -178,7 +179,7 @@ def build_field_infos(type_resolver, cls):
     type_hints = typing.get_type_hints(cls)
 
     field_infos = []
-    visitor = StructTypeIdVisitor(type_resolver)
+    visitor = StructTypeIdVisitor(type_resolver.fory)
 
     for field_name in field_names:
         field_type_hint = type_hints.get(field_name, typing.Any)
@@ -213,7 +214,8 @@ def build_field_type_from_type_ids(type_resolver, field_name: str, type_ids, vis
         key_type = build_field_type_from_type_ids(type_resolver, field_name, type_ids[1], visitor)
         value_type = build_field_type_from_type_ids(type_resolver, field_name, type_ids[2], visitor)
         return MapFieldType(type_id, morphic, True, tracking_ref, key_type, value_type)
-    elif type_id == TypeId.UNKNOWN:
+    elif type_id in [TypeId.UNKNOWN, TypeId.EXT, TypeId.STRUCT, TypeId.NAMED_STRUCT,
+                     TypeId.COMPATIBLE_STRUCT, TypeId.NAMED_COMPATIBLE_STRUCT]:
         return DynamicFieldType(type_id, False, True, tracking_ref)
     else:
         assert is_primitive_type(type_id) or type_id in [TypeId.STRING, TypeId.ENUM, TypeId.NAMED_ENUM], (

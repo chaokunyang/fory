@@ -155,6 +155,7 @@ class TypeResolver:
         "namespace_decoder",
         "typename_encoder",
         "typename_decoder",
+        "meta_compressor",
         "require_registration",
         "metastring_resolver",
         "language",
@@ -578,6 +579,10 @@ class TypeResolver:
         else:
             return self._type_id_to_typeinfo[type_id]
     
+    def get_typeinfo_by_id(self, type_id):
+        """Get typeinfo by type_id."""
+        return self._type_id_to_typeinfo[type_id]
+
     def get_meta_compressor(self):
         return self.meta_compressor
 

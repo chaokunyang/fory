@@ -100,7 +100,7 @@ def decode_typedef(buffer: Buffer, resolver) -> TypeDef:
         type_id = TypeId.COMPATIBLE_STRUCT
     else:
         type_id = meta_buffer.read_varuint32()
-        type_info = resolver.get_typeinfo(type_id)
+        type_info = resolver.get_typeinfo_by_id(type_id)
         name = type_info.cls.__name__
 
     # Read fields info if present

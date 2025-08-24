@@ -80,7 +80,7 @@ def decode_typedef(buffer: Buffer, resolver) -> TypeDef:
     meta_buffer = Buffer(meta_data)
 
     # Read meta header
-    meta_header = meta_buffer.read_int8()
+    meta_header = meta_buffer.read_uint8()
 
     # Extract number of fields
     num_fields = meta_header & 0b11111
@@ -125,7 +125,7 @@ def read_typename(buffer: Buffer) -> str:
 def read_meta_string(buffer: Buffer, decoder: MetaStringDecoder) -> str:
     """Read a meta string from the buffer."""
     # Read encoding and length combined in first byte
-    header = buffer.read_int8()
+    header = buffer.read_uint8()
 
     # Extract encoding (2 bits) and size (6 bits)
     encoding_value = header & 0b11
@@ -160,7 +160,7 @@ def read_fields_info(buffer: Buffer, resolver, defined_class: str, num_fields: i
 def read_field_info(buffer: Buffer, resolver, defined_class: str) -> FieldInfo:
     """Read a single field info from the buffer."""
     # Read field header
-    header = buffer.read_int8()
+    header = buffer.read_uint8()
 
     # Extract field header components
     field_name_encoding = (header >> 6) & 0b11

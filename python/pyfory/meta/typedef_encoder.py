@@ -66,7 +66,7 @@ def encode_typedef(type_resolver, cls):
     buffer = Buffer.allocate(64)
 
     # Write placeholder for header
-    buffer.write_int8(-1)
+    buffer.write_uint8(0)
 
     # Write meta header
     header = len(field_infos)
@@ -88,7 +88,7 @@ def encode_typedef(type_resolver, cls):
         write_typename(buffer, typename)
 
     # Update header byte
-    buffer.put_int8(0, header)
+    buffer.put_uint8(0, header)
 
     # Write fields info
     write_fields_info(type_resolver, buffer, field_infos)
@@ -154,7 +154,7 @@ def write_typename(buffer: Buffer, typename: str):
 def write_meta_string(buffer: Buffer, meta_string):
     """Write a meta string to the buffer."""
     # Write encoding
-    buffer.write_int8(meta_string.encoding.value)
+    buffer.write_uint8(meta_string.encoding.value)
 
     # Write length
     length = len(meta_string.encoded_data)
@@ -187,11 +187,11 @@ def write_field_info(buffer: Buffer, field_info: FieldInfo):
     header |= encoding_flags << 6
     if field_name_binary_size >= FIELD_NAME_SIZE_THRESHOLD:
         header |= 0b00111100
-        buffer.write_int8(header)
+        buffer.write_uint8(header)
         buffer.write_varuint32(field_name_binary_size - FIELD_NAME_SIZE_THRESHOLD)
     else:
         header |= field_name_binary_size << 2
-        buffer.write_int8(header)
+        buffer.write_uint8(header)
 
     # Write field type info
     field_info.field_type.xwrite(buffer, False)

@@ -15,32 +15,21 @@
 # specific language governing permissions and limitations
 # under the License.
 
-name: Publish Fory Java Snapshot
-
+name: Build Containerized PR Wheels
 on:
+  pull_request:
+    paths: [ci/**, python/**, .github/workflows/**]
   push:
-    branches:
-      - main
-      - release-java-snapshot
+    branches: [main]
+    paths: [ci/**, python/**, .github/workflows/**]
 
 jobs:
-  publish-java:
-    runs-on: ubuntu-latest
-    if: github.repository == 'apache/fory'
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm]
     steps:
       - uses: actions/checkout@v5
-      - name: Set up Maven Central Repository
-        uses: actions/setup-java@v4
-        with:
-          java-version: "11"
-          distribution: "adopt"
-          architecture: x64
-          cache: maven
-          server-id: apache.snapshots.https
-          server-username: NEXUS_USERNAME
-          server-password: NEXUS_PASSWORD
-      - name: Publish Fory Java Snapshot
-        run: python ./ci/run_ci.py java --version 11 --release
-        env:
-          NEXUS_USERNAME: ${{ secrets.NEXUS_USER }}
-          NEXUS_PASSWORD: ${{ secrets.NEXUS_PW }}
+      - name: Build and test wheels
+        run: ./ci/build_linux_wheels.py --arch ${{ runner.arch }}

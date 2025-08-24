@@ -180,7 +180,8 @@ def write_field_info(buffer: Buffer, field_info: FieldInfo):
         header |= 0b10
     if field_info.field_type.is_tracking_ref:
         header |= 0b1
-    meta_string = FIELD_NAME_ENCODER.encode(field_info.name)
+    encoding = FIELD_NAME_ENCODER.compute_encoding(field_info.name, FIELD_NAME_ENCODINGS)
+    meta_string = FIELD_NAME_ENCODER.encode_with_encoding(field_info.name, encoding)
     field_name_binary_size = len(meta_string.encoded_data) - 1
     encoding_flags = FIELD_NAME_ENCODINGS.index(meta_string.encoding)
     header |= encoding_flags << 6

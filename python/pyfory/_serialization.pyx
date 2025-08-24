@@ -570,6 +570,9 @@ cdef class TypeResolver:
             raise ValueError(f"Unexpected type_id {type_id}")
         typeinfo = <TypeInfo> typeinfo_ptr
         return typeinfo
+    
+    def get_typeinfo_by_id(self, type_id):
+        return self._resolver.get_typeinfo_by_id(type_id=type_id)
 
     def get_meta_compressor(self):
         return self._resolver.get_meta_compressor()

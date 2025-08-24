@@ -119,9 +119,9 @@ class FieldType:
 
     def create_serializer(self, resolver):
         if self.type_id in [TypeId.EXT, TypeId.STRUCT, TypeId.NAMED_STRUCT,
-                            TypeId.COMPATIBLE_STRUCT, TypeId.NAMED_COMPATIBLE_STRUCT]:
+                            TypeId.COMPATIBLE_STRUCT, TypeId.NAMED_COMPATIBLE_STRUCT, TypeId.UNKNOWN]:
             return None
-        return resolver.get_serializer(self.type_id)
+        return resolver.get_typeinfo_by_id(self.type_id).serializer
 
 
 class CollectionFieldType(FieldType):

@@ -129,7 +129,7 @@ class TypeId:
     Fory type for cross-language serialization.
     See `org.apache.fory.types.Type`
     """
-
+    UNKNOWN = -1
     # null value
     NA = 0
     # a boolean value (true or false).
@@ -365,8 +365,9 @@ _polymorphic_type_ids = {
     TypeId.NAMED_COMPATIBLE_STRUCT,
     TypeId.EXT,
     TypeId.NAMED_EXT,
-    -1,
+    TypeId.UNKNOWN,
 }
+
 
 def is_polymorphic_type(type_id: int) -> bool:
     return type_id in _polymorphic_type_ids

@@ -571,6 +571,9 @@ cdef class TypeResolver:
         typeinfo = <TypeInfo> typeinfo_ptr
         return typeinfo
 
+    def get_meta_compressor(self):
+        return self._resolver.get_meta_compressor()
+
     cpdef inline reset(self):
         pass
 

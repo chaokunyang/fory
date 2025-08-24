@@ -66,6 +66,7 @@ from pyfory.serializer import (
     ObjectSerializer,
 )
 from pyfory.meta.metastring import MetaStringEncoder, MetaStringDecoder
+from pyfory.meta.meta_compressor import DeflaterMetaCompressor
 from pyfory.type import (
     TypeId,
     Int8Type,
@@ -182,6 +183,7 @@ class TypeResolver:
         self.namespace_decoder = MetaStringDecoder(".", "_")
         self.typename_encoder = MetaStringEncoder("$", "_")
         self.typename_decoder = MetaStringDecoder("$", "_")
+        self.meta_compressor = DeflaterMetaCompressor()
 
     def initialize(self):
         self._initialize_xlang()
@@ -575,6 +577,9 @@ class TypeResolver:
             return typeinfo
         else:
             return self._type_id_to_typeinfo[type_id]
+    
+    def get_meta_compressor(self):
+        return self.meta_compressor
 
     def reset(self):
         pass

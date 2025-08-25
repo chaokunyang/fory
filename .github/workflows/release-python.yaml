@@ -51,7 +51,7 @@ jobs:
 
       - name: Publish to TestPyPI
         uses: pypa/gh-action-pypi-publish@release/v1
-        if: startsWith(github.ref, 'refs/tags/') && contains(github.ref, '-')
+        if: startsWith(github.event.workflow_run.head_branch, 'refs/tags/') && contains(github.event.workflow_run.head_branch, '-')
         with:
           repository-url: https://test.pypi.org/legacy/
           skip-existing: true
@@ -61,7 +61,7 @@ jobs:
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
-        if: startsWith(github.ref, 'refs/tags/') && !contains(github.ref, '-')
+        if: startsWith(github.event.workflow_run.head_branch, 'refs/tags/') && !contains(github.event.workflow_run.head_branch, '-')
         with:
           skip-existing: true
           verify-metadata: false

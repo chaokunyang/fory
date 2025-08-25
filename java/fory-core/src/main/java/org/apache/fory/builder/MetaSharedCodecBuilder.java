@@ -20,7 +20,10 @@
 package org.apache.fory.builder;
 
 import static org.apache.fory.builder.Generated.GeneratedMetaSharedSerializer.SERIALIZER_FIELD_NAME;
+import static org.apache.fory.type.TypeUtils.OBJECT_TYPE;
+import static org.apache.fory.type.TypeUtils.STRING_TYPE;
 
+import java.lang.reflect.Member;
 import java.util.Collection;
 import java.util.Map;
 import java.util.SortedMap;
@@ -30,6 +33,7 @@ import org.apache.fory.builder.Generated.GeneratedMetaSharedSerializer;
 import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.codegen.Expression;
 import org.apache.fory.codegen.Expression.Literal;
+import org.apache.fory.codegen.Expression.StaticInvoke;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.memory.MemoryBuffer;
@@ -42,6 +46,7 @@ import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.Serializers;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
+import org.apache.fory.util.DefaultValueUtils;
 import org.apache.fory.util.ExceptionUtils;
 import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.Preconditions;
@@ -67,6 +72,8 @@ import org.apache.fory.util.record.RecordUtils;
  */
 public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
   private final ClassDef classDef;
+  private final String defaultValueLanguage;
+  private final DefaultValueUtils.DefaultValueField[] defaultValueFields;
 
   public MetaSharedCodecBuilder(TypeRef<?> beanType, Fory fory, ClassDef classDef) {
     super(beanType, fory, GeneratedMetaSharedSerializer.class);
@@ -84,6 +91,33 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
     DescriptorGrouper grouper = fory.getClassResolver().createDescriptorGrouper(descriptors, false);
     objectCodecOptimizer =
         new ObjectCodecOptimizer(beanClass, grouper, !fory.isBasicTypesRefIgnored(), ctx);
+
+    String defaultValueLanguage = "None";
+    DefaultValueUtils.DefaultValueField[] defaultValueFields =
+        new DefaultValueUtils.DefaultValueField[0];
+    if (fory.getConfig().isScalaOptimizationEnabled()) {
+      // Check if this is a Scala case class and build default value fields
+      defaultValueFields =
+          DefaultValueUtils.getScalaDefaultValueSupport()
+              .buildDefaultValueFields(fory, beanClass, grouper.getSortedDescriptors());
+      if (defaultValueFields.length > 0) {
+        defaultValueLanguage = "Scala";
+      }
+    }
+    if (defaultValueFields.length == 0) {
+      DefaultValueUtils.DefaultValueSupport kotlinDefaultValueSupport =
+          DefaultValueUtils.getKotlinDefaultValueSupport();
+      if (kotlinDefaultValueSupport != null) {
+        defaultValueFields =
+            kotlinDefaultValueSupport.buildDefaultValueFields(
+                fory, beanClass, grouper.getSortedDescriptors());
+        if (defaultValueFields.length > 0) {
+          defaultValueLanguage = "Kotlin";
+        }
+      }
+    }
+    this.defaultValueLanguage = defaultValueLanguage;
+    this.defaultValueFields = defaultValueFields;
   }
 
   // Must be static to be shared across the whole process life.
@@ -195,5 +229,47 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
       return new Expression.StaticInvoke(ExceptionUtils.class, "ignore", value);
     }
     return super.setFieldValue(bean, descriptor, value);
+  }
+
+  @Override
+  protected Expression newBean() {
+    Expression bean = super.newBean();
+    if (defaultValueFields.length == 0) {
+      return bean;
+    }
+
+    Expression.ListExpression setDefaultsExpr = new Expression.ListExpression();
+    setDefaultsExpr.add(bean);
+    Map<Member, Descriptor> descriptors = Descriptor.getAllDescriptorsMap(beanClass);
+    for (DefaultValueUtils.DefaultValueField defaultField : defaultValueFields) {
+      Object defaultValue = defaultField.getDefaultValue();
+      Member member = defaultField.getFieldAccessor().getField();
+      Descriptor descriptor = descriptors.get(member);
+      TypeRef<?> typeRef = descriptor.getTypeRef();
+      Expression defaultValueExpr;
+      if (typeRef.unwrap().isPrimitive() || typeRef.equals(STRING_TYPE)) {
+        defaultValueExpr = new Literal(defaultValue, typeRef);
+      } else {
+        String funcName = "get" + defaultValueLanguage + "DefaultValue";
+        defaultValueExpr =
+            getOrCreateField(
+                true,
+                typeRef.getRawType(),
+                member.getName(),
+                () -> {
+                  Expression expr =
+                      new StaticInvoke(
+                          DefaultValueUtils.class,
+                          funcName,
+                          OBJECT_TYPE,
+                          staticBeanClassExpr(),
+                          Literal.ofString(member.getName()));
+                  return new Expression.Cast(expr, typeRef);
+                });
+      }
+      setDefaultsExpr.add(super.setFieldValue(bean, descriptor, defaultValueExpr));
+    }
+    setDefaultsExpr.add(bean);
+    return setDefaultsExpr;
   }
 }

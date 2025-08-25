@@ -17,11 +17,12 @@
  * under the License.
  */
 
-package org.apache.fory.serializer;
+package org.apache.fory.extension.serializer;
 
 import com.google.protobuf.ByteString;
 import org.apache.fory.Fory;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.serializer.Serializer;
 
 public class ByteStringSerializer extends Serializer<ByteString> {
   public ByteStringSerializer(Fory fory, Class<ByteString> type) {

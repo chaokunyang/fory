@@ -82,6 +82,15 @@ public abstract class AbstractThreadSafeFory implements ThreadSafeFory {
     registerCallback(fory -> fory.getClassResolver().setClassChecker(classChecker));
   }
 
+  @Override
+  public void ensureSerializersCompiled() {
+    execute(
+        fory -> {
+          fory.ensureSerializersCompiled();
+          return null;
+        });
+  }
+
   @Internal
   public abstract void registerCallback(Consumer<Fory> callback);
 }

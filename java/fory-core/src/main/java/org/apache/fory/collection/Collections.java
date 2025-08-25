@@ -19,6 +19,8 @@
 
 package org.apache.fory.collection;
 
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 import com.google.common.collect.MapMaker;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -195,6 +197,27 @@ public class Collections {
       return new ConcurrentHashMap<>();
     } else {
       return new MapMaker().weakKeys().makeMap();
+    }
+  }
+
+  /**
+   * Create a cache with weak keys and soft values.
+   *
+   * <p>when in graalvm, the cache is a concurrent hash map. when in jvm, the cache is a weak hash
+   * map.
+   *
+   * @param concurrencyLevel the concurrency level
+   * @return the cache
+   */
+  public static <T> Cache<Class<?>, T> newClassKeySoftCache(int concurrencyLevel) {
+    if (GraalvmSupport.isGraalBuildtime()) {
+      return CacheBuilder.newBuilder().concurrencyLevel(concurrencyLevel).build();
+    } else {
+      return CacheBuilder.newBuilder()
+          .weakKeys()
+          .softValues()
+          .concurrencyLevel(concurrencyLevel)
+          .build();
     }
   }
 }

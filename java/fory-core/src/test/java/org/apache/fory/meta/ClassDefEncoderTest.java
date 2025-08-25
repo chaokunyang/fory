@@ -26,6 +26,7 @@ import java.io.Serializable;
 import java.util.List;
 import lombok.Data;
 import org.apache.fory.Fory;
+import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.Language;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.test.bean.BeanA;
@@ -118,5 +119,55 @@ public class ClassDefEncoderTest {
     Assert.assertEquals(header & ClassDef.META_SIZE_MASKS, ClassDef.META_SIZE_MASKS);
     Assert.assertEquals(header & ClassDef.COMPRESS_META_FLAG, ClassDef.COMPRESS_META_FLAG);
     Assert.assertEquals(header & ClassDef.HAS_FIELDS_META_FLAG, 0);
+  }
+
+  @Test
+  public void testAbstractParentClass() {
+    Fory fory0 =
+        Fory.builder()
+            .withMetaShare(true)
+            .withScopedMetaShare(true)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .requireClassRegistration(false)
+            .build();
+    Fory fory1 =
+        Fory.builder()
+            .withMetaShare(true)
+            .withScopedMetaShare(true)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .build();
+    fory1.register(BaseAbstractClass.class);
+    fory1.register(ChildClass.class);
+    for (Fory fory : new Fory[] {fory0, fory1}) {
+      ClassDef classDef = ClassDef.buildClassDef(fory, ChildClass.class);
+      ClassDef classDef1 =
+          ClassDef.readClassDef(fory, MemoryBuffer.fromByteArray(classDef.getEncoded()));
+      Assert.assertEquals(classDef, classDef1);
+      ChildClass c = new ChildClass();
+      c.setId("123");
+      c.setName("test");
+      byte[] serialized = fory.serialize(c);
+      ChildClass c1 = fory.deserialize(serialized, ChildClass.class);
+      Assert.assertEquals(c1.getId(), "123");
+      Assert.assertEquals(c1.getName(), "test");
+    }
+  }
+
+  @Data
+  public abstract static class BaseAbstractClass {
+    private String id;
+
+    public String getId() {
+      return id;
+    }
+
+    public void setId(String id) {
+      this.id = id;
+    }
+  }
+
+  @Data
+  public static class ChildClass extends BaseAbstractClass {
+    private String name;
   }
 }

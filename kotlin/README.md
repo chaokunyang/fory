@@ -60,6 +60,76 @@ fun main(args: Array<String>) {
 }
 ```
 
+## Default Value Support
+
+Fory Kotlin provides support for Kotlin data class default values during serialization and deserialization. This feature allows for backward and forward compatibility when data class schemas evolve.
+
+### How It Works
+
+When a Kotlin data class has parameters with default values, Fory can:
+
+1. **Detect default values** using Kotlin reflection
+2. **Apply default values** during deserialization when fields are missing from serialized data
+3. **Support schema evolution** by allowing new fields with defaults to be added without breaking existing serialized data
+
+### Example Usage
+
+```kotlin
+import org.apache.fory.Fory
+import org.apache.fory.config.CompatibleMode
+import org.apache.fory.serializer.kotlin.KotlinSerializers
+
+// Original data class
+data class User(val name: String, val age: Int)
+
+// Evolved data class with new field and default value
+data class UserV2(val name: String, val age: Int, val email: String = "default@example.com")
+
+fun main() {
+    val fory = Fory.builder()
+        .withCompatibleMode(CompatibleMode.COMPATIBLE)
+        .build()
+    KotlinSerializers.registerSerializers(fory)
+    fory.register(User::class.java)
+    fory.register(UserV2::class.java)
+
+    // Serialize with old schema
+    val oldUser = User("John", 30)
+    val serialized = fory.serialize(oldUser)
+
+    // Deserialize with new schema - missing field gets default value
+    val newUser = fory.deserialize(serialized, UserV2::class.java)
+    println(newUser) // UserV2(name=John, age=30, email=default@example.com)
+}
+```
+
+### Supported Default Value Types
+
+The following types are supported for default values:
+
+- **Primitive types**: `Int`, `Long`, `Double`, `Float`, `Boolean`, `Byte`, `Short`, `Char`
+- **String**: `String`
+- **Collections**: `List`, `Set`, `Map` (with default instances)
+- **Custom objects**: Any object that can be instantiated via reflection
+
+### Configuration
+
+To enable default value support:
+
+1. **Enable compatible mode** (recommended for schema evolution):
+
+   ```kotlin
+   val fory = Fory.builder()
+       .withCompatibleMode(CompatibleMode.COMPATIBLE)
+       .build()
+   ```
+
+2. **Register Kotlin serializers**:
+
+   ```kotlin
+   KotlinSerializers.registerSerializers(fory)
+   ```
+
 ## Building Fory Kotlin
 
 ```bash

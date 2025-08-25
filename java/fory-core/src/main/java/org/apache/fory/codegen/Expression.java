@@ -2183,7 +2183,7 @@ public interface Expression {
 
     /**
      * Use lambda to create a new context, and by capturing variables, we can make the codegen of
-     * thoese variable expressions happen before while loop.
+     * those variable expressions happen before while loop.
      */
     public While(Expression predicate, SerializableSupplier<Expression> action) {
       this(
@@ -2432,8 +2432,7 @@ public interface Expression {
           action.apply(
               new Reference(i),
               new Reference(leftElemValue, leftElemType, true),
-              // elemValue nullability check use isNullAt inside action, so elemValueRef'nullable is
-              // false.
+              // elemValue nullability check uses isNullAt inside action, so elemValueRef's nullable is false.
               new Reference(rightElemValue, rightElemType, false));
       ExprCode elementExprCode = elemExpr.genCode(ctx);
 

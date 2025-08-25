@@ -388,9 +388,9 @@ cdef class TypeInfo:
     for python `int`: `Int8/1632/64/128Serializer` for `int8/16/32/64/128` each, and another
     `IntSerializer` for `int` which will dispatch to different `int8/16/32/64/128` type
     according the actual value.
-    We do not get the acutal type here, because it will introduce extra computing.
+    We do not get the actual type here, because it will introduce extra computing.
     For example, we have want to get actual `Int8/16/32/64Serializer`, we must check and
-    extract the actutal here which will introduce cost, and we will do same thing again
+    extract the actual here which will introduce cost, and we will do same thing again
     when serializing the actual data.
     """
     cdef public object cls
@@ -454,6 +454,17 @@ cdef class TypeResolver:
         self._resolver.initialize()
         for typeinfo in self._resolver._types_info.values():
             self._populate_typeinfo(typeinfo)
+
+    def register(
+        self,
+        cls: Union[type, TypeVar],
+        *,
+        type_id: int = None,
+        namespace: str = None,
+        typename: str = None,
+        serializer=None,
+    ):
+        self.register_type(cls, type_id=type_id, namespace=namespace, typename=typename, serializer=serializer)
 
     def register_type(
             self,
@@ -543,14 +554,17 @@ cdef class TypeResolver:
     cpdef inline TypeInfo read_typeinfo(self, Buffer buffer):
         cdef:
             int32_t type_id = buffer.read_varuint32()
+        if type_id < 0:
+            type_id = -type_id
+        if type_id > self._c_registered_id_to_type_info.size():
+            raise ValueError(f"Unexpected type_id {type_id}")
+        cdef:
             int32_t internal_type_id = type_id & 0xFF
-        cdef MetaStringBytes namespace_bytes, typename_bytes
+            MetaStringBytes namespace_bytes, typename_bytes
         if IsNamespacedType(internal_type_id):
             namespace_bytes = self.metastring_resolver.read_meta_string_bytes(buffer)
             typename_bytes = self.metastring_resolver.read_meta_string_bytes(buffer)
             return self._load_bytes_to_typeinfo(type_id, namespace_bytes, typename_bytes)
-        if type_id < 0 or type_id > self._c_registered_id_to_type_info.size():
-            raise ValueError(f"Unexpected type_id {type_id}")
         typeinfo_ptr = self._c_registered_id_to_type_info[type_id]
         if typeinfo_ptr == NULL:
             raise ValueError(f"Unexpected type_id {type_id}")
@@ -588,7 +602,7 @@ cdef class Fory:
 
     def __init__(
             self,
-            language=Language.XLANG,
+            language=Language.PYTHON,
             ref_tracking: bool = False,
             require_type_registration: bool = True,
     ):
@@ -636,14 +650,26 @@ cdef class Fory:
     def register_serializer(self, cls: Union[type, TypeVar], Serializer serializer):
         self.type_resolver.register_serializer(cls, serializer)
 
+    def register(
+        self,
+        cls: Union[type, TypeVar],
+        *,
+        type_id: int = None,
+        namespace: str = None,
+        typename: str = None,
+        serializer=None,
+    ):
+        self.type_resolver.register_type(
+            cls, type_id=type_id, namespace=namespace, typename=typename, serializer=serializer)
+
     def register_type(
-            self,
-            cls: Union[type, TypeVar],
-            *,
-            type_id: int = None,
-            namespace: str = None,
-            typename: str = None,
-            serializer=None,
+        self,
+        cls: Union[type, TypeVar],
+        *,
+        type_id: int = None,
+        namespace: str = None,
+        typename: str = None,
+        serializer=None,
     ):
         self.type_resolver.register_type(
             cls, type_id=type_id, namespace=namespace, typename=typename, serializer=serializer)
@@ -1529,7 +1555,7 @@ cdef inline get_next_element(
     typeinfo = type_resolver.read_typeinfo(buffer)
     cdef int32_t type_id = typeinfo.type_id
     # Note that all read operations in fast paths of list/tuple/set/dict/sub_dict
-    # ust match corresponding writing operations. Otherwise, ref tracking will
+    # must match corresponding writing operations. Otherwise, ref tracking will
     # error.
     if type_id == <int32_t>TypeId.STRING:
         return buffer.read_string()

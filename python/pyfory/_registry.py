@@ -21,6 +21,7 @@ import datetime
 import enum
 import functools
 import logging
+import types
 from typing import TypeVar, Union
 from enum import Enum
 
@@ -60,6 +61,9 @@ from pyfory.serializer import (
     PickleSerializer,
     DataClassSerializer,
     StatefulSerializer,
+    ReduceSerializer,
+    FunctionSerializer,
+    ObjectSerializer,
 )
 from pyfory.meta.metastring import MetaStringEncoder, MetaStringDecoder
 from pyfory.type import (
@@ -344,6 +348,10 @@ class TypeResolver:
             if issubclass(cls, enum.Enum):
                 serializer = EnumSerializer(self.fory, cls)
                 type_id = TypeId.NAMED_ENUM if type_id is None else ((type_id << 8) + TypeId.ENUM)
+            elif cls is types.FunctionType:
+                # Use FunctionSerializer for function types (including lambdas)
+                serializer = FunctionSerializer(self.fory, cls)
+                type_id = TypeId.NAMED_EXT if type_id is None else ((type_id << 8) + TypeId.EXT)
             else:
                 serializer = DataClassSerializer(self.fory, cls, xlang=True)
                 type_id = TypeId.NAMED_STRUCT if type_id is None else ((type_id << 8) + TypeId.STRUCT)
@@ -460,7 +468,7 @@ class TypeResolver:
                 type_id = TypeId.NAMED_ENUM
             elif type(serializer) is PickleSerializer:
                 type_id = PickleSerializer.PICKLE_TYPE_ID
-            elif isinstance(serializer, StatefulSerializer):
+            elif isinstance(serializer, (ObjectSerializer, StatefulSerializer, ReduceSerializer)):
                 type_id = TypeId.NAMED_EXT
             if not self.require_registration:
                 if isinstance(serializer, DataClassSerializer):
@@ -482,12 +490,25 @@ class TypeResolver:
                 serializer = type(type_info.serializer)(self.fory, cls)
                 break
         else:
-            if dataclasses.is_dataclass(cls):
-                from pyfory import DataClassSerializer
-
+            if cls is types.FunctionType:
+                # Use PickleSerializer for function types (including lambdas)
+                serializer = PickleSerializer(self.fory, cls)
+            elif dataclasses.is_dataclass(cls):
                 serializer = DataClassSerializer(self.fory, cls)
             elif issubclass(cls, enum.Enum):
                 serializer = EnumSerializer(self.fory, cls)
+            elif (hasattr(cls, "__reduce__") and cls.__reduce__ is not object.__reduce__) or (
+                hasattr(cls, "__reduce_ex__") and cls.__reduce_ex__ is not object.__reduce_ex__
+            ):
+                # Use ReduceSerializer for objects that have custom __reduce__ or __reduce_ex__ methods
+                # This has higher precedence than StatefulSerializer and ObjectSerializer
+                # Only use it for objects with custom reduce methods, not default ones from the object
+                module_name = getattr(cls, "__module__", "")
+                if module_name.startswith("pandas.") or module_name == "builtins" or cls.__name__ in ("type", "function", "method"):
+                    # Exclude pandas, built-ins, and certain system types
+                    serializer = PickleSerializer(self.fory, cls)
+                else:
+                    serializer = ReduceSerializer(self.fory, cls)
             elif hasattr(cls, "__getstate__") and hasattr(cls, "__setstate__"):
                 # Use StatefulSerializer for objects that support __getstate__ and __setstate__
                 # But exclude certain types that have incompatible state methods
@@ -497,6 +518,12 @@ class TypeResolver:
                     serializer = PickleSerializer(self.fory, cls)
                 else:
                     serializer = StatefulSerializer(self.fory, cls)
+            elif (
+                cls is not type
+                and (hasattr(cls, "__dict__") or hasattr(cls, "__slots__"))
+                and not (np and (issubclass(cls, np.dtype) or cls is type(np.dtype)))
+            ):
+                serializer = ObjectSerializer(self.fory, cls)
             else:
                 serializer = PickleSerializer(self.fory, cls)
         return serializer

@@ -24,6 +24,6 @@ except ImportError:
 
 
 def require_pyarrow(func):
-    arrow_not_installed = pa is None or hasattr(pa, "get_library_dirs")
+    arrow_not_installed = pa is None or not hasattr(pa, "get_library_dirs")
     mark_decorator = pytest.mark.skipif(arrow_not_installed, reason="pyarrow not installed")(func)
     return mark_decorator

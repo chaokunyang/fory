@@ -319,8 +319,8 @@ subclass.
 
 `50 bits hash + 1bit compress flag + write fields meta + 12 bits meta size`. Right is the lower bits.
 
-- lower 12 bits are used to encode meta size. If meta size `>= 0b111_1111_1111`, then write
-  `meta_ size - 0b111_1111_1111` next.
+- lower 12 bits are used to encode meta size. If meta size `>= 0b1111_1111_1111`, then write
+  `meta_ size - 0b1111_1111_1111` next.
 - 13rd bit is used to indicate whether to write fields meta. When this class is schema-consistent or use registered
   serializer, fields meta will be skipped. Class Meta will be used for share namespace + type name only.
 - 14rd bit is used to indicate whether meta is compressed.
@@ -615,7 +615,7 @@ which will be encoded by elements header, each use one bit:
 - If the elements have null, use the second bit `0b10` of the header to flag it. If ref tracking is enabled for this
   element type, this flag is invalid.
 - If the element types are not the declared type, use the 3rd bit `0b100` of the header to flag it.
-- If the element types are different, use the 4rd bit `0b1000` header to flag it.
+- If the element types are different, use the 4th bit `0b1000` header to flag it.
 
 By default, all bits are unset, which means all elements won't track ref, all elements are same type, not null and
 the actual element is the declared type in the custom type field.
@@ -661,7 +661,7 @@ else:
             fory.write_value(buffer, elem)
 ```
 
-[`CollectionSerializer#writeElements`](https://github.com/apache/fory/blob/20a1a78b17a75a123a6f5b7094c06ff77defc0fe/java/fory-core/src/main/java/org/apache/fory/serializer/collection/AbstractCollectionSerializer.java#L302)
+[`CollectionSerializer#writeElements`](https://github.com/apache/fory/blob/20a1a78b17a75a123a6f5b7094c06ff77defc0fe/java/fory-core/src/main/java/org/apache/fory/serializer/collection/CollectionLikeSerializer.java#L302)
 can be taken as an example.
 
 ### array

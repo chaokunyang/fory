@@ -146,9 +146,9 @@ class CollectionFieldType(FieldType):
 
     def create_serializer(self, resolver):
         if self.type_id == TypeId.LIST:
-            return ListSerializer(self.fory, list, self.element_type.create_serializer(resolver))
+            return ListSerializer(resolver.fory, list, self.element_type.create_serializer(resolver))
         elif self.type_id == TypeId.SET:
-            return SetSerializer(self.fory, set, self.element_type.create_serializer(resolver))
+            return SetSerializer(resolver.fory, set, self.element_type.create_serializer(resolver))
         else:
             raise ValueError(f"Unknown collection type: {self.type_id}")
 
@@ -170,7 +170,7 @@ class MapFieldType(FieldType):
     def create_serializer(self, resolver):
         key_serializer = self.key_type.create_serializer(resolver)
         value_serializer = self.value_type.create_serializer(resolver)
-        return MapSerializer(self.fory, dict, key_serializer, value_serializer)
+        return MapSerializer(resolver.fory, dict, key_serializer, value_serializer)
 
     def __repr__(self):
         return (

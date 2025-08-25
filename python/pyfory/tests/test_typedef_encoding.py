@@ -108,30 +108,33 @@ def test_encode_decode_typedef():
     """Test encoding and decoding a TypeDef."""
     fory = Fory(language=pyfory.XLANG)
     fory.register(SimpleTypeDef, namespace="example", typename="SimpleTypeDef")
+    fory.register(TestTypeDef, namespace="example", typename="TestTypeDef")
     # Create a mock resolver
     resolver = fory.type_resolver
 
-    # Encode a TypeDef
-    typedef = encode_typedef(resolver, SimpleTypeDef)
-    print(f"typedef: {typedef}")
+    types = [SimpleTypeDef, TestTypeDef]
+    for type_ in types:
+        # Encode a TypeDef
+        typedef = encode_typedef(resolver, type_)
+        print(f"typedef: {typedef}")
 
-    # Create a buffer from the encoded data
-    buffer = Buffer(typedef.encoded)
+        # Create a buffer from the encoded data
+        buffer = Buffer(typedef.encoded)
 
-    # Decode the TypeDef
-    decoded_typedef = decode_typedef(buffer, resolver)
-    print(f"decoded_typedef: {decoded_typedef}")
+        # Decode the TypeDef
+        decoded_typedef = decode_typedef(buffer, resolver)
+        print(f"decoded_typedef: {decoded_typedef}")
 
-    # Verify the decoded TypeDef has the expected properties
-    assert decoded_typedef.type_id == typedef.type_id
-    assert decoded_typedef.is_compressed == typedef.is_compressed
-    assert len(decoded_typedef.fields) == len(typedef.fields)
+        # Verify the decoded TypeDef has the expected properties
+        assert decoded_typedef.type_id == typedef.type_id
+        assert decoded_typedef.is_compressed == typedef.is_compressed
+        assert len(decoded_typedef.fields) == len(typedef.fields)
 
-    # Verify field names match
-    for i, field in enumerate(decoded_typedef.fields):
-        assert field.name == typedef.fields[i].name
-        assert field.field_type.type_id == typedef.fields[i].field_type.type_id
-        assert field.field_type.is_nullable == typedef.fields[i].field_type.is_nullable
+        # Verify field names match
+        for i, field in enumerate(decoded_typedef.fields):
+            assert field.name == typedef.fields[i].name
+            assert field.field_type.type_id == typedef.fields[i].field_type.type_id
+            assert field.field_type.is_nullable == typedef.fields[i].field_type.is_nullable
 
 
 if __name__ == "__main__":

@@ -240,7 +240,7 @@ class StructTypeIdVisitor(TypeVisitor):
         # Infer type recursively for type such as Dict[str, Dict[str, str]]
         key_ids = infer_field("key", key_type, self, types_path=types_path)
         value_ids = infer_field("value", value_type, self, types_path=types_path)
-        return TypeId.MAP, (key_ids, value_ids)
+        return TypeId.MAP, key_ids, value_ids
 
     def visit_customized(self, field_name, type_, types_path=None):
         return None, None
@@ -254,7 +254,7 @@ class StructTypeIdVisitor(TypeVisitor):
             return None, None
         typeinfo = self.fory.type_resolver.get_typeinfo(type_)
         assert not isinstance(typeinfo.serializer, (PickleSerializer,))
-        return typeinfo.type_id, None
+        return [typeinfo.type_id]
 
 
 def get_field_names(clz, type_hints=None):

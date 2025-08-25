@@ -153,13 +153,19 @@ def write_typename(buffer: Buffer, typename: str):
 
 def write_meta_string(buffer: Buffer, meta_string):
     """Write a meta string to the buffer."""
-    # Write encoding
-    buffer.write_uint8(meta_string.encoding.value)
-
-    # Write length
+    # Write encoding and length combined in first byte
     length = len(meta_string.encoded_data)
+    encoding_value = meta_string.encoding.value
+
     if length >= FIELD_NAME_SIZE_THRESHOLD:
+        # Use threshold value and write additional length
+        header = (FIELD_NAME_SIZE_THRESHOLD << 2) | encoding_value
+        buffer.write_uint8(header)
         buffer.write_varuint32(length - FIELD_NAME_SIZE_THRESHOLD)
+    else:
+        # Combine length and encoding in single byte
+        header = (length << 2) | encoding_value
+        buffer.write_uint8(header)
 
     # Write encoded data
     if meta_string.encoded_data:

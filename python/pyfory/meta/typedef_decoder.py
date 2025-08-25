@@ -95,9 +95,13 @@ def decode_typedef(buffer: Buffer, resolver) -> TypeDef:
         namespace = read_namespace(meta_buffer)
         typename = read_typename(meta_buffer)
         name = namespace + "." + typename if namespace else typename
-        # In a real implementation, you would look up the type_id from namespace and typename
-        # For now, we'll use UNKNOWN as placeholder
-        type_id = TypeId.COMPATIBLE_STRUCT
+        # Look up the type_id from namespace and typename
+        type_info = resolver.get_typeinfo_by_name(namespace, typename)
+        if type_info:
+            type_id = type_info.type_id
+        else:
+            # Fallback to COMPATIBLE_STRUCT if not found
+            type_id = TypeId.COMPATIBLE_STRUCT
     else:
         type_id = meta_buffer.read_varuint32()
         type_info = resolver.get_typeinfo_by_id(type_id)

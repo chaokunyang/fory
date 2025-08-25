@@ -54,6 +54,9 @@ class TypeDef:
         serializers = [field_info.field_type.create_serializer(resolver) for field_info in self.fields]
         return serializers
 
+    def __repr__(self):
+        return f"TypeDef(name={self.name}, type_id={self.type_id}, fields={self.fields}, is_compressed={self.is_compressed})"
+
 
 class FieldInfo:
     def __init__(self, name: str, field_type: "FieldType", defined_class: str):
@@ -70,6 +73,9 @@ class FieldInfo:
         # Note: name and defined_class would need to be read from the buffer
         # This is a simplified version
         return cls("", field_type, "")
+
+    def __repr__(self):
+        return f"FieldInfo(name={self.name}, field_type={self.field_type}, defined_class={self.defined_class})"
 
 
 class FieldType:
@@ -118,10 +124,12 @@ class FieldType:
             return FieldType(xtype_id, False, is_nullable, is_tracking_ref)
 
     def create_serializer(self, resolver):
-        if self.type_id in [TypeId.EXT, TypeId.STRUCT, TypeId.NAMED_STRUCT,
-                            TypeId.COMPATIBLE_STRUCT, TypeId.NAMED_COMPATIBLE_STRUCT, TypeId.UNKNOWN]:
+        if self.type_id in [TypeId.EXT, TypeId.STRUCT, TypeId.NAMED_STRUCT, TypeId.COMPATIBLE_STRUCT, TypeId.NAMED_COMPATIBLE_STRUCT, TypeId.UNKNOWN]:
             return None
         return resolver.get_typeinfo_by_id(self.type_id).serializer
+
+    def __repr__(self):
+        return f"FieldType(type_id={self.type_id}, is_monomorphic={self.is_monomorphic}, is_nullable={self.is_nullable}, is_tracking_ref={self.is_tracking_ref})"
 
 
 class CollectionFieldType(FieldType):
@@ -164,6 +172,12 @@ class MapFieldType(FieldType):
         value_serializer = self.value_type.create_serializer(resolver)
         return MapSerializer(self.fory, dict, key_serializer, value_serializer)
 
+    def __repr__(self):
+        return (
+            f"MapFieldType(type_id={self.type_id}, is_monomorphic={self.is_monomorphic}, is_nullable={self.is_nullable}, "
+            f"is_tracking_ref={self.is_tracking_ref}, key_type={self.key_type}, value_type={self.value_type})"
+        )
+
 
 class DynamicFieldType(FieldType):
     def __init__(self, type_id: int, is_monomorphic: bool, is_nullable: bool, is_tracking_ref: bool):
@@ -171,6 +185,9 @@ class DynamicFieldType(FieldType):
 
     def create_serializer(self, resolver):
         return None
+
+    def __repr__(self):
+        return f"DynamicFieldType(type_id={self.type_id}, is_monomorphic={self.is_monomorphic}, is_nullable={self.is_nullable}, is_tracking_ref={self.is_tracking_ref})"
 
 
 def build_field_infos(type_resolver, cls):
@@ -214,8 +231,7 @@ def build_field_type_from_type_ids(type_resolver, field_name: str, type_ids, vis
         key_type = build_field_type_from_type_ids(type_resolver, field_name, type_ids[1], visitor)
         value_type = build_field_type_from_type_ids(type_resolver, field_name, type_ids[2], visitor)
         return MapFieldType(type_id, morphic, True, tracking_ref, key_type, value_type)
-    elif type_id in [TypeId.UNKNOWN, TypeId.EXT, TypeId.STRUCT, TypeId.NAMED_STRUCT,
-                     TypeId.COMPATIBLE_STRUCT, TypeId.NAMED_COMPATIBLE_STRUCT]:
+    elif type_id in [TypeId.UNKNOWN, TypeId.EXT, TypeId.STRUCT, TypeId.NAMED_STRUCT, TypeId.COMPATIBLE_STRUCT, TypeId.NAMED_COMPATIBLE_STRUCT]:
         return DynamicFieldType(type_id, False, True, tracking_ref)
     else:
         assert is_primitive_type(type_id) or type_id in [TypeId.STRING, TypeId.ENUM, TypeId.NAMED_ENUM], (

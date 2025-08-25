@@ -578,10 +578,14 @@ class TypeResolver:
             return typeinfo
         else:
             return self._type_id_to_typeinfo[type_id]
-    
+
     def get_typeinfo_by_id(self, type_id):
         """Get typeinfo by type_id."""
         return self._type_id_to_typeinfo[type_id]
+
+    def get_typeinfo_by_name(self, namespace, typename):
+        """Get typeinfo by namespace and typename."""
+        return self._named_type_to_typeinfo.get((namespace, typename))
 
     def get_meta_compressor(self):
         return self.meta_compressor

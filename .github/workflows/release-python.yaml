@@ -48,6 +48,7 @@ jobs:
           mkdir dist
           find downloaded_wheels -type f -name "*.whl" -exec mv {} dist/ \;
           ls -R dist
+          echo "head_branch: ${{ github.event.workflow_run.head_branch }}"
 
       - name: Publish to TestPyPI
         uses: pypa/gh-action-pypi-publish@release/v1

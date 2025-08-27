@@ -58,6 +58,7 @@ parse_py_version() {
   version="${version//-alpha/a}"
   version="${version//-beta/b}"
   version="${version//-rc/rc}"
+  version="${version//-//}"
   echo "$version"
 }
 

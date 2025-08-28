@@ -1,5 +1,5 @@
 {
-  "name": "@foryjs/fory",
+  "name": "@apache-fory/fory",
   "version": "0.13.0.dev",
   "description": "Apache Fory™ is a blazingly fast multi-language serialization framework powered by jit and zero-copy",
   "main": "dist/index.js",

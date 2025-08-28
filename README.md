@@ -162,12 +162,6 @@ libraryDependencies += "org.apache.fory" % "fory-scala_3" % "0.12.0"
 pip install pyfory
 ```
 
-### JavaScript
-
-```bash
-npm install @foryjs/fory
-```
-
 ### Golang
 
 ```bash

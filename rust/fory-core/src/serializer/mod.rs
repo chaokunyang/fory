@@ -64,6 +64,30 @@ pub fn deserialize<T: Serializer>(context: &mut ReadContext) -> Result<T, Error>
     }
 }
 
+pub fn deserialize_into<T: Serializer>(context: &mut ReadContext, output: &mut T) -> Result<(), Error> {
+    // ref flag
+    let ref_flag = context.reader.i8();
+
+    if ref_flag == (RefFlag::NotNullValue as i8) || ref_flag == (RefFlag::RefValue as i8) {
+        let actual_type_id = context.reader.i16();
+        let expected_type_id = T::get_type_id(context.get_fory());
+        ensure!(
+            actual_type_id == expected_type_id,
+            anyhow!("Invalid field type, expected:{expected_type_id}, actual:{actual_type_id}")
+        );
+
+        // For complex types, we need to call read_into which will call deserialize on its fields
+        // For basic types, read_into will just call read
+        T::read_into(context, output)
+    } else if ref_flag == (RefFlag::Null as i8) {
+        Err(anyhow!("Try to deserialize non-option type to null"))?
+    } else if ref_flag == (RefFlag::Ref as i8) {
+        Err(Error::Ref)
+    } else {
+        Err(anyhow!("Unknown ref flag, value:{ref_flag}"))?
+    }
+}
+
 pub trait Serializer
 where
     Self: Sized,
@@ -87,6 +111,19 @@ where
 
     fn deserialize(context: &mut ReadContext) -> Result<Self, Error> {
         deserialize(context)
+    }
+
+    /// Read data into an existing instance to avoid allocation.
+    /// For basic types, this will still copy the value.
+    /// For complex types, this will deserialize directly into the existing instance.
+    fn read_into(context: &mut ReadContext, output: &mut Self) -> Result<(), Error> {
+        // Default implementation: deserialize and copy
+        *output = Self::read(context)?;
+        Ok(())
+    }
+
+    fn deserialize_into(context: &mut ReadContext, output: &mut Self) -> Result<(), Error> {
+        deserialize_into(context, output)
     }
 
     fn get_type_id(_fory: &Fory) -> i16;

@@ -47,6 +47,18 @@ impl<T: Serializer + Eq + std::hash::Hash> Serializer for HashSet<T> {
             .collect::<Result<HashSet<_>, Error>>()
     }
 
+    fn read_into(context: &mut ReadContext, output: &mut Self) -> Result<(), Error> {
+        // length
+        let len = context.reader.var_int32();
+        output.clear();
+        
+        for _ in 0..len {
+            let item = T::deserialize(context)?;
+            output.insert(item);
+        }
+        Ok(())
+    }
+
     fn reserved_space() -> usize {
         mem::size_of::<i32>()
     }

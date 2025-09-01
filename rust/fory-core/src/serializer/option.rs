@@ -29,6 +29,11 @@ impl<T: Serializer> Serializer for Option<T> {
         Ok(Some(T::read(context)?))
     }
 
+    fn read_into(context: &mut ReadContext, output: &mut Self) -> Result<(), Error> {
+        *output = Some(T::read(context)?);
+        Ok(())
+    }
+
     fn deserialize(context: &mut ReadContext) -> Result<Self, Error> {
         // ref flag
         let ref_flag = context.reader.i8();
@@ -45,6 +50,31 @@ impl<T: Serializer> Serializer for Option<T> {
             Ok(Some(T::read(context)?))
         } else if ref_flag == (RefFlag::Null as i8) {
             Ok(None)
+        } else if ref_flag == (RefFlag::Ref as i8) {
+            Err(Error::Ref)
+        } else {
+            Err(anyhow!("Unknown ref flag, value:{ref_flag}"))?
+        }
+    }
+
+    fn deserialize_into(context: &mut ReadContext, output: &mut Self) -> Result<(), Error> {
+        // ref flag
+        let ref_flag = context.reader.i8();
+
+        if ref_flag == (RefFlag::NotNullValue as i8) || ref_flag == (RefFlag::RefValue as i8) {
+            // type_id
+            let actual_type_id = context.reader.i16();
+            let expected_type_id = T::get_type_id(context.get_fory());
+            ensure!(
+                actual_type_id == expected_type_id,
+                anyhow!("Invalid field type, expected:{expected_type_id}, actual:{actual_type_id}")
+            );
+
+            *output = Some(T::read(context)?);
+            Ok(())
+        } else if ref_flag == (RefFlag::Null as i8) {
+            *output = None;
+            Ok(())
         } else if ref_flag == (RefFlag::Ref as i8) {
             Err(Error::Ref)
         } else {

@@ -33,6 +33,11 @@ macro_rules! impl_num_serializer {
                 Ok(context.reader.$name())
             }
 
+            fn read_into(context: &mut ReadContext, output: &mut Self) -> Result<(), Error> {
+                *output = context.reader.$name();
+                Ok(())
+            }
+
             fn reserved_space() -> usize {
                 std::mem::size_of::<$ty>()
             }

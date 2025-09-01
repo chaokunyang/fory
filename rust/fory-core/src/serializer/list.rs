@@ -45,6 +45,19 @@ where
             .collect::<Result<Vec<_>, Error>>()
     }
 
+    fn read_into(context: &mut ReadContext, output: &mut Self) -> Result<(), Error> {
+        // vec length
+        let len = context.reader.var_int32();
+        output.clear();
+        output.reserve(len as usize);
+        
+        for _ in 0..len {
+            let item = T::deserialize(context)?;
+            output.push(item);
+        }
+        Ok(())
+    }
+
     fn reserved_space() -> usize {
         // size of the vec
         mem::size_of::<u32>()

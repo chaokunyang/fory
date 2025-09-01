@@ -38,6 +38,13 @@ impl Serializer for String {
         Ok(context.reader.string(len as usize))
     }
 
+    fn read_into(context: &mut ReadContext, output: &mut Self) -> Result<(), Error> {
+        let len = context.reader.var_int32();
+        output.clear();
+        output.push_str(&context.reader.string(len as usize));
+        Ok(())
+    }
+
     fn get_type_id(_fory: &Fory) -> i16 {
         TypeId::STRING.into()
     }

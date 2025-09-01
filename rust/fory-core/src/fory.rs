@@ -75,6 +75,16 @@ impl Fory {
         <T as Serializer>::deserialize(&mut context)
     }
 
+    pub fn deserialize_into<T: Serializer>(&self, bf: &[u8], output: &mut T) -> Result<(), Error> {
+        let mut reader = Reader::new(bf);
+        let meta_offset = self.read_head(&mut reader)?;
+        let mut context = ReadContext::new(self, reader);
+        if meta_offset > 0 {
+            context.load_meta(meta_offset as usize);
+        }
+        <T as Serializer>::deserialize_into(&mut context, output)
+    }
+
     pub fn serialize<T: Serializer>(&self, record: &T) -> Vec<u8> {
         let mut writer = Writer::default();
         let meta_offset = self.write_head::<T>(&mut writer);

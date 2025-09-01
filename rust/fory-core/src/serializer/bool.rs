@@ -36,6 +36,11 @@ impl Serializer for bool {
         Ok(context.reader.u8() == 1)
     }
 
+    fn read_into(context: &mut ReadContext, output: &mut Self) -> Result<(), Error> {
+        *output = context.reader.u8() == 1;
+        Ok(())
+    }
+
     fn get_type_id(_fory: &Fory) -> i16 {
         TypeId::BOOL.into()
     }

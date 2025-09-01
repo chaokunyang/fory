@@ -36,6 +36,16 @@ impl Serializer for NaiveDateTime {
             )))
     }
 
+    fn read_into(context: &mut ReadContext, output: &mut Self) -> Result<(), Error> {
+        let timestamp = context.reader.u64();
+        *output = DateTime::from_timestamp_millis(timestamp as i64)
+            .map(|dt| dt.naive_utc())
+            .ok_or(Error::from(anyhow!(
+                "Date out of range, timestamp:{timestamp}"
+            )))?;
+        Ok(())
+    }
+
     fn write(&self, context: &mut WriteContext) {
         context.writer.u64(self.and_utc().timestamp_millis() as u64);
     }
@@ -68,6 +78,16 @@ impl Serializer for NaiveDate {
             .ok_or(Error::from(anyhow!(
                 "Date out of range, {days} days since epoch"
             )))
+    }
+
+    fn read_into(context: &mut ReadContext, output: &mut Self) -> Result<(), Error> {
+        let days = context.reader.u64();
+        *output = EPOCH
+            .checked_add_days(Days::new(days))
+            .ok_or(Error::from(anyhow!(
+                "Date out of range, {days} days since epoch"
+            )))?;
+        Ok(())
     }
 
     fn get_type_id(_fory: &Fory) -> i16 {

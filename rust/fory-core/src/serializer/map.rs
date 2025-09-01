@@ -52,6 +52,19 @@ impl<T1: Serializer + Eq + std::hash::Hash, T2: Serializer> Serializer for HashM
             .collect::<Result<HashMap<_, _>, Error>>()
     }
 
+    fn read_into(context: &mut ReadContext, output: &mut Self) -> Result<(), Error> {
+        // map length
+        let len = context.reader.var_int32();
+        output.clear();
+        
+        for _ in 0..len {
+            let k = <T1 as Serializer>::deserialize(context)?;
+            let v = <T2 as Serializer>::deserialize(context)?;
+            output.insert(k, v);
+        }
+        Ok(())
+    }
+
     fn reserved_space() -> usize {
         mem::size_of::<i32>()
     }

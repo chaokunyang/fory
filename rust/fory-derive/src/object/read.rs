@@ -70,6 +70,23 @@ fn read(fields: &[&Field]) -> TokenStream {
     }
 }
 
+fn read_into(fields: &[&Field]) -> TokenStream {
+    let assign_stmt = fields.iter().map(|field| {
+        let ty = &field.ty;
+        let name = &field.ident;
+        quote! {
+            output.#name = <#ty as fory_core::serializer::Serializer>::read(context)?;
+        }
+    });
+
+    quote! {
+        fn read_into(context: &mut fory_core::resolver::context::ReadContext, output: &mut Self) -> Result<(), fory_core::error::Error> {
+            #(#assign_stmt)*
+            Ok(())
+        }
+    }
+}
+
 fn deserialize_compatible(fields: &[&Field]) -> TokenStream {
     let pattern_items = fields.iter().map(|field| {
         let ty = &field.ty;
@@ -132,6 +149,7 @@ fn deserialize_compatible(fields: &[&Field]) -> TokenStream {
 
 pub fn gen(fields: &[&Field]) -> TokenStream {
     let read_token_stream = read(fields);
+    let read_into_token_stream = read_into(fields);
     let compatible_token_stream = deserialize_compatible(fields);
 
     quote! {
@@ -146,5 +164,6 @@ pub fn gen(fields: &[&Field]) -> TokenStream {
             }
         }
         #read_token_stream
+        #read_into_token_stream
     }
 }

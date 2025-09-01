@@ -64,5 +64,21 @@ pub fn gen_read(data_enum: &DataEnum) -> TokenStream {
                _ => panic!("unknown value"),
            }
        }
+
+       fn read_into(
+           context: &mut fory_core::resolver::context::ReadContext,
+           output: &mut Self,
+       ) -> Result<(), fory_core::error::Error> {
+           let v = context.reader.var_int32();
+           match v {
+               #(
+                   #variant_values => {
+                       *output = Self::#variant_idents;
+                   }
+               )*
+               _ => panic!("unknown value"),
+           }
+           Ok(())
+       }
     }
 }

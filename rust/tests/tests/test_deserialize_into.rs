@@ -1,4 +1,5 @@
 use fory_core::fory::Fory;
+use fory_derive::Fory;
 use std::collections::HashMap;
 
 #[test]
@@ -70,6 +71,114 @@ fn test_deserialize_into_option() {
     let mut output_none = Some("should be cleared".to_string());
     fory.deserialize_into(&bin, &mut output_none).expect("should work");
     assert_eq!(original_none, output_none);
+}
+
+#[test]
+fn test_deserialize_into_struct() {
+    #[derive(Fory, Debug, PartialEq, Default)]
+    struct Person {
+        name: String,
+        age: i32,
+        scores: Vec<f64>,
+        metadata: HashMap<String, String>,
+    }
+    
+    let mut fory = Fory::default();
+    fory.register::<Person>(999);
+    
+    let original_person = Person {
+        name: "Alice".to_string(),
+        age: 30,
+        scores: vec![95.5, 87.2, 92.1],
+        metadata: HashMap::from([
+            ("city".to_string(), "New York".to_string()),
+            ("country".to_string(), "USA".to_string()),
+        ]),
+    };
+    
+    let bin = fory.serialize(&original_person);
+    let mut output_person = Person::default();
+    fory.deserialize_into(&bin, &mut output_person).expect("should work");
+    assert_eq!(original_person, output_person);
+}
+
+#[test]
+fn test_deserialize_into_enum() {
+    #[derive(Fory, Debug, PartialEq)]
+    enum Color {
+        Red,
+        Green,
+        Blue,
+    }
+    
+    let mut fory = Fory::default();
+    fory.register::<Color>(888);
+    
+    // Test with Red
+    let original_color = Color::Red;
+    let bin = fory.serialize(&original_color);
+    let mut output_color = Color::Blue; // Start with different variant
+    fory.deserialize_into(&bin, &mut output_color).expect("should work");
+    assert_eq!(original_color, output_color);
+    
+    // Test with Green
+    let original_color = Color::Green;
+    let bin = fory.serialize(&original_color);
+    let mut output_color = Color::Red; // Start with different variant
+    fory.deserialize_into(&bin, &mut output_color).expect("should work");
+    assert_eq!(original_color, output_color);
+    
+    // Test with Blue
+    let original_color = Color::Blue;
+    let bin = fory.serialize(&original_color);
+    let mut output_color = Color::Green; // Start with different variant
+    fory.deserialize_into(&bin, &mut output_color).expect("should work");
+    assert_eq!(original_color, output_color);
+}
+
+#[test]
+fn test_deserialize_into_complex_struct_with_enum() {
+    #[derive(Fory, Debug, PartialEq)]
+    enum Status {
+        Active,
+        Inactive,
+        Pending,
+    }
+    
+    impl Default for Status {
+        fn default() -> Self {
+            Status::Pending
+        }
+    }
+    
+    #[derive(Fory, Debug, PartialEq, Default)]
+    struct User {
+        id: i32,
+        name: String,
+        status: Status,
+        tags: Vec<String>,
+        settings: HashMap<String, String>,
+    }
+    
+    let mut fory = Fory::default();
+    fory.register::<Status>(777);
+    fory.register::<User>(666);
+    
+    let original_user = User {
+        id: 12345,
+        name: "John Doe".to_string(),
+        status: Status::Active,
+        tags: vec!["admin".to_string(), "verified".to_string()],
+        settings: HashMap::from([
+            ("theme".to_string(), "dark".to_string()),
+            ("language".to_string(), "en".to_string()),
+        ]),
+    };
+    
+    let bin = fory.serialize(&original_user);
+    let mut output_user = User::default();
+    fory.deserialize_into(&bin, &mut output_user).expect("should work");
+    assert_eq!(original_user, output_user);
 }
 
 #[test]

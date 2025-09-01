@@ -75,7 +75,7 @@ fn read_into(fields: &[&Field]) -> TokenStream {
         let ty = &field.ty;
         let name = &field.ident;
         quote! {
-            output.#name = <#ty as fory_core::serializer::Serializer>::read(context)?;
+            <#ty as fory_core::serializer::Serializer>::deserialize_into(context, &mut output.#name)?;
         }
     });
 

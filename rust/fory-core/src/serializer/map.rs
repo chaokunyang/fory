@@ -56,7 +56,7 @@ impl<T1: Serializer + Eq + std::hash::Hash, T2: Serializer> Serializer for HashM
         // map length
         let len = context.reader.var_int32();
         output.clear();
-        
+
         for _ in 0..len {
             let k = <T1 as Serializer>::deserialize(context)?;
             let v = <T2 as Serializer>::deserialize(context)?;

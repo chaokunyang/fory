@@ -51,7 +51,7 @@ impl<T: Serializer + Eq + std::hash::Hash> Serializer for HashSet<T> {
         // length
         let len = context.reader.var_int32();
         output.clear();
-        
+
         for _ in 0..len {
             let item = T::deserialize(context)?;
             output.insert(item);

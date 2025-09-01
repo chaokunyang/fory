@@ -64,7 +64,10 @@ pub fn deserialize<T: Serializer>(context: &mut ReadContext) -> Result<T, Error>
     }
 }
 
-pub fn deserialize_into<T: Serializer>(context: &mut ReadContext, output: &mut T) -> Result<(), Error> {
+pub fn deserialize_into<T: Serializer>(
+    context: &mut ReadContext,
+    output: &mut T,
+) -> Result<(), Error> {
     // ref flag
     let ref_flag = context.reader.i8();
 

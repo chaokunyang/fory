@@ -50,7 +50,7 @@ where
         let len = context.reader.var_int32();
         output.clear();
         output.reserve(len as usize);
-        
+
         for _ in 0..len {
             let item = T::deserialize(context)?;
             output.push(item);

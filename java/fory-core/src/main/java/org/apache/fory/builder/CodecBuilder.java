@@ -42,6 +42,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 import org.apache.fory.Fory;
 import org.apache.fory.codegen.CodegenContext;
 import org.apache.fory.codegen.Expression;
@@ -115,8 +116,10 @@ public abstract class CodecBuilder {
     ctx.reserveName(ROOT_OBJECT_NAME);
     // Don't import other packages to avoid class conflicts.
     // For example user class named as `Date`/`List`/`MemoryBuffer`
-    ReflectionUtils.getFields(beanType.getRawType(), true)
-        .forEach(f -> ctx.reserveName(f.getName()));
+    ReflectionUtils.getFields(beanType.getRawType(), true).stream()
+        .map(Field::getName)
+        .collect(Collectors.toSet())
+        .forEach(ctx::reserveName);
   }
 
   /** Generate codec class code. */

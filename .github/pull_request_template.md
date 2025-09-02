@@ -16,10 +16,6 @@ Contribution Checklist
 
 <!-- Describe the purpose of this PR. -->
 
-## What does this PR do?
-
-<!-- Describe the purpose of this PR. -->
-
 ## Related issues
 
 <!--

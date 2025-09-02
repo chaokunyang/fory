@@ -80,9 +80,9 @@ import org.apache.fory.util.record.RecordUtils;
  */
 @SuppressWarnings("UnstableApiUsage")
 public abstract class CodecBuilder {
-  protected static final String ROOT_OBJECT_NAME = "obj";
+  protected static final String ROOT_OBJECT_NAME = "_f_obj";
   // avoid user class has field with name fory.
-  protected static final String FORY_NAME = "fory";
+  protected static final String FORY_NAME = "_f_fory";
   static TypeRef<Object[]> objectArrayTypeRef = TypeRef.of(Object[].class);
   static TypeRef<MemoryBuffer> bufferTypeRef = TypeRef.of(MemoryBuffer.class);
   static TypeRef<ClassInfo> classInfoTypeRef = TypeRef.of(ClassInfo.class);
@@ -115,6 +115,8 @@ public abstract class CodecBuilder {
     ctx.reserveName(ROOT_OBJECT_NAME);
     // Don't import other packages to avoid class conflicts.
     // For example user class named as `Date`/`List`/`MemoryBuffer`
+    ReflectionUtils.getFields(beanType.getRawType(), true)
+        .forEach(f -> ctx.reserveName(f.getName()));
   }
 
   /** Generate codec class code. */

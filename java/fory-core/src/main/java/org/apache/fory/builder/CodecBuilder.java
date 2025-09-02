@@ -257,6 +257,10 @@ public abstract class CodecBuilder {
       if (ref == null) {
         Class<?> funcInterface = methodInfo.f0;
         TypeRef<?> getterType = TypeRef.of(funcInterface);
+        if (GraalvmSupport.isGraalBuildtime()) {
+          // generate getter ahead at native image build time.
+          Functions.makeGetterFunction(beanClass, fieldName);
+        }
         Expression getter =
             new StaticInvoke(
                 Functions.class,

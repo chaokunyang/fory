@@ -191,7 +191,7 @@ def bump_java_version(new_version):
     #     f"mvn versions:set -DnewVersion={new_version}",
     #     shell=True,
     #     universal_newlines=True,
-    # )        
+    # )
     _bump_version("java", "pom.xml", new_version, _update_parent_pom_version)
 
 

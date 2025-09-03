@@ -25,5 +25,10 @@ publish = false
 [dependencies]
 fory-core = { path = "../fory-core" }
 fory-derive = { path = "../fory-derive" }
+criterion = "0.5"
 
 chrono = "0.4"
+
+[[bench]]
+name = "deserialize_bench"
+harness = false

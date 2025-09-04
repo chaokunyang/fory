@@ -63,6 +63,7 @@ public class Config implements Serializable {
   private final boolean deserializeNonexistentEnumValueAsNull;
   private final boolean serializeEnumByName;
   private final int bufferSizeLimitBytes;
+  private final int maxDepth;
 
   public Config(ForyBuilder builder) {
     name = builder.name;
@@ -101,6 +102,7 @@ public class Config implements Serializable {
     deserializeNonexistentEnumValueAsNull = builder.deserializeNonexistentEnumValueAsNull;
     serializeEnumByName = builder.serializeEnumByName;
     bufferSizeLimitBytes = builder.bufferSizeLimitBytes;
+    maxDepth = builder.maxDepth;
   }
 
   /** Returns the name for Fory serialization. */
@@ -356,5 +358,10 @@ public class Config implements Serializable {
       configHash = configIdMap.computeIfAbsent(this, k -> counter.incrementAndGet());
     }
     return configHash;
+  }
+
+  /** Returns max depth for deserialization, when depth exceeds, an exception will be thrown. */
+  public int maxDepth() {
+    return maxDepth;
   }
 }

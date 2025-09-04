@@ -95,7 +95,7 @@ public abstract class CodecBuilder {
   protected final boolean isRecord;
   protected final boolean isInterface;
   private final Set<String> duplicatedFields;
-  protected Reference foryRef = new Reference(FORY_NAME, TypeRef.of(Fory.class));
+  protected Reference foryRef = Reference.fieldRef(FORY_NAME, TypeRef.of(Fory.class));
   public static final Reference recordComponentDefaultValues =
       new Reference("recordComponentDefaultValues", OBJECT_ARRAY_TYPE);
   protected final Map<String, Reference> fieldMap = new HashMap<>();

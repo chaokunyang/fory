@@ -44,7 +44,6 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
 import java.util.StringTokenizer;
 import java.util.TreeMap;
 import java.util.TreeSet;
@@ -417,7 +416,8 @@ public class ForyTest extends ForyTestBase {
     serDe(fory, ByteBuffer.allocate(32));
     serDe(fory, ByteBuffer.allocateDirect(32));
     assertThrows(InsecureException.class, () -> fory.serialize(new Thread()));
-    assertThrows(UnsupportedOperationException.class, () -> fory.serialize(MethodHandles.lookup()));
+    assertThrowsCause(
+        UnsupportedOperationException.class, () -> fory.serialize(MethodHandles.lookup()));
   }
 
   @Test
@@ -480,7 +480,7 @@ public class ForyTest extends ForyTestBase {
   @Test
   public void testExposeFields2() {
     Fory fory = Fory.builder().requireClassRegistration(false).build();
-    assertThrows(RuntimeException.class, () -> serDe(fory, new ExposeFields2(1, 2, 3)));
+    assertThrowsCause(RuntimeException.class, () -> serDe(fory, new ExposeFields2(1, 2, 3)));
   }
 
   @Test(timeOut = 60_000)

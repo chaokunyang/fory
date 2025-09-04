@@ -40,6 +40,7 @@ import org.apache.fory.config.LongEncoding;
 import org.apache.fory.exception.CopyException;
 import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.exception.ForyException;
+import org.apache.fory.exception.InsecureException;
 import org.apache.fory.exception.SerializationException;
 import org.apache.fory.io.ForyInputStream;
 import org.apache.fory.io.ForyReadableChannel;
@@ -126,6 +127,7 @@ public final class Fory implements BaseFory {
   private Iterator<MemoryBuffer> outOfBandBuffers;
   private boolean peerOutOfBandEnabled;
   private int depth;
+  private final int maxDepth;
   private int copyDepth;
   private final boolean copyRefTracking;
   private final IdentityMap<Object, Object> originToCopyMap;
@@ -141,6 +143,7 @@ public final class Fory implements BaseFory {
     this.shareMeta = config.isMetaShareEnabled();
     compressInt = config.compressInt();
     longEncoding = config.longEncoding();
+    maxDepth = config.maxDepth();
     if (refTracking) {
       this.refResolver = new MapRefResolver();
     } else {
@@ -653,17 +656,6 @@ public final class Fory implements BaseFory {
       case ClassResolver.STRING_CLASS_ID:
         stringSerializer.writeJavaString(buffer, (String) obj);
         break;
-      case ClassResolver.ARRAYLIST_CLASS_ID:
-        depth++;
-        arrayListSerializer.write(buffer, (ArrayList) obj);
-        depth--;
-        break;
-      case ClassResolver.HASHMAP_CLASS_ID:
-        depth++;
-        hashMapSerializer.write(buffer, (HashMap) obj);
-        depth--;
-        break;
-        // TODO(add fastpath for other types)
       default:
         depth++;
         classInfo.getSerializer().write(buffer, obj);
@@ -1024,7 +1016,7 @@ public final class Fory implements BaseFory {
 
   /** Class should be read already. */
   public Object readData(MemoryBuffer buffer, ClassInfo classInfo) {
-    depth++;
+    incReadDepth();
     Serializer<?> serializer = classInfo.getSerializer();
     Object read = serializer.read(buffer);
     depth--;
@@ -1055,19 +1047,8 @@ public final class Fory implements BaseFory {
         return buffer.readFloat64();
       case ClassResolver.STRING_CLASS_ID:
         return stringSerializer.readJavaString(buffer);
-      case ClassResolver.ARRAYLIST_CLASS_ID:
-        depth++;
-        Object list = arrayListSerializer.read(buffer);
-        depth--;
-        return list;
-      case ClassResolver.HASHMAP_CLASS_ID:
-        depth++;
-        Object map = hashMapSerializer.read(buffer);
-        depth--;
-        return map;
-        // TODO(add fastpath for other types)
       default:
-        depth++;
+        incReadDepth();
         Object read = classInfo.getSerializer().read(buffer);
         depth--;
         return read;
@@ -1112,7 +1093,7 @@ public final class Fory implements BaseFory {
   }
 
   public Object xreadNonRef(MemoryBuffer buffer, Serializer<?> serializer) {
-    depth++;
+    incReadDepth();
     Object o = serializer.xread(buffer);
     depth--;
     return o;
@@ -1142,7 +1123,7 @@ public final class Fory implements BaseFory {
         return buffer.readFloat64();
         // TODO(add fastpath for other types)
       default:
-        depth++;
+        incReadDepth();
         Object o = classInfo.getSerializer().xread(buffer);
         depth--;
         return o;
@@ -1680,6 +1661,29 @@ public final class Fory implements BaseFory {
 
   public void incDepth(int diff) {
     this.depth += diff;
+  }
+
+  public void incDepth() {
+    this.depth += 1;
+  }
+
+  public void decDepth() {
+    this.depth -= 1;
+  }
+
+  public void incReadDepth() {
+    if ((this.depth += 1) > maxDepth) {
+      throwReadDepthExceedException();
+    }
+  }
+
+  private void throwReadDepthExceedException() {
+    throw new InsecureException(
+        String.format(
+            "Read depth exceed max depth %s, "
+                + "the deserialization data may be malicious. If it's not malicious, "
+                + "please increase max read depth by ForyBuilder#withMaxDepth(largerDepth)",
+            maxDepth));
   }
 
   public void incCopyDepth(int diff) {

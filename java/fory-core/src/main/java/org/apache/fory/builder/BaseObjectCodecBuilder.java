@@ -1636,13 +1636,13 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
         obj = deserializeForMap(buffer, typeRef, serializer, invokeHint);
       } else {
         if (serializer != null) {
-          return new Invoke(serializer, "read", OBJECT_TYPE, buffer);
+          return read(serializer, buffer, OBJECT_TYPE);
         }
         if (isMonomorphic(cls)) {
           serializer = getOrCreateSerializer(cls);
           Class<?> returnType =
               ReflectionUtils.getReturnType(getRawType(serializer.type()), "read");
-          obj = new Invoke(serializer, "read", TypeRef.of(returnType), buffer);
+          obj = read(serializer, buffer, TypeRef.of(returnType));
         } else {
           obj = readForNotNullNonFinal(buffer, typeRef, serializer);
         }
@@ -1651,13 +1651,24 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     }
   }
 
+  protected Expression read(Expression serializer, Expression buffer, TypeRef<?> returnType) {
+    Class<?> type = returnType.getRawType();
+    Expression read = new Invoke(serializer, "read", returnType, buffer);
+    if (ReflectionUtils.isMonomorphic(type) && !TypeUtils.hasExpandableLeafs(type)) {
+      return read;
+    }
+    read = uninline(read);
+    return new ListExpression(
+        new Invoke(foryRef, "incReadDepth"), read, new Invoke(foryRef, "decDepth"), read);
+  }
+
   protected Expression readForNotNullNonFinal(
       Expression buffer, TypeRef<?> typeRef, Expression serializer) {
     if (serializer == null) {
       Expression classInfo = readClassInfo(getRawType(typeRef), buffer);
       serializer = inlineInvoke(classInfo, "getSerializer", SERIALIZER_TYPE);
     }
-    return new Invoke(serializer, "read", OBJECT_TYPE, buffer);
+    return read(serializer, buffer, OBJECT_TYPE);
   }
 
   /**
@@ -1693,7 +1704,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
         new If(
             supportHook,
             new ListExpression(collection, hookRead),
-            new Invoke(serializer, "read", OBJECT_TYPE, buffer),
+            read(serializer, buffer, OBJECT_TYPE),
             false);
     if (invokeHint != null && invokeHint.genNewMethod) {
       invokeHint.add(buffer);
@@ -1969,8 +1980,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     expressions.add(chunksLoop, newMap);
     // first newMap to create map, last newMap as expr value
     Expression map = inlineInvoke(serializer, "onMapRead", OBJECT_TYPE, expressions);
-    Expression action =
-        new If(supportHook, map, new Invoke(serializer, "read", OBJECT_TYPE, buffer), false);
+    Expression action = new If(supportHook, map, read(serializer, buffer, OBJECT_TYPE), false);
     if (invokeHint != null && invokeHint.genNewMethod) {
       invokeHint.add(buffer);
       invokeHint.add(serializer);

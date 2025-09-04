@@ -1653,10 +1653,11 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
 
   protected Expression read(Expression serializer, Expression buffer, TypeRef<?> returnType) {
     Class<?> type = returnType.getRawType();
-    Invoke read = new Invoke(serializer, "read", returnType, buffer);
+    Expression read = new Invoke(serializer, "read", returnType, buffer);
     if (ReflectionUtils.isMonomorphic(type) && !TypeUtils.hasExpandableLeafs(type)) {
       return read;
     }
+    read = uninline(read);
     return new ListExpression(
         new Invoke(foryRef, "incReadDepth"), read, new Invoke(foryRef, "decDepth"), read);
   }

@@ -647,9 +647,9 @@ public class XtypeResolver implements TypeResolver {
   }
 
   private ClassInfo getListClassInfo() {
-    fory.incDepth(1);
+    fory.incReadDepth();
     GenericType genericType = generics.nextGenericType();
-    fory.incDepth(-1);
+    fory.decDepth();
     if (genericType != null) {
       return getOrBuildClassInfo(genericType.getCls());
     }
@@ -657,9 +657,9 @@ public class XtypeResolver implements TypeResolver {
   }
 
   private ClassInfo getGenericClassInfo() {
-    fory.incDepth(1);
+    fory.incReadDepth();
     GenericType genericType = generics.nextGenericType();
-    fory.incDepth(-1);
+    fory.decDepth();
     if (genericType != null) {
       return getOrBuildClassInfo(genericType.getCls());
     }

@@ -44,6 +44,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.StringTokenizer;
 import java.util.TreeMap;
 import java.util.TreeSet;
@@ -61,6 +62,7 @@ import org.apache.fory.config.Language;
 import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.exception.InsecureException;
+import org.apache.fory.exception.SerializationException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.memory.Platform;
@@ -565,9 +567,10 @@ public class ForyTest extends ForyTestBase {
     Fory fory = Fory.builder().withRefTracking(false).requireClassRegistration(false).build();
     try {
       fory.serialize(a);
-      throw new IllegalStateException("StackOverflowError not raised.");
-    } catch (StackOverflowError e) {
-      Assert.assertTrue(e.getMessage().contains("reference"));
+      throw new IllegalStateException("SerializationException not raised.");
+    } catch (SerializationException e) {
+      Throwable ex = e.getCause();
+      Assert.assertTrue(ex.getMessage().contains("reference"));
     }
   }
 

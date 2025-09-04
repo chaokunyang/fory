@@ -896,11 +896,12 @@ public class TypeUtils {
           if (leafTypes.contains(cls)) {
             return false;
           }
-          for (Field field : ReflectionUtils.getFields(cls, true)) {
+          List<Field> fields = ReflectionUtils.getFields(cls, true);
+          if (fields.isEmpty()) {
+            return false;
+          }
+          for (Field field : fields) {
             Class<?> fieldType = field.getType();
-            if (!ReflectionUtils.isMonomorphic(fieldType)) {
-              return true;
-            }
             if (!leafTypes.contains(fieldType) && !fieldType.isEnum()) {
               return true;
             }

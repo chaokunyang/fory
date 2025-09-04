@@ -871,7 +871,6 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
     } else {
       valueSerializer = valueGenericType.getSerializer(typeResolver);
     }
-    fory.incReadDepth();
     if (keyGenericType.hasGenericParameters() || valueGenericType.hasGenericParameters()) {
       for (int i = 0; i < chunkSize; i++) {
         generics.pushGenericType(keyGenericType);
@@ -910,7 +909,6 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
         size--;
       }
     }
-    fory.decDepth();
     return size > 0 ? (size << 8) | buffer.readUnsignedByte() : 0;
   }
 

@@ -296,6 +296,14 @@ public class TypeUtilsTest {
     assertEquals(allTypeArguments.get(2).getRawType(), BeanA.class);
   }
 
+  static class SingleBasicFieldStruct {
+    int f1;
+  }
+
+  static class SingleExpandableFieldStruct {
+    Object f1;
+  }
+
   @Test
   public void testHasExpandableLeafs() {
     for (Class<?> type : Primitives.allPrimitiveTypes()) {
@@ -309,5 +317,7 @@ public class TypeUtilsTest {
     assertFalse(TypeUtils.hasExpandableLeafs(Foo.class));
     assertTrue(TypeUtils.hasExpandableLeafs(BeanB.class));
     assertTrue(TypeUtils.hasExpandableLeafs(BeanA.class));
+    assertFalse(TypeUtils.hasExpandableLeafs(SingleBasicFieldStruct.class));
+    assertTrue(TypeUtils.hasExpandableLeafs(SingleExpandableFieldStruct.class));
   }
 }

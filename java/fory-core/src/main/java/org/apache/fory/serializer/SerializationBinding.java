@@ -51,52 +51,55 @@ abstract class SerializationBinding {
 
   abstract void writeRef(MemoryBuffer buffer, Object obj, ClassInfo classInfo);
 
-  abstract  void writeNonRef(MemoryBuffer buffer, Object obj);
+  abstract void writeNonRef(MemoryBuffer buffer, Object obj);
 
-  abstract  void writeNonRef(MemoryBuffer buffer, Object obj, ClassInfo classInfo);
+  abstract void writeNonRef(MemoryBuffer buffer, Object obj, ClassInfo classInfo);
 
-  abstract  void writeNonRef(MemoryBuffer buffer, Object obj, ClassInfoHolder classInfoHolder);
+  abstract void writeNonRef(MemoryBuffer buffer, Object obj, ClassInfoHolder classInfoHolder);
 
-  abstract  void writeNullable(MemoryBuffer buffer, Object obj);
+  abstract void writeNullable(MemoryBuffer buffer, Object obj);
 
-  abstract  void writeNullable(MemoryBuffer buffer, Object obj, Serializer serializer);
+  abstract void writeNullable(MemoryBuffer buffer, Object obj, Serializer serializer);
 
   abstract void writeNullable(MemoryBuffer buffer, Object obj, ClassInfoHolder classInfoHolder);
 
-  abstract  void writeNullable(MemoryBuffer buffer, Object obj, ClassInfo classInfo);
+  abstract void writeNullable(MemoryBuffer buffer, Object obj, ClassInfo classInfo);
 
-  abstract  void writeNullable(
+  abstract void writeNullable(
       MemoryBuffer buffer, Object obj, ClassInfoHolder classInfoHolder, boolean nullable);
 
-  abstract  void writeNullable(MemoryBuffer buffer, Object obj, Serializer serializer, boolean nullable);
+  abstract void writeNullable(
+      MemoryBuffer buffer, Object obj, Serializer serializer, boolean nullable);
 
-  abstract  void writeContainerFieldValue(MemoryBuffer buffer, Object fieldValue, ClassInfo classInfo);
+  abstract void writeContainerFieldValue(
+      MemoryBuffer buffer, Object fieldValue, ClassInfo classInfo);
 
-  abstract  void write(MemoryBuffer buffer, Serializer serializer, Object value);
+  abstract void write(MemoryBuffer buffer, Serializer serializer, Object value);
 
-  abstract  Object read(MemoryBuffer buffer, Serializer serializer);
+  abstract Object read(MemoryBuffer buffer, Serializer serializer);
 
   abstract <T> T readRef(MemoryBuffer buffer, Serializer<T> serializer);
 
-  abstract  Object readRef(MemoryBuffer buffer, GenericTypeField field);
+  abstract Object readRef(MemoryBuffer buffer, GenericTypeField field);
 
-  abstract  Object readRef(MemoryBuffer buffer, ClassInfoHolder classInfoHolder);
+  abstract Object readRef(MemoryBuffer buffer, ClassInfoHolder classInfoHolder);
 
   abstract Object readRef(MemoryBuffer buffer);
 
-  abstract  Object readNonRef(MemoryBuffer buffer);
+  abstract Object readNonRef(MemoryBuffer buffer);
 
-  abstract  Object readNonRef(MemoryBuffer buffer, ClassInfoHolder classInfoHolder);
+  abstract Object readNonRef(MemoryBuffer buffer, ClassInfoHolder classInfoHolder);
 
   abstract Object readNonRef(MemoryBuffer buffer, GenericTypeField field);
 
-  abstract  Object readNullable(MemoryBuffer buffer, Serializer<Object> serializer);
+  abstract Object readNullable(MemoryBuffer buffer, Serializer<Object> serializer);
 
-  abstract  Object readNullable(MemoryBuffer buffer, Serializer<Object> serializer, boolean nullable);
+  abstract Object readNullable(
+      MemoryBuffer buffer, Serializer<Object> serializer, boolean nullable);
 
-  abstract  Object readContainerFieldValue(MemoryBuffer buffer, GenericTypeField field);
+  abstract Object readContainerFieldValue(MemoryBuffer buffer, GenericTypeField field);
 
-  abstract  Object readContainerFieldValueRef(MemoryBuffer buffer, GenericTypeField fieldInfo);
+  abstract Object readContainerFieldValueRef(MemoryBuffer buffer, GenericTypeField fieldInfo);
 
   public int preserveRefId(int refId) {
     return refResolver.preserveRefId(refId);

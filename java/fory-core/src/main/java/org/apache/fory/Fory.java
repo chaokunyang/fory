@@ -656,17 +656,6 @@ public final class Fory implements BaseFory {
       case ClassResolver.STRING_CLASS_ID:
         stringSerializer.writeJavaString(buffer, (String) obj);
         break;
-      case ClassResolver.ARRAYLIST_CLASS_ID:
-        depth++;
-        arrayListSerializer.write(buffer, (ArrayList) obj);
-        depth--;
-        break;
-      case ClassResolver.HASHMAP_CLASS_ID:
-        depth++;
-        hashMapSerializer.write(buffer, (HashMap) obj);
-        depth--;
-        break;
-        // TODO(add fastpath for other types)
       default:
         depth++;
         classInfo.getSerializer().write(buffer, obj);
@@ -1689,9 +1678,12 @@ public final class Fory implements BaseFory {
   }
 
   private void throwReadDepthExceedException() {
-    throw new InsecureException(String.format("Read depth exceed max depth %s, " +
-      "the deserialization data may be malicious. If it's not malicious, " +
-      "please increase max read depth by ForyBuilder#withMaxDepth(newDepth)", maxDepth));
+    throw new InsecureException(
+        String.format(
+            "Read depth exceed max depth %s, "
+                + "the deserialization data may be malicious. If it's not malicious, "
+                + "please increase max read depth by ForyBuilder#withMaxDepth(largerDepth)",
+            maxDepth));
   }
 
   public void incCopyDepth(int diff) {

@@ -351,8 +351,8 @@ public final class ForyBuilder {
   }
 
   /**
-   * Set max depth for deserialization, when depth exceeds, an exception will be thrown.
-   * Default max depth is 50.
+   * Set max depth for deserialization, when depth exceeds, an exception will be thrown. Default max
+   * depth is 50.
    */
   public ForyBuilder withMaxDepth(int maxDepth) {
     Preconditions.checkArgument(maxDepth >= 2, "maxDepth must >= 2 but got %s", maxDepth);

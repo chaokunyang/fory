@@ -67,7 +67,7 @@
 //! you can use the core types directly for advanced use cases.
 //!
 //! ```rust
-//! use fory_core::{Fory, Error, Mode};
+//! use fory_core::{fory::Fory, error::Error, types::Mode};
 //! use fory_core::row::{to_row, from_row};
 //!
 //! // Create a Fory instance

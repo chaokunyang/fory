@@ -44,20 +44,16 @@
 //! use fory::{Fory, Error};
 //! use fory_derive::Fory;
 //! use std::collections::HashMap;
-//! use chrono::{NaiveDate, NaiveDateTime};
-//!
-//! #[derive(Fory, Debug, PartialEq)]
+//! #[derive(Fory, Debug, PartialEq, Default)]
 //! struct Person {
 //!     name: String,
-//!     age: u32,
+//!     age: i32,
 //!     address: Address,
 //!     hobbies: Vec<String>,
 //!     metadata: HashMap<String, String>,
-//!     birth_date: NaiveDate,
-//!     last_login: Option<NaiveDateTime>,
 //! }
 //!
-//! #[derive(Fory, Debug, PartialEq)]
+//! #[derive(Fory, Debug, PartialEq, Default)]
 //! struct Address {
 //!     street: String,
 //!     city: String,
@@ -78,8 +74,6 @@
 //!         ("department".to_string(), "engineering".to_string()),
 //!         ("level".to_string(), "senior".to_string()),
 //!     ]),
-//!     birth_date: NaiveDate::from_ymd_opt(1993, 5, 15).unwrap(),
-//!     last_login: Some(NaiveDateTime::from_timestamp_opt(1640995200, 0).unwrap()),
 //! };
 //!
 //! // Create a Fory instance and register types
@@ -111,7 +105,7 @@
 //!
 //! #[derive(ForyRow)]
 //! struct UserProfile {
-//!     id: u64,
+//!     id: i64,
 //!     username: String,
 //!     email: String,
 //!     scores: Vec<i32>,
@@ -187,10 +181,11 @@
 //!   independent field additions/deletions
 //!
 //! ```rust
-//! use fory::{Fory, Mode};
+//! use fory::Fory;
+//! use fory_core::types::Mode;
 //! use fory_derive::Fory;
 //!
-//! #[derive(Fory, Debug)]
+//! #[derive(Fory, Debug, Default)]
 //! struct Config {
 //!     name: String,
 //!     value: i32,
@@ -209,7 +204,7 @@
 //! use fory::{Fory, Error};
 //! use fory_derive::Fory;
 //!
-//! #[derive(Fory)]
+//! #[derive(Fory, Default)]
 //! struct Data {
 //!     value: i32,
 //! }
@@ -253,7 +248,7 @@
 //! ```rust
 //! use fory_derive::{Fory, ForyRow};
 //!
-//! #[derive(Fory)]        // For object serialization
+//! #[derive(Fory, Default)]        // For object serialization
 //! #[derive(ForyRow)]     // For row-based serialization
 //! struct MyData {
 //!     field1: String,

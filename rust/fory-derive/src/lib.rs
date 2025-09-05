@@ -39,16 +39,16 @@
 //! use fory_derive::Fory;
 //! use std::collections::HashMap;
 //!
-//! #[derive(Fory, Debug, PartialEq)]
+//! #[derive(Fory, Debug, PartialEq, Default)]
 //! struct Person {
 //!     name: String,
-//!     age: u32,
+//!     age: i32,
 //!     address: Address,
 //!     hobbies: Vec<String>,
 //!     metadata: HashMap<String, String>,
 //! }
 //!
-//! #[derive(Fory, Debug, PartialEq)]
+//! #[derive(Fory, Debug, PartialEq, Default)]
 //! struct Address {
 //!     street: String,
 //!     city: String,
@@ -58,7 +58,7 @@
 //! enum Status {
 //!     Active,
 //!     Inactive,
-//!     Suspended { reason: String },
+//!     Suspended,
 //! }
 //! ```
 //!
@@ -78,7 +78,7 @@
 //!
 //! #[derive(ForyRow)]
 //! struct UserProfile {
-//!     id: u64,
+//!     id: i64,
 //!     username: String,
 //!     email: String,
 //!     scores: Vec<i32>,
@@ -132,10 +132,10 @@
 //! framework:
 //!
 //! ```rust
-//! use fory::{Fory, Error};
+//! use fory_core::{fory::Fory, error::Error};
 //! use fory_derive::Fory;
 //!
-//! #[derive(Fory, Debug, PartialEq)]
+//! #[derive(Fory, Debug, PartialEq, Default)]
 //! struct MyData {
 //!     value: i32,
 //!     text: String,
@@ -184,14 +184,14 @@ mod util;
 /// ```rust
 /// use fory_derive::Fory;
 ///
-/// #[derive(Fory, Debug, PartialEq)]
+/// #[derive(Fory, Debug, PartialEq, Default)]
 /// struct Person {
 ///     name: String,
-///     age: u32,
+///     age: i32,
 ///     address: Address,
 /// }
 ///
-/// #[derive(Fory, Debug, PartialEq)]
+/// #[derive(Fory, Debug, PartialEq, Default)]
 /// struct Address {
 ///     street: String,
 ///     city: String,
@@ -216,7 +216,7 @@ pub fn proc_macro_derive_fory_object(input: proc_macro::TokenStream) -> TokenStr
 ///
 /// #[derive(ForyRow)]
 /// struct UserProfile {
-///     id: u64,
+///     id: i64,
 ///     username: String,
 ///     email: String,
 ///     is_active: bool,

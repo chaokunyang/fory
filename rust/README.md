@@ -45,19 +45,17 @@ For complex data structures with full object graph serialization:
 use fory::{Fory, Error};
 use fory_derive::Fory;
 use std::collections::HashMap;
-use chrono::NaiveDate;
 
-#[derive(Fory, Debug, PartialEq)]
+#[derive(Fory, Debug, PartialEq, Default)]
 struct Person {
     name: String,
-    age: u32,
+    age: i32,
     address: Address,
     hobbies: Vec<String>,
     metadata: HashMap<String, String>,
-    birth_date: NaiveDate,
 }
 
-#[derive(Fory, Debug, PartialEq)]
+#[derive(Fory, Debug, PartialEq, Default)]
 struct Address {
     street: String,
     city: String,
@@ -82,7 +80,6 @@ let person = Person {
         ("department".to_string(), "engineering".to_string()),
         ("level".to_string(), "senior".to_string()),
     ]),
-    birth_date: NaiveDate::from_ymd_opt(1993, 5, 15).unwrap(),
 };
 
 // Serialize the object
@@ -105,7 +102,7 @@ use std::collections::BTreeMap;
 
 #[derive(ForyRow)]
 struct UserProfile {
-    id: u64,
+    id: i64,
     username: String,
     email: String,
     scores: Vec<i32>,
@@ -186,8 +183,8 @@ assert_eq!(prefs.values().get(0), "en");
 
 ### Date and Time
 
-- `chrono::NaiveDate` for dates
-- `chrono::NaiveDateTime` for timestamps
+- `chrono::NaiveDate` for dates (requires chrono dependency)
+- `chrono::NaiveDateTime` for timestamps (requires chrono dependency)
 
 ### Custom Types
 

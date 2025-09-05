@@ -49,7 +49,7 @@
 //! The framework uses a comprehensive type system that supports:
 //! - Primitive types (bool, integers, floats, strings)
 //! - Collections (Vec, HashMap, BTreeMap)
-//! - Optional types (Option<T>)
+//! - Optional types (`Option<T>`)
 //! - Date/time types (chrono integration)
 //! - Custom structs and enums
 //!

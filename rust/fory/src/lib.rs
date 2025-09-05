@@ -64,38 +64,38 @@
 //!     country: String,
 //! }
 //!
-//! fn main() -> Result<(), Error> {
-//!     let person = Person {
-//!         name: "John Doe".to_string(),
-//!         age: 30,
-//!         address: Address {
-//!             street: "123 Main St".to_string(),
-//!             city: "New York".to_string(),
-//!             country: "USA".to_string(),
-//!         },
-//!         hobbies: vec!["reading".to_string(), "coding".to_string()],
-//!         metadata: HashMap::from([
-//!             ("department".to_string(), "engineering".to_string()),
-//!             ("level".to_string(), "senior".to_string()),
-//!         ]),
-//!         birth_date: NaiveDate::from_ymd_opt(1993, 5, 15).unwrap(),
-//!         last_login: Some(NaiveDateTime::from_timestamp_opt(1640995200, 0).unwrap()),
-//!     };
+//! # fn main() -> Result<(), Error> {
+//! let person = Person {
+//!     name: "John Doe".to_string(),
+//!     age: 30,
+//!     address: Address {
+//!         street: "123 Main St".to_string(),
+//!         city: "New York".to_string(),
+//!         country: "USA".to_string(),
+//!     },
+//!     hobbies: vec!["reading".to_string(), "coding".to_string()],
+//!     metadata: HashMap::from([
+//!         ("department".to_string(), "engineering".to_string()),
+//!         ("level".to_string(), "senior".to_string()),
+//!     ]),
+//!     birth_date: NaiveDate::from_ymd_opt(1993, 5, 15).unwrap(),
+//!     last_login: Some(NaiveDateTime::from_timestamp_opt(1640995200, 0).unwrap()),
+//! };
 //!
-//!     // Create a Fory instance and register types
-//!     let mut fory = Fory::default();
-//!     fory.register::<Address>(100);
-//!     fory.register::<Person>(200);
+//! // Create a Fory instance and register types
+//! let mut fory = Fory::default();
+//! fory.register::<Address>(100);
+//! fory.register::<Person>(200);
 //!
-//!     // Serialize the object
-//!     let serialized = fory.serialize(&person);
+//! // Serialize the object
+//! let serialized = fory.serialize(&person);
 //!
-//!     // Deserialize back to the original type
-//!     let deserialized: Person = fory.deserialize(&serialized)?;
+//! // Deserialize back to the original type
+//! let deserialized: Person = fory.deserialize(&serialized)?;
 //!
-//!     assert_eq!(person, deserialized);
-//!     Ok(())
-//! }
+//! assert_eq!(person, deserialized);
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! ### 2. Row-Based Serialization
@@ -119,42 +119,40 @@
 //!     is_active: bool,
 //! }
 //!
-//! fn main() {
-//!     let profile = UserProfile {
-//!         id: 12345,
-//!         username: "alice".to_string(),
-//!         email: "alice@example.com".to_string(),
-//!         scores: vec![95, 87, 92, 88],
-//!         preferences: BTreeMap::from([
-//!             ("theme".to_string(), "dark".to_string()),
-//!             ("language".to_string(), "en".to_string()),
-//!         ]),
-//!         is_active: true,
-//!     };
+//! let profile = UserProfile {
+//!     id: 12345,
+//!     username: "alice".to_string(),
+//!     email: "alice@example.com".to_string(),
+//!     scores: vec![95, 87, 92, 88],
+//!     preferences: BTreeMap::from([
+//!         ("theme".to_string(), "dark".to_string()),
+//!         ("language".to_string(), "en".to_string()),
+//!     ]),
+//!     is_active: true,
+//! };
 //!
-//!     // Serialize to row format
-//!     let row_data = to_row(&profile);
+//! // Serialize to row format
+//! let row_data = to_row(&profile);
 //!
-//!     // Deserialize with zero-copy access
-//!     let row = from_row::<UserProfile>(&row_data);
+//! // Deserialize with zero-copy access
+//! let row = from_row::<UserProfile>(&row_data);
 //!
-//!     // Access fields directly from the row data
-//!     assert_eq!(row.id(), 12345);
-//!     assert_eq!(row.username(), "alice");
-//!     assert_eq!(row.email(), "alice@example.com");
-//!     assert_eq!(row.is_active(), true);
+//! // Access fields directly from the row data
+//! assert_eq!(row.id(), 12345);
+//! assert_eq!(row.username(), "alice");
+//! assert_eq!(row.email(), "alice@example.com");
+//! assert_eq!(row.is_active(), true);
 //!
-//!     // Access collections efficiently
-//!     let scores = row.scores();
-//!     assert_eq!(scores.size(), 4);
-//!     assert_eq!(scores.get(0), 95);
-//!     assert_eq!(scores.get(1), 87);
+//! // Access collections efficiently
+//! let scores = row.scores();
+//! assert_eq!(scores.size(), 4);
+//! assert_eq!(scores.get(0), 95);
+//! assert_eq!(scores.get(1), 87);
 //!
-//!     let prefs = row.preferences();
-//!     assert_eq!(prefs.keys().size(), 2);
-//!     assert_eq!(prefs.keys().get(0), "language");
-//!     assert_eq!(prefs.values().get(0), "en");
-//! }
+//! let prefs = row.preferences();
+//! assert_eq!(prefs.keys().size(), 2);
+//! assert_eq!(prefs.keys().get(0), "language");
+//! assert_eq!(prefs.values().get(0), "en");
 //! ```
 //!
 //! ## Supported Types

@@ -13,7 +13,7 @@ compatibility.
 
 - **High Performance**: Optimized for speed with zero-copy deserialization
 - **Cross-Language**: Designed for multi-language environments and microservices
-- **Two Serialization Modes**: Object serialization with highly-optimized protocal and row-based lazy on-demand serialization
+- **Two Serialization Modes**: Object serialization with highly-optimized protocol and row-based lazy on-demand serialization
 - **Type Safety**: Compile-time type checking with derive macros
 - **Schema Evolution**: Support for compatible mode with field additions/deletions
 - **Zero Dependencies**: Minimal runtime dependencies for maximum performance
@@ -27,6 +27,15 @@ This repository contains three main crates:
 - **[`fory-derive`](fory-derive/)**: Procedural macros for code generation
 
 ## 🏃‍♂️ Quick Start
+
+Add Fory to your `Cargo.toml`:
+
+```toml
+[dependencies]
+fory = "0.1"
+fory-derive = "0.1"
+chrono = "0.4"
+```
 
 ### Object Serialization
 
@@ -55,37 +64,34 @@ struct Address {
     country: String,
 }
 
-fn main() -> Result<(), Error> {
-    let person = Person {
-        name: "John Doe".to_string(),
-        age: 30,
-        address: Address {
-            street: "123 Main St".to_string(),
-            city: "New York".to_string(),
-            country: "USA".to_string(),
-        },
-        hobbies: vec!["reading".to_string(), "coding".to_string()],
-        metadata: HashMap::from([
-            ("department".to_string(), "engineering".to_string()),
-            ("level".to_string(), "senior".to_string()),
-        ]),
-        birth_date: NaiveDate::from_ymd_opt(1993, 5, 15).unwrap(),
-    };
+// Create a Fory instance and register types
+let mut fory = Fory::default();
+fory.register::<Address>(100);
+fory.register::<Person>(200);
 
-    // Create a Fory instance and register types
-    let mut fory = Fory::default();
-    fory.register::<Address>(100);
-    fory.register::<Person>(200);
+let person = Person {
+    name: "John Doe".to_string(),
+    age: 30,
+    address: Address {
+        street: "123 Main St".to_string(),
+        city: "New York".to_string(),
+        country: "USA".to_string(),
+    },
+    hobbies: vec!["reading".to_string(), "coding".to_string()],
+    metadata: HashMap::from([
+        ("department".to_string(), "engineering".to_string()),
+        ("level".to_string(), "senior".to_string()),
+    ]),
+    birth_date: NaiveDate::from_ymd_opt(1993, 5, 15).unwrap(),
+};
 
-    // Serialize the object
-    let serialized = fory.serialize(&person);
+// Serialize the object
+let serialized = fory.serialize(&person);
 
-    // Deserialize back to the original type
-    let deserialized: Person = fory.deserialize(&serialized)?;
+// Deserialize back to the original type
+let deserialized: Person = fory.deserialize(&serialized)?;
 
-    assert_eq!(person, deserialized);
-    Ok(())
-}
+assert_eq!(person, deserialized);
 ```
 
 ### Row-Based Serialization
@@ -107,42 +113,40 @@ struct UserProfile {
     is_active: bool,
 }
 
-fn main() {
-    let profile = UserProfile {
-        id: 12345,
-        username: "alice".to_string(),
-        email: "alice@example.com".to_string(),
-        scores: vec![95, 87, 92, 88],
-        preferences: BTreeMap::from([
-            ("theme".to_string(), "dark".to_string()),
-            ("language".to_string(), "en".to_string()),
-        ]),
-        is_active: true,
-    };
+let profile = UserProfile {
+    id: 12345,
+    username: "alice".to_string(),
+    email: "alice@example.com".to_string(),
+    scores: vec![95, 87, 92, 88],
+    preferences: BTreeMap::from([
+        ("theme".to_string(), "dark".to_string()),
+        ("language".to_string(), "en".to_string()),
+    ]),
+    is_active: true,
+};
 
-    // Serialize to row format
-    let row_data = to_row(&profile);
+// Serialize to row format
+let row_data = to_row(&profile);
 
-    // Deserialize with zero-copy access
-    let row = from_row::<UserProfile>(&row_data);
+// Deserialize with zero-copy access
+let row = from_row::<UserProfile>(&row_data);
 
-    // Access fields directly from the row data
-    assert_eq!(row.id(), 12345);
-    assert_eq!(row.username(), "alice");
-    assert_eq!(row.email(), "alice@example.com");
-    assert_eq!(row.is_active(), true);
+// Access fields directly from the row data
+assert_eq!(row.id(), 12345);
+assert_eq!(row.username(), "alice");
+assert_eq!(row.email(), "alice@example.com");
+assert_eq!(row.is_active(), true);
 
-    // Access collections efficiently
-    let scores = row.scores();
-    assert_eq!(scores.size(), 4);
-    assert_eq!(scores.get(0), 95);
-    assert_eq!(scores.get(1), 87);
+// Access collections efficiently
+let scores = row.scores();
+assert_eq!(scores.size(), 4);
+assert_eq!(scores.get(0), 95);
+assert_eq!(scores.get(1), 87);
 
-    let prefs = row.preferences();
-    assert_eq!(prefs.keys().size(), 2);
-    assert_eq!(prefs.keys().get(0), "language");
-    assert_eq!(prefs.values().get(0), "en");
-}
+let prefs = row.preferences();
+assert_eq!(prefs.keys().size(), 2);
+assert_eq!(prefs.keys().get(0), "language");
+assert_eq!(prefs.values().get(0), "en");
 ```
 
 ## 📚 Documentation
@@ -153,12 +157,14 @@ fn main() {
 ## 🎯 Use Cases
 
 ### Object Serialization
+
 - **Complex data structures** with nested objects and references
 - **Cross-language communication** in microservices architectures
 - **General-purpose serialization** with full type safety
 - **Schema evolution** with compatible mode
 
 ### Row-Based Serialization
+
 - **High-throughput data processing** with zero-copy access
 - **Analytics workloads** requiring fast field access
 - **Memory-constrained environments** with minimal allocations
@@ -167,20 +173,24 @@ fn main() {
 ## 🔧 Supported Types
 
 ### Primitive Types
+
 - `bool`, `i8`, `i16`, `i32`, `i64`, `f32`, `f64`
 - `String`, `&str` (in row format)
 - `Vec<u8>` for binary data
 
 ### Collections
+
 - `Vec<T>` for arrays/lists
 - `HashMap<K, V>` and `BTreeMap<K, V>` for maps
 - `Option<T>` for nullable values
 
 ### Date and Time
+
 - `chrono::NaiveDate` for dates
 - `chrono::NaiveDateTime` for timestamps
 
 ### Custom Types
+
 - Structs with `#[derive(Fory)]` or `#[derive(ForyRow)]`
 - Enums with `#[derive(Fory)]`
 

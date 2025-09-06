@@ -38,7 +38,7 @@ message Order {
     map<string, string> metadata = 7;
 }
 
-message ECommerceData {
+message ProtoECommerceData {
     repeated Order orders = 1;
     repeated Customer customers = 2;
     repeated Product products = 3;

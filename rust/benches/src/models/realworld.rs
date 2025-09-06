@@ -39,7 +39,7 @@ pub struct FuryAPIMetrics {
 }
 
 #[derive(Fory, Debug, Clone, PartialEq, Default)]
-pub struct FurySystemData {
+pub struct SystemData {
     pub logs: Vec<FuryLogEntry>,
     pub users: Vec<FuryUserProfile>,
     pub metrics: Vec<FuryAPIMetrics>,
@@ -88,8 +88,8 @@ pub struct SerdeSystemData {
     pub system_info: HashMap<String, String>,
 }
 
-impl TestDataGenerator for FurySystemData {
-    type Data = FurySystemData;
+impl TestDataGenerator for SystemData {
+    type Data = SystemData;
     
     fn generate_small() -> Self::Data {
         let log = FuryLogEntry {
@@ -132,7 +132,7 @@ impl TestDataGenerator for FurySystemData {
             measured_at: DateTime::from_timestamp(1640995200, 0).unwrap().naive_utc(),
         };
         
-        FurySystemData {
+        SystemData {
             logs: vec![log],
             users: vec![user],
             metrics: vec![metric],
@@ -208,7 +208,7 @@ impl TestDataGenerator for FurySystemData {
             metrics.push(metric);
         }
         
-        FurySystemData {
+        SystemData {
             logs,
             users,
             metrics,
@@ -287,7 +287,7 @@ impl TestDataGenerator for FurySystemData {
             metrics.push(metric);
         }
         
-        FurySystemData {
+        SystemData {
             logs,
             users,
             metrics,
@@ -345,8 +345,8 @@ impl From<FuryAPIMetrics> for SerdeAPIMetrics {
     }
 }
 
-impl From<FurySystemData> for SerdeSystemData {
-    fn from(f: FurySystemData) -> Self {
+impl From<SystemData> for SerdeSystemData {
+    fn from(f: SystemData) -> Self {
         SerdeSystemData {
             logs: f.logs.into_iter().map(|l| l.into()).collect(),
             users: f.users.into_iter().map(|u| u.into()).collect(),
@@ -399,9 +399,9 @@ impl From<SerdeAPIMetrics> for FuryAPIMetrics {
     }
 }
 
-impl From<SerdeSystemData> for FurySystemData {
+impl From<SerdeSystemData> for SystemData {
     fn from(s: SerdeSystemData) -> Self {
-        FurySystemData {
+        SystemData {
             logs: s.logs.into_iter().map(|l| l.into()).collect(),
             users: s.users.into_iter().map(|u| u.into()).collect(),
             metrics: s.metrics.into_iter().map(|m| m.into()).collect(),

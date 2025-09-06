@@ -44,7 +44,7 @@ pub struct FuryOrder {
 }
 
 #[derive(Fory, Debug, Clone, PartialEq, Default)]
-pub struct FuryECommerceData {
+pub struct ECommerceData {
     pub orders: Vec<FuryOrder>,
     pub customers: Vec<FuryCustomer>,
     pub products: Vec<FuryProduct>,
@@ -98,8 +98,8 @@ pub struct SerdeECommerceData {
     pub order_lookup: HashMap<String, SerdeOrder>,
 }
 
-impl TestDataGenerator for FuryECommerceData {
-    type Data = FuryECommerceData;
+impl TestDataGenerator for ECommerceData {
+    type Data = ECommerceData;
     
     fn generate_small() -> Self::Data {
         let product = FuryProduct {
@@ -149,7 +149,7 @@ impl TestDataGenerator for FuryECommerceData {
         let mut order_lookup = HashMap::new();
         order_lookup.insert(order.id.clone(), order.clone());
         
-        FuryECommerceData {
+        ECommerceData {
             orders: vec![order],
             customers: vec![customer],
             products: vec![product],
@@ -247,7 +247,7 @@ impl TestDataGenerator for FuryECommerceData {
             orders.push(order);
         }
         
-        FuryECommerceData {
+        ECommerceData {
             orders,
             customers,
             products,
@@ -345,7 +345,7 @@ impl TestDataGenerator for FuryECommerceData {
             orders.push(order);
         }
         
-        FuryECommerceData {
+        ECommerceData {
             orders,
             customers,
             products,
@@ -405,8 +405,8 @@ impl From<FuryOrder> for SerdeOrder {
     }
 }
 
-impl From<FuryECommerceData> for SerdeECommerceData {
-    fn from(f: FuryECommerceData) -> Self {
+impl From<ECommerceData> for SerdeECommerceData {
+    fn from(f: ECommerceData) -> Self {
         SerdeECommerceData {
             orders: f.orders.into_iter().map(|o| o.into()).collect(),
             customers: f.customers.into_iter().map(|c| c.into()).collect(),
@@ -467,9 +467,9 @@ impl From<SerdeOrder> for FuryOrder {
     }
 }
 
-impl From<SerdeECommerceData> for FuryECommerceData {
+impl From<SerdeECommerceData> for ECommerceData {
     fn from(s: SerdeECommerceData) -> Self {
-        FuryECommerceData {
+        ECommerceData {
             orders: s.orders.into_iter().map(|o| o.into()).collect(),
             customers: s.customers.into_iter().map(|c| c.into()).collect(),
             products: s.products.into_iter().map(|p| p.into()).collect(),

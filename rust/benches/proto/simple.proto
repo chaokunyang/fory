@@ -2,19 +2,19 @@ syntax = "proto3";
 
 package simple;
 
-message SimpleStruct {
+message ProtoSimpleStruct {
     int32 id = 1;
     string name = 2;
     bool active = 3;
     double score = 4;
 }
 
-message SimpleList {
+message ProtoSimpleList {
     repeated int32 numbers = 1;
     repeated string names = 2;
 }
 
-message SimpleMap {
+message ProtoSimpleMap {
     map<string, int32> string_to_int = 1;
     map<int32, string> int_to_string = 2;
 }

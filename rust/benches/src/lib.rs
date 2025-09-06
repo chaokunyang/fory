@@ -10,7 +10,7 @@ include!(concat!(env!("OUT_DIR"), "/realworld.rs"));
 // Benchmark function implementation
 use criterion::{black_box, Criterion, BenchmarkId};
 use serializers::{Serializer, fury::FurySerializer, protobuf::ProtobufSerializer, json::JsonSerializer};
-use models::{TestDataGenerator, simple::FurySimpleStruct, medium::{FuryPerson, FuryCompany}, complex::FuryECommerceData, realworld::FurySystemData};
+use models::{TestDataGenerator, simple::{SimpleStruct, SimpleList, SimpleMap}, medium::{Person, Company}, complex::ECommerceData, realworld::SystemData};
 
 pub fn run_serialization_benchmarks(c: &mut Criterion) {
     let fury_serializer = FurySerializer::new();
@@ -18,7 +18,7 @@ pub fn run_serialization_benchmarks(c: &mut Criterion) {
     let json_serializer = JsonSerializer::new();
 
     // Simple struct benchmarks
-    run_benchmark_group::<FurySimpleStruct>(
+    run_benchmark_group::<SimpleStruct>(
         c,
         "simple_struct",
         &fury_serializer,
@@ -26,8 +26,26 @@ pub fn run_serialization_benchmarks(c: &mut Criterion) {
         &json_serializer,
     );
 
+    // Simple list benchmarks
+    run_benchmark_group::<SimpleList>(
+        c,
+        "simple_list",
+        &fury_serializer,
+        &protobuf_serializer,
+        &json_serializer,
+    );
+
+    // Simple map benchmarks
+    run_benchmark_group::<SimpleMap>(
+        c,
+        "simple_map",
+        &fury_serializer,
+        &protobuf_serializer,
+        &json_serializer,
+    );
+
     // Person benchmarks
-    run_benchmark_group::<FuryPerson>(
+    run_benchmark_group::<Person>(
         c,
         "person",
         &fury_serializer,
@@ -36,7 +54,7 @@ pub fn run_serialization_benchmarks(c: &mut Criterion) {
     );
 
     // Company benchmarks
-    run_benchmark_group::<FuryCompany>(
+    run_benchmark_group::<Company>(
         c,
         "company",
         &fury_serializer,
@@ -45,7 +63,7 @@ pub fn run_serialization_benchmarks(c: &mut Criterion) {
     );
 
     // ECommerce data benchmarks
-    run_benchmark_group::<FuryECommerceData>(
+    run_benchmark_group::<ECommerceData>(
         c,
         "ecommerce_data",
         &fury_serializer,
@@ -54,7 +72,7 @@ pub fn run_serialization_benchmarks(c: &mut Criterion) {
     );
 
     // System data benchmarks
-    run_benchmark_group::<FurySystemData>(
+    run_benchmark_group::<SystemData>(
         c,
         "system_data",
         &fury_serializer,

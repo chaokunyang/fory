@@ -5,7 +5,7 @@ use crate::models::{TestDataGenerator, generate_random_string};
 
 // Fury models
 #[derive(Fory, Debug, Clone, PartialEq, Default)]
-pub struct FurySimpleStruct {
+pub struct SimpleStruct {
     pub id: i32,
     pub name: String,
     pub active: bool,
@@ -13,13 +13,13 @@ pub struct FurySimpleStruct {
 }
 
 #[derive(Fory, Debug, Clone, PartialEq, Default)]
-pub struct FurySimpleList {
+pub struct SimpleList {
     pub numbers: Vec<i32>,
     pub names: Vec<String>,
 }
 
 #[derive(Fory, Debug, Clone, PartialEq, Default)]
-pub struct FurySimpleMap {
+pub struct SimpleMap {
     pub string_to_int: HashMap<String, i32>,
     pub int_to_string: HashMap<i32, String>,
 }
@@ -45,11 +45,11 @@ pub struct SerdeSimpleMap {
     pub int_to_string: HashMap<i32, String>,
 }
 
-impl TestDataGenerator for FurySimpleStruct {
-    type Data = FurySimpleStruct;
+impl TestDataGenerator for SimpleStruct {
+    type Data = SimpleStruct;
     
     fn generate_small() -> Self::Data {
-        FurySimpleStruct {
+        SimpleStruct {
             id: 1,
             name: "test".to_string(),
             active: true,
@@ -58,7 +58,7 @@ impl TestDataGenerator for FurySimpleStruct {
     }
     
     fn generate_medium() -> Self::Data {
-        FurySimpleStruct {
+        SimpleStruct {
             id: 12345,
             name: generate_random_string(50),
             active: true,
@@ -67,7 +67,7 @@ impl TestDataGenerator for FurySimpleStruct {
     }
     
     fn generate_large() -> Self::Data {
-        FurySimpleStruct {
+        SimpleStruct {
             id: 999999,
             name: generate_random_string(200),
             active: false,
@@ -76,33 +76,33 @@ impl TestDataGenerator for FurySimpleStruct {
     }
 }
 
-impl TestDataGenerator for FurySimpleList {
-    type Data = FurySimpleList;
+impl TestDataGenerator for SimpleList {
+    type Data = SimpleList;
     
     fn generate_small() -> Self::Data {
-        FurySimpleList {
+        SimpleList {
             numbers: vec![1, 2, 3, 4, 5],
             names: vec!["a".to_string(), "b".to_string(), "c".to_string()],
         }
     }
     
     fn generate_medium() -> Self::Data {
-        FurySimpleList {
+        SimpleList {
             numbers: (1..=100).collect(),
             names: (1..=50).map(|i| format!("name_{}", i)).collect(),
         }
     }
     
     fn generate_large() -> Self::Data {
-        FurySimpleList {
+        SimpleList {
             numbers: (1..=1000).collect(),
             names: (1..=500).map(|_i| generate_random_string(20)).collect(),
         }
     }
 }
 
-impl TestDataGenerator for FurySimpleMap {
-    type Data = FurySimpleMap;
+impl TestDataGenerator for SimpleMap {
+    type Data = SimpleMap;
     
     fn generate_small() -> Self::Data {
         let mut string_to_int = HashMap::new();
@@ -113,7 +113,7 @@ impl TestDataGenerator for FurySimpleMap {
         int_to_string.insert(1, "one".to_string());
         int_to_string.insert(2, "two".to_string());
         
-        FurySimpleMap {
+        SimpleMap {
             string_to_int,
             int_to_string,
         }
@@ -129,7 +129,7 @@ impl TestDataGenerator for FurySimpleMap {
             int_to_string.insert(i, key);
         }
         
-        FurySimpleMap {
+        SimpleMap {
             string_to_int,
             int_to_string,
         }
@@ -145,7 +145,7 @@ impl TestDataGenerator for FurySimpleMap {
             int_to_string.insert(i, key);
         }
         
-        FurySimpleMap {
+        SimpleMap {
             string_to_int,
             int_to_string,
         }
@@ -153,8 +153,8 @@ impl TestDataGenerator for FurySimpleMap {
 }
 
 // Conversion functions for Serde
-impl From<FurySimpleStruct> for SerdeSimpleStruct {
-    fn from(f: FurySimpleStruct) -> Self {
+impl From<SimpleStruct> for SerdeSimpleStruct {
+    fn from(f: SimpleStruct) -> Self {
         SerdeSimpleStruct {
             id: f.id,
             name: f.name,
@@ -164,8 +164,8 @@ impl From<FurySimpleStruct> for SerdeSimpleStruct {
     }
 }
 
-impl From<FurySimpleList> for SerdeSimpleList {
-    fn from(f: FurySimpleList) -> Self {
+impl From<SimpleList> for SerdeSimpleList {
+    fn from(f: SimpleList) -> Self {
         SerdeSimpleList {
             numbers: f.numbers,
             names: f.names,
@@ -173,8 +173,8 @@ impl From<FurySimpleList> for SerdeSimpleList {
     }
 }
 
-impl From<FurySimpleMap> for SerdeSimpleMap {
-    fn from(f: FurySimpleMap) -> Self {
+impl From<SimpleMap> for SerdeSimpleMap {
+    fn from(f: SimpleMap) -> Self {
         SerdeSimpleMap {
             string_to_int: f.string_to_int,
             int_to_string: f.int_to_string,
@@ -183,9 +183,9 @@ impl From<FurySimpleMap> for SerdeSimpleMap {
 }
 
 // Reverse conversions from Serde to Fury
-impl From<SerdeSimpleStruct> for FurySimpleStruct {
+impl From<SerdeSimpleStruct> for SimpleStruct {
     fn from(s: SerdeSimpleStruct) -> Self {
-        FurySimpleStruct {
+        SimpleStruct {
             id: s.id,
             name: s.name,
             active: s.active,
@@ -194,18 +194,18 @@ impl From<SerdeSimpleStruct> for FurySimpleStruct {
     }
 }
 
-impl From<SerdeSimpleList> for FurySimpleList {
+impl From<SerdeSimpleList> for SimpleList {
     fn from(s: SerdeSimpleList) -> Self {
-        FurySimpleList {
+        SimpleList {
             numbers: s.numbers,
             names: s.names,
         }
     }
 }
 
-impl From<SerdeSimpleMap> for FurySimpleMap {
+impl From<SerdeSimpleMap> for SimpleMap {
     fn from(s: SerdeSimpleMap) -> Self {
-        FurySimpleMap {
+        SimpleMap {
             string_to_int: s.string_to_int,
             int_to_string: s.int_to_string,
         }

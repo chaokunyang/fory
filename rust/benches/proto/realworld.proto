@@ -46,7 +46,7 @@ message APIMetrics {
     google.protobuf.Timestamp measured_at = 6;
 }
 
-message SystemData {
+message ProtoSystemData {
     repeated LogEntry logs = 1;
     repeated UserProfile users = 2;
     repeated APIMetrics metrics = 3;

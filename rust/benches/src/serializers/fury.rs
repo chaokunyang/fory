@@ -1,9 +1,9 @@
 use fory_core::fory::Fory;
 use crate::serializers::Serializer;
-use crate::models::simple::{FurySimpleStruct, FurySimpleList, FurySimpleMap};
-use crate::models::medium::{FuryAddress, FuryPerson, FuryCompany};
-use crate::models::complex::{FuryProduct, FuryOrderItem, FuryCustomer, FuryOrder, FuryECommerceData};
-use crate::models::realworld::{FuryLogEntry, FuryUserProfile, FuryAPIMetrics, FurySystemData};
+use crate::models::simple::{SimpleStruct, SimpleList, SimpleMap};
+use crate::models::medium::{FuryAddress, Person, Company};
+use crate::models::complex::{FuryProduct, FuryOrderItem, FuryCustomer, FuryOrder, ECommerceData};
+use crate::models::realworld::{FuryLogEntry, FuryUserProfile, FuryAPIMetrics, SystemData};
 
 pub struct FurySerializer {
     fory: Fory,
@@ -14,98 +14,98 @@ impl FurySerializer {
         let mut fory = Fory::default();
         
         // Register simple types
-        fory.register::<FurySimpleStruct>(100);
-        fory.register::<FurySimpleList>(101);
-        fory.register::<FurySimpleMap>(102);
+        fory.register::<SimpleStruct>(100);
+        fory.register::<SimpleList>(101);
+        fory.register::<SimpleMap>(102);
         
         // Register medium types
         fory.register::<FuryAddress>(200);
-        fory.register::<FuryPerson>(201);
-        fory.register::<FuryCompany>(202);
+        fory.register::<Person>(201);
+        fory.register::<Company>(202);
         
         // Register complex types
         fory.register::<FuryProduct>(300);
         fory.register::<FuryOrderItem>(301);
         fory.register::<FuryCustomer>(302);
         fory.register::<FuryOrder>(303);
-        fory.register::<FuryECommerceData>(304);
+        fory.register::<ECommerceData>(304);
         
         // Register realworld types
         fory.register::<FuryLogEntry>(400);
         fory.register::<FuryUserProfile>(401);
         fory.register::<FuryAPIMetrics>(402);
-        fory.register::<FurySystemData>(403);
+        fory.register::<SystemData>(403);
         
         Self { fory }
     }
 }
 
-impl Serializer<FurySimpleStruct> for FurySerializer {
-    fn serialize(&self, data: &FurySimpleStruct) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+impl Serializer<SimpleStruct> for FurySerializer {
+    fn serialize(&self, data: &SimpleStruct) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
         Ok(self.fory.serialize(data))
     }
     
-    fn deserialize(&self, data: &[u8]) -> Result<FurySimpleStruct, Box<dyn std::error::Error>> {
+    fn deserialize(&self, data: &[u8]) -> Result<SimpleStruct, Box<dyn std::error::Error>> {
         Ok(self.fory.deserialize(data)?)
     }
 }
 
-impl Serializer<FurySimpleList> for FurySerializer {
-    fn serialize(&self, data: &FurySimpleList) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+impl Serializer<SimpleList> for FurySerializer {
+    fn serialize(&self, data: &SimpleList) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
         Ok(self.fory.serialize(data))
     }
     
-    fn deserialize(&self, data: &[u8]) -> Result<FurySimpleList, Box<dyn std::error::Error>> {
+    fn deserialize(&self, data: &[u8]) -> Result<SimpleList, Box<dyn std::error::Error>> {
         Ok(self.fory.deserialize(data)?)
     }
 }
 
-impl Serializer<FurySimpleMap> for FurySerializer {
-    fn serialize(&self, data: &FurySimpleMap) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+impl Serializer<SimpleMap> for FurySerializer {
+    fn serialize(&self, data: &SimpleMap) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
         Ok(self.fory.serialize(data))
     }
     
-    fn deserialize(&self, data: &[u8]) -> Result<FurySimpleMap, Box<dyn std::error::Error>> {
+    fn deserialize(&self, data: &[u8]) -> Result<SimpleMap, Box<dyn std::error::Error>> {
         Ok(self.fory.deserialize(data)?)
     }
 }
 
-impl Serializer<FuryPerson> for FurySerializer {
-    fn serialize(&self, data: &FuryPerson) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+impl Serializer<Person> for FurySerializer {
+    fn serialize(&self, data: &Person) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
         Ok(self.fory.serialize(data))
     }
     
-    fn deserialize(&self, data: &[u8]) -> Result<FuryPerson, Box<dyn std::error::Error>> {
+    fn deserialize(&self, data: &[u8]) -> Result<Person, Box<dyn std::error::Error>> {
         Ok(self.fory.deserialize(data)?)
     }
 }
 
-impl Serializer<FuryCompany> for FurySerializer {
-    fn serialize(&self, data: &FuryCompany) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+impl Serializer<Company> for FurySerializer {
+    fn serialize(&self, data: &Company) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
         Ok(self.fory.serialize(data))
     }
     
-    fn deserialize(&self, data: &[u8]) -> Result<FuryCompany, Box<dyn std::error::Error>> {
+    fn deserialize(&self, data: &[u8]) -> Result<Company, Box<dyn std::error::Error>> {
         Ok(self.fory.deserialize(data)?)
     }
 }
 
-impl Serializer<FuryECommerceData> for FurySerializer {
-    fn serialize(&self, data: &FuryECommerceData) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+impl Serializer<ECommerceData> for FurySerializer {
+    fn serialize(&self, data: &ECommerceData) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
         Ok(self.fory.serialize(data))
     }
     
-    fn deserialize(&self, data: &[u8]) -> Result<FuryECommerceData, Box<dyn std::error::Error>> {
+    fn deserialize(&self, data: &[u8]) -> Result<ECommerceData, Box<dyn std::error::Error>> {
         Ok(self.fory.deserialize(data)?)
     }
 }
 
-impl Serializer<FurySystemData> for FurySerializer {
-    fn serialize(&self, data: &FurySystemData) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+impl Serializer<SystemData> for FurySerializer {
+    fn serialize(&self, data: &SystemData) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
         Ok(self.fory.serialize(data))
     }
     
-    fn deserialize(&self, data: &[u8]) -> Result<FurySystemData, Box<dyn std::error::Error>> {
+    fn deserialize(&self, data: &[u8]) -> Result<SystemData, Box<dyn std::error::Error>> {
         Ok(self.fory.deserialize(data)?)
     }
 }

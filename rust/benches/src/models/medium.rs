@@ -14,7 +14,7 @@ pub struct FuryAddress {
 }
 
 #[derive(Fory, Debug, Clone, PartialEq, Default)]
-pub struct FuryPerson {
+pub struct Person {
     pub name: String,
     pub age: i32,
     pub address: FuryAddress,
@@ -24,9 +24,9 @@ pub struct FuryPerson {
 }
 
 #[derive(Fory, Debug, Clone, PartialEq, Default)]
-pub struct FuryCompany {
+pub struct Company {
     pub name: String,
-    pub employees: Vec<FuryPerson>,
+    pub employees: Vec<Person>,
     pub offices: HashMap<String, FuryAddress>,
     pub is_public: bool,
 }
@@ -58,11 +58,11 @@ pub struct SerdeCompany {
     pub is_public: bool,
 }
 
-impl TestDataGenerator for FuryPerson {
-    type Data = FuryPerson;
+impl TestDataGenerator for Person {
+    type Data = Person;
     
     fn generate_small() -> Self::Data {
-        FuryPerson {
+        Person {
             name: "John Doe".to_string(),
             age: 30,
             address: FuryAddress {
@@ -81,7 +81,7 @@ impl TestDataGenerator for FuryPerson {
     }
     
     fn generate_medium() -> Self::Data {
-        FuryPerson {
+        Person {
             name: generate_random_string(30),
             age: 35,
             address: FuryAddress {
@@ -103,7 +103,7 @@ impl TestDataGenerator for FuryPerson {
     }
     
     fn generate_large() -> Self::Data {
-        FuryPerson {
+        Person {
             name: generate_random_string(100),
             age: 40,
             address: FuryAddress {
@@ -125,13 +125,13 @@ impl TestDataGenerator for FuryPerson {
     }
 }
 
-impl TestDataGenerator for FuryCompany {
-    type Data = FuryCompany;
+impl TestDataGenerator for Company {
+    type Data = Company;
     
     fn generate_small() -> Self::Data {
-        FuryCompany {
+        Company {
             name: "Tech Corp".to_string(),
-            employees: vec![FuryPerson::generate_small()],
+            employees: vec![Person::generate_small()],
             offices: HashMap::from([
                 ("HQ".to_string(), FuryAddress {
                     street: "456 Tech Ave".to_string(),
@@ -147,7 +147,7 @@ impl TestDataGenerator for FuryCompany {
     fn generate_medium() -> Self::Data {
         let mut employees = Vec::new();
         for i in 1..=10 {
-            let mut person = FuryPerson::generate_medium();
+            let mut person = Person::generate_medium();
             person.name = format!("Employee_{}", i);
             employees.push(person);
         }
@@ -165,7 +165,7 @@ impl TestDataGenerator for FuryCompany {
             );
         }
         
-        FuryCompany {
+        Company {
             name: generate_random_string(50),
             employees,
             offices,
@@ -176,7 +176,7 @@ impl TestDataGenerator for FuryCompany {
     fn generate_large() -> Self::Data {
         let mut employees = Vec::new();
         for i in 1..=100 {
-            let mut person = FuryPerson::generate_large();
+            let mut person = Person::generate_large();
             person.name = format!("Employee_{}", i);
             employees.push(person);
         }
@@ -194,7 +194,7 @@ impl TestDataGenerator for FuryCompany {
             );
         }
         
-        FuryCompany {
+        Company {
             name: generate_random_string(100),
             employees,
             offices,
@@ -215,8 +215,8 @@ impl From<FuryAddress> for SerdeAddress {
     }
 }
 
-impl From<FuryPerson> for SerdePerson {
-    fn from(f: FuryPerson) -> Self {
+impl From<Person> for SerdePerson {
+    fn from(f: Person) -> Self {
         SerdePerson {
             name: f.name,
             age: f.age,
@@ -228,8 +228,8 @@ impl From<FuryPerson> for SerdePerson {
     }
 }
 
-impl From<FuryCompany> for SerdeCompany {
-    fn from(f: FuryCompany) -> Self {
+impl From<Company> for SerdeCompany {
+    fn from(f: Company) -> Self {
         SerdeCompany {
             name: f.name,
             employees: f.employees.into_iter().map(|e| e.into()).collect(),
@@ -251,9 +251,9 @@ impl From<SerdeAddress> for FuryAddress {
     }
 }
 
-impl From<SerdePerson> for FuryPerson {
+impl From<SerdePerson> for Person {
     fn from(s: SerdePerson) -> Self {
-        FuryPerson {
+        Person {
             name: s.name,
             age: s.age,
             address: s.address.into(),
@@ -264,9 +264,9 @@ impl From<SerdePerson> for FuryPerson {
     }
 }
 
-impl From<SerdeCompany> for FuryCompany {
+impl From<SerdeCompany> for Company {
     fn from(s: SerdeCompany) -> Self {
-        FuryCompany {
+        Company {
             name: s.name,
             employees: s.employees.into_iter().map(|e| e.into()).collect(),
             offices: s.offices.into_iter().map(|(k, v)| (k, v.into())).collect(),

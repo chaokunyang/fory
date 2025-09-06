@@ -1,12 +1,12 @@
 use prost::Message;
 use crate::serializers::{Serializer, naive_datetime_to_timestamp, timestamp_to_naive_datetime};
-use crate::models::simple::{FurySimpleStruct, FurySimpleList, FurySimpleMap};
-use crate::models::medium::{FuryPerson, FuryCompany, FuryAddress};
-use crate::models::complex::{FuryECommerceData, FuryProduct, FuryOrderItem, FuryCustomer, FuryOrder};
-use crate::models::realworld::{FurySystemData, FuryLogEntry, FuryUserProfile, FuryAPIMetrics};
+use crate::models::simple::{SimpleStruct, SimpleList, SimpleMap};
+use crate::models::medium::{Person, Company, FuryAddress};
+use crate::models::complex::{ECommerceData, FuryProduct, FuryOrderItem, FuryCustomer, FuryOrder};
+use crate::models::realworld::{SystemData, FuryLogEntry, FuryUserProfile, FuryAPIMetrics};
 
-// Import protobuf types from the generated code
-use crate::{SimpleStruct, SimpleList, SimpleMap, Address, Person, Company, Product, OrderItem, Customer, Order, ECommerceData, LogEntry, UserProfile, ApiMetrics, SystemData};
+// Import protobuf types from the generated code (included directly in lib.rs)
+use crate::{ProtoSimpleStruct, ProtoSimpleList, ProtoSimpleMap, Address, ProtoPerson, ProtoCompany, Product, OrderItem, Customer, Order, ProtoECommerceData, LogEntry, UserProfile, ApiMetrics, ProtoSystemData};
 
 pub struct ProtobufSerializer;
 
@@ -17,9 +17,9 @@ impl ProtobufSerializer {
 }
 
 // Conversion functions from Fury models to Protobuf models
-impl From<&FurySimpleStruct> for SimpleStruct {
-    fn from(f: &FurySimpleStruct) -> Self {
-        SimpleStruct {
+impl From<&SimpleStruct> for ProtoSimpleStruct {
+    fn from(f: &SimpleStruct) -> Self {
+        ProtoSimpleStruct {
             id: f.id,
             name: f.name.clone(),
             active: f.active,
@@ -28,18 +28,18 @@ impl From<&FurySimpleStruct> for SimpleStruct {
     }
 }
 
-impl From<&FurySimpleList> for SimpleList {
-    fn from(f: &FurySimpleList) -> Self {
-        SimpleList {
+impl From<&SimpleList> for ProtoSimpleList {
+    fn from(f: &SimpleList) -> Self {
+        ProtoSimpleList {
             numbers: f.numbers.clone(),
             names: f.names.clone(),
         }
     }
 }
 
-impl From<&FurySimpleMap> for SimpleMap {
-    fn from(f: &FurySimpleMap) -> Self {
-        SimpleMap {
+impl From<&SimpleMap> for ProtoSimpleMap {
+    fn from(f: &SimpleMap) -> Self {
+        ProtoSimpleMap {
             string_to_int: f.string_to_int.clone(),
             int_to_string: f.int_to_string.clone(),
         }
@@ -57,9 +57,9 @@ impl From<&FuryAddress> for Address {
     }
 }
 
-impl From<&FuryPerson> for Person {
-    fn from(f: &FuryPerson) -> Self {
-        Person {
+impl From<&Person> for ProtoPerson {
+    fn from(f: &Person) -> Self {
+        ProtoPerson {
             name: f.name.clone(),
             age: f.age,
             address: Some((&f.address).into()),
@@ -70,9 +70,9 @@ impl From<&FuryPerson> for Person {
     }
 }
 
-impl From<&FuryCompany> for Company {
-    fn from(f: &FuryCompany) -> Self {
-        Company {
+impl From<&Company> for ProtoCompany {
+    fn from(f: &Company) -> Self {
+        ProtoCompany {
             name: f.name.clone(),
             employees: f.employees.iter().map(|e| e.into()).collect(),
             offices: f.offices.iter().map(|(k, v)| (k.clone(), v.into())).collect(),
@@ -131,9 +131,9 @@ impl From<&FuryOrder> for Order {
     }
 }
 
-impl From<&FuryECommerceData> for ECommerceData {
-    fn from(f: &FuryECommerceData) -> Self {
-        ECommerceData {
+impl From<&ECommerceData> for ProtoECommerceData {
+    fn from(f: &ECommerceData) -> Self {
+        ProtoECommerceData {
             orders: f.orders.iter().map(|o| o.into()).collect(),
             customers: f.customers.iter().map(|c| c.into()).collect(),
             products: f.products.iter().map(|p| p.into()).collect(),
@@ -184,9 +184,9 @@ impl From<&FuryAPIMetrics> for ApiMetrics {
     }
 }
 
-impl From<&FurySystemData> for SystemData {
-    fn from(f: &FurySystemData) -> Self {
-        SystemData {
+impl From<&SystemData> for ProtoSystemData {
+    fn from(f: &SystemData) -> Self {
+        ProtoSystemData {
             logs: f.logs.iter().map(|l| l.into()).collect(),
             users: f.users.iter().map(|u| u.into()).collect(),
             metrics: f.metrics.iter().map(|m| m.into()).collect(),
@@ -196,9 +196,9 @@ impl From<&FurySystemData> for SystemData {
 }
 
 // Conversion functions from Protobuf models to Fury models
-impl From<SimpleStruct> for FurySimpleStruct {
-    fn from(p: SimpleStruct) -> Self {
-        FurySimpleStruct {
+impl From<ProtoSimpleStruct> for SimpleStruct {
+    fn from(p: ProtoSimpleStruct) -> Self {
+        SimpleStruct {
             id: p.id,
             name: p.name,
             active: p.active,
@@ -207,18 +207,18 @@ impl From<SimpleStruct> for FurySimpleStruct {
     }
 }
 
-impl From<SimpleList> for FurySimpleList {
-    fn from(p: SimpleList) -> Self {
-        FurySimpleList {
+impl From<ProtoSimpleList> for SimpleList {
+    fn from(p: ProtoSimpleList) -> Self {
+        SimpleList {
             numbers: p.numbers,
             names: p.names,
         }
     }
 }
 
-impl From<SimpleMap> for FurySimpleMap {
-    fn from(p: SimpleMap) -> Self {
-        FurySimpleMap {
+impl From<ProtoSimpleMap> for SimpleMap {
+    fn from(p: ProtoSimpleMap) -> Self {
+        SimpleMap {
             string_to_int: p.string_to_int,
             int_to_string: p.int_to_string,
         }
@@ -236,9 +236,9 @@ impl From<Address> for FuryAddress {
     }
 }
 
-impl From<Person> for FuryPerson {
-    fn from(p: Person) -> Self {
-        FuryPerson {
+impl From<ProtoPerson> for Person {
+    fn from(p: ProtoPerson) -> Self {
+        Person {
             name: p.name,
             age: p.age,
             address: p.address.map(|a| a.into()).unwrap_or_default(),
@@ -249,9 +249,9 @@ impl From<Person> for FuryPerson {
     }
 }
 
-impl From<Company> for FuryCompany {
-    fn from(p: Company) -> Self {
-        FuryCompany {
+impl From<ProtoCompany> for Company {
+    fn from(p: ProtoCompany) -> Self {
+        Company {
             name: p.name,
             employees: p.employees.into_iter().map(|e| e.into()).collect(),
             offices: p.offices.into_iter().map(|(k, v)| (k, v.into())).collect(),
@@ -310,9 +310,9 @@ impl From<Order> for FuryOrder {
     }
 }
 
-impl From<ECommerceData> for FuryECommerceData {
-    fn from(p: ECommerceData) -> Self {
-        FuryECommerceData {
+impl From<ProtoECommerceData> for ECommerceData {
+    fn from(p: ProtoECommerceData) -> Self {
+        ECommerceData {
             orders: p.orders.into_iter().map(|o| o.into()).collect(),
             customers: p.customers.into_iter().map(|c| c.into()).collect(),
             products: p.products.into_iter().map(|prod| prod.into()).collect(),
@@ -363,9 +363,9 @@ impl From<ApiMetrics> for FuryAPIMetrics {
     }
 }
 
-impl From<SystemData> for FurySystemData {
-    fn from(p: SystemData) -> Self {
-        FurySystemData {
+impl From<ProtoSystemData> for SystemData {
+    fn from(p: ProtoSystemData) -> Self {
+        SystemData {
             logs: p.logs.into_iter().map(|l| l.into()).collect(),
             users: p.users.into_iter().map(|u| u.into()).collect(),
             metrics: p.metrics.into_iter().map(|m| m.into()).collect(),
@@ -375,100 +375,100 @@ impl From<SystemData> for FurySystemData {
 }
 
 // Serializer implementations
-impl Serializer<FurySimpleStruct> for ProtobufSerializer {
-    fn serialize(&self, data: &FurySimpleStruct) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-        let proto: SimpleStruct = data.into();
+impl Serializer<SimpleStruct> for ProtobufSerializer {
+    fn serialize(&self, data: &SimpleStruct) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+        let proto: ProtoSimpleStruct = data.into();
         let mut buf = Vec::new();
         proto.encode(&mut buf)?;
         Ok(buf)
     }
     
-    fn deserialize(&self, data: &[u8]) -> Result<FurySimpleStruct, Box<dyn std::error::Error>> {
-        let proto = SimpleStruct::decode(data)?;
+    fn deserialize(&self, data: &[u8]) -> Result<SimpleStruct, Box<dyn std::error::Error>> {
+        let proto = ProtoSimpleStruct::decode(data)?;
         Ok(proto.into())
     }
 }
 
-impl Serializer<FurySimpleList> for ProtobufSerializer {
-    fn serialize(&self, data: &FurySimpleList) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-        let proto: SimpleList = data.into();
+impl Serializer<SimpleList> for ProtobufSerializer {
+    fn serialize(&self, data: &SimpleList) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+        let proto: ProtoSimpleList = data.into();
         let mut buf = Vec::new();
         proto.encode(&mut buf)?;
         Ok(buf)
     }
     
-    fn deserialize(&self, data: &[u8]) -> Result<FurySimpleList, Box<dyn std::error::Error>> {
-        let proto = SimpleList::decode(data)?;
+    fn deserialize(&self, data: &[u8]) -> Result<SimpleList, Box<dyn std::error::Error>> {
+        let proto = ProtoSimpleList::decode(data)?;
         Ok(proto.into())
     }
 }
 
-impl Serializer<FurySimpleMap> for ProtobufSerializer {
-    fn serialize(&self, data: &FurySimpleMap) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-        let proto: SimpleMap = data.into();
+impl Serializer<SimpleMap> for ProtobufSerializer {
+    fn serialize(&self, data: &SimpleMap) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+        let proto: ProtoSimpleMap = data.into();
         let mut buf = Vec::new();
         proto.encode(&mut buf)?;
         Ok(buf)
     }
     
-    fn deserialize(&self, data: &[u8]) -> Result<FurySimpleMap, Box<dyn std::error::Error>> {
-        let proto = SimpleMap::decode(data)?;
+    fn deserialize(&self, data: &[u8]) -> Result<SimpleMap, Box<dyn std::error::Error>> {
+        let proto = ProtoSimpleMap::decode(data)?;
         Ok(proto.into())
     }
 }
 
-impl Serializer<FuryPerson> for ProtobufSerializer {
-    fn serialize(&self, data: &FuryPerson) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-        let proto: Person = data.into();
+impl Serializer<Person> for ProtobufSerializer {
+    fn serialize(&self, data: &Person) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+        let proto: ProtoPerson = data.into();
         let mut buf = Vec::new();
         proto.encode(&mut buf)?;
         Ok(buf)
     }
     
-    fn deserialize(&self, data: &[u8]) -> Result<FuryPerson, Box<dyn std::error::Error>> {
-        let proto = Person::decode(data)?;
+    fn deserialize(&self, data: &[u8]) -> Result<Person, Box<dyn std::error::Error>> {
+        let proto = ProtoPerson::decode(data)?;
         Ok(proto.into())
     }
 }
 
-impl Serializer<FuryCompany> for ProtobufSerializer {
-    fn serialize(&self, data: &FuryCompany) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-        let proto: Company = data.into();
+impl Serializer<Company> for ProtobufSerializer {
+    fn serialize(&self, data: &Company) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+        let proto: ProtoCompany = data.into();
         let mut buf = Vec::new();
         proto.encode(&mut buf)?;
         Ok(buf)
     }
     
-    fn deserialize(&self, data: &[u8]) -> Result<FuryCompany, Box<dyn std::error::Error>> {
-        let proto = Company::decode(data)?;
+    fn deserialize(&self, data: &[u8]) -> Result<Company, Box<dyn std::error::Error>> {
+        let proto = ProtoCompany::decode(data)?;
         Ok(proto.into())
     }
 }
 
-impl Serializer<FuryECommerceData> for ProtobufSerializer {
-    fn serialize(&self, data: &FuryECommerceData) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-        let proto: ECommerceData = data.into();
+impl Serializer<ECommerceData> for ProtobufSerializer {
+    fn serialize(&self, data: &ECommerceData) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+        let proto: ProtoECommerceData = data.into();
         let mut buf = Vec::new();
         proto.encode(&mut buf)?;
         Ok(buf)
     }
     
-    fn deserialize(&self, data: &[u8]) -> Result<FuryECommerceData, Box<dyn std::error::Error>> {
-        let proto = ECommerceData::decode(data)?;
+    fn deserialize(&self, data: &[u8]) -> Result<ECommerceData, Box<dyn std::error::Error>> {
+        let proto = ProtoECommerceData::decode(data)?;
         Ok(proto.into())
     }
 }
 
-impl Serializer<FurySystemData> for ProtobufSerializer {
-    fn serialize(&self, data: &FurySystemData) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-        let proto: SystemData = data.into();
+impl Serializer<SystemData> for ProtobufSerializer {
+    fn serialize(&self, data: &SystemData) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+        let proto: ProtoSystemData = data.into();
         let mut buf = Vec::new();
         proto.encode(&mut buf)?;
         Ok(buf)
     }
     
-    fn deserialize(&self, data: &[u8]) -> Result<FurySystemData, Box<dyn std::error::Error>> {
-        let proto = SystemData::decode(data)?;
+    fn deserialize(&self, data: &[u8]) -> Result<SystemData, Box<dyn std::error::Error>> {
+        let proto = ProtoSystemData::decode(data)?;
         Ok(proto.into())
     }
 }

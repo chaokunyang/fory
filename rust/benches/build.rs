@@ -21,19 +21,6 @@ fn main() {
     println!("cargo:warning=Build script running");
     println!("cargo:warning=OUT_DIR: {}", std::env::var("OUT_DIR").unwrap());
     
-    // Check if protoc is available
-    let protoc_available = std::process::Command::new("protoc")
-        .arg("--version")
-        .output()
-        .is_ok();
-    
-    if !protoc_available {
-        println!("cargo:warning=Skipping protobuf compilation - protoc not available");
-        println!("cargo:warning=To install protoc on Linux: sudo apt-get install protobuf-compiler");
-        println!("cargo:warning=To install protoc on macOS: brew install protobuf");
-        return;
-    }
-    
     let proto_files = [
         "proto/simple.proto",
         "proto/medium.proto", 

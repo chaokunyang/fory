@@ -1,0 +1,24 @@
+[package]
+name = "fory-benchmarks"
+version = "0.1.0"
+edition = "2021"
+
+[[bench]]
+name = "serialization_bench"
+path = "benches/serialization_bench.rs"
+harness = false
+
+[dependencies]
+fory = { path = "../fory" }
+fory-core = { path = "../fory-core" }
+fory-derive = { path = "../fory-derive" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+prost = "0.12"
+prost-types = "0.12"
+rand = "0.8"
+criterion = "0.5"
+
+[build-dependencies]
+prost-build = "0.12"

@@ -32,7 +32,7 @@ def run():
             # On Linux/macOS, install via package manager
             logging.info("Installing protoc")
             import shutil
-            
+
             if shutil.which("apt-get"):
                 # Ubuntu/Debian
                 common.exec_cmd("sudo apt-get update")
@@ -46,7 +46,9 @@ def run():
             else:
                 # Fallback: download binary
                 logging.info("Package manager not found, downloading protoc binary")
-                common.exec_cmd("curl -LO https://github.com/protocolbuffers/protobuf/releases/download/v21.12/protoc-21.12-linux-x86_64.zip")
+                common.exec_cmd(
+                    "curl -LO https://github.com/protocolbuffers/protobuf/releases/download/v21.12/protoc-21.12-linux-x86_64.zip"
+                )
                 common.exec_cmd("unzip protoc-21.12-linux-x86_64.zip -d protoc")
                 common.exec_cmd("sudo mv protoc/bin/* /usr/local/bin/")
                 common.exec_cmd("sudo mv protoc/include/* /usr/local/include/")

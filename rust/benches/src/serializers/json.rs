@@ -24,6 +24,7 @@ use crate::models::simple::{
 use crate::serializers::Serializer;
 use serde_json;
 
+#[derive(Default)]
 pub struct JsonSerializer;
 
 impl JsonSerializer {

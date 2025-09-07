@@ -29,6 +29,7 @@ use crate::{
     ProtoSystemData, UserProfile,
 };
 
+#[derive(Default)]
 pub struct ProtobufSerializer;
 
 impl ProtobufSerializer {
@@ -275,7 +276,7 @@ impl From<ProtoPerson> for Person {
             metadata: p.metadata,
             created_at: p
                 .created_at
-                .map(|ts| timestamp_to_naive_datetime(ts))
+                .map(timestamp_to_naive_datetime)
                 .unwrap_or_default(),
         }
     }
@@ -325,7 +326,7 @@ impl From<Customer> for FuryCustomer {
             preferences: p.preferences,
             member_since: p
                 .member_since
-                .map(|ts| timestamp_to_naive_datetime(ts))
+                .map(timestamp_to_naive_datetime)
                 .unwrap_or_default(),
         }
     }
@@ -341,7 +342,7 @@ impl From<Order> for FuryOrder {
             status: p.status,
             order_date: p
                 .order_date
-                .map(|ts| timestamp_to_naive_datetime(ts))
+                .map(timestamp_to_naive_datetime)
                 .unwrap_or_default(),
             metadata: p.metadata,
         }
@@ -372,7 +373,7 @@ impl From<LogEntry> for FuryLogEntry {
             service: p.service,
             timestamp: p
                 .timestamp
-                .map(|ts| timestamp_to_naive_datetime(ts))
+                .map(timestamp_to_naive_datetime)
                 .unwrap_or_default(),
             context: p.context,
             tags: p.tags,
@@ -391,7 +392,7 @@ impl From<UserProfile> for FuryUserProfile {
             permissions: p.permissions,
             last_login: p
                 .last_login
-                .map(|ts| timestamp_to_naive_datetime(ts))
+                .map(timestamp_to_naive_datetime)
                 .unwrap_or_default(),
             is_active: p.is_active,
         }
@@ -408,7 +409,7 @@ impl From<ApiMetrics> for FuryAPIMetrics {
             status_codes: p.status_codes,
             measured_at: p
                 .measured_at
-                .map(|ts| timestamp_to_naive_datetime(ts))
+                .map(timestamp_to_naive_datetime)
                 .unwrap_or_default(),
         }
     }

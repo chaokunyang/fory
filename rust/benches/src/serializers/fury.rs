@@ -22,6 +22,7 @@ use crate::models::simple::{SimpleList, SimpleMap, SimpleStruct};
 use crate::serializers::Serializer;
 use fory_core::fory::Fory;
 
+#[derive(Default)]
 pub struct FurySerializer {
     fory: Fory,
 }

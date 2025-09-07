@@ -46,6 +46,7 @@ impl Harness {
     }
 }
 
+#[derive(Clone)]
 pub struct TypeInfo {
     type_def: Vec<u8>,
     type_id: u32,
@@ -73,6 +74,8 @@ pub struct TypeResolver {
     serialize_map: HashMap<u32, Harness>,
     type_id_map: HashMap<std::any::TypeId, u32>,
     type_info_map: HashMap<std::any::TypeId, TypeInfo>,
+    // Fast lookup by numeric ID for common types
+    type_info_by_id: Vec<Option<TypeInfo>>,
 }
 
 impl TypeResolver {
@@ -83,6 +86,16 @@ impl TypeResolver {
                 type_id
             )
         })
+    }
+
+    /// Fast path for getting type info by numeric ID (avoids HashMap lookup by TypeId)
+    pub fn get_type_info_by_id(&self, id: u32) -> Option<&TypeInfo> {
+        let id_usize = id as usize;
+        if id_usize < self.type_info_by_id.len() {
+            self.type_info_by_id[id_usize].as_ref()
+        } else {
+            None
+        }
     }
 
     pub fn register<T: StructSerializer>(&mut self, type_info: TypeInfo, id: u32) {
@@ -104,11 +117,21 @@ impl TypeResolver {
                 Err(e) => Err(e),
             }
         }
+        
+        // Ensure the Vec is large enough
+        let id_usize = id as usize;
+        if self.type_info_by_id.len() <= id_usize {
+            self.type_info_by_id.resize(id_usize + 1, None);
+        }
+        
         self.type_id_map.insert(std::any::TypeId::of::<T>(), id);
         self.serialize_map
             .insert(id, Harness::new(serializer::<T>, deserializer::<T>));
         self.type_info_map
-            .insert(std::any::TypeId::of::<T>(), type_info);
+            .insert(std::any::TypeId::of::<T>(), type_info.clone());
+        
+        // Store in fast lookup
+        self.type_info_by_id[id_usize] = Some(type_info);
     }
 
     pub fn get_harness_by_type(&self, type_id: std::any::TypeId) -> Option<&Harness> {

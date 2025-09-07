@@ -77,7 +77,15 @@ pub fn gen_in_struct_impl(fields: &[&Field]) -> TokenStream {
 pub fn gen() -> TokenStream {
     quote! {
         fn get_type_id(fory: &fory_core::fory::Fory) -> u32 {
-            fory.get_type_resolver().get_type_info(std::any::TypeId::of::<Self>()).get_type_id()
+            use std::sync::Once;
+            static mut TYPE_ID: u32 = 0u32;
+            static TYPE_ID_ONCE: Once = Once::new();
+            unsafe {
+                TYPE_ID_ONCE.call_once(|| {
+                    TYPE_ID = fory.get_type_resolver().get_type_info(std::any::TypeId::of::<Self>()).get_type_id();
+                });
+                TYPE_ID
+            }
         }
     }
 }

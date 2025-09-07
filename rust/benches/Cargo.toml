@@ -20,6 +20,10 @@ name = "fory-benchmarks"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "fury_profiler"
+path = "src/main.rs"
+
 [[bench]]
 name = "serialization_bench"
 path = "benches/serialization_bench.rs"

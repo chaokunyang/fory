@@ -15,11 +15,11 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use serde::{Deserialize, Serialize};
+use crate::models::{generate_random_string, generate_random_strings, TestDataGenerator};
+use chrono::{DateTime, NaiveDateTime, Utc};
 use fory_derive::Fory;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use chrono::{DateTime, Utc, NaiveDateTime};
-use crate::models::{TestDataGenerator, generate_random_string, generate_random_strings};
 
 // Fury models
 #[derive(Fory, Debug, Clone, PartialEq, Default)]
@@ -117,7 +117,7 @@ pub struct SerdeECommerceData {
 
 impl TestDataGenerator for ECommerceData {
     type Data = ECommerceData;
-    
+
     fn generate_small() -> Self::Data {
         let product = FuryProduct {
             id: "prod_1".to_string(),
@@ -129,7 +129,7 @@ impl TestDataGenerator for ECommerceData {
                 ("model".to_string(), "X1".to_string()),
             ]),
         };
-        
+
         let customer = FuryCustomer {
             id: "cust_1".to_string(),
             name: "John Doe".to_string(),
@@ -141,16 +141,14 @@ impl TestDataGenerator for ECommerceData {
             ]),
             member_since: DateTime::from_timestamp(1640995200, 0).unwrap().naive_utc(),
         };
-        
+
         let order_item = FuryOrderItem {
             product: product.clone(),
             quantity: 1,
             unit_price: 999.99,
-            customizations: HashMap::from([
-                ("color".to_string(), "black".to_string()),
-            ]),
+            customizations: HashMap::from([("color".to_string(), "black".to_string())]),
         };
-        
+
         let order = FuryOrder {
             id: "order_1".to_string(),
             customer: customer.clone(),
@@ -158,14 +156,12 @@ impl TestDataGenerator for ECommerceData {
             total_amount: 999.99,
             status: "completed".to_string(),
             order_date: DateTime::from_timestamp(1640995200, 0).unwrap().naive_utc(),
-            metadata: HashMap::from([
-                ("payment_method".to_string(), "credit_card".to_string()),
-            ]),
+            metadata: HashMap::from([("payment_method".to_string(), "credit_card".to_string())]),
         };
-        
+
         let mut order_lookup = HashMap::new();
         order_lookup.insert(order.id.clone(), order.clone());
-        
+
         ECommerceData {
             orders: vec![order],
             customers: vec![customer],
@@ -173,13 +169,13 @@ impl TestDataGenerator for ECommerceData {
             order_lookup,
         }
     }
-    
+
     fn generate_medium() -> Self::Data {
         let mut products = Vec::new();
         let mut customers = Vec::new();
         let mut orders = Vec::new();
         let mut order_lookup = HashMap::new();
-        
+
         // Generate 20 products
         for i in 1..=20 {
             let product = FuryProduct {
@@ -197,7 +193,7 @@ impl TestDataGenerator for ECommerceData {
             };
             products.push(product);
         }
-        
+
         // Generate 10 customers
         for i in 1..=10 {
             let customer = FuryCustomer {
@@ -216,19 +212,19 @@ impl TestDataGenerator for ECommerceData {
             };
             customers.push(customer);
         }
-        
+
         // Generate 15 orders
         for i in 1..=15 {
             let customer = customers[i % customers.len()].clone();
             let mut items = Vec::new();
             let mut total = 0.0;
-            
+
             for j in 1..=3 {
                 let product = products[j % products.len()].clone();
                 let quantity = ((j % 5) + 1) as i32;
                 let unit_price = product.price;
                 total += unit_price * quantity as f64;
-                
+
                 let item = FuryOrderItem {
                     product,
                     quantity,
@@ -243,13 +239,17 @@ impl TestDataGenerator for ECommerceData {
                 };
                 items.push(item);
             }
-            
+
             let order = FuryOrder {
                 id: format!("order_{}", i),
                 customer,
                 items,
                 total_amount: total,
-                status: if i % 3 == 0 { "pending".to_string() } else { "completed".to_string() },
+                status: if i % 3 == 0 {
+                    "pending".to_string()
+                } else {
+                    "completed".to_string()
+                },
                 order_date: DateTime::from_timestamp(1640995200, 0).unwrap().naive_utc(),
                 metadata: {
                     let mut map = HashMap::new();
@@ -259,11 +259,11 @@ impl TestDataGenerator for ECommerceData {
                     map
                 },
             };
-            
+
             order_lookup.insert(order.id.clone(), order.clone());
             orders.push(order);
         }
-        
+
         ECommerceData {
             orders,
             customers,
@@ -271,13 +271,13 @@ impl TestDataGenerator for ECommerceData {
             order_lookup,
         }
     }
-    
+
     fn generate_large() -> Self::Data {
         let mut products = Vec::new();
         let mut customers = Vec::new();
         let mut orders = Vec::new();
         let mut order_lookup = HashMap::new();
-        
+
         // Generate 100 products
         for i in 1..=100 {
             let product = FuryProduct {
@@ -295,7 +295,7 @@ impl TestDataGenerator for ECommerceData {
             };
             products.push(product);
         }
-        
+
         // Generate 50 customers
         for i in 1..=50 {
             let customer = FuryCustomer {
@@ -314,19 +314,19 @@ impl TestDataGenerator for ECommerceData {
             };
             customers.push(customer);
         }
-        
+
         // Generate 100 orders
         for i in 1..=100 {
             let customer = customers[i % customers.len()].clone();
             let mut items = Vec::new();
             let mut total = 0.0;
-            
+
             for j in 1..=5 {
                 let product = products[j % products.len()].clone();
                 let quantity = ((j % 10) + 1) as i32;
                 let unit_price = product.price;
                 total += unit_price * quantity as f64;
-                
+
                 let item = FuryOrderItem {
                     product,
                     quantity,
@@ -341,13 +341,17 @@ impl TestDataGenerator for ECommerceData {
                 };
                 items.push(item);
             }
-            
+
             let order = FuryOrder {
                 id: format!("order_{}", i),
                 customer,
                 items,
                 total_amount: total,
-                status: if i % 4 == 0 { "pending".to_string() } else { "completed".to_string() },
+                status: if i % 4 == 0 {
+                    "pending".to_string()
+                } else {
+                    "completed".to_string()
+                },
                 order_date: DateTime::from_timestamp(1640995200, 0).unwrap().naive_utc(),
                 metadata: {
                     let mut map = HashMap::new();
@@ -357,11 +361,11 @@ impl TestDataGenerator for ECommerceData {
                     map
                 },
             };
-            
+
             order_lookup.insert(order.id.clone(), order.clone());
             orders.push(order);
         }
-        
+
         ECommerceData {
             orders,
             customers,
@@ -428,7 +432,11 @@ impl From<ECommerceData> for SerdeECommerceData {
             orders: f.orders.into_iter().map(|o| o.into()).collect(),
             customers: f.customers.into_iter().map(|c| c.into()).collect(),
             products: f.products.into_iter().map(|p| p.into()).collect(),
-            order_lookup: f.order_lookup.into_iter().map(|(k, v)| (k, v.into())).collect(),
+            order_lookup: f
+                .order_lookup
+                .into_iter()
+                .map(|(k, v)| (k, v.into()))
+                .collect(),
         }
     }
 }
@@ -490,7 +498,11 @@ impl From<SerdeECommerceData> for ECommerceData {
             orders: s.orders.into_iter().map(|o| o.into()).collect(),
             customers: s.customers.into_iter().map(|c| c.into()).collect(),
             products: s.products.into_iter().map(|p| p.into()).collect(),
-            order_lookup: s.order_lookup.into_iter().map(|(k, v)| (k, v.into())).collect(),
+            order_lookup: s
+                .order_lookup
+                .into_iter()
+                .map(|(k, v)| (k, v.into()))
+                .collect(),
         }
     }
 }

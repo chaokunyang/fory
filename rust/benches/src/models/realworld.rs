@@ -15,11 +15,11 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use serde::{Deserialize, Serialize};
+use crate::models::{generate_random_string, generate_random_strings, TestDataGenerator};
+use chrono::{DateTime, NaiveDateTime, Utc};
 use fory_derive::Fory;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use chrono::{DateTime, Utc, NaiveDateTime};
-use crate::models::{TestDataGenerator, generate_random_string, generate_random_strings};
 
 // Fury models
 #[derive(Fory, Debug, Clone, PartialEq, Default)]
@@ -107,7 +107,7 @@ pub struct SerdeSystemData {
 
 impl TestDataGenerator for SystemData {
     type Data = SystemData;
-    
+
     fn generate_small() -> Self::Data {
         let log = FuryLogEntry {
             id: "log_1".to_string(),
@@ -122,7 +122,7 @@ impl TestDataGenerator for SystemData {
             tags: vec!["auth".to_string(), "login".to_string()],
             duration_ms: 45.2,
         };
-        
+
         let user = FuryUserProfile {
             user_id: "user_123".to_string(),
             username: "johndoe".to_string(),
@@ -135,7 +135,7 @@ impl TestDataGenerator for SystemData {
             last_login: DateTime::from_timestamp(1640995200, 0).unwrap().naive_utc(),
             is_active: true,
         };
-        
+
         let metric = FuryAPIMetrics {
             endpoint: "/api/users".to_string(),
             request_count: 1000,
@@ -148,7 +148,7 @@ impl TestDataGenerator for SystemData {
             ]),
             measured_at: DateTime::from_timestamp(1640995200, 0).unwrap().naive_utc(),
         };
-        
+
         SystemData {
             logs: vec![log],
             users: vec![user],
@@ -159,12 +159,12 @@ impl TestDataGenerator for SystemData {
             ]),
         }
     }
-    
+
     fn generate_medium() -> Self::Data {
         let mut logs = Vec::new();
         let mut users = Vec::new();
         let mut metrics = Vec::new();
-        
+
         // Generate 50 log entries
         for i in 1..=50 {
             let log = FuryLogEntry {
@@ -172,7 +172,9 @@ impl TestDataGenerator for SystemData {
                 level: i % 5,
                 message: generate_random_string(100),
                 service: format!("service_{}", i % 10),
-                timestamp: DateTime::from_timestamp(1640995200 + i as i64, 0).unwrap().naive_utc(),
+                timestamp: DateTime::from_timestamp(1640995200 + i as i64, 0)
+                    .unwrap()
+                    .naive_utc(),
                 context: {
                     let mut map = HashMap::new();
                     for j in 1..=5 {
@@ -185,7 +187,7 @@ impl TestDataGenerator for SystemData {
             };
             logs.push(log);
         }
-        
+
         // Generate 20 users
         for i in 1..=20 {
             let user = FuryUserProfile {
@@ -200,12 +202,14 @@ impl TestDataGenerator for SystemData {
                     map
                 },
                 permissions: generate_random_strings(5, 15),
-                last_login: DateTime::from_timestamp(1640995200 + i as i64, 0).unwrap().naive_utc(),
+                last_login: DateTime::from_timestamp(1640995200 + i as i64, 0)
+                    .unwrap()
+                    .naive_utc(),
                 is_active: i % 3 != 0,
             };
             users.push(user);
         }
-        
+
         // Generate 10 metrics
         for i in 1..=10 {
             let metric = FuryAPIMetrics {
@@ -220,11 +224,13 @@ impl TestDataGenerator for SystemData {
                     map.insert("500".to_string(), (i * 10) as i64);
                     map
                 },
-                measured_at: DateTime::from_timestamp(1640995200 + i as i64, 0).unwrap().naive_utc(),
+                measured_at: DateTime::from_timestamp(1640995200 + i as i64, 0)
+                    .unwrap()
+                    .naive_utc(),
             };
             metrics.push(metric);
         }
-        
+
         SystemData {
             logs,
             users,
@@ -238,12 +244,12 @@ impl TestDataGenerator for SystemData {
             },
         }
     }
-    
+
     fn generate_large() -> Self::Data {
         let mut logs = Vec::new();
         let mut users = Vec::new();
         let mut metrics = Vec::new();
-        
+
         // Generate 500 log entries
         for i in 1..=500 {
             let log = FuryLogEntry {
@@ -251,7 +257,9 @@ impl TestDataGenerator for SystemData {
                 level: i % 5,
                 message: generate_random_string(200),
                 service: format!("service_{}", i % 50),
-                timestamp: DateTime::from_timestamp(1640995200 + i as i64, 0).unwrap().naive_utc(),
+                timestamp: DateTime::from_timestamp(1640995200 + i as i64, 0)
+                    .unwrap()
+                    .naive_utc(),
                 context: {
                     let mut map = HashMap::new();
                     for j in 1..=10 {
@@ -264,7 +272,7 @@ impl TestDataGenerator for SystemData {
             };
             logs.push(log);
         }
-        
+
         // Generate 100 users
         for i in 1..=100 {
             let user = FuryUserProfile {
@@ -279,12 +287,14 @@ impl TestDataGenerator for SystemData {
                     map
                 },
                 permissions: generate_random_strings(10, 20),
-                last_login: DateTime::from_timestamp(1640995200 + i as i64, 0).unwrap().naive_utc(),
+                last_login: DateTime::from_timestamp(1640995200 + i as i64, 0)
+                    .unwrap()
+                    .naive_utc(),
                 is_active: i % 4 != 0,
             };
             users.push(user);
         }
-        
+
         // Generate 50 metrics
         for i in 1..=50 {
             let metric = FuryAPIMetrics {
@@ -299,11 +309,13 @@ impl TestDataGenerator for SystemData {
                     map.insert("500".to_string(), (i * 20) as i64);
                     map
                 },
-                measured_at: DateTime::from_timestamp(1640995200 + i as i64, 0).unwrap().naive_utc(),
+                measured_at: DateTime::from_timestamp(1640995200 + i as i64, 0)
+                    .unwrap()
+                    .naive_utc(),
             };
             metrics.push(metric);
         }
-        
+
         SystemData {
             logs,
             users,

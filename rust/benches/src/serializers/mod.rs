@@ -16,10 +16,10 @@
 // under the License.
 
 pub mod fury;
-pub mod protobuf;
 pub mod json;
+pub mod protobuf;
 
-use chrono::{DateTime, Utc, NaiveDateTime};
+use chrono::{DateTime, NaiveDateTime, Utc};
 use prost_types::Timestamp;
 
 pub trait Serializer<T> {
@@ -36,7 +36,9 @@ pub fn naive_datetime_to_timestamp(dt: NaiveDateTime) -> Timestamp {
 }
 
 pub fn timestamp_to_naive_datetime(ts: Timestamp) -> NaiveDateTime {
-    DateTime::from_timestamp(ts.seconds, ts.nanos as u32).unwrap().naive_utc()
+    DateTime::from_timestamp(ts.seconds, ts.nanos as u32)
+        .unwrap()
+        .naive_utc()
 }
 
 pub fn datetime_to_timestamp(dt: DateTime<Utc>) -> Timestamp {

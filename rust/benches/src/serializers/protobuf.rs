@@ -15,15 +15,19 @@
 // specific language governing permissions and limitations
 // under the License.
 
+use crate::models::complex::{ECommerceData, FuryCustomer, FuryOrder, FuryOrderItem, FuryProduct};
+use crate::models::medium::{Company, FuryAddress, Person};
+use crate::models::realworld::{FuryAPIMetrics, FuryLogEntry, FuryUserProfile, SystemData};
+use crate::models::simple::{SimpleList, SimpleMap, SimpleStruct};
+use crate::serializers::{naive_datetime_to_timestamp, timestamp_to_naive_datetime, Serializer};
 use prost::Message;
-use crate::serializers::{Serializer, naive_datetime_to_timestamp, timestamp_to_naive_datetime};
-use crate::models::simple::{SimpleStruct, SimpleList, SimpleMap};
-use crate::models::medium::{Person, Company, FuryAddress};
-use crate::models::complex::{ECommerceData, FuryProduct, FuryOrderItem, FuryCustomer, FuryOrder};
-use crate::models::realworld::{SystemData, FuryLogEntry, FuryUserProfile, FuryAPIMetrics};
 
 // Import protobuf types from the generated code (included directly in lib.rs)
-use crate::{ProtoSimpleStruct, ProtoSimpleList, ProtoSimpleMap, Address, ProtoPerson, ProtoCompany, Product, OrderItem, Customer, Order, ProtoECommerceData, LogEntry, UserProfile, ApiMetrics, ProtoSystemData};
+use crate::{
+    Address, ApiMetrics, Customer, LogEntry, Order, OrderItem, Product, ProtoCompany,
+    ProtoECommerceData, ProtoPerson, ProtoSimpleList, ProtoSimpleMap, ProtoSimpleStruct,
+    ProtoSystemData, UserProfile,
+};
 
 pub struct ProtobufSerializer;
 
@@ -92,7 +96,11 @@ impl From<&Company> for ProtoCompany {
         ProtoCompany {
             name: f.name.clone(),
             employees: f.employees.iter().map(|e| e.into()).collect(),
-            offices: f.offices.iter().map(|(k, v)| (k.clone(), v.into())).collect(),
+            offices: f
+                .offices
+                .iter()
+                .map(|(k, v)| (k.clone(), v.into()))
+                .collect(),
             is_public: f.is_public,
         }
     }
@@ -154,7 +162,11 @@ impl From<&ECommerceData> for ProtoECommerceData {
             orders: f.orders.iter().map(|o| o.into()).collect(),
             customers: f.customers.iter().map(|c| c.into()).collect(),
             products: f.products.iter().map(|p| p.into()).collect(),
-            order_lookup: f.order_lookup.iter().map(|(k, v)| (k.clone(), v.into())).collect(),
+            order_lookup: f
+                .order_lookup
+                .iter()
+                .map(|(k, v)| (k.clone(), v.into()))
+                .collect(),
         }
     }
 }
@@ -261,7 +273,10 @@ impl From<ProtoPerson> for Person {
             address: p.address.map(|a| a.into()).unwrap_or_default(),
             hobbies: p.hobbies,
             metadata: p.metadata,
-            created_at: p.created_at.map(|ts| timestamp_to_naive_datetime(ts)).unwrap_or_default(),
+            created_at: p
+                .created_at
+                .map(|ts| timestamp_to_naive_datetime(ts))
+                .unwrap_or_default(),
         }
     }
 }
@@ -308,7 +323,10 @@ impl From<Customer> for FuryCustomer {
             email: p.email,
             phone_numbers: p.phone_numbers,
             preferences: p.preferences,
-            member_since: p.member_since.map(|ts| timestamp_to_naive_datetime(ts)).unwrap_or_default(),
+            member_since: p
+                .member_since
+                .map(|ts| timestamp_to_naive_datetime(ts))
+                .unwrap_or_default(),
         }
     }
 }
@@ -321,7 +339,10 @@ impl From<Order> for FuryOrder {
             items: p.items.into_iter().map(|i| i.into()).collect(),
             total_amount: p.total_amount,
             status: p.status,
-            order_date: p.order_date.map(|ts| timestamp_to_naive_datetime(ts)).unwrap_or_default(),
+            order_date: p
+                .order_date
+                .map(|ts| timestamp_to_naive_datetime(ts))
+                .unwrap_or_default(),
             metadata: p.metadata,
         }
     }
@@ -333,7 +354,11 @@ impl From<ProtoECommerceData> for ECommerceData {
             orders: p.orders.into_iter().map(|o| o.into()).collect(),
             customers: p.customers.into_iter().map(|c| c.into()).collect(),
             products: p.products.into_iter().map(|prod| prod.into()).collect(),
-            order_lookup: p.order_lookup.into_iter().map(|(k, v)| (k, v.into())).collect(),
+            order_lookup: p
+                .order_lookup
+                .into_iter()
+                .map(|(k, v)| (k, v.into()))
+                .collect(),
         }
     }
 }
@@ -345,7 +370,10 @@ impl From<LogEntry> for FuryLogEntry {
             level: p.level,
             message: p.message,
             service: p.service,
-            timestamp: p.timestamp.map(|ts| timestamp_to_naive_datetime(ts)).unwrap_or_default(),
+            timestamp: p
+                .timestamp
+                .map(|ts| timestamp_to_naive_datetime(ts))
+                .unwrap_or_default(),
             context: p.context,
             tags: p.tags,
             duration_ms: p.duration_ms,
@@ -361,7 +389,10 @@ impl From<UserProfile> for FuryUserProfile {
             email: p.email,
             preferences: p.preferences,
             permissions: p.permissions,
-            last_login: p.last_login.map(|ts| timestamp_to_naive_datetime(ts)).unwrap_or_default(),
+            last_login: p
+                .last_login
+                .map(|ts| timestamp_to_naive_datetime(ts))
+                .unwrap_or_default(),
             is_active: p.is_active,
         }
     }
@@ -375,7 +406,10 @@ impl From<ApiMetrics> for FuryAPIMetrics {
             avg_response_time: p.avg_response_time,
             error_count: p.error_count,
             status_codes: p.status_codes,
-            measured_at: p.measured_at.map(|ts| timestamp_to_naive_datetime(ts)).unwrap_or_default(),
+            measured_at: p
+                .measured_at
+                .map(|ts| timestamp_to_naive_datetime(ts))
+                .unwrap_or_default(),
         }
     }
 }
@@ -399,7 +433,7 @@ impl Serializer<SimpleStruct> for ProtobufSerializer {
         proto.encode(&mut buf)?;
         Ok(buf)
     }
-    
+
     fn deserialize(&self, data: &[u8]) -> Result<SimpleStruct, Box<dyn std::error::Error>> {
         let proto = ProtoSimpleStruct::decode(data)?;
         Ok(proto.into())
@@ -413,7 +447,7 @@ impl Serializer<SimpleList> for ProtobufSerializer {
         proto.encode(&mut buf)?;
         Ok(buf)
     }
-    
+
     fn deserialize(&self, data: &[u8]) -> Result<SimpleList, Box<dyn std::error::Error>> {
         let proto = ProtoSimpleList::decode(data)?;
         Ok(proto.into())
@@ -427,7 +461,7 @@ impl Serializer<SimpleMap> for ProtobufSerializer {
         proto.encode(&mut buf)?;
         Ok(buf)
     }
-    
+
     fn deserialize(&self, data: &[u8]) -> Result<SimpleMap, Box<dyn std::error::Error>> {
         let proto = ProtoSimpleMap::decode(data)?;
         Ok(proto.into())
@@ -441,7 +475,7 @@ impl Serializer<Person> for ProtobufSerializer {
         proto.encode(&mut buf)?;
         Ok(buf)
     }
-    
+
     fn deserialize(&self, data: &[u8]) -> Result<Person, Box<dyn std::error::Error>> {
         let proto = ProtoPerson::decode(data)?;
         Ok(proto.into())
@@ -455,7 +489,7 @@ impl Serializer<Company> for ProtobufSerializer {
         proto.encode(&mut buf)?;
         Ok(buf)
     }
-    
+
     fn deserialize(&self, data: &[u8]) -> Result<Company, Box<dyn std::error::Error>> {
         let proto = ProtoCompany::decode(data)?;
         Ok(proto.into())
@@ -469,7 +503,7 @@ impl Serializer<ECommerceData> for ProtobufSerializer {
         proto.encode(&mut buf)?;
         Ok(buf)
     }
-    
+
     fn deserialize(&self, data: &[u8]) -> Result<ECommerceData, Box<dyn std::error::Error>> {
         let proto = ProtoECommerceData::decode(data)?;
         Ok(proto.into())
@@ -483,7 +517,7 @@ impl Serializer<SystemData> for ProtobufSerializer {
         proto.encode(&mut buf)?;
         Ok(buf)
     }
-    
+
     fn deserialize(&self, data: &[u8]) -> Result<SystemData, Box<dyn std::error::Error>> {
         let proto = ProtoSystemData::decode(data)?;
         Ok(proto.into())

@@ -15,10 +15,10 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use serde::{Deserialize, Serialize};
+use crate::models::{generate_random_string, TestDataGenerator};
 use fory_derive::Fory;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use crate::models::{TestDataGenerator, generate_random_string};
 
 // Fury models
 #[derive(Fory, Debug, Clone, PartialEq, Default)]
@@ -64,7 +64,7 @@ pub struct SerdeSimpleMap {
 
 impl TestDataGenerator for SimpleStruct {
     type Data = SimpleStruct;
-    
+
     fn generate_small() -> Self::Data {
         SimpleStruct {
             id: 1,
@@ -73,7 +73,7 @@ impl TestDataGenerator for SimpleStruct {
             score: 95.5,
         }
     }
-    
+
     fn generate_medium() -> Self::Data {
         SimpleStruct {
             id: 12345,
@@ -82,7 +82,7 @@ impl TestDataGenerator for SimpleStruct {
             score: 87.123456,
         }
     }
-    
+
     fn generate_large() -> Self::Data {
         SimpleStruct {
             id: 999999,
@@ -95,21 +95,21 @@ impl TestDataGenerator for SimpleStruct {
 
 impl TestDataGenerator for SimpleList {
     type Data = SimpleList;
-    
+
     fn generate_small() -> Self::Data {
         SimpleList {
             numbers: vec![1, 2, 3, 4, 5],
             names: vec!["a".to_string(), "b".to_string(), "c".to_string()],
         }
     }
-    
+
     fn generate_medium() -> Self::Data {
         SimpleList {
             numbers: (1..=100).collect(),
             names: (1..=50).map(|i| format!("name_{}", i)).collect(),
         }
     }
-    
+
     fn generate_large() -> Self::Data {
         SimpleList {
             numbers: (1..=1000).collect(),
@@ -120,48 +120,48 @@ impl TestDataGenerator for SimpleList {
 
 impl TestDataGenerator for SimpleMap {
     type Data = SimpleMap;
-    
+
     fn generate_small() -> Self::Data {
         let mut string_to_int = HashMap::new();
         string_to_int.insert("one".to_string(), 1);
         string_to_int.insert("two".to_string(), 2);
-        
+
         let mut int_to_string = HashMap::new();
         int_to_string.insert(1, "one".to_string());
         int_to_string.insert(2, "two".to_string());
-        
+
         SimpleMap {
             string_to_int,
             int_to_string,
         }
     }
-    
+
     fn generate_medium() -> Self::Data {
         let mut string_to_int = HashMap::new();
         let mut int_to_string = HashMap::new();
-        
+
         for i in 1..=50 {
             let key = format!("key_{}", i);
             string_to_int.insert(key.clone(), i);
             int_to_string.insert(i, key);
         }
-        
+
         SimpleMap {
             string_to_int,
             int_to_string,
         }
     }
-    
+
     fn generate_large() -> Self::Data {
         let mut string_to_int = HashMap::new();
         let mut int_to_string = HashMap::new();
-        
+
         for i in 1..=500 {
             let key = generate_random_string(15);
             string_to_int.insert(key.clone(), i);
             int_to_string.insert(i, key);
         }
-        
+
         SimpleMap {
             string_to_int,
             int_to_string,

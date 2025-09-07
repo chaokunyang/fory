@@ -19,11 +19,14 @@ use std::path::Path;
 
 fn main() {
     println!("cargo:warning=Build script running");
-    println!("cargo:warning=OUT_DIR: {}", std::env::var("OUT_DIR").unwrap());
-    
+    println!(
+        "cargo:warning=OUT_DIR: {}",
+        std::env::var("OUT_DIR").unwrap()
+    );
+
     let proto_files = [
         "proto/simple.proto",
-        "proto/medium.proto", 
+        "proto/medium.proto",
         "proto/complex.proto",
         "proto/realworld.proto",
     ];
@@ -39,7 +42,7 @@ fn main() {
 
     let mut config = prost_build::Config::new();
     // Don't set out_dir, use the default OUT_DIR
-    
+
     println!("cargo:warning=About to compile protobuf files");
     config
         .compile_protos(&proto_files, &["proto/"])

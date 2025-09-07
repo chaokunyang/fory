@@ -15,10 +15,10 @@
 // specific language governing permissions and limitations
 // under the License.
 
-pub mod simple;
-pub mod medium;
 pub mod complex;
+pub mod medium;
 pub mod realworld;
+pub mod simple;
 
 use rand::Rng;
 

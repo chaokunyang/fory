@@ -15,11 +15,11 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use serde::{Deserialize, Serialize};
+use crate::models::{generate_random_string, generate_random_strings, TestDataGenerator};
+use chrono::{DateTime, NaiveDateTime, Utc};
 use fory_derive::Fory;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use chrono::{DateTime, Utc, NaiveDateTime};
-use crate::models::{TestDataGenerator, generate_random_string, generate_random_strings};
 
 // Fury models
 #[derive(Fory, Debug, Clone, PartialEq, Default)]
@@ -77,7 +77,7 @@ pub struct SerdeCompany {
 
 impl TestDataGenerator for Person {
     type Data = Person;
-    
+
     fn generate_small() -> Self::Data {
         Person {
             name: "John Doe".to_string(),
@@ -96,7 +96,7 @@ impl TestDataGenerator for Person {
             created_at: DateTime::from_timestamp(1640995200, 0).unwrap().naive_utc(),
         }
     }
-    
+
     fn generate_medium() -> Self::Data {
         Person {
             name: generate_random_string(30),
@@ -118,7 +118,7 @@ impl TestDataGenerator for Person {
             created_at: DateTime::from_timestamp(1640995200, 0).unwrap().naive_utc(),
         }
     }
-    
+
     fn generate_large() -> Self::Data {
         Person {
             name: generate_random_string(100),
@@ -144,23 +144,24 @@ impl TestDataGenerator for Person {
 
 impl TestDataGenerator for Company {
     type Data = Company;
-    
+
     fn generate_small() -> Self::Data {
         Company {
             name: "Tech Corp".to_string(),
             employees: vec![Person::generate_small()],
-            offices: HashMap::from([
-                ("HQ".to_string(), FuryAddress {
+            offices: HashMap::from([(
+                "HQ".to_string(),
+                FuryAddress {
                     street: "456 Tech Ave".to_string(),
                     city: "San Francisco".to_string(),
                     country: "USA".to_string(),
                     zip_code: "94105".to_string(),
-                }),
-            ]),
+                },
+            )]),
             is_public: true,
         }
     }
-    
+
     fn generate_medium() -> Self::Data {
         let mut employees = Vec::new();
         for i in 1..=10 {
@@ -168,7 +169,7 @@ impl TestDataGenerator for Company {
             person.name = format!("Employee_{}", i);
             employees.push(person);
         }
-        
+
         let mut offices = HashMap::new();
         for i in 1..=5 {
             offices.insert(
@@ -178,10 +179,10 @@ impl TestDataGenerator for Company {
                     city: generate_random_string(20),
                     country: generate_random_string(15),
                     zip_code: generate_random_string(10),
-                }
+                },
             );
         }
-        
+
         Company {
             name: generate_random_string(50),
             employees,
@@ -189,7 +190,7 @@ impl TestDataGenerator for Company {
             is_public: true,
         }
     }
-    
+
     fn generate_large() -> Self::Data {
         let mut employees = Vec::new();
         for i in 1..=100 {
@@ -197,7 +198,7 @@ impl TestDataGenerator for Company {
             person.name = format!("Employee_{}", i);
             employees.push(person);
         }
-        
+
         let mut offices = HashMap::new();
         for i in 1..=20 {
             offices.insert(
@@ -207,10 +208,10 @@ impl TestDataGenerator for Company {
                     city: generate_random_string(50),
                     country: generate_random_string(30),
                     zip_code: generate_random_string(20),
-                }
+                },
             );
         }
-        
+
         Company {
             name: generate_random_string(100),
             employees,

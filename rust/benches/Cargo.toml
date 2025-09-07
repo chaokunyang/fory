@@ -25,6 +25,11 @@ name = "serialization_bench"
 path = "benches/serialization_bench.rs"
 harness = false
 
+[[bench]]
+name = "simple_struct_deserialize"
+path = "benches/simple_struct_deserialize.rs"
+harness = false
+
 [dependencies]
 fory = { path = "../fory" }
 fory-core = { path = "../fory-core" }

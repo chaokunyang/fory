@@ -291,11 +291,11 @@ case $1 in
       rustup component add rustfmt
       echo "Executing fory rust tests"
       cd "$ROOT/rust"
-      cargo doc --no-deps --document-private-items --all-features --open
+      cargo doc --no-deps --document-private-items --workspace --exclude fory-benchmarks
       cargo fmt --all -- --check
       cargo fmt --all
       cargo clippy --workspace --all-features --all-targets
-      cargo doc
+      cargo doc --workspace --exclude fory-benchmarks
       cargo build --all-features --all-targets
       cargo test
       testcode=$?

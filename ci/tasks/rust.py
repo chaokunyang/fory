@@ -33,11 +33,11 @@ def run():
         logging.warning("Continuing with existing components")
 
     cmds = (
-        "cargo doc --no-deps --document-private-items --all-features --open",
+        "cargo doc --no-deps --document-private-items --workspace --exclude fory-benchmarks",
         "cargo fmt --all -- --check",
         "cargo fmt --all",
         "cargo clippy --workspace --all-features --all-targets -- -D warnings",
-        "cargo doc",
+        "cargo doc --workspace --exclude fory-benchmarks",
         "cargo build --all-features --all-targets",
         "cargo test",
         "cargo clean",

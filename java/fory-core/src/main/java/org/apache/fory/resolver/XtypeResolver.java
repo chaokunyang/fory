@@ -226,28 +226,6 @@ public class XtypeResolver implements TypeResolver {
     register(type, serializer, namespace, typeName, xtypeId);
   }
 
-  /**
-   * Register type with given type id and serializer for type in fory type system.
-   *
-   * <p>Do not use this method to register custom type in java type system. Use {@link
-   * #register(Class, String, String)} or {@link #register(Class, int)} instead.
-   *
-   * @param type type to register.
-   * @param serializer serializer to register.
-   * @param typeId type id to register.
-   * @throws IllegalArgumentException if type id is too big.
-   */
-  @Internal
-  public void registerForyType(Class<?> type, Serializer serializer, int typeId) {
-    Preconditions.checkArgument(typeId < MAX_TYPE_ID, "Too big type id %s", typeId);
-    register(
-        type,
-        serializer,
-        ReflectionUtils.getPackage(type),
-        ReflectionUtils.getClassNameWithoutPackage(type),
-        typeId);
-  }
-
   private void register(
       Class<?> type, Serializer<?> serializer, String namespace, String typeName, int xtypeId) {
     ClassInfo classInfo = newClassInfo(type, serializer, namespace, typeName, (short) xtypeId);
@@ -264,6 +242,28 @@ public class XtypeResolver implements TypeResolver {
     classInfoMap.put(type, classInfo);
     registeredTypeIds.add(xtypeId);
     xtypeIdToClassMap.put(xtypeId, classInfo);
+  }
+
+  /**
+   * Register type with given type id and serializer for type in fory type system.
+   *
+   * <p>Do not use this method to register custom type in java type system. Use {@link
+   * #register(Class, String, String)} or {@link #register(Class, int)} instead.
+   *
+   * @param type type to register.
+   * @param serializer serializer to register.
+   * @param typeId type id to register.
+   * @throws IllegalArgumentException if type id is too big.
+   */
+  @Internal
+  public void registerForyType(Class<?> type, Serializer serializer, int typeId) {
+    Preconditions.checkArgument(typeId < MAX_TYPE_ID, "Too big type id %s", typeId);
+    register(
+      type,
+      serializer,
+      ReflectionUtils.getPackage(type),
+      ReflectionUtils.getClassNameWithoutPackage(type),
+      typeId);
   }
 
   private boolean isStructType(Serializer serializer) {

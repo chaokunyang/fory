@@ -51,8 +51,10 @@ pub fn derive_serializer(ast: &syn::DeriveInput) -> TokenStream {
         }
     };
 
-    let misc_token_stream = misc::gen();
-    let type_index_token_stream = misc::gen_type_index();
+    // Allocate a unique type ID once and share it between both functions
+    let type_id = misc::allocate_type_id();
+    let misc_token_stream = misc::gen(type_id);
+    let type_index_token_stream = misc::gen_type_index(type_id);
 
     let gen = quote! {
         impl fory_core::serializer::StructSerializer for #name {

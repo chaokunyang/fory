@@ -83,10 +83,7 @@ pub fn gen_in_struct_impl(fields: &[&Field]) -> TokenStream {
     }
 }
 
-pub fn gen() -> TokenStream {
-    // Allocate a unique type ID at macro processing time
-    let type_id = allocate_type_id();
-
+pub fn gen(type_id: u32) -> TokenStream {
     quote! {
         fn get_type_id(fory: &fory_core::fory::Fory) -> u32 {
             fory.get_type_resolver().get_type_id(&std::any::TypeId::of::<Self>(), #type_id)
@@ -94,10 +91,7 @@ pub fn gen() -> TokenStream {
     }
 }
 
-pub fn gen_type_index() -> TokenStream {
-    // Allocate a unique type ID at macro processing time
-    let type_id = allocate_type_id();
-
+pub fn gen_type_index(type_id: u32) -> TokenStream {
     quote! {
         fn type_index() -> u32 {
             #type_id

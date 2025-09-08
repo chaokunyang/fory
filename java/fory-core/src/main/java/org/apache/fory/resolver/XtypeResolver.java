@@ -259,11 +259,11 @@ public class XtypeResolver implements TypeResolver {
   public void registerForyType(Class<?> type, Serializer serializer, int typeId) {
     Preconditions.checkArgument(typeId < MAX_TYPE_ID, "Too big type id %s", typeId);
     register(
-      type,
-      serializer,
-      ReflectionUtils.getPackage(type),
-      ReflectionUtils.getClassNameWithoutPackage(type),
-      typeId);
+        type,
+        serializer,
+        ReflectionUtils.getPackage(type),
+        ReflectionUtils.getClassNameWithoutPackage(type),
+        typeId);
   }
 
   private boolean isStructType(Serializer serializer) {

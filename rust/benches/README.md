@@ -1,7 +1,7 @@
 ## How to generate flamegraph
 
 ```bash
-cargo flamegraph --bin fury_profiler -- --operation deserialize --serializer fury
+cargo flamegraph --bin fory_profiler -- --operation deserialize --serializer fory
 ```
 
 ## How to run benchmarks

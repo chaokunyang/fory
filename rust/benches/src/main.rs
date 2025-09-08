@@ -18,7 +18,7 @@
 use clap::{Parser, ValueEnum};
 use fory_benchmarks::models::complex::ECommerceData;
 use fory_benchmarks::models::TestDataGenerator;
-use fory_benchmarks::serializers::fury::FurySerializer;
+use fory_benchmarks::serializers::fory::ForySerializer;
 use fory_benchmarks::serializers::protobuf::ProtobufSerializer;
 use fory_benchmarks::serializers::Serializer;
 use std::hint::black_box;
@@ -32,12 +32,12 @@ pub enum Operation {
 #[derive(Debug, Clone, Copy, ValueEnum)]
 pub enum SerializerType {
     Protobuf,
-    Fury,
+    Fory,
 }
 
 #[derive(Parser)]
-#[command(name = "fury_profiler")]
-#[command(about = "A profiler for Fury and Protobuf serialization performance")]
+#[command(name = "fory_profiler")]
+#[command(about = "A profiler for Fory and Protobuf serialization performance")]
 struct Cli {
     /// The operation to perform
     #[arg(short, long, value_enum)]
@@ -146,8 +146,8 @@ fn main() {
             let serializer = ProtobufSerializer::new();
             profile(cli.iterations, &data, &serializer, cli.operation);
         }
-        SerializerType::Fury => {
-            let serializer = FurySerializer::new();
+        SerializerType::Fory => {
+            let serializer = ForySerializer::new();
             profile(cli.iterations, &data, &serializer, cli.operation);
         }
     }

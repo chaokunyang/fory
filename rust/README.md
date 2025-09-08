@@ -238,8 +238,8 @@ We welcome contributions! Please see our [Contributing Guide](../CONTRIBUTING.md
 ## 📞 Support
 
 - **Documentation**: [docs.rs/fory](https://docs.rs/fory)
-- **Issues**: [GitHub Issues](https://github.com/apache/fury/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/apache/fury/discussions)
+- **Issues**: [GitHub Issues](https://github.com/apache/fory/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/apache/fory/discussions)
 
 ---
 

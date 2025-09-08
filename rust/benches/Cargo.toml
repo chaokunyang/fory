@@ -21,7 +21,7 @@ version = "0.1.0"
 edition = "2021"
 
 [[bin]]
-name = "fury_profiler"
+name = "fory_profiler"
 path = "src/main.rs"
 
 [[bench]]

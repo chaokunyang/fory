@@ -2,7 +2,7 @@
 
 ## Overview
 
-This PR adds Dart language support to Apache Fory, implementing a comprehensive serialization solution for Dart and Flutter applications. Fory Dart consists of approximately 15,000 lines of code and provides an efficient serialization mechanism that works within Flutter's reflection limitations.
+This PR adds Dart language support to Apache Fory™, implementing a comprehensive serialization solution for Dart and Flutter applications. Fory Dart consists of approximately 15,000 lines of code and provides an efficient serialization mechanism that works within Flutter's reflection limitations.
 
 ## Implementation Approach
 

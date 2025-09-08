@@ -198,7 +198,7 @@ bazel run :refresh_compile_commands
 
 ## How to use Jetbrains IDEA IDE for Java Development
 
-Apache Fory Java development is based on Java 11+, and different modules are built with different Java versions.
+Apache Fory™ Java development is based on Java 11+, and different modules are built with different Java versions.
 
 For example, the `fory-core` module is built with Java 8, and the `fory-format` module is built with Java 11.
 

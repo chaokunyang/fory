@@ -175,6 +175,8 @@ public class XtypeResolver implements TypeResolver {
         } else {
           xtypeId = (xtypeId << 8) + Types.EXT;
         }
+      } else {
+        xtypeId = (xtypeId << 8) + Types.STRUCT;
       }
     }
     register(

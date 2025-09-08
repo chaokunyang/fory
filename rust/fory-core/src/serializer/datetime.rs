@@ -20,7 +20,7 @@ use crate::fory::Fory;
 use crate::resolver::context::ReadContext;
 use crate::resolver::context::WriteContext;
 use crate::serializer::Serializer;
-use crate::types::{FieldType, ForyGeneralList};
+use crate::types::{ForyGeneralList, TypeId};
 use crate::util::EPOCH;
 use anyhow::anyhow;
 use chrono::{DateTime, Days, NaiveDate, NaiveDateTime};
@@ -44,8 +44,8 @@ impl Serializer for NaiveDateTime {
         mem::size_of::<u64>()
     }
 
-    fn get_type_id(_fory: &Fory) -> i16 {
-        FieldType::TIMESTAMP.into()
+    fn get_type_id(_fory: &Fory) -> u32 {
+        TypeId::TIMESTAMP as u32
     }
 }
 
@@ -70,8 +70,8 @@ impl Serializer for NaiveDate {
             )))
     }
 
-    fn get_type_id(_fory: &Fory) -> i16 {
-        FieldType::DATE.into()
+    fn get_type_id(_fory: &Fory) -> u32 {
+        TypeId::LOCAL_DATE as u32
     }
 }
 

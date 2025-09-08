@@ -20,7 +20,7 @@ use crate::fory::Fory;
 use crate::resolver::context::ReadContext;
 use crate::resolver::context::WriteContext;
 use crate::serializer::Serializer;
-use crate::types::{FieldType, ForyGeneralList, SIZE_OF_REF_AND_TYPE};
+use crate::types::{ForyGeneralList, TypeId, SIZE_OF_REF_AND_TYPE};
 use std::collections::HashMap;
 use std::mem;
 
@@ -56,8 +56,8 @@ impl<T1: Serializer + Eq + std::hash::Hash, T2: Serializer> Serializer for HashM
         mem::size_of::<i32>()
     }
 
-    fn get_type_id(_fory: &Fory) -> i16 {
-        FieldType::MAP.into()
+    fn get_type_id(_fory: &Fory) -> u32 {
+        TypeId::MAP as u32
     }
 }
 

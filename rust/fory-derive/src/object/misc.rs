@@ -17,7 +17,18 @@
 
 use proc_macro2::TokenStream;
 use quote::quote;
+use std::sync::atomic::{AtomicU32, Ordering};
 use syn::Field;
+
+use super::util::{generic_tree_to_tokens, parse_generic_tree};
+
+// Global type ID counter that auto-grows from 0 at macro processing time
+static TYPE_ID_COUNTER: AtomicU32 = AtomicU32::new(0);
+
+/// Allocates a new unique type ID at macro processing time
+pub fn allocate_type_id() -> u32 {
+    TYPE_ID_COUNTER.fetch_add(1, Ordering::SeqCst)
+}
 
 fn hash(fields: &[&Field]) -> TokenStream {
     let props = fields.iter().map(|field| {
@@ -47,14 +58,16 @@ fn type_def(fields: &[&Field]) -> TokenStream {
     let field_infos = fields.iter().map(|field| {
         let ty = &field.ty;
         let name = format!("{}", field.ident.as_ref().expect("should be field name"));
+        let generic_tree = parse_generic_tree(ty);
+        let generic_token = generic_tree_to_tokens(&generic_tree, false);
         quote! {
-            fory_core::meta::FieldInfo::new(#name, <#ty as fory_core::serializer::Serializer>::get_type_id(fory))
+            fory_core::meta::FieldInfo::new(#name, #generic_token)
         }
     });
     quote! {
-        fn type_def(fory: &fory_core::fory::Fory) -> Vec<u8> {
+        fn type_def(fory: &fory_core::fory::Fory, layer_id: u32) -> Vec<u8> {
             fory_core::meta::TypeMeta::from_fields(
-                0,
+                layer_id,
                 vec![#(#field_infos),*]
             ).to_bytes().unwrap()
         }
@@ -70,10 +83,18 @@ pub fn gen_in_struct_impl(fields: &[&Field]) -> TokenStream {
     }
 }
 
-pub fn gen() -> TokenStream {
+pub fn gen(type_id: u32) -> TokenStream {
     quote! {
-            fn get_type_id(fory: &fory_core::fory::Fory) -> i16 {
-                fory.get_class_resolver().get_class_info(std::any::TypeId::of::<Self>()).get_type_id() as i16
-            }
+        fn get_type_id(fory: &fory_core::fory::Fory) -> u32 {
+            fory.get_type_resolver().get_type_id(&std::any::TypeId::of::<Self>(), #type_id)
+        }
+    }
+}
+
+pub fn gen_type_index(type_id: u32) -> TokenStream {
+    quote! {
+        fn type_index() -> u32 {
+            #type_id
+        }
     }
 }

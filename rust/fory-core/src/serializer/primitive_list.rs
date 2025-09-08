@@ -20,7 +20,7 @@ use crate::fory::Fory;
 use crate::resolver::context::ReadContext;
 use crate::resolver::context::WriteContext;
 use crate::serializer::Serializer;
-use crate::types::FieldType;
+use crate::types::TypeId;
 use std::mem;
 
 pub fn to_u8_slice<T>(slice: &[T]) -> &[u8] {
@@ -60,8 +60,8 @@ macro_rules! impl_primitive_vec {
                 mem::size_of::<i32>()
             }
 
-            fn get_type_id(_fory: &Fory) -> i16 {
-                ($field_type).into()
+            fn get_type_id(_fory: &Fory) -> u32 {
+                ($field_type) as u32
             }
         }
     };
@@ -77,8 +77,8 @@ impl Serializer for Vec<bool> {
         mem::size_of::<u8>()
     }
 
-    fn get_type_id(_fory: &Fory) -> i16 {
-        FieldType::ForyPrimitiveBoolArray.into()
+    fn get_type_id(_fory: &Fory) -> u32 {
+        TypeId::ForyPrimitiveBoolArray as u32
     }
 
     fn read(context: &mut ReadContext) -> Result<Self, Error> {
@@ -88,9 +88,9 @@ impl Serializer for Vec<bool> {
     }
 }
 
-impl_primitive_vec!(u8, u8, FieldType::BINARY);
-impl_primitive_vec!(i16, i16, FieldType::ForyPrimitiveShortArray);
-impl_primitive_vec!(i32, i32, FieldType::ForyPrimitiveIntArray);
-impl_primitive_vec!(i64, i64, FieldType::ForyPrimitiveLongArray);
-impl_primitive_vec!(f32, f32, FieldType::ForyPrimitiveFloatArray);
-impl_primitive_vec!(f64, f64, FieldType::ForyPrimitiveDoubleArray);
+impl_primitive_vec!(u8, u8, TypeId::BINARY);
+impl_primitive_vec!(i16, i16, TypeId::ForyPrimitiveShortArray);
+impl_primitive_vec!(i32, i32, TypeId::ForyPrimitiveIntArray);
+impl_primitive_vec!(i64, i64, TypeId::ForyPrimitiveLongArray);
+impl_primitive_vec!(f32, f32, TypeId::ForyPrimitiveFloatArray);
+impl_primitive_vec!(f64, f64, TypeId::ForyPrimitiveDoubleArray);

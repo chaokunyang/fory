@@ -20,7 +20,7 @@ use crate::fory::Fory;
 use crate::resolver::context::ReadContext;
 use crate::resolver::context::WriteContext;
 use crate::serializer::Serializer;
-use crate::types::FieldType;
+use crate::types::TypeId;
 use std::mem;
 
 impl Serializer for bool {
@@ -36,7 +36,7 @@ impl Serializer for bool {
         Ok(context.reader.u8() == 1)
     }
 
-    fn get_type_id(_fory: &Fory) -> i16 {
-        FieldType::BOOL.into()
+    fn get_type_id(_fory: &Fory) -> u32 {
+        TypeId::BOOL as u32
     }
 }

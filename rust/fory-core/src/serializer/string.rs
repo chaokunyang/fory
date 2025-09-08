@@ -20,7 +20,7 @@ use crate::fory::Fory;
 use crate::resolver::context::ReadContext;
 use crate::resolver::context::WriteContext;
 use crate::serializer::Serializer;
-use crate::types::{FieldType, ForyGeneralList};
+use crate::types::{ForyGeneralList, TypeId};
 use std::mem;
 
 impl Serializer for String {
@@ -38,8 +38,8 @@ impl Serializer for String {
         Ok(context.reader.string(len as usize))
     }
 
-    fn get_type_id(_fory: &Fory) -> i16 {
-        FieldType::STRING.into()
+    fn get_type_id(_fory: &Fory) -> u32 {
+        TypeId::STRING as u32
     }
 }
 

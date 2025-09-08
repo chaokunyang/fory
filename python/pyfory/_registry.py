@@ -66,6 +66,7 @@ from pyfory.serializer import (
     ObjectSerializer,
 )
 from pyfory.meta.metastring import MetaStringEncoder, MetaStringDecoder
+from pyfory.meta.meta_compressor import DeflaterMetaCompressor
 from pyfory.type import (
     TypeId,
     Int8Type,
@@ -154,6 +155,7 @@ class TypeResolver:
         "namespace_decoder",
         "typename_encoder",
         "typename_decoder",
+        "meta_compressor",
         "require_registration",
         "metastring_resolver",
         "language",
@@ -182,6 +184,7 @@ class TypeResolver:
         self.namespace_decoder = MetaStringDecoder(".", "_")
         self.typename_encoder = MetaStringEncoder("$", "_")
         self.typename_decoder = MetaStringDecoder("$", "_")
+        self.meta_compressor = DeflaterMetaCompressor()
 
     def initialize(self):
         self._initialize_xlang()
@@ -376,6 +379,9 @@ class TypeResolver:
         serializer: Serializer = None,
         internal: bool = False,
     ):
+        # Set default type_id when None, similar to _register_xtype
+        if type_id is None and typename is not None:
+            type_id = self._next_type_id()
         return self.__register_type(
             cls,
             type_id=type_id,
@@ -395,7 +401,7 @@ class TypeResolver:
         serializer: Serializer = None,
         internal: bool = False,
     ):
-        dynamic_type = type_id < 0
+        dynamic_type = type_id is not None and type_id < 0
         if not internal and serializer is None:
             serializer = self._create_serializer(cls)
         if typename is None:
@@ -468,6 +474,8 @@ class TypeResolver:
                 type_id = TypeId.NAMED_ENUM
             elif type(serializer) is PickleSerializer:
                 type_id = PickleSerializer.PICKLE_TYPE_ID
+            elif isinstance(serializer, FunctionSerializer):
+                type_id = TypeId.NAMED_EXT
             elif isinstance(serializer, (ObjectSerializer, StatefulSerializer, ReduceSerializer)):
                 type_id = TypeId.NAMED_EXT
             if not self.require_registration:
@@ -491,8 +499,8 @@ class TypeResolver:
                 break
         else:
             if cls is types.FunctionType:
-                # Use PickleSerializer for function types (including lambdas)
-                serializer = PickleSerializer(self.fory, cls)
+                # Use FunctionSerializer for function types (including lambdas)
+                serializer = FunctionSerializer(self.fory, cls)
             elif dataclasses.is_dataclass(cls):
                 serializer = DataClassSerializer(self.fory, cls)
             elif issubclass(cls, enum.Enum):
@@ -575,6 +583,17 @@ class TypeResolver:
             return typeinfo
         else:
             return self._type_id_to_typeinfo[type_id]
+
+    def get_typeinfo_by_id(self, type_id):
+        """Get typeinfo by type_id."""
+        return self._type_id_to_typeinfo[type_id]
+
+    def get_typeinfo_by_name(self, namespace, typename):
+        """Get typeinfo by namespace and typename."""
+        return self._named_type_to_typeinfo.get((namespace, typename))
+
+    def get_meta_compressor(self):
+        return self.meta_compressor
 
     def reset(self):
         pass

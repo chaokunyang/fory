@@ -1,5 +1,5 @@
 {
-  "name": "@foryjs/hps",
+  "name": "@apache-fory/hps",
   "version": "0.13.0.dev",
   "description": "Apache Fory™ nodejs high-performance suite",
   "main": "dist/index.js",

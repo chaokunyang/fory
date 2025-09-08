@@ -19,7 +19,9 @@
 
 
 # Print commands and their arguments as they are executed.
-set -x
+if [ "${DEPLOY_QUIET:-0}" != "1" ]; then
+    set -x
+fi
 
 # Cause the script to exit if a single command fails.
 set -e
@@ -44,16 +46,27 @@ bump_java_version() {
   python "$ROOT/ci/release.py" bump_version -l java -version "$1"
 }
 
-bump_py_version() {
+# Replicates the behavior of _update_python_version in ci/release.py
+parse_py_version() {
   local version="$1"
   if [ -z "$version" ]; then
     # Get the latest tag from the current Git repository
     version=$(git describe --tags --abbrev=0)
-    # Check if the tag starts with 'v' and strip it
-    if [[ $version == v* ]]; then
-      version="${version:1}"
-    fi
   fi
+  # Check if the tag starts with 'v' and strip it
+  if [[ $version == v* ]]; then
+    version="${version:1}"
+  fi
+  version="${version//-alpha/a}"
+  version="${version//-beta/b}"
+  version="${version//-rc/rc}"
+  version="${version//-/}"
+  echo "$version"
+}
+
+bump_py_version() {
+  local version
+  version=$(parse_py_version "$1")
   python "$ROOT/ci/release.py" bump_version -l python -version "$version"
 }
 
@@ -85,6 +98,19 @@ build_pyfory() {
     else
       $PYTHON_CMD setup.py bdist_wheel --dist-dir="$ROOT/dist"
     fi
+  elif [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" ]]; then
+
+    # Windows tends to drop alpha/beta markers - force it through setup.cfg
+    if [ -n "$GITHUB_REF_NAME" ]; then
+      version=$(parse_py_version "$GITHUB_REF_NAME")
+      echo "Using version from GITHUB_REF_NAME: $version"
+      echo "[metadata]" > setup.cfg
+      echo "version = $version" >> setup.cfg
+    fi
+
+    $PYTHON_CMD setup.py bdist_wheel --dist-dir="$ROOT/dist"
+    # Clean up
+    rm setup.cfg
   else
     $PYTHON_CMD setup.py bdist_wheel --dist-dir="$ROOT/dist"
   fi

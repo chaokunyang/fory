@@ -22,7 +22,6 @@ use anyhow::anyhow;
 
 use crate::meta::TypeMeta;
 use crate::resolver::meta_resolver::{MetaReaderResolver, MetaWriterResolver};
-use std::any::TypeId;
 use std::rc::Rc;
 
 pub struct WriteContext<'se> {
@@ -42,7 +41,7 @@ impl<'se> WriteContext<'se> {
         }
     }
 
-    pub fn push_meta(&mut self, type_id: TypeId) -> usize {
+    pub fn push_meta(&mut self, type_id: std::any::TypeId) -> usize {
         self.meta_resolver.push(type_id, self.fory)
     }
 
@@ -99,6 +98,16 @@ impl<'de, 'bf: 'de> ReadContext<'de, 'bf> {
 
     pub fn get_meta(&self, type_index: usize) -> &Rc<TypeMeta> {
         self.meta_resolver.get(type_index)
+    }
+
+    pub fn get_meta_by_type_id(&self, type_id: u32) -> Rc<TypeMeta> {
+        let type_defs: Vec<_> = self.meta_resolver.reading_type_defs.to_vec();
+        for type_def in type_defs.iter() {
+            if type_def.get_type_id() == type_id {
+                return type_def.clone();
+            }
+        }
+        unreachable!()
     }
 
     pub fn load_meta(&mut self, offset: usize) {

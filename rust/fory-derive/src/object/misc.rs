@@ -17,9 +17,18 @@
 
 use proc_macro2::TokenStream;
 use quote::quote;
+use std::sync::atomic::{AtomicU32, Ordering};
 use syn::Field;
 
 use super::util::{generic_tree_to_tokens, parse_generic_tree};
+
+// Global type ID counter that auto-grows from 0 at macro processing time
+static TYPE_ID_COUNTER: AtomicU32 = AtomicU32::new(0);
+
+/// Allocates a new unique type ID at macro processing time
+pub fn allocate_type_id() -> u32 {
+    TYPE_ID_COUNTER.fetch_add(1, Ordering::SeqCst)
+}
 
 fn hash(fields: &[&Field]) -> TokenStream {
     let props = fields.iter().map(|field| {
@@ -75,17 +84,23 @@ pub fn gen_in_struct_impl(fields: &[&Field]) -> TokenStream {
 }
 
 pub fn gen() -> TokenStream {
+    // Allocate a unique type ID at macro processing time
+    let type_id = allocate_type_id();
+
     quote! {
         fn get_type_id(fory: &fory_core::fory::Fory) -> u32 {
-            use std::sync::Once;
-            static mut TYPE_ID: u32 = 0u32;
-            static TYPE_ID_ONCE: Once = Once::new();
-            unsafe {
-                TYPE_ID_ONCE.call_once(|| {
-                    TYPE_ID = fory.get_type_resolver().get_type_info(std::any::TypeId::of::<Self>()).get_type_id();
-                });
-                TYPE_ID
-            }
+            fory.get_type_resolver().get_type_id(&std::any::TypeId::of::<Self>(), #type_id)
+        }
+    }
+}
+
+pub fn gen_type_index() -> TokenStream {
+    // Allocate a unique type ID at macro processing time
+    let type_id = allocate_type_id();
+
+    quote! {
+        fn type_index() -> u32 {
+            #type_id
         }
     }
 }

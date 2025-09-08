@@ -15,43 +15,51 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use fory_benchmarks::serializers::fury::FurySerializer;
-use fory_benchmarks::serializers::Serializer;
 use fory_benchmarks::models::simple::SimpleStruct;
 use fory_benchmarks::models::TestDataGenerator;
+use fory_benchmarks::serializers::fury::FurySerializer;
+use fory_benchmarks::serializers::Serializer;
 use std::hint::black_box;
 
 fn main() {
     println!("Starting Fury deserialization profiling...");
-    
+
     // Initialize the Fury serializer
     let fury_serializer = FurySerializer::new();
-    
+
     // Generate test data
     let simple_struct = SimpleStruct::generate_small();
     println!("Generated test struct: {:?}", simple_struct);
-    
+
     // Pre-serialize the data once
     let serialized_data = fury_serializer.serialize(&simple_struct).unwrap();
     println!("Serialized data size: {} bytes", serialized_data.len());
-    
+
     // Warm up - run a few iterations to get the code in cache
     for _ in 0..1000 {
-        let _: SimpleStruct = black_box(fury_serializer.deserialize(black_box(&serialized_data)).unwrap());
+        let _: SimpleStruct = black_box(
+            fury_serializer
+                .deserialize(black_box(&serialized_data))
+                .unwrap(),
+        );
     }
-    
+
     println!("Warmup complete. Starting main profiling loop...");
-    
+
     // Main profiling loop - run many iterations to get good profiling data
     const ITERATIONS: usize = 10_000_000;
     for i in 0..ITERATIONS {
-        let _: SimpleStruct = black_box(fury_serializer.deserialize(black_box(&serialized_data)).unwrap());
-        
+        let _: SimpleStruct = black_box(
+            fury_serializer
+                .deserialize(black_box(&serialized_data))
+                .unwrap(),
+        );
+
         // Print progress every million iterations
         if i % 1_000_000 == 0 && i > 0 {
             println!("Completed {} iterations", i);
         }
     }
-    
+
     println!("Profiling complete! Ran {} iterations", ITERATIONS);
 }

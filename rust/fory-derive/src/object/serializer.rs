@@ -52,10 +52,12 @@ pub fn derive_serializer(ast: &syn::DeriveInput) -> TokenStream {
     };
 
     let misc_token_stream = misc::gen();
+    let type_index_token_stream = misc::gen_type_index();
 
     let gen = quote! {
         impl fory_core::serializer::StructSerializer for #name {
             #type_def_token_stream
+            #type_index_token_stream
         }
         impl fory_core::types::ForyGeneralList for #name {}
         impl fory_core::serializer::Serializer for #name {

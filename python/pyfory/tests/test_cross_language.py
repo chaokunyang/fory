@@ -465,7 +465,7 @@ def test_serialize_simple_struct(data_file_path):
 @cross_language_test
 def test_register_by_id(data_file_path):
     fory = pyfory.Fory(language=pyfory.Language.XLANG, ref_tracking=True)
-    fory.register_type(ComplexObject2, type_id=1)
+    fory.register_type(ComplexObject2, type_id=100)
     obj = ComplexObject2(f1=True, f2={-1: 2})
     struct_round_back(data_file_path, fory, obj)
 

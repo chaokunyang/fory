@@ -505,7 +505,7 @@ public class CrossLanguageTest extends ForyTestBase {
             .withRefTracking(true)
             .requireClassRegistration(false)
             .build();
-    fory.register(ComplexObject2.class, 1);
+    fory.register(ComplexObject2.class, 100);
     ComplexObject2 obj2 = new ComplexObject2();
     obj2.f1 = true;
     obj2.f2 = new HashMap<>(ImmutableMap.of((byte) -1, 2));

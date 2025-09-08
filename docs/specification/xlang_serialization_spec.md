@@ -1,5 +1,5 @@
 ---
-title: Fory Xlang Serialization Format
+title: Apache Fory™ Xlang Serialization Format
 sidebar_position: 0
 id: fory_xlang_serialization_spec
 license: |
@@ -25,7 +25,7 @@ license: |
 >
 > - Version 0.1 - serialization spec formalized
 
-Fory xlang serialization is an automatic object serialization framework that supports reference and polymorphism.
+Apache Fory™ xlang serialization is an automatic object serialization framework that supports reference and polymorphism.
 Fory will convert an object from/to fory xlang serialization binary format.
 Fory has two core concepts for xlang serialization:
 

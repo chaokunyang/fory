@@ -549,7 +549,7 @@ class TypeResolver:
             else:
                 serializer = PickleSerializer(self.fory, cls)
         return serializer
-    
+
     def _set_struct_typeinfo(self, typeinfo):
         assert self.meta_share, "Meta share must be enabled"
         type_def = encode_typedef(self, typeinfo.cls)
@@ -561,7 +561,7 @@ class TypeResolver:
         if typeinfo is None:
             return False
         return TypeId.is_namespaced_type(typeinfo.type_id & 0xFF)
-    
+
     def is_registered_by_id(self, cls):
         typeinfo = self._types_info.get(cls)
         if typeinfo is None:
@@ -577,7 +577,7 @@ class TypeResolver:
         typeinfo = self._types_info.get(cls)
         assert typeinfo is not None, f"{cls} not registered"
         return typeinfo.type_id
-    
+
     def _load_metabytes_to_typeinfo(self, ns_metabytes, type_metabytes):
         typeinfo = self._ns_type_to_typeinfo.get((ns_metabytes, type_metabytes))
         if typeinfo is not None:
@@ -599,12 +599,12 @@ class TypeResolver:
             return
         type_id = typeinfo.type_id
         internal_type_id = type_id & 0xFF
-        
+
         # Check if meta share is enabled first
         if self.meta_share:
             self.write_shared_type_meta(buffer, typeinfo)
             return
-            
+
         buffer.write_varuint32(type_id)
         if TypeId.is_namespaced_type(internal_type_id):
             self.metastring_resolver.write_meta_string_bytes(buffer, typeinfo.namespace_bytes)
@@ -614,7 +614,7 @@ class TypeResolver:
         # Check if meta share is enabled first
         if self.meta_share:
             return self.read_shared_type_meta(buffer)
-            
+
         type_id = buffer.read_varuint32()
         internal_type_id = type_id & 0xFF
         if TypeId.is_namespaced_type(internal_type_id):
@@ -671,13 +671,13 @@ class TypeResolver:
         for type_def in writing_type_defs:
             # Just copy the encoded bytes directly
             buffer.write_bytes(type_def.encoded)
-        
+
     def read_type_defs(self, buffer):
         """Read all type definitions from the buffer."""
         meta_context = self.fory.serialization_context.meta_context
         if meta_context is None:
             return
-        
+
         num_type_defs = buffer.read_varuint32()
         for i in range(num_type_defs):
             # Read the header (first 8 bytes) to get the type ID
@@ -696,7 +696,7 @@ class TypeResolver:
             meta_context.add_read_type_info(type_info)
 
     def _build_type_info_from_typedef(self, type_def):
-        """Build TypeInfo from TypeDef using TypeDef's create_serializer method."""        
+        """Build TypeInfo from TypeDef using TypeDef's create_serializer method."""
         # Create serializer using TypeDef's create_serializer method
         serializer = type_def.create_serializer(self)
         ns_metastr = self.namespace_encoder.encode(type_def.namespace or "")

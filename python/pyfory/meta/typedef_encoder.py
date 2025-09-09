@@ -100,7 +100,7 @@ def encode_typedef(type_resolver, cls):
     if is_compressed:
         binary = compressed_binary
     # Prepend header
-    binary = prepend_header(binary, is_compressed, len(field_infos) > 0)    
+    binary = prepend_header(binary, is_compressed, len(field_infos) > 0)
     # Extract namespace and typename
     if type_resolver.is_registered_by_name(cls):
         namespace, typename = type_resolver.get_registered_name(cls)

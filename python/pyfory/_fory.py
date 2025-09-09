@@ -151,6 +151,7 @@ class Fory:
         self.type_resolver = TypeResolver(self, meta_share=compatbile)
         self.type_resolver.initialize()
         from pyfory._serialization import SerializationContext
+
         self.serialization_context = SerializationContext(scoped_meta_share_enabled=compatbile)
         self.buffer = Buffer.allocate(32)
         if not require_type_registration:
@@ -266,12 +267,12 @@ class Fory:
         if self.serialization_context.scoped_meta_share_enabled:
             type_defs_offset_pos = buffer.writer_index
             buffer.write_int32(-1)  # Reserve 4 bytes for type definitions offset
-        
+
         if self.language == Language.PYTHON:
             self.serialize_ref(buffer, obj)
         else:
             self.xserialize_ref(buffer, obj)
-        
+
         # Write type definitions at the end, similar to Java implementation
         if self.serialization_context.scoped_meta_share_enabled:
             meta_context = self.serialization_context.meta_context
@@ -280,7 +281,7 @@ class Fory:
                 current_pos = buffer.writer_index
                 buffer.put_int32(type_defs_offset_pos, current_pos - type_defs_offset_pos - 4)
                 self.type_resolver.write_type_defs(buffer)
-        
+
         self.reset_write()
         if buffer is not self.buffer:
             return buffer
@@ -391,7 +392,7 @@ class Fory:
             self._buffers = iter(buffers)
         else:
             assert buffers is None, "buffers should be null when the serialized stream is produced with buffer_callback null."
-        
+
         # Read type definitions at the start, similar to Java implementation
         if self.serialization_context.scoped_meta_share_enabled:
             relative_type_defs_offset = buffer.read_int32()
@@ -404,7 +405,7 @@ class Fory:
                 self.type_resolver.read_type_defs(buffer)
                 # Jump back to continue with object deserialization
                 buffer.reader_index = current_reader_index
-        
+
         if is_target_x_lang:
             obj = self.xdeserialize_ref(buffer)
         else:
@@ -524,8 +525,6 @@ class Fory:
     def reset(self):
         self.reset_write()
         self.reset_read()
-
-
 
 
 _ENABLE_TYPE_REGISTRATION_FORCIBLY = os.getenv("ENABLE_TYPE_REGISTRATION_FORCIBLY", "0") in {

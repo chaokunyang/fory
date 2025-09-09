@@ -449,7 +449,7 @@ class DataClassSerializer(Serializer):
             f'"""xwrite method for {self.type_}"""',
         ]
         if not self.fory.compatbile:
-             # Compute hash at generation time since we're in xlang mode
+            # Compute hash at generation time since we're in xlang mode
             if self._hash == 0:
                 self._hash = _get_hash(self.fory, self._field_names, self._type_hints)
             stmts.append(f"{buffer}.write_int32({self._hash})")
@@ -498,16 +498,20 @@ class DataClassSerializer(Serializer):
             # Compute hash at generation time since we're in xlang mode
             if self._hash == 0:
                 self._hash = _get_hash(self.fory, self._field_names, self._type_hints)
-            stmts.extend([
-                f"read_hash = {buffer}.read_int32()",
-                f"if read_hash != {self._hash}:",
-                f"""   raise TypeNotCompatibleError(
+            stmts.extend(
+                [
+                    f"read_hash = {buffer}.read_int32()",
+                    f"if read_hash != {self._hash}:",
+                    f"""   raise TypeNotCompatibleError(
                 f"Hash {{read_hash}} is not consistent with {self._hash} for type {self.type_}")""",
-            ])
-        stmts.extend([
-            f"{obj} = {obj_class}.__new__({obj_class})",
-            f"{ref_resolver}.reference({obj})",
-        ])
+                ]
+            )
+        stmts.extend(
+            [
+                f"{obj} = {obj_class}.__new__({obj_class})",
+                f"{ref_resolver}.reference({obj})",
+            ]
+        )
 
         if not self._has_slots:
             stmts.append(f"{obj_dict} = {obj}.__dict__")

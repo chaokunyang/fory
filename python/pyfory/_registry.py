@@ -557,12 +557,24 @@ class TypeResolver:
             return
         type_id = typeinfo.type_id
         internal_type_id = type_id & 0xFF
+        
+        # Check if meta share is enabled first
+        meta_context = self.fory.serialization_context.get_meta_context()
+        if meta_context is not None:
+            self.write_shared_type_meta(buffer, typeinfo)
+            return
+            
         buffer.write_varuint32(type_id)
         if TypeId.is_namespaced_type(internal_type_id):
             self.metastring_resolver.write_meta_string_bytes(buffer, typeinfo.namespace_bytes)
             self.metastring_resolver.write_meta_string_bytes(buffer, typeinfo.typename_bytes)
 
     def read_typeinfo(self, buffer):
+        # Check if meta share is enabled first
+        meta_context = self.fory.serialization_context.get_meta_context()
+        if meta_context is not None:
+            return self.read_shared_type_meta(buffer)
+            
         type_id = buffer.read_varuint32()
         internal_type_id = type_id & 0xFF
         if TypeId.is_namespaced_type(internal_type_id):
@@ -594,6 +606,92 @@ class TypeResolver:
 
     def get_meta_compressor(self):
         return self.meta_compressor
+
+    def write_shared_type_meta(self, buffer, typeinfo):
+        """Write shared type meta information."""
+        meta_context = self.fory.serialization_context.get_meta_context()
+        assert meta_context is not None, "Meta context must be set when meta share is enabled"
+        
+        type_id, is_new = meta_context.put_or_get_type_id(typeinfo.cls)
+        if not is_new:
+            # Type already sent, just write the ID
+            buffer.write_varuint32(type_id)
+        else:
+            # New type, write ID and store typeinfo for later use
+            buffer.write_varuint32(type_id)
+            # Store the typeinfo in meta context for deserialization
+            meta_context.set_read_type_info(type_id, typeinfo)
+
+    def read_shared_type_meta(self, buffer):
+        """Read shared type meta information."""
+        meta_context = self.fory.serialization_context.get_meta_context()
+        assert meta_context is not None, "Meta context must be set when meta share is enabled"
+        
+        type_id = buffer.read_varuint32()
+        typeinfo = meta_context.get_read_type_info(type_id)
+        if typeinfo is None:
+            # Need to read type definition
+            typeinfo = self._read_type_info_with_meta_share(meta_context, type_id)
+        return typeinfo
+
+    def _build_type_def(self, typeinfo):
+        """Build TypeDef for a TypeInfo."""
+        from pyfory.meta.typedef_encoder import encode_typedef
+        return encode_typedef(self, typeinfo.cls)
+
+    def _read_type_info_with_meta_share(self, meta_context, type_id):
+        """Read type info with meta share support."""
+        # First check if we already have the typeinfo cached
+        typeinfo = meta_context.get_read_type_info(type_id)
+        if typeinfo is not None:
+            return typeinfo
+        
+        # If not found, this is an error in our current implementation
+        raise ValueError(f"Type info not found for ID {type_id}")
+
+    def _create_type_info_from_def(self, type_def):
+        """Create TypeInfo from TypeDef."""
+        # This is a simplified implementation
+        # In practice, you'd need to create the appropriate serializer based on the type definition
+        return TypeInfo(
+            cls=type_def.name,  # This would need to be resolved to actual class
+            type_id=type_def.type_id,
+            serializer=None,  # Would be created based on type_def
+            namespace_bytes=None,
+            typename_bytes=None,
+            dynamic_type=False
+        )
+
+    def write_type_defs(self, buffer):
+        """Write all type definitions that need to be sent."""
+        meta_context = self.fory.serialization_context.get_meta_context()
+        if meta_context is None:
+            return
+        
+        writing_type_defs = meta_context.get_writing_type_defs()
+        buffer.write_varuint32(len(writing_type_defs))
+        
+        for type_def in writing_type_defs:
+            # Write type definition header (ID and size)
+            buffer.write_int64(type_def.id if hasattr(type_def, 'id') else 0)
+            buffer.write_bytes(type_def.encoded)
+        
+        meta_context.clear_writing_type_defs()
+
+    def read_type_defs(self, buffer):
+        """Read all type definitions from the buffer."""
+        meta_context = self.fory.serialization_context.get_meta_context()
+        if meta_context is None:
+            return
+        
+        num_type_defs = buffer.read_varuint32()
+        for i in range(num_type_defs):
+            # Read type definition header
+            type_def_id = buffer.read_int64()
+            # Read the encoded type definition
+            from pyfory.meta.typedef_decoder import decode_typedef
+            type_def = decode_typedef(buffer, self)
+            meta_context.add_read_type_def(type_def)
 
     def reset(self):
         pass

@@ -120,6 +120,7 @@ class Fory:
         language=Language.PYTHON,
         ref_tracking: bool = False,
         require_type_registration: bool = True,
+        meta_share: bool = False,
     ):
         """
         :param require_type_registration:
@@ -130,6 +131,10 @@ class Fory:
           Do not disable type registration if you can't ensure your environment are
           *indeed secure*. We are not responsible for security risks if
           you disable this option.
+        :param meta_share:
+         Whether to enable meta share mode for cross-language serialization.
+         When enabled, type definitions will be shared between serialization calls
+         to reduce overhead for repeated types.
         """
         self.language = language
         self.is_py = language == Language.PYTHON
@@ -145,7 +150,7 @@ class Fory:
         self.metastring_resolver = MetaStringResolver()
         self.type_resolver = TypeResolver(self)
         self.type_resolver.initialize()
-        self.serialization_context = SerializationContext()
+        self.serialization_context = SerializationContext(scoped_meta_share_enabled=meta_share)
         self.buffer = Buffer.allocate(32)
         if not require_type_registration:
             warnings.warn(
@@ -470,7 +475,7 @@ class Fory:
     def reset_write(self):
         self.ref_resolver.reset_write()
         self.type_resolver.reset_write()
-        self.serialization_context.reset()
+        self.serialization_context.reset_write()
         self.metastring_resolver.reset_write()
         self.pickler.clear_memo()
         self._buffer_callback = None
@@ -479,7 +484,7 @@ class Fory:
     def reset_read(self):
         self.ref_resolver.reset_read()
         self.type_resolver.reset_read()
-        self.serialization_context.reset()
+        self.serialization_context.reset_read()
         self.metastring_resolver.reset_write()
         self.unpickler = None
         self._buffers = None
@@ -498,10 +503,16 @@ class SerializationContext:
     object tree.
     """
 
-    __slots__ = ("objects",)
+    __slots__ = ("objects", "meta_context", "scoped_meta_share_enabled")
 
-    def __init__(self):
+    def __init__(self, scoped_meta_share_enabled: bool = False):
         self.objects = dict()
+        self.scoped_meta_share_enabled = scoped_meta_share_enabled
+        if scoped_meta_share_enabled:
+            from pyfory._serialization import MetaContext
+            self.meta_context = MetaContext()
+        else:
+            self.meta_context = None
 
     def add(self, key, obj):
         self.objects[id(key)] = obj
@@ -515,9 +526,45 @@ class SerializationContext:
     def get(self, key):
         return self.objects.get(id(key))
 
-    def reset(self):
+    def get_meta_context(self):
+        """Get the meta context for meta share mode."""
+        return self.meta_context
+
+    def set_meta_context(self, meta_context):
+        """
+        Set meta context, which can be used to share data across multiple serialization call.
+        Note that meta_context will be cleared after the serialization is finished.
+        Please set the context before every serialization if metaShare is enabled.
+        """
+        assert not self.scoped_meta_share_enabled, "Cannot set meta context when scoped meta share is enabled"
+        self.meta_context = meta_context
+
+    def reset_write(self):
+        """Reset write state."""
         if len(self.objects) > 0:
             self.objects.clear()
+        if self.scoped_meta_share_enabled and self.meta_context:
+            self.meta_context.reset_write()
+        elif not self.scoped_meta_share_enabled:
+            self.meta_context = None
+
+    def reset_read(self):
+        """Reset read state."""
+        if len(self.objects) > 0:
+            self.objects.clear()
+        if self.scoped_meta_share_enabled and self.meta_context:
+            self.meta_context.reset_read()
+        elif not self.scoped_meta_share_enabled:
+            self.meta_context = None
+
+    def reset(self):
+        """Reset both read and write state."""
+        if len(self.objects) > 0:
+            self.objects.clear()
+        if self.scoped_meta_share_enabled and self.meta_context:
+            self.meta_context.reset()
+        elif not self.scoped_meta_share_enabled:
+            self.meta_context = None
 
 
 _ENABLE_TYPE_REGISTRATION_FORCIBLY = os.getenv("ENABLE_TYPE_REGISTRATION_FORCIBLY", "0") in {

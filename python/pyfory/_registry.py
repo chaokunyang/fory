@@ -650,17 +650,7 @@ class TypeResolver:
     def write_shared_type_meta(self, buffer, typeinfo):
         """Write shared type meta information."""
         meta_context = self.fory.serialization_context.get_meta_context()
-        assert meta_context is not None, "Meta context must be set when meta share is enabled"
-        index = meta_context.add_writing_type(typeinfo.cls)
-        if index >= 0:
-            # Type already sent, just write the ID
-            buffer.write_varuint32(index)
-        else:
-            index = -index - 1
-            # New type, write ID and store typeinfo for later use
-            buffer.write_varuint32(index)
-            # Store the typeinfo in meta context for deserialization
-            meta_context.add_writing_type_def(index, typeinfo.type_def)
+        meta_context.write_typeinfo(buffer, typeinfo)
 
     def read_shared_type_meta(self, buffer):
         """Read shared type meta information."""
@@ -690,11 +680,12 @@ class TypeResolver:
         
         num_type_defs = buffer.read_varuint32()
         for i in range(num_type_defs):
-            # Read type ID first
+            # Read the header (first 8 bytes) to get the type ID
             header = buffer.read_int64()
             # Check if we already have this TypeDef cached
             type_info = self._meta_shared_typeinfo.get(header)
             if type_info is not None:
+                # Skip the rest of the TypeDef binary for faster performance
                 skip_typedef(buffer, header)
             else:
                 # Read the TypeDef and create TypeInfo

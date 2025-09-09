@@ -50,7 +50,6 @@ def skip_typedef(buffer: Buffer, header) -> None:
     """
     Skip a TypeDef from the buffer.
     """
-    header = buffer.read_int64()    
     # Extract components from header
     meta_size = header & META_SIZE_MASKS
     # If meta size is at maximum, read additional size

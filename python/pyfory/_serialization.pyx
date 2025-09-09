@@ -446,11 +446,13 @@ cdef class TypeResolver:
         # hash -> TypeInfo
         flat_hash_map[pair[int64_t, int64_t], PyObject *] _c_meta_hash_to_typeinfo
         MetaStringResolver meta_string_resolver
+        c_bool meta_share
         SerializationContext serialization_context
 
     def __init__(self, fory, meta_share=False):
         self.fory = fory
         self.metastring_resolver = fory.metastring_resolver
+        self.meta_share = meta_share
         from pyfory._registry import TypeResolver
         self._resolver = TypeResolver(fory, meta_share=meta_share)
         self.serialization_context = fory.serialization_context
@@ -609,16 +611,7 @@ cdef class TypeResolver:
         """Write shared type meta information."""
         meta_context = self.serialization_context.get_meta_context()
         assert meta_context is not None, "Meta context must be set when meta share is enabled"
-        index = meta_context.add_writing_type(typeinfo.cls)
-        if index >= 0:
-            # Type already sent, just write the ID
-            buffer.write_varuint32(index)
-        else:
-            index = -index - 1
-            # New type, write ID and store typeinfo for later use
-            buffer.write_varuint32(index)
-            # Store the typeinfo in meta context for deserialization
-            meta_context.add_writing_type_def(index, typeinfo.type_def)
+        meta_context.write_typeinfo(buffer, typeinfo)
 
     cpdef TypeInfo read_shared_type_meta(self, Buffer buffer):
         """Read shared type meta information."""
@@ -661,26 +654,25 @@ cdef class MetaContext:
         flat_hash_map[uint64_t, int32_t] _c_type_map   
         
         # Counter for assigning new IDs
-        int32_t _next_id
         list _writing_type_defs
         list _read_type_infos
     
     def __cinit__(self):
-        self._next_id = 0
         self._writing_type_defs = []
         self._read_type_infos = []
     
-    cpdef inline int32_t add_writing_type(self, typeinfo):
+    cpdef inline int32_t write_typeinfo(self, Buffer buffer, typeinfo):
         """Add a type definition to the writing queue."""
         type_cls = typeinfo.cls
         cdef uint64_t type_addr = <uint64_t> <PyObject *> type_cls
         cdef flat_hash_map[uint64_t, int32_t].iterator it = self._c_type_map.find(type_addr)
         if it != self._c_type_map.end():
-            return deref(it).second
+            buffer.write_varuint32(deref(it).second)
         
-        self._c_type_map[type_addr] = self._next_id
-        self._next_id += 1
-        type_def = type_info.type_def
+        cdef index = self._c_type_map.size()
+        buffer.write_varuint32(index)
+        self._c_type_map[type_addr] = index
+        type_def = typeinfo.type_def
         self._writing_type_defs.append(type_def)
 
     cpdef inline list get_writing_type_defs(self):
@@ -691,7 +683,6 @@ cdef class MetaContext:
         """Reset write state."""
         self._writing_type_defs.clear()
         self._c_type_map.clear()
-        self._next_id = 0
     
     cpdef inline add_read_type_info(self, type_info):
         """Add a type info read from peer."""

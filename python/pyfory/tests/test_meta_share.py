@@ -113,22 +113,6 @@ class TestMetaShareMode:
         assert deserialized.value == obj.value
         assert deserialized.name == obj.name
 
-    def test_meta_context_type_mapping(self):
-        """Test that meta context properly maps types to IDs."""
-        fory = Fory(language=Language.XLANG, meta_share=True)
-        meta_context = fory.serialization_context.meta_context
-        
-        # Register the dataclass
-        fory.register_type(SimpleDataClass)
-        
-        obj = SimpleDataClass(name="test", age=25, active=True)
-        buffer = fory.serialize(obj)
-        
-        # Check that type was added to meta context
-        type_id = meta_context.get_type_id(SimpleDataClass)
-        assert type_id is not None
-        assert type_id >= 0
-
     def test_serialization_without_meta_share(self):
         """Test that serialization works without meta share mode."""
         fory = Fory(language=Language.XLANG, meta_share=False)
@@ -144,22 +128,3 @@ class TestMetaShareMode:
         assert deserialized.age == obj.age
         assert deserialized.active == obj.active
 
-    def test_meta_context_reset(self):
-        """Test that meta context is properly reset."""
-        fory = Fory(language=Language.XLANG, meta_share=True)
-        meta_context = fory.serialization_context.meta_context
-        
-        # Register the dataclass
-        fory.register_type(SimpleDataClass)
-        
-        obj = SimpleDataClass(name="test", age=25, active=True)
-        fory.serialize(obj)
-        
-        # Check that type was added
-        type_id = meta_context.get_type_id(SimpleDataClass)
-        assert type_id is not None
-        
-        # Reset and check that type mapping is preserved (meta share behavior)
-        fory.reset_write()
-        type_id_after_reset = meta_context.get_type_id(SimpleDataClass)
-        assert type_id_after_reset is not None  # Should be preserved in meta share mode

@@ -150,6 +150,7 @@ class Fory:
         self.metastring_resolver = MetaStringResolver()
         self.type_resolver = TypeResolver(self)
         self.type_resolver.initialize()
+        from pyfory._serialization import SerializationContext
         self.serialization_context = SerializationContext(scoped_meta_share_enabled=meta_share)
         self.buffer = Buffer.allocate(32)
         if not require_type_registration:
@@ -525,76 +526,6 @@ class Fory:
         self.reset_read()
 
 
-class SerializationContext:
-    """
-    A context is used to add some context-related information, so that the
-    serializers can setup relation between serializing different objects.
-    The context will be reset after finished serializing/deserializing the
-    object tree.
-    """
-
-    __slots__ = ("objects", "meta_context", "scoped_meta_share_enabled")
-
-    def __init__(self, scoped_meta_share_enabled: bool = False):
-        self.objects = dict()
-        self.scoped_meta_share_enabled = scoped_meta_share_enabled
-        if scoped_meta_share_enabled:
-            from pyfory._serialization import MetaContext
-            self.meta_context = MetaContext()
-        else:
-            self.meta_context = None
-
-    def add(self, key, obj):
-        self.objects[id(key)] = obj
-
-    def __contains__(self, key):
-        return id(key) in self.objects
-
-    def __getitem__(self, key):
-        return self.objects[id(key)]
-
-    def get(self, key):
-        return self.objects.get(id(key))
-
-    def get_meta_context(self):
-        """Get the meta context for meta share mode."""
-        return self.meta_context
-
-    def set_meta_context(self, meta_context):
-        """
-        Set meta context, which can be used to share data across multiple serialization call.
-        Note that meta_context will be cleared after the serialization is finished.
-        Please set the context before every serialization if metaShare is enabled.
-        """
-        assert not self.scoped_meta_share_enabled, "Cannot set meta context when scoped meta share is enabled"
-        self.meta_context = meta_context
-
-    def reset_write(self):
-        """Reset write state."""
-        if len(self.objects) > 0:
-            self.objects.clear()
-        if self.scoped_meta_share_enabled and self.meta_context:
-            self.meta_context.reset_write()
-        elif not self.scoped_meta_share_enabled:
-            self.meta_context = None
-
-    def reset_read(self):
-        """Reset read state."""
-        if len(self.objects) > 0:
-            self.objects.clear()
-        if self.scoped_meta_share_enabled and self.meta_context:
-            self.meta_context.reset_read()
-        elif not self.scoped_meta_share_enabled:
-            self.meta_context = None
-
-    def reset(self):
-        """Reset both read and write state."""
-        if len(self.objects) > 0:
-            self.objects.clear()
-        if self.scoped_meta_share_enabled and self.meta_context:
-            self.meta_context.reset()
-        elif not self.scoped_meta_share_enabled:
-            self.meta_context = None
 
 
 _ENABLE_TYPE_REGISTRATION_FORCIBLY = os.getenv("ENABLE_TYPE_REGISTRATION_FORCIBLY", "0") in {

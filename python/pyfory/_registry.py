@@ -649,12 +649,12 @@ class TypeResolver:
 
     def write_shared_type_meta(self, buffer, typeinfo):
         """Write shared type meta information."""
-        meta_context = self.fory.serialization_context.get_meta_context()
+        meta_context = self.fory.serialization_context.meta_context
         meta_context.write_typeinfo(buffer, typeinfo)
 
     def read_shared_type_meta(self, buffer):
         """Read shared type meta information."""
-        meta_context = self.fory.serialization_context.get_meta_context()
+        meta_context = self.fory.serialization_context.meta_context
         assert meta_context is not None, "Meta context must be set when meta share is enabled"
         type_id = buffer.read_varuint32()
         typeinfo = meta_context.get_read_type_info(type_id)
@@ -663,7 +663,7 @@ class TypeResolver:
 
     def write_type_defs(self, buffer):
         """Write all type definitions that need to be sent."""
-        meta_context = self.fory.serialization_context.get_meta_context()
+        meta_context = self.fory.serialization_context.meta_context
         if meta_context is None:
             return
         writing_type_defs = meta_context.get_writing_type_defs()
@@ -674,7 +674,7 @@ class TypeResolver:
         
     def read_type_defs(self, buffer):
         """Read all type definitions from the buffer."""
-        meta_context = self.fory.serialization_context.get_meta_context()
+        meta_context = self.fory.serialization_context.meta_context
         if meta_context is None:
             return
         

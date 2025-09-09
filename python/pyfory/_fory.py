@@ -274,7 +274,7 @@ class Fory:
         
         # Write type definitions at the end, similar to Java implementation
         if self.serialization_context.scoped_meta_share_enabled:
-            meta_context = self.serialization_context.get_meta_context()
+            meta_context = self.serialization_context.meta_context
             if meta_context is not None and len(meta_context.get_writing_type_defs()) > 0:
                 # Update the offset to point to current position
                 current_pos = buffer.writer_index

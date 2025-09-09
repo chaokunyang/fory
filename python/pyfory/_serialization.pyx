@@ -609,13 +609,13 @@ cdef class TypeResolver:
 
     cpdef write_shared_type_meta(self, Buffer buffer, TypeInfo typeinfo):
         """Write shared type meta information."""
-        meta_context = self.serialization_context.get_meta_context()
+        meta_context = self.serialization_context.meta_context
         assert meta_context is not None, "Meta context must be set when meta share is enabled"
         meta_context.write_typeinfo(buffer, typeinfo)
 
     cpdef TypeInfo read_shared_type_meta(self, Buffer buffer):
         """Read shared type meta information."""
-        meta_context = self.serialization_context.get_meta_context()
+        meta_context = self.serialization_context.meta_context
         assert meta_context is not None, "Meta context must be set when meta share is enabled"
         type_id = buffer.read_varuint32()
         typeinfo = meta_context.get_read_type_info(type_id)
@@ -712,23 +712,15 @@ cdef class MetaContext:
 cdef class SerializationContext:
     cdef dict objects
     cdef readonly bint scoped_meta_share_enabled
-    cdef object _meta_context
+    cdef public object meta_context
 
     def __init__(self, scoped_meta_share_enabled: bool = False):
         self.objects = dict()
         self.scoped_meta_share_enabled = scoped_meta_share_enabled
         if scoped_meta_share_enabled:
-            self._meta_context = MetaContext()
+            self.meta_context = MetaContext()
         else:
-            self._meta_context = None
-
-    @property
-    def meta_context(self):
-        return self._meta_context
-    
-    @meta_context.setter
-    def meta_context(self, value):
-        self._meta_context = value
+            self.meta_context = None
 
     def add(self, key, obj):
         self.objects[id(key)] = obj
@@ -742,24 +734,21 @@ cdef class SerializationContext:
     def get(self, key):
         return self.objects.get(id(key))
 
-    def get_meta_context(self):
-        return self._meta_context
-
-    def reset(self):
+    cpdef reset(self):
         if len(self.objects) > 0:
             self.objects.clear()
 
-    def reset_write(self):
+    cpdef reset_write(self):
         if len(self.objects) > 0:
             self.objects.clear()
-        if self.scoped_meta_share_enabled and self._meta_context is not None:
-            self._meta_context.reset_write()
+        if self.scoped_meta_share_enabled and self.meta_context is not None:
+            self.meta_context.reset_write()
 
-    def reset_read(self):
+    cpdef reset_read(self):
         if len(self.objects) > 0:
             self.objects.clear()
-        if self.scoped_meta_share_enabled and self._meta_context is not None:
-            self._meta_context.reset_read()
+        if self.scoped_meta_share_enabled and self.meta_context is not None:
+            self.meta_context.reset_read()
 
 
 @cython.final
@@ -812,9 +801,9 @@ cdef class Fory:
         self.ref_resolver = MapRefResolver(ref_tracking)
         self.is_py = self.language == Language.PYTHON
         self.metastring_resolver = MetaStringResolver()
-        self.type_resolver = TypeResolver(self)
-        self.type_resolver.initialize()
         self.serialization_context = SerializationContext(scoped_meta_share_enabled=compatbile)
+        self.type_resolver = TypeResolver(self, meta_share=compatbile)
+        self.type_resolver.initialize()
         self.buffer = Buffer.allocate(32)
         if not require_type_registration:
             warnings.warn(
@@ -927,7 +916,7 @@ cdef class Fory:
         
         # Write type definitions at the end, similar to Java implementation
         if self.serialization_context.scoped_meta_share_enabled:
-            meta_context = self.serialization_context.get_meta_context()
+            meta_context = self.serialization_context.meta_context
             if meta_context is not None and len(meta_context.get_writing_type_defs()) > 0:
                 # Update the offset to point to current position
                 current_pos = buffer.writer_index

@@ -633,8 +633,7 @@ cdef class TypeResolver:
         buffer.write_varuint32(len(writing_type_defs))
         
         for type_def in writing_type_defs:
-            # Write type definition header (ID and size)
-            buffer.write_int64(type_def.id if hasattr(type_def, 'id') else 0)
+            # Just copy the encoded bytes directly
             buffer.write_bytes(type_def.encoded)
         
         meta_context.clear_writing_type_defs()
@@ -647,9 +646,7 @@ cdef class TypeResolver:
         
         num_type_defs = buffer.read_varuint32()
         for i in range(num_type_defs):
-            # Read type definition header
-            type_def_id = buffer.read_int64()
-            # Read the encoded type definition
+            # Read the encoded type definition directly
             from pyfory.meta.typedef_decoder import decode_typedef
             type_def = decode_typedef(buffer, self._resolver)
             meta_context.add_read_type_def(type_def)

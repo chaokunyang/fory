@@ -423,6 +423,9 @@ class TypeResolver:
             if type_id not in self._type_id_to_typeinfo or not internal:
                 self._type_id_to_typeinfo[type_id] = typeinfo
         self._types_info[cls] = typeinfo
+
+        if self.meta_share and isinstance(serializer, DataClassSerializer):
+            self._set_struct_typeinfo(typeinfo)
         return typeinfo
 
     def _next_type_id(self):
@@ -502,7 +505,7 @@ class TypeResolver:
                 # Use FunctionSerializer for function types (including lambdas)
                 serializer = FunctionSerializer(self.fory, cls)
             elif dataclasses.is_dataclass(cls):
-                serializer = DataClassSerializer(self.fory, cls)
+                serializer = DataClassSerializer(self.fory, cls, xlang=not self.fory.is_py)
             elif issubclass(cls, enum.Enum):
                 serializer = EnumSerializer(self.fory, cls)
             elif (hasattr(cls, "__reduce__") and cls.__reduce__ is not object.__reduce__) or (
@@ -535,7 +538,36 @@ class TypeResolver:
             else:
                 serializer = PickleSerializer(self.fory, cls)
         return serializer
+    
+    def _set_struct_typeinfo(self, typeinfo):
+        assert self.meta_share, "Meta share must be enabled"
+        from pyfory.meta.typedef_encoder import encode_typedef
+        type_def = encode_typedef(self, typeinfo.cls)
+        typeinfo.serializer = type_def.create_serializer(self)
+        typeinfo.type_def = type_def
 
+    def is_registered_by_name(self, cls):
+        typeinfo = self._types_info.get(cls)
+        if typeinfo is None:
+            return False
+        return TypeId.is_namespaced_type(typeinfo.type_id & 0xFF)
+    
+    def is_registered_by_id(self, cls):
+        typeinfo = self._types_info.get(cls)
+        if typeinfo is None:
+            return False
+        return not TypeId.is_namespaced_type(typeinfo.type_id & 0xFF)
+
+    def get_registered_name(self, cls):
+        typeinfo = self._types_info.get(cls)
+        assert typeinfo is not None, f"{cls} not registered"
+        return typeinfo.decode_namespace(), typeinfo.decode_typename()
+
+    def get_registered_id(self, cls):
+        typeinfo = self._types_info.get(cls)
+        assert typeinfo is not None, f"{cls} not registered"
+        return typeinfo.type_id
+    
     def _load_metabytes_to_typeinfo(self, ns_metabytes, type_metabytes):
         typeinfo = self._ns_type_to_typeinfo.get((ns_metabytes, type_metabytes))
         if typeinfo is not None:
@@ -648,19 +680,6 @@ class TypeResolver:
         
         # If not found, this is an error in our current implementation
         raise ValueError(f"Type info not found for ID {type_id}")
-
-    def _create_type_info_from_def(self, type_def):
-        """Create TypeInfo from TypeDef."""
-        # This is a simplified implementation
-        # In practice, you'd need to create the appropriate serializer based on the type definition
-        return TypeInfo(
-            cls=type_def.name,  # This would need to be resolved to actual class
-            type_id=type_def.type_id,
-            serializer=None,  # Would be created based on type_def
-            namespace_bytes=None,
-            typename_bytes=None,
-            dynamic_type=False
-        )
 
     def write_type_defs(self, buffer):
         """Write all type definitions that need to be sent."""

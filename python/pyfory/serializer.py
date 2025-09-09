@@ -24,6 +24,7 @@ import os
 import pickle
 import types
 import typing
+from typing_extensions import List
 import warnings
 from weakref import WeakValueDictionary
 
@@ -297,21 +298,22 @@ from pyfory._struct import _get_hash, _sort_fields, ComplexTypeVisitor
 
 
 class DataClassSerializer(Serializer):
-    def __init__(self, fory, clz: type, xlang: bool = False):
+    def __init__(self, fory, clz: type, xlang: bool = False, field_names: List[str] = None, serializers: List[Serializer] = None):
         super().__init__(fory, clz)
         self._xlang = xlang
         # This will get superclass type hints too.
         self._type_hints = typing.get_type_hints(clz)
-        self._field_names = self._get_field_names(clz)
+        self._field_names = field_names or self._get_field_names(clz)
         self._has_slots = hasattr(clz, "__slots__")
 
         if self._xlang:
-            self._serializers = [None] * len(self._field_names)
-            visitor = ComplexTypeVisitor(fory)
-            for index, key in enumerate(self._field_names):
-                serializer = infer_field(key, self._type_hints[key], visitor, types_path=[])
-                self._serializers[index] = serializer
-            self._field_names, self._serializers = _sort_fields(fory.type_resolver, self._field_names, self._serializers)
+            self._serializers = serializers or [None] * len(self._field_names)
+            if serializers is None:
+                visitor = ComplexTypeVisitor(fory)
+                for index, key in enumerate(self._field_names):
+                    serializer = infer_field(key, self._type_hints[key], visitor, types_path=[])
+                    self._serializers[index] = serializer
+                self._field_names, self._serializers = _sort_fields(fory.type_resolver, self._field_names, self._serializers)
             self._hash = 0  # Will be computed on first xwrite/xread
             self._generated_xwrite_method = self._gen_xwrite_method()
             self._generated_xread_method = self._gen_xread_method()

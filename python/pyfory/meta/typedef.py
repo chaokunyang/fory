@@ -43,8 +43,9 @@ FIELD_NAME_ENCODINGS = [Encoding.UTF_8, Encoding.LOWER_UPPER_DIGIT_SPECIAL, Enco
 
 
 class TypeDef:
-    def __init__(self, name: str, type_id: int, fields: List["FieldInfo"], encoded: bytes = None, is_compressed: bool = False):
+    def __init__(self, name: str, cls: type, type_id: int, fields: List["FieldInfo"], encoded: bytes = None, is_compressed: bool = False):
         self.name = name
+        self.cls = cls
         self.type_id = type_id
         self.fields = fields
         self.encoded = encoded
@@ -54,8 +55,16 @@ class TypeDef:
         serializers = [field_info.field_type.create_serializer(resolver) for field_info in self.fields]
         return serializers
 
+    def get_field_names(self):
+        return [field_info.name for field_info in self.fields]
+
+    def create_serializer(self, resolver):
+        from pyfory.serializer import DataClassSerializer
+        fory = resolver.fory
+        return DataClassSerializer(fory, self.cls, xlang=not fory.is_py, field_names=self.get_field_names(), serializers=self.create_fields_serializer(resolver))
+
     def __repr__(self):
-        return f"TypeDef(name={self.name}, type_id={self.type_id}, fields={self.fields}, is_compressed={self.is_compressed})"
+        return f"TypeDef(name={self.name}, cls={self.cls}, type_id={self.type_id}, fields={self.fields}, is_compressed={self.is_compressed})"
 
 
 class FieldInfo:

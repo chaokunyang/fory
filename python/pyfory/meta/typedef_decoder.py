@@ -36,7 +36,7 @@ from pyfory.meta.typedef import (
     NUM_HASH_BITS,
     FIELD_NAME_ENCODINGS,
 )
-from pyfory.type import TypeId
+from pyfory.type import TypeId, record_class_factory
 from pyfory.meta.metastring import MetaStringDecoder, Encoding
 
 
@@ -90,6 +90,7 @@ def decode_typedef(buffer: Buffer, resolver) -> TypeDef:
     # Check if registered by name
     is_registered_by_name = (meta_header & REGISTER_BY_NAME_FLAG) != 0
 
+    type_cls = None
     # Read type info
     if is_registered_by_name:
         namespace = read_namespace(meta_buffer)
@@ -105,15 +106,20 @@ def decode_typedef(buffer: Buffer, resolver) -> TypeDef:
     else:
         type_id = meta_buffer.read_varuint32()
         type_info = resolver.get_typeinfo_by_id(type_id)
-        name = type_info.cls.__name__
-
+        if type_info is not None:
+            type_cls = type_info.cls
+            name = type_info.cls.__name__
+        else:
+            name = f"fory.Nonexistent{type_id}"
     # Read fields info if present
     field_infos = []
     if has_fields_meta:
         field_infos = read_fields_info(meta_buffer, resolver, name, num_fields)
+    if type_cls is None:
+        type_cls = record_class_factory(name, [field_info.name for field_info in field_infos])
 
     # Create TypeDef object
-    return TypeDef(name, type_id, field_infos, meta_data, is_compressed)
+    return TypeDef(name, type_cls, type_id, field_infos, meta_data, is_compressed)
 
 
 def read_namespace(buffer: Buffer) -> str:

@@ -399,6 +399,7 @@ cdef class TypeInfo:
     cdef public MetaStringBytes namespace_bytes
     cdef public MetaStringBytes typename_bytes
     cdef public c_bool dynamic_type
+    cdef public object type_def
 
     def __init__(
             self,
@@ -408,6 +409,7 @@ cdef class TypeInfo:
             namespace_bytes: MetaStringBytes = None,
             typename_bytes: MetaStringBytes = None,
             dynamic_type: bool = False,
+            type_def: object = None
     ):
         self.cls = cls
         self.type_id = type_id
@@ -415,6 +417,7 @@ cdef class TypeInfo:
         self.namespace_bytes = namespace_bytes
         self.typename_bytes = typename_bytes
         self.dynamic_type = dynamic_type
+        self.type_def = type_def
 
     def __repr__(self):
         return f"TypeInfo(cls={self.cls}, type_id={self.type_id}, " \
@@ -527,6 +530,18 @@ cdef class TypeResolver:
             self._c_types_info[<uintptr_t> <PyObject *> cls] = <PyObject *> type_info
             self._populate_typeinfo(type_info)
             return type_info
+    
+    def is_registered_by_name(self, cls):
+        return self._resolver.is_registered_by_name(cls)
+    
+    def is_registered_by_id(self, cls):
+        return self._resolver.is_registered_by_id(cls)
+
+    def get_registered_name(self, cls):
+        return self._resolver.get_registered_name(cls)
+
+    def get_registered_id(self, cls):
+        return self._resolver.get_registered_id(cls)
 
     cdef inline TypeInfo _load_bytes_to_typeinfo(
             self, int32_t type_id, MetaStringBytes ns_metabytes, MetaStringBytes type_metabytes):

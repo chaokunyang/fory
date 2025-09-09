@@ -260,10 +260,26 @@ class Fory:
             set_bit(buffer, mask_index, 3)
         else:
             clear_bit(buffer, mask_index, 3)
+        # Reserve space for type definitions offset, similar to Java implementation
+        type_defs_offset_pos = None
+        if self.serialization_context.scoped_meta_share_enabled:
+            type_defs_offset_pos = buffer.writer_index
+            buffer.write_int32(-1)  # Reserve 4 bytes for type definitions offset
+        
         if self.language == Language.PYTHON:
             self.serialize_ref(buffer, obj)
         else:
             self.xserialize_ref(buffer, obj)
+        
+        # Write type definitions at the end, similar to Java implementation
+        if self.serialization_context.scoped_meta_share_enabled:
+            meta_context = self.serialization_context.get_meta_context()
+            if meta_context is not None and len(meta_context.get_writing_type_defs()) > 0:
+                # Update the offset to point to current position
+                current_pos = buffer.writer_index
+                buffer.put_int32(type_defs_offset_pos, current_pos - type_defs_offset_pos - 4)
+                self.type_resolver.write_type_defs(buffer)
+        
         self.reset_write()
         if buffer is not self.buffer:
             return buffer
@@ -374,6 +390,20 @@ class Fory:
             self._buffers = iter(buffers)
         else:
             assert buffers is None, "buffers should be null when the serialized stream is produced with buffer_callback null."
+        
+        # Read type definitions at the start, similar to Java implementation
+        if self.serialization_context.scoped_meta_share_enabled:
+            relative_type_defs_offset = buffer.read_int32()
+            if relative_type_defs_offset != -1:
+                # Save current reader position
+                current_reader_index = buffer.reader_index
+                # Jump to type definitions
+                buffer.reader_index = current_reader_index + relative_type_defs_offset
+                # Read type definitions
+                self.type_resolver.read_type_defs(buffer)
+                # Jump back to continue with object deserialization
+                buffer.reader_index = current_reader_index
+        
         if is_target_x_lang:
             obj = self.xdeserialize_ref(buffer)
         else:

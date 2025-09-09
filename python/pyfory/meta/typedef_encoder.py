@@ -125,7 +125,7 @@ def prepend_header(buffer: bytes, is_compressed: bool, has_fields_meta: bool):
         result.write_varuint32(meta_size - META_SIZE_MASKS)
 
     result.write_bytes(buffer)
-    return result
+    return result.to_bytes()
 
 
 def write_namespace(buffer: Buffer, namespace: str):

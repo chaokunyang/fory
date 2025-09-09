@@ -98,6 +98,7 @@ class Fory:
     __slots__ = (
         "language",
         "is_py",
+        "compatbile",
         "ref_tracking",
         "ref_resolver",
         "type_resolver",
@@ -113,14 +114,13 @@ class Fory:
         "_unsupported_objects",
         "_peer_language",
     )
-    serialization_context: "SerializationContext"
 
     def __init__(
         self,
         language=Language.PYTHON,
         ref_tracking: bool = False,
         require_type_registration: bool = True,
-        meta_share: bool = False,
+        compatbile: bool = False,
     ):
         """
         :param require_type_registration:
@@ -131,14 +131,14 @@ class Fory:
           Do not disable type registration if you can't ensure your environment are
           *indeed secure*. We are not responsible for security risks if
           you disable this option.
-        :param meta_share:
-         Whether to enable meta share mode for cross-language serialization.
-         When enabled, type definitions will be shared between serialization calls
-         to reduce overhead for repeated types.
+        :param compatbile:
+         Whether to enable compatbile mode for cross-language serialization.
+         When enabled, type forward/backward compatibility for struct fields will be enabled.
         """
         self.language = language
         self.is_py = language == Language.PYTHON
         self.require_type_registration = _ENABLE_TYPE_REGISTRATION_FORCIBLY or require_type_registration
+        self.compatbile = compatbile
         self.ref_tracking = ref_tracking
         if self.ref_tracking:
             self.ref_resolver = MapRefResolver()
@@ -148,10 +148,10 @@ class Fory:
         from pyfory._registry import TypeResolver
 
         self.metastring_resolver = MetaStringResolver()
-        self.type_resolver = TypeResolver(self, meta_share=meta_share)
+        self.type_resolver = TypeResolver(self, meta_share=compatbile)
         self.type_resolver.initialize()
         from pyfory._serialization import SerializationContext
-        self.serialization_context = SerializationContext(scoped_meta_share_enabled=meta_share)
+        self.serialization_context = SerializationContext(scoped_meta_share_enabled=compatbile)
         self.buffer = Buffer.allocate(32)
         if not require_type_registration:
             warnings.warn(

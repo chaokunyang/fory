@@ -80,10 +80,11 @@ def encode_typedef(type_resolver, cls):
         namespace, typename = type_resolver.get_registered_name(cls)
         write_namespace(buffer, namespace)
         write_typename(buffer, typename)
+        type_id = TypeId.NAMED_COMPATIBLE_STRUCT
     else:
         assert type_resolver.is_registered_by_id(cls), "Class must be registered by name or id"
-        buffer.write_varuint32(type_resolver.get_registered_id(cls))
-
+        type_id = type_resolver.get_registered_id(cls)
+        buffer.write_varuint32(type_id)
     # Update header byte
     buffer.put_uint8(0, header)
 
@@ -99,8 +100,8 @@ def encode_typedef(type_resolver, cls):
     if is_compressed:
         binary = compressed_binary
     # Prepend header
-    binary = prepend_header(binary, is_compressed, len(field_infos) > 0)
-    return TypeDef(cls.__name__, type_info.type_id, field_infos, binary, is_compressed)
+    binary = prepend_header(binary, is_compressed, len(field_infos) > 0)    
+    return TypeDef(cls.__name__, cls, type_id, field_infos, binary, is_compressed)
 
 
 def prepend_header(buffer: bytes, is_compressed: bool, has_fields_meta: bool):

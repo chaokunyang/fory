@@ -148,7 +148,7 @@ class Fory:
         from pyfory._registry import TypeResolver
 
         self.metastring_resolver = MetaStringResolver()
-        self.type_resolver = TypeResolver(self)
+        self.type_resolver = TypeResolver(self, meta_share=meta_share)
         self.type_resolver.initialize()
         from pyfory._serialization import SerializationContext
         self.serialization_context = SerializationContext(scoped_meta_share_enabled=meta_share)

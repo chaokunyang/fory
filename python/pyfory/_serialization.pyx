@@ -447,11 +447,11 @@ cdef class TypeResolver:
         flat_hash_map[pair[int64_t, int64_t], PyObject *] _c_meta_hash_to_typeinfo
         MetaStringResolver meta_string_resolver
 
-    def __init__(self, fory):
+    def __init__(self, fory, meta_share=False):
         self.fory = fory
         self.metastring_resolver = fory.metastring_resolver
         from pyfory._registry import TypeResolver
-        self._resolver = TypeResolver(fory)
+        self._resolver = TypeResolver(fory, meta_share=meta_share)
 
     def initialize(self):
         self._resolver.initialize()
@@ -655,16 +655,7 @@ cdef class TypeResolver:
 
     cpdef read_type_defs(self, Buffer buffer):
         """Read all type definitions from the buffer."""
-        meta_context = self._resolver.fory.serialization_context.get_meta_context()
-        if meta_context is None:
-            return
-        
-        num_type_defs = buffer.read_varuint32()
-        for i in range(num_type_defs):
-            # Read the encoded type definition directly
-            from pyfory.meta.typedef_decoder import decode_typedef
-            type_def = decode_typedef(buffer, self._resolver)
-            meta_context.add_read_type_def(type_def)
+        self._resolver.read_type_defs(buffer)
 
     def _read_type_info_with_meta_share(self, meta_context, type_id):
         """Read type info with meta share support."""

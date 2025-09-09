@@ -95,7 +95,6 @@ def decode_typedef(buffer: Buffer, resolver) -> TypeDef:
     if is_registered_by_name:
         namespace = read_namespace(meta_buffer)
         typename = read_typename(meta_buffer)
-        name = namespace + "." + typename if namespace else typename
         # Look up the type_id from namespace and typename
         type_info = resolver.get_typeinfo_by_name(namespace, typename)
         if type_info:
@@ -108,9 +107,12 @@ def decode_typedef(buffer: Buffer, resolver) -> TypeDef:
         type_info = resolver.get_typeinfo_by_id(type_id)
         if type_info is not None:
             type_cls = type_info.cls
-            name = type_info.cls.__name__
+            namespace = type_info.decode_namespace()
+            typename = type_info.decode_typename()
         else:
-            name = f"fory.Nonexistent{type_id}"
+            namespace = "fory"
+            typename = f"Nonexistent{type_id}"
+    name = namespace + "." + typename if namespace else typename
     # Read fields info if present
     field_infos = []
     if has_fields_meta:
@@ -119,7 +121,7 @@ def decode_typedef(buffer: Buffer, resolver) -> TypeDef:
         type_cls = record_class_factory(name, [field_info.name for field_info in field_infos])
 
     # Create TypeDef object
-    return TypeDef(name, type_cls, type_id, field_infos, meta_data, is_compressed)
+    return TypeDef(namespace, typename, type_cls, type_id, field_infos, meta_data, is_compressed)
 
 
 def read_namespace(buffer: Buffer) -> str:

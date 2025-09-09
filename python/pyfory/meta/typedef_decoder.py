@@ -25,15 +25,12 @@ from typing import List
 from pyfory._util import Buffer
 from pyfory.meta.typedef import TypeDef, FieldInfo, FieldType
 from pyfory.meta.typedef import (
-    FieldInfo,
-    TypeDef,
     SMALL_NUM_FIELDS_THRESHOLD,
     REGISTER_BY_NAME_FLAG,
     FIELD_NAME_SIZE_THRESHOLD,
     COMPRESS_META_FLAG,
     HAS_FIELDS_META_FLAG,
     META_SIZE_MASKS,
-    NUM_HASH_BITS,
     FIELD_NAME_ENCODINGS,
 )
 from pyfory.type import TypeId, record_class_factory

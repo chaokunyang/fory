@@ -86,7 +86,6 @@ from pyfory._fory import (
 from pyfory.meta.typedef import TypeDef
 from pyfory.meta.typedef_decoder import decode_typedef, skip_typedef
 from pyfory.meta.typedef_encoder import encode_typedef
-from pyfory.type import TypeId
 
 try:
     import numpy as np

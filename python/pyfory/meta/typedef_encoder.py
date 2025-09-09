@@ -33,7 +33,6 @@ from pyfory.meta.typedef import (
 from pyfory.meta.metastring import MetaStringEncoder
 
 from pyfory._util import Buffer
-from pyfory.type import TypeId
 from pyfory.lib.mmh3 import hash_buffer
 
 

@@ -448,7 +448,7 @@ class DataClassSerializer(Serializer):
         stmts = [
             f'"""xwrite method for {self.type_}"""',
         ]
-        if not self.fory.compatbile:
+        if not self.fory.compatible:
             # Compute hash at generation time since we're in xlang mode
             if self._hash == 0:
                 self._hash = _get_hash(self.fory, self._field_names, self._type_hints)
@@ -494,7 +494,7 @@ class DataClassSerializer(Serializer):
         stmts = [
             f'"""xread method for {self.type_}"""',
         ]
-        if not self.fory.compatbile:
+        if not self.fory.compatible:
             # Compute hash at generation time since we're in xlang mode
             if self._hash == 0:
                 self._hash = _get_hash(self.fory, self._field_names, self._type_hints)

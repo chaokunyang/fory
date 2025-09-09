@@ -620,8 +620,6 @@ cdef class TypeResolver:
         else:
             # New type, write ID and add to writing queue
             buffer.write_varuint32(type_id)
-            # Store the typeinfo in the read cache for immediate deserialization
-            meta_context.set_read_type_info(type_id, typeinfo)
             type_def = self._resolver._build_type_def(typeinfo)
             meta_context.add_writing_type_def(type_def)
 

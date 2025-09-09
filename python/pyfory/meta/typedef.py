@@ -19,8 +19,6 @@ from typing import List
 import typing
 from pyfory.type import TypeId
 from pyfory._util import Buffer
-from pyfory.serializer import MapSerializer, ListSerializer, SetSerializer
-from pyfory._struct import _sort_fields, StructTypeIdVisitor, get_field_names
 from pyfory.type import TypeId, infer_field, is_primitive_type, is_polymorphic_type
 from pyfory.meta.metastring import Encoding
 
@@ -155,6 +153,8 @@ class CollectionFieldType(FieldType):
         self.element_type = element_type
 
     def create_serializer(self, resolver):
+        from pyfory.serializer import ListSerializer, SetSerializer
+
         if self.type_id == TypeId.LIST:
             return ListSerializer(resolver.fory, list, self.element_type.create_serializer(resolver))
         elif self.type_id == TypeId.SET:
@@ -180,6 +180,8 @@ class MapFieldType(FieldType):
     def create_serializer(self, resolver):
         key_serializer = self.key_type.create_serializer(resolver)
         value_serializer = self.value_type.create_serializer(resolver)
+        from pyfory.serializer import MapSerializer
+
         return MapSerializer(resolver.fory, dict, key_serializer, value_serializer)
 
     def __repr__(self):
@@ -202,6 +204,8 @@ class DynamicFieldType(FieldType):
 
 def build_field_infos(type_resolver, cls):
     """Build field information for the class."""
+    from pyfory._struct import _sort_fields, StructTypeIdVisitor, get_field_names
+
     field_names = get_field_names(cls)
     type_hints = typing.get_type_hints(cls)
 
@@ -215,6 +219,7 @@ def build_field_infos(type_resolver, cls):
         field_infos.append(field_info)
 
     serializers = [field_info.field_type.create_serializer(type_resolver) for field_info in field_infos]
+
     field_names, serializers = _sort_fields(type_resolver, field_names, serializers)
     field_infos_map = {field_info.name: field_info for field_info in field_infos}
     new_field_infos = []

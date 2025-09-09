@@ -101,7 +101,15 @@ def encode_typedef(type_resolver, cls):
         binary = compressed_binary
     # Prepend header
     binary = prepend_header(binary, is_compressed, len(field_infos) > 0)    
-    return TypeDef(cls.__name__, cls, type_id, field_infos, binary, is_compressed)
+    # Extract namespace and typename
+    if type_resolver.is_registered_by_name(cls):
+        namespace, typename = type_resolver.get_registered_name(cls)
+    else:
+        splits = cls.__name__.rsplit(".", 1)
+        if len(splits) == 1:
+            splits.insert(0, "")
+        namespace, typename = splits
+    return TypeDef(namespace, typename, cls, type_id, field_infos, binary, is_compressed)
 
 
 def prepend_header(buffer: bytes, is_compressed: bool, has_fields_meta: bool):

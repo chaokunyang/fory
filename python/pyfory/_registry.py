@@ -82,6 +82,9 @@ from pyfory._fory import (
     # preserve 0 as flag for type id not set in TypeInfo`
     NO_TYPE_ID,
 )
+from pyfory.meta.typedef import TypeDef
+from pyfory.meta.typedef_decoder import decode_typedef, skip_typedef
+from pyfory.meta.typedef_encoder import encode_typedef
 
 try:
     import numpy as np
@@ -115,6 +118,7 @@ else:
             namespace_bytes=None,
             typename_bytes=None,
             dynamic_type: bool = False,
+            type_def: TypeDef = None,
         ):
             self.cls = cls
             self.type_id = type_id
@@ -162,7 +166,7 @@ class TypeResolver:
         "metastring_resolver",
         "language",
         "_type_id_to_typeinfo",
-        "_typedef_cache",
+        "_meta_shared_typeinfo",
         "meta_share",
     )
 
@@ -187,7 +191,7 @@ class TypeResolver:
         self.namespace_encoder = MetaStringEncoder(".", "_")
         self.namespace_decoder = MetaStringDecoder(".", "_")
         # Cache for TypeDef and TypeInfo tuples (similar to Java's classIdToDef)
-        self._typedef_cache = {}
+        self._meta_shared_typeinfo = {}
         self.typename_encoder = MetaStringEncoder("$", "_")
         self.typename_decoder = MetaStringDecoder("$", "_")
         self.meta_compressor = DeflaterMetaCompressor()
@@ -548,7 +552,6 @@ class TypeResolver:
     
     def _set_struct_typeinfo(self, typeinfo):
         assert self.meta_share, "Meta share must be enabled"
-        from pyfory.meta.typedef_encoder import encode_typedef
         type_def = encode_typedef(self, typeinfo.cls)
         typeinfo.serializer = type_def.create_serializer(self)
         typeinfo.type_def = type_def
@@ -680,8 +683,7 @@ class TypeResolver:
         buffer.write_varuint32(len(writing_type_defs))
         
         for type_def in writing_type_defs:
-            # Write type ID first, then the encoded bytes
-            buffer.write_int64(type_def.type_id)
+            # Just copy the encoded bytes directly
             buffer.write_bytes(type_def.encoded)
         
         meta_context.clear_writing_type_defs()
@@ -695,36 +697,31 @@ class TypeResolver:
         num_type_defs = buffer.read_varuint32()
         for i in range(num_type_defs):
             # Read type ID first
-            type_id = buffer.read_int64()
-            
+            header = buffer.read_int64()
             # Check if we already have this TypeDef cached
-            if type_id in self._typedef_cache:
-                # Skip the TypeDef binary for faster performance
-                type_def, type_info = self._typedef_cache[type_id]
-                meta_context.add_read_type_def(type_def)
-                meta_context.set_read_type_info(type_id, type_info)
+            type_info = self._meta_shared_typeinfo.get(header)
+            if type_info is not None:
+                meta_context.add_read_type_def(type_info.type_def)
+                meta_context.set_read_type_info(header, type_info)
+                skip_typedef(buffer, header)
             else:
                 # Read the TypeDef and create TypeInfo
-                from pyfory.meta.typedef_decoder import decode_typedef
-                type_def = decode_typedef(buffer, self)
+                type_def = decode_typedef(buffer, self, header=header)
                 type_info = self._build_type_info_from_typedef(type_def)
-                
                 # Cache the tuple for future use
-                self._typedef_cache[type_id] = (type_def, type_info)
-                
+                self._meta_shared_typeinfo[header] = type_info
                 meta_context.add_read_type_def(type_def)
-                meta_context.set_read_type_info(type_id, type_info)
+                meta_context.set_read_type_info(header, type_info)
 
     def _build_type_info_from_typedef(self, type_def):
         """Build TypeInfo from TypeDef using TypeDef's create_serializer method."""        
         # Create serializer using TypeDef's create_serializer method
         serializer = type_def.create_serializer(self)
-        typeinfo = self._types_info.get(type_def.cls)
         ns_metastr = self.namespace_encoder.encode(type_def.namespace or "")
         ns_meta_bytes = self.metastring_resolver.get_metastr_bytes(ns_metastr)
         type_metastr = self.typename_encoder.encode(type_def.typename)
         type_meta_bytes = self.metastring_resolver.get_metastr_bytes(type_metastr)
-        typeinfo = TypeInfo(type_def.cls, type_def.type_id, serializer, ns_meta_bytes, type_meta_bytes, False)
+        typeinfo = TypeInfo(type_def.cls, type_def.type_id, serializer, ns_meta_bytes, type_meta_bytes, False, type_def)
         return typeinfo
 
     def reset(self):

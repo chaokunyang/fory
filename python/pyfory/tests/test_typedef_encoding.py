@@ -75,7 +75,7 @@ def test_typedef_creation():
         FieldInfo("age", FieldType(TypeId.INT32, True, True, False), "TestTypeDef"),
     ]
 
-    typedef = TypeDef("TestTypeDef", TypeId.STRUCT, fields, b"encoded_data", False)
+    typedef = TypeDef("", "TestTypeDef", TypeId.STRUCT, fields, b"encoded_data", False)
 
     assert typedef.namespace == ""
     assert typedef.typename == "TestTypeDef"

@@ -19,7 +19,7 @@ from typing import List
 import typing
 from pyfory.type import TypeId
 from pyfory._util import Buffer
-from pyfory.type import TypeId, infer_field, is_primitive_type, is_polymorphic_type
+from pyfory.type import TypeId, infer_field, is_primitive_type, is_polymorphic_type, is_struct_type
 from pyfory.meta.metastring import Encoding
 
 
@@ -237,12 +237,15 @@ def build_field_infos(type_resolver, cls):
 def build_field_type(type_resolver, field_name: str, type_hint, visitor):
     """Build field type from type hint."""
     type_ids = infer_field(field_name, type_hint, visitor)
+    print(f"=??????????=> {field_name, type_hint, visitor,type_ids}")
     return build_field_type_from_type_ids(type_resolver, field_name, type_ids, visitor)
 
 
 def build_field_type_from_type_ids(type_resolver, field_name: str, type_ids, visitor):
     tracking_ref = type_resolver.fory.ref_tracking
     type_id = type_ids[0]
+    if type_id is not None and type_id >= 0:
+        type_id = type_id & 0xff
     morphic = not is_polymorphic_type(type_id)
     if type_id in [TypeId.SET, TypeId.LIST]:
         elem_type = build_field_type_from_type_ids(type_resolver, field_name, type_ids[1], visitor)
@@ -254,7 +257,7 @@ def build_field_type_from_type_ids(type_resolver, field_name: str, type_ids, vis
     elif type_id in [TypeId.UNKNOWN, TypeId.EXT, TypeId.STRUCT, TypeId.NAMED_STRUCT, TypeId.COMPATIBLE_STRUCT, TypeId.NAMED_COMPATIBLE_STRUCT]:
         return DynamicFieldType(type_id, False, True, tracking_ref)
     else:
-        assert is_primitive_type(type_id) or type_id in [TypeId.STRING, TypeId.ENUM, TypeId.NAMED_ENUM], (
+        assert is_primitive_type(type_id) or type_id in [TypeId.STRING, TypeId.ENUM, TypeId.NAMED_ENUM] or is_struct_type(type_id), (
             f"Unknown type: {type_id} for field: {field_name}"
         )
         return FieldType(type_id, morphic, True, tracking_ref)

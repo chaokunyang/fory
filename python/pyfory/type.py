@@ -369,10 +369,19 @@ _polymorphic_type_ids = {
     TypeId.UNKNOWN,
 }
 
+_struct_type_ids = {
+    TypeId.STRUCT,
+    TypeId.COMPATIBLE_STRUCT,
+    TypeId.NAMED_STRUCT,
+    TypeId.NAMED_COMPATIBLE_STRUCT,
+}
 
 def is_polymorphic_type(type_id: int) -> bool:
     return type_id in _polymorphic_type_ids
 
+
+def is_struct_type(type_id: int) -> bool:
+    return type_id in _struct_type_ids
 
 def is_subclass(from_type, to_type):
     try:

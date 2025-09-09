@@ -24,7 +24,7 @@ import os
 import pickle
 import types
 import typing
-from typing_extensions import List
+from typing import List
 import warnings
 from weakref import WeakValueDictionary
 

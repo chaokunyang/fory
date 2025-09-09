@@ -80,7 +80,8 @@ def encode_typedef(type_resolver, cls):
         namespace, typename = type_resolver.get_registered_name(cls)
         write_namespace(buffer, namespace)
         write_typename(buffer, typename)
-        type_id = TypeId.NAMED_COMPATIBLE_STRUCT
+        # Use the actual type_id from the resolver, not a generic one
+        type_id = type_resolver.get_registered_id(cls)
     else:
         assert type_resolver.is_registered_by_id(cls), "Class must be registered by name or id"
         type_id = type_resolver.get_registered_id(cls)

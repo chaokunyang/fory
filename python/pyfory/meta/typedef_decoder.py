@@ -196,7 +196,7 @@ def read_field_info(buffer: Buffer, resolver, defined_class: str) -> FieldInfo:
     field_name_size += 1
     encoding = FIELD_NAME_ENCODINGS[field_name_encoding]
     is_nullable = (header & 0b10) != 0
-    is_tracking_ref = header & 0b1
+    is_tracking_ref = (header & 0b1) != 0
 
     # Read field type info (without flags since they're in the header)
     xtype_id = buffer.read_varuint32()

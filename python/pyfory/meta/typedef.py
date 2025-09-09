@@ -134,7 +134,10 @@ class FieldType:
         elif xtype_id == TypeId.UNKNOWN:
             return DynamicFieldType(xtype_id, False, is_nullable, is_tracking_ref)
         else:
-            return FieldType(xtype_id, False, is_nullable, is_tracking_ref)
+            # For primitive types, determine if they are monomorphic based on the type
+            from pyfory.type import is_polymorphic_type
+            is_monomorphic = not is_polymorphic_type(xtype_id)
+            return FieldType(xtype_id, is_monomorphic, is_nullable, is_tracking_ref)
 
     def create_serializer(self, resolver):
         if self.type_id in [TypeId.EXT, TypeId.STRUCT, TypeId.NAMED_STRUCT, TypeId.COMPATIBLE_STRUCT, TypeId.NAMED_COMPATIBLE_STRUCT, TypeId.UNKNOWN]:

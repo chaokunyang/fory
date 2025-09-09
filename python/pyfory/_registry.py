@@ -480,6 +480,8 @@ class TypeResolver:
             raise TypeUnregisteredError(f"{cls} not registered")
         logger.info("Type %s not registered", cls)
         serializer = self._create_serializer(cls)
+        if serializer is None:
+            serializer = DataClassSerializer(self.fory, cls, xlang=not self.fory.is_py)
         type_id = None
         if self.language == Language.PYTHON:
             if isinstance(serializer, EnumSerializer):

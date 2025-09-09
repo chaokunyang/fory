@@ -525,7 +525,7 @@ cdef class TypeResolver:
             if type_info.serializer is not None:
                 return type_info
             else:
-                type_info.serializer = self._resolver._create_serializer(cls)
+                type_info.serializer = self._resolver.get_typeinfo(cls).serializer
                 return type_info
         elif not create:
             return None

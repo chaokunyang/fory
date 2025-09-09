@@ -86,6 +86,7 @@ from pyfory._fory import (
 from pyfory.meta.typedef import TypeDef
 from pyfory.meta.typedef_decoder import decode_typedef, skip_typedef
 from pyfory.meta.typedef_encoder import encode_typedef
+from pyfory.type import TypeId
 
 try:
     import numpy as np
@@ -480,8 +481,6 @@ class TypeResolver:
             raise TypeUnregisteredError(f"{cls} not registered")
         logger.info("Type %s not registered", cls)
         serializer = self._create_serializer(cls)
-        if serializer is None:
-            serializer = DataClassSerializer(self.fory, cls, xlang=not self.fory.is_py)
         type_id = None
         if self.language == Language.PYTHON:
             if isinstance(serializer, EnumSerializer):
@@ -530,8 +529,11 @@ class TypeResolver:
                 # Use FunctionSerializer for function types (including lambdas)
                 serializer = FunctionSerializer(self.fory, cls)
             elif dataclasses.is_dataclass(cls):
-                # lazy create serializer to handle nested struct fields.
-                serializer = None
+                if not self.meta_share:
+                    serializer = DataClassSerializer(self.fory, cls, xlang=not self.fory.is_py)
+                else:
+                    # lazy create serializer to handle nested struct fields.
+                    serializer = None
             elif issubclass(cls, enum.Enum):
                 serializer = EnumSerializer(self.fory, cls)
             elif (hasattr(cls, "__reduce__") and cls.__reduce__ is not object.__reduce__) or (

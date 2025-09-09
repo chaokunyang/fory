@@ -136,6 +136,7 @@ class FieldType:
         else:
             # For primitive types, determine if they are monomorphic based on the type
             from pyfory.type import is_polymorphic_type
+
             is_monomorphic = not is_polymorphic_type(xtype_id)
             return FieldType(xtype_id, is_monomorphic, is_nullable, is_tracking_ref)
 
@@ -240,7 +241,7 @@ def build_field_infos(type_resolver, cls):
 def build_field_type(type_resolver, field_name: str, type_hint, visitor):
     """Build field type from type hint."""
     type_ids = infer_field(field_name, type_hint, visitor)
-    print(f"=??????????=> {field_name, type_hint, visitor,type_ids}")
+    print(f"=??????????=> {field_name, type_hint, visitor, type_ids}")
     return build_field_type_from_type_ids(type_resolver, field_name, type_ids, visitor)
 
 
@@ -248,7 +249,7 @@ def build_field_type_from_type_ids(type_resolver, field_name: str, type_ids, vis
     tracking_ref = type_resolver.fory.ref_tracking
     type_id = type_ids[0]
     if type_id is not None and type_id >= 0:
-        type_id = type_id & 0xff
+        type_id = type_id & 0xFF
     morphic = not is_polymorphic_type(type_id)
     if type_id in [TypeId.SET, TypeId.LIST]:
         elem_type = build_field_type_from_type_ids(type_resolver, field_name, type_ids[1], visitor)

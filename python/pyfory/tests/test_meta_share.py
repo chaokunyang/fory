@@ -228,10 +228,7 @@ class TestMetaShareMode:
         fory1.register_type(NestedStructClass)
         fory1.register_type(SimpleNestedDataClass)
 
-        obj = NestedStructClass(
-            name="test",
-            nested=SimpleNestedDataClass(value=42, name="nested_test")
-        )
+        obj = NestedStructClass(name="test", nested=SimpleNestedDataClass(value=42, name="nested_test"))
         buffer = fory1.serialize(obj)
 
         # Deserialize with inconsistent schema (different nested type)
@@ -252,11 +249,7 @@ class TestMetaShareMode:
         fory1 = Fory(language=Language.XLANG, compatbile=True)
         fory1.register_type(ListFieldsClass)
 
-        obj = ListFieldsClass(
-            name="test",
-            int_list=[1, 2, 3],
-            str_list=["a", "b", "c"]
-        )
+        obj = ListFieldsClass(name="test", int_list=[1, 2, 3], str_list=["a", "b", "c"])
         buffer = fory1.serialize(obj)
 
         # Deserialize with inconsistent schema (swapped List types)
@@ -277,11 +270,7 @@ class TestMetaShareMode:
         fory1 = Fory(language=Language.XLANG, compatbile=True)
         fory1.register_type(DictFieldsClass)
 
-        obj = DictFieldsClass(
-            name="test",
-            int_dict={"key1": 1, "key2": 2},
-            str_dict={"key1": "value1", "key2": "value2"}
-        )
+        obj = DictFieldsClass(name="test", int_dict={"key1": 1, "key2": 2}, str_dict={"key1": "value1", "key2": "value2"})
         buffer = fory1.serialize(obj)
 
         # Deserialize with inconsistent schema (swapped Dict value types)

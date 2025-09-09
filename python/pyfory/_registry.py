@@ -505,7 +505,7 @@ class TypeResolver:
         )
 
     def _set_typeinfo(self, typeinfo):
-        type_id = typeinfo.type_id & 0xff
+        type_id = typeinfo.type_id & 0xFF
         if is_struct_type(type_id):
             if self.meta_share:
                 type_def = encode_typedef(self, typeinfo.cls)
@@ -515,7 +515,7 @@ class TypeResolver:
                 typeinfo.serializer = DataClassSerializer(self.fory, typeinfo.cls, xlang=not self.fory.is_py)
         else:
             typeinfo.serializer = self._create_serializer(typeinfo.cls)
-            
+
         return typeinfo
 
     def _create_serializer(self, cls):

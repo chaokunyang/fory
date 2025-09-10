@@ -129,6 +129,9 @@ public class Serializers {
   private static <T> Serializer<T> createSerializer(
       Fory fory, Class<?> type, Class<? extends Serializer> serializerClass) throws Throwable {
     MethodHandles.Lookup lookup = _JDKAccess._trustedLookup(serializerClass);
+    if (Platform.JAVA_VERSION >= 9) {
+      lookup = _JDKAccess.privateLookupIn(serializerClass, lookup);
+    }
     try {
       MethodHandle ctr = lookup.findConstructor(serializerClass, SIG1);
       CTR_MAP.put(serializerClass, Tuple2.of(SIG1, ctr));

@@ -111,6 +111,10 @@ public class _JDKAccess {
     return lookupCache.get(objectClass);
   }
 
+  public static Lookup privateLookupIn(Class<?> targetClass, Lookup caller) {
+    return _Lookup.privateLookupIn(targetClass, caller);
+  }
+
   public static <T> T tryMakeFunction(
       Lookup lookup, MethodHandle handle, Class<T> functionInterface) {
     try {

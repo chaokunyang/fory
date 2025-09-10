@@ -133,7 +133,7 @@ public abstract class ForyTestBase {
 
   @DataProvider
   public static Object[][] compatible() {
-    return new Object[][] {{true}};
+    return new Object[][] {{false}, {true}};
   }
 
   @DataProvider

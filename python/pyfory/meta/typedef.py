@@ -263,7 +263,6 @@ def build_field_type_from_type_ids(type_resolver, field_name: str, type_ids, vis
     elif type_id in [TypeId.UNKNOWN, TypeId.EXT, TypeId.STRUCT, TypeId.NAMED_STRUCT, TypeId.COMPATIBLE_STRUCT, TypeId.NAMED_COMPATIBLE_STRUCT]:
         return DynamicFieldType(type_id, False, True, tracking_ref)
     else:
-        assert is_primitive_type(type_id) or type_id in [TypeId.STRING, TypeId.ENUM, TypeId.NAMED_ENUM] or is_struct_type(type_id), (
-            f"Unknown type: {type_id} for field: {field_name}"
-        )
+        if type_id <= 0 or type_id >= TypeId.BOUND:
+            raise TypeError(f"Unknown type: {type_id} for field: {field_name}")
         return FieldType(type_id, morphic, True, tracking_ref)

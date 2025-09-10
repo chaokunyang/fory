@@ -212,7 +212,8 @@ public class XtypeResolver implements TypeResolver {
     short xtypeId;
     if (serializer != null) {
       if (isStructType(serializer)) {
-        xtypeId = (short) (fory.isCompatible() ? Types.NAMED_COMPATIBLE_STRUCT : Types.NAMED_STRUCT);
+        xtypeId =
+            (short) (fory.isCompatible() ? Types.NAMED_COMPATIBLE_STRUCT : Types.NAMED_STRUCT);
       } else if (serializer instanceof EnumSerializer) {
         xtypeId = Types.NAMED_ENUM;
       } else {
@@ -222,7 +223,8 @@ public class XtypeResolver implements TypeResolver {
       if (type.isEnum()) {
         xtypeId = Types.NAMED_ENUM;
       } else {
-        xtypeId = (short) (fory.isCompatible() ? Types.NAMED_COMPATIBLE_STRUCT : Types.NAMED_STRUCT);
+        xtypeId =
+            (short) (fory.isCompatible() ? Types.NAMED_COMPATIBLE_STRUCT : Types.NAMED_STRUCT);
       }
     }
     register(type, serializer, namespace, typeName, xtypeId);
@@ -544,10 +546,12 @@ public class XtypeResolver implements TypeResolver {
     classInfoMap.put(defaultType, classInfo);
     xtypeIdToClassMap.put(xtypeId, classInfo);
     for (Class<?> otherType : otherTypes) {
-      Serializer<?> serializer = ReflectionUtils.isAbstract(otherType) ?
-        classResolver.getSerializer(otherTypes[0]) : classResolver.getSerializer(otherType);
-      classInfo = newClassInfo(otherType, serializer, (short) xtypeId);
-      classInfoMap.put(otherType, classInfo);
+      Serializer<?> serializer =
+          ReflectionUtils.isAbstract(otherType)
+              ? classInfo.serializer
+              : classResolver.getSerializer(otherType);
+      ClassInfo info = newClassInfo(otherType, serializer, (short) xtypeId);
+      classInfoMap.put(otherType, info);
     }
   }
 
@@ -577,7 +581,7 @@ public class XtypeResolver implements TypeResolver {
         break;
       case Types.NAMED_COMPATIBLE_STRUCT:
       case Types.COMPATIBLE_STRUCT:
-        assert shareMeta: "Meta share must be enabled for compatible mode";
+        assert shareMeta : "Meta share must be enabled for compatible mode";
         writeSharedClassMeta(buffer, classInfo);
         break;
       default:
@@ -651,7 +655,7 @@ public class XtypeResolver implements TypeResolver {
         return loadBytesToClassInfo(internalTypeId, packageBytes, simpleClassNameBytes);
       case Types.NAMED_COMPATIBLE_STRUCT:
       case Types.COMPATIBLE_STRUCT:
-        assert shareMeta: "Meta share must be enabled for compatible mode";
+        assert shareMeta : "Meta share must be enabled for compatible mode";
         return readSharedClassMeta(buffer);
       case Types.LIST:
         return getListClassInfo();

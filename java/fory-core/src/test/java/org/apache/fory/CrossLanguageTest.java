@@ -488,7 +488,8 @@ public class CrossLanguageTest extends ForyTestBase {
     Fory fory =
         Fory.builder()
             .withLanguage(Language.XLANG)
-            .withCompatibleMode(compatible ? CompatibleMode.COMPATIBLE : CompatibleMode.SCHEMA_CONSISTENT)
+            .withCompatibleMode(
+                compatible ? CompatibleMode.COMPATIBLE : CompatibleMode.SCHEMA_CONSISTENT)
             .withRefTracking(true)
             .requireClassRegistration(false)
             .build();
@@ -531,10 +532,13 @@ public class CrossLanguageTest extends ForyTestBase {
     Assert.assertEquals(fory.deserialize(serialized), obj);
   }
 
-  public void testSerializeComplexStruct() throws Exception {
+  @Test(dataProvider = "compatible")
+  public void testSerializeComplexStruct(boolean compatible) throws Exception {
     Fory fory =
         Fory.builder()
             .withLanguage(Language.XLANG)
+            .withCompatibleMode(
+                compatible ? CompatibleMode.COMPATIBLE : CompatibleMode.SCHEMA_CONSISTENT)
             .withRefTracking(true)
             .requireClassRegistration(false)
             .build();
@@ -557,7 +561,7 @@ public class CrossLanguageTest extends ForyTestBase {
     obj.f11 = new short[] {(short) 1, (short) 2};
     obj.f12 = ImmutableList.of((short) -1, (short) 4);
 
-    structRoundBack(fory, obj, "test_serialize_complex_struct");
+    structRoundBack(fory, obj, "test_serialize_complex_struct" + (compatible ? "_compatible" : ""));
   }
 
   private void structRoundBack(Fory fory, Object obj, String testName) throws IOException {

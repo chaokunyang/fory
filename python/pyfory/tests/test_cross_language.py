@@ -538,7 +538,8 @@ def test_struct_hash(data_file_path):
 
 @cross_language_test
 def test_serialize_complex_struct(data_file_path):
-    fory = pyfory.Fory(language=pyfory.Language.XLANG, ref_tracking=True)
+    compatible = "compatible" in data_file_path
+    fory = pyfory.Fory(language=pyfory.Language.XLANG, ref_tracking=True, compatible=compatible)
     fory.register_type(ComplexObject1, namespace="test", typename="ComplexObject1")
     fory.register_type(ComplexObject2, namespace="test", typename="ComplexObject2")
 

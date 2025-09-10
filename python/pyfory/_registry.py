@@ -371,7 +371,10 @@ class TypeResolver:
                 type_id = TypeId.NAMED_EXT if type_id is None else ((type_id << 8) + TypeId.EXT)
             else:
                 serializer = None
-                type_id = TypeId.NAMED_STRUCT if type_id is None else ((type_id << 8) + TypeId.STRUCT)
+                if self.meta_share:
+                    type_id = TypeId.NAMED_COMPATIBLE_STRUCT if type_id is None else ((type_id << 8) + TypeId.COMPATIBLE_STRUCT)
+                else:
+                    type_id = TypeId.NAMED_STRUCT if type_id is None else ((type_id << 8) + TypeId.STRUCT)
         elif not internal:
             type_id = TypeId.NAMED_EXT if type_id is None else ((type_id << 8) + TypeId.EXT)
         return self.__register_type(
@@ -609,14 +612,12 @@ class TypeResolver:
     def write_typeinfo(self, buffer, typeinfo):
         if typeinfo.dynamic_type:
             return
-        type_id = typeinfo.type_id
-        internal_type_id = type_id & 0xFF
-
         # Check if meta share is enabled first
         if self.meta_share:
             self.write_shared_type_meta(buffer, typeinfo)
             return
-
+        type_id = typeinfo.type_id
+        internal_type_id = type_id & 0xFF
         buffer.write_varuint32(type_id)
         if TypeId.is_namespaced_type(internal_type_id):
             self.metastring_resolver.write_meta_string_bytes(buffer, typeinfo.namespace_bytes)

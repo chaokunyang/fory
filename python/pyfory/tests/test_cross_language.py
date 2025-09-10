@@ -454,8 +454,8 @@ def test_serialize_simple_struct_local():
     assert fory.deserialize(new_buf) == obj
 
 
-# @cross_language_test
-def test_serialize_simple_struct(data_file_path='/Users/chaokunyang/Desktop/chaokun/fury_open_source/java/fory-core/test_serialize_simple_struct_compatible'):
+@cross_language_test
+def test_serialize_simple_struct(data_file_path):
     compatible = "compatible" in data_file_path
     fory = pyfory.Fory(language=pyfory.Language.XLANG, ref_tracking=True, compatible=compatible)
     fory.register_type(ComplexObject2, namespace="test", typename="ComplexObject2")

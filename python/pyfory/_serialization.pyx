@@ -703,7 +703,7 @@ cdef class MetaContext:
     cpdef inline read_shared_typeinfo(self, Buffer buffer):
         """Read a type info from buffer."""
         cdef type_id = buffer.read_varuint32()
-        if IsNamespacedType(type_id & 0xFF):
+        if IsTypeShareMeta(type_id & 0xFF):
             return self._read_type_infos[buffer.read_varuint32()]
         return self.type_resolver.get_typeinfo_by_id(type_id)
     

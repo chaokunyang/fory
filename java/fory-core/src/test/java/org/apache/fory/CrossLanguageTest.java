@@ -483,11 +483,12 @@ public class CrossLanguageTest extends ForyTestBase {
     roundBytes("test_struct_hash", buffer.getBytes(0, 4));
   }
 
-  @Test
-  public void testSerializeSimpleStruct() throws Exception {
+  @Test(dataProvider = "compatible")
+  public void testSerializeSimpleStruct(boolean compatible) throws Exception {
     Fory fory =
         Fory.builder()
             .withLanguage(Language.XLANG)
+            .withCompatibleMode(compatible ? CompatibleMode.COMPATIBLE : CompatibleMode.SCHEMA_CONSISTENT)
             .withRefTracking(true)
             .requireClassRegistration(false)
             .build();
@@ -495,7 +496,7 @@ public class CrossLanguageTest extends ForyTestBase {
     ComplexObject2 obj2 = new ComplexObject2();
     obj2.f1 = true;
     obj2.f2 = new HashMap<>(ImmutableMap.of((byte) -1, 2));
-    structRoundBack(fory, obj2, "test_serialize_simple_struct");
+    structRoundBack(fory, obj2, "test_serialize_simple_struct" + (compatible ? "_compatible" : ""));
   }
 
   @Test

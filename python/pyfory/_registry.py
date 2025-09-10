@@ -169,6 +169,7 @@ class TypeResolver:
         "_type_id_to_typeinfo",
         "_meta_shared_typeinfo",
         "meta_share",
+        "serialization_context",
     )
 
     def __init__(self, fory, meta_share=False):
@@ -202,6 +203,7 @@ class TypeResolver:
         self._initialize_xlang()
         if self.fory.language == Language.PYTHON:
             self._initialize_py()
+        self.serialization_context = self.fory.serialization_context
 
     def _initialize_py(self):
         register = functools.partial(self._register_type, internal=True)
@@ -659,17 +661,14 @@ class TypeResolver:
 
     def write_shared_type_meta(self, buffer, typeinfo):
         """Write shared type meta information."""
-        assert typeinfo.type_def is not None, "Type info must be set when meta share is enabled"
         meta_context = self.fory.serialization_context.meta_context
-        meta_context.write_typeinfo(buffer, typeinfo)
+        meta_context.write_shared_typeinfo(buffer, typeinfo)
 
     def read_shared_type_meta(self, buffer):
         """Read shared type meta information."""
-        meta_context = self.fory.serialization_context.meta_context
+        meta_context = self.serialization_context.meta_context
         assert meta_context is not None, "Meta context must be set when meta share is enabled"
-        type_id = buffer.read_varuint32()
-        typeinfo = meta_context.get_read_type_info(type_id)
-        assert typeinfo is not None, f"Type info not found for ID {type_id}"
+        typeinfo = meta_context.read_shared_typeinfo(buffer)
         return typeinfo
 
     def write_type_defs(self, buffer):
@@ -704,7 +703,7 @@ class TypeResolver:
                 type_info = self._build_type_info_from_typedef(type_def)
                 # Cache the tuple for future use
                 self._meta_shared_typeinfo[header] = type_info
-            meta_context.add_read_type_info(type_info)
+            meta_context.add_read_typeinfo(type_info)
 
     def _build_type_info_from_typedef(self, type_def):
         """Build TypeInfo from TypeDef using TypeDef's create_serializer method."""

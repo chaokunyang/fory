@@ -454,9 +454,10 @@ def test_serialize_simple_struct_local():
     assert fory.deserialize(new_buf) == obj
 
 
-@cross_language_test
-def test_serialize_simple_struct(data_file_path):
-    fory = pyfory.Fory(language=pyfory.Language.XLANG, ref_tracking=True)
+# @cross_language_test
+def test_serialize_simple_struct(data_file_path='/Users/chaokunyang/Desktop/chaokun/fury_open_source/java/fory-core/test_serialize_simple_struct_compatible'):
+    compatible = "compatible" in data_file_path
+    fory = pyfory.Fory(language=pyfory.Language.XLANG, ref_tracking=True, compatible=compatible)
     fory.register_type(ComplexObject2, namespace="test", typename="ComplexObject2")
     obj = ComplexObject2(f1=True, f2={-1: 2})
     struct_round_back(data_file_path, fory, obj)
@@ -687,7 +688,7 @@ if __name__ == "__main__":
     try:
         args = sys.argv[1:]
         assert len(args) > 0
-        func = getattr(sys.modules[__name__], args[0])
+        func = getattr(sys.modules[__name__], args[0].replace("_compatible", ""))
         if not func:
             raise Exception("Unknown args {}".format(args))
         func(*args[1:])

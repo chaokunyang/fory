@@ -38,11 +38,13 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -210,7 +212,7 @@ public class XtypeResolver implements TypeResolver {
     short xtypeId;
     if (serializer != null) {
       if (isStructType(serializer)) {
-        xtypeId = Types.NAMED_STRUCT;
+        xtypeId = (short) (fory.isCompatible() ? Types.NAMED_COMPATIBLE_STRUCT : Types.NAMED_STRUCT);
       } else if (serializer instanceof EnumSerializer) {
         xtypeId = Types.NAMED_ENUM;
       } else {
@@ -220,7 +222,7 @@ public class XtypeResolver implements TypeResolver {
       if (type.isEnum()) {
         xtypeId = Types.NAMED_ENUM;
       } else {
-        xtypeId = Types.NAMED_STRUCT;
+        xtypeId = (short) (fory.isCompatible() ? Types.NAMED_COMPATIBLE_STRUCT : Types.NAMED_STRUCT);
       }
     }
     register(type, serializer, namespace, typeName, xtypeId);
@@ -530,9 +532,9 @@ public class XtypeResolver implements TypeResolver {
     registerDefaultTypes(Types.INT64_ARRAY, long[].class);
     registerDefaultTypes(Types.FLOAT32_ARRAY, float[].class);
     registerDefaultTypes(Types.FLOAT64_ARRAY, double[].class);
-    registerDefaultTypes(Types.LIST, ArrayList.class, Object[].class);
-    registerDefaultTypes(Types.SET, HashSet.class, LinkedHashSet.class);
-    registerDefaultTypes(Types.MAP, HashMap.class, LinkedHashMap.class);
+    registerDefaultTypes(Types.LIST, ArrayList.class, Object[].class, List.class, Collection.class);
+    registerDefaultTypes(Types.SET, HashSet.class, LinkedHashSet.class, Set.class);
+    registerDefaultTypes(Types.MAP, HashMap.class, LinkedHashMap.class, Map.class);
     registerDefaultTypes(Types.LOCAL_DATE, LocalDate.class);
   }
 
@@ -542,7 +544,9 @@ public class XtypeResolver implements TypeResolver {
     classInfoMap.put(defaultType, classInfo);
     xtypeIdToClassMap.put(xtypeId, classInfo);
     for (Class<?> otherType : otherTypes) {
-      classInfo = newClassInfo(otherType, classResolver.getSerializer(otherType), (short) xtypeId);
+      Serializer<?> serializer = ReflectionUtils.isAbstract(otherType) ?
+        classResolver.getSerializer(otherTypes[0]) : classResolver.getSerializer(otherType);
+      classInfo = newClassInfo(otherType, serializer, (short) xtypeId);
       classInfoMap.put(otherType, classInfo);
     }
   }
@@ -561,7 +565,6 @@ public class XtypeResolver implements TypeResolver {
     switch (internalTypeId) {
       case Types.NAMED_ENUM:
       case Types.NAMED_STRUCT:
-      case Types.NAMED_COMPATIBLE_STRUCT:
       case Types.NAMED_EXT:
         if (shareMeta) {
           writeSharedClassMeta(buffer, classInfo);
@@ -571,6 +574,11 @@ public class XtypeResolver implements TypeResolver {
         metaStringResolver.writeMetaStringBytes(buffer, classInfo.namespaceBytes);
         assert classInfo.typeNameBytes != null;
         metaStringResolver.writeMetaStringBytes(buffer, classInfo.typeNameBytes);
+        break;
+      case Types.NAMED_COMPATIBLE_STRUCT:
+      case Types.COMPATIBLE_STRUCT:
+        assert shareMeta: "Meta share must be enabled for compatible mode";
+        writeSharedClassMeta(buffer, classInfo);
         break;
       default:
         break;
@@ -634,7 +642,6 @@ public class XtypeResolver implements TypeResolver {
     switch (internalTypeId) {
       case Types.NAMED_ENUM:
       case Types.NAMED_STRUCT:
-      case Types.NAMED_COMPATIBLE_STRUCT:
       case Types.NAMED_EXT:
         if (shareMeta) {
           return readSharedClassMeta(buffer);
@@ -642,6 +649,10 @@ public class XtypeResolver implements TypeResolver {
         MetaStringBytes packageBytes = metaStringResolver.readMetaStringBytes(buffer);
         MetaStringBytes simpleClassNameBytes = metaStringResolver.readMetaStringBytes(buffer);
         return loadBytesToClassInfo(internalTypeId, packageBytes, simpleClassNameBytes);
+      case Types.NAMED_COMPATIBLE_STRUCT:
+      case Types.COMPATIBLE_STRUCT:
+        assert shareMeta: "Meta share must be enabled for compatible mode";
+        return readSharedClassMeta(buffer);
       case Types.LIST:
         return getListClassInfo();
       case Types.TIMESTAMP:

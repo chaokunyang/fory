@@ -99,6 +99,12 @@ public class CodecUtils {
             CodeGenerator.getPackage(beanClass),
             codecBuilder.codecClassName(beanClass),
             codecBuilder::genCode);
+    String className = codecBuilder.codecQualifiedClassName(beanClass);
+     try {
+      return (Class<? extends Serializer<T>>) beanClass.getClassLoader().loadClass(className);
+    } catch (ClassNotFoundException e) {
+      
+    }
     CodeGenerator codeGenerator;
     ClassLoader beanClassClassLoader =
         beanClass.getClassLoader() == null
@@ -112,7 +118,7 @@ public class CodecUtils {
     ClassLoader classLoader =
         codeGenerator.compile(
             Collections.singletonList(compileUnit), compileState -> compileState.lock.lock());
-    String className = codecBuilder.codecQualifiedClassName(beanClass);
+    
     try {
       return (Class<? extends Serializer<T>>) classLoader.loadClass(className);
     } catch (ClassNotFoundException e) {

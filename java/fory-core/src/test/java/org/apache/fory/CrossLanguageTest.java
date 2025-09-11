@@ -55,6 +55,7 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import lombok.Data;
+import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.config.Language;
 import org.apache.fory.logging.Logger;
@@ -482,11 +483,13 @@ public class CrossLanguageTest extends ForyTestBase {
     roundBytes("test_struct_hash", buffer.getBytes(0, 4));
   }
 
-  @Test
-  public void testSerializeSimpleStruct() throws Exception {
+  @Test(dataProvider = "compatible")
+  public void testSerializeSimpleStruct(boolean compatible) throws Exception {
     Fory fory =
         Fory.builder()
             .withLanguage(Language.XLANG)
+            .withCompatibleMode(
+                compatible ? CompatibleMode.COMPATIBLE : CompatibleMode.SCHEMA_CONSISTENT)
             .withRefTracking(true)
             .requireClassRegistration(false)
             .build();
@@ -494,13 +497,48 @@ public class CrossLanguageTest extends ForyTestBase {
     ComplexObject2 obj2 = new ComplexObject2();
     obj2.f1 = true;
     obj2.f2 = new HashMap<>(ImmutableMap.of((byte) -1, 2));
-    structRoundBack(fory, obj2, "test_serialize_simple_struct");
+    structRoundBack(fory, obj2, "test_serialize_simple_struct" + (compatible ? "_compatible" : ""));
   }
 
-  public void testSerializeComplexStruct() throws Exception {
+  @Test
+  public void testRegisterById() throws Exception {
     Fory fory =
         Fory.builder()
             .withLanguage(Language.XLANG)
+            .withRefTracking(true)
+            .requireClassRegistration(false)
+            .build();
+    fory.register(ComplexObject2.class, 100);
+    ComplexObject2 obj2 = new ComplexObject2();
+    obj2.f1 = true;
+    obj2.f2 = new HashMap<>(ImmutableMap.of((byte) -1, 2));
+    structRoundBack(fory, obj2, "test_register_by_id");
+  }
+
+  @Test
+  public void testRegisterByIdMetaShare() throws Exception {
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withRefTracking(true)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .requireClassRegistration(false)
+            .build();
+    fory.register(ComplexObject2.class, 100);
+    ComplexObject2 obj = new ComplexObject2();
+    obj.f1 = true;
+    obj.f2 = new HashMap<>(ImmutableMap.of((byte) -1, 2));
+    byte[] serialized = fory.serialize(obj);
+    Assert.assertEquals(fory.deserialize(serialized), obj);
+  }
+
+  @Test(dataProvider = "compatible")
+  public void testSerializeComplexStruct(boolean compatible) throws Exception {
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(
+                compatible ? CompatibleMode.COMPATIBLE : CompatibleMode.SCHEMA_CONSISTENT)
             .withRefTracking(true)
             .requireClassRegistration(false)
             .build();
@@ -523,7 +561,7 @@ public class CrossLanguageTest extends ForyTestBase {
     obj.f11 = new short[] {(short) 1, (short) 2};
     obj.f12 = ImmutableList.of((short) -1, (short) 4);
 
-    structRoundBack(fory, obj, "test_serialize_complex_struct");
+    structRoundBack(fory, obj, "test_serialize_complex_struct" + (compatible ? "_compatible" : ""));
   }
 
   private void structRoundBack(Fory fory, Object obj, String testName) throws IOException {
@@ -533,7 +571,7 @@ public class CrossLanguageTest extends ForyTestBase {
     System.out.println(dataFile.toAbsolutePath());
     Files.deleteIfExists(dataFile);
     Files.write(dataFile, serialized);
-    dataFile.toFile().deleteOnExit();
+    // dataFile.toFile().deleteOnExit();
     ImmutableList<String> command =
         ImmutableList.of(
             PYTHON_EXECUTABLE, "-m", PYTHON_MODULE, testName, dataFile.toAbsolutePath().toString());
@@ -785,9 +823,12 @@ public class CrossLanguageTest extends ForyTestBase {
     String f3;
   }
 
-  @Test
-  public void testEnumField() throws java.io.IOException {
-    Fory fory = Fory.builder().withLanguage(Language.XLANG).requireClassRegistration(true).build();
+  @Test(dataProvider = "compatible")
+  public void testEnumField(boolean compatible) throws java.io.IOException {
+    Fory fory = Fory.builder().withLanguage(Language.XLANG)
+      .withCompatibleMode(
+        compatible ? CompatibleMode.COMPATIBLE : CompatibleMode.SCHEMA_CONSISTENT)
+      .requireClassRegistration(true).build();
     fory.register(EnumTestClass.class, "test.EnumTestClass");
     fory.register(EnumFieldStruct.class, "test.EnumFieldStruct");
 
@@ -796,6 +837,6 @@ public class CrossLanguageTest extends ForyTestBase {
     a.f2 = EnumTestClass.BAR;
     a.f3 = "abc";
     Assert.assertEquals(xserDe(fory, a), a);
-    structRoundBack(fory, a, "test_enum_field");
+    structRoundBack(fory, a, "test_enum_field" + (compatible ? "_compatible" : ""));
   }
 }

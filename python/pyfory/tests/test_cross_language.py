@@ -456,8 +456,17 @@ def test_serialize_simple_struct_local():
 
 @cross_language_test
 def test_serialize_simple_struct(data_file_path):
-    fory = pyfory.Fory(language=pyfory.Language.XLANG, ref_tracking=True)
+    compatible = "compatible" in data_file_path
+    fory = pyfory.Fory(language=pyfory.Language.XLANG, ref_tracking=True, compatible=compatible)
     fory.register_type(ComplexObject2, namespace="test", typename="ComplexObject2")
+    obj = ComplexObject2(f1=True, f2={-1: 2})
+    struct_round_back(data_file_path, fory, obj)
+
+
+@cross_language_test
+def test_register_by_id(data_file_path):
+    fory = pyfory.Fory(language=pyfory.Language.XLANG, ref_tracking=True)
+    fory.register_type(ComplexObject2, type_id=100)
     obj = ComplexObject2(f1=True, f2={-1: 2})
     struct_round_back(data_file_path, fory, obj)
 
@@ -505,7 +514,8 @@ class EnumFieldStruct:
 
 @cross_language_test
 def test_enum_field(data_file_path):
-    fory = pyfory.Fory(language=pyfory.Language.XLANG, ref_tracking=False)
+    compatible = "compatible" in data_file_path
+    fory = pyfory.Fory(language=pyfory.Language.XLANG, ref_tracking=False, compatible=compatible)
     fory.register_type(EnumTestClass, namespace="test", typename="EnumTestClass")
     fory.register_type(EnumFieldStruct, namespace="test", typename="EnumFieldStruct")
     obj = EnumFieldStruct(f1=EnumTestClass.FOO, f2=EnumTestClass.BAR, f3="abc")
@@ -520,7 +530,7 @@ def test_struct_hash(data_file_path):
     read_hash = pyfory.Buffer(data_bytes).read_int32()
     fory = pyfory.Fory(language=pyfory.Language.XLANG, ref_tracking=True)
     fory.register_type(ComplexObject1, typename="ComplexObject1")
-    serializer = fory.type_resolver.get_serializer(ComplexObject1)
+    serializer = fory.type_resolver.get_serializer(ComplexObject1)._replace()
     from pyfory._struct import _get_hash
 
     v = _get_hash(fory, serializer._field_names, serializer._type_hints)
@@ -529,7 +539,8 @@ def test_struct_hash(data_file_path):
 
 @cross_language_test
 def test_serialize_complex_struct(data_file_path):
-    fory = pyfory.Fory(language=pyfory.Language.XLANG, ref_tracking=True)
+    compatible = "compatible" in data_file_path
+    fory = pyfory.Fory(language=pyfory.Language.XLANG, ref_tracking=True, compatible=compatible)
     fory.register_type(ComplexObject1, namespace="test", typename="ComplexObject1")
     fory.register_type(ComplexObject2, namespace="test", typename="ComplexObject2")
 
@@ -679,7 +690,7 @@ if __name__ == "__main__":
     try:
         args = sys.argv[1:]
         assert len(args) > 0
-        func = getattr(sys.modules[__name__], args[0])
+        func = getattr(sys.modules[__name__], args[0].replace("_compatible", ""))
         if not func:
             raise Exception("Unknown args {}".format(args))
         func(*args[1:])

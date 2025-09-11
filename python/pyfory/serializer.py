@@ -600,16 +600,16 @@ class DataClassStubSerializer(DataClassSerializer):
         Serializer.__init__(self, fory, clz)
         self.xlang = xlang
 
-    def write(self,  buffer, value):
+    def write(self, buffer, value):
         self._replace().write(buffer, value)
 
-    def read(self,  buffer):
+    def read(self, buffer):
         return self._replace().read(buffer)
 
-    def xwrite(self,  buffer, value):
+    def xwrite(self, buffer, value):
         self._replace().xwrite(buffer, value)
 
-    def xread(self,  buffer):
+    def xread(self, buffer):
         return self._replace().xread(buffer)
 
     def _replace(self):

@@ -59,8 +59,7 @@ class TypeDef:
 
     def create_fields_serializer(self, resolver):
         field_types = infer_field_types(self.cls)
-        serializers = [field_info.field_type.create_serializer(resolver, field_types.get(field_info.name, None))
-                       for field_info in self.fields]
+        serializers = [field_info.field_type.create_serializer(resolver, field_types.get(field_info.name, None)) for field_info in self.fields]
         return serializers
 
     def get_field_names(self):
@@ -148,8 +147,7 @@ class FieldType:
             return FieldType(xtype_id, is_monomorphic, is_nullable, is_tracking_ref)
 
     def create_serializer(self, resolver, type_):
-        if self.type_id in [TypeId.EXT, TypeId.STRUCT, TypeId.NAMED_STRUCT, TypeId.COMPATIBLE_STRUCT,
-                            TypeId.NAMED_COMPATIBLE_STRUCT, TypeId.UNKNOWN]:
+        if self.type_id in [TypeId.EXT, TypeId.STRUCT, TypeId.NAMED_STRUCT, TypeId.COMPATIBLE_STRUCT, TypeId.NAMED_COMPATIBLE_STRUCT, TypeId.UNKNOWN]:
             return None
         if isinstance(type_, list):
             type_ = type_[0]
@@ -159,6 +157,7 @@ class FieldType:
                 return typeinfo.serializer
             else:
                 from pyfory.serializer import NonExistEnumSerializer
+
                 return NonExistEnumSerializer(resolver.fory)
         return resolver.get_typeinfo_by_id(self.type_id).serializer
 
@@ -180,6 +179,7 @@ class CollectionFieldType(FieldType):
 
     def create_serializer(self, resolver, type_):
         from pyfory.serializer import ListSerializer, SetSerializer
+
         elem_type = type_[1] if len(type_) >= 2 else None
         elem_serializer = self.element_type.create_serializer(resolver, elem_type)
         if self.type_id == TypeId.LIST:
@@ -250,8 +250,7 @@ def build_field_infos(type_resolver, cls):
         field_info = FieldInfo(field_name, field_type, cls.__name__)
         field_infos.append(field_info)
     field_types = infer_field_types(cls)
-    serializers = [field_info.field_type.create_serializer(type_resolver, field_types.get(field_info.name, None))
-                   for field_info in field_infos]
+    serializers = [field_info.field_type.create_serializer(type_resolver, field_types.get(field_info.name, None)) for field_info in field_infos]
 
     field_names, serializers = _sort_fields(type_resolver, field_names, serializers)
     field_infos_map = {field_info.name: field_info for field_info in field_infos}

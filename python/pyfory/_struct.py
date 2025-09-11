@@ -212,7 +212,10 @@ class StructHashVisitor(TypeVisitor):
             assert not isinstance(serializer, (PickleSerializer,))
             id_ = typeinfo.type_id
             assert id_ is not None, serializer
-        id_ = abs(id_)
+            if TypeId.is_namespaced_type(typeinfo.type_id):
+                namespace_str = typeinfo.decode_namespace()
+                typename_str = typeinfo.decode_typename()
+                id_ = compute_string_hash(namespace_str + typename_str)
         self._hash = self._compute_field_hash(self._hash, id_)
 
     @staticmethod

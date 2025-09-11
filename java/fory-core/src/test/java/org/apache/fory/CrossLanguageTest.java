@@ -825,10 +825,13 @@ public class CrossLanguageTest extends ForyTestBase {
 
   @Test(dataProvider = "compatible")
   public void testEnumField(boolean compatible) throws java.io.IOException {
-    Fory fory = Fory.builder().withLanguage(Language.XLANG)
-      .withCompatibleMode(
-        compatible ? CompatibleMode.COMPATIBLE : CompatibleMode.SCHEMA_CONSISTENT)
-      .requireClassRegistration(true).build();
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(
+                compatible ? CompatibleMode.COMPATIBLE : CompatibleMode.SCHEMA_CONSISTENT)
+            .requireClassRegistration(true)
+            .build();
     fory.register(EnumTestClass.class, "test.EnumTestClass");
     fory.register(EnumFieldStruct.class, "test.EnumFieldStruct");
 

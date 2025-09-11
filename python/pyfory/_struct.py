@@ -65,7 +65,7 @@ basic_types = {
 }
 
 
-class ComplexTypeVisitor(TypeVisitor):
+class StructFieldSerializerVisitor(TypeVisitor):
     def __init__(
         self,
         fory,
@@ -88,6 +88,8 @@ class ComplexTypeVisitor(TypeVisitor):
         return MapSerializer(self.fory, dict, key_serializer, value_serializer)
 
     def visit_customized(self, field_name, type_, types_path=None):
+        if issubclass(type_, enum.Enum):
+            return self.fory.type_resolver.get_serializer(type_)
         return None
 
     def visit_other(self, field_name, type_, types_path=None):
@@ -260,6 +262,28 @@ class StructTypeIdVisitor(TypeVisitor):
         typeinfo = self.fory.type_resolver.get_typeinfo(type_)
         assert not isinstance(typeinfo.serializer, (PickleSerializer,))
         return [typeinfo.type_id]
+
+
+class StructTypeVisitor(TypeVisitor):
+    def __init__(self, cls):
+        self.cls = cls
+
+    def visit_list(self, field_name, elem_type, types_path=None):
+        # Infer type recursively for type such as List[Dict[str, str]]
+        elem_types = infer_field("item", elem_type, self, types_path=types_path)
+        return typing.List, elem_types
+
+    def visit_dict(self, field_name, key_type, value_type, types_path=None):
+        # Infer type recursively for type such as Dict[str, Dict[str, str]]
+        key_types = infer_field("key", key_type, self, types_path=types_path)
+        value_types = infer_field("value", value_type, self, types_path=types_path)
+        return typing.Dict, key_types, value_types
+
+    def visit_customized(self, field_name, type_, types_path=None):
+        return [type_]
+
+    def visit_other(self, field_name, type_, types_path=None):
+        return [type_]
 
 
 def get_field_names(clz, type_hints=None):

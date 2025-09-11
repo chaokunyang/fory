@@ -256,7 +256,7 @@ class StructTypeIdVisitor(TypeVisitor):
         from pyfory.serializer import PickleSerializer  # Local import
 
         if is_subclass(type_, enum.Enum):
-            return self.fory.type_resolver.get_typeinfo(type_).type_id
+            return [self.fory.type_resolver.get_typeinfo(type_).type_id]
         if type_ not in basic_types and not is_py_array_type(type_):
             return None, None
         typeinfo = self.fory.type_resolver.get_typeinfo(type_)

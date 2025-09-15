@@ -471,12 +471,12 @@ func (r *typeResolver) RegisterSerializer(type_ reflect.Type, s Serializer) erro
 
 // RegisterGeneratedSerializer registers a generated serializer for a specific type.
 // Generated serializers have priority over reflection-based serializers and can override existing ones.
-func RegisterGeneratedSerializer(typ interface{}, s Serializer) error {
-	if typ == nil {
-		return fmt.Errorf("typ cannot be nil")
+func RegisterGeneratedSerializer(type_ interface{}, s Serializer) error {
+	if type_ == nil {
+		return fmt.Errorf("type_ cannot be nil")
 	}
 
-	reflectType := reflect.TypeOf(typ)
+	reflectType := reflect.TypeOf(type_)
 	if reflectType.Kind() == reflect.Ptr {
 		reflectType = reflectType.Elem()
 	}
@@ -589,13 +589,13 @@ func (r *typeResolver) getTypeInfo(value reflect.Value, create bool) (TypeInfo, 
 	if value.Kind() == reflect.Interface {
 		value = value.Elem()
 	}
-	typ := value.Type()
+	type_ := value.Type()
 	// Get package path and type name for registration
 	var typeName string
 	var pkgPath string
-	rawInfo, ok := r.typeToTypeInfo[typ]
+	rawInfo, ok := r.typeToTypeInfo[type_]
 	if !ok {
-		fmt.Errorf("type %v not registered with a tag", typ)
+		fmt.Errorf("type %v not registered with a tag", type_)
 	}
 	clean := strings.TrimPrefix(rawInfo, "*@")
 	clean = strings.TrimPrefix(clean, "@")
@@ -604,17 +604,17 @@ func (r *typeResolver) getTypeInfo(value reflect.Value, create bool) (TypeInfo, 
 	} else {
 		pkgPath = clean
 	}
-	if typ.Kind() == reflect.Ptr {
-		typeName = typ.Elem().Name()
+	if type_.Kind() == reflect.Ptr {
+		typeName = type_.Elem().Name()
 	} else {
-		typeName = typ.Name()
+		typeName = type_.Name()
 	}
 
 	// Handle special types that require explicit registration
 	switch {
-	case typ.Kind() == reflect.Ptr:
+	case type_.Kind() == reflect.Ptr:
 		fmt.Errorf("pointer types must be registered explicitly")
-	case typ.Kind() == reflect.Interface:
+	case type_.Kind() == reflect.Interface:
 		fmt.Errorf("interface types must be registered explicitly")
 	case pkgPath == "" && typeName == "":
 		fmt.Errorf("anonymous types must be registered explicitly")
@@ -627,7 +627,7 @@ func (r *typeResolver) getTypeInfo(value reflect.Value, create bool) (TypeInfo, 
 		// Auto-assign IDs
 		typeID = 0
 	default:
-		fmt.Errorf("type %v must be registered explicitly", typ)
+		fmt.Errorf("type %v must be registered explicitly", type_)
 	}
 
 	/*
@@ -650,8 +650,8 @@ func (r *typeResolver) getTypeInfo(value reflect.Value, create bool) (TypeInfo, 
 	} else if value.Kind() == reflect.Map {
 		typeID = MAP
 	} else if value.Kind() == reflect.Array {
-		typ = reflect.SliceOf(typ.Elem())
-		return r.typesInfo[typ], nil
+		type_ = reflect.SliceOf(type_.Elem())
+		return r.typesInfo[type_], nil
 	} else if isMultiDimensionaSlice(value) {
 		typeID = LIST
 		return r.typeIDToTypeInfo[typeID], nil
@@ -659,7 +659,7 @@ func (r *typeResolver) getTypeInfo(value reflect.Value, create bool) (TypeInfo, 
 
 	// Register the type with full metadata
 	return r.registerType(
-		typ,
+		type_,
 		typeID,
 		pkgPath,
 		typeName,
@@ -677,7 +677,7 @@ func isMultiDimensionaSlice(v reflect.Value) bool {
 }
 
 func (r *typeResolver) registerType(
-	typ reflect.Type,
+	type_ reflect.Type,
 	typeID int32,
 	namespace string,
 	typeName string,
@@ -685,24 +685,24 @@ func (r *typeResolver) registerType(
 	internal bool,
 ) (TypeInfo, error) {
 	// Input validation
-	if typ == nil {
+	if type_ == nil {
 		panic("nil type")
 	}
 	if typeName == "" && namespace != "" {
 		panic("namespace provided without typeName")
 	}
 	if internal && serializer != nil {
-		if err := r.RegisterSerializer(typ, serializer); err != nil {
+		if err := r.RegisterSerializer(type_, serializer); err != nil {
 			panic(fmt.Errorf("impossible error: %s", err))
 		}
 	}
 	// Serializer initialization
 	if !internal && serializer == nil {
 		var err error
-		serializer = r.typeToSerializers[typ] // Check pre-registered serializers
+		serializer = r.typeToSerializers[type_] // Check pre-registered serializers
 		if serializer == nil {
 			// Create new serializer if not found
-			if serializer, err = r.createSerializer(typ, false); err != nil {
+			if serializer, err = r.createSerializer(type_, false); err != nil {
 				panic(fmt.Sprintf("failed to create serializer: %v", err))
 			}
 		}
@@ -735,16 +735,16 @@ func (r *typeResolver) registerType(
 
 	// Build complete type information structure
 	typeInfo := TypeInfo{
-		Type:         typ,
+		Type:         type_,
 		TypeID:       typeID,
 		Serializer:   serializer,
 		PkgPathBytes: nsBytes,   // Encoded namespace bytes
 		NameBytes:    typeBytes, // Encoded type name bytes
 		IsDynamic:    dynamicType,
-		hashValue:    calcTypeHash(typ), // Precomputed hash for fast lookups
+		hashValue:    calcTypeHash(type_), // Precomputed hash for fast lookups
 	}
 	// Update resolver caches:
-	r.typesInfo[typ] = typeInfo // Cache by type string
+	r.typesInfo[type_] = typeInfo // Cache by type string
 	if typeName != "" {
 		r.namedTypeToTypeInfo[[2]string{namespace, typeName}] = typeInfo
 		// Cache by hashed namespace/name bytes
@@ -774,12 +774,12 @@ func (r *typeResolver) registerType(
 	return typeInfo, nil
 }
 
-func calcTypeHash(typ reflect.Type) uint64 {
+func calcTypeHash(type_ reflect.Type) uint64 {
 	// Implement proper hash calculation based on type
 	h := fnv.New64a()
-	h.Write([]byte(typ.PkgPath()))
-	h.Write([]byte(typ.Name()))
-	h.Write([]byte(typ.Kind().String()))
+	h.Write([]byte(type_.PkgPath()))
+	h.Write([]byte(type_.Name()))
+	h.Write([]byte(type_.Kind().String()))
 	return h.Sum64()
 }
 

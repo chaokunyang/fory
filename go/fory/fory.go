@@ -36,11 +36,11 @@ func NewFory(referenceTracking bool) *Fory {
 
 	// Copy generated serializers from global resolver to this instance
 	if globalTypeResolver != nil {
-		for typ, serializer := range globalTypeResolver.typeToSerializers {
-			fory.typeResolver.typeToSerializers[typ] = serializer
+		for type_, serializer := range globalTypeResolver.typeToSerializers {
+			fory.typeResolver.typeToSerializers[type_] = serializer
 		}
-		for typeId, typ := range globalTypeResolver.typeIdToType {
-			fory.typeResolver.typeIdToType[typeId] = typ
+		for typeId, type_ := range globalTypeResolver.typeIdToType {
+			fory.typeResolver.typeIdToType[typeId] = type_
 		}
 	}
 
@@ -447,7 +447,7 @@ func (f *Fory) readData(buffer *ByteBuffer, value reflect.Value, serializer Seri
 		}
 		serializer = typeInfo.Serializer
 		var concrete reflect.Value
-		var typ reflect.Type
+		var type_ reflect.Type
 		/*
 		   Added logic to distinguish between:
 		   1. Deserialization into a specified interface type,
@@ -458,12 +458,12 @@ func (f *Fory) readData(buffer *ByteBuffer, value reflect.Value, serializer Seri
 		case value.Kind() == reflect.Interface,
 			!value.CanSet():
 			concrete = reflect.New(typeInfo.Type).Elem()
-			typ = typeInfo.Type
+			type_ = typeInfo.Type
 		default:
 			concrete = value
-			typ = concrete.Type()
+			type_ = concrete.Type()
 		}
-		if err := serializer.Read(f, buffer, typ, concrete); err != nil {
+		if err := serializer.Read(f, buffer, type_, concrete); err != nil {
 			return err
 		}
 		value.Set(concrete)

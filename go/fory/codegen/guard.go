@@ -92,20 +92,20 @@ func formatFieldType(field FieldInfo) string {
 
 // formatGoType converts a Go type to its string representation
 func formatGoType(t types.Type) string {
-	switch typ := t.(type) {
+	switch type_ := t.(type) {
 	case *types.Basic:
-		return typ.Name()
+		return type_.Name()
 	case *types.Pointer:
-		return "*" + formatGoType(typ.Elem())
+		return "*" + formatGoType(type_.Elem())
 	case *types.Array:
-		return fmt.Sprintf("[%d]%s", typ.Len(), formatGoType(typ.Elem()))
+		return fmt.Sprintf("[%d]%s", type_.Len(), formatGoType(type_.Elem()))
 	case *types.Slice:
-		return "[]" + formatGoType(typ.Elem())
+		return "[]" + formatGoType(type_.Elem())
 	case *types.Map:
-		return fmt.Sprintf("map[%s]%s", formatGoType(typ.Key()), formatGoType(typ.Elem()))
+		return fmt.Sprintf("map[%s]%s", formatGoType(type_.Key()), formatGoType(type_.Elem()))
 	case *types.Chan:
 		dir := ""
-		switch typ.Dir() {
+		switch type_.Dir() {
 		case types.SendOnly:
 			dir = "chan<- "
 		case types.RecvOnly:
@@ -113,22 +113,22 @@ func formatGoType(t types.Type) string {
 		default:
 			dir = "chan "
 		}
-		return dir + formatGoType(typ.Elem())
+		return dir + formatGoType(type_.Elem())
 	case *types.Named:
 		// Handle named types like custom structs, interfaces, etc.
-		obj := typ.Obj()
+		obj := type_.Obj()
 		if obj.Pkg() != nil && obj.Pkg().Name() != "" {
 			return obj.Pkg().Name() + "." + obj.Name()
 		}
 		return obj.Name()
 	case *types.Interface:
-		if typ.Empty() {
+		if type_.Empty() {
 			return "interface{}"
 		}
 		// For non-empty interfaces, we need to format method signatures
 		var methods []string
-		for i := 0; i < typ.NumMethods(); i++ {
-			method := typ.Method(i)
+		for i := 0; i < type_.NumMethods(); i++ {
+			method := type_.Method(i)
 			sig := method.Type().(*types.Signature)
 			methods = append(methods, formatMethodSignature(method.Name(), sig))
 		}

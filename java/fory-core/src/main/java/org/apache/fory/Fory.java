@@ -1643,7 +1643,9 @@ public final class Fory implements BaseFory {
    * polymorphic invoke cost.
    */
   @Internal
+  // CHECKSTYLE.OFF:MethodName
   public TypeResolver _getTypeResolver() {
+    // CHECKSTYLE.ON:MethodName
     return isCrossLanguage() ? xtypeResolver : classResolver;
   }
 

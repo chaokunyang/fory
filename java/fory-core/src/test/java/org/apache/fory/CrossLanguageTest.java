@@ -62,6 +62,7 @@ import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
+import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.ArraySerializersTest;
 import org.apache.fory.serializer.BufferObject;
 import org.apache.fory.serializer.EnumSerializerTest;
@@ -465,6 +466,7 @@ public class CrossLanguageTest extends ForyTestBase {
         Fory.builder()
             .withLanguage(Language.XLANG)
             .withRefTracking(true)
+            .withCodegen(false)
             .requireClassRegistration(false)
             .build();
     fory.register(ComplexObject1.class, "test.ComplexObject1");
@@ -473,10 +475,9 @@ public class CrossLanguageTest extends ForyTestBase {
     Method method =
         ObjectSerializer.class.getDeclaredMethod("computeStructHash", Fory.class, Collection.class);
     method.setAccessible(true);
-    Collection<Descriptor> descriptors =
-        fory.getClassResolver().getFieldDescriptors(ComplexObject1.class, true);
-    descriptors =
-        fory.getClassResolver().createDescriptorGrouper(descriptors, false).getSortedDescriptors();
+    TypeResolver resolver = fory._getTypeResolver();
+    Collection<Descriptor> descriptors = resolver.getFieldDescriptors(ComplexObject1.class, false);
+    descriptors = resolver.createDescriptorGrouper(descriptors, false).getSortedDescriptors();
     Integer hash = (Integer) method.invoke(serializer, fory, descriptors);
     MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(4);
     buffer.writeInt32(hash);
@@ -515,11 +516,12 @@ public class CrossLanguageTest extends ForyTestBase {
     structRoundBack(fory, obj2, "test_register_by_id");
   }
 
-  @Test
-  public void testRegisterByIdMetaShare() throws Exception {
+  @Test(dataProvider = "enableCodegen")
+  public void testRegisterByIdMetaShare(boolean enableCodegen) throws Exception {
     Fory fory =
         Fory.builder()
             .withLanguage(Language.XLANG)
+            .withCodegen(enableCodegen)
             .withRefTracking(true)
             .withCompatibleMode(CompatibleMode.COMPATIBLE)
             .requireClassRegistration(false)
@@ -881,11 +883,12 @@ public class CrossLanguageTest extends ForyTestBase {
     structRoundBack(fory, obj, "test_cross_language_meta_share");
   }
 
-  @Test
-  public void testCrossLanguageMetaShareComplex() throws Exception {
+  @Test(dataProvider = "enableCodegen")
+  public void testCrossLanguageMetaShareComplex(boolean enableCodegen) throws Exception {
     Fory fory =
         Fory.builder()
             .withLanguage(Language.XLANG)
+            .withCodegen(enableCodegen)
             .withRefTracking(true)
             .withCompatibleMode(CompatibleMode.COMPATIBLE)
             .requireClassRegistration(false)
@@ -942,12 +945,13 @@ public class CrossLanguageTest extends ForyTestBase {
     Boolean active; // Another new field
   }
 
-  @Test
-  public void testSchemaEvolution() throws Exception {
+  @Test(dataProvider = "enableCodegen")
+  public void testSchemaEvolution(boolean enableCodegen) throws Exception {
     // Test simple schema evolution compatibility
     Fory fory =
         Fory.builder()
             .withLanguage(Language.XLANG)
+            .withCodegen(enableCodegen)
             .withRefTracking(true)
             .withCompatibleMode(CompatibleMode.COMPATIBLE)
             .requireClassRegistration(false)
@@ -965,12 +969,13 @@ public class CrossLanguageTest extends ForyTestBase {
     structRoundBack(fory, objV1, "test_schema_evolution");
   }
 
-  @Test
-  public void testBackwardCompatibility() throws Exception {
+  @Test(dataProvider = "enableCodegen")
+  public void testBackwardCompatibility(boolean enableCodegen) throws Exception {
     // Test that old version can read new data (ignoring unknown fields)
     Fory fory =
         Fory.builder()
             .withLanguage(Language.XLANG)
+            .withCodegen(enableCodegen)
             .withRefTracking(true)
             .withCompatibleMode(CompatibleMode.COMPATIBLE)
             .requireClassRegistration(false)
@@ -991,12 +996,13 @@ public class CrossLanguageTest extends ForyTestBase {
     structBackwardCompatibility(fory, objV2, "test_backward_compatibility");
   }
 
-  @Test
-  public void testFieldReorderingCompatibility() throws Exception {
+  @Test(dataProvider = "enableCodegen")
+  public void testFieldReorderingCompatibility(boolean enableCodegen) throws Exception {
     // Test that field reordering doesn't break compatibility
     Fory fory =
         Fory.builder()
             .withLanguage(Language.XLANG)
+            .withCodegen(enableCodegen)
             .withRefTracking(true)
             .withCompatibleMode(CompatibleMode.COMPATIBLE)
             .requireClassRegistration(false)
@@ -1022,13 +1028,14 @@ public class CrossLanguageTest extends ForyTestBase {
     CompatTestV2 newObject;
   }
 
-  @Test
-  public void testCrossVersionCompatibility() throws Exception {
+  @Test(dataProvider = "enableCodegen")
+  public void testCrossVersionCompatibility(boolean enableCodegen) throws Exception {
     // Test mixed version compatibility in one test
     Fory fory =
         Fory.builder()
             .withLanguage(Language.XLANG)
             .withRefTracking(true)
+            .withCodegen(enableCodegen)
             .withCompatibleMode(CompatibleMode.COMPATIBLE)
             .requireClassRegistration(false)
             .build();

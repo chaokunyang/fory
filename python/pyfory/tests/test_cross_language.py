@@ -922,11 +922,11 @@ def test_cross_version_compatibility(data_file_path):
     debug_print(f"Deserialized mixed version container: {obj}")
 
     # Verify the nested objects
-    assert obj.oldObject.name == "Old Format"
-    assert obj.oldObject.age == 20
-    assert obj.newObject.name == "New Format"
-    assert obj.newObject.age == 25
-    assert obj.newObject.email == "new@example.com"
+    assert obj.oldObject.name == "Old Format", obj.oldObject.name
+    assert obj.oldObject.age == 20, obj.oldObject.age
+    assert obj.newObject.name == "New Format", obj.newObject.name
+    assert obj.newObject.age == 25, obj.newObject.age
+    assert obj.newObject.email == "new@example.com", obj.newObject.email
 
     # Serialize back
     new_serialized = fory.serialize(obj)

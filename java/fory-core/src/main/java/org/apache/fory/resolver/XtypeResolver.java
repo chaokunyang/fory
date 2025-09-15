@@ -86,7 +86,8 @@ import org.apache.fory.serializer.collection.CollectionLikeSerializer;
 import org.apache.fory.serializer.collection.CollectionSerializer;
 import org.apache.fory.serializer.collection.CollectionSerializers.ArrayListSerializer;
 import org.apache.fory.serializer.collection.CollectionSerializers.HashSetSerializer;
-import org.apache.fory.serializer.collection.CollectionSerializers.XlangCollectionDefaultSerializer;
+import org.apache.fory.serializer.collection.CollectionSerializers.XlangListDefaultSerializer;
+import org.apache.fory.serializer.collection.CollectionSerializers.XlangSetDefaultSerializer;
 import org.apache.fory.serializer.collection.MapLikeSerializer;
 import org.apache.fory.serializer.collection.MapSerializer;
 import org.apache.fory.serializer.collection.MapSerializers.XlangMapSerializer;
@@ -419,6 +420,9 @@ public class XtypeResolver extends TypeResolver {
 
       return s instanceof TimeSerializers.ImmutableTimeSerializer;
     }
+    if (isMap(clz) || isCollection(clz)) {
+      return true;
+    }
     return false;
   }
 
@@ -595,8 +599,10 @@ public class XtypeResolver extends TypeResolver {
       if (ReflectionUtils.isAbstract(otherType)) {
         if (isMap(otherType)) {
           serializer = new XlangMapSerializer(fory, otherType);
+        } else if (isSet(otherType)) {
+          serializer = new XlangSetDefaultSerializer(fory, otherType);
         } else if (isCollection(otherType)) {
-          serializer = new XlangCollectionDefaultSerializer(fory, otherType);
+          serializer = new XlangListDefaultSerializer(fory, otherType);
         } else {
           serializer = classInfo.serializer;
         }

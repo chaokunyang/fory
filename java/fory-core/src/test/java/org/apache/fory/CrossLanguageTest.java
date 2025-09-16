@@ -575,7 +575,7 @@ public class CrossLanguageTest extends ForyTestBase {
     System.out.println(dataFile.toAbsolutePath());
     Files.deleteIfExists(dataFile);
     Files.write(dataFile, serialized);
-    // dataFile.toFile().deleteOnExit();
+    dataFile.toFile().deleteOnExit();
     ImmutableList<String> command =
         ImmutableList.of(
             PYTHON_EXECUTABLE, "-m", PYTHON_MODULE, testName, dataFile.toAbsolutePath().toString());

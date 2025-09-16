@@ -178,7 +178,6 @@ public class DescriptorGrouper {
       } else if (TypeUtils.isMap(descriptor.getRawType())) {
         mapDescriptors.add(descriptorUpdater.apply(descriptor));
       } else if (isMonomorphic.test(descriptor.getRawType())) {
-        isMonomorphic.test(descriptor.getRawType());
         finalDescriptors.add(descriptorUpdater.apply(descriptor));
       } else {
         otherDescriptors.add(descriptorUpdater.apply(descriptor));

@@ -1646,7 +1646,7 @@ public final class Fory implements BaseFory {
   // CHECKSTYLE.OFF:MethodName
   public TypeResolver _getTypeResolver() {
     // CHECKSTYLE.ON:MethodName
-    return isCrossLanguage() ? xtypeResolver : classResolver;
+    return crossLanguage ? xtypeResolver : classResolver;
   }
 
   public MetaStringResolver getMetaStringResolver() {

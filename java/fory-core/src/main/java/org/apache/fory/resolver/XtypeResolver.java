@@ -74,7 +74,6 @@ import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.serializer.ArraySerializers;
 import org.apache.fory.serializer.DeferedLazySerializer.DeferedLazyObjectSerializer;
 import org.apache.fory.serializer.EnumSerializer;
-import org.apache.fory.serializer.LazySerializer;
 import org.apache.fory.serializer.NonexistentClass;
 import org.apache.fory.serializer.NonexistentClassSerializers;
 import org.apache.fory.serializer.ObjectSerializer;
@@ -182,14 +181,15 @@ public class XtypeResolver extends TypeResolver {
     if (type.isEnum()) {
       xtypeId = (xtypeId << 8) + Types.ENUM;
     } else {
+      int id = (xtypeId << 8) + (shareMeta ? Types.COMPATIBLE_STRUCT : Types.STRUCT);
       if (serializer != null) {
         if (isStructType(serializer)) {
-          xtypeId = (xtypeId << 8) + Types.STRUCT;
+          xtypeId = id;
         } else {
           xtypeId = (xtypeId << 8) + Types.EXT;
         }
       } else {
-        xtypeId = (xtypeId << 8) + Types.STRUCT;
+        xtypeId = id;
       }
     }
     register(
@@ -303,7 +303,7 @@ public class XtypeResolver extends TypeResolver {
     if (serializer instanceof ObjectSerializer || serializer instanceof GeneratedSerializer) {
       return true;
     }
-    return serializer instanceof LazySerializer.LazyObjectSerializer;
+    return serializer instanceof DeferedLazyObjectSerializer;
   }
 
   private ClassInfo newClassInfo(Class<?> type, Serializer<?> serializer, short xtypeId) {
@@ -365,10 +365,7 @@ public class XtypeResolver extends TypeResolver {
     if (classInfo == null) {
       return false;
     }
-    byte xtypeId = (byte) classInfo.xtypeId;
-    if (xtypeId <= 0) {
-      return false;
-    }
+    int xtypeId = classInfo.xtypeId & 0xff;
     switch (xtypeId) {
       case Types.NAMED_COMPATIBLE_STRUCT:
       case Types.NAMED_ENUM:
@@ -386,10 +383,7 @@ public class XtypeResolver extends TypeResolver {
     if (classInfo == null) {
       return false;
     }
-    byte xtypeId = (byte) classInfo.xtypeId;
-    if (xtypeId <= 0) {
-      return false;
-    }
+    int xtypeId = classInfo.xtypeId & 0xff;
     switch (xtypeId) {
       case Types.NAMED_COMPATIBLE_STRUCT:
       case Types.NAMED_ENUM:
@@ -466,7 +460,7 @@ public class XtypeResolver extends TypeResolver {
   }
 
   public ClassInfo getUserTypeInfo(int userTypeId) {
-    Preconditions.checkArgument((byte) (userTypeId) < Types.UNKNOWN);
+    Preconditions.checkArgument((userTypeId & 0xff) < Types.UNKNOWN);
     return xtypeIdToClassMap.get(userTypeId);
   }
 
@@ -623,7 +617,7 @@ public class XtypeResolver extends TypeResolver {
   @Override
   public void writeClassInfo(MemoryBuffer buffer, ClassInfo classInfo) {
     int xtypeId = classInfo.getXtypeId();
-    byte internalTypeId = (byte) xtypeId;
+    int internalTypeId = xtypeId & 0xff;
     buffer.writeVarUint32Small7(xtypeId);
     switch (internalTypeId) {
       case Types.NAMED_ENUM:
@@ -716,8 +710,8 @@ public class XtypeResolver extends TypeResolver {
   }
 
   public ClassInfo readClassInfo(MemoryBuffer buffer) {
-    long xtypeId = buffer.readVarUint32Small14();
-    byte internalTypeId = (byte) xtypeId;
+    int xtypeId = buffer.readVarUint32Small14();
+    int internalTypeId = xtypeId & 0xff;
     switch (internalTypeId) {
       case Types.NAMED_ENUM:
       case Types.NAMED_STRUCT:

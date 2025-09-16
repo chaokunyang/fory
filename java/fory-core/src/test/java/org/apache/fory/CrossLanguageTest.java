@@ -501,11 +501,13 @@ public class CrossLanguageTest extends ForyTestBase {
     structRoundBack(fory, obj2, "test_serialize_simple_struct" + (compatible ? "_compatible" : ""));
   }
 
-  @Test
-  public void testRegisterById() throws Exception {
+  @Test(dataProvider = "compatible")
+  public void testRegisterById(boolean compatible) throws Exception {
     Fory fory =
         Fory.builder()
             .withLanguage(Language.XLANG)
+            .withCompatibleMode(
+                compatible ? CompatibleMode.COMPATIBLE : CompatibleMode.SCHEMA_CONSISTENT)
             .withRefTracking(true)
             .requireClassRegistration(false)
             .build();
@@ -513,7 +515,7 @@ public class CrossLanguageTest extends ForyTestBase {
     ComplexObject2 obj2 = new ComplexObject2();
     obj2.f1 = true;
     obj2.f2 = new HashMap<>(ImmutableMap.of((byte) -1, 2));
-    structRoundBack(fory, obj2, "test_register_by_id");
+    structRoundBack(fory, obj2, "test_register_by_id" + (compatible ? "_compatible" : ""));
   }
 
   @Test(dataProvider = "enableCodegen")
@@ -859,6 +861,26 @@ public class CrossLanguageTest extends ForyTestBase {
     a.f3 = "abc";
     Assert.assertEquals(xserDe(fory, a), a);
     structRoundBack(fory, a, "test_enum_field" + (compatible ? "_compatible" : ""));
+  }
+
+  @Test(dataProvider = "compatible")
+  public void testEnumFieldRegisterById(boolean compatible) throws java.io.IOException {
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(
+                compatible ? CompatibleMode.COMPATIBLE : CompatibleMode.SCHEMA_CONSISTENT)
+            .requireClassRegistration(true)
+            .build();
+    fory.register(EnumTestClass.class, 1);
+    fory.register(EnumFieldStruct.class, 2);
+
+    EnumFieldStruct a = new EnumFieldStruct();
+    a.f1 = EnumTestClass.FOO;
+    a.f2 = EnumTestClass.BAR;
+    a.f3 = "abc";
+    Assert.assertEquals(xserDe(fory, a), a);
+    structRoundBack(fory, a, "test_enum_field_register_by_id" + (compatible ? "_compatible" : ""));
   }
 
   @Test

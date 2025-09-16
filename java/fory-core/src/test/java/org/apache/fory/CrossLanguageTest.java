@@ -867,6 +867,8 @@ public class CrossLanguageTest extends ForyTestBase {
   public void testEnumFieldRegisterById(boolean compatible) throws java.io.IOException {
     Fory fory =
         Fory.builder()
+            // avoid generated code conflict with register by name
+            .withName("testEnumFieldRegisterById")
             .withLanguage(Language.XLANG)
             .withCompatibleMode(
                 compatible ? CompatibleMode.COMPATIBLE : CompatibleMode.SCHEMA_CONSISTENT)

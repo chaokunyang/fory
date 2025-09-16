@@ -58,12 +58,12 @@ public class Encoders {
 
   static final Encoding[] typeNameEncodings =
       new Encoding[] {
-        UTF_8, LOWER_UPPER_DIGIT_SPECIAL, FIRST_TO_LOWER_SPECIAL, ALL_TO_LOWER_SPECIAL
+        UTF_8, ALL_TO_LOWER_SPECIAL, LOWER_UPPER_DIGIT_SPECIAL, FIRST_TO_LOWER_SPECIAL
       };
   static final List<Encoding> typeNameEncodingsList = Arrays.asList(typeNameEncodings);
 
   static final Encoding[] fieldNameEncodings =
-      new Encoding[] {UTF_8, LOWER_UPPER_DIGIT_SPECIAL, ALL_TO_LOWER_SPECIAL};
+      new Encoding[] {UTF_8, ALL_TO_LOWER_SPECIAL, LOWER_UPPER_DIGIT_SPECIAL};
   static final List<Encoding> fieldNameEncodingsList = Arrays.asList(fieldNameEncodings);
 
   public static MetaString encodePackage(String pkg) {

@@ -290,18 +290,27 @@ public interface Expression {
   }
 
   class Variable extends AbstractExpression {
+    private static final Expression NULL_STUB = Literal.ofInt(-1);
+
     private final String namePrefix;
-    private Expression from;
+    private final Expression from;
+    private TypeRef<?> type;
+
+    public Variable(String namePrefix, TypeRef<?> type) {
+      this(namePrefix, NULL_STUB);
+      this.type = type;
+    }
 
     public Variable(String namePrefix, Expression from) {
       super(from);
       this.namePrefix = namePrefix;
       this.from = from;
+      this.type = from.type();
     }
 
     @Override
     public TypeRef<?> type() {
-      return from.type();
+      return type;
     }
 
     @Override
@@ -311,12 +320,17 @@ public interface Expression {
 
     @Override
     public ExprCode doGenCode(CodegenContext ctx) {
+      String name = ctx.newName(namePrefix);
+      if (from == NULL_STUB) {
+        String decl =
+            StringUtils.format("${type} ${name};", "type", ctx.type(type()), "name", name);
+        return new ExprCode(decl, FalseLiteral, Code.variable(type().getRawType(), name));
+      }
       StringBuilder codeBuilder = new StringBuilder();
       ExprCode targetExprCode = from.genCode(ctx);
       if (StringUtils.isNotBlank(targetExprCode.code())) {
         codeBuilder.append(targetExprCode.code()).append('\n');
       }
-      String name = ctx.newName(namePrefix);
       String decl =
           StringUtils.format(
               "${type} ${name} = ${from};",
@@ -456,6 +470,10 @@ public interface Expression {
           throw new UnsupportedOperationException("Unsupported type " + javaType);
         }
       }
+    }
+
+    public Object getValue() {
+      return value;
     }
 
     @Override

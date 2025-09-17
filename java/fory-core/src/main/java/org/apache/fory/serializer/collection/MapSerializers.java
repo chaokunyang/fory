@@ -32,6 +32,7 @@ import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import org.apache.fory.Fory;
+import org.apache.fory.collection.IterableOnceMapSnapshot;
 import org.apache.fory.collection.LazyMap;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
@@ -243,8 +244,8 @@ public class MapSerializers {
     }
   }
 
-  public static final class ConcurrentHashMapSerializer extends MapSerializer<ConcurrentHashMap> {
-
+  public static final class ConcurrentHashMapSerializer
+      extends ConcurrentMapSerializer<ConcurrentHashMap> {
     public ConcurrentHashMapSerializer(Fory fory, Class<ConcurrentHashMap> type) {
       super(fory, type, true);
     }
@@ -265,10 +266,19 @@ public class MapSerializers {
   }
 
   public static final class ConcurrentSkipListMapSerializer
-      extends SortedMapSerializer<ConcurrentSkipListMap> {
+      extends ConcurrentMapSerializer<ConcurrentSkipListMap> {
 
     public ConcurrentSkipListMapSerializer(Fory fory, Class<ConcurrentSkipListMap> cls) {
-      super(fory, cls);
+      super(fory, cls, true);
+    }
+
+    @Override
+    public IterableOnceMapSnapshot onMapWrite(MemoryBuffer buffer, ConcurrentSkipListMap value) {
+      IterableOnceMapSnapshot snapshot = super.onMapWrite(buffer, value);
+      if (!fory.isCrossLanguage()) {
+        fory.writeRef(buffer, value.comparator());
+      }
+      return snapshot;
     }
 
     @Override

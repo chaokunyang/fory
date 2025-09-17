@@ -1255,8 +1255,9 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
                   new If(
                       neqNull(entry), inline ? writeChunk : new Assign(entry, inline(writeChunk))));
             });
-
-    return new If(not(inlineInvoke(map, "isEmpty", PRIMITIVE_BOOLEAN_TYPE)), whileAction);
+    ListExpression action =
+        new ListExpression(whileAction, new Invoke(serializer, "onMapWriteFinish", map));
+    return new If(not(inlineInvoke(map, "isEmpty", PRIMITIVE_BOOLEAN_TYPE)), action);
   }
 
   private Tuple2<Expression, Expression> getMapKVSerializer(Class<?> keyType, Class<?> valueType) {

@@ -168,6 +168,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
         }
       }
     }
+    onMapWriteFinish(map);
   }
 
   @Override
@@ -935,6 +936,8 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
    * </ol>
    */
   public abstract Map onMapWrite(MemoryBuffer buffer, T value);
+
+  public void onMapWriteFinish(Map map) {}
 
   /**
    * Read data except size and elements, return empty map to be filled.

@@ -46,6 +46,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.CopyOnWriteArrayList;
 import org.apache.fory.Fory;
+import org.apache.fory.collection.CollectionSnapshot;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
@@ -271,10 +272,10 @@ public class CollectionSerializers {
   }
 
   public static class CopyOnWriteArrayListSerializer
-      extends CollectionSerializer<CopyOnWriteArrayList> {
+      extends ConcurrentCollectionSerializer<CopyOnWriteArrayList> {
 
     public CopyOnWriteArrayListSerializer(Fory fory, Class<CopyOnWriteArrayList> type) {
-      super(fory, type);
+      super(fory, type, true);
     }
 
     @Override
@@ -407,10 +408,19 @@ public class CollectionSerializers {
   }
 
   public static final class ConcurrentSkipListSetSerializer
-      extends SortedSetSerializer<ConcurrentSkipListSet> {
+      extends ConcurrentCollectionSerializer<ConcurrentSkipListSet> {
 
     public ConcurrentSkipListSetSerializer(Fory fory, Class<ConcurrentSkipListSet> cls) {
-      super(fory, cls);
+      super(fory, cls, true);
+    }
+
+    @Override
+    public CollectionSnapshot onCollectionWrite(MemoryBuffer buffer, ConcurrentSkipListSet value) {
+      CollectionSnapshot snapshot = super.onCollectionWrite(buffer, value);
+      if (!fory.isCrossLanguage()) {
+        fory.writeRef(buffer, value.comparator());
+      }
+      return snapshot;
     }
 
     @Override

@@ -30,11 +30,11 @@ import java.util.Map;
 import java.util.Set;
 import org.testng.annotations.Test;
 
-public class IterableOnceMapSnapshotTest {
+public class MapSnapshotTest {
 
   @Test
   public void testSetMap() {
-    IterableOnceMapSnapshot<String, Integer> snapshot = new IterableOnceMapSnapshot<>();
+    MapSnapshot<String, Integer> snapshot = new MapSnapshot<>();
     Map<String, Integer> originalMap = new HashMap<>();
     originalMap.put("key1", 1);
     originalMap.put("key2", 2);
@@ -59,7 +59,7 @@ public class IterableOnceMapSnapshotTest {
 
   @Test
   public void testIterator() {
-    IterableOnceMapSnapshot<String, Integer> snapshot = new IterableOnceMapSnapshot<>();
+    MapSnapshot<String, Integer> snapshot = new MapSnapshot<>();
     Map<String, Integer> originalMap = new HashMap<>();
     originalMap.put("a", 1);
     originalMap.put("b", 2);
@@ -85,7 +85,7 @@ public class IterableOnceMapSnapshotTest {
 
   @Test
   public void testClear() {
-    IterableOnceMapSnapshot<String, Integer> snapshot = new IterableOnceMapSnapshot<>();
+    MapSnapshot<String, Integer> snapshot = new MapSnapshot<>();
     Map<String, Integer> originalMap = new HashMap<>();
     originalMap.put("key1", 1);
     originalMap.put("key2", 2);
@@ -102,7 +102,7 @@ public class IterableOnceMapSnapshotTest {
 
   @Test
   public void testReuseAfterClear() {
-    IterableOnceMapSnapshot<String, Integer> snapshot = new IterableOnceMapSnapshot<>();
+    MapSnapshot<String, Integer> snapshot = new MapSnapshot<>();
 
     // First use
     Map<String, Integer> map1 = new HashMap<>();
@@ -132,7 +132,7 @@ public class IterableOnceMapSnapshotTest {
 
   @Test
   public void testEmptyMapSet() {
-    IterableOnceMapSnapshot<String, Integer> snapshot = new IterableOnceMapSnapshot<>();
+    MapSnapshot<String, Integer> snapshot = new MapSnapshot<>();
     Map<String, Integer> emptyMap = new HashMap<>();
 
     snapshot.setMap(emptyMap);
@@ -144,7 +144,7 @@ public class IterableOnceMapSnapshotTest {
 
   @Test
   public void testEntrySetSize() {
-    IterableOnceMapSnapshot<String, Integer> snapshot = new IterableOnceMapSnapshot<>();
+    MapSnapshot<String, Integer> snapshot = new MapSnapshot<>();
     Map<String, Integer> originalMap = new HashMap<>();
     originalMap.put("key1", 1);
     originalMap.put("key2", 2);

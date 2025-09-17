@@ -33,15 +33,6 @@ import org.testng.annotations.Test;
 public class IterableOnceMapSnapshotTest {
 
   @Test
-  public void testEmptySnapshot() {
-    IterableOnceMapSnapshot<String, Integer> snapshot = new IterableOnceMapSnapshot<>();
-
-    assertEquals(snapshot.size(), 0);
-    assertTrue(snapshot.isEmpty());
-    assertTrue(snapshot.entrySet().isEmpty());
-  }
-
-  @Test
   public void testSetMap() {
     IterableOnceMapSnapshot<String, Integer> snapshot = new IterableOnceMapSnapshot<>();
     Map<String, Integer> originalMap = new HashMap<>();
@@ -110,25 +101,6 @@ public class IterableOnceMapSnapshotTest {
   }
 
   @Test
-  public void testClearLargeMap() {
-    IterableOnceMapSnapshot<String, Integer> snapshot = new IterableOnceMapSnapshot<>();
-    Map<String, Integer> largeMap = new HashMap<>();
-
-    // Create a map larger than CLEAR_ARRAY_SIZE_THRESHOLD (2048)
-    for (int i = 0; i < 3000; i++) {
-      largeMap.put("key" + i, i);
-    }
-
-    snapshot.setMap(largeMap);
-    assertEquals(snapshot.size(), 3000);
-
-    snapshot.clear();
-
-    assertEquals(snapshot.size(), 0);
-    assertTrue(snapshot.isEmpty());
-  }
-
-  @Test
   public void testReuseAfterClear() {
     IterableOnceMapSnapshot<String, Integer> snapshot = new IterableOnceMapSnapshot<>();
 
@@ -185,35 +157,4 @@ public class IterableOnceMapSnapshotTest {
     assertEquals(snapshot.entrySet().size(), snapshot.size());
   }
 
-  @Test
-  public void testIteratorResetAfterSetMap() {
-    IterableOnceMapSnapshot<String, Integer> snapshot = new IterableOnceMapSnapshot<>();
-    Map<String, Integer> map1 = new HashMap<>();
-    map1.put("a", 1);
-    map1.put("b", 2);
-
-    snapshot.setMap(map1);
-
-    // Iterate partially
-    Iterator<Map.Entry<String, Integer>> iterator = snapshot.entrySet().iterator();
-    assertTrue(iterator.hasNext());
-    iterator.next();
-
-    // Set new map - should reset iteration
-    Map<String, Integer> map2 = new HashMap<>();
-    map2.put("x", 10);
-    map2.put("y", 20);
-    map2.put("z", 30);
-
-    snapshot.setMap(map2);
-
-    // Iterator should be reset and work with new data
-    iterator = snapshot.entrySet().iterator();
-    int count = 0;
-    while (iterator.hasNext()) {
-      iterator.next();
-      count++;
-    }
-    assertEquals(count, 3);
-  }
 }

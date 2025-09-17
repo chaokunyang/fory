@@ -20,7 +20,6 @@
 package org.apache.fory.serializer.collection;
 
 import java.util.Map;
-import java.util.concurrent.ConcurrentMap;
 import org.apache.fory.Fory;
 import org.apache.fory.collection.IterableOnceMapSnapshot;
 import org.apache.fory.collection.ObjectArray;
@@ -49,7 +48,7 @@ import org.apache.fory.memory.MemoryBuffer;
  * @since 1.0
  */
 @SuppressWarnings({"rawtypes", "unchecked"})
-public class ConcurrentMapSerializer<T extends ConcurrentMap> extends MapSerializer<T> {
+public class ConcurrentMapSerializer<T extends Map> extends MapSerializer<T> {
   /** Pool of reusable IterableOnceMapSnapshot instances for efficient serialization. */
   protected final ObjectArray<IterableOnceMapSnapshot> snapshots = new ObjectArray<>(1);
 

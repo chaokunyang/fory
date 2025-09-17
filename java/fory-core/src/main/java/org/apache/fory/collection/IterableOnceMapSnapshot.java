@@ -141,7 +141,7 @@ public class IterableOnceMapSnapshot<K, V> extends AbstractMap<K, V> {
 
   @Override
   public void clear() {
-    if (size > 2048) {
+    if (size > CLEAR_ARRAY_SIZE_THRESHOLD) {
       array = new ObjectArray<>(16);
     } else {
       array.clear();

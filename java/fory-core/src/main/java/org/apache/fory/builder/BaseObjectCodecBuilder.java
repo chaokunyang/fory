@@ -969,7 +969,10 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       builder.add(action);
     }
     walkPath.removeLast();
-    return new ListExpression(onCollectionWrite, new If(gt(size, ofInt(0)), builder));
+    return new ListExpression(
+        onCollectionWrite,
+        new If(gt(size, ofInt(0)), builder),
+        new Invoke(serializer, "onCollectionWriteFinish", collection));
   }
 
   /**

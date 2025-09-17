@@ -112,6 +112,8 @@ class Fory:
         "_unsupported_callback",
         "_unsupported_objects",
         "_peer_language",
+        "max_depth",
+        "depth",
     )
     serialization_context: "SerializationContext"
 
@@ -120,6 +122,7 @@ class Fory:
         language=Language.PYTHON,
         ref_tracking: bool = False,
         require_type_registration: bool = True,
+        max_depth: int = 50,
     ):
         """
         :param require_type_registration:
@@ -130,6 +133,10 @@ class Fory:
           Do not disable type registration if you can't ensure your environment are
           *indeed secure*. We are not responsible for security risks if
           you disable this option.
+        :param max_depth:
+         The maximum depth of the deserialization data.
+         If the depth exceeds the maximum depth, an exception will be raised.
+         The default value is 50.
         """
         self.language = language
         self.is_py = language == Language.PYTHON
@@ -163,6 +170,8 @@ class Fory:
         self._unsupported_callback = None
         self._unsupported_objects = None
         self._peer_language = None
+        self.max_depth = max_depth
+        self.depth = 0
 
     def register(
         self,
@@ -381,7 +390,11 @@ class Fory:
         # indicates that the object is first read.
         if ref_id >= NOT_NULL_VALUE_FLAG:
             typeinfo = self.type_resolver.read_typeinfo(buffer)
+            self.depth += 1
+            if self.depth > self.max_depth:
+                self.throw_depth_limit_exceeded_exception()
             o = typeinfo.serializer.read(buffer)
+            self.depth -= 1
             ref_resolver.set_read_object(ref_id, o)
             return o
         else:
@@ -390,7 +403,12 @@ class Fory:
     def deserialize_nonref(self, buffer):
         """Deserialize not-null and non-reference object from buffer."""
         typeinfo = self.type_resolver.read_typeinfo(buffer)
-        return typeinfo.serializer.read(buffer)
+        self.depth += 1
+        if self.depth > self.max_depth:
+            self.throw_depth_limit_exceeded_exception()
+        o = typeinfo.serializer.read(buffer)
+        self.depth -= 1
+        return o
 
     def xdeserialize_ref(self, buffer, serializer=None):
         if serializer is None or serializer.need_to_write_ref:
@@ -411,7 +429,12 @@ class Fory:
     def xdeserialize_nonref(self, buffer, serializer=None):
         if serializer is None:
             serializer = self.type_resolver.read_typeinfo(buffer).serializer
-        return serializer.xread(buffer)
+        self.depth += 1
+        if self.depth > self.max_depth:
+            self.throw_depth_limit_exceeded_exception()
+        o = serializer.xread(buffer)
+        self.depth -= 1
+        return o
 
     def write_buffer_object(self, buffer, buffer_object: BufferObject):
         if self._buffer_callback is None or self._buffer_callback(buffer_object):
@@ -477,6 +500,7 @@ class Fory:
         self._unsupported_callback = None
 
     def reset_read(self):
+        self.depth = 0
         self.ref_resolver.reset_read()
         self.type_resolver.reset_read()
         self.serialization_context.reset()

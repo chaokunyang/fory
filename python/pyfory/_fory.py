@@ -490,6 +490,20 @@ class Fory:
     def read_ref_pyobject(self, buffer):
         return self.deserialize_ref(buffer)
 
+    def inc_depth(self):
+        self.depth += 1
+        if self.depth > self.max_depth:
+            self.throw_depth_limit_exceeded_exception()
+
+    def dec_depth(self):
+        self.depth -= 1
+
+    def throw_depth_limit_exceeded_exception(self):
+        raise Exception(
+            f"Read depth exceed max depth: {self.depth}, the deserialization data may be malicious. If it's not malicious, "
+            "please increase max read depth by Fory(..., max_depth=...)"
+        )
+
     def reset_write(self):
         self.ref_resolver.reset_write()
         self.type_resolver.reset_write()

@@ -1288,12 +1288,16 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       TypeRef<?> keyType,
       TypeRef<?> valueType) {
     ListExpression expressions = new ListExpression();
-    Expression key = new Variable("key", keyType);
-    Expression value = new Variable("value", valueType);
     boolean keyMonomorphic = isMonomorphic(keyType);
     boolean valueMonomorphic = isMonomorphic(valueType);
     Class<?> keyTypeRawType = keyType.getRawType();
     Class<?> valueTypeRawType = valueType.getRawType();
+    Expression key =
+        keyMonomorphic ? new Variable("key", keyType) : invoke(entry, "getKey", "key", keyType);
+    Expression value =
+        valueMonomorphic
+            ? new Variable("value", valueType)
+            : invoke(entry, "getValue", "value", valueType);
     Expression keyTypeExpr =
         keyMonomorphic
             ? getClassExpr(keyTypeRawType)

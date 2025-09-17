@@ -116,9 +116,12 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
    *   <li>write collection size
    *   <li>onCollectionWrite
    *   <li>write elements
+   *   <li>onCollectionWriteFinish
    * </ol>
    */
   public abstract Collection onCollectionWrite(MemoryBuffer buffer, T value);
+
+  public void onCollectionWriteFinish(Collection map) {}
 
   /**
    * Write elements data header. Keep this consistent with
@@ -313,6 +316,7 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
     if (len != 0) {
       writeElements(fory, buffer, collection);
     }
+    onCollectionWriteFinish(collection);
   }
 
   protected final void writeElements(Fory fory, MemoryBuffer buffer, Collection value) {

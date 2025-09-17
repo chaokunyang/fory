@@ -29,11 +29,16 @@ import org.apache.fory.annotation.Internal;
 /**
  * A specialized map implementation that creates a snapshot of entries for single iteration. This
  * class is designed to efficiently handle concurrent map serialization by creating a lightweight
- * snapshot that can be iterated once without holding references to the original map entries.
+ * snapshot that can be iterated without holding references to the original map entries.
  *
  * <p>The implementation uses an array-based storage for entries and provides optimized iteration
  * through a custom iterator. It includes memory management features such as automatic array
  * reallocation when clearing large collections to prevent memory leaks.
+ *
+ * <p><strong>Important:</strong> The returned iterator from {@link #entrySet()}{@code .iterator()}
+ * must be consumed completely before calling {@code iterator()} again. The iterator maintains its
+ * position through a shared index, and calling {@code iterator()} again before the previous
+ * iterator is fully consumed will result in incorrect iteration behavior.
  *
  * <p>This class is marked as {@code @Internal} and should not be used directly by application code.
  * It's specifically designed for internal serialization purposes.
@@ -43,7 +48,7 @@ import org.apache.fory.annotation.Internal;
  * @since 1.0
  */
 @Internal
-public class IterableOnceMapSnapshot<K, V> extends AbstractMap<K, V> {
+public class MapSnapshot<K, V> extends AbstractMap<K, V> {
   /** Threshold for array reallocation during clear operation to prevent memory leaks. */
   private static final int CLEAR_ARRAY_SIZE_THRESHOLD = 2048;
 
@@ -66,10 +71,10 @@ public class IterableOnceMapSnapshot<K, V> extends AbstractMap<K, V> {
   private final EntryIterator iterator;
 
   /**
-   * Constructs a new empty IterableOnceMapSnapshot. Initializes the internal array with a default
-   * capacity of 16 entries and creates the entry set and iterator instances.
+   * Constructs a new empty MapSnapshot. Initializes the internal array with a default capacity of
+   * 16 entries and creates the entry set and iterator instances.
    */
-  public IterableOnceMapSnapshot() {
+  public MapSnapshot() {
     array = new ObjectArray<>(16);
     entrySet = new EntrySet();
     iterator = new EntryIterator();
@@ -86,13 +91,14 @@ public class IterableOnceMapSnapshot<K, V> extends AbstractMap<K, V> {
   }
 
   /**
-   * Entry set implementation for the IterableOnceMapSnapshot. Provides a view of the map entries
-   * and supports iteration through the custom EntryIterator.
+   * Entry set implementation for the MapSnapshot. Provides a view of the map entries and supports
+   * iteration through the custom EntryIterator.
    */
   class EntrySet extends AbstractSet<Entry<K, V>> {
 
     @Override
     public Iterator<Entry<K, V>> iterator() {
+      iterIndex = 0;
       return iterator;
     }
 
@@ -103,9 +109,14 @@ public class IterableOnceMapSnapshot<K, V> extends AbstractMap<K, V> {
   }
 
   /**
-   * Iterator implementation for the IterableOnceMapSnapshot. This iterator is designed for
-   * single-pass iteration and maintains its position through the iterIndex field. It provides
-   * efficient access to map entries stored in the underlying array.
+   * Iterator implementation for the MapSnapshot. This iterator is designed for single-pass
+   * iteration and maintains its position through the iterIndex field. It provides efficient access
+   * to map entries stored in the underlying array.
+   *
+   * <p><strong>Important:</strong> This iterator must be consumed completely before calling {@code
+   * iterator()} again on the entry set. The iterator shares its position with other potential
+   * iterators through the {@code iterIndex} field, and calling {@code iterator()} again before the
+   * current iterator is fully consumed will result in incorrect iteration behavior.
    */
   class EntryIterator implements Iterator<Entry<K, V>> {
 
@@ -141,7 +152,7 @@ public class IterableOnceMapSnapshot<K, V> extends AbstractMap<K, V> {
 
   @Override
   public void clear() {
-    if (size > 2048) {
+    if (size > CLEAR_ARRAY_SIZE_THRESHOLD) {
       array = new ObjectArray<>(16);
     } else {
       array.clear();

@@ -799,6 +799,8 @@ cdef class Fory:
     cdef object _unsupported_callback
     cdef object _unsupported_objects  # iterator
     cdef object _peer_language
+    cdef int32_t max_depth
+    cdef int32_t depth
 
     def __init__(
             self,
@@ -806,6 +808,7 @@ cdef class Fory:
             ref_tracking: bool = False,
             require_type_registration: bool = True,
             compatible: bool = False,
+            max_depth: int = 50,
     ):
         """
        :param require_type_registration:
@@ -819,6 +822,10 @@ cdef class Fory:
        :param compatible:
         Whether to enable compatible mode for cross-language serialization.
          When enabled, type forward/backward compatibility for struct fields will be enabled.
+       :param max_depth:
+        The maximum depth of the deserialization data.
+        If the depth exceeds the maximum depth, an exception will be raised.
+        The default value is 50.
         """
         self.language = language
         if _ENABLE_TYPE_REGISTRATION_FORCIBLY or require_type_registration:
@@ -851,6 +858,8 @@ cdef class Fory:
         self._unsupported_callback = None
         self._unsupported_objects = None
         self._peer_language = None
+        self.depth = 0
+        self.max_depth = max_depth
 
     def register_serializer(self, cls: Union[type, TypeVar], Serializer serializer):
         self.type_resolver.register_serializer(cls, serializer)
@@ -1116,7 +1125,11 @@ cdef class Fory:
             return buffer.read_bool()
         elif cls is float:
             return buffer.read_double()
+        self.depth += 1
+        if self.depth > self.max_depth:
+            self.throw_depth_limit_exceeded_exception()
         o = typeinfo.serializer.read(buffer)
+        self.depth -= 1
         ref_resolver.set_read_object(ref_id, o)
         return o
 
@@ -1132,7 +1145,12 @@ cdef class Fory:
             return buffer.read_bool()
         elif cls is float:
             return buffer.read_double()
-        return typeinfo.serializer.read(buffer)
+        self.depth += 1
+        if self.depth > self.max_depth:
+            self.throw_depth_limit_exceeded_exception()
+        o = typeinfo.serializer.read(buffer)
+        self.depth -= 1
+        return o
 
     cpdef inline xdeserialize_ref(self, Buffer buffer, Serializer serializer=None):
         cdef MapRefResolver ref_resolver
@@ -1160,7 +1178,16 @@ cdef class Fory:
             self, Buffer buffer, Serializer serializer=None):
         if serializer is None:
             serializer = self.type_resolver.read_typeinfo(buffer).serializer
-        return serializer.xread(buffer)
+        self.depth += 1
+        if self.depth > self.max_depth:
+            self.throw_depth_limit_exceeded_exception()
+        o = serializer.xread(buffer)
+        self.depth -= 1
+        return o
+
+    cdef inline throw_depth_limit_exceeded_exception(self):
+        raise Exception(f"Read depth exceed max depth: {self.depth}, the deserialization data may be malicious. If it's not malicious, "
+            "please increase max read depth by Fory(..., max_depth=...)")
 
     cpdef inline write_buffer_object(self, Buffer buffer, buffer_object):
         if self._buffer_callback is not None and self._buffer_callback(buffer_object):
@@ -1232,6 +1259,7 @@ cdef class Fory:
         self._unsupported_callback = None
 
     cpdef inline reset_read(self):
+        self.depth = 0
         self.ref_resolver.reset_read()
         self.type_resolver.reset_read()
         self.metastring_resolver.reset_read()

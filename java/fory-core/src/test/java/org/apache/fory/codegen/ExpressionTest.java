@@ -91,6 +91,6 @@ public class ExpressionTest {
             neq(Literal.ofInt(3), Literal.ofInt(4)),
             neq(Literal.ofInt(5), Literal.ofInt(6)));
     ExprCode exprCode = or.genCode(ctx);
-    Assert.assertEquals(exprCode.value().code(), "((false || (3 != 4)) || (5 != 6))");
+    Assert.assertEquals(exprCode.value().code(), "((3 != 4) || (5 != 6))");
   }
 }

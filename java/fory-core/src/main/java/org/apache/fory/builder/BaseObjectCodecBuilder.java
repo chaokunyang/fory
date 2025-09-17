@@ -97,6 +97,7 @@ import org.apache.fory.codegen.Expression.ListExpression;
 import org.apache.fory.codegen.Expression.Literal;
 import org.apache.fory.codegen.Expression.Reference;
 import org.apache.fory.codegen.Expression.Return;
+import org.apache.fory.codegen.Expression.Variable;
 import org.apache.fory.codegen.Expression.While;
 import org.apache.fory.codegen.ExpressionUtils;
 import org.apache.fory.codegen.ExpressionVisitor.ExprHolder;
@@ -1255,9 +1256,9 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
                   new If(
                       neqNull(entry), inline ? writeChunk : new Assign(entry, inline(writeChunk))));
             });
-    ListExpression action =
-        new ListExpression(whileAction, new Invoke(serializer, "onMapWriteFinish", map));
-    return new If(not(inlineInvoke(map, "isEmpty", PRIMITIVE_BOOLEAN_TYPE)), action);
+    return new ListExpression(
+        new If(not(inlineInvoke(map, "isEmpty", PRIMITIVE_BOOLEAN_TYPE)), whileAction),
+        new Invoke(serializer, "onMapWriteFinish", map));
   }
 
   private Tuple2<Expression, Expression> getMapKVSerializer(Class<?> keyType, Class<?> valueType) {
@@ -1287,8 +1288,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       TypeRef<?> keyType,
       TypeRef<?> valueType) {
     ListExpression expressions = new ListExpression();
-    Expression key = invoke(entry, "getKey", "key", keyType);
-    Expression value = invoke(entry, "getValue", "value", valueType);
+    Expression key = new Variable("key", keyType);
+    Expression value = new Variable("value", valueType);
     boolean keyMonomorphic = isMonomorphic(keyType);
     boolean valueMonomorphic = isMonomorphic(valueType);
     Class<?> keyTypeRawType = keyType.getRawType();
@@ -1414,6 +1415,9 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
         new While(
             Literal.ofBoolean(true),
             () -> {
+              Expression keyAssign = new Assign(key, invokeInline(entry, "getKey", keyType));
+              Expression valueAssign =
+                  new Assign(value, invokeInline(entry, "getValue", valueType));
               Expression breakCondition;
               if (keyMonomorphic && valueMonomorphic) {
                 breakCondition = or(eqNull(key), eqNull(value));
@@ -1469,20 +1473,16 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
                         writeValue);
               }
               return new ListExpression(
+                  keyAssign,
+                  valueAssign,
                   new If(breakCondition, new Break()),
                   writeKey,
                   writeValue,
                   new Assign(chunkSize, add(chunkSize, ofInt(1))),
                   new If(
                       inlineInvoke(iterator, "hasNext", PRIMITIVE_BOOLEAN_TYPE),
-                      new ListExpression(
-                          new Assign(
-                              entry,
-                              cast(inlineInvoke(iterator, "next", OBJECT_TYPE), MAP_ENTRY_TYPE)),
-                          new Assign(
-                              key,
-                              tryInlineCast(inlineInvoke(entry, "getKey", OBJECT_TYPE), keyType)),
-                          new Assign(value, invokeInline(entry, "getValue", valueType))),
+                      new Assign(
+                          entry, cast(inlineInvoke(iterator, "next", OBJECT_TYPE), MAP_ENTRY_TYPE)),
                       list(new Assign(entry, new Literal(null, MAP_ENTRY_TYPE)), new Break())),
                   new If(eq(chunkSize, ofInt(MAX_CHUNK_SIZE)), new Break()));
             });

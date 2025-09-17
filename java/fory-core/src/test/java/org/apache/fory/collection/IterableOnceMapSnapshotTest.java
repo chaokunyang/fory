@@ -156,5 +156,4 @@ public class IterableOnceMapSnapshotTest {
     assertEquals(snapshot.entrySet().size(), 4);
     assertEquals(snapshot.entrySet().size(), snapshot.size());
   }
-
 }

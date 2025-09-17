@@ -103,7 +103,20 @@ public class ExpressionUtils {
     return new LogicalAnd(true, left, right);
   }
 
-  public static LogicalOr or(Expression left, Expression right, Expression... expressions) {
+  public static Expression or(Expression left, Expression right, Expression... expressions) {
+    if (left instanceof Literal) {
+      Literal l = (Literal) left;
+      if (!(Boolean) (l.getValue())) {
+        if (expressions.length == 0) {
+          return right;
+        }
+        LogicalOr logicalOr = new LogicalOr(right, expressions[0]);
+        for (int i = 1; i < expressions.length; i++) {
+          logicalOr = new LogicalOr(logicalOr, expressions[i]);
+        }
+        return logicalOr;
+      }
+    }
     LogicalOr logicalOr = new LogicalOr(left, right);
     for (Expression expression : expressions) {
       logicalOr = new LogicalOr(logicalOr, expression);
@@ -125,7 +138,12 @@ public class ExpressionUtils {
     return new BitAnd(left, right);
   }
 
-  public static Not not(Expression target) {
+  public static Expression not(Expression target) {
+    if (target instanceof Literal) {
+      Literal literal = (Literal) target;
+      Boolean b = (Boolean) literal.getValue();
+      return Literal.ofBoolean(!b);
+    }
     return new Not(target);
   }
 

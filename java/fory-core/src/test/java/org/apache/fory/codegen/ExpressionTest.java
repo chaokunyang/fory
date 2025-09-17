@@ -27,7 +27,6 @@ import static org.testng.Assert.assertNull;
 import org.apache.fory.codegen.Code.ExprCode;
 import org.apache.fory.codegen.Expression.ListExpression;
 import org.apache.fory.codegen.Expression.Literal;
-import org.apache.fory.codegen.Expression.LogicalOr;
 import org.apache.fory.codegen.Expression.Reference;
 import org.apache.fory.codegen.Expression.Return;
 import org.testng.Assert;
@@ -86,7 +85,7 @@ public class ExpressionTest {
   @Test
   public void testMultipleOr() {
     CodegenContext ctx = new CodegenContext();
-    LogicalOr or =
+    Expression or =
         or(
             Literal.ofBoolean(false),
             neq(Literal.ofInt(3), Literal.ofInt(4)),

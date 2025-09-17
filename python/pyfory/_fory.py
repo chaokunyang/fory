@@ -426,11 +426,9 @@ class Fory:
         # indicates that the object is first read.
         if ref_id >= NOT_NULL_VALUE_FLAG:
             typeinfo = self.type_resolver.read_typeinfo(buffer)
-            self.depth += 1
-            if self.depth > self.max_depth:
-                self.throw_depth_limit_exceeded_exception()
+            self.inc_depth()
             o = typeinfo.serializer.read(buffer)
-            self.depth -= 1
+            self.dec_depth()
             ref_resolver.set_read_object(ref_id, o)
             return o
         else:
@@ -439,11 +437,9 @@ class Fory:
     def deserialize_nonref(self, buffer):
         """Deserialize not-null and non-reference object from buffer."""
         typeinfo = self.type_resolver.read_typeinfo(buffer)
-        self.depth += 1
-        if self.depth > self.max_depth:
-            self.throw_depth_limit_exceeded_exception()
+        self.inc_depth()
         o = typeinfo.serializer.read(buffer)
-        self.depth -= 1
+        self.dec_depth()
         return o
 
     def xdeserialize_ref(self, buffer, serializer=None):
@@ -465,11 +461,9 @@ class Fory:
     def xdeserialize_nonref(self, buffer, serializer=None):
         if serializer is None:
             serializer = self.type_resolver.read_typeinfo(buffer).serializer
-        self.depth += 1
-        if self.depth > self.max_depth:
-            self.throw_depth_limit_exceeded_exception()
+        self.inc_depth()
         o = serializer.xread(buffer)
-        self.depth -= 1
+        self.dec_depth()
         return o
 
     def write_buffer_object(self, buffer, buffer_object: BufferObject):
@@ -548,6 +542,14 @@ class Fory:
     def reset(self):
         self.reset_write()
         self.reset_read()
+
+    def inc_depth(self):
+        self.depth += 1
+        if self.depth > self.max_depth:
+            self.throw_depth_limit_exceeded_exception()
+
+    def dec_depth(self):
+        self.depth -= 1
 
     def throw_depth_limit_exceeded_exception(self):
         raise Exception(

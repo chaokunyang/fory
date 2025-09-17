@@ -348,14 +348,17 @@ class CollectionSerializer(Serializer):
         raise NotImplementedError
 
     def _read_same_type_no_ref(self, buffer, len_, collection_, typeinfo):
+        self.fory.inc_depth()
         if self.is_py:
             for _ in range(len_):
                 self._add_element(collection_, typeinfo.serializer.read(buffer))
         else:
             for _ in range(len_):
                 self._add_element(collection_, typeinfo.serializer.xread(buffer))
+        self.fory.dec_depth()
 
     def _read_same_type_ref(self, buffer, len_, collection_, typeinfo):
+        self.fory.inc_depth()
         for _ in range(len_):
             ref_id = self.ref_resolver.try_preserve_ref_id(buffer)
             if ref_id < NOT_NULL_VALUE_FLAG:
@@ -367,13 +370,16 @@ class CollectionSerializer(Serializer):
                     obj = typeinfo.serializer.xread(buffer)
                 self.ref_resolver.set_read_object(ref_id, obj)
             self._add_element(collection_, obj)
+        self.fory.dec_depth()
 
     def _read_different_types(self, buffer, len_, collection_):
+        self.fory.inc_depth()
         for _ in range(len_):
             self._add_element(
                 collection_,
                 get_next_element(buffer, self.ref_resolver, self.type_resolver, self.is_py),
             )
+        self.fory.dec_depth()
 
     def xwrite(self, buffer, value):
         self.write(buffer, value)
@@ -558,6 +564,7 @@ class MapSerializer(Serializer):
             chunk_header = buffer.read_uint8()
         key_serializer, value_serializer = self.key_serializer, self.value_serializer
         deserialize_ref = fory.deserialize_ref if self.fory.is_py else fory.xdeserialize_ref
+        fory.inc_depth()
         while size > 0:
             while True:
                 key_has_null = (chunk_header & KEY_HAS_NULL) != 0
@@ -598,6 +605,7 @@ class MapSerializer(Serializer):
                         map_[None] = None
                 size -= 1
                 if size == 0:
+                    fory.dec_depth()
                     return map_
                 else:
                     chunk_header = buffer.read_uint8()
@@ -634,6 +642,7 @@ class MapSerializer(Serializer):
                 size -= 1
             if size != 0:
                 chunk_header = buffer.read_uint8()
+        fory.dec_depth()
         return map_
 
     def _write_obj(self, serializer, buffer, obj):

@@ -21,7 +21,7 @@ package org.apache.fory.serializer.collection;
 
 import java.util.Collection;
 import org.apache.fory.Fory;
-import org.apache.fory.collection.IterableOnceCollectionSnapshot;
+import org.apache.fory.collection.CollectionSnapshot;
 import org.apache.fory.collection.ObjectArray;
 import org.apache.fory.memory.MemoryBuffer;
 
@@ -30,13 +30,12 @@ import org.apache.fory.memory.MemoryBuffer;
  *
  * <p>This serializer extends {@link CollectionSerializer} to provide specialized handling for
  * concurrent collections such as {@link java.util.concurrent.ConcurrentLinkedQueue} and other
- * thread-safe collection implementations. The key feature is the use of {@link
- * IterableOnceCollectionSnapshot} to create stable snapshots of concurrent collections during
- * serialization, avoiding potential {@link java.util.ConcurrentModificationException} and ensuring
- * thread safety.
+ * thread-safe collection implementations. The key feature is the use of {@link CollectionSnapshot}
+ * to create stable snapshots of concurrent collections during serialization, avoiding potential
+ * {@link java.util.ConcurrentModificationException} and ensuring thread safety.
  *
- * <p>The serializer maintains a pool of reusable {@link IterableOnceCollectionSnapshot} instances
- * to minimize object allocation overhead during serialization.
+ * <p>The serializer maintains a pool of reusable {@link CollectionSnapshot} instances to minimize
+ * object allocation overhead during serialization.
  *
  * <p>This implementation is particularly important for concurrent collections because:
  *
@@ -51,8 +50,8 @@ import org.apache.fory.memory.MemoryBuffer;
  */
 @SuppressWarnings({"rawtypes", "unchecked"})
 public class ConcurrentCollectionSerializer<T extends Collection> extends CollectionSerializer<T> {
-  /** Pool of reusable IterableOnceCollectionSnapshot instances for efficient serialization. */
-  protected final ObjectArray<IterableOnceCollectionSnapshot> snapshots = new ObjectArray<>(1);
+  /** Pool of reusable CollectionSnapshot instances for efficient serialization. */
+  protected final ObjectArray<CollectionSnapshot> snapshots = new ObjectArray<>(1);
 
   /**
    * Constructs a new ConcurrentCollectionSerializer for the specified concurrent collection type.
@@ -68,20 +67,20 @@ public class ConcurrentCollectionSerializer<T extends Collection> extends Collec
   /**
    * Creates a snapshot of the concurrent collection for safe serialization.
    *
-   * <p>This method retrieves a reusable {@link IterableOnceCollectionSnapshot} from the pool, or
-   * creates a new one if none are available. It then creates a snapshot of the concurrent
-   * collection to avoid concurrent modification issues during serialization. The collection size is
-   * written to the buffer before returning the snapshot.
+   * <p>This method retrieves a reusable {@link CollectionSnapshot} from the pool, or creates a new
+   * one if none are available. It then creates a snapshot of the concurrent collection to avoid
+   * concurrent modification issues during serialization. The collection size is written to the
+   * buffer before returning the snapshot.
    *
    * @param buffer the memory buffer to write serialization data to
    * @param value the concurrent collection to serialize
    * @return a snapshot of the collection for safe iteration during serialization
    */
   @Override
-  public IterableOnceCollectionSnapshot onCollectionWrite(MemoryBuffer buffer, T value) {
-    IterableOnceCollectionSnapshot snapshot = snapshots.popOrNull();
+  public CollectionSnapshot onCollectionWrite(MemoryBuffer buffer, T value) {
+    CollectionSnapshot snapshot = snapshots.popOrNull();
     if (snapshot == null) {
-      snapshot = new IterableOnceCollectionSnapshot();
+      snapshot = new CollectionSnapshot();
     }
     snapshot.setCollection(value);
     buffer.writeVarUint32Small7(snapshot.size());
@@ -99,7 +98,7 @@ public class ConcurrentCollectionSerializer<T extends Collection> extends Collec
    */
   @Override
   public void onCollectionWriteFinish(Collection collection) {
-    IterableOnceCollectionSnapshot snapshot = (IterableOnceCollectionSnapshot) collection;
+    CollectionSnapshot snapshot = (CollectionSnapshot) collection;
     snapshot.clear();
     snapshots.add(snapshot);
   }

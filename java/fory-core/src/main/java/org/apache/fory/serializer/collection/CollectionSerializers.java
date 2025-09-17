@@ -46,7 +46,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.CopyOnWriteArrayList;
 import org.apache.fory.Fory;
-import org.apache.fory.collection.IterableOnceCollectionSnapshot;
+import org.apache.fory.collection.CollectionSnapshot;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
@@ -415,9 +415,8 @@ public class CollectionSerializers {
     }
 
     @Override
-    public IterableOnceCollectionSnapshot onCollectionWrite(
-        MemoryBuffer buffer, ConcurrentSkipListSet value) {
-      IterableOnceCollectionSnapshot snapshot = super.onCollectionWrite(buffer, value);
+    public CollectionSnapshot onCollectionWrite(MemoryBuffer buffer, ConcurrentSkipListSet value) {
+      CollectionSnapshot snapshot = super.onCollectionWrite(buffer, value);
       if (!fory.isCrossLanguage()) {
         fory.writeRef(buffer, value.comparator());
       }

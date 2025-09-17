@@ -21,7 +21,7 @@ package org.apache.fory.serializer.collection;
 
 import java.util.Map;
 import org.apache.fory.Fory;
-import org.apache.fory.collection.IterableOnceMapSnapshot;
+import org.apache.fory.collection.MapSnapshot;
 import org.apache.fory.collection.ObjectArray;
 import org.apache.fory.memory.MemoryBuffer;
 
@@ -30,11 +30,11 @@ import org.apache.fory.memory.MemoryBuffer;
  *
  * <p>This serializer extends {@link MapSerializer} to provide specialized handling for concurrent
  * maps such as {@link java.util.concurrent.ConcurrentHashMap}. The key feature is the use of {@link
- * IterableOnceMapSnapshot} to create stable snapshots of concurrent maps during serialization,
- * avoiding potential {@link java.util.ConcurrentModificationException} and ensuring thread safety.
+ * MapSnapshot} to create stable snapshots of concurrent maps during serialization, avoiding
+ * potential {@link java.util.ConcurrentModificationException} and ensuring thread safety.
  *
- * <p>The serializer maintains a pool of reusable {@link IterableOnceMapSnapshot} instances to
- * minimize object allocation overhead during serialization.
+ * <p>The serializer maintains a pool of reusable {@link MapSnapshot} instances to minimize object
+ * allocation overhead during serialization.
  *
  * <p>This implementation is particularly important for concurrent maps because:
  *
@@ -49,8 +49,8 @@ import org.apache.fory.memory.MemoryBuffer;
  */
 @SuppressWarnings({"rawtypes", "unchecked"})
 public class ConcurrentMapSerializer<T extends Map> extends MapSerializer<T> {
-  /** Pool of reusable IterableOnceMapSnapshot instances for efficient serialization. */
-  protected final ObjectArray<IterableOnceMapSnapshot> snapshots = new ObjectArray<>(1);
+  /** Pool of reusable MapSnapshot instances for efficient serialization. */
+  protected final ObjectArray<MapSnapshot> snapshots = new ObjectArray<>(1);
 
   /**
    * Constructs a new ConcurrentMapSerializer for the specified concurrent map type.
@@ -66,20 +66,20 @@ public class ConcurrentMapSerializer<T extends Map> extends MapSerializer<T> {
   /**
    * Creates a snapshot of the concurrent map for safe serialization.
    *
-   * <p>This method retrieves a reusable {@link IterableOnceMapSnapshot} from the pool, or creates a
-   * new one if none are available. It then creates a snapshot of the concurrent map to avoid
-   * concurrent modification issues during serialization. The map size is written to the buffer
-   * before returning the snapshot.
+   * <p>This method retrieves a reusable {@link MapSnapshot} from the pool, or creates a new one if
+   * none are available. It then creates a snapshot of the concurrent map to avoid concurrent
+   * modification issues during serialization. The map size is written to the buffer before
+   * returning the snapshot.
    *
    * @param buffer the memory buffer to write serialization data to
    * @param value the concurrent map to serialize
    * @return a snapshot of the map for safe iteration during serialization
    */
   @Override
-  public IterableOnceMapSnapshot onMapWrite(MemoryBuffer buffer, T value) {
-    IterableOnceMapSnapshot snapshot = snapshots.popOrNull();
+  public MapSnapshot onMapWrite(MemoryBuffer buffer, T value) {
+    MapSnapshot snapshot = snapshots.popOrNull();
     if (snapshot == null) {
-      snapshot = new IterableOnceMapSnapshot();
+      snapshot = new MapSnapshot();
     }
     snapshot.setMap(value);
     buffer.writeVarUint32Small7(snapshot.size());
@@ -97,7 +97,7 @@ public class ConcurrentMapSerializer<T extends Map> extends MapSerializer<T> {
    */
   @Override
   public void onMapWriteFinish(Map map) {
-    IterableOnceMapSnapshot snapshot = (IterableOnceMapSnapshot) map;
+    MapSnapshot snapshot = (MapSnapshot) map;
     snapshot.clear();
     snapshots.add(snapshot);
   }

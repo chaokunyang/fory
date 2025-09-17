@@ -24,11 +24,11 @@ import static org.testng.Assert.*;
 import java.util.*;
 import org.testng.annotations.Test;
 
-public class IterableOnceCollectionSnapshotTest {
+public class CollectionSnapshotTest {
 
   @Test
   public void testSetCollection() {
-    IterableOnceCollectionSnapshot<String> snapshot = new IterableOnceCollectionSnapshot<>();
+    CollectionSnapshot<String> snapshot = new CollectionSnapshot<>();
     List<String> source = Arrays.asList("a", "b", "c");
 
     snapshot.setCollection(source);
@@ -43,7 +43,7 @@ public class IterableOnceCollectionSnapshotTest {
 
   @Test
   public void testIterator() {
-    IterableOnceCollectionSnapshot<Integer> snapshot = new IterableOnceCollectionSnapshot<>();
+    CollectionSnapshot<Integer> snapshot = new CollectionSnapshot<>();
     List<Integer> source = Arrays.asList(1, 2, 3);
     snapshot.setCollection(source);
 
@@ -59,7 +59,7 @@ public class IterableOnceCollectionSnapshotTest {
 
   @Test
   public void testClearSmallCollection() {
-    IterableOnceCollectionSnapshot<String> snapshot = new IterableOnceCollectionSnapshot<>();
+    CollectionSnapshot<String> snapshot = new CollectionSnapshot<>();
     snapshot.setCollection(Arrays.asList("a", "b"));
 
     snapshot.clear();
@@ -70,7 +70,7 @@ public class IterableOnceCollectionSnapshotTest {
 
   @Test
   public void testClearLargeCollection() {
-    IterableOnceCollectionSnapshot<Integer> snapshot = new IterableOnceCollectionSnapshot<>();
+    CollectionSnapshot<Integer> snapshot = new CollectionSnapshot<>();
     List<Integer> largeList = new ArrayList<>();
     for (int i = 0; i < 3000; i++) {
       largeList.add(i);
@@ -85,7 +85,7 @@ public class IterableOnceCollectionSnapshotTest {
 
   @Test
   public void testClearAndReuse() {
-    IterableOnceCollectionSnapshot<Integer> snapshot = new IterableOnceCollectionSnapshot<>();
+    CollectionSnapshot<Integer> snapshot = new CollectionSnapshot<>();
 
     // First use
     snapshot.setCollection(Arrays.asList(1, 2, 3));

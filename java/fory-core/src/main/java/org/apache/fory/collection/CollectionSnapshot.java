@@ -24,8 +24,29 @@ import java.util.Collection;
 import java.util.Iterator;
 import org.apache.fory.annotation.Internal;
 
+/**
+ * A specialized collection implementation that creates a snapshot of elements for single iteration.
+ * This class is designed to efficiently handle concurrent collection serialization by creating a
+ * lightweight snapshot that can be iterated without holding references to the original collection
+ * elements.
+ *
+ * <p>The implementation uses an array-based storage for elements and provides optimized iteration
+ * through a custom iterator. It includes memory management features such as automatic array
+ * reallocation when clearing large collections to prevent memory leaks.
+ *
+ * <p><strong>Important:</strong> The returned iterator from {@link #iterator()} must be consumed
+ * completely before calling {@code iterator()} again. The iterator maintains its position through a
+ * shared index, and calling {@code iterator()} again before the previous iterator is fully consumed
+ * will result in incorrect iteration behavior.
+ *
+ * <p>This class is marked as {@code @Internal} and should not be used directly by application code.
+ * It's specifically designed for internal serialization purposes.
+ *
+ * @param <E> the type of elements maintained by this collection
+ * @since 1.0
+ */
 @Internal
-public class IterableOnceCollectionSnapshot<E> extends AbstractCollection<E> {
+public class CollectionSnapshot<E> extends AbstractCollection<E> {
   /** Threshold for array reallocation during clear operation to prevent memory leaks. */
   private static final int CLEAR_ARRAY_SIZE_THRESHOLD = 2048;
 
@@ -48,7 +69,7 @@ public class IterableOnceCollectionSnapshot<E> extends AbstractCollection<E> {
    * Constructs a new empty Snapshot. Initializes the internal array with a default capacity of 16
    * elements and creates the iterator instance.
    */
-  public IterableOnceCollectionSnapshot() {
+  public CollectionSnapshot() {
     array = new ObjectArray<>(16);
     iterator = new CollectionIterator();
   }
@@ -58,15 +79,32 @@ public class IterableOnceCollectionSnapshot<E> extends AbstractCollection<E> {
     return size;
   }
 
+  /**
+   * Returns an iterator over the elements in this collection. The iterator is designed for
+   * single-pass iteration and maintains its position through a shared index.
+   *
+   * <p><strong>Important:</strong> The returned iterator must be consumed completely before calling
+   * this method again. The iterator shares its position with other potential iterators through the
+   * {@code iterIndex} field, and calling {@code iterator()} again before the current iterator is
+   * fully consumed will result in incorrect iteration behavior.
+   *
+   * @return an iterator over the elements in this collection
+   */
   @Override
   public Iterator<E> iterator() {
+    iterIndex = 0;
     return iterator;
   }
 
   /**
-   * Iterator implementation for the IterableOnceCollectionSnapshot. This iterator is designed for
-   * single-pass iteration and maintains its position through the iterIndex field. It provides
-   * efficient access to collection elements stored in the underlying array.
+   * Iterator implementation for the CollectionSnapshot. This iterator is designed for single-pass
+   * iteration and maintains its position through the iterIndex field. It provides efficient access
+   * to collection elements stored in the underlying array.
+   *
+   * <p><strong>Important:</strong> This iterator must be consumed completely before calling {@code
+   * iterator()} again on the collection. The iterator shares its position with other potential
+   * iterators through the {@code iterIndex} field, and calling {@code iterator()} again before the
+   * current iterator is fully consumed will result in incorrect iteration behavior.
    */
   class CollectionIterator implements Iterator<E> {
 

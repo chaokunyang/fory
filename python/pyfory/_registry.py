@@ -63,6 +63,8 @@ from pyfory.serializer import (
     TypeSerializer,
     MethodSerializer,
     NumpyDtypeSerializer,
+    DynamicPyArraySerializer,
+    PandasSerializer,
 )
 from pyfory.meta.metastring import MetaStringEncoder, MetaStringDecoder
 from pyfory.meta.meta_compressor import DeflaterMetaCompressor
@@ -430,7 +432,7 @@ class TypeResolver:
             self._named_type_to_typeinfo[(namespace, typename)] = typeinfo
             self._ns_type_to_typeinfo[(ns_meta_bytes, type_meta_bytes)] = typeinfo
         self._types_info[cls] = typeinfo
-        if type_id > 0 and (self.language == Language.PYTHON or not TypeId.is_namespaced_type(type_id)):
+        if type_id is not None and type_id != 0 and (self.language == Language.PYTHON or not TypeId.is_namespaced_type(type_id)):
             if type_id not in self._type_id_to_typeinfo or not internal:
                 self._type_id_to_typeinfo[type_id] = typeinfo
         self._types_info[cls] = typeinfo
@@ -485,7 +487,7 @@ class TypeResolver:
                 type_id = TypeId.NAMED_ENUM
             elif isinstance(serializer, FunctionSerializer):
                 type_id = TypeId.NAMED_EXT
-            elif isinstance(serializer, (ObjectSerializer, StatefulSerializer, ReduceSerializer, TypeSerializer, MethodSerializer, NumpyDtypeSerializer)):
+            elif isinstance(serializer, (ObjectSerializer, StatefulSerializer, ReduceSerializer, TypeSerializer, MethodSerializer, NumpyDtypeSerializer, DynamicPyArraySerializer, PandasSerializer)):
                 type_id = TypeId.NAMED_EXT
             if not self.require_registration:
                 if isinstance(serializer, DataClassSerializer):
@@ -542,19 +544,19 @@ class TypeResolver:
             elif np and (issubclass(cls, np.dtype) or cls is type(np.dtype)):
                 # Handle NumPy dtype objects
                 serializer = NumpyDtypeSerializer(self.fory, cls)
+            elif cls is array.array:
+                # Handle array.array objects with DynamicPyArraySerializer
+                serializer = DynamicPyArraySerializer(self.fory, cls)
+            elif hasattr(cls, "__module__") and cls.__module__ and cls.__module__.startswith("pandas."):
+                # Handle pandas objects with PandasSerializer
+                serializer = PandasSerializer(self.fory, cls)
             elif (hasattr(cls, "__reduce__") and cls.__reduce__ is not object.__reduce__) or (
                 hasattr(cls, "__reduce_ex__") and cls.__reduce_ex__ is not object.__reduce_ex__
             ):
                 # Use ReduceSerializer for objects that have custom __reduce__ or __reduce_ex__ methods
                 # This has higher precedence than StatefulSerializer and ObjectSerializer
                 # Only use it for objects with custom reduce methods, not default ones from the object
-                module_name = getattr(cls, "__module__", "")
-                if module_name.startswith("pandas."):
-                    # For pandas objects, use StatefulSerializer instead of ReduceSerializer
-                    # as pandas objects have __getstate__/__setstate__ that work better
-                    serializer = StatefulSerializer(self.fory, cls)
-                else:
-                    serializer = ReduceSerializer(self.fory, cls)
+                serializer = ReduceSerializer(self.fory, cls)
             elif hasattr(cls, "__getstate__") and hasattr(cls, "__setstate__"):
                 # Use StatefulSerializer for objects that support __getstate__ and __setstate__
                 # This now includes pandas objects

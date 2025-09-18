@@ -228,6 +228,73 @@ class NumpyDtypeSerializer(Serializer):
         return self.read(buffer)
 
 
+class PandasSerializer(Serializer):
+    """
+    Special serializer for pandas objects that extracts their data and reconstructs them.
+    This avoids the complexity of pandas internal objects.
+    """
+    
+    def __init__(self, fory, cls):
+        super().__init__(fory, cls)
+        self.cls = cls
+    
+    def write(self, buffer, value):
+        # For DataFrames, extract the data and metadata
+        if hasattr(value, 'to_dict'):
+            # DataFrame or Series
+            data = value.to_dict('records') if hasattr(value, 'to_dict') else value.to_dict()
+            index = value.index.tolist() if hasattr(value, 'index') else None
+            columns = value.columns.tolist() if hasattr(value, 'columns') else None
+            
+            self.fory.serialize_ref(buffer, {
+                'data': data,
+                'index': index,
+                'columns': columns,
+                'dtype': str(value.dtypes) if hasattr(value, 'dtypes') else None,
+                'class_name': value.__class__.__name__,
+                'module_name': value.__class__.__module__
+            })
+        else:
+            # For other pandas objects, try to serialize their string representation
+            # This is a fallback for objects that don't have to_dict
+            self.fory.serialize_ref(buffer, {
+                'data': str(value),
+                'class_name': value.__class__.__name__,
+                'module_name': value.__class__.__module__
+            })
+    
+    def read(self, buffer):
+        data_dict = self.fory.deserialize_ref(buffer)
+        
+        if data_dict['class_name'] == 'DataFrame':
+            # Reconstruct DataFrame
+            import pandas as pd
+            if data_dict['data'] and data_dict['columns']:
+                df = pd.DataFrame(data_dict['data'])
+                if data_dict['index']:
+                    df.index = data_dict['index']
+                return df
+            else:
+                return pd.DataFrame()
+        elif data_dict['class_name'] == 'Series':
+            # Reconstruct Series
+            import pandas as pd
+            if data_dict['data']:
+                return pd.Series(data_dict['data'], index=data_dict['index'])
+            else:
+                return pd.Series()
+        else:
+            # For other pandas objects, try to reconstruct from string representation
+            # This is a fallback
+            raise ValueError(f"Cannot reconstruct {data_dict['class_name']} from serialized data")
+    
+    def xwrite(self, buffer, value):
+        return self.write(buffer, value)
+    
+    def xread(self, buffer):
+        return self.read(buffer)
+
+
 
 
 class PandasRangeIndexSerializer(Serializer):

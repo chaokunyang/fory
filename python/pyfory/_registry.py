@@ -25,7 +25,7 @@ import types
 from typing import TypeVar, Union
 from enum import Enum
 
-from pyfory._serialization import ENABLE_FORY_CYTHON_SERIALIZATION
+from pyfory import ENABLE_FORY_CYTHON_SERIALIZATION
 from pyfory import Language
 from pyfory.error import TypeUnregisteredError
 
@@ -36,8 +36,6 @@ from pyfory.serializer import (
     PyArraySerializer,
     DynamicPyArraySerializer,
     _PickleStub,
-    PickleStrongCacheStub,
-    PickleCacheStub,
     NoneSerializer,
     BooleanSerializer,
     ByteSerializer,
@@ -56,15 +54,15 @@ from pyfory.serializer import (
     SetSerializer,
     EnumSerializer,
     SliceSerializer,
-    PickleCacheSerializer,
-    PickleStrongCacheSerializer,
-    PickleSerializer,
     DataClassSerializer,
     DataClassStubSerializer,
     StatefulSerializer,
     ReduceSerializer,
     FunctionSerializer,
     ObjectSerializer,
+    TypeSerializer,
+    MethodSerializer,
+    NumpyDtypeSerializer,
 )
 from pyfory.meta.metastring import MetaStringEncoder, MetaStringDecoder
 from pyfory.meta.meta_compressor import DeflaterMetaCompressor
@@ -208,21 +206,6 @@ class TypeResolver:
 
     def _initialize_py(self):
         register = functools.partial(self._register_type, internal=True)
-        register(
-            _PickleStub,
-            type_id=PickleSerializer.PICKLE_TYPE_ID,
-            serializer=PickleSerializer,
-        )
-        register(
-            PickleStrongCacheStub,
-            type_id=97,
-            serializer=PickleStrongCacheSerializer(self.fory),
-        )
-        register(
-            PickleCacheStub,
-            type_id=98,
-            serializer=PickleCacheSerializer(self.fory),
-        )
         register(type(None), serializer=NoneSerializer)
         register(tuple, serializer=TupleSerializer)
         register(slice, serializer=SliceSerializer)
@@ -500,11 +483,9 @@ class TypeResolver:
         if self.language == Language.PYTHON:
             if isinstance(serializer, EnumSerializer):
                 type_id = TypeId.NAMED_ENUM
-            elif type(serializer) is PickleSerializer:
-                type_id = PickleSerializer.PICKLE_TYPE_ID
             elif isinstance(serializer, FunctionSerializer):
                 type_id = TypeId.NAMED_EXT
-            elif isinstance(serializer, (ObjectSerializer, StatefulSerializer, ReduceSerializer)):
+            elif isinstance(serializer, (ObjectSerializer, StatefulSerializer, ReduceSerializer, TypeSerializer, MethodSerializer, NumpyDtypeSerializer)):
                 type_id = TypeId.NAMED_EXT
             if not self.require_registration:
                 if isinstance(serializer, DataClassSerializer):
@@ -552,6 +533,15 @@ class TypeResolver:
                 serializer = DataClassStubSerializer(self.fory, cls, xlang=not self.fory.is_py)
             elif issubclass(cls, enum.Enum):
                 serializer = EnumSerializer(self.fory, cls)
+            elif cls is type:
+                # Handle Python type objects
+                serializer = TypeSerializer(self.fory, cls)
+            elif cls.__name__ == "method":
+                # Handle bound method objects
+                serializer = MethodSerializer(self.fory, cls)
+            elif np and (issubclass(cls, np.dtype) or cls is type(np.dtype)):
+                # Handle NumPy dtype objects
+                serializer = NumpyDtypeSerializer(self.fory, cls)
             elif (hasattr(cls, "__reduce__") and cls.__reduce__ is not object.__reduce__) or (
                 hasattr(cls, "__reduce_ex__") and cls.__reduce_ex__ is not object.__reduce_ex__
             ):
@@ -559,28 +549,24 @@ class TypeResolver:
                 # This has higher precedence than StatefulSerializer and ObjectSerializer
                 # Only use it for objects with custom reduce methods, not default ones from the object
                 module_name = getattr(cls, "__module__", "")
-                if module_name.startswith("pandas.") or module_name == "builtins" or cls.__name__ in ("type", "function", "method"):
-                    # Exclude pandas, built-ins, and certain system types
-                    serializer = PickleSerializer(self.fory, cls)
+                if module_name.startswith("pandas."):
+                    # For pandas objects, use StatefulSerializer instead of ReduceSerializer
+                    # as pandas objects have __getstate__/__setstate__ that work better
+                    serializer = StatefulSerializer(self.fory, cls)
                 else:
                     serializer = ReduceSerializer(self.fory, cls)
             elif hasattr(cls, "__getstate__") and hasattr(cls, "__setstate__"):
                 # Use StatefulSerializer for objects that support __getstate__ and __setstate__
-                # But exclude certain types that have incompatible state methods
-                module_name = getattr(cls, "__module__", "")
-                if module_name.startswith("pandas."):
-                    # Pandas objects have __getstate__/__setstate__ but use incompatible pickle formats
-                    serializer = PickleSerializer(self.fory, cls)
-                else:
-                    serializer = StatefulSerializer(self.fory, cls)
+                # This now includes pandas objects
+                serializer = StatefulSerializer(self.fory, cls)
             elif (
-                cls is not type
-                and (hasattr(cls, "__dict__") or hasattr(cls, "__slots__"))
-                and not (np and (issubclass(cls, np.dtype) or cls is type(np.dtype)))
+                hasattr(cls, "__dict__") or hasattr(cls, "__slots__")
             ):
                 serializer = ObjectSerializer(self.fory, cls)
             else:
-                serializer = PickleSerializer(self.fory, cls)
+                # Final fallback - try to use ObjectSerializer for any remaining objects
+                # This should handle most remaining cases that don't fit other categories
+                serializer = ObjectSerializer(self.fory, cls)
         return serializer
 
     def is_registered_by_name(self, cls):

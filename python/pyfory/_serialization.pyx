@@ -30,7 +30,7 @@ from typing import TypeVar, Union, Iterable
 from pyfory._util import get_bit, set_bit, clear_bit
 from pyfory import _fory as fmod
 from pyfory._fory import Language
-from pyfory._fory import _PicklerStub, _UnpicklerStub, Pickler, Unpickler
+# Removed pickle imports - no longer needed
 from pyfory._fory import _ENABLE_TYPE_REGISTRATION_FORCIBLY
 from pyfory.lib import mmh3
 from pyfory.meta.metastring import Encoding
@@ -792,8 +792,7 @@ cdef class Fory:
     cdef readonly MetaStringResolver metastring_resolver
     cdef readonly SerializationContext serialization_context
     cdef Buffer buffer
-    cdef public object pickler  # pickle.Pickler
-    cdef public object unpickler  # Optional[pickle.Unpickler]
+    # Removed pickler and unpickler - no longer using pickle
     cdef object _buffer_callback
     cdef object _buffers  # iterator
     cdef object _unsupported_callback
@@ -841,18 +840,7 @@ cdef class Fory:
         self.serialization_context = SerializationContext(fory=self, scoped_meta_share_enabled=compatible)
         self.type_resolver.initialize()
         self.buffer = Buffer.allocate(32)
-        if not require_type_registration:
-            warnings.warn(
-                "Type registration is disabled, unknown types can be deserialized "
-                "which may be insecure.",
-                RuntimeWarning,
-                stacklevel=2,
-            )
-            self.pickler = Pickler(self.buffer)
-        else:
-            self.pickler = _PicklerStub()
-            self.unpickler = _UnpicklerStub()
-        self.unpickler = None
+        # Removed pickle-based fallback - all objects should now be handled by native serializers
         self._buffer_callback = None
         self._buffers = None
         self._unsupported_callback = None
@@ -908,7 +896,7 @@ cdef class Fory:
         self._buffer_callback = buffer_callback
         self._unsupported_callback = unsupported_callback
         if buffer is not None:
-            self.pickler = Pickler(self.buffer)
+            pass  # Use provided buffer
         else:
             self.buffer.writer_index = 0
             buffer = self.buffer
@@ -1053,8 +1041,7 @@ cdef class Fory:
 
     cpdef inline _deserialize(
             self, Buffer buffer, buffers=None, unsupported_objects=None):
-        if not self.require_type_registration:
-            self.unpickler = Unpickler(buffer)
+        # Removed pickle-based deserialization
         if unsupported_objects is not None:
             self._unsupported_objects = iter(unsupported_objects)
         if self.language == Language.XLANG:
@@ -1218,21 +1205,14 @@ cdef class Fory:
         return buf
 
     cpdef inline handle_unsupported_write(self, Buffer buffer, obj):
-        if self._unsupported_callback is None or self._unsupported_callback(obj):
-            buffer.write_bool(True)
-            self.pickler.dump(obj)
-        else:
-            buffer.write_bool(False)
+        # No longer supported - all objects should be handled by native serializers
+        raise TypeError(f"Object {type(obj)} is not supported for serialization. "
+                       f"All objects should now be handled by native serializers.")
 
     cpdef inline handle_unsupported_read(self, Buffer buffer):
-        cdef c_bool in_band = buffer.read_bool()
-        if in_band:
-            if self.unpickler is None:
-                self.unpickler.buffer = Unpickler(buffer)
-            return self.unpickler.load()
-        else:
-            assert self._unsupported_objects is not None
-            return next(self._unsupported_objects)
+        # No longer supported - all objects should be handled by native serializers
+        raise TypeError("Unsupported object deserialization is no longer supported. "
+                       "All objects should now be handled by native serializers.")
 
     cpdef inline write_ref_pyobject(
             self, Buffer buffer, value, TypeInfo typeinfo=None):

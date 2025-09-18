@@ -93,14 +93,11 @@ class StructFieldSerializerVisitor(TypeVisitor):
         return None
 
     def visit_other(self, field_name, type_, types_path=None):
-        from pyfory.serializer import PickleSerializer  # Local import
-
         if is_subclass(type_, enum.Enum):
             return self.fory.type_resolver.get_serializer(type_)
         if type_ not in basic_types and not is_py_array_type(type_):
             return None
         serializer = self.fory.type_resolver.get_serializer(type_)
-        assert not isinstance(serializer, (PickleSerializer,))
         return serializer
 
 
@@ -202,14 +199,11 @@ class StructHashVisitor(TypeVisitor):
         self._hash = self._compute_field_hash(self._hash, hash_value)
 
     def visit_other(self, field_name, type_, types_path=None):
-        from pyfory.serializer import PickleSerializer  # Local import
-
         typeinfo = self.fory.type_resolver.get_typeinfo(type_, create=False)
         if typeinfo is None:
             id_ = 0
         else:
             serializer = typeinfo.serializer
-            assert not isinstance(serializer, (PickleSerializer,))
             id_ = typeinfo.type_id
             assert id_ is not None, serializer
             if TypeId.is_namespaced_type(typeinfo.type_id):
@@ -256,14 +250,11 @@ class StructTypeIdVisitor(TypeVisitor):
         return [typeinfo.type_id]
 
     def visit_other(self, field_name, type_, types_path=None):
-        from pyfory.serializer import PickleSerializer  # Local import
-
         if is_subclass(type_, enum.Enum):
             return [self.fory.type_resolver.get_typeinfo(type_).type_id]
         if type_ not in basic_types and not is_py_array_type(type_):
             return None, None
         typeinfo = self.fory.type_resolver.get_typeinfo(type_)
-        assert not isinstance(typeinfo.serializer, (PickleSerializer,))
         return [typeinfo.type_id]
 
 

@@ -545,19 +545,6 @@ def test_duplicate_serialize():
     assert ser_de(fory, EnumClass.E4) == EnumClass.E4
 
 
-@dataclass(unsafe_hash=True)
-class CacheClass1:
-    f1: int
-
-
-def test_cache_serializer():
-    fory = Fory(language=Language.PYTHON, ref_tracking=True)
-    fory.register_type(CacheClass1, serializer=pyfory.PickleStrongCacheSerializer(fory))
-    assert ser_de(fory, CacheClass1(1)) == CacheClass1(1)
-    fory.register_type(CacheClass1, serializer=pyfory.PickleCacheSerializer(fory))
-    assert ser_de(fory, CacheClass1(1)) == CacheClass1(1)
-
-
 def test_pandas_range_index():
     fory = Fory(language=Language.PYTHON, ref_tracking=True, require_type_registration=False)
     fory.register_type(pd.RangeIndex, serializer=pyfory.PandasRangeIndexSerializer(fory))

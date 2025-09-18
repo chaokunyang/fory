@@ -143,78 +143,91 @@ class _PickleStub:
     pass
 
 
-class PickleStrongCacheStub:
-    pass
-
-
-class PickleCacheStub:
-    pass
-
-
-class PickleStrongCacheSerializer(Serializer):
-    """If we can't create weak ref to object, use this cache serializer instead.
-    clear cache by threshold to avoid memory leak."""
-
-    __slots__ = "_cached", "_clear_threshold", "_counter"
-
-    def __init__(self, fory, clear_threshold: int = 1000):
-        super().__init__(fory, PickleStrongCacheStub)
-        self._cached = {}
-        self._clear_threshold = clear_threshold
-
+class TypeSerializer(Serializer):
+    """Serializer for Python type objects (classes)."""
+    
+    def __init__(self, fory, cls):
+        super().__init__(fory, cls)
+        self.cls = cls
+    
     def write(self, buffer, value):
-        serialized = self._cached.get(value)
-        if serialized is None:
-            serialized = pickle.dumps(value)
-            self._cached[value] = serialized
-        buffer.write_bytes_and_size(serialized)
-        if len(self._cached) == self._clear_threshold:
-            self._cached.clear()
-
+        # Serialize the type by its module and name
+        module_name = getattr(value, '__module__', None)
+        type_name = getattr(value, '__name__', None)
+        qualname = getattr(value, '__qualname__', None)
+        
+        # Serialize as a tuple of (module, name, qualname)
+        self.fory.serialize_ref(buffer, (module_name, type_name, qualname))
+    
     def read(self, buffer):
-        return pickle.loads(buffer.read_bytes_and_size())
-
-    def xwrite(self, buffer, value):
-        raise NotImplementedError
-
-    def xread(self, buffer):
-        raise NotImplementedError
-
-
-class PickleCacheSerializer(Serializer):
-    __slots__ = "_cached", "_reverse_cached"
-
-    def __init__(self, fory):
-        super().__init__(fory, PickleCacheStub)
-        self._cached = WeakIdentityKeyDictionary()
-        self._reverse_cached = WeakValueDictionary()
-
-    def write(self, buffer, value):
-        cache = self._cached.get(value)
-        if cache is None:
-            serialized = pickle.dumps(value)
-            value_hash = pyfory.lib.mmh3.hash_buffer(serialized)[0]
-            cache = value_hash, serialized
-            self._cached[value] = cache
-        buffer.write_int64(cache[0])
-        buffer.write_bytes_and_size(cache[1])
-
-    def read(self, buffer):
-        value_hash = buffer.read_int64()
-        value = self._reverse_cached.get(value_hash)
-        if value is None:
-            value = pickle.loads(buffer.read_bytes_and_size())
-            self._reverse_cached[value_hash] = value
+        module_name, type_name, qualname = self.fory.deserialize_ref(buffer)
+        
+        # Import the module and get the type
+        if module_name and module_name != 'builtins':
+            module = __import__(module_name, fromlist=[type_name])
+            return getattr(module, type_name)
         else:
-            size = buffer.read_int32()
-            buffer.skip(size)
-        return value
-
+            # Handle built-in types
+            return getattr(builtins, type_name, type)
+    
     def xwrite(self, buffer, value):
-        raise NotImplementedError
-
+        return self.write(buffer, value)
+    
     def xread(self, buffer):
-        raise NotImplementedError
+        return self.read(buffer)
+
+
+class MethodSerializer(Serializer):
+    """Serializer for bound method objects."""
+    
+    def __init__(self, fory, cls):
+        super().__init__(fory, cls)
+        self.cls = cls
+    
+    def write(self, buffer, value):
+        # Serialize bound method as (instance, method_name)
+        instance = value.__self__
+        method_name = value.__func__.__name__
+        
+        self.fory.serialize_ref(buffer, instance)
+        buffer.write_string(method_name)
+    
+    def read(self, buffer):
+        instance = self.fory.deserialize_ref(buffer)
+        method_name = buffer.read_string()
+        
+        return getattr(instance, method_name)
+    
+    def xwrite(self, buffer, value):
+        return self.write(buffer, value)
+    
+    def xread(self, buffer):
+        return self.read(buffer)
+
+
+class NumpyDtypeSerializer(Serializer):
+    """Serializer for NumPy dtype objects."""
+    
+    def __init__(self, fory, cls):
+        super().__init__(fory, cls)
+        self.cls = cls
+    
+    def write(self, buffer, value):
+        # Serialize numpy dtype by its string representation
+        dtype_str = str(value)
+        self.fory.serialize_ref(buffer, dtype_str)
+    
+    def read(self, buffer):
+        dtype_str = self.fory.deserialize_ref(buffer)
+        return np.dtype(dtype_str)
+    
+    def xwrite(self, buffer, value):
+        return self.write(buffer, value)
+    
+    def xread(self, buffer):
+        return self.read(buffer)
+
+
 
 
 class PandasRangeIndexSerializer(Serializer):
@@ -713,31 +726,27 @@ class PyArraySerializer(CrossLanguageCompatibleSerializer):
 
 
 class DynamicPyArraySerializer(Serializer):
-    def xwrite(self, buffer, value):
-        itemsize, ftype, type_id = typecode_dict[value.typecode]
-        view = memoryview(value)
-        nbytes = len(value) * itemsize
-        buffer.write_varuint32(type_id)
-        buffer.write_varuint32(nbytes)
-        if not view.c_contiguous:
-            buffer.write_bytes(value.tobytes())
-        else:
-            buffer.write_buffer(value)
+    """Serializer for dynamic Python arrays that handles any typecode."""
+    
+    def write(self, buffer, value):
+        # Use the same approach as PyArraySerializer - write typecode as string
+        buffer.write_string(value.typecode)
+        data = value.tobytes()
+        buffer.write_bytes_and_size(data)
 
-    def xread(self, buffer):
-        type_id = buffer.read_varint32()
-        typecode = typeid_code[type_id]
+    def read(self, buffer):
+        # Read typecode as string and data, same as PyArraySerializer
+        typecode = buffer.read_string()
         data = buffer.read_bytes_and_size()
         arr = array.array(typecode, [])
         arr.frombytes(data)
         return arr
-
-    def write(self, buffer, value):
-        buffer.write_varuint32(PickleSerializer.PICKLE_TYPE_ID)
-        self.fory.handle_unsupported_write(buffer, value)
-
-    def read(self, buffer):
-        return self.fory.handle_unsupported_read(buffer)
+    
+    def xwrite(self, buffer, value):
+        return self.write(buffer, value)
+    
+    def xread(self, buffer):
+        return self.read(buffer)
 
 
 if np:
@@ -793,11 +802,16 @@ class Numpy1DArraySerializer(Serializer):
         return np.frombuffer(data, dtype=self.dtype)
 
     def write(self, buffer, value):
-        buffer.write_int8(PickleSerializer.PICKLE_TYPE_ID)
-        self.fory.handle_unsupported_write(buffer, value)
+        # Serialize numpy 1D array using native format
+        buffer.write_string(self.dtype.str)
+        data = value.tobytes()
+        buffer.write_bytes_and_size(data)
 
     def read(self, buffer):
-        return self.fory.handle_unsupported_read(buffer)
+        dtype_str = buffer.read_string()
+        dtype = np.dtype(dtype_str)
+        data = buffer.read_bytes_and_size()
+        return np.frombuffer(data, dtype=dtype)
 
 
 class NDArraySerializer(Serializer):
@@ -816,11 +830,21 @@ class NDArraySerializer(Serializer):
         raise NotImplementedError("Multi-dimensional array not supported currently")
 
     def write(self, buffer, value):
-        buffer.write_int8(PickleSerializer.PICKLE_TYPE_ID)
-        self.fory.handle_unsupported_write(buffer, value)
+        # Serialize numpy ND array using native format
+        buffer.write_string(value.dtype.str)
+        buffer.write_varuint32(len(value.shape))
+        for dim in value.shape:
+            buffer.write_varuint32(dim)
+        data = value.tobytes()
+        buffer.write_bytes_and_size(data)
 
     def read(self, buffer):
-        return self.fory.handle_unsupported_read(buffer)
+        dtype_str = buffer.read_string()
+        dtype = np.dtype(dtype_str)
+        ndim = buffer.read_varuint32()
+        shape = tuple(buffer.read_varuint32() for _ in range(ndim))
+        data = buffer.read_bytes_and_size()
+        return np.frombuffer(data, dtype=dtype).reshape(shape)
 
 
 class BytesSerializer(CrossLanguageCompatibleSerializer):
@@ -1213,20 +1237,6 @@ class FunctionSerializer(CrossLanguageCompatibleSerializer):
         return self._deserialize_function(buffer)
 
 
-class PickleSerializer(Serializer):
-    PICKLE_TYPE_ID = 96
-
-    def xwrite(self, buffer, value):
-        raise NotImplementedError
-
-    def xread(self, buffer):
-        raise NotImplementedError
-
-    def write(self, buffer, value):
-        self.fory.handle_unsupported_write(buffer, value)
-
-    def read(self, buffer):
-        return self.fory.handle_unsupported_read(buffer)
 
 
 class ObjectSerializer(Serializer):

@@ -37,9 +37,6 @@ try:
 except ImportError:
     np = None
 
-from cloudpickle import Pickler
-
-from pickle import Unpickler
 
 logger = logging.getLogger(__name__)
 
@@ -105,8 +102,6 @@ class Fory:
         "serialization_context",
         "require_type_registration",
         "buffer",
-        "pickler",
-        "unpickler",
         "_buffer_callback",
         "_buffers",
         "metastring_resolver",
@@ -160,17 +155,6 @@ class Fory:
         self.type_resolver.initialize()
 
         self.buffer = Buffer.allocate(32)
-        if not require_type_registration:
-            warnings.warn(
-                "Type registration is disabled, unknown types can be deserialized which may be insecure.",
-                RuntimeWarning,
-                stacklevel=2,
-            )
-            self.pickler = Pickler(self.buffer)
-            self.unpickler = None
-        else:
-            self.pickler = _PicklerStub()
-            self.unpickler = _UnpicklerStub()
         self._buffer_callback = None
         self._buffers = None
         self._unsupported_callback = None
@@ -238,7 +222,7 @@ class Fory:
         self._buffer_callback = buffer_callback
         self._unsupported_callback = unsupported_callback
         if buffer is not None:
-            self.pickler = Pickler(buffer)
+            pass  # Use provided buffer
         else:
             self.buffer.writer_index = 0
             buffer = self.buffer
@@ -492,22 +476,14 @@ class Fory:
             return next(self._buffers)
 
     def handle_unsupported_write(self, buffer, obj):
-        if self._unsupported_callback is None or self._unsupported_callback(obj):
-            buffer.write_bool(True)
-            self.pickler.dump(obj)
-        else:
-            buffer.write_bool(False)
+        # No longer supported - all objects should be handled by native serializers
+        raise TypeError(f"Object {type(obj)} is not supported for serialization. "
+                       f"All objects should now be handled by native serializers.")
 
     def handle_unsupported_read(self, buffer):
-        in_band = buffer.read_bool()
-        if in_band:
-            unpickler = self.unpickler
-            if unpickler is None:
-                self.unpickler = unpickler = Unpickler(buffer)
-            return unpickler.load()
-        else:
-            assert self._unsupported_objects is not None
-            return next(self._unsupported_objects)
+        # No longer supported - all objects should be handled by native serializers
+        raise TypeError("Unsupported object deserialization is no longer supported. "
+                       "All objects should now be handled by native serializers.")
 
     def write_ref_pyobject(self, buffer, value, typeinfo=None):
         if self.ref_resolver.write_ref_or_null(buffer, value):
@@ -525,7 +501,6 @@ class Fory:
         self.type_resolver.reset_write()
         self.serialization_context.reset_write()
         self.metastring_resolver.reset_write()
-        self.pickler.clear_memo()
         self._buffer_callback = None
         self._unsupported_callback = None
 
@@ -535,7 +510,6 @@ class Fory:
         self.type_resolver.reset_read()
         self.serialization_context.reset_read()
         self.metastring_resolver.reset_write()
-        self.unpickler = None
         self._buffers = None
         self._unsupported_objects = None
 
@@ -564,18 +538,3 @@ _ENABLE_TYPE_REGISTRATION_FORCIBLY = os.getenv("ENABLE_TYPE_REGISTRATION_FORCIBL
 }
 
 
-class _PicklerStub:
-    def dump(self, o):
-        raise ValueError(
-            f"Type {type(o)} is not registered, "
-            f"pickle is not allowed when type registration enabled, "
-            f"Please register the type or pass unsupported_callback"
-        )
-
-    def clear_memo(self):
-        pass
-
-
-class _UnpicklerStub:
-    def load(self):
-        raise ValueError("pickle is not allowed when type registration enabled, Please register the type or pass unsupported_callback")

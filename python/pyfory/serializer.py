@@ -787,7 +787,7 @@ class PyArraySerializer(CrossLanguageCompatibleSerializer):
     def read(self, buffer):
         typecode = buffer.read_string()
         data = buffer.read_bytes_and_size()
-        arr = array.array(typecode, [])
+        arr = array.array(typecode[0], [])  # Take first character
         arr.frombytes(data)
         return arr
 
@@ -795,19 +795,51 @@ class PyArraySerializer(CrossLanguageCompatibleSerializer):
 class DynamicPyArraySerializer(Serializer):
     """Serializer for dynamic Python arrays that handles any typecode."""
     
+    def __init__(self, fory, cls):
+        super().__init__(fory, cls)
+        self.cls = cls
+    
     def write(self, buffer, value):
-        # Use the same approach as PyArraySerializer - write typecode as string
-        buffer.write_string(value.typecode)
-        data = value.tobytes()
-        buffer.write_bytes_and_size(data)
+        # Check if this array has a supported typecode and use PyArraySerializer if possible
+        typecode = value.typecode
+        if typecode in typecode_dict:
+            # Use PyArraySerializer approach for supported typecodes
+            itemsize, ftype, type_id = typecode_dict[typecode]
+            buffer.write_varuint32(type_id)
+            data = value.tobytes()
+            buffer.write_bytes_and_size(data)
+        else:
+            # Fallback to string-based approach for unsupported typecodes
+            buffer.write_string(typecode)
+            data = value.tobytes()
+            buffer.write_bytes_and_size(data)
 
     def read(self, buffer):
-        # Read typecode as string and data, same as PyArraySerializer
-        typecode = buffer.read_string()
-        data = buffer.read_bytes_and_size()
-        arr = array.array(typecode, [])
-        arr.frombytes(data)
-        return arr
+        # Try to read as type_id first (PyArraySerializer format)
+        try:
+            type_id = buffer.read_varuint32()
+            if type_id in typeid_code:
+                typecode = typeid_code[type_id]
+                data = buffer.read_bytes_and_size()
+                arr = array.array(typecode, [])
+                arr.frombytes(data)
+                return arr
+            else:
+                # Not a valid type_id, fall back to string format
+                # Reset buffer position
+                buffer.reader_index = buffer.reader_index - 1  # Go back one byte
+                typecode = buffer.read_string()
+                data = buffer.read_bytes_and_size()
+                arr = array.array(typecode[0], [])  # Take first character
+                arr.frombytes(data)
+                return arr
+        except:
+            # Fallback to string-based approach
+            typecode = buffer.read_string()
+            data = buffer.read_bytes_and_size()
+            arr = array.array(typecode[0], [])  # Take first character
+            arr.frombytes(data)
+            return arr
     
     def xwrite(self, buffer, value):
         return self.write(buffer, value)
@@ -1048,9 +1080,18 @@ class ReduceSerializer(CrossLanguageCompatibleSerializer):
             # Case 1: Global name
             global_name = reduce_data[1]
             # Import and return the global object
-            module_name, obj_name = global_name.rsplit(".", 1)
-            module = __import__(module_name, fromlist=[obj_name])
-            return getattr(module, obj_name)
+            if "." in global_name:
+                module_name, obj_name = global_name.rsplit(".", 1)
+                module = __import__(module_name, fromlist=[obj_name])
+                return getattr(module, obj_name)
+            else:
+                # Handle case where global_name doesn't contain a dot
+                # This might be a built-in type or a simple name
+                try:
+                    import builtins
+                    return getattr(builtins, global_name)
+                except AttributeError:
+                    raise ValueError(f"Cannot resolve global name: {global_name}")
         elif reduce_data[0] == "callable":
             # Case 2-5: Callable with args and optional state/items
             callable_obj = reduce_data[1]

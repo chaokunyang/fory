@@ -545,7 +545,9 @@ class TypeResolver:
                 # Handle NumPy dtype objects
                 serializer = NumpyDtypeSerializer(self.fory, cls)
             elif cls is array.array:
-                # Handle array.array objects with DynamicPyArraySerializer
+                # Handle array.array objects - use specific PyArraySerializer for supported typecodes
+                # For dynamic arrays, we need to check the typecode at serialization time
+                # For now, use DynamicPyArraySerializer as fallback
                 serializer = DynamicPyArraySerializer(self.fory, cls)
             elif hasattr(cls, "__module__") and cls.__module__ and cls.__module__.startswith("pandas."):
                 # Handle pandas objects with PandasSerializer

@@ -215,6 +215,7 @@ class TypeResolver:
         register(tuple, serializer=TupleSerializer)
         register(slice, serializer=SliceSerializer)
         register(np.ndarray, serializer=NDArraySerializer)
+        register(array.array, serializer=DynamicPyArraySerializer)
         self._internal_py_serializer_map = {
             ReduceSerializer: (self._stub_cls("__Reduce__"), self._next_type_id()),
             TypeSerializer: (self._stub_cls("__Type__"), self._next_type_id()),
@@ -505,9 +506,6 @@ class TypeResolver:
             if isinstance(serializer, EnumSerializer):
                 type_id = TypeId.NAMED_ENUM
             elif isinstance(serializer, FunctionSerializer):
-                type_id = TypeId.NAMED_EXT
-            elif isinstance(serializer, DynamicPyArraySerializer):
-                # Use a specific type ID for array.array instead of dynamic type
                 type_id = TypeId.NAMED_EXT
             elif isinstance(serializer, (ObjectSerializer, StatefulSerializer)):
                 type_id = TypeId.NAMED_EXT

@@ -74,13 +74,11 @@ class Serializer(ABC):
     def read(self, buffer):
         raise NotImplementedError
 
-    @abstractmethod
     def xwrite(self, buffer, value):
-        pass
+        raise NotImplementedError
 
-    @abstractmethod
     def xread(self, buffer):
-        pass
+        raise NotImplementedError
 
     @classmethod
     def support_subclass(cls) -> bool:

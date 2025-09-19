@@ -459,7 +459,7 @@ def test_np_types():
     o1 = [1, True, np.dtype(np.int32)]
     data1 = fory.serialize(o1)
     new_o1 = fory.deserialize(data1)
-    assert o1 == new_o1    
+    assert o1 == new_o1
 
 
 def test_pandas_dataframe():

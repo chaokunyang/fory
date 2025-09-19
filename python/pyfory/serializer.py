@@ -18,6 +18,8 @@
 import array
 import builtins
 import dataclasses
+import importlib
+import inspect
 import itertools
 import marshal
 import logging
@@ -147,15 +149,14 @@ class TypeSerializer(Serializer):
 
     def write(self, buffer, value):
         # Serialize the type by its module and name
-        module_name = getattr(value, '__module__', None)
-        type_name = getattr(value, '__name__', None)
-        qualname = getattr(value, '__qualname__', None)
-
-        # Serialize as a tuple of (module, name, qualname)
-        self.fory.serialize_ref(buffer, (module_name, type_name, qualname))
+        module_name = getattr(value, '__module__', "")
+        type_name = getattr(value, '__name__', "")
+        buffer.write_string(module_name)
+        buffer.write_string(type_name)
 
     def read(self, buffer):
-        module_name, type_name, qualname = self.fory.deserialize_ref(buffer)
+        module_name = buffer.read_string()
+        type_name = buffer.read_string()
 
         # Import the module and get the type
         if module_name and module_name != 'builtins':
@@ -164,132 +165,6 @@ class TypeSerializer(Serializer):
         else:
             # Handle built-in types
             return getattr(builtins, type_name, type)
-
-    def xwrite(self, buffer, value):
-        return self.write(buffer, value)
-
-    def xread(self, buffer):
-        return self.read(buffer)
-
-
-class MethodSerializer(Serializer):
-    """Serializer for bound method objects."""
-
-    def __init__(self, fory, cls):
-        super().__init__(fory, cls)
-        self.cls = cls
-
-    def write(self, buffer, value):
-        # Serialize bound method as (instance, method_name)
-        instance = value.__self__
-        method_name = value.__func__.__name__
-
-        self.fory.serialize_ref(buffer, instance)
-        buffer.write_string(method_name)
-
-    def read(self, buffer):
-        instance = self.fory.deserialize_ref(buffer)
-        method_name = buffer.read_string()
-
-        return getattr(instance, method_name)
-
-    def xwrite(self, buffer, value):
-        return self.write(buffer, value)
-
-    def xread(self, buffer):
-        return self.read(buffer)
-
-
-class NumpyDtypeSerializer(Serializer):
-    """Serializer for NumPy dtype objects."""
-
-    def __init__(self, fory, cls):
-        super().__init__(fory, cls)
-        self.cls = cls
-
-    def write(self, buffer, value):
-        # Serialize numpy dtype by its string representation
-        dtype_str = str(value)
-        self.fory.serialize_ref(buffer, dtype_str)
-
-    def read(self, buffer):
-        dtype_str = self.fory.deserialize_ref(buffer)
-        return np.dtype(dtype_str)
-
-    def xwrite(self, buffer, value):
-        return self.write(buffer, value)
-
-    def xread(self, buffer):
-        return self.read(buffer)
-
-
-class PandasSerializer(Serializer):
-    """
-    Special serializer for pandas objects that extracts their data and reconstructs them.
-    This avoids the complexity of pandas internal objects.
-    """
-
-    def __init__(self, fory, cls):
-        super().__init__(fory, cls)
-        self.cls = cls
-
-    def write(self, buffer, value):
-        # For DataFrames, extract the data and metadata
-        if hasattr(value, 'to_dict'):
-            # DataFrame or Series
-            data = value.to_dict('records') if hasattr(value, 'to_dict') else value.to_dict()
-            index = value.index.tolist() if hasattr(value, 'index') else None
-            columns = value.columns.tolist() if hasattr(value, 'columns') else None
-
-            self.fory.serialize_ref(buffer, {
-                'data': data,
-                'index': index,
-                'columns': columns,
-                'dtype': str(value.dtypes) if hasattr(value, 'dtypes') else None,
-                'class_name': value.__class__.__name__,
-                'module_name': value.__class__.__module__
-            })
-        else:
-            # For other pandas objects, try to serialize their string representation
-            # This is a fallback for objects that don't have to_dict
-            self.fory.serialize_ref(buffer, {
-                'data': str(value),
-                'class_name': value.__class__.__name__,
-                'module_name': value.__class__.__module__
-            })
-
-    def read(self, buffer):
-        data_dict = self.fory.deserialize_ref(buffer)
-
-        if data_dict['class_name'] == 'DataFrame':
-            # Reconstruct DataFrame
-            import pandas as pd
-            if data_dict['data'] and data_dict['columns']:
-                df = pd.DataFrame(data_dict['data'])
-                if data_dict['index']:
-                    df.index = data_dict['index']
-                return df
-            else:
-                return pd.DataFrame()
-        elif data_dict['class_name'] == 'Series':
-            # Reconstruct Series
-            import pandas as pd
-            if data_dict['data']:
-                return pd.Series(data_dict['data'], index=data_dict['index'])
-            else:
-                return pd.Series()
-        else:
-            # For other pandas objects, try to reconstruct from string representation
-            # This is a fallback
-            raise ValueError(f"Cannot reconstruct {data_dict['class_name']} from serialized data")
-
-    def xwrite(self, buffer, value):
-        return self.write(buffer, value)
-
-    def xread(self, buffer):
-        return self.read(buffer)
-
-
 
 
 class PandasRangeIndexSerializer(Serializer):
@@ -895,17 +770,29 @@ class NDArraySerializer(Serializer):
 
     def write(self, buffer, value):
         # Serialize numpy ND array using native format
-        self.fory.serialize_ref(buffer, value.dtype)
+        dtype = value.dtype
+        fory = self.fory
+        fory.serialize_ref(buffer, dtype)
         buffer.write_varuint32(len(value.shape))
         for dim in value.shape:
             buffer.write_varuint32(dim)
-        data = value.tobytes()
-        buffer.write_bytes_and_size(data)
+        if dtype.kind == "O":
+            buffer.write_varint32(len(value))
+            for item in value:
+                fory.serialize_ref(buffer, item)
+        else:
+            data = value.tobytes()
+            buffer.write_bytes_and_size(data)
 
     def read(self, buffer):
-        dtype = self.fory.deserialize_ref(buffer)
+        fory = self.fory
+        dtype = fory.deserialize_ref(buffer)
         ndim = buffer.read_varuint32()
         shape = tuple(buffer.read_varuint32() for _ in range(ndim))
+        if dtype.kind == "O":
+            length = buffer.read_varint32()
+            items = [fory.deserialize_ref(buffer) for _ in range(length)]
+            return  np.array(items, dtype=object)
         data = buffer.read_bytes_and_size()
         return np.frombuffer(data, dtype=dtype).reshape(shape)
 
@@ -1014,31 +901,40 @@ class ReduceSerializer(CrossLanguageCompatibleSerializer):
         # Handle different __reduce__ return formats
         if isinstance(reduce_result, str):
             # Case 1: Just a global name (simple case)
-            self.fory.serialize_ref(buffer, ("global", reduce_result, None, None, None))
+            reduce_data = ("global", reduce_result)
         elif isinstance(reduce_result, tuple):
             if len(reduce_result) == 2:
                 # Case 2: (callable, args)
                 callable_obj, args = reduce_result
-                self.fory.serialize_ref(buffer, ("callable", callable_obj, args, None, None))
+                reduce_data =  ("callable", callable_obj, args)
             elif len(reduce_result) == 3:
                 # Case 3: (callable, args, state)
                 callable_obj, args, state = reduce_result
-                self.fory.serialize_ref(buffer, ("callable", callable_obj, args, state, None))
+                reduce_data = ("callable", callable_obj, args, state)
             elif len(reduce_result) == 4:
                 # Case 4: (callable, args, state, listitems)
                 callable_obj, args, state, listitems = reduce_result
-                self.fory.serialize_ref(buffer, ("callable", callable_obj, args, state, listitems))
+                reduce_data = ("callable", callable_obj, args, state, listitems)
             elif len(reduce_result) == 5:
                 # Case 5: (callable, args, state, listitems, dictitems)
                 callable_obj, args, state, listitems, dictitems = reduce_result
-                self.fory.serialize_ref(buffer, ("callable", callable_obj, args, state, listitems, dictitems))
+                reduce_data = ("callable", callable_obj, args, state, listitems, dictitems)
             else:
                 raise ValueError(f"Invalid __reduce__ result length: {len(reduce_result)}")
         else:
             raise ValueError(f"Invalid __reduce__ result type: {type(reduce_result)}")
+        buffer.write_varuint32(len(reduce_data))
+        fory = self.fory
+        for item in reduce_data:
+            fory.serialize_ref(buffer, item)
 
     def read(self, buffer):
-        reduce_data = self.fory.deserialize_ref(buffer)
+        reduce_data_num_items = buffer.read_varuint32()
+        assert reduce_data_num_items <= 6, buffer
+        reduce_data = [None] * 6
+        fory = self.fory
+        for i in range(reduce_data_num_items):
+            reduce_data[i] = fory.deserialize_ref(buffer)
 
         if reduce_data[0] == "global":
             # Case 1: Global name
@@ -1114,32 +1010,39 @@ class FunctionSerializer(CrossLanguageCompatibleSerializer):
     def _serialize_function(self, buffer, func):
         """Serialize a function by capturing all its components."""
         # Get function metadata
-        is_method = hasattr(func, "__self__")
-        if is_method:
+        instance = getattr(func, "__self__", None)
+        if instance is not None and not inspect.ismodule(instance):
             # Handle bound methods
-            self_obj = func.__self__
+            self_obj = instance
             func_name = func.__name__
             # Serialize as a tuple (is_method, self_obj, method_name)
-            buffer.write_bool(True)  # is a method
+            buffer.write_int8(0)  # is a method
             # For the 'self' object, we need to use fory's serialization
             self.fory.serialize_ref(buffer, self_obj)
             buffer.write_string(func_name)
             return
-
+        import types
         # Regular function or lambda
         code = func.__code__
         name = func.__name__
-        defaults = func.__defaults__
-        closure = func.__closure__
-        globals_dict = func.__globals__
         module = func.__module__
         qualname = func.__qualname__
 
+        if "<locals>" not in qualname and module != "__main__":
+            buffer.write_int8(1)  # Not a method
+            buffer.write_string(name)
+            buffer.write_string(module)
+            return
+
         # Serialize function metadata
-        buffer.write_bool(False)  # Not a method
+        buffer.write_int8(2)  # Not a method
         buffer.write_string(name)
         buffer.write_string(module)
         buffer.write_string(qualname)
+
+        defaults = func.__defaults__
+        closure = func.__closure__
+        globals_dict = func.__globals__
 
         # Instead of trying to serialize the code object in parts, use marshal
         # which is specifically designed for code objects
@@ -1211,12 +1114,18 @@ class FunctionSerializer(CrossLanguageCompatibleSerializer):
         import sys
 
         # Check if it's a method
-        is_method = buffer.read_bool()
-        if is_method:
+        func_type_id = buffer.read_int8()
+        if func_type_id == 0:
             # Handle bound methods
             self_obj = self.fory.deserialize_ref(buffer)
             method_name = buffer.read_string()
             return getattr(self_obj, method_name)
+
+        if func_type_id == 1:
+            name = buffer.read_string()
+            module = buffer.read_string()
+            mod = importlib.import_module(module)
+            return getattr(mod, name)
 
         # Regular function or lambda
         name = buffer.read_string()
@@ -1265,7 +1174,7 @@ class FunctionSerializer(CrossLanguageCompatibleSerializer):
         # Create a globals dictionary with module's globals as the base
         func_globals = {}
         try:
-            mod = sys.modules.get(module)
+            mod = importlib.import_module(module)
             if mod:
                 func_globals.update(mod.__dict__)
         except (KeyError, AttributeError):
@@ -1293,12 +1202,10 @@ class FunctionSerializer(CrossLanguageCompatibleSerializer):
         return func
 
     def xwrite(self, buffer, value):
-        """Serialize a function for cross-language compatibility."""
-        self._serialize_function(buffer, value)
+        raise NotImplementedError()
 
     def xread(self, buffer):
-        """Deserialize a function for cross-language compatibility."""
-        return self._deserialize_function(buffer)
+        raise NotImplementedError()
 
     def write(self, buffer, value):
         """Serialize a function for Python-only mode."""
@@ -1307,6 +1214,58 @@ class FunctionSerializer(CrossLanguageCompatibleSerializer):
     def read(self, buffer):
         """Deserialize a function for Python-only mode."""
         return self._deserialize_function(buffer)
+
+
+class NativeFuncMethodSerializer(Serializer):
+    def write(self,  buffer, func):
+        name = func.__name__
+        buffer.write_string(name)
+        obj = getattr(func, "__self__", None)
+        if obj is None or inspect.ismodule(obj):
+            buffer.write_bool(True)
+            module = func.__module__
+            buffer.write_string(module)
+        else:
+            buffer.write_bool(False)
+            self.fory.serialize_ref(buffer, obj)
+
+    def read(self, buffer):
+        name = buffer.read_string()
+        if buffer.read_bool():
+            module = buffer.read_string()
+            mod = importlib.import_module(module)
+            return getattr(mod, name)
+        else:
+            obj = self.fory.deserialize_ref(buffer)
+            return getattr(obj, name)
+
+
+class MethodSerializer(Serializer):
+    """Serializer for bound method objects."""
+
+    def __init__(self, fory, cls):
+        super().__init__(fory, cls)
+        self.cls = cls
+
+    def write(self, buffer, value):
+        # Serialize bound method as (instance, method_name)
+        instance = value.__self__
+        method_name = value.__func__.__name__
+
+        self.fory.serialize_ref(buffer, instance)
+        buffer.write_string(method_name)
+
+    def read(self, buffer):
+        instance = self.fory.deserialize_ref(buffer)
+        method_name = buffer.read_string()
+
+        return getattr(instance, method_name)
+
+    def xwrite(self, buffer, value):
+        return self.write(buffer, value)
+
+    def xread(self, buffer):
+        return self.read(buffer)
 
 
 class ObjectSerializer(Serializer):

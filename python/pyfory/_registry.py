@@ -61,9 +61,8 @@ from pyfory.serializer import (
     ObjectSerializer,
     TypeSerializer,
     MethodSerializer,
-    NumpyDtypeSerializer,
-    PandasSerializer,
     UnsupportedSerializer,
+    NativeFuncMethodSerializer,
 )
 from pyfory.meta.metastring import MetaStringEncoder, MetaStringDecoder
 from pyfory.meta.meta_compressor import DeflaterMetaCompressor
@@ -77,6 +76,7 @@ from pyfory.type import (
     Float64Type,
     load_class,
     is_struct_type,
+    record_class_factory,
 )
 from pyfory._fory import (
     DYNAMIC_TYPE_ID,
@@ -170,6 +170,7 @@ class TypeResolver:
         "_meta_shared_typeinfo",
         "meta_share",
         "serialization_context",
+        "_internal_py_serializer_map",
     )
 
     def __init__(self, fory, meta_share=False):
@@ -198,6 +199,7 @@ class TypeResolver:
         self.typename_decoder = MetaStringDecoder("$", "_")
         self.meta_compressor = DeflaterMetaCompressor()
         self.meta_share = meta_share
+        self._internal_py_serializer_map = {}
 
     def initialize(self):
         self._initialize_common()
@@ -213,6 +215,18 @@ class TypeResolver:
         register(tuple, serializer=TupleSerializer)
         register(slice, serializer=SliceSerializer)
         register(np.ndarray, serializer=NDArraySerializer)
+        self._internal_py_serializer_map = {
+            ReduceSerializer: (self._stub_cls("__Reduce__"), self._next_type_id()),
+            TypeSerializer: (self._stub_cls("__Type__"), self._next_type_id()),
+            MethodSerializer: (self._stub_cls("__Method__"), self._next_type_id()),
+            NativeFuncMethodSerializer: (self._stub_cls("__NativeFunction__"), self._next_type_id()),
+        }
+        for serializer, (stub_cls, type_id) in self._internal_py_serializer_map.items():
+            register(stub_cls, serializer=serializer, type_id=type_id)
+
+    @staticmethod
+    def _stub_cls(name: str):
+        return record_class_factory(name, [])
 
     def _initialize_xlang(self):
         register = functools.partial(self._register_type, internal=True)
@@ -495,8 +509,10 @@ class TypeResolver:
             elif isinstance(serializer, DynamicPyArraySerializer):
                 # Use a specific type ID for array.array instead of dynamic type
                 type_id = TypeId.NAMED_EXT
-            elif isinstance(serializer, (ObjectSerializer, StatefulSerializer, ReduceSerializer, TypeSerializer, MethodSerializer, NumpyDtypeSerializer, PandasSerializer)):
+            elif isinstance(serializer, (ObjectSerializer, StatefulSerializer)):
                 type_id = TypeId.NAMED_EXT
+            elif self._internal_py_serializer_map.get(type(serializer)) is not None:
+                type_id = self._internal_py_serializer_map.get(type(serializer))[1]
             if not self.require_registration:
                 if isinstance(serializer, DataClassSerializer):
                     type_id = TypeId.NAMED_STRUCT
@@ -543,22 +559,18 @@ class TypeResolver:
                 serializer = DataClassStubSerializer(self.fory, cls, xlang=not self.fory.is_py)
             elif issubclass(cls, enum.Enum):
                 serializer = EnumSerializer(self.fory, cls)
-            elif cls is type:
-                # Handle Python type objects
-                serializer = TypeSerializer(self.fory, cls)
+            elif ("builtin_function_or_method" in str(cls) or "cython_function_or_method" in str(cls)) and "<locals>" not in str(cls):
+                serializer = NativeFuncMethodSerializer(self.fory, cls)
             elif cls is type(self.initialize):
                 # Handle bound method objects
                 serializer = MethodSerializer(self.fory, cls)
-            elif np and issubclass(cls, np.dtype):
-                # Handle NumPy dtype objects
-                serializer = NumpyDtypeSerializer(self.fory, cls)
+            elif issubclass(cls, type):
+                # Handle Python type objects and metaclass such as numpy._DTypeMeta(i.e. np.dtype)
+                serializer = TypeSerializer(self.fory, cls)
             elif cls is array.array:
                 # Handle array.array objects with DynamicPyArraySerializer
                 # Note: This will use DynamicPyArraySerializer for all array.array objects
                 serializer = DynamicPyArraySerializer(self.fory, cls)
-            elif hasattr(cls, "__module__") and cls.__module__ and cls.__module__.startswith("pandas."):
-                # Handle pandas objects with PandasSerializer
-                serializer = PandasSerializer(self.fory, cls)
             elif (hasattr(cls, "__reduce__") and cls.__reduce__ is not object.__reduce__) or (
                 hasattr(cls, "__reduce_ex__") and cls.__reduce_ex__ is not object.__reduce_ex__
             ):
@@ -568,7 +580,6 @@ class TypeResolver:
                 serializer = ReduceSerializer(self.fory, cls)
             elif hasattr(cls, "__getstate__") and hasattr(cls, "__setstate__"):
                 # Use StatefulSerializer for objects that support __getstate__ and __setstate__
-                # This now includes pandas objects
                 serializer = StatefulSerializer(self.fory, cls)
             elif (
                 hasattr(cls, "__dict__") or hasattr(cls, "__slots__")

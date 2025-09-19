@@ -18,7 +18,6 @@
 import enum
 import logging
 import os
-import warnings
 from abc import ABC, abstractmethod
 from typing import Union, Iterable, TypeVar
 
@@ -532,5 +531,3 @@ _ENABLE_TYPE_REGISTRATION_FORCIBLY = os.getenv("ENABLE_TYPE_REGISTRATION_FORCIBL
     "1",
     "true",
 }
-
-

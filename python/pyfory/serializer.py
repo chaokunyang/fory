@@ -28,9 +28,7 @@ import types
 import typing
 from typing import List
 import warnings
-from weakref import WeakValueDictionary
 
-import pyfory.lib.mmh3
 from pyfory.buffer import Buffer
 from pyfory.codegen import (
     gen_write_nullable_basic_stmts,
@@ -38,7 +36,6 @@ from pyfory.codegen import (
     compile_function,
 )
 from pyfory.error import TypeNotCompatibleError
-from pyfory.lib.collection import WeakIdentityKeyDictionary
 from pyfory.resolver import NULL_FLAG, NOT_NULL_VALUE_FLAG
 from pyfory import Language
 
@@ -149,8 +146,8 @@ class TypeSerializer(Serializer):
 
     def write(self, buffer, value):
         # Serialize the type by its module and name
-        module_name = getattr(value, '__module__', "")
-        type_name = getattr(value, '__name__', "")
+        module_name = getattr(value, "__module__", "")
+        type_name = getattr(value, "__name__", "")
         buffer.write_string(module_name)
         buffer.write_string(type_name)
 
@@ -159,7 +156,7 @@ class TypeSerializer(Serializer):
         type_name = buffer.read_string()
 
         # Import the module and get the type
-        if module_name and module_name != 'builtins':
+        if module_name and module_name != "builtins":
             module = __import__(module_name, fromlist=[type_name])
             return getattr(module, type_name)
         else:
@@ -792,7 +789,7 @@ class NDArraySerializer(Serializer):
         if dtype.kind == "O":
             length = buffer.read_varint32()
             items = [fory.deserialize_ref(buffer) for _ in range(length)]
-            return  np.array(items, dtype=object)
+            return np.array(items, dtype=object)
         data = buffer.read_bytes_and_size()
         return np.frombuffer(data, dtype=dtype).reshape(shape)
 
@@ -906,7 +903,7 @@ class ReduceSerializer(CrossLanguageCompatibleSerializer):
             if len(reduce_result) == 2:
                 # Case 2: (callable, args)
                 callable_obj, args = reduce_result
-                reduce_data =  ("callable", callable_obj, args)
+                reduce_data = ("callable", callable_obj, args)
             elif len(reduce_result) == 3:
                 # Case 3: (callable, args, state)
                 callable_obj, args, state = reduce_result
@@ -949,6 +946,7 @@ class ReduceSerializer(CrossLanguageCompatibleSerializer):
                 # This might be a built-in type or a simple name
                 try:
                     import builtins
+
                     return getattr(builtins, global_name)
                 except AttributeError:
                     raise ValueError(f"Cannot resolve global name: {global_name}")
@@ -1022,6 +1020,7 @@ class FunctionSerializer(CrossLanguageCompatibleSerializer):
             buffer.write_string(func_name)
             return
         import types
+
         # Regular function or lambda
         code = func.__code__
         name = func.__name__
@@ -1111,7 +1110,6 @@ class FunctionSerializer(CrossLanguageCompatibleSerializer):
 
     def _deserialize_function(self, buffer):
         """Deserialize a function from its components."""
-        import sys
 
         # Check if it's a method
         func_type_id = buffer.read_int8()
@@ -1217,7 +1215,7 @@ class FunctionSerializer(CrossLanguageCompatibleSerializer):
 
 
 class NativeFuncMethodSerializer(Serializer):
-    def write(self,  buffer, func):
+    def write(self, buffer, func):
         name = func.__name__
         buffer.write_string(name)
         obj = getattr(func, "__self__", None)
@@ -1358,12 +1356,11 @@ class NonExistEnumSerializer(Serializer):
 
 
 class UnsupportedSerializer(Serializer):
-
     def write(self, buffer, value):
-        self.fory.handle_unsupported_type(value)
+        self.fory.handle_unsupported_write(value)
 
     def read(self, buffer):
-        return self.fory.handle_unsupported_type(buffer)
+        return self.fory.handle_unsupported_read(buffer)
 
     def xwrite(self, buffer, value):
         raise NotImplementedError(f"{self.type_} is not supported for xwrite")

@@ -19,7 +19,7 @@ import datetime
 import logging
 import platform
 import time
-from abc import ABC, abstractmethod
+from abc import ABC
 from typing import Dict
 
 from pyfory._fory import NOT_NULL_INT64_FLAG

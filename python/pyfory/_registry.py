@@ -581,9 +581,7 @@ class TypeResolver:
             elif hasattr(cls, "__getstate__") and hasattr(cls, "__setstate__"):
                 # Use StatefulSerializer for objects that support __getstate__ and __setstate__
                 serializer = StatefulSerializer(self.fory, cls)
-            elif (
-                hasattr(cls, "__dict__") or hasattr(cls, "__slots__")
-            ):
+            elif hasattr(cls, "__dict__") or hasattr(cls, "__slots__"):
                 serializer = ObjectSerializer(self.fory, cls)
             else:
                 # c-extension types will go to here

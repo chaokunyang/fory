@@ -1983,11 +1983,13 @@ public class ClassResolver extends TypeResolver {
 
   public void resetWrite() {}
 
+  private static final GenericType OBJECT_GENERIC_TYPE = GenericType.build(Object.class);
+
   @CodegenInvoke
   public GenericType getGenericTypeInStruct(Class<?> cls, String genericTypeStr) {
     Map<String, GenericType> map =
-        extRegistry.classGenericTypes.computeIfAbsent(cls, TypeUtils::buildGenericMap);
-    return map.get(genericTypeStr);
+        extRegistry.classGenericTypes.computeIfAbsent(cls, this::buildGenericMap);
+    return map.getOrDefault(genericTypeStr, OBJECT_GENERIC_TYPE);
   }
 
   @Override

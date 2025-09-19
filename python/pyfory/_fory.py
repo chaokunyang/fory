@@ -221,9 +221,7 @@ class Fory:
     ) -> Union[Buffer, bytes]:
         self._buffer_callback = buffer_callback
         self._unsupported_callback = unsupported_callback
-        if buffer is not None:
-            pass  # Use provided buffer
-        else:
+        if buffer is None:
             self.buffer.writer_index = 0
             buffer = self.buffer
         if self.language == Language.XLANG:
@@ -476,14 +474,12 @@ class Fory:
             return next(self._buffers)
 
     def handle_unsupported_write(self, buffer, obj):
-        # No longer supported - all objects should be handled by native serializers
-        raise TypeError(f"Object {type(obj)} is not supported for serialization. "
-                       f"All objects should now be handled by native serializers.")
+        if self._unsupported_callback is None or self._unsupported_callback(obj):
+            raise NotImplementedError(f"{type(obj)} is not supported for write")
 
     def handle_unsupported_read(self, buffer):
-        # No longer supported - all objects should be handled by native serializers
-        raise TypeError("Unsupported object deserialization is no longer supported. "
-                       "All objects should now be handled by native serializers.")
+        assert self._unsupported_objects is not None
+        return next(self._unsupported_objects)
 
     def write_ref_pyobject(self, buffer, value, typeinfo=None):
         if self.ref_resolver.write_ref_or_null(buffer, value):

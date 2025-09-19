@@ -454,13 +454,16 @@ def test_register_type():
     assert isinstance(fory.deserialize(fory.serialize(A.B.C())), A.B.C)
 
 
-def test_pickle_fallback():
+def test_np_types():
     fory = Fory(language=Language.PYTHON, ref_tracking=True, require_type_registration=False)
     o1 = [1, True, np.dtype(np.int32)]
     data1 = fory.serialize(o1)
     new_o1 = fory.deserialize(data1)
-    assert o1 == new_o1
+    assert o1 == new_o1    
 
+
+def test_pandas_dataframe():
+    fory = Fory(language=Language.PYTHON, ref_tracking=True, require_type_registration=False)
     df = pd.DataFrame({"a": list(range(10))})
     df2 = fory.deserialize(fory.serialize(df))
     assert df2.equals(df)

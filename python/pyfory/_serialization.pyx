@@ -30,7 +30,6 @@ from typing import TypeVar, Union, Iterable
 from pyfory._util import get_bit, set_bit, clear_bit
 from pyfory import _fory as fmod
 from pyfory._fory import Language
-# Removed pickle imports - no longer needed
 from pyfory._fory import _ENABLE_TYPE_REGISTRATION_FORCIBLY
 from pyfory.lib import mmh3
 from pyfory.meta.metastring import Encoding
@@ -792,7 +791,6 @@ cdef class Fory:
     cdef readonly MetaStringResolver metastring_resolver
     cdef readonly SerializationContext serialization_context
     cdef Buffer buffer
-    # Removed pickler and unpickler - no longer using pickle
     cdef object _buffer_callback
     cdef object _buffers  # iterator
     cdef object _unsupported_callback
@@ -840,7 +838,6 @@ cdef class Fory:
         self.serialization_context = SerializationContext(fory=self, scoped_meta_share_enabled=compatible)
         self.type_resolver.initialize()
         self.buffer = Buffer.allocate(32)
-        # Removed pickle-based fallback - all objects should now be handled by native serializers
         self._buffer_callback = None
         self._buffers = None
         self._unsupported_callback = None
@@ -895,9 +892,7 @@ cdef class Fory:
             self, obj, Buffer buffer, buffer_callback=None, unsupported_callback=None):
         self._buffer_callback = buffer_callback
         self._unsupported_callback = unsupported_callback
-        if buffer is not None:
-            pass  # Use provided buffer
-        else:
+        if buffer is None:
             self.buffer.writer_index = 0
             buffer = self.buffer
         if self.language == Language.XLANG:
@@ -1041,7 +1036,6 @@ cdef class Fory:
 
     cpdef inline _deserialize(
             self, Buffer buffer, buffers=None, unsupported_objects=None):
-        # Removed pickle-based deserialization
         if unsupported_objects is not None:
             self._unsupported_objects = iter(unsupported_objects)
         if self.language == Language.XLANG:
@@ -1204,15 +1198,13 @@ cdef class Fory:
         buffer.reader_index += size
         return buf
 
-    cpdef inline handle_unsupported_write(self, Buffer buffer, obj):
-        # No longer supported - all objects should be handled by native serializers
-        raise TypeError(f"Object {type(obj)} is not supported for serialization. "
-                       f"All objects should now be handled by native serializers.")
+    cpdef handle_unsupported_write(self, buffer, obj):
+        if self._unsupported_callback is None or self._unsupported_callback(obj):
+            raise NotImplementedError(f"{type(obj)} is not supported for write")
 
-    cpdef inline handle_unsupported_read(self, Buffer buffer):
-        # No longer supported - all objects should be handled by native serializers
-        raise TypeError("Unsupported object deserialization is no longer supported. "
-                       "All objects should now be handled by native serializers.")
+    cpdef handle_unsupported_read(self, buffer):
+        assert self._unsupported_objects is not None
+        return next(self._unsupported_objects)
 
     cpdef inline write_ref_pyobject(
             self, Buffer buffer, value, TypeInfo typeinfo=None):
@@ -1241,7 +1233,6 @@ cdef class Fory:
         self.type_resolver.reset_write()
         self.metastring_resolver.reset_write()
         self.serialization_context.reset_write()
-        self.pickler.clear_memo()
         self._unsupported_callback = None
 
     cpdef inline reset_read(self):
@@ -1251,7 +1242,6 @@ cdef class Fory:
         self.metastring_resolver.reset_read()
         self.serialization_context.reset_read()
         self._buffers = None
-        self.unpickler = None
         self._unsupported_objects = None
 
     cpdef inline reset(self):
@@ -1713,7 +1703,7 @@ cdef class CollectionSerializer(Serializer):
                 ref_resolver.set_read_object(ref_id, obj)
             self._add_element(collection_, i, obj)
         self.fory.dec_depth()
-        
+
     cpdef _add_element(self, object collection_, int64_t index, object element):
         raise NotImplementedError
 

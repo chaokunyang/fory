@@ -63,6 +63,7 @@ from pyfory.serializer import (
     MethodSerializer,
     NumpyDtypeSerializer,
     PandasSerializer,
+    UnsupportedSerializer,
 )
 from pyfory.meta.metastring import MetaStringEncoder, MetaStringDecoder
 from pyfory.meta.meta_compressor import DeflaterMetaCompressor
@@ -545,17 +546,15 @@ class TypeResolver:
             elif cls is type:
                 # Handle Python type objects
                 serializer = TypeSerializer(self.fory, cls)
-            elif cls.__name__ == "method":
+            elif cls is type(self.initialize):
                 # Handle bound method objects
                 serializer = MethodSerializer(self.fory, cls)
-            elif np and (issubclass(cls, np.dtype) or cls is type(np.dtype)):
+            elif np and issubclass(cls, np.dtype):
                 # Handle NumPy dtype objects
                 serializer = NumpyDtypeSerializer(self.fory, cls)
             elif cls is array.array:
                 # Handle array.array objects with DynamicPyArraySerializer
                 # Note: This will use DynamicPyArraySerializer for all array.array objects
-                # The test expects specific typecodes to use PyArraySerializer, but that would
-                # require checking the actual array instance, not just the class
                 serializer = DynamicPyArraySerializer(self.fory, cls)
             elif hasattr(cls, "__module__") and cls.__module__ and cls.__module__.startswith("pandas."):
                 # Handle pandas objects with PandasSerializer
@@ -576,9 +575,8 @@ class TypeResolver:
             ):
                 serializer = ObjectSerializer(self.fory, cls)
             else:
-                # Final fallback - try to use ObjectSerializer for any remaining objects
-                # This should handle most remaining cases that don't fit other categories
-                serializer = ObjectSerializer(self.fory, cls)
+                # c-extension types will go to here
+                serializer = UnsupportedSerializer(self.fory, cls)
         return serializer
 
     def is_registered_by_name(self, cls):

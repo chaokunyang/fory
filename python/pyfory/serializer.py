@@ -22,7 +22,6 @@ import itertools
 import marshal
 import logging
 import os
-import pickle
 import types
 import typing
 from typing import List
@@ -137,10 +136,6 @@ class NoneSerializer(Serializer):
 
     def read(self, buffer):
         return None
-
-
-class _PickleStub:
-    pass
 
 
 class TypeSerializer(Serializer):
@@ -372,9 +367,7 @@ _ENABLE_FORY_PYTHON_JIT = os.environ.get("ENABLE_FORY_PYTHON_JIT", "True").lower
     "1",
 )
 
-# Moved from L32 to here, after all Serializer base classes and specific serializers
-# like ListSerializer, MapSerializer, PickleSerializer are defined or imported
-# and before DataClassSerializer which uses StructFieldSerializerVisitor from _struct.
+
 from pyfory._struct import _get_hash, _sort_fields, StructFieldSerializerVisitor
 
 
@@ -1316,8 +1309,6 @@ class FunctionSerializer(CrossLanguageCompatibleSerializer):
         return self._deserialize_function(buffer)
 
 
-
-
 class ObjectSerializer(Serializer):
     """Serializer for regular Python objects.
     It serializes objects based on `__dict__` or `__slots__`.
@@ -1405,3 +1396,18 @@ class NonExistEnumSerializer(Serializer):
     def xread(self, buffer):
         value = buffer.read_varuint32()
         return NonExistEnum(value=value)
+
+
+class UnsupportedSerializer(Serializer):
+
+    def write(self, buffer, value):
+        self.fory.handle_unsupported_type(value)
+
+    def read(self, buffer):
+        return self.fory.handle_unsupported_type(buffer)
+
+    def xwrite(self, buffer, value):
+        raise NotImplementedError(f"{self.type_} is not supported for xwrite")
+
+    def xread(self, buffer):
+        raise NotImplementedError(f"{self.type_} is not supported for xread")

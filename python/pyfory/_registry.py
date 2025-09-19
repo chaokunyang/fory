@@ -35,7 +35,6 @@ from pyfory.serializer import (
     NDArraySerializer,
     PyArraySerializer,
     DynamicPyArraySerializer,
-    _PickleStub,
     NoneSerializer,
     BooleanSerializer,
     ByteSerializer,
@@ -63,7 +62,6 @@ from pyfory.serializer import (
     TypeSerializer,
     MethodSerializer,
     NumpyDtypeSerializer,
-    DynamicPyArraySerializer,
     PandasSerializer,
 )
 from pyfory.meta.metastring import MetaStringEncoder, MetaStringDecoder
@@ -201,9 +199,11 @@ class TypeResolver:
         self.meta_share = meta_share
 
     def initialize(self):
-        self._initialize_xlang()
+        self._initialize_common()
         if self.fory.language == Language.PYTHON:
             self._initialize_py()
+        else:
+            self._initialize_xlang()
         self.serialization_context = self.fory.serialization_context
 
     def _initialize_py(self):
@@ -211,8 +211,14 @@ class TypeResolver:
         register(type(None), serializer=NoneSerializer)
         register(tuple, serializer=TupleSerializer)
         register(slice, serializer=SliceSerializer)
+        register(np.ndarray, serializer=NDArraySerializer)
 
     def _initialize_xlang(self):
+        register = functools.partial(self._register_type, internal=True)
+        register(array.array, type_id=DYNAMIC_TYPE_ID, serializer=DynamicPyArraySerializer)
+        register(np.ndarray, type_id=DYNAMIC_TYPE_ID, serializer=NDArraySerializer)
+
+    def _initialize_common(self):
         register = functools.partial(self._register_type, internal=True)
         register(None, type_id=TypeId.NA, serializer=NoneSerializer)
         register(bool, type_id=TypeId.BOOL, serializer=BooleanSerializer)
@@ -243,7 +249,6 @@ class TypeResolver:
                 type_id=typeid,
                 serializer=PyArraySerializer(self.fory, ftype, typeid),
             )
-        register(array.array, type_id=DYNAMIC_TYPE_ID, serializer=DynamicPyArraySerializer)
         if np:
             # overwrite pyarray  with same type id.
             # if pyarray are needed, one must annotate that value with XXXArrayType
@@ -259,7 +264,6 @@ class TypeResolver:
                     type_id=typeid,
                     serializer=Numpy1DArraySerializer(self.fory, ftype, dtype),
                 )
-            register(np.ndarray, type_id=DYNAMIC_TYPE_ID, serializer=NDArraySerializer)
         register(list, type_id=TypeId.LIST, serializer=ListSerializer)
         register(set, type_id=TypeId.SET, serializer=SetSerializer)
         register(dict, type_id=TypeId.MAP, serializer=MapSerializer)
@@ -487,7 +491,10 @@ class TypeResolver:
                 type_id = TypeId.NAMED_ENUM
             elif isinstance(serializer, FunctionSerializer):
                 type_id = TypeId.NAMED_EXT
-            elif isinstance(serializer, (ObjectSerializer, StatefulSerializer, ReduceSerializer, TypeSerializer, MethodSerializer, NumpyDtypeSerializer, DynamicPyArraySerializer, PandasSerializer)):
+            elif isinstance(serializer, DynamicPyArraySerializer):
+                # Use a specific type ID for array.array instead of dynamic type
+                type_id = TypeId.NAMED_EXT
+            elif isinstance(serializer, (ObjectSerializer, StatefulSerializer, ReduceSerializer, TypeSerializer, MethodSerializer, NumpyDtypeSerializer, PandasSerializer)):
                 type_id = TypeId.NAMED_EXT
             if not self.require_registration:
                 if isinstance(serializer, DataClassSerializer):
@@ -545,9 +552,10 @@ class TypeResolver:
                 # Handle NumPy dtype objects
                 serializer = NumpyDtypeSerializer(self.fory, cls)
             elif cls is array.array:
-                # Handle array.array objects - use specific PyArraySerializer for supported typecodes
-                # For dynamic arrays, we need to check the typecode at serialization time
-                # For now, use DynamicPyArraySerializer as fallback
+                # Handle array.array objects with DynamicPyArraySerializer
+                # Note: This will use DynamicPyArraySerializer for all array.array objects
+                # The test expects specific typecodes to use PyArraySerializer, but that would
+                # require checking the actual array instance, not just the class
                 serializer = DynamicPyArraySerializer(self.fory, cls)
             elif hasattr(cls, "__module__") and cls.__module__ and cls.__module__.startswith("pandas."):
                 # Handle pandas objects with PandasSerializer

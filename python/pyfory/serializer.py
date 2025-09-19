@@ -145,23 +145,23 @@ class _PickleStub:
 
 class TypeSerializer(Serializer):
     """Serializer for Python type objects (classes)."""
-    
+
     def __init__(self, fory, cls):
         super().__init__(fory, cls)
         self.cls = cls
-    
+
     def write(self, buffer, value):
         # Serialize the type by its module and name
         module_name = getattr(value, '__module__', None)
         type_name = getattr(value, '__name__', None)
         qualname = getattr(value, '__qualname__', None)
-        
+
         # Serialize as a tuple of (module, name, qualname)
         self.fory.serialize_ref(buffer, (module_name, type_name, qualname))
-    
+
     def read(self, buffer):
         module_name, type_name, qualname = self.fory.deserialize_ref(buffer)
-        
+
         # Import the module and get the type
         if module_name and module_name != 'builtins':
             module = __import__(module_name, fromlist=[type_name])
@@ -169,61 +169,61 @@ class TypeSerializer(Serializer):
         else:
             # Handle built-in types
             return getattr(builtins, type_name, type)
-    
+
     def xwrite(self, buffer, value):
         return self.write(buffer, value)
-    
+
     def xread(self, buffer):
         return self.read(buffer)
 
 
 class MethodSerializer(Serializer):
     """Serializer for bound method objects."""
-    
+
     def __init__(self, fory, cls):
         super().__init__(fory, cls)
         self.cls = cls
-    
+
     def write(self, buffer, value):
         # Serialize bound method as (instance, method_name)
         instance = value.__self__
         method_name = value.__func__.__name__
-        
+
         self.fory.serialize_ref(buffer, instance)
         buffer.write_string(method_name)
-    
+
     def read(self, buffer):
         instance = self.fory.deserialize_ref(buffer)
         method_name = buffer.read_string()
-        
+
         return getattr(instance, method_name)
-    
+
     def xwrite(self, buffer, value):
         return self.write(buffer, value)
-    
+
     def xread(self, buffer):
         return self.read(buffer)
 
 
 class NumpyDtypeSerializer(Serializer):
     """Serializer for NumPy dtype objects."""
-    
+
     def __init__(self, fory, cls):
         super().__init__(fory, cls)
         self.cls = cls
-    
+
     def write(self, buffer, value):
         # Serialize numpy dtype by its string representation
         dtype_str = str(value)
         self.fory.serialize_ref(buffer, dtype_str)
-    
+
     def read(self, buffer):
         dtype_str = self.fory.deserialize_ref(buffer)
         return np.dtype(dtype_str)
-    
+
     def xwrite(self, buffer, value):
         return self.write(buffer, value)
-    
+
     def xread(self, buffer):
         return self.read(buffer)
 
@@ -233,11 +233,11 @@ class PandasSerializer(Serializer):
     Special serializer for pandas objects that extracts their data and reconstructs them.
     This avoids the complexity of pandas internal objects.
     """
-    
+
     def __init__(self, fory, cls):
         super().__init__(fory, cls)
         self.cls = cls
-    
+
     def write(self, buffer, value):
         # For DataFrames, extract the data and metadata
         if hasattr(value, 'to_dict'):
@@ -245,7 +245,7 @@ class PandasSerializer(Serializer):
             data = value.to_dict('records') if hasattr(value, 'to_dict') else value.to_dict()
             index = value.index.tolist() if hasattr(value, 'index') else None
             columns = value.columns.tolist() if hasattr(value, 'columns') else None
-            
+
             self.fory.serialize_ref(buffer, {
                 'data': data,
                 'index': index,
@@ -262,10 +262,10 @@ class PandasSerializer(Serializer):
                 'class_name': value.__class__.__name__,
                 'module_name': value.__class__.__module__
             })
-    
+
     def read(self, buffer):
         data_dict = self.fory.deserialize_ref(buffer)
-        
+
         if data_dict['class_name'] == 'DataFrame':
             # Reconstruct DataFrame
             import pandas as pd
@@ -287,10 +287,10 @@ class PandasSerializer(Serializer):
             # For other pandas objects, try to reconstruct from string representation
             # This is a fallback
             raise ValueError(f"Cannot reconstruct {data_dict['class_name']} from serialized data")
-    
+
     def xwrite(self, buffer, value):
         return self.write(buffer, value)
-    
+
     def xread(self, buffer):
         return self.read(buffer)
 
@@ -794,58 +794,35 @@ class PyArraySerializer(CrossLanguageCompatibleSerializer):
 
 class DynamicPyArraySerializer(Serializer):
     """Serializer for dynamic Python arrays that handles any typecode."""
-    
+
     def __init__(self, fory, cls):
         super().__init__(fory, cls)
-        self.cls = cls
-    
-    def write(self, buffer, value):
-        # Check if this array has a supported typecode and use PyArraySerializer if possible
-        typecode = value.typecode
-        if typecode in typecode_dict:
-            # Use PyArraySerializer approach for supported typecodes
-            itemsize, ftype, type_id = typecode_dict[typecode]
-            buffer.write_varuint32(type_id)
-            data = value.tobytes()
-            buffer.write_bytes_and_size(data)
+        self._serializer = ReduceSerializer(fory, cls)
+
+    def xwrite(self, buffer, value):
+        itemsize, ftype, type_id = typecode_dict[value.typecode]
+        view = memoryview(value)
+        nbytes = len(value) * itemsize
+        buffer.write_varuint32(type_id)
+        buffer.write_varuint32(nbytes)
+        if not view.c_contiguous:
+            buffer.write_bytes(value.tobytes())
         else:
-            # Fallback to string-based approach for unsupported typecodes
-            buffer.write_string(typecode)
-            data = value.tobytes()
-            buffer.write_bytes_and_size(data)
+            buffer.write_buffer(value)
+
+    def xread(self, buffer):
+        type_id = buffer.read_varint32()
+        typecode = typeid_code[type_id]
+        data = buffer.read_bytes_and_size()
+        arr = array.array(typecode, [])
+        arr.frombytes(data)
+        return arr
+
+    def write(self, buffer, value):
+        self._serializer.write(buffer, value)
 
     def read(self, buffer):
-        # Try to read as type_id first (PyArraySerializer format)
-        try:
-            type_id = buffer.read_varuint32()
-            if type_id in typeid_code:
-                typecode = typeid_code[type_id]
-                data = buffer.read_bytes_and_size()
-                arr = array.array(typecode, [])
-                arr.frombytes(data)
-                return arr
-            else:
-                # Not a valid type_id, fall back to string format
-                # Reset buffer position
-                buffer.reader_index = buffer.reader_index - 1  # Go back one byte
-                typecode = buffer.read_string()
-                data = buffer.read_bytes_and_size()
-                arr = array.array(typecode[0], [])  # Take first character
-                arr.frombytes(data)
-                return arr
-        except:
-            # Fallback to string-based approach
-            typecode = buffer.read_string()
-            data = buffer.read_bytes_and_size()
-            arr = array.array(typecode[0], [])  # Take first character
-            arr.frombytes(data)
-            return arr
-    
-    def xwrite(self, buffer, value):
-        return self.write(buffer, value)
-    
-    def xread(self, buffer):
-        return self.read(buffer)
+        return self._serializer.read(buffer)
 
 
 if np:
@@ -880,6 +857,7 @@ class Numpy1DArraySerializer(Serializer):
         super().__init__(fory, ftype)
         self.dtype = dtype
         self.itemsize, self.format, self.typecode, self.type_id = _np_dtypes_dict[self.dtype]
+        self._serializer = ReduceSerializer(fory, np.ndarray)
 
     def xwrite(self, buffer, value):
         assert value.itemsize == self.itemsize
@@ -901,16 +879,10 @@ class Numpy1DArraySerializer(Serializer):
         return np.frombuffer(data, dtype=self.dtype)
 
     def write(self, buffer, value):
-        # Serialize numpy 1D array using native format
-        buffer.write_string(self.dtype.str)
-        data = value.tobytes()
-        buffer.write_bytes_and_size(data)
+        self._serializer.write(buffer, value)
 
     def read(self, buffer):
-        dtype_str = buffer.read_string()
-        dtype = np.dtype(dtype_str)
-        data = buffer.read_bytes_and_size()
-        return np.frombuffer(data, dtype=dtype)
+        return self._serializer.read(buffer)
 
 
 class NDArraySerializer(Serializer):
@@ -930,7 +902,7 @@ class NDArraySerializer(Serializer):
 
     def write(self, buffer, value):
         # Serialize numpy ND array using native format
-        buffer.write_string(value.dtype.str)
+        self.fory.serialize_ref(buffer, value.dtype)
         buffer.write_varuint32(len(value.shape))
         for dim in value.shape:
             buffer.write_varuint32(dim)
@@ -938,8 +910,7 @@ class NDArraySerializer(Serializer):
         buffer.write_bytes_and_size(data)
 
     def read(self, buffer):
-        dtype_str = buffer.read_string()
-        dtype = np.dtype(dtype_str)
+        dtype = self.fory.deserialize_ref(buffer)
         ndim = buffer.read_varuint32()
         shape = tuple(buffer.read_varuint32() for _ in range(ndim))
         data = buffer.read_bytes_and_size()

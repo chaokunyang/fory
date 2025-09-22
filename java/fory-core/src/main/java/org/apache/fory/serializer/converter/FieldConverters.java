@@ -266,7 +266,7 @@ public class FieldConverters {
    */
   public static class ShortConverter extends FieldConverter<Short> {
     static Set<Class<?>> compatibleTypes =
-        ImmutableSet.of(String.class, Integer.class, Long.class, Short.class, Byte.class);
+        ImmutableSet.of(String.class, Integer.class, Long.class, Short.class);
 
     protected ShortConverter(FieldAccessor fieldAccessor) {
       super(fieldAccessor);
@@ -290,8 +290,6 @@ public class FieldConverters {
         return ((Integer) from).shortValue();
       } else if (from instanceof Long) {
         return ((Long) from).shortValue();
-      } else if (from instanceof Byte) {
-        return ((Byte) from).shortValue();
       } else if (from instanceof String) {
         return Short.parseShort((String) from);
       } else {
@@ -332,8 +330,7 @@ public class FieldConverters {
    * values.
    */
   public static class IntConverter extends FieldConverter<Integer> {
-    static Set<Class<?>> compatibleTypes =
-        ImmutableSet.of(String.class, Long.class, Integer.class, Short.class, Byte.class);
+    static Set<Class<?>> compatibleTypes = ImmutableSet.of(String.class, Long.class, Integer.class);
 
     protected IntConverter(FieldAccessor fieldAccessor) {
       super(fieldAccessor);
@@ -355,10 +352,6 @@ public class FieldConverters {
         return Math.toIntExact((Long) from);
       } else if (from instanceof Integer) {
         return (Integer) from;
-      } else if (from instanceof Short) {
-        return ((Short) from).intValue();
-      } else if (from instanceof Byte) {
-        return ((Byte) from).intValue();
       } else if (from instanceof String) {
         return Integer.parseInt((String) from);
       } else {
@@ -405,8 +398,7 @@ public class FieldConverters {
    * null values.
    */
   public static class LongConverter extends FieldConverter<Long> {
-    static Set<Class<?>> compatibleTypes =
-        ImmutableSet.of(String.class, Integer.class, Long.class, Short.class, Byte.class);
+    static Set<Class<?>> compatibleTypes = ImmutableSet.of(String.class, Long.class);
 
     protected LongConverter(FieldAccessor fieldAccessor) {
       super(fieldAccessor);
@@ -425,12 +417,6 @@ public class FieldConverters {
       }
       if (from instanceof Long) {
         return (Long) from;
-      } else if (from instanceof Integer) {
-        return ((Integer) from).longValue();
-      } else if (from instanceof Short) {
-        return ((Short) from).longValue();
-      } else if (from instanceof Byte) {
-        return ((Byte) from).longValue();
       } else if (from instanceof String) {
         return Long.parseLong((String) from);
       } else {

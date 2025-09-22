@@ -27,7 +27,7 @@ public class CollectionFlags {
   /** Whether collection has null elements. */
   public static int HAS_NULL = 0b10;
 
-  /** Whether collection elements type is declare type. */
+  /** Whether collection elements type is declared type. */
   public static int IS_DECL_ELEMENT_TYPE = 0b100;
 
   /** Whether collection elements type are same. */

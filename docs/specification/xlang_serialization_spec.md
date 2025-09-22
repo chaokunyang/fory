@@ -718,11 +718,11 @@ KV header:
 - If track key ref, use the first bit `0b1` of the header to flag it.
 - If the key has null, use the second bit `0b10` of the header to flag it. If ref tracking is enabled for this
   key type, this flag is invalid.
-- If the actual key type of map is not the declared key type, use the 3rd bit `0b100` of the header to flag it.
+- If the actual key type of map is the declared key type, use the 3rd bit `0b100` of the header to flag it.
 - If track value ref, use the 4th bit `0b1000` of the header to flag it.
 - If the value has null, use the 5th bit `0b10000` of the header to flag it. If ref tracking is enabled for this
   value type, this flag is invalid.
-- If the value type of map is not the declared value type, use the 6rd bit `0b100000` of the header to flag it.
+- If the value type of map is the declared value type, use the 6rd bit `0b100000` of the header to flag it.
 - If key or value is null, that key and value will be written as a separate chunk, and chunk size writing will be
   skipped too.
 

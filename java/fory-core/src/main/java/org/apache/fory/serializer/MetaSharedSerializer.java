@@ -228,12 +228,6 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
         fieldAccessor.putObject(obj, fieldValue);
       }
     }
-
-    // Set default values for missing fields in Scala case classes
-    if (hasDefaultValues) {
-      DefaultValueUtils.setDefaultValues(obj, defaultValueFields);
-    }
-
     return obj;
   }
 
@@ -241,7 +235,10 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
     if (!hasDefaultValues) {
       return newBean();
     }
-    return Platform.newInstance(type);
+    T obj = Platform.newInstance(type);
+    // Set default values for missing fields in Scala case classes
+    DefaultValueUtils.setDefaultValues(obj, defaultValueFields);
+    return obj;
   }
 
   @Override
@@ -284,6 +281,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
                 binding, refResolver, classResolver, fieldInfo, isFinal, buffer);
           }
         }
+        // remapping will handle those extra fields from peers.
         fields[counter++] = null;
       }
     }

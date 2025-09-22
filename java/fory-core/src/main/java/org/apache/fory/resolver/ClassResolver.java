@@ -755,7 +755,7 @@ public class ClassResolver extends TypeResolver {
 
   /**
    * Set serializer to avoid circular error when there is a serializer query for fields by {@link
-   * #readClassInfoWithMetaShare} and {@link #getSerializer(Class)} which access current creating
+   * #readSharedClassMeta} and {@link #getSerializer(Class)} which access current creating
    * serializer. This method is used to avoid overwriting existing serializer for class when
    * creating a data serializer for serialization of parts fields of a class.
    */
@@ -1417,7 +1417,7 @@ public class ClassResolver extends TypeResolver {
   }
 
   @Override
-  public ClassInfo readClassInfoWithMetaShare(MemoryBuffer buffer, MetaContext metaContext) {
+  public ClassInfo readSharedClassMeta(MemoryBuffer buffer, MetaContext metaContext) {
     assert metaContext != null : SET_META__CONTEXT_MSG;
     int header = buffer.readVarUint32Small14();
     int id = header >>> 1;
@@ -1426,7 +1426,7 @@ public class ClassResolver extends TypeResolver {
     }
     ClassInfo classInfo = metaContext.readClassInfos.get(id);
     if (classInfo == null) {
-      classInfo = readClassInfoWithMetaShare(metaContext, id);
+      classInfo = readSharedClassMeta(metaContext, id);
     }
     return classInfo;
   }
@@ -1525,7 +1525,7 @@ public class ClassResolver extends TypeResolver {
    */
   public ClassInfo readClassInfo(MemoryBuffer buffer) {
     if (metaContextShareEnabled) {
-      return readClassInfoWithMetaShare(buffer, fory.getSerializationContext().getMetaContext());
+      return readSharedClassMeta(buffer, fory.getSerializationContext().getMetaContext());
     }
     int header = buffer.readVarUint32Small14();
     ClassInfo classInfo;
@@ -1547,7 +1547,7 @@ public class ClassResolver extends TypeResolver {
   @Override
   public ClassInfo readClassInfo(MemoryBuffer buffer, ClassInfo classInfoCache) {
     if (metaContextShareEnabled) {
-      return readClassInfoWithMetaShare(buffer, fory.getSerializationContext().getMetaContext());
+      return readSharedClassMeta(buffer, fory.getSerializationContext().getMetaContext());
     }
     int header = buffer.readVarUint32Small14();
     if ((header & 0b1) != 0) {
@@ -1562,7 +1562,7 @@ public class ClassResolver extends TypeResolver {
   @CodegenInvoke
   public ClassInfo readClassInfo(MemoryBuffer buffer, ClassInfoHolder classInfoHolder) {
     if (metaContextShareEnabled) {
-      return readClassInfoWithMetaShare(buffer, fory.getSerializationContext().getMetaContext());
+      return readSharedClassMeta(buffer, fory.getSerializationContext().getMetaContext());
     }
     int header = buffer.readVarUint32Small14();
     if ((header & 0b1) != 0) {
@@ -1575,7 +1575,7 @@ public class ClassResolver extends TypeResolver {
   private ClassInfo readClassInfoByCache(
       MemoryBuffer buffer, ClassInfo classInfoCache, int header) {
     if (metaContextShareEnabled) {
-      return readClassInfoWithMetaShare(buffer, fory.getSerializationContext().getMetaContext());
+      return readSharedClassMeta(buffer, fory.getSerializationContext().getMetaContext());
     }
     return readClassInfoFromBytes(buffer, classInfoCache, header);
   }
@@ -1583,7 +1583,7 @@ public class ClassResolver extends TypeResolver {
   private ClassInfo readClassInfoFromBytes(
       MemoryBuffer buffer, ClassInfoHolder classInfoHolder, int header) {
     if (metaContextShareEnabled) {
-      return readClassInfoWithMetaShare(buffer, fory.getSerializationContext().getMetaContext());
+      return readSharedClassMeta(buffer, fory.getSerializationContext().getMetaContext());
     }
     ClassInfo classInfo = readClassInfoFromBytes(buffer, classInfoHolder.classInfo, header);
     classInfoHolder.classInfo = classInfo;

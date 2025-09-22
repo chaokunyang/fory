@@ -25,7 +25,6 @@ import static org.apache.fory.meta.Encoders.GENERIC_ENCODER;
 import static org.apache.fory.meta.Encoders.PACKAGE_DECODER;
 import static org.apache.fory.meta.Encoders.PACKAGE_ENCODER;
 import static org.apache.fory.meta.Encoders.TYPE_NAME_DECODER;
-import static org.apache.fory.resolver.ClassResolver.NO_CLASS_ID;
 import static org.apache.fory.serializer.collection.MapSerializers.HashMapSerializer;
 import static org.apache.fory.type.TypeUtils.qualifiedName;
 
@@ -700,11 +699,6 @@ public class XtypeResolver extends TypeResolver {
     return readClassInfo(buffer);
   }
 
-  @Override
-  public ClassInfo readClassInfoWithMetaShare(MemoryBuffer buffer, MetaContext metaContext) {
-    return null;
-  }
-
   public ClassInfo readClassInfo(MemoryBuffer buffer) {
     int xtypeId = buffer.readVarUint32Small14();
     int internalTypeId = xtypeId & 0xff;
@@ -735,13 +729,18 @@ public class XtypeResolver extends TypeResolver {
     }
   }
 
+  @Override
+  public ClassInfo readSharedClassMeta(MemoryBuffer buffer, MetaContext metaContext) {
+    return readClassInfo(buffer);
+  }
+
   private ClassInfo readSharedClassMeta(MemoryBuffer buffer) {
     MetaContext metaContext = fory.getSerializationContext().getMetaContext();
     assert metaContext != null : SET_META__CONTEXT_MSG;
     int id = buffer.readVarUint32Small14();
     ClassInfo classInfo = metaContext.readClassInfos.get(id);
     if (classInfo == null) {
-      classInfo = readClassInfoWithMetaShare(metaContext, id);
+      classInfo = readSharedClassMeta(metaContext, id);
     }
     return classInfo;
   }

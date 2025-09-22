@@ -184,13 +184,11 @@ public abstract class TypeResolver {
 
   public abstract ClassInfo readClassInfo(MemoryBuffer buffer, ClassInfo classInfoCache);
 
-  public abstract ClassInfo readClassInfoWithMetaShare(
-      MemoryBuffer buffer, MetaContext metaContext);
+  abstract ClassInfo readSharedClassMeta(MemoryBuffer buffer, MetaContext metaContext);
 
-  public ClassInfo readClassInfoWithMetaShare(MemoryBuffer buffer, Class<?> targetClass) {
-    assert metaContextShareEnabled;
+  public final ClassInfo readSharedClassMeta(MemoryBuffer buffer, Class<?> targetClass) {
     ClassInfo classInfo =
-        readClassInfoWithMetaShare(buffer, fory.getSerializationContext().getMetaContext());
+        readSharedClassMeta(buffer, fory.getSerializationContext().getMetaContext());
     Class<?> readClass = classInfo.getCls();
     // replace target class if needed
     if (targetClass != readClass) {
@@ -209,7 +207,7 @@ public abstract class TypeResolver {
     return classInfo;
   }
 
-  final ClassInfo readClassInfoWithMetaShare(MetaContext metaContext, int index) {
+  final ClassInfo readSharedClassMeta(MetaContext metaContext, int index) {
     ClassDef classDef = metaContext.readClassDefs.get(index);
     Tuple2<ClassDef, ClassInfo> classDefTuple = extRegistry.classIdToDef.get(classDef.getId());
     ClassInfo classInfo;

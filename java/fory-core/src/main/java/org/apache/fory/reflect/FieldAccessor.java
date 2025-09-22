@@ -23,11 +23,14 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.concurrent.ConcurrentMap;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.ToDoubleFunction;
 import java.util.function.ToIntFunction;
 import java.util.function.ToLongFunction;
+import org.apache.fory.collection.ClassValueCache;
+import org.apache.fory.collection.Tuple2;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.type.TypeUtils;
 import org.apache.fory.util.GraalvmSupport;
@@ -494,20 +497,35 @@ public abstract class FieldAccessor {
   }
 
   static class GeneratedAccessor extends FieldAccessor {
+    private static final ClassValueCache<ConcurrentMap<String, Tuple2<MethodHandle, MethodHandle>>>
+        cache = ClassValueCache.newClassKeyCache(8);
+
     private final MethodHandle getter;
     private final MethodHandle setter;
 
     protected GeneratedAccessor(Field field) {
       super(field, -1);
+      ConcurrentMap<String, Tuple2<MethodHandle, MethodHandle>> map =
+          cache.getIfPresent(field.getDeclaringClass());
       MethodHandles.Lookup lookup = _JDKAccess._trustedLookup(field.getDeclaringClass());
-      try {
-        this.getter =
-            lookup.findGetter(field.getDeclaringClass(), field.getName(), field.getType());
-        this.setter =
-            lookup.findSetter(field.getDeclaringClass(), field.getName(), field.getType());
-      } catch (IllegalAccessException | NoSuchFieldException ex) {
-        throw new RuntimeException(ex);
-      }
+      Tuple2<MethodHandle, MethodHandle> tuple2 =
+          map.computeIfAbsent(
+              field.getName(),
+              k -> {
+                try {
+                  MethodHandle getter =
+                      lookup.findGetter(
+                          field.getDeclaringClass(), field.getName(), field.getType());
+                  MethodHandle setter =
+                      lookup.findSetter(
+                          field.getDeclaringClass(), field.getName(), field.getType());
+                  return Tuple2.of(getter, setter);
+                } catch (IllegalAccessException | NoSuchFieldException ex) {
+                  throw new RuntimeException(ex);
+                }
+              });
+      getter = tuple2.f0;
+      setter = tuple2.f1;
     }
 
     @Override

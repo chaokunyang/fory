@@ -153,6 +153,7 @@ import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.StringUtils;
 import org.apache.fory.util.function.Functions;
+import org.apache.fory.util.record.RecordUtils;
 
 /**
  * Class registry for types of serializing objects, responsible for reading/writing types, setting
@@ -1291,6 +1292,10 @@ public class ClassResolver extends TypeResolver {
           .put(cls, getGraalvmSerializerClass(classInfo.serializer));
       classInfo.serializer = null;
       classInfoCache = NIL_CLASS_INFO;
+      if (RecordUtils.isRecord(cls)) {
+        RecordUtils.getRecordConstructor(cls);
+        RecordUtils.getRecordComponents(cls);
+      }
     }
   }
 

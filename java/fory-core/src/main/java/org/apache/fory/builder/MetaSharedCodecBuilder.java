@@ -44,7 +44,9 @@ import org.apache.fory.serializer.MetaSharedSerializer;
 import org.apache.fory.serializer.ObjectSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.Serializers;
+import org.apache.fory.serializer.converter.FieldConverter;
 import org.apache.fory.type.Descriptor;
+import org.apache.fory.type.DescriptorBuilder;
 import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.util.DefaultValueUtils;
 import org.apache.fory.util.ExceptionUtils;
@@ -221,11 +223,17 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
   @Override
   protected Expression setFieldValue(Expression bean, Descriptor descriptor, Expression value) {
     if (descriptor.getField() == null) {
+      FieldConverter<?> converter = descriptor.getFieldConverter();
+      if (converter != null) {
+        StaticInvoke converted = new StaticInvoke(converter.getClass(), "convertFrom", value);
+        Descriptor newDesc = new DescriptorBuilder(descriptor).field(converter.getField()).build();
+        return super.setFieldValue(bean, newDesc, converted);
+      }
       // Field doesn't exist in current class, skip set this field value.
       // Note that the field value shouldn't be an inlined value, otherwise field value read may
       // be ignored.
       // Add an ignored call here to make expression type to void.
-      return new Expression.StaticInvoke(ExceptionUtils.class, "ignore", value);
+      return new StaticInvoke(ExceptionUtils.class, "ignore", value);
     }
     return super.setFieldValue(bean, descriptor, value);
   }

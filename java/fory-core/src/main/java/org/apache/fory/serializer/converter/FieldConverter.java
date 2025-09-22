@@ -19,6 +19,7 @@
 
 package org.apache.fory.serializer.converter;
 
+import java.lang.reflect.Field;
 import org.apache.fory.reflect.FieldAccessor;
 
 /**
@@ -94,5 +95,9 @@ public abstract class FieldConverter<TO> {
   public void set(Object target, Object from) {
     TO converted = convert(from);
     fieldAccessor.set(target, converted);
+  }
+
+  public Field getField() {
+    return fieldAccessor.getField();
   }
 }

@@ -148,12 +148,22 @@ public class FieldConverters {
       super(fieldAccessor);
     }
 
-    @Override
-    public Boolean convert(Object from) {
+    /**
+     * Converts an object to a Boolean value.
+     *
+     * @param from the object to convert
+     * @return the converted Boolean value, or null if from is null
+     */
+    public static Boolean convertFrom(Object from) {
       if (from == null) {
         return null;
       }
       return BooleanConverter.convertFrom(from);
+    }
+
+    @Override
+    public Boolean convert(Object from) {
+      return convertFrom(from);
     }
   }
 
@@ -211,12 +221,22 @@ public class FieldConverters {
       super(fieldAccessor);
     }
 
-    @Override
-    public Byte convert(Object from) {
+    /**
+     * Converts an object to a Byte value.
+     *
+     * @param from the object to convert
+     * @return the converted Byte value, or null if from is null
+     */
+    public static Byte convertFrom(Object from) {
       if (from == null) {
         return null;
       }
       return ByteConverter.convertFrom(from);
+    }
+
+    @Override
+    public Byte convert(Object from) {
+      return convertFrom(from);
     }
   }
 
@@ -274,12 +294,16 @@ public class FieldConverters {
       super(fieldAccessor);
     }
 
-    @Override
-    public Short convert(Object from) {
+    public static Short convertFrom(Object from) {
       if (from == null) {
         return null;
       }
       return ShortConverter.convertFrom(from);
+    }
+
+    @Override
+    public Short convert(Object from) {
+      return convertFrom(from);
     }
   }
 
@@ -335,12 +359,22 @@ public class FieldConverters {
       super(fieldAccessor);
     }
 
-    @Override
-    public Integer convert(Object from) {
+    /**
+     * Converts an object to an Integer value.
+     *
+     * @param from the object to convert
+     * @return the converted Integer value, or null if from is null
+     */
+    public static Integer convertFrom(Object from) {
       if (from == null) {
         return null;
       }
       return IntConverter.convertFrom(from);
+    }
+
+    @Override
+    public Integer convert(Object from) {
+      return convertFrom(from);
     }
   }
 
@@ -397,12 +431,22 @@ public class FieldConverters {
       super(fieldAccessor);
     }
 
-    @Override
-    public Long convert(Object from) {
+    /**
+     * Converts an object to a Long value.
+     *
+     * @param from the object to convert
+     * @return the converted Long value, or null if from is null
+     */
+    public static Long convertFrom(Object from) {
       if (from == null) {
         return null;
       }
       return LongConverter.convertFrom(from);
+    }
+
+    @Override
+    public Long convert(Object from) {
+      return convertFrom(from);
     }
   }
 
@@ -418,8 +462,13 @@ public class FieldConverters {
       super(fieldAccessor);
     }
 
-    @Override
-    public String convert(Object from) {
+    /**
+     * Converts an object to a String value.
+     *
+     * @param from the object to convert
+     * @return the converted String value, or null if from is null
+     */
+    public static String convertFrom(Object from) {
       if (from == null) {
         return null;
       } else if (from instanceof Number) {
@@ -428,6 +477,11 @@ public class FieldConverters {
         // disallow on other types, to avoid malicious toString get called.
         throw new UnsupportedOperationException("Incompatible type: " + from.getClass());
       }
+    }
+
+    @Override
+    public String convert(Object from) {
+      return convertFrom(from);
     }
   }
 }

@@ -200,15 +200,19 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
           fieldAccessor.putObject(obj, fieldValue);
         }
       } else {
-        // Skip the field value from buffer since it doesn't exist in current class
-        if (skipPrimitiveFieldValueFailed(fory, fieldInfo.classId, buffer)) {
-          if (fieldInfo.classInfo == null) {
-            // TODO(chaokunyang) support registered serializer in peer with ref tracking disabled.
-            fory.readRef(buffer, classInfoHolder);
-          } else {
-            AbstractObjectSerializer.readFinalObjectFieldValue(
-                binding, refResolver, classResolver, fieldInfo, isFinal, buffer);
+        if (fieldInfo.fieldConverter == null) {
+          // Skip the field value from buffer since it doesn't exist in current class
+          if (skipPrimitiveFieldValueFailed(fory, fieldInfo.classId, buffer)) {
+            if (fieldInfo.classInfo == null) {
+              // TODO(chaokunyang) support registered serializer in peer with ref tracking disabled.
+              fory.readRef(buffer, classInfoHolder);
+            } else {
+              AbstractObjectSerializer.readFinalObjectFieldValue(
+                  binding, refResolver, classResolver, fieldInfo, isFinal, buffer);
+            }
           }
+        } else {
+          compatibleRead(buffer, fieldInfo, isFinal, obj);
         }
       }
     }
@@ -229,6 +233,21 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
       }
     }
     return obj;
+  }
+
+  private void compatibleRead(
+      MemoryBuffer buffer, FinalTypeField fieldInfo, boolean isFinal, Object obj) {
+    Object fieldValue;
+    short classId = fieldInfo.classId;
+    if (classId >= ClassResolver.PRIMITIVE_BOOLEAN_CLASS_ID
+        && classId <= ClassResolver.PRIMITIVE_DOUBLE_CLASS_ID) {
+      fieldValue = Serializers.readPrimitiveValue(fory, buffer, classId);
+    } else {
+      fieldValue =
+          AbstractObjectSerializer.readFinalObjectFieldValue(
+              binding, refResolver, classResolver, fieldInfo, isFinal, buffer);
+    }
+    fieldInfo.fieldConverter.set(obj, fieldValue);
   }
 
   private T newInstance() {

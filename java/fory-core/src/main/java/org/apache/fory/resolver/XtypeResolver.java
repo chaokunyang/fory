@@ -54,7 +54,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import org.apache.fory.Fory;
 import org.apache.fory.annotation.Internal;
-import org.apache.fory.collection.IdentityMap;
 import org.apache.fory.collection.IdentityObjectIntMap;
 import org.apache.fory.collection.LongMap;
 import org.apache.fory.collection.ObjectMap;
@@ -110,10 +109,9 @@ public class XtypeResolver extends TypeResolver {
   private final Config config;
   private final Fory fory;
   private final ClassResolver classResolver;
-  private final ClassInfoHolder classInfoCache = new ClassInfoHolder(ClassResolver.NIL_CLASS_INFO);
+  private final ClassInfoHolder classInfoCache = new ClassInfoHolder(NIL_CLASS_INFO);
   private final MetaStringResolver metaStringResolver;
-  // IdentityMap has better lookup performance, when loadFactor is 0.05f, performance is better
-  private final IdentityMap<Class<?>, ClassInfo> classInfoMap = new IdentityMap<>(64, loadFactor);
+
   // Every deserialization for unregistered class will query it, performance is important.
   private final ObjectMap<TypeNameBytes, ClassInfo> compositeClassNameBytes2ClassInfo =
       new ObjectMap<>(16, loadFactor);
@@ -465,15 +463,6 @@ public class XtypeResolver extends TypeResolver {
   }
 
   @Override
-  public boolean needToWriteRef(TypeRef<?> typeRef) {
-    ClassInfo classInfo = classInfoMap.get(typeRef.getRawType());
-    if (classInfo == null) {
-      return fory.trackingRef();
-    }
-    return classInfo.serializer.needToWriteRef();
-  }
-
-  @Override
   public GenericType buildGenericType(TypeRef<?> typeRef) {
     return classResolver.buildGenericType(typeRef);
   }
@@ -644,7 +633,7 @@ public class XtypeResolver extends TypeResolver {
 
   public void writeSharedClassMeta(MemoryBuffer buffer, ClassInfo classInfo) {
     MetaContext metaContext = fory.getSerializationContext().getMetaContext();
-    assert metaContext != null : ClassResolver.SET_META__CONTEXT_MSG;
+    assert metaContext != null : SET_META__CONTEXT_MSG;
     IdentityObjectIntMap<Class<?>> classMap = metaContext.classMap;
     int newId = classMap.size;
     int id = classMap.putOrGet(classInfo.cls, newId);
@@ -709,6 +698,11 @@ public class XtypeResolver extends TypeResolver {
     return readClassInfo(buffer);
   }
 
+  @Override
+  public ClassInfo readClassInfoWithMetaShare(MemoryBuffer buffer, MetaContext metaContext) {
+    return null;
+  }
+
   public ClassInfo readClassInfo(MemoryBuffer buffer) {
     int xtypeId = buffer.readVarUint32Small14();
     int internalTypeId = xtypeId & 0xff;
@@ -741,11 +735,11 @@ public class XtypeResolver extends TypeResolver {
 
   private ClassInfo readSharedClassMeta(MemoryBuffer buffer) {
     MetaContext metaContext = fory.getSerializationContext().getMetaContext();
-    assert metaContext != null : ClassResolver.SET_META__CONTEXT_MSG;
+    assert metaContext != null : SET_META__CONTEXT_MSG;
     int id = buffer.readVarUint32Small14();
     ClassInfo classInfo = metaContext.readClassInfos.get(id);
     if (classInfo == null) {
-      classInfo = classResolver.readClassInfoWithMetaShare(metaContext, id);
+      classInfo = readClassInfoWithMetaShare(metaContext, id);
     }
     return classInfo;
   }

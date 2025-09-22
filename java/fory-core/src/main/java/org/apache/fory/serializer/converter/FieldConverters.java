@@ -93,6 +93,26 @@ public class FieldConverters {
       if (LongConverter.compatibleTypes.contains(from)) {
         return new BoxedLongConverter(FieldAccessor.createAccessor(field));
       }
+    } else if (to == float.class) {
+      // Handle primitive float conversions
+      if (FloatConverter.compatibleTypes.contains(from)) {
+        return new FloatConverter(FieldAccessor.createAccessor(field));
+      }
+    } else if (to == Float.class) {
+      // Handle boxed Float conversions
+      if (FloatConverter.compatibleTypes.contains(from)) {
+        return new BoxedFloatConverter(FieldAccessor.createAccessor(field));
+      }
+    } else if (to == double.class) {
+      // Handle primitive double conversions
+      if (DoubleConverter.compatibleTypes.contains(from)) {
+        return new DoubleConverter(FieldAccessor.createAccessor(field));
+      }
+    } else if (to == Double.class) {
+      // Handle boxed Double conversions
+      if (DoubleConverter.compatibleTypes.contains(from)) {
+        return new BoxedDoubleConverter(FieldAccessor.createAccessor(field));
+      }
     } else if (to == String.class) {
       // Handle String conversions
       if (StringConverter.compatibleTypes.contains(from)) {
@@ -453,12 +473,151 @@ public class FieldConverters {
   }
 
   /**
+   * Converter for primitive float fields. Converts compatible types to float values. Returns 0.0f
+   * for null values. Only allows conversion from String.
+   */
+  public static class FloatConverter extends FieldConverter<Float> {
+    static Set<Class<?>> compatibleTypes = ImmutableSet.of(String.class, Float.class);
+
+    protected FloatConverter(FieldAccessor fieldAccessor) {
+      super(fieldAccessor);
+    }
+
+    /**
+     * Converts an object to a float value.
+     *
+     * @param from the object to convert
+     * @return the converted float value
+     * @throws NumberFormatException if the string cannot be parsed as a float
+     */
+    public static Float convertFrom(Object from) {
+      if (from == null) {
+        return 0.0f;
+      }
+      if (from instanceof String) {
+        return Float.parseFloat((String) from);
+      } else if (from instanceof Float) {
+        return (Float) from;
+      } else {
+        throw new UnsupportedOperationException("Incompatible type: " + from.getClass());
+      }
+    }
+
+    @Override
+    public Float convert(Object from) {
+      return convertFrom(from);
+    }
+  }
+
+  /**
+   * Converter for boxed Float fields. Converts compatible types to Float values. Returns null for
+   * null values, unlike the primitive version. Only allows conversion from String.
+   */
+  public static class BoxedFloatConverter extends FieldConverter<Float> {
+    protected BoxedFloatConverter(FieldAccessor fieldAccessor) {
+      super(fieldAccessor);
+    }
+
+    /**
+     * Converts an object to a Float value.
+     *
+     * @param from the object to convert
+     * @return the converted Float value, or null if from is null
+     */
+    public static Float convertFrom(Object from) {
+      if (from == null) {
+        return null;
+      }
+      return FloatConverter.convertFrom(from);
+    }
+
+    @Override
+    public Float convert(Object from) {
+      return convertFrom(from);
+    }
+  }
+
+  /**
+   * Converter for primitive double fields. Converts compatible types to double values. Returns 0.0
+   * for null values. Allows conversion from String and Float.
+   */
+  public static class DoubleConverter extends FieldConverter<Double> {
+    static Set<Class<?>> compatibleTypes = ImmutableSet.of(String.class, Float.class, Double.class);
+
+    protected DoubleConverter(FieldAccessor fieldAccessor) {
+      super(fieldAccessor);
+    }
+
+    /**
+     * Converts an object to a double value.
+     *
+     * @param from the object to convert
+     * @return the converted double value
+     * @throws NumberFormatException if the string cannot be parsed as a double
+     */
+    public static Double convertFrom(Object from) {
+      if (from == null) {
+        return 0.0;
+      }
+      if (from instanceof String) {
+        return Double.parseDouble((String) from);
+      } else if (from instanceof Double) {
+        return (Double) from;
+      } else if (from instanceof Float) {
+        return ((Float) from).doubleValue();
+      } else {
+        throw new UnsupportedOperationException("Incompatible type: " + from.getClass());
+      }
+    }
+
+    @Override
+    public Double convert(Object from) {
+      return convertFrom(from);
+    }
+  }
+
+  /**
+   * Converter for boxed Double fields. Converts compatible types to Double values. Returns null for
+   * null values, unlike the primitive version. Allows conversion from String and Float.
+   */
+  public static class BoxedDoubleConverter extends FieldConverter<Double> {
+    protected BoxedDoubleConverter(FieldAccessor fieldAccessor) {
+      super(fieldAccessor);
+    }
+
+    /**
+     * Converts an object to a Double value.
+     *
+     * @param from the object to convert
+     * @return the converted Double value, or null if from is null
+     */
+    public static Double convertFrom(Object from) {
+      if (from == null) {
+        return null;
+      }
+      return DoubleConverter.convertFrom(from);
+    }
+
+    @Override
+    public Double convert(Object from) {
+      return convertFrom(from);
+    }
+  }
+
+  /**
    * Converter for String fields. Converts compatible types to String values. Only allows conversion
    * from Number types to prevent malicious toString() calls.
    */
   public static class StringConverter extends FieldConverter<String> {
     static Set<Class<?>> compatibleTypes =
-        ImmutableSet.of(Integer.class, Long.class, Short.class, Byte.class, Boolean.class);
+        ImmutableSet.of(
+            Integer.class,
+            Long.class,
+            Short.class,
+            Byte.class,
+            Boolean.class,
+            Float.class,
+            Double.class);
 
     protected StringConverter(FieldAccessor fieldAccessor) {
       super(fieldAccessor);

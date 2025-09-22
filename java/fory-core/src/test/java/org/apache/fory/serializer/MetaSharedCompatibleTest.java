@@ -946,6 +946,7 @@ public class MetaSharedCompatibleTest extends ForyTestBase {
   public void testCompatibleFieldConvert() throws Exception {
     byte[] bytes;
     Object o1;
+    ImmutableSet<String> floatFields = ImmutableSet.of("f11", "f12", "f13", "f14");
     {
       CompileUnit compileUnit =
           new CompileUnit(
@@ -962,7 +963,12 @@ public class MetaSharedCompatibleTest extends ForyTestBase {
                   + "  public Integer f8;\n"
                   + "  public long f9;\n"
                   + "  public Long f10;\n"
-                  + "  public String toString() {return \"\" + ftrue + ffalse + f3 + f4 + f5 + f6 + f7 + f8 + f9 + f10;}\n"
+                  + "  public float f11;\n"
+                  + "  public Float f12;\n"
+                  + "  public double f13;\n"
+                  + "  public Double f14;\n"
+                  + "  public String toString() {return \"\" + ftrue + ffalse + "
+                  + "f3 + f4 + f5 + f6 + f7 + f8 + f9 + f10 + f11 + f12 + f13 + f14;}\n"
                   + "}"));
 
       ClassLoader classLoader =
@@ -1000,7 +1006,12 @@ public class MetaSharedCompatibleTest extends ForyTestBase {
                   + "  public int f8;\n"
                   + "  public Long f9;\n"
                   + "  public long f10;\n"
-                  + "  public String toString() {return \"\" + ftrue + ffalse + f3 + f4 + f5 + f6 + f7 + f8 + f9 + f10;}\n"
+                  + "  public Float f11;\n"
+                  + "  public float f12;\n"
+                  + "  public Double f13;\n"
+                  + "  public double f14;\n"
+                  + "  public String toString() {return \"\" + ftrue + ffalse + "
+                  + "f3 + f4 + f5 + f6 + f7 + f8 + f9 + f10 + f11 + f12 + f13 + f14;}\n"
                   + "}"));
       ClassLoader classLoader =
           JaninoUtils.compile(Thread.currentThread().getContextClassLoader(), compileUnit);
@@ -1017,7 +1028,11 @@ public class MetaSharedCompatibleTest extends ForyTestBase {
       for (Field field : fields) {
         field.setAccessible(true);
         Object fieldValue = field.get(o);
-        Assert.assertEquals(fieldValue.toString(), field.getName().substring(1));
+        if (fieldValue instanceof Float || fieldValue instanceof Double) {
+          Assert.assertEquals(fieldValue.toString(), field.getName().substring(1) + ".0");
+        } else {
+          Assert.assertEquals(fieldValue.toString(), field.getName().substring(1));
+        }
       }
       Assert.assertEquals(o.toString(), o1.toString());
     }
@@ -1037,7 +1052,12 @@ public class MetaSharedCompatibleTest extends ForyTestBase {
                   + "  public String f8;\n"
                   + "  public String f9;\n"
                   + "  public String f10;\n"
-                  + "  public String toString() {return \"\" + ftrue + ffalse + f3 + f4 + f5 + f6 + f7 + f8 + f9 + f10;}\n"
+                  + "  public String f11;\n"
+                  + "  public String f12;\n"
+                  + "  public String f13;\n"
+                  + "  public String f14;\n"
+                  + "  public String toString() {return \"\" + ftrue + ffalse + "
+                  + "f3 + f4 + f5 + f6 + f7 + f8 + f9 + f10 + f11 + f12 + f13 + f14;}\n"
                   + "}"));
 
       ClassLoader classLoader =
@@ -1055,7 +1075,11 @@ public class MetaSharedCompatibleTest extends ForyTestBase {
       for (Field field : fields) {
         field.setAccessible(true);
         Object fieldValue = field.get(o);
-        Assert.assertEquals(fieldValue, field.getName().substring(1));
+        if (floatFields.contains(field.getName())) {
+          Assert.assertEquals(fieldValue.toString(), field.getName().substring(1) + ".0");
+        } else {
+          Assert.assertEquals(fieldValue.toString(), field.getName().substring(1));
+        }
       }
       Assert.assertEquals(o.toString(), o1.toString());
     }

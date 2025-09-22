@@ -39,6 +39,7 @@ public class ClassSpec {
         cls.isArray(),
         cls.isArray() ? TypeUtils.getArrayDimensions(cls) : 0,
         -1);
+    type = cls;
   }
 
   public ClassSpec(Class<?> cls, int typeId) {

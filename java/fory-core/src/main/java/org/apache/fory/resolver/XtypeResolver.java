@@ -242,7 +242,9 @@ public class XtypeResolver extends TypeResolver {
   private void register(
       Class<?> type, Serializer<?> serializer, String namespace, String typeName, int xtypeId) {
     ClassInfo classInfo = newClassInfo(type, serializer, namespace, typeName, (short) xtypeId);
-    qualifiedType2ClassInfo.put(qualifiedName(namespace, typeName), classInfo);
+    String qualifiedName = qualifiedName(namespace, typeName);
+    qualifiedType2ClassInfo.put(qualifiedName, classInfo);
+    extRegistry.registeredClasses.put(qualifiedName, type);
     if (serializer == null) {
       if (type.isEnum()) {
         classInfo.serializer = new EnumSerializer(fory, (Class<Enum>) type);

@@ -359,6 +359,9 @@ public abstract class TypeResolver {
   }
 
   final Class<?> loadClass(ClassSpec classSpec) {
+    if (classSpec.type != null) {
+      return classSpec.type;
+    }
     return loadClass(classSpec.entireClassName, classSpec.isEnum, classSpec.dimension);
   }
 

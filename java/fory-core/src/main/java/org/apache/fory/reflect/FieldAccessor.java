@@ -23,6 +23,7 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -505,8 +506,12 @@ public abstract class FieldAccessor {
 
     protected GeneratedAccessor(Field field) {
       super(field, -1);
-      ConcurrentMap<String, Tuple2<MethodHandle, MethodHandle>> map =
-          cache.getIfPresent(field.getDeclaringClass());
+      ConcurrentMap<String, Tuple2<MethodHandle, MethodHandle>> map;
+      try {
+        map = cache.get(field.getDeclaringClass(), ConcurrentHashMap::new);
+      } catch (Exception e) {
+        throw new RuntimeException(e);
+      }
       MethodHandles.Lookup lookup = _JDKAccess._trustedLookup(field.getDeclaringClass());
       Tuple2<MethodHandle, MethodHandle> tuple2 =
           map.computeIfAbsent(

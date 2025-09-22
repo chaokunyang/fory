@@ -23,6 +23,7 @@ import static org.apache.fory.builder.Generated.GeneratedMetaSharedSerializer.SE
 import static org.apache.fory.type.TypeUtils.OBJECT_TYPE;
 import static org.apache.fory.type.TypeUtils.STRING_TYPE;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Member;
 import java.util.Collection;
 import java.util.Map;
@@ -225,8 +226,16 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
     if (descriptor.getField() == null) {
       FieldConverter<?> converter = descriptor.getFieldConverter();
       if (converter != null) {
-        StaticInvoke converted = new StaticInvoke(converter.getClass(), "convertFrom", value);
-        Descriptor newDesc = new DescriptorBuilder(descriptor).field(converter.getField()).build();
+        Field field = converter.getField();
+        StaticInvoke converted =
+            new StaticInvoke(
+                converter.getClass(), "convertFrom", TypeRef.of(field.getType()), value);
+        Descriptor newDesc =
+            new DescriptorBuilder(descriptor)
+                .field(field)
+                .type(field.getType())
+                .typeRef(TypeRef.of(field.getType()))
+                .build();
         return super.setFieldValue(bean, newDesc, converted);
       }
       // Field doesn't exist in current class, skip set this field value.

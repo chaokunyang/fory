@@ -313,7 +313,7 @@ public class FieldConverters {
    */
   public static class IntConverter extends FieldConverter<Integer> {
     static Set<Class<?>> compatibleTypes =
-        ImmutableSet.of(String.class, Long.class, Short.class, Byte.class);
+        ImmutableSet.of(String.class, Long.class, Integer.class, Short.class, Byte.class);
 
     protected IntConverter(FieldAccessor fieldAccessor) {
       super(fieldAccessor);
@@ -333,6 +333,8 @@ public class FieldConverters {
       }
       if (from instanceof Long) {
         return Math.toIntExact((Long) from);
+      } else if (from instanceof Integer) {
+        return (Integer) from;
       } else if (from instanceof Short) {
         return ((Short) from).intValue();
       } else if (from instanceof Byte) {
@@ -471,7 +473,7 @@ public class FieldConverters {
     public static String convertFrom(Object from) {
       if (from == null) {
         return null;
-      } else if (from instanceof Number) {
+      } else if (from instanceof Number || from instanceof Boolean) {
         return from.toString();
       } else {
         // disallow on other types, to avoid malicious toString get called.

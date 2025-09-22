@@ -597,7 +597,7 @@ Which encoding to choose:
 - If the string is encoded by `utf-8`, then fory will use `utf-8` to decode the data. Cross-language string
   serialization of fory uses `utf-8` by default.
 
-### list
+### collection/list
 
 Format:
 
@@ -614,8 +614,8 @@ which will be encoded by elements header, each use one bit:
 - If track elements ref, use the first bit `0b1` of the header to flag it.
 - If the elements have null, use the second bit `0b10` of the header to flag it. If ref tracking is enabled for this
   element type, this flag is invalid.
-- If the element types are not the declared type, use the 3rd bit `0b100` of the header to flag it.
-- If the element types are different, use the 4th bit `0b1000` header to flag it.
+- If the element types are the declared type, use the 3rd bit `0b100` of the header to flag it.
+- If the element types are smae, use the 4th bit `0b1000` header to flag it.
 
 By default, all bits are unset, which means all elements won't track ref, all elements are same type, not null and
 the actual element is the declared type in the custom type field.

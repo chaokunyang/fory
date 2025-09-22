@@ -44,11 +44,11 @@ import org.apache.fory.reflect.FieldAccessor;
  * converter.set(targetObject, "123");
  * }</pre>
  *
- * @param <TO> the target type that this converter produces
+ * @param <T> the target type that this converter produces
  * @see FieldConverters for factory methods to create specific converter instances
  * @see FieldAccessor for the field access mechanism
  */
-public abstract class FieldConverter<TO> {
+public abstract class FieldConverter<T> {
   private final FieldAccessor fieldAccessor;
 
   /**
@@ -69,13 +69,13 @@ public abstract class FieldConverter<TO> {
    * values appropriately and throw {@link UnsupportedOperationException} for incompatible types.
    *
    * @param from the object to convert
-   * @return the converted object of type TO
+   * @return the converted object of type T
    * @throws UnsupportedOperationException if the source type is not compatible with this converter
    * @throws NumberFormatException if converting from String to a numeric type and the string is not
    *     a valid number
    * @throws ArithmeticException if the numeric conversion would result in overflow or underflow
    */
-  public abstract TO convert(Object from);
+  public abstract T convert(Object from);
 
   /**
    * Converts the given object and sets it on the target object's field.
@@ -93,7 +93,7 @@ public abstract class FieldConverter<TO> {
    * @throws IllegalArgumentException if target is null or the field accessor fails
    */
   public void set(Object target, Object from) {
-    TO converted = convert(from);
+    T converted = convert(from);
     fieldAccessor.set(target, converted);
   }
 

@@ -9,11 +9,48 @@ import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.record.RecordUtils;
 
+/**
+ * Factory class for creating and caching {@link ObjectCreator} instances.
+ *
+ * <p>This class provides a centralized way to obtain optimized object creators for different types.
+ * It automatically selects the most appropriate creation strategy based on the target type and
+ * runtime environment:
+ *
+ * <ul>
+ *   <li><strong>Record types:</strong> Uses {@link RecordCtrCreator} with MethodHandle for
+ *       parameterized constructor invocation
+ *   <li><strong>Classes with no-arg constructors:</strong> Uses {@link DeclaredNoArgCtrCreator}
+ *       with MethodHandle for fast invocation
+ *   <li><strong>Classes without accessible constructors:</strong> Uses {@link UnsafeObjectCreator}
+ *       with platform-specific unsafe allocation
+ *   <li><strong>GraalVM native image compatibility:</strong> Uses {@link
+ *       NoArgSerializableObjectCreator} for reflection-based creation when needed
+ * </ul>
+ *
+ * <p>All created ObjectCreator instances are cached using a soft reference cache to improve
+ * performance on repeated requests for the same type.
+ *
+ * <p><strong>Thread Safety:</strong> This class and all returned ObjectCreator instances are
+ * thread-safe and can be safely used across multiple threads concurrently.
+ */
 @SuppressWarnings("unchecked")
 public class ObjectCreators {
   private static final ClassValueCache<ObjectCreator<?>> cache =
       ClassValueCache.newClassKeySoftCache(8);
 
+  /**
+   * Returns an optimized ObjectCreator for the given type.
+   *
+   * <p>This method automatically selects the most appropriate creation strategy based on the type
+   * characteristics and caches the result for future use. The selection logic prioritizes
+   * performance and platform compatibility.
+   *
+   * @param <T> the type for which to create an ObjectCreator
+   * @param type the Class object representing the target type
+   * @return a cached ObjectCreator instance optimized for the given type
+   * @throws ForyException if the type cannot be instantiated (e.g., missing no-arg constructor in
+   *     GraalVM native image)
+   */
   public static <T> ObjectCreator<T> getObjectCreator(Class<T> type) {
     return (ObjectCreator<T>) cache.get(type, () -> creategetObjectCreator(type));
   }

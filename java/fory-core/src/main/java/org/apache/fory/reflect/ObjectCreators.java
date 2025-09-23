@@ -150,7 +150,7 @@ public class ObjectCreators {
         // ensure it does work;
         newInstance();
       } catch (Throwable e) {
-        throw new ForyException("Please provide a no-arg constructor for " + type);
+        throw new ForyException("Please provide a no-arg constructor for " + type, e);
       }
     }
 

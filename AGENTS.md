@@ -125,6 +125,20 @@ cargo doc --lib --no-deps --all-features
 cargo bench
 ```
 
+### Integration Tests
+
+- All commands must be executed within the `integration_tests` directory.
+- For java releated integration tests, please install the java libraries first by `cd ../java && mvn -T16 install -DskipTests`. If not code changes after intalled fory java, you can skip the installation step.
+
+```bash
+it_dir=$(pwd)
+# Run graalvm tests
+cd $it_dir/gravalvm_tests && mvn -T16 -DskipTests=true -Pnative package && target/main
+
+# Run latest_jdk_tests
+cd $it_dir/latest_jdk_tests && mvn -T16 test
+```
+
 ### Documentation
 
 - When you update any markdown documentation, please use the `prettier --write $file` to format.
@@ -253,6 +267,15 @@ Fory rust provides macro-based serialization and deserialization. Fory rust cons
 - **fory-derive**: Rust macro-based codegen for serialization and deserialization
   - `rust/fory-derive/src/object`: macro for serializing/deserializing structs
   - `rust/fory-derive/src/fory_row`: macro for encoding/decoding row format
+
+#### Integration Tests
+
+`integration_tests` contains integration tests with following modules:
+
+- **cpython_benchmark**: benchmark suite for fory python
+- **graalvm_tests**: test suite for fory java on gravelvm
+- **jdk_compatibility_tests**: test suite for fory serialization compatibility between multiple JDK versions
+- **latest_jdk_tests**: test suite for `jdk17+` versions
 
 ## Key Development Tips
 

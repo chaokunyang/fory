@@ -29,7 +29,6 @@ import org.apache.fory.collection.Tuple2;
 import org.apache.fory.collection.Tuple3;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.memory.Platform;
 import org.apache.fory.meta.ClassDef;
 import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.reflect.ReflectionUtils;
@@ -245,13 +244,9 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
     if (isRecord) {
       Object[] fields = readFields(buffer);
       fields = RecordUtils.remapping(recordInfo, fields);
-      try {
-        T obj = (T) constructor.invokeWithArguments(fields);
-        Arrays.fill(recordInfo.getRecordComponents(), null);
-        return obj;
-      } catch (Throwable e) {
-        Platform.throwException(e);
-      }
+      T obj = (T) objectCreator.newInstanceWithArguments(fields);
+      Arrays.fill(recordInfo.getRecordComponents(), null);
+      return obj;
     }
     T obj = newBean();
     refResolver.reference(obj);

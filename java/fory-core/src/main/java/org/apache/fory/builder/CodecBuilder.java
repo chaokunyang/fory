@@ -483,6 +483,21 @@ public abstract class CodecBuilder {
     if (sourcePublicAccessible(beanClass)) {
       return new Expression.NewInstance(beanType);
     } else {
+      if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE && Platform.JAVA_VERSION >= 25) {
+        ReflectionUtils.getCtrHandle(beanClass, true); // trigger cache
+        Reference ctrField =
+            getOrCreateField(
+                true,
+                MethodHandle.class,
+                ctx.newName(beanClass.getSimpleName() + "Ctr"),
+                () ->
+                    new StaticInvoke(
+                        ReflectionUtils.class,
+                        "staticBeanClassExpr",
+                        TypeRef.of(MethodHandle.class),
+                        Literal.True));
+        return new Invoke(ctrField, "invoke", OBJECT_TYPE);
+      }
       return new StaticInvoke(Platform.class, "newInstance", OBJECT_TYPE, beanClassExpr());
     }
   }

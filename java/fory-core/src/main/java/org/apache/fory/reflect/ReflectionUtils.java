@@ -22,6 +22,7 @@ package org.apache.fory.reflect;
 import static org.apache.fory.type.TypeUtils.OBJECT_TYPE;
 import static org.apache.fory.type.TypeUtils.getRawType;
 
+import java.io.ObjectStreamClass;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
@@ -68,15 +69,15 @@ public class ReflectionUtils {
   }
 
   public static boolean hasNoArgConstructor(Class<?> clazz) {
-    return getNoArgConstructor(clazz) != null;
+    return getNoArgConstructor(clazz, false) != null;
   }
 
   public static boolean hasPublicNoArgConstructor(Class<?> clazz) {
-    Constructor<?> constructor = getNoArgConstructor(clazz);
+    Constructor<?> constructor = getNoArgConstructor(clazz, false);
     return constructor != null && Modifier.isPublic(constructor.getModifiers());
   }
 
-  static <T> Constructor<T> getNoArgConstructor(Class<T> clazz) {
+  static <T> Constructor<T> getNoArgConstructor(Class<T> clazz, boolean searchParent) {
     if (clazz.isInterface()) {
       return null;
     }
@@ -84,13 +85,21 @@ public class ReflectionUtils {
       return null;
     }
     Constructor[] constructors = clazz.getDeclaredConstructors();
-    if (constructors.length == 0) {
-      return null;
-    } else {
-      return Stream.of(constructors)
-          .filter((c) -> c.getParameterCount() == 0)
-          .findAny()
-          .orElse(null);
+    Constructor ctr = null;
+    if (constructors.length != 0) {
+      ctr =
+          Stream.of(constructors).filter((c) -> c.getParameterCount() == 0).findAny().orElse(null);
+    }
+    if (!searchParent) {
+      return ctr;
+    }
+    try {
+      Method method =
+          ObjectStreamClass.class.getDeclaredMethod("getSerializableConstructor", Class.class);
+      return (Constructor)
+          _JDKAccess._trustedLookup(ObjectStreamClass.class).unreflect(method).invoke(clazz);
+    } catch (Throwable e) {
+      throw new RuntimeException(e);
     }
   }
 
@@ -103,7 +112,7 @@ public class ReflectionUtils {
       };
 
   private static MethodHandle createNoArgCtrHandle(Class<?> cls) {
-    Constructor<?> ctr = getNoArgConstructor(cls);
+    Constructor<?> ctr = getNoArgConstructor(cls, false);
     if (ctr == null) {
       return null;
     }
@@ -123,7 +132,11 @@ public class ReflectionUtils {
   public static MethodHandle getCtrHandle(Class<?> cls, boolean checked) {
     MethodHandle methodHandle = ctrHandleCache.get(cls);
     if (checked && methodHandle == null) {
-      throw new RuntimeException(String.format("Class %s doesn't have a no-arg constructor", cls));
+      throw new RuntimeException(
+          String.format(
+              "Class %s doesn't have a no-arg constructor, "
+                  + "please provide a no-arg constructor for the type",
+              cls));
     }
     return methodHandle;
   }

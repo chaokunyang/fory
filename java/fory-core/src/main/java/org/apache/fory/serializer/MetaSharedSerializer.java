@@ -41,6 +41,7 @@ import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.type.Generics;
 import org.apache.fory.util.DefaultValueUtils;
+import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.record.RecordInfo;
 import org.apache.fory.util.record.RecordUtils;
@@ -162,14 +163,9 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
           new Object[finalFields.length + otherFields.length + containerFields.length];
       readFields(buffer, fieldValues);
       fieldValues = RecordUtils.remapping(recordInfo, fieldValues);
-
-      try {
-        T t = (T) constructor.invokeWithArguments(fieldValues);
-        Arrays.fill(recordInfo.getRecordComponents(), null);
-        return t;
-      } catch (Throwable e) {
-        Platform.throwException(e);
-      }
+      T t = objectCreator.newInstanceWithArguments(fieldValues);
+      Arrays.fill(recordInfo.getRecordComponents(), null);
+      return t;
     }
     T obj = newInstance();
     Fory fory = this.fory;
@@ -254,7 +250,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
     if (!hasDefaultValues) {
       return newBean();
     }
-    T obj = Platform.newInstance(type);
+    T obj = GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE ? newBean() : Platform.newInstance(type);
     // Set default values for missing fields in Scala case classes
     DefaultValueUtils.setDefaultValues(obj, defaultValueFields);
     return obj;

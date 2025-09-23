@@ -34,7 +34,6 @@ import java.io.ObjectStreamField;
 import java.io.Serializable;
 import java.io.UnsupportedEncodingException;
 import java.lang.invoke.MethodHandles;
-import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -81,7 +80,6 @@ import org.apache.fory.util.unsafe._JDKAccess;
 public class ObjectStreamSerializer extends AbstractObjectSerializer {
   private static final Logger LOG = LoggerFactory.getLogger(ObjectStreamSerializer.class);
 
-  private final Constructor constructor;
   private final SlotsInfo[] slotsInfos;
 
   public ObjectStreamSerializer(Fory fory, Class<?> type) {
@@ -98,17 +96,6 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
         Externalizable.class.getName());
     // stream serializer may be data serializer of ReplaceResolver serializer.
     fory.getClassResolver().setSerializerIfAbsent(type, this);
-    Constructor constructor;
-    try {
-      constructor = type.getConstructor();
-      if (!constructor.isAccessible()) {
-        constructor.setAccessible(true);
-      }
-    } catch (Exception e) {
-      constructor =
-          (Constructor) ReflectionUtils.getObjectFieldValue(ObjectStreamClass.lookup(type), "cons");
-    }
-    this.constructor = constructor;
     List<SlotsInfo> slotsInfoList = new ArrayList<>();
     Class<?> end = type;
     // locate closest non-serializable superclass
@@ -166,16 +153,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
 
   @Override
   public Object read(MemoryBuffer buffer) {
-    Object obj = null;
-    if (constructor != null) {
-      try {
-        obj = constructor.newInstance();
-      } catch (InstantiationException | IllegalAccessException | InvocationTargetException e) {
-        Platform.throwException(e);
-      }
-    } else {
-      obj = Platform.newInstance(type);
-    }
+    Object obj = objectCreator.newInstance();
     fory.getRefResolver().reference(obj);
     int numClasses = buffer.readInt16();
     int slotIndex = 0;

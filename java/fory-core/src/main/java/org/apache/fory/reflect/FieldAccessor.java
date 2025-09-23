@@ -506,12 +506,9 @@ public abstract class FieldAccessor {
 
     protected GeneratedAccessor(Field field) {
       super(field, -1);
-      ConcurrentMap<String, Tuple2<MethodHandle, MethodHandle>> map;
-      try {
-        map = cache.get(field.getDeclaringClass(), ConcurrentHashMap::new);
-      } catch (Exception e) {
-        throw new RuntimeException(e);
-      }
+      ConcurrentMap<String, Tuple2<MethodHandle, MethodHandle>> map =
+          cache.get(field.getDeclaringClass(), ConcurrentHashMap::new);
+      ;
       MethodHandles.Lookup lookup = _JDKAccess._trustedLookup(field.getDeclaringClass());
       Tuple2<MethodHandle, MethodHandle> tuple2 =
           map.computeIfAbsent(

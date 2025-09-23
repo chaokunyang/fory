@@ -21,7 +21,6 @@ package org.apache.fory.serializer;
 
 import static org.apache.fory.type.TypeUtils.getRawType;
 
-import java.lang.invoke.MethodHandle;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
@@ -36,6 +35,8 @@ import org.apache.fory.collection.Tuple3;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.reflect.FieldAccessor;
+import org.apache.fory.reflect.ObjectCreator;
+import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.ClassInfo;
@@ -57,25 +58,20 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
   protected final RefResolver refResolver;
   protected final ClassResolver classResolver;
   protected final boolean isRecord;
-  protected final MethodHandle constructor;
+  protected final ObjectCreator<T> objectCreator;
   private InternalFieldInfo[] fieldInfos;
   private RecordInfo copyRecordInfo;
 
   public AbstractObjectSerializer(Fory fory, Class<T> type) {
-    this(
-        fory,
-        type,
-        RecordUtils.isRecord(type)
-            ? RecordUtils.getRecordConstructor(type).f1
-            : ReflectionUtils.getCtrHandle(type, false));
+    this(fory, type, ObjectCreators.getObjectCreator(type));
   }
 
-  public AbstractObjectSerializer(Fory fory, Class<T> type, MethodHandle constructor) {
+  public AbstractObjectSerializer(Fory fory, Class<T> type, ObjectCreator<T> objectCreator) {
     super(fory, type);
     this.refResolver = fory.getRefResolver();
     this.classResolver = fory.getClassResolver();
     this.isRecord = RecordUtils.isRecord(type);
-    this.constructor = constructor;
+    this.objectCreator = objectCreator;
   }
 
   /**
@@ -704,7 +700,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
   private T copyRecord(T originObj) {
     Object[] fieldValues = copyFields(originObj);
     try {
-      T t = (T) constructor.invokeWithArguments(fieldValues);
+      T t = (T) objectCreator.newInstanceWithArguments(fieldValues);
       Arrays.fill(copyRecordInfo.getRecordComponents(), null);
       fory.reference(originObj, t);
       return t;
@@ -931,14 +927,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
   }
 
   protected T newBean() {
-    if (constructor != null) {
-      try {
-        return (T) constructor.invoke();
-      } catch (Throwable e) {
-        Platform.throwException(e);
-      }
-    }
-    return Platform.newInstance(type);
+    return objectCreator.newInstance();
   }
 
   static Tuple3<Tuple2<FinalTypeField[], boolean[]>, GenericTypeField[], GenericTypeField[]>

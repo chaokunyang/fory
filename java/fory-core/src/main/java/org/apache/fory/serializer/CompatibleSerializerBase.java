@@ -19,9 +19,9 @@
 
 package org.apache.fory.serializer;
 
-import java.lang.invoke.MethodHandle;
 import org.apache.fory.Fory;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.reflect.ObjectCreator;
 
 /**
  * Base class for compatible serializer. Both JIT mode serializer and interpreter-mode serializer
@@ -32,8 +32,8 @@ public abstract class CompatibleSerializerBase<T> extends AbstractObjectSerializ
     super(fory, type);
   }
 
-  public CompatibleSerializerBase(Fory fory, Class<T> type, MethodHandle constructor) {
-    super(fory, type, constructor);
+  public CompatibleSerializerBase(Fory fory, Class<T> type, ObjectCreator<T> objectCreator) {
+    super(fory, type, objectCreator);
   }
 
   public T readAndSetFields(MemoryBuffer buffer, T obj) {

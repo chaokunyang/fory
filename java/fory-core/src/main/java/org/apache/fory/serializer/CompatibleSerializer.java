@@ -26,7 +26,6 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import org.apache.fory.Fory;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.memory.Platform;
 import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.resolver.ClassInfo;
 import org.apache.fory.resolver.ClassResolver;
@@ -69,7 +68,7 @@ public final class CompatibleSerializer<T> extends CompatibleSerializerBase<T> {
   }
 
   public CompatibleSerializer(Fory fory, Class<T> cls, FieldResolver fieldResolver) {
-    super(fory, cls, null);
+    super(fory, cls);
     Preconditions.checkArgument(!isRecord, cls);
     recordInfo = null;
     this.fieldResolver = fieldResolver;
@@ -309,16 +308,12 @@ public final class CompatibleSerializer<T> extends CompatibleSerializerBase<T> {
       Object[] fieldValues = new Object[fieldResolver.getNumFields()];
       readFields(buffer, fieldValues);
       fieldValues = RecordUtils.remapping(recordInfo, fieldValues);
-      assert constructor != null;
-      try {
-        T t = (T) constructor.invokeWithArguments(fieldValues);
-        Arrays.fill(recordInfo.getRecordComponents(), null);
-        return t;
-      } catch (Throwable e) {
-        Platform.throwException(e);
-      }
+      assert objectCreator != null;
+      T t = objectCreator.newInstanceWithArguments(fieldValues);
+      Arrays.fill(recordInfo.getRecordComponents(), null);
+      return t;
     }
-    T obj = (T) newBean();
+    T obj = newBean();
     refResolver.reference(obj);
     return readAndSetFields(buffer, obj);
   }

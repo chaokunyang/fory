@@ -22,6 +22,7 @@ package org.apache.fory.collection;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.util.GraalvmSupport;
 
@@ -38,8 +39,12 @@ public class ClassValueCache<T> {
     return cache.getIfPresent(k);
   }
 
-  public T get(Class<?> k, Callable<? extends T> loader) throws Exception {
-    return cache.get(k, loader);
+  public T get(Class<?> k, Callable<? extends T> loader) {
+    try {
+      return cache.get(k, loader);
+    } catch (ExecutionException e) {
+      throw new RuntimeException(e);
+    }
   }
 
   public void put(Class<?> k, T v) {

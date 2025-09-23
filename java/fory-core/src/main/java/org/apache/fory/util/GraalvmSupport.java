@@ -21,6 +21,7 @@ package org.apache.fory.util;
 
 import java.util.Objects;
 import org.apache.fory.Fory;
+import org.apache.fory.exception.ForyException;
 import org.apache.fory.serializer.Serializer;
 
 /** A helper for Graalvm native image support. */
@@ -36,7 +37,7 @@ public class GraalvmSupport {
 
   static {
     String imageCode = System.getProperty(GRAAL_IMAGE_CODE_KEY);
-    IN_GRAALVM_NATIVE_IMAGE = imageCode != null;
+    IN_GRAALVM_NATIVE_IMAGE = false;
   }
 
   /** Returns true if current process is running in graalvm native image build stage. */
@@ -62,5 +63,9 @@ public class GraalvmSupport {
     public Class<? extends Serializer> getSerializerClass() {
       return serializerClass;
     }
+  }
+
+  public static ForyException throwNoArgCtrException(Class<?> type) {
+    throw new ForyException("Please provide a no-arg constructor for " + type);
   }
 }

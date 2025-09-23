@@ -249,6 +249,13 @@ cd $it_dir/cpython_benchmark && pip install -r requirements.txt && python benchm
 
 ## Repository Structure Understanding
 
+### Git Repository
+
+Apache Fory is an open-source project hosted on GitHub.
+The git repository for Apache Fory is https://github.com/apache/fory .
+Contributors always fork the repository and create a pull request to propose changes.
+The `origin` points to forked repository instead of the official repository.
+
 ### Key Directories
 
 - **`docs/`**: Documentation, specifications, and guides
@@ -302,7 +309,7 @@ Fory uses binary protocols for efficient serialization and deserialization. Fory
 - **[Java serialization format](docs/specification/java_serialization_spec.md)**: Highly-optimized and drop-in replacement for Java serialization.
 - **Python serialization format**: Highly-optimized and drop-in replacement for Python pickle, which is an extension built upon **[xlang serialization format](docs/specification/xlang_serialization_spec.md)**.
 
-**`docs/specification/**` are the specification for the Fory protocol**, please read those documents carefully and think hard and make sure you understand them before making changes to code and documentation.
+**`docs/specification/**` are the specification for the Fory protocol\*\*, please read those documents carefully and think hard and make sure you understand them before making changes to code and documentation.
 
 ### Core Structure
 
@@ -419,7 +426,9 @@ Fory rust provides macro-based serialization and deserialization. Fory rust cons
 `integration_tests` contains integration tests with following modules:
 
 - **cpython_benchmark**: benchmark suite for fory python
-- **graalvm_tests**: test suite for fory java on graalvm
+- **graalvm_tests**: test suite for fory java on graalvm.
+  - Note that fory use codegen to support graalvm instead of reflection, fory don't use `reflect-config.json` for
+    serialization, this is the core advantage of compared to graalvm JDK serialization.
 - **jdk_compatibility_tests**: test suite for fory serialization compatibility between multiple JDK versions
 - **latest_jdk_tests**: test suite for `jdk17+` versions
 

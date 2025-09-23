@@ -42,3 +42,42 @@ MODULE.bazel.lock
 **/.DS_Store
 .vscode/
 go/fory/.gocache
+
+# Build directories for all languages
+# Java
+**/target/
+java/**/target/
+
+# Python
+python/build/
+python/dist/
+**/build/
+**/dist/
+
+# C++
+cpp/build/
+cpp/bazel-*
+
+# Bazel build directories
+bazel-out/
+bazel-bin/
+bazel-testlogs/
+bazel-genfiles//
+
+# Go
+go/**/build/
+
+# Rust
+rust/target/
+
+# JavaScript/Node.js
+**/node_modules/
+javascript/**/build/
+
+# General build artifacts
+build/
+dist/
+**/.ruff_cache
+**/.pytest_cache
+.venv
+**/.idea

@@ -37,7 +37,7 @@ public class GraalvmSupport {
 
   static {
     String imageCode = System.getProperty(GRAAL_IMAGE_CODE_KEY);
-    IN_GRAALVM_NATIVE_IMAGE = false;
+    IN_GRAALVM_NATIVE_IMAGE = imageCode != null;
   }
 
   /** Returns true if current process is running in graalvm native image build stage. */

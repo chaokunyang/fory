@@ -56,6 +56,8 @@ import org.apache.fory.codegen.Expression.StaticInvoke;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
+import org.apache.fory.reflect.ObjectCreator;
+import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.ClassInfo;
@@ -484,18 +486,18 @@ public abstract class CodecBuilder {
       return new Expression.NewInstance(beanType);
     } else {
       if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE && Platform.JAVA_VERSION >= 25) {
-        ReflectionUtils.getCtrHandle(beanClass, true); // trigger cache
+        ObjectCreators.getObjectCreator(beanClass); // trigger cache
         Reference ctrField =
             getOrCreateField(
                 true,
-                MethodHandle.class,
-                ctx.newName(beanClass.getSimpleName() + "Ctr"),
+                ObjectCreator.class,
+                ctx.newName("objectCreator_" + beanClass.getSimpleName()),
                 () ->
                     new StaticInvoke(
-                        ReflectionUtils.class,
-                        "staticBeanClassExpr",
-                        TypeRef.of(MethodHandle.class),
-                        Literal.True));
+                        ObjectCreators.class,
+                        "getObjectCreator",
+                        TypeRef.of(ObjectCreator.class),
+                        staticBeanClassExpr()));
         return new Invoke(ctrField, "invoke", OBJECT_TYPE);
       }
       return new StaticInvoke(Platform.class, "newInstance", OBJECT_TYPE, beanClassExpr());

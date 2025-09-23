@@ -161,17 +161,11 @@ cargo bench
 # Install dependencies
 npm install
 
-# Build
-npm run build
-
 # Run tests
-npm test
+node ./node_modules/.bin/jest --ci --reporters=default --reporters=jest-junit
 
 # Format code
-npm run format
-
-# Lint
-npm run lint
+git ls-files -- '*.ts' | xargs -P 5 node ./node_modules/.bin/eslint
 ```
 
 ### Dart Development
@@ -180,23 +174,23 @@ npm run lint
 - Uses pub for package management.
 
 ```bash
-# Get dependencies
-dart pub get
+# First, generate necessary code
+dart run build_runner build
 
-# Run tests
+# Run all tests
 dart test
 
 # Format code
-dart format .
-
-# Analyze code
 dart analyze
+dart fix --dry-run
+dart fix --apply
 ```
 
 ### Kotlin Development
 
 - All maven commands must be executed within the `kotlin` directory.
-- Kotlin implementation provides interop with Java Fury.
+- Kotlin implementation provides extra serializers for kotlin types.
+- Kotlin implementation is built on fory java, please install the java libraries first by `cd ../java && mvn -T16 install -DskipTests`. If no code changes after installed fory java, you can skip the installation step.
 
 ```bash
 # Build
@@ -209,7 +203,8 @@ mvn test
 ### Scala Development
 
 - All commands must be executed within the `scala` directory.
-- Scala implementation provides functional programming interface.
+- Scala implementation provides extra serializers for Scala types.
+- Scala implementation is built on fory java, please install the java libraries first by `cd ../java && mvn -T16 install -DskipTests`. If no code changes after installed fory java, you can skip the installation step.
 
 ```bash
 # Build with sbt

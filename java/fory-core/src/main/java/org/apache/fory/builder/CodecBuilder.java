@@ -498,7 +498,7 @@ public abstract class CodecBuilder {
                         "getObjectCreator",
                         TypeRef.of(ObjectCreator.class),
                         staticBeanClassExpr()));
-        return new Invoke(ctrField, "invoke", OBJECT_TYPE);
+        return new Invoke(ctrField, "newInstance", OBJECT_TYPE);
       }
       return new StaticInvoke(Platform.class, "newInstance", OBJECT_TYPE, beanClassExpr());
     }

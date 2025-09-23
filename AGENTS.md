@@ -341,6 +341,13 @@ Fory serialization for every language is implemented independently to minimize t
 
 - **benchmark**: Benchmark suite based on jmh
 
+#### Bazel
+
+`bazel` dir provide build support for fory c++ and cython:
+
+- `bazel/arrow`: build rules to get arrow shared libraries based on bazel template
+- `grpc-cython-copts.patch/grpc-python.patch`: patch for grpc to add `pyx_library` for cython.
+
 #### C++
 
 - `cpp/fory/row`: Row format data structures

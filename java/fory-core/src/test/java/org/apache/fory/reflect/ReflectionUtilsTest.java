@@ -117,7 +117,7 @@ public class ReflectionUtilsTest {
 
   @Test
   public void testGetNoArgConstructor() throws Throwable {
-    Constructor ctr = ReflectionUtils.getNoArgConstructor(NoArgConstructor1.class, false);
+    Constructor ctr = ReflectionUtils.getNoArgConstructor(NoArgConstructor1.class, true);
     ctr.setAccessible(true);
     Assert.assertEquals(ctr.newInstance().getClass(), NoArgConstructor1.class);
     Lookup lookup = _JDKAccess._trustedLookup(NoArgConstructor1.class);

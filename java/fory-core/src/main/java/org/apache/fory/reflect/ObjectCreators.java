@@ -12,7 +12,7 @@ import org.apache.fory.util.record.RecordUtils;
 @SuppressWarnings("unchecked")
 public class ObjectCreators {
   private static final ClassValueCache<ObjectCreator<?>> cache =
-      ClassValueCache.newClassKeyCache(8);
+      ClassValueCache.newClassKeySoftCache(8);
 
   public static <T> ObjectCreator<T> getObjectCreator(Class<T> type) {
     return (ObjectCreator<T>) cache.get(type, () -> creategetObjectCreator(type));

@@ -410,7 +410,8 @@ public class CompatibleCodecBuilder extends BaseObjectCodecBuilder {
             "readFields",
             false);
     Expression record =
-        new Invoke(getObjectCreator(beanClass), "newInstance", OBJECT_TYPE, components);
+        new Invoke(
+            getObjectCreator(beanClass), "newInstanceWithArguments", OBJECT_TYPE, components);
     return new ListExpression(buffer, components, readActions, new Return(record));
   }
 

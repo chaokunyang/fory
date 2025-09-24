@@ -115,9 +115,6 @@ go test -race -v
 # Build
 go build
 
-# Run linter (if golangci-lint is installed)
-golangci-lint run
-
 # Generate code (if using go:generate)
 go generate ./...
 ```
@@ -310,7 +307,7 @@ Fory uses binary protocols for efficient serialization and deserialization. Fory
 - **[Java serialization format](docs/specification/java_serialization_spec.md)**: Highly-optimized and drop-in replacement for Java serialization.
 - **Python serialization format**: Highly-optimized and drop-in replacement for Python pickle, which is an extension built upon **[xlang serialization format](docs/specification/xlang_serialization_spec.md)**.
 
-**`docs/specification/**` are the specification for the Fory protocol\*\*, please read those documents carefully and think hard and make sure you understand them before making changes to code and documentation.
+**`docs/specification/**` are the specification for the Fory protocol, please read those documents carefully and think hard and make sure you understand them before making changes to code and documentation.
 
 ### Core Structure
 

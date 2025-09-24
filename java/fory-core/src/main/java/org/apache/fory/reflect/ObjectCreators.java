@@ -24,10 +24,10 @@ import java.lang.invoke.MethodHandles.Lookup;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Constructor;
 import org.apache.fory.collection.ClassValueCache;
+import org.apache.fory.collection.Tuple2;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.util.GraalvmSupport;
-import org.apache.fory.util.record.RecordComponent;
 import org.apache.fory.util.record.RecordUtils;
 import org.apache.fory.util.unsafe._JDKAccess;
 
@@ -81,7 +81,6 @@ public class ObjectCreators {
     if (RecordUtils.isRecord(type)) {
       return new RecordObjectCreator<>(type);
     }
-
     Constructor<T> noArgConstructor = ReflectionUtils.getNoArgConstructor(type, true);
     if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE && Platform.JAVA_VERSION >= 25) {
       if (noArgConstructor != null && noArgConstructor.getDeclaringClass() == type) {
@@ -138,65 +137,21 @@ public class ObjectCreators {
 
   public static final class RecordObjectCreator<T> extends ObjectCreator<T> {
     private final MethodHandle handle;
-    private final java.util.function.Function<Object[], T> lambdaFactory;
+    private final Constructor<?> constructor;
 
     public RecordObjectCreator(Class<T> type) {
       super(type);
-      // For GraalVM 25+, use LambdaMetafactory to avoid direct method handle reflection issues
+      Tuple2<Constructor, MethodHandle> tuple2 = RecordUtils.getRecordConstructor(type);
+      constructor = tuple2.f0;
+      handle = tuple2.f1;
       if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE && Platform.JAVA_VERSION >= 25) {
-        this.handle = null;
-        this.lambdaFactory = createRecordLambdaFactory(type);
-      } else {
-        this.handle = RecordUtils.getRecordCtrHandle(type);
-        this.lambdaFactory = null;
-      }
-    }
-
-    @SuppressWarnings("unchecked")
-    private java.util.function.Function<Object[], T> createRecordLambdaFactory(Class<T> type) {
-      try {
-        // Try to use existing method handle from RecordUtils, but wrap it in a lambda
-        // This avoids duplicating the constructor lookup logic
-        MethodHandle existingHandle = RecordUtils.getRecordCtrHandle(type);
-        if (existingHandle == null) {
-          throw new RuntimeException("Could not get constructor handle for record " + type);
+        try {
+          constructor.setAccessible(true);
+        } catch (Throwable t) {
+          throw new ForyException(
+              "Failed to create instance, please provide a public constructor for " + type, t);
         }
-        Lookup lookup = _JDKAccess._trustedLookup(type);
-        // Create a method handle that takes Object[] and spreads it to the existing handle
-        Class<?>[] paramTypes = getRecordParamTypes(type);
-        MethodHandle arraySpreadHandle =
-            existingHandle.asSpreader(Object[].class, paramTypes.length);
-
-        // Use LambdaMetafactory to create a Function that wraps the constructor call
-        java.lang.invoke.CallSite callSite =
-            java.lang.invoke.LambdaMetafactory.metafactory(
-                lookup,
-                "apply",
-                MethodType.methodType(java.util.function.Function.class),
-                MethodType.methodType(Object.class, Object.class),
-                arraySpreadHandle,
-                MethodType.methodType(type, Object[].class));
-
-        return (java.util.function.Function<Object[], T>) callSite.getTarget().invokeExact();
-      } catch (Throwable e) {
-        throw new ForyException(
-            "Record instantiation failed. "
-                + "Consider make type as public or adding reflection metadata for: "
-                + type,
-            e);
       }
-    }
-
-    private Class<?>[] getRecordParamTypes(Class<T> type) {
-      RecordComponent[] components = RecordUtils.getRecordComponents(type);
-      if (components == null) {
-        throw new RuntimeException("Not a record class: " + type);
-      }
-      Class<?>[] paramTypes = new Class<?>[components.length];
-      for (int i = 0; i < components.length; i++) {
-        paramTypes[i] = components[i].getType();
-      }
-      return paramTypes;
     }
 
     @Override
@@ -207,9 +162,10 @@ public class ObjectCreators {
     @Override
     public T newInstanceWithArguments(Object... arguments) {
       try {
-        if (lambdaFactory != null) {
-          // GraalVM 25+ path: use lambda factory
-          return lambdaFactory.apply(arguments);
+        // compile-time constant is eligible for dead code elimination.
+        if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE && Platform.JAVA_VERSION >= 25) {
+          // GraalVM 25+ path: workaround for https://github.com/oracle/graal/issues/12106
+          return (T) constructor.newInstance(arguments);
         } else {
           // Regular path: use method handle
           return (T) handle.invokeWithArguments(arguments);

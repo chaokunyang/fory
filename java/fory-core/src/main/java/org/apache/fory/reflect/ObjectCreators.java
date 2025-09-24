@@ -208,7 +208,8 @@ public class ObjectCreators {
         return (Constructor<T>)
             newConstructorForSerializationMethod.invoke(reflectionFactory, type, parentConstructor);
       } catch (Throwable e) {
-        throw new ForyException("Failed to create ReflectionFactory constructor for " + type, e);
+        throw new ForyException(
+            "Failed to create instance, please provide a no-arg constructor for " + type, e);
       }
     }
 

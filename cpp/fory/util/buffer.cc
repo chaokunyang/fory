@@ -145,4 +145,111 @@ Buffer *AllocateBuffer(uint32_t size) {
   }
 }
 
+// 64-bit varint operations - optimized version from _util.pyx
+uint32_t Buffer::PutVarUint64(uint32_t offset, uint64_t value) {
+  uint8_t* arr = data_ + offset;
+
+  if (value >> 7 == 0) {
+    arr[0] = static_cast<uint8_t>(value);
+    return 1;
+  }
+  arr[0] = static_cast<uint8_t>((value & 0x7F) | 0x80);
+
+  if (value >> 14 == 0) {
+    arr[1] = static_cast<uint8_t>(value >> 7);
+    return 2;
+  }
+  arr[1] = static_cast<uint8_t>((value >> 7) | 0x80);
+
+  if (value >> 21 == 0) {
+    arr[2] = static_cast<uint8_t>(value >> 14);
+    return 3;
+  }
+  arr[2] = static_cast<uint8_t>((value >> 14) | 0x80);
+
+  if (value >> 28 == 0) {
+    arr[3] = static_cast<uint8_t>(value >> 21);
+    return 4;
+  }
+  arr[3] = static_cast<uint8_t>((value >> 21) | 0x80);
+
+  if (value >> 35 == 0) {
+    arr[4] = static_cast<uint8_t>(value >> 28);
+    return 5;
+  }
+  arr[4] = static_cast<uint8_t>((value >> 28) | 0x80);
+
+  if (value >> 42 == 0) {
+    arr[5] = static_cast<uint8_t>(value >> 35);
+    return 6;
+  }
+  arr[5] = static_cast<uint8_t>((value >> 35) | 0x80);
+
+  if (value >> 49 == 0) {
+    arr[6] = static_cast<uint8_t>(value >> 42);
+    return 7;
+  }
+  arr[6] = static_cast<uint8_t>((value >> 42) | 0x80);
+
+  if (value >> 56 == 0) {
+    arr[7] = static_cast<uint8_t>(value >> 49);
+    return 8;
+  }
+  arr[7] = static_cast<uint8_t>((value >> 49) | 0x80);
+  arr[8] = static_cast<uint8_t>(value >> 56);
+  return 9;
+}
+
+uint64_t Buffer::GetVarUint64(uint32_t offset, uint32_t *readBytesLength) {
+  uint8_t* arr = data_ + offset;
+  uint32_t read_length = 1;
+  uint64_t result;
+
+  uint8_t b = arr[0];
+  result = b & 0x7F;
+  if ((b & 0x80) != 0) {
+    read_length++;
+    b = arr[1];
+    result |= static_cast<uint64_t>(b & 0x7F) << 7;
+    if ((b & 0x80) != 0) {
+      read_length++;
+      b = arr[2];
+      result |= static_cast<uint64_t>(b & 0x7F) << 14;
+      if ((b & 0x80) != 0) {
+        read_length++;
+        b = arr[3];
+        result |= static_cast<uint64_t>(b & 0x7F) << 21;
+        if ((b & 0x80) != 0) {
+          read_length++;
+          b = arr[4];
+          result |= static_cast<uint64_t>(b & 0x7F) << 28;
+          if ((b & 0x80) != 0) {
+            read_length++;
+            b = arr[5];
+            result |= static_cast<uint64_t>(b & 0x7F) << 35;
+            if ((b & 0x80) != 0) {
+              read_length++;
+              b = arr[6];
+              result |= static_cast<uint64_t>(b & 0x7F) << 42;
+              if ((b & 0x80) != 0) {
+                read_length++;
+                b = arr[7];
+                result |= static_cast<uint64_t>(b & 0x7F) << 49;
+                if ((b & 0x80) != 0) {
+                  read_length++;
+                  b = arr[8];
+                  // Highest bit in last byte is sign bit
+                  result |= static_cast<uint64_t>(b) << 56;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  *readBytesLength = read_length;
+  return result;
+}
+
 } // namespace fory

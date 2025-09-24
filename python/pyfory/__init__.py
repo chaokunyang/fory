@@ -29,10 +29,39 @@ try:
 except ImportError:
     ENABLE_FORY_CYTHON_SERIALIZATION = False
 
+# Try to import nanobind serialization
+try:
+    from pyfory.nanobind import ENABLE_FORY_NANOBIND_SERIALIZATION
+except ImportError:
+    ENABLE_FORY_NANOBIND_SERIALIZATION = False
+
+# Environment variable to enable nanobind serialization
+import os
+if os.environ.get('ENABLE_FORY_NANOBIND_SERIALIZATION', '0').strip() in ('1', 'true', 'True'):
+    ENABLE_FORY_NANOBIND_SERIALIZATION = True
+
 from pyfory._registry import TypeInfo
 
-if ENABLE_FORY_CYTHON_SERIALIZATION:
+# Prioritize nanobind over cython if both are available
+if ENABLE_FORY_NANOBIND_SERIALIZATION:
+    try:
+        from pyfory.nanobind import (
+            Fory,  # Import C++ backed Fory class
+            Buffer,  # Import C++ backed Buffer class
+            Language,  # Import Language constants
+            MapRefResolver,
+            TypeResolver,
+            MetaStringResolver,
+            TypeInfo,  # Override with nanobind version
+        )
+        print("Using nanobind-based serialization (experimental)")
+    except ImportError as e:
+        print(f"Failed to import nanobind serialization: {e}")
+        ENABLE_FORY_NANOBIND_SERIALIZATION = False
+
+elif ENABLE_FORY_CYTHON_SERIALIZATION:
     from pyfory._serialization import Fory, TypeInfo  # noqa: F401,F811
+    print("Using Cython-based serialization")
 
 from pyfory.serializer import *  # noqa: F401,F403 # pylint: disable=unused-import
 from pyfory.type import (  # noqa: F401 # pylint: disable=unused-import
@@ -53,15 +82,18 @@ from pyfory.type import (  # noqa: F401 # pylint: disable=unused-import
     Float64ArrayType,
     dataslots,
 )
-from pyfory._util import Buffer  # noqa: F401 # pylint: disable=unused-import
+# Import Buffer - use nanobind version if available, else fallback to _util
+if not ENABLE_FORY_NANOBIND_SERIALIZATION:
+    from pyfory._util import Buffer  # noqa: F401 # pylint: disable=unused-import
 
 import warnings
 
-try:
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=RuntimeWarning)
-        from pyfory.format import *  # noqa: F401,F403 # pylint: disable=unused-import
-except (AttributeError, ImportError):
-    pass
+# Temporarily commented out to avoid conflicts during nanobind development
+# try:
+#     with warnings.catch_warnings():
+#         warnings.filterwarnings("ignore", category=RuntimeWarning)
+#         from pyfory.format import *  # noqa: F401,F403 # pylint: disable=unused-import
+# except (AttributeError, ImportError):
+#     pass
 
 __version__ = "0.13.0.dev"

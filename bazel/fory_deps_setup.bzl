@@ -166,3 +166,20 @@ def setup_deps():
         url = "https://github.com/hedronvision/bazel-compile-commands-extractor/archive/80ac7efb33a65f0cc627635e5b958ea3eb03231d.tar.gz",
         strip_prefix = "bazel-compile-commands-extractor-80ac7efb33a65f0cc627635e5b958ea3eb03231d",
     )
+
+    # Add nanobind for Python C++ extensions
+    auto_http_archive(
+        name = "nanobind",
+        url = "https://github.com/wjakob/nanobind/archive/refs/tags/v2.4.0.tar.gz",
+        sha256 = "c37c53c60ada5fe1c956e24bd4b83af669a2309bf5ee8d8b27cb8cb3d22d54fa",
+        strip_prefix = "nanobind-2.4.0",
+        build_file = "//bazel:BUILD.nanobind",
+    )
+
+    # Add pybind11 as a fallback dependency for nanobind
+    auto_http_archive(
+        name = "pybind11",
+        url = "https://github.com/pybind/pybind11/archive/refs/tags/v2.13.6.tar.gz",
+        sha256 = "ba6bb2c8ef7b5fc0ba4e4e8e16dc4ad01a60ee9b3f2aae8f6f5b56f71c5b38e6",
+        strip_prefix = "pybind11-2.13.6",
+    )

@@ -97,6 +97,7 @@ genrule(
         ":python/pyfory/lib/mmh3/mmh3.so",
         ":python/pyfory/format/_format.so",
         ":python/pyfory/_serialization.so",
+        "//python/pyfory/nanobind:_nanobind_serialization.so",
     ],
     outs = [
         "cp_fory_py_generated.out",
@@ -106,17 +107,22 @@ genrule(
         set -x
         WORK_DIR=$$(pwd)
         u_name=`uname -s`
+        # Ensure directories exist
+        mkdir -p "$$WORK_DIR/python/pyfory/nanobind"
+
         if [ "$${u_name: 0: 4}" == "MING" ] || [ "$${u_name: 0: 4}" == "MSYS" ]
         then
             cp -f $(location python/pyfory/_util.so) "$$WORK_DIR/python/pyfory/_util.pyd"
             cp -f $(location python/pyfory/lib/mmh3/mmh3.so) "$$WORK_DIR/python/pyfory/lib/mmh3/mmh3.pyd"
             cp -f $(location python/pyfory/format/_format.so) "$$WORK_DIR/python/pyfory/format/_format.pyd"
             cp -f $(location python/pyfory/_serialization.so) "$$WORK_DIR/python/pyfory/_serialization.pyd"
+            cp -f $(location //python/pyfory/nanobind:_nanobind_serialization.so) "$$WORK_DIR/python/pyfory/nanobind/_nanobind_serialization.pyd"
         else
             cp -f $(location python/pyfory/_util.so) "$$WORK_DIR/python/pyfory"
             cp -f $(location python/pyfory/lib/mmh3/mmh3.so) "$$WORK_DIR/python/pyfory/lib/mmh3"
             cp -f $(location python/pyfory/format/_format.so) "$$WORK_DIR/python/pyfory/format"
             cp -f $(location python/pyfory/_serialization.so) "$$WORK_DIR/python/pyfory"
+            cp -f $(location //python/pyfory/nanobind:_nanobind_serialization.so) "$$WORK_DIR/python/pyfory/nanobind"
         fi
         echo $$(date) > $@
     """,

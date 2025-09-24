@@ -43,6 +43,7 @@ public:
     reader_index_ = 0;
   }
 
+
   Buffer(Buffer &&buffer) noexcept;
 
   Buffer &operator=(Buffer &&buffer) noexcept;
@@ -287,6 +288,257 @@ public:
   std::string ToString() const;
 
   std::string Hex() const;
+
+  // Additional methods for missing functionality from _util.pyx
+
+  // Signed varint operations
+  inline void WriteVarInt32(int32_t value) {
+    WriteVarUInt32((value << 1) ^ (value >> 31));
+  }
+
+  inline void WriteVarUInt32(uint32_t value) {
+    Grow(5);  // Max 5 bytes for 32-bit varint
+    uint32_t bytes_written = PutVarUint32(writer_index_, value);
+    writer_index_ += bytes_written;
+  }
+
+  inline void WriteVarInt64(int64_t value) {
+    WriteVarUInt64((static_cast<uint64_t>(value) << 1) ^ static_cast<uint64_t>(value >> 63));
+  }
+
+  inline void WriteVarUInt64(uint64_t value) {
+    Grow(9);  // Max 9 bytes for 64-bit varint
+    uint32_t bytes_written = PutVarUint64(writer_index_, value);
+    writer_index_ += bytes_written;
+  }
+
+  inline int32_t ReadVarInt32() {
+    uint32_t value = ReadVarUInt32();
+    return static_cast<int32_t>((value >> 1) ^ (-(value & 1)));
+  }
+
+  inline uint32_t ReadVarUInt32() {
+    uint32_t read_length = 0;
+    uint32_t result = GetVarUint32(reader_index_, &read_length);
+    reader_index_ += read_length;
+    return result;
+  }
+
+  inline int64_t ReadVarInt64() {
+    uint64_t value = ReadVarUInt64();
+    return static_cast<int64_t>((value >> 1) ^ (-(value & 1)));
+  }
+
+  inline uint64_t ReadVarUInt64() {
+    uint32_t read_length = 0;
+    uint64_t result = GetVarUint64(reader_index_, &read_length);
+    reader_index_ += read_length;
+    return result;
+  }
+
+  // Int24 support
+  inline void WriteInt24(int32_t value) {
+    Grow(3);
+    PutInt24(writer_index_, value);
+    writer_index_ += 3;
+  }
+
+  inline int32_t ReadInt24() {
+    int32_t value = GetInt24(reader_index_);
+    reader_index_ += 3;
+    return value;
+  }
+
+  inline void PutInt24(uint32_t offset, int32_t value) {
+    uint8_t* arr = data_ + offset;
+    arr[0] = static_cast<uint8_t>(value);
+    arr[1] = static_cast<uint8_t>(value >> 8);
+    arr[2] = static_cast<uint8_t>(value >> 16);
+  }
+
+  inline int32_t GetInt24(uint32_t offset) {
+    uint8_t* arr = data_ + offset;
+    int32_t result = arr[0];
+    return (result & 0xFF) | ((static_cast<int16_t>(arr[1]) & 0xFF) << 8) |
+           ((static_cast<int16_t>(arr[2]) & 0xFF) << 16);
+  }
+
+  // String operations
+  inline void WriteString(const std::string& str) {
+    WriteVarUInt32(static_cast<uint32_t>(str.size()));
+    if (!str.empty()) {
+      Grow(str.size());
+      CopyFrom(writer_index_, reinterpret_cast<const uint8_t*>(str.data()), 0, str.size());
+      writer_index_ += str.size();
+    }
+  }
+
+  inline std::string ReadString() {
+    uint32_t length = ReadVarUInt32();
+    if (length == 0) return {};
+
+    if (reader_index_ + length > size_) {
+      FORY_CHECK(false) << "Buffer underflow when reading string";
+    }
+
+    std::string result(reinterpret_cast<const char*>(data_ + reader_index_), length);
+    reader_index_ += length;
+    return result;
+  }
+
+  // Bytes operations with size
+  inline void WriteBytesAndSize(const uint8_t* data, uint32_t length) {
+    WriteVarUInt32(length);
+    if (length > 0) {
+      Grow(length);
+      CopyFrom(writer_index_, data, 0, length);
+      writer_index_ += length;
+    }
+  }
+
+  inline void WriteBytes(const uint8_t* data, uint32_t length) {
+    if (length > 0) {
+      Grow(length);
+      CopyFrom(writer_index_, data, 0, length);
+      writer_index_ += length;
+    }
+  }
+
+  inline void ReadBytes(uint32_t length, uint8_t* out) {
+    if (length > 0) {
+      if (reader_index_ + length > size_) {
+        FORY_CHECK(false) << "Buffer underflow when reading bytes";
+      }
+      memcpy(out, data_ + reader_index_, length);
+      reader_index_ += length;
+    }
+  }
+
+  // Buffer utilities
+  inline void Skip(uint32_t length) {
+    if (reader_index_ + length > size_) {
+      FORY_CHECK(false) << "Buffer underflow when skipping";
+    }
+    reader_index_ += length;
+  }
+
+  inline void EnsureCapacity(uint32_t capacity) {
+    if (capacity > size_) {
+      Reserve(capacity * 2);
+    }
+  }
+
+  inline void CheckBound(uint32_t offset, uint32_t length) const {
+    if (offset + length > size_) {
+      FORY_CHECK(false) << "Buffer access out of bounds";
+    }
+  }
+
+  // Bit manipulation utilities
+  inline bool GetBit(uint32_t byte_offset, int bit_index) const {
+    CheckBound(byte_offset, 1);
+    return (data_[byte_offset] & (1 << bit_index)) != 0;
+  }
+
+  inline void SetBit(uint32_t byte_offset, int bit_index) {
+    CheckBound(byte_offset, 1);
+    data_[byte_offset] |= (1 << bit_index);
+  }
+
+  inline void ClearBit(uint32_t byte_offset, int bit_index) {
+    CheckBound(byte_offset, 1);
+    data_[byte_offset] &= ~(1 << bit_index);
+  }
+
+  // Reader/Writer operations for primitives
+  inline bool ReadBool() {
+    bool value = GetBool(reader_index_);
+    reader_index_++;
+    return value;
+  }
+
+  inline int8_t ReadInt8() {
+    int8_t value = GetInt8(reader_index_);
+    reader_index_++;
+    return value;
+  }
+
+  inline int16_t ReadInt16() {
+    int16_t value = GetInt16(reader_index_);
+    reader_index_ += 2;
+    return value;
+  }
+
+  inline int32_t ReadInt32() {
+    int32_t value = GetInt32(reader_index_);
+    reader_index_ += 4;
+    return value;
+  }
+
+  inline int64_t ReadInt64() {
+    int64_t value = GetInt64(reader_index_);
+    reader_index_ += 8;
+    return value;
+  }
+
+  inline float ReadFloat() {
+    float value = GetFloat(reader_index_);
+    reader_index_ += 4;
+    return value;
+  }
+
+  inline double ReadDouble() {
+    double value = GetDouble(reader_index_);
+    reader_index_ += 8;
+    return value;
+  }
+
+  inline void WriteBool(bool value) {
+    Grow(1);
+    UnsafePutByte(writer_index_, value);
+    writer_index_++;
+  }
+
+  inline void WriteInt8(int8_t value) {
+    Grow(1);
+    UnsafePutByte(writer_index_, value);
+    writer_index_++;
+  }
+
+  inline void WriteInt16(int16_t value) {
+    Grow(2);
+    UnsafePut(writer_index_, value);
+    writer_index_ += 2;
+  }
+
+  inline void WriteInt32(int32_t value) {
+    Grow(4);
+    UnsafePut(writer_index_, value);
+    writer_index_ += 4;
+  }
+
+  inline void WriteInt64(int64_t value) {
+    Grow(8);
+    UnsafePut(writer_index_, value);
+    writer_index_ += 8;
+  }
+
+  inline void WriteFloat(float value) {
+    Grow(4);
+    UnsafePut(writer_index_, value);
+    writer_index_ += 4;
+  }
+
+  inline void WriteDouble(double value) {
+    Grow(8);
+    UnsafePut(writer_index_, value);
+    writer_index_ += 8;
+  }
+
+  // Need to declare these methods for 64-bit varint support
+  uint32_t PutVarUint64(uint32_t offset, uint64_t value);
+  uint64_t GetVarUint64(uint32_t offset, uint32_t *readBytesLength);
+
 
 private:
   uint8_t *data_;

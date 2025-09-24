@@ -26,6 +26,7 @@ import java.lang.reflect.Constructor;
 import org.apache.fory.collection.ClassValueCache;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.Platform;
+import org.apache.fory.util.ExceptionUtils;
 import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.record.RecordUtils;
 import org.apache.fory.util.unsafe._JDKAccess;
@@ -141,6 +142,14 @@ public class ObjectCreators {
     public RecordObjectCreator(Class<T> type) {
       super(type);
       handle = RecordUtils.getRecordCtrHandle(type);
+      if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE && Platform.JAVA_VERSION >= 25) {
+        try {
+          // trigger method handle on graalvm25
+          handle.invokeWithArguments(RecordUtils.buildRecordComponentDefaultValues(type));
+        } catch (Throwable e) {
+          ExceptionUtils.ignore(e);
+        }
+      }
     }
 
     @Override

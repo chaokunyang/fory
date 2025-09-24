@@ -46,7 +46,7 @@ import org.apache.fory.util.unsafe._JDKAccess;
  *   <li><strong>Classes without accessible constructors:</strong> Uses {@link UnsafeObjectCreator}
  *       with platform-specific unsafe allocation
  *   <li><strong>GraalVM native image compatibility:</strong> Uses {@link
- *       ParentNoArgCtrObjectCreator} for reflection-based creation when needed
+ *       ParentNoArgCtrObjectCreator} for constructor generate-based creation when needed
  * </ul>
  *
  * <p>All created ObjectCreator instances are cached using a soft reference cache to improve
@@ -81,15 +81,15 @@ public class ObjectCreators {
     if (RecordUtils.isRecord(type)) {
       return new RecordObjectCreator<>(type);
     }
-    Constructor<T> noArgConstructor = ReflectionUtils.getNoArgConstructor(type, true);
+    Constructor<T> noArgConstructor = ReflectionUtils.getNoArgConstructor(type);
     if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE && Platform.JAVA_VERSION >= 25) {
-      if (noArgConstructor != null && noArgConstructor.getDeclaringClass() == type) {
+      if (noArgConstructor != null) {
         return new DeclaredNoArgCtrObjectCreator<>(type);
       } else {
         return new ParentNoArgCtrObjectCreator<>(type);
       }
     }
-    if (noArgConstructor == null || noArgConstructor.getDeclaringClass() != type) {
+    if (noArgConstructor == null) {
       return new UnsafeObjectCreator<>(type);
     }
     return new DeclaredNoArgCtrObjectCreator<>(type);

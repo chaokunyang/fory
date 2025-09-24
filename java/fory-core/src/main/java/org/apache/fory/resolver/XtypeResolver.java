@@ -280,7 +280,6 @@ public class XtypeResolver extends TypeResolver {
     }
     classInfoMap.put(type, classInfo);
     registeredTypeIds.add(xtypeId);
-    extRegistry.registeredClassIdMap.put(type, (short) xtypeId);
     xtypeIdToClassMap.put(xtypeId, classInfo);
   }
 

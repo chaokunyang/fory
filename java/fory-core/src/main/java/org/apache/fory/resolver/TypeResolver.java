@@ -254,7 +254,9 @@ public abstract class TypeResolver {
         classInfo.setSerializer(this, new NonexistentClassSerializer(fory, classDef));
         // ensure `NonexistentMetaSharedClass` registered to write fixed-length class def,
         // so we can rewrite it in `NonexistentClassSerializer`.
-        Preconditions.checkNotNull(classId);
+        if (!fory.isCrossLanguage()) {
+          Preconditions.checkNotNull(classId);
+        }
       } else {
         classInfo.serializer =
             NonexistentClassSerializers.getSerializer(fory, classDef.getClassName(), cls);

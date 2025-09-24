@@ -40,6 +40,7 @@ import org.apache.fory.resolver.MetaStringResolver;
 import org.apache.fory.resolver.RefResolver;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.NonexistentClass.NonexistentEnum;
+import org.apache.fory.serializer.Serializers.CrossLanguageCompatibleSerializer;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.type.Generics;
@@ -239,7 +240,8 @@ public final class NonexistentClassSerializers {
     }
   }
 
-  public static final class NonexistentEnumClassSerializer extends Serializer {
+  public static final class NonexistentEnumClassSerializer
+      extends CrossLanguageCompatibleSerializer {
     private final NonexistentEnum[] enumConstants;
     private final MetaStringResolver metaStringResolver;
 
@@ -262,21 +264,6 @@ public final class NonexistentClassSerializers {
         return NonexistentEnum.UNKNOWN;
       }
 
-      int ordinal = buffer.readVarUint32Small7();
-      if (ordinal >= enumConstants.length) {
-        return NonexistentEnum.UNKNOWN;
-      }
-      return enumConstants[ordinal];
-    }
-
-    @Override
-    public void xwrite(MemoryBuffer buffer, Object value) {
-      NonexistentEnum enumValue = (NonexistentEnum) value;
-      buffer.writeVarUint32Small7(enumValue.ordinal());
-    }
-
-    @Override
-    public Object xread(MemoryBuffer buffer) {
       int ordinal = buffer.readVarUint32Small7();
       if (ordinal >= enumConstants.length) {
         return NonexistentEnum.UNKNOWN;

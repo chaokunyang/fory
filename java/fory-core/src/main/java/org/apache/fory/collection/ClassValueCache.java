@@ -80,7 +80,7 @@ public class ClassValueCache<T> {
    * @return the cache
    */
   public static <T> ClassValueCache<T> newClassKeySoftCache(int concurrencyLevel) {
-    if (GraalvmSupport.isGraalBuildtime()) {
+    if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
       return new ClassValueCache<>(
           CacheBuilder.newBuilder().concurrencyLevel(concurrencyLevel).build());
     } else {

@@ -409,13 +409,8 @@ public class CompatibleCodecBuilder extends BaseObjectCodecBuilder {
             "private",
             "readFields",
             false);
-    StaticInvoke record =
-        new StaticInvoke(
-            RecordUtils.class,
-            "invokeRecordCtrHandle",
-            OBJECT_TYPE,
-            getRecordCtrHandle(),
-            components);
+    Expression record =
+        new Invoke(getObjectCreator(beanClass), "newInstance", OBJECT_TYPE, components);
     return new ListExpression(buffer, components, readActions, new Return(record));
   }
 

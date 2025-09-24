@@ -489,21 +489,24 @@ public abstract class CodecBuilder {
     } else {
       if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE && Platform.JAVA_VERSION >= 25) {
         ObjectCreators.getObjectCreator(beanClass); // trigger cache
-        Reference ctrField =
-            getOrCreateField(
-                true,
-                ObjectCreator.class,
-                ctx.newName("objectCreator_" + beanClass.getSimpleName()),
-                () ->
-                    new StaticInvoke(
-                        ObjectCreators.class,
-                        "getObjectCreator",
-                        TypeRef.of(ObjectCreator.class),
-                        staticBeanClassExpr()));
-        return new Invoke(ctrField, "newInstance", OBJECT_TYPE);
+        return new Invoke(getObjectCreator(beanClass), "newInstance", OBJECT_TYPE);
       }
       return new StaticInvoke(Platform.class, "newInstance", OBJECT_TYPE, beanClassExpr());
     }
+  }
+
+  protected Expression getObjectCreator(Class<?> type) {
+    ObjectCreators.getObjectCreator(type); // trigger cache
+    return getOrCreateField(
+        true,
+        ObjectCreator.class,
+        ctx.newName("objectCreator_" + type.getSimpleName()),
+        () ->
+            new StaticInvoke(
+                ObjectCreators.class,
+                "getObjectCreator",
+                TypeRef.of(ObjectCreator.class),
+                staticBeanClassExpr()));
   }
 
   protected void buildRecordComponentDefaultValues() {

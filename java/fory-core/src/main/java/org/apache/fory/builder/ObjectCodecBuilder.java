@@ -55,6 +55,8 @@ import org.apache.fory.codegen.Expression.ReplaceStub;
 import org.apache.fory.codegen.Expression.StaticInvoke;
 import org.apache.fory.codegen.ExpressionVisitor;
 import org.apache.fory.memory.Platform;
+import org.apache.fory.reflect.ObjectCreator;
+import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.serializer.ObjectSerializer;
 import org.apache.fory.serializer.PrimitiveSerializers.LongSerializer;
@@ -472,13 +474,8 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
         FieldsCollector collector = (FieldsCollector) bean;
         bean = createRecord(collector.recordValuesMap);
       } else {
-        bean =
-            new StaticInvoke(
-                RecordUtils.class,
-                "invokeRecordCtrHandle",
-                OBJECT_TYPE,
-                getRecordCtrHandle(),
-                bean);
+        ObjectCreators.getObjectCreator(beanClass); // trigger cache and make error raised early
+        bean = new Invoke(getObjectCreator(beanClass), "newInstance", OBJECT_TYPE, bean);
       }
     }
     expressions.add(new Expression.Return(bean));

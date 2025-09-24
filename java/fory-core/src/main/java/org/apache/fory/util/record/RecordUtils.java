@@ -203,15 +203,6 @@ public class RecordUtils {
     return getRecordConstructor(cls).f1;
   }
 
-  // Invoked by jit
-  public static Object invokeRecordCtrHandle(MethodHandle handle, Object[] fields) {
-    try {
-      return handle.invokeWithArguments(fields);
-    } catch (Throwable e) {
-      throw new RuntimeException(e);
-    }
-  }
-
   public static Object[] buildRecordComponentDefaultValues(Class<?> cls) {
     RecordComponent[] components = RecordUtils.getRecordComponents(cls);
     assert components != null;

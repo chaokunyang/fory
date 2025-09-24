@@ -90,7 +90,7 @@ public class ReflectionUtils {
       ctr =
           Stream.of(constructors).filter((c) -> c.getParameterCount() == 0).findAny().orElse(null);
     }
-    if (!searchParent) {
+    if (ctr != null || !searchParent) {
       return ctr;
     }
     try {

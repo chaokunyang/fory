@@ -19,9 +19,11 @@
 
 package org.apache.fory.util;
 
+import java.lang.reflect.Constructor;
 import java.util.Objects;
 import org.apache.fory.Fory;
 import org.apache.fory.exception.ForyException;
+import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.serializer.Serializer;
 
 /** A helper for Graalvm native image support. */
@@ -54,6 +56,7 @@ public class GraalvmSupport {
 
   public static class GraalvmSerializerHolder extends Serializer {
     private final Class serializerClass;
+    private Serializer serializer;
 
     public GraalvmSerializerHolder(Fory fory, Class<?> type, Class<?> serializerClass) {
       super(fory, type);
@@ -62,6 +65,31 @@ public class GraalvmSupport {
 
     public Class<? extends Serializer> getSerializerClass() {
       return serializerClass;
+    }
+
+    @Override
+    public void write(MemoryBuffer buffer, Object value) {
+      // for debug only, graalvm native image won't go to here
+      getSerializer().write(buffer, value);
+    }
+
+    @Override
+    public Object read(MemoryBuffer buffer) {
+      // for debug only, graalvm native image won't go to here
+      return getSerializer().read(buffer);
+    }
+
+    private Serializer getSerializer() {
+      if (serializer == null) {
+        try {
+          Constructor ctr = serializerClass.getDeclaredConstructor(Fory.class, Class.class);
+          ctr.setAccessible(true);
+          serializer = (Serializer) ctr.newInstance(fory, type);
+        } catch (Exception e) {
+          throw new RuntimeException(e);
+        }
+      }
+      return serializer;
     }
   }
 

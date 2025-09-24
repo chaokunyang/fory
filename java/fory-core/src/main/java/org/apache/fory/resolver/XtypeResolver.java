@@ -73,7 +73,9 @@ import org.apache.fory.serializer.ArraySerializers;
 import org.apache.fory.serializer.DeferedLazySerializer.DeferedLazyObjectSerializer;
 import org.apache.fory.serializer.EnumSerializer;
 import org.apache.fory.serializer.NonexistentClass;
+import org.apache.fory.serializer.NonexistentClass.NonexistentMetaShared;
 import org.apache.fory.serializer.NonexistentClassSerializers;
+import org.apache.fory.serializer.NonexistentClassSerializers.NonexistentClassSerializer;
 import org.apache.fory.serializer.ObjectSerializer;
 import org.apache.fory.serializer.SerializationUtils;
 import org.apache.fory.serializer.Serializer;
@@ -140,6 +142,11 @@ public class XtypeResolver extends TypeResolver {
   @Override
   public void initialize() {
     registerDefaultTypes();
+    if (shareMeta) {
+      Serializer serializer = new NonexistentClassSerializer(fory, null);
+      register(
+          NonexistentMetaShared.class, serializer, "", "unknown_struct", Types.COMPATIBLE_STRUCT);
+    }
   }
 
   public void register(Class<?> type) {
@@ -273,6 +280,7 @@ public class XtypeResolver extends TypeResolver {
     }
     classInfoMap.put(type, classInfo);
     registeredTypeIds.add(xtypeId);
+    extRegistry.registeredClassIdMap.put(type, (short) xtypeId);
     xtypeIdToClassMap.put(xtypeId, classInfo);
   }
 
@@ -513,6 +521,13 @@ public class XtypeResolver extends TypeResolver {
         }
       }
       xtypeId = Types.MAP;
+    } else if (NonexistentClass.class.isAssignableFrom(cls)) {
+      serializer = NonexistentClassSerializers.getSerializer(fory, "Unknown", cls);
+      if (cls.isEnum()) {
+        xtypeId = Types.ENUM;
+      } else {
+        xtypeId = shareMeta ? Types.COMPATIBLE_STRUCT : Types.STRUCT;
+      }
     } else {
       Class<Enum> enclosingClass = (Class<Enum>) cls.getEnclosingClass();
       if (enclosingClass != null && enclosingClass.isEnum()) {
@@ -880,6 +895,9 @@ public class XtypeResolver extends TypeResolver {
     if (fory.getXtypeResolver().isRegistered(cls)) {
       return fory.getXtypeResolver().getClassInfo(cls).getXtypeId();
     } else {
+      if (cls.isEnum()) {
+        return Types.ENUM;
+      }
       if (ReflectionUtils.isMonomorphic(cls)) {
         throw new UnsupportedOperationException(cls + " is not supported for xlang serialization");
       }

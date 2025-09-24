@@ -227,6 +227,16 @@ public final class NonexistentClassSerializers {
       obj.setEntries(entries);
       return obj;
     }
+
+    @Override
+    public void xwrite(MemoryBuffer buffer, Object value) {
+      write(buffer, value);
+    }
+
+    @Override
+    public Object xread(MemoryBuffer buffer) {
+      return read(buffer);
+    }
   }
 
   public static final class NonexistentEnumClassSerializer extends Serializer {
@@ -240,6 +250,12 @@ public final class NonexistentClassSerializers {
     }
 
     @Override
+    public void write(MemoryBuffer buffer, Object value) {
+      NonexistentEnum enumValue = (NonexistentEnum) value;
+      buffer.writeVarUint32Small7(enumValue.ordinal());
+    }
+
+    @Override
     public Object read(MemoryBuffer buffer) {
       if (fory.getConfig().serializeEnumByName()) {
         metaStringResolver.readMetaStringBytes(buffer);
@@ -248,7 +264,22 @@ public final class NonexistentClassSerializers {
 
       int ordinal = buffer.readVarUint32Small7();
       if (ordinal >= enumConstants.length) {
-        ordinal = enumConstants.length - 1;
+        return NonexistentEnum.UNKNOWN;
+      }
+      return enumConstants[ordinal];
+    }
+
+    @Override
+    public void xwrite(MemoryBuffer buffer, Object value) {
+      NonexistentEnum enumValue = (NonexistentEnum) value;
+      buffer.writeVarUint32Small7(enumValue.ordinal());
+    }
+
+    @Override
+    public Object xread(MemoryBuffer buffer) {
+      int ordinal = buffer.readVarUint32Small7();
+      if (ordinal >= enumConstants.length) {
+        return NonexistentEnum.UNKNOWN;
       }
       return enumConstants[ordinal];
     }

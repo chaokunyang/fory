@@ -52,6 +52,7 @@ import java.util.TreeSet;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import lombok.Data;
@@ -66,6 +67,7 @@ import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.ArraySerializersTest;
 import org.apache.fory.serializer.BufferObject;
 import org.apache.fory.serializer.EnumSerializerTest;
+import org.apache.fory.serializer.NonexistentClass.NonexistentMetaShared;
 import org.apache.fory.serializer.ObjectSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.test.TestUtils;
@@ -904,6 +906,40 @@ public class CrossLanguageTest extends ForyTestBase {
     a.f3 = "abc";
     Assert.assertEquals(xserDe(fory, a), a);
     structRoundBack(fory, a, "test_enum_field_register_by_id" + (compatible ? "_compatible" : ""));
+  }
+
+  static class EnumFieldStruct2 {}
+
+  @Test(dataProvider = "enableCodegen")
+  public void testMissingEnumField(boolean enableCodegen) {
+    Supplier<Fory> builder =
+        () ->
+            Fory.builder()
+                .withLanguage(Language.XLANG)
+                .withCompatibleMode(CompatibleMode.COMPATIBLE)
+                .withCodegen(enableCodegen)
+                .build();
+    Fory fory = builder.get();
+    fory.register(EnumTestClass.class, "test_enum");
+    fory.register(EnumFieldStruct.class, 2);
+
+    EnumFieldStruct a = new EnumFieldStruct();
+    a.f1 = EnumTestClass.FOO;
+    a.f2 = EnumTestClass.BAR;
+    a.f3 = "abc";
+
+    {
+      Fory fory2 = builder.get();
+      fory2.register(EnumTestClass.class, "test_enum");
+      fory2.register(EnumFieldStruct2.class, 2);
+      Assert.assertEquals(fory2.deserialize(fory.serialize(a)).getClass(), EnumFieldStruct2.class);
+    }
+    {
+      Fory fory2 = builder.get();
+      fory2.register(EnumTestClass.class, "test_enum");
+      Assert.assertEquals(
+          fory2.deserialize(fory.serialize(a)).getClass(), NonexistentMetaShared.class);
+    }
   }
 
   @Test

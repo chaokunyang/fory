@@ -20,13 +20,15 @@
 package org.apache.fory.reflect;
 
 import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles.Lookup;
+import java.lang.invoke.MethodType;
 import java.lang.reflect.Constructor;
 import org.apache.fory.collection.ClassValueCache;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.util.GraalvmSupport;
-import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.record.RecordUtils;
+import org.apache.fory.util.unsafe._JDKAccess;
 
 /**
  * Factory class for creating and caching {@link ObjectCreator} instances.
@@ -36,14 +38,14 @@ import org.apache.fory.util.record.RecordUtils;
  * runtime environment:
  *
  * <ul>
- *   <li><strong>Record types:</strong> Uses {@link RecordCtrCreator} with MethodHandle for
+ *   <li><strong>Record types:</strong> Uses {@link RecordObjectCreator} with MethodHandle for
  *       parameterized constructor invocation
- *   <li><strong>Classes with no-arg constructors:</strong> Uses {@link DeclaredNoArgCtrCreator}
- *       with MethodHandle for fast invocation
+ *   <li><strong>Classes with no-arg constructors:</strong> Uses {@link
+ *       DeclaredNoArgCtrObjectCreator} with MethodHandle for fast invocation
  *   <li><strong>Classes without accessible constructors:</strong> Uses {@link UnsafeObjectCreator}
  *       with platform-specific unsafe allocation
  *   <li><strong>GraalVM native image compatibility:</strong> Uses {@link
- *       NoArgSerializableObjectCreator} for reflection-based creation when needed
+ *       ParentNoArgCtrObjectCreator} for reflection-based creation when needed
  * </ul>
  *
  * <p>All created ObjectCreator instances are cached using a soft reference cache to improve
@@ -74,25 +76,23 @@ public class ObjectCreators {
     return (ObjectCreator<T>) cache.get(type, () -> creategetObjectCreator(type));
   }
 
-  static <T> ObjectCreator<T> creategetObjectCreator(Class<T> type) {
+  private static <T> ObjectCreator<T> creategetObjectCreator(Class<T> type) {
     if (RecordUtils.isRecord(type)) {
-      return new RecordCtrCreator<>(type);
+      return new RecordObjectCreator<>(type);
     }
+
     Constructor<T> noArgConstructor = ReflectionUtils.getNoArgConstructor(type, true);
     if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE && Platform.JAVA_VERSION >= 25) {
-      if (noArgConstructor == null) {
-        throw GraalvmSupport.throwNoArgCtrException(type);
-      }
-      if (noArgConstructor.getDeclaringClass() == type) {
-        return new DeclaredNoArgCtrCreator<>(type);
+      if (noArgConstructor != null && noArgConstructor.getDeclaringClass() == type) {
+        return new DeclaredNoArgCtrObjectCreator<>(type);
       } else {
-        return new NoArgSerializableObjectCreator<>(type);
+        return new ParentNoArgCtrObjectCreator<>(type);
       }
     }
     if (noArgConstructor == null || noArgConstructor.getDeclaringClass() != type) {
       return new UnsafeObjectCreator<>(type);
     }
-    return new DeclaredNoArgCtrCreator<>(type);
+    return new DeclaredNoArgCtrObjectCreator<>(type);
   }
 
   public static final class UnsafeObjectCreator<T> extends ObjectCreator<T> {
@@ -112,10 +112,10 @@ public class ObjectCreators {
     }
   }
 
-  public static final class DeclaredNoArgCtrCreator<T> extends ObjectCreator<T> {
+  public static final class DeclaredNoArgCtrObjectCreator<T> extends ObjectCreator<T> {
     private final MethodHandle handle;
 
-    public DeclaredNoArgCtrCreator(Class<T> type) {
+    public DeclaredNoArgCtrObjectCreator(Class<T> type) {
       super(type);
       handle = ReflectionUtils.getCtrHandle(type, true);
     }
@@ -135,44 +135,10 @@ public class ObjectCreators {
     }
   }
 
-  public static final class NoArgSerializableObjectCreator<T> extends ObjectCreator<T> {
-    private final Constructor<T> ctr;
-
-    public NoArgSerializableObjectCreator(Class<T> type) {
-      this(type, ReflectionUtils.getNoArgConstructor(type, true));
-    }
-
-    public NoArgSerializableObjectCreator(Class<T> type, Constructor<T> ctr) {
-      super(type);
-      this.ctr = Preconditions.checkNotNull(ctr);
-      try {
-        ctr.setAccessible(true);
-        // ensure it does work;
-        newInstance();
-      } catch (Throwable e) {
-        throw new ForyException("Please provide a no-arg constructor for " + type);
-      }
-    }
-
-    @Override
-    public T newInstance() {
-      try {
-        return ctr.newInstance();
-      } catch (Throwable e) {
-        throw new RuntimeException(e);
-      }
-    }
-
-    @Override
-    public T newInstanceWithArguments(Object... arguments) {
-      throw new UnsupportedOperationException();
-    }
-  }
-
-  public static final class RecordCtrCreator<T> extends ObjectCreator<T> {
+  public static final class RecordObjectCreator<T> extends ObjectCreator<T> {
     private final MethodHandle handle;
 
-    public RecordCtrCreator(Class<T> type) {
+    public RecordObjectCreator(Class<T> type) {
       super(type);
       handle = RecordUtils.getRecordCtrHandle(type);
     }
@@ -189,6 +155,92 @@ public class ObjectCreators {
       } catch (Throwable e) {
         throw new RuntimeException(e);
       }
+    }
+  }
+
+  public static final class ParentNoArgCtrObjectCreator<T> extends ObjectCreator<T> {
+    private static volatile Object reflectionFactory;
+    private static volatile MethodHandle newConstructorForSerializationMethod;
+
+    private final Constructor<T> constructor;
+
+    public ParentNoArgCtrObjectCreator(Class<T> type) {
+      super(type);
+      this.constructor = createSerializationConstructor(type);
+    }
+
+    private static <T> Constructor<T> createSerializationConstructor(Class<T> type) {
+      try {
+        // Get ReflectionFactory instance
+        if (reflectionFactory == null) {
+          Class<?> reflectionFactoryClass;
+          if (Platform.JAVA_VERSION >= 9) {
+            reflectionFactoryClass = Class.forName("jdk.internal.reflect.ReflectionFactory");
+          } else {
+            reflectionFactoryClass = Class.forName("sun.reflect.ReflectionFactory");
+          }
+          Lookup lookup = _JDKAccess._trustedLookup(reflectionFactoryClass);
+          MethodHandle handle =
+              lookup.findStatic(
+                  reflectionFactoryClass,
+                  "getReflectionFactory",
+                  MethodType.methodType(reflectionFactoryClass));
+          reflectionFactory = handle.invoke();
+          newConstructorForSerializationMethod =
+              lookup.findVirtual(
+                  reflectionFactoryClass,
+                  "newConstructorForSerialization",
+                  MethodType.methodType(Constructor.class, Class.class, Constructor.class));
+        }
+        // Find a public no-arg constructor in parent classes that we can use as a template
+        Constructor<?> parentConstructor = findPublicNoArgConstructor(type);
+        if (parentConstructor == null) {
+          // Use Object's constructor as fallback
+          parentConstructor = Object.class.getDeclaredConstructor();
+        } else {
+          try {
+            parentConstructor.newInstance();
+          } catch (Throwable ignored) {
+            parentConstructor = Object.class.getDeclaredConstructor();
+          }
+        }
+        // Create serialization constructor using ReflectionFactory
+        return (Constructor<T>)
+            newConstructorForSerializationMethod.invoke(reflectionFactory, type, parentConstructor);
+      } catch (Throwable e) {
+        throw new ForyException("Failed to create ReflectionFactory constructor for " + type, e);
+      }
+    }
+
+    private static Constructor<?> findPublicNoArgConstructor(Class<?> type) {
+      Class<?> current = type.getSuperclass();
+      while (current != null && current != Object.class) {
+        try {
+          Constructor<?> constructor = current.getDeclaredConstructor();
+          if (constructor.getModifiers() == java.lang.reflect.Modifier.PUBLIC) {
+            return constructor;
+          }
+        } catch (NoSuchMethodException ignored) {
+          // Continue searching
+        }
+        current = current.getSuperclass();
+      }
+      return null;
+    }
+
+    @Override
+    public T newInstance() {
+      try {
+        return constructor.newInstance();
+      } catch (Exception e) {
+        throw new ForyException(
+            "Failed to create instance, please provide a no-arg constructor for " + type, e);
+      }
+    }
+
+    @Override
+    public T newInstanceWithArguments(Object... arguments) {
+      throw new UnsupportedOperationException();
     }
   }
 }

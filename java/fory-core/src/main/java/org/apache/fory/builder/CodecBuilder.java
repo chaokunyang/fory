@@ -180,6 +180,8 @@ public abstract class CodecBuilder {
     String fieldName = "_record_ctr_";
     Reference fieldRef = fieldMap.get(fieldName);
     if (fieldRef == null) {
+      // trigger cache for graalvm
+      RecordUtils.getRecordCtrHandle(beanClass);
       StaticInvoke getRecordCtrHandle =
           new StaticInvoke(
               RecordUtils.class,

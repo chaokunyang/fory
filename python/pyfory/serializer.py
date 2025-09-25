@@ -231,7 +231,51 @@ class TypeSerializer(Serializer):
         cls.__module__ = module
         cls.__qualname__ = qualname
 
+        # Fix method globals to support natural class name references
+        self._inject_class_reference_into_methods(cls, class_dict)
+
         return cls
+
+    def _inject_class_reference_into_methods(self, cls, class_dict):
+        """Inject the class reference into method closures so they can reference the class by name.
+
+        This allows methods to use natural syntax like 'LocalClass.counter += 1' instead of
+        workarounds like 'self.__class__.counter += 1'.
+
+        Local class methods reference the class name as a free variable (closure variable),
+        not as a global variable, so we need to update the closure cells.
+        """
+        import types
+
+        class_name = cls.__name__
+
+        for attr_name, attr_value in class_dict.items():
+            # Check if this is a function that has the class name as a free variable
+            if (callable(attr_value) and hasattr(attr_value, '__code__') and
+                hasattr(attr_value, '__closure__') and attr_value.__code__.co_freevars):
+
+                code = attr_value.__code__
+                # If the function's code has the class name as a free variable
+                if class_name in code.co_freevars:
+                    # Find the index of the class name in freevars
+                    class_index = code.co_freevars.index(class_name)
+
+                    # Update the closure cell for the class reference
+                    if attr_value.__closure__ and len(attr_value.__closure__) > class_index:
+                        # Create a new cell with the class reference
+                        cell = types.CellType(cls)
+                        # Replace the closure tuple with updated cell
+                        closure_list = list(attr_value.__closure__)
+                        closure_list[class_index] = cell
+                        # Create a new function with the updated closure
+                        new_func = types.FunctionType(
+                            code, attr_value.__globals__, attr_value.__name__,
+                            attr_value.__defaults__, tuple(closure_list)
+                        )
+                        # Replace the method in the class dict
+                        class_dict[attr_name] = new_func
+                        # Update the class attribute as well
+                        setattr(cls, attr_name, new_func)
 
 
 class PandasRangeIndexSerializer(Serializer):

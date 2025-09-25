@@ -716,7 +716,7 @@ def test_local_class_serialization():
                 return self.value
 
             def __eq__(self, other):
-                return isinstance(other, self.__class__) and self.value == other.value
+                return isinstance(other, LocalTestClass) and self.value == other.value
 
         return LocalTestClass
 
@@ -824,14 +824,17 @@ def test_local_class_with_class_variables():
 
             def __init__(self, value):
                 self.value = value
-                # Use self.__class__ instead of hard-coded class name to avoid reference issues
-                self.__class__.counter += 1
+                self.counter += 1
+                LocalClassWithVars.counter += 1
 
             def get_value(self):
                 return self.value
 
             def get_class_var(self):
-                return self.__class__.class_var
+                return LocalClassWithVars.class_var
+
+            def get_info(self):
+                return f"value={self.value}, class_var={self.class_var}, counter={self.counter}"
 
         return LocalClassWithVars
 
@@ -854,6 +857,10 @@ def test_local_class_with_class_variables():
     assert deserialized.class_var == LocalClass.class_var == "shared_value"
     # Counter should be preserved from when class was serialized
     assert deserialized.counter >= 0
+    # Test that the get_info method works with natural class references
+    info = instance3.get_info()
+    assert "value=3" in info
+    assert "class_var=shared_value" in info
 
 
 def test_nested_global_classes():

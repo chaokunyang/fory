@@ -38,5 +38,6 @@ public class Main {
     ObjectStreamExample.main(args);
     Benchmark.main(args);
     CollectionExample.main(args);
+    ArrayExample.main(args);
   }
 }

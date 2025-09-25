@@ -21,7 +21,6 @@ package org.apache.fory.serializer;
 
 import java.lang.reflect.Array;
 import java.util.Arrays;
-import java.util.IdentityHashMap;
 import org.apache.fory.Fory;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.memory.MemoryBuffer;
@@ -34,7 +33,6 @@ import org.apache.fory.serializer.collection.CollectionFlags;
 import org.apache.fory.serializer.collection.ForyArrayAsListSerializer;
 import org.apache.fory.type.GenericType;
 import org.apache.fory.type.TypeUtils;
-import org.apache.fory.type.Types;
 import org.apache.fory.util.Preconditions;
 
 /** Serializers for array types. */
@@ -250,14 +248,9 @@ public class ArraySerializers {
   // virtual method call cost.
   public abstract static class PrimitiveArraySerializer<T>
       extends Serializers.CrossLanguageCompatibleSerializer<T> {
-    protected final int offset;
-    protected final int elemSize;
 
     public PrimitiveArraySerializer(Fory fory, Class<T> cls) {
       super(fory, cls);
-      Class<?> innerType = TypeUtils.getArrayComponentInfo(cls).f0;
-      this.offset = primitiveInfo.get(innerType)[0];
-      this.elemSize = primitiveInfo.get(innerType)[1];
     }
 
     @Override
@@ -280,11 +273,12 @@ public class ArraySerializers {
     @Override
     public void write(MemoryBuffer buffer, boolean[] value) {
       if (fory.getBufferCallback() == null) {
-        int size = Math.multiplyExact(value.length, elemSize);
-        buffer.writePrimitiveArrayWithSize(value, offset, size);
+        int size = Math.multiplyExact(value.length, 1);
+        buffer.writePrimitiveArrayWithSize(value, Platform.BOOLEAN_ARRAY_OFFSET, size);
       } else {
         fory.writeBufferObject(
-            buffer, new PrimitiveArrayBufferObject(value, offset, elemSize, value.length));
+            buffer,
+            new PrimitiveArrayBufferObject(value, Platform.BOOLEAN_ARRAY_OFFSET, 1, value.length));
       }
     }
 
@@ -298,15 +292,15 @@ public class ArraySerializers {
       if (fory.isPeerOutOfBandEnabled()) {
         MemoryBuffer buf = fory.readBufferObject(buffer);
         int size = buf.remaining();
-        int numElements = size / elemSize;
+        int numElements = size;
         boolean[] values = new boolean[numElements];
-        buf.copyToUnsafe(0, values, offset, size);
+        buf.copyToUnsafe(0, values, Platform.BOOLEAN_ARRAY_OFFSET, size);
         return values;
       } else {
         int size = buffer.readVarUint32Small7();
-        int numElements = size / elemSize;
+        int numElements = size;
         boolean[] values = new boolean[numElements];
-        buffer.readToUnsafe(values, offset, size);
+        buffer.readToUnsafe(values, Platform.BOOLEAN_ARRAY_OFFSET, size);
         return values;
       }
     }
@@ -322,10 +316,11 @@ public class ArraySerializers {
     public void write(MemoryBuffer buffer, byte[] value) {
       if (fory.getBufferCallback() == null) {
         int size = Math.multiplyExact(value.length, 1);
-        buffer.writePrimitiveArrayWithSize(value, offset, size);
+        buffer.writePrimitiveArrayWithSize(value, Platform.BYTE_ARRAY_OFFSET, size);
       } else {
         fory.writeBufferObject(
-            buffer, new PrimitiveArrayBufferObject(value, offset, 1, value.length));
+            buffer,
+            new PrimitiveArrayBufferObject(value, Platform.BYTE_ARRAY_OFFSET, 1, value.length));
       }
     }
 
@@ -340,12 +335,12 @@ public class ArraySerializers {
         MemoryBuffer buf = fory.readBufferObject(buffer);
         int size = buf.remaining();
         byte[] values = new byte[size];
-        buf.copyToUnsafe(0, values, offset, size);
+        buf.copyToUnsafe(0, values, Platform.BYTE_ARRAY_OFFSET, size);
         return values;
       } else {
         int size = buffer.readVarUint32Small7();
         byte[] values = new byte[size];
-        buffer.readToUnsafe(values, offset, size);
+        buffer.readToUnsafe(values, Platform.BYTE_ARRAY_OFFSET, size);
         return values;
       }
     }
@@ -360,11 +355,12 @@ public class ArraySerializers {
     @Override
     public void write(MemoryBuffer buffer, char[] value) {
       if (fory.getBufferCallback() == null) {
-        int size = Math.multiplyExact(value.length, elemSize);
-        buffer.writePrimitiveArrayWithSize(value, offset, size);
+        int size = Math.multiplyExact(value.length, 2);
+        buffer.writePrimitiveArrayWithSize(value, Platform.CHAR_ARRAY_OFFSET, size);
       } else {
         fory.writeBufferObject(
-            buffer, new PrimitiveArrayBufferObject(value, offset, elemSize, value.length));
+            buffer,
+            new PrimitiveArrayBufferObject(value, Platform.CHAR_ARRAY_OFFSET, 2, value.length));
       }
     }
 
@@ -378,15 +374,15 @@ public class ArraySerializers {
       if (fory.isPeerOutOfBandEnabled()) {
         MemoryBuffer buf = fory.readBufferObject(buffer);
         int size = buf.remaining();
-        int numElements = size / elemSize;
+        int numElements = size / 2;
         char[] values = new char[numElements];
-        buf.copyToUnsafe(0, values, offset, size);
+        buf.copyToUnsafe(0, values, Platform.CHAR_ARRAY_OFFSET, size);
         return values;
       } else {
         int size = buffer.readVarUint32Small7();
-        int numElements = size / elemSize;
+        int numElements = size / 2;
         char[] values = new char[numElements];
-        buffer.readToUnsafe(values, offset, size);
+        buffer.readToUnsafe(values, Platform.CHAR_ARRAY_OFFSET, size);
         return values;
       }
     }
@@ -411,11 +407,12 @@ public class ArraySerializers {
     @Override
     public void write(MemoryBuffer buffer, short[] value) {
       if (fory.getBufferCallback() == null) {
-        int size = Math.multiplyExact(value.length, elemSize);
-        buffer.writePrimitiveArrayWithSize(value, offset, size);
+        int size = Math.multiplyExact(value.length, 2);
+        buffer.writePrimitiveArrayWithSize(value, Platform.SHORT_ARRAY_OFFSET, size);
       } else {
         fory.writeBufferObject(
-            buffer, new PrimitiveArrayBufferObject(value, offset, elemSize, value.length));
+            buffer,
+            new PrimitiveArrayBufferObject(value, Platform.SHORT_ARRAY_OFFSET, 2, value.length));
       }
     }
 
@@ -429,15 +426,15 @@ public class ArraySerializers {
       if (fory.isPeerOutOfBandEnabled()) {
         MemoryBuffer buf = fory.readBufferObject(buffer);
         int size = buf.remaining();
-        int numElements = size / elemSize;
+        int numElements = size / 2;
         short[] values = new short[numElements];
-        buf.copyToUnsafe(0, values, offset, size);
+        buf.copyToUnsafe(0, values, Platform.SHORT_ARRAY_OFFSET, size);
         return values;
       } else {
         int size = buffer.readVarUint32Small7();
-        int numElements = size / elemSize;
+        int numElements = size / 2;
         short[] values = new short[numElements];
-        buffer.readToUnsafe(values, offset, size);
+        buffer.readToUnsafe(values, Platform.SHORT_ARRAY_OFFSET, size);
         return values;
       }
     }
@@ -452,11 +449,12 @@ public class ArraySerializers {
     @Override
     public void write(MemoryBuffer buffer, int[] value) {
       if (fory.getBufferCallback() == null) {
-        int size = Math.multiplyExact(value.length, elemSize);
-        buffer.writePrimitiveArrayWithSize(value, offset, size);
+        int size = Math.multiplyExact(value.length, 4);
+        buffer.writePrimitiveArrayWithSize(value, Platform.INT_ARRAY_OFFSET, size);
       } else {
         fory.writeBufferObject(
-            buffer, new PrimitiveArrayBufferObject(value, offset, elemSize, value.length));
+            buffer,
+            new PrimitiveArrayBufferObject(value, Platform.INT_ARRAY_OFFSET, 4, value.length));
       }
     }
 
@@ -470,19 +468,19 @@ public class ArraySerializers {
       if (fory.isPeerOutOfBandEnabled()) {
         MemoryBuffer buf = fory.readBufferObject(buffer);
         int size = buf.remaining();
-        int numElements = size / elemSize;
+        int numElements = size / 4;
         int[] values = new int[numElements];
         if (size > 0) {
-          buf.copyToUnsafe(0, values, offset, size);
+          buf.copyToUnsafe(0, values, Platform.INT_ARRAY_OFFSET, size);
         }
         return values;
       }
 
       int size = buffer.readVarUint32Small7();
-      int numElements = size / elemSize;
+      int numElements = size / 4;
       int[] values = new int[numElements];
       if (size > 0) {
-        buffer.readToUnsafe(values, offset, size);
+        buffer.readToUnsafe(values, Platform.INT_ARRAY_OFFSET, size);
       }
       return values;
     }
@@ -497,11 +495,12 @@ public class ArraySerializers {
     @Override
     public void write(MemoryBuffer buffer, long[] value) {
       if (fory.getBufferCallback() == null) {
-        int size = Math.multiplyExact(value.length, elemSize);
-        buffer.writePrimitiveArrayWithSize(value, offset, size);
+        int size = Math.multiplyExact(value.length, 8);
+        buffer.writePrimitiveArrayWithSize(value, Platform.LONG_ARRAY_OFFSET, size);
       } else {
         fory.writeBufferObject(
-            buffer, new PrimitiveArrayBufferObject(value, offset, elemSize, value.length));
+            buffer,
+            new PrimitiveArrayBufferObject(value, Platform.LONG_ARRAY_OFFSET, 8, value.length));
       }
     }
 
@@ -515,19 +514,19 @@ public class ArraySerializers {
       if (fory.isPeerOutOfBandEnabled()) {
         MemoryBuffer buf = fory.readBufferObject(buffer);
         int size = buf.remaining();
-        int numElements = size / elemSize;
+        int numElements = size / 8;
         long[] values = new long[numElements];
         if (size > 0) {
-          buf.copyToUnsafe(0, values, offset, size);
+          buf.copyToUnsafe(0, values, Platform.LONG_ARRAY_OFFSET, size);
         }
         return values;
       }
 
       int size = buffer.readVarUint32Small7();
-      int numElements = size / elemSize;
+      int numElements = size / 8;
       long[] values = new long[numElements];
       if (size > 0) {
-        buffer.readToUnsafe(values, offset, size);
+        buffer.readToUnsafe(values, Platform.LONG_ARRAY_OFFSET, size);
       }
       return values;
     }
@@ -542,11 +541,12 @@ public class ArraySerializers {
     @Override
     public void write(MemoryBuffer buffer, float[] value) {
       if (fory.getBufferCallback() == null) {
-        int size = Math.multiplyExact(value.length, elemSize);
-        buffer.writePrimitiveArrayWithSize(value, offset, size);
+        int size = Math.multiplyExact(value.length, 4);
+        buffer.writePrimitiveArrayWithSize(value, Platform.FLOAT_ARRAY_OFFSET, size);
       } else {
         fory.writeBufferObject(
-            buffer, new PrimitiveArrayBufferObject(value, offset, elemSize, value.length));
+            buffer,
+            new PrimitiveArrayBufferObject(value, Platform.FLOAT_ARRAY_OFFSET, 4, value.length));
       }
     }
 
@@ -560,15 +560,15 @@ public class ArraySerializers {
       if (fory.isPeerOutOfBandEnabled()) {
         MemoryBuffer buf = fory.readBufferObject(buffer);
         int size = buf.remaining();
-        int numElements = size / elemSize;
+        int numElements = size / 4;
         float[] values = new float[numElements];
-        buf.copyToUnsafe(0, values, offset, size);
+        buf.copyToUnsafe(0, values, Platform.FLOAT_ARRAY_OFFSET, size);
         return values;
       } else {
         int size = buffer.readVarUint32Small7();
-        int numElements = size / elemSize;
+        int numElements = size / 4;
         float[] values = new float[numElements];
-        buffer.readToUnsafe(values, offset, size);
+        buffer.readToUnsafe(values, Platform.FLOAT_ARRAY_OFFSET, size);
         return values;
       }
     }
@@ -583,11 +583,12 @@ public class ArraySerializers {
     @Override
     public void write(MemoryBuffer buffer, double[] value) {
       if (fory.getBufferCallback() == null) {
-        int size = Math.multiplyExact(value.length, elemSize);
-        buffer.writePrimitiveArrayWithSize(value, offset, size);
+        int size = Math.multiplyExact(value.length, 8);
+        buffer.writePrimitiveArrayWithSize(value, Platform.DOUBLE_ARRAY_OFFSET, size);
       } else {
         fory.writeBufferObject(
-            buffer, new PrimitiveArrayBufferObject(value, offset, elemSize, value.length));
+            buffer,
+            new PrimitiveArrayBufferObject(value, Platform.DOUBLE_ARRAY_OFFSET, 8, value.length));
       }
     }
 
@@ -601,15 +602,15 @@ public class ArraySerializers {
       if (fory.isPeerOutOfBandEnabled()) {
         MemoryBuffer buf = fory.readBufferObject(buffer);
         int size = buf.remaining();
-        int numElements = size / elemSize;
+        int numElements = size / 8;
         double[] values = new double[numElements];
-        buf.copyToUnsafe(0, values, offset, size);
+        buf.copyToUnsafe(0, values, Platform.DOUBLE_ARRAY_OFFSET, size);
         return values;
       } else {
         int size = buffer.readVarUint32Small7();
-        int numElements = size / elemSize;
+        int numElements = size / 8;
         double[] values = new double[numElements];
-        buffer.readToUnsafe(values, offset, size);
+        buffer.readToUnsafe(values, Platform.DOUBLE_ARRAY_OFFSET, size);
         return values;
       }
     }
@@ -757,22 +758,6 @@ public class ArraySerializers {
 
   public static PrimitiveArrayBufferObject byteArrayBufferObject(byte[] array) {
     return new PrimitiveArrayBufferObject(array, Platform.BYTE_ARRAY_OFFSET, 1, array.length);
-  }
-
-  static final IdentityHashMap<Class<?>, int[]> primitiveInfo = new IdentityHashMap<>();
-
-  static {
-    primitiveInfo.put(
-        boolean.class, new int[] {Platform.BOOLEAN_ARRAY_OFFSET, 1, Types.BOOL_ARRAY});
-    primitiveInfo.put(byte.class, new int[] {Platform.BYTE_ARRAY_OFFSET, 1, Types.BINARY});
-    primitiveInfo.put(
-        char.class, new int[] {Platform.CHAR_ARRAY_OFFSET, 2, Fory.NOT_SUPPORT_XLANG});
-    primitiveInfo.put(short.class, new int[] {Platform.SHORT_ARRAY_OFFSET, 2, Types.INT16_ARRAY});
-    primitiveInfo.put(int.class, new int[] {Platform.INT_ARRAY_OFFSET, 4, Types.INT32_ARRAY});
-    primitiveInfo.put(long.class, new int[] {Platform.LONG_ARRAY_OFFSET, 8, Types.INT64_ARRAY});
-    primitiveInfo.put(float.class, new int[] {Platform.FLOAT_ARRAY_OFFSET, 4, Types.FLOAT32_ARRAY});
-    primitiveInfo.put(
-        double.class, new int[] {Platform.DOUBLE_ARRAY_OFFSET, 8, Types.FLOAT64_ARRAY});
   }
 
   public abstract static class AbstractedNonexistentArrayClassSerializer extends Serializer {

@@ -177,52 +177,76 @@ class TypeSerializer(Serializer):
 
     def _serialize_local_class(self, buffer, cls):
         """Serialize a local class by capturing its creation context."""
-        assert self.fory.ref_tracking, "Reference tracking must be enabled for local classes serialization"
+        assert (
+            self.fory.ref_tracking
+        ), "Reference tracking must be enabled for local classes serialization"
         # Basic class information
         module = cls.__module__
         qualname = cls.__qualname__
         buffer.write_string(module)
         buffer.write_string(qualname)
+        fory = self.fory
 
         # Serialize base classes
         # Let Fory's normal serialization handle bases (including other local classes)
         bases = cls.__bases__
         buffer.write_varuint32(len(bases))
         for base in bases:
-            self.fory.serialize_ref(buffer, base)
+            fory.serialize_ref(buffer, base)
 
         # Serialize class dictionary (excluding special attributes)
         # FunctionSerializer will automatically handle methods with closures
         class_dict = {}
+        attr_names, class_methods = [], []
         for attr_name, attr_value in cls.__dict__.items():
             # Skip special attributes that are handled by type() constructor
             if attr_name in __skip_class_attr_names__:
                 continue
-            class_dict[attr_name] = attr_value
+            if isinstance(attr_value, classmethod):
+                attr_names.append(attr_name)
+                class_methods.append(attr_value)
+            else:
+                class_dict[attr_name] = attr_value
+        # serialize method specially to avoid circular deps in method deserialization
+        buffer.write_varuint32(len(class_methods))
+        for i in range(len(class_methods)):
+            buffer.write_string(attr_names[i])
+            class_method = class_methods[i]
+            fory.serialize_ref(buffer, class_method.__func__)
 
         # Let Fory's normal serialization handle the class dict
         # This will use FunctionSerializer for methods, which handles closures properly
-        self.fory.serialize_ref(buffer, class_dict)
+        fory.serialize_ref(buffer, class_dict)
 
     def _deserialize_local_class(self, buffer):
         """Deserialize a local class by recreating it with the captured context."""
-        assert self.fory.ref_tracking, "Reference tracking must be enabled for local classes deserialization"
+        fory = self.fory
+        assert (
+            fory.ref_tracking
+        ), "Reference tracking must be enabled for local classes deserialization"
         # Read basic class information
         module = buffer.read_string()
         qualname = buffer.read_string()
         name = qualname.rsplit(".", 1)[-1]
-        ref_id = self.fory.ref_resolver.last_preserved_ref_id()
+        ref_id = fory.ref_resolver.last_preserved_ref_id()
 
         # Read base classes
         num_bases = buffer.read_varuint32()
-        bases = tuple([self.fory.deserialize_ref(buffer) for _ in range(num_bases)])
+        bases = tuple([fory.deserialize_ref(buffer) for _ in range(num_bases)])
         # Create the class using type() constructor
         cls = type(name, bases, {})
         # `class_dict` may reference to `cls`, which is a circular reference
-        self.fory.ref_resolver.set_read_object(ref_id, cls)
+        fory.ref_resolver.set_read_object(ref_id, cls)
+
+        # classmethods
+        for i in range(buffer.read_varuint32()):
+            attr_name = buffer.read_string()
+            func = fory.deserialize_ref(buffer)
+            method = types.MethodType(func, cls)
+            setattr(cls, attr_name, method)
         # Read class dictionary
         # Fory's normal deserialization will handle methods via FunctionSerializer
-        class_dict = self.fory.deserialize_ref(buffer)
+        class_dict = fory.deserialize_ref(buffer)
         for k, v in class_dict.items():
             setattr(cls, k, v)
 
@@ -332,9 +356,13 @@ class DataClassSerializer(Serializer):
             if serializers is None:
                 visitor = StructFieldSerializerVisitor(fory)
                 for index, key in enumerate(self._field_names):
-                    serializer = infer_field(key, self._type_hints[key], visitor, types_path=[])
+                    serializer = infer_field(
+                        key, self._type_hints[key], visitor, types_path=[]
+                    )
                     self._serializers[index] = serializer
-            self._field_names, self._serializers = _sort_fields(fory.type_resolver, self._field_names, self._serializers)
+            self._field_names, self._serializers = _sort_fields(
+                fory.type_resolver, self._field_names, self._serializers
+            )
             self._hash = 0  # Will be computed on first xwrite/xread
             self._generated_xwrite_method = self._gen_xwrite_method()
             self._generated_xread_method = self._gen_xread_method()
@@ -397,7 +425,9 @@ class DataClassSerializer(Serializer):
             else:
                 stmts.append(f"{fory}.write_ref_pyobject({buffer}, {field_value})")
         self._write_method_code, func = compile_function(
-            f"write_{self.type_.__module__}_{self.type_.__qualname__}".replace(".", "_"),
+            f"write_{self.type_.__module__}_{self.type_.__qualname__}".replace(
+                ".", "_"
+            ),
             [buffer, value],
             stmts,
             context,
@@ -484,9 +514,13 @@ class DataClassSerializer(Serializer):
                 stmts.append(f"{field_value} = {value_dict}['{field_name}']")
             else:
                 stmts.append(f"{field_value} = {value}.{field_name}")
-            stmts.append(f"{fory}.xserialize_ref({buffer}, {field_value}, serializer={serializer_var})")
+            stmts.append(
+                f"{fory}.xserialize_ref({buffer}, {field_value}, serializer={serializer_var})"
+            )
         self._xwrite_method_code, func = compile_function(
-            f"xwrite_{self.type_.__module__}_{self.type_.__qualname__}".replace(".", "_"),
+            f"xwrite_{self.type_.__module__}_{self.type_.__qualname__}".replace(
+                ".", "_"
+            ),
             [buffer, value],
             stmts,
             context,
@@ -541,7 +575,9 @@ class DataClassSerializer(Serializer):
             serializer_var = f"serializer{index}"
             context[serializer_var] = self._serializers[index]
             field_value = f"field_value{index}"
-            stmts.append(f"{field_value} = {fory}.xdeserialize_ref({buffer}, serializer={serializer_var})")
+            stmts.append(
+                f"{field_value} = {fory}.xdeserialize_ref({buffer}, serializer={serializer_var})"
+            )
             if field_name not in current_class_field_names:
                 stmts.append(f"# {field_name} is not in {self.type_}")
                 continue
@@ -551,7 +587,9 @@ class DataClassSerializer(Serializer):
                 stmts.append(f"{obj}.{field_name} = {field_value}")
         stmts.append(f"return {obj}")
         self._xread_method_code, func = compile_function(
-            f"xread_{self.type_.__module__}_{self.type_.__qualname__}".replace(".", "_"),
+            f"xread_{self.type_.__module__}_{self.type_.__qualname__}".replace(
+                ".", "_"
+            ),
             [buffer],
             stmts,
             context,
@@ -583,7 +621,9 @@ class DataClassSerializer(Serializer):
 
     def xwrite(self, buffer: Buffer, value):
         if not self._xlang:
-            raise TypeError("xwrite can only be called when DataClassSerializer is in xlang mode")
+            raise TypeError(
+                "xwrite can only be called when DataClassSerializer is in xlang mode"
+            )
         if self._hash == 0:
             self._hash = _get_hash(self.fory, self._field_names, self._type_hints)
         buffer.write_int32(self._hash)
@@ -594,7 +634,9 @@ class DataClassSerializer(Serializer):
 
     def xread(self, buffer):
         if not self._xlang:
-            raise TypeError("xread can only be called when DataClassSerializer is in xlang mode")
+            raise TypeError(
+                "xread can only be called when DataClassSerializer is in xlang mode"
+            )
         if self._hash == 0:
             self._hash = _get_hash(self.fory, self._field_names, self._type_hints)
         hash_ = buffer.read_int32()
@@ -796,7 +838,9 @@ class Numpy1DArraySerializer(Serializer):
     def __init__(self, fory, ftype, dtype):
         super().__init__(fory, ftype)
         self.dtype = dtype
-        self.itemsize, self.format, self.typecode, self.type_id = _np_dtypes_dict[self.dtype]
+        self.itemsize, self.format, self.typecode, self.type_id = _np_dtypes_dict[
+            self.dtype
+        ]
         self._serializer = ReduceSerializer(fory, np.ndarray)
 
     def xwrite(self, buffer, value):
@@ -959,7 +1003,10 @@ class ReduceSerializer(CrossLanguageCompatibleSerializer):
     def write(self, buffer, value):
         # Try __reduce_ex__ first (with protocol 2), then __reduce__
         # Check if the object has a custom __reduce_ex__ method (not just the default from object)
-        if hasattr(value, "__reduce_ex__") and value.__class__.__reduce_ex__ is not object.__reduce_ex__:
+        if (
+            hasattr(value, "__reduce_ex__")
+            and value.__class__.__reduce_ex__ is not object.__reduce_ex__
+        ):
             try:
                 reduce_result = value.__reduce_ex__(2)
             except TypeError:
@@ -968,7 +1015,9 @@ class ReduceSerializer(CrossLanguageCompatibleSerializer):
         elif hasattr(value, "__reduce__"):
             reduce_result = value.__reduce__()
         else:
-            raise ValueError(f"Object {value} has no __reduce__ or __reduce_ex__ method")
+            raise ValueError(
+                f"Object {value} has no __reduce__ or __reduce_ex__ method"
+            )
 
         # Handle different __reduce__ return formats
         if isinstance(reduce_result, str):
@@ -999,7 +1048,9 @@ class ReduceSerializer(CrossLanguageCompatibleSerializer):
                     dictitems,
                 )
             else:
-                raise ValueError(f"Invalid __reduce__ result length: {len(reduce_result)}")
+                raise ValueError(
+                    f"Invalid __reduce__ result length: {len(reduce_result)}"
+                )
         else:
             raise ValueError(f"Invalid __reduce__ result type: {type(reduce_result)}")
         buffer.write_varuint32(len(reduce_data))
@@ -1115,19 +1166,17 @@ class FunctionSerializer(CrossLanguageCompatibleSerializer):
 
         # Regular function or lambda
         code = func.__code__
-        name = func.__name__
         module = func.__module__
         qualname = func.__qualname__
 
         if "<locals>" not in qualname and module != "__main__":
             buffer.write_int8(1)  # Not a method
-            buffer.write_string(name)
             buffer.write_string(module)
+            buffer.write_string(qualname)
             return
 
         # Serialize function metadata
         buffer.write_int8(2)  # Not a method
-        buffer.write_string(name)
         buffer.write_string(module)
         buffer.write_string(qualname)
 
@@ -1183,7 +1232,9 @@ class FunctionSerializer(CrossLanguageCompatibleSerializer):
                         global_names.add(name)
 
         # Create and serialize a dictionary with only the necessary globals
-        globals_to_serialize = {name: globals_dict[name] for name in global_names if name in globals_dict}
+        globals_to_serialize = {
+            name: globals_dict[name] for name in global_names if name in globals_dict
+        }
         self.fory.serialize_ref(buffer, globals_to_serialize)
 
         # Handle additional attributes
@@ -1212,15 +1263,17 @@ class FunctionSerializer(CrossLanguageCompatibleSerializer):
             return getattr(self_obj, method_name)
 
         if func_type_id == 1:
-            name = buffer.read_string()
             module = buffer.read_string()
+            qualname = buffer.read_string()
             mod = importlib.import_module(module)
-            return getattr(mod, name)
+            for name in qualname.split("."):
+                mod = getattr(mod, name)
+            return mod
 
         # Regular function or lambda
-        name = buffer.read_string()
         module = buffer.read_string()
         qualname = buffer.read_string()
+        name = qualname.rsplit(".")[-1]
 
         # Use marshal to load the code object, which handles all Python versions correctly
         marshalled_code = buffer.read_bytes_and_size()

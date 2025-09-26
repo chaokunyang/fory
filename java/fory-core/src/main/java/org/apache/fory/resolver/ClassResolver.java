@@ -1798,7 +1798,8 @@ public class ClassResolver extends TypeResolver {
       Serializers.newSerializer(fory, LambdaSerializer.STUB_LAMBDA_CLASS, LambdaSerializer.class);
       Serializers.newSerializer(
           fory, JdkProxySerializer.SUBT_PROXY.getClass(), JdkProxySerializer.class);
-      classInfoMap.forEach(
+      for (int i = 0; i < 2; i++) { // run twice to ensure lazy serializers compiled too.
+        classInfoMap.forEach(
           (cls, classInfo) -> {
             if (classInfo.serializer == null) {
               if (isSerializable(classInfo.cls)) {
@@ -1806,6 +1807,7 @@ public class ClassResolver extends TypeResolver {
               }
             }
           });
+      }
       if (GraalvmSupport.isGraalBuildtime()) {
         classInfoMap.forEach(
             (cls, classInfo) -> {

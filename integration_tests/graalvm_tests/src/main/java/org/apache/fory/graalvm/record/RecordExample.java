@@ -40,7 +40,8 @@ public class RecordExample {
             .requireClassRegistration(true)
             .build();
     // register and generate serializer code.
-    fory.register(Record.class, true);
+    fory.register(Record.class);
+    fory.ensureSerializersCompiled();
     return fory;
   }
 

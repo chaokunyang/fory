@@ -74,11 +74,13 @@ public class Benchmark {
 
   static {
     fory1 = Fory.builder().withNumberCompressed(false).build();
-    fory1.register(Foo.class, true);
-    fory1.register(Struct.class, true);
+    fory1.register(Foo.class);
+    fory1.register(Struct.class);
+    fory1.ensureSerializersCompiled();
     fory2 = Fory.builder().withNumberCompressed(true).build();
-    fory2.register(Foo.class, true);
-    fory2.register(Struct.class, true);
+    fory2.register(Foo.class);
+    fory2.register(Struct.class);
+    fory2.ensureSerializersCompiled();
   }
 
   public static void main(String[] args) {

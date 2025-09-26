@@ -38,7 +38,8 @@ public class ScopedCompatibleExample {
             .withScopedMetaShare(true)
             .build();
     // register and generate serializer code.
-    fory.register(Foo.class, true);
+    fory.register(Foo.class);
+    fory.ensureSerializersCompiled();
     return fory;
   }
 

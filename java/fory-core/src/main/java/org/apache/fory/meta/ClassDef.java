@@ -288,7 +288,7 @@ public class ClassDef implements Serializable {
     return descriptors;
   }
 
-  /** Returns true if can use current field type */
+  /** Returns true if can use current field type. */
   private static boolean useFieldType(Class<?> parsedType, Descriptor descriptor) {
     if (parsedType.isEnum()
         || parsedType.isAssignableFrom(descriptor.getRawType())

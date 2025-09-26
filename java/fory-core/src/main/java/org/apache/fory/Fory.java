@@ -197,9 +197,8 @@ public final class Fory implements BaseFory {
   }
 
   /**
-   * register class with given type name, this method will have bigger serialization space cost
-   * compared to register by id, but the name is more manageable and has less conflict compared to
-   * id
+   * Register class with given type name, this method will have bigger serialization time/space cost
+   * compared to register by id.
    */
   @Override
   public void register(Class<?> cls, String typeName) {

@@ -28,7 +28,8 @@ public class ArrayExample {
   private static final Fory FORY = Fory.builder().registerGuavaTypes(false).build();
 
   static {
-    FORY.register(ArrayExample.class, true);
+    FORY.register(ArrayExample.class);
+    FORY.ensureSerializersCompiled();
   }
 
   byte[] bytes;

@@ -33,7 +33,7 @@ public class ObjectStreamExample extends AbstractMap<Integer, Integer> {
           .build();
 
   static {
-    FORY.register(ObjectStreamExample.class, true);
+    FORY.register(ObjectStreamExample.class);
     FORY.ensureSerializersCompiled();
   }
 

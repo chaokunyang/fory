@@ -333,6 +333,10 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
                         this.slotsSerializer =
                             (CompatibleSerializerBase) Serializers.newSerializer(fory, type, c));
       }
+      if (GraalvmSupport.isGraalBuildtime()) {
+        // trigger serializer constructor method handle generate.
+        Serializers.newSerializer(fory, type, sc);
+      }
       if (sc == CompatibleSerializer.class || GraalvmSupport.isGraalBuildtime()) {
         // skip init generated serializer at graalvm build time
         this.slotsSerializer = new CompatibleSerializer(fory, type, fieldResolver);

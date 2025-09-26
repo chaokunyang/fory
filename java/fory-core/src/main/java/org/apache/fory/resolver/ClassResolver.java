@@ -1258,15 +1258,6 @@ public class ClassResolver extends TypeResolver {
     return serializer;
   }
 
-  private void createSerializerAhead(Class<?> cls) {
-    try {
-      fory.getJITContext().lock();
-      createSerializer0(cls);
-    } finally {
-      fory.getJITContext().unlock();
-    }
-  }
-
   private void createSerializer0(Class<?> cls) {
     ClassInfo classInfo = getClassInfo(cls);
     ClassInfo deserializationClassInfo;
@@ -1281,8 +1272,6 @@ public class ClassResolver extends TypeResolver {
             .deserializerClassMap
             .put(classDef.getId(), getGraalvmSerializerClass(deserializationClassInfo.serializer));
         Tuple2<ClassDef, ClassInfo> classDefTuple = extRegistry.classIdToDef.get(classDef.getId());
-        // empty serializer for graalvm build time
-        classDefTuple.f1.serializer = null;
         classInfoCache = NIL_CLASS_INFO;
         extRegistry.classIdToDef.put(classDef.getId(), Tuple2.of(classDefTuple.f0, null));
       }
@@ -1292,7 +1281,6 @@ public class ClassResolver extends TypeResolver {
       getGraalvmClassRegistry()
           .serializerClassMap
           .put(cls, getGraalvmSerializerClass(classInfo.serializer));
-      classInfo.serializer = null;
       classInfoCache = NIL_CLASS_INFO;
       if (RecordUtils.isRecord(cls)) {
         RecordUtils.getRecordConstructor(cls);
@@ -1798,16 +1786,14 @@ public class ClassResolver extends TypeResolver {
       Serializers.newSerializer(fory, LambdaSerializer.STUB_LAMBDA_CLASS, LambdaSerializer.class);
       Serializers.newSerializer(
           fory, JdkProxySerializer.SUBT_PROXY.getClass(), JdkProxySerializer.class);
-      for (int i = 0; i < 2; i++) { // run twice to ensure lazy serializers compiled too.
-        classInfoMap.forEach(
-          (cls, classInfo) -> {
-            if (classInfo.serializer == null) {
-              if (isSerializable(classInfo.cls)) {
-                createSerializerAhead(classInfo.cls);
-              }
+      classInfoMap.forEach(
+        (cls, classInfo) -> {
+          if (classInfo.serializer == null) {
+            if (isSerializable(classInfo.cls)) {
+              createSerializer0(cls);
             }
-          });
-      }
+          }
+        });
       if (GraalvmSupport.isGraalBuildtime()) {
         classInfoMap.forEach(
             (cls, classInfo) -> {

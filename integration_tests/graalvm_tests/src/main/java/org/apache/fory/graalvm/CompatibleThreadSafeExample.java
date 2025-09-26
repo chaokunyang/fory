@@ -39,7 +39,7 @@ public class CompatibleThreadSafeExample {
                       .build();
               // register and generate serializer code.
               f.register(Foo.class);
-              fory.ensureSerializersCompiled();
+              f.ensureSerializersCompiled();
               return f;
             });
     System.out.println("Init fory at build time");

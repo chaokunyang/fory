@@ -86,7 +86,7 @@ ruff check --fix .
 # Install
 pip install -v -e .
 
-# Build native extension
+# Build native extension when cython code changed
 bazel build //:cp_fory_so --config=x86_64 # For x86_64
 bazel build //:cp_fory_so --copt=-fsigned-char # For arm64 and aarch64
 

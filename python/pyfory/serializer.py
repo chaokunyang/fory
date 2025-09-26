@@ -215,17 +215,20 @@ class TypeSerializer(Serializer):
         module = buffer.read_string()
         qualname = buffer.read_string()
         name = qualname.rsplit(".", 1)[-1]
+        ref_id = self.fory.ref_resolver.last_preserved_ref_id()
 
         # Read base classes
         num_bases = buffer.read_varuint32()
         bases = tuple([self.fory.deserialize_ref(buffer) for _ in range(num_bases)])
-
+        # Create the class using type() constructor
+        cls = type(name, bases, {})
+        # `class_dict` may reference to `cls`, which is a circular reference
+        self.fory.ref_resolver.set_read_object(ref_id, cls)
         # Read class dictionary
         # Fory's normal deserialization will handle methods via FunctionSerializer
         class_dict = self.fory.deserialize_ref(buffer)
-
-        # Create the class using type() constructor
-        cls = type(name, bases, class_dict)
+        for k, v in class_dict.items():
+            setattr(cls, k, v)
 
         # Set module and qualname
         cls.__module__ = module

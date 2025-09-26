@@ -149,6 +149,7 @@ public class XtypeResolver extends TypeResolver {
     }
   }
 
+  @Override
   public void register(Class<?> type) {
     while (registeredTypeIds.contains(xtypeIdGenerator)) {
       xtypeIdGenerator++;
@@ -156,6 +157,7 @@ public class XtypeResolver extends TypeResolver {
     register(type, xtypeIdGenerator++);
   }
 
+  @Override
   public void register(Class<?> type, int userTypeId) {
     // ClassInfo[] has length of max type id. If the type id is too big, Fory will waste many
     // memory. We can relax this limit in the future.
@@ -204,6 +206,7 @@ public class XtypeResolver extends TypeResolver {
         xtypeId);
   }
 
+  @Override
   public void register(Class<?> type, String namespace, String typeName) {
     Preconditions.checkArgument(
         !typeName.contains("."),

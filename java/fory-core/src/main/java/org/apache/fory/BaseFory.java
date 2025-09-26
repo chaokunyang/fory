@@ -56,23 +56,45 @@ public interface BaseFory {
   void register(Class<?> cls, boolean createSerializer);
 
   /**
-   * Register class with specified id.
+   * Register class with specified id. This method has been deprecated, please use {@link
+   * #register(Class, int)} instead, and invoke {@link #ensureSerializersCompiled} after all classes
+   * has been registered.
    *
    * @param cls class to register.
    * @param id id for provided class.
    * @param createSerializer whether to create serializer, if true and codegen enabled, this will
-   *     generate the serializer code too.
+   *     generate the serializer code too. this parameter has no effect anymore on whether to
+   *     generate code, please use {@link #ensureSerializersCompiled} to trigger code generation
    */
+  @Deprecated
   void register(Class<?> cls, int id, boolean createSerializer);
 
   /** register class with given type name which will be used for cross-language serialization. */
   void register(Class<?> cls, String typeName);
 
   /**
-   * register class with given type namespace and name which will be used for cross-language
-   * serialization.
+   * register class with given type namespace and name. This can be used mapping different classes
+   * into same type when deserializing.
    */
   void register(Class<?> cls, String namespace, String typeName);
+
+  /**
+   * Register class and allocate an auto-grown ID for this class. Note that the registration order
+   * is important. If registration order is inconsistent, the allocated ID will be different, and
+   * the deserialization will failed.
+   *
+   * @param className full class name to register.
+   */
+  void register(String className);
+
+  /** register class with given id. */
+  void register(String className, int classId);
+
+  /**
+   * register class with given type namespace and name. This can be used mapping different classes
+   * into same type when deserializing.
+   */
+  void register(String className, String namespace, String typeName);
 
   /**
    * Register a Serializer for a class, and allocate an auto-grown ID for this class if it's not
@@ -109,8 +131,11 @@ public interface BaseFory {
    * Ensure all compilation for serializers and accessors even for lazy initialized serializers.
    * This method will block until all compilation is done.
    *
-   * <p>This method is mainly used for graalvm native image build time and trigger compilation ahead
+   * <p>This method is mainly used for graalvm native image build time or trigger compilation ahead
    * for online service ahead to avoid cold start.
+   *
+   * <p>Note that this method should be invoked after all registrations and invoked only once.
+   * Repeated invocations will have no effect.
    */
   void ensureSerializersCompiled();
 

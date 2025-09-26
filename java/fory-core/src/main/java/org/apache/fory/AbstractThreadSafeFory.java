@@ -48,6 +48,7 @@ public abstract class AbstractThreadSafeFory implements ThreadSafeFory {
     registerCallback(fory -> fory.register(cls, id, createSerializer));
   }
 
+  @Deprecated
   @Override
   public void register(Class<?> cls, String typeName) {
     registerCallback(fory -> fory.register(cls, typeName));
@@ -56,6 +57,21 @@ public abstract class AbstractThreadSafeFory implements ThreadSafeFory {
   @Override
   public void register(Class<?> cls, String namespace, String typeName) {
     registerCallback(fory -> fory.register(cls, namespace, typeName));
+  }
+
+  @Override
+  public void register(String className) {
+    registerCallback(fory -> fory.register(className));
+  }
+
+  @Override
+  public void register(String className, int id) {
+    registerCallback(fory -> fory.register(className, id));
+  }
+
+  @Override
+  public void register(String className, String namespace, String typeName) {
+    registerCallback(fory -> fory.register(className, namespace, typeName));
   }
 
   @Override

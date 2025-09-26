@@ -389,11 +389,13 @@ public class ClassResolver extends TypeResolver {
     }
   }
 
+  /**
+   * This method has been deprecated, please use {@link #register(Class)} instead, and invoke {@link
+   * #ensureSerializersCompiled} after all classes has been registered.
+   */
+  @Deprecated
   public void register(Class<?> cls, boolean createSerializer) {
     register(cls);
-    if (createSerializer) {
-      createSerializerAhead(cls);
-    }
   }
 
   /**
@@ -430,15 +432,13 @@ public class ClassResolver extends TypeResolver {
     register(loadClass(className, false, 0, false), classId);
   }
 
+  /**
+   * This method has been deprecated, please use {@link #register(Class, int)} instead, and invoke
+   * {@link #ensureSerializersCompiled} after all classes has been registered.
+   */
+  @Deprecated
   public void register(Class<?> cls, int id, boolean createSerializer) {
     register(cls, id);
-    if (createSerializer) {
-      createSerializerAhead(cls);
-    }
-  }
-
-  public void register(String className, Short classId, boolean createSerializer) {
-    register(loadClass(className, false, 0, false), classId, createSerializer);
   }
 
   /**
@@ -446,6 +446,7 @@ public class ClassResolver extends TypeResolver {
    * registered, the serialized class will have smaller payload size. In many cases, it type name
    * has no conflict, namespace can be left as empty.
    */
+  @Override
   public void register(Class<?> cls, String namespace, String name) {
     Preconditions.checkArgument(!Functions.isLambda(cls));
     Preconditions.checkArgument(!ReflectionUtils.isJdkProxy(cls));
@@ -1783,8 +1784,15 @@ public class ClassResolver extends TypeResolver {
   /**
    * Ensure all compilation for serializers and accessors even for lazy initialized serializers.
    * This method will block until all compilation is done.
+   *
+   * <p>Note that this method should be invoked after all registrations and invoked only once.
+   * Repeated invocations will have no effect.
    */
   public void ensureSerializersCompiled() {
+    if (extRegistry.ensureSerializersCompiled) {
+      return;
+    }
+    extRegistry.ensureSerializersCompiled = true;
     try {
       fory.getJITContext().lock();
       Serializers.newSerializer(fory, LambdaSerializer.STUB_LAMBDA_CLASS, LambdaSerializer.class);
@@ -1793,7 +1801,9 @@ public class ClassResolver extends TypeResolver {
       classInfoMap.forEach(
           (cls, classInfo) -> {
             if (classInfo.serializer == null) {
-              getSerializer(classInfo.cls, isSerializable(classInfo.cls));
+              if (isSerializable(classInfo.cls)) {
+                createSerializerAhead(classInfo.cls);
+              }
             }
           });
       if (GraalvmSupport.isGraalBuildtime()) {

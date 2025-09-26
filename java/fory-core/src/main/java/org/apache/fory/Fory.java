@@ -176,41 +176,32 @@ public final class Fory implements BaseFory {
 
   @Override
   public void register(Class<?> cls) {
-    if (!crossLanguage) {
-      classResolver.register(cls);
-    } else {
-      xtypeResolver.register(cls);
-    }
+    _getTypeResolver().register(cls);
   }
 
   @Override
   public void register(Class<?> cls, int id) {
-    if (!crossLanguage) {
-      classResolver.register(cls, id);
-    } else {
-      xtypeResolver.register(cls, id);
-    }
+    _getTypeResolver().register(cls, id);
   }
 
+  @Deprecated
   @Override
   public void register(Class<?> cls, boolean createSerializer) {
-    if (!crossLanguage) {
-      classResolver.register(cls, createSerializer);
-    } else {
-      xtypeResolver.register(cls);
-    }
+    _getTypeResolver().register(cls);
   }
 
+  @Deprecated
   @Override
   public void register(Class<?> cls, int id, boolean createSerializer) {
-    if (!crossLanguage) {
-      classResolver.register(cls, id, createSerializer);
-    } else {
-      xtypeResolver.register(cls, id);
-    }
+    _getTypeResolver().register(cls, id);
   }
 
-  /** register class with given type tag which will be used for cross-language serialization. */
+  /**
+   * register class with given type name, this method will have bigger serialization space cost
+   * compared to register by id, but the name is more manageable and has less conflict compared to
+   * id
+   */
+  @Override
   public void register(Class<?> cls, String typeName) {
     int idx = typeName.lastIndexOf('.');
     String namespace = "";
@@ -222,38 +213,37 @@ public final class Fory implements BaseFory {
   }
 
   public void register(Class<?> cls, String namespace, String typeName) {
-    if (!crossLanguage) {
-      classResolver.register(cls, namespace, typeName);
-    } else {
-      xtypeResolver.register(cls, namespace, typeName);
-    }
+    _getTypeResolver().register(cls, namespace, typeName);
+  }
+
+  @Override
+  public void register(String className) {
+    _getTypeResolver().register(className);
+  }
+
+  @Override
+  public void register(String className, int classId) {
+    _getTypeResolver().register(className, classId);
+  }
+
+  @Override
+  public void register(String className, String namespace, String typeName) {
+    _getTypeResolver().register(className, namespace, typeName);
   }
 
   @Override
   public <T> void registerSerializer(Class<T> type, Class<? extends Serializer> serializerClass) {
-    if (!crossLanguage) {
-      classResolver.registerSerializer(type, serializerClass);
-    } else {
-      xtypeResolver.registerSerializer(type, serializerClass);
-    }
+    _getTypeResolver().registerSerializer(type, serializerClass);
   }
 
   @Override
   public void registerSerializer(Class<?> type, Serializer<?> serializer) {
-    if (!crossLanguage) {
-      classResolver.registerSerializer(type, serializer);
-    } else {
-      xtypeResolver.registerSerializer(type, serializer);
-    }
+    _getTypeResolver().registerSerializer(type, serializer);
   }
 
   @Override
   public void registerSerializer(Class<?> type, Function<Fory, Serializer<?>> serializerCreator) {
-    if (!crossLanguage) {
-      classResolver.registerSerializer(type, serializerCreator.apply(this));
-    } else {
-      xtypeResolver.registerSerializer(type, serializerCreator.apply(this));
-    }
+    _getTypeResolver().registerSerializer(type, serializerCreator.apply(this));
   }
 
   @Override

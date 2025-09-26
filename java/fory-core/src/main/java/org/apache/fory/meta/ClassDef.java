@@ -23,7 +23,6 @@ import static org.apache.fory.meta.ClassDefEncoder.buildFields;
 import static org.apache.fory.type.TypeUtils.COLLECTION_TYPE;
 import static org.apache.fory.type.TypeUtils.MAP_TYPE;
 import static org.apache.fory.type.TypeUtils.collectionOf;
-import static org.apache.fory.type.TypeUtils.getArrayComponent;
 import static org.apache.fory.type.TypeUtils.mapOf;
 
 import java.io.ObjectStreamClass;
@@ -292,8 +291,8 @@ public class ClassDef implements Serializable {
   /** Returns true if can use current field type */
   private static boolean useFieldType(Class<?> parsedType, Descriptor descriptor) {
     if (parsedType.isEnum()
-      || parsedType.isAssignableFrom(descriptor.getRawType())
-      || parsedType == FinalObjectTypeStub.class) {
+        || parsedType.isAssignableFrom(descriptor.getRawType())
+        || parsedType == FinalObjectTypeStub.class) {
       return true;
     }
     if (parsedType.isArray()) {

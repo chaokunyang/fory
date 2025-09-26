@@ -448,7 +448,15 @@ public abstract class TypeResolver {
       return false;
     }
     try {
+      ClassInfo classInfo = classInfoMap.get(cls);
+      Serializer<?> serializer = null;
+      if (classInfo != null) {
+        serializer = classInfo.serializer;
+      }
       getSerializerClass(cls, false);
+      if (classInfo != null && serializer == null) {
+        classInfo.serializer = null;
+      }
       return true;
     } catch (Throwable t) {
       return false;

@@ -360,7 +360,12 @@ public class ClassResolver extends TypeResolver {
     register(EnumSet.allOf(Language.class).getClass());
     register(EnumSet.of(Language.JAVA).getClass());
     register(SerializedLambda.class);
-    register(Throwable.class, StackTraceElement.class, Exception.class, RuntimeException.class);
+    register(
+        Throwable.class,
+        StackTraceElement.class,
+        StackTraceElement[].class,
+        Exception.class,
+        RuntimeException.class);
     register(NullPointerException.class);
     register(IOException.class);
     register(IllegalArgumentException.class);
@@ -1787,13 +1792,13 @@ public class ClassResolver extends TypeResolver {
       Serializers.newSerializer(
           fory, JdkProxySerializer.SUBT_PROXY.getClass(), JdkProxySerializer.class);
       classInfoMap.forEach(
-        (cls, classInfo) -> {
-          if (classInfo.serializer == null) {
-            if (isSerializable(classInfo.cls)) {
-              createSerializer0(cls);
+          (cls, classInfo) -> {
+            if (classInfo.serializer == null) {
+              if (isSerializable(classInfo.cls)) {
+                createSerializer0(cls);
+              }
             }
-          }
-        });
+          });
       if (GraalvmSupport.isGraalBuildtime()) {
         classInfoMap.forEach(
             (cls, classInfo) -> {

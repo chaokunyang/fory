@@ -1242,7 +1242,7 @@ public class ClassResolver extends TypeResolver {
     if (!extRegistry.absClassInfo.isEmpty()) {
       Class<?> tmpCls = cls;
       while (tmpCls != null && tmpCls != Object.class) {
-        ClassInfo absClass = null;
+        ClassInfo absClass;
         if ((absClass = extRegistry.absClassInfo.get(tmpCls.getSuperclass())) != null) {
           return absClass.serializer;
         }
@@ -1796,6 +1796,9 @@ public class ClassResolver extends TypeResolver {
             if (classInfo.serializer == null) {
               if (isSerializable(classInfo.cls)) {
                 createSerializer0(cls);
+              }
+              if (cls.isArray()) {
+                createSerializer0(TypeUtils.getArrayComponent(cls));
               }
             }
           });

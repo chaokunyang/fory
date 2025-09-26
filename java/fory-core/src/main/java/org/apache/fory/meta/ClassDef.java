@@ -270,11 +270,7 @@ public class ClassDef implements Serializable {
         if (descriptor != null) {
           // Make DescriptorGrouper have consistent order whether field exist or not
           // fory builtin types skip
-          if (rawType.isEnum()
-              || rawType.isAssignableFrom(descriptor.getRawType())
-              || NonexistentClass.isNonexistent(rawType)
-              || rawType == FinalObjectTypeStub.class
-              || (rawType.isArray() && getArrayComponent(rawType) == FinalObjectTypeStub.class)) {
+          if (useFieldType(rawType, descriptor)) {
             descriptor = descriptor.copyWithTypeName(newDesc.getTypeName());
             descriptors.add(descriptor);
           } else {
@@ -291,6 +287,24 @@ public class ClassDef implements Serializable {
       }
     }
     return descriptors;
+  }
+
+  /** Returns true if can use current field type */
+  private static boolean useFieldType(Class<?> parsedType, Descriptor descriptor) {
+    if (parsedType.isEnum()
+      || parsedType.isAssignableFrom(descriptor.getRawType())
+      || parsedType == FinalObjectTypeStub.class) {
+      return true;
+    }
+    if (parsedType.isArray()) {
+      Tuple2<Class<?>, Integer> info = TypeUtils.getArrayComponentInfo(parsedType);
+      Field field = descriptor.getField();
+      if (!field.getType().isArray() || TypeUtils.getArrayDimensions(field.getType()) != info.f1) {
+        return false;
+      }
+      return info.f0 == FinalObjectTypeStub.class || info.f0.isEnum();
+    }
+    return false;
   }
 
   /**

@@ -31,7 +31,9 @@ impl<T: Serializer + Send + Sync + 'static> Serializer for Arc<T> {
             RefFlag::Null => Err(anyhow!("Arc cannot be null").into()),
             RefFlag::Ref => {
                 let ref_id = context.ref_resolver.read_ref_id(&mut context.reader);
-                context.ref_resolver.get_arc_ref::<T>(ref_id)
+                context
+                    .ref_resolver
+                    .get_arc_ref::<T>(ref_id)
                     .ok_or_else(|| anyhow!("Arc reference {} not found", ref_id).into())
             }
             RefFlag::NotNullValue => {
@@ -79,52 +81,3 @@ impl<T: Serializer + Send + Sync + 'static> Serializer for Arc<T> {
 }
 
 impl<T: Serializer + Send + Sync> ForyGeneralList for Arc<T> {}
-
-#[cfg(test)]
-mod tests {
-    use crate::fory::Fory;
-    use std::sync::Arc;
-
-    #[test]
-    fn test_arc_serialization_basic() {
-        let fury = Fory::default();
-        let arc = Arc::new(42i32);
-
-        let serialized = fury.serialize(&arc);
-        let deserialized: Arc<i32> = fury.deserialize(&serialized).unwrap();
-
-        assert_eq!(*deserialized, 42);
-    }
-
-    #[test]
-    fn test_arc_shared_reference() {
-        let fury = Fory::default();
-        let arc1 = Arc::new(String::from("shared"));
-
-        let serialized = fury.serialize(&arc1);
-        let deserialized: Arc<String> = fury.deserialize(&serialized).unwrap();
-
-        assert_eq!(*deserialized, "shared");
-        // In a full implementation with proper reference tracking,
-        // multiple references to the same object would be preserved
-    }
-
-    #[test]
-    fn test_arc_thread_safety() {
-        use std::thread;
-
-        let fury = Fory::default();
-        let arc = Arc::new(vec![1, 2, 3, 4, 5]);
-
-        let serialized = fury.serialize(&arc);
-
-        // Test that Arc can be sent across threads
-        let handle = thread::spawn(move || {
-            let fury = Fory::default();
-            let deserialized: Arc<Vec<i32>> = fury.deserialize(&serialized).unwrap();
-            assert_eq!(*deserialized, vec![1, 2, 3, 4, 5]);
-        });
-
-        handle.join().unwrap();
-    }
-}

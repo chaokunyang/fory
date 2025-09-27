@@ -31,7 +31,9 @@ impl<T: Serializer + 'static> Serializer for Rc<T> {
             RefFlag::Null => Err(anyhow!("Rc cannot be null").into()),
             RefFlag::Ref => {
                 let ref_id = context.ref_resolver.read_ref_id(&mut context.reader);
-                context.ref_resolver.get_rc_ref::<T>(ref_id)
+                context
+                    .ref_resolver
+                    .get_rc_ref::<T>(ref_id)
                     .ok_or_else(|| anyhow!("Rc reference {} not found", ref_id).into())
             }
             RefFlag::NotNullValue => {
@@ -79,33 +81,3 @@ impl<T: Serializer + 'static> Serializer for Rc<T> {
 }
 
 impl<T: Serializer> ForyGeneralList for Rc<T> {}
-
-#[cfg(test)]
-mod tests {
-    use crate::fory::Fory;
-    use std::rc::Rc;
-
-    #[test]
-    fn test_rc_serialization_basic() {
-        let fury = Fory::default();
-        let rc = Rc::new(42i32);
-
-        let serialized = fury.serialize(&rc);
-        let deserialized: Rc<i32> = fury.deserialize(&serialized).unwrap();
-
-        assert_eq!(*deserialized, 42);
-    }
-
-    #[test]
-    fn test_rc_shared_reference() {
-        let fury = Fory::default();
-        let rc1 = Rc::new(String::from("shared"));
-
-        let serialized = fury.serialize(&rc1);
-        let deserialized: Rc<String> = fury.deserialize(&serialized).unwrap();
-
-        assert_eq!(*deserialized, "shared");
-        // In a full implementation with proper reference tracking,
-        // multiple references to the same object would be preserved
-    }
-}

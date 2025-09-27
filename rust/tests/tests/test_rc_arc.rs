@@ -197,3 +197,72 @@ fn test_rc_arc_with_hashmaps() {
     assert_eq!("shared", *deserialized["key1"]);
     assert_eq!("shared", *deserialized["key2"]);
 }
+
+// Additional tests moved from arc.rs and rc.rs serializer modules
+
+#[test]
+fn test_arc_serialization_basic() {
+    let fury = Fory::default();
+    let arc = Arc::new(42i32);
+
+    let serialized = fury.serialize(&arc);
+    let deserialized: Arc<i32> = fury.deserialize(&serialized).unwrap();
+
+    assert_eq!(*deserialized, 42);
+}
+
+#[test]
+fn test_arc_shared_reference() {
+    let fury = Fory::default();
+    let arc1 = Arc::new(String::from("shared"));
+
+    let serialized = fury.serialize(&arc1);
+    let deserialized: Arc<String> = fury.deserialize(&serialized).unwrap();
+
+    assert_eq!(*deserialized, "shared");
+    // In a full implementation with proper reference tracking,
+    // multiple references to the same object would be preserved
+}
+
+#[test]
+fn test_arc_thread_safety() {
+    use std::thread;
+
+    let fury = Fory::default();
+    let arc = Arc::new(vec![1, 2, 3, 4, 5]);
+
+    let serialized = fury.serialize(&arc);
+
+    // Test that Arc can be sent across threads
+    let handle = thread::spawn(move || {
+        let fury = Fory::default();
+        let deserialized: Arc<Vec<i32>> = fury.deserialize(&serialized).unwrap();
+        assert_eq!(*deserialized, vec![1, 2, 3, 4, 5]);
+    });
+
+    handle.join().unwrap();
+}
+
+#[test]
+fn test_rc_serialization_basic() {
+    let fury = Fory::default();
+    let rc = Rc::new(42i32);
+
+    let serialized = fury.serialize(&rc);
+    let deserialized: Rc<i32> = fury.deserialize(&serialized).unwrap();
+
+    assert_eq!(*deserialized, 42);
+}
+
+#[test]
+fn test_rc_shared_reference() {
+    let fury = Fory::default();
+    let rc1 = Rc::new(String::from("shared"));
+
+    let serialized = fury.serialize(&rc1);
+    let deserialized: Rc<String> = fury.deserialize(&serialized).unwrap();
+
+    assert_eq!(*deserialized, "shared");
+    // In a full implementation with proper reference tracking,
+    // multiple references to the same object would be preserved
+}

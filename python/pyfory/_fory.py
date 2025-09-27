@@ -113,20 +113,21 @@ class Fory:
 
     def __init__(
         self,
-        language=Language.PYTHON,
+        xlang: bool = False,
         ref: bool = False,
         strict: bool = True,
         compatible: bool = False,
         max_depth: int = 50,
+        **kwargs,
     ):
         """
-        :param language:
-         The serialization format mode. When set to Language.PYTHON, enables Python-native
+        :param xlang:
+         Whether to enable cross-language serialization. When set to False, enables Python-native
          serialization supporting all serializable Python objects including dataclasses,
          structs, classes with __getstate__/__setstate__/__reduce__/__reduce_ex__, local
          functions/classes, and classes defined in IPython. With ref=True and strict=False,
          Fury can serve as a drop-in replacement for pickle and cloudpickle.
-         When set to Language.XLANG, serializes objects in cross-language format that can
+         When set to True, serializes objects in cross-language format that can
          be deserialized by other Fury-supported languages, but Python-specific features
          like functions/classes/methods and custom __reduce__ methods are not supported.
         :param ref:
@@ -150,15 +151,21 @@ class Fory:
          If the depth exceeds the maximum depth, an exception will be raised.
          The default value is 50.
         """
-        self.language = language
-        self.is_py = language == Language.PYTHON
-        self.strict = _ENABLE_TYPE_REGISTRATION_FORCIBLY or strict
-        self.compatible = compatible
+        self.language = Language.XLANG if xlang else Language.PYTHON
+        if kwargs.get("language") is not None:
+            self.language = kwargs.get("language")
+        self.is_py = self.language == Language.PYTHON
+        if kwargs.get("ref_tracking") is not None:
+            ref = kwargs.get("ref_tracking")
         self.ref_tracking = ref
         if self.ref_tracking:
             self.ref_resolver = MapRefResolver()
         else:
             self.ref_resolver = NoRefResolver()
+        if kwargs.get("require_type_registration") is not None:
+            strict = kwargs.get("require_type_registration")
+        self.strict = _ENABLE_TYPE_REGISTRATION_FORCIBLY or strict
+        self.compatible = compatible
         from pyfory._serialization import MetaStringResolver, SerializationContext
         from pyfory._registry import TypeResolver
 
@@ -213,6 +220,29 @@ class Fory:
 
     def register_serializer(self, cls: type, serializer):
         self.type_resolver.register_serializer(cls, serializer)
+
+    def dumps(
+        self,
+        obj,
+        buffer: Buffer = None,
+        buffer_callback=None,
+        unsupported_callback=None,
+    ) -> Union[Buffer, bytes]:
+        """
+        Serialize an object to bytes, alias for `serialize` method.
+        """
+        return self.serialize(obj, buffer, buffer_callback, unsupported_callback)
+
+    def loads(
+        self,
+        buffer: Union[Buffer, bytes],
+        buffers: Iterable = None,
+        unsupported_objects: Iterable = None,
+    ):
+        """
+        Deserialize bytes to an object, alias for `deserialize` method.
+        """
+        return self.deserialize(buffer, buffers, unsupported_objects)
 
     def serialize(
         self,

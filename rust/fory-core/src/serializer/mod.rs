@@ -22,6 +22,7 @@ use crate::types::{Mode, RefFlag, PRIMITIVE_TYPES};
 
 mod any;
 mod bool;
+mod box_;
 pub mod collection;
 mod datetime;
 pub mod enum_;

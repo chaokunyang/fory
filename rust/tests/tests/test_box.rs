@@ -32,11 +32,13 @@ fn test_box_primitive() {
     // Test Box<String>
     let value = Box::new("Hello, Box!".to_string());
     let bin = fory.serialize(&value);
-    let deserialized: Box<String> = fory.deserialize(&bin).expect("Should deserialize Box<String>");
+    let deserialized: Box<String> = fory
+        .deserialize(&bin)
+        .expect("Should deserialize Box<String>");
     assert_eq!(*value, *deserialized);
 
     // Test Box<f64>
-    let value = Box::new(3.14159f64);
+    let value = Box::new(std::f64::consts::PI);
     let bin = fory.serialize(&value);
     let deserialized: Box<f64> = fory.deserialize(&bin).expect("Should deserialize Box<f64>");
     assert_eq!(*value, *deserialized);
@@ -59,7 +61,9 @@ fn test_box_struct() {
     };
     let value = Box::new(person);
     let bin = fory.serialize(&value);
-    let deserialized: Box<Person> = fory.deserialize(&bin).expect("Should deserialize Box<Person>");
+    let deserialized: Box<Person> = fory
+        .deserialize(&bin)
+        .expect("Should deserialize Box<Person>");
     assert_eq!(*value, *deserialized);
 }
 
@@ -81,7 +85,9 @@ fn test_box_struct_separate() {
     };
     let boxed_person = Box::new(person);
     let bin = fory.serialize(&boxed_person);
-    let deserialized: Box<Person> = fory.deserialize(&bin).expect("Should deserialize Box<Person>");
+    let deserialized: Box<Person> = fory
+        .deserialize(&bin)
+        .expect("Should deserialize Box<Person>");
     assert_eq!(*boxed_person, *deserialized);
 }
 
@@ -92,7 +98,9 @@ fn test_box_collection() {
     // Test Box<Vec<i32>>
     let value = Box::new(vec![1, 2, 3, 4, 5]);
     let bin = fory.serialize(&value);
-    let deserialized: Box<Vec<i32>> = fory.deserialize(&bin).expect("Should deserialize Box<Vec<i32>>");
+    let deserialized: Box<Vec<i32>> = fory
+        .deserialize(&bin)
+        .expect("Should deserialize Box<Vec<i32>>");
     assert_eq!(*value, *deserialized);
 
     // Test Box<HashMap<String, i32>>
@@ -101,7 +109,9 @@ fn test_box_collection() {
     map.insert("key2".to_string(), 20);
     let value = Box::new(map);
     let bin = fory.serialize(&value);
-    let deserialized: Box<HashMap<String, i32>> = fory.deserialize(&bin).expect("Should deserialize Box<HashMap<String, i32>>");
+    let deserialized: Box<HashMap<String, i32>> = fory
+        .deserialize(&bin)
+        .expect("Should deserialize Box<HashMap<String, i32>>");
     assert_eq!(*value, *deserialized);
 }
 
@@ -112,7 +122,9 @@ fn test_box_option() {
     // Test Box<Option<String>> with Some value
     let value = Box::new(Some("Hello".to_string()));
     let bin = fory.serialize(&value);
-    let deserialized: Box<Option<String>> = fory.deserialize(&bin).expect("Should deserialize Box<Option<String>>");
+    let deserialized: Box<Option<String>> = fory
+        .deserialize(&bin)
+        .expect("Should deserialize Box<Option<String>>");
     assert_eq!(*value, *deserialized);
 
     // Note: Box<Option<None>> is not supported due to the way Option's serializer works
@@ -127,6 +139,8 @@ fn test_nested_box() {
 
     let value = Box::new(Box::new(42i32));
     let bin = fory.serialize(&value);
-    let deserialized: Box<Box<i32>> = fory.deserialize(&bin).expect("Should deserialize Box<Box<i32>>");
+    let deserialized: Box<Box<i32>> = fory
+        .deserialize(&bin)
+        .expect("Should deserialize Box<Box<i32>>");
     assert_eq!(**value, **deserialized);
 }

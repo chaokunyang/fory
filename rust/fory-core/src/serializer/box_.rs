@@ -56,5 +56,4 @@ impl<T: Serializer> Serializer for Box<T> {
     }
 }
 
-
 impl<T: Serializer> ForyGeneralList for Box<T> {}

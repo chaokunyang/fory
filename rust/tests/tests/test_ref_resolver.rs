@@ -15,63 +15,115 @@
 // specific language governing permissions and limitations
 // under the License.
 
-//! Tests for RefResolver functionality
+//! Tests for RefWriter and RefReader functionality
 
 use fory_core::buffer::Writer;
-use fory_core::resolver::ref_resolver::RefResolver;
+use fory_core::resolver::ref_resolver::{RefReader, RefWriter};
 use std::rc::Rc;
 use std::sync::Arc;
 
 #[test]
 fn test_rc_ref_tracking() {
-    let mut resolver = RefResolver::new();
+    let mut ref_writer = RefWriter::new();
     let mut writer = Writer::default();
 
     let rc1 = Rc::new(42i32);
     let rc2 = rc1.clone();
 
     // First write should register the reference
-    assert!(!resolver.try_write_rc_ref(&mut writer, &rc1));
+    assert!(!ref_writer.try_write_rc_ref(&mut writer, &rc1));
 
     // Second write should find existing reference
-    assert!(resolver.try_write_rc_ref(&mut writer, &rc2));
+    assert!(ref_writer.try_write_rc_ref(&mut writer, &rc2));
 }
 
 #[test]
 fn test_arc_ref_tracking() {
-    let mut resolver = RefResolver::new();
+    let mut ref_writer = RefWriter::new();
     let mut writer = Writer::default();
 
     let arc1 = Arc::new(42i32);
     let arc2 = arc1.clone();
 
     // First write should register the reference
-    assert!(!resolver.try_write_arc_ref(&mut writer, &arc1));
+    assert!(!ref_writer.try_write_arc_ref(&mut writer, &arc1));
 
     // Second write should find existing reference
-    assert!(resolver.try_write_arc_ref(&mut writer, &arc2));
+    assert!(ref_writer.try_write_arc_ref(&mut writer, &arc2));
 }
 
 #[test]
 fn test_rc_storage_and_retrieval() {
-    let mut resolver = RefResolver::new();
+    let mut ref_reader = RefReader::new();
     let rc = Rc::new(String::from("test"));
 
-    let ref_id = resolver.store_rc_ref(rc.clone());
+    let ref_id = ref_reader.store_rc_ref(rc.clone());
 
-    let retrieved = resolver.get_rc_ref::<String>(ref_id).unwrap();
+    let retrieved = ref_reader.get_rc_ref::<String>(ref_id).unwrap();
     assert_eq!(*retrieved, "test");
     assert!(Rc::ptr_eq(&rc, &retrieved));
 }
 
 #[test]
 fn test_arc_storage_and_retrieval() {
-    let mut resolver = RefResolver::new();
+    let mut ref_reader = RefReader::new();
     let arc = Arc::new(String::from("test"));
 
-    let ref_id = resolver.store_arc_ref(arc.clone());
+    let ref_id = ref_reader.store_arc_ref(arc.clone());
 
-    let retrieved = resolver.get_arc_ref::<String>(ref_id).unwrap();
+    let retrieved = ref_reader.get_arc_ref::<String>(ref_id).unwrap();
     assert_eq!(*retrieved, "test");
     assert!(Arc::ptr_eq(&arc, &retrieved));
+}
+
+#[test]
+fn test_ref_writer_clear() {
+    let mut ref_writer = RefWriter::new();
+    let mut writer = Writer::default();
+
+    let rc = Rc::new(42i32);
+
+    // Register a reference
+    assert!(!ref_writer.try_write_rc_ref(&mut writer, &rc));
+
+    // Clear the writer
+    ref_writer.clear();
+
+    // After clearing, should register as new reference again
+    assert!(!ref_writer.try_write_rc_ref(&mut writer, &rc));
+}
+
+#[test]
+fn test_ref_reader_clear() {
+    let mut ref_reader = RefReader::new();
+    let rc = Rc::new(String::from("test"));
+
+    // Store a reference
+    let ref_id = ref_reader.store_rc_ref(rc.clone());
+    assert!(ref_reader.get_rc_ref::<String>(ref_id).is_some());
+
+    // Clear the reader
+    ref_reader.clear();
+
+    // After clearing, reference should no longer be found
+    assert!(ref_reader.get_rc_ref::<String>(ref_id).is_none());
+}
+
+#[test]
+fn test_ref_writer_ref_reader_separation() {
+    let mut ref_writer = RefWriter::new();
+    let mut ref_reader = RefReader::new();
+    let mut writer = Writer::default();
+
+    let rc1 = Rc::new(42i32);
+    let rc2 = rc1.clone();
+
+    // Test writing with RefWriter
+    assert!(!ref_writer.try_write_rc_ref(&mut writer, &rc1));
+    assert!(ref_writer.try_write_rc_ref(&mut writer, &rc2));
+
+    // Test storing and retrieving with RefReader
+    let ref_id = ref_reader.store_rc_ref(rc1.clone());
+    let retrieved = ref_reader.get_rc_ref::<i32>(ref_id).unwrap();
+    assert!(Rc::ptr_eq(&rc1, &retrieved));
 }

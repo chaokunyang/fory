@@ -25,14 +25,14 @@ use std::rc::Rc;
 
 impl<T: Serializer + 'static> Serializer for Rc<T> {
     fn read(context: &mut ReadContext) -> Result<Self, Error> {
-        let ref_flag = context.ref_resolver.read_ref_flag(&mut context.reader);
+        let ref_flag = context.ref_reader.read_ref_flag(&mut context.reader);
 
         match ref_flag {
             RefFlag::Null => Err(anyhow!("Rc cannot be null").into()),
             RefFlag::Ref => {
-                let ref_id = context.ref_resolver.read_ref_id(&mut context.reader);
+                let ref_id = context.ref_reader.read_ref_id(&mut context.reader);
                 context
-                    .ref_resolver
+                    .ref_reader
                     .get_rc_ref::<T>(ref_id)
                     .ok_or_else(|| anyhow!("Rc reference {} not found", ref_id).into())
             }
@@ -43,7 +43,7 @@ impl<T: Serializer + 'static> Serializer for Rc<T> {
             RefFlag::RefValue => {
                 let inner = T::read(context)?;
                 let rc = Rc::new(inner);
-                context.ref_resolver.store_rc_ref(rc.clone());
+                context.ref_reader.store_rc_ref(rc.clone());
                 Ok(rc)
             }
         }
@@ -54,7 +54,7 @@ impl<T: Serializer + 'static> Serializer for Rc<T> {
     }
 
     fn write(&self, context: &mut WriteContext, is_field: bool) {
-        if !context.ref_resolver.try_write_rc_ref(context.writer, self) {
+        if !context.ref_writer.try_write_rc_ref(context.writer, self) {
             T::write(self.as_ref(), context, is_field);
         }
     }

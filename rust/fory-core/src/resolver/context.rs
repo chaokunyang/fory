@@ -22,7 +22,7 @@ use anyhow::anyhow;
 
 use crate::meta::TypeMeta;
 use crate::resolver::meta_resolver::{MetaReaderResolver, MetaWriterResolver};
-use crate::resolver::ref_resolver::RefResolver;
+use crate::resolver::ref_resolver::{RefReader, RefWriter};
 use std::rc::Rc;
 
 pub struct WriteContext<'se> {
@@ -30,7 +30,7 @@ pub struct WriteContext<'se> {
     pub tags: Vec<&'static str>,
     fory: &'se Fory,
     meta_resolver: MetaWriterResolver<'se>,
-    pub ref_resolver: RefResolver,
+    pub ref_writer: RefWriter,
 }
 
 impl<'se> WriteContext<'se> {
@@ -40,7 +40,7 @@ impl<'se> WriteContext<'se> {
             tags: Vec::new(),
             fory,
             meta_resolver: MetaWriterResolver::default(),
-            ref_resolver: RefResolver::new(),
+            ref_writer: RefWriter::new(),
         }
     }
 
@@ -89,7 +89,7 @@ pub struct ReadContext<'de, 'bf: 'de> {
     pub tags: Vec<&'de str>,
     fory: &'de Fory,
     pub meta_resolver: MetaReaderResolver,
-    pub ref_resolver: RefResolver,
+    pub ref_reader: RefReader,
 }
 
 impl<'de, 'bf: 'de> ReadContext<'de, 'bf> {
@@ -99,7 +99,7 @@ impl<'de, 'bf: 'de> ReadContext<'de, 'bf> {
             tags: Vec::new(),
             fory,
             meta_resolver: MetaReaderResolver::default(),
-            ref_resolver: RefResolver::new(),
+            ref_reader: RefReader::new(),
         }
     }
 

@@ -25,14 +25,14 @@ use std::sync::Arc;
 
 impl<T: Serializer + Send + Sync + 'static> Serializer for Arc<T> {
     fn read(context: &mut ReadContext) -> Result<Self, Error> {
-        let ref_flag = context.ref_resolver.read_ref_flag(&mut context.reader);
+        let ref_flag = context.ref_reader.read_ref_flag(&mut context.reader);
 
         match ref_flag {
             RefFlag::Null => Err(anyhow!("Arc cannot be null").into()),
             RefFlag::Ref => {
-                let ref_id = context.ref_resolver.read_ref_id(&mut context.reader);
+                let ref_id = context.ref_reader.read_ref_id(&mut context.reader);
                 context
-                    .ref_resolver
+                    .ref_reader
                     .get_arc_ref::<T>(ref_id)
                     .ok_or_else(|| anyhow!("Arc reference {} not found", ref_id).into())
             }
@@ -43,7 +43,7 @@ impl<T: Serializer + Send + Sync + 'static> Serializer for Arc<T> {
             RefFlag::RefValue => {
                 let inner = T::read(context)?;
                 let arc = Arc::new(inner);
-                context.ref_resolver.store_arc_ref(arc.clone());
+                context.ref_reader.store_arc_ref(arc.clone());
                 Ok(arc)
             }
         }
@@ -54,7 +54,7 @@ impl<T: Serializer + Send + Sync + 'static> Serializer for Arc<T> {
     }
 
     fn write(&self, context: &mut WriteContext, is_field: bool) {
-        if !context.ref_resolver.try_write_arc_ref(context.writer, self) {
+        if !context.ref_writer.try_write_arc_ref(context.writer, self) {
             T::write(self.as_ref(), context, is_field);
         }
     }

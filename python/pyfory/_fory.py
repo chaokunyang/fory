@@ -99,7 +99,7 @@ class Fory:
         "ref_resolver",
         "type_resolver",
         "serialization_context",
-        "require_type_registration",
+        "strict",
         "buffer",
         "_buffer_callback",
         "_buffers",
@@ -114,18 +114,32 @@ class Fory:
     def __init__(
         self,
         language=Language.PYTHON,
-        ref_tracking: bool = False,
-        require_type_registration: bool = True,
+        ref: bool = False,
+        strict: bool = True,
         compatible: bool = False,
         max_depth: int = 50,
     ):
         """
-        :param require_type_registration:
+        :param language:
+         The serialization format mode. When set to Language.PYTHON, enables Python-native
+         serialization supporting all serializable Python objects including dataclasses,
+         structs, classes with __getstate__/__setstate__/__reduce__/__reduce_ex__, local
+         functions/classes, and classes defined in IPython. With ref=True and strict=False,
+         Fury can serve as a drop-in replacement for pickle and cloudpickle.
+         When set to Language.XLANG, serializes objects in cross-language format that can
+         be deserialized by other Fury-supported languages, but Python-specific features
+         like functions/classes/methods and custom __reduce__ methods are not supported.
+        :param ref:
+         Whether to enable reference tracking for shared and circular references.
+         When enabled, duplicate objects will be stored only once and circular references
+         are supported. Disabled by default for better performance.
+        :param strict:
          Whether to require registering types for serialization, enabled by default.
-          If disabled, unknown insecure types can be deserialized, which can be
-          insecure and cause remote code execution attack if the types
-          `__new__`/`__init__`/`__eq__`/`__hash__` method contain malicious code.
-          Do not disable type registration if you can't ensure your environment are
+         If disabled, unknown insecure types can be deserialized, which can be
+         insecure and cause remote code execution attack if the types
+         `__new__`/`__init__`/`__eq__`/`__hash__` method contain malicious code, or you
+         are deserializing local functions/methods/classes.
+          Do not disable strict mode if you can't ensure your environment are
           *indeed secure*. We are not responsible for security risks if
           you disable this option.
         :param compatible:
@@ -138,9 +152,9 @@ class Fory:
         """
         self.language = language
         self.is_py = language == Language.PYTHON
-        self.require_type_registration = _ENABLE_TYPE_REGISTRATION_FORCIBLY or require_type_registration
+        self.strict = _ENABLE_TYPE_REGISTRATION_FORCIBLY or strict
         self.compatible = compatible
-        self.ref_tracking = ref_tracking
+        self.ref_tracking = ref
         if self.ref_tracking:
             self.ref_resolver = MapRefResolver()
         else:
@@ -171,7 +185,13 @@ class Fory:
         typename: str = None,
         serializer=None,
     ):
-        self.register_type(cls, type_id=type_id, namespace=namespace, typename=typename, serializer=serializer)
+        self.register_type(
+            cls,
+            type_id=type_id,
+            namespace=namespace,
+            typename=typename,
+            serializer=serializer,
+        )
 
     # `Union[type, TypeVar]` is not supported in py3.6
     def register_type(

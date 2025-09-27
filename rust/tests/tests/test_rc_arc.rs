@@ -220,8 +220,57 @@ fn test_arc_shared_reference() {
     let deserialized: Arc<String> = fury.deserialize(&serialized).unwrap();
 
     assert_eq!(*deserialized, "shared");
-    // In a full implementation with proper reference tracking,
-    // multiple references to the same object would be preserved
+}
+
+#[test]
+fn test_arc_shared_reference_in_vec() {
+    let fury = Fory::default();
+
+    let shared = Arc::new(String::from("shared_value"));
+    let vec = vec![shared.clone(), shared.clone(), shared.clone()];
+
+    let serialized = fury.serialize(&vec);
+    let deserialized: Vec<Arc<String>> = fury.deserialize(&serialized).unwrap();
+
+    assert_eq!(deserialized.len(), 3);
+    assert_eq!(*deserialized[0], "shared_value");
+    assert_eq!(*deserialized[1], "shared_value");
+    assert_eq!(*deserialized[2], "shared_value");
+
+    assert!(Arc::ptr_eq(&deserialized[0], &deserialized[1]));
+    assert!(Arc::ptr_eq(&deserialized[1], &deserialized[2]));
+    assert!(Arc::ptr_eq(&deserialized[0], &deserialized[2]));
+}
+
+#[test]
+fn test_arc_multiple_shared_references() {
+    let fury = Fory::default();
+
+    let shared1 = Arc::new(42i32);
+    let shared2 = Arc::new(100i32);
+
+    let vec = vec![
+        shared1.clone(),
+        shared2.clone(),
+        shared1.clone(),
+        shared2.clone(),
+        shared1.clone(),
+    ];
+
+    let serialized = fury.serialize(&vec);
+    let deserialized: Vec<Arc<i32>> = fury.deserialize(&serialized).unwrap();
+
+    assert_eq!(deserialized.len(), 5);
+    assert_eq!(*deserialized[0], 42);
+    assert_eq!(*deserialized[1], 100);
+    assert_eq!(*deserialized[2], 42);
+    assert_eq!(*deserialized[3], 100);
+    assert_eq!(*deserialized[4], 42);
+
+    assert!(Arc::ptr_eq(&deserialized[0], &deserialized[2]));
+    assert!(Arc::ptr_eq(&deserialized[0], &deserialized[4]));
+    assert!(Arc::ptr_eq(&deserialized[1], &deserialized[3]));
+    assert!(!Arc::ptr_eq(&deserialized[0], &deserialized[1]));
 }
 
 #[test]
@@ -263,6 +312,55 @@ fn test_rc_shared_reference() {
     let deserialized: Rc<String> = fury.deserialize(&serialized).unwrap();
 
     assert_eq!(*deserialized, "shared");
-    // In a full implementation with proper reference tracking,
-    // multiple references to the same object would be preserved
+}
+
+#[test]
+fn test_rc_shared_reference_in_vec() {
+    let fury = Fory::default();
+
+    let shared = Rc::new(String::from("shared_value"));
+    let vec = vec![shared.clone(), shared.clone(), shared.clone()];
+
+    let serialized = fury.serialize(&vec);
+    let deserialized: Vec<Rc<String>> = fury.deserialize(&serialized).unwrap();
+
+    assert_eq!(deserialized.len(), 3);
+    assert_eq!(*deserialized[0], "shared_value");
+    assert_eq!(*deserialized[1], "shared_value");
+    assert_eq!(*deserialized[2], "shared_value");
+
+    assert!(Rc::ptr_eq(&deserialized[0], &deserialized[1]));
+    assert!(Rc::ptr_eq(&deserialized[1], &deserialized[2]));
+    assert!(Rc::ptr_eq(&deserialized[0], &deserialized[2]));
+}
+
+#[test]
+fn test_rc_multiple_shared_references() {
+    let fury = Fory::default();
+
+    let shared1 = Rc::new(42i32);
+    let shared2 = Rc::new(100i32);
+
+    let vec = vec![
+        shared1.clone(),
+        shared2.clone(),
+        shared1.clone(),
+        shared2.clone(),
+        shared1.clone(),
+    ];
+
+    let serialized = fury.serialize(&vec);
+    let deserialized: Vec<Rc<i32>> = fury.deserialize(&serialized).unwrap();
+
+    assert_eq!(deserialized.len(), 5);
+    assert_eq!(*deserialized[0], 42);
+    assert_eq!(*deserialized[1], 100);
+    assert_eq!(*deserialized[2], 42);
+    assert_eq!(*deserialized[3], 100);
+    assert_eq!(*deserialized[4], 42);
+
+    assert!(Rc::ptr_eq(&deserialized[0], &deserialized[2]));
+    assert!(Rc::ptr_eq(&deserialized[0], &deserialized[4]));
+    assert!(Rc::ptr_eq(&deserialized[1], &deserialized[3]));
+    assert!(!Rc::ptr_eq(&deserialized[0], &deserialized[1]));
 }

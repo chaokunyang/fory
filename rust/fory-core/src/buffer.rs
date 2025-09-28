@@ -291,6 +291,11 @@ impl Writer {
             .expect("//todo")
             .copy_from_slice(data);
     }
+
+    pub fn reset(&mut self) {
+        self.bf.clear();
+        self.reserved = 0;
+    }
 }
 
 pub struct Reader<'de> {

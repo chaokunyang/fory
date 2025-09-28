@@ -16,10 +16,13 @@
 // under the License.
 
 use super::context::{ReadContext, WriteContext};
+use crate::buffer::{Reader, Writer};
 use crate::error::Error;
 use crate::fory::Fory;
+use crate::meta::TypeMeta;
 use crate::serializer::StructSerializer;
 use std::cell::RefCell;
+use std::rc::Rc;
 use std::{any::Any, collections::HashMap};
 
 type SerializerFn = fn(&dyn Any, &mut WriteContext, is_field: bool);
@@ -93,6 +96,11 @@ pub struct TypeResolver {
     // Fast lookup by numeric ID for common types
     type_id_index: Vec<u32>,
     sorted_field_names_map: RefCell<HashMap<std::any::TypeId, Vec<String>>>,
+
+    // New fields (merged from MetaReaderResolver/MetaWriterResolver)
+    reading_type_defs: Vec<Rc<TypeMeta>>,
+    writing_type_defs: Vec<Vec<u8>>,
+    type_id_index_map: HashMap<std::any::TypeId, usize>,
 }
 
 const NO_TYPE_ID: u32 = 1000000000;
@@ -212,5 +220,54 @@ impl TypeResolver {
     pub fn set_sorted_field_names<T: StructSerializer>(&self, field_names: &[String]) {
         let mut map = self.sorted_field_names_map.borrow_mut();
         map.insert(std::any::TypeId::of::<T>(), field_names.to_owned());
+    }
+
+    // New meta reading methods (from MetaReaderResolver)
+    pub fn get_meta(&self, index: usize) -> &Rc<TypeMeta> {
+        unsafe { self.reading_type_defs.get_unchecked(index) }
+    }
+
+    pub fn load_meta(&mut self, reader: &mut Reader) -> usize {
+        let meta_size = reader.var_uint32();
+        for _ in 0..meta_size {
+            self.reading_type_defs
+                .push(Rc::new(TypeMeta::from_bytes(reader)));
+        }
+        reader.get_cursor()
+    }
+
+    pub fn clear_reading_meta(&mut self) {
+        self.reading_type_defs.clear();
+    }
+
+    // New meta writing methods (from MetaWriterResolver)
+    pub fn push_meta(&mut self, type_id: std::any::TypeId) -> usize {
+        match self.type_id_index_map.get(&type_id) {
+            None => {
+                let index = self.writing_type_defs.len();
+                let type_def = self.get_type_info(type_id).get_type_def().clone();
+                self.writing_type_defs.push(type_def);
+                self.type_id_index_map.insert(type_id, index);
+                index
+            }
+            Some(index) => *index,
+        }
+    }
+
+    pub fn meta_to_bytes(&self, writer: &mut Writer) -> Result<(), Error> {
+        writer.var_uint32(self.writing_type_defs.len() as u32);
+        for item in &self.writing_type_defs {
+            writer.bytes(item);
+        }
+        Ok(())
+    }
+
+    pub fn is_meta_empty(&self) -> bool {
+        self.writing_type_defs.is_empty()
+    }
+
+    pub fn clear_writing_meta(&mut self) {
+        self.writing_type_defs.clear();
+        self.type_id_index_map.clear();
     }
 }

@@ -20,6 +20,7 @@ use fory_core::buffer::{Reader, Writer};
 use fory_core::fory::Fory;
 use fory_core::meta::murmurhash3_x64_128;
 use fory_core::resolver::context::{ReadContext, WriteContext};
+use fory_core::resolver::ref_resolver::{RefReader, RefWriter};
 use fory_core::serializer::Serializer;
 use fory_core::types::Mode::Compatible;
 use fory_derive::Fory;
@@ -225,13 +226,16 @@ fn test_string_serializer() {
         .mode(Compatible)
         .xlang(true)
         .compress_string(false);
-    let mut context = ReadContext::new(&fory, reader);
+    let mut ref_reader = RefReader::new();
+    let mut context = ReadContext::new(&fory, reader, &mut ref_reader);
     let reader_compress = Reader::new(bytes.as_slice());
     let fory_compress = Fory::default()
         .mode(Compatible)
         .xlang(true)
         .compress_string(true);
-    let mut context_compress = ReadContext::new(&fory_compress, reader_compress);
+    let mut ref_reader_compress = RefReader::new();
+    let mut context_compress =
+        ReadContext::new(&fory_compress, reader_compress, &mut ref_reader_compress);
     let test_strings: Vec<String> = vec![
         // Latin1
         "ab".to_string(),
@@ -251,7 +255,8 @@ fn test_string_serializer() {
     }
     let mut writer = Writer::default();
     let fory = Fory::default().mode(Compatible).xlang(true);
-    let mut context = WriteContext::new(&fory, &mut writer);
+    let mut ref_writer = RefWriter::new();
+    let mut context = WriteContext::new(&fory, &mut writer, &mut ref_writer);
     for s in &test_strings {
         s.write(&mut context, true);
     }
@@ -284,7 +289,8 @@ fn test_cross_language_serializer() {
     let reader = Reader::new(bytes.as_slice());
     let mut fory = Fory::default().mode(Compatible).xlang(true);
     fory.register::<Color>(101);
-    let mut context = ReadContext::new(&fory, reader);
+    let mut ref_reader = RefReader::new();
+    let mut context = ReadContext::new(&fory, reader, &mut ref_reader);
     assert_de!(fory, context, bool, true);
     assert_de!(fory, context, bool, false);
     assert_de!(fory, context, i32, -1);
@@ -313,7 +319,8 @@ fn test_cross_language_serializer() {
     assert_de!(fory, context, Color, color);
 
     let mut writer = Writer::default();
-    let mut context = WriteContext::new(&fory, &mut writer);
+    let mut ref_writer = RefWriter::new();
+    let mut context = WriteContext::new(&fory, &mut writer, &mut ref_writer);
     fory.serialize_with_context(&true, &mut context);
     fory.serialize_with_context(&false, &mut context);
     fory.serialize_with_context(&-1, &mut context);
@@ -476,7 +483,8 @@ fn test_map() {
     let mut fory = Fory::default().mode(Compatible);
     fory.register::<Item>(102);
     let reader = Reader::new(bytes.as_slice());
-    let mut context = ReadContext::new(&fory, reader);
+    let mut ref_reader = RefReader::new();
+    let mut context = ReadContext::new(&fory, reader, &mut ref_reader);
 
     let str_map = HashMap::from([
         (Some("k1".to_string()), Some("v1".to_string())),
@@ -546,7 +554,8 @@ fn test_integer() {
     fory.register::<Item2>(101);
     let reader = Reader::new(bytes.as_slice());
 
-    let mut context = ReadContext::new(&fory, reader);
+    let mut ref_reader = RefReader::new();
+    let mut context = ReadContext::new(&fory, reader, &mut ref_reader);
     let f1 = 1;
     let f2 = Some(2);
     let f3 = Some(3);
@@ -578,7 +587,8 @@ fn test_integer() {
     assert_eq!(remote_f6, f6);
 
     let mut writer = Writer::default();
-    let mut context = WriteContext::new(&fory, &mut writer);
+    let mut ref_writer = RefWriter::new();
+    let mut context = WriteContext::new(&fory, &mut writer, &mut ref_writer);
     fory.serialize_with_context(&remote_item2, &mut context);
     fory.serialize_with_context(&remote_f1, &mut context);
     fory.serialize_with_context(&remote_f2, &mut context);

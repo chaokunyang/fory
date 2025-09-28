@@ -20,6 +20,7 @@ use crate::ensure;
 use crate::error::Error;
 use crate::resolver::context::ReadContext;
 use crate::resolver::context::WriteContext;
+use crate::resolver::ref_resolver::{RefReader, RefWriter};
 use crate::resolver::type_resolver::{TypeInfo, TypeResolver};
 use crate::serializer::{Serializer, StructSerializer};
 use crate::types::config_flags::IS_NULL_FLAG;
@@ -28,12 +29,16 @@ use crate::types::{
     Language, Mode, MAGIC_NUMBER, SIZE_OF_REF_AND_TYPE,
 };
 use anyhow::anyhow;
+use std::cell::UnsafeCell;
 
 pub struct Fory {
     mode: Mode,
     xlang: bool,
-    type_resolver: TypeResolver,
+    type_resolver: UnsafeCell<TypeResolver>,
     compress_string: bool,
+    ref_reader: UnsafeCell<RefReader>,
+    ref_writer: UnsafeCell<RefWriter>,
+    writer: UnsafeCell<Writer>,
 }
 
 impl Default for Fory {
@@ -41,8 +46,11 @@ impl Default for Fory {
         Fory {
             mode: Mode::SchemaConsistent,
             xlang: true,
-            type_resolver: TypeResolver::default(),
+            type_resolver: UnsafeCell::new(TypeResolver::default()),
             compress_string: false,
+            ref_reader: UnsafeCell::new(RefReader::new()),
+            ref_writer: UnsafeCell::new(RefWriter::new()),
+            writer: UnsafeCell::new(Writer::default()),
         }
     }
 }
@@ -134,7 +142,11 @@ impl Fory {
 
     pub fn deserialize<T: Serializer>(&self, bf: &[u8]) -> Result<T, Error> {
         let reader = Reader::new(bf);
-        let mut context = ReadContext::new(self, reader);
+        self.prepare_for_deserialization();
+
+        // Use unsafe to get mutable reference
+        let ref_reader = unsafe { self.get_ref_reader_mut() };
+        let mut context = ReadContext::new(self, reader, ref_reader);
         self.deserialize_with_context(&mut context)
     }
 
@@ -161,8 +173,12 @@ impl Fory {
     }
 
     pub fn serialize<T: Serializer>(&self, record: &T) -> Vec<u8> {
-        let mut writer = Writer::default();
-        let mut context: WriteContext<'_> = WriteContext::new(self, &mut writer);
+        self.prepare_for_serialization();
+
+        // Use reused writer and ref_writer from Fory struct
+        let (writer, ref_writer) = unsafe { (self.get_writer_mut(), self.get_ref_writer_mut()) };
+
+        let mut context = WriteContext::new(self, writer, ref_writer);
         self.serialize_with_context(record, &mut context)
     }
 
@@ -187,7 +203,40 @@ impl Fory {
     }
 
     pub fn get_type_resolver(&self) -> &TypeResolver {
-        &self.type_resolver
+        unsafe { &*self.type_resolver.get() }
+    }
+
+    // Unsafe methods for internal mutable access (public for context access)
+    pub unsafe fn get_type_resolver_mut(&self) -> &mut TypeResolver {
+        &mut *self.type_resolver.get()
+    }
+
+    unsafe fn get_ref_reader_mut(&self) -> &mut RefReader {
+        &mut *self.ref_reader.get()
+    }
+
+    unsafe fn get_ref_writer_mut(&self) -> &mut RefWriter {
+        &mut *self.ref_writer.get()
+    }
+
+    unsafe fn get_writer_mut(&self) -> &mut Writer {
+        &mut *self.writer.get()
+    }
+
+    // State preparation methods
+    fn prepare_for_serialization(&self) {
+        unsafe {
+            self.get_ref_writer_mut().clear();
+            self.get_type_resolver_mut().clear_writing_meta();
+            self.get_writer_mut().reset();
+        }
+    }
+
+    fn prepare_for_deserialization(&self) {
+        unsafe {
+            self.get_ref_reader_mut().clear();
+            self.get_type_resolver_mut().clear_reading_meta();
+        }
     }
 
     pub fn register<T: 'static + StructSerializer>(&mut self, id: u32) {
@@ -195,7 +244,9 @@ impl Fory {
         let empty_string = String::new();
         let type_info =
             TypeInfo::new::<T>(self, actual_type_id, &empty_string, &empty_string, false);
-        self.type_resolver.register::<T>(&type_info);
+        unsafe {
+            self.get_type_resolver_mut().register::<T>(&type_info);
+        }
     }
 
     pub fn register_by_namespace<T: 'static + StructSerializer>(
@@ -205,7 +256,9 @@ impl Fory {
     ) {
         let actual_type_id = T::actual_type_id(0, true, &self.mode);
         let type_info = TypeInfo::new::<T>(self, actual_type_id, namespace, type_name, true);
-        self.type_resolver.register::<T>(&type_info);
+        unsafe {
+            self.get_type_resolver_mut().register::<T>(&type_info);
+        }
     }
 
     pub fn register_by_name<T: 'static + StructSerializer>(&mut self, type_name: &str) {

@@ -26,10 +26,12 @@ import (
 )
 
 type structSerializer struct {
-	typeTag    string
-	type_      reflect.Type
-	fieldsInfo structFieldsInfo
-	structHash int32
+	typeTag         string
+	type_           reflect.Type
+	fieldsInfo      structFieldsInfo
+	structHash      int32
+	fieldDefs       []FieldDef // defs obtained during reading
+	codegenDelegate Serializer // Optional codegen serializer for performance (like Python's approach)
 }
 
 var UNKNOWN_TYPE_ID = int16(-1)
@@ -42,14 +44,37 @@ func (s *structSerializer) NeedWriteRef() bool {
 	return true
 }
 
+func (s *structSerializer) ensureFieldsInfo(f *Fory, fallbackType reflect.Type) error {
+	if s.fieldsInfo != nil {
+		return nil
+	}
+
+	var (
+		infos structFieldsInfo
+		err   error
+	)
+	if len(s.fieldDefs) == 0 {
+		infos, err = createStructFieldInfos(f, s.type_)
+	} else {
+		infos, err = createStructFieldInfosFromFieldDefs(f, s.fieldDefs, fallbackType)
+	}
+	if err != nil {
+		return err
+	}
+
+	s.fieldsInfo = infos
+	return nil
+}
+
 func (s *structSerializer) Write(f *Fory, buf *ByteBuffer, value reflect.Value) error {
-	// TODO support fields back and forward compatible. need to serialize fields name too.
-	if s.fieldsInfo == nil {
-		if fieldsInfo, err := createStructFieldInfos(f, s.type_); err != nil {
-			return err
-		} else {
-			s.fieldsInfo = fieldsInfo
-		}
+	// If we have a codegen delegate, use it for optimal performance
+	if s.codegenDelegate != nil {
+		return s.codegenDelegate.Write(f, buf, value)
+	}
+
+	// Fall back to reflection-based serialization
+	if err := s.ensureFieldsInfo(f, value.Type()); err != nil {
+		return err
 	}
 	if s.structHash == 0 {
 		if hash, err := computeStructHash(s.fieldsInfo, f.typeResolver); err != nil {
@@ -77,6 +102,12 @@ func (s *structSerializer) Write(f *Fory, buf *ByteBuffer, value reflect.Value) 
 }
 
 func (s *structSerializer) Read(f *Fory, buf *ByteBuffer, type_ reflect.Type, value reflect.Value) error {
+	// If we have a codegen delegate, use it for optimal performance
+	if s.codegenDelegate != nil {
+		return s.codegenDelegate.Read(f, buf, type_, value)
+	}
+
+	// Fall back to reflection-based deserialization
 	// struct value may be a value type if it's not a pointer, so we don't invoke `refResolver.Reference` here,
 	// but invoke it in `ptrToStructSerializer` instead.
 	if value.Kind() == reflect.Ptr {
@@ -85,12 +116,8 @@ func (s *structSerializer) Read(f *Fory, buf *ByteBuffer, type_ reflect.Type, va
 		}
 		value = value.Elem()
 	}
-	if s.fieldsInfo == nil {
-		if infos, err := createStructFieldInfos(f, s.type_); err != nil {
-			return err
-		} else {
-			s.fieldsInfo = infos
-		}
+	if err := s.ensureFieldsInfo(f, type_); err != nil {
+		return err
 	}
 	if s.structHash == 0 {
 		if hash, err := computeStructHash(s.fieldsInfo, f.typeResolver); err != nil {
@@ -100,12 +127,21 @@ func (s *structSerializer) Read(f *Fory, buf *ByteBuffer, type_ reflect.Type, va
 		}
 	}
 	structHash := buf.ReadInt32()
-	if structHash != s.structHash {
+	if !f.compatible && structHash != s.structHash {
 		return fmt.Errorf("hash %d is not consistent with %d for type %s",
 			structHash, s.structHash, s.type_)
 	}
 	for _, fieldInfo_ := range s.fieldsInfo {
-		fieldValue := value.Field(fieldInfo_.fieldIndex)
+		var fieldValue reflect.Value
+
+		if fieldInfo_.fieldIndex >= 0 {
+			// Field exists in current struct version
+			fieldValue = value.Field(fieldInfo_.fieldIndex)
+		} else {
+			// Field doesn't exist in current struct version, create temporary value to discard
+			fieldValue = reflect.New(fieldInfo_.type_).Elem()
+		}
+
 		fieldSerializer := fieldInfo_.serializer
 		if fieldSerializer != nil {
 			if err := readBySerializer(f, buf, fieldValue, fieldSerializer, fieldInfo_.referencable); err != nil {
@@ -140,19 +176,23 @@ func createStructFieldInfos(f *Fory, type_ reflect.Type) (structFieldsInfo, erro
 		if field.Type.Kind() == reflect.Interface {
 			field.Type = reflect.ValueOf(field.Type).Elem().Type()
 		}
-		fieldSerializer, _ := f.typeResolver.getSerializerByType(field.Type, true)
-		if field.Type.Kind() == reflect.Array {
-			// When a struct field is an array type,
-			// retrieve its corresponding slice serializer and populate it into fieldInfo for reuse.
-			elemType := field.Type.Elem()
-			sliceType := reflect.SliceOf(elemType)
-			fieldSerializer = f.typeResolver.typeToSerializers[sliceType]
-		} else if field.Type.Kind() == reflect.Slice {
-			// If the field is a concrete slice type, dynamically create a valid serializer
-			// so it has the potential and capability to use readSameTypes function.
-			if field.Type.Elem().Kind() != reflect.Interface {
-				fieldSerializer = sliceSerializer{
-					f.typeResolver.typesInfo[field.Type.Elem()],
+		var fieldSerializer Serializer
+		if field.Type.Kind() != reflect.Struct {
+			var _ error
+			fieldSerializer, _ = f.typeResolver.getSerializerByType(field.Type, true)
+			if field.Type.Kind() == reflect.Array {
+				// When a struct field is an array type,
+				// retrieve its corresponding slice serializer and populate it into fieldInfo for reuse.
+				elemType := field.Type.Elem()
+				sliceType := reflect.SliceOf(elemType)
+				fieldSerializer = f.typeResolver.typeToSerializers[sliceType]
+			} else if field.Type.Kind() == reflect.Slice {
+				// If the field is a concrete slice type, dynamically create a valid serializer
+				// so it has the potential and capability to use readSameTypes function.
+				if field.Type.Elem().Kind() != reflect.Interface {
+					fieldSerializer = sliceSerializer{
+						elemInfo: f.typeResolver.typesInfo[field.Type.Elem()],
+					}
 				}
 			}
 		}
@@ -202,6 +242,116 @@ func createStructFieldInfos(f *Fory, type_ reflect.Type) (structFieldsInfo, erro
 		}
 	})
 	return fields, nil
+}
+
+// createStructFieldInfosFromFieldDefs creates structFieldsInfo from fieldDefs and builds field name mapping
+func createStructFieldInfosFromFieldDefs(f *Fory, fieldDefs []FieldDef, type_ reflect.Type) (structFieldsInfo, error) {
+	fieldNameToIndex := make(map[string]int)
+
+	// Build map from field names to struct field indices for quick lookup
+	for i := 0; i < type_.NumField(); i++ {
+		field := type_.Field(i)
+		fieldName := SnakeCase(field.Name)
+		fieldNameToIndex[fieldName] = i
+	}
+
+	var fields structFieldsInfo
+	current_field_names := make(map[string]int)
+
+	for i, def := range fieldDefs {
+		current_field_names[def.name] = i
+
+		fieldTypeFromDef, err := resolveFieldDefType(f, def)
+		if err != nil {
+			return nil, err
+		}
+
+		fieldIndex := -1 // Default to -1 if field doesn't exist in current struct
+		var fieldType reflect.Type
+		var structField reflect.StructField
+
+		if structFieldIndex, exists := fieldNameToIndex[def.name]; exists {
+			structField = type_.Field(structFieldIndex)
+			fieldType = fieldTypeFromDef
+			if typesCompatible(structField.Type, fieldTypeFromDef) {
+				fieldIndex = structFieldIndex
+				fieldType = structField.Type
+			} else {
+				fieldType = fieldTypeFromDef
+			}
+		} else {
+			fieldType = fieldTypeFromDef
+		}
+
+		fieldSerializer, err := getFieldTypeSerializer(f, def.fieldType)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get serializer for field %s: %w", def.name, err)
+		}
+
+		fieldInfo := &fieldInfo{
+			name:         def.name,
+			field:        structField,
+			fieldIndex:   fieldIndex,
+			type_:        fieldType,
+			referencable: def.nullable,
+			serializer:   fieldSerializer,
+		}
+
+		fields = append(fields, fieldInfo)
+	}
+
+	return fields, nil
+}
+
+func resolveFieldDefType(f *Fory, def FieldDef) (reflect.Type, error) {
+	typeInfo, err := def.fieldType.getTypeInfo(f)
+	if err != nil {
+		return nil, fmt.Errorf("unknown type for field %s with typeId %d: %w", def.name, def.fieldType.TypeId(), err)
+	}
+	if typeInfo.Type == nil {
+		return nil, fmt.Errorf("type information missing for field %s with typeId %d", def.name, def.fieldType.TypeId())
+	}
+	return typeInfo.Type, nil
+}
+
+func typesCompatible(actual, expected reflect.Type) bool {
+	if actual == nil || expected == nil {
+		return false
+	}
+	if actual == expected {
+		return true
+	}
+	if actual.AssignableTo(expected) || expected.AssignableTo(actual) {
+		return true
+	}
+	if actual.Kind() == reflect.Ptr && actual.Elem() == expected {
+		return true
+	}
+	if expected.Kind() == reflect.Ptr && expected.Elem() == actual {
+		return true
+	}
+	if actual.Kind() == expected.Kind() {
+		switch actual.Kind() {
+		case reflect.Slice, reflect.Array:
+			return elementTypesCompatible(actual.Elem(), expected.Elem())
+		case reflect.Map:
+			return elementTypesCompatible(actual.Key(), expected.Key()) && elementTypesCompatible(actual.Elem(), expected.Elem())
+		}
+	}
+	return false
+}
+
+func elementTypesCompatible(actual, expected reflect.Type) bool {
+	if actual == nil || expected == nil {
+		return false
+	}
+	if actual == expected || actual.AssignableTo(expected) || expected.AssignableTo(actual) {
+		return true
+	}
+	if actual.Kind() == reflect.Ptr {
+		return elementTypesCompatible(actual, expected.Elem())
+	}
+	return false
 }
 
 type triple struct {
@@ -310,6 +460,7 @@ func (x structFieldsInfo) Swap(i, j int) { x[i], x[j] = x[j], x[i] }
 type ptrToStructSerializer struct {
 	type_ reflect.Type
 	structSerializer
+	codegenDelegate Serializer // Optional codegen serializer for performance (like Python's approach)
 }
 
 func (s *ptrToStructSerializer) TypeId() TypeId {
@@ -321,10 +472,22 @@ func (s *ptrToStructSerializer) NeedWriteRef() bool {
 }
 
 func (s *ptrToStructSerializer) Write(f *Fory, buf *ByteBuffer, value reflect.Value) error {
+	// If we have a codegen delegate, use it for optimal performance (Python-style approach)
+	if s.codegenDelegate != nil {
+		return s.codegenDelegate.Write(f, buf, value)
+	}
+
+	// Fall back to reflection-based serialization
 	return s.structSerializer.Write(f, buf, value.Elem())
 }
 
 func (s *ptrToStructSerializer) Read(f *Fory, buf *ByteBuffer, type_ reflect.Type, value reflect.Value) error {
+	// If we have a codegen delegate, use it for optimal performance
+	if s.codegenDelegate != nil {
+		return s.codegenDelegate.Read(f, buf, type_, value)
+	}
+
+	// Fall back to reflection-based deserialization
 	newValue := reflect.New(type_.Elem())
 	value.Set(newValue)
 	elem := newValue.Elem()

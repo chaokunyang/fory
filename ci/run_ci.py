@@ -294,6 +294,7 @@ def parse_args():
             func()
         else:
             run_shell_script("go")
+            pass
     elif command == "format":
         if USE_PYTHON_FORMAT:
             func()

@@ -18,11 +18,38 @@
 package fory
 
 // ValidationDemo is a simple struct for testing code generation
-// Contains only basic types since PR1 only supports basic types
+// Contains various basic types to validate comprehensive type support
 
-// fory:gen
+// fory:generate
 type ValidationDemo struct {
-	A int32  `json:"a"` // int32 field
-	B string `json:"b"` // string field
-	C int64  `json:"c"` // int64 field (instead of array, as arrays are not supported yet)
+	A int32   // int32 field
+	B string  // string field
+	C int64   // int64 field
+	D float64 // float64 field
+	E bool    // bool field
+}
+
+// SliceDemo is a struct for testing slice serialization
+// Contains various slice types
+
+// fory:generate
+type SliceDemo struct {
+	IntSlice    []int32   // slice of int32
+	StringSlice []string  // slice of string
+	FloatSlice  []float64 // slice of float64
+	BoolSlice   []bool    // slice of bool
+}
+
+// DynamicSliceDemo is a struct for testing dynamic slice serialization
+// fory:generate
+type DynamicSliceDemo struct {
+	DynamicSlice []interface{} // slice of interface{}
+}
+
+// MapDemo demonstrates map field support
+// fory:generate
+type MapDemo struct {
+	StringMap map[string]string // map[string]string
+	IntMap    map[int]int       // map[int]int
+	MixedMap  map[string]int    // map[string]int
 }

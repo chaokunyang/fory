@@ -19,32 +19,29 @@ use crate::error::Error;
 use crate::fory::Fory;
 use crate::resolver::context::ReadContext;
 use crate::resolver::context::WriteContext;
+use crate::serializer::collection::{
+    read_collection, read_collection_type_info, write_collection, write_collection_type_info,
+};
 use crate::serializer::Serializer;
-use crate::types::{ForyGeneralList, TypeId, SIZE_OF_REF_AND_TYPE};
+use crate::types::{ForyGeneralList, TypeId};
 use std::collections::HashSet;
 use std::mem;
 
 impl<T: Serializer + Eq + std::hash::Hash> Serializer for HashSet<T> {
-    fn write(&self, context: &mut WriteContext) {
-        // length
-        context.writer.var_int32(self.len() as i32);
+    fn write(&self, context: &mut WriteContext, is_field: bool) {
+        write_collection(self, context, is_field);
+    }
 
-        let reserved_space =
-            (<T as Serializer>::reserved_space() + SIZE_OF_REF_AND_TYPE) * self.len();
-        context.writer.reserve(reserved_space);
-
-        // key-value
-        for i in self.iter() {
-            i.serialize(context);
-        }
+    fn write_type_info(context: &mut WriteContext, is_field: bool) {
+        write_collection_type_info(context, is_field, TypeId::SET as u32);
     }
 
     fn read(context: &mut ReadContext) -> Result<Self, Error> {
-        // length
-        let len = context.reader.var_int32();
-        (0..len)
-            .map(|_| T::deserialize(context))
-            .collect::<Result<HashSet<_>, Error>>()
+        read_collection(context)
+    }
+
+    fn read_type_info(context: &mut ReadContext, is_field: bool) {
+        read_collection_type_info(context, is_field, TypeId::SET as u32)
     }
 
     fn reserved_space() -> usize {

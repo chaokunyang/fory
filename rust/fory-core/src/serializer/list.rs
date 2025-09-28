@@ -20,29 +20,31 @@ use crate::fory::Fory;
 use crate::resolver::context::ReadContext;
 use crate::resolver::context::WriteContext;
 use crate::serializer::Serializer;
-use crate::types::{ForyGeneralList, TypeId, SIZE_OF_REF_AND_TYPE};
+use crate::types::{ForyGeneralList, TypeId};
 use std::mem;
+
+use super::collection::{
+    read_collection, read_collection_type_info, write_collection, write_collection_type_info,
+};
 
 impl<T> Serializer for Vec<T>
 where
     T: Serializer + ForyGeneralList,
 {
-    fn write(&self, context: &mut WriteContext) {
-        context.writer.var_int32(self.len() as i32);
-        context
-            .writer
-            .reserve((<T as Serializer>::reserved_space() + SIZE_OF_REF_AND_TYPE) * self.len());
-        for item in self.iter() {
-            item.serialize(context);
-        }
+    fn write(&self, context: &mut WriteContext, is_field: bool) {
+        write_collection(self, context, is_field);
+    }
+
+    fn write_type_info(context: &mut WriteContext, is_field: bool) {
+        write_collection_type_info(context, is_field, TypeId::LIST as u32);
     }
 
     fn read(context: &mut ReadContext) -> Result<Self, Error> {
-        // vec length
-        let len = context.reader.var_int32();
-        (0..len)
-            .map(|_| T::deserialize(context))
-            .collect::<Result<Vec<_>, Error>>()
+        read_collection(context)
+    }
+
+    fn read_type_info(context: &mut ReadContext, is_field: bool) {
+        read_collection_type_info(context, is_field, TypeId::LIST as u32)
     }
 
     fn reserved_space() -> usize {
@@ -51,7 +53,7 @@ where
     }
 
     fn get_type_id(_fory: &Fory) -> u32 {
-        TypeId::ARRAY as u32
+        TypeId::LIST as u32
     }
 }
 

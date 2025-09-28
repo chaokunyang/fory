@@ -314,34 +314,6 @@ func TestSerializeStruct(t *testing.T) {
 	}
 }
 
-func TestSerializeStringReference(t *testing.T) {
-	fory := NewFory(true)
-	strSlice := []string{"str1", "str1", "", "", "str2"}
-	strSlice = append(strSlice, strSlice[0])
-	serde(t, fory, strSlice)
-	type A struct {
-		F1 string
-		F2 string
-	}
-	require.Nil(t, fory.RegisterTagType("example.A", A{}))
-	serde(t, fory, A{})
-	serde(t, fory, A{F1: "str", F2: "str"})
-	var strData []byte
-	for i := 0; i < 1000; i++ {
-		strData = append(strData, 100)
-	}
-	x := string(strData)
-	serde(t, fory, &x)
-	strSlice2 := []string{x, x, x}
-	bytes, err := fory.Marshal(strSlice2)
-	require.Nil(t, err)
-	require.Less(t, len(bytes), 2*len(strData))
-	strSlice23 := []*string{&x, &x, &x}
-	bytes, err = fory.Marshal(strSlice23)
-	require.Nil(t, err)
-	require.Less(t, len(bytes), 2*len(strData))
-}
-
 func TestSerializeCircularReference(t *testing.T) {
 	fory := NewFory(true)
 	{

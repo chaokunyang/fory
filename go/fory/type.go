@@ -24,6 +24,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/apache/fory/go/fory/meta"
@@ -203,6 +204,7 @@ var (
 	stringSliceType    = reflect.TypeOf((*[]string)(nil)).Elem()
 	byteSliceType      = reflect.TypeOf((*[]byte)(nil)).Elem()
 	boolSliceType      = reflect.TypeOf((*[]bool)(nil)).Elem()
+	int8SliceType      = reflect.TypeOf((*[]int8)(nil)).Elem()
 	int16SliceType     = reflect.TypeOf((*[]int16)(nil)).Elem()
 	int32SliceType     = reflect.TypeOf((*[]int32)(nil)).Elem()
 	int64SliceType     = reflect.TypeOf((*[]int64)(nil)).Elem()
@@ -224,71 +226,24 @@ var (
 	genericSetType     = reflect.TypeOf((*GenericSet)(nil)).Elem()
 )
 
-// Global type resolver shared by all Fory instances for generated serializers
-var globalTypeResolver *typeResolver
-
-func init() {
-	// Initialize global type resolver after other init functions
-	initGlobalTypeResolver()
+// Global registry for generated serializer factories
+var generatedSerializerFactories = struct {
+	mu        sync.RWMutex
+	factories map[reflect.Type]func() Serializer
+}{
+	factories: make(map[reflect.Type]func() Serializer),
 }
 
-func initGlobalTypeResolver() {
-	// Create a dummy fory instance just for initializing the global type resolver
-	r := &typeResolver{
-		typeTagToSerializers: map[string]Serializer{},
-		typeToSerializers:    map[reflect.Type]Serializer{},
-		typeIdToType:         map[int16]reflect.Type{},
-		typeToTypeInfo:       map[reflect.Type]string{},
-		typeInfoToType:       map[string]reflect.Type{},
-		dynamicStringToId:    map[string]int16{},
-		dynamicIdToString:    map[int16]string{},
-
-		language:            XLANG,
-		metaStringResolver:  NewMetaStringResolver(),
-		requireRegistration: false,
-
-		metaStrToStr:     make(map[string]string),
-		metaStrToClass:   make(map[string]reflect.Type),
-		hashToMetaString: make(map[uint64]string),
-		hashToClassInfo:  make(map[uint64]TypeInfo),
-
-		dynamicWrittenMetaStr: make([]string, 0),
-		typeIDToTypeInfo:      make(map[int32]TypeInfo),
-		typeIDCounter:         300,
-		dynamicWriteStringID:  0,
-
-		typesInfo:           make(map[reflect.Type]TypeInfo),
-		nsTypeToTypeInfo:    make(map[nsTypeKey]TypeInfo),
-		namedTypeToTypeInfo: make(map[namedTypeKey]TypeInfo),
-
-		namespaceEncoder: meta.NewEncoder('.', '_'),
-		namespaceDecoder: meta.NewDecoder('.', '_'),
-		typeNameEncoder:  meta.NewEncoder('$', '_'),
-		typeNameDecoder:  meta.NewDecoder('$', '_'),
+// RegisterSerializerFactory registers a factory function for a generated serializer
+func RegisterSerializerFactory(type_ interface{}, factory func() Serializer) {
+	reflectType := reflect.TypeOf(type_)
+	if reflectType.Kind() == reflect.Ptr {
+		reflectType = reflectType.Elem()
 	}
 
-	// Initialize base type mappings - copy from newTypeResolver
-	for _, t := range []reflect.Type{
-		boolType,
-		byteType,
-		int8Type,
-		int16Type,
-		int32Type,
-		intType,
-		int64Type,
-		float32Type,
-		float64Type,
-		stringType,
-		dateType,
-		timestampType,
-		interfaceType,
-		genericSetType,
-	} {
-		r.typeInfoToType[t.String()] = t
-		r.typeToTypeInfo[t] = t.String()
-	}
-	r.initialize()
-	globalTypeResolver = r
+	generatedSerializerFactories.mu.Lock()
+	defer generatedSerializerFactories.mu.Unlock()
+	generatedSerializerFactories.factories[reflectType] = factory
 }
 
 type TypeInfo struct {
@@ -351,6 +306,10 @@ type typeResolver struct {
 	namespaceDecoder *meta.Decoder
 	typeNameEncoder  *meta.Encoder
 	typeNameDecoder  *meta.Decoder
+
+	// meta share related
+	typeToTypeDef  map[reflect.Type]*TypeDef
+	defIdToTypeDef map[int64]*TypeDef
 }
 
 func newTypeResolver(fory *Fory) *typeResolver {
@@ -386,6 +345,9 @@ func newTypeResolver(fory *Fory) *typeResolver {
 		namespaceDecoder: meta.NewDecoder('.', '_'),
 		typeNameEncoder:  meta.NewEncoder('$', '_'),
 		typeNameDecoder:  meta.NewDecoder('$', '_'),
+
+		typeToTypeDef:  make(map[reflect.Type]*TypeDef),
+		defIdToTypeDef: make(map[int64]*TypeDef),
 	}
 	// base type info for encode/decode types.
 	// composite types info will be constructed dynamically.
@@ -409,6 +371,55 @@ func newTypeResolver(fory *Fory) *typeResolver {
 		r.typeToTypeInfo[t] = t.String()
 	}
 	r.initialize()
+
+	// Register generated serializers from factories with complete type information
+	generatedSerializerFactories.mu.RLock()
+	for type_, factory := range generatedSerializerFactories.factories {
+		codegenSerializer := factory()
+		pkgPath := type_.PkgPath()
+		typeName := type_.Name()
+		typeTag := pkgPath + "." + typeName
+
+		// Create structSerializer with codegen delegate (Python-style)
+		structSer := &structSerializer{
+			typeTag:         typeTag,
+			type_:           type_,
+			codegenDelegate: codegenSerializer, // Delegate to codegen for performance
+		}
+		// Create ptrToStructSerializer with codegen delegate (Python-style)
+		ptrType := reflect.PtrTo(type_)
+		ptrStructSer := &ptrToStructSerializer{
+			type_:            ptrType,
+			structSerializer: *structSer,
+			codegenDelegate:  codegenSerializer, // Delegate to codegen for performance
+		}
+
+		// 1. Basic type mappings (same as reflection)
+		r.typeToSerializers[type_] = structSer      // Value type -> structSerializer with codegen
+		r.typeToSerializers[ptrType] = ptrStructSer // Pointer type -> ptrToStructSerializer with codegen
+
+		// 2. Cross-language critical mapping (same as reflection)
+		r.typeTagToSerializers[typeTag] = ptrStructSer // "pkg.Type" -> ptrToStructSerializer
+
+		// 3. Register complete type information (critical for proper serialization)
+		_, err := r.registerType(type_, int32(codegenSerializer.TypeId()), pkgPath, typeName, structSer, false)
+		if err != nil {
+			panic(fmt.Errorf("failed to register codegen type %s: %v", typeTag, err))
+		}
+		// 4. Register pointer type information
+		_, err = r.registerType(ptrType, -int32(codegenSerializer.TypeId()), pkgPath, typeName, ptrStructSer, false)
+		if err != nil {
+			panic(fmt.Errorf("failed to register codegen pointer type %s: %v", typeTag, err))
+		}
+
+		// 5. Type info mappings (same as reflection) - these are redundant if registerType is called
+		r.typeToTypeInfo[type_] = "@" + typeTag    // Type -> "@pkg.Type"
+		r.typeToTypeInfo[ptrType] = "*@" + typeTag // *Type -> "*@pkg.Type"
+		r.typeInfoToType["@"+typeTag] = type_      // "@pkg.Type" -> Type
+		r.typeInfoToType["*@"+typeTag] = ptrType   // "*@pkg.Type" -> *Type
+	}
+	generatedSerializerFactories.mu.RUnlock()
+
 	return r
 }
 
@@ -421,12 +432,13 @@ func (r *typeResolver) initialize() {
 		{stringPtrType, ptrToStringSerializer{}},
 		{stringSliceType, stringSliceSerializer{}},
 		{byteSliceType, byteSliceSerializer{}},
-		{boolSliceType, boolSliceSerializer{}},
-		{int16SliceType, int16SliceSerializer{}},
-		{int32SliceType, int32SliceSerializer{}},
-		{int64SliceType, int64SliceSerializer{}},
-		{float32SliceType, float32SliceSerializer{}},
-		{float64SliceType, float64SliceSerializer{}},
+		// Map basic type slices to proper array types for xlang compatibility
+		{boolSliceType, boolArraySerializer{}},
+		{int16SliceType, int16ArraySerializer{}},
+		{int32SliceType, int32ArraySerializer{}},
+		{int64SliceType, int64ArraySerializer{}},
+		{float32SliceType, float32ArraySerializer{}},
+		{float64SliceType, float64ArraySerializer{}},
 		{interfaceSliceType, sliceSerializer{}},
 		{interfaceMapType, mapSerializer{}},
 		{boolType, boolSerializer{}},
@@ -464,39 +476,6 @@ func (r *typeResolver) RegisterSerializer(type_ reflect.Type, s Serializer) erro
 			r.typeIdToType[typeId] = type_
 		}
 	}
-	return nil
-}
-
-// RegisterGeneratedSerializer registers a generated serializer for a specific type.
-// Generated serializers have priority over reflection-based serializers and can override existing ones.
-func RegisterGeneratedSerializer(typ interface{}, s Serializer) error {
-	if typ == nil {
-		return fmt.Errorf("typ cannot be nil")
-	}
-
-	reflectType := reflect.TypeOf(typ)
-	if reflectType.Kind() == reflect.Ptr {
-		reflectType = reflectType.Elem()
-	}
-
-	// Use the global type resolver
-	if globalTypeResolver == nil {
-		return fmt.Errorf("global type resolver not initialized")
-	}
-
-	// Allow overriding existing serializers by directly setting the map
-	// This gives generated serializers priority over reflection-based ones
-	globalTypeResolver.typeToSerializers[reflectType] = s
-
-	// Handle typeId registration
-	typeId := s.TypeId()
-	if typeId != FORY_TYPE_TAG {
-		if typeId > NotSupportCrossLanguage {
-			// Allow overriding existing typeId mappings as well
-			globalTypeResolver.typeIdToType[typeId] = reflectType
-		}
-	}
-
 	return nil
 }
 
@@ -561,6 +540,10 @@ func (r *typeResolver) getSerializerByTypeTag(typeTag string) (Serializer, error
 
 func (r *typeResolver) getTypeInfo(value reflect.Value, create bool) (TypeInfo, error) {
 	// First check if type info exists in cache
+	if value.Kind() == reflect.Interface {
+		// make sure the concrete value don't miss its real typeInfo
+		value = value.Elem()
+	}
 	typeString := value.Type()
 	if info, ok := r.typesInfo[typeString]; ok {
 		if info.Serializer == nil {
@@ -584,35 +567,27 @@ func (r *typeResolver) getTypeInfo(value reflect.Value, create bool) (TypeInfo, 
 	if !create {
 		fmt.Errorf("type %v not registered and create=false", value.Type())
 	}
-	if value.Kind() == reflect.Interface {
-		value = value.Elem()
-	}
-	typ := value.Type()
+	type_ := value.Type()
 	// Get package path and type name for registration
 	var typeName string
 	var pkgPath string
-	rawInfo, ok := r.typeToTypeInfo[typ]
+	rawInfo, ok := r.typeToTypeInfo[type_]
 	if !ok {
-		fmt.Errorf("type %v not registered with a tag", typ)
+		fmt.Errorf("type %v not registered with a tag", type_)
 	}
 	clean := strings.TrimPrefix(rawInfo, "*@")
 	clean = strings.TrimPrefix(clean, "@")
+	typeName = clean
 	if idx := strings.LastIndex(clean, "."); idx != -1 {
 		pkgPath = clean[:idx]
-	} else {
-		pkgPath = clean
-	}
-	if typ.Kind() == reflect.Ptr {
-		typeName = typ.Elem().Name()
-	} else {
-		typeName = typ.Name()
+		typeName = clean[idx+1:]
 	}
 
 	// Handle special types that require explicit registration
 	switch {
-	case typ.Kind() == reflect.Ptr:
+	case type_.Kind() == reflect.Ptr:
 		fmt.Errorf("pointer types must be registered explicitly")
-	case typ.Kind() == reflect.Interface:
+	case type_.Kind() == reflect.Interface:
 		fmt.Errorf("interface types must be registered explicitly")
 	case pkgPath == "" && typeName == "":
 		fmt.Errorf("anonymous types must be registered explicitly")
@@ -625,7 +600,7 @@ func (r *typeResolver) getTypeInfo(value reflect.Value, create bool) (TypeInfo, 
 		// Auto-assign IDs
 		typeID = 0
 	default:
-		fmt.Errorf("type %v must be registered explicitly", typ)
+		fmt.Errorf("type %v must be registered explicitly", type_)
 	}
 
 	/*
@@ -648,8 +623,8 @@ func (r *typeResolver) getTypeInfo(value reflect.Value, create bool) (TypeInfo, 
 	} else if value.Kind() == reflect.Map {
 		typeID = MAP
 	} else if value.Kind() == reflect.Array {
-		typ = reflect.SliceOf(typ.Elem())
-		return r.typesInfo[typ], nil
+		type_ = reflect.SliceOf(type_.Elem())
+		return r.typesInfo[type_], nil
 	} else if isMultiDimensionaSlice(value) {
 		typeID = LIST
 		return r.typeIDToTypeInfo[typeID], nil
@@ -657,7 +632,7 @@ func (r *typeResolver) getTypeInfo(value reflect.Value, create bool) (TypeInfo, 
 
 	// Register the type with full metadata
 	return r.registerType(
-		typ,
+		type_,
 		typeID,
 		pkgPath,
 		typeName,
@@ -675,7 +650,7 @@ func isMultiDimensionaSlice(v reflect.Value) bool {
 }
 
 func (r *typeResolver) registerType(
-	typ reflect.Type,
+	type_ reflect.Type,
 	typeID int32,
 	namespace string,
 	typeName string,
@@ -683,24 +658,24 @@ func (r *typeResolver) registerType(
 	internal bool,
 ) (TypeInfo, error) {
 	// Input validation
-	if typ == nil {
+	if type_ == nil {
 		panic("nil type")
 	}
 	if typeName == "" && namespace != "" {
 		panic("namespace provided without typeName")
 	}
 	if internal && serializer != nil {
-		if err := r.RegisterSerializer(typ, serializer); err != nil {
+		if err := r.RegisterSerializer(type_, serializer); err != nil {
 			panic(fmt.Errorf("impossible error: %s", err))
 		}
 	}
 	// Serializer initialization
 	if !internal && serializer == nil {
 		var err error
-		serializer = r.typeToSerializers[typ] // Check pre-registered serializers
+		serializer = r.typeToSerializers[type_] // Check pre-registered serializers
 		if serializer == nil {
 			// Create new serializer if not found
-			if serializer, err = r.createSerializer(typ, false); err != nil {
+			if serializer, err = r.createSerializer(type_, false); err != nil {
 				panic(fmt.Sprintf("failed to create serializer: %v", err))
 			}
 		}
@@ -733,16 +708,16 @@ func (r *typeResolver) registerType(
 
 	// Build complete type information structure
 	typeInfo := TypeInfo{
-		Type:         typ,
+		Type:         type_,
 		TypeID:       typeID,
 		Serializer:   serializer,
 		PkgPathBytes: nsBytes,   // Encoded namespace bytes
 		NameBytes:    typeBytes, // Encoded type name bytes
 		IsDynamic:    dynamicType,
-		hashValue:    calcTypeHash(typ), // Precomputed hash for fast lookups
+		hashValue:    calcTypeHash(type_), // Precomputed hash for fast lookups
 	}
 	// Update resolver caches:
-	r.typesInfo[typ] = typeInfo // Cache by type string
+	r.typesInfo[type_] = typeInfo // Cache by type string
 	if typeName != "" {
 		r.namedTypeToTypeInfo[[2]string{namespace, typeName}] = typeInfo
 		// Cache by hashed namespace/name bytes
@@ -772,13 +747,17 @@ func (r *typeResolver) registerType(
 	return typeInfo, nil
 }
 
-func calcTypeHash(typ reflect.Type) uint64 {
+func calcTypeHash(type_ reflect.Type) uint64 {
 	// Implement proper hash calculation based on type
 	h := fnv.New64a()
-	h.Write([]byte(typ.PkgPath()))
-	h.Write([]byte(typ.Name()))
-	h.Write([]byte(typ.Kind().String()))
+	h.Write([]byte(type_.PkgPath()))
+	h.Write([]byte(type_.Name()))
+	h.Write([]byte(type_.Kind().String()))
 	return h.Sum64()
+}
+
+func (r *typeResolver) metaShareEnabled() bool {
+	return r.fory != nil && r.fory.metaContext != nil && r.fory.compatible
 }
 
 func (r *typeResolver) writeTypeInfo(buffer *ByteBuffer, typeInfo TypeInfo) error {
@@ -794,6 +773,12 @@ func (r *typeResolver) writeTypeInfo(buffer *ByteBuffer, typeInfo TypeInfo) erro
 
 	// For namespaced types, write additional metadata:
 	if IsNamespacedType(TypeId(internalTypeID)) {
+		if r.metaShareEnabled() {
+			if err := r.writeSharedTypeMeta(buffer, typeInfo); err != nil {
+				return err
+			}
+			return nil
+		}
 		// Write package path (namespace) metadata
 		if err := r.metaStringResolver.WriteMetaStringBytes(buffer, typeInfo.PkgPathBytes); err != nil {
 			return err
@@ -804,6 +789,91 @@ func (r *typeResolver) writeTypeInfo(buffer *ByteBuffer, typeInfo TypeInfo) erro
 		}
 	}
 
+	return nil
+}
+
+func (r *typeResolver) writeSharedTypeMeta(buffer *ByteBuffer, typeInfo TypeInfo) error {
+	context := r.fory.metaContext
+	typ := typeInfo.Type
+
+	if index, exists := context.typeMap[typ]; exists {
+		buffer.WriteVarUint32(index)
+		return nil
+	}
+
+	newIndex := uint32(len(context.typeMap))
+	buffer.WriteVarUint32(newIndex)
+	context.typeMap[typ] = newIndex
+
+	typeDef, err := r.getTypeDef(typeInfo.Type, true)
+	if err != nil {
+		return err
+	}
+	context.writingTypeDefs = append(context.writingTypeDefs, typeDef)
+	return nil
+}
+
+func (r *typeResolver) getTypeDef(typ reflect.Type, create bool) (*TypeDef, error) {
+	if existingTypeDef, exists := r.typeToTypeDef[typ]; exists {
+		return existingTypeDef, nil
+	}
+
+	if !create {
+		return nil, fmt.Errorf("TypeDef not found for type %s", typ)
+	}
+
+	zero := reflect.Zero(typ)
+	typeDef, err := buildTypeDef(r.fory, zero)
+	if err != nil {
+		return nil, err
+	}
+	r.typeToTypeDef[typ] = typeDef
+	return typeDef, nil
+}
+
+func (r *typeResolver) readSharedTypeMeta(buffer *ByteBuffer) (TypeInfo, error) {
+	context := r.fory.metaContext
+	index := buffer.ReadVarInt32() // shared meta index id
+	if index < 0 || index >= int32(len(context.readTypeInfos)) {
+		return TypeInfo{}, fmt.Errorf("TypeInfo not found for index %d", index)
+	}
+	info := context.readTypeInfos[index]
+	return info, nil
+}
+
+func (r *typeResolver) writeTypeDefs(buffer *ByteBuffer) {
+	context := r.fory.metaContext
+	sz := len(context.writingTypeDefs)
+	buffer.WriteVarUint32Small7(uint32(sz))
+	for _, typeDef := range context.writingTypeDefs {
+		typeDef.writeTypeDef(buffer)
+	}
+	context.writingTypeDefs = nil
+}
+
+func (r *typeResolver) readTypeDefs(buffer *ByteBuffer) error {
+	numTypeDefs := buffer.ReadVarUint32Small7()
+	context := r.fory.metaContext
+	for i := 0; i < numTypeDefs; i++ {
+		id := buffer.ReadInt64()
+		var td *TypeDef
+		if existingTd, exists := r.defIdToTypeDef[id]; exists {
+			skipTypeDef(buffer, id)
+			td = existingTd
+		} else {
+			newTd, err := readTypeDef(r.fory, buffer, id)
+			if err != nil {
+				return err
+			}
+			r.defIdToTypeDef[id] = newTd
+			td = newTd
+		}
+		typeInfo, err := td.buildTypeInfo()
+		if err != nil {
+			return err
+		}
+		context.readTypeInfos = append(context.readTypeInfos, typeInfo)
+	}
 	return nil
 }
 
@@ -821,6 +891,45 @@ func (r *typeResolver) createSerializer(type_ reflect.Type, mapInStruct bool) (s
 		return &ptrToValueSerializer{valueSerializer}, nil
 	case reflect.Slice:
 		elem := type_.Elem()
+		// Handle special slice types for xlang compatibility
+		if r.language == XLANG {
+			// Basic type slices should use array types for efficiency
+			switch elem.Kind() {
+			case reflect.Bool:
+				if type_ == boolSliceType {
+					return boolArraySerializer{}, nil
+				}
+			case reflect.Int8:
+				if type_ == int8SliceType {
+					return int8ArraySerializer{}, nil
+				}
+			case reflect.Int16:
+				if type_ == int16SliceType {
+					return int16ArraySerializer{}, nil
+				}
+			case reflect.Int32:
+				if type_ == int32SliceType {
+					return int32ArraySerializer{}, nil
+				}
+			case reflect.Int64:
+				if type_ == int64SliceType {
+					return int64ArraySerializer{}, nil
+				}
+			case reflect.Float32:
+				if type_ == float32SliceType {
+					return float32ArraySerializer{}, nil
+				}
+			case reflect.Float64:
+				if type_ == float64SliceType {
+					return float64ArraySerializer{}, nil
+				}
+			case reflect.Int, reflect.Uint:
+				// Platform-dependent types should use LIST for cross-platform compatibility
+				// We treat them as dynamic types to force LIST serialization
+				return sliceSerializer{}, nil
+			}
+		}
+		// For dynamic types or non-xlang mode, use generic slice serializer
 		if isDynamicType(elem) {
 			return sliceSerializer{}, nil
 		} else {
@@ -1041,6 +1150,9 @@ func (r *typeResolver) readTypeInfo(buffer *ByteBuffer) (TypeInfo, error) {
 		internalTypeID = -internalTypeID
 	}
 	if IsNamespacedType(TypeId(internalTypeID)) {
+		if r.metaShareEnabled() {
+			return r.readSharedTypeMeta(buffer)
+		}
 		// Read namespace and type name metadata bytes
 		nsBytes, err := r.metaStringResolver.ReadMetaStringBytes(buffer)
 		if err != nil {
@@ -1127,8 +1239,11 @@ func (r *typeResolver) getTypeById(id int16) (reflect.Type, error) {
 }
 
 func (r *typeResolver) getTypeInfoById(id int16) (TypeInfo, error) {
-	typeInfo := r.typeIDToTypeInfo[int32(id)]
-	return typeInfo, nil
+	if typeInfo, exists := r.typeIDToTypeInfo[int32(id)]; exists {
+		return typeInfo, nil
+	} else {
+		return TypeInfo{}, fmt.Errorf("typeInfo of typeID %d not found", id)
+	}
 }
 
 func (r *typeResolver) writeMetaString(buffer *ByteBuffer, str string) error {

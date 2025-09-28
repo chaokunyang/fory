@@ -38,7 +38,8 @@ public class CompatibleThreadSafeExample {
                       .withCompatibleMode(CompatibleMode.COMPATIBLE)
                       .build();
               // register and generate serializer code.
-              f.register(Foo.class, true);
+              f.register(Foo.class);
+              f.ensureSerializersCompiled();
               return f;
             });
     System.out.println("Init fory at build time");

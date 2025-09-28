@@ -414,6 +414,14 @@ public class TypeUtils {
     return type;
   }
 
+  public static TypeRef<?> getArrayComponent(TypeRef<?> type) {
+    if (type.getType() instanceof GenericArrayType) {
+      Type componentType = ((GenericArrayType) (type.getType())).getGenericComponentType();
+      return TypeRef.of(componentType);
+    }
+    return TypeRef.of(getArrayComponentInfo(type.getRawType()).f0);
+  }
+
   public static Class<?> getArrayComponent(Class<?> type) {
     return getArrayComponentInfo(type).f0;
   }

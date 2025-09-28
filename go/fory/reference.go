@@ -95,11 +95,6 @@ func (r *RefResolver) WriteRefOrNull(buffer *ByteBuffer, value reflect.Value) (r
 	case reflect.Interface:
 		value = value.Elem()
 		return r.WriteRefOrNull(buffer, value)
-	case reflect.String:
-		isNil = false
-		str := unsafeGetBytes(value.Interface().(string))
-		value = reflect.ValueOf(str)
-		length = len(str)
 	case reflect.Invalid:
 		isNil = true
 	case reflect.Struct:

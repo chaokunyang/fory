@@ -52,18 +52,22 @@ import java.util.TreeSet;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import lombok.Data;
+import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.config.Language;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
+import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.ArraySerializersTest;
 import org.apache.fory.serializer.BufferObject;
 import org.apache.fory.serializer.EnumSerializerTest;
+import org.apache.fory.serializer.NonexistentClass.NonexistentMetaShared;
 import org.apache.fory.serializer.ObjectSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.test.TestUtils;
@@ -464,6 +468,7 @@ public class CrossLanguageTest extends ForyTestBase {
         Fory.builder()
             .withLanguage(Language.XLANG)
             .withRefTracking(true)
+            .withCodegen(false)
             .requireClassRegistration(false)
             .build();
     fory.register(ComplexObject1.class, "test.ComplexObject1");
@@ -472,21 +477,22 @@ public class CrossLanguageTest extends ForyTestBase {
     Method method =
         ObjectSerializer.class.getDeclaredMethod("computeStructHash", Fory.class, Collection.class);
     method.setAccessible(true);
-    Collection<Descriptor> descriptors =
-        fory.getClassResolver().getFieldDescriptors(ComplexObject1.class, true);
-    descriptors =
-        fory.getClassResolver().createDescriptorGrouper(descriptors, false).getSortedDescriptors();
+    TypeResolver resolver = fory._getTypeResolver();
+    Collection<Descriptor> descriptors = resolver.getFieldDescriptors(ComplexObject1.class, false);
+    descriptors = resolver.createDescriptorGrouper(descriptors, false).getSortedDescriptors();
     Integer hash = (Integer) method.invoke(serializer, fory, descriptors);
     MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(4);
     buffer.writeInt32(hash);
     roundBytes("test_struct_hash", buffer.getBytes(0, 4));
   }
 
-  @Test
-  public void testSerializeSimpleStruct() throws Exception {
+  @Test(dataProvider = "compatible")
+  public void testSerializeSimpleStruct(boolean compatible) throws Exception {
     Fory fory =
         Fory.builder()
             .withLanguage(Language.XLANG)
+            .withCompatibleMode(
+                compatible ? CompatibleMode.COMPATIBLE : CompatibleMode.SCHEMA_CONSISTENT)
             .withRefTracking(true)
             .requireClassRegistration(false)
             .build();
@@ -494,13 +500,51 @@ public class CrossLanguageTest extends ForyTestBase {
     ComplexObject2 obj2 = new ComplexObject2();
     obj2.f1 = true;
     obj2.f2 = new HashMap<>(ImmutableMap.of((byte) -1, 2));
-    structRoundBack(fory, obj2, "test_serialize_simple_struct");
+    structRoundBack(fory, obj2, "test_serialize_simple_struct" + (compatible ? "_compatible" : ""));
   }
 
-  public void testSerializeComplexStruct() throws Exception {
+  @Test(dataProvider = "compatible")
+  public void testRegisterById(boolean compatible) throws Exception {
     Fory fory =
         Fory.builder()
             .withLanguage(Language.XLANG)
+            .withCompatibleMode(
+                compatible ? CompatibleMode.COMPATIBLE : CompatibleMode.SCHEMA_CONSISTENT)
+            .withRefTracking(true)
+            .requireClassRegistration(false)
+            .build();
+    fory.register(ComplexObject2.class, 100);
+    ComplexObject2 obj2 = new ComplexObject2();
+    obj2.f1 = true;
+    obj2.f2 = new HashMap<>(ImmutableMap.of((byte) -1, 2));
+    structRoundBack(fory, obj2, "test_register_by_id" + (compatible ? "_compatible" : ""));
+  }
+
+  @Test(dataProvider = "enableCodegen")
+  public void testRegisterByIdMetaShare(boolean enableCodegen) throws Exception {
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCodegen(enableCodegen)
+            .withRefTracking(true)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .requireClassRegistration(false)
+            .build();
+    fory.register(ComplexObject2.class, 100);
+    ComplexObject2 obj = new ComplexObject2();
+    obj.f1 = true;
+    obj.f2 = new HashMap<>(ImmutableMap.of((byte) -1, 2));
+    byte[] serialized = fory.serialize(obj);
+    Assert.assertEquals(fory.deserialize(serialized), obj);
+  }
+
+  @Test(dataProvider = "compatible")
+  public void testSerializeComplexStruct(boolean compatible) throws Exception {
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(
+                compatible ? CompatibleMode.COMPATIBLE : CompatibleMode.SCHEMA_CONSISTENT)
             .withRefTracking(true)
             .requireClassRegistration(false)
             .build();
@@ -523,7 +567,7 @@ public class CrossLanguageTest extends ForyTestBase {
     obj.f11 = new short[] {(short) 1, (short) 2};
     obj.f12 = ImmutableList.of((short) -1, (short) 4);
 
-    structRoundBack(fory, obj, "test_serialize_complex_struct");
+    structRoundBack(fory, obj, "test_serialize_complex_struct" + (compatible ? "_compatible" : ""));
   }
 
   private void structRoundBack(Fory fory, Object obj, String testName) throws IOException {
@@ -539,6 +583,22 @@ public class CrossLanguageTest extends ForyTestBase {
             PYTHON_EXECUTABLE, "-m", PYTHON_MODULE, testName, dataFile.toAbsolutePath().toString());
     Assert.assertTrue(executeCommand(command, 30));
     Assert.assertEquals(fory.deserialize(Files.readAllBytes(dataFile)), obj);
+  }
+
+  private void structBackwardCompatibility(Fory fory, Object obj, String testName)
+      throws IOException {
+    byte[] serialized = fory.serialize(obj);
+    Assert.assertEquals(fory.deserialize(serialized), obj);
+    Path dataFile = Paths.get(testName);
+    System.out.println(dataFile.toAbsolutePath());
+    Files.deleteIfExists(dataFile);
+    Files.write(dataFile, serialized);
+    dataFile.toFile().deleteOnExit();
+    ImmutableList<String> command =
+        ImmutableList.of(
+            PYTHON_EXECUTABLE, "-m", PYTHON_MODULE, testName, dataFile.toAbsolutePath().toString());
+    // Just test that Python can read the data - don't check round-trip
+    Assert.assertTrue(executeCommand(command, 30));
   }
 
   private static class ComplexObject1Serializer extends Serializer<ComplexObject1> {
@@ -785,9 +845,15 @@ public class CrossLanguageTest extends ForyTestBase {
     String f3;
   }
 
-  @Test
-  public void testEnumField() throws java.io.IOException {
-    Fory fory = Fory.builder().withLanguage(Language.XLANG).requireClassRegistration(true).build();
+  @Test(dataProvider = "compatible")
+  public void testEnumField(boolean compatible) throws java.io.IOException {
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(
+                compatible ? CompatibleMode.COMPATIBLE : CompatibleMode.SCHEMA_CONSISTENT)
+            .requireClassRegistration(true)
+            .build();
     fory.register(EnumTestClass.class, "test.EnumTestClass");
     fory.register(EnumFieldStruct.class, "test.EnumFieldStruct");
 
@@ -796,6 +862,282 @@ public class CrossLanguageTest extends ForyTestBase {
     a.f2 = EnumTestClass.BAR;
     a.f3 = "abc";
     Assert.assertEquals(xserDe(fory, a), a);
-    structRoundBack(fory, a, "test_enum_field");
+    structRoundBack(fory, a, "test_enum_field" + (compatible ? "_compatible" : ""));
+  }
+
+  @Test(dataProvider = "compatible")
+  public void testNamedEnum(boolean compatible) {
+    Fory fory =
+        Fory.builder()
+            // avoid generated code conflict with register by name
+            .withName("testEnumObject")
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(
+                compatible ? CompatibleMode.COMPATIBLE : CompatibleMode.SCHEMA_CONSISTENT)
+            .requireClassRegistration(true)
+            .build();
+    fory.register(EnumTestClass.class, "demo.Enum1");
+    fory.register(EnumFieldStruct.class, "demo.EnumFieldStruct");
+    Assert.assertEquals(xserDe(fory, EnumTestClass.FOO), EnumTestClass.FOO);
+    EnumFieldStruct a = new EnumFieldStruct();
+    a.f1 = EnumTestClass.FOO;
+    a.f2 = EnumTestClass.BAR;
+    a.f3 = "abc";
+    Assert.assertEquals(xserDe(fory, a), a);
+  }
+
+  @Test(dataProvider = "compatible")
+  public void testEnumFieldRegisterById(boolean compatible) throws java.io.IOException {
+    Fory fory =
+        Fory.builder()
+            // avoid generated code conflict with register by name
+            .withName("testEnumFieldRegisterById")
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(
+                compatible ? CompatibleMode.COMPATIBLE : CompatibleMode.SCHEMA_CONSISTENT)
+            .requireClassRegistration(true)
+            .build();
+    fory.register(EnumTestClass.class, 1);
+    fory.register(EnumFieldStruct.class, 2);
+
+    EnumFieldStruct a = new EnumFieldStruct();
+    a.f1 = EnumTestClass.FOO;
+    a.f2 = EnumTestClass.BAR;
+    a.f3 = "abc";
+    Assert.assertEquals(xserDe(fory, a), a);
+    structRoundBack(fory, a, "test_enum_field_register_by_id" + (compatible ? "_compatible" : ""));
+  }
+
+  static class EnumFieldStruct2 {}
+
+  @Test(dataProvider = "enableCodegen")
+  public void testMissingEnumField(boolean enableCodegen) {
+    Supplier<Fory> builder =
+        () ->
+            Fory.builder()
+                .withLanguage(Language.XLANG)
+                .withCompatibleMode(CompatibleMode.COMPATIBLE)
+                .withCodegen(enableCodegen)
+                .build();
+    Fory fory = builder.get();
+    fory.register(EnumTestClass.class, "test_enum");
+    fory.register(EnumFieldStruct.class, 2);
+
+    EnumFieldStruct a = new EnumFieldStruct();
+    a.f1 = EnumTestClass.FOO;
+    a.f2 = EnumTestClass.BAR;
+    a.f3 = "abc";
+
+    {
+      Fory fory2 = builder.get();
+      fory2.register(EnumTestClass.class, "test_enum");
+      fory2.register(EnumFieldStruct2.class, 2);
+      Assert.assertEquals(fory2.deserialize(fory.serialize(a)).getClass(), EnumFieldStruct2.class);
+    }
+    {
+      Fory fory2 = builder.get();
+      fory2.register(EnumTestClass.class, "test_enum");
+      Assert.assertEquals(
+          fory2.deserialize(fory.serialize(a)).getClass(), NonexistentMetaShared.class);
+    }
+  }
+
+  @Test
+  public void testCrossLanguageMetaShare() throws Exception {
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withRefTracking(true)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .requireClassRegistration(false)
+            .build();
+    fory.register(ComplexObject2.class, "test.ComplexObject2");
+
+    ComplexObject2 obj = new ComplexObject2();
+    obj.f1 = true;
+    obj.f2 = new HashMap<>(ImmutableMap.of((byte) -1, 2));
+
+    // Test with meta share enabled
+    byte[] serialized = fory.serialize(obj);
+    Assert.assertEquals(fory.deserialize(serialized), obj);
+
+    structRoundBack(fory, obj, "test_cross_language_meta_share");
+  }
+
+  @Test(dataProvider = "enableCodegen")
+  public void testCrossLanguageMetaShareComplex(boolean enableCodegen) throws Exception {
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCodegen(enableCodegen)
+            .withRefTracking(true)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .requireClassRegistration(false)
+            .build();
+    fory.register(ComplexObject1.class, "test.ComplexObject1");
+    fory.register(ComplexObject2.class, "test.ComplexObject2");
+
+    ComplexObject2 obj2 = new ComplexObject2();
+    obj2.f1 = true;
+    obj2.f2 = ImmutableMap.of((byte) -1, 2);
+
+    ComplexObject1 obj = new ComplexObject1();
+    obj.f1 = obj2;
+    obj.f2 = "meta_share_test";
+    obj.f3 = Arrays.asList("compatible", "mode");
+    obj.f4 = ImmutableMap.of((byte) 1, 2);
+    obj.f5 = Byte.MAX_VALUE;
+    obj.f6 = Short.MAX_VALUE;
+    obj.f7 = Integer.MAX_VALUE;
+    obj.f8 = Long.MAX_VALUE;
+    obj.f9 = 1.0f / 2;
+    obj.f10 = 1 / 3.0;
+    obj.f11 = new short[] {(short) 1, (short) 2};
+    obj.f12 = ImmutableList.of((short) -1, (short) 4);
+
+    // Test with meta share enabled
+    byte[] serialized = fory.serialize(obj);
+    Assert.assertEquals(fory.deserialize(serialized), obj);
+
+    structRoundBack(fory, obj, "test_cross_language_meta_share_complex");
+  }
+
+  // Compatibility test classes - Version 1 (original)
+  @Data
+  public static class CompatTestV1 {
+    String name;
+    Integer age;
+  }
+
+  // Compatibility test classes - Version 2 (with additional field)
+  @Data
+  public static class CompatTestV2 {
+    String name;
+    Integer age;
+    String email; // New field added
+  }
+
+  // Compatibility test classes - Version 3 (with reordered fields)
+  @Data
+  public static class CompatTestV3 {
+    Integer age; // Reordered
+    String name; // Reordered
+    String email;
+    Boolean active; // Another new field
+  }
+
+  @Test(dataProvider = "enableCodegen")
+  public void testSchemaEvolution(boolean enableCodegen) throws Exception {
+    // Test simple schema evolution compatibility
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCodegen(enableCodegen)
+            .withRefTracking(true)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .requireClassRegistration(false)
+            .build();
+
+    fory.register(CompatTestV1.class, "test.CompatTest");
+
+    CompatTestV1 objV1 = new CompatTestV1();
+    objV1.name = "Schema Evolution Test";
+    objV1.age = 42;
+
+    // Serialize with V1 schema
+    Assert.assertEquals(fory.deserialize(fory.serialize(objV1)), objV1);
+
+    structRoundBack(fory, objV1, "test_schema_evolution");
+  }
+
+  @Test(dataProvider = "enableCodegen")
+  public void testBackwardCompatibility(boolean enableCodegen) throws Exception {
+    // Test that old version can read new data (ignoring unknown fields)
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCodegen(enableCodegen)
+            .withRefTracking(true)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .requireClassRegistration(false)
+            .build();
+
+    fory.register(CompatTestV2.class, "test.CompatTest");
+
+    CompatTestV2 objV2 = new CompatTestV2();
+    objV2.name = "Bob";
+    objV2.age = 30;
+    objV2.email = "bob@example.com";
+
+    // Serialize with V2 schema
+    Assert.assertEquals(fory.deserialize(fory.serialize(objV2)), objV2);
+
+    // Test: old version (V1) reads new version (V2) data
+    // Expected: V1 should successfully read name and age, ignoring email
+    structBackwardCompatibility(fory, objV2, "test_backward_compatibility");
+  }
+
+  @Test(dataProvider = "enableCodegen")
+  public void testFieldReorderingCompatibility(boolean enableCodegen) throws Exception {
+    // Test that field reordering doesn't break compatibility
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCodegen(enableCodegen)
+            .withRefTracking(true)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .requireClassRegistration(false)
+            .build();
+
+    fory.register(CompatTestV3.class, "test.CompatTest");
+
+    CompatTestV3 objV3 = new CompatTestV3();
+    objV3.name = "Charlie";
+    objV3.age = 35;
+    objV3.email = "charlie@example.com";
+    objV3.active = true;
+
+    // Serialize with V3 schema (reordered fields)
+    Assert.assertEquals(fory.deserialize(fory.serialize(objV3)), objV3);
+
+    structRoundBack(fory, objV3, "test_field_reordering_compatibility");
+  }
+
+  @Data
+  public static class CompatContainer {
+    CompatTestV1 oldObject;
+    CompatTestV2 newObject;
+  }
+
+  @Test(dataProvider = "enableCodegen")
+  public void testCrossVersionCompatibility(boolean enableCodegen) throws Exception {
+    // Test mixed version compatibility in one test
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withRefTracking(true)
+            .withCodegen(enableCodegen)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .requireClassRegistration(false)
+            .build();
+
+    fory.register(CompatContainer.class, "test.CompatContainer");
+    fory.register(CompatTestV1.class, "test.CompatTestV1");
+    fory.register(CompatTestV2.class, "test.CompatTestV2");
+
+    CompatTestV1 v1 = new CompatTestV1();
+    v1.name = "Old Format";
+    v1.age = 20;
+
+    CompatTestV2 v2 = new CompatTestV2();
+    v2.name = "New Format";
+    v2.age = 25;
+    v2.email = "new@example.com";
+
+    CompatContainer container = new CompatContainer();
+    container.oldObject = v1;
+    container.newObject = v2;
+
+    structRoundBack(fory, container, "test_cross_version_compatibility");
   }
 }

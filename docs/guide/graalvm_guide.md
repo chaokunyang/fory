@@ -37,13 +37,44 @@ build time. For example, here we configure `org.apache.fory.graalvm.Example` cla
 Args = --initialize-at-build-time=org.apache.fory.graalvm.Example
 ```
 
-Another benefit using fory is that you don't have to configure [reflection json](https://www.graalvm.org/latest/reference-manual/native-image/metadata/#specifying-reflection-metadata-in-json) and
-[serialization json](https://www.graalvm.org/latest/reference-manual/native-image/metadata/#serialization), which is
-very tedious, cumbersome and inconvenient. When using fory, you just need to invoke
-`org.apache.fory.Fory.register(Class<?>, boolean)` for every type you want to serialize.
+**The main benefit of using Fory with GraalVM is that you don't need to configure [reflection json](https://www.graalvm.org/latest/reference-manual/native-image/metadata/#specifying-reflection-metadata-in-json) or
+[serialization json](https://www.graalvm.org/latest/reference-manual/native-image/metadata/#serialization) for your serializable classes!** This eliminates the tedious, cumbersome and error-prone configuration process.
+
+Fory achieves this by using **codegen instead of reflection** - all serialization code is generated at build time when you call:
+
+- `fory.register(YourClass.class)` to register your classes
+- `fory.ensureSerializersCompiled()` to compile serializers at build time
 
 Note that Fory `asyncCompilationEnabled` option will be disabled automatically for graalvm native image since graalvm
 native image doesn't support JIT at the image run time.
+
+## Registering Your Classes
+
+If you encounter a GraalVM error like:
+
+```
+Type com.example.MyClass is instantiated reflectively but was never registered
+```
+
+This means you need to register your class with Fory. **Do NOT add it to reflect-config.json** - instead, register it with Fory's codegen system:
+
+```java
+static {
+  fory = Fory.builder().build();
+  // register class
+  fory.register(MyClass.class);
+  // ensure all serializers for registered classes being compiled by fory at graalvm native image build time.
+  fory.ensureSerializersCompiled();
+}
+```
+
+And make sure the class executing static registering is initialized at build time in `native-image.properties`:
+
+```properties
+Args = --initialize-at-build-time=com.example.MyForySerializer
+```
+
+This approach is much more efficient than reflection-based serialization and eliminates the need for complex GraalVM configuration files.
 
 ## Not thread-safe Fory
 
@@ -68,9 +99,9 @@ public class Example {
 
   static {
     fory = Fory.builder().build();
-    // register and generate serializer code.
-    fory.register(Record.class, true);
-    // ensure lazy initialized serializers being compiled by fory.
+    // register class
+    fory.register(Record.class);
+    // ensure all serializers for registered classes being compiled by fory at graalvm native image build time.
     fory.ensureSerializersCompiled();
   }
 
@@ -115,9 +146,9 @@ public class ThreadSafeExample {
   static {
     fory = new ThreadLocalFory(classLoader -> {
       Fory f = Fory.builder().build();
-      // register and generate serializer code.
-      f.register(Foo.class, true);
-      // ensure lazy initialized serializers being compiled by fory.
+      // register class
+      f.register(Foo.class);
+      // ensure all serializers for registered classes being compiled by fory at graalvm native image build time.
       fory.ensureSerializersCompiled();
       return f;
     });
@@ -146,8 +177,7 @@ Args = --initialize-at-build-time=org.apache.fory.graalvm.ThreadSafeExample
 
 For framework developers, if you want to integrate fory for serialization, you can provided a configuration file to let
 the users to list all the classes they want to serialize, then you can load those classes and invoke
-`org.apache.fory.Fory.register(Class<?>, boolean)` to register those classes in your Fory integration class, and configure that
-class be initialized at graalvm native image build time.
+`org.apache.fory.Fory.register(Class<?>)` to register those classes in your Fory integration class. After all classes are registered, you need to invoke `org.apache.fory.Fory.ensureSerializersCompiled()` to compile serializers at build time, and configure that class be initialized at graalvm native image build time.
 
 ## Benchmark
 

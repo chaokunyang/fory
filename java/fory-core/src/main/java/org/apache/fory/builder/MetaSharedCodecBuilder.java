@@ -23,6 +23,7 @@ import static org.apache.fory.builder.Generated.GeneratedMetaSharedSerializer.SE
 import static org.apache.fory.type.TypeUtils.OBJECT_TYPE;
 import static org.apache.fory.type.TypeUtils.STRING_TYPE;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Member;
 import java.util.Collection;
 import java.util.Map;
@@ -44,7 +45,9 @@ import org.apache.fory.serializer.MetaSharedSerializer;
 import org.apache.fory.serializer.ObjectSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.Serializers;
+import org.apache.fory.serializer.converter.FieldConverter;
 import org.apache.fory.type.Descriptor;
+import org.apache.fory.type.DescriptorBuilder;
 import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.util.DefaultValueUtils;
 import org.apache.fory.util.ExceptionUtils;
@@ -88,7 +91,7 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
                     f.isCrossLanguage() ? f.getXtypeResolver() : f.getClassResolver(),
                     beanClass,
                     classDef));
-    DescriptorGrouper grouper = fory.getClassResolver().createDescriptorGrouper(descriptors, false);
+    DescriptorGrouper grouper = typeResolver(r -> r.createDescriptorGrouper(descriptors, false));
     objectCodecOptimizer =
         new ObjectCodecOptimizer(beanClass, grouper, !fory.isBasicTypesRefIgnored(), ctx);
 
@@ -164,7 +167,7 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
     Expression decodeExpr = buildDecodeExpression();
     String decodeCode = decodeExpr.genCode(ctx).code();
     decodeCode = ctx.optimizeMethodCode(decodeCode);
-    ctx.overrideMethod("read", decodeCode, Object.class, MemoryBuffer.class, BUFFER_NAME);
+    ctx.overrideMethod(readMethodName, decodeCode, Object.class, MemoryBuffer.class, BUFFER_NAME);
     registerJITNotifyCallback();
     ctx.addConstructor(constructorCode, Fory.class, FORY_NAME, Class.class, POJO_CLASS_TYPE_NAME);
     return ctx.genCode();
@@ -181,8 +184,7 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
   public static Serializer setCodegenSerializer(
       Fory fory, Class<?> cls, GeneratedMetaSharedSerializer s) {
     if (GraalvmSupport.isGraalRuntime()) {
-      return fory.getJITContext()
-          .asyncVisitFory(f -> f.getClassResolver().getSerializer(s.getType()));
+      return typeResolver(fory, r -> r.getSerializer(s.getType()));
     }
     // This method hold jit lock, so create jit serializer async to avoid block serialization.
     Class serializerClass =
@@ -222,11 +224,25 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
   @Override
   protected Expression setFieldValue(Expression bean, Descriptor descriptor, Expression value) {
     if (descriptor.getField() == null) {
+      FieldConverter<?> converter = descriptor.getFieldConverter();
+      if (converter != null) {
+        Field field = converter.getField();
+        StaticInvoke converted =
+            new StaticInvoke(
+                converter.getClass(), "convertFrom", TypeRef.of(field.getType()), value);
+        Descriptor newDesc =
+            new DescriptorBuilder(descriptor)
+                .field(field)
+                .type(field.getType())
+                .typeRef(TypeRef.of(field.getType()))
+                .build();
+        return super.setFieldValue(bean, newDesc, converted);
+      }
       // Field doesn't exist in current class, skip set this field value.
       // Note that the field value shouldn't be an inlined value, otherwise field value read may
       // be ignored.
       // Add an ignored call here to make expression type to void.
-      return new Expression.StaticInvoke(ExceptionUtils.class, "ignore", value);
+      return new StaticInvoke(ExceptionUtils.class, "ignore", value);
     }
     return super.setFieldValue(bean, descriptor, value);
   }

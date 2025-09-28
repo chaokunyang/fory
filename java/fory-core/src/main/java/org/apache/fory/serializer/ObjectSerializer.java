@@ -29,7 +29,6 @@ import org.apache.fory.collection.Tuple2;
 import org.apache.fory.collection.Tuple3;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.memory.Platform;
 import org.apache.fory.meta.ClassDef;
 import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.reflect.ReflectionUtils;
@@ -43,6 +42,7 @@ import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.type.Generics;
 import org.apache.fory.type.TypeUtils;
 import org.apache.fory.type.Types;
+import org.apache.fory.util.ExceptionUtils;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.record.RecordInfo;
 import org.apache.fory.util.record.RecordUtils;
@@ -96,12 +96,12 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
     Collection<Descriptor> descriptors;
     boolean shareMeta = fory.getConfig().isMetaShareEnabled();
     if (shareMeta) {
-      ClassDef classDef = classResolver.getClassDef(cls, resolveParent);
+      ClassDef classDef = typeResolver.getTypeDef(cls, resolveParent);
       descriptors = classDef.getDescriptors(typeResolver, cls);
     } else {
-      descriptors = fory.getClassResolver().getFieldDescriptors(cls, resolveParent);
+      descriptors = typeResolver.getFieldDescriptors(cls, resolveParent);
     }
-    DescriptorGrouper descriptorGrouper = classResolver.createDescriptorGrouper(descriptors, false);
+    DescriptorGrouper descriptorGrouper = typeResolver.createDescriptorGrouper(descriptors, false);
     descriptors = descriptorGrouper.getSortedDescriptors();
     if (isRecord) {
       List<String> fieldNames =
@@ -244,13 +244,9 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
     if (isRecord) {
       Object[] fields = readFields(buffer);
       fields = RecordUtils.remapping(recordInfo, fields);
-      try {
-        T obj = (T) constructor.invokeWithArguments(fields);
-        Arrays.fill(recordInfo.getRecordComponents(), null);
-        return obj;
-      } catch (Throwable e) {
-        Platform.throwException(e);
-      }
+      T obj = (T) objectCreator.newInstanceWithArguments(fields);
+      Arrays.fill(recordInfo.getRecordComponents(), null);
+      return obj;
     }
     T obj = newBean();
     refResolver.reference(obj);
@@ -353,7 +349,7 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
   }
 
   private static int computeFieldHash(int hash, Fory fory, TypeRef<?> typeRef) {
-    int id;
+    int id = 0;
     if (typeRef.isSubtypeOf(List.class)) {
       // TODO(chaokunyang) add list element type into schema hash
       id = Types.LIST;
@@ -362,24 +358,19 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
       id = Types.MAP;
     } else {
       try {
-        TypeResolver resolver =
-            fory.isCrossLanguage() ? fory.getXtypeResolver() : fory.getClassResolver();
+        TypeResolver resolver = fory._getTypeResolver();
         Class<?> cls = typeRef.getRawType();
-        if (ReflectionUtils.isAbstract(cls) || cls.isInterface()) {
-          id = 0;
-        } else {
-          ClassInfo classInfo = resolver.getClassInfo(typeRef.getRawType());
-          int xtypeId = classInfo.getXtypeId();
-          if (Types.isStructType((byte) xtypeId)) {
+        if (!ReflectionUtils.isAbstract(cls) && !cls.isInterface()) {
+          ClassInfo classInfo = resolver.getClassInfo(cls);
+          int xtypeId = id = classInfo.getXtypeId();
+          if (Types.isNamedType(xtypeId & 0xff)) {
             id =
                 TypeUtils.computeStringHash(
                     classInfo.decodeNamespace() + classInfo.decodeTypeName());
-          } else {
-            id = Math.abs(xtypeId);
           }
         }
       } catch (Exception e) {
-        id = 0;
+        ExceptionUtils.ignore(e);
       }
     }
     long newHash = ((long) hash) * 31 + id;

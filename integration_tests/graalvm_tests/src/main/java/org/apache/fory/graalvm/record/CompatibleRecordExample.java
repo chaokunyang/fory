@@ -37,7 +37,8 @@ public class CompatibleRecordExample {
             .withCompatibleMode(CompatibleMode.COMPATIBLE)
             .build();
     // register and generate serializer code.
-    fory.register(RecordExample.Record.class, true);
+    fory.register(RecordExample.Record.class);
+    fory.ensureSerializersCompiled();
     return fory;
   }
 

@@ -25,12 +25,25 @@ use crate::types::{ForyGeneralList, TypeId};
 macro_rules! impl_num_serializer {
     ($name: ident, $ty:tt, $field_type: expr) => {
         impl Serializer for $ty {
-            fn write(&self, context: &mut WriteContext) {
+            fn write(&self, context: &mut WriteContext, _is_field: bool) {
                 context.writer.$name(*self);
+            }
+
+            fn write_type_info(context: &mut WriteContext, is_field: bool) {
+                if *context.get_fory().get_mode() == crate::types::Mode::Compatible && !is_field {
+                    context.writer.var_uint32($field_type as u32);
+                }
             }
 
             fn read(context: &mut ReadContext) -> Result<Self, Error> {
                 Ok(context.reader.$name())
+            }
+
+            fn read_type_info(context: &mut ReadContext, is_field: bool) {
+                if *context.get_fory().get_mode() == crate::types::Mode::Compatible && !is_field {
+                    let remote_type_id = context.reader.var_uint32();
+                    assert_eq!(remote_type_id, $field_type as u32);
+                }
             }
 
             fn reserved_space() -> usize {
@@ -43,14 +56,13 @@ macro_rules! impl_num_serializer {
         }
     };
 }
-impl ForyGeneralList for i8 {}
 impl ForyGeneralList for u16 {}
 impl ForyGeneralList for u32 {}
 impl ForyGeneralList for u64 {}
 
 impl_num_serializer!(i8, i8, TypeId::INT8);
 impl_num_serializer!(i16, i16, TypeId::INT16);
-impl_num_serializer!(i32, i32, TypeId::INT32);
-impl_num_serializer!(i64, i64, TypeId::INT64);
+impl_num_serializer!(var_int32, i32, TypeId::INT32);
+impl_num_serializer!(var_int64, i64, TypeId::INT64);
 impl_num_serializer!(f32, f32, TypeId::FLOAT32);
 impl_num_serializer!(f64, f64, TypeId::FLOAT64);

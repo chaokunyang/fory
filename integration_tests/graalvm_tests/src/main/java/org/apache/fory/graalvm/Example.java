@@ -30,7 +30,8 @@ public class Example {
   static {
     fory = Fory.builder().withName(Example.class.getName()).requireClassRegistration(true).build();
     // register and generate serializer code.
-    fory.register(Foo.class, true);
+    fory.register(Foo.class);
+    fory.ensureSerializersCompiled();
   }
 
   static void test(Fory fory) {

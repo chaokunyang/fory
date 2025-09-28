@@ -24,39 +24,72 @@ import (
 	"sync"
 )
 
-func NewFory(referenceTracking bool) *Fory {
-	fory := &Fory{
-		refResolver:       newRefResolver(referenceTracking),
-		referenceTracking: referenceTracking,
-		language:          XLANG,
-		buffer:            NewByteBuffer(nil),
+// Option represents a configuration option for Fory instances.
+// This follows the functional options pattern, allowing flexible configuration
+// by passing variadic option functions to constructors like NewForyWithOptions.
+type Option func(*Fory)
+
+// WithCompatible sets the compatible mode for the Fory instance.
+// When compatible=true, scoped meta sharing is automatically enabled.
+func WithCompatible(compatible bool) Option {
+	return func(f *Fory) {
+		f.compatible = compatible
+		if compatible {
+			f.metaContext = NewMetaContext(true) // Enable scoped meta sharing
+		} else {
+			f.metaContext = nil
+		}
 	}
+}
+
+// WithRefTracking sets the reference tracking mode for the Fory instance
+func WithRefTracking(refTracking bool) Option {
+	return func(f *Fory) {
+		f.refTracking = refTracking
+	}
+}
+
+// WithScopedMetaShare sets the scoped meta share mode for the Fory instance.
+// Note: Compatible mode automatically enables scoped meta sharing.
+// This option is mainly used for fine-grained control when compatible mode is already enabled.
+func WithScopedMetaShare(enabled bool) Option {
+	return func(f *Fory) {
+		if f.metaContext == nil {
+			f.metaContext = NewMetaContext(enabled)
+		} else {
+			f.metaContext.SetScopedMetaShareEnabled(enabled)
+		}
+	}
+}
+
+func NewFory(refTracking bool) *Fory {
+	return NewForyWithOptions(WithRefTracking(refTracking))
+}
+
+// NewForyWithOptions creates a Fory instance with configurable options
+func NewForyWithOptions(options ...Option) *Fory {
+	fory := &Fory{
+		refResolver: nil,
+		refTracking: false,
+		language:    XLANG,
+		buffer:      NewByteBuffer(nil),
+		compatible:  false,
+	}
+
+	// Apply options
+	for _, option := range options {
+		option(fory)
+	}
+
 	// Create a new type resolver for this instance but copy generated serializers from global resolver
 	fory.typeResolver = newTypeResolver(fory)
 
-	// Copy generated serializers from global resolver to this instance
-	if globalTypeResolver != nil {
-		for typ, serializer := range globalTypeResolver.typeToSerializers {
-			fory.typeResolver.typeToSerializers[typ] = serializer
-		}
-		for typeId, typ := range globalTypeResolver.typeIdToType {
-			fory.typeResolver.typeIdToType[typeId] = typ
-		}
+	// Initialize meta context if compatible mode is enabled
+	if fory.compatible {
+		fory.metaContext = NewMetaContext(true)
 	}
 
-	return fory
-}
-
-// NewForyWithIsolatedTypes creates a Fory instance with isolated type resolver
-// for use cases that need independent type registration
-func NewForyWithIsolatedTypes(referenceTracking bool) *Fory {
-	fory := &Fory{
-		refResolver:       newRefResolver(referenceTracking),
-		referenceTracking: referenceTracking,
-		language:          XLANG,
-		buffer:            NewByteBuffer(nil),
-	}
-	fory.typeResolver = newTypeResolver(fory)
+	fory.refResolver = newRefResolver(fory.refTracking)
 	return fory
 }
 
@@ -129,14 +162,16 @@ const (
 const MAGIC_NUMBER int16 = 0x62D4
 
 type Fory struct {
-	typeResolver      *typeResolver
-	refResolver       *RefResolver
-	referenceTracking bool
-	language          Language
-	bufferCallback    BufferCallback
-	peerLanguage      Language
-	buffer            *ByteBuffer
-	buffers           []*ByteBuffer
+	typeResolver   *typeResolver
+	refResolver    *RefResolver
+	refTracking    bool
+	language       Language
+	bufferCallback BufferCallback
+	peerLanguage   Language
+	buffer         *ByteBuffer
+	buffers        []*ByteBuffer
+	compatible     bool
+	metaContext    *MetaContext
 }
 
 func (f *Fory) RegisterTagType(tag string, v interface{}) error {
@@ -210,7 +245,7 @@ func (f *Fory) Write(buffer *ByteBuffer, v interface{}) (err error) {
 	case byte: // uint8
 		f.WriteByte_(buffer, v)
 	default:
-		err = f.WriteReferencable(buffer, reflect.ValueOf(v))
+		err = f.WriteReferencable_(buffer, reflect.ValueOf(v))
 	}
 	return
 }
@@ -269,6 +304,22 @@ func (f *Fory) readLength(buffer *ByteBuffer) int {
 	return int(buffer.ReadVarInt32())
 }
 
+func (f *Fory) WriteReferencable_(buffer *ByteBuffer, value reflect.Value) error {
+	metaOffset := buffer.writerIndex
+	if f.compatible {
+		buffer.WriteInt32(-1)
+	}
+	err := f.WriteReferencable(buffer, value)
+	if err != nil {
+		return err
+	}
+	if f.compatible && f.metaContext != nil && len(f.metaContext.writingTypeDefs) > 0 {
+		buffer.PutInt32(metaOffset, int32(buffer.writerIndex-metaOffset-4))
+		f.typeResolver.writeTypeDefs(buffer)
+	}
+	return nil
+}
+
 func (f *Fory) WriteReferencable(buffer *ByteBuffer, value reflect.Value) error {
 	return f.writeReferencableBySerializer(buffer, value, nil)
 }
@@ -323,7 +374,20 @@ func (f *Fory) writeValue(buffer *ByteBuffer, value reflect.Value, serializer Se
 	if err != nil {
 		return fmt.Errorf("cannot write typeinfo for value %v: %v", value, err)
 	}
-	serializer = typeInfo.Serializer
+	// if compatible mode enable, use declared serializer to write value
+	if IsNamespacedType(TypeId(typeInfo.TypeID)) && f.compatible {
+		if declaredTypeDef, err := f.typeResolver.getTypeDef(typeInfo.Type, false); err != nil {
+			return err
+		} else {
+			ti, err := declaredTypeDef.buildTypeInfo()
+			if err != nil {
+				return err
+			}
+			serializer = ti.Serializer
+		}
+	} else {
+		serializer = typeInfo.Serializer
+	}
 	// Serialize the actual value using the serializer
 	return serializer.Write(f, buffer, value)
 }
@@ -391,6 +455,19 @@ func (f *Fory) Deserialize(buf *ByteBuffer, v interface{}, buffers []*ByteBuffer
 				"produced with buffer_callback null")
 		}
 	}
+
+	if f.compatible {
+		typeDefOffset := buf.ReadInt32()
+		if typeDefOffset >= 0 {
+			save := buf.readerIndex
+			buf.SetReaderIndex(save + int(typeDefOffset))
+			if err := f.typeResolver.readTypeDefs(buf); err != nil {
+				return fmt.Errorf("failed to read typeDefs: %w", err)
+			}
+			buf.SetReaderIndex(save)
+		}
+	}
+
 	if isXLangFlag {
 		return f.ReadReferencable(buf, reflect.ValueOf(v).Elem())
 	} else {
@@ -447,7 +524,7 @@ func (f *Fory) readData(buffer *ByteBuffer, value reflect.Value, serializer Seri
 		}
 		serializer = typeInfo.Serializer
 		var concrete reflect.Value
-		var typ reflect.Type
+		var type_ reflect.Type
 		/*
 		   Added logic to distinguish between:
 		   1. Deserialization into a specified interface type,
@@ -458,12 +535,12 @@ func (f *Fory) readData(buffer *ByteBuffer, value reflect.Value, serializer Seri
 		case value.Kind() == reflect.Interface,
 			!value.CanSet():
 			concrete = reflect.New(typeInfo.Type).Elem()
-			typ = typeInfo.Type
+			type_ = typeInfo.Type
 		default:
 			concrete = value
-			typ = concrete.Type()
+			type_ = concrete.Type()
 		}
-		if err := serializer.Read(f, buffer, typ, concrete); err != nil {
+		if err := serializer.Read(f, buffer, type_, concrete); err != nil {
 			return err
 		}
 		value.Set(concrete)
@@ -499,11 +576,25 @@ func (f *Fory) Reset() {
 func (f *Fory) resetWrite() {
 	f.typeResolver.resetWrite()
 	f.refResolver.resetWrite()
+	if f.metaContext != nil {
+		if f.metaContext.IsScopedMetaShareEnabled() {
+			f.metaContext.resetWrite()
+		} else {
+			f.metaContext = nil
+		}
+	}
 }
 
 func (f *Fory) resetRead() {
 	f.typeResolver.resetRead()
 	f.refResolver.resetRead()
+	if f.metaContext != nil {
+		if f.metaContext.IsScopedMetaShareEnabled() {
+			f.metaContext.resetRead()
+		} else {
+			f.metaContext = nil
+		}
+	}
 }
 
 // methods for configure fory.
@@ -512,6 +603,6 @@ func (f *Fory) SetLanguage(language Language) {
 	f.language = language
 }
 
-func (f *Fory) SetReferenceTracking(referenceTracking bool) {
-	f.referenceTracking = referenceTracking
+func (f *Fory) SetRefTracking(refTracking bool) {
+	f.refTracking = refTracking
 }

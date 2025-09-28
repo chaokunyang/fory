@@ -55,9 +55,11 @@ import org.apache.fory.codegen.Expression.ReplaceStub;
 import org.apache.fory.codegen.Expression.StaticInvoke;
 import org.apache.fory.codegen.ExpressionVisitor;
 import org.apache.fory.memory.Platform;
+import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.serializer.ObjectSerializer;
 import org.apache.fory.serializer.PrimitiveSerializers.LongSerializer;
+import org.apache.fory.serializer.SerializationUtils;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.util.Preconditions;
@@ -87,20 +89,18 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
     super(TypeRef.of(beanClass), fory, Generated.GeneratedObjectSerializer.class);
     Collection<Descriptor> descriptors;
     boolean shareMeta = fory.getConfig().isMetaShareEnabled();
-    boolean xlang = fory.isCrossLanguage();
     if (shareMeta) {
       descriptors =
           fory(
               f ->
                   f.getClassResolver()
-                      .getClassDef(beanClass, true)
-                      .getDescriptors(
-                          xlang ? f.getXtypeResolver() : f.getClassResolver(), beanClass));
+                      .getTypeDef(beanClass, true)
+                      .getDescriptors(SerializationUtils.getTypeResolver(fory), beanClass));
     } else {
-      descriptors = fory.getClassResolver().getFieldDescriptors(beanClass, true);
+      descriptors = typeResolver(r -> r.getFieldDescriptors(beanClass, true));
     }
     Collection<Descriptor> p = descriptors;
-    DescriptorGrouper grouper = fory(f -> f.getClassResolver().createDescriptorGrouper(p, false));
+    DescriptorGrouper grouper = typeResolver(r -> r.createDescriptorGrouper(p, false));
     descriptors = grouper.getSortedDescriptors();
     classVersionHash =
         fory.checkClassVersion()
@@ -141,7 +141,7 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
   /** Mark non-inner registered final types as non-final to write class def for those types. */
   @Override
   protected boolean isMonomorphic(Class<?> clz) {
-    return fory(f -> f.getClassResolver().isMonomorphic(clz));
+    return typeResolver(r -> r.isMonomorphic(clz));
   }
 
   /**
@@ -473,13 +473,9 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
         FieldsCollector collector = (FieldsCollector) bean;
         bean = createRecord(collector.recordValuesMap);
       } else {
+        ObjectCreators.getObjectCreator(beanClass); // trigger cache and make error raised early
         bean =
-            new StaticInvoke(
-                RecordUtils.class,
-                "invokeRecordCtrHandle",
-                OBJECT_TYPE,
-                getRecordCtrHandle(),
-                bean);
+            new Invoke(getObjectCreator(beanClass), "newInstanceWithArguments", OBJECT_TYPE, bean);
       }
     }
     expressions.add(new Expression.Return(bean));

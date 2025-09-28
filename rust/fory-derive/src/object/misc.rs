@@ -20,7 +20,7 @@ use quote::quote;
 use std::sync::atomic::{AtomicU32, Ordering};
 use syn::Field;
 
-use super::util::{generic_tree_to_tokens, parse_generic_tree};
+use super::util::{generic_tree_to_tokens, get_sort_fields_ts, parse_generic_tree};
 
 // Global type ID counter that auto-grows from 0 at macro processing time
 static TYPE_ID_COUNTER: AtomicU32 = AtomicU32::new(0);
@@ -30,6 +30,7 @@ pub fn allocate_type_id() -> u32 {
     TYPE_ID_COUNTER.fetch_add(1, Ordering::SeqCst)
 }
 
+#[allow(dead_code)]
 fn hash(fields: &[&Field]) -> TokenStream {
     let props = fields.iter().map(|field| {
         let ty = &field.ty;
@@ -54,7 +55,28 @@ fn hash(fields: &[&Field]) -> TokenStream {
     }
 }
 
-fn type_def(fields: &[&Field]) -> TokenStream {
+pub fn gen_actual_type_id() -> TokenStream {
+    quote! {
+        fory_core::serializer::struct_::actual_type_id(type_id, register_by_name, mode)
+    }
+}
+
+pub fn gen_get_sorted_field_names(fields: &[&Field]) -> TokenStream {
+    let create_sorted_field_names = get_sort_fields_ts(fields);
+    quote! {
+        let sorted_field_names = match fory.get_type_resolver().get_sorted_field_names::<Self>(std::any::TypeId::of::<Self>()) {
+            Some(result) => result,
+            None => {
+                #create_sorted_field_names
+                fory.get_type_resolver().set_sorted_field_names::<Self>(&sorted_field_names);
+                sorted_field_names
+            }
+        };
+        sorted_field_names
+    }
+}
+
+pub fn gen_type_def(fields: &[&Field]) -> TokenStream {
     let field_infos = fields.iter().map(|field| {
         let ty = &field.ty;
         let name = format!("{}", field.ident.as_ref().expect("should be field name"));
@@ -65,36 +87,7 @@ fn type_def(fields: &[&Field]) -> TokenStream {
         }
     });
     quote! {
-        fn type_def(fory: &fory_core::fory::Fory, layer_id: u32) -> Vec<u8> {
-            fory_core::meta::TypeMeta::from_fields(
-                layer_id,
-                vec![#(#field_infos),*]
-            ).to_bytes().unwrap()
-        }
-    }
-}
-
-pub fn gen_in_struct_impl(fields: &[&Field]) -> TokenStream {
-    let _hash_token_stream = hash(fields);
-    let type_def_token_stream = type_def(fields);
-
-    quote! {
-        #type_def_token_stream
-    }
-}
-
-pub fn gen(type_id: u32) -> TokenStream {
-    quote! {
-        fn get_type_id(fory: &fory_core::fory::Fory) -> u32 {
-            fory.get_type_resolver().get_type_id(&std::any::TypeId::of::<Self>(), #type_id)
-        }
-    }
-}
-
-pub fn gen_type_index(type_id: u32) -> TokenStream {
-    quote! {
-        fn type_index() -> u32 {
-            #type_id
-        }
+        let field_infos: Vec<fory_core::meta::FieldInfo> = vec![#(#field_infos),*];
+        fory_core::serializer::struct_::type_def::<Self>(fory, type_id, namespace, type_name, register_by_name, &field_infos)
     }
 }

@@ -45,18 +45,19 @@ type TypeDef struct {
 	typeName       *MetaStringBytes
 	compressed     bool
 	registerByName bool
-	fieldInfos     []FieldInfo
+	fieldDefs      []FieldDef
 	encoded        []byte
+	type_          reflect.Type
 }
 
-func NewTypeDef(typeId TypeId, nsName, typeName *MetaStringBytes, registerByName, compressed bool, fieldInfos []FieldInfo) *TypeDef {
+func NewTypeDef(typeId TypeId, nsName, typeName *MetaStringBytes, registerByName, compressed bool, fieldDefs []FieldDef) *TypeDef {
 	return &TypeDef{
 		typeId:         typeId,
 		nsName:         nsName,
 		typeName:       typeName,
 		compressed:     compressed,
 		registerByName: registerByName,
-		fieldInfos:     fieldInfos,
+		fieldDefs:      fieldDefs,
 		encoded:        nil,
 	}
 }
@@ -65,8 +66,21 @@ func (td *TypeDef) writeTypeDef(buffer *ByteBuffer) {
 	buffer.WriteBinary(td.encoded)
 }
 
-func readTypeDef(fory *Fory, buffer *ByteBuffer) (*TypeDef, error) {
-	return decodeTypeDef(fory, buffer)
+// buildTypeInfo constructs a TypeInfo from the TypeDef
+func (td *TypeDef) buildTypeInfo() (TypeInfo, error) {
+	info := TypeInfo{
+		Type:         td.type_,
+		TypeID:       int32(td.typeId),
+		Serializer:   &structSerializer{type_: td.type_, fieldDefs: td.fieldDefs},
+		PkgPathBytes: td.nsName,
+		NameBytes:    td.typeName,
+		IsDynamic:    td.typeId < 0,
+	}
+	return info, nil
+}
+
+func readTypeDef(fory *Fory, buffer *ByteBuffer, header int64) (*TypeDef, error) {
+	return decodeTypeDef(fory, buffer, header)
 }
 
 func skipTypeDef(buffer *ByteBuffer, header int64) {
@@ -79,7 +93,7 @@ func skipTypeDef(buffer *ByteBuffer, header int64) {
 
 // buildTypeDef constructs a TypeDef from a value
 func buildTypeDef(fory *Fory, value reflect.Value) (*TypeDef, error) {
-	fieldInfos, err := buildFieldInfos(fory, value)
+	fieldDefs, err := buildFieldDefs(fory, value)
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract field infos: %w", err)
 	}
@@ -90,7 +104,7 @@ func buildTypeDef(fory *Fory, value reflect.Value) (*TypeDef, error) {
 	}
 	typeId := TypeId(info.TypeID)
 	registerByName := IsNamespacedType(typeId)
-	typeDef := NewTypeDef(typeId, info.PkgPathBytes, info.NameBytes, registerByName, false, fieldInfos)
+	typeDef := NewTypeDef(typeId, info.PkgPathBytes, info.NameBytes, registerByName, false, fieldDefs)
 
 	// encoding the typeDef, and save the encoded bytes
 	encoded, err := encodingTypeDef(fory.typeResolver, typeDef)
@@ -103,13 +117,13 @@ func buildTypeDef(fory *Fory, value reflect.Value) (*TypeDef, error) {
 }
 
 /*
-FieldInfo contains information about a single field in a struct
-field info layout as following:
+FieldDef contains definition of a single field in a struct
+field def layout as following:
   - first 1 byte: header (2 bits field name encoding + 4 bits size + nullability flag + ref tracking flag)
   - next variable bytes: FieldType info
   - next variable bytes: field name or tag id
 */
-type FieldInfo struct {
+type FieldDef struct {
 	name         string
 	nameEncoding meta.Encoding
 	nullable     bool
@@ -117,17 +131,17 @@ type FieldInfo struct {
 	fieldType    FieldType
 }
 
-// buildFieldInfos extracts field information from a struct value
-func buildFieldInfos(fory *Fory, value reflect.Value) ([]FieldInfo, error) {
-	var fieldInfos []FieldInfo
+// buildFieldDefs extracts field definitions from a struct value
+func buildFieldDefs(fory *Fory, value reflect.Value) ([]FieldDef, error) {
+	var fieldDefs []FieldDef
 
-	typ := value.Type()
-	for i := 0; i < typ.NumField(); i++ {
-		field := typ.Field(i)
+	type_ := value.Type()
+	for i := 0; i < type_.NumField(); i++ {
+		field := type_.Field(i)
 		fieldValue := value.Field(i)
 
-		var fieldInfo FieldInfo
-		fieldName := field.Name
+		var fieldInfo FieldDef
+		fieldName := SnakeCase(field.Name)
 
 		nameEncoding := fory.typeResolver.typeNameEncoder.ComputeEncodingWith(fieldName, fieldNameEncodings)
 
@@ -135,22 +149,57 @@ func buildFieldInfos(fory *Fory, value reflect.Value) ([]FieldInfo, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to build field type for field %s: %w", fieldName, err)
 		}
-		fieldInfo = FieldInfo{
+		fieldInfo = FieldDef{
 			name:         fieldName,
 			nameEncoding: nameEncoding,
 			nullable:     nullable(field.Type),
-			trackingRef:  fory.referenceTracking,
+			trackingRef:  fory.refTracking,
 			fieldType:    ft,
 		}
-		fieldInfos = append(fieldInfos, fieldInfo)
+		fieldDefs = append(fieldDefs, fieldInfo)
 	}
-	return fieldInfos, nil
+
+	// Sort field definitions
+	if len(fieldDefs) > 1 {
+		// Extract serializers and names for sorting
+		serializers := make([]Serializer, len(fieldDefs))
+		fieldNames := make([]string, len(fieldDefs))
+		for i, fieldDef := range fieldDefs {
+			serializer, err := getFieldTypeSerializer(fory, fieldDef.fieldType)
+			if err != nil {
+				// If we can't get serializer, use nil (will be handled by sortFields)
+				serializers[i] = nil
+			} else {
+				serializers[i] = serializer
+			}
+			fieldNames[i] = fieldDef.name
+		}
+
+		// Use existing sortFields function to get optimal order
+		_, sortedNames := sortFields(fory.typeResolver, fieldNames, serializers)
+
+		// Rebuild fieldInfos in the sorted order
+		nameToFieldInfo := make(map[string]FieldDef)
+		for _, fieldInfo := range fieldDefs {
+			nameToFieldInfo[fieldInfo.name] = fieldInfo
+		}
+
+		sortedFieldInfos := make([]FieldDef, len(fieldDefs))
+		for i, name := range sortedNames {
+			sortedFieldInfos[i] = nameToFieldInfo[name]
+		}
+
+		fieldDefs = sortedFieldInfos
+	}
+
+	return fieldDefs, nil
 }
 
 // FieldType interface represents different field types, including object, collection, and map types
 type FieldType interface {
 	TypeId() TypeId
 	write(*ByteBuffer)
+	getTypeInfo(*Fory) (TypeInfo, error) // some serializer need typeinfo as well
 }
 
 // BaseFieldType provides common functionality for field types
@@ -163,22 +212,79 @@ func (b *BaseFieldType) write(buffer *ByteBuffer) {
 	buffer.WriteVarUint32Small7(uint32(b.typeId))
 }
 
-// readFieldInfo reads field type info from the buffer according to the TypeId
-func readFieldType(buffer *ByteBuffer) (FieldType, error) {
-	typeId := buffer.ReadVarUint32Small7()
-	if typeId == LIST || typeId == SET {
-		panic("not implement yet")
-	} else if typeId == MAP {
-		panic("not implement yet")
+func getFieldTypeSerializer(fory *Fory, ft FieldType) (Serializer, error) {
+	typeInfo, err := ft.getTypeInfo(fory)
+	if err != nil {
+		return nil, err
 	}
-
-	return NewObjectFieldType(TypeId(typeId)), nil
+	return typeInfo.Serializer, nil
 }
 
-// CollectionFieldType represents collection types like List, Set
+func (b *BaseFieldType) getTypeInfo(fory *Fory) (TypeInfo, error) {
+	info, err := fory.typeResolver.getTypeInfoById(b.typeId)
+	if err != nil {
+		return TypeInfo{}, err
+	}
+	return info, nil
+}
+
+// readFieldType reads field type info from the buffer according to the TypeId
+func readFieldType(buffer *ByteBuffer) (FieldType, error) {
+	typeId := buffer.ReadVarUint32Small7()
+
+	switch typeId {
+	case LIST, SET:
+		// Read element type recursively
+		elementType, err := readFieldType(buffer)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read element type: %w", err)
+		}
+		return NewCollectionFieldType(TypeId(typeId), elementType), nil
+	case MAP:
+		// Read key type recursively
+		keyType, err := readFieldType(buffer)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read key type: %w", err)
+		}
+		// Read value type recursively
+		valueType, err := readFieldType(buffer)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read value type: %w", err)
+		}
+		return NewMapFieldType(TypeId(typeId), keyType, valueType), nil
+	case EXTENSION, STRUCT, NAMED_STRUCT, COMPATIBLE_STRUCT, NAMED_COMPATIBLE_STRUCT:
+		return NewDynamicFieldType(TypeId(typeId)), nil
+	}
+	return NewSimpleFieldType(TypeId(typeId)), nil
+}
+
+// CollectionFieldType represents collection types like List, Slice
 type CollectionFieldType struct {
 	BaseFieldType
 	elementType FieldType
+}
+
+func NewCollectionFieldType(typeId TypeId, elementType FieldType) *CollectionFieldType {
+	return &CollectionFieldType{
+		BaseFieldType: BaseFieldType{typeId: typeId},
+		elementType:   elementType,
+	}
+}
+
+func (c *CollectionFieldType) write(buffer *ByteBuffer) {
+	c.BaseFieldType.write(buffer)
+	c.elementType.write(buffer)
+}
+
+func (c *CollectionFieldType) getTypeInfo(f *Fory) (TypeInfo, error) {
+	elemInfo, err := c.elementType.getTypeInfo(f)
+	elementType := elemInfo.Type
+	collectionType := reflect.SliceOf(elementType)
+	if err != nil {
+		return TypeInfo{}, err
+	}
+	sliceSerializer := &sliceSerializer{elemInfo: elemInfo, declaredType: elemInfo.Type}
+	return TypeInfo{Type: collectionType, Serializer: sliceSerializer}, nil
 }
 
 // MapFieldType represents map types
@@ -188,24 +294,111 @@ type MapFieldType struct {
 	valueType FieldType
 }
 
-// ObjectFieldType represents object field types that aren't registered or collection/map types
-type ObjectFieldType struct {
+func NewMapFieldType(typeId TypeId, keyType, valueType FieldType) *MapFieldType {
+	return &MapFieldType{
+		BaseFieldType: BaseFieldType{typeId: typeId},
+		keyType:       keyType,
+		valueType:     valueType,
+	}
+}
+
+func (m *MapFieldType) write(buffer *ByteBuffer) {
+	m.BaseFieldType.write(buffer)
+	m.keyType.write(buffer)
+	m.valueType.write(buffer)
+}
+
+func (m *MapFieldType) getTypeInfo(f *Fory) (TypeInfo, error) {
+	keyInfo, err := m.keyType.getTypeInfo(f)
+	if err != nil {
+		return TypeInfo{}, err
+	}
+	valueInfo, err := m.valueType.getTypeInfo(f)
+	if err != nil {
+		return TypeInfo{}, err
+	}
+	var mapType reflect.Type
+	if keyInfo.Type != nil && valueInfo.Type != nil {
+		mapType = reflect.MapOf(keyInfo.Type, valueInfo.Type)
+	}
+	mapSerializer := &mapSerializer{
+		keySerializer:   keyInfo.Serializer,
+		valueSerializer: valueInfo.Serializer,
+	}
+	return TypeInfo{Type: mapType, Serializer: mapSerializer}, nil
+}
+
+// SimpleFieldType represents object field types that aren't collection/map types
+type SimpleFieldType struct {
 	BaseFieldType
 }
 
-func NewObjectFieldType(typeId TypeId) *ObjectFieldType {
-	return &ObjectFieldType{
+func NewSimpleFieldType(typeId TypeId) *SimpleFieldType {
+	return &SimpleFieldType{
 		BaseFieldType: BaseFieldType{
 			typeId: typeId,
 		},
 	}
 }
 
-// todo: implement buildFieldType for collection and map types
-// buildFieldType builds field type from reflect.Type, handling collection, map and object types
+// DynamicFieldType represents a field type that is determined at runtime, like EXTENSION or STRUCT
+type DynamicFieldType struct {
+	BaseFieldType
+}
+
+func NewDynamicFieldType(typeId TypeId) *DynamicFieldType {
+	return &DynamicFieldType{
+		BaseFieldType: BaseFieldType{
+			typeId: typeId,
+		},
+	}
+}
+
+func (d *DynamicFieldType) getTypeInfo(fory *Fory) (TypeInfo, error) {
+	// leave empty for runtime resolution, we not know the actual type here
+	return TypeInfo{Type: reflect.TypeOf((*interface{})(nil)).Elem(), Serializer: nil}, nil
+}
+
+// buildFieldType builds field type from reflect.Type, handling collection, map recursively
 func buildFieldType(fory *Fory, fieldValue reflect.Value) (FieldType, error) {
 	fieldType := fieldValue.Type()
 
+	// Handle slice and array types
+	if fieldType.Kind() == reflect.Slice || fieldType.Kind() == reflect.Array {
+		// Create a zero value of the element type for recursive processing
+		elemType := fieldType.Elem()
+		elemValue := reflect.Zero(elemType)
+
+		elementFieldType, err := buildFieldType(fory, elemValue)
+		if err != nil {
+			return nil, fmt.Errorf("failed to build element field type: %w", err)
+		}
+
+		return NewCollectionFieldType(LIST, elementFieldType), nil
+	}
+
+	// Handle map types
+	if fieldType.Kind() == reflect.Map {
+		// Create zero values for key and value types
+		keyType := fieldType.Key()
+		valueType := fieldType.Elem()
+		keyValue := reflect.Zero(keyType)
+		valueValue := reflect.Zero(valueType)
+
+		keyFieldType, err := buildFieldType(fory, keyValue)
+		if err != nil {
+			return nil, fmt.Errorf("failed to build key field type: %w", err)
+		}
+
+		valueFieldType, err := buildFieldType(fory, valueValue)
+		if err != nil {
+			return nil, fmt.Errorf("failed to build value field type: %w", err)
+		}
+
+		return NewMapFieldType(MAP, keyFieldType, valueFieldType), nil
+	}
+
+	// For all other types, get the type ID and treat as ObjectFieldType
 	var typeId TypeId
 	typeInfo, err := fory.typeResolver.getTypeInfo(fieldValue, true)
 	if err != nil {
@@ -213,14 +406,10 @@ func buildFieldType(fory *Fory, fieldValue reflect.Value) (FieldType, error) {
 	}
 	typeId = TypeId(typeInfo.TypeID)
 
-	if fieldType.Kind() == reflect.Slice || fieldType.Kind() == reflect.Array || fieldType.Kind() == SET {
-		panic("not implement yet")
+	if typeId == EXTENSION || typeId == STRUCT || typeId == NAMED_STRUCT ||
+		typeId == COMPATIBLE_STRUCT || typeId == NAMED_COMPATIBLE_STRUCT {
+		return NewDynamicFieldType(typeId), nil
 	}
 
-	if fieldType.Kind() == reflect.Map {
-		panic("not implement yet")
-	}
-
-	// For all other types, treat as ObjectFieldType
-	return NewObjectFieldType(typeId), nil
+	return NewSimpleFieldType(typeId), nil
 }

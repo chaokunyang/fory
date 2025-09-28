@@ -55,7 +55,7 @@ func (s setSerializer) Write(f *Fory, buf *ByteBuffer, value reflect.Value) erro
 	collectFlag, elemTypeInfo := s.writeHeader(f, buf, keys)
 
 	// Check if all elements are of same type
-	if (collectFlag & CollectionNotSameType) == 0 {
+	if (collectFlag & CollectionIsSameType) != 0 {
 		// Optimized path for same-type elements
 		return s.writeSameType(f, buf, keys, elemTypeInfo, collectFlag)
 	}
@@ -72,7 +72,7 @@ func (s setSerializer) writeHeader(f *Fory, buf *ByteBuffer, keys []reflect.Valu
 	collectFlag := CollectionDefaultFlag
 	var elemTypeInfo TypeInfo
 	hasNull := false
-	hasDifferentType := false
+	hasSameType := true
 
 	// Check elements to detect types
 	// Initialize element type information from first non-null element
@@ -97,7 +97,7 @@ func (s setSerializer) writeHeader(f *Fory, buf *ByteBuffer, keys []reflect.Valu
 		// Compare each element's type with the reference type
 		currentTypeInfo, _ := f.typeResolver.getTypeInfo(key, true)
 		if currentTypeInfo.TypeID != elemTypeInfo.TypeID {
-			hasDifferentType = true
+			hasSameType = false
 		}
 	}
 
@@ -105,12 +105,12 @@ func (s setSerializer) writeHeader(f *Fory, buf *ByteBuffer, keys []reflect.Valu
 	if hasNull {
 		collectFlag |= CollectionHasNull // Mark if collection contains null values
 	}
-	if hasDifferentType {
-		collectFlag |= CollectionNotSameType // Mark if elements have different types
+	if hasSameType {
+		collectFlag |= CollectionIsSameType // Mark if elements have different types
 	}
 
 	// Enable reference tracking if configured
-	if f.referenceTracking {
+	if f.refTracking {
 		collectFlag |= CollectionTrackingRef
 	}
 
@@ -119,7 +119,7 @@ func (s setSerializer) writeHeader(f *Fory, buf *ByteBuffer, keys []reflect.Valu
 	buf.WriteInt8(int8(collectFlag))      // Collection flags
 
 	// Write element type ID if all elements have same type
-	if !hasDifferentType {
+	if hasSameType {
 		buf.WriteVarInt32(elemTypeInfo.TypeID)
 	}
 
@@ -206,7 +206,7 @@ func (s setSerializer) Read(f *Fory, buf *ByteBuffer, type_ reflect.Type, value 
 	var elemTypeInfo TypeInfo
 
 	// If all elements are same type, read the shared type info
-	if (collectFlag & CollectionNotSameType) == 0 {
+	if (collectFlag & CollectionIsSameType) != 0 {
 		typeID := buf.ReadVarInt32()
 		elemTypeInfo, _ = f.typeResolver.getTypeInfoById(int16(typeID))
 	}
@@ -219,7 +219,7 @@ func (s setSerializer) Read(f *Fory, buf *ByteBuffer, type_ reflect.Type, value 
 	f.refResolver.Reference(value)
 
 	// Choose appropriate deserialization path based on type consistency
-	if (collectFlag & CollectionNotSameType) == 0 {
+	if (collectFlag & CollectionIsSameType) != 0 {
 		return s.readSameType(f, buf, value, elemTypeInfo, collectFlag, length)
 	}
 	return s.readDifferentTypes(f, buf, value, length)

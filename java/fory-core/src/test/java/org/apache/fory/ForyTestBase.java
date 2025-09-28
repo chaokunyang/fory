@@ -132,6 +132,11 @@ public abstract class ForyTestBase {
   }
 
   @DataProvider
+  public static Object[][] compatible() {
+    return new Object[][] {{false}, {true}};
+  }
+
+  @DataProvider
   public static Object[][] compressNumber() {
     return new Object[][] {{false}, {true}};
   }
@@ -174,6 +179,11 @@ public abstract class ForyTestBase {
       {false, Language.XLANG},
       {true, Language.XLANG}
     };
+  }
+
+  @DataProvider
+  public static Object[][] language() {
+    return new Object[][] {{Language.JAVA}, {Language.XLANG}};
   }
 
   @DataProvider(name = "javaFory")

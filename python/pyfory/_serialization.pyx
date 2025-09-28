@@ -30,14 +30,13 @@ from typing import TypeVar, Union, Iterable
 from pyfory._util import get_bit, set_bit, clear_bit
 from pyfory import _fory as fmod
 from pyfory._fory import Language
-from pyfory._fory import _PicklerStub, _UnpicklerStub, Pickler, Unpickler
 from pyfory._fory import _ENABLE_TYPE_REGISTRATION_FORCIBLY
 from pyfory.lib import mmh3
 from pyfory.meta.metastring import Encoding
 from pyfory.type import is_primitive_type
 from pyfory.util import is_little_endian
 from pyfory.includes.libserialization cimport \
-    (TypeId, IsNamespacedType, Fory_PyBooleanSequenceWriteToBuffer, Fory_PyFloatSequenceWriteToBuffer)
+    (TypeId, IsNamespacedType, IsTypeShareMeta, Fory_PyBooleanSequenceWriteToBuffer, Fory_PyFloatSequenceWriteToBuffer)
 
 from libc.stdint cimport int8_t, int16_t, int32_t, int64_t, uint64_t
 from libc.stdint cimport *
@@ -100,9 +99,9 @@ cdef class MapRefResolver:
     cdef object read_object
     cdef c_bool ref_tracking
 
-    def __cinit__(self, c_bool ref_tracking):
+    def __cinit__(self, c_bool ref):
         self.read_object = None
-        self.ref_tracking = ref_tracking
+        self.ref_tracking = ref
 
     # Special methods of extension types must be declared with def, not cdef.
     def __dealloc__(self):
@@ -141,10 +140,14 @@ cdef class MapRefResolver:
         if not self.ref_tracking:
             return head_flag
         cdef int32_t ref_id
+        cdef PyObject * obj
         if head_flag == REF_FLAG:
             # read reference id and get object from reference resolver
             ref_id = buffer.read_varuint32()
-            self.read_object = <object> (self.read_objects[ref_id])
+            assert 0 <= ref_id < self.read_objects.size(), f"Invalid ref id {ref_id}, current size {self.read_objects.size()}"
+            obj = self.read_objects[ref_id]
+            assert obj != NULL, f"Invalid ref id {ref_id}, current size {self.read_objects.size()}"
+            self.read_object = <object> obj
             return REF_FLAG
         else:
             self.read_object = None
@@ -164,10 +167,16 @@ cdef class MapRefResolver:
             # `refId >= NOT_NULL_VALUE_FLAG` to read data.
             return buffer.read_int8()
         head_flag = buffer.read_int8()
+        cdef int32_t ref_id
+        cdef PyObject *obj
         if head_flag == REF_FLAG:
             # read reference id and get object from reference resolver
             ref_id = buffer.read_varuint32()
-            self.read_object = <object> (self.read_objects[ref_id])
+            # avoid wrong id cause crash
+            assert 0 <= ref_id < self.read_objects.size(), f"Invalid ref id {ref_id}, current size {self.read_objects.size()}"
+            obj = self.read_objects[ref_id]
+            assert obj != NULL, f"Invalid ref id {ref_id}, current size {self.read_objects.size()}"
+            self.read_object = <object> obj
             # `head_flag` except `REF_FLAG` can be used as stub reference id because
             # we use `refId >= NOT_NULL_VALUE_FLAG` to read data.
             return head_flag
@@ -176,6 +185,11 @@ cdef class MapRefResolver:
             if head_flag == REF_VALUE_FLAG:
                 return self.preserve_ref_id()
             return head_flag
+
+    cpdef inline int32_t last_preserved_ref_id(self):
+        cdef int32_t length = self.read_ref_ids.size()
+        assert length > 0
+        return self.read_ref_ids[length - 1]
 
     cpdef inline reference(self, obj):
         if not self.ref_tracking:
@@ -193,7 +207,10 @@ cdef class MapRefResolver:
         if id_ is None:
             return self.read_object
         cdef int32_t ref_id = id_
-        return <object> (self.read_objects[ref_id])
+        cdef PyObject * obj = self.read_objects[ref_id]
+        if obj == NULL:
+            return None
+        return <object> obj
 
     cpdef inline set_read_object(self, int32_t ref_id, obj):
         if not self.ref_tracking:
@@ -399,6 +416,7 @@ cdef class TypeInfo:
     cdef public MetaStringBytes namespace_bytes
     cdef public MetaStringBytes typename_bytes
     cdef public c_bool dynamic_type
+    cdef public object type_def
 
     def __init__(
             self,
@@ -408,6 +426,7 @@ cdef class TypeInfo:
             namespace_bytes: MetaStringBytes = None,
             typename_bytes: MetaStringBytes = None,
             dynamic_type: bool = False,
+            type_def: object = None
     ):
         self.cls = cls
         self.type_id = type_id
@@ -415,6 +434,7 @@ cdef class TypeInfo:
         self.namespace_bytes = namespace_bytes
         self.typename_bytes = typename_bytes
         self.dynamic_type = dynamic_type
+        self.type_def = type_def
 
     def __repr__(self):
         return f"TypeInfo(cls={self.cls}, type_id={self.type_id}, " \
@@ -443,17 +463,21 @@ cdef class TypeResolver:
         # hash -> TypeInfo
         flat_hash_map[pair[int64_t, int64_t], PyObject *] _c_meta_hash_to_typeinfo
         MetaStringResolver meta_string_resolver
+        c_bool meta_share
+        readonly SerializationContext serialization_context
 
-    def __init__(self, fory):
+    def __init__(self, fory, meta_share=False):
         self.fory = fory
         self.metastring_resolver = fory.metastring_resolver
+        self.meta_share = meta_share
         from pyfory._registry import TypeResolver
-        self._resolver = TypeResolver(fory)
+        self._resolver = TypeResolver(fory, meta_share=meta_share)
 
     def initialize(self):
         self._resolver.initialize()
         for typeinfo in self._resolver._types_info.values():
             self._populate_typeinfo(typeinfo)
+        self.serialization_context = self.fory.serialization_context
 
     def register(
         self,
@@ -518,7 +542,7 @@ cdef class TypeResolver:
             if type_info.serializer is not None:
                 return type_info
             else:
-                type_info.serializer = self._resolver._create_serializer(cls)
+                type_info.serializer = self._resolver.get_typeinfo(cls).serializer
                 return type_info
         elif not create:
             return None
@@ -527,6 +551,18 @@ cdef class TypeResolver:
             self._c_types_info[<uintptr_t> <PyObject *> cls] = <PyObject *> type_info
             self._populate_typeinfo(type_info)
             return type_info
+
+    def is_registered_by_name(self, cls):
+        return self._resolver.is_registered_by_name(cls)
+
+    def is_registered_by_id(self, cls):
+        return self._resolver.is_registered_by_id(cls)
+
+    def get_registered_name(self, cls):
+        return self._resolver.get_registered_name(cls)
+
+    def get_registered_id(self, cls):
+        return self._resolver.get_registered_id(cls)
 
     cdef inline TypeInfo _load_bytes_to_typeinfo(
             self, int32_t type_id, MetaStringBytes ns_metabytes, MetaStringBytes type_metabytes):
@@ -546,17 +582,25 @@ cdef class TypeResolver:
         cdef:
             int32_t type_id = typeinfo.type_id
             int32_t internal_type_id = type_id & 0xFF
+
+        if self.meta_share:
+            self.write_shared_type_meta(buffer, typeinfo)
+            return
+
         buffer.write_varuint32(type_id)
         if IsNamespacedType(internal_type_id):
             self.metastring_resolver.write_meta_string_bytes(buffer, typeinfo.namespace_bytes)
             self.metastring_resolver.write_meta_string_bytes(buffer, typeinfo.typename_bytes)
 
     cpdef inline TypeInfo read_typeinfo(self, Buffer buffer):
+        if self.meta_share:
+            return self.read_shared_type_meta(buffer)
+
         cdef:
             int32_t type_id = buffer.read_varuint32()
         if type_id < 0:
             type_id = -type_id
-        if type_id > self._c_registered_id_to_type_info.size():
+        if type_id >= self._c_registered_id_to_type_info.size():
             raise ValueError(f"Unexpected type_id {type_id}")
         cdef:
             int32_t internal_type_id = type_id & 0xFF
@@ -570,15 +614,43 @@ cdef class TypeResolver:
             raise ValueError(f"Unexpected type_id {type_id}")
         typeinfo = <TypeInfo> typeinfo_ptr
         return typeinfo
-    
-    def get_typeinfo_by_id(self, type_id):
-        return self._resolver.get_typeinfo_by_id(type_id=type_id)
+
+    cpdef inline TypeInfo get_typeinfo_by_id(self, int32_t type_id):
+        if type_id >= self._c_registered_id_to_type_info.size() or type_id < 0 or IsNamespacedType(type_id & 0xFF):
+            raise ValueError(f"Unexpected type_id {type_id}")
+        typeinfo_ptr = self._c_registered_id_to_type_info[type_id]
+        if typeinfo_ptr == NULL:
+            raise ValueError(f"Unexpected type_id {type_id}")
+        typeinfo = <TypeInfo> typeinfo_ptr
+        return typeinfo
 
     def get_typeinfo_by_name(self, namespace, typename):
         return self._resolver.get_typeinfo_by_name(namespace=namespace, typename=typename)
 
+    cpdef _set_typeinfo(self, typeinfo):
+        self._resolver._set_typeinfo(typeinfo)
+
     def get_meta_compressor(self):
         return self._resolver.get_meta_compressor()
+
+    cpdef write_shared_type_meta(self, Buffer buffer, TypeInfo typeinfo):
+        """Write shared type meta information."""
+        meta_context = self.serialization_context.meta_context
+        meta_context.write_shared_typeinfo(buffer, typeinfo)
+
+    cpdef TypeInfo read_shared_type_meta(self, Buffer buffer):
+        """Read shared type meta information."""
+        meta_context = self.serialization_context.meta_context
+        typeinfo = meta_context.read_shared_typeinfo(buffer)
+        return typeinfo
+
+    cpdef write_type_defs(self, Buffer buffer):
+        """Write all type definitions that need to be sent."""
+        self._resolver.write_type_defs(buffer)
+
+    cpdef read_type_defs(self, Buffer buffer):
+        """Read all type definitions from the buffer."""
+        self._resolver.read_type_defs(buffer)
 
     cpdef inline reset(self):
         pass
@@ -591,70 +663,227 @@ cdef class TypeResolver:
 
 
 @cython.final
+cdef class MetaContext:
+    """
+    Context for sharing type meta across multiple serialization. Type name, field name and field
+    type will be shared between different serialization.
+
+    Note that this context is not thread-safe, you should use it with one Fory instance.
+    """
+    cdef:
+        # Types which have sent definitions to peer
+        # Maps type objects to their assigned IDs
+        flat_hash_map[uint64_t, int32_t] _c_type_map
+
+        # Counter for assigning new IDs
+        list _writing_type_defs
+        list _read_type_infos
+        object fory
+        object type_resolver
+
+    def __cinit__(self, object fory):
+        self.fory = fory
+        self.type_resolver = fory.type_resolver
+        self._writing_type_defs = []
+        self._read_type_infos = []
+
+    cpdef inline void write_shared_typeinfo(self, Buffer buffer, typeinfo):
+        """Add a type definition to the writing queue."""
+        type_cls = typeinfo.cls
+        cdef int32_t type_id = typeinfo.type_id
+        cdef int32_t internal_type_id = type_id & 0xFF
+        buffer.write_varuint32(type_id)
+        if not IsTypeShareMeta(internal_type_id):
+            return
+
+        cdef uint64_t type_addr = <uint64_t> <PyObject *> type_cls
+        cdef flat_hash_map[uint64_t, int32_t].iterator it = self._c_type_map.find(type_addr)
+        if it != self._c_type_map.end():
+            buffer.write_varuint32(deref(it).second)
+
+        cdef index = self._c_type_map.size()
+        buffer.write_varuint32(index)
+        self._c_type_map[type_addr] = index
+        type_def = typeinfo.type_def
+        if type_def is None:
+            self.type_resolver._set_typeinfo(typeinfo)
+            type_def = typeinfo.type_def
+        self._writing_type_defs.append(type_def)
+
+    cpdef inline list get_writing_type_defs(self):
+        """Get all type definitions that need to be written."""
+        return self._writing_type_defs
+
+    cpdef inline reset_write(self):
+        """Reset write state."""
+        self._writing_type_defs.clear()
+        self._c_type_map.clear()
+
+    cpdef inline add_read_typeinfo(self, type_info):
+        """Add a type info read from peer."""
+        self._read_type_infos.append(type_info)
+
+    cpdef inline read_shared_typeinfo(self, Buffer buffer):
+        """Read a type info from buffer."""
+        cdef type_id = buffer.read_varuint32()
+        if IsTypeShareMeta(type_id & 0xFF):
+            return self._read_type_infos[buffer.read_varuint32()]
+        return self.type_resolver.get_typeinfo_by_id(type_id)
+
+    cpdef inline reset_read(self):
+        """Reset read state."""
+        self._read_type_infos.clear()
+
+    cpdef inline reset(self):
+        """Reset both read and write state."""
+        self.reset_write()
+        self.reset_read()
+
+    def __str__(self):
+        return self.__repr__()
+
+    def __repr__(self):
+        return (f"MetaContext("
+                f"read_infos={self._read_type_infos}, "
+                f"writing_defs={self._writing_type_defs})")
+
+
+@cython.final
+cdef class SerializationContext:
+    """
+    Context for sharing data across multiple serialization.
+    Note that this context is not thread-safe, you should use it with one Fory instance.
+    """
+    cdef dict objects
+    cdef readonly bint scoped_meta_share_enabled
+    cdef public MetaContext meta_context
+    cdef public object fory
+
+    def __init__(self, object fory, scoped_meta_share_enabled: bool = False):
+        self.objects = dict()
+        self.scoped_meta_share_enabled = scoped_meta_share_enabled
+        if scoped_meta_share_enabled:
+            self.meta_context = MetaContext(fory)
+        else:
+            self.meta_context = None
+        self.fory = fory
+
+    def add(self, key, obj):
+        self.objects[id(key)] = obj
+
+    def __contains__(self, key):
+        return id(key) in self.objects
+
+    def __getitem__(self, key):
+        return self.objects[id(key)]
+
+    def get(self, key):
+        return self.objects.get(id(key))
+
+    cpdef reset(self):
+        if len(self.objects) > 0:
+            self.objects.clear()
+
+    cpdef reset_write(self):
+        if len(self.objects) > 0:
+            self.objects.clear()
+        if self.scoped_meta_share_enabled and self.meta_context is not None:
+            self.meta_context.reset_write()
+
+    cpdef reset_read(self):
+        if len(self.objects) > 0:
+            self.objects.clear()
+        if self.scoped_meta_share_enabled and self.meta_context is not None:
+            self.meta_context.reset_read()
+
+
+@cython.final
 cdef class Fory:
     cdef readonly object language
     cdef readonly c_bool ref_tracking
-    cdef readonly c_bool require_type_registration
+    cdef readonly c_bool strict
     cdef readonly c_bool is_py
+    cdef readonly c_bool compatible
     cdef readonly MapRefResolver ref_resolver
     cdef readonly TypeResolver type_resolver
     cdef readonly MetaStringResolver metastring_resolver
     cdef readonly SerializationContext serialization_context
     cdef Buffer buffer
-    cdef public object pickler  # pickle.Pickler
-    cdef public object unpickler  # Optional[pickle.Unpickler]
     cdef object _buffer_callback
     cdef object _buffers  # iterator
     cdef object _unsupported_callback
     cdef object _unsupported_objects  # iterator
     cdef object _peer_language
+    cdef int32_t max_depth
+    cdef int32_t depth
 
     def __init__(
             self,
-            language=Language.PYTHON,
-            ref_tracking: bool = False,
-            require_type_registration: bool = True,
+            xlang: bool = False,
+            ref: bool = False,
+            strict: bool = True,
+            compatible: bool = False,
+            max_depth: int = 50,
+            **kwargs,
     ):
         """
-       :param require_type_registration:
-        Whether to require registering types for serialization, enabled by default.
+        :param xlang:
+         Whether to enable cross-language serialization. When set to False, enables Python-native
+         serialization supporting all serializable Python objects including dataclasses,
+         structs, classes with __getstate__/__setstate__/__reduce__/__reduce_ex__, local
+         functions/classes, and classes defined in IPython. With ref=True and strict=False,
+         Fury can serve as a drop-in replacement for pickle and cloudpickle.
+         When set to True, serializes objects in cross-language format that can
+         be deserialized by other Fury-supported languages, but Python-specific features
+         like functions/classes/methods and custom __reduce__ methods are not supported.
+        :param ref:
+         Whether to enable reference tracking for shared and circular references.
+         When enabled, duplicate objects will be stored only once and circular references
+         are supported. Disabled by default for better performance.
+        :param strict:
+         Whether to require registering types for serialization, enabled by default.
          If disabled, unknown insecure types can be deserialized, which can be
          insecure and cause remote code execution attack if the types
-         `__new__`/`__init__`/`__eq__`/`__hash__` method contain malicious code.
-         Do not disable type registration if you can't ensure your environment are
-         *indeed secure*. We are not responsible for security risks if
-         you disable this option.
-       """
-        self.language = language
-        if _ENABLE_TYPE_REGISTRATION_FORCIBLY or require_type_registration:
-            self.require_type_registration = True
+         `__new__`/`__init__`/`__eq__`/`__hash__` method contain malicious code, or you
+         are deserializing local functions/methods/classes.
+          Do not disable strict mode if you can't ensure your environment are
+          *indeed secure*. We are not responsible for security risks if
+          you disable this option.
+        :param compatible:
+         Whether to enable compatible mode for cross-language serialization.
+         When enabled, type forward/backward compatibility for struct fields will be enabled.
+        :param max_depth:
+         The maximum depth of the deserialization data.
+         If the depth exceeds the maximum depth, an exception will be raised.
+         The default value is 50.
+        """
+        self.language = Language.XLANG if xlang else Language.PYTHON
+        if kwargs.get("language") is not None:
+            self.language = kwargs.get("language")
+        if kwargs.get("ref_tracking") is not None:
+            ref = kwargs.get("ref_tracking")
+        if kwargs.get("require_type_registration") is not None:
+            strict = kwargs.get("require_type_registration")
+        if _ENABLE_TYPE_REGISTRATION_FORCIBLY or strict:
+            self.strict = True
         else:
-            self.require_type_registration = False
-        self.ref_tracking = ref_tracking
-        self.ref_resolver = MapRefResolver(ref_tracking)
+            self.strict = False
+        self.compatible = compatible
+        self.ref_tracking = ref
+        self.ref_resolver = MapRefResolver(ref)
         self.is_py = self.language == Language.PYTHON
         self.metastring_resolver = MetaStringResolver()
-        self.type_resolver = TypeResolver(self)
+        self.type_resolver = TypeResolver(self, meta_share=compatible)
+        self.serialization_context = SerializationContext(fory=self, scoped_meta_share_enabled=compatible)
         self.type_resolver.initialize()
-        self.serialization_context = SerializationContext()
         self.buffer = Buffer.allocate(32)
-        if not require_type_registration:
-            warnings.warn(
-                "Type registration is disabled, unknown types can be deserialized "
-                "which may be insecure.",
-                RuntimeWarning,
-                stacklevel=2,
-            )
-            self.pickler = Pickler(self.buffer)
-        else:
-            self.pickler = _PicklerStub()
-            self.unpickler = _UnpicklerStub()
-        self.unpickler = None
         self._buffer_callback = None
         self._buffers = None
         self._unsupported_callback = None
         self._unsupported_objects = None
         self._peer_language = None
+        self.depth = 0
+        self.max_depth = max_depth
 
     def register_serializer(self, cls: Union[type, TypeVar], Serializer serializer):
         self.type_resolver.register_serializer(cls, serializer)
@@ -683,6 +912,29 @@ cdef class Fory:
         self.type_resolver.register_type(
             cls, type_id=type_id, namespace=namespace, typename=typename, serializer=serializer)
 
+    def dumps(
+        self,
+        obj,
+        buffer: Buffer = None,
+        buffer_callback=None,
+        unsupported_callback=None,
+    ) -> Union[Buffer, bytes]:
+        """
+        Serialize an object to bytes, alias for `serialize` method.
+        """
+        return self.serialize(obj, buffer, buffer_callback, unsupported_callback)
+    
+    def loads(
+        self,
+        buffer: Union[Buffer, bytes],
+        buffers: Iterable = None,
+        unsupported_objects: Iterable = None,
+    ):
+        """
+        Deserialize bytes to an object, alias for `deserialize` method.
+        """
+        return self.deserialize(buffer, buffers, unsupported_objects)
+
     def serialize(
             self, obj,
             Buffer buffer=None,
@@ -702,9 +954,7 @@ cdef class Fory:
             self, obj, Buffer buffer, buffer_callback=None, unsupported_callback=None):
         self._buffer_callback = buffer_callback
         self._unsupported_callback = unsupported_callback
-        if buffer is not None:
-            self.pickler = Pickler(self.buffer)
-        else:
+        if buffer is None:
             self.buffer.writer_index = 0
             buffer = self.buffer
         if self.language == Language.XLANG:
@@ -735,11 +985,27 @@ cdef class Fory:
             set_bit(buffer, mask_index, 3)
         else:
             clear_bit(buffer, mask_index, 3)
+        # Reserve space for type definitions offset, similar to Java implementation
+        cdef int32_t type_defs_offset_pos = -1
+        if self.serialization_context.scoped_meta_share_enabled:
+            type_defs_offset_pos = buffer.writer_index
+            buffer.write_int32(-1)  # Reserve 4 bytes for type definitions offset
+
         cdef int32_t start_offset
         if self.language == Language.PYTHON:
             self.serialize_ref(buffer, obj)
         else:
             self.xserialize_ref(buffer, obj)
+
+        # Write type definitions at the end, similar to Java implementation
+        if self.serialization_context.scoped_meta_share_enabled:
+            meta_context = self.serialization_context.meta_context
+            if meta_context is not None and len(meta_context.get_writing_type_defs()) > 0:
+                # Update the offset to point to current position
+                current_pos = buffer.writer_index
+                buffer.put_int32(type_defs_offset_pos, current_pos - type_defs_offset_pos - 4)
+                self.type_resolver.write_type_defs(buffer)
+
         if buffer is not self.buffer:
             return buffer
         else:
@@ -832,8 +1098,6 @@ cdef class Fory:
 
     cpdef inline _deserialize(
             self, Buffer buffer, buffers=None, unsupported_objects=None):
-        if not self.require_type_registration:
-            self.unpickler = Unpickler(buffer)
         if unsupported_objects is not None:
             self._unsupported_objects = iter(unsupported_objects)
         if self.language == Language.XLANG:
@@ -870,6 +1134,20 @@ cdef class Fory:
                 "buffers should be null when the serialized stream is "
                 "produced with buffer_callback null."
             )
+
+        # Read type definitions at the start, similar to Java implementation
+        if self.serialization_context.scoped_meta_share_enabled:
+            relative_type_defs_offset = buffer.read_int32()
+            if relative_type_defs_offset != -1:
+                # Save current reader position
+                current_reader_index = buffer.reader_index
+                # Jump to type definitions
+                buffer.reader_index = current_reader_index + relative_type_defs_offset
+                # Read type definitions
+                self.type_resolver.read_type_defs(buffer)
+                # Jump back to continue with object deserialization
+                buffer.reader_index = current_reader_index
+
         if not is_target_x_lang:
             return self.deserialize_ref(buffer)
         return self.xdeserialize_ref(buffer)
@@ -890,7 +1168,9 @@ cdef class Fory:
             return buffer.read_bool()
         elif cls is float:
             return buffer.read_double()
+        self.inc_depth()
         o = typeinfo.serializer.read(buffer)
+        self.depth -= 1
         ref_resolver.set_read_object(ref_id, o)
         return o
 
@@ -906,7 +1186,10 @@ cdef class Fory:
             return buffer.read_bool()
         elif cls is float:
             return buffer.read_double()
-        return typeinfo.serializer.read(buffer)
+        self.inc_depth()
+        o = typeinfo.serializer.read(buffer)
+        self.depth -= 1
+        return o
 
     cpdef inline xdeserialize_ref(self, Buffer buffer, Serializer serializer=None):
         cdef MapRefResolver ref_resolver
@@ -934,7 +1217,24 @@ cdef class Fory:
             self, Buffer buffer, Serializer serializer=None):
         if serializer is None:
             serializer = self.type_resolver.read_typeinfo(buffer).serializer
-        return serializer.xread(buffer)
+        self.inc_depth()
+        o = serializer.xread(buffer)
+        self.depth -= 1
+        return o
+
+    cpdef inline inc_depth(self):
+        self.depth += 1
+        if self.depth > self.max_depth:
+            self.throw_depth_limit_exceeded_exception()
+
+    cpdef inline dec_depth(self):
+        self.depth -= 1
+
+    cpdef inline throw_depth_limit_exceeded_exception(self):
+        raise Exception(
+            f"Read depth exceed max depth: {self.depth}, the deserialization data may be malicious. If it's not malicious, "
+            "please increase max read depth by Fory(..., max_depth=...)"
+        )
 
     cpdef inline write_buffer_object(self, Buffer buffer, buffer_object):
         if self._buffer_callback is not None and self._buffer_callback(buffer_object):
@@ -960,22 +1260,13 @@ cdef class Fory:
         buffer.reader_index += size
         return buf
 
-    cpdef inline handle_unsupported_write(self, Buffer buffer, obj):
+    cpdef handle_unsupported_write(self, buffer, obj):
         if self._unsupported_callback is None or self._unsupported_callback(obj):
-            buffer.write_bool(True)
-            self.pickler.dump(obj)
-        else:
-            buffer.write_bool(False)
+            raise NotImplementedError(f"{type(obj)} is not supported for write")
 
-    cpdef inline handle_unsupported_read(self, Buffer buffer):
-        cdef c_bool in_band = buffer.read_bool()
-        if in_band:
-            if self.unpickler is None:
-                self.unpickler.buffer = Unpickler(buffer)
-            return self.unpickler.load()
-        else:
-            assert self._unsupported_objects is not None
-            return next(self._unsupported_objects)
+    cpdef handle_unsupported_read(self, buffer):
+        assert self._unsupported_objects is not None
+        return next(self._unsupported_objects)
 
     cpdef inline write_ref_pyobject(
             self, Buffer buffer, value, TypeInfo typeinfo=None):
@@ -993,7 +1284,9 @@ cdef class Fory:
             return ref_resolver.get_read_object()
         # indicates that the object is first read.
         cdef TypeInfo typeinfo = self.type_resolver.read_typeinfo(buffer)
+        self.inc_depth()
         o = typeinfo.serializer.read(buffer)
+        self.depth -= 1
         ref_resolver.set_read_object(ref_id, o)
         return o
 
@@ -1001,17 +1294,16 @@ cdef class Fory:
         self.ref_resolver.reset_write()
         self.type_resolver.reset_write()
         self.metastring_resolver.reset_write()
-        self.serialization_context.reset()
-        self.pickler.clear_memo()
+        self.serialization_context.reset_write()
         self._unsupported_callback = None
 
     cpdef inline reset_read(self):
+        self.depth = 0
         self.ref_resolver.reset_read()
         self.type_resolver.reset_read()
         self.metastring_resolver.reset_read()
-        self.serialization_context.reset()
+        self.serialization_context.reset_read()
         self._buffers = None
-        self.unpickler = None
         self._unsupported_objects = None
 
     cpdef inline reset(self):
@@ -1070,29 +1362,6 @@ cpdef inline read_nullable_pystr(Buffer buffer):
     else:
         return None
 
-
-@cython.final
-cdef class SerializationContext:
-    cdef dict objects
-
-    def __init__(self):
-        self.objects = dict()
-
-    def add(self, key, obj):
-        self.objects[id(key)] = obj
-
-    def __contains__(self, key):
-        return id(key) in self.objects
-
-    def __getitem__(self, key):
-        return self.objects[id(key)]
-
-    def get(self, key):
-        return self.objects.get(id(key))
-
-    def reset(self):
-        if len(self.objects) > 0:
-            self.objects.clear()
 
 cdef class Serializer:
     cdef readonly Fory fory
@@ -1273,14 +1542,18 @@ cdef class TimestampSerializer(CrossLanguageCompatibleSerializer):
 Collection serialization format:
 https://fory.apache.org/docs/specification/fory_xlang_serialization_spec/#list
 Has the following changes:
-* None has an independent NonType type, so COLLECTION_NOT_SAME_TYPE can also cover the concept of being nullable.
+* None has an independent type, so COLL_NOT_SAME_TYPE can also cover the concept of being nullable.
 * No flag is needed to indicate that the element type is not the declared type.
 """
-cdef int8_t COLLECTION_DEFAULT_FLAG = 0b0
-cdef int8_t COLLECTION_TRACKING_REF = 0b1
-cdef int8_t COLLECTION_HAS_NULL = 0b10
-cdef int8_t COLLECTION_NOT_DECL_ELEMENT_TYPE = 0b100
-cdef int8_t COLLECTION_NOT_SAME_TYPE = 0b1000
+cdef int8_t COLL_DEFAULT_FLAG = 0b0
+cdef int8_t COLL_TRACKING_REF = 0b1
+cdef int8_t COLL_HAS_NULL = 0b10
+cdef int8_t COLL_IS_DECL_ELEMENT_TYPE = 0b100
+cdef int8_t COLL_IS_SAME_TYPE = 0b1000
+cdef int8_t COLL_DECL_SAME_TYPE_TRACKING_REF = COLL_IS_DECL_ELEMENT_TYPE | COLL_IS_SAME_TYPE | COLL_TRACKING_REF
+cdef int8_t COLL_DECL_SAME_TYPE_NOT_TRACKING_REF = COLL_IS_DECL_ELEMENT_TYPE | COLL_IS_SAME_TYPE
+cdef int8_t COLL_DECL_SAME_TYPE_HAS_NULL = COLL_IS_DECL_ELEMENT_TYPE | COLL_IS_SAME_TYPE | COLL_HAS_NULL
+cdef int8_t COLL_DECL_SAME_TYPE_NOT_HAS_NULL = COLL_IS_DECL_ELEMENT_TYPE | COLL_IS_SAME_TYPE
 
 
 cdef class CollectionSerializer(Serializer):
@@ -1308,41 +1581,41 @@ cdef class CollectionSerializer(Serializer):
         self.is_py = fory.is_py
 
     cdef pair[int8_t, int64_t] write_header(self, Buffer buffer, value):
-        cdef int8_t collect_flag = COLLECTION_DEFAULT_FLAG
+        cdef int8_t collect_flag = COLL_DEFAULT_FLAG
         elem_type = self.elem_type
         cdef TypeInfo elem_typeinfo = self.elem_typeinfo
         cdef c_bool has_null = False
-        cdef c_bool has_different_type = False
+        cdef c_bool has_same_type = True
         if elem_type is None:
-            collect_flag = COLLECTION_NOT_DECL_ELEMENT_TYPE
             for s in value:
                 if not has_null and s is None:
                     has_null = True
                     continue
                 if elem_type is None:
                     elem_type = type(s)
-                elif not has_different_type and type(s) is not elem_type:
-                    collect_flag |= COLLECTION_NOT_SAME_TYPE
-                    has_different_type = True
-            if not has_different_type:
+                elif has_same_type and type(s) is not elem_type:
+                    has_same_type = False
+            if has_same_type:
+                collect_flag |= COLL_IS_SAME_TYPE
                 elem_typeinfo = self.type_resolver.get_typeinfo(elem_type)
         else:
+            collect_flag |= COLL_IS_DECL_ELEMENT_TYPE | COLL_IS_SAME_TYPE
             for s in value:
                 if s is None:
                     has_null = True
                     break
         if has_null:
-            collect_flag |= COLLECTION_HAS_NULL
+            collect_flag |= COLL_HAS_NULL
         if self.fory.ref_tracking:
             if self.elem_tracking_ref == 1:
-                collect_flag |= COLLECTION_TRACKING_REF
+                collect_flag |= COLL_TRACKING_REF
             elif self.elem_tracking_ref == -1:
-                if has_different_type or elem_typeinfo.serializer.need_to_write_ref:
-                    collect_flag |= COLLECTION_TRACKING_REF
+                if not has_same_type or elem_typeinfo.serializer.need_to_write_ref:
+                    collect_flag |= COLL_TRACKING_REF
         buffer.write_varuint32(len(value))
         buffer.write_int8(collect_flag)
-        if (not has_different_type and
-                collect_flag & COLLECTION_NOT_DECL_ELEMENT_TYPE != 0):
+        if (has_same_type and
+                collect_flag & COLL_IS_DECL_ELEMENT_TYPE == 0):
             self.type_resolver.write_typeinfo(buffer, elem_typeinfo)
         return pair[int8_t, int64_t](collect_flag, obj2int(elem_typeinfo))
 
@@ -1359,7 +1632,7 @@ cdef class CollectionSerializer(Serializer):
         cdef TypeResolver type_resolver = self.type_resolver
         cdef c_bool is_py = self.is_py
         cdef serializer = type(elem_typeinfo.serializer)
-        if (collect_flag & COLLECTION_NOT_SAME_TYPE) == 0:
+        if (collect_flag & COLL_IS_SAME_TYPE) != 0:
             if elem_type is str:
                 self._write_string(buffer, value)
             elif serializer is Int64Serializer:
@@ -1369,7 +1642,7 @@ cdef class CollectionSerializer(Serializer):
             elif serializer is Float64Serializer:
                 self._write_float(buffer, value)
             else:
-                if (collect_flag & COLLECTION_TRACKING_REF) == 0:
+                if (collect_flag & COLL_TRACKING_REF) == 0:
                     self._write_same_type_no_ref(buffer, value, elem_typeinfo)
                 else:
                     self._write_same_type_ref(buffer, value, elem_typeinfo)
@@ -1456,6 +1729,7 @@ cdef class CollectionSerializer(Serializer):
     cpdef _read_same_type_no_ref(self, Buffer buffer, int64_t len_, object collection_, TypeInfo typeinfo):
         cdef MapRefResolver ref_resolver = self.ref_resolver
         cdef TypeResolver type_resolver = self.type_resolver
+        self.fory.inc_depth()
         if self.is_py:
             for i in range(len_):
                 obj = typeinfo.serializer.read(buffer)
@@ -1464,6 +1738,7 @@ cdef class CollectionSerializer(Serializer):
             for i in range(len_):
                 obj = typeinfo.serializer.xread(buffer)
                 self._add_element(collection_, i, obj)
+        self.fory.dec_depth()
 
     cpdef _write_same_type_ref(self, Buffer buffer, value, TypeInfo typeinfo):
         cdef MapRefResolver ref_resolver = self.ref_resolver
@@ -1481,6 +1756,7 @@ cdef class CollectionSerializer(Serializer):
         cdef MapRefResolver ref_resolver = self.ref_resolver
         cdef TypeResolver type_resolver = self.type_resolver
         cdef c_bool is_py = self.is_py
+        self.fory.inc_depth()
         for i in range(len_):
             ref_id = ref_resolver.try_preserve_ref_id(buffer)
             if ref_id < NOT_NULL_VALUE_FLAG:
@@ -1492,6 +1768,7 @@ cdef class CollectionSerializer(Serializer):
                     obj = typeinfo.serializer.xread(buffer)
                 ref_resolver.set_read_object(ref_id, obj)
             self._add_element(collection_, i, obj)
+        self.fory.dec_depth()
 
     cpdef _add_element(self, object collection_, int64_t index, object element):
         raise NotImplementedError
@@ -1512,12 +1789,12 @@ cdef class ListSerializer(CollectionSerializer):
         cdef c_bool is_py = self.is_py
         cdef TypeInfo typeinfo
         cdef int32_t type_id = -1
-        if (collect_flag & COLLECTION_NOT_SAME_TYPE) == 0:
-            if collect_flag & COLLECTION_NOT_DECL_ELEMENT_TYPE != 0:
+        if (collect_flag & COLL_IS_SAME_TYPE) != 0:
+            if collect_flag & COLL_IS_DECL_ELEMENT_TYPE == 0:
                 typeinfo = self.type_resolver.read_typeinfo(buffer)
             else:
                 typeinfo = self.elem_typeinfo
-            if (collect_flag & COLLECTION_HAS_NULL) == 0:
+            if (collect_flag & COLL_HAS_NULL) == 0:
                 type_id = typeinfo.type_id
                 if type_id == <int32_t>TypeId.STRING:
                     self._read_string(buffer, len_, list_)
@@ -1531,15 +1808,17 @@ cdef class ListSerializer(CollectionSerializer):
                 elif type_id == <int32_t>TypeId.FLOAT64:
                     self._read_float(buffer, len_, list_)
                     return list_
-            if (collect_flag & COLLECTION_TRACKING_REF) == 0:
+            if (collect_flag & COLL_TRACKING_REF) == 0:
                 self._read_same_type_no_ref(buffer, len_, list_, typeinfo)
             else:
                 self._read_same_type_ref(buffer, len_, list_, typeinfo)
         else:
+            self.fory.inc_depth()
             for i in range(len_):
                 elem = get_next_element(buffer, ref_resolver, type_resolver, is_py)
                 Py_INCREF(elem)
                 PyList_SET_ITEM(list_, i, elem)
+            self.fory.dec_depth()
         return list_
 
     cpdef _add_element(self, object collection_, int64_t index, object element):
@@ -1596,12 +1875,12 @@ cdef class TupleSerializer(CollectionSerializer):
         cdef c_bool is_py = self.is_py
         cdef TypeInfo typeinfo
         cdef int32_t type_id = -1
-        if (collect_flag & COLLECTION_NOT_SAME_TYPE) == 0:
-            if collect_flag & COLLECTION_NOT_DECL_ELEMENT_TYPE != 0:
+        if (collect_flag & COLL_IS_SAME_TYPE) != 0:
+            if collect_flag & COLL_IS_DECL_ELEMENT_TYPE == 0:
                 typeinfo = self.type_resolver.read_typeinfo(buffer)
             else:
                 typeinfo = self.elem_typeinfo
-            if (collect_flag & COLLECTION_HAS_NULL) == 0:
+            if (collect_flag & COLL_HAS_NULL) == 0:
                 type_id = typeinfo.type_id
                 if type_id == <int32_t>TypeId.STRING:
                     self._read_string(buffer, len_, tuple_)
@@ -1615,15 +1894,17 @@ cdef class TupleSerializer(CollectionSerializer):
                 if type_id == <int32_t>TypeId.FLOAT64:
                     self._read_float(buffer, len_, tuple_)
                     return tuple_
-            if (collect_flag & COLLECTION_TRACKING_REF) == 0:
+            if (collect_flag & COLL_TRACKING_REF) == 0:
                 self._read_same_type_no_ref(buffer, len_, tuple_, typeinfo)
             else:
                 self._read_same_type_ref(buffer, len_, tuple_, typeinfo)
         else:
+            self.fory.inc_depth()
             for i in range(len_):
                 elem = get_next_element(buffer, ref_resolver, type_resolver, is_py)
                 Py_INCREF(elem)
                 PyTuple_SET_ITEM(tuple_, i, elem)
+            self.fory.dec_depth()
         return tuple_
 
     cpdef inline _add_element(self, object collection_, int64_t index, object element):
@@ -1655,12 +1936,12 @@ cdef class SetSerializer(CollectionSerializer):
         cdef TypeInfo typeinfo
         cdef int32_t type_id = -1
         cdef c_bool is_py = self.is_py
-        if (collect_flag & COLLECTION_NOT_SAME_TYPE) == 0:
-            if collect_flag & COLLECTION_NOT_DECL_ELEMENT_TYPE != 0:
+        if (collect_flag & COLL_IS_SAME_TYPE) != 0:
+            if collect_flag & COLL_IS_DECL_ELEMENT_TYPE == 0:
                 typeinfo = self.type_resolver.read_typeinfo(buffer)
             else:
                 typeinfo = self.elem_typeinfo
-            if (collect_flag & COLLECTION_HAS_NULL) == 0:
+            if (collect_flag & COLL_HAS_NULL) == 0:
                 type_id = typeinfo.type_id
                 if type_id == <int32_t>TypeId.STRING:
                     self._read_string(buffer, len_, instance)
@@ -1674,11 +1955,12 @@ cdef class SetSerializer(CollectionSerializer):
                 if type_id == <int32_t>TypeId.FLOAT64:
                     self._read_float(buffer, len_, instance)
                     return instance
-            if (collect_flag & COLLECTION_TRACKING_REF) == 0:
+            if (collect_flag & COLL_TRACKING_REF) == 0:
                 self._read_same_type_no_ref(buffer, len_, instance, typeinfo)
             else:
                 self._read_same_type_ref(buffer, len_, instance, typeinfo)
         else:
+            self.fory.inc_depth()
             for i in range(len_):
                 ref_id = ref_resolver.try_preserve_ref_id(buffer)
                 if ref_id < NOT_NULL_VALUE_FLAG:
@@ -1702,6 +1984,7 @@ cdef class SetSerializer(CollectionSerializer):
                         o = typeinfo.serializer.xread(buffer)
                     ref_resolver.set_read_object(ref_id, o)
                     instance.add(o)
+            self.fory.dec_depth()
         return instance
 
     cpdef inline _add_element(self, object collection_, int64_t index, object element):
@@ -1936,6 +2219,7 @@ cdef class MapSerializer(Serializer):
         cdef type key_serializer_type, value_serializer_type
         cdef int32_t chunk_size
         cdef c_bool is_py = self.is_py
+        self.fory.inc_depth()
         while size > 0:
             while True:
                 key_has_null = (chunk_header & KEY_HAS_NULL) != 0
@@ -1991,6 +2275,7 @@ cdef class MapSerializer(Serializer):
                         map_[None] = None
                 size -= 1
                 if size == 0:
+                    self.fory.dec_depth()
                     return map_
                 else:
                     chunk_header = buffer.read_uint8()
@@ -2064,6 +2349,7 @@ cdef class MapSerializer(Serializer):
                 size -= 1
             if size != 0:
                 chunk_header = buffer.read_uint8()
+        self.fory.dec_depth()
         return map_
 
     cpdef inline xwrite(self, Buffer buffer, o):
@@ -2130,6 +2416,7 @@ cdef class SubMapSerializer(Serializer):
         cdef int32_t ref_id
         cdef TypeInfo key_typeinfo
         cdef TypeInfo value_typeinfo
+        self.fory.inc_depth()
         for i in range(len_):
             ref_id = ref_resolver.try_preserve_ref_id(buffer)
             if ref_id < NOT_NULL_VALUE_FLAG:
@@ -2159,6 +2446,7 @@ cdef class SubMapSerializer(Serializer):
                     value = value_typeinfo.serializer.read(buffer)
                     ref_resolver.set_read_object(ref_id, value)
             map_[key] = value
+        self.fory.dec_depth()
         return map_
 
 

@@ -18,7 +18,6 @@
 import enum
 import logging
 import os
-import warnings
 from abc import ABC, abstractmethod
 from typing import Union, Iterable, TypeVar
 
@@ -37,9 +36,6 @@ try:
 except ImportError:
     np = None
 
-from cloudpickle import Pickler
-
-from pickle import Unpickler
 
 logger = logging.getLogger(__name__)
 
@@ -98,71 +94,94 @@ class Fory:
     __slots__ = (
         "language",
         "is_py",
+        "compatible",
         "ref_tracking",
         "ref_resolver",
         "type_resolver",
         "serialization_context",
-        "require_type_registration",
+        "strict",
         "buffer",
-        "pickler",
-        "unpickler",
         "_buffer_callback",
         "_buffers",
         "metastring_resolver",
         "_unsupported_callback",
         "_unsupported_objects",
         "_peer_language",
+        "max_depth",
+        "depth",
     )
-    serialization_context: "SerializationContext"
 
     def __init__(
         self,
-        language=Language.PYTHON,
-        ref_tracking: bool = False,
-        require_type_registration: bool = True,
+        xlang: bool = False,
+        ref: bool = False,
+        strict: bool = True,
+        compatible: bool = False,
+        max_depth: int = 50,
+        **kwargs,
     ):
         """
-        :param require_type_registration:
+        :param xlang:
+         Whether to enable cross-language serialization. When set to False, enables Python-native
+         serialization supporting all serializable Python objects including dataclasses,
+         structs, classes with __getstate__/__setstate__/__reduce__/__reduce_ex__, local
+         functions/classes, and classes defined in IPython. With ref=True and strict=False,
+         Fury can serve as a drop-in replacement for pickle and cloudpickle.
+         When set to True, serializes objects in cross-language format that can
+         be deserialized by other Fury-supported languages, but Python-specific features
+         like functions/classes/methods and custom __reduce__ methods are not supported.
+        :param ref:
+         Whether to enable reference tracking for shared and circular references.
+         When enabled, duplicate objects will be stored only once and circular references
+         are supported. Disabled by default for better performance.
+        :param strict:
          Whether to require registering types for serialization, enabled by default.
-          If disabled, unknown insecure types can be deserialized, which can be
-          insecure and cause remote code execution attack if the types
-          `__new__`/`__init__`/`__eq__`/`__hash__` method contain malicious code.
-          Do not disable type registration if you can't ensure your environment are
+         If disabled, unknown insecure types can be deserialized, which can be
+         insecure and cause remote code execution attack if the types
+         `__new__`/`__init__`/`__eq__`/`__hash__` method contain malicious code, or you
+         are deserializing local functions/methods/classes.
+          Do not disable strict mode if you can't ensure your environment are
           *indeed secure*. We are not responsible for security risks if
           you disable this option.
+        :param compatible:
+         Whether to enable compatible mode for cross-language serialization.
+         When enabled, type forward/backward compatibility for struct fields will be enabled.
+        :param max_depth:
+         The maximum depth of the deserialization data.
+         If the depth exceeds the maximum depth, an exception will be raised.
+         The default value is 50.
         """
-        self.language = language
-        self.is_py = language == Language.PYTHON
-        self.require_type_registration = _ENABLE_TYPE_REGISTRATION_FORCIBLY or require_type_registration
-        self.ref_tracking = ref_tracking
+        self.language = Language.XLANG if xlang else Language.PYTHON
+        if kwargs.get("language") is not None:
+            self.language = kwargs.get("language")
+        self.is_py = self.language == Language.PYTHON
+        if kwargs.get("ref_tracking") is not None:
+            ref = kwargs.get("ref_tracking")
+        self.ref_tracking = ref
         if self.ref_tracking:
             self.ref_resolver = MapRefResolver()
         else:
             self.ref_resolver = NoRefResolver()
-        from pyfory._serialization import MetaStringResolver
+        if kwargs.get("require_type_registration") is not None:
+            strict = kwargs.get("require_type_registration")
+        self.strict = _ENABLE_TYPE_REGISTRATION_FORCIBLY or strict
+        self.compatible = compatible
+        from pyfory._serialization import MetaStringResolver, SerializationContext
         from pyfory._registry import TypeResolver
 
         self.metastring_resolver = MetaStringResolver()
-        self.type_resolver = TypeResolver(self)
+        self.type_resolver = TypeResolver(self, meta_share=compatible)
+        self.serialization_context = SerializationContext(fory=self, scoped_meta_share_enabled=compatible)
         self.type_resolver.initialize()
-        self.serialization_context = SerializationContext()
+
         self.buffer = Buffer.allocate(32)
-        if not require_type_registration:
-            warnings.warn(
-                "Type registration is disabled, unknown types can be deserialized which may be insecure.",
-                RuntimeWarning,
-                stacklevel=2,
-            )
-            self.pickler = Pickler(self.buffer)
-            self.unpickler = None
-        else:
-            self.pickler = _PicklerStub()
-            self.unpickler = _UnpicklerStub()
         self._buffer_callback = None
         self._buffers = None
         self._unsupported_callback = None
         self._unsupported_objects = None
         self._peer_language = None
+        self.max_depth = max_depth
+        self.depth = 0
 
     def register(
         self,
@@ -173,7 +192,13 @@ class Fory:
         typename: str = None,
         serializer=None,
     ):
-        self.register_type(cls, type_id=type_id, namespace=namespace, typename=typename, serializer=serializer)
+        self.register_type(
+            cls,
+            type_id=type_id,
+            namespace=namespace,
+            typename=typename,
+            serializer=serializer,
+        )
 
     # `Union[type, TypeVar]` is not supported in py3.6
     def register_type(
@@ -195,6 +220,29 @@ class Fory:
 
     def register_serializer(self, cls: type, serializer):
         self.type_resolver.register_serializer(cls, serializer)
+
+    def dumps(
+        self,
+        obj,
+        buffer: Buffer = None,
+        buffer_callback=None,
+        unsupported_callback=None,
+    ) -> Union[Buffer, bytes]:
+        """
+        Serialize an object to bytes, alias for `serialize` method.
+        """
+        return self.serialize(obj, buffer, buffer_callback, unsupported_callback)
+
+    def loads(
+        self,
+        buffer: Union[Buffer, bytes],
+        buffers: Iterable = None,
+        unsupported_objects: Iterable = None,
+    ):
+        """
+        Deserialize bytes to an object, alias for `deserialize` method.
+        """
+        return self.deserialize(buffer, buffers, unsupported_objects)
 
     def serialize(
         self,
@@ -222,9 +270,7 @@ class Fory:
     ) -> Union[Buffer, bytes]:
         self._buffer_callback = buffer_callback
         self._unsupported_callback = unsupported_callback
-        if buffer is not None:
-            self.pickler = Pickler(buffer)
-        else:
+        if buffer is None:
             self.buffer.writer_index = 0
             buffer = self.buffer
         if self.language == Language.XLANG:
@@ -255,10 +301,26 @@ class Fory:
             set_bit(buffer, mask_index, 3)
         else:
             clear_bit(buffer, mask_index, 3)
+        # Reserve space for type definitions offset, similar to Java implementation
+        type_defs_offset_pos = None
+        if self.serialization_context.scoped_meta_share_enabled:
+            type_defs_offset_pos = buffer.writer_index
+            buffer.write_int32(-1)  # Reserve 4 bytes for type definitions offset
+
         if self.language == Language.PYTHON:
             self.serialize_ref(buffer, obj)
         else:
             self.xserialize_ref(buffer, obj)
+
+        # Write type definitions at the end, similar to Java implementation
+        if self.serialization_context.scoped_meta_share_enabled:
+            meta_context = self.serialization_context.meta_context
+            if meta_context is not None and len(meta_context.get_writing_type_defs()) > 0:
+                # Update the offset to point to current position
+                current_pos = buffer.writer_index
+                buffer.put_int32(type_defs_offset_pos, current_pos - type_defs_offset_pos - 4)
+                self.type_resolver.write_type_defs(buffer)
+
         self.reset_write()
         if buffer is not self.buffer:
             return buffer
@@ -369,6 +431,20 @@ class Fory:
             self._buffers = iter(buffers)
         else:
             assert buffers is None, "buffers should be null when the serialized stream is produced with buffer_callback null."
+
+        # Read type definitions at the start, similar to Java implementation
+        if self.serialization_context.scoped_meta_share_enabled:
+            relative_type_defs_offset = buffer.read_int32()
+            if relative_type_defs_offset != -1:
+                # Save current reader position
+                current_reader_index = buffer.reader_index
+                # Jump to type definitions
+                buffer.reader_index = current_reader_index + relative_type_defs_offset
+                # Read type definitions
+                self.type_resolver.read_type_defs(buffer)
+                # Jump back to continue with object deserialization
+                buffer.reader_index = current_reader_index
+
         if is_target_x_lang:
             obj = self.xdeserialize_ref(buffer)
         else:
@@ -381,7 +457,9 @@ class Fory:
         # indicates that the object is first read.
         if ref_id >= NOT_NULL_VALUE_FLAG:
             typeinfo = self.type_resolver.read_typeinfo(buffer)
+            self.inc_depth()
             o = typeinfo.serializer.read(buffer)
+            self.dec_depth()
             ref_resolver.set_read_object(ref_id, o)
             return o
         else:
@@ -390,7 +468,10 @@ class Fory:
     def deserialize_nonref(self, buffer):
         """Deserialize not-null and non-reference object from buffer."""
         typeinfo = self.type_resolver.read_typeinfo(buffer)
-        return typeinfo.serializer.read(buffer)
+        self.inc_depth()
+        o = typeinfo.serializer.read(buffer)
+        self.dec_depth()
+        return o
 
     def xdeserialize_ref(self, buffer, serializer=None):
         if serializer is None or serializer.need_to_write_ref:
@@ -411,7 +492,10 @@ class Fory:
     def xdeserialize_nonref(self, buffer, serializer=None):
         if serializer is None:
             serializer = self.type_resolver.read_typeinfo(buffer).serializer
-        return serializer.xread(buffer)
+        self.inc_depth()
+        o = serializer.xread(buffer)
+        self.dec_depth()
+        return o
 
     def write_buffer_object(self, buffer, buffer_object: BufferObject):
         if self._buffer_callback is None or self._buffer_callback(buffer_object):
@@ -440,21 +524,11 @@ class Fory:
 
     def handle_unsupported_write(self, buffer, obj):
         if self._unsupported_callback is None or self._unsupported_callback(obj):
-            buffer.write_bool(True)
-            self.pickler.dump(obj)
-        else:
-            buffer.write_bool(False)
+            raise NotImplementedError(f"{type(obj)} is not supported for write")
 
     def handle_unsupported_read(self, buffer):
-        in_band = buffer.read_bool()
-        if in_band:
-            unpickler = self.unpickler
-            if unpickler is None:
-                self.unpickler = unpickler = Unpickler(buffer)
-            return unpickler.load()
-        else:
-            assert self._unsupported_objects is not None
-            return next(self._unsupported_objects)
+        assert self._unsupported_objects is not None
+        return next(self._unsupported_objects)
 
     def write_ref_pyobject(self, buffer, value, typeinfo=None):
         if self.ref_resolver.write_ref_or_null(buffer, value):
@@ -470,18 +544,17 @@ class Fory:
     def reset_write(self):
         self.ref_resolver.reset_write()
         self.type_resolver.reset_write()
-        self.serialization_context.reset()
+        self.serialization_context.reset_write()
         self.metastring_resolver.reset_write()
-        self.pickler.clear_memo()
         self._buffer_callback = None
         self._unsupported_callback = None
 
     def reset_read(self):
+        self.depth = 0
         self.ref_resolver.reset_read()
         self.type_resolver.reset_read()
-        self.serialization_context.reset()
+        self.serialization_context.reset_read()
         self.metastring_resolver.reset_write()
-        self.unpickler = None
         self._buffers = None
         self._unsupported_objects = None
 
@@ -489,55 +562,22 @@ class Fory:
         self.reset_write()
         self.reset_read()
 
+    def inc_depth(self):
+        self.depth += 1
+        if self.depth > self.max_depth:
+            self.throw_depth_limit_exceeded_exception()
 
-class SerializationContext:
-    """
-    A context is used to add some context-related information, so that the
-    serializers can setup relation between serializing different objects.
-    The context will be reset after finished serializing/deserializing the
-    object tree.
-    """
+    def dec_depth(self):
+        self.depth -= 1
 
-    __slots__ = ("objects",)
-
-    def __init__(self):
-        self.objects = dict()
-
-    def add(self, key, obj):
-        self.objects[id(key)] = obj
-
-    def __contains__(self, key):
-        return id(key) in self.objects
-
-    def __getitem__(self, key):
-        return self.objects[id(key)]
-
-    def get(self, key):
-        return self.objects.get(id(key))
-
-    def reset(self):
-        if len(self.objects) > 0:
-            self.objects.clear()
+    def throw_depth_limit_exceeded_exception(self):
+        raise Exception(
+            f"Read depth exceed max depth: {self.depth}, the deserialization data may be malicious. If it's not malicious, "
+            "please increase max read depth by Fory(..., max_depth=...)"
+        )
 
 
 _ENABLE_TYPE_REGISTRATION_FORCIBLY = os.getenv("ENABLE_TYPE_REGISTRATION_FORCIBLY", "0") in {
     "1",
     "true",
 }
-
-
-class _PicklerStub:
-    def dump(self, o):
-        raise ValueError(
-            f"Type {type(o)} is not registered, "
-            f"pickle is not allowed when type registration enabled, "
-            f"Please register the type or pass unsupported_callback"
-        )
-
-    def clear_memo(self):
-        pass
-
-
-class _UnpicklerStub:
-    def load(self):
-        raise ValueError("pickle is not allowed when type registration enabled, Please register the type or pass unsupported_callback")

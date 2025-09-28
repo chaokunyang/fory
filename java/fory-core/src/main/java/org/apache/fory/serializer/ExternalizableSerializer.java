@@ -21,25 +21,20 @@ package org.apache.fory.serializer;
 
 import java.io.Externalizable;
 import java.io.IOException;
-import java.lang.invoke.MethodHandle;
 import org.apache.fory.Fory;
 import org.apache.fory.io.MemoryBufferObjectInput;
 import org.apache.fory.io.MemoryBufferObjectOutput;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
-import org.apache.fory.reflect.ReflectionUtils;
 
 /** Serializer for class implements {@link Externalizable}. */
 public class ExternalizableSerializer<T extends Externalizable>
     extends AbstractObjectSerializer<T> {
-  private final MethodHandle constructor;
   private final MemoryBufferObjectInput objectInput;
   private final MemoryBufferObjectOutput objectOutput;
 
   public ExternalizableSerializer(Fory fory, Class<T> cls) {
     super(fory, cls);
-    constructor = ReflectionUtils.getCtrHandle(cls, false);
-
     objectInput = new MemoryBufferObjectInput(fory, null);
     objectOutput = new MemoryBufferObjectOutput(fory, null);
   }
@@ -60,18 +55,9 @@ public class ExternalizableSerializer<T extends Externalizable>
   }
 
   @Override
-  @SuppressWarnings("unchecked")
   public T read(MemoryBuffer buffer) {
-    T t;
-    if (constructor != null) {
-      try {
-        t = (T) constructor.invoke();
-      } catch (Throwable e) {
-        throw new RuntimeException(e);
-      }
-    } else {
-      t = Platform.newInstance(type);
-    }
+    T t = objectCreator.newInstance();
+    refResolver.reference(t);
     objectInput.setBuffer(buffer);
     try {
       t.readExternal(objectInput);

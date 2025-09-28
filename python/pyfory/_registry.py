@@ -25,7 +25,7 @@ import types
 from typing import TypeVar, Union
 from enum import Enum
 
-from pyfory._serialization import ENABLE_FORY_CYTHON_SERIALIZATION
+from pyfory import ENABLE_FORY_CYTHON_SERIALIZATION
 from pyfory import Language
 from pyfory.error import TypeUnregisteredError
 
@@ -35,9 +35,6 @@ from pyfory.serializer import (
     NDArraySerializer,
     PyArraySerializer,
     DynamicPyArraySerializer,
-    _PickleStub,
-    PickleStrongCacheStub,
-    PickleCacheStub,
     NoneSerializer,
     BooleanSerializer,
     ByteSerializer,
@@ -56,14 +53,16 @@ from pyfory.serializer import (
     SetSerializer,
     EnumSerializer,
     SliceSerializer,
-    PickleCacheSerializer,
-    PickleStrongCacheSerializer,
-    PickleSerializer,
     DataClassSerializer,
+    DataClassStubSerializer,
     StatefulSerializer,
     ReduceSerializer,
     FunctionSerializer,
     ObjectSerializer,
+    TypeSerializer,
+    MethodSerializer,
+    UnsupportedSerializer,
+    NativeFuncMethodSerializer,
 )
 from pyfory.meta.metastring import MetaStringEncoder, MetaStringDecoder
 from pyfory.meta.meta_compressor import DeflaterMetaCompressor
@@ -76,12 +75,17 @@ from pyfory.type import (
     Float32Type,
     Float64Type,
     load_class,
+    is_struct_type,
+    record_class_factory,
 )
 from pyfory._fory import (
     DYNAMIC_TYPE_ID,
     # preserve 0 as flag for type id not set in TypeInfo`
     NO_TYPE_ID,
 )
+from pyfory.meta.typedef import TypeDef
+from pyfory.meta.typedef_decoder import decode_typedef, skip_typedef
+from pyfory.meta.typedef_encoder import encode_typedef
 
 try:
     import numpy as np
@@ -104,6 +108,7 @@ else:
             "namespace_bytes",
             "typename_bytes",
             "dynamic_type",
+            "type_def",
         )
 
         def __init__(
@@ -114,6 +119,7 @@ else:
             namespace_bytes=None,
             typename_bytes=None,
             dynamic_type: bool = False,
+            type_def: TypeDef = None,
         ):
             self.cls = cls
             self.type_id = type_id
@@ -121,6 +127,7 @@ else:
             self.namespace_bytes = namespace_bytes
             self.typename_bytes = typename_bytes
             self.dynamic_type = dynamic_type
+            self.type_def = type_def
 
         def __repr__(self):
             return f"TypeInfo(cls={self.cls}, type_id={self.type_id}, serializer={self.serializer})"
@@ -160,13 +167,17 @@ class TypeResolver:
         "metastring_resolver",
         "language",
         "_type_id_to_typeinfo",
+        "_meta_shared_typeinfo",
+        "meta_share",
+        "serialization_context",
+        "_internal_py_serializer_map",
     )
 
-    def __init__(self, fory):
+    def __init__(self, fory, meta_share=False):
         self.fory = fory
         self.metastring_resolver = fory.metastring_resolver
         self.language = fory.language
-        self.require_registration = fory.require_type_registration
+        self.require_registration = fory.strict
         self._metastr_to_str = dict()
         self._metastr_to_type = dict()
         self._hash_to_metastring = dict()
@@ -182,37 +193,59 @@ class TypeResolver:
         self._named_type_to_typeinfo = dict()
         self.namespace_encoder = MetaStringEncoder(".", "_")
         self.namespace_decoder = MetaStringDecoder(".", "_")
+        # Cache for TypeDef and TypeInfo tuples (similar to Java's classIdToDef)
+        self._meta_shared_typeinfo = {}
         self.typename_encoder = MetaStringEncoder("$", "_")
         self.typename_decoder = MetaStringDecoder("$", "_")
         self.meta_compressor = DeflaterMetaCompressor()
+        self.meta_share = meta_share
+        self._internal_py_serializer_map = {}
 
     def initialize(self):
-        self._initialize_xlang()
+        self._initialize_common()
         if self.fory.language == Language.PYTHON:
             self._initialize_py()
+        else:
+            self._initialize_xlang()
+        self.serialization_context = self.fory.serialization_context
 
     def _initialize_py(self):
         register = functools.partial(self._register_type, internal=True)
-        register(
-            _PickleStub,
-            type_id=PickleSerializer.PICKLE_TYPE_ID,
-            serializer=PickleSerializer,
-        )
-        register(
-            PickleStrongCacheStub,
-            type_id=97,
-            serializer=PickleStrongCacheSerializer(self.fory),
-        )
-        register(
-            PickleCacheStub,
-            type_id=98,
-            serializer=PickleCacheSerializer(self.fory),
-        )
         register(type(None), serializer=NoneSerializer)
         register(tuple, serializer=TupleSerializer)
         register(slice, serializer=SliceSerializer)
+        register(np.ndarray, serializer=NDArraySerializer)
+        register(array.array, serializer=DynamicPyArraySerializer)
+        if not self.require_registration:
+            self._internal_py_serializer_map = {
+                ReduceSerializer: (self._stub_cls("__Reduce__"), self._next_type_id()),
+                TypeSerializer: (self._stub_cls("__Type__"), self._next_type_id()),
+                MethodSerializer: (self._stub_cls("__Method__"), self._next_type_id()),
+                FunctionSerializer: (
+                    self._stub_cls("__Function__"),
+                    self._next_type_id(),
+                ),
+                NativeFuncMethodSerializer: (
+                    self._stub_cls("__NativeFunction__"),
+                    self._next_type_id(),
+                ),
+            }
+            for serializer, (
+                stub_cls,
+                type_id,
+            ) in self._internal_py_serializer_map.items():
+                register(stub_cls, serializer=serializer, type_id=type_id)
+
+    @staticmethod
+    def _stub_cls(name: str):
+        return record_class_factory(name, [])
 
     def _initialize_xlang(self):
+        register = functools.partial(self._register_type, internal=True)
+        register(array.array, type_id=DYNAMIC_TYPE_ID, serializer=DynamicPyArraySerializer)
+        register(np.ndarray, type_id=DYNAMIC_TYPE_ID, serializer=NDArraySerializer)
+
+    def _initialize_common(self):
         register = functools.partial(self._register_type, internal=True)
         register(None, type_id=TypeId.NA, serializer=NoneSerializer)
         register(bool, type_id=TypeId.BOOL, serializer=BooleanSerializer)
@@ -243,7 +276,6 @@ class TypeResolver:
                 type_id=typeid,
                 serializer=PyArraySerializer(self.fory, ftype, typeid),
             )
-        register(array.array, type_id=DYNAMIC_TYPE_ID, serializer=DynamicPyArraySerializer)
         if np:
             # overwrite pyarray  with same type id.
             # if pyarray are needed, one must annotate that value with XXXArrayType
@@ -259,7 +291,6 @@ class TypeResolver:
                     type_id=typeid,
                     serializer=Numpy1DArraySerializer(self.fory, ftype, dtype),
                 )
-            register(np.ndarray, type_id=DYNAMIC_TYPE_ID, serializer=NDArraySerializer)
         register(list, type_id=TypeId.LIST, serializer=ListSerializer)
         register(set, type_id=TypeId.SET, serializer=SetSerializer)
         register(dict, type_id=TypeId.MAP, serializer=MapSerializer)
@@ -351,15 +382,15 @@ class TypeResolver:
             if issubclass(cls, enum.Enum):
                 serializer = EnumSerializer(self.fory, cls)
                 type_id = TypeId.NAMED_ENUM if type_id is None else ((type_id << 8) + TypeId.ENUM)
-            elif cls is types.FunctionType:
-                # Use FunctionSerializer for function types (including lambdas)
-                serializer = FunctionSerializer(self.fory, cls)
-                type_id = TypeId.NAMED_EXT if type_id is None else ((type_id << 8) + TypeId.EXT)
             else:
-                serializer = DataClassSerializer(self.fory, cls, xlang=True)
-                type_id = TypeId.NAMED_STRUCT if type_id is None else ((type_id << 8) + TypeId.STRUCT)
+                serializer = None
+                if self.meta_share:
+                    type_id = TypeId.NAMED_COMPATIBLE_STRUCT if type_id is None else ((type_id << 8) + TypeId.COMPATIBLE_STRUCT)
+                else:
+                    type_id = TypeId.NAMED_STRUCT if type_id is None else ((type_id << 8) + TypeId.STRUCT)
         elif not internal:
             type_id = TypeId.NAMED_EXT if type_id is None else ((type_id << 8) + TypeId.EXT)
+
         return self.__register_type(
             cls,
             type_id=type_id,
@@ -402,8 +433,17 @@ class TypeResolver:
         internal: bool = False,
     ):
         dynamic_type = type_id is not None and type_id < 0
-        if not internal and serializer is None:
+        # In metashare mode, for struct types, we want to keep serializer=None
+        # so that _set_typeinfo will be called to create the TypeDef-based serializer
+        should_create_serializer = (
+            not internal
+            and serializer is None
+            and not (self.meta_share and typename is not None and type_id is not None and is_struct_type(type_id & 0xFF))
+        )
+
+        if should_create_serializer:
             serializer = self._create_serializer(cls)
+
         if typename is None:
             typeinfo = TypeInfo(cls, type_id, serializer, None, None, dynamic_type)
         else:
@@ -419,7 +459,7 @@ class TypeResolver:
             self._named_type_to_typeinfo[(namespace, typename)] = typeinfo
             self._ns_type_to_typeinfo[(ns_meta_bytes, type_meta_bytes)] = typeinfo
         self._types_info[cls] = typeinfo
-        if type_id > 0 and (self.language == Language.PYTHON or not TypeId.is_namespaced_type(type_id)):
+        if type_id is not None and type_id != 0 and (self.language == Language.PYTHON or not TypeId.is_namespaced_type(type_id)):
             if type_id not in self._type_id_to_typeinfo or not internal:
                 self._type_id_to_typeinfo[type_id] = typeinfo
         self._types_info[cls] = typeinfo
@@ -460,11 +500,11 @@ class TypeResolver:
         type_info = self._types_info.get(cls)
         if type_info is not None:
             if type_info.serializer is None:
-                type_info.serializer = self._create_serializer(cls)
+                self._set_typeinfo(type_info)
             return type_info
         elif not create:
             return None
-        if self.language != Language.PYTHON or (self.require_registration and not issubclass(cls, Enum)):
+        if self.require_registration and not issubclass(cls, Enum):
             raise TypeUnregisteredError(f"{cls} not registered")
         logger.info("Type %s not registered", cls)
         serializer = self._create_serializer(cls)
@@ -472,12 +512,10 @@ class TypeResolver:
         if self.language == Language.PYTHON:
             if isinstance(serializer, EnumSerializer):
                 type_id = TypeId.NAMED_ENUM
-            elif type(serializer) is PickleSerializer:
-                type_id = PickleSerializer.PICKLE_TYPE_ID
-            elif isinstance(serializer, FunctionSerializer):
+            elif isinstance(serializer, (ObjectSerializer, StatefulSerializer)):
                 type_id = TypeId.NAMED_EXT
-            elif isinstance(serializer, (ObjectSerializer, StatefulSerializer, ReduceSerializer)):
-                type_id = TypeId.NAMED_EXT
+            elif self._internal_py_serializer_map.get(type(serializer)) is not None:
+                type_id = self._internal_py_serializer_map.get(type(serializer))[1]
             if not self.require_registration:
                 if isinstance(serializer, DataClassSerializer):
                     type_id = TypeId.NAMED_STRUCT
@@ -491,6 +529,24 @@ class TypeResolver:
             serializer=serializer,
         )
 
+    def _set_typeinfo(self, typeinfo):
+        type_id = typeinfo.type_id & 0xFF
+        if is_struct_type(type_id):
+            if self.meta_share:
+                type_def = encode_typedef(self, typeinfo.cls)
+                if type_def is not None:
+                    typeinfo.serializer = type_def.create_serializer(self)
+                    typeinfo.type_def = type_def
+                else:
+                    # Fallback to regular serializer
+                    typeinfo.serializer = DataClassSerializer(self.fory, typeinfo.cls, xlang=not self.fory.is_py)
+            else:
+                typeinfo.serializer = DataClassSerializer(self.fory, typeinfo.cls, xlang=not self.fory.is_py)
+        else:
+            typeinfo.serializer = self._create_serializer(typeinfo.cls)
+
+        return typeinfo
+
     def _create_serializer(self, cls):
         for clz in cls.__mro__:
             type_info = self._types_info.get(clz)
@@ -502,39 +558,60 @@ class TypeResolver:
                 # Use FunctionSerializer for function types (including lambdas)
                 serializer = FunctionSerializer(self.fory, cls)
             elif dataclasses.is_dataclass(cls):
-                serializer = DataClassSerializer(self.fory, cls)
+                # lazy create serializer to handle nested struct fields.
+                serializer = DataClassStubSerializer(self.fory, cls, xlang=not self.fory.is_py)
             elif issubclass(cls, enum.Enum):
                 serializer = EnumSerializer(self.fory, cls)
+            elif ("builtin_function_or_method" in str(cls) or "cython_function_or_method" in str(cls)) and "<locals>" not in str(cls):
+                serializer = NativeFuncMethodSerializer(self.fory, cls)
+            elif cls is type(self.initialize):
+                # Handle bound method objects
+                serializer = MethodSerializer(self.fory, cls)
+            elif issubclass(cls, type):
+                # Handle Python type objects and metaclass such as numpy._DTypeMeta(i.e. np.dtype)
+                serializer = TypeSerializer(self.fory, cls)
+            elif cls is array.array:
+                # Handle array.array objects with DynamicPyArraySerializer
+                # Note: This will use DynamicPyArraySerializer for all array.array objects
+                serializer = DynamicPyArraySerializer(self.fory, cls)
             elif (hasattr(cls, "__reduce__") and cls.__reduce__ is not object.__reduce__) or (
                 hasattr(cls, "__reduce_ex__") and cls.__reduce_ex__ is not object.__reduce_ex__
             ):
                 # Use ReduceSerializer for objects that have custom __reduce__ or __reduce_ex__ methods
                 # This has higher precedence than StatefulSerializer and ObjectSerializer
                 # Only use it for objects with custom reduce methods, not default ones from the object
-                module_name = getattr(cls, "__module__", "")
-                if module_name.startswith("pandas.") or module_name == "builtins" or cls.__name__ in ("type", "function", "method"):
-                    # Exclude pandas, built-ins, and certain system types
-                    serializer = PickleSerializer(self.fory, cls)
-                else:
-                    serializer = ReduceSerializer(self.fory, cls)
+                serializer = ReduceSerializer(self.fory, cls)
             elif hasattr(cls, "__getstate__") and hasattr(cls, "__setstate__"):
                 # Use StatefulSerializer for objects that support __getstate__ and __setstate__
-                # But exclude certain types that have incompatible state methods
-                module_name = getattr(cls, "__module__", "")
-                if module_name.startswith("pandas."):
-                    # Pandas objects have __getstate__/__setstate__ but use incompatible pickle formats
-                    serializer = PickleSerializer(self.fory, cls)
-                else:
-                    serializer = StatefulSerializer(self.fory, cls)
-            elif (
-                cls is not type
-                and (hasattr(cls, "__dict__") or hasattr(cls, "__slots__"))
-                and not (np and (issubclass(cls, np.dtype) or cls is type(np.dtype)))
-            ):
+                serializer = StatefulSerializer(self.fory, cls)
+            elif hasattr(cls, "__dict__") or hasattr(cls, "__slots__"):
                 serializer = ObjectSerializer(self.fory, cls)
             else:
-                serializer = PickleSerializer(self.fory, cls)
+                # c-extension types will go to here
+                serializer = UnsupportedSerializer(self.fory, cls)
         return serializer
+
+    def is_registered_by_name(self, cls):
+        typeinfo = self._types_info.get(cls)
+        if typeinfo is None:
+            return False
+        return TypeId.is_namespaced_type(typeinfo.type_id & 0xFF)
+
+    def is_registered_by_id(self, cls):
+        typeinfo = self._types_info.get(cls)
+        if typeinfo is None:
+            return False
+        return not TypeId.is_namespaced_type(typeinfo.type_id & 0xFF)
+
+    def get_registered_name(self, cls):
+        typeinfo = self._types_info.get(cls)
+        assert typeinfo is not None, f"{cls} not registered"
+        return typeinfo.decode_namespace(), typeinfo.decode_typename()
+
+    def get_registered_id(self, cls):
+        typeinfo = self._types_info.get(cls)
+        assert typeinfo is not None, f"{cls} not registered"
+        return typeinfo.type_id
 
     def _load_metabytes_to_typeinfo(self, ns_metabytes, type_metabytes):
         typeinfo = self._ns_type_to_typeinfo.get((ns_metabytes, type_metabytes))
@@ -555,6 +632,10 @@ class TypeResolver:
     def write_typeinfo(self, buffer, typeinfo):
         if typeinfo.dynamic_type:
             return
+        # Check if meta share is enabled first
+        if self.meta_share:
+            self.write_shared_type_meta(buffer, typeinfo)
+            return
         type_id = typeinfo.type_id
         internal_type_id = type_id & 0xFF
         buffer.write_varuint32(type_id)
@@ -563,6 +644,10 @@ class TypeResolver:
             self.metastring_resolver.write_meta_string_bytes(buffer, typeinfo.typename_bytes)
 
     def read_typeinfo(self, buffer):
+        # Check if meta share is enabled first
+        if self.meta_share:
+            return self.read_shared_type_meta(buffer)
+
         type_id = buffer.read_varuint32()
         internal_type_id = type_id & 0xFF
         if TypeId.is_namespaced_type(internal_type_id):
@@ -594,6 +679,71 @@ class TypeResolver:
 
     def get_meta_compressor(self):
         return self.meta_compressor
+
+    def write_shared_type_meta(self, buffer, typeinfo):
+        """Write shared type meta information."""
+        meta_context = self.fory.serialization_context.meta_context
+        meta_context.write_shared_typeinfo(buffer, typeinfo)
+
+    def read_shared_type_meta(self, buffer):
+        """Read shared type meta information."""
+        meta_context = self.serialization_context.meta_context
+        assert meta_context is not None, "Meta context must be set when meta share is enabled"
+        typeinfo = meta_context.read_shared_typeinfo(buffer)
+        return typeinfo
+
+    def write_type_defs(self, buffer):
+        """Write all type definitions that need to be sent."""
+        meta_context = self.fory.serialization_context.meta_context
+        if meta_context is None:
+            return
+        writing_type_defs = meta_context.get_writing_type_defs()
+        buffer.write_varuint32(len(writing_type_defs))
+        for type_def in writing_type_defs:
+            # Just copy the encoded bytes directly
+            buffer.write_bytes(type_def.encoded)
+
+    def read_type_defs(self, buffer):
+        """Read all type definitions from the buffer."""
+        meta_context = self.fory.serialization_context.meta_context
+        if meta_context is None:
+            return
+
+        num_type_defs = buffer.read_varuint32()
+        for i in range(num_type_defs):
+            # Read the header (first 8 bytes) to get the type ID
+            header = buffer.read_int64()
+            # Check if we already have this TypeDef cached
+            type_info = self._meta_shared_typeinfo.get(header)
+            if type_info is not None:
+                # Skip the rest of the TypeDef binary for faster performance
+                skip_typedef(buffer, header)
+            else:
+                # Read the TypeDef and create TypeInfo
+                type_def = decode_typedef(buffer, self, header=header)
+                type_info = self._build_type_info_from_typedef(type_def)
+                # Cache the tuple for future use
+                self._meta_shared_typeinfo[header] = type_info
+            meta_context.add_read_typeinfo(type_info)
+
+    def _build_type_info_from_typedef(self, type_def):
+        """Build TypeInfo from TypeDef using TypeDef's create_serializer method."""
+        # Create serializer using TypeDef's create_serializer method
+        serializer = type_def.create_serializer(self)
+        ns_metastr = self.namespace_encoder.encode(type_def.namespace or "")
+        ns_meta_bytes = self.metastring_resolver.get_metastr_bytes(ns_metastr)
+        type_metastr = self.typename_encoder.encode(type_def.typename)
+        type_meta_bytes = self.metastring_resolver.get_metastr_bytes(type_metastr)
+        typeinfo = TypeInfo(
+            type_def.cls,
+            type_def.type_id,
+            serializer,
+            ns_meta_bytes,
+            type_meta_bytes,
+            False,
+            type_def,
+        )
+        return typeinfo
 
     def reset(self):
         pass

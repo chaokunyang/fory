@@ -25,10 +25,10 @@ import (
 
 func TestTypeResolver(t *testing.T) {
 	fory := &Fory{
-		refResolver:       newRefResolver(false),
-		referenceTracking: false,
-		language:          XLANG,
-		buffer:            NewByteBuffer(nil),
+		refResolver: newRefResolver(false),
+		refTracking: false,
+		language:    XLANG,
+		buffer:      NewByteBuffer(nil),
 	}
 	typeResolver := newTypeResolver(fory)
 	type A struct {

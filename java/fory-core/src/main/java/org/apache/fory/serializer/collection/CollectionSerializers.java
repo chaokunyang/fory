@@ -46,6 +46,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.CopyOnWriteArrayList;
 import org.apache.fory.Fory;
+import org.apache.fory.collection.CollectionSnapshot;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
@@ -271,10 +272,10 @@ public class CollectionSerializers {
   }
 
   public static class CopyOnWriteArrayListSerializer
-      extends CollectionSerializer<CopyOnWriteArrayList> {
+      extends ConcurrentCollectionSerializer<CopyOnWriteArrayList> {
 
     public CopyOnWriteArrayListSerializer(Fory fory, Class<CopyOnWriteArrayList> type) {
-      super(fory, type);
+      super(fory, type, true);
     }
 
     @Override
@@ -407,10 +408,19 @@ public class CollectionSerializers {
   }
 
   public static final class ConcurrentSkipListSetSerializer
-      extends SortedSetSerializer<ConcurrentSkipListSet> {
+      extends ConcurrentCollectionSerializer<ConcurrentSkipListSet> {
 
     public ConcurrentSkipListSetSerializer(Fory fory, Class<ConcurrentSkipListSet> cls) {
-      super(fory, cls);
+      super(fory, cls, true);
+    }
+
+    @Override
+    public CollectionSnapshot onCollectionWrite(MemoryBuffer buffer, ConcurrentSkipListSet value) {
+      CollectionSnapshot snapshot = super.onCollectionWrite(buffer, value);
+      if (!fory.isCrossLanguage()) {
+        fory.writeRef(buffer, value.comparator());
+      }
+      return snapshot;
     }
 
     @Override
@@ -770,6 +780,55 @@ public class CollectionSerializers {
     @Override
     public T copy(T value) {
       return fory.copyObject(value, (Serializer<T>) serializer);
+    }
+  }
+
+  public abstract static class XlangCollectionDefaultSerializer extends CollectionLikeSerializer {
+
+    public XlangCollectionDefaultSerializer(Fory fory, Class cls) {
+      super(fory, cls);
+    }
+
+    @Override
+    public Collection onCollectionWrite(MemoryBuffer buffer, Object value) {
+      Collection v = (Collection) value;
+      buffer.writeVarUint32Small7(v.size());
+      return v;
+    }
+
+    @Override
+    public Object onCollectionRead(Collection collection) {
+      return collection;
+    }
+  }
+
+  public static class XlangListDefaultSerializer extends XlangCollectionDefaultSerializer {
+    public XlangListDefaultSerializer(Fory fory, Class cls) {
+      super(fory, cls);
+    }
+
+    @Override
+    public List newCollection(MemoryBuffer buffer) {
+      int numElements = buffer.readVarUint32Small7();
+      setNumElements(numElements);
+      ArrayList list = new ArrayList(numElements);
+      fory.getRefResolver().reference(list);
+      return list;
+    }
+  }
+
+  public static class XlangSetDefaultSerializer extends XlangCollectionDefaultSerializer {
+    public XlangSetDefaultSerializer(Fory fory, Class cls) {
+      super(fory, cls);
+    }
+
+    @Override
+    public Set newCollection(MemoryBuffer buffer) {
+      int numElements = buffer.readVarUint32Small7();
+      setNumElements(numElements);
+      HashSet set = new HashSet(numElements);
+      fory.getRefResolver().reference(set);
+      return set;
     }
   }
 

@@ -23,7 +23,6 @@ import static org.apache.fory.meta.ClassDefEncoder.buildFields;
 import static org.apache.fory.type.TypeUtils.COLLECTION_TYPE;
 import static org.apache.fory.type.TypeUtils.MAP_TYPE;
 import static org.apache.fory.type.TypeUtils.collectionOf;
-import static org.apache.fory.type.TypeUtils.getArrayComponent;
 import static org.apache.fory.type.TypeUtils.mapOf;
 
 import java.io.ObjectStreamClass;
@@ -58,6 +57,8 @@ import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.resolver.XtypeResolver;
 import org.apache.fory.serializer.CompatibleSerializer;
 import org.apache.fory.serializer.NonexistentClass;
+import org.apache.fory.serializer.converter.FieldConverter;
+import org.apache.fory.serializer.converter.FieldConverters;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.FinalObjectTypeStub;
 import org.apache.fory.type.GenericType;
@@ -268,14 +269,15 @@ public class ClassDef implements Serializable {
         if (descriptor != null) {
           // Make DescriptorGrouper have consistent order whether field exist or not
           // fory builtin types skip
-          if (rawType.isEnum()
-              || rawType.isAssignableFrom(descriptor.getRawType())
-              || NonexistentClass.isNonexistent(rawType)
-              || rawType == FinalObjectTypeStub.class
-              || (rawType.isArray() && getArrayComponent(rawType) == FinalObjectTypeStub.class)) {
+          if (useFieldType(rawType, descriptor)) {
             descriptor = descriptor.copyWithTypeName(newDesc.getTypeName());
             descriptors.add(descriptor);
           } else {
+            FieldConverter<?> converter =
+                FieldConverters.getConverter(rawType, descriptor.getField());
+            if (converter != null) {
+              newDesc.setFieldConverter(converter);
+            }
             descriptors.add(newDesc);
           }
         } else {
@@ -284,6 +286,24 @@ public class ClassDef implements Serializable {
       }
     }
     return descriptors;
+  }
+
+  /** Returns true if can use current field type. */
+  private static boolean useFieldType(Class<?> parsedType, Descriptor descriptor) {
+    if (parsedType.isEnum()
+        || parsedType.isAssignableFrom(descriptor.getRawType())
+        || parsedType == FinalObjectTypeStub.class) {
+      return true;
+    }
+    if (parsedType.isArray()) {
+      Tuple2<Class<?>, Integer> info = TypeUtils.getArrayComponentInfo(parsedType);
+      Field field = descriptor.getField();
+      if (!field.getType().isArray() || TypeUtils.getArrayDimensions(field.getType()) != info.f1) {
+        return false;
+      }
+      return info.f0 == FinalObjectTypeStub.class || info.f0.isEnum();
+    }
+    return false;
   }
 
   /**
@@ -594,10 +614,13 @@ public class ClassDef implements Serializable {
       if (resolver instanceof XtypeResolver) {
         cls = ((XtypeResolver) resolver).getXtypeInfo(classId).getCls();
         if (Types.isPrimitiveType(classId)) {
-          if (declared.isPrimitive() && !nullable) {
+          // For primitive types, ensure we use the correct primitive/boxed form
+          // based on the nullable flag, not the declared type
+          if (!nullable) {
+            // nullable=false means the source was primitive, use primitive type
             cls = TypeUtils.unwrap(cls);
-          }
-          if (nullable && !declared.isPrimitive()) {
+          } else {
+            // nullable=true means the source was boxed, use boxed type
             cls = TypeUtils.wrap(cls);
           }
         }

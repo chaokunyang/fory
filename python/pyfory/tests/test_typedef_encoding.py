@@ -21,9 +21,15 @@ Tests for xlang TypeDef implementation.
 
 from dataclasses import dataclass
 from typing import List, Dict
-import pyfory
 from pyfory._util import Buffer
-from pyfory.meta.typedef import TypeDef, FieldInfo, FieldType, CollectionFieldType, MapFieldType, DynamicFieldType
+from pyfory.meta.typedef import (
+    TypeDef,
+    FieldInfo,
+    FieldType,
+    CollectionFieldType,
+    MapFieldType,
+    DynamicFieldType,
+)
 from pyfory.meta.typedef_encoder import encode_typedef
 from pyfory.meta.typedef_decoder import decode_typedef
 from pyfory.type import TypeId
@@ -75,9 +81,10 @@ def test_typedef_creation():
         FieldInfo("age", FieldType(TypeId.INT32, True, True, False), "TestTypeDef"),
     ]
 
-    typedef = TypeDef("TestTypeDef", TypeId.STRUCT, fields, b"encoded_data", False)
+    typedef = TypeDef("", "TestTypeDef", None, TypeId.STRUCT, fields, b"encoded_data", False)
 
-    assert typedef.name == "TestTypeDef"
+    assert typedef.namespace == ""
+    assert typedef.typename == "TestTypeDef"
     assert typedef.type_id == TypeId.STRUCT
     assert len(typedef.fields) == 2
     assert typedef.encoded == b"encoded_data"
@@ -106,7 +113,7 @@ def test_dynamic_field_type():
 
 def test_encode_decode_typedef():
     """Test encoding and decoding a TypeDef."""
-    fory = Fory(language=pyfory.XLANG)
+    fory = Fory(xlang=True)
     fory.register(SimpleTypeDef, namespace="example", typename="SimpleTypeDef")
     fory.register(TestTypeDef, namespace="example", typename="TestTypeDef")
     # Create a mock resolver

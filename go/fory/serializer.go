@@ -232,7 +232,7 @@ func (s stringSerializer) TypeId() TypeId {
 }
 
 func (s stringSerializer) NeedWriteRef() bool {
-	return true
+	return false
 }
 
 func (s stringSerializer) Write(f *Fory, buf *ByteBuffer, value reflect.Value) error {
@@ -468,7 +468,7 @@ func (s *ptrToValueSerializer) Read(f *Fory, buf *ByteBuffer, type_ reflect.Type
 }
 
 func writeBySerializer(f *Fory, buf *ByteBuffer, value reflect.Value, serializer Serializer, referencable bool) error {
-	if referencable {
+	if referencable && (serializer == nil || serializer.NeedWriteRef()) {
 		return f.writeReferencableBySerializer(buf, value, serializer)
 	} else {
 		return f.writeNonReferencableBySerializer(buf, value, serializer)

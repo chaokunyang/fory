@@ -16,46 +16,64 @@
 // under the License.
 
 use super::context::{ReadContext, WriteContext};
+use crate::buffer::{Reader, Writer};
 use crate::error::Error;
 use crate::fory::Fory;
+use crate::meta::TypeMeta;
 use crate::serializer::StructSerializer;
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::{any::Any, collections::HashMap};
 
+type SerializerFn = fn(&dyn Any, &mut WriteContext, is_field: bool);
+type DeserializerFn =
+    fn(&mut ReadContext, is_field: bool, skip_ref_flag: bool) -> Result<Box<dyn Any>, Error>;
+
 pub struct Harness {
-    serializer: fn(&dyn Any, &mut WriteContext),
-    deserializer: fn(&mut ReadContext) -> Result<Box<dyn Any>, Error>,
+    serializer: SerializerFn,
+    deserializer: DeserializerFn,
 }
 
 impl Harness {
-    pub fn new(
-        serializer: fn(&dyn Any, &mut WriteContext),
-        deserializer: fn(&mut ReadContext) -> Result<Box<dyn Any>, Error>,
-    ) -> Harness {
+    pub fn new(serializer: SerializerFn, deserializer: DeserializerFn) -> Harness {
         Harness {
             serializer,
             deserializer,
         }
     }
 
-    pub fn get_serializer(&self) -> fn(&dyn Any, &mut WriteContext) {
+    pub fn get_serializer(&self) -> fn(&dyn Any, &mut WriteContext, is_field: bool) {
         self.serializer
     }
 
-    pub fn get_deserializer(&self) -> fn(&mut ReadContext) -> Result<Box<dyn Any>, Error> {
+    pub fn get_deserializer(&self) -> DeserializerFn {
         self.deserializer
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct TypeInfo {
     type_def: Vec<u8>,
     type_id: u32,
+    namespace: String,
+    type_name: String,
+    register_by_name: bool,
 }
 
 impl TypeInfo {
-    pub fn new<T: StructSerializer>(fory: &Fory, type_id: u32) -> TypeInfo {
+    pub fn new<T: StructSerializer>(
+        fory: &Fory,
+        type_id: u32,
+        namespace: &str,
+        type_name: &str,
+        register_by_name: bool,
+    ) -> TypeInfo {
         TypeInfo {
-            type_def: T::type_def(fory, type_id),
+            type_def: T::type_def(fory, type_id, namespace, type_name, register_by_name),
             type_id,
+            namespace: namespace.to_owned(),
+            type_name: type_name.to_owned(),
+            register_by_name,
         }
     }
 
@@ -71,10 +89,18 @@ impl TypeInfo {
 #[derive(Default)]
 pub struct TypeResolver {
     serialize_map: HashMap<u32, Harness>,
+    name_serialize_map: HashMap<(String, String), Harness>,
     type_id_map: HashMap<std::any::TypeId, u32>,
+    type_name_map: HashMap<std::any::TypeId, (String, String)>,
     type_info_map: HashMap<std::any::TypeId, TypeInfo>,
     // Fast lookup by numeric ID for common types
     type_id_index: Vec<u32>,
+    sorted_field_names_map: RefCell<HashMap<std::any::TypeId, Vec<String>>>,
+
+    // New fields (merged from MetaReaderResolver/MetaWriterResolver)
+    reading_type_defs: Vec<Rc<TypeMeta>>,
+    writing_type_defs: Vec<Vec<u8>>,
+    type_id_index_map: HashMap<std::any::TypeId, usize>,
 }
 
 const NO_TYPE_ID: u32 = 1000000000;
@@ -104,12 +130,18 @@ impl TypeResolver {
         )
     }
 
-    pub fn register<T: StructSerializer>(&mut self, type_info: TypeInfo, id: u32) {
-        fn serializer<T2: 'static + StructSerializer>(this: &dyn Any, context: &mut WriteContext) {
+    pub fn register<T: StructSerializer>(&mut self, type_info: &TypeInfo) {
+        fn serializer<T2: 'static + StructSerializer>(
+            this: &dyn Any,
+            context: &mut WriteContext,
+            is_field: bool,
+        ) {
             let this = this.downcast_ref::<T2>();
             match this {
                 Some(v) => {
-                    T2::serialize(v, context);
+                    let skip_ref_flag =
+                        crate::serializer::get_skip_ref_flag::<T2>(context.get_fory());
+                    crate::serializer::write_data(v, context, is_field, skip_ref_flag, true);
                 }
                 None => todo!(),
             }
@@ -117,22 +149,51 @@ impl TypeResolver {
 
         fn deserializer<T2: 'static + StructSerializer>(
             context: &mut ReadContext,
+            is_field: bool,
+            skip_ref_flag: bool,
         ) -> Result<Box<dyn Any>, Error> {
-            match T2::deserialize(context) {
+            match crate::serializer::read_data::<T2>(context, is_field, skip_ref_flag, true) {
                 Ok(v) => Ok(Box::new(v)),
                 Err(e) => Err(e),
             }
         }
+        let rs_type_id = std::any::TypeId::of::<T>();
+        if self.type_info_map.contains_key(&rs_type_id) {
+            panic!("rs_struct:{:?} already registered", type_info.type_id);
+        }
+        self.type_info_map.insert(rs_type_id, (*type_info).clone());
+
         let index = T::type_index() as usize;
         if index >= self.type_id_index.len() {
             self.type_id_index.resize(index + 1, NO_TYPE_ID);
         }
-        self.type_id_index[index] = id;
-        self.type_id_map.insert(std::any::TypeId::of::<T>(), id);
-        self.serialize_map
-            .insert(id, Harness::new(serializer::<T>, deserializer::<T>));
-        self.type_info_map
-            .insert(std::any::TypeId::of::<T>(), type_info);
+        self.type_id_index[index] = type_info.type_id;
+
+        if type_info.register_by_name {
+            let namespace = type_info.namespace.clone();
+            let type_name = type_info.type_name.clone();
+            if self
+                .name_serialize_map
+                .contains_key(&(namespace.clone(), type_name.clone()))
+            {
+                panic!("TypeId {:?} already registered_by_name", type_info.type_id);
+            }
+            self.type_name_map
+                .insert(rs_type_id, (namespace.clone(), type_name.clone()));
+            self.name_serialize_map.insert(
+                (namespace, type_name),
+                Harness::new(serializer::<T>, deserializer::<T>),
+            );
+        } else {
+            let type_id = type_info.type_id;
+            if self.serialize_map.contains_key(&type_id) {
+                panic!("TypeId {:?} already registered_by_id", type_id);
+            }
+
+            self.type_id_map.insert(rs_type_id, type_id);
+            self.serialize_map
+                .insert(type_id, Harness::new(serializer::<T>, deserializer::<T>));
+        }
     }
 
     pub fn get_harness_by_type(&self, type_id: std::any::TypeId) -> Option<&Harness> {
@@ -141,5 +202,72 @@ impl TypeResolver {
 
     pub fn get_harness(&self, id: u32) -> Option<&Harness> {
         self.serialize_map.get(&id)
+    }
+
+    pub fn get_name_harness(&self, namespace: &str, type_name: &str) -> Option<&Harness> {
+        self.name_serialize_map
+            .get(&(namespace.to_owned(), type_name.to_owned()))
+    }
+
+    pub fn get_sorted_field_names<T: StructSerializer>(
+        &self,
+        type_id: std::any::TypeId,
+    ) -> Option<Vec<String>> {
+        let map = self.sorted_field_names_map.borrow();
+        map.get(&type_id).cloned()
+    }
+
+    pub fn set_sorted_field_names<T: StructSerializer>(&self, field_names: &[String]) {
+        let mut map = self.sorted_field_names_map.borrow_mut();
+        map.insert(std::any::TypeId::of::<T>(), field_names.to_owned());
+    }
+
+    // New meta reading methods (from MetaReaderResolver)
+    pub fn get_meta(&self, index: usize) -> &Rc<TypeMeta> {
+        unsafe { self.reading_type_defs.get_unchecked(index) }
+    }
+
+    pub fn load_meta(&mut self, reader: &mut Reader) -> usize {
+        let meta_size = reader.var_uint32();
+        for _ in 0..meta_size {
+            self.reading_type_defs
+                .push(Rc::new(TypeMeta::from_bytes(reader)));
+        }
+        reader.get_cursor()
+    }
+
+    pub fn clear_reading_meta(&mut self) {
+        self.reading_type_defs.clear();
+    }
+
+    // New meta writing methods (from MetaWriterResolver)
+    pub fn push_meta(&mut self, type_id: std::any::TypeId) -> usize {
+        match self.type_id_index_map.get(&type_id) {
+            None => {
+                let index = self.writing_type_defs.len();
+                let type_def = self.get_type_info(type_id).get_type_def().clone();
+                self.writing_type_defs.push(type_def);
+                self.type_id_index_map.insert(type_id, index);
+                index
+            }
+            Some(index) => *index,
+        }
+    }
+
+    pub fn meta_to_bytes(&self, writer: &mut Writer) -> Result<(), Error> {
+        writer.var_uint32(self.writing_type_defs.len() as u32);
+        for item in &self.writing_type_defs {
+            writer.bytes(item);
+        }
+        Ok(())
+    }
+
+    pub fn is_meta_empty(&self) -> bool {
+        self.writing_type_defs.is_empty()
+    }
+
+    pub fn clear_writing_meta(&mut self) {
+        self.writing_type_defs.clear();
+        self.type_id_index_map.clear();
     }
 }

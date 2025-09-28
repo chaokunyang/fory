@@ -56,6 +56,8 @@ import org.apache.fory.codegen.Expression.StaticInvoke;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
+import org.apache.fory.reflect.ObjectCreator;
+import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.ClassInfo;
@@ -168,6 +170,9 @@ public abstract class CodecBuilder {
         && !expression.type().wrap().isSubtypeOf(targetType.wrap())) {
       return new Cast(expression, targetType, valuePrefix);
     }
+    if (rawType.isArray()) {
+      return new Cast(expression, OBJECT_ARRAY_TYPE, valuePrefix);
+    }
     return expression;
   }
 
@@ -175,6 +180,8 @@ public abstract class CodecBuilder {
     String fieldName = "_record_ctr_";
     Reference fieldRef = fieldMap.get(fieldName);
     if (fieldRef == null) {
+      // trigger cache for graalvm
+      RecordUtils.getRecordCtrHandle(beanClass);
       StaticInvoke getRecordCtrHandle =
           new StaticInvoke(
               RecordUtils.class,
@@ -480,8 +487,26 @@ public abstract class CodecBuilder {
     if (sourcePublicAccessible(beanClass)) {
       return new Expression.NewInstance(beanType);
     } else {
+      if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE && Platform.JAVA_VERSION >= 25) {
+        ObjectCreators.getObjectCreator(beanClass); // trigger cache
+        return new Invoke(getObjectCreator(beanClass), "newInstance", OBJECT_TYPE);
+      }
       return new StaticInvoke(Platform.class, "newInstance", OBJECT_TYPE, beanClassExpr());
     }
+  }
+
+  protected Expression getObjectCreator(Class<?> type) {
+    ObjectCreators.getObjectCreator(type); // trigger cache
+    return getOrCreateField(
+        true,
+        ObjectCreator.class,
+        ctx.newName("objectCreator_" + type.getSimpleName()),
+        () ->
+            new StaticInvoke(
+                ObjectCreators.class,
+                "getObjectCreator",
+                TypeRef.of(ObjectCreator.class),
+                staticBeanClassExpr()));
   }
 
   protected void buildRecordComponentDefaultValues() {

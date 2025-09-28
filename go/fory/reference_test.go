@@ -32,7 +32,7 @@ func TestReferenceResolver(t *testing.T) {
 	values = append(values, commonMap()...)
 	foo := newFoo()
 	bar := Bar{}
-	values = append(values, "", "str", &foo, &bar)
+	values = append(values, &foo, &bar)
 	for _, data := range values {
 		refWritten, err := refResolver.WriteRefOrNull(buf, reflect.ValueOf(data))
 		require.Nil(t, err)

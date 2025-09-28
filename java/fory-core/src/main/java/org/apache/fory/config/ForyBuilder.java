@@ -31,7 +31,6 @@ import org.apache.fory.meta.DeflaterMetaCompressor;
 import org.apache.fory.meta.MetaCompressor;
 import org.apache.fory.pool.ThreadPoolFory;
 import org.apache.fory.reflect.ReflectionUtils;
-import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.serializer.JavaSerializer;
 import org.apache.fory.serializer.ObjectStreamSerializer;
 import org.apache.fory.serializer.Serializer;
@@ -69,6 +68,8 @@ public final class ForyBuilder {
   ClassLoader classLoader;
   boolean compressInt = true;
   public LongEncoding longEncoding = LongEncoding.SLI;
+  boolean compressIntArray = false;
+  boolean compressLongArray = false;
   boolean compressString = false;
   Boolean writeNumUtf16BytesForUtf8Encoding;
   CompatibleMode compatibleMode = CompatibleMode.SCHEMA_CONSISTENT;
@@ -97,9 +98,6 @@ public final class ForyBuilder {
    */
   public ForyBuilder withLanguage(Language language) {
     this.language = language;
-    if (language != Language.JAVA) {
-      codeGenEnabled = false;
-    }
     return this;
   }
 
@@ -182,6 +180,18 @@ public final class ForyBuilder {
   /** Use variable length encoding for long. */
   public ForyBuilder withLongCompressed(LongEncoding longEncoding) {
     this.longEncoding = Objects.requireNonNull(longEncoding);
+    return this;
+  }
+
+  /** Whether compress int arrays when values are small. */
+  public ForyBuilder withIntArrayCompressed(boolean intArrayCompressed) {
+    this.compressIntArray = intArrayCompressed;
+    return this;
+  }
+
+  /** Whether compress long arrays when values are small. */
+  public ForyBuilder withLongArrayCompressed(boolean longArrayCompressed) {
+    this.compressLongArray = longArrayCompressed;
     return this;
   }
 
@@ -269,8 +279,9 @@ public final class ForyBuilder {
    * attack if the classes `constructor`/`equals`/`hashCode` method contain malicious code. Do not
    * disable class registration if you can't ensure your environment are *indeed secure*. We are not
    * responsible for security risks if you disable this option. If you disable this option, you can
-   * configure {@link org.apache.fory.resolver.ClassChecker} by {@link
-   * ClassResolver#setClassChecker} to control which classes are allowed being serialized.
+   * configure {@link org.apache.fory.resolver.TypeChecker} by {@link
+   * org.apache.fory.resolver.TypeResolver#setTypeChecker} to control which classes are allowed
+   * being serialized.
    */
   public ForyBuilder requireClassRegistration(boolean requireClassRegistration) {
     this.requireClassRegistration = requireClassRegistration;
@@ -447,8 +458,8 @@ public final class ForyBuilder {
       LOG.warn(
           "Class registration isn't forced, unknown classes can be deserialized. "
               + "If the environment isn't secure, please enable class registration by "
-              + "`ForyBuilder#requireClassRegistration(true)` or configure ClassChecker by "
-              + "`ClassResolver#setClassChecker`");
+              + "`ForyBuilder#requireClassRegistration(true)` or configure TypeChecker by "
+              + "`TypeResolver#setTypeChecker`");
     }
     if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE && asyncCompilationEnabled) {
       LOG.info("Use sync compilation for graalvm native image since it doesn't support JIT.");

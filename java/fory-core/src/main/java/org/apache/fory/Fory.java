@@ -30,6 +30,7 @@ import java.util.Iterator;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import javax.annotation.concurrent.NotThreadSafe;
+import org.apache.fory.annotation.Internal;
 import org.apache.fory.builder.JITContext;
 import org.apache.fory.collection.IdentityMap;
 import org.apache.fory.config.CompatibleMode;
@@ -58,6 +59,7 @@ import org.apache.fory.resolver.MetaStringResolver;
 import org.apache.fory.resolver.NoRefResolver;
 import org.apache.fory.resolver.RefResolver;
 import org.apache.fory.resolver.SerializationContext;
+import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.resolver.XtypeResolver;
 import org.apache.fory.serializer.ArraySerializers;
 import org.apache.fory.serializer.BufferCallback;
@@ -174,41 +176,31 @@ public final class Fory implements BaseFory {
 
   @Override
   public void register(Class<?> cls) {
-    if (!crossLanguage) {
-      classResolver.register(cls);
-    } else {
-      xtypeResolver.register(cls);
-    }
+    _getTypeResolver().register(cls);
   }
 
   @Override
   public void register(Class<?> cls, int id) {
-    if (!crossLanguage) {
-      classResolver.register(cls, id);
-    } else {
-      xtypeResolver.register(cls, id);
-    }
+    _getTypeResolver().register(cls, id);
   }
 
+  @Deprecated
   @Override
   public void register(Class<?> cls, boolean createSerializer) {
-    if (!crossLanguage) {
-      classResolver.register(cls, createSerializer);
-    } else {
-      xtypeResolver.register(cls);
-    }
+    _getTypeResolver().register(cls);
   }
 
+  @Deprecated
   @Override
   public void register(Class<?> cls, int id, boolean createSerializer) {
-    if (!crossLanguage) {
-      classResolver.register(cls, id, createSerializer);
-    } else {
-      xtypeResolver.register(cls, id);
-    }
+    _getTypeResolver().register(cls, id);
   }
 
-  /** register class with given type tag which will be used for cross-language serialization. */
+  /**
+   * Register class with given type name, this method will have bigger serialization time/space cost
+   * compared to register by id.
+   */
+  @Override
   public void register(Class<?> cls, String typeName) {
     int idx = typeName.lastIndexOf('.');
     String namespace = "";
@@ -220,38 +212,37 @@ public final class Fory implements BaseFory {
   }
 
   public void register(Class<?> cls, String namespace, String typeName) {
-    if (!crossLanguage) {
-      classResolver.register(cls, namespace, typeName);
-    } else {
-      xtypeResolver.register(cls, namespace, typeName);
-    }
+    _getTypeResolver().register(cls, namespace, typeName);
+  }
+
+  @Override
+  public void register(String className) {
+    _getTypeResolver().register(className);
+  }
+
+  @Override
+  public void register(String className, int classId) {
+    _getTypeResolver().register(className, classId);
+  }
+
+  @Override
+  public void register(String className, String namespace, String typeName) {
+    _getTypeResolver().register(className, namespace, typeName);
   }
 
   @Override
   public <T> void registerSerializer(Class<T> type, Class<? extends Serializer> serializerClass) {
-    if (!crossLanguage) {
-      classResolver.registerSerializer(type, serializerClass);
-    } else {
-      xtypeResolver.registerSerializer(type, serializerClass);
-    }
+    _getTypeResolver().registerSerializer(type, serializerClass);
   }
 
   @Override
   public void registerSerializer(Class<?> type, Serializer<?> serializer) {
-    if (!crossLanguage) {
-      classResolver.registerSerializer(type, serializer);
-    } else {
-      xtypeResolver.registerSerializer(type, serializer);
-    }
+    _getTypeResolver().registerSerializer(type, serializer);
   }
 
   @Override
   public void registerSerializer(Class<?> type, Function<Fory, Serializer<?>> serializerCreator) {
-    if (!crossLanguage) {
-      classResolver.registerSerializer(type, serializerCreator.apply(this));
-    } else {
-      xtypeResolver.registerSerializer(type, serializerCreator.apply(this));
-    }
+    _getTypeResolver().registerSerializer(type, serializerCreator.apply(this));
   }
 
   @Override
@@ -1213,7 +1204,7 @@ public final class Fory implements BaseFory {
       if (nextReadRefId >= NOT_NULL_VALUE_FLAG) {
         ClassInfo classInfo;
         if (shareMeta) {
-          classInfo = classResolver.readClassInfoWithMetaShare(buffer, cls);
+          classInfo = classResolver.readSharedClassMeta(buffer, cls);
         } else {
           classInfo = classResolver.getClassInfo(cls);
         }
@@ -1636,8 +1627,16 @@ public final class Fory implements BaseFory {
     return xtypeResolver;
   }
 
-  // don't provide getTypeResolver directly to avoid users use this
-  // API too much since it has polymorphic invoke cost.
+  /**
+   * Don't use this API for type resolving and dispatch, methods on returned resolver has
+   * polymorphic invoke cost.
+   */
+  @Internal
+  // CHECKSTYLE.OFF:MethodName
+  public TypeResolver _getTypeResolver() {
+    // CHECKSTYLE.ON:MethodName
+    return crossLanguage ? xtypeResolver : classResolver;
+  }
 
   public MetaStringResolver getMetaStringResolver() {
     return metaStringResolver;
@@ -1701,6 +1700,10 @@ public final class Fory implements BaseFory {
 
   public boolean isCrossLanguage() {
     return crossLanguage;
+  }
+
+  public boolean isCompatible() {
+    return config.getCompatibleMode() == CompatibleMode.COMPATIBLE;
   }
 
   public boolean trackingRef() {

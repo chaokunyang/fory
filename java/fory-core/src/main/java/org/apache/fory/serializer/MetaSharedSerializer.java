@@ -41,6 +41,7 @@ import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.type.Generics;
 import org.apache.fory.util.DefaultValueUtils;
+import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.record.RecordInfo;
 import org.apache.fory.util.record.RecordUtils;
@@ -162,14 +163,9 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
           new Object[finalFields.length + otherFields.length + containerFields.length];
       readFields(buffer, fieldValues);
       fieldValues = RecordUtils.remapping(recordInfo, fieldValues);
-
-      try {
-        T t = (T) constructor.invokeWithArguments(fieldValues);
-        Arrays.fill(recordInfo.getRecordComponents(), null);
-        return t;
-      } catch (Throwable e) {
-        Platform.throwException(e);
-      }
+      T t = objectCreator.newInstanceWithArguments(fieldValues);
+      Arrays.fill(recordInfo.getRecordComponents(), null);
+      return t;
     }
     T obj = newInstance();
     Fory fory = this.fory;
@@ -200,15 +196,19 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
           fieldAccessor.putObject(obj, fieldValue);
         }
       } else {
-        // Skip the field value from buffer since it doesn't exist in current class
-        if (skipPrimitiveFieldValueFailed(fory, fieldInfo.classId, buffer)) {
-          if (fieldInfo.classInfo == null) {
-            // TODO(chaokunyang) support registered serializer in peer with ref tracking disabled.
-            fory.readRef(buffer, classInfoHolder);
-          } else {
-            AbstractObjectSerializer.readFinalObjectFieldValue(
-                binding, refResolver, classResolver, fieldInfo, isFinal, buffer);
+        if (fieldInfo.fieldConverter == null) {
+          // Skip the field value from buffer since it doesn't exist in current class
+          if (skipPrimitiveFieldValueFailed(fory, fieldInfo.classId, buffer)) {
+            if (fieldInfo.classInfo == null) {
+              // TODO(chaokunyang) support registered serializer in peer with ref tracking disabled.
+              fory.readRef(buffer, classInfoHolder);
+            } else {
+              AbstractObjectSerializer.readFinalObjectFieldValue(
+                  binding, refResolver, classResolver, fieldInfo, isFinal, buffer);
+            }
           }
+        } else {
+          compatibleRead(buffer, fieldInfo, isFinal, obj);
         }
       }
     }
@@ -228,20 +228,32 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
         fieldAccessor.putObject(obj, fieldValue);
       }
     }
-
-    // Set default values for missing fields in Scala case classes
-    if (hasDefaultValues) {
-      DefaultValueUtils.setDefaultValues(obj, defaultValueFields);
-    }
-
     return obj;
+  }
+
+  private void compatibleRead(
+      MemoryBuffer buffer, FinalTypeField fieldInfo, boolean isFinal, Object obj) {
+    Object fieldValue;
+    short classId = fieldInfo.classId;
+    if (classId >= ClassResolver.PRIMITIVE_BOOLEAN_CLASS_ID
+        && classId <= ClassResolver.PRIMITIVE_DOUBLE_CLASS_ID) {
+      fieldValue = Serializers.readPrimitiveValue(fory, buffer, classId);
+    } else {
+      fieldValue =
+          AbstractObjectSerializer.readFinalObjectFieldValue(
+              binding, refResolver, classResolver, fieldInfo, isFinal, buffer);
+    }
+    fieldInfo.fieldConverter.set(obj, fieldValue);
   }
 
   private T newInstance() {
     if (!hasDefaultValues) {
       return newBean();
     }
-    return Platform.newInstance(type);
+    T obj = GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE ? newBean() : Platform.newInstance(type);
+    // Set default values for missing fields in Scala case classes
+    DefaultValueUtils.setDefaultValues(obj, defaultValueFields);
+    return obj;
   }
 
   @Override
@@ -284,6 +296,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
                 binding, refResolver, classResolver, fieldInfo, isFinal, buffer);
           }
         }
+        // remapping will handle those extra fields from peers.
         fields[counter++] = null;
       }
     }

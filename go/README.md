@@ -2,7 +2,27 @@
 
 Fory is a blazingly fast multi-language serialization framework powered by just-in-time compilation and zero-copy.
 
-Currently, Fory Go is implemented using reflection. We have also implemented a static code generator to generate serializer code ahead of time to speed up serialization.
+Fory Go provides two serialization paths: a high-performance code generation path and a reflection-based path. The code generation path is recommended for production use as it offers better performance and broader type support.
+
+## Supported Types
+
+Fory Go supports the following types for both reflection-based serialization and code generation:
+
+### Basic Data Types
+
+- `bool`
+- `int8`, `int16`, `int32`, `int64`, `int`
+- `uint8` (byte)
+- `float32`, `float64`
+- `string`
+
+### Collection Types
+
+- `[]bool`, `[]int16`, `[]int32`, `[]int64`
+- `[]float32`, `[]float64`
+- `[]string`
+- `[]interface{}` (dynamic slice)
+- `map[string]string`, `map[int]int`, `map[string]int`
 
 ## Fory Go Codegen (optional)
 
@@ -27,7 +47,7 @@ The generator binary is `fory`.
 go install github.com/apache/fory/go/fory/cmd/fory@latest
 ```
 
-- Go 1.13+
+- Go 1.13+:
 
 ```bash
 # Inside a module-enabled environment
@@ -43,12 +63,12 @@ Ensure $GOBIN or $GOPATH/bin is on your PATH so that `fory` is discoverable by `
 
 ### Usage: annotate and generate
 
-1. Mark structs for generation with `//fory:gen`, and add a `go:generate` directive. File-based generation is recommended.
+1. Mark structs for generation with `//fory:generate`, and add a `go:generate` directive. File-based generation is recommended.
 
 ```go
 package yourpkg
 
-//fory:gen
+//fory:generate
 type User struct {
     ID   int64  `json:"id"`
     Name string `json:"name"`
@@ -77,7 +97,7 @@ Re-run generation whenever any of the following change for generated structs:
 
 - Field additions/removals/renames
 - Field type changes or tag changes
-- New structs annotated with `//fory:gen`
+- New structs annotated with `//fory:generate`
 
 Fory adds a compile-time guard in generated files to detect stale code. If you forget to re-generate, your build will fail with a clear message. The generator also includes a smart auto-retry: when invoked via `go generate`, it detects this situation, removes the stale generated file, and retries automatically. You can force this behavior manually with:
 
@@ -145,6 +165,38 @@ fory --force -file <your file>
 - Is codegen required? No. Fory works without it via reflection.
 - Does generated code work across Go versions? Yes, it’s plain Go code; keep your toolchain consistent in CI.
 - Can I mix generated and non-generated structs? Yes, adoption is incremental and per file.
+
+## Configuration Options
+
+Fory Go supports several configuration options through the functional options pattern:
+
+### Compatible Mode (Metashare)
+
+Compatible mode enables meta information sharing, which allows for schema evolution:
+
+```go
+// Enable compatible mode with metashare
+fory := NewForyWithOptions(WithCompatible(true))
+```
+
+### Reference Tracking
+
+Enable reference tracking:
+
+```go
+fory := NewForyWithOptions(WithRefTracking(true))
+```
+
+### Combined Options
+
+You can combine multiple options:
+
+```go
+fory := NewForyWithOptions(
+    WithCompatible(true),
+    WithRefTracking(true),
+)
+```
 
 ## How to test
 

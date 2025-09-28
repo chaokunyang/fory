@@ -23,6 +23,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.resolver.ClassChecker;
+import org.apache.fory.resolver.TypeChecker;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.SerializerFactory;
 
@@ -47,6 +48,7 @@ public abstract class AbstractThreadSafeFory implements ThreadSafeFory {
     registerCallback(fory -> fory.register(cls, id, createSerializer));
   }
 
+  @Deprecated
   @Override
   public void register(Class<?> cls, String typeName) {
     registerCallback(fory -> fory.register(cls, typeName));
@@ -55,6 +57,21 @@ public abstract class AbstractThreadSafeFory implements ThreadSafeFory {
   @Override
   public void register(Class<?> cls, String namespace, String typeName) {
     registerCallback(fory -> fory.register(cls, namespace, typeName));
+  }
+
+  @Override
+  public void register(String className) {
+    registerCallback(fory -> fory.register(className));
+  }
+
+  @Override
+  public void register(String className, int id) {
+    registerCallback(fory -> fory.register(className, id));
+  }
+
+  @Override
+  public void register(String className, String namespace, String typeName) {
+    registerCallback(fory -> fory.register(className, namespace, typeName));
   }
 
   @Override
@@ -78,8 +95,14 @@ public abstract class AbstractThreadSafeFory implements ThreadSafeFory {
   }
 
   @Override
+  @Deprecated
   public void setClassChecker(ClassChecker classChecker) {
     registerCallback(fory -> fory.getClassResolver().setClassChecker(classChecker));
+  }
+
+  @Override
+  public void setTypeChecker(TypeChecker typeChecker) {
+    registerCallback(fory -> fory._getTypeResolver().setTypeChecker(typeChecker));
   }
 
   @Override

@@ -85,6 +85,14 @@ class RefResolver(ABC):
         """
 
     @abstractmethod
+    def last_preserved_ref_id(self) -> int:
+        """
+        Returns
+        -------
+            the last preserved reference id.
+        """
+
+    @abstractmethod
     def reference(self, obj):
         """
         Call this method immediately after composited object such as object
@@ -188,6 +196,9 @@ class MapRefResolver(RefResolver):
         # `refId >= NOT_NULL_VALUE_FLAG` to read data.
         return head_flag
 
+    def last_preserved_ref_id(self) -> int:
+        return self.read_ref_ids[-1]
+
     def reference(self, obj):
         ref_id = self.read_ref_ids.pop()
         self.set_read_object(ref_id, obj)
@@ -235,6 +246,9 @@ class NoRefResolver(RefResolver):
         # `NOT_NULL_VALUE_FLAG` can be used as stub reference id because we use
         # `refId >= NOT_NULL_VALUE_FLAG` to read data.
         return buffer.read_int8()
+
+    def last_preserved_ref_id(self) -> int:
+        return -1
 
     def reference(self, obj):
         pass

@@ -37,6 +37,7 @@ mod set;
 pub mod skip;
 mod string;
 pub mod struct_;
+pub mod trait_;
 
 pub fn write_data<T: Serializer + 'static>(
     record: &T,

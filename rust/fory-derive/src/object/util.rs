@@ -501,6 +501,11 @@ impl fmt::Display for NullableTypeNode {
 fn extract_type_name(ty: &Type) -> String {
     if let Type::Path(type_path) = ty {
         type_path.path.segments.last().unwrap().ident.to_string()
+    } else if let Type::TraitObject(_) = ty {
+        // Handle dyn Trait types - use the full quoted representation for now
+        let ty_str = quote!(#ty).to_string();
+        // Remove spaces to create a valid identifier-like string
+        ty_str.replace(" ", "")
     } else {
         quote!(#ty).to_string()
     }
@@ -526,6 +531,9 @@ pub(super) fn parse_generic_tree(ty: &Type) -> TypeNode {
         } else {
             vec![]
         }
+    } else if let Type::TraitObject(_) = ty {
+        // Trait objects have no generics
+        vec![]
     } else {
         vec![]
     };
@@ -564,6 +572,16 @@ pub(super) fn generic_tree_to_tokens(node: &TypeNode, have_context: bool) -> Tok
     let get_type_id = if node.name == "Option" {
         let option_type_id = TypeId::ForyNullable as u32;
         quote! { #option_type_id }
+    } else if node.name.starts_with("dyn") {
+        // Use UNKNOWN type for trait objects (any type starting with "dyn")
+        let unknown_type_id = TypeId::UNKNOWN as u32;
+        quote! { #unknown_type_id }
+    } else if (node.name == "Box" || node.name == "Arc" || node.name == "Rc") &&
+               node.generics.len() == 1 &&
+               node.generics[0].name.starts_with("dyn") {
+        // Handle Box<dyn Trait>, Arc<dyn Trait>, Rc<dyn Trait>
+        let unknown_type_id = TypeId::UNKNOWN as u32;
+        quote! { #unknown_type_id }
     } else if let Some(ts) = primitive_vec {
         ts
     } else {

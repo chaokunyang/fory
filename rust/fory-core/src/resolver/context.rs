@@ -16,9 +16,7 @@
 // under the License.
 
 use crate::buffer::{Reader, Writer};
-use crate::error::Error;
 use crate::fory::Fory;
-use anyhow::anyhow;
 
 use crate::meta::TypeMeta;
 use crate::resolver::meta_resolver::{MetaReaderResolver, MetaWriterResolver};
@@ -27,7 +25,6 @@ use std::rc::Rc;
 
 pub struct WriteContext<'se> {
     pub writer: &'se mut Writer,
-    pub tags: Vec<&'static str>,
     fory: &'se Fory,
     meta_resolver: MetaWriterResolver<'se>,
     pub ref_writer: RefWriter,
@@ -37,7 +34,6 @@ impl<'se> WriteContext<'se> {
     pub fn new(fory: &'se Fory, writer: &'se mut Writer) -> WriteContext<'se> {
         WriteContext {
             writer,
-            tags: Vec::new(),
             fory,
             meta_resolver: MetaWriterResolver::default(),
             ref_writer: RefWriter::new(),
@@ -63,30 +59,10 @@ impl<'se> WriteContext<'se> {
     pub fn get_fory(&self) -> &Fory {
         self.fory
     }
-
-    pub fn write_tag(&mut self, tag: &'static str) {
-        const USESTRINGVALUE: u8 = 0;
-        const USESTRINGID: u8 = 1;
-
-        let mayby_idx = self.tags.iter().position(|x| *x == tag);
-        match mayby_idx {
-            Some(idx) => {
-                self.writer.u8(USESTRINGID);
-                self.writer.i16(idx as i16);
-            }
-            None => {
-                self.writer.u8(USESTRINGVALUE);
-                self.writer.skip(8); // todo tag hash
-                self.writer.i16(tag.len() as i16);
-                self.writer.bytes(tag.as_bytes());
-            }
-        };
-    }
 }
 
 pub struct ReadContext<'de, 'bf: 'de> {
     pub reader: Reader<'bf>,
-    pub tags: Vec<&'de str>,
     fory: &'de Fory,
     pub meta_resolver: MetaReaderResolver,
     pub ref_reader: RefReader,
@@ -96,7 +72,6 @@ impl<'de, 'bf: 'de> ReadContext<'de, 'bf> {
     pub fn new(fory: &'de Fory, reader: Reader<'bf>) -> ReadContext<'de, 'bf> {
         ReadContext {
             reader,
-            tags: Vec::new(),
             fory,
             meta_resolver: MetaReaderResolver::default(),
             ref_reader: RefReader::new(),
@@ -115,23 +90,5 @@ impl<'de, 'bf: 'de> ReadContext<'de, 'bf> {
         self.meta_resolver.load(&mut Reader::new(
             &self.reader.slice_after_cursor()[offset..],
         ))
-    }
-
-    pub fn read_tag(&mut self) -> Result<&str, Error> {
-        const USESTRINGVALUE: u8 = 0;
-        const USESTRINGID: u8 = 1;
-        let tag_type = self.reader.u8();
-        if tag_type == USESTRINGID {
-            Ok(self.tags[self.reader.i16() as usize])
-        } else if tag_type == USESTRINGVALUE {
-            self.reader.skip(8); // todo tag hash
-            let len = self.reader.i16();
-            let tag: &str =
-                unsafe { std::str::from_utf8_unchecked(self.reader.bytes(len as usize)) };
-            self.tags.push(tag);
-            Ok(tag)
-        } else {
-            Err(anyhow!("Unknown tag type, value:{tag_type}"))?
-        }
     }
 }

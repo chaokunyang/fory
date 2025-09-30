@@ -19,7 +19,7 @@
 - **Cross-Language Mode**: Optimized for multi-language data exchange
 - **Row Format**: Zero-copy row format for analytics workloads
 
-### Versatile Serialization Features
+### 🎯 Versatile Serialization Features
 
 - **Shared/circular reference support** for complex object graphs in both Python-native and cross-language modes
 - **Polymorphism support** for customized types with automatic type dispatching
@@ -30,7 +30,7 @@
 - **Extremely fast performance** compared to other serialization frameworks
 - **Runtime code generation** and **Cython-accelerated** core implementation for optimal performance
 
-### Compact Data Size
+### 📦 Compact Data Size
 
 - **Compact object graph protocol** with minimal space overhead—up to 3× size reduction compared to pickle/cloudpickle
 - **Meta packing and sharing** to minimize type forward/backward compatibility space overhead

@@ -67,7 +67,7 @@ pip install -e ".[dev,format]"
 - **Python**: 3.8 or higher
 - **OS**: Linux, macOS, Windows
 
-## Python Native Serialization
+## 🐍 Python Native Serialization
 
 `pyfory` provides a Python-native serialization mode that offers the same functionality as pickle/cloudpickle, but with **significantly better performance, smaller data size, and enhanced security features**.
 
@@ -163,7 +163,7 @@ print(fory.loads(data))  # Person(name='Bob', age=25)
 
 #### Serialize Global Functions
 
-Capture and recreate functions defined at module level. Fory preserves the function's behavior:
+Capture and get functions defined at module level. Fory deserialize and return same function object:
 
 ```python
 import pyfory

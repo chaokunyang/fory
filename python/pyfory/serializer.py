@@ -252,6 +252,31 @@ class TypeSerializer(Serializer):
         return cls
 
 
+class ModuleSerializer(Serializer):
+    """Serializer for python module"""
+
+    def __init__(self, fory):
+        super().__init__(fory, types.ModuleType)
+
+    def write(self, buffer, value):
+        buffer.write_string(value.__name__)
+
+    def read(self, buffer):
+        mod = buffer.read_string()
+        return importlib.import_module(mod)
+
+
+class MappingProxySerializer(Serializer):
+    def __init__(self, fory):
+        super().__init__(fory, types.MappingProxyType)
+
+    def write(self, buffer, value):
+        self.fory.serialize_ref(buffer, dict(value))
+
+    def read(self, buffer):
+        return types.MappingProxyType(self.fory.deserialize_ref(buffer))
+
+
 class PandasRangeIndexSerializer(Serializer):
     __slots__ = "_cached"
 
@@ -1131,7 +1156,6 @@ class FunctionSerializer(CrossLanguageCompatibleSerializer):
             self.fory.serialize_ref(buffer, self_obj)
             buffer.write_string(func_name)
             return
-        import types
 
         # Regular function or lambda
         code = func.__code__

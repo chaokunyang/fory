@@ -710,5 +710,20 @@ def test_dumps_loads():
     assert obj == new_obj
 
 
+def test_module_serialize():
+    fory = Fory(xlang=False, ref=True, strict=False)
+    assert fory.loads(fory.dumps(pyfory)) is pyfory
+    from pyfory import serializer
+    from pyfory import _serialization
+
+    assert fory.loads(fory.dumps(serializer)) is serializer
+    assert fory.loads(fory.dumps(_serialization)) is _serialization
+    import threading
+
+    assert fory.loads(fory.dumps(threading)) is threading
+    # check only serialize module name
+    assert len(fory.dumps(threading)) < 20
+
+
 if __name__ == "__main__":
     test_string()

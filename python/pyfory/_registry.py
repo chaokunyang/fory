@@ -60,6 +60,8 @@ from pyfory.serializer import (
     FunctionSerializer,
     ObjectSerializer,
     TypeSerializer,
+    ModuleSerializer,
+    MappingProxySerializer,
     MethodSerializer,
     UnsupportedSerializer,
     NativeFuncMethodSerializer,
@@ -216,7 +218,9 @@ class TypeResolver:
         register(slice, serializer=SliceSerializer)
         register(np.ndarray, serializer=NDArraySerializer)
         register(array.array, serializer=DynamicPyArraySerializer)
+        register(types.MappingProxyType, serializer=MappingProxySerializer)
         if not self.require_registration:
+            register(types.ModuleType, serializer=ModuleSerializer)
             self._internal_py_serializer_map = {
                 ReduceSerializer: (self._stub_cls("__Reduce__"), self._next_type_id()),
                 TypeSerializer: (self._stub_cls("__Type__"), self._next_type_id()),

@@ -16,6 +16,7 @@
 # under the License.
 
 from pyfory import Fory
+from dataclasses import dataclass
 
 
 def test_local_class_serialization():
@@ -319,3 +320,50 @@ def test_local_class_with_multiple_inheritance():
     assert instance2.combined_method() == "AB_check"
     assert instance1.method_a() == "A"
     assert instance2.method_b() == "B"
+
+
+@dataclass
+class Person:
+    name: str
+    age: int
+
+    def f(self, x):
+        return self.age * x
+
+    @classmethod
+    def g(cls, x):
+        return 10 * x
+
+    @staticmethod
+    def h(x):
+        return 10 * x
+
+
+def test_dataclass_serialize():
+    fory = Fory(xlang=False, ref=True, strict=False)
+
+    # serialize global class
+    @dataclass
+    class LocalPerson:
+        name: str
+        age: int
+
+        def f(self, x):
+            return self.age * x
+
+        @classmethod
+        def g(cls, x):
+            return 10 * x
+
+        @staticmethod
+        def h(x):
+            return 10 * x
+
+    for cls in [LocalPerson, LocalPerson]:
+        assert str(fory.loads(fory.dumps(cls))("Bob", 25)) == str(cls("Bob", 25))
+        # serialize global class instance method
+        assert fory.loads(fory.dumps(cls("Bob", 20).f))(10) == 200
+        # serialize global class class method
+        assert fory.loads(fory.dumps(cls.g))(10) == 100
+        # serialize global class static method
+        assert fory.loads(fory.dumps(cls.h))(10) == 100

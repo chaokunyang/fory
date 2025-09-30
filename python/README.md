@@ -67,7 +67,18 @@ pip install -e ".[dev,format]"
 - **Python**: 3.8 or higher
 - **OS**: Linux, macOS, Windows
 
-## 🏃‍♂️ Cross-Language Object Graph Serialization
+## Python Native Serialization
+
+`pyfory` provides a Python-native serialization mode that offers the same functionality as pickle/cloudpickle, but with **significantly better performance, smaller data size, and enhanced security features**.
+
+The binary protocol and API are similar to Fory's xlang mode, but Python-native mode can serialize any Python object—including global functions, local functions, lambdas, and custom classes—which are not allowed in xlang mode.
+
+To use Python-native mode, create `Fory` with `xlang=False`. This mode is optimized for pure Python applications:
+
+```python
+import pyfory
+fory = pyfory.Fory(xlang=False, ref=False, strict=True)
+```
 
 ### Basic Object Serialization
 
@@ -112,63 +123,6 @@ person = Person("Bob", 25, [88, 92, 85], {"team": "engineering"})
 data = fory.serialize(person)
 result = fory.deserialize(data)
 print(result)  # Person(name='Bob', age=25, ...)
-```
-
-### Cross-Language Deserialization
-
-Serialize data in Python and deserialize it in Java, Go, Rust, or other supported languages. Both sides must register the same type with matching names:
-
-**Python (Serializer)**
-
-```python
-import pyfory
-
-# Cross-language mode for interoperability
-f = pyfory.Fory(xlang=True, ref=True)
-
-# Register type for cross-language compatibility
-@dataclass
-class Person:
-    name: str
-    age: int
-
-f.register(Person, typename="example.Person")
-
-person = Person("Charlie", 35)
-binary_data = f.serialize(person)
-# binary_data can now be sent to Java, Go, etc.
-```
-
-**Java (Deserializer)**
-
-```java
-import org.apache.fory.*;
-
-public class Person {
-    public String name;
-    public int age;
-}
-
-Fory fory = Fory.builder()
-    .withLanguage(Language.XLANG)
-    .withRefTracking(true)
-    .build();
-
-fory.register(Person.class, "example.Person");
-Person person = (Person) fory.deserialize(binaryData);
-```
-
-## Python Native Serialization
-
-`pyfory` provides a Python-native serialization mode that offers the same functionality as pickle/cloudpickle, but with **significantly better performance, smaller data size, and enhanced security features**.
-
-The binary protocol and API are similar to Fory's xlang mode, but Python-native mode can serialize any Python object—including global functions, local functions, lambdas, and custom classes—which are not allowed in xlang mode.
-
-To use Python-native mode, create `Fory` with `xlang=False`. This mode is optimized for pure Python applications:
-
-```python
-import pyfory
-fory = pyfory.Fory(xlang=False, ref=False, strict=True)
 ```
 
 ### Drop-in Replacement for Pickle/Cloudpickle
@@ -323,6 +277,63 @@ print(fory.loads(data)(10))  # 100
 # serialize local class static method
 data = fory.dumps(create_local_class().h)
 print(fory.loads(data)(10))  # 100
+```
+
+## 🏃‍♂️ Cross-Language Object Graph Serialization
+
+`pyfory` supports cross-language object graph serialization, allowing you to serialize data in Python and deserialize it in Java, Go, Rust, or other supported languages.
+
+The binary protocol and API are similar to `pyfory`'s python-native mode, but Python-native mode can serialize any Python object—including global functions, local functions, lambdas, and custom classes—which are not allowed in xlang mode.
+
+To use xlang mode, create `Fory` with `xlang=True`. This mode is for xlang serialization applications:
+
+```python
+import pyfory
+fory = pyfory.Fory(xlang=True, ref=False, strict=True)
+```
+
+### Cross-Language Sserialization
+
+Serialize data in Python and deserialize it in Java, Go, Rust, or other supported languages. Both sides must register the same type with matching names:
+
+**Python (Serializer)**
+
+```python
+import pyfory
+
+# Cross-language mode for interoperability
+f = pyfory.Fory(xlang=True, ref=True)
+
+# Register type for cross-language compatibility
+@dataclass
+class Person:
+    name: str
+    age: pyfory.Int32Type
+
+f.register(Person, typename="example.Person")
+
+person = Person("Charlie", 35)
+binary_data = f.serialize(person)
+# binary_data can now be sent to Java, Go, etc.
+```
+
+**Java (Deserializer)**
+
+```java
+import org.apache.fory.*;
+
+public class Person {
+    public String name;
+    public int age;
+}
+
+Fory fory = Fory.builder()
+    .withLanguage(Language.XLANG)
+    .withRefTracking(true)
+    .build();
+
+fory.register(Person.class, "example.Person");
+Person person = (Person) fory.deserialize(binaryData);
 ```
 
 ## 📊 Row Format - Zero-Copy Processing

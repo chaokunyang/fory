@@ -71,7 +71,7 @@ pip install -e ".[dev,format]"
 
 `pyfory` provides a Python-native serialization mode that offers the same functionality as pickle/cloudpickle, but with **significantly better performance, smaller data size, and enhanced security features**.
 
-The binary protocol and API are similar to Fory's xlang mode, but Python-native mode can serialize any Python object—including global functions, local functions, lambdas, and custom classes—which are not allowed in xlang mode.
+The binary protocol and API are similar to Fory's xlang mode, but Python-native mode can serialize any Python object—including global functions, local functions, lambdas, local classes and types with customized serialization using `__getstate__/__reduce__/__reduce_ex__`, which are not allowed in xlang mode.
 
 To use Python-native mode, create `Fory` with `xlang=False`. This mode is optimized for pure Python applications:
 
@@ -283,7 +283,7 @@ print(fory.loads(data)(10))  # 100
 
 `pyfory` supports cross-language object graph serialization, allowing you to serialize data in Python and deserialize it in Java, Go, Rust, or other supported languages.
 
-The binary protocol and API are similar to `pyfory`'s python-native mode, but Python-native mode can serialize any Python object—including global functions, local functions, lambdas, and custom classes—which are not allowed in xlang mode.
+The binary protocol and API are similar to `pyfory`'s python-native mode, but Python-native mode can serialize any Python object—including global functions, local functions, lambdas, local classes, and types with customized serialization using `__getstate__/__reduce__/__reduce_ex__`, which are not allowed in xlang mode.
 
 To use xlang mode, create `Fory` with `xlang=True`. This mode is for xlang serialization applications:
 

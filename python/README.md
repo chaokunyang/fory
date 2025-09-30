@@ -406,6 +406,8 @@ print(foo_row.f4[100000].f1)           # Access nested field directly
 print(foo_row.f4[200000].f2[5])        # Access deeply nested field directly
 ```
 
+### Cross-Language Compatibility
+
 **Java**
 
 ```java
@@ -453,6 +455,57 @@ Bar bar2 = barEncoder.fromRow(f4Array.getStruct(20));     // Deserialize 21st Ba
 
 // Full deserialization when needed
 Foo newFoo = encoder.fromRow(binaryRow);
+```
+
+**C++**
+
+```cpp
+#include "fory/encoder/row_encoder.h"
+#include "fory/row/writer.h"
+
+struct Bar {
+  std::string f1;
+  std::vector<int64_t> f2;
+};
+
+FORY_FIELD_INFO(Bar, f1, f2);
+
+struct Foo {
+  int32_t f1;
+  std::vector<int32_t> f2;
+  std::map<std::string, int32_t> f3;
+  std::vector<Bar> f4;
+};
+
+FORY_FIELD_INFO(Foo, f1, f2, f3, f4);
+
+// Create large dataset
+Foo foo;
+foo.f1 = 10;
+for (int i = 0; i < 1000000; i++) {
+  foo.f2.push_back(i);
+  foo.f3["k" + std::to_string(i)] = i;
+}
+for (int i = 0; i < 1000000; i++) {
+  Bar bar;
+  bar.f1 = "s" + std::to_string(i);
+  for (int j = 0; j < 10; j++) {
+    bar.f2.push_back(j);
+  }
+  foo.f4.push_back(bar);
+}
+
+// Encode to row format (cross-language compatible with Python/Java)
+fory::encoder::RowEncoder<Foo> encoder;
+encoder.Encode(foo);
+auto row = encoder.GetWriter().ToRow();
+
+// Zero-copy random access without full deserialization
+auto f2_array = row->GetArray(1);                    // Access f2 list
+auto f4_array = row->GetArray(3);                    // Access f4 list
+auto bar10 = f4_array->GetStruct(10);                // Access 11th Bar
+int64_t value = bar10->GetArray(1)->GetInt64(5);    // Access 6th element of bar.f2
+std::string str = bar10->GetString(0);               // Access bar.f1
 ```
 
 ### Key Benefits

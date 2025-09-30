@@ -21,7 +21,7 @@ use crate::resolver::context::ReadContext;
 use crate::resolver::context::WriteContext;
 use crate::serializer::Serializer;
 
-impl<T: Serializer> Serializer for Box<T> {
+impl<T: Serializer + Default> Serializer for Box<T> {
     fn fory_read_data(context: &mut ReadContext, is_field: bool) -> Result<Self, Error> {
         Ok(Box::new(T::fory_read_data(context, is_field)?))
     }

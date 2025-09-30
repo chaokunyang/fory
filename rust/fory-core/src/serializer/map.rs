@@ -80,7 +80,7 @@ fn write_chunk_size(context: &mut WriteContext, header_offset: usize, size: u8) 
     context.writer.set_bytes(header_offset + 1, &[size]);
 }
 
-impl<K: Serializer + Eq + std::hash::Hash, V: Serializer> Serializer for HashMap<K, V> {
+impl<K: Serializer + Default + Eq + std::hash::Hash, V: Serializer + Default> Serializer for HashMap<K, V> {
     fn fory_write_data(&self, context: &mut WriteContext, is_field: bool) {
         let length = self.len();
         context.writer.write_varuint32(length as u32);

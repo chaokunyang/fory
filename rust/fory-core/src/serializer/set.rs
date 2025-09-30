@@ -27,7 +27,7 @@ use crate::types::TypeId;
 use std::collections::HashSet;
 use std::mem;
 
-impl<T: Serializer + Eq + std::hash::Hash> Serializer for HashSet<T> {
+impl<T: Serializer + Default + Eq + std::hash::Hash> Serializer for HashSet<T> {
     fn fory_write_data(&self, context: &mut WriteContext, is_field: bool) {
         write_collection(self, context, is_field);
     }

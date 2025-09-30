@@ -203,7 +203,7 @@ impl TypeResolver {
         )
     }
 
-    pub fn register<T: StructSerializer + Serializer>(&mut self, type_info: &TypeInfo) {
+    pub fn register<T: StructSerializer + Serializer + Default>(&mut self, type_info: &TypeInfo) {
         fn serializer<T2: 'static + Serializer>(
             this: &dyn Any,
             context: &mut WriteContext,
@@ -226,7 +226,7 @@ impl TypeResolver {
             }
         }
 
-        fn deserializer<T2: 'static + Serializer>(
+        fn deserializer<T2: 'static + Serializer + Default>(
             context: &mut ReadContext,
             is_field: bool,
             skip_ref_flag: bool,
@@ -279,7 +279,86 @@ impl TypeResolver {
         }
     }
 
-    pub fn register_serializer<T: Serializer>(&mut self, type_info: &TypeInfo) {
+    pub fn register_trait_object<T: StructSerializer + Serializer + Default>(&mut self, type_info: &TypeInfo) {
+        fn serializer<T2: 'static + Serializer>(
+            this: &dyn Any,
+            context: &mut WriteContext,
+            is_field: bool,
+        ) {
+            let this = this.downcast_ref::<T2>();
+            match this {
+                Some(v) => {
+                    let skip_ref_flag =
+                        crate::serializer::get_skip_ref_flag::<T2>(context.get_fory());
+                    crate::serializer::write_ref_info_data(
+                        v,
+                        context,
+                        is_field,
+                        skip_ref_flag,
+                        true,
+                    );
+                }
+                None => todo!(),
+            }
+        }
+
+        fn deserializer<T2: 'static + Serializer + Default>(
+            context: &mut ReadContext,
+            is_field: bool,
+            skip_ref_flag: bool,
+        ) -> Result<Box<dyn Any>, Error> {
+            match crate::serializer::read_ref_info_data::<T2>(
+                context,
+                is_field,
+                skip_ref_flag,
+                true,
+            ) {
+                Ok(v) => {
+                    let trait_object: Box<dyn crate::serializer::Serializer> = Box::new(v);
+                    Ok(Box::new(trait_object))
+                }
+                Err(e) => Err(e),
+            }
+        }
+
+        let rs_type_id = std::any::TypeId::of::<T>();
+        if self.type_info_cache.contains_key(&rs_type_id) {
+            panic!("rs_struct:{:?} already registered", rs_type_id);
+        }
+        self.type_info_cache.insert(rs_type_id, type_info.clone());
+        let index = T::fory_type_index() as usize;
+        if index >= self.type_id_index.len() {
+            self.type_id_index.resize(index + 1, NO_TYPE_ID);
+        } else if self.type_id_index.get(index).unwrap() != &NO_TYPE_ID {
+            panic!("please:{:?} already registered", type_info.type_id);
+        }
+        self.type_id_index[index] = type_info.type_id;
+
+        if type_info.register_by_name {
+            let namespace = &type_info.namespace;
+            let type_name = &type_info.type_name;
+            let key = (namespace.clone(), type_name.clone());
+            if self.name_serializer_map.contains_key(&key) {
+                panic!(
+                    "Namespace:{:?} Name:{:?} already registered_by_name",
+                    namespace, type_name
+                );
+            }
+            self.type_name_map.insert(rs_type_id, key.clone());
+            self.name_serializer_map
+                .insert(key, Harness::new(serializer::<T>, deserializer::<T>));
+        } else {
+            let type_id = type_info.type_id;
+            if self.serializer_map.contains_key(&type_id) {
+                panic!("TypeId {:?} already registered_by_id", type_id);
+            }
+            self.type_id_map.insert(rs_type_id, type_id);
+            self.serializer_map
+                .insert(type_id, Harness::new(serializer::<T>, deserializer::<T>));
+        }
+    }
+
+    pub fn register_serializer<T: Serializer + Default>(&mut self, type_info: &TypeInfo) {
         let rs_type_id = std::any::TypeId::of::<T>();
         if self.type_info_cache.contains_key(&rs_type_id) {
             panic!("rs_struct:{:?} already registered", rs_type_id);

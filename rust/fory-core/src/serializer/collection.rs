@@ -95,7 +95,7 @@ pub fn read_collection_type_info(
 
 pub fn read_collection<C, T>(context: &mut ReadContext) -> Result<C, Error>
 where
-    T: Serializer,
+    T: Serializer + Default,
     C: FromIterator<T>,
 {
     let len = context.reader.read_varuint32();

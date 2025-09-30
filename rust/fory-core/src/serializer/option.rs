@@ -21,7 +21,7 @@ use crate::resolver::context::ReadContext;
 use crate::resolver::context::WriteContext;
 use crate::serializer::Serializer;
 
-impl<T: Serializer> Serializer for Option<T> {
+impl<T: Serializer + Default> Serializer for Option<T> {
     fn fory_read_data(context: &mut ReadContext, is_field: bool) -> Result<Self, Error> {
         Ok(Some(T::fory_read_data(context, is_field)?))
     }

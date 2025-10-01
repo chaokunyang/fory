@@ -7,7 +7,7 @@ trait Printable: Serializer {
 
 #[test]
 fn test_trait_object_architecture() {
-    let fory = Fory::default();
+    let _fory = Fory::default();
 
     // Test that Box<dyn Serializer> implements Serializer
     let _: Box<dyn Serializer> = Box::new(42i32);
@@ -46,4 +46,19 @@ fn test_trait_coercion() {
     let _serializer: Box<dyn Serializer> = printable;
 
     assert!(true);
+}
+
+#[test]
+fn test_primitive_trait_objects() {
+    // Test that primitives can be used as trait objects
+    use fory_core::serializer::Serializer;
+
+    let mut _items: Vec<Box<dyn Serializer>> = Vec::new();
+    _items.push(Box::new(42i32));
+    _items.push(Box::new(String::from("hello")));
+    _items.push(Box::new(3.14f64));
+    _items.push(Box::new(vec![1, 2, 3]));
+
+    // All primitives implement Serializer and can be used as trait objects!
+    assert_eq!(_items.len(), 4);
 }

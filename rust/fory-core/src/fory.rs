@@ -244,29 +244,6 @@ impl Fory {
         self.type_resolver.register_serializer::<T>(&type_info);
     }
 
-    pub fn register_trait_object<T: 'static + StructSerializer + Serializer + Default>(&mut self, id: u32) {
-        let actual_type_id = T::fory_actual_type_id(id, false, &self.mode);
-        let type_info =
-            TypeInfo::new::<T>(self, actual_type_id, &EMPTY_STRING, &EMPTY_STRING, false);
-        self.type_resolver.register_trait_object::<T>(&type_info);
-    }
-
-    pub fn register_trait_object_by_namespace<T: 'static + StructSerializer + Serializer + Default>(
-        &mut self,
-        namespace: &str,
-        type_name: &str,
-    ) {
-        let actual_type_id = T::fory_actual_type_id(0, true, &self.mode);
-        let type_info = TypeInfo::new::<T>(self, actual_type_id, namespace, type_name, true);
-        self.type_resolver.register_trait_object::<T>(&type_info);
-    }
-
-    pub fn register_trait_object_by_name<T: 'static + StructSerializer + Serializer + Default>(
-        &mut self,
-        type_name: &str,
-    ) {
-        self.register_trait_object_by_namespace::<T>("", type_name);
-    }
 }
 
 pub fn write<T: Serializer>(this: &T, context: &mut WriteContext, is_field: bool) {

@@ -29,6 +29,7 @@ use std::{any::Any, collections::HashMap};
 type SerializerFn = fn(&dyn Any, &mut WriteContext, is_field: bool);
 type DeserializerFn =
     fn(&mut ReadContext, is_field: bool, skip_ref_flag: bool) -> Result<Box<dyn Any>, Error>;
+type ToSerializerFn = fn(Box<dyn Any>) -> Result<Box<dyn crate::serializer::Serializer>, Error>;
 
 pub type ExtWriteFn = dyn Fn(&dyn Any, &mut WriteContext, bool) + Send + Sync;
 pub type ExtReadFn = dyn Fn(&mut ReadContext, bool) -> Result<Box<dyn Any>, Error> + Send + Sync;
@@ -36,13 +37,15 @@ pub type ExtReadFn = dyn Fn(&mut ReadContext, bool) -> Result<Box<dyn Any>, Erro
 pub struct Harness {
     serializer: SerializerFn,
     deserializer: DeserializerFn,
+    to_serializer: ToSerializerFn,
 }
 
 impl Harness {
-    pub fn new(serializer: SerializerFn, deserializer: DeserializerFn) -> Harness {
+    pub fn new(serializer: SerializerFn, deserializer: DeserializerFn, to_serializer: ToSerializerFn) -> Harness {
         Harness {
             serializer,
             deserializer,
+            to_serializer,
         }
     }
 
@@ -52,6 +55,10 @@ impl Harness {
 
     pub fn get_deserializer(&self) -> DeserializerFn {
         self.deserializer
+    }
+
+    pub fn get_to_serializer(&self) -> ToSerializerFn {
+        self.to_serializer
     }
 }
 
@@ -242,6 +249,13 @@ impl TypeResolver {
             }
         }
 
+        fn to_serializer<T2: 'static + Serializer>(boxed_any: Box<dyn Any>) -> Result<Box<dyn crate::serializer::Serializer>, Error> {
+            match boxed_any.downcast::<T2>() {
+                Ok(concrete) => Ok(Box::new(*concrete) as Box<dyn crate::serializer::Serializer>),
+                Err(_) => Err(Error::Other(anyhow::anyhow!("Failed to downcast to concrete type"))),
+            }
+        }
+
         let rs_type_id = std::any::TypeId::of::<T>();
         if self.type_info_cache.contains_key(&rs_type_id) {
             panic!("rs_struct:{:?} already registered", rs_type_id);
@@ -267,7 +281,7 @@ impl TypeResolver {
             }
             self.type_name_map.insert(rs_type_id, key.clone());
             self.name_serializer_map
-                .insert(key, Harness::new(serializer::<T>, deserializer::<T>));
+                .insert(key, Harness::new(serializer::<T>, deserializer::<T>, to_serializer::<T>));
         } else {
             let type_id = type_info.type_id;
             if self.serializer_map.contains_key(&type_id) {
@@ -275,11 +289,11 @@ impl TypeResolver {
             }
             self.type_id_map.insert(rs_type_id, type_id);
             self.serializer_map
-                .insert(type_id, Harness::new(serializer::<T>, deserializer::<T>));
+                .insert(type_id, Harness::new(serializer::<T>, deserializer::<T>, to_serializer::<T>));
         }
     }
 
-    pub fn register_trait_object<T: StructSerializer + Serializer + Default>(&mut self, type_info: &TypeInfo) {
+    pub fn register_serializer<T: Serializer + Default>(&mut self, type_info: &TypeInfo) {
         fn serializer<T2: 'static + Serializer>(
             this: &dyn Any,
             context: &mut WriteContext,
@@ -288,15 +302,7 @@ impl TypeResolver {
             let this = this.downcast_ref::<T2>();
             match this {
                 Some(v) => {
-                    let skip_ref_flag =
-                        crate::serializer::get_skip_ref_flag::<T2>(context.get_fory());
-                    crate::serializer::write_ref_info_data(
-                        v,
-                        context,
-                        is_field,
-                        skip_ref_flag,
-                        true,
-                    );
+                    v.fory_write(context, is_field);
                 }
                 None => todo!(),
             }
@@ -305,19 +311,18 @@ impl TypeResolver {
         fn deserializer<T2: 'static + Serializer + Default>(
             context: &mut ReadContext,
             is_field: bool,
-            skip_ref_flag: bool,
+            _skip_ref_flag: bool,
         ) -> Result<Box<dyn Any>, Error> {
-            match crate::serializer::read_ref_info_data::<T2>(
-                context,
-                is_field,
-                skip_ref_flag,
-                true,
-            ) {
-                Ok(v) => {
-                    let trait_object: Box<dyn crate::serializer::Serializer> = Box::new(v);
-                    Ok(Box::new(trait_object))
-                }
+            match T2::fory_read(context, is_field) {
+                Ok(v) => Ok(Box::new(v)),
                 Err(e) => Err(e),
+            }
+        }
+
+        fn to_serializer<T2: 'static + Serializer>(boxed_any: Box<dyn Any>) -> Result<Box<dyn crate::serializer::Serializer>, Error> {
+            match boxed_any.downcast::<T2>() {
+                Ok(concrete) => Ok(Box::new(*concrete) as Box<dyn crate::serializer::Serializer>),
+                Err(_) => Err(Error::Other(anyhow::anyhow!("Failed to downcast to concrete type"))),
             }
         }
 
@@ -326,14 +331,6 @@ impl TypeResolver {
             panic!("rs_struct:{:?} already registered", rs_type_id);
         }
         self.type_info_cache.insert(rs_type_id, type_info.clone());
-        let index = T::fory_type_index() as usize;
-        if index >= self.type_id_index.len() {
-            self.type_id_index.resize(index + 1, NO_TYPE_ID);
-        } else if self.type_id_index.get(index).unwrap() != &NO_TYPE_ID {
-            panic!("please:{:?} already registered", type_info.type_id);
-        }
-        self.type_id_index[index] = type_info.type_id;
-
         if type_info.register_by_name {
             let namespace = &type_info.namespace;
             let type_name = &type_info.type_name;
@@ -346,7 +343,7 @@ impl TypeResolver {
             }
             self.type_name_map.insert(rs_type_id, key.clone());
             self.name_serializer_map
-                .insert(key, Harness::new(serializer::<T>, deserializer::<T>));
+                .insert(key, Harness::new(serializer::<T>, deserializer::<T>, to_serializer::<T>));
         } else {
             let type_id = type_info.type_id;
             if self.serializer_map.contains_key(&type_id) {
@@ -354,40 +351,7 @@ impl TypeResolver {
             }
             self.type_id_map.insert(rs_type_id, type_id);
             self.serializer_map
-                .insert(type_id, Harness::new(serializer::<T>, deserializer::<T>));
-        }
-    }
-
-    pub fn register_serializer<T: Serializer + Default>(&mut self, type_info: &TypeInfo) {
-        let rs_type_id = std::any::TypeId::of::<T>();
-        if self.type_info_cache.contains_key(&rs_type_id) {
-            panic!("rs_struct:{:?} already registered", rs_type_id);
-        }
-        self.type_info_cache.insert(rs_type_id, type_info.clone());
-
-        let write_fn: fn(&T, &mut WriteContext, bool) = T::fory_write;
-        let read_fn: fn(&mut ReadContext, bool) -> Result<T, Error> = T::fory_read;
-        if type_info.register_by_name {
-            let namespace = &type_info.namespace;
-            let type_name = &type_info.type_name;
-            let key = (namespace.clone(), type_name.clone());
-            if self.ext_name_serializer_map.contains_key(&key) {
-                panic!(
-                    "Namespace:{:?} Name:{:?} already registered_by_name",
-                    namespace, type_name
-                );
-            }
-            self.type_name_map.insert(rs_type_id, key.clone());
-            let harness = ExtHarness::new(write_fn, read_fn);
-            self.ext_name_serializer_map.insert(key, harness);
-        } else {
-            let type_id = type_info.type_id;
-            if self.ext_serializer_map.contains_key(&type_id) {
-                panic!("TypeId {:?} already registered_by_id", type_id);
-            }
-            self.type_id_map.insert(rs_type_id, type_id);
-            let harness = ExtHarness::new(write_fn, read_fn);
-            self.ext_serializer_map.insert(type_id, harness);
+                .insert(type_id, Harness::new(serializer::<T>, deserializer::<T>, to_serializer::<T>));
         }
     }
 

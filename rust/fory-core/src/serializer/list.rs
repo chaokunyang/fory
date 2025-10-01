@@ -95,4 +95,11 @@ impl<T: Serializer + Default> Serializer for Vec<T> {
             None => TypeId::LIST as u32,
         }
     }
+
+    fn fory_type_id_dyn(&self, _fory: &Fory) -> u32 {
+        match check_primitive::<T>() {
+            Some(type_id) => type_id as u32,
+            None => TypeId::LIST as u32,
+        }
+    }
 }

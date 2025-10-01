@@ -50,6 +50,13 @@ impl<T: Serializer + Default> Serializer for Option<T> {
         T::fory_get_type_id(fory)
     }
 
+    fn fory_type_id_dyn(&self, fory: &Fory) -> u32 {
+        match self {
+            Some(val) => val.fory_type_id_dyn(fory),
+            None => T::fory_get_type_id(fory),
+        }
+    }
+
     fn fory_is_option() -> bool {
         true
     }

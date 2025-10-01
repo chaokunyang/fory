@@ -169,7 +169,6 @@ impl TypeInfo {
     }
 }
 
-#[derive(Default)]
 pub struct TypeResolver {
     serializer_map: HashMap<u32, Harness>,
     name_serializer_map: HashMap<(MetaString, MetaString), Harness>,
@@ -185,7 +184,68 @@ pub struct TypeResolver {
 
 const NO_TYPE_ID: u32 = 1000000000;
 
+impl Default for TypeResolver {
+    fn default() -> Self {
+        let mut resolver = TypeResolver {
+            serializer_map: HashMap::new(),
+            name_serializer_map: HashMap::new(),
+            ext_serializer_map: HashMap::new(),
+            ext_name_serializer_map: HashMap::new(),
+            type_id_map: HashMap::new(),
+            type_name_map: HashMap::new(),
+            type_info_cache: HashMap::new(),
+            type_id_index: Vec::new(),
+            sorted_field_names_map: RefCell::new(HashMap::new()),
+        };
+        resolver.register_builtin_types();
+        resolver
+    }
+}
+
 impl TypeResolver {
+    fn register_builtin_types(&mut self) {
+        use crate::types::TypeId;
+        use std::collections::{HashMap as StdHashMap, HashSet};
+
+        macro_rules! register_basic_type {
+            ($ty:ty, $type_id:expr) => {{
+                let type_info = TypeInfo {
+                    type_def: vec![],
+                    type_id: $type_id as u32,
+                    namespace: NAMESPACE_ENCODER
+                        .encode_with_encodings("", NAMESPACE_ENCODINGS)
+                        .unwrap(),
+                    type_name: TYPE_NAME_ENCODER
+                        .encode_with_encodings("", TYPE_NAME_ENCODINGS)
+                        .unwrap(),
+                    register_by_name: false,
+                };
+                self.register_serializer::<$ty>(&type_info);
+            }};
+        }
+
+        register_basic_type!(bool, TypeId::BOOL);
+        register_basic_type!(i8, TypeId::INT8);
+        register_basic_type!(i16, TypeId::INT16);
+        register_basic_type!(i32, TypeId::INT32);
+        register_basic_type!(i64, TypeId::INT64);
+        register_basic_type!(f32, TypeId::FLOAT32);
+        register_basic_type!(f64, TypeId::FLOAT64);
+        register_basic_type!(String, TypeId::STRING);
+
+        register_basic_type!(Vec<bool>, TypeId::BOOL_ARRAY);
+        register_basic_type!(Vec<i8>, TypeId::INT8_ARRAY);
+        register_basic_type!(Vec<i16>, TypeId::INT16_ARRAY);
+        register_basic_type!(Vec<i32>, TypeId::INT32_ARRAY);
+        register_basic_type!(Vec<i64>, TypeId::INT64_ARRAY);
+        register_basic_type!(Vec<f32>, TypeId::FLOAT32_ARRAY);
+        register_basic_type!(Vec<f64>, TypeId::FLOAT64_ARRAY);
+
+        register_basic_type!(Vec<String>, TypeId::LIST);
+        register_basic_type!(StdHashMap<String, i32>, TypeId::MAP);
+        register_basic_type!(HashSet<i32>, TypeId::SET);
+    }
+
     pub fn get_type_info(&self, type_id: std::any::TypeId) -> &TypeInfo {
         self.type_info_cache.get(&type_id).unwrap_or_else(|| {
             panic!(
@@ -311,11 +371,18 @@ impl TypeResolver {
         fn deserializer<T2: 'static + Serializer + Default>(
             context: &mut ReadContext,
             is_field: bool,
-            _skip_ref_flag: bool,
+            skip_ref_flag: bool,
         ) -> Result<Box<dyn Any>, Error> {
-            match T2::fory_read(context, is_field) {
-                Ok(v) => Ok(Box::new(v)),
-                Err(e) => Err(e),
+            if skip_ref_flag {
+                match T2::fory_read_data(context, is_field) {
+                    Ok(v) => Ok(Box::new(v)),
+                    Err(e) => Err(e),
+                }
+            } else {
+                match T2::fory_read(context, is_field) {
+                    Ok(v) => Ok(Box::new(v)),
+                    Err(e) => Err(e),
+                }
             }
         }
 
@@ -396,5 +463,13 @@ impl TypeResolver {
     pub fn set_sorted_field_names<T: StructSerializer>(&self, field_names: &[String]) {
         let mut map = self.sorted_field_names_map.borrow_mut();
         map.insert(std::any::TypeId::of::<T>(), field_names.to_owned());
+    }
+
+    pub fn get_fory_type_id(&self, rust_type_id: std::any::TypeId) -> Option<u32> {
+        if let Some(type_info) = self.type_info_cache.get(&rust_type_id) {
+            Some(type_info.get_type_id())
+        } else {
+            self.type_id_map.get(&rust_type_id).copied()
+        }
     }
 }

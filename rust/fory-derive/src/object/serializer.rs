@@ -121,6 +121,10 @@ pub fn derive_serializer(ast: &syn::DeriveInput) -> TokenStream {
                 fory.get_type_resolver().get_type_id(&std::any::TypeId::of::<Self>(), #type_idx)
             }
 
+            fn fory_type_id_dyn(&self, fory: &fory_core::fory::Fory) -> u32 {
+                Self::fory_get_type_id(fory)
+            }
+
             fn fory_reserved_space() -> usize {
                 #reserved_space_ts
             }

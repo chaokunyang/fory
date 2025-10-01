@@ -137,6 +137,8 @@ pub trait Serializer: 'static {
             .get_type_id()
     }
 
+    fn fory_type_id_dyn(&self, fory: &Fory) -> u32;
+
     /// The possible max memory size of the type.
     /// Used to reserve the buffer space to avoid reallocation, which may hurt performance.
     fn fory_reserved_space() -> usize

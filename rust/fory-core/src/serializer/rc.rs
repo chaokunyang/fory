@@ -70,4 +70,8 @@ impl<T: Serializer + Default + 'static> Serializer for Rc<T> {
     fn fory_get_type_id(fory: &Fory) -> u32 {
         T::fory_get_type_id(fory)
     }
+
+    fn fory_type_id_dyn(&self, fory: &Fory) -> u32 {
+        (**self).fory_type_id_dyn(fory)
+    }
 }

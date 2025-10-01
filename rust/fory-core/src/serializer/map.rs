@@ -111,9 +111,9 @@ impl<K: Serializer + Default + Eq + std::hash::Hash, V: Serializer + Default> Se
                     chunk_header |= DECL_VALUE_TYPE;
                 }
                 // skip_key_ref_flag = crate::serializer::get_skip_ref_flag::<K>(context.get_fory());
-                skip_key_ref_flag = true;
+                skip_key_ref_flag = !K::fory_is_polymorphic();
                 // skip_val_ref_flag = crate::serializer::get_skip_ref_flag::<V>(context.get_fory());
-                skip_val_ref_flag = true;
+                skip_val_ref_flag = !V::fory_is_polymorphic();
                 if !skip_key_ref_flag {
                     chunk_header |= TRACKING_KEY_REF;
                 }
@@ -132,8 +132,16 @@ impl<K: Serializer + Default + Eq + std::hash::Hash, V: Serializer + Default> Se
                 check_and_write_null(context, is_field, key, value);
                 continue;
             }
-            write_ref_info_data(key, context, is_field, skip_key_ref_flag, true);
-            write_ref_info_data(value, context, is_field, skip_val_ref_flag, true);
+            if K::fory_is_polymorphic() {
+                key.fory_write(context, is_field);
+            } else {
+                write_ref_info_data(key, context, is_field, skip_key_ref_flag, true);
+            }
+            if V::fory_is_polymorphic() {
+                value.fory_write(context, is_field);
+            } else {
+                write_ref_info_data(value, context, is_field, skip_val_ref_flag, true);
+            }
             pair_counter += 1;
             if pair_counter == MAX_CHUNK_SIZE {
                 write_chunk_size(context, header_offset, pair_counter);
@@ -196,10 +204,18 @@ impl<K: Serializer + Default + Eq + std::hash::Hash, V: Serializer + Default> Se
             V::fory_read_type_info(context, value_declared);
             assert!(len_counter + chunk_size as u32 <= len);
             for _ in (0..chunk_size).enumerate() {
-                // let skip_ref_flag = crate::serializer::get_skip_ref_flag::<K>(context.get_fory());
-                let key = read_ref_info_data(context, key_declared, true, true)?;
-                // let skip_ref_flag = crate::serializer::get_skip_ref_flag::<V>(context.get_fory());
-                let value = read_ref_info_data(context, value_declared, true, true)?;
+                let key = if K::fory_is_polymorphic() {
+                    K::fory_read(context, key_declared)?
+                } else {
+                    // let skip_ref_flag = crate::serializer::get_skip_ref_flag::<K>(context.get_fory());
+                    read_ref_info_data(context, key_declared, true, true)?
+                };
+                let value = if V::fory_is_polymorphic() {
+                    V::fory_read(context, value_declared)?
+                } else {
+                    // let skip_ref_flag = crate::serializer::get_skip_ref_flag::<V>(context.get_fory());
+                    read_ref_info_data(context, value_declared, true, true)?
+                };
                 map.insert(key, value);
             }
             len_counter += chunk_size as u32;

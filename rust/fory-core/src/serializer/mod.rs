@@ -128,6 +128,13 @@ pub trait Serializer: 'static {
         false
     }
 
+    fn fory_is_polymorphic() -> bool
+    where
+        Self: Sized,
+    {
+        false
+    }
+
     fn fory_get_type_id(fory: &Fory) -> u32
     where
         Self: Sized,

@@ -14,11 +14,11 @@ impl Serializer for Box<dyn Serializer> {
     where
         Self: Sized,
     {
-        use crate::types::{Mode, RefFlag};
+        use crate::types::RefFlag;
 
         context.writer.write_i8(RefFlag::NotNullValue as i8);
 
-        if *context.get_fory().get_mode() == Mode::Compatible && !is_field {
+        if !is_field {
             let fory_type_id = (**self).fory_type_id_dyn(context.get_fory());
             context.writer.write_varuint32(fory_type_id);
         }
@@ -33,21 +33,27 @@ impl Serializer for Box<dyn Serializer> {
         (**self).fory_type_id_dyn(fory)
     }
 
+    fn fory_is_polymorphic() -> bool {
+        true
+    }
+
+    fn fory_write_type_info(_context: &mut WriteContext, _is_field: bool) {
+        // Box<dyn Serializer> is polymorphic - type info is written per element
+    }
+
+    fn fory_read_type_info(_context: &mut ReadContext, _is_field: bool) {
+        // Box<dyn Serializer> is polymorphic - type info is read per element
+    }
+
     fn fory_read(context: &mut ReadContext, is_field: bool) -> Result<Self, Error>
     where
         Self: Sized + Default,
     {
-        use crate::types::{Mode, RefFlag};
+        use crate::types::RefFlag;
 
         let ref_flag = context.reader.read_i8();
         if ref_flag != RefFlag::NotNullValue as i8 {
             return Err(Error::Other(anyhow::anyhow!("Expected NotNullValue ref flag, got {}", ref_flag)));
-        }
-
-        if *context.get_fory().get_mode() != Mode::Compatible {
-            return Err(Error::Other(anyhow::anyhow!(
-                "Box<dyn Serializer> deserialization is only supported in Compatible mode"
-            )));
         }
 
         let fory_type_id = if !is_field {
@@ -56,18 +62,43 @@ impl Serializer for Box<dyn Serializer> {
             return Err(Error::Other(anyhow::anyhow!("Box<dyn Serializer> cannot be used as a field")));
         };
 
-        let (deserializer_fn, to_serializer_fn) = {
-            let type_resolver = context.get_fory().get_type_resolver();
-            let harness = type_resolver
-                .get_harness(fory_type_id)
-                .ok_or_else(|| Error::Other(anyhow::anyhow!("Type ID {} not registered", fory_type_id)))?;
-            (harness.get_deserializer(), harness.get_to_serializer())
-        };
+        let type_resolver = context.get_fory().get_type_resolver();
 
-        let boxed_any = deserializer_fn(context, is_field, true)?;
-        let trait_object = to_serializer_fn(boxed_any)?;
-
-        Ok(trait_object)
+        if let Some(harness) = type_resolver.get_harness(fory_type_id) {
+            let deserializer_fn = harness.get_deserializer();
+            let to_serializer_fn = harness.get_to_serializer();
+            let boxed_any = deserializer_fn(context, is_field, true)?;
+            let trait_object = to_serializer_fn(boxed_any)?;
+            Ok(trait_object)
+        } else {
+            use crate::types::TypeId;
+            match fory_type_id {
+                id if id == TypeId::LIST as u32 => {
+                    Err(Error::Other(anyhow::anyhow!(
+                        "Cannot deserialize LIST type ID {} as Box<dyn Serializer> without knowing concrete type. \
+                        Use concrete type instead (e.g., Vec<String>)",
+                        fory_type_id
+                    )))
+                }
+                id if id == TypeId::MAP as u32 => {
+                    Err(Error::Other(anyhow::anyhow!(
+                        "Cannot deserialize MAP type ID {} as Box<dyn Serializer> without knowing concrete type. \
+                        Use concrete type instead (e.g., HashMap<String, i32>)",
+                        fory_type_id
+                    )))
+                }
+                id if id == TypeId::SET as u32 => {
+                    Err(Error::Other(anyhow::anyhow!(
+                        "Cannot deserialize SET type ID {} as Box<dyn Serializer> without knowing concrete type. \
+                        Use concrete type instead (e.g., HashSet<i32>)",
+                        fory_type_id
+                    )))
+                }
+                _ => {
+                    Err(Error::Other(anyhow::anyhow!("Type ID {} not registered", fory_type_id)))
+                }
+            }
+        }
     }
 
     fn fory_read_data(_context: &mut ReadContext, _is_field: bool) -> Result<Self, Error>

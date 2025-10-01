@@ -205,7 +205,6 @@ impl Default for TypeResolver {
 impl TypeResolver {
     fn register_builtin_types(&mut self) {
         use crate::types::TypeId;
-        use std::collections::{HashMap as StdHashMap, HashSet};
 
         macro_rules! register_basic_type {
             ($ty:ty, $type_id:expr) => {{
@@ -240,10 +239,6 @@ impl TypeResolver {
         register_basic_type!(Vec<i64>, TypeId::INT64_ARRAY);
         register_basic_type!(Vec<f32>, TypeId::FLOAT32_ARRAY);
         register_basic_type!(Vec<f64>, TypeId::FLOAT64_ARRAY);
-
-        register_basic_type!(Vec<String>, TypeId::LIST);
-        register_basic_type!(StdHashMap<String, i32>, TypeId::MAP);
-        register_basic_type!(HashSet<i32>, TypeId::SET);
     }
 
     pub fn get_type_info(&self, type_id: std::any::TypeId) -> &TypeInfo {

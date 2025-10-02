@@ -398,7 +398,7 @@ struct Company {
 
 #[test]
 fn test_fory_derived_struct_as_trait_object() {
-    let mut fory = fory_schema_consistent();
+    let mut fory = fory_compatible();
     fory.register::<Person>(5000);
 
     let person = Person {
@@ -414,7 +414,7 @@ fn test_fory_derived_struct_as_trait_object() {
 
 #[test]
 fn test_fory_derived_nested_struct_as_trait_object() {
-    let mut fory = fory_schema_consistent();
+    let mut fory = fory_compatible();
     fory.register::<Person>(5000);
     fory.register::<Company>(5001);
 
@@ -434,7 +434,7 @@ fn test_fory_derived_nested_struct_as_trait_object() {
 
 #[test]
 fn test_vec_of_fory_derived_trait_objects() {
-    let mut fory = fory_schema_consistent();
+    let mut fory = fory_compatible();
     fory.register::<Person>(5000);
     fory.register::<Company>(5001);
     fory.register_serializer::<Vec<Box<dyn Serializer>>>(3000);
@@ -456,7 +456,7 @@ fn test_vec_of_fory_derived_trait_objects() {
 
 #[test]
 fn test_hashmap_with_fory_derived_values() {
-    let mut fory = fory_schema_consistent();
+    let mut fory = fory_compatible();
     fory.register::<Person>(5000);
     fory.register::<Company>(5001);
     fory.register_serializer::<HashMap<String, Box<dyn Serializer>>>(3002);
@@ -471,6 +471,62 @@ fn test_hashmap_with_fory_derived_values() {
 
     let serialized = fory.serialize(&map);
     let deserialized: HashMap<String, Box<dyn Serializer>> = fory.deserialize(&serialized).unwrap();
+
+    assert_eq!(deserialized.len(), 3);
+}
+
+#[test]
+fn test_compatible_mode_schema_evolution() {
+    let mut fory = fory_compatible();
+    fory.register::<Person>(5000);
+
+    let person = Person {
+        name: String::from("Alice"),
+        age: 30,
+    };
+    let trait_obj: Box<dyn Serializer> = Box::new(person.clone());
+    let serialized = fory.serialize(&trait_obj);
+
+    let deserialized_trait: Box<dyn Serializer> = fory.deserialize(&serialized).unwrap();
+    let deserialized_concrete: Person = fory.deserialize(&serialized).unwrap();
+
+    assert_eq!(deserialized_concrete.name, person.name);
+    assert_eq!(deserialized_concrete.age, person.age);
+
+    let reserialized = fory.serialize(&deserialized_trait);
+    assert_eq!(serialized, reserialized);
+}
+
+#[test]
+fn test_schema_consistent_mode_for_comparison() {
+    let mut fory = fory_schema_consistent();
+    fory.register::<Person>(5000);
+
+    let person = Person {
+        name: String::from("Bob"),
+        age: 25,
+    };
+    let trait_obj: Box<dyn Serializer> = Box::new(person.clone());
+    let serialized = fory.serialize(&trait_obj);
+
+    let deserialized_concrete: Person = fory.deserialize(&serialized).unwrap();
+    assert_eq!(deserialized_concrete, person);
+}
+
+#[test]
+fn test_compatible_mode_with_multiple_same_type_structs() {
+    let mut fory = fory_compatible();
+    fory.register::<Person>(5000);
+    fory.register_serializer::<Vec<Box<dyn Serializer>>>(3000);
+
+    let vec_of_people: Vec<Box<dyn Serializer>> = vec![
+        Box::new(Person { name: String::from("Alice"), age: 30 }),
+        Box::new(Person { name: String::from("Bob"), age: 25 }),
+        Box::new(Person { name: String::from("Charlie"), age: 35 }),
+    ];
+
+    let serialized = fory.serialize(&vec_of_people);
+    let deserialized: Vec<Box<dyn Serializer>> = fory.deserialize(&serialized).unwrap();
 
     assert_eq!(deserialized.len(), 3);
 }

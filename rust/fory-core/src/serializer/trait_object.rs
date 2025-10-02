@@ -62,13 +62,18 @@ impl Serializer for Box<dyn Serializer> {
 
         let ref_flag = context.reader.read_i8();
         if ref_flag != RefFlag::NotNullValue as i8 {
-            return Err(Error::Other(anyhow::anyhow!("Expected NotNullValue ref flag, got {}", ref_flag)));
+            return Err(Error::Other(anyhow::anyhow!(
+                "Expected NotNullValue ref flag, got {}",
+                ref_flag
+            )));
         }
 
         let fory_type_id = if !is_field {
             context.reader.read_varuint32()
         } else {
-            return Err(Error::Other(anyhow::anyhow!("Box<dyn Serializer> cannot be used as a field")));
+            return Err(Error::Other(anyhow::anyhow!(
+                "Box<dyn Serializer> cannot be used as a field"
+            )));
         };
 
         if context.get_fory().get_mode() == &Mode::Compatible
@@ -124,4 +129,3 @@ impl Serializer for Box<dyn Serializer> {
         panic!("fory_read_data should not be called directly on Box<dyn Serializer>");
     }
 }
-

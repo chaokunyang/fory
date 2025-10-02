@@ -41,7 +41,11 @@ pub struct Harness {
 }
 
 impl Harness {
-    pub fn new(serializer: SerializerFn, deserializer: DeserializerFn, to_serializer: ToSerializerFn) -> Harness {
+    pub fn new(
+        serializer: SerializerFn,
+        deserializer: DeserializerFn,
+        to_serializer: ToSerializerFn,
+    ) -> Harness {
         Harness {
             serializer,
             deserializer,
@@ -304,10 +308,14 @@ impl TypeResolver {
             }
         }
 
-        fn to_serializer<T2: 'static + Serializer>(boxed_any: Box<dyn Any>) -> Result<Box<dyn crate::serializer::Serializer>, Error> {
+        fn to_serializer<T2: 'static + Serializer>(
+            boxed_any: Box<dyn Any>,
+        ) -> Result<Box<dyn crate::serializer::Serializer>, Error> {
             match boxed_any.downcast::<T2>() {
                 Ok(concrete) => Ok(Box::new(*concrete) as Box<dyn crate::serializer::Serializer>),
-                Err(_) => Err(Error::Other(anyhow::anyhow!("Failed to downcast to concrete type"))),
+                Err(_) => Err(Error::Other(anyhow::anyhow!(
+                    "Failed to downcast to concrete type"
+                ))),
             }
         }
 
@@ -335,16 +343,20 @@ impl TypeResolver {
                 );
             }
             self.type_name_map.insert(rs_type_id, key.clone());
-            self.name_serializer_map
-                .insert(key, Harness::new(serializer::<T>, deserializer::<T>, to_serializer::<T>));
+            self.name_serializer_map.insert(
+                key,
+                Harness::new(serializer::<T>, deserializer::<T>, to_serializer::<T>),
+            );
         } else {
             let type_id = type_info.type_id;
             if self.serializer_map.contains_key(&type_id) {
                 panic!("TypeId {:?} already registered_by_id", type_id);
             }
             self.type_id_map.insert(rs_type_id, type_id);
-            self.serializer_map
-                .insert(type_id, Harness::new(serializer::<T>, deserializer::<T>, to_serializer::<T>));
+            self.serializer_map.insert(
+                type_id,
+                Harness::new(serializer::<T>, deserializer::<T>, to_serializer::<T>),
+            );
         }
     }
 
@@ -381,10 +393,14 @@ impl TypeResolver {
             }
         }
 
-        fn to_serializer<T2: 'static + Serializer>(boxed_any: Box<dyn Any>) -> Result<Box<dyn crate::serializer::Serializer>, Error> {
+        fn to_serializer<T2: 'static + Serializer>(
+            boxed_any: Box<dyn Any>,
+        ) -> Result<Box<dyn crate::serializer::Serializer>, Error> {
             match boxed_any.downcast::<T2>() {
                 Ok(concrete) => Ok(Box::new(*concrete) as Box<dyn crate::serializer::Serializer>),
-                Err(_) => Err(Error::Other(anyhow::anyhow!("Failed to downcast to concrete type"))),
+                Err(_) => Err(Error::Other(anyhow::anyhow!(
+                    "Failed to downcast to concrete type"
+                ))),
             }
         }
 
@@ -404,16 +420,20 @@ impl TypeResolver {
                 );
             }
             self.type_name_map.insert(rs_type_id, key.clone());
-            self.name_serializer_map
-                .insert(key, Harness::new(serializer::<T>, deserializer::<T>, to_serializer::<T>));
+            self.name_serializer_map.insert(
+                key,
+                Harness::new(serializer::<T>, deserializer::<T>, to_serializer::<T>),
+            );
         } else {
             let type_id = type_info.type_id;
             if self.serializer_map.contains_key(&type_id) {
                 panic!("TypeId {:?} already registered_by_id", type_id);
             }
             self.type_id_map.insert(rs_type_id, type_id);
-            self.serializer_map
-                .insert(type_id, Harness::new(serializer::<T>, deserializer::<T>, to_serializer::<T>));
+            self.serializer_map.insert(
+                type_id,
+                Harness::new(serializer::<T>, deserializer::<T>, to_serializer::<T>),
+            );
         }
     }
 

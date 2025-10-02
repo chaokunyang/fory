@@ -237,19 +237,25 @@ impl Fory {
         self.type_resolver.register_serializer::<T>(&type_info);
     }
 
-    pub fn register_serializer_by_name<T: Serializer + Default>(&mut self, type_name: &str, namespace: &str) {
+    pub fn register_serializer_by_name<T: Serializer + Default>(
+        &mut self,
+        type_name: &str,
+        namespace: &str,
+    ) {
         let actual_type_id = get_ext_actual_type_id(0, false);
         let type_info =
             TypeInfo::new_with_empty_def::<T>(self, actual_type_id, namespace, type_name, true);
         self.type_resolver.register_serializer::<T>(&type_info);
     }
-
 }
 
 pub fn write<T: Serializer>(this: &T, context: &mut WriteContext, is_field: bool) {
     T::fory_write(this, context, is_field);
 }
 
-pub fn read<T: Serializer + Default>(context: &mut ReadContext, is_field: bool) -> Result<T, Error> {
+pub fn read<T: Serializer + Default>(
+    context: &mut ReadContext,
+    is_field: bool,
+) -> Result<T, Error> {
     T::fory_read(context, is_field)
 }

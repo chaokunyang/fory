@@ -31,10 +31,17 @@ fn test_trait_coercion() {
     }
 
     impl Serializer for Book {
-        fn fory_write_data(&self, context: &mut fory_core::resolver::context::WriteContext, _is_field: bool) {
+        fn fory_write_data(
+            &self,
+            context: &mut fory_core::resolver::context::WriteContext,
+            _is_field: bool,
+        ) {
             self.title.fory_write_data(context, false);
         }
-        fn fory_read_data(context: &mut fory_core::resolver::context::ReadContext, _is_field: bool) -> Result<Self, fory_core::error::Error> {
+        fn fory_read_data(
+            context: &mut fory_core::resolver::context::ReadContext,
+            _is_field: bool,
+        ) -> Result<Self, fory_core::error::Error> {
             Ok(Book {
                 title: String::fory_read_data(context, false)?,
             })
@@ -50,7 +57,9 @@ fn test_trait_coercion() {
         }
     }
 
-    let book = Book { title: String::from("Test") };
+    let book = Book {
+        title: String::from("Test"),
+    };
     let printable: Box<dyn Printable> = Box::new(book);
     let _serializer: Box<dyn Serializer> = printable;
 }
@@ -421,8 +430,14 @@ fn test_fory_derived_nested_struct_as_trait_object() {
     let company = Company {
         name: String::from("Acme Corp"),
         employees: vec![
-            Person { name: String::from("Alice"), age: 30 },
-            Person { name: String::from("Bob"), age: 25 },
+            Person {
+                name: String::from("Alice"),
+                age: 30,
+            },
+            Person {
+                name: String::from("Bob"),
+                age: 25,
+            },
         ],
     };
     let trait_obj: Box<dyn Serializer> = Box::new(company.clone());
@@ -440,10 +455,16 @@ fn test_vec_of_fory_derived_trait_objects() {
     fory.register_serializer::<Vec<Box<dyn Serializer>>>(3000);
 
     let vec_of_trait_objects: Vec<Box<dyn Serializer>> = vec![
-        Box::new(Person { name: String::from("Alice"), age: 30 }),
+        Box::new(Person {
+            name: String::from("Alice"),
+            age: 30,
+        }),
         Box::new(Company {
             name: String::from("Acme"),
-            employees: vec![Person { name: String::from("Bob"), age: 25 }]
+            employees: vec![Person {
+                name: String::from("Bob"),
+                age: 25,
+            }],
         }),
         Box::new(42i32),
     ];
@@ -462,11 +483,20 @@ fn test_hashmap_with_fory_derived_values() {
     fory.register_serializer::<HashMap<String, Box<dyn Serializer>>>(3002);
 
     let mut map: HashMap<String, Box<dyn Serializer>> = HashMap::new();
-    map.insert(String::from("person"), Box::new(Person { name: String::from("Alice"), age: 30 }));
-    map.insert(String::from("company"), Box::new(Company {
-        name: String::from("Acme"),
-        employees: vec![]
-    }));
+    map.insert(
+        String::from("person"),
+        Box::new(Person {
+            name: String::from("Alice"),
+            age: 30,
+        }),
+    );
+    map.insert(
+        String::from("company"),
+        Box::new(Company {
+            name: String::from("Acme"),
+            employees: vec![],
+        }),
+    );
     map.insert(String::from("number"), Box::new(42i32));
 
     let serialized = fory.serialize(&map);
@@ -520,9 +550,18 @@ fn test_compatible_mode_with_multiple_same_type_structs() {
     fory.register_serializer::<Vec<Box<dyn Serializer>>>(3000);
 
     let vec_of_people: Vec<Box<dyn Serializer>> = vec![
-        Box::new(Person { name: String::from("Alice"), age: 30 }),
-        Box::new(Person { name: String::from("Bob"), age: 25 }),
-        Box::new(Person { name: String::from("Charlie"), age: 35 }),
+        Box::new(Person {
+            name: String::from("Alice"),
+            age: 30,
+        }),
+        Box::new(Person {
+            name: String::from("Bob"),
+            age: 25,
+        }),
+        Box::new(Person {
+            name: String::from("Charlie"),
+            age: 35,
+        }),
     ];
 
     let serialized = fory.serialize(&vec_of_people);

@@ -35,19 +35,18 @@ impl Serializer for Box<dyn Serializer> {
 
         context.writer.write_i8(RefFlag::NotNullValue as i8);
 
-        if !is_field {
-            let fory_type_id = (**self).fory_type_id_dyn(context.get_fory());
-            context.writer.write_varuint32(fory_type_id);
+        let fory_type_id = (**self).fory_type_id_dyn(context.get_fory());
+        context.writer.write_varuint32(fory_type_id);
 
-            if context.get_fory().get_mode() == &Mode::Compatible
-                && (fory_type_id & 0xff == TypeId::NAMED_COMPATIBLE_STRUCT as u32
-                    || fory_type_id & 0xff == TypeId::COMPATIBLE_STRUCT as u32)
-            {
-                let concrete_type_id = (**self).fory_concrete_type_id();
-                let meta_index = context.push_meta(concrete_type_id) as u32;
-                context.writer.write_varuint32(meta_index);
-            }
+        if context.get_fory().get_mode() == &Mode::Compatible
+            && (fory_type_id & 0xff == TypeId::NAMED_COMPATIBLE_STRUCT as u32
+                || fory_type_id & 0xff == TypeId::COMPATIBLE_STRUCT as u32)
+        {
+            let concrete_type_id = (**self).fory_concrete_type_id();
+            let meta_index = context.push_meta(concrete_type_id) as u32;
+            context.writer.write_varuint32(meta_index);
         }
+
         (**self).fory_write_data(context, is_field);
     }
 
@@ -85,13 +84,7 @@ impl Serializer for Box<dyn Serializer> {
             )));
         }
 
-        let fory_type_id = if !is_field {
-            context.reader.read_varuint32()
-        } else {
-            return Err(Error::Other(anyhow::anyhow!(
-                "Box<dyn Serializer> cannot be used as a field"
-            )));
-        };
+        let fory_type_id = context.reader.read_varuint32();
 
         if context.get_fory().get_mode() == &Mode::Compatible
             && (fory_type_id & 0xff == TypeId::NAMED_COMPATIBLE_STRUCT as u32

@@ -586,3 +586,29 @@ fn test_compatible_mode_with_multiple_same_type_structs() {
 
     assert_eq!(deserialized.len(), 3);
 }
+
+#[derive(ForyDerive, Default, Debug, PartialEq, Clone)]
+struct SetContainer {
+    unique_items: HashSet<i32>,
+}
+
+#[test]
+fn test_hashset_as_field() {
+    let mut fory = fory_compatible();
+    fory.register::<SetContainer>(6005);
+
+    let mut unique_items = HashSet::new();
+    unique_items.insert(1);
+    unique_items.insert(2);
+    unique_items.insert(3);
+
+    let container = SetContainer { unique_items };
+
+    let serialized = fory.serialize(&container);
+    let deserialized: SetContainer = fory.deserialize(&serialized).unwrap();
+
+    assert_eq!(deserialized.unique_items.len(), 3);
+    assert!(deserialized.unique_items.contains(&1));
+    assert!(deserialized.unique_items.contains(&2));
+    assert!(deserialized.unique_items.contains(&3));
+}

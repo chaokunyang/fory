@@ -18,12 +18,19 @@
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::Field;
+use crate::util::is_box_dyn_trait;
 
 pub fn gen_reserved_space(fields: &[&Field]) -> TokenStream {
     let reserved_size_expr: Vec<_> = fields.iter().map(|field| {
         let ty = &field.ty;
-        quote! {
-            <#ty as fory_core::serializer::Serializer>::fory_reserved_space() + fory_core::types::SIZE_OF_REF_AND_TYPE
+        if is_box_dyn_trait(ty).is_some() {
+            quote! {
+                fory_core::types::SIZE_OF_REF_AND_TYPE
+            }
+        } else {
+            quote! {
+                <#ty as fory_core::serializer::Serializer>::fory_reserved_space() + fory_core::types::SIZE_OF_REF_AND_TYPE
+            }
         }
     }).collect();
     if reserved_size_expr.is_empty() {
@@ -40,13 +47,6 @@ pub fn gen_write_type_info() -> TokenStream {
 }
 
 pub fn gen_write_data(fields: &[&Field]) -> TokenStream {
-    // let accessor_expr = fields.iter().map(|field| {
-    //     let ty = &field.ty;
-    //     let ident = &field.ident;
-    //     quote! {
-    //         <#ty as fory_core::serializer::Serializer>::serialize(&self.#ident, context, true);
-    //     }
-    // });
     let sorted_serialize = if fields.is_empty() {
         quote! {}
     } else {
@@ -54,10 +54,35 @@ pub fn gen_write_data(fields: &[&Field]) -> TokenStream {
             let ty = &field.ty;
             let ident = &field.ident;
             let name_str = ident.as_ref().unwrap().to_string();
-            quote! {
-                #name_str => {
-                    let skip_ref_flag = fory_core::serializer::get_skip_ref_flag::<#ty>(context.get_fory());
-                    fory_core::serializer::write_ref_info_data::<#ty>(&self.#ident, context, true, skip_ref_flag, false);
+
+            if is_box_dyn_trait(ty).is_some() {
+                quote! {
+                    #name_str => {
+                        let any_ref = self.#ident.as_any();
+                        let concrete_type_id = any_ref.type_id();
+                        let fory_type_id = context.get_fory()
+                            .get_type_resolver()
+                            .get_fory_type_id(concrete_type_id)
+                            .expect("Type not registered for trait object field");
+
+                        context.writer.write_i8(fory_core::types::RefFlag::NotNullValue as i8);
+                        context.writer.write_varuint32(fory_type_id);
+
+                        let harness = context.get_fory()
+                            .get_type_resolver()
+                            .get_harness(fory_type_id)
+                            .expect("Harness not found for trait object field");
+
+                        let serializer_fn = harness.get_serializer();
+                        serializer_fn(any_ref, context, true);
+                    }
+                }
+            } else {
+                quote! {
+                    #name_str => {
+                        let skip_ref_flag = fory_core::serializer::get_skip_ref_flag::<#ty>(context.get_fory());
+                        fory_core::serializer::write_ref_info_data::<#ty>(&self.#ident, context, true, skip_ref_flag, false);
+                    }
                 }
             }
         });
@@ -72,9 +97,6 @@ pub fn gen_write_data(fields: &[&Field]) -> TokenStream {
         }
     };
     quote! {
-        // write way before
-        // #(#accessor_expr)*
-        // sort and write
         #sorted_serialize
     }
 }

@@ -257,3 +257,65 @@
 //! ```
 
 pub use fory_core::{error::Error, fory::Fory, row::from_row, row::to_row};
+
+/// Macro to register trait object conversions for custom traits.
+///
+/// This macro generates a `from_any` method on the trait object that can convert
+/// `Box<dyn Any>` to `Box<dyn YourTrait>` based on the Fory type ID.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use fory::register_trait_type;
+/// use fory_derive::Fory;
+///
+/// trait Animal {
+///     fn speak(&self);
+/// }
+///
+/// #[derive(Fory, Default)]
+/// struct Dog { name: String }
+///
+/// impl Animal for Dog {
+///     fn speak(&self) { println!("Woof!"); }
+/// }
+///
+/// #[derive(Fory, Default)]
+/// struct Cat { name: String }
+///
+/// impl Animal for Cat {
+///     fn speak(&self) { println!("Meow!"); }
+/// }
+///
+/// // Register the trait and its implementations
+/// register_trait_type!(Animal, (Dog, 5001), (Cat, 5002));
+/// ```
+#[macro_export]
+macro_rules! register_trait_type {
+    ($trait_name:ident, $(($impl_type:ty, $type_id:expr)),+ $(,)?) => {
+        impl Box<dyn $trait_name> {
+            #[allow(dead_code)]
+            pub fn from_any_internal(
+                any_box: Box<dyn std::any::Any>,
+                fory_type_id: u32,
+            ) -> Result<Self, $crate::Error> {
+                match fory_type_id {
+                    $(
+                        $type_id => {
+                            let concrete = any_box.downcast::<$impl_type>()
+                                .map_err(|_| $crate::Error::Other(
+                                    anyhow::anyhow!("Failed to downcast to {}", stringify!($impl_type))
+                                ))?;
+                            Ok(concrete as Box<dyn $trait_name>)
+                        }
+                    )+
+                    _ => Err($crate::Error::Other(anyhow::anyhow!(
+                        "Type ID {} is not registered for trait {}",
+                        fory_type_id,
+                        stringify!($trait_name)
+                    )))
+                }
+            }
+        }
+    };
+}

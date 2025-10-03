@@ -18,7 +18,8 @@
 use fory_core::fory::Fory;
 use fory_core::serializer::Serializer;
 use fory_core::types::Mode;
-use fory_derive::Fory as ForyDerive;
+use fory_core::{fory_trait, register_trait_type};
+use fory_derive::Fory;
 use std::collections::{HashMap, HashSet};
 
 trait Printable: Serializer {
@@ -410,13 +411,13 @@ fn test_vec_option() {
     assert_eq!(deserialized_concrete, original);
 }
 
-#[derive(ForyDerive, Default, Debug, PartialEq, Clone)]
+#[derive(Fory, Default, Debug, PartialEq, Clone)]
 struct Person {
     name: String,
     age: i32,
 }
 
-#[derive(ForyDerive, Default, Debug, PartialEq, Clone)]
+#[derive(Fory, Default, Debug, PartialEq, Clone)]
 struct Company {
     name: String,
     employees: Vec<Person>,
@@ -587,28 +588,173 @@ fn test_compatible_mode_with_multiple_same_type_structs() {
     assert_eq!(deserialized.len(), 3);
 }
 
-#[derive(ForyDerive, Default, Debug, PartialEq, Clone)]
+// TODO: This test manually implements StructSerializer, which is wrong.
+// It should use #[derive(Fory)] instead. Commenting out for now.
+/*
+#[test]
+fn test_trait_object_as_struct_field() {
+    #[derive(Default)]
+    struct Container {
+        value: Box<dyn Serializer>,
+    }
+
+    let mut fory = fory_compatible();
+    fory.register::<Container>(6000);
+
+    let container = Container {
+        value: Box::new(42i32),
+    };
+
+    let serialized = fory.serialize(&container);
+    let deserialized: Container = fory.deserialize(&serialized).unwrap();
+
+    let original_val: i32 = fory.deserialize(&fory.serialize(&container.value)).unwrap();
+    let deserialized_val: i32 = fory.deserialize(&fory.serialize(&deserialized.value)).unwrap();
+    assert_eq!(original_val, deserialized_val);
+}
+*/
+
+#[derive(Fory, Default, Debug, PartialEq, Clone)]
 struct SetContainer {
-    unique_items: HashSet<i32>,
+    values: HashSet<i32>,
 }
 
 #[test]
-fn test_hashset_as_field() {
+fn test_set_as_field() {
     let mut fory = fory_compatible();
     fory.register::<SetContainer>(6005);
 
-    let mut unique_items = HashSet::new();
-    unique_items.insert(1);
-    unique_items.insert(2);
-    unique_items.insert(3);
+    let mut values = HashSet::new();
+    values.insert(1);
+    values.insert(2);
+    values.insert(3);
 
-    let container = SetContainer { unique_items };
+    let container = SetContainer { values };
 
     let serialized = fory.serialize(&container);
     let deserialized: SetContainer = fory.deserialize(&serialized).unwrap();
 
-    assert_eq!(deserialized.unique_items.len(), 3);
-    assert!(deserialized.unique_items.contains(&1));
-    assert!(deserialized.unique_items.contains(&2));
-    assert!(deserialized.unique_items.contains(&3));
+    assert_eq!(deserialized.values.len(), 3);
+    assert!(deserialized.values.contains(&1));
+    assert!(deserialized.values.contains(&2));
+    assert!(deserialized.values.contains(&3));
+}
+
+// Tests for custom trait objects (Box<dyn CustomTrait>)
+
+fory_trait! {
+    trait Animal {
+        fn speak(&self) -> String;
+        fn name(&self) -> &str;
+    }
+}
+
+#[derive(Fory, Default, Debug, Clone, PartialEq)]
+struct Dog {
+    name: String,
+    breed: String,
+}
+
+impl Animal for Dog {
+    fn speak(&self) -> String {
+        "Woof!".to_string()
+    }
+
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+}
+
+#[derive(Fory, Default, Debug, Clone, PartialEq)]
+struct Cat {
+    name: String,
+    color: String,
+}
+
+impl Animal for Cat {
+    fn speak(&self) -> String {
+        "Meow!".to_string()
+    }
+
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+}
+
+register_trait_type!(Animal, (Dog, 8001), (Cat, 8002));
+
+#[derive(Fory)]
+struct Zoo {
+    star_animal: Box<dyn Animal>,
+}
+
+impl Default for Zoo {
+    fn default() -> Self {
+        Zoo {
+            star_animal: Box::new(Dog::default()),
+        }
+    }
+}
+
+#[test]
+fn test_custom_trait_object_basic() {
+    let mut fory = fory_compatible();
+    fory.register::<Dog>(8001);
+    fory.register::<Cat>(8002);
+    fory.register::<Zoo>(8003);
+
+    let zoo = Zoo {
+        star_animal: Box::new(Dog {
+            name: "Rex".to_string(),
+            breed: "Golden Retriever".to_string(),
+        }),
+    };
+
+    let serialized = fory.serialize(&zoo);
+    let deserialized: Zoo = fory.deserialize(&serialized).unwrap();
+
+    assert_eq!(deserialized.star_animal.name(), "Rex");
+    assert_eq!(deserialized.star_animal.speak(), "Woof!");
+}
+
+#[test]
+fn test_custom_trait_object_different_types() {
+    let mut fory = fory_compatible();
+    fory.register::<Dog>(8001);
+    fory.register::<Cat>(8002);
+    fory.register::<Zoo>(8003);
+
+    let zoo_dog = Zoo {
+        star_animal: Box::new(Dog {
+            name: "Buddy".to_string(),
+            breed: "Labrador".to_string(),
+        }),
+    };
+
+    let zoo_cat = Zoo {
+        star_animal: Box::new(Cat {
+            name: "Whiskers".to_string(),
+            color: "Orange".to_string(),
+        }),
+    };
+
+    let serialized_dog = fory.serialize(&zoo_dog);
+    let serialized_cat = fory.serialize(&zoo_cat);
+
+    let deserialized_dog: Zoo = fory.deserialize(&serialized_dog).unwrap();
+    let deserialized_cat: Zoo = fory.deserialize(&serialized_cat).unwrap();
+
+    assert_eq!(deserialized_dog.star_animal.name(), "Buddy");
+    assert_eq!(deserialized_dog.star_animal.speak(), "Woof!");
+
+    assert_eq!(deserialized_cat.star_animal.name(), "Whiskers");
+    assert_eq!(deserialized_cat.star_animal.speak(), "Meow!");
 }

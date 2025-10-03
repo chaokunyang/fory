@@ -547,17 +547,17 @@ fory.register(MyClass, typename="my.package.MyClass", serializer=custom_serializ
 
 ### Language Modes Comparison
 
-| Feature               | Python Mode (`xlang=False`) | Cross-Language Mode (`xlang=True`)    |
-| --------------------- | --------------------------- | ------------------------------------- |
-| **Use Case**          | Pure Python applications    | Multi-language systems                |
-| **Compatibility**     | Python only                 | Java, Go, Rust, C++, JavaScript, etc. |
-| **Supported Types**   | All Python types            | Cross-language compatible types only  |
-| **Functions/Lambdas** | ✓ Supported                 | ✗ Not allowed                         |
-| **Local Classes**     | ✓ Supported                 | ✗ Not allowed                         |
-| **Dynamic Classes**   | ✓ Supported                 | ✗ Not allowed                         |
-| **Schema Evolution**  | ✓ Supported (with `compatible=True`)| ✓ Supported (with `compatible=True`)  |
-| **Performance**       | Extremely fast              | Very fast                             |
-| **Data Size**         | Compact                     | Compact with type metadata            |
+| Feature               | Python Mode (`xlang=False`)          | Cross-Language Mode (`xlang=True`)    |
+| --------------------- | ------------------------------------ | ------------------------------------- |
+| **Use Case**          | Pure Python applications             | Multi-language systems                |
+| **Compatibility**     | Python only                          | Java, Go, Rust, C++, JavaScript, etc. |
+| **Supported Types**   | All Python types                     | Cross-language compatible types only  |
+| **Functions/Lambdas** | ✓ Supported                          | ✗ Not allowed                         |
+| **Local Classes**     | ✓ Supported                          | ✗ Not allowed                         |
+| **Dynamic Classes**   | ✓ Supported                          | ✗ Not allowed                         |
+| **Schema Evolution**  | ✓ Supported (with `compatible=True`) | ✓ Supported (with `compatible=True`)  |
+| **Performance**       | Extremely fast                       | Very fast                             |
+| **Data Size**         | Compact                              | Compact with type metadata            |
 
 #### Python Mode (`xlang=False`)
 

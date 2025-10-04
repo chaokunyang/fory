@@ -25,7 +25,7 @@ use fory_derive::Fory;
 #[test]
 #[allow(dead_code)]
 fn test_duplicate_impl() {
-    #[derive(Debug, Fory, PartialEq, Default)]
+    #[derive(Debug, Fory, PartialEq)]
     struct Item1 {
         f1: i32,
     }

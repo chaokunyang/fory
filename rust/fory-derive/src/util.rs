@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use syn::{Field, Fields, Type, TypePath, TypeTraitObject, PathArguments, GenericArgument};
+use syn::{Field, Fields, GenericArgument, PathArguments, Type, TypePath, TypeTraitObject};
 
 pub fn sorted_fields(fields: &Fields) -> Vec<&Field> {
     let mut fields = fields.iter().collect::<Vec<&Field>>();
@@ -29,7 +29,9 @@ pub fn is_box_dyn_trait(ty: &Type) -> Option<&TypeTraitObject> {
         if let Some(seg) = path.segments.last() {
             if seg.ident == "Box" {
                 if let PathArguments::AngleBracketed(args) = &seg.arguments {
-                    if let Some(GenericArgument::Type(Type::TraitObject(trait_obj))) = args.args.first() {
+                    if let Some(GenericArgument::Type(Type::TraitObject(trait_obj))) =
+                        args.args.first()
+                    {
                         return Some(trait_obj);
                     }
                 }

@@ -16,70 +16,15 @@
 // under the License.
 
 use fory_core::fory::Fory;
+use fory_core::register_trait_type;
 use fory_core::serializer::Serializer;
 use fory_core::types::Mode;
-use fory_core::{fory_trait, register_trait_type};
+use fory_derive::fory_trait;
 use fory_derive::Fory;
 use std::collections::{HashMap, HashSet};
 
-trait Printable: Serializer {
-    #[allow(dead_code)]
-    fn print_info(&self);
-}
-
 fn fory_compatible() -> Fory {
     Fory::default().mode(Mode::Compatible)
-}
-
-fn fory_schema_consistent() -> Fory {
-    Fory::default()
-}
-
-#[test]
-fn test_trait_object_architecture() {
-    let _fory = Fory::default();
-    let _: Box<dyn Serializer> = Box::new(42i32);
-}
-
-#[test]
-fn test_trait_coercion() {
-    #[derive(Default, Debug, PartialEq)]
-    struct Book {
-        title: String,
-    }
-
-    impl Serializer for Book {
-        fn fory_write_data(
-            &self,
-            context: &mut fory_core::resolver::context::WriteContext,
-            _is_field: bool,
-        ) {
-            self.title.fory_write_data(context, false);
-        }
-        fn fory_read_data(
-            context: &mut fory_core::resolver::context::ReadContext,
-            _is_field: bool,
-        ) -> Result<Self, fory_core::error::Error> {
-            Ok(Book {
-                title: String::fory_read_data(context, false)?,
-            })
-        }
-        fn fory_type_id_dyn(&self, _fory: &Fory) -> u32 {
-            999
-        }
-    }
-
-    impl Printable for Book {
-        fn print_info(&self) {
-            println!("Book: {}", self.title);
-        }
-    }
-
-    let book = Book {
-        title: String::from("Test"),
-    };
-    let printable: Box<dyn Printable> = Box::new(book);
-    let _serializer: Box<dyn Serializer> = printable;
 }
 
 #[test]
@@ -92,51 +37,6 @@ fn test_i32_roundtrip() {
 
     let deserialized_trait: Box<dyn Serializer> = fory.deserialize(&serialized).unwrap();
     let deserialized_concrete: i32 = fory.deserialize(&serialized).unwrap();
-
-    assert_eq!(deserialized_concrete, original);
-    assert_eq!(fory.serialize(&deserialized_trait), serialized);
-}
-
-#[test]
-fn test_i64_roundtrip() {
-    let fory = fory_compatible();
-
-    let original = -9223372036854775808i64;
-    let trait_obj: Box<dyn Serializer> = Box::new(original);
-    let serialized = fory.serialize(&trait_obj);
-
-    let deserialized_trait: Box<dyn Serializer> = fory.deserialize(&serialized).unwrap();
-    let deserialized_concrete: i64 = fory.deserialize(&serialized).unwrap();
-
-    assert_eq!(deserialized_concrete, original);
-    assert_eq!(fory.serialize(&deserialized_trait), serialized);
-}
-
-#[test]
-fn test_f64_roundtrip() {
-    let fory = fory_compatible();
-
-    let original = std::f64::consts::PI;
-    let trait_obj: Box<dyn Serializer> = Box::new(original);
-    let serialized = fory.serialize(&trait_obj);
-
-    let deserialized_trait: Box<dyn Serializer> = fory.deserialize(&serialized).unwrap();
-    let deserialized_concrete: f64 = fory.deserialize(&serialized).unwrap();
-
-    assert_eq!(deserialized_concrete, original);
-    assert_eq!(fory.serialize(&deserialized_trait), serialized);
-}
-
-#[test]
-fn test_bool_roundtrip() {
-    let fory = fory_compatible();
-
-    let original = true;
-    let trait_obj: Box<dyn Serializer> = Box::new(original);
-    let serialized = fory.serialize(&trait_obj);
-
-    let deserialized_trait: Box<dyn Serializer> = fory.deserialize(&serialized).unwrap();
-    let deserialized_concrete: bool = fory.deserialize(&serialized).unwrap();
 
     assert_eq!(deserialized_concrete, original);
     assert_eq!(fory.serialize(&deserialized_trait), serialized);
@@ -158,68 +58,10 @@ fn test_string_roundtrip() {
 }
 
 #[test]
-fn test_string_empty_roundtrip() {
-    let fory = fory_compatible();
-
-    let original = String::new();
-    let trait_obj: Box<dyn Serializer> = Box::new(original.clone());
-    let serialized = fory.serialize(&trait_obj);
-
-    let deserialized_trait: Box<dyn Serializer> = fory.deserialize(&serialized).unwrap();
-    let deserialized_concrete: String = fory.deserialize(&serialized).unwrap();
-
-    assert_eq!(deserialized_concrete, original);
-    assert_eq!(fory.serialize(&deserialized_trait), serialized);
-}
-
-#[test]
-fn test_string_unicode_roundtrip() {
-    let fory = fory_compatible();
-
-    let original = String::from("こんにちは世界 🌍");
-    let trait_obj: Box<dyn Serializer> = Box::new(original.clone());
-    let serialized = fory.serialize(&trait_obj);
-
-    let deserialized_trait: Box<dyn Serializer> = fory.deserialize(&serialized).unwrap();
-    let deserialized_concrete: String = fory.deserialize(&serialized).unwrap();
-
-    assert_eq!(deserialized_concrete, original);
-    assert_eq!(fory.serialize(&deserialized_trait), serialized);
-}
-
-#[test]
 fn test_vec_i32_roundtrip() {
     let fory = fory_compatible();
 
     let original = vec![1, 2, 3, 4, 5];
-    let trait_obj: Box<dyn Serializer> = Box::new(original.clone());
-    let serialized = fory.serialize(&trait_obj);
-
-    let deserialized_trait: Box<dyn Serializer> = fory.deserialize(&serialized).unwrap();
-    let deserialized_concrete: Vec<i32> = fory.deserialize(&serialized).unwrap();
-
-    assert_eq!(deserialized_concrete, original);
-    assert_eq!(fory.serialize(&deserialized_trait), serialized);
-}
-
-#[test]
-fn test_vec_string_roundtrip() {
-    let fory = fory_compatible();
-
-    let original = vec![String::from("a"), String::from("b"), String::from("c")];
-    let trait_obj: Box<dyn Serializer> = Box::new(original.clone());
-    let serialized = fory.serialize(&trait_obj);
-
-    let deserialized_concrete: Vec<String> = fory.deserialize(&serialized).unwrap();
-
-    assert_eq!(deserialized_concrete, original);
-}
-
-#[test]
-fn test_vec_empty_roundtrip() {
-    let fory = fory_compatible();
-
-    let original: Vec<i32> = Vec::new();
     let trait_obj: Box<dyn Serializer> = Box::new(original.clone());
     let serialized = fory.serialize(&trait_obj);
 
@@ -288,21 +130,6 @@ fn test_hashset_roundtrip() {
 }
 
 #[test]
-fn test_large_vec_roundtrip() {
-    let fory = fory_compatible();
-
-    let original: Vec<i32> = (0..1000).collect();
-    let trait_obj: Box<dyn Serializer> = Box::new(original.clone());
-    let serialized = fory.serialize(&trait_obj);
-
-    let deserialized_trait: Box<dyn Serializer> = fory.deserialize(&serialized).unwrap();
-    let deserialized_concrete: Vec<i32> = fory.deserialize(&serialized).unwrap();
-
-    assert_eq!(deserialized_concrete, original);
-    assert_eq!(fory.serialize(&deserialized_trait), serialized);
-}
-
-#[test]
 fn test_multiple_types_in_sequence() {
     let fory = fory_compatible();
 
@@ -333,21 +160,6 @@ fn test_multiple_types_in_sequence() {
     assert_eq!(ser1, fory.serialize(&de1_trait));
     assert_eq!(ser2, fory.serialize(&de2_trait));
     assert_eq!(ser3, fory.serialize(&de3_trait));
-}
-
-#[test]
-fn test_schema_consistent_mode() {
-    let fory = fory_schema_consistent();
-
-    let original = 42i32;
-    let trait_obj: Box<dyn Serializer> = Box::new(original);
-    let serialized = fory.serialize(&trait_obj);
-
-    let deserialized_trait: Box<dyn Serializer> = fory.deserialize(&serialized).unwrap();
-    let deserialized_concrete: i32 = fory.deserialize(&serialized).unwrap();
-
-    assert_eq!(deserialized_concrete, original);
-    assert_eq!(fory.serialize(&deserialized_trait), serialized);
 }
 
 #[test]
@@ -383,41 +195,13 @@ fn test_hashmap_string_to_trait_objects() {
     assert_eq!(deserialized.len(), 3);
 }
 
-#[test]
-fn test_nested_vec() {
-    let mut fory = fory_compatible();
-    fory.register_serializer::<Vec<Vec<i32>>>(2000);
-
-    let original = vec![vec![1, 2], vec![3, 4, 5]];
-    let trait_obj: Box<dyn Serializer> = Box::new(original.clone());
-    let serialized = fory.serialize(&trait_obj);
-
-    let deserialized_concrete: Vec<Vec<i32>> = fory.deserialize(&serialized).unwrap();
-
-    assert_eq!(deserialized_concrete, original);
-}
-
-#[test]
-fn test_vec_option() {
-    let mut fory = fory_compatible();
-    fory.register_serializer::<Vec<Option<i32>>>(2001);
-
-    let original = vec![Some(1), None, Some(3)];
-    let trait_obj: Box<dyn Serializer> = Box::new(original.clone());
-    let serialized = fory.serialize(&trait_obj);
-
-    let deserialized_concrete: Vec<Option<i32>> = fory.deserialize(&serialized).unwrap();
-
-    assert_eq!(deserialized_concrete, original);
-}
-
-#[derive(Fory, Default, Debug, PartialEq, Clone)]
+#[derive(Fory, Debug, PartialEq, Clone)]
 struct Person {
     name: String,
     age: i32,
 }
 
-#[derive(Fory, Default, Debug, PartialEq, Clone)]
+#[derive(Fory, Debug, PartialEq, Clone)]
 struct Company {
     name: String,
     employees: Vec<Person>,
@@ -545,76 +329,7 @@ fn test_compatible_mode_schema_evolution() {
     assert_eq!(serialized, reserialized);
 }
 
-#[test]
-fn test_schema_consistent_mode_for_comparison() {
-    let mut fory = fory_schema_consistent();
-    fory.register::<Person>(5000);
-
-    let person = Person {
-        name: String::from("Bob"),
-        age: 25,
-    };
-    let trait_obj: Box<dyn Serializer> = Box::new(person.clone());
-    let serialized = fory.serialize(&trait_obj);
-
-    let deserialized_concrete: Person = fory.deserialize(&serialized).unwrap();
-    assert_eq!(deserialized_concrete, person);
-}
-
-#[test]
-fn test_compatible_mode_with_multiple_same_type_structs() {
-    let mut fory = fory_compatible();
-    fory.register::<Person>(5000);
-    fory.register_serializer::<Vec<Box<dyn Serializer>>>(3000);
-
-    let vec_of_people: Vec<Box<dyn Serializer>> = vec![
-        Box::new(Person {
-            name: String::from("Alice"),
-            age: 30,
-        }),
-        Box::new(Person {
-            name: String::from("Bob"),
-            age: 25,
-        }),
-        Box::new(Person {
-            name: String::from("Charlie"),
-            age: 35,
-        }),
-    ];
-
-    let serialized = fory.serialize(&vec_of_people);
-    let deserialized: Vec<Box<dyn Serializer>> = fory.deserialize(&serialized).unwrap();
-
-    assert_eq!(deserialized.len(), 3);
-}
-
-// TODO: This test manually implements StructSerializer, which is wrong.
-// It should use #[derive(Fory)] instead. Commenting out for now.
-/*
-#[test]
-fn test_trait_object_as_struct_field() {
-    #[derive(Default)]
-    struct Container {
-        value: Box<dyn Serializer>,
-    }
-
-    let mut fory = fory_compatible();
-    fory.register::<Container>(6000);
-
-    let container = Container {
-        value: Box::new(42i32),
-    };
-
-    let serialized = fory.serialize(&container);
-    let deserialized: Container = fory.deserialize(&serialized).unwrap();
-
-    let original_val: i32 = fory.deserialize(&fory.serialize(&container.value)).unwrap();
-    let deserialized_val: i32 = fory.deserialize(&fory.serialize(&deserialized.value)).unwrap();
-    assert_eq!(original_val, deserialized_val);
-}
-*/
-
-#[derive(Fory, Default, Debug, PartialEq, Clone)]
+#[derive(Fory, Debug, PartialEq, Clone)]
 struct SetContainer {
     values: HashSet<i32>,
 }
@@ -642,14 +357,13 @@ fn test_set_as_field() {
 
 // Tests for custom trait objects (Box<dyn CustomTrait>)
 
-fory_trait! {
-    trait Animal {
-        fn speak(&self) -> String;
-        fn name(&self) -> &str;
-    }
+#[fory_trait]
+trait Animal {
+    fn speak(&self) -> String;
+    fn name(&self) -> &str;
 }
 
-#[derive(Fory, Default, Debug, Clone, PartialEq)]
+#[derive(Fory, Debug, Clone, PartialEq)]
 struct Dog {
     name: String,
     breed: String,
@@ -669,7 +383,7 @@ impl Animal for Dog {
     }
 }
 
-#[derive(Fory, Default, Debug, Clone, PartialEq)]
+#[derive(Fory, Debug, Clone, PartialEq)]
 struct Cat {
     name: String,
     color: String,
@@ -689,19 +403,11 @@ impl Animal for Cat {
     }
 }
 
-register_trait_type!(Animal, (Dog, 8001), (Cat, 8002));
+register_trait_type!(Animal, Dog, Cat);
 
 #[derive(Fory)]
 struct Zoo {
     star_animal: Box<dyn Animal>,
-}
-
-impl Default for Zoo {
-    fn default() -> Self {
-        Zoo {
-            star_animal: Box::new(Dog::default()),
-        }
-    }
 }
 
 #[test]

@@ -15,10 +15,10 @@
 // specific language governing permissions and limitations
 // under the License.
 
+use crate::util::is_box_dyn_trait;
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::Field;
-use crate::util::is_box_dyn_trait;
 
 pub fn gen_reserved_space(fields: &[&Field]) -> TokenStream {
     let reserved_size_expr: Vec<_> = fields.iter().map(|field| {

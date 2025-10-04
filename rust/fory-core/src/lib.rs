@@ -94,116 +94,82 @@ pub mod util;
 /// Macro to register trait object conversions for custom traits.
 ///
 /// This macro automatically generates:
-/// 1. `from_any_internal()` for deserializing trait objects
+/// 1. `from_any_internal()` for deserializing trait objects using Fory's type system
 /// 2. `Default` implementation for `Box<dyn Trait>` (uses first registered type)
 ///
 /// **Note**: Your trait must provide `as_any()` method returning `&dyn Any`.
-/// You can use the `fory_trait!` macro to automatically add this.
+/// Use the `#[fory_trait]` attribute to automatically add this.
 ///
 /// # Example
 ///
 /// ```rust,ignore
-/// use fory_core::{register_trait_type, fory_trait};
-/// use fory_derive::Fory;
+/// use fory_core::register_trait_type;
+/// use fory_derive::{fory_trait, Fory};
 ///
-/// // Define trait with as_any support
-/// fory_trait! {
-///     trait Animal {
-///         fn speak(&self);
-///     }
+/// #[fory_trait]
+/// trait Animal {
+///     fn speak(&self);
 /// }
 ///
-/// #[derive(Fory, Default)]
+/// #[derive(Fory)]
 /// struct Dog { name: String }
+///
+/// #[derive(Fory)]
+/// struct Cat { name: String }
 ///
 /// impl Animal for Dog {
 ///     fn speak(&self) { println!("Woof!"); }
+///     fn as_any(&self) -> &dyn std::any::Any { self }
 /// }
 ///
-/// // Register the trait and its implementations
-/// register_trait_type!(Animal, (Dog, 5001), (Cat, 5002));
+/// impl Animal for Cat {
+///     fn speak(&self) { println!("Meow!"); }
+///     fn as_any(&self) -> &dyn std::any::Any { self }
+/// }
+///
+/// // Register the trait and its implementations (no type IDs needed!)
+/// register_trait_type!(Animal, Dog, Cat);
 /// ```
 #[macro_export]
 macro_rules! register_trait_type {
-    ($trait_name:ident, $(($impl_type:ty, $type_id:expr)),+ $(,)?) => {
+    ($trait_name:ident, $($impl_type:ty),+ $(,)?) => {
         // Default implementation using first registered type
         impl std::default::Default for Box<dyn $trait_name> {
             fn default() -> Self {
-                register_trait_type!(@first_default $(($impl_type)),+)
+                register_trait_type!(@first_default $($impl_type),+)
             }
         }
 
-        // Create a module with helper functions for this trait
+        // Create helper functions for this trait
+        #[allow(non_snake_case)]
         mod __fory_trait_helpers {
             use super::*;
 
             #[allow(dead_code)]
             pub fn from_any_internal(
                 any_box: Box<dyn std::any::Any>,
-                fory_type_id: u32,
+                _fory_type_id: u32,
             ) -> Result<Box<dyn $trait_name>, $crate::error::Error> {
-                match fory_type_id {
-                    $(
-                        $type_id => {
-                            let concrete = any_box.downcast::<$impl_type>()
-                                .map_err(|_| $crate::error::Error::Other(
-                                    anyhow::anyhow!("Failed to downcast to {}", stringify!($impl_type))
-                                ))?;
-                            Ok(concrete as Box<dyn $trait_name>)
-                        }
-                    )+
-                    _ => Err($crate::error::Error::Other(anyhow::anyhow!(
-                        "Type ID {} is not registered for trait {}",
-                        fory_type_id,
-                        stringify!($trait_name)
-                    )))
-                }
+                $(
+                    if any_box.is::<$impl_type>() {
+                        let concrete = any_box.downcast::<$impl_type>()
+                            .map_err(|_| $crate::error::Error::Other(
+                                anyhow::anyhow!("Failed to downcast to {}", stringify!($impl_type))
+                            ))?;
+                        return Ok(concrete as Box<dyn $trait_name>);
+                    }
+                )+
+
+                Err($crate::error::Error::Other(anyhow::anyhow!(
+                    "No matching type found for trait {}",
+                    stringify!($trait_name)
+                )))
             }
         }
     };
 
     // Helper to get first type for Default impl
-    (@first_default ($first_type:ty) $(, $rest:tt)*) => {
+    (@first_default $first_type:ty $(, $rest:ty)*) => {
         Box::new(<$first_type as std::default::Default>::default())
-    };
-}
-
-/// Macro to define a Fory-compatible trait.
-///
-/// This automatically adds the `as_any()` method required for trait object serialization.
-///
-/// # Example
-///
-/// ```rust,ignore
-/// use fory_core::fory_trait;
-///
-/// fory_trait! {
-///     pub trait Animal {
-///         fn speak(&self) -> String;
-///         fn name(&self) -> &str;
-///     }
-/// }
-/// ```
-#[macro_export]
-macro_rules! fory_trait {
-    (
-        $(#[$meta:meta])*
-        $vis:vis trait $trait_name:ident $(: $($supertrait:path),+)? {
-            $(
-                $(#[$method_meta:meta])*
-                fn $method_name:ident(&self $(, $arg_name:ident: $arg_type:ty)*) $(-> $ret_type:ty)?;
-            )*
-        }
-    ) => {
-        $(#[$meta])*
-        $vis trait $trait_name $(: $($supertrait +)+)? {
-            $(
-                $(#[$method_meta])*
-                fn $method_name(&self $(, $arg_name: $arg_type)*) $(-> $ret_type)?;
-            )*
-
-            /// Get a reference to this object as `&dyn Any` for runtime type identification
-            fn as_any(&self) -> &dyn std::any::Any;
-        }
     };
 }

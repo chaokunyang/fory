@@ -20,7 +20,7 @@ use quote::{format_ident, quote};
 use syn::{Field, Type};
 
 use super::util::{generic_tree_to_tokens, parse_generic_tree, NullableTypeNode};
-use crate::util::{is_box_dyn_trait, is_rc_dyn_trait, is_arc_dyn_trait};
+use crate::util::{is_arc_dyn_trait, is_box_dyn_trait, is_rc_dyn_trait};
 
 fn create_private_field_name(field: &Field) -> Ident {
     format_ident!("_{}", field.ident.as_ref().expect(""))
@@ -36,7 +36,10 @@ fn declare_var(fields: &[&Field]) -> Vec<TokenStream> {
         .map(|field| {
             let ty = &field.ty;
             let var_name = create_private_field_name(field);
-            if is_box_dyn_trait(ty).is_some() || is_rc_dyn_trait(ty).is_some() || is_arc_dyn_trait(ty).is_some() {
+            if is_box_dyn_trait(ty).is_some()
+                || is_rc_dyn_trait(ty).is_some()
+                || is_arc_dyn_trait(ty).is_some()
+            {
                 quote! {
                     let mut #var_name: #ty = Default::default();
                 }
@@ -55,7 +58,10 @@ fn assign_value(fields: &[&Field]) -> Vec<TokenStream> {
         .map(|field| {
             let name = &field.ident;
             let var_name = create_private_field_name(field);
-            if is_box_dyn_trait(&field.ty).is_some() || is_rc_dyn_trait(&field.ty).is_some() || is_arc_dyn_trait(&field.ty).is_some() {
+            if is_box_dyn_trait(&field.ty).is_some()
+                || is_rc_dyn_trait(&field.ty).is_some()
+                || is_arc_dyn_trait(&field.ty).is_some()
+            {
                 quote! {
                     #name: #var_name
                 }
@@ -96,7 +102,10 @@ pub fn gen_read_data(fields: &[&Field]) -> TokenStream {
                 .zip(private_idents.iter())
                 .map(|(field, private_ident)| {
                     let ty = &field.ty;
-                    if is_box_dyn_trait(ty).is_some() || is_rc_dyn_trait(ty).is_some() || is_arc_dyn_trait(ty).is_some() {
+                    if is_box_dyn_trait(ty).is_some()
+                        || is_rc_dyn_trait(ty).is_some()
+                        || is_arc_dyn_trait(ty).is_some()
+                    {
                         quote! {
                             let mut #private_ident: #ty = Default::default();
                         }
@@ -178,7 +187,10 @@ pub fn gen_read_data(fields: &[&Field]) -> TokenStream {
         .map(|(field, private_ident)| {
             let original_ident = &field.ident;
             let ty = &field.ty;
-            if is_box_dyn_trait(ty).is_some() || is_rc_dyn_trait(ty).is_some() || is_arc_dyn_trait(ty).is_some() {
+            if is_box_dyn_trait(ty).is_some()
+                || is_rc_dyn_trait(ty).is_some()
+                || is_arc_dyn_trait(ty).is_some()
+            {
                 quote! {
                     #original_ident: #private_ident
                 }

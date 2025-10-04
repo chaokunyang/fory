@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use crate::util::{is_box_dyn_trait, is_rc_dyn_trait, is_arc_dyn_trait};
+use crate::util::{is_arc_dyn_trait, is_box_dyn_trait, is_rc_dyn_trait};
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::Field;

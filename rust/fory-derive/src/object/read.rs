@@ -20,7 +20,7 @@ use quote::{format_ident, quote};
 use syn::{Field, Type};
 
 use super::util::{generic_tree_to_tokens, parse_generic_tree, NullableTypeNode};
-use crate::util::is_box_dyn_trait;
+use crate::util::{is_box_dyn_trait, is_rc_dyn_trait, is_arc_dyn_trait};
 
 fn create_private_field_name(field: &Field) -> Ident {
     format_ident!("_{}", field.ident.as_ref().expect(""))
@@ -36,7 +36,7 @@ fn declare_var(fields: &[&Field]) -> Vec<TokenStream> {
         .map(|field| {
             let ty = &field.ty;
             let var_name = create_private_field_name(field);
-            if is_box_dyn_trait(ty).is_some() {
+            if is_box_dyn_trait(ty).is_some() || is_rc_dyn_trait(ty).is_some() || is_arc_dyn_trait(ty).is_some() {
                 quote! {
                     let mut #var_name: #ty = Default::default();
                 }
@@ -55,7 +55,7 @@ fn assign_value(fields: &[&Field]) -> Vec<TokenStream> {
         .map(|field| {
             let name = &field.ident;
             let var_name = create_private_field_name(field);
-            if is_box_dyn_trait(&field.ty).is_some() {
+            if is_box_dyn_trait(&field.ty).is_some() || is_rc_dyn_trait(&field.ty).is_some() || is_arc_dyn_trait(&field.ty).is_some() {
                 quote! {
                     #name: #var_name
                 }
@@ -96,8 +96,14 @@ pub fn gen_read_data(fields: &[&Field]) -> TokenStream {
                 .zip(private_idents.iter())
                 .map(|(field, private_ident)| {
                     let ty = &field.ty;
-                    quote! {
-                        let mut #private_ident: #ty = Default::default();
+                    if is_box_dyn_trait(ty).is_some() || is_rc_dyn_trait(ty).is_some() || is_arc_dyn_trait(ty).is_some() {
+                        quote! {
+                            let mut #private_ident: #ty = Default::default();
+                        }
+                    } else {
+                        quote! {
+                            let mut #private_ident: Option<#ty> = None;
+                        }
                     }
                 });
         let match_ts = fields.iter().zip(private_idents.iter()).map(|(field, private_ident)| {
@@ -126,11 +132,31 @@ pub fn gen_read_data(fields: &[&Field]) -> TokenStream {
                         #private_ident = __fory_trait_helpers::from_any_internal(any_box, base_type_id)?;
                     }
                 }
+            } else if let Some((_, trait_name)) = is_rc_dyn_trait(ty) {
+                let wrapper_ty = quote::format_ident!("Dyn{}Rc", trait_name);
+                let trait_ident = quote::format_ident!("{}", trait_name);
+                quote! {
+                    #name_str => {
+                        let skip_ref_flag = fory_core::serializer::get_skip_ref_flag::<#wrapper_ty>(context.get_fory());
+                        let wrapper = fory_core::serializer::read_ref_info_data::<#wrapper_ty>(context, true, skip_ref_flag, false)?;
+                        #private_ident = std::rc::Rc::<dyn #trait_ident>::from(wrapper);
+                    }
+                }
+            } else if let Some((_, trait_name)) = is_arc_dyn_trait(ty) {
+                let wrapper_ty = quote::format_ident!("Dyn{}Arc", trait_name);
+                let trait_ident = quote::format_ident!("{}", trait_name);
+                quote! {
+                    #name_str => {
+                        let skip_ref_flag = fory_core::serializer::get_skip_ref_flag::<#wrapper_ty>(context.get_fory());
+                        let wrapper = fory_core::serializer::read_ref_info_data::<#wrapper_ty>(context, true, skip_ref_flag, false)?;
+                        #private_ident = std::sync::Arc::<dyn #trait_ident + Send + Sync>::from(wrapper);
+                    }
+                }
             } else {
                 quote! {
                     #name_str => {
                         let skip_ref_flag = fory_core::serializer::get_skip_ref_flag::<#ty>(context.get_fory());
-                        #private_ident = fory_core::serializer::read_ref_info_data::<#ty>(context, true, skip_ref_flag, false)?;
+                        #private_ident = Some(fory_core::serializer::read_ref_info_data::<#ty>(context, true, skip_ref_flag, false)?);
                     }
                 }
             }
@@ -151,8 +177,15 @@ pub fn gen_read_data(fields: &[&Field]) -> TokenStream {
         .zip(private_idents.iter())
         .map(|(field, private_ident)| {
             let original_ident = &field.ident;
-            quote! {
-                #original_ident: #private_ident
+            let ty = &field.ty;
+            if is_box_dyn_trait(ty).is_some() || is_rc_dyn_trait(ty).is_some() || is_arc_dyn_trait(ty).is_some() {
+                quote! {
+                    #original_ident: #private_ident
+                }
+            } else {
+                quote! {
+                    #original_ident: #private_ident.unwrap_or_default()
+                }
             }
         });
     quote! {
@@ -212,6 +245,28 @@ pub fn gen_read_compatible(fields: &[&Field], struct_ident: &Ident) -> TokenStre
                     let any_box = deserializer_fn(context, true, false).unwrap();
                     let base_type_id = fory_type_id >> 8;
                     #var_name = __fory_trait_helpers::from_any_internal(any_box, base_type_id).unwrap();
+                }
+            }
+        } else if let Some((_, trait_name)) = is_rc_dyn_trait(ty) {
+            let wrapper_ty = quote::format_ident!("Dyn{}Rc", trait_name);
+            let trait_ident = quote::format_ident!("{}", trait_name);
+            let field_name_str = field.ident.as_ref().unwrap().to_string();
+            quote! {
+                if _field.field_name.as_str() == #field_name_str {
+                    let skip_ref_flag = fory_core::serializer::get_skip_ref_flag::<#wrapper_ty>(context.get_fory());
+                    let wrapper = fory_core::serializer::read_ref_info_data::<#wrapper_ty>(context, true, skip_ref_flag, false).unwrap();
+                    #var_name = Some(std::rc::Rc::<dyn #trait_ident>::from(wrapper));
+                }
+            }
+        } else if let Some((_, trait_name)) = is_arc_dyn_trait(ty) {
+            let wrapper_ty = quote::format_ident!("Dyn{}Arc", trait_name);
+            let trait_ident = quote::format_ident!("{}", trait_name);
+            let field_name_str = field.ident.as_ref().unwrap().to_string();
+            quote! {
+                if _field.field_name.as_str() == #field_name_str {
+                    let skip_ref_flag = fory_core::serializer::get_skip_ref_flag::<#wrapper_ty>(context.get_fory());
+                    let wrapper = fory_core::serializer::read_ref_info_data::<#wrapper_ty>(context, true, skip_ref_flag, false).unwrap();
+                    #var_name = Some(std::sync::Arc::<dyn #trait_ident + Send + Sync>::from(wrapper));
                 }
             }
         } else {

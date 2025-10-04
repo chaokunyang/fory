@@ -40,3 +40,55 @@ pub fn is_box_dyn_trait(ty: &Type) -> Option<&TypeTraitObject> {
     }
     None
 }
+
+/// Check if a type is `Rc<dyn Trait>` and return the trait type and trait name if it is
+pub fn is_rc_dyn_trait(ty: &Type) -> Option<(&TypeTraitObject, String)> {
+    if let Type::Path(TypePath { path, .. }) = ty {
+        if let Some(seg) = path.segments.last() {
+            if seg.ident == "Rc" {
+                if let PathArguments::AngleBracketed(args) = &seg.arguments {
+                    if let Some(GenericArgument::Type(Type::TraitObject(trait_obj))) =
+                        args.args.first()
+                    {
+                        // Extract trait name from the trait object
+                        if let Some(bound) = trait_obj.bounds.first() {
+                            if let syn::TypeParamBound::Trait(trait_bound) = bound {
+                                if let Some(segment) = trait_bound.path.segments.last() {
+                                    let trait_name = segment.ident.to_string();
+                                    return Some((trait_obj, trait_name));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Check if a type is `Arc<dyn Trait>` and return the trait type and trait name if it is
+pub fn is_arc_dyn_trait(ty: &Type) -> Option<(&TypeTraitObject, String)> {
+    if let Type::Path(TypePath { path, .. }) = ty {
+        if let Some(seg) = path.segments.last() {
+            if seg.ident == "Arc" {
+                if let PathArguments::AngleBracketed(args) = &seg.arguments {
+                    if let Some(GenericArgument::Type(Type::TraitObject(trait_obj))) =
+                        args.args.first()
+                    {
+                        // Extract trait name from the trait object
+                        if let Some(bound) = trait_obj.bounds.first() {
+                            if let syn::TypeParamBound::Trait(trait_bound) = bound {
+                                if let Some(segment) = trait_bound.path.segments.last() {
+                                    let trait_name = segment.ident.to_string();
+                                    return Some((trait_obj, trait_name));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
+}

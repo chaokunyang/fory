@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use crate::util::is_box_dyn_trait;
+use crate::util::{is_box_dyn_trait, is_rc_dyn_trait, is_arc_dyn_trait};
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::Field;
@@ -26,6 +26,16 @@ pub fn gen_reserved_space(fields: &[&Field]) -> TokenStream {
         if is_box_dyn_trait(ty).is_some() {
             quote! {
                 fory_core::types::SIZE_OF_REF_AND_TYPE
+            }
+        } else if let Some((_, trait_name)) = is_rc_dyn_trait(ty) {
+            let wrapper_ty = quote::format_ident!("Dyn{}Rc", trait_name);
+            quote! {
+                <#wrapper_ty as fory_core::serializer::Serializer>::fory_reserved_space() + fory_core::types::SIZE_OF_REF_AND_TYPE
+            }
+        } else if let Some((_, trait_name)) = is_arc_dyn_trait(ty) {
+            let wrapper_ty = quote::format_ident!("Dyn{}Arc", trait_name);
+            quote! {
+                <#wrapper_ty as fory_core::serializer::Serializer>::fory_reserved_space() + fory_core::types::SIZE_OF_REF_AND_TYPE
             }
         } else {
             quote! {
@@ -75,6 +85,26 @@ pub fn gen_write_data(fields: &[&Field]) -> TokenStream {
 
                         let serializer_fn = harness.get_serializer();
                         serializer_fn(any_ref, context, true);
+                    }
+                }
+            } else if let Some((_, trait_name)) = is_rc_dyn_trait(ty) {
+                let wrapper_ty = quote::format_ident!("Dyn{}Rc", trait_name);
+                let trait_ident = quote::format_ident!("{}", trait_name);
+                quote! {
+                    #name_str => {
+                        let wrapper = #wrapper_ty::from(self.#ident.clone() as std::rc::Rc<dyn #trait_ident>);
+                        let skip_ref_flag = fory_core::serializer::get_skip_ref_flag::<#wrapper_ty>(context.get_fory());
+                        fory_core::serializer::write_ref_info_data::<#wrapper_ty>(&wrapper, context, true, skip_ref_flag, false);
+                    }
+                }
+            } else if let Some((_, trait_name)) = is_arc_dyn_trait(ty) {
+                let wrapper_ty = quote::format_ident!("Dyn{}Arc", trait_name);
+                let trait_ident = quote::format_ident!("{}", trait_name);
+                quote! {
+                    #name_str => {
+                        let wrapper = #wrapper_ty::from(self.#ident.clone() as std::sync::Arc<dyn #trait_ident + Send + Sync>);
+                        let skip_ref_flag = fory_core::serializer::get_skip_ref_flag::<#wrapper_ty>(context.get_fory());
+                        fory_core::serializer::write_ref_info_data::<#wrapper_ty>(&wrapper, context, true, skip_ref_flag, false);
                     }
                 }
             } else {

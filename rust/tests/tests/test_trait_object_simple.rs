@@ -102,7 +102,7 @@ fn test_automatic_rc_wrapper_basic() {
     });
 
     // Convert to wrapper
-    let wrapper = DynAnimalRc::from(dog_rc.clone() as Rc<dyn Animal>);
+    let wrapper = AnimalRc::from(dog_rc.clone() as Rc<dyn Animal>);
 
     // Test wrapper functionality
     assert_eq!(wrapper.as_ref().name(), "Rex");
@@ -128,7 +128,7 @@ fn test_automatic_arc_wrapper_basic() {
     });
 
     // Convert to wrapper
-    let wrapper = DynAnimalArc::from(cat_arc.clone() as Arc<dyn Animal + Send + Sync>);
+    let wrapper = AnimalArc::from(cat_arc.clone() as Arc<dyn Animal + Send + Sync>);
 
     // Test wrapper functionality
     assert_eq!(wrapper.as_ref().name(), "Whiskers");
@@ -148,12 +148,12 @@ fn test_automatic_arc_wrapper_basic() {
 #[test]
 fn test_wrapper_polymorphism() {
     // Test that different concrete types work through the wrapper interface
-    let dog_wrapper = DynAnimalRc::from(Rc::new(Dog {
+    let dog_wrapper = AnimalRc::from(Rc::new(Dog {
         name: "Buddy".to_string(),
         breed: "Labrador".to_string(),
     }) as Rc<dyn Animal>);
 
-    let cat_wrapper = DynAnimalRc::from(Rc::new(Cat {
+    let cat_wrapper = AnimalRc::from(Rc::new(Cat {
         name: "Mittens".to_string(),
         color: "Gray".to_string(),
     }) as Rc<dyn Animal>);
@@ -178,18 +178,18 @@ fn test_wrapper_polymorphism() {
 #[test]
 fn test_wrapper_default_implementations() {
     // Test that wrapper types have proper Default implementations
-    let default_rc = DynAnimalRc::default();
+    let default_rc = AnimalRc::default();
     // Dog::default() should have empty name
     assert_eq!(default_rc.as_ref().name(), "");
 
-    let default_arc = DynAnimalArc::default();
+    let default_arc = AnimalArc::default();
     // Dog::default() should have empty name
     assert_eq!(default_arc.as_ref().name(), "");
 }
 
 #[test]
 fn test_wrapper_debug_formatting() {
-    let dog_wrapper = DynAnimalRc::from(Rc::new(Dog {
+    let dog_wrapper = AnimalRc::from(Rc::new(Dog {
         name: "Rex".to_string(),
         breed: "Golden Retriever".to_string(),
     }) as Rc<dyn Animal>);

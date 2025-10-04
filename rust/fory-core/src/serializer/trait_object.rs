@@ -83,8 +83,7 @@ macro_rules! register_trait_type {
         // 3. Auto-generate Arc wrapper type and conversions
         $crate::generate_arc_wrapper!($trait_name, $($impl_type),+);
 
-        // 4. Generate automatic registration helper function for wrapper types
-        $crate::generate_wrapper_registration!($trait_name);
+        // 4. Skip registration helper function for wrapper types - wrappers are not registered
 
         // 5. Serializer implementation for Box<dyn Trait> (existing functionality)
         impl $crate::serializer::Serializer for Box<dyn $trait_name> {
@@ -1136,9 +1135,9 @@ macro_rules! generate_rc_wrapper {
     ($trait_name:ident, $($impl_type:ty),+ $(,)?) => {
         $crate::paste::paste! {
             #[derive(Clone)]
-            pub struct [<Dyn $trait_name Rc>](std::rc::Rc<dyn $trait_name>);
+            pub struct [<$trait_name Rc>](std::rc::Rc<dyn $trait_name>);
 
-            impl [<Dyn $trait_name Rc>] {
+            impl [<$trait_name Rc>] {
                 pub fn new(inner: std::rc::Rc<dyn $trait_name>) -> Self {
                     Self(inner)
                 }
@@ -1156,25 +1155,25 @@ macro_rules! generate_rc_wrapper {
                 }
             }
 
-            impl From<std::rc::Rc<dyn $trait_name>> for [<Dyn $trait_name Rc>] {
+            impl From<std::rc::Rc<dyn $trait_name>> for [<$trait_name Rc>] {
                 fn from(rc: std::rc::Rc<dyn $trait_name>) -> Self {
                     Self::new(rc)
                 }
             }
 
-            impl From<[<Dyn $trait_name Rc>]> for std::rc::Rc<dyn $trait_name> {
-                fn from(wrapper: [<Dyn $trait_name Rc>]) -> Self {
+            impl From<[<$trait_name Rc>]> for std::rc::Rc<dyn $trait_name> {
+                fn from(wrapper: [<$trait_name Rc>]) -> Self {
                     wrapper.into_inner()
                 }
             }
 
-            impl std::default::Default for [<Dyn $trait_name Rc>] {
+            impl std::default::Default for [<$trait_name Rc>] {
                 fn default() -> Self {
                     Self(std::rc::Rc::new(<register_trait_type!(@first_type $($impl_type),+) as std::default::Default>::default()))
                 }
             }
 
-            impl std::fmt::Debug for [<Dyn $trait_name Rc>] {
+            impl std::fmt::Debug for [<$trait_name Rc>] {
                 fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                     // Try to show the actual content by downcasting to known types
                     let any_obj = self.0.as_any();
@@ -1188,7 +1187,7 @@ macro_rules! generate_rc_wrapper {
                 }
             }
 
-            impl $crate::serializer::Serializer for [<Dyn $trait_name Rc>] {
+            impl $crate::serializer::Serializer for [<$trait_name Rc>] {
             fn fory_write(&self, context: &mut $crate::resolver::context::WriteContext, is_field: bool) {
                 use $crate::types::{Mode, RefFlag, TypeId};
 
@@ -1304,10 +1303,42 @@ macro_rules! generate_rc_wrapper {
                 )))
             }
 
-            fn fory_type_id_dyn(&self, _fory: &$crate::fory::Fory) -> u32 {
-                // Return the wrapper's own type ID, not the concrete type's ID
-                // This is essential for collections of wrappers to work correctly
-                <Self as $crate::serializer::StructSerializer>::fory_type_index()
+            fn fory_get_type_id(_fory: &$crate::fory::Fory) -> u32
+            where
+                Self: Sized,
+            {
+                // Wrapper types are polymorphic like Box<dyn Trait> - return STRUCT type ID
+                $crate::types::TypeId::STRUCT as u32
+            }
+
+            fn fory_write_type_info(_context: &mut $crate::resolver::context::WriteContext, _is_field: bool)
+            where
+                Self: Sized,
+            {
+                // Wrapper types are polymorphic - type info is written per element like Box<dyn Serializer>
+            }
+
+            fn fory_read_type_info(_context: &mut $crate::resolver::context::ReadContext, _is_field: bool)
+            where
+                Self: Sized,
+            {
+                // Wrapper types are polymorphic - type info is read per element like Box<dyn Serializer>
+            }
+
+            fn fory_is_polymorphic() -> bool
+            where
+                Self: Sized,
+            {
+                true
+            }
+
+            fn fory_type_id_dyn(&self, fory: &$crate::fory::Fory) -> u32 {
+                // Return the concrete type's ID since wrapper types are not registered
+                let any_obj = self.0.as_any();
+                let concrete_type_id = any_obj.type_id();
+                fory.get_type_resolver()
+                    .get_fory_type_id(concrete_type_id)
+                    .expect("Type not registered for trait object")
             }
 
             fn fory_concrete_type_id(&self) -> std::any::TypeId {
@@ -1315,12 +1346,6 @@ macro_rules! generate_rc_wrapper {
             }
         }
 
-            impl $crate::serializer::StructSerializer for [<Dyn $trait_name Rc>] {
-                fn fory_type_index() -> u32 {
-                    // Use a unique index for Animal Rc wrapper to avoid conflicts
-                    19001
-                }
-            }
         }
     };
 }
@@ -1331,9 +1356,9 @@ macro_rules! generate_arc_wrapper {
     ($trait_name:ident, $($impl_type:ty),+ $(,)?) => {
         $crate::paste::paste! {
             #[derive(Clone)]
-            pub struct [<Dyn $trait_name Arc>](std::sync::Arc<dyn $trait_name + Send + Sync>);
+            pub struct [<$trait_name Arc>](std::sync::Arc<dyn $trait_name + Send + Sync>);
 
-            impl [<Dyn $trait_name Arc>] {
+            impl [<$trait_name Arc>] {
                 pub fn new(inner: std::sync::Arc<dyn $trait_name + Send + Sync>) -> Self {
                     Self(inner)
                 }
@@ -1351,25 +1376,25 @@ macro_rules! generate_arc_wrapper {
                 }
             }
 
-            impl From<std::sync::Arc<dyn $trait_name + Send + Sync>> for [<Dyn $trait_name Arc>] {
+            impl From<std::sync::Arc<dyn $trait_name + Send + Sync>> for [<$trait_name Arc>] {
             fn from(arc: std::sync::Arc<dyn $trait_name + Send + Sync>) -> Self {
                 Self::new(arc)
             }
         }
 
-            impl From<[<Dyn $trait_name Arc>]> for std::sync::Arc<dyn $trait_name + Send + Sync> {
-            fn from(wrapper: [<Dyn $trait_name Arc>]) -> Self {
+            impl From<[<$trait_name Arc>]> for std::sync::Arc<dyn $trait_name + Send + Sync> {
+            fn from(wrapper: [<$trait_name Arc>]) -> Self {
                 wrapper.into_inner()
             }
         }
 
-            impl std::default::Default for [<Dyn $trait_name Arc>] {
+            impl std::default::Default for [<$trait_name Arc>] {
             fn default() -> Self {
                 Self(std::sync::Arc::new(<register_trait_type!(@first_type $($impl_type),+) as std::default::Default>::default()))
             }
         }
 
-            impl std::fmt::Debug for [<Dyn $trait_name Arc>] {
+            impl std::fmt::Debug for [<$trait_name Arc>] {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 // Try to show the actual content by downcasting to known types
                 let any_obj = self.0.as_any();
@@ -1383,7 +1408,7 @@ macro_rules! generate_arc_wrapper {
             }
         }
 
-            impl $crate::serializer::Serializer for [<Dyn $trait_name Arc>] {
+            impl $crate::serializer::Serializer for [<$trait_name Arc>] {
             fn fory_write(&self, context: &mut $crate::resolver::context::WriteContext, is_field: bool) {
                 use $crate::types::{Mode, RefFlag, TypeId};
 
@@ -1499,10 +1524,42 @@ macro_rules! generate_arc_wrapper {
                 )))
             }
 
-            fn fory_type_id_dyn(&self, _fory: &$crate::fory::Fory) -> u32 {
-                // Return the wrapper's own type ID, not the concrete type's ID
-                // This is essential for collections of wrappers to work correctly
-                <Self as $crate::serializer::StructSerializer>::fory_type_index()
+            fn fory_get_type_id(_fory: &$crate::fory::Fory) -> u32
+            where
+                Self: Sized,
+            {
+                // Wrapper types are polymorphic like Box<dyn Trait> - return STRUCT type ID
+                $crate::types::TypeId::STRUCT as u32
+            }
+
+            fn fory_write_type_info(_context: &mut $crate::resolver::context::WriteContext, _is_field: bool)
+            where
+                Self: Sized,
+            {
+                // Wrapper types are polymorphic - type info is written per element like Box<dyn Serializer>
+            }
+
+            fn fory_read_type_info(_context: &mut $crate::resolver::context::ReadContext, _is_field: bool)
+            where
+                Self: Sized,
+            {
+                // Wrapper types are polymorphic - type info is read per element like Box<dyn Serializer>
+            }
+
+            fn fory_is_polymorphic() -> bool
+            where
+                Self: Sized,
+            {
+                true
+            }
+
+            fn fory_type_id_dyn(&self, fory: &$crate::fory::Fory) -> u32 {
+                // Return the concrete type's ID since wrapper types are not registered
+                let any_obj = self.0.as_any();
+                let concrete_type_id = any_obj.type_id();
+                fory.get_type_resolver()
+                    .get_fory_type_id(concrete_type_id)
+                    .expect("Type not registered for trait object")
             }
 
             fn fory_concrete_type_id(&self) -> std::any::TypeId {
@@ -1510,10 +1567,11 @@ macro_rules! generate_arc_wrapper {
             }
         }
 
-            impl $crate::serializer::StructSerializer for [<Dyn $trait_name Arc>] {
+            impl $crate::serializer::StructSerializer for [<$trait_name Arc>] {
                 fn fory_type_index() -> u32 {
-                    // Use a unique index for Animal Arc wrapper to avoid conflicts
-                    19002
+                    // Wrapper types should not be registered as struct types
+                    // This should not be called in normal operation
+                    0
                 }
             }
         }
@@ -1528,7 +1586,7 @@ macro_rules! generate_arc_wrapper {
 macro_rules! fory_rc_to_wrapper {
     ($field:expr, $trait_name:ident) => {
         $crate::paste::paste! {
-            [<Dyn $trait_name Rc>]::from($field)
+            [<$trait_name Rc>]::from($field)
         }
     };
 }
@@ -1546,7 +1604,7 @@ macro_rules! fory_wrapper_to_rc {
 macro_rules! fory_arc_to_wrapper {
     ($field:expr, $trait_name:ident) => {
         $crate::paste::paste! {
-            [<Dyn $trait_name Arc>]::from($field)
+            [<$trait_name Arc>]::from($field)
         }
     };
 }
@@ -1564,7 +1622,7 @@ macro_rules! fory_wrapper_to_arc {
 macro_rules! fory_vec_rc_to_wrapper {
     ($vec:expr, $trait_name:ident) => {
         $crate::paste::paste! {
-            $vec.into_iter().map(|item| [<Dyn $trait_name Rc>]::from(item)).collect()
+            $vec.into_iter().map(|item| [<$trait_name Rc>]::from(item)).collect()
         }
     };
 }
@@ -1593,23 +1651,8 @@ macro_rules! fory_map_wrapper_to_rc {
     };
 }
 
-/// Generate automatic registration helper function for wrapper types
-#[macro_export]
-macro_rules! generate_wrapper_registration {
-    ($trait_name:ident) => {
-        $crate::paste::paste! {
-            /// Register wrapper types for this trait with Fory
-            /// This function should be called after creating a Fory instance to register wrapper types
-            /// Note: These type IDs are specifically chosen to avoid conflicts with user types
-            pub fn [<register_ $trait_name:snake _wrappers>](fory: &mut $crate::fory::Fory) {
-                // Use fixed type IDs that are specifically allocated for Animal trait wrappers
-                // These IDs are chosen to be in a safe range that won't conflict with user types
-                fory.register::<[<Dyn $trait_name Rc>]>(19001);  // Fixed ID for Animal Rc wrapper
-                fory.register::<[<Dyn $trait_name Arc>]>(19002); // Fixed ID for Animal Arc wrapper
-            }
-        }
-    };
-}
+// Wrapper registration is removed - wrapper types should not be registered
+// They are only used to work around the type system limitation for Rc/Arc<dyn Trait>
 
 // Note: The automatic wrapper approach completely eliminates manual wrapper usage.
 // Users call register_trait_type!(Animal, Dog, Cat) once and get transparent conversions.

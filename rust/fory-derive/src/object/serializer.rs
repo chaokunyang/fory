@@ -190,33 +190,42 @@ fn generate_default_impl(ast: &syn::DeriveInput) -> proc_macro2::TokenStream {
     if let Data::Struct(s) = &ast.data {
         let fields = sorted_fields(&s.fields);
 
+        use super::util::{
+            classify_trait_object_field, create_wrapper_types_arc, create_wrapper_types_rc,
+            TraitObjectField,
+        };
+
         let field_inits = fields.iter().map(|field| {
             let ident = &field.ident;
             let ty = &field.ty;
 
-            use crate::util::{is_arc_dyn_trait, is_rc_dyn_trait};
-
-            if let Some((_, trait_name)) = is_rc_dyn_trait(ty) {
-                let wrapper_ty = quote::format_ident!("{}Rc", trait_name);
-                let trait_ident = quote::format_ident!("{}", trait_name);
-                quote! {
-                    #ident: {
-                        let wrapper = #wrapper_ty::default();
-                        std::rc::Rc::<dyn #trait_ident>::from(wrapper)
+            match classify_trait_object_field(ty) {
+                TraitObjectField::RcDyn(trait_name) => {
+                    let types = create_wrapper_types_rc(&trait_name);
+                    let wrapper_ty = types.wrapper_ty;
+                    let trait_ident = types.trait_ident;
+                    quote! {
+                        #ident: {
+                            let wrapper = #wrapper_ty::default();
+                            std::rc::Rc::<dyn #trait_ident>::from(wrapper)
+                        }
                     }
                 }
-            } else if let Some((_, trait_name)) = is_arc_dyn_trait(ty) {
-                let wrapper_ty = quote::format_ident!("{}Arc", trait_name);
-                let trait_ident = quote::format_ident!("{}", trait_name);
-                quote! {
-                    #ident: {
-                        let wrapper = #wrapper_ty::default();
-                        std::sync::Arc::<dyn #trait_ident>::from(wrapper)
+                TraitObjectField::ArcDyn(trait_name) => {
+                    let types = create_wrapper_types_arc(&trait_name);
+                    let wrapper_ty = types.wrapper_ty;
+                    let trait_ident = types.trait_ident;
+                    quote! {
+                        #ident: {
+                            let wrapper = #wrapper_ty::default();
+                            std::sync::Arc::<dyn #trait_ident>::from(wrapper)
+                        }
                     }
                 }
-            } else {
-                quote! {
-                    #ident: Default::default()
+                _ => {
+                    quote! {
+                        #ident: Default::default()
+                    }
                 }
             }
         });

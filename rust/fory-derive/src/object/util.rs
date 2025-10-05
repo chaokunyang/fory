@@ -15,12 +15,99 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use crate::util::is_box_dyn_trait;
+use crate::util::{
+    detect_collection_with_trait_object, is_arc_dyn_trait, is_box_dyn_trait, is_rc_dyn_trait,
+    CollectionTraitInfo,
+};
 use fory_core::types::{TypeId, BASIC_TYPE_NAMES, CONTAINER_TYPE_NAMES, PRIMITIVE_ARRAY_TYPE_MAP};
-use proc_macro2::TokenStream;
-use quote::{quote, ToTokens};
+use proc_macro2::{Ident, TokenStream};
+use quote::{format_ident, quote, ToTokens};
 use std::fmt;
 use syn::{parse_str, Field, GenericArgument, PathArguments, Type};
+
+pub(super) fn contains_trait_object(ty: &Type) -> bool {
+    match ty {
+        Type::TraitObject(_) => true,
+        Type::Path(type_path) => {
+            if is_box_dyn_trait(ty).is_some()
+                || is_rc_dyn_trait(ty).is_some()
+                || is_arc_dyn_trait(ty).is_some()
+            {
+                return true;
+            }
+
+            if let Some(seg) = type_path.path.segments.last() {
+                if let PathArguments::AngleBracketed(args) = &seg.arguments {
+                    return args.args.iter().any(|arg| {
+                        if let GenericArgument::Type(inner_ty) = arg {
+                            contains_trait_object(inner_ty)
+                        } else {
+                            false
+                        }
+                    });
+                }
+            }
+            false
+        }
+        _ => false,
+    }
+}
+
+pub(super) struct WrapperTypes {
+    pub wrapper_ty: Ident,
+    pub trait_ident: Ident,
+}
+
+pub(super) fn create_wrapper_types_rc(trait_name: &str) -> WrapperTypes {
+    WrapperTypes {
+        wrapper_ty: format_ident!("{}Rc", trait_name),
+        trait_ident: format_ident!("{}", trait_name),
+    }
+}
+
+pub(super) fn create_wrapper_types_arc(trait_name: &str) -> WrapperTypes {
+    WrapperTypes {
+        wrapper_ty: format_ident!("{}Arc", trait_name),
+        trait_ident: format_ident!("{}", trait_name),
+    }
+}
+
+#[derive(Debug)]
+pub(super) enum TraitObjectField {
+    BoxDyn,
+    RcDyn(String),
+    ArcDyn(String),
+    VecRc(String),
+    VecArc(String),
+    HashMapRc(Box<Type>, String),
+    HashMapArc(Box<Type>, String),
+    ContainsTraitObject,
+    None,
+}
+
+pub(super) fn classify_trait_object_field(ty: &Type) -> TraitObjectField {
+    if is_box_dyn_trait(ty).is_some() {
+        return TraitObjectField::BoxDyn;
+    }
+    if let Some((_, trait_name)) = is_rc_dyn_trait(ty) {
+        return TraitObjectField::RcDyn(trait_name);
+    }
+    if let Some((_, trait_name)) = is_arc_dyn_trait(ty) {
+        return TraitObjectField::ArcDyn(trait_name);
+    }
+    if let Some(collection_info) = detect_collection_with_trait_object(ty) {
+        return match collection_info {
+            CollectionTraitInfo::VecRc(t) => TraitObjectField::VecRc(t),
+            CollectionTraitInfo::VecArc(t) => TraitObjectField::VecArc(t),
+            CollectionTraitInfo::HashMapRc(k, t) => TraitObjectField::HashMapRc(k, t),
+            CollectionTraitInfo::HashMapArc(k, t) => TraitObjectField::HashMapArc(k, t),
+        };
+    }
+    if contains_trait_object(ty) {
+        return TraitObjectField::ContainsTraitObject;
+    }
+    TraitObjectField::None
+}
 
 #[derive(Debug)]
 pub(super) struct TypeNode {

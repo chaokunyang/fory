@@ -654,103 +654,6 @@ macro_rules! generate_smart_pointer_serializer {
     };
 }
 
-/// Macro to generate serializers for Any trait objects
-#[macro_export]
-macro_rules! generate_any_trait_serializers {
-    () => {
-        // Generate for Box<dyn Any>
-        $crate::generate_any_serializer!(Box);
-        // Generate for Rc<dyn Any>
-        $crate::generate_any_serializer!(Rc);
-        // Generate for Arc<dyn Any>
-        $crate::generate_any_serializer!(Arc);
-    };
-}
-
-/// Macro to generate serializer for Any trait with specific pointer type
-#[macro_export]
-macro_rules! generate_any_serializer {
-    ($pointer_type:ident) => {
-        impl Default for $pointer_type<dyn std::any::Any> {
-            fn default() -> Self {
-                panic!("{}<<dyn Any>> cannot be default-constructed", stringify!($pointer_type))
-            }
-        }
-
-        impl $crate::serializer::Serializer for $pointer_type<dyn std::any::Any> {
-            fn fory_write(&self, context: &mut $crate::resolver::context::WriteContext, is_field: bool) {
-                use $crate::types::{Mode, RefFlag, TypeId};
-
-                context.writer.write_i8(RefFlag::NotNullValue as i8);
-
-                let concrete_type_id = (**self).type_id();
-
-                if let Some(fory_type_id) = context.get_fory().get_type_resolver().get_fory_type_id(concrete_type_id) {
-                    context.writer.write_varuint32(fory_type_id);
-
-                    if context.get_fory().get_mode() == &Mode::Compatible
-                        && (fory_type_id & 0xff == TypeId::NAMED_COMPATIBLE_STRUCT as u32
-                            || fory_type_id & 0xff == TypeId::COMPATIBLE_STRUCT as u32)
-                    {
-                        let meta_index = context.push_meta(concrete_type_id) as u32;
-                        context.writer.write_varuint32(meta_index);
-                    }
-
-                    // Now we need to serialize the concrete data
-                    // This requires complex type registry lookup - for now, error out
-                    panic!("{}<<dyn Any>> serialization requires advanced type registry - not yet implemented", stringify!($pointer_type));
-                } else {
-                    panic!("Type {:?} not registered for {}<<dyn Any>> serialization", concrete_type_id, stringify!($pointer_type));
-                }
-            }
-
-            fn fory_write_data(&self, _context: &mut $crate::resolver::context::WriteContext, _is_field: bool) {
-                panic!("fory_write_data should not be called directly on {}<<dyn Any>>", stringify!($pointer_type));
-            }
-
-            fn fory_type_id_dyn(&self, fory: &$crate::fory::Fory) -> u32 {
-                let concrete_type_id = (**self).type_id();
-                fory.get_type_resolver()
-                    .get_fory_type_id(concrete_type_id)
-                    .unwrap_or_else(|| panic!("Type {:?} not registered for {}<<dyn Any>>", concrete_type_id, stringify!($pointer_type)))
-            }
-
-            fn fory_is_polymorphic() -> bool {
-                true
-            }
-
-            fn fory_write_type_info(_context: &mut $crate::resolver::context::WriteContext, _is_field: bool) {
-                // Pointer<dyn Any> is polymorphic - type info is written per element
-            }
-
-            fn fory_read_type_info(_context: &mut $crate::resolver::context::ReadContext, _is_field: bool) {
-                // Pointer<dyn Any> is polymorphic - type info is read per element
-            }
-
-            fn fory_read(_context: &mut $crate::resolver::context::ReadContext, _is_field: bool) -> Result<Self, $crate::error::Error>
-            where
-                Self: Sized + Default,
-            {
-                // Any trait deserialization requires complex type registry
-                Err($crate::error::Error::Other($crate::error::AnyhowError::msg(
-                    format!("{}<<dyn Any>> deserialization not yet implemented", stringify!($pointer_type))
-                )))
-            }
-
-            fn fory_read_data(_context: &mut $crate::resolver::context::ReadContext, _is_field: bool) -> Result<Self, $crate::error::Error>
-            where
-                Self: Sized + Default,
-            {
-                panic!("fory_read_data should not be called directly on {}<<dyn Any>>", stringify!($pointer_type));
-            }
-
-            fn fory_concrete_type_id(&self) -> std::any::TypeId {
-                (**self).type_id()
-            }
-        }
-    };
-}
-
 /// Helper macros for automatic conversions in derive code
 /// These are used by fory-derive to generate transparent conversions
 ///
@@ -782,24 +685,6 @@ macro_rules! wrap_arc {
     };
 }
 
-/// Convert field of type Arc<dyn Trait> to wrapper for serialization (legacy name)
-#[macro_export]
-macro_rules! fory_arc_to_wrapper {
-    ($field:expr, $trait_name:ident) => {
-        $crate::paste::paste! {
-            [<$trait_name Arc>]::from($field)
-        }
-    };
-}
-
-/// Convert wrapper back to Arc<dyn Trait> for deserialization
-#[macro_export]
-macro_rules! fory_wrapper_to_arc {
-    ($wrapper:expr, $trait_name:ident) => {
-        std::sync::Arc::<dyn $trait_name>::from($wrapper)
-    };
-}
-
 /// Convert Vec<Rc<dyn Trait>> to Vec<wrapper> for serialization
 #[macro_export]
 macro_rules! wrap_vec_rc {
@@ -809,40 +694,3 @@ macro_rules! wrap_vec_rc {
         }
     };
 }
-
-/// Convert Vec<wrapper> back to Vec<Rc<dyn Trait>> for deserialization
-#[macro_export]
-macro_rules! fory_vec_wrapper_to_rc {
-    ($vec:expr, $trait_name:ident) => {
-        $vec.into_iter()
-            .map(|item| std::rc::Rc::<dyn $trait_name>::from(item))
-            .collect()
-    };
-}
-
-/// Convert HashMap<K, Rc<dyn Trait>> to HashMap<K, wrapper> for serialization
-#[macro_export]
-macro_rules! fory_map_rc_to_wrapper {
-    ($map:expr, $trait_name:ident) => {
-        $map.into_iter()
-            .map(|(k, v)| (k, trait_object_rc_wrapper::from(v)))
-            .collect()
-    };
-}
-
-/// Convert HashMap<K, wrapper> back to HashMap<K, Rc<dyn Trait>> for deserialization
-#[macro_export]
-macro_rules! fory_map_wrapper_to_rc {
-    ($map:expr, $trait_name:ident) => {
-        $map.into_iter()
-            .map(|(k, v)| (k, std::rc::Rc::<dyn $trait_name>::from(v)))
-            .collect()
-    };
-}
-
-// Wrapper registration is removed - wrapper types should not be registered
-// They are only used to work around the type system limitation for Rc/Arc<dyn Trait>
-
-// Note: The automatic wrapper approach completely eliminates manual wrapper usage.
-// Users call register_trait_type!(Animal, Dog, Cat) once and get transparent conversions.
-// The derive macro handles all wrapper conversions automatically.

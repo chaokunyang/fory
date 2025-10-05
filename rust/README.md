@@ -101,31 +101,29 @@ Serialize trait objects using `Box<dyn Trait>`:
 
 ```rust
 use fory_core::{Fory, register_trait_type};
-use fory_derive::{Fory, fory_trait};
+use fory_core::serializer::Serializer;
+use fory_derive::Fory;
 use fory_core::types::Mode;
 
-#[fory_trait]
-trait Animal {
+trait Animal: Serializer {
     fn speak(&self) -> String;
     fn name(&self) -> &str;
 }
 
-#[derive(Fory, Clone)]
+#[derive(Fory)]
 struct Dog { name: String, breed: String }
 
 impl Animal for Dog {
     fn speak(&self) -> String { "Woof!".to_string() }
     fn name(&self) -> &str { &self.name }
-    fn as_any(&self) -> &dyn std::any::Any { self }
 }
 
-#[derive(Fory, Clone)]
+#[derive(Fory)]
 struct Cat { name: String, color: String }
 
 impl Animal for Cat {
     fn speak(&self) -> String { "Meow!".to_string() }
     fn name(&self) -> &str { &self.name }
-    fn as_any(&self) -> &dyn std::any::Any { self }
 }
 
 register_trait_type!(Animal, Dog, Cat);
@@ -200,7 +198,7 @@ assert_eq!(deserialized.animals_arc[0].speak(), "Woof!");
 
 **Wrapper Types for Standalone Usage**
 
-Due to Rust's orphan rule, `Rc<dyn Trait>` and `Arc<dyn Trait>` cannot implement `Serializer` directly. For standalone serialization (not inside struct fields), use the auto-generated wrapper types:
+Due to Rust's orphan rule, `Rc<dyn Trait>` and `Arc<dyn Trait>` cannot implement `Serializer` directly. For standalone serialization (not inside struct fields), use the fory auto-generated wrapper types:
 
 ```rust
 // register_trait_type! generates: AnimalRc and AnimalArc
@@ -220,6 +218,8 @@ let deserialized: AnimalRc = fory.deserialize(&serialized)?;
 let unwrapped: Rc<dyn Animal> = deserialized.unwrap();
 assert_eq!(unwrapped.name(), "Rex");
 ```
+
+For struct fields with `Rc<dyn Trait>` and `Arc<dyn Trait>` type, fory will generate code automatically to convert such fields to wrappers for serialization and deserialization.
 
 ### Row-Based Serialization
 
@@ -320,7 +320,7 @@ assert_eq!(prefs.values().get(0), "en");
 
 - Structs with `#[derive(Fory)]` or `#[derive(ForyRow)]`
 - Enums with `#[derive(Fory)]`
-- Trait objects with `#[fory_trait]`
+- Trait objects
 
 ## ⚡ Performance
 

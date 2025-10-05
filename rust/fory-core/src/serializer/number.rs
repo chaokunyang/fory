@@ -45,6 +45,10 @@ macro_rules! impl_num_serializer {
             fn fory_type_id_dyn(&self, _fory: &Fory) -> u32 {
                 $field_type as u32
             }
+
+            fn as_any(&self) -> &dyn std::any::Any {
+                self
+            }
         }
     };
 }

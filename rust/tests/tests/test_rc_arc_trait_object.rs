@@ -17,9 +17,9 @@
 
 use fory_core::fory::Fory;
 use fory_core::register_trait_type;
+use fory_core::serializer::Serializer;
 use fory_core::types::Mode;
 use fory_core::{unwrap_rc, wrap_rc, wrap_vec_rc};
-use fory_derive::fory_trait;
 use fory_derive::Fory;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -29,8 +29,7 @@ fn fory_compatible() -> Fory {
     Fory::default().mode(Mode::Compatible)
 }
 
-#[fory_trait]
-trait Animal: Send + Sync {
+trait Animal: Serializer + Send + Sync {
     fn speak(&self) -> String;
     fn name(&self) -> &str;
 }
@@ -49,10 +48,6 @@ impl Animal for Dog {
     fn name(&self) -> &str {
         &self.name
     }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
 }
 
 #[derive(Fory, Debug, PartialEq)]
@@ -68,10 +63,6 @@ impl Animal for Cat {
 
     fn name(&self) -> &str {
         &self.name
-    }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
     }
 }
 

@@ -193,6 +193,8 @@ pub trait Serializer: 'static {
     {
         self
     }
+
+    fn as_any(&self) -> &dyn std::any::Any;
 }
 
 pub trait StructSerializer: Serializer + 'static {

@@ -67,6 +67,10 @@ fn test_use() {
         fn fory_type_id_dyn(&self, fory: &Fory) -> u32 {
             Self::fory_get_type_id(fory)
         }
+
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
     }
     let mut fory = Fory::default().mode(Compatible).xlang(true);
     let item = Item { f1: 1, f2: 2 };

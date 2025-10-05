@@ -91,4 +91,8 @@ impl Serializer for String {
     fn fory_type_id_dyn(&self, _fory: &Fory) -> u32 {
         TypeId::STRING as u32
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }

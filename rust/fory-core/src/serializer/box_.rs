@@ -49,4 +49,8 @@ impl<T: Serializer + Default> Serializer for Box<T> {
     fn fory_type_id_dyn(&self, fory: &Fory) -> u32 {
         (**self).fory_type_id_dyn(fory)
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }

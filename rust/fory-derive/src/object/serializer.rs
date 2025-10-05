@@ -149,6 +149,10 @@ pub fn derive_serializer(ast: &syn::DeriveInput) -> TokenStream {
                 Self::fory_get_type_id(fory)
             }
 
+            fn as_any(&self) -> &dyn std::any::Any {
+                self
+            }
+
             fn fory_reserved_space() -> usize {
                 #reserved_space_ts
             }

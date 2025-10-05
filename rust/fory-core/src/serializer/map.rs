@@ -236,4 +236,8 @@ impl<K: Serializer + Default + Eq + std::hash::Hash, V: Serializer + Default> Se
     fn fory_type_id_dyn(&self, _fory: &Fory) -> u32 {
         TypeId::MAP as u32
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }

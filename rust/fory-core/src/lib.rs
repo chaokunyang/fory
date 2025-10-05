@@ -67,10 +67,9 @@
 //!
 //! #### Box-Based Trait Objects
 //!
-//! Define custom traits with `#[fory_trait]` and register implementations:
+//! Define custom traits and register implementations:
 //!
 //! ```ignore
-//! #[fory_trait]
 //! trait Animal {
 //!     fn speak(&self) -> String;
 //! }

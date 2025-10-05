@@ -55,4 +55,8 @@ impl<T: Serializer + Default + Eq + std::hash::Hash> Serializer for HashSet<T> {
     fn fory_type_id_dyn(&self, _fory: &Fory) -> u32 {
         TypeId::SET as u32
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }

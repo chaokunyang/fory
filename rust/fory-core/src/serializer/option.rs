@@ -64,4 +64,8 @@ impl<T: Serializer + Default> Serializer for Option<T> {
     fn fory_is_none(&self) -> bool {
         self.is_none()
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }

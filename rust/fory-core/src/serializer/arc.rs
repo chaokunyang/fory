@@ -74,4 +74,8 @@ impl<T: Serializer + Default + Send + Sync + 'static> Serializer for Arc<T> {
     fn fory_type_id_dyn(&self, fory: &Fory) -> u32 {
         (**self).fory_type_id_dyn(fory)
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }

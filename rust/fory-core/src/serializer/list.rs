@@ -102,4 +102,8 @@ impl<T: Serializer + Default> Serializer for Vec<T> {
             None => TypeId::LIST as u32,
         }
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }

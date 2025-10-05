@@ -110,17 +110,17 @@ macro_rules! resolve_and_deserialize {
 /// - `Default` implementation for `Box<dyn Trait>` (uses first registered type)
 /// - `from_any_internal()` helper for deserializing trait objects
 ///
-/// **Note**: Your trait must provide `as_any()` method returning `&dyn Any`.
-/// Use the `#[fory_trait]` attribute to automatically add this.
+/// **Note**: Your trait must extend the `Serializer` trait.
+/// The `as_any()` method is automatically provided by the `Serializer` trait.
 ///
 /// # Example
 ///
 /// ```rust,ignore
 /// use fory_core::register_trait_type;
-/// use fory_derive::{fory_trait, Fory};
+/// use fory_core::serializer::Serializer;
+/// use fory_derive::Fory;
 ///
-/// #[fory_trait]
-/// trait Animal {
+/// trait Animal: Serializer {
 ///     fn speak(&self) -> String;
 ///     fn name(&self) -> &str;
 /// }
@@ -134,13 +134,11 @@ macro_rules! resolve_and_deserialize {
 /// impl Animal for Dog {
 ///     fn speak(&self) -> String { "Woof!".to_string() }
 ///     fn name(&self) -> &str { &self.name }
-///     fn as_any(&self) -> &dyn std::any::Any { self }
 /// }
 ///
 /// impl Animal for Cat {
 ///     fn speak(&self) -> String { "Meow!".to_string() }
 ///     fn name(&self) -> &str { &self.name }
-///     fn as_any(&self) -> &dyn std::any::Any { self }
 /// }
 ///
 /// // Register the trait and its implementations
@@ -168,7 +166,7 @@ macro_rules! register_trait_type {
         // 5. Serializer implementation for Box<dyn Trait> (existing functionality)
         impl $crate::serializer::Serializer for Box<dyn $trait_name> {
             fn fory_write(&self, context: &mut $crate::resolver::context::WriteContext, is_field: bool) {
-                let any_ref = self.as_any();
+                let any_ref = <dyn $trait_name as $crate::serializer::Serializer>::as_any(&**self);
                 let concrete_type_id = any_ref.type_id();
 
                 if let Some(fory_type_id) = context.get_fory().get_type_resolver().get_fory_type_id(concrete_type_id) {
@@ -185,7 +183,7 @@ macro_rules! register_trait_type {
             }
 
             fn fory_type_id_dyn(&self, fory: &$crate::fory::Fory) -> u32 {
-                let any_ref = self.as_any();
+                let any_ref = <dyn $trait_name as $crate::serializer::Serializer>::as_any(&**self);
                 let concrete_type_id = any_ref.type_id();
                 fory.get_type_resolver()
                     .get_fory_type_id(concrete_type_id)
@@ -234,7 +232,11 @@ macro_rules! register_trait_type {
             }
 
             fn fory_concrete_type_id(&self) -> std::any::TypeId {
-                self.as_any().type_id()
+                <dyn $trait_name as $crate::serializer::Serializer>::as_any(&**self).type_id()
+            }
+
+            fn as_any(&self) -> &dyn std::any::Any {
+                <dyn $trait_name as $crate::serializer::Serializer>::as_any(&**self)
             }
         }
 
@@ -318,7 +320,7 @@ macro_rules! generate_smart_pointer_wrapper {
 
             impl std::fmt::Debug for [<$trait_name Rc>] {
                 fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                    let any_obj = self.0.as_any();
+                    let any_obj = <dyn $trait_name as $crate::serializer::Serializer>::as_any(&*self.0);
                     $(
                         if let Some(concrete) = any_obj.downcast_ref::<$impl_type>() {
                             return write!(f, "{}Rc({:?})", stringify!($trait_name), concrete);
@@ -375,7 +377,7 @@ macro_rules! generate_smart_pointer_wrapper {
 
             impl std::fmt::Debug for [<$trait_name Arc>] {
                 fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                    let any_obj = self.0.as_any();
+                    let any_obj = <dyn $trait_name as $crate::serializer::Serializer>::as_any(&*self.0);
                     $(
                         if let Some(concrete) = any_obj.downcast_ref::<$impl_type>() {
                             return write!(f, "{}Arc({:?})", stringify!($trait_name), concrete);
@@ -396,7 +398,7 @@ macro_rules! impl_smart_pointer_serializer {
     ($wrapper_name:ident, $constructor_expr:expr, $pointer_type:ty, $trait_name:ident, $($impl_type:ty),+) => {
         impl $crate::serializer::Serializer for $wrapper_name {
             fn fory_write(&self, context: &mut $crate::resolver::context::WriteContext, is_field: bool) {
-                let any_ref = self.0.as_any();
+                let any_ref = <dyn $trait_name as $crate::serializer::Serializer>::as_any(&*self.0);
                 let concrete_type_id = any_ref.type_id();
 
                 if let Some(fory_type_id) = context.get_fory().get_type_resolver().get_fory_type_id(concrete_type_id) {
@@ -408,7 +410,7 @@ macro_rules! impl_smart_pointer_serializer {
             }
 
             fn fory_write_data(&self, context: &mut $crate::resolver::context::WriteContext, is_field: bool) {
-                let any_obj = self.0.as_any();
+                let any_obj = <dyn $trait_name as $crate::serializer::Serializer>::as_any(&*self.0);
                 $crate::downcast_and_serialize!(any_obj, context, is_field, $trait_name, $($impl_type),+);
             }
 
@@ -481,7 +483,7 @@ macro_rules! impl_smart_pointer_serializer {
             }
 
             fn fory_type_id_dyn(&self, fory: &$crate::fory::Fory) -> u32 {
-                let any_obj = self.0.as_any();
+                let any_obj = <dyn $trait_name as $crate::serializer::Serializer>::as_any(&*self.0);
                 let concrete_type_id = any_obj.type_id();
                 fory.get_type_resolver()
                     .get_fory_type_id(concrete_type_id)
@@ -489,7 +491,11 @@ macro_rules! impl_smart_pointer_serializer {
             }
 
             fn fory_concrete_type_id(&self) -> std::any::TypeId {
-                self.0.as_any().type_id()
+                <dyn $trait_name as $crate::serializer::Serializer>::as_any(&*self.0).type_id()
+            }
+
+            fn as_any(&self) -> &dyn std::any::Any {
+                <dyn $trait_name as $crate::serializer::Serializer>::as_any(&*self.0)
             }
         }
 
@@ -521,6 +527,10 @@ impl Serializer for Box<dyn Serializer> {
 
     fn fory_type_id_dyn(&self, fory: &Fory) -> u32 {
         (**self).fory_type_id_dyn(fory)
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        (**self).as_any()
     }
 
     fn fory_is_polymorphic() -> bool {

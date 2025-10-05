@@ -335,18 +335,18 @@ macro_rules! generate_smart_pointer_wrapper {
     (Arc, $trait_name:ident, $($impl_type:ty),+ $(,)?) => {
         $crate::paste::paste! {
             #[derive(Clone)]
-            pub struct [<$trait_name Arc>](std::sync::Arc<dyn $trait_name + Send + Sync>);
+            pub struct [<$trait_name Arc>](std::sync::Arc<dyn $trait_name>);
 
             impl [<$trait_name Arc>] {
-                pub fn new(inner: std::sync::Arc<dyn $trait_name + Send + Sync>) -> Self {
+                pub fn new(inner: std::sync::Arc<dyn $trait_name>) -> Self {
                     Self(inner)
                 }
 
-                pub fn into_inner(self) -> std::sync::Arc<dyn $trait_name + Send + Sync> {
+                pub fn into_inner(self) -> std::sync::Arc<dyn $trait_name> {
                     self.0
                 }
 
-                pub fn unwrap(self) -> std::sync::Arc<dyn $trait_name + Send + Sync> {
+                pub fn unwrap(self) -> std::sync::Arc<dyn $trait_name> {
                     self.0
                 }
 
@@ -355,13 +355,13 @@ macro_rules! generate_smart_pointer_wrapper {
                 }
             }
 
-            impl From<std::sync::Arc<dyn $trait_name + Send + Sync>> for [<$trait_name Arc>] {
-                fn from(ptr: std::sync::Arc<dyn $trait_name + Send + Sync>) -> Self {
+            impl From<std::sync::Arc<dyn $trait_name>> for [<$trait_name Arc>] {
+                fn from(ptr: std::sync::Arc<dyn $trait_name>) -> Self {
                     Self::new(ptr)
                 }
             }
 
-            impl From<[<$trait_name Arc>]> for std::sync::Arc<dyn $trait_name + Send + Sync> {
+            impl From<[<$trait_name Arc>]> for std::sync::Arc<dyn $trait_name> {
                 fn from(wrapper: [<$trait_name Arc>]) -> Self {
                     wrapper.into_inner()
                 }
@@ -385,7 +385,7 @@ macro_rules! generate_smart_pointer_wrapper {
                 }
             }
 
-            $crate::impl_smart_pointer_serializer!([<$trait_name Arc>], std::sync::Arc::new, std::sync::Arc<dyn $trait_name + Send + Sync>, $trait_name, $($impl_type),+);
+            $crate::impl_smart_pointer_serializer!([<$trait_name Arc>], std::sync::Arc::new, std::sync::Arc<dyn $trait_name>, $trait_name, $($impl_type),+);
         }
     };
 }
@@ -483,6 +483,7 @@ macro_rules! impl_smart_pointer_serializer {
                 self.0.as_any().type_id()
             }
         }
+
     };
 }
 
@@ -755,7 +756,7 @@ macro_rules! generate_any_serializer {
 ///
 /// Convert field of type Rc<dyn Trait> to wrapper for serialization
 #[macro_export]
-macro_rules! fory_rc_to_wrapper {
+macro_rules! wrap_rc {
     ($field:expr, $trait_name:ident) => {
         $crate::paste::paste! {
             [<$trait_name Rc>]::from($field)
@@ -765,13 +766,23 @@ macro_rules! fory_rc_to_wrapper {
 
 /// Convert wrapper back to Rc<dyn Trait> for deserialization
 #[macro_export]
-macro_rules! fory_wrapper_to_rc {
+macro_rules! unwrap_rc {
     ($wrapper:expr, $trait_name:ident) => {
         std::rc::Rc::<dyn $trait_name>::from($wrapper)
     };
 }
 
-/// Convert field of type Arc<dyn Trait> to wrapper for serialization
+/// Convert Arc<dyn Trait> to wrapper for serialization
+#[macro_export]
+macro_rules! wrap_arc {
+    ($field:expr, $trait_name:ident) => {
+        $crate::paste::paste! {
+            [<$trait_name Arc>]::from($field)
+        }
+    };
+}
+
+/// Convert field of type Arc<dyn Trait> to wrapper for serialization (legacy name)
 #[macro_export]
 macro_rules! fory_arc_to_wrapper {
     ($field:expr, $trait_name:ident) => {
@@ -785,13 +796,13 @@ macro_rules! fory_arc_to_wrapper {
 #[macro_export]
 macro_rules! fory_wrapper_to_arc {
     ($wrapper:expr, $trait_name:ident) => {
-        std::sync::Arc::<dyn $trait_name + Send + Sync>::from($wrapper)
+        std::sync::Arc::<dyn $trait_name>::from($wrapper)
     };
 }
 
 /// Convert Vec<Rc<dyn Trait>> to Vec<wrapper> for serialization
 #[macro_export]
-macro_rules! fory_vec_rc_to_wrapper {
+macro_rules! wrap_vec_rc {
     ($vec:expr, $trait_name:ident) => {
         $crate::paste::paste! {
             $vec.into_iter().map(|item| [<$trait_name Rc>]::from(item)).collect()

@@ -92,3 +92,60 @@ pub fn is_arc_dyn_trait(ty: &Type) -> Option<(&TypeTraitObject, String)> {
     }
     None
 }
+
+#[derive(Debug, Clone)]
+pub enum CollectionTraitInfo {
+    VecRc(String),
+    VecArc(String),
+    HashMapRc(Box<Type>, String),
+    HashMapArc(Box<Type>, String),
+}
+
+/// Check if a type is a collection containing Rc<dyn Trait> or Arc<dyn Trait>
+pub fn detect_collection_with_trait_object(ty: &Type) -> Option<CollectionTraitInfo> {
+    if let Type::Path(TypePath { path, .. }) = ty {
+        if let Some(seg) = path.segments.last() {
+            match seg.ident.to_string().as_str() {
+                "Vec" => {
+                    if let PathArguments::AngleBracketed(args) = &seg.arguments {
+                        if let Some(GenericArgument::Type(inner_ty)) = args.args.first() {
+                            if let Some((_, trait_name)) = is_rc_dyn_trait(inner_ty) {
+                                return Some(CollectionTraitInfo::VecRc(trait_name));
+                            }
+                            if let Some((_, trait_name)) = is_arc_dyn_trait(inner_ty) {
+                                return Some(CollectionTraitInfo::VecArc(trait_name));
+                            }
+                        }
+                    }
+                }
+                "HashMap" => {
+                    if let PathArguments::AngleBracketed(args) = &seg.arguments {
+                        let args_vec: Vec<_> = args.args.iter().collect();
+                        if args_vec.len() == 2 {
+                            if let (
+                                GenericArgument::Type(key_ty),
+                                GenericArgument::Type(value_ty),
+                            ) = (args_vec[0], args_vec[1])
+                            {
+                                if let Some((_, trait_name)) = is_rc_dyn_trait(value_ty) {
+                                    return Some(CollectionTraitInfo::HashMapRc(
+                                        Box::new(key_ty.clone()),
+                                        trait_name,
+                                    ));
+                                }
+                                if let Some((_, trait_name)) = is_arc_dyn_trait(value_ty) {
+                                    return Some(CollectionTraitInfo::HashMapArc(
+                                        Box::new(key_ty.clone()),
+                                        trait_name,
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    None
+}

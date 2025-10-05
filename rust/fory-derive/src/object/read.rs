@@ -20,7 +20,10 @@ use quote::{format_ident, quote};
 use syn::{Field, Type};
 
 use super::util::{generic_tree_to_tokens, parse_generic_tree, NullableTypeNode};
-use crate::util::{is_arc_dyn_trait, is_box_dyn_trait, is_rc_dyn_trait};
+use crate::util::{
+    detect_collection_with_trait_object, is_arc_dyn_trait, is_box_dyn_trait, is_rc_dyn_trait,
+    CollectionTraitInfo,
+};
 use syn::{GenericArgument, PathArguments};
 
 /// Check if a type contains trait objects anywhere in its structure
@@ -174,23 +177,72 @@ pub fn gen_read_data(fields: &[&Field]) -> TokenStream {
                     }
                 }
             } else if let Some((_, trait_name)) = is_rc_dyn_trait(ty) {
-                let wrapper_ty = quote::format_ident!("Dyn{}Rc", trait_name);
+                let wrapper_ty = quote::format_ident!("{}Rc", trait_name);
                 let trait_ident = quote::format_ident!("{}", trait_name);
                 quote! {
                     #name_str => {
-                        let skip_ref_flag = fory_core::serializer::get_skip_ref_flag::<#wrapper_ty>(context.get_fory());
-                        let wrapper = fory_core::serializer::read_ref_info_data::<#wrapper_ty>(context, true, skip_ref_flag, false)?;
+                        let wrapper = <#wrapper_ty as fory_core::serializer::Serializer>::fory_read(context, true)?;
                         #private_ident = std::rc::Rc::<dyn #trait_ident>::from(wrapper);
                     }
                 }
             } else if let Some((_, trait_name)) = is_arc_dyn_trait(ty) {
-                let wrapper_ty = quote::format_ident!("Dyn{}Arc", trait_name);
+                let wrapper_ty = quote::format_ident!("{}Arc", trait_name);
                 let trait_ident = quote::format_ident!("{}", trait_name);
                 quote! {
                     #name_str => {
-                        let skip_ref_flag = fory_core::serializer::get_skip_ref_flag::<#wrapper_ty>(context.get_fory());
-                        let wrapper = fory_core::serializer::read_ref_info_data::<#wrapper_ty>(context, true, skip_ref_flag, false)?;
-                        #private_ident = std::sync::Arc::<dyn #trait_ident + Send + Sync>::from(wrapper);
+                        let wrapper = <#wrapper_ty as fory_core::serializer::Serializer>::fory_read(context, true)?;
+                        #private_ident = std::sync::Arc::<dyn #trait_ident>::from(wrapper);
+                    }
+                }
+            } else if let Some(collection_info) = detect_collection_with_trait_object(ty) {
+                match collection_info {
+                    CollectionTraitInfo::VecRc(trait_name) => {
+                        let wrapper_ty = quote::format_ident!("{}Rc", trait_name);
+                        let trait_ident = quote::format_ident!("{}", trait_name);
+                        quote! {
+                            #name_str => {
+                                let wrapper_vec = <Vec<#wrapper_ty> as fory_core::serializer::Serializer>::fory_read(context, true)?;
+                                #private_ident = Some(wrapper_vec.into_iter()
+                                    .map(|w| std::rc::Rc::<dyn #trait_ident>::from(w))
+                                    .collect());
+                            }
+                        }
+                    }
+                    CollectionTraitInfo::VecArc(trait_name) => {
+                        let wrapper_ty = quote::format_ident!("{}Arc", trait_name);
+                        let trait_ident = quote::format_ident!("{}", trait_name);
+                        quote! {
+                            #name_str => {
+                                let wrapper_vec = <Vec<#wrapper_ty> as fory_core::serializer::Serializer>::fory_read(context, true)?;
+                                #private_ident = Some(wrapper_vec.into_iter()
+                                    .map(|w| std::sync::Arc::<dyn #trait_ident>::from(w))
+                                    .collect());
+                            }
+                        }
+                    }
+                    CollectionTraitInfo::HashMapRc(key_ty, trait_name) => {
+                        let wrapper_ty = quote::format_ident!("{}Rc", trait_name);
+                        let trait_ident = quote::format_ident!("{}", trait_name);
+                        quote! {
+                            #name_str => {
+                                let wrapper_map = <std::collections::HashMap<#key_ty, #wrapper_ty> as fory_core::serializer::Serializer>::fory_read(context, true)?;
+                                #private_ident = Some(wrapper_map.into_iter()
+                                    .map(|(k, v)| (k, std::rc::Rc::<dyn #trait_ident>::from(v)))
+                                    .collect());
+                            }
+                        }
+                    }
+                    CollectionTraitInfo::HashMapArc(key_ty, trait_name) => {
+                        let wrapper_ty = quote::format_ident!("{}Arc", trait_name);
+                        let trait_ident = quote::format_ident!("{}", trait_name);
+                        quote! {
+                            #name_str => {
+                                let wrapper_map = <std::collections::HashMap<#key_ty, #wrapper_ty> as fory_core::serializer::Serializer>::fory_read(context, true)?;
+                                #private_ident = Some(wrapper_map.into_iter()
+                                    .map(|(k, v)| (k, std::sync::Arc::<dyn #trait_ident>::from(v)))
+                                    .collect());
+                            }
+                        }
                     }
                 }
             } else {
@@ -292,25 +344,75 @@ pub fn gen_read_compatible(fields: &[&Field], struct_ident: &Ident) -> TokenStre
                 }
             }
         } else if let Some((_, trait_name)) = is_rc_dyn_trait(ty) {
-            let wrapper_ty = quote::format_ident!("Dyn{}Rc", trait_name);
+            let wrapper_ty = quote::format_ident!("{}Rc", trait_name);
             let trait_ident = quote::format_ident!("{}", trait_name);
             let field_name_str = field.ident.as_ref().unwrap().to_string();
             quote! {
                 if _field.field_name.as_str() == #field_name_str {
-                    let skip_ref_flag = fory_core::serializer::get_skip_ref_flag::<#wrapper_ty>(context.get_fory());
-                    let wrapper = fory_core::serializer::read_ref_info_data::<#wrapper_ty>(context, true, skip_ref_flag, false).unwrap();
+                    let wrapper = <#wrapper_ty as fory_core::serializer::Serializer>::fory_read(context, true).unwrap();
                     #var_name = Some(std::rc::Rc::<dyn #trait_ident>::from(wrapper));
                 }
             }
         } else if let Some((_, trait_name)) = is_arc_dyn_trait(ty) {
-            let wrapper_ty = quote::format_ident!("Dyn{}Arc", trait_name);
+            let wrapper_ty = quote::format_ident!("{}Arc", trait_name);
             let trait_ident = quote::format_ident!("{}", trait_name);
             let field_name_str = field.ident.as_ref().unwrap().to_string();
             quote! {
                 if _field.field_name.as_str() == #field_name_str {
-                    let skip_ref_flag = fory_core::serializer::get_skip_ref_flag::<#wrapper_ty>(context.get_fory());
-                    let wrapper = fory_core::serializer::read_ref_info_data::<#wrapper_ty>(context, true, skip_ref_flag, false).unwrap();
-                    #var_name = Some(std::sync::Arc::<dyn #trait_ident + Send + Sync>::from(wrapper));
+                    let wrapper = <#wrapper_ty as fory_core::serializer::Serializer>::fory_read(context, true).unwrap();
+                    #var_name = Some(std::sync::Arc::<dyn #trait_ident>::from(wrapper));
+                }
+            }
+        } else if let Some(collection_info) = detect_collection_with_trait_object(ty) {
+            let field_name_str = field.ident.as_ref().unwrap().to_string();
+            match collection_info {
+                CollectionTraitInfo::VecRc(trait_name) => {
+                    let wrapper_ty = quote::format_ident!("{}Rc", trait_name);
+                    let trait_ident = quote::format_ident!("{}", trait_name);
+                    quote! {
+                        if _field.field_name.as_str() == #field_name_str {
+                            let wrapper_vec = <Vec<#wrapper_ty> as fory_core::serializer::Serializer>::fory_read(context, true).unwrap();
+                            #var_name = Some(wrapper_vec.into_iter()
+                                .map(|w| std::rc::Rc::<dyn #trait_ident>::from(w))
+                                .collect());
+                        }
+                    }
+                }
+                CollectionTraitInfo::VecArc(trait_name) => {
+                    let wrapper_ty = quote::format_ident!("{}Arc", trait_name);
+                    let trait_ident = quote::format_ident!("{}", trait_name);
+                    quote! {
+                        if _field.field_name.as_str() == #field_name_str {
+                            let wrapper_vec = <Vec<#wrapper_ty> as fory_core::serializer::Serializer>::fory_read(context, true).unwrap();
+                            #var_name = Some(wrapper_vec.into_iter()
+                                .map(|w| std::sync::Arc::<dyn #trait_ident>::from(w))
+                                .collect());
+                        }
+                    }
+                }
+                CollectionTraitInfo::HashMapRc(key_ty, trait_name) => {
+                    let wrapper_ty = quote::format_ident!("{}Rc", trait_name);
+                    let trait_ident = quote::format_ident!("{}", trait_name);
+                    quote! {
+                        if _field.field_name.as_str() == #field_name_str {
+                            let wrapper_map = <std::collections::HashMap<#key_ty, #wrapper_ty> as fory_core::serializer::Serializer>::fory_read(context, true).unwrap();
+                            #var_name = Some(wrapper_map.into_iter()
+                                .map(|(k, v)| (k, std::rc::Rc::<dyn #trait_ident>::from(v)))
+                                .collect());
+                        }
+                    }
+                }
+                CollectionTraitInfo::HashMapArc(key_ty, trait_name) => {
+                    let wrapper_ty = quote::format_ident!("{}Arc", trait_name);
+                    let trait_ident = quote::format_ident!("{}", trait_name);
+                    quote! {
+                        if _field.field_name.as_str() == #field_name_str {
+                            let wrapper_map = <std::collections::HashMap<#key_ty, #wrapper_ty> as fory_core::serializer::Serializer>::fory_read(context, true).unwrap();
+                            #var_name = Some(wrapper_map.into_iter()
+                                .map(|(k, v)| (k, std::sync::Arc::<dyn #trait_ident>::from(v)))
+                                .collect());
+                        }
+                    }
                 }
             }
         } else if contains_trait_object(ty) {

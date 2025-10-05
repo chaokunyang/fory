@@ -192,8 +192,32 @@ fn generate_default_impl(ast: &syn::DeriveInput) -> proc_macro2::TokenStream {
 
         let field_inits = fields.iter().map(|field| {
             let ident = &field.ident;
-            quote! {
-                #ident: Default::default()
+            let ty = &field.ty;
+
+            use crate::util::{is_arc_dyn_trait, is_rc_dyn_trait};
+
+            if let Some((_, trait_name)) = is_rc_dyn_trait(ty) {
+                let wrapper_ty = quote::format_ident!("{}Rc", trait_name);
+                let trait_ident = quote::format_ident!("{}", trait_name);
+                quote! {
+                    #ident: {
+                        let wrapper = #wrapper_ty::default();
+                        std::rc::Rc::<dyn #trait_ident>::from(wrapper)
+                    }
+                }
+            } else if let Some((_, trait_name)) = is_arc_dyn_trait(ty) {
+                let wrapper_ty = quote::format_ident!("{}Arc", trait_name);
+                let trait_ident = quote::format_ident!("{}", trait_name);
+                quote! {
+                    #ident: {
+                        let wrapper = #wrapper_ty::default();
+                        std::sync::Arc::<dyn #trait_ident>::from(wrapper)
+                    }
+                }
+            } else {
+                quote! {
+                    #ident: Default::default()
+                }
             }
         });
 

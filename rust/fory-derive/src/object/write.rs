@@ -15,7 +15,10 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use crate::util::{is_arc_dyn_trait, is_box_dyn_trait, is_rc_dyn_trait};
+use crate::util::{
+    detect_collection_with_trait_object, is_arc_dyn_trait, is_box_dyn_trait, is_rc_dyn_trait,
+    CollectionTraitInfo,
+};
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{Field, GenericArgument, PathArguments, Type};
@@ -59,14 +62,41 @@ pub fn gen_reserved_space(fields: &[&Field]) -> TokenStream {
                 fory_core::types::SIZE_OF_REF_AND_TYPE
             }
         } else if let Some((_, trait_name)) = is_rc_dyn_trait(ty) {
-            let wrapper_ty = quote::format_ident!("Dyn{}Rc", trait_name);
+            let wrapper_ty = quote::format_ident!("{}Rc", trait_name);
             quote! {
                 <#wrapper_ty as fory_core::serializer::Serializer>::fory_reserved_space() + fory_core::types::SIZE_OF_REF_AND_TYPE
             }
         } else if let Some((_, trait_name)) = is_arc_dyn_trait(ty) {
-            let wrapper_ty = quote::format_ident!("Dyn{}Arc", trait_name);
+            let wrapper_ty = quote::format_ident!("{}Arc", trait_name);
             quote! {
                 <#wrapper_ty as fory_core::serializer::Serializer>::fory_reserved_space() + fory_core::types::SIZE_OF_REF_AND_TYPE
+            }
+        } else if let Some(collection_info) = detect_collection_with_trait_object(ty) {
+            match collection_info {
+                CollectionTraitInfo::VecRc(trait_name) => {
+                    let wrapper_ty = quote::format_ident!("{}Rc", trait_name);
+                    quote! {
+                        <Vec<#wrapper_ty> as fory_core::serializer::Serializer>::fory_reserved_space() + fory_core::types::SIZE_OF_REF_AND_TYPE
+                    }
+                }
+                CollectionTraitInfo::VecArc(trait_name) => {
+                    let wrapper_ty = quote::format_ident!("{}Arc", trait_name);
+                    quote! {
+                        <Vec<#wrapper_ty> as fory_core::serializer::Serializer>::fory_reserved_space() + fory_core::types::SIZE_OF_REF_AND_TYPE
+                    }
+                }
+                CollectionTraitInfo::HashMapRc(key_ty, trait_name) => {
+                    let wrapper_ty = quote::format_ident!("{}Rc", trait_name);
+                    quote! {
+                        <std::collections::HashMap<#key_ty, #wrapper_ty> as fory_core::serializer::Serializer>::fory_reserved_space() + fory_core::types::SIZE_OF_REF_AND_TYPE
+                    }
+                }
+                CollectionTraitInfo::HashMapArc(key_ty, trait_name) => {
+                    let wrapper_ty = quote::format_ident!("{}Arc", trait_name);
+                    quote! {
+                        <std::collections::HashMap<#key_ty, #wrapper_ty> as fory_core::serializer::Serializer>::fory_reserved_space() + fory_core::types::SIZE_OF_REF_AND_TYPE
+                    }
+                }
             }
         } else if contains_trait_object(ty) {
             // For complex types containing trait objects (like HashMap<String, Box<dyn Animal>>),
@@ -125,23 +155,72 @@ pub fn gen_write_data(fields: &[&Field]) -> TokenStream {
                     }
                 }
             } else if let Some((_, trait_name)) = is_rc_dyn_trait(ty) {
-                let wrapper_ty = quote::format_ident!("Dyn{}Rc", trait_name);
+                let wrapper_ty = quote::format_ident!("{}Rc", trait_name);
                 let trait_ident = quote::format_ident!("{}", trait_name);
                 quote! {
                     #name_str => {
                         let wrapper = #wrapper_ty::from(self.#ident.clone() as std::rc::Rc<dyn #trait_ident>);
-                        let skip_ref_flag = fory_core::serializer::get_skip_ref_flag::<#wrapper_ty>(context.get_fory());
-                        fory_core::serializer::write_ref_info_data::<#wrapper_ty>(&wrapper, context, true, skip_ref_flag, false);
+                        fory_core::serializer::Serializer::fory_write(&wrapper, context, true);
                     }
                 }
             } else if let Some((_, trait_name)) = is_arc_dyn_trait(ty) {
-                let wrapper_ty = quote::format_ident!("Dyn{}Arc", trait_name);
+                let wrapper_ty = quote::format_ident!("{}Arc", trait_name);
                 let trait_ident = quote::format_ident!("{}", trait_name);
                 quote! {
                     #name_str => {
-                        let wrapper = #wrapper_ty::from(self.#ident.clone() as std::sync::Arc<dyn #trait_ident + Send + Sync>);
-                        let skip_ref_flag = fory_core::serializer::get_skip_ref_flag::<#wrapper_ty>(context.get_fory());
-                        fory_core::serializer::write_ref_info_data::<#wrapper_ty>(&wrapper, context, true, skip_ref_flag, false);
+                        let wrapper = #wrapper_ty::from(self.#ident.clone() as std::sync::Arc<dyn #trait_ident>);
+                        fory_core::serializer::Serializer::fory_write(&wrapper, context, true);
+                    }
+                }
+            } else if let Some(collection_info) = detect_collection_with_trait_object(ty) {
+                match collection_info {
+                    CollectionTraitInfo::VecRc(trait_name) => {
+                        let wrapper_ty = quote::format_ident!("{}Rc", trait_name);
+                        let trait_ident = quote::format_ident!("{}", trait_name);
+                        quote! {
+                            #name_str => {
+                                let wrapper_vec: Vec<#wrapper_ty> = self.#ident.iter()
+                                    .map(|item| #wrapper_ty::from(item.clone() as std::rc::Rc<dyn #trait_ident>))
+                                    .collect();
+                                fory_core::serializer::Serializer::fory_write(&wrapper_vec, context, true);
+                            }
+                        }
+                    }
+                    CollectionTraitInfo::VecArc(trait_name) => {
+                        let wrapper_ty = quote::format_ident!("{}Arc", trait_name);
+                        let trait_ident = quote::format_ident!("{}", trait_name);
+                        quote! {
+                            #name_str => {
+                                let wrapper_vec: Vec<#wrapper_ty> = self.#ident.iter()
+                                    .map(|item| #wrapper_ty::from(item.clone() as std::sync::Arc<dyn #trait_ident>))
+                                    .collect();
+                                fory_core::serializer::Serializer::fory_write(&wrapper_vec, context, true);
+                            }
+                        }
+                    }
+                    CollectionTraitInfo::HashMapRc(key_ty, trait_name) => {
+                        let wrapper_ty = quote::format_ident!("{}Rc", trait_name);
+                        let trait_ident = quote::format_ident!("{}", trait_name);
+                        quote! {
+                            #name_str => {
+                                let wrapper_map: std::collections::HashMap<#key_ty, #wrapper_ty> = self.#ident.iter()
+                                    .map(|(k, v)| (k.clone(), #wrapper_ty::from(v.clone() as std::rc::Rc<dyn #trait_ident>)))
+                                    .collect();
+                                fory_core::serializer::Serializer::fory_write(&wrapper_map, context, true);
+                            }
+                        }
+                    }
+                    CollectionTraitInfo::HashMapArc(key_ty, trait_name) => {
+                        let wrapper_ty = quote::format_ident!("{}Arc", trait_name);
+                        let trait_ident = quote::format_ident!("{}", trait_name);
+                        quote! {
+                            #name_str => {
+                                let wrapper_map: std::collections::HashMap<#key_ty, #wrapper_ty> = self.#ident.iter()
+                                    .map(|(k, v)| (k.clone(), #wrapper_ty::from(v.clone() as std::sync::Arc<dyn #trait_ident>)))
+                                    .collect();
+                                fory_core::serializer::Serializer::fory_write(&wrapper_map, context, true);
+                            }
+                        }
                     }
                 }
             } else {

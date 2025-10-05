@@ -18,7 +18,38 @@
 use crate::util::{is_arc_dyn_trait, is_box_dyn_trait, is_rc_dyn_trait};
 use proc_macro2::TokenStream;
 use quote::quote;
-use syn::Field;
+use syn::{Field, GenericArgument, PathArguments, Type};
+
+/// Check if a type contains trait objects anywhere in its structure
+fn contains_trait_object(ty: &Type) -> bool {
+    match ty {
+        Type::TraitObject(_) => true,
+        Type::Path(type_path) => {
+            // Check for Box<dyn Trait>, Rc<dyn Trait>, Arc<dyn Trait>
+            if is_box_dyn_trait(ty).is_some()
+                || is_rc_dyn_trait(ty).is_some()
+                || is_arc_dyn_trait(ty).is_some()
+            {
+                return true;
+            }
+
+            // Check generics recursively
+            if let Some(seg) = type_path.path.segments.last() {
+                if let PathArguments::AngleBracketed(args) = &seg.arguments {
+                    return args.args.iter().any(|arg| {
+                        if let GenericArgument::Type(inner_ty) = arg {
+                            contains_trait_object(inner_ty)
+                        } else {
+                            false
+                        }
+                    });
+                }
+            }
+            false
+        }
+        _ => false,
+    }
+}
 
 pub fn gen_reserved_space(fields: &[&Field]) -> TokenStream {
     let reserved_size_expr: Vec<_> = fields.iter().map(|field| {
@@ -36,6 +67,12 @@ pub fn gen_reserved_space(fields: &[&Field]) -> TokenStream {
             let wrapper_ty = quote::format_ident!("Dyn{}Arc", trait_name);
             quote! {
                 <#wrapper_ty as fory_core::serializer::Serializer>::fory_reserved_space() + fory_core::types::SIZE_OF_REF_AND_TYPE
+            }
+        } else if contains_trait_object(ty) {
+            // For complex types containing trait objects (like HashMap<String, Box<dyn Animal>>),
+            // just use the standard serialization path without trying to parse the type structure
+            quote! {
+                <#ty as fory_core::serializer::Serializer>::fory_reserved_space() + fory_core::types::SIZE_OF_REF_AND_TYPE
             }
         } else {
             quote! {

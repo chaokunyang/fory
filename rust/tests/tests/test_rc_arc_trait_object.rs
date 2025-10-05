@@ -297,7 +297,7 @@ fn test_conversion_helper_macros() {
 
     let back_to_animals: Vec<Rc<dyn Animal>> = wrapped_animals
         .into_iter()
-        .map(|w| Rc::<dyn Animal>::from(w))
+        .map(Rc::<dyn Animal>::from)
         .collect();
     assert_eq!(back_to_animals.len(), 2);
     assert_eq!(back_to_animals[0].name(), "Dog1");

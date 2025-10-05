@@ -21,7 +21,39 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use syn::Field;
 
 use super::util::{generic_tree_to_tokens, get_sort_fields_ts, parse_generic_tree};
-use crate::util::is_box_dyn_trait;
+use crate::util::{is_arc_dyn_trait, is_box_dyn_trait, is_rc_dyn_trait};
+use syn::{GenericArgument, PathArguments, Type};
+
+/// Check if a type contains trait objects anywhere in its structure
+fn contains_trait_object(ty: &Type) -> bool {
+    match ty {
+        Type::TraitObject(_) => true,
+        Type::Path(type_path) => {
+            // Check for Box<dyn Trait>, Rc<dyn Trait>, Arc<dyn Trait>
+            if is_box_dyn_trait(ty).is_some()
+                || is_rc_dyn_trait(ty).is_some()
+                || is_arc_dyn_trait(ty).is_some()
+            {
+                return true;
+            }
+
+            // Check generics recursively
+            if let Some(seg) = type_path.path.segments.last() {
+                if let PathArguments::AngleBracketed(args) = &seg.arguments {
+                    return args.args.iter().any(|arg| {
+                        if let GenericArgument::Type(inner_ty) = arg {
+                            contains_trait_object(inner_ty)
+                        } else {
+                            false
+                        }
+                    });
+                }
+            }
+            false
+        }
+        _ => false,
+    }
+}
 
 // Global type ID counter that auto-grows from 0 at macro processing time
 static TYPE_ID_COUNTER: AtomicU32 = AtomicU32::new(0);
@@ -82,7 +114,9 @@ pub fn gen_type_def(fields: &[&Field]) -> TokenStream {
         let ty = &field.ty;
         let name = format!("{}", field.ident.as_ref().expect("should be field name"));
 
-        if is_box_dyn_trait(ty).is_some() {
+        if is_box_dyn_trait(ty).is_some() || contains_trait_object(ty) {
+            // For both direct trait objects and complex types containing trait objects,
+            // use UNKNOWN type ID to avoid complex type parsing
             quote! {
                 fory_core::meta::FieldInfo::new(#name, fory_core::meta::FieldType {
                     type_id: fory_core::types::TypeId::UNKNOWN as u32,

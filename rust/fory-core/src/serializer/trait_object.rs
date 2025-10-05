@@ -21,7 +21,7 @@ use crate::resolver::context::{ReadContext, WriteContext};
 use crate::serializer::Serializer;
 
 /// Helper functions for trait object serialization to reduce code duplication
-
+///
 /// Writes common trait object headers (ref flag, type ID, compatibility metadata)
 pub fn write_trait_object_headers(
     context: &mut WriteContext,
@@ -752,7 +752,7 @@ macro_rules! generate_any_serializer {
 
 /// Helper macros for automatic conversions in derive code
 /// These are used by fory-derive to generate transparent conversions
-
+///
 /// Convert field of type Rc<dyn Trait> to wrapper for serialization
 #[macro_export]
 macro_rules! fory_rc_to_wrapper {

@@ -21,6 +21,38 @@ use syn::{Field, Type};
 
 use super::util::{generic_tree_to_tokens, parse_generic_tree, NullableTypeNode};
 use crate::util::{is_arc_dyn_trait, is_box_dyn_trait, is_rc_dyn_trait};
+use syn::{GenericArgument, PathArguments};
+
+/// Check if a type contains trait objects anywhere in its structure
+fn contains_trait_object(ty: &Type) -> bool {
+    match ty {
+        Type::TraitObject(_) => true,
+        Type::Path(type_path) => {
+            // Check for Box<dyn Trait>, Rc<dyn Trait>, Arc<dyn Trait>
+            if is_box_dyn_trait(ty).is_some()
+                || is_rc_dyn_trait(ty).is_some()
+                || is_arc_dyn_trait(ty).is_some()
+            {
+                return true;
+            }
+
+            // Check generics recursively
+            if let Some(seg) = type_path.path.segments.last() {
+                if let PathArguments::AngleBracketed(args) = &seg.arguments {
+                    return args.args.iter().any(|arg| {
+                        if let GenericArgument::Type(inner_ty) = arg {
+                            contains_trait_object(inner_ty)
+                        } else {
+                            false
+                        }
+                    });
+                }
+            }
+            false
+        }
+        _ => false,
+    }
+}
 
 fn create_private_field_name(field: &Field) -> Ident {
     format_ident!("_{}", field.ident.as_ref().expect(""))
@@ -281,6 +313,18 @@ pub fn gen_read_compatible(fields: &[&Field], struct_ident: &Ident) -> TokenStre
                     #var_name = Some(std::sync::Arc::<dyn #trait_ident + Send + Sync>::from(wrapper));
                 }
             }
+        } else if contains_trait_object(ty) {
+            // For complex types containing trait objects (like HashMap<String, Box<dyn Animal>>),
+            // use standard deserialization instead of type tree parsing
+            let field_name_str = field.ident.as_ref().unwrap().to_string();
+            quote! {
+                if _field.field_name.as_str() == #field_name_str {
+                    // Skip type checking for fields containing trait objects
+                    // and use standard deserialization
+                    let skip_ref_flag = fory_core::serializer::get_skip_ref_flag::<#ty>(context.get_fory());
+                    #var_name = Some(fory_core::serializer::read_ref_info_data::<#ty>(context, true, skip_ref_flag, false).unwrap());
+                }
+            }
         } else {
             let generic_tree = parse_generic_tree(ty);
             // dbg!(&generic_tree);
@@ -359,7 +403,9 @@ pub fn gen_read_nullable(fields: &[&Field]) -> TokenStream {
         .iter()
         .filter_map(|field| {
             let ty = &field.ty;
-            if is_box_dyn_trait(ty).is_some() {
+            if is_box_dyn_trait(ty).is_some() || contains_trait_object(ty) {
+                // Skip both direct trait objects and complex types containing trait objects
+                // They will be handled by standard deserialization
                 None
             } else {
                 let fn_name = create_read_nullable_fn_name(field);

@@ -405,9 +405,6 @@ impl Animal for Cat {
 
 register_trait_type!(Animal, Dog, Cat);
 
-// Note: Structs with trait object fields temporarily disabled due to derive macro issues
-// TODO: Fix derive macro to support trait object wrapper types
-
 #[derive(Fory)]
 struct Zoo {
     star_animal: Box<dyn Animal>,
@@ -771,21 +768,16 @@ fn test_struct_with_wrapper_fields() {
 }
 
 // Tests for collections of wrappers
-// TODO: Fix derive macro issue with HashMap<String, Box<dyn Animal>>
 
-/*
 #[derive(Fory)]
 struct AnimalShelter {
     animals_rc: Vec<Box<dyn Animal>>,
     animals_arc: Vec<Box<dyn Animal>>,
     animal_registry: HashMap<String, Box<dyn Animal>>,
 }
-*/
 
 #[test]
-#[ignore] // Temporarily disabled due to derive macro issues with complex trait object collections
 fn test_collections_of_wrappers() {
-    /*
     let mut fory = fory_compatible();
     fory.register::<Dog>(8001);
     fory.register::<Cat>(8002);
@@ -879,7 +871,6 @@ fn test_collections_of_wrappers() {
             .speak(),
         "Meow!"
     );
-    */
 }
 
 #[test]

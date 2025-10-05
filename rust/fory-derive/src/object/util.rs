@@ -15,6 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+use crate::util::is_box_dyn_trait;
 use fory_core::types::{TypeId, BASIC_TYPE_NAMES, CONTAINER_TYPE_NAMES, PRIMITIVE_ARRAY_TYPE_MAP};
 use proc_macro2::TokenStream;
 use quote::{quote, ToTokens};
@@ -543,11 +544,16 @@ pub(super) fn parse_generic_tree(ty: &Type) -> TypeNode {
 }
 
 pub(super) fn generic_tree_to_tokens(node: &TypeNode, have_context: bool) -> TokenStream {
-    if node.name == "Option" && node.generics.first().unwrap().name == "Option" {
-        return quote! {
-            compile_error!("adjacent Options are not supported");
-        };
+    if node.name == "Option" {
+        if let Some(first_generic) = node.generics.first() {
+            if first_generic.name == "Option" {
+                return quote! {
+                    compile_error!("adjacent Options are not supported");
+                };
+            }
+        }
     }
+
     if let Some(ts) = try_vec_of_option_primitive(node) {
         return ts;
     }
@@ -697,7 +703,6 @@ pub(super) fn get_sort_fields_ts(fields: &[&Field]) -> TokenStream {
             }
         }
 
-        use crate::util::is_box_dyn_trait;
         for field in fields {
             if is_box_dyn_trait(&field.ty).is_some() {
                 let ident = field.ident.as_ref().unwrap().to_string();

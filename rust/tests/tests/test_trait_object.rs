@@ -156,7 +156,7 @@ struct Person {
     age: i32,
 }
 
-#[derive(Fory, Debug, PartialEq, Clone)]
+#[derive(Fory, Debug, PartialEq)]
 struct Company {
     name: String,
     employees: Vec<Person>,
@@ -250,7 +250,7 @@ trait Animal {
     fn name(&self) -> &str;
 }
 
-#[derive(Fory, Debug, Clone, PartialEq)]
+#[derive(Fory, Debug, PartialEq)]
 struct Dog {
     name: String,
     breed: String,
@@ -270,7 +270,7 @@ impl Animal for Dog {
     }
 }
 
-#[derive(Fory, Debug, Clone, PartialEq)]
+#[derive(Fory, Debug, PartialEq)]
 struct Cat {
     name: String,
     color: String,

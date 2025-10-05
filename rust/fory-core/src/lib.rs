@@ -52,6 +52,7 @@
 //! - Optional types (`Option<T>`)
 //! - Date/time types (chrono integration)
 //! - Custom structs and enums
+//! - Trait objects (Box, Rc, Arc)
 //!
 //! ### Performance Optimizations
 //!
@@ -59,6 +60,60 @@
 //! - **Buffer pre-allocation** to minimize allocations
 //! - **Variable-length encoding** for compact representation
 //! - **Little-endian byte order** for cross-platform compatibility
+//!
+//! ### Trait Object Serialization
+//!
+//! Fory supports polymorphic serialization through trait objects:
+//!
+//! #### Box-Based Trait Objects
+//!
+//! Define custom traits with `#[fory_trait]` and register implementations:
+//!
+//! ```ignore
+//! #[fory_trait]
+//! trait Animal {
+//!     fn speak(&self) -> String;
+//! }
+//!
+//! #[derive(Fory)]
+//! struct Dog { name: String }
+//!
+//! #[derive(Fory)]
+//! struct Cat { name: String }
+//!
+//! impl Animal for Dog {
+//!     fn speak(&self) -> String { "Woof!".to_string() }
+//!     fn as_any(&self) -> &dyn std::any::Any { self }
+//! }
+//!
+//! impl Animal for Cat {
+//!     fn speak(&self) -> String { "Meow!".to_string() }
+//!     fn as_any(&self) -> &dyn std::any::Any { self }
+//! }
+//!
+//! register_trait_type!(Animal, Dog, Cat);
+//!
+//! // Use in struct fields
+//! #[derive(Fory)]
+//! struct Zoo {
+//!     star_animal: Box<dyn Animal>,
+//! }
+//! ```
+//!
+//! #### Rc/Arc-Based Trait Objects
+//!
+//! For reference-counted trait objects, use them directly in struct fields:
+//!
+//! ```ignore
+//! #[derive(Fory)]
+//! struct Shelter {
+//!     animals_rc: Vec<Rc<dyn Animal>>,
+//!     animals_arc: Vec<Arc<dyn Animal>>,
+//! }
+//! ```
+//!
+//! For standalone serialization, use auto-generated wrapper types (e.g., `AnimalRc`, `AnimalArc`)
+//! created by `register_trait_type!` due to Rust's orphan rule limitations.
 //!
 //! ## Usage
 //!

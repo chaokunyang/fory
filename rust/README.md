@@ -91,6 +91,136 @@ let deserialized: Person = fory.deserialize(&serialized)?;
 assert_eq!(person, deserialized);
 ```
 
+### Trait Object Serialization
+
+Apache Fory™ supports serializing trait objects with polymorphism, enabling dynamic dispatch and type flexibility.
+
+#### Box-Based Trait Objects
+
+Serialize trait objects using `Box<dyn Trait>`:
+
+```rust
+use fory_core::{Fory, register_trait_type};
+use fory_derive::{Fory, fory_trait};
+use fory_core::types::Mode;
+
+#[fory_trait]
+trait Animal {
+    fn speak(&self) -> String;
+    fn name(&self) -> &str;
+}
+
+#[derive(Fory, Clone)]
+struct Dog { name: String, breed: String }
+
+impl Animal for Dog {
+    fn speak(&self) -> String { "Woof!".to_string() }
+    fn name(&self) -> &str { &self.name }
+    fn as_any(&self) -> &dyn std::any::Any { self }
+}
+
+#[derive(Fory, Clone)]
+struct Cat { name: String, color: String }
+
+impl Animal for Cat {
+    fn speak(&self) -> String { "Meow!".to_string() }
+    fn name(&self) -> &str { &self.name }
+    fn as_any(&self) -> &dyn std::any::Any { self }
+}
+
+register_trait_type!(Animal, Dog, Cat);
+
+#[derive(Fory)]
+struct Zoo {
+    star_animal: Box<dyn Animal>,
+}
+
+let mut fory = Fory::default().mode(Mode::Compatible);
+fory.register::<Dog>(100);
+fory.register::<Cat>(101);
+fory.register::<Zoo>(102);
+
+let zoo = Zoo {
+    star_animal: Box::new(Dog {
+        name: "Buddy".to_string(),
+        breed: "Labrador".to_string(),
+    }),
+};
+
+let serialized = fory.serialize(&zoo);
+let deserialized: Zoo = fory.deserialize(&serialized)?;
+
+assert_eq!(deserialized.star_animal.name(), "Buddy");
+assert_eq!(deserialized.star_animal.speak(), "Woof!");
+```
+
+#### Rc/Arc-Based Trait Objects
+
+For fields with `Rc<dyn Trait>` or `Arc<dyn Trait>`, use them directly in struct definitions:
+
+```rust
+use std::sync::Arc;
+use std::rc::Rc;
+use std::collections::HashMap;
+
+#[derive(Fory)]
+struct AnimalShelter {
+    animals_rc: Vec<Rc<dyn Animal>>,
+    animals_arc: Vec<Arc<dyn Animal>>,
+    registry: HashMap<String, Arc<dyn Animal>>,
+}
+
+let mut fory = Fory::default().mode(Mode::Compatible);
+fory.register::<Dog>(100);
+fory.register::<Cat>(101);
+fory.register::<AnimalShelter>(102);
+
+let shelter = AnimalShelter {
+    animals_rc: vec![
+        Rc::new(Dog { name: "Rex".to_string(), breed: "Golden".to_string() }),
+        Rc::new(Cat { name: "Mittens".to_string(), color: "Gray".to_string() }),
+    ],
+    animals_arc: vec![
+        Arc::new(Dog { name: "Buddy".to_string(), breed: "Labrador".to_string() }),
+    ],
+    registry: HashMap::from([
+        ("pet1".to_string(), Arc::new(Dog {
+            name: "Max".to_string(),
+            breed: "Shepherd".to_string()
+        }) as Arc<dyn Animal>),
+    ]),
+};
+
+let serialized = fory.serialize(&shelter);
+let deserialized: AnimalShelter = fory.deserialize(&serialized)?;
+
+assert_eq!(deserialized.animals_rc[0].name(), "Rex");
+assert_eq!(deserialized.animals_arc[0].speak(), "Woof!");
+```
+
+**Wrapper Types for Standalone Usage**
+
+Due to Rust's orphan rule, `Rc<dyn Trait>` and `Arc<dyn Trait>` cannot implement `Serializer` directly. For standalone serialization (not inside struct fields), use the auto-generated wrapper types:
+
+```rust
+// register_trait_type! generates: AnimalRc and AnimalArc
+
+// Wrap Rc/Arc trait objects
+let dog_rc: Rc<dyn Animal> = Rc::new(Dog {
+    name: "Rex".to_string(),
+    breed: "Golden".to_string()
+});
+let wrapper = AnimalRc::from(dog_rc);
+
+// Serialize the wrapper
+let serialized = fory.serialize(&wrapper);
+let deserialized: AnimalRc = fory.deserialize(&serialized)?;
+
+// Unwrap back to Rc<dyn Animal>
+let unwrapped: Rc<dyn Animal> = deserialized.unwrap();
+assert_eq!(unwrapped.name(), "Rex");
+```
+
 ### Row-Based Serialization
 
 For high-performance, zero-copy scenarios:
@@ -190,6 +320,7 @@ assert_eq!(prefs.values().get(0), "en");
 
 - Structs with `#[derive(Fory)]` or `#[derive(ForyRow)]`
 - Enums with `#[derive(Fory)]`
+- Trait objects with `#[fory_trait]`
 
 ## ⚡ Performance
 

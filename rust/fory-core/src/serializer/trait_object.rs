@@ -424,9 +424,18 @@ macro_rules! impl_smart_pointer_serializer {
                     let deserializer_fn = harness.get_deserializer();
                     if let Ok(any_obj) = deserializer_fn(context, is_field, true) {
                         $(
-                            if let Some(concrete) = any_obj.downcast_ref::<$impl_type>() {
-                                let pointer = $constructor_expr(concrete.clone()) as $pointer_type;
-                                return Ok(Self::from(pointer));
+                            if any_obj.is::<$impl_type>() {
+                                match any_obj.downcast::<$impl_type>() {
+                                    Ok(boxed) => {
+                                        let pointer = $constructor_expr(*boxed) as $pointer_type;
+                                        return Ok(Self::from(pointer));
+                                    }
+                                    Err(recovered) => {
+                                        return Err($crate::error::Error::Other($crate::error::AnyhowError::msg(
+                                            format!("Failed to downcast type for trait {}", stringify!($trait_name))
+                                        )));
+                                    }
+                                }
                             }
                         )*
                         return Err($crate::error::Error::Other($crate::error::AnyhowError::msg(

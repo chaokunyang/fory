@@ -35,7 +35,7 @@ trait Animal: Send + Sync {
     fn name(&self) -> &str;
 }
 
-#[derive(Fory, Debug, Clone, PartialEq)]
+#[derive(Fory, Debug, PartialEq)]
 struct Dog {
     name: String,
     breed: String,
@@ -55,7 +55,7 @@ impl Animal for Dog {
     }
 }
 
-#[derive(Fory, Debug, Clone, PartialEq)]
+#[derive(Fory, Debug, PartialEq)]
 struct Cat {
     name: String,
     color: String,

@@ -39,7 +39,7 @@ fn declare_var(fields: &[&Field]) -> Vec<TokenStream> {
             let ty = &field.ty;
             let var_name = create_private_field_name(field);
             match classify_trait_object_field(ty) {
-                TraitObjectField::BoxDyn
+                TraitObjectField::BoxDyn(_)
                 | TraitObjectField::RcDyn(_)
                 | TraitObjectField::ArcDyn(_) => {
                     quote! {
@@ -63,7 +63,7 @@ fn assign_value(fields: &[&Field]) -> Vec<TokenStream> {
             let name = &field.ident;
             let var_name = create_private_field_name(field);
             match classify_trait_object_field(&field.ty) {
-                TraitObjectField::BoxDyn
+                TraitObjectField::BoxDyn(_)
                 | TraitObjectField::RcDyn(_)
                 | TraitObjectField::ArcDyn(_) => {
                     quote! {
@@ -85,7 +85,9 @@ fn gen_read_match_arm(field: &Field, private_ident: &Ident) -> TokenStream {
     let name_str = field.ident.as_ref().unwrap().to_string();
 
     match classify_trait_object_field(ty) {
-        TraitObjectField::BoxDyn => {
+        TraitObjectField::BoxDyn(trait_name) => {
+            let from_any_fn = format_ident!("from_any_internal_{}", trait_name);
+            let helper_mod = format_ident!("__fory_trait_helpers_{}", trait_name);
             quote! {
                 #name_str => {
                     let ref_flag = context.reader.read_i8();
@@ -104,7 +106,7 @@ fn gen_read_match_arm(field: &Field, private_ident: &Ident) -> TokenStream {
                     let any_box = deserializer_fn(context, true, false)?;
 
                     let base_type_id = fory_type_id >> 8;
-                    #private_ident = __fory_trait_helpers::from_any_internal(any_box, base_type_id)?;
+                    #private_ident = #helper_mod::#from_any_fn(any_box, base_type_id)?;
                 }
             }
         }
@@ -214,7 +216,7 @@ pub fn gen_read_data(fields: &[&Field]) -> TokenStream {
                 .map(|(field, private_ident)| {
                     let ty = &field.ty;
                     match classify_trait_object_field(ty) {
-                        TraitObjectField::BoxDyn
+                        TraitObjectField::BoxDyn(_)
                         | TraitObjectField::RcDyn(_)
                         | TraitObjectField::ArcDyn(_) => {
                             quote! {
@@ -250,7 +252,7 @@ pub fn gen_read_data(fields: &[&Field]) -> TokenStream {
             let original_ident = &field.ident;
             let ty = &field.ty;
             match classify_trait_object_field(ty) {
-                TraitObjectField::BoxDyn
+                TraitObjectField::BoxDyn(_)
                 | TraitObjectField::RcDyn(_)
                 | TraitObjectField::ArcDyn(_) => {
                     quote! {
@@ -277,7 +279,9 @@ fn gen_read_compatible_match_arm(field: &Field, var_name: &Ident) -> TokenStream
     let field_name_str = field.ident.as_ref().unwrap().to_string();
 
     match classify_trait_object_field(ty) {
-        TraitObjectField::BoxDyn => {
+        TraitObjectField::BoxDyn(trait_name) => {
+            let from_any_fn = format_ident!("from_any_internal_{}", trait_name);
+            let helper_mod = format_ident!("__fory_trait_helpers_{}", trait_name);
             quote! {
                 if _field.field_name.as_str() == #field_name_str {
                     let ref_flag = context.reader.read_i8();
@@ -292,7 +296,7 @@ fn gen_read_compatible_match_arm(field: &Field, var_name: &Ident) -> TokenStream
                     let deserializer_fn = harness.get_deserializer();
                     let any_box = deserializer_fn(context, true, false).unwrap();
                     let base_type_id = fory_type_id >> 8;
-                    #var_name = __fory_trait_helpers::from_any_internal(any_box, base_type_id).unwrap();
+                    #var_name = #helper_mod::#from_any_fn(any_box, base_type_id).unwrap();
                 }
             }
         }

@@ -27,7 +27,7 @@ pub fn gen_reserved_space(fields: &[&Field]) -> TokenStream {
     let reserved_size_expr: Vec<_> = fields.iter().map(|field| {
         let ty = &field.ty;
         match classify_trait_object_field(ty) {
-            TraitObjectField::BoxDyn => {
+            TraitObjectField::BoxDyn(_) => {
                 quote! {
                     fory_core::types::SIZE_OF_REF_AND_TYPE
                 }
@@ -100,7 +100,7 @@ fn gen_write_match_arm(field: &Field) -> TokenStream {
     let name_str = ident.as_ref().unwrap().to_string();
 
     match classify_trait_object_field(ty) {
-        TraitObjectField::BoxDyn => {
+        TraitObjectField::BoxDyn(_) => {
             quote! {
                 #name_str => {
                     let any_ref = self.#ident.as_any();

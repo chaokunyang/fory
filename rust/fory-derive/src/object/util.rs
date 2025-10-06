@@ -73,7 +73,7 @@ pub(super) fn create_wrapper_types_arc(trait_name: &str) -> WrapperTypes {
 }
 
 pub(super) enum TraitObjectField {
-    BoxDyn,
+    BoxDyn(String),
     RcDyn(String),
     ArcDyn(String),
     VecRc(String),
@@ -85,8 +85,8 @@ pub(super) enum TraitObjectField {
 }
 
 pub(super) fn classify_trait_object_field(ty: &Type) -> TraitObjectField {
-    if is_box_dyn_trait(ty).is_some() {
-        return TraitObjectField::BoxDyn;
+    if let Some((_, trait_name)) = is_box_dyn_trait(ty) {
+        return TraitObjectField::BoxDyn(trait_name);
     }
     if let Some((_, trait_name)) = is_rc_dyn_trait(ty) {
         return TraitObjectField::RcDyn(trait_name);
@@ -790,7 +790,7 @@ pub(super) fn get_sort_fields_ts(fields: &[&Field]) -> TokenStream {
         }
 
         for field in fields {
-            if is_box_dyn_trait(&field.ty).is_some() {
+            if let Some(_) = is_box_dyn_trait(&field.ty) {
                 let ident = field.ident.as_ref().unwrap().to_string();
                 if let Some(pos) = struct_or_enum_fields.iter().position(|x| x.0 == ident) {
                     struct_or_enum_fields[pos].2 = TypeId::UNKNOWN as u32;

@@ -198,24 +198,44 @@ assert_eq!(deserialized.animals_arc[0].speak(), "Woof!");
 
 **Wrapper Types for Standalone Usage**
 
-Due to Rust's orphan rule, `Rc<dyn Trait>` and `Arc<dyn Trait>` cannot implement `Serializer` directly. For standalone serialization (not inside struct fields), use the fory auto-generated wrapper types:
+Due to Rust's orphan rule, `Rc<dyn Trait>` and `Arc<dyn Trait>` cannot implement `Serializer` directly. For standalone serialization (not inside struct fields), use the `Rc<dyn Any>/Arc<dyn Any>` or fory auto-generated wrapper types instead:
+
+Example for `Rc<dyn Any>`:
+
+```rust
+let dog_rc: Rc<dyn Animal> = Rc::new(Dog {
+    name: "Rex".to_string(),
+    breed: "Golden".to_string()
+});
+let dog = doc_rc.as_any();
+
+// Serialize the wrapper
+let serialized = fory.serialize(&wrapper);
+let deserialized: Rc<dyn Any> = fory.deserialize(&serialized)?;
+
+// Unwrap back to Rc<dyn Animal>
+let unwrapped: Rc<dyn Animal> = deserialized.downcast_ref::<Dog>();
+assert_eq!(unwrapped.name(), "Rex");
+```
+
+Example for `Arc<dyn Any>`:
 
 ```rust
 // register_trait_type! generates: AnimalRc and AnimalArc
 
 // Wrap Rc/Arc trait objects
-let dog_rc: Rc<dyn Animal> = Rc::new(Dog {
+let dog_rc: Arc<dyn Animal> = Arc::new(Dog {
     name: "Rex".to_string(),
     breed: "Golden".to_string()
 });
-let wrapper = AnimalRc::from(dog_rc);
+let wrapper = AnimalArc::from(dog_rc);
 
 // Serialize the wrapper
 let serialized = fory.serialize(&wrapper);
-let deserialized: AnimalRc = fory.deserialize(&serialized)?;
+let deserialized: AnimalArc = fory.deserialize(&serialized)?;
 
-// Unwrap back to Rc<dyn Animal>
-let unwrapped: Rc<dyn Animal> = deserialized.unwrap();
+// Unwrap back to Arc<dyn Animal>
+let unwrapped: Arc<dyn Animal> = deserialized.unwrap();
 assert_eq!(unwrapped.name(), "Rex");
 ```
 

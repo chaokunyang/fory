@@ -23,8 +23,8 @@ pub fn sorted_fields(fields: &Fields) -> Vec<&Field> {
     fields
 }
 
-/// Check if a type is `Box<dyn Trait>` and return the trait type if it is
-pub fn is_box_dyn_trait(ty: &Type) -> Option<&TypeTraitObject> {
+/// Check if a type is `Box<dyn Trait>` and return the trait type and trait name if it is
+pub fn is_box_dyn_trait(ty: &Type) -> Option<(&TypeTraitObject, String)> {
     if let Type::Path(TypePath { path, .. }) = ty {
         if let Some(seg) = path.segments.last() {
             if seg.ident == "Box" {
@@ -32,7 +32,15 @@ pub fn is_box_dyn_trait(ty: &Type) -> Option<&TypeTraitObject> {
                     if let Some(GenericArgument::Type(Type::TraitObject(trait_obj))) =
                         args.args.first()
                     {
-                        return Some(trait_obj);
+                        // Extract trait name from the trait object
+                        if let Some(syn::TypeParamBound::Trait(trait_bound)) =
+                            trait_obj.bounds.first()
+                        {
+                            if let Some(segment) = trait_bound.path.segments.last() {
+                                let trait_name = segment.ident.to_string();
+                                return Some((trait_obj, trait_name));
+                            }
+                        }
                     }
                 }
             }

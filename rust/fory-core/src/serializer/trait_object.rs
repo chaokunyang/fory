@@ -118,17 +118,17 @@ macro_rules! resolve_and_deserialize {
 /// ```rust,ignore
 /// use fory_core::register_trait_type;
 /// use fory_core::serializer::Serializer;
-/// use fory_derive::Fory;
+/// use fory_derive::ForyObject;
 ///
 /// trait Animal: Serializer {
 ///     fn speak(&self) -> String;
 ///     fn name(&self) -> &str;
 /// }
 ///
-/// #[derive(Fory)]
+/// #[derive(ForyObject)]
 /// struct Dog { name: String }
 ///
-/// #[derive(Fory)]
+/// #[derive(ForyObject)]
 /// struct Cat { name: String }
 ///
 /// impl Animal for Dog {

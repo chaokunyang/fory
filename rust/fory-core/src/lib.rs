@@ -74,10 +74,10 @@
 //!     fn speak(&self) -> String;
 //! }
 //!
-//! #[derive(Fory)]
+//! #[derive(ForyObject)]
 //! struct Dog { name: String }
 //!
-//! #[derive(Fory)]
+//! #[derive(ForyObject)]
 //! struct Cat { name: String }
 //!
 //! impl Animal for Dog {
@@ -93,7 +93,7 @@
 //! register_trait_type!(Animal, Dog, Cat);
 //!
 //! // Use in struct fields
-//! #[derive(Fory)]
+//! #[derive(ForyObject)]
 //! struct Zoo {
 //!     star_animal: Box<dyn Animal>,
 //! }
@@ -104,7 +104,7 @@
 //! For reference-counted trait objects, use them directly in struct fields:
 //!
 //! ```ignore
-//! #[derive(Fory)]
+//! #[derive(ForyObject)]
 //! struct Shelter {
 //!     animals_rc: Vec<Rc<dyn Animal>>,
 //!     animals_arc: Vec<Arc<dyn Animal>>,

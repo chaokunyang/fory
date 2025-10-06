@@ -42,9 +42,9 @@
 //!
 //! ```rust
 //! use fory::{Fory, Error};
-//! use fory_derive::Fory;
+//! use fory_derive::ForyObject;
 //! use std::collections::HashMap;
-//! #[derive(Fory, Debug, PartialEq)]
+//! #[derive(ForyObject, Debug, PartialEq)]
 //! struct Person {
 //!     name: String,
 //!     age: i32,
@@ -53,7 +53,7 @@
 //!     metadata: HashMap<String, String>,
 //! }
 //!
-//! #[derive(Fory, Debug, PartialEq)]
+//! #[derive(ForyObject, Debug, PartialEq)]
 //! struct Address {
 //!     street: String,
 //!     city: String,
@@ -168,8 +168,8 @@
 //! - `chrono::NaiveDateTime` for timestamps
 //!
 //! ### Custom Types
-//! - Structs with `#[derive(Fory)]` or `#[derive(ForyRow)]`
-//! - Enums with `#[derive(Fory)]`
+//! - Structs with `#[derive(ForyObject)]` or `#[derive(ForyRow)]`
+//! - Enums with `#[derive(ForyObject)]`
 //!
 //! ## Serialization Modes
 //!
@@ -183,9 +183,9 @@
 //! ```rust
 //! use fory::Fory;
 //! use fory_core::types::Mode;
-//! use fory_derive::Fory;
+//! use fory_derive::ForyObject;
 //!
-//! #[derive(Fory, Debug)]
+//! #[derive(ForyObject, Debug)]
 //! struct Config {
 //!     name: String,
 //!     value: i32,
@@ -202,9 +202,9 @@
 //!
 //! ```rust
 //! use fory::{Fory, Error};
-//! use fory_derive::Fory;
+//! use fory_derive::ForyObject;
 //!
-//! #[derive(Fory)]
+//! #[derive(ForyObject)]
 //! struct Data {
 //!     value: i32,
 //! }
@@ -246,9 +246,9 @@
 //! Then use the derive macros to make your types serializable:
 //!
 //! ```rust
-//! use fory_derive::{Fory, ForyRow};
+//! use fory_derive::{ForyObject, ForyRow};
 //!
-//! #[derive(Fory)]        // For object serialization
+//! #[derive(ForyObject)]        // For object serialization
 //! #[derive(ForyRow)]     // For row-based serialization
 //! struct MyData {
 //!     field1: String,

@@ -20,7 +20,7 @@ use fory_core::register_trait_type;
 use fory_core::serializer::Serializer;
 use fory_core::types::Mode;
 use fory_core::{unwrap_rc, wrap_rc, wrap_vec_rc};
-use fory_derive::Fory;
+use fory_derive::ForyObject;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -34,7 +34,7 @@ trait Animal: Serializer + Send + Sync {
     fn name(&self) -> &str;
 }
 
-#[derive(Fory, Debug, PartialEq)]
+#[derive(ForyObject, Debug, PartialEq)]
 struct Dog {
     name: String,
     breed: String,
@@ -50,7 +50,7 @@ impl Animal for Dog {
     }
 }
 
-#[derive(Fory, Debug, PartialEq)]
+#[derive(ForyObject, Debug, PartialEq)]
 struct Cat {
     name: String,
     color: String,
@@ -298,7 +298,7 @@ fn test_empty_wrapper_collections() {
     assert_eq!(deserialized.len(), 0);
 }
 
-#[derive(Fory)]
+#[derive(ForyObject)]
 struct AnimalShelter {
     animals_rc: Vec<Rc<dyn Animal>>,
     animals_arc: Vec<Arc<dyn Animal>>,

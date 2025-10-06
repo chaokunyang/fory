@@ -22,7 +22,7 @@ use fory_core::meta::murmurhash3_x64_128;
 use fory_core::resolver::context::{ReadContext, WriteContext};
 use fory_core::serializer::Serializer;
 use fory_core::types::Mode::Compatible;
-use fory_derive::Fory;
+use fory_derive::ForyObject;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 
@@ -31,7 +31,7 @@ fn get_data_file() -> String {
     std::env::var("DATA_FILE").expect("DATA_FILE not set")
 }
 
-#[derive(Fory, Debug, PartialEq, Default)]
+#[derive(ForyObject, Debug, PartialEq, Default)]
 enum Color {
     #[default]
     Green,
@@ -40,12 +40,12 @@ enum Color {
     White,
 }
 
-#[derive(Fory, Debug, PartialEq)]
+#[derive(ForyObject, Debug, PartialEq)]
 struct Item {
     name: Option<String>,
 }
 
-#[derive(Fory, Debug, PartialEq)]
+#[derive(ForyObject, Debug, PartialEq)]
 struct SimpleStruct {
     // field_order != sorted_order
     f1: HashMap<i32, f64>,
@@ -532,7 +532,7 @@ fn test_map() {
 #[test]
 #[ignore]
 fn test_integer() {
-    #[derive(Fory, Debug, PartialEq)]
+    #[derive(ForyObject, Debug, PartialEq)]
     struct Item2 {
         f1: i32,
         f2: Option<i32>,

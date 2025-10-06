@@ -69,6 +69,12 @@ pub fn deserialize_any_box(context: &mut ReadContext) -> Result<Box<dyn Any>, Er
     deserializer_fn(context, true, true)
 }
 
+impl ForyDefault for Box<dyn Any> {
+    fn fory_default() -> Self {
+        Box::new(())
+    }
+}
+
 impl Serializer for Box<dyn Any> {
     fn fory_write(&self, context: &mut WriteContext, is_field: bool) {
         serialize_any_box(self, context, is_field);

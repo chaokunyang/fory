@@ -167,9 +167,7 @@ macro_rules! register_trait_type {
         // 3. Auto-generate Arc wrapper type and conversions
         $crate::generate_smart_pointer_wrapper!(Arc, $trait_name, $($impl_type),+);
 
-        // 4. Skip registration helper function for wrapper types - wrappers are not registered
-
-        // 5. Serializer implementation for Box<dyn Trait> (existing functionality)
+        // 4. Serializer implementation for Box<dyn Trait> (existing functionality)
         impl $crate::serializer::Serializer for Box<dyn $trait_name> {
             fn fory_write(&self, context: &mut $crate::resolver::context::WriteContext, is_field: bool) {
                 let any_ref = <dyn $trait_name as $crate::serializer::Serializer>::as_any(&**self);
@@ -336,7 +334,7 @@ macro_rules! generate_smart_pointer_wrapper {
                 }
             }
 
-            $crate::impl_smart_pointer_serializer!([<$trait_name Rc>], std::rc::Rc::new, std::rc::Rc<dyn $trait_name>, $trait_name, $($impl_type),+);
+            $crate::impl_smart_pointer_serializer!(Rc, [<$trait_name Rc>], std::rc::Rc<dyn $trait_name>, $trait_name, $($impl_type),+);
         }
     };
 
@@ -399,7 +397,7 @@ macro_rules! generate_smart_pointer_wrapper {
                 }
             }
 
-            $crate::impl_smart_pointer_serializer!([<$trait_name Arc>], std::sync::Arc::new, std::sync::Arc<dyn $trait_name>, $trait_name, $($impl_type),+);
+            $crate::impl_smart_pointer_serializer!(Arc, [<$trait_name Arc>], std::sync::Arc<dyn $trait_name>, $trait_name, $($impl_type),+);
         }
     };
 }
@@ -407,17 +405,15 @@ macro_rules! generate_smart_pointer_wrapper {
 /// Shared serializer implementation for smart pointer wrappers
 #[macro_export]
 macro_rules! impl_smart_pointer_serializer {
-    ($wrapper_name:ident, $constructor_expr:expr, $pointer_type:ty, $trait_name:ident, $($impl_type:ty),+) => {
+    (Rc, $wrapper_name:ident, $pointer_type:ty, $trait_name:ident, $($impl_type:ty),+) => {
         impl $crate::serializer::Serializer for $wrapper_name {
             fn fory_write(&self, context: &mut $crate::resolver::context::WriteContext, is_field: bool) {
-                let any_ref = <dyn $trait_name as $crate::serializer::Serializer>::as_any(&*self.0);
-                let concrete_type_id = any_ref.type_id();
-
-                if let Some(fory_type_id) = context.get_fory().get_type_resolver().get_fory_type_id(concrete_type_id) {
-                    $crate::serializer::trait_object::write_trait_object_headers(context, fory_type_id, concrete_type_id);
-                    $crate::downcast_and_serialize!(any_ref, context, is_field, $trait_name, $($impl_type),+);
-                } else {
-                    panic!("Type {:?} not registered for {} serialization", concrete_type_id, stringify!($wrapper_name));
+                if !context.ref_writer.try_write_rc_ref(context.writer, &self.0) {
+                    let any_obj = <dyn $trait_name as $crate::serializer::Serializer>::as_any(&*self.0);
+                    let concrete_type_id = any_obj.type_id();
+                    let harness = context.write_any_typeinfo(concrete_type_id);
+                    let serializer_fn = harness.get_serializer_no_ref();
+                    serializer_fn(any_obj, context, is_field);
                 }
             }
 
@@ -427,37 +423,58 @@ macro_rules! impl_smart_pointer_serializer {
             }
 
             fn fory_read(context: &mut $crate::resolver::context::ReadContext, is_field: bool) -> Result<Self, $crate::error::Error> {
-                let fory_type_id = $crate::serializer::trait_object::read_trait_object_headers(context)?;
+                use $crate::types::RefFlag;
 
-                // Use type resolver to deserialize any registered type
-                let type_resolver = context.get_fory().get_type_resolver();
-                if let Some(harness) = type_resolver.get_harness(fory_type_id) {
-                    let deserializer_fn = harness.get_deserializer();
-                    if let Ok(any_obj) = deserializer_fn(context, is_field, true) {
+                let ref_flag = context.ref_reader.read_ref_flag(&mut context.reader);
+
+                match ref_flag {
+                    RefFlag::Null => Err($crate::error::AnyhowError::msg("Rc<dyn Trait> cannot be null").into()),
+                    RefFlag::Ref => {
+                        let ref_id = context.ref_reader.read_ref_id(&mut context.reader);
+                        context.ref_reader.get_rc_ref::<dyn $trait_name>(ref_id)
+                            .map(|rc| Self::from(rc))
+                            .ok_or_else(|| $crate::error::AnyhowError::msg(
+                                format!("Rc<dyn {}> reference {} not found", stringify!($trait_name), ref_id)
+                            ).into())
+                    }
+                    RefFlag::NotNullValue => {
+                        let harness = context.read_any_typeinfo();
+                        let deserializer_fn = harness.get_deserializer_no_ref();
+                        let boxed_any = deserializer_fn(context, is_field)?;
+
                         $(
-                            if any_obj.is::<$impl_type>() {
-                                match any_obj.downcast::<$impl_type>() {
-                                    Ok(boxed) => {
-                                        let pointer = $constructor_expr(*boxed) as $pointer_type;
-                                        return Ok(Self::from(pointer));
-                                    }
-                                    Err(recovered) => {
-                                        return Err($crate::error::Error::Other($crate::error::AnyhowError::msg(
-                                            format!("Failed to downcast type for trait {}", stringify!($trait_name))
-                                        )));
-                                    }
-                                }
+                            if boxed_any.is::<$impl_type>() {
+                                let concrete = boxed_any.downcast::<$impl_type>()
+                                    .map_err(|_| $crate::error::AnyhowError::msg("Downcast failed"))?;
+                                let rc: std::rc::Rc<dyn $trait_name> = std::rc::Rc::new(*concrete);
+                                return Ok(Self::from(rc));
                             }
                         )*
-                        return Err($crate::error::Error::Other($crate::error::AnyhowError::msg(
-                            format!("Type ID {} is registered but doesn't implement trait {}", fory_type_id, stringify!($trait_name))
-                        )));
+
+                        Err($crate::error::AnyhowError::msg(
+                            format!("Deserialized type does not implement trait {}", stringify!($trait_name))
+                        ).into())
+                    }
+                    RefFlag::RefValue => {
+                        let harness = context.read_any_typeinfo();
+                        let deserializer_fn = harness.get_deserializer_no_ref();
+                        let boxed_any = deserializer_fn(context, is_field)?;
+
+                        $(
+                            if boxed_any.is::<$impl_type>() {
+                                let concrete = boxed_any.downcast::<$impl_type>()
+                                    .map_err(|_| $crate::error::AnyhowError::msg("Downcast failed"))?;
+                                let rc: std::rc::Rc<dyn $trait_name> = std::rc::Rc::new(*concrete);
+                                context.ref_reader.store_rc_ref(rc.clone());
+                                return Ok(Self::from(rc));
+                            }
+                        )*
+
+                        Err($crate::error::AnyhowError::msg(
+                            format!("Deserialized type does not implement trait {}", stringify!($trait_name))
+                        ).into())
                     }
                 }
-
-                Err($crate::error::Error::Other($crate::error::AnyhowError::msg(
-                    format!("Type ID {} not registered in Fory", fory_type_id)
-                )))
             }
 
             fn fory_read_data(context: &mut $crate::resolver::context::ReadContext, is_field: bool) -> Result<Self, $crate::error::Error> {
@@ -465,7 +482,7 @@ macro_rules! impl_smart_pointer_serializer {
                 $crate::resolve_and_deserialize!(
                     concrete_fory_type_id, context, is_field,
                     |obj| {
-                        let pointer = $constructor_expr(obj) as $pointer_type;
+                        let pointer = std::rc::Rc::new(obj) as $pointer_type;
                         Self::from(pointer)
                     },
                     $trait_name, $($impl_type),+
@@ -477,11 +494,9 @@ macro_rules! impl_smart_pointer_serializer {
             }
 
             fn fory_write_type_info(_context: &mut $crate::resolver::context::WriteContext, _is_field: bool) {
-                // Wrapper types are polymorphic - type info is written per element
             }
 
             fn fory_read_type_info(_context: &mut $crate::resolver::context::ReadContext, _is_field: bool) {
-                // Wrapper types are polymorphic - type info is read per element
             }
 
             fn fory_is_polymorphic() -> bool {
@@ -504,7 +519,122 @@ macro_rules! impl_smart_pointer_serializer {
                 <dyn $trait_name as $crate::serializer::Serializer>::as_any(&*self.0)
             }
         }
+    };
 
+    (Arc, $wrapper_name:ident, $pointer_type:ty, $trait_name:ident, $($impl_type:ty),+) => {
+        impl $crate::serializer::Serializer for $wrapper_name {
+            fn fory_write(&self, context: &mut $crate::resolver::context::WriteContext, is_field: bool) {
+                if !context.ref_writer.try_write_arc_ref(context.writer, &self.0) {
+                    let any_obj = <dyn $trait_name as $crate::serializer::Serializer>::as_any(&*self.0);
+                    let concrete_type_id = any_obj.type_id();
+                    let harness = context.write_any_typeinfo(concrete_type_id);
+                    let serializer_fn = harness.get_serializer_no_ref();
+                    serializer_fn(any_obj, context, is_field);
+                }
+            }
+
+            fn fory_write_data(&self, context: &mut $crate::resolver::context::WriteContext, is_field: bool) {
+                let any_obj = <dyn $trait_name as $crate::serializer::Serializer>::as_any(&*self.0);
+                $crate::downcast_and_serialize!(any_obj, context, is_field, $trait_name, $($impl_type),+);
+            }
+
+            fn fory_read(context: &mut $crate::resolver::context::ReadContext, is_field: bool) -> Result<Self, $crate::error::Error> {
+                use $crate::types::RefFlag;
+
+                let ref_flag = context.ref_reader.read_ref_flag(&mut context.reader);
+
+                match ref_flag {
+                    RefFlag::Null => Err($crate::error::AnyhowError::msg("Arc<dyn Trait> cannot be null").into()),
+                    RefFlag::Ref => {
+                        let ref_id = context.ref_reader.read_ref_id(&mut context.reader);
+                        context.ref_reader.get_arc_ref::<dyn $trait_name>(ref_id)
+                            .map(|arc| Self::from(arc))
+                            .ok_or_else(|| $crate::error::AnyhowError::msg(
+                                format!("Arc<dyn {}> reference {} not found", stringify!($trait_name), ref_id)
+                            ).into())
+                    }
+                    RefFlag::NotNullValue => {
+                        let harness = context.read_any_typeinfo();
+                        let deserializer_fn = harness.get_deserializer_no_ref();
+                        let boxed_any = deserializer_fn(context, is_field)?;
+
+                        $(
+                            if boxed_any.is::<$impl_type>() {
+                                let concrete = boxed_any.downcast::<$impl_type>()
+                                    .map_err(|_| $crate::error::AnyhowError::msg("Downcast failed"))?;
+                                let arc: std::sync::Arc<dyn $trait_name> = std::sync::Arc::new(*concrete);
+                                return Ok(Self::from(arc));
+                            }
+                        )*
+
+                        Err($crate::error::AnyhowError::msg(
+                            format!("Deserialized type does not implement trait {}", stringify!($trait_name))
+                        ).into())
+                    }
+                    RefFlag::RefValue => {
+                        let harness = context.read_any_typeinfo();
+                        let deserializer_fn = harness.get_deserializer_no_ref();
+                        let boxed_any = deserializer_fn(context, is_field)?;
+
+                        $(
+                            if boxed_any.is::<$impl_type>() {
+                                let concrete = boxed_any.downcast::<$impl_type>()
+                                    .map_err(|_| $crate::error::AnyhowError::msg("Downcast failed"))?;
+                                let arc: std::sync::Arc<dyn $trait_name> = std::sync::Arc::new(*concrete);
+                                context.ref_reader.store_arc_ref(arc.clone());
+                                return Ok(Self::from(arc));
+                            }
+                        )*
+
+                        Err($crate::error::AnyhowError::msg(
+                            format!("Deserialized type does not implement trait {}", stringify!($trait_name))
+                        ).into())
+                    }
+                }
+            }
+
+            fn fory_read_data(context: &mut $crate::resolver::context::ReadContext, is_field: bool) -> Result<Self, $crate::error::Error> {
+                let concrete_fory_type_id = context.reader.read_varuint32();
+                $crate::resolve_and_deserialize!(
+                    concrete_fory_type_id, context, is_field,
+                    |obj| {
+                        let pointer = std::sync::Arc::new(obj) as $pointer_type;
+                        Self::from(pointer)
+                    },
+                    $trait_name, $($impl_type),+
+                )
+            }
+
+            fn fory_get_type_id(_fory: &$crate::fory::Fory) -> u32 {
+                $crate::types::TypeId::STRUCT as u32
+            }
+
+            fn fory_write_type_info(_context: &mut $crate::resolver::context::WriteContext, _is_field: bool) {
+            }
+
+            fn fory_read_type_info(_context: &mut $crate::resolver::context::ReadContext, _is_field: bool) {
+            }
+
+            fn fory_is_polymorphic() -> bool {
+                true
+            }
+
+            fn fory_type_id_dyn(&self, fory: &$crate::fory::Fory) -> u32 {
+                let any_obj = <dyn $trait_name as $crate::serializer::Serializer>::as_any(&*self.0);
+                let concrete_type_id = any_obj.type_id();
+                fory.get_type_resolver()
+                    .get_fory_type_id(concrete_type_id)
+                    .expect("Type not registered for trait object")
+            }
+
+            fn fory_concrete_type_id(&self) -> std::any::TypeId {
+                <dyn $trait_name as $crate::serializer::Serializer>::as_any(&*self.0).type_id()
+            }
+
+            fn as_any(&self) -> &dyn std::any::Any {
+                <dyn $trait_name as $crate::serializer::Serializer>::as_any(&*self.0)
+            }
+        }
     };
 }
 

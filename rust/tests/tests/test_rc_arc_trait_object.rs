@@ -401,3 +401,67 @@ fn test_collections_of_wrappers() {
         "Meow!"
     );
 }
+
+#[test]
+fn test_rc_shared_ref_tracking() {
+    let mut fory = fory_compatible();
+    fory.register::<Dog>(200);
+    fory.register::<Cat>(201);
+
+    let dog = Rc::new(Dog {
+        name: "Rex".to_string(),
+        breed: "Golden Retriever".to_string(),
+    }) as Rc<dyn Animal>;
+
+    let shared_animals: Vec<AnimalRc> = vec![
+        AnimalRc::from(dog.clone()),
+        AnimalRc::from(dog.clone()),
+        AnimalRc::from(dog.clone()),
+    ];
+
+    let serialized = fory.serialize(&shared_animals);
+    let deserialized: Vec<AnimalRc> = fory.deserialize(&serialized).unwrap();
+
+    assert_eq!(deserialized.len(), 3);
+    assert_eq!(deserialized[0].as_ref().name(), "Rex");
+    assert_eq!(deserialized[1].as_ref().name(), "Rex");
+    assert_eq!(deserialized[2].as_ref().name(), "Rex");
+
+    let rc0 = Rc::<dyn Animal>::from(deserialized[0].clone());
+    let rc1 = Rc::<dyn Animal>::from(deserialized[1].clone());
+    let rc2 = Rc::<dyn Animal>::from(deserialized[2].clone());
+    assert!(Rc::ptr_eq(&rc0, &rc1));
+    assert!(Rc::ptr_eq(&rc1, &rc2));
+}
+
+#[test]
+fn test_arc_shared_ref_tracking() {
+    let mut fory = fory_compatible();
+    fory.register::<Dog>(200);
+    fory.register::<Cat>(201);
+
+    let cat = Arc::new(Cat {
+        name: "Whiskers".to_string(),
+        color: "Orange".to_string(),
+    }) as Arc<dyn Animal>;
+
+    let shared_animals: Vec<AnimalArc> = vec![
+        AnimalArc::from(cat.clone()),
+        AnimalArc::from(cat.clone()),
+        AnimalArc::from(cat.clone()),
+    ];
+
+    let serialized = fory.serialize(&shared_animals);
+    let deserialized: Vec<AnimalArc> = fory.deserialize(&serialized).unwrap();
+
+    assert_eq!(deserialized.len(), 3);
+    assert_eq!(deserialized[0].as_ref().name(), "Whiskers");
+    assert_eq!(deserialized[1].as_ref().name(), "Whiskers");
+    assert_eq!(deserialized[2].as_ref().name(), "Whiskers");
+
+    let arc0 = Arc::<dyn Animal>::from(deserialized[0].clone());
+    let arc1 = Arc::<dyn Animal>::from(deserialized[1].clone());
+    let arc2 = Arc::<dyn Animal>::from(deserialized[2].clone());
+    assert!(Arc::ptr_eq(&arc0, &arc1));
+    assert!(Arc::ptr_eq(&arc1, &arc2));
+}

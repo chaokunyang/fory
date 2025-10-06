@@ -20,7 +20,7 @@ use crate::fory::Fory;
 use crate::resolver::context::ReadContext;
 use crate::resolver::context::WriteContext;
 use crate::serializer::primitive_list;
-use crate::serializer::Serializer;
+use crate::serializer::{ForyDefault, Serializer};
 use crate::types::TypeId;
 use std::any::TypeId as RsTypeId;
 use std::mem;
@@ -42,7 +42,7 @@ fn check_primitive<T: 'static>() -> Option<TypeId> {
     })
 }
 
-impl<T: Serializer + Default> Serializer for Vec<T> {
+impl<T: Serializer + ForyDefault> Serializer for Vec<T> {
     fn fory_write_data(&self, context: &mut WriteContext, is_field: bool) {
         match check_primitive::<T>() {
             Some(_) => {

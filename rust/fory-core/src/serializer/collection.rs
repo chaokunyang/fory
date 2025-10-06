@@ -18,7 +18,7 @@
 use crate::error::Error;
 use crate::resolver::context::ReadContext;
 use crate::resolver::context::WriteContext;
-use crate::serializer::Serializer;
+use crate::serializer::{ForyDefault, Serializer};
 use crate::types::Mode;
 
 // const TRACKING_REF: u8 = 0b1;
@@ -101,7 +101,7 @@ pub fn read_collection_type_info(
 
 pub fn read_collection<C, T>(context: &mut ReadContext) -> Result<C, Error>
 where
-    T: Serializer + Default,
+    T: Serializer + ForyDefault,
     C: FromIterator<T>,
 {
     let len = context.reader.read_varuint32();

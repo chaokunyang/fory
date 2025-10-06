@@ -228,7 +228,7 @@ fn generate_default_impl(ast: &syn::DeriveInput) -> proc_macro2::TokenStream {
                 }
                 _ => {
                     quote! {
-                        #ident: Default::default()
+                        #ident: fory_core::serializer::ForyDefault::fory_default()
                     }
                 }
             }

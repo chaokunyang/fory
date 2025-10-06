@@ -21,7 +21,7 @@ use crate::fory::Fory;
 use crate::meta::{
     MetaString, NAMESPACE_ENCODER, NAMESPACE_ENCODINGS, TYPE_NAME_ENCODER, TYPE_NAME_ENCODINGS,
 };
-use crate::serializer::{Serializer, StructSerializer};
+use crate::serializer::{ForyDefault, Serializer, StructSerializer};
 use std::cell::RefCell;
 use std::sync::Arc;
 use std::{any::Any, collections::HashMap};
@@ -269,7 +269,10 @@ impl TypeResolver {
         )
     }
 
-    pub fn register<T: StructSerializer + Serializer + Default>(&mut self, type_info: &TypeInfo) {
+    pub fn register<T: StructSerializer + Serializer + ForyDefault>(
+        &mut self,
+        type_info: &TypeInfo,
+    ) {
         fn serializer<T2: 'static + Serializer>(
             this: &dyn Any,
             context: &mut WriteContext,
@@ -292,7 +295,7 @@ impl TypeResolver {
             }
         }
 
-        fn deserializer<T2: 'static + Serializer + Default>(
+        fn deserializer<T2: 'static + Serializer + ForyDefault>(
             context: &mut ReadContext,
             is_field: bool,
             skip_ref_flag: bool,
@@ -360,7 +363,7 @@ impl TypeResolver {
         }
     }
 
-    pub fn register_serializer<T: Serializer + Default>(&mut self, type_info: &TypeInfo) {
+    pub fn register_serializer<T: Serializer + ForyDefault>(&mut self, type_info: &TypeInfo) {
         fn serializer<T2: 'static + Serializer>(
             this: &dyn Any,
             context: &mut WriteContext,
@@ -375,7 +378,7 @@ impl TypeResolver {
             }
         }
 
-        fn deserializer<T2: 'static + Serializer + Default>(
+        fn deserializer<T2: 'static + Serializer + ForyDefault>(
             context: &mut ReadContext,
             is_field: bool,
             skip_ref_flag: bool,

@@ -18,12 +18,12 @@
 use crate::error::Error;
 use crate::fory::Fory;
 use crate::resolver::context::{ReadContext, WriteContext};
-use crate::serializer::Serializer;
+use crate::serializer::{ForyDefault, Serializer};
 use crate::types::RefFlag;
 use anyhow::anyhow;
 use std::sync::Arc;
 
-impl<T: Serializer + Default + Send + Sync + 'static> Serializer for Arc<T> {
+impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for Arc<T> {
     fn fory_read_data(context: &mut ReadContext, is_field: bool) -> Result<Self, Error> {
         let ref_flag = context.ref_reader.read_ref_flag(&mut context.reader);
 

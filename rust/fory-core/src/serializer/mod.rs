@@ -60,7 +60,7 @@ pub fn write_ref_info_data<T: Serializer + 'static>(
     }
 }
 
-pub fn read_ref_info_data<T: Serializer + Default>(
+pub fn read_ref_info_data<T: Serializer + ForyDefault>(
     context: &mut ReadContext,
     is_field: bool,
     skip_ref_flag: bool,
@@ -69,7 +69,7 @@ pub fn read_ref_info_data<T: Serializer + Default>(
     if !skip_ref_flag {
         let ref_flag = context.reader.read_i8();
         if ref_flag == RefFlag::Null as i8 {
-            Ok(T::default())
+            Ok(T::fory_default())
         } else if ref_flag == (RefFlag::NotNullValue as i8) {
             if !skip_type_info {
                 T::fory_read_type_info(context, is_field);
@@ -84,7 +84,7 @@ pub fn read_ref_info_data<T: Serializer + Default>(
         } else if ref_flag == (RefFlag::Ref as i8) {
             // This is a reference to a previously deserialized object
             // For now, just return default - this should be handled by specific types
-            Ok(T::default())
+            Ok(T::fory_default())
         } else {
             unimplemented!("Unknown ref flag: {}", ref_flag)
         }
@@ -101,6 +101,16 @@ pub fn get_skip_ref_flag<T: Serializer>(fory: &Fory) -> bool {
     !T::fory_is_option() && PRIMITIVE_TYPES.contains(&elem_type_id)
 }
 
+pub trait ForyDefault: Sized {
+    fn fory_default() -> Self;
+}
+
+impl<T: Default> ForyDefault for T {
+    fn fory_default() -> Self {
+        Default::default()
+    }
+}
+
 pub trait Serializer: 'static {
     /// Entry point of the serialization.
     fn fory_write(&self, context: &mut WriteContext, is_field: bool)
@@ -112,7 +122,7 @@ pub trait Serializer: 'static {
 
     fn fory_read(context: &mut ReadContext, is_field: bool) -> Result<Self, Error>
     where
-        Self: Sized + Default,
+        Self: Sized + ForyDefault,
     {
         read_ref_info_data(context, is_field, false, false)
     }
@@ -181,7 +191,7 @@ pub trait Serializer: 'static {
 
     fn fory_read_data(context: &mut ReadContext, is_field: bool) -> Result<Self, Error>
     where
-        Self: Sized + Default;
+        Self: Sized + ForyDefault;
 
     fn fory_concrete_type_id(&self) -> std::any::TypeId {
         std::any::TypeId::of::<Self>()

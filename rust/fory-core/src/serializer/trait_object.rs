@@ -18,7 +18,7 @@
 use crate::error::Error;
 use crate::fory::Fory;
 use crate::resolver::context::{ReadContext, WriteContext};
-use crate::serializer::Serializer;
+use crate::serializer::{ForyDefault, Serializer};
 
 /// Helper functions for trait object serialization to reduce code duplication
 ///
@@ -204,7 +204,7 @@ macro_rules! register_trait_type {
 
             fn fory_read(context: &mut $crate::resolver::context::ReadContext, is_field: bool) -> Result<Self, $crate::error::Error>
             where
-                Self: Sized + Default,
+                Self: Sized + ForyDefault,
             {
                 let fory_type_id = $crate::serializer::trait_object::read_trait_object_headers(context)?;
                 $crate::resolve_and_deserialize!(
@@ -216,7 +216,7 @@ macro_rules! register_trait_type {
 
             fn fory_read_data(_context: &mut $crate::resolver::context::ReadContext, _is_field: bool) -> Result<Self, $crate::error::Error>
             where
-                Self: Sized + Default,
+                Self: Sized + ForyDefault,
             {
                 // This should not be called for polymorphic types like Box<dyn Trait>
                 // The fory_read method handles the polymorphic dispatch
@@ -416,7 +416,7 @@ macro_rules! impl_smart_pointer_serializer {
 
             fn fory_read(context: &mut $crate::resolver::context::ReadContext, is_field: bool) -> Result<Self, $crate::error::Error>
             where
-                Self: Sized + Default,
+                Self: Sized + ForyDefault,
             {
                 let fory_type_id = $crate::serializer::trait_object::read_trait_object_headers(context)?;
 
@@ -453,7 +453,7 @@ macro_rules! impl_smart_pointer_serializer {
 
             fn fory_read_data(context: &mut $crate::resolver::context::ReadContext, is_field: bool) -> Result<Self, $crate::error::Error>
             where
-                Self: Sized + Default,
+                Self: Sized + ForyDefault,
             {
                 let concrete_fory_type_id = context.reader.read_varuint32();
                 $crate::resolve_and_deserialize!(
@@ -547,7 +547,7 @@ impl Serializer for Box<dyn Serializer> {
 
     fn fory_read(context: &mut ReadContext, is_field: bool) -> Result<Self, Error>
     where
-        Self: Sized + Default,
+        Self: Sized + ForyDefault,
     {
         let fory_type_id = read_trait_object_headers(context)?;
 
@@ -592,7 +592,7 @@ impl Serializer for Box<dyn Serializer> {
 
     fn fory_read_data(_context: &mut ReadContext, _is_field: bool) -> Result<Self, Error>
     where
-        Self: Sized + Default,
+        Self: Sized + ForyDefault,
     {
         panic!("fory_read_data should not be called directly on Box<dyn Serializer>");
     }
@@ -653,7 +653,7 @@ macro_rules! generate_smart_pointer_serializer {
 
             fn fory_read(_context: &mut $crate::resolver::context::ReadContext, _is_field: bool) -> Result<Self, $crate::error::Error>
             where
-                Self: Sized + Default,
+                Self: Sized + ForyDefault,
             {
                 // For now, Rc and Arc deserialization is not implemented
                 // This would require complex reference counting logic
@@ -665,7 +665,7 @@ macro_rules! generate_smart_pointer_serializer {
 
             fn fory_read_data(_context: &mut $crate::resolver::context::ReadContext, _is_field: bool) -> Result<Self, $crate::error::Error>
             where
-                Self: Sized + Default,
+                Self: Sized + ForyDefault,
             {
                 panic!("fory_read_data should not be called directly on {}<<dyn {}>>", stringify!($pointer_type), stringify!($trait_name));
             }

@@ -266,7 +266,7 @@ impl NullableTypeNode {
                                     fory_core::types::RefFlag::NotNullValue as i8
                                 };
                                 let element = if ref_flag == fory_core::types::RefFlag::Null as i8 {
-                                    <#element_ty>::default()
+                                    <#element_ty>::fory_default()
                                 } else {
                                     #element_tokens?
                                 };
@@ -317,7 +317,7 @@ impl NullableTypeNode {
                                     fory_core::types::RefFlag::NotNullValue as i8
                                 };
                                 let element = if ref_flag == fory_core::types::RefFlag::Null as i8 {
-                                    <#element_ty>::default()
+                                    <#element_ty>::fory_default()
                                 } else {
                                     #element_tokens?
                                 };
@@ -372,19 +372,19 @@ impl NullableTypeNode {
                                 }
                                 let header = context.reader.read_u8();
                                 if header & fory_core::serializer::map::KEY_NULL != 0 && header & fory_core::serializer::map::VALUE_NULL != 0 {
-                                    map.insert(<#key_ty>::default(), <#val_ty>::default());
+                                    map.insert(<#key_ty>::fory_default(), <#val_ty>::fory_default());
                                     len_counter += 1;
                                     continue;
                                 }
                                 if header & fory_core::serializer::map::KEY_NULL != 0 {
                                     let value: #val_ty = {#val_tokens}?;
-                                    map.insert(<#key_ty>::default(), value);
+                                    map.insert(<#key_ty>::fory_default(), value);
                                     len_counter += 1;
                                     continue;
                                 }
                                 if header & fory_core::serializer::map::VALUE_NULL != 0 {
                                     let key: #key_ty = {#key_tokens}?;
-                                    map.insert(key, <#val_ty>::default());
+                                    map.insert(key, <#val_ty>::fory_default());
                                     len_counter += 1;
                                     continue;
                                 }
@@ -449,7 +449,7 @@ impl NullableTypeNode {
             } else {
                 quote! {
                     let res2 = if cur_remote_nullable_type.nullable && ref_flag == (fory_core::types::RefFlag::Null as i8) {
-                        #ty::default()
+                        #ty::fory_default()
                     } else {
                         let type_id = cur_remote_nullable_type.type_id;
                         let internal_id = type_id & 0xff;
@@ -489,7 +489,7 @@ impl NullableTypeNode {
                     fory_core::types::RefFlag::NotNullValue as i8
                 };
                 if ref_flag == fory_core::types::RefFlag::Null as i8 {
-                    Ok(Default::default())
+                    Ok(ForyDefault::fory_default())
                 } else {
                     #tokens
                 }

@@ -43,7 +43,7 @@ fn declare_var(fields: &[&Field]) -> Vec<TokenStream> {
                 | TraitObjectField::RcDyn(_)
                 | TraitObjectField::ArcDyn(_) => {
                     quote! {
-                        let mut #var_name: #ty = Default::default();
+                        let mut #var_name: #ty = ForyDefault::fory_default();
                     }
                 }
                 _ => {
@@ -218,7 +218,7 @@ pub fn gen_read_data(fields: &[&Field]) -> TokenStream {
                         | TraitObjectField::RcDyn(_)
                         | TraitObjectField::ArcDyn(_) => {
                             quote! {
-                                let mut #private_ident: #ty = Default::default();
+                                let mut #private_ident: #ty = ForyDefault::fory_default();
                             }
                         }
                         _ => {
@@ -402,7 +402,7 @@ fn gen_read_compatible_match_arm(field: &Field, var_name: &Ident) -> TokenStream
                             println!("Type not match, just skip: {}", #field_name_str);
                             let read_ref_flag = fory_core::serializer::skip::get_read_ref_flag(&remote_nullable_type);
                             fory_core::serializer::skip::skip_field_value(context, &remote_nullable_type, read_ref_flag).unwrap();
-                            #var_name = Some(#base_ty::default());
+                            #var_name = Some(#base_ty::fory_default());
                         } else {
                             println!("Try to deserialize_compatible: {}", #field_name_str);
                             #var_name = Some(
@@ -437,7 +437,7 @@ pub fn gen_read(struct_ident: &Ident) -> TokenStream {
                 _ => unreachable!()
             }
         } else if ref_flag == (fory_core::types::RefFlag::Null as i8) {
-            Ok(Self::default())
+            Ok(Self::fory_default())
             // Err(fory_core::error::AnyhowError::msg("Try to read non-option type to null"))?
         } else if ref_flag == (fory_core::types::RefFlag::Ref as i8) {
             Err(fory_core::error::Error::Ref)

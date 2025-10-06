@@ -19,7 +19,7 @@ use crate::error::Error;
 use crate::fory::Fory;
 use crate::resolver::context::ReadContext;
 use crate::resolver::context::WriteContext;
-use crate::serializer::{read_ref_info_data, write_ref_info_data, Serializer};
+use crate::serializer::{read_ref_info_data, write_ref_info_data, ForyDefault, Serializer};
 use crate::types::{TypeId, SIZE_OF_REF_AND_TYPE};
 use std::collections::HashMap;
 use std::mem;
@@ -80,7 +80,7 @@ fn write_chunk_size(context: &mut WriteContext, header_offset: usize, size: u8) 
     context.writer.set_bytes(header_offset + 1, &[size]);
 }
 
-impl<K: Serializer + Default + Eq + std::hash::Hash, V: Serializer + Default> Serializer
+impl<K: Serializer + ForyDefault + Eq + std::hash::Hash, V: Serializer + ForyDefault> Serializer
     for HashMap<K, V>
 {
     fn fory_write_data(&self, context: &mut WriteContext, is_field: bool) {
@@ -169,7 +169,7 @@ impl<K: Serializer + Default + Eq + std::hash::Hash, V: Serializer + Default> Se
             }
             let header = context.reader.read_u8();
             if header & KEY_NULL != 0 && header & VALUE_NULL != 0 {
-                map.insert(K::default(), V::default());
+                map.insert(K::fory_default(), V::fory_default());
                 len_counter += 1;
                 continue;
             }
@@ -185,7 +185,7 @@ impl<K: Serializer + Default + Eq + std::hash::Hash, V: Serializer + Default> Se
                     false
                 };
                 let value = read_ref_info_data(context, value_declared, skip_ref_flag, false)?;
-                map.insert(K::default(), value);
+                map.insert(K::fory_default(), value);
                 len_counter += 1;
                 continue;
             }
@@ -197,7 +197,7 @@ impl<K: Serializer + Default + Eq + std::hash::Hash, V: Serializer + Default> Se
                     false
                 };
                 let key = read_ref_info_data(context, key_declared, skip_ref_flag, false)?;
-                map.insert(key, V::default());
+                map.insert(key, V::fory_default());
                 len_counter += 1;
                 continue;
             }

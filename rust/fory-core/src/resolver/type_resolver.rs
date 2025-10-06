@@ -29,6 +29,8 @@ use std::{any::Any, collections::HashMap};
 type SerializerFn = fn(&dyn Any, &mut WriteContext, is_field: bool);
 type DeserializerFn =
     fn(&mut ReadContext, is_field: bool, skip_ref_flag: bool) -> Result<Box<dyn Any>, Error>;
+type SerializerNoRefFn = fn(&dyn Any, &mut WriteContext, is_field: bool);
+type DeserializerNoRefFn = fn(&mut ReadContext, is_field: bool) -> Result<Box<dyn Any>, Error>;
 type ToSerializerFn = fn(Box<dyn Any>) -> Result<Box<dyn crate::serializer::Serializer>, Error>;
 
 pub type ExtWriteFn = dyn Fn(&dyn Any, &mut WriteContext, bool) + Send + Sync;
@@ -37,6 +39,8 @@ pub type ExtReadFn = dyn Fn(&mut ReadContext, bool) -> Result<Box<dyn Any>, Erro
 pub struct Harness {
     serializer: SerializerFn,
     deserializer: DeserializerFn,
+    serializer_no_ref: Option<SerializerNoRefFn>,
+    deserializer_no_ref: Option<DeserializerNoRefFn>,
     to_serializer: ToSerializerFn,
 }
 
@@ -49,6 +53,24 @@ impl Harness {
         Harness {
             serializer,
             deserializer,
+            serializer_no_ref: None,
+            deserializer_no_ref: None,
+            to_serializer,
+        }
+    }
+
+    pub fn new_with_no_ref(
+        serializer: SerializerFn,
+        deserializer: DeserializerFn,
+        serializer_no_ref: SerializerNoRefFn,
+        deserializer_no_ref: DeserializerNoRefFn,
+        to_serializer: ToSerializerFn,
+    ) -> Harness {
+        Harness {
+            serializer,
+            deserializer,
+            serializer_no_ref: Some(serializer_no_ref),
+            deserializer_no_ref: Some(deserializer_no_ref),
             to_serializer,
         }
     }
@@ -59,6 +81,14 @@ impl Harness {
 
     pub fn get_deserializer(&self) -> DeserializerFn {
         self.deserializer
+    }
+
+    pub fn get_serializer_no_ref(&self) -> Option<SerializerNoRefFn> {
+        self.serializer_no_ref
+    }
+
+    pub fn get_deserializer_no_ref(&self) -> Option<DeserializerNoRefFn> {
+        self.deserializer_no_ref
     }
 
     pub fn get_to_serializer(&self) -> ToSerializerFn {
@@ -311,6 +341,30 @@ impl TypeResolver {
             }
         }
 
+        fn serializer_no_ref<T2: 'static + Serializer>(
+            this: &dyn Any,
+            context: &mut WriteContext,
+            is_field: bool,
+        ) {
+            let this = this.downcast_ref::<T2>();
+            match this {
+                Some(v) => {
+                    T2::fory_write_data(v, context, is_field);
+                }
+                None => todo!(),
+            }
+        }
+
+        fn deserializer_no_ref<T2: 'static + Serializer + ForyDefault>(
+            context: &mut ReadContext,
+            is_field: bool,
+        ) -> Result<Box<dyn Any>, Error> {
+            match T2::fory_read_data(context, is_field) {
+                Ok(v) => Ok(Box::new(v)),
+                Err(e) => Err(e),
+            }
+        }
+
         fn to_serializer<T2: 'static + Serializer>(
             boxed_any: Box<dyn Any>,
         ) -> Result<Box<dyn crate::serializer::Serializer>, Error> {
@@ -348,7 +402,13 @@ impl TypeResolver {
             self.type_name_map.insert(rs_type_id, key.clone());
             self.name_serializer_map.insert(
                 key,
-                Harness::new(serializer::<T>, deserializer::<T>, to_serializer::<T>),
+                Harness::new_with_no_ref(
+                    serializer::<T>,
+                    deserializer::<T>,
+                    serializer_no_ref::<T>,
+                    deserializer_no_ref::<T>,
+                    to_serializer::<T>,
+                ),
             );
         } else {
             let type_id = type_info.type_id;
@@ -358,7 +418,13 @@ impl TypeResolver {
             self.type_id_map.insert(rs_type_id, type_id);
             self.serializer_map.insert(
                 type_id,
-                Harness::new(serializer::<T>, deserializer::<T>, to_serializer::<T>),
+                Harness::new_with_no_ref(
+                    serializer::<T>,
+                    deserializer::<T>,
+                    serializer_no_ref::<T>,
+                    deserializer_no_ref::<T>,
+                    to_serializer::<T>,
+                ),
             );
         }
     }
@@ -396,6 +462,30 @@ impl TypeResolver {
             }
         }
 
+        fn serializer_no_ref<T2: 'static + Serializer>(
+            this: &dyn Any,
+            context: &mut WriteContext,
+            is_field: bool,
+        ) {
+            let this = this.downcast_ref::<T2>();
+            match this {
+                Some(v) => {
+                    T2::fory_write_data(v, context, is_field);
+                }
+                None => todo!(),
+            }
+        }
+
+        fn deserializer_no_ref<T2: 'static + Serializer + ForyDefault>(
+            context: &mut ReadContext,
+            is_field: bool,
+        ) -> Result<Box<dyn Any>, Error> {
+            match T2::fory_read_data(context, is_field) {
+                Ok(v) => Ok(Box::new(v)),
+                Err(e) => Err(e),
+            }
+        }
+
         fn to_serializer<T2: 'static + Serializer>(
             boxed_any: Box<dyn Any>,
         ) -> Result<Box<dyn crate::serializer::Serializer>, Error> {
@@ -425,7 +515,13 @@ impl TypeResolver {
             self.type_name_map.insert(rs_type_id, key.clone());
             self.name_serializer_map.insert(
                 key,
-                Harness::new(serializer::<T>, deserializer::<T>, to_serializer::<T>),
+                Harness::new_with_no_ref(
+                    serializer::<T>,
+                    deserializer::<T>,
+                    serializer_no_ref::<T>,
+                    deserializer_no_ref::<T>,
+                    to_serializer::<T>,
+                ),
             );
         } else {
             let type_id = type_info.type_id;
@@ -435,7 +531,13 @@ impl TypeResolver {
             self.type_id_map.insert(rs_type_id, type_id);
             self.serializer_map.insert(
                 type_id,
-                Harness::new(serializer::<T>, deserializer::<T>, to_serializer::<T>),
+                Harness::new_with_no_ref(
+                    serializer::<T>,
+                    deserializer::<T>,
+                    serializer_no_ref::<T>,
+                    deserializer_no_ref::<T>,
+                    to_serializer::<T>,
+                ),
             );
         }
     }

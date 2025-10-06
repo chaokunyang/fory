@@ -19,6 +19,7 @@ use fory_core::fory::Fory;
 use std::any::Any;
 use std::rc::Rc;
 use std::sync::Arc;
+use std::vec;
 
 #[test]
 fn test_box_dyn_any() {
@@ -42,10 +43,10 @@ fn test_box_dyn_any() {
     let deserialized3: Box<dyn Any> = fory.deserialize(&bytes3).unwrap();
     assert_eq!(deserialized3.downcast_ref::<String>().unwrap(), "");
 
-    let value5: Box<dyn Any> = Box::new(3.14f64);
+    let value5: Box<dyn Any> = Box::new(3.15f64);
     let bytes5 = fory.serialize(&value5);
     let deserialized5: Box<dyn Any> = fory.deserialize(&bytes5).unwrap();
-    assert_eq!(deserialized5.downcast_ref::<f64>().unwrap(), &3.14f64);
+    assert_eq!(deserialized5.downcast_ref::<f64>().unwrap(), &3.15f64);
 }
 
 #[test]
@@ -109,4 +110,39 @@ fn test_dyn_any_negative_values() {
     let bytes2 = fory.serialize(&value2);
     let deserialized2: Arc<dyn Any> = fory.deserialize(&bytes2).unwrap();
     assert_eq!(deserialized2.downcast_ref::<i64>().unwrap(), &-999i64);
+}
+
+#[test]
+fn test_rc_dyn_any_shared_reference() {
+    let fory = Fory::default();
+
+    let shared_str: Rc<dyn Any> = Rc::new("shared".to_string());
+
+    let data = vec![shared_str.clone(), shared_str.clone()];
+
+    let bytes = fory.serialize(&data);
+    let deserialized: Vec<Rc<dyn Any>> = fory.deserialize(&bytes).unwrap();
+
+    let first_str = deserialized[0].downcast_ref::<String>().unwrap();
+    let second_str = deserialized[1].downcast_ref::<String>().unwrap();
+
+    assert_eq!(first_str, "shared");
+    assert_eq!(second_str, "shared");
+}
+
+#[test]
+fn test_arc_dyn_any_shared_reference() {
+    let fory = Fory::default();
+
+    let shared_vec: Arc<dyn Any> = Arc::new(vec![1, 2, 3]);
+
+    let data = vec![shared_vec.clone(), shared_vec.clone()];
+
+    let bytes = fory.serialize(&data);
+    let deserialized: Vec<Arc<dyn Any>> = fory.deserialize(&bytes).unwrap();
+
+    let first_vec = deserialized[0].downcast_ref::<Vec<i32>>().unwrap();
+    let second_vec = deserialized[1].downcast_ref::<Vec<i32>>().unwrap();
+    assert_eq!(first_vec, &vec![1, 2, 3]);
+    assert_eq!(second_vec, &vec![1, 2, 3]);
 }

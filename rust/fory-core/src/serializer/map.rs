@@ -241,3 +241,9 @@ impl<K: Serializer + ForyDefault + Eq + std::hash::Hash, V: Serializer + ForyDef
         self
     }
 }
+
+impl<K, V> ForyDefault for HashMap<K, V> {
+    fn fory_default() -> Self {
+        HashMap::new()
+    }
+}

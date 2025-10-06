@@ -18,7 +18,7 @@
 use crate::error::Error;
 use crate::fory::Fory;
 use crate::resolver::context::{ReadContext, WriteContext};
-use crate::serializer::Serializer;
+use crate::serializer::{ForyDefault, Serializer};
 
 /// Helper functions for trait object serialization to reduce code duplication
 ///
@@ -151,6 +151,12 @@ macro_rules! register_trait_type {
         // Default implementation using first registered type
         impl std::default::Default for Box<dyn $trait_name> {
             fn default() -> Self {
+                Box::new(<register_trait_type!(@first_type $($impl_type),+) as std::default::Default>::default())
+            }
+        }
+
+        impl $crate::serializer::ForyDefault for Box<dyn $trait_name> {
+            fn fory_default() -> Self {
                 Box::new(<register_trait_type!(@first_type $($impl_type),+) as std::default::Default>::default())
             }
         }
@@ -312,6 +318,12 @@ macro_rules! generate_smart_pointer_wrapper {
                 }
             }
 
+            impl $crate::serializer::ForyDefault for [<$trait_name Rc>] {
+                fn fory_default() -> Self {
+                    Self(std::rc::Rc::new(<register_trait_type!(@first_type $($impl_type),+) as std::default::Default>::default()))
+                }
+            }
+
             impl std::fmt::Debug for [<$trait_name Rc>] {
                 fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                     let any_obj = <dyn $trait_name as $crate::serializer::Serializer>::as_any(&*self.0);
@@ -365,6 +377,12 @@ macro_rules! generate_smart_pointer_wrapper {
 
             impl std::default::Default for [<$trait_name Arc>] {
                 fn default() -> Self {
+                    Self(std::sync::Arc::new(<register_trait_type!(@first_type $($impl_type),+) as std::default::Default>::default()))
+                }
+            }
+
+            impl $crate::serializer::ForyDefault for [<$trait_name Arc>] {
+                fn fory_default() -> Self {
                     Self(std::sync::Arc::new(<register_trait_type!(@first_type $($impl_type),+) as std::default::Default>::default()))
                 }
             }
@@ -493,7 +511,13 @@ macro_rules! impl_smart_pointer_serializer {
 // Keep the existing Box<dyn Serializer> implementation as is
 impl Default for Box<dyn Serializer> {
     fn default() -> Self {
-        panic!("Box<dyn Serializer> cannot be default-constructed")
+        Box::new(0)
+    }
+}
+
+impl ForyDefault for Box<dyn Serializer> {
+    fn fory_default() -> Self {
+        Box::new(0)
     }
 }
 
@@ -575,75 +599,6 @@ impl Serializer for Box<dyn Serializer> {
     fn fory_read_data(_context: &mut ReadContext, _is_field: bool) -> Result<Self, Error> {
         panic!("fory_read_data should not be called directly on Box<dyn Serializer>");
     }
-}
-
-// Note: The macro invocations are moved to the end of the file after macro definitions
-
-/// Macro to generate serializer implementations for smart pointer types with Serializer trait
-#[macro_export]
-macro_rules! generate_smart_pointer_serializer {
-    ($pointer_type:ident, $trait_name:ident) => {
-        impl Default for $pointer_type<dyn $crate::serializer::$trait_name> {
-            fn default() -> Self {
-                panic!("{}<<dyn {}>> cannot be default-constructed", stringify!($pointer_type), stringify!($trait_name))
-            }
-        }
-
-        impl $crate::serializer::Serializer for $pointer_type<dyn $crate::serializer::$trait_name> {
-            fn fory_write(&self, context: &mut $crate::resolver::context::WriteContext, is_field: bool) {
-                use $crate::types::{Mode, RefFlag, TypeId};
-
-                context.writer.write_i8(RefFlag::NotNullValue as i8);
-
-                let fory_type_id = (**self).fory_type_id_dyn(context.get_fory());
-                context.writer.write_varuint32(fory_type_id);
-
-                if context.get_fory().get_mode() == &Mode::Compatible
-                    && (fory_type_id & 0xff == TypeId::NAMED_COMPATIBLE_STRUCT as u32
-                        || fory_type_id & 0xff == TypeId::COMPATIBLE_STRUCT as u32)
-                {
-                    let concrete_type_id = (**self).fory_concrete_type_id();
-                    let meta_index = context.push_meta(concrete_type_id) as u32;
-                    context.writer.write_varuint32(meta_index);
-                }
-
-                (**self).fory_write_data(context, is_field);
-            }
-
-            fn fory_write_data(&self, _context: &mut $crate::resolver::context::WriteContext, _is_field: bool) {
-                panic!("fory_write_data should not be called directly on {}<<dyn {}>>", stringify!($pointer_type), stringify!($trait_name));
-            }
-
-            fn fory_type_id_dyn(&self, fory: &$crate::fory::Fory) -> u32 {
-                (**self).fory_type_id_dyn(fory)
-            }
-
-            fn fory_is_polymorphic() -> bool {
-                true
-            }
-
-            fn fory_write_type_info(_context: &mut $crate::resolver::context::WriteContext, _is_field: bool) {
-                // Pointer<dyn Trait> is polymorphic - type info is written per element
-            }
-
-            fn fory_read_type_info(_context: &mut $crate::resolver::context::ReadContext, _is_field: bool) {
-                // Pointer<dyn Trait> is polymorphic - type info is read per element
-            }
-
-            fn fory_read(_context: &mut $crate::resolver::context::ReadContext, _is_field: bool) -> Result<Self, $crate::error::Error> {
-                // For now, Rc and Arc deserialization is not implemented
-                // This would require complex reference counting logic
-                Err($crate::error::Error::Other($crate::error::AnyhowError::msg(
-                    format!("{}<<dyn {}>> deserialization not yet implemented - use Box<dyn {}> instead",
-                        stringify!($pointer_type), stringify!($trait_name), stringify!($trait_name))
-                )))
-            }
-
-            fn fory_read_data(_context: &mut $crate::resolver::context::ReadContext, _is_field: bool) -> Result<Self, $crate::error::Error> {
-                panic!("fory_read_data should not be called directly on {}<<dyn {}>>", stringify!($pointer_type), stringify!($trait_name));
-            }
-        }
-    };
 }
 
 /// Helper macros for automatic conversions in derive code

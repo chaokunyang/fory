@@ -19,7 +19,7 @@ use crate::error::Error;
 use crate::fory::Fory;
 use crate::resolver::context::ReadContext;
 use crate::resolver::context::WriteContext;
-use crate::serializer::Serializer;
+use crate::serializer::{ForyDefault, Serializer};
 use crate::types::TypeId;
 use std::mem;
 
@@ -46,5 +46,11 @@ impl Serializer for bool {
 
     fn as_any(&self) -> &dyn std::any::Any {
         self
+    }
+}
+
+impl ForyDefault for bool {
+    fn fory_default() -> Self {
+        false
     }
 }

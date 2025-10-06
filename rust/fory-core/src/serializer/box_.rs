@@ -54,3 +54,9 @@ impl<T: Serializer + ForyDefault> Serializer for Box<T> {
         self
     }
 }
+
+impl<T: ForyDefault> ForyDefault for Box<T> {
+    fn fory_default() -> Self {
+        Box::new(T::fory_default())
+    }
+}

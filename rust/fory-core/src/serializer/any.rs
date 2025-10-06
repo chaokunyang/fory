@@ -16,9 +16,13 @@
 // under the License.
 
 use crate::error::Error;
+use crate::fory::Fory;
 use crate::resolver::context::{ReadContext, WriteContext};
+use crate::serializer::{ForyDefault, Serializer};
 use crate::types::RefFlag;
 use std::any::Any;
+use std::rc::Rc;
+use std::sync::Arc;
 
 /// Helper function to serialize a Box<dyn Any>
 pub fn serialize_any_box(any_box: &Box<dyn Any>, context: &mut WriteContext, is_field: bool) {
@@ -63,4 +67,157 @@ pub fn deserialize_any_box(context: &mut ReadContext) -> Result<Box<dyn Any>, Er
 
     let deserializer_fn = harness.get_deserializer();
     deserializer_fn(context, true, true)
+}
+
+impl Serializer for Box<dyn Any> {
+    fn fory_write(&self, context: &mut WriteContext, is_field: bool) {
+        serialize_any_box(self, context, is_field);
+    }
+
+    fn fory_write_data(&self, context: &mut WriteContext, is_field: bool) {
+        serialize_any_box(self, context, is_field);
+    }
+
+    fn fory_read(context: &mut ReadContext, _is_field: bool) -> Result<Self, Error> {
+        deserialize_any_box(context)
+    }
+
+    fn fory_read_data(context: &mut ReadContext, _is_field: bool) -> Result<Self, Error> {
+        deserialize_any_box(context)
+    }
+
+    fn fory_get_type_id(_fory: &Fory) -> u32 {
+        panic!("Box<dyn Any> has no static type ID - use fory_type_id_dyn")
+    }
+
+    fn fory_type_id_dyn(&self, fory: &Fory) -> u32 {
+        let concrete_type_id = (**self).type_id();
+        fory.get_type_resolver()
+            .get_fory_type_id(concrete_type_id)
+            .expect("Type not registered")
+    }
+
+    fn fory_is_polymorphic() -> bool {
+        true
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        &**self
+    }
+}
+
+impl ForyDefault for Rc<dyn Any> {
+    fn fory_default() -> Self {
+        Rc::new(())
+    }
+}
+
+impl Serializer for Rc<dyn Any> {
+    fn fory_write(&self, context: &mut WriteContext, is_field: bool) {
+        context.writer.write_i8(RefFlag::NotNullValue as i8);
+        let concrete_type_id = (**self).type_id();
+        let fory_type_id = context
+            .get_fory()
+            .get_type_resolver()
+            .get_fory_type_id(concrete_type_id)
+            .expect("Type not registered");
+        context.writer.write_varuint32(fory_type_id);
+        let harness = context
+            .get_fory()
+            .get_type_resolver()
+            .get_harness(fory_type_id)
+            .expect("Harness not found");
+        let serializer_fn = harness.get_serializer();
+        serializer_fn(&**self, context, is_field);
+    }
+
+    fn fory_write_data(&self, context: &mut WriteContext, is_field: bool) {
+        self.fory_write(context, is_field);
+    }
+
+    fn fory_read(context: &mut ReadContext, _is_field: bool) -> Result<Self, Error> {
+        let boxed = deserialize_any_box(context)?;
+        Ok(Rc::from(boxed))
+    }
+
+    fn fory_read_data(context: &mut ReadContext, is_field: bool) -> Result<Self, Error> {
+        Self::fory_read(context, is_field)
+    }
+
+    fn fory_get_type_id(_fory: &Fory) -> u32 {
+        panic!("Rc<dyn Any> has no static type ID - use fory_type_id_dyn")
+    }
+
+    fn fory_type_id_dyn(&self, fory: &Fory) -> u32 {
+        let concrete_type_id = (**self).type_id();
+        fory.get_type_resolver()
+            .get_fory_type_id(concrete_type_id)
+            .expect("Type not registered")
+    }
+
+    fn fory_is_polymorphic() -> bool {
+        true
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        &**self
+    }
+}
+
+impl ForyDefault for Arc<dyn Any> {
+    fn fory_default() -> Self {
+        Arc::new(())
+    }
+}
+
+impl Serializer for Arc<dyn Any> {
+    fn fory_write(&self, context: &mut WriteContext, is_field: bool) {
+        context.writer.write_i8(RefFlag::NotNullValue as i8);
+        let concrete_type_id = (**self).type_id();
+        let fory_type_id = context
+            .get_fory()
+            .get_type_resolver()
+            .get_fory_type_id(concrete_type_id)
+            .expect("Type not registered");
+        context.writer.write_varuint32(fory_type_id);
+        let harness = context
+            .get_fory()
+            .get_type_resolver()
+            .get_harness(fory_type_id)
+            .expect("Harness not found");
+        let serializer_fn = harness.get_serializer();
+        serializer_fn(&**self, context, is_field);
+    }
+
+    fn fory_write_data(&self, context: &mut WriteContext, is_field: bool) {
+        self.fory_write(context, is_field);
+    }
+
+    fn fory_read(context: &mut ReadContext, _is_field: bool) -> Result<Self, Error> {
+        let boxed = deserialize_any_box(context)?;
+        Ok(Arc::from(boxed))
+    }
+
+    fn fory_read_data(context: &mut ReadContext, is_field: bool) -> Result<Self, Error> {
+        Self::fory_read(context, is_field)
+    }
+
+    fn fory_get_type_id(_fory: &Fory) -> u32 {
+        panic!("Arc<dyn Any> has no static type ID - use fory_type_id_dyn")
+    }
+
+    fn fory_type_id_dyn(&self, fory: &Fory) -> u32 {
+        let concrete_type_id = (**self).type_id();
+        fory.get_type_resolver()
+            .get_fory_type_id(concrete_type_id)
+            .expect("Type not registered")
+    }
+
+    fn fory_is_polymorphic() -> bool {
+        true
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        &**self
+    }
 }

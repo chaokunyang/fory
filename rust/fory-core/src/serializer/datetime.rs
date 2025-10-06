@@ -19,6 +19,7 @@ use crate::error::Error;
 use crate::fory::Fory;
 use crate::resolver::context::ReadContext;
 use crate::resolver::context::WriteContext;
+use crate::serializer::ForyDefault;
 use crate::serializer::Serializer;
 use crate::types::TypeId;
 use crate::util::EPOCH;
@@ -91,5 +92,17 @@ impl Serializer for NaiveDate {
 
     fn as_any(&self) -> &dyn std::any::Any {
         self
+    }
+}
+
+impl ForyDefault for NaiveDateTime {
+    fn fory_default() -> Self {
+        NaiveDateTime::default()
+    }
+}
+
+impl ForyDefault for NaiveDate {
+    fn fory_default() -> Self {
+        NaiveDate::default()
     }
 }

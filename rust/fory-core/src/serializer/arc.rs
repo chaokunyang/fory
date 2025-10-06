@@ -79,3 +79,9 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for Arc<T> 
         self
     }
 }
+
+impl<T: ForyDefault> ForyDefault for Arc<T> {
+    fn fory_default() -> Self {
+        Arc::new(T::fory_default())
+    }
+}

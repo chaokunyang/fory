@@ -107,3 +107,9 @@ impl<T: Serializer + ForyDefault> Serializer for Vec<T> {
         self
     }
 }
+
+impl<T> ForyDefault for Vec<T> {
+    fn fory_default() -> Self {
+        Vec::new()
+    }
+}

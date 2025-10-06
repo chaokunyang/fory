@@ -21,23 +21,26 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::Data;
 
-pub fn derive_serializer(ast: &syn::DeriveInput) -> TokenStream {
-    let name = &ast.ident;
-
-    // Check if Default is already derived/implemented
-    let has_existing_default = ast.attrs.iter().any(|attr| {
+fn has_existing_default(ast: &syn::DeriveInput, trait_name: &str) -> bool {
+    ast.attrs.iter().any(|attr| {
         attr.path().is_ident("derive") && {
             let mut has_default = false;
             let _ = attr.parse_nested_meta(|meta| {
-                if meta.path.is_ident("Default") {
+                if meta.path.is_ident(trait_name) {
                     has_default = true;
                 }
                 Ok(())
             });
             has_default
         }
-    });
+    })
+}
 
+pub fn derive_serializer(ast: &syn::DeriveInput) -> TokenStream {
+    let name = &ast.ident;
+
+    // Check if ForyDefault is already derived/implemented
+    let has_existing_default = has_existing_default(ast, "ForyDefault");
     let default_impl = if !has_existing_default {
         generate_default_impl(ast)
     } else {
@@ -117,6 +120,8 @@ pub fn derive_serializer(ast: &syn::DeriveInput) -> TokenStream {
     let type_idx = misc::allocate_type_id();
 
     let gen = quote! {
+        use fory_core::serializer::ForyDefault as _;
+
         #default_impl
 
         impl fory_core::serializer::StructSerializer for #name {
@@ -190,6 +195,7 @@ pub fn derive_serializer(ast: &syn::DeriveInput) -> TokenStream {
 
 fn generate_default_impl(ast: &syn::DeriveInput) -> proc_macro2::TokenStream {
     let name = &ast.ident;
+    let has_existing_default = has_existing_default(ast, "Default");
 
     match &ast.data {
         Data::Struct(s) => {
@@ -235,11 +241,26 @@ fn generate_default_impl(ast: &syn::DeriveInput) -> proc_macro2::TokenStream {
                 }
             });
 
-            quote! {
-                impl std::default::Default for #name {
-                    fn default() -> Self {
-                        Self {
-                            #(#field_inits),*
+            if has_existing_default {
+                quote! {
+                   impl fory_core::serializer::ForyDefault for #name {
+                        fn fory_default() -> Self {
+                            Self::default()
+                        }
+                    }
+                }
+            } else {
+                quote! {
+                    impl fory_core::serializer::ForyDefault for #name {
+                        fn fory_default() -> Self {
+                            Self {
+                                #(#field_inits),*
+                            }
+                        }
+                    }
+                    impl std::default::Default for #name {
+                        fn default() -> Self {
+                            Self::fory_default()
                         }
                     }
                 }
@@ -258,6 +279,12 @@ fn generate_default_impl(ast: &syn::DeriveInput) -> proc_macro2::TokenStream {
                 if let Some(first_variant) = e.variants.first() {
                     let variant_ident = &first_variant.ident;
                     quote! {
+                        impl fory_core::serializer::ForyDefault for #name {
+                            fn fory_default() -> Self {
+                                Self::#variant_ident
+                            }
+                        }
+
                         impl std::default::Default for #name {
                             fn default() -> Self {
                                 Self::#variant_ident
@@ -265,10 +292,21 @@ fn generate_default_impl(ast: &syn::DeriveInput) -> proc_macro2::TokenStream {
                         }
                     }
                 } else {
+                    // impl fory_core::serializer::ForyDefault for #name {
+                    //     fn fory_default() -> Self {
+                    //         panic!("No unit-like variants found in enum {}", stringify!(#name));
+                    //     }
+                    // }
                     quote! {}
                 }
             } else {
-                quote! {}
+                quote! {
+                    impl fory_core::serializer::ForyDefault for #name {
+                        fn fory_default() -> Self {
+                            Self::default()
+                        }
+                    }
+                }
             }
         }
         Data::Union(_) => quote! {},

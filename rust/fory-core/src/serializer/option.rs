@@ -69,3 +69,9 @@ impl<T: Serializer + ForyDefault> Serializer for Option<T> {
         self
     }
 }
+
+impl<T: ForyDefault> ForyDefault for Option<T> {
+    fn fory_default() -> Self {
+        None
+    }
+}

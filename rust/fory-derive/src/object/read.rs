@@ -383,7 +383,7 @@ fn gen_read_compatible_match_arm(field: &Field, var_name: &Ident) -> TokenStream
             let generic_token = generic_tree_to_tokens(&generic_tree, true);
             let read_nullable_fn_name = create_read_nullable_fn_name(field);
 
-            let base_ty = match &ty {
+            let _base_ty = match &ty {
                 Type::Path(type_path) => &type_path.path.segments.first().unwrap().ident,
                 _ => panic!("Unsupported type"),
             };

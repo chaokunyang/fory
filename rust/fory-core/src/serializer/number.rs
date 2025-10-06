@@ -20,7 +20,7 @@ use crate::error::Error;
 use crate::fory::Fory;
 use crate::resolver::context::ReadContext;
 use crate::resolver::context::WriteContext;
-use crate::serializer::Serializer;
+use crate::serializer::{ForyDefault, Serializer};
 use crate::types::TypeId;
 
 macro_rules! impl_num_serializer {
@@ -48,6 +48,11 @@ macro_rules! impl_num_serializer {
 
             fn as_any(&self) -> &dyn std::any::Any {
                 self
+            }
+        }
+        impl ForyDefault for $ty {
+            fn fory_default() -> Self {
+                0 as $ty
             }
         }
     };

@@ -61,3 +61,9 @@ impl<T: Serializer + ForyDefault + Eq + std::hash::Hash> Serializer for HashSet<
         self
     }
 }
+
+impl<T> ForyDefault for HashSet<T> {
+    fn fory_default() -> Self {
+        HashSet::new()
+    }
+}

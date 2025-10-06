@@ -18,7 +18,7 @@
 use fory_core::error::Error;
 use fory_core::fory::Fory;
 use fory_core::resolver::context::{ReadContext, WriteContext};
-use fory_core::serializer::Serializer;
+use fory_core::serializer::{ForyDefault, Serializer};
 use fory_core::types::Mode::Compatible;
 use fory_derive::Fory;
 
@@ -47,11 +47,18 @@ fn test_duplicate_impl() {
 #[test]
 fn test_use() {
     use fory_core::fory::{read, write};
-    #[derive(Debug, PartialEq, Default)]
+    #[derive(Debug, PartialEq)]
     struct Item {
         f1: i32,
         f2: i8,
     }
+
+    impl ForyDefault for Item {
+        fn fory_default() -> Self {
+            Self { f1: 0, f2: 0 }
+        }
+    }
+
     impl Serializer for Item {
         fn fory_write_data(&self, context: &mut WriteContext, is_field: bool) {
             write(&self.f1, context, is_field);

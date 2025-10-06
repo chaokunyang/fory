@@ -105,11 +105,14 @@ pub trait ForyDefault: Sized {
     fn fory_default() -> Self;
 }
 
-impl<T: Default> ForyDefault for T {
-    fn fory_default() -> Self {
-        Default::default()
-    }
-}
+// We can't add blanket impl for all T: Default because it conflicts with other impls.
+// For example, upstream crates may add a new impl of trait `std::default::Default` for
+// type `std::rc::Rc<(dyn std::any::Any + 'static)>` in future versions.
+// impl<T: Default + Sized> ForyDefault for T {
+//     fn fory_default() -> Self {
+//         Default::default()
+//     }
+// }
 
 pub trait Serializer: 'static {
     /// Entry point of the serialization.

@@ -79,3 +79,9 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for Rc<T> {
         self
     }
 }
+
+impl<T: ForyDefault> ForyDefault for Rc<T> {
+    fn fory_default() -> Self {
+        Rc::new(T::fory_default())
+    }
+}

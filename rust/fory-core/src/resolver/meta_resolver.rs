@@ -64,7 +64,7 @@ impl MetaReaderResolver {
             0x04 => Encoding::AllToLowerSpecial,
             _ => Encoding::Utf8,
         };
-        NAMESPACE_DECODER.decode(&bytes, encoding).unwrap()
+        NAMESPACE_DECODER.decode(bytes, encoding).unwrap()
     }
 }
 

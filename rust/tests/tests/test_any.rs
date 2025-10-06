@@ -184,7 +184,7 @@ fn test_mixed_any_types() {
         Box::new(42i32),
         Box::new("hello".to_string()),
         Box::new(item),
-        Box::new(3.14f64),
+        Box::new(3.15f64),
     ];
 
     let bytes = fory.serialize(&mixed);
@@ -197,7 +197,7 @@ fn test_mixed_any_types() {
     assert_eq!(item_result.id, 123);
     assert_eq!(item_result.value, "test");
 
-    assert_eq!(deserialized[3].downcast_ref::<f64>().unwrap(), &3.14f64);
+    assert_eq!(deserialized[3].downcast_ref::<f64>().unwrap(), &3.15f64);
 }
 
 #[derive(ForyObject, PartialEq, Debug)]

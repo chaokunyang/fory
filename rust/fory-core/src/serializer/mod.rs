@@ -39,6 +39,7 @@ pub mod skip;
 mod string;
 pub mod struct_;
 pub mod trait_object;
+pub mod weak;
 
 pub fn write_ref_info_data<T: Serializer + 'static>(
     record: &T,

@@ -109,7 +109,7 @@ pub enum CollectionTraitInfo {
     HashMapArc(Box<Type>, String),
 }
 
-/// Check if a type is a collection containing Rc<dyn Trait> or Arc<dyn Trait>
+/// Check if a type is a collection containing `Rc<dyn Trait>` or `Arc<dyn Trait>`
 pub fn detect_collection_with_trait_object(ty: &Type) -> Option<CollectionTraitInfo> {
     if let Type::Path(TypePath { path, .. }) = ty {
         if let Some(seg) = path.segments.last() {

@@ -26,7 +26,7 @@ pub enum StringFlag {
     UTF8 = 1,
 }
 
-#[derive(TryFromPrimitive)]
+#[derive(Debug, TryFromPrimitive)]
 #[repr(i8)]
 pub enum RefFlag {
     Null = -3,

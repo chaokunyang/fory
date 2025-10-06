@@ -29,22 +29,8 @@ pub fn serialize_any_box(any_box: &Box<dyn Any>, context: &mut WriteContext, is_
     context.writer.write_i8(RefFlag::NotNullValue as i8);
 
     let concrete_type_id = (**any_box).type_id();
-
-    let fory_type_id = context
-        .get_fory()
-        .get_type_resolver()
-        .get_fory_type_id(concrete_type_id)
-        .expect("Type not registered");
-
-    context.writer.write_varuint32(fory_type_id);
-
-    let harness = context
-        .get_fory()
-        .get_type_resolver()
-        .get_harness(fory_type_id)
-        .expect("Harness not found");
-
-    let serializer_fn = harness.get_serializer();
+    let harness = context.write_any_typeinfo(concrete_type_id);
+    let serializer_fn = harness.get_serializer_no_ref();
     serializer_fn(&**any_box, context, is_field);
 }
 
@@ -56,17 +42,9 @@ pub fn deserialize_any_box(context: &mut ReadContext) -> Result<Box<dyn Any>, Er
             "Expected NotNullValue for Box<dyn Any>"
         )));
     }
-
-    let fory_type_id = context.reader.read_varuint32();
-
-    let harness = context
-        .get_fory()
-        .get_type_resolver()
-        .get_harness(fory_type_id)
-        .ok_or_else(|| Error::Other(anyhow::anyhow!("Type {} not registered", fory_type_id)))?;
-
-    let deserializer_fn = harness.get_deserializer();
-    deserializer_fn(context, true, true)
+    let harness = context.read_any_typeinfo();
+    let deserializer_fn = harness.get_deserializer_no_ref();
+    deserializer_fn(context, true)
 }
 
 impl ForyDefault for Box<dyn Any> {
@@ -105,6 +83,14 @@ impl Serializer for Box<dyn Any> {
 
     fn fory_is_polymorphic() -> bool {
         true
+    }
+
+    fn fory_write_type_info(_context: &mut WriteContext, _is_field: bool) {
+        // Box<dyn Any> is polymorphic - type info is written per element
+    }
+
+    fn fory_read_type_info(_context: &mut ReadContext, _is_field: bool) {
+        // Box<dyn Any> is polymorphic - type info is read per element
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -182,6 +168,14 @@ impl Serializer for Rc<dyn Any> {
         true
     }
 
+    fn fory_write_type_info(_context: &mut WriteContext, _is_field: bool) {
+        // Rc<dyn Any> is polymorphic - type info is written per element
+    }
+
+    fn fory_read_type_info(_context: &mut ReadContext, _is_field: bool) {
+        // Rc<dyn Any> is polymorphic - type info is read per element
+    }
+
     fn as_any(&self) -> &dyn Any {
         &**self
     }
@@ -255,6 +249,14 @@ impl Serializer for Arc<dyn Any> {
 
     fn fory_is_polymorphic() -> bool {
         true
+    }
+
+    fn fory_write_type_info(_context: &mut WriteContext, _is_field: bool) {
+        // Arc<dyn Any> is polymorphic - type info is written per element
+    }
+
+    fn fory_read_type_info(_context: &mut ReadContext, _is_field: bool) {
+        // Arc<dyn Any> is polymorphic - type info is read per element
     }
 
     fn as_any(&self) -> &dyn Any {

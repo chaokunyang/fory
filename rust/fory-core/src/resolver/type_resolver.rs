@@ -55,8 +55,8 @@ impl Harness {
         Harness {
             serializer,
             deserializer,
-            serializer_no_ref: serializer_no_ref,
-            deserializer_no_ref: deserializer_no_ref,
+            serializer_no_ref,
+            deserializer_no_ref,
             to_serializer,
         }
     }

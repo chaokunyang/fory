@@ -187,6 +187,10 @@ impl TypeInfo {
     pub fn get_type_def(&self) -> &Vec<u8> {
         &self.type_def
     }
+
+    pub fn is_registered_by_name(&self) -> bool {
+        self.register_by_name
+    }
 }
 
 pub struct TypeResolver {

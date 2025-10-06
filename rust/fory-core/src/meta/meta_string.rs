@@ -67,7 +67,7 @@ impl MetaStringBytes {
     }
 }
 
-#[derive(Debug, PartialEq, Hash, Eq, Clone, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct MetaString {
     pub original: String,
     pub encoding: Encoding,
@@ -75,6 +75,20 @@ pub struct MetaString {
     pub strip_last_char: bool,
     pub special_char1: char,
     pub special_char2: char,
+}
+
+impl PartialEq for MetaString {
+    fn eq(&self, other: &Self) -> bool {
+        self.bytes == other.bytes
+    }
+}
+
+impl Eq for MetaString {}
+
+impl std::hash::Hash for MetaString {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.bytes.hash(state);
+    }
 }
 
 impl MetaString {
@@ -99,6 +113,11 @@ impl MetaString {
             special_char1,
             special_char2,
         })
+    }
+
+    pub fn write_to(&self, writer: &mut crate::buffer::Writer) {
+        writer.write_varuint32(self.bytes.len() as u32);
+        writer.write_bytes(&self.bytes);
     }
 }
 

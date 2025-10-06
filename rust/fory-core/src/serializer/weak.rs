@@ -29,6 +29,15 @@ pub struct RcWeak<T: ?Sized> {
     inner: UnsafeCell<std::rc::Weak<T>>,
 }
 
+impl<T: ?Sized> std::fmt::Debug for RcWeak<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RcWeak")
+            .field("strong_count", &self.strong_count())
+            .field("weak_count", &self.weak_count())
+            .finish()
+    }
+}
+
 impl<T> RcWeak<T> {
     pub fn new() -> Self {
         RcWeak {
@@ -94,6 +103,15 @@ unsafe impl<T: ?Sized> Sync for RcWeak<T> where std::rc::Weak<T>: Sync {}
 
 pub struct ArcWeak<T: ?Sized> {
     inner: UnsafeCell<std::sync::Weak<T>>,
+}
+
+impl<T: ?Sized> std::fmt::Debug for ArcWeak<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ArcWeak")
+            .field("strong_count", &self.strong_count())
+            .field("weak_count", &self.weak_count())
+            .finish()
+    }
 }
 
 impl<T> ArcWeak<T> {
@@ -165,6 +183,14 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for RcWeak<T> {
 
         match ref_flag {
             RefFlag::Null => Ok(RcWeak::new()),
+            RefFlag::RefValue => {
+                let data = T::fory_read_data(context, _is_field)?;
+                let rc = Rc::new(data);
+                let ref_id = context.ref_reader.store_rc_ref(rc);
+                let rc = context.ref_reader.get_rc_ref::<T>(ref_id).unwrap();
+                let weak = RcWeak::from(&rc);
+                Ok(weak)
+            }
             RefFlag::Ref => {
                 let ref_id = context.ref_reader.read_ref_id(&mut context.reader);
                 let weak = RcWeak::new();
@@ -182,7 +208,7 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for RcWeak<T> {
 
                 Ok(weak)
             }
-            _ => Err(anyhow!("Weak can only be Null or Ref, got {:?}", ref_flag).into()),
+            _ => Err(anyhow!("Weak can only be Null, RefValue or Ref, got {:?}", ref_flag).into()),
         }
     }
 
@@ -192,11 +218,12 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for RcWeak<T> {
 
     fn fory_write_data(&self, context: &mut WriteContext, _is_field: bool) {
         if let Some(rc) = self.upgrade() {
-            if context.ref_writer.try_write_rc_ref(context.writer, &rc) {
-                return;
+            if !context.ref_writer.try_write_rc_ref(context.writer, &rc) {
+                T::fory_write_data(&*rc, context, _is_field);
             }
+        } else {
+            context.writer.write_i8(RefFlag::Null as i8);
         }
-        context.writer.write_i8(RefFlag::Null as i8);
     }
 
     fn fory_write_type_info(context: &mut WriteContext, is_field: bool) {
@@ -236,6 +263,14 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for ArcWeak
 
         match ref_flag {
             RefFlag::Null => Ok(ArcWeak::new()),
+            RefFlag::RefValue => {
+                let data = T::fory_read_data(context, _is_field)?;
+                let arc = Arc::new(data);
+                let ref_id = context.ref_reader.store_arc_ref(arc);
+                let arc = context.ref_reader.get_arc_ref::<T>(ref_id).unwrap();
+                let weak = ArcWeak::from(&arc);
+                Ok(weak)
+            }
             RefFlag::Ref => {
                 let ref_id = context.ref_reader.read_ref_id(&mut context.reader);
                 let weak = ArcWeak::new();
@@ -253,7 +288,7 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for ArcWeak
 
                 Ok(weak)
             }
-            _ => Err(anyhow!("Weak can only be Null or Ref, got {:?}", ref_flag).into()),
+            _ => Err(anyhow!("Weak can only be Null, RefValue or Ref, got {:?}", ref_flag).into()),
         }
     }
 
@@ -263,11 +298,12 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for ArcWeak
 
     fn fory_write_data(&self, context: &mut WriteContext, _is_field: bool) {
         if let Some(arc) = self.upgrade() {
-            if context.ref_writer.try_write_arc_ref(context.writer, &arc) {
-                return;
+            if !context.ref_writer.try_write_arc_ref(context.writer, &arc) {
+                T::fory_write_data(&*arc, context, _is_field);
             }
+        } else {
+            context.writer.write_i8(RefFlag::Null as i8);
         }
-        context.writer.write_i8(RefFlag::Null as i8);
     }
 
     fn fory_write_type_info(context: &mut WriteContext, is_field: bool) {

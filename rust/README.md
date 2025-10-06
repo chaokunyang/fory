@@ -43,10 +43,10 @@ For complex data structures with full object graph serialization:
 
 ```rust
 use fory::{Fory, Error};
-use fory_derive::Fory;
+use fory_derive::ForyObject;
 use std::collections::HashMap;
 
-#[derive(Fory, Debug, PartialEq, Default)]
+#[derive(ForyObject, Debug, PartialEq, Default)]
 struct Person {
     name: String,
     age: i32,
@@ -55,7 +55,7 @@ struct Person {
     metadata: HashMap<String, String>,
 }
 
-#[derive(Fory, Debug, PartialEq, Default)]
+#[derive(ForyObject, Debug, PartialEq, Default)]
 struct Address {
     street: String,
     city: String,
@@ -102,7 +102,7 @@ Serialize trait objects using `Box<dyn Trait>`:
 ```rust
 use fory_core::{Fory, register_trait_type};
 use fory_core::serializer::Serializer;
-use fory_derive::Fory;
+use fory_derive::ForyObject;
 use fory_core::types::Mode;
 
 trait Animal: Serializer {
@@ -110,7 +110,7 @@ trait Animal: Serializer {
     fn name(&self) -> &str;
 }
 
-#[derive(Fory)]
+#[derive(ForyObject)]
 struct Dog { name: String, breed: String }
 
 impl Animal for Dog {
@@ -118,7 +118,7 @@ impl Animal for Dog {
     fn name(&self) -> &str { &self.name }
 }
 
-#[derive(Fory)]
+#[derive(ForyObject)]
 struct Cat { name: String, color: String }
 
 impl Animal for Cat {
@@ -128,7 +128,7 @@ impl Animal for Cat {
 
 register_trait_type!(Animal, Dog, Cat);
 
-#[derive(Fory)]
+#[derive(ForyObject)]
 struct Zoo {
     star_animal: Box<dyn Animal>,
 }
@@ -161,7 +161,7 @@ use std::sync::Arc;
 use std::rc::Rc;
 use std::collections::HashMap;
 
-#[derive(Fory)]
+#[derive(ForyObject)]
 struct AnimalShelter {
     animals_rc: Vec<Rc<dyn Animal>>,
     animals_arc: Vec<Arc<dyn Animal>>,
@@ -318,8 +318,8 @@ assert_eq!(prefs.values().get(0), "en");
 
 ### Custom Types
 
-- Structs with `#[derive(Fory)]` or `#[derive(ForyRow)]`
-- Enums with `#[derive(Fory)]`
+- Structs with `#[derive(ForyObject)]` or `#[derive(ForyRow)]`
+- Enums with `#[derive(ForyObject)]`
 - Trait objects
 
 ## ⚡ Performance

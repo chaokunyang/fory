@@ -21,6 +21,8 @@ use crate::fory::Fory;
 use crate::meta::TypeMeta;
 use crate::resolver::meta_resolver::{MetaReaderResolver, MetaWriterResolver};
 use crate::resolver::ref_resolver::{RefReader, RefWriter};
+use crate::resolver::type_resolver::Harness;
+use std::any::TypeId;
 use std::rc::Rc;
 
 pub struct WriteContext<'se> {
@@ -59,6 +61,19 @@ impl<'se> WriteContext<'se> {
     pub fn get_fory(&self) -> &Fory {
         self.fory
     }
+
+    pub fn write_any_typeinfo(&mut self, concrete_type_id: TypeId) -> &'se Harness {
+        let fory_type_id = self
+            .fory
+            .get_type_resolver()
+            .get_fory_type_id(concrete_type_id)
+            .expect("Type not registered");
+        self.writer.write_varuint32(fory_type_id);
+        self.fory
+            .get_type_resolver()
+            .get_harness(fory_type_id)
+            .expect("Harness not found")
+    }
 }
 
 pub struct ReadContext<'de, 'bf: 'de> {
@@ -90,5 +105,13 @@ impl<'de, 'bf: 'de> ReadContext<'de, 'bf> {
         self.meta_resolver.load(&mut Reader::new(
             &self.reader.slice_after_cursor()[offset..],
         ))
+    }
+
+    pub fn read_any_typeinfo(&mut self) -> &'de Harness {
+        let fory_type_id = self.reader.read_varuint32();
+        self.fory
+            .get_type_resolver()
+            .get_harness(fory_type_id)
+            .expect("Harness not found")
     }
 }

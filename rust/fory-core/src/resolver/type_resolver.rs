@@ -39,27 +39,13 @@ pub type ExtReadFn = dyn Fn(&mut ReadContext, bool) -> Result<Box<dyn Any>, Erro
 pub struct Harness {
     serializer: SerializerFn,
     deserializer: DeserializerFn,
-    serializer_no_ref: Option<SerializerNoRefFn>,
-    deserializer_no_ref: Option<DeserializerNoRefFn>,
+    serializer_no_ref: SerializerNoRefFn,
+    deserializer_no_ref: DeserializerNoRefFn,
     to_serializer: ToSerializerFn,
 }
 
 impl Harness {
     pub fn new(
-        serializer: SerializerFn,
-        deserializer: DeserializerFn,
-        to_serializer: ToSerializerFn,
-    ) -> Harness {
-        Harness {
-            serializer,
-            deserializer,
-            serializer_no_ref: None,
-            deserializer_no_ref: None,
-            to_serializer,
-        }
-    }
-
-    pub fn new_with_no_ref(
         serializer: SerializerFn,
         deserializer: DeserializerFn,
         serializer_no_ref: SerializerNoRefFn,
@@ -69,8 +55,8 @@ impl Harness {
         Harness {
             serializer,
             deserializer,
-            serializer_no_ref: Some(serializer_no_ref),
-            deserializer_no_ref: Some(deserializer_no_ref),
+            serializer_no_ref: serializer_no_ref,
+            deserializer_no_ref: deserializer_no_ref,
             to_serializer,
         }
     }
@@ -83,11 +69,11 @@ impl Harness {
         self.deserializer
     }
 
-    pub fn get_serializer_no_ref(&self) -> Option<SerializerNoRefFn> {
+    pub fn get_serializer_no_ref(&self) -> SerializerNoRefFn {
         self.serializer_no_ref
     }
 
-    pub fn get_deserializer_no_ref(&self) -> Option<DeserializerNoRefFn> {
+    pub fn get_deserializer_no_ref(&self) -> DeserializerNoRefFn {
         self.deserializer_no_ref
     }
 
@@ -402,7 +388,7 @@ impl TypeResolver {
             self.type_name_map.insert(rs_type_id, key.clone());
             self.name_serializer_map.insert(
                 key,
-                Harness::new_with_no_ref(
+                Harness::new(
                     serializer::<T>,
                     deserializer::<T>,
                     serializer_no_ref::<T>,
@@ -418,7 +404,7 @@ impl TypeResolver {
             self.type_id_map.insert(rs_type_id, type_id);
             self.serializer_map.insert(
                 type_id,
-                Harness::new_with_no_ref(
+                Harness::new(
                     serializer::<T>,
                     deserializer::<T>,
                     serializer_no_ref::<T>,
@@ -515,7 +501,7 @@ impl TypeResolver {
             self.type_name_map.insert(rs_type_id, key.clone());
             self.name_serializer_map.insert(
                 key,
-                Harness::new_with_no_ref(
+                Harness::new(
                     serializer::<T>,
                     deserializer::<T>,
                     serializer_no_ref::<T>,
@@ -531,7 +517,7 @@ impl TypeResolver {
             self.type_id_map.insert(rs_type_id, type_id);
             self.serializer_map.insert(
                 type_id,
-                Harness::new_with_no_ref(
+                Harness::new(
                     serializer::<T>,
                     deserializer::<T>,
                     serializer_no_ref::<T>,

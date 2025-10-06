@@ -20,8 +20,7 @@ members = [
     "fory-core",
     "fory",
     "fory-derive",
-    "tests",
-    "benches"
+    "tests"
 ]
 
 exclude = [

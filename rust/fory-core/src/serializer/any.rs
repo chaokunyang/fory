@@ -122,20 +122,8 @@ impl Serializer for Rc<dyn Any> {
     fn fory_write(&self, context: &mut WriteContext, is_field: bool) {
         if !context.ref_writer.try_write_rc_ref(context.writer, self) {
             let concrete_type_id = (**self).type_id();
-            let fory_type_id = context
-                .get_fory()
-                .get_type_resolver()
-                .get_fory_type_id(concrete_type_id)
-                .expect("Type not registered");
-            context.writer.write_varuint32(fory_type_id);
-            let harness = context
-                .get_fory()
-                .get_type_resolver()
-                .get_harness(fory_type_id)
-                .expect("Harness not found");
-            let serializer_fn = harness
-                .get_serializer_no_ref()
-                .expect("SerializerNoRefFn not found");
+            let harness = context.write_any_typeinfo(concrete_type_id);
+            let serializer_fn = harness.get_serializer_no_ref();
             serializer_fn(&**self, context, is_field);
         }
     }
@@ -159,32 +147,14 @@ impl Serializer for Rc<dyn Any> {
                     })
             }
             RefFlag::NotNullValue => {
-                let fory_type_id = context.reader.read_varuint32();
-                let harness = context
-                    .get_fory()
-                    .get_type_resolver()
-                    .get_harness(fory_type_id)
-                    .ok_or_else(|| {
-                        Error::Other(anyhow::anyhow!("Type {} not registered", fory_type_id))
-                    })?;
-                let deserializer_fn = harness
-                    .get_deserializer_no_ref()
-                    .expect("DeserializerNoRefFn not found");
+                let harness = context.read_any_typeinfo();
+                let deserializer_fn = harness.get_deserializer_no_ref();
                 let boxed = deserializer_fn(context, true)?;
                 Ok(Rc::<dyn Any>::from(boxed))
             }
             RefFlag::RefValue => {
-                let fory_type_id = context.reader.read_varuint32();
-                let harness = context
-                    .get_fory()
-                    .get_type_resolver()
-                    .get_harness(fory_type_id)
-                    .ok_or_else(|| {
-                        Error::Other(anyhow::anyhow!("Type {} not registered", fory_type_id))
-                    })?;
-                let deserializer_fn = harness
-                    .get_deserializer_no_ref()
-                    .expect("DeserializerNoRefFn not found");
+                let harness = context.read_any_typeinfo();
+                let deserializer_fn = harness.get_deserializer_no_ref();
                 let boxed = deserializer_fn(context, true)?;
                 let rc: Rc<dyn Any> = Rc::from(boxed);
                 context.ref_reader.store_rc_ref(rc.clone());
@@ -227,20 +197,8 @@ impl Serializer for Arc<dyn Any> {
     fn fory_write(&self, context: &mut WriteContext, is_field: bool) {
         if !context.ref_writer.try_write_arc_ref(context.writer, self) {
             let concrete_type_id = (**self).type_id();
-            let fory_type_id = context
-                .get_fory()
-                .get_type_resolver()
-                .get_fory_type_id(concrete_type_id)
-                .expect("Type not registered");
-            context.writer.write_varuint32(fory_type_id);
-            let harness = context
-                .get_fory()
-                .get_type_resolver()
-                .get_harness(fory_type_id)
-                .expect("Harness not found");
-            let serializer_fn = harness
-                .get_serializer_no_ref()
-                .expect("SerializerNoRefFn not found");
+            let harness = context.write_any_typeinfo(concrete_type_id);
+            let serializer_fn = harness.get_serializer_no_ref();
             serializer_fn(&**self, context, is_field);
         }
     }
@@ -264,32 +222,14 @@ impl Serializer for Arc<dyn Any> {
                     })
             }
             RefFlag::NotNullValue => {
-                let fory_type_id = context.reader.read_varuint32();
-                let harness = context
-                    .get_fory()
-                    .get_type_resolver()
-                    .get_harness(fory_type_id)
-                    .ok_or_else(|| {
-                        Error::Other(anyhow::anyhow!("Type {} not registered", fory_type_id))
-                    })?;
-                let deserializer_fn = harness
-                    .get_deserializer_no_ref()
-                    .expect("DeserializerNoRefFn not found");
+                let harness = context.read_any_typeinfo();
+                let deserializer_fn = harness.get_deserializer_no_ref();
                 let boxed = deserializer_fn(context, true)?;
                 Ok(Arc::<dyn Any>::from(boxed))
             }
             RefFlag::RefValue => {
-                let fory_type_id = context.reader.read_varuint32();
-                let harness = context
-                    .get_fory()
-                    .get_type_resolver()
-                    .get_harness(fory_type_id)
-                    .ok_or_else(|| {
-                        Error::Other(anyhow::anyhow!("Type {} not registered", fory_type_id))
-                    })?;
-                let deserializer_fn = harness
-                    .get_deserializer_no_ref()
-                    .expect("DeserializerNoRefFn not found");
+                let harness = context.read_any_typeinfo();
+                let deserializer_fn = harness.get_deserializer_no_ref();
                 let boxed = deserializer_fn(context, true)?;
                 let arc: Arc<dyn Any> = Arc::from(boxed);
                 context.ref_reader.store_arc_ref(arc.clone());

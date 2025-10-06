@@ -321,6 +321,73 @@ fn test_custom_trait_object_basic() {
     assert_eq!(deserialized_cat.star_animal.speak(), "Meow!");
 }
 
+trait Pet: Serializer {
+    fn pet_name(&self) -> &str;
+}
+
+impl Pet for Dog {
+    fn pet_name(&self) -> &str {
+        &self.name
+    }
+}
+
+impl Pet for Cat {
+    fn pet_name(&self) -> &str {
+        &self.name
+    }
+}
+
+register_trait_type!(Pet, Dog, Cat);
+
+#[derive(ForyObject)]
+struct PetOwner {
+    pets: Vec<Box<dyn Pet>>,
+    animals: Vec<Box<dyn Animal>>,
+}
+
+#[test]
+fn test_multiple_traits() {
+    let mut fory = fory_compatible();
+    fory.register::<Dog>(8001);
+    fory.register::<Cat>(8002);
+    fory.register::<PetOwner>(9001);
+
+    let owner = PetOwner {
+        pets: vec![
+            Box::new(Dog {
+                name: "Rex".to_string(),
+                breed: "German Shepherd".to_string(),
+            }),
+            Box::new(Cat {
+                name: "Luna".to_string(),
+                color: "Black".to_string(),
+            }),
+        ],
+        animals: vec![
+            Box::new(Dog {
+                name: "Rex".to_string(),
+                breed: "German Shepherd".to_string(),
+            }),
+            Box::new(Cat {
+                name: "Luna".to_string(),
+                color: "Black".to_string(),
+            }),
+        ],
+    };
+
+    let serialized = fory.serialize(&owner);
+    let deserialized: PetOwner = fory.deserialize(&serialized).unwrap();
+
+    assert_eq!(deserialized.pets.len(), 2);
+    assert_eq!(deserialized.pets[0].pet_name(), "Rex");
+    assert_eq!(deserialized.pets[1].pet_name(), "Luna");
+    assert_eq!(deserialized.animals.len(), 2);
+    assert_eq!(deserialized.animals[0].name(), "Rex");
+    assert_eq!(deserialized.animals[0].speak(), "Woof!");
+    assert_eq!(deserialized.animals[1].name(), "Luna");
+    assert_eq!(deserialized.animals[1].speak(), "Meow!");
+}
+
 // Tests for direct Vec<Box<dyn CustomTrait>> and HashMap<String, Box<dyn CustomTrait>>
 // These should work automatically now with the enhanced register_trait_type! macro
 

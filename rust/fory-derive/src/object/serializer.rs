@@ -191,59 +191,86 @@ pub fn derive_serializer(ast: &syn::DeriveInput) -> TokenStream {
 fn generate_default_impl(ast: &syn::DeriveInput) -> proc_macro2::TokenStream {
     let name = &ast.ident;
 
-    if let Data::Struct(s) = &ast.data {
-        let fields = sorted_fields(&s.fields);
+    match &ast.data {
+        Data::Struct(s) => {
+            let fields = sorted_fields(&s.fields);
 
-        use super::util::{
-            classify_trait_object_field, create_wrapper_types_arc, create_wrapper_types_rc,
-            TraitObjectField,
-        };
+            use super::util::{
+                classify_trait_object_field, create_wrapper_types_arc, create_wrapper_types_rc,
+                TraitObjectField,
+            };
 
-        let field_inits = fields.iter().map(|field| {
-            let ident = &field.ident;
-            let ty = &field.ty;
+            let field_inits = fields.iter().map(|field| {
+                let ident = &field.ident;
+                let ty = &field.ty;
 
-            match classify_trait_object_field(ty) {
-                TraitObjectField::RcDyn(trait_name) => {
-                    let types = create_wrapper_types_rc(&trait_name);
-                    let wrapper_ty = types.wrapper_ty;
-                    let trait_ident = types.trait_ident;
-                    quote! {
-                        #ident: {
-                            let wrapper = #wrapper_ty::default();
-                            std::rc::Rc::<dyn #trait_ident>::from(wrapper)
+                match classify_trait_object_field(ty) {
+                    TraitObjectField::RcDyn(trait_name) => {
+                        let types = create_wrapper_types_rc(&trait_name);
+                        let wrapper_ty = types.wrapper_ty;
+                        let trait_ident = types.trait_ident;
+                        quote! {
+                            #ident: {
+                                let wrapper = #wrapper_ty::default();
+                                std::rc::Rc::<dyn #trait_ident>::from(wrapper)
+                            }
+                        }
+                    }
+                    TraitObjectField::ArcDyn(trait_name) => {
+                        let types = create_wrapper_types_arc(&trait_name);
+                        let wrapper_ty = types.wrapper_ty;
+                        let trait_ident = types.trait_ident;
+                        quote! {
+                            #ident: {
+                                let wrapper = #wrapper_ty::default();
+                                std::sync::Arc::<dyn #trait_ident>::from(wrapper)
+                            }
+                        }
+                    }
+                    _ => {
+                        quote! {
+                            #ident: <#ty as fory_core::serializer::ForyDefault>::fory_default()
                         }
                     }
                 }
-                TraitObjectField::ArcDyn(trait_name) => {
-                    let types = create_wrapper_types_arc(&trait_name);
-                    let wrapper_ty = types.wrapper_ty;
-                    let trait_ident = types.trait_ident;
-                    quote! {
-                        #ident: {
-                            let wrapper = #wrapper_ty::default();
-                            std::sync::Arc::<dyn #trait_ident>::from(wrapper)
+            });
+
+            quote! {
+                impl std::default::Default for #name {
+                    fn default() -> Self {
+                        Self {
+                            #(#field_inits),*
                         }
                     }
                 }
-                _ => {
-                    quote! {
-                        #ident: fory_core::serializer::ForyDefault::fory_default()
-                    }
-                }
             }
-        });
+        }
+        Data::Enum(e) => {
+            // Check if any variant has #[default] attribute (indicates user is deriving Default)
+            let has_default_variant = e
+                .variants
+                .iter()
+                .any(|v| v.attrs.iter().any(|attr| attr.path().is_ident("default")));
 
-        return quote! {
-            impl std::default::Default for #name {
-                fn default() -> Self {
-                    Self {
-                        #(#field_inits),*
+            // For C-like enums, implement Default by returning the first variant
+            // Only if there's no #[default] attribute (which means Default is being derived)
+            if !has_default_variant {
+                if let Some(first_variant) = e.variants.first() {
+                    let variant_ident = &first_variant.ident;
+                    quote! {
+                        impl std::default::Default for #name {
+                            fn default() -> Self {
+                                Self::#variant_ident
+                            }
+                        }
                     }
+                } else {
+                    quote! {}
                 }
+            } else {
+                quote! {}
             }
-        };
+        }
+        Data::Union(_) => quote! {},
     }
-
-    quote! {}
 }

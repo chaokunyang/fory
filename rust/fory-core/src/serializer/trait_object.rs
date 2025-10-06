@@ -18,7 +18,7 @@
 use crate::error::Error;
 use crate::fory::Fory;
 use crate::resolver::context::{ReadContext, WriteContext};
-use crate::serializer::{ForyDefault, Serializer};
+use crate::serializer::Serializer;
 
 /// Helper functions for trait object serialization to reduce code duplication
 ///
@@ -202,10 +202,7 @@ macro_rules! register_trait_type {
                 // Box<dyn Trait> is polymorphic - type info is read per element
             }
 
-            fn fory_read(context: &mut $crate::resolver::context::ReadContext, is_field: bool) -> Result<Self, $crate::error::Error>
-            where
-                Self: Sized + ForyDefault,
-            {
+            fn fory_read(context: &mut $crate::resolver::context::ReadContext, is_field: bool) -> Result<Self, $crate::error::Error> {
                 let fory_type_id = $crate::serializer::trait_object::read_trait_object_headers(context)?;
                 $crate::resolve_and_deserialize!(
                     fory_type_id, context, is_field,
@@ -214,10 +211,7 @@ macro_rules! register_trait_type {
                 )
             }
 
-            fn fory_read_data(_context: &mut $crate::resolver::context::ReadContext, _is_field: bool) -> Result<Self, $crate::error::Error>
-            where
-                Self: Sized + ForyDefault,
-            {
+            fn fory_read_data(_context: &mut $crate::resolver::context::ReadContext, _is_field: bool) -> Result<Self, $crate::error::Error> {
                 // This should not be called for polymorphic types like Box<dyn Trait>
                 // The fory_read method handles the polymorphic dispatch
                 panic!("fory_read_data should not be called directly on polymorphic Box<dyn {}> trait object", stringify!($trait_name));
@@ -414,10 +408,7 @@ macro_rules! impl_smart_pointer_serializer {
                 $crate::downcast_and_serialize!(any_obj, context, is_field, $trait_name, $($impl_type),+);
             }
 
-            fn fory_read(context: &mut $crate::resolver::context::ReadContext, is_field: bool) -> Result<Self, $crate::error::Error>
-            where
-                Self: Sized + ForyDefault,
-            {
+            fn fory_read(context: &mut $crate::resolver::context::ReadContext, is_field: bool) -> Result<Self, $crate::error::Error> {
                 let fory_type_id = $crate::serializer::trait_object::read_trait_object_headers(context)?;
 
                 // Use type resolver to deserialize any registered type
@@ -451,10 +442,7 @@ macro_rules! impl_smart_pointer_serializer {
                 )))
             }
 
-            fn fory_read_data(context: &mut $crate::resolver::context::ReadContext, is_field: bool) -> Result<Self, $crate::error::Error>
-            where
-                Self: Sized + ForyDefault,
-            {
+            fn fory_read_data(context: &mut $crate::resolver::context::ReadContext, is_field: bool) -> Result<Self, $crate::error::Error> {
                 let concrete_fory_type_id = context.reader.read_varuint32();
                 $crate::resolve_and_deserialize!(
                     concrete_fory_type_id, context, is_field,
@@ -510,10 +498,7 @@ impl Default for Box<dyn Serializer> {
 }
 
 impl Serializer for Box<dyn Serializer> {
-    fn fory_write(&self, context: &mut WriteContext, is_field: bool)
-    where
-        Self: Sized,
-    {
+    fn fory_write(&self, context: &mut WriteContext, is_field: bool) {
         let fory_type_id = (**self).fory_type_id_dyn(context.get_fory());
         let concrete_type_id = (**self).fory_concrete_type_id();
 
@@ -545,10 +530,7 @@ impl Serializer for Box<dyn Serializer> {
         // Box<dyn Serializer> is polymorphic - type info is read per element
     }
 
-    fn fory_read(context: &mut ReadContext, is_field: bool) -> Result<Self, Error>
-    where
-        Self: Sized + ForyDefault,
-    {
+    fn fory_read(context: &mut ReadContext, is_field: bool) -> Result<Self, Error> {
         let fory_type_id = read_trait_object_headers(context)?;
 
         let type_resolver = context.get_fory().get_type_resolver();
@@ -590,10 +572,7 @@ impl Serializer for Box<dyn Serializer> {
         }
     }
 
-    fn fory_read_data(_context: &mut ReadContext, _is_field: bool) -> Result<Self, Error>
-    where
-        Self: Sized + ForyDefault,
-    {
+    fn fory_read_data(_context: &mut ReadContext, _is_field: bool) -> Result<Self, Error> {
         panic!("fory_read_data should not be called directly on Box<dyn Serializer>");
     }
 }
@@ -651,10 +630,7 @@ macro_rules! generate_smart_pointer_serializer {
                 // Pointer<dyn Trait> is polymorphic - type info is read per element
             }
 
-            fn fory_read(_context: &mut $crate::resolver::context::ReadContext, _is_field: bool) -> Result<Self, $crate::error::Error>
-            where
-                Self: Sized + ForyDefault,
-            {
+            fn fory_read(_context: &mut $crate::resolver::context::ReadContext, _is_field: bool) -> Result<Self, $crate::error::Error> {
                 // For now, Rc and Arc deserialization is not implemented
                 // This would require complex reference counting logic
                 Err($crate::error::Error::Other($crate::error::AnyhowError::msg(
@@ -663,10 +639,7 @@ macro_rules! generate_smart_pointer_serializer {
                 )))
             }
 
-            fn fory_read_data(_context: &mut $crate::resolver::context::ReadContext, _is_field: bool) -> Result<Self, $crate::error::Error>
-            where
-                Self: Sized + ForyDefault,
-            {
+            fn fory_read_data(_context: &mut $crate::resolver::context::ReadContext, _is_field: bool) -> Result<Self, $crate::error::Error> {
                 panic!("fory_read_data should not be called directly on {}<<dyn {}>>", stringify!($pointer_type), stringify!($trait_name));
             }
         }

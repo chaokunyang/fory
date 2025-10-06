@@ -93,7 +93,7 @@ pub fn is_arc_dyn_trait(ty: &Type) -> Option<(&TypeTraitObject, String)> {
     None
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum CollectionTraitInfo {
     VecRc(String),
     VecArc(String),

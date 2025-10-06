@@ -24,7 +24,7 @@ use std::any::Any;
 use std::rc::Rc;
 use std::sync::Arc;
 
-/// Helper function to serialize a Box<dyn Any>
+/// Helper function to serialize a `Box<dyn Any>`
 pub fn serialize_any_box(any_box: &Box<dyn Any>, context: &mut WriteContext, is_field: bool) {
     context.writer.write_i8(RefFlag::NotNullValue as i8);
 
@@ -34,7 +34,7 @@ pub fn serialize_any_box(any_box: &Box<dyn Any>, context: &mut WriteContext, is_
     serializer_fn(&**any_box, context, is_field);
 }
 
-/// Helper function to deserialize to Box<dyn Any>
+/// Helper function to deserialize to `Box<dyn Any>`
 pub fn deserialize_any_box(context: &mut ReadContext) -> Result<Box<dyn Any>, Error> {
     let ref_flag = context.reader.read_i8();
     if ref_flag != RefFlag::NotNullValue as i8 {

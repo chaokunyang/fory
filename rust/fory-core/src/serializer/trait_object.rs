@@ -103,7 +103,7 @@ macro_rules! resolve_and_deserialize {
 /// Macro to register trait object conversions for custom traits.
 ///
 /// This macro automatically generates serializers for `Box<dyn Trait>` trait objects.
-/// Due to Rust's orphan rules, only Box<dyn Trait> is supported for user-defined traits.
+/// Due to Rust's orphan rules, only `Box<dyn Trait>` is supported for user-defined traits.
 /// For `Rc<dyn Trait>` and `Arc<dyn Trait>`, wrapper types are generated (e.g., `TraitRc`, `TraitArc`),
 /// either you use the wrapper types or use the `Rc<dyn Any>` or `Arc<dyn Any>` instead if it's not
 /// inside struct fields. For struct fields, you can use the `Rc<dyn Trait>`, `Arc<dyn Trait>` directly,
@@ -644,7 +644,7 @@ impl Serializer for Box<dyn Serializer> {
 /// Helper macros for automatic conversions in derive code
 /// These are used by fory-derive to generate transparent conversions
 ///
-/// Convert field of type Rc<dyn Trait> to wrapper for serialization
+/// Convert field of type `Rc<dyn Trait>` to wrapper for serialization
 #[macro_export]
 macro_rules! wrap_rc {
     ($field:expr, $trait_name:ident) => {
@@ -654,7 +654,7 @@ macro_rules! wrap_rc {
     };
 }
 
-/// Convert wrapper back to Rc<dyn Trait> for deserialization
+/// Convert wrapper back to `Rc<dyn Trait>` for deserialization
 #[macro_export]
 macro_rules! unwrap_rc {
     ($wrapper:expr, $trait_name:ident) => {
@@ -662,7 +662,7 @@ macro_rules! unwrap_rc {
     };
 }
 
-/// Convert Arc<dyn Trait> to wrapper for serialization
+/// Convert `Arc<dyn Trait>` to wrapper for serialization
 #[macro_export]
 macro_rules! wrap_arc {
     ($field:expr, $trait_name:ident) => {
@@ -672,7 +672,7 @@ macro_rules! wrap_arc {
     };
 }
 
-/// Convert Vec<Rc<dyn Trait>> to Vec<wrapper> for serialization
+/// Convert `Vec<Rc<dyn Trait>>` to `Vec<wrapper>` for serialization
 #[macro_export]
 macro_rules! wrap_vec_rc {
     ($vec:expr, $trait_name:ident) => {

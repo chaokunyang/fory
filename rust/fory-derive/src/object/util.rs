@@ -790,7 +790,7 @@ pub(super) fn get_sort_fields_ts(fields: &[&Field]) -> TokenStream {
         }
 
         for field in fields {
-            if let Some(_) = is_box_dyn_trait(&field.ty) {
+            if is_box_dyn_trait(&field.ty).is_some() {
                 let ident = field.ident.as_ref().unwrap().to_string();
                 if let Some(pos) = struct_or_enum_fields.iter().position(|x| x.0 == ident) {
                     struct_or_enum_fields[pos].2 = TypeId::UNKNOWN as u32;

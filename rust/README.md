@@ -200,7 +200,7 @@ assert_eq!(deserialized.animals_arc[0].speak(), "Woof!");
 
 Due to Rust's orphan rule, `Rc<dyn Trait>` and `Arc<dyn Trait>` cannot implement `Serializer` directly. For standalone serialization (not inside struct fields), use the `Rc<dyn Any>/Arc<dyn Any>` or fory auto-generated wrapper types instead:
 
-Example for `Rc<dyn Any>`:
+Example for `Rc<dyn T>`:
 
 ```rust
 let dog_rc: Rc<dyn Animal> = Rc::new(Dog {

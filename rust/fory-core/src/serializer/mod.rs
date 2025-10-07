@@ -26,6 +26,7 @@ mod arc;
 mod bool;
 mod box_;
 pub mod collection;
+mod refcell;
 mod datetime;
 pub mod enum_;
 mod list;

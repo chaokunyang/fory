@@ -72,7 +72,7 @@ pub(super) fn create_wrapper_types_arc(trait_name: &str) -> WrapperTypes {
     }
 }
 
-pub(super) enum TraitObjectField {
+pub(super) enum StructField {
     BoxDyn(String),
     RcDyn(String),
     ArcDyn(String),
@@ -81,31 +81,74 @@ pub(super) enum TraitObjectField {
     HashMapRc(Box<Type>, String),
     HashMapArc(Box<Type>, String),
     ContainsTraitObject,
+    Forward,
     None,
 }
 
-pub(super) fn classify_trait_object_field(ty: &Type) -> TraitObjectField {
+fn is_recursive_wrapped_type(ty: &Type) -> bool {
+    if let Type::Path(type_path) = ty {
+        if let Some(seg) = type_path.path.segments.last() {
+            if seg.ident == "Vec" {
+                if let PathArguments::AngleBracketed(args) = &seg.arguments {
+                    if let Some(GenericArgument::Type(inner_ty)) = args.args.first() {
+                        if let Type::Path(inner_path) = inner_ty {
+                            if let Some(inner_seg) = inner_path.path.segments.last() {
+                                if inner_seg.ident == "Rc" || inner_seg.ident == "Arc" {
+                                    if let PathArguments::AngleBracketed(inner_args) =
+                                        &inner_seg.arguments
+                                    {
+                                        if let Some(GenericArgument::Type(wrapper_ty)) =
+                                            inner_args.args.first()
+                                        {
+                                            if let Type::Path(wrapper_path) = wrapper_ty {
+                                                if let Some(wrapper_seg) =
+                                                    wrapper_path.path.segments.last()
+                                                {
+                                                    if wrapper_seg.ident == "RefCell"
+                                                        || wrapper_seg.ident == "Cell"
+                                                    {
+                                                        return true;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
+pub(super) fn classify_trait_object_field(ty: &Type) -> StructField {
+    if is_recursive_wrapped_type(ty) {
+        return StructField::Forward;
+    }
     if let Some((_, trait_name)) = is_box_dyn_trait(ty) {
-        return TraitObjectField::BoxDyn(trait_name);
+        return StructField::BoxDyn(trait_name);
     }
     if let Some((_, trait_name)) = is_rc_dyn_trait(ty) {
-        return TraitObjectField::RcDyn(trait_name);
+        return StructField::RcDyn(trait_name);
     }
     if let Some((_, trait_name)) = is_arc_dyn_trait(ty) {
-        return TraitObjectField::ArcDyn(trait_name);
+        return StructField::ArcDyn(trait_name);
     }
     if let Some(collection_info) = detect_collection_with_trait_object(ty) {
         return match collection_info {
-            CollectionTraitInfo::VecRc(t) => TraitObjectField::VecRc(t),
-            CollectionTraitInfo::VecArc(t) => TraitObjectField::VecArc(t),
-            CollectionTraitInfo::HashMapRc(k, t) => TraitObjectField::HashMapRc(k, t),
-            CollectionTraitInfo::HashMapArc(k, t) => TraitObjectField::HashMapArc(k, t),
+            CollectionTraitInfo::VecRc(t) => StructField::VecRc(t),
+            CollectionTraitInfo::VecArc(t) => StructField::VecArc(t),
+            CollectionTraitInfo::HashMapRc(k, t) => StructField::HashMapRc(k, t),
+            CollectionTraitInfo::HashMapArc(k, t) => StructField::HashMapArc(k, t),
         };
     }
     if contains_trait_object(ty) {
-        return TraitObjectField::ContainsTraitObject;
+        return StructField::ContainsTraitObject;
     }
-    TraitObjectField::None
+    StructField::None
 }
 
 #[derive(Debug)]
@@ -734,6 +777,14 @@ pub(super) fn get_sort_fields_ts(fields: &[&Field]) -> TokenStream {
         let mut map_fields = Vec::new();
         let mut struct_or_enum_fields = Vec::new();
 
+        // First handle Forward fields separately to avoid borrow checker issues
+        for field in fields {
+            if is_recursive_wrapped_type(&field.ty) {
+                let ident = field.ident.as_ref().unwrap().to_string();
+                collection_fields.push((ident, "Forward".to_string(), TypeId::LIST as u32));
+            }
+        }
+
         let mut group_field = |ident: String, ty: &str| {
             if PRIMITIVE_TYPE_NAMES.contains(&ty) {
                 let type_id = get_primitive_type_id(ty);
@@ -767,6 +818,12 @@ pub(super) fn get_sort_fields_ts(fields: &[&Field]) -> TokenStream {
 
         for field in fields {
             let ident = field.ident.as_ref().unwrap().to_string();
+
+            // Skip if already handled as Forward field
+            if is_recursive_wrapped_type(&field.ty) {
+                continue;
+            }
+
             let ty: String = field
                 .ty
                 .to_token_stream()

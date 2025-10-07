@@ -22,7 +22,7 @@ use syn::Field;
 
 use super::util::{
     classify_trait_object_field, generic_tree_to_tokens, get_sort_fields_ts, parse_generic_tree,
-    TraitObjectField,
+    StructField,
 };
 
 // Global type ID counter that auto-grows from 0 at macro processing time
@@ -85,7 +85,7 @@ pub fn gen_type_def(fields: &[&Field]) -> TokenStream {
         let name = format!("{}", field.ident.as_ref().expect("should be field name"));
 
         match classify_trait_object_field(ty) {
-            TraitObjectField::None => {
+            StructField::None => {
                 let generic_tree = parse_generic_tree(ty);
                 let generic_token = generic_tree_to_tokens(&generic_tree, false);
                 quote! {

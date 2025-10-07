@@ -203,7 +203,7 @@ fn generate_default_impl(ast: &syn::DeriveInput) -> proc_macro2::TokenStream {
 
             use super::util::{
                 classify_trait_object_field, create_wrapper_types_arc, create_wrapper_types_rc,
-                TraitObjectField,
+                StructField,
             };
 
             let field_inits = fields.iter().map(|field| {
@@ -211,7 +211,7 @@ fn generate_default_impl(ast: &syn::DeriveInput) -> proc_macro2::TokenStream {
                 let ty = &field.ty;
 
                 match classify_trait_object_field(ty) {
-                    TraitObjectField::RcDyn(trait_name) => {
+                    StructField::RcDyn(trait_name) => {
                         let types = create_wrapper_types_rc(&trait_name);
                         let wrapper_ty = types.wrapper_ty;
                         let trait_ident = types.trait_ident;
@@ -222,7 +222,7 @@ fn generate_default_impl(ast: &syn::DeriveInput) -> proc_macro2::TokenStream {
                             }
                         }
                     }
-                    TraitObjectField::ArcDyn(trait_name) => {
+                    StructField::ArcDyn(trait_name) => {
                         let types = create_wrapper_types_arc(&trait_name);
                         let wrapper_ty = types.wrapper_ty;
                         let trait_ident = types.trait_ident;
@@ -233,7 +233,7 @@ fn generate_default_impl(ast: &syn::DeriveInput) -> proc_macro2::TokenStream {
                             }
                         }
                     }
-                    _ => {
+                    StructField::Forward | _ => {
                         quote! {
                             #ident: <#ty as fory_core::serializer::ForyDefault>::fory_default()
                         }

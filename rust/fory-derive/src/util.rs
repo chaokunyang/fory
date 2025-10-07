@@ -64,6 +64,9 @@ pub fn is_rc_dyn_trait(ty: &Type) -> Option<(&TypeTraitObject, String)> {
                         {
                             if let Some(segment) = trait_bound.path.segments.last() {
                                 let trait_name = segment.ident.to_string();
+                                if trait_name == "Any" {
+                                    return None;
+                                }
                                 return Some((trait_obj, trait_name));
                             }
                         }
@@ -90,6 +93,9 @@ pub fn is_arc_dyn_trait(ty: &Type) -> Option<(&TypeTraitObject, String)> {
                         {
                             if let Some(segment) = trait_bound.path.segments.last() {
                                 let trait_name = segment.ident.to_string();
+                                if trait_name == "Any" {
+                                    return None;
+                                }
                                 return Some((trait_obj, trait_name));
                             }
                         }

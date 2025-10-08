@@ -84,7 +84,7 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for Arc<T> 
     fn fory_reserved_space() -> usize {
         // Arc is a shared ref, so we just need space for the ref tracking
         // We don't recursively compute inner type's space to avoid infinite recursion
-        0
+        4
     }
 
     fn fory_get_type_id(fory: &Fory) -> u32 {

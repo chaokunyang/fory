@@ -12,8 +12,6 @@
 //! # Example
 //! ```rust
 //! use std::cell::RefCell;
-//! use fory_core::serializer::recell::*;
-//!
 //! let cell = RefCell::new(42);
 //! // Can be serialized by the Fory framework
 //! ```

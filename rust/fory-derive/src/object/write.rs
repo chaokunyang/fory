@@ -73,7 +73,12 @@ pub fn gen_reserved_space(fields: &[&Field]) -> TokenStream {
                     <std::collections::HashMap<#key_ty, #wrapper_ty> as fory_core::serializer::Serializer>::fory_reserved_space() + fory_core::types::SIZE_OF_REF_AND_TYPE
                 }
             }
-            StructField::Forward | _ => {
+            StructField::Forward => {
+                quote! {
+                    <#ty as fory_core::serializer::Serializer>::fory_reserved_space() + fory_core::types::SIZE_OF_REF_AND_TYPE
+                }
+            }
+            _ => {
                 quote! {
                     <#ty as fory_core::serializer::Serializer>::fory_reserved_space() + fory_core::types::SIZE_OF_REF_AND_TYPE
                 }

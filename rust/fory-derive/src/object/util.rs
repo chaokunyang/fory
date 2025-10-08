@@ -27,7 +27,7 @@ use std::fmt;
 use syn::{parse_str, Field, GenericArgument, PathArguments, Type};
 
 thread_local! {
-    static MACRO_CONTEXT: RefCell<Option<MacroContext>> = RefCell::new(None);
+    static MACRO_CONTEXT: RefCell<Option<MacroContext>> = const {RefCell::new(None)};
 }
 
 struct MacroContext {

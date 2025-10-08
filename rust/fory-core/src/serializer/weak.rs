@@ -283,8 +283,8 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for RcWeak<T> {
     }
 
     fn fory_reserved_space() -> usize {
-        // RcWeak is a shared ref, return 0 to avoid infinite recursion
-        0
+        // RcWeak is a shared ref, return a const to avoid infinite recursion
+        4
     }
 
     fn fory_get_type_id(fory: &Fory) -> u32 {
@@ -358,7 +358,7 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for ArcWeak
                     weak.update(Arc::downgrade(&arc));
                 } else {
                     // Capture the raw pointer to the UnsafeCell so we can update it in the callback
-                    let weak_ptr = weak.inner.get() as *mut std::sync::Weak<T>;
+                    let weak_ptr = weak.inner.get();
                     context.ref_reader.add_callback(Box::new(move |ref_reader| {
                         if let Some(arc) = ref_reader.get_arc_ref::<T>(ref_id) {
                             unsafe {
@@ -383,8 +383,8 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for ArcWeak
     }
 
     fn fory_reserved_space() -> usize {
-        // ArcWeak is a shared ref, return 0 to avoid infinite recursion
-        0
+        // ArcWeak is a shared ref, return a const to avoid infinite recursion
+        4
     }
 
     fn fory_get_type_id(fory: &Fory) -> u32 {

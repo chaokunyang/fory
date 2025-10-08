@@ -237,7 +237,12 @@ fn generate_default_impl(ast: &syn::DeriveInput) -> proc_macro2::TokenStream {
                             }
                         }
                     }
-                    StructField::Forward | _ => {
+                    StructField::Forward => {
+                        quote! {
+                            #ident: <#ty as fory_core::serializer::ForyDefault>::fory_default()
+                        }
+                    }
+                    _ => {
                         quote! {
                             #ident: <#ty as fory_core::serializer::ForyDefault>::fory_default()
                         }

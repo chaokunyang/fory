@@ -228,7 +228,6 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for RcWeak<T> {
                 // Already seen, wrote Ref flag + id, we're done
                 return;
             }
-            eprint!("Writing ref to RcWeak");
             // First time seeing this object, write RefValue and then its data
             T::fory_write_data(&*rc, context, _is_field);
         } else {
@@ -236,8 +235,8 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for RcWeak<T> {
         }
     }
 
-    fn fory_write_data(&self, _context: &mut WriteContext, _is_field: bool) {
-        panic!("Should not call RcWeak::fory_write_data directly, use RcWeak::fory_write instead");
+    fn fory_write_data(&self, context: &mut WriteContext, is_field: bool) {
+        self.fory_write(context, is_field);
     }
 
     fn fory_write_type_info(context: &mut WriteContext, is_field: bool) {
@@ -278,8 +277,8 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for RcWeak<T> {
         }
     }
 
-    fn fory_read_data(_context: &mut ReadContext, _is_field: bool) -> Result<Self, Error> {
-        panic!("Should not call RcWeak::fory_read_data directly, use RcWeak::fory_read instead");
+    fn fory_read_data(context: &mut ReadContext, is_field: bool) -> Result<Self, Error> {
+        Self::fory_read(context, is_field)
     }
 
     fn fory_read_type_info(context: &mut ReadContext, is_field: bool) {
@@ -287,7 +286,8 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for RcWeak<T> {
     }
 
     fn fory_reserved_space() -> usize {
-        T::fory_reserved_space()
+        // RcWeak is a shared ref, return 0 to avoid infinite recursion
+        0
     }
 
     fn fory_get_type_id(fory: &Fory) -> u32 {
@@ -332,10 +332,8 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for ArcWeak
         }
     }
 
-    fn fory_write_data(&self, _context: &mut WriteContext, _is_field: bool) {
-        panic!(
-            "Should not call ArcWeak::fory_write_data directly, use ArcWeak::fory_write instead"
-        );
+    fn fory_write_data(&self, context: &mut WriteContext, is_field: bool) {
+        self.fory_write(context, is_field);
     }
 
     fn fory_write_type_info(context: &mut WriteContext, is_field: bool) {
@@ -376,8 +374,8 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for ArcWeak
         }
     }
 
-    fn fory_read_data(_context: &mut ReadContext, _is_field: bool) -> Result<Self, Error> {
-        panic!("Should not call ArcWeak::fory_read_data directly, use ArcWeak::fory_read instead");
+    fn fory_read_data(context: &mut ReadContext, is_field: bool) -> Result<Self, Error> {
+        Self::fory_read(context, is_field)
     }
 
     fn fory_read_type_info(context: &mut ReadContext, is_field: bool) {
@@ -385,7 +383,8 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for ArcWeak
     }
 
     fn fory_reserved_space() -> usize {
-        T::fory_reserved_space()
+        // ArcWeak is a shared ref, return 0 to avoid infinite recursion
+        0
     }
 
     fn fory_get_type_id(fory: &Fory) -> u32 {

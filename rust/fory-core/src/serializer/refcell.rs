@@ -34,6 +34,7 @@ impl<T: Serializer + ForyDefault> Serializer for RefCell<T> {
     {
         Ok(RefCell::new(T::fory_read(context, is_field)?))
     }
+
     fn fory_read_data(context: &mut ReadContext, is_field: bool) -> Result<Self, Error> {
         Ok(RefCell::new(T::fory_read_data(context, is_field)?))
     }
@@ -43,11 +44,13 @@ impl<T: Serializer + ForyDefault> Serializer for RefCell<T> {
     }
 
     fn fory_write(&self, context: &mut WriteContext, is_field: bool) {
-        eprintln!("Writing RefCell");
+        // Don't add ref tracking for RefCell itself, just delegate to inner type
+        // The inner type will handle its own ref tracking
         T::fory_write(&*self.borrow(), context, is_field);
     }
 
     fn fory_write_data(&self, context: &mut WriteContext, is_field: bool) {
+        // When called from Rc, just delegate to inner type's data serialization
         T::fory_write_data(&*self.borrow(), context, is_field)
     }
 
@@ -56,6 +59,7 @@ impl<T: Serializer + ForyDefault> Serializer for RefCell<T> {
     }
 
     fn fory_reserved_space() -> usize {
+        // RefCell is transparent, delegate to inner type
         T::fory_reserved_space()
     }
 

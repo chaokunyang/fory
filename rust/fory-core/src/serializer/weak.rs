@@ -15,6 +15,35 @@
 // specific language governing permissions and limitations
 // under the License.
 
+//! Weak pointer serialization support for `Rc` and `Arc`.
+//!
+//! This module provides `RcWeak<T>` and `ArcWeak<T>` wrapper types that can be serialized
+//! and deserialized by the Fory serialization framework while preserving reference identity
+//! and supporting circular references.
+//!
+//! In Rust, `std::rc::Weak` and `std::sync::Weak` cannot be directly upgraded if the strong
+//! reference has been dropped. These wrappers make it possible to store weak references
+//! inside serialized graphs:
+//!
+//! - If a weak pointer can be upgraded during serialization, it will be de/serialized
+//!   as a reference to its corresponding strong object
+//! - If it cannot be upgraded (target dropped), it will be serialized as `Null`
+//!
+//! During deserialization, unresolved weak pointers (because their strong reference appears
+//! later in the stream) are handled via callbacks in `RefReader` to support forward references.
+//!
+//! This enables **circular graph structures** to be serialized and restored correctly without
+//! duplicating nodes or losing shared reference relationships.
+//!
+//! # Example usage
+//! ```rust
+//! use fory_core::serializer::weak::RcWeak;
+//! use std::rc::Rc;
+//!
+//! let rc = Rc::new(42);
+//! let weak = RcWeak::from(&rc);
+//! assert!(weak.upgrade().is_some());
+//! ```
 use crate::error::Error;
 use crate::fory::Fory;
 use crate::resolver::context::{ReadContext, WriteContext};
@@ -25,6 +54,13 @@ use std::cell::UnsafeCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
+/// Wrapper for a `std::rc::Weak<T>` that is compatible with the Fory serialization framework.
+///
+/// This type uses interior mutability via `UnsafeCell` to allow updating the stored weak pointer
+/// after creation (necessary during deserialization when resolving forward references).
+///
+/// It implements `Serializer` so it can be automatically handled in object graphs.
+/// See module-level docs for details.
 pub struct RcWeak<T: ?Sized> {
     inner: UnsafeCell<std::rc::Weak<T>>,
 }
@@ -101,6 +137,9 @@ impl<T: ?Sized> From<&Rc<T>> for RcWeak<T> {
 unsafe impl<T: ?Sized> Send for RcWeak<T> where std::rc::Weak<T>: Send {}
 unsafe impl<T: ?Sized> Sync for RcWeak<T> where std::rc::Weak<T>: Sync {}
 
+/// Wrapper for a `std::sync::Weak<T>` that is compatible with the Fory serialization framework.
+///
+/// Works like [`RcWeak`] but for thread-safe reference-counted graphs.
 pub struct ArcWeak<T: ?Sized> {
     inner: UnsafeCell<std::sync::Weak<T>>,
 }
@@ -178,7 +217,33 @@ unsafe impl<T: ?Sized + Send + Sync> Send for ArcWeak<T> {}
 unsafe impl<T: ?Sized + Send + Sync> Sync for ArcWeak<T> {}
 
 impl<T: Serializer + ForyDefault + 'static> Serializer for RcWeak<T> {
-    fn fory_read_data(context: &mut ReadContext, _is_field: bool) -> Result<Self, Error> {
+    fn fory_is_shared_ref() -> bool {
+        true
+    }
+
+    fn fory_write(&self, context: &mut WriteContext, _is_field: bool) {
+        if let Some(rc) = self.upgrade() {
+            // IMPORTANT: If the target Rc was serialized already, just write a ref
+            if context.ref_writer.try_write_rc_ref(context.writer, &rc) {
+                // Already seen, wrote Ref flag + id, we're done
+                return;
+            }
+            // First time seeing this object, write RefValue and then its data
+            T::fory_write_data(&*rc, context, _is_field);
+        } else {
+            context.writer.write_i8(RefFlag::Null as i8);
+        }
+    }
+
+    fn fory_write_data(&self, _context: &mut WriteContext, _is_field: bool) {
+        panic!("Should not call RcWeak::fory_write_data directly, use RcWeak::fory_write instead");
+    }
+
+    fn fory_write_type_info(context: &mut WriteContext, is_field: bool) {
+        T::fory_write_type_info(context, is_field);
+    }
+
+    fn fory_read(context: &mut ReadContext, _is_field: bool) -> Result<Self, Error> {
         let ref_flag = context.ref_reader.read_ref_flag(&mut context.reader);
 
         match ref_flag {
@@ -212,22 +277,12 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for RcWeak<T> {
         }
     }
 
+    fn fory_read_data(_context: &mut ReadContext, _is_field: bool) -> Result<Self, Error> {
+        panic!("Should not call RcWeak::fory_read_data directly, use RcWeak::fory_read instead");
+    }
+
     fn fory_read_type_info(context: &mut ReadContext, is_field: bool) {
         T::fory_read_type_info(context, is_field);
-    }
-
-    fn fory_write_data(&self, context: &mut WriteContext, _is_field: bool) {
-        if let Some(rc) = self.upgrade() {
-            if !context.ref_writer.try_write_rc_ref(context.writer, &rc) {
-                T::fory_write_data(&*rc, context, _is_field);
-            }
-        } else {
-            context.writer.write_i8(RefFlag::Null as i8);
-        }
-    }
-
-    fn fory_write_type_info(context: &mut WriteContext, is_field: bool) {
-        T::fory_write_type_info(context, is_field);
     }
 
     fn fory_reserved_space() -> usize {
@@ -258,7 +313,35 @@ impl<T: ForyDefault> ForyDefault for RcWeak<T> {
 }
 
 impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for ArcWeak<T> {
-    fn fory_read_data(context: &mut ReadContext, _is_field: bool) -> Result<Self, Error> {
+    fn fory_is_shared_ref() -> bool {
+        true
+    }
+
+    fn fory_write(&self, context: &mut WriteContext, _is_field: bool) {
+        if let Some(arc) = self.upgrade() {
+            // IMPORTANT: If the target Arc was serialized already, just write a ref
+            if context.ref_writer.try_write_arc_ref(context.writer, &arc) {
+                // Already seen, wrote Ref flag + id, we're done
+                return;
+            }
+            // First time seeing this object, write RefValue and then its data
+            T::fory_write_data(&*arc, context, _is_field);
+        } else {
+            context.writer.write_i8(RefFlag::Null as i8);
+        }
+    }
+
+    fn fory_write_data(&self, _context: &mut WriteContext, _is_field: bool) {
+        panic!(
+            "Should not call ArcWeak::fory_write_data directly, use ArcWeak::fory_write instead"
+        );
+    }
+
+    fn fory_write_type_info(context: &mut WriteContext, is_field: bool) {
+        T::fory_write_type_info(context, is_field);
+    }
+
+    fn fory_read(context: &mut ReadContext, _is_field: bool) -> Result<Self, Error> {
         let ref_flag = context.ref_reader.read_ref_flag(&mut context.reader);
 
         match ref_flag {
@@ -292,22 +375,12 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for ArcWeak
         }
     }
 
+    fn fory_read_data(_context: &mut ReadContext, _is_field: bool) -> Result<Self, Error> {
+        panic!("Should not call ArcWeak::fory_read_data directly, use ArcWeak::fory_read instead");
+    }
+
     fn fory_read_type_info(context: &mut ReadContext, is_field: bool) {
         T::fory_read_type_info(context, is_field);
-    }
-
-    fn fory_write_data(&self, context: &mut WriteContext, _is_field: bool) {
-        if let Some(arc) = self.upgrade() {
-            if !context.ref_writer.try_write_arc_ref(context.writer, &arc) {
-                T::fory_write_data(&*arc, context, _is_field);
-            }
-        } else {
-            context.writer.write_i8(RefFlag::Null as i8);
-        }
-    }
-
-    fn fory_write_type_info(context: &mut WriteContext, is_field: bool) {
-        T::fory_write_type_info(context, is_field);
     }
 
     fn fory_reserved_space() -> usize {

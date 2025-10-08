@@ -150,6 +150,10 @@ pub trait Serializer: 'static {
         false
     }
 
+    fn fory_is_shared_ref() -> bool {
+        false
+    }
+
     fn fory_get_type_id(fory: &Fory) -> u32
     where
         Self: Sized,

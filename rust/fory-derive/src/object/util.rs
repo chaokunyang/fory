@@ -123,37 +123,48 @@ fn is_forward_field(ty: &Type) -> bool {
 fn is_forward_field_internal(ty: &Type, struct_name: &str) -> bool {
     match ty {
         Type::TraitObject(_) => true,
+
         Type::Path(type_path) => {
             if let Some(seg) = type_path.path.segments.last() {
-                // Check if this is the struct type itself
+                // Direct match: type is the struct itself
                 if seg.ident == struct_name {
                     return true;
                 }
 
-                // Check for RcWeak, ArcWeak, Rc<dyn Any>, Arc<dyn Any>
+                // Special cases for weak pointers
                 if seg.ident == "RcWeak" || seg.ident == "ArcWeak" {
                     return true;
                 }
 
+                // Check smart pointers: Rc<T> / Arc<T>
                 if seg.ident == "Rc" || seg.ident == "Arc" {
                     if let PathArguments::AngleBracketed(args) = &seg.arguments {
                         if let Some(GenericArgument::Type(inner_ty)) = args.args.first() {
-                            if let Type::TraitObject(trait_obj) = inner_ty {
-                                if trait_obj
-                                    .bounds
-                                    .iter()
-                                    .any(|b| b.to_token_stream().to_string() == "Any")
-                                {
+                            match inner_ty {
+                                // Inner type is trait object
+                                Type::TraitObject(trait_obj) => {
+                                    if trait_obj
+                                        .bounds
+                                        .iter()
+                                        .any(|b| b.to_token_stream().to_string() == "Any")
+                                    {
+                                        // Rc<dyn Any> → return true
+                                        return true;
+                                    } else {
+                                        // Rc<dyn SomethingElse> → return false
+                                        return false;
+                                    }
+                                }
+                                // Inner type is not a trait object → return true
+                                _ => {
                                     return true;
-                                } else {
-                                    return false;
                                 }
                             }
                         }
                     }
                 }
 
-                // Recursively check generic arguments
+                // Recursively check other generic args
                 if let PathArguments::AngleBracketed(args) = &seg.arguments {
                     for arg in &args.args {
                         if let GenericArgument::Type(inner_ty) = arg {
@@ -164,8 +175,10 @@ fn is_forward_field_internal(ty: &Type, struct_name: &str) -> bool {
                     }
                 }
             }
+
             false
         }
+
         _ => false,
     }
 }

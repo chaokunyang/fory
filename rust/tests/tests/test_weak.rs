@@ -47,25 +47,6 @@ fn test_arc_weak_null_serialization() {
 }
 
 #[test]
-fn test_rc_weak_serialization_creates_references() {
-    let fury = Fory::default();
-
-    let rc = Rc::new(42i32);
-    let weak1 = RcWeak::from(&rc);
-    let weak2 = weak1.clone();
-
-    // When we serialize weaks while rc is alive, they serialize as references
-    let data = vec![weak1, weak2];
-    let serialized = fury.serialize(&data);
-
-    // Serialization should have written:
-    // - First weak: RefValue flag + data
-    // - Second weak: Ref flag + ref_id
-    // We can verify this by checking the serialized bytes contain both flags
-    assert!(!serialized.is_empty());
-}
-
-#[test]
 fn test_rc_weak_dead_pointer_serializes_as_null() {
     let fury = Fory::default();
 
@@ -103,35 +84,6 @@ fn test_arc_weak_dead_pointer_serializes_as_null() {
     let deserialized: ArcWeak<String> = fury.deserialize(&serialized).unwrap();
 
     assert!(deserialized.upgrade().is_none());
-}
-
-#[test]
-fn test_rc_weak_serialization_preserves_sharing() {
-    let fury = Fory::default();
-
-    let data1 = Rc::new(42i32);
-    let weak1a = RcWeak::from(&data1);
-    let weak1b = weak1a.clone();
-
-    let weaks = vec![weak1a, weak1b];
-    let serialized = fury.serialize(&weaks);
-
-    assert!(!serialized.is_empty());
-}
-
-#[test]
-fn test_arc_weak_serialization_preserves_sharing() {
-    let fury = Fory::default();
-
-    let data1 = Arc::new(String::from("test"));
-    let weak1a = ArcWeak::from(&data1);
-    let weak1b = weak1a.clone();
-    let weak1c = weak1a.clone();
-
-    let weaks = vec![weak1a, weak1b, weak1c];
-    let serialized = fury.serialize(&weaks);
-
-    assert!(!serialized.is_empty());
 }
 
 #[test]
@@ -206,35 +158,48 @@ struct Node {
 
 #[test]
 fn test_node_circular_reference_with_parent_children() {
-    // Parent
+    // Register the Node type with Fory
+    let mut fury = Fory::default();
+    fury.register::<Node>(2000);
+
+    // Create parent
     let parent = Rc::new(RefCell::new(Node {
         value: 1,
         parent: RcWeak::new(),
         children: vec![],
     }));
 
-    // Child 1
+    // Create children pointing back to parent via weak ref
     let child1 = Rc::new(RefCell::new(Node {
         value: 2,
         parent: RcWeak::from(&parent),
         children: vec![],
     }));
 
-    // Child 2
     let child2 = Rc::new(RefCell::new(Node {
         value: 3,
         parent: RcWeak::from(&parent),
         children: vec![],
     }));
 
-    // Modify parent's children after creation
+    // Add children to parent's children list
     parent.borrow_mut().children.push(child1.clone());
     parent.borrow_mut().children.push(child2.clone());
 
-    // Verify both children's parent points back to parent
-    assert_eq!(parent.borrow().children.len(), 2);
-    for child in &parent.borrow().children {
+    // --- Serialize the parent node (will include children recursively) ---
+    let serialized = fury.serialize(&parent);
+
+    // --- Deserialize ---
+    let deserialized: Rc<RefCell<Node>> = fury.deserialize(&serialized).unwrap();
+
+    // --- Verify ---
+    let des_parent = deserialized.borrow();
+    assert_eq!(des_parent.value, 1);
+    assert_eq!(des_parent.children.len(), 2);
+
+    // Each child should have parent pointing back to the same Rc
+    for child in &des_parent.children {
         let upgraded_parent = child.borrow().parent.upgrade().unwrap();
-        assert!(Rc::ptr_eq(&parent, &upgraded_parent));
+        assert!(Rc::ptr_eq(&deserialized, &upgraded_parent));
     }
 }

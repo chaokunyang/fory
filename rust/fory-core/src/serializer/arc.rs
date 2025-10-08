@@ -24,7 +24,25 @@ use anyhow::anyhow;
 use std::sync::Arc;
 
 impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for Arc<T> {
-    fn fory_read_data(context: &mut ReadContext, is_field: bool) -> Result<Self, Error> {
+    fn fory_is_shared_ref() -> bool {
+        true
+    }
+
+    fn fory_write(&self, context: &mut WriteContext, is_field: bool) {
+        if !context.ref_writer.try_write_arc_ref(context.writer, self) {
+            T::fory_write_data(self.as_ref(), context, is_field);
+        }
+    }
+
+    fn fory_write_data(&self, _context: &mut WriteContext, _is_field: bool) {
+        panic!("Should not call Rc::fory_write_data directly, use Rc::fory_write instead");
+    }
+
+    fn fory_write_type_info(context: &mut WriteContext, is_field: bool) {
+        T::fory_write_type_info(context, is_field);
+    }
+
+    fn fory_read(context: &mut ReadContext, is_field: bool) -> Result<Self, Error> {
         let ref_flag = context.ref_reader.read_ref_flag(&mut context.reader);
 
         match ref_flag {
@@ -49,18 +67,12 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for Arc<T> 
         }
     }
 
+    fn fory_read_data(_context: &mut ReadContext, _is_field: bool) -> Result<Self, Error> {
+        panic!("Should not call Rc::fory_read_data directly, use Rc::fory_read instead");
+    }
+
     fn fory_read_type_info(context: &mut ReadContext, is_field: bool) {
         T::fory_read_type_info(context, is_field);
-    }
-
-    fn fory_write_data(&self, context: &mut WriteContext, is_field: bool) {
-        if !context.ref_writer.try_write_arc_ref(context.writer, self) {
-            T::fory_write_data(self.as_ref(), context, is_field);
-        }
-    }
-
-    fn fory_write_type_info(context: &mut WriteContext, is_field: bool) {
-        T::fory_write_type_info(context, is_field);
     }
 
     fn fory_reserved_space() -> usize {

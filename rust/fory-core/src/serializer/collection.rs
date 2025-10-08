@@ -80,9 +80,9 @@ pub fn write_collection<'a, T: Serializer + 'a, I: IntoIterator<Item = &'a T>>(
             item.fory_write(context, is_field);
         }
     } else {
+        // let skip_ref_flag = crate::serializer::get_skip_ref_flag::<T>(context.get_fory());
+        let skip_ref_flag = is_same_type && !has_null;
         for item in &items {
-            // let skip_ref_flag = crate::serializer::get_skip_ref_flag::<T>(context.get_fory());
-            let skip_ref_flag = is_same_type && !has_null;
             crate::serializer::write_ref_info_data(*item, context, is_field, skip_ref_flag, true);
         }
     }

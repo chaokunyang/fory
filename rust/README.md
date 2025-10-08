@@ -14,7 +14,9 @@ compatibility.
 - **High Performance**: Optimized for speed with zero-copy deserialization
 - **Cross-Language**: Designed for multi-language environments and microservices
 - **Two Serialization Modes**: Object serialization with highly-optimized protocol and row-based lazy on-demand serialization
+- **Shared/Circular References**: Automatic tracking and preservation of reference identity with `Rc<T>`, `Arc<T>`, and weak pointer support
 - **Type Safety**: Compile-time type checking with derive macros
+- **Trait Object Serialization**: Polymorphic serialization with `Box<dyn Trait>`, `Rc<dyn Trait>`, and `Arc<dyn Trait>`
 - **Schema Evolution**: Support for compatible mode with field additions/deletions
 - **Zero Dependencies**: Minimal runtime dependencies for maximum performance
 
@@ -241,6 +243,207 @@ assert_eq!(unwrapped.name(), "Rex");
 
 For struct fields with `Rc<dyn Trait>` and `Arc<dyn Trait>` type, fory will generate code automatically to convert such fields to wrappers for serialization and deserialization.
 
+### Shared/Circular References Serialization
+
+Apache Fory™ provides comprehensive support for serializing complex object graphs with shared references and circular dependencies. This feature is essential for real-world data structures like trees with parent pointers, doubly-linked lists, and general graphs.
+
+#### Shared References with `Rc<T>` and `Arc<T>`
+
+Fory automatically tracks reference identity for `Rc<T>` (single-threaded) and `Arc<T>` (thread-safe) smart pointers. When the same object is referenced multiple times in an object graph, Fory serializes it only once and uses reference IDs for subsequent occurrences, ensuring:
+
+- **Space efficiency**: No data duplication in serialized output
+- **Reference identity preservation**: Deserialized objects maintain the same sharing relationships
+
+```rust
+use fory::Fory;
+use std::rc::Rc;
+
+let fory = Fory::default();
+
+// Create a shared value
+let shared = Rc::new(String::from("shared_value"));
+
+// Reference it multiple times in a vector
+let data = vec![shared.clone(), shared.clone(), shared.clone()];
+
+// The shared value is serialized only once
+let serialized = fory.serialize(&data);
+let deserialized: Vec<Rc<String>> = fory.deserialize(&serialized)?;
+
+// Verify reference identity is preserved
+assert_eq!(deserialized.len(), 3);
+assert_eq!(*deserialized[0], "shared_value");
+
+// All three Rc pointers point to the same object
+assert!(Rc::ptr_eq(&deserialized[0], &deserialized[1]));
+assert!(Rc::ptr_eq(&deserialized[1], &deserialized[2]));
+```
+
+For thread-safe shared references, use `Arc<T>`:
+
+```rust
+use fory::Fory;
+use std::sync::Arc;
+
+let fory = Fory::default();
+
+let shared1 = Arc::new(42i32);
+let shared2 = Arc::new(100i32);
+
+// Multiple references to different shared values
+let data = vec![
+    shared1.clone(),
+    shared2.clone(),
+    shared1.clone(),
+    shared2.clone(),
+];
+
+let serialized = fory.serialize(&data);
+let deserialized: Vec<Arc<i32>> = fory.deserialize(&serialized)?;
+
+// Verify reference identity preservation
+assert!(Arc::ptr_eq(&deserialized[0], &deserialized[2]));
+assert!(Arc::ptr_eq(&deserialized[1], &deserialized[3]));
+```
+
+#### Circular References with Weak Pointers
+
+To serialize circular references like parent-child relationships, use `RcWeak<T>` or `ArcWeak<T>` to break the cycle. These weak pointers are serialized as references to their strong counterparts, preserving the graph structure without causing memory leaks or infinite recursion.
+
+```rust
+use fory::{Fory, Error};
+use fory_derive::ForyObject;
+use fory_core::serializer::weak::RcWeak;
+use std::rc::Rc;
+use std::cell::RefCell;
+
+#[derive(ForyObject, Debug)]
+struct Node {
+    value: i32,
+    parent: RcWeak<RefCell<Node>>,
+    children: Vec<Rc<RefCell<Node>>>,
+}
+
+let mut fory = Fory::default();
+fory.register::<Node>(2000);
+
+// Build a parent-child tree
+let parent = Rc::new(RefCell::new(Node {
+    value: 1,
+    parent: RcWeak::new(),
+    children: vec![],
+}));
+
+let child1 = Rc::new(RefCell::new(Node {
+    value: 2,
+    parent: RcWeak::from(&parent),
+    children: vec![],
+}));
+
+let child2 = Rc::new(RefCell::new(Node {
+    value: 3,
+    parent: RcWeak::from(&parent),
+    children: vec![],
+}));
+
+parent.borrow_mut().children.push(child1.clone());
+parent.borrow_mut().children.push(child2.clone());
+
+// Serialize and deserialize the circular structure
+let serialized = fory.serialize(&parent);
+let deserialized: Rc<RefCell<Node>> = fory.deserialize(&serialized)?;
+
+// Verify the circular relationship
+assert_eq!(deserialized.borrow().children.len(), 2);
+for child in &deserialized.borrow().children {
+    let upgraded_parent = child.borrow().parent.upgrade().unwrap();
+    assert!(Rc::ptr_eq(&deserialized, &upgraded_parent));
+}
+```
+
+**Key Features of Weak Reference Serialization:**
+
+- **Reference tracking**: Weak pointers serialize as references to their strong counterparts
+- **Null handling**: If the strong pointer has been dropped, weak serializes as `Null`
+- **Forward reference resolution**: Weak pointers that appear before their targets are resolved via callbacks after deserialization
+- **Shared cell semantics**: All clones of an `RcWeak`/`ArcWeak` share the same internal cell, so deserialization updates propagate to all copies
+
+#### Thread-Safe Circular Graphs with `Arc`
+
+For multi-threaded scenarios with circular references, use `ArcWeak<T>` with `Arc<Mutex<T>>`:
+
+```rust
+use fory::{Fory, Error};
+use fory_derive::ForyObject;
+use fory_core::serializer::weak::ArcWeak;
+use std::sync::{Arc, Mutex};
+
+#[derive(ForyObject)]
+struct Node {
+    val: i32,
+    parent: ArcWeak<Mutex<Node>>,
+    children: Vec<Arc<Mutex<Node>>>,
+}
+
+let mut fory = Fory::default();
+fory.register::<Node>(6000);
+
+// Build a parent-child tree with Arc/Mutex
+let parent = Arc::new(Mutex::new(Node {
+    val: 10,
+    parent: ArcWeak::new(),
+    children: vec![],
+}));
+
+let child1 = Arc::new(Mutex::new(Node {
+    val: 20,
+    parent: ArcWeak::from(&parent),
+    children: vec![],
+}));
+
+let child2 = Arc::new(Mutex::new(Node {
+    val: 30,
+    parent: ArcWeak::from(&parent),
+    children: vec![],
+}));
+
+parent.lock().unwrap().children.push(child1.clone());
+parent.lock().unwrap().children.push(child2.clone());
+
+// Serialize and deserialize the circular structure
+let serialized = fory.serialize(&parent);
+let deserialized: Arc<Mutex<Node>> = fory.deserialize(&serialized)?;
+
+// Verify the circular relationship
+assert_eq!(deserialized.lock().unwrap().children.len(), 2);
+for child in &deserialized.lock().unwrap().children {
+    let upgraded_parent = child.lock().unwrap().parent.upgrade().unwrap();
+    assert!(Arc::ptr_eq(&deserialized, &upgraded_parent));
+}
+```
+
+#### Implementation Details
+
+The reference tracking system uses four reference flags:
+
+- **`NotNullValue`**: First occurrence of an object that won't be referenced again
+- **`RefValue`**: First occurrence of an object that will be referenced later
+- **`Ref`**: Subsequent reference to an already-serialized object (followed by reference ID)
+- **`Null`**: Null reference
+
+During serialization:
+
+1. When encountering an `Rc<T>`/`Arc<T>`, check if it was seen before
+2. If first time: write `RefValue` flag, assign reference ID, serialize data
+3. If seen before: write `Ref` flag + reference ID
+
+During deserialization:
+
+1. Read reference flag
+2. If `RefValue`: deserialize object, store with reference ID
+3. If `Ref`: lookup object by reference ID
+4. For weak pointers appearing before targets: register callback for later resolution
+
 ### Row-Based Serialization
 
 For high-performance, zero-copy scenarios:
@@ -331,6 +534,15 @@ assert_eq!(prefs.values().get(0), "en");
 - `HashMap<K, V>` and `BTreeMap<K, V>` for maps
 - `Option<T>` for nullable values
 
+### Smart Pointers
+
+- `Box<T>` for heap-allocated values
+- `Rc<T>` for single-threaded reference counting with shared reference tracking
+- `Arc<T>` for thread-safe reference counting with shared reference tracking
+- `RcWeak<T>` for weak references to `Rc<T>` (breaks circular references)
+- `ArcWeak<T>` for weak references to `Arc<T>` (breaks circular references)
+- `RefCell<T>` and `Mutex<T>` for interior mutability
+
 ### Date and Time
 
 - `chrono::NaiveDate` for dates (requires chrono dependency)
@@ -375,7 +587,10 @@ Apache Fory™ Rust implementation roadmap:
 - [x] Row format serialization
 - [x] Cross-language object graph serialization
 - [x] Static codegen based on fory-derive macro processor
-- [ ] Advanced schema evolution features
+- [x] Shared and circular reference tracking with `Rc<T>` and `Arc<T>`
+- [x] Weak pointer support with `RcWeak<T>` and `ArcWeak<T>`
+- [x] Trait object serialization with polymorphism
+- [x] Advanced schema evolution features
 - [ ] Performance optimizations and benchmarks
 
 ## 📄 License

@@ -4,44 +4,75 @@
 [![Documentation](https://docs.rs/fory/badge.svg)](https://docs.rs/fory)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-Apache Fory™ is a blazingly fast multi-language serialization framework powered by
-codegen and zero-copy techniques. It provides high-performance
-serialization and deserialization for Rust applications with cross-language
-compatibility.
+Apache Fory™ is a blazingly-fast multi-language serialization framework powered by JIT compilation and zero-copy techniques, delivering **up to 170x** performance improvement over traditional serialization methods. The Rust implementation provides high-performance serialization with automatic memory management and compile-time type safety.
 
-## 🚀 Key Features
+## 🚀 Why Apache Fory™ Rust?
 
-- **High Performance**: Optimized for speed with zero-copy deserialization
-- **Cross-Language**: Designed for multi-language environments and microservices
-- **Two Serialization Modes**: Object serialization with highly-optimized protocol and row-based lazy on-demand serialization
-- **Shared/Circular References**: Automatic tracking and preservation of reference identity with `Rc<T>`, `Arc<T>`, and weak pointer support
-- **Type Safety**: Compile-time type checking with derive macros
-- **Trait Object Serialization**: Polymorphic serialization with `Box<dyn Trait>`, `Rc<dyn Trait>`, and `Arc<dyn Trait>`
-- **Schema Evolution**: Support for compatible mode with field additions/deletions
-- **Zero Dependencies**: Minimal runtime dependencies for maximum performance
+- **🔥 Blazingly Fast**: Zero-copy deserialization and optimized binary protocols
+- **🌍 Cross-Language**: Seamlessly serialize/deserialize data across Java, Python, C++, Go, JavaScript, and Rust
+- **🎯 Type-Safe**: Compile-time type checking with derive macros
+- **🔄 Circular References**: Automatic tracking of shared and circular references with `Rc`/`Arc` and weak pointers
+- **🧬 Polymorphic**: Serialize trait objects with `Box<dyn Trait>`, `Rc<dyn Trait>`, and `Arc<dyn Trait>`
+- **📦 Schema Evolution**: Compatible mode for independent schema changes
+- **⚡ Two Modes**: Object graph serialization and zero-copy row-based format
 
 ## 📦 Crates
 
-This repository contains three main crates:
+| Crate | Description | Version |
+|-------|-------------|---------|
+| [`fory`](fory/) | High-level API with derive macros | [![crates.io](https://img.shields.io/crates/v/fory.svg)](https://crates.io/crates/fory) |
+| [`fory-core`](fory-core/) | Core serialization engine | [![crates.io](https://img.shields.io/crates/v/fory-core.svg)](https://crates.io/crates/fory-core) |
+| [`fory-derive`](fory-derive/) | Procedural macros | [![crates.io](https://img.shields.io/crates/v/fory-derive.svg)](https://crates.io/crates/fory-derive) |
 
-- **[`fory`](fory/)**: Main crate with high-level API and derive macros
-- **[`fory-core`](fory-core/)**: Core serialization engine and low-level APIs
-- **[`fory-derive`](fory-derive/)**: Procedural macros for code generation
-
-## 🏃‍♂️ Quick Start
+## 🏃 Quick Start
 
 Add Apache Fory™ to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-fory = "0.1"
-fory-derive = "0.1"
-chrono = "0.4"
+fory = "0.13"
+fory-derive = "0.13"
 ```
 
-### Object Serialization
+### Basic Example
 
-For complex data structures with full object graph serialization:
+```rust
+use fory::{Fory, Error};
+use fory_derive::ForyObject;
+
+#[derive(ForyObject, Debug, PartialEq)]
+struct User {
+    name: String,
+    age: i32,
+    email: String,
+}
+
+fn main() -> Result<(), Error> {
+    let mut fory = Fory::default();
+    fory.register::<User>(1);
+
+    let user = User {
+        name: "Alice".to_string(),
+        age: 30,
+        email: "alice@example.com".to_string(),
+    };
+
+    // Serialize
+    let bytes = fory.serialize(&user);
+
+    // Deserialize
+    let decoded: User = fory.deserialize(&bytes)?;
+    assert_eq!(user, decoded);
+
+    Ok(())
+}
+```
+
+## 📚 Core Features
+
+### 1. Object Graph Serialization
+
+Serialize complex object graphs with full reference tracking:
 
 ```rust
 use fory::{Fory, Error};
@@ -64,7 +95,6 @@ struct Address {
     country: String,
 }
 
-// Create a Fory instance and register types
 let mut fory = Fory::default();
 fory.register::<Address>(100);
 fory.register::<Person>(200);
@@ -79,27 +109,141 @@ let person = Person {
     },
     hobbies: vec!["reading".to_string(), "coding".to_string()],
     metadata: HashMap::from([
-        ("department".to_string(), "engineering".to_string()),
-        ("level".to_string(), "senior".to_string()),
+        ("role".to_string(), "developer".to_string()),
     ]),
 };
 
-// Serialize the object
-let serialized = fory.serialize(&person);
-
-// Deserialize back to the original type
-let deserialized: Person = fory.deserialize(&serialized)?;
-
-assert_eq!(person, deserialized);
+let bytes = fory.serialize(&person);
+let decoded: Person = fory.deserialize(&bytes)?;
+assert_eq!(person, decoded);
 ```
 
-### Trait Object Serialization
+### 2. Row-Based Serialization
 
-Apache Fory™ supports serializing trait objects with polymorphism, enabling dynamic dispatch and type flexibility.
+Zero-copy deserialization for maximum performance:
+
+```rust
+use fory::{to_row, from_row};
+use fory_derive::ForyRow;
+use std::collections::BTreeMap;
+
+#[derive(ForyRow)]
+struct UserProfile {
+    id: i64,
+    username: String,
+    email: String,
+    scores: Vec<i32>,
+    preferences: BTreeMap<String, String>,
+    is_active: bool,
+}
+
+let profile = UserProfile {
+    id: 12345,
+    username: "alice".to_string(),
+    email: "alice@example.com".to_string(),
+    scores: vec![95, 87, 92, 88],
+    preferences: BTreeMap::from([
+        ("theme".to_string(), "dark".to_string()),
+        ("language".to_string(), "en".to_string()),
+    ]),
+    is_active: true,
+};
+
+// Serialize to row format
+let row_data = to_row(&profile);
+
+// Zero-copy deserialization
+let row = from_row::<UserProfile>(&row_data);
+assert_eq!(row.id(), 12345);
+assert_eq!(row.username(), "alice");
+assert_eq!(row.is_active(), true);
+```
+
+### 3. Shared and Circular References
+
+Automatically track reference identity with `Rc<T>`, `Arc<T>`, and weak pointers:
+
+#### Shared References
+
+```rust
+use fory::Fory;
+use std::rc::Rc;
+
+let fory = Fory::default();
+
+// Create a shared value
+let shared = Rc::new(String::from("shared_value"));
+
+// Reference it multiple times
+let data = vec![shared.clone(), shared.clone(), shared.clone()];
+
+// Only serialized once, reference identity preserved
+let bytes = fory.serialize(&data);
+let decoded: Vec<Rc<String>> = fory.deserialize(&bytes)?;
+
+// Verify reference identity is preserved
+assert!(Rc::ptr_eq(&decoded[0], &decoded[1]));
+assert!(Rc::ptr_eq(&decoded[1], &decoded[2]));
+```
+
+#### Circular References with Weak Pointers
+
+```rust
+use fory::{Fory, Error};
+use fory_derive::ForyObject;
+use fory_core::serializer::weak::RcWeak;
+use std::rc::Rc;
+use std::cell::RefCell;
+
+#[derive(ForyObject, Debug)]
+struct Node {
+    value: i32,
+    parent: RcWeak<RefCell<Node>>,
+    children: Vec<Rc<RefCell<Node>>>,
+}
+
+let mut fory = Fory::default();
+fory.register::<Node>(1);
+
+// Build a parent-child tree
+let parent = Rc::new(RefCell::new(Node {
+    value: 1,
+    parent: RcWeak::new(),
+    children: vec![],
+}));
+
+let child1 = Rc::new(RefCell::new(Node {
+    value: 2,
+    parent: RcWeak::from(&parent),
+    children: vec![],
+}));
+
+let child2 = Rc::new(RefCell::new(Node {
+    value: 3,
+    parent: RcWeak::from(&parent),
+    children: vec![],
+}));
+
+parent.borrow_mut().children.push(child1.clone());
+parent.borrow_mut().children.push(child2.clone());
+
+// Serialize and deserialize the circular structure
+let bytes = fory.serialize(&parent);
+let decoded: Rc<RefCell<Node>> = fory.deserialize(&bytes)?;
+
+// Verify the circular relationship
+assert_eq!(decoded.borrow().children.len(), 2);
+for child in &decoded.borrow().children {
+    let upgraded_parent = child.borrow().parent.upgrade().unwrap();
+    assert!(Rc::ptr_eq(&decoded, &upgraded_parent));
+}
+```
+
+### 4. Trait Object Serialization
+
+Serialize polymorphic types with trait objects:
 
 #### Box-Based Trait Objects
-
-Serialize trait objects using `Box<dyn Trait>`:
 
 ```rust
 use fory_core::{Fory, register_trait_type};
@@ -128,6 +272,7 @@ impl Animal for Cat {
     fn name(&self) -> &str { &self.name }
 }
 
+// Register trait implementations
 register_trait_type!(Animal, Dog, Cat);
 
 #[derive(ForyObject)]
@@ -147,16 +292,16 @@ let zoo = Zoo {
     }),
 };
 
-let serialized = fory.serialize(&zoo);
-let deserialized: Zoo = fory.deserialize(&serialized)?;
+let bytes = fory.serialize(&zoo);
+let decoded: Zoo = fory.deserialize(&bytes)?;
 
-assert_eq!(deserialized.star_animal.name(), "Buddy");
-assert_eq!(deserialized.star_animal.speak(), "Woof!");
+assert_eq!(decoded.star_animal.name(), "Buddy");
+assert_eq!(decoded.star_animal.speak(), "Woof!");
 ```
 
 #### Rc/Arc-Based Trait Objects
 
-For fields with `Rc<dyn Trait>` or `Arc<dyn Trait>`, use them directly in struct definitions:
+For fields with `Rc<dyn Trait>` or `Arc<dyn Trait>`, use them directly:
 
 ```rust
 use std::sync::Arc;
@@ -191,407 +336,339 @@ let shelter = AnimalShelter {
     ]),
 };
 
-let serialized = fory.serialize(&shelter);
-let deserialized: AnimalShelter = fory.deserialize(&serialized)?;
+let bytes = fory.serialize(&shelter);
+let decoded: AnimalShelter = fory.deserialize(&bytes)?;
 
-assert_eq!(deserialized.animals_rc[0].name(), "Rex");
-assert_eq!(deserialized.animals_arc[0].speak(), "Woof!");
+assert_eq!(decoded.animals_rc[0].name(), "Rex");
+assert_eq!(decoded.animals_arc[0].speak(), "Woof!");
 ```
 
-**Wrapper Types for Standalone Usage**
+### 5. Schema Evolution
 
-Due to Rust's orphan rule, `Rc<dyn Trait>` and `Arc<dyn Trait>` cannot implement `Serializer` directly. For standalone serialization (not inside struct fields), use the `Rc<dyn Any>/Arc<dyn Any>` or fory auto-generated wrapper types instead:
-
-Example for `Rc<dyn T>`:
-
-```rust
-let dog_rc: Rc<dyn Animal> = Rc::new(Dog {
-    name: "Rex".to_string(),
-    breed: "Golden".to_string()
-});
-let dog = doc_rc.as_any();
-
-// Serialize the wrapper
-let serialized = fory.serialize(&wrapper);
-let deserialized: Rc<dyn Any> = fory.deserialize(&serialized)?;
-
-// Unwrap back to Rc<dyn Animal>
-let unwrapped: Rc<dyn Animal> = deserialized.downcast_ref::<Dog>();
-assert_eq!(unwrapped.name(), "Rex");
-```
-
-Example for `Arc<dyn Any>`:
-
-```rust
-// register_trait_type! generates: AnimalRc and AnimalArc
-
-// Wrap Rc/Arc trait objects
-let dog_rc: Arc<dyn Animal> = Arc::new(Dog {
-    name: "Rex".to_string(),
-    breed: "Golden".to_string()
-});
-let wrapper = AnimalArc::from(dog_rc);
-
-// Serialize the wrapper
-let serialized = fory.serialize(&wrapper);
-let deserialized: AnimalArc = fory.deserialize(&serialized)?;
-
-// Unwrap back to Arc<dyn Animal>
-let unwrapped: Arc<dyn Animal> = deserialized.unwrap();
-assert_eq!(unwrapped.name(), "Rex");
-```
-
-For struct fields with `Rc<dyn Trait>` and `Arc<dyn Trait>` type, fory will generate code automatically to convert such fields to wrappers for serialization and deserialization.
-
-### Shared/Circular References Serialization
-
-Apache Fory™ provides comprehensive support for serializing complex object graphs with shared references and circular dependencies. This feature is essential for real-world data structures like trees with parent pointers, doubly-linked lists, and general graphs.
-
-#### Shared References with `Rc<T>` and `Arc<T>`
-
-Fory automatically tracks reference identity for `Rc<T>` (single-threaded) and `Arc<T>` (thread-safe) smart pointers. When the same object is referenced multiple times in an object graph, Fory serializes it only once and uses reference IDs for subsequent occurrences, ensuring:
-
-- **Space efficiency**: No data duplication in serialized output
-- **Reference identity preservation**: Deserialized objects maintain the same sharing relationships
+Support independent schema changes between serialization peers:
 
 ```rust
 use fory::Fory;
-use std::rc::Rc;
-
-let fory = Fory::default();
-
-// Create a shared value
-let shared = Rc::new(String::from("shared_value"));
-
-// Reference it multiple times in a vector
-let data = vec![shared.clone(), shared.clone(), shared.clone()];
-
-// The shared value is serialized only once
-let serialized = fory.serialize(&data);
-let deserialized: Vec<Rc<String>> = fory.deserialize(&serialized)?;
-
-// Verify reference identity is preserved
-assert_eq!(deserialized.len(), 3);
-assert_eq!(*deserialized[0], "shared_value");
-
-// All three Rc pointers point to the same object
-assert!(Rc::ptr_eq(&deserialized[0], &deserialized[1]));
-assert!(Rc::ptr_eq(&deserialized[1], &deserialized[2]));
-```
-
-For thread-safe shared references, use `Arc<T>`:
-
-```rust
-use fory::Fory;
-use std::sync::Arc;
-
-let fory = Fory::default();
-
-let shared1 = Arc::new(42i32);
-let shared2 = Arc::new(100i32);
-
-// Multiple references to different shared values
-let data = vec![
-    shared1.clone(),
-    shared2.clone(),
-    shared1.clone(),
-    shared2.clone(),
-];
-
-let serialized = fory.serialize(&data);
-let deserialized: Vec<Arc<i32>> = fory.deserialize(&serialized)?;
-
-// Verify reference identity preservation
-assert!(Arc::ptr_eq(&deserialized[0], &deserialized[2]));
-assert!(Arc::ptr_eq(&deserialized[1], &deserialized[3]));
-```
-
-#### Circular References with Weak Pointers
-
-To serialize circular references like parent-child relationships, use `RcWeak<T>` or `ArcWeak<T>` to break the cycle. These weak pointers are serialized as references to their strong counterparts, preserving the graph structure without causing memory leaks or infinite recursion.
-
-```rust
-use fory::{Fory, Error};
+use fory_core::types::Mode;
 use fory_derive::ForyObject;
-use fory_core::serializer::weak::RcWeak;
-use std::rc::Rc;
-use std::cell::RefCell;
+use std::collections::HashMap;
 
 #[derive(ForyObject, Debug)]
-struct Node {
-    value: i32,
-    parent: RcWeak<RefCell<Node>>,
-    children: Vec<Rc<RefCell<Node>>>,
+struct PersonV1 {
+    name: String,
+    age: i32,
+    address: String,
 }
 
-let mut fory = Fory::default();
-fory.register::<Node>(2000);
-
-// Build a parent-child tree
-let parent = Rc::new(RefCell::new(Node {
-    value: 1,
-    parent: RcWeak::new(),
-    children: vec![],
-}));
-
-let child1 = Rc::new(RefCell::new(Node {
-    value: 2,
-    parent: RcWeak::from(&parent),
-    children: vec![],
-}));
-
-let child2 = Rc::new(RefCell::new(Node {
-    value: 3,
-    parent: RcWeak::from(&parent),
-    children: vec![],
-}));
-
-parent.borrow_mut().children.push(child1.clone());
-parent.borrow_mut().children.push(child2.clone());
-
-// Serialize and deserialize the circular structure
-let serialized = fory.serialize(&parent);
-let deserialized: Rc<RefCell<Node>> = fory.deserialize(&serialized)?;
-
-// Verify the circular relationship
-assert_eq!(deserialized.borrow().children.len(), 2);
-for child in &deserialized.borrow().children {
-    let upgraded_parent = child.borrow().parent.upgrade().unwrap();
-    assert!(Rc::ptr_eq(&deserialized, &upgraded_parent));
-}
-```
-
-**Key Features of Weak Reference Serialization:**
-
-- **Reference tracking**: Weak pointers serialize as references to their strong counterparts
-- **Null handling**: If the strong pointer has been dropped, weak serializes as `Null`
-- **Forward reference resolution**: Weak pointers that appear before their targets are resolved via callbacks after deserialization
-- **Shared cell semantics**: All clones of an `RcWeak`/`ArcWeak` share the same internal cell, so deserialization updates propagate to all copies
-
-#### Thread-Safe Circular Graphs with `Arc`
-
-For multi-threaded scenarios with circular references, use `ArcWeak<T>` with `Arc<Mutex<T>>`:
-
-```rust
-use fory::{Fory, Error};
-use fory_derive::ForyObject;
-use fory_core::serializer::weak::ArcWeak;
-use std::sync::{Arc, Mutex};
-
-#[derive(ForyObject)]
-struct Node {
-    val: i32,
-    parent: ArcWeak<Mutex<Node>>,
-    children: Vec<Arc<Mutex<Node>>>,
+#[derive(ForyObject, Debug)]
+struct PersonV2 {
+    name: String,
+    age: i32,
+    // address removed
+    // phone added
+    phone: Option<String>,
+    metadata: HashMap<String, String>,
 }
 
-let mut fory = Fory::default();
-fory.register::<Node>(6000);
+let mut fory1 = Fory::default().mode(Mode::Compatible);
+fory1.register::<PersonV1>(1);
 
-// Build a parent-child tree with Arc/Mutex
-let parent = Arc::new(Mutex::new(Node {
-    val: 10,
-    parent: ArcWeak::new(),
-    children: vec![],
-}));
+let mut fory2 = Fory::default().mode(Mode::Compatible);
+fory2.register::<PersonV2>(1);
 
-let child1 = Arc::new(Mutex::new(Node {
-    val: 20,
-    parent: ArcWeak::from(&parent),
-    children: vec![],
-}));
-
-let child2 = Arc::new(Mutex::new(Node {
-    val: 30,
-    parent: ArcWeak::from(&parent),
-    children: vec![],
-}));
-
-parent.lock().unwrap().children.push(child1.clone());
-parent.lock().unwrap().children.push(child2.clone());
-
-// Serialize and deserialize the circular structure
-let serialized = fory.serialize(&parent);
-let deserialized: Arc<Mutex<Node>> = fory.deserialize(&serialized)?;
-
-// Verify the circular relationship
-assert_eq!(deserialized.lock().unwrap().children.len(), 2);
-for child in &deserialized.lock().unwrap().children {
-    let upgraded_parent = child.lock().unwrap().parent.upgrade().unwrap();
-    assert!(Arc::ptr_eq(&deserialized, &upgraded_parent));
-}
-```
-
-#### Implementation Details
-
-The reference tracking system uses four reference flags:
-
-- **`NotNullValue`**: First occurrence of an object that won't be referenced again
-- **`RefValue`**: First occurrence of an object that will be referenced later
-- **`Ref`**: Subsequent reference to an already-serialized object (followed by reference ID)
-- **`Null`**: Null reference
-
-During serialization:
-
-1. When encountering an `Rc<T>`/`Arc<T>`, check if it was seen before
-2. If first time: write `RefValue` flag, assign reference ID, serialize data
-3. If seen before: write `Ref` flag + reference ID
-
-During deserialization:
-
-1. Read reference flag
-2. If `RefValue`: deserialize object, store with reference ID
-3. If `Ref`: lookup object by reference ID
-4. For weak pointers appearing before targets: register callback for later resolution
-
-### Row-Based Serialization
-
-For high-performance, zero-copy scenarios:
-
-```rust
-use fory::{to_row, from_row};
-use fory_derive::ForyRow;
-use std::collections::BTreeMap;
-
-#[derive(ForyRow)]
-struct UserProfile {
-    id: i64,
-    username: String,
-    email: String,
-    scores: Vec<i32>,
-    preferences: BTreeMap<String, String>,
-    is_active: bool,
-}
-
-let profile = UserProfile {
-    id: 12345,
-    username: "alice".to_string(),
-    email: "alice@example.com".to_string(),
-    scores: vec![95, 87, 92, 88],
-    preferences: BTreeMap::from([
-        ("theme".to_string(), "dark".to_string()),
-        ("language".to_string(), "en".to_string()),
-    ]),
-    is_active: true,
+let person_v1 = PersonV1 {
+    name: "Alice".to_string(),
+    age: 30,
+    address: "123 Main St".to_string(),
 };
 
-// Serialize to row format
-let row_data = to_row(&profile);
+// Serialize with V1
+let bytes = fory1.serialize(&person_v1);
 
-// Deserialize with zero-copy access
-let row = from_row::<UserProfile>(&row_data);
-
-// Access fields directly from the row data
-assert_eq!(row.id(), 12345);
-assert_eq!(row.username(), "alice");
-assert_eq!(row.email(), "alice@example.com");
-assert_eq!(row.is_active(), true);
-
-// Access collections efficiently
-let scores = row.scores();
-assert_eq!(scores.size(), 4);
-assert_eq!(scores.get(0), 95);
-assert_eq!(scores.get(1), 87);
-
-let prefs = row.preferences();
-assert_eq!(prefs.keys().size(), 2);
-assert_eq!(prefs.keys().get(0), "language");
-assert_eq!(prefs.values().get(0), "en");
+// Deserialize with V2 - missing fields get default values
+let person_v2: PersonV2 = fory2.deserialize(&bytes)?;
+assert_eq!(person_v2.name, "Alice");
+assert_eq!(person_v2.age, 30);
+assert_eq!(person_v2.phone, None);
 ```
 
-## 📚 Documentation
+### 6. Enum Support
 
-- **[API Documentation](https://docs.rs/fory)** - Complete API reference
-- **[Performance Guide](docs/performance.md)** - Optimization tips and benchmarks
+Serialize enums with or without payloads:
 
-## 🎯 Use Cases
+```rust
+use fory_derive::ForyObject;
 
-### Object Serialization
+#[derive(ForyObject, Debug, PartialEq, Default)]
+enum Status {
+    #[default]
+    Pending,
+    Active,
+    Inactive,
+    Deleted,
+}
 
-- **Complex data structures** with nested objects and references
-- **Cross-language communication** in microservices architectures
-- **General-purpose serialization** with full type safety
-- **Schema evolution** with compatible mode
+let mut fory = Fory::default();
+fory.register::<Status>(1);
 
-### Row-Based Serialization
+let status = Status::Active;
+let bytes = fory.serialize(&status);
+let decoded: Status = fory.deserialize(&bytes)?;
+assert_eq!(status, decoded);
+```
 
-- **High-throughput data processing** with zero-copy access
-- **Analytics workloads** requiring fast field access
-- **Memory-constrained environments** with minimal allocations
-- **Real-time data streaming** applications
+### 7. Custom Serializers
+
+Implement custom serialization logic:
+
+```rust
+use fory_core::fory::{Fory, read_data, write_data};
+use fory_core::resolver::context::{ReadContext, WriteContext};
+use fory_core::serializer::{Serializer, ForyDefault};
+use fory_core::error::Error;
+use std::any::Any;
+
+#[derive(Debug, PartialEq, Default)]
+struct CustomType {
+    value: i32,
+}
+
+impl Serializer for CustomType {
+    fn fory_write_data(&self, context: &mut WriteContext, is_field: bool) {
+        write_data(&self.value, context, is_field);
+    }
+
+    fn fory_read_data(context: &mut ReadContext, is_field: bool) -> Result<Self, Error> {
+        Ok(Self {
+            value: read_data(context, is_field)?,
+        })
+    }
+
+    fn fory_type_id_dyn(&self, fory: &Fory) -> u32 {
+        Self::fory_get_type_id(fory)
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+impl ForyDefault for CustomType {
+    fn fory_default() -> Self {
+        Self::default()
+    }
+}
+
+let mut fory = Fory::default();
+fory.register_serializer::<CustomType>(100);
+
+let custom = CustomType { value: 42 };
+let bytes = fory.serialize(&custom);
+let decoded: CustomType = fory.deserialize(&bytes)?;
+assert_eq!(custom, decoded);
+```
 
 ## 🔧 Supported Types
 
 ### Primitive Types
 
-- `bool`, `i8`, `i16`, `i32`, `i64`, `f32`, `f64`
-- `String`, `&str` (in row format)
-- `Vec<u8>` for binary data
+| Rust Type | Description |
+|-----------|-------------|
+| `bool` | Boolean |
+| `i8`, `i16`, `i32`, `i64` | Signed integers |
+| `f32`, `f64` | Floating point |
+| `String` | UTF-8 string |
 
 ### Collections
 
-- `Vec<T>` for arrays/lists
-- `HashMap<K, V>` and `BTreeMap<K, V>` for maps
-- `Option<T>` for nullable values
+| Rust Type | Description |
+|-----------|-------------|
+| `Vec<T>` | Dynamic array |
+| `HashMap<K, V>` | Hash map |
+| `BTreeMap<K, V>` | Ordered map |
+| `HashSet<T>` | Hash set |
+| `Option<T>` | Optional value |
 
 ### Smart Pointers
 
-- `Box<T>` for heap-allocated values
-- `Rc<T>` for single-threaded reference counting with shared reference tracking
-- `Arc<T>` for thread-safe reference counting with shared reference tracking
-- `RcWeak<T>` for weak references to `Rc<T>` (breaks circular references)
-- `ArcWeak<T>` for weak references to `Arc<T>` (breaks circular references)
-- `RefCell<T>` and `Mutex<T>` for interior mutability
+| Rust Type | Description |
+|-----------|-------------|
+| `Box<T>` | Heap allocation |
+| `Rc<T>` | Reference counting (shared refs tracked) |
+| `Arc<T>` | Thread-safe reference counting (shared refs tracked) |
+| `RcWeak<T>` | Weak reference to `Rc<T>` (breaks circular refs) |
+| `ArcWeak<T>` | Weak reference to `Arc<T>` (breaks circular refs) |
+| `RefCell<T>` | Interior mutability (runtime borrow checking) |
+| `Mutex<T>` | Thread-safe interior mutability |
 
 ### Date and Time
 
-- `chrono::NaiveDate` for dates (requires chrono dependency)
-- `chrono::NaiveDateTime` for timestamps (requires chrono dependency)
+| Rust Type | Description |
+|-----------|-------------|
+| `chrono::NaiveDate` | Date without timezone |
+| `chrono::NaiveDateTime` | Timestamp without timezone |
 
 ### Custom Types
 
-- Structs with `#[derive(ForyObject)]` or `#[derive(ForyRow)]`
-- Enums with `#[derive(ForyObject)]`
-- Trait objects
+| Macro | Description |
+|-------|-------------|
+| `#[derive(ForyObject)]` | Object graph serialization |
+| `#[derive(ForyRow)]` | Row-based serialization |
+
+## 🌍 Cross-Language Serialization
+
+Apache Fory™ supports seamless data exchange across multiple languages:
+
+```rust
+use fory::Fory;
+use fory_core::types::Mode;
+
+// Enable cross-language mode
+let mut fory = Fory::default()
+    .mode(Mode::Compatible)
+    .xlang(true);
+
+// Register types with consistent IDs across languages
+fory.register::<MyStruct>(100);
+
+// Or use namespace-based registration
+fory.register_by_namespace::<MyStruct>("com.example", "MyStruct");
+```
+
+See [xlang_type_mapping.md](../docs/guide/xlang_type_mapping.md) for type mapping across languages.
 
 ## ⚡ Performance
 
-Apache Fory™ is designed for maximum performance:
+Apache Fory™ Rust is designed for maximum performance:
 
-- **Zero-copy deserialization** in row mode
-- **Buffer pre-allocation** to minimize allocations
-- **Variable-length encoding** for compact representation
-- **Little-endian byte order** for cross-platform compatibility
-- **Optimized code generation** with derive macros
+- **Zero-Copy Deserialization**: Row format enables direct memory access without copying
+- **Buffer Pre-allocation**: Minimizes memory allocations during serialization
+- **Compact Encoding**: Variable-length encoding for space efficiency
+- **Little-Endian**: Optimized for modern CPU architectures
+- **Reference Deduplication**: Shared objects serialized only once
 
-## 🌍 Cross-Language Compatibility
-
-Apache Fory™ is designed to work across multiple programming languages, making it ideal for:
-
-- **Microservices architectures** with polyglot services
-- **Distributed systems** with heterogeneous components
-- **Data pipelines** spanning multiple language ecosystems
-- **API communication** between different technology stacks
-
-## Benchmark
+Run benchmarks:
 
 ```bash
+cd rust
 cargo bench --package fory-benchmarks
 ```
 
-## 🛠️ Development Status
+## 📖 Documentation
 
-Apache Fory™ Rust implementation roadmap:
+- **[API Documentation](https://docs.rs/fory)** - Complete API reference
+- **[Protocol Specification](../docs/specification/xlang_serialization_spec.md)** - Serialization protocol details
+- **[Row Format Specification](../docs/specification/row_format_spec.md)** - Row format details
+- **[Type Mapping](../docs/guide/xlang_type_mapping.md)** - Cross-language type mappings
+
+## 🎯 Use Cases
+
+### Object Serialization
+
+- Complex data structures with nested objects and references
+- Cross-language communication in microservices
+- General-purpose serialization with full type safety
+- Schema evolution with compatible mode
+- Graph-like data structures with circular references
+
+### Row-Based Serialization
+
+- High-throughput data processing
+- Analytics workloads requiring fast field access
+- Memory-constrained environments
+- Real-time data streaming applications
+- Zero-copy scenarios
+
+## 🏗️ Architecture
+
+The Rust implementation consists of three main crates:
+
+```
+fory/                   # High-level API
+├── src/lib.rs         # Public API exports
+
+fory-core/             # Core serialization engine
+├── src/
+│   ├── fory.rs       # Main serialization entry point
+│   ├── buffer.rs     # Binary buffer management
+│   ├── serializer/   # Type-specific serializers
+│   ├── resolver/     # Type resolution and metadata
+│   ├── meta/         # Meta string compression
+│   ├── row/          # Row format implementation
+│   └── types.rs      # Type definitions
+
+fory-derive/           # Procedural macros
+├── src/
+│   ├── object/       # ForyObject macro
+│   └── fory_row.rs  # ForyRow macro
+```
+
+## 🔄 Serialization Modes
+
+Apache Fory™ supports two serialization modes:
+
+### SchemaConsistent Mode (Default)
+
+Type declarations must match exactly between peers:
+
+```rust
+let fory = Fory::default(); // SchemaConsistent by default
+```
+
+### Compatible Mode
+
+Allows independent schema evolution:
+
+```rust
+use fory_core::types::Mode;
+
+let fory = Fory::default().mode(Mode::Compatible);
+```
+
+## 🛠️ Development
+
+### Building
+
+```bash
+cd rust
+cargo build
+```
+
+### Testing
+
+```bash
+# Run all tests
+cargo test --features tests
+
+# Run specific test
+cargo test -p fory-tests --test test_complex_struct
+```
+
+### Code Quality
+
+```bash
+# Format code
+cargo fmt
+
+# Check formatting
+cargo fmt --check
+
+# Run linter
+cargo clippy --all-targets --all-features -- -D warnings
+```
+
+## 🗺️ Roadmap
 
 - [x] Static codegen based on rust macro
 - [x] Row format serialization
 - [x] Cross-language object graph serialization
-- [x] Static codegen based on fory-derive macro processor
-- [x] Shared and circular reference tracking with `Rc<T>` and `Arc<T>`
-- [x] Weak pointer support with `RcWeak<T>` and `ArcWeak<T>`
+- [x] Shared and circular reference tracking
+- [x] Weak pointer support
 - [x] Trait object serialization with polymorphism
-- [x] Advanced schema evolution features
-- [ ] Performance optimizations and benchmarks
+- [x] Schema evolution in compatible mode
+- [ ] SIMD optimizations for primitive arrays
+- [ ] Async serialization support
+- [ ] More comprehensive benchmarks
 
 ## 📄 License
 
@@ -606,7 +683,8 @@ We welcome contributions! Please see our [Contributing Guide](../CONTRIBUTING.md
 - **Documentation**: [docs.rs/fory](https://docs.rs/fory)
 - **Issues**: [GitHub Issues](https://github.com/apache/fory/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/apache/fory/discussions)
+- **Slack**: [Apache Fory Slack](https://join.slack.com/t/fory-project/shared_invite/zt-1u8soj4qc-ieYEu7ciHOqA2mo47llS8A)
 
 ---
 
-**Apache Fory™** - Blazingly fast serialization.
+**Apache Fory™** - Blazingly fast multi-language serialization framework.

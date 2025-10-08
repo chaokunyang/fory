@@ -461,7 +461,7 @@ pub fn gen_read(struct_ident: &Ident) -> TokenStream {
     }
 }
 
-pub fn gen_read_compatible(fields: &[&Field], _struct_ident: &Ident) -> TokenStream {
+pub fn gen_read_compatible(fields: &[&Field]) -> TokenStream {
     let pattern_items = fields.iter().map(|field| {
         let var_name = create_private_field_name(field);
         gen_read_compatible_match_arm(field, &var_name)

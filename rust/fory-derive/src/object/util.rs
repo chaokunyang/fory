@@ -22,8 +22,35 @@ use crate::util::{
 use fory_core::types::{TypeId, BASIC_TYPE_NAMES, CONTAINER_TYPE_NAMES, PRIMITIVE_ARRAY_TYPE_MAP};
 use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote, ToTokens};
+use std::cell::RefCell;
 use std::fmt;
 use syn::{parse_str, Field, GenericArgument, PathArguments, Type};
+
+thread_local! {
+    static MACRO_CONTEXT: RefCell<Option<MacroContext>> = RefCell::new(None);
+}
+
+struct MacroContext {
+    struct_name: String,
+}
+
+pub(super) fn set_struct_context(name: &str) {
+    MACRO_CONTEXT.with(|ctx| {
+        *ctx.borrow_mut() = Some(MacroContext {
+            struct_name: name.to_string(),
+        });
+    });
+}
+
+pub(super) fn clear_struct_context() {
+    MACRO_CONTEXT.with(|ctx| {
+        *ctx.borrow_mut() = None;
+    });
+}
+
+fn get_struct_name() -> Option<String> {
+    MACRO_CONTEXT.with(|ctx| ctx.borrow().as_ref().map(|c| c.struct_name.clone()))
+}
 
 pub(super) fn contains_trait_object(ty: &Type) -> bool {
     match ty {
@@ -85,47 +112,66 @@ pub(super) enum StructField {
     None,
 }
 
-fn is_recursive_wrapped_type(ty: &Type) -> bool {
-    if let Type::Path(type_path) = ty {
-        if let Some(seg) = type_path.path.segments.last() {
-            if seg.ident == "Vec" {
-                if let PathArguments::AngleBracketed(args) = &seg.arguments {
-                    if let Some(GenericArgument::Type(inner_ty)) = args.args.first() {
-                        if let Type::Path(inner_path) = inner_ty {
-                            if let Some(inner_seg) = inner_path.path.segments.last() {
-                                if inner_seg.ident == "Rc" || inner_seg.ident == "Arc" {
-                                    if let PathArguments::AngleBracketed(inner_args) =
-                                        &inner_seg.arguments
-                                    {
-                                        if let Some(GenericArgument::Type(wrapper_ty)) =
-                                            inner_args.args.first()
-                                        {
-                                            if let Type::Path(wrapper_path) = wrapper_ty {
-                                                if let Some(wrapper_seg) =
-                                                    wrapper_path.path.segments.last()
-                                                {
-                                                    if wrapper_seg.ident == "RefCell"
-                                                        || wrapper_seg.ident == "Cell"
-                                                    {
-                                                        return true;
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
+fn is_forward_field(ty: &Type) -> bool {
+    let struct_name = match get_struct_name() {
+        Some(name) => name,
+        None => return false,
+    };
+    is_forward_field_internal(ty, &struct_name)
+}
+
+fn is_forward_field_internal(ty: &Type, struct_name: &str) -> bool {
+    match ty {
+        Type::TraitObject(_) => true,
+        Type::Path(type_path) => {
+            if let Some(seg) = type_path.path.segments.last() {
+                // Check if this is the struct type itself
+                if seg.ident == struct_name {
+                    return true;
+                }
+
+                // Check for RcWeak, ArcWeak, Rc<dyn Any>, Arc<dyn Any>
+                if seg.ident == "RcWeak" || seg.ident == "ArcWeak" {
+                    return true;
+                }
+
+                if seg.ident == "Rc" || seg.ident == "Arc" {
+                    if let PathArguments::AngleBracketed(args) = &seg.arguments {
+                        if let Some(GenericArgument::Type(inner_ty)) = args.args.first() {
+                            if let Type::TraitObject(trait_obj) = inner_ty {
+                                if trait_obj
+                                    .bounds
+                                    .iter()
+                                    .any(|b| b.to_token_stream().to_string() == "Any")
+                                {
+                                    return true;
+                                } else {
+                                    return false;
                                 }
                             }
                         }
                     }
                 }
+
+                // Recursively check generic arguments
+                if let PathArguments::AngleBracketed(args) = &seg.arguments {
+                    for arg in &args.args {
+                        if let GenericArgument::Type(inner_ty) = arg {
+                            if is_forward_field_internal(inner_ty, struct_name) {
+                                return true;
+                            }
+                        }
+                    }
+                }
             }
+            false
         }
+        _ => false,
     }
-    false
 }
 
 pub(super) fn classify_trait_object_field(ty: &Type) -> StructField {
-    if is_recursive_wrapped_type(ty) {
+    if is_forward_field(ty) {
         return StructField::Forward;
     }
     if let Some((_, trait_name)) = is_box_dyn_trait(ty) {
@@ -779,7 +825,7 @@ pub(super) fn get_sort_fields_ts(fields: &[&Field]) -> TokenStream {
 
         // First handle Forward fields separately to avoid borrow checker issues
         for field in fields {
-            if is_recursive_wrapped_type(&field.ty) {
+            if is_forward_field(&field.ty) {
                 let ident = field.ident.as_ref().unwrap().to_string();
                 collection_fields.push((ident, "Forward".to_string(), TypeId::LIST as u32));
             }
@@ -820,7 +866,7 @@ pub(super) fn get_sort_fields_ts(fields: &[&Field]) -> TokenStream {
             let ident = field.ident.as_ref().unwrap().to_string();
 
             // Skip if already handled as Forward field
-            if is_recursive_wrapped_type(&field.ty) {
+            if is_forward_field(&field.ty) {
                 continue;
             }
 

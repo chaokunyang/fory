@@ -30,6 +30,7 @@ mod datetime;
 pub mod enum_;
 mod list;
 pub mod map;
+mod mutex;
 mod number;
 mod option;
 mod primitive_list;

@@ -21,6 +21,7 @@ use fory_derive::ForyObject;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
+use std::sync::Mutex;
 
 #[test]
 fn test_rc_weak_null_serialization() {
@@ -205,5 +206,48 @@ fn test_node_circular_reference_with_parent_children() {
         let upgraded_parent = child.borrow().parent.upgrade();
         assert!(upgraded_parent.is_some());
         assert!(Rc::ptr_eq(&deserialized, &upgraded_parent.unwrap()));
+    }
+}
+
+#[test]
+fn test_arc_mutex_circular_reference() {
+    #[derive(ForyObject)]
+    struct Node {
+        val: i32,
+        parent: ArcWeak<Mutex<Node>>,
+        children: Vec<Arc<Mutex<Node>>>,
+    }
+
+    let mut fury = Fory::default();
+    fury.register::<Node>(6000);
+
+    let parent = Arc::new(Mutex::new(Node {
+        val: 10,
+        parent: ArcWeak::new(),
+        children: vec![],
+    }));
+
+    let child1 = Arc::new(Mutex::new(Node {
+        val: 20,
+        parent: ArcWeak::from(&parent),
+        children: vec![],
+    }));
+
+    let child2 = Arc::new(Mutex::new(Node {
+        val: 30,
+        parent: ArcWeak::from(&parent),
+        children: vec![],
+    }));
+
+    parent.lock().unwrap().children.push(child1.clone());
+    parent.lock().unwrap().children.push(child2.clone());
+
+    let serialized = fury.serialize(&parent);
+    let deserialized: Arc<Mutex<Node>> = fury.deserialize(&serialized).unwrap();
+
+    assert_eq!(deserialized.lock().unwrap().children.len(), 2);
+    for child in &deserialized.lock().unwrap().children {
+        let upgraded_parent = child.lock().unwrap().parent.upgrade().unwrap();
+        assert!(Arc::ptr_eq(&deserialized, &upgraded_parent));
     }
 }

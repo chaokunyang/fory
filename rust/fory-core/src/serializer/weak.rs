@@ -17,33 +17,109 @@
 
 //! Weak pointer serialization support for `Rc` and `Arc`.
 //!
-//! This module provides `RcWeak<T>` and `ArcWeak<T>` wrapper types that can be serialized
-//! and deserialized by the Fory serialization framework while preserving reference identity
-//! and supporting circular references.
+//! This module provides [`RcWeak<T>`] and [`ArcWeak<T>`] wrapper types that integrate
+//! Rust's `std::rc::Weak` / `std::sync::Weak` into the Fory serialization framework,
+//! with full support for:
+//
+//! - **Reference identity tracking** — weak pointers serialize as references to their
+//!   corresponding strong pointers, ensuring shared and circular references in the graph
+//!   are preserved without duplication.
+//! - **Null weak pointers** — if the strong pointer has been dropped or was never set,
+//!   the weak will serialize as a `Null` flag.
+//! - **Forward references during deserialization** — if the strong pointer appears later
+//!   in the serialized data, the weak will be resolved after deserialization using
+//!   `RefReader` callbacks.
 //!
-//! In Rust, `std::rc::Weak` and `std::sync::Weak` cannot be directly upgraded if the strong
-//! reference has been dropped. These wrappers make it possible to store weak references
-//! inside serialized graphs:
+//! ## When to use
 //!
-//! - If a weak pointer can be upgraded during serialization, it will be de/serialized
-//!   as a reference to its corresponding strong object
-//! - If it cannot be upgraded (target dropped), it will be serialized as `Null`
+//! Use these wrappers when your graph structure contains parent/child relationships
+//! or other shared edges where a strong pointer would cause a reference cycle.
+//! Storing a weak pointer avoids owning the target strongly, but serialization
+//! will preserve the link by reference ID.
 //!
-//! During deserialization, unresolved weak pointers (because their strong reference appears
-//! later in the stream) are handled via callbacks in `RefReader` to support forward references.
+//! ## Example — Parent/Child Graph
 //!
-//! This enables **circular graph structures** to be serialized and restored correctly without
-//! duplicating nodes or losing shared reference relationships.
-//!
-//! # Example usage
-//! ```rust
-//! use fory_core::serializer::weak::RcWeak;
+//! ```rust,ignore
+//! use fory_core::RcWeak;
+//! use std::cell::RefCell;
 //! use std::rc::Rc;
+//! use fory_derive::ForyObject;
 //!
-//! let rc = Rc::new(42);
-//! let weak = RcWeak::from(&rc);
-//! assert!(weak.upgrade().is_some());
+//! // #[derive(ForyObject)]
+//! struct Node {
+//!     value: i32,
+//!     parent: RcWeak<RefCell<Node>>,
+//!     children: Vec<Rc<RefCell<Node>>>,
+//! }
+//!
+//! // Build a parent with two children
+//! let parent = Rc::new(RefCell::new(Node {
+//!     value: 1,
+//!     parent: RcWeak::new(),
+//!     children: vec![],
+//! }));
+//!
+//! let child1 = Rc::new(RefCell::new(Node {
+//!     value: 2,
+//!     parent: RcWeak::from(&parent),
+//!     children: vec![],
+//! }));
+//!
+//! let child2 = Rc::new(RefCell::new(Node {
+//!     value: 3,
+//!     parent: RcWeak::from(&parent),
+//!     children: vec![],
+//! }));
+//!
+//! parent.borrow_mut().children.push(child1);
+//! parent.borrow_mut().children.push(child2);
+//!
+//! // Serialize & deserialize while preserving reference identity
+//! let mut fury = fory_core::fory::Fory::default();
+//! fury.register::<Node>(2000);
+//!
+//! let serialized = fury.serialize(&parent);
+//! let deserialized: Rc<RefCell<Node>> = fury.deserialize(&serialized).unwrap();
+//!
+//! assert_eq!(deserialized.borrow().children.len(), 2);
+//! for child in &deserialized.borrow().children {
+//!     let upgraded_parent = child.borrow().parent.upgrade().unwrap();
+//!     assert!(Rc::ptr_eq(&deserialized, &upgraded_parent));
+//! }
 //! ```
+//!
+//! ## Example — Arc for Multi-Threaded Graphs
+//!
+//! ```rust,ignore
+//! use fory_core::serializer::weak::ArcWeak;
+//! use std::sync::{Arc, Mutex};
+//!
+//! #[derive(fory_derive::ForyObject)]
+//! struct Node {
+//!     value: i32,
+//!     parent: ArcWeak<Mutex<Node>>,
+//! }
+//!
+//! let parent = Arc::new(Mutex::new(Node { value: 1, parent: ArcWeak::new() }));
+//! let child = Arc::new(Mutex::new(Node { value: 2, parent: ArcWeak::from(&parent) }));
+//!
+//! let mut fury = fory_core::fory::Fory::default();
+//! fury.register::<Node>(2001);
+//!
+//! let serialized = fury.serialize(&child);
+//! let deserialized: Arc<Mutex<Node>> = fury.deserialize(&serialized).unwrap();
+//! assert_eq!(deserialized.lock().unwrap().value, 2);
+//! ```
+//!
+//! ## Notes
+//!
+//! - These types share the same `UnsafeCell` across clones, so updating a weak in one clone
+//!   will update all of them.
+//! - During serialization, weak pointers **never serialize the target object's data directly**
+//!   — they only emit a reference to the already-serialized strong pointer, or `Null`.
+//! - During deserialization, unresolved references will be patched up by `RefReader::add_callback`
+//!   once the strong pointer becomes available.
+
 use crate::error::Error;
 use crate::fory::Fory;
 use crate::resolver::context::{ReadContext, WriteContext};
@@ -54,13 +130,21 @@ use std::cell::UnsafeCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
-/// Wrapper for a `std::rc::Weak<T>` that is compatible with the Fory serialization framework.
+/// A serializable wrapper around `std::rc::Weak<T>`.
 ///
-/// This type uses interior mutability via `UnsafeCell` to allow updating the stored weak pointer
-/// after creation (necessary during deserialization when resolving forward references).
+/// `RcWeak<T>` is designed for use in graph-like structures where nodes may need to hold
+/// non-owning references to other nodes (e.g., parent pointers), and you still want them
+/// to round-trip through serialization while preserving reference identity.
 ///
-/// It implements `Serializer` so it can be automatically handled in object graphs.
-/// See module-level docs for details.
+/// Unlike a raw `Weak<T>`, cloning `RcWeak` keeps all clones pointing to the same
+/// internal `UnsafeCell`, so updates via deserialization callbacks affect all copies.
+///
+/// # Example
+/// See module-level docs for a complete graph example.
+///
+/// # Null handling
+/// If the target `Rc<T>` has been dropped or never assigned, `upgrade()` returns `None`
+/// and serialization will write a `RefFlag::Null` instead of a reference ID.
 pub struct RcWeak<T: ?Sized> {
     // Use Rc<UnsafeCell> so that clones share the same cell
     inner: Rc<UnsafeCell<std::rc::Weak<T>>>,
@@ -137,9 +221,16 @@ impl<T: ?Sized> From<&Rc<T>> for RcWeak<T> {
 unsafe impl<T: ?Sized> Send for RcWeak<T> where std::rc::Weak<T>: Send {}
 unsafe impl<T: ?Sized> Sync for RcWeak<T> where std::rc::Weak<T>: Sync {}
 
-/// Wrapper for a `std::sync::Weak<T>` that is compatible with the Fory serialization framework.
+/// A serializable wrapper around `std::sync::Weak<T>` (thread-safe).
 ///
-/// Works like [`RcWeak`] but for thread-safe reference-counted graphs.
+/// `ArcWeak<T>` works exactly like [`RcWeak<T>`] but is intended for use with
+/// multi-threaded shared graphs where strong pointers are `Arc<T>`.
+///
+/// All clones of an `ArcWeak<T>` share the same `UnsafeCell` so deserialization
+/// updates propagate to all copies.
+///
+/// # Example
+/// See module-level docs for an `Arc<Mutex<Node>>` usage example.
 pub struct ArcWeak<T: ?Sized> {
     // Use Arc<UnsafeCell> so that clones share the same cell
     inner: Arc<UnsafeCell<std::sync::Weak<T>>>,

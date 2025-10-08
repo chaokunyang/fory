@@ -150,7 +150,10 @@ pub trait Serializer: 'static {
         false
     }
 
-    fn fory_is_shared_ref() -> bool {
+    fn fory_is_shared_ref() -> bool
+    where
+        Self: Sized,
+    {
         false
     }
 

@@ -134,12 +134,12 @@ impl<K: Serializer + ForyDefault + Eq + std::hash::Hash, V: Serializer + ForyDef
                 check_and_write_null(context, is_field, key, value);
                 continue;
             }
-            if K::fory_is_polymorphic() {
+            if K::fory_is_polymorphic() || K::fory_is_shared_ref() {
                 key.fory_write(context, is_field);
             } else {
                 write_ref_info_data(key, context, is_field, skip_key_ref_flag, true);
             }
-            if V::fory_is_polymorphic() {
+            if V::fory_is_polymorphic() || V::fory_is_shared_ref() {
                 value.fory_write(context, is_field);
             } else {
                 write_ref_info_data(value, context, is_field, skip_val_ref_flag, true);

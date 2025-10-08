@@ -29,6 +29,8 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for Rc<T> {
     }
 
     fn fory_write(&self, context: &mut WriteContext, is_field: bool) {
+        eprintln!("Writing Rc");
+
         if !context.ref_writer.try_write_rc_ref(context.writer, self) {
             T::fory_write_data(self.as_ref(), context, is_field);
         }

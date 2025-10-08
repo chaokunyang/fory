@@ -28,12 +28,23 @@ use std::cell::RefCell;
 /// Simply delegates to the serializer for `T`, allowing interior mutable
 /// containers to be included in serialized graphs.
 impl<T: Serializer + ForyDefault> Serializer for RefCell<T> {
+    fn fory_read(context: &mut ReadContext, is_field: bool) -> Result<Self, Error>
+    where
+        Self: Sized + ForyDefault,
+    {
+        Ok(RefCell::new(T::fory_read(context, is_field)?))
+    }
     fn fory_read_data(context: &mut ReadContext, is_field: bool) -> Result<Self, Error> {
         Ok(RefCell::new(T::fory_read_data(context, is_field)?))
     }
 
     fn fory_read_type_info(context: &mut ReadContext, is_field: bool) {
         T::fory_read_type_info(context, is_field);
+    }
+
+    fn fory_write(&self, context: &mut WriteContext, is_field: bool) {
+        eprintln!("Writing RefCell");
+        T::fory_write(&*self.borrow(), context, is_field);
     }
 
     fn fory_write_data(&self, context: &mut WriteContext, is_field: bool) {

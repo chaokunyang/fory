@@ -75,7 +75,8 @@ pub fn write_collection<'a, T: Serializer + 'a, I: IntoIterator<Item = &'a T>>(
     context.writer.write_u8(header);
     T::fory_write_type_info(context, is_field);
     // context.writer.reserve((T::reserved_space() + SIZE_OF_REF_AND_TYPE) * len);
-    if T::fory_is_polymorphic() {
+    if T::fory_is_polymorphic() || T::fory_is_shared_ref() {
+        // TOTO: make it xlang compatible
         for item in &items {
             item.fory_write(context, is_field);
         }
@@ -113,7 +114,7 @@ where
     T::fory_read_type_info(context, declared);
     let has_null = (header & HAS_NULL) != 0;
     let is_same_type = (header & IS_SAME_TYPE) != 0;
-    if T::fory_is_polymorphic() {
+    if T::fory_is_polymorphic() || T::fory_is_shared_ref() {
         (0..len)
             .map(|_| T::fory_read(context, declared))
             .collect::<Result<C, Error>>()

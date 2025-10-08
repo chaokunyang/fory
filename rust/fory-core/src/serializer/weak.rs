@@ -228,6 +228,7 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for RcWeak<T> {
                 // Already seen, wrote Ref flag + id, we're done
                 return;
             }
+            eprint!("Writing ref to RcWeak");
             // First time seeing this object, write RefValue and then its data
             T::fory_write_data(&*rc, context, _is_field);
         } else {

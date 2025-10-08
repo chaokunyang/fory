@@ -63,7 +63,7 @@ impl RefWriter {
         Self::default()
     }
 
-    /// Attempt to write a reference for an Rc<T>.
+    /// Attempt to write a reference for an `Rc<T>`.
     ///
     /// Returns true if a reference was written (indicating this object has been
     /// seen before), false if this is the first occurrence and the object should
@@ -94,7 +94,7 @@ impl RefWriter {
         }
     }
 
-    /// Attempt to write a reference for an Arc<T>.
+    /// Attempt to write a reference for an `Arc<T>`.
     ///
     /// Returns true if a reference was written (indicating this object has been
     /// seen before), false if this is the first occurrence and the object should
@@ -182,7 +182,7 @@ impl RefReader {
         ref_id
     }
 
-    /// Store an Rc<T> at a previously reserved reference ID.
+    /// Store an `Rc<T>` at a previously reserved reference ID.
     ///
     /// # Arguments
     ///
@@ -192,7 +192,7 @@ impl RefReader {
         self.refs[ref_id as usize] = Box::new(rc);
     }
 
-    /// Store an Rc<T> for later reference resolution during deserialization.
+    /// Store an `Rc<T>` for later reference resolution during deserialization.
     ///
     /// # Arguments
     ///
@@ -207,7 +207,7 @@ impl RefReader {
         ref_id
     }
 
-    /// Store an Arc<T> at a previously reserved reference ID.
+    /// Store an `Arc<T>` at a previously reserved reference ID.
     ///
     /// # Arguments
     ///
@@ -217,7 +217,7 @@ impl RefReader {
         self.refs[ref_id as usize] = Box::new(arc);
     }
 
-    /// Store an Arc<T> for later reference resolution during deserialization.
+    /// Store an `Arc<T>` for later reference resolution during deserialization.
     ///
     /// # Arguments
     ///

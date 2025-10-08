@@ -97,7 +97,7 @@ cargo build
 # run test
 cargo test
 # run specific test
-cargo test -p fory-tests  --test $test_file $test_method 
+cargo test -p fory-tests --test $test_file $test_method
 ```
 
 #### Environment Requirements

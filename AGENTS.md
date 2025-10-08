@@ -138,7 +138,7 @@ cargo clippy --all-targets --all-features -- -D warnings
 cargo test --features tests
 
 # run specific test
-cargo test -p fory-tests  --test $test_file $test_method 
+cargo test -p fory-tests  --test $test_file $test_method
 
 # Format code
 cargo fmt

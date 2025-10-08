@@ -91,7 +91,7 @@ pub fn gen_type_def(fields: &[&Field]) -> TokenStream {
                     fory_core::meta::FieldInfo::new(#name, #generic_token)
                 }
             }
-            TraitObjectField::VecRc(_) | TraitObjectField::VecArc(_) => {
+            StructField::VecRc(_) | StructField::VecArc(_) => {
                 quote! {
                     fory_core::meta::FieldInfo::new(#name, fory_core::meta::FieldType {
                         type_id: fory_core::types::TypeId::LIST as u32,
@@ -99,7 +99,7 @@ pub fn gen_type_def(fields: &[&Field]) -> TokenStream {
                     })
                 }
             }
-            TraitObjectField::HashMapRc(..) | TraitObjectField::HashMapArc(..) => {
+            StructField::HashMapRc(..) | StructField::HashMapArc(..) => {
                 quote! {
                     fory_core::meta::FieldInfo::new(#name, fory_core::meta::FieldType {
                         type_id: fory_core::types::TypeId::MAP as u32,

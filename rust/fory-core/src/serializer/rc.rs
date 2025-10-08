@@ -62,9 +62,10 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for Rc<T> {
                 Ok(Rc::new(inner))
             }
             RefFlag::RefValue => {
+                let ref_id = context.ref_reader.reserve_ref_id();
                 let inner = T::fory_read_data(context, is_field)?;
                 let rc = Rc::new(inner);
-                context.ref_reader.store_rc_ref(rc.clone());
+                context.ref_reader.store_rc_ref_at(ref_id, rc.clone());
                 Ok(rc)
             }
         }

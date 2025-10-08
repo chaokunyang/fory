@@ -82,12 +82,10 @@ impl RefWriter {
         let ptr_addr = Rc::as_ptr(rc) as *const () as usize;
 
         if let Some(&ref_id) = self.refs.get(&ptr_addr) {
-            // This object has been seen before, write a reference
             writer.write_i8(RefFlag::Ref as i8);
             writer.write_u32(ref_id);
             true
         } else {
-            // First time seeing this object, register it and return false
             let ref_id = self.next_ref_id;
             self.next_ref_id += 1;
             self.refs.insert(ptr_addr, ref_id);
@@ -175,6 +173,25 @@ impl RefReader {
         Self::default()
     }
 
+    /// Reserve a reference ID slot without storing anything yet.
+    ///
+    /// Returns the reserved reference ID that will be used when storing the object later.
+    pub fn reserve_ref_id(&mut self) -> u32 {
+        let ref_id = self.refs.len() as u32;
+        self.refs.push(Box::new(()));
+        ref_id
+    }
+
+    /// Store an Rc<T> at a previously reserved reference ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `ref_id` - The reference ID that was reserved
+    /// * `rc` - The Rc to store
+    pub fn store_rc_ref_at<T: 'static + ?Sized>(&mut self, ref_id: u32, rc: Rc<T>) {
+        self.refs[ref_id as usize] = Box::new(rc);
+    }
+
     /// Store an Rc<T> for later reference resolution during deserialization.
     ///
     /// # Arguments
@@ -188,6 +205,16 @@ impl RefReader {
         let ref_id = self.refs.len() as u32;
         self.refs.push(Box::new(rc));
         ref_id
+    }
+
+    /// Store an Arc<T> at a previously reserved reference ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `ref_id` - The reference ID that was reserved
+    /// * `arc` - The Arc to store
+    pub fn store_arc_ref_at<T: 'static + ?Sized>(&mut self, ref_id: u32, arc: Arc<T>) {
+        self.refs[ref_id as usize] = Box::new(arc);
     }
 
     /// Store an Arc<T> for later reference resolution during deserialization.

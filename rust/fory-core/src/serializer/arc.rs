@@ -62,9 +62,10 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for Arc<T> 
                 Ok(Arc::new(inner))
             }
             RefFlag::RefValue => {
+                let ref_id = context.ref_reader.reserve_ref_id();
                 let inner = T::fory_read_data(context, is_field)?;
                 let arc = Arc::new(inner);
-                context.ref_reader.store_arc_ref(arc.clone());
+                context.ref_reader.store_arc_ref_at(ref_id, arc.clone());
                 Ok(arc)
             }
         }

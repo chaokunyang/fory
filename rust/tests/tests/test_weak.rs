@@ -172,19 +172,23 @@ fn test_node_circular_reference_with_parent_children() {
     // Create children pointing back to parent via weak ref
     let child1 = Rc::new(RefCell::new(Node {
         value: 2,
-        parent: RcWeak::from(&parent),
+        parent: RcWeak::new(),
         children: vec![],
     }));
 
     let child2 = Rc::new(RefCell::new(Node {
         value: 3,
-        parent: RcWeak::from(&parent),
+        parent: RcWeak::new(),
         children: vec![],
     }));
 
     // Add children to parent's children list
     parent.borrow_mut().children.push(child1.clone());
     parent.borrow_mut().children.push(child2.clone());
+
+    // Set children's parent weak refs to point back to parent (creating circular reference)
+    child1.borrow_mut().parent = RcWeak::from(&parent);
+    child2.borrow_mut().parent = RcWeak::from(&parent);
 
     // --- Serialize the parent node (will include children recursively) ---
     let serialized = fury.serialize(&parent);
@@ -197,9 +201,9 @@ fn test_node_circular_reference_with_parent_children() {
     assert_eq!(des_parent.value, 1);
     assert_eq!(des_parent.children.len(), 2);
 
-    // Each child should have parent pointing back to the same Rc
     for child in &des_parent.children {
-        let upgraded_parent = child.borrow().parent.upgrade().unwrap();
-        assert!(Rc::ptr_eq(&deserialized, &upgraded_parent));
+        let upgraded_parent = child.borrow().parent.upgrade();
+        assert!(upgraded_parent.is_some());
+        assert!(Rc::ptr_eq(&deserialized, &upgraded_parent.unwrap()));
     }
 }

@@ -62,7 +62,8 @@ use std::sync::Arc;
 /// It implements `Serializer` so it can be automatically handled in object graphs.
 /// See module-level docs for details.
 pub struct RcWeak<T: ?Sized> {
-    inner: UnsafeCell<std::rc::Weak<T>>,
+    // Use Rc<UnsafeCell> so that clones share the same cell
+    inner: Rc<UnsafeCell<std::rc::Weak<T>>>,
 }
 
 impl<T: ?Sized> std::fmt::Debug for RcWeak<T> {
@@ -77,7 +78,7 @@ impl<T: ?Sized> std::fmt::Debug for RcWeak<T> {
 impl<T> RcWeak<T> {
     pub fn new() -> Self {
         RcWeak {
-            inner: UnsafeCell::new(std::rc::Weak::new()),
+            inner: Rc::new(UnsafeCell::new(std::rc::Weak::new())),
         }
     }
 }
@@ -107,7 +108,7 @@ impl<T: ?Sized> RcWeak<T> {
 
     pub fn from_std(weak: std::rc::Weak<T>) -> Self {
         RcWeak {
-            inner: UnsafeCell::new(weak),
+            inner: Rc::new(UnsafeCell::new(weak)),
         }
     }
 }
@@ -120,10 +121,9 @@ impl<T> Default for RcWeak<T> {
 
 impl<T: ?Sized> Clone for RcWeak<T> {
     fn clone(&self) -> Self {
-        unsafe {
-            RcWeak {
-                inner: UnsafeCell::new((*self.inner.get()).clone()),
-            }
+        // Clone the Rc, not the inner Weak - this way clones share the same cell!
+        RcWeak {
+            inner: self.inner.clone(),
         }
     }
 }
@@ -141,7 +141,8 @@ unsafe impl<T: ?Sized> Sync for RcWeak<T> where std::rc::Weak<T>: Sync {}
 ///
 /// Works like [`RcWeak`] but for thread-safe reference-counted graphs.
 pub struct ArcWeak<T: ?Sized> {
-    inner: UnsafeCell<std::sync::Weak<T>>,
+    // Use Arc<UnsafeCell> so that clones share the same cell
+    inner: Arc<UnsafeCell<std::sync::Weak<T>>>,
 }
 
 impl<T: ?Sized> std::fmt::Debug for ArcWeak<T> {
@@ -156,7 +157,7 @@ impl<T: ?Sized> std::fmt::Debug for ArcWeak<T> {
 impl<T> ArcWeak<T> {
     pub fn new() -> Self {
         ArcWeak {
-            inner: UnsafeCell::new(std::sync::Weak::new()),
+            inner: Arc::new(UnsafeCell::new(std::sync::Weak::new())),
         }
     }
 }
@@ -186,7 +187,7 @@ impl<T: ?Sized> ArcWeak<T> {
 
     pub fn from_std(weak: std::sync::Weak<T>) -> Self {
         ArcWeak {
-            inner: UnsafeCell::new(weak),
+            inner: Arc::new(UnsafeCell::new(weak)),
         }
     }
 }
@@ -199,10 +200,9 @@ impl<T> Default for ArcWeak<T> {
 
 impl<T: ?Sized> Clone for ArcWeak<T> {
     fn clone(&self) -> Self {
-        unsafe {
-            ArcWeak {
-                inner: UnsafeCell::new((*self.inner.get()).clone()),
-            }
+        // Clone the Arc, not the inner Weak - this way clones share the same cell!
+        ArcWeak {
+            inner: self.inner.clone(),
         }
     }
 }
@@ -223,12 +223,9 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for RcWeak<T> {
 
     fn fory_write(&self, context: &mut WriteContext, _is_field: bool) {
         if let Some(rc) = self.upgrade() {
-            // IMPORTANT: If the target Rc was serialized already, just write a ref
             if context.ref_writer.try_write_rc_ref(context.writer, &rc) {
-                // Already seen, wrote Ref flag + id, we're done
                 return;
             }
-            // First time seeing this object, write RefValue and then its data
             T::fory_write_data(&*rc, context, _is_field);
         } else {
             context.writer.write_i8(RefFlag::Null as i8);
@@ -253,25 +250,25 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for RcWeak<T> {
                 let rc = Rc::new(data);
                 let ref_id = context.ref_reader.store_rc_ref(rc);
                 let rc = context.ref_reader.get_rc_ref::<T>(ref_id).unwrap();
-                let weak = RcWeak::from(&rc);
-                Ok(weak)
+                Ok(RcWeak::from(&rc))
             }
             RefFlag::Ref => {
                 let ref_id = context.ref_reader.read_ref_id(&mut context.reader);
-                let weak = RcWeak::new();
 
                 if let Some(rc) = context.ref_reader.get_rc_ref::<T>(ref_id) {
-                    weak.update(Rc::downgrade(&rc));
+                    Ok(RcWeak::from(&rc))
                 } else {
-                    let weak_clone = weak.clone();
+                    let result_weak = RcWeak::new();
+                    let callback_weak = result_weak.clone();
+
                     context.ref_reader.add_callback(Box::new(move |ref_reader| {
                         if let Some(rc) = ref_reader.get_rc_ref::<T>(ref_id) {
-                            weak_clone.update(Rc::downgrade(&rc));
+                            callback_weak.update(Rc::downgrade(&rc));
                         }
                     }));
-                }
 
-                Ok(weak)
+                    Ok(result_weak)
+                }
             }
             _ => Err(anyhow!("Weak can only be Null, RefValue or Ref, got {:?}", ref_flag).into()),
         }
@@ -360,10 +357,13 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for ArcWeak
                 if let Some(arc) = context.ref_reader.get_arc_ref::<T>(ref_id) {
                     weak.update(Arc::downgrade(&arc));
                 } else {
-                    let weak_clone = weak.clone();
+                    // Capture the raw pointer to the UnsafeCell so we can update it in the callback
+                    let weak_ptr = weak.inner.get() as *mut std::sync::Weak<T>;
                     context.ref_reader.add_callback(Box::new(move |ref_reader| {
                         if let Some(arc) = ref_reader.get_arc_ref::<T>(ref_id) {
-                            weak_clone.update(Arc::downgrade(&arc));
+                            unsafe {
+                                *weak_ptr = Arc::downgrade(&arc);
+                            }
                         }
                     }));
                 }

@@ -593,3 +593,100 @@ _ENABLE_TYPE_REGISTRATION_FORCIBLY = os.getenv("ENABLE_TYPE_REGISTRATION_FORCIBL
     "1",
     "true",
 }
+
+
+class ThreadSafeFory:
+    def __init__(self, **kwargs):
+        import threading
+
+        self._config = kwargs
+        self._callbacks = []
+        self._callbacks_lock = threading.Lock()
+        self._pool = threading.local()
+        self._fory_class = self._get_fory_class()
+
+    def _get_fory_class(self):
+        try:
+            from pyfory._serialization import ENABLE_FORY_CYTHON_SERIALIZATION
+
+            if ENABLE_FORY_CYTHON_SERIALIZATION:
+                from pyfory._serialization import Fory as CythonFory
+
+                return CythonFory
+        except ImportError:
+            pass
+        return Fory
+
+    def _get_fory(self):
+        if not hasattr(self._pool, "instance"):
+            fory = self._fory_class(**self._config)
+            with self._callbacks_lock:
+                for callback in self._callbacks:
+                    callback(fory)
+            self._pool.instance = fory
+        return self._pool.instance
+
+    def _register_callback(self, callback):
+        with self._callbacks_lock:
+            self._callbacks.append(callback)
+
+    def register(
+        self,
+        cls: Union[type, TypeVar],
+        *,
+        type_id: int = None,
+        namespace: str = None,
+        typename: str = None,
+        serializer=None,
+    ):
+        self._register_callback(lambda f: f.register(cls, type_id=type_id, namespace=namespace, typename=typename, serializer=serializer))
+
+    def register_type(
+        self,
+        cls: Union[type, TypeVar],
+        *,
+        type_id: int = None,
+        namespace: str = None,
+        typename: str = None,
+        serializer=None,
+    ):
+        self._register_callback(lambda f: f.register_type(cls, type_id=type_id, namespace=namespace, typename=typename, serializer=serializer))
+
+    def register_serializer(self, cls: type, serializer):
+        self._register_callback(lambda f: f.register_serializer(cls, serializer))
+
+    def serialize(
+        self,
+        obj,
+        buffer: Buffer = None,
+        buffer_callback=None,
+        unsupported_callback=None,
+    ) -> Union[Buffer, bytes]:
+        fory = self._get_fory()
+        return fory.serialize(obj, buffer, buffer_callback, unsupported_callback)
+
+    def deserialize(
+        self,
+        buffer: Union[Buffer, bytes],
+        buffers: Iterable = None,
+        unsupported_objects: Iterable = None,
+    ):
+        fory = self._get_fory()
+        return fory.deserialize(buffer, buffers, unsupported_objects)
+
+    def dumps(
+        self,
+        obj,
+        buffer: Buffer = None,
+        buffer_callback=None,
+        unsupported_callback=None,
+    ) -> Union[Buffer, bytes]:
+        return self.serialize(obj, buffer, buffer_callback, unsupported_callback)
+
+    def loads(
+        self,
+        buffer: Union[Buffer, bytes],
+        buffers: Iterable = None,
+        unsupported_objects: Iterable = None,
+    ):
+        return self.deserialize(buffer, buffers, unsupported_objects)

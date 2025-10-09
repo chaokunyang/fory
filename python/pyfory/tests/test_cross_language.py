@@ -202,7 +202,9 @@ def test_record_batch(data_file_path):
         record_batch_bytes = f.read()
         buf = pa.py_buffer(record_batch_bytes)
         reader = pa.ipc.open_stream(buf)
-        foo_schema_without_meta = pa.schema([pa.field(f.name, f.type, f.nullable) for f in create_foo_schema()])
+        foo_schema_without_meta = pa.schema(
+            [pa.field(f.name, f.type, f.nullable) for f in create_foo_schema()]
+        )
         assert reader.schema == foo_schema_without_meta
         # debug_print(f"reader.schema {reader.schema}")
         batches = [batch for batch in reader]
@@ -402,8 +404,10 @@ def test_serialize_arrow_out_of_band(int_band_file, out_of_band_file):
     objects = fory.deserialize(in_band_buffer, buffers=buffers)
     assert objects == [batch, table]
     buffer_objects = []
-    in_band_buffer = fory.serialize([batch, table], buffer_callback=buffer_objects.append)
-    buffers = [o.to_buffer() for o in buffer_objects]
+    in_band_buffer = fory.serialize(
+        [batch, table], buffer_callback=buffer_objects.append
+    )
+    buffers = [o.getbuffer() for o in buffer_objects]
     with open(int_band_file, "wb+") as f:
         f.write(in_band_buffer)
     with open(out_of_band_file, "wb+") as f:
@@ -602,7 +606,9 @@ class ComplexObject1Serializer(pyfory.serializer.Serializer):
         self.fory.xserialize_ref(buffer, value.f3)
 
     def xread(self, buffer):
-        obj = ComplexObject1(*([None] * len(typing.get_type_hints(ComplexObject1).keys())))
+        obj = ComplexObject1(
+            *([None] * len(typing.get_type_hints(ComplexObject1).keys()))
+        )
         self.fory.ref_resolver.reference(obj)
         obj.f1 = self.fory.xdeserialize_ref(buffer)
         obj.f2 = self.fory.xdeserialize_ref(buffer)
@@ -676,8 +682,10 @@ def test_oob_buffer(in_band_file_path, out_of_band_file_path):
     # in_band_bytes size may be different because it may contain language-specific meta.
     debug_print(f"{len(serialized), len(in_band_bytes)}")
     debug_print(f"deserialized from other language {new_obj}")
-    debug_print(f"deserialized from python {fory.deserialize(serialized, [o.to_buffer() for o in buffer_objects])}")
-    fory.deserialize(serialized, [o.to_buffer() for o in buffer_objects])
+    debug_print(
+        f"deserialized from python {fory.deserialize(serialized, [o.getbuffer() for o in buffer_objects])}"
+    )
+    fory.deserialize(serialized, [o.getbuffer() for o in buffer_objects])
     with open(in_band_file_path, "wb+") as f:
         f.write(serialized)
     out_of_band_buffer.write_int32(len(buffer_objects))
@@ -758,7 +766,9 @@ def test_cross_language_meta_share_complex(data_file_path):
     with open(data_file_path, "rb") as f:
         data_bytes = f.read()
 
-    debug_print(f"Reading complex data of length {len(data_bytes)} from {data_file_path}")
+    debug_print(
+        f"Reading complex data of length {len(data_bytes)} from {data_file_path}"
+    )
 
     # Deserialize Java-generated complex object with meta share
     obj = fory.deserialize(data_bytes)
@@ -800,7 +810,9 @@ def test_schema_evolution(data_file_path):
     with open(data_file_path, "rb") as f:
         data_bytes = f.read()
 
-    debug_print(f"Reading schema evolution data of length {len(data_bytes)} from {data_file_path}")
+    debug_print(
+        f"Reading schema evolution data of length {len(data_bytes)} from {data_file_path}"
+    )
 
     # Deserialize V1 data into V1 object
     obj = fory.deserialize(data_bytes)
@@ -877,7 +889,9 @@ def test_field_reordering_compatibility(data_file_path):
     with open(data_file_path, "rb") as f:
         data_bytes = f.read()
 
-    debug_print(f"Reading V3 reordered data of length {len(data_bytes)} from {data_file_path}")
+    debug_print(
+        f"Reading V3 reordered data of length {len(data_bytes)} from {data_file_path}"
+    )
 
     # Deserialize V3 data into V3 object
     obj = fory.deserialize(data_bytes)
@@ -926,7 +940,9 @@ def test_cross_version_compatibility(data_file_path):
     with open(data_file_path, "rb") as f:
         data_bytes = f.read()
 
-    debug_print(f"Reading mixed version data of length {len(data_bytes)} from {data_file_path}")
+    debug_print(
+        f"Reading mixed version data of length {len(data_bytes)} from {data_file_path}"
+    )
 
     # Deserialize mixed version container
     obj = fory.deserialize(data_bytes)

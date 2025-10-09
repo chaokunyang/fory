@@ -309,7 +309,7 @@ serialized_data = fory.serialize(array, buffer_callback=buffer_objects.append)
 # Convert buffer objects to memoryview for zero-copy transmission
 # For contiguous buffers (bytes, numpy arrays), this is zero-copy
 # For non-contiguous data, a copy may be created to ensure contiguity
-buffers = [obj.to_buffer() for obj in buffer_objects]
+buffers = [obj.getbuffer() for obj in buffer_objects]
 
 # Deserialize with out-of-band buffers (accepts memoryview, bytes, or Buffer)
 deserialized_array = fory.deserialize(serialized_data, buffers=buffers)
@@ -336,7 +336,7 @@ df = pd.DataFrame({
 # Serialize with out-of-band buffers
 buffer_objects = []
 serialized_data = fory.serialize(df, buffer_callback=buffer_objects.append)
-buffers = [obj.to_buffer() for obj in buffer_objects]
+buffers = [obj.getbuffer() for obj in buffer_objects]
 
 # Deserialize
 deserialized_df = fory.deserialize(serialized_data, buffers=buffers)
@@ -371,7 +371,7 @@ def selective_callback(buffer_object):
     return True  # In-band
 
 serialized = fory.serialize(data, buffer_callback=selective_callback)
-buffers = [obj.to_buffer() for obj in buffer_objects]
+buffers = [obj.getbuffer() for obj in buffer_objects]
 deserialized = fory.deserialize(serialized, buffers=buffers)
 ```
 
@@ -392,7 +392,7 @@ pickle_buffer = pickle.PickleBuffer(data)
 # Serialize with buffer callback for out-of-band handling
 buffer_objects = []
 serialized = fory.serialize(pickle_buffer, buffer_callback=buffer_objects.append)
-buffers = [obj.to_buffer() for obj in buffer_objects]
+buffers = [obj.getbuffer() for obj in buffer_objects]
 
 # Deserialize with buffers
 deserialized = fory.deserialize(serialized, buffers=buffers)
@@ -427,11 +427,11 @@ for buffer_obj in buffer_objects:
         buffer_obj.write_to(f)
 
     # Get zero-copy memoryview (for contiguous buffers)
-    mv = buffer_obj.to_buffer()
+    mv = buffer_obj.getbuffer()
     assert isinstance(mv, memoryview)
 ```
 
-**Note**: For contiguous memory buffers (like bytes, numpy arrays), `to_buffer()` returns a zero-copy `memoryview`. For non-contiguous data, a copy may be created to ensure contiguity.
+**Note**: For contiguous memory buffers (like bytes, numpy arrays), `getbuffer()` returns a zero-copy `memoryview`. For non-contiguous data, a copy may be created to ensure contiguity.
 
 ## 🏃‍♂️ Cross-Language Object Graph Serialization
 

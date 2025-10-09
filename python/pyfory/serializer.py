@@ -965,12 +965,12 @@ class BytesBufferObject(BufferObject):
         return len(self.binary)
 
     def write_to(self, stream):
-        if hasattr(stream, 'write_bytes'):
+        if hasattr(stream, "write_bytes"):
             stream.write_bytes(self.binary)
         else:
             stream.write(self.binary)
 
-    def to_buffer(self) -> memoryview:
+    def getbuffer(self) -> memoryview:
         return memoryview(self.binary)
 
 
@@ -996,12 +996,12 @@ class PickleBufferObject(BufferObject):
 
     def write_to(self, stream):
         raw = self.pickle_buffer.raw()
-        if hasattr(stream, 'write_buffer'):
+        if hasattr(stream, "write_buffer"):
             stream.write_buffer(raw)
         else:
             stream.write(bytes(raw) if isinstance(raw, memoryview) else raw)
 
-    def to_buffer(self) -> memoryview:
+    def getbuffer(self) -> memoryview:
         raw = self.pickle_buffer.raw()
         if isinstance(raw, memoryview):
             return raw
@@ -1021,12 +1021,12 @@ class NDArrayBufferObject(BufferObject):
 
     def write_to(self, stream):
         data = self.array.tobytes()
-        if hasattr(stream, 'write_buffer'):
+        if hasattr(stream, "write_buffer"):
             stream.write_buffer(data)
         else:
             stream.write(data)
 
-    def to_buffer(self) -> memoryview:
+    def getbuffer(self) -> memoryview:
         if self.array.flags.c_contiguous:
             return memoryview(self.array.data)
         return memoryview(self.array.tobytes())

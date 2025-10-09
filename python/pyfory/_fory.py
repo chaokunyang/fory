@@ -91,7 +91,7 @@ class BufferObject(ABC):
         """
 
     @abstractmethod
-    def to_buffer(self) -> memoryview:
+    def getbuffer(self) -> memoryview:
         """
         Return serialized data as memoryview for zero-copy access.
 
@@ -183,7 +183,9 @@ class Fory:
 
         self.metastring_resolver = MetaStringResolver()
         self.type_resolver = TypeResolver(self, meta_share=compatible)
-        self.serialization_context = SerializationContext(fory=self, scoped_meta_share_enabled=compatible)
+        self.serialization_context = SerializationContext(
+            fory=self, scoped_meta_share_enabled=compatible
+        )
         self.type_resolver.initialize()
 
         self.buffer = Buffer.allocate(32)
@@ -327,10 +329,15 @@ class Fory:
         # Write type definitions at the end, similar to Java implementation
         if self.serialization_context.scoped_meta_share_enabled:
             meta_context = self.serialization_context.meta_context
-            if meta_context is not None and len(meta_context.get_writing_type_defs()) > 0:
+            if (
+                meta_context is not None
+                and len(meta_context.get_writing_type_defs()) > 0
+            ):
                 # Update the offset to point to current position
                 current_pos = buffer.writer_index
-                buffer.put_int32(type_defs_offset_pos, current_pos - type_defs_offset_pos - 4)
+                buffer.put_int32(
+                    type_defs_offset_pos, current_pos - type_defs_offset_pos - 4
+                )
                 self.type_resolver.write_type_defs(buffer)
 
         self.reset_write()
@@ -431,7 +438,9 @@ class Fory:
         if get_bit(buffer, reader_index, 0):
             return None
         is_little_endian_ = get_bit(buffer, reader_index, 1)
-        assert is_little_endian_, "Big endian is not supported for now, please ensure peer machine is little endian."
+        assert (
+            is_little_endian_
+        ), "Big endian is not supported for now, please ensure peer machine is little endian."
         is_target_x_lang = get_bit(buffer, reader_index, 2)
         if is_target_x_lang:
             self._peer_language = Language(buffer.read_int8())
@@ -439,10 +448,14 @@ class Fory:
             self._peer_language = Language.PYTHON
         is_out_of_band_serialization_enabled = get_bit(buffer, reader_index, 3)
         if is_out_of_band_serialization_enabled:
-            assert buffers is not None, "buffers shouldn't be null when the serialized stream is produced with buffer_callback not null."
+            assert (
+                buffers is not None
+            ), "buffers shouldn't be null when the serialized stream is produced with buffer_callback not null."
             self._buffers = iter(buffers)
         else:
-            assert buffers is None, "buffers should be null when the serialized stream is produced with buffer_callback null."
+            assert (
+                buffers is None
+            ), "buffers should be null when the serialized stream is produced with buffer_callback null."
 
         # Read type definitions at the start, similar to Java implementation
         if self.serialization_context.scoped_meta_share_enabled:
@@ -589,7 +602,9 @@ class Fory:
         )
 
 
-_ENABLE_TYPE_REGISTRATION_FORCIBLY = os.getenv("ENABLE_TYPE_REGISTRATION_FORCIBLY", "0") in {
+_ENABLE_TYPE_REGISTRATION_FORCIBLY = os.getenv(
+    "ENABLE_TYPE_REGISTRATION_FORCIBLY", "0"
+) in {
     "1",
     "true",
 }

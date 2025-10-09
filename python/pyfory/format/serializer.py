@@ -53,10 +53,10 @@ class ArrowRecordBatchBufferObject(BufferObject):
         self._write(self.batch, sink)
         if not isinstance(stream, Buffer):
             data = sink.getvalue()
-            if hasattr(stream, 'write'):
+            if hasattr(stream, "write"):
                 stream.write(data.to_pybytes())
 
-    def to_buffer(self) -> memoryview:
+    def getbuffer(self) -> memoryview:
         sink = pa.BufferOutputStream()
         ArrowRecordBatchBufferObject._write(self.batch, sink)
         arrow_buffer = sink.getvalue()
@@ -102,10 +102,10 @@ class ArrowTableBufferObject(BufferObject):
         ArrowTableBufferObject._write(self.table, sink)
         if not isinstance(stream, Buffer):
             data = sink.getvalue()
-            if hasattr(stream, 'write'):
+            if hasattr(stream, "write"):
                 stream.write(data.to_pybytes())
 
-    def to_buffer(self) -> memoryview:
+    def getbuffer(self) -> memoryview:
         sink = pa.BufferOutputStream()
         self._write(self.table, sink)
         arrow_buffer = sink.getvalue()

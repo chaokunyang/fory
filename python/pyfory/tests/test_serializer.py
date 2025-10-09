@@ -131,15 +131,11 @@ def test_big_chunk_dict(track_ref):
 def test_basic_serializer(language):
     fory = Fory(language=language, ref=True)
     typeinfo = fory.type_resolver.get_typeinfo(datetime.datetime)
-    assert isinstance(
-        typeinfo.serializer, (TimestampSerializer, _serialization.TimestampSerializer)
-    )
+    assert isinstance(typeinfo.serializer, (TimestampSerializer, _serialization.TimestampSerializer))
     if language == Language.XLANG:
         assert typeinfo.type_id == TypeId.TIMESTAMP
     typeinfo = fory.type_resolver.get_typeinfo(datetime.date)
-    assert isinstance(
-        typeinfo.serializer, (DateSerializer, _serialization.DateSerializer)
-    )
+    assert isinstance(typeinfo.serializer, (DateSerializer, _serialization.DateSerializer))
     if language == Language.XLANG:
         assert typeinfo.type_id == TypeId.LOCAL_DATE
     assert ser_de(fory, True) is True
@@ -364,9 +360,7 @@ def test_serialize_arrow_zero_copy():
     buffer_objects = []
     fory = Fory(xlang=True, ref=True)
     serialized_data = Buffer.allocate(32)
-    fory.serialize(
-        record_batch, buffer=serialized_data, buffer_callback=buffer_objects.append
-    )
+    fory.serialize(record_batch, buffer=serialized_data, buffer_callback=buffer_objects.append)
     fory.serialize(table, buffer=serialized_data, buffer_callback=buffer_objects.append)
     buffers = [o.getbuffer() for o in buffer_objects]
     new_batch = fory.deserialize(serialized_data, buffers=buffers[:1])
@@ -505,33 +499,21 @@ def test_unsupported_callback():
 
 def test_slice():
     fory = Fory(xlang=False, ref=True)
-    assert fory.deserialize(fory.serialize(slice(1, None, "10"))) == slice(
-        1, None, "10"
-    )
+    assert fory.deserialize(fory.serialize(slice(1, None, "10"))) == slice(1, None, "10")
     assert fory.deserialize(fory.serialize(slice(1, 100, 10))) == slice(1, 100, 10)
     assert fory.deserialize(fory.serialize(slice(1, None, 10))) == slice(1, None, 10)
     assert fory.deserialize(fory.serialize(slice(10, 10, None))) == slice(10, 10, None)
-    assert fory.deserialize(fory.serialize(slice(None, None, 10))) == slice(
-        None, None, 10
-    )
-    assert fory.deserialize(fory.serialize(slice(None, None, None))) == slice(
-        None, None, None
-    )
-    assert fory.deserialize(
-        fory.serialize([1, 2, slice(1, 100, 10), slice(1, 100, 10)])
-    ) == [1, 2, slice(1, 100, 10), slice(1, 100, 10)]
-    assert fory.deserialize(
-        fory.serialize([1, slice(1, None, 10), False, [], slice(1, 100, 10)])
-    ) == [
+    assert fory.deserialize(fory.serialize(slice(None, None, 10))) == slice(None, None, 10)
+    assert fory.deserialize(fory.serialize(slice(None, None, None))) == slice(None, None, None)
+    assert fory.deserialize(fory.serialize([1, 2, slice(1, 100, 10), slice(1, 100, 10)])) == [1, 2, slice(1, 100, 10), slice(1, 100, 10)]
+    assert fory.deserialize(fory.serialize([1, slice(1, None, 10), False, [], slice(1, 100, 10)])) == [
         1,
         slice(1, None, 10),
         False,
         [],
         slice(1, 100, 10),
     ]
-    assert fory.deserialize(
-        fory.serialize([1, slice(1, None, "10"), False, [], slice(1, 100, "10")])
-    ) == [
+    assert fory.deserialize(fory.serialize([1, slice(1, None, "10"), False, [], slice(1, 100, "10")])) == [
         1,
         slice(1, None, "10"),
         False,
@@ -568,9 +550,7 @@ def test_duplicate_serialize():
 
 def test_pandas_range_index():
     fory = Fory(xlang=False, ref=True, strict=False)
-    fory.register_type(
-        pd.RangeIndex, serializer=pyfory.PandasRangeIndexSerializer(fory)
-    )
+    fory.register_type(pd.RangeIndex, serializer=pyfory.PandasRangeIndexSerializer(fory))
     index = pd.RangeIndex(1, 100, 2, name="a")
     new_index = ser_de(fory, index)
     pd.testing.assert_index_equal(new_index, new_index)
@@ -594,9 +574,7 @@ def test_py_serialize_dataclass(track_ref):
         ref=track_ref,
         strict=False,
     )
-    obj1 = PyDataClass1(
-        f1=1, f2=-2.0, f3="abc", f4=True, f5="xyz", f6=[1, 2], f7={"k1": "v1"}
-    )
+    obj1 = PyDataClass1(f1=1, f2=-2.0, f3="abc", f4=True, f5="xyz", f6=[1, 2], f7={"k1": "v1"})
     assert ser_de(fory, obj1) == obj1
     obj2 = PyDataClass1(f1=None, f2=-2.0, f3="abc", f4=None, f5="xyz", f6=None, f7=None)
     assert ser_de(fory, obj2) == obj2

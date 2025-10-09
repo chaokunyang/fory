@@ -17,7 +17,6 @@
 
 import pickle
 import pytest
-import pyfory
 from pyfory import Fory
 
 
@@ -133,9 +132,7 @@ def test_mixed_numpy_pandas_out_of_band():
     fory = Fory(xlang=False, ref=True, strict=False)
 
     arr = np.arange(500, dtype=np.float64)
-    df = pd.DataFrame(
-        {"x": np.arange(500, dtype=np.int64), "y": np.arange(500, dtype=np.float32)}
-    )
+    df = pd.DataFrame({"x": np.arange(500, dtype=np.int64), "y": np.arange(500, dtype=np.float32)})
 
     data = {"array": arr, "dataframe": df}
 
@@ -198,9 +195,7 @@ def test_buffer_object_write_to_stream():
     assert len(buffer_objects) > 0, "Should have collected out-of-band buffers"
 
     for buffer_obj in buffer_objects:
-        assert isinstance(
-            buffer_obj, NDArrayBufferObject
-        ), f"Expected NDArrayBufferObject, got {type(buffer_obj)}"
+        assert isinstance(buffer_obj, NDArrayBufferObject), f"Expected NDArrayBufferObject, got {type(buffer_obj)}"
 
     for buffer_obj in buffer_objects:
         stream = io.BytesIO()
@@ -238,9 +233,7 @@ def test_multidimensional_numpy_array_out_of_band():
     assert len(buffer_objects) > 0, "Should have collected out-of-band buffers"
 
     for buffer_obj in buffer_objects:
-        assert isinstance(
-            buffer_obj, NDArrayBufferObject
-        ), f"Expected NDArrayBufferObject, got {type(buffer_obj)}"
+        assert isinstance(buffer_obj, NDArrayBufferObject), f"Expected NDArrayBufferObject, got {type(buffer_obj)}"
         mv = buffer_obj.getbuffer()
         assert isinstance(mv, memoryview), "getbuffer() should return memoryview"
         assert len(mv) > 0, "Buffer should contain data"
@@ -282,9 +275,7 @@ def test_numpy_array_different_dtypes_out_of_band():
     assert len(buffer_objects) > 0, "Should have collected out-of-band buffers"
 
     for buffer_obj in buffer_objects:
-        assert isinstance(
-            buffer_obj, NDArrayBufferObject
-        ), f"Expected NDArrayBufferObject, got {type(buffer_obj)}"
+        assert isinstance(buffer_obj, NDArrayBufferObject), f"Expected NDArrayBufferObject, got {type(buffer_obj)}"
         mv = buffer_obj.getbuffer()
         assert isinstance(mv, memoryview), "getbuffer() should return memoryview"
 
@@ -293,9 +284,7 @@ def test_numpy_array_different_dtypes_out_of_band():
 
     for key, original_array in arrays.items():
         np.testing.assert_array_equal(original_array, deserialized[key])
-        assert (
-            original_array.dtype == deserialized[key].dtype
-        ), f"dtype mismatch for {key}: {original_array.dtype} != {deserialized[key].dtype}"
+        assert original_array.dtype == deserialized[key].dtype, f"dtype mismatch for {key}: {original_array.dtype} != {deserialized[key].dtype}"
 
 
 @pytest.mark.skipif(np is None, reason="Requires numpy")
@@ -317,9 +306,7 @@ def test_large_numpy_arrays_verify_buffer_collection():
     assert len(buffer_objects) > 0, "Should have collected out-of-band buffers"
 
     for i, buffer_obj in enumerate(buffer_objects):
-        assert isinstance(
-            buffer_obj, NDArrayBufferObject
-        ), f"Buffer {i}: Expected NDArrayBufferObject, got {type(buffer_obj)}"
+        assert isinstance(buffer_obj, NDArrayBufferObject), f"Buffer {i}: Expected NDArrayBufferObject, got {type(buffer_obj)}"
         mv = buffer_obj.getbuffer()
         assert isinstance(mv, memoryview), "getbuffer() should return memoryview"
         assert len(mv) > 0, f"Buffer {i} should contain data"

@@ -285,10 +285,11 @@ print(fory.loads(data)(10))  # 100
 Fory supports pickle5-compatible out-of-band buffer serialization for efficient zero-copy handling of large data structures. This is particularly useful for NumPy arrays, Pandas DataFrames, and other objects with large memory footprints.
 
 Out-of-band serialization separates metadata from the actual data buffers, allowing for:
-- **Zero-copy transfers** when sending data over networks or IPC
-- **Reduced memory usage** by avoiding data duplication
+
+- **Zero-copy transfers** when sending data over networks or IPC using `memoryview`
 - **Improved performance** for large datasets
 - **Pickle5 compatibility** using `pickle.PickleBuffer`
+- **Flexible stream support** - write to any writable object (files, BytesIO, sockets, etc.)
 
 #### Basic Out-of-Band Serialization
 
@@ -305,10 +306,12 @@ array = np.arange(10000, dtype=np.float64)
 buffer_objects = []
 serialized_data = fory.serialize(array, buffer_callback=buffer_objects.append)
 
-# Convert buffer objects to buffers for transmission
+# Convert buffer objects to memoryview for zero-copy transmission
+# For contiguous buffers (bytes, numpy arrays), this is zero-copy
+# For non-contiguous data, a copy may be created to ensure contiguity
 buffers = [obj.to_buffer() for obj in buffer_objects]
 
-# Deserialize with out-of-band buffers
+# Deserialize with out-of-band buffers (accepts memoryview, bytes, or Buffer)
 deserialized_array = fory.deserialize(serialized_data, buffers=buffers)
 
 assert np.array_equal(array, deserialized_array)
@@ -393,9 +396,42 @@ buffers = [obj.to_buffer() for obj in buffer_objects]
 
 # Deserialize with buffers
 deserialized = fory.deserialize(serialized, buffers=buffers)
-
 assert bytes(deserialized.raw()) == data
 ```
+
+#### Writing Buffers to Different Streams
+
+The `BufferObject.write_to()` method accepts any writable stream object, making it flexible for various use cases:
+
+```python
+import pyfory
+import numpy as np
+import io
+
+fory = pyfory.Fory(xlang=False, ref=False, strict=False)
+
+array = np.arange(1000, dtype=np.float64)
+
+# Collect out-of-band buffers
+buffer_objects = []
+serialized = fory.serialize(array, buffer_callback=buffer_objects.append)
+
+# Write to different stream types
+for buffer_obj in buffer_objects:
+    # Write to BytesIO (in-memory stream)
+    bytes_stream = io.BytesIO()
+    buffer_obj.write_to(bytes_stream)
+
+    # Write to file
+    with open('/tmp/buffer_data.bin', 'wb') as f:
+        buffer_obj.write_to(f)
+
+    # Get zero-copy memoryview (for contiguous buffers)
+    mv = buffer_obj.to_buffer()
+    assert isinstance(mv, memoryview)
+```
+
+**Note**: For contiguous memory buffers (like bytes, numpy arrays), `to_buffer()` returns a zero-copy `memoryview`. For non-contiguous data, a copy may be created to ensure contiguity.
 
 ## 🏃‍♂️ Cross-Language Object Graph Serialization
 

@@ -912,9 +912,8 @@ class NDArraySerializer(Serializer):
         raise NotImplementedError("Multi-dimensional array not supported currently")
 
     def write(self, buffer, value):
-        # Serialize numpy ND array using native format
-        dtype = value.dtype
         fory = self.fory
+        dtype = value.dtype
         fory.serialize_ref(buffer, dtype)
         buffer.write_varuint32(len(value.shape))
         for dim in value.shape:
@@ -924,8 +923,7 @@ class NDArraySerializer(Serializer):
             for item in value:
                 fory.serialize_ref(buffer, item)
         else:
-            data = value.tobytes()
-            buffer.write_bytes_and_size(data)
+            fory.write_buffer_object(buffer, NDArrayBufferObject(value))
 
     def read(self, buffer):
         fory = self.fory
@@ -936,8 +934,12 @@ class NDArraySerializer(Serializer):
             length = buffer.read_varint32()
             items = [fory.deserialize_ref(buffer) for _ in range(length)]
             return np.array(items, dtype=object)
-        data = buffer.read_bytes_and_size()
-        return np.frombuffer(data, dtype=dtype).reshape(shape)
+        fory_buf = fory.read_buffer_object(buffer)
+        if isinstance(fory_buf, memoryview):
+            return np.frombuffer(fory_buf, dtype=dtype).reshape(shape)
+        elif isinstance(fory_buf, bytes):
+            return np.frombuffer(fory_buf, dtype=dtype).reshape(shape)
+        return np.frombuffer(fory_buf.to_pybytes(), dtype=dtype).reshape(shape)
 
 
 class BytesSerializer(CrossLanguageCompatibleSerializer):
@@ -946,6 +948,10 @@ class BytesSerializer(CrossLanguageCompatibleSerializer):
 
     def read(self, buffer):
         fory_buf = self.fory.read_buffer_object(buffer)
+        if isinstance(fory_buf, memoryview):
+            return bytes(fory_buf)
+        elif isinstance(fory_buf, bytes):
+            return fory_buf
         return fory_buf.to_pybytes()
 
 
@@ -958,11 +964,14 @@ class BytesBufferObject(BufferObject):
     def total_bytes(self) -> int:
         return len(self.binary)
 
-    def write_to(self, buffer: "Buffer"):
-        buffer.write_bytes(self.binary)
+    def write_to(self, stream):
+        if hasattr(stream, 'write_bytes'):
+            stream.write_bytes(self.binary)
+        else:
+            stream.write(self.binary)
 
-    def to_buffer(self) -> "Buffer":
-        return Buffer(self.binary)
+    def to_buffer(self) -> memoryview:
+        return memoryview(self.binary)
 
 
 class PickleBufferSerializer(CrossLanguageCompatibleSerializer):
@@ -971,7 +980,8 @@ class PickleBufferSerializer(CrossLanguageCompatibleSerializer):
 
     def read(self, buffer):
         fory_buf = self.fory.read_buffer_object(buffer)
-
+        if isinstance(fory_buf, (bytes, memoryview, bytearray, Buffer)):
+            return pickle.PickleBuffer(fory_buf)
         return pickle.PickleBuffer(fory_buf.to_pybytes())
 
 
@@ -984,11 +994,42 @@ class PickleBufferObject(BufferObject):
     def total_bytes(self) -> int:
         return len(self.pickle_buffer.raw())
 
-    def write_to(self, buffer: "Buffer"):
-        buffer.write_buffer((self.pickle_buffer.raw()))
+    def write_to(self, stream):
+        raw = self.pickle_buffer.raw()
+        if hasattr(stream, 'write_buffer'):
+            stream.write_buffer(raw)
+        else:
+            stream.write(bytes(raw) if isinstance(raw, memoryview) else raw)
 
-    def to_buffer(self) -> "Buffer":
-        return Buffer(bytes(self.pickle_buffer.raw()))
+    def to_buffer(self) -> memoryview:
+        raw = self.pickle_buffer.raw()
+        if isinstance(raw, memoryview):
+            return raw
+        return memoryview(bytes(raw))
+
+
+class NDArrayBufferObject(BufferObject):
+    __slots__ = ("array", "dtype", "shape")
+
+    def __init__(self, array):
+        self.array = array
+        self.dtype = array.dtype
+        self.shape = array.shape
+
+    def total_bytes(self) -> int:
+        return self.array.nbytes
+
+    def write_to(self, stream):
+        data = self.array.tobytes()
+        if hasattr(stream, 'write_buffer'):
+            stream.write_buffer(data)
+        else:
+            stream.write(data)
+
+    def to_buffer(self) -> memoryview:
+        if self.array.flags.c_contiguous:
+            return memoryview(self.array.data)
+        return memoryview(self.array.tobytes())
 
 
 class StatefulSerializer(CrossLanguageCompatibleSerializer):

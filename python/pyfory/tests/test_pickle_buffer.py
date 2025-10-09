@@ -179,3 +179,145 @@ def test_selective_out_of_band_serialization():
     assert len(deserialized) == 2
     np.testing.assert_array_equal(arr1, deserialized[0])
     np.testing.assert_array_equal(arr2, deserialized[1])
+
+
+@pytest.mark.skipif(np is None, reason="Requires numpy")
+def test_buffer_object_write_to_stream():
+    """Test BufferObject.write_to() with different stream types"""
+    import io
+    from pyfory.serializer import NDArrayBufferObject
+    fory = Fory(xlang=False, ref=False, strict=False)
+
+    arr = np.arange(100).reshape(10, 10).astype(np.float64)
+
+    buffer_objects = []
+    serialized = fory.serialize(arr, buffer_callback=buffer_objects.append)
+
+    assert len(buffer_objects) > 0, "Should have collected out-of-band buffers"
+
+    for buffer_obj in buffer_objects:
+        assert isinstance(buffer_obj, NDArrayBufferObject), \
+            f"Expected NDArrayBufferObject, got {type(buffer_obj)}"
+
+    for buffer_obj in buffer_objects:
+        stream = io.BytesIO()
+        buffer_obj.write_to(stream)
+        stream.seek(0)
+        data = stream.read()
+        assert len(data) == buffer_obj.total_bytes()
+
+    for buffer_obj in buffer_objects:
+        mv = buffer_obj.to_buffer()
+        assert isinstance(mv, memoryview)
+        assert mv.nbytes == buffer_obj.total_bytes()
+
+    buffers = [obj.to_buffer() for obj in buffer_objects]
+    deserialized = fory.deserialize(serialized, buffers=buffers)
+    np.testing.assert_array_equal(arr, deserialized)
+
+
+@pytest.mark.skipif(np is None, reason="Requires numpy")
+def test_multidimensional_numpy_array_out_of_band():
+    """Test out-of-band serialization with multi-dimensional numpy arrays"""
+    from pyfory.serializer import NDArrayBufferObject
+    fory = Fory(xlang=False, ref=False, strict=False)
+
+    arr_2d = np.arange(100).reshape(10, 10).astype(np.float64)
+    arr_3d = np.arange(1000).reshape(10, 10, 10).astype(np.int64)
+    arr_4d = np.arange(256).reshape(4, 4, 4, 4).astype(np.float32)
+
+    data = [arr_2d, arr_3d, arr_4d]
+
+    buffer_objects = []
+    serialized = fory.serialize(data, buffer_callback=buffer_objects.append)
+
+    assert len(buffer_objects) > 0, "Should have collected out-of-band buffers"
+
+    for buffer_obj in buffer_objects:
+        assert isinstance(buffer_obj, NDArrayBufferObject), \
+            f"Expected NDArrayBufferObject, got {type(buffer_obj)}"
+        mv = buffer_obj.to_buffer()
+        assert isinstance(mv, memoryview), "to_buffer() should return memoryview"
+        assert len(mv) > 0, "Buffer should contain data"
+
+    buffers = [obj.to_buffer() for obj in buffer_objects]
+    deserialized = fory.deserialize(serialized, buffers=buffers)
+
+    assert len(deserialized) == 3
+    assert deserialized[0].shape == (10, 10)
+    assert deserialized[1].shape == (10, 10, 10)
+    assert deserialized[2].shape == (4, 4, 4, 4)
+
+    np.testing.assert_array_equal(arr_2d, deserialized[0])
+    np.testing.assert_array_equal(arr_3d, deserialized[1])
+    np.testing.assert_array_equal(arr_4d, deserialized[2])
+
+
+@pytest.mark.skipif(np is None, reason="Requires numpy")
+def test_numpy_array_different_dtypes_out_of_band():
+    """Test out-of-band serialization preserves various numpy dtypes"""
+    from pyfory.serializer import NDArrayBufferObject
+    fory = Fory(xlang=False, ref=False, strict=False)
+
+    arrays = {
+        "float32": np.arange(100).reshape(10, 10).astype(np.float32),
+        "float64": np.arange(100).reshape(10, 10).astype(np.float64),
+        "int8": np.arange(100).reshape(10, 10).astype(np.int8),
+        "int16": np.arange(100).reshape(10, 10).astype(np.int16),
+        "int32": np.arange(100).reshape(10, 10).astype(np.int32),
+        "int64": np.arange(100).reshape(10, 10).astype(np.int64),
+        "uint8": np.arange(100).reshape(10, 10).astype(np.uint8),
+        "bool": np.array([True, False] * 50, dtype=np.bool_).reshape(10, 10),
+    }
+
+    buffer_objects = []
+    serialized = fory.serialize(arrays, buffer_callback=buffer_objects.append)
+
+    assert len(buffer_objects) > 0, "Should have collected out-of-band buffers"
+
+    for buffer_obj in buffer_objects:
+        assert isinstance(buffer_obj, NDArrayBufferObject), \
+            f"Expected NDArrayBufferObject, got {type(buffer_obj)}"
+        mv = buffer_obj.to_buffer()
+        assert isinstance(mv, memoryview), "to_buffer() should return memoryview"
+
+    buffers = [obj.to_buffer() for obj in buffer_objects]
+    deserialized = fory.deserialize(serialized, buffers=buffers)
+
+    for key, original_array in arrays.items():
+        np.testing.assert_array_equal(original_array, deserialized[key])
+        assert original_array.dtype == deserialized[key].dtype, \
+            f"dtype mismatch for {key}: {original_array.dtype} != {deserialized[key].dtype}"
+
+
+@pytest.mark.skipif(np is None, reason="Requires numpy")
+def test_large_numpy_arrays_verify_buffer_collection():
+    """Verify that large numpy arrays properly use out-of-band buffers"""
+    from pyfory.serializer import NDArrayBufferObject
+    fory = Fory(xlang=False, ref=False, strict=False)
+
+    large_2d = np.arange(10000).reshape(100, 100).astype(np.int64)
+    large_3d = np.arange(27000).reshape(30, 30, 30).astype(np.float32)
+    large_4d = np.arange(10000).reshape(10, 10, 10, 10).astype(np.float64)
+
+    arrays = [large_2d, large_3d, large_4d]
+
+    buffer_objects = []
+    serialized = fory.serialize(arrays, buffer_callback=buffer_objects.append)
+
+    assert len(buffer_objects) > 0, "Should have collected out-of-band buffers"
+
+    for i, buffer_obj in enumerate(buffer_objects):
+        assert isinstance(buffer_obj, NDArrayBufferObject), \
+            f"Buffer {i}: Expected NDArrayBufferObject, got {type(buffer_obj)}"
+        mv = buffer_obj.to_buffer()
+        assert isinstance(mv, memoryview), "to_buffer() should return memoryview"
+        assert len(mv) > 0, f"Buffer {i} should contain data"
+
+    buffers = [obj.to_buffer() for obj in buffer_objects]
+    deserialized = fory.deserialize(serialized, buffers=buffers)
+
+    assert len(deserialized) == 3
+    np.testing.assert_array_equal(large_2d, deserialized[0])
+    np.testing.assert_array_equal(large_3d, deserialized[1])
+    np.testing.assert_array_equal(large_4d, deserialized[2])

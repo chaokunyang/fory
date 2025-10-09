@@ -120,8 +120,7 @@ macro_rules! resolve_and_deserialize {
 /// # Example
 ///
 /// ```rust,ignore
-/// use fory_core::register_trait_type;
-/// use fory_core::serializer::Serializer;
+/// use fory_core::{fory::Fory, register_trait_type, serializer::Serializer, types::Mode};
 /// use fory_derive::ForyObject;
 ///
 /// trait Animal: Serializer {
@@ -129,10 +128,10 @@ macro_rules! resolve_and_deserialize {
 ///     fn name(&self) -> &str;
 /// }
 ///
-/// #[derive(ForyObject)]
+/// #[derive(ForyObject, Debug)]
 /// struct Dog { name: String }
 ///
-/// #[derive(ForyObject)]
+/// #[derive(ForyObject, Debug)]
 /// struct Cat { name: String }
 ///
 /// impl Animal for Dog {
@@ -145,8 +144,18 @@ macro_rules! resolve_and_deserialize {
 ///     fn name(&self) -> &str { &self.name }
 /// }
 ///
-/// // Register the trait and its implementations
 /// register_trait_type!(Animal, Dog, Cat);
+///
+/// # fn main() {
+/// let mut fory = Fory::default().mode(Mode::Compatible);
+/// fory.register::<Dog>(100);
+/// fory.register::<Cat>(101);
+///
+/// let dog: Box<dyn Animal> = Box::new(Dog { name: "Rex".to_string() });
+/// let bytes = fory.serialize(&dog);
+/// let decoded: Box<dyn Animal> = fory.deserialize(&bytes).unwrap();
+/// assert_eq!(decoded.name(), "Rex");
+/// # }
 /// ```
 #[macro_export]
 macro_rules! register_trait_type {

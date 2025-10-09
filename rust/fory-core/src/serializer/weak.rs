@@ -40,19 +40,22 @@
 //! ## Example — Parent/Child Graph
 //!
 //! ```rust,ignore
-//! use fory_core::RcWeak;
+//! use fory_core::serializer::weak::RcWeak;
+//! use fory_core::fory::Fory;
 //! use std::cell::RefCell;
 //! use std::rc::Rc;
 //! use fory_derive::ForyObject;
 //!
-//! // #[derive(ForyObject)]
+//! #[derive(ForyObject)]
 //! struct Node {
 //!     value: i32,
 //!     parent: RcWeak<RefCell<Node>>,
 //!     children: Vec<Rc<RefCell<Node>>>,
 //! }
 //!
-//! // Build a parent with two children
+//! let mut fury = Fory::default();
+//! fury.register::<Node>(2000);
+//!
 //! let parent = Rc::new(RefCell::new(Node {
 //!     value: 1,
 //!     parent: RcWeak::new(),
@@ -74,10 +77,6 @@
 //! parent.borrow_mut().children.push(child1);
 //! parent.borrow_mut().children.push(child2);
 //!
-//! // Serialize & deserialize while preserving reference identity
-//! let mut fury = fory_core::fory::Fory::default();
-//! fury.register::<Node>(2000);
-//!
 //! let serialized = fury.serialize(&parent);
 //! let deserialized: Rc<RefCell<Node>> = fury.deserialize(&serialized).unwrap();
 //!
@@ -92,19 +91,21 @@
 //!
 //! ```rust,ignore
 //! use fory_core::serializer::weak::ArcWeak;
+//! use fory_core::fory::Fory;
 //! use std::sync::{Arc, Mutex};
+//! use fory_derive::ForyObject;
 //!
-//! #[derive(fory_derive::ForyObject)]
+//! #[derive(ForyObject)]
 //! struct Node {
 //!     value: i32,
 //!     parent: ArcWeak<Mutex<Node>>,
 //! }
 //!
+//! let mut fury = Fory::default();
+//! fury.register::<Node>(2001);
+//!
 //! let parent = Arc::new(Mutex::new(Node { value: 1, parent: ArcWeak::new() }));
 //! let child = Arc::new(Mutex::new(Node { value: 2, parent: ArcWeak::from(&parent) }));
-//!
-//! let mut fury = fory_core::fory::Fory::default();
-//! fury.register::<Node>(2001);
 //!
 //! let serialized = fury.serialize(&child);
 //! let deserialized: Arc<Mutex<Node>> = fury.deserialize(&serialized).unwrap();

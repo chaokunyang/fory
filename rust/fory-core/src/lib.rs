@@ -69,41 +69,61 @@
 //!
 //! Define custom traits and register implementations:
 //!
-//! ```ignore
-//! trait Animal {
+//! ```rust,ignore
+//! use fory_core::{fory::Fory, register_trait_type, serializer::Serializer, types::Mode};
+//! use fory_derive::ForyObject;
+//!
+//! trait Animal: Serializer {
 //!     fn speak(&self) -> String;
 //! }
 //!
-//! #[derive(ForyObject)]
+//! #[derive(ForyObject, Debug)]
 //! struct Dog { name: String }
 //!
-//! #[derive(ForyObject)]
+//! #[derive(ForyObject, Debug)]
 //! struct Cat { name: String }
 //!
 //! impl Animal for Dog {
 //!     fn speak(&self) -> String { "Woof!".to_string() }
-//!     fn as_any(&self) -> &dyn std::any::Any { self }
 //! }
 //!
 //! impl Animal for Cat {
 //!     fn speak(&self) -> String { "Meow!".to_string() }
-//!     fn as_any(&self) -> &dyn std::any::Any { self }
 //! }
 //!
 //! register_trait_type!(Animal, Dog, Cat);
 //!
-//! // Use in struct fields
 //! #[derive(ForyObject)]
 //! struct Zoo {
 //!     star_animal: Box<dyn Animal>,
 //! }
+//!
+//! # fn main() {
+//! let mut fory = Fory::default().mode(Mode::Compatible);
+//! fory.register::<Dog>(100);
+//! fory.register::<Cat>(101);
+//! fory.register::<Zoo>(102);
+//!
+//! let zoo = Zoo {
+//!     star_animal: Box::new(Dog { name: "Buddy".to_string() }),
+//! };
+//!
+//! let bytes = fory.serialize(&zoo);
+//! let decoded: Zoo = fory.deserialize(&bytes).unwrap();
+//! assert_eq!(decoded.star_animal.speak(), "Woof!");
+//! # }
 //! ```
 //!
 //! #### Rc/Arc-Based Trait Objects
 //!
 //! For reference-counted trait objects, use them directly in struct fields:
 //!
-//! ```ignore
+//! ```rust,ignore
+//! # use fory_core::serializer::Serializer;
+//! # use fory_derive::ForyObject;
+//! # use std::rc::Rc;
+//! # use std::sync::Arc;
+//! # trait Animal: Serializer { fn speak(&self) -> String; }
 //! #[derive(ForyObject)]
 //! struct Shelter {
 //!     animals_rc: Vec<Rc<dyn Animal>>,

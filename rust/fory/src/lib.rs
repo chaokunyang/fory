@@ -335,7 +335,7 @@
 //!
 //! #### Basic Trait Object Serialization
 //!
-//! ```rust,ignore
+//! ```rust
 //! use fory::{Fory, register_trait_type};
 //! use fory_core::serializer::Serializer;
 //! use fory_derive::ForyObject;
@@ -347,7 +347,7 @@
 //!     fn name(&self) -> &str;
 //! }
 //!
-//! #[derive(ForyObject)]
+//! #[derive(ForyObject, Debug)]
 //! struct Dog { name: String, breed: String }
 //!
 //! impl Animal for Dog {
@@ -355,7 +355,7 @@
 //!     fn name(&self) -> &str { &self.name }
 //! }
 //!
-//! #[derive(ForyObject)]
+//! #[derive(ForyObject, Debug)]
 //! struct Cat { name: String, color: String }
 //!
 //! impl Animal for Cat {
@@ -480,13 +480,13 @@
 //!     fn name(&self) -> &str;
 //! }
 //!
-//! #[derive(ForyObject)]
+//! #[derive(ForyObject, Debug)]
 //! struct Dog { name: String }
 //! impl Animal for Dog {
 //!     fn name(&self) -> &str { &self.name }
 //! }
 //!
-//! #[derive(ForyObject)]
+//! #[derive(ForyObject, Debug)]
 //! struct Cat { name: String }
 //! impl Animal for Cat {
 //!     fn name(&self) -> &str { &self.name }
@@ -536,11 +536,10 @@
 //!
 //! The `register_trait_type!` macro generates `AnimalRc` and `AnimalArc` wrapper types:
 //!
-//! ```rust,ignore
-//! use fory_core::{Fory, register_trait_type};
+//! ```rust
+//! use fory::{Fory, Mode, register_trait_type};
 //! use fory_core::serializer::Serializer;
 //! use fory_derive::ForyObject;
-//! use fory_core::types::Mode;
 //! use std::sync::Arc;
 //! use std::rc::Rc;
 //!
@@ -548,7 +547,7 @@
 //!     fn name(&self) -> &str;
 //! }
 //!
-//! #[derive(ForyObject)]
+//! #[derive(ForyObject, Debug)]
 //! struct Dog { name: String }
 //! impl Animal for Dog {
 //!     fn name(&self) -> &str { &self.name }
@@ -556,6 +555,7 @@
 //!
 //! register_trait_type!(Animal, Dog);
 //!
+//! # fn main() -> Result<(), fory::Error> {
 //! let mut fory = Fory::default().mode(Mode::Compatible);
 //! fory.register::<Dog>(100);
 //!
@@ -579,6 +579,8 @@
 //!
 //! let unwrapped: Arc<dyn Animal> = decoded.unwrap();
 //! assert_eq!(unwrapped.name(), "Buddy");
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! ### 4. Schema Evolution
@@ -713,7 +715,7 @@
 //! `fory_read_data()` methods to control exactly how data is written to and read from
 //! the binary buffer.
 //!
-//! ```rust,ignore
+//! ```rust
 //! use fory::Fory;
 //! use fory_core::resolver::context::{ReadContext, WriteContext};
 //! use fory_core::serializer::{Serializer, ForyDefault};
@@ -728,17 +730,16 @@
 //!
 //! impl Serializer for CustomType {
 //!     fn fory_write_data(&self, context: &mut WriteContext, is_field: bool) {
-//!         // Use writer methods for easy serialization
 //!         context.writer.write_i32(self.value);
-//!         context.writer.write_string(&self.name);
+//!         context.writer.write_varuint32(self.name.len() as u32);
+//!         context.writer.write_utf8_string(&self.name);
 //!     }
 //!
 //!     fn fory_read_data(context: &mut ReadContext, is_field: bool) -> Result<Self, Error> {
-//!         // Use reader methods for easy deserialization
-//!         Ok(Self {
-//!             value: context.reader.read_i32(),
-//!             name: context.reader.read_string()?,
-//!         })
+//!         let value = context.reader.read_i32();
+//!         let len = context.reader.read_varuint32() as usize;
+//!         let name = context.reader.read_utf8_string(len);
+//!         Ok(Self { value, name })
 //!     }
 //!
 //!     fn fory_type_id_dyn(&self, fory: &Fory) -> u32 {
@@ -811,7 +812,7 @@
 //! | Memory usage         | Full object graph in memory   | Only accessed fields in memory  |
 //! | Suitable for         | Small objects, full access    | Large objects, selective access |
 //!
-//! ```rust,ignore
+//! ```rust
 //! use fory::{to_row, from_row};
 //! use fory_derive::ForyRow;
 //! use std::collections::BTreeMap;
@@ -933,7 +934,7 @@
 //! - Slightly slower due to metadata processing
 //! - Essential for zero-downtime deployments
 //!
-//! ```rust,ignore
+//! ```rust
 //! use fory::{Fory, Mode};
 //!
 //! let fory = Fory::default().mode(Mode::Compatible);
@@ -949,12 +950,19 @@
 //!
 //! **How to enable:**
 //!
-//! ```rust,ignore
+//! ```rust
 //! use fory::{Fory, Mode};
+//! use fory_derive::ForyObject;
 //!
 //! let mut fory = Fory::default()
 //!     .mode(Mode::Compatible)
 //!     .xlang(true);
+//!
+//! #[derive(ForyObject)]
+//! struct MyStruct {
+//!     field1: i32,
+//!     field2: String,
+//! }
 //!
 //! fory.register_by_namespace::<MyStruct>("com.example", "MyStruct");
 //! ```

@@ -141,7 +141,9 @@
 //! you can use the core types directly for advanced use cases.
 //!
 //! ```rust
-//! use fory_core::{Fory, Error, Mode};
+//! use fory_core::fory::Fory;
+//! use fory_core::error::Error;
+//! use fory_core::types::Mode;
 //! use fory_core::row::{to_row, from_row};
 //!
 //! // Create a Fory instance
@@ -168,6 +170,9 @@ pub mod util;
 // Re-export paste for use in macros
 pub use paste;
 
+pub use crate::buffer::{Reader, Writer};
+pub use crate::fory::Fory;
+pub use crate::resolver::context::{ReadContext, WriteContext};
+pub use crate::resolver::type_resolver::TypeResolver;
 pub use crate::serializer::weak::{ArcWeak, RcWeak};
 pub use crate::serializer::{ForyDefault, Serializer};
-pub use crate::resolver::context::{ReadContext, WriteContext};

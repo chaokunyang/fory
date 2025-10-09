@@ -39,11 +39,9 @@ pub fn deserialize_any_box(context: &mut ReadContext) -> Result<Box<dyn Any>, Er
     context.inc_depth()?;
     let ref_flag = context.reader.read_i8();
     if ref_flag != RefFlag::NotNullValue as i8 {
-        let err = Err(Error::Other(anyhow::anyhow!(
+        return Err(Error::Other(anyhow::anyhow!(
             "Expected NotNullValue for Box<dyn Any>"
         )));
-        context.dec_depth();
-        return err;
     }
     let harness = context.read_any_typeinfo();
     let deserializer_fn = harness.get_read_data_fn();
@@ -124,10 +122,9 @@ impl Serializer for Rc<dyn Any> {
     }
 
     fn fory_read(context: &mut ReadContext, _is_field: bool) -> Result<Self, Error> {
-        context.inc_depth()?;
         let ref_flag = context.ref_reader.read_ref_flag(&mut context.reader);
 
-        let result = match ref_flag {
+        match ref_flag {
             RefFlag::Null => Err(anyhow::anyhow!("Rc<dyn Any> cannot be null").into()),
             RefFlag::Ref => {
                 let ref_id = context.ref_reader.read_ref_id(&mut context.reader);
@@ -139,22 +136,24 @@ impl Serializer for Rc<dyn Any> {
                     })
             }
             RefFlag::NotNullValue => {
+                context.inc_depth()?;
                 let harness = context.read_any_typeinfo();
                 let deserializer_fn = harness.get_read_data_fn();
-                deserializer_fn(context, true).map(Rc::<dyn Any>::from)
+                let boxed = deserializer_fn(context, true)?;
+                context.dec_depth();
+                Ok(Rc::<dyn Any>::from(boxed))
             }
             RefFlag::RefValue => {
+                context.inc_depth()?;
                 let harness = context.read_any_typeinfo();
                 let deserializer_fn = harness.get_read_data_fn();
-                deserializer_fn(context, true).map(|boxed| {
-                    let rc: Rc<dyn Any> = Rc::from(boxed);
-                    context.ref_reader.store_rc_ref(rc.clone());
-                    rc
-                })
+                let boxed = deserializer_fn(context, true)?;
+                context.dec_depth();
+                let rc: Rc<dyn Any> = Rc::from(boxed);
+                context.ref_reader.store_rc_ref(rc.clone());
+                Ok(rc)
             }
-        };
-        context.dec_depth();
-        result
+        }
     }
 
     fn fory_read_data(context: &mut ReadContext, is_field: bool) -> Result<Self, Error> {
@@ -210,10 +209,9 @@ impl Serializer for Arc<dyn Any> {
     }
 
     fn fory_read(context: &mut ReadContext, _is_field: bool) -> Result<Self, Error> {
-        context.inc_depth()?;
         let ref_flag = context.ref_reader.read_ref_flag(&mut context.reader);
 
-        let result = match ref_flag {
+        match ref_flag {
             RefFlag::Null => Err(anyhow::anyhow!("Arc<dyn Any> cannot be null").into()),
             RefFlag::Ref => {
                 let ref_id = context.ref_reader.read_ref_id(&mut context.reader);
@@ -225,22 +223,24 @@ impl Serializer for Arc<dyn Any> {
                     })
             }
             RefFlag::NotNullValue => {
+                context.inc_depth()?;
                 let harness = context.read_any_typeinfo();
                 let deserializer_fn = harness.get_read_data_fn();
-                deserializer_fn(context, true).map(Arc::<dyn Any>::from)
+                let boxed = deserializer_fn(context, true)?;
+                context.dec_depth();
+                Ok(Arc::<dyn Any>::from(boxed))
             }
             RefFlag::RefValue => {
+                context.inc_depth()?;
                 let harness = context.read_any_typeinfo();
                 let deserializer_fn = harness.get_read_data_fn();
-                deserializer_fn(context, true).map(|boxed| {
-                    let arc: Arc<dyn Any> = Arc::from(boxed);
-                    context.ref_reader.store_arc_ref(arc.clone());
-                    arc
-                })
+                let boxed = deserializer_fn(context, true)?;
+                context.dec_depth();
+                let arc: Arc<dyn Any> = Arc::from(boxed);
+                context.ref_reader.store_arc_ref(arc.clone());
+                Ok(arc)
             }
-        };
-        context.dec_depth();
-        result
+        }
     }
 
     fn fory_read_data(context: &mut ReadContext, is_field: bool) -> Result<Self, Error> {

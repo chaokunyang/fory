@@ -79,99 +79,97 @@ pub fn skip_field_value(
                     (Vec<f64> , FLOAT64_ARRAY),
                 );
             } else if CONTAINER_TYPES.contains(&type_id) {
-                context.inc_depth()?;
-                let result = if type_id == TypeId::LIST || type_id == TypeId::SET {
+                if type_id == TypeId::LIST || type_id == TypeId::SET {
                     let length = context.reader.read_varuint32() as usize;
                     if length == 0 {
-                        Ok(())
-                    } else {
-                        let header = context.reader.read_u8();
-                        let has_null = (header & HAS_NULL) != 0;
-                        let is_same_type = (header & IS_SAME_TYPE) != 0;
-                        let skip_ref_flag = is_same_type && !has_null;
-                        let elem_type = field_type.generics.first().unwrap();
-                        for _ in 0..length {
-                            skip_field_value(context, elem_type, !skip_ref_flag)?;
-                        }
-                        Ok(())
+                        return Ok(());
                     }
+                    let header = context.reader.read_u8();
+                    let has_null = (header & HAS_NULL) != 0;
+                    let is_same_type = (header & IS_SAME_TYPE) != 0;
+                    let skip_ref_flag = is_same_type && !has_null;
+                    let elem_type = field_type.generics.first().unwrap();
+                    context.inc_depth()?;
+                    for _ in 0..length {
+                        skip_field_value(context, elem_type, !skip_ref_flag)?;
+                    }
+                    context.dec_depth();
                 } else if type_id == TypeId::MAP {
                     let length = context.reader.read_varuint32();
                     if length == 0 {
-                        Ok(())
-                    } else {
-                        let mut len_counter = 0;
-                        let key_type = field_type.generics.first().unwrap();
-                        let value_type = field_type.generics.get(1).unwrap();
-                        loop {
-                            if len_counter == length {
-                                break;
-                            }
-                            let header = context.reader.read_u8();
-                            if header & crate::serializer::map::KEY_NULL != 0
-                                && header & crate::serializer::map::VALUE_NULL != 0
-                            {
-                                len_counter += 1;
-                                continue;
-                            }
-                            if header & crate::serializer::map::KEY_NULL != 0 {
-                                skip_field_value(context, value_type, false)?;
-                                len_counter += 1;
-                                continue;
-                            }
-                            if header & crate::serializer::map::VALUE_NULL != 0 {
-                                skip_field_value(context, key_type, false)?;
-                                len_counter += 1;
-                                continue;
-                            }
-                            let chunk_size = context.reader.read_u8();
-                            for _ in (0..chunk_size).enumerate() {
-                                skip_field_value(context, key_type, false)?;
-                                skip_field_value(context, value_type, false)?;
-                            }
-                            len_counter += chunk_size as u32;
-                        }
-                        Ok(())
+                        return Ok(());
                     }
-                } else {
-                    Ok(())
-                };
-                context.dec_depth();
-                result
+                    let mut len_counter = 0;
+                    let key_type = field_type.generics.first().unwrap();
+                    let value_type = field_type.generics.get(1).unwrap();
+                    loop {
+                        if len_counter == length {
+                            break;
+                        }
+                        let header = context.reader.read_u8();
+                        if header & crate::serializer::map::KEY_NULL != 0
+                            && header & crate::serializer::map::VALUE_NULL != 0
+                        {
+                            len_counter += 1;
+                            continue;
+                        }
+                        if header & crate::serializer::map::KEY_NULL != 0 {
+                            // let read_ref_flag = get_read_ref_flag(value_type);
+                            context.inc_depth()?;
+                            skip_field_value(context, value_type, false)?;
+                            context.dec_depth();
+                            len_counter += 1;
+                            continue;
+                        }
+                        if header & crate::serializer::map::VALUE_NULL != 0 {
+                            // let read_ref_flag = get_read_ref_flag(key_type);
+                            context.inc_depth()?;
+                            skip_field_value(context, key_type, false)?;
+                            context.dec_depth();
+                            len_counter += 1;
+                            continue;
+                        }
+                        let chunk_size = context.reader.read_u8();
+                        context.inc_depth()?;
+                        for _ in (0..chunk_size).enumerate() {
+                            // let read_ref_flag = get_read_ref_flag(key_type);
+                            skip_field_value(context, key_type, false)?;
+                            // let read_ref_flag = get_read_ref_flag(value_type);
+                            skip_field_value(context, value_type, false)?;
+                        }
+                        context.dec_depth();
+                        len_counter += chunk_size as u32;
+                    }
+                }
+                Ok(())
             } else if type_id == TypeId::NAMED_ENUM {
                 let _ordinal = context.reader.read_varuint32();
                 Ok(())
             } else if type_id == TypeId::NAMED_COMPATIBLE_STRUCT {
-                context.inc_depth()?;
                 let remote_type_id = context.reader.read_varuint32();
                 assert_eq!(type_id_num, remote_type_id);
                 let meta_index = context.reader.read_varuint32();
                 let type_meta = context.get_meta(meta_index as usize);
                 let field_infos = type_meta.get_field_infos().to_vec();
-                let result = {
-                    for field_info in field_infos.iter() {
-                        let nullable_field_type =
-                            NullableFieldType::from(field_info.field_type.clone());
-                        let read_ref_flag = get_read_ref_flag(&nullable_field_type);
-                        skip_field_value(context, &nullable_field_type, read_ref_flag)?;
-                    }
-                    Ok(())
-                };
-                context.dec_depth();
-                result
-            } else if type_id == TypeId::NAMED_EXT {
                 context.inc_depth()?;
+                for field_info in field_infos.iter() {
+                    let nullable_field_type =
+                        NullableFieldType::from(field_info.field_type.clone());
+                    let read_ref_flag = get_read_ref_flag(&nullable_field_type);
+                    skip_field_value(context, &nullable_field_type, read_ref_flag)?;
+                }
+                context.dec_depth();
+                Ok(())
+            } else if type_id == TypeId::NAMED_EXT {
                 let remote_type_id = context.reader.read_varuint32();
                 assert_eq!(type_id_num, remote_type_id);
                 let meta_index = context.reader.read_varuint32();
                 let type_meta = context.get_meta(meta_index as usize);
                 let type_resolver = context.get_fory().get_type_resolver();
-                let result = type_resolver
+                type_resolver
                     .get_ext_name_harness(&type_meta.get_namespace(), &type_meta.get_type_name())
-                    .get_read_data_fn()(context, true)
-                .map(|_| ());
-                context.dec_depth();
-                result
+                    .get_read_data_fn()(context, true)?;
+                Ok(())
             } else {
                 unreachable!("unimplemented type: {:?}", type_id);
             }
@@ -182,36 +180,30 @@ pub fn skip_field_value(
             const EXT_ID: u32 = TypeId::EXT as u32;
             const ENUM_ID: u32 = TypeId::ENUM as u32;
             if internal_id == COMPATIBLE_STRUCT_ID {
-                context.inc_depth()?;
                 let remote_type_id = context.reader.read_varuint32();
                 let meta_index = context.reader.read_varuint32();
                 let type_meta = context.get_meta(meta_index as usize);
                 assert_eq!(remote_type_id, type_meta.get_type_id());
                 let field_infos = type_meta.get_field_infos().to_vec();
-                let result: Result<(), Error> = {
-                    for field_info in field_infos.iter() {
-                        let nullable_field_type =
-                            NullableFieldType::from(field_info.field_type.clone());
-                        let read_ref_flag = get_read_ref_flag(&nullable_field_type);
-                        skip_field_value(context, &nullable_field_type, read_ref_flag)?;
-                    }
-                    Ok(())
-                };
+                context.inc_depth()?;
+                for field_info in field_infos.iter() {
+                    let nullable_field_type =
+                        NullableFieldType::from(field_info.field_type.clone());
+                    let read_ref_flag = get_read_ref_flag(&nullable_field_type);
+                    skip_field_value(context, &nullable_field_type, read_ref_flag)?;
+                }
                 context.dec_depth();
-                result?;
             } else if internal_id == ENUM_ID {
                 let _ordinal = context.reader.read_varuint32();
             } else if internal_id == EXT_ID {
-                context.inc_depth()?;
                 let remote_type_id = context.reader.read_varuint32();
                 assert_eq!(remote_type_id, type_id_num);
+                context.inc_depth()?;
                 let type_resolver = context.get_fory().get_type_resolver();
-                let result: Result<Box<dyn std::any::Any>, Error> =
-                    type_resolver
-                        .get_ext_harness(type_id_num)
-                        .get_read_data_fn()(context, true);
+                type_resolver
+                    .get_ext_harness(type_id_num)
+                    .get_read_data_fn()(context, true)?;
                 context.dec_depth();
-                result?;
             } else {
                 unreachable!("unimplemented skipped type: {:?}", type_id_num);
             }

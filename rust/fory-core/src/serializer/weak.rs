@@ -333,19 +333,22 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for RcWeak<T> {
     }
 
     fn fory_read(context: &mut ReadContext, _is_field: bool) -> Result<Self, Error> {
-        context.inc_depth()?;
         let ref_flag = context.ref_reader.read_ref_flag(&mut context.reader);
 
-        let result = match ref_flag {
+        match ref_flag {
             RefFlag::Null => Ok(RcWeak::new()),
-            RefFlag::RefValue => T::fory_read_data(context, _is_field).map(|data| {
+            RefFlag::RefValue => {
+                context.inc_depth()?;
+                let data = T::fory_read_data(context, _is_field)?;
+                context.dec_depth();
                 let rc = Rc::new(data);
                 let ref_id = context.ref_reader.store_rc_ref(rc);
                 let rc = context.ref_reader.get_rc_ref::<T>(ref_id).unwrap();
-                RcWeak::from(&rc)
-            }),
+                Ok(RcWeak::from(&rc))
+            }
             RefFlag::Ref => {
                 let ref_id = context.ref_reader.read_ref_id(&mut context.reader);
+
                 if let Some(rc) = context.ref_reader.get_rc_ref::<T>(ref_id) {
                     Ok(RcWeak::from(&rc))
                 } else {
@@ -362,9 +365,7 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for RcWeak<T> {
                 }
             }
             _ => Err(anyhow!("Weak can only be Null, RefValue or Ref, got {:?}", ref_flag).into()),
-        };
-        context.dec_depth();
-        result
+        }
     }
 
     fn fory_read_data(context: &mut ReadContext, is_field: bool) -> Result<Self, Error> {
@@ -431,17 +432,20 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for ArcWeak
     }
 
     fn fory_read(context: &mut ReadContext, _is_field: bool) -> Result<Self, Error> {
-        context.inc_depth()?;
         let ref_flag = context.ref_reader.read_ref_flag(&mut context.reader);
 
-        let result = match ref_flag {
+        match ref_flag {
             RefFlag::Null => Ok(ArcWeak::new()),
-            RefFlag::RefValue => T::fory_read_data(context, _is_field).map(|data| {
+            RefFlag::RefValue => {
+                context.inc_depth()?;
+                let data = T::fory_read_data(context, _is_field)?;
+                context.dec_depth();
                 let arc = Arc::new(data);
                 let ref_id = context.ref_reader.store_arc_ref(arc);
                 let arc = context.ref_reader.get_arc_ref::<T>(ref_id).unwrap();
-                ArcWeak::from(&arc)
-            }),
+                let weak = ArcWeak::from(&arc);
+                Ok(weak)
+            }
             RefFlag::Ref => {
                 let ref_id = context.ref_reader.read_ref_id(&mut context.reader);
                 let weak = ArcWeak::new();
@@ -449,6 +453,7 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for ArcWeak
                 if let Some(arc) = context.ref_reader.get_arc_ref::<T>(ref_id) {
                     weak.update(Arc::downgrade(&arc));
                 } else {
+                    // Capture the raw pointer to the UnsafeCell so we can update it in the callback
                     let weak_ptr = weak.inner.get();
                     context.ref_reader.add_callback(Box::new(move |ref_reader| {
                         if let Some(arc) = ref_reader.get_arc_ref::<T>(ref_id) {
@@ -458,14 +463,12 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for ArcWeak
                         }
                     }));
                 }
+
                 Ok(weak)
             }
             _ => Err(anyhow!("Weak can only be Null, RefValue or Ref, got {:?}", ref_flag).into()),
-        };
-        context.dec_depth();
-        result
+        }
     }
-
     fn fory_read_data(context: &mut ReadContext, is_field: bool) -> Result<Self, Error> {
         Self::fory_read(context, is_field)
     }

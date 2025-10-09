@@ -422,10 +422,9 @@ macro_rules! impl_smart_pointer_serializer {
             fn fory_read(context: &mut $crate::resolver::context::ReadContext, is_field: bool) -> Result<Self, $crate::error::Error> {
                 use $crate::types::RefFlag;
 
-                context.inc_depth()?;
                 let ref_flag = context.ref_reader.read_ref_flag(&mut context.reader);
 
-                let result: Result<Self, $crate::error::Error> = match ref_flag {
+                match ref_flag {
                     RefFlag::Null => Err($crate::error::AnyhowError::msg(
                         format!("{}<dyn {}> cannot be null", stringify!($pointer_type), stringify!($trait_name))
                     ).into()),
@@ -438,16 +437,17 @@ macro_rules! impl_smart_pointer_serializer {
                             ).into())
                     }
                     RefFlag::NotNullValue => {
+                        context.inc_depth()?;
                         let harness = context.read_any_typeinfo();
                         let deserializer_fn = harness.get_read_data_fn();
                         let boxed_any = deserializer_fn(context, is_field)?;
+                        context.dec_depth();
 
                         $(
                             if boxed_any.is::<$impl_type>() {
                                 let concrete = boxed_any.downcast::<$impl_type>()
                                     .map_err(|_| $crate::error::AnyhowError::msg("Downcast failed"))?;
                                 let ptr = $constructor_expr(*concrete) as $pointer_type;
-                                context.dec_depth();
                                 return Ok(Self::from(ptr));
                             }
                         )*
@@ -457,9 +457,11 @@ macro_rules! impl_smart_pointer_serializer {
                         ).into())
                     }
                     RefFlag::RefValue => {
+                        context.inc_depth()?;
                         let harness = context.read_any_typeinfo();
                         let deserializer_fn = harness.get_read_data_fn();
                         let boxed_any = deserializer_fn(context, is_field)?;
+                        context.dec_depth();
 
                         $(
                             if boxed_any.is::<$impl_type>() {
@@ -467,7 +469,6 @@ macro_rules! impl_smart_pointer_serializer {
                                     .map_err(|_| $crate::error::AnyhowError::msg("Downcast failed"))?;
                                 let ptr = $constructor_expr(*concrete) as $pointer_type;
                                 context.ref_reader.$store_ref(ptr.clone());
-                                context.dec_depth();
                                 return Ok(Self::from(ptr));
                             }
                         )*
@@ -476,11 +477,8 @@ macro_rules! impl_smart_pointer_serializer {
                             format!("Deserialized type does not implement trait {}", stringify!($trait_name))
                         ).into())
                     }
-                };
-                context.dec_depth();
-                result
+                }
             }
-
             fn fory_read_data(context: &mut $crate::resolver::context::ReadContext, is_field: bool) -> Result<Self, $crate::error::Error> {
                 let concrete_fory_type_id = context.reader.read_varuint32();
                 $crate::resolve_and_deserialize!(
@@ -573,16 +571,17 @@ impl Serializer for Box<dyn Serializer> {
     }
 
     fn fory_read(context: &mut ReadContext, is_field: bool) -> Result<Self, Error> {
-        context.inc_depth()?;
         let fory_type_id = read_trait_object_headers(context)?;
 
         let type_resolver = context.get_fory().get_type_resolver();
 
-        let result = if let Some(harness) = type_resolver.get_harness(fory_type_id) {
+        if let Some(harness) = type_resolver.get_harness(fory_type_id) {
+            context.inc_depth()?;
             let deserializer_fn = harness.get_read_fn();
             let to_serializer_fn = harness.get_to_serializer();
             let boxed_any = deserializer_fn(context, is_field, true)?;
             let trait_object = to_serializer_fn(boxed_any)?;
+            context.dec_depth();
             Ok(trait_object)
         } else {
             use crate::types::TypeId;
@@ -612,11 +611,8 @@ impl Serializer for Box<dyn Serializer> {
                     Err(Error::Other(anyhow::anyhow!("Type ID {} not registered", fory_type_id)))
                 }
             }
-        };
-        context.dec_depth();
-        result
+        }
     }
-
     fn fory_read_data(_context: &mut ReadContext, _is_field: bool) -> Result<Self, Error> {
         panic!("fory_read_data should not be called directly on Box<dyn Serializer>");
     }

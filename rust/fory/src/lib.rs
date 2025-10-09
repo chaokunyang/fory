@@ -467,7 +467,7 @@
 //! For struct fields containing `Rc<dyn Trait>` or `Arc<dyn Trait>`, Apache Fury™
 //! automatically handles the conversion without needing wrappers:
 //!
-//! ```rust,ignore
+//! ```rust
 //! use fory::{Fory, register_trait_type};
 //! use fory_core::serializer::Serializer;
 //! use fory_derive::ForyObject;
@@ -537,7 +537,7 @@
 //! The `register_trait_type!` macro generates `AnimalRc` and `AnimalArc` wrapper types:
 //!
 //! ```rust
-//! use fory::{Fory, Mode, register_trait_type};
+//! use fory::{Fory, Mode, Error, register_trait_type};
 //! use fory_core::serializer::Serializer;
 //! use fory_derive::ForyObject;
 //! use std::sync::Arc;
@@ -555,7 +555,7 @@
 //!
 //! register_trait_type!(Animal, Dog);
 //!
-//! # fn main() -> Result<(), fory::Error> {
+//! # fn main() -> Result<(), Error> {
 //! let mut fory = Fory::default().mode(Mode::Compatible);
 //! fory.register::<Dog>(100);
 //!
@@ -1037,23 +1037,6 @@
 //!     let data = vec![1, 2, 3];
 //!     fory.borrow().serialize(&data)
 //! })
-//! # }
-//! ```
-//!
-//! Or use thread-safe primitives:
-//!
-//! ```rust,ignore
-//! use once_cell::sync::Lazy;
-//! use parking_lot::Mutex;
-//! use fory::Fory;
-//!
-//! static FORY: Lazy<Mutex<Fory>> = Lazy::new(|| {
-//!     Mutex::new(Fory::default())
-//! });
-//!
-//! # fn serialize_data() -> Vec<u8> {
-//! let data = vec![1, 2, 3];
-//! FORY.lock().serialize(&data)
 //! # }
 //! ```
 //!

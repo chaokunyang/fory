@@ -57,7 +57,7 @@
 //!
 //! ```rust
 //! use fory::{Fory, Error};
-//! use fory_derive::ForyObject;
+//! use fory::ForyObject;
 //!
 //! #[derive(ForyObject, Debug, PartialEq)]
 //! struct User {
@@ -111,7 +111,7 @@
 //!
 //! ```rust
 //! use fory::{Fory, Error};
-//! use fory_derive::ForyObject;
+//! use fory::ForyObject;
 //! use std::collections::HashMap;
 //!
 //! #[derive(ForyObject, Debug, PartialEq)]
@@ -230,9 +230,8 @@
 //! - All clones of a weak pointer share the same internal cell for automatic updates
 //!
 //! ```rust
-//! use fory::{Fory, Error};
-//! use fory_derive::ForyObject;
-//! use fory_core::serializer::weak::RcWeak;
+//! use fory::{Fory, Error, RcWeak};
+//! use fory::ForyObject;
 //! use std::rc::Rc;
 //! use std::cell::RefCell;
 //!
@@ -274,9 +273,8 @@
 //! **Thread-Safe Circular Graphs with Arc:**
 //!
 //! ```rust
-//! use fory::{Fory, Error};
-//! use fory_derive::ForyObject;
-//! use fory_core::serializer::weak::ArcWeak;
+//! use fory::{Fory, Error, ArcWeak};
+//! use fory::ForyObject;
 //! use std::sync::{Arc, Mutex};
 //!
 //! #[derive(ForyObject)]
@@ -336,11 +334,8 @@
 //! #### Basic Trait Object Serialization
 //!
 //! ```rust
-//! use fory::{Fory, register_trait_type};
-//! use fory_core::serializer::Serializer;
-//! use fory_derive::ForyObject;
-//! use fory::Mode;
-//! use fory::Error;
+//! use fory::{Fory, register_trait_type, Serializer, Mode, Error};
+//! use fory::ForyObject;
 //!
 //! trait Animal: Serializer {
 //!     fn speak(&self) -> String;
@@ -411,7 +406,7 @@
 //! use fory::Error;
 //! use std::rc::Rc;
 //! use std::any::Any;
-//! use fory_derive::ForyObject;
+//! use fory::ForyObject;
 //!
 //! #[derive(ForyObject)]
 //! struct Dog { name: String }
@@ -440,7 +435,7 @@
 //! use fory::Error;
 //! use std::sync::Arc;
 //! use std::any::Any;
-//! use fory_derive::ForyObject;
+//! use fory::ForyObject;
 //!
 //! #[derive(ForyObject)]
 //! struct Cat { name: String }
@@ -468,11 +463,8 @@
 //! automatically handles the conversion without needing wrappers:
 //!
 //! ```rust
-//! use fory::{Fory, register_trait_type};
-//! use fory_core::serializer::Serializer;
-//! use fory_derive::ForyObject;
-//! use fory::Mode;
-//! use fory::Error;
+//! use fory::{Fory, register_trait_type, Serializer, Mode, Error};
+//! use fory::ForyObject;
 //! use std::sync::Arc;
 //! use std::rc::Rc;
 //!
@@ -537,9 +529,8 @@
 //! The `register_trait_type!` macro generates `AnimalRc` and `AnimalArc` wrapper types:
 //!
 //! ```rust
-//! use fory::{Fory, Mode, Error, register_trait_type};
-//! use fory_core::serializer::Serializer;
-//! use fory_derive::ForyObject;
+//! use fory::{Fory, Mode, Error, register_trait_type, Serializer};
+//! use fory::ForyObject;
 //! use std::sync::Arc;
 //! use std::rc::Rc;
 //!
@@ -612,7 +603,7 @@
 //!
 //! ```rust
 //! use fory::{Fory, Error, Mode};
-//! use fory_derive::ForyObject;
+//! use fory::ForyObject;
 //! use std::collections::HashMap;
 //!
 //! #[derive(ForyObject, Debug)]
@@ -675,7 +666,7 @@
 //! ```rust
 //! use fory::Fory;
 //! use fory::Error;
-//! use fory_derive::ForyObject;
+//! use fory::ForyObject;
 //!
 //! #[derive(ForyObject, Debug, PartialEq, Default)]
 //! enum Status {
@@ -716,10 +707,7 @@
 //! the binary buffer.
 //!
 //! ```rust
-//! use fory::Fory;
-//! use fory_core::resolver::context::{ReadContext, WriteContext};
-//! use fory_core::serializer::{Serializer, ForyDefault};
-//! use fory::Error;
+//! use fory::{Fory, ReadContext, WriteContext, Serializer, ForyDefault, Error};
 //! use std::any::Any;
 //!
 //! #[derive(Debug, PartialEq, Default)]
@@ -952,7 +940,7 @@
 //!
 //! ```rust
 //! use fory::{Fory, Mode};
-//! use fory_derive::ForyObject;
+//! use fory::ForyObject;
 //!
 //! let mut fory = Fory::default()
 //!     .mode(Mode::Compatible)
@@ -1003,7 +991,7 @@
 //!
 //! ```rust
 //! use fory::{Fory, Error};
-//! use fory_derive::ForyObject;
+//! use fory::ForyObject;
 //!
 //! #[derive(ForyObject)]
 //! struct Data {
@@ -1059,6 +1047,6 @@
 
 pub use fory_core::{
     error::Error, fory::Fory, register_trait_type, row::from_row, row::to_row, types::Mode,
-    types::TypeId, ArcWeak, RcWeak,
+    types::TypeId, ArcWeak, ForyDefault, RcWeak, ReadContext, Serializer, WriteContext,
 };
 pub use fory_derive::{ForyObject, ForyRow};

@@ -40,8 +40,8 @@
 //! ## Example — Parent/Child Graph
 //!
 //! ```rust,ignore
-//! use fory_core::serializer::weak::RcWeak;
-//! use fory_core::fory::Fory;
+//! use fory_core::RcWeak;
+//! use fory_core::Fory;
 //! use std::cell::RefCell;
 //! use std::rc::Rc;
 //! use fory_derive::ForyObject;
@@ -90,8 +90,8 @@
 //! ## Example — Arc for Multi-Threaded Graphs
 //!
 //! ```rust,ignore
-//! use fory_core::serializer::weak::ArcWeak;
-//! use fory_core::fory::Fory;
+//! use fory_core::ArcWeak;
+//! use fory_core::Fory;
 //! use std::sync::{Arc, Mutex};
 //! use fory_derive::ForyObject;
 //!

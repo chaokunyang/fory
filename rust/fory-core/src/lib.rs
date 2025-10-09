@@ -70,7 +70,7 @@
 //! Define custom traits and register implementations:
 //!
 //! ```rust,ignore
-//! use fory_core::{fory::Fory, register_trait_type, serializer::Serializer, types::Mode};
+//! use fory_core::{Fory, register_trait_type, Serializer, Mode};
 //! use fory_derive::ForyObject;
 //!
 //! trait Animal: Serializer {
@@ -119,7 +119,7 @@
 //! For reference-counted trait objects, use them directly in struct fields:
 //!
 //! ```rust,ignore
-//! # use fory_core::serializer::Serializer;
+//! # use fory_core::Serializer;
 //! # use fory_derive::ForyObject;
 //! # use std::rc::Rc;
 //! # use std::sync::Arc;
@@ -141,7 +141,7 @@
 //! you can use the core types directly for advanced use cases.
 //!
 //! ```rust
-//! use fory_core::{fory::Fory, error::Error, types::Mode};
+//! use fory_core::{Fory, Error, Mode};
 //! use fory_core::row::{to_row, from_row};
 //!
 //! // Create a Fory instance
@@ -169,3 +169,5 @@ pub mod util;
 pub use paste;
 
 pub use crate::serializer::weak::{ArcWeak, RcWeak};
+pub use crate::serializer::{ForyDefault, Serializer};
+pub use crate::resolver::context::{ReadContext, WriteContext};

@@ -28,7 +28,7 @@
 //! # Example
 //! ```rust
 //! use std::sync::Mutex;
-//! use fory_core::serializer::{Serializer, ForyDefault};
+//! use fory_core::{Serializer, ForyDefault};
 //!
 //! let mutex = Mutex::new(42);
 //! // Can be serialized by the Fory framework

@@ -913,6 +913,7 @@ let fory = Fory::default().max_dyn_depth(10); // Allow up to 10 levels
 - **Decrease**: For stricter security requirements or shallow data structures
 
 **Protected types:**
+
 - `Box<dyn Any>`, `Rc<dyn Any>`, `Arc<dyn Any>`
 - `Box<dyn Trait>`, `Rc<dyn Trait>`, `Arc<dyn Trait>` (trait objects)
 - `RcWeak<T>`, `ArcWeak<T>`

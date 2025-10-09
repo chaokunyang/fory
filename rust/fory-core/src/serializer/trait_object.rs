@@ -572,11 +572,10 @@ impl Serializer for Box<dyn Serializer> {
 
     fn fory_read(context: &mut ReadContext, is_field: bool) -> Result<Self, Error> {
         let fory_type_id = read_trait_object_headers(context)?;
-
+        context.inc_depth()?;
         let type_resolver = context.get_fory().get_type_resolver();
 
         if let Some(harness) = type_resolver.get_harness(fory_type_id) {
-            context.inc_depth()?;
             let deserializer_fn = harness.get_read_fn();
             let to_serializer_fn = harness.get_to_serializer();
             let boxed_any = deserializer_fn(context, is_field, true)?;
@@ -585,6 +584,7 @@ impl Serializer for Box<dyn Serializer> {
             Ok(trait_object)
         } else {
             use crate::types::TypeId;
+            context.dec_depth();
             match fory_type_id {
                 id if id == TypeId::LIST as u32 => {
                     Err(Error::Other(anyhow::anyhow!(

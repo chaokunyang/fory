@@ -33,14 +33,13 @@ Add Apache Fory™ to your `Cargo.toml`:
 ```toml
 [dependencies]
 fory = "0.13"
-fory-derive = "0.13"
 ```
 
 ### Basic Example
 
 ```rust
 use fory::{Fory, Error};
-use fory_derive::ForyObject;
+use fory::ForyObject;
 
 #[derive(ForyObject, Debug, PartialEq)]
 struct User {
@@ -86,7 +85,7 @@ Apache Fory™ provides automatic serialization of complex object graphs, preser
 
 ```rust
 use fory::{Fory, Error};
-use fory_derive::ForyObject;
+use fory::ForyObject;
 use std::collections::HashMap;
 
 #[derive(ForyObject, Debug, PartialEq, Default)]
@@ -191,8 +190,8 @@ To serialize circular references like parent-child relationships or doubly-linke
 
 ```rust
 use fory::{Fory, Error};
-use fory_derive::ForyObject;
-use fory_core::serializer::weak::RcWeak;
+use fory::ForyObject;
+use fory::RcWeak;
 use std::rc::Rc;
 use std::cell::RefCell;
 
@@ -244,8 +243,8 @@ for child in &decoded.borrow().children {
 
 ```rust
 use fory::{Fory, Error};
-use fory_derive::ForyObject;
-use fory_core::serializer::weak::ArcWeak;
+use fory::ForyObject;
+use fory::ArcWeak;
 use std::sync::{Arc, Mutex};
 
 #[derive(ForyObject)]
@@ -303,10 +302,10 @@ Apache Fory™ supports polymorphic serialization through trait objects, enablin
 #### Basic Trait Object Serialization
 
 ```rust
-use fory_core::{Fory, register_trait_type};
-use fory_core::serializer::Serializer;
-use fory_derive::ForyObject;
-use fory_core::types::Mode;
+use fory::{Fory, register_trait_type};
+use fory::Serializer;
+use fory::ForyObject;
+use fory::Mode;
 
 trait Animal: Serializer {
     fn speak(&self) -> String;
@@ -511,8 +510,8 @@ Apache Fory™ supports schema evolution in **Compatible mode**, allowing serial
 
 ```rust
 use fory::Fory;
-use fory_core::types::Mode;
-use fory_derive::ForyObject;
+use fory::Mode;
+use fory::ForyObject;
 use std::collections::HashMap;
 
 #[derive(ForyObject, Debug)]
@@ -566,7 +565,7 @@ Apache Fory™ supports enums without data payloads (C-style enums). Each varian
 - Default variant support with `#[default]`
 
 ```rust
-use fory_derive::ForyObject;
+use fory::ForyObject;
 
 #[derive(ForyObject, Debug, PartialEq, Default)]
 enum Status {
@@ -596,26 +595,27 @@ For types that don't support `#[derive(ForyObject)]`, implement the `Serializer`
 - Performance-critical custom encoding
 
 ```rust
-use fory_core::fory::{Fory, read_data, write_data};
-use fory_core::resolver::context::{ReadContext, WriteContext};
-use fory_core::serializer::{Serializer, ForyDefault};
-use fory_core::error::Error;
+use fory::{Fory, ReadContext, WriteContext, Serializer, ForyDefault, Error};
 use std::any::Any;
 
 #[derive(Debug, PartialEq, Default)]
 struct CustomType {
     value: i32,
+    name: String,
 }
 
 impl Serializer for CustomType {
     fn fory_write_data(&self, context: &mut WriteContext, is_field: bool) {
-        write_data(&self.value, context, is_field);
+        context.writer.write_i32(self.value);
+        context.writer.write_varuint32(self.name.len() as u32);
+        context.writer.write_utf8_string(&self.name);
     }
 
     fn fory_read_data(context: &mut ReadContext, is_field: bool) -> Result<Self, Error> {
-        Ok(Self {
-            value: read_data(context, is_field)?,
-        })
+        let value = context.reader.read_i32();
+        let len = context.reader.read_varuint32() as usize;
+        let name = context.reader.read_utf8_string(len);
+        Ok(Self { value, name })
     }
 
     fn fory_type_id_dyn(&self, fory: &Fory) -> u32 {
@@ -636,7 +636,10 @@ impl ForyDefault for CustomType {
 let mut fory = Fory::default();
 fory.register_serializer::<CustomType>(100);
 
-let custom = CustomType { value: 42 };
+let custom = CustomType {
+    value: 42,
+    name: "test".to_string(),
+};
 let bytes = fory.serialize(&custom);
 let decoded: CustomType = fory.deserialize(&bytes)?;
 assert_eq!(custom, decoded);
@@ -671,7 +674,7 @@ Apache Fory™ provides a high-performance **row format** for zero-copy deserial
 
 ```rust
 use fory::{to_row, from_row};
-use fory_derive::ForyRow;
+use fory::ForyRow;
 use std::collections::BTreeMap;
 
 #[derive(ForyRow)]
@@ -782,7 +785,7 @@ Apache Fory™ supports seamless data exchange across multiple languages:
 
 ```rust
 use fory::Fory;
-use fory_core::types::Mode;
+use fory::Mode;
 
 // Enable cross-language mode
 let mut fory = Fory::default()
@@ -881,7 +884,7 @@ let fory = Fory::default(); // SchemaConsistent by default
 Allows independent schema evolution:
 
 ```rust
-use fory_core::types::Mode;
+use fory::Mode;
 
 let fory = Fory::default().mode(Mode::Compatible);
 ```

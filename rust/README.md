@@ -920,28 +920,7 @@ let fory = Fory::default().max_dyn_depth(10); // Allow up to 10 levels
 - Collection types (Vec, HashMap, HashSet)
 - Nested struct types in Compatible mode
 
-**Example:**
-
-```rust
-use fory::{Fory, Error};
-
-let fory = Fory::default().max_dyn_depth(3);
-
-// This will succeed - 3 levels of nesting
-let inner: Box<dyn Any> = Box::new(42i32);
-let middle: Box<dyn Any> = Box::new(inner);
-let outer: Box<dyn Any> = Box::new(middle);
-
-let bytes = fory.serialize(&outer);
-let result: Result<Box<dyn Any>, Error> = fory.deserialize(&bytes);
-assert!(result.is_ok());
-
-// This will fail - 4 levels exceeds limit
-let too_deep: Box<dyn Any> = Box::new(outer);
-let bytes = fory.serialize(&too_deep);
-let result: Result<Box<dyn Any>, Error> = fory.deserialize(&bytes);
-assert!(result.is_err()); // Error: Maximum dynamic object nesting depth exceeded
-```
+Note: Static data types (non-dynamic types) are secure by nature and not subject to depth limits, as their structure is known at compile time.
 
 ## 🛠️ Development
 

@@ -43,6 +43,7 @@ pub struct Fory {
     type_resolver: TypeResolver,
     metastring_resolver: Rc<RefCell<MetaStringResolver>>,
     compress_string: bool,
+    max_dyn_depth: u32,
 }
 
 impl Default for Fory {
@@ -54,6 +55,7 @@ impl Default for Fory {
             type_resolver: TypeResolver::default(),
             metastring_resolver: Rc::from(RefCell::from(MetaStringResolver::default())),
             compress_string: false,
+            max_dyn_depth: 5,
         }
     }
 }
@@ -73,6 +75,11 @@ impl Fory {
 
     pub fn compress_string(mut self, compress_string: bool) -> Self {
         self.compress_string = compress_string;
+        self
+    }
+
+    pub fn max_dyn_depth(mut self, max_dyn_depth: u32) -> Self {
+        self.max_dyn_depth = max_dyn_depth;
         self
     }
 
@@ -159,9 +166,11 @@ impl Fory {
 
     pub fn deserialize<T: Serializer + ForyDefault>(&self, bf: &[u8]) -> Result<T, Error> {
         let reader = Reader::new(bf);
-        let mut context = ReadContext::new(self, reader);
+        let mut context = ReadContext::new(self, reader, self.max_dyn_depth);
         let result = self.deserialize_with_context(&mut context);
-        assert_eq!(context.reader.slice_after_cursor().len(), 0);
+        if result.is_ok() {
+            assert_eq!(context.reader.slice_after_cursor().len(), 0);
+        }
         result
     }
 

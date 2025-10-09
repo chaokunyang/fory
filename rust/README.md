@@ -889,6 +889,59 @@ use fory::Mode;
 let fory = Fory::default().mode(Mode::Compatible);
 ```
 
+## ⚙️ Configuration
+
+### Maximum Dynamic Object Nesting Depth
+
+Apache Fory™ provides protection against stack overflow from deeply nested dynamic objects during deserialization. By default, the maximum nesting depth is set to 5 levels for trait objects and containers.
+
+**Default configuration:**
+
+```rust
+let fory = Fory::default(); // max_dyn_depth = 5
+```
+
+**Custom depth limit:**
+
+```rust
+let fory = Fory::default().max_dyn_depth(10); // Allow up to 10 levels
+```
+
+**When to adjust:**
+
+- **Increase**: For legitimate deeply nested data structures
+- **Decrease**: For stricter security requirements or shallow data structures
+
+**Protected types:**
+- `Box<dyn Any>`, `Rc<dyn Any>`, `Arc<dyn Any>`
+- `Box<dyn Trait>`, `Rc<dyn Trait>`, `Arc<dyn Trait>` (trait objects)
+- `RcWeak<T>`, `ArcWeak<T>`
+- Collection types (Vec, HashMap, HashSet)
+- Nested struct types in Compatible mode
+
+**Example:**
+
+```rust
+use fory::{Fory, Error};
+
+let fory = Fory::default().max_dyn_depth(3);
+
+// This will succeed - 3 levels of nesting
+let inner: Box<dyn Any> = Box::new(42i32);
+let middle: Box<dyn Any> = Box::new(inner);
+let outer: Box<dyn Any> = Box::new(middle);
+
+let bytes = fory.serialize(&outer);
+let result: Result<Box<dyn Any>, Error> = fory.deserialize(&bytes);
+assert!(result.is_ok());
+
+// This will fail - 4 levels exceeds limit
+let too_deep: Box<dyn Any> = Box::new(outer);
+let bytes = fory.serialize(&too_deep);
+let result: Result<Box<dyn Any>, Error> = fory.deserialize(&bytes);
+assert!(result.is_err()); // Error: Maximum dynamic object nesting depth exceeded
+```
+
 ## 🛠️ Development
 
 ### Building

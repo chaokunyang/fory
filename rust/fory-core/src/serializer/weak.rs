@@ -53,8 +53,8 @@
 //!     children: Vec<Rc<RefCell<Node>>>,
 //! }
 //!
-//! let mut fury = Fory::default();
-//! fury.register::<Node>(2000);
+//! let mut fory = Fory::default();
+//! fory.register::<Node>(2000);
 //!
 //! let parent = Rc::new(RefCell::new(Node {
 //!     value: 1,
@@ -77,8 +77,8 @@
 //! parent.borrow_mut().children.push(child1);
 //! parent.borrow_mut().children.push(child2);
 //!
-//! let serialized = fury.serialize(&parent);
-//! let deserialized: Rc<RefCell<Node>> = fury.deserialize(&serialized).unwrap();
+//! let serialized = fory.serialize(&parent);
+//! let deserialized: Rc<RefCell<Node>> = fory.deserialize(&serialized).unwrap();
 //!
 //! assert_eq!(deserialized.borrow().children.len(), 2);
 //! for child in &deserialized.borrow().children {
@@ -101,14 +101,14 @@
 //!     parent: ArcWeak<Mutex<Node>>,
 //! }
 //!
-//! let mut fury = Fory::default();
-//! fury.register::<Node>(2001);
+//! let mut fory = Fory::default();
+//! fory.register::<Node>(2001);
 //!
 //! let parent = Arc::new(Mutex::new(Node { value: 1, parent: ArcWeak::new() }));
 //! let child = Arc::new(Mutex::new(Node { value: 2, parent: ArcWeak::from(&parent) }));
 //!
-//! let serialized = fury.serialize(&child);
-//! let deserialized: Arc<Mutex<Node>> = fury.deserialize(&serialized).unwrap();
+//! let serialized = fory.serialize(&child);
+//! let deserialized: Arc<Mutex<Node>> = fory.deserialize(&serialized).unwrap();
 //! assert_eq!(deserialized.lock().unwrap().value, 2);
 //! ```
 //!

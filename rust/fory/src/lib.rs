@@ -15,20 +15,20 @@
 // specific language governing permissions and limitations
 // under the License.
 
-//! # Apache Fury™ Rust
+//! # Apache Fory™ Rust
 //!
-//! **Apache Fury™** is a blazingly fast multi-language serialization framework powered by
+//! **Apache Fory™** is a blazingly fast multi-language serialization framework powered by
 //! **JIT compilation** and **zero-copy** techniques, providing up to ultra-fast performance
 //! while maintaining ease of use and safety.
 //!
 //! The Rust implementation provides versatile and high-performance serialization with
 //! automatic memory management and compile-time type safety.
 //!
-//! **GitHub**: <https://github.com/apache/fury>
+//! **GitHub**: <https://github.com/apache/fory>
 //!
-//! ## Why Apache Fury™ Rust?
+//! ## Why Apache Fory™ Rust?
 //!
-//! Apache Fury™ Rust solves the fundamental serialization dilemma: **you shouldn't have to
+//! Apache Fory™ Rust solves the fundamental serialization dilemma: **you shouldn't have to
 //! choose between performance and developer experience**. Traditional frameworks force you
 //! to pick between fast but fragile binary formats, flexible but slow text-based protocols,
 //! or complex solutions that don't support your language's advanced features.
@@ -45,7 +45,7 @@
 //!
 //! ## Quick Start
 //!
-//! Add Apache Fury™ to your `Cargo.toml`:
+//! Add Apache Fory™ to your `Cargo.toml`:
 //!
 //! ```toml
 //! [dependencies]
@@ -85,7 +85,7 @@
 //!
 //! ## Core Features
 //!
-//! Apache Fury™ Rust provides seven major feature categories, each designed to solve
+//! Apache Fory™ Rust provides seven major feature categories, each designed to solve
 //! specific serialization challenges in modern applications.
 //!
 //! ### 1. Object Graph Serialization
@@ -94,7 +94,7 @@
 //! preserving relationships and hierarchies.
 //!
 //! **Why it matters:** Most real-world applications deal with complex domain models,
-//! not just flat data structures. Apache Fury™ handles arbitrary nesting depth,
+//! not just flat data structures. Apache Fory™ handles arbitrary nesting depth,
 //! collections, and optional fields without manual mapping code.
 //!
 //! **Technical approach:** The `#[derive(ForyObject)]` macro generates efficient
@@ -165,7 +165,7 @@
 //! models) are common in real applications but notoriously difficult to serialize. Most
 //! frameworks either panic on circular references or require extensive manual handling.
 //!
-//! **Technical approach:** Apache Fury™ maintains a reference tracking map during
+//! **Technical approach:** Apache Fory™ maintains a reference tracking map during
 //! serialization. When the same object is encountered multiple times, it's serialized
 //! only once and subsequent references use IDs. Weak pointers (`RcWeak<T>`, `ArcWeak<T>`)
 //! break cycles by serializing as references without strong ownership.
@@ -459,7 +459,7 @@
 //!
 //! #### Rc/Arc-Based Trait Objects in Structs
 //!
-//! For struct fields containing `Rc<dyn Trait>` or `Arc<dyn Trait>`, Apache Fury™
+//! For struct fields containing `Rc<dyn Trait>` or `Arc<dyn Trait>`, Apache Fory™
 //! automatically handles the conversion without needing wrappers:
 //!
 //! ```rust
@@ -583,7 +583,7 @@
 //! evolve independently. Schema evolution enables zero-downtime deployments where
 //! services can be updated gradually without breaking communication.
 //!
-//! **Technical approach:** In Compatible mode, Apache Fury™ includes field names and
+//! **Technical approach:** In Compatible mode, Apache Fory™ includes field names and
 //! type metadata in the serialized data. During deserialization, fields are matched by
 //! name, allowing for additions, deletions, and reordering.
 //!
@@ -843,7 +843,7 @@
 //!
 //! ## Supported Types
 //!
-//! Apache Fury™ supports a comprehensive type system for maximum flexibility.
+//! Apache Fory™ supports a comprehensive type system for maximum flexibility.
 //!
 //! ### Primitive Types
 //!
@@ -892,7 +892,7 @@
 //!
 //! ## Serialization Modes
 //!
-//! Apache Fury™ supports two serialization modes to balance between performance
+//! Apache Fory™ supports two serialization modes to balance between performance
 //! and flexibility:
 //!
 //! ### SchemaConsistent Mode (Default)
@@ -934,7 +934,7 @@
 //! JavaScript, and Rust implementations.
 //!
 //! **Why it matters:** Microservices architectures often use multiple languages.
-//! Apache Fury™ provides a common binary protocol without IDL files or code generation.
+//! Apache Fory™ provides a common binary protocol without IDL files or code generation.
 //!
 //! **How to enable:**
 //!
@@ -962,7 +962,7 @@
 //!
 //! ## Performance Characteristics
 //!
-//! Apache Fury™ Rust is designed for maximum performance through multiple techniques:
+//! Apache Fory™ Rust is designed for maximum performance through multiple techniques:
 //!
 //! **Compile-time code generation:**
 //! - Procedural macros generate specialized serialization code
@@ -986,7 +986,7 @@
 //!
 //! ## Error Handling
 //!
-//! Apache Fury™ uses `Result<T, Error>` for all fallible operations, providing
+//! Apache Fory™ uses `Result<T, Error>` for all fallible operations, providing
 //! comprehensive error handling:
 //!
 //! ```rust
@@ -1039,11 +1039,11 @@
 //!
 //! ## Documentation
 //!
-//! - **[Protocol Specification](https://fury.apache.org/docs/specification/fury_xlang_serialization_spec)** - Binary protocol details
-//! - **[Row Format Specification](https://fury.apache.org/docs/specification/fury_row_format_spec)** - Row format internals
-//! - **[Type Mapping](https://fury.apache.org/docs/guide/xlang_type_mapping)** - Cross-language type mappings
+//! - **[Protocol Specification](https://fory.apache.org/docs/specification/fory_xlang_serialization_spec)** - Binary protocol details
+//! - **[Row Format Specification](https://fory.apache.org/docs/specification/fory_row_format_spec)** - Row format internals
+//! - **[Type Mapping](https://fory.apache.org/docs/guide/xlang_type_mapping)** - Cross-language type mappings
 //! - **[API Documentation](https://docs.rs/fory)** - Complete API reference
-//! - **[GitHub Repository](https://github.com/apache/fury)** - Source code and issue tracking
+//! - **[GitHub Repository](https://github.com/apache/fory)** - Source code and issue tracking
 
 pub use fory_core::{
     error::Error, fory::Fory, register_trait_type, row::from_row, row::to_row, types::Mode,

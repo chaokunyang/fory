@@ -879,7 +879,7 @@ pub(super) fn get_sort_fields_ts(fields: &[&Field]) -> TokenStream {
                 || ty.starts_with("LinkedList<")
             {
                 collection_fields.push((ident, ty.to_string(), TypeId::LIST as u32));
-            } else if ty.starts_with("HashSet<") {
+            } else if ty.starts_with("HashSet<") || ty.starts_with("BTreeSet<") {
                 collection_fields.push((ident, ty.to_string(), TypeId::SET as u32));
             } else if ty.starts_with("HashMap<") {
                 map_fields.push((ident, ty.to_string(), TypeId::MAP as u32));

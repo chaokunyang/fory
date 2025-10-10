@@ -25,7 +25,7 @@ use crate::serializer::collection::{
 
 use crate::serializer::{ForyDefault, Serializer};
 use crate::types::TypeId;
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::mem;
 
 impl<T: Serializer + ForyDefault + Eq + std::hash::Hash> Serializer for HashSet<T> {
@@ -65,5 +65,45 @@ impl<T: Serializer + ForyDefault + Eq + std::hash::Hash> Serializer for HashSet<
 impl<T> ForyDefault for HashSet<T> {
     fn fory_default() -> Self {
         HashSet::new()
+    }
+}
+
+impl<T: Serializer + ForyDefault + Ord> Serializer for BTreeSet<T> {
+    fn fory_write_data(&self, context: &mut WriteContext, is_field: bool) {
+        write_collection(self, context, is_field);
+    }
+
+    fn fory_write_type_info(context: &mut WriteContext, is_field: bool) {
+        write_collection_type_info(context, is_field, TypeId::SET as u32);
+    }
+
+    fn fory_read_data(context: &mut ReadContext, _is_field: bool) -> Result<Self, Error> {
+        read_collection(context)
+    }
+
+    fn fory_read_type_info(context: &mut ReadContext, is_field: bool) {
+        read_collection_type_info(context, is_field, TypeId::SET as u32)
+    }
+
+    fn fory_reserved_space() -> usize {
+        mem::size_of::<i32>()
+    }
+
+    fn fory_get_type_id(_fory: &Fory) -> u32 {
+        TypeId::SET as u32
+    }
+
+    fn fory_type_id_dyn(&self, _fory: &Fory) -> u32 {
+        TypeId::SET as u32
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+}
+
+impl<T> ForyDefault for BTreeSet<T> {
+    fn fory_default() -> Self {
+        BTreeSet::new()
     }
 }

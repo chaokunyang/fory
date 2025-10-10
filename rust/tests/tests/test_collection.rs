@@ -17,7 +17,43 @@
 
 use fory_core::{Fory, Serializer};
 use fory_derive::ForyObject;
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeSet, BinaryHeap, HashSet};
+
+#[test]
+fn test_btreeset_roundtrip() {
+    let fory: Fory = Fory::default();
+
+    let mut original = BTreeSet::new();
+    original.insert(1);
+    original.insert(2);
+    original.insert(3);
+
+    let trait_obj: Box<dyn Serializer> = Box::new(original.clone());
+    let serialized = fory.serialize(&trait_obj);
+
+    let deserialized_concrete: BTreeSet<i32> = fory.deserialize(&serialized).unwrap();
+
+    assert_eq!(deserialized_concrete.len(), 3);
+    assert!(deserialized_concrete.contains(&1));
+    assert!(deserialized_concrete.contains(&2));
+    assert!(deserialized_concrete.contains(&3));
+}
+
+#[test]
+fn test_binaryheap_roundtrip() {
+    let fory: Fory = Fory::default();
+
+    let mut original = BinaryHeap::new();
+    original.push(10);
+    original.push(20);
+    original.push(15);
+
+    let serialized = fory.serialize(&original);
+    let deserialized_concrete: BinaryHeap<i32> = fory.deserialize(&serialized).unwrap();
+
+    assert_eq!(deserialized_concrete.len(), 3);
+    assert_eq!(deserialized_concrete.peek(), Some(&20));
+}
 
 #[derive(ForyObject, Debug, Clone, PartialEq)]
 struct SetContainer {
@@ -59,22 +95,27 @@ fn test_set_container() {
     assert!(deserialized.hash_set.contains("three"));
 }
 
+#[derive(ForyObject, Debug)]
+struct HeapContainer {
+    binary_heap: BinaryHeap<i32>,
+}
+
 #[test]
-fn test_btreeset_roundtrip() {
-    let fory: Fory = Fory::default();
+fn test_heap_container() {
+    let mut fory: Fory = Fory::default();
+    fory.register::<HeapContainer>(100);
 
-    let mut original = BTreeSet::new();
-    original.insert(1);
-    original.insert(2);
-    original.insert(3);
+    let mut binary_heap = BinaryHeap::new();
+    binary_heap.push(3);
+    binary_heap.push(1);
+    binary_heap.push(2);
 
-    let trait_obj: Box<dyn Serializer> = Box::new(original.clone());
-    let serialized = fory.serialize(&trait_obj);
+    let original = HeapContainer { binary_heap };
 
-    let deserialized_concrete: BTreeSet<i32> = fory.deserialize(&serialized).unwrap();
+    let serialized = fory.serialize(&original);
+    let deserialized: HeapContainer = fory.deserialize(&serialized).unwrap();
 
-    assert_eq!(deserialized_concrete.len(), 3);
-    assert!(deserialized_concrete.contains(&1));
-    assert!(deserialized_concrete.contains(&2));
-    assert!(deserialized_concrete.contains(&3));
+    assert_eq!(deserialized.binary_heap.len(), 3);
+    assert_eq!(deserialized.binary_heap.len(), 3);
+    assert_eq!(deserialized.binary_heap.peek(), Some(&3));
 }

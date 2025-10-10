@@ -881,7 +881,7 @@ pub(super) fn get_sort_fields_ts(fields: &[&Field]) -> TokenStream {
                 collection_fields.push((ident, ty.to_string(), TypeId::LIST as u32));
             } else if ty.starts_with("HashSet<") {
                 collection_fields.push((ident, ty.to_string(), TypeId::SET as u32));
-            } else if ty.starts_with("HashMap<") {
+            } else if ty.starts_with("HashMap<") || ty.starts_with("BTreeMap<") {
                 map_fields.push((ident, ty.to_string(), TypeId::MAP as u32));
             } else {
                 struct_or_enum_fields.push((ident, ty.to_string(), 0));

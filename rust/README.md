@@ -745,13 +745,15 @@ assert_eq!(prefs.values().get(0), "en");
 
 ### Collections
 
-| Rust Type        | Description    |
-| ---------------- | -------------- |
-| `Vec<T>`         | Dynamic array  |
-| `HashMap<K, V>`  | Hash map       |
-| `BTreeMap<K, V>` | Ordered map    |
-| `HashSet<T>`     | Hash set       |
-| `Option<T>`      | Optional value |
+| Rust Type        | Description        |
+| ---------------- | ------------------ |
+| `Vec<T>`         | Dynamic array      |
+| `VecDeque<T>`    | Double-ended queue |
+| `LinkedList<T>`  | Doubly-linked list |
+| `HashMap<K, V>`  | Hash map           |
+| `BTreeMap<K, V>` | Ordered map        |
+| `HashSet<T>`     | Hash set           |
+| `Option<T>`      | Optional value     |
 
 ### Smart Pointers
 

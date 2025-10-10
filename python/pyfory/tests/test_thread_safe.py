@@ -135,17 +135,13 @@ def test_thread_safe_fory_ref_tracking():
 
 def test_thread_safe_fory_cross_thread_registration():
     fory = ThreadSafeFory()
+    fory.register(Person)
+    fory.register(Address)
 
-    registration_errors = []
+    results = []
+    errors = []
 
-    def register_types():
-        try:
-            fory.register(Person)
-            fory.register(Address)
-        except Exception as e:
-            registration_errors.append(e)
-
-    def serialize_data(thread_id, results, errors):
+    def serialize_data(thread_id):
         try:
             person = Person(name=f"User{thread_id}", age=25)
             data = fory.serialize(person)
@@ -154,17 +150,9 @@ def test_thread_safe_fory_cross_thread_registration():
         except Exception as e:
             errors.append((thread_id, e))
 
-    reg_thread = threading.Thread(target=register_types)
-    reg_thread.start()
-    reg_thread.join()
-
-    assert len(registration_errors) == 0
-
-    results = []
-    errors = []
     threads = []
     for i in range(5):
-        t = threading.Thread(target=serialize_data, args=(i, results, errors))
+        t = threading.Thread(target=serialize_data, args=(i,))
         threads.append(t)
         t.start()
 
@@ -173,3 +161,17 @@ def test_thread_safe_fory_cross_thread_registration():
 
     assert len(errors) == 0
     assert len(results) == 5
+
+
+def test_thread_safe_fory_register_after_use():
+    fory = ThreadSafeFory()
+    fory.register(Person)
+
+    person = Person(name="Alice", age=30)
+    fory.serialize(person)
+
+    try:
+        fory.register(Address)
+        assert False, "Should raise RuntimeError"
+    except RuntimeError as e:
+        assert "Cannot register types after Fory instances have been created" in str(e)

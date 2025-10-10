@@ -16,6 +16,7 @@
 // under the License.
 
 use fory_core::fory::Fory;
+use fory_derive::ForyObject;
 use std::collections::{LinkedList, VecDeque};
 
 #[test]
@@ -104,4 +105,35 @@ fn test_linkedlist_bool() {
     let bin = fory.serialize(&list);
     let obj: LinkedList<bool> = fory.deserialize(&bin).expect("deserialize");
     assert_eq!(list, obj);
+}
+
+#[derive(ForyObject, PartialEq, Debug)]
+struct CollectionStruct {
+    vec_field: Vec<i32>,
+    deque_field: VecDeque<String>,
+    list_field: LinkedList<bool>,
+}
+
+#[test]
+fn test_struct_with_collections() {
+    let mut fory = Fory::default();
+    fory.register_by_name::<CollectionStruct>("CollectionStruct");
+
+    let mut deque = VecDeque::new();
+    deque.push_back("hello".to_string());
+    deque.push_back("world".to_string());
+
+    let mut list = LinkedList::new();
+    list.push_back(true);
+    list.push_back(false);
+
+    let data = CollectionStruct {
+        vec_field: vec![1, 2, 3],
+        deque_field: deque,
+        list_field: list,
+    };
+
+    let bin = fory.serialize(&data);
+    let obj: CollectionStruct = fory.deserialize(&bin).expect("deserialize");
+    assert_eq!(data, obj);
 }

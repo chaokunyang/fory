@@ -802,22 +802,22 @@ const PRIMITIVE_ARRAY_NAMES: [&str; 7] = [
     "Vec<f64>",
 ];
 
+fn get_primitive_type_id(ty: &str) -> u32 {
+    match ty {
+        "bool" => TypeId::BOOL as u32,
+        "i8" => TypeId::INT8 as u32,
+        "i16" => TypeId::INT16 as u32,
+        "i32" => TypeId::INT32 as u32,
+        "i64" => TypeId::INT64 as u32,
+        "f32" => TypeId::FLOAT32 as u32,
+        "f64" => TypeId::FLOAT64 as u32,
+        _ => unreachable!("Unknown primitive type: {}", ty),
+    }
+}
+
 fn group_fields_by_type(fields: &[&Field]) -> FieldGroups {
     fn extract_option_inner(s: &str) -> Option<&str> {
         s.strip_prefix("Option<")?.strip_suffix(">")
-    }
-
-    fn get_primitive_type_id(ty: &str) -> u32 {
-        match ty {
-            "bool" => TypeId::BOOL as u32,
-            "i8" => TypeId::INT8 as u32,
-            "i16" => TypeId::INT16 as u32,
-            "i32" => TypeId::INT32 as u32,
-            "i64" => TypeId::INT64 as u32,
-            "f32" => TypeId::FLOAT32 as u32,
-            "f64" => TypeId::FLOAT64 as u32,
-            _ => unreachable!("Unknown primitive type: {}", ty),
-        }
     }
 
     let mut primitive_fields = Vec::new();
@@ -842,8 +842,9 @@ fn group_fields_by_type(fields: &[&Field]) -> FieldGroups {
             primitive_fields.push((ident, ty.to_string(), type_id));
         } else if ty == "String" {
             string_fields.push((ident, ty.to_string(), TypeId::STRING as u32));
-        } else if PRIMITIVE_ARRAY_NAMES.contains(&ty)
-            || ty.starts_with("Vec<")
+        } else if PRIMITIVE_ARRAY_NAMES.contains(&ty) {
+            other_fields.push((ident, ty.to_string(), 0));
+        } else if ty.starts_with("Vec<")
             || ty.starts_with("VecDeque<")
             || ty.starts_with("LinkedList<")
             || ty.starts_with("BinaryHeap<")

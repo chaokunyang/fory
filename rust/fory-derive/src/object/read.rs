@@ -473,7 +473,6 @@ pub fn gen_read_compatible(fields: &[&Field]) -> TokenStream {
     let declare_ts: Vec<TokenStream> = declare_var(fields);
     let assign_ts: Vec<TokenStream> = assign_value(fields);
 
-    let consistent_fields_loop_ts = get_fields_loop_ts(fields);
     quote! {
         let remote_type_id = context.reader.read_varuint32();
         let meta_index = context.reader.read_varuint32();
@@ -489,8 +488,7 @@ pub fn gen_read_compatible(fields: &[&Field]) -> TokenStream {
         let local_type_hash = i64::from_le_bytes(high_bytes.try_into().unwrap());
         if meta.get_hash() == local_type_hash {
             // fast path
-            let field_names = <Self as fory_core::serializer::StructSerializer>::fory_get_sorted_field_names(fory);
-            #consistent_fields_loop_ts
+            <Self as fory_core::serializer::Serializer>::fory_read_data(fory, context, false)
         } else {
             for _field in fields.iter() {
                 #(#pattern_items else)* {

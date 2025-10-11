@@ -781,7 +781,6 @@ Field will be ordered as following, every group of fields will have its own orde
   - when same size and type id, sort by snake case field name
   - types: bool/int8/int16/int32/varint32/int64/varint64/sliint64/float16/float32/float64
 - nullable primitive fields: same order as primitive fields
-- enum fields: sort by snake case field name
 - string fields: sort by snake case field name
 - list fields: sort by snake case field name
 - set fields: sort by snake case field name

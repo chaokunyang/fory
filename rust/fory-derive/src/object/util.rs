@@ -789,7 +789,6 @@ type FieldGroups = (
     FieldGroup,
     FieldGroup,
     FieldGroup,
-    FieldGroup,
 );
 
 const PRIMITIVE_TYPE_NAMES: [&str; 7] = ["bool", "i8", "i16", "i32", "i64", "f32", "f64"];
@@ -823,7 +822,6 @@ fn group_fields_by_type(fields: &[&Field]) -> FieldGroups {
 
     let mut primitive_fields = Vec::new();
     let mut nullable_primitive_fields = Vec::new();
-    let mut enum_fields = Vec::new();
     let mut string_fields = Vec::new();
     let mut list_fields = Vec::new();
     let mut set_fields = Vec::new();
@@ -936,7 +934,6 @@ fn group_fields_by_type(fields: &[&Field]) -> FieldGroups {
     nullable_primitive_fields.sort_by(numeric_sorter);
     primitive_fields.extend(nullable_primitive_fields);
 
-    enum_fields.sort_by(name_sorter);
     string_fields.sort_by(name_sorter);
     list_fields.sort_by(name_sorter);
     set_fields.sort_by(name_sorter);
@@ -945,7 +942,6 @@ fn group_fields_by_type(fields: &[&Field]) -> FieldGroups {
 
     (
         primitive_fields,
-        enum_fields,
         string_fields,
         list_fields,
         set_fields,
@@ -955,18 +951,10 @@ fn group_fields_by_type(fields: &[&Field]) -> FieldGroups {
 }
 
 pub(crate) fn get_sorted_field_names(fields: &[&Field]) -> Vec<String> {
-    let (
-        primitive_fields,
-        enum_fields,
-        string_fields,
-        list_fields,
-        set_fields,
-        map_fields,
-        other_fields,
-    ) = group_fields_by_type(fields);
+    let (primitive_fields, string_fields, list_fields, set_fields, map_fields, other_fields) =
+        group_fields_by_type(fields);
 
     let mut all_fields = primitive_fields;
-    all_fields.extend(enum_fields);
     all_fields.extend(string_fields);
     all_fields.extend(list_fields);
     all_fields.extend(set_fields);

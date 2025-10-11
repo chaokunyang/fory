@@ -250,7 +250,7 @@ macro_rules! basic_type_deserialize {
     };
 }
 
-pub fn try_primitive_vec_type(node: &TypeNode) -> Option<TokenStream> {
+pub(super) fn try_primitive_vec_type(node: &TypeNode) -> Option<TokenStream> {
     if node.name != "Vec" {
         return None;
     }
@@ -263,7 +263,7 @@ pub fn try_primitive_vec_type(node: &TypeNode) -> Option<TokenStream> {
     None
 }
 
-pub fn try_vec_of_option_primitive(node: &TypeNode) -> Option<TokenStream> {
+pub(super) fn try_vec_of_option_primitive(node: &TypeNode) -> Option<TokenStream> {
     if node.name != "Vec" {
         return None;
     }
@@ -283,7 +283,7 @@ pub fn try_vec_of_option_primitive(node: &TypeNode) -> Option<TokenStream> {
     None
 }
 
-pub fn try_primitive_vec_type_name(node: &NullableTypeNode) -> Option<String> {
+pub(super) fn try_primitive_vec_type_name(node: &NullableTypeNode) -> Option<String> {
     if node.name != "Vec" {
         return None;
     }

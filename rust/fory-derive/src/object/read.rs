@@ -221,7 +221,7 @@ fn get_fields_loop_ts(fields: &[&Field]) -> TokenStream {
     #[cfg(not(feature = "fields-loop-unroll"))]
     let loop_ts = quote! {
         for field_name in field_names {
-            match field_name.as_str() {
+            match *field_name {
                 #(#match_ts),*
                 , _ => unreachable!()
             }
@@ -232,8 +232,8 @@ fn get_fields_loop_ts(fields: &[&Field]) -> TokenStream {
         let loop_item_ts = fields.iter().enumerate().map(|(i, _field)| {
             let idx = syn::Index::from(i);
             quote! {
-                let field_name = field_names.get(#idx).unwrap();
-                match field_name.as_str() {
+                let field_name = field_names[#idx];
+                match field_name {
                     #(#match_ts),*
                     , _ => { unreachable!() }
                 }
@@ -275,7 +275,6 @@ pub fn gen_read_data(fields: &[&Field]) -> TokenStream {
         quote! {
              #(#declare_var_ts)*
             let field_names = <Self as fory_core::serializer::StructSerializer>::fory_get_sorted_field_names(fory);
-            let field_names = field_names.as_ref();
             #loop_ts
         }
     };
@@ -518,7 +517,6 @@ pub fn gen_read_compatible(fields: &[&Field]) -> TokenStream {
         if meta.get_hash() == local_type_hash {
             // fast path
             let field_names = <Self as fory_core::serializer::StructSerializer>::fory_get_sorted_field_names(fory);
-            let field_names = field_names.as_ref();
             #consistent_fields_loop_ts
         } else {
             for _field in fields.iter() {

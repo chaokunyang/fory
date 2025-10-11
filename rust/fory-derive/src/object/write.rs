@@ -229,7 +229,7 @@ pub fn gen_write_data(fields: &[&Field]) -> TokenStream {
         #[cfg(not(feature = "fields-loop-unroll"))]
         let loop_ts = quote! {
             for field_name in sorted_field_names {
-                match field_name.as_str() {
+                match *field_name {
                     #(#match_ts),*
                     , _ => {unreachable!()}
                 }
@@ -240,8 +240,8 @@ pub fn gen_write_data(fields: &[&Field]) -> TokenStream {
             let loop_item_ts = fields.iter().enumerate().map(|(i, _field)| {
                 let idx = syn::Index::from(i);
                 quote! {
-                    let field_name = sorted_field_names.get(#idx).unwrap();
-                    match field_name.as_str() {
+                    let field_name = sorted_field_names[#idx];
+                    match field_name {
                         #(#match_ts),*
                         , _ => { unreachable!() }
                     }
@@ -253,7 +253,6 @@ pub fn gen_write_data(fields: &[&Field]) -> TokenStream {
         };
         quote! {
             let sorted_field_names = <Self as fory_core::serializer::StructSerializer>::fory_get_sorted_field_names(fory);
-            let sorted_field_names = sorted_field_names.as_ref();
             #loop_ts
         }
     };

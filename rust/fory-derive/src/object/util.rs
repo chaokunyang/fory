@@ -782,196 +782,206 @@ pub(super) fn generic_tree_to_tokens(node: &TypeNode) -> TokenStream {
 }
 
 type FieldGroup = Vec<(String, String, u32)>;
-type FieldGroups = (FieldGroup, FieldGroup, FieldGroup, FieldGroup, FieldGroup, FieldGroup, FieldGroup);
-pub(super) fn get_sort_fields_ts(fields: &[&Field]) -> TokenStream {
-    fn group_fields(fields: &[&Field]) -> FieldGroups {
-        const PRIMITIVE_TYPE_NAMES: [&str; 7] = ["bool", "i8", "i16", "i32", "i64", "f32", "f64"];
-        const PRIMITIVE_ARRAY_NAMES: [&str; 7] = [
-            "Vec<bool>",
-            "Vec<i8>",
-            "Vec<i16>",
-            "Vec<i32>",
-            "Vec<i64>",
-            "Vec<f32>",
-            "Vec<f64>",
-        ];
+type FieldGroups = (
+    FieldGroup,
+    FieldGroup,
+    FieldGroup,
+    FieldGroup,
+    FieldGroup,
+    FieldGroup,
+    FieldGroup,
+);
 
-        fn extract_option_inner(s: &str) -> Option<&str> {
-            s.strip_prefix("Option<")?.strip_suffix(">")
+fn group_fields_by_type(fields: &[&Field]) -> FieldGroups {
+    const PRIMITIVE_TYPE_NAMES: [&str; 7] = ["bool", "i8", "i16", "i32", "i64", "f32", "f64"];
+    const PRIMITIVE_ARRAY_NAMES: [&str; 7] = [
+        "Vec<bool>",
+        "Vec<i8>",
+        "Vec<i16>",
+        "Vec<i32>",
+        "Vec<i64>",
+        "Vec<f32>",
+        "Vec<f64>",
+    ];
+
+    fn extract_option_inner(s: &str) -> Option<&str> {
+        s.strip_prefix("Option<")?.strip_suffix(">")
+    }
+
+    fn get_primitive_type_id(ty: &str) -> u32 {
+        match ty {
+            "bool" => TypeId::BOOL as u32,
+            "i8" => TypeId::INT8 as u32,
+            "i16" => TypeId::INT16 as u32,
+            "i32" => TypeId::INT32 as u32,
+            "i64" => TypeId::INT64 as u32,
+            "f32" => TypeId::FLOAT32 as u32,
+            "f64" => TypeId::FLOAT64 as u32,
+            _ => unreachable!("Unknown primitive type: {}", ty),
         }
+    }
 
-        fn get_primitive_type_id(ty: &str) -> u32 {
-            match ty {
-                "bool" => TypeId::BOOL as u32,
-                "i8" => TypeId::INT8 as u32,
-                "i16" => TypeId::INT16 as u32,
-                "i32" => TypeId::INT32 as u32,
-                "i64" => TypeId::INT64 as u32,
-                "f32" => TypeId::FLOAT32 as u32,
-                "f64" => TypeId::FLOAT64 as u32,
-                _ => unreachable!("Unknown primitive type: {}", ty),
-            }
-        }
+    let mut primitive_fields = Vec::new();
+    let mut nullable_primitive_fields = Vec::new();
+    let mut enum_fields = Vec::new();
+    let mut string_fields = Vec::new();
+    let mut list_fields = Vec::new();
+    let mut set_fields = Vec::new();
+    let mut map_fields = Vec::new();
+    let mut other_fields = Vec::new();
 
-        let mut primitive_fields = Vec::new();
-        let mut nullable_primitive_fields = Vec::new();
-        let mut enum_fields = Vec::new();
-        let mut string_fields = Vec::new();
-        let mut list_fields = Vec::new();
-        let mut set_fields = Vec::new();
-        let mut map_fields = Vec::new();
-        let mut other_fields = Vec::new();
-
-        // First handle Forward fields separately to avoid borrow checker issues
-        for field in fields {
-            if is_forward_field(&field.ty) {
-                let ident = field.ident.as_ref().unwrap().to_string();
-                list_fields.push((ident, "Forward".to_string(), TypeId::LIST as u32));
-            }
-        }
-
-        let mut group_field = |ident: String, ty: &str| {
-            if PRIMITIVE_TYPE_NAMES.contains(&ty) {
-                let type_id = get_primitive_type_id(ty);
-                primitive_fields.push((ident, ty.to_string(), type_id));
-            } else if ty == "String" {
-                string_fields.push((ident, ty.to_string(), TypeId::STRING as u32));
-            } else if PRIMITIVE_ARRAY_NAMES.contains(&ty)
-                || ty.starts_with("Vec<")
-                || ty.starts_with("VecDeque<")
-                || ty.starts_with("LinkedList<")
-                || ty.starts_with("BinaryHeap<")
-            {
-                list_fields.push((ident, ty.to_string(), TypeId::LIST as u32));
-            } else if ty.starts_with("HashSet<") || ty.starts_with("BTreeSet<") {
-                set_fields.push((ident, ty.to_string(), TypeId::SET as u32));
-            } else if ty.starts_with("HashMap<") || ty.starts_with("BTreeMap<") {
-                map_fields.push((ident, ty.to_string(), TypeId::MAP as u32));
-            } else {
-                other_fields.push((ident, ty.to_string(), 0));
-            }
-        };
-
-        for field in fields {
+    // First handle Forward fields separately to avoid borrow checker issues
+    for field in fields {
+        if is_forward_field(&field.ty) {
             let ident = field.ident.as_ref().unwrap().to_string();
+            list_fields.push((ident, "Forward".to_string(), TypeId::LIST as u32));
+        }
+    }
 
-            // Skip if already handled as Forward field
-            if is_forward_field(&field.ty) {
-                continue;
-            }
+    let mut group_field = |ident: String, ty: &str| {
+        if PRIMITIVE_TYPE_NAMES.contains(&ty) {
+            let type_id = get_primitive_type_id(ty);
+            primitive_fields.push((ident, ty.to_string(), type_id));
+        } else if ty == "String" {
+            string_fields.push((ident, ty.to_string(), TypeId::STRING as u32));
+        } else if PRIMITIVE_ARRAY_NAMES.contains(&ty)
+            || ty.starts_with("Vec<")
+            || ty.starts_with("VecDeque<")
+            || ty.starts_with("LinkedList<")
+            || ty.starts_with("BinaryHeap<")
+        {
+            list_fields.push((ident, ty.to_string(), TypeId::LIST as u32));
+        } else if ty.starts_with("HashSet<") || ty.starts_with("BTreeSet<") {
+            set_fields.push((ident, ty.to_string(), TypeId::SET as u32));
+        } else if ty.starts_with("HashMap<") || ty.starts_with("BTreeMap<") {
+            map_fields.push((ident, ty.to_string(), TypeId::MAP as u32));
+        } else {
+            other_fields.push((ident, ty.to_string(), 0));
+        }
+    };
 
-            let ty: String = field
-                .ty
-                .to_token_stream()
-                .to_string()
-                .chars()
-                .filter(|c| !c.is_whitespace())
-                .collect::<String>();
-            // handle Option<Primitive> specially
-            if let Some(inner) = extract_option_inner(&ty) {
-                if PRIMITIVE_TYPE_NAMES.contains(&inner) {
-                    let type_id = get_primitive_type_id(inner);
-                    nullable_primitive_fields.push((ident, ty.to_string(), type_id));
-                } else {
-                    // continue to handle Option<not Primitive>
-                    // already avoid Option<Option<T>> at compile-time
-                    group_field(ident, inner);
-                }
+    for field in fields {
+        let ident = field.ident.as_ref().unwrap().to_string();
+
+        // Skip if already handled as Forward field
+        if is_forward_field(&field.ty) {
+            continue;
+        }
+
+        let ty: String = field
+            .ty
+            .to_token_stream()
+            .to_string()
+            .chars()
+            .filter(|c| !c.is_whitespace())
+            .collect::<String>();
+        // handle Option<Primitive> specially
+        if let Some(inner) = extract_option_inner(&ty) {
+            if PRIMITIVE_TYPE_NAMES.contains(&inner) {
+                let type_id = get_primitive_type_id(inner);
+                nullable_primitive_fields.push((ident, ty.to_string(), type_id));
             } else {
-                group_field(ident, &ty);
+                // continue to handle Option<not Primitive>
+                // already avoid Option<Option<T>> at compile-time
+                group_field(ident, inner);
             }
-        }
-
-        fn get_primitive_type_size(type_id_num: u32) -> i32 {
-            let type_id = TypeId::try_from(type_id_num as i16).unwrap();
-            match type_id {
-                TypeId::BOOL => 1,
-                TypeId::INT8 => 1,
-                TypeId::INT16 => 2,
-                TypeId::INT32 => 4,
-                TypeId::VAR_INT32 => 4,
-                TypeId::INT64 => 8,
-                TypeId::VAR_INT64 => 8,
-                TypeId::FLOAT16 => 2,
-                TypeId::FLOAT32 => 4,
-                TypeId::FLOAT64 => 8,
-                _ => unreachable!(),
-            }
-        }
-
-        fn is_compress(type_id: u32) -> bool {
-            [
-                TypeId::INT32 as u32,
-                TypeId::INT64 as u32,
-                TypeId::VAR_INT32 as u32,
-                TypeId::VAR_INT64 as u32,
-            ]
-            .contains(&type_id)
-        }
-
-        fn numeric_sorter(
-            a: &(String, String, u32),
-            b: &(String, String, u32),
-        ) -> std::cmp::Ordering {
-            let compress_a = is_compress(a.2);
-            let compress_b = is_compress(b.2);
-            let size_a = get_primitive_type_size(a.2);
-            let size_b = get_primitive_type_size(b.2);
-            compress_a
-                .cmp(&compress_b)
-                .then_with(|| size_b.cmp(&size_a))
-                .then_with(|| a.0.cmp(&b.0))
-        }
-
-        fn name_sorter(
-            a: &(String, String, u32),
-            b: &(String, String, u32),
-        ) -> std::cmp::Ordering {
-            a.0.cmp(&b.0)
-        }
-
-        primitive_fields.sort_by(numeric_sorter);
-        nullable_primitive_fields.sort_by(numeric_sorter);
-        primitive_fields.extend(nullable_primitive_fields);
-
-        enum_fields.sort_by(name_sorter);
-        string_fields.sort_by(name_sorter);
-        list_fields.sort_by(name_sorter);
-        set_fields.sort_by(name_sorter);
-        map_fields.sort_by(name_sorter);
-        other_fields.sort_by(name_sorter);
-
-        (
-            primitive_fields,
-            enum_fields,
-            string_fields,
-            list_fields,
-            set_fields,
-            map_fields,
-            other_fields,
-        )
-    }
-
-    fn gen_static_str_array(fields: &[(String, String, u32)]) -> TokenStream {
-        let names = fields.iter().map(|(name, _, _)| {
-            quote! { #name }
-        });
-        quote! {
-            &[#(#names),*]
+        } else {
+            group_field(ident, &ty);
         }
     }
 
-    let (primitive_fields, enum_fields, string_fields, list_fields, set_fields, map_fields, other_fields) =
-        group_fields(fields);
+    fn get_primitive_type_size(type_id_num: u32) -> i32 {
+        let type_id = TypeId::try_from(type_id_num as i16).unwrap();
+        match type_id {
+            TypeId::BOOL => 1,
+            TypeId::INT8 => 1,
+            TypeId::INT16 => 2,
+            TypeId::INT32 => 4,
+            TypeId::VAR_INT32 => 4,
+            TypeId::INT64 => 8,
+            TypeId::VAR_INT64 => 8,
+            TypeId::FLOAT16 => 2,
+            TypeId::FLOAT32 => 4,
+            TypeId::FLOAT64 => 8,
+            _ => unreachable!(),
+        }
+    }
 
-    gen_static_str_array(&{
-        let mut all_fields = primitive_fields;
-        all_fields.extend(enum_fields);
-        all_fields.extend(string_fields);
-        all_fields.extend(list_fields);
-        all_fields.extend(set_fields);
-        all_fields.extend(map_fields);
-        all_fields.extend(other_fields);
-        all_fields
-    })
+    fn is_compress(type_id: u32) -> bool {
+        [
+            TypeId::INT32 as u32,
+            TypeId::INT64 as u32,
+            TypeId::VAR_INT32 as u32,
+            TypeId::VAR_INT64 as u32,
+        ]
+        .contains(&type_id)
+    }
+
+    fn numeric_sorter(a: &(String, String, u32), b: &(String, String, u32)) -> std::cmp::Ordering {
+        let compress_a = is_compress(a.2);
+        let compress_b = is_compress(b.2);
+        let size_a = get_primitive_type_size(a.2);
+        let size_b = get_primitive_type_size(b.2);
+        compress_a
+            .cmp(&compress_b)
+            .then_with(|| size_b.cmp(&size_a))
+            .then_with(|| a.0.cmp(&b.0))
+    }
+
+    fn name_sorter(a: &(String, String, u32), b: &(String, String, u32)) -> std::cmp::Ordering {
+        a.0.cmp(&b.0)
+    }
+
+    primitive_fields.sort_by(numeric_sorter);
+    nullable_primitive_fields.sort_by(numeric_sorter);
+    primitive_fields.extend(nullable_primitive_fields);
+
+    enum_fields.sort_by(name_sorter);
+    string_fields.sort_by(name_sorter);
+    list_fields.sort_by(name_sorter);
+    set_fields.sort_by(name_sorter);
+    map_fields.sort_by(name_sorter);
+    other_fields.sort_by(name_sorter);
+
+    (
+        primitive_fields,
+        enum_fields,
+        string_fields,
+        list_fields,
+        set_fields,
+        map_fields,
+        other_fields,
+    )
+}
+
+pub(crate) fn get_sorted_field_names(fields: &[&Field]) -> Vec<String> {
+    let (
+        primitive_fields,
+        enum_fields,
+        string_fields,
+        list_fields,
+        set_fields,
+        map_fields,
+        other_fields,
+    ) = group_fields_by_type(fields);
+
+    let mut all_fields = primitive_fields;
+    all_fields.extend(enum_fields);
+    all_fields.extend(string_fields);
+    all_fields.extend(list_fields);
+    all_fields.extend(set_fields);
+    all_fields.extend(map_fields);
+    all_fields.extend(other_fields);
+
+    all_fields.into_iter().map(|(name, _, _)| name).collect()
+}
+
+pub(super) fn get_sort_fields_ts(fields: &[&Field]) -> TokenStream {
+    let sorted_names = get_sorted_field_names(fields);
+    let names = sorted_names.iter().map(|name| {
+        quote! { #name }
+    });
+    quote! {
+        &[#(#names),*]
+    }
 }

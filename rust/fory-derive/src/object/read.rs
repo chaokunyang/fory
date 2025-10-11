@@ -83,16 +83,14 @@ fn assign_value(fields: &[&Field]) -> Vec<TokenStream> {
         .collect()
 }
 
-fn gen_read_match_arm(field: &Field, private_ident: &Ident) -> TokenStream {
+fn gen_read_field(field: &Field, private_ident: &Ident) -> TokenStream {
     let ty = &field.ty;
-    let name_str = field.ident.as_ref().unwrap().to_string();
-
     match classify_trait_object_field(ty) {
         StructField::BoxDyn(trait_name) => {
             let from_any_fn = format_ident!("from_any_internal_{}", trait_name);
             let helper_mod = format_ident!("__fory_trait_helpers_{}", trait_name);
             quote! {
-                #name_str => {
+                {
                     let ref_flag = context.reader.read_i8();
                     if ref_flag != fory_core::types::RefFlag::NotNullValue as i8 {
                         panic!("Expected NotNullValue for trait object field");
@@ -117,7 +115,7 @@ fn gen_read_match_arm(field: &Field, private_ident: &Ident) -> TokenStream {
             let wrapper_ty = types.wrapper_ty;
             let trait_ident = types.trait_ident;
             quote! {
-                #name_str => {
+                {
                     let wrapper = <#wrapper_ty as fory_core::serializer::Serializer>::fory_read(fory, context, true)?;
                     #private_ident = std::rc::Rc::<dyn #trait_ident>::from(wrapper);
                 }
@@ -128,7 +126,7 @@ fn gen_read_match_arm(field: &Field, private_ident: &Ident) -> TokenStream {
             let wrapper_ty = types.wrapper_ty;
             let trait_ident = types.trait_ident;
             quote! {
-                #name_str => {
+                {
                     let wrapper = <#wrapper_ty as fory_core::serializer::Serializer>::fory_read(fory, context, true)?;
                     #private_ident = std::sync::Arc::<dyn #trait_ident>::from(wrapper);
                 }
@@ -139,7 +137,7 @@ fn gen_read_match_arm(field: &Field, private_ident: &Ident) -> TokenStream {
             let wrapper_ty = types.wrapper_ty;
             let trait_ident = types.trait_ident;
             quote! {
-                #name_str => {
+                {
                     let wrapper_vec = <Vec<#wrapper_ty> as fory_core::serializer::Serializer>::fory_read(fory, context, true)?;
                     #private_ident = Some(wrapper_vec.into_iter()
                         .map(|w| std::rc::Rc::<dyn #trait_ident>::from(w))
@@ -152,7 +150,7 @@ fn gen_read_match_arm(field: &Field, private_ident: &Ident) -> TokenStream {
             let wrapper_ty = types.wrapper_ty;
             let trait_ident = types.trait_ident;
             quote! {
-                #name_str => {
+                {
                     let wrapper_vec = <Vec<#wrapper_ty> as fory_core::serializer::Serializer>::fory_read(fory, context, true)?;
                     #private_ident = Some(wrapper_vec.into_iter()
                         .map(|w| std::sync::Arc::<dyn #trait_ident>::from(w))
@@ -165,7 +163,7 @@ fn gen_read_match_arm(field: &Field, private_ident: &Ident) -> TokenStream {
             let wrapper_ty = types.wrapper_ty;
             let trait_ident = types.trait_ident;
             quote! {
-                #name_str => {
+                {
                     let wrapper_map = <std::collections::HashMap<#key_ty, #wrapper_ty> as fory_core::serializer::Serializer>::fory_read(fory, context, true)?;
                     #private_ident = Some(wrapper_map.into_iter()
                         .map(|(k, v)| (k, std::rc::Rc::<dyn #trait_ident>::from(v)))
@@ -178,7 +176,7 @@ fn gen_read_match_arm(field: &Field, private_ident: &Ident) -> TokenStream {
             let wrapper_ty = types.wrapper_ty;
             let trait_ident = types.trait_ident;
             quote! {
-                #name_str => {
+                {
                     let wrapper_map = <std::collections::HashMap<#key_ty, #wrapper_ty> as fory_core::serializer::Serializer>::fory_read(fory, context, true)?;
                     #private_ident = Some(wrapper_map.into_iter()
                         .map(|(k, v)| (k, std::sync::Arc::<dyn #trait_ident>::from(v)))
@@ -188,14 +186,14 @@ fn gen_read_match_arm(field: &Field, private_ident: &Ident) -> TokenStream {
         }
         StructField::Forward => {
             quote! {
-                #name_str => {
+                {
                     #private_ident = Some(fory_core::serializer::Serializer::fory_read(fory, context, true)?);
                 }
             }
         }
         _ => {
             quote! {
-                #name_str => {
+                {
                     let skip_ref_flag = fory_core::serializer::get_skip_ref_flag::<#ty>(fory);
                     #private_ident = Some(fory_core::serializer::read_ref_info_data::<#ty>(fory, context, true, skip_ref_flag, false)?);
                 }
@@ -211,39 +209,16 @@ pub fn gen_read_type_info() -> TokenStream {
 }
 
 fn get_fields_loop_ts(fields: &[&Field]) -> TokenStream {
-    let match_ts: Vec<_> = fields
+    let read_fields_ts: Vec<_> = fields
         .iter()
         .map(|field| {
             let private_ident = create_private_field_name(field);
-            gen_read_match_arm(field, &private_ident)
+            gen_read_field(field, &private_ident)
         })
         .collect();
-    #[cfg(not(feature = "fields-loop-unroll"))]
-    let loop_ts = quote! {
-        for field_name in field_names {
-            match *field_name {
-                #(#match_ts),*
-                , _ => unreachable!()
-            }
-        }
-    };
-    #[cfg(feature = "fields-loop-unroll")]
-    let loop_ts = {
-        let loop_item_ts = fields.iter().enumerate().map(|(i, _field)| {
-            let idx = syn::Index::from(i);
-            quote! {
-                let field_name = field_names[#idx];
-                match field_name {
-                    #(#match_ts),*
-                    , _ => { unreachable!() }
-                }
-            }
-        });
-        quote! {
-            #(#loop_item_ts)*
-        }
-    };
-    loop_ts
+    quote! {
+        #(#read_fields_ts)*
+    }
 }
 
 pub fn gen_read_data(fields: &[&Field]) -> TokenStream {

@@ -936,31 +936,31 @@ fn group_fields_by_type(fields: &[&Field]) -> FieldGroups {
     primitive_fields.extend(nullable_primitive_fields);
 
     string_fields.sort_by(name_sorter);
+    other_fields.sort_by(name_sorter);
     list_fields.sort_by(name_sorter);
     set_fields.sort_by(name_sorter);
     map_fields.sort_by(name_sorter);
-    other_fields.sort_by(name_sorter);
 
     (
         primitive_fields,
         string_fields,
+        other_fields,
         list_fields,
         set_fields,
         map_fields,
-        other_fields,
     )
 }
 
 pub(crate) fn get_sorted_field_names(fields: &[&Field]) -> Vec<String> {
-    let (primitive_fields, string_fields, list_fields, set_fields, map_fields, other_fields) =
+    let (primitive_fields, string_fields, other_fields, list_fields, set_fields, map_fields) =
         group_fields_by_type(fields);
 
     let mut all_fields = primitive_fields;
     all_fields.extend(string_fields);
+    all_fields.extend(other_fields);
     all_fields.extend(list_fields);
     all_fields.extend(set_fields);
     all_fields.extend(map_fields);
-    all_fields.extend(other_fields);
 
     all_fields.into_iter().map(|(name, _, _)| name).collect()
 }

@@ -480,10 +480,10 @@ impl TypeMetaLayer {
         sorted_field_infos.extend(primitive_fields);
         sorted_field_infos.extend(nullable_primitive_fields);
         sorted_field_infos.extend(string_fields);
+        sorted_field_infos.extend(other_fields);
         sorted_field_infos.extend(list_fields);
         sorted_field_infos.extend(set_fields);
         sorted_field_infos.extend(map_fields);
-        sorted_field_infos.extend(other_fields);
         sorted_field_infos
     }
 

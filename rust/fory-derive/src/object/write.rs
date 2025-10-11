@@ -16,7 +16,8 @@
 // under the License.
 
 use super::util::{
-    classify_trait_object_field, create_wrapper_types_arc, create_wrapper_types_rc, StructField,
+    classify_trait_object_field, create_wrapper_types_arc, create_wrapper_types_rc, skip_ref_flag,
+    StructField,
 };
 use proc_macro2::TokenStream;
 use quote::quote;
@@ -101,8 +102,6 @@ pub fn gen_write_type_info() -> TokenStream {
 fn gen_write_field(field: &Field) -> TokenStream {
     let ty = &field.ty;
     let ident = &field.ident;
-    let name_str = ident.as_ref().unwrap().to_string();
-
     match classify_trait_object_field(ty) {
         StructField::BoxDyn(_) => {
             quote! {
@@ -208,11 +207,9 @@ fn gen_write_field(field: &Field) -> TokenStream {
             }
         }
         _ => {
+            let skip_ref_flag = skip_ref_flag(ty);
             quote! {
-                {
-                    let skip_ref_flag = fory_core::serializer::get_skip_ref_flag::<#ty>(fory);
-                    fory_core::serializer::write_ref_info_data::<#ty>(&self.#ident, fory, context, true, skip_ref_flag, false);
-                }
+                fory_core::serializer::write_ref_info_data::<#ty>(&self.#ident, fory, context, true, #skip_ref_flag, false);
             }
         }
     }

@@ -792,18 +792,18 @@ type FieldGroups = (
     FieldGroup,
 );
 
-fn group_fields_by_type(fields: &[&Field]) -> FieldGroups {
-    const PRIMITIVE_TYPE_NAMES: [&str; 7] = ["bool", "i8", "i16", "i32", "i64", "f32", "f64"];
-    const PRIMITIVE_ARRAY_NAMES: [&str; 7] = [
-        "Vec<bool>",
-        "Vec<i8>",
-        "Vec<i16>",
-        "Vec<i32>",
-        "Vec<i64>",
-        "Vec<f32>",
-        "Vec<f64>",
-    ];
+const PRIMITIVE_TYPE_NAMES: [&str; 7] = ["bool", "i8", "i16", "i32", "i64", "f32", "f64"];
+const PRIMITIVE_ARRAY_NAMES: [&str; 7] = [
+    "Vec<bool>",
+    "Vec<i8>",
+    "Vec<i16>",
+    "Vec<i32>",
+    "Vec<i64>",
+    "Vec<f32>",
+    "Vec<f64>",
+];
 
+fn group_fields_by_type(fields: &[&Field]) -> FieldGroups {
     fn extract_option_inner(s: &str) -> Option<&str> {
         s.strip_prefix("Option<")?.strip_suffix(">")
     }
@@ -984,4 +984,9 @@ pub(super) fn get_sort_fields_ts(fields: &[&Field]) -> TokenStream {
     quote! {
         &[#(#names),*]
     }
+}
+
+pub(crate) fn skip_ref_flag(ty: &Type) -> bool {
+    // !T::fory_is_option() && PRIMITIVE_TYPES.contains(&elem_type_id)
+    PRIMITIVE_TYPE_NAMES.contains(&extract_type_name(ty).as_str())
 }

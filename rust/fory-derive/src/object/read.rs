@@ -21,7 +21,7 @@ use syn::{Field, Type};
 
 use super::util::{
     classify_trait_object_field, create_wrapper_types_arc, create_wrapper_types_rc,
-    generic_tree_to_tokens, parse_generic_tree, NullableTypeNode, StructField,
+    generic_tree_to_tokens, parse_generic_tree, skip_ref_flag, NullableTypeNode, StructField,
 };
 
 fn create_private_field_name(field: &Field) -> Ident {
@@ -192,11 +192,9 @@ fn gen_read_field(field: &Field, private_ident: &Ident) -> TokenStream {
             }
         }
         _ => {
+            let skip_ref_flag = skip_ref_flag(ty);
             quote! {
-                {
-                    let skip_ref_flag = fory_core::serializer::get_skip_ref_flag::<#ty>(fory);
-                    #private_ident = Some(fory_core::serializer::read_ref_info_data::<#ty>(fory, context, true, skip_ref_flag, false)?);
-                }
+                #private_ident = Some(fory_core::serializer::read_ref_info_data::<#ty>(fory, context, true, #skip_ref_flag, false)?);
             }
         }
     }

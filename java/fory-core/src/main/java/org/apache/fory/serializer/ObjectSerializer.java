@@ -103,6 +103,7 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
     }
     DescriptorGrouper descriptorGrouper = typeResolver.createDescriptorGrouper(descriptors, false);
     descriptors = descriptorGrouper.getSortedDescriptors();
+    System.out.println(descriptors.stream().map(f -> f.getName()).collect(Collectors.toList()));
     if (isRecord) {
       List<String> fieldNames =
           descriptors.stream().map(Descriptor::getName).collect(Collectors.toList());
@@ -132,14 +133,20 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
     }
     // write order: primitive,boxed,final,other,collection,map
     writeFinalFields(buffer, value, fory, refResolver, typeResolver);
-    writeOtherFields(buffer, value);
     writeContainerFields(buffer, value, fory, refResolver, typeResolver);
+    writeOtherFields(buffer, value);
   }
 
   private void writeOtherFields(MemoryBuffer buffer, T value) {
     for (GenericTypeField fieldInfo : otherFields) {
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       Object fieldValue = fieldAccessor.getObject(value);
+      if (fieldValue == null) {
+        buffer.writeByte(Fory.NULL_FLAG);
+      } else if (fieldValue.getClass().isEnum()) {
+        buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
+        fieldInfo.genericType.getSerializer(typeResolver).write(buffer, fieldValue);
+      }
       if (fieldInfo.trackingRef) {
         binding.writeRef(buffer, fieldValue, fieldInfo.classInfoHolder);
       } else {
@@ -286,13 +293,13 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
         fieldValues[counter++] = fieldValue;
       }
     }
-    for (GenericTypeField fieldInfo : otherFields) {
-      Object fieldValue = readOtherFieldValue(binding, fieldInfo, buffer);
-      fieldValues[counter++] = fieldValue;
-    }
     Generics generics = fory.getGenerics();
     for (GenericTypeField fieldInfo : containerFields) {
       Object fieldValue = readContainerFieldValue(binding, generics, fieldInfo, buffer);
+      fieldValues[counter++] = fieldValue;
+    }
+    for (GenericTypeField fieldInfo : otherFields) {
+      Object fieldValue = readOtherFieldValue(binding, fieldInfo, buffer);
       fieldValues[counter++] = fieldValue;
     }
     return fieldValues;
@@ -325,14 +332,14 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
         fieldAccessor.putObject(obj, fieldValue);
       }
     }
-    for (GenericTypeField fieldInfo : otherFields) {
-      Object fieldValue = readOtherFieldValue(binding, fieldInfo, buffer);
-      FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
-      fieldAccessor.putObject(obj, fieldValue);
-    }
     Generics generics = fory.getGenerics();
     for (GenericTypeField fieldInfo : containerFields) {
       Object fieldValue = readContainerFieldValue(binding, generics, fieldInfo, buffer);
+      FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
+      fieldAccessor.putObject(obj, fieldValue);
+    }
+    for (GenericTypeField fieldInfo : otherFields) {
+      Object fieldValue = readOtherFieldValue(binding, fieldInfo, buffer);
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       fieldAccessor.putObject(obj, fieldValue);
     }

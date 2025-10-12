@@ -190,9 +190,9 @@ public class DescriptorGrouper {
     descriptors.addAll(getPrimitiveDescriptors());
     descriptors.addAll(getBoxedDescriptors());
     descriptors.addAll(getFinalDescriptors());
-    descriptors.addAll(getOtherDescriptors());
     descriptors.addAll(getCollectionDescriptors());
     descriptors.addAll(getMapDescriptors());
+    descriptors.addAll(getOtherDescriptors());
     return descriptors;
   }
 

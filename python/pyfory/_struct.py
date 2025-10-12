@@ -39,7 +39,7 @@ from pyfory.type import (
     is_list_type,
     is_map_type,
     get_primitive_type_size,
-    is_primitive_array_type,
+    is_polymorphic_type,
 )
 
 from pyfory.type import is_subclass
@@ -79,6 +79,13 @@ class StructFieldSerializerVisitor(TypeVisitor):
         elem_serializer = infer_field("item", elem_type, self, types_path=types_path)
         return ListSerializer(self.fory, list, elem_serializer)
 
+    def visit_set(self, field_name, elem_type, types_path=None):
+        from pyfory.serializer import SetSerializer  # Local import
+
+        # Infer type recursively for type such as Set[Dict[str, str]]
+        elem_serializer = infer_field("item", elem_type, self, types_path=types_path)
+        return SetSerializer(self.fory, set, elem_serializer)
+
     def visit_dict(self, field_name, key_type, value_type, types_path=None):
         from pyfory.serializer import MapSerializer  # Local import
 
@@ -117,8 +124,9 @@ _time_types = {datetime.date, datetime.datetime, datetime.timedelta}
 def _sort_fields(type_resolver, field_names, serializers):
     boxed_types = []
     collection_types = []
+    set_types = []
     map_types = []
-    str_types = []
+    internal_types = []
     other_types = []
     type_ids = []
     for field_name, serializer in zip(field_names, serializers):
@@ -127,7 +135,7 @@ def _sort_fields(type_resolver, field_names, serializers):
         else:
             type_ids.append(
                 (
-                    type_resolver.get_typeinfo(serializer.type_).type_id,
+                    type_resolver.get_typeinfo(serializer.type_).type_id & 0xFF,
                     serializer,
                     field_name,
                 )
@@ -135,14 +143,21 @@ def _sort_fields(type_resolver, field_names, serializers):
     for type_id, serializer, field_name in type_ids:
         if is_primitive_type(type_id):
             container = boxed_types
+        elif type_id == TypeId.SET:
+            container = set_types
         elif is_list_type(serializer.type_):
             container = collection_types
         elif is_map_type(serializer.type_):
             container = map_types
-        elif type_id == TypeId.STRING:
-            container = str_types
-        else:
+        elif is_polymorphic_type(type_id) or type_id in {
+            TypeId.ENUM,
+            TypeId.NAMED_ENUM,
+        }:
             container = other_types
+        else:
+            assert TypeId.LOWER_BOUND < type_id < TypeId.UNKNOWN, (type_id,)
+            assert type_id != TypeId.UNKNOWN, serializer
+            container = internal_types
         container.append((type_id, serializer, field_name))
 
     def sorter(item):
@@ -160,10 +175,11 @@ def _sort_fields(type_resolver, field_names, serializers):
 
     boxed_types = sorted(boxed_types, key=numeric_sorter)
     collection_types = sorted(collection_types, key=sorter)
-    str_types = sorted(str_types, key=sorter)
+    internal_types = sorted(internal_types, key=sorter)
     map_types = sorted(map_types, key=sorter)
     other_types = sorted(other_types, key=sorter)
-    all_types = boxed_types + str_types + other_types + collection_types + map_types
+    all_types = boxed_types + internal_types + collection_types + set_types + map_types + other_types
+    print("all_types:", all_types)
     return [t[2] for t in all_types], [t[1] for t in all_types]
 
 
@@ -178,6 +194,11 @@ class StructHashVisitor(TypeVisitor):
     def visit_list(self, field_name, elem_type, types_path=None):
         # TODO add list element type to hash.
         xtype_id = self.fory.type_resolver.get_typeinfo(list).type_id
+        self._hash = self._compute_field_hash(self._hash, abs(xtype_id))
+
+    def visit_set(self, field_name, elem_type, types_path=None):
+        # TODO add set element type to hash.
+        xtype_id = self.fory.type_resolver.get_typeinfo(set).type_id
         self._hash = self._compute_field_hash(self._hash, abs(xtype_id))
 
     def visit_dict(self, field_name, key_type, value_type, types_path=None):
@@ -235,6 +256,11 @@ class StructTypeIdVisitor(TypeVisitor):
         elem_ids = infer_field("item", elem_type, self, types_path=types_path)
         return TypeId.LIST, elem_ids
 
+    def visit_set(self, field_name, elem_type, types_path=None):
+        # Infer type recursively for type such as Set[Dict[str, str]]
+        elem_ids = infer_field("item", elem_type, self, types_path=types_path)
+        return TypeId.SET, elem_ids
+
     def visit_dict(self, field_name, key_type, value_type, types_path=None):
         # Infer type recursively for type such as Dict[str, Dict[str, str]]
         key_ids = infer_field("key", key_type, self, types_path=types_path)
@@ -264,6 +290,11 @@ class StructTypeVisitor(TypeVisitor):
         # Infer type recursively for type such as List[Dict[str, str]]
         elem_types = infer_field("item", elem_type, self, types_path=types_path)
         return typing.List, elem_types
+
+    def visit_set(self, field_name, elem_type, types_path=None):
+        # Infer type recursively for type such as Set[Dict[str, str]]
+        elem_types = infer_field("item", elem_type, self, types_path=types_path)
+        return typing.Set, elem_types
 
     def visit_dict(self, field_name, key_type, value_type, types_path=None):
         # Infer type recursively for type such as Dict[str, Dict[str, str]]

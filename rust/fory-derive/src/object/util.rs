@@ -789,18 +789,10 @@ type FieldGroups = (
     FieldGroup,
     FieldGroup,
     FieldGroup,
+    FieldGroup,
 );
 
 const PRIMITIVE_TYPE_NAMES: [&str; 7] = ["bool", "i8", "i16", "i32", "i64", "f32", "f64"];
-const PRIMITIVE_ARRAY_NAMES: [&str; 7] = [
-    "Vec<bool>",
-    "Vec<i8>",
-    "Vec<i16>",
-    "Vec<i32>",
-    "Vec<i64>",
-    "Vec<f32>",
-    "Vec<f64>",
-];
 
 fn get_primitive_type_id(ty: &str) -> u32 {
     match ty {
@@ -822,7 +814,7 @@ fn group_fields_by_type(fields: &[&Field]) -> FieldGroups {
 
     let mut primitive_fields = Vec::new();
     let mut nullable_primitive_fields = Vec::new();
-    let mut string_fields = Vec::new();
+    let mut internal_type_fields = Vec::new();
     let mut list_fields = Vec::new();
     let mut set_fields = Vec::new();
     let mut map_fields = Vec::new();
@@ -832,18 +824,36 @@ fn group_fields_by_type(fields: &[&Field]) -> FieldGroups {
     for field in fields {
         if is_forward_field(&field.ty) {
             let ident = field.ident.as_ref().unwrap().to_string();
-            list_fields.push((ident, "Forward".to_string(), TypeId::LIST as u32));
+            other_fields.push((ident, "Forward".to_string(), TypeId::UNKNOWN as u32));
+        }
+    }
+
+    fn get_other_internal_type_id(ty: &str) -> u32 {
+        match ty {
+            "String" => TypeId::STRING as u32,
+            "NaiveDate" => TypeId::LOCAL_DATE as u32,
+            "NaiveDateTime" => TypeId::TIMESTAMP as u32,
+            "Duration" => TypeId::DURATION as u32,
+            "Decimal" => TypeId::DECIMAL as u32,
+            "Vec<u8>" | "bytes" => TypeId::BINARY as u32,
+            "Vec<bool>" => TypeId::BOOL_ARRAY as u32,
+            "Vec<i8>" => TypeId::INT8_ARRAY as u32,
+            "Vec<i16>" => TypeId::INT16_ARRAY as u32,
+            "Vec<i32>" => TypeId::INT32_ARRAY as u32,
+            "Vec<i64>" => TypeId::INT64_ARRAY as u32,
+            "Vec<f16>" => TypeId::FLOAT16_ARRAY as u32,
+            "Vec<f32>" => TypeId::FLOAT32_ARRAY as u32,
+            "Vec<f64>" => TypeId::FLOAT64_ARRAY as u32,
+            _ => 0,
         }
     }
 
     let mut group_field = |ident: String, ty: &str| {
         if PRIMITIVE_TYPE_NAMES.contains(&ty) {
-            let type_id = get_primitive_type_id(ty);
-            primitive_fields.push((ident, ty.to_string(), type_id));
-        } else if ty == "String" {
-            string_fields.push((ident, ty.to_string(), TypeId::STRING as u32));
-        } else if PRIMITIVE_ARRAY_NAMES.contains(&ty) {
-            other_fields.push((ident, ty.to_string(), 0));
+            primitive_fields.push((ident, ty.to_string(), get_primitive_type_id(ty)));
+        } else if get_other_internal_type_id(ty) > 0 {
+            let internal_type_id = get_other_internal_type_id(ty);
+            internal_type_fields.push((ident, ty.to_string(), internal_type_id));
         } else if ty.starts_with("Vec<")
             || ty.starts_with("VecDeque<")
             || ty.starts_with("LinkedList<")
@@ -855,7 +865,7 @@ fn group_fields_by_type(fields: &[&Field]) -> FieldGroups {
         } else if ty.starts_with("HashMap<") || ty.starts_with("BTreeMap<") {
             map_fields.push((ident, ty.to_string(), TypeId::MAP as u32));
         } else {
-            other_fields.push((ident, ty.to_string(), 0));
+            other_fields.push((ident, ty.to_string(), TypeId::UNKNOWN as u32));
         }
     };
 
@@ -880,8 +890,6 @@ fn group_fields_by_type(fields: &[&Field]) -> FieldGroups {
                 let type_id = get_primitive_type_id(inner);
                 nullable_primitive_fields.push((ident, ty.to_string(), type_id));
             } else {
-                // continue to handle Option<not Primitive>
-                // already avoid Option<Option<T>> at compile-time
                 group_field(ident, inner);
             }
         } else {
@@ -924,7 +932,15 @@ fn group_fields_by_type(fields: &[&Field]) -> FieldGroups {
         compress_a
             .cmp(&compress_b)
             .then_with(|| size_b.cmp(&size_a))
+            .then_with(|| a.2.cmp(&b.2))
             .then_with(|| a.0.cmp(&b.0))
+    }
+
+    fn type_id_then_name_sorter(
+        a: &(String, String, u32),
+        b: &(String, String, u32),
+    ) -> std::cmp::Ordering {
+        a.2.cmp(&b.2).then_with(|| a.0.cmp(&b.0))
     }
 
     fn name_sorter(a: &(String, String, u32), b: &(String, String, u32)) -> std::cmp::Ordering {
@@ -933,34 +949,41 @@ fn group_fields_by_type(fields: &[&Field]) -> FieldGroups {
 
     primitive_fields.sort_by(numeric_sorter);
     nullable_primitive_fields.sort_by(numeric_sorter);
-    primitive_fields.extend(nullable_primitive_fields);
-
-    string_fields.sort_by(name_sorter);
-    other_fields.sort_by(name_sorter);
+    internal_type_fields.sort_by(type_id_then_name_sorter);
     list_fields.sort_by(name_sorter);
     set_fields.sort_by(name_sorter);
     map_fields.sort_by(name_sorter);
+    other_fields.sort_by(name_sorter);
 
     (
         primitive_fields,
-        string_fields,
-        other_fields,
+        nullable_primitive_fields,
+        internal_type_fields,
         list_fields,
         set_fields,
         map_fields,
+        other_fields,
     )
 }
 
 pub(crate) fn get_sorted_field_names(fields: &[&Field]) -> Vec<String> {
-    let (primitive_fields, string_fields, other_fields, list_fields, set_fields, map_fields) =
-        group_fields_by_type(fields);
+    let (
+        primitive_fields,
+        nullable_primitive_fields,
+        internal_type_fields,
+        list_fields,
+        set_fields,
+        map_fields,
+        other_fields,
+    ) = group_fields_by_type(fields);
 
     let mut all_fields = primitive_fields;
-    all_fields.extend(string_fields);
-    all_fields.extend(other_fields);
+    all_fields.extend(nullable_primitive_fields);
+    all_fields.extend(internal_type_fields);
     all_fields.extend(list_fields);
     all_fields.extend(set_fields);
     all_fields.extend(map_fields);
+    all_fields.extend(other_fields);
 
     all_fields.into_iter().map(|(name, _, _)| name).collect()
 }

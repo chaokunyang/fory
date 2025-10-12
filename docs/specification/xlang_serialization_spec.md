@@ -785,7 +785,7 @@ Field will be ordered as following, every group of fields will have its own orde
 - list fields: sort by snake case field name
 - set fields: sort by snake case field name
 - map fields: sort by snake case field name
-- other fields: sort by type id then snake case field name
+- other fields: sort by snake case field name
 
 If two fields have same type, then sort by snake_case styled field name.
 

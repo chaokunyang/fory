@@ -177,9 +177,8 @@ def _sort_fields(type_resolver, field_names, serializers):
     collection_types = sorted(collection_types, key=sorter)
     internal_types = sorted(internal_types, key=sorter)
     map_types = sorted(map_types, key=sorter)
-    other_types = sorted(other_types, key=sorter)
+    other_types = sorted(other_types, key=lambda item: item[2])
     all_types = boxed_types + internal_types + collection_types + set_types + map_types + other_types
-    print("all_types:", all_types)
     return [t[2] for t in all_types], [t[1] for t in all_types]
 
 

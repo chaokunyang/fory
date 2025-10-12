@@ -181,6 +181,7 @@ impl FieldType {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct FieldInfo {
+    pub field_id: i16,
     pub field_name: String,
     pub field_type: FieldType,
 }
@@ -188,6 +189,7 @@ pub struct FieldInfo {
 impl FieldInfo {
     pub fn new(field_name: &str, field_type: FieldType) -> FieldInfo {
         FieldInfo {
+            field_id: -1i16,
             field_name: field_name.to_string(),
             field_type,
         }
@@ -223,6 +225,7 @@ impl FieldInfo {
             .decode(field_name_bytes, encoding)
             .unwrap();
         FieldInfo {
+            field_id: -1i16,
             field_name: field_name.original,
             field_type,
         }
@@ -386,7 +389,7 @@ impl TypeMetaLayer {
         // group
         let mut primitive_fields = Vec::new();
         let mut nullable_primitive_fields = Vec::new();
-        let mut string_fields = Vec::new();
+        let mut internal_type_fields = Vec::new();
         let mut list_fields = Vec::new();
         let mut set_fields = Vec::new();
         let mut map_fields = Vec::new();
@@ -394,7 +397,8 @@ impl TypeMetaLayer {
 
         for field_info in field_infos.into_iter() {
             let mut type_id = field_info.field_type.type_id;
-            if type_id == TypeId::ForyNullable as u32 {
+            let is_nullable = type_id == TypeId::ForyNullable as u32;
+            if is_nullable {
                 type_id = field_info.field_type.generics.first().unwrap().type_id;
                 if PRIMITIVE_TYPES.contains(&type_id) {
                     nullable_primitive_fields.push(field_info);
@@ -404,14 +408,14 @@ impl TypeMetaLayer {
 
             if PRIMITIVE_TYPES.contains(&type_id) {
                 primitive_fields.push(field_info);
-            } else if TypeId::STRING as u32 == type_id {
-                string_fields.push(field_info);
             } else if TypeId::LIST as u32 == type_id {
                 list_fields.push(field_info);
             } else if TypeId::SET as u32 == type_id {
                 set_fields.push(field_info);
             } else if TypeId::MAP as u32 == type_id {
                 map_fields.push(field_info);
+            } else if crate::types::is_internal_type(type_id) {
+                internal_type_fields.push(field_info);
             } else {
                 other_fields.push(field_info);
             }
@@ -466,12 +470,18 @@ impl TypeMetaLayer {
                 .then_with(|| a_id.cmp(&b_id))
                 .then_with(|| a_field_name.cmp(b_field_name))
         }
+        fn type_then_name_sorter(a: &FieldInfo, b: &FieldInfo) -> std::cmp::Ordering {
+            a.field_type
+                .type_id
+                .cmp(&b.field_type.type_id)
+                .then_with(|| a.field_name.cmp(&b.field_name))
+        }
         fn name_sorter(a: &FieldInfo, b: &FieldInfo) -> std::cmp::Ordering {
             a.field_name.cmp(&b.field_name)
         }
         primitive_fields.sort_by(numeric_sorter);
         nullable_primitive_fields.sort_by(numeric_sorter);
-        string_fields.sort_by(name_sorter);
+        internal_type_fields.sort_by(type_then_name_sorter);
         list_fields.sort_by(name_sorter);
         set_fields.sort_by(name_sorter);
         map_fields.sort_by(name_sorter);
@@ -479,11 +489,11 @@ impl TypeMetaLayer {
         let mut sorted_field_infos = Vec::with_capacity(fields_len);
         sorted_field_infos.extend(primitive_fields);
         sorted_field_infos.extend(nullable_primitive_fields);
-        sorted_field_infos.extend(string_fields);
-        sorted_field_infos.extend(other_fields);
+        sorted_field_infos.extend(internal_type_fields);
         sorted_field_infos.extend(list_fields);
         sorted_field_infos.extend(set_fields);
         sorted_field_infos.extend(map_fields);
+        sorted_field_infos.extend(other_fields);
         sorted_field_infos
     }
 
@@ -526,16 +536,16 @@ impl TypeMetaLayer {
 pub struct TypeMeta {
     // assigned valid value and used, only during deserializing
     hash: i64,
-    layers: Vec<TypeMetaLayer>,
+    layer: TypeMetaLayer,
 }
 
 impl TypeMeta {
     pub fn get_field_infos(&self) -> &Vec<FieldInfo> {
-        self.layers.first().unwrap().get_field_infos()
+        self.layer.get_field_infos()
     }
 
     pub fn get_type_id(&self) -> u32 {
-        self.layers.first().unwrap().get_type_id()
+        self.layer.get_type_id()
     }
 
     pub fn get_hash(&self) -> i64 {
@@ -543,11 +553,11 @@ impl TypeMeta {
     }
 
     pub fn get_type_name(&self) -> MetaString {
-        self.layers.first().unwrap().get_type_name().clone()
+        self.layer.get_type_name().clone()
     }
 
     pub fn get_namespace(&self) -> MetaString {
-        self.layers.first().unwrap().get_namespace().clone()
+        self.layer.get_namespace().clone()
     }
 
     pub fn from_fields(
@@ -559,13 +569,7 @@ impl TypeMeta {
     ) -> TypeMeta {
         TypeMeta {
             hash: 0,
-            layers: vec![TypeMetaLayer::new(
-                type_id,
-                namespace,
-                type_name,
-                register_by_name,
-                field_infos,
-            )],
+            layer: TypeMetaLayer::new(type_id, namespace, type_name, register_by_name, field_infos),
         }
     }
     #[allow(unused_assignments)]
@@ -580,13 +584,11 @@ impl TypeMeta {
         // let is_compressed: bool = (header & COMPRESS_META_FLAG) != 0;
         // let meta_hash = header >> (64 - NUM_HASH_BITS);
 
-        let mut layers = Vec::new();
         // let current_meta_size = 0;
         // while current_meta_size < meta_size {}
         let layer = TypeMetaLayer::from_bytes(reader);
-        layers.push(layer);
         TypeMeta {
-            layers,
+            layer,
             hash: header,
         }
     }
@@ -598,7 +600,7 @@ impl TypeMeta {
         // for layer in self.layers.iter() {
         //     layers_writer.bytes(layer.to_bytes()?.as_slice());
         // }
-        layers_writer.write_bytes(self.layers.first().unwrap().to_bytes()?.as_slice());
+        layers_writer.write_bytes(self.layer.to_bytes()?.as_slice());
         // global_binary_header:| hash:50bits | is_compressed:1bit | write_fields_meta:1bit | meta_size:12bits |
         let meta_size = layers_writer.len() as i64;
         let mut header: i64 = min(META_SIZE_MASK, meta_size);

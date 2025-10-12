@@ -141,17 +141,7 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
     for (GenericTypeField fieldInfo : otherFields) {
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       Object fieldValue = fieldAccessor.getObject(value);
-      if (fieldValue == null) {
-        buffer.writeByte(Fory.NULL_FLAG);
-      } else if (fieldValue.getClass().isEnum()) {
-        buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
-        fieldInfo.genericType.getSerializer(typeResolver).write(buffer, fieldValue);
-      }
-      if (fieldInfo.trackingRef) {
-        binding.writeRef(buffer, fieldValue, fieldInfo.classInfoHolder);
-      } else {
-        binding.writeNullable(buffer, fieldValue, fieldInfo.classInfoHolder, fieldInfo.nullable);
-      }
+      writeOtherFieldValue(binding, typeResolver, buffer, fieldInfo, fieldValue);
     }
   }
 
@@ -243,6 +233,25 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
           fieldValue,
           typeResolver.getClassInfo(fieldValue.getClass(), fieldInfo.classInfoHolder));
       generics.popGenericType();
+    }
+  }
+
+  protected static void writeOtherFieldValue(
+      SerializationBinding binding,
+      TypeResolver typeResolver,
+      MemoryBuffer buffer,
+      GenericTypeField fieldInfo,
+      Object fieldValue) {
+    if (fieldValue == null) {
+      buffer.writeByte(Fory.NULL_FLAG);
+    } else if (fieldValue.getClass().isEnum()) {
+      buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
+      fieldInfo.genericType.getSerializer(typeResolver).write(buffer, fieldValue);
+    }
+    if (fieldInfo.trackingRef) {
+      binding.writeRef(buffer, fieldValue, fieldInfo.classInfoHolder);
+    } else {
+      binding.writeNullable(buffer, fieldValue, fieldInfo.classInfoHolder, fieldInfo.nullable);
     }
   }
 

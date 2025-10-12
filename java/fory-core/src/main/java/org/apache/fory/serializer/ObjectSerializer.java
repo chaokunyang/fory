@@ -236,7 +236,7 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
     }
   }
 
-  protected static void writeOtherFieldValue(
+  static void writeOtherFieldValue(
       SerializationBinding binding,
       TypeResolver typeResolver,
       MemoryBuffer buffer,
@@ -247,8 +247,7 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
     } else if (fieldValue.getClass().isEnum()) {
       buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
       fieldInfo.genericType.getSerializer(typeResolver).write(buffer, fieldValue);
-    }
-    if (fieldInfo.trackingRef) {
+    } else if (fieldInfo.trackingRef) {
       binding.writeRef(buffer, fieldValue, fieldInfo.classInfoHolder);
     } else {
       binding.writeNullable(buffer, fieldValue, fieldInfo.classInfoHolder, fieldInfo.nullable);

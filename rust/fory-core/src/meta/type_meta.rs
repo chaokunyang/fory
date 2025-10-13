@@ -66,10 +66,10 @@ pub struct FieldType {
 }
 
 impl FieldType {
-    pub fn new(type_id: u32, generics: Vec<FieldType>) -> Self {
+    pub fn new(type_id: u32, nullable: bool, generics: Vec<FieldType>) -> Self {
         FieldType {
             type_id,
-            nullable: false,
+            nullable,
             generics,
         }
     }

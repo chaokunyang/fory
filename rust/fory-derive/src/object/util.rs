@@ -336,7 +336,10 @@ pub(super) fn generic_tree_to_tokens(node: &TypeNode) -> TokenStream {
     let ty: syn::Type = syn::parse_str(&node.to_string()).unwrap();
     let nullable = node.name == "Option";
     let get_type_id = if nullable {
-        children_tokens.remove(0)
+        let first = children_tokens.remove(0);
+        quote! {
+            #first.type_id
+        }
     } else if let Some(ts) = primitive_vec {
         ts
     } else {

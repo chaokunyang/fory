@@ -62,8 +62,8 @@ pub fn type_def<T: Serializer + StructSerializer>(
         }
     }
     // assign field id in ascending order
-    for i in 0..sorted_field_infos.len() {
-        sorted_field_infos[i].field_id = i as i16;
+    for (i, field_info) in sorted_field_infos.iter_mut().enumerate() {
+        field_info.field_id = i as i16;
     }
     let meta = TypeMeta::from_fields(
         type_id,

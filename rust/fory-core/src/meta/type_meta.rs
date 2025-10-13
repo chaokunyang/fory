@@ -541,7 +541,7 @@ impl TypeMetaLayer {
         )
     }
 
-    fn assign_field_ids(type_info_current: &TypeInfo, field_infos: &mut Vec<FieldInfo>) {
+    fn assign_field_ids(type_info_current: &TypeInfo, field_infos: &mut [FieldInfo]) {
         // convert to map: fiend_name -> field_info
         let field_info_map = type_info_current
             .get_type_meta()
@@ -549,7 +549,7 @@ impl TypeMetaLayer {
             .iter()
             .map(|field_info| (field_info.field_name.clone(), field_info.clone()))
             .collect::<HashMap<String, FieldInfo>>();
-        for (_i, field) in field_infos.iter_mut().enumerate() {
+        for field in field_infos.iter_mut() {
             match field_info_map.get(&field.field_name.clone()) {
                 Some(local_field_info) => {
                     if field.field_type.type_id != local_field_info.field_type.type_id

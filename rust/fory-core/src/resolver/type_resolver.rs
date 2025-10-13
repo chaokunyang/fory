@@ -269,13 +269,9 @@ impl TypeResolver {
         self.type_info_map_by_id.get(&id)
     }
 
-    pub fn get_type_info_by_name(
-        &self,
-        namespace: &String,
-        type_name: &String,
-    ) -> Option<&TypeInfo> {
-        let key = (namespace.clone(), type_name.clone());
-        self.type_info_map_by_name.get(&key)
+    pub fn get_type_info_by_name(&self, namespace: &str, type_name: &str) -> Option<&TypeInfo> {
+        self.type_info_map_by_name
+            .get(&(namespace.to_owned(), type_name.to_owned()))
     }
 
     /// Fast path for getting type info by numeric ID (avoids HashMap lookup by TypeId)

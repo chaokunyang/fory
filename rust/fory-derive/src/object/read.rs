@@ -30,10 +30,7 @@ fn create_private_field_name(field: &Field) -> Ident {
 
 fn is_declared_by_option(field: &Field) -> bool {
     let type_name = extract_type_name(&field.ty);
-    if type_name == "Option" || !is_primitive_type(type_name.as_str()) {
-        return true;
-    }
-    return false;
+    type_name == "Option" || !is_primitive_type(type_name.as_str())
 }
 
 fn declare_var(fields: &[&Field]) -> Vec<TokenStream> {
@@ -56,8 +53,14 @@ fn declare_var(fields: &[&Field]) -> Vec<TokenStream> {
                             let mut #var_name: Option<#ty> = None;
                         }
                     } else {
-                        quote! {
-                            let mut #var_name: #ty = 0 as #ty;
+                        if extract_type_name(&field.ty) == "bool" {
+                            quote! {
+                                let mut #var_name: bool = false;
+                            }
+                        } else {
+                            quote! {
+                                let mut #var_name: #ty = 0 as #ty;
+                            }
                         }
                     }
                 }
@@ -349,11 +352,11 @@ fn gen_read_compatible_match_arm_body(field: &Field, var_name: &Ident) -> TokenS
             let skip_ref_flag = skip_ref_flag(ty);
             if local_nullable {
                 quote! {
-                    if &_field.field_type.nullable {
+                    if _field.field_type.nullable {
                         #var_name = Some(fory_core::serializer::read_ref_info_data::<#ty>(fory, context, true, #skip_ref_flag, false)?);
                     } else {
                         #var_name = Some(
-                            fory_core::serializer::read_ref_info_data::<#ty>(fory, context, true, skip_ref_flag, false)?
+                            fory_core::serializer::read_ref_info_data::<#ty>(fory, context, true, #skip_ref_flag, false)?
                         );
                     }
                 }
@@ -361,7 +364,7 @@ fn gen_read_compatible_match_arm_body(field: &Field, var_name: &Ident) -> TokenS
                 let dec_by_option = is_declared_by_option(field);
                 if dec_by_option {
                     quote! {
-                        if !&_field.field_type.nullable {
+                        if !_field.field_type.nullable {
                             #var_name = Some(fory_core::serializer::read_ref_info_data::<#ty>(fory, context, true, #skip_ref_flag, false)?);
                         } else {
                             if (context.reader.read_bool()) {
@@ -375,7 +378,7 @@ fn gen_read_compatible_match_arm_body(field: &Field, var_name: &Ident) -> TokenS
                     }
                 } else {
                     quote! {
-                        if !&_field.field_type.nullable {
+                        if !_field.field_type.nullable {
                             #var_name = fory_core::serializer::read_ref_info_data::<#ty>(fory, context, true, #skip_ref_flag, false)?;
                         } else {
                             if (context.reader.read_bool()) {

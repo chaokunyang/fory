@@ -21,10 +21,12 @@ use crate::meta::{
     murmurhash3_x64_128, Encoding, MetaString, MetaStringDecoder, FIELD_NAME_DECODER,
     FIELD_NAME_ENCODER, NAMESPACE_DECODER, TYPE_NAME_DECODER,
 };
+use crate::resolver::type_resolver::{TypeInfo, TypeResolver};
 use crate::types::{TypeId, PRIMITIVE_TYPES};
 use anyhow::anyhow;
 use std::clone::Clone;
 use std::cmp::min;
+use std::collections::HashMap;
 
 const SMALL_NUM_FIELDS_THRESHOLD: usize = 0b11111;
 const REGISTER_BY_NAME_FLAG: u8 = 0b100000;
@@ -296,6 +298,16 @@ impl TypeMetaLayer {
         }
     }
 
+    pub fn empty() -> TypeMetaLayer {
+        TypeMetaLayer {
+            type_id: 0,
+            namespace: MetaString::default(),
+            type_name: MetaString::default(),
+            register_by_name: false,
+            field_infos: vec![],
+        }
+    }
+
     pub fn get_type_id(&self) -> u32 {
         self.type_id
     }
@@ -497,7 +509,7 @@ impl TypeMetaLayer {
         sorted_field_infos
     }
 
-    fn from_bytes(reader: &mut Reader) -> TypeMetaLayer {
+    fn from_bytes(reader: &mut Reader, type_resolver: &TypeResolver) -> TypeMetaLayer {
         let meta_header = reader.read_u8();
         let register_by_name = (meta_header & REGISTER_BY_NAME_FLAG) != 0;
         let mut num_fields = meta_header as usize & SMALL_NUM_FIELDS_THRESHOLD;
@@ -517,11 +529,28 @@ impl TypeMetaLayer {
             namespace = empty_name.clone();
             type_name = empty_name;
         }
+
         let mut field_infos = Vec::with_capacity(num_fields);
         for _ in 0..num_fields {
             field_infos.push(FieldInfo::from_bytes(reader));
         }
-        let sorted_field_infos = Self::sort_field_infos(field_infos);
+        let mut sorted_field_infos = Self::sort_field_infos(field_infos);
+
+        if register_by_name {
+            if let Some(type_info_current) = type_resolver
+                .get_type_info_by_name(&namespace.original, &type_name.original) {
+                println!("Found TypeInfo by name: {}/{}", namespace.original, type_name.original);
+                Self::assign_field_ids(type_info_current, &mut sorted_field_infos);
+            } else {
+                println!("TypeInfo not found by name: {}/{}", namespace.original, type_name.original);
+            }
+        } else if let Some(type_info_current) = type_resolver.get_type_info_by_id(type_id) {
+            println!("Found TypeInfo by id: {}", type_id);
+            Self::assign_field_ids(type_info_current, &mut sorted_field_infos);
+        } else {
+            println!("TypeInfo not found by id: {}", type_id);
+        }
+
         TypeMetaLayer::new(
             type_id,
             namespace,
@@ -529,6 +558,26 @@ impl TypeMetaLayer {
             register_by_name,
             sorted_field_infos,
         )
+    }
+
+    fn assign_field_ids(type_info_current: &TypeInfo, field_infos: &mut Vec<FieldInfo>) {
+        // convert to map: fiend_name -> field_info
+        let field_info_map = type_info_current
+            .get_type_meta()
+            .get_field_infos()
+            .iter()
+            .map(|field_info| (field_info.field_name.clone(), field_info.clone()))
+            .collect::<HashMap<String, FieldInfo>>();
+        for (_i, field) in field_infos.iter_mut().enumerate() {
+            match field_info_map.get(&field.field_name.clone()) {
+                Some(local_field_info) => {
+                    field.field_id = local_field_info.field_id;
+                }
+                None => {
+                    field.field_id = -1;
+                }
+            }
+        }
     }
 }
 
@@ -560,6 +609,13 @@ impl TypeMeta {
         self.layer.get_namespace().clone()
     }
 
+    pub fn empty() -> TypeMeta {
+        TypeMeta {
+            hash: 0,
+            layer: TypeMetaLayer::empty(),
+        }
+    }
+
     pub fn from_fields(
         type_id: u32,
         namespace: MetaString,
@@ -573,7 +629,7 @@ impl TypeMeta {
         }
     }
     #[allow(unused_assignments)]
-    pub fn from_bytes(reader: &mut Reader) -> TypeMeta {
+    pub fn from_bytes(reader: &mut Reader, type_resolver: &TypeResolver) -> TypeMeta {
         let header = reader.read_i64();
         let mut meta_size = header & META_SIZE_MASK;
         if meta_size == META_SIZE_MASK {
@@ -586,7 +642,7 @@ impl TypeMeta {
 
         // let current_meta_size = 0;
         // while current_meta_size < meta_size {}
-        let layer = TypeMetaLayer::from_bytes(reader);
+        let layer = TypeMetaLayer::from_bytes(reader, type_resolver);
         TypeMeta {
             layer,
             hash: header,

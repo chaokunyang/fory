@@ -139,7 +139,7 @@ pub fn derive_serializer(ast: &syn::DeriveInput) -> TokenStream {
                 #get_sorted_field_names_ts
             }
 
-            fn fory_type_def(fory: &fory_core::fory::Fory, type_id: u32, namespace: fory_core::meta::MetaString, type_name: fory_core::meta::MetaString, register_by_name: bool) -> Vec<u8> {
+            fn fory_type_def(fory: &fory_core::fory::Fory, type_id: u32, namespace: fory_core::meta::MetaString, type_name: fory_core::meta::MetaString, register_by_name: bool) -> (Vec<u8>, fory_core::meta::TypeMeta) {
                 #type_def_ts
             }
         }

@@ -226,7 +226,6 @@ pub fn gen_read_data(fields: &[&Field]) -> TokenStream {
 
 fn gen_read_compatible_match_arm_body(field: &Field, var_name: &Ident) -> TokenStream {
     let ty = &field.ty;
-    let field_name_str = field.ident.as_ref().unwrap().to_string();
 
     match classify_trait_object_field(ty) {
         StructField::BoxDyn(trait_name) => {
@@ -327,11 +326,11 @@ fn gen_read_compatible_match_arm_body(field: &Field, var_name: &Ident) -> TokenS
                 Type::Path(type_path) => &type_path.path.segments.first().unwrap().ident,
                 _ => panic!("Unsupported type"),
             };
+            let skip_ref_flag = skip_ref_flag(ty);
             if local_nullable {
                 quote! {
                     if &_field.field_type.nullable {
-                        let skip_ref_flag = fory_core::serializer::get_skip_ref_flag::<#ty>(fory);
-                        #var_name = Some(fory_core::serializer::read_ref_info_data::<#ty>(fory, context, true, skip_ref_flag, false));
+                        #var_name = Some(fory_core::serializer::read_ref_info_data::<#ty>(fory, context, true, #skip_ref_flag, false));
                     } else {
                         #var_name = Some(
                             fory_core::serializer::read_ref_info_data::<#ty>(fory, context, true, skip_ref_flag, false)
@@ -341,14 +340,13 @@ fn gen_read_compatible_match_arm_body(field: &Field, var_name: &Ident) -> TokenS
             } else {
                 quote! {
                     if !&_field.field_type.nullable {
-                        let skip_ref_flag = fory_core::serializer::get_skip_ref_flag::<#ty>(fory);
-                        #var_name = Some(fory_core::serializer::read_ref_info_data::<#ty>(fory, context, true, skip_ref_flag, false));
+                        #var_name = Some(fory_core::serializer::read_ref_info_data::<#ty>(fory, context, true, #skip_ref_flag, false));
                     } else {
                         if (context.reader.read_bool()) {
                             #var_name = Some(<#ty as fory_core::serializer::ForyDefault>::fory_default());
                         } else {
                             #var_name = Some(
-                                fory_core::serializer::read_ref_info_data::<#ty>(fory, context, true, skip_ref_flag, false)
+                                fory_core::serializer::read_ref_info_data::<#ty>(fory, context, true, #skip_ref_flag, false)
                             );
                         }
                     }

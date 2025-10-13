@@ -216,33 +216,6 @@ pub(super) struct TypeNode {
     pub generics: Vec<TypeNode>,
 }
 
-macro_rules! basic_type_deserialize {
-    ($name:expr, $nullable:expr; $( ($ty_str:expr, $ty:ty) ),* $(,)?) => {
-        match $name {
-            $(
-                $ty_str => {
-                    if $nullable {
-                        quote! {
-                            <$ty as fory_core::serializer::Serializer>::fory_read_type_info(fory, context, true);
-                            let res1 = Some(<$ty as fory_core::serializer::Serializer>::fory_read_data(fory, context, true)
-                                .map_err(fory_core::error::Error::from)?);
-                            Ok::<Option<$ty>, fory_core::error::Error>(res1)
-                        }
-                    } else {
-                        quote! {
-                            <$ty as fory_core::serializer::Serializer>::fory_read_type_info(fory, context, true);
-                            let res2 = <$ty as fory_core::serializer::Serializer>::fory_read_data(fory, context, true)
-                                .map_err(fory_core::error::Error::from)?;
-                            Ok::<$ty, fory_core::error::Error>(res2)
-                        }
-                    }
-                }
-            )*
-            _ => unreachable!(),
-        }
-    };
-}
-
 pub(super) fn try_primitive_vec_type(node: &TypeNode) -> Option<TokenStream> {
     if node.name != "Vec" {
         return None;

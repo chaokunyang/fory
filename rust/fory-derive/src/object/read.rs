@@ -21,15 +21,11 @@ use syn::{Field, Type};
 
 use super::util::{
     classify_trait_object_field, create_wrapper_types_arc, create_wrapper_types_rc,
-    generic_tree_to_tokens, parse_generic_tree, skip_ref_flag, NullableTypeNode, StructField,
+    parse_generic_tree, skip_ref_flag, StructField,
 };
 
 fn create_private_field_name(field: &Field) -> Ident {
     format_ident!("_{}", field.ident.as_ref().expect(""))
-}
-
-fn create_read_nullable_fn_name(field: &Field) -> Ident {
-    format_ident!("fory_read_nullable_{}", field.ident.as_ref().expect(""))
 }
 
 fn declare_var(fields: &[&Field]) -> Vec<TokenStream> {
@@ -326,38 +322,35 @@ fn gen_read_compatible_match_arm_body(field: &Field, var_name: &Ident) -> TokenS
         }
         StructField::None => {
             let generic_tree = parse_generic_tree(ty);
-            let generic_token = generic_tree_to_tokens(&generic_tree);
-            let read_nullable_fn_name = create_read_nullable_fn_name(field);
-
+            let local_nullable = generic_tree.name == "Option";
             let _base_ty = match &ty {
                 Type::Path(type_path) => &type_path.path.segments.first().unwrap().ident,
                 _ => panic!("Unsupported type"),
             };
-            quote! {
-                let local_field_type = #generic_token;
-                if &_field.field_type == &local_field_type {
-                    let skip_ref_flag = fory_core::serializer::get_skip_ref_flag::<#ty>(fory);
-                    #var_name = Some(fory_core::serializer::read_ref_info_data::<#ty>(fory, context, true, skip_ref_flag, false).unwrap_or_else(|_err| {
-                        panic!("Err at deserializing {:?}: {:?}", #field_name_str, _err);
-                    }));
-                } else {
-                    let local_nullable_type = fory_core::meta::NullableFieldType::from(&local_field_type);
-                    let remote_nullable_type = fory_core::meta::NullableFieldType::from(&_field.field_type);
-                    if local_nullable_type != remote_nullable_type {
-                        let read_ref_flag = fory_core::serializer::skip::get_read_ref_flag(&remote_nullable_type);
-                        fory_core::serializer::skip::skip_field_value(fory, context, &remote_nullable_type, read_ref_flag).unwrap();
-                        #var_name = Some(<#ty as fory_core::serializer::ForyDefault>::fory_default());
+            if local_nullable {
+                quote! {
+                    if &_field.field_type.nullable {
+                        let skip_ref_flag = fory_core::serializer::get_skip_ref_flag::<#ty>(fory);
+                        #var_name = Some(fory_core::serializer::read_ref_info_data::<#ty>(fory, context, true, skip_ref_flag, false));
                     } else {
                         #var_name = Some(
-                            Self::#read_nullable_fn_name(
-                                fory,
-                                context,
-                                &local_nullable_type,
-                                &remote_nullable_type
-                            ).unwrap_or_else(|_err| {
-                                panic!("Err at deserializing {:?}: {:?}", #field_name_str, _err);
-                            })
+                            fory_core::serializer::read_ref_info_data::<#ty>(fory, context, true, skip_ref_flag, false)
                         );
+                    }
+                }
+            } else {
+                quote! {
+                    if !&_field.field_type.nullable {
+                        let skip_ref_flag = fory_core::serializer::get_skip_ref_flag::<#ty>(fory);
+                        #var_name = Some(fory_core::serializer::read_ref_info_data::<#ty>(fory, context, true, skip_ref_flag, false));
+                    } else {
+                        if (context.reader.read_bool()) {
+                            #var_name = Some(<#ty as fory_core::serializer::ForyDefault>::fory_default());
+                        } else {
+                            #var_name = Some(
+                                fory_core::serializer::read_ref_info_data::<#ty>(fory, context, true, skip_ref_flag, false)
+                            );
+                        }
                     }
                 }
             }
@@ -394,16 +387,20 @@ pub fn gen_read_compatible(fields: &[&Field]) -> TokenStream {
     let declare_ts: Vec<TokenStream> = declare_var(fields);
     let assign_ts: Vec<TokenStream> = assign_value(fields);
 
-    let match_arms: Vec<TokenStream> = fields.iter().enumerate().map(|(i, field)| {
-        let var_name = create_private_field_name(field);
-        let field_id = i as i16;
-        let body = gen_read_compatible_match_arm_body(field, &var_name);
-        quote! {
-            #field_id => {
-                #body
+    let match_arms: Vec<TokenStream> = fields
+        .iter()
+        .enumerate()
+        .map(|(i, field)| {
+            let var_name = create_private_field_name(field);
+            let field_id = i as i16;
+            let body = gen_read_compatible_match_arm_body(field, &var_name);
+            quote! {
+                #field_id => {
+                    #body
+                }
             }
-        }
-    }).collect();
+        })
+        .collect();
 
     quote! {
         let remote_type_id = context.reader.read_varuint32();
@@ -425,9 +422,9 @@ pub fn gen_read_compatible(fields: &[&Field]) -> TokenStream {
                 match _field.field_id {
                     #(#match_arms)*
                     _ => {
-                        let nullable_field_type = fory_core::meta::NullableFieldType::from(&_field.field_type);
-                        let read_ref_flag = fory_core::serializer::skip::get_read_ref_flag(&nullable_field_type);
-                        fory_core::serializer::skip::skip_field_value(fory, context, &nullable_field_type, read_ref_flag).unwrap();
+                        let field_type = &_field.field_type;
+                        let read_ref_flag = fory_core::serializer::skip::get_read_ref_flag(&field_type);
+                        fory_core::serializer::skip::skip_field_value(fory, context, &field_type, read_ref_flag).unwrap();
                     }
                 }
             }
@@ -435,36 +432,5 @@ pub fn gen_read_compatible(fields: &[&Field]) -> TokenStream {
                 #(#assign_ts),*
             })
         }
-    }
-}
-
-pub fn gen_read_nullable(fields: &[&Field]) -> TokenStream {
-    let func_tokens: Vec<TokenStream> = fields
-        .iter()
-        .filter_map(|field| {
-            let ty = &field.ty;
-            match classify_trait_object_field(ty) {
-                StructField::None => {
-                    let fn_name = create_read_nullable_fn_name(field);
-                    let generic_tree = parse_generic_tree(ty);
-                    let nullable_generic_tree = NullableTypeNode::from(generic_tree);
-                    let read_tokens = nullable_generic_tree.to_read_tokens(&vec![], true);
-                    Some(quote! {
-                        fn #fn_name(
-                            fory: &fory_core::fory::Fory,
-                            context: &mut fory_core::resolver::context::ReadContext,
-                            local_nullable_type: &fory_core::meta::NullableFieldType,
-                            remote_nullable_type: &fory_core::meta::NullableFieldType
-                        ) -> Result<#ty, fory_core::error::Error> {
-                            #read_tokens
-                        }
-                    })
-                }
-                _ => None,
-            }
-        })
-        .collect::<Vec<_>>();
-    quote! {
-        #(#func_tokens)*
     }
 }

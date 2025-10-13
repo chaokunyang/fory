@@ -61,47 +61,17 @@ static FIELD_NAME_ENCODINGS: &[Encoding] = &[
 #[derive(Debug, Eq, Clone)]
 pub struct FieldType {
     pub type_id: u32,
+    pub nullable: bool,
     pub generics: Vec<FieldType>,
 }
 
-#[derive(Debug, Clone)]
-pub struct NullableFieldType {
-    pub type_id: u32,
-    pub generics: Vec<NullableFieldType>,
-    pub nullable: bool,
-}
-
-impl NullableFieldType {
-    pub fn from(node: &FieldType) -> Self {
-        if node.type_id == TypeId::ForyNullable as u32 {
-            let inner = NullableFieldType::from(&node.generics[0]);
-            NullableFieldType {
-                type_id: inner.type_id,
-                generics: inner.generics,
-                nullable: true,
-            }
-        } else {
-            let generics = node.generics.iter().map(NullableFieldType::from).collect();
-            NullableFieldType {
-                type_id: node.type_id,
-                generics,
-                nullable: false,
-            }
-        }
-    }
-}
-
-impl PartialEq for NullableFieldType {
-    fn eq(&self, other: &Self) -> bool {
-        self.type_id == other.type_id && self.generics == other.generics
-    }
-}
-
-impl Eq for NullableFieldType {}
-
 impl FieldType {
     pub fn new(type_id: u32, generics: Vec<FieldType>) -> Self {
-        FieldType { type_id, generics }
+        FieldType {
+            type_id,
+            nullable: false,
+            generics,
+        }
     }
 
     fn to_bytes(&self, writer: &mut Writer, write_flag: bool, nullable: bool) -> Result<(), Error> {
@@ -154,6 +124,7 @@ impl FieldType {
                 let generic = Self::from_bytes(reader, true, None);
                 Self {
                     type_id,
+                    nullable: _nullable,
                     generics: vec![generic],
                 }
             }
@@ -162,17 +133,20 @@ impl FieldType {
                 let val_generic = Self::from_bytes(reader, true, None);
                 Self {
                     type_id,
+                    nullable: _nullable,
                     generics: vec![key_generic, val_generic],
                 }
             }
             _ => Self {
                 type_id,
+                nullable: _nullable,
                 generics: vec![],
             },
         };
         if _nullable {
             Self {
                 type_id: TypeId::ForyNullable as u32,
+                nullable: _nullable,
                 generics: vec![field_type],
             }
         } else {
@@ -537,12 +511,19 @@ impl TypeMetaLayer {
         let mut sorted_field_infos = Self::sort_field_infos(field_infos);
 
         if register_by_name {
-            if let Some(type_info_current) = type_resolver
-                .get_type_info_by_name(&namespace.original, &type_name.original) {
-                println!("Found TypeInfo by name: {}/{}", namespace.original, type_name.original);
+            if let Some(type_info_current) =
+                type_resolver.get_type_info_by_name(&namespace.original, &type_name.original)
+            {
+                println!(
+                    "Found TypeInfo by name: {}/{}",
+                    namespace.original, type_name.original
+                );
                 Self::assign_field_ids(type_info_current, &mut sorted_field_infos);
             } else {
-                println!("TypeInfo not found by name: {}/{}", namespace.original, type_name.original);
+                println!(
+                    "TypeInfo not found by name: {}/{}",
+                    namespace.original, type_name.original
+                );
             }
         } else if let Some(type_info_current) = type_resolver.get_type_info_by_id(type_id) {
             println!("Found TypeInfo by id: {}", type_id);
@@ -571,7 +552,13 @@ impl TypeMetaLayer {
         for (_i, field) in field_infos.iter_mut().enumerate() {
             match field_info_map.get(&field.field_name.clone()) {
                 Some(local_field_info) => {
-                    field.field_id = local_field_info.field_id;
+                    if field.field_type.type_id != local_field_info.field_type.type_id
+                        || field.field_type.generics != local_field_info.field_type.generics
+                    {
+                        field.field_id = -1;
+                    } else {
+                        field.field_id = local_field_info.field_id;
+                    }
                 }
                 None => {
                     field.field_id = -1;

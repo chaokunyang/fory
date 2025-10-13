@@ -106,17 +106,6 @@ pub fn derive_serializer(ast: &syn::DeriveInput) -> TokenStream {
             panic!("Union is not supported")
         }
     };
-    // extra
-    let (deserialize_nullable_ts,) = match &ast.data {
-        syn::Data::Struct(s) => {
-            let fields = sorted_fields(&s.fields);
-            (read::gen_read_nullable(&fields),)
-        }
-        syn::Data::Enum(_s) => (quote! {},),
-        syn::Data::Union(_) => {
-            panic!("Union is not supported")
-        }
-    };
 
     // Allocate a unique type ID once and share it between both functions
     let type_idx = misc::allocate_type_id();
@@ -187,9 +176,6 @@ pub fn derive_serializer(ast: &syn::DeriveInput) -> TokenStream {
             fn fory_read_compatible(fory: &fory_core::fory::Fory, context: &mut fory_core::resolver::context::ReadContext) -> Result<Self, fory_core::error::Error> {
                 #read_compatible_ts
             }
-        }
-        impl #name {
-            #deserialize_nullable_ts
         }
     };
     let code = gen.into();

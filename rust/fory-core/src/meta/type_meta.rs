@@ -75,13 +75,6 @@ impl FieldType {
     }
 
     fn to_bytes(&self, writer: &mut Writer, write_flag: bool, nullable: bool) -> Result<(), Error> {
-        if self.type_id == TypeId::ForyNullable as u32 {
-            self.generics
-                .first()
-                .unwrap()
-                .to_bytes(writer, write_flag, true)?;
-            return Ok(());
-        }
         let mut header = self.type_id;
         if write_flag {
             header <<= 2;
@@ -119,7 +112,7 @@ impl FieldType {
             type_id = header;
             _nullable = nullable.unwrap();
         }
-        let field_type = match type_id {
+        match type_id {
             x if x == TypeId::LIST as u32 || x == TypeId::SET as u32 => {
                 let generic = Self::from_bytes(reader, true, None);
                 Self {
@@ -142,15 +135,6 @@ impl FieldType {
                 nullable: _nullable,
                 generics: vec![],
             },
-        };
-        if _nullable {
-            Self {
-                type_id: TypeId::ForyNullable as u32,
-                nullable: _nullable,
-                generics: vec![field_type],
-            }
-        } else {
-            field_type
         }
     }
 }
@@ -217,7 +201,7 @@ impl FieldInfo {
         let name_size = name_encoded.len() - 1;
         let mut header: u8 = (min(FIELD_NAME_SIZE_THRESHOLD, name_size) as u8) << 2;
         // let ref_tracking = false;
-        let nullable = self.field_type.type_id == TypeId::ForyNullable as u32;
+        let nullable = self.field_type.nullable;
         // if ref_tracking {
         //     header |= 1;
         // }
@@ -382,14 +366,11 @@ impl TypeMetaLayer {
         let mut other_fields = Vec::new();
 
         for field_info in field_infos.into_iter() {
-            let mut type_id = field_info.field_type.type_id;
-            let is_nullable = type_id == TypeId::ForyNullable as u32;
-            if is_nullable {
-                type_id = field_info.field_type.generics.first().unwrap().type_id;
-                if PRIMITIVE_TYPES.contains(&type_id) {
-                    nullable_primitive_fields.push(field_info);
-                    continue;
-                }
+            let type_id = field_info.field_type.type_id;
+            let is_nullable = field_info.field_type.nullable;
+            if is_nullable && PRIMITIVE_TYPES.contains(&type_id) {
+                nullable_primitive_fields.push(field_info);
+                continue;
             }
 
             if PRIMITIVE_TYPES.contains(&type_id) {
@@ -433,28 +414,21 @@ impl TypeMetaLayer {
             .contains(&type_id)
         }
         fn numeric_sorter(a: &FieldInfo, b: &FieldInfo) -> std::cmp::Ordering {
-            let (a_id, b_id) = {
-                // for nullable_primitive
-                if a.field_type.type_id == TypeId::ForyNullable as u32 {
-                    (
-                        a.field_type.generics.first().unwrap().type_id,
-                        b.field_type.generics.first().unwrap().type_id,
-                    )
-                } else {
-                    (a.field_type.type_id, b.field_type.type_id)
-                }
-            };
+            let (a_id, b_id) = (a.field_type.type_id, b.field_type.type_id);
             let a_field_name = &a.field_name;
             let b_field_name = &b.field_name;
             let compress_a = is_compress(a_id);
             let compress_b = is_compress(b_id);
             let size_a = get_primitive_type_size(a_id);
             let size_b = get_primitive_type_size(b_id);
-            compress_a
-                .cmp(&compress_b)
-                .then_with(|| size_b.cmp(&size_a))
-                .then_with(|| a_id.cmp(&b_id))
-                .then_with(|| a_field_name.cmp(b_field_name))
+            let a_nullable = a.field_type.nullable;
+            let b_nullable = b.field_type.nullable;
+            a_nullable
+                .cmp(&b_nullable) // non-nullable first
+                .then_with(|| compress_a.cmp(&compress_b)) // fixed-size (false) first, then variable-size (true) last
+                .then_with(|| size_b.cmp(&size_a)) // when same compress status: larger size first
+                .then_with(|| a_id.cmp(&b_id)) // when same size: smaller type id first
+                .then_with(|| a_field_name.cmp(b_field_name)) // when same id: lexicographic name
         }
         fn type_then_name_sorter(a: &FieldInfo, b: &FieldInfo) -> std::cmp::Ordering {
             a.field_type
@@ -514,24 +488,12 @@ impl TypeMetaLayer {
             if let Some(type_info_current) =
                 type_resolver.get_type_info_by_name(&namespace.original, &type_name.original)
             {
-                println!(
-                    "Found TypeInfo by name: {}/{}",
-                    namespace.original, type_name.original
-                );
                 Self::assign_field_ids(type_info_current, &mut sorted_field_infos);
-            } else {
-                println!(
-                    "TypeInfo not found by name: {}/{}",
-                    namespace.original, type_name.original
-                );
             }
         } else if let Some(type_info_current) = type_resolver.get_type_info_by_id(type_id) {
-            println!("Found TypeInfo by id: {}", type_id);
             Self::assign_field_ids(type_info_current, &mut sorted_field_infos);
-        } else {
-            println!("TypeInfo not found by id: {}", type_id);
         }
-
+        // if no type found, keep all fields id as -1 to be skipped.
         TypeMetaLayer::new(
             type_id,
             namespace,

@@ -15,6 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+use fory_core::types::RefFlag;
 use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
 use syn::{Field, Type};
@@ -28,7 +29,7 @@ fn create_private_field_name(field: &Field) -> Ident {
     format_ident!("_{}", field.ident.as_ref().expect(""))
 }
 
-fn is_declared_by_option(field: &Field) -> bool {
+fn need_declared_by_option(field: &Field) -> bool {
     let type_name = extract_type_name(&field.ty);
     type_name == "Option" || !is_primitive_type(type_name.as_str())
 }
@@ -48,19 +49,17 @@ fn declare_var(fields: &[&Field]) -> Vec<TokenStream> {
                     }
                 }
                 _ => {
-                    if is_declared_by_option(field) {
+                    if need_declared_by_option(field) {
                         quote! {
                             let mut #var_name: Option<#ty> = None;
                         }
+                    } else if extract_type_name(&field.ty) == "bool" {
+                        quote! {
+                            let mut #var_name: bool = false;
+                        }
                     } else {
-                        if extract_type_name(&field.ty) == "bool" {
-                            quote! {
-                                let mut #var_name: bool = false;
-                            }
-                        } else {
-                            quote! {
-                                let mut #var_name: #ty = 0 as #ty;
-                            }
+                        quote! {
+                            let mut #var_name: #ty = 0 as #ty;
                         }
                     }
                 }
@@ -87,7 +86,7 @@ fn assign_value(fields: &[&Field]) -> Vec<TokenStream> {
                     }
                 }
                 _ => {
-                    if is_declared_by_option(field) {
+                    if need_declared_by_option(field) {
                         quote! {
                             #name: #var_name.unwrap_or_default()
                         }
@@ -349,42 +348,36 @@ fn gen_read_compatible_match_arm_body(field: &Field, var_name: &Ident) -> TokenS
                 Type::Path(type_path) => &type_path.path.segments.first().unwrap().ident,
                 _ => panic!("Unsupported type"),
             };
-            let skip_ref_flag = skip_ref_flag(ty);
             if local_nullable {
                 quote! {
                     if _field.field_type.nullable {
-                        #var_name = Some(fory_core::serializer::read_ref_info_data::<#ty>(fory, context, true, #skip_ref_flag, false)?);
+                        #var_name = Some(fory_core::serializer::read_ref_info_data::<#ty>(fory, context, true, false, false)?);
                     } else {
                         #var_name = Some(
-                            fory_core::serializer::read_ref_info_data::<#ty>(fory, context, true, #skip_ref_flag, false)?
+                            fory_core::serializer::read_ref_info_data::<#ty>(fory, context, true, true, false)?
                         );
                     }
                 }
             } else {
-                let dec_by_option = is_declared_by_option(field);
+                let dec_by_option = need_declared_by_option(field);
                 if dec_by_option {
                     quote! {
                         if !_field.field_type.nullable {
-                            #var_name = Some(fory_core::serializer::read_ref_info_data::<#ty>(fory, context, true, #skip_ref_flag, false)?);
+                            #var_name = Some(fory_core::serializer::read_ref_info_data::<#ty>(fory, context, true, true, false)?);
                         } else {
-                            if (context.reader.read_bool()) {
-                                #var_name = Some(<#ty as fory_core::serializer::ForyDefault>::fory_default());
-                            } else {
-                                #var_name = Some(
-                                    fory_core::serializer::read_ref_info_data::<#ty>(fory, context, true, #skip_ref_flag, false)?
-                                );
-                            }
+                            #var_name = fory_core::serializer::read_ref_info_data::<Option<#ty>>(fory, context, true, false, false)?
                         }
                     }
                 } else {
+                    let null_flag = RefFlag::Null as i8;
                     quote! {
                         if !_field.field_type.nullable {
-                            #var_name = fory_core::serializer::read_ref_info_data::<#ty>(fory, context, true, #skip_ref_flag, false)?;
+                            #var_name = fory_core::serializer::read_ref_info_data::<#ty>(fory, context, true, true, false)?;
                         } else {
-                            if (context.reader.read_bool()) {
+                            if context.reader.read_i8() == #null_flag {
                                 #var_name = <#ty as fory_core::serializer::ForyDefault>::fory_default();
                             } else {
-                                #var_name = fory_core::serializer::read_ref_info_data::<#ty>(fory, context, true, #skip_ref_flag, false)?;
+                                #var_name = fory_core::serializer::read_ref_info_data::<#ty>(fory, context, true, true, false)?;
                             }
                         }
                     }

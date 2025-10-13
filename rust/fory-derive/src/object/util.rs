@@ -313,40 +313,51 @@ pub(super) fn parse_generic_tree(ty: &Type) -> TypeNode {
 }
 
 pub(super) fn generic_tree_to_tokens(node: &TypeNode) -> TokenStream {
-    if node.name == "Option" {
-        if let Some(first_generic) = node.generics.first() {
-            if first_generic.name == "Option" {
-                return quote! {
-                    compile_error!("adjacent Options are not supported");
-                };
+    // If Option, unwrap it before generating children
+    let (nullable, base_node) = if node.name == "Option" {
+        if let Some(inner) = node.generics.first() {
+            if inner.name == "Option" {
+                return quote! { compile_error!("Nested adjacent Option is not allowed!"); };
             }
+            // Unwrap Option and propagate parsing
+            (true, inner)
+        } else {
+            return quote! { compile_error!("Missing Option inner type"); };
         }
-    }
+    } else {
+        (!PRIMITIVE_TYPE_NAMES.contains(&node.name.as_str()), node)
+    };
 
-    if let Some(ts) = try_vec_of_option_primitive(node) {
+    // Vec<Option<primitive>> rule stays as is
+    if let Some(ts) = try_vec_of_option_primitive(base_node) {
         return ts;
     }
-    let primitive_vec = try_primitive_vec_type(node);
 
-    let mut children_tokens: Vec<TokenStream> = if primitive_vec.is_none() {
-        node.generics.iter().map(generic_tree_to_tokens).collect()
+    // Try primitive Vec type
+    let primitive_vec = try_primitive_vec_type(base_node);
+
+    // Recursively generate children token streams
+    let children_tokens: Vec<TokenStream> = if primitive_vec.is_none() {
+        base_node
+            .generics
+            .iter()
+            .map(generic_tree_to_tokens)
+            .collect()
     } else {
         vec![]
     };
-    let ty: syn::Type = syn::parse_str(&node.to_string()).unwrap();
-    let nullable = node.name == "Option";
-    let get_type_id = if nullable {
-        let first = children_tokens.remove(0);
-        quote! {
-            #first.type_id
-        }
-    } else if let Some(ts) = primitive_vec {
+
+    // Build the syn::Type from the DISPLAY of base_node, not the original node if Option
+    let ty: syn::Type = syn::parse_str(&base_node.to_string()).unwrap();
+
+    let get_type_id = if let Some(ts) = primitive_vec {
         ts
     } else {
         quote! {
             <#ty as fory_core::serializer::Serializer>::fory_get_type_id(fory)
         }
     };
+
     quote! {
         fory_core::meta::FieldType::new(
             #get_type_id,

@@ -268,7 +268,7 @@ impl fmt::Display for TypeNode {
     }
 }
 
-fn extract_type_name(ty: &Type) -> String {
+pub(super) fn extract_type_name(ty: &Type) -> String {
     if let Type::Path(type_path) = ty {
         type_path.path.segments.last().unwrap().ident.to_string()
     } else if matches!(ty, Type::TraitObject(_)) {
@@ -377,6 +377,10 @@ fn get_primitive_type_id(ty: &str) -> u32 {
         "f64" => TypeId::FLOAT64 as u32,
         _ => unreachable!("Unknown primitive type: {}", ty),
     }
+}
+
+pub(super) fn is_primitive_type(ty: &str) -> bool {
+    PRIMITIVE_TYPE_NAMES.contains(&ty)
 }
 
 fn group_fields_by_type(fields: &[&Field]) -> FieldGroups {

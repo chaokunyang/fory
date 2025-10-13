@@ -21,11 +21,19 @@ use syn::{Field, Type};
 
 use super::util::{
     classify_trait_object_field, create_wrapper_types_arc, create_wrapper_types_rc,
-    parse_generic_tree, skip_ref_flag, StructField,
+    extract_type_name, is_primitive_type, parse_generic_tree, skip_ref_flag, StructField,
 };
 
 fn create_private_field_name(field: &Field) -> Ident {
     format_ident!("_{}", field.ident.as_ref().expect(""))
+}
+
+fn is_declared_by_option(field: &Field) -> bool {
+    let type_name = extract_type_name(&field.ty);
+    if type_name == "Option" || !is_primitive_type(type_name.as_str()) {
+        return true;
+    }
+    return false;
 }
 
 fn declare_var(fields: &[&Field]) -> Vec<TokenStream> {
@@ -43,8 +51,14 @@ fn declare_var(fields: &[&Field]) -> Vec<TokenStream> {
                     }
                 }
                 _ => {
-                    quote! {
-                        let mut #var_name: Option<#ty> = None;
+                    if is_declared_by_option(field) {
+                        quote! {
+                            let mut #var_name: Option<#ty> = None;
+                        }
+                    } else {
+                        quote! {
+                            let mut #var_name: #ty = 0 as #ty;
+                        }
                     }
                 }
             }
@@ -70,8 +84,14 @@ fn assign_value(fields: &[&Field]) -> Vec<TokenStream> {
                     }
                 }
                 _ => {
-                    quote! {
-                        #name: #var_name.unwrap_or_default()
+                    if is_declared_by_option(field) {
+                        quote! {
+                            #name: #var_name.unwrap_or_default()
+                        }
+                    } else {
+                        quote! {
+                            #name: #var_name
+                        }
                     }
                 }
             }
@@ -338,16 +358,31 @@ fn gen_read_compatible_match_arm_body(field: &Field, var_name: &Ident) -> TokenS
                     }
                 }
             } else {
-                quote! {
-                    if !&_field.field_type.nullable {
-                        #var_name = Some(fory_core::serializer::read_ref_info_data::<#ty>(fory, context, true, #skip_ref_flag, false));
-                    } else {
-                        if (context.reader.read_bool()) {
-                            #var_name = Some(<#ty as fory_core::serializer::ForyDefault>::fory_default());
+                let dec_by_option = is_declared_by_option(field);
+                if dec_by_option {
+                    quote! {
+                        if !&_field.field_type.nullable {
+                            #var_name = Some(fory_core::serializer::read_ref_info_data::<#ty>(fory, context, true, #skip_ref_flag, false));
                         } else {
-                            #var_name = Some(
-                                fory_core::serializer::read_ref_info_data::<#ty>(fory, context, true, #skip_ref_flag, false)
-                            );
+                            if (context.reader.read_bool()) {
+                                #var_name = Some(<#ty as fory_core::serializer::ForyDefault>::fory_default());
+                            } else {
+                                #var_name = Some(
+                                    fory_core::serializer::read_ref_info_data::<#ty>(fory, context, true, #skip_ref_flag, false)
+                                );
+                            }
+                        }
+                    }
+                } else {
+                    quote! {
+                        if !&_field.field_type.nullable {
+                            #var_name = fory_core::serializer::read_ref_info_data::<#ty>(fory, context, true, #skip_ref_flag, false);
+                        } else {
+                            if (context.reader.read_bool()) {
+                                #var_name = <#ty as fory_core::serializer::ForyDefault>::fory_default();
+                            } else {
+                                #var_name = fory_core::serializer::read_ref_info_data::<#ty>(fory, context, true, #skip_ref_flag, false);
+                            }
                         }
                     }
                 }

@@ -18,7 +18,7 @@
 import enum
 import typing
 from typing import List
-from pyfory.type import TypeId
+from pyfory.type import TypeId, is_primitive_type
 from pyfory._util import Buffer
 from pyfory.type import infer_field, is_polymorphic_type
 from pyfory.meta.metastring import Encoding
@@ -250,7 +250,7 @@ def build_field_infos(type_resolver, cls):
     for field_name in field_names:
         field_type_hint = type_hints.get(field_name, typing.Any)
         unwrapped_type, is_nullable = unwrap_optional(field_type_hint)
-        nullable_map[field_name] = is_nullable
+        nullable_map[field_name] = is_nullable or not is_primitive_type(unwrapped_type)
         field_type = build_field_type(type_resolver, field_name, unwrapped_type, visitor, is_nullable)
         field_info = FieldInfo(field_name, field_type, cls.__name__)
         field_infos.append(field_info)

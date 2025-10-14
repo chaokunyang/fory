@@ -368,19 +368,26 @@ class DataClassSerializer(Serializer):
     ):
         super().__init__(fory, clz)
         self._xlang = xlang
-        # This will get superclass type hints too.
+        from pyfory.type import unwrap_optional
+
         self._type_hints = typing.get_type_hints(clz)
         self._field_names = field_names or self._get_field_names(clz)
         self._has_slots = hasattr(clz, "__slots__")
+        self._nullable_fields = {}
+        for field_name in self._field_names:
+            if field_name in self._type_hints:
+                _, is_nullable = unwrap_optional(self._type_hints[field_name])
+                self._nullable_fields[field_name] = is_nullable
 
         if self._xlang:
             self._serializers = serializers or [None] * len(self._field_names)
             if serializers is None:
                 visitor = StructFieldSerializerVisitor(fory)
                 for index, key in enumerate(self._field_names):
-                    serializer = infer_field(key, self._type_hints[key], visitor, types_path=[])
+                    unwrapped_type, _ = unwrap_optional(self._type_hints[key])
+                    serializer = infer_field(key, unwrapped_type, visitor, types_path=[])
                     self._serializers[index] = serializer
-            self._field_names, self._serializers = _sort_fields(fory.type_resolver, self._field_names, self._serializers)
+            self._field_names, self._serializers = _sort_fields(fory.type_resolver, self._field_names, self._serializers, self._nullable_fields)
             self._hash = 0  # Will be computed on first xwrite/xread
             self._generated_xwrite_method = self._gen_xwrite_method()
             self._generated_xread_method = self._gen_xread_method()
@@ -510,15 +517,20 @@ class DataClassSerializer(Serializer):
         context[fory] = self.fory
         context[get_hash_func] = _get_hash
         context["_field_names"] = self._field_names
-        context["_type_hints"] = self._type_hints
+        from pyfory.type import unwrap_optional
+
+        unwrapped_hints = {}
+        for field_name, hint in self._type_hints.items():
+            unwrapped, _ = unwrap_optional(hint)
+            unwrapped_hints[field_name] = unwrapped
+        context["_type_hints"] = unwrapped_hints
         context["_serializers"] = self._serializers
         stmts = [
             f'"""xwrite method for {self.type_}"""',
         ]
         if not self.fory.compatible:
-            # Compute hash at generation time since we're in xlang mode
             if self._hash == 0:
-                self._hash = _get_hash(self.fory, self._field_names, self._type_hints)
+                self._hash = _get_hash(self.fory, self._field_names, unwrapped_hints)
             stmts.append(f"{buffer}.write_int32({self._hash})")
         if not self._has_slots:
             stmts.append(f"{value_dict} = {value}.__dict__")
@@ -530,7 +542,18 @@ class DataClassSerializer(Serializer):
                 stmts.append(f"{field_value} = {value_dict}['{field_name}']")
             else:
                 stmts.append(f"{field_value} = {value}.{field_name}")
-            stmts.append(f"{fory}.xserialize_ref({buffer}, {field_value}, serializer={serializer_var})")
+            is_nullable = self._nullable_fields.get(field_name, False)
+            if is_nullable:
+                stmts.extend(
+                    [
+                        f"if {field_value} is None:",
+                        f"    {buffer}.write_int8(-3)",
+                        "else:",
+                        f"    {fory}.xserialize_ref({buffer}, {field_value}, serializer={serializer_var})",
+                    ]
+                )
+            else:
+                stmts.append(f"{fory}.xserialize_ref({buffer}, {field_value}, serializer={serializer_var})")
         self._xwrite_method_code, func = compile_function(
             f"xwrite_{self.type_.__module__}_{self.type_.__qualname__}".replace(".", "_"),
             [buffer, value],
@@ -555,16 +578,21 @@ class DataClassSerializer(Serializer):
         context[ref_resolver] = self.fory.ref_resolver
         context[get_hash_func] = _get_hash
         context["_field_names"] = self._field_names
-        context["_type_hints"] = self._type_hints
+        from pyfory.type import unwrap_optional
+
+        unwrapped_hints = {}
+        for field_name, hint in self._type_hints.items():
+            unwrapped, _ = unwrap_optional(hint)
+            unwrapped_hints[field_name] = unwrapped
+        context["_type_hints"] = unwrapped_hints
         context["_serializers"] = self._serializers
         current_class_field_names = set(self._get_field_names(self.type_))
         stmts = [
             f'"""xread method for {self.type_}"""',
         ]
         if not self.fory.compatible:
-            # Compute hash at generation time since we're in xlang mode
             if self._hash == 0:
-                self._hash = _get_hash(self.fory, self._field_names, self._type_hints)
+                self._hash = _get_hash(self.fory, self._field_names, unwrapped_hints)
             stmts.extend(
                 [
                     f"read_hash = {buffer}.read_int32()",
@@ -587,7 +615,21 @@ class DataClassSerializer(Serializer):
             serializer_var = f"serializer{index}"
             context[serializer_var] = self._serializers[index]
             field_value = f"field_value{index}"
-            stmts.append(f"{field_value} = {fory}.xdeserialize_ref({buffer}, serializer={serializer_var})")
+            is_nullable = self._nullable_fields.get(field_name, False)
+            if is_nullable:
+                ref_id_var = f"ref_id{index}"
+                stmts.extend(
+                    [
+                        f"{ref_id_var} = {buffer}.read_int8()",
+                        f"if {ref_id_var} == -3:",
+                        f"    {field_value} = None",
+                        "else:",
+                        f"    {buffer}.reader_index -= 1",
+                        f"    {field_value} = {fory}.xdeserialize_ref({buffer}, serializer={serializer_var})",
+                    ]
+                )
+            else:
+                stmts.append(f"{field_value} = {fory}.xdeserialize_ref({buffer}, serializer={serializer_var})")
             if field_name not in current_class_field_names:
                 stmts.append(f"# {field_name} is not in {self.type_}")
                 continue
@@ -631,33 +673,62 @@ class DataClassSerializer(Serializer):
         if not self._xlang:
             raise TypeError("xwrite can only be called when DataClassSerializer is in xlang mode")
         if self._hash == 0:
-            self._hash = _get_hash(self.fory, self._field_names, self._type_hints)
-        buffer.write_int32(self._hash)
+            from pyfory.type import unwrap_optional
+
+            unwrapped_hints = {}
+            for field_name, hint in self._type_hints.items():
+                unwrapped, _ = unwrap_optional(hint)
+                unwrapped_hints[field_name] = unwrapped
+            self._hash = _get_hash(self.fory, self._field_names, unwrapped_hints)
+        if not self.fory.compatible:
+            buffer.write_int32(self._hash)
         for index, field_name in enumerate(self._field_names):
             field_value = getattr(value, field_name)
             serializer = self._serializers[index]
-            self.fory.xserialize_ref(buffer, field_value, serializer=serializer)
+            is_nullable = self._nullable_fields.get(field_name, False)
+            if is_nullable and field_value is None:
+                buffer.write_int8(-3)
+            else:
+                self.fory.xserialize_ref(buffer, field_value, serializer=serializer)
 
     def xread(self, buffer):
         if not self._xlang:
             raise TypeError("xread can only be called when DataClassSerializer is in xlang mode")
         if self._hash == 0:
-            self._hash = _get_hash(self.fory, self._field_names, self._type_hints)
-        hash_ = buffer.read_int32()
-        if hash_ != self._hash:
-            raise TypeNotCompatibleError(
-                f"Hash {hash_} is not consistent with {self._hash} for type {self.type_}",
-            )
+            from pyfory.type import unwrap_optional
+
+            unwrapped_hints = {}
+            for field_name, hint in self._type_hints.items():
+                unwrapped, _ = unwrap_optional(hint)
+                unwrapped_hints[field_name] = unwrapped
+            self._hash = _get_hash(self.fory, self._field_names, unwrapped_hints)
+        if not self.fory.compatible:
+            hash_ = buffer.read_int32()
+            if hash_ != self._hash:
+                raise TypeNotCompatibleError(
+                    f"Hash {hash_} is not consistent with {self._hash} for type {self.type_}",
+                )
         obj = self.type_.__new__(self.type_)
         self.fory.ref_resolver.reference(obj)
+        current_class_field_names = set(self._get_field_names(self.type_))
         for index, field_name in enumerate(self._field_names):
             serializer = self._serializers[index]
-            field_value = self.fory.xdeserialize_ref(buffer, serializer=serializer)
-            setattr(
-                obj,
-                field_name,
-                field_value,
-            )
+            is_nullable = self._nullable_fields.get(field_name, False)
+            if is_nullable:
+                ref_id = buffer.read_int8()
+                if ref_id == -3:
+                    field_value = None
+                else:
+                    buffer.reader_index -= 1
+                    field_value = self.fory.xdeserialize_ref(buffer, serializer=serializer)
+            else:
+                field_value = self.fory.xdeserialize_ref(buffer, serializer=serializer)
+            if field_name in current_class_field_names:
+                setattr(
+                    obj,
+                    field_name,
+                    field_value,
+                )
         return obj
 
 

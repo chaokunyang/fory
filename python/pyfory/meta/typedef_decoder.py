@@ -202,6 +202,7 @@ def read_field_info(buffer: Buffer, resolver, defined_class: str) -> FieldInfo:
     xtype_id = buffer.read_varuint32()
     field_type = FieldType.xread_with_type(buffer, resolver, xtype_id, is_nullable, is_tracking_ref)
 
-    # Read field name
-    field_name = FIELD_NAME_DECODER.decode(buffer.read_bytes(field_name_size), encoding)
+    # Read field name - it comes AFTER the type info in the encoding
+    field_name_bytes = buffer.read_bytes(field_name_size)
+    field_name = FIELD_NAME_DECODER.decode(field_name_bytes, encoding)
     return FieldInfo(field_name, field_type, defined_class)

@@ -66,18 +66,21 @@ def encode_typedef(type_resolver, cls):
 
     buffer = Buffer.allocate(64)
 
-    # Write placeholder for header
-    buffer.write_uint8(0)
-
     # Write meta header
     header = len(field_infos)
     if len(field_infos) >= SMALL_NUM_FIELDS_THRESHOLD:
         header = SMALL_NUM_FIELDS_THRESHOLD
+        if type_resolver.is_registered_by_name(cls):
+            header |= REGISTER_BY_NAME_FLAG
+        buffer.write_uint8(header)
         buffer.write_varuint32(len(field_infos) - SMALL_NUM_FIELDS_THRESHOLD)
+    else:
+        if type_resolver.is_registered_by_name(cls):
+            header |= REGISTER_BY_NAME_FLAG
+        buffer.write_uint8(header)
 
     # Write type info
     if type_resolver.is_registered_by_name(cls):
-        header |= REGISTER_BY_NAME_FLAG
         namespace, typename = type_resolver.get_registered_name(cls)
         write_namespace(buffer, namespace)
         write_typename(buffer, typename)
@@ -87,8 +90,6 @@ def encode_typedef(type_resolver, cls):
         assert type_resolver.is_registered_by_id(cls), "Class must be registered by name or id"
         type_id = type_resolver.get_registered_id(cls)
         buffer.write_varuint32(type_id)
-    # Update header byte
-    buffer.put_uint8(0, header)
 
     # Write fields info
     write_fields_info(type_resolver, buffer, field_infos)

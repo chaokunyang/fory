@@ -159,23 +159,7 @@ def test_sort_fields():
 
     fory = Fory(xlang=True, ref=True)
     serializer = DataClassSerializer(fory, TestClass, xlang=True)
-    assert serializer._field_names == [
-        "f13",
-        "f5",
-        "f11",
-        "f7",
-        "f12",
-        "f1",
-        "f4",
-        "f15",
-        "f6",
-        "f10",
-        "f2",
-        "f14",
-        "f3",
-        "f9",
-        "f8",
-    ]
+    assert serializer._field_names == ["f13", "f5", "f11", "f12", "f1", "f7", "f4", "f15", "f6", "f10", "f2", "f14", "f3", "f9", "f8"]
 
 
 def test_data_class_serializer_xlang():

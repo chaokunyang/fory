@@ -542,20 +542,44 @@ class DataClassSerializer(Serializer):
         for index, field_name in enumerate(self._field_names):
             field_value = f"field_value{next(counter)}"
             serializer_var = f"serializer{index}"
-            context[serializer_var] = self._serializers[index]
+            serializer = self._serializers[index]
+            context[serializer_var] = serializer
             if not self._has_slots:
                 stmts.append(f"{field_value} = {value_dict}['{field_name}']")
             else:
                 stmts.append(f"{field_value} = {value}.{field_name}")
             is_nullable = self._nullable_fields.get(field_name, False)
             if is_nullable:
-                stmts.extend(
-                    [
-                        f"{fory}.xwrite_ref({buffer}, {field_value}, serializer={serializer_var})",
-                    ]
-                )
+                if isinstance(serializer, StringSerializer):
+                    stmts.extend(
+                        [
+                            f"if {field_value} is None:",
+                            f"    {buffer}.write_int8({NULL_FLAG})",
+                            "else:",
+                            f"     {buffer}.write_int8({NOT_NULL_VALUE_FLAG})",
+                            f"     {buffer}.write_string({field_value})",
+                        ]
+                    )
+                else:
+                    stmts.append(f"{fory}.xwrite_ref({buffer}, {field_value}, serializer={serializer_var})")
             else:
-                stmts.append(f"{fory}.xwrite_no_ref({buffer}, {field_value}, serializer={serializer_var})")
+                if isinstance(serializer, BooleanSerializer):
+                    stmt = f"{buffer}.write_bool({field_value})"
+                elif isinstance(serializer, ByteSerializer):
+                    stmt = f"{buffer}.write_int8({field_value})"
+                elif isinstance(serializer, Int16Serializer):
+                    stmt = f"{buffer}.write_int16({field_value})"
+                elif isinstance(serializer, Int32Serializer):
+                    stmt = f"{buffer}.write_varint32({field_value})"
+                elif isinstance(serializer, Int64Serializer):
+                    stmt = f"{buffer}.write_varint64({field_value})"
+                elif isinstance(serializer, Float32Serializer):
+                    stmt = f"{buffer}.write_float32({field_value})"
+                elif isinstance(serializer, Float64Serializer):
+                    stmt = f"{buffer}.write_float64({field_value})"
+                else:
+                    stmt = f"{fory}.xwrite_no_ref({buffer}, {field_value}, serializer={serializer_var})"
+                stmts.append(stmt)
         self._xwrite_method_code, func = compile_function(
             f"xwrite_{self.type_.__module__}_{self.type_.__qualname__}".replace(".", "_"),
             [buffer, value],
@@ -615,13 +639,40 @@ class DataClassSerializer(Serializer):
 
         for index, field_name in enumerate(self._field_names):
             serializer_var = f"serializer{index}"
-            context[serializer_var] = self._serializers[index]
+            serializer = self._serializers[index]
+            context[serializer_var] = serializer
             field_value = f"field_value{index}"
             is_nullable = self._nullable_fields.get(field_name, False)
             if is_nullable:
-                stmts.append(f"{field_value} = {fory}.xread_ref({buffer}, serializer={serializer_var})")
+                if isinstance(serializer, StringSerializer):
+                    stmts.extend(
+                        [
+                            f"if {buffer}.read_int8() >= {NOT_NULL_VALUE_FLAG}:",
+                            f"    {field_value} = {buffer}.read_string()",
+                            "else:",
+                            f"    {field_value} = None",
+                        ]
+                    )
+                else:
+                    stmts.append(f"{field_value} = {fory}.xread_ref({buffer}, serializer={serializer_var})")
             else:
-                stmts.append(f"{field_value} = {fory}.xread_no_ref({buffer}, serializer={serializer_var})")
+                if isinstance(serializer, BooleanSerializer):
+                    stmt = f"{field_value} = {buffer}.read_bool()"
+                elif isinstance(serializer, ByteSerializer):
+                    stmt = f"{field_value} = {buffer}.read_int8()"
+                elif isinstance(serializer, Int16Serializer):
+                    stmt = f"{field_value} = {buffer}.read_int16()"
+                elif isinstance(serializer, Int32Serializer):
+                    stmt = f"{field_value} = {buffer}.read_varint32()"
+                elif isinstance(serializer, Int64Serializer):
+                    stmt = f"{field_value} = {buffer}.read_varint64()"
+                elif isinstance(serializer, Float32Serializer):
+                    stmt = f"{field_value} = {buffer}.read_float32()"
+                elif isinstance(serializer, Float64Serializer):
+                    stmt = f"{field_value} = {buffer}.read_float64()"
+                else:
+                    stmt = f"{field_value} = {fory}.xread_no_ref({buffer}, serializer={serializer_var})"
+                stmts.append(stmt)
             if field_name not in current_class_field_names:
                 stmts.append(f"# {field_name} is not in {self.type_}")
                 continue

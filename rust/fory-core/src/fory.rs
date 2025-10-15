@@ -20,7 +20,7 @@ use crate::ensure;
 use crate::error::Error;
 use crate::resolver::context::WriteContext;
 use crate::resolver::context::{Pool, ReadContext};
-use crate::resolver::type_resolver::{TypeInfo, TypeResolver};
+use crate::resolver::type_resolver::{TypeInfo, TypeRegistry, TypeResolver};
 use crate::serializer::ForyDefault;
 use crate::serializer::{Serializer, StructSerializer};
 use crate::types::config_flags::IS_NULL_FLAG;
@@ -29,6 +29,8 @@ use crate::types::{
     Language, MAGIC_NUMBER, SIZE_OF_REF_AND_TYPE,
 };
 use crate::util::get_ext_actual_type_id;
+use std::cell::RefCell;
+use std::sync::Arc;
 
 static EMPTY_STRING: String = String::new();
 
@@ -79,38 +81,91 @@ pub struct Fory {
     compatible: bool,
     xlang: bool,
     share_meta: bool,
-    type_resolver: TypeResolver,
+    type_registry: TypeRegistry,
     compress_string: bool,
     max_dyn_depth: u32,
-    write_context_pool: Pool<WriteContext>,
-    read_context_pool: Pool<ReadContext>,
+    // Lazy-initialized type resolver for lookups during registration
+    cached_type_resolver: RefCell<Option<Arc<TypeResolver>>>,
+    // Lazy-initialized pools (interior mutability for lazy init)
+    write_context_pool: RefCell<Option<Pool<WriteContext>>>,
+    read_context_pool: RefCell<Option<Pool<ReadContext>>>,
 }
 
 impl Default for Fory {
     fn default() -> Self {
-        let write_context_constructor = || {
-            let writer = Writer::default();
-            WriteContext::new(writer)
-        };
-        let read_context_constructor = || {
-            let reader = Reader::new(&[]);
-            // when context is popped out, max_dyn_depth will be assigned a valid value
-            ReadContext::new(reader, 0)
-        };
         Fory {
             compatible: false,
             xlang: true,
             share_meta: false,
-            type_resolver: TypeResolver::default(),
+            type_registry: TypeRegistry::default(),
             compress_string: false,
             max_dyn_depth: 5,
-            write_context_pool: Pool::new(write_context_constructor),
-            read_context_pool: Pool::new(read_context_constructor),
+            cached_type_resolver: RefCell::new(None),
+            write_context_pool: RefCell::new(None),
+            read_context_pool: RefCell::new(None),
         }
     }
 }
 
 impl Fory {
+    /// Initialize write context pool if not already initialized (using interior mutability)
+    fn ensure_write_pool_initialized(&self) {
+        let mut pool_ref = self.write_context_pool.borrow_mut();
+
+        if pool_ref.is_some() {
+            return;
+        }
+
+        // Build an immutable TypeResolver from the TypeRegistry
+        let type_resolver = Arc::new(self.type_registry.build());
+        let compatible = self.compatible;
+        let share_meta = self.share_meta;
+        let compress_string = self.compress_string;
+        let xlang = self.xlang;
+
+        let factory = move || {
+            let writer = Writer::default();
+            WriteContext::new(
+                writer,
+                type_resolver.clone(),
+                compatible,
+                share_meta,
+                compress_string,
+                xlang,
+            )
+        };
+        *pool_ref = Some(Pool::new(factory));
+    }
+
+    /// Initialize read context pool if not already initialized (using interior mutability)
+    fn ensure_read_pool_initialized(&self) {
+        let mut pool_ref = self.read_context_pool.borrow_mut();
+
+        if pool_ref.is_some() {
+            return;
+        }
+
+        // Build an immutable TypeResolver from the TypeRegistry
+        let type_resolver = Arc::new(self.type_registry.build());
+        let compatible = self.compatible;
+        let share_meta = self.share_meta;
+        let xlang = self.xlang;
+        let max_dyn_depth = self.max_dyn_depth;
+
+        let factory = move || {
+            let reader = Reader::new(&[]);
+            ReadContext::new(
+                reader,
+                type_resolver.clone(),
+                compatible,
+                share_meta,
+                xlang,
+                max_dyn_depth,
+            )
+        };
+        *pool_ref = Some(Pool::new(factory));
+    }
+
     /// Sets the serialization compatible mode for this Fory instance.
     ///
     /// # Arguments
@@ -275,13 +330,25 @@ impl Fory {
         self.share_meta
     }
 
-    /// Returns a reference to the type resolver.
+    /// Returns a type resolver for type lookups.
     ///
     /// # Returns
     ///
-    /// A reference to the internal `TypeResolver` used for type registration and lookup.
-    pub fn get_type_resolver(&self) -> &TypeResolver {
-        &self.type_resolver
+    /// An Arc to a TypeResolver built from the current type registry.
+    /// This is used during type registration for looking up type information.
+    ///
+    /// Note: This method is cached to avoid rebuilding the resolver on every call.
+    pub fn get_type_resolver(&self) -> Arc<TypeResolver> {
+        let mut cached = self.cached_type_resolver.borrow_mut();
+        if cached.is_none() {
+            *cached = Some(Arc::new(self.type_registry.build()));
+        }
+        cached.as_ref().unwrap().clone()
+    }
+
+    /// Invalidate the cached type resolver. Called after new type registrations.
+    fn invalidate_type_resolver_cache(&self) {
+        *self.cached_type_resolver.borrow_mut() = None;
     }
 
     pub fn write_head<T: Serializer>(&self, is_none: bool, writer: &mut Writer) {
@@ -384,14 +451,16 @@ impl Fory {
     /// let deserialized: Point = fory.deserialize(&bytes).unwrap();
     /// ```
     pub fn deserialize<T: Serializer + ForyDefault>(&self, bf: &[u8]) -> Result<T, Error> {
-        let mut context = self.read_context_pool.get();
+        self.ensure_read_pool_initialized();
+        let pool = self.read_context_pool.borrow();
+        let mut context = pool.as_ref().unwrap().get();
         context.init(bf, self.max_dyn_depth);
         let result = self.deserialize_with_context(&mut context);
         if result.is_ok() {
             assert_eq!(context.reader.slice_after_cursor().len(), 0);
         }
         context.reset();
-        self.read_context_pool.put(context);
+        pool.as_ref().unwrap().put(context);
         result
     }
 
@@ -404,14 +473,13 @@ impl Fory {
             return Ok(T::fory_default());
         }
         let mut bytes_to_skip = 0;
-        if self.compatible {
+        if context.is_compatible() {
             let meta_offset = context.reader.read_i32()?;
             if meta_offset != -1 {
-                bytes_to_skip =
-                    context.load_meta(self.get_type_resolver(), meta_offset as usize)?;
+                bytes_to_skip = context.load_meta(meta_offset as usize)?;
             }
         }
-        let result = <T as Serializer>::fory_read(self, context, false);
+        let result = <T as Serializer>::fory_read(context, false);
         if bytes_to_skip > 0 {
             context.reader.skip(bytes_to_skip)?;
         }
@@ -447,10 +515,12 @@ impl Fory {
     /// let bytes = fory.serialize(&point);
     /// ```
     pub fn serialize<T: Serializer>(&self, record: &T) -> Result<Vec<u8>, Error> {
-        let mut context = self.write_context_pool.get();
+        self.ensure_write_pool_initialized();
+        let pool = self.write_context_pool.borrow();
+        let mut context = pool.as_ref().unwrap().get();
         let result = self.serialize_with_context(record, &mut context)?;
         context.reset();
-        self.write_context_pool.put(context);
+        pool.as_ref().unwrap().put(context);
         Ok(result)
     }
 
@@ -463,11 +533,11 @@ impl Fory {
         self.write_head::<T>(is_none, &mut context.writer);
         let meta_start_offset = context.writer.len();
         if !is_none {
-            if self.compatible {
+            if context.is_compatible() {
                 context.writer.write_i32(-1);
             };
-            <T as Serializer>::fory_write(record, self, context, false)?;
-            if self.compatible && !context.empty() {
+            <T as Serializer>::fory_write(record, context, false)?;
+            if context.is_compatible() && !context.empty() {
                 context.write_meta(meta_start_offset);
             }
         }
@@ -506,9 +576,10 @@ impl Fory {
         id: u32,
     ) -> Result<(), Error> {
         let actual_type_id = T::fory_actual_type_id(id, false, self.compatible);
-        let type_info =
-            TypeInfo::new::<T>(self, actual_type_id, &EMPTY_STRING, &EMPTY_STRING, false)?;
-        self.type_resolver.register::<T>(&type_info)
+        let type_info = TypeInfo::new::<T>(actual_type_id, &EMPTY_STRING, &EMPTY_STRING, false)?;
+        self.type_registry.register::<T>(&type_info)?;
+        self.invalidate_type_resolver_cache();
+        Ok(())
     }
 
     /// Registers a struct type with a namespace and type name for cross-language serialization.
@@ -547,8 +618,10 @@ impl Fory {
         type_name: &str,
     ) -> Result<(), Error> {
         let actual_type_id = T::fory_actual_type_id(0, true, self.compatible);
-        let type_info = TypeInfo::new::<T>(self, actual_type_id, namespace, type_name, true)?;
-        self.type_resolver.register::<T>(&type_info)
+        let type_info = TypeInfo::new::<T>(actual_type_id, namespace, type_name, true)?;
+        self.type_registry.register::<T>(&type_info)?;
+        self.invalidate_type_resolver_cache();
+        Ok(())
     }
 
     /// Registers a struct type with a type name (using the default namespace).
@@ -616,14 +689,17 @@ impl Fory {
         id: u32,
     ) -> Result<(), Error> {
         let actual_type_id = get_ext_actual_type_id(id, false);
+        let type_resolver = self.get_type_resolver();
         let type_info = TypeInfo::new_with_empty_fields::<T>(
-            self,
             actual_type_id,
             &EMPTY_STRING,
             &EMPTY_STRING,
             false,
+            &type_resolver,
         )?;
-        self.type_resolver.register_serializer::<T>(&type_info)
+        self.type_registry.register_serializer::<T>(&type_info)?;
+        self.invalidate_type_resolver_cache();
+        Ok(())
     }
 
     /// Registers a custom serializer type with a namespace and type name.
@@ -648,9 +724,17 @@ impl Fory {
         type_name: &str,
     ) -> Result<(), Error> {
         let actual_type_id = get_ext_actual_type_id(0, true);
-        let type_info =
-            TypeInfo::new_with_empty_fields::<T>(self, actual_type_id, namespace, type_name, true)?;
-        self.type_resolver.register_serializer::<T>(&type_info)
+        let type_resolver = self.get_type_resolver();
+        let type_info = TypeInfo::new_with_empty_fields::<T>(
+            actual_type_id,
+            namespace,
+            type_name,
+            true,
+            &type_resolver,
+        )?;
+        self.type_registry.register_serializer::<T>(&type_info)?;
+        self.invalidate_type_resolver_cache();
+        Ok(())
     }
 
     /// Registers a custom serializer type with a type name (using the default namespace).
@@ -676,17 +760,15 @@ impl Fory {
 
 pub fn write_data<T: Serializer>(
     this: &T,
-    fory: &Fory,
     context: &mut WriteContext,
     is_field: bool,
 ) -> Result<(), Error> {
-    T::fory_write_data(this, fory, context, is_field)
+    T::fory_write_data(this, context, is_field)
 }
 
 pub fn read_data<T: Serializer + ForyDefault>(
-    fory: &Fory,
     context: &mut ReadContext,
     is_field: bool,
 ) -> Result<T, Error> {
-    T::fory_read_data(fory, context, is_field)
+    T::fory_read_data(context, is_field)
 }

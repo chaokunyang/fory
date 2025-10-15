@@ -17,7 +17,6 @@
 
 use super::context::{ReadContext, WriteContext};
 use crate::error::Error;
-use crate::fory::Fory;
 use crate::meta::{
     MetaString, TypeMeta, NAMESPACE_ENCODER, NAMESPACE_ENCODINGS, TYPE_NAME_ENCODER,
     TYPE_NAME_ENCODINGS,
@@ -27,17 +26,12 @@ use crate::Reader;
 use std::sync::Arc;
 use std::{any::Any, collections::HashMap};
 
-type WriteFn = fn(&dyn Any, fory: &Fory, &mut WriteContext, is_field: bool) -> Result<(), Error>;
-type ReadFn = fn(
-    fory: &Fory,
-    &mut ReadContext,
-    is_field: bool,
-    skip_ref_flag: bool,
-) -> Result<Box<dyn Any>, Error>;
+type WriteFn = fn(&dyn Any, &mut WriteContext, is_field: bool) -> Result<(), Error>;
+type ReadFn =
+    fn(&mut ReadContext, is_field: bool, skip_ref_flag: bool) -> Result<Box<dyn Any>, Error>;
 
-type WriteDataFn =
-    fn(&dyn Any, fory: &Fory, &mut WriteContext, is_field: bool) -> Result<(), Error>;
-type ReadDataFn = fn(fory: &Fory, &mut ReadContext, is_field: bool) -> Result<Box<dyn Any>, Error>;
+type WriteDataFn = fn(&dyn Any, &mut WriteContext, is_field: bool) -> Result<(), Error>;
+type ReadDataFn = fn(&mut ReadContext, is_field: bool) -> Result<Box<dyn Any>, Error>;
 type ToSerializerFn = fn(Box<dyn Any>) -> Result<Box<dyn Serializer>, Error>;
 
 #[derive(Clone)]
@@ -99,7 +93,6 @@ pub struct TypeInfo {
 
 impl TypeInfo {
     pub fn new<T: StructSerializer>(
-        fory: &Fory,
         type_id: u32,
         namespace: &str,
         type_name: &str,
@@ -110,7 +103,6 @@ impl TypeInfo {
         let type_name_metastring =
             TYPE_NAME_ENCODER.encode_with_encodings(type_name, TYPE_NAME_ENCODINGS)?;
         let (type_def_bytes, type_meta) = T::fory_type_def(
-            fory,
             type_id,
             namespace_metastring.clone(),
             type_name_metastring.clone(),
@@ -127,11 +119,11 @@ impl TypeInfo {
     }
 
     pub fn new_with_empty_fields<T: Serializer>(
-        _fory: &Fory,
         type_id: u32,
         namespace: &str,
         type_name: &str,
         register_by_name: bool,
+        type_resolver: &TypeResolver,
     ) -> Result<TypeInfo, Error> {
         let namespace_metastring =
             NAMESPACE_ENCODER.encode_with_encodings(namespace, NAMESPACE_ENCODINGS)?;
@@ -145,7 +137,6 @@ impl TypeInfo {
             vec![],
         );
         let type_def = meta.to_bytes()?;
-        let type_resolver = _fory.get_type_resolver();
         let meta = TypeMeta::from_bytes(&mut Reader::new(&type_def), type_resolver)?;
         Ok(TypeInfo {
             type_def: Arc::from(type_def),
@@ -182,6 +173,22 @@ impl TypeInfo {
     }
 }
 
+/// TypeRegistry is a mutable registry for type registration.
+/// It collects type registrations and can build an immutable TypeResolver for serialization.
+pub struct TypeRegistry {
+    serializer_map: HashMap<u32, Arc<Harness>>,
+    name_serializer_map: HashMap<(MetaString, MetaString), Arc<Harness>>,
+    type_id_map: HashMap<std::any::TypeId, u32>,
+    type_name_map: HashMap<std::any::TypeId, (MetaString, MetaString)>,
+    type_info_cache: HashMap<std::any::TypeId, TypeInfo>,
+    type_info_map_by_id: HashMap<u32, TypeInfo>,
+    type_info_map_by_name: HashMap<(String, String), TypeInfo>,
+    // Fast lookup by numeric ID for common types
+    type_id_index: Vec<u32>,
+}
+
+/// TypeResolver is an immutable type resolver for fast type/serializer dispatch.
+/// It is created from TypeRegistry and used during serialization/deserialization.
 pub struct TypeResolver {
     serializer_map: HashMap<u32, Arc<Harness>>,
     name_serializer_map: HashMap<(MetaString, MetaString), Arc<Harness>>,
@@ -196,9 +203,9 @@ pub struct TypeResolver {
 
 const NO_TYPE_ID: u32 = 1000000000;
 
-impl Default for TypeResolver {
+impl Default for TypeRegistry {
     fn default() -> Self {
-        let mut resolver = TypeResolver {
+        let mut registry = TypeRegistry {
             serializer_map: HashMap::new(),
             name_serializer_map: HashMap::new(),
             type_id_map: HashMap::new(),
@@ -208,12 +215,39 @@ impl Default for TypeResolver {
             type_info_map_by_name: HashMap::new(),
             type_id_index: Vec::new(),
         };
-        resolver.register_builtin_types().unwrap();
-        resolver
+        registry.register_builtin_types().unwrap();
+        registry
     }
 }
 
-impl TypeResolver {
+impl TypeRegistry {
+    /// Build an immutable TypeResolver from this registry.
+    /// The TypeResolver is optimized for fast lookup during serialization.
+    pub fn build(&self) -> TypeResolver {
+        let mut resolver = TypeResolver {
+            serializer_map: self.serializer_map.clone(),
+            name_serializer_map: self.name_serializer_map.clone(),
+            type_id_map: self.type_id_map.clone(),
+            type_name_map: self.type_name_map.clone(),
+            type_info_cache: self.type_info_cache.clone(),
+            type_info_map_by_id: self.type_info_map_by_id.clone(),
+            type_info_map_by_name: self.type_info_map_by_name.clone(),
+            type_id_index: self.type_id_index.clone(),
+        };
+
+        // Optimize memory usage
+        resolver.serializer_map.shrink_to_fit();
+        resolver.name_serializer_map.shrink_to_fit();
+        resolver.type_id_map.shrink_to_fit();
+        resolver.type_name_map.shrink_to_fit();
+        resolver.type_info_cache.shrink_to_fit();
+        resolver.type_info_map_by_id.shrink_to_fit();
+        resolver.type_info_map_by_name.shrink_to_fit();
+        resolver.type_id_index.shrink_to_fit();
+
+        resolver
+    }
+
     fn register_builtin_types(&mut self) -> Result<(), Error> {
         use crate::types::TypeId;
         let namespace = NAMESPACE_ENCODER.encode_with_encodings("", NAMESPACE_ENCODINGS)?;
@@ -253,58 +287,22 @@ impl TypeResolver {
         Ok(())
     }
 
-    pub fn get_type_info(&self, type_id: std::any::TypeId) -> Result<&TypeInfo, Error> {
-        self.type_info_cache.get(&type_id)
-            .ok_or_else(|| Error::TypeError(format!(
-                "TypeId {:?} not found in type_info registry, maybe you forgot to register some types",
-                type_id
-            ).into()))
-    }
-
-    pub fn get_type_info_by_id(&self, id: u32) -> Option<&TypeInfo> {
-        self.type_info_map_by_id.get(&id)
-    }
-
-    pub fn get_type_info_by_name(&self, namespace: &str, type_name: &str) -> Option<&TypeInfo> {
-        self.type_info_map_by_name
-            .get(&(namespace.to_owned(), type_name.to_owned()))
-    }
-
-    /// Fast path for getting type info by numeric ID (avoids HashMap lookup by TypeId)
-    pub fn get_type_id(&self, type_id: &std::any::TypeId, id: u32) -> Result<u32, Error> {
-        let id_usize = id as usize;
-        if id_usize < self.type_id_index.len() {
-            let type_id = self.type_id_index[id_usize];
-            if type_id != NO_TYPE_ID {
-                return Ok(type_id);
-            }
-        }
-        Err(Error::TypeError(
-            format!(
-                "TypeId {:?} not found in type_id_index, maybe you forgot to register some types",
-                type_id
-            )
-            .into(),
-        ))
-    }
-
     pub fn register<T: StructSerializer + Serializer + ForyDefault>(
         &mut self,
         type_info: &TypeInfo,
     ) -> Result<(), Error> {
         fn write<T2: 'static + Serializer>(
             this: &dyn Any,
-            fory: &Fory,
             context: &mut WriteContext,
             is_field: bool,
         ) -> Result<(), Error> {
             let this = this.downcast_ref::<T2>();
             match this {
                 Some(v) => {
-                    let skip_ref_flag = crate::serializer::get_skip_ref_flag::<T2>(fory)?;
+                    let skip_ref_flag =
+                        crate::serializer::get_skip_ref_flag::<T2>(context.get_type_resolver())?;
                     crate::serializer::write_ref_info_data(
                         v,
-                        fory,
                         context,
                         is_field,
                         skip_ref_flag,
@@ -317,13 +315,11 @@ impl TypeResolver {
         }
 
         fn read<T2: 'static + Serializer + ForyDefault>(
-            fory: &Fory,
             context: &mut ReadContext,
             is_field: bool,
             skip_ref_flag: bool,
         ) -> Result<Box<dyn Any>, Error> {
             match crate::serializer::read_ref_info_data::<T2>(
-                fory,
                 context,
                 is_field,
                 skip_ref_flag,
@@ -336,23 +332,21 @@ impl TypeResolver {
 
         fn write_data<T2: 'static + Serializer>(
             this: &dyn Any,
-            fory: &Fory,
             context: &mut WriteContext,
             is_field: bool,
         ) -> Result<(), Error> {
             let this = this.downcast_ref::<T2>();
             match this {
-                Some(v) => T2::fory_write_data(v, fory, context, is_field),
+                Some(v) => T2::fory_write_data(v, context, is_field),
                 None => todo!(),
             }
         }
 
         fn read_data<T2: 'static + Serializer + ForyDefault>(
-            fory: &Fory,
             context: &mut ReadContext,
             is_field: bool,
         ) -> Result<Box<dyn Any>, Error> {
-            match T2::fory_read_data(fory, context, is_field) {
+            match T2::fory_read_data(context, is_field) {
                 Ok(v) => Ok(Box::new(v)),
                 Err(e) => Err(e),
             }
@@ -443,30 +437,28 @@ impl TypeResolver {
     ) -> Result<(), Error> {
         fn write<T2: 'static + Serializer>(
             this: &dyn Any,
-            fory: &Fory,
             context: &mut WriteContext,
             is_field: bool,
         ) -> Result<(), Error> {
             let this = this.downcast_ref::<T2>();
             match this {
-                Some(v) => Ok(v.fory_write(fory, context, is_field)?),
+                Some(v) => Ok(v.fory_write(context, is_field)?),
                 None => todo!(),
             }
         }
 
         fn read<T2: 'static + Serializer + ForyDefault>(
-            fory: &Fory,
             context: &mut ReadContext,
             is_field: bool,
             skip_ref_flag: bool,
         ) -> Result<Box<dyn Any>, Error> {
             if skip_ref_flag {
-                match T2::fory_read_data(fory, context, is_field) {
+                match T2::fory_read_data(context, is_field) {
                     Ok(v) => Ok(Box::new(v)),
                     Err(e) => Err(e),
                 }
             } else {
-                match T2::fory_read(fory, context, is_field) {
+                match T2::fory_read(context, is_field) {
                     Ok(v) => Ok(Box::new(v)),
                     Err(e) => Err(e),
                 }
@@ -475,23 +467,21 @@ impl TypeResolver {
 
         fn write_data<T2: 'static + Serializer>(
             this: &dyn Any,
-            fory: &Fory,
             context: &mut WriteContext,
             is_field: bool,
         ) -> Result<(), Error> {
             let this = this.downcast_ref::<T2>();
             match this {
-                Some(v) => T2::fory_write_data(v, fory, context, is_field),
+                Some(v) => T2::fory_write_data(v, context, is_field),
                 None => todo!(),
             }
         }
 
         fn read_data<T2: 'static + Serializer + ForyDefault>(
-            fory: &Fory,
             context: &mut ReadContext,
             is_field: bool,
         ) -> Result<Box<dyn Any>, Error> {
-            match T2::fory_read_data(fory, context, is_field) {
+            match T2::fory_read_data(context, is_field) {
                 Ok(v) => Ok(Box::new(v)),
                 Err(e) => Err(e),
             }
@@ -559,6 +549,43 @@ impl TypeResolver {
             );
         }
         Ok(())
+    }
+}
+
+impl TypeResolver {
+    pub fn get_type_info(&self, type_id: std::any::TypeId) -> Result<&TypeInfo, Error> {
+        self.type_info_cache.get(&type_id)
+            .ok_or_else(|| Error::TypeError(format!(
+                "TypeId {:?} not found in type_info registry, maybe you forgot to register some types",
+                type_id
+            ).into()))
+    }
+
+    pub fn get_type_info_by_id(&self, id: u32) -> Option<&TypeInfo> {
+        self.type_info_map_by_id.get(&id)
+    }
+
+    pub fn get_type_info_by_name(&self, namespace: &str, type_name: &str) -> Option<&TypeInfo> {
+        self.type_info_map_by_name
+            .get(&(namespace.to_owned(), type_name.to_owned()))
+    }
+
+    /// Fast path for getting type info by numeric ID (avoids HashMap lookup by TypeId)
+    pub fn get_type_id(&self, type_id: &std::any::TypeId, id: u32) -> Result<u32, Error> {
+        let id_usize = id as usize;
+        if id_usize < self.type_id_index.len() {
+            let type_id = self.type_id_index[id_usize];
+            if type_id != NO_TYPE_ID {
+                return Ok(type_id);
+            }
+        }
+        Err(Error::TypeError(
+            format!(
+                "TypeId {:?} not found in type_id_index, maybe you forgot to register some types",
+                type_id
+            )
+            .into(),
+        ))
     }
 
     pub fn get_harness(&self, id: u32) -> Option<Arc<Harness>> {

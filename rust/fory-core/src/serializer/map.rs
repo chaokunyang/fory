@@ -49,8 +49,7 @@ fn check_and_write_null<K: Serializer + Eq + std::hash::Hash, V: Serializer>(
         let mut chunk_header = KEY_NULL;
         let skip_ref_flag;
         if is_field {
-            skip_ref_flag =
-                crate::serializer::get_skip_ref_flag::<V>(context.get_type_resolver())?;
+            skip_ref_flag = crate::serializer::get_skip_ref_flag::<V>(context.get_type_resolver())?;
             chunk_header |= DECL_VALUE_TYPE;
         } else {
             skip_ref_flag = false;

@@ -63,7 +63,7 @@ pub fn derive_serializer(ast: &syn::DeriveInput) -> TokenStream {
             }
             syn::Data::Enum(s) => (
                 derive_enum::gen_actual_type_id(),
-                quote! { unreachable!() },
+                quote! { &[] },
                 derive_enum::gen_field_fields_info(s),
                 derive_enum::gen_read_compatible(),
             ),

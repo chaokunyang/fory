@@ -104,54 +104,6 @@ impl Default for Fory {
 }
 
 impl Fory {
-    /// Initialize write context pool if not already initialized (thread-safe, lazy initialization)
-    fn ensure_write_pool_initialized(&self) {
-        self.write_context_pool.get_or_init(|| {
-            let type_resolver = self.type_resolver.clone();
-            let compatible = self.compatible;
-            let share_meta = self.share_meta;
-            let compress_string = self.compress_string;
-            let xlang = self.xlang;
-
-            let factory = move || {
-                let writer = Writer::default();
-                WriteContext::new(
-                    writer,
-                    type_resolver.clone(),
-                    compatible,
-                    share_meta,
-                    compress_string,
-                    xlang,
-                )
-            };
-            Pool::new(factory)
-        });
-    }
-
-    /// Initialize read context pool if not already initialized (thread-safe, lazy initialization)
-    fn ensure_read_pool_initialized(&self) {
-        self.read_context_pool.get_or_init(|| {
-            let type_resolver = self.type_resolver.clone();
-            let compatible = self.compatible;
-            let share_meta = self.share_meta;
-            let xlang = self.xlang;
-            let max_dyn_depth = self.max_dyn_depth;
-
-            let factory = move || {
-                let reader = Reader::new(&[]);
-                ReadContext::new(
-                    reader,
-                    type_resolver.clone(),
-                    compatible,
-                    share_meta,
-                    xlang,
-                    max_dyn_depth,
-                )
-            };
-            Pool::new(factory)
-        });
-    }
-
     /// Sets the serialization compatible mode for this Fory instance.
     ///
     /// # Arguments
@@ -431,8 +383,26 @@ impl Fory {
     /// let deserialized: Point = fory.deserialize(&bytes).unwrap();
     /// ```
     pub fn deserialize<T: Serializer + ForyDefault>(&self, bf: &[u8]) -> Result<T, Error> {
-        self.ensure_read_pool_initialized();
-        let pool = self.read_context_pool.get().unwrap();
+        let pool = self.read_context_pool.get_or_init(|| {
+            let type_resolver = self.type_resolver.clone();
+            let compatible = self.compatible;
+            let share_meta = self.share_meta;
+            let xlang = self.xlang;
+            let max_dyn_depth = self.max_dyn_depth;
+
+            let factory = move || {
+                let reader = Reader::new(&[]);
+                ReadContext::new(
+                    reader,
+                    type_resolver.clone(),
+                    compatible,
+                    share_meta,
+                    xlang,
+                    max_dyn_depth,
+                )
+            };
+            Pool::new(factory)
+        });
         let mut context = pool.get();
         context.init(bf, self.max_dyn_depth);
         let result = self.deserialize_with_context(&mut context);
@@ -495,8 +465,26 @@ impl Fory {
     /// let bytes = fory.serialize(&point);
     /// ```
     pub fn serialize<T: Serializer>(&self, record: &T) -> Result<Vec<u8>, Error> {
-        self.ensure_write_pool_initialized();
-        let pool = self.write_context_pool.get().unwrap();
+        let pool = self.write_context_pool.get_or_init(|| {
+            let type_resolver = self.type_resolver.clone();
+            let compatible = self.compatible;
+            let share_meta = self.share_meta;
+            let compress_string = self.compress_string;
+            let xlang = self.xlang;
+
+            let factory = move || {
+                let writer = Writer::default();
+                WriteContext::new(
+                    writer,
+                    type_resolver.clone(),
+                    compatible,
+                    share_meta,
+                    compress_string,
+                    xlang,
+                )
+            };
+            Pool::new(factory)
+        });
         let mut context = pool.get();
         let result = self.serialize_with_context(record, &mut context)?;
         context.reset();

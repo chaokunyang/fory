@@ -134,7 +134,7 @@ impl TypeInfo {
         let type_def_bytes = type_meta.to_bytes()?;
         Ok(TypeInfo {
             type_def: Arc::from(type_def_bytes),
-            type_meta: type_meta,
+            type_meta,
             type_id,
             namespace: namespace_metastring,
             type_name: type_name_metastring,

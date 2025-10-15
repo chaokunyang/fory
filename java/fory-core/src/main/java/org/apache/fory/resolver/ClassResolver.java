@@ -1802,6 +1802,7 @@ public class ClassResolver extends TypeResolver {
           fory, JdkProxySerializer.SUBT_PROXY.getClass(), JdkProxySerializer.class);
       classInfoMap.forEach(
           (cls, classInfo) -> {
+            TypeResolver.registerClassForGraalvm(cls, fory.getConfig().getConfigHash());
             if (classInfo.serializer == null) {
               if (isSerializable(classInfo.cls)) {
                 createSerializer0(cls);

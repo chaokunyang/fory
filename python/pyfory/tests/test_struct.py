@@ -376,12 +376,12 @@ def test_data_class_serializer_xlang_codegen_generated_code():
     # Check that xwrite code contains expected elements
     assert "def xwrite_" in xwrite_code
     assert "buffer.write_int32" in xwrite_code  # Hash writing
-    assert "fory.xserialize_ref" in xwrite_code  # Field serialization
+    assert "fory.xwrite_ref" in xwrite_code  # Field serialization
 
     # Check that xread code contains expected elements
     assert "def xread_" in xread_code
     assert "buffer.read_int32" in xread_code  # Hash reading
-    assert "fory.xdeserialize_ref" in xread_code  # Field deserialization
+    assert "fory.xread_ref" in xread_code  # Field deserialization
     assert "TypeNotCompatibleError" in xread_code  # Hash validation
 
     # Check that field names are referenced in the code

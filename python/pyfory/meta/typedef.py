@@ -70,8 +70,14 @@ class TypeDef:
         from pyfory.serializer import DataClassSerializer
 
         fory = resolver.fory
+        nullable_fields = {f.name: f.field_type.is_nullable for f in self.fields}
         return DataClassSerializer(
-            fory, self.cls, xlang=not fory.is_py, field_names=self.get_field_names(), serializers=self.create_fields_serializer(resolver)
+            fory,
+            self.cls,
+            xlang=not fory.is_py,
+            field_names=self.get_field_names(),
+            serializers=self.create_fields_serializer(resolver),
+            nullable_fields=nullable_fields,
         )
 
     def __repr__(self):
@@ -250,7 +256,8 @@ def build_field_infos(type_resolver, cls):
     for field_name in field_names:
         field_type_hint = type_hints.get(field_name, typing.Any)
         unwrapped_type, is_nullable = unwrap_optional(field_type_hint)
-        nullable_map[field_name] = is_nullable or not is_primitive_type(unwrapped_type)
+        is_nullable = is_nullable or not is_primitive_type(unwrapped_type)
+        nullable_map[field_name] = is_nullable
         field_type = build_field_type(type_resolver, field_name, unwrapped_type, visitor, is_nullable)
         field_info = FieldInfo(field_name, field_type, cls.__name__)
         field_infos.append(field_info)

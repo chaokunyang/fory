@@ -16,7 +16,7 @@
 // under the License.
 
 use crate::error::Error;
-use crate::meta::{MetaString, TypeMeta, NAMESPACE_DECODER, TYPE_NAME_DECODER};
+use crate::meta::{FieldInfo, NAMESPACE_DECODER, TYPE_NAME_DECODER};
 use crate::resolver::context::{ReadContext, WriteContext};
 use crate::types::{RefFlag, TypeId, PRIMITIVE_TYPES};
 use crate::{ensure, TypeResolver};
@@ -322,14 +322,8 @@ pub trait Serializer: 'static {
 }
 
 pub trait StructSerializer: Serializer + 'static {
-    fn fory_type_def(
-        _: &TypeResolver,
-        _type_id: u32,
-        _namespace: MetaString,
-        _type_name: MetaString,
-        _register_by_name: bool,
-    ) -> Result<(Vec<u8>, TypeMeta), Error> {
-        Ok((Vec::default(), TypeMeta::empty()))
+    fn fory_fields_info(_: &TypeResolver) -> Result<Vec<FieldInfo>, Error> {
+        Ok(Vec::default())
     }
 
     fn fory_type_index() -> u32 {

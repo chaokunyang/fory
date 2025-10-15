@@ -50,21 +50,21 @@ pub fn derive_serializer(ast: &syn::DeriveInput) -> TokenStream {
     };
 
     // StructSerializer
-    let (actual_type_id_ts, get_sorted_field_names_ts, type_def_ts, read_compatible_ts) =
+    let (actual_type_id_ts, get_sorted_field_names_ts, fields_info_ts, read_compatible_ts) =
         match &ast.data {
             syn::Data::Struct(s) => {
                 let fields = sorted_fields(&s.fields);
                 (
                     misc::gen_actual_type_id(),
                     misc::gen_get_sorted_field_names(&fields),
-                    misc::gen_type_def(&fields),
+                    misc::gen_field_fields_info(&fields),
                     read::gen_read_compatible(&fields),
                 )
             }
             syn::Data::Enum(s) => (
                 derive_enum::gen_actual_type_id(),
                 quote! { unreachable!() },
-                derive_enum::gen_type_def(s),
+                derive_enum::gen_field_fields_info(s),
                 derive_enum::gen_read_compatible(),
             ),
             syn::Data::Union(_) => {
@@ -128,8 +128,8 @@ pub fn derive_serializer(ast: &syn::DeriveInput) -> TokenStream {
                 #get_sorted_field_names_ts
             }
 
-            fn fory_type_def(type_resolver: &fory_core::resolver::type_resolver::TypeResolver, type_id: u32, namespace: fory_core::meta::MetaString, type_name: fory_core::meta::MetaString, register_by_name: bool) -> Result<(Vec<u8>, fory_core::meta::TypeMeta), fory_core::error::Error> {
-                #type_def_ts
+            fn fory_fields_info(type_resolver: &fory_core::resolver::type_resolver::TypeResolver) -> Result<Vec<fory_core::meta::FieldInfo>, fory_core::error::Error> {
+                #fields_info_ts
             }
         }
         impl fory_core::serializer::Serializer for #name {

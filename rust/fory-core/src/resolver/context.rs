@@ -30,7 +30,7 @@ use std::sync::{Arc, Mutex};
 
 pub struct WriteContext {
     // Replicated environment fields (direct access, no Arc indirection for flags)
-    type_resolver: Arc<TypeResolver>,
+    type_resolver: TypeResolver,
     compatible: bool,
     share_meta: bool,
     compress_string: bool,
@@ -46,7 +46,7 @@ pub struct WriteContext {
 impl WriteContext {
     pub fn new(
         writer: Writer,
-        type_resolver: Arc<TypeResolver>,
+        type_resolver: TypeResolver,
         compatible: bool,
         share_meta: bool,
         compress_string: bool,
@@ -194,7 +194,7 @@ impl WriteContext {
 
 pub struct ReadContext {
     // Replicated environment fields (direct access, no Arc indirection for flags)
-    type_resolver: Arc<TypeResolver>,
+    type_resolver: TypeResolver,
     compatible: bool,
     share_meta: bool,
     xlang: bool,
@@ -211,7 +211,7 @@ pub struct ReadContext {
 impl ReadContext {
     pub fn new(
         reader: Reader,
-        type_resolver: Arc<TypeResolver>,
+        type_resolver: TypeResolver,
         compatible: bool,
         share_meta: bool,
         xlang: bool,

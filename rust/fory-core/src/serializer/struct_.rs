@@ -17,10 +17,8 @@
 
 use crate::ensure;
 use crate::error::Error;
-use crate::meta::{FieldInfo, MetaString, TypeMeta};
 use crate::resolver::context::{ReadContext, WriteContext};
-use crate::resolver::type_resolver;
-use crate::serializer::{Serializer, StructSerializer};
+use crate::serializer::Serializer;
 use crate::types::{RefFlag, TypeId};
 
 #[inline(always)]
@@ -36,46 +34,6 @@ pub fn actual_type_id(type_id: u32, register_by_name: bool, compatible: bool) ->
     } else {
         (type_id << 8) + TypeId::STRUCT as u32
     }
-}
-
-#[inline(always)]
-pub fn type_def<T: Serializer + StructSerializer>(
-    _: &type_resolver::TypeResolver,
-    type_id: u32,
-    namespace: MetaString,
-    type_name: MetaString,
-    register_by_name: bool,
-    mut field_infos: Vec<FieldInfo>,
-) -> (Vec<u8>, TypeMeta) {
-    let sorted_field_names = T::fory_get_sorted_field_names();
-    let mut sorted_field_infos: Vec<FieldInfo> = Vec::with_capacity(field_infos.len());
-    for name in sorted_field_names.iter() {
-        let mut found = false;
-        for i in 0..field_infos.len() {
-            if &field_infos[i].field_name == name {
-                // swap_remove is faster
-                sorted_field_infos.push(field_infos.swap_remove(i));
-                found = true;
-                break;
-            }
-        }
-        if !found {
-            unreachable!("Field {} not found in field_infos", name);
-        }
-    }
-    // assign field id in ascending order
-    for (i, field_info) in sorted_field_infos.iter_mut().enumerate() {
-        field_info.field_id = i as i16;
-    }
-    let meta = TypeMeta::from_fields(
-        type_id,
-        namespace,
-        type_name,
-        register_by_name,
-        sorted_field_infos,
-    );
-    let bytes = meta.to_bytes().unwrap();
-    (bytes, meta)
 }
 
 #[inline(always)]

@@ -25,9 +25,9 @@ pub fn gen_actual_type_id() -> TokenStream {
     }
 }
 
-pub fn gen_type_def(_data_enum: &DataEnum) -> TokenStream {
+pub fn gen_field_fields_info(_data_enum: &DataEnum) -> TokenStream {
     quote! {
-        Ok(fory_core::serializer::enum_::type_def(type_id, namespace, type_name, register_by_name))
+        Ok(Vec::new())
     }
 }
 

@@ -323,6 +323,7 @@ pub trait Serializer: 'static {
 
 pub trait StructSerializer: Serializer + 'static {
     fn fory_type_def(
+        _: &TypeResolver,
         _type_id: u32,
         _namespace: MetaString,
         _type_name: MetaString,

@@ -303,6 +303,11 @@ impl Fory {
         self
     }
 
+    /// Returns whether cross-language serialization is enabled.
+    pub fn is_xlang(&self) -> bool {
+        self.xlang
+    }
+
     /// Returns the current serialization mode.
     ///
     /// # Returns
@@ -328,6 +333,11 @@ impl Fory {
     /// `true` if metadata sharing is enabled (automatically set based on mode), `false` otherwise.
     pub fn is_share_meta(&self) -> bool {
         self.share_meta
+    }
+
+    /// Returns the maximum depth for nested dynamic object serialization.
+    pub fn get_max_dyn_depth(&self) -> u32 {
+        self.max_dyn_depth
     }
 
     /// Returns a type resolver for type lookups.
@@ -576,7 +586,14 @@ impl Fory {
         id: u32,
     ) -> Result<(), Error> {
         let actual_type_id = T::fory_actual_type_id(id, false, self.compatible);
-        let type_info = TypeInfo::new::<T>(actual_type_id, &EMPTY_STRING, &EMPTY_STRING, false)?;
+        let type_resolver = self.get_type_resolver();
+        let type_info = TypeInfo::new::<T>(
+            &type_resolver,
+            actual_type_id,
+            &EMPTY_STRING,
+            &EMPTY_STRING,
+            false,
+        )?;
         self.type_registry.register::<T>(&type_info)?;
         self.invalidate_type_resolver_cache();
         Ok(())
@@ -618,7 +635,9 @@ impl Fory {
         type_name: &str,
     ) -> Result<(), Error> {
         let actual_type_id = T::fory_actual_type_id(0, true, self.compatible);
-        let type_info = TypeInfo::new::<T>(actual_type_id, namespace, type_name, true)?;
+        let type_resolver = self.get_type_resolver();
+        let type_info =
+            TypeInfo::new::<T>(&type_resolver, actual_type_id, namespace, type_name, true)?;
         self.type_registry.register::<T>(&type_info)?;
         self.invalidate_type_resolver_cache();
         Ok(())
@@ -691,11 +710,11 @@ impl Fory {
         let actual_type_id = get_ext_actual_type_id(id, false);
         let type_resolver = self.get_type_resolver();
         let type_info = TypeInfo::new_with_empty_fields::<T>(
+            &type_resolver,
             actual_type_id,
             &EMPTY_STRING,
             &EMPTY_STRING,
             false,
-            &type_resolver,
         )?;
         self.type_registry.register_serializer::<T>(&type_info)?;
         self.invalidate_type_resolver_cache();
@@ -726,11 +745,11 @@ impl Fory {
         let actual_type_id = get_ext_actual_type_id(0, true);
         let type_resolver = self.get_type_resolver();
         let type_info = TypeInfo::new_with_empty_fields::<T>(
+            &type_resolver,
             actual_type_id,
             namespace,
             type_name,
             true,
-            &type_resolver,
         )?;
         self.type_registry.register_serializer::<T>(&type_info)?;
         self.invalidate_type_resolver_cache();

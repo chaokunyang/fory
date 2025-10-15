@@ -124,21 +124,21 @@ pub fn derive_serializer(ast: &syn::DeriveInput) -> TokenStream {
                 #actual_type_id_ts
             }
 
-            fn fory_get_sorted_field_names(_fory: &fory_core::fory::Fory) -> &'static [&'static str] {
+            fn fory_get_sorted_field_names() -> &'static [&'static str] {
                 #get_sorted_field_names_ts
             }
 
-            fn fory_type_def(fory: &fory_core::fory::Fory, type_id: u32, namespace: fory_core::meta::MetaString, type_name: fory_core::meta::MetaString, register_by_name: bool) -> Result<(Vec<u8>, fory_core::meta::TypeMeta), fory_core::error::Error> {
+            fn fory_type_def(type_resolver: &fory_core::resolver::type_resolver::TypeResolver, type_id: u32, namespace: fory_core::meta::MetaString, type_name: fory_core::meta::MetaString, register_by_name: bool) -> Result<(Vec<u8>, fory_core::meta::TypeMeta), fory_core::error::Error> {
                 #type_def_ts
             }
         }
         impl fory_core::serializer::Serializer for #name {
-            fn fory_get_type_id(fory: &fory_core::fory::Fory) -> Result<u32, fory_core::error::Error> {
-                fory.get_type_resolver().get_type_id(&std::any::TypeId::of::<Self>(), #type_idx)
+            fn fory_get_type_id(type_resolver: &fory_core::resolver::type_resolver::TypeResolver) -> Result<u32, fory_core::error::Error> {
+                type_resolver.get_type_id(&std::any::TypeId::of::<Self>(), #type_idx)
             }
 
-            fn fory_type_id_dyn(&self, fory: &fory_core::fory::Fory) -> Result<u32, fory_core::error::Error> {
-                Self::fory_get_type_id(fory)
+            fn fory_type_id_dyn(&self, type_resolver: &fory_core::resolver::type_resolver::TypeResolver) -> Result<u32, fory_core::error::Error> {
+                Self::fory_get_type_id(type_resolver)
             }
 
             fn as_any(&self) -> &dyn std::any::Any {
@@ -149,31 +149,31 @@ pub fn derive_serializer(ast: &syn::DeriveInput) -> TokenStream {
                 #reserved_space_ts
             }
 
-            fn fory_write_type_info(fory: &fory_core::fory::Fory, context: &mut fory_core::resolver::context::WriteContext, is_field: bool) -> Result<(), fory_core::error::Error> {
+            fn fory_write_type_info(context: &mut fory_core::resolver::context::WriteContext, is_field: bool) -> Result<(), fory_core::error::Error> {
                 #write_type_info_ts
             }
 
-            fn fory_read_type_info(fory: &fory_core::fory::Fory, context: &mut fory_core::resolver::context::ReadContext, is_field: bool) -> Result<(), fory_core::error::Error> {
+            fn fory_read_type_info(context: &mut fory_core::resolver::context::ReadContext, is_field: bool) -> Result<(), fory_core::error::Error> {
                 #read_type_info_ts
             }
 
-            fn fory_write_data(&self, fory: &fory_core::fory::Fory, context: &mut fory_core::resolver::context::WriteContext, is_field: bool) -> Result<(), fory_core::error::Error> {
+            fn fory_write_data(&self, context: &mut fory_core::resolver::context::WriteContext, is_field: bool) -> Result<(), fory_core::error::Error> {
                 #write_data_ts
             }
 
-            fn fory_read_data(fory: &fory_core::fory::Fory, context: &mut fory_core::resolver::context::ReadContext, is_field: bool) -> Result<Self, fory_core::error::Error> {
+            fn fory_read_data( context: &mut fory_core::resolver::context::ReadContext, is_field: bool) -> Result<Self, fory_core::error::Error> {
                 #read_data_ts
             }
 
-            fn fory_write(&self, fory: &fory_core::fory::Fory, context: &mut fory_core::resolver::context::WriteContext, is_field: bool) -> Result<(), fory_core::error::Error> {
+            fn fory_write(&self, context: &mut fory_core::resolver::context::WriteContext, is_field: bool) -> Result<(), fory_core::error::Error> {
                 #write_ts
             }
 
-            fn fory_read(fory: &fory_core::fory::Fory, context: &mut fory_core::resolver::context::ReadContext, is_field: bool) -> Result<Self, fory_core::error::Error> {
+            fn fory_read(context: &mut fory_core::resolver::context::ReadContext, is_field: bool) -> Result<Self, fory_core::error::Error> {
                 #read_ts
             }
 
-            fn fory_read_compatible(fory: &fory_core::fory::Fory, context: &mut fory_core::resolver::context::ReadContext) -> Result<Self, fory_core::error::Error> {
+            fn fory_read_compatible(context: &mut fory_core::resolver::context::ReadContext) -> Result<Self, fory_core::error::Error> {
                 #read_compatible_ts
             }
         }

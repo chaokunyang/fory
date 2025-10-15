@@ -32,15 +32,16 @@ const MAX_PARSED_NUM_TYPE_DEFS: usize = 8192;
 
 #[allow(dead_code)]
 impl MetaWriterResolver {
-    pub fn push(&mut self, type_id: std::any::TypeId, type_resolver: &TypeResolver) -> Result<usize, Error> {
+    pub fn push(
+        &mut self,
+        type_id: std::any::TypeId,
+        type_resolver: &TypeResolver,
+    ) -> Result<usize, Error> {
         match self.type_id_index_map.get(&type_id) {
             None => {
                 let index = self.type_defs.len();
-                self.type_defs.push(
-                    type_resolver
-                        .get_type_info(type_id)?
-                        .get_type_def(),
-                );
+                self.type_defs
+                    .push(type_resolver.get_type_info(type_id)?.get_type_def());
                 self.type_id_index_map.insert(type_id, index);
                 Ok(index)
             }

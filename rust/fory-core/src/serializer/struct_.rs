@@ -19,6 +19,7 @@ use crate::ensure;
 use crate::error::Error;
 use crate::meta::{FieldInfo, MetaString, TypeMeta};
 use crate::resolver::context::{ReadContext, WriteContext};
+use crate::resolver::type_resolver;
 use crate::serializer::{Serializer, StructSerializer};
 use crate::types::{RefFlag, TypeId};
 
@@ -39,6 +40,7 @@ pub fn actual_type_id(type_id: u32, register_by_name: bool, compatible: bool) ->
 
 #[inline(always)]
 pub fn type_def<T: Serializer + StructSerializer>(
+    _: &type_resolver::TypeResolver,
     type_id: u32,
     namespace: MetaString,
     type_name: MetaString,

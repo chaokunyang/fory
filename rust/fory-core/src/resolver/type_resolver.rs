@@ -93,6 +93,7 @@ pub struct TypeInfo {
 
 impl TypeInfo {
     pub fn new<T: StructSerializer>(
+        type_resolver: &TypeResolver,
         type_id: u32,
         namespace: &str,
         type_name: &str,
@@ -103,6 +104,7 @@ impl TypeInfo {
         let type_name_metastring =
             TYPE_NAME_ENCODER.encode_with_encodings(type_name, TYPE_NAME_ENCODINGS)?;
         let (type_def_bytes, type_meta) = T::fory_type_def(
+            type_resolver,
             type_id,
             namespace_metastring.clone(),
             type_name_metastring.clone(),
@@ -119,11 +121,11 @@ impl TypeInfo {
     }
 
     pub fn new_with_empty_fields<T: Serializer>(
+        type_resolver: &TypeResolver,
         type_id: u32,
         namespace: &str,
         type_name: &str,
         register_by_name: bool,
-        type_resolver: &TypeResolver,
     ) -> Result<TypeInfo, Error> {
         let namespace_metastring =
             NAMESPACE_ENCODER.encode_with_encodings(namespace, NAMESPACE_ENCODINGS)?;
@@ -189,6 +191,7 @@ pub struct TypeRegistry {
 
 /// TypeResolver is an immutable type resolver for fast type/serializer dispatch.
 /// It is created from TypeRegistry and used during serialization/deserialization.
+#[derive(Clone)]
 pub struct TypeResolver {
     serializer_map: HashMap<u32, Arc<Harness>>,
     name_serializer_map: HashMap<(MetaString, MetaString), Arc<Harness>>,

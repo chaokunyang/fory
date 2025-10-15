@@ -18,6 +18,7 @@
 use crate::buffer::{Reader, Writer};
 
 use crate::error::Error;
+use crate::fory::Fory;
 use crate::meta::{MetaString, TypeMeta};
 use crate::resolver::meta_resolver::{MetaReaderResolver, MetaWriterResolver};
 use crate::resolver::metastring_resolver::{
@@ -57,6 +58,20 @@ impl WriteContext {
             share_meta,
             compress_string,
             xlang,
+            writer,
+            meta_resolver: MetaWriterResolver::default(),
+            meta_string_resolver: MetaStringWriterResolver::default(),
+            ref_writer: RefWriter::new(),
+        }
+    }
+
+    pub fn new_from_fory(writer: Writer, fory: &Fory) -> WriteContext {
+        WriteContext {
+            type_resolver: fory.get_type_resolver().clone(),
+            compatible: fory.is_compatible(),
+            share_meta: fory.is_share_meta(),
+            compress_string: fory.is_compress_string(),
+            xlang: fory.is_xlang(),
             writer,
             meta_resolver: MetaWriterResolver::default(),
             meta_string_resolver: MetaStringWriterResolver::default(),
@@ -122,15 +137,20 @@ impl WriteContext {
         let type_info = self.type_resolver.get_type_info(concrete_type_id)?;
         let fory_type_id = type_info.get_type_id();
 
-        if type_info.is_registered_by_name() {
+        // Clone out the data we need from `type_info` to break the borrow
+        let namespace = type_info.get_namespace().clone();
+        let type_name = type_info.get_type_name().clone();
+        let registered_by_name = type_info.is_registered_by_name();
+
+        if registered_by_name {
             if fory_type_id & 0xff == ForyTypeId::NAMED_STRUCT as u32 {
                 self.writer.write_varuint32(fory_type_id);
                 if self.is_share_meta() {
                     let meta_index = self.push_meta(concrete_type_id)? as u32;
                     self.writer.write_varuint32(meta_index);
                 } else {
-                    type_info.get_namespace().write_to(&mut self.writer);
-                    type_info.get_type_name().write_to(&mut self.writer);
+                    namespace.write_to(&mut self.writer);
+                    type_name.write_to(&mut self.writer);
                 }
             } else if fory_type_id & 0xff == ForyTypeId::NAMED_COMPATIBLE_STRUCT as u32 {
                 self.writer.write_varuint32(fory_type_id);
@@ -138,11 +158,11 @@ impl WriteContext {
                 self.writer.write_varuint32(meta_index);
             } else {
                 self.writer.write_varuint32(u32::MAX);
-                type_info.get_namespace().write_to(&mut self.writer);
-                type_info.get_type_name().write_to(&mut self.writer);
+                namespace.write_to(&mut self.writer);
+                type_name.write_to(&mut self.writer);
             }
             self.type_resolver
-                .get_name_harness(type_info.get_namespace(), type_info.get_type_name())
+                .get_name_harness(&namespace, &type_name)
                 .ok_or_else(|| Error::TypeError("Name harness not found".into()))
         } else {
             if fory_type_id & 0xff == ForyTypeId::COMPATIBLE_STRUCT as u32 {
@@ -203,6 +223,21 @@ impl ReadContext {
             share_meta,
             xlang,
             max_dyn_depth,
+            reader,
+            meta_resolver: MetaReaderResolver::default(),
+            meta_string_resolver: MetaStringReaderResolver::default(),
+            ref_reader: RefReader::new(),
+            current_depth: 0,
+        }
+    }
+
+    pub fn new_from_fory(reader: Reader, fory: &Fory) -> ReadContext {
+        ReadContext {
+            type_resolver: fory.get_type_resolver().clone(),
+            compatible: fory.is_compatible(),
+            share_meta: fory.is_share_meta(),
+            xlang: fory.is_xlang(),
+            max_dyn_depth: fory.get_max_dyn_depth(),
             reader,
             meta_resolver: MetaReaderResolver::default(),
             meta_string_resolver: MetaStringReaderResolver::default(),

@@ -39,7 +39,6 @@ pub fn actual_type_id(type_id: u32, register_by_name: bool, compatible: bool) ->
 #[inline(always)]
 pub fn write_type_info<T: Serializer>(
     context: &mut WriteContext,
-    _is_field: bool,
 ) -> Result<(), Error> {
     let type_id = T::fory_get_type_id(context.get_type_resolver())?;
     context.writer.write_varuint32(type_id);
@@ -68,7 +67,6 @@ pub fn write_type_info<T: Serializer>(
 #[inline(always)]
 pub fn read_type_info<T: Serializer>(
     context: &mut ReadContext,
-    _is_field: bool,
 ) -> Result<(), Error> {
     let remote_type_id = context.reader.read_varuint32()?;
     let local_type_id = T::fory_get_type_id(context.get_type_resolver())?;
@@ -96,17 +94,16 @@ pub fn read_type_info<T: Serializer>(
 pub fn write<T: Serializer>(
     this: &T,
     context: &mut WriteContext,
-    _is_field: bool,
 ) -> Result<(), Error> {
     if context.is_compatible() {
         context.writer.write_i8(RefFlag::NotNullValue as i8);
-        T::fory_write_type_info(context, false)?;
-        this.fory_write_data(context, true)?;
+        T::fory_write_type_info(context)?;
+        this.fory_write_data(context)?;
     } else {
         // currently same
         context.writer.write_i8(RefFlag::NotNullValue as i8);
-        T::fory_write_type_info(context, false)?;
-        this.fory_write_data(context, true)?;
+        T::fory_write_type_info(context)?;
+        this.fory_write_data(context)?;
     }
     Ok(())
 }

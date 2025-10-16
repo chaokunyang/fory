@@ -592,3 +592,94 @@ pub(crate) fn skip_ref_flag(ty: &Type) -> bool {
     // !T::fory_is_option() && PRIMITIVE_TYPES.contains(&elem_type_id)
     PRIMITIVE_TYPE_NAMES.contains(&extract_type_name(ty).as_str())
 }
+
+/// Determine whether to skip writing type info for a struct field based on its type.
+///
+/// According to xlang_serialization_spec.md:
+/// - Primitive fields: skip type info
+/// - Nullable primitive fields (Option<primitive>): skip type info
+/// - Internal type fields (String, Date, arrays): skip type info
+/// - List/Set/Map fields: skip type info
+/// - Struct fields: WRITE type info
+/// - Ext fields: WRITE type info
+/// - Enum fields: skip type info (enum is morphic)
+///
+/// Returns true if type info should be skipped, false if it should be written.
+pub(crate) fn should_skip_type_info_for_field(ty: &Type) -> bool {
+    let ty_str: String = ty
+        .to_token_stream()
+        .to_string()
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .collect();
+
+    // Check if it's Option<T>
+    if let Some(inner) = ty_str.strip_prefix("Option<").and_then(|s| s.strip_suffix(">")) {
+        // For Option<primitive>, we skip type info
+        if PRIMITIVE_TYPE_NAMES.contains(&inner) {
+            return true;
+        }
+        // For other Option types, recursively check the inner type
+        // Parse inner type and check again
+        let inner_ty: Type = syn::parse_str(inner).unwrap_or_else(|_| ty.clone());
+        return should_skip_type_info_for_field(&inner_ty);
+    }
+
+    // Check if it's a primitive type
+    let type_name = extract_type_name(ty);
+    if PRIMITIVE_TYPE_NAMES.contains(&type_name.as_str()) {
+        return true;
+    }
+
+    // Check if it's an internal type (String, dates, arrays, etc.)
+    let internal_types = [
+        "String",
+        "NaiveDate",
+        "NaiveDateTime",
+        "Duration",
+        "Decimal",
+    ];
+    if internal_types.contains(&type_name.as_str()) {
+        return true;
+    }
+
+    // Check if it's a primitive array (Vec<primitive>)
+    if ty_str.starts_with("Vec<") {
+        // Vec<u8> is binary
+        if ty_str == "Vec<u8>" {
+            return true;
+        }
+        // Vec<primitive> is primitive array
+        if let Some(inner) = ty_str.strip_prefix("Vec<").and_then(|s| s.strip_suffix(">")) {
+            if PRIMITIVE_TYPE_NAMES.contains(&inner)
+                || inner == "bool"
+                || inner == "f16"
+            {
+                return true;
+            }
+        }
+    }
+
+    // Check if it's a collection type (Vec/VecDeque/LinkedList/BinaryHeap/HashSet/BTreeSet/HashMap/BTreeMap)
+    let collection_prefixes = [
+        "Vec<",
+        "VecDeque<",
+        "LinkedList<",
+        "BinaryHeap<",
+        "HashSet<",
+        "BTreeSet<",
+        "HashMap<",
+        "BTreeMap<",
+    ];
+    for prefix in &collection_prefixes {
+        if ty_str.starts_with(prefix) {
+            return true;
+        }
+    }
+
+    // For all other types (struct/ext/enum/etc.), we need to write type info
+    // EXCEPT that enum should skip type info, but we can't determine that at compile time easily
+    // So we return false here (meaning: write type info), and the code generator will add
+    // runtime checks for enum types if needed
+    false
+}

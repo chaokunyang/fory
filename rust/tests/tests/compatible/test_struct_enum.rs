@@ -402,13 +402,12 @@ fn ext() {
         fn fory_write_data(
             &self,
             context: &mut WriteContext,
-            is_field: bool,
         ) -> Result<(), fory_core::error::Error> {
-            write_data(&self.id, context, is_field)
+            write_data(&self.id, context)
         }
-        fn fory_read_data(context: &mut ReadContext, is_field: bool) -> Result<Self, Error> {
+        fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
             Ok(Self {
-                id: read_data(context, is_field)?,
+                id: read_data(context)?,
             })
         }
 
@@ -457,13 +456,12 @@ fn skip_ext() {
         fn fory_write_data(
             &self,
             context: &mut WriteContext,
-            is_field: bool,
         ) -> Result<(), fory_core::error::Error> {
-            write_data(&self.id, context, is_field)
+            write_data(&self.id, context)
         }
-        fn fory_read_data(context: &mut ReadContext, is_field: bool) -> Result<Self, Error> {
+        fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
             Ok(Self {
-                id: read_data(context, is_field)?,
+                id: read_data(context)?,
             })
         }
 
@@ -527,13 +525,12 @@ fn compatible_ext() {
         fn fory_write_data(
             &self,
             context: &mut WriteContext,
-            is_field: bool,
         ) -> Result<(), fory_core::error::Error> {
-            write_data(&self.id, context, is_field)
+            write_data(&self.id, context)
         }
-        fn fory_read_data(context: &mut ReadContext, is_field: bool) -> Result<Self, Error> {
+        fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
             Ok(Self {
-                id: read_data(context, is_field)?,
+                id: read_data(context)?,
             })
         }
         fn fory_type_id_dyn(

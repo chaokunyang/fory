@@ -29,20 +29,20 @@ use std::collections::{BTreeSet, HashSet};
 use std::mem;
 
 impl<T: Serializer + ForyDefault + Eq + std::hash::Hash> Serializer for HashSet<T> {
-    fn fory_write_data(&self, context: &mut WriteContext, is_field: bool) -> Result<(), Error> {
-        write_collection(self, context, is_field)
+    fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error> {
+        write_collection(self, context)
     }
 
-    fn fory_write_type_info(context: &mut WriteContext, is_field: bool) -> Result<(), Error> {
-        write_collection_type_info(context, is_field, TypeId::SET as u32)
+    fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error> {
+        write_collection_type_info(context, TypeId::SET as u32)
     }
 
-    fn fory_read_data(context: &mut ReadContext, _is_field: bool) -> Result<Self, Error> {
+    fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
         read_collection(context)
     }
 
-    fn fory_read_type_info(context: &mut ReadContext, is_field: bool) -> Result<(), Error> {
-        read_collection_type_info(context, is_field, TypeId::SET as u32)
+    fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error> {
+        read_collection_type_info(context, TypeId::SET as u32)
     }
 
     fn fory_reserved_space() -> usize {
@@ -69,20 +69,20 @@ impl<T> ForyDefault for HashSet<T> {
 }
 
 impl<T: Serializer + ForyDefault + Ord> Serializer for BTreeSet<T> {
-    fn fory_write_data(&self, context: &mut WriteContext, is_field: bool) -> Result<(), Error> {
-        write_collection(self, context, is_field)
+    fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error> {
+        write_collection(self, context)
     }
 
-    fn fory_write_type_info(context: &mut WriteContext, is_field: bool) -> Result<(), Error> {
-        write_collection_type_info(context, is_field, TypeId::SET as u32)
+    fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error> {
+        write_collection_type_info(context, TypeId::SET as u32)
     }
 
-    fn fory_read_data(context: &mut ReadContext, _is_field: bool) -> Result<Self, Error> {
+    fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
         read_collection(context)
     }
 
-    fn fory_read_type_info(context: &mut ReadContext, is_field: bool) -> Result<(), Error> {
-        read_collection_type_info(context, is_field, TypeId::SET as u32)
+    fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error> {
+        read_collection_type_info(context, TypeId::SET as u32)
     }
 
     fn fory_reserved_space() -> usize {

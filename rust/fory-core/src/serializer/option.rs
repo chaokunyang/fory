@@ -23,27 +23,27 @@ use crate::serializer::{ForyDefault, Serializer};
 
 impl<T: Serializer + ForyDefault> Serializer for Option<T> {
     #[inline(always)]
-    fn fory_read_data(context: &mut ReadContext, is_field: bool) -> Result<Self, Error> {
-        Ok(Some(T::fory_read_data(context, is_field)?))
+    fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
+        Ok(Some(T::fory_read_data(context)?))
     }
 
     #[inline(always)]
-    fn fory_read_type_info(context: &mut ReadContext, is_field: bool) -> Result<(), Error> {
-        T::fory_read_type_info(context, is_field)
+    fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error> {
+        T::fory_read_type_info(context)
     }
 
     #[inline(always)]
-    fn fory_write_data(&self, context: &mut WriteContext, is_field: bool) -> Result<(), Error> {
+    fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error> {
         if let Some(v) = self {
-            T::fory_write_data(v, context, is_field)
+            T::fory_write_data(v, context)
         } else {
             unreachable!("write should be call by serialize")
         }
     }
 
     #[inline(always)]
-    fn fory_write_type_info(context: &mut WriteContext, is_field: bool) -> Result<(), Error> {
-        T::fory_write_type_info(context, is_field)
+    fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error> {
+        T::fory_write_type_info(context)
     }
 
     #[inline(always)]

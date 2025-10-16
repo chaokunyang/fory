@@ -149,27 +149,27 @@ pub fn derive_serializer(ast: &syn::DeriveInput) -> TokenStream {
                 #reserved_space_ts
             }
 
-            fn fory_write_type_info(context: &mut fory_core::resolver::context::WriteContext, is_field: bool) -> Result<(), fory_core::error::Error> {
+            fn fory_write_type_info(context: &mut fory_core::resolver::context::WriteContext) -> Result<(), fory_core::error::Error> {
                 #write_type_info_ts
             }
 
-            fn fory_read_type_info(context: &mut fory_core::resolver::context::ReadContext, is_field: bool) -> Result<(), fory_core::error::Error> {
+            fn fory_read_type_info(context: &mut fory_core::resolver::context::ReadContext) -> Result<(), fory_core::error::Error> {
                 #read_type_info_ts
             }
 
-            fn fory_write_data(&self, context: &mut fory_core::resolver::context::WriteContext, is_field: bool) -> Result<(), fory_core::error::Error> {
+            fn fory_write_data(&self, context: &mut fory_core::resolver::context::WriteContext) -> Result<(), fory_core::error::Error> {
                 #write_data_ts
             }
 
-            fn fory_read_data( context: &mut fory_core::resolver::context::ReadContext, is_field: bool) -> Result<Self, fory_core::error::Error> {
+            fn fory_read_data( context: &mut fory_core::resolver::context::ReadContext) -> Result<Self, fory_core::error::Error> {
                 #read_data_ts
             }
 
-            fn fory_write(&self, context: &mut fory_core::resolver::context::WriteContext, is_field: bool) -> Result<(), fory_core::error::Error> {
+            fn fory_write(&self, context: &mut fory_core::resolver::context::WriteContext) -> Result<(), fory_core::error::Error> {
                 #write_ts
             }
 
-            fn fory_read(context: &mut fory_core::resolver::context::ReadContext, is_field: bool) -> Result<Self, fory_core::error::Error> {
+            fn fory_read(context: &mut fory_core::resolver::context::ReadContext) -> Result<Self, fory_core::error::Error> {
                 #read_ts
             }
 

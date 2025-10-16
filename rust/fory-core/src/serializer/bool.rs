@@ -25,13 +25,13 @@ use std::mem;
 
 impl Serializer for bool {
     #[inline(always)]
-    fn fory_write_data(&self, context: &mut WriteContext, _is_field: bool) -> Result<(), Error> {
+    fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error> {
         context.writer.write_u8(if *self { 1 } else { 0 });
         Ok(())
     }
 
     #[inline(always)]
-    fn fory_read_data(context: &mut ReadContext, _is_field: bool) -> Result<Self, Error> {
+    fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
         Ok(context.reader.read_u8()? == 1)
     }
 
@@ -55,13 +55,13 @@ impl Serializer for bool {
     }
 
     #[inline(always)]
-    fn fory_write_type_info(context: &mut WriteContext, is_field: bool) -> Result<(), Error> {
-        write_type_info::<Self>(context, is_field)
+    fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error> {
+        write_type_info::<Self>(context)
     }
 
     #[inline(always)]
-    fn fory_read_type_info(context: &mut ReadContext, is_field: bool) -> Result<(), Error> {
-        read_type_info::<Self>(context, is_field)
+    fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error> {
+        read_type_info::<Self>(context)
     }
 }
 

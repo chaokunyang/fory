@@ -39,13 +39,13 @@ pub fn gen_reserved_space() -> TokenStream {
 
 pub fn gen_write_type_info() -> TokenStream {
     quote! {
-        fory_core::serializer::enum_::write_type_info::<Self>(context, is_field)
+        fory_core::serializer::enum_::write_type_info::<Self>(context)
     }
 }
 
 pub fn gen_read_type_info() -> TokenStream {
     quote! {
-        fory_core::serializer::enum_::read_type_info::<Self>(context, is_field)
+        fory_core::serializer::enum_::read_type_info::<Self>(context)
     }
 }
 
@@ -85,12 +85,12 @@ pub fn gen_read_compatible() -> TokenStream {
 
 pub fn gen_write(_data_enum: &DataEnum) -> TokenStream {
     quote! {
-        fory_core::serializer::enum_::write::<Self>(self, context, is_field)
+        fory_core::serializer::enum_::write::<Self>(self, context)
     }
 }
 
 pub fn gen_read(_data_enum: &DataEnum) -> TokenStream {
     quote! {
-        fory_core::serializer::enum_::read::<Self>(context, is_field)
+        fory_core::serializer::enum_::read::<Self>(context)
     }
 }

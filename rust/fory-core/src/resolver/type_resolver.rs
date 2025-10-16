@@ -26,12 +26,12 @@ use crate::Reader;
 use std::sync::Arc;
 use std::{any::Any, collections::HashMap};
 
-type WriteFn = fn(&dyn Any, &mut WriteContext, is_field: bool) -> Result<(), Error>;
+type WriteFn = fn(&dyn Any, &mut WriteContext) -> Result<(), Error>;
 type ReadFn =
-    fn(&mut ReadContext, is_field: bool, skip_ref_flag: bool) -> Result<Box<dyn Any>, Error>;
+    fn(&mut ReadContext, skip_ref_flag: bool) -> Result<Box<dyn Any>, Error>;
 
-type WriteDataFn = fn(&dyn Any, &mut WriteContext, is_field: bool) -> Result<(), Error>;
-type ReadDataFn = fn(&mut ReadContext, is_field: bool) -> Result<Box<dyn Any>, Error>;
+type WriteDataFn = fn(&dyn Any, &mut WriteContext) -> Result<(), Error>;
+type ReadDataFn = fn(&mut ReadContext) -> Result<Box<dyn Any>, Error>;
 type ToSerializerFn = fn(Box<dyn Any>) -> Result<Box<dyn Serializer>, Error>;
 
 #[derive(Clone)]
@@ -351,7 +351,6 @@ impl TypeResolver {
         fn write<T2: 'static + Serializer>(
             this: &dyn Any,
             context: &mut WriteContext,
-            is_field: bool,
         ) -> Result<(), Error> {
             let this = this.downcast_ref::<T2>();
             match this {
@@ -361,7 +360,6 @@ impl TypeResolver {
                     crate::serializer::write_ref_info_data(
                         v,
                         context,
-                        is_field,
                         skip_ref_flag,
                         true,
                     )?;
@@ -373,12 +371,10 @@ impl TypeResolver {
 
         fn read<T2: 'static + Serializer + ForyDefault>(
             context: &mut ReadContext,
-            is_field: bool,
             skip_ref_flag: bool,
         ) -> Result<Box<dyn Any>, Error> {
             match crate::serializer::read_ref_info_data::<T2>(
                 context,
-                is_field,
                 skip_ref_flag,
                 true,
             ) {
@@ -390,20 +386,18 @@ impl TypeResolver {
         fn write_data<T2: 'static + Serializer>(
             this: &dyn Any,
             context: &mut WriteContext,
-            is_field: bool,
         ) -> Result<(), Error> {
             let this = this.downcast_ref::<T2>();
             match this {
-                Some(v) => T2::fory_write_data(v, context, is_field),
+                Some(v) => T2::fory_write_data(v, context),
                 None => todo!(),
             }
         }
 
         fn read_data<T2: 'static + Serializer + ForyDefault>(
             context: &mut ReadContext,
-            is_field: bool,
         ) -> Result<Box<dyn Any>, Error> {
-            match T2::fory_read_data(context, is_field) {
+            match T2::fory_read_data(context) {
                 Ok(v) => Ok(Box::new(v)),
                 Err(e) => Err(e),
             }
@@ -495,27 +489,25 @@ impl TypeResolver {
         fn write<T2: 'static + Serializer>(
             this: &dyn Any,
             context: &mut WriteContext,
-            is_field: bool,
         ) -> Result<(), Error> {
             let this = this.downcast_ref::<T2>();
             match this {
-                Some(v) => Ok(v.fory_write(context, is_field)?),
+                Some(v) => Ok(v.fory_write(context)?),
                 None => todo!(),
             }
         }
 
         fn read<T2: 'static + Serializer + ForyDefault>(
             context: &mut ReadContext,
-            is_field: bool,
             skip_ref_flag: bool,
         ) -> Result<Box<dyn Any>, Error> {
             if skip_ref_flag {
-                match T2::fory_read_data(context, is_field) {
+                match T2::fory_read_data(context) {
                     Ok(v) => Ok(Box::new(v)),
                     Err(e) => Err(e),
                 }
             } else {
-                match T2::fory_read(context, is_field) {
+                match T2::fory_read(context) {
                     Ok(v) => Ok(Box::new(v)),
                     Err(e) => Err(e),
                 }
@@ -525,20 +517,18 @@ impl TypeResolver {
         fn write_data<T2: 'static + Serializer>(
             this: &dyn Any,
             context: &mut WriteContext,
-            is_field: bool,
         ) -> Result<(), Error> {
             let this = this.downcast_ref::<T2>();
             match this {
-                Some(v) => T2::fory_write_data(v, context, is_field),
+                Some(v) => T2::fory_write_data(v, context),
                 None => todo!(),
             }
         }
 
         fn read_data<T2: 'static + Serializer + ForyDefault>(
             context: &mut ReadContext,
-            is_field: bool,
         ) -> Result<Box<dyn Any>, Error> {
-            match T2::fory_read_data(context, is_field) {
+            match T2::fory_read_data(context) {
                 Ok(v) => Ok(Box::new(v)),
                 Err(e) => Err(e),
             }

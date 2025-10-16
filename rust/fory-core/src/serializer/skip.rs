@@ -33,8 +33,8 @@ macro_rules! basic_type_deserialize {
     ($tid:expr, $context:expr; $(($ty:ty, $id:ident)),+ $(,)?) => {
         $(
             if $tid == TypeId::$id {
-                <$ty as Serializer>::fory_read_type_info($context, true)?;
-                <$ty as Serializer>::fory_read_data($context, true)?;
+                <$ty as Serializer>::fory_read_type_info($context)?;
+                <$ty as Serializer>::fory_read_data($context)?;
                 return Ok(());
             }
         )+else {
@@ -173,7 +173,7 @@ pub fn skip_field_value(
                 let type_resolver = context.get_type_resolver();
                 type_resolver
                     .get_ext_name_harness(&type_meta.get_namespace(), &type_meta.get_type_name())?
-                    .get_read_data_fn()(context, true)?;
+                    .get_read_data_fn()(context)?;
                 Ok(())
             } else {
                 unreachable!("unimplemented type: {:?}", type_id);
@@ -211,7 +211,7 @@ pub fn skip_field_value(
                 let type_resolver = context.get_type_resolver();
                 type_resolver
                     .get_ext_harness(type_id_num)?
-                    .get_read_data_fn()(context, true)?;
+                    .get_read_data_fn()(context)?;
                 context.dec_depth();
             } else {
                 unreachable!("unimplemented skipped type: {:?}", type_id_num);

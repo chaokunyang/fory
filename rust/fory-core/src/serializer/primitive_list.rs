@@ -38,12 +38,8 @@ pub fn fory_write_data<T>(this: &[T], context: &mut WriteContext) -> Result<(), 
 
 pub fn fory_write_type_info(
     context: &mut WriteContext,
-    is_field: bool,
     type_id: TypeId,
 ) -> Result<(), Error> {
-    if is_field {
-        return Ok(());
-    }
     context.writer.write_varuint32(type_id as u32);
     Ok(())
 }
@@ -66,12 +62,8 @@ pub fn fory_read_data<T>(context: &mut ReadContext) -> Result<Vec<T>, Error> {
 
 pub fn fory_read_type_info(
     context: &mut ReadContext,
-    is_field: bool,
     type_id: TypeId,
 ) -> Result<(), Error> {
-    if is_field {
-        return Ok(());
-    }
     let remote_type_id = context.reader.read_varuint32()?;
     if remote_type_id == TypeId::LIST as u32 {
         return Err(Error::TypeError(

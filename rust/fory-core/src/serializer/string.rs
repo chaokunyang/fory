@@ -32,7 +32,7 @@ enum StrEncoding {
 
 impl Serializer for String {
     #[inline]
-    fn fory_write_data(&self, context: &mut WriteContext, _is_field: bool) -> Result<(), Error> {
+    fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error> {
         let mut len = get_latin1_length(self);
         if len >= 0 {
             let bitor = (len as u64) << 2 | StrEncoding::Latin1 as u64;
@@ -54,7 +54,7 @@ impl Serializer for String {
     }
 
     #[inline]
-    fn fory_read_data(context: &mut ReadContext, _is_field: bool) -> Result<Self, Error> {
+    fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
         let bitor = context.reader.read_varuint36small()?;
         let len = bitor >> 2;
         let encoding = bitor & 0b11;
@@ -96,13 +96,13 @@ impl Serializer for String {
     }
 
     #[inline(always)]
-    fn fory_write_type_info(context: &mut WriteContext, is_field: bool) -> Result<(), Error> {
-        write_type_info::<Self>(context, is_field)
+    fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error> {
+        write_type_info::<Self>(context)
     }
 
     #[inline(always)]
-    fn fory_read_type_info(context: &mut ReadContext, is_field: bool) -> Result<(), Error> {
-        read_type_info::<Self>(context, is_field)
+    fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error> {
+        read_type_info::<Self>(context)
     }
 }
 

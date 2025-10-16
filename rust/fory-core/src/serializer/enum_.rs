@@ -46,11 +46,7 @@ pub fn type_def(
 #[inline(always)]
 pub fn write_type_info<T: Serializer>(
     context: &mut WriteContext,
-    is_field: bool,
 ) -> Result<(), Error> {
-    if is_field {
-        return Ok(());
-    }
     let type_id = T::fory_get_type_id(context.get_type_resolver())?;
     context.writer.write_varuint32(type_id);
     let is_named_enum = type_id & 0xff == TypeId::NAMED_ENUM as u32;
@@ -74,11 +70,7 @@ pub fn write_type_info<T: Serializer>(
 #[inline(always)]
 pub fn read_type_info<T: Serializer>(
     context: &mut ReadContext,
-    is_field: bool,
 ) -> Result<(), Error> {
-    if is_field {
-        return Ok(());
-    }
     let local_type_id = T::fory_get_type_id(context.get_type_resolver())?;
     let remote_type_id = context.reader.read_varuint32()?;
     ensure!(
@@ -100,33 +92,30 @@ pub fn read_type_info<T: Serializer>(
 
 #[inline(always)]
 pub fn read_compatible<T: Serializer + ForyDefault>(context: &mut ReadContext) -> Result<T, Error> {
-    T::fory_read_type_info(context, true)?;
-    T::fory_read_data(context, true)
+    T::fory_read_type_info(context)?;
+    T::fory_read_data(context)
 }
 
 #[inline(always)]
 pub fn write<T: Serializer>(
     this: &T,
-
     context: &mut WriteContext,
-    is_field: bool,
 ) -> Result<(), Error> {
     context.writer.write_i8(RefFlag::NotNullValue as i8);
-    T::fory_write_type_info(context, is_field)?;
-    this.fory_write_data(context, is_field)
+    T::fory_write_type_info(context)?;
+    this.fory_write_data(context)
 }
 
 #[inline(always)]
 pub fn read<T: Serializer + ForyDefault>(
     context: &mut ReadContext,
-    is_field: bool,
 ) -> Result<T, Error> {
     let ref_flag = context.reader.read_i8()?;
     if ref_flag == RefFlag::Null as i8 {
         Ok(T::fory_default())
     } else if ref_flag == (RefFlag::NotNullValue as i8) {
-        T::fory_read_type_info(context, false)?;
-        T::fory_read_data(context, is_field)
+        T::fory_read_type_info(context)?;
+        T::fory_read_data(context)
     } else {
         unimplemented!()
     }

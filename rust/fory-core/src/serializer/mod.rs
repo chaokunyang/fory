@@ -49,7 +49,6 @@ pub mod weak;
 pub fn write_ref_info_data<T: Serializer + 'static>(
     record: &T,
     context: &mut WriteContext,
-    is_field: bool,
     skip_ref_flag: bool,
     skip_type_info: bool,
 ) -> Result<(), Error> {
@@ -60,9 +59,9 @@ pub fn write_ref_info_data<T: Serializer + 'static>(
             context.writer.write_i8(RefFlag::NotNullValue as i8);
         }
         if !skip_type_info {
-            T::fory_write_type_info(context, is_field)?;
+            T::fory_write_type_info(context)?;
         }
-        record.fory_write_data(context, is_field)?;
+        record.fory_write_data(context)?;
     }
     Ok(())
 }
@@ -70,7 +69,6 @@ pub fn write_ref_info_data<T: Serializer + 'static>(
 #[inline(always)]
 pub fn read_ref_info_data<T: Serializer + ForyDefault>(
     context: &mut ReadContext,
-    is_field: bool,
     skip_ref_flag: bool,
     skip_type_info: bool,
 ) -> Result<T, Error> {
@@ -80,15 +78,15 @@ pub fn read_ref_info_data<T: Serializer + ForyDefault>(
             Ok(T::fory_default())
         } else if ref_flag == (RefFlag::NotNullValue as i8) {
             if !skip_type_info {
-                T::fory_read_type_info(context, is_field)?;
+                T::fory_read_type_info(context)?;
             }
-            T::fory_read_data(context, is_field)
+            T::fory_read_data(context)
         } else if ref_flag == (RefFlag::RefValue as i8) {
             // First time seeing this referenceable object
             if !skip_type_info {
-                T::fory_read_type_info(context, is_field)?;
+                T::fory_read_type_info(context)?;
             }
-            T::fory_read_data(context, is_field)
+            T::fory_read_data(context)
         } else if ref_flag == (RefFlag::Ref as i8) {
             // This is a reference to a previously deserialized object
             // For now, just return default - this should be handled by specific types
@@ -98,20 +96,16 @@ pub fn read_ref_info_data<T: Serializer + ForyDefault>(
         }
     } else {
         if !skip_type_info {
-            T::fory_read_type_info(context, is_field)?;
+            T::fory_read_type_info(context)?;
         }
-        T::fory_read_data(context, is_field)
+        T::fory_read_data(context)
     }
 }
 
 #[inline(always)]
 pub fn write_type_info<T: Serializer>(
     context: &mut WriteContext,
-    is_field: bool,
 ) -> Result<(), Error> {
-    if is_field {
-        return Ok(());
-    }
     let type_id = T::fory_get_type_id(context.get_type_resolver())?;
     context.writer.write_varuint32(type_id);
     Ok(())
@@ -120,11 +114,7 @@ pub fn write_type_info<T: Serializer>(
 #[inline(always)]
 pub fn read_type_info<T: Serializer>(
     context: &mut ReadContext,
-    is_field: bool,
 ) -> Result<(), Error> {
-    if is_field {
-        return Ok(());
-    }
     let local_type_id = T::fory_get_type_id(context.get_type_resolver())?;
     let remote_type_id = context.reader.read_varuint32()?;
     ensure!(
@@ -155,18 +145,18 @@ pub trait ForyDefault: Sized {
 
 pub trait Serializer: 'static {
     /// Entry point of the serialization.
-    fn fory_write(&self, context: &mut WriteContext, is_field: bool) -> Result<(), Error>
+    fn fory_write(&self, context: &mut WriteContext) -> Result<(), Error>
     where
         Self: Sized,
     {
-        write_ref_info_data(self, context, is_field, false, false)
+        write_ref_info_data(self, context, false, false)
     }
 
-    fn fory_read(context: &mut ReadContext, is_field: bool) -> Result<Self, Error>
+    fn fory_read(context: &mut ReadContext) -> Result<Self, Error>
     where
         Self: Sized + ForyDefault,
     {
-        read_ref_info_data(context, is_field, false, false)
+        read_ref_info_data(context, false, false)
     }
 
     fn fory_is_option() -> bool
@@ -214,7 +204,7 @@ pub trait Serializer: 'static {
         0
     }
 
-    fn fory_write_type_info(context: &mut WriteContext, _is_field: bool) -> Result<(), Error>
+    fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error>
     where
         Self: Sized,
     {
@@ -238,7 +228,7 @@ pub trait Serializer: 'static {
         Ok(())
     }
 
-    fn fory_read_type_info(context: &mut ReadContext, _is_field: bool) -> Result<(), Error>
+    fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error>
     where
         Self: Sized,
     {
@@ -277,7 +267,7 @@ pub trait Serializer: 'static {
             context
                 .get_type_resolver()
                 .get_ext_harness(local_type_id)?
-                .get_read_data_fn()(context, true)
+                .get_read_data_fn()(context)
             .and_then(|b: Box<dyn Any>| {
                 b.downcast::<Self>()
                     .map(|boxed_self| *boxed_self)
@@ -298,7 +288,7 @@ pub trait Serializer: 'static {
             context
                 .get_type_resolver()
                 .get_ext_name_harness(&namespace, &type_name)?
-                .get_read_data_fn()(context, true)
+                .get_read_data_fn()(context)
             .and_then(|b: Box<dyn Any>| {
                 b.downcast::<Self>()
                     .map(|boxed_self| *boxed_self)
@@ -308,9 +298,9 @@ pub trait Serializer: 'static {
     }
 
     /// Write/Read the data into the buffer. Need to be implemented.
-    fn fory_write_data(&self, context: &mut WriteContext, is_field: bool) -> Result<(), Error>;
+    fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error>;
 
-    fn fory_read_data(context: &mut ReadContext, is_field: bool) -> Result<Self, Error>
+    fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error>
     where
         Self: Sized + ForyDefault;
 

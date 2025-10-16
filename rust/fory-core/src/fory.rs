@@ -429,7 +429,7 @@ impl Fory {
                 bytes_to_skip = context.load_meta(meta_offset as usize)?;
             }
         }
-        let result = <T as Serializer>::fory_read(context, false);
+        let result = <T as Serializer>::fory_read(context);
         if bytes_to_skip > 0 {
             context.reader.skip(bytes_to_skip)?;
         }
@@ -504,7 +504,7 @@ impl Fory {
             if context.is_compatible() {
                 context.writer.write_i32(-1);
             };
-            <T as Serializer>::fory_write(record, context, false)?;
+            <T as Serializer>::fory_write(record, context)?;
             if context.is_compatible() && !context.empty() {
                 context.write_meta(meta_start_offset);
             }
@@ -735,14 +735,12 @@ impl Fory {
 pub fn write_data<T: Serializer>(
     this: &T,
     context: &mut WriteContext,
-    is_field: bool,
 ) -> Result<(), Error> {
-    T::fory_write_data(this, context, is_field)
+    T::fory_write_data(this, context)
 }
 
 pub fn read_data<T: Serializer + ForyDefault>(
     context: &mut ReadContext,
-    is_field: bool,
 ) -> Result<T, Error> {
-    T::fory_read_data(context, is_field)
+    T::fory_read_data(context)
 }

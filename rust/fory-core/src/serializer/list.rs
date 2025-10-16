@@ -44,31 +44,31 @@ fn check_primitive<T: 'static>() -> Option<TypeId> {
 }
 
 impl<T: Serializer + ForyDefault> Serializer for Vec<T> {
-    fn fory_write_data(&self, context: &mut WriteContext, is_field: bool) -> Result<(), Error> {
+    fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error> {
         match check_primitive::<T>() {
             Some(_) => primitive_list::fory_write_data(self, context),
-            None => write_collection(self, context, is_field),
+            None => write_collection(self, context),
         }
     }
 
-    fn fory_write_type_info(context: &mut WriteContext, is_field: bool) -> Result<(), Error> {
+    fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error> {
         match check_primitive::<T>() {
-            Some(type_id) => primitive_list::fory_write_type_info(context, is_field, type_id),
-            None => write_collection_type_info(context, is_field, TypeId::LIST as u32),
+            Some(type_id) => primitive_list::fory_write_type_info(context, type_id),
+            None => write_collection_type_info(context, TypeId::LIST as u32),
         }
     }
 
-    fn fory_read_data(context: &mut ReadContext, _is_field: bool) -> Result<Self, Error> {
+    fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
         match check_primitive::<T>() {
             Some(_) => primitive_list::fory_read_data(context),
             None => read_collection(context),
         }
     }
 
-    fn fory_read_type_info(context: &mut ReadContext, is_field: bool) -> Result<(), Error> {
+    fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error> {
         match check_primitive::<T>() {
-            Some(type_id) => primitive_list::fory_read_type_info(context, is_field, type_id),
-            None => read_collection_type_info(context, is_field, TypeId::LIST as u32),
+            Some(type_id) => primitive_list::fory_read_type_info(context, type_id),
+            None => read_collection_type_info(context, TypeId::LIST as u32),
         }
     }
 
@@ -108,20 +108,20 @@ impl<T> ForyDefault for Vec<T> {
 }
 
 impl<T: Serializer + ForyDefault> Serializer for VecDeque<T> {
-    fn fory_write_data(&self, context: &mut WriteContext, is_field: bool) -> Result<(), Error> {
-        write_collection(self, context, is_field)
+    fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error> {
+        write_collection(self, context)
     }
 
-    fn fory_write_type_info(context: &mut WriteContext, is_field: bool) -> Result<(), Error> {
-        write_collection_type_info(context, is_field, TypeId::LIST as u32)
+    fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error> {
+        write_collection_type_info(context, TypeId::LIST as u32)
     }
 
-    fn fory_read_data(context: &mut ReadContext, _is_field: bool) -> Result<Self, Error> {
+    fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
         read_collection(context)
     }
 
-    fn fory_read_type_info(context: &mut ReadContext, is_field: bool) -> Result<(), Error> {
-        read_collection_type_info(context, is_field, TypeId::LIST as u32)
+    fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error> {
+        read_collection_type_info(context, TypeId::LIST as u32)
     }
 
     fn fory_reserved_space() -> usize {
@@ -148,20 +148,20 @@ impl<T> ForyDefault for VecDeque<T> {
 }
 
 impl<T: Serializer + ForyDefault> Serializer for LinkedList<T> {
-    fn fory_write_data(&self, context: &mut WriteContext, is_field: bool) -> Result<(), Error> {
-        write_collection(self, context, is_field)
+    fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error> {
+        write_collection(self, context)
     }
 
-    fn fory_write_type_info(context: &mut WriteContext, is_field: bool) -> Result<(), Error> {
-        write_collection_type_info(context, is_field, TypeId::LIST as u32)
+    fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error> {
+        write_collection_type_info(context, TypeId::LIST as u32)
     }
 
-    fn fory_read_data(context: &mut ReadContext, _is_field: bool) -> Result<Self, Error> {
+    fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
         read_collection(context)
     }
 
-    fn fory_read_type_info(context: &mut ReadContext, is_field: bool) -> Result<(), Error> {
-        read_collection_type_info(context, is_field, TypeId::LIST as u32)
+    fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error> {
+        read_collection_type_info(context, TypeId::LIST as u32)
     }
 
     fn fory_reserved_space() -> usize {

@@ -318,142 +318,158 @@ where
     Ok(())
 }
 
-fn read_hashmap_data_dyn_ref<K, V>(
-    context: &mut ReadContext,
-    length: u32,
-) -> Result<HashMap<K, V>, Error>
-where
-    K: Serializer + ForyDefault + Eq + std::hash::Hash,
-    V: Serializer + ForyDefault,
-{
-    let mut map = HashMap::<K, V>::with_capacity(length as usize);
-    if length == 0 {
-        return Ok(map);
-    }
+/// Macro to generate read_*_data_dyn_ref functions for HashMap and BTreeMap.
+/// This avoids code duplication while maintaining zero runtime cost.
+macro_rules! impl_read_map_dyn_ref {
+    ($fn_name:ident, $map_type:ty, $($extra_trait_bounds:tt)*) => {
+        fn $fn_name<K, V>(
+            context: &mut ReadContext,
+            mut map: $map_type,
+            length: u32,
+        ) -> Result<$map_type, Error>
+        where
+            K: Serializer + ForyDefault + $($extra_trait_bounds)*,
+            V: Serializer + ForyDefault,
+        {
+            let key_is_polymorphic = K::fory_is_polymorphic();
+            let val_is_polymorphic = V::fory_is_polymorphic();
+            let key_is_shared_ref = K::fory_is_shared_ref();
+            let val_is_shared_ref = V::fory_is_shared_ref();
 
-    let key_is_polymorphic = K::fory_is_polymorphic();
-    let val_is_polymorphic = V::fory_is_polymorphic();
-    let key_is_shared_ref = K::fory_is_shared_ref();
-    let val_is_shared_ref = V::fory_is_shared_ref();
+            let mut len_counter = 0u32;
 
-    let mut len_counter = 0u32;
+            while len_counter < length {
+                let header = context.reader.read_u8()?;
 
-    while len_counter < length {
-        let header = context.reader.read_u8()?;
-
-        // Handle null key/value entries
-        if header & KEY_NULL != 0 && header & VALUE_NULL != 0 {
-            // Both key and value are null
-            map.insert(K::fory_default(), V::fory_default());
-            len_counter += 1;
-            continue;
-        }
-
-        if header & KEY_NULL != 0 {
-            // Null key, non-null value
-            let value_declared = (header & DECL_VALUE_TYPE) != 0;
-            let track_value_ref = (header & TRACKING_VALUE_REF) != 0;
-
-            // Read value type info if not declared
-            if !value_declared {
-                if val_is_polymorphic {
-                    // For polymorphic types, type info is already written in value
-                } else {
-                    V::fory_read_type_info(context)?;
+                // Handle null key/value entries
+                if header & KEY_NULL != 0 && header & VALUE_NULL != 0 {
+                    // Both key and value are null
+                    map.insert(K::fory_default(), V::fory_default());
+                    len_counter += 1;
+                    continue;
                 }
-            }
 
-            // Read value
-            let value = if val_is_shared_ref || track_value_ref {
-                V::fory_read(context)?
-            } else {
-                V::fory_read_data(context)?
-            };
+                if header & KEY_NULL != 0 {
+                    // Null key, non-null value
+                    let value_declared = (header & DECL_VALUE_TYPE) != 0;
+                    let track_value_ref = (header & TRACKING_VALUE_REF) != 0;
 
-            map.insert(K::fory_default(), value);
-            len_counter += 1;
-            continue;
-        }
+                    // Read value type info if not declared
+                    if !value_declared {
+                        if val_is_polymorphic {
+                            // For polymorphic types, type info is already written in value
+                        } else {
+                            V::fory_read_type_info(context)?;
+                        }
+                    }
 
-        if header & VALUE_NULL != 0 {
-            // Non-null key, null value
-            let key_declared = (header & DECL_KEY_TYPE) != 0;
-            let track_key_ref = (header & TRACKING_KEY_REF) != 0;
+                    // Read value
+                    let value = if val_is_shared_ref || track_value_ref {
+                        V::fory_read(context)?
+                    } else {
+                        V::fory_read_data(context)?
+                    };
 
-            // Read key type info if not declared
-            if !key_declared {
-                if key_is_polymorphic {
-                    // For polymorphic types, type info is already written in key
-                } else {
-                    K::fory_read_type_info(context)?;
+                    map.insert(K::fory_default(), value);
+                    len_counter += 1;
+                    continue;
                 }
+
+                if header & VALUE_NULL != 0 {
+                    // Non-null key, null value
+                    let key_declared = (header & DECL_KEY_TYPE) != 0;
+                    let track_key_ref = (header & TRACKING_KEY_REF) != 0;
+
+                    // Read key type info if not declared
+                    if !key_declared {
+                        if key_is_polymorphic {
+                            // For polymorphic types, type info is already written in key
+                        } else {
+                            K::fory_read_type_info(context)?;
+                        }
+                    }
+
+                    // Read key
+                    let key = if key_is_shared_ref || track_key_ref {
+                        K::fory_read(context)?
+                    } else {
+                        K::fory_read_data(context)?
+                    };
+
+                   map.insert(key, V::fory_default());
+                    len_counter += 1;
+                    continue;
+                }
+
+                // Non-null key and value chunk
+                let chunk_size = context.reader.read_u8()?;
+                let key_declared = (header & DECL_KEY_TYPE) != 0;
+                let value_declared = (header & DECL_VALUE_TYPE) != 0;
+                let track_key_ref = (header & TRACKING_KEY_REF) != 0;
+                let track_value_ref = (header & TRACKING_VALUE_REF) != 0;
+
+                // Read type info for key and value if not declared
+                if !key_declared {
+                    if key_is_polymorphic {
+                        // For polymorphic types, type info is written per element
+                    } else {
+                        K::fory_read_type_info(context)?;
+                    }
+                }
+                if !value_declared {
+                    if val_is_polymorphic {
+                        // For polymorphic types, type info is written per element
+                    } else {
+                        V::fory_read_type_info(context)?;
+                    }
+                }
+
+                let cur_len = len_counter + chunk_size as u32;
+                ensure!(
+                    cur_len <= length,
+                    Error::InvalidData(
+                        format!("current length {} exceeds total length {}", cur_len, length).into()
+                    )
+                );
+
+                // Read chunk_size pairs of key-value
+                for _ in 0..chunk_size {
+                    let key = if key_is_shared_ref || track_key_ref {
+                        K::fory_read(context)?
+                    } else {
+                        K::fory_read_data(context)?
+                    };
+
+                    let value = if val_is_shared_ref || track_value_ref {
+                        V::fory_read(context)?
+                    } else {
+                        V::fory_read_data(context)?
+                    };
+
+                    map.insert(key, value);
+                }
+
+                len_counter += chunk_size as u32;
             }
 
-            // Read key
-            let key = if key_is_shared_ref || track_key_ref {
-                K::fory_read(context)?
-            } else {
-                K::fory_read_data(context)?
-            };
-
-            map.insert(key, V::fory_default());
-            len_counter += 1;
-            continue;
+            Ok(map)
         }
-
-        // Non-null key and value chunk
-        let chunk_size = context.reader.read_u8()?;
-        let key_declared = (header & DECL_KEY_TYPE) != 0;
-        let value_declared = (header & DECL_VALUE_TYPE) != 0;
-        let track_key_ref = (header & TRACKING_KEY_REF) != 0;
-        let track_value_ref = (header & TRACKING_VALUE_REF) != 0;
-
-        // Read type info for key and value if not declared
-        if !key_declared {
-            if key_is_polymorphic {
-                // For polymorphic types, type info is written per element
-            } else {
-                K::fory_read_type_info(context)?;
-            }
-        }
-        if !value_declared {
-            if val_is_polymorphic {
-                // For polymorphic types, type info is written per element
-            } else {
-                V::fory_read_type_info(context)?;
-            }
-        }
-
-        let cur_len = len_counter + chunk_size as u32;
-        ensure!(
-            cur_len <= length,
-            Error::InvalidData(
-                format!("current length {} exceeds total length {}", cur_len, length).into()
-            )
-        );
-
-        // Read chunk_size pairs of key-value
-        for _ in 0..chunk_size {
-            let key = if key_is_shared_ref || track_key_ref {
-                K::fory_read(context)?
-            } else {
-                K::fory_read_data(context)?
-            };
-
-            let value = if val_is_shared_ref || track_value_ref {
-                V::fory_read(context)?
-            } else {
-                V::fory_read_data(context)?
-            };
-
-            map.insert(key, value);
-        }
-
-        len_counter += chunk_size as u32;
-    }
-
-    Ok(map)
+    };
 }
+
+// Generate read_hashmap_data_dyn_ref for HashMap
+impl_read_map_dyn_ref!(
+    read_hashmap_data_dyn_ref,
+    HashMap<K, V>,
+    Eq + std::hash::Hash
+);
+
+// Generate read_btreemap_data_dyn_ref for BTreeMap
+impl_read_map_dyn_ref!(
+    read_btreemap_data_dyn_ref,
+    BTreeMap<K, V>,
+    Ord
+);
 
 impl<K: Serializer + ForyDefault + Eq + std::hash::Hash, V: Serializer + ForyDefault> Serializer
     for HashMap<K, V>
@@ -481,7 +497,8 @@ impl<K: Serializer + ForyDefault + Eq + std::hash::Hash, V: Serializer + ForyDef
             || V::fory_is_polymorphic()
             || V::fory_is_shared_ref()
         {
-            return read_hashmap_data_dyn_ref(context, len);
+            let map: HashMap<K, V> = HashMap::with_capacity(len as usize);
+            return read_hashmap_data_dyn_ref(context, map, len);
         }
         let mut len_counter = 0;
         loop {
@@ -585,143 +602,6 @@ impl<K, V> ForyDefault for HashMap<K, V> {
     }
 }
 
-fn read_btreemap_data_dyn_ref<K, V>(
-    context: &mut ReadContext,
-    length: u32,
-) -> Result<BTreeMap<K, V>, Error>
-where
-    K: Serializer + ForyDefault + Ord,
-    V: Serializer + ForyDefault,
-{
-    let mut map = BTreeMap::<K, V>::new();
-    if length == 0 {
-        return Ok(map);
-    }
-
-    let key_is_polymorphic = K::fory_is_polymorphic();
-    let val_is_polymorphic = V::fory_is_polymorphic();
-    let key_is_shared_ref = K::fory_is_shared_ref();
-    let val_is_shared_ref = V::fory_is_shared_ref();
-
-    let mut len_counter = 0u32;
-
-    while len_counter < length {
-        let header = context.reader.read_u8()?;
-
-        // Handle null key/value entries
-        if header & KEY_NULL != 0 && header & VALUE_NULL != 0 {
-            // Both key and value are null
-            map.insert(K::fory_default(), V::fory_default());
-            len_counter += 1;
-            continue;
-        }
-
-        if header & KEY_NULL != 0 {
-            // Null key, non-null value
-            let value_declared = (header & DECL_VALUE_TYPE) != 0;
-            let track_value_ref = (header & TRACKING_VALUE_REF) != 0;
-
-            // Read value type info if not declared
-            if !value_declared {
-                if val_is_polymorphic {
-                    // For polymorphic types, type info is already written in value
-                } else {
-                    V::fory_read_type_info(context)?;
-                }
-            }
-
-            // Read value
-            let value = if val_is_shared_ref || track_value_ref {
-                V::fory_read(context)?
-            } else {
-                V::fory_read_data(context)?
-            };
-
-            map.insert(K::fory_default(), value);
-            len_counter += 1;
-            continue;
-        }
-
-        if header & VALUE_NULL != 0 {
-            // Non-null key, null value
-            let key_declared = (header & DECL_KEY_TYPE) != 0;
-            let track_key_ref = (header & TRACKING_KEY_REF) != 0;
-
-            // Read key type info if not declared
-            if !key_declared {
-                if key_is_polymorphic {
-                    // For polymorphic types, type info is already written in key
-                } else {
-                    K::fory_read_type_info(context)?;
-                }
-            }
-
-            // Read key
-            let key = if key_is_shared_ref || track_key_ref {
-                K::fory_read(context)?
-            } else {
-                K::fory_read_data(context)?
-            };
-
-            map.insert(key, V::fory_default());
-            len_counter += 1;
-            continue;
-        }
-
-        // Non-null key and value chunk
-        let chunk_size = context.reader.read_u8()?;
-        let key_declared = (header & DECL_KEY_TYPE) != 0;
-        let value_declared = (header & DECL_VALUE_TYPE) != 0;
-        let track_key_ref = (header & TRACKING_KEY_REF) != 0;
-        let track_value_ref = (header & TRACKING_VALUE_REF) != 0;
-
-        // Read type info for key and value if not declared
-        if !key_declared {
-            if key_is_polymorphic {
-                // For polymorphic types, type info is written per element
-            } else {
-                K::fory_read_type_info(context)?;
-            }
-        }
-        if !value_declared {
-            if val_is_polymorphic {
-                // For polymorphic types, type info is written per element
-            } else {
-                V::fory_read_type_info(context)?;
-            }
-        }
-
-        let cur_len = len_counter + chunk_size as u32;
-        ensure!(
-            cur_len <= length,
-            Error::InvalidData(
-                format!("current length {} exceeds total length {}", cur_len, length).into()
-            )
-        );
-
-        // Read chunk_size pairs of key-value
-        for _ in 0..chunk_size {
-            let key = if key_is_shared_ref || track_key_ref {
-                K::fory_read(context)?
-            } else {
-                K::fory_read_data(context)?
-            };
-
-            let value = if val_is_shared_ref || track_value_ref {
-                V::fory_read(context)?
-            } else {
-                V::fory_read_data(context)?
-            };
-
-            map.insert(key, value);
-        }
-
-        len_counter += chunk_size as u32;
-    }
-
-    Ok(map)
-}
-
 impl<K: Serializer + ForyDefault + Ord + std::hash::Hash, V: Serializer + ForyDefault> Serializer
     for BTreeMap<K, V>
 {
@@ -748,7 +628,8 @@ impl<K: Serializer + ForyDefault + Ord + std::hash::Hash, V: Serializer + ForyDe
             || V::fory_is_polymorphic()
             || V::fory_is_shared_ref()
         {
-            return read_btreemap_data_dyn_ref(context, len);
+            let map: BTreeMap<K, V> = BTreeMap::new();
+            return read_btreemap_data_dyn_ref(context, map, len);
         }
         let mut len_counter = 0;
         loop {

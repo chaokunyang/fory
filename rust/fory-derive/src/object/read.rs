@@ -198,8 +198,17 @@ fn gen_read_field(field: &Field, private_ident: &Ident) -> TokenStream {
         _ => {
             let skip_ref_flag = skip_ref_flag(ty);
             let skip_type_info = should_skip_type_info_for_field(ty);
-            quote! {
-                let #private_ident = fory_core::serializer::read_ref_info_data::<#ty>(context, #skip_ref_flag, #skip_type_info)?;
+            if skip_type_info {
+                // Known types (primitives, strings, collections) - skip type info at compile time
+                return quote! {
+                    let #private_ident = fory_core::serializer::read_ref_info_data::<#ty>(context, #skip_ref_flag, true)?;
+                };
+            } else {
+                // Custom types (struct/enum/ext) - need runtime check for enums
+                return quote! {
+                    let is_enum = <#ty as fory_core::serializer::Serializer>::fory_static_type_id() == fory_core::types::TypeId::ENUM;
+                    let #private_ident = fory_core::serializer::read_ref_info_data::<#ty>(context, #skip_ref_flag, is_enum)?;
+                };
             }
         }
     }
@@ -350,36 +359,87 @@ fn gen_read_compatible_match_arm_body(field: &Field, var_name: &Ident) -> TokenS
                 Type::Path(type_path) => &type_path.path.segments.first().unwrap().ident,
                 _ => panic!("Unsupported type"),
             };
-            if local_nullable {
-                quote! {
-                    if _field.field_type.nullable {
-                        #var_name = Some(fory_core::serializer::read_ref_info_data::<#ty>(context, false, false)?);
-                    } else {
-                        #var_name = Some(
-                            fory_core::serializer::read_ref_info_data::<#ty>(context, true, false)?
-                        );
-                    }
-                }
-            } else {
-                let dec_by_option = need_declared_by_option(field);
-                if dec_by_option {
+            let skip_type_info = should_skip_type_info_for_field(ty);
+
+            if skip_type_info {
+                // Known types (primitives, strings, collections) - skip type info at compile time
+                if local_nullable {
                     quote! {
-                        if !_field.field_type.nullable {
-                            #var_name = Some(fory_core::serializer::read_ref_info_data::<#ty>(context, true, false)?);
+                        if _field.field_type.nullable {
+                            #var_name = Some(fory_core::serializer::read_ref_info_data::<#ty>(context, false, true)?);
                         } else {
-                            #var_name = fory_core::serializer::read_ref_info_data::<Option<#ty>>(context, false, false)?
+                            #var_name = Some(
+                                fory_core::serializer::read_ref_info_data::<#ty>(context, true, true)?
+                            );
                         }
                     }
                 } else {
-                    let null_flag = RefFlag::Null as i8;
-                    quote! {
-                        if !_field.field_type.nullable {
-                            #var_name = fory_core::serializer::read_ref_info_data::<#ty>(context, true, false)?;
-                        } else {
-                            if context.reader.read_i8()? == #null_flag {
-                                #var_name = <#ty as fory_core::serializer::ForyDefault>::fory_default();
+                    let dec_by_option = need_declared_by_option(field);
+                    if dec_by_option {
+                        quote! {
+                            if !_field.field_type.nullable {
+                                #var_name = Some(fory_core::serializer::read_ref_info_data::<#ty>(context, true, true)?);
                             } else {
-                                #var_name = fory_core::serializer::read_ref_info_data::<#ty>(context, true, false)?;
+                                #var_name = fory_core::serializer::read_ref_info_data::<Option<#ty>>(context, false, true)?
+                            }
+                        }
+                    } else {
+                        let null_flag = RefFlag::Null as i8;
+                        quote! {
+                            if !_field.field_type.nullable {
+                                #var_name = fory_core::serializer::read_ref_info_data::<#ty>(context, true, true)?;
+                            } else {
+                                if context.reader.read_i8()? == #null_flag {
+                                    #var_name = <#ty as fory_core::serializer::ForyDefault>::fory_default();
+                                } else {
+                                    #var_name = fory_core::serializer::read_ref_info_data::<#ty>(context, true, true)?;
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Custom types (struct/enum/ext) - need runtime check for enums
+                if local_nullable {
+                    quote! {
+                        {
+                            let skip_type_info = fory_core::serializer::util::should_skip_type_info_at_runtime(_field.field_type.type_id);
+                            if _field.field_type.nullable {
+                                #var_name = Some(fory_core::serializer::read_ref_info_data::<#ty>(context, false, skip_type_info)?);
+                            } else {
+                                #var_name = Some(
+                                    fory_core::serializer::read_ref_info_data::<#ty>(context, true, skip_type_info)?
+                                );
+                            }
+                        }
+                    }
+                } else {
+                    let dec_by_option = need_declared_by_option(field);
+                    if dec_by_option {
+                        quote! {
+                            {
+                                let skip_type_info = fory_core::serializer::util::should_skip_type_info_at_runtime(_field.field_type.type_id);
+                                if !_field.field_type.nullable {
+                                    #var_name = Some(fory_core::serializer::read_ref_info_data::<#ty>(context, true, skip_type_info)?);
+                                } else {
+                                    #var_name = fory_core::serializer::read_ref_info_data::<Option<#ty>>(context, false, skip_type_info)?
+                                }
+                            }
+                        }
+                    } else {
+                        let null_flag = RefFlag::Null as i8;
+                        quote! {
+                            {
+                                let skip_type_info = fory_core::serializer::util::should_skip_type_info_at_runtime(_field.field_type.type_id);
+                                if !_field.field_type.nullable {
+                                    #var_name = fory_core::serializer::read_ref_info_data::<#ty>(context, true, skip_type_info)?;
+                                } else {
+                                    if context.reader.read_i8()? == #null_flag {
+                                        #var_name = <#ty as fory_core::serializer::ForyDefault>::fory_default();
+                                    } else {
+                                        #var_name = fory_core::serializer::read_ref_info_data::<#ty>(context, true, skip_type_info)?;
+                                    }
+                                }
                             }
                         }
                     }
@@ -432,11 +492,8 @@ pub fn gen_read_compatible(fields: &[&Field]) -> TokenStream {
     quote! {
         let remote_type_id = context.reader.read_varuint32()?;
         let meta_index = context.reader.read_varuint32()?;
-        let meta = context.get_meta(meta_index as usize);
-        let fields = {
-            let meta = context.get_meta(meta_index as usize);
-            meta.get_field_infos().clone()
-        };
+        let meta = context.get_meta(meta_index as usize)?;
+        let fields = meta.get_field_infos().clone();
         #(#declare_ts)*
 
         let local_type_hash = context.get_type_resolver().get_type_info(std::any::TypeId::of::<Self>())?.get_type_meta().get_hash();

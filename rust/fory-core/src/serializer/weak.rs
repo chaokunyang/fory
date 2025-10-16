@@ -126,6 +126,7 @@ use crate::resolver::context::{ReadContext, WriteContext};
 use crate::resolver::type_resolver::TypeResolver;
 use crate::serializer::{ForyDefault, Serializer};
 use crate::types::RefFlag;
+use crate::types::TypeId;
 use std::cell::UnsafeCell;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -398,6 +399,10 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for RcWeak<T> {
         }
     }
 
+    fn fory_static_type_id() -> TypeId {
+        T::fory_static_type_id()
+    }
+
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -502,6 +507,10 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for ArcWeak
         } else {
             T::fory_get_type_id(type_resolver)
         }
+    }
+
+    fn fory_static_type_id() -> TypeId {
+        T::fory_static_type_id()
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

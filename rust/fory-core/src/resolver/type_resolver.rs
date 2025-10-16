@@ -27,8 +27,7 @@ use std::sync::Arc;
 use std::{any::Any, collections::HashMap};
 
 type WriteFn = fn(&dyn Any, &mut WriteContext) -> Result<(), Error>;
-type ReadFn =
-    fn(&mut ReadContext, skip_ref_flag: bool) -> Result<Box<dyn Any>, Error>;
+type ReadFn = fn(&mut ReadContext, skip_ref_flag: bool) -> Result<Box<dyn Any>, Error>;
 
 type WriteDataFn = fn(&dyn Any, &mut WriteContext) -> Result<(), Error>;
 type ReadDataFn = fn(&mut ReadContext) -> Result<Box<dyn Any>, Error>;
@@ -355,14 +354,8 @@ impl TypeResolver {
             let this = this.downcast_ref::<T2>();
             match this {
                 Some(v) => {
-                    let skip_ref_flag =
-                        crate::serializer::get_skip_ref_flag::<T2>(context.get_type_resolver())?;
-                    crate::serializer::write_ref_info_data(
-                        v,
-                        context,
-                        skip_ref_flag,
-                        true,
-                    )?;
+                    let skip_ref_flag = crate::serializer::get_skip_ref_flag::<T2>();
+                    crate::serializer::write_ref_info_data(v, context, skip_ref_flag, true)?;
                     Ok(())
                 }
                 None => todo!(),
@@ -373,11 +366,7 @@ impl TypeResolver {
             context: &mut ReadContext,
             skip_ref_flag: bool,
         ) -> Result<Box<dyn Any>, Error> {
-            match crate::serializer::read_ref_info_data::<T2>(
-                context,
-                skip_ref_flag,
-                true,
-            ) {
+            match crate::serializer::read_ref_info_data::<T2>(context, skip_ref_flag, true) {
                 Ok(v) => Ok(Box::new(v)),
                 Err(e) => Err(e),
             }

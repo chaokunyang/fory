@@ -284,8 +284,10 @@ impl ReadContext {
     }
 
     #[inline(always)]
-    pub fn get_meta(&self, type_index: usize) -> &Arc<TypeMeta> {
-        self.meta_resolver.get(type_index)
+    pub fn get_meta(&self, type_index: usize) -> Result<&Arc<TypeMeta>, Error> {
+        self.meta_resolver.get(type_index).ok_or_else(|| {
+            Error::TypeError(format!("Meta not found for type index: {}", type_index).into())
+        })
     }
 
     #[inline(always)]
@@ -324,7 +326,8 @@ impl ReadContext {
         } else if fory_type_id & 0xff == ForyTypeId::NAMED_COMPATIBLE_STRUCT as u32
             || fory_type_id & 0xff == ForyTypeId::COMPATIBLE_STRUCT as u32
         {
-            let _meta_index = self.reader.read_varuint32();
+            let meta_index = self.reader.read_varuint32()? as usize;
+            self.get_meta(meta_index)?;
             self.type_resolver
                 .get_harness(fory_type_id)
                 .ok_or_else(|| Error::TypeError("ID harness not found".into()))

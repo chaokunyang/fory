@@ -58,6 +58,10 @@ impl Serializer for NaiveDateTime {
         Ok(TypeId::TIMESTAMP as u32)
     }
 
+    fn fory_static_type_id() -> TypeId {
+        TypeId::TIMESTAMP
+    }
+
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -97,6 +101,10 @@ impl Serializer for NaiveDate {
 
     fn fory_type_id_dyn(&self, _: &TypeResolver) -> Result<u32, Error> {
         Ok(TypeId::LOCAL_DATE as u32)
+    }
+
+    fn fory_static_type_id() -> TypeId {
+        TypeId::LOCAL_DATE
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

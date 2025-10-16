@@ -1140,4 +1140,32 @@ public class CrossLanguageTest extends ForyTestBase {
 
     structRoundBack(fory, container, "test_cross_version_compatibility");
   }
+
+
+  @Data
+  public static class EnumContainer {
+    public List<EnumTestClass> list1 = new ArrayList<EnumTestClass>();
+    public  List<Object> list2 = new ArrayList<>();
+    public  List<Foo> list3  = new ArrayList<>();;
+  }
+
+  @Test
+  public void testCrossVersionEnumCompatibility() throws Exception {
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withRefTracking(true)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .build();
+
+    fory.register(EnumContainer.class, "test.EnumContainer");
+    fory.register(EnumTestClass.class, "test.EnumTestClass");
+    fory.register(Foo.class, "test.Foo");
+    EnumContainer  container = new EnumContainer();
+    container.list1 = new ArrayList<EnumTestClass>();
+    container.list1.add(EnumTestClass.BAR);
+    container.list2.add(EnumTestClass.BAR);
+    container.list3.add(Foo.create());
+    fory.serialize(container);
+  }
 }

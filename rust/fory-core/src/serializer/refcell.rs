@@ -36,6 +36,7 @@ use crate::error::Error;
 use crate::resolver::context::{ReadContext, WriteContext};
 use crate::resolver::type_resolver::TypeResolver;
 use crate::serializer::{ForyDefault, Serializer};
+use crate::types::TypeId;
 use std::cell::RefCell;
 
 /// `Serializer` impl for `RefCell<T>`
@@ -84,6 +85,13 @@ impl<T: Serializer + ForyDefault> Serializer for RefCell<T> {
 
     fn fory_type_id_dyn(&self, type_resolver: &TypeResolver) -> Result<u32, Error> {
         (*self.borrow()).fory_type_id_dyn(type_resolver)
+    }
+
+    fn fory_static_type_id() -> TypeId
+    where
+        Self: Sized,
+    {
+        T::fory_static_type_id()
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

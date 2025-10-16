@@ -49,6 +49,10 @@ impl Serializer for bool {
         Ok(TypeId::BOOL as u32)
     }
 
+    fn fory_static_type_id() -> TypeId {
+        TypeId::BOOL
+    }
+
     #[inline(always)]
     fn as_any(&self) -> &dyn std::any::Any {
         self

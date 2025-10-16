@@ -86,8 +86,17 @@ impl Serializer for String {
         Ok(TypeId::STRING as u32)
     }
 
+    #[inline(always)]
     fn fory_type_id_dyn(&self, _: &TypeResolver) -> Result<u32, Error> {
         Ok(TypeId::STRING as u32)
+    }
+
+    #[inline(always)]
+    fn fory_static_type_id() -> TypeId
+    where
+        Self: Sized,
+    {
+        TypeId::STRING
     }
 
     #[inline(always)]

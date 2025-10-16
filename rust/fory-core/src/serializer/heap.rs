@@ -20,17 +20,18 @@ use crate::resolver::context::ReadContext;
 use crate::resolver::context::WriteContext;
 use crate::resolver::type_resolver::TypeResolver;
 use crate::serializer::collection::{
-    read_collection, read_collection_type_info, write_collection, write_collection_type_info,
+    read_collection_data, read_collection_type_info, write_collection_data,
+    write_collection_type_info,
 };
 
-use crate::serializer::{ForyDefault, Serializer};
+use crate::serializer::{CollectionSerializer, ForyDefault, Serializer};
 use crate::types::TypeId;
 use std::collections::BinaryHeap;
 use std::mem;
 
 impl<T: Serializer + ForyDefault + Ord> Serializer for BinaryHeap<T> {
     fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error> {
-        write_collection(self, context)
+        write_collection_data(self, context, false)
     }
 
     fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error> {
@@ -38,7 +39,7 @@ impl<T: Serializer + ForyDefault + Ord> Serializer for BinaryHeap<T> {
     }
 
     fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
-        read_collection(context)
+        read_collection_data(context)
     }
 
     fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error> {
@@ -59,6 +60,12 @@ impl<T: Serializer + ForyDefault + Ord> Serializer for BinaryHeap<T> {
 
     fn as_any(&self) -> &dyn std::any::Any {
         self
+    }
+}
+
+impl<T: Serializer + ForyDefault + Ord> CollectionSerializer for BinaryHeap<T> {
+    fn fory_write_collection_field(&self, context: &mut WriteContext) -> Result<(), Error> {
+        write_collection_data(self, context, true)
     }
 }
 

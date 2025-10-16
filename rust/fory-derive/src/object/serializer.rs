@@ -80,6 +80,7 @@ pub fn derive_serializer(ast: &syn::DeriveInput) -> TokenStream {
         read_data_ts,
         write_ts,
         read_ts,
+        static_type_id_ts,
     ) = match &ast.data {
         syn::Data::Struct(s) => {
             let fields = sorted_fields(&s.fields);
@@ -91,6 +92,7 @@ pub fn derive_serializer(ast: &syn::DeriveInput) -> TokenStream {
                 read::gen_read_data(&fields),
                 write::gen_write(),
                 read::gen_read(name),
+                quote! { fory_core::types::TypeId::STRUCT },
             )
         }
         syn::Data::Enum(e) => (
@@ -101,6 +103,7 @@ pub fn derive_serializer(ast: &syn::DeriveInput) -> TokenStream {
             derive_enum::gen_read_data(e),
             derive_enum::gen_write(e),
             derive_enum::gen_read(e),
+            quote! { fory_core::types::TypeId::ENUM },
         ),
         syn::Data::Union(_) => {
             panic!("Union is not supported")
@@ -143,6 +146,13 @@ pub fn derive_serializer(ast: &syn::DeriveInput) -> TokenStream {
 
             fn as_any(&self) -> &dyn std::any::Any {
                 self
+            }
+
+            fn fory_static_type_id() -> fory_core::types::TypeId
+            where
+                Self: Sized,
+            {
+                #static_type_id_ts
             }
 
             fn fory_reserved_space() -> usize {

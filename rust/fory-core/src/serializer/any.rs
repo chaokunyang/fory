@@ -20,15 +20,13 @@ use crate::resolver::context::{ReadContext, WriteContext};
 use crate::resolver::type_resolver::TypeResolver;
 use crate::serializer::{ForyDefault, Serializer};
 use crate::types::RefFlag;
+use crate::types::TypeId;
 use std::any::Any;
 use std::rc::Rc;
 use std::sync::Arc;
 
 /// Helper function to serialize a `Box<dyn Any>`
-pub fn serialize_any_box(
-    any_box: &Box<dyn Any>,
-    context: &mut WriteContext,
-) -> Result<(), Error> {
+pub fn serialize_any_box(any_box: &Box<dyn Any>, context: &mut WriteContext) -> Result<(), Error> {
     context.writer.write_i8(RefFlag::NotNullValue as i8);
 
     let concrete_type_id = (**any_box).type_id();
@@ -89,6 +87,10 @@ impl Serializer for Box<dyn Any> {
 
     fn fory_is_polymorphic() -> bool {
         true
+    }
+
+    fn fory_static_type_id() -> TypeId {
+        TypeId::UNKNOWN
     }
 
     fn fory_write_type_info(_context: &mut WriteContext) -> Result<(), Error> {
@@ -186,6 +188,10 @@ impl Serializer for Rc<dyn Any> {
         true
     }
 
+    fn fory_static_type_id() -> TypeId {
+        TypeId::UNKNOWN
+    }
+
     fn fory_write_type_info(_context: &mut WriteContext) -> Result<(), Error> {
         // Rc<dyn Any> is polymorphic - type info is written per element
         Ok(())
@@ -279,6 +285,10 @@ impl Serializer for Arc<dyn Any> {
 
     fn fory_is_polymorphic() -> bool {
         true
+    }
+
+    fn fory_static_type_id() -> TypeId {
+        TypeId::UNKNOWN
     }
 
     fn fory_write_type_info(_context: &mut WriteContext) -> Result<(), Error> {

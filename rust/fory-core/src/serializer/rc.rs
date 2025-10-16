@@ -20,6 +20,7 @@ use crate::resolver::context::{ReadContext, WriteContext};
 use crate::resolver::type_resolver::TypeResolver;
 use crate::serializer::{ForyDefault, Serializer};
 use crate::types::RefFlag;
+use crate::types::TypeId;
 use std::rc::Rc;
 
 impl<T: Serializer + ForyDefault + 'static> Serializer for Rc<T> {
@@ -94,6 +95,10 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for Rc<T> {
 
     fn fory_type_id_dyn(&self, type_resolver: &TypeResolver) -> Result<u32, Error> {
         (**self).fory_type_id_dyn(type_resolver)
+    }
+
+    fn fory_static_type_id() -> TypeId {
+        T::fory_static_type_id()
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

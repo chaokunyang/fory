@@ -27,10 +27,7 @@ macro_rules! impl_num_serializer {
     ($ty:ty, $writer:expr, $reader:expr, $field_type:expr) => {
         impl Serializer for $ty {
             #[inline]
-            fn fory_write_data(
-                &self,
-                context: &mut WriteContext,
-            ) -> Result<(), Error> {
+            fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error> {
                 $writer(&mut context.writer, *self);
                 Ok(())
             }
@@ -54,15 +51,17 @@ macro_rules! impl_num_serializer {
                 Ok($field_type as u32)
             }
 
+            fn fory_static_type_id() -> TypeId {
+                $field_type
+            }
+
             #[inline]
             fn as_any(&self) -> &dyn std::any::Any {
                 self
             }
 
             #[inline]
-            fn fory_write_type_info(
-                context: &mut WriteContext,
-            ) -> Result<(), Error> {
+            fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error> {
                 write_type_info::<Self>(context)
             }
 

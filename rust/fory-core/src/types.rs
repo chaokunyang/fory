@@ -171,6 +171,24 @@ pub static PRIMITIVE_ARRAY_TYPE_MAP: &[(&str, u32, &str)] = &[
     ("f64", TypeId::FLOAT64_ARRAY as u32, "Vec<f64>"),
 ];
 
+#[inline(always)]
+pub fn is_primitive_type(type_id: TypeId) -> bool {
+    match type_id {
+        TypeId::BOOL
+        | TypeId::INT8
+        | TypeId::INT16
+        | TypeId::INT32
+        | TypeId::INT64
+        | TypeId::FLOAT32
+        | TypeId::FLOAT64
+        | TypeId::STRING
+        | TypeId::LOCAL_DATE
+        | TypeId::TIMESTAMP => true,
+        _ => false,
+    }
+}
+
+#[inline(always)]
 pub fn is_internal_type(type_id: u32) -> bool {
     if type_id == 0 || type_id >= TypeId::UNKNOWN as u32 {
         return false;
@@ -186,6 +204,25 @@ pub fn is_internal_type(type_id: u32) -> bool {
         TypeId::NAMED_EXT as u32,
     ];
     !excluded.contains(&type_id)
+}
+
+#[inline(always)]
+pub fn need_to_write_type_for_field(type_id: TypeId) -> bool {
+    match type_id {
+        TypeId::STRUCT => true,
+        TypeId::COMPATIBLE_STRUCT => true,
+        TypeId::NAMED_STRUCT => true,
+        TypeId::NAMED_COMPATIBLE_STRUCT => true,
+        TypeId::EXT => true,
+        TypeId::NAMED_EXT => true,
+        TypeId::UNKNOWN => true,
+        _ => false,
+    }
+}
+
+#[inline(always)]
+pub fn is_container_type(type_id: TypeId) -> bool {
+    type_id == TypeId::LIST || type_id == TypeId::SET || type_id == TypeId::MAP
 }
 
 pub fn compute_field_hash(hash: u32, id: i16) -> u32 {

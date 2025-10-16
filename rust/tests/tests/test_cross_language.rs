@@ -251,10 +251,7 @@ fn test_string_serializer() {
     for s in &test_strings {
         // make is_field=true to skip read/write type_id
         assert_eq!(*s, String::fory_read_data(&mut context).unwrap());
-        assert_eq!(
-            *s,
-            String::fory_read_data(&mut context_compress).unwrap()
-        );
+        assert_eq!(*s, String::fory_read_data(&mut context_compress).unwrap());
     }
     let writer = Writer::default();
     let fory = Fory::default().compatible(true).xlang(true);
@@ -614,10 +611,7 @@ struct MyExt {
     id: i32,
 }
 impl Serializer for MyExt {
-    fn fory_write_data(
-        &self,
-        context: &mut WriteContext,
-    ) -> Result<(), fory_core::error::Error> {
+    fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), fory_core::error::Error> {
         // set is_field=false to write type_id like in java
         write_data(&self.id, context)
     }

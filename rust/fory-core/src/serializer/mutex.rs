@@ -45,6 +45,7 @@ use crate::error::Error;
 use crate::resolver::context::{ReadContext, WriteContext};
 use crate::resolver::type_resolver::TypeResolver;
 use crate::serializer::{ForyDefault, Serializer};
+use crate::types::TypeId;
 use std::sync::Mutex;
 
 /// `Serializer` impl for `Mutex<T>`
@@ -96,6 +97,10 @@ impl<T: Serializer + ForyDefault> Serializer for Mutex<T> {
     fn fory_type_id_dyn(&self, type_resolver: &TypeResolver) -> Result<u32, Error> {
         let guard = self.lock().unwrap();
         (*guard).fory_type_id_dyn(type_resolver)
+    }
+
+    fn fory_static_type_id() -> TypeId {
+        T::fory_static_type_id()
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

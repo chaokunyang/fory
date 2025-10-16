@@ -20,7 +20,7 @@ use crate::error::Error;
 use crate::resolver::context::ReadContext;
 use crate::resolver::context::WriteContext;
 use crate::serializer::{ForyDefault, Serializer};
-use crate::types::PRIMITIVE_ARRAY_TYPES;
+use crate::types::{need_to_write_type_for_field, PRIMITIVE_ARRAY_TYPES};
 
 // const TRACKING_REF: u8 = 0b1;
 
@@ -40,10 +40,10 @@ pub fn write_collection_type_info(
     Ok(())
 }
 
-pub fn write_collection<'a, T, I>(
+pub fn write_collection_data<'a, T, I>(
     iter: I,
-
     context: &mut WriteContext,
+    has_generics: bool,
 ) -> Result<(), Error>
 where
     T: Serializer + 'a,
@@ -74,8 +74,13 @@ where
     if is_same_type {
         header |= IS_SAME_TYPE;
     }
-    context.writer.write_u8(header);
-    T::fory_write_type_info(context)?;
+    if !has_generics || need_to_write_type_for_field(T::fory_static_type_id()) {
+        context.writer.write_u8(header);
+        T::fory_write_type_info(context)?;
+    } else {
+        header |= DECL_ELEMENT_TYPE;
+        context.writer.write_u8(header);
+    }
     // context.writer.reserve((T::reserved_space() + SIZE_OF_REF_AND_TYPE) * len);
     if T::fory_is_polymorphic() || T::fory_is_shared_ref() {
         // TOTO: make it xlang compatible
@@ -113,7 +118,7 @@ pub fn read_collection_type_info(
     Ok(())
 }
 
-pub fn read_collection<C, T>(context: &mut ReadContext) -> Result<C, Error>
+pub fn read_collection_data<C, T>(context: &mut ReadContext) -> Result<C, Error>
 where
     T: Serializer + ForyDefault,
     C: FromIterator<T>,
@@ -123,8 +128,12 @@ where
         return Ok(C::from_iter(std::iter::empty()));
     }
     let header = context.reader.read_u8()?;
-    // let declared = (header & DECL_ELEMENT_TYPE) != 0;
-    T::fory_read_type_info(context)?;
+    let declared = (header & DECL_ELEMENT_TYPE) != 0;
+    if !declared {
+        // context.read_any_typeinfo();
+        // TODO check whether type info consistent with T
+        T::fory_read_type_info(context)?;
+    }
     let has_null = (header & HAS_NULL) != 0;
     let is_same_type = (header & IS_SAME_TYPE) != 0;
     if T::fory_is_polymorphic() || T::fory_is_shared_ref() {
@@ -135,7 +144,7 @@ where
         let skip_ref_flag = is_same_type && !has_null;
         // let skip_ref_flag = crate::serializer::get_skip_ref_flag::<T>(context.get_fory());
         (0..len)
-            .map(|_| crate::serializer::read_ref_info_data(context, skip_ref_flag, true))
+            .map(|_| crate::serializer::read_ref_info_data(context, skip_ref_flag, declared))
             .collect::<Result<C, Error>>()
     }
 }

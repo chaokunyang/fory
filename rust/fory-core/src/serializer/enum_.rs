@@ -44,9 +44,7 @@ pub fn type_def(
 }
 
 #[inline(always)]
-pub fn write_type_info<T: Serializer>(
-    context: &mut WriteContext,
-) -> Result<(), Error> {
+pub fn write_type_info<T: Serializer>(context: &mut WriteContext) -> Result<(), Error> {
     let type_id = T::fory_get_type_id(context.get_type_resolver())?;
     context.writer.write_varuint32(type_id);
     let is_named_enum = type_id & 0xff == TypeId::NAMED_ENUM as u32;
@@ -68,9 +66,7 @@ pub fn write_type_info<T: Serializer>(
 }
 
 #[inline(always)]
-pub fn read_type_info<T: Serializer>(
-    context: &mut ReadContext,
-) -> Result<(), Error> {
+pub fn read_type_info<T: Serializer>(context: &mut ReadContext) -> Result<(), Error> {
     let local_type_id = T::fory_get_type_id(context.get_type_resolver())?;
     let remote_type_id = context.reader.read_varuint32()?;
     ensure!(
@@ -97,19 +93,14 @@ pub fn read_compatible<T: Serializer + ForyDefault>(context: &mut ReadContext) -
 }
 
 #[inline(always)]
-pub fn write<T: Serializer>(
-    this: &T,
-    context: &mut WriteContext,
-) -> Result<(), Error> {
+pub fn write<T: Serializer>(this: &T, context: &mut WriteContext) -> Result<(), Error> {
     context.writer.write_i8(RefFlag::NotNullValue as i8);
     T::fory_write_type_info(context)?;
     this.fory_write_data(context)
 }
 
 #[inline(always)]
-pub fn read<T: Serializer + ForyDefault>(
-    context: &mut ReadContext,
-) -> Result<T, Error> {
+pub fn read<T: Serializer + ForyDefault>(context: &mut ReadContext) -> Result<T, Error> {
     let ref_flag = context.reader.read_i8()?;
     if ref_flag == RefFlag::Null as i8 {
         Ok(T::fory_default())

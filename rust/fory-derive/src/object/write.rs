@@ -17,8 +17,10 @@
 
 use super::util::{
     classify_trait_object_field, create_wrapper_types_arc, create_wrapper_types_rc,
-    should_skip_type_info_for_field, skip_ref_flag, StructField,
+    get_type_id_by_type_ast, is_option, should_skip_type_info_for_field, skip_ref_flag,
+    StructField,
 };
+use fory_core::types::TypeId;
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::Field;
@@ -112,7 +114,7 @@ fn gen_write_field(field: &Field) -> TokenStream {
                         .get_fory_type_id(concrete_type_id)
                         .ok_or_else(|| fory_core::error::Error::TypeError("Type not registered for trait object field".into()))?;
 
-                    context.writer.write_i8(fory_core::types::RefFlag::NotNullValue as i8)?;
+                    context.writer.write_i8(fory_core::types::RefFlag::NotNullValue as i8);
                     context.writer.write_varuint32(fory_type_id);
 
                     let harness = context
@@ -209,8 +211,55 @@ fn gen_write_field(field: &Field) -> TokenStream {
         _ => {
             let skip_ref_flag = skip_ref_flag(ty);
             let skip_type_info = should_skip_type_info_for_field(ty);
-            quote! {
-                fory_core::serializer::write_ref_info_data::<#ty>(&self.#ident, context, #skip_ref_flag, #skip_type_info)?;
+            let type_id = get_type_id_by_type_ast(ty);
+            let is_option = is_option(&field.ty);
+            if type_id == TypeId::LIST as u32 || type_id == TypeId::SET as u32 {
+                if is_option {
+                    quote! {
+                        if let Some(v) = &self.#ident {
+                            context.writer.write_i8(fory_core::types::RefFlag::NotNullValue as i8);
+                            fory_core::serializer::CollectionSerializer::fory_write_collection_field(v, context)?;
+                        } else {
+                            context.writer.write_i8(fory_core::types::RefFlag::Null as i8);
+                        }
+                    }
+                } else {
+                    quote! {
+                        context.writer.write_i8(fory_core::types::RefFlag::NotNullValue as i8);
+                        fory_core::serializer::CollectionSerializer::fory_write_collection_field(&self.#ident, context)?;
+                    }
+                }
+            } else if type_id == TypeId::MAP as u32 {
+                if is_option {
+                    quote! {
+                        if let Some(v) = &self.#ident {
+                            context.writer.write_i8(fory_core::types::RefFlag::NotNullValue as i8);
+                            fory_core::serializer::MapSerializer::fory_write_map_field(v, context)?;
+                        } else {
+                            context.writer.write_i8(fory_core::types::RefFlag::Null as i8);
+                        }
+                    }
+                } else {
+                    quote! {
+                        context.writer.write_i8(fory_core::types::RefFlag::NotNullValue as i8);
+                        fory_core::serializer::MapSerializer::fory_write_map_field(&self.#ident, context)?;
+                    }
+                }
+            } else {
+                // For custom types that we can't determine at compile time (like enums),
+                // we need to check at runtime whether to skip type info
+                if skip_type_info {
+                    // Known types (primitives, strings, collections) - skip type info at compile time
+                    quote! {
+                        fory_core::serializer::write_ref_info_data::<#ty>(&self.#ident, context, #skip_ref_flag, true)?;
+                    }
+                } else {
+                    // Custom types (struct/enum/ext) - need runtime check for enums
+                    quote! {
+                        let is_enum = <#ty as fory_core::serializer::Serializer>::fory_static_type_id() == fory_core::types::TypeId::ENUM;
+                        fory_core::serializer::write_ref_info_data::<#ty>(&self.#ident, context, #skip_ref_flag, is_enum)?;
+                    }
+                }
             }
         }
     }

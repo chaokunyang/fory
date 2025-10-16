@@ -20,6 +20,7 @@ use crate::resolver::context::ReadContext;
 use crate::resolver::context::WriteContext;
 use crate::resolver::type_resolver::TypeResolver;
 use crate::serializer::{ForyDefault, Serializer};
+use crate::types::TypeId;
 
 impl<T: Serializer + ForyDefault> Serializer for Option<T> {
     #[inline(always)]
@@ -72,6 +73,11 @@ impl<T: Serializer + ForyDefault> Serializer for Option<T> {
     #[inline(always)]
     fn fory_is_none(&self) -> bool {
         self.is_none()
+    }
+
+    #[inline(always)]
+    fn fory_static_type_id() -> TypeId {
+        T::fory_static_type_id()
     }
 
     #[inline(always)]

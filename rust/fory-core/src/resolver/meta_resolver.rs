@@ -73,8 +73,8 @@ pub struct MetaReaderResolver {
 }
 
 impl MetaReaderResolver {
-    pub fn get(&self, index: usize) -> &Arc<TypeMeta> {
-        unsafe { self.reading_type_defs.get_unchecked(index) }
+    pub fn get(&self, index: usize) -> Option<&Arc<TypeMeta>> {
+        self.reading_type_defs.get(index)
     }
 
     pub fn load(

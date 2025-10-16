@@ -260,6 +260,10 @@ macro_rules! register_trait_type {
                 Ok($crate::types::TypeId::STRUCT as u32)
             }
 
+            fn fory_static_type_id() -> $crate::types::TypeId {
+                $crate::types::TypeId::UNKNOWN
+            }
+
             fn fory_reserved_space() -> usize {
                 $crate::types::SIZE_OF_REF_AND_TYPE
             }
@@ -495,6 +499,10 @@ macro_rules! impl_smart_pointer_serializer {
 
             fn fory_get_type_id(_type_resolver: &$crate::resolver::type_resolver::TypeResolver) -> Result<u32, $crate::error::Error> {
                 Ok($crate::types::TypeId::STRUCT as u32)
+            }
+
+            fn fory_static_type_id() -> $crate::types::TypeId {
+                $crate::types::TypeId::UNKNOWN
             }
 
             fn fory_write_type_info(_context: &mut $crate::resolver::context::WriteContext) -> Result<(), $crate::error::Error> {

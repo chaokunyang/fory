@@ -28,6 +28,15 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for Arc<T> 
         true
     }
 
+    fn fory_write_ref(&self, context: &mut WriteContext) -> bool
+    where
+        Self: Sized,
+    {
+        context
+            .ref_writer
+            .try_write_arc_ref(&mut context.writer, self)
+    }
+
     fn fory_write(&self, context: &mut WriteContext) -> Result<(), Error> {
         if !context
             .ref_writer

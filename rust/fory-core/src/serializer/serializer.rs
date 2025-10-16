@@ -81,6 +81,16 @@ pub trait Serializer: 'static {
         false
     }
 
+    // must be used with `fory_is_shared_ref` check
+    fn fory_write_ref(&self, context: &mut WriteContext) -> bool
+    where
+        Self: Sized,
+    {
+        panic!(
+            "Current value is not a value holded by a smart pointer with shared ownership".into()
+        )
+    }
+
     fn fory_static_type_id() -> TypeId
     where
         Self: Sized,

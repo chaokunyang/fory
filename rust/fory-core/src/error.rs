@@ -53,6 +53,12 @@ pub enum Error {
     #[error("{0}")]
     DepthExceed(Cow<'static, str>),
 
+    #[error("{0}")]
+    Uunsupported(Cow<'static, str>),
+
+    #[error("{0}")]
+    NotAllowed(Cow<'static, str>),
+
     /// Do not construct this variant directly; use [`Error::unknown`] instead.
     #[error("{0}")]
     Unknown(Cow<'static, str>),

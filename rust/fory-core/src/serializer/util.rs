@@ -212,3 +212,19 @@ pub fn should_skip_type_info_at_runtime(type_id: u32) -> bool {
         false
     }
 }
+
+#[inline(always)]
+pub fn write_ref<T: Serializer>(
+    value: &T,
+    context: &mut WriteContext,
+    has_generics: bool,
+) -> Result<(), Error> {
+    if T::fory_is_shared_ref() {
+        if !value.fory_write_ref(context)? {
+            value.fory_write_data_generic(context, has_generics)?;
+        }
+    } else {
+        value.fory_write_data_generic(context, has_generics)?;
+    }
+    Ok(())
+}

@@ -313,6 +313,20 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for RcWeak<T> {
         true
     }
 
+    fn fory_write_ref(&self, context: &mut WriteContext) -> bool
+    where
+        Self: Sized,
+    {
+        if let Some(rc) = self.upgrade() {
+            context
+                .ref_writer
+                .try_write_rc_ref(&mut context.writer, &rc)
+        } else {
+            context.writer.write_i8(RefFlag::Null as i8);
+            false
+        }
+    }
+
     fn fory_write(&self, context: &mut WriteContext) -> Result<(), Error> {
         if let Some(rc) = self.upgrade() {
             if context
@@ -417,6 +431,20 @@ impl<T: ForyDefault> ForyDefault for RcWeak<T> {
 impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for ArcWeak<T> {
     fn fory_is_shared_ref() -> bool {
         true
+    }
+
+    fn fory_write_ref(&self, context: &mut WriteContext) -> bool
+    where
+        Self: Sized,
+    {
+        if let Some(arc) = self.upgrade() {
+            context
+                .ref_writer
+                .try_write_arc_ref(&mut context.writer, &arc)
+        } else {
+            context.writer.write_i8(RefFlag::Null as i8);
+            false
+        }
     }
 
     fn fory_write(&self, context: &mut WriteContext) -> Result<(), Error> {

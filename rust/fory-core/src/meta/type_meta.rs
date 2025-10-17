@@ -494,10 +494,10 @@ impl TypeMetaLayer {
             if let Some(type_info_current) =
                 type_resolver.get_type_info_by_name(&namespace.original, &type_name.original)
             {
-                Self::assign_field_ids(type_info_current, &mut sorted_field_infos);
+                Self::assign_field_ids(&type_info_current, &mut sorted_field_infos);
             }
         } else if let Some(type_info_current) = type_resolver.get_type_info_by_id(type_id) {
-            Self::assign_field_ids(type_info_current, &mut sorted_field_infos);
+            Self::assign_field_ids(&type_info_current, &mut sorted_field_infos);
         }
         // if no type found, keep all fields id as -1 to be skipped.
         Ok(TypeMetaLayer::new(

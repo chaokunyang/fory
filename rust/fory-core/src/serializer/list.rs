@@ -20,7 +20,7 @@ use crate::resolver::context::ReadContext;
 use crate::resolver::context::WriteContext;
 use crate::resolver::type_resolver::TypeResolver;
 use crate::serializer::primitive_list;
-use crate::serializer::{CollectionSerializer, ForyDefault, Serializer};
+use crate::serializer::{ForyDefault, Serializer, CollectionSerializer};
 use crate::types::TypeId;
 use std::any::TypeId as RsTypeId;
 use std::collections::{LinkedList, VecDeque};
@@ -98,9 +98,8 @@ impl<T: Serializer + ForyDefault> Serializer for Vec<T> {
     }
 
     fn fory_static_type_id() -> TypeId
-    where
-        Self: Sized,
-    {
+        where
+            Self: Sized, {
         match check_primitive::<T>() {
             Some(type_id) => type_id,
             None => TypeId::LIST,
@@ -113,7 +112,10 @@ impl<T: Serializer + ForyDefault> Serializer for Vec<T> {
 }
 
 impl<T: Serializer + ForyDefault> CollectionSerializer for Vec<T> {
-    fn fory_write_collection_field(&self, context: &mut WriteContext) -> Result<(), Error> {
+    fn fory_write_collection_field(
+        &self,
+        context: &mut WriteContext,
+    ) -> Result<(), Error> {
         match check_primitive::<T>() {
             Some(_) => primitive_list::fory_write_data(self, context),
             None => write_collection_data(self, context, true),
@@ -166,7 +168,10 @@ impl<T: Serializer + ForyDefault> Serializer for VecDeque<T> {
 }
 
 impl<T: Serializer + ForyDefault> CollectionSerializer for VecDeque<T> {
-    fn fory_write_collection_field(&self, context: &mut WriteContext) -> Result<(), Error> {
+    fn fory_write_collection_field(
+        &self,
+        context: &mut WriteContext,
+    ) -> Result<(), Error> {
         write_collection_data(self, context, true)
     }
 }
@@ -206,9 +211,7 @@ impl<T: Serializer + ForyDefault> Serializer for LinkedList<T> {
         Ok(TypeId::LIST as u32)
     }
 
-    fn fory_static_type_id() -> TypeId {
-        TypeId::LIST
-    }
+    
 
     fn as_any(&self) -> &dyn std::any::Any {
         self
@@ -216,7 +219,10 @@ impl<T: Serializer + ForyDefault> Serializer for LinkedList<T> {
 }
 
 impl<T: Serializer + ForyDefault> CollectionSerializer for LinkedList<T> {
-    fn fory_write_collection_field(&self, context: &mut WriteContext) -> Result<(), Error> {
+    fn fory_write_collection_field(
+        &self,
+        context: &mut WriteContext,
+    ) -> Result<(), Error> {
         write_collection_data(self, context, true)
     }
 }

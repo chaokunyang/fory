@@ -186,7 +186,7 @@ where
                     }
                 }
                 if key_is_shared_ref {
-                    key.fory_write(context)?;
+                    key.fory_write(context, false, has_generics)?;
                 } else {
                     key.fory_write_data_generic(context, has_generics)?;
                 }
@@ -210,7 +210,7 @@ where
                     }
                 }
                 if val_is_shared_ref {
-                    value.fory_write(context)?;
+                    value.fory_write(context, false, has_generics)?;
                 } else {
                     value.fory_write_data_generic(context, has_generics)?;
                 }
@@ -290,12 +290,12 @@ where
 
         // Write key-value pair
         if key_is_shared_ref {
-            key.fory_write(context)?;
+            key.fory_write(context, false, has_generics)?;
         } else {
             key.fory_write_data_generic(context, has_generics)?;
         }
         if val_is_shared_ref {
-            value.fory_write(context)?;
+            value.fory_write(context, false, has_generics)?;
         } else {
             value.fory_write_data_generic(context, has_generics)?;
         }
@@ -486,7 +486,7 @@ impl<K: Serializer + ForyDefault + Eq + std::hash::Hash, V: Serializer + ForyDef
         write_map_data(self.iter(), self.len(), context, has_generics)
     }
 
-    fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
+    fn fory_read(context: &mut ReadContext, read_ref_info: bool, read_type_info: bool) -> Result<Self, Error> {
         let len = context.reader.read_varuint32()?;
         let mut map = HashMap::<K, V>::with_capacity(len as usize);
         if len == 0 {
@@ -617,7 +617,7 @@ impl<K: Serializer + ForyDefault + Ord + std::hash::Hash, V: Serializer + ForyDe
         write_map_data(self.iter(), self.len(), context, has_generics)
     }
 
-    fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
+    fn fory_read(context: &mut ReadContext, read_ref_info: bool, read_type_info: bool) -> Result<Self, Error> {
         let len = context.reader.read_varuint32()?;
         let mut map = BTreeMap::<K, V>::new();
         if len == 0 {

@@ -127,7 +127,7 @@ use crate::resolver::type_resolver::{TypeInfo, TypeResolver};
 use crate::serializer::{ForyDefault, Serializer};
 use crate::types::RefFlag;
 use crate::types::TypeId;
-use std::cell::UnsafeCell;
+use std::cell::{Ref, UnsafeCell};
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -335,30 +335,16 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for RcWeak<T> {
         Ok(())
     }
 
-    fn fory_write_data_generic(
-        &self,
-        context: &mut WriteContext,
-        has_generics: bool,
-    ) -> Result<(), Error> {
-        // When Arc is nested inside another shared ref (like Rc<Arc<T>>),
-        // the outer ref calls fory_write_data on the inner Arc.
-        // We still need to track the Arc's own references here.
-        if T::fory_is_shared_ref() {
-            return Err(Error::NotAllowed(
-                "Nested shared references like Rc<Arc<T>> are not supported".into(),
-            ));
-        }
-        if let Some(rc) = self.upgrade() {
-            T::fory_write_data_generic(&*rc, context, has_generics)
-        } else {
-            Err(Error::InvalidRef(
-                "Cannot write data for a null RcWeak reference".into(),
-            ))
-        }
+    fn fory_write_data_generic(&self, _: &mut WriteContext, _: bool) -> Result<(), Error> {
+        panic!(
+            "RcWeak<T> should be written using `fory_write` to handle reference tracking properly"
+        );
     }
 
-    fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error> {
-        self.fory_write_data_generic(context, false)
+    fn fory_write_data(&self, _: &mut WriteContext) -> Result<(), Error> {
+        panic!(
+            "RcWeak<T> should be written using `fory_write` to handle reference tracking properly"
+        );
     }
 
     fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error> {
@@ -366,52 +352,18 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for RcWeak<T> {
     }
 
     fn fory_read(context: &mut ReadContext) -> Result<Self, Error> {
-        let ref_flag = context.ref_reader.read_ref_flag(&mut context.reader)?;
-
-        match ref_flag {
-            RefFlag::Null => Ok(RcWeak::new()),
-            RefFlag::RefValue => {
-                context.inc_depth()?;
-                let data = T::fory_read_data(context)?;
-                context.dec_depth();
-                let rc = Rc::new(data);
-                let ref_id = context.ref_reader.store_rc_ref(rc);
-                let rc = context.ref_reader.get_rc_ref::<T>(ref_id).unwrap();
-                Ok(RcWeak::from(&rc))
-            }
-            RefFlag::Ref => {
-                let ref_id = context.ref_reader.read_ref_id(&mut context.reader)?;
-
-                if let Some(rc) = context.ref_reader.get_rc_ref::<T>(ref_id) {
-                    Ok(RcWeak::from(&rc))
-                } else {
-                    let result_weak = RcWeak::new();
-                    let callback_weak = result_weak.clone();
-
-                    context.ref_reader.add_callback(Box::new(move |ref_reader| {
-                        if let Some(rc) = ref_reader.get_rc_ref::<T>(ref_id) {
-                            callback_weak.update(Rc::downgrade(&rc));
-                        }
-                    }));
-
-                    Ok(result_weak)
-                }
-            }
-            _ => Err(Error::InvalidRef(
-                format!("Weak can only be Null, RefValue or Ref, got {:?}", ref_flag).into(),
-            )),
-        }
+        read_rc_weak::<T>(context, None)
     }
 
     fn fory_read_with_typeinfo(
         context: &mut ReadContext,
         typeinfo: Arc<TypeInfo>,
     ) -> Result<Self, Error> {
-        Self::fory_read(context)
+        read_rc_weak::<T>(context, Some(typeinfo))
     }
 
-    fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
-        Self::fory_read(context)
+    fn fory_read_data(_: &mut ReadContext) -> Result<Self, Error> {
+        panic!("RcWeak<T> should be written using `fory_read/fory_read_with_typeinfo` to handle reference tracking properly");
     }
 
     fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error> {
@@ -441,6 +393,53 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for RcWeak<T> {
 
     fn as_any(&self) -> &dyn std::any::Any {
         self
+    }
+}
+
+fn read_rc_weak<T: Serializer + ForyDefault + 'static>(
+    context: &mut ReadContext,
+    type_info: Option<Arc<TypeInfo>>,
+) -> Result<RcWeak<T>, Error> {
+    let ref_flag = context.ref_reader.read_ref_flag(&mut context.reader)?;
+    match ref_flag {
+        RefFlag::Null => Ok(RcWeak::new()),
+        RefFlag::RefValue => {
+            context.inc_depth()?;
+            let data = if let Some(type_info) = type_info {
+                T::fory_read_data_with_typeinfo(context, type_info)?
+            } else {
+                T::fory_read_data(context)?
+            };
+            context.dec_depth();
+            let rc = Rc::new(data);
+            let ref_id = context.ref_reader.store_rc_ref(rc);
+            let rc = context.ref_reader.get_rc_ref::<T>(ref_id).unwrap();
+            Ok(RcWeak::from(&rc))
+        }
+        RefFlag::Ref => {
+            let ref_id = context.ref_reader.read_ref_id(&mut context.reader)?;
+            if let Some(rc) = context.ref_reader.get_rc_ref::<T>(ref_id) {
+                Ok(RcWeak::from(&rc))
+            } else {
+                let result_weak = RcWeak::new();
+                let callback_weak = result_weak.clone();
+                context.ref_reader.add_callback(Box::new(move |ref_reader| {
+                    if let Some(rc) = ref_reader.get_rc_ref::<T>(ref_id) {
+                        callback_weak.update(Rc::downgrade(&rc));
+                    }
+                }));
+
+                Ok(result_weak)
+            }
+        }
+        RefFlag::NotNullValue => {
+            let inner = if let Some(typeinfo) = type_info {
+                T::fory_read_data_with_typeinfo(context, typeinfo)?
+            } else {
+                T::fory_read_data(context)?
+            };
+            Ok(RcWeak::from(&Rc::new(inner)))
+        }
     }
 }
 
@@ -477,27 +476,16 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for ArcWeak
         Ok(())
     }
 
-    fn fory_write_data_generic(
-        &self,
-        context: &mut WriteContext,
-        has_generics: bool,
-    ) -> Result<(), Error> {
-        if T::fory_is_shared_ref() {
-            return Err(Error::NotAllowed(
-                "Nested shared references like Arc<Rc<T>> are not supported".into(),
-            ));
-        }
-        if let Some(arc) = self.upgrade() {
-            T::fory_write_data_generic(&*arc, context, has_generics)
-        } else {
-            Err(Error::InvalidRef(
-                "Cannot write data for a null RcWeak reference".into(),
-            ))
-        }
+    fn fory_write_data_generic(&self, _: &mut WriteContext, _: bool) -> Result<(), Error> {
+        panic!(
+            "ArcWeak<T> should be written using `fory_write` to handle reference tracking properly"
+        );
     }
 
-    fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error> {
-        self.fory_write_data_generic(context, false)
+    fn fory_write_data(&self, _: &mut WriteContext) -> Result<(), Error> {
+        panic!(
+            "ArcWeak<T> should be written using `fory_write` to handle reference tracking properly"
+        );
     }
 
     fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error> {
@@ -505,46 +493,18 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for ArcWeak
     }
 
     fn fory_read(context: &mut ReadContext) -> Result<Self, Error> {
-        let ref_flag = context.ref_reader.read_ref_flag(&mut context.reader)?;
-
-        match ref_flag {
-            RefFlag::Null => Ok(ArcWeak::new()),
-            RefFlag::RefValue => {
-                context.inc_depth()?;
-                let data = T::fory_read_data(context)?;
-                context.dec_depth();
-                let arc = Arc::new(data);
-                let ref_id = context.ref_reader.store_arc_ref(arc);
-                let arc = context.ref_reader.get_arc_ref::<T>(ref_id).unwrap();
-                let weak = ArcWeak::from(&arc);
-                Ok(weak)
-            }
-            RefFlag::Ref => {
-                let ref_id = context.ref_reader.read_ref_id(&mut context.reader)?;
-                let weak = ArcWeak::new();
-
-                if let Some(arc) = context.ref_reader.get_arc_ref::<T>(ref_id) {
-                    weak.update(Arc::downgrade(&arc));
-                } else {
-                    // Capture the raw pointer to the UnsafeCell so we can update it in the callback
-                    let weak_ptr = weak.inner.get();
-                    context.ref_reader.add_callback(Box::new(move |ref_reader| {
-                        if let Some(arc) = ref_reader.get_arc_ref::<T>(ref_id) {
-                            unsafe {
-                                *weak_ptr = Arc::downgrade(&arc);
-                            }
-                        }
-                    }));
-                }
-                Ok(weak)
-            }
-            _ => Err(Error::InvalidRef(
-                format!("Weak can only be Null, RefValue or Ref, got {:?}", ref_flag).into(),
-            )),
-        }
+        read_arc_weak(context, None)
     }
-    fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
-        Self::fory_read(context)
+
+    fn fory_read_with_typeinfo(
+        context: &mut ReadContext,
+        typeinfo: Arc<TypeInfo>,
+    ) -> Result<Self, Error> {
+        read_arc_weak::<T>(context, Some(typeinfo))
+    }
+
+    fn fory_read_data(_: &mut ReadContext) -> Result<Self, Error> {
+        panic!("ArcWeak<T> should be written using `fory_read/fory_read_with_typeinfo` to handle reference tracking properly");
     }
 
     fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error> {
@@ -574,6 +534,57 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for ArcWeak
 
     fn as_any(&self) -> &dyn std::any::Any {
         self
+    }
+}
+
+fn read_arc_weak<T: Serializer + ForyDefault + 'static>(
+    context: &mut ReadContext,
+    type_info: Option<Arc<TypeInfo>>,
+) -> Result<ArcWeak<T>, Error> {
+    let ref_flag = context.ref_reader.read_ref_flag(&mut context.reader)?;
+    match ref_flag {
+        RefFlag::Null => Ok(ArcWeak::new()),
+        RefFlag::RefValue => {
+            context.inc_depth()?;
+            let data = if let Some(type_info) = type_info {
+                T::fory_read_data_with_typeinfo(context, type_info)?
+            } else {
+                T::fory_read_data(context)?
+            };
+            context.dec_depth();
+            let arc = Arc::new(data);
+            let ref_id = context.ref_reader.store_arc_ref(arc);
+            let arc = context.ref_reader.get_arc_ref::<T>(ref_id).unwrap();
+            let weak = ArcWeak::from(&arc);
+            Ok(weak)
+        }
+        RefFlag::Ref => {
+            let ref_id = context.ref_reader.read_ref_id(&mut context.reader)?;
+            let weak = ArcWeak::new();
+
+            if let Some(arc) = context.ref_reader.get_arc_ref::<T>(ref_id) {
+                weak.update(Arc::downgrade(&arc));
+            } else {
+                // Capture the raw pointer to the UnsafeCell so we can update it in the callback
+                let weak_ptr = weak.inner.get();
+                context.ref_reader.add_callback(Box::new(move |ref_reader| {
+                    if let Some(arc) = ref_reader.get_arc_ref::<T>(ref_id) {
+                        unsafe {
+                            *weak_ptr = Arc::downgrade(&arc);
+                        }
+                    }
+                }));
+            }
+            Ok(weak)
+        }
+        RefFlag::NotNullValue => {
+            let inner = if let Some(typeinfo) = type_info {
+                T::fory_read_data_with_typeinfo(context, typeinfo)?
+            } else {
+                T::fory_read_data(context)?
+            };
+            Ok(ArcWeak::from(&Arc::new(inner)))
+        }
     }
 }
 

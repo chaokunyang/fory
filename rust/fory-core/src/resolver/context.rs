@@ -27,7 +27,6 @@ use crate::resolver::metastring_resolver::{
 use crate::resolver::ref_resolver::{RefReader, RefWriter};
 use crate::resolver::type_resolver::{TypeInfo, TypeResolver};
 use crate::types;
-use crate::types::TypeId as ForyTypeId;
 use std::sync::{Arc, Mutex};
 
 pub struct WriteContext {
@@ -85,6 +84,11 @@ impl WriteContext {
     #[inline(always)]
     pub fn get_type_resolver(&self) -> &TypeResolver {
         &self.type_resolver
+    }
+
+    #[inline(always)]
+    pub fn get_type_info(&self, type_id: &std::any::TypeId) -> Result<Arc<TypeInfo>, Error> {
+        self.type_resolver.get_type_info(type_id)
     }
 
     /// Check if compatible mode is enabled

@@ -26,16 +26,6 @@ use std::any::Any;
 use std::rc::Rc;
 use std::sync::Arc;
 
-/// Helper function to serialize a `Box<dyn Any>`
-pub fn serialize_any_box(any_box: &Box<dyn Any>, context: &mut WriteContext) -> Result<(), Error> {
-    context.writer.write_i8(RefFlag::NotNullValue as i8);
-
-    let concrete_type_id = (**any_box).type_id();
-    let harness = context.write_any_typeinfo(concrete_type_id)?.get_harness();
-    let serializer_fn = harness.get_write_data_fn();
-    serializer_fn(&**any_box, context, false)
-}
-
 /// Helper function to deserialize to `Box<dyn Any>`
 pub fn deserialize_any_box(context: &mut ReadContext) -> Result<Box<dyn Any>, Error> {
     context.inc_depth()?;
@@ -45,8 +35,8 @@ pub fn deserialize_any_box(context: &mut ReadContext) -> Result<Box<dyn Any>, Er
             "Expected NotNullValue for Box<dyn Any>".into(),
         ));
     }
-    let harness = context.read_any_typeinfo()?.get_harness();
-    let deserializer_fn = harness.get_read_data_fn();
+    let typeinfo = context.read_any_typeinfo()?;
+    let deserializer_fn = typeinfo.get_harness().get_read_data_fn();
     let result = deserializer_fn(context);
     context.dec_depth();
     result
@@ -62,18 +52,60 @@ impl Serializer for Box<dyn Any> {
     fn fory_write(
         &self,
         context: &mut WriteContext,
-        write_type_info: bool,
+        write_ref_info: bool,
+        write_typeinfo: bool,
         has_generics: bool,
     ) -> Result<(), Error> {
-        serialize_any_box(self, context)
+        if write_ref_info {
+            context.writer.write_i8(RefFlag::NotNullValue as i8);
+        }
+        let concrete_type_id = (**self).type_id();
+        let typeinfo = if write_typeinfo {
+            context.write_any_typeinfo(concrete_type_id)?
+        } else {
+            context.get_type_info(&concrete_type_id)?
+        };
+        let serializer_fn = typeinfo.get_harness().get_write_data_fn();
+        serializer_fn(&**self, context, has_generics)
+    }
+
+    fn fory_write_data_generic(
+        &self,
+        context: &mut WriteContext,
+        has_generics: bool,
+    ) -> Result<(), Error> {
+        let concrete_type_id = (**self).type_id();
+        let typeinfo = context.get_type_info(&concrete_type_id)?;
+        let serializer_fn = typeinfo.get_harness().get_write_data_fn();
+        serializer_fn(&**self, context, has_generics)
     }
 
     fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error> {
-        serialize_any_box(self, context)
+        self.fory_write_data_generic(context, false)
     }
 
-    fn fory_read(context: &mut ReadContext) -> Result<Self, Error> {
-        deserialize_any_box(context)
+    fn fory_read(context: &mut ReadContext, read_ref_info: bool) -> Result<Self, Error> {
+        context.inc_depth()?;
+        let ref_flag = context.reader.read_i8()?;
+        if ref_flag != RefFlag::NotNullValue as i8 {
+            return Err(Error::InvalidRef(
+                "Expected NotNullValue for Box<dyn Any>".into(),
+            ));
+        }
+        let typeinfo = context.read_any_typeinfo()?;
+        let deserializer_fn = typeinfo.get_harness().get_read_data_fn();
+        let result = deserializer_fn(context);
+        context.dec_depth();
+        result
+    }
+
+    fn fory_read_data_with_typeinfo(
+        context: &mut ReadContext,
+        _: Arc<crate::resolver::type_resolver::TypeInfo>,
+    ) -> Result<Self, Error>
+    where
+        Self: Sized + ForyDefault,
+    {
     }
 
     fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
@@ -81,7 +113,9 @@ impl Serializer for Box<dyn Any> {
     }
 
     fn fory_get_type_id(_: &TypeResolver) -> Result<u32, Error> {
-        unreachable!("Box<dyn Any> has no static type ID - use fory_type_id_dyn")
+        Err(Error::TypeError(
+            "Box<dyn Any> has no static type ID - use fory_type_id_dyn".into(),
+        ))
     }
 
     fn fory_type_id_dyn(&self, type_resolver: &TypeResolver) -> Result<u32, Error> {
@@ -177,16 +211,16 @@ impl Serializer for Rc<dyn Any> {
             }
             RefFlag::NotNullValue => {
                 context.inc_depth()?;
-                let harness = context.read_any_typeinfo()?.get_harness();
-                let deserializer_fn = harness.get_read_data_fn();
+                let typeinfo = context.read_any_typeinfo()?;
+                let deserializer_fn = typeinfo.get_harness().get_read_data_fn();
                 let boxed = deserializer_fn(context)?;
                 context.dec_depth();
                 Ok(Rc::<dyn Any>::from(boxed))
             }
             RefFlag::RefValue => {
                 context.inc_depth()?;
-                let harness = context.read_any_typeinfo()?.get_harness();
-                let deserializer_fn = harness.get_read_data_fn();
+                let typeinfo = context.read_any_typeinfo()?;
+                let deserializer_fn = typeinfo.get_harness().get_read_data_fn();
                 let boxed = deserializer_fn(context)?;
                 context.dec_depth();
                 let rc: Rc<dyn Any> = Rc::from(boxed);
@@ -201,7 +235,9 @@ impl Serializer for Rc<dyn Any> {
     }
 
     fn fory_get_type_id(_: &TypeResolver) -> Result<u32, Error> {
-        unreachable!("Rc<dyn Any> has no static type ID - use fory_type_id_dyn")
+        Err(Error::TypeError(
+            "Rc<dyn Any> has no static type ID - use fory_type_id_dyn".into(),
+        ))
     }
 
     fn fory_type_id_dyn(&self, type_resolver: &TypeResolver) -> Result<u32, Error> {
@@ -297,16 +333,16 @@ impl Serializer for Arc<dyn Any> {
             }
             RefFlag::NotNullValue => {
                 context.inc_depth()?;
-                let harness = context.read_any_typeinfo()?.get_harness();
-                let deserializer_fn = harness.get_read_data_fn();
+                let typeinfo = context.read_any_typeinfo()?;
+                let deserializer_fn = typeinfo.get_harness().get_read_data_fn();
                 let boxed = deserializer_fn(context)?;
                 context.dec_depth();
                 Ok(Arc::<dyn Any>::from(boxed))
             }
             RefFlag::RefValue => {
                 context.inc_depth()?;
-                let harness = context.read_any_typeinfo()?.get_harness();
-                let deserializer_fn = harness.get_read_data_fn();
+                let typeinfo = context.read_any_typeinfo()?;
+                let deserializer_fn = typeinfo.get_harness().get_read_data_fn();
                 let boxed = deserializer_fn(context)?;
                 context.dec_depth();
                 let arc: Arc<dyn Any> = Arc::from(boxed);
@@ -321,7 +357,9 @@ impl Serializer for Arc<dyn Any> {
     }
 
     fn fory_get_type_id(_type_resolver: &TypeResolver) -> Result<u32, Error> {
-        unreachable!("Arc<dyn Any> has no static type ID - use fory_type_id_dyn")
+        Err(Error::TypeError(
+            "Arc<dyn Any> has no static type ID - use fory_type_id_dyn".into(),
+        ))
     }
 
     fn fory_type_id_dyn(&self, type_resolver: &TypeResolver) -> Result<u32, Error> {

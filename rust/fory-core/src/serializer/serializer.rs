@@ -19,9 +19,7 @@ use crate::error::Error;
 use crate::meta::FieldInfo;
 use crate::resolver::context::{ReadContext, WriteContext};
 use crate::resolver::type_resolver::TypeInfo;
-use crate::serializer::util::{
-    read_compatible_default, read_ref_info_data, write_ext_type_info, write_ref_info_data,
-};
+use crate::serializer::util::{read_compatible_default, read_ref_info_data};
 use crate::serializer::{bool, struct_};
 use crate::types::{RefFlag, TypeId};
 use crate::TypeResolver;
@@ -46,6 +44,7 @@ pub trait Serializer: 'static {
     fn fory_write(
         &self,
         context: &mut WriteContext,
+        write_ref_info: bool,
         write_type_info: bool,
         has_generics: bool,
     ) -> Result<(), Error>
@@ -86,31 +85,32 @@ pub trait Serializer: 'static {
     /// Write the data into the buffer. Need to be implemented.
     fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error>;
 
-    fn fory_read(context: &mut ReadContext) -> Result<Self, Error>
+    fn fory_read(context: &mut ReadContext, read_ref_info: bool, read_type_info: bool) -> Result<Self, Error>
     where
         Self: Sized + ForyDefault,
     {
-        read_ref_info_data(context, false, false)
+        read_ref_info_data(context, !read_ref_info, !read_type_info)
     }
 
-    fn fory_read_with_typeinfo(
-        context: &mut ReadContext,
-        typeinfo: Arc<TypeInfo>,
-    ) -> Result<Self, Error>
+    fn fory_read_with_typeinfo(context: &mut ReadContext, _: Arc<TypeInfo>) -> Result<Self, Error>
     where
         Self: Sized + ForyDefault,
     {
-        Self::fory_read(context, false)
+        // Default implementation just ignore the typeinfo, only for morphic types supported by fory directly
+        // or ext type registered by user. Dynamic trait types or reference types should override this method.
+        Self::fory_read_data(context)
     }
 
     fn fory_read_data_with_typeinfo(
         context: &mut ReadContext,
-        typeinfo: Arc<TypeInfo>,
+        _: Arc<TypeInfo>,
     ) -> Result<Self, Error>
     where
         Self: Sized + ForyDefault,
     {
-        Self::fory_read(context, false)
+        // Default implementation just ignore the typeinfo, only for morphic types supported by fory directly
+        // or ext type registered by user. Dynamic trait types or reference types should override this method.
+        Self::fory_read_data(context)
     }
 
     fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error>

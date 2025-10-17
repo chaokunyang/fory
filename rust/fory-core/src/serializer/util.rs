@@ -15,13 +15,13 @@
 // specific language governing permissions and limitations
 // under the License.
 
+use crate::ensure;
 use crate::error::Error;
 use crate::meta::{NAMESPACE_DECODER, TYPE_NAME_DECODER};
 use crate::resolver::context::{ReadContext, WriteContext};
 use crate::serializer::{bool, ForyDefault, Serializer};
+use crate::types::RefFlag;
 use crate::types::{is_primitive_type, TypeId};
-use crate::types::{RefFlag, PRIMITIVE_TYPES};
-use crate::{ensure, TypeResolver};
 use std::any::Any;
 
 #[inline(always)]
@@ -96,53 +96,6 @@ pub fn read_type_info<T: Serializer>(context: &mut ReadContext) -> Result<(), Er
         local_type_id == remote_type_id,
         Error::TypeMismatch(local_type_id, remote_type_id)
     );
-    Ok(())
-}
-
-pub(super) fn write_ext_type_info<T: Serializer>(context: &mut WriteContext) -> Result<(), Error>
-where
-    T: Sized,
-{
-    // default implementation only for ext/named_ext
-    let type_id = T::fory_get_type_id(context.get_type_resolver())?;
-    context.writer.write_varuint32(type_id);
-    if type_id & 0xff == TypeId::EXT as u32 {
-        return Ok(());
-    }
-    let rs_type_id = std::any::TypeId::of::<T>();
-    if context.is_share_meta() {
-        let meta_index = context.push_meta(rs_type_id)? as u32;
-        context.writer.write_varuint32(meta_index);
-    } else {
-        let type_info = context.get_type_resolver().get_type_info(&rs_type_id)?;
-        let namespace = type_info.get_namespace().to_owned();
-        let type_name = type_info.get_type_name().to_owned();
-        context.write_meta_string_bytes(&namespace)?;
-        context.write_meta_string_bytes(&type_name)?;
-    }
-    Ok(())
-}
-
-pub(super) fn read_ext_type_info<T: Serializer>(context: &mut ReadContext) -> Result<(), Error>
-where
-    T: Sized,
-{
-    // default implementation only for ext/named_ext
-    let local_type_id = T::fory_get_type_id(context.get_type_resolver())?;
-    let remote_type_id = context.reader.read_varuint32()?;
-    ensure!(
-        local_type_id == remote_type_id,
-        Error::TypeMismatch(local_type_id, remote_type_id)
-    );
-    if local_type_id & 0xff == TypeId::EXT as u32 {
-        return Ok(());
-    }
-    if context.is_share_meta() {
-        let _meta_index = context.reader.read_varuint32()?;
-    } else {
-        let _namespace_msb = context.read_meta_string_bytes()?;
-        let _type_name_msb = context.read_meta_string_bytes()?;
-    }
     Ok(())
 }
 

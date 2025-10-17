@@ -17,7 +17,7 @@
 
 use crate::error::Error;
 use crate::resolver::context::{ReadContext, WriteContext};
-use crate::resolver::type_resolver::TypeResolver;
+use crate::resolver::type_resolver::{TypeInfo, TypeResolver};
 use crate::serializer::{ForyDefault, Serializer};
 use crate::types::RefFlag;
 use crate::types::TypeId;
@@ -47,24 +47,12 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for Arc<T> 
         }
     }
 
-    fn fory_write_data_generic(
-        &self,
-        context: &mut WriteContext,
-        has_generics: bool,
-    ) -> Result<(), Error> {
-        // When Arc is nested inside another shared ref (like Rc<Arc<T>>),
-        // the outer ref calls fory_write_data on the inner Arc.
-        // We still need to track the Arc's own references here.
-        if T::fory_is_shared_ref() {
-            return Err(Error::NotAllowed(
-                "Nested shared references like Rc<Arc<T>> are not supported".into(),
-            ));
-        }
-        T::fory_write_data_generic(&self, context, has_generics)
+    fn fory_write_data_generic(&self, _: &mut WriteContext, _: bool) -> Result<(), Error> {
+        panic!("Arc<T> should be written using `fory_write` to handle reference tracking properly");
     }
 
-    fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error> {
-        self.fory_write_data_generic(context, false)
+    fn fory_write_data(&self, _: &mut WriteContext) -> Result<(), Error> {
+        panic!("Arc<T> should be written using `fory_write` to handle reference tracking properly");
     }
 
     fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error> {
@@ -72,36 +60,21 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for Arc<T> 
     }
 
     fn fory_read(context: &mut ReadContext) -> Result<Self, Error> {
-        let ref_flag = context.ref_reader.read_ref_flag(&mut context.reader)?;
-        Ok(match ref_flag {
-            RefFlag::Null => Err(Error::InvalidRef("Arc cannot be null".into()))?,
-            RefFlag::Ref => {
-                let ref_id = context.ref_reader.read_ref_id(&mut context.reader)?;
-                context
-                    .ref_reader
-                    .get_arc_ref::<T>(ref_id)
-                    .ok_or(Error::InvalidData(
-                        format!("Arc reference {ref_id} not found").into(),
-                    ))?
-            }
-            RefFlag::NotNullValue => {
-                let inner = T::fory_read_data(context)?;
-                Arc::new(inner)
-            }
-            RefFlag::RefValue => {
-                let ref_id = context.ref_reader.reserve_ref_id();
-                let inner = T::fory_read_data(context)?;
-                let arc = Arc::new(inner);
-                context.ref_reader.store_arc_ref_at(ref_id, arc.clone());
-                arc
-            }
-        })
+        read_arc(context, None)
     }
 
-    fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
-        // When Arc is nested inside another shared ref, fory_read_data is called.
-        // Delegate to fory_read which handles ref tracking properly.
-        Self::fory_read(context)
+    fn fory_read_data_with_typeinfo(
+        context: &mut ReadContext,
+        typeinfo: Arc<TypeInfo>,
+    ) -> Result<Self, Error>
+    where
+        Self: Sized + ForyDefault,
+    {
+        read_arc(context, Some(typeinfo))
+    }
+
+    fn fory_read_data(_: &mut ReadContext) -> Result<Self, Error> {
+        panic!("Arc<T> should be read using `fory_read/fory_read_with_typeinfo` to handle reference tracking properly");
     }
 
     fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error> {
@@ -128,6 +101,41 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for Arc<T> 
 
     fn as_any(&self) -> &dyn std::any::Any {
         self
+    }
+}
+
+fn read_arc<T: Serializer + ForyDefault + 'static>(
+    context: &mut ReadContext,
+    typeinfo: Option<Arc<TypeInfo>>,
+) -> Result<Arc<T>, Error> {
+    let ref_flag = context.ref_reader.read_ref_flag(&mut context.reader)?;
+    match ref_flag {
+        RefFlag::Null => Err(Error::InvalidRef("Arc cannot be null".into())),
+        RefFlag::Ref => {
+            let ref_id = context.ref_reader.read_ref_id(&mut context.reader)?;
+            context.ref_reader.get_arc_ref::<T>(ref_id).ok_or_else(|| {
+                Error::InvalidRef(format!("Arc reference {ref_id} not found").into())
+            })
+        }
+        RefFlag::NotNullValue => {
+            let inner = if let Some(typeinfo) = typeinfo {
+                T::fory_read_data_with_typeinfo(context, typeinfo)?
+            } else {
+                T::fory_read_data(context)?
+            };
+            Ok(Arc::new(inner))
+        }
+        RefFlag::RefValue => {
+            let ref_id = context.ref_reader.reserve_ref_id();
+            let inner = if let Some(typeinfo) = typeinfo {
+                T::fory_read_data_with_typeinfo(context, typeinfo)?
+            } else {
+                T::fory_read_data(context)?
+            };
+            let arc = Arc::new(inner);
+            context.ref_reader.store_arc_ref_at(ref_id, arc.clone());
+            Ok(arc)
+        }
     }
 }
 

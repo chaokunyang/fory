@@ -199,7 +199,7 @@ macro_rules! register_trait_type {
 
         // 4. Serializer implementation for Box<dyn Trait> (existing functionality)
         impl $crate::serializer::Serializer for Box<dyn $trait_name> {
-            fn fory_write(&self, context: &mut $crate::resolver::context::WriteContext) -> Result<(), $crate::error::Error> {
+            fn fory_write(&self, context: &mut $crate::resolver::context::WriteContext, write_type_info: bool, has_generics: bool) -> Result<(), $crate::error::Error> {
                 let any_ref = <dyn $trait_name as $crate::serializer::Serializer>::as_any(&**self);
                 let concrete_type_id = any_ref.type_id();
 
@@ -409,13 +409,17 @@ macro_rules! generate_smart_pointer_wrapper {
 macro_rules! impl_smart_pointer_serializer {
     ($wrapper_name:ident, $pointer_type:ty, $constructor_expr:expr, $trait_name:ident, $try_write_ref:ident, $get_ref:ident, $store_ref:ident, $($impl_type:ty),+) => {
         impl $crate::serializer::Serializer for $wrapper_name {
-            fn fory_write(&self, context: &mut $crate::resolver::context::WriteContext) -> Result<(), $crate::error::Error> {
+            fn fory_write(&self, context: &mut $crate::resolver::context::WriteContext, write_type_info: bool, has_generics: bool) -> Result<(), $crate::error::Error> {
                 if !context.ref_writer.$try_write_ref(&mut context.writer, &self.0) {
                     let any_obj = <dyn $trait_name as $crate::serializer::Serializer>::as_any(&*self.0);
                     let concrete_type_id = any_obj.type_id();
-                    let harness = context.write_any_typeinfo(concrete_type_id)?;
-                    let serializer_fn = harness.get_write_data_fn();
-                    serializer_fn(any_obj, context)?;
+                    let typeinfo = if write_type_info {
+                         context.write_any_typeinfo(concrete_type_id)?
+                    } else {
+                        context.get_type_info(&concrete_type_id)?
+                    };
+                    let serializer_fn = typeinfo.get_harness().get_write_data_fn();
+                    serializer_fn(any_obj, context, has_generics)?;
                 }
                 Ok(())
             }
@@ -444,8 +448,8 @@ macro_rules! impl_smart_pointer_serializer {
                     }
                     RefFlag::NotNullValue => {
                         context.inc_depth()?;
-                        let harness = context.read_any_typeinfo()?;
-                        let deserializer_fn = harness.get_read_data_fn();
+                        let type_info = context.read_any_typeinfo()?;
+                        let deserializer_fn = type_info.get_harness().get_read_data_fn();
                         let boxed_any = deserializer_fn(context)?;
                         context.dec_depth();
 
@@ -464,11 +468,10 @@ macro_rules! impl_smart_pointer_serializer {
                     }
                     RefFlag::RefValue => {
                         context.inc_depth()?;
-                        let harness = context.read_any_typeinfo()?;
-                        let deserializer_fn = harness.get_read_data_fn();
+                        let type_info = context.read_any_typeinfo()?;
+                        let deserializer_fn = type_info.get_harness().get_read_data_fn();
                         let boxed_any = deserializer_fn(context)?;
                         context.dec_depth();
-
                         $(
                             if boxed_any.is::<$impl_type>() {
                                 let concrete = boxed_any.downcast::<$impl_type>()
@@ -550,12 +553,7 @@ impl ForyDefault for Box<dyn Serializer> {
 }
 
 impl Serializer for Box<dyn Serializer> {
-    fn fory_write(
-        &self,
-        context: &mut WriteContext,
-        write_type_info: bool,
-        has_generics: bool,
-    ) -> Result<(), Error> {
+    fn fory_write(&self, context: &mut WriteContext, _: bool, _: bool) -> Result<(), Error> {
         let fory_type_id = (**self).fory_type_id_dyn(context.get_type_resolver())?;
         let concrete_type_id = (**self).fory_concrete_type_id();
 

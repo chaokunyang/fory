@@ -59,10 +59,15 @@ impl<T: Serializer + ForyDefault> Serializer for RefCell<T> {
         T::fory_read_type_info(context)
     }
 
-    fn fory_write(&self, context: &mut WriteContext) -> Result<(), Error> {
+    fn fory_write(
+        &self,
+        context: &mut WriteContext,
+        write_type_info: bool,
+        has_generics: bool,
+    ) -> Result<(), Error> {
         // Don't add ref tracking for RefCell itself, just delegate to inner type
         // The inner type will handle its own ref tracking
-        T::fory_write(&*self.borrow(), context)
+        T::fory_write(&*self.borrow(), context, write_type_info, has_generics)
     }
 
     fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error> {

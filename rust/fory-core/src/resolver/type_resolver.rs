@@ -27,10 +27,10 @@ use crate::{Reader, TypeId};
 use std::sync::Arc;
 use std::{any::Any, collections::HashMap};
 
-type WriteFn = fn(&dyn Any, &mut WriteContext) -> Result<(), Error>;
+type WriteFn = fn(&dyn Any, &mut WriteContext, bool, bool) -> Result<(), Error>;
 type ReadFn = fn(&mut ReadContext, skip_ref_flag: bool) -> Result<Box<dyn Any>, Error>;
 
-type WriteDataFn = fn(&dyn Any, &mut WriteContext) -> Result<(), Error>;
+type WriteDataFn = fn(&dyn Any, &mut WriteContext, has_generics: bool) -> Result<(), Error>;
 type ReadDataFn = fn(&mut ReadContext) -> Result<Box<dyn Any>, Error>;
 type ToSerializerFn = fn(Box<dyn Any>) -> Result<Box<dyn Serializer>, Error>;
 static EMPTY_STRING: String = String::new();
@@ -210,10 +210,10 @@ impl TypeInfo {
 /// TypeResolver is a resolver for fast type/serializer dispatch.
 #[derive(Clone)]
 pub struct TypeResolver {
-    type_info_map_by_id: HashMap<u32, TypeInfo>,
-    type_info_map: HashMap<std::any::TypeId, TypeInfo>,
-    type_info_map_by_name: HashMap<(String, String), TypeInfo>,
-    type_info_map_by_ms_name: HashMap<(MetaString, MetaString), TypeInfo>,
+    type_info_map_by_id: HashMap<u32, Arc<TypeInfo>>,
+    type_info_map: HashMap<std::any::TypeId, Arc<TypeInfo>>,
+    type_info_map_by_name: HashMap<(String, String), Arc<TypeInfo>>,
+    type_info_map_by_ms_name: HashMap<(MetaString, MetaString), Arc<TypeInfo>>,
     // Fast lookup by numeric ID for common types
     type_id_index: Vec<u32>,
     compatible: bool,
@@ -237,30 +237,33 @@ impl Default for TypeResolver {
 }
 
 impl TypeResolver {
-    pub fn get_type_info(&self, type_id: &std::any::TypeId) -> Result<&TypeInfo, Error> {
+    pub fn get_type_info(&self, type_id: &std::any::TypeId) -> Result<Arc<TypeInfo>, Error> {
         self.type_info_map.get(type_id)
             .ok_or_else(|| Error::TypeError(format!(
                 "TypeId {:?} not found in type_info registry, maybe you forgot to register some types",
                 type_id
             ).into()))
+            .cloned()
     }
 
-    pub fn get_type_info_by_id(&self, id: u32) -> Option<&TypeInfo> {
-        self.type_info_map_by_id.get(&id)
+    pub fn get_type_info_by_id(&self, id: u32) -> Option<Arc<TypeInfo>> {
+        self.type_info_map_by_id.get(&id).cloned()
     }
 
-    pub fn get_type_info_by_name(&self, namespace: &str, type_name: &str) -> Option<&TypeInfo> {
+    pub fn get_type_info_by_name(&self, namespace: &str, type_name: &str) -> Option<Arc<TypeInfo>> {
         self.type_info_map_by_name
             .get(&(namespace.to_owned(), type_name.to_owned()))
+            .cloned()
     }
 
     pub fn get_type_info_by_msname(
         &self,
         namespace: &MetaString,
         type_name: &MetaString,
-    ) -> Option<&TypeInfo> {
+    ) -> Option<Arc<TypeInfo>> {
         self.type_info_map_by_ms_name
             .get(&(namespace.clone(), type_name.clone()))
+            .cloned()
     }
 
     /// Fast path for getting type info by numeric ID (avoids HashMap lookup by TypeId)
@@ -378,15 +381,19 @@ impl TypeResolver {
         fn write<T2: 'static + Serializer>(
             this: &dyn Any,
             context: &mut WriteContext,
+            write_type_info: bool,
+            has_generics: bool,
         ) -> Result<(), Error> {
             let this = this.downcast_ref::<T2>();
             match this {
-                Some(v) => {
-                    let skip_ref_flag = crate::serializer::get_skip_ref_flag::<T2>();
-                    crate::serializer::write_ref_info_data(v, context, skip_ref_flag, true)?;
-                    Ok(())
-                }
-                None => todo!(),
+                Some(v) => T2::fory_write(v, context, write_type_info, has_generics),
+                None => Err(Error::TypeError(
+                    format!(
+                        "Cast type error when writing: {:?}",
+                        T2::fory_static_type_id()
+                    )
+                    .into(),
+                )),
             }
         }
 
@@ -403,10 +410,11 @@ impl TypeResolver {
         fn write_data<T2: 'static + Serializer>(
             this: &dyn Any,
             context: &mut WriteContext,
+            has_generics: bool,
         ) -> Result<(), Error> {
             let this = this.downcast_ref::<T2>();
             match this {
-                Some(v) => T2::fory_write_data(v, context),
+                Some(v) => T2::fory_write_data_generic(v, context, has_generics),
                 None => todo!(),
             }
         }
@@ -456,11 +464,12 @@ impl TypeResolver {
         }
 
         // Store in main map
-        self.type_info_map.insert(rs_type_id, type_info.clone());
+        self.type_info_map
+            .insert(rs_type_id, Arc::new(type_info.clone()));
 
         // Store by ID
         self.type_info_map_by_id
-            .insert(type_info.type_id, type_info.clone());
+            .insert(type_info.type_id, Arc::new(type_info.clone()));
 
         // Update type_id_index for fast lookup
         let index = T::fory_type_index() as usize;
@@ -488,10 +497,10 @@ impl TypeResolver {
                 ));
             }
             self.type_info_map_by_ms_name
-                .insert(ms_key, type_info.clone());
+                .insert(ms_key, Arc::new(type_info.clone()));
             let string_key = (namespace.original.clone(), type_name.original.clone());
             self.type_info_map_by_name
-                .insert(string_key, type_info.clone());
+                .insert(string_key, Arc::new(type_info));
         }
         Ok(())
     }
@@ -536,11 +545,19 @@ impl TypeResolver {
         fn write<T2: 'static + Serializer>(
             this: &dyn Any,
             context: &mut WriteContext,
+            write_type_info: bool,
+            has_generics: bool,
         ) -> Result<(), Error> {
             let this = this.downcast_ref::<T2>();
             match this {
-                Some(v) => Ok(v.fory_write(context)?),
-                None => todo!(),
+                Some(v) => Ok(v.fory_write(context, write_type_info, has_generics)?),
+                None => Err(Error::TypeError(
+                    format!(
+                        "Cast type error when writing: {:?}",
+                        T2::fory_static_type_id()
+                    )
+                    .into(),
+                )),
             }
         }
 
@@ -564,10 +581,11 @@ impl TypeResolver {
         fn write_data<T2: 'static + Serializer>(
             this: &dyn Any,
             context: &mut WriteContext,
+            has_generics: bool,
         ) -> Result<(), Error> {
             let this = this.downcast_ref::<T2>();
             match this {
-                Some(v) => T2::fory_write_data(v, context),
+                Some(v) => T2::fory_write_data_generic(v, context, has_generics),
                 None => todo!(),
             }
         }
@@ -617,11 +635,12 @@ impl TypeResolver {
         }
 
         // Store in main map
-        self.type_info_map.insert(rs_type_id, type_info.clone());
+        self.type_info_map
+            .insert(rs_type_id, Arc::new(type_info.clone()));
 
         // Store by ID
         self.type_info_map_by_id
-            .insert(type_info.type_id, type_info.clone());
+            .insert(type_info.type_id, Arc::new(type_info.clone()));
 
         // Store by name if registered by name
         if type_info.register_by_name {
@@ -638,10 +657,10 @@ impl TypeResolver {
                 ));
             }
             self.type_info_map_by_ms_name
-                .insert(ms_key, type_info.clone());
+                .insert(ms_key, Arc::new(type_info.clone()));
             let string_key = (namespace.original.clone(), type_name.original.clone());
             self.type_info_map_by_name
-                .insert(string_key, type_info.clone());
+                .insert(string_key, Arc::new(type_info));
         }
         Ok(())
     }

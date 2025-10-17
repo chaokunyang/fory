@@ -53,11 +53,16 @@ use std::sync::Mutex;
 /// Simply delegates to the serializer for `T`, allowing thread-safe interior mutable
 /// containers to be included in serialized graphs.
 impl<T: Serializer + ForyDefault> Serializer for Mutex<T> {
-    fn fory_write(&self, context: &mut WriteContext) -> Result<(), Error> {
+    fn fory_write(
+        &self,
+        context: &mut WriteContext,
+        write_type_info: bool,
+        has_generics: bool,
+    ) -> Result<(), Error> {
         // Don't add ref tracking for Mutex itself, just delegate to inner type
         // The inner type will handle its own ref tracking
         let guard = self.lock().unwrap();
-        T::fory_write(&*guard, context)
+        T::fory_write(&*guard, context, write_type_info, has_generics)
     }
 
     fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error> {

@@ -123,7 +123,7 @@
 
 use crate::error::Error;
 use crate::resolver::context::{ReadContext, WriteContext};
-use crate::resolver::type_resolver::TypeResolver;
+use crate::resolver::type_resolver::{TypeInfo, TypeResolver};
 use crate::serializer::{ForyDefault, Serializer};
 use crate::types::RefFlag;
 use crate::types::TypeId;
@@ -313,39 +313,52 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for RcWeak<T> {
         true
     }
 
-    fn fory_write_ref(
+    fn fory_write(
         &self,
         context: &mut WriteContext,
         write_type_info: bool,
         has_generics: bool,
-    ) -> bool {
+    ) -> Result<(), Error> {
         if let Some(rc) = self.upgrade() {
-            context
-                .ref_writer
-                .try_write_rc_ref(&mut context.writer, &rc)
-        } else {
-            context.writer.write_i8(RefFlag::Null as i8);
-            false
-        }
-    }
-
-    fn fory_write(&self, context: &mut WriteContext) -> Result<(), Error> {
-        if let Some(rc) = self.upgrade() {
-            if context
+            if !context
                 .ref_writer
                 .try_write_rc_ref(&mut context.writer, &rc)
             {
-                return Ok(());
+                if write_type_info {
+                    T::fory_write_type_info(context)?;
+                }
+                T::fory_write_data_generic(&*rc, context, has_generics)?;
             }
-            T::fory_write_data(&*rc, context)?;
         } else {
             context.writer.write_i8(RefFlag::Null as i8);
         }
         Ok(())
     }
 
+    fn fory_write_data_generic(
+        &self,
+        context: &mut WriteContext,
+        has_generics: bool,
+    ) -> Result<(), Error> {
+        // When Arc is nested inside another shared ref (like Rc<Arc<T>>),
+        // the outer ref calls fory_write_data on the inner Arc.
+        // We still need to track the Arc's own references here.
+        if T::fory_is_shared_ref() {
+            return Err(Error::NotAllowed(
+                "Nested shared references like Rc<Arc<T>> are not supported".into(),
+            ));
+        }
+        if let Some(rc) = self.upgrade() {
+            T::fory_write_data_generic(&*rc, context, has_generics)
+        } else {
+            Err(Error::InvalidRef(
+                "Cannot write data for a null RcWeak reference".into(),
+            ))
+        }
+    }
+
     fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error> {
-        self.fory_write(context)
+        self.fory_write_data_generic(context, false)
     }
 
     fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error> {
@@ -388,6 +401,13 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for RcWeak<T> {
                 format!("Weak can only be Null, RefValue or Ref, got {:?}", ref_flag).into(),
             )),
         }
+    }
+
+    fn fory_read_with_typeinfo(
+        context: &mut ReadContext,
+        typeinfo: Arc<TypeInfo>,
+    ) -> Result<Self, Error> {
+        Self::fory_read(context)
     }
 
     fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
@@ -435,42 +455,49 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for ArcWeak
         true
     }
 
-    fn fory_write_ref(
+    fn fory_write(
         &self,
         context: &mut WriteContext,
         write_type_info: bool,
         has_generics: bool,
-    ) -> bool {
+    ) -> Result<(), Error> {
         if let Some(arc) = self.upgrade() {
-            context
-                .ref_writer
-                .try_write_arc_ref(&mut context.writer, &arc)
-        } else {
-            context.writer.write_i8(RefFlag::Null as i8);
-            false
-        }
-    }
-
-    fn fory_write(&self, context: &mut WriteContext) -> Result<(), Error> {
-        if let Some(arc) = self.upgrade() {
-            // IMPORTANT: If the target Arc was serialized already, just write a ref
-            if context
+            if !context
                 .ref_writer
                 .try_write_arc_ref(&mut context.writer, &arc)
             {
-                // Already seen, wrote Ref flag + id, we're done
-                return Ok(());
+                if write_type_info {
+                    T::fory_write_type_info(context)?;
+                }
+                T::fory_write_data_generic(&*arc, context, has_generics)?;
             }
-            // First time seeing this object, write RefValue and then its data
-            T::fory_write_data(&*arc, context)?;
         } else {
             context.writer.write_i8(RefFlag::Null as i8);
         }
         Ok(())
     }
 
+    fn fory_write_data_generic(
+        &self,
+        context: &mut WriteContext,
+        has_generics: bool,
+    ) -> Result<(), Error> {
+        if T::fory_is_shared_ref() {
+            return Err(Error::NotAllowed(
+                "Nested shared references like Arc<Rc<T>> are not supported".into(),
+            ));
+        }
+        if let Some(arc) = self.upgrade() {
+            T::fory_write_data_generic(&*arc, context, has_generics)
+        } else {
+            Err(Error::InvalidRef(
+                "Cannot write data for a null RcWeak reference".into(),
+            ))
+        }
+    }
+
     fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error> {
-        self.fory_write(context)
+        self.fory_write_data_generic(context, false)
     }
 
     fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error> {

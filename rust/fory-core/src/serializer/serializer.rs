@@ -16,17 +16,17 @@
 // under the License.
 
 use crate::error::Error;
-use crate::meta::{FieldInfo};
-use crate::resolver::type_resolver::TypeInfo;
+use crate::meta::FieldInfo;
 use crate::resolver::context::{ReadContext, WriteContext};
+use crate::resolver::type_resolver::TypeInfo;
 use crate::serializer::util::{
-    read_compatible_default, read_ref_info_data, write_ext_type_info,
-    write_ref_info_data,
+    read_compatible_default, read_ref_info_data, write_ext_type_info, write_ref_info_data,
 };
 use crate::serializer::{bool, struct_};
-use crate::types::TypeId;
+use crate::types::{RefFlag, TypeId};
 use crate::TypeResolver;
 use std::any::Any;
+use std::sync::Arc;
 
 pub trait ForyDefault: Sized {
     fn fory_default() -> Self;
@@ -43,12 +43,48 @@ pub trait ForyDefault: Sized {
 
 pub trait Serializer: 'static {
     /// Entry point of the serialization.
-    fn fory_write(&self, context: &mut WriteContext) -> Result<(), Error>
+    fn fory_write(
+        &self,
+        context: &mut WriteContext,
+        write_type_info: bool,
+        has_generics: bool,
+    ) -> Result<(), Error>
     where
         Self: Sized,
     {
-        write_ref_info_data(self, context, false, false)
+        if self.fory_is_none() {
+            context.writer.write_i8(RefFlag::Null as i8);
+            Ok(())
+        } else {
+            context.writer.write_i8(RefFlag::NotNullValue as i8);
+            if !write_type_info {
+                Self::fory_write_type_info(context)?;
+            }
+            self.fory_write_data_generic(context, has_generics)
+        }
     }
+
+    fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error>
+    where
+        Self: Sized,
+    {
+        let rs_type_id = std::any::TypeId::of::<Self>();
+        context.write_any_typeinfo(rs_type_id)?;
+        Ok(())
+    }
+
+    /// Write the data into the buffer. Need to be implemented for collection/map.
+    /// For other types, just forward to `fory_write_data`.
+    fn fory_write_data_generic(
+        &self,
+        context: &mut WriteContext,
+        _has_generics: bool,
+    ) -> Result<(), Error> {
+        self.fory_write_data(context)
+    }
+
+    /// Write the data into the buffer. Need to be implemented.
+    fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error>;
 
     fn fory_read(context: &mut ReadContext) -> Result<Self, Error>
     where
@@ -56,6 +92,48 @@ pub trait Serializer: 'static {
     {
         read_ref_info_data(context, false, false)
     }
+
+    fn fory_read_with_typeinfo(
+        context: &mut ReadContext,
+        typeinfo: Arc<TypeInfo>,
+    ) -> Result<Self, Error>
+    where
+        Self: Sized + ForyDefault,
+    {
+        Self::fory_read(context, false)
+    }
+
+    fn fory_read_data_with_typeinfo(
+        context: &mut ReadContext,
+        typeinfo: Arc<TypeInfo>,
+    ) -> Result<Self, Error>
+    where
+        Self: Sized + ForyDefault,
+    {
+        Self::fory_read(context, false)
+    }
+
+    fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error>
+    where
+        Self: Sized,
+    {
+        context.read_any_typeinfo()?;
+        Ok(())
+    }
+
+    // only used by struct/enum/ext
+    fn fory_read_compatible(context: &mut ReadContext) -> Result<Self, Error>
+    where
+        Self: Sized,
+    {
+        // default logic only for ext/named_ext
+        // this method will be overridden by fory macro generated serializers
+        read_compatible_default::<Self>(context)
+    }
+
+    fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error>
+    where
+        Self: Sized + ForyDefault;
 
     fn fory_is_option() -> bool
     where
@@ -82,19 +160,6 @@ pub trait Serializer: 'static {
         false
     }
 
-    // must be used with `fory_is_shared_ref` check
-    fn fory_write_ref(
-        &self,
-        context: &mut WriteContext,
-        write_type_info: bool,
-        has_generics: bool,
-    ) -> bool
-    where
-        Self: Sized,
-    {
-        panic!("Current value is not a value holded by a smart pointer with shared ownership")
-    }
-
     fn fory_static_type_id() -> TypeId
     where
         Self: Sized,
@@ -115,6 +180,10 @@ pub trait Serializer: 'static {
 
     fn fory_type_id_dyn(&self, type_resolver: &TypeResolver) -> Result<u32, Error>;
 
+    fn fory_concrete_type_id(&self) -> std::any::TypeId {
+        std::any::TypeId::of::<Self>()
+    }
+
     /// The possible max memory size of the type.
     /// Used to reserve the buffer space to avoid reallocation, which may hurt performance.
     fn fory_reserved_space() -> usize
@@ -122,54 +191,6 @@ pub trait Serializer: 'static {
         Self: Sized,
     {
         0
-    }
-
-    fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error>
-    where
-        Self: Sized,
-    {
-        let rs_type_id = std::any::TypeId::of::<Self>();
-        context.write_any_typeinfo(rs_type_id)?;
-        Ok(())
-    }
-
-    fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error>
-    where
-        Self: Sized,
-    {
-        context.read_any_typeinfo()?;
-        Ok(())
-    }
-
-    // only used by struct/enum/ext
-    fn fory_read_compatible(context: &mut ReadContext) -> Result<Self, Error>
-    where
-        Self: Sized,
-    {
-        // default logic only for ext/named_ext
-        // this method will be overridden by fory macro generated serializers
-        read_compatible_default::<Self>(context)
-    }
-
-    /// Write the data into the buffer. Need to be implemented.
-    fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error>;
-
-    /// Write the data into the buffer. Need to be implemented for collection/map.
-    /// For other types, just forward to `fory_write_data`.
-    fn fory_write_data_generic(
-        &self,
-        context: &mut WriteContext,
-        _has_generics: bool,
-    ) -> Result<(), Error> {
-        self.fory_write_data(context)
-    }
-
-    fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error>
-    where
-        Self: Sized + ForyDefault;
-
-    fn fory_concrete_type_id(&self) -> std::any::TypeId {
-        std::any::TypeId::of::<Self>()
     }
 
     fn as_any(&self) -> &dyn Any;

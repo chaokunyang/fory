@@ -168,54 +168,38 @@ where
         // All elements are same type
         if !has_null {
             // No null elements
-            for item in iter {
-                if elem_is_shared_ref {
-                    item.fory_write_ref(context, false, has_generics);
-                } else {
+            if elem_is_shared_ref {
+                for item in iter {
+                    item.fory_write(context, false, has_generics)?;
+                }
+            } else {
+                for item in iter {
                     item.fory_write_data_generic(context, has_generics)?;
                 }
             }
         } else {
             // Has null elements
             for item in iter {
-                if elem_is_shared_ref {
-                    item.fory_write_ref(context, false, has_generics);
-                } else {
-                    if item.fory_is_none() {
-                        context.writer.write_u8(RefFlag::Null as u8);
-                    } else {
-                        context.writer.write_u8(RefFlag::NotNullValue as u8);
-                        item.fory_write_data_generic(context, has_generics)?;
-                    }
-                }
+                item.fory_write(context, false, has_generics)?;
             }
         }
     } else {
         // Different types (polymorphic elements with different types)
         if !has_null {
             // No null elements
-            for item in iter {
-                if elem_is_shared_ref {
-                    item.fory_write_ref(context, true, has_generics);
-                } else {
-                    // TODO: support xlang protocol
+            if elem_is_shared_ref {
+                for item in iter {
+                    item.fory_write(context, true, has_generics)?;
+                }
+            } else {
+                for item in iter {
                     item.fory_write_data_generic(context, has_generics)?;
                 }
             }
         } else {
             // Has null elements
             for item in iter {
-                if elem_is_shared_ref {
-                    item.fory_write_ref(context, true, has_generics);
-                } else {
-                    if item.fory_is_none() {
-                        context.writer.write_u8(RefFlag::Null as u8);
-                    } else {
-                        context.writer.write_u8(RefFlag::NotNullValue as u8);
-                        context.write_any_typeinfo(item.fory_concrete_type_id())?;
-                        item.fory_write_data_generic(context, has_generics)?;
-                    }
-                }
+                item.fory_write(context, true, has_generics)?;
             }
         }
     }
@@ -290,83 +274,48 @@ where
     T: Serializer + ForyDefault,
     C: FromIterator<T>,
 {
-    let elem_is_polymorphic = T::fory_is_polymorphic();
     let elem_is_shared_ref = T::fory_is_shared_ref();
-
     // Read header
     let header = context.reader.read_u8()?;
     let is_same_type = (header & IS_SAME_TYPE) != 0;
     let has_null = (header & HAS_NULL) != 0;
     let is_declared = (header & DECL_ELEMENT_TYPE) != 0;
-
-    // Read type info if needed
-    // let dyn_tye_info: Some() =
-    if is_same_type && !is_declared {
-        if elem_is_polymorphic {
-            context.read_any_typeinfo()?;
-        } else {
-            T::fory_read_type_info(context)?;
-        }
-    }
-
     // Read elements
     if is_same_type {
+        let type_info = if !is_declared {
+            context.read_any_typeinfo()?
+        } else {
+            let rs_type_id = std::any::TypeId::of::<T>();
+            context.get_type_resolver().get_type_info(&rs_type_id)?
+        };
         // All elements are same type
         if elem_is_shared_ref {
             (0..len)
-                .map(|_| T::fory_read(context))
+                .map(|_| T::fory_read_with_typeinfo(context, type_info.clone()))
                 .collect::<Result<C, Error>>()
         } else {
             if !has_null {
                 // No null elements
                 (0..len)
-                    .map(|_| T::fory_read_data(context))
+                    .map(|_| T::fory_read_data_with_typeinfo(context, type_info.clone()))
                     .collect::<Result<C, Error>>()
             } else {
                 // Has null elements
                 (0..len)
                     .map(|_| {
-                        let flag = context.reader.read_u8()?;
-                        if flag & RefFlag::Null as u8 != 0 {
+                        let flag = context.reader.read_i8()?;
+                        if flag == (RefFlag::NotNullValue as i8) {
                             Ok(T::fory_default())
                         } else {
-                            T::fory_read_data(context)
+                            T::fory_read_data_with_typeinfo(context, type_info.clone())
                         }
                     })
                     .collect::<Result<C, Error>>()
             }
         }
     } else {
-        if elem_is_shared_ref {
-            (0..len)
-                .map(|_| T::fory_read(context))
-                .collect::<Result<C, Error>>()
-        } else {
-            // Different types (polymorphic elements with different types)
-            if !has_null {
-                // No null elements
-                (0..len)
-                    .map(|_| {
-                        // Read type ID for each element
-                        let _type_id = context.reader.read_varuint32()?;
-                        // TODO: We might need to use this type_id to get the correct deserializer
-                        T::fory_read_data(context)
-                    })
-                    .collect::<Result<C, Error>>()
-            } else {
-                // Has null elements
-                (0..len)
-                    .map(|_| {
-                        let flag = context.reader.read_u8()?;
-                        if flag & RefFlag::Null as u8 != 0 {
-                            return Ok(T::fory_default());
-                        }
-                        // Read type ID for each element
-                        let _type_id = context.reader.read_varuint32()?;
-                        T::fory_read_data(context)
-                    })
-                    .collect::<Result<C, Error>>()
-            }
-        }
+        (0..len)
+            .map(|_| T::fory_read(context))
+            .collect::<Result<C, Error>>()
     }
 }

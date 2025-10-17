@@ -20,9 +20,31 @@ use crate::resolver::context::ReadContext;
 use crate::resolver::context::WriteContext;
 use crate::resolver::type_resolver::TypeResolver;
 use crate::serializer::{ForyDefault, Serializer};
-use crate::types::TypeId;
+use crate::types::{RefFlag, TypeId};
 
 impl<T: Serializer + ForyDefault> Serializer for Option<T> {
+    #[inline(always)]
+    fn fory_write(
+        &self,
+        context: &mut WriteContext,
+        write_type_info: bool,
+        has_generics: bool,
+    ) -> Result<(), Error> {
+        if let Some(v) = self {
+            if T::fory_is_shared_ref() {
+                return Err(Error::NotAllowed(
+                    "Option<T> where T is a shared reference is not allowed".into(),
+                ));
+            }
+            context.writer.write_u8(RefFlag::NotNullValue as u8);
+            // pass has_generics to nested collection/map
+            T::fory_write(v, context, write_type_info, has_generics)
+        } else {
+            context.writer.write_u8(RefFlag::Null as u8);
+            Ok(())
+        }
+    }
+
     #[inline(always)]
     fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
         Ok(Some(T::fory_read_data(context)?))

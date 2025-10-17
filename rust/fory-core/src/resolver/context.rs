@@ -133,7 +133,7 @@ impl WriteContext {
     pub fn write_any_typeinfo(
         &mut self,
         concrete_type_id: std::any::TypeId,
-    ) -> Result<&TypeInfo, Error> {
+    ) -> Result<Arc<TypeInfo>, Error> {
         let type_info = self.type_resolver.get_type_info(&concrete_type_id)?;
         let fory_type_id = type_info.get_type_id();
         let namespace = type_info.get_namespace();
@@ -286,7 +286,7 @@ impl ReadContext {
         )
     }
 
-    pub fn read_any_typeinfo(&mut self) -> Result<&TypeInfo, Error> {
+    pub fn read_any_typeinfo(&mut self) -> Result<Arc<TypeInfo>, Error> {
         let fory_type_id = self.reader.read_varuint32()?;
         // should be compiled to jump table generation
         match fory_type_id & 0xff {

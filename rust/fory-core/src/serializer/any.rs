@@ -18,6 +18,7 @@
 use crate::error::Error;
 use crate::resolver::context::{ReadContext, WriteContext};
 use crate::resolver::type_resolver::TypeResolver;
+use crate::serializer::util::write_dyn_data_generic;
 use crate::serializer::{ForyDefault, Serializer};
 use crate::types::RefFlag;
 use crate::types::TypeId;
@@ -32,7 +33,7 @@ pub fn serialize_any_box(any_box: &Box<dyn Any>, context: &mut WriteContext) -> 
     let concrete_type_id = (**any_box).type_id();
     let harness = context.write_any_typeinfo(concrete_type_id)?.get_harness();
     let serializer_fn = harness.get_write_data_fn();
-    serializer_fn(&**any_box, context)
+    serializer_fn(&**any_box, context, false)
 }
 
 /// Helper function to deserialize to `Box<dyn Any>`
@@ -58,7 +59,12 @@ impl ForyDefault for Box<dyn Any> {
 }
 
 impl Serializer for Box<dyn Any> {
-    fn fory_write(&self, context: &mut WriteContext) -> Result<(), Error> {
+    fn fory_write(
+        &self,
+        context: &mut WriteContext,
+        write_type_info: bool,
+        has_generics: bool,
+    ) -> Result<(), Error> {
         serialize_any_box(self, context)
     }
 
@@ -115,21 +121,42 @@ impl ForyDefault for Rc<dyn Any> {
 }
 
 impl Serializer for Rc<dyn Any> {
-    fn fory_write(&self, context: &mut WriteContext) -> Result<(), Error> {
+    fn fory_write(
+        &self,
+        context: &mut WriteContext,
+        write_type_info: bool,
+        has_generics: bool,
+    ) -> Result<(), Error> {
         if !context
             .ref_writer
             .try_write_rc_ref(&mut context.writer, self)
         {
-            let concrete_type_id = (**self).type_id();
-            let harness = context.write_any_typeinfo(concrete_type_id)?.get_harness();
-            let serializer_fn = harness.get_write_data_fn();
-            serializer_fn(&**self, context)?
-        };
+            let concrete_type_id: std::any::TypeId = (**self).type_id();
+            if write_type_info {
+                let typeinfo = context.write_any_typeinfo(concrete_type_id)?;
+                let serializer_fn = typeinfo.get_harness().get_write_data_fn();
+                serializer_fn(&**self, context, has_generics)?;
+            } else {
+                let serializer_fn = context
+                    .write_any_typeinfo(concrete_type_id)?
+                    .get_harness()
+                    .get_write_data_fn();
+                serializer_fn(&**self, context, has_generics)?;
+            }
+        }
         Ok(())
     }
 
     fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error> {
-        self.fory_write(context)
+        write_dyn_data_generic(self, context, false)
+    }
+
+    fn fory_write_data_generic(
+        &self,
+        context: &mut WriteContext,
+        has_generics: bool,
+    ) -> Result<(), Error> {
+        write_dyn_data_generic(self, context, has_generics)
     }
 
     fn fory_read(context: &mut ReadContext) -> Result<Self, Error> {
@@ -214,21 +241,42 @@ impl ForyDefault for Arc<dyn Any> {
 }
 
 impl Serializer for Arc<dyn Any> {
-    fn fory_write(&self, context: &mut WriteContext) -> Result<(), Error> {
+    fn fory_write(
+        &self,
+        context: &mut WriteContext,
+        write_type_info: bool,
+        has_generics: bool,
+    ) -> Result<(), Error> {
         if !context
             .ref_writer
             .try_write_arc_ref(&mut context.writer, self)
         {
-            let concrete_type_id = (**self).type_id();
-            let harness = context.write_any_typeinfo(concrete_type_id)?.get_harness();
-            let serializer_fn = harness.get_write_data_fn();
-            serializer_fn(&**self, context)?;
+            let concrete_type_id: std::any::TypeId = (**self).type_id();
+            if write_type_info {
+                let typeinfo = context.write_any_typeinfo(concrete_type_id)?;
+                let serializer_fn = typeinfo.get_harness().get_write_data_fn();
+                serializer_fn(&**self, context, has_generics)?;
+            } else {
+                let serializer_fn = context
+                    .write_any_typeinfo(concrete_type_id)?
+                    .get_harness()
+                    .get_write_data_fn();
+                serializer_fn(&**self, context, has_generics)?;
+            }
         }
         Ok(())
     }
 
     fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error> {
-        self.fory_write(context)
+        write_dyn_data_generic(self, context, false)
+    }
+
+    fn fory_write_data_generic(
+        &self,
+        context: &mut WriteContext,
+        has_generics: bool,
+    ) -> Result<(), Error> {
+        write_dyn_data_generic(self, context, has_generics)
     }
 
     fn fory_read(context: &mut ReadContext) -> Result<Self, Error> {

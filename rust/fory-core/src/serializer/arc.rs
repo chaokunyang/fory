@@ -28,32 +28,43 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for Arc<T> 
         true
     }
 
-    fn fory_write_ref(
+    fn fory_write(
         &self,
         context: &mut WriteContext,
         write_type_info: bool,
         has_generics: bool,
-    ) -> bool {
-        context
-            .ref_writer
-            .try_write_arc_ref(&mut context.writer, self)
-    }
-
-    fn fory_write(&self, context: &mut WriteContext) -> Result<(), Error> {
+    ) -> Result<(), Error> {
         if !context
             .ref_writer
             .try_write_arc_ref(&mut context.writer, self)
         {
-            T::fory_write_data(self.as_ref(), context)?
-        };
-        Ok(())
+            if write_type_info {
+                T::fory_write_type_info(context)?;
+            }
+            T::fory_write_data_generic(&self, context, has_generics)
+        } else {
+            Ok(())
+        }
     }
 
-    fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error> {
+    fn fory_write_data_generic(
+        &self,
+        context: &mut WriteContext,
+        has_generics: bool,
+    ) -> Result<(), Error> {
         // When Arc is nested inside another shared ref (like Rc<Arc<T>>),
         // the outer ref calls fory_write_data on the inner Arc.
         // We still need to track the Arc's own references here.
-        self.fory_write(context)
+        if T::fory_is_shared_ref() {
+            return Err(Error::NotAllowed(
+                "Nested shared references like Rc<Arc<T>> are not supported".into(),
+            ));
+        }
+        T::fory_write_data_generic(&self, context, has_generics)
+    }
+
+    fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error> {
+        self.fory_write_data_generic(context, false)
     }
 
     fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error> {

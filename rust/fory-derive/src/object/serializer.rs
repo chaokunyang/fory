@@ -175,7 +175,7 @@ pub fn derive_serializer(ast: &syn::DeriveInput) -> TokenStream {
                 #read_data_ts
             }
 
-            fn fory_write(&self, context: &mut fory_core::resolver::context::WriteContext) -> Result<(), fory_core::error::Error> {
+            fn fory_write(&self, context: &mut fory_core::resolver::context::WriteContext, write_type_info: bool, _: bool) -> Result<(), fory_core::error::Error> {
                 #write_ts
             }
 

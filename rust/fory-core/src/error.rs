@@ -82,6 +82,10 @@ impl Error {
     pub fn unknown<S: Into<Cow<'static, str>>>(s: S) -> Self {
         Error::Unknown(s.into())
     }
+
+    pub fn not_allowed<S: Into<Cow<'static, str>>>(s: S) -> Self {
+        Error::NotAllowed(s.into())
+    }
 }
 
 /// Ensures a condition is true; otherwise returns an [`enum@Error`].

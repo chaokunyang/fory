@@ -502,7 +502,7 @@ impl Fory {
             if context.is_compatible() {
                 context.writer.write_i32(-1);
             };
-            <T as Serializer>::fory_write(record, context)?;
+            <T as Serializer>::fory_write(record, context, true, false)?;
             if context.is_compatible() && !context.empty() {
                 context.write_meta(meta_start_offset);
             }

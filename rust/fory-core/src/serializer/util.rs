@@ -213,18 +213,16 @@ pub fn should_skip_type_info_at_runtime(type_id: u32) -> bool {
     }
 }
 
-// #[inline(always)]
-// pub fn write_ref<T: Serializer>(
-//     value: &T,
-//     context: &mut WriteContext,
-//     has_generics: bool,
-// ) -> Result<(), Error> {
-//     if T::fory_is_shared_ref() {
-//         if !value.fory_write_ref(context)? {
-//             value.fory_write_data_generic(context, has_generics)?;
-//         }
-//     } else {
-//         value.fory_write_data_generic(context, has_generics)?;
-//     }
-//     Ok(())
-// }
+#[inline(always)]
+pub fn write_dyn_data_generic<T: Serializer>(
+    value: &T,
+    context: &mut WriteContext,
+    has_generics: bool,
+) -> Result<(), Error> {
+    let concrete_type_id: std::any::TypeId = value.type_id();
+    let serializer_fn = context
+        .write_any_typeinfo(concrete_type_id)?
+        .get_harness()
+        .get_write_data_fn();
+    serializer_fn(value, context, has_generics)
+}

@@ -550,7 +550,12 @@ impl ForyDefault for Box<dyn Serializer> {
 }
 
 impl Serializer for Box<dyn Serializer> {
-    fn fory_write(&self, context: &mut WriteContext) -> Result<(), Error> {
+    fn fory_write(
+        &self,
+        context: &mut WriteContext,
+        write_type_info: bool,
+        has_generics: bool,
+    ) -> Result<(), Error> {
         let fory_type_id = (**self).fory_type_id_dyn(context.get_type_resolver())?;
         let concrete_type_id = (**self).fory_concrete_type_id();
 

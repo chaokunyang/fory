@@ -41,7 +41,7 @@ impl MetaWriterResolver {
             None => {
                 let index = self.type_defs.len();
                 self.type_defs
-                    .push(type_resolver.get_type_info(type_id)?.get_type_def());
+                    .push(type_resolver.get_type_info(&type_id)?.get_type_def());
                 self.type_id_index_map.insert(type_id, index);
                 Ok(index)
             }

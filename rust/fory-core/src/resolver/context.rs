@@ -25,7 +25,9 @@ use crate::resolver::metastring_resolver::{
     MetaStringBytes, MetaStringReaderResolver, MetaStringWriterResolver,
 };
 use crate::resolver::ref_resolver::{RefReader, RefWriter};
-use crate::resolver::type_resolver::{Harness, TypeResolver};
+use crate::resolver::type_resolver::{TypeInfo, TypeResolver};
+use crate::types;
+use crate::types::TypeId as ForyTypeId;
 use std::sync::{Arc, Mutex};
 
 pub struct WriteContext {
@@ -131,51 +133,37 @@ impl WriteContext {
     pub fn write_any_typeinfo(
         &mut self,
         concrete_type_id: std::any::TypeId,
-    ) -> Result<Arc<Harness>, Error> {
-        use crate::types::TypeId as ForyTypeId;
-
-        let type_info = self.type_resolver.get_type_info(concrete_type_id)?;
+    ) -> Result<&TypeInfo, Error> {
+        let type_info = self.type_resolver.get_type_info(&concrete_type_id)?;
         let fory_type_id = type_info.get_type_id();
-
-        // Clone out the data we need from `type_info` to break the borrow
-        let namespace = type_info.get_namespace().clone();
-        let type_name = type_info.get_type_name().clone();
-        let registered_by_name = type_info.is_registered_by_name();
-
-        if registered_by_name {
-            if fory_type_id & 0xff == ForyTypeId::NAMED_STRUCT as u32 {
-                self.writer.write_varuint32(fory_type_id);
+        let namespace = type_info.get_namespace();
+        let type_name = type_info.get_type_name();
+        self.writer.write_varuint32(fory_type_id);
+        // should be compiled to jump table generation
+        match fory_type_id & 0xff {
+            types::NAMED_COMPATIBLE_STRUCT | types::COMPATIBLE_STRUCT => {
+                let meta_index =
+                    self.meta_resolver
+                        .push(concrete_type_id, &self.type_resolver)? as u32;
+                self.writer.write_varuint32(meta_index);
+            }
+            types::NAMED_ENUM | types::NAMED_EXT | types::NAMED_STRUCT => {
                 if self.is_share_meta() {
-                    let meta_index = self.push_meta(concrete_type_id)? as u32;
+                    let meta_index = self
+                        .meta_resolver
+                        .push(concrete_type_id, &self.type_resolver)?
+                        as u32;
                     self.writer.write_varuint32(meta_index);
                 } else {
                     namespace.write_to(&mut self.writer);
                     type_name.write_to(&mut self.writer);
                 }
-            } else if fory_type_id & 0xff == ForyTypeId::NAMED_COMPATIBLE_STRUCT as u32 {
-                self.writer.write_varuint32(fory_type_id);
-                let meta_index = self.push_meta(concrete_type_id)? as u32;
-                self.writer.write_varuint32(meta_index);
-            } else {
-                self.writer.write_varuint32(u32::MAX);
-                namespace.write_to(&mut self.writer);
-                type_name.write_to(&mut self.writer);
             }
-            self.type_resolver
-                .get_name_harness(&namespace, &type_name)
-                .ok_or_else(|| Error::TypeError("Name harness not found".into()))
-        } else {
-            if fory_type_id & 0xff == ForyTypeId::COMPATIBLE_STRUCT as u32 {
-                self.writer.write_varuint32(fory_type_id);
-                let meta_index = self.push_meta(concrete_type_id)? as u32;
-                self.writer.write_varuint32(meta_index);
-            } else {
-                self.writer.write_varuint32(fory_type_id);
+            _ => {
+                // default case: do nothing
             }
-            self.type_resolver
-                .get_harness(fory_type_id)
-                .ok_or_else(|| Error::TypeError("ID harness not found".into()))
         }
+        Ok(type_info)
     }
 
     #[inline(always)]
@@ -298,43 +286,37 @@ impl ReadContext {
         )
     }
 
-    pub fn read_any_typeinfo(&mut self) -> Result<Arc<Harness>, Error> {
-        use crate::types::TypeId as ForyTypeId;
-
+    pub fn read_any_typeinfo(&mut self) -> Result<&TypeInfo, Error> {
         let fory_type_id = self.reader.read_varuint32()?;
-
-        if fory_type_id == u32::MAX {
-            let namespace = self.meta_resolver.read_metastring(&mut self.reader)?;
-            let type_name = self.meta_resolver.read_metastring(&mut self.reader)?;
-            self.type_resolver
-                .get_name_harness(&namespace, &type_name)
-                .ok_or_else(|| Error::TypeError("Name harness not found".into()))
-        } else if fory_type_id & 0xff == ForyTypeId::NAMED_STRUCT as u32 {
-            if self.is_share_meta() {
-                let _meta_index = self.reader.read_varuint32();
-            } else {
-                let namespace = self.meta_resolver.read_metastring(&mut self.reader)?;
-                let type_name = self.meta_resolver.read_metastring(&mut self.reader)?;
-                return self
-                    .type_resolver
-                    .get_name_harness(&namespace, &type_name)
-                    .ok_or_else(|| Error::TypeError("Name harness not found".into()));
+        // should be compiled to jump table generation
+        match fory_type_id & 0xff {
+            types::NAMED_COMPATIBLE_STRUCT | types::COMPATIBLE_STRUCT => {
+                let meta_index = self.reader.read_varuint32()? as usize;
+                self.get_meta(meta_index)?;
+                self.type_resolver
+                    .get_type_info_by_id(fory_type_id)
+                    .ok_or_else(|| Error::TypeError("ID harness not found".into()))
             }
-            self.type_resolver
-                .get_harness(fory_type_id)
-                .ok_or_else(|| Error::TypeError("ID harness not found".into()))
-        } else if fory_type_id & 0xff == ForyTypeId::NAMED_COMPATIBLE_STRUCT as u32
-            || fory_type_id & 0xff == ForyTypeId::COMPATIBLE_STRUCT as u32
-        {
-            let meta_index = self.reader.read_varuint32()? as usize;
-            self.get_meta(meta_index)?;
-            self.type_resolver
-                .get_harness(fory_type_id)
-                .ok_or_else(|| Error::TypeError("ID harness not found".into()))
-        } else {
-            self.type_resolver
-                .get_harness(fory_type_id)
-                .ok_or_else(|| Error::TypeError("ID harness not found".into()))
+            types::NAMED_ENUM | types::NAMED_EXT | types::NAMED_STRUCT => {
+                if self.is_share_meta() {
+                    let meta_index = self.reader.read_varuint32()? as usize;
+                    self.get_meta(meta_index)?;
+                    self.type_resolver
+                        .get_type_info_by_id(fory_type_id)
+                        .ok_or_else(|| Error::TypeError("ID harness not found".into()))
+                } else {
+                    let namespace = self.meta_resolver.read_metastring(&mut self.reader)?;
+                    let type_name = self.meta_resolver.read_metastring(&mut self.reader)?;
+                    return self
+                        .type_resolver
+                        .get_type_info_by_msname(&namespace, &type_name)
+                        .ok_or_else(|| Error::TypeError("Name harness not found".into()));
+                }
+            }
+            _ => self
+                .type_resolver
+                .get_type_info_by_id(fory_type_id)
+                .ok_or_else(|| Error::TypeError("ID harness not found".into())),
         }
     }
 

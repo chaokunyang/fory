@@ -16,10 +16,11 @@
 // under the License.
 
 use crate::error::Error;
-use crate::meta::FieldInfo;
+use crate::meta::{FieldInfo};
+use crate::resolver::type_resolver::TypeInfo;
 use crate::resolver::context::{ReadContext, WriteContext};
 use crate::serializer::util::{
-    read_compatible_default, read_ext_type_info, read_ref_info_data, write_ext_type_info,
+    read_compatible_default, read_ref_info_data, write_ext_type_info,
     write_ref_info_data,
 };
 use crate::serializer::{bool, struct_};
@@ -82,13 +83,16 @@ pub trait Serializer: 'static {
     }
 
     // must be used with `fory_is_shared_ref` check
-    fn fory_write_ref(&self, context: &mut WriteContext) -> bool
+    fn fory_write_ref(
+        &self,
+        context: &mut WriteContext,
+        write_type_info: bool,
+        has_generics: bool,
+    ) -> bool
     where
         Self: Sized,
     {
-        panic!(
-            "Current value is not a value holded by a smart pointer with shared ownership".into()
-        )
+        panic!("Current value is not a value holded by a smart pointer with shared ownership")
     }
 
     fn fory_static_type_id() -> TypeId
@@ -105,7 +109,7 @@ pub trait Serializer: 'static {
         Self: Sized,
     {
         Ok(type_resolver
-            .get_type_info(std::any::TypeId::of::<Self>())?
+            .get_type_info(&std::any::TypeId::of::<Self>())?
             .get_type_id())
     }
 
@@ -124,18 +128,17 @@ pub trait Serializer: 'static {
     where
         Self: Sized,
     {
-        // default implementation only for ext/named_ext
-        // this method will be overridden by serializers for supported types
-        write_ext_type_info::<Self>(context)
+        let rs_type_id = std::any::TypeId::of::<Self>();
+        context.write_any_typeinfo(rs_type_id)?;
+        Ok(())
     }
 
     fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error>
     where
         Self: Sized,
     {
-        // default implementation only for ext/named_ext
-        // this method will be overridden by serializers for supported types
-        read_ext_type_info::<Self>(context)
+        context.read_any_typeinfo()?;
+        Ok(())
     }
 
     // only used by struct/enum/ext

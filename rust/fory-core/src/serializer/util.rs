@@ -114,7 +114,7 @@ where
         let meta_index = context.push_meta(rs_type_id)? as u32;
         context.writer.write_varuint32(meta_index);
     } else {
-        let type_info = context.get_type_resolver().get_type_info(rs_type_id)?;
+        let type_info = context.get_type_resolver().get_type_info(&rs_type_id)?;
         let namespace = type_info.get_namespace().to_owned();
         let type_name = type_info.get_type_name().to_owned();
         context.write_meta_string_bytes(&namespace)?;
@@ -213,18 +213,18 @@ pub fn should_skip_type_info_at_runtime(type_id: u32) -> bool {
     }
 }
 
-#[inline(always)]
-pub fn write_ref<T: Serializer>(
-    value: &T,
-    context: &mut WriteContext,
-    has_generics: bool,
-) -> Result<(), Error> {
-    if T::fory_is_shared_ref() {
-        if !value.fory_write_ref(context)? {
-            value.fory_write_data_generic(context, has_generics)?;
-        }
-    } else {
-        value.fory_write_data_generic(context, has_generics)?;
-    }
-    Ok(())
-}
+// #[inline(always)]
+// pub fn write_ref<T: Serializer>(
+//     value: &T,
+//     context: &mut WriteContext,
+//     has_generics: bool,
+// ) -> Result<(), Error> {
+//     if T::fory_is_shared_ref() {
+//         if !value.fory_write_ref(context)? {
+//             value.fory_write_data_generic(context, has_generics)?;
+//         }
+//     } else {
+//         value.fory_write_data_generic(context, has_generics)?;
+//     }
+//     Ok(())
+// }

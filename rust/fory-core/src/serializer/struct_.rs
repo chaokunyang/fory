@@ -47,7 +47,7 @@ pub fn write_type_info<T: Serializer>(context: &mut WriteContext) -> Result<(), 
             let meta_index = context.push_meta(rs_type_id)? as u32;
             context.writer.write_varuint32(meta_index);
         } else {
-            let type_info = context.get_type_resolver().get_type_info(rs_type_id)?;
+            let type_info = context.get_type_resolver().get_type_info(&rs_type_id)?;
             let namespace = type_info.get_namespace().to_owned();
             let type_name = type_info.get_type_name().to_owned();
             context.write_meta_string_bytes(&namespace)?;

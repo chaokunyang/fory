@@ -28,10 +28,12 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for Arc<T> 
         true
     }
 
-    fn fory_write_ref(&self, context: &mut WriteContext) -> bool
-    where
-        Self: Sized,
-    {
+    fn fory_write_ref(
+        &self,
+        context: &mut WriteContext,
+        write_type_info: bool,
+        has_generics: bool,
+    ) -> bool {
         context
             .ref_writer
             .try_write_arc_ref(&mut context.writer, self)
@@ -60,7 +62,6 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for Arc<T> 
 
     fn fory_read(context: &mut ReadContext) -> Result<Self, Error> {
         let ref_flag = context.ref_reader.read_ref_flag(&mut context.reader)?;
-
         Ok(match ref_flag {
             RefFlag::Null => Err(Error::InvalidRef("Arc cannot be null".into()))?,
             RefFlag::Ref => {

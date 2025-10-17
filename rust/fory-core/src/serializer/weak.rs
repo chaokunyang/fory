@@ -313,10 +313,12 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for RcWeak<T> {
         true
     }
 
-    fn fory_write_ref(&self, context: &mut WriteContext) -> bool
-    where
-        Self: Sized,
-    {
+    fn fory_write_ref(
+        &self,
+        context: &mut WriteContext,
+        write_type_info: bool,
+        has_generics: bool,
+    ) -> bool {
         if let Some(rc) = self.upgrade() {
             context
                 .ref_writer
@@ -433,10 +435,12 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for ArcWeak
         true
     }
 
-    fn fory_write_ref(&self, context: &mut WriteContext) -> bool
-    where
-        Self: Sized,
-    {
+    fn fory_write_ref(
+        &self,
+        context: &mut WriteContext,
+        write_type_info: bool,
+        has_generics: bool,
+    ) -> bool {
         if let Some(arc) = self.upgrade() {
             context
                 .ref_writer

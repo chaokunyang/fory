@@ -126,7 +126,7 @@ where
     for item in iter.clone() {
         if item.fory_is_none() {
             has_null = true;
-        } else if elem_is_polymorphic {
+        } else if elem_is_polymorphic && is_same_type {
             let type_id = item.fory_concrete_type_id();
             if let Some(first_id) = first_type_id {
                 if first_id != type_id {
@@ -147,25 +147,22 @@ where
     }
     if is_elem_declared && !elem_is_polymorphic {
         header |= DECL_ELEMENT_TYPE;
-    }
-
-    // Write header
-    context.writer.write_u8(header);
-
-    // Write type info if needed (for same type, non-declared elements)
-    if is_same_type && !is_elem_declared {
+        // Write header
+        context.writer.write_u8(header);
         if elem_is_polymorphic {
             if let Some(type_id) = first_type_id {
                 context.write_any_typeinfo(type_id)?;
             } else {
-                // All elements are null, write void type
-                T::fory_write_type_info(context)?;
+                // All elements are null, write any simple type as stub
+                i8::fory_write_type_info(context)?;
             }
         } else {
             T::fory_write_type_info(context)?;
         }
+    } else {
+        // Write header
+        context.writer.write_u8(header);
     }
-
     // Write elements data
     if is_same_type {
         // All elements are same type
@@ -173,7 +170,7 @@ where
             // No null elements
             for item in iter {
                 if elem_is_shared_ref {
-                    item.fory_write(context)?;
+                    item.fory_write_ref(context, false, has_generics);
                 } else {
                     item.fory_write_data_generic(context, has_generics)?;
                 }
@@ -182,8 +179,7 @@ where
             // Has null elements
             for item in iter {
                 if elem_is_shared_ref {
-                    // TODO: use xlang protocol
-                    item.fory_write(context)?;
+                    item.fory_write_ref(context, false, has_generics);
                 } else {
                     if item.fory_is_none() {
                         context.writer.write_u8(RefFlag::Null as u8);
@@ -200,11 +196,9 @@ where
             // No null elements
             for item in iter {
                 if elem_is_shared_ref {
-                    // TODO: use xlang protocol
-                    item.fory_write(context)?;
+                    item.fory_write_ref(context, true, has_generics);
                 } else {
-                    let type_id = item.fory_type_id_dyn(context.get_type_resolver())?;
-                    context.writer.write_varuint32(type_id);
+                    // TODO: support xlang protocol
                     item.fory_write_data_generic(context, has_generics)?;
                 }
             }
@@ -212,15 +206,13 @@ where
             // Has null elements
             for item in iter {
                 if elem_is_shared_ref {
-                    // TODO: use xlang protocol
-                    item.fory_write(context)?;
+                    item.fory_write_ref(context, true, has_generics);
                 } else {
                     if item.fory_is_none() {
                         context.writer.write_u8(RefFlag::Null as u8);
                     } else {
                         context.writer.write_u8(RefFlag::NotNullValue as u8);
-                        let type_id = item.fory_type_id_dyn(context.get_type_resolver())?;
-                        context.writer.write_varuint32(type_id);
+                        context.write_any_typeinfo(item.fory_concrete_type_id())?;
                         item.fory_write_data_generic(context, has_generics)?;
                     }
                 }
@@ -308,12 +300,10 @@ where
     let is_declared = (header & DECL_ELEMENT_TYPE) != 0;
 
     // Read type info if needed
+    // let dyn_tye_info: Some() =
     if is_same_type && !is_declared {
         if elem_is_polymorphic {
-            // For polymorphic types, type info is written as type ID
-            let _type_id = context.reader.read_varuint32()?;
-            // TODO: We might need to use this type_id to get the correct deserializer
-            // For now, we rely on T::fory_read to handle polymorphic deserialization
+            context.read_any_typeinfo()?;
         } else {
             T::fory_read_type_info(context)?;
         }

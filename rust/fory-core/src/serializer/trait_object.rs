@@ -212,8 +212,8 @@ macro_rules! register_trait_type {
             }
 
             fn fory_write_data(&self, context: &mut $crate::resolver::context::WriteContext) -> Result<(), $crate::error::Error> {
-                // Delegate to fory_write since this handles the polymorphic dispatch
-                self.fory_write(context)
+                let any_ref = <dyn $trait_name as $crate::serializer::Serializer>::as_any(&**self);
+                $crate::downcast_and_serialize!(any_ref, context, $trait_name, $($impl_type),+);
             }
 
             fn fory_type_id_dyn(&self, type_resolver: &$crate::resolver::type_resolver::TypeResolver) -> Result<u32, $crate::error::Error> {
@@ -229,7 +229,7 @@ macro_rules! register_trait_type {
             }
 
             fn fory_write_type_info(_context: &mut $crate::resolver::context::WriteContext) -> Result<(), $crate::error::Error> {
-                // Box<dyn Trait> is polymorphic - type info is written per element
+                 // Box<dyn Trait> is polymorphic - type info is written per element
                 Ok(())
             }
 

@@ -496,7 +496,7 @@ pub fn gen_read_compatible(fields: &[&Field]) -> TokenStream {
         let fields = meta.get_field_infos().clone();
         #(#declare_ts)*
 
-        let local_type_hash = context.get_type_resolver().get_type_info(std::any::TypeId::of::<Self>())?.get_type_meta().get_hash();
+        let local_type_hash = context.get_type_resolver().get_type_info(&std::any::TypeId::of::<Self>())?.get_type_meta().get_hash();
         if meta.get_hash() == local_type_hash {
             <Self as fory_core::serializer::Serializer>::fory_read_data(context)
         } else {

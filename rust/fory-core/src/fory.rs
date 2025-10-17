@@ -20,7 +20,7 @@ use crate::ensure;
 use crate::error::Error;
 use crate::resolver::context::WriteContext;
 use crate::resolver::context::{Pool, ReadContext};
-use crate::resolver::type_resolver::{TypeInfo, TypeResolver};
+use crate::resolver::type_resolver::TypeResolver;
 use crate::serializer::ForyDefault;
 use crate::serializer::{Serializer, StructSerializer};
 use crate::types::config_flags::IS_NULL_FLAG;
@@ -28,10 +28,7 @@ use crate::types::{
     config_flags::{IS_CROSS_LANGUAGE_FLAG, IS_LITTLE_ENDIAN_FLAG},
     Language, MAGIC_NUMBER, SIZE_OF_REF_AND_TYPE,
 };
-use crate::util::get_ext_actual_type_id;
 use std::sync::OnceLock;
-
-static EMPTY_STRING: String = String::new();
 
 /// The main Fory serialization framework instance.
 ///
@@ -135,6 +132,7 @@ impl Fory {
         // Setting share_meta individually is not supported currently
         self.share_meta = compatible;
         self.compatible = compatible;
+        self.type_resolver.set_compatible(compatible);
         self
     }
 
@@ -543,16 +541,7 @@ impl Fory {
         &mut self,
         id: u32,
     ) -> Result<(), Error> {
-        let actual_type_id = T::fory_actual_type_id(id, false, self.compatible);
-        let type_info = TypeInfo::new::<T>(
-            &self.type_resolver,
-            actual_type_id,
-            &EMPTY_STRING,
-            &EMPTY_STRING,
-            false,
-        )?;
-        self.type_resolver.register::<T>(&type_info)?;
-        Ok(())
+        self.type_resolver.register_by_id::<T>(id)
     }
 
     /// Registers a struct type with a namespace and type name for cross-language serialization.
@@ -590,16 +579,8 @@ impl Fory {
         namespace: &str,
         type_name: &str,
     ) -> Result<(), Error> {
-        let actual_type_id = T::fory_actual_type_id(0, true, self.compatible);
-        let type_info = TypeInfo::new::<T>(
-            &self.type_resolver,
-            actual_type_id,
-            namespace,
-            type_name,
-            true,
-        )?;
-        self.type_resolver.register::<T>(&type_info)?;
-        Ok(())
+        self.type_resolver
+            .register_by_namespace::<T>(namespace, type_name)
     }
 
     /// Registers a struct type with a type name (using the default namespace).
@@ -666,16 +647,7 @@ impl Fory {
         &mut self,
         id: u32,
     ) -> Result<(), Error> {
-        let actual_type_id = get_ext_actual_type_id(id, false);
-        let type_info = TypeInfo::new_with_empty_fields::<T>(
-            &self.type_resolver,
-            actual_type_id,
-            &EMPTY_STRING,
-            &EMPTY_STRING,
-            false,
-        )?;
-        self.type_resolver.register_serializer::<T>(&type_info)?;
-        Ok(())
+        self.type_resolver.register_serializer_by_id::<T>(id)
     }
 
     /// Registers a custom serializer type with a namespace and type name.
@@ -699,16 +671,8 @@ impl Fory {
         namespace: &str,
         type_name: &str,
     ) -> Result<(), Error> {
-        let actual_type_id = get_ext_actual_type_id(0, true);
-        let type_info = TypeInfo::new_with_empty_fields::<T>(
-            &self.type_resolver,
-            actual_type_id,
-            namespace,
-            type_name,
-            true,
-        )?;
-        self.type_resolver.register_serializer::<T>(&type_info)?;
-        Ok(())
+        self.type_resolver
+            .register_serializer_by_namespace::<T>(namespace, type_name)
     }
 
     /// Registers a custom serializer type with a type name (using the default namespace).

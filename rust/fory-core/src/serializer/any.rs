@@ -30,7 +30,7 @@ pub fn serialize_any_box(any_box: &Box<dyn Any>, context: &mut WriteContext) -> 
     context.writer.write_i8(RefFlag::NotNullValue as i8);
 
     let concrete_type_id = (**any_box).type_id();
-    let harness = context.write_any_typeinfo(concrete_type_id)?;
+    let harness = context.write_any_typeinfo(concrete_type_id)?.get_harness();
     let serializer_fn = harness.get_write_data_fn();
     serializer_fn(&**any_box, context)
 }
@@ -44,7 +44,7 @@ pub fn deserialize_any_box(context: &mut ReadContext) -> Result<Box<dyn Any>, Er
             "Expected NotNullValue for Box<dyn Any>".into(),
         ));
     }
-    let harness = context.read_any_typeinfo()?;
+    let harness = context.read_any_typeinfo()?.get_harness();
     let deserializer_fn = harness.get_read_data_fn();
     let result = deserializer_fn(context);
     context.dec_depth();
@@ -121,7 +121,7 @@ impl Serializer for Rc<dyn Any> {
             .try_write_rc_ref(&mut context.writer, self)
         {
             let concrete_type_id = (**self).type_id();
-            let harness = context.write_any_typeinfo(concrete_type_id)?;
+            let harness = context.write_any_typeinfo(concrete_type_id)?.get_harness();
             let serializer_fn = harness.get_write_data_fn();
             serializer_fn(&**self, context)?
         };
@@ -150,7 +150,7 @@ impl Serializer for Rc<dyn Any> {
             }
             RefFlag::NotNullValue => {
                 context.inc_depth()?;
-                let harness = context.read_any_typeinfo()?;
+                let harness = context.read_any_typeinfo()?.get_harness();
                 let deserializer_fn = harness.get_read_data_fn();
                 let boxed = deserializer_fn(context)?;
                 context.dec_depth();
@@ -158,7 +158,7 @@ impl Serializer for Rc<dyn Any> {
             }
             RefFlag::RefValue => {
                 context.inc_depth()?;
-                let harness = context.read_any_typeinfo()?;
+                let harness = context.read_any_typeinfo()?.get_harness();
                 let deserializer_fn = harness.get_read_data_fn();
                 let boxed = deserializer_fn(context)?;
                 context.dec_depth();
@@ -220,7 +220,7 @@ impl Serializer for Arc<dyn Any> {
             .try_write_arc_ref(&mut context.writer, self)
         {
             let concrete_type_id = (**self).type_id();
-            let harness = context.write_any_typeinfo(concrete_type_id)?;
+            let harness = context.write_any_typeinfo(concrete_type_id)?.get_harness();
             let serializer_fn = harness.get_write_data_fn();
             serializer_fn(&**self, context)?;
         }
@@ -249,7 +249,7 @@ impl Serializer for Arc<dyn Any> {
             }
             RefFlag::NotNullValue => {
                 context.inc_depth()?;
-                let harness = context.read_any_typeinfo()?;
+                let harness = context.read_any_typeinfo()?.get_harness();
                 let deserializer_fn = harness.get_read_data_fn();
                 let boxed = deserializer_fn(context)?;
                 context.dec_depth();
@@ -257,7 +257,7 @@ impl Serializer for Arc<dyn Any> {
             }
             RefFlag::RefValue => {
                 context.inc_depth()?;
-                let harness = context.read_any_typeinfo()?;
+                let harness = context.read_any_typeinfo()?.get_harness();
                 let deserializer_fn = harness.get_read_data_fn();
                 let boxed = deserializer_fn(context)?;
                 context.dec_depth();

@@ -28,10 +28,12 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for Rc<T> {
         true
     }
 
-    fn fory_write_ref(&self, context: &mut WriteContext) -> bool
-    where
-        Self: Sized,
-    {
+    fn fory_write_ref(
+        &self,
+        context: &mut WriteContext,
+        write_type_info: bool,
+        has_generics: bool,
+    ) -> bool {
         context
             .ref_writer
             .try_write_rc_ref(&mut context.writer, self)

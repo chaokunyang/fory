@@ -46,7 +46,7 @@ macro_rules! resolve_and_deserialize {
         $(
             if let Some(registered_type_id) = $context.get_type_resolver().get_fory_type_id(std::any::TypeId::of::<$impl_type>()) {
                 if $fory_type_id == registered_type_id {
-                    let concrete_obj = <$impl_type as $crate::serializer::Serializer>::fory_read_data($context)?;
+                    let concrete_obj = <$impl_type as fory_core::Serializer>::fory_read_data($context)?;
                     return Ok($constructor(concrete_obj));
                 }
             }
@@ -158,24 +158,24 @@ macro_rules! register_trait_type {
         );
 
         // 4. Serializer implementation for Box<dyn Trait> (existing functionality)
-        impl $crate::serializer::Serializer for Box<dyn $trait_name> {
-            fn fory_write(&self, context: &mut $crate::resolver::context::WriteContext, write_ref_info: bool, write_type_info: bool, has_generics: bool) -> Result<(), fory_core::Error> {
-                let any_ref = <dyn $trait_name as $crate::serializer::Serializer>::as_any(&**self);
+        impl fory_core::Serializer for Box<dyn $trait_name> {
+            fn fory_write(&self, context: &mut fory_core::WriteContext, write_ref_info: bool, write_type_info: bool, has_generics: bool) -> Result<(), fory_core::Error> {
+                let any_ref = <dyn $trait_name as fory_core::Serializer>::as_any(&**self);
                 fory_core::serializer::write_box_any(&any_ref, context, write_ref_info, write_type_info, has_generics)
             }
 
-            fn fory_write_data(&self, context: &mut $crate::resolver::context::WriteContext) -> Result<(), fory_core::Error> {
-                let any_ref = <dyn $trait_name as $crate::serializer::Serializer>::as_any(&**self);
+            fn fory_write_data(&self, context: &mut fory_core::WriteContext) -> Result<(), fory_core::Error> {
+                let any_ref = <dyn $trait_name as fory_core::Serializer>::as_any(&**self);
                 fory_core::serializer::write_box_any(&any_ref, context, false, false, false)
             }
 
-            fn fory_write_data_generic(&self, context: &mut $crate::resolver::context::WriteContext, has_generics: bool) -> Result<(), fory_core::Error> {
-                let any_ref = <dyn $trait_name as $crate::serializer::Serializer>::as_any(&**self);
+            fn fory_write_data_generic(&self, context: &mut fory_core::WriteContext, has_generics: bool) -> Result<(), fory_core::Error> {
+                let any_ref = <dyn $trait_name as fory_core::Serializer>::as_any(&**self);
                 fory_core::serializer::write_box_any(&any_ref, context, false, false, has_generics)
             }
 
-            fn fory_type_id_dyn(&self, type_resolver: &$crate::resolver::type_resolver::TypeResolver) -> Result<u32, fory_core::Error> {
-                let any_ref = <dyn $trait_name as $crate::serializer::Serializer>::as_any(&**self);
+            fn fory_type_id_dyn(&self, type_resolver: &fory_core::TypeResolver) -> Result<u32, fory_core::Error> {
+                let any_ref = <dyn $trait_name as fory_core::Serializer>::as_any(&**self);
                 let concrete_type_id = any_ref.type_id();
                 type_resolver
                     .get_fory_type_id(concrete_type_id)
@@ -186,15 +186,15 @@ macro_rules! register_trait_type {
                 true
             }
 
-            fn fory_write_type_info(_context: &mut $crate::resolver::context::WriteContext) -> Result<(), fory_core::Error> {
+            fn fory_write_type_info(_context: &mut fory_core::WriteContext) -> Result<(), fory_core::Error> {
                 $crate::not_allowed!("fory_write_type_info should not be called directly on polymorphic Box<dyn {}> trait object", stringify!($trait_name))
             }
 
-            fn fory_read_type_info(_context: &mut $crate::resolver::context::ReadContext) -> Result<(), fory_core::Error> {
+            fn fory_read_type_info(_context: &mut fory_core::ReadContext) -> Result<(), fory_core::Error> {
                 $crate::not_allowed!("fory_read_type_info should not be called directly on polymorphic Box<dyn {}> trait object", stringify!($trait_name))
             }
 
-            fn fory_read(context: &mut $crate::resolver::context::ReadContext, read_ref_info: bool, read_type_info: bool) -> Result<Self, fory_core::Error> {
+            fn fory_read(context: &mut fory_core::ReadContext, read_ref_info: bool, read_type_info: bool) -> Result<Self, fory_core::Error> {
                 let boxed_any = fory_core::serializer::read_box_any(context, read_ref_info, read_type_info, None)?;
                 $(
                     if boxed_any.is::<$impl_type>() {
@@ -231,18 +231,18 @@ macro_rules! register_trait_type {
                 ))
             }
 
-            fn fory_read_data(_context: &mut $crate::resolver::context::ReadContext) -> Result<Self, fory_core::Error> {
+            fn fory_read_data(_context: &mut fory_core::ReadContext) -> Result<Self, fory_core::Error> {
                 // This should not be called for polymorphic types like Box<dyn Trait>
                 // The fory_read method handles the polymorphic dispatch
                 $crate::not_allowed!("fory_read_data should not be called directly on polymorphic Box<dyn {}> trait object", stringify!($trait_name))
             }
 
-            fn fory_get_type_id(_type_resolver: &$crate::resolver::type_resolver::TypeResolver) -> Result<u32, fory_core::Error> {
+            fn fory_get_type_id(_type_resolver: &fory_core::TypeResolver) -> Result<u32, fory_core::Error> {
                 $crate::not_allowed!("fory_get_type_id should not be called directly on polymorphic Box<dyn {}> trait object", stringify!($trait_name))
             }
 
-            fn fory_static_type_id() -> $crate::types::TypeId {
-                $crate::types::TypeId::UNKNOWN
+            fn fory_static_type_id() -> fory_core::TypeId {
+                fory_core::TypeId::UNKNOWN
             }
 
             fn fory_reserved_space() -> usize {
@@ -250,11 +250,11 @@ macro_rules! register_trait_type {
             }
 
             fn fory_concrete_type_id(&self) -> std::any::TypeId {
-                <dyn $trait_name as $crate::serializer::Serializer>::as_any(&**self).type_id()
+                <dyn $trait_name as fory_core::Serializer>::as_any(&**self).type_id()
             }
 
             fn as_any(&self) -> &dyn std::any::Any {
-                <dyn $trait_name as $crate::serializer::Serializer>::as_any(&**self)
+                <dyn $trait_name as fory_core::Serializer>::as_any(&**self)
             }
         }
 
@@ -361,7 +361,7 @@ macro_rules! generate_smart_pointer_wrapper {
 
             impl std::fmt::Debug for [<$trait_name $ptr_name>] {
                 fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                    let any_obj = <dyn $trait_name as $crate::serializer::Serializer>::as_any(&*self.0);
+                    let any_obj = <dyn $trait_name as fory_core::Serializer>::as_any(&*self.0);
                     $(
                         if let Some(concrete) = any_obj.downcast_ref::<$impl_type>() {
                             return write!(f, concat!(stringify!($trait_name), stringify!($ptr_name), "({:?})"), concrete);
@@ -390,10 +390,10 @@ macro_rules! generate_smart_pointer_wrapper {
 #[macro_export]
 macro_rules! impl_smart_pointer_serializer {
     ($wrapper_name:ident, $pointer_type:ty, $constructor_expr:expr, $trait_name:ident, $try_write_ref:ident, $get_ref:ident, $store_ref:ident, $read_ptr_any: ident, $($impl_type:ty),+) => {
-        impl $crate::serializer::Serializer for $wrapper_name {
-            fn fory_write(&self, context: &mut $crate::resolver::context::WriteContext, write_ref_info: bool, write_type_info: bool, has_generics: bool) -> Result<(), fory_core::Error> {
+        impl fory_core::Serializer for $wrapper_name {
+            fn fory_write(&self, context: &mut fory_core::WriteContext, write_ref_info: bool, write_type_info: bool, has_generics: bool) -> Result<(), fory_core::Error> {
                 if !write_ref_info || !context.ref_writer.$try_write_ref(&mut context.writer, &self.0) {
-                    let any_obj = <dyn $trait_name as $crate::serializer::Serializer>::as_any(&*self.0);
+                    let any_obj = <dyn $trait_name as fory_core::Serializer>::as_any(&*self.0);
                     let concrete_type_id = any_obj.type_id();
                     let typeinfo = if write_type_info {
                          context.write_any_typeinfo(concrete_type_id)?
@@ -406,12 +406,12 @@ macro_rules! impl_smart_pointer_serializer {
                 Ok(())
             }
 
-            fn fory_write_data(&self, context: &mut $crate::resolver::context::WriteContext) -> Result<(), fory_core::Error> {
-                let any_obj = <dyn $trait_name as $crate::serializer::Serializer>::as_any(&*self.0);
+            fn fory_write_data(&self, context: &mut fory_core::WriteContext) -> Result<(), fory_core::Error> {
+                let any_obj = <dyn $trait_name as fory_core::Serializer>::as_any(&*self.0);
                 $crate::downcast_and_serialize!(any_obj, context, $trait_name, $($impl_type),+)
             }
 
-            fn fory_read(context: &mut $crate::resolver::context::ReadContext, read_ref_info: bool, read_type_info: bool) -> Result<Self, fory_core::Error> {
+            fn fory_read(context: &mut fory_core::ReadContext, read_ref_info: bool, read_type_info: bool) -> Result<Self, fory_core::Error> {
                 let boxed_any = fory_core::serializer::$read_ptr_any(context, read_ref_info, read_type_info, None);
                 $(
                     if boxed_any.is::<$impl_type>() {
@@ -446,19 +446,19 @@ macro_rules! impl_smart_pointer_serializer {
                 $crate::not_allowed!("fory_read_data should not be called directly on polymorphic {}<dyn {}> trait object", stringify!($ptr_path), stringify!($trait_name))
             }
 
-            fn fory_get_type_id(_type_resolver: &$crate::resolver::type_resolver::TypeResolver) -> Result<u32, fory_core::Error> {
-                Ok($crate::types::TypeId::STRUCT as u32)
+            fn fory_get_type_id(_type_resolver: &fory_core::TypeResolver) -> Result<u32, fory_core::Error> {
+                Ok(fory_core::TypeId::STRUCT as u32)
             }
 
-            fn fory_static_type_id() -> $crate::types::TypeId {
-                $crate::types::TypeId::UNKNOWN
+            fn fory_static_type_id() -> fory_core::TypeId {
+                fory_core::TypeId::UNKNOWN
             }
 
-            fn fory_write_type_info(_context: &mut $crate::resolver::context::WriteContext) -> Result<(), fory_core::Error> {
+            fn fory_write_type_info(_context: &mut fory_core::WriteContext) -> Result<(), fory_core::Error> {
                 Ok(())
             }
 
-            fn fory_read_type_info(_context: &mut $crate::resolver::context::ReadContext) -> Result<(), fory_core::Error>  {
+            fn fory_read_type_info(_context: &mut fory_core::ReadContext) -> Result<(), fory_core::Error>  {
                 Ok(())
             }
 
@@ -466,8 +466,8 @@ macro_rules! impl_smart_pointer_serializer {
                 true
             }
 
-            fn fory_type_id_dyn(&self, type_resolver: &$crate::resolver::type_resolver::TypeResolver) -> Result<u32, fory_core::Error> {
-                let any_obj = <dyn $trait_name as $crate::serializer::Serializer>::as_any(&*self.0);
+            fn fory_type_id_dyn(&self, type_resolver: &fory_core::TypeResolver) -> Result<u32, fory_core::Error> {
+                let any_obj = <dyn $trait_name as fory_core::Serializer>::as_any(&*self.0);
                 let concrete_type_id = any_obj.type_id();
                 type_resolver
                     .get_fory_type_id(concrete_type_id)
@@ -475,11 +475,11 @@ macro_rules! impl_smart_pointer_serializer {
             }
 
             fn fory_concrete_type_id(&self) -> std::any::TypeId {
-                <dyn $trait_name as $crate::serializer::Serializer>::as_any(&*self.0).type_id()
+                <dyn $trait_name as fory_core::Serializer>::as_any(&*self.0).type_id()
             }
 
             fn as_any(&self) -> &dyn std::any::Any {
-                <dyn $trait_name as $crate::serializer::Serializer>::as_any(&*self.0)
+                <dyn $trait_name as fory_core::Serializer>::as_any(&*self.0)
             }
         }
     };

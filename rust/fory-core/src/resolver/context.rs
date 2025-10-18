@@ -296,10 +296,13 @@ impl ReadContext {
         match fory_type_id & 0xff {
             types::NAMED_COMPATIBLE_STRUCT | types::COMPATIBLE_STRUCT => {
                 let meta_index = self.reader.read_varuint32()? as usize;
-                self.get_meta(meta_index)?;
-                self.type_resolver
+                let remote_meta = self.get_meta(meta_index)?.clone();
+                let local_type_info = self.type_resolver
                     .get_type_info_by_id(fory_type_id)
-                    .ok_or_else(|| Error::type_error("ID harness not found"))
+                    .ok_or_else(|| Error::type_error("ID harness not found"))?;
+                // Create a new TypeInfo with remote metadata but local harness
+                // TODO: make self.get_meta return type info
+                Ok(Arc::new(local_type_info.with_remote_meta(remote_meta)))
             }
             types::NAMED_ENUM | types::NAMED_EXT | types::NAMED_STRUCT => {
                 if self.is_share_meta() {

@@ -195,7 +195,7 @@ fn gen_read_field(field: &Field, private_ident: &Ident) -> TokenStream {
                 if skip_ref_flag {
                     quote! {
                         let is_enum = <#ty as fory_core::Serializer>::fory_static_type_id() == fory_core::types::TypeId::ENUM;
-                        let #private_ident = <#ty as fory_core::Serializer>::fory_read(context, false, !is_enum)?;
+                        let #private_ident = <#ty as fory_core::Serializer>::fory_read(context, true, !is_enum)?;
                     }
                 } else {
                     quote! {
@@ -340,7 +340,7 @@ fn gen_read_compatible_match_arm_body(field: &Field, var_name: &Ident) -> TokenS
             let skip_type_info = should_skip_type_info_for_field(ty);
             if skip_type_info {
                 // Known types (primitives, strings, collections) - skip type info at compile time
-                // TODO field info should contain whether tracking ref, and we should pass that info to `fory_read`
+                // Use metadata's nullable field to determine whether ref tracking is enabled
                 let dec_by_option = need_declared_by_option(field);
                 if dec_by_option {
                     quote! {
@@ -470,7 +470,8 @@ pub fn gen_read_compatible(fields: &[&Field]) -> TokenStream {
         #(#declare_ts)*
         let meta = context.get_type_info(&std::any::TypeId::of::<Self>())?.get_type_meta();
         let local_type_hash = meta.get_hash();
-        if meta.get_hash() == local_type_hash {
+        let remote_type_hash = type_info.get_type_meta().get_hash();
+        if remote_type_hash == local_type_hash {
             <Self as fory_core::Serializer>::fory_read_data(context)
         } else {
             for _field in fields.iter() {

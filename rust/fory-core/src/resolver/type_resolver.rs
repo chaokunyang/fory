@@ -212,6 +212,21 @@ impl TypeInfo {
     pub fn get_harness(&self) -> &Harness {
         &self.harness
     }
+
+    /// Create a new TypeInfo with the same properties but different type_meta.
+    /// This is used during deserialization to create a TypeInfo with remote metadata
+    /// while keeping the local harness for deserialization functions.
+    pub fn with_remote_meta(&self, remote_meta: Arc<TypeMeta>) -> TypeInfo {
+        TypeInfo {
+            type_def: self.type_def.clone(),
+            type_meta: remote_meta,
+            type_id: self.type_id,
+            namespace: self.namespace.clone(),
+            type_name: self.type_name.clone(),
+            register_by_name: self.register_by_name,
+            harness: self.harness.clone(),
+        }
+    }
 }
 
 /// TypeResolver is a resolver for fast type/serializer dispatch.

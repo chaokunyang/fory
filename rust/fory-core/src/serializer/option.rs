@@ -43,6 +43,7 @@ impl<T: Serializer + ForyDefault> Serializer for Option<T> {
             if write_ref_info {
                 context.writer.write_u8(RefFlag::Null as u8);
             }
+            // no value, skip write type info
             Ok(())
         }
     }

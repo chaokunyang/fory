@@ -60,7 +60,7 @@ impl<T: Serializer + ForyDefault> Serializer for RefCell<T> {
         )?))
     }
 
-    fn fory_read_with_typeinfo(
+    fn fory_read_with_type_info(
         context: &mut ReadContext,
         read_ref_info: bool,
         type_info: Arc<TypeInfo>,
@@ -68,7 +68,7 @@ impl<T: Serializer + ForyDefault> Serializer for RefCell<T> {
     where
         Self: Sized + ForyDefault,
     {
-        Ok(RefCell::new(T::fory_read_with_typeinfo(
+        Ok(RefCell::new(T::fory_read_with_type_info(
             context,
             read_ref_info,
             type_info,

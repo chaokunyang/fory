@@ -128,7 +128,7 @@ use crate::resolver::type_resolver::{TypeInfo, TypeResolver};
 use crate::serializer::{ForyDefault, Serializer};
 use crate::types::RefFlag;
 use crate::types::TypeId;
-use std::cell::{Ref, UnsafeCell};
+use std::cell::UnsafeCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -364,7 +364,7 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for RcWeak<T> {
         read_rc_weak::<T>(context, read_ref_info, read_type_info, None)
     }
 
-    fn fory_read_with_typeinfo(
+    fn fory_read_with_type_info(
         context: &mut ReadContext,
         read_ref_info: bool,
         typeinfo: Arc<TypeInfo>,
@@ -373,7 +373,7 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for RcWeak<T> {
     }
 
     fn fory_read_data(_: &mut ReadContext) -> Result<Self, Error> {
-        Err(Error::NotAllowed("RcWeak<T> should be written using `fory_read/fory_read_with_typeinfo` to handle reference tracking properly".into()))
+        Err(Error::NotAllowed("RcWeak<T> should be written using `fory_read/fory_read_with_type_info` to handle reference tracking properly".into()))
     }
 
     fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error> {
@@ -422,7 +422,7 @@ fn read_rc_weak<T: Serializer + ForyDefault + 'static>(
         RefFlag::RefValue => {
             context.inc_depth()?;
             let data = if let Some(type_info) = type_info {
-                T::fory_read_with_typeinfo(context, false, type_info)?
+                T::fory_read_with_type_info(context, false, type_info)?
             } else {
                 if read_type_info {
                     context.read_any_typeinfo()?;
@@ -453,7 +453,7 @@ fn read_rc_weak<T: Serializer + ForyDefault + 'static>(
         }
         RefFlag::NotNullValue => {
             // let inner = if let Some(typeinfo) = type_info {
-            //     T::fory_read_with_typeinfo(context, false, typeinfo)?
+            //     T::fory_read_with_type_info(context, false, typeinfo)?
             // } else {
             //     T::fory_read_data(context)?
             // };
@@ -525,7 +525,7 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for ArcWeak
         read_arc_weak(context, read_ref_info, read_type_info, None)
     }
 
-    fn fory_read_with_typeinfo(
+    fn fory_read_with_type_info(
         context: &mut ReadContext,
         read_ref_info: bool,
         typeinfo: Arc<TypeInfo>,
@@ -534,7 +534,7 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for ArcWeak
     }
 
     fn fory_read_data(_: &mut ReadContext) -> Result<Self, Error> {
-        Err(Error::NotAllowed("ArcWeak<T> should be written using `fory_read/fory_read_with_typeinfo` to handle reference tracking properly".into()))
+        Err(Error::NotAllowed("ArcWeak<T> should be written using `fory_read/fory_read_with_type_info` to handle reference tracking properly".into()))
     }
 
     fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error> {
@@ -583,7 +583,7 @@ fn read_arc_weak<T: Serializer + ForyDefault + 'static>(
         RefFlag::RefValue => {
             context.inc_depth()?;
             let data = if let Some(type_info) = type_info {
-                T::fory_read_with_typeinfo(context, false, type_info)?
+                T::fory_read_with_type_info(context, false, type_info)?
             } else {
                 if read_type_info {
                     context.read_any_typeinfo()?;
@@ -618,7 +618,7 @@ fn read_arc_weak<T: Serializer + ForyDefault + 'static>(
         }
         RefFlag::NotNullValue => {
             // let inner = if let Some(typeinfo) = type_info {
-            //     T::fory_read_with_typeinfo(context, false, typeinfo)?
+            //     T::fory_read_with_type_info(context, false, typeinfo)?
             // } else {
             //     T::fory_read_data(context)?
             // };

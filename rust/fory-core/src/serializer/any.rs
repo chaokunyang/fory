@@ -83,7 +83,7 @@ impl Serializer for Box<dyn Any> {
         read_box_any(context, read_ref_info, read_type_info, None)
     }
 
-    fn fory_read_with_typeinfo(
+    fn fory_read_with_type_info(
         context: &mut ReadContext,
         read_ref_info: bool,
         type_info: Arc<TypeInfo>,
@@ -242,7 +242,7 @@ impl Serializer for Rc<dyn Any> {
         read_rc_any(context, read_ref_info, read_type_info, None)
     }
 
-    fn fory_read_with_typeinfo(
+    fn fory_read_with_type_info(
         context: &mut ReadContext,
         read_ref_info: bool,
         type_info: Arc<TypeInfo>,
@@ -402,7 +402,7 @@ impl Serializer for Arc<dyn Any> {
         read_arc_any(context, read_ref_info, read_type_info, None)
     }
 
-    fn fory_read_with_typeinfo(
+    fn fory_read_with_type_info(
         context: &mut ReadContext,
         read_ref_info: bool,
         type_info: Arc<TypeInfo>,

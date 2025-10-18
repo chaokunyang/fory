@@ -111,7 +111,7 @@ impl<T: Serializer + ForyDefault> Serializer for Mutex<T> {
         )?))
     }
 
-    fn fory_read_with_typeinfo(
+    fn fory_read_with_type_info(
         context: &mut ReadContext,
         read_ref_info: bool,
         type_info: Arc<TypeInfo>,
@@ -119,7 +119,7 @@ impl<T: Serializer + ForyDefault> Serializer for Mutex<T> {
     where
         Self: Sized + ForyDefault,
     {
-        Ok(Mutex::new(T::fory_read_with_typeinfo(
+        Ok(Mutex::new(T::fory_read_with_type_info(
             context,
             read_ref_info,
             type_info,

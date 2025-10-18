@@ -98,7 +98,7 @@ impl Serializer for Box<dyn Serializer> {
         read_box_seralizer(context, read_ref_info, read_type_info, None)
     }
 
-    fn fory_read_with_typeinfo(
+    fn fory_read_with_type_info(
         context: &mut ReadContext,
         read_ref_info: bool,
         type_info: Arc<TypeInfo>,

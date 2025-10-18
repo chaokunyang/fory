@@ -37,15 +37,9 @@ pub fn gen_reserved_space() -> TokenStream {
     }
 }
 
-pub fn gen_write_type_info() -> TokenStream {
+pub fn gen_write(_data_enum: &DataEnum) -> TokenStream {
     quote! {
-        fory_core::serializer::enum_::write_type_info::<Self>(context)
-    }
-}
-
-pub fn gen_read_type_info() -> TokenStream {
-    quote! {
-        fory_core::serializer::enum_::read_type_info::<Self>(context)
+        fory_core::serializer::enum_::write::<Self>(self, context)
     }
 }
 
@@ -60,6 +54,23 @@ pub fn gen_write_data(data_enum: &DataEnum) -> TokenStream {
                 }
             )*
         })
+    }
+}
+pub fn gen_write_type_info() -> TokenStream {
+    quote! {
+        fory_core::serializer::enum_::write_type_info::<Self>(context)
+    }
+}
+
+pub fn gen_read(_: &DataEnum) -> TokenStream {
+    quote! {
+        fory_core::serializer::enum_::read::<Self>(context, read_ref_info, read_type_info)
+    }
+}
+
+pub fn gen_read_with_type_info(_: &DataEnum) -> TokenStream {
+    quote! {
+        fory_core::serializer::enum_::read::<Self>(context, read_ref_info, false)
     }
 }
 
@@ -77,20 +88,8 @@ pub fn gen_read_data(data_enum: &DataEnum) -> TokenStream {
     }
 }
 
-pub fn gen_read_compatible() -> TokenStream {
+pub fn gen_read_type_info() -> TokenStream {
     quote! {
-        fory_core::serializer::enum_::read_compatible::<Self>(context)
-    }
-}
-
-pub fn gen_write(_data_enum: &DataEnum) -> TokenStream {
-    quote! {
-        fory_core::serializer::enum_::write::<Self>(self, context)
-    }
-}
-
-pub fn gen_read(_data_enum: &DataEnum) -> TokenStream {
-    quote! {
-        fory_core::serializer::enum_::read::<Self>(context)
+        fory_core::serializer::enum_::read_type_info::<Self>(context)
     }
 }

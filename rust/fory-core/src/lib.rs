@@ -190,6 +190,7 @@ pub mod util;
 pub use paste;
 
 pub use crate::buffer::{Reader, Writer};
+pub use crate::error::Error;
 pub use crate::fory::Fory;
 pub use crate::resolver::context::{ReadContext, WriteContext};
 pub use crate::resolver::type_resolver::{TypeInfo, TypeResolver};
@@ -198,4 +199,3 @@ pub use crate::serializer::{
     CollectionSerializer, ForyDefault, MapSerializer, Serializer, StructSerializer,
 };
 pub use crate::types::{RefFlag, TypeId};
-pub use crate::error::Error;

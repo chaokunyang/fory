@@ -87,16 +87,17 @@ pub fn read_type_info<T: Serializer>(context: &mut ReadContext) -> Result<(), Er
 }
 
 #[inline(always)]
-pub fn write<T: Serializer>(this: &T, context: &mut WriteContext) -> Result<(), Error> {
-    if context.is_compatible() {
+pub fn write<T: Serializer>(
+    this: &T,
+    context: &mut WriteContext,
+    write_ref_info: bool,
+    write_type_info: bool,
+) -> Result<(), Error> {
+    if write_ref_info {
         context.writer.write_i8(RefFlag::NotNullValue as i8);
-        T::fory_write_type_info(context)?;
-        this.fory_write_data(context)?;
-    } else {
-        // currently same
-        context.writer.write_i8(RefFlag::NotNullValue as i8);
-        T::fory_write_type_info(context)?;
-        this.fory_write_data(context)?;
     }
-    Ok(())
+    if write_type_info {
+        T::fory_write_type_info(context)?;
+    }
+    this.fory_write_data(context)
 }

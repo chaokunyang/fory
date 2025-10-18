@@ -19,7 +19,6 @@ use crate::error::Error;
 use crate::meta::FieldInfo;
 use crate::resolver::context::{ReadContext, WriteContext};
 use crate::resolver::type_resolver::TypeInfo;
-use crate::serializer::util::{read_compatible_default, read_ref_info_data};
 use crate::serializer::{bool, struct_};
 use crate::types::{RefFlag, TypeId};
 use crate::TypeResolver;
@@ -41,6 +40,7 @@ pub trait ForyDefault: Sized {
 
 pub trait Serializer: 'static {
     /// Entry point of the serialization.
+    /// Serializer for `option/rc/arc/weak` should override this method.
     fn fory_write(
         &self,
         context: &mut WriteContext,
@@ -51,25 +51,15 @@ pub trait Serializer: 'static {
     where
         Self: Sized,
     {
-        if self.fory_is_none() {
-            context.writer.write_i8(RefFlag::Null as i8);
-            Ok(())
-        } else {
+        if write_ref_info {
+            // skip check option/pointer, the Serializer for such types will override `fory_write`.
             context.writer.write_i8(RefFlag::NotNullValue as i8);
-            if !write_type_info {
-                Self::fory_write_type_info(context)?;
-            }
-            self.fory_write_data_generic(context, has_generics)
         }
-    }
-
-    fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error>
-    where
-        Self: Sized,
-    {
-        let rs_type_id = std::any::TypeId::of::<Self>();
-        context.write_any_typeinfo(rs_type_id)?;
-        Ok(())
+        if !write_type_info {
+            // Serializer for dynamic types should override `fory_write` to write actual typeinfo.
+            Self::fory_write_type_info(context)?;
+        }
+        self.fory_write_data_generic(context, has_generics)
     }
 
     /// Write the data into the buffer. Need to be implemented for collection/map.
@@ -85,8 +75,18 @@ pub trait Serializer: 'static {
     /// Write the data into the buffer. Need to be implemented.
     fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error>;
 
+    fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error>
+    where
+        Self: Sized,
+    {
+        let rs_type_id = std::any::TypeId::of::<Self>();
+        context.write_any_typeinfo(rs_type_id)?;
+        Ok(())
+    }
+
     /// Unlike `fory_write`, read don't need `is_generics` is only used for wtring meta, and the need meta info
     /// already written in the buffer, so the read can parse the meta info from the buffer directly to decide how to read the data.
+    /// Serializer for `option/rc/arc/weak` should override this method.
     fn fory_read(
         context: &mut ReadContext,
         read_ref_info: bool,
@@ -131,7 +131,7 @@ pub trait Serializer: 'static {
     }
 
     #[allow(unused_variables)]
-    fn fory_read_with_typeinfo(
+    fn fory_read_with_type_info(
         context: &mut ReadContext,
         read_ref_info: bool,
         type_info: Arc<TypeInfo>,
@@ -142,16 +142,6 @@ pub trait Serializer: 'static {
         // Default implementation just ignore the typeinfo, only for morphic types supported by fory directly
         // or ext type registered by user. Dynamic trait types or reference types should override this method.
         Self::fory_read(context, true, false)
-    }
-
-    // only used by struct/enum/ext
-    fn fory_read_compatible(context: &mut ReadContext) -> Result<Self, Error>
-    where
-        Self: Sized,
-    {
-        // default logic only for ext/named_ext
-        // this method will be overridden by fory macro generated serializers
-        read_compatible_default::<Self>(context)
     }
 
     fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error>
@@ -244,6 +234,11 @@ pub trait StructSerializer: Serializer + 'static {
     fn fory_get_sorted_field_names() -> &'static [&'static str] {
         &[]
     }
+
+    // only used by struct
+    fn fory_read_compatible(context: &mut ReadContext) -> Result<Self, Error>
+    where
+        Self: Sized;
 }
 
 pub trait CollectionSerializer: Serializer + 'static {

@@ -70,7 +70,7 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for Rc<T> {
         read_rc(context, read_ref_info, read_type_info, None)
     }
 
-    fn fory_read_with_typeinfo(
+    fn fory_read_with_type_info(
         context: &mut ReadContext,
         read_ref_info: bool,
         typeinfo: Arc<TypeInfo>,
@@ -82,7 +82,7 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for Rc<T> {
     }
 
     fn fory_read_data(_: &mut ReadContext) -> Result<Self, Error> {
-        panic!("Rc<T> should be read using `fory_read/fory_read_with_typeinfo` to handle reference tracking properly");
+        panic!("Rc<T> should be read using `fory_read/fory_read_with_type_info` to handle reference tracking properly");
     }
 
     fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error> {
@@ -134,7 +134,7 @@ fn read_rc<T: Serializer + ForyDefault + 'static>(
         }
         RefFlag::NotNullValue => {
             let inner = if let Some(typeinfo) = typeinfo {
-                T::fory_read_with_typeinfo(context, read_ref_info, typeinfo)?
+                T::fory_read_with_type_info(context, read_ref_info, typeinfo)?
             } else {
                 if read_type_info {
                     T::fory_read_type_info(context)?;
@@ -146,7 +146,7 @@ fn read_rc<T: Serializer + ForyDefault + 'static>(
         RefFlag::RefValue => {
             let ref_id = context.ref_reader.reserve_ref_id();
             let inner = if let Some(typeinfo) = typeinfo {
-                T::fory_read_with_typeinfo(context, read_ref_info, typeinfo)?
+                T::fory_read_with_type_info(context, read_ref_info, typeinfo)?
             } else {
                 if read_type_info {
                     T::fory_read_type_info(context)?;

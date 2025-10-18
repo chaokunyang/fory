@@ -277,7 +277,6 @@ where
     T: Serializer + ForyDefault,
     C: FromIterator<T>,
 {
-    let elem_is_shared_ref = T::fory_is_shared_ref();
     // Read header
     let header = context.reader.read_u8()?;
     let is_track_ref = (header & TRACKING_REF) != 0;
@@ -295,13 +294,13 @@ where
         // All elements are same type
         if is_track_ref {
             (0..len)
-                .map(|_| T::fory_read_with_typeinfo(context, true, type_info.clone()))
+                .map(|_| T::fory_read_with_type_info(context, true, type_info.clone()))
                 .collect::<Result<C, Error>>()
         } else {
             if !has_null {
                 // No null elements
                 (0..len)
-                    .map(|_| T::fory_read_with_typeinfo(context, false, type_info.clone()))
+                    .map(|_| T::fory_read_with_type_info(context, false, type_info.clone()))
                     .collect::<Result<C, Error>>()
             } else {
                 // Has null elements
@@ -311,7 +310,7 @@ where
                         if flag == (RefFlag::NotNullValue as i8) {
                             Ok(T::fory_default())
                         } else {
-                            T::fory_read_with_typeinfo(context, true, type_info.clone())
+                            T::fory_read_with_type_info(context, true, type_info.clone())
                         }
                     })
                     .collect::<Result<C, Error>>()

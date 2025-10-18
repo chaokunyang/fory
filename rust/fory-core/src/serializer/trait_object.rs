@@ -15,13 +15,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use crate::ensure;
-use crate::error::Error;
-use crate::resolver::context::{ReadContext, WriteContext};
-use crate::resolver::type_resolver::{TypeInfo, TypeResolver};
-use crate::serializer::{ForyDefault, Serializer};
-use crate::RefFlag;
-use std::sync::Arc;
+// Re-exports for use in macros - these are needed for macro expansion in user crates
+// Even though they appear unused in this file, they are used by the macro-generated code
 
 /// Helper macro for common type resolution and downcasting pattern
 #[macro_export]
@@ -209,7 +204,7 @@ macro_rules! register_trait_type {
                 ))
             }
 
-            fn fory_read_with_typeinfo(
+            fn fory_read_with_type_info(
                 context: &mut fory_core::ReadContext,
                 read_ref_info: bool,
                 type_info: std::sync::Arc<fory_core::TypeInfo>,
@@ -412,7 +407,7 @@ macro_rules! impl_smart_pointer_serializer {
             }
 
             fn fory_read(context: &mut fory_core::ReadContext, read_ref_info: bool, read_type_info: bool) -> Result<Self, fory_core::Error> {
-                let boxed_any = fory_core::serializer::$read_ptr_any(context, read_ref_info, read_type_info, None);
+                let boxed_any = fory_core::serializer::$read_ptr_any(context, read_ref_info, read_type_info, None)?;
                 $(
                     if boxed_any.is::<$impl_type>() {
                         let concrete = boxed_any.downcast::<$impl_type>()
@@ -426,8 +421,8 @@ macro_rules! impl_smart_pointer_serializer {
                 ))
             }
 
-            fn fory_read_with_typeinfo(context: &mut fory_core::ReadContext, read_ref_info: bool, type_info: std::sync::Arc<fory_core::TypeInfo>) -> Result<Self, fory_core::Error> {
-                let boxed_any = fory_core::serializer::$read_ptr_any(context, read_ref_info, false, Some(type_info));
+            fn fory_read_with_type_info(context: &mut fory_core::ReadContext, read_ref_info: bool, type_info: std::sync::Arc<fory_core::TypeInfo>) -> Result<Self, fory_core::Error> {
+                let boxed_any = fory_core::serializer::$read_ptr_any(context, read_ref_info, false, Some(type_info))?;
                 $(
                     if boxed_any.is::<$impl_type>() {
                         let concrete = boxed_any.downcast::<$impl_type>()

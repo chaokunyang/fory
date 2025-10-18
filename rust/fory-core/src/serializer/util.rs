@@ -17,7 +17,6 @@
 
 use crate::ensure;
 use crate::error::Error;
-use crate::meta::{NAMESPACE_DECODER, TYPE_NAME_DECODER};
 use crate::resolver::context::{ReadContext, WriteContext};
 use crate::serializer::{bool, ForyDefault, Serializer};
 use crate::types::RefFlag;
@@ -97,52 +96,6 @@ pub fn read_type_info<T: Serializer>(context: &mut ReadContext) -> Result<(), Er
         Error::TypeMismatch(local_type_id, remote_type_id)
     );
     Ok(())
-}
-
-// only used by struct/enum/ext
-pub(super) fn read_compatible_default<T: Serializer>(context: &mut ReadContext) -> Result<T, Error>
-where
-    T: Sized,
-{
-    // default logic only for ext/named_ext
-    let remote_type_id = context.reader.read_varuint32()?;
-    let local_type_id = T::fory_get_type_id(context.get_type_resolver())?;
-    ensure!(
-        local_type_id == remote_type_id,
-        Error::TypeMismatch(local_type_id, remote_type_id)
-    );
-    if local_type_id & 0xff == TypeId::EXT as u32 {
-        context
-            .get_type_resolver()
-            .get_ext_harness(local_type_id)?
-            .get_read_data_fn()(context)
-        .and_then(|b: Box<dyn Any>| {
-            b.downcast::<T>()
-                .map(|boxed_self| *boxed_self)
-                .map_err(|_| Error::TypeError("downcast to Self failed".into()))
-        })
-    } else {
-        let (namespace, type_name) = if context.is_share_meta() {
-            let meta_index = context.reader.read_varuint32()?;
-            let type_meta = context.get_meta(meta_index as usize)?;
-            (type_meta.get_namespace(), type_meta.get_type_name())
-        } else {
-            let nsb = context.read_meta_string_bytes()?;
-            let tsb = context.read_meta_string_bytes()?;
-            let ns = NAMESPACE_DECODER.decode(&nsb.bytes, nsb.encoding)?;
-            let ts = TYPE_NAME_DECODER.decode(&tsb.bytes, tsb.encoding)?;
-            (ns, ts)
-        };
-        context
-            .get_type_resolver()
-            .get_ext_name_harness(&namespace, &type_name)?
-            .get_read_data_fn()(context)
-        .and_then(|b: Box<dyn Any>| {
-            b.downcast::<T>()
-                .map(|boxed_self| *boxed_self)
-                .map_err(|_| Error::TypeError("downcast to Self failed".into()))
-        })
-    }
 }
 
 #[inline(always)]

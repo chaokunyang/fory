@@ -38,52 +38,52 @@ pub fn gen_reserved_space(fields: &[&Field]) -> TokenStream {
                 let types = create_wrapper_types_rc(&trait_name);
                 let wrapper_ty = types.wrapper_ty;
                 quote! {
-                    <#wrapper_ty as fory_core::serializer::Serializer>::fory_reserved_space() + fory_core::types::SIZE_OF_REF_AND_TYPE
+                    <#wrapper_ty as fory_core::Serializer>::fory_reserved_space() + fory_core::types::SIZE_OF_REF_AND_TYPE
                 }
             }
             StructField::ArcDyn(trait_name) => {
                 let types = create_wrapper_types_arc(&trait_name);
                 let wrapper_ty = types.wrapper_ty;
                 quote! {
-                    <#wrapper_ty as fory_core::serializer::Serializer>::fory_reserved_space() + fory_core::types::SIZE_OF_REF_AND_TYPE
+                    <#wrapper_ty as fory_core::Serializer>::fory_reserved_space() + fory_core::types::SIZE_OF_REF_AND_TYPE
                 }
             }
             StructField::VecRc(trait_name) => {
                 let types = create_wrapper_types_rc(&trait_name);
                 let wrapper_ty = types.wrapper_ty;
                 quote! {
-                    <Vec<#wrapper_ty> as fory_core::serializer::Serializer>::fory_reserved_space() + fory_core::types::SIZE_OF_REF_AND_TYPE
+                    <Vec<#wrapper_ty> as fory_core::Serializer>::fory_reserved_space() + fory_core::types::SIZE_OF_REF_AND_TYPE
                 }
             }
             StructField::VecArc(trait_name) => {
                 let types = create_wrapper_types_arc(&trait_name);
                 let wrapper_ty = types.wrapper_ty;
                 quote! {
-                    <Vec<#wrapper_ty> as fory_core::serializer::Serializer>::fory_reserved_space() + fory_core::types::SIZE_OF_REF_AND_TYPE
+                    <Vec<#wrapper_ty> as fory_core::Serializer>::fory_reserved_space() + fory_core::types::SIZE_OF_REF_AND_TYPE
                 }
             }
             StructField::HashMapRc(key_ty, trait_name) => {
                 let types = create_wrapper_types_rc(&trait_name);
                 let wrapper_ty = types.wrapper_ty;
                 quote! {
-                    <std::collections::HashMap<#key_ty, #wrapper_ty> as fory_core::serializer::Serializer>::fory_reserved_space() + fory_core::types::SIZE_OF_REF_AND_TYPE
+                    <std::collections::HashMap<#key_ty, #wrapper_ty> as fory_core::Serializer>::fory_reserved_space() + fory_core::types::SIZE_OF_REF_AND_TYPE
                 }
             }
             StructField::HashMapArc(key_ty, trait_name) => {
                 let types = create_wrapper_types_arc(&trait_name);
                 let wrapper_ty = types.wrapper_ty;
                 quote! {
-                    <std::collections::HashMap<#key_ty, #wrapper_ty> as fory_core::serializer::Serializer>::fory_reserved_space() + fory_core::types::SIZE_OF_REF_AND_TYPE
+                    <std::collections::HashMap<#key_ty, #wrapper_ty> as fory_core::Serializer>::fory_reserved_space() + fory_core::types::SIZE_OF_REF_AND_TYPE
                 }
             }
             StructField::Forward => {
                 quote! {
-                    <#ty as fory_core::serializer::Serializer>::fory_reserved_space() + fory_core::types::SIZE_OF_REF_AND_TYPE
+                    <#ty as fory_core::Serializer>::fory_reserved_space() + fory_core::types::SIZE_OF_REF_AND_TYPE
                 }
             }
             _ => {
                 quote! {
-                    <#ty as fory_core::serializer::Serializer>::fory_reserved_space() + fory_core::types::SIZE_OF_REF_AND_TYPE
+                    <#ty as fory_core::Serializer>::fory_reserved_space() + fory_core::types::SIZE_OF_REF_AND_TYPE
                 }
             }
         }
@@ -107,7 +107,7 @@ fn gen_write_field(field: &Field) -> TokenStream {
     match classify_trait_object_field(ty) {
         StructField::BoxDyn(_) => {
             quote! {
-                fory_core::serializer::Serializer::fory_write(&self.#ident, context, true, false)?;
+                fory_core::Serializer::fory_write(&self.#ident, context, true, false)?;
             }
         }
         StructField::RcDyn(trait_name) => {
@@ -116,7 +116,7 @@ fn gen_write_field(field: &Field) -> TokenStream {
             let trait_ident = types.trait_ident;
             quote! {
                 let wrapper = #wrapper_ty::from(self.#ident.clone() as std::rc::Rc<dyn #trait_ident>);
-                fory_core::serializer::Serializer::fory_write(&wrapper, context, true, false)?;
+                fory_core::Serializer::fory_write(&wrapper, context, true, false)?;
             }
         }
         StructField::ArcDyn(trait_name) => {
@@ -125,7 +125,7 @@ fn gen_write_field(field: &Field) -> TokenStream {
             let trait_ident = types.trait_ident;
             quote! {
                 let wrapper = #wrapper_ty::from(self.#ident.clone() as std::sync::Arc<dyn #trait_ident>);
-                fory_core::serializer::Serializer::fory_write(&wrapper, context, true, false)?;
+                fory_core::Serializer::fory_write(&wrapper, context, true, false)?;
             }
         }
         StructField::VecRc(trait_name) => {
@@ -136,7 +136,7 @@ fn gen_write_field(field: &Field) -> TokenStream {
                 let wrapper_vec: Vec<#wrapper_ty> = self.#ident.iter()
                     .map(|item| #wrapper_ty::from(item.clone() as std::rc::Rc<dyn #trait_ident>))
                     .collect();
-                fory_core::serializer::Serializer::fory_write(&wrapper_vec, context, false, true)?;
+                fory_core::Serializer::fory_write(&wrapper_vec, context, false, true)?;
             }
         }
         StructField::VecArc(trait_name) => {
@@ -147,7 +147,7 @@ fn gen_write_field(field: &Field) -> TokenStream {
                 let wrapper_vec: Vec<#wrapper_ty> = self.#ident.iter()
                     .map(|item| #wrapper_ty::from(item.clone() as std::sync::Arc<dyn #trait_ident>))
                     .collect();
-                fory_core::serializer::Serializer::fory_write(&wrapper_vec, context, false, true)?;
+                fory_core::Serializer::fory_write(&wrapper_vec, context, false, true)?;
             }
         }
         StructField::HashMapRc(key_ty, trait_name) => {
@@ -158,7 +158,7 @@ fn gen_write_field(field: &Field) -> TokenStream {
                 let wrapper_map: std::collections::HashMap<#key_ty, #wrapper_ty> = self.#ident.iter()
                     .map(|(k, v)| (k.clone(), #wrapper_ty::from(v.clone() as std::rc::Rc<dyn #trait_ident>)))
                     .collect();
-                fory_core::serializer::Serializer::fory_write(&wrapper_map, context, false, true)?;
+                fory_core::Serializer::fory_write(&wrapper_map, context, false, true)?;
             }
         }
         StructField::HashMapArc(key_ty, trait_name) => {
@@ -169,12 +169,12 @@ fn gen_write_field(field: &Field) -> TokenStream {
                 let wrapper_map: std::collections::HashMap<#key_ty, #wrapper_ty> = self.#ident.iter()
                     .map(|(k, v)| (k.clone(), #wrapper_ty::from(v.clone() as std::sync::Arc<dyn #trait_ident>)))
                     .collect();
-                fory_core::serializer::Serializer::fory_write(&wrapper_map, context, false, true)?;
+                fory_core::Serializer::fory_write(&wrapper_map, context, false, true)?;
             }
         }
         StructField::Forward => {
             quote! {
-                fory_core::serializer::Serializer::fory_write(&self.#ident, context, true, false)?;
+                fory_core::Serializer::fory_write(&self.#ident, context, true, false)?;
             }
         }
         _ => {
@@ -186,15 +186,15 @@ fn gen_write_field(field: &Field) -> TokenStream {
                 if is_option {
                     quote! {
                         if let Some(v) = &self.#ident {
-                            context.writer.write_i8(fory_core::types::RefFlag::NotNullValue as i8);
+                            context.writer.write_i8(fory_core::RefFlag::NotNullValue as i8);
                             fory_core::serializer::CollectionSerializer::fory_write_collection_field(v, context)?;
                         } else {
-                            context.writer.write_i8(fory_core::types::RefFlag::Null as i8);
+                            context.writer.write_i8(fory_core::RefFlag::Null as i8);
                         }
                     }
                 } else {
                     quote! {
-                        context.writer.write_i8(fory_core::types::RefFlag::NotNullValue as i8);
+                        context.writer.write_i8(fory_core::RefFlag::NotNullValue as i8);
                         fory_core::serializer::CollectionSerializer::fory_write_collection_field(&self.#ident, context)?;
                     }
                 }
@@ -202,15 +202,15 @@ fn gen_write_field(field: &Field) -> TokenStream {
                 if is_option {
                     quote! {
                         if let Some(v) = &self.#ident {
-                            context.writer.write_i8(fory_core::types::RefFlag::NotNullValue as i8);
+                            context.writer.write_i8(fory_core::RefFlag::NotNullValue as i8);
                             fory_core::serializer::MapSerializer::fory_write_map_field(v, context)?;
                         } else {
-                            context.writer.write_i8(fory_core::types::RefFlag::Null as i8);
+                            context.writer.write_i8(fory_core::RefFlag::Null as i8);
                         }
                     }
                 } else {
                     quote! {
-                        context.writer.write_i8(fory_core::types::RefFlag::NotNullValue as i8);
+                        context.writer.write_i8(fory_core::RefFlag::NotNullValue as i8);
                         fory_core::serializer::MapSerializer::fory_write_map_field(&self.#ident, context)?;
                     }
                 }
@@ -225,7 +225,7 @@ fn gen_write_field(field: &Field) -> TokenStream {
                 } else {
                     // Custom types (struct/enum/ext) - need runtime check for enums
                     quote! {
-                        let is_enum = <#ty as fory_core::serializer::Serializer>::fory_static_type_id() == fory_core::types::TypeId::ENUM;
+                        let is_enum = <#ty as fory_core::Serializer>::fory_static_type_id() == fory_core::types::TypeId::ENUM;
                         fory_core::serializer::write_ref_info_data::<#ty>(&self.#ident, context, #skip_ref_flag, is_enum)?;
                     }
                 }
@@ -244,6 +244,6 @@ pub fn gen_write_data(fields: &[&Field]) -> TokenStream {
 
 pub fn gen_write() -> TokenStream {
     quote! {
-        fory_core::serializer::struct_::write::<Self>(self, context)
+        fory_core::serializer::struct_::write::<Self>(self, context, write_ref_info, write_type_info)
     }
 }

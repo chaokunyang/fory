@@ -21,14 +21,14 @@ use std::sync::OnceLock;
 
 use thiserror::Error;
 
-/// Global flag to check if FORY_ERROR_PANIC environment variable is set.
+/// Global flag to check if FORY_PANIC_ON_ERROR environment variable is set.
 static PANIC_ON_ERROR: OnceLock<bool> = OnceLock::new();
 
-/// Check if FORY_ERROR_PANIC environment variable is set.
+/// Check if FORY_PANIC_ON_ERROR environment variable is set.
 #[inline]
 fn should_panic_on_error() -> bool {
     *PANIC_ON_ERROR.get_or_init(|| {
-        std::env::var("FORY_ERROR_PANIC")
+        std::env::var("FORY_PANIC_ON_ERROR")
             .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
             .unwrap_or(false)
     })
@@ -79,21 +79,22 @@ fn should_panic_on_error() -> bool {
 /// - [`Error::not_allowed`] - For disallowed operations
 /// - [`Error::unknown`] - For generic errors
 ///
-/// ## Debug Mode: FORY_ERROR_PANIC
+/// ## Debug Mode: FORY_PANIC_ON_ERROR
 ///
-/// For easier debugging, you can set the `FORY_ERROR_PANIC` environment variable to make
+/// For easier debugging, you can set the `FORY_PANIC_ON_ERROR` environment variable to make
 /// the program panic at the exact location where an error is created. This helps identify
 /// the error source with a full stack trace.
 ///
 /// ```bash
-/// FORY_ERROR_PANIC=1 cargo run
+/// RUST_BACKTRACE=1 FORY_PANIC_ON_ERROR=1 cargo run
 /// # or
-/// FORY_ERROR_PANIC=true cargo run
+/// RUST_BACKTRACE=1 FORY_PANIC_ON_ERROR=true cargo test
 /// ```
 ///
 /// When enabled, any error created via the static constructor functions will panic immediately
 /// with the error message, allowing you to see the exact call stack in your debugger or
-/// panic output.
+/// panic output. Use `RUST_BACKTRACE=1` together with `FORY_PANIC_ON_ERROR` to get a full
+/// stack trace showing exactly where the error was created.
 #[derive(Error, Debug)]
 #[non_exhaustive]
 pub enum Error {
@@ -177,7 +178,7 @@ pub enum Error {
 impl Error {
     /// Creates a new [`Error::TypeMismatch`] with the given type IDs.
     ///
-    /// If `FORY_ERROR_PANIC` environment variable is set, this will panic with the error message.
+    /// If `FORY_PANIC_ON_ERROR` environment variable is set, this will panic with the error message.
     ///
     /// # Example
     /// ```
@@ -190,14 +191,14 @@ impl Error {
     pub fn type_mismatch(type_a: u32, type_b: u32) -> Self {
         let err = Error::TypeMismatch(type_a, type_b);
         if should_panic_on_error() {
-            panic!("FORY_ERROR_PANIC: {}", err);
+            panic!("FORY_PANIC_ON_ERROR: {}", err);
         }
         err
     }
 
     /// Creates a new [`Error::BufferOutOfBound`] with the given bounds.
     ///
-    /// If `FORY_ERROR_PANIC` environment variable is set, this will panic with the error message.
+    /// If `FORY_PANIC_ON_ERROR` environment variable is set, this will panic with the error message.
     ///
     /// # Example
     /// ```
@@ -210,14 +211,14 @@ impl Error {
     pub fn buffer_out_of_bound(offset: usize, length: usize, capacity: usize) -> Self {
         let err = Error::BufferOutOfBound(offset, length, capacity);
         if should_panic_on_error() {
-            panic!("FORY_ERROR_PANIC: {}", err);
+            panic!("FORY_PANIC_ON_ERROR: {}", err);
         }
         err
     }
 
     /// Creates a new [`Error::EncodeError`] from a string or static message.
     ///
-    /// If `FORY_ERROR_PANIC` environment variable is set, this will panic with the error message.
+    /// If `FORY_PANIC_ON_ERROR` environment variable is set, this will panic with the error message.
     ///
     /// # Example
     /// ```
@@ -231,14 +232,14 @@ impl Error {
     pub fn encode_error<S: Into<Cow<'static, str>>>(s: S) -> Self {
         let err = Error::EncodeError(s.into());
         if should_panic_on_error() {
-            panic!("FORY_ERROR_PANIC: {}", err);
+            panic!("FORY_PANIC_ON_ERROR: {}", err);
         }
         err
     }
 
     /// Creates a new [`Error::InvalidData`] from a string or static message.
     ///
-    /// If `FORY_ERROR_PANIC` environment variable is set, this will panic with the error message.
+    /// If `FORY_PANIC_ON_ERROR` environment variable is set, this will panic with the error message.
     ///
     /// # Example
     /// ```
@@ -252,14 +253,14 @@ impl Error {
     pub fn invalid_data<S: Into<Cow<'static, str>>>(s: S) -> Self {
         let err = Error::InvalidData(s.into());
         if should_panic_on_error() {
-            panic!("FORY_ERROR_PANIC: {}", err);
+            panic!("FORY_PANIC_ON_ERROR: {}", err);
         }
         err
     }
 
     /// Creates a new [`Error::InvalidRef`] from a string or static message.
     ///
-    /// If `FORY_ERROR_PANIC` environment variable is set, this will panic with the error message.
+    /// If `FORY_PANIC_ON_ERROR` environment variable is set, this will panic with the error message.
     ///
     /// # Example
     /// ```
@@ -273,14 +274,14 @@ impl Error {
     pub fn invalid_ref<S: Into<Cow<'static, str>>>(s: S) -> Self {
         let err = Error::InvalidRef(s.into());
         if should_panic_on_error() {
-            panic!("FORY_ERROR_PANIC: {}", err);
+            panic!("FORY_PANIC_ON_ERROR: {}", err);
         }
         err
     }
 
     /// Creates a new [`Error::UnknownEnum`] from a string or static message.
     ///
-    /// If `FORY_ERROR_PANIC` environment variable is set, this will panic with the error message.
+    /// If `FORY_PANIC_ON_ERROR` environment variable is set, this will panic with the error message.
     ///
     /// # Example
     /// ```
@@ -294,14 +295,14 @@ impl Error {
     pub fn unknown_enum<S: Into<Cow<'static, str>>>(s: S) -> Self {
         let err = Error::UnknownEnum(s.into());
         if should_panic_on_error() {
-            panic!("FORY_ERROR_PANIC: {}", err);
+            panic!("FORY_PANIC_ON_ERROR: {}", err);
         }
         err
     }
 
     /// Creates a new [`Error::TypeError`] from a string or static message.
     ///
-    /// If `FORY_ERROR_PANIC` environment variable is set, this will panic with the error message.
+    /// If `FORY_PANIC_ON_ERROR` environment variable is set, this will panic with the error message.
     ///
     /// # Example
     /// ```
@@ -315,14 +316,14 @@ impl Error {
     pub fn type_error<S: Into<Cow<'static, str>>>(s: S) -> Self {
         let err = Error::TypeError(s.into());
         if should_panic_on_error() {
-            panic!("FORY_ERROR_PANIC: {}", err);
+            panic!("FORY_PANIC_ON_ERROR: {}", err);
         }
         err
     }
 
     /// Creates a new [`Error::EncodingError`] from a string or static message.
     ///
-    /// If `FORY_ERROR_PANIC` environment variable is set, this will panic with the error message.
+    /// If `FORY_PANIC_ON_ERROR` environment variable is set, this will panic with the error message.
     ///
     /// # Example
     /// ```
@@ -336,14 +337,14 @@ impl Error {
     pub fn encoding_error<S: Into<Cow<'static, str>>>(s: S) -> Self {
         let err = Error::EncodingError(s.into());
         if should_panic_on_error() {
-            panic!("FORY_ERROR_PANIC: {}", err);
+            panic!("FORY_PANIC_ON_ERROR: {}", err);
         }
         err
     }
 
     /// Creates a new [`Error::DepthExceed`] from a string or static message.
     ///
-    /// If `FORY_ERROR_PANIC` environment variable is set, this will panic with the error message.
+    /// If `FORY_PANIC_ON_ERROR` environment variable is set, this will panic with the error message.
     ///
     /// # Example
     /// ```
@@ -357,14 +358,14 @@ impl Error {
     pub fn depth_exceed<S: Into<Cow<'static, str>>>(s: S) -> Self {
         let err = Error::DepthExceed(s.into());
         if should_panic_on_error() {
-            panic!("FORY_ERROR_PANIC: {}", err);
+            panic!("FORY_PANIC_ON_ERROR: {}", err);
         }
         err
     }
 
     /// Creates a new [`Error::Uunsupported`] from a string or static message.
     ///
-    /// If `FORY_ERROR_PANIC` environment variable is set, this will panic with the error message.
+    /// If `FORY_PANIC_ON_ERROR` environment variable is set, this will panic with the error message.
     ///
     /// # Example
     /// ```
@@ -378,14 +379,14 @@ impl Error {
     pub fn unsupported<S: Into<Cow<'static, str>>>(s: S) -> Self {
         let err = Error::Uunsupported(s.into());
         if should_panic_on_error() {
-            panic!("FORY_ERROR_PANIC: {}", err);
+            panic!("FORY_PANIC_ON_ERROR: {}", err);
         }
         err
     }
 
     /// Creates a new [`Error::NotAllowed`] from a string or static message.
     ///
-    /// If `FORY_ERROR_PANIC` environment variable is set, this will panic with the error message.
+    /// If `FORY_PANIC_ON_ERROR` environment variable is set, this will panic with the error message.
     ///
     /// # Example
     /// ```
@@ -399,7 +400,7 @@ impl Error {
     pub fn not_allowed<S: Into<Cow<'static, str>>>(s: S) -> Self {
         let err = Error::NotAllowed(s.into());
         if should_panic_on_error() {
-            panic!("FORY_ERROR_PANIC: {}", err);
+            panic!("FORY_PANIC_ON_ERROR: {}", err);
         }
         err
     }
@@ -410,7 +411,7 @@ impl Error {
     /// from a literal, `String`, or any type that can be converted into
     /// a [`Cow<'static, str>`].
     ///
-    /// If `FORY_ERROR_PANIC` environment variable is set, this will panic with the error message.
+    /// If `FORY_PANIC_ON_ERROR` environment variable is set, this will panic with the error message.
     ///
     /// # Example
     /// ```
@@ -424,7 +425,7 @@ impl Error {
     pub fn unknown<S: Into<Cow<'static, str>>>(s: S) -> Self {
         let err = Error::Unknown(s.into());
         if should_panic_on_error() {
-            panic!("FORY_ERROR_PANIC: {}", err);
+            panic!("FORY_PANIC_ON_ERROR: {}", err);
         }
         err
     }

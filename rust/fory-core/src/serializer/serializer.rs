@@ -40,6 +40,15 @@ pub trait ForyDefault: Sized {
 
 pub trait Serializer: 'static {
     /// Entry point of the serialization.
+    ///
+    /// # Parameters
+    ///
+    /// * `write_ref_info` - When `true`, WRITES reference flag (null/not-null/ref). When `false`, SKIPS writing ref flag.
+    /// * `write_type_info` - When `true`, WRITES type information. When `false`, SKIPS writing type info.
+    /// * `has_generics` - Indicates if the type has generic parameters (used for collection meta).
+    ///
+    /// # Notes
+    ///
     /// Serializer for `option/rc/arc/weak` should override this method.
     fn fory_write(
         &self,
@@ -55,7 +64,7 @@ pub trait Serializer: 'static {
             // skip check option/pointer, the Serializer for such types will override `fory_write`.
             context.writer.write_i8(RefFlag::NotNullValue as i8);
         }
-        if !write_type_info {
+        if write_type_info {
             // Serializer for dynamic types should override `fory_write` to write actual typeinfo.
             Self::fory_write_type_info(context)?;
         }
@@ -64,10 +73,11 @@ pub trait Serializer: 'static {
 
     /// Write the data into the buffer. Need to be implemented for collection/map.
     /// For other types, just forward to `fory_write_data`.
+    #[allow(unused_variables)]
     fn fory_write_data_generic(
         &self,
         context: &mut WriteContext,
-        _has_generics: bool,
+        has_generics: bool,
     ) -> Result<(), Error> {
         self.fory_write_data(context)
     }
@@ -86,8 +96,17 @@ pub trait Serializer: 'static {
         Ok(())
     }
 
-    /// Unlike `fory_write`, read don't need `is_generics` is only used for wtring meta, and the need meta info
-    /// already written in the buffer, so the read can parse the meta info from the buffer directly to decide how to read the data.
+    /// Entry point of deserialization.
+    ///
+    /// # Parameters
+    ///
+    /// * `read_ref_info` - When `true`, READS reference flag from buffer. When `false`, SKIPS reading ref flag.
+    /// * `read_type_info` - When `true`, READS type information from buffer. When `false`, SKIPS reading type info.
+    ///
+    /// # Notes
+    ///
+    /// Unlike `fory_write`, read doesn't need `has_generics` - it's only used for writing meta.
+    /// The meta info is already written in the buffer, so read can parse it directly to decide how to read the data.
     /// Serializer for `option/rc/arc/weak` should override this method.
     fn fory_read(
         context: &mut ReadContext,
@@ -131,6 +150,18 @@ pub trait Serializer: 'static {
         }
     }
 
+    /// Deserialization with pre-read type information.
+    ///
+    /// # Parameters
+    ///
+    /// * `read_ref_info` - When `true`, READS reference flag from buffer. When `false`, SKIPS reading ref flag.
+    /// * `type_info` - Type information that has already been read ahead. DO NOT read type info again from buffer.
+    ///
+    /// # Notes
+    ///
+    /// The type info has already been read and is passed as an argument, so this method should NOT read type info from the buffer.
+    /// Default implementation ignores the typeinfo, only for morphic types supported by fory directly
+    /// or ext type registered by user. Dynamic trait types or reference types should override this method.
     #[allow(unused_variables)]
     fn fory_read_with_type_info(
         context: &mut ReadContext,

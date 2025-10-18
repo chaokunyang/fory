@@ -107,7 +107,7 @@ fn gen_write_field(field: &Field) -> TokenStream {
     match classify_trait_object_field(ty) {
         StructField::BoxDyn => {
             quote! {
-                fory_core::Serializer::fory_write(&self.#ident, context, true, false)?;
+                fory_core::Serializer::fory_write(&self.#ident, context, true, true, false)?;
             }
         }
         StructField::RcDyn(trait_name) => {
@@ -116,7 +116,7 @@ fn gen_write_field(field: &Field) -> TokenStream {
             let trait_ident = types.trait_ident;
             quote! {
                 let wrapper = #wrapper_ty::from(self.#ident.clone() as std::rc::Rc<dyn #trait_ident>);
-                fory_core::Serializer::fory_write(&wrapper, context, true, false)?;
+                fory_core::Serializer::fory_write(&wrapper, context, true, true, false)?;
             }
         }
         StructField::ArcDyn(trait_name) => {
@@ -125,7 +125,7 @@ fn gen_write_field(field: &Field) -> TokenStream {
             let trait_ident = types.trait_ident;
             quote! {
                 let wrapper = #wrapper_ty::from(self.#ident.clone() as std::sync::Arc<dyn #trait_ident>);
-                fory_core::Serializer::fory_write(&wrapper, context, true, false)?;
+                fory_core::Serializer::fory_write(&wrapper, context, true, true, false)?;
             }
         }
         StructField::VecRc(trait_name) => {
@@ -136,7 +136,7 @@ fn gen_write_field(field: &Field) -> TokenStream {
                 let wrapper_vec: Vec<#wrapper_ty> = self.#ident.iter()
                     .map(|item| #wrapper_ty::from(item.clone() as std::rc::Rc<dyn #trait_ident>))
                     .collect();
-                fory_core::Serializer::fory_write(&wrapper_vec, context, false, true)?;
+                fory_core::Serializer::fory_write(&wrapper_vec, context, false, true, true)?;
             }
         }
         StructField::VecArc(trait_name) => {
@@ -147,7 +147,7 @@ fn gen_write_field(field: &Field) -> TokenStream {
                 let wrapper_vec: Vec<#wrapper_ty> = self.#ident.iter()
                     .map(|item| #wrapper_ty::from(item.clone() as std::sync::Arc<dyn #trait_ident>))
                     .collect();
-                fory_core::Serializer::fory_write(&wrapper_vec, context, false, true)?;
+                fory_core::Serializer::fory_write(&wrapper_vec, context, false, true, true)?;
             }
         }
         StructField::HashMapRc(key_ty, trait_name) => {
@@ -158,7 +158,7 @@ fn gen_write_field(field: &Field) -> TokenStream {
                 let wrapper_map: std::collections::HashMap<#key_ty, #wrapper_ty> = self.#ident.iter()
                     .map(|(k, v)| (k.clone(), #wrapper_ty::from(v.clone() as std::rc::Rc<dyn #trait_ident>)))
                     .collect();
-                fory_core::Serializer::fory_write(&wrapper_map, context, false, true)?;
+                fory_core::Serializer::fory_write(&wrapper_map, context, false, true, true)?;
             }
         }
         StructField::HashMapArc(key_ty, trait_name) => {
@@ -169,12 +169,12 @@ fn gen_write_field(field: &Field) -> TokenStream {
                 let wrapper_map: std::collections::HashMap<#key_ty, #wrapper_ty> = self.#ident.iter()
                     .map(|(k, v)| (k.clone(), #wrapper_ty::from(v.clone() as std::sync::Arc<dyn #trait_ident>)))
                     .collect();
-                fory_core::Serializer::fory_write(&wrapper_map, context, false, true)?;
+                fory_core::Serializer::fory_write(&wrapper_map, context, false, true, true)?;
             }
         }
         StructField::Forward => {
             quote! {
-                fory_core::Serializer::fory_write(&self.#ident, context, true, false)?;
+                fory_core::Serializer::fory_write(&self.#ident, context, true, true, false)?;
             }
         }
         _ => {
@@ -225,19 +225,19 @@ fn gen_write_field(field: &Field) -> TokenStream {
                         }
                     } else {
                         quote! {
-                            fory_core::Serializer::fory_write(&self.#ident, context, false, true)?;
+                            fory_core::Serializer::fory_write(&self.#ident, context, false, true, false)?;
                         }
                     }
                 } else {
                     if skip_ref_flag {
                         quote! {
                             let is_enum = <#ty as fory_core::Serializer>::fory_static_type_id() == fory_core::types::TypeId::ENUM;
-                            fory_core::Serializer::fory_write(&self.#ident, context, true, is_enum)?;
+                            fory_core::Serializer::fory_write(&self.#ident, context, true, is_enum, false)?;
                         }
                     } else {
                         quote! {
                             let is_enum = <#ty as fory_core::Serializer>::fory_static_type_id() == fory_core::types::TypeId::ENUM;
-                            fory_core::Serializer::fory_write(&self.#ident, context, false, is_enum)?;
+                            fory_core::Serializer::fory_write(&self.#ident, context, false, is_enum, false)?;
                         }
                     }
                 }

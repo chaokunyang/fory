@@ -324,6 +324,11 @@ impl ReadContext {
         }
     }
 
+    #[inline(always)]
+    pub fn get_type_info(&self, type_id: &std::any::TypeId) -> Result<Arc<TypeInfo>, Error> {
+        self.type_resolver.get_type_info(type_id)
+    }
+
     pub fn read_meta_string_bytes(&mut self) -> Result<MetaStringBytes, Error> {
         self.meta_string_resolver
             .read_meta_string_bytes(&mut self.reader)

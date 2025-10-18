@@ -248,7 +248,7 @@ pub trait StructSerializer: Serializer + 'static {
     }
 
     // only used by struct
-    fn fory_read_compatible(context: &mut ReadContext) -> Result<Self, Error>
+    fn fory_read_compatible(context: &mut ReadContext, type_info: Arc<TypeInfo>) -> Result<Self, Error>
     where
         Self: Sized;
 }

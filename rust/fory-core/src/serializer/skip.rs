@@ -57,7 +57,7 @@ pub fn skip_value(
     context: &mut ReadContext,
     field_type: &FieldType,
     read_ref_flag: bool,
-    is_field: bool,
+    _is_field: bool,
 ) -> Result<(), Error> {
     if read_ref_flag {
         let ref_flag = context.reader.read_i8()?;

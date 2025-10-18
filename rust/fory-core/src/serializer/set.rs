@@ -24,7 +24,7 @@ use crate::serializer::collection::{
     write_collection_type_info,
 };
 
-use crate::serializer::{CollectionSerializer, ForyDefault, Serializer};
+use crate::serializer::{ForyDefault, Serializer};
 use crate::types::TypeId;
 use std::collections::{BTreeSet, HashSet};
 use std::mem;
@@ -67,12 +67,6 @@ impl<T: Serializer + ForyDefault + Eq + std::hash::Hash> Serializer for HashSet<
 
     fn as_any(&self) -> &dyn std::any::Any {
         self
-    }
-}
-
-impl<T: Serializer + ForyDefault + Eq + std::hash::Hash> CollectionSerializer for HashSet<T> {
-    fn fory_write_collection_field(&self, context: &mut WriteContext) -> Result<(), Error> {
-        write_collection_data(self, context, true)
     }
 }
 
@@ -120,12 +114,6 @@ impl<T: Serializer + ForyDefault + Ord> Serializer for BTreeSet<T> {
 
     fn as_any(&self) -> &dyn std::any::Any {
         self
-    }
-}
-
-impl<T: Serializer + ForyDefault + Ord> CollectionSerializer for BTreeSet<T> {
-    fn fory_write_collection_field(&self, context: &mut WriteContext) -> Result<(), Error> {
-        write_collection_data(self, context, true)
     }
 }
 

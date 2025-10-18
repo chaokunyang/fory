@@ -567,7 +567,6 @@ macro_rules! wrap_vec_rc {
     };
 }
 
-
 impl Default for Box<dyn Serializer> {
     fn default() -> Self {
         Box::new(0)

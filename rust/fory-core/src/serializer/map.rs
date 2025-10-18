@@ -20,7 +20,7 @@ use crate::error::Error;
 use crate::resolver::context::{ReadContext, WriteContext};
 use crate::resolver::type_resolver::TypeResolver;
 use crate::serializer::util::read_basic_type_info;
-use crate::serializer::{ForyDefault, MapSerializer, Serializer};
+use crate::serializer::{ForyDefault, Serializer};
 use crate::types::{need_to_write_type_for_field, TypeId, SIZE_OF_REF_AND_TYPE};
 use std::collections::{BTreeMap, HashMap};
 
@@ -588,14 +588,6 @@ impl<K: Serializer + ForyDefault + Eq + std::hash::Hash, V: Serializer + ForyDef
     }
 }
 
-impl<K: Serializer + ForyDefault + Eq + std::hash::Hash, V: Serializer + ForyDefault> MapSerializer
-    for HashMap<K, V>
-{
-    fn fory_write_map_field(&self, context: &mut WriteContext) -> Result<(), Error> {
-        write_map_data(self.iter(), self.len(), context, true)
-    }
-}
-
 impl<K, V> ForyDefault for HashMap<K, V> {
     fn fory_default() -> Self {
         HashMap::new()
@@ -716,14 +708,6 @@ impl<K: Serializer + ForyDefault + Ord + std::hash::Hash, V: Serializer + ForyDe
 
     fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error> {
         read_basic_type_info::<Self>(context)
-    }
-}
-
-impl<K: Serializer + ForyDefault + Ord + std::hash::Hash, V: Serializer + ForyDefault> MapSerializer
-    for BTreeMap<K, V>
-{
-    fn fory_write_map_field(&self, context: &mut WriteContext) -> Result<(), Error> {
-        write_map_data(self.iter(), self.len(), context, true)
     }
 }
 

@@ -248,15 +248,10 @@ pub trait StructSerializer: Serializer + 'static {
     }
 
     // only used by struct
-    fn fory_read_compatible(context: &mut ReadContext, type_info: Arc<TypeInfo>) -> Result<Self, Error>
+    fn fory_read_compatible(
+        context: &mut ReadContext,
+        type_info: Arc<TypeInfo>,
+    ) -> Result<Self, Error>
     where
         Self: Sized;
-}
-
-pub trait CollectionSerializer: Serializer + 'static {
-    fn fory_write_collection_field(&self, context: &mut WriteContext) -> Result<(), Error>;
-}
-
-pub trait MapSerializer: Serializer + 'static {
-    fn fory_write_map_field(&self, context: &mut WriteContext) -> Result<(), Error>;
 }

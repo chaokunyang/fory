@@ -279,6 +279,7 @@ pub(super) fn extract_type_name(ty: &Type) -> String {
     }
 }
 
+#[allow(dead_code)]
 pub(super) fn is_option(ty: &Type) -> bool {
     if let Type::Path(type_path) = ty {
         if let Some(seg) = type_path.path.segments.last() {

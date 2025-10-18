@@ -41,6 +41,4 @@ pub mod weak;
 
 pub mod serializer;
 pub use any::{read_box_any, write_box_any};
-pub use serializer::{
-    CollectionSerializer, ForyDefault, MapSerializer, Serializer, StructSerializer,
-};
+pub use serializer::{ForyDefault, Serializer, StructSerializer};

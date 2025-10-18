@@ -75,10 +75,12 @@ pub trait Serializer: 'static {
     /// Write the data into the buffer. Need to be implemented.
     fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error>;
 
+    #[inline(always)]
     fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error>
     where
         Self: Sized,
     {
+        // Serializer for internal types should overwrite this method for faster performance.
         let rs_type_id = std::any::TypeId::of::<Self>();
         context.write_any_typeinfo(rs_type_id)?;
         Ok(())
@@ -148,14 +150,17 @@ pub trait Serializer: 'static {
     where
         Self: Sized + ForyDefault;
 
+    #[inline(always)]
     fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error>
     where
         Self: Sized,
     {
+        // Serializer for internal types should overwrite this method for faster performance.
         context.read_any_typeinfo()?;
         Ok(())
     }
 
+    #[inline(always)]
     fn fory_is_option() -> bool
     where
         Self: Sized,
@@ -163,10 +168,12 @@ pub trait Serializer: 'static {
         false
     }
 
+    #[inline(always)]
     fn fory_is_none(&self) -> bool {
         false
     }
 
+    #[inline(always)]
     fn fory_is_polymorphic() -> bool
     where
         Self: Sized,
@@ -174,6 +181,7 @@ pub trait Serializer: 'static {
         false
     }
 
+    #[inline(always)]
     fn fory_is_shared_ref() -> bool
     where
         Self: Sized,
@@ -181,6 +189,7 @@ pub trait Serializer: 'static {
         false
     }
 
+    #[inline(always)]
     fn fory_static_type_id() -> TypeId
     where
         Self: Sized,
@@ -190,6 +199,7 @@ pub trait Serializer: 'static {
         TypeId::EXT
     }
 
+    #[inline(always)]
     fn fory_get_type_id(type_resolver: &TypeResolver) -> Result<u32, Error>
     where
         Self: Sized,
@@ -201,12 +211,14 @@ pub trait Serializer: 'static {
 
     fn fory_type_id_dyn(&self, type_resolver: &TypeResolver) -> Result<u32, Error>;
 
+    #[inline(always)]
     fn fory_concrete_type_id(&self) -> std::any::TypeId {
         std::any::TypeId::of::<Self>()
     }
 
     /// The possible max memory size of the type.
     /// Used to reserve the buffer space to avoid reallocation, which may hurt performance.
+    #[inline(always)]
     fn fory_reserved_space() -> usize
     where
         Self: Sized,

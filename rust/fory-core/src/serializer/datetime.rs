@@ -19,8 +19,9 @@ use crate::error::Error;
 use crate::resolver::context::ReadContext;
 use crate::resolver::context::WriteContext;
 use crate::resolver::type_resolver::TypeResolver;
+use crate::serializer::util::read_basic_type_info;
+use crate::serializer::ForyDefault;
 use crate::serializer::Serializer;
-use crate::serializer::{read_type_info, write_type_info, ForyDefault};
 use crate::types::TypeId;
 use crate::util::EPOCH;
 use chrono::{DateTime, Days, NaiveDate, NaiveDateTime};
@@ -67,11 +68,12 @@ impl Serializer for NaiveDateTime {
     }
 
     fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error> {
-        write_type_info::<Self>(context)
+        context.writer.write_varuint32(TypeId::TIMESTAMP as u32);
+        Ok(())
     }
 
     fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error> {
-        read_type_info::<Self>(context)
+        read_basic_type_info::<Self>(context)
     }
 }
 
@@ -112,11 +114,12 @@ impl Serializer for NaiveDate {
     }
 
     fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error> {
-        write_type_info::<Self>(context)
+        context.writer.write_varuint32(TypeId::LOCAL_DATE as u32);
+        Ok(())
     }
 
     fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error> {
-        read_type_info::<Self>(context)
+        read_basic_type_info::<Self>(context)
     }
 }
 

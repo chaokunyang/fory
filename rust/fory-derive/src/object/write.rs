@@ -29,7 +29,7 @@ pub fn gen_reserved_space(fields: &[&Field]) -> TokenStream {
     let reserved_size_expr: Vec<_> = fields.iter().map(|field| {
         let ty = &field.ty;
         match classify_trait_object_field(ty) {
-            StructField::BoxDyn(_) => {
+            StructField::BoxDyn => {
                 quote! {
                     fory_core::types::SIZE_OF_REF_AND_TYPE
                 }
@@ -105,7 +105,7 @@ fn gen_write_field(field: &Field) -> TokenStream {
     let ty = &field.ty;
     let ident = &field.ident;
     match classify_trait_object_field(ty) {
-        StructField::BoxDyn(_) => {
+        StructField::BoxDyn => {
             quote! {
                 fory_core::Serializer::fory_write(&self.#ident, context, true, false)?;
             }
@@ -215,18 +215,30 @@ fn gen_write_field(field: &Field) -> TokenStream {
                     }
                 }
             } else {
+                // Known types (primitives, strings, collections) - skip type info at compile time
                 // For custom types that we can't determine at compile time (like enums),
                 // we need to check at runtime whether to skip type info
                 if skip_type_info {
-                    // Known types (primitives, strings, collections) - skip type info at compile time
-                    quote! {
-                        fory_core::serializer::write_ref_info_data::<#ty>(&self.#ident, context, #skip_ref_flag, true)?;
+                    if skip_ref_flag {
+                        quote! {
+                            fory_core::Serializer::fory_write_data(&self.#ident, context)?;
+                        }
+                    } else {
+                        quote! {
+                            fory_core::Serializer::fory_write(&self.#ident, context, false, true)?;
+                        }
                     }
                 } else {
-                    // Custom types (struct/enum/ext) - need runtime check for enums
-                    quote! {
-                        let is_enum = <#ty as fory_core::Serializer>::fory_static_type_id() == fory_core::types::TypeId::ENUM;
-                        fory_core::serializer::write_ref_info_data::<#ty>(&self.#ident, context, #skip_ref_flag, is_enum)?;
+                    if skip_ref_flag {
+                        quote! {
+                            let is_enum = <#ty as fory_core::Serializer>::fory_static_type_id() == fory_core::types::TypeId::ENUM;
+                            fory_core::Serializer::fory_write(&self.#ident, context, true, is_enum)?;
+                        }
+                    } else {
+                        quote! {
+                            let is_enum = <#ty as fory_core::Serializer>::fory_static_type_id() == fory_core::types::TypeId::ENUM;
+                            fory_core::Serializer::fory_write(&self.#ident, context, false, is_enum)?;
+                        }
                     }
                 }
             }

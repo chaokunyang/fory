@@ -100,7 +100,8 @@ pub(super) fn create_wrapper_types_arc(trait_name: &str) -> WrapperTypes {
 }
 
 pub(super) enum StructField {
-    BoxDyn(String),
+    #[allow(unused_variables)]
+    BoxDyn,
     RcDyn(String),
     ArcDyn(String),
     VecRc(String),
@@ -187,8 +188,8 @@ pub(super) fn classify_trait_object_field(ty: &Type) -> StructField {
     if is_forward_field(ty) {
         return StructField::Forward;
     }
-    if let Some((_, trait_name)) = is_box_dyn_trait(ty) {
-        return StructField::BoxDyn(trait_name);
+    if let Some((_, _)) = is_box_dyn_trait(ty) {
+        return StructField::BoxDyn;
     }
     if let Some((_, trait_name)) = is_rc_dyn_trait(ty) {
         return StructField::RcDyn(trait_name);

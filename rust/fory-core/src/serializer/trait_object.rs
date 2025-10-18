@@ -252,34 +252,6 @@ macro_rules! register_trait_type {
                 <dyn $trait_name as fory_core::Serializer>::as_any(&**self)
             }
         }
-
-        // Create helper functions for this trait with trait-specific names
-        $crate::paste::paste! {
-            #[allow(non_snake_case)]
-            mod [<__fory_trait_helpers_ $trait_name>] {
-                use super::*;
-
-                #[allow(dead_code)]
-                pub fn [<from_any_internal_ $trait_name>](
-                    any_box: Box<dyn std::any::Any>,
-                    _fory_type_id: u32,
-                ) -> Result<Box<dyn $trait_name>, fory_core::Error> {
-                    $(
-                        if any_box.is::<$impl_type>() {
-                            let concrete = any_box.downcast::<$impl_type>()
-                                .map_err(|_| fory_core::Error::TypeError(
-                                    format!("Failed to downcast to {}", stringify!($impl_type)).into()
-                                ))?;
-                            return Ok(Box::new(*concrete) as Box<dyn $trait_name>);
-                        }
-                    )+
-
-                    Err(fory_core::Error::TypeError(
-                        format!("No matching type found for trait {}", stringify!($trait_name)).into()
-                    ))
-                }
-            }
-        }
     };
 
     // Helper to get first type for Default impl

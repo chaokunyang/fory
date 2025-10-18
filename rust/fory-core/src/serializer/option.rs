@@ -49,16 +49,6 @@ impl<T: Serializer + ForyDefault> Serializer for Option<T> {
     }
 
     #[inline(always)]
-    fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
-        Ok(Some(T::fory_read_data(context)?))
-    }
-
-    #[inline(always)]
-    fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error> {
-        T::fory_read_type_info(context)
-    }
-
-    #[inline(always)]
     fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error> {
         if let Some(v) = self {
             T::fory_write_data(v, context)
@@ -70,6 +60,54 @@ impl<T: Serializer + ForyDefault> Serializer for Option<T> {
     #[inline(always)]
     fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error> {
         T::fory_write_type_info(context)
+    }
+
+    fn fory_read(
+        context: &mut ReadContext,
+        read_ref_info: bool,
+        read_type_info: bool,
+    ) -> Result<Self, Error>
+    where
+        Self: Sized + ForyDefault,
+    {
+        if read_ref_info {
+            let ref_flag = context.reader.read_i8()?;
+            if ref_flag == RefFlag::Null as i8 {
+                // null value won't write type info, so we can ignore `read_type_info`
+                return Ok(None);
+            }
+        }
+        if read_type_info {
+            T::fory_read_type_info(context)?;
+        }
+        Ok(Some(T::fory_read_data(context)?))
+    }
+
+    fn fory_read_with_type_info(
+        context: &mut ReadContext,
+        read_ref_info: bool,
+        _: std::sync::Arc<crate::TypeInfo>,
+    ) -> Result<Self, Error>
+    where
+        Self: Sized + ForyDefault,
+    {
+        if read_ref_info {
+            let ref_flag = context.reader.read_i8()?;
+            if ref_flag == RefFlag::Null as i8 {
+                return Ok(None);
+            }
+        }
+        Ok(Some(T::fory_read_data(context)?))
+    }
+
+    #[inline(always)]
+    fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
+        Ok(Some(T::fory_read_data(context)?))
+    }
+
+    #[inline(always)]
+    fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error> {
+        T::fory_read_type_info(context)
     }
 
     #[inline(always)]

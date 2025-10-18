@@ -18,77 +18,12 @@
 use crate::ensure;
 use crate::error::Error;
 use crate::resolver::context::{ReadContext, WriteContext};
-use crate::serializer::{bool, ForyDefault, Serializer};
-use crate::types::RefFlag;
-use crate::types::{is_primitive_type, TypeId};
+use crate::serializer::{bool, Serializer};
+use crate::types::TypeId;
 use std::any::Any;
 
 #[inline(always)]
-pub fn write_ref_info_data<T: Serializer + 'static>(
-    record: &T,
-    context: &mut WriteContext,
-    skip_ref_flag: bool,
-    skip_type_info: bool,
-) -> Result<(), Error> {
-    if record.fory_is_none() {
-        context.writer.write_i8(RefFlag::Null as i8);
-    } else {
-        if !skip_ref_flag {
-            context.writer.write_i8(RefFlag::NotNullValue as i8);
-        }
-        if !skip_type_info {
-            T::fory_write_type_info(context)?;
-        }
-        record.fory_write_data(context)?;
-    }
-    Ok(())
-}
-
-#[inline(always)]
-pub fn read_ref_info_data<T: Serializer + ForyDefault>(
-    context: &mut ReadContext,
-    skip_ref_flag: bool,
-    skip_type_info: bool,
-) -> Result<T, Error> {
-    if !skip_ref_flag {
-        let ref_flag = context.reader.read_i8()?;
-        if ref_flag == RefFlag::Null as i8 {
-            Ok(T::fory_default())
-        } else if ref_flag == (RefFlag::NotNullValue as i8) {
-            if !skip_type_info {
-                T::fory_read_type_info(context)?;
-            }
-            T::fory_read_data(context)
-        } else if ref_flag == (RefFlag::RefValue as i8) {
-            // First time seeing this referenceable object
-            if !skip_type_info {
-                T::fory_read_type_info(context)?;
-            }
-            T::fory_read_data(context)
-        } else if ref_flag == (RefFlag::Ref as i8) {
-            // This is a reference to a previously deserialized object
-            // For now, just return default - this should be handled by specific types
-            Ok(T::fory_default())
-        } else {
-            unimplemented!("Unknown ref flag: {}", ref_flag)
-        }
-    } else {
-        if !skip_type_info {
-            T::fory_read_type_info(context)?;
-        }
-        T::fory_read_data(context)
-    }
-}
-
-#[inline(always)]
-pub fn write_type_info<T: Serializer>(context: &mut WriteContext) -> Result<(), Error> {
-    let type_id = T::fory_get_type_id(context.get_type_resolver())?;
-    context.writer.write_varuint32(type_id);
-    Ok(())
-}
-
-#[inline(always)]
-pub fn read_type_info<T: Serializer>(context: &mut ReadContext) -> Result<(), Error> {
+pub(crate) fn read_basic_type_info<T: Serializer>(context: &mut ReadContext) -> Result<(), Error> {
     let local_type_id = T::fory_get_type_id(context.get_type_resolver())?;
     let remote_type_id = context.reader.read_varuint32()?;
     ensure!(
@@ -96,12 +31,6 @@ pub fn read_type_info<T: Serializer>(context: &mut ReadContext) -> Result<(), Er
         Error::TypeMismatch(local_type_id, remote_type_id)
     );
     Ok(())
-}
-
-#[inline(always)]
-pub fn get_skip_ref_flag<T: Serializer>() -> bool {
-    let type_id = T::fory_static_type_id();
-    !T::fory_is_option() && is_primitive_type(type_id)
 }
 
 /// Check at runtime whether type info should be skipped for a given type id.

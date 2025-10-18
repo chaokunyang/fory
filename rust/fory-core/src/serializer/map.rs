@@ -19,7 +19,8 @@ use crate::ensure;
 use crate::error::Error;
 use crate::resolver::context::{ReadContext, WriteContext};
 use crate::resolver::type_resolver::TypeResolver;
-use crate::serializer::{read_type_info, write_type_info, ForyDefault, MapSerializer, Serializer};
+use crate::serializer::util::read_basic_type_info;
+use crate::serializer::{ForyDefault, MapSerializer, Serializer};
 use crate::types::{need_to_write_type_for_field, TypeId, SIZE_OF_REF_AND_TYPE};
 use std::collections::{BTreeMap, HashMap};
 
@@ -546,7 +547,6 @@ impl<K: Serializer + ForyDefault + Eq + std::hash::Hash, V: Serializer + ForyDef
             );
             for _ in 0..chunk_size {
                 let key = K::fory_read_data(context)?;
-                // let skip_ref_flag = crate::serializer::get_skip_ref_flag::<V>(context.get_fory());
                 let value = V::fory_read_data(context)?;
                 map.insert(key, value);
             }
@@ -579,11 +579,12 @@ impl<K: Serializer + ForyDefault + Eq + std::hash::Hash, V: Serializer + ForyDef
     }
 
     fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error> {
-        write_type_info::<Self>(context)
+        context.writer.write_varuint32(TypeId::MAP as u32);
+        Ok(())
     }
 
     fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error> {
-        read_type_info::<Self>(context)
+        read_basic_type_info::<Self>(context)
     }
 }
 
@@ -677,7 +678,6 @@ impl<K: Serializer + ForyDefault + Ord + std::hash::Hash, V: Serializer + ForyDe
             );
             for _ in 0..chunk_size {
                 let key = K::fory_read_data(context)?;
-                // let skip_ref_flag = crate::serializer::get_skip_ref_flag::<V>(context.get_fory());
                 let value = V::fory_read_data(context)?;
                 map.insert(key, value);
             }
@@ -710,11 +710,12 @@ impl<K: Serializer + ForyDefault + Ord + std::hash::Hash, V: Serializer + ForyDe
     }
 
     fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error> {
-        write_type_info::<Self>(context)
+        context.writer.write_varuint32(TypeId::MAP as u32);
+        Ok(())
     }
 
     fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error> {
-        read_type_info::<Self>(context)
+        read_basic_type_info::<Self>(context)
     }
 }
 

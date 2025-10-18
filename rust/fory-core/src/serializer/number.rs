@@ -20,7 +20,8 @@ use crate::error::Error;
 use crate::resolver::context::ReadContext;
 use crate::resolver::context::WriteContext;
 use crate::resolver::type_resolver::TypeResolver;
-use crate::serializer::{read_type_info, write_type_info, ForyDefault, Serializer};
+use crate::serializer::util::read_basic_type_info;
+use crate::serializer::{ForyDefault, Serializer};
 use crate::types::TypeId;
 
 macro_rules! impl_num_serializer {
@@ -62,12 +63,13 @@ macro_rules! impl_num_serializer {
 
             #[inline]
             fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error> {
-                write_type_info::<Self>(context)
+                context.writer.write_varuint32($field_type as u32);
+                Ok(())
             }
 
             #[inline]
             fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error> {
-                read_type_info::<Self>(context)
+                read_basic_type_info::<Self>(context)
             }
         }
         impl ForyDefault for $ty {

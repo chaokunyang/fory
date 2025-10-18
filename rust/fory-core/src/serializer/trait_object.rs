@@ -143,7 +143,6 @@ macro_rules! register_trait_type {
             try_write_rc_ref,
             get_rc_ref,
             store_rc_ref,
-            read_rc_any,
             $($impl_type),+
         );
 
@@ -156,7 +155,6 @@ macro_rules! register_trait_type {
             try_write_arc_ref,
             get_arc_ref,
             store_arc_ref,
-            read_arc_any,
             $($impl_type),+
         );
 
@@ -164,17 +162,17 @@ macro_rules! register_trait_type {
         impl fory_core::Serializer for Box<dyn $trait_name> {
             fn fory_write(&self, context: &mut fory_core::WriteContext, write_ref_info: bool, write_type_info: bool, has_generics: bool) -> Result<(), fory_core::Error> {
                 let any_ref = <dyn $trait_name as fory_core::Serializer>::as_any(&**self);
-                fory_core::serializer::write_box_any(&any_ref, context, write_ref_info, write_type_info, has_generics)
+                fory_core::serializer::write_box_any(any_ref, context, write_ref_info, write_type_info, has_generics)
             }
 
             fn fory_write_data(&self, context: &mut fory_core::WriteContext) -> Result<(), fory_core::Error> {
                 let any_ref = <dyn $trait_name as fory_core::Serializer>::as_any(&**self);
-                fory_core::serializer::write_box_any(&any_ref, context, false, false, false)
+                fory_core::serializer::write_box_any(any_ref, context, false, false, false)
             }
 
             fn fory_write_data_generic(&self, context: &mut fory_core::WriteContext, has_generics: bool) -> Result<(), fory_core::Error> {
                 let any_ref = <dyn $trait_name as fory_core::Serializer>::as_any(&**self);
-                fory_core::serializer::write_box_any(&any_ref, context, false, false, has_generics)
+                fory_core::serializer::write_box_any(any_ref, context, false, false, has_generics)
             }
 
             fn fory_type_id_dyn(&self, type_resolver: &fory_core::TypeResolver) -> Result<u32, fory_core::Error> {
@@ -272,7 +270,7 @@ macro_rules! register_trait_type {
 /// Supports both Rc and Arc pointer types
 #[macro_export]
 macro_rules! generate_smart_pointer_wrapper {
-    ($ptr_path:path, $ptr_name:ident, $get_mut:path, $trait_name:ident, $try_write_ref:ident, $get_ref:ident, $store_ref:ident, $read_ptr_any:ident, $($impl_type:ty),+ $(,)?) => {
+    ($ptr_path:path, $ptr_name:ident, $get_mut:path, $trait_name:ident, $try_write_ref:ident, $get_ref:ident, $store_ref:ident, $($impl_type:ty),+ $(,)?) => {
         $crate::paste::paste! {
             #[derive(Clone)]
             pub(crate) struct [<$trait_name $ptr_name>]($ptr_path<dyn $trait_name>);
@@ -354,17 +352,86 @@ macro_rules! generate_smart_pointer_wrapper {
                 $try_write_ref,
                 $get_ref,
                 $store_ref,
-                $read_ptr_any,
                 $($impl_type),+
             );
         }
     };
 }
 
+/// Macro to read smart pointer trait objects (Rc<dyn Trait>, Arc<dyn Trait>)
+/// This macro handles ref tracking and directly constructs the trait object from concrete types
+#[macro_export]
+macro_rules! read_ptr_trait_object {
+    ($context:expr, $read_ref_info:expr, $read_type_info:expr, $type_info:expr, $pointer_type:ty, $trait_name:ident, $constructor_expr:expr, $get_ref:ident, $store_ref:ident, $($impl_type:ty),+) => {{
+        let ref_flag = if $read_ref_info {
+            $context.ref_reader.read_ref_flag(&mut $context.reader)?
+        } else {
+            fory_core::RefFlag::NotNullValue
+        };
+        match ref_flag {
+            fory_core::RefFlag::Null => Err(fory_core::Error::InvalidRef(format!("smart pointer to dyn {} cannot be null", stringify!($trait_name)).into())),
+            fory_core::RefFlag::Ref => {
+                let ref_id = $context.ref_reader.read_ref_id(&mut $context.reader)?;
+                let ptr_ref = $context.ref_reader.$get_ref::<dyn $trait_name>(ref_id)
+                    .ok_or_else(|| fory_core::Error::InvalidData(format!("dyn {} reference {} not found", stringify!($trait_name), ref_id).into()))?;
+                Ok(Self::from(ptr_ref))
+            }
+            fory_core::RefFlag::NotNullValue => {
+                $context.inc_depth()?;
+                let typeinfo = if $read_type_info {
+                    $context.read_any_typeinfo()?
+                } else {
+                    $type_info.ok_or_else(|| fory_core::Error::TypeError("No type info found for read".into()))?
+                };
+                let fory_type_id = typeinfo.get_type_id();
+                $(
+                    if let Some(registered_type_id) = $context.get_type_resolver().get_fory_type_id(std::any::TypeId::of::<$impl_type>()) {
+                        if fory_type_id == registered_type_id {
+                            let concrete_obj = <$impl_type as fory_core::Serializer>::fory_read_data($context)?;
+                            $context.dec_depth();
+                            let ptr = $constructor_expr(concrete_obj) as $pointer_type;
+                            return Ok(Self::from(ptr));
+                        }
+                    }
+                )*
+                $context.dec_depth();
+                Err(fory_core::Error::TypeError(
+                    format!("Type ID {} not registered for trait {}", fory_type_id, stringify!($trait_name)).into()
+                ))
+            }
+            fory_core::RefFlag::RefValue => {
+                $context.inc_depth()?;
+                let typeinfo = if $read_type_info {
+                    $context.read_any_typeinfo()?
+                } else {
+                    $type_info.ok_or_else(|| fory_core::Error::TypeError("No type info found for read".into()))?
+                };
+                let fory_type_id = typeinfo.get_type_id();
+                $(
+                    if let Some(registered_type_id) = $context.get_type_resolver().get_fory_type_id(std::any::TypeId::of::<$impl_type>()) {
+                        if fory_type_id == registered_type_id {
+                            let concrete_obj = <$impl_type as fory_core::Serializer>::fory_read_data($context)?;
+                            $context.dec_depth();
+                            let ptr = $constructor_expr(concrete_obj) as $pointer_type;
+                            let wrapper = Self::from(ptr.clone());
+                            $context.ref_reader.$store_ref(ptr);
+                            return Ok(wrapper);
+                        }
+                    }
+                )*
+                $context.dec_depth();
+                Err(fory_core::Error::TypeError(
+                    format!("Type ID {} not registered for trait {}", fory_type_id, stringify!($trait_name)).into()
+                ))
+            }
+        }
+    }};
+}
+
 /// Shared serializer implementation for smart pointer wrappers
 #[macro_export]
 macro_rules! impl_smart_pointer_serializer {
-    ($wrapper_name:ident, $pointer_type:ty, $constructor_expr:expr, $trait_name:ident, $try_write_ref:ident, $get_ref:ident, $store_ref:ident, $read_ptr_any: ident, $($impl_type:ty),+) => {
+    ($wrapper_name:ident, $pointer_type:ty, $constructor_expr:expr, $trait_name:ident, $try_write_ref:ident, $get_ref:ident, $store_ref:ident, $($impl_type:ty),+) => {
         impl fory_core::Serializer for $wrapper_name {
             fn fory_write(&self, context: &mut fory_core::WriteContext, write_ref_info: bool, write_type_info: bool, has_generics: bool) -> Result<(), fory_core::Error> {
                 if !write_ref_info || !context.ref_writer.$try_write_ref(&mut context.writer, &self.0) {
@@ -387,34 +454,33 @@ macro_rules! impl_smart_pointer_serializer {
             }
 
             fn fory_read(context: &mut fory_core::ReadContext, read_ref_info: bool, read_type_info: bool) -> Result<Self, fory_core::Error> {
-                let boxed_any = fory_core::serializer::$read_ptr_any(context, read_ref_info, read_type_info, None)?;
-                $(
-                    if boxed_any.is::<$impl_type>() {
-                        let concrete = boxed_any.downcast::<$impl_type>()
-                            .map_err(|_| fory_core::Error::TypeError("Downcast failed".into()))?;
-                        let ptr = $constructor_expr(*concrete) as $pointer_type;
-                        return Ok(Self::from(ptr));
-                    }
-                )*
-                Err(fory_core::Error::TypeError(
-                    format!("Deserialized type does not implement trait {}", stringify!($trait_name)).into()
-                ))
+                $crate::read_ptr_trait_object!(
+                    context,
+                    read_ref_info,
+                    read_type_info,
+                    None,
+                    $pointer_type,
+                    $trait_name,
+                    $constructor_expr,
+                    $get_ref,
+                    $store_ref,
+                    $($impl_type),+
+                )
             }
 
             fn fory_read_with_type_info(context: &mut fory_core::ReadContext, read_ref_info: bool, type_info: std::sync::Arc<fory_core::TypeInfo>) -> Result<Self, fory_core::Error> {
-                let boxed_any = fory_core::serializer::$read_ptr_any(context, read_ref_info, false, Some(type_info))?;
-                $(
-                    if boxed_any.is::<$impl_type>() {
-                        let concrete = boxed_any.downcast::<$impl_type>()
-                            .map_err(|_| fory_core::Error::TypeError("Downcast failed".into()))?;
-                        let ptr = $constructor_expr(*concrete) as $pointer_type;
-                        return Ok(Self::from(ptr));
-                    }
-                )*
-
-                Err(fory_core::Error::TypeError(
-                    format!("Deserialized type does not implement trait {}", stringify!($trait_name)).into()
-                ))
+                $crate::read_ptr_trait_object!(
+                    context,
+                    read_ref_info,
+                    false,
+                    Some(type_info),
+                    $pointer_type,
+                    $trait_name,
+                    $constructor_expr,
+                    $get_ref,
+                    $store_ref,
+                    $($impl_type),+
+                )
             }
 
             fn fory_read_data(context: &mut fory_core::ReadContext) -> Result<Self, fory_core::Error> {

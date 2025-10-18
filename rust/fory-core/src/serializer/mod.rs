@@ -40,7 +40,7 @@ pub mod util;
 pub mod weak;
 
 pub mod serializer;
-pub use any::{read_arc_any, read_box_any, read_rc_any, write_box_any};
+pub use any::{read_box_any, write_box_any};
 pub use serializer::{
     CollectionSerializer, ForyDefault, MapSerializer, Serializer, StructSerializer,
 };

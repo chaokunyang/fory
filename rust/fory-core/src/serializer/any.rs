@@ -137,7 +137,7 @@ impl Serializer for Box<dyn Any> {
 }
 
 pub fn write_box_any(
-    value: &Box<dyn Any>,
+    value: &dyn Any,
     context: &mut WriteContext,
     write_ref_info: bool,
     write_typeinfo: bool,
@@ -146,14 +146,14 @@ pub fn write_box_any(
     if write_ref_info {
         context.writer.write_i8(RefFlag::NotNullValue as i8);
     }
-    let concrete_type_id = (**value).type_id();
+    let concrete_type_id = value.type_id();
     let typeinfo = if write_typeinfo {
         context.write_any_typeinfo(concrete_type_id)?
     } else {
         context.get_type_info(&concrete_type_id)?
     };
     let serializer_fn = typeinfo.get_harness().get_write_data_fn();
-    serializer_fn(&**value, context, has_generics)
+    serializer_fn(value, context, has_generics)
 }
 
 pub fn read_box_any(

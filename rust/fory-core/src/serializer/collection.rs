@@ -22,7 +22,7 @@ use crate::resolver::context::WriteContext;
 use crate::serializer::{ForyDefault, Serializer};
 use crate::types::{need_to_write_type_for_field, RefFlag, PRIMITIVE_ARRAY_TYPES};
 
-// const TRACKING_REF: u8 = 0b1;
+const TRACKING_REF: u8 = 0b1;
 
 pub const HAS_NULL: u8 = 0b10;
 
@@ -145,6 +145,9 @@ where
     if is_same_type {
         header |= IS_SAME_TYPE;
     }
+    if elem_is_shared_ref {
+        header |= TRACKING_REF;
+    }
     if is_elem_declared && !elem_is_polymorphic {
         header |= DECL_ELEMENT_TYPE;
         // Write header
@@ -170,7 +173,7 @@ where
             // No null elements
             if elem_is_shared_ref {
                 for item in iter {
-                    item.fory_write(context, false, has_generics)?;
+                    item.fory_write(context, true, false, has_generics)?;
                 }
             } else {
                 for item in iter {
@@ -180,7 +183,7 @@ where
         } else {
             // Has null elements
             for item in iter {
-                item.fory_write(context, false, has_generics)?;
+                item.fory_write(context, true, false, has_generics)?;
             }
         }
     } else {
@@ -189,17 +192,17 @@ where
             // No null elements
             if elem_is_shared_ref {
                 for item in iter {
-                    item.fory_write(context, true, has_generics)?;
+                    item.fory_write(context, true, true, has_generics)?;
                 }
             } else {
                 for item in iter {
-                    item.fory_write_data_generic(context, has_generics)?;
+                    item.fory_write(context, false, true, has_generics)?;
                 }
             }
         } else {
             // Has null elements
             for item in iter {
-                item.fory_write(context, true, has_generics)?;
+                item.fory_write(context, true, true, has_generics)?;
             }
         }
     }
@@ -277,6 +280,7 @@ where
     let elem_is_shared_ref = T::fory_is_shared_ref();
     // Read header
     let header = context.reader.read_u8()?;
+    let is_track_ref = (header & TRACKING_REF) != 0;
     let is_same_type = (header & IS_SAME_TYPE) != 0;
     let has_null = (header & HAS_NULL) != 0;
     let is_declared = (header & DECL_ELEMENT_TYPE) != 0;
@@ -289,15 +293,15 @@ where
             context.get_type_resolver().get_type_info(&rs_type_id)?
         };
         // All elements are same type
-        if elem_is_shared_ref {
+        if is_track_ref {
             (0..len)
-                .map(|_| T::fory_read_with_typeinfo(context, type_info.clone()))
+                .map(|_| T::fory_read_with_typeinfo(context, true, type_info.clone()))
                 .collect::<Result<C, Error>>()
         } else {
             if !has_null {
                 // No null elements
                 (0..len)
-                    .map(|_| T::fory_read_data_with_typeinfo(context, type_info.clone()))
+                    .map(|_| T::fory_read_with_typeinfo(context, false, type_info.clone()))
                     .collect::<Result<C, Error>>()
             } else {
                 // Has null elements
@@ -307,7 +311,7 @@ where
                         if flag == (RefFlag::NotNullValue as i8) {
                             Ok(T::fory_default())
                         } else {
-                            T::fory_read_data_with_typeinfo(context, type_info.clone())
+                            T::fory_read_with_typeinfo(context, true, type_info.clone())
                         }
                     })
                     .collect::<Result<C, Error>>()
@@ -315,7 +319,7 @@ where
         }
     } else {
         (0..len)
-            .map(|_| T::fory_read(context))
+            .map(|_| T::fory_read(context, is_track_ref, true))
             .collect::<Result<C, Error>>()
     }
 }

@@ -140,3 +140,28 @@ macro_rules! bail {
         return Err($crate::error::Error::unknown(format!($fmt, $($arg)*)))
     };
 }
+
+/// Returns early with a [`Error::NotAllowed`].
+///
+/// # Examples
+/// ```
+/// use fory_core::not_allowed;
+/// use fory_core::error::Error;
+///
+/// fn check_operation() -> Result<(), Error> {
+///     not_allowed!("operation not allowed");
+/// }
+///
+/// fn check_operation_with_context(op: &str) -> Result<(), Error> {
+///     not_allowed!("operation {} not allowed", op);
+/// }
+/// ```
+#[macro_export]
+macro_rules! not_allowed {
+    ($err:expr) => {
+        return Err($crate::error::Error::not_allowed($err))
+    };
+    ($fmt:expr, $($arg:tt)*) => {
+        return Err($crate::error::Error::not_allowed(format!($fmt, $($arg)*)))
+    };
+}

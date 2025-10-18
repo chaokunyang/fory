@@ -27,6 +27,7 @@ impl<T: Serializer + ForyDefault> Serializer for Option<T> {
     fn fory_write(
         &self,
         context: &mut WriteContext,
+        write_ref_info: bool,
         write_type_info: bool,
         has_generics: bool,
     ) -> Result<(), Error> {
@@ -36,11 +37,12 @@ impl<T: Serializer + ForyDefault> Serializer for Option<T> {
                     "Option<T> where T is a shared reference is not allowed".into(),
                 ));
             }
-            context.writer.write_u8(RefFlag::NotNullValue as u8);
             // pass has_generics to nested collection/map
-            T::fory_write(v, context, write_type_info, has_generics)
+            T::fory_write(v, context, write_ref_info, write_type_info, has_generics)
         } else {
-            context.writer.write_u8(RefFlag::Null as u8);
+            if write_ref_info {
+                context.writer.write_u8(RefFlag::Null as u8);
+            }
             Ok(())
         }
     }

@@ -23,7 +23,10 @@ use crate::serializer::{ForyDefault, Serializer};
 use crate::types::TypeId;
 
 impl<T: Serializer + ForyDefault> Serializer for Box<T> {
-    fn fory_read(context: &mut ReadContext, read_ref_info: bool, read_type_info: bool) -> Result<Self, Error> {
+    fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error>
+    where
+        Self: Sized + ForyDefault,
+    {
         Ok(Box::new(T::fory_read_data(context)?))
     }
 

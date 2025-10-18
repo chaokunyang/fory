@@ -32,12 +32,14 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for Rc<T> {
     fn fory_write(
         &self,
         context: &mut WriteContext,
+        write_ref_info: bool,
         write_type_info: bool,
         has_generics: bool,
     ) -> Result<(), Error> {
-        if !context
-            .ref_writer
-            .try_write_rc_ref(&mut context.writer, self)
+        if !write_ref_info
+            || !context
+                .ref_writer
+                .try_write_rc_ref(&mut context.writer, self)
         {
             if write_type_info {
                 T::fory_write_type_info(context)?;
@@ -60,18 +62,23 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for Rc<T> {
         T::fory_write_type_info(context)
     }
 
-    fn fory_read(context: &mut ReadContext) -> Result<Self, Error> {
-        read_rc(context, None)
+    fn fory_read(
+        context: &mut ReadContext,
+        read_ref_info: bool,
+        read_type_info: bool,
+    ) -> Result<Self, Error> {
+        read_rc(context, read_ref_info, read_type_info, None)
     }
 
-    fn fory_read_data_with_typeinfo(
+    fn fory_read_with_typeinfo(
         context: &mut ReadContext,
+        read_ref_info: bool,
         typeinfo: Arc<TypeInfo>,
     ) -> Result<Self, Error>
     where
         Self: Sized + ForyDefault,
     {
-        read_rc(context, Some(typeinfo))
+        read_rc(context, read_ref_info, false, Some(typeinfo))
     }
 
     fn fory_read_data(_: &mut ReadContext) -> Result<Self, Error> {
@@ -107,9 +114,15 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for Rc<T> {
 
 fn read_rc<T: Serializer + ForyDefault + 'static>(
     context: &mut ReadContext,
+    read_ref_info: bool,
+    read_type_info: bool,
     typeinfo: Option<Arc<TypeInfo>>,
 ) -> Result<Rc<T>, Error> {
-    let ref_flag = context.ref_reader.read_ref_flag(&mut context.reader)?;
+    let ref_flag = if read_ref_info {
+        context.ref_reader.read_ref_flag(&mut context.reader)?
+    } else {
+        RefFlag::NotNullValue
+    };
     match ref_flag {
         RefFlag::Null => Err(Error::InvalidRef("Rc cannot be null".into())),
         RefFlag::Ref => {
@@ -121,8 +134,11 @@ fn read_rc<T: Serializer + ForyDefault + 'static>(
         }
         RefFlag::NotNullValue => {
             let inner = if let Some(typeinfo) = typeinfo {
-                T::fory_read_data_with_typeinfo(context, typeinfo)?
+                T::fory_read_with_typeinfo(context, read_ref_info, typeinfo)?
             } else {
+                if read_type_info {
+                    T::fory_read_type_info(context)?;
+                }
                 T::fory_read_data(context)?
             };
             Ok(Rc::new(inner))
@@ -130,8 +146,11 @@ fn read_rc<T: Serializer + ForyDefault + 'static>(
         RefFlag::RefValue => {
             let ref_id = context.ref_reader.reserve_ref_id();
             let inner = if let Some(typeinfo) = typeinfo {
-                T::fory_read_data_with_typeinfo(context, typeinfo)?
+                T::fory_read_with_typeinfo(context, read_ref_info, typeinfo)?
             } else {
+                if read_type_info {
+                    T::fory_read_type_info(context)?;
+                }
                 T::fory_read_data(context)?
             };
             let rc = Rc::new(inner);

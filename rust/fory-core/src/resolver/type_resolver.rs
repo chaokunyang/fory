@@ -27,8 +27,15 @@ use crate::{Reader, TypeId};
 use std::sync::Arc;
 use std::{any::Any, collections::HashMap};
 
-type WriteFn = fn(&dyn Any, &mut WriteContext, bool, bool) -> Result<(), Error>;
-type ReadFn = fn(&mut ReadContext, skip_ref_flag: bool) -> Result<Box<dyn Any>, Error>;
+type WriteFn = fn(
+    &dyn Any,
+    &mut WriteContext,
+    write_ref_info: bool,
+    write_type_info: bool,
+    has_enerics: bool,
+) -> Result<(), Error>;
+type ReadFn =
+    fn(&mut ReadContext, read_ref_info: bool, read_type_info: bool) -> Result<Box<dyn Any>, Error>;
 
 type WriteDataFn = fn(&dyn Any, &mut WriteContext, has_generics: bool) -> Result<(), Error>;
 type ReadDataFn = fn(&mut ReadContext) -> Result<Box<dyn Any>, Error>;
@@ -381,12 +388,15 @@ impl TypeResolver {
         fn write<T2: 'static + Serializer>(
             this: &dyn Any,
             context: &mut WriteContext,
+            write_ref_info: bool,
             write_type_info: bool,
             has_generics: bool,
         ) -> Result<(), Error> {
             let this = this.downcast_ref::<T2>();
             match this {
-                Some(v) => T2::fory_write(v, context, write_type_info, has_generics),
+                Some(v) => {
+                    T2::fory_write(v, context, write_ref_info, write_type_info, has_generics)
+                }
                 None => Err(Error::TypeError(
                     format!(
                         "Cast type error when writing: {:?}",
@@ -399,12 +409,14 @@ impl TypeResolver {
 
         fn read<T2: 'static + Serializer + ForyDefault>(
             context: &mut ReadContext,
-            skip_ref_flag: bool,
+            read_ref_info: bool,
+            read_type_info: bool,
         ) -> Result<Box<dyn Any>, Error> {
-            match crate::serializer::read_ref_info_data::<T2>(context, skip_ref_flag, true) {
-                Ok(v) => Ok(Box::new(v)),
-                Err(e) => Err(e),
-            }
+            Ok(Box::new(T2::fory_read(
+                context,
+                read_ref_info,
+                read_type_info,
+            )?))
         }
 
         fn write_data<T2: 'static + Serializer>(
@@ -545,12 +557,15 @@ impl TypeResolver {
         fn write<T2: 'static + Serializer>(
             this: &dyn Any,
             context: &mut WriteContext,
+            write_ref_info: bool,
             write_type_info: bool,
             has_generics: bool,
         ) -> Result<(), Error> {
             let this = this.downcast_ref::<T2>();
             match this {
-                Some(v) => Ok(v.fory_write(context, write_type_info, has_generics)?),
+                Some(v) => {
+                    Ok(v.fory_write(context, write_ref_info, write_type_info, has_generics)?)
+                }
                 None => Err(Error::TypeError(
                     format!(
                         "Cast type error when writing: {:?}",
@@ -563,19 +578,14 @@ impl TypeResolver {
 
         fn read<T2: 'static + Serializer + ForyDefault>(
             context: &mut ReadContext,
-            skip_ref_flag: bool,
+            read_ref_info: bool,
+            read_type_info: bool,
         ) -> Result<Box<dyn Any>, Error> {
-            if skip_ref_flag {
-                match T2::fory_read_data(context) {
-                    Ok(v) => Ok(Box::new(v)),
-                    Err(e) => Err(e),
-                }
-            } else {
-                match T2::fory_read(context) {
-                    Ok(v) => Ok(Box::new(v)),
-                    Err(e) => Err(e),
-                }
-            }
+            Ok(Box::new(T2::fory_read(
+                context,
+                read_ref_info,
+                read_type_info,
+            )?))
         }
 
         fn write_data<T2: 'static + Serializer>(

@@ -186,7 +186,7 @@ where
                     }
                 }
                 if key_is_shared_ref {
-                    key.fory_write(context, false, has_generics)?;
+                    key.fory_write(context, false, false, has_generics)?;
                 } else {
                     key.fory_write_data_generic(context, has_generics)?;
                 }
@@ -210,7 +210,7 @@ where
                     }
                 }
                 if val_is_shared_ref {
-                    value.fory_write(context, false, has_generics)?;
+                    value.fory_write(context, false, false, has_generics)?;
                 } else {
                     value.fory_write_data_generic(context, has_generics)?;
                 }
@@ -290,16 +290,15 @@ where
 
         // Write key-value pair
         if key_is_shared_ref {
-            key.fory_write(context, false, has_generics)?;
+            key.fory_write(context, true, false, has_generics)?;
         } else {
             key.fory_write_data_generic(context, has_generics)?;
         }
         if val_is_shared_ref {
-            value.fory_write(context, false, has_generics)?;
+            value.fory_write(context, true, false, has_generics)?;
         } else {
             value.fory_write_data_generic(context, has_generics)?;
         }
-
         pair_counter += 1;
         if pair_counter == MAX_CHUNK_SIZE {
             write_chunk_size(context, header_offset, pair_counter);
@@ -365,7 +364,7 @@ macro_rules! impl_read_map_dyn_ref {
 
                     // Read value
                     let value = if val_is_shared_ref || track_value_ref {
-                        V::fory_read(context)?
+                        V::fory_read(context, true, !value_declared)?
                     } else {
                         V::fory_read_data(context)?
                     };
@@ -391,7 +390,7 @@ macro_rules! impl_read_map_dyn_ref {
 
                     // Read key
                     let key = if key_is_shared_ref || track_key_ref {
-                        K::fory_read(context)?
+                        K::fory_read(context, true, !key_declared)?
                     } else {
                         K::fory_read_data(context)?
                     };
@@ -435,13 +434,13 @@ macro_rules! impl_read_map_dyn_ref {
                 // Read chunk_size pairs of key-value
                 for _ in 0..chunk_size {
                     let key = if key_is_shared_ref || track_key_ref {
-                        K::fory_read(context)?
+                        K::fory_read(context, track_key_ref, false)?
                     } else {
                         K::fory_read_data(context)?
                     };
 
                     let value = if val_is_shared_ref || track_value_ref {
-                        V::fory_read(context)?
+                        V::fory_read(context, track_value_ref, false)?
                     } else {
                         V::fory_read_data(context)?
                     };
@@ -486,7 +485,7 @@ impl<K: Serializer + ForyDefault + Eq + std::hash::Hash, V: Serializer + ForyDef
         write_map_data(self.iter(), self.len(), context, has_generics)
     }
 
-    fn fory_read(context: &mut ReadContext, read_ref_info: bool, read_type_info: bool) -> Result<Self, Error> {
+    fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
         let len = context.reader.read_varuint32()?;
         let mut map = HashMap::<K, V>::with_capacity(len as usize);
         if len == 0 {
@@ -617,7 +616,7 @@ impl<K: Serializer + ForyDefault + Ord + std::hash::Hash, V: Serializer + ForyDe
         write_map_data(self.iter(), self.len(), context, has_generics)
     }
 
-    fn fory_read(context: &mut ReadContext, read_ref_info: bool, read_type_info: bool) -> Result<Self, Error> {
+    fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
         let len = context.reader.read_varuint32()?;
         let mut map = BTreeMap::<K, V>::new();
         if len == 0 {

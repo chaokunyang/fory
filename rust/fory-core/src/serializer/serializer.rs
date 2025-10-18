@@ -85,40 +85,63 @@ pub trait Serializer: 'static {
     /// Write the data into the buffer. Need to be implemented.
     fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error>;
 
-    fn fory_read(context: &mut ReadContext, read_ref_info: bool, read_type_info: bool) -> Result<Self, Error>
-    where
-        Self: Sized + ForyDefault,
-    {
-        read_ref_info_data(context, !read_ref_info, !read_type_info)
-    }
-
-    fn fory_read_with_typeinfo(context: &mut ReadContext, _: Arc<TypeInfo>) -> Result<Self, Error>
-    where
-        Self: Sized + ForyDefault,
-    {
-        // Default implementation just ignore the typeinfo, only for morphic types supported by fory directly
-        // or ext type registered by user. Dynamic trait types or reference types should override this method.
-        Self::fory_read_data(context)
-    }
-
-    fn fory_read_data_with_typeinfo(
+    /// Unlike `fory_write`, read don't need `is_generics` is only used for wtring meta, and the need meta info
+    /// already written in the buffer, so the read can parse the meta info from the buffer directly to decide how to read the data.
+    fn fory_read(
         context: &mut ReadContext,
-        _: Arc<TypeInfo>,
+        read_ref_info: bool,
+        read_type_info: bool,
+    ) -> Result<Self, Error>
+    where
+        Self: Sized + ForyDefault,
+    {
+        if read_ref_info {
+            let ref_flag = context.reader.read_i8()?;
+            if ref_flag == RefFlag::Null as i8 {
+                return Ok(Self::fory_default());
+            } else if ref_flag == (RefFlag::NotNullValue as i8) {
+                if read_type_info {
+                    Self::fory_read_type_info(context)?;
+                }
+                return Self::fory_read_data(context);
+            } else if ref_flag == (RefFlag::RefValue as i8) {
+                // First time seeing this referenceable object.
+                // Note that if this ref is shared, later reads won't read correct value since we don't have Rc/Arc here.
+                // and we don't store ref to RefReader.
+                // Serializer for Rc/Arc should override this method to handle shared refs properly.
+                if read_type_info {
+                    Self::fory_read_type_info(context)?;
+                }
+                return Self::fory_read_data(context);
+            } else if ref_flag == (RefFlag::Ref as i8) {
+                return Err(Error::InvalidRef(
+                    "Invalid ref, current type is not a ref".into(),
+                ));
+            } else {
+                return Err(Error::InvalidData(
+                    format!("Unknown ref flag: {}", ref_flag).into(),
+                ));
+            }
+        } else {
+            if read_type_info {
+                Self::fory_read_type_info(context)?;
+            }
+            return Self::fory_read_data(context);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn fory_read_with_typeinfo(
+        context: &mut ReadContext,
+        read_ref_info: bool,
+        type_info: Arc<TypeInfo>,
     ) -> Result<Self, Error>
     where
         Self: Sized + ForyDefault,
     {
         // Default implementation just ignore the typeinfo, only for morphic types supported by fory directly
         // or ext type registered by user. Dynamic trait types or reference types should override this method.
-        Self::fory_read_data(context)
-    }
-
-    fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error>
-    where
-        Self: Sized,
-    {
-        context.read_any_typeinfo()?;
-        Ok(())
+        Self::fory_read(context, true, false)
     }
 
     // only used by struct/enum/ext
@@ -134,6 +157,14 @@ pub trait Serializer: 'static {
     fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error>
     where
         Self: Sized + ForyDefault;
+
+    fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error>
+    where
+        Self: Sized,
+    {
+        context.read_any_typeinfo()?;
+        Ok(())
+    }
 
     fn fory_is_option() -> bool
     where
@@ -197,7 +228,8 @@ pub trait Serializer: 'static {
 }
 
 pub trait StructSerializer: Serializer + 'static {
-    fn fory_fields_info(_: &TypeResolver) -> Result<Vec<FieldInfo>, Error> {
+    #[allow(unused_variables)]
+    fn fory_fields_info(type_resolver: &TypeResolver) -> Result<Vec<FieldInfo>, Error> {
         Ok(Vec::default())
     }
 

@@ -286,9 +286,9 @@ impl RefReader {
     ///
     /// The RefFlag indicating what type of reference this is
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if an invalid reference flag value is encountered
+    /// Errors if an invalid reference flag value is encountered
     pub fn read_ref_flag(&self, reader: &mut Reader) -> Result<RefFlag, Error> {
         let flag_value = reader.read_i8()?;
         Ok(match flag_value {

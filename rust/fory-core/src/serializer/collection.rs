@@ -216,16 +216,15 @@ pub fn read_collection_type_info(
 ) -> Result<(), Error> {
     let remote_collection_type_id = context.reader.read_varuint32()?;
     if PRIMITIVE_ARRAY_TYPES.contains(&remote_collection_type_id) {
-        return Err(Error::TypeError(
+        return Err(Error::type_error(
             "Vec<number> belongs to the `number_array` type, \
             and Vec<Option<number>> belongs to the `list` type. \
-            You should not read data of type `number_array` as data of type `list`."
-                .into(),
+            You should not read data of type `number_array` as data of type `list`.",
         ));
     }
     ensure!(
         collection_type_id == remote_collection_type_id,
-        Error::TypeMismatch(collection_type_id, remote_collection_type_id)
+        Error::type_mismatch(collection_type_id, remote_collection_type_id)
     );
     Ok(())
 }
@@ -252,7 +251,7 @@ where
     let has_null = (header & HAS_NULL) != 0;
     ensure!(
         (header & IS_SAME_TYPE) != 0,
-        Error::TypeError("Type inconsistent, target type is not polymorphic".into())
+        Error::type_error("Type inconsistent, target type is not polymorphic")
     );
     if !has_null {
         (0..len)

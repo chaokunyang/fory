@@ -328,9 +328,9 @@ impl TryFrom<u8> for Language {
             4 => Ok(Language::Go),
             5 => Ok(Language::Javascript),
             6 => Ok(Language::Rust),
-            _ => Err(Error::InvalidData(
-                format!("Unsupported language code, value:{num}").into(),
-            )),
+            _ => Err(Error::invalid_data(format!(
+                "Unsupported language code, value:{num}"
+            ))),
         }
     }
 }

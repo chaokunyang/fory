@@ -66,7 +66,7 @@ pub fn derive_serializer(ast: &syn::DeriveInput) -> TokenStream {
                 quote! { &[] },
                 derive_enum::gen_field_fields_info(s),
                 quote! {
-                    Err(fory_core::Error::NotAllowed("`fory_read_compatible` should only be invoked at struct type".into()
+                    Err(fory_core::Error::not_allowed("`fory_read_compatible` should only be invoked at struct type"
                 ))
                 },
             ),

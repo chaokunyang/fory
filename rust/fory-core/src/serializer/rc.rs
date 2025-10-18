@@ -124,13 +124,13 @@ fn read_rc<T: Serializer + ForyDefault + 'static>(
         RefFlag::NotNullValue
     };
     match ref_flag {
-        RefFlag::Null => Err(Error::InvalidRef("Rc cannot be null".into())),
+        RefFlag::Null => Err(Error::invalid_ref("Rc cannot be null")),
         RefFlag::Ref => {
             let ref_id = context.ref_reader.read_ref_id(&mut context.reader)?;
             context
                 .ref_reader
                 .get_rc_ref::<T>(ref_id)
-                .ok_or_else(|| Error::InvalidRef(format!("Rc reference {ref_id} not found").into()))
+                .ok_or_else(|| Error::invalid_ref(format!("Rc reference {ref_id} not found")))
         }
         RefFlag::NotNullValue => {
             let inner = if let Some(typeinfo) = typeinfo {

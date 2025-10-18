@@ -32,9 +32,7 @@ pub fn deserialize_any_box(context: &mut ReadContext) -> Result<Box<dyn Any>, Er
     context.inc_depth()?;
     let ref_flag = context.reader.read_i8()?;
     if ref_flag != RefFlag::NotNullValue as i8 {
-        return Err(Error::InvalidRef(
-            "Expected NotNullValue for Box<dyn Any>".into(),
-        ));
+        return Err(Error::invalid_ref("Expected NotNullValue for Box<dyn Any>"));
     }
     let typeinfo = context.read_any_typeinfo()?;
     let deserializer_fn = typeinfo.get_harness().get_read_data_fn();
@@ -101,8 +99,8 @@ impl Serializer for Box<dyn Any> {
     }
 
     fn fory_get_type_id(_: &TypeResolver) -> Result<u32, Error> {
-        Err(Error::TypeError(
-            "Box<dyn Any> has no static type ID - use fory_type_id_dyn".into(),
+        Err(Error::type_error(
+            "Box<dyn Any> has no static type ID - use fory_type_id_dyn",
         ))
     }
 
@@ -110,7 +108,7 @@ impl Serializer for Box<dyn Any> {
         let concrete_type_id = (**self).type_id();
         type_resolver
             .get_fory_type_id(concrete_type_id)
-            .ok_or_else(|| Error::TypeError("Type not registered".into()))
+            .ok_or_else(|| Error::type_error("Type not registered"))
     }
 
     fn fory_is_polymorphic() -> bool {
@@ -169,8 +167,8 @@ pub fn read_box_any(
         RefFlag::NotNullValue as i8
     };
     if ref_flag != RefFlag::NotNullValue as i8 {
-        return Err(Error::InvalidData(
-            "Expected NotNullValue for Box<dyn Any>".into(),
+        return Err(Error::invalid_data(
+            "Expected NotNullValue for Box<dyn Any>",
         ));
     }
     let typeinfo = if let Some(type_info) = type_info {
@@ -178,7 +176,7 @@ pub fn read_box_any(
     } else {
         ensure!(
             read_type_info,
-            Error::InvalidData("Type info must be read for Box<dyn Any>".into())
+            Error::invalid_data("Type info must be read for Box<dyn Any>")
         );
         context.read_any_typeinfo()?
     };
@@ -261,8 +259,8 @@ impl Serializer for Rc<dyn Any> {
     }
 
     fn fory_get_type_id(_: &TypeResolver) -> Result<u32, Error> {
-        Err(Error::TypeError(
-            "Rc<dyn Any> has no static type ID - use fory_type_id_dyn".into(),
+        Err(Error::type_error(
+            "Rc<dyn Any> has no static type ID - use fory_type_id_dyn",
         ))
     }
 
@@ -270,7 +268,7 @@ impl Serializer for Rc<dyn Any> {
         let concrete_type_id = (**self).type_id();
         type_resolver
             .get_fory_type_id(concrete_type_id)
-            .ok_or_else(|| Error::TypeError("Type not registered".into()))
+            .ok_or_else(|| Error::type_error("Type not registered"))
     }
 
     fn fory_is_polymorphic() -> bool {
@@ -308,14 +306,14 @@ pub fn read_rc_any(
         RefFlag::NotNullValue
     };
     match ref_flag {
-        RefFlag::Null => Err(Error::InvalidRef("Rc<dyn Any> cannot be null".into())),
+        RefFlag::Null => Err(Error::invalid_ref("Rc<dyn Any> cannot be null")),
         RefFlag::Ref => {
             let ref_id = context.ref_reader.read_ref_id(&mut context.reader)?;
             context
                 .ref_reader
                 .get_rc_ref::<dyn Any>(ref_id)
                 .ok_or_else(|| {
-                    Error::InvalidData(format!("Rc<dyn Any> reference {} not found", ref_id).into())
+                    Error::invalid_data(format!("Rc<dyn Any> reference {} not found", ref_id))
                 })
         }
         RefFlag::NotNullValue => {
@@ -323,7 +321,7 @@ pub fn read_rc_any(
             let typeinfo = if read_type_info {
                 context.read_any_typeinfo()?
             } else {
-                type_info.ok_or_else(|| Error::TypeError("No type info found for read".into()))?
+                type_info.ok_or_else(|| Error::type_error("No type info found for read"))?
             };
             let read_data_fn = typeinfo.get_harness().get_read_data_fn();
             let boxed = read_data_fn(context)?;
@@ -335,7 +333,7 @@ pub fn read_rc_any(
             let typeinfo = if read_type_info {
                 context.read_any_typeinfo()?
             } else {
-                type_info.ok_or_else(|| Error::TypeError("No type info found for read".into()))?
+                type_info.ok_or_else(|| Error::type_error("No type info found for read"))?
             };
             let read_data_fn = typeinfo.get_harness().get_read_data_fn();
             let boxed = read_data_fn(context)?;
@@ -421,8 +419,8 @@ impl Serializer for Arc<dyn Any> {
     }
 
     fn fory_get_type_id(_type_resolver: &TypeResolver) -> Result<u32, Error> {
-        Err(Error::TypeError(
-            "Arc<dyn Any> has no static type ID - use fory_type_id_dyn".into(),
+        Err(Error::type_error(
+            "Arc<dyn Any> has no static type ID - use fory_type_id_dyn",
         ))
     }
 
@@ -430,7 +428,7 @@ impl Serializer for Arc<dyn Any> {
         let concrete_type_id = (**self).type_id();
         type_resolver
             .get_fory_type_id(concrete_type_id)
-            .ok_or_else(|| Error::TypeError("Type not registered".into()))
+            .ok_or_else(|| Error::type_error("Type not registered"))
     }
 
     fn fory_is_polymorphic() -> bool {
@@ -468,16 +466,14 @@ pub fn read_arc_any(
         RefFlag::NotNullValue
     };
     match ref_flag {
-        RefFlag::Null => Err(Error::InvalidRef("Arc<dyn Any> cannot be null".into())),
+        RefFlag::Null => Err(Error::invalid_ref("Arc<dyn Any> cannot be null")),
         RefFlag::Ref => {
             let ref_id = context.ref_reader.read_ref_id(&mut context.reader)?;
             context
                 .ref_reader
                 .get_arc_ref::<dyn Any>(ref_id)
                 .ok_or_else(|| {
-                    Error::InvalidData(
-                        format!("Arc<dyn Any> reference {} not found", ref_id).into(),
-                    )
+                    Error::invalid_data(format!("Arc<dyn Any> reference {} not found", ref_id))
                 })
         }
         RefFlag::NotNullValue => {
@@ -485,9 +481,8 @@ pub fn read_arc_any(
             let typeinfo = if read_type_info {
                 context.read_any_typeinfo()?
             } else {
-                type_info.ok_or_else(|| {
-                    Error::TypeError("No type info found for read Arc<dyn Any>".into())
-                })?
+                type_info
+                    .ok_or_else(|| Error::type_error("No type info found for read Arc<dyn Any>"))?
             };
             let read_data_fn = typeinfo.get_harness().get_read_data_fn();
             let boxed = read_data_fn(context)?;
@@ -499,9 +494,8 @@ pub fn read_arc_any(
             let typeinfo = if read_type_info {
                 context.read_any_typeinfo()?
             } else {
-                type_info.ok_or_else(|| {
-                    Error::TypeError("No type info found for read Arc<dyn Any>".into())
-                })?
+                type_info
+                    .ok_or_else(|| Error::type_error("No type info found for read Arc<dyn Any>"))?
             };
             let read_data_fn = typeinfo.get_harness().get_read_data_fn();
             let boxed = read_data_fn(context)?;

@@ -159,7 +159,7 @@ pub fn skip_value(
                 let remote_type_id = context.reader.read_varuint32()?;
                 ensure!(
                     type_id_num == remote_type_id,
-                    Error::TypeMismatch(type_id_num, remote_type_id)
+                    Error::type_mismatch(type_id_num, remote_type_id)
                 );
                 let meta_index = context.reader.read_varuint32()?;
                 let type_meta = context.get_meta(meta_index as usize)?;
@@ -175,7 +175,7 @@ pub fn skip_value(
                 let remote_type_id = context.reader.read_varuint32()?;
                 ensure!(
                     type_id_num == remote_type_id,
-                    Error::TypeMismatch(type_id_num, remote_type_id)
+                    Error::type_mismatch(type_id_num, remote_type_id)
                 );
                 let meta_index = context.reader.read_varuint32()?;
                 let type_meta = context.get_meta(meta_index as usize)?;
@@ -199,7 +199,7 @@ pub fn skip_value(
                 let type_meta = context.get_meta(meta_index as usize)?;
                 ensure!(
                     type_meta.get_type_id() == remote_type_id,
-                    Error::TypeMismatch(type_meta.get_type_id(), remote_type_id)
+                    Error::type_mismatch(type_meta.get_type_id(), remote_type_id)
                 );
                 let field_infos = type_meta.get_field_infos().to_vec();
                 context.inc_depth()?;
@@ -216,7 +216,7 @@ pub fn skip_value(
                 let remote_type_id = context.reader.read_varuint32()?;
                 ensure!(
                     type_id_num == remote_type_id,
-                    Error::TypeMismatch(type_id_num, remote_type_id)
+                    Error::type_mismatch(type_id_num, remote_type_id)
                 );
                 context.inc_depth()?;
                 let type_resolver = context.get_type_resolver();
@@ -225,9 +225,10 @@ pub fn skip_value(
                     .get_read_data_fn()(context)?;
                 context.dec_depth();
             } else {
-                return Err(Error::TypeError(
-                    format!("Unknown type id: {}", type_id_num).into(),
-                ));
+                return Err(Error::type_error(format!(
+                    "Unknown type id: {}",
+                    type_id_num
+                )));
             }
             Ok(())
         }

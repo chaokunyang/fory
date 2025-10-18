@@ -246,10 +246,10 @@ impl Default for TypeResolver {
 impl TypeResolver {
     pub fn get_type_info(&self, type_id: &std::any::TypeId) -> Result<Arc<TypeInfo>, Error> {
         self.type_info_map.get(type_id)
-            .ok_or_else(|| Error::TypeError(format!(
+            .ok_or_else(|| Error::type_error(format!(
                 "TypeId {:?} not found in type_info registry, maybe you forgot to register some types",
                 type_id
-            ).into()))
+            )))
             .cloned()
     }
 
@@ -282,13 +282,10 @@ impl TypeResolver {
                 return Ok(type_id);
             }
         }
-        Err(Error::TypeError(
-            format!(
-                "TypeId {:?} not found in type_id_index, maybe you forgot to register some types",
-                type_id
-            )
-            .into(),
-        ))
+        Err(Error::type_error(format!(
+            "TypeId {:?} not found in type_id_index, maybe you forgot to register some types",
+            type_id
+        )))
     }
 
     pub fn get_harness(&self, id: u32) -> Option<Arc<Harness>> {
@@ -312,7 +309,7 @@ impl TypeResolver {
         self.type_info_map_by_id
             .get(&id)
             .map(|info| Arc::new(info.get_harness().clone()))
-            .ok_or_else(|| Error::TypeError("ext type must be registered in both peers".into()))
+            .ok_or_else(|| Error::type_error("ext type must be registered in both peers"))
     }
 
     pub fn get_ext_name_harness(
@@ -324,9 +321,7 @@ impl TypeResolver {
         self.type_info_map_by_ms_name
             .get(&key)
             .map(|info| Arc::new(info.get_harness().clone()))
-            .ok_or_else(|| {
-                Error::TypeError("named_ext type must be registered in both peers".into())
-            })
+            .ok_or_else(|| Error::type_error("named_ext type must be registered in both peers"))
     }
 
     pub fn get_fory_type_id(&self, rust_type_id: std::any::TypeId) -> Option<u32> {
@@ -379,8 +374,8 @@ impl TypeResolver {
     ) -> Result<(), Error> {
         let register_by_name = !namespace.is_empty() && !type_name.is_empty();
         if !register_by_name && id == 0 {
-            return Err(Error::NotAllowed(
-                "Either id must be non-zero for ID registration, or both namespace and type_name must be non-empty for name registration".into(),
+            return Err(Error::not_allowed(
+                "Either id must be non-zero for ID registration, or both namespace and type_name must be non-empty for name registration",
             ));
         }
         let actual_type_id = T::fory_actual_type_id(id, register_by_name, self.compatible);
@@ -397,13 +392,10 @@ impl TypeResolver {
                 Some(v) => {
                     T2::fory_write(v, context, write_ref_info, write_type_info, has_generics)
                 }
-                None => Err(Error::TypeError(
-                    format!(
-                        "Cast type error when writing: {:?}",
-                        T2::fory_static_type_id()
-                    )
-                    .into(),
-                )),
+                None => Err(Error::type_error(format!(
+                    "Cast type error when writing: {:?}",
+                    T2::fory_static_type_id()
+                ))),
             }
         }
 
@@ -445,9 +437,7 @@ impl TypeResolver {
         ) -> Result<Box<dyn Serializer>, Error> {
             match boxed_any.downcast::<T2>() {
                 Ok(concrete) => Ok(Box::new(*concrete) as Box<dyn Serializer>),
-                Err(_) => Err(Error::TypeError(
-                    "Failed to downcast to concrete type".into(),
-                )),
+                Err(_) => Err(Error::type_error("Failed to downcast to concrete type")),
             }
         }
 
@@ -470,9 +460,10 @@ impl TypeResolver {
 
         let rs_type_id = std::any::TypeId::of::<T>();
         if self.type_info_map.contains_key(&rs_type_id) {
-            return Err(Error::TypeError(
-                format!("rs_struct:{:?} already registered", rs_type_id).into(),
-            ));
+            return Err(Error::type_error(format!(
+                "rs_struct:{:?} already registered",
+                rs_type_id
+            )));
         }
 
         // Store in main map
@@ -488,9 +479,10 @@ impl TypeResolver {
         if index >= self.type_id_index.len() {
             self.type_id_index.resize(index + 1, NO_TYPE_ID);
         } else if self.type_id_index[index] != NO_TYPE_ID {
-            return Err(Error::TypeError(
-                format!("Type index {:?} already registered", index).into(),
-            ));
+            return Err(Error::type_error(format!(
+                "Type index {:?} already registered",
+                index
+            )));
         }
         self.type_id_index[index] = type_info.type_id;
 
@@ -500,13 +492,10 @@ impl TypeResolver {
             let type_name = &type_info.type_name;
             let ms_key = (namespace.clone(), type_name.clone());
             if self.type_info_map_by_ms_name.contains_key(&ms_key) {
-                return Err(Error::InvalidData(
-                    format!(
-                        "Namespace:{:?} Name:{:?} already registered_by_name",
-                        namespace, type_name
-                    )
-                    .into(),
-                ));
+                return Err(Error::invalid_data(format!(
+                    "Namespace:{:?} Name:{:?} already registered_by_name",
+                    namespace, type_name
+                )));
             }
             self.type_info_map_by_ms_name
                 .insert(ms_key, Arc::new(type_info.clone()));
@@ -550,8 +539,8 @@ impl TypeResolver {
     ) -> Result<(), Error> {
         let register_by_name = !namespace.is_empty() && !type_name.is_empty();
         if !register_by_name && id == 0 {
-            return Err(Error::NotAllowed(
-                "Either id must be non-zero for ID registration, or both namespace and type_name must be non-empty for name registration".into(),
+            return Err(Error::not_allowed(
+                "Either id must be non-zero for ID registration, or both namespace and type_name must be non-empty for name registration",
             ));
         }
         fn write<T2: 'static + Serializer>(
@@ -566,13 +555,10 @@ impl TypeResolver {
                 Some(v) => {
                     Ok(v.fory_write(context, write_ref_info, write_type_info, has_generics)?)
                 }
-                None => Err(Error::TypeError(
-                    format!(
-                        "Cast type error when writing: {:?}",
-                        T2::fory_static_type_id()
-                    )
-                    .into(),
-                )),
+                None => Err(Error::type_error(format!(
+                    "Cast type error when writing: {:?}",
+                    T2::fory_static_type_id()
+                ))),
             }
         }
 
@@ -614,9 +600,7 @@ impl TypeResolver {
         ) -> Result<Box<dyn Serializer>, Error> {
             match boxed_any.downcast::<T2>() {
                 Ok(concrete) => Ok(Box::new(*concrete) as Box<dyn Serializer>),
-                Err(_) => Err(Error::TypeError(
-                    "Failed to downcast to concrete type".into(),
-                )),
+                Err(_) => Err(Error::type_error("Failed to downcast to concrete type")),
             }
         }
 
@@ -639,9 +623,10 @@ impl TypeResolver {
 
         let rs_type_id = std::any::TypeId::of::<T>();
         if self.type_info_map.contains_key(&rs_type_id) {
-            return Err(Error::TypeError(
-                format!("rs_struct:{:?} already registered", rs_type_id).into(),
-            ));
+            return Err(Error::type_error(format!(
+                "rs_struct:{:?} already registered",
+                rs_type_id
+            )));
         }
 
         // Store in main map
@@ -658,13 +643,10 @@ impl TypeResolver {
             let type_name = &type_info.type_name;
             let ms_key = (namespace.clone(), type_name.clone());
             if self.type_info_map_by_ms_name.contains_key(&ms_key) {
-                return Err(Error::InvalidData(
-                    format!(
-                        "Namespace:{:?} Name:{:?} already registered_by_name",
-                        namespace, type_name
-                    )
-                    .into(),
-                ));
+                return Err(Error::invalid_data(format!(
+                    "Namespace:{:?} Name:{:?} already registered_by_name",
+                    namespace, type_name
+                )));
             }
             self.type_info_map_by_ms_name
                 .insert(ms_key, Arc::new(type_info.clone()));

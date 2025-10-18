@@ -427,8 +427,8 @@ macro_rules! impl_read_map_dyn_ref {
                 let cur_len = len_counter + chunk_size as u32;
                 ensure!(
                     cur_len <= length,
-                    Error::InvalidData(
-                        format!("current length {} exceeds total length {}", cur_len, length).into()
+                    Error::invalid_data(
+                        format!("current length {} exceeds total length {}", cur_len, length)
                     )
                 );
 
@@ -541,9 +541,10 @@ impl<K: Serializer + ForyDefault + Eq + std::hash::Hash, V: Serializer + ForyDef
             let cur_len = len_counter + chunk_size as u32;
             ensure!(
                 cur_len <= len,
-                Error::InvalidData(
-                    format!("current length {} exceeds total length {}", cur_len, len).into()
-                )
+                Error::invalid_data(format!(
+                    "current length {} exceeds total length {}",
+                    cur_len, len
+                ))
             );
             for _ in 0..chunk_size {
                 let key = K::fory_read_data(context)?;
@@ -664,9 +665,10 @@ impl<K: Serializer + ForyDefault + Ord + std::hash::Hash, V: Serializer + ForyDe
             let cur_len = len_counter + chunk_size as u32;
             ensure!(
                 cur_len <= len,
-                Error::InvalidData(
-                    format!("current length {} exceeds total length {}", cur_len, len).into()
-                )
+                Error::invalid_data(format!(
+                    "current length {} exceeds total length {}",
+                    cur_len, len
+                ))
             );
             for _ in 0..chunk_size {
                 let key = K::fory_read_data(context)?;

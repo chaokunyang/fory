@@ -68,7 +68,7 @@ pub fn read_type_info<T: Serializer>(context: &mut ReadContext) -> Result<(), Er
     let local_type_id = T::fory_get_type_id(context.get_type_resolver())?;
     ensure!(
         local_type_id == remote_type_id,
-        Error::TypeMismatch(local_type_id, remote_type_id)
+        Error::type_mismatch(local_type_id, remote_type_id)
     );
 
     if local_type_id & 0xff == TypeId::NAMED_STRUCT as u32 {

@@ -33,8 +33,8 @@ impl<T: Serializer + ForyDefault> Serializer for Option<T> {
     ) -> Result<(), Error> {
         if let Some(v) = self {
             if T::fory_is_shared_ref() {
-                return Err(Error::NotAllowed(
-                    "Option<T> where T is a shared reference is not allowed".into(),
+                return Err(Error::not_allowed(
+                    "Option<T> where T is a shared reference is not allowed",
                 ));
             }
             // pass has_generics to nested collection/map

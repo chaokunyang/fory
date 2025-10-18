@@ -38,7 +38,7 @@ macro_rules! downcast_and_serialize {
                 }
             }
         )*
-        return Err(fory_core::Error::TypeError(format!("Failed to downcast to any registered type for trait {}", stringify!($trait_name)).into()));
+        return Err(fory_core::Error::type_error(format!("Failed to downcast to any registered type for trait {}", stringify!($trait_name))));
     }};
 }
 
@@ -54,8 +54,8 @@ macro_rules! resolve_and_deserialize {
                 }
             }
         )*
-        Err(fory_core::Error::TypeError(
-            format!("Type ID {} not registered for trait {}", $fory_type_id, stringify!($trait_name)).into()
+        Err(fory_core::Error::type_error(
+            format!("Type ID {} not registered for trait {}", $fory_type_id, stringify!($trait_name))
         ))
     }};
 }
@@ -180,7 +180,7 @@ macro_rules! register_trait_type {
                 let concrete_type_id = any_ref.type_id();
                 type_resolver
                     .get_fory_type_id(concrete_type_id)
-                    .ok_or_else(|| fory_core::Error::TypeError("Type not registered for trait object".into()))
+                    .ok_or_else(|| fory_core::Error::type_error("Type not registered for trait object"))
             }
 
             fn fory_is_polymorphic() -> bool {
@@ -200,13 +200,13 @@ macro_rules! register_trait_type {
                 $(
                     if boxed_any.is::<$impl_type>() {
                         let concrete = boxed_any.downcast::<$impl_type>()
-                            .map_err(|_| fory_core::Error::TypeError("Downcast failed".into()))?;
+                            .map_err(|_| fory_core::Error::type_error("Downcast failed"))?;
                         let ptr = Box::new(*concrete);
                         return Ok(Self::from(ptr));
                     }
                 )*
-                Err(fory_core::Error::TypeError(
-                    format!("Deserialized type does not implement trait {}", stringify!($trait_name)).into()
+                Err(fory_core::Error::type_error(
+                    format!("Deserialized type does not implement trait {}", stringify!($trait_name))
                 ))
             }
 
@@ -222,13 +222,13 @@ macro_rules! register_trait_type {
                 $(
                     if boxed_any.is::<$impl_type>() {
                         let concrete = boxed_any.downcast::<$impl_type>()
-                            .map_err(|_| fory_core::Error::TypeError("Downcast failed".into()))?;
+                            .map_err(|_| fory_core::Error::type_error("Downcast failed"))?;
                         let ptr = Box::new(*concrete);
                         return Ok(Self::from(ptr));
                     }
                 )*
-                Err(fory_core::Error::TypeError(
-                    format!("Deserialized type does not implement trait {}", stringify!($trait_name)).into()
+                Err(fory_core::Error::type_error(
+                    format!("Deserialized type does not implement trait {}", stringify!($trait_name))
                 ))
             }
 
@@ -369,11 +369,11 @@ macro_rules! read_ptr_trait_object {
             fory_core::RefFlag::NotNullValue
         };
         match ref_flag {
-            fory_core::RefFlag::Null => Err(fory_core::Error::InvalidRef(format!("smart pointer to dyn {} cannot be null", stringify!($trait_name)).into())),
+            fory_core::RefFlag::Null => Err(fory_core::Error::invalid_ref(format!("smart pointer to dyn {} cannot be null", stringify!($trait_name)))),
             fory_core::RefFlag::Ref => {
                 let ref_id = $context.ref_reader.read_ref_id(&mut $context.reader)?;
                 let ptr_ref = $context.ref_reader.$get_ref::<dyn $trait_name>(ref_id)
-                    .ok_or_else(|| fory_core::Error::InvalidData(format!("dyn {} reference {} not found", stringify!($trait_name), ref_id).into()))?;
+                    .ok_or_else(|| fory_core::Error::invalid_data(format!("dyn {} reference {} not found", stringify!($trait_name), ref_id)))?;
                 Ok(Self::from(ptr_ref))
             }
             fory_core::RefFlag::NotNullValue => {
@@ -381,7 +381,7 @@ macro_rules! read_ptr_trait_object {
                 let typeinfo = if $read_type_info {
                     $context.read_any_typeinfo()?
                 } else {
-                    $type_info.ok_or_else(|| fory_core::Error::TypeError("No type info found for read".into()))?
+                    $type_info.ok_or_else(|| fory_core::Error::type_error("No type info found for read"))?
                 };
                 let fory_type_id = typeinfo.get_type_id();
                 $(
@@ -395,8 +395,8 @@ macro_rules! read_ptr_trait_object {
                     }
                 )*
                 $context.dec_depth();
-                Err(fory_core::Error::TypeError(
-                    format!("Type ID {} not registered for trait {}", fory_type_id, stringify!($trait_name)).into()
+                Err(fory_core::Error::type_error(
+                    format!("Type ID {} not registered for trait {}", fory_type_id, stringify!($trait_name))
                 ))
             }
             fory_core::RefFlag::RefValue => {
@@ -404,7 +404,7 @@ macro_rules! read_ptr_trait_object {
                 let typeinfo = if $read_type_info {
                     $context.read_any_typeinfo()?
                 } else {
-                    $type_info.ok_or_else(|| fory_core::Error::TypeError("No type info found for read".into()))?
+                    $type_info.ok_or_else(|| fory_core::Error::type_error("No type info found for read"))?
                 };
                 let fory_type_id = typeinfo.get_type_id();
                 $(
@@ -420,8 +420,8 @@ macro_rules! read_ptr_trait_object {
                     }
                 )*
                 $context.dec_depth();
-                Err(fory_core::Error::TypeError(
-                    format!("Type ID {} not registered for trait {}", fory_type_id, stringify!($trait_name)).into()
+                Err(fory_core::Error::type_error(
+                    format!("Type ID {} not registered for trait {}", fory_type_id, stringify!($trait_name))
                 ))
             }
         }
@@ -512,7 +512,7 @@ macro_rules! impl_smart_pointer_serializer {
                 let concrete_type_id = any_obj.type_id();
                 type_resolver
                     .get_fory_type_id(concrete_type_id)
-                    .ok_or_else(|| fory_core::Error::TypeError("Type not registered for trait object".into()))
+                    .ok_or_else(|| fory_core::Error::type_error("Type not registered for trait object"))
             }
 
             fn fory_concrete_type_id(&self) -> std::any::TypeId {
@@ -671,8 +671,8 @@ fn read_box_seralizer(
         RefFlag::NotNullValue as i8
     };
     if ref_flag != RefFlag::NotNullValue as i8 {
-        return Err(Error::InvalidData(
-            "Expected NotNullValue for Box<dyn Serializer>".into(),
+        return Err(Error::invalid_data(
+            "Expected NotNullValue for Box<dyn Serializer>",
         ));
     }
     let typeinfo = if let Some(type_info) = type_info {
@@ -680,7 +680,7 @@ fn read_box_seralizer(
     } else {
         ensure!(
             read_type_info,
-            Error::InvalidData("Type info must be read for Box<dyn Serializer>".into())
+            Error::invalid_data("Type info must be read for Box<dyn Serializer>")
         );
         context.read_any_typeinfo()?
     };

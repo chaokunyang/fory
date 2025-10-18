@@ -116,13 +116,12 @@ pub trait Serializer: 'static {
                 }
                 return Self::fory_read_data(context);
             } else if ref_flag == (RefFlag::Ref as i8) {
-                return Err(Error::InvalidRef(
-                    "Invalid ref, current type is not a ref".into(),
-                ));
+                return Err(Error::invalid_ref("Invalid ref, current type is not a ref"));
             } else {
-                return Err(Error::InvalidData(
-                    format!("Unknown ref flag: {}", ref_flag).into(),
-                ));
+                return Err(Error::invalid_data(format!(
+                    "Unknown ref flag: {}",
+                    ref_flag
+                )));
             }
         } else {
             if read_type_info {

@@ -373,7 +373,7 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for RcWeak<T> {
     }
 
     fn fory_read_data(_: &mut ReadContext) -> Result<Self, Error> {
-        Err(Error::NotAllowed("RcWeak<T> should be written using `fory_read/fory_read_with_type_info` to handle reference tracking properly".into()))
+        Err(Error::not_allowed("RcWeak<T> should be written using `fory_read/fory_read_with_type_info` to handle reference tracking properly"))
     }
 
     fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error> {
@@ -458,9 +458,7 @@ fn read_rc_weak<T: Serializer + ForyDefault + 'static>(
             //     T::fory_read_data(context)?
             // };
             // Ok(RcWeak::from(&Rc::new(inner)))
-            Err(Error::InvalidRef(
-                "RcWeak can't hold a strong ref value".into(),
-            ))
+            Err(Error::invalid_ref("RcWeak can't hold a strong ref value"))
         }
     }
 }
@@ -534,7 +532,7 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for ArcWeak
     }
 
     fn fory_read_data(_: &mut ReadContext) -> Result<Self, Error> {
-        Err(Error::NotAllowed("ArcWeak<T> should be written using `fory_read/fory_read_with_type_info` to handle reference tracking properly".into()))
+        Err(Error::not_allowed("ArcWeak<T> should be written using `fory_read/fory_read_with_type_info` to handle reference tracking properly"))
     }
 
     fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error> {
@@ -623,9 +621,7 @@ fn read_arc_weak<T: Serializer + ForyDefault + 'static>(
             //     T::fory_read_data(context)?
             // };
             // Ok(ArcWeak::from(&Arc::new(inner)))
-            Err(Error::InvalidRef(
-                "ArcWeak can't hold a strong ref value".into(),
-            ))
+            Err(Error::invalid_ref("ArcWeak can't hold a strong ref value"))
         }
     }
 }

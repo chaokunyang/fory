@@ -163,9 +163,9 @@ impl FieldInfo {
             0x00 => Ok(Encoding::Utf8),
             0x01 => Ok(Encoding::AllToLowerSpecial),
             0x02 => Ok(Encoding::LowerUpperDigitSpecial),
-            _ => Err(Error::EncodingError(
-                format!("Unsupported encoding of field name in type meta, value:{value}").into(),
-            ))?,
+            _ => Err(Error::encoding_error(format!(
+                "Unsupported encoding of field name in type meta, value:{value}"
+            )))?,
         }
     }
 

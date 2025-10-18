@@ -415,7 +415,7 @@ pub fn gen_read(struct_ident: &Ident) -> TokenStream {
         } else if ref_flag == (fory_core::RefFlag::Null as i8) {
             Ok(<Self as fory_core::ForyDefault>::fory_default())
         } else {
-            Err(fory_core::error::Error::InvalidRef(format!("Unknown ref flag, value:{ref_flag}").into()))
+            Err(fory_core::error::Error::invalid_ref(format!("Unknown ref flag, value:{ref_flag}")))
         }
     }
 }
@@ -441,7 +441,7 @@ pub fn gen_read_with_type_info(struct_ident: &Ident) -> TokenStream {
         } else if ref_flag == (fory_core::RefFlag::Null as i8) {
             Ok(<Self as fory_core::ForyDefault>::fory_default())
         } else {
-            Err(fory_core::error::Error::InvalidRef(format!("Unknown ref flag, value:{ref_flag}").into()))
+            Err(fory_core::error::Error::invalid_ref(format!("Unknown ref flag, value:{ref_flag}")))
         }
     }
 }

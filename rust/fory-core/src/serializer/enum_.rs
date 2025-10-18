@@ -78,9 +78,7 @@ pub fn read<T: Serializer + ForyDefault>(
         }
         T::fory_read_data(context)
     } else {
-        Err(Error::InvalidRef(
-            "Invalid ref, enum type is not a ref".into(),
-        ))
+        Err(Error::invalid_ref("Invalid ref, enum type is not a ref"))
     }
 }
 
@@ -90,7 +88,7 @@ pub fn read_type_info<T: Serializer>(context: &mut ReadContext) -> Result<(), Er
     let remote_type_id = context.reader.read_varuint32()?;
     ensure!(
         local_type_id == remote_type_id,
-        Error::TypeMismatch(local_type_id, remote_type_id)
+        Error::type_mismatch(local_type_id, remote_type_id)
     );
     let is_named_enum = local_type_id & 0xff == TypeId::NAMED_ENUM as u32;
     if !is_named_enum {

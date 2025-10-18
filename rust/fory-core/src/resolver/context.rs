@@ -278,7 +278,7 @@ impl ReadContext {
     #[inline(always)]
     pub fn get_meta(&self, type_index: usize) -> Result<&Arc<TypeMeta>, Error> {
         self.meta_resolver.get(type_index).ok_or_else(|| {
-            Error::TypeError(format!("Meta not found for type index: {}", type_index).into())
+            Error::type_error(format!("Meta not found for type index: {}", type_index))
         })
     }
 
@@ -299,7 +299,7 @@ impl ReadContext {
                 self.get_meta(meta_index)?;
                 self.type_resolver
                     .get_type_info_by_id(fory_type_id)
-                    .ok_or_else(|| Error::TypeError("ID harness not found".into()))
+                    .ok_or_else(|| Error::type_error("ID harness not found"))
             }
             types::NAMED_ENUM | types::NAMED_EXT | types::NAMED_STRUCT => {
                 if self.is_share_meta() {
@@ -307,20 +307,20 @@ impl ReadContext {
                     self.get_meta(meta_index)?;
                     self.type_resolver
                         .get_type_info_by_id(fory_type_id)
-                        .ok_or_else(|| Error::TypeError("ID harness not found".into()))
+                        .ok_or_else(|| Error::type_error("ID harness not found"))
                 } else {
                     let namespace = self.meta_resolver.read_metastring(&mut self.reader)?;
                     let type_name = self.meta_resolver.read_metastring(&mut self.reader)?;
                     return self
                         .type_resolver
                         .get_type_info_by_msname(&namespace, &type_name)
-                        .ok_or_else(|| Error::TypeError("Name harness not found".into()));
+                        .ok_or_else(|| Error::type_error("Name harness not found"));
                 }
             }
             _ => self
                 .type_resolver
                 .get_type_info_by_id(fory_type_id)
-                .ok_or_else(|| Error::TypeError("ID harness not found".into())),
+                .ok_or_else(|| Error::type_error("ID harness not found")),
         }
     }
 
@@ -338,16 +338,13 @@ impl ReadContext {
     pub fn inc_depth(&mut self) -> Result<(), Error> {
         self.current_depth += 1;
         if self.current_depth > self.max_dyn_depth() {
-            return Err(Error::DepthExceed(
-                format!(
-                    "Maximum dynamic object nesting depth ({}) exceeded. Current depth: {}. \
+            return Err(Error::depth_exceed(format!(
+                "Maximum dynamic object nesting depth ({}) exceeded. Current depth: {}. \
                     This may indicate a circular reference or overly deep object graph. \
                     Consider increasing max_dyn_depth if this is expected.",
-                    self.max_dyn_depth(),
-                    self.current_depth
-                )
-                .into(),
-            ));
+                self.max_dyn_depth(),
+                self.current_depth
+            )));
         }
         Ok(())
     }

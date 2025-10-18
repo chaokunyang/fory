@@ -28,7 +28,7 @@ pub(crate) fn read_basic_type_info<T: Serializer>(context: &mut ReadContext) -> 
     let remote_type_id = context.reader.read_varuint32()?;
     ensure!(
         local_type_id == remote_type_id,
-        Error::TypeMismatch(local_type_id, remote_type_id)
+        Error::type_mismatch(local_type_id, remote_type_id)
     );
     Ok(())
 }

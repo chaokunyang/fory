@@ -296,9 +296,10 @@ impl RefReader {
             -2 => RefFlag::Ref,
             -1 => RefFlag::NotNullValue,
             0 => RefFlag::RefValue,
-            _ => Err(Error::InvalidRef(
-                format!("Invalid reference flag: {}", flag_value).into(),
-            ))?,
+            _ => Err(Error::invalid_ref(format!(
+                "Invalid reference flag: {}",
+                flag_value
+            )))?,
         })
     }
 

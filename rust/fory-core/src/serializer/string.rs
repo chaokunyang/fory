@@ -64,9 +64,10 @@ impl Serializer for String {
             1 => StrEncoding::Utf16,
             2 => StrEncoding::Utf8,
             _ => {
-                return Err(Error::EncodingError(
-                    format!("wrong encoding value: {}", encoding).into(),
-                ))
+                return Err(Error::encoding_error(format!(
+                    "wrong encoding value: {}",
+                    encoding
+                )))
             }
         };
         let s = match encoding {

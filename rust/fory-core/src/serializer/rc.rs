@@ -134,7 +134,7 @@ fn read_rc<T: Serializer + ForyDefault + 'static>(
         }
         RefFlag::NotNullValue => {
             let inner = if let Some(typeinfo) = typeinfo {
-                T::fory_read_with_type_info(context, read_ref_info, typeinfo)?
+                T::fory_read_with_type_info(context, false, typeinfo)?
             } else {
                 if read_type_info {
                     T::fory_read_type_info(context)?;
@@ -146,7 +146,7 @@ fn read_rc<T: Serializer + ForyDefault + 'static>(
         RefFlag::RefValue => {
             let ref_id = context.ref_reader.reserve_ref_id();
             let inner = if let Some(typeinfo) = typeinfo {
-                T::fory_read_with_type_info(context, read_ref_info, typeinfo)?
+                T::fory_read_with_type_info(context, false, typeinfo)?
             } else {
                 if read_type_info {
                     T::fory_read_type_info(context)?;

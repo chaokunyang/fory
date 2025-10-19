@@ -171,9 +171,9 @@ pub trait Serializer: 'static {
     where
         Self: Sized + ForyDefault,
     {
-        // Default implementation just ignore the typeinfo, only for morphic types supported by fory directly
-        // or ext type registered by user. Dynamic trait types or reference types should override this method.
-        Self::fory_read(context, true, false)
+        // Default implementation ignores the provided typeinfo because the static type matches.
+        // Honor the supplied `read_ref_info` flag so callers can control whether ref metadata is present.
+        Self::fory_read(context, read_ref_info, false)
     }
 
     fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error>

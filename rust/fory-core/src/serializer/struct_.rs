@@ -119,6 +119,8 @@ fn enable_debug_output() -> bool {
 
 pub type BeforeWriteFieldFunc =
     fn(struct_name: &str, field_name: &str, field_value: &dyn Any, context: &mut WriteContext);
+pub type AfterWriteFieldFunc =
+    fn(struct_name: &str, field_name: &str, field_value: &dyn Any, context: &mut WriteContext);
 pub type BeforeReadFieldFunc = fn(struct_name: &str, field_name: &str, context: &mut ReadContext);
 pub type AfterReadFieldFunc =
     fn(struct_name: &str, field_name: &str, field_value: &dyn Any, context: &mut ReadContext);
@@ -132,6 +134,20 @@ fn default_before_write_field(
     if enable_debug_output() {
         println!(
             "before_write_field:\tstruct={struct_name},\tfield={field_name},\twriter_len={}",
+            context.writer.len()
+        );
+    }
+}
+
+fn default_after_write_field(
+    struct_name: &str,
+    field_name: &str,
+    _field_value: &dyn Any,
+    context: &mut WriteContext,
+) {
+    if enable_debug_output() {
+        println!(
+            "after_write_field:\tstruct={struct_name},\tfield={field_name},\twriter_len={}",
             context.writer.len()
         );
     }
@@ -161,11 +177,16 @@ fn default_after_read_field(
 }
 
 static mut BEFORE_WRITE_FIELD_FUNC: BeforeWriteFieldFunc = default_before_write_field;
+static mut AFTER_WRITE_FIELD_FUNC: AfterWriteFieldFunc = default_after_write_field;
 static mut BEFORE_READ_FIELD_FUNC: BeforeReadFieldFunc = default_before_read_field;
 static mut AFTER_READ_FIELD_FUNC: AfterReadFieldFunc = default_after_read_field;
 
 pub fn set_before_write_field_func(func: BeforeWriteFieldFunc) {
     unsafe { BEFORE_WRITE_FIELD_FUNC = func }
+}
+
+pub fn set_after_write_field_func(func: AfterWriteFieldFunc) {
+    unsafe { AFTER_WRITE_FIELD_FUNC = func }
 }
 
 pub fn set_before_read_field_func(func: BeforeReadFieldFunc) {
@@ -179,6 +200,7 @@ pub fn set_after_read_field_func(func: AfterReadFieldFunc) {
 pub fn reset_struct_debug_hooks() {
     unsafe {
         BEFORE_WRITE_FIELD_FUNC = default_before_write_field;
+        AFTER_WRITE_FIELD_FUNC = default_after_write_field;
         BEFORE_READ_FIELD_FUNC = default_before_read_field;
         AFTER_READ_FIELD_FUNC = default_after_read_field;
     }
@@ -192,6 +214,16 @@ pub fn struct_before_write_field(
     context: &mut WriteContext,
 ) {
     unsafe { BEFORE_WRITE_FIELD_FUNC(struct_name, field_name, field_value, context) }
+}
+
+/// Debug method to hook into struct serialization
+pub fn struct_after_write_field(
+    struct_name: &str,
+    field_name: &str,
+    field_value: &dyn Any,
+    context: &mut WriteContext,
+) {
+    unsafe { AFTER_WRITE_FIELD_FUNC(struct_name, field_name, field_value, context) }
 }
 
 /// Debug method to hook into struct deserialization

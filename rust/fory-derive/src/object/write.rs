@@ -232,6 +232,12 @@ fn gen_write_field(field: &Field) -> TokenStream {
                 context,
             );
             #base
+            fory_core::serializer::struct_::struct_after_write_field(
+                #struct_name_lit,
+                #field_name_lit,
+                (&self.#ident) as &dyn std::any::Any,
+                context,
+            );
         }
     } else {
         base

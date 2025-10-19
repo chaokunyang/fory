@@ -61,7 +61,10 @@ pub fn field_requires_ref_flag(type_id: u32, nullable: bool) -> bool {
             || x == TypeId::INT32 as u32
             || x == TypeId::INT64 as u32
             || x == TypeId::FLOAT32 as u32
-            || x == TypeId::FLOAT64 as u32 => false,
+            || x == TypeId::FLOAT64 as u32 =>
+        {
+            false
+        }
         _ => true,
     }
 }

@@ -39,7 +39,7 @@ pub fn gen_reserved_space() -> TokenStream {
 
 pub fn gen_write(_data_enum: &DataEnum) -> TokenStream {
     quote! {
-        fory_core::serializer::enum_::write::<Self>(self, context)
+        fory_core::serializer::enum_::write::<Self>(self, context, write_ref_info, write_type_info)
     }
 }
 

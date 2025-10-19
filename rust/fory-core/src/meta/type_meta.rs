@@ -86,13 +86,13 @@ impl FieldType {
         match self.type_id {
             x if x == TypeId::LIST as u32 || x == TypeId::SET as u32 => {
                 let generic = self.generics.first().unwrap();
-                generic.to_bytes(writer, true, false)?;
+                generic.to_bytes(writer, true, generic.nullable)?;
             }
             x if x == TypeId::MAP as u32 => {
                 let key_generic = self.generics.first().unwrap();
                 let val_generic = self.generics.get(1).unwrap();
-                key_generic.to_bytes(writer, true, false)?;
-                val_generic.to_bytes(writer, true, false)?;
+                key_generic.to_bytes(writer, true, key_generic.nullable)?;
+                val_generic.to_bytes(writer, true, val_generic.nullable)?;
             }
             _ => {}
         }

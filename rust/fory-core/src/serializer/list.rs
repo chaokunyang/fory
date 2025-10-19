@@ -52,6 +52,17 @@ impl<T: Serializer + ForyDefault> Serializer for Vec<T> {
         }
     }
 
+    fn fory_write_data_generic(
+        &self,
+        context: &mut WriteContext,
+        has_generics: bool,
+    ) -> Result<(), Error> {
+        match check_primitive::<T>() {
+            Some(_) => primitive_list::fory_write_data(self, context),
+            None => write_collection_data(self, context, has_generics),
+        }
+    }
+
     fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error> {
         match check_primitive::<T>() {
             Some(type_id) => primitive_list::fory_write_type_info(context, type_id),
@@ -123,6 +134,14 @@ impl<T: Serializer + ForyDefault> Serializer for VecDeque<T> {
         write_collection_data(self, context, false)
     }
 
+    fn fory_write_data_generic(
+        &self,
+        context: &mut WriteContext,
+        has_generics: bool,
+    ) -> Result<(), Error> {
+        write_collection_data(self, context, has_generics)
+    }
+
     fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error> {
         write_collection_type_info(context, TypeId::LIST as u32)
     }
@@ -165,6 +184,14 @@ impl<T> ForyDefault for VecDeque<T> {
 impl<T: Serializer + ForyDefault> Serializer for LinkedList<T> {
     fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error> {
         write_collection_data(self, context, false)
+    }
+
+    fn fory_write_data_generic(
+        &self,
+        context: &mut WriteContext,
+        has_generics: bool,
+    ) -> Result<(), Error> {
+        write_collection_data(self, context, has_generics)
     }
 
     fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error> {

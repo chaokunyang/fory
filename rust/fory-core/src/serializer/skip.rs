@@ -57,7 +57,7 @@ pub fn skip_value(
 ) -> Result<(), Error> {
     if read_ref_flag {
         let ref_flag = context.reader.read_i8()?;
-        if field_type.nullable && ref_flag == (RefFlag::Null as i8) {
+        if ref_flag == (RefFlag::Null as i8) {
             return Ok(());
         }
     }

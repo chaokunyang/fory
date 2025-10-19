@@ -31,9 +31,18 @@ pub fn actual_type_id(type_id: u32, register_by_name: bool, _compatible: bool) -
 }
 
 #[inline(always)]
-pub fn write<T: Serializer>(this: &T, context: &mut WriteContext) -> Result<(), Error> {
-    context.writer.write_i8(RefFlag::NotNullValue as i8);
-    T::fory_write_type_info(context)?;
+pub fn write<T: Serializer>(
+    this: &T,
+    context: &mut WriteContext,
+    write_ref_info: bool,
+    write_type_info: bool,
+) -> Result<(), Error> {
+    if write_ref_info {
+        context.writer.write_i8(RefFlag::NotNullValue as i8);
+    }
+    if write_type_info {
+        T::fory_write_type_info(context)?;
+    }
     this.fory_write_data(context)
 }
 

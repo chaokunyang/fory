@@ -387,10 +387,10 @@ impl TypeResolver {
         namespace: &str,
         type_name: &str,
     ) -> Result<(), Error> {
-        let register_by_name = !namespace.is_empty() && !type_name.is_empty();
+        let register_by_name = !type_name.is_empty();
         if !register_by_name && id == 0 {
             return Err(Error::not_allowed(
-                "Either id must be non-zero for ID registration, or both namespace and type_name must be non-empty for name registration",
+                "Either id must be non-zero for ID registration, or type_name must be non-empty for name registration",
             ));
         }
         let actual_type_id = T::fory_actual_type_id(id, register_by_name, self.compatible);
@@ -552,10 +552,10 @@ impl TypeResolver {
         namespace: &str,
         type_name: &str,
     ) -> Result<(), Error> {
-        let register_by_name = !namespace.is_empty() && !type_name.is_empty();
+        let register_by_name = !type_name.is_empty();
         if !register_by_name && id == 0 {
             return Err(Error::not_allowed(
-                "Either id must be non-zero for ID registration, or both namespace and type_name must be non-empty for name registration",
+                "Either id must be non-zero for ID registration, or type_name must be non-empty for name registration",
             ));
         }
         fn write<T2: 'static + Serializer>(

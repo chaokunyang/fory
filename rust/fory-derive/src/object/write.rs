@@ -202,17 +202,15 @@ fn gen_write_field(field: &Field) -> TokenStream {
                             <#ty as fory_core::Serializer>::fory_write(&self.#ident, context, true, false, false)?;
                         }
                     }
+                } else if skip_ref_flag {
+                    quote! {
+                        let is_enum = <#ty as fory_core::Serializer>::fory_static_type_id() == fory_core::types::TypeId::ENUM;
+                        <#ty as fory_core::Serializer>::fory_write(&self.#ident, context, false, !is_enum, false)?;
+                    }
                 } else {
-                    if skip_ref_flag {
-                        quote! {
-                            let is_enum = <#ty as fory_core::Serializer>::fory_static_type_id() == fory_core::types::TypeId::ENUM;
-                            <#ty as fory_core::Serializer>::fory_write(&self.#ident, context, false, !is_enum, false)?;
-                        }
-                    } else {
-                        quote! {
-                            let is_enum = <#ty as fory_core::Serializer>::fory_static_type_id() == fory_core::types::TypeId::ENUM;
-                            <#ty as fory_core::Serializer>::fory_write(&self.#ident, context, true, !is_enum, false)?;
-                        }
+                    quote! {
+                        let is_enum = <#ty as fory_core::Serializer>::fory_static_type_id() == fory_core::types::TypeId::ENUM;
+                        <#ty as fory_core::Serializer>::fory_write(&self.#ident, context, true, !is_enum, false)?;
                     }
                 }
             }

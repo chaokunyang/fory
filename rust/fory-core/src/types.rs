@@ -212,19 +212,19 @@ pub static PRIMITIVE_ARRAY_TYPE_MAP: &[(&str, u32, &str)] = &[
 
 #[inline(always)]
 pub fn is_primitive_type(type_id: TypeId) -> bool {
-    match type_id {
+    matches!(
+        type_id,
         TypeId::BOOL
-        | TypeId::INT8
-        | TypeId::INT16
-        | TypeId::INT32
-        | TypeId::INT64
-        | TypeId::FLOAT32
-        | TypeId::FLOAT64
-        | TypeId::STRING
-        | TypeId::LOCAL_DATE
-        | TypeId::TIMESTAMP => true,
-        _ => false,
-    }
+            | TypeId::INT8
+            | TypeId::INT16
+            | TypeId::INT32
+            | TypeId::INT64
+            | TypeId::FLOAT32
+            | TypeId::FLOAT64
+            | TypeId::STRING
+            | TypeId::LOCAL_DATE
+            | TypeId::TIMESTAMP
+    )
 }
 
 #[inline(always)]
@@ -247,16 +247,16 @@ pub fn is_internal_type(type_id: u32) -> bool {
 
 #[inline(always)]
 pub fn need_to_write_type_for_field(type_id: TypeId) -> bool {
-    match type_id {
-        TypeId::STRUCT => true,
-        TypeId::COMPATIBLE_STRUCT => true,
-        TypeId::NAMED_STRUCT => true,
-        TypeId::NAMED_COMPATIBLE_STRUCT => true,
-        TypeId::EXT => true,
-        TypeId::NAMED_EXT => true,
-        TypeId::UNKNOWN => true,
-        _ => false,
-    }
+    matches!(
+        type_id,
+        TypeId::STRUCT
+            | TypeId::COMPATIBLE_STRUCT
+            | TypeId::NAMED_STRUCT
+            | TypeId::NAMED_COMPATIBLE_STRUCT
+            | TypeId::EXT
+            | TypeId::NAMED_EXT
+            | TypeId::UNKNOWN
+    )
 }
 
 #[inline(always)]

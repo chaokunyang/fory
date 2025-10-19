@@ -298,25 +298,23 @@ where
             (0..len)
                 .map(|_| T::fory_read_with_type_info(context, true, type_info.clone()))
                 .collect::<Result<C, Error>>()
+        } else if !has_null {
+            // No null elements
+            (0..len)
+                .map(|_| T::fory_read_with_type_info(context, false, type_info.clone()))
+                .collect::<Result<C, Error>>()
         } else {
-            if !has_null {
-                // No null elements
-                (0..len)
-                    .map(|_| T::fory_read_with_type_info(context, false, type_info.clone()))
-                    .collect::<Result<C, Error>>()
-            } else {
-                // Has null elements
-                (0..len)
-                    .map(|_| {
-                        let flag = context.reader.read_i8()?;
-                        if flag == RefFlag::Null as i8 {
-                            Ok(T::fory_default())
-                        } else {
-                            T::fory_read_with_type_info(context, false, type_info.clone())
-                        }
-                    })
-                    .collect::<Result<C, Error>>()
-            }
+            // Has null elements
+            (0..len)
+                .map(|_| {
+                    let flag = context.reader.read_i8()?;
+                    if flag == RefFlag::Null as i8 {
+                        Ok(T::fory_default())
+                    } else {
+                        T::fory_read_with_type_info(context, false, type_info.clone())
+                    }
+                })
+                .collect::<Result<C, Error>>()
         }
     } else {
         (0..len)

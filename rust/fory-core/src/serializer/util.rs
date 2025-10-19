@@ -21,6 +21,16 @@ use crate::resolver::context::{ReadContext, WriteContext};
 use crate::serializer::{bool, Serializer};
 use crate::types::TypeId;
 
+const NO_REF_FLAG_TYPE_IDS: [u32; 7] = [
+    TypeId::BOOL as u32,
+    TypeId::INT8 as u32,
+    TypeId::INT16 as u32,
+    TypeId::INT32 as u32,
+    TypeId::INT64 as u32,
+    TypeId::FLOAT32 as u32,
+    TypeId::FLOAT64 as u32,
+];
+
 #[inline(always)]
 pub(crate) fn read_basic_type_info<T: Serializer>(context: &mut ReadContext) -> Result<(), Error> {
     let local_type_id = T::fory_get_type_id(context.get_type_resolver())?;
@@ -40,11 +50,7 @@ pub(crate) fn read_basic_type_info<T: Serializer>(context: &mut ReadContext) -> 
 #[inline]
 pub fn should_skip_type_info_at_runtime(type_id: u32) -> bool {
     let internal_type_id = (type_id & 0xff) as i8;
-    if internal_type_id == TypeId::ENUM as i8 || internal_type_id == TypeId::NAMED_ENUM as i8 {
-        true
-    } else {
-        false
-    }
+    internal_type_id == TypeId::ENUM as i8 || internal_type_id == TypeId::NAMED_ENUM as i8
 }
 
 #[inline]
@@ -52,20 +58,8 @@ pub fn field_requires_ref_flag(type_id: u32, nullable: bool) -> bool {
     if nullable {
         return true;
     }
-    let internal_type_id = (type_id & 0xff) as u32;
-    match internal_type_id {
-        x if x == TypeId::BOOL as u32
-            || x == TypeId::INT8 as u32
-            || x == TypeId::INT16 as u32
-            || x == TypeId::INT32 as u32
-            || x == TypeId::INT64 as u32
-            || x == TypeId::FLOAT32 as u32
-            || x == TypeId::FLOAT64 as u32 =>
-        {
-            false
-        }
-        _ => true,
-    }
+    let internal_type_id = type_id & 0xff;
+    !NO_REF_FLAG_TYPE_IDS.contains(&internal_type_id)
 }
 
 #[inline(always)]

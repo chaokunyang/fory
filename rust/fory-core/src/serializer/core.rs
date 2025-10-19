@@ -118,35 +118,30 @@ pub trait Serializer: 'static {
     {
         if read_ref_info {
             let ref_flag = context.reader.read_i8()?;
-            if ref_flag == RefFlag::Null as i8 {
-                return Ok(Self::fory_default());
-            } else if ref_flag == (RefFlag::NotNullValue as i8) {
-                if read_type_info {
-                    Self::fory_read_type_info(context)?;
+            match ref_flag {
+                flag if flag == RefFlag::Null as i8 => Ok(Self::fory_default()),
+                flag
+                    if flag == RefFlag::NotNullValue as i8
+                        || flag == RefFlag::RefValue as i8 =>
+                {
+                    if read_type_info {
+                        Self::fory_read_type_info(context)?;
+                    }
+                    Self::fory_read_data(context)
                 }
-                return Self::fory_read_data(context);
-            } else if ref_flag == (RefFlag::RefValue as i8) {
-                // First time seeing this referenceable object.
-                // Note that if this ref is shared, later reads won't read correct value since we don't have Rc/Arc here.
-                // and we don't store ref to RefReader.
-                // Serializer for Rc/Arc should override this method to handle shared refs properly.
-                if read_type_info {
-                    Self::fory_read_type_info(context)?;
+                flag if flag == RefFlag::Ref as i8 => {
+                    Err(Error::invalid_ref("Invalid ref, current type is not a ref"))
                 }
-                return Self::fory_read_data(context);
-            } else if ref_flag == (RefFlag::Ref as i8) {
-                return Err(Error::invalid_ref("Invalid ref, current type is not a ref"));
-            } else {
-                return Err(Error::invalid_data(format!(
+                other => Err(Error::invalid_data(format!(
                     "Unknown ref flag: {}",
-                    ref_flag
-                )));
+                    other
+                ))),
             }
         } else {
             if read_type_info {
                 Self::fory_read_type_info(context)?;
             }
-            return Self::fory_read_data(context);
+            Self::fory_read_data(context)
         }
     }
 

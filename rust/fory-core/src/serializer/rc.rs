@@ -54,7 +54,7 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for Rc<T> {
             if write_type_info {
                 T::fory_write_type_info(context)?;
             }
-            T::fory_write_data_generic(&self, context, has_generics)
+            T::fory_write_data_generic(self, context, has_generics)
         } else {
             Ok(())
         }

@@ -39,6 +39,6 @@ pub mod trait_object;
 pub mod util;
 pub mod weak;
 
-pub mod serializer;
+mod core;
 pub use any::{read_box_any, write_box_any};
-pub use serializer::{ForyDefault, Serializer, StructSerializer};
+pub use core::{ForyDefault, Serializer, StructSerializer};

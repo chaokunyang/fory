@@ -24,7 +24,7 @@ use crate::serializer::ForyDefault;
 use crate::serializer::Serializer;
 use crate::types::TypeId;
 use crate::util::EPOCH;
-use chrono::{DateTime, Days, NaiveDate, NaiveDateTime};
+use chrono::{NaiveDate, NaiveDateTime};
 use std::mem;
 
 impl Serializer for NaiveDateTime {

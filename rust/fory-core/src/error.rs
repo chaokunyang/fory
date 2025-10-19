@@ -26,7 +26,7 @@ static PANIC_ON_ERROR: OnceLock<bool> = OnceLock::new();
 
 /// Check if FORY_PANIC_ON_ERROR environment variable is set.
 #[inline]
-fn should_panic_on_error() -> bool {
+pub fn should_panic_on_error() -> bool {
     *PANIC_ON_ERROR.get_or_init(|| {
         std::env::var("FORY_PANIC_ON_ERROR")
             .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))

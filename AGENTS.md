@@ -123,7 +123,8 @@ go generate ./...
 
 - All cargo commands must be executed within the `rust` directory.
 - All changes to `rust` must pass the clippy check and tests.
-- You must set `RUST_BACKTRACE=1 FORY_PANIC_ON_ERROR=1` when executing rust tests.
+- You must set `RUST_BACKTRACE=1 FORY_PANIC_ON_ERROR=1` when debuging rust tests to get backtrace.
+- You must not set `FORY_PANIC_ON_ERROR=1` when runing all rust tests to check whether all tests pass, some tests will check Error content, which will fail if error just panic.
 
 ```bash
 # Check code

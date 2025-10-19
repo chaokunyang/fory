@@ -584,6 +584,10 @@ impl ForyDefault for Box<dyn Serializer> {
 }
 
 impl Serializer for Box<dyn Serializer> {
+    fn fory_concrete_type_id(&self) -> std::any::TypeId {
+        (**self).fory_concrete_type_id()
+    }
+
     fn fory_write(
         &self,
         context: &mut WriteContext,
@@ -610,11 +614,7 @@ impl Serializer for Box<dyn Serializer> {
         context: &mut WriteContext,
         has_generics: bool,
     ) -> Result<(), Error> {
-        let concrete_type_id = (**self).fory_concrete_type_id();
-        context
-            .get_type_info(&concrete_type_id)?
-            .get_harness()
-            .get_write_data_fn()(self.as_any(), context, has_generics)
+        (**self).fory_write_data_generic(context, has_generics)
     }
 
     fn fory_type_id_dyn(&self, type_resolver: &TypeResolver) -> Result<u32, Error> {

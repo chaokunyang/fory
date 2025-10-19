@@ -674,6 +674,24 @@ impl TypeResolver {
         Ok(())
     }
 
+    /// Register a generic trait type like List, Map, Set
+    pub fn register_generic_trait<T: 'static + Serializer + ForyDefault>(&mut self) -> Result<(), Error> {
+        let rs_type_id = std::any::TypeId::of::<T>();
+        if self.type_info_map.contains_key(&rs_type_id) {
+            return Err(Error::type_error(format!(
+                "Type:{:?} already registered",
+                rs_type_id
+            )));
+        }
+        let type_id = T::fory_static_type_id();
+        if type_id != TypeId::LIST && type_id != TypeId::MAP && type_id != TypeId::SET {
+            return Err(Error::not_allowed(
+                "register_generic_trait can only be used for generic trait types: List, Map, Set",
+            ));
+        }
+        self.register_internal_serializer::<T>(type_id)
+    }
+
     pub(crate) fn set_compatible(&mut self, compatible: bool) {
         self.compatible = compatible;
     }

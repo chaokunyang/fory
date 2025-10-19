@@ -120,10 +120,7 @@ pub trait Serializer: 'static {
             let ref_flag = context.reader.read_i8()?;
             match ref_flag {
                 flag if flag == RefFlag::Null as i8 => Ok(Self::fory_default()),
-                flag
-                    if flag == RefFlag::NotNullValue as i8
-                        || flag == RefFlag::RefValue as i8 =>
-                {
+                flag if flag == RefFlag::NotNullValue as i8 || flag == RefFlag::RefValue as i8 => {
                     if read_type_info {
                         Self::fory_read_type_info(context)?;
                     }
@@ -132,10 +129,7 @@ pub trait Serializer: 'static {
                 flag if flag == RefFlag::Ref as i8 => {
                     Err(Error::invalid_ref("Invalid ref, current type is not a ref"))
                 }
-                other => Err(Error::invalid_data(format!(
-                    "Unknown ref flag: {}",
-                    other
-                ))),
+                other => Err(Error::invalid_data(format!("Unknown ref flag: {}", other))),
             }
         } else {
             if read_type_info {

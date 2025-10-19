@@ -76,7 +76,7 @@ fn test_option_some_roundtrip() {
 #[test]
 fn test_hashmap_roundtrip() {
     let mut fory = fory_compatible();
-    fory.register_serializer::<HashMap<String, i32>>(1001)
+    fory.register_generic_trait::<HashMap<String, i32>>()
         .unwrap();
 
     let mut original = HashMap::new();
@@ -98,7 +98,7 @@ fn test_hashmap_roundtrip() {
 #[test]
 fn test_hashset_roundtrip() {
     let mut fory = fory_compatible();
-    fory.register_serializer::<HashSet<i32>>(1002).unwrap();
+    fory.register_generic_trait::<HashSet<i32>>().unwrap();
 
     let mut original = HashSet::new();
     original.insert(1);
@@ -118,10 +118,7 @@ fn test_hashset_roundtrip() {
 
 #[test]
 fn test_vec_of_trait_objects() {
-    let mut fory = fory_compatible();
-    fory.register_serializer::<Vec<Box<dyn Serializer>>>(3000)
-        .unwrap();
-
+    let fory = fory_compatible();
     let vec_of_trait_objects: Vec<Box<dyn Serializer>> = vec![
         Box::new(42i32),
         Box::new(String::from("hello")),
@@ -136,9 +133,7 @@ fn test_vec_of_trait_objects() {
 
 #[test]
 fn test_hashmap_string_to_trait_objects() {
-    let mut fory = fory_compatible();
-    fory.register_serializer::<HashMap<String, Box<dyn Serializer>>>(3002)
-        .unwrap();
+    let fory = fory_compatible();
 
     let mut map: HashMap<String, Box<dyn Serializer>> = HashMap::new();
     map.insert(String::from("int"), Box::new(42i32));
@@ -190,8 +185,6 @@ fn test_vec_of_fory_derived_trait_objects() {
     let mut fory = fory_compatible();
     fory.register::<Person>(5000).unwrap();
     fory.register::<Company>(5001).unwrap();
-    fory.register_serializer::<Vec<Box<dyn Serializer>>>(3000)
-        .unwrap();
 
     let vec_of_trait_objects: Vec<Box<dyn Serializer>> = vec![
         Box::new(Person {
@@ -219,8 +212,6 @@ fn test_hashmap_with_fory_derived_values() {
     let mut fory = fory_compatible();
     fory.register::<Person>(5000).unwrap();
     fory.register::<Company>(5001).unwrap();
-    fory.register_serializer::<HashMap<String, Box<dyn Serializer>>>(3002)
-        .unwrap();
 
     let mut map: HashMap<String, Box<dyn Serializer>> = HashMap::new();
     map.insert(

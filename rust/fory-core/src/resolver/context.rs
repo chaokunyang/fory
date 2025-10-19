@@ -315,8 +315,7 @@ impl ReadContext {
                 } else {
                     let namespace = self.meta_resolver.read_metastring(&mut self.reader)?;
                     let type_name = self.meta_resolver.read_metastring(&mut self.reader)?;
-                    self
-                        .type_resolver
+                    self.type_resolver
                         .get_type_info_by_msname(&namespace, &type_name)
                         .ok_or_else(|| Error::type_error("Name harness not found"))
                 }

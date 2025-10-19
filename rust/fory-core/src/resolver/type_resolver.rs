@@ -528,6 +528,12 @@ impl TypeResolver {
         id: u32,
     ) -> Result<(), Error> {
         let actual_type_id = get_ext_actual_type_id(id, false);
+        let static_type_id = T::fory_static_type_id();
+        if static_type_id != TypeId::EXT && static_type_id != TypeId::NAMED_EXT {
+            return Err(Error::not_allowed(
+                "register_serializer can only be used for ext and named_ext types",
+            ));
+        }
         self.register_serializer::<T>(id, actual_type_id, &EMPTY_STRING, &EMPTY_STRING)
     }
 
@@ -537,6 +543,12 @@ impl TypeResolver {
         type_name: &str,
     ) -> Result<(), Error> {
         let actual_type_id = get_ext_actual_type_id(0, true);
+        let static_type_id = T::fory_static_type_id();
+        if static_type_id != TypeId::EXT && static_type_id != TypeId::NAMED_EXT {
+            return Err(Error::not_allowed(
+                "register_serializer can only be used for ext and named_ext types",
+            ));
+        }
         self.register_serializer::<T>(0, actual_type_id, namespace, type_name)
     }
 
@@ -560,6 +572,7 @@ impl TypeResolver {
                 "Either id must be non-zero for ID registration, or type_name must be non-empty for name registration",
             ));
         }
+
         fn write<T2: 'static + Serializer>(
             this: &dyn Any,
             context: &mut WriteContext,
@@ -675,7 +688,9 @@ impl TypeResolver {
     }
 
     /// Register a generic trait type like List, Map, Set
-    pub fn register_generic_trait<T: 'static + Serializer + ForyDefault>(&mut self) -> Result<(), Error> {
+    pub fn register_generic_trait<T: 'static + Serializer + ForyDefault>(
+        &mut self,
+    ) -> Result<(), Error> {
         let rs_type_id = std::any::TypeId::of::<T>();
         if self.type_info_map.contains_key(&rs_type_id) {
             return Err(Error::type_error(format!(

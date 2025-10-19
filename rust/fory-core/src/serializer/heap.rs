@@ -58,6 +58,10 @@ impl<T: Serializer + ForyDefault + Ord> Serializer for BinaryHeap<T> {
         Ok(TypeId::SET as u32)
     }
 
+    fn fory_static_type_id() -> TypeId {
+        TypeId::SET
+    }
+
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }

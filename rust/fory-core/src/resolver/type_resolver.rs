@@ -710,9 +710,10 @@ impl TypeResolver {
         }
         let type_id = T::fory_static_type_id();
         if type_id != TypeId::LIST && type_id != TypeId::MAP && type_id != TypeId::SET {
-            return Err(Error::not_allowed(
-                "register_generic_trait can only be used for generic trait types: List, Map, Set",
-            ));
+            return Err(Error::not_allowed(format!(
+                "register_generic_trait can only be used for generic trait types: List, Map, Set, but got type {}",
+                type_id as u32
+            )));
         }
         self.register_internal_serializer::<T>(type_id)
     }

@@ -218,6 +218,10 @@ impl<T: Serializer + ForyDefault> Serializer for LinkedList<T> {
         Ok(TypeId::LIST as u32)
     }
 
+    fn fory_static_type_id() -> TypeId {
+        TypeId::LIST
+    }
+
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }

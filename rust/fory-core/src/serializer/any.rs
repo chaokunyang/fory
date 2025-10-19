@@ -117,8 +117,16 @@ impl Serializer for Box<dyn Any> {
             .ok_or_else(|| Error::type_error("Type not registered"))
     }
 
+    fn fory_concrete_type_id(&self) -> std::any::TypeId {
+        (**self).type_id()
+    }
+
     fn fory_is_polymorphic() -> bool {
         true
+    }
+
+    fn fory_is_shared_ref() -> bool {
+        false
     }
 
     fn fory_static_type_id() -> TypeId {
@@ -277,6 +285,14 @@ impl Serializer for Rc<dyn Any> {
             .ok_or_else(|| Error::type_error("Type not registered"))
     }
 
+    fn fory_concrete_type_id(&self) -> std::any::TypeId {
+        (**self).type_id()
+    }
+
+    fn fory_is_shared_ref() -> bool {
+        true
+    }
+
     fn fory_is_polymorphic() -> bool {
         true
     }
@@ -377,7 +393,7 @@ impl Serializer for Arc<dyn Any> {
                 serializer_fn(&**self, context, has_generics)?;
             } else {
                 let serializer_fn = context
-                    .write_any_typeinfo(concrete_type_id)?
+                    .get_type_info(&concrete_type_id)?
                     .get_harness()
                     .get_write_data_fn();
                 serializer_fn(&**self, context, has_generics)?;
@@ -437,7 +453,15 @@ impl Serializer for Arc<dyn Any> {
             .ok_or_else(|| Error::type_error("Type not registered"))
     }
 
+    fn fory_concrete_type_id(&self) -> std::any::TypeId {
+        (**self).type_id()
+    }
+
     fn fory_is_polymorphic() -> bool {
+        true
+    }
+
+    fn fory_is_shared_ref() -> bool {
         true
     }
 

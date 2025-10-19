@@ -117,30 +117,36 @@ where
     let elem_is_shared_ref = T::fory_is_shared_ref();
 
     let iter = iter.into_iter();
-    let mut header = 0u8;
     let mut has_null = false;
     let mut is_same_type = true;
     let mut first_type_id: Option<std::any::TypeId> = None;
 
-    // Analyze elements to determine header flags
     for item in iter.clone() {
         if item.fory_is_none() {
             has_null = true;
         } else if elem_is_polymorphic && is_same_type {
-            let type_id = item.fory_concrete_type_id();
+            let concrete_id = item.fory_concrete_type_id();
             if let Some(first_id) = first_type_id {
-                if first_id != type_id {
+                if first_id != concrete_id {
                     is_same_type = false;
                 }
             } else {
-                first_type_id = Some(type_id);
+                first_type_id = Some(concrete_id);
             }
         }
     }
 
-    // Set header flags
+    if elem_is_polymorphic && is_same_type && first_type_id.is_none() {
+        // All elements are null for a polymorphic collection; fallback to per-element typing.
+        is_same_type = false;
+    }
+
+    let mut header = 0u8;
     if has_null {
         header |= HAS_NULL;
+    }
+    if is_elem_declared {
+        header |= DECL_ELEMENT_TYPE;
     }
     if is_same_type {
         header |= IS_SAME_TYPE;
@@ -148,23 +154,20 @@ where
     if elem_is_shared_ref {
         header |= TRACKING_REF;
     }
-    if is_elem_declared && !elem_is_polymorphic {
-        header |= DECL_ELEMENT_TYPE;
-        // Write header
-        context.writer.write_u8(header);
+
+    context.writer.write_u8(header);
+
+    if is_same_type && !is_elem_declared {
         if elem_is_polymorphic {
-            if let Some(type_id) = first_type_id {
-                context.write_any_typeinfo(type_id)?;
-            } else {
-                // All elements are null, write any simple type as stub
-                i8::fory_write_type_info(context)?;
-            }
+            let type_id = first_type_id.ok_or_else(|| {
+                Error::type_error(
+                    "Unable to determine concrete type for polymorphic collection elements",
+                )
+            })?;
+            context.write_any_typeinfo(type_id)?;
         } else {
             T::fory_write_type_info(context)?;
         }
-    } else {
-        // Write header
-        context.writer.write_u8(header);
     }
     // Write elements data
     if is_same_type {

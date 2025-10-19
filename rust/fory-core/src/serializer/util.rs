@@ -20,7 +20,6 @@ use crate::error::Error;
 use crate::resolver::context::{ReadContext, WriteContext};
 use crate::serializer::{bool, Serializer};
 use crate::types::TypeId;
-use std::any::Any;
 
 #[inline(always)]
 pub(crate) fn read_basic_type_info<T: Serializer>(context: &mut ReadContext) -> Result<(), Error> {
@@ -75,10 +74,11 @@ pub fn write_dyn_data_generic<T: Serializer>(
     context: &mut WriteContext,
     has_generics: bool,
 ) -> Result<(), Error> {
-    let concrete_type_id: std::any::TypeId = value.type_id();
+    let any_value = value.as_any();
+    let concrete_type_id = any_value.type_id();
     let serializer_fn = context
         .write_any_typeinfo(concrete_type_id)?
         .get_harness()
         .get_write_data_fn();
-    serializer_fn(value, context, has_generics)
+    serializer_fn(any_value, context, has_generics)
 }

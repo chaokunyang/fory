@@ -261,10 +261,12 @@ impl Default for TypeResolver {
 impl TypeResolver {
     pub fn get_type_info(&self, type_id: &std::any::TypeId) -> Result<Arc<TypeInfo>, Error> {
         self.type_info_map.get(type_id)
-            .ok_or_else(|| Error::type_error(format!(
-                "TypeId {:?} not found in type_info registry, maybe you forgot to register some types",
-                type_id
-            )))
+                .ok_or_else(|| {
+                    Error::type_error(format!(
+                        "TypeId {:?} not found in type_info registry, maybe you forgot to register some types",
+                        type_id
+                    ))
+                })
             .cloned()
     }
 

@@ -20,6 +20,8 @@ use crate::error::Error;
 use crate::resolver::context::{ReadContext, WriteContext};
 use crate::serializer::Serializer;
 use crate::types::{RefFlag, TypeId};
+use std::any::Any;
+use std::sync::OnceLock;
 
 #[inline(always)]
 pub fn actual_type_id(type_id: u32, register_by_name: bool, compatible: bool) -> u32 {
@@ -100,4 +102,109 @@ pub fn write<T: Serializer>(
         T::fory_write_type_info(context)?;
     }
     this.fory_write_data(context)
+}
+
+/// Global flag to check if ENABLE_FORY_DEBUG_OUTPUT environment variable is set.
+static ENABLE_FORY_DEBUG_OUTPUT: OnceLock<bool> = OnceLock::new();
+
+/// Check if ENABLE_FORY_DEBUG_OUTPUT environment variable is set.
+#[inline]
+fn enable_debug_output() -> bool {
+    *ENABLE_FORY_DEBUG_OUTPUT.get_or_init(|| {
+        std::env::var("ENABLE_FORY_DEBUG_OUTPUT")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false)
+    })
+}
+
+pub type BeforeWriteFieldFunc =
+    fn(struct_name: &str, field_name: &str, field_value: &dyn Any, context: &mut WriteContext);
+pub type BeforeReadFieldFunc = fn(struct_name: &str, field_name: &str, context: &mut ReadContext);
+pub type AfterReadFieldFunc =
+    fn(struct_name: &str, field_name: &str, field_value: &dyn Any, context: &mut ReadContext);
+
+fn default_before_write_field(
+    struct_name: &str,
+    field_name: &str,
+    _field_value: &dyn Any,
+    context: &mut WriteContext,
+) {
+    if enable_debug_output() {
+        println!(
+            "before_write_field: struct={struct_name}, field={field_name}, writer_len={}",
+            context.writer.len()
+        );
+    }
+}
+
+fn default_before_read_field(struct_name: &str, field_name: &str, context: &mut ReadContext) {
+    if enable_debug_output() {
+        println!(
+            "before_read_field: struct={struct_name}, field={field_name}, reader_cursor={}",
+            context.reader.get_cursor()
+        );
+    }
+}
+
+fn default_after_read_field(
+    struct_name: &str,
+    field_name: &str,
+    _field_value: &dyn Any,
+    context: &mut ReadContext,
+) {
+    if enable_debug_output() {
+        println!(
+            "after_read_field: struct={struct_name}, field={field_name}, reader_cursor={}",
+            context.reader.get_cursor()
+        );
+    }
+}
+
+static mut BEFORE_WRITE_FIELD_FUNC: BeforeWriteFieldFunc = default_before_write_field;
+static mut BEFORE_READ_FIELD_FUNC: BeforeReadFieldFunc = default_before_read_field;
+static mut AFTER_READ_FIELD_FUNC: AfterReadFieldFunc = default_after_read_field;
+
+pub fn set_before_write_field_func(func: BeforeWriteFieldFunc) {
+    unsafe { BEFORE_WRITE_FIELD_FUNC = func }
+}
+
+pub fn set_before_read_field_func(func: BeforeReadFieldFunc) {
+    unsafe { BEFORE_READ_FIELD_FUNC = func }
+}
+
+pub fn set_after_read_field_func(func: AfterReadFieldFunc) {
+    unsafe { AFTER_READ_FIELD_FUNC = func }
+}
+
+pub fn reset_struct_debug_hooks() {
+    unsafe {
+        BEFORE_WRITE_FIELD_FUNC = default_before_write_field;
+        BEFORE_READ_FIELD_FUNC = default_before_read_field;
+        AFTER_READ_FIELD_FUNC = default_after_read_field;
+    }
+}
+
+/// Debug method to hook into struct serialization
+pub fn struct_before_write_field(
+    struct_name: &str,
+    field_name: &str,
+    field_value: &dyn Any,
+    context: &mut WriteContext,
+) {
+    unsafe { BEFORE_WRITE_FIELD_FUNC(struct_name, field_name, field_value, context) }
+}
+
+/// Debug method to hook into struct deserialization
+pub fn struct_before_read_field(struct_name: &str, field_name: &str, context: &mut ReadContext) {
+    unsafe { BEFORE_READ_FIELD_FUNC(struct_name, field_name, context) }
+}
+
+/// Debug method to hook into struct deserialization
+pub fn struct_after_read_field(
+    struct_name: &str,
+    field_name: &str,
+    field_value: &dyn Any,
+    context: &mut ReadContext,
+) {
+    unsafe { AFTER_READ_FIELD_FUNC(struct_name, field_name, field_value, context) }
 }

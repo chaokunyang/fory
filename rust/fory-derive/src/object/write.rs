@@ -17,7 +17,8 @@
 
 use super::util::{
     classify_trait_object_field, create_wrapper_types_arc, create_wrapper_types_rc,
-    get_type_id_by_type_ast, should_skip_type_info_for_field, skip_ref_flag, StructField,
+    get_struct_name, get_type_id_by_type_ast, is_debug_enabled, should_skip_type_info_for_field,
+    skip_ref_flag, StructField,
 };
 use fory_core::types::TypeId;
 use proc_macro2::TokenStream;
@@ -103,7 +104,7 @@ pub fn gen_write_type_info() -> TokenStream {
 fn gen_write_field(field: &Field) -> TokenStream {
     let ty = &field.ty;
     let ident = &field.ident;
-    match classify_trait_object_field(ty) {
+    let base = match classify_trait_object_field(ty) {
         StructField::BoxDyn => {
             quote! {
                 <#ty as fory_core::Serializer>::fory_write(&self.#ident, context, true, true, false)?;
@@ -216,6 +217,24 @@ fn gen_write_field(field: &Field) -> TokenStream {
                 }
             }
         }
+    };
+
+    if is_debug_enabled() {
+        let struct_name = get_struct_name().expect("struct context not set");
+        let struct_name_lit = syn::LitStr::new(&struct_name, proc_macro2::Span::call_site());
+        let field_name = field.ident.as_ref().unwrap().to_string();
+        let field_name_lit = syn::LitStr::new(&field_name, proc_macro2::Span::call_site());
+        quote! {
+            fory_core::serializer::struct_::struct_before_write_field(
+                #struct_name_lit,
+                #field_name_lit,
+                (&self.#ident) as &dyn std::any::Any,
+                context,
+            );
+            #base
+        }
+    } else {
+        base
     }
 }
 

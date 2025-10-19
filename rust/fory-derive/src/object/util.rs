@@ -30,14 +30,17 @@ thread_local! {
     static MACRO_CONTEXT: RefCell<Option<MacroContext>> = const {RefCell::new(None)};
 }
 
+#[derive(Clone)]
 struct MacroContext {
     struct_name: String,
+    debug_enabled: bool,
 }
 
-pub(super) fn set_struct_context(name: &str) {
+pub(super) fn set_struct_context(name: &str, debug_enabled: bool) {
     MACRO_CONTEXT.with(|ctx| {
         *ctx.borrow_mut() = Some(MacroContext {
             struct_name: name.to_string(),
+            debug_enabled,
         });
     });
 }
@@ -48,8 +51,17 @@ pub(super) fn clear_struct_context() {
     });
 }
 
-fn get_struct_name() -> Option<String> {
+pub(super) fn get_struct_name() -> Option<String> {
     MACRO_CONTEXT.with(|ctx| ctx.borrow().as_ref().map(|c| c.struct_name.clone()))
+}
+
+pub(super) fn is_debug_enabled() -> bool {
+    MACRO_CONTEXT.with(|ctx| {
+        ctx.borrow()
+            .as_ref()
+            .map(|c| c.debug_enabled)
+            .unwrap_or(false)
+    })
 }
 
 pub(super) fn contains_trait_object(ty: &Type) -> bool {

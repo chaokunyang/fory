@@ -21,8 +21,8 @@ use syn::{Field, Type};
 
 use super::util::{
     classify_trait_object_field, create_wrapper_types_arc, create_wrapper_types_rc,
-    extract_type_name, is_primitive_type, should_skip_type_info_for_field, skip_ref_flag,
-    StructField,
+    extract_type_name, get_struct_name, is_debug_enabled, is_primitive_type,
+    should_skip_type_info_for_field, skip_ref_flag, StructField,
 };
 
 fn create_private_field_name(field: &Field) -> Ident {
@@ -103,7 +103,7 @@ fn assign_value(fields: &[&Field]) -> Vec<TokenStream> {
 
 fn gen_read_field(field: &Field, private_ident: &Ident) -> TokenStream {
     let ty = &field.ty;
-    match classify_trait_object_field(ty) {
+    let base = match classify_trait_object_field(ty) {
         StructField::BoxDyn => {
             quote! {
                 let #private_ident = <#ty as fory_core::Serializer>::fory_read(context, true, true)?;
@@ -205,6 +205,29 @@ fn gen_read_field(field: &Field, private_ident: &Ident) -> TokenStream {
                 }
             }
         }
+    };
+
+    if is_debug_enabled() {
+        let struct_name = get_struct_name().expect("struct context not set");
+        let struct_name_lit = syn::LitStr::new(&struct_name, proc_macro2::Span::call_site());
+        let field_name = field.ident.as_ref().unwrap().to_string();
+        let field_name_lit = syn::LitStr::new(&field_name, proc_macro2::Span::call_site());
+        quote! {
+            fory_core::serializer::struct_::struct_before_read_field(
+                #struct_name_lit,
+                #field_name_lit,
+                context,
+            );
+            #base
+            fory_core::serializer::struct_::struct_after_read_field(
+                #struct_name_lit,
+                #field_name_lit,
+                (&#private_ident) as &dyn std::any::Any,
+                context,
+            );
+        }
+    } else {
+        base
     }
 }
 
@@ -254,7 +277,7 @@ pub fn gen_read_data(fields: &[&Field]) -> TokenStream {
 fn gen_read_compatible_match_arm_body(field: &Field, var_name: &Ident) -> TokenStream {
     let ty = &field.ty;
 
-    match classify_trait_object_field(ty) {
+    let base = match classify_trait_object_field(ty) {
         StructField::BoxDyn => {
             quote! {
                 #var_name = Some(<#ty as fory_core::Serializer>::fory_read(context, true, true)?);
@@ -387,6 +410,29 @@ fn gen_read_compatible_match_arm_body(field: &Field, var_name: &Ident) -> TokenS
                 }
             }
         }
+    };
+
+    if is_debug_enabled() {
+        let struct_name = get_struct_name().expect("struct context not set");
+        let struct_name_lit = syn::LitStr::new(&struct_name, proc_macro2::Span::call_site());
+        let field_name = field.ident.as_ref().unwrap().to_string();
+        let field_name_lit = syn::LitStr::new(&field_name, proc_macro2::Span::call_site());
+        quote! {
+            fory_core::serializer::struct_::struct_before_read_field(
+                #struct_name_lit,
+                #field_name_lit,
+                context,
+            );
+            #base
+            fory_core::serializer::struct_::struct_after_read_field(
+                #struct_name_lit,
+                #field_name_lit,
+                (&#var_name) as &dyn std::any::Any,
+                context,
+            );
+        }
+    } else {
+        base
     }
 }
 

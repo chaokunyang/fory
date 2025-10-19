@@ -55,7 +55,13 @@ impl Serializer for Box<dyn Any> {
         write_typeinfo: bool,
         has_generics: bool,
     ) -> Result<(), Error> {
-        write_box_any(self, context, write_ref_info, write_typeinfo, has_generics)
+        write_box_any(
+            self.as_ref(),
+            context,
+            write_ref_info,
+            write_typeinfo,
+            has_generics,
+        )
     }
 
     fn fory_write_data_generic(

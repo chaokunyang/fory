@@ -21,16 +21,22 @@ fn event_log() -> &'static Mutex<Vec<String>> {
     LOG.get_or_init(|| Mutex::new(Vec::new()))
 }
 
+fn record_event(prefix: &str, struct_name: &str, field_name: &str) {
+    if struct_name == "DebugSample" {
+        event_log()
+            .lock()
+            .unwrap()
+            .push(format!("{prefix}:{struct_name}:{field_name}"));
+    }
+}
+
 fn before_write(
     struct_name: &str,
     field_name: &str,
     _field_value: &dyn Any,
     _context: &mut WriteContext,
 ) {
-    event_log()
-        .lock()
-        .unwrap()
-        .push(format!("write:{struct_name}:{field_name}"));
+    record_event("write", struct_name, field_name);
 }
 
 fn after_write(
@@ -39,17 +45,11 @@ fn after_write(
     _field_value: &dyn Any,
     _context: &mut WriteContext,
 ) {
-    event_log()
-        .lock()
-        .unwrap()
-        .push(format!("after_write:{struct_name}:{field_name}"));
+    record_event("after_write", struct_name, field_name);
 }
 
 fn before_read(struct_name: &str, field_name: &str, _context: &mut ReadContext) {
-    event_log()
-        .lock()
-        .unwrap()
-        .push(format!("before_read:{struct_name}:{field_name}"));
+    record_event("before_read", struct_name, field_name);
 }
 
 fn after_read(
@@ -58,10 +58,7 @@ fn after_read(
     _field_value: &dyn Any,
     _context: &mut ReadContext,
 ) {
-    event_log()
-        .lock()
-        .unwrap()
-        .push(format!("after_read:{struct_name}:{field_name}"));
+    record_event("after_read", struct_name, field_name);
 }
 
 struct HookGuard {

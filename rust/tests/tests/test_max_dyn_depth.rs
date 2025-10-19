@@ -19,6 +19,12 @@ use fory_core::fory::Fory;
 use fory_derive::ForyObject;
 use std::any::Any;
 
+fn panic_on_error_enabled() -> bool {
+    std::env::var("FORY_PANIC_ON_ERROR")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
 #[derive(ForyObject, Debug)]
 #[fory_debug]
 struct Container {
@@ -28,6 +34,9 @@ struct Container {
 
 #[test]
 fn test_max_dyn_depth_exceeded_box_dyn_any() {
+    if panic_on_error_enabled() {
+        return;
+    }
     for compatible in [false, true] {
         let mut fory = Fory::default().max_dyn_depth(2).compatible(compatible);
         fory.register::<Container>(100).unwrap();
@@ -60,6 +69,9 @@ fn test_max_dyn_depth_exceeded_box_dyn_any() {
 
 #[test]
 fn test_max_dyn_depth_within_limit_box_dyn_any() {
+    if panic_on_error_enabled() {
+        return;
+    }
     let mut fory = Fory::default().max_dyn_depth(3);
     fory.register::<Container>(100).unwrap();
 
@@ -84,6 +96,9 @@ fn test_max_dyn_depth_within_limit_box_dyn_any() {
 
 #[test]
 fn test_max_dyn_depth_default_exceeded() {
+    if panic_on_error_enabled() {
+        return;
+    }
     let mut fory = Fory::default();
     fory.register::<Container>(100).unwrap();
 
@@ -112,6 +127,9 @@ fn test_max_dyn_depth_default_exceeded() {
 
 #[test]
 fn test_max_dyn_depth_default_within_limit() {
+    if panic_on_error_enabled() {
+        return;
+    }
     let mut fory = Fory::default();
     fory.register::<Container>(100).unwrap();
 

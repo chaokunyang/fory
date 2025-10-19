@@ -77,16 +77,20 @@ impl<T: Serializer + ForyDefault> Serializer for Option<T> {
                 return Ok(None);
             }
         }
-        if read_type_info {
-            T::fory_read_type_info(context)?;
+        if T::fory_is_polymorphic() {
+            Ok(Some(T::fory_read(context, false, read_type_info)?))
+        } else {
+            if read_type_info {
+                T::fory_read_type_info(context)?;
+            }
+            Ok(Some(T::fory_read_data(context)?))
         }
-        Ok(Some(T::fory_read_data(context)?))
     }
 
     fn fory_read_with_type_info(
         context: &mut ReadContext,
         read_ref_info: bool,
-        _: std::sync::Arc<crate::TypeInfo>,
+        type_info: std::sync::Arc<crate::TypeInfo>,
     ) -> Result<Self, Error>
     where
         Self: Sized + ForyDefault,
@@ -97,12 +101,23 @@ impl<T: Serializer + ForyDefault> Serializer for Option<T> {
                 return Ok(None);
             }
         }
-        Ok(Some(T::fory_read_data(context)?))
+        if T::fory_is_polymorphic() {
+            // Type info already resolved by caller
+            Ok(Some(T::fory_read_with_type_info(
+                context, false, type_info,
+            )?))
+        } else {
+            Ok(Some(T::fory_read_data(context)?))
+        }
     }
 
     #[inline(always)]
     fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
-        Ok(Some(T::fory_read_data(context)?))
+        if T::fory_is_polymorphic() {
+            Ok(Some(T::fory_read(context, false, true)?))
+        } else {
+            Ok(Some(T::fory_read_data(context)?))
+        }
     }
 
     #[inline(always)]

@@ -511,6 +511,39 @@ pub fn gen_read_compatible(fields: &[&Field]) -> TokenStream {
         })
         .collect();
 
+    let skip_arm = if is_debug_enabled() {
+        let struct_name = get_struct_name().expect("struct context not set");
+        let struct_name_lit = syn::LitStr::new(&struct_name, proc_macro2::Span::call_site());
+        quote! {
+            _ => {
+                let field_type = &_field.field_type;
+                let read_ref_flag = fory_core::serializer::skip::get_read_ref_flag(&field_type);
+                let field_name = _field.field_name.as_str();
+                fory_core::serializer::struct_::struct_before_read_field(
+                    #struct_name_lit,
+                    field_name,
+                    context,
+                );
+                fory_core::serializer::skip::skip_field_value(context, &field_type, read_ref_flag)?;
+                let placeholder: &dyn std::any::Any = &();
+                fory_core::serializer::struct_::struct_after_read_field(
+                    #struct_name_lit,
+                    field_name,
+                    placeholder,
+                    context,
+                );
+            }
+        }
+    } else {
+        quote! {
+            _ => {
+                let field_type = &_field.field_type;
+                let read_ref_flag = fory_core::serializer::skip::get_read_ref_flag(&field_type);
+                fory_core::serializer::skip::skip_field_value(context, &field_type, read_ref_flag)?;
+            }
+        }
+    };
+
     quote! {
         let fields = type_info.get_type_meta().get_field_infos().clone();
         #(#declare_ts)*
@@ -523,11 +556,7 @@ pub fn gen_read_compatible(fields: &[&Field]) -> TokenStream {
             for _field in fields.iter() {
                 match _field.field_id {
                     #(#match_arms)*
-                    _ => {
-                        let field_type = &_field.field_type;
-                        let read_ref_flag = fory_core::serializer::skip::get_read_ref_flag(&field_type);
-                        fory_core::serializer::skip::skip_field_value(context, &field_type, read_ref_flag)?;
-                    }
+                    #skip_arm
                 }
             }
             Ok(Self {

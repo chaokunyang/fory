@@ -41,6 +41,16 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for Rc<T> {
                 .ref_writer
                 .try_write_rc_ref(&mut context.writer, self)
         {
+            if T::fory_is_shared_ref() || T::fory_is_polymorphic() {
+                let inner_write_ref = T::fory_is_shared_ref();
+                return T::fory_write(
+                    &**self,
+                    context,
+                    inner_write_ref,
+                    write_type_info,
+                    has_generics,
+                );
+            }
             if write_type_info {
                 T::fory_write_type_info(context)?;
             }
@@ -133,31 +143,36 @@ fn read_rc<T: Serializer + ForyDefault + 'static>(
                 .ok_or_else(|| Error::invalid_ref(format!("Rc reference {ref_id} not found")))
         }
         RefFlag::NotNullValue => {
-            let inner = if let Some(typeinfo) = typeinfo {
-                T::fory_read_with_type_info(context, false, typeinfo)?
-            } else {
-                if read_type_info {
-                    T::fory_read_type_info(context)?;
-                }
-                T::fory_read_data(context)?
-            };
+            let inner = read_rc_inner::<T>(context, read_type_info, typeinfo)?;
             Ok(Rc::new(inner))
         }
         RefFlag::RefValue => {
             let ref_id = context.ref_reader.reserve_ref_id();
-            let inner = if let Some(typeinfo) = typeinfo {
-                T::fory_read_with_type_info(context, false, typeinfo)?
-            } else {
-                if read_type_info {
-                    T::fory_read_type_info(context)?;
-                }
-                T::fory_read_data(context)?
-            };
+            let inner = read_rc_inner::<T>(context, read_type_info, typeinfo)?;
             let rc = Rc::new(inner);
             context.ref_reader.store_rc_ref_at(ref_id, rc.clone());
             Ok(rc)
         }
     }
+}
+
+fn read_rc_inner<T: Serializer + ForyDefault + 'static>(
+    context: &mut ReadContext,
+    read_type_info: bool,
+    typeinfo: Option<Arc<TypeInfo>>,
+) -> Result<T, Error> {
+    if let Some(typeinfo) = typeinfo {
+        let inner_read_ref = T::fory_is_shared_ref();
+        return T::fory_read_with_type_info(context, inner_read_ref, typeinfo);
+    }
+    if T::fory_is_shared_ref() || T::fory_is_polymorphic() {
+        let inner_read_ref = T::fory_is_shared_ref();
+        return T::fory_read(context, inner_read_ref, read_type_info);
+    }
+    if read_type_info {
+        T::fory_read_type_info(context)?;
+    }
+    T::fory_read_data(context)
 }
 
 impl<T: ForyDefault> ForyDefault for Rc<T> {

@@ -507,6 +507,10 @@ macro_rules! impl_smart_pointer_serializer {
                 true
             }
 
+            fn fory_is_shared_ref() -> bool {
+                true
+            }
+
             fn fory_type_id_dyn(&self, type_resolver: &fory_core::TypeResolver) -> Result<u32, fory_core::Error> {
                 let any_obj = <dyn $trait_name as fory_core::Serializer>::as_any(&*self.0);
                 let concrete_type_id = any_obj.type_id();

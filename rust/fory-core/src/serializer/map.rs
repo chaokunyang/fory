@@ -18,11 +18,12 @@
 use crate::ensure;
 use crate::error::Error;
 use crate::resolver::context::{ReadContext, WriteContext};
-use crate::resolver::type_resolver::TypeResolver;
+use crate::resolver::type_resolver::{TypeInfo, TypeResolver};
 use crate::serializer::util::read_basic_type_info;
 use crate::serializer::{ForyDefault, Serializer};
 use crate::types::{need_to_write_type_for_field, TypeId, SIZE_OF_REF_AND_TYPE};
 use std::collections::{BTreeMap, HashMap};
+use std::sync::Arc;
 
 const MAX_CHUNK_SIZE: u8 = 255;
 
@@ -196,8 +197,7 @@ where
                 } else {
                     context.writer.write_u8(chunk_header);
                     if key_is_polymorphic {
-                        let key_type_id = key.fory_type_id_dyn(context.get_type_resolver())?;
-                        context.writer.write_varuint32(key_type_id);
+                        context.write_any_typeinfo(key.fory_concrete_type_id())?;
                     } else {
                         K::fory_write_type_info(context)?;
                     }
@@ -220,8 +220,7 @@ where
                 } else {
                     context.writer.write_u8(chunk_header);
                     if val_is_polymorphic {
-                        let val_type_id = value.fory_type_id_dyn(context.get_type_resolver())?;
-                        context.writer.write_varuint32(val_type_id);
+                        context.write_any_typeinfo(value.fory_concrete_type_id())?;
                     } else {
                         V::fory_write_type_info(context)?;
                     }
@@ -276,8 +275,7 @@ where
             } else {
                 // Write type info for key
                 if key_is_polymorphic {
-                    let key_type_id = key.fory_type_id_dyn(context.get_type_resolver())?;
-                    context.writer.write_varuint32(key_type_id);
+                    context.write_any_typeinfo(key.fory_concrete_type_id())?;
                 } else {
                     K::fory_write_type_info(context)?;
                 }
@@ -292,8 +290,7 @@ where
             } else {
                 // Write type info for value
                 if val_is_polymorphic {
-                    let val_type_id = value.fory_type_id_dyn(context.get_type_resolver())?;
-                    context.writer.write_varuint32(val_type_id);
+                    context.write_any_typeinfo(value.fory_concrete_type_id())?;
                 } else {
                     V::fory_write_type_info(context)?;
                 }
@@ -370,18 +367,24 @@ macro_rules! impl_read_map_dyn_ref {
                     let value_declared = (header & DECL_VALUE_TYPE) != 0;
                     let track_value_ref = (header & TRACKING_VALUE_REF) != 0;
 
-                    // Read value type info if not declared
-                    if !value_declared {
+                    // Determine value type info (if any)
+                    let value_type_info: Option<Arc<TypeInfo>> = if !value_declared {
                         if val_is_polymorphic {
-                            // For polymorphic types, type info is already written in value
+                            Some(context.read_any_typeinfo()?)
                         } else {
                             V::fory_read_type_info(context)?;
+                            None
                         }
-                    }
+                    } else {
+                        None
+                    };
 
-                    // Read value
-                    let value = if val_is_shared_ref || track_value_ref {
-                        V::fory_read(context, val_is_shared_ref || track_value_ref, !value_declared)?
+                    // Read value payload
+                    let read_ref = val_is_shared_ref || track_value_ref;
+                    let value = if let Some(type_info) = value_type_info {
+                        V::fory_read_with_type_info(context, read_ref, type_info)?
+                    } else if read_ref {
+                        V::fory_read(context, read_ref, false)?
                     } else {
                         V::fory_read_data(context)?
                     };
@@ -396,18 +399,22 @@ macro_rules! impl_read_map_dyn_ref {
                     let key_declared = (header & DECL_KEY_TYPE) != 0;
                     let track_key_ref = (header & TRACKING_KEY_REF) != 0;
 
-                    // Read key type info if not declared
-                    if !key_declared {
+                    let key_type_info: Option<Arc<TypeInfo>> = if !key_declared {
                         if key_is_polymorphic {
-                            // For polymorphic types, type info is already written in key
+                            Some(context.read_any_typeinfo()?)
                         } else {
                             K::fory_read_type_info(context)?;
+                            None
                         }
-                    }
+                    } else {
+                        None
+                    };
 
-                    // Read key
-                    let key = if key_is_shared_ref || track_key_ref {
-                        K::fory_read(context, key_is_shared_ref || track_key_ref, !key_declared)?
+                    let read_ref = key_is_shared_ref || track_key_ref;
+                    let key = if let Some(type_info) = key_type_info {
+                        K::fory_read_with_type_info(context, read_ref, type_info)?
+                    } else if read_ref {
+                        K::fory_read(context, read_ref, false)?
                     } else {
                         K::fory_read_data(context)?
                     };
@@ -424,21 +431,26 @@ macro_rules! impl_read_map_dyn_ref {
                 let track_key_ref = (header & TRACKING_KEY_REF) != 0;
                 let track_value_ref = (header & TRACKING_VALUE_REF) != 0;
 
-                // Read type info for key and value if not declared
-                if !key_declared {
+                let key_type_info: Option<Arc<TypeInfo>> = if !key_declared {
                     if key_is_polymorphic {
-                        // For polymorphic types, type info is written per element
+                        Some(context.read_any_typeinfo()?)
                     } else {
                         K::fory_read_type_info(context)?;
+                        None
                     }
-                }
-                if !value_declared {
+                } else {
+                    None
+                };
+                let value_type_info: Option<Arc<TypeInfo>> = if !value_declared {
                     if val_is_polymorphic {
-                        // For polymorphic types, type info is written per element
+                        Some(context.read_any_typeinfo()?)
                     } else {
                         V::fory_read_type_info(context)?;
+                        None
                     }
-                }
+                } else {
+                    None
+                };
 
                 let cur_len = len_counter + chunk_size as u32;
                 ensure!(
@@ -449,15 +461,21 @@ macro_rules! impl_read_map_dyn_ref {
                 );
 
                 // Read chunk_size pairs of key-value
+                let key_read_ref = key_is_shared_ref || track_key_ref;
+                let val_read_ref = val_is_shared_ref || track_value_ref;
                 for _ in 0..chunk_size {
-                    let key = if key_is_shared_ref || track_key_ref {
-                        K::fory_read(context, key_is_shared_ref || track_key_ref, false)?
+                    let key = if let Some(type_info) = key_type_info.as_ref() {
+                        K::fory_read_with_type_info(context, key_read_ref, type_info.clone())?
+                    } else if key_read_ref {
+                        K::fory_read(context, key_read_ref, false)?
                     } else {
                         K::fory_read_data(context)?
                     };
 
-                    let value = if val_is_shared_ref || track_value_ref {
-                        V::fory_read(context, val_is_shared_ref || track_value_ref, false)?
+                    let value = if let Some(type_info) = value_type_info.as_ref() {
+                        V::fory_read_with_type_info(context, val_read_ref, type_info.clone())?
+                    } else if val_read_ref {
+                        V::fory_read(context, val_read_ref, false)?
                     } else {
                         V::fory_read_data(context)?
                     };

@@ -131,7 +131,7 @@ fn default_before_write_field(
 ) {
     if enable_debug_output() {
         println!(
-            "before_write_field: struct={struct_name}, field={field_name}, writer_len={}",
+            "before_write_field:\tstruct={struct_name},\tfield={field_name},\twriter_len={}",
             context.writer.len()
         );
     }
@@ -140,7 +140,7 @@ fn default_before_write_field(
 fn default_before_read_field(struct_name: &str, field_name: &str, context: &mut ReadContext) {
     if enable_debug_output() {
         println!(
-            "before_read_field: struct={struct_name}, field={field_name}, reader_cursor={}",
+            "before_read_field:\tstruct={struct_name},\tfield={field_name},\treader_cursor={}",
             context.reader.get_cursor()
         );
     }
@@ -154,7 +154,7 @@ fn default_after_read_field(
 ) {
     if enable_debug_output() {
         println!(
-            "after_read_field: struct={struct_name}, field={field_name}, reader_cursor={}",
+            "after_read_field:\tstruct={struct_name},\tfield={field_name},\treader_cursor={}",
             context.reader.get_cursor()
         );
     }

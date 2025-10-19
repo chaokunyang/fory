@@ -20,14 +20,10 @@ use crate::error::Error;
 use crate::meta::FieldType;
 use crate::resolver::context::ReadContext;
 use crate::serializer::collection::{HAS_NULL, IS_SAME_TYPE};
+use crate::serializer::util;
 use crate::serializer::Serializer;
-use crate::types::{RefFlag, TypeId, BASIC_TYPES, CONTAINER_TYPES, PRIMITIVE_TYPES};
+use crate::types::{RefFlag, TypeId, BASIC_TYPES, CONTAINER_TYPES};
 use chrono::{NaiveDate, NaiveDateTime};
-
-pub fn get_read_ref_flag(field_type: &FieldType) -> bool {
-    let nullable = field_type.nullable;
-    nullable || !PRIMITIVE_TYPES.contains(&field_type.type_id)
-}
 
 macro_rules! basic_type_deserialize {
     ($tid:expr, $context:expr; $(($ty:ty, $id:ident)),+ $(,)?) => {
@@ -124,7 +120,7 @@ pub fn skip_value(
                             continue;
                         }
                         if header & crate::serializer::map::KEY_NULL != 0 {
-                            // let read_ref_flag = get_read_ref_flag(value_type);
+                            // value_type.nullable determines whether ref flag was written
                             context.inc_depth()?;
                             skip_value(context, value_type, false, false)?;
                             context.dec_depth();
@@ -132,7 +128,7 @@ pub fn skip_value(
                             continue;
                         }
                         if header & crate::serializer::map::VALUE_NULL != 0 {
-                            // let read_ref_flag = get_read_ref_flag(key_type);
+                            // key_type.nullable determines whether ref flag was written
                             context.inc_depth()?;
                             skip_value(context, key_type, false, false)?;
                             context.dec_depth();
@@ -142,9 +138,9 @@ pub fn skip_value(
                         let chunk_size = context.reader.read_u8()?;
                         context.inc_depth()?;
                         for _ in (0..chunk_size).enumerate() {
-                            // let read_ref_flag = get_read_ref_flag(key_type);
+                            // key_type.nullable determines whether ref flag was written
                             skip_value(context, key_type, false, false)?;
-                            // let read_ref_flag = get_read_ref_flag(value_type);
+                            // value_type.nullable determines whether ref flag was written
                             skip_value(context, value_type, false, false)?;
                         }
                         context.dec_depth();
@@ -166,7 +162,10 @@ pub fn skip_value(
                 let field_infos = type_meta.get_field_infos().to_vec();
                 context.inc_depth()?;
                 for field_info in field_infos.iter() {
-                    let read_ref_flag = get_read_ref_flag(&field_info.field_type);
+                    let read_ref_flag = util::field_requires_ref_flag(
+                        field_info.field_type.type_id,
+                        field_info.field_type.nullable,
+                    );
                     skip_value(context, &field_info.field_type, read_ref_flag, true)?;
                 }
                 context.dec_depth();
@@ -204,7 +203,10 @@ pub fn skip_value(
                 let field_infos = type_meta.get_field_infos().to_vec();
                 context.inc_depth()?;
                 for field_info in field_infos.iter() {
-                    let read_ref_flag = get_read_ref_flag(&field_info.field_type);
+                    let read_ref_flag = util::field_requires_ref_flag(
+                        field_info.field_type.type_id,
+                        field_info.field_type.nullable,
+                    );
                     skip_value(context, &field_info.field_type, read_ref_flag, true)?;
                 }
                 context.dec_depth();

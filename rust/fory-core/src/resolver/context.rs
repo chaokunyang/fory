@@ -297,7 +297,8 @@ impl ReadContext {
             types::NAMED_COMPATIBLE_STRUCT | types::COMPATIBLE_STRUCT => {
                 let meta_index = self.reader.read_varuint32()? as usize;
                 let remote_meta = self.get_meta(meta_index)?.clone();
-                let local_type_info = self.type_resolver
+                let local_type_info = self
+                    .type_resolver
                     .get_type_info_by_id(fory_type_id)
                     .ok_or_else(|| Error::type_error("ID harness not found"))?;
                 // Create a new TypeInfo with remote metadata but local harness

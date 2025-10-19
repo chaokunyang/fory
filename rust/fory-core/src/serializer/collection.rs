@@ -260,8 +260,8 @@ where
     } else {
         (0..len)
             .map(|_| {
-                let flag = context.reader.read_u8()?;
-                if flag & RefFlag::Null as u8 != 0 {
+                let flag = context.reader.read_i8()?;
+                if flag == RefFlag::Null as i8 {
                     return Ok(T::fory_default());
                 }
                 T::fory_read_data(context)
@@ -306,10 +306,10 @@ where
                 (0..len)
                     .map(|_| {
                         let flag = context.reader.read_i8()?;
-                        if flag == (RefFlag::NotNullValue as i8) {
+                        if flag == RefFlag::Null as i8 {
                             Ok(T::fory_default())
                         } else {
-                            T::fory_read_with_type_info(context, true, type_info.clone())
+                            T::fory_read_with_type_info(context, false, type_info.clone())
                         }
                     })
                     .collect::<Result<C, Error>>()

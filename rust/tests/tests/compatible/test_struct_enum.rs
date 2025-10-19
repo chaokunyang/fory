@@ -26,6 +26,7 @@ use fory_derive::ForyObject;
 use std::collections::{HashMap, HashSet};
 
 #[derive(ForyObject, Debug, PartialEq, Eq, Hash)]
+#[fory_debug]
 struct Item {
     id: i32,
 }
@@ -40,6 +41,7 @@ enum Color {
 }
 
 #[derive(ForyObject, Debug, PartialEq)]
+#[fory_debug]
 struct Person {
     // primitive
     f1: bool,
@@ -78,6 +80,7 @@ struct Person {
 }
 
 #[derive(ForyObject, Debug, PartialEq)]
+#[fory_debug]
 struct Empty {}
 
 #[test]
@@ -165,6 +168,7 @@ fn skip_basic() {
 #[test]
 fn nested() {
     #[derive(ForyObject, Debug, PartialEq)]
+    #[fory_debug]
     struct Element {
         f1: Vec<Item>,
         f2: HashSet<Item>,
@@ -174,6 +178,7 @@ fn nested() {
         f6: HashMap<Color, Color>,
     }
     #[derive(ForyObject, Debug, PartialEq)]
+    #[fory_debug]
     struct Nested {
         f1: Vec<Item>,
         f2: HashSet<Item>,
@@ -216,6 +221,7 @@ fn nested() {
 #[test]
 fn compatible_nullable() {
     #[derive(ForyObject, Debug, PartialEq)]
+    #[fory_debug]
     struct Nonnull {
         f1: bool,
         f2: i8,
@@ -241,6 +247,7 @@ fn compatible_nullable() {
         f29: HashMap<String, i32>,
     }
     #[derive(ForyObject, Debug, PartialEq)]
+    #[fory_debug]
     struct Nullable {
         f1: Option<bool>,
         f2: Option<i8>,
@@ -322,6 +329,7 @@ fn compatible_nullable() {
 #[test]
 fn name_mismatch() {
     #[derive(ForyObject, Debug, PartialEq)]
+    #[fory_debug]
     struct MismatchPerson {
         f2: bool,
         f3: i8,

@@ -16,4 +16,7 @@
 // under the License.
 
 mod compatible;
+mod debug_basic;
+mod simple_tests;
+mod test_debug;
 mod test_max_dyn_depth;

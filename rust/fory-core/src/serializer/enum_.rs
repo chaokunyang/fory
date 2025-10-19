@@ -72,13 +72,18 @@ pub fn read<T: Serializer + ForyDefault>(
     };
     if ref_flag == RefFlag::Null as i8 {
         Ok(T::fory_default())
-    } else if ref_flag == (RefFlag::NotNullValue as i8) {
+    } else if ref_flag == (RefFlag::NotNullValue as i8) || ref_flag == (RefFlag::RefValue as i8) {
         if read_type_info {
             T::fory_read_type_info(context)?;
         }
         T::fory_read_data(context)
-    } else {
+    } else if ref_flag == (RefFlag::Ref as i8) {
         Err(Error::invalid_ref("Invalid ref, enum type is not a ref"))
+    } else {
+        Err(Error::invalid_data(format!(
+            "Unknown ref flag: {}",
+            ref_flag
+        )))
     }
 }
 

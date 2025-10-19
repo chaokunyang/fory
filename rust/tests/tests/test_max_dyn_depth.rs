@@ -20,6 +20,7 @@ use fory_derive::ForyObject;
 use std::any::Any;
 
 #[derive(ForyObject, Debug)]
+#[fory_debug]
 struct Container {
     value: i32,
     nested: Option<Box<dyn Any>>,

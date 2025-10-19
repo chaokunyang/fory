@@ -71,11 +71,22 @@ where
     let is_key_declared = has_generics && !need_to_write_type_for_field(key_static_type_id);
     let is_val_declared = has_generics && !need_to_write_type_for_field(val_static_type_id);
     for (key, value) in iter {
-        if need_write_header {
-            if key.fory_is_none() && value.fory_is_none() {
+        let key_is_none = key.fory_is_none();
+        let value_is_none = value.fory_is_none();
+
+        if key_is_none || value_is_none {
+            if !need_write_header && pair_counter > 0 {
+                write_chunk_size(context, header_offset, pair_counter);
+                pair_counter = 0;
+                need_write_header = true;
+            }
+
+            if key_is_none && value_is_none {
                 context.writer.write_u8(KEY_NULL | VALUE_NULL);
                 continue;
-            } else if value.fory_is_none() {
+            }
+
+            if value_is_none {
                 let mut chunk_header = VALUE_NULL;
                 if is_key_declared {
                     chunk_header |= DECL_KEY_TYPE;
@@ -84,20 +95,24 @@ where
                     context.writer.write_u8(chunk_header);
                     K::fory_write_type_info(context)?;
                 }
-                value.fory_write_data_generic(context, has_generics)?;
-                continue;
-            } else if key.fory_is_none() {
-                let mut chunk_header = KEY_NULL;
-                if is_val_declared {
-                    chunk_header |= DECL_VALUE_TYPE;
-                    context.writer.write_u8(chunk_header);
-                } else {
-                    context.writer.write_u8(chunk_header);
-                    V::fory_write_type_info(context)?;
-                }
                 key.fory_write_data_generic(context, has_generics)?;
                 continue;
             }
+
+            // key is None, value is not
+            let mut chunk_header = KEY_NULL;
+            if is_val_declared {
+                chunk_header |= DECL_VALUE_TYPE;
+                context.writer.write_u8(chunk_header);
+            } else {
+                context.writer.write_u8(chunk_header);
+                V::fory_write_type_info(context)?;
+            }
+            value.fory_write_data_generic(context, has_generics)?;
+            continue;
+        }
+
+        if need_write_header {
             header_offset = context.writer.len();
             context.writer.write_i16(-1);
             let mut chunk_header = 0u8;
@@ -114,6 +129,7 @@ where
             context.writer.set_bytes(header_offset, &[chunk_header]);
             need_write_header = false;
         }
+
         key.fory_write_data_generic(context, has_generics)?;
         value.fory_write_data_generic(context, has_generics)?;
         pair_counter += 1;
@@ -187,7 +203,7 @@ where
                     }
                 }
                 if key_is_shared_ref {
-                    key.fory_write(context, false, false, has_generics)?;
+                    key.fory_write(context, true, false, has_generics)?;
                 } else {
                     key.fory_write_data_generic(context, has_generics)?;
                 }
@@ -211,7 +227,7 @@ where
                     }
                 }
                 if val_is_shared_ref {
-                    value.fory_write(context, false, false, has_generics)?;
+                    value.fory_write(context, true, false, has_generics)?;
                 } else {
                     value.fory_write_data_generic(context, has_generics)?;
                 }
@@ -365,7 +381,7 @@ macro_rules! impl_read_map_dyn_ref {
 
                     // Read value
                     let value = if val_is_shared_ref || track_value_ref {
-                        V::fory_read(context, true, !value_declared)?
+                        V::fory_read(context, val_is_shared_ref || track_value_ref, !value_declared)?
                     } else {
                         V::fory_read_data(context)?
                     };
@@ -391,12 +407,12 @@ macro_rules! impl_read_map_dyn_ref {
 
                     // Read key
                     let key = if key_is_shared_ref || track_key_ref {
-                        K::fory_read(context, true, !key_declared)?
+                        K::fory_read(context, key_is_shared_ref || track_key_ref, !key_declared)?
                     } else {
                         K::fory_read_data(context)?
                     };
 
-                   map.insert(key, V::fory_default());
+                    map.insert(key, V::fory_default());
                     len_counter += 1;
                     continue;
                 }
@@ -435,13 +451,13 @@ macro_rules! impl_read_map_dyn_ref {
                 // Read chunk_size pairs of key-value
                 for _ in 0..chunk_size {
                     let key = if key_is_shared_ref || track_key_ref {
-                        K::fory_read(context, track_key_ref, false)?
+                        K::fory_read(context, key_is_shared_ref || track_key_ref, false)?
                     } else {
                         K::fory_read_data(context)?
                     };
 
                     let value = if val_is_shared_ref || track_value_ref {
-                        V::fory_read(context, track_value_ref, false)?
+                        V::fory_read(context, val_is_shared_ref || track_value_ref, false)?
                     } else {
                         V::fory_read_data(context)?
                     };

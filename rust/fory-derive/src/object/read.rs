@@ -276,8 +276,9 @@ pub fn gen_read_data(fields: &[&Field]) -> TokenStream {
 
 fn gen_read_compatible_match_arm_body(field: &Field, var_name: &Ident) -> TokenStream {
     let ty = &field.ty;
+    let field_kind = classify_trait_object_field(ty);
 
-    let base = match classify_trait_object_field(ty) {
+    let base = match field_kind {
         StructField::BoxDyn => {
             quote! {
                 #var_name = Some(<#ty as fory_core::Serializer>::fory_read(context, true, true)?);
@@ -361,50 +362,58 @@ fn gen_read_compatible_match_arm_body(field: &Field, var_name: &Ident) -> TokenS
                 _ => panic!("Unsupported type"),
             };
             let skip_type_info = should_skip_type_info_for_field(ty);
+            let dec_by_option = need_declared_by_option(field);
             if skip_type_info {
-                // Known types (primitives, strings, collections) - skip type info at compile time
-                // Use metadata's nullable field to determine whether ref tracking is enabled
-                let dec_by_option = need_declared_by_option(field);
                 if dec_by_option {
                     quote! {
-                        if !_field.field_type.nullable {
-                            #var_name = Some(<#ty as fory_core::Serializer>::fory_read_data(context)?);
-                        } else {
+                        let read_ref_flag = fory_core::serializer::util::field_requires_ref_flag(
+                            _field.field_type.type_id,
+                            _field.field_type.nullable,
+                        );
+                        if read_ref_flag {
                             #var_name = Some(<#ty as fory_core::Serializer>::fory_read(context, true, false)?);
+                        } else {
+                            #var_name = Some(<#ty as fory_core::Serializer>::fory_read_data(context)?);
                         }
                     }
                 } else {
                     quote! {
-                        if !_field.field_type.nullable {
-                            #var_name = <#ty as fory_core::Serializer>::fory_read_data(context)?;
-                        } else {
+                        let read_ref_flag = fory_core::serializer::util::field_requires_ref_flag(
+                            _field.field_type.type_id,
+                            _field.field_type.nullable,
+                        );
+                        if read_ref_flag {
                             #var_name = <#ty as fory_core::Serializer>::fory_read(context, true, false)?;
+                        } else {
+                            #var_name = <#ty as fory_core::Serializer>::fory_read_data(context)?;
                         }
                     }
                 }
             } else {
-                // Custom types (struct/enum/ext) - need runtime check for enums
-                let dec_by_option = need_declared_by_option(field);
                 if dec_by_option {
                     quote! {
-                        {
-                            let skip_type_info = fory_core::serializer::util::should_skip_type_info_at_runtime(_field.field_type.type_id);
-                            if _field.field_type.nullable {
-                                #var_name = Some(<#ty as fory_core::Serializer>::fory_read(context, true, !skip_type_info)?);
-                            } else {
-                                #var_name = Some(<#ty as fory_core::Serializer>::fory_read(context, false, !skip_type_info)?);
-                            }
+                        let skip_type_info = fory_core::serializer::util::should_skip_type_info_at_runtime(_field.field_type.type_id);
+                        let read_ref_flag = fory_core::serializer::util::field_requires_ref_flag(
+                            _field.field_type.type_id,
+                            _field.field_type.nullable,
+                        );
+                        if read_ref_flag {
+                            #var_name = Some(<#ty as fory_core::Serializer>::fory_read(context, true, !skip_type_info)?);
+                        } else {
+                            #var_name = Some(<#ty as fory_core::Serializer>::fory_read_data(context)?);
                         }
                     }
                 } else {
                     quote! {
-                        {
-                            let skip_type_info = fory_core::serializer::util::should_skip_type_info_at_runtime(_field.field_type.type_id);
-                            if !_field.field_type.nullable {
-                                #var_name = <#ty as fory_core::Serializer>::fory_read(context, false, !skip_type_info)?;
-                            } else {
-                                #var_name = <#ty as fory_core::Serializer>::fory_read(context, true, !skip_type_info)?;
-                            }
+                        let skip_type_info = fory_core::serializer::util::should_skip_type_info_at_runtime(_field.field_type.type_id);
+                        let read_ref_flag = fory_core::serializer::util::field_requires_ref_flag(
+                            _field.field_type.type_id,
+                            _field.field_type.nullable,
+                        );
+                        if read_ref_flag {
+                            #var_name = <#ty as fory_core::Serializer>::fory_read(context, true, !skip_type_info)?;
+                        } else {
+                            #var_name = <#ty as fory_core::Serializer>::fory_read_data(context)?;
                         }
                     }
                 }
@@ -432,7 +441,9 @@ fn gen_read_compatible_match_arm_body(field: &Field, var_name: &Ident) -> TokenS
             );
         }
     } else {
-        base
+        quote! {
+            #base
+        }
     }
 }
 
@@ -517,7 +528,10 @@ pub fn gen_read_compatible(fields: &[&Field]) -> TokenStream {
         quote! {
             _ => {
                 let field_type = &_field.field_type;
-                let read_ref_flag = fory_core::serializer::skip::get_read_ref_flag(&field_type);
+                let read_ref_flag = fory_core::serializer::util::field_requires_ref_flag(
+                    field_type.type_id,
+                    field_type.nullable,
+                );
                 let field_name = _field.field_name.as_str();
                 fory_core::serializer::struct_::struct_before_read_field(
                     #struct_name_lit,
@@ -538,8 +552,11 @@ pub fn gen_read_compatible(fields: &[&Field]) -> TokenStream {
         quote! {
             _ => {
                 let field_type = &_field.field_type;
-                let read_ref_flag = fory_core::serializer::skip::get_read_ref_flag(&field_type);
-                fory_core::serializer::skip::skip_field_value(context, &field_type, read_ref_flag)?;
+                let read_ref_flag = fory_core::serializer::util::field_requires_ref_flag(
+                    field_type.type_id,
+                    field_type.nullable,
+                );
+                fory_core::serializer::skip::skip_field_value(context, field_type, read_ref_flag)?;
             }
         }
     };

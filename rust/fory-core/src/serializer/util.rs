@@ -48,6 +48,24 @@ pub fn should_skip_type_info_at_runtime(type_id: u32) -> bool {
     }
 }
 
+#[inline]
+pub fn field_requires_ref_flag(type_id: u32, nullable: bool) -> bool {
+    if nullable {
+        return true;
+    }
+    let internal_type_id = (type_id & 0xff) as u32;
+    match internal_type_id {
+        x if x == TypeId::BOOL as u32
+            || x == TypeId::INT8 as u32
+            || x == TypeId::INT16 as u32
+            || x == TypeId::INT32 as u32
+            || x == TypeId::INT64 as u32
+            || x == TypeId::FLOAT32 as u32
+            || x == TypeId::FLOAT64 as u32 => false,
+        _ => true,
+    }
+}
+
 #[inline(always)]
 pub fn write_dyn_data_generic<T: Serializer>(
     value: &T,

@@ -32,12 +32,7 @@ impl<T: Serializer + ForyDefault> Serializer for Option<T> {
         has_generics: bool,
     ) -> Result<(), Error> {
         if let Some(v) = self {
-            if T::fory_is_shared_ref() {
-                return Err(Error::not_allowed(
-                    "Option<T> where T is a shared reference is not allowed",
-                ));
-            }
-            // pass has_generics to nested collection/map
+            // pass has_generics to nested collection/map serializers
             T::fory_write(v, context, write_ref_info, write_type_info, has_generics)
         } else {
             if write_ref_info {
@@ -76,15 +71,13 @@ impl<T: Serializer + ForyDefault> Serializer for Option<T> {
                 // null value won't write type info, so we can ignore `read_type_info`
                 return Ok(None);
             }
-        }
-        if T::fory_is_polymorphic() {
-            Ok(Some(T::fory_read(context, false, read_type_info)?))
-        } else {
-            if read_type_info {
-                T::fory_read_type_info(context)?;
+            if T::fory_is_shared_ref() {
+                // shared ref types always write ref flag, so we can ignore `read_type_info`
+                context.reader.move_back(1); // rewind to re-read ref flag in nested read
+                return Ok(Some(T::fory_read(context, true, read_type_info)?));
             }
-            Ok(Some(T::fory_read_data(context)?))
         }
+        Ok(Some(T::fory_read(context, false, read_type_info)?))
     }
 
     fn fory_read_with_type_info(

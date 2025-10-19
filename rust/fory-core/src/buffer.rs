@@ -375,6 +375,11 @@ impl Reader {
     }
 
     #[inline(always)]
+    pub(crate) fn move_back(&mut self, additional: usize) {
+        self.cursor -= additional;
+    }
+
+    #[inline(always)]
     pub(crate) fn ptr_at(&self, offset: usize) -> *const u8 {
         unsafe { self.bf.add(offset) }
     }

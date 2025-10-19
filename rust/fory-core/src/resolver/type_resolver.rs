@@ -364,6 +364,10 @@ impl TypeResolver {
         self.register_internal_serializer::<Vec<i64>>(TypeId::INT64_ARRAY)?;
         self.register_internal_serializer::<Vec<f32>>(TypeId::FLOAT32_ARRAY)?;
         self.register_internal_serializer::<Vec<f64>>(TypeId::FLOAT64_ARRAY)?;
+        self.register_generic_trait::<Vec<String>>()?;
+        self.register_generic_trait::<HashMap<String, String>>()?;
+        self.register_generic_trait::<HashMap<String, i32>>()?;
+        self.register_generic_trait::<HashMap<String, i64>>()?;
 
         Ok(())
     }

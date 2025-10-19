@@ -164,7 +164,7 @@ where
                     "Unable to determine concrete type for polymorphic collection elements",
                 )
             })?;
-            context.write_any_typeinfo(type_id)?;
+            context.write_any_typeinfo(T::fory_static_type_id() as u32, type_id)?;
         } else {
             T::fory_write_type_info(context)?;
         }

@@ -24,6 +24,7 @@ use crate::meta::{
 use crate::serializer::{ForyDefault, Serializer, StructSerializer};
 use crate::util::get_ext_actual_type_id;
 use crate::{Reader, TypeId};
+use std::collections::{HashSet, LinkedList};
 use std::sync::Arc;
 use std::{any::Any, collections::HashMap};
 
@@ -365,6 +366,11 @@ impl TypeResolver {
         self.register_internal_serializer::<Vec<f32>>(TypeId::FLOAT32_ARRAY)?;
         self.register_internal_serializer::<Vec<f64>>(TypeId::FLOAT64_ARRAY)?;
         self.register_generic_trait::<Vec<String>>()?;
+        self.register_generic_trait::<LinkedList<i32>>()?;
+        self.register_generic_trait::<LinkedList<String>>()?;
+        self.register_generic_trait::<HashSet<String>>()?;
+        self.register_generic_trait::<HashSet<i32>>()?;
+        self.register_generic_trait::<HashSet<i64>>()?;
         self.register_generic_trait::<HashMap<String, String>>()?;
         self.register_generic_trait::<HashMap<String, i32>>()?;
         self.register_generic_trait::<HashMap<String, i64>>()?;

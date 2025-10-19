@@ -92,7 +92,7 @@ pub trait Serializer: 'static {
     {
         // Serializer for internal types should overwrite this method for faster performance.
         let rs_type_id = std::any::TypeId::of::<Self>();
-        context.write_any_typeinfo(rs_type_id)?;
+        context.write_any_typeinfo(Self::fory_static_type_id() as u32, rs_type_id)?;
         Ok(())
     }
 

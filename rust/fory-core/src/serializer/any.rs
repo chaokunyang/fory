@@ -160,7 +160,7 @@ pub fn write_box_any(
     }
     let concrete_type_id = value.type_id();
     let typeinfo = if write_typeinfo {
-        context.write_any_typeinfo(concrete_type_id)?
+        context.write_any_typeinfo(TypeId::UNKNOWN as u32, concrete_type_id)?
     } else {
         context.get_type_info(&concrete_type_id)?
     };
@@ -221,7 +221,8 @@ impl Serializer for Rc<dyn Any> {
         {
             let concrete_type_id: std::any::TypeId = (**self).type_id();
             let write_data_fn = if write_type_info {
-                let typeinfo = context.write_any_typeinfo(concrete_type_id)?;
+                let typeinfo =
+                    context.write_any_typeinfo(TypeId::UNKNOWN as u32, concrete_type_id)?;
                 typeinfo.get_harness().get_write_data_fn()
             } else {
                 context
@@ -388,7 +389,8 @@ impl Serializer for Arc<dyn Any> {
         {
             let concrete_type_id: std::any::TypeId = (**self).type_id();
             if write_type_info {
-                let typeinfo = context.write_any_typeinfo(concrete_type_id)?;
+                let typeinfo =
+                    context.write_any_typeinfo(TypeId::UNKNOWN as u32, concrete_type_id)?;
                 let serializer_fn = typeinfo.get_harness().get_write_data_fn();
                 serializer_fn(&**self, context, has_generics)?;
             } else {

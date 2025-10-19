@@ -75,10 +75,7 @@ fn test_option_some_roundtrip() {
 
 #[test]
 fn test_hashmap_roundtrip() {
-    let mut fory = fory_compatible();
-    fory.register_generic_trait::<HashMap<String, i32>>()
-        .unwrap();
-
+    let fory = fory_compatible();
     let mut original = HashMap::new();
     original.insert(String::from("one"), 1);
     original.insert(String::from("two"), 2);
@@ -97,9 +94,7 @@ fn test_hashmap_roundtrip() {
 
 #[test]
 fn test_hashset_roundtrip() {
-    let mut fory = fory_compatible();
-    fory.register_generic_trait::<HashSet<i32>>().unwrap();
-
+    let fory = fory_compatible();
     let mut original = HashSet::new();
     original.insert(1);
     original.insert(2);

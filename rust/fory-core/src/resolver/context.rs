@@ -136,8 +136,16 @@ impl WriteContext {
 
     pub fn write_any_typeinfo(
         &mut self,
+        fory_type_id: u32,
         concrete_type_id: std::any::TypeId,
     ) -> Result<Arc<TypeInfo>, Error> {
+        if types::is_internal_type(fory_type_id) {
+            self.writer.write_varuint32(fory_type_id);
+            return self
+                .type_resolver
+                .get_type_info_by_id(fory_type_id)
+                .ok_or_else(|| Error::type_error("Type info for internal type not found"));
+        }
         let type_info = self.type_resolver.get_type_info(&concrete_type_id)?;
         let fory_type_id = type_info.get_type_id();
         let namespace = type_info.get_namespace();

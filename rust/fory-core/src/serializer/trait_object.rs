@@ -438,7 +438,7 @@ macro_rules! impl_smart_pointer_serializer {
                     let any_obj = <dyn $trait_name as fory_core::Serializer>::as_any(&*self.0);
                     let concrete_type_id = any_obj.type_id();
                     let typeinfo = if write_type_info {
-                         context.write_any_typeinfo(concrete_type_id)?
+                         context.write_any_typeinfo(fory_core::TypeId::UNKNOWN as u32, concrete_type_id)?
                     } else {
                         context.get_type_info(&concrete_type_id)?
                     };
@@ -598,9 +598,10 @@ impl Serializer for Box<dyn Serializer> {
         if write_ref_info {
             context.writer.write_i8(RefFlag::NotNullValue as i8);
         }
+        let fory_type_id_dyn = self.fory_type_id_dyn(context.get_type_resolver())?;
         let concrete_type_id = (**self).fory_concrete_type_id();
         if write_type_info {
-            context.write_any_typeinfo(concrete_type_id)?;
+            context.write_any_typeinfo(fory_type_id_dyn, concrete_type_id)?;
         };
         self.fory_write_data_generic(context, has_generics)
     }

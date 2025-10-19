@@ -197,7 +197,10 @@ where
                 } else {
                     context.writer.write_u8(chunk_header);
                     if key_is_polymorphic {
-                        context.write_any_typeinfo(key.fory_concrete_type_id())?;
+                        context.write_any_typeinfo(
+                            K::fory_static_type_id() as u32,
+                            key.fory_concrete_type_id(),
+                        )?;
                     } else {
                         K::fory_write_type_info(context)?;
                     }
@@ -220,7 +223,10 @@ where
                 } else {
                     context.writer.write_u8(chunk_header);
                     if val_is_polymorphic {
-                        context.write_any_typeinfo(value.fory_concrete_type_id())?;
+                        context.write_any_typeinfo(
+                            V::fory_static_type_id() as u32,
+                            value.fory_concrete_type_id(),
+                        )?;
                     } else {
                         V::fory_write_type_info(context)?;
                     }
@@ -275,7 +281,10 @@ where
             } else {
                 // Write type info for key
                 if key_is_polymorphic {
-                    context.write_any_typeinfo(key.fory_concrete_type_id())?;
+                    context.write_any_typeinfo(
+                        K::fory_static_type_id() as u32,
+                        key.fory_concrete_type_id(),
+                    )?;
                 } else {
                     K::fory_write_type_info(context)?;
                 }
@@ -290,7 +299,10 @@ where
             } else {
                 // Write type info for value
                 if val_is_polymorphic {
-                    context.write_any_typeinfo(value.fory_concrete_type_id())?;
+                    context.write_any_typeinfo(
+                        V::fory_static_type_id() as u32,
+                        value.fory_concrete_type_id(),
+                    )?;
                 } else {
                     V::fory_write_type_info(context)?;
                 }

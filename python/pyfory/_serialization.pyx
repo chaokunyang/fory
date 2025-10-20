@@ -877,7 +877,7 @@ cdef class Fory:
         self.ref_tracking = ref
         self.ref_resolver = MapRefResolver(ref)
         self.is_py = self.language == Language.PYTHON
-        self.field_nullable = field_nullable
+        self.field_nullable = field_nullable if self.is_py else False
         self.metastring_resolver = MetaStringResolver()
         self.type_resolver = TypeResolver(self, meta_share=compatible)
         self.serialization_context = SerializationContext(fory=self, scoped_meta_share_enabled=compatible)

@@ -183,7 +183,7 @@ class Fory:
             strict = kwargs.get("require_type_registration")
         self.strict = _ENABLE_TYPE_REGISTRATION_FORCIBLY or strict
         self.compatible = compatible
-        self.field_nullable = field_nullable
+        self.field_nullable = field_nullable if self.is_py else False
         from pyfory._serialization import MetaStringResolver, SerializationContext
         from pyfory._registry import TypeResolver
 

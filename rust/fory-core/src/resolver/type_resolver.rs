@@ -216,7 +216,10 @@ impl TypeInfo {
 
     /// Create a TypeInfo from remote TypeMeta with a stub harness
     /// Used when the type doesn't exist locally during deserialization
-    pub fn from_remote_meta(remote_meta: Rc<TypeMeta>, local_harness: Option<&Harness>) -> TypeInfo {
+    pub fn from_remote_meta(
+        remote_meta: Rc<TypeMeta>,
+        local_harness: Option<&Harness>,
+    ) -> TypeInfo {
         let type_id = remote_meta.get_type_id();
         let namespace = remote_meta.get_namespace();
         let type_name = remote_meta.get_type_name();
@@ -256,31 +259,33 @@ fn stub_write_fn(
     _: bool,
     _: bool,
 ) -> Result<(), Error> {
-    Err(Error::type_error("Cannot serialize unknown remote type - type not registered locally"))
+    Err(Error::type_error(
+        "Cannot serialize unknown remote type - type not registered locally",
+    ))
 }
 
-fn stub_read_fn(
-    _: &mut ReadContext,
-    _: bool,
-    _: bool,
-) -> Result<Box<dyn Any>, Error> {
-    Err(Error::type_error("Cannot deserialize unknown remote type - type not registered locally"))
+fn stub_read_fn(_: &mut ReadContext, _: bool, _: bool) -> Result<Box<dyn Any>, Error> {
+    Err(Error::type_error(
+        "Cannot deserialize unknown remote type - type not registered locally",
+    ))
 }
 
-fn stub_write_data_fn(
-    _: &dyn Any,
-    _: &mut WriteContext,
-    _: bool,
-) -> Result<(), Error> {
-    Err(Error::type_error("Cannot serialize unknown remote type - type not registered locally"))
+fn stub_write_data_fn(_: &dyn Any, _: &mut WriteContext, _: bool) -> Result<(), Error> {
+    Err(Error::type_error(
+        "Cannot serialize unknown remote type - type not registered locally",
+    ))
 }
 
 fn stub_read_data_fn(_: &mut ReadContext) -> Result<Box<dyn Any>, Error> {
-    Err(Error::type_error("Cannot deserialize unknown remote type - type not registered locally"))
+    Err(Error::type_error(
+        "Cannot deserialize unknown remote type - type not registered locally",
+    ))
 }
 
 fn stub_to_serializer_fn(_: Box<dyn Any>) -> Result<Box<dyn Serializer>, Error> {
-    Err(Error::type_error("Cannot convert unknown remote type to serializer"))
+    Err(Error::type_error(
+        "Cannot convert unknown remote type to serializer",
+    ))
 }
 
 /// TypeResolver is a resolver for fast type/serializer dispatch.

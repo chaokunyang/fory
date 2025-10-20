@@ -103,7 +103,10 @@ impl MetaReaderResolver {
                     let type_id = type_meta.get_type_id();
                     if let Some(local_type_info) = type_resolver.get_type_info_by_id(type_id) {
                         // Use local harness with remote metadata
-                        Rc::new(TypeInfo::from_remote_meta(type_meta.clone(), Some(local_type_info.get_harness())))
+                        Rc::new(TypeInfo::from_remote_meta(
+                            type_meta.clone(),
+                            Some(local_type_info.get_harness()),
+                        ))
                     } else {
                         // No local type found, use stub harness
                         Rc::new(TypeInfo::from_remote_meta(type_meta.clone(), None))
@@ -112,9 +115,14 @@ impl MetaReaderResolver {
                     // Registered by name
                     let namespace = &type_meta.get_namespace().original;
                     let type_name = &type_meta.get_type_name().original;
-                    if let Some(local_type_info) = type_resolver.get_type_info_by_name(namespace, type_name) {
+                    if let Some(local_type_info) =
+                        type_resolver.get_type_info_by_name(namespace, type_name)
+                    {
                         // Use local harness with remote metadata
-                        Rc::new(TypeInfo::from_remote_meta(type_meta.clone(), Some(local_type_info.get_harness())))
+                        Rc::new(TypeInfo::from_remote_meta(
+                            type_meta.clone(),
+                            Some(local_type_info.get_harness()),
+                        ))
                     } else {
                         // No local type found, use stub harness
                         Rc::new(TypeInfo::from_remote_meta(type_meta.clone(), None))
@@ -123,7 +131,8 @@ impl MetaReaderResolver {
 
                 if self.parsed_type_infos.len() < MAX_PARSED_NUM_TYPE_DEFS {
                     // avoid malicious type defs to OOM parsed_type_infos
-                    self.parsed_type_infos.insert(meta_header, type_info.clone());
+                    self.parsed_type_infos
+                        .insert(meta_header, type_info.clone());
                 }
                 self.reading_type_infos.push(type_info);
             }

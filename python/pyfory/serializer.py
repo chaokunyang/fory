@@ -377,10 +377,11 @@ class DataClassSerializer(Serializer):
         self._field_names = field_names or self._get_field_names(clz)
         self._has_slots = hasattr(clz, "__slots__")
         self._nullable_fields = nullable_fields or {}
+        field_nullable = fory.field_nullable
         if self._field_names and not self._nullable_fields:
             for field_name in self._field_names:
                 if field_name in self._type_hints:
-                    unwrapped_type, is_nullable = unwrap_optional(self._type_hints[field_name])
+                    unwrapped_type, is_nullable = unwrap_optional(self._type_hints[field_name], field_nullable=field_nullable)
                     is_nullable = is_nullable or not is_primitive_type(unwrapped_type)
                     self._nullable_fields[field_name] = is_nullable
 

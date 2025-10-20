@@ -94,7 +94,7 @@ public class EnumSerializer extends ImmutableSerializer<Enum> {
     } else {
       int value = buffer.readVarUint32Small7();
       if (value >= enumConstants.length) {
-        return handleNonexistentEnumValue(value);
+        return handleNonexistentEnumValue(enumConstants, value);
       }
       return enumConstants[value];
     }
@@ -109,26 +109,32 @@ public class EnumSerializer extends ImmutableSerializer<Enum> {
   public Enum xread(MemoryBuffer buffer) {
     int value = buffer.readVarUint32Small7();
     if (value >= enumConstants.length) {
-      return handleNonexistentEnumValue(value);
+      return handleNonexistentEnumValue(enumConstants, value);
     }
     return enumConstants[value];
   }
 
-  private Enum handleNonexistentEnumValue(int value) {
-    if (fory.getConfig().deserializeNonexistentEnumValueAsNull()) {
-      return null;
-    } else {
-      throw new IllegalArgumentException(
-          String.format("Enum ordinal %s not in %s", value, Arrays.toString(enumConstants)));
+  private Enum handleNonexistentEnumValue(Enum[] enumConstants, int value) {
+    switch (fory.getConfig().getUnknownEnumValueStrategy()) {
+      case RETURN_NULL:
+        return null;
+      case RETURN_FIRST_VARIANT:
+        return enumConstants[0];
+      default:
+        throw new IllegalArgumentException(
+            String.format("Enum ordinal %s not in %s", value, Arrays.toString(enumConstants)));
     }
   }
 
   private Enum handleNonexistentEnumValue(String value) {
-    if (fory.getConfig().deserializeNonexistentEnumValueAsNull()) {
-      return null;
-    } else {
-      throw new IllegalArgumentException(
-          String.format("Enum string %s not in %s", value, Arrays.toString(enumConstants)));
+    switch (fory.getConfig().getUnknownEnumValueStrategy()) {
+      case RETURN_NULL:
+        return null;
+      case RETURN_FIRST_VARIANT:
+        return enumConstants[0];
+      default:
+        throw new IllegalArgumentException(
+            String.format("Enum string %s not in %s", value, Arrays.toString(enumConstants)));
     }
   }
 }

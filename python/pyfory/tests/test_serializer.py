@@ -23,7 +23,7 @@ import os
 import pickle
 import weakref
 from enum import Enum
-from typing import Any, List, Dict
+from typing import Any, List, Dict, Optional
 
 import numpy as np
 import pandas as pd
@@ -558,13 +558,13 @@ def test_pandas_range_index():
 
 @dataclass(unsafe_hash=True)
 class PyDataClass1:
-    f1: int
+    f1: Optional[int]
     f2: float
     f3: str
-    f4: bool
+    f4: Optional[bool]
     f5: Any
     f6: List
-    f7: Dict
+    f7: Optional[Dict]
 
 
 @pytest.mark.parametrize("track_ref", [False, True])

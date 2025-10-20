@@ -29,5 +29,7 @@ public enum UnknownEnumValueStrategy {
   /** Return {@code null} instead of the unknown enum constant. */
   RETURN_NULL,
   /** Fallback to the first declared enum constant. */
-  RETURN_FIRST_VARIANT
+  RETURN_FIRST_VARIANT,
+  /** Fallback to the last declared enum constant. */
+  RETURN_LAST_VARIANT
 }

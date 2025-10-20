@@ -36,6 +36,7 @@ public class EnumTest {
 
   enum Color2 {
     Green,
+    Red,
   }
 
   static class EnumWrapper {
@@ -72,6 +73,19 @@ public class EnumTest {
     enumWrapper.color = Color.White;
     byte[] serialize = fory1.serialize(enumWrapper);
     EnumWrapper2 wrapper2 = (EnumWrapper2) fory2.deserialize(serialize);
-    Assert.assertEquals(Color2.Green, wrapper2.color);
+    Assert.assertEquals(wrapper2.color, Color2.Green);
+
+    Fory fory3 =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .unknownEnumValueStrategy(UnknownEnumValueStrategy.RETURN_LAST_VARIANT)
+            .withCodegen(false)
+            .build();
+    fory3.register(Color.class, 101);
+    fory3.register(Color2.class, 102);
+    fory3.register(EnumWrapper2.class, 103);
+    EnumWrapper2 wrapper3 = (EnumWrapper2) fory3.deserialize(serialize);
+    Assert.assertEquals(wrapper3.color, Color2.Red);
   }
 }

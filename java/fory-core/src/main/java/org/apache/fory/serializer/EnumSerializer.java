@@ -94,7 +94,7 @@ public class EnumSerializer extends ImmutableSerializer<Enum> {
     } else {
       int value = buffer.readVarUint32Small7();
       if (value >= enumConstants.length) {
-        return handleNonexistentEnumValue(enumConstants, value);
+        return handleNonexistentEnumValue(value);
       }
       return enumConstants[value];
     }
@@ -109,17 +109,19 @@ public class EnumSerializer extends ImmutableSerializer<Enum> {
   public Enum xread(MemoryBuffer buffer) {
     int value = buffer.readVarUint32Small7();
     if (value >= enumConstants.length) {
-      return handleNonexistentEnumValue(enumConstants, value);
+      return handleNonexistentEnumValue(value);
     }
     return enumConstants[value];
   }
 
-  private Enum handleNonexistentEnumValue(Enum[] enumConstants, int value) {
+  private Enum handleNonexistentEnumValue(int value) {
     switch (fory.getConfig().getUnknownEnumValueStrategy()) {
       case RETURN_NULL:
         return null;
       case RETURN_FIRST_VARIANT:
         return enumConstants[0];
+      case RETURN_LAST_VARIANT:
+        return enumConstants[enumConstants.length - 1];
       default:
         throw new IllegalArgumentException(
             String.format("Enum ordinal %s not in %s", value, Arrays.toString(enumConstants)));
@@ -132,6 +134,8 @@ public class EnumSerializer extends ImmutableSerializer<Enum> {
         return null;
       case RETURN_FIRST_VARIANT:
         return enumConstants[0];
+      case RETURN_LAST_VARIANT:
+        return enumConstants[enumConstants.length - 1];
       default:
         throw new IllegalArgumentException(
             String.format("Enum string %s not in %s", value, Arrays.toString(enumConstants)));

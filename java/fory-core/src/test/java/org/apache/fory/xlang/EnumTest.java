@@ -62,7 +62,7 @@ public class EnumTest {
         Fory.builder()
             .withLanguage(Language.XLANG)
             .withCompatibleMode(CompatibleMode.COMPATIBLE)
-            .unknownEnumValueStrategy(UnknownEnumValueStrategy.RETURN_FIRST_VARIANT)
+            .withUnknownEnumValueStrategy(UnknownEnumValueStrategy.RETURN_FIRST_VARIANT)
             .withCodegen(false)
             .build();
     fory2.register(Color.class, 101);
@@ -79,7 +79,7 @@ public class EnumTest {
         Fory.builder()
             .withLanguage(Language.XLANG)
             .withCompatibleMode(CompatibleMode.COMPATIBLE)
-            .unknownEnumValueStrategy(UnknownEnumValueStrategy.RETURN_LAST_VARIANT)
+            .withUnknownEnumValueStrategy(UnknownEnumValueStrategy.RETURN_LAST_VARIANT)
             .withCodegen(false)
             .build();
     fory3.register(Color.class, 101);

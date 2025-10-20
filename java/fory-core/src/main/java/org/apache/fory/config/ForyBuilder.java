@@ -146,7 +146,7 @@ public final class ForyBuilder {
    * @param action policy to apply for unknown enum values
    * @return this builder instance for chaining
    */
-  public ForyBuilder unknownEnumValueStrategy(UnknownEnumValueStrategy action) {
+  public ForyBuilder withUnknownEnumValueStrategy(UnknownEnumValueStrategy action) {
     this.unknownEnumValueStrategy = action;
     return this;
   }

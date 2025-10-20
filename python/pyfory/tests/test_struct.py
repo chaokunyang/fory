@@ -414,10 +414,12 @@ class OptionalFieldsObject:
     f5: str = ""
 
 
+@pytest.mark.parametrize("xlang", [False, True])
 @pytest.mark.parametrize("compatible", [False, True])
-def test_optional_fields(compatible):
-    fory = Fory(xlang=True, ref=True, compatible=compatible)
-    fory.register_type(OptionalFieldsObject, typename="example.OptionalFieldsObject")
+def test_optional_fields(xlang, compatible):
+    fory = Fory(xlang=xlang, ref=True, compatible=compatible, strict=False)
+    if xlang:
+        fory.register_type(OptionalFieldsObject, typename="example.OptionalFieldsObject")
 
     obj_with_none = OptionalFieldsObject(f1=None, f2=None, f3=None, f4=42, f5="test")
     result = ser_de(fory, obj_with_none)
@@ -451,11 +453,13 @@ class NestedOptionalObject:
     f3: str = ""
 
 
+@pytest.mark.parametrize("xlang", [False, True])
 @pytest.mark.parametrize("compatible", [False, True])
-def test_nested_optional_fields(compatible):
-    fory = Fory(xlang=True, ref=True, compatible=compatible)
-    fory.register_type(ComplexObject, typename="example.ComplexObject")
-    fory.register_type(NestedOptionalObject, typename="example.NestedOptionalObject")
+def test_nested_optional_fields(xlang, compatible):
+    fory = Fory(xlang=xlang, ref=True, compatible=compatible, strict=False)
+    if xlang:
+        fory.register_type(ComplexObject, typename="example.ComplexObject")
+        fory.register_type(NestedOptionalObject, typename="example.NestedOptionalObject")
 
     obj_with_none = NestedOptionalObject(f1=None, f2=None, f3="test")
     result = ser_de(fory, obj_with_none)

@@ -431,6 +431,8 @@ class DataClassSerializer(Serializer):
         counter = itertools.count(0)
         buffer, fory, value, value_dict = "buffer", "fory", "value", "value_dict"
         context[fory] = self.fory
+        from pyfory.type import unwrap_optional
+
         stmts = [
             f'"""write method for {self.type_}"""',
             f"{buffer}.write_int32({self._hash})",
@@ -439,18 +441,19 @@ class DataClassSerializer(Serializer):
             stmts.append(f"{value_dict} = {value}.__dict__")
         for field_name in self._field_names:
             field_type = self._type_hints[field_name]
+            unwrapped_type, is_optional = unwrap_optional(field_type)
             field_value = f"field_value{next(counter)}"
             if not self._has_slots:
                 stmts.append(f"{field_value} = {value_dict}['{field_name}']")
             else:
                 stmts.append(f"{field_value} = {value}.{field_name}")
-            if field_type is bool:
+            if unwrapped_type is bool:
                 stmts.extend(gen_write_nullable_basic_stmts(buffer, field_value, bool))
-            elif field_type is int:
+            elif unwrapped_type is int:
                 stmts.extend(gen_write_nullable_basic_stmts(buffer, field_value, int))
-            elif field_type is float:
+            elif unwrapped_type is float:
                 stmts.extend(gen_write_nullable_basic_stmts(buffer, field_value, float))
-            elif field_type is str:
+            elif unwrapped_type is str:
                 stmts.extend(gen_write_nullable_basic_stmts(buffer, field_value, str))
             else:
                 stmts.append(f"{fory}.write_ref_pyobject({buffer}, {field_value})")
@@ -475,6 +478,8 @@ class DataClassSerializer(Serializer):
         context[fory] = self.fory
         context[obj_class] = self.type_
         context[ref_resolver] = self.fory.ref_resolver
+        from pyfory.type import unwrap_optional
+
         stmts = [
             f'"""read method for {self.type_}"""',
             f"{obj} = {obj_class}.__new__({obj_class})",
@@ -495,13 +500,14 @@ class DataClassSerializer(Serializer):
 
         for field_name in self._field_names:
             field_type = self._type_hints[field_name]
-            if field_type is bool:
+            unwrapped_type, is_optional = unwrap_optional(field_type)
+            if unwrapped_type is bool:
                 stmts.extend(gen_read_nullable_basic_stmts(buffer, bool, set_action))
-            elif field_type is int:
+            elif unwrapped_type is int:
                 stmts.extend(gen_read_nullable_basic_stmts(buffer, int, set_action))
-            elif field_type is float:
+            elif unwrapped_type is float:
                 stmts.extend(gen_read_nullable_basic_stmts(buffer, float, set_action))
-            elif field_type is str:
+            elif unwrapped_type is str:
                 stmts.extend(gen_read_nullable_basic_stmts(buffer, str, set_action))
             else:
                 stmts.append(f"{obj}.{field_name} = {fory}.read_ref_pyobject({buffer})")

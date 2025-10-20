@@ -101,7 +101,7 @@ impl MetaStringBytes {
             // ((v1 * 31 + v2) >> 8 << 8) | encoding
             let tmp: u128 = (v1 as u128).wrapping_mul(31u128).wrapping_add(v2 as u128);
             let masked = ((tmp >> 8) << 8) as u64;
-            hash_code = masked as i64 | (encoding_val as i64);
+            hash_code = masked as i64 | encoding_val;
         } else {
             let mut hc = murmurhash3_x64_128(&bytes, 47).0 as i64;
             hc = hc.abs();

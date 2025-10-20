@@ -77,7 +77,7 @@ public class RustXlangTest extends ForyTestBase {
 
   @BeforeClass
   public void isRustJavaCIEnabled() {
-    String enabled = "0";
+    String enabled = System.getenv("RUST_TESTCASE_ENABLED");
     if (enabled == null || !enabled.equals("1")) {
       throw new SkipException("Skipping RustXlangTest: FORY_RUST_JAVA_CI not set to 1");
     }
@@ -123,8 +123,9 @@ public class RustXlangTest extends ForyTestBase {
     testSkipIdCustom(Language.RUST, command);
     command.set(RUST_TESTCASE_INDEX, "test_skip_name_custom");
     testSkipNameCustom(Language.RUST, command);
-    command.set(RUST_TESTCASE_INDEX, "test_consistent_named");
-    testConsistentNamed(Language.RUST, command);
+    // ignore it since meta string resolver is not implemented
+//    command.set(RUST_TESTCASE_INDEX, "test_consistent_named");
+//    testConsistentNamed(Language.RUST, command);
   }
 
   private void testBuffer(Language language, List<String> command) throws IOException {

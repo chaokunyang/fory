@@ -123,9 +123,8 @@ public class RustXlangTest extends ForyTestBase {
     testSkipIdCustom(Language.RUST, command);
     command.set(RUST_TESTCASE_INDEX, "test_skip_name_custom");
     testSkipNameCustom(Language.RUST, command);
-    // ignore it since meta string resolver is not implemented
-//    command.set(RUST_TESTCASE_INDEX, "test_consistent_named");
-//    testConsistentNamed(Language.RUST, command);
+    command.set(RUST_TESTCASE_INDEX, "test_consistent_named");
+    testConsistentNamed(Language.RUST, command);
   }
 
   private void testBuffer(Language language, List<String> command) throws IOException {

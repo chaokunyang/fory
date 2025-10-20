@@ -717,7 +717,7 @@ impl<K: Serializer + ForyDefault + Ord + std::hash::Hash, V: Serializer + ForyDe
                     cur_len, len
                 ))
             );
-              if !track_key_ref && !track_value_ref {
+            if !track_key_ref && !track_value_ref {
                 for _ in 0..chunk_size {
                     let key = K::fory_read_data(context)?;
                     let value = V::fory_read_data(context)?;

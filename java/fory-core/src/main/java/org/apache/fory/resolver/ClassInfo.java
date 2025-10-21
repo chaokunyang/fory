@@ -58,7 +58,7 @@ public class ClassInfo {
       boolean isDynamicGeneratedClass,
       Serializer<?> serializer,
       short classId,
-      short xtypeId) {
+      int xtypeId) {
     this.cls = cls;
     this.fullNameBytes = fullNameBytes;
     this.namespaceBytes = namespaceBytes;
@@ -70,6 +70,7 @@ public class ClassInfo {
     if (cls != null && classId == TypeResolver.NO_CLASS_ID) {
       Preconditions.checkArgument(typeNameBytes != null);
     }
+    assert xtypeId >= 0;
   }
 
   ClassInfo(

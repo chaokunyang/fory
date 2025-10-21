@@ -541,6 +541,8 @@ fn is_internal_type_id(type_id: u32) -> bool {
     .contains(&type_id)
 }
 
+/// Group fields into serialization categories while normalizing field names to snake_case.
+/// The returned groups preserve the ordering rules required by the serialization layout.
 fn group_fields_by_type(fields: &[&Field]) -> FieldGroups {
     let mut primitive_fields = Vec::new();
     let mut nullable_primitive_fields = Vec::new();
@@ -553,7 +555,8 @@ fn group_fields_by_type(fields: &[&Field]) -> FieldGroups {
     // First handle Forward fields separately to avoid borrow checker issues
     for field in fields {
         if is_forward_field(&field.ty) {
-            let ident = field.ident.as_ref().unwrap().to_string();
+            let raw_ident = field.ident.as_ref().unwrap().to_string();
+            let ident = to_snake_case(&raw_ident);
             other_fields.push((ident, "Forward".to_string(), TypeId::UNKNOWN as u32));
         }
     }
@@ -578,7 +581,8 @@ fn group_fields_by_type(fields: &[&Field]) -> FieldGroups {
     };
 
     for field in fields {
-        let ident = field.ident.as_ref().unwrap().to_string();
+        let raw_ident = field.ident.as_ref().unwrap().to_string();
+        let ident = to_snake_case(&raw_ident);
 
         // Skip if already handled as Forward field
         if is_forward_field(&field.ty) {

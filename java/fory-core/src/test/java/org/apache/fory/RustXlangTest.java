@@ -99,30 +99,30 @@ public class RustXlangTest extends ForyTestBase {
   @Test
   public void testRust() throws Exception {
     List<String> command = rustBaseCommand;
-//    command.set(RUST_TESTCASE_INDEX, "test_buffer");
-//    testBuffer(Language.RUST, command);
-//    command.set(RUST_TESTCASE_INDEX, "test_buffer_var");
-//    testBufferVar(Language.RUST, command);
-//    command.set(RUST_TESTCASE_INDEX, "test_murmurhash3");
-//    testMurmurHash3(Language.RUST, command);
-//    command.set(RUST_TESTCASE_INDEX, "test_string_serializer");
-//    testStringSerializer(Language.RUST, command);
-//    command.set(RUST_TESTCASE_INDEX, "test_cross_language_serializer");
-//    testCrossLanguageSerializer(Language.RUST, command);
-//    command.set(RUST_TESTCASE_INDEX, "test_simple_struct");
-//    testSimpleStruct(Language.RUST, command);
-//    command.set(RUST_TESTCASE_INDEX, "test_simple_named_struct");
-//    testSimpleNamedStruct(Language.RUST, command);
-//    command.set(RUST_TESTCASE_INDEX, "test_list");
-//    testList(Language.RUST, command);
-//    command.set(RUST_TESTCASE_INDEX, "test_map");
-//    testMap(Language.RUST, command);
-//    command.set(RUST_TESTCASE_INDEX, "test_integer");
-//    testInteger(Language.RUST, command);
-//    command.set(RUST_TESTCASE_INDEX, "test_skip_id_custom");
-//    testSkipIdCustom(Language.RUST, command);
-//    command.set(RUST_TESTCASE_INDEX, "test_skip_name_custom");
-//    testSkipNameCustom(Language.RUST, command);
+    command.set(RUST_TESTCASE_INDEX, "test_buffer");
+    testBuffer(Language.RUST, command);
+    command.set(RUST_TESTCASE_INDEX, "test_buffer_var");
+    testBufferVar(Language.RUST, command);
+    command.set(RUST_TESTCASE_INDEX, "test_murmurhash3");
+    testMurmurHash3(Language.RUST, command);
+    command.set(RUST_TESTCASE_INDEX, "test_string_serializer");
+    testStringSerializer(Language.RUST, command);
+    command.set(RUST_TESTCASE_INDEX, "test_cross_language_serializer");
+    testCrossLanguageSerializer(Language.RUST, command);
+    command.set(RUST_TESTCASE_INDEX, "test_simple_struct");
+    testSimpleStruct(Language.RUST, command);
+    command.set(RUST_TESTCASE_INDEX, "test_simple_named_struct");
+    testSimpleNamedStruct(Language.RUST, command);
+    command.set(RUST_TESTCASE_INDEX, "test_list");
+    testList(Language.RUST, command);
+    command.set(RUST_TESTCASE_INDEX, "test_map");
+    testMap(Language.RUST, command);
+    command.set(RUST_TESTCASE_INDEX, "test_integer");
+    testInteger(Language.RUST, command);
+    command.set(RUST_TESTCASE_INDEX, "test_skip_id_custom");
+    testSkipIdCustom(Language.RUST, command);
+    command.set(RUST_TESTCASE_INDEX, "test_skip_name_custom");
+    testSkipNameCustom(Language.RUST, command);
     command.set(RUST_TESTCASE_INDEX, "test_struct_version_check");
     testStructVersionCheck(Language.RUST, command);
     command.set(RUST_TESTCASE_INDEX, "test_consistent_named");
@@ -855,7 +855,10 @@ public class RustXlangTest extends ForyTestBase {
     fory.serialize(buffer, obj);
     byte[] bytes = buffer.getBytes(0, buffer.writerIndex());
     // Debug: print first 30 bytes
-    System.out.println("Java serialized bytes (first 30): " + java.util.Arrays.toString(java.util.Arrays.copyOf(bytes, Math.min(30, bytes.length))));
+    System.out.println(
+        "Java serialized bytes (first 30): "
+            + java.util.Arrays.toString(
+                java.util.Arrays.copyOf(bytes, Math.min(30, bytes.length))));
     Path dataFile = Files.createTempFile("test_struct_version_check", "data");
     Pair<Map<String, String>, File> env_workdir = setFilePath(language, command, dataFile, bytes);
     Assert.assertTrue(executeCommand(command, 30, env_workdir.getLeft(), env_workdir.getRight()));

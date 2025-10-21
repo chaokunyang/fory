@@ -25,6 +25,7 @@ use quote::{format_ident, quote, ToTokens};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt;
+use std::sync::OnceLock;
 use syn::{Field, GenericArgument, PathArguments, Type};
 
 thread_local! {
@@ -54,6 +55,19 @@ pub(super) fn clear_struct_context() {
 
 pub(super) fn get_struct_name() -> Option<String> {
     MACRO_CONTEXT.with(|ctx| ctx.borrow().as_ref().map(|c| c.struct_name.clone()))
+}
+
+/// Global flag to check if ENABLE_FORY_DEBUG_OUTPUT environment variable is set.
+static ENABLE_FORY_DEBUG_OUTPUT: OnceLock<bool> = OnceLock::new();
+
+/// Check if ENABLE_FORY_DEBUG_OUTPUT environment variable is set.
+#[inline]
+fn enable_debug_output() -> bool {
+    *ENABLE_FORY_DEBUG_OUTPUT.get_or_init(|| {
+        std::env::var("ENABLE_FORY_DEBUG_OUTPUT")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false)
+    })
 }
 
 pub(super) fn is_debug_enabled() -> bool {
@@ -755,7 +769,7 @@ pub(crate) fn compute_struct_version_hash(fields: &[&Field]) -> i32 {
     let version = (hash & 0xFFFF_FFFF) as u32;
     let version = version as i32;
 
-    if is_debug_enabled() {
+    if enable_debug_output() {
         if let Some(struct_name) = get_struct_name() {
             println!(
                 "[fory-debug] struct {struct_name} version fingerprint=\"{fingerprint}\" hash={version}"

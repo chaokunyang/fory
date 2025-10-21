@@ -18,6 +18,7 @@
 import datetime
 import enum
 import logging
+import os
 import typing
 
 from pyfory.lib.mmh3 import hash_buffer
@@ -260,9 +261,15 @@ def compute_struct_meta(type_resolver, field_names, serializers, nullable_map=No
     hash_str = "".join(hash_parts)
     hash_bytes = hash_str.encode("utf-8")
 
-    full_hash = hash_buffer(hash_bytes)
+    full_hash = hash_buffer(hash_bytes, seed=47)[0]
     type_hash_32 = full_hash & 0xffffffff
+    if full_hash & 0x80000000:
+        # If the sign bit is set, it's a negative number in 2's complement
+        # Subtract 2^32 to get the correct negative value
+        type_hash_32 = type_hash_32 - 0x100000000
     assert type_hash_32 != 0
+    if os.environ.get("ENABLE_FORY_DEBUG_OUTPUT", "").lower() in ("1", "true"):
+        print(f"[fory-debug] struct version fingerprint=\"{hash_str}\" version hash={type_hash_32}")
 
     # Flatten all groups in correct order (already sorted from group_fields)
     all_types = (

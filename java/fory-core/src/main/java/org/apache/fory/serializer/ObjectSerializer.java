@@ -375,7 +375,8 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
 
     String fingerprint = builder.toString();
     byte[] bytes = fingerprint.getBytes(StandardCharsets.UTF_8);
-    int hash = (int) MurmurHash3.murmurhash3_x64_128(bytes, 0, bytes.length, 47)[0];
+    long hashLong = MurmurHash3.murmurhash3_x64_128(bytes, 0, bytes.length, 47)[0];
+    int hash = (int) (hashLong & 0xffffffffL);
     if (fory.getConfig().isForyDebugOutputEnabled()) {
       String className =
           sorted.isEmpty() ? "<unknown>" : String.valueOf(sorted.get(0).getDeclaringClass());

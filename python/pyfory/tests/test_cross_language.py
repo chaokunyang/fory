@@ -545,9 +545,9 @@ def test_struct_hash(data_file_path):
     from pyfory._struct import compute_struct_meta
 
     v = compute_struct_meta(
-        fory,
+        fory.type_resolver,
         serializer._field_names,
-        serializer._unwrapped_hints,
+        serializer._serializers,
         serializer._nullable_fields,
     )[0]
     assert read_hash == v, (read_hash, v)

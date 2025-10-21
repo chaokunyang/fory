@@ -484,7 +484,8 @@ impl TypeResolver {
                     T2::fory_write(v, context, write_ref_info, write_type_info, has_generics)
                 }
                 None => Err(Error::type_error(format!(
-                    "Cast type error when writing: {:?}",
+                    "Cast type to {:?} error when writing: {:?}",
+                    std::any::type_name::<T2>(),
                     T2::fory_static_type_id()
                 ))),
             }
@@ -510,7 +511,11 @@ impl TypeResolver {
             let this = this.downcast_ref::<T2>();
             match this {
                 Some(v) => T2::fory_write_data_generic(v, context, has_generics),
-                None => todo!(),
+                None => Err(Error::type_error(format!(
+                    "Cast type to {:?} error when writing data: {:?}",
+                    std::any::type_name::<T2>(),
+                    T2::fory_static_type_id()
+                ))),
             }
         }
 
@@ -660,7 +665,8 @@ impl TypeResolver {
                     Ok(v.fory_write(context, write_ref_info, write_type_info, has_generics)?)
                 }
                 None => Err(Error::type_error(format!(
-                    "Cast type error when writing: {:?}",
+                    "Cast type to {:?} error when writing: {:?}",
+                    std::any::type_name::<T2>(),
                     T2::fory_static_type_id()
                 ))),
             }
@@ -686,7 +692,11 @@ impl TypeResolver {
             let this = this.downcast_ref::<T2>();
             match this {
                 Some(v) => T2::fory_write_data_generic(v, context, has_generics),
-                None => todo!(),
+                None => Err(Error::type_error(format!(
+                    "Cast type to {:?} error when writing data: {:?}",
+                    std::any::type_name::<T2>(),
+                    T2::fory_static_type_id()
+                ))),
             }
         }
 

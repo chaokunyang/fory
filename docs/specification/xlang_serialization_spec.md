@@ -843,10 +843,13 @@ other types such as enum/struct/ext
 Type hash algorithm:
 
 - Sort fields by fields sort algorithm
-- Start with hash 47
-- Iterate every field, compute hash by:
-  - `hash = hash * 31 + (type id) * int(nullable)`. For other fields, use type id `TypeId::UNKNOWN` instead
-  - `hash = hash * 31 + hash(snow_case(field_name))`
+- Start with string `""`
+- Iterate every field, append string by:
+  - `$type_id`, for other fields, use type id `TypeId::UNKNOWN` instead.
+  - `$nullable`, `1` if nullable, `0` otherwise.
+  - `snow_case(field_name)`. For camelcase name, convert it to snow_case first.
+- Then convert string to utf8 bytes
+- Compute murmurhash3_x64_128, and use first 32 bits
 
 #### Schema evolution
 

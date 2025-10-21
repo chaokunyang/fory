@@ -28,6 +28,7 @@ use chrono::{NaiveDate, NaiveDateTime};
 use std::mem;
 
 impl Serializer for NaiveDateTime {
+    #[inline(always)]
     fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error> {
         let dt = self.and_utc();
         let micros = dt.timestamp() * 1_000_000 + dt.timestamp_subsec_micros() as i64;
@@ -35,6 +36,7 @@ impl Serializer for NaiveDateTime {
         Ok(())
     }
 
+    #[inline(always)]
     fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
         let micros = context.reader.read_i64()?;
         use chrono::TimeDelta;
@@ -45,43 +47,52 @@ impl Serializer for NaiveDateTime {
         Ok(result)
     }
 
+    #[inline(always)]
     fn fory_reserved_space() -> usize {
         mem::size_of::<u64>()
     }
 
+    #[inline(always)]
     fn fory_get_type_id(_: &TypeResolver) -> Result<u32, Error> {
         Ok(TypeId::TIMESTAMP as u32)
     }
 
+    #[inline(always)]
     fn fory_type_id_dyn(&self, _: &TypeResolver) -> Result<u32, Error> {
         Ok(TypeId::TIMESTAMP as u32)
     }
 
+    #[inline(always)]
     fn fory_static_type_id() -> TypeId {
         TypeId::TIMESTAMP
     }
 
+    #[inline(always)]
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
 
+    #[inline(always)]
     fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error> {
         context.writer.write_varuint32(TypeId::TIMESTAMP as u32);
         Ok(())
     }
 
+    #[inline(always)]
     fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error> {
         read_basic_type_info::<Self>(context)
     }
 }
 
 impl Serializer for NaiveDate {
+    #[inline(always)]
     fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error> {
         let days_since_epoch = self.signed_duration_since(EPOCH).num_days();
         context.writer.write_i32(days_since_epoch as i32);
         Ok(())
     }
 
+    #[inline(always)]
     fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
         let days = context.reader.read_i32()?;
         use chrono::TimeDelta;
@@ -90,43 +101,52 @@ impl Serializer for NaiveDate {
         Ok(result)
     }
 
+    #[inline(always)]
     fn fory_reserved_space() -> usize {
         mem::size_of::<i32>()
     }
 
+    #[inline(always)]
     fn fory_get_type_id(_: &TypeResolver) -> Result<u32, Error> {
         Ok(TypeId::LOCAL_DATE as u32)
     }
 
+    #[inline(always)]
     fn fory_type_id_dyn(&self, _: &TypeResolver) -> Result<u32, Error> {
         Ok(TypeId::LOCAL_DATE as u32)
     }
 
+    #[inline(always)]
     fn fory_static_type_id() -> TypeId {
         TypeId::LOCAL_DATE
     }
 
+    #[inline(always)]
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
 
+    #[inline(always)]
     fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error> {
         context.writer.write_varuint32(TypeId::LOCAL_DATE as u32);
         Ok(())
     }
 
+    #[inline(always)]
     fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error> {
         read_basic_type_info::<Self>(context)
     }
 }
 
 impl ForyDefault for NaiveDateTime {
+    #[inline(always)]
     fn fory_default() -> Self {
         NaiveDateTime::default()
     }
 }
 
 impl ForyDefault for NaiveDate {
+    #[inline(always)]
     fn fory_default() -> Self {
         NaiveDate::default()
     }

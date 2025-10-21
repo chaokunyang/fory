@@ -32,7 +32,7 @@ enum StrEncoding {
 }
 
 impl Serializer for String {
-    #[inline]
+    #[inline(always)]
     fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error> {
         let mut len = get_latin1_length(self);
         if len >= 0 {
@@ -54,7 +54,7 @@ impl Serializer for String {
         Ok(())
     }
 
-    #[inline]
+    #[inline(always)]
     fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
         let bitor = context.reader.read_varuint36small()?;
         let len = bitor >> 2;
@@ -78,7 +78,7 @@ impl Serializer for String {
         Ok(s)
     }
 
-    #[inline]
+    #[inline(always)]
     fn fory_reserved_space() -> usize {
         mem::size_of::<i32>()
     }

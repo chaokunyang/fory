@@ -36,6 +36,7 @@ pub const MIN_DIM_SIZE_AVX: usize = 32;
 ))]
 pub const MIN_DIM_SIZE_SIMD: usize = 16;
 
+#[inline(always)]
 #[cfg(target_arch = "x86_64")]
 unsafe fn is_latin_avx(s: &str) -> bool {
     let bytes = s.as_bytes();
@@ -62,6 +63,7 @@ unsafe fn is_latin_avx(s: &str) -> bool {
     true
 }
 
+#[inline(always)]
 #[cfg(target_feature = "sse2")]
 unsafe fn is_latin_sse(s: &str) -> bool {
     let bytes = s.as_bytes();
@@ -88,6 +90,7 @@ unsafe fn is_latin_sse(s: &str) -> bool {
     true
 }
 
+#[inline(always)]
 #[cfg(target_feature = "neon")]
 unsafe fn is_latin_neon(s: &str) -> bool {
     let bytes = s.as_bytes();
@@ -113,10 +116,12 @@ unsafe fn is_latin_neon(s: &str) -> bool {
     true
 }
 
+#[inline(always)]
 fn is_latin_standard(s: &str) -> bool {
     s.chars().all(|c| c as u32 <= 0xFF)
 }
 
+#[inline(always)]
 pub fn is_latin(s: &str) -> bool {
     #[cfg(target_arch = "x86_64")]
     {
@@ -144,6 +149,7 @@ pub fn is_latin(s: &str) -> bool {
     is_latin_standard(s)
 }
 
+#[inline(always)]
 #[cfg(target_arch = "x86_64")]
 unsafe fn get_latin1_length_avx(s: &str) -> i32 {
     let bytes = s.as_bytes();
@@ -171,6 +177,7 @@ unsafe fn get_latin1_length_avx(s: &str) -> i32 {
     count as i32
 }
 
+#[inline(always)]
 #[cfg(target_feature = "sse2")]
 unsafe fn get_latin1_length_sse(s: &str) -> i32 {
     let bytes = s.as_bytes();
@@ -198,6 +205,7 @@ unsafe fn get_latin1_length_sse(s: &str) -> i32 {
     count as i32
 }
 
+#[inline(always)]
 #[cfg(target_feature = "neon")]
 unsafe fn get_latin1_length_neon(s: &str) -> i32 {
     let bytes = s.as_bytes();
@@ -224,6 +232,7 @@ unsafe fn get_latin1_length_neon(s: &str) -> i32 {
     count as i32
 }
 
+#[inline(always)]
 fn get_latin1_length_standard(s: &str) -> i32 {
     let mut count = 0;
     for c in s.chars() {
@@ -235,6 +244,7 @@ fn get_latin1_length_standard(s: &str) -> i32 {
     count
 }
 
+#[inline(always)]
 pub fn get_latin1_length(s: &str) -> i32 {
     #[cfg(target_arch = "x86_64")]
     {

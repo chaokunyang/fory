@@ -46,10 +46,12 @@ impl Serializer for bool {
         Ok(TypeId::BOOL as u32)
     }
 
+    #[inline(always)]
     fn fory_type_id_dyn(&self, _: &TypeResolver) -> Result<u32, Error> {
         Ok(TypeId::BOOL as u32)
     }
 
+    #[inline(always)]
     fn fory_static_type_id() -> TypeId {
         TypeId::BOOL
     }

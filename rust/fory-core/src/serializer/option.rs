@@ -58,6 +58,7 @@ impl<T: Serializer + ForyDefault> Serializer for Option<T> {
         T::fory_write_type_info(context)
     }
 
+    #[inline(always)]
     fn fory_read(
         context: &mut ReadContext,
         read_ref_info: bool,
@@ -81,6 +82,7 @@ impl<T: Serializer + ForyDefault> Serializer for Option<T> {
         Ok(Some(T::fory_read(context, false, read_type_info)?))
     }
 
+    #[inline(always)]
     fn fory_read_with_type_info(
         context: &mut ReadContext,
         read_ref_info: bool,

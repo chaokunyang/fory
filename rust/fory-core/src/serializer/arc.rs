@@ -25,10 +25,12 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for Arc<T> {
+    #[inline(always)]
     fn fory_is_shared_ref() -> bool {
         true
     }
 
+    #[inline(always)]
     fn fory_write(
         &self,
         context: &mut WriteContext,
@@ -72,10 +74,12 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for Arc<T> 
         ))
     }
 
+    #[inline(always)]
     fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error> {
         T::fory_write_type_info(context)
     }
 
+    #[inline(always)]
     fn fory_read(
         context: &mut ReadContext,
         read_ref_info: bool,
@@ -85,6 +89,7 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for Arc<T> 
         read_arc(context, read_ref_info, read_type_info, None)
     }
 
+    #[inline(always)]
     fn fory_read_with_type_info(
         context: &mut ReadContext,
         read_ref_info: bool,
@@ -100,33 +105,40 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for Arc<T> 
         Err(Error::not_allowed("Arc<T> should be read using `fory_read/fory_read_with_type_info` to handle reference tracking properly"))
     }
 
+    #[inline(always)]
     fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error> {
         T::fory_read_type_info(context)
     }
 
+    #[inline(always)]
     fn fory_reserved_space() -> usize {
         // Arc is a shared ref, so we just need space for the ref tracking
         // We don't recursively compute inner type's space to avoid infinite recursion
         4
     }
 
+    #[inline(always)]
     fn fory_get_type_id(type_resolver: &TypeResolver) -> Result<u32, Error> {
         T::fory_get_type_id(type_resolver)
     }
 
+    #[inline(always)]
     fn fory_type_id_dyn(&self, type_resolver: &TypeResolver) -> Result<u32, Error> {
         (**self).fory_type_id_dyn(type_resolver)
     }
 
+    #[inline(always)]
     fn fory_static_type_id() -> TypeId {
         T::fory_static_type_id()
     }
 
+    #[inline(always)]
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
 }
 
+#[inline(always)]
 fn read_arc<T: Serializer + ForyDefault + 'static>(
     context: &mut ReadContext,
     read_ref_info: bool,
@@ -161,6 +173,7 @@ fn read_arc<T: Serializer + ForyDefault + 'static>(
     }
 }
 
+#[inline(always)]
 fn read_arc_inner<T: Serializer + ForyDefault + 'static>(
     context: &mut ReadContext,
     read_type_info: bool,
@@ -181,6 +194,7 @@ fn read_arc_inner<T: Serializer + ForyDefault + 'static>(
 }
 
 impl<T: ForyDefault> ForyDefault for Arc<T> {
+    #[inline(always)]
     fn fory_default() -> Self {
         Arc::new(T::fory_default())
     }

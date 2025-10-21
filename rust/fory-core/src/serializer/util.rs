@@ -47,13 +47,13 @@ pub(crate) fn read_basic_type_info<T: Serializer>(context: &mut ReadContext) -> 
 /// According to xlang_serialization_spec.md:
 /// - For enums (ENUM/NAMED_ENUM), we should skip writing type info
 /// - For structs and ext types, we should write type info
-#[inline]
+#[inline(always)]
 pub fn should_skip_type_info_at_runtime(type_id: u32) -> bool {
     let internal_type_id = (type_id & 0xff) as i8;
     internal_type_id == TypeId::ENUM as i8 || internal_type_id == TypeId::NAMED_ENUM as i8
 }
 
-#[inline]
+#[inline(always)]
 pub fn field_requires_ref_flag(type_id: u32, nullable: bool) -> bool {
     if nullable {
         return true;

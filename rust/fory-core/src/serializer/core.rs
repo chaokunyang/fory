@@ -246,6 +246,7 @@ pub trait Serializer: 'static {
     /// [`fory_write_data`]: Serializer::fory_write_data
     /// [`fory_write_type_info`]: Serializer::fory_write_type_info
     /// [`fory_write_data_generic`]: Serializer::fory_write_data_generic
+    #[inline(always)]
     fn fory_write(
         &self,
         context: &mut WriteContext,
@@ -304,6 +305,7 @@ pub trait Serializer: 'static {
     /// - Focus on implementing [`fory_write_data`] for custom types
     ///
     /// [`fory_write_data`]: Serializer::fory_write_data
+    #[inline(always)]
     #[allow(unused_variables)]
     fn fory_write_data_generic(
         &self,
@@ -574,6 +576,7 @@ pub trait Serializer: 'static {
     /// [`fory_read_data`]: Serializer::fory_read_data
     /// [`fory_read_type_info`]: Serializer::fory_read_type_info
     /// [`fory_write`]: Serializer::fory_write
+    #[inline(always)]
     fn fory_read(
         context: &mut ReadContext,
         read_ref_info: bool,
@@ -658,6 +661,7 @@ pub trait Serializer: 'static {
     /// - User types with custom serialization rarely need to override this
     ///
     /// [`fory_read`]: Serializer::fory_read
+    #[inline(always)]
     #[allow(unused_variables)]
     fn fory_read_with_type_info(
         context: &mut ReadContext,

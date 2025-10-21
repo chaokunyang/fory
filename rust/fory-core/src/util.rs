@@ -27,10 +27,12 @@ pub const EPOCH: NaiveDate = match NaiveDate::from_ymd_opt(1970, 1, 1) {
 };
 
 // Swapping the high 8 bits and the low 8 bits of a 16-bit value
+#[inline(always)]
 fn swap_endian(value: u16) -> u16 {
     value.rotate_right(8)
 }
 
+#[inline]
 pub fn to_utf8(utf16: &[u16], is_little_endian: bool) -> Result<Vec<u8>, String> {
     // Pre-allocating capacity to avoid dynamic resizing
     // Longest case: 1 u16 to 3 u8
@@ -121,6 +123,7 @@ pub fn to_utf8(utf16: &[u16], is_little_endian: bool) -> Result<Vec<u8>, String>
     Ok(utf8_bytes)
 }
 
+#[inline(always)]
 pub fn get_ext_actual_type_id(type_id: u32, register_by_name: bool) -> u32 {
     (type_id << 8)
         + if register_by_name {

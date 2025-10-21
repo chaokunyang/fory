@@ -310,6 +310,7 @@ unsafe impl<T: ?Sized + Send + Sync> Send for ArcWeak<T> {}
 unsafe impl<T: ?Sized + Send + Sync> Sync for ArcWeak<T> {}
 
 impl<T: Serializer + ForyDefault + 'static> Serializer for RcWeak<T> {
+    #[inline(always)]
     fn fory_is_shared_ref() -> bool {
         true
     }
@@ -352,10 +353,12 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for RcWeak<T> {
         ))
     }
 
+    #[inline(always)]
     fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error> {
         T::fory_write_type_info(context)
     }
 
+    #[inline(always)]
     fn fory_read(
         context: &mut ReadContext,
         read_ref_info: bool,
@@ -364,6 +367,7 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for RcWeak<T> {
         read_rc_weak::<T>(context, read_ref_info, read_type_info, None)
     }
 
+    #[inline(always)]
     fn fory_read_with_type_info(
         context: &mut ReadContext,
         read_ref_info: bool,
@@ -372,23 +376,28 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for RcWeak<T> {
         read_rc_weak::<T>(context, read_ref_info, false, Some(typeinfo))
     }
 
+    #[inline(always)]
     fn fory_read_data(_: &mut ReadContext) -> Result<Self, Error> {
         Err(Error::not_allowed("RcWeak<T> should be written using `fory_read/fory_read_with_type_info` to handle reference tracking properly"))
     }
 
+    #[inline(always)]
     fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error> {
         T::fory_read_type_info(context)
     }
 
+    #[inline(always)]
     fn fory_reserved_space() -> usize {
         // RcWeak is a shared ref, return a const to avoid infinite recursion
         4
     }
 
+    #[inline(always)]
     fn fory_get_type_id(type_resolver: &TypeResolver) -> Result<u32, Error> {
         T::fory_get_type_id(type_resolver)
     }
 
+    #[inline(always)]
     fn fory_type_id_dyn(&self, type_resolver: &TypeResolver) -> Result<u32, Error> {
         if let Some(rc) = self.upgrade() {
             (*rc).fory_type_id_dyn(type_resolver)
@@ -397,10 +406,12 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for RcWeak<T> {
         }
     }
 
+    #[inline(always)]
     fn fory_static_type_id() -> TypeId {
         T::fory_static_type_id()
     }
 
+    #[inline(always)]
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -464,16 +475,19 @@ fn read_rc_weak<T: Serializer + ForyDefault + 'static>(
 }
 
 impl<T: ForyDefault> ForyDefault for RcWeak<T> {
+    #[inline(always)]
     fn fory_default() -> Self {
         RcWeak::new()
     }
 }
 
 impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for ArcWeak<T> {
+    #[inline(always)]
     fn fory_is_shared_ref() -> bool {
         true
     }
 
+    #[inline(always)]
     fn fory_write(
         &self,
         context: &mut WriteContext,
@@ -515,6 +529,7 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for ArcWeak
         T::fory_write_type_info(context)
     }
 
+    #[inline(always)]
     fn fory_read(
         context: &mut ReadContext,
         read_ref_info: bool,
@@ -523,6 +538,7 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for ArcWeak
         read_arc_weak(context, read_ref_info, read_type_info, None)
     }
 
+    #[inline(always)]
     fn fory_read_with_type_info(
         context: &mut ReadContext,
         read_ref_info: bool,
@@ -535,19 +551,23 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for ArcWeak
         Err(Error::not_allowed("ArcWeak<T> should be written using `fory_read/fory_read_with_type_info` to handle reference tracking properly"))
     }
 
+    #[inline(always)]
     fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error> {
         T::fory_read_type_info(context)
     }
 
+    #[inline(always)]
     fn fory_reserved_space() -> usize {
         // ArcWeak is a shared ref, return a const to avoid infinite recursion
         4
     }
 
+    #[inline(always)]
     fn fory_get_type_id(type_resolver: &TypeResolver) -> Result<u32, Error> {
         T::fory_get_type_id(type_resolver)
     }
 
+    #[inline(always)]
     fn fory_type_id_dyn(&self, type_resolver: &TypeResolver) -> Result<u32, Error> {
         if let Some(arc) = self.upgrade() {
             (*arc).fory_type_id_dyn(type_resolver)
@@ -556,10 +576,12 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for ArcWeak
         }
     }
 
+    #[inline(always)]
     fn fory_static_type_id() -> TypeId {
         T::fory_static_type_id()
     }
 
+    #[inline(always)]
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -627,6 +649,7 @@ fn read_arc_weak<T: Serializer + ForyDefault + 'static>(
 }
 
 impl<T: ForyDefault> ForyDefault for ArcWeak<T> {
+    #[inline(always)]
     fn fory_default() -> Self {
         ArcWeak::new()
     }

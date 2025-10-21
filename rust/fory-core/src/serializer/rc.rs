@@ -24,10 +24,12 @@ use crate::types::TypeId;
 use std::rc::Rc;
 
 impl<T: Serializer + ForyDefault + 'static> Serializer for Rc<T> {
+    #[inline(always)]
     fn fory_is_shared_ref() -> bool {
         true
     }
 
+    #[inline(always)]
     fn fory_write(
         &self,
         context: &mut WriteContext,
@@ -59,22 +61,26 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for Rc<T> {
         }
     }
 
+    #[inline(always)]
     fn fory_write_data_generic(&self, _: &mut WriteContext, _: bool) -> Result<(), Error> {
         Err(Error::not_allowed(
             "Rc<T> should be written using `fory_write` to handle reference tracking properly",
         ))
     }
 
+    #[inline(always)]
     fn fory_write_data(&self, _: &mut WriteContext) -> Result<(), Error> {
         Err(Error::not_allowed(
             "Rc<T> should be written using `fory_write` to handle reference tracking properly",
         ))
     }
 
+    #[inline(always)]
     fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error> {
         T::fory_write_type_info(context)
     }
 
+    #[inline(always)]
     fn fory_read(
         context: &mut ReadContext,
         read_ref_info: bool,
@@ -83,6 +89,7 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for Rc<T> {
         read_rc(context, read_ref_info, read_type_info, None)
     }
 
+    #[inline(always)]
     fn fory_read_with_type_info(
         context: &mut ReadContext,
         read_ref_info: bool,
@@ -94,37 +101,45 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for Rc<T> {
         read_rc(context, read_ref_info, false, Some(typeinfo))
     }
 
+    #[inline(always)]
     fn fory_read_data(_: &mut ReadContext) -> Result<Self, Error> {
         Err(Error::not_allowed("Rc<T> should be read using `fory_read/fory_read_with_type_info` to handle reference tracking properly"))
     }
 
+    #[inline(always)]
     fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error> {
         T::fory_read_type_info(context)
     }
 
+    #[inline(always)]
     fn fory_reserved_space() -> usize {
         // Rc is a shared ref, so we just need space for the ref tracking
         // We don't recursively compute inner type's space to avoid infinite recursion
         4
     }
 
+    #[inline(always)]
     fn fory_get_type_id(type_resolver: &TypeResolver) -> Result<u32, Error> {
         T::fory_get_type_id(type_resolver)
     }
 
+    #[inline(always)]
     fn fory_type_id_dyn(&self, type_resolver: &TypeResolver) -> Result<u32, Error> {
         (**self).fory_type_id_dyn(type_resolver)
     }
 
+    #[inline(always)]
     fn fory_static_type_id() -> TypeId {
         T::fory_static_type_id()
     }
 
+    #[inline(always)]
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
 }
 
+#[inline]
 fn read_rc<T: Serializer + ForyDefault + 'static>(
     context: &mut ReadContext,
     read_ref_info: bool,
@@ -159,6 +174,7 @@ fn read_rc<T: Serializer + ForyDefault + 'static>(
     }
 }
 
+#[inline]
 fn read_rc_inner<T: Serializer + ForyDefault + 'static>(
     context: &mut ReadContext,
     read_type_info: bool,

@@ -541,6 +541,8 @@ impl TypeMetaLayer {
 pub struct TypeMeta {
     // assigned valid value and used, only during deserializing
     hash: i64,
+    // version hash computed from field types for schema consistency check
+    version: i32,
     layer: TypeMetaLayer,
 }
 
@@ -556,6 +558,9 @@ impl TypeMeta {
     pub fn get_hash(&self) -> i64 {
         self.hash
     }
+    pub fn get_version(&self) -> i32 {
+        self.version
+    }
 
     pub fn get_type_name(&self) -> Rc<MetaString> {
         self.layer.get_type_name()
@@ -568,6 +573,7 @@ impl TypeMeta {
     pub fn empty() -> TypeMeta {
         TypeMeta {
             hash: 0,
+            version: 0,
             layer: TypeMetaLayer::empty(),
         }
     }
@@ -579,10 +585,48 @@ impl TypeMeta {
         register_by_name: bool,
         field_infos: Vec<FieldInfo>,
     ) -> TypeMeta {
+        let version = Self::compute_struct_version(&field_infos);
         TypeMeta {
             hash: 0,
+            version,
             layer: TypeMetaLayer::new(type_id, namespace, type_name, register_by_name, field_infos),
         }
+    }
+
+    /// Compute struct version hash from field types, similar to Java's computeStructHash
+    fn compute_struct_version(field_infos: &[FieldInfo]) -> i32 {
+        let mut hash: i32 = 17;
+        for field_info in field_infos.iter() {
+            hash = Self::compute_field_hash(hash, &field_info.field_type);
+        }
+        assert_ne!(hash, 0, "Struct version hash should not be zero");
+        hash
+    }
+
+    /// Compute hash for a single field type, similar to Java's computeFieldHash
+    fn compute_field_hash(hash: i32, field_type: &FieldType) -> i32 {
+        use crate::types::TypeId;
+        let id = field_type.type_id;
+
+        // For List, Map, Set, use the type constant directly
+        // TODO: include generics type info in hash like Java
+        let type_id_for_hash = if id == TypeId::LIST as u32
+            || id == TypeId::MAP as u32
+            || id == TypeId::SET as u32 {
+            id
+        } else {
+            // For other types, use the type_id directly
+            // Named types would need special handling with namespace+typename
+            // but for now we use type_id which should be consistent
+            id
+        };
+
+        // Compute new hash: (hash * 31 + id) with overflow handling
+        let mut new_hash = (hash as i64) * 31 + (type_id_for_hash as i64);
+        while new_hash >= i32::MAX as i64 {
+            new_hash /= 7;
+        }
+        new_hash as i32
     }
 
     pub fn from_bytes(
@@ -603,9 +647,11 @@ impl TypeMeta {
         // let current_meta_size = 0;
         // while current_meta_size < meta_size {}
         let layer = TypeMetaLayer::from_bytes(reader, type_resolver)?;
+        let version = Self::compute_struct_version(layer.get_field_infos());
         Ok(TypeMeta {
             layer,
             hash: meta_hash,
+            version,
         })
     }
 
@@ -627,9 +673,11 @@ impl TypeMeta {
         // let current_meta_size = 0;
         // while current_meta_size < meta_size {}
         let layer = TypeMetaLayer::from_bytes(reader, type_resolver)?;
+        let version = Self::compute_struct_version(layer.get_field_infos());
         Ok(TypeMeta {
             layer,
             hash: meta_hash,
+            version,
         })
     }
 
@@ -639,6 +687,17 @@ impl TypeMeta {
             meta_size += reader.read_varuint32()? as i64;
         }
         reader.skip(meta_size as usize)
+    }
+
+    /// Check class version consistency, similar to Java's checkClassVersion
+    pub fn check_class_version(read_version: i32, local_version: i32, type_name: &str) -> Result<(), Error> {
+        if read_version != local_version {
+            return Err(Error::struct_version_mismatch(format!(
+                "Read class {} version {} is not consistent with {}",
+                type_name, read_version, local_version
+            )));
+        }
+        Ok(())
     }
 
     pub fn to_bytes(&self) -> Result<Vec<u8>, Error> {

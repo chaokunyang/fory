@@ -245,6 +245,13 @@ fn gen_write_field(field: &Field) -> TokenStream {
 pub fn gen_write_data(fields: &[&Field]) -> TokenStream {
     let write_fields_ts: Vec<_> = fields.iter().map(|field| gen_write_field(field)).collect();
     quote! {
+        // Write version hash when class version checking is enabled
+        if context.is_check_class_version() {
+            let rs_type_id = std::any::TypeId::of::<Self>();
+            let type_info = context.get_type_info(&rs_type_id)?;
+            let version = type_info.get_type_meta().get_version();
+            context.writer.write_i32(version);
+        }
         #(#write_fields_ts)*
         Ok(())
     }

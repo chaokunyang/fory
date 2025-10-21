@@ -80,6 +80,7 @@ pub struct Fory {
     type_resolver: TypeResolver,
     compress_string: bool,
     max_dyn_depth: u32,
+    check_class_version: bool,
     // Lazy-initialized pools (thread-safe, one-time initialization)
     write_context_pool: OnceLock<Pool<WriteContext>>,
     read_context_pool: OnceLock<Pool<ReadContext>>,
@@ -94,6 +95,7 @@ impl Default for Fory {
             type_resolver: TypeResolver::default(),
             compress_string: false,
             max_dyn_depth: 5,
+            check_class_version: false,
             write_context_pool: OnceLock::new(),
             read_context_pool: OnceLock::new(),
         }
@@ -202,6 +204,42 @@ impl Fory {
         self
     }
 
+    /// Enables or disables class version checking for schema consistency.
+    ///
+    /// # Arguments
+    ///
+    /// * `check_class_version` - If `true`, enables class version checking to ensure
+    ///   schema consistency between serialization and deserialization. When enabled,
+    ///   a version hash computed from field types is written/read to detect schema mismatches.
+    ///   If `false`, no version checking is performed.
+    ///
+    /// # Returns
+    ///
+    /// Returns `self` for method chaining.
+    ///
+    /// # Default
+    ///
+    /// The default value is `false`.
+    ///
+    /// # Note
+    ///
+    /// This feature is only effective when `compatible` mode is `false`. In compatible mode,
+    /// schema evolution is supported and version checking is not needed.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use fory_core::Fory;
+    ///
+    /// let fory = Fory::default()
+    ///     .compatible(false)
+    ///     .check_class_version(true);
+    /// ```
+    pub fn check_class_version(mut self, check_class_version: bool) -> Self {
+        self.check_class_version = check_class_version;
+        self
+    }
+
     /// Sets the maximum depth for nested dynamic object serialization.
     ///
     /// # Arguments
@@ -274,6 +312,15 @@ impl Fory {
     /// Returns the maximum depth for nested dynamic object serialization.
     pub fn get_max_dyn_depth(&self) -> u32 {
         self.max_dyn_depth
+    }
+
+    /// Returns whether class version checking is enabled.
+    ///
+    /// # Returns
+    ///
+    /// `true` if class version checking is enabled, `false` otherwise.
+    pub fn is_check_class_version(&self) -> bool {
+        self.check_class_version
     }
 
     /// Returns a type resolver for type lookups.
@@ -383,6 +430,7 @@ impl Fory {
             let share_meta = self.share_meta;
             let xlang = self.xlang;
             let max_dyn_depth = self.max_dyn_depth;
+            let check_class_version = self.check_class_version;
 
             let factory = move || {
                 let reader = Reader::new(&[]);
@@ -393,6 +441,7 @@ impl Fory {
                     share_meta,
                     xlang,
                     max_dyn_depth,
+                    check_class_version,
                 )
             };
             Pool::new(factory)
@@ -466,6 +515,7 @@ impl Fory {
             let share_meta = self.share_meta;
             let compress_string = self.compress_string;
             let xlang = self.xlang;
+            let check_class_version = self.check_class_version;
 
             let factory = move || {
                 let writer = Writer::default();
@@ -476,6 +526,7 @@ impl Fory {
                     share_meta,
                     compress_string,
                     xlang,
+                    check_class_version,
                 )
             };
             Pool::new(factory)

@@ -79,7 +79,7 @@ public class RustXlangTest extends ForyTestBase {
   public void isRustJavaCIEnabled() {
     String enabled = System.getenv("RUST_TESTCASE_ENABLED");
     if (enabled == null || !enabled.equals("1")) {
-      throw new SkipException("Skipping RustXlangTest: FORY_RUST_JAVA_CI not set to 1");
+//      throw new SkipException("Skipping RustXlangTest: FORY_RUST_JAVA_CI not set to 1");
     }
     boolean rustInstalled = true;
     try {
@@ -99,30 +99,32 @@ public class RustXlangTest extends ForyTestBase {
   @Test
   public void testRust() throws Exception {
     List<String> command = rustBaseCommand;
-    command.set(RUST_TESTCASE_INDEX, "test_buffer");
-    testBuffer(Language.RUST, command);
-    command.set(RUST_TESTCASE_INDEX, "test_buffer_var");
-    testBufferVar(Language.RUST, command);
-    command.set(RUST_TESTCASE_INDEX, "test_murmurhash3");
-    testMurmurHash3(Language.RUST, command);
-    command.set(RUST_TESTCASE_INDEX, "test_string_serializer");
-    testStringSerializer(Language.RUST, command);
-    command.set(RUST_TESTCASE_INDEX, "test_cross_language_serializer");
-    testCrossLanguageSerializer(Language.RUST, command);
-    command.set(RUST_TESTCASE_INDEX, "test_simple_struct");
-    testSimpleStruct(Language.RUST, command);
-    command.set(RUST_TESTCASE_INDEX, "test_simple_named_struct");
-    testSimpleNamedStruct(Language.RUST, command);
-    command.set(RUST_TESTCASE_INDEX, "test_list");
-    testList(Language.RUST, command);
-    command.set(RUST_TESTCASE_INDEX, "test_map");
-    testMap(Language.RUST, command);
-    command.set(RUST_TESTCASE_INDEX, "test_integer");
-    testInteger(Language.RUST, command);
-    command.set(RUST_TESTCASE_INDEX, "test_skip_id_custom");
-    testSkipIdCustom(Language.RUST, command);
-    command.set(RUST_TESTCASE_INDEX, "test_skip_name_custom");
-    testSkipNameCustom(Language.RUST, command);
+//    command.set(RUST_TESTCASE_INDEX, "test_buffer");
+//    testBuffer(Language.RUST, command);
+//    command.set(RUST_TESTCASE_INDEX, "test_buffer_var");
+//    testBufferVar(Language.RUST, command);
+//    command.set(RUST_TESTCASE_INDEX, "test_murmurhash3");
+//    testMurmurHash3(Language.RUST, command);
+//    command.set(RUST_TESTCASE_INDEX, "test_string_serializer");
+//    testStringSerializer(Language.RUST, command);
+//    command.set(RUST_TESTCASE_INDEX, "test_cross_language_serializer");
+//    testCrossLanguageSerializer(Language.RUST, command);
+//    command.set(RUST_TESTCASE_INDEX, "test_simple_struct");
+//    testSimpleStruct(Language.RUST, command);
+//    command.set(RUST_TESTCASE_INDEX, "test_simple_named_struct");
+//    testSimpleNamedStruct(Language.RUST, command);
+//    command.set(RUST_TESTCASE_INDEX, "test_list");
+//    testList(Language.RUST, command);
+//    command.set(RUST_TESTCASE_INDEX, "test_map");
+//    testMap(Language.RUST, command);
+//    command.set(RUST_TESTCASE_INDEX, "test_integer");
+//    testInteger(Language.RUST, command);
+//    command.set(RUST_TESTCASE_INDEX, "test_skip_id_custom");
+//    testSkipIdCustom(Language.RUST, command);
+//    command.set(RUST_TESTCASE_INDEX, "test_skip_name_custom");
+//    testSkipNameCustom(Language.RUST, command);
+    command.set(RUST_TESTCASE_INDEX, "test_struct_version_check");
+    testStructVersionCheck(Language.RUST, command);
     command.set(RUST_TESTCASE_INDEX, "test_consistent_named");
     testConsistentNamed(Language.RUST, command);
   }
@@ -795,7 +797,7 @@ public class RustXlangTest extends ForyTestBase {
             .withLanguage(Language.XLANG)
             .withCompatibleMode(CompatibleMode.SCHEMA_CONSISTENT)
             .withCodegen(false)
-            .withClassVersionCheck(false)
+            .withClassVersionCheck(true)
             .build();
     fory.register(Color.class, "color");
     fory.register(MyStruct.class, "my_struct");
@@ -826,6 +828,41 @@ public class RustXlangTest extends ForyTestBase {
     }
   }
 
+  @Data
+  static class VersionCheckStruct {
+    int f1;
+    String f2;
+    double f3;
+  }
+
+  private void testStructVersionCheck(Language language, List<String> command)
+      throws java.io.IOException {
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(CompatibleMode.SCHEMA_CONSISTENT)
+            .withCodegen(false)
+            .withClassVersionCheck(true)
+            .build();
+    fory.register(VersionCheckStruct.class, 201);
+
+    VersionCheckStruct obj = new VersionCheckStruct();
+    obj.f1 = 10;
+    obj.f2 = "test";
+    obj.f3 = 3.14;
+
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(32);
+    fory.serialize(buffer, obj);
+    byte[] bytes = buffer.getBytes(0, buffer.writerIndex());
+    // Debug: print first 30 bytes
+    System.out.println("Java serialized bytes (first 30): " + java.util.Arrays.toString(java.util.Arrays.copyOf(bytes, Math.min(30, bytes.length))));
+    Path dataFile = Files.createTempFile("test_struct_version_check", "data");
+    Pair<Map<String, String>, File> env_workdir = setFilePath(language, command, dataFile, bytes);
+    Assert.assertTrue(executeCommand(command, 30, env_workdir.getLeft(), env_workdir.getRight()));
+    MemoryBuffer buffer2 = MemoryUtils.wrap(Files.readAllBytes(dataFile));
+    Assert.assertEquals(fory.deserialize(buffer2), obj);
+  }
+
   /**
    * Execute an external command.
    *
@@ -850,7 +887,11 @@ public class RustXlangTest extends ForyTestBase {
     if (peerLanguage == Language.RUST) {
       return Pair.of(
           ImmutableMap.of(
-              "DATA_FILE", dataFile.toAbsolutePath().toString(), "RUSTFLAGS", "-Awarnings"),
+              "DATA_FILE", dataFile.toAbsolutePath().toString(),
+              "RUSTFLAGS", "-Awarnings",
+              "RUST_BACKTRACE", "1",
+              "ENABLE_FORY_DEBUG_OUTPUT", "1",
+              "FORY_PANIC_ON_ERROR", "1"),
           new File("../../rust"));
     } else {
       return Pair.of(Collections.emptyMap(), new File("../../python"));

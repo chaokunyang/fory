@@ -260,6 +260,15 @@ pub fn gen_read_data(fields: &[&Field]) -> TokenStream {
         }
     });
     quote! {
+        // Read and check version hash when class version checking is enabled
+        if context.is_check_class_version() {
+            let read_version = context.reader.read_i32()?;
+            let rs_type_id = std::any::TypeId::of::<Self>();
+            let type_info = context.get_type_info(&rs_type_id)?;
+            let local_version = type_info.get_type_meta().get_version();
+            let type_name = std::any::type_name::<Self>();
+            fory_core::meta::TypeMeta::check_class_version(read_version, local_version, type_name)?;
+        }
         #sorted_read
         Ok(Self {
             #(#field_idents),*

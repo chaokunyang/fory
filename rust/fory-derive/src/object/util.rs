@@ -23,6 +23,7 @@ use fory_core::types::{TypeId, PRIMITIVE_ARRAY_TYPE_MAP};
 use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote, ToTokens};
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::fmt;
 use syn::{Field, GenericArgument, PathArguments, Type};
 
@@ -676,6 +677,78 @@ pub(super) fn get_sort_fields_ts(fields: &[&Field]) -> TokenStream {
     quote! {
         &[#(#names),*]
     }
+}
+
+fn to_snake_case(name: &str) -> String {
+    if name
+        .chars()
+        .all(|c| c.is_lowercase() || c.is_ascii_digit() || c == '_')
+    {
+        return name.to_string();
+    }
+
+    let mut result = String::with_capacity(name.len() * 2);
+    let mut chars = name.chars().peekable();
+    let mut prev: Option<char> = None;
+
+    while let Some(ch) = chars.next() {
+        if ch == '_' {
+            result.push('_');
+            prev = Some(ch);
+            continue;
+        }
+
+        if ch.is_uppercase() {
+            if let Some(prev_ch) = prev {
+                let need_underscore = (prev_ch.is_lowercase() || prev_ch.is_ascii_digit())
+                    || (prev_ch.is_uppercase()
+                        && chars
+                            .peek()
+                            .map(|next| next.is_lowercase())
+                            .unwrap_or(false));
+                if need_underscore && !result.ends_with('_') {
+                    result.push('_');
+                }
+            }
+            result.push(ch.to_ascii_lowercase());
+        } else {
+            result.push(ch);
+        }
+        prev = Some(ch);
+    }
+
+    result
+}
+
+pub(crate) fn compute_struct_version_hash(fields: &[&Field]) -> i32 {
+    let mut field_info_map: HashMap<String, (u32, bool)> = HashMap::with_capacity(fields.len());
+    for field in fields {
+        let name = field.ident.as_ref().unwrap().to_string();
+        let type_id = get_type_id_by_type_ast(&field.ty);
+        let nullable = is_option(&field.ty);
+        field_info_map.insert(name, (type_id, nullable));
+    }
+
+    let mut fingerprint = String::new();
+    for name in get_sorted_field_names(fields).iter() {
+        let (type_id, nullable) = field_info_map
+            .get(name)
+            .expect("Field metadata missing during struct hash computation");
+        fingerprint.push_str(&to_snake_case(name));
+        fingerprint.push(',');
+        let effective_type_id = if *type_id == TypeId::UNKNOWN as u32 {
+            TypeId::UNKNOWN as u32
+        } else {
+            *type_id
+        };
+        fingerprint.push_str(&effective_type_id.to_string());
+        fingerprint.push(',');
+        fingerprint.push_str(if *nullable { "1;" } else { "0;" });
+    }
+
+    let (hash, _) = fory_core::meta::murmurhash3_x64_128(fingerprint.as_bytes(), 0);
+    let version = (hash & 0xFFFF_FFFF) as u32;
+    version as i32
 }
 
 pub(crate) fn skip_ref_flag(ty: &Type) -> bool {

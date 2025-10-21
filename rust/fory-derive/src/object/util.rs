@@ -750,9 +750,21 @@ pub(crate) fn compute_struct_version_hash(fields: &[&Field]) -> i32 {
         fingerprint.push_str(if *nullable { "1;" } else { "0;" });
     }
 
-    let (hash, _) = fory_core::meta::murmurhash3_x64_128(fingerprint.as_bytes(), 0);
+    let seed: u64 = 47;
+    let (hash, _) = fory_core::meta::murmurhash3_x64_128(fingerprint.as_bytes(), seed);
     let version = (hash & 0xFFFF_FFFF) as u32;
-    version as i32
+    let version = version as i32;
+
+    if is_debug_enabled() {
+        if let Some(struct_name) = get_struct_name() {
+            println!(
+                "[fory-debug] struct {struct_name} version fingerprint=\"{fingerprint}\" hash={version}"
+            );
+        } else {
+            println!("[fory-debug] struct version fingerprint=\"{fingerprint}\" hash={version}");
+        }
+    }
+    version
 }
 
 pub(crate) fn skip_ref_flag(ty: &Type) -> bool {

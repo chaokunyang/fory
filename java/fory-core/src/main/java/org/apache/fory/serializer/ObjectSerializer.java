@@ -23,12 +23,13 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 import org.apache.fory.Fory;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.collection.Tuple3;
 import org.apache.fory.exception.ForyException;
+import org.apache.fory.logging.Logger;
+import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.ClassDef;
 import org.apache.fory.reflect.FieldAccessor;
@@ -62,6 +63,8 @@ import org.apache.fory.util.record.RecordUtils;
 // TODO(chaokunyang) support generics optimization for {@code SomeClass<T>}
 @SuppressWarnings({"unchecked"})
 public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
+  private static final Logger LOG = LoggerFactory.getLogger(ObjectSerializer.class);
+
   private final RecordInfo recordInfo;
   private final FinalTypeField[] finalFields;
 
@@ -355,21 +358,36 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
 
   public static int computeStructHash(Fory fory, DescriptorGrouper grouper) {
     StringBuilder builder = new StringBuilder();
-    for (Descriptor d : grouper.getSortedDescriptors()) {
-      Class<?> rawType = d.getTypeRef().getRawType();
+    List<Descriptor> sorted = grouper.getSortedDescriptors();
+    for (Descriptor descriptor : sorted) {
+      Class<?> rawType = descriptor.getTypeRef().getRawType();
       int typeId = getTypeId(fory, rawType);
-      String underscore = StringUtils.lowerCamelToLowerUnderscore(d.getName());
+      String underscore = StringUtils.lowerCamelToLowerUnderscore(descriptor.getName());
       char nullable = rawType.isPrimitive() ? '0' : '1';
       builder
           .append(underscore)
-          .append(",")
+          .append(',')
           .append(typeId)
-          .append(",")
+          .append(',')
           .append(nullable)
-          .append(";");
+          .append(';');
     }
-    byte[] bytes = builder.toString().getBytes(StandardCharsets.UTF_8);
-    return (int) MurmurHash3.murmurhash3_x64_128(bytes, 0, bytes.length, 47)[0];
+
+    String fingerprint = builder.toString();
+    byte[] bytes = fingerprint.getBytes(StandardCharsets.UTF_8);
+    int hash = (int) MurmurHash3.murmurhash3_x64_128(bytes, 0, bytes.length, 47)[0];
+    if (fory.getConfig().isForyDebugOutputEnabled()) {
+      String className =
+          sorted.isEmpty() ? "<unknown>" : String.valueOf(sorted.get(0).getDeclaringClass());
+      LOG.info(
+          "[fory-debug] struct "
+              + className
+              + " version fingerprint=\""
+              + fingerprint
+              + "\" version hash="
+              + hash);
+    }
+    return hash;
   }
 
   private static int getTypeId(Fory fory, Class<?> cls) {
@@ -378,7 +396,7 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
       return Types.SET;
     } else if (resolver.isCollection(cls)) {
       return Types.LIST;
-    } else if (resolver.isMap(Map.class)) {
+    } else if (resolver.isMap(cls)) {
       return Types.MAP;
     } else {
       if (ReflectionUtils.isAbstract(cls) || cls.isInterface() || cls.isEnum()) {

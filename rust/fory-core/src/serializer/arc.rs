@@ -62,13 +62,13 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for Arc<T> 
 
     fn fory_write_data_generic(&self, _: &mut WriteContext, _: bool) -> Result<(), Error> {
         Err(Error::not_allowed(
-            "Arc<T> should be written using `fory_write` to handle reference tracking properly"
+            "Arc<T> should be written using `fory_write` to handle reference tracking properly",
         ))
     }
 
     fn fory_write_data(&self, _: &mut WriteContext) -> Result<(), Error> {
         Err(Error::not_allowed(
-            "Arc<T> should be written using `fory_write` to handle reference tracking properly"
+            "Arc<T> should be written using `fory_write` to handle reference tracking properly",
         ))
     }
 

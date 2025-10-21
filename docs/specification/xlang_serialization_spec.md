@@ -815,27 +815,38 @@ nullable primitive field value:
 +-----------+---------------+
 | null flag |  field value  |
 +-----------+---------------+
-field value of final type with ref tracking:
+other interal types supported by fory
 | var bytes | var objects |
 +-----------+-------------+
-| ref meta  | value data  |
+| null flag | value data  |
 +-----------+-------------+
-field value of final type without ref tracking:
+list field type:
 | one byte  | var objects |
 +-----------+-------------+
-| null flag | field value |
+| ref meta  | value data  |
+set field type:
+| one byte  | var objects |
 +-----------+-------------+
-field value of non-final type with ref tracking:
-| one byte  | var bytes | var objects |
+| ref meta  | value data  |
+map field type:
+| one byte  | var objects |
++-----------+-------------+
+| ref meta  | value data  |
 +-----------+-------------+-------------+
-| ref meta  | type meta  | value data  |
-+-----------+-------------+-------------+
-field value of non-final type without ref tracking:
+other types such as enum/struct/ext
 | one byte  | var bytes | var objects |
 +-----------+------------+------------+
-| null flag | type meta | value data |
+| ref  flag | type meta | value data |
 +-----------+------------+------------+
 ```
+
+Type hash algorithm:
+
+- Sort fields by fields sort algorithm
+- Start with hash 47
+- Iterate every field, compute hash by:
+  - `hash = hash * 31 + (type id) * int(nullable)`. For other fields, use type id `TypeId::UNKNOWN` instead
+  - `hash = hash * 31 + hash(snow_case(field_name))`
 
 #### Schema evolution
 

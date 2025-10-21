@@ -180,6 +180,7 @@ def bump_java_version(new_version):
         "java/benchmark",
         "java/fory-core",
         "java/fory-format",
+        "java/fory-simd",
         "java/fory-extensions",
         "java/fory-test-core",
         "java/fory-testsuite",

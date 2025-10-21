@@ -849,7 +849,7 @@ public class RustXlangTest extends ForyTestBase {
     VersionCheckStruct obj = new VersionCheckStruct();
     obj.f1 = 10;
     obj.f2 = "test";
-    obj.f3 = 3.14;
+    obj.f3 = 3.2;
 
     MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(32);
     fory.serialize(buffer, obj);

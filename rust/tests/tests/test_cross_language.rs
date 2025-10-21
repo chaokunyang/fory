@@ -762,7 +762,7 @@ fn test_struct_version_check() {
     let local_obj = VersionCheckStruct {
         f1: 10,
         f2: Some("test".to_string()),
-        f3: 3.14,
+        f3: 3.2,
     };
     let remote_obj: VersionCheckStruct = fory.deserialize(&bytes).unwrap();
     assert_eq!(remote_obj, local_obj);

@@ -104,7 +104,7 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
     descriptors = grouper.getSortedDescriptors();
     classVersionHash =
         fory.checkClassVersion()
-            ? new Literal(ObjectSerializer.computeStructHash(fory, descriptors), PRIMITIVE_INT_TYPE)
+            ? new Literal(ObjectSerializer.computeStructHash(fory, grouper), PRIMITIVE_INT_TYPE)
             : null;
     objectCodecOptimizer =
         new ObjectCodecOptimizer(beanClass, grouper, !fory.isBasicTypesRefIgnored(), ctx);

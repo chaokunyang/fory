@@ -648,7 +648,15 @@ public class XtypeResolver extends TypeResolver {
   public void writeClassInfo(MemoryBuffer buffer, ClassInfo classInfo) {
     int xtypeId = classInfo.getXtypeId();
     int internalTypeId = xtypeId & 0xff;
-    System.out.println("DEBUG XtypeResolver.writeClassInfo: xtypeId=" + xtypeId + " (0x" + Integer.toHexString(xtypeId) + "), internalTypeId=" + internalTypeId + ", class=" + classInfo.getCls().getSimpleName());
+    System.out.println(
+        "DEBUG XtypeResolver.writeClassInfo: xtypeId="
+            + xtypeId
+            + " (0x"
+            + Integer.toHexString(xtypeId)
+            + "), internalTypeId="
+            + internalTypeId
+            + ", class="
+            + classInfo.getCls().getSimpleName());
     buffer.writeVarUint32Small7(xtypeId);
     switch (internalTypeId) {
       case Types.NAMED_ENUM:

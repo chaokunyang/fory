@@ -145,11 +145,10 @@ _time_types = {datetime.date, datetime.datetime, datetime.timedelta}
 
 
 def _sort_fields(type_resolver, field_names, serializers, nullable_map=None):
-    (boxed_types, nullable_boxed_types, internal_types,
-     collection_types, set_types, map_types, other_types) = group_fields(
-        type_resolver, field_names, serializers, nullable_map)
-    all_types = (boxed_types + nullable_boxed_types + internal_types +
-                 collection_types + set_types + map_types + other_types)
+    (boxed_types, nullable_boxed_types, internal_types, collection_types, set_types, map_types, other_types) = group_fields(
+        type_resolver, field_names, serializers, nullable_map
+    )
+    all_types = boxed_types + nullable_boxed_types + internal_types + collection_types + set_types + map_types + other_types
     return [t[2] for t in all_types], [t[1] for t in all_types]
 
 
@@ -214,20 +213,13 @@ def group_fields(type_resolver, field_names, serializers, nullable_map=None):
     internal_types = sorted(internal_types, key=sorter)
     map_types = sorted(map_types, key=sorter)
     other_types = sorted(other_types, key=lambda item: item[2])
-    return (boxed_types, nullable_boxed_types, internal_types,
-            collection_types, set_types, map_types, other_types)
+    return (boxed_types, nullable_boxed_types, internal_types, collection_types, set_types, map_types, other_types)
 
 
 def compute_struct_meta(type_resolver, field_names, serializers, nullable_map=None):
-    (
-        boxed_types,
-        nullable_boxed_types,
-        internal_types,
-        collection_types,
-        set_types,
-        map_types,
-        other_types
-    ) = group_fields(type_resolver, field_names, serializers, nullable_map)
+    (boxed_types, nullable_boxed_types, internal_types, collection_types, set_types, map_types, other_types) = group_fields(
+        type_resolver, field_names, serializers, nullable_map
+    )
 
     # Build hash string
     hash_parts = []
@@ -236,50 +228,48 @@ def compute_struct_meta(type_resolver, field_names, serializers, nullable_map=No
     for field in boxed_types:
         type_id = field[0]
         field_name = field[2]  # already snake_case
-        nullable_flag = '0'
+        nullable_flag = "0"
         hash_parts.append(f"{field_name},{type_id},{nullable_flag};")
 
     # All other groups => nullable
     for group in (
-            nullable_boxed_types,
-            internal_types,
-            collection_types,
-            set_types,
-            map_types,
+        nullable_boxed_types,
+        internal_types,
+        collection_types,
+        set_types,
+        map_types,
     ):
         for field in group:
             type_id = field[0]
             field_name = field[2]
-            nullable_flag = '1'
+            nullable_flag = "1"
             hash_parts.append(f"{field_name},{type_id},{nullable_flag};")
-    for field in  other_types:
+    for field in other_types:
         type_id = TypeId.UNKNOWN
         field_name = field[2]
-        nullable_flag = '1'
+        nullable_flag = "1"
         hash_parts.append(f"{field_name},{type_id},{nullable_flag};")
 
     hash_str = "".join(hash_parts)
     hash_bytes = hash_str.encode("utf-8")
 
     full_hash = hash_buffer(hash_bytes, seed=47)[0]
-    type_hash_32 = full_hash & 0xffffffff
+    type_hash_32 = full_hash & 0xFFFFFFFF
     if full_hash & 0x80000000:
         # If the sign bit is set, it's a negative number in 2's complement
         # Subtract 2^32 to get the correct negative value
         type_hash_32 = type_hash_32 - 0x100000000
     assert type_hash_32 != 0
     if os.environ.get("ENABLE_FORY_DEBUG_OUTPUT", "").lower() in ("1", "true"):
-        print(f"[fory-debug] struct version fingerprint=\"{hash_str}\" version hash={type_hash_32}")
+        print(f'[fory-debug] struct version fingerprint="{hash_str}" version hash={type_hash_32}')
 
     # Flatten all groups in correct order (already sorted from group_fields)
-    all_types = (
-            boxed_types + nullable_boxed_types + internal_types +
-            collection_types + set_types + map_types + other_types
-    )
+    all_types = boxed_types + nullable_boxed_types + internal_types + collection_types + set_types + map_types + other_types
     sorted_field_names = [f[2] for f in all_types]
     sorted_serializers = [f[1] for f in all_types]
 
     return type_hash_32, sorted_field_names, sorted_serializers
+
 
 class StructTypeIdVisitor(TypeVisitor):
     def __init__(

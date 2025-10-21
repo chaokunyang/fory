@@ -396,7 +396,9 @@ class DataClassSerializer(Serializer):
                     unwrapped_type, _ = unwrap_optional(self._type_hints[key])
                     serializer = infer_field(key, unwrapped_type, visitor, types_path=[])
                     self._serializers[index] = serializer
-            self._hash, self._field_names, self._serializers = compute_struct_meta(fory.type_resolver, self._field_names, self._serializers, self._nullable_fields)
+            self._hash, self._field_names, self._serializers = compute_struct_meta(
+                fory.type_resolver, self._field_names, self._serializers, self._nullable_fields
+            )
             self._generated_xwrite_method = self._gen_xwrite_method()
             self._generated_xread_method = self._gen_xread_method()
             if _ENABLE_FORY_PYTHON_JIT:
@@ -422,7 +424,9 @@ class DataClassSerializer(Serializer):
             # In compatible mode, maintain stable field ordering (don't sort)
             # In non-compatible mode, sort fields for consistent serialization
             if not fory.compatible:
-                self._hash, self._field_names, self._serializers = compute_struct_meta(fory.type_resolver, self._field_names, self._serializers, self._nullable_fields)
+                self._hash, self._field_names, self._serializers = compute_struct_meta(
+                    fory.type_resolver, self._field_names, self._serializers, self._nullable_fields
+                )
             self._generated_write_method = self._gen_write_method()
             self._generated_read_method = self._gen_read_method()
             if _ENABLE_FORY_PYTHON_JIT:

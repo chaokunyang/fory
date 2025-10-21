@@ -22,15 +22,169 @@ use crate::resolver::context::WriteContext;
 use crate::serializer::{ForyDefault, Serializer};
 use crate::types::{need_to_write_type_for_field, RefFlag, PRIMITIVE_ARRAY_TYPES};
 
-const TRACKING_REF: u8 = 0b1;
+pub const TRACKING_REF: u8 = 0b1;
 
 pub const HAS_NULL: u8 = 0b10;
 
 // Whether collection elements type is declare type.
-const DECL_ELEMENT_TYPE: u8 = 0b100;
+pub const DECL_ELEMENT_TYPE: u8 = 0b100;
 
 //  Whether collection elements type same.
 pub const IS_SAME_TYPE: u8 = 0b1000;
+
+#[macro_export]
+macro_rules! impl_collection_read_data {
+    (
+        $(
+            {
+                name: $name:ident,
+                dyn_name: $dyn_name:ident,
+                collection: $collection:ty,
+                empty: $empty:expr,
+                with_capacity: |$len_ident:ident| $with_capacity:expr,
+                insert: |$result_ident:ident, $value_ident:ident| $insert:block
+                $(, where $($where:tt)+)?
+            }
+        )*
+    ) => {
+        $(
+            pub fn $name<T>(
+                context: &mut $crate::resolver::context::ReadContext,
+                len: u32,
+            ) -> Result<$collection, $crate::error::Error>
+            where
+                T: $crate::serializer::Serializer + $crate::serializer::ForyDefault
+                $(, $($where)+)?
+            {
+                if len == 0 {
+                    return Ok($empty);
+                }
+                if T::fory_is_polymorphic() || T::fory_is_shared_ref() {
+                    return $dyn_name(context, len);
+                }
+                let header = context.reader.read_u8()?;
+                let declared = (header & $crate::serializer::collection::DECL_ELEMENT_TYPE) != 0;
+                if !declared {
+                    T::fory_read_type_info(context)?;
+                }
+                let has_null = (header & $crate::serializer::collection::HAS_NULL) != 0;
+                $crate::ensure!(
+                    (header & $crate::serializer::collection::IS_SAME_TYPE) != 0,
+                    $crate::error::Error::type_error(
+                        "Type inconsistent, target type is not polymorphic"
+                    )
+                );
+                let mut result = {
+                    let $len_ident = len;
+                    $with_capacity
+                };
+                if !has_null {
+                    for _ in 0..len {
+                        let value = T::fory_read_data(context)?;
+                        let $result_ident = &mut result;
+                        let $value_ident = value;
+                        $insert
+                    }
+                } else {
+                    for _ in 0..len {
+                        let flag = context.reader.read_i8()?;
+                        let value = if flag == $crate::types::RefFlag::Null as i8 {
+                            T::fory_default()
+                        } else {
+                            T::fory_read_data(context)?
+                        };
+                        let $result_ident = &mut result;
+                        let $value_ident = value;
+                        $insert
+                    }
+                }
+                Ok(result)
+            }
+
+            pub fn $dyn_name<T>(
+                context: &mut $crate::resolver::context::ReadContext,
+                len: u32,
+            ) -> Result<$collection, $crate::error::Error>
+            where
+                T: $crate::serializer::Serializer + $crate::serializer::ForyDefault
+                $(, $($where)+)?
+            {
+                if len == 0 {
+                    return Ok($empty);
+                }
+                let header = context.reader.read_u8()?;
+                let is_track_ref = (header & $crate::serializer::collection::TRACKING_REF) != 0;
+                let is_same_type = (header & $crate::serializer::collection::IS_SAME_TYPE) != 0;
+                let has_null = (header & $crate::serializer::collection::HAS_NULL) != 0;
+                let is_declared =
+                    (header & $crate::serializer::collection::DECL_ELEMENT_TYPE) != 0;
+
+                let mut result = {
+                    let $len_ident = len;
+                    $with_capacity
+                };
+                if is_same_type {
+                    let type_info = if !is_declared {
+                        context.read_any_typeinfo()?
+                    } else {
+                        let rs_type_id = std::any::TypeId::of::<T>();
+                        context.get_type_resolver().get_type_info(&rs_type_id)?
+                    };
+                    if is_track_ref {
+                        for _ in 0..len {
+                            let value = T::fory_read_with_type_info(
+                                context,
+                                true,
+                                type_info.clone(),
+                            )?;
+                            let $result_ident = &mut result;
+                            let $value_ident = value;
+                            $insert
+                        }
+                    } else if !has_null {
+                        for _ in 0..len {
+                            let value = T::fory_read_with_type_info(
+                                context,
+                                false,
+                                type_info.clone(),
+                            )?;
+                            let $result_ident = &mut result;
+                            let $value_ident = value;
+                            $insert
+                        }
+                    } else {
+                        for _ in 0..len {
+                            let flag = context.reader.read_i8()?;
+                            if flag == $crate::types::RefFlag::Null as i8 {
+                                let value = T::fory_default();
+                                let $result_ident = &mut result;
+                                let $value_ident = value;
+                                $insert
+                            } else {
+                                let value = T::fory_read_with_type_info(
+                                    context,
+                                    false,
+                                    type_info.clone(),
+                                )?;
+                                let $result_ident = &mut result;
+                                let $value_ident = value;
+                                $insert
+                            }
+                        }
+                    }
+                } else {
+                    for _ in 0..len {
+                        let value = T::fory_read(context, is_track_ref, true)?;
+                        let $result_ident = &mut result;
+                        let $value_ident = value;
+                        $insert
+                    }
+                }
+                Ok(result)
+            }
+        )*
+    };
+}
 
 pub fn write_collection_type_info(
     context: &mut WriteContext,

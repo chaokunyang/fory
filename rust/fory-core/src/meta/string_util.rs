@@ -325,6 +325,7 @@ mod tests {
     }
 }
 
+#[inline(always)]
 fn fmix64(mut k: u64) -> u64 {
     k ^= k >> 33;
     k = k.wrapping_mul(0xff51afd7ed558ccdu64);
@@ -546,7 +547,7 @@ pub mod buffer_rw_string {
     use crate::buffer::{Reader, Writer};
     use crate::error::Error;
 
-    #[inline]
+    #[inline(always)]
     pub fn write_latin1_standard(writer: &mut Writer, s: &str) {
         for c in s.chars() {
             let b = c as u32;
@@ -555,7 +556,7 @@ pub mod buffer_rw_string {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn write_utf8_standard(writer: &mut Writer, s: &str) {
         let bytes = s.as_bytes();
         for &b in bytes {
@@ -563,7 +564,7 @@ pub mod buffer_rw_string {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn write_utf16_standard(writer: &mut Writer, utf16: &[u16]) {
         for unit in utf16 {
             #[cfg(target_endian = "little")]
@@ -577,7 +578,7 @@ pub mod buffer_rw_string {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn read_latin1_standard(reader: &mut Reader, len: usize) -> Result<String, Error> {
         let slice = unsafe { std::slice::from_raw_parts(reader.bf.add(reader.cursor), len) };
         let result: String = slice.iter().map(|&b| b as char).collect();
@@ -585,7 +586,7 @@ pub mod buffer_rw_string {
         Ok(result)
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn read_utf8_standard(reader: &mut Reader, len: usize) -> Result<String, Error> {
         let slice = unsafe { std::slice::from_raw_parts(reader.bf.add(reader.cursor), len) };
         let result = String::from_utf8_lossy(slice).to_string();
@@ -593,7 +594,7 @@ pub mod buffer_rw_string {
         Ok(result)
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn read_utf16_standard(reader: &mut Reader, len: usize) -> Result<String, Error> {
         assert!(len % 2 == 0, "UTF-16 length must be even");
         let slice = unsafe { std::slice::from_raw_parts(reader.bf.add(reader.cursor), len) };
@@ -695,7 +696,7 @@ pub mod buffer_rw_string {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn write_latin1_simd(writer: &mut Writer, s: &str) {
         if s.is_empty() {
             return;
@@ -709,7 +710,7 @@ pub mod buffer_rw_string {
         write_bytes_simd(writer, &buf);
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn write_utf8_simd(writer: &mut Writer, s: &str) {
         let bytes = s.as_bytes();
         write_bytes_simd(writer, bytes);

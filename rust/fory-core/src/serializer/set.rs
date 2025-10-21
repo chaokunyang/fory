@@ -31,7 +31,7 @@ use std::mem;
 
 impl<T: Serializer + ForyDefault + Eq + std::hash::Hash> Serializer for HashSet<T> {
     fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error> {
-        write_collection_data(self, context, false)
+        write_collection_data(self.iter(), context, false)
     }
 
     fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error> {
@@ -78,7 +78,7 @@ impl<T> ForyDefault for HashSet<T> {
 
 impl<T: Serializer + ForyDefault + Ord> Serializer for BTreeSet<T> {
     fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error> {
-        write_collection_data(self, context, false)
+        write_collection_data(self.iter(), context, false)
     }
 
     fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error> {

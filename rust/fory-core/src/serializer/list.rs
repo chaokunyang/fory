@@ -27,8 +27,8 @@ use std::collections::{LinkedList, VecDeque};
 use std::mem;
 
 use super::collection::{
-    read_collection_data, read_collection_type_info, write_collection_data,
-    write_collection_type_info,
+    read_collection_data, read_collection_type_info,
+    write_collection_data, write_collection_type_info,
 };
 
 fn check_primitive<T: 'static>() -> Option<TypeId> {
@@ -42,6 +42,17 @@ fn check_primitive<T: 'static>() -> Option<TypeId> {
         id if id == RsTypeId::of::<f64>() => TypeId::FLOAT64_ARRAY,
         _ => return None,
     })
+}
+
+crate::impl_collection_read_data! {
+    {
+        name: read_vec_collection_data,
+        dyn_name: read_vec_collection_data_dyn_ref,
+        collection: Vec<T>,
+        empty: Vec::new(),
+        with_capacity: |len| Vec::with_capacity(len as usize),
+        insert: |result, value| { result.push(value); }
+    }
 }
 
 impl<T: Serializer + ForyDefault> Serializer for Vec<T> {
@@ -73,7 +84,10 @@ impl<T: Serializer + ForyDefault> Serializer for Vec<T> {
     fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
         match check_primitive::<T>() {
             Some(_) => primitive_list::fory_read_data(context),
-            None => read_collection_data(context),
+            None => {
+                let len = context.reader.read_varuint32()?;
+                read_vec_collection_data(context, len)
+            }
         }
     }
 

@@ -845,9 +845,9 @@ Type hash algorithm:
 - Sort fields by fields sort algorithm
 - Start with string `""`
 - Iterate every field, append string by:
-  - `$type_id`, for other fields, use type id `TypeId::UNKNOWN` instead.
-  - `$nullable`, `1` if nullable, `0` otherwise.
-  - `snow_case(field_name)`. For camelcase name, convert it to snow_case first.
+  - `snow_case(field_name),`. For camelcase name, convert it to snow_case first.
+  - `$type_id,`, for other fields, use type id `TypeId::UNKNOWN` instead.
+  - `$nullable;`, `1` if nullable, `0` otherwise.
 - Then convert string to utf8 bytes
 - Compute murmurhash3_x64_128, and use first 32 bits
 

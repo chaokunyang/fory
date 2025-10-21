@@ -542,9 +542,14 @@ def test_struct_hash(data_file_path):
     fory = pyfory.Fory(xlang=True, ref=True)
     fory.register_type(ComplexObject1, typename="ComplexObject1")
     serializer = fory.type_resolver.get_serializer(ComplexObject1)._replace()
-    from pyfory._struct import _get_hash
+    from pyfory._struct import compute_struct_meta
 
-    v = _get_hash(fory, serializer._field_names, serializer._type_hints)
+    v = compute_struct_meta(
+        fory,
+        serializer._field_names,
+        serializer._unwrapped_hints,
+        serializer._nullable_fields,
+    )[0]
     assert read_hash == v, (read_hash, v)
 
 

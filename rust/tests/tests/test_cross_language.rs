@@ -756,7 +756,7 @@ fn test_struct_version_check() {
     let mut fory = Fory::default()
         .compatible(false)
         .xlang(true)
-        .check_class_version(true);
+        .check_struct_version(true);
     fory.register::<VersionCheckStruct>(201).unwrap();
 
     let local_obj = VersionCheckStruct {

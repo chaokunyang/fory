@@ -247,7 +247,7 @@ pub fn gen_write_data(fields: &[&Field]) -> TokenStream {
     let version_hash = compute_struct_version_hash(fields);
     quote! {
         // Write version hash when class version checking is enabled
-        if context.is_check_class_version() {
+        if context.is_check_struct_version() {
             context.writer.write_i32(#version_hash);
         }
         #(#write_fields_ts)*

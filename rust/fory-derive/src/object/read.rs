@@ -262,10 +262,10 @@ pub fn gen_read_data(fields: &[&Field]) -> TokenStream {
     });
     quote! {
         // Read and check version hash when class version checking is enabled
-        if context.is_check_class_version() {
+        if context.is_check_struct_version() {
             let read_version = context.reader.read_i32()?;
             let type_name = std::any::type_name::<Self>();
-            fory_core::meta::TypeMeta::check_class_version(read_version, #version_hash, type_name)?;
+            fory_core::meta::TypeMeta::check_struct_version(read_version, #version_hash, type_name)?;
         }
         #sorted_read
         Ok(Self {

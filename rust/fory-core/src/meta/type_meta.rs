@@ -641,7 +641,7 @@ impl TypeMeta {
     }
 
     /// Check class version consistency, similar to Java's checkClassVersion
-    pub fn check_class_version(
+    pub fn check_struct_version(
         read_version: i32,
         local_version: i32,
         type_name: &str,

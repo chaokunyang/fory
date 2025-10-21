@@ -791,3 +791,98 @@ pub(crate) fn should_skip_type_info_for_field(ty: &Type) -> bool {
     // Primitive, nullable primitive, internal types, List/Set/Map skip type info
     true
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use syn::parse_quote;
+
+    #[test]
+    fn to_snake_case_handles_common_patterns() {
+        assert_eq!(to_snake_case("lowercase"), "lowercase");
+        assert_eq!(to_snake_case("camelCase"), "camel_case");
+        assert_eq!(to_snake_case("HTTPRequest"), "http_request");
+        assert_eq!(to_snake_case("withNumbers123"), "with_numbers123");
+        assert_eq!(to_snake_case("snake_case"), "snake_case");
+    }
+
+    #[test]
+    fn group_fields_normalizes_names_and_preserves_ordering() {
+        let fields: Vec<syn::Field> = vec![
+            parse_quote!(pub camelCase: i32),
+            parse_quote!(pub optionalValue: Option<i64>),
+            parse_quote!(pub simpleString: String),
+            parse_quote!(pub listItems: Vec<String>),
+            parse_quote!(pub setItems: HashSet<i32>),
+            parse_quote!(pub mapValues: HashMap<String, i32>),
+            parse_quote!(pub customType: CustomType),
+        ];
+        let field_refs: Vec<&syn::Field> = fields.iter().collect();
+
+        let (
+            primitive_fields,
+            nullable_primitive_fields,
+            internal_type_fields,
+            list_fields,
+            set_fields,
+            map_fields,
+            other_fields,
+        ) = group_fields_by_type(&field_refs);
+
+        let primitive_names: Vec<&str> = primitive_fields
+            .iter()
+            .map(|(name, _, _)| name.as_str())
+            .collect();
+        assert_eq!(primitive_names, vec!["camel_case"]);
+
+        let nullable_names: Vec<&str> = nullable_primitive_fields
+            .iter()
+            .map(|(name, _, _)| name.as_str())
+            .collect();
+        assert_eq!(nullable_names, vec!["optional_value"]);
+
+        let internal_names: Vec<&str> = internal_type_fields
+            .iter()
+            .map(|(name, _, _)| name.as_str())
+            .collect();
+        assert_eq!(internal_names, vec!["simple_string"]);
+
+        let list_names: Vec<&str> = list_fields
+            .iter()
+            .map(|(name, _, _)| name.as_str())
+            .collect();
+        assert_eq!(list_names, vec!["list_items"]);
+
+        let set_names: Vec<&str> = set_fields
+            .iter()
+            .map(|(name, _, _)| name.as_str())
+            .collect();
+        assert_eq!(set_names, vec!["set_items"]);
+
+        let map_names: Vec<&str> = map_fields
+            .iter()
+            .map(|(name, _, _)| name.as_str())
+            .collect();
+        assert_eq!(map_names, vec!["map_values"]);
+
+        let other_names: Vec<&str> = other_fields
+            .iter()
+            .map(|(name, _, _)| name.as_str())
+            .collect();
+        assert_eq!(other_names, vec!["custom_type"]);
+
+        let sorted_names = get_sorted_field_names(&field_refs);
+        assert_eq!(
+            sorted_names,
+            vec![
+                "camel_case".to_string(),
+                "optional_value".to_string(),
+                "simple_string".to_string(),
+                "list_items".to_string(),
+                "set_items".to_string(),
+                "map_values".to_string(),
+                "custom_type".to_string(),
+            ]
+        );
+    }
+}

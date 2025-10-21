@@ -70,7 +70,6 @@ public class ClassInfo {
     if (cls != null && classId == TypeResolver.NO_CLASS_ID) {
       Preconditions.checkArgument(typeNameBytes != null);
     }
-    assert xtypeId >= 0;
   }
 
   ClassInfo(

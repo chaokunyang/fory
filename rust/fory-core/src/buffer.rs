@@ -329,6 +329,12 @@ impl Writer {
 
     #[inline(always)]
     pub fn write_latin1_string(&mut self, s: &str) {
+        if s.len() < SIMD_THRESHOLD {
+            // Fast path for small buffers - direct copy avoids SIMD overhead
+            self.bf.reserve(s.len());
+            self.bf.extend_from_slice(s.as_bytes());
+            return;
+        }
         write_latin1_simd(self, s);
     }
 
@@ -350,6 +356,19 @@ impl Writer {
 
     #[inline(always)]
     pub fn write_utf16_bytes(&mut self, bytes: &[u16]) {
+        let total_bytes = bytes.len() * 2;
+        if total_bytes < SIMD_THRESHOLD {
+            // Fast path for small UTF-16 data - direct copy
+            let old_len = self.bf.len();
+            self.bf.reserve(total_bytes);
+            unsafe {
+                let dest = self.bf.as_mut_ptr().add(old_len);
+                let src = bytes.as_ptr() as *const u8;
+                std::ptr::copy_nonoverlapping(src, dest, total_bytes);
+                self.bf.set_len(old_len + total_bytes);
+            }
+            return;
+        }
         write_utf16_simd(self, bytes);
     }
 }
@@ -632,7 +651,24 @@ impl Reader {
     #[inline(always)]
     pub fn read_latin1_string(&mut self, len: usize) -> Result<String, Error> {
         self.check_bound(len)?;
-        read_latin1_simd(self, len)
+        if len < SIMD_THRESHOLD {
+            // Fast path for small buffers - direct copy avoids SIMD overhead
+            // SAFETY: bounds already checked, assuming valid Latin-1 (caller's responsibility)
+            unsafe {
+                let mut vec = Vec::with_capacity(len);
+                let src = self.bf.add(self.cursor);
+                let dst = vec.as_mut_ptr();
+                // Use fastest possible copy - copy_nonoverlapping compiles to memcpy
+                std::ptr::copy_nonoverlapping(src, dst, len);
+                vec.set_len(len);
+                self.move_next(len);
+                // SAFETY: Assuming valid Latin-1 bytes (responsibility of serialization protocol)
+                Ok(String::from_utf8_unchecked(vec))
+            }
+        } else {
+            // Use SIMD for larger strings where the overhead is amortized
+            read_latin1_simd(self, len)
+        }
     }
 
     #[inline(always)]
@@ -662,6 +698,18 @@ impl Reader {
     #[inline(always)]
     pub fn read_utf16_string(&mut self, len: usize) -> Result<String, Error> {
         self.check_bound(len)?;
+                if len < SIMD_THRESHOLD {
+            // Fast path for small UTF-16 strings - direct copy
+            unsafe {
+                let slice = std::slice::from_raw_parts(self.bf.add(self.cursor), len);
+                let units: Vec<u16> = slice
+                    .chunks_exact(2)
+                    .map(|c| u16::from_le_bytes([c[0], c[1]]))
+                    .collect();
+                self.move_next(len);
+                return Ok(String::from_utf16_lossy(&units));
+            }
+        }
         read_utf16_simd(self, len)
     }
 

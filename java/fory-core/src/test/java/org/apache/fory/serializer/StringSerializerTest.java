@@ -725,11 +725,7 @@ public class StringSerializerTest extends ForyTestBase {
       // readBytesUTF8ForXlang will be invoked only in java9+
       return;
     }
-    Fory fory =
-        Fory.builder()
-            .withLanguage(Language.XLANG)
-            .requireClassRegistration(false)
-            .build();
+    Fory fory = Fory.builder().withLanguage(Language.XLANG).requireClassRegistration(false).build();
 
     // Direct test with raw UTF-8 bytes - bypasses full serialization
     // This tests the method directly with known UTF-8 byte sequences

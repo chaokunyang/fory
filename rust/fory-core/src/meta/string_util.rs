@@ -534,6 +534,30 @@ pub mod buffer_rw_string {
         }
     }
 
+    #[inline(always)]
+    pub fn write_latin1_string(writer: &mut Writer, s: &str) {
+        if s.len() < 128 {
+            // Fast path for small buffers
+            let bytes = s.as_bytes();
+            // CRITICAL: Only safe if ASCII (UTF-8 == Latin1 for ASCII)
+            let is_ascii = bytes.iter().all(|&b| b < 0x80);
+            if is_ascii {
+                writer.bf.reserve(s.len());
+                writer.bf.extend_from_slice(bytes);
+            } else {
+                // Non-ASCII: must iterate chars to extract Latin1 byte values
+                writer.bf.reserve(s.len());
+                for c in s.chars() {
+                    let v = c as u32;
+                    assert!(v <= 0xFF, "Non-Latin1 character found");
+                    writer.bf.push(v as u8);
+                }
+            }
+            return;
+        }
+        write_latin1_simd(writer, s);
+    }
+
     #[inline]
     pub fn write_utf8_standard(writer: &mut Writer, s: &str) {
         let bytes = s.as_bytes();

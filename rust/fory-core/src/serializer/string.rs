@@ -16,7 +16,6 @@
 // under the License.
 
 use crate::error::Error;
-use crate::meta::get_latin1_length;
 use crate::resolver::context::ReadContext;
 use crate::resolver::context::WriteContext;
 use crate::resolver::type_resolver::TypeResolver;
@@ -40,25 +39,9 @@ impl Serializer for String {
             context.writer.write_utf8_string(self);
             return Ok(());
         }
-
-        // xlang mode: use encoding header for optimal format selection
-        let mut len = get_latin1_length(self);
-        if len >= 0 {
-            let bitor = (len as u64) << 2 | StrEncoding::Latin1 as u64;
-            context.writer.write_varuint36_small(bitor);
-            context.writer.write_latin1_string(self);
-        } else if context.is_compress_string() {
-            // todo: support `writeNumUtf16BytesForUtf8Encoding` like in java
-            len = self.len() as i32;
-            let bitor = (len as u64) << 2 | StrEncoding::Utf8 as u64;
-            context.writer.write_varuint36_small(bitor);
-            context.writer.write_utf8_string(self);
-        } else {
-            let utf16: Vec<u16> = self.encode_utf16().collect();
-            let bitor = (utf16.len() as u64 * 2) << 2 | StrEncoding::Utf16 as u64;
-            context.writer.write_varuint36_small(bitor);
-            context.writer.write_utf16_bytes(&utf16);
-        }
+        let bitor = (self.len() as i32 as u64) << 2 | StrEncoding::Utf8 as u64;
+        context.writer.write_varuint36_small(bitor);
+        context.writer.write_utf8_string(self);
         Ok(())
     }
 

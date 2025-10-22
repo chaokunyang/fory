@@ -22,7 +22,9 @@ use std::arch::x86_64::*;
 use fory_core::buffer::{Reader, Writer};
 use fory_core::meta::buffer_rw_string::{
     read_latin1_simd, read_latin1_standard, write_latin1_simd, write_latin1_standard,
+    write_latin1_string,
 };
+
 #[cfg(target_feature = "sse2")]
 use std::arch::x86_64::*;
 
@@ -114,7 +116,7 @@ fn benchmark_read_latin1(c: &mut Criterion) {
     for &size in &sizes {
         let s_ascii = ascii_string.repeat(size / ascii_string.len() + 1);
         let mut writer = Writer::default();
-        writer.write_latin1_string(&s_ascii);
+        write_latin1_string(&mut writer, &s_ascii);
         let data = writer.dump();
 
         let name_simd = format!("Read Latin-1 SIMD size {}", size);

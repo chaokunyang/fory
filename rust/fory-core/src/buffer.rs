@@ -325,48 +325,11 @@ impl Writer {
     }
 
     #[inline(always)]
-    pub fn write_latin1_string(&mut self, s: &str) {
-        if s.len() < SIMD_THRESHOLD {
-            // Fast path for small buffers
-            let bytes = s.as_bytes();
-            // CRITICAL: Only safe if ASCII (UTF-8 == Latin1 for ASCII)
-            let is_ascii = bytes.iter().all(|&b| b < 0x80);
-            if is_ascii {
-                self.bf.reserve(s.len());
-                self.bf.extend_from_slice(bytes);
-            } else {
-                // Non-ASCII: must iterate chars to extract Latin1 byte values
-                self.bf.reserve(s.len());
-                for c in s.chars() {
-                    let v = c as u32;
-                    assert!(v <= 0xFF, "Non-Latin1 character found");
-                    self.bf.push(v as u8);
-                }
-            }
-            return;
-        }
-        write_latin1_simd(self, s);
-    }
-
-    #[inline(always)]
     pub fn write_utf8_string(&mut self, s: &str) {
         let bytes = s.as_bytes();
         let len = bytes.len();
         self.bf.reserve(len);
         self.bf.extend_from_slice(bytes);
-    }
-
-    #[inline(always)]
-    pub fn write_utf16_bytes(&mut self, bytes: &[u16]) {
-        let total_bytes = bytes.len() * 2;
-        let old_len = self.bf.len();
-        self.bf.reserve(total_bytes);
-        unsafe {
-            let dest = self.bf.as_mut_ptr().add(old_len);
-            let src = bytes.as_ptr() as *const u8;
-            std::ptr::copy_nonoverlapping(src, dest, total_bytes);
-            self.bf.set_len(old_len + total_bytes);
-        }
     }
 }
 

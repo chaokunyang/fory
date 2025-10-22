@@ -54,6 +54,7 @@ from pyfory.type import (  # noqa: F401 # pylint: disable=unused-import
     Float64ArrayType,
     dataslots,
 )
+from pyfory.policy import DeserializationPolicy  # noqa: F401 # pylint: disable=unused-import
 from pyfory._util import Buffer  # noqa: F401 # pylint: disable=unused-import
 
 import warnings

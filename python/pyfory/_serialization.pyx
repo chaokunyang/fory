@@ -34,6 +34,7 @@ from pyfory._fory import _ENABLE_TYPE_REGISTRATION_FORCIBLY
 from pyfory.lib import mmh3
 from pyfory.meta.metastring import Encoding
 from pyfory.type import is_primitive_type
+from pyfory.policy import DeserializationPolicy, DEFAULT_POLICY
 from pyfory.util import is_little_endian
 from pyfory.includes.libserialization cimport \
     (TypeId, IsNamespacedType, IsTypeShareMeta, Fory_PyBooleanSequenceWriteToBuffer, Fory_PyFloatSequenceWriteToBuffer)
@@ -805,6 +806,7 @@ cdef class Fory:
     cdef readonly c_bool is_py
     cdef readonly c_bool compatible
     cdef readonly c_bool field_nullable
+    cdef readonly object policy
     cdef readonly MapRefResolver ref_resolver
     cdef readonly TypeResolver type_resolver
     cdef readonly MetaStringResolver metastring_resolver
@@ -823,6 +825,7 @@ cdef class Fory:
             xlang: bool = False,
             ref: bool = False,
             strict: bool = True,
+            policy: DeserializationPolicy = None,
             compatible: bool = False,
             max_depth: int = 50,
             field_nullable: bool = False,
@@ -851,6 +854,10 @@ cdef class Fory:
           Do not disable strict mode if you can't ensure your environment are
           *indeed secure*. We are not responsible for security risks if
           you disable this option.
+        :param policy:
+         A custom type policy for deserialization security check.
+         If not None, it will be used to check whether a type can be deserialized
+         instead of the default type policy.
         :param compatible:
          Whether to enable compatible mode for cross-language serialization.
          When enabled, type forward/backward compatibility for struct fields will be enabled.
@@ -873,6 +880,7 @@ cdef class Fory:
             self.strict = True
         else:
             self.strict = False
+        self.policy = policy or DEFAULT_POLICY
         self.compatible = compatible
         self.ref_tracking = ref
         self.ref_resolver = MapRefResolver(ref)
@@ -2366,97 +2374,6 @@ cdef class MapSerializer(Serializer):
 
     cpdef inline xread(self, Buffer buffer):
         return self.read(buffer)
-
-
-@cython.final
-cdef class SubMapSerializer(Serializer):
-    cdef TypeResolver type_resolver
-    cdef MapRefResolver ref_resolver
-    cdef Serializer key_serializer
-    cdef Serializer value_serializer
-
-    def __init__(self, fory, type_, key_serializer=None, value_serializer=None):
-        super().__init__(fory, type_)
-        self.type_resolver = fory.type_resolver
-        self.ref_resolver = fory.ref_resolver
-        self.key_serializer = key_serializer
-        self.value_serializer = value_serializer
-
-    cpdef inline write(self, Buffer buffer, value):
-        buffer.write_varuint32(len(value))
-        cdef TypeInfo key_typeinfo
-        cdef TypeInfo value_typeinfo
-        for k, v in value.items():
-            key_cls = type(k)
-            if key_cls is str:
-                buffer.write_int16(NOT_NULL_STRING_FLAG)
-                buffer.write_string(k)
-            else:
-                if not self.ref_resolver.write_ref_or_null(buffer, k):
-                    key_typeinfo = self.type_resolver.get_typeinfo(key_cls)
-                    self.type_resolver.write_typeinfo(buffer, key_typeinfo)
-                    key_typeinfo.serializer.write(buffer, k)
-            value_cls = type(v)
-            if value_cls is str:
-                buffer.write_int16(NOT_NULL_STRING_FLAG)
-                buffer.write_string(v)
-            elif value_cls is int:
-                buffer.write_int16(NOT_NULL_INT64_FLAG)
-                buffer.write_varint64(v)
-            elif value_cls is bool:
-                buffer.write_int16(NOT_NULL_BOOL_FLAG)
-                buffer.write_bool(v)
-            elif value_cls is float:
-                buffer.write_int16(NOT_NULL_FLOAT64_FLAG)
-                buffer.write_double(v)
-            else:
-                if not self.ref_resolver.write_ref_or_null(buffer, v):
-                    value_typeinfo = self.type_resolver. \
-                        get_typeinfo(value_cls)
-                    self.type_resolver.write_typeinfo(buffer, value_typeinfo)
-                    value_typeinfo.serializer.write(buffer, v)
-
-    cpdef inline read(self, Buffer buffer):
-        cdef MapRefResolver ref_resolver = self.fory.ref_resolver
-        cdef TypeResolver type_resolver = self.fory.type_resolver
-        map_ = self.type_()
-        ref_resolver.reference(map_)
-        cdef int32_t len_ = buffer.read_varuint32()
-        cdef int32_t ref_id
-        cdef TypeInfo key_typeinfo
-        cdef TypeInfo value_typeinfo
-        self.fory.inc_depth()
-        for i in range(len_):
-            ref_id = ref_resolver.try_preserve_ref_id(buffer)
-            if ref_id < NOT_NULL_VALUE_FLAG:
-                key = ref_resolver.get_read_object()
-            else:
-                key_typeinfo = type_resolver.read_typeinfo(buffer)
-                if key_typeinfo.cls is str:
-                    key = buffer.read_string()
-                else:
-                    key = key_typeinfo.serializer.read(buffer)
-                    ref_resolver.set_read_object(ref_id, key)
-            ref_id = ref_resolver.try_preserve_ref_id(buffer)
-            if ref_id < NOT_NULL_VALUE_FLAG:
-                value = ref_resolver.get_read_object()
-            else:
-                value_typeinfo = type_resolver.read_typeinfo(buffer)
-                cls = value_typeinfo.cls
-                if cls is str:
-                    value = buffer.read_string()
-                elif cls is int:
-                    value = buffer.read_varint64()
-                elif cls is bool:
-                    value = buffer.read_bool()
-                elif cls is float:
-                    value = buffer.read_double()
-                else:
-                    value = value_typeinfo.serializer.read(buffer)
-                    ref_resolver.set_read_object(ref_id, value)
-            map_[key] = value
-        self.fory.dec_depth()
-        return map_
 
 
 @cython.final

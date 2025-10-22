@@ -28,7 +28,6 @@ import pickle
 import types
 import typing
 from typing import List, Dict
-import warnings
 
 from pyfory.buffer import Buffer
 from pyfory.codegen import (
@@ -76,7 +75,6 @@ if ENABLE_FORY_CYTHON_SERIALIZATION:
         StringArraySerializer,
         SetSerializer,
         MapSerializer,
-        SubMapSerializer,
         EnumSerializer,
         SliceSerializer,
     )
@@ -100,7 +98,6 @@ else:
         StringArraySerializer,
         SetSerializer,
         MapSerializer,
-        SubMapSerializer,
         EnumSerializer,
         SliceSerializer,
     )
@@ -176,6 +173,9 @@ class TypeSerializer(Serializer):
             cls = importlib.import_module(module_name)
             for name in qualname.split("."):
                 cls = getattr(cls, name)
+            result = self.fory.policy.validate_class(cls, is_local=False)
+            if result is not None:
+                cls = result
             return cls
 
     def _serialize_local_class(self, buffer, cls):
@@ -252,6 +252,9 @@ class TypeSerializer(Serializer):
         # Set module and qualname
         cls.__module__ = module
         cls.__qualname__ = qualname
+        result = fory.policy.validate_class(cls, is_local=True)
+        if result is not None:
+            cls = result
         return cls
 
 
@@ -266,7 +269,11 @@ class ModuleSerializer(Serializer):
 
     def read(self, buffer):
         mod = buffer.read_string()
-        return importlib.import_module(mod)
+        mod = importlib.import_module(mod)
+        result = self.fory.policy.validate_module(mod.__name__)
+        if result is not None:
+            mod = result
+        return mod
 
 
 class MappingProxySerializer(Serializer):
@@ -665,6 +672,9 @@ class DataClassSerializer(Serializer):
         stmts = [
             f'"""read method for {self.type_}"""',
         ]
+        if not self.fory.strict:
+            context["checker"] = self.fory.policy
+            stmts.append(f"checker.authorize_instantiation({obj_class})")
 
         # Read hash only in non-compatible mode; in compatible mode, read field count
         if not self.fory.compatible:
@@ -815,6 +825,9 @@ class DataClassSerializer(Serializer):
         stmts = [
             f'"""xread method for {self.type_}"""',
         ]
+        if not self.fory.strict:
+            context["checker"] = self.fory.policy
+            stmts.append(f"checker.authorize_instantiation({obj_class})")
         if not self.fory.compatible:
             stmts.extend(
                 [
@@ -1333,9 +1346,10 @@ class StatefulSerializer(CrossLanguageCompatibleSerializer):
         self.fory.serialize_ref(buffer, state)
 
     def read(self, buffer):
-        args = self.fory.read_ref(buffer)
-        kwargs = self.fory.read_ref(buffer)
-        state = self.fory.read_ref(buffer)
+        fory = self.fory
+        args = fory.read_ref(buffer)
+        kwargs = fory.read_ref(buffer)
+        state = fory.read_ref(buffer)
 
         if args or kwargs:
             # Case 1: __getnewargs__ was used. Re-create by calling __init__.
@@ -1345,6 +1359,7 @@ class StatefulSerializer(CrossLanguageCompatibleSerializer):
             obj = self.cls.__new__(self.cls)
 
         if state:
+            fory.policy.intercept_setstate(obj, state)
             obj.__setstate__(state)
         return obj
 
@@ -1449,8 +1464,10 @@ class ReduceSerializer(CrossLanguageCompatibleSerializer):
             listitems = reduce_data[4]
             dictitems = reduce_data[5] if len(reduce_data) > 5 else None
 
-            # Create the object using the callable and args
-            obj = callable_obj(*args)
+            obj = fory.policy.intercept_reduce_call(callable_obj, args)
+            if obj is None:
+                # Create the object using the callable and args
+                obj = callable_obj(*args)
 
             # Restore state if present
             if state is not None:
@@ -1470,6 +1487,9 @@ class ReduceSerializer(CrossLanguageCompatibleSerializer):
                 for key, value in dictitems:
                     obj[key] = value
 
+            result = fory.policy.inspect_reduced_object(obj)
+            if result is not None:
+                obj = result
             return obj
         else:
             raise ValueError(f"Invalid reduce data format: {reduce_data[0]}")
@@ -1615,7 +1635,11 @@ class FunctionSerializer(CrossLanguageCompatibleSerializer):
             # Handle bound methods
             self_obj = self.fory.read_ref(buffer)
             method_name = buffer.read_string()
-            return getattr(self_obj, method_name)
+            func = getattr(self_obj, method_name)
+            result = self.fory.policy.validate_function(func, is_local=False)
+            if result is not None:
+                func = result
+            return func
 
         if func_type_id == 1:
             module = buffer.read_string()
@@ -1623,6 +1647,9 @@ class FunctionSerializer(CrossLanguageCompatibleSerializer):
             mod = importlib.import_module(module)
             for name in qualname.split("."):
                 mod = getattr(mod, name)
+            result = self.fory.policy.validate_function(mod, is_local=False)
+            if result is not None:
+                mod = result
             return mod
 
         # Regular function or lambda
@@ -1697,6 +1724,9 @@ class FunctionSerializer(CrossLanguageCompatibleSerializer):
         for attr_name, attr_value in attrs.items():
             setattr(func, attr_name, attr_value)
 
+        result = self.fory.policy.validate_function(func, is_local=True)
+        if result is not None:
+            func = result
         return func
 
     def xwrite(self, buffer, value):
@@ -1732,10 +1762,14 @@ class NativeFuncMethodSerializer(Serializer):
         if buffer.read_bool():
             module = buffer.read_string()
             mod = importlib.import_module(module)
-            return getattr(mod, name)
+            func = getattr(mod, name)
         else:
             obj = self.fory.read_ref(buffer)
-            return getattr(obj, name)
+            func = getattr(obj, name)
+        result = self.fory.policy.validate_function(func, is_local=False)
+        if result is not None:
+            func = result
+        return func
 
 
 class MethodSerializer(Serializer):
@@ -1757,7 +1791,13 @@ class MethodSerializer(Serializer):
         instance = self.fory.read_ref(buffer)
         method_name = buffer.read_string()
 
-        return getattr(instance, method_name)
+        method = getattr(instance, method_name)
+        cls = method.__self__.__class__
+        is_local = cls.__module__ == "__main__" or "<locals>" in cls.__qualname__
+        result = self.fory.policy.validate_method(method, is_local=is_local)
+        if result is not None:
+            method = result
+        return method
 
     def xwrite(self, buffer, value):
         return self.write(buffer, value)
@@ -1796,12 +1836,14 @@ class ObjectSerializer(Serializer):
             self.fory.serialize_ref(buffer, field_value)
 
     def read(self, buffer):
+        fory = self.fory
+        fory.policy.authorize_instantiation(self.type_)
         obj = self.type_.__new__(self.type_)
-        self.fory.ref_resolver.reference(obj)
+        fory.ref_resolver.reference(obj)
         num_fields = buffer.read_varuint32()
         for _ in range(num_fields):
             field_name = buffer.read_string()
-            field_value = self.fory.read_ref(buffer)
+            field_value = fory.read_ref(buffer)
             setattr(obj, field_name, field_value)
         return obj
 
@@ -1812,17 +1854,6 @@ class ObjectSerializer(Serializer):
     def xread(self, buffer):
         # symmetric to xwrite
         return self.read(buffer)
-
-
-class ComplexObjectSerializer(DataClassSerializer):
-    def __new__(cls, fory, clz):
-        warnings.warn(
-            "`ComplexObjectSerializer` is deprecated and will be removed in a future version. "
-            "Use `DataClassSerializer(fory, clz, xlang=True)` instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return DataClassSerializer(fory, clz, xlang=True)
 
 
 @dataclasses.dataclass

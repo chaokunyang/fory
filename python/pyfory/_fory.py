@@ -30,6 +30,7 @@ from pyfory.resolver import (
 )
 from pyfory.util import is_little_endian, set_bit, get_bit, clear_bit
 from pyfory.type import TypeId
+from pyfory.policy import DeserializationPolicy, DEFAULT_POLICY
 
 try:
     import numpy as np
@@ -122,6 +123,7 @@ class Fory:
         "max_depth",
         "depth",
         "field_nullable",
+        "policy",
     )
 
     def __init__(
@@ -131,6 +133,7 @@ class Fory:
         strict: bool = True,
         compatible: bool = False,
         max_depth: int = 50,
+        policy: DeserializationPolicy = None,
         field_nullable: bool = False,
         **kwargs,
     ):
@@ -157,6 +160,10 @@ class Fory:
           Do not disable strict mode if you can't ensure your environment are
           *indeed secure*. We are not responsible for security risks if
           you disable this option.
+        :param policy:
+         A custom type policy for deserialization security check.
+         If not None, it will be used to check whether a type can be deserialized
+         instead of the default type policy.
         :param compatible:
          Whether to enable compatible mode for cross-language serialization.
          When enabled, type forward/backward compatibility for dataclass fields will be enabled.
@@ -182,6 +189,7 @@ class Fory:
         if kwargs.get("require_type_registration") is not None:
             strict = kwargs.get("require_type_registration")
         self.strict = _ENABLE_TYPE_REGISTRATION_FORCIBLY or strict
+        self.policy = policy or DEFAULT_POLICY
         self.compatible = compatible
         self.field_nullable = field_nullable if self.is_py else False
         from pyfory._serialization import MetaStringResolver, SerializationContext

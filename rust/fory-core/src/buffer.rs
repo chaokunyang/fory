@@ -16,7 +16,7 @@
 // under the License.
 
 use crate::error::Error;
-use crate::meta::buffer_rw_string::{read_latin1_simd, write_latin1_simd};
+use crate::meta::buffer_rw_string::read_latin1_simd;
 use byteorder::{ByteOrder, LittleEndian, WriteBytesExt};
 use std::slice;
 

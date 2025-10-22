@@ -246,7 +246,7 @@ pub trait Serializer: 'static {
     /// [`fory_write_data`]: Serializer::fory_write_data
     /// [`fory_write_type_info`]: Serializer::fory_write_type_info
     /// [`fory_write_data_generic`]: Serializer::fory_write_data_generic
-     #[inline(always)]
+    #[inline(always)]
     fn fory_write(
         &self,
         context: &mut WriteContext,
@@ -305,7 +305,7 @@ pub trait Serializer: 'static {
     /// - Focus on implementing [`fory_write_data`] for custom types
     ///
     /// [`fory_write_data`]: Serializer::fory_write_data
-     #[inline(always)]
+    #[inline(always)]
     #[allow(unused_variables)]
     fn fory_write_data_generic(
         &self,
@@ -576,7 +576,7 @@ pub trait Serializer: 'static {
     /// [`fory_read_data`]: Serializer::fory_read_data
     /// [`fory_read_type_info`]: Serializer::fory_read_type_info
     /// [`fory_write`]: Serializer::fory_write
-     #[inline(always)]
+    #[inline(always)]
     fn fory_read(
         context: &mut ReadContext,
         read_ref_info: bool,
@@ -1367,7 +1367,7 @@ pub trait StructSerializer: Serializer + 'static {
     /// - Default delegates to `struct_::actual_type_id`
     /// - Handles type ID transformations for compatibility
     /// - **Do not override** for user types with custom serialization (EXT types)
-     #[inline(always)]
+    #[inline(always)]
     fn fory_actual_type_id(type_id: u32, register_by_name: bool, compatible: bool) -> u32 {
         struct_::actual_type_id(type_id, register_by_name, compatible)
     }

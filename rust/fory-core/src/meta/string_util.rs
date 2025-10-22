@@ -511,10 +511,6 @@ mod test_hash {
 }
 
 pub mod buffer_rw_string {
-    /// Threshold for using SIMD optimizations in string operations.
-    /// For buffers smaller than this, direct copy is faster than SIMD setup overhead.
-    const SIMD_THRESHOLD: usize = 128;
-
     #[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
     use std::arch::aarch64::*;
     #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
@@ -688,23 +684,85 @@ pub mod buffer_rw_string {
     }
 
     #[inline]
+    fn is_ascii_bytes(bytes: &[u8]) -> bool {
+        let len = bytes.len();
+        let mut i = 0;
+
+        #[cfg(target_arch = "x86_64")]
+        unsafe {
+            if is_x86_feature_detected!("avx2") && len >= 32 {
+                while i + 32 <= len {
+                    let chunk = _mm256_loadu_si256(bytes.as_ptr().add(i) as *const __m256i);
+                    let mask = _mm256_movemask_epi8(chunk);
+                    if mask != 0 {
+                        return false;
+                    }
+                    i += 32;
+                }
+            }
+        }
+
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+        unsafe {
+            if is_x86_feature_detected!("sse2") && len >= 16 {
+                while i + 16 <= len {
+                    let chunk = _mm_loadu_si128(bytes.as_ptr().add(i) as *const __m128i);
+                    let mask = _mm_movemask_epi8(chunk);
+                    if mask != 0 {
+                        return false;
+                    }
+                    i += 16;
+                }
+            }
+        }
+
+        #[cfg(target_arch = "aarch64")]
+        unsafe {
+            if std::arch::is_aarch64_feature_detected!("neon") && len >= 16 {
+                while i + 16 <= len {
+                    let chunk = vld1q_u8(bytes.as_ptr().add(i));
+                    if vmaxvq_u8(chunk) >= 0x80 {
+                        return false;
+                    }
+                    i += 16;
+                }
+            }
+        }
+
+        // Scalar fallback
+        bytes[i..].iter().all(|&b| b < 0x80)
+    }
+
+    #[inline]
     pub fn write_latin1_simd(writer: &mut Writer, s: &str) {
         if s.is_empty() {
             return;
         }
-        let mut buf: Vec<u8> = Vec::with_capacity(s.len());
-        for c in s.chars() {
-            let v = c as u32;
-            assert!(v <= 0xFF, "Non-Latin1 character found");
-            buf.push(v as u8);
+
+        let bytes = s.as_bytes();
+
+        // CRITICAL OPTIMIZATION: For ASCII strings, UTF-8 bytes == Latin1 bytes
+        // Check if all ASCII using SIMD
+        if is_ascii_bytes(bytes) {
+            // Zero-copy fast path: direct write
+            write_bytes_simd(writer, bytes);
+        } else {
+            // Non-ASCII: Must iterate chars to extract Latin1 byte values
+            // Example: 'À' in Rust String is UTF-8 [0xC3, 0x80] but Latin1 is [0xC0]
+            let mut buf: Vec<u8> = Vec::with_capacity(s.len());
+            for c in s.chars() {
+                let v = c as u32;
+                assert!(v <= 0xFF, "Non-Latin1 character found");
+                buf.push(v as u8);
+            }
+            write_bytes_simd(writer, &buf);
         }
-        write_bytes_simd(writer, &buf);
     }
 
     #[inline(always)]
     pub fn write_utf8_simd(writer: &mut Writer, s: &str) {
         let bytes = s.as_bytes();
-write_bytes_simd(writer, bytes);
+        write_bytes_simd(writer, bytes);
     }
 
     pub fn write_utf16_simd(writer: &mut Writer, utf16: &[u16]) {
@@ -778,12 +836,15 @@ write_bytes_simd(writer, bytes);
         }
         let src = unsafe { std::slice::from_raw_parts(reader.bf.add(reader.cursor), len) };
 
-        let mut out: Vec<u8> = Vec::with_capacity(len + len / 4);
+        // Pessimistic allocation: Latin1 0x80-0xFF expands to 2 bytes in UTF-8
+        let mut out: Vec<u8> = Vec::with_capacity(len * 2);
 
         unsafe {
+            let out_ptr = out.as_mut_ptr();
+            let mut out_len = 0usize;
             let mut i = 0usize;
 
-            // ---- AVX2 fast-path (32 bytes) ----
+            // ---- AVX2 fast-path: process 32 ASCII bytes at once ----
             #[cfg(target_arch = "x86_64")]
             {
                 if std::arch::is_x86_feature_detected!("avx2") {
@@ -793,19 +854,20 @@ write_bytes_simd(writer, bytes);
                         let chunk = _mm256_loadu_si256(ptr);
                         let mask = _mm256_movemask_epi8(chunk);
                         if mask == 0 {
-                            let mut buf32: [u8; 32] = std::mem::zeroed();
-                            _mm256_storeu_si256(buf32.as_mut_ptr() as *mut __m256i, chunk);
-                            out.extend_from_slice(&buf32);
+                            // All ASCII: direct copy (no conversion needed)
+                            _mm256_storeu_si256(out_ptr.add(out_len) as *mut __m256i, chunk);
+                            out_len += 32;
                             i += 32;
                             continue;
                         } else {
+                            // Contains Latin1 bytes, break to scalar
                             break;
                         }
                     }
                 }
             }
 
-            // ---- SSE2 fast-path (16 bytes) ----
+            // ---- SSE2 fast-path: process 16 ASCII bytes at once ----
             #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
             {
                 if std::arch::is_x86_feature_detected!("sse2") {
@@ -815,9 +877,9 @@ write_bytes_simd(writer, bytes);
                         let chunk = _mm_loadu_si128(ptr);
                         let mask = _mm_movemask_epi8(chunk);
                         if mask == 0 {
-                            let mut buf16: [u8; 16] = std::mem::zeroed();
-                            _mm_storeu_si128(buf16.as_mut_ptr() as *mut __m128i, chunk);
-                            out.extend_from_slice(&buf16);
+                            // All ASCII: direct copy
+                            _mm_storeu_si128(out_ptr.add(out_len) as *mut __m128i, chunk);
+                            out_len += 16;
                             i += 16;
                             continue;
                         } else {
@@ -827,7 +889,7 @@ write_bytes_simd(writer, bytes);
                 }
             }
 
-            // ---- NEON fast-path (16 bytes) ----
+            // ---- NEON fast-path: process 16 ASCII bytes at once ----
             #[cfg(target_arch = "aarch64")]
             {
                 if std::arch::is_aarch64_feature_detected!("neon") {
@@ -835,15 +897,11 @@ write_bytes_simd(writer, bytes);
                     while i + 16 <= len {
                         let ptr = src.as_ptr().add(i);
                         let v = vld1q_u8(ptr);
-                        let cmp = vcgeq_u8(v, vdupq_n_u8(128));
-
-                        let mut mask_arr: [u8; 16] = std::mem::zeroed();
-                        vst1q_u8(mask_arr.as_mut_ptr(), cmp);
-
-                        if mask_arr.iter().all(|&x| x == 0) {
-                            let mut buf16: [u8; 16] = std::mem::zeroed();
-                            vst1q_u8(buf16.as_mut_ptr(), v);
-                            out.extend_from_slice(&buf16);
+                        // Check if any byte >= 0x80
+                        if vmaxvq_u8(v) < 0x80 {
+                            // All ASCII: direct copy
+                            vst1q_u8(out_ptr.add(out_len), v);
+                            out_len += 16;
                             i += 16;
                             continue;
                         } else {
@@ -853,17 +911,25 @@ write_bytes_simd(writer, bytes);
                 }
             }
 
-            // ---- scalar fallback for remaining bytes ----
+            // ---- Scalar fallback: convert Latin1 -> UTF-8 ----
+            // ASCII (0x00-0x7F): copy as-is
+            // Latin1 (0x80-0xFF): encode as 2-byte UTF-8
             while i < len {
                 let b = *src.get_unchecked(i);
                 if b < 0x80 {
-                    out.push(b);
+                    *out_ptr.add(out_len) = b;
+                    out_len += 1;
                 } else {
-                    out.push(0xC0 | (b >> 6));
-                    out.push(0x80 | (b & 0x3F));
+                    // Latin1 byte 0x80-0xFF -> UTF-8 encoding
+                    // Example: 0xC0 (À) -> [0xC3, 0x80]
+                    *out_ptr.add(out_len) = 0xC0 | (b >> 6);
+                    *out_ptr.add(out_len + 1) = 0x80 | (b & 0x3F);
+                    out_len += 2;
                 }
                 i += 1;
             }
+
+            out.set_len(out_len);
         }
         reader.move_next(len);
         Ok(unsafe { String::from_utf8_unchecked(out) })
@@ -875,23 +941,27 @@ write_bytes_simd(writer, bytes);
             return Ok(String::new());
         }
         let src = unsafe { std::slice::from_raw_parts(reader.bf.add(reader.cursor), len) };
-        let mut result = String::with_capacity(len);
+
+        // CRITICAL OPTIMIZATION: Allocate Vec once, SIMD copy directly, single String construction
+        // Eliminates multiple push_str copies
+        let mut vec = Vec::with_capacity(len);
 
         unsafe {
+            let dst: *mut u8 = vec.as_mut_ptr();
             let mut i = 0usize;
 
+            // ---- AVX2 path: 32-byte chunks ----
             #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
             {
                 const CHUNK: usize = 32;
                 while i + CHUNK <= len {
                     let chunk = _mm256_loadu_si256(src.as_ptr().add(i) as *const __m256i);
-                    let mut buf = [0u8; CHUNK];
-                    _mm256_storeu_si256(buf.as_mut_ptr() as *mut __m256i, chunk);
-                    result.push_str(std::str::from_utf8_unchecked(&buf));
+                    _mm256_storeu_si256(dst.add(i) as *mut __m256i, chunk);
                     i += CHUNK;
                 }
             }
 
+            // ---- SSE2 path: 16-byte chunks ----
             #[cfg(all(
                 any(target_arch = "x86", target_arch = "x86_64"),
                 target_feature = "sse2",
@@ -901,32 +971,33 @@ write_bytes_simd(writer, bytes);
                 const CHUNK: usize = 16;
                 while i + CHUNK <= len {
                     let chunk = _mm_loadu_si128(src.as_ptr().add(i) as *const __m128i);
-                    let mut buf = [0u8; CHUNK];
-                    _mm_storeu_si128(buf.as_mut_ptr() as *mut __m128i, chunk);
-                    result.push_str(std::str::from_utf8_unchecked(&buf));
+                    _mm_storeu_si128(dst.add(i) as *mut __m128i, chunk);
                     i += CHUNK;
                 }
             }
 
+            // ---- NEON path: 16-byte chunks ----
             #[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
             {
                 const CHUNK: usize = 16;
                 while i + CHUNK <= len {
                     let chunk = vld1q_u8(src.as_ptr().add(i));
-                    let mut buf = [0u8; CHUNK];
-                    vst1q_u8(buf.as_mut_ptr(), chunk);
-                    result.push_str(std::str::from_utf8_unchecked(&buf));
+                    vst1q_u8(dst.add(i), chunk);
                     i += CHUNK;
                 }
             }
 
+            // ---- Copy remaining bytes ----
             if i < len {
-                result.push_str(std::str::from_utf8_unchecked(&src[i..len]));
+                std::ptr::copy_nonoverlapping(src.as_ptr().add(i), dst.add(i), len - i);
             }
+
+            vec.set_len(len);
         }
 
         reader.move_next(len);
-        Ok(result)
+        // Single String construction - no intermediate copies!
+        Ok(unsafe { String::from_utf8_unchecked(vec) })
     }
 
     #[inline]

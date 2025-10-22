@@ -303,4 +303,58 @@ public class StringUtils {
     }
     return isLatin;
   }
+
+  /** Check if UTF-8 encoded bytes represent ASCII-only text. */
+  public static boolean isAscii(byte[] bytes, int offset, int length) {
+    final int end = offset + length;
+    int vectorizedLen = length >> 3;
+    int vectorizedBytes = vectorizedLen << 3;
+    int vectorizedEnd = offset + vectorizedBytes;
+    // Vectorized check: 8 bytes at a time
+    for (int i = offset; i < vectorizedEnd; i += 8) {
+      long multiBytes = Platform.getLong(bytes, Platform.BYTE_ARRAY_OFFSET + i);
+      // If any byte has high bit set, it's not ASCII
+      if ((multiBytes & 0x8080808080808080L) != 0) {
+        return false;
+      }
+    }
+    // Check remaining bytes
+    for (int i = vectorizedEnd; i < end; i++) {
+      if (bytes[i] < 0) { // high bit set
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /** Check if UTF-8 encoded bytes represent Latin1-encodable text. */
+  public static boolean isLatin(byte[] bytes, int offset, int length) {
+    final int end = offset + length;
+    for (int i = offset; i < end; ) {
+      int b = bytes[i] & 0xFF;
+      if (b < 0x80) {
+        // ASCII (1 byte)
+        i++;
+      } else if ((b >> 5) == 0b110 && (b & 0x1e) != 0) {
+        // 2-byte UTF-8 sequence
+        if (i + 1 >= end) {
+          return false;
+        }
+        int b2 = bytes[i + 1] & 0xFF;
+        if ((b2 & 0xc0) != 0x80) {
+          return false;
+        }
+        // Decode to check if <= 0xFF
+        int codePoint = ((b & 0x1F) << 6) | (b2 & 0x3F);
+        if (codePoint > 0xFF) {
+          return false;
+        }
+        i += 2;
+      } else {
+        // 3 or 4 byte UTF-8 sequence - definitely not Latin1
+        return false;
+      }
+    }
+    return true;
+  }
 }

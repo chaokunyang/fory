@@ -16,10 +16,7 @@
 // under the License.
 
 use crate::error::Error;
-use crate::meta::buffer_rw_string::{
-    read_latin1_simd, read_utf16_simd, read_utf8_simd, write_latin1_simd, write_utf16_simd,
-    write_utf8_simd,
-};
+use crate::meta::buffer_rw_string::{read_latin1_simd, write_latin1_simd};
 use byteorder::{ByteOrder, LittleEndian, WriteBytesExt};
 use std::slice;
 
@@ -355,34 +352,21 @@ impl Writer {
     pub fn write_utf8_string(&mut self, s: &str) {
         let bytes = s.as_bytes();
         let len = bytes.len();
-
-        if len < SIMD_THRESHOLD {
-            // Fast path for small strings - direct copy avoids SIMD overhead
-            // For small strings, the branch cost + simple copy is faster than SIMD setup
-            self.bf.reserve(len);
-            self.bf.extend_from_slice(bytes);
-        } else {
-            // Use SIMD for larger strings where the overhead is amortized
-            write_utf8_simd(self, s);
-        }
+        self.bf.reserve(len);
+        self.bf.extend_from_slice(bytes);
     }
 
     #[inline(always)]
     pub fn write_utf16_bytes(&mut self, bytes: &[u16]) {
         let total_bytes = bytes.len() * 2;
-        if total_bytes < SIMD_THRESHOLD {
-            // Fast path for small UTF-16 data - direct copy
-            let old_len = self.bf.len();
-            self.bf.reserve(total_bytes);
-            unsafe {
-                let dest = self.bf.as_mut_ptr().add(old_len);
-                let src = bytes.as_ptr() as *const u8;
-                std::ptr::copy_nonoverlapping(src, dest, total_bytes);
-                self.bf.set_len(old_len + total_bytes);
-            }
-            return;
+        let old_len = self.bf.len();
+        self.bf.reserve(total_bytes);
+        unsafe {
+            let dest = self.bf.as_mut_ptr().add(old_len);
+            let src = bytes.as_ptr() as *const u8;
+            std::ptr::copy_nonoverlapping(src, dest, total_bytes);
+            self.bf.set_len(old_len + total_bytes);
         }
-        write_utf16_simd(self, bytes);
     }
 }
 
@@ -712,43 +696,32 @@ impl Reader {
     #[inline(always)]
     pub fn read_utf8_string(&mut self, len: usize) -> Result<String, Error> {
         self.check_bound(len)?;
-
-        if len < SIMD_THRESHOLD {
-            // Fast path for small strings - direct copy avoids SIMD overhead
-            // SAFETY: bounds already checked, assuming valid UTF-8 (caller's responsibility)
-            unsafe {
-                let mut vec = Vec::with_capacity(len);
-                let src = self.bf.add(self.cursor);
-                let dst = vec.as_mut_ptr();
-                // Use fastest possible copy - copy_nonoverlapping compiles to memcpy
-                std::ptr::copy_nonoverlapping(src, dst, len);
-                vec.set_len(len);
-                self.move_next(len);
-                // SAFETY: Assuming valid UTF-8 bytes (responsibility of serialization protocol)
-                Ok(String::from_utf8_unchecked(vec))
-            }
-        } else {
-            // Use SIMD for larger strings where the overhead is amortized
-            read_utf8_simd(self, len)
+        // don't use simd for memory copy, copy_non_overlapping is faster
+        unsafe {
+            let mut vec = Vec::with_capacity(len);
+            let src = self.bf.add(self.cursor);
+            let dst = vec.as_mut_ptr();
+            // Use fastest possible copy - copy_nonoverlapping compiles to memcpy
+            std::ptr::copy_nonoverlapping(src, dst, len);
+            vec.set_len(len);
+            self.move_next(len);
+            // SAFETY: Assuming valid UTF-8 bytes (responsibility of serialization protocol)
+            Ok(String::from_utf8_unchecked(vec))
         }
     }
 
     #[inline(always)]
     pub fn read_utf16_string(&mut self, len: usize) -> Result<String, Error> {
         self.check_bound(len)?;
-        if len < SIMD_THRESHOLD {
-            // Fast path for small UTF-16 strings - direct copy
-            unsafe {
-                let slice = std::slice::from_raw_parts(self.bf.add(self.cursor), len);
-                let units: Vec<u16> = slice
-                    .chunks_exact(2)
-                    .map(|c| u16::from_le_bytes([c[0], c[1]]))
-                    .collect();
-                self.move_next(len);
-                return Ok(String::from_utf16_lossy(&units));
-            }
+        unsafe {
+            let slice = std::slice::from_raw_parts(self.bf.add(self.cursor), len);
+            let units: Vec<u16> = slice
+                .chunks_exact(2)
+                .map(|c| u16::from_le_bytes([c[0], c[1]]))
+                .collect();
+            self.move_next(len);
+            Ok(String::from_utf16_lossy(&units))
         }
-        read_utf16_simd(self, len)
     }
 
     #[inline(always)]

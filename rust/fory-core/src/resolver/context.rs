@@ -371,6 +371,7 @@ impl ReadContext {
         self.type_resolver.get_type_info(type_id)
     }
 
+    #[inline(always)]
     pub fn read_meta_string(&mut self) -> Result<&MetaString, Error> {
         self.meta_string_resolver.read_meta_string(&mut self.reader)
     }

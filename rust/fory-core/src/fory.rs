@@ -364,6 +364,7 @@ impl Fory {
         }
     }
 
+    #[inline(always)]
     fn read_head(&self, reader: &mut Reader) -> Result<bool, Error> {
         if self.xlang {
             let magic_numer = reader.read_u16()?;

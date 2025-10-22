@@ -511,6 +511,10 @@ mod test_hash {
 }
 
 pub mod buffer_rw_string {
+    /// Threshold for using SIMD optimizations in string operations.
+    /// For buffers smaller than this, direct copy is faster than SIMD setup overhead.
+    const SIMD_THRESHOLD: usize = 128;
+
     #[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
     use std::arch::aarch64::*;
     #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
@@ -602,12 +606,19 @@ pub mod buffer_rw_string {
     #[inline]
     fn write_bytes_simd(writer: &mut Writer, bytes: &[u8]) {
         let len = bytes.len();
-        let mut i = 0usize;
 
         if len == 0 {
             return;
         }
 
+        if len < SIMD_THRESHOLD {
+            // Fast path for small buffers - direct copy avoids SIMD overhead
+            writer.bf.reserve(len);
+            writer.bf.extend_from_slice(bytes);
+            return;
+        }
+
+        let mut i = 0usize;
         writer.bf.reserve(len);
 
         #[cfg(any(
@@ -702,7 +713,14 @@ pub mod buffer_rw_string {
     #[inline]
     pub fn write_utf8_simd(writer: &mut Writer, s: &str) {
         let bytes = s.as_bytes();
-        write_bytes_simd(writer, bytes);
+
+        if bytes.len() < SIMD_THRESHOLD {
+            // Fast path for small strings - direct copy avoids SIMD overhead
+            writer.bf.reserve(bytes.len());
+            writer.bf.extend_from_slice(bytes);
+        } else {
+            write_bytes_simd(writer, bytes);
+        }
     }
 
     pub fn write_utf16_simd(writer: &mut Writer, utf16: &[u16]) {
@@ -718,6 +736,18 @@ pub mod buffer_rw_string {
         #[cfg(target_endian = "little")]
         unsafe {
             let total_bytes = utf16.len() * 2;
+
+            if total_bytes < SIMD_THRESHOLD {
+                // Fast path for small UTF-16 data - direct copy
+                let old_len = writer.bf.len();
+                writer.bf.reserve(total_bytes);
+                let dest = writer.bf.as_mut_ptr().add(old_len);
+                let src = utf16.as_ptr() as *const u8;
+                std::ptr::copy_nonoverlapping(src, dest, total_bytes);
+                writer.bf.set_len(old_len + total_bytes);
+                return;
+            }
+
             let old_len = writer.bf.len();
             writer.bf.reserve(total_bytes);
             let dest = writer.bf.as_mut_ptr().add(old_len);
@@ -873,6 +903,19 @@ pub mod buffer_rw_string {
             return Ok(String::new());
         }
 
+        if len < SIMD_THRESHOLD {
+            // Fast path for small strings - direct copy avoids SIMD overhead
+            unsafe {
+                let mut vec = Vec::with_capacity(len);
+                let src = reader.bf.add(reader.cursor);
+                let dst = vec.as_mut_ptr();
+                std::ptr::copy_nonoverlapping(src, dst, len);
+                vec.set_len(len);
+                reader.move_next(len);
+                return Ok(String::from_utf8_unchecked(vec));
+            }
+        }
+
         let src = unsafe { std::slice::from_raw_parts(reader.bf.add(reader.cursor), len) };
         let mut result = String::with_capacity(len);
 
@@ -931,6 +974,20 @@ pub mod buffer_rw_string {
     #[inline]
     pub fn read_utf16_simd(reader: &mut Reader, len: usize) -> Result<String, Error> {
         assert_eq!(len % 2, 0, "UTF-16 length must be even");
+
+        if len < SIMD_THRESHOLD {
+            // Fast path for small UTF-16 strings - direct copy
+            unsafe {
+                let slice = std::slice::from_raw_parts(reader.bf.add(reader.cursor), len);
+                let units: Vec<u16> = slice
+                    .chunks_exact(2)
+                    .map(|c| u16::from_le_bytes([c[0], c[1]]))
+                    .collect();
+                reader.move_next(len);
+                return Ok(String::from_utf16_lossy(&units));
+            }
+        }
+
         unsafe fn simd_impl(bytes: &[u8]) -> String {
             let len = bytes.len();
             let unit_len = len / 2;

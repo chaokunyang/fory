@@ -23,6 +23,10 @@ use crate::meta::buffer_rw_string::{
 use byteorder::{ByteOrder, LittleEndian, WriteBytesExt};
 use std::slice;
 
+/// Threshold for using SIMD optimizations in string operations.
+/// For buffers smaller than this, direct copy is faster than SIMD setup overhead.
+const SIMD_THRESHOLD: usize = 128;
+
 #[derive(Default)]
 pub struct Writer {
     pub(crate) bf: Vec<u8>,
@@ -330,7 +334,18 @@ impl Writer {
 
     #[inline(always)]
     pub fn write_utf8_string(&mut self, s: &str) {
-        write_utf8_simd(self, s);
+        let bytes = s.as_bytes();
+        let len = bytes.len();
+
+        if len < SIMD_THRESHOLD {
+            // Fast path for small strings - direct copy avoids SIMD overhead
+            // For small strings, the branch cost + simple copy is faster than SIMD setup
+            self.bf.reserve(len);
+            self.bf.extend_from_slice(bytes);
+        } else {
+            // Use SIMD for larger strings where the overhead is amortized
+            write_utf8_simd(self, s);
+        }
     }
 
     #[inline(always)]
@@ -623,7 +638,25 @@ impl Reader {
     #[inline(always)]
     pub fn read_utf8_string(&mut self, len: usize) -> Result<String, Error> {
         self.check_bound(len)?;
-        read_utf8_simd(self, len)
+
+        if len < SIMD_THRESHOLD {
+            // Fast path for small strings - direct copy avoids SIMD overhead
+            // SAFETY: bounds already checked, assuming valid UTF-8 (caller's responsibility)
+            unsafe {
+                let mut vec = Vec::with_capacity(len);
+                let src = self.bf.add(self.cursor);
+                let dst = vec.as_mut_ptr();
+                // Use fastest possible copy - copy_nonoverlapping compiles to memcpy
+                std::ptr::copy_nonoverlapping(src, dst, len);
+                vec.set_len(len);
+                self.move_next(len);
+                // SAFETY: Assuming valid UTF-8 bytes (responsibility of serialization protocol)
+                Ok(String::from_utf8_unchecked(vec))
+            }
+        } else {
+            // Use SIMD for larger strings where the overhead is amortized
+            read_utf8_simd(self, len)
+        }
     }
 
     #[inline(always)]

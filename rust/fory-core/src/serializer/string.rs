@@ -24,6 +24,7 @@ use crate::serializer::{ForyDefault, Serializer};
 use crate::types::TypeId;
 use std::mem;
 
+#[allow(dead_code)]
 enum StrEncoding {
     Latin1 = 0,
     Utf16 = 1,

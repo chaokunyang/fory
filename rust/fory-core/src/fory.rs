@@ -90,7 +90,7 @@ impl Default for Fory {
     fn default() -> Self {
         Fory {
             compatible: false,
-            xlang: true,
+            xlang: false,
             share_meta: false,
             type_resolver: TypeResolver::default(),
             compress_string: false,
@@ -156,7 +156,7 @@ impl Fory {
     ///
     /// # Default
     ///
-    /// The default value is `true`.
+    /// The default value is `false`.
     ///
     /// # Examples
     ///
@@ -166,7 +166,8 @@ impl Fory {
     /// // For cross-language use (default)
     /// let fory = Fory::default().xlang(true);
     ///
-    /// // For Rust-only optimization
+    /// // For Rust-only optimization, this mode is faster and more compact since it avoids
+    /// // cross-language metadata and type system costs.
     /// let fory = Fory::default().xlang(false);
     /// ```
     pub fn xlang(mut self, xlang: bool) -> Self {

@@ -721,9 +721,12 @@ public class StringSerializerTest extends ForyTestBase {
 
   @Test
   public void disabled_testReadBytesUTF8ForXlang_DirectRawBytes() {
+    if (Platform.JAVA_VERSION <= 8) {
+      // readBytesUTF8ForXlang will be invoked only in java9+
+      return;
+    }
     Fory fory =
         Fory.builder()
-            .withStringCompressed(true)
             .withLanguage(Language.XLANG)
             .requireClassRegistration(false)
             .build();

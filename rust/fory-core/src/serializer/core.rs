@@ -1432,3 +1432,11 @@ pub trait StructSerializer: Serializer + 'static {
     where
         Self: Sized;
 }
+
+pub fn write_data<T: Serializer>(this: &T, context: &mut WriteContext) -> Result<(), Error> {
+    T::fory_write_data(this, context)
+}
+
+pub fn read_data<T: Serializer + ForyDefault>(context: &mut ReadContext) -> Result<T, Error> {
+    T::fory_read_data(context)
+}

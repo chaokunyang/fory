@@ -18,10 +18,10 @@
 use chrono::{NaiveDate, NaiveDateTime};
 use fory_core::buffer::{Reader, Writer};
 use fory_core::error::Error;
-use fory_core::fory::{read_data, write_data, Fory};
 use fory_core::resolver::context::{ReadContext, WriteContext};
 use fory_core::serializer::{ForyDefault, Serializer};
 use fory_core::TypeResolver;
+use fory_core::{read_data, write_data, Fory};
 use fory_derive::ForyObject;
 use std::collections::{HashMap, HashSet};
 

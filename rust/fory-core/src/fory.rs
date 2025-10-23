@@ -339,7 +339,6 @@ impl Fory {
         &self.type_resolver
     }
 
-
     /// Registers a struct type with a numeric type ID for serialization.
     ///
     /// # Type Parameters
@@ -532,7 +531,7 @@ impl Fory {
         &mut self,
     ) -> Result<(), Error> {
         self.type_resolver.register_generic_trait::<T>()
-    }    
+    }
 
     /// Serializes a value of type `T` into a byte vector.
     ///
@@ -765,12 +764,4 @@ impl Fory {
         }
         Ok(false)
     }
-}
-
-pub fn write_data<T: Serializer>(this: &T, context: &mut WriteContext) -> Result<(), Error> {
-    T::fory_write_data(this, context)
-}
-
-pub fn read_data<T: Serializer + ForyDefault>(context: &mut ReadContext) -> Result<T, Error> {
-    T::fory_read_data(context)
 }

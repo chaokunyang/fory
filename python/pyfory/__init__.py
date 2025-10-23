@@ -26,14 +26,14 @@ PYTHON = Language.PYTHON
 XLANG = Language.XLANG
 
 try:
-    from pyfory._serialization import ENABLE_FORY_CYTHON_SERIALIZATION
+    from pyfory.serialization import ENABLE_FORY_CYTHON_SERIALIZATION
 except ImportError:
     ENABLE_FORY_CYTHON_SERIALIZATION = False
 
 from pyfory._registry import TypeInfo
 
 if ENABLE_FORY_CYTHON_SERIALIZATION:
-    from pyfory._serialization import Fory, TypeInfo  # noqa: F401,F811
+    from pyfory.serialization import Fory, TypeInfo  # noqa: F401,F811
 
 from pyfory.serializer import (  # noqa: F401 # pylint: disable=unused-import
     Serializer,

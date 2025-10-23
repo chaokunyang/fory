@@ -53,10 +53,10 @@ from pyfory._fory import (
 
 _WINDOWS = os.name == "nt"
 
-from pyfory._serialization import ENABLE_FORY_CYTHON_SERIALIZATION
+from pyfory.serialization import ENABLE_FORY_CYTHON_SERIALIZATION
 
 if ENABLE_FORY_CYTHON_SERIALIZATION:
-    from pyfory._serialization import (  # noqa: F401, F811
+    from pyfory.serialization import (  # noqa: F401, F811
         Serializer,
         CrossLanguageCompatibleSerializer,
         BooleanSerializer,

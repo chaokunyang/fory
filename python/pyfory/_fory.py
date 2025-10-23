@@ -192,7 +192,7 @@ class Fory:
         self.policy = policy or DEFAULT_POLICY
         self.compatible = compatible
         self.field_nullable = field_nullable if self.is_py else False
-        from pyfory._serialization import MetaStringResolver, SerializationContext
+        from pyfory.serialization import MetaStringResolver, SerializationContext
         from pyfory._registry import TypeResolver
 
         self.metastring_resolver = MetaStringResolver()
@@ -673,10 +673,10 @@ class ThreadSafeFory:
 
     def _get_fory_class(self):
         try:
-            from pyfory._serialization import ENABLE_FORY_CYTHON_SERIALIZATION
+            from pyfory.serialization import ENABLE_FORY_CYTHON_SERIALIZATION
 
             if ENABLE_FORY_CYTHON_SERIALIZATION:
-                from pyfory._serialization import Fory as CythonFory
+                from pyfory.serialization import Fory as CythonFory
 
                 return CythonFory
         except ImportError:

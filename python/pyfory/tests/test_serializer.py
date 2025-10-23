@@ -34,7 +34,7 @@ import pytest
 
 import pyfory
 from pyfory.buffer import Buffer
-from pyfory import Fory, Language, _serialization, EnumSerializer
+from pyfory import Fory, Language, serialization, EnumSerializer
 from pyfory.serializer import (
     TimestampSerializer,
     DateSerializer,
@@ -131,11 +131,11 @@ def test_big_chunk_dict(track_ref):
 def test_basic_serializer(language):
     fory = Fory(language=language, ref=True)
     typeinfo = fory.type_resolver.get_typeinfo(datetime.datetime)
-    assert isinstance(typeinfo.serializer, (TimestampSerializer, _serialization.TimestampSerializer))
+    assert isinstance(typeinfo.serializer, (TimestampSerializer, serialization.TimestampSerializer))
     if language == Language.XLANG:
         assert typeinfo.type_id == TypeId.TIMESTAMP
     typeinfo = fory.type_resolver.get_typeinfo(datetime.date)
-    assert isinstance(typeinfo.serializer, (DateSerializer, _serialization.DateSerializer))
+    assert isinstance(typeinfo.serializer, (DateSerializer, serialization.DateSerializer))
     if language == Language.XLANG:
         assert typeinfo.type_id == TypeId.LOCAL_DATE
     assert ser_de(fory, True) is True
@@ -760,10 +760,10 @@ def test_module_serialize():
     fory = Fory(xlang=False, ref=True, strict=False)
     assert fory.loads(fory.dumps(pyfory)) is pyfory
     from pyfory import serializer
-    from pyfory import _serialization
+    from pyfory import serialization
 
     assert fory.loads(fory.dumps(serializer)) is serializer
-    assert fory.loads(fory.dumps(_serialization)) is _serialization
+    assert fory.loads(fory.dumps(serialization)) is serialization
     import threading
 
     assert fory.loads(fory.dumps(threading)) is threading

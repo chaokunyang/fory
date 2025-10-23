@@ -314,7 +314,6 @@ fn stub_sorted_field_infos(_: &TypeResolver) -> Result<Vec<FieldInfo>, Error> {
 }
 
 /// TypeResolver is a resolver for fast type/serializer dispatch.
-#[derive(Clone)]
 pub struct TypeResolver {
     type_info_map_by_id: HashMap<u32, Rc<TypeInfo>>,
     type_info_map: HashMap<std::any::TypeId, Rc<TypeInfo>>,
@@ -877,7 +876,25 @@ impl TypeResolver {
         self.compatible = compatible;
     }
 
-    /// Build the final TypeResolver by completing all partial type infos builded during registration
+    /// Builds the final TypeResolver by completing all partial type infos created during registration.
+    ///
+    /// This method processes all types that were registered with lazy initialization enabled.
+    /// During registration, types are stored in `partial_type_infos` without their complete
+    /// type metadata to avoid circular dependencies. This method:
+    ///
+    /// 1. Iterates through all partial type infos
+    /// 2. Calls their `sorted_field_infos` function to get complete field information
+    /// 3. Builds complete TypeMeta and serializes it to bytes
+    /// 4. Inserts completed type infos into all lookup maps
+    ///
+    /// # Returns
+    ///
+    /// A new TypeResolver with all type infos fully initialized and ready for use.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any type info fails to complete, such as when field info
+    /// cannot be retrieved or type metadata cannot be serialized.
     pub(crate) fn build_final_type_resolver(&self) -> Result<TypeResolver, Error> {
         // copy all type info from type_resolver to here
         let mut type_info_map_by_id = self.type_info_map_by_id.clone();
@@ -929,5 +946,41 @@ impl TypeResolver {
             type_id_index: self.type_id_index.clone(),
             compatible: self.compatible,
         })
+    }
+
+    /// Clones the TypeResolver including any partial type infos.
+    ///
+    /// **WARNING**: This method is restricted to `pub(crate)` visibility because it clones
+    /// the TypeResolver in its current state, which may include incomplete `partial_type_infos`.
+    ///
+    /// # Important
+    ///
+    /// External code should **not** use this method directly. Instead, use
+    /// [`build_final_type_resolver`](Self::build_final_type_resolver) to obtain a complete
+    /// TypeResolver with all type infos fully initialized.
+    ///
+    /// This method is only used internally for a type resolver without partial type infos:
+    ///
+    /// # Returns
+    ///
+    /// A shallow clone of the TypeResolver with all internal maps cloned.
+    ///
+    /// # See Also
+    ///
+    /// - [`build_final_type_resolver`](Self::build_final_type_resolver) - Builds a complete resolver
+    pub(crate) fn clone(&self) -> TypeResolver {
+        if !self.partial_type_infos.is_empty() {
+            panic!("TypeResolver::clone() should not be called when there are partial type infos. 
+            Use build_final_type_resolver() to get a complete TypeResolver first instead.");
+        }
+        TypeResolver {
+            type_info_map_by_id: self.type_info_map_by_id.clone(),
+            type_info_map: self.type_info_map.clone(),
+            type_info_map_by_name: self.type_info_map_by_name.clone(),
+            type_info_map_by_meta_string_name: self.type_info_map_by_meta_string_name.clone(),
+            partial_type_infos: self.partial_type_infos.clone(),
+            type_id_index: self.type_id_index.clone(),
+            compatible: self.compatible,
+        }
     }
 }

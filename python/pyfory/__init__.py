@@ -57,6 +57,11 @@ from pyfory.serializer import (  # noqa: F401 # pylint: disable=unused-import
     EnumSerializer,
     SliceSerializer,
     DataClassSerializer,
+    FunctionSerializer,
+    TypeSerializer,
+    MethodSerializer,
+    ReduceSerializer,
+    StatefulSerializer,
 )
 from pyfory.type import (  # noqa: F401 # pylint: disable=unused-import
     record_class_factory,
@@ -132,6 +137,11 @@ __all__ = [
     "EnumSerializer",
     "SliceSerializer",
     "DataClassSerializer",
+    "FunctionSerializer",
+    "TypeSerializer",
+    "MethodSerializer",
+    "ReduceSerializer",
+    "StatefulSerializer",
     # Version
     "__version__",
 ]

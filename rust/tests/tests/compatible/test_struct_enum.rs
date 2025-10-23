@@ -95,7 +95,7 @@ fn basic() {
     fory2.register_by_name::<Person>("person").unwrap();
     for fory in [fory1, fory2] {
         let writer = Writer::default();
-        let mut write_context = WriteContext::new_from_fory(writer, &fory);
+        let mut write_context = WriteContext::new_from_fory(writer, &fory).unwrap();
         let person = Person::default();
         let bytes1 = fory
             .serialize_with_context(&person, &mut write_context)

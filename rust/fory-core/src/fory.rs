@@ -82,8 +82,8 @@ pub struct Fory {
     max_dyn_depth: u32,
     check_struct_version: bool,
     // Lazy-initialized pools (thread-safe, one-time initialization)
-    write_context_pool: OnceLock<Pool<Box<WriteContext>>>,
-    read_context_pool: OnceLock<Pool<Box<ReadContext>>>,
+    write_context_pool: OnceLock<Result<Pool<Box<WriteContext>>, Error>>,
+    read_context_pool: OnceLock<Result<Pool<Box<ReadContext>>, Error>>,
 }
 
 impl Default for Fory {
@@ -561,8 +561,11 @@ impl Fory {
     /// let bytes = fory.serialize(&point);
     /// ```
     pub fn serialize<T: Serializer>(&self, record: &T) -> Result<Vec<u8>, Error> {
-        let pool = self.write_context_pool.get_or_init(|| {
-            let type_resolver = self.type_resolver.clone();
+        let pool_result = self.write_context_pool.get_or_init(|| {
+            let type_resolver = match self.type_resolver.build_final_type_resolver() {
+                Ok(resolver) => resolver,
+                Err(e) => return Err(e),
+            };
             let compatible = self.compatible;
             let share_meta = self.share_meta;
             let compress_string = self.compress_string;
@@ -581,8 +584,9 @@ impl Fory {
                     check_struct_version,
                 ))
             };
-            Pool::new(factory)
+            Ok(Pool::new(factory))
         });
+        let pool = pool_result.as_ref().map_err(|e| Error::type_error(format!("Failed to build type resolver: {}", e)))?;
         let mut context = pool.get();
         let result = self.serialize_with_context(record, &mut context)?;
         pool.put(context);
@@ -671,8 +675,11 @@ impl Fory {
     /// let deserialized: Point = fory.deserialize(&bytes).unwrap();
     /// ```
     pub fn deserialize<T: Serializer + ForyDefault>(&self, bf: &[u8]) -> Result<T, Error> {
-        let pool = self.read_context_pool.get_or_init(|| {
-            let type_resolver = self.type_resolver.clone();
+        let pool_result = self.read_context_pool.get_or_init(|| {
+            let type_resolver = match self.type_resolver.build_final_type_resolver() {
+                Ok(resolver) => resolver,
+                Err(e) => return Err(e),
+            };
             let compatible = self.compatible;
             let share_meta = self.share_meta;
             let xlang = self.xlang;
@@ -691,8 +698,9 @@ impl Fory {
                     check_struct_version,
                 ))
             };
-            Pool::new(factory)
+            Ok(Pool::new(factory))
         });
+        let pool = pool_result.as_ref().map_err(|e| Error::type_error(format!("Failed to build type resolver: {}", e)))?;
         let mut context = pool.get();
         context.init(bf, self.max_dyn_depth);
         let result = self.deserialize_with_context(&mut context);

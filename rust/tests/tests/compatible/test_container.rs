@@ -224,12 +224,12 @@ fn container_outer_auto_conv() {
     let fory = Fory::default().compatible(true);
     // serialize_outer_non-null
     let writer = Writer::default();
-    let mut write_context = WriteContext::new_from_fory(writer, &fory);
+    let mut write_context = WriteContext::new_from_fory(writer, &fory).unwrap();
     let bytes = fory
         .serialize_with_context(&basic_list(), &mut write_context)
         .unwrap();
     let reader = Reader::new(bytes.as_slice());
-    let mut read_context = ReadContext::new_from_fory(reader, &fory);
+    let mut read_context = ReadContext::new_from_fory(reader, &fory).unwrap();
     assert_eq!(
         Some(basic_list()),
         fory.deserialize_with_context::<Option<Vec<String>>>(&mut read_context)
@@ -239,7 +239,7 @@ fn container_outer_auto_conv() {
         .serialize_with_context(&basic_set(), &mut write_context)
         .unwrap();
     let reader = Reader::new(bytes.as_slice());
-    let mut read_context = ReadContext::new_from_fory(reader, &fory);
+    let mut read_context = ReadContext::new_from_fory(reader, &fory).unwrap();
     assert_eq!(
         Some(basic_set()),
         fory.deserialize_with_context::<Option<HashSet<String>>>(&mut read_context)
@@ -250,7 +250,7 @@ fn container_outer_auto_conv() {
         .unwrap();
     // deserialize_outer_nullable
     let reader = Reader::new(bytes.as_slice());
-    let mut read_context = ReadContext::new_from_fory(reader, &fory);
+    let mut read_context = ReadContext::new_from_fory(reader, &fory).unwrap();
     assert_eq!(
         Some(basic_map()),
         fory.deserialize_with_context::<Option<HashMap<String, String>>>(&mut read_context)
@@ -259,7 +259,7 @@ fn container_outer_auto_conv() {
     assert_eq!(read_context.reader.slice_after_cursor().len(), 0);
     // serialize_outer_nullable
     let writer = Writer::default();
-    let mut write_context = WriteContext::new_from_fory(writer, &fory);
+    let mut write_context = WriteContext::new_from_fory(writer, &fory).unwrap();
     let mut bins = vec![
         fory.serialize_with_context(&Some(basic_list()), &mut write_context)
             .unwrap(),
@@ -280,7 +280,7 @@ fn container_outer_auto_conv() {
         fory.deserialize_with_context::<Vec<String>>(&mut ReadContext::new_from_fory(
             Reader::new(bins.pop().unwrap().as_slice()),
             &fory
-        ))
+        ).unwrap())
         .unwrap()
     );
     assert_eq!(
@@ -288,7 +288,7 @@ fn container_outer_auto_conv() {
         fory.deserialize_with_context::<HashSet<String>>(&mut ReadContext::new_from_fory(
             Reader::new(bins.pop().unwrap().as_slice()),
             &fory
-        ))
+        ).unwrap())
         .unwrap()
     );
     assert_eq!(
@@ -296,7 +296,7 @@ fn container_outer_auto_conv() {
         fory.deserialize_with_context::<HashMap<String, String>>(&mut ReadContext::new_from_fory(
             Reader::new(bins.pop().unwrap().as_slice()),
             &fory
-        ))
+        ).unwrap())
         .unwrap()
     );
     assert_eq!(
@@ -304,7 +304,7 @@ fn container_outer_auto_conv() {
         fory.deserialize_with_context::<Vec<String>>(&mut ReadContext::new_from_fory(
             Reader::new(bins.pop().unwrap().as_slice()),
             &fory
-        ))
+        ).unwrap())
         .unwrap()
     );
     assert_eq!(
@@ -312,7 +312,7 @@ fn container_outer_auto_conv() {
         fory.deserialize_with_context::<HashSet<String>>(&mut ReadContext::new_from_fory(
             Reader::new(bins.pop().unwrap().as_slice()),
             &fory
-        ))
+        ).unwrap())
         .unwrap()
     );
     assert_eq!(
@@ -320,7 +320,7 @@ fn container_outer_auto_conv() {
         fory.deserialize_with_context::<HashMap<String, String>>(&mut ReadContext::new_from_fory(
             Reader::new(bins.pop().unwrap().as_slice()),
             &fory
-        ))
+        ).unwrap())
         .unwrap()
     );
     assert_eq!(read_context.reader.slice_after_cursor().len(), 0);
@@ -335,7 +335,7 @@ fn collection_inner() {
     for fory in [fory1, fory2] {
         // serialize
         let writer = Writer::default();
-        let mut write_context = WriteContext::new_from_fory(writer, &fory);
+        let mut write_context = WriteContext::new_from_fory(writer, &fory).unwrap();
         let mut bins = vec![
             fory.serialize_with_context(&basic_list(), &mut write_context)
                 .unwrap(),
@@ -361,7 +361,7 @@ fn collection_inner() {
             fory.deserialize_with_context::<Vec<String>>(&mut ReadContext::new_from_fory(
                 Reader::new(bins.pop().unwrap().as_slice()),
                 &fory
-            ))
+            ).unwrap())
             .unwrap()
         );
         assert_eq!(
@@ -369,7 +369,7 @@ fn collection_inner() {
             fory.deserialize_with_context::<Vec<Item>>(&mut ReadContext::new_from_fory(
                 Reader::new(bins.pop().unwrap().as_slice()),
                 &fory
-            ))
+            ).unwrap())
             .unwrap()
         );
         assert_eq!(
@@ -377,7 +377,7 @@ fn collection_inner() {
             fory.deserialize_with_context::<HashSet<String>>(&mut ReadContext::new_from_fory(
                 Reader::new(bins.pop().unwrap().as_slice()),
                 &fory
-            ))
+            ).unwrap())
             .unwrap()
         );
         assert_eq!(
@@ -385,7 +385,7 @@ fn collection_inner() {
             fory.deserialize_with_context::<HashSet<Item>>(&mut ReadContext::new_from_fory(
                 Reader::new(bins.pop().unwrap().as_slice()),
                 &fory
-            ))
+            ).unwrap())
             .unwrap()
         );
         assert_eq!(
@@ -393,7 +393,7 @@ fn collection_inner() {
             fory.deserialize_with_context::<Vec<Option<String>>>(&mut ReadContext::new_from_fory(
                 Reader::new(bins.pop().unwrap().as_slice()),
                 &fory
-            ))
+            ).unwrap())
             .unwrap()
         );
         assert_eq!(
@@ -401,13 +401,13 @@ fn collection_inner() {
             fory.deserialize_with_context::<Vec<Option<Item>>>(&mut ReadContext::new_from_fory(
                 Reader::new(bins.pop().unwrap().as_slice()),
                 &fory
-            ))
+            ).unwrap())
             .unwrap()
         );
         assert_eq!(
             nullable_basic_set(false),
             fory.deserialize_with_context::<HashSet<Option<String>>>(
-                &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), &fory)
+                &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), &fory).unwrap()
             )
             .unwrap()
         );
@@ -430,7 +430,7 @@ fn collection_inner_auto_conv() {
     for fory in [fory1, fory2] {
         // serialize_non_null
         let writer = Writer::default();
-        let mut write_context = WriteContext::new_from_fory(writer, &fory);
+        let mut write_context = WriteContext::new_from_fory(writer, &fory).unwrap();
         let mut bins = vec![
             fory.serialize_with_context(&basic_list(), &mut write_context)
                 .unwrap(),
@@ -448,7 +448,7 @@ fn collection_inner_auto_conv() {
             fory.deserialize_with_context::<Vec<Option<String>>>(&mut ReadContext::new_from_fory(
                 Reader::new(bins.pop().unwrap().as_slice()),
                 &fory
-            ))
+            ).unwrap())
             .unwrap()
         );
         assert_eq!(
@@ -456,26 +456,26 @@ fn collection_inner_auto_conv() {
             fory.deserialize_with_context::<Vec<Option<Item>>>(&mut ReadContext::new_from_fory(
                 Reader::new(bins.pop().unwrap().as_slice()),
                 &fory
-            ))
+            ).unwrap())
             .unwrap()
         );
         assert_eq!(
             nullable_basic_set(true),
             fory.deserialize_with_context::<HashSet<Option<String>>>(
-                &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), &fory)
+                &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), &fory).unwrap()
             )
             .unwrap()
         );
         assert_eq!(
             nullable_item_set(true),
             fory.deserialize_with_context::<HashSet<Option<Item>>>(
-                &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), &fory)
+                &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), &fory).unwrap()
             )
             .unwrap()
         );
         // serialize_nullable
         let writer = Writer::default();
-        let mut write_context = WriteContext::new_from_fory(writer, &fory);
+        let mut write_context = WriteContext::new_from_fory(writer, &fory).unwrap();
         let mut bins = vec![
             fory.serialize_with_context(&nullable_basic_list(false), &mut write_context)
                 .unwrap(),
@@ -493,7 +493,7 @@ fn collection_inner_auto_conv() {
             fory.deserialize_with_context::<Vec<String>>(&mut ReadContext::new_from_fory(
                 Reader::new(bins.pop().unwrap().as_slice()),
                 &fory
-            ))
+            ).unwrap())
             .unwrap()
         );
         assert_eq!(
@@ -501,7 +501,7 @@ fn collection_inner_auto_conv() {
             fory.deserialize_with_context::<Vec<Item>>(&mut ReadContext::new_from_fory(
                 Reader::new(bins.pop().unwrap().as_slice()),
                 &fory
-            ))
+            ).unwrap())
             .unwrap()
         );
         assert_eq!(
@@ -509,7 +509,7 @@ fn collection_inner_auto_conv() {
             fory.deserialize_with_context::<HashSet<String>>(&mut ReadContext::new_from_fory(
                 Reader::new(bins.pop().unwrap().as_slice()),
                 &fory
-            ))
+            ).unwrap())
             .unwrap()
         );
         assert_eq!(
@@ -517,7 +517,7 @@ fn collection_inner_auto_conv() {
             fory.deserialize_with_context::<HashSet<Item>>(&mut ReadContext::new_from_fory(
                 Reader::new(bins.pop().unwrap().as_slice()),
                 &fory
-            ))
+            ).unwrap())
             .unwrap()
         );
     }
@@ -532,14 +532,14 @@ fn map_inner() {
     for fory in [fory1, fory2] {
         // serialize
         let writer = Writer::default();
-        let mut write_context = WriteContext::new_from_fory(writer, &fory);
+        let mut write_context = WriteContext::new_from_fory(writer, &fory).unwrap();
         let bytes = fory
             .serialize_with_context(&basic_map(), &mut write_context)
             .unwrap();
         assert_eq!(
             basic_map(),
             fory.deserialize_with_context::<HashMap<String, String>>(
-                &mut ReadContext::new_from_fory(Reader::new(bytes.as_slice()), &fory)
+                &mut ReadContext::new_from_fory(Reader::new(bytes.as_slice()), &fory).unwrap()
             )
             .unwrap()
         );
@@ -552,7 +552,7 @@ fn map_inner() {
             fory.deserialize_with_context::<HashMap<Item, Item>>(&mut ReadContext::new_from_fory(
                 Reader::new(bytes.as_slice()),
                 &fory
-            ))
+            ).unwrap())
             .unwrap()
         );
 
@@ -562,7 +562,7 @@ fn map_inner() {
         assert_eq!(
             nullable_basic_map(false),
             fory.deserialize_with_context::<HashMap<Option<String>, Option<String>>>(
-                &mut ReadContext::new_from_fory(Reader::new(bytes.as_slice()), &fory)
+                &mut ReadContext::new_from_fory(Reader::new(bytes.as_slice()), &fory).unwrap()
             )
             .unwrap()
         );
@@ -572,7 +572,7 @@ fn map_inner() {
         assert_eq!(
             nullable_item_map(false),
             fory.deserialize_with_context::<HashMap<Option<Item>, Option<Item>>>(
-                &mut ReadContext::new_from_fory(Reader::new(bytes.as_slice()), &fory)
+                &mut ReadContext::new_from_fory(Reader::new(bytes.as_slice()), &fory).unwrap()
             )
             .unwrap()
         );
@@ -588,13 +588,13 @@ fn map_inner_auto_conv() {
     for fory in [fory1, fory2] {
         // serialize_non_null
         let writer = Writer::default();
-        let mut write_context = WriteContext::new_from_fory(writer, &fory);
+        let mut write_context = WriteContext::new_from_fory(writer, &fory).unwrap();
         let bytes = fory
             .serialize_with_context(&basic_map(), &mut write_context)
             .unwrap();
         // deserialize_nullable
         let reader = Reader::new(bytes.as_slice());
-        let mut read_context = ReadContext::new_from_fory(reader, &fory);
+        let mut read_context = ReadContext::new_from_fory(reader, &fory).unwrap();
         assert_eq!(
             nullable_basic_map(true),
             fory.deserialize_with_context::<HashMap<Option<String>, Option<String>>>(
@@ -607,7 +607,7 @@ fn map_inner_auto_conv() {
             .unwrap();
         // deserialize_nullable
         let reader = Reader::new(bytes.as_slice());
-        let mut read_context = ReadContext::new_from_fory(reader, &fory);
+        let mut read_context = ReadContext::new_from_fory(reader, &fory).unwrap();
         assert_eq!(
             nullable_item_map(true),
             fory.deserialize_with_context::<HashMap<Option<Item>, Option<Item>>>(&mut read_context)
@@ -616,13 +616,13 @@ fn map_inner_auto_conv() {
         assert_eq!(read_context.reader.slice_after_cursor().len(), 0);
         // serialize_nullable
         let writer = Writer::default();
-        let mut write_context = WriteContext::new_from_fory(writer, &fory);
+        let mut write_context = WriteContext::new_from_fory(writer, &fory).unwrap();
         let bytes = fory
             .serialize_with_context(&nullable_basic_map(false), &mut write_context)
             .unwrap();
         // deserialize_non-null
         let reader = Reader::new(bytes.as_slice());
-        let mut read_context = ReadContext::new_from_fory(reader, &fory);
+        let mut read_context = ReadContext::new_from_fory(reader, &fory).unwrap();
         assert_eq!(
             basic_map(),
             fory.deserialize_with_context::<HashMap<String, String>>(&mut read_context)
@@ -633,7 +633,7 @@ fn map_inner_auto_conv() {
             .unwrap();
         // deserialize_non-null
         let reader = Reader::new(bytes.as_slice());
-        let mut read_context = ReadContext::new_from_fory(reader, &fory);
+        let mut read_context = ReadContext::new_from_fory(reader, &fory).unwrap();
         assert_eq!(
             item_map(),
             fory.deserialize_with_context::<HashMap<Item, Item>>(&mut read_context)
@@ -651,7 +651,7 @@ fn complex() {
     fory2.register_by_name::<Item>("item").unwrap();
     for fory in [fory1, fory2] {
         let writer = Writer::default();
-        let mut write_context = WriteContext::new_from_fory(writer, &fory);
+        let mut write_context = WriteContext::new_from_fory(writer, &fory).unwrap();
         let mut bins = vec![
             fory.serialize_with_context(&nested_collection(), &mut write_context)
                 .unwrap(),
@@ -666,20 +666,20 @@ fn complex() {
             fory.deserialize_with_context::<Vec<HashSet<Item>>>(&mut ReadContext::new_from_fory(
                 Reader::new(bins.pop().unwrap().as_slice()),
                 &fory
-            ))
+            ).unwrap())
             .unwrap()
         );
         assert_eq!(
             complex_container1(),
             fory.deserialize_with_context::<Vec<HashMap<Item, Item>>>(
-                &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), &fory)
+                &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), &fory).unwrap()
             )
             .unwrap()
         );
         assert_eq!(
             complex_container2(),
             fory.deserialize_with_context::<Vec<HashMap<Vec<Item>, Vec<Item>>>>(
-                &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), &fory)
+                &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), &fory).unwrap()
             )
             .unwrap()
         );

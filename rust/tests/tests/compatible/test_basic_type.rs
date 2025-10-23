@@ -155,7 +155,7 @@ fn deserialize_non_null(fory: &Fory, mut bins: Vec<Vec<u8>>, auto_conv: bool) {
         fory.deserialize_with_context::<bool>(&mut ReadContext::new_from_fory(
             Reader::new(bins.pop().unwrap().as_slice()),
             fory
-        ))
+        ).unwrap())
         .unwrap()
     );
     assert_eq!(
@@ -163,7 +163,7 @@ fn deserialize_non_null(fory: &Fory, mut bins: Vec<Vec<u8>>, auto_conv: bool) {
         fory.deserialize_with_context::<i8>(&mut ReadContext::new_from_fory(
             Reader::new(bins.pop().unwrap().as_slice()),
             fory
-        ))
+        ).unwrap())
         .unwrap()
     );
     assert_eq!(
@@ -171,7 +171,7 @@ fn deserialize_non_null(fory: &Fory, mut bins: Vec<Vec<u8>>, auto_conv: bool) {
         fory.deserialize_with_context::<i16>(&mut ReadContext::new_from_fory(
             Reader::new(bins.pop().unwrap().as_slice()),
             fory
-        ))
+        ).unwrap())
         .unwrap()
     );
     assert_eq!(
@@ -179,7 +179,7 @@ fn deserialize_non_null(fory: &Fory, mut bins: Vec<Vec<u8>>, auto_conv: bool) {
         fory.deserialize_with_context::<i32>(&mut ReadContext::new_from_fory(
             Reader::new(bins.pop().unwrap().as_slice()),
             fory
-        ))
+        ).unwrap())
         .unwrap()
     );
     assert_eq!(
@@ -187,7 +187,7 @@ fn deserialize_non_null(fory: &Fory, mut bins: Vec<Vec<u8>>, auto_conv: bool) {
         fory.deserialize_with_context::<i64>(&mut ReadContext::new_from_fory(
             Reader::new(bins.pop().unwrap().as_slice()),
             fory
-        ))
+        ).unwrap())
         .unwrap()
     );
     assert_eq!(
@@ -195,7 +195,7 @@ fn deserialize_non_null(fory: &Fory, mut bins: Vec<Vec<u8>>, auto_conv: bool) {
         fory.deserialize_with_context::<f32>(&mut ReadContext::new_from_fory(
             Reader::new(bins.pop().unwrap().as_slice()),
             fory
-        ))
+        ).unwrap())
         .unwrap()
     );
     assert_eq!(
@@ -203,7 +203,7 @@ fn deserialize_non_null(fory: &Fory, mut bins: Vec<Vec<u8>>, auto_conv: bool) {
         fory.deserialize_with_context::<f64>(&mut ReadContext::new_from_fory(
             Reader::new(bins.pop().unwrap().as_slice()),
             fory
-        ))
+        ).unwrap())
         .unwrap()
     );
     assert_eq!(
@@ -211,7 +211,7 @@ fn deserialize_non_null(fory: &Fory, mut bins: Vec<Vec<u8>>, auto_conv: bool) {
         fory.deserialize_with_context::<String>(&mut ReadContext::new_from_fory(
             Reader::new(bins.pop().unwrap().as_slice()),
             fory
-        ))
+        ).unwrap())
         .unwrap()
     );
     assert_eq!(
@@ -219,7 +219,7 @@ fn deserialize_non_null(fory: &Fory, mut bins: Vec<Vec<u8>>, auto_conv: bool) {
         fory.deserialize_with_context::<NaiveDate>(&mut ReadContext::new_from_fory(
             Reader::new(bins.pop().unwrap().as_slice()),
             fory
-        ))
+        ).unwrap())
         .unwrap()
     );
     assert_eq!(
@@ -227,7 +227,7 @@ fn deserialize_non_null(fory: &Fory, mut bins: Vec<Vec<u8>>, auto_conv: bool) {
         fory.deserialize_with_context::<NaiveDateTime>(&mut ReadContext::new_from_fory(
             Reader::new(bins.pop().unwrap().as_slice()),
             fory
-        ))
+        ).unwrap())
         .unwrap()
     );
 
@@ -236,7 +236,7 @@ fn deserialize_non_null(fory: &Fory, mut bins: Vec<Vec<u8>>, auto_conv: bool) {
         fory.deserialize_with_context::<Vec<bool>>(&mut ReadContext::new_from_fory(
             Reader::new(bins.pop().unwrap().as_slice()),
             fory
-        ))
+        ).unwrap())
         .unwrap()
     );
     assert_eq!(
@@ -252,7 +252,7 @@ fn deserialize_non_null(fory: &Fory, mut bins: Vec<Vec<u8>>, auto_conv: bool) {
         fory.deserialize_with_context::<Vec<i16>>(&mut ReadContext::new_from_fory(
             Reader::new(bins.pop().unwrap().as_slice()),
             fory
-        ))
+        ).unwrap())
         .unwrap()
     );
     assert_eq!(
@@ -260,7 +260,7 @@ fn deserialize_non_null(fory: &Fory, mut bins: Vec<Vec<u8>>, auto_conv: bool) {
         fory.deserialize_with_context::<Vec<i32>>(&mut ReadContext::new_from_fory(
             Reader::new(bins.pop().unwrap().as_slice()),
             fory
-        ))
+        ).unwrap())
         .unwrap()
     );
     assert_eq!(
@@ -268,7 +268,7 @@ fn deserialize_non_null(fory: &Fory, mut bins: Vec<Vec<u8>>, auto_conv: bool) {
         fory.deserialize_with_context::<Vec<i64>>(&mut ReadContext::new_from_fory(
             Reader::new(bins.pop().unwrap().as_slice()),
             fory
-        ))
+        ).unwrap())
         .unwrap()
     );
     assert_eq!(
@@ -284,7 +284,7 @@ fn deserialize_non_null(fory: &Fory, mut bins: Vec<Vec<u8>>, auto_conv: bool) {
         fory.deserialize_with_context::<Vec<f64>>(&mut ReadContext::new_from_fory(
             Reader::new(bins.pop().unwrap().as_slice()),
             fory
-        ))
+        ).unwrap())
         .unwrap()
     );
     if auto_conv {
@@ -293,7 +293,7 @@ fn deserialize_non_null(fory: &Fory, mut bins: Vec<Vec<u8>>, auto_conv: bool) {
             fory.deserialize_with_context::<bool>(&mut ReadContext::new_from_fory(
                 Reader::new(bins.pop().unwrap().as_slice()),
                 fory
-            ))
+            ).unwrap())
             .unwrap()
         );
         assert_eq!(
@@ -301,7 +301,7 @@ fn deserialize_non_null(fory: &Fory, mut bins: Vec<Vec<u8>>, auto_conv: bool) {
             fory.deserialize_with_context::<i8>(&mut ReadContext::new_from_fory(
                 Reader::new(bins.pop().unwrap().as_slice()),
                 fory
-            ))
+            ).unwrap())
             .unwrap()
         );
         assert_eq!(
@@ -309,7 +309,7 @@ fn deserialize_non_null(fory: &Fory, mut bins: Vec<Vec<u8>>, auto_conv: bool) {
             fory.deserialize_with_context::<i16>(&mut ReadContext::new_from_fory(
                 Reader::new(bins.pop().unwrap().as_slice()),
                 fory
-            ))
+            ).unwrap())
             .unwrap()
         );
         assert_eq!(
@@ -317,7 +317,7 @@ fn deserialize_non_null(fory: &Fory, mut bins: Vec<Vec<u8>>, auto_conv: bool) {
             fory.deserialize_with_context::<i32>(&mut ReadContext::new_from_fory(
                 Reader::new(bins.pop().unwrap().as_slice()),
                 fory
-            ))
+            ).unwrap())
             .unwrap()
         );
         assert_eq!(
@@ -325,7 +325,7 @@ fn deserialize_non_null(fory: &Fory, mut bins: Vec<Vec<u8>>, auto_conv: bool) {
             fory.deserialize_with_context::<i64>(&mut ReadContext::new_from_fory(
                 Reader::new(bins.pop().unwrap().as_slice()),
                 fory
-            ))
+            ).unwrap())
             .unwrap()
         );
         assert_eq!(
@@ -333,7 +333,7 @@ fn deserialize_non_null(fory: &Fory, mut bins: Vec<Vec<u8>>, auto_conv: bool) {
             fory.deserialize_with_context::<f32>(&mut ReadContext::new_from_fory(
                 Reader::new(bins.pop().unwrap().as_slice()),
                 fory
-            ))
+            ).unwrap())
             .unwrap()
         );
         assert_eq!(
@@ -341,7 +341,7 @@ fn deserialize_non_null(fory: &Fory, mut bins: Vec<Vec<u8>>, auto_conv: bool) {
             fory.deserialize_with_context::<f64>(&mut ReadContext::new_from_fory(
                 Reader::new(bins.pop().unwrap().as_slice()),
                 fory
-            ))
+            ).unwrap())
             .unwrap()
         );
         assert_eq!(
@@ -349,7 +349,7 @@ fn deserialize_non_null(fory: &Fory, mut bins: Vec<Vec<u8>>, auto_conv: bool) {
             fory.deserialize_with_context::<String>(&mut ReadContext::new_from_fory(
                 Reader::new(bins.pop().unwrap().as_slice()),
                 fory
-            ))
+            ).unwrap())
             .unwrap()
         );
         assert_eq!(
@@ -357,7 +357,7 @@ fn deserialize_non_null(fory: &Fory, mut bins: Vec<Vec<u8>>, auto_conv: bool) {
             fory.deserialize_with_context::<NaiveDate>(&mut ReadContext::new_from_fory(
                 Reader::new(bins.pop().unwrap().as_slice()),
                 fory
-            ))
+            ).unwrap())
             .unwrap()
         );
         assert_eq!(
@@ -365,7 +365,7 @@ fn deserialize_non_null(fory: &Fory, mut bins: Vec<Vec<u8>>, auto_conv: bool) {
             fory.deserialize_with_context::<NaiveDateTime>(&mut ReadContext::new_from_fory(
                 Reader::new(bins.pop().unwrap().as_slice()),
                 fory
-            ))
+            ).unwrap())
             .unwrap()
         );
 
@@ -374,7 +374,7 @@ fn deserialize_non_null(fory: &Fory, mut bins: Vec<Vec<u8>>, auto_conv: bool) {
             fory.deserialize_with_context::<Vec<bool>>(&mut ReadContext::new_from_fory(
                 Reader::new(bins.pop().unwrap().as_slice()),
                 fory
-            ))
+            ).unwrap())
             .unwrap()
         );
         assert_eq!(
@@ -382,7 +382,7 @@ fn deserialize_non_null(fory: &Fory, mut bins: Vec<Vec<u8>>, auto_conv: bool) {
             fory.deserialize_with_context::<Vec<i8>>(&mut ReadContext::new_from_fory(
                 Reader::new(bins.pop().unwrap().as_slice()),
                 fory
-            ))
+            ).unwrap())
             .unwrap()
         );
         assert_eq!(
@@ -390,7 +390,7 @@ fn deserialize_non_null(fory: &Fory, mut bins: Vec<Vec<u8>>, auto_conv: bool) {
             fory.deserialize_with_context::<Vec<i16>>(&mut ReadContext::new_from_fory(
                 Reader::new(bins.pop().unwrap().as_slice()),
                 fory
-            ))
+            ).unwrap())
             .unwrap()
         );
         assert_eq!(
@@ -398,7 +398,7 @@ fn deserialize_non_null(fory: &Fory, mut bins: Vec<Vec<u8>>, auto_conv: bool) {
             fory.deserialize_with_context::<Vec<i32>>(&mut ReadContext::new_from_fory(
                 Reader::new(bins.pop().unwrap().as_slice()),
                 fory
-            ))
+            ).unwrap())
             .unwrap()
         );
         assert_eq!(
@@ -406,7 +406,7 @@ fn deserialize_non_null(fory: &Fory, mut bins: Vec<Vec<u8>>, auto_conv: bool) {
             fory.deserialize_with_context::<Vec<i64>>(&mut ReadContext::new_from_fory(
                 Reader::new(bins.pop().unwrap().as_slice()),
                 fory
-            ))
+            ).unwrap())
             .unwrap()
         );
         assert_eq!(
@@ -414,7 +414,7 @@ fn deserialize_non_null(fory: &Fory, mut bins: Vec<Vec<u8>>, auto_conv: bool) {
             fory.deserialize_with_context::<Vec<f32>>(&mut ReadContext::new_from_fory(
                 Reader::new(bins.pop().unwrap().as_slice()),
                 fory
-            ))
+            ).unwrap())
             .unwrap()
         );
         assert_eq!(
@@ -422,7 +422,7 @@ fn deserialize_non_null(fory: &Fory, mut bins: Vec<Vec<u8>>, auto_conv: bool) {
             fory.deserialize_with_context::<Vec<f64>>(&mut ReadContext::new_from_fory(
                 Reader::new(bins.pop().unwrap().as_slice()),
                 fory
-            ))
+            ).unwrap())
             .unwrap()
         );
     }
@@ -435,7 +435,7 @@ fn deserialize_nullable(fory: &Fory, mut bins: Vec<Vec<u8>>, auto_conv: bool) {
         fory.deserialize_with_context::<Option<bool>>(&mut ReadContext::new_from_fory(
             Reader::new(bins.pop().unwrap().as_slice()),
             fory
-        ))
+        ).unwrap())
         .unwrap()
     );
     assert_eq!(
@@ -443,7 +443,7 @@ fn deserialize_nullable(fory: &Fory, mut bins: Vec<Vec<u8>>, auto_conv: bool) {
         fory.deserialize_with_context::<Option<i8>>(&mut ReadContext::new_from_fory(
             Reader::new(bins.pop().unwrap().as_slice()),
             fory
-        ))
+        ).unwrap())
         .unwrap()
     );
     assert_eq!(
@@ -451,7 +451,7 @@ fn deserialize_nullable(fory: &Fory, mut bins: Vec<Vec<u8>>, auto_conv: bool) {
         fory.deserialize_with_context::<Option<i16>>(&mut ReadContext::new_from_fory(
             Reader::new(bins.pop().unwrap().as_slice()),
             fory
-        ))
+        ).unwrap())
         .unwrap()
     );
     assert_eq!(
@@ -459,7 +459,7 @@ fn deserialize_nullable(fory: &Fory, mut bins: Vec<Vec<u8>>, auto_conv: bool) {
         fory.deserialize_with_context::<Option<i32>>(&mut ReadContext::new_from_fory(
             Reader::new(bins.pop().unwrap().as_slice()),
             fory
-        ))
+        ).unwrap())
         .unwrap()
     );
     assert_eq!(
@@ -467,7 +467,7 @@ fn deserialize_nullable(fory: &Fory, mut bins: Vec<Vec<u8>>, auto_conv: bool) {
         fory.deserialize_with_context::<Option<i64>>(&mut ReadContext::new_from_fory(
             Reader::new(bins.pop().unwrap().as_slice()),
             fory
-        ))
+        ).unwrap())
         .unwrap()
     );
     assert_eq!(
@@ -475,7 +475,7 @@ fn deserialize_nullable(fory: &Fory, mut bins: Vec<Vec<u8>>, auto_conv: bool) {
         fory.deserialize_with_context::<Option<f32>>(&mut ReadContext::new_from_fory(
             Reader::new(bins.pop().unwrap().as_slice()),
             fory
-        ))
+        ).unwrap())
         .unwrap()
     );
     assert_eq!(
@@ -483,7 +483,7 @@ fn deserialize_nullable(fory: &Fory, mut bins: Vec<Vec<u8>>, auto_conv: bool) {
         fory.deserialize_with_context::<Option<f64>>(&mut ReadContext::new_from_fory(
             Reader::new(bins.pop().unwrap().as_slice()),
             fory
-        ))
+        ).unwrap())
         .unwrap()
     );
     assert_eq!(
@@ -713,7 +713,7 @@ fn basic() {
     let fory = Fory::default().compatible(true);
     // serialize
     let writer = Writer::default();
-    let mut write_context = WriteContext::new_from_fory(writer, &fory);
+    let mut write_context = WriteContext::new_from_fory(writer, &fory).unwrap();
     let bins = serialize_non_null(&fory, &mut write_context);
     // deserialize
     deserialize_non_null(&fory, bins, false);
@@ -725,7 +725,7 @@ fn basic_nullable() {
     let fory = Fory::default().compatible(true);
     // serialize
     let writer = Writer::default();
-    let mut write_context = WriteContext::new_from_fory(writer, &fory);
+    let mut write_context = WriteContext::new_from_fory(writer, &fory).unwrap();
     let bins = serialize_nullable(&fory, &mut write_context);
     // deserialize
     deserialize_nullable(&fory, bins, false);
@@ -737,12 +737,12 @@ fn auto_conv() {
     let fory = Fory::default().compatible(true);
     // serialize_non-null
     let writer = Writer::default();
-    let mut write_context = WriteContext::new_from_fory(writer, &fory);
+    let mut write_context = WriteContext::new_from_fory(writer, &fory).unwrap();
     let bins = serialize_non_null(&fory, &mut write_context);
     deserialize_nullable(&fory, bins, true);
     // serialize_nullable
     let writer = Writer::default();
-    let mut write_context = WriteContext::new_from_fory(writer, &fory);
+    let mut write_context = WriteContext::new_from_fory(writer, &fory).unwrap();
     let bins = serialize_nullable(&fory, &mut write_context);
     // deserialize_non-null
     deserialize_non_null(&fory, bins, true);

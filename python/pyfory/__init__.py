@@ -97,8 +97,6 @@ __all__ = [
     # Language constants
     "PYTHON",
     "XLANG",
-    # Configuration
-    "ENABLE_FORY_CYTHON_SERIALIZATION",
     # Type utilities
     "record_class_factory",
     "get_qualified_classname",
@@ -156,22 +154,15 @@ try:
         from pyfory.format import (  # noqa: F401 # pylint: disable=unused-import
             create_row_encoder,
             RowData,
-            ArrowWriter,
-            get_cls_by_schema,
-            remove_schema,
-            reset,
             encoder,
             Encoder,
         )
 
         __all__.extend(
             [
+                "format",
                 "create_row_encoder",
                 "RowData",
-                "ArrowWriter",
-                "get_cls_by_schema",
-                "remove_schema",
-                "reset",
                 "encoder",
                 "Encoder",
             ]

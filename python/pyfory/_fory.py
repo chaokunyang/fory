@@ -334,7 +334,7 @@ class Fory:
             buffer.write_int32(-1)  # Reserve 4 bytes for type definitions offset
 
         if self.language == Language.PYTHON:
-            self.serialize_ref(buffer, obj)
+            self.write_ref(buffer, obj)
         else:
             self.xwrite_ref(buffer, obj)
 
@@ -353,7 +353,7 @@ class Fory:
         else:
             return buffer.to_bytes(0, buffer.writer_index)
 
-    def serialize_ref(self, buffer, obj, typeinfo=None):
+    def write_ref(self, buffer, obj, typeinfo=None):
         cls = type(obj)
         if cls is str:
             buffer.write_int16(NOT_NULL_STRING_FLAG)
@@ -374,7 +374,7 @@ class Fory:
         self.type_resolver.write_typeinfo(buffer, typeinfo)
         typeinfo.serializer.write(buffer, obj)
 
-    def serialize_nonref(self, buffer, obj):
+    def write_nonref(self, buffer, obj):
         cls = type(obj)
         if cls is str:
             buffer.write_varuint32(STRING_TYPE_ID)

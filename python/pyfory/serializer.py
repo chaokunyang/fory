@@ -158,7 +158,7 @@ class PandasRangeIndexSerializer(Serializer):
                 buffer.write_int8(NULL_FLAG)
             else:
                 buffer.write_int8(NOT_NULL_VALUE_FLAG)
-                fory.serialize_nonref(buffer, start)
+                fory.write_nonref(buffer, start)
         if type(stop) is int:
             buffer.write_int16(NOT_NULL_INT64_FLAG)
             buffer.write_varint64(stop)
@@ -167,7 +167,7 @@ class PandasRangeIndexSerializer(Serializer):
                 buffer.write_int8(NULL_FLAG)
             else:
                 buffer.write_int8(NOT_NULL_VALUE_FLAG)
-                fory.serialize_nonref(buffer, stop)
+                fory.write_nonref(buffer, stop)
         if type(step) is int:
             buffer.write_int16(NOT_NULL_INT64_FLAG)
             buffer.write_varint64(step)
@@ -176,9 +176,9 @@ class PandasRangeIndexSerializer(Serializer):
                 buffer.write_int8(NULL_FLAG)
             else:
                 buffer.write_int8(NOT_NULL_VALUE_FLAG)
-                fory.serialize_nonref(buffer, step)
-        fory.serialize_ref(buffer, value.dtype)
-        fory.serialize_ref(buffer, value.name)
+                fory.write_nonref(buffer, step)
+        fory.write_ref(buffer, value.dtype)
+        fory.write_ref(buffer, value.name)
 
     def read(self, buffer):
         if buffer.read_int8() == NULL_FLAG:
@@ -1048,14 +1048,14 @@ class NDArraySerializer(Serializer):
     def write(self, buffer, value):
         fory = self.fory
         dtype = value.dtype
-        fory.serialize_ref(buffer, dtype)
+        fory.write_ref(buffer, dtype)
         buffer.write_varuint32(len(value.shape))
         for dim in value.shape:
             buffer.write_varuint32(dim)
         if dtype.kind == "O":
             buffer.write_varint32(len(value))
             for item in value:
-                fory.serialize_ref(buffer, item)
+                fory.write_ref(buffer, item)
         else:
             fory.write_buffer_object(buffer, NDArrayBufferObject(value))
 
@@ -1189,11 +1189,11 @@ class StatefulSerializer(XlangCompatibleSerializer):
             args = self._getnewargs(value)
 
         # Serialize constructor arguments first
-        self.fory.serialize_ref(buffer, args)
-        self.fory.serialize_ref(buffer, kwargs)
+        self.fory.write_ref(buffer, args)
+        self.fory.write_ref(buffer, kwargs)
 
         # Then serialize the state
-        self.fory.serialize_ref(buffer, state)
+        self.fory.write_ref(buffer, state)
 
     def read(self, buffer):
         fory = self.fory
@@ -1279,7 +1279,7 @@ class ReduceSerializer(XlangCompatibleSerializer):
         buffer.write_varuint32(len(reduce_data))
         fory = self.fory
         for item in reduce_data:
-            fory.serialize_ref(buffer, item)
+            fory.write_ref(buffer, item)
 
     def read(self, buffer):
         reduce_data_num_items = buffer.read_varuint32()
@@ -1401,7 +1401,7 @@ class TypeSerializer(Serializer):
         bases = cls.__bases__
         buffer.write_varuint32(len(bases))
         for base in bases:
-            fory.serialize_ref(buffer, base)
+            fory.write_ref(buffer, base)
 
         # Serialize class dictionary (excluding special attributes)
         # FunctionSerializer will automatically handle methods with closures
@@ -1421,11 +1421,11 @@ class TypeSerializer(Serializer):
         for i in range(len(class_methods)):
             buffer.write_string(attr_names[i])
             class_method = class_methods[i]
-            fory.serialize_ref(buffer, class_method.__func__)
+            fory.write_ref(buffer, class_method.__func__)
 
         # Let Fory's normal serialization handle the class dict
         # This will use FunctionSerializer for methods, which handles closures properly
-        fory.serialize_ref(buffer, class_dict)
+        fory.write_ref(buffer, class_dict)
 
     def _deserialize_local_class(self, buffer):
         """Deserialize a local class by recreating it with the captured context."""
@@ -1489,7 +1489,7 @@ class MappingProxySerializer(Serializer):
         super().__init__(fory, types.MappingProxyType)
 
     def write(self, buffer, value):
-        self.fory.serialize_ref(buffer, dict(value))
+        self.fory.write_ref(buffer, dict(value))
 
     def read(self, buffer):
         return types.MappingProxyType(self.fory.read_ref(buffer))
@@ -1509,7 +1509,7 @@ class FunctionSerializer(XlangCompatibleSerializer):
 
     The code object is serialized with marshal, and all other components
     (defaults, globals, closure cells, attrs) go through Fory’s own
-    serialize_ref/read_ref pipeline to ensure proper type registration
+    write_ref/read_ref pipeline to ensure proper type registration
     and reference tracking.
     """
 
@@ -1537,7 +1537,7 @@ class FunctionSerializer(XlangCompatibleSerializer):
             # Serialize as a tuple (is_method, self_obj, method_name)
             buffer.write_int8(0)  # is a method
             # For the 'self' object, we need to use fory's serialization
-            self.fory.serialize_ref(buffer, self_obj)
+            self.fory.write_ref(buffer, self_obj)
             buffer.write_string(func_name)
             return
 
@@ -1574,7 +1574,7 @@ class FunctionSerializer(XlangCompatibleSerializer):
             buffer.write_varuint32(len(defaults))
             # Serialize each default value individually
             for default_value in defaults:
-                self.fory.serialize_ref(buffer, default_value)
+                self.fory.write_ref(buffer, default_value)
 
         # Handle closure
         # We need to serialize both the closure values and the fact that there is a closure
@@ -1585,7 +1585,7 @@ class FunctionSerializer(XlangCompatibleSerializer):
         if closure:
             # Extract and serialize each closure cell's contents
             for cell in closure:
-                self.fory.serialize_ref(buffer, cell.cell_contents)
+                self.fory.write_ref(buffer, cell.cell_contents)
 
         # Serialize free variable names as a list of strings
         # Convert tuple to list since tuple might not be registered
@@ -1610,7 +1610,7 @@ class FunctionSerializer(XlangCompatibleSerializer):
 
         # Create and serialize a dictionary with only the necessary globals
         globals_to_serialize = {name: globals_dict[name] for name in global_names if name in globals_dict}
-        self.fory.serialize_ref(buffer, globals_to_serialize)
+        self.fory.write_ref(buffer, globals_to_serialize)
 
         # Handle additional attributes
         attrs = {}
@@ -1624,7 +1624,7 @@ class FunctionSerializer(XlangCompatibleSerializer):
             except (AttributeError, TypeError):
                 pass
 
-        self.fory.serialize_ref(buffer, attrs)
+        self.fory.write_ref(buffer, attrs)
 
     def _deserialize_function(self, buffer):
         """Deserialize a function from its components."""
@@ -1755,7 +1755,7 @@ class NativeFuncMethodSerializer(Serializer):
             buffer.write_string(module)
         else:
             buffer.write_bool(False)
-            self.fory.serialize_ref(buffer, obj)
+            self.fory.write_ref(buffer, obj)
 
     def read(self, buffer):
         name = buffer.read_string()
@@ -1784,7 +1784,7 @@ class MethodSerializer(Serializer):
         instance = value.__self__
         method_name = value.__func__.__name__
 
-        self.fory.serialize_ref(buffer, instance)
+        self.fory.write_ref(buffer, instance)
         buffer.write_string(method_name)
 
     def read(self, buffer):
@@ -1833,7 +1833,7 @@ class ObjectSerializer(Serializer):
         for field_name in sorted_field_names:
             buffer.write_string(field_name)
             field_value = getattr(value, field_name)
-            self.fory.serialize_ref(buffer, field_value)
+            self.fory.write_ref(buffer, field_value)
 
     def read(self, buffer):
         fory = self.fory

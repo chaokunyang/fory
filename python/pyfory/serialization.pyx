@@ -1007,7 +1007,7 @@ cdef class Fory:
 
         cdef int32_t start_offset
         if self.language == Language.PYTHON:
-            self.serialize_ref(buffer, obj)
+            self.write_ref(buffer, obj)
         else:
             self.xwrite_ref(buffer, obj)
 
@@ -1025,7 +1025,7 @@ cdef class Fory:
         else:
             return buffer.to_bytes(0, buffer.writer_index)
 
-    cpdef inline serialize_ref(
+    cpdef inline write_ref(
             self, Buffer buffer, obj, TypeInfo typeinfo=None):
         cls = type(obj)
         if cls is str:
@@ -1051,7 +1051,7 @@ cdef class Fory:
         self.type_resolver.write_typeinfo(buffer, typeinfo)
         typeinfo.serializer.write(buffer, obj)
 
-    cpdef inline serialize_nonref(self, Buffer buffer, obj):
+    cpdef inline write_nonref(self, Buffer buffer, obj):
         cls = type(obj)
         if cls is str:
             buffer.write_varuint32(STRING_TYPE_ID)
@@ -2099,7 +2099,7 @@ cdef class MapSerializer(Serializer):
                     else:
                         buffer.write_int8(VALUE_HAS_NULL | TRACKING_KEY_REF)
                         if is_py:
-                            fory.serialize_ref(buffer, key)
+                            fory.write_ref(buffer, key)
                         else:
                             fory.xwrite_ref(buffer, key)
                 else:
@@ -2126,7 +2126,7 @@ cdef class MapSerializer(Serializer):
                         else:
                             buffer.write_int8(KEY_HAS_NULL | TRACKING_VALUE_REF)
                             if is_py:
-                                fory.serialize_ref(buffer, value)
+                                fory.write_ref(buffer, value)
                             else:
                                 fory.xwrite_ref(buffer, value)
                     else:
@@ -2411,7 +2411,7 @@ cdef class SliceSerializer(Serializer):
                 buffer.write_int8(NULL_FLAG)
             else:
                 buffer.write_int8(NOT_NULL_VALUE_FLAG)
-                self.fory.serialize_nonref(buffer, start)
+                self.fory.write_nonref(buffer, start)
         if type(stop) is int:
             # TODO support varint128
             buffer.write_int16(NOT_NULL_INT64_FLAG)
@@ -2421,7 +2421,7 @@ cdef class SliceSerializer(Serializer):
                 buffer.write_int8(NULL_FLAG)
             else:
                 buffer.write_int8(NOT_NULL_VALUE_FLAG)
-                self.fory.serialize_nonref(buffer, stop)
+                self.fory.write_nonref(buffer, stop)
         if type(step) is int:
             # TODO support varint128
             buffer.write_int16(NOT_NULL_INT64_FLAG)
@@ -2431,7 +2431,7 @@ cdef class SliceSerializer(Serializer):
                 buffer.write_int8(NULL_FLAG)
             else:
                 buffer.write_int8(NOT_NULL_VALUE_FLAG)
-                self.fory.serialize_nonref(buffer, step)
+                self.fory.write_nonref(buffer, step)
 
     cpdef inline read(self, Buffer buffer):
         if buffer.read_int8() == NULL_FLAG:

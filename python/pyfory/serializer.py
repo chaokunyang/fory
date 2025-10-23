@@ -103,11 +103,11 @@ else:
     )
 
 from pyfory.type import (
-    Int16ArrayType,
-    Int32ArrayType,
-    Int64ArrayType,
-    Float32ArrayType,
-    Float64ArrayType,
+    int16_array,
+    int32_array,
+    int64_array,
+    float32_array,
+    float64_array,
     BoolNDArrayType,
     Int16NDArrayType,
     Int32NDArrayType,
@@ -847,19 +847,19 @@ class DataClassStubSerializer(DataClassSerializer):
 typecode_dict = (
     {
         # use bytes serializer for byte array.
-        "h": (2, Int16ArrayType, TypeId.INT16_ARRAY),
-        "i": (4, Int32ArrayType, TypeId.INT32_ARRAY),
-        "l": (8, Int64ArrayType, TypeId.INT64_ARRAY),
-        "f": (4, Float32ArrayType, TypeId.FLOAT32_ARRAY),
-        "d": (8, Float64ArrayType, TypeId.FLOAT64_ARRAY),
+        "h": (2, int16_array, TypeId.INT16_ARRAY),
+        "i": (4, int32_array, TypeId.INT32_ARRAY),
+        "l": (8, int64_array, TypeId.INT64_ARRAY),
+        "f": (4, float32_array, TypeId.FLOAT32_ARRAY),
+        "d": (8, float64_array, TypeId.FLOAT64_ARRAY),
     }
     if not _WINDOWS
     else {
-        "h": (2, Int16ArrayType, TypeId.INT16_ARRAY),
-        "l": (4, Int32ArrayType, TypeId.INT32_ARRAY),
-        "q": (8, Int64ArrayType, TypeId.INT64_ARRAY),
-        "f": (4, Float32ArrayType, TypeId.FLOAT32_ARRAY),
-        "d": (8, Float64ArrayType, TypeId.FLOAT64_ARRAY),
+        "h": (2, int16_array, TypeId.INT16_ARRAY),
+        "l": (4, int32_array, TypeId.INT32_ARRAY),
+        "q": (8, int64_array, TypeId.INT64_ARRAY),
+        "f": (4, float32_array, TypeId.FLOAT32_ARRAY),
+        "d": (8, float64_array, TypeId.FLOAT64_ARRAY),
     }
 )
 
@@ -886,19 +886,19 @@ class PyArraySerializer(CrossLanguageCompatibleSerializer):
     typecode_dict = typecode_dict
     typecodearray_type = (
         {
-            "h": Int16ArrayType,
-            "i": Int32ArrayType,
-            "l": Int64ArrayType,
-            "f": Float32ArrayType,
-            "d": Float64ArrayType,
+            "h": int16_array,
+            "i": int32_array,
+            "l": int64_array,
+            "f": float32_array,
+            "d": float64_array,
         }
         if not _WINDOWS
         else {
-            "h": Int16ArrayType,
-            "l": Int32ArrayType,
-            "q": Int64ArrayType,
-            "f": Float32ArrayType,
-            "d": Float64ArrayType,
+            "h": int16_array,
+            "l": int32_array,
+            "q": int64_array,
+            "f": float32_array,
+            "d": float64_array,
         }
     )
 

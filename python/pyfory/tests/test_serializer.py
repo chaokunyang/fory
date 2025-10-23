@@ -550,7 +550,7 @@ def test_duplicate_serialize():
 
 def test_pandas_range_index():
     fory = Fory(xlang=False, ref=True, strict=False)
-    fory.register_type(pd.RangeIndex, serializer=pyfory.PandasRangeIndexSerializer(fory))
+    fory.register_type(pd.RangeIndex, serializer=pyfory.serializer.PandasRangeIndexSerializer(fory))
     index = pd.RangeIndex(1, 100, 2, name="a")
     new_index = ser_de(fory, index)
     pd.testing.assert_index_equal(new_index, new_index)

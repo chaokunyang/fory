@@ -1168,6 +1168,8 @@ cdef class Fory:
 
     cpdef inline _serialize(
             self, obj, Buffer buffer, buffer_callback=None, unsupported_callback=None):
+        assert self.depth == 0, "Nested serialization should use write_ref/write_no_ref/xwrite_ref/xwrite_no_ref."
+        self.depth += 1
         self.buffer_callback = buffer_callback
         self._unsupported_callback = unsupported_callback
         if buffer is None:
@@ -1336,6 +1338,8 @@ cdef class Fory:
 
     cpdef inline _deserialize(
             self, Buffer buffer, buffers=None, unsupported_objects=None):
+        assert self.depth == 0, "Nested deserialization should use read_ref/read_no_ref/xread_ref/xread_no_ref."
+        self.depth += 1
         if unsupported_objects is not None:
             self._unsupported_objects = iter(unsupported_objects)
         if self.language == Language.XLANG:
@@ -1538,6 +1542,7 @@ cdef class Fory:
         Clears internal write buffers, reference tracking state, and type resolution
         caches. This method is automatically called after each serialization.
         """
+        self.depth = 0
         self.ref_resolver.reset_write()
         self.type_resolver.reset_write()
         self.metastring_resolver.reset_write()

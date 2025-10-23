@@ -442,6 +442,8 @@ class Fory:
         buffer_callback=None,
         unsupported_callback=None,
     ) -> Union[Buffer, bytes]:
+        assert self.depth == 0, "Nested serialization should use write_ref/write_no_ref/xwrite_ref/xwrite_no_ref."
+        self.depth += 1
         self._buffer_callback = buffer_callback
         self._unsupported_callback = unsupported_callback
         if buffer is None:
@@ -494,8 +496,6 @@ class Fory:
                 current_pos = buffer.writer_index
                 buffer.put_int32(type_defs_offset_pos, current_pos - type_defs_offset_pos - 4)
                 self.type_resolver.write_type_defs(buffer)
-
-        self.reset_write()
         if buffer is not self.buffer:
             return buffer
         else:
@@ -600,6 +600,8 @@ class Fory:
         buffers: Iterable = None,
         unsupported_objects: Iterable = None,
     ):
+        assert self.depth == 0, "Nested deserialization should use read_ref/read_no_ref/xread_ref/xread_no_ref."
+        self.depth += 1
         if isinstance(buffer, bytes):
             buffer = Buffer(buffer)
         if unsupported_objects is not None:
@@ -744,6 +746,7 @@ class Fory:
         Clears internal write buffers, reference tracking state, and type resolution
         caches. This method is automatically called after each serialization.
         """
+        self.depth = 0
         self.ref_resolver.reset_write()
         self.type_resolver.reset_write()
         self.serialization_context.reset_write()

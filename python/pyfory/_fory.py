@@ -130,7 +130,7 @@ class Fory:
         >>> # Python-native mode
         >>> fory = pyfory.Fory()
         >>> fory.register(Person)
-        >>> data = fory.dumps(Person("Alice", 30))
+        >>> data = fory.serialize(Person("Alice", 30))
         >>> person = fory.deserialize(data)
         >>>
         >>> # Cross-language mode

@@ -211,7 +211,7 @@ def test_record_batch(data_file_path):
         # debug_print(f"batch[0] {batch[0]}")
 
         encoder = pyfory.create_row_encoder(create_foo_schema())
-        writer = pyfory.ArrowWriter(create_foo_schema())
+        writer = pyfory.format.ArrowWriter(create_foo_schema())
         num_rows = 128
         for i in range(num_rows):
             foo = create_foo()

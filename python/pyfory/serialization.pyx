@@ -882,12 +882,12 @@ cdef class Fory:
         >>> fory = pyfory.Fory()
         >>> fory.register(Person)
         >>> data = fory.serialize(Person("Alice", 30))
-        >>> person = fory.loads(data)
+        >>> person = fory.deserialize(data)
         >>>
         >>> # Cross-language mode
         >>> fory_xlang = pyfory.Fory(xlang=True)
         >>> fory_xlang.register(Person)
-        >>> data = fory_xlang.deserialize(Person("Bob", 25))
+        >>> data = fory_xlang.serialize(Person("Bob", 25))
 
     See Also:
         ThreadSafeFory: Thread-safe wrapper for concurrent usage

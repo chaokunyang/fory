@@ -112,7 +112,7 @@ pub struct TypeInfo {
 }
 
 impl TypeInfo {
-    fn new<T: StructSerializer>(
+    fn new(
         type_resolver: &TypeResolver,
         type_id: u32,
         namespace: &str,
@@ -143,7 +143,7 @@ impl TypeInfo {
         })
     }
 
-    fn new_lazy<T: StructSerializer>(
+    fn new_lazy(
         type_id: u32,
         namespace: &str,
         type_name: &str,
@@ -165,7 +165,7 @@ impl TypeInfo {
         })
     }
 
-    fn new_with_empty_fields<T: Serializer>(
+    fn new_with_empty_fields(
         type_resolver: &TypeResolver,
         type_id: u32,
         namespace: &str,
@@ -609,7 +609,7 @@ impl TypeResolver {
             sorted_field_infos::<T>,
         );
         let type_info = if lazy {
-            let type_info = TypeInfo::new_lazy::<T>(
+            let type_info = TypeInfo::new_lazy(
                 actual_type_id,
                 namespace,
                 type_name,
@@ -620,7 +620,7 @@ impl TypeResolver {
                 .insert(std::any::TypeId::of::<T>(), type_info.clone());
             type_info
         } else {
-            TypeInfo::new::<T>(
+            TypeInfo::new(
                 self,
                 actual_type_id,
                 namespace,
@@ -793,7 +793,7 @@ impl TypeResolver {
             }
         }
 
-        fn sorted_field_infos<T: Serializer>(_: &TypeResolver) -> Result<Vec<FieldInfo>, Error> {
+        fn sorted_field_infos(_: &TypeResolver) -> Result<Vec<FieldInfo>, Error> {
             Ok(vec![])
         }
 
@@ -803,10 +803,10 @@ impl TypeResolver {
             write_data::<T>,
             read_data::<T>,
             to_serializer::<T>,
-            sorted_field_infos::<T>,
+            sorted_field_infos,
         );
 
-        let type_info = TypeInfo::new_with_empty_fields::<T>(
+        let type_info = TypeInfo::new_with_empty_fields(
             self,
             actual_type_id,
             namespace,
@@ -919,14 +919,14 @@ impl TypeResolver {
                 namespace: partial_type_info.namespace.clone(),
                 type_name: partial_type_info.type_name.clone(),
                 register_by_name: partial_type_info.register_by_name,
-                harness: harness,
+                harness,
             };
             // Insert into all maps
             type_info_map_by_id.insert(
                 completed_type_info.type_id,
                 Rc::new(completed_type_info.clone()),
             );
-            type_info_map.insert(type_id.clone(), Rc::new(completed_type_info.clone()));
+            type_info_map.insert(*type_id, Rc::new(completed_type_info.clone()));
             if completed_type_info.register_by_name {
                 let namespace = &completed_type_info.namespace;
                 let type_name = &completed_type_info.type_name;

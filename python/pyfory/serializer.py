@@ -158,7 +158,7 @@ class PandasRangeIndexSerializer(Serializer):
                 buffer.write_int8(NULL_FLAG)
             else:
                 buffer.write_int8(NOT_NULL_VALUE_FLAG)
-                fory.write_nonref(buffer, start)
+                fory.write_no_ref(buffer, start)
         if type(stop) is int:
             buffer.write_int16(NOT_NULL_INT64_FLAG)
             buffer.write_varint64(stop)
@@ -167,7 +167,7 @@ class PandasRangeIndexSerializer(Serializer):
                 buffer.write_int8(NULL_FLAG)
             else:
                 buffer.write_int8(NOT_NULL_VALUE_FLAG)
-                fory.write_nonref(buffer, stop)
+                fory.write_no_ref(buffer, stop)
         if type(step) is int:
             buffer.write_int16(NOT_NULL_INT64_FLAG)
             buffer.write_varint64(step)
@@ -176,7 +176,7 @@ class PandasRangeIndexSerializer(Serializer):
                 buffer.write_int8(NULL_FLAG)
             else:
                 buffer.write_int8(NOT_NULL_VALUE_FLAG)
-                fory.write_nonref(buffer, step)
+                fory.write_no_ref(buffer, step)
         fory.write_ref(buffer, value.dtype)
         fory.write_ref(buffer, value.name)
 

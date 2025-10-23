@@ -522,7 +522,7 @@ class Fory:
         self.type_resolver.write_typeinfo(buffer, typeinfo)
         typeinfo.serializer.write(buffer, obj)
 
-    def write_nonref(self, buffer, obj):
+    def write_no_ref(self, buffer, obj):
         cls = type(obj)
         if cls is str:
             buffer.write_varuint32(STRING_TYPE_ID)

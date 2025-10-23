@@ -707,7 +707,7 @@ class SliceSerializer(Serializer):
                 buffer.write_int8(NULL_FLAG)
             else:
                 buffer.write_int8(NOT_NULL_VALUE_FLAG)
-                self.fory.write_nonref(buffer, start)
+                self.fory.write_no_ref(buffer, start)
         if type(stop) is int:
             # TODO support varint128
             buffer.write_int16(NOT_NULL_INT64_FLAG)
@@ -717,7 +717,7 @@ class SliceSerializer(Serializer):
                 buffer.write_int8(NULL_FLAG)
             else:
                 buffer.write_int8(NOT_NULL_VALUE_FLAG)
-                self.fory.write_nonref(buffer, stop)
+                self.fory.write_no_ref(buffer, stop)
         if type(step) is int:
             # TODO support varint128
             buffer.write_int16(NOT_NULL_INT64_FLAG)
@@ -727,7 +727,7 @@ class SliceSerializer(Serializer):
                 buffer.write_int8(NULL_FLAG)
             else:
                 buffer.write_int8(NOT_NULL_VALUE_FLAG)
-                self.fory.write_nonref(buffer, step)
+                self.fory.write_no_ref(buffer, step)
 
     def read(self, buffer):
         if buffer.read_int8() == NULL_FLAG:

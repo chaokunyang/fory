@@ -92,14 +92,13 @@ impl<'a> WriteContext<'a> {
     /// Test method to create WriteContext from Fory instance
     /// Will be removed in future releases, do not use it in production code
     pub fn new_from_fory(fory: &Fory) -> WriteContext<'a> {
-        let type_resolver = fory
-            .get_type_resolver()
-            .build_final_type_resolver()
-            .unwrap();
         WriteContext {
             default_writer: None,
             writer: Writer::from_buffer(Self::get_leak_buffer()),
-            type_resolver: type_resolver,
+            type_resolver: fory
+                .get_type_resolver()
+                .build_final_type_resolver()
+                .unwrap(),
             compatible: fory.is_compatible(),
             share_meta: fory.is_share_meta(),
             compress_string: fory.is_compress_string(),

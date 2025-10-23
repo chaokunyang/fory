@@ -31,7 +31,8 @@ pub fn empty() {
         let meta_string = NAMESPACE_ENCODER.encode("").unwrap();
         let rc_meta_string = Rc::from(meta_string);
 
-        let mut writer = Writer::default();
+        let mut buffer = vec![];
+        let mut writer = Writer::from_buffer(&mut buffer);
         meta_string_writer
             .write_meta_string_bytes(&mut writer, rc_meta_string.clone())
             .unwrap();
@@ -62,7 +63,8 @@ pub fn small_ms() {
                 data.push(rc_meta_string.clone());
             }
         }
-        let mut writer = Writer::default();
+        let mut buffer = vec![];
+        let mut writer = Writer::from_buffer(&mut buffer);
         for meta_string in data.iter() {
             meta_string_writer
                 .write_meta_string_bytes(&mut writer, meta_string.clone())
@@ -106,7 +108,8 @@ pub fn big_ms() {
                 data.push(rc_meta_string.clone());
             }
         }
-        let mut writer = Writer::default();
+        let mut buffer = vec![];
+        let mut writer = Writer::from_buffer(&mut buffer);
         for meta_string in data.iter() {
             meta_string_writer
                 .write_meta_string_bytes(&mut writer, meta_string.clone())

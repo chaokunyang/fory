@@ -969,18 +969,12 @@ impl TypeResolver {
     ///
     /// - [`build_final_type_resolver`](Self::build_final_type_resolver) - Builds a complete resolver
     pub(crate) fn clone(&self) -> TypeResolver {
-        if !self.partial_type_infos.is_empty() {
-            panic!(
-                "TypeResolver::clone() should not be called when there are partial type infos. 
-            Use build_final_type_resolver() to get a complete TypeResolver first instead."
-            );
-        }
         TypeResolver {
             type_info_map_by_id: self.type_info_map_by_id.clone(),
             type_info_map: self.type_info_map.clone(),
             type_info_map_by_name: self.type_info_map_by_name.clone(),
             type_info_map_by_meta_string_name: self.type_info_map_by_meta_string_name.clone(),
-            partial_type_infos: self.partial_type_infos.clone(),
+            partial_type_infos: HashMap::new(),
             type_id_index: self.type_id_index.clone(),
             compatible: self.compatible,
         }

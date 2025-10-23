@@ -28,6 +28,7 @@ use crate::types::{
     config_flags::{IS_CROSS_LANGUAGE_FLAG, IS_LITTLE_ENDIAN_FLAG},
     Language, MAGIC_NUMBER, SIZE_OF_REF_AND_TYPE,
 };
+use std::mem;
 use std::sync::OnceLock;
 
 /// The main Fory serialization framework instance.
@@ -82,7 +83,7 @@ pub struct Fory {
     max_dyn_depth: u32,
     check_struct_version: bool,
     // Lazy-initialized pools (thread-safe, one-time initialization)
-    write_context_pool: OnceLock<Result<Pool<Box<WriteContext>>, Error>>,
+    write_context_pool: OnceLock<Result<Pool<Box<WriteContext<'static>>>, Error>>,
     read_context_pool: OnceLock<Result<Pool<Box<ReadContext>>, Error>>,
 }
 
@@ -339,6 +340,115 @@ impl Fory {
         &self.type_resolver
     }
 
+    /// Serializes a value of type `T` into a byte vector.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - The type of the value to serialize. Must implement `Serializer`.
+    ///
+    /// # Arguments
+    ///
+    /// * `record` - A reference to the value to serialize.
+    ///
+    /// # Returns
+    ///
+    /// A `Vec<u8>` containing the serialized data.
+    ///
+    /// # Examples
+    ///
+    /// ```rust, ignore
+    /// use fory::Fory;
+    /// use fory::ForyObject;
+    ///
+    /// #[derive(ForyObject)]
+    /// struct Point { x: i32, y: i32 }
+    ///
+    /// let fory = Fory::default();
+    /// let point = Point { x: 10, y: 20 };
+    /// let bytes = fory.serialize(&point);
+    /// ```
+    pub fn serialize<T: Serializer>(&self, record: &T) -> Result<Vec<u8>, Error> {
+        let pool = self.get_writer_pool()?;
+        let mut context = pool.get();
+        match self.serialize_with_context(record, &mut context) {
+            Ok(_) => {
+                let result = context.writer.dump();
+                context.writer.reset();
+                pool.put(context);
+                Ok(result)
+            }
+            Err(err) => {
+                context.writer.reset();
+                pool.put(context);
+                Err(err)
+            }
+        }
+    }
+
+    pub fn serialize_to<T: Serializer>(&self, record: &T, buf: &mut Vec<u8>) -> Result<(), Error> {
+        let pool = self.get_writer_pool()?;
+        let mut context = pool.get();
+        // Context go from pool would be 'static. but context hold the buffer through `writer` field, so we should make buffer live longer.
+        // After serializing, `detach_writer` will be called, the writer in context will be set to dangling pointer.
+        // So it's safe to make buf live to the end of this method.
+        let outlive_buffer = unsafe { mem::transmute::<&mut Vec<u8>, &mut Vec<u8>>(buf) };
+        context.attach_writer(Writer::from_buffer(outlive_buffer));
+        let result = self.serialize_with_context(record, &mut context);
+        context.detach_writer();
+        pool.put(context);
+        result
+    }
+
+    #[inline(always)]
+    fn get_writer_pool(&self) -> Result<&Pool<Box<WriteContext<'static>>>, Error> {
+        let pool_result = self.write_context_pool.get_or_init(|| {
+            let type_resolver = self.type_resolver.build_final_type_resolver()?;
+            let compatible = self.compatible;
+            let share_meta = self.share_meta;
+            let compress_string = self.compress_string;
+            let xlang = self.xlang;
+            let check_struct_version = self.check_struct_version;
+
+            let factory = move || {
+                Box::new(WriteContext::new(
+                    type_resolver.clone(),
+                    compatible,
+                    share_meta,
+                    compress_string,
+                    xlang,
+                    check_struct_version,
+                ))
+            };
+            Ok(Pool::new(factory))
+        });
+        pool_result
+            .as_ref()
+            .map_err(|e| Error::type_error(format!("Failed to build type resolver: {}", e)))
+    }
+
+    /// Serializes a value of type `T` into a byte vector.
+    #[inline(always)]
+    fn serialize_with_context<T: Serializer>(
+        &self,
+        record: &T,
+        context: &mut WriteContext,
+    ) -> Result<(), Error> {
+        let is_none = record.fory_is_none();
+        self.write_head::<T>(is_none, &mut context.writer);
+        let meta_start_offset = context.writer.len();
+        if !is_none {
+            if context.is_compatible() {
+                context.writer.write_i32(-1);
+            };
+            <T as Serializer>::fory_write(record, context, true, true, false)?;
+            if context.is_compatible() && !context.empty() {
+                context.write_meta(meta_start_offset);
+            }
+        }
+        context.reset();
+        Ok(())
+    }
+
     /// Registers a struct type with a numeric type ID for serialization.
     ///
     /// # Type Parameters
@@ -533,90 +643,8 @@ impl Fory {
         self.type_resolver.register_generic_trait::<T>()
     }
 
-    /// Serializes a value of type `T` into a byte vector.
-    ///
-    /// # Type Parameters
-    ///
-    /// * `T` - The type of the value to serialize. Must implement `Serializer`.
-    ///
-    /// # Arguments
-    ///
-    /// * `record` - A reference to the value to serialize.
-    ///
-    /// # Returns
-    ///
-    /// A `Vec<u8>` containing the serialized data.
-    ///
-    /// # Examples
-    ///
-    /// ```rust, ignore
-    /// use fory::Fory;
-    /// use fory::ForyObject;
-    ///
-    /// #[derive(ForyObject)]
-    /// struct Point { x: i32, y: i32 }
-    ///
-    /// let fory = Fory::default();
-    /// let point = Point { x: 10, y: 20 };
-    /// let bytes = fory.serialize(&point);
-    /// ```
-    pub fn serialize<T: Serializer>(&self, record: &T) -> Result<Vec<u8>, Error> {
-        let pool_result = self.write_context_pool.get_or_init(|| {
-            let type_resolver = match self.type_resolver.build_final_type_resolver() {
-                Ok(resolver) => resolver,
-                Err(e) => return Err(e),
-            };
-            let compatible = self.compatible;
-            let share_meta = self.share_meta;
-            let compress_string = self.compress_string;
-            let xlang = self.xlang;
-            let check_struct_version = self.check_struct_version;
-
-            let factory = move || {
-                let writer = Writer::default();
-                Box::new(WriteContext::new(
-                    writer,
-                    type_resolver.clone(),
-                    compatible,
-                    share_meta,
-                    compress_string,
-                    xlang,
-                    check_struct_version,
-                ))
-            };
-            Ok(Pool::new(factory))
-        });
-        let pool = pool_result
-            .as_ref()
-            .map_err(|e| Error::type_error(format!("Failed to build type resolver: {}", e)))?;
-        let mut context = pool.get();
-        let result = self.serialize_with_context(record, &mut context)?;
-        pool.put(context);
-        Ok(result)
-    }
-
-    pub fn serialize_with_context<T: Serializer>(
-        &self,
-        record: &T,
-        context: &mut WriteContext,
-    ) -> Result<Vec<u8>, Error> {
-        context.writer.attach_buffer(vec![]);
-        let is_none = record.fory_is_none();
-        self.write_head::<T>(is_none, &mut context.writer);
-        let meta_start_offset = context.writer.len();
-        if !is_none {
-            if context.is_compatible() {
-                context.writer.write_i32(-1);
-            };
-            <T as Serializer>::fory_write(record, context, true, true, false)?;
-            if context.is_compatible() && !context.empty() {
-                context.write_meta(meta_start_offset);
-            }
-        }
-        context.reset();
-        Ok(context.writer.detach_buffer())
-    }
-
+    /// Writes the serialization header to the writer.
+    #[inline(always)]
     pub fn write_head<T: Serializer>(&self, is_none: bool, writer: &mut Writer) {
         const HEAD_SIZE: usize = 10;
         writer.reserve(T::fory_reserved_space() + SIZE_OF_REF_AND_TYPE + HEAD_SIZE);
@@ -678,10 +706,7 @@ impl Fory {
     /// ```
     pub fn deserialize<T: Serializer + ForyDefault>(&self, bf: &[u8]) -> Result<T, Error> {
         let pool_result = self.read_context_pool.get_or_init(|| {
-            let type_resolver = match self.type_resolver.build_final_type_resolver() {
-                Ok(resolver) => resolver,
-                Err(e) => return Err(e),
-            };
+            let type_resolver = self.type_resolver.clone();
             let compatible = self.compatible;
             let share_meta = self.share_meta;
             let xlang = self.xlang;

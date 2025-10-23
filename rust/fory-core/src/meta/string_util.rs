@@ -839,7 +839,8 @@ pub mod buffer_rw_string {
             ];
 
             for s in samples {
-                let mut writer = Writer::default();
+                let mut buffer = vec![];
+                let mut writer = Writer::from_buffer(&mut buffer);
                 write_latin1_simd(&mut writer, s);
                 write_latin1_simd(&mut writer, s);
                 let bytes = &*writer.dump();
@@ -848,7 +849,8 @@ pub mod buffer_rw_string {
                 assert_eq!(read_latin1_standard(&mut reader, bytes_len).unwrap(), s);
                 assert_eq!(read_latin1_standard(&mut reader, bytes_len).unwrap(), s);
 
-                let mut writer = Writer::default();
+                let mut buffer = vec![];
+                let mut writer = Writer::from_buffer(&mut buffer);
                 write_latin1_standard(&mut writer, s);
                 write_latin1_standard(&mut writer, s);
                 let bytes = &*writer.dump();
@@ -872,7 +874,8 @@ pub mod buffer_rw_string {
             for s in samples {
                 let bytes_len = s.len();
 
-                let mut writer = Writer::default();
+                let mut buffer = vec![];
+                let mut writer = Writer::from_buffer(&mut buffer);
                 write_utf8_standard(&mut writer, s);
                 write_utf8_standard(&mut writer, s);
                 let bytes = &*writer.dump();
@@ -895,11 +898,13 @@ pub mod buffer_rw_string {
                 let utf16: Vec<u16> = s.encode_utf16().collect();
                 let bytes_len = utf16.len() * 2;
 
-                let mut writer = Writer::default();
+                let mut buffer = vec![];
+                let mut writer = Writer::from_buffer(&mut buffer);
                 write_utf16_standard(&mut writer, &utf16);
                 write_utf16_standard(&mut writer, &utf16);
 
-                let mut writer = Writer::default();
+                let mut buffer = vec![];
+                let mut writer = Writer::from_buffer(&mut buffer);
                 write_utf16_standard(&mut writer, &utf16);
                 write_utf16_standard(&mut writer, &utf16);
                 let bytes = &*writer.dump();

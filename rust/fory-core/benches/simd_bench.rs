@@ -94,16 +94,18 @@ fn benchmark_write_latin1(c: &mut Criterion) {
         let name_simd = format!("Write Latin-1 SIMD size {}", size);
         c.bench_function(&name_simd, |b| {
             b.iter(|| {
-                let mut w = Writer::default();
-                write_latin1_simd(black_box(&mut w), black_box(&s_ascii));
+                let mut buffer = vec![];
+                let mut writer = Writer::from_buffer(&mut buffer);
+                write_latin1_simd(black_box(&mut writer), black_box(&s_ascii));
             })
         });
 
         let name_scalar = format!("Write Latin-1 Standard size {}", size);
         c.bench_function(&name_scalar, |b| {
             b.iter(|| {
-                let mut w = Writer::default();
-                write_latin1_standard(black_box(&mut w), black_box(&s_ascii));
+                let mut buffer = vec![];
+                let mut writer = Writer::from_buffer(&mut buffer);
+                write_latin1_standard(black_box(&mut writer), black_box(&s_ascii));
             })
         });
     }
@@ -115,7 +117,8 @@ fn benchmark_read_latin1(c: &mut Criterion) {
 
     for &size in &sizes {
         let s_ascii = ascii_string.repeat(size / ascii_string.len() + 1);
-        let mut writer = Writer::default();
+        let mut buffer = vec![];
+        let mut writer = Writer::from_buffer(&mut buffer);
         write_latin1_string(&mut writer, &s_ascii);
         let data = writer.dump();
 

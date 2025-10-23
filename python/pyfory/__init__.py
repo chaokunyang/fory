@@ -15,8 +15,8 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from pyfory import lib  # noqa: F401 # pylint: disable=unused-import
-from pyfory._fory import (  # noqa: F401 # pylint: disable=unused-import
+from pyfory.lib import mmh3
+from pyfory._fory import (
     Fory,
     Language,
     ThreadSafeFory,
@@ -37,7 +37,7 @@ if ENABLE_FORY_CYTHON_SERIALIZATION:
 
 from pyfory.serializer import (  # noqa: F401 # pylint: disable=unused-import
     Serializer,
-    CrossLanguageCompatibleSerializer,
+    XlangCompatibleSerializer,
     BooleanSerializer,
     ByteSerializer,
     Int16Serializer,
@@ -117,7 +117,7 @@ __all__ = [
     "dataslots",
     # Serializers
     "Serializer",
-    "CrossLanguageCompatibleSerializer",
+    "XlangCompatibleSerializer",
     "BooleanSerializer",
     "ByteSerializer",
     "Int16Serializer",
@@ -142,6 +142,7 @@ __all__ = [
     "MethodSerializer",
     "ReduceSerializer",
     "StatefulSerializer",
+    "mmh3",
     # Version
     "__version__",
 ]

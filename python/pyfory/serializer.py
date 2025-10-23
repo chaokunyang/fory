@@ -58,7 +58,7 @@ from pyfory.serialization import ENABLE_FORY_CYTHON_SERIALIZATION
 if ENABLE_FORY_CYTHON_SERIALIZATION:
     from pyfory.serialization import (  # noqa: F401, F811
         Serializer,
-        CrossLanguageCompatibleSerializer,
+        XlangCompatibleSerializer,
         BooleanSerializer,
         ByteSerializer,
         Int16Serializer,
@@ -81,7 +81,7 @@ if ENABLE_FORY_CYTHON_SERIALIZATION:
 else:
     from pyfory._serializer import (  # noqa: F401 # pylint: disable=unused-import
         Serializer,
-        CrossLanguageCompatibleSerializer,
+        XlangCompatibleSerializer,
         BooleanSerializer,
         ByteSerializer,
         Int16Serializer,
@@ -882,7 +882,7 @@ typeid_code = (
 )
 
 
-class PyArraySerializer(CrossLanguageCompatibleSerializer):
+class PyArraySerializer(XlangCompatibleSerializer):
     typecode_dict = typecode_dict
     typecodearray_type = (
         {
@@ -1076,7 +1076,7 @@ class NDArraySerializer(Serializer):
         return np.frombuffer(fory_buf.to_pybytes(), dtype=dtype).reshape(shape)
 
 
-class BytesSerializer(CrossLanguageCompatibleSerializer):
+class BytesSerializer(XlangCompatibleSerializer):
     def write(self, buffer, value):
         self.fory.write_buffer_object(buffer, BytesBufferObject(value))
 
@@ -1108,7 +1108,7 @@ class BytesBufferObject(BufferObject):
         return memoryview(self.binary)
 
 
-class PickleBufferSerializer(CrossLanguageCompatibleSerializer):
+class PickleBufferSerializer(XlangCompatibleSerializer):
     def write(self, buffer, value):
         self.fory.write_buffer_object(buffer, PickleBufferObject(value))
 
@@ -1166,7 +1166,7 @@ class NDArrayBufferObject(BufferObject):
         return memoryview(self.array.tobytes())
 
 
-class StatefulSerializer(CrossLanguageCompatibleSerializer):
+class StatefulSerializer(XlangCompatibleSerializer):
     """
     Serializer for objects that support __getstate__ and __setstate__.
     Uses Fory's native serialization for better cross-language support.
@@ -1214,7 +1214,7 @@ class StatefulSerializer(CrossLanguageCompatibleSerializer):
         return obj
 
 
-class ReduceSerializer(CrossLanguageCompatibleSerializer):
+class ReduceSerializer(XlangCompatibleSerializer):
     """
     Serializer for objects that support __reduce__ or __reduce_ex__.
     Uses Fory's native serialization for better cross-language support.
@@ -1495,7 +1495,7 @@ class MappingProxySerializer(Serializer):
         return types.MappingProxyType(self.fory.read_ref(buffer))
 
 
-class FunctionSerializer(CrossLanguageCompatibleSerializer):
+class FunctionSerializer(XlangCompatibleSerializer):
     """Serializer for function objects
 
     This serializer captures all the necessary information to recreate a function:

@@ -1406,7 +1406,7 @@ cdef class Serializer:
     def support_subclass(cls) -> bool:
         return False
 
-cdef class CrossLanguageCompatibleSerializer(Serializer):
+cdef class XlangCompatibleSerializer(Serializer):
     cpdef xwrite(self, Buffer buffer, value):
         self.write(buffer, value)
 
@@ -1415,7 +1415,7 @@ cdef class CrossLanguageCompatibleSerializer(Serializer):
 
 
 @cython.final
-cdef class BooleanSerializer(CrossLanguageCompatibleSerializer):
+cdef class BooleanSerializer(XlangCompatibleSerializer):
     cpdef inline write(self, Buffer buffer, value):
         buffer.write_bool(value)
 
@@ -1424,7 +1424,7 @@ cdef class BooleanSerializer(CrossLanguageCompatibleSerializer):
 
 
 @cython.final
-cdef class ByteSerializer(CrossLanguageCompatibleSerializer):
+cdef class ByteSerializer(XlangCompatibleSerializer):
     cpdef inline write(self, Buffer buffer, value):
         buffer.write_int8(value)
 
@@ -1433,7 +1433,7 @@ cdef class ByteSerializer(CrossLanguageCompatibleSerializer):
 
 
 @cython.final
-cdef class Int16Serializer(CrossLanguageCompatibleSerializer):
+cdef class Int16Serializer(XlangCompatibleSerializer):
     cpdef inline write(self, Buffer buffer, value):
         buffer.write_int16(value)
 
@@ -1442,7 +1442,7 @@ cdef class Int16Serializer(CrossLanguageCompatibleSerializer):
 
 
 @cython.final
-cdef class Int32Serializer(CrossLanguageCompatibleSerializer):
+cdef class Int32Serializer(XlangCompatibleSerializer):
     cpdef inline write(self, Buffer buffer, value):
         buffer.write_varint32(value)
 
@@ -1451,7 +1451,7 @@ cdef class Int32Serializer(CrossLanguageCompatibleSerializer):
 
 
 @cython.final
-cdef class Int64Serializer(CrossLanguageCompatibleSerializer):
+cdef class Int64Serializer(XlangCompatibleSerializer):
     cpdef inline xwrite(self, Buffer buffer, value):
         buffer.write_varint64(value)
 
@@ -1475,7 +1475,7 @@ cdef float FLOAT32_MAX_VALUE = 3.40282e+38
 
 
 @cython.final
-cdef class Float32Serializer(CrossLanguageCompatibleSerializer):
+cdef class Float32Serializer(XlangCompatibleSerializer):
     cpdef inline write(self, Buffer buffer, value):
         buffer.write_float(value)
 
@@ -1484,7 +1484,7 @@ cdef class Float32Serializer(CrossLanguageCompatibleSerializer):
 
 
 @cython.final
-cdef class Float64Serializer(CrossLanguageCompatibleSerializer):
+cdef class Float64Serializer(XlangCompatibleSerializer):
     cpdef inline write(self, Buffer buffer, value):
         buffer.write_double(value)
 
@@ -1493,7 +1493,7 @@ cdef class Float64Serializer(CrossLanguageCompatibleSerializer):
 
 
 @cython.final
-cdef class StringSerializer(CrossLanguageCompatibleSerializer):
+cdef class StringSerializer(XlangCompatibleSerializer):
     def __init__(self, fory, type_, track_ref=False):
         super().__init__(fory, type_)
         self.need_to_write_ref = track_ref
@@ -1509,7 +1509,7 @@ cdef _base_date = datetime.date(1970, 1, 1)
 
 
 @cython.final
-cdef class DateSerializer(CrossLanguageCompatibleSerializer):
+cdef class DateSerializer(XlangCompatibleSerializer):
     cpdef inline write(self, Buffer buffer, value):
         if type(value) is not datetime.date:
             raise TypeError(
@@ -1526,7 +1526,7 @@ cdef class DateSerializer(CrossLanguageCompatibleSerializer):
 
 
 @cython.final
-cdef class TimestampSerializer(CrossLanguageCompatibleSerializer):
+cdef class TimestampSerializer(XlangCompatibleSerializer):
     cdef bint win_platform
 
     def __init__(self, fory, type_: Union[type, TypeVar]):

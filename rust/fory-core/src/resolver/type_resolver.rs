@@ -883,8 +883,7 @@ impl TypeResolver {
         let mut type_info_map_by_id = self.type_info_map_by_id.clone();
         let mut type_info_map = self.type_info_map.clone();
         let mut type_info_map_by_name = self.type_info_map_by_name.clone();
-        let mut type_info_map_by_meta_string_name =
-            self.type_info_map_by_meta_string_name.clone();
+        let mut type_info_map_by_meta_string_name = self.type_info_map_by_meta_string_name.clone();
         // Iterate over partial_type_infos and complete them
         for (type_id, partial_type_info) in self.partial_type_infos.iter() {
             let harness = partial_type_info.harness.clone();

@@ -104,14 +104,14 @@ fn basic() {
             .serialize_with_context(&person, &mut write_context)
             .unwrap();
         let reader1 = Reader::new(bytes1.as_slice());
-        let mut read_context1 = ReadContext::new_from_fory(reader1, &fory);
+        let mut read_context1 = ReadContext::new_from_fory(reader1, &fory).unwrap();
         assert_eq!(
             person,
             fory.deserialize_with_context::<Person>(&mut read_context1)
                 .unwrap()
         );
         let reader2 = Reader::new(bytes2.as_slice());
-        let mut read_context2 = ReadContext::new_from_fory(reader2, &fory);
+        let mut read_context2 = ReadContext::new_from_fory(reader2, &fory).unwrap();
         assert_eq!(
             person,
             fory.deserialize_with_context::<Person>(&mut read_context2)

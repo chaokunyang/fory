@@ -586,7 +586,9 @@ impl Fory {
             };
             Ok(Pool::new(factory))
         });
-        let pool = pool_result.as_ref().map_err(|e| Error::type_error(format!("Failed to build type resolver: {}", e)))?;
+        let pool = pool_result
+            .as_ref()
+            .map_err(|e| Error::type_error(format!("Failed to build type resolver: {}", e)))?;
         let mut context = pool.get();
         let result = self.serialize_with_context(record, &mut context)?;
         pool.put(context);
@@ -700,7 +702,9 @@ impl Fory {
             };
             Ok(Pool::new(factory))
         });
-        let pool = pool_result.as_ref().map_err(|e| Error::type_error(format!("Failed to build type resolver: {}", e)))?;
+        let pool = pool_result
+            .as_ref()
+            .map_err(|e| Error::type_error(format!("Failed to build type resolver: {}", e)))?;
         let mut context = pool.get();
         context.init(bf, self.max_dyn_depth);
         let result = self.deserialize_with_context(&mut context);

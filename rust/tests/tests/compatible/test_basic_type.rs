@@ -152,277 +152,277 @@ fn deserialize_non_null(fory: &Fory, mut bins: Vec<Vec<u8>>, auto_conv: bool) {
     bins.reverse();
     assert_eq!(
         BOOL_VAL,
-        fory.deserialize_with_context::<bool>(&mut ReadContext::new_from_fory(
-            Reader::new(bins.pop().unwrap().as_slice()),
-            fory
-        ).unwrap())
+        fory.deserialize_with_context::<bool>(
+            &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                .unwrap()
+        )
         .unwrap()
     );
     assert_eq!(
         I8_VAL,
-        fory.deserialize_with_context::<i8>(&mut ReadContext::new_from_fory(
-            Reader::new(bins.pop().unwrap().as_slice()),
-            fory
-        ).unwrap())
+        fory.deserialize_with_context::<i8>(
+            &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                .unwrap()
+        )
         .unwrap()
     );
     assert_eq!(
         I16_VAL,
-        fory.deserialize_with_context::<i16>(&mut ReadContext::new_from_fory(
-            Reader::new(bins.pop().unwrap().as_slice()),
-            fory
-        ).unwrap())
+        fory.deserialize_with_context::<i16>(
+            &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                .unwrap()
+        )
         .unwrap()
     );
     assert_eq!(
         I32_VAL,
-        fory.deserialize_with_context::<i32>(&mut ReadContext::new_from_fory(
-            Reader::new(bins.pop().unwrap().as_slice()),
-            fory
-        ).unwrap())
+        fory.deserialize_with_context::<i32>(
+            &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                .unwrap()
+        )
         .unwrap()
     );
     assert_eq!(
         I64_VAL,
-        fory.deserialize_with_context::<i64>(&mut ReadContext::new_from_fory(
-            Reader::new(bins.pop().unwrap().as_slice()),
-            fory
-        ).unwrap())
+        fory.deserialize_with_context::<i64>(
+            &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                .unwrap()
+        )
         .unwrap()
     );
     assert_eq!(
         F32_VAL,
-        fory.deserialize_with_context::<f32>(&mut ReadContext::new_from_fory(
-            Reader::new(bins.pop().unwrap().as_slice()),
-            fory
-        ).unwrap())
+        fory.deserialize_with_context::<f32>(
+            &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                .unwrap()
+        )
         .unwrap()
     );
     assert_eq!(
         F64_VAL,
-        fory.deserialize_with_context::<f64>(&mut ReadContext::new_from_fory(
-            Reader::new(bins.pop().unwrap().as_slice()),
-            fory
-        ).unwrap())
+        fory.deserialize_with_context::<f64>(
+            &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                .unwrap()
+        )
         .unwrap()
     );
     assert_eq!(
         STR_LATIN1_VAL.to_string(),
-        fory.deserialize_with_context::<String>(&mut ReadContext::new_from_fory(
-            Reader::new(bins.pop().unwrap().as_slice()),
-            fory
-        ).unwrap())
+        fory.deserialize_with_context::<String>(
+            &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                .unwrap()
+        )
         .unwrap()
     );
     assert_eq!(
         LOCAL_DATE_VAL,
-        fory.deserialize_with_context::<NaiveDate>(&mut ReadContext::new_from_fory(
-            Reader::new(bins.pop().unwrap().as_slice()),
-            fory
-        ).unwrap())
+        fory.deserialize_with_context::<NaiveDate>(
+            &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                .unwrap()
+        )
         .unwrap()
     );
     assert_eq!(
         TIMESTAMP_VAL,
-        fory.deserialize_with_context::<NaiveDateTime>(&mut ReadContext::new_from_fory(
-            Reader::new(bins.pop().unwrap().as_slice()),
-            fory
-        ).unwrap())
+        fory.deserialize_with_context::<NaiveDateTime>(
+            &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                .unwrap()
+        )
         .unwrap()
     );
 
     assert_eq!(
         BOOL_ARRAY.to_vec(),
-        fory.deserialize_with_context::<Vec<bool>>(&mut ReadContext::new_from_fory(
-            Reader::new(bins.pop().unwrap().as_slice()),
-            fory
-        ).unwrap())
+        fory.deserialize_with_context::<Vec<bool>>(
+            &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                .unwrap()
+        )
         .unwrap()
     );
     assert_eq!(
         INT8_ARRAY.to_vec(),
-        fory.deserialize_with_context::<Vec<i8>>(&mut ReadContext::new_from_fory(
-            Reader::new(bins.pop().unwrap().as_slice()),
-            fory
-        ))
+        fory.deserialize_with_context::<Vec<i8>>(
+            &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                .unwrap()
+        )
         .unwrap()
     );
     assert_eq!(
         INT16_ARRAY.to_vec(),
-        fory.deserialize_with_context::<Vec<i16>>(&mut ReadContext::new_from_fory(
-            Reader::new(bins.pop().unwrap().as_slice()),
-            fory
-        ).unwrap())
+        fory.deserialize_with_context::<Vec<i16>>(
+            &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                .unwrap()
+        )
         .unwrap()
     );
     assert_eq!(
         INT32_ARRAY.to_vec(),
-        fory.deserialize_with_context::<Vec<i32>>(&mut ReadContext::new_from_fory(
-            Reader::new(bins.pop().unwrap().as_slice()),
-            fory
-        ).unwrap())
+        fory.deserialize_with_context::<Vec<i32>>(
+            &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                .unwrap()
+        )
         .unwrap()
     );
     assert_eq!(
         INT64_ARRAY.to_vec(),
-        fory.deserialize_with_context::<Vec<i64>>(&mut ReadContext::new_from_fory(
-            Reader::new(bins.pop().unwrap().as_slice()),
-            fory
-        ).unwrap())
+        fory.deserialize_with_context::<Vec<i64>>(
+            &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                .unwrap()
+        )
         .unwrap()
     );
     assert_eq!(
         FLOAT32_ARRAY.to_vec(),
-        fory.deserialize_with_context::<Vec<f32>>(&mut ReadContext::new_from_fory(
-            Reader::new(bins.pop().unwrap().as_slice()),
-            fory
-        ))
+        fory.deserialize_with_context::<Vec<f32>>(
+            &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                .unwrap()
+        )
         .unwrap()
     );
     assert_eq!(
         FLOAT64_ARRAY.to_vec(),
-        fory.deserialize_with_context::<Vec<f64>>(&mut ReadContext::new_from_fory(
-            Reader::new(bins.pop().unwrap().as_slice()),
-            fory
-        ).unwrap())
+        fory.deserialize_with_context::<Vec<f64>>(
+            &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                .unwrap()
+        )
         .unwrap()
     );
     if auto_conv {
         assert_eq!(
             bool::default(),
-            fory.deserialize_with_context::<bool>(&mut ReadContext::new_from_fory(
-                Reader::new(bins.pop().unwrap().as_slice()),
-                fory
-            ).unwrap())
+            fory.deserialize_with_context::<bool>(
+                &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                    .unwrap()
+            )
             .unwrap()
         );
         assert_eq!(
             i8::default(),
-            fory.deserialize_with_context::<i8>(&mut ReadContext::new_from_fory(
-                Reader::new(bins.pop().unwrap().as_slice()),
-                fory
-            ).unwrap())
+            fory.deserialize_with_context::<i8>(
+                &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                    .unwrap()
+            )
             .unwrap()
         );
         assert_eq!(
             i16::default(),
-            fory.deserialize_with_context::<i16>(&mut ReadContext::new_from_fory(
-                Reader::new(bins.pop().unwrap().as_slice()),
-                fory
-            ).unwrap())
+            fory.deserialize_with_context::<i16>(
+                &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                    .unwrap()
+            )
             .unwrap()
         );
         assert_eq!(
             i32::default(),
-            fory.deserialize_with_context::<i32>(&mut ReadContext::new_from_fory(
-                Reader::new(bins.pop().unwrap().as_slice()),
-                fory
-            ).unwrap())
+            fory.deserialize_with_context::<i32>(
+                &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                    .unwrap()
+            )
             .unwrap()
         );
         assert_eq!(
             i64::default(),
-            fory.deserialize_with_context::<i64>(&mut ReadContext::new_from_fory(
-                Reader::new(bins.pop().unwrap().as_slice()),
-                fory
-            ).unwrap())
+            fory.deserialize_with_context::<i64>(
+                &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                    .unwrap()
+            )
             .unwrap()
         );
         assert_eq!(
             f32::default(),
-            fory.deserialize_with_context::<f32>(&mut ReadContext::new_from_fory(
-                Reader::new(bins.pop().unwrap().as_slice()),
-                fory
-            ).unwrap())
+            fory.deserialize_with_context::<f32>(
+                &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                    .unwrap()
+            )
             .unwrap()
         );
         assert_eq!(
             f64::default(),
-            fory.deserialize_with_context::<f64>(&mut ReadContext::new_from_fory(
-                Reader::new(bins.pop().unwrap().as_slice()),
-                fory
-            ).unwrap())
+            fory.deserialize_with_context::<f64>(
+                &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                    .unwrap()
+            )
             .unwrap()
         );
         assert_eq!(
             String::default(),
-            fory.deserialize_with_context::<String>(&mut ReadContext::new_from_fory(
-                Reader::new(bins.pop().unwrap().as_slice()),
-                fory
-            ).unwrap())
+            fory.deserialize_with_context::<String>(
+                &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                    .unwrap()
+            )
             .unwrap()
         );
         assert_eq!(
             NaiveDate::default(),
-            fory.deserialize_with_context::<NaiveDate>(&mut ReadContext::new_from_fory(
-                Reader::new(bins.pop().unwrap().as_slice()),
-                fory
-            ).unwrap())
+            fory.deserialize_with_context::<NaiveDate>(
+                &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                    .unwrap()
+            )
             .unwrap()
         );
         assert_eq!(
             NaiveDateTime::default(),
-            fory.deserialize_with_context::<NaiveDateTime>(&mut ReadContext::new_from_fory(
-                Reader::new(bins.pop().unwrap().as_slice()),
-                fory
-            ).unwrap())
+            fory.deserialize_with_context::<NaiveDateTime>(
+                &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                    .unwrap()
+            )
             .unwrap()
         );
 
         assert_eq!(
             Vec::<bool>::default(),
-            fory.deserialize_with_context::<Vec<bool>>(&mut ReadContext::new_from_fory(
-                Reader::new(bins.pop().unwrap().as_slice()),
-                fory
-            ).unwrap())
+            fory.deserialize_with_context::<Vec<bool>>(
+                &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                    .unwrap()
+            )
             .unwrap()
         );
         assert_eq!(
             Vec::<i8>::default(),
-            fory.deserialize_with_context::<Vec<i8>>(&mut ReadContext::new_from_fory(
-                Reader::new(bins.pop().unwrap().as_slice()),
-                fory
-            ).unwrap())
+            fory.deserialize_with_context::<Vec<i8>>(
+                &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                    .unwrap()
+            )
             .unwrap()
         );
         assert_eq!(
             Vec::<i16>::default(),
-            fory.deserialize_with_context::<Vec<i16>>(&mut ReadContext::new_from_fory(
-                Reader::new(bins.pop().unwrap().as_slice()),
-                fory
-            ).unwrap())
+            fory.deserialize_with_context::<Vec<i16>>(
+                &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                    .unwrap()
+            )
             .unwrap()
         );
         assert_eq!(
             Vec::<i32>::default(),
-            fory.deserialize_with_context::<Vec<i32>>(&mut ReadContext::new_from_fory(
-                Reader::new(bins.pop().unwrap().as_slice()),
-                fory
-            ).unwrap())
+            fory.deserialize_with_context::<Vec<i32>>(
+                &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                    .unwrap()
+            )
             .unwrap()
         );
         assert_eq!(
             Vec::<i64>::default(),
-            fory.deserialize_with_context::<Vec<i64>>(&mut ReadContext::new_from_fory(
-                Reader::new(bins.pop().unwrap().as_slice()),
-                fory
-            ).unwrap())
+            fory.deserialize_with_context::<Vec<i64>>(
+                &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                    .unwrap()
+            )
             .unwrap()
         );
         assert_eq!(
             Vec::<f32>::default(),
-            fory.deserialize_with_context::<Vec<f32>>(&mut ReadContext::new_from_fory(
-                Reader::new(bins.pop().unwrap().as_slice()),
-                fory
-            ).unwrap())
+            fory.deserialize_with_context::<Vec<f32>>(
+                &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                    .unwrap()
+            )
             .unwrap()
         );
         assert_eq!(
             Vec::<f64>::default(),
-            fory.deserialize_with_context::<Vec<f64>>(&mut ReadContext::new_from_fory(
-                Reader::new(bins.pop().unwrap().as_slice()),
-                fory
-            ).unwrap())
+            fory.deserialize_with_context::<Vec<f64>>(
+                &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                    .unwrap()
+            )
             .unwrap()
         );
     }
@@ -432,276 +432,277 @@ fn deserialize_nullable(fory: &Fory, mut bins: Vec<Vec<u8>>, auto_conv: bool) {
     bins.reverse();
     assert_eq!(
         Some(BOOL_VAL),
-        fory.deserialize_with_context::<Option<bool>>(&mut ReadContext::new_from_fory(
-            Reader::new(bins.pop().unwrap().as_slice()),
-            fory
-        ).unwrap())
+        fory.deserialize_with_context::<Option<bool>>(
+            &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                .unwrap()
+        )
         .unwrap()
     );
     assert_eq!(
         Some(I8_VAL),
-        fory.deserialize_with_context::<Option<i8>>(&mut ReadContext::new_from_fory(
-            Reader::new(bins.pop().unwrap().as_slice()),
-            fory
-        ).unwrap())
+        fory.deserialize_with_context::<Option<i8>>(
+            &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                .unwrap()
+        )
         .unwrap()
     );
     assert_eq!(
         Some(I16_VAL),
-        fory.deserialize_with_context::<Option<i16>>(&mut ReadContext::new_from_fory(
-            Reader::new(bins.pop().unwrap().as_slice()),
-            fory
-        ).unwrap())
+        fory.deserialize_with_context::<Option<i16>>(
+            &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                .unwrap()
+        )
         .unwrap()
     );
     assert_eq!(
         Some(I32_VAL),
-        fory.deserialize_with_context::<Option<i32>>(&mut ReadContext::new_from_fory(
-            Reader::new(bins.pop().unwrap().as_slice()),
-            fory
-        ).unwrap())
+        fory.deserialize_with_context::<Option<i32>>(
+            &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                .unwrap()
+        )
         .unwrap()
     );
     assert_eq!(
         Some(I64_VAL),
-        fory.deserialize_with_context::<Option<i64>>(&mut ReadContext::new_from_fory(
-            Reader::new(bins.pop().unwrap().as_slice()),
-            fory
-        ).unwrap())
+        fory.deserialize_with_context::<Option<i64>>(
+            &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                .unwrap()
+        )
         .unwrap()
     );
     assert_eq!(
         Some(F32_VAL),
-        fory.deserialize_with_context::<Option<f32>>(&mut ReadContext::new_from_fory(
-            Reader::new(bins.pop().unwrap().as_slice()),
-            fory
-        ).unwrap())
+        fory.deserialize_with_context::<Option<f32>>(
+            &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                .unwrap()
+        )
         .unwrap()
     );
     assert_eq!(
         Some(F64_VAL),
-        fory.deserialize_with_context::<Option<f64>>(&mut ReadContext::new_from_fory(
-            Reader::new(bins.pop().unwrap().as_slice()),
-            fory
-        ).unwrap())
+        fory.deserialize_with_context::<Option<f64>>(
+            &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                .unwrap()
+        )
         .unwrap()
     );
     assert_eq!(
         Some(STR_LATIN1_VAL.to_string()),
-        fory.deserialize_with_context::<Option<String>>(&mut ReadContext::new_from_fory(
-            Reader::new(bins.pop().unwrap().as_slice()),
-            fory
-        ))
+        fory.deserialize_with_context::<Option<String>>(
+            &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                .unwrap()
+        )
         .unwrap()
     );
     assert_eq!(
         Some(LOCAL_DATE_VAL),
-        fory.deserialize_with_context::<Option<NaiveDate>>(&mut ReadContext::new_from_fory(
-            Reader::new(bins.pop().unwrap().as_slice()),
-            fory
-        ))
+        fory.deserialize_with_context::<Option<NaiveDate>>(
+            &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                .unwrap()
+        )
         .unwrap()
     );
     assert_eq!(
         Some(TIMESTAMP_VAL),
-        fory.deserialize_with_context::<Option<NaiveDateTime>>(&mut ReadContext::new_from_fory(
-            Reader::new(bins.pop().unwrap().as_slice()),
-            fory
-        ))
+        fory.deserialize_with_context::<Option<NaiveDateTime>>(
+            &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                .unwrap()
+        )
         .unwrap()
     );
 
     assert_eq!(
         Some(BOOL_ARRAY.to_vec()),
-        fory.deserialize_with_context::<Option<Vec<bool>>>(&mut ReadContext::new_from_fory(
-            Reader::new(bins.pop().unwrap().as_slice()),
-            fory
-        ))
+        fory.deserialize_with_context::<Option<Vec<bool>>>(
+            &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                .unwrap()
+        )
         .unwrap()
     );
     assert_eq!(
         Some(INT8_ARRAY.to_vec()),
-        fory.deserialize_with_context::<Option<Vec<i8>>>(&mut ReadContext::new_from_fory(
-            Reader::new(bins.pop().unwrap().as_slice()),
-            fory
-        ))
+        fory.deserialize_with_context::<Option<Vec<i8>>>(
+            &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                .unwrap()
+        )
         .unwrap()
     );
     assert_eq!(
         Some(INT16_ARRAY.to_vec()),
-        fory.deserialize_with_context::<Option<Vec<i16>>>(&mut ReadContext::new_from_fory(
-            Reader::new(bins.pop().unwrap().as_slice()),
-            fory
-        ))
+        fory.deserialize_with_context::<Option<Vec<i16>>>(
+            &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                .unwrap()
+        )
         .unwrap()
     );
     assert_eq!(
         Some(INT32_ARRAY.to_vec()),
-        fory.deserialize_with_context::<Option<Vec<i32>>>(&mut ReadContext::new_from_fory(
-            Reader::new(bins.pop().unwrap().as_slice()),
-            fory
-        ))
+        fory.deserialize_with_context::<Option<Vec<i32>>>(
+            &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                .unwrap()
+        )
         .unwrap()
     );
     assert_eq!(
         Some(INT64_ARRAY.to_vec()),
-        fory.deserialize_with_context::<Option<Vec<i64>>>(&mut ReadContext::new_from_fory(
-            Reader::new(bins.pop().unwrap().as_slice()),
-            fory
-        ))
+        fory.deserialize_with_context::<Option<Vec<i64>>>(
+            &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                .unwrap()
+        )
         .unwrap()
     );
     assert_eq!(
         Some(FLOAT32_ARRAY.to_vec()),
-        fory.deserialize_with_context::<Option<Vec<f32>>>(&mut ReadContext::new_from_fory(
-            Reader::new(bins.pop().unwrap().as_slice()),
-            fory
-        ))
+        fory.deserialize_with_context::<Option<Vec<f32>>>(
+            &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                .unwrap()
+        )
         .unwrap()
     );
     assert_eq!(
         Some(FLOAT64_ARRAY.to_vec()),
-        fory.deserialize_with_context::<Option<Vec<f64>>>(&mut ReadContext::new_from_fory(
-            Reader::new(bins.pop().unwrap().as_slice()),
-            fory
-        ))
+        fory.deserialize_with_context::<Option<Vec<f64>>>(
+            &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                .unwrap()
+        )
         .unwrap()
     );
     if !auto_conv {
         assert_eq!(
             None,
-            fory.deserialize_with_context::<Option<bool>>(&mut ReadContext::new_from_fory(
-                Reader::new(bins.pop().unwrap().as_slice()),
-                fory
-            ))
+            fory.deserialize_with_context::<Option<bool>>(
+                &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                    .unwrap()
+            )
             .unwrap()
         );
         assert_eq!(
             None,
-            fory.deserialize_with_context::<Option<i8>>(&mut ReadContext::new_from_fory(
-                Reader::new(bins.pop().unwrap().as_slice()),
-                fory
-            ))
+            fory.deserialize_with_context::<Option<i8>>(
+                &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                    .unwrap()
+            )
             .unwrap()
         );
         assert_eq!(
             None,
-            fory.deserialize_with_context::<Option<i16>>(&mut ReadContext::new_from_fory(
-                Reader::new(bins.pop().unwrap().as_slice()),
-                fory
-            ))
+            fory.deserialize_with_context::<Option<i16>>(
+                &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                    .unwrap()
+            )
             .unwrap()
         );
         assert_eq!(
             None,
-            fory.deserialize_with_context::<Option<i32>>(&mut ReadContext::new_from_fory(
-                Reader::new(bins.pop().unwrap().as_slice()),
-                fory
-            ))
+            fory.deserialize_with_context::<Option<i32>>(
+                &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                    .unwrap()
+            )
             .unwrap()
         );
         assert_eq!(
             None,
-            fory.deserialize_with_context::<Option<i64>>(&mut ReadContext::new_from_fory(
-                Reader::new(bins.pop().unwrap().as_slice()),
-                fory
-            ))
+            fory.deserialize_with_context::<Option<i64>>(
+                &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                    .unwrap()
+            )
             .unwrap()
         );
         assert_eq!(
             None,
-            fory.deserialize_with_context::<Option<f32>>(&mut ReadContext::new_from_fory(
-                Reader::new(bins.pop().unwrap().as_slice()),
-                fory
-            ))
+            fory.deserialize_with_context::<Option<f32>>(
+                &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                    .unwrap()
+            )
             .unwrap()
         );
         assert_eq!(
             None,
-            fory.deserialize_with_context::<Option<f64>>(&mut ReadContext::new_from_fory(
-                Reader::new(bins.pop().unwrap().as_slice()),
-                fory
-            ))
+            fory.deserialize_with_context::<Option<f64>>(
+                &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                    .unwrap()
+            )
             .unwrap()
         );
         assert_eq!(
             None,
-            fory.deserialize_with_context::<Option<String>>(&mut ReadContext::new_from_fory(
-                Reader::new(bins.pop().unwrap().as_slice()),
-                fory
-            ))
+            fory.deserialize_with_context::<Option<String>>(
+                &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                    .unwrap()
+            )
             .unwrap()
         );
         assert_eq!(
             None,
-            fory.deserialize_with_context::<Option<NaiveDate>>(&mut ReadContext::new_from_fory(
-                Reader::new(bins.pop().unwrap().as_slice()),
-                fory
-            ))
+            fory.deserialize_with_context::<Option<NaiveDate>>(
+                &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                    .unwrap()
+            )
             .unwrap()
         );
         assert_eq!(
             None,
             fory.deserialize_with_context::<Option<NaiveDateTime>>(
                 &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                    .unwrap()
             )
             .unwrap()
         );
 
         assert_eq!(
             None,
-            fory.deserialize_with_context::<Option<Vec<bool>>>(&mut ReadContext::new_from_fory(
-                Reader::new(bins.pop().unwrap().as_slice()),
-                fory
-            ))
+            fory.deserialize_with_context::<Option<Vec<bool>>>(
+                &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                    .unwrap()
+            )
             .unwrap()
         );
         assert_eq!(
             None,
-            fory.deserialize_with_context::<Option<Vec<i8>>>(&mut ReadContext::new_from_fory(
-                Reader::new(bins.pop().unwrap().as_slice()),
-                fory
-            ))
+            fory.deserialize_with_context::<Option<Vec<i8>>>(
+                &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                    .unwrap()
+            )
             .unwrap()
         );
         assert_eq!(
             None,
-            fory.deserialize_with_context::<Option<Vec<i16>>>(&mut ReadContext::new_from_fory(
-                Reader::new(bins.pop().unwrap().as_slice()),
-                fory
-            ))
+            fory.deserialize_with_context::<Option<Vec<i16>>>(
+                &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                    .unwrap()
+            )
             .unwrap()
         );
         assert_eq!(
             None,
-            fory.deserialize_with_context::<Option<Vec<i32>>>(&mut ReadContext::new_from_fory(
-                Reader::new(bins.pop().unwrap().as_slice()),
-                fory
-            ))
+            fory.deserialize_with_context::<Option<Vec<i32>>>(
+                &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                    .unwrap()
+            )
             .unwrap()
         );
         assert_eq!(
             None,
-            fory.deserialize_with_context::<Option<Vec<i64>>>(&mut ReadContext::new_from_fory(
-                Reader::new(bins.pop().unwrap().as_slice()),
-                fory
-            ))
+            fory.deserialize_with_context::<Option<Vec<i64>>>(
+                &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                    .unwrap()
+            )
             .unwrap()
         );
         assert_eq!(
             None,
-            fory.deserialize_with_context::<Option<Vec<f32>>>(&mut ReadContext::new_from_fory(
-                Reader::new(bins.pop().unwrap().as_slice()),
-                fory
-            ))
+            fory.deserialize_with_context::<Option<Vec<f32>>>(
+                &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                    .unwrap()
+            )
             .unwrap()
         );
         assert_eq!(
             None,
-            fory.deserialize_with_context::<Option<Vec<f64>>>(&mut ReadContext::new_from_fory(
-                Reader::new(bins.pop().unwrap().as_slice()),
-                fory
-            ))
+            fory.deserialize_with_context::<Option<Vec<f64>>>(
+                &mut ReadContext::new_from_fory(Reader::new(bins.pop().unwrap().as_slice()), fory)
+                    .unwrap()
+            )
             .unwrap()
         );
     }

@@ -15,6 +15,48 @@
 # specific language governing permissions and limitations
 # under the License.
 
+"""Apache Fory™ CPython Benchmark Suite
+
+Microbenchmark for Apache Fory™ serialization performance in CPython.
+
+Usage:
+    python fory_benchmark.py [OPTIONS]
+
+Fory Options:
+    --benchmarks BENCHMARK_LIST
+        Comma-separated list of benchmarks to run. Default: all
+        Available: dict, large_dict, dict_group, tuple, large_tuple,
+                   large_float_tuple, large_boolean_tuple, list, large_list, complex
+
+    --no-ref
+        Disable reference tracking (enabled by default)
+
+    --disable-cython
+        Use pure Python mode instead of Cython serialization
+
+Common Pyperf Options:
+    --affinity CPU_LIST       Specify CPU affinity for worker processes
+    -o FILENAME              Write results to JSON file
+    --profile PROFILE        Collect cProfile data
+    --help                   Show all available options
+
+Examples:
+    # Run all benchmarks
+    python fory_benchmark.py
+
+    # Run specific benchmarks
+    python fory_benchmark.py --benchmarks dict,large_dict,complex
+
+    # Run without reference tracking
+    python fory_benchmark.py --no-ref
+
+    # Profile and save results
+    python fory_benchmark.py --benchmarks complex --profile complex.prof -o results.json
+
+    # Debug with pure Python mode
+    python fory_benchmark.py --disable-cython --benchmarks dict
+"""
+
 import argparse
 from dataclasses import dataclass
 import datetime
@@ -173,6 +215,14 @@ def benchmark_args():
     parser = argparse.ArgumentParser(description="Fory Benchmark")
     parser.add_argument("--no-ref", action="store_true", default=False)
     parser.add_argument("--disable-cython", action="store_true", default=False)
+    parser.add_argument(
+        "--benchmarks",
+        type=str,
+        default="all",
+        help="Comma-separated list of benchmarks to run. Available: dict, large_dict, "
+        "dict_group, tuple, large_tuple, large_float_tuple, large_boolean_tuple, "
+        "list, large_list, complex. Default: all",
+    )
 
     if "--help" in sys.argv:
         parser.print_help()
@@ -187,16 +237,46 @@ def micro_benchmark():
     runner = pyperf.Runner()
     runner.parse_args()
     ref = not args.no_ref
-    runner.bench_func("fory_dict", fory_object, ref, DICT)
-    runner.bench_func("fory_large_dict", fory_object, ref, LARGE_DICT)
-    runner.bench_func("fory_dict_group", fory_object, ref, DICT_GROUP)
-    runner.bench_func("fory_tuple", fory_object, ref, TUPLE)
-    runner.bench_func("fory_large_tuple", fory_object, ref, LARGE_TUPLE)
-    runner.bench_func("fory_large_float_tuple", fory_object, ref, LARGE_FLOAT_TUPLE)
-    runner.bench_func("fory_large_boolean_tuple", fory_object, ref, LARGE_BOOLEAN_TUPLE)
-    runner.bench_func("fory_list", fory_object, ref, LIST)
-    runner.bench_func("fory_large_list", fory_object, ref, LARGE_LIST)
-    runner.bench_func("fory_complex", fory_data_class, ref, COMPLEX_OBJECT)
+
+    # Define all available benchmarks
+    benchmarks = {
+        "dict": ("fory_dict", fory_object, ref, DICT),
+        "large_dict": ("fory_large_dict", fory_object, ref, LARGE_DICT),
+        "dict_group": ("fory_dict_group", fory_object, ref, DICT_GROUP),
+        "tuple": ("fory_tuple", fory_object, ref, TUPLE),
+        "large_tuple": ("fory_large_tuple", fory_object, ref, LARGE_TUPLE),
+        "large_float_tuple": (
+            "fory_large_float_tuple",
+            fory_object,
+            ref,
+            LARGE_FLOAT_TUPLE,
+        ),
+        "large_boolean_tuple": (
+            "fory_large_boolean_tuple",
+            fory_object,
+            ref,
+            LARGE_BOOLEAN_TUPLE,
+        ),
+        "list": ("fory_list", fory_object, ref, LIST),
+        "large_list": ("fory_large_list", fory_object, ref, LARGE_LIST),
+        "complex": ("fory_complex", fory_data_class, ref, COMPLEX_OBJECT),
+    }
+
+    # Determine which benchmarks to run
+    if args.benchmarks == "all":
+        selected_benchmarks = benchmarks.keys()
+    else:
+        selected_benchmarks = [b.strip() for b in args.benchmarks.split(",")]
+        # Validate benchmark names
+        invalid = [b for b in selected_benchmarks if b not in benchmarks]
+        if invalid:
+            print(f"Error: Invalid benchmark names: {', '.join(invalid)}")
+            print(f"Available benchmarks: {', '.join(benchmarks.keys())}")
+            sys.exit(1)
+
+    # Run selected benchmarks
+    for benchmark_name in selected_benchmarks:
+        runner.bench_func(*benchmarks[benchmark_name])
 
 
 if __name__ == "__main__":

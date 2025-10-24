@@ -37,8 +37,17 @@ cc_test(
 )
 
 cc_test(
-    name = "status_test",
-    srcs = ["status_test.cc"],
+    name = "result_test",
+    srcs = ["result_test.cc"],
+    deps = [
+        ":fory_util",
+        "@com_google_googletest//:gtest",
+    ],
+)
+
+cc_test(
+    name = "error_test",
+    srcs = ["error_test.cc"],
     deps = [
         ":fory_util",
         "@com_google_googletest//:gtest",

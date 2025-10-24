@@ -27,7 +27,7 @@
 
 #include "fory/util/bit_util.h"
 #include "fory/util/logging.h"
-#include "fory/util/status.h"
+#include "fory/util/result.h"
 
 namespace fory {
 
@@ -134,11 +134,11 @@ public:
 
   inline double GetDouble(uint32_t offset) { return Get<double>(offset); }
 
-  inline Status GetBytesAsInt64(uint32_t offset, uint32_t length,
-                                int64_t *target) {
+  inline Result<void, Error> GetBytesAsInt64(uint32_t offset, uint32_t length,
+                                             int64_t *target) {
     if (length == 0) {
       *target = 0;
-      return Status::OK();
+      return Result<void, Error>();
     }
     if (size_ - (offset + 8) > 0) {
       uint64_t mask = 0xffffffffffffffff;
@@ -146,7 +146,7 @@ public:
       *target = GetInt64(offset) & x;
     } else {
       if (size_ - (offset + length) < 0) {
-        return Status::OutOfBound("buffer out of bound");
+        return Unexpected(Error::out_of_bound("buffer out of bound"));
       }
       int64_t result = 0;
       for (size_t i = 0; i < length; i++) {
@@ -154,7 +154,7 @@ public:
       }
       *target = result;
     }
-    return Status::OK();
+    return Result<void, Error>();
   }
 
   inline uint32_t PutVarUint32(uint32_t offset, int32_t value) {
@@ -207,6 +207,36 @@ public:
           }
         }
       }
+    }
+    *readBytesLength = position - offset;
+    return result;
+  }
+
+  /// Put unsigned varint64 at offset. Returns number of bytes written (1-9).
+  /// Uses PVL (Progressive Variable-length Long) encoding per xlang spec.
+  inline uint32_t PutVarUint64(uint32_t offset, uint64_t value) {
+    uint32_t position = offset;
+    while (value >= 0x80) {
+      data_[position++] = static_cast<uint8_t>((value & 0x7F) | 0x80);
+      value >>= 7;
+    }
+    data_[position++] = static_cast<uint8_t>(value);
+    return position - offset;
+  }
+
+  /// Get unsigned varint64 from offset. Writes number of bytes read to readBytesLength.
+  /// Uses PVL (Progressive Variable-length Long) encoding per xlang spec.
+  inline uint64_t GetVarUint64(uint32_t offset, uint32_t *readBytesLength) {
+    uint32_t position = offset;
+    uint64_t result = 0;
+    int shift = 0;
+    while (true) {
+      uint8_t b = data_[position++];
+      result |= static_cast<uint64_t>(b & 0x7F) << shift;
+      if ((b & 0x80) == 0) {
+        break;
+      }
+      shift += 7;
     }
     *readBytesLength = position - offset;
     return result;

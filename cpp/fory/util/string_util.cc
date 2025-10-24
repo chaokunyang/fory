@@ -150,6 +150,7 @@ std::u16string utf8ToUtf16SIMD(const std::string &utf8, bool is_little_endian) {
 
 #if defined(FORY_HAS_IMMINTRIN)
 
+__attribute__((target("avx2")))
 std::string utf16ToUtf8(const std::u16string &utf16, bool is_little_endian) {
   std::string utf8;
   utf8.reserve(utf16.size() *

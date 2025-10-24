@@ -17,6 +17,8 @@
  * under the License.
  */
 
+#pragma once
+
 #include <cstdint> // For fixed-width integer types
 
 namespace fory {

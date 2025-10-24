@@ -51,6 +51,8 @@ mvn -T16 test -Dtest=org.apache.fory.TestClass#testMethod
 ### C++ Development
 
 - All commands must be executed within the `cpp` directory.
+- Fory c++ use c++ 17, you must not use features from higher version of C++.
+- Whnen you updated teh code, use `clang-format` to update the code
 
 ```bash
 # Prepare for build
@@ -64,6 +66,9 @@ bazel test $(bazel query //...)
 
 # Run specific test
 bazel test //fory/util:buffer_test
+
+# format c++ code
+clang-format -i $file
 ```
 
 ### Python Development

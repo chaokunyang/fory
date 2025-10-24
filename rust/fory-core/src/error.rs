@@ -16,7 +16,6 @@
 // under the License.
 
 use std::borrow::Cow;
-use std::io;
 use std::sync::OnceLock;
 
 use thiserror::Error;

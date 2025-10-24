@@ -1778,6 +1778,7 @@ cdef class StringSerializer(XlangCompatibleSerializer):
 
 
 cdef _base_date = datetime.date(1970, 1, 1)
+cdef int _base_date_ordinal = _base_date.toordinal()  # Precompute for faster date deserialization
 
 
 @cython.final
@@ -1794,7 +1795,7 @@ cdef class DateSerializer(XlangCompatibleSerializer):
 
     cpdef inline read(self, Buffer buffer):
         days = buffer.read_int32()
-        return _base_date + datetime.timedelta(days=days)
+        return datetime.date.fromordinal(_base_date_ordinal + days)
 
 
 @cython.final
@@ -1869,7 +1870,7 @@ cdef class CollectionSerializer(Serializer):
             self.elem_tracking_ref = <int8_t> (elem_serializer.need_to_write_ref)
         self.is_py = fory.is_py
 
-    cdef pair[int8_t, int64_t] write_header(self, Buffer buffer, value):
+    cdef inline pair[int8_t, int64_t] write_header(self, Buffer buffer, value):
         cdef int8_t collect_flag = COLL_DEFAULT_FLAG
         elem_type = self.elem_type
         cdef TypeInfo elem_typeinfo = self.elem_typeinfo

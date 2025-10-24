@@ -110,10 +110,6 @@ pub enum Error {
     #[error("Buffer out of bound: {0} + {1} > {2}")]
     BufferOutOfBound(usize, usize, usize),
 
-    /// IO error from underlying operations.
-    #[error("IO error: {0}")]
-    Io(#[from] io::Error),
-
     /// Error during data encoding.
     ///
     /// Do not construct this variant directly; use [`Error::encode_error`] instead.

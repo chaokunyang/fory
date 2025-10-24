@@ -18,7 +18,6 @@
 use std::any::Any;
 use std::sync::{Mutex, MutexGuard, OnceLock};
 
-use fory_core::buffer::{Reader, Writer};
 use fory_core::fory::Fory;
 use fory_core::resolver::context::{ReadContext, WriteContext};
 use fory_core::serializer::struct_::{
@@ -153,15 +152,8 @@ fn debug_hooks_trigger_for_struct() {
 
     let mut fory_compat = Fory::default().compatible(true);
     fory_compat.register::<DebugSample>(4001).unwrap();
-    let writer = Writer::default();
-    let mut write_ctx = WriteContext::new_from_fory(writer, &fory_compat);
-    fory_compat
-        .serialize_with_context(&sample, &mut write_ctx)
-        .unwrap();
-    let compat_bytes = write_ctx.writer.dump();
-    let reader = Reader::new(compat_bytes.as_slice());
-    let mut read_ctx = ReadContext::new_from_fory(reader, &fory_compat);
-    let _: DebugSample = fory_compat.deserialize_with_context(&mut read_ctx).unwrap();
+    let compat_bytes = fory_compat.serialize(&sample).unwrap();
+    let _: DebugSample = fory_compat.deserialize(compat_bytes.as_slice()).unwrap();
 
     let compat_entries = event_log().lock().unwrap().clone();
     assert!(

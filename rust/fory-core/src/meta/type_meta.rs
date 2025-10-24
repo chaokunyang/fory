@@ -197,7 +197,8 @@ impl FieldInfo {
 
     fn to_bytes(&self) -> Result<Vec<u8>, Error> {
         // field_bytes: | header | type_info | field_name |
-        let mut writer = Writer::default();
+        let mut buffer = vec![];
+        let mut writer = Writer::from_buffer(&mut buffer);
         // header: | field_name_encoding:2bits | size:4bits | nullability:1bit | ref_tracking:1bit |
         let meta_string =
             FIELD_NAME_ENCODER.encode_with_encodings(&self.field_name, FIELD_NAME_ENCODINGS)?;
@@ -224,7 +225,7 @@ impl FieldInfo {
         self.field_type.to_bytes(&mut writer, false, nullable)?;
         // write field_name
         writer.write_bytes(name_encoded);
-        Ok(writer.dump())
+        Ok(buffer)
     }
 }
 
@@ -333,8 +334,9 @@ impl TypeMetaLayer {
     }
 
     fn to_bytes(&self) -> Result<Vec<u8>, Error> {
+        let mut buffer = vec![];
         // layer_bytes:| meta_header | fields meta |
-        let mut writer = Writer::default();
+        let mut writer = Writer::from_buffer(&mut buffer);
         let num_fields = self.field_infos.len();
         let _internal_id = self.type_id & 0xff;
         // meta_header: | unuse:2 bits | is_register_by_id:1 bit | num_fields:4 bits |
@@ -355,7 +357,7 @@ impl TypeMetaLayer {
         for field in self.field_infos.iter() {
             writer.write_bytes(field.to_bytes()?.as_slice());
         }
-        Ok(writer.dump())
+        Ok(buffer)
     }
 
     fn sort_field_infos(field_infos: Vec<FieldInfo>) -> Vec<FieldInfo> {
@@ -545,25 +547,32 @@ pub struct TypeMeta {
 }
 
 impl TypeMeta {
+    #[inline(always)]
     pub fn get_field_infos(&self) -> &Vec<FieldInfo> {
         self.layer.get_field_infos()
     }
 
+    #[inline(always)]
     pub fn get_type_id(&self) -> u32 {
         self.layer.get_type_id()
     }
 
+    #[inline(always)]
     pub fn get_hash(&self) -> i64 {
         self.hash
     }
+
+    #[inline(always)]
     pub fn get_type_name(&self) -> Rc<MetaString> {
         self.layer.get_type_name()
     }
 
+    #[inline(always)]
     pub fn get_namespace(&self) -> Rc<MetaString> {
         self.layer.get_namespace()
     }
 
+    #[inline(always)]
     pub fn empty() -> TypeMeta {
         TypeMeta {
             hash: 0,
@@ -571,7 +580,7 @@ impl TypeMeta {
         }
     }
 
-    pub fn from_fields(
+    pub(crate) fn from_fields(
         type_id: u32,
         namespace: MetaString,
         type_name: MetaString,
@@ -584,7 +593,7 @@ impl TypeMeta {
         }
     }
 
-    pub fn from_bytes(
+    pub(crate) fn from_bytes(
         reader: &mut Reader,
         type_resolver: &TypeResolver,
     ) -> Result<TypeMeta, Error> {
@@ -608,7 +617,7 @@ impl TypeMeta {
         })
     }
 
-    pub fn from_bytes_with_header(
+    pub(crate) fn from_bytes_with_header(
         reader: &mut Reader,
         type_resolver: &TypeResolver,
         header: i64,
@@ -632,6 +641,7 @@ impl TypeMeta {
         })
     }
 
+    #[inline(always)]
     pub fn skip_bytes(reader: &mut Reader, header: i64) -> Result<(), Error> {
         let mut meta_size = header & META_SIZE_MASK;
         if meta_size == META_SIZE_MASK {
@@ -641,6 +651,7 @@ impl TypeMeta {
     }
 
     /// Check class version consistency, similar to Java's checkClassVersion
+    #[inline(always)]
     pub fn check_struct_version(
         read_version: i32,
         local_version: i32,
@@ -648,17 +659,20 @@ impl TypeMeta {
     ) -> Result<(), Error> {
         if read_version != local_version {
             return Err(Error::struct_version_mismatch(format!(
-                "Read class {} version {} is not consistent with {}",
+                "Read class {} version {} is not consistent with {}, please align struct field types and names, 
+                or use compatible mode of Fory by Fory#compatible(true)",
                 type_name, read_version, local_version
             )));
         }
         Ok(())
     }
 
-    pub fn to_bytes(&self) -> Result<Vec<u8>, Error> {
+    pub(crate) fn to_bytes(&self) -> Result<Vec<u8>, Error> {
         // | global_binary_header | layers_bytes |
-        let mut result = Writer::default();
-        let mut layers_writer = Writer::default();
+        let mut buffer = vec![];
+        let mut result = Writer::from_buffer(&mut buffer);
+        let mut layers_buffer = vec![];
+        let mut layers_writer = Writer::from_buffer(&mut layers_buffer);
         // for layer in self.layers.iter() {
         //     layers_writer.bytes(layer.to_bytes()?.as_slice());
         // }
@@ -680,7 +694,7 @@ impl TypeMeta {
         if meta_size >= META_SIZE_MASK {
             result.write_varuint32((meta_size - META_SIZE_MASK) as u32);
         }
-        result.write_bytes(layers_writer.dump().as_slice());
-        Ok(result.dump())
+        result.write_bytes(layers_buffer.as_slice());
+        Ok(buffer)
     }
 }

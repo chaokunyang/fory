@@ -28,6 +28,7 @@ use crate::types::{
     config_flags::{IS_CROSS_LANGUAGE_FLAG, IS_LITTLE_ENDIAN_FLAG},
     Language, MAGIC_NUMBER, SIZE_OF_REF_AND_TYPE,
 };
+use std::mem;
 use std::sync::OnceLock;
 
 /// The main Fory serialization framework instance.
@@ -82,15 +83,15 @@ pub struct Fory {
     max_dyn_depth: u32,
     check_struct_version: bool,
     // Lazy-initialized pools (thread-safe, one-time initialization)
-    write_context_pool: OnceLock<Pool<WriteContext>>,
-    read_context_pool: OnceLock<Pool<ReadContext>>,
+    write_context_pool: OnceLock<Result<Pool<Box<WriteContext<'static>>>, Error>>,
+    read_context_pool: OnceLock<Result<Pool<Box<ReadContext<'static>>>, Error>>,
 }
 
 impl Default for Fory {
     fn default() -> Self {
         Fory {
             compatible: false,
-            xlang: true,
+            xlang: false,
             share_meta: false,
             type_resolver: TypeResolver::default(),
             compress_string: false,
@@ -156,7 +157,7 @@ impl Fory {
     ///
     /// # Default
     ///
-    /// The default value is `true`.
+    /// The default value is `false`.
     ///
     /// # Examples
     ///
@@ -166,7 +167,8 @@ impl Fory {
     /// // For cross-language use (default)
     /// let fory = Fory::default().xlang(true);
     ///
-    /// // For Rust-only optimization
+    /// // For Rust-only optimization, this mode is faster and more compact since it avoids
+    /// // cross-language metadata and type system costs.
     /// let fory = Fory::default().xlang(false);
     /// ```
     pub fn xlang(mut self, xlang: bool) -> Self {
@@ -333,164 +335,6 @@ impl Fory {
         self.check_struct_version
     }
 
-    /// Returns a type resolver for type lookups.
-    pub(crate) fn get_type_resolver(&self) -> &TypeResolver {
-        &self.type_resolver
-    }
-
-    pub fn write_head<T: Serializer>(&self, is_none: bool, writer: &mut Writer) {
-        const HEAD_SIZE: usize = 10;
-        writer.reserve(T::fory_reserved_space() + SIZE_OF_REF_AND_TYPE + HEAD_SIZE);
-        if self.xlang {
-            writer.write_u16(MAGIC_NUMBER);
-        }
-        #[cfg(target_endian = "big")]
-        let mut bitmap = 0;
-        #[cfg(target_endian = "little")]
-        let mut bitmap = IS_LITTLE_ENDIAN_FLAG;
-        if self.xlang {
-            bitmap |= IS_CROSS_LANGUAGE_FLAG;
-        }
-        if is_none {
-            bitmap |= IS_NULL_FLAG;
-        }
-        writer.write_u8(bitmap);
-        if is_none {
-            return;
-        }
-        if self.xlang {
-            writer.write_u8(Language::Rust as u8);
-        }
-    }
-
-    fn read_head(&self, reader: &mut Reader) -> Result<bool, Error> {
-        if self.xlang {
-            let magic_numer = reader.read_u16()?;
-            ensure!(
-                magic_numer == MAGIC_NUMBER,
-                Error::invalid_data(format!(
-                    "The fory xlang serialization must start with magic number {:X}. \
-                    Please check whether the serialization is based on the xlang protocol \
-                    and the data didn't corrupt.",
-                    MAGIC_NUMBER
-                ))
-            )
-        }
-        let bitmap = reader.read_u8()?;
-        let peer_is_xlang = (bitmap & IS_CROSS_LANGUAGE_FLAG) != 0;
-        ensure!(
-            self.xlang == peer_is_xlang,
-            Error::invalid_data("header bitmap mismatch at xlang bit")
-        );
-        let is_little_endian = (bitmap & IS_LITTLE_ENDIAN_FLAG) != 0;
-        ensure!(
-            is_little_endian,
-            Error::invalid_data(
-                "Big endian is not supported for now, please ensure peer machine is little endian."
-            )
-        );
-        let is_none = (bitmap & IS_NULL_FLAG) != 0;
-        if is_none {
-            return Ok(true);
-        }
-        if peer_is_xlang {
-            let _peer_lang = reader.read_u8()?;
-        }
-        Ok(false)
-    }
-
-    /// Deserializes data from a byte slice into a value of type `T`.
-    ///
-    /// # Type Parameters
-    ///
-    /// * `T` - The target type to deserialize into. Must implement `Serializer` and `ForyDefault`.
-    ///
-    /// # Arguments
-    ///
-    /// * `bf` - The byte slice containing the serialized data.
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(T)` - The deserialized value on success.
-    /// * `Err(Error)` - An error if deserialization fails (e.g., invalid format, type mismatch).
-    ///
-    /// # Panics
-    ///
-    /// Panics in debug mode if there are unread bytes remaining after successful deserialization,
-    /// indicating a potential protocol violation.
-    ///
-    /// # Examples
-    ///
-    /// ```rust, ignore
-    /// use fory::Fory;
-    /// use fory::ForyObject;
-    ///
-    /// #[derive(ForyObject)]
-    /// struct Point { x: i32, y: i32 }
-    ///
-    /// let fory = Fory::default();
-    /// let point = Point { x: 10, y: 20 };
-    /// let bytes = fory.serialize(&point);
-    /// let deserialized: Point = fory.deserialize(&bytes).unwrap();
-    /// ```
-    pub fn deserialize<T: Serializer + ForyDefault>(&self, bf: &[u8]) -> Result<T, Error> {
-        let pool = self.read_context_pool.get_or_init(|| {
-            let type_resolver = self.type_resolver.clone();
-            let compatible = self.compatible;
-            let share_meta = self.share_meta;
-            let xlang = self.xlang;
-            let max_dyn_depth = self.max_dyn_depth;
-            let check_struct_version = self.check_struct_version;
-
-            let factory = move || {
-                let reader = Reader::new(&[]);
-                ReadContext::new(
-                    reader,
-                    type_resolver.clone(),
-                    compatible,
-                    share_meta,
-                    xlang,
-                    max_dyn_depth,
-                    check_struct_version,
-                )
-            };
-            Pool::new(factory)
-        });
-        let mut context = pool.get();
-        context.init(bf, self.max_dyn_depth);
-        let result = self.deserialize_with_context(&mut context);
-        if result.is_ok() {
-            assert_eq!(context.reader.slice_after_cursor().len(), 0);
-        }
-        context.reader.reset();
-        pool.put(context);
-        result
-    }
-
-    pub fn deserialize_with_context<T: Serializer + ForyDefault>(
-        &self,
-        context: &mut ReadContext,
-    ) -> Result<T, Error> {
-        let is_none = self.read_head(&mut context.reader)?;
-        if is_none {
-            return Ok(T::fory_default());
-        }
-        let mut bytes_to_skip = 0;
-        if context.is_compatible() {
-            let meta_offset = context.reader.read_i32()?;
-            if meta_offset != -1 {
-                bytes_to_skip = context.load_type_meta(meta_offset as usize)?;
-            }
-        }
-        let result = <T as Serializer>::fory_read(context, true, true);
-        if bytes_to_skip > 0 {
-            context.reader.skip(bytes_to_skip)?;
-        }
-        context.ref_reader.resolve_callbacks();
-        context.reset();
-        result
-    }
-
     /// Serializes a value of type `T` into a byte vector.
     ///
     /// # Type Parameters
@@ -519,8 +363,164 @@ impl Fory {
     /// let bytes = fory.serialize(&point);
     /// ```
     pub fn serialize<T: Serializer>(&self, record: &T) -> Result<Vec<u8>, Error> {
-        let pool = self.write_context_pool.get_or_init(|| {
-            let type_resolver = self.type_resolver.clone();
+        let pool = self.get_writer_pool()?;
+        pool.borrow_mut(
+            |context| match self.serialize_with_context(record, context) {
+                Ok(_) => {
+                    let result = context.writer.dump();
+                    context.writer.reset();
+                    Ok(result)
+                }
+                Err(err) => {
+                    context.writer.reset();
+                    Err(err)
+                }
+            },
+        )
+    }
+
+    /// Serializes a value of type `T` into the provided byte buffer.
+    ///
+    /// The serialized data is appended to the end of the buffer by default.
+    /// To write from a specific position, resize the buffer before calling this method.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - The type of the value to serialize. Must implement `Serializer`.
+    ///
+    /// # Arguments
+    ///
+    /// * `record` - A reference to the value to serialize.
+    /// * `buf` - A mutable reference to the byte buffer to append the serialized data to.
+    ///   The buffer will be resized as needed during serialization.
+    ///
+    /// # Returns
+    ///
+    /// The number of bytes written to the buffer on success, or an error if serialization fails.
+    ///
+    /// # Notes
+    ///
+    /// - Multiple `serialize_to` calls to the same buffer will append data sequentially.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage - appending to a buffer:
+    ///
+    /// ```rust, ignore
+    /// use fory_core::Fory;
+    /// use fory_derive::ForyObject;
+    ///
+    /// #[derive(ForyObject)]
+    /// struct Point {
+    ///     x: i32,
+    ///     y: i32,
+    /// }
+    ///
+    /// let fory = Fory::default();
+    /// let point = Point { x: 1, y: 2 };
+    ///
+    /// let mut buf = Vec::new();
+    /// let bytes_written = fory.serialize_to(&point, &mut buf).unwrap();
+    /// assert_eq!(bytes_written, buf.len());
+    /// ```
+    ///
+    /// Multiple serializations to the same buffer:
+    ///
+    /// ```rust, ignore
+    /// use fory_core::Fory;
+    /// use fory_derive::ForyObject;
+    ///
+    /// #[derive(ForyObject, PartialEq, Debug)]
+    /// struct Point {
+    ///     x: i32,
+    ///     y: i32,
+    /// }
+    ///
+    /// let fory = Fory::default();
+    /// let p1 = Point { x: 1, y: 2 };
+    /// let p2 = Point { x: -3, y: 4 };
+    ///
+    /// let mut buf = Vec::new();
+    ///
+    /// // First serialization
+    /// let len1 = fory.serialize_to(&p1, &mut buf).unwrap();
+    /// let offset1 = buf.len();
+    ///
+    /// // Second serialization - appends to existing data
+    /// let len2 = fory.serialize_to(&p2, &mut buf).unwrap();
+    /// let offset2 = buf.len();
+    ///
+    /// assert_eq!(offset1, len1);
+    /// assert_eq!(offset2, len1 + len2);
+    ///
+    /// // Deserialize both objects
+    /// let deserialized1: Point = fory.deserialize(&buf[0..offset1]).unwrap();
+    /// let deserialized2: Point = fory.deserialize(&buf[offset1..offset2]).unwrap();
+    /// assert_eq!(deserialized1, p1);
+    /// assert_eq!(deserialized2, p2);
+    /// ```
+    ///
+    /// Writing to a specific position using `resize`:
+    /// # Notes on `vec.resize()`
+    ///
+    /// When calling `vec.resize(n, 0)`, note that if `n` is smaller than the current length,
+    /// the buffer will be truncated (not shrunk in capacity). The capacity remains unchanged,
+    /// making subsequent writes efficient for buffer reuse patterns:
+    ///
+    /// ```rust, ignore
+    /// use fory_core::Fory;
+    /// use fory_derive::ForyObject;
+    ///
+    /// #[derive(ForyObject)]
+    /// struct Point {
+    ///     x: i32,
+    ///     y: i32,
+    /// }
+    ///
+    /// let fory = Fory::default();
+    /// let point = Point { x: 1, y: 2 };
+    ///
+    /// let mut buf = Vec::with_capacity(1024);
+    /// buf.resize(16, 0);  // Set length to 16 to append the write, capacity stays 1024
+    ///
+    /// let initial_capacity = buf.capacity();
+    /// fory.serialize_to(&point, &mut buf).unwrap();
+    ///
+    /// // Reset to smaller size to append the write - capacity unchanged
+    /// buf.resize(16, 0);
+    /// assert_eq!(buf.capacity(), initial_capacity);  // Capacity not shrunk
+    ///
+    /// // Reuse buffer efficiently without reallocation
+    /// fory.serialize_to(&point, &mut buf).unwrap();
+    /// assert_eq!(buf.capacity(), initial_capacity);  // Still no reallocation
+    /// ```
+    pub fn serialize_to<T: Serializer>(
+        &self,
+        record: &T,
+        buf: &mut Vec<u8>,
+    ) -> Result<usize, Error> {
+        let pool = self.get_writer_pool()?;
+        let start = buf.len();
+        pool.borrow_mut(|context| {
+            // Context go from pool would be 'static. but context hold the buffer through `writer` field, so we should make buffer live longer.
+            // After serializing, `detach_writer` will be called, the writer in context will be set to dangling pointer.
+            // So it's safe to make buf live to the end of this method.
+            let outlive_buffer = unsafe { mem::transmute::<&mut Vec<u8>, &mut Vec<u8>>(buf) };
+            context.attach_writer(Writer::from_buffer(outlive_buffer));
+            let result = self.serialize_with_context(record, context);
+            let written_size = context.writer.len() - start;
+            context.detach_writer();
+            match result {
+                Ok(_) => Ok(written_size),
+                Err(err) => Err(err),
+            }
+        })
+    }
+
+    #[inline(always)]
+    fn get_writer_pool(&self) -> Result<&Pool<Box<WriteContext<'static>>>, Error> {
+        let pool_result = self.write_context_pool.get_or_init(|| {
+            let type_resolver = self.type_resolver.build_final_type_resolver()?;
             let compatible = self.compatible;
             let share_meta = self.share_meta;
             let compress_string = self.compress_string;
@@ -528,31 +528,29 @@ impl Fory {
             let check_struct_version = self.check_struct_version;
 
             let factory = move || {
-                let writer = Writer::default();
-                WriteContext::new(
-                    writer,
+                Box::new(WriteContext::new(
                     type_resolver.clone(),
                     compatible,
                     share_meta,
                     compress_string,
                     xlang,
                     check_struct_version,
-                )
+                ))
             };
-            Pool::new(factory)
+            Ok(Pool::new(factory))
         });
-        let mut context = pool.get();
-        let result = self.serialize_with_context(record, &mut context)?;
-        context.writer.reset();
-        pool.put(context);
-        Ok(result)
+        pool_result
+            .as_ref()
+            .map_err(|e| Error::type_error(format!("Failed to build type resolver: {}", e)))
     }
 
-    pub fn serialize_with_context<T: Serializer>(
+    /// Serializes a value of type `T` into a byte vector.
+    #[inline(always)]
+    fn serialize_with_context<T: Serializer>(
         &self,
         record: &T,
         context: &mut WriteContext,
-    ) -> Result<Vec<u8>, Error> {
+    ) -> Result<(), Error> {
         let is_none = record.fory_is_none();
         self.write_head::<T>(is_none, &mut context.writer);
         let meta_start_offset = context.writer.len();
@@ -566,7 +564,7 @@ impl Fory {
             }
         }
         context.reset();
-        Ok(context.writer.dump())
+        Ok(())
     }
 
     /// Registers a struct type with a numeric type ID for serialization.
@@ -762,12 +760,231 @@ impl Fory {
     ) -> Result<(), Error> {
         self.type_resolver.register_generic_trait::<T>()
     }
-}
 
-pub fn write_data<T: Serializer>(this: &T, context: &mut WriteContext) -> Result<(), Error> {
-    T::fory_write_data(this, context)
-}
+    /// Writes the serialization header to the writer.
+    #[inline(always)]
+    pub fn write_head<T: Serializer>(&self, is_none: bool, writer: &mut Writer) {
+        const HEAD_SIZE: usize = 10;
+        writer.reserve(T::fory_reserved_space() + SIZE_OF_REF_AND_TYPE + HEAD_SIZE);
+        if self.xlang {
+            writer.write_u16(MAGIC_NUMBER);
+        }
+        #[cfg(target_endian = "big")]
+        let mut bitmap = 0;
+        #[cfg(target_endian = "little")]
+        let mut bitmap = IS_LITTLE_ENDIAN_FLAG;
+        if self.xlang {
+            bitmap |= IS_CROSS_LANGUAGE_FLAG;
+        }
+        if is_none {
+            bitmap |= IS_NULL_FLAG;
+        }
+        writer.write_u8(bitmap);
+        if is_none {
+            return;
+        }
+        if self.xlang {
+            writer.write_u8(Language::Rust as u8);
+        }
+    }
 
-pub fn read_data<T: Serializer + ForyDefault>(context: &mut ReadContext) -> Result<T, Error> {
-    T::fory_read_data(context)
+    /// Deserializes data from a byte slice into a value of type `T`.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - The target type to deserialize into. Must implement `Serializer` and `ForyDefault`.
+    ///
+    /// # Arguments
+    ///
+    /// * `bf` - The byte slice containing the serialized data.
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(T)` - The deserialized value on success.
+    /// * `Err(Error)` - An error if deserialization fails (e.g., invalid format, type mismatch).
+    ///
+    /// # Panics
+    ///
+    /// Panics in debug mode if there are unread bytes remaining after successful deserialization,
+    /// indicating a potential protocol violation.
+    ///
+    /// # Examples
+    ///
+    /// ```rust, ignore
+    /// use fory::Fory;
+    /// use fory::ForyObject;
+    ///
+    /// #[derive(ForyObject)]
+    /// struct Point { x: i32, y: i32 }
+    ///
+    /// let fory = Fory::default();
+    /// let point = Point { x: 10, y: 20 };
+    /// let bytes = fory.serialize(&point);
+    /// let deserialized: Point = fory.deserialize(&bytes).unwrap();
+    /// ```
+    pub fn deserialize<T: Serializer + ForyDefault>(&self, bf: &[u8]) -> Result<T, Error> {
+        let pool = self.get_read_pool()?;
+        pool.borrow_mut(|context| {
+            context.init(self.max_dyn_depth);
+            let outlive_buffer = unsafe { mem::transmute::<&[u8], &[u8]>(bf) };
+            context.attach_reader(Reader::new(outlive_buffer));
+            let result = self.deserialize_with_context(context);
+            context.detach_reader();
+            result
+        })
+    }
+
+    /// Deserializes data from a `Reader` into a value of type `T`.
+    ///
+    /// This method is the paired read operation for [`serialize_to`](Self::serialize_to).
+    /// It reads serialized data from the current position of the reader and automatically
+    /// advances the cursor to the end of the read data, making it suitable for reading
+    /// multiple objects sequentially from the same buffer.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - The target type to deserialize into. Must implement `Serializer` and `ForyDefault`.
+    ///
+    /// # Arguments
+    ///
+    /// * `reader` - A mutable reference to the `Reader` containing the serialized data.
+    ///   The reader's cursor will be advanced to the end of the deserialized data.
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(T)` - The deserialized value on success.
+    /// * `Err(Error)` - An error if deserialization fails (e.g., invalid format, type mismatch).
+    ///
+    /// # Notes
+    ///
+    /// - The reader's cursor is automatically updated after each successful read.
+    /// - This method is ideal for reading multiple objects from the same buffer sequentially.
+    /// - See [`serialize_to`](Self::serialize_to) for complete usage examples.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```rust, ignore
+    /// use fory_core::{Fory, Reader};
+    /// use fory_derive::ForyObject;
+    ///
+    /// #[derive(ForyObject)]
+    /// struct Point { x: i32, y: i32 }
+    ///
+    /// let fory = Fory::default();
+    /// let point = Point { x: 10, y: 20 };
+    ///
+    /// let mut buf = Vec::new();
+    /// fory.serialize_to(&point, &mut buf).unwrap();
+    ///
+    /// let mut reader = Reader::new(&buf);
+    /// let deserialized: Point = fory.deserialize_from(&mut reader).unwrap();
+    /// ```
+    pub fn deserialize_from<T: Serializer + ForyDefault>(
+        &self,
+        reader: &mut Reader,
+    ) -> Result<T, Error> {
+        let pool = self.get_read_pool()?;
+        pool.borrow_mut(|context| {
+            context.init(self.max_dyn_depth);
+            let outlive_buffer = unsafe { mem::transmute::<&[u8], &[u8]>(reader.bf) };
+            let mut new_reader = Reader::new(outlive_buffer);
+            new_reader.set_cursor(reader.cursor);
+            context.attach_reader(new_reader);
+            let result = self.deserialize_with_context(context);
+            let end = context.detach_reader().get_cursor();
+            reader.set_cursor(end);
+            result
+        })
+    }
+
+    #[inline(always)]
+    fn get_read_pool(&self) -> Result<&Pool<Box<ReadContext<'static>>>, Error> {
+        let pool_result = self.read_context_pool.get_or_init(|| {
+            let type_resolver = self.type_resolver.build_final_type_resolver()?;
+            let compatible = self.compatible;
+            let share_meta = self.share_meta;
+            let xlang = self.xlang;
+            let max_dyn_depth = self.max_dyn_depth;
+            let check_struct_version = self.check_struct_version;
+
+            let factory = move || {
+                Box::new(ReadContext::new(
+                    type_resolver.clone(),
+                    compatible,
+                    share_meta,
+                    xlang,
+                    max_dyn_depth,
+                    check_struct_version,
+                ))
+            };
+            Ok(Pool::new(factory))
+        });
+        pool_result
+            .as_ref()
+            .map_err(|e| Error::type_error(format!("Failed to build type resolver: {}", e)))
+    }
+
+    #[inline(always)]
+    fn deserialize_with_context<T: Serializer + ForyDefault>(
+        &self,
+        context: &mut ReadContext,
+    ) -> Result<T, Error> {
+        let is_none = self.read_head(&mut context.reader)?;
+        if is_none {
+            return Ok(T::fory_default());
+        }
+        let mut bytes_to_skip = 0;
+        if context.is_compatible() {
+            let meta_offset = context.reader.read_i32()?;
+            if meta_offset != -1 {
+                bytes_to_skip = context.load_type_meta(meta_offset as usize)?;
+            }
+        }
+        let result = <T as Serializer>::fory_read(context, true, true);
+        if bytes_to_skip > 0 {
+            context.reader.skip(bytes_to_skip)?;
+        }
+        context.ref_reader.resolve_callbacks();
+        context.reset();
+        result
+    }
+
+    #[inline(always)]
+    fn read_head(&self, reader: &mut Reader) -> Result<bool, Error> {
+        if self.xlang {
+            let magic_numer = reader.read_u16()?;
+            ensure!(
+                magic_numer == MAGIC_NUMBER,
+                Error::invalid_data(format!(
+                    "The fory xlang serialization must start with magic number {:X}. \
+                    Please check whether the serialization is based on the xlang protocol \
+                    and the data didn't corrupt.",
+                    MAGIC_NUMBER
+                ))
+            )
+        }
+        let bitmap = reader.read_u8()?;
+        let peer_is_xlang = (bitmap & IS_CROSS_LANGUAGE_FLAG) != 0;
+        ensure!(
+            self.xlang == peer_is_xlang,
+            Error::invalid_data("header bitmap mismatch at xlang bit")
+        );
+        let is_little_endian = (bitmap & IS_LITTLE_ENDIAN_FLAG) != 0;
+        ensure!(
+            is_little_endian,
+            Error::invalid_data(
+                "Big endian is not supported for now, please ensure peer machine is little endian."
+            )
+        );
+        let is_none = (bitmap & IS_NULL_FLAG) != 0;
+        if is_none {
+            return Ok(true);
+        }
+        if peer_is_xlang {
+            let _peer_lang = reader.read_u8()?;
+        }
+        Ok(false)
+    }
 }

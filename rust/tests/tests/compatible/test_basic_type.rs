@@ -16,9 +16,7 @@
 // under the License.
 
 use chrono::{NaiveDate, NaiveDateTime};
-use fory_core::buffer::{Reader, Writer};
-use fory_core::fory::Fory;
-use fory_core::resolver::context::{ReadContext, WriteContext};
+use fory_core::{fory::Fory, Reader};
 
 // primitive_val
 const BOOL_VAL: bool = true;
@@ -44,435 +42,373 @@ const INT64_ARRAY: [i64; 1] = [51];
 const FLOAT32_ARRAY: [f32; 1] = [52.0];
 const FLOAT64_ARRAY: [f64; 1] = [53.0];
 
-fn serialize_non_null(fory: &Fory, context: &mut WriteContext) {
-    fory.serialize_with_context(&BOOL_VAL, context).unwrap();
-    fory.serialize_with_context(&I8_VAL, context).unwrap();
-    fory.serialize_with_context(&I16_VAL, context).unwrap();
-    fory.serialize_with_context(&I32_VAL, context).unwrap();
-    fory.serialize_with_context(&I64_VAL, context).unwrap();
-    fory.serialize_with_context(&F32_VAL, context).unwrap();
-    fory.serialize_with_context(&F64_VAL, context).unwrap();
-    fory.serialize_with_context(&STR_LATIN1_VAL.to_string(), context)
+fn serialize_non_null(fory: &Fory) -> Vec<u8> {
+    let mut buf = Vec::new();
+    fory.serialize_to(&BOOL_VAL, &mut buf).unwrap();
+    fory.serialize_to(&I8_VAL, &mut buf).unwrap();
+    fory.serialize_to(&I16_VAL, &mut buf).unwrap();
+    fory.serialize_to(&I32_VAL, &mut buf).unwrap();
+    fory.serialize_to(&I64_VAL, &mut buf).unwrap();
+    fory.serialize_to(&F32_VAL, &mut buf).unwrap();
+    fory.serialize_to(&F64_VAL, &mut buf).unwrap();
+    fory.serialize_to(&STR_LATIN1_VAL.to_string(), &mut buf)
         .unwrap();
-    fory.serialize_with_context(&LOCAL_DATE_VAL, context)
+    fory.serialize_to(&LOCAL_DATE_VAL, &mut buf).unwrap();
+    fory.serialize_to(&TIMESTAMP_VAL, &mut buf).unwrap();
+    fory.serialize_to(&BOOL_ARRAY.to_vec(), &mut buf).unwrap();
+    fory.serialize_to(&INT8_ARRAY.to_vec(), &mut buf).unwrap();
+    fory.serialize_to(&INT16_ARRAY.to_vec(), &mut buf).unwrap();
+    fory.serialize_to(&INT32_ARRAY.to_vec(), &mut buf).unwrap();
+    fory.serialize_to(&INT64_ARRAY.to_vec(), &mut buf).unwrap();
+    fory.serialize_to(&FLOAT32_ARRAY.to_vec(), &mut buf)
         .unwrap();
-    fory.serialize_with_context(&TIMESTAMP_VAL, context)
+    fory.serialize_to(&FLOAT64_ARRAY.to_vec(), &mut buf)
         .unwrap();
-
-    fory.serialize_with_context(&BOOL_ARRAY.to_vec(), context)
-        .unwrap();
-    fory.serialize_with_context(&INT8_ARRAY.to_vec(), context)
-        .unwrap();
-    fory.serialize_with_context(&INT16_ARRAY.to_vec(), context)
-        .unwrap();
-    fory.serialize_with_context(&INT32_ARRAY.to_vec(), context)
-        .unwrap();
-    fory.serialize_with_context(&INT64_ARRAY.to_vec(), context)
-        .unwrap();
-    fory.serialize_with_context(&FLOAT32_ARRAY.to_vec(), context)
-        .unwrap();
-    fory.serialize_with_context(&FLOAT64_ARRAY.to_vec(), context)
-        .unwrap();
+    buf
 }
 
-fn serialize_nullable(fory: &Fory, context: &mut WriteContext) {
-    fory.serialize_with_context(&Some(BOOL_VAL), context)
+fn serialize_nullable(fory: &Fory) -> Vec<u8> {
+    let mut buf = Vec::new();
+    fory.serialize_to(&Some(BOOL_VAL), &mut buf).unwrap();
+    fory.serialize_to(&Some(I8_VAL), &mut buf).unwrap();
+    fory.serialize_to(&Some(I16_VAL), &mut buf).unwrap();
+    fory.serialize_to(&Some(I32_VAL), &mut buf).unwrap();
+    fory.serialize_to(&Some(I64_VAL), &mut buf).unwrap();
+    fory.serialize_to(&Some(F32_VAL), &mut buf).unwrap();
+    fory.serialize_to(&Some(F64_VAL), &mut buf).unwrap();
+    fory.serialize_to(&Some(STR_LATIN1_VAL.to_string()), &mut buf)
         .unwrap();
-    fory.serialize_with_context(&Some(I8_VAL), context).unwrap();
-    fory.serialize_with_context(&Some(I16_VAL), context)
+    fory.serialize_to(&Some(LOCAL_DATE_VAL), &mut buf).unwrap();
+    fory.serialize_to(&Some(TIMESTAMP_VAL), &mut buf).unwrap();
+    fory.serialize_to(&Some(BOOL_ARRAY.to_vec()), &mut buf)
         .unwrap();
-    fory.serialize_with_context(&Some(I32_VAL), context)
+    fory.serialize_to(&Some(INT8_ARRAY.to_vec()), &mut buf)
         .unwrap();
-    fory.serialize_with_context(&Some(I64_VAL), context)
+    fory.serialize_to(&Some(INT16_ARRAY.to_vec()), &mut buf)
         .unwrap();
-    fory.serialize_with_context(&Some(F32_VAL), context)
+    fory.serialize_to(&Some(INT32_ARRAY.to_vec()), &mut buf)
         .unwrap();
-    fory.serialize_with_context(&Some(F64_VAL), context)
+    fory.serialize_to(&Some(INT64_ARRAY.to_vec()), &mut buf)
         .unwrap();
-    fory.serialize_with_context(&Some(STR_LATIN1_VAL.to_string()), context)
+    fory.serialize_to(&Some(FLOAT32_ARRAY.to_vec()), &mut buf)
         .unwrap();
-    fory.serialize_with_context(&Some(LOCAL_DATE_VAL), context)
+    fory.serialize_to(&Some(FLOAT64_ARRAY.to_vec()), &mut buf)
         .unwrap();
-    fory.serialize_with_context(&Some(TIMESTAMP_VAL), context)
+    fory.serialize_to(&Option::<bool>::None, &mut buf).unwrap();
+    fory.serialize_to(&Option::<i8>::None, &mut buf).unwrap();
+    fory.serialize_to(&Option::<i16>::None, &mut buf).unwrap();
+    fory.serialize_to(&Option::<i32>::None, &mut buf).unwrap();
+    fory.serialize_to(&Option::<i64>::None, &mut buf).unwrap();
+    fory.serialize_to(&Option::<f32>::None, &mut buf).unwrap();
+    fory.serialize_to(&Option::<f64>::None, &mut buf).unwrap();
+    fory.serialize_to(&Option::<String>::None, &mut buf)
         .unwrap();
-
-    fory.serialize_with_context(&Some(BOOL_ARRAY.to_vec()), context)
+    fory.serialize_to(&Option::<NaiveDate>::None, &mut buf)
         .unwrap();
-    fory.serialize_with_context(&Some(INT8_ARRAY.to_vec()), context)
+    fory.serialize_to(&Option::<NaiveDateTime>::None, &mut buf)
         .unwrap();
-    fory.serialize_with_context(&Some(INT16_ARRAY.to_vec()), context)
+    fory.serialize_to(&Option::<Vec<bool>>::None, &mut buf)
         .unwrap();
-    fory.serialize_with_context(&Some(INT32_ARRAY.to_vec()), context)
+    fory.serialize_to(&Option::<Vec<i8>>::None, &mut buf)
         .unwrap();
-    fory.serialize_with_context(&Some(INT64_ARRAY.to_vec()), context)
+    fory.serialize_to(&Option::<Vec<i16>>::None, &mut buf)
         .unwrap();
-    fory.serialize_with_context(&Some(FLOAT32_ARRAY.to_vec()), context)
+    fory.serialize_to(&Option::<Vec<i32>>::None, &mut buf)
         .unwrap();
-    fory.serialize_with_context(&Some(FLOAT64_ARRAY.to_vec()), context)
+    fory.serialize_to(&Option::<Vec<i64>>::None, &mut buf)
         .unwrap();
-
-    fory.serialize_with_context(&Option::<bool>::None, context)
+    fory.serialize_to(&Option::<Vec<f32>>::None, &mut buf)
         .unwrap();
-    fory.serialize_with_context(&Option::<i8>::None, context)
+    fory.serialize_to(&Option::<Vec<f64>>::None, &mut buf)
         .unwrap();
-    fory.serialize_with_context(&Option::<i16>::None, context)
-        .unwrap();
-    fory.serialize_with_context(&Option::<i32>::None, context)
-        .unwrap();
-    fory.serialize_with_context(&Option::<i64>::None, context)
-        .unwrap();
-    fory.serialize_with_context(&Option::<f32>::None, context)
-        .unwrap();
-    fory.serialize_with_context(&Option::<f64>::None, context)
-        .unwrap();
-    fory.serialize_with_context(&Option::<String>::None, context)
-        .unwrap();
-    fory.serialize_with_context(&Option::<NaiveDate>::None, context)
-        .unwrap();
-    fory.serialize_with_context(&Option::<NaiveDateTime>::None, context)
-        .unwrap();
-
-    fory.serialize_with_context(&Option::<Vec<bool>>::None, context)
-        .unwrap();
-    fory.serialize_with_context(&Option::<Vec<i8>>::None, context)
-        .unwrap();
-    fory.serialize_with_context(&Option::<Vec<i16>>::None, context)
-        .unwrap();
-    fory.serialize_with_context(&Option::<Vec<i32>>::None, context)
-        .unwrap();
-    fory.serialize_with_context(&Option::<Vec<i64>>::None, context)
-        .unwrap();
-    fory.serialize_with_context(&Option::<Vec<f32>>::None, context)
-        .unwrap();
-    fory.serialize_with_context(&Option::<Vec<f64>>::None, context)
-        .unwrap();
+    buf
 }
 
-fn deserialize_non_null(fory: &Fory, context: &mut ReadContext, auto_conv: bool, to_end: bool) {
+fn deserialize_non_null(fory: &Fory, bins: Vec<u8>, auto_conv: bool) {
+    let mut reader = Reader::new(bins.as_slice());
     assert_eq!(
         BOOL_VAL,
-        fory.deserialize_with_context::<bool>(context).unwrap()
+        fory.deserialize_from::<bool>(&mut reader).unwrap()
     );
-    assert_eq!(
-        I8_VAL,
-        fory.deserialize_with_context::<i8>(context).unwrap()
-    );
-    assert_eq!(
-        I16_VAL,
-        fory.deserialize_with_context::<i16>(context).unwrap()
-    );
-    assert_eq!(
-        I32_VAL,
-        fory.deserialize_with_context::<i32>(context).unwrap()
-    );
-    assert_eq!(
-        I64_VAL,
-        fory.deserialize_with_context::<i64>(context).unwrap()
-    );
-    assert_eq!(
-        F32_VAL,
-        fory.deserialize_with_context::<f32>(context).unwrap()
-    );
-    assert_eq!(
-        F64_VAL,
-        fory.deserialize_with_context::<f64>(context).unwrap()
-    );
+    assert_eq!(I8_VAL, fory.deserialize_from::<i8>(&mut reader).unwrap());
+    assert_eq!(I16_VAL, fory.deserialize_from::<i16>(&mut reader).unwrap());
+    assert_eq!(I32_VAL, fory.deserialize_from::<i32>(&mut reader).unwrap());
+    assert_eq!(I64_VAL, fory.deserialize_from::<i64>(&mut reader).unwrap());
+    assert_eq!(F32_VAL, fory.deserialize_from::<f32>(&mut reader).unwrap());
+    assert_eq!(F64_VAL, fory.deserialize_from::<f64>(&mut reader).unwrap());
     assert_eq!(
         STR_LATIN1_VAL.to_string(),
-        fory.deserialize_with_context::<String>(context).unwrap()
+        fory.deserialize_from::<String>(&mut reader).unwrap()
     );
     assert_eq!(
         LOCAL_DATE_VAL,
-        fory.deserialize_with_context::<NaiveDate>(context).unwrap()
+        fory.deserialize_from::<NaiveDate>(&mut reader).unwrap()
     );
     assert_eq!(
         TIMESTAMP_VAL,
-        fory.deserialize_with_context::<NaiveDateTime>(context)
-            .unwrap()
+        fory.deserialize_from::<NaiveDateTime>(&mut reader).unwrap()
     );
 
     assert_eq!(
         BOOL_ARRAY.to_vec(),
-        fory.deserialize_with_context::<Vec<bool>>(context).unwrap()
+        fory.deserialize_from::<Vec<bool>>(&mut reader).unwrap()
     );
     assert_eq!(
         INT8_ARRAY.to_vec(),
-        fory.deserialize_with_context::<Vec<i8>>(context).unwrap()
+        fory.deserialize_from::<Vec<i8>>(&mut reader).unwrap()
     );
     assert_eq!(
         INT16_ARRAY.to_vec(),
-        fory.deserialize_with_context::<Vec<i16>>(context).unwrap()
+        fory.deserialize_from::<Vec<i16>>(&mut reader).unwrap()
     );
     assert_eq!(
         INT32_ARRAY.to_vec(),
-        fory.deserialize_with_context::<Vec<i32>>(context).unwrap()
+        fory.deserialize_from::<Vec<i32>>(&mut reader).unwrap()
     );
     assert_eq!(
         INT64_ARRAY.to_vec(),
-        fory.deserialize_with_context::<Vec<i64>>(context).unwrap()
+        fory.deserialize_from::<Vec<i64>>(&mut reader).unwrap()
     );
     assert_eq!(
         FLOAT32_ARRAY.to_vec(),
-        fory.deserialize_with_context::<Vec<f32>>(context).unwrap()
+        fory.deserialize_from::<Vec<f32>>(&mut reader).unwrap()
     );
     assert_eq!(
         FLOAT64_ARRAY.to_vec(),
-        fory.deserialize_with_context::<Vec<f64>>(context).unwrap()
+        fory.deserialize_from::<Vec<f64>>(&mut reader).unwrap()
     );
     if auto_conv {
         assert_eq!(
             bool::default(),
-            fory.deserialize_with_context::<bool>(context).unwrap()
+            fory.deserialize_from::<bool>(&mut reader).unwrap()
         );
         assert_eq!(
             i8::default(),
-            fory.deserialize_with_context::<i8>(context).unwrap()
+            fory.deserialize_from::<i8>(&mut reader).unwrap()
         );
         assert_eq!(
             i16::default(),
-            fory.deserialize_with_context::<i16>(context).unwrap()
+            fory.deserialize_from::<i16>(&mut reader).unwrap()
         );
         assert_eq!(
             i32::default(),
-            fory.deserialize_with_context::<i32>(context).unwrap()
+            fory.deserialize_from::<i32>(&mut reader).unwrap()
         );
         assert_eq!(
             i64::default(),
-            fory.deserialize_with_context::<i64>(context).unwrap()
+            fory.deserialize_from::<i64>(&mut reader).unwrap()
         );
         assert_eq!(
             f32::default(),
-            fory.deserialize_with_context::<f32>(context).unwrap()
+            fory.deserialize_from::<f32>(&mut reader).unwrap()
         );
         assert_eq!(
             f64::default(),
-            fory.deserialize_with_context::<f64>(context).unwrap()
+            fory.deserialize_from::<f64>(&mut reader).unwrap()
         );
         assert_eq!(
             String::default(),
-            fory.deserialize_with_context::<String>(context).unwrap()
+            fory.deserialize_from::<String>(&mut reader).unwrap()
         );
         assert_eq!(
             NaiveDate::default(),
-            fory.deserialize_with_context::<NaiveDate>(context).unwrap()
+            fory.deserialize_from::<NaiveDate>(&mut reader).unwrap()
         );
         assert_eq!(
             NaiveDateTime::default(),
-            fory.deserialize_with_context::<NaiveDateTime>(context)
-                .unwrap()
+            fory.deserialize_from::<NaiveDateTime>(&mut reader).unwrap()
         );
 
         assert_eq!(
             Vec::<bool>::default(),
-            fory.deserialize_with_context::<Vec<bool>>(context).unwrap()
+            fory.deserialize_from::<Vec<bool>>(&mut reader).unwrap()
         );
         assert_eq!(
             Vec::<i8>::default(),
-            fory.deserialize_with_context::<Vec<i8>>(context).unwrap()
+            fory.deserialize_from::<Vec<i8>>(&mut reader).unwrap()
         );
         assert_eq!(
             Vec::<i16>::default(),
-            fory.deserialize_with_context::<Vec<i16>>(context).unwrap()
+            fory.deserialize_from::<Vec<i16>>(&mut reader).unwrap()
         );
         assert_eq!(
             Vec::<i32>::default(),
-            fory.deserialize_with_context::<Vec<i32>>(context).unwrap()
+            fory.deserialize_from::<Vec<i32>>(&mut reader).unwrap()
         );
         assert_eq!(
             Vec::<i64>::default(),
-            fory.deserialize_with_context::<Vec<i64>>(context).unwrap()
+            fory.deserialize_from::<Vec<i64>>(&mut reader).unwrap()
         );
         assert_eq!(
             Vec::<f32>::default(),
-            fory.deserialize_with_context::<Vec<f32>>(context).unwrap()
+            fory.deserialize_from::<Vec<f32>>(&mut reader).unwrap()
         );
         assert_eq!(
             Vec::<f64>::default(),
-            fory.deserialize_with_context::<Vec<f64>>(context).unwrap()
+            fory.deserialize_from::<Vec<f64>>(&mut reader).unwrap()
         );
-    }
-    if to_end {
-        assert_eq!(context.reader.slice_after_cursor().len(), 0);
     }
 }
 
-fn deserialize_nullable(fory: &Fory, context: &mut ReadContext, auto_conv: bool, to_end: bool) {
+fn deserialize_nullable(fory: &Fory, bins: Vec<u8>, auto_conv: bool) {
+    let mut reader = Reader::new(bins.as_slice());
     assert_eq!(
         Some(BOOL_VAL),
-        fory.deserialize_with_context::<Option<bool>>(context)
-            .unwrap()
+        fory.deserialize_from::<Option<bool>>(&mut reader).unwrap()
     );
     assert_eq!(
         Some(I8_VAL),
-        fory.deserialize_with_context::<Option<i8>>(context)
-            .unwrap()
+        fory.deserialize_from::<Option<i8>>(&mut reader).unwrap()
     );
     assert_eq!(
         Some(I16_VAL),
-        fory.deserialize_with_context::<Option<i16>>(context)
-            .unwrap()
+        fory.deserialize_from::<Option<i16>>(&mut reader).unwrap()
     );
     assert_eq!(
         Some(I32_VAL),
-        fory.deserialize_with_context::<Option<i32>>(context)
-            .unwrap()
+        fory.deserialize_from::<Option<i32>>(&mut reader).unwrap()
     );
     assert_eq!(
         Some(I64_VAL),
-        fory.deserialize_with_context::<Option<i64>>(context)
-            .unwrap()
+        fory.deserialize_from::<Option<i64>>(&mut reader).unwrap()
     );
     assert_eq!(
         Some(F32_VAL),
-        fory.deserialize_with_context::<Option<f32>>(context)
-            .unwrap()
+        fory.deserialize_from::<Option<f32>>(&mut reader).unwrap()
     );
     assert_eq!(
         Some(F64_VAL),
-        fory.deserialize_with_context::<Option<f64>>(context)
-            .unwrap()
+        fory.deserialize_from::<Option<f64>>(&mut reader).unwrap()
     );
     assert_eq!(
         Some(STR_LATIN1_VAL.to_string()),
-        fory.deserialize_with_context::<Option<String>>(context)
+        fory.deserialize_from::<Option<String>>(&mut reader)
             .unwrap()
     );
     assert_eq!(
         Some(LOCAL_DATE_VAL),
-        fory.deserialize_with_context::<Option<NaiveDate>>(context)
+        fory.deserialize_from::<Option<NaiveDate>>(&mut reader)
             .unwrap()
     );
     assert_eq!(
         Some(TIMESTAMP_VAL),
-        fory.deserialize_with_context::<Option<NaiveDateTime>>(context)
+        fory.deserialize_from::<Option<NaiveDateTime>>(&mut reader)
             .unwrap()
     );
-
     assert_eq!(
         Some(BOOL_ARRAY.to_vec()),
-        fory.deserialize_with_context::<Option<Vec<bool>>>(context)
+        fory.deserialize_from::<Option<Vec<bool>>>(&mut reader)
             .unwrap()
     );
     assert_eq!(
         Some(INT8_ARRAY.to_vec()),
-        fory.deserialize_with_context::<Option<Vec<i8>>>(context)
+        fory.deserialize_from::<Option<Vec<i8>>>(&mut reader)
             .unwrap()
     );
     assert_eq!(
         Some(INT16_ARRAY.to_vec()),
-        fory.deserialize_with_context::<Option<Vec<i16>>>(context)
+        fory.deserialize_from::<Option<Vec<i16>>>(&mut reader)
             .unwrap()
     );
     assert_eq!(
         Some(INT32_ARRAY.to_vec()),
-        fory.deserialize_with_context::<Option<Vec<i32>>>(context)
+        fory.deserialize_from::<Option<Vec<i32>>>(&mut reader)
             .unwrap()
     );
     assert_eq!(
         Some(INT64_ARRAY.to_vec()),
-        fory.deserialize_with_context::<Option<Vec<i64>>>(context)
+        fory.deserialize_from::<Option<Vec<i64>>>(&mut reader)
             .unwrap()
     );
     assert_eq!(
         Some(FLOAT32_ARRAY.to_vec()),
-        fory.deserialize_with_context::<Option<Vec<f32>>>(context)
+        fory.deserialize_from::<Option<Vec<f32>>>(&mut reader)
             .unwrap()
     );
     assert_eq!(
         Some(FLOAT64_ARRAY.to_vec()),
-        fory.deserialize_with_context::<Option<Vec<f64>>>(context)
+        fory.deserialize_from::<Option<Vec<f64>>>(&mut reader)
             .unwrap()
     );
     if !auto_conv {
         assert_eq!(
             None,
-            fory.deserialize_with_context::<Option<bool>>(context)
+            fory.deserialize_from::<Option<bool>>(&mut reader).unwrap()
+        );
+        assert_eq!(
+            None,
+            fory.deserialize_from::<Option<i8>>(&mut reader).unwrap()
+        );
+        assert_eq!(
+            None,
+            fory.deserialize_from::<Option<i16>>(&mut reader).unwrap()
+        );
+        assert_eq!(
+            None,
+            fory.deserialize_from::<Option<i32>>(&mut reader).unwrap()
+        );
+        assert_eq!(
+            None,
+            fory.deserialize_from::<Option<i64>>(&mut reader).unwrap()
+        );
+        assert_eq!(
+            None,
+            fory.deserialize_from::<Option<f32>>(&mut reader).unwrap()
+        );
+        assert_eq!(
+            None,
+            fory.deserialize_from::<Option<f64>>(&mut reader).unwrap()
+        );
+        assert_eq!(
+            None,
+            fory.deserialize_from::<Option<String>>(&mut reader)
                 .unwrap()
         );
         assert_eq!(
             None,
-            fory.deserialize_with_context::<Option<i8>>(context)
+            fory.deserialize_from::<Option<NaiveDate>>(&mut reader)
                 .unwrap()
         );
         assert_eq!(
             None,
-            fory.deserialize_with_context::<Option<i16>>(context)
+            fory.deserialize_from::<Option<NaiveDateTime>>(&mut reader)
                 .unwrap()
         );
         assert_eq!(
             None,
-            fory.deserialize_with_context::<Option<i32>>(context)
+            fory.deserialize_from::<Option<Vec<bool>>>(&mut reader)
                 .unwrap()
         );
         assert_eq!(
             None,
-            fory.deserialize_with_context::<Option<i64>>(context)
+            fory.deserialize_from::<Option<Vec<i8>>>(&mut reader)
                 .unwrap()
         );
         assert_eq!(
             None,
-            fory.deserialize_with_context::<Option<f32>>(context)
+            fory.deserialize_from::<Option<Vec<i16>>>(&mut reader)
                 .unwrap()
         );
         assert_eq!(
             None,
-            fory.deserialize_with_context::<Option<f64>>(context)
+            fory.deserialize_from::<Option<Vec<i32>>>(&mut reader)
                 .unwrap()
         );
         assert_eq!(
             None,
-            fory.deserialize_with_context::<Option<String>>(context)
+            fory.deserialize_from::<Option<Vec<i64>>>(&mut reader)
                 .unwrap()
         );
         assert_eq!(
             None,
-            fory.deserialize_with_context::<Option<NaiveDate>>(context)
+            fory.deserialize_from::<Option<Vec<f32>>>(&mut reader)
                 .unwrap()
         );
         assert_eq!(
             None,
-            fory.deserialize_with_context::<Option<NaiveDateTime>>(context)
+            fory.deserialize_from::<Option<Vec<f64>>>(&mut reader)
                 .unwrap()
         );
-
-        assert_eq!(
-            None,
-            fory.deserialize_with_context::<Option<Vec<bool>>>(context)
-                .unwrap()
-        );
-        assert_eq!(
-            None,
-            fory.deserialize_with_context::<Option<Vec<i8>>>(context)
-                .unwrap()
-        );
-        assert_eq!(
-            None,
-            fory.deserialize_with_context::<Option<Vec<i16>>>(context)
-                .unwrap()
-        );
-        assert_eq!(
-            None,
-            fory.deserialize_with_context::<Option<Vec<i32>>>(context)
-                .unwrap()
-        );
-        assert_eq!(
-            None,
-            fory.deserialize_with_context::<Option<Vec<i64>>>(context)
-                .unwrap()
-        );
-        assert_eq!(
-            None,
-            fory.deserialize_with_context::<Option<Vec<f32>>>(context)
-                .unwrap()
-        );
-        assert_eq!(
-            None,
-            fory.deserialize_with_context::<Option<Vec<f64>>>(context)
-                .unwrap()
-        );
-    }
-    if to_end {
-        assert_eq!(context.reader.slice_after_cursor().len(), 0);
     }
 }
 
@@ -481,14 +417,9 @@ fn deserialize_nullable(fory: &Fory, context: &mut ReadContext, auto_conv: bool,
 fn basic() {
     let fory = Fory::default().compatible(true);
     // serialize
-    let writer = Writer::default();
-    let mut write_context = WriteContext::new_from_fory(writer, &fory);
-    serialize_non_null(&fory, &mut write_context);
+    let bins = serialize_non_null(&fory);
     // deserialize
-    let bytes = write_context.writer.dump();
-    let reader = Reader::new(bytes.as_slice());
-    let mut read_context = ReadContext::new_from_fory(reader, &fory);
-    deserialize_non_null(&fory, &mut read_context, false, true);
+    deserialize_non_null(&fory, bins, false);
 }
 
 // nullable <-> nullable
@@ -496,14 +427,9 @@ fn basic() {
 fn basic_nullable() {
     let fory = Fory::default().compatible(true);
     // serialize
-    let writer = Writer::default();
-    let mut write_context = WriteContext::new_from_fory(writer, &fory);
-    serialize_nullable(&fory, &mut write_context);
+    let bins = serialize_nullable(&fory);
     // deserialize
-    let bytes = write_context.writer.dump();
-    let reader = Reader::new(bytes.as_slice());
-    let mut read_context = ReadContext::new_from_fory(reader, &fory);
-    deserialize_nullable(&fory, &mut read_context, false, true);
+    deserialize_nullable(&fory, bins, false);
 }
 
 // non-null -> nullable -> non-null
@@ -511,21 +437,10 @@ fn basic_nullable() {
 fn auto_conv() {
     let fory = Fory::default().compatible(true);
     // serialize_non-null
-    let writer = Writer::default();
-    let mut write_context = WriteContext::new_from_fory(writer, &fory);
-    serialize_non_null(&fory, &mut write_context);
-    // deserialize_nullable
-    let bytes = write_context.writer.dump();
-    let reader = Reader::new(bytes.as_slice());
-    let mut read_context: ReadContext = ReadContext::new_from_fory(reader, &fory);
-    deserialize_nullable(&fory, &mut read_context, true, true);
+    let bins = serialize_non_null(&fory);
+    deserialize_nullable(&fory, bins, true);
     // serialize_nullable
-    let writer = Writer::default();
-    let mut write_context = WriteContext::new_from_fory(writer, &fory);
-    serialize_nullable(&fory, &mut write_context);
+    let bins = serialize_nullable(&fory);
     // deserialize_non-null
-    let bytes = write_context.writer.dump();
-    let reader = Reader::new(bytes.as_slice());
-    let mut read_context = ReadContext::new_from_fory(reader, &fory);
-    deserialize_non_null(&fory, &mut read_context, true, true);
+    deserialize_non_null(&fory, bins, true);
 }

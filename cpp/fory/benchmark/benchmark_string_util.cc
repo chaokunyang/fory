@@ -453,7 +453,8 @@ static void BM_Utf16HasSurrogatePairs_FORY_Size64(benchmark::State &state) {
 
 BENCHMARK(BM_Utf16HasSurrogatePairs_FORY_Size64);
 
-static void BM_Utf16HasSurrogatePairs_BaseLine_Size128(benchmark::State &state) {
+static void
+BM_Utf16HasSurrogatePairs_BaseLine_Size128(benchmark::State &state) {
   for (auto _ : state) {
     for (const std::u16string &str : test_utf16_strings_medium_128) {
       bool result = utf16HasSurrogatePairs_BaseLine(str);
@@ -475,7 +476,8 @@ static void BM_Utf16HasSurrogatePairs_FORY_Size128(benchmark::State &state) {
 
 BENCHMARK(BM_Utf16HasSurrogatePairs_FORY_Size128);
 
-static void BM_Utf16HasSurrogatePairs_BaseLine_Size256(benchmark::State &state) {
+static void
+BM_Utf16HasSurrogatePairs_BaseLine_Size256(benchmark::State &state) {
   for (auto _ : state) {
     for (const std::u16string &str : test_utf16_strings_medium_256) {
       bool result = utf16HasSurrogatePairs_BaseLine(str);
@@ -497,7 +499,8 @@ static void BM_Utf16HasSurrogatePairs_FORY_Size256(benchmark::State &state) {
 
 BENCHMARK(BM_Utf16HasSurrogatePairs_FORY_Size256);
 
-static void BM_Utf16HasSurrogatePairs_BaseLine_Size512(benchmark::State &state) {
+static void
+BM_Utf16HasSurrogatePairs_BaseLine_Size512(benchmark::State &state) {
   for (auto _ : state) {
     for (const std::u16string &str : test_utf16_strings_large_512) {
       bool result = utf16HasSurrogatePairs_BaseLine(str);

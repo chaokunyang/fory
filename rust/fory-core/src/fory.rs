@@ -839,6 +839,53 @@ impl Fory {
         })
     }
 
+    /// Deserializes data from a `Reader` into a value of type `T`.
+    ///
+    /// This method is the paired read operation for [`serialize_to`](Self::serialize_to).
+    /// It reads serialized data from the current position of the reader and automatically
+    /// advances the cursor to the end of the read data, making it suitable for reading
+    /// multiple objects sequentially from the same buffer.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - The target type to deserialize into. Must implement `Serializer` and `ForyDefault`.
+    ///
+    /// # Arguments
+    ///
+    /// * `reader` - A mutable reference to the `Reader` containing the serialized data.
+    ///   The reader's cursor will be advanced to the end of the deserialized data.
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(T)` - The deserialized value on success.
+    /// * `Err(Error)` - An error if deserialization fails (e.g., invalid format, type mismatch).
+    ///
+    /// # Notes
+    ///
+    /// - The reader's cursor is automatically updated after each successful read.
+    /// - This method is ideal for reading multiple objects from the same buffer sequentially.
+    /// - See [`serialize_to`](Self::serialize_to) for complete usage examples.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```rust, ignore
+    /// use fory_core::{Fory, Reader};
+    /// use fory_derive::ForyObject;
+    ///
+    /// #[derive(ForyObject)]
+    /// struct Point { x: i32, y: i32 }
+    ///
+    /// let fory = Fory::default();
+    /// let point = Point { x: 10, y: 20 };
+    ///
+    /// let mut buf = Vec::new();
+    /// fory.serialize_to(&point, &mut buf).unwrap();
+    ///
+    /// let mut reader = Reader::new(&buf);
+    /// let deserialized: Point = fory.deserialize_from(&mut reader).unwrap();
+    /// ```
     pub fn deserialize_from<T: Serializer + ForyDefault>(
         &self,
         reader: &mut Reader,

@@ -385,6 +385,121 @@ impl Fory {
         }
     }
 
+    /// Serializes a value of type `T` into the provided byte buffer.
+    ///
+    /// The serialized data is appended to the end of the buffer by default.
+    /// To write from a specific position, resize the buffer before calling this method.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - The type of the value to serialize. Must implement `Serializer`.
+    ///
+    /// # Arguments
+    ///
+    /// * `record` - A reference to the value to serialize.
+    /// * `buf` - A mutable reference to the byte buffer to append the serialized data to.
+    ///   The buffer will be resized as needed during serialization.
+    ///
+    /// # Returns
+    ///
+    /// The number of bytes written to the buffer on success, or an error if serialization fails.
+    ///
+    /// # Notes
+    ///
+    /// - Multiple `serialize_to` calls to the same buffer will append data sequentially.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage - appending to a buffer:
+    ///
+    /// ```rust, ignore
+    /// use fory_core::Fory;
+    /// use fory_derive::ForyObject;
+    ///
+    /// #[derive(ForyObject)]
+    /// struct Point {
+    ///     x: i32,
+    ///     y: i32,
+    /// }
+    ///
+    /// let fory = Fory::default();
+    /// let point = Point { x: 1, y: 2 };
+    ///
+    /// let mut buf = Vec::new();
+    /// let bytes_written = fory.serialize_to(&point, &mut buf).unwrap();
+    /// assert_eq!(bytes_written, buf.len());
+    /// ```
+    ///
+    /// Multiple serializations to the same buffer:
+    ///
+    /// ```rust, ignore
+    /// use fory_core::Fory;
+    /// use fory_derive::ForyObject;
+    ///
+    /// #[derive(ForyObject, PartialEq, Debug)]
+    /// struct Point {
+    ///     x: i32,
+    ///     y: i32,
+    /// }
+    ///
+    /// let fory = Fory::default();
+    /// let p1 = Point { x: 1, y: 2 };
+    /// let p2 = Point { x: -3, y: 4 };
+    ///
+    /// let mut buf = Vec::new();
+    ///
+    /// // First serialization
+    /// let len1 = fory.serialize_to(&p1, &mut buf).unwrap();
+    /// let offset1 = buf.len();
+    ///
+    /// // Second serialization - appends to existing data
+    /// let len2 = fory.serialize_to(&p2, &mut buf).unwrap();
+    /// let offset2 = buf.len();
+    ///
+    /// assert_eq!(offset1, len1);
+    /// assert_eq!(offset2, len1 + len2);
+    ///
+    /// // Deserialize both objects
+    /// let deserialized1: Point = fory.deserialize(&buf[0..offset1]).unwrap();
+    /// let deserialized2: Point = fory.deserialize(&buf[offset1..offset2]).unwrap();
+    /// assert_eq!(deserialized1, p1);
+    /// assert_eq!(deserialized2, p2);
+    /// ```
+    ///
+    /// Writing to a specific position using `resize`:
+    /// # Notes on `vec.resize()`
+    ///
+    /// When calling `vec.resize(n, 0)`, note that if `n` is smaller than the current length,
+    /// the buffer will be truncated (not shrunk in capacity). The capacity remains unchanged,
+    /// making subsequent writes efficient for buffer reuse patterns:
+    ///
+    /// ```rust, ignore
+    /// use fory_core::Fory;
+    /// use fory_derive::ForyObject;
+    ///
+    /// #[derive(ForyObject)]
+    /// struct Point {
+    ///     x: i32,
+    ///     y: i32,
+    /// }
+    ///
+    /// let fory = Fory::default();
+    /// let point = Point { x: 1, y: 2 };
+    ///
+    /// let mut buf = Vec::with_capacity(1024);
+    /// buf.resize(16, 0);  // Set length to 16 to append the write, capacity stays 1024
+    ///
+    /// let initial_capacity = buf.capacity();
+    /// fory.serialize_to(&point, &mut buf).unwrap();
+    ///
+    /// // Reset to smaller size to append the write - capacity unchanged
+    /// buf.resize(16, 0);
+    /// assert_eq!(buf.capacity(), initial_capacity);  // Capacity not shrunk
+    ///
+    /// // Reuse buffer efficiently without reallocation
+    /// fory.serialize_to(&point, &mut buf).unwrap();
+    /// assert_eq!(buf.capacity(), initial_capacity);  // Still no reallocation
+    /// ```
     pub fn serialize_to<T: Serializer>(
         &self,
         record: &T,

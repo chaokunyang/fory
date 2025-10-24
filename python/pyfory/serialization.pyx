@@ -551,6 +551,9 @@ cdef class TypeResolver:
         if type_id > 0 and (self.fory.language == Language.PYTHON or not IsNamespacedType(type_id)):
             self._c_registered_id_to_type_info[type_id] = <PyObject *> typeinfo
         self._c_types_info[<uintptr_t> <PyObject *> typeinfo.cls] = <PyObject *> typeinfo
+        # Resize if load factor >= 0.4 (using integer arithmetic: size/capacity >= 4/10)
+        if self._c_types_info.size() * 10 >= self._c_types_info.bucket_count() * 5:
+            self._c_types_info.rehash(self._c_types_info.size() * 2)
         if typeinfo.typename_bytes is not None:
             self._load_bytes_to_typeinfo(type_id, typeinfo.namespace_bytes, typeinfo.typename_bytes)
 

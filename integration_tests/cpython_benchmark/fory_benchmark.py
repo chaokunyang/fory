@@ -18,7 +18,6 @@
 import argparse
 from dataclasses import dataclass
 import datetime
-import os
 import random
 import sys
 from typing import Any, Dict, List
@@ -117,21 +116,21 @@ class ComplexObject1:
     f1: Any = None
     f2: str = None
     f3: List[str] = None
-    f4: Dict[pyfory.Int8Type, pyfory.Int32Type] = None
-    f5: pyfory.Int8Type = None
-    f6: pyfory.Int16Type = None
-    f7: pyfory.Int32Type = None
-    f8: pyfory.Int64Type = None
-    f9: pyfory.Float32Type = None
-    f10: pyfory.Float64Type = None
-    f11: pyfory.Int16ArrayType = None
-    f12: List[pyfory.Int16Type] = None
+    f4: Dict[pyfory.int8, pyfory.int32] = None
+    f5: pyfory.int8 = None
+    f6: pyfory.int16 = None
+    f7: pyfory.int32 = None
+    f8: pyfory.int64 = None
+    f9: pyfory.float32 = None
+    f10: pyfory.float64 = None
+    f11: pyfory.int16_array = None
+    f12: List[pyfory.int16] = None
 
 
 @dataclass
 class ComplexObject2:
     f1: Any
-    f2: Dict[pyfory.Int8Type, pyfory.Int32Type]
+    f2: Dict[pyfory.int8, pyfory.int32]
 
 
 COMPLEX_OBJECT = ComplexObject1(
@@ -148,23 +147,30 @@ COMPLEX_OBJECT = ComplexObject1(
     f11=[-1, 4],
 )
 
+# Global fory instances
+fory_with_ref = pyfory.Fory(ref=True)
+fory_without_ref = pyfory.Fory(ref=False)
 
-def fory_object(xlang, ref, obj):
-    fory = pyfory.Fory(xlang=xlang, ref=ref)
+# Register all custom types on both instances
+for fory_instance in (fory_with_ref, fory_without_ref):
+    fory_instance.register_type(ComplexObject1)
+    fory_instance.register_type(ComplexObject2)
+
+
+def fory_object(ref, obj):
+    fory = fory_with_ref if ref else fory_without_ref
     binary = fory.serialize(obj)
     fory.deserialize(binary)
 
 
-def fory_data_class(xlang, ref, obj, register_callable):
-    fory = pyfory.Fory(xlang=xlang, ref=ref)
-    register_callable(fory)
+def fory_data_class(ref, obj):
+    fory = fory_with_ref if ref else fory_without_ref
     binary = fory.serialize(obj)
     fory.deserialize(binary)
 
 
 def benchmark_args():
     parser = argparse.ArgumentParser(description="Fory Benchmark")
-    parser.add_argument("--xlang", action="store_true", default=False)
     parser.add_argument("--no-ref", action="store_true", default=False)
     parser.add_argument("--disable-cython", action="store_true", default=False)
 
@@ -179,57 +185,18 @@ def benchmark_args():
 def micro_benchmark():
     args = benchmark_args()
     runner = pyperf.Runner()
-    if args and args.disable_cython:
-        os.environ["ENABLE_FORY_CYTHON_SERIALIZATION"] = "0"
-        sys.argv += ["--inherit-environ", "ENABLE_FORY_CYTHON_SERIALIZATION"]
     runner.parse_args()
-    xlang = args.xlang
-    runner.bench_func("fory_dict", fory_object, xlang, not args.no_ref, DICT)
-    runner.bench_func(
-        "fory_large_dict", fory_object, xlang, not args.no_ref, LARGE_DICT
-    )
-    runner.bench_func(
-        "fory_dict_group", fory_object, xlang, not args.no_ref, DICT_GROUP
-    )
-    runner.bench_func("fory_tuple", fory_object, xlang, not args.no_ref, TUPLE)
-    runner.bench_func(
-        "fory_large_tuple", fory_object, xlang, not args.no_ref, LARGE_TUPLE
-    )
-    runner.bench_func(
-        "fory_large_float_tuple",
-        fory_object,
-        xlang,
-        not args.no_ref,
-        LARGE_FLOAT_TUPLE,
-    )
-    runner.bench_func(
-        "fory_large_boolean_tuple",
-        fory_object,
-        xlang,
-        not args.no_ref,
-        LARGE_BOOLEAN_TUPLE,
-    )
-    runner.bench_func("fory_list", fory_object, xlang, not args.no_ref, LIST)
-    runner.bench_func(
-        "fory_large_list", fory_object, xlang, not args.no_ref, LARGE_LIST
-    )
-
-    def register_complex(fory):
-        if args.xlang:
-            fory.register_type(ComplexObject1, typename="example.ComplexObject1")
-            fory.register_type(ComplexObject2, typename="example.ComplexObject2")
-        else:
-            fory.register_type(ComplexObject1)
-            fory.register_type(ComplexObject2)
-
-    runner.bench_func(
-        "fory_complex",
-        fory_data_class,
-        xlang,
-        not args.no_ref,
-        COMPLEX_OBJECT,
-        register_complex,
-    )
+    ref = not args.no_ref
+    runner.bench_func("fory_dict", fory_object, ref, DICT)
+    runner.bench_func("fory_large_dict", fory_object, ref, LARGE_DICT)
+    runner.bench_func("fory_dict_group", fory_object, ref, DICT_GROUP)
+    runner.bench_func("fory_tuple", fory_object, ref, TUPLE)
+    runner.bench_func("fory_large_tuple", fory_object, ref, LARGE_TUPLE)
+    runner.bench_func("fory_large_float_tuple", fory_object, ref, LARGE_FLOAT_TUPLE)
+    runner.bench_func("fory_large_boolean_tuple", fory_object, ref, LARGE_BOOLEAN_TUPLE)
+    runner.bench_func("fory_list", fory_object, ref, LIST)
+    runner.bench_func("fory_large_list", fory_object, ref, LARGE_LIST)
+    runner.bench_func("fory_complex", fory_data_class, ref, COMPLEX_OBJECT)
 
 
 if __name__ == "__main__":

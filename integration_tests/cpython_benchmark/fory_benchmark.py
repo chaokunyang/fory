@@ -36,9 +36,6 @@ Benchmark Options:
     --no-ref
         Disable reference tracking for Fory (enabled by default)
 
-    --disable-cython
-        Use pure Python mode instead of Cython serialization for Fory
-
     --warmup N
         Number of warmup iterations (default: 3)
 

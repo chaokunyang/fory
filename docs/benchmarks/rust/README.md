@@ -1,4 +1,4 @@
-# Performance Comparison Report
+## Performance Comparison Report
 
 _Generated on 2025-10-26 18:19:37_
 

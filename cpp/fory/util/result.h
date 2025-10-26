@@ -60,8 +60,7 @@ namespace fory {
 ///     return 42;
 /// }
 /// ```
-template <typename E>
-class Unexpected {
+template <typename E> class Unexpected {
 public:
   explicit Unexpected(const E &e) : error_(e) {}
   explicit Unexpected(E &&e) : error_(std::move(e)) {}
@@ -78,8 +77,8 @@ private:
 /// Result<T, E> - A type that represents either success (T) or failure (E)
 ///
 /// This is a zero-cost abstraction similar to C++23 std::expected<T, E>.
-/// It stores either a value of type T (on success) or an error of type E (on failure),
-/// using a union for efficient storage with no heap allocation.
+/// It stores either a value of type T (on success) or an error of type E (on
+/// failure), using a union for efficient storage with no heap allocation.
 ///
 /// The implementation uses manual lifetime management via placement new and
 /// explicit destructor calls to ensure zero-cost abstraction while supporting
@@ -109,8 +108,7 @@ private:
 ///     int val = *result;  // operator* for value access
 /// }
 /// ```
-template <typename T, typename E>
-class Result {
+template <typename T, typename E> class Result {
 private:
   // Union for zero-cost storage - only one is active at a time
   union Storage {
@@ -140,9 +138,7 @@ public:
   using error_type = E;
 
   // Construct with value (success case)
-  Result(const T &value) : has_value_(true) {
-    new (&storage_.value_) T(value);
-  }
+  Result(const T &value) : has_value_(true) { new (&storage_.value_) T(value); }
 
   Result(T &&value) : has_value_(true) {
     new (&storage_.value_) T(std::move(value));
@@ -270,14 +266,12 @@ public:
   }
 
   /// Returns the contained value or a default value
-  template <typename U>
-  T value_or(U &&default_value) const & {
+  template <typename U> T value_or(U &&default_value) const & {
     return has_value_ ? storage_.value_
                       : static_cast<T>(std::forward<U>(default_value));
   }
 
-  template <typename U>
-  T value_or(U &&default_value) && {
+  template <typename U> T value_or(U &&default_value) && {
     return has_value_ ? std::move(storage_.value_)
                       : static_cast<T>(std::forward<U>(default_value));
   }
@@ -328,8 +322,8 @@ public:
 
 /// Result<void, E> - Specialization for operations that don't return a value
 ///
-/// This specialization is for operations that either succeed (with no return value)
-/// or fail with an error.
+/// This specialization is for operations that either succeed (with no return
+/// value) or fail with an error.
 ///
 /// ## Usage Example
 ///
@@ -342,8 +336,7 @@ public:
 ///     return Result<void, Error>();  // Success
 /// }
 /// ```
-template <typename E>
-class Result<void, E> {
+template <typename E> class Result<void, E> {
 private:
   E *error_; // nullptr for success, heap-allocated for error
 
@@ -355,8 +348,7 @@ public:
   Result() : error_(nullptr) {}
 
   // Construct error result
-  Result(const Unexpected<E> &unexpected)
-      : error_(new E(unexpected.error())) {}
+  Result(const Unexpected<E> &unexpected) : error_(new E(unexpected.error())) {}
 
   Result(Unexpected<E> &&unexpected)
       : error_(new E(std::move(unexpected.error()))) {}
@@ -409,26 +401,22 @@ public:
 
   /// Returns a reference to the contained error
   E &error() & {
-    FORY_CHECK(error_ != nullptr)
-        << "Cannot access error of successful Result";
+    FORY_CHECK(error_ != nullptr) << "Cannot access error of successful Result";
     return *error_;
   }
 
   const E &error() const & {
-    FORY_CHECK(error_ != nullptr)
-        << "Cannot access error of successful Result";
+    FORY_CHECK(error_ != nullptr) << "Cannot access error of successful Result";
     return *error_;
   }
 
   E &&error() && {
-    FORY_CHECK(error_ != nullptr)
-        << "Cannot access error of successful Result";
+    FORY_CHECK(error_ != nullptr) << "Cannot access error of successful Result";
     return std::move(*error_);
   }
 
   const E &&error() const && {
-    FORY_CHECK(error_ != nullptr)
-        << "Cannot access error of successful Result";
+    FORY_CHECK(error_ != nullptr) << "Cannot access error of successful Result";
     return std::move(*error_);
   }
 };
@@ -444,6 +432,9 @@ public:
     }                                                                          \
   } while (0)
 
+/// Return early if Result is an error (alias for FORY_RETURN_NOT_OK)
+#define FORY_RETURN_IF_ERROR(expr) FORY_RETURN_NOT_OK(expr)
+
 /// Return early if Result is an error, with additional cleanup
 #define FORY_RETURN_NOT_OK_ELSE(expr, else_)                                   \
   do {                                                                         \
@@ -458,8 +449,7 @@ public:
 #define FORY_CHECK_OK_PREPEND(expr, msg)                                       \
   do {                                                                         \
     auto _result = (expr);                                                     \
-    FORY_CHECK(_result.ok()) << (msg) << ": "                                  \
-                             << _result.error().to_string();                   \
+    FORY_CHECK(_result.ok()) << (msg) << ": " << _result.error().to_string();  \
   } while (0)
 
 #define FORY_CHECK_OK(expr) FORY_CHECK_OK_PREPEND(expr, "Bad result")

@@ -26,6 +26,7 @@
 #include <string>
 
 #include "fory/util/bit_util.h"
+#include "fory/util/error.h"
 #include "fory/util/logging.h"
 #include "fory/util/result.h"
 
@@ -224,8 +225,9 @@ public:
     return position - offset;
   }
 
-  /// Get unsigned varint64 from offset. Writes number of bytes read to readBytesLength.
-  /// Uses PVL (Progressive Variable-length Long) encoding per xlang spec.
+  /// Get unsigned varint64 from offset. Writes number of bytes read to
+  /// readBytesLength. Uses PVL (Progressive Variable-length Long) encoding per
+  /// xlang spec.
   inline uint64_t GetVarUint64(uint32_t offset, uint32_t *readBytesLength) {
     uint32_t position = offset;
     uint64_t result = 0;
@@ -240,6 +242,115 @@ public:
     }
     *readBytesLength = position - offset;
     return result;
+  }
+
+  /// Write uint8_t value to buffer at current writer index.
+  /// Automatically grows buffer and advances writer index.
+  inline void WriteUint8(uint8_t value) {
+    Grow(1);
+    UnsafePutByte(writer_index_, value);
+    IncreaseWriterIndex(1);
+  }
+
+  /// Write int8_t value to buffer at current writer index.
+  /// Automatically grows buffer and advances writer index.
+  inline void WriteInt8(int8_t value) {
+    Grow(1);
+    UnsafePutByte(writer_index_, static_cast<uint8_t>(value));
+    IncreaseWriterIndex(1);
+  }
+
+  /// Write uint32_t value as varint to buffer at current writer index.
+  /// Automatically grows buffer and advances writer index.
+  inline void WriteVarUint32(uint32_t value) {
+    Grow(5); // Max 5 bytes for varint32
+    uint32_t len = PutVarUint32(writer_index_, value);
+    IncreaseWriterIndex(len);
+  }
+
+  /// Write uint64_t value as varint to buffer at current writer index.
+  /// Automatically grows buffer and advances writer index.
+  inline void WriteVarUint64(uint64_t value) {
+    Grow(9); // Max 9 bytes for varint64
+    uint32_t len = PutVarUint64(writer_index_, value);
+    IncreaseWriterIndex(len);
+  }
+
+  /// Write raw bytes to buffer at current writer index.
+  /// Automatically grows buffer and advances writer index.
+  inline void WriteBytes(const void *data, uint32_t length) {
+    Grow(length);
+    UnsafePut(writer_index_, data, length);
+    IncreaseWriterIndex(length);
+  }
+
+  /// Read uint8_t value from buffer at current reader index.
+  /// Advances reader index and checks bounds.
+  inline Result<uint8_t, Error> ReadUint8() {
+    if (reader_index_ + 1 > size_) {
+      return Unexpected(Error::buffer_out_of_bound(reader_index_, 1, size_));
+    }
+    uint8_t value = GetByteAs<uint8_t>(reader_index_);
+    IncreaseReaderIndex(1);
+    return value;
+  }
+
+  /// Read int8_t value from buffer at current reader index.
+  /// Advances reader index and checks bounds.
+  inline Result<int8_t, Error> ReadInt8() {
+    if (reader_index_ + 1 > size_) {
+      return Unexpected(Error::buffer_out_of_bound(reader_index_, 1, size_));
+    }
+    int8_t value = GetByteAs<int8_t>(reader_index_);
+    IncreaseReaderIndex(1);
+    return value;
+  }
+
+  /// Read uint32_t value as varint from buffer at current reader index.
+  /// Advances reader index and checks bounds.
+  inline Result<uint32_t, Error> ReadVarUint32() {
+    if (reader_index_ + 1 > size_) {
+      return Unexpected(Error::buffer_out_of_bound(reader_index_, 1, size_));
+    }
+    uint32_t read_bytes = 0;
+    uint32_t value = GetVarUint32(reader_index_, &read_bytes);
+    IncreaseReaderIndex(read_bytes);
+    return value;
+  }
+
+  /// Read uint64_t value as varint from buffer at current reader index.
+  /// Advances reader index and checks bounds.
+  inline Result<uint64_t, Error> ReadVarUint64() {
+    if (reader_index_ + 1 > size_) {
+      return Unexpected(Error::buffer_out_of_bound(reader_index_, 1, size_));
+    }
+    uint32_t read_bytes = 0;
+    uint64_t value = GetVarUint64(reader_index_, &read_bytes);
+    IncreaseReaderIndex(read_bytes);
+    return value;
+  }
+
+  /// Read raw bytes from buffer at current reader index.
+  /// Advances reader index and checks bounds.
+  inline Result<void, Error> ReadBytes(void *data, uint32_t length) {
+    if (reader_index_ + length > size_) {
+      return Unexpected(
+          Error::buffer_out_of_bound(reader_index_, length, size_));
+    }
+    Copy(reader_index_, length, static_cast<uint8_t *>(data));
+    IncreaseReaderIndex(length);
+    return Result<void, Error>();
+  }
+
+  /// Skip bytes in buffer by advancing reader index.
+  /// Checks bounds to ensure we don't skip past the end.
+  inline Result<void, Error> Skip(uint32_t length) {
+    if (reader_index_ + length > size_) {
+      return Unexpected(
+          Error::buffer_out_of_bound(reader_index_, length, size_));
+    }
+    IncreaseReaderIndex(length);
+    return Result<void, Error>();
   }
 
   /// Return true if both buffers are the same size and contain the same bytes

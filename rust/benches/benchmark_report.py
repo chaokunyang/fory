@@ -1,3 +1,20 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
 import os
 import re
 import platform
@@ -21,10 +38,16 @@ bench_re = re.compile(
 UNIT_TO_SEC = {"ns": 1e-9, "µs": 1e-6, "us": 1e-6, "ms": 1e-3, "s": 1.0}
 
 # === Parse arguments ===
-parser = argparse.ArgumentParser(description="Plot Cargo Bench stats and generate Markdown report")
+parser = argparse.ArgumentParser(
+    description="Plot Cargo Bench stats and generate Markdown report"
+)
 parser.add_argument("--log-file", default="cargo_bench.log", help="Benchmark log file")
-parser.add_argument("--output-dir", default="", help="Output directory for plots and report")
-parser.add_argument("--plot-prefix", default="", help="Image path prefix in Markdown report")
+parser.add_argument(
+    "--output-dir", default="", help="Output directory for plots and report"
+)
+parser.add_argument(
+    "--plot-prefix", default="", help="Image path prefix in Markdown report"
+)
 args = parser.parse_args()
 
 # === Determine output directory ===
@@ -59,6 +82,7 @@ for match in bench_re.finditer(content):
 sizes = ["small", "medium", "large"]
 ops = ["serialize", "deserialize"]
 
+
 # === Get system info ===
 def get_system_info():
     try:
@@ -68,17 +92,19 @@ def get_system_info():
             "Processor": platform.processor() or "Unknown",
             "CPU Cores (Physical)": psutil.cpu_count(logical=False),
             "CPU Cores (Logical)": psutil.cpu_count(logical=True),
-            "Total RAM (GB)": round(psutil.virtual_memory().total / (1024**3), 2)
+            "Total RAM (GB)": round(psutil.virtual_memory().total / (1024**3), 2),
         }
     except Exception as e:
         info = {"Error gathering system info": str(e)}
     return info
+
 
 system_info = get_system_info()
 
 serialize_rows = []
 deserialize_rows = []
 plot_images = []
+
 
 # === Plotting function ===
 def plot_datatype(ax, struct, size):
@@ -87,9 +113,7 @@ def plot_datatype(ax, struct, size):
         ax.axis("off")
         return
     ops_present = [op for op in ops if op in data[struct][size]]
-    libs = sorted(
-        {lib for op in ops_present for lib in data[struct][size][op].keys()}
-    )
+    libs = sorted({lib for op in ops_present for lib in data[struct][size][op].keys()})
     lib_order = [lib for lib in ["fory", "json", "protobuf"] if lib in libs] + [
         lib for lib in libs if lib not in ["fory", "json", "protobuf"]
     ]
@@ -120,13 +144,14 @@ def plot_datatype(ax, struct, size):
         p_tps = data[struct][size][op].get("protobuf", 0)
         fastest_lib, fastest_val = max(
             [("fory", f_tps), ("json", j_tps), ("protobuf", p_tps)],
-            key=lambda kv: kv[1]
+            key=lambda kv: kv[1],
         )
         row = (struct, size, op, f_tps, j_tps, p_tps, fastest_lib, fastest_val)
         if op == "serialize":
             serialize_rows.append(row)
         else:
             deserialize_rows.append(row)
+
 
 # === Main plotting loop ===
 for struct in sorted(data.keys()):
@@ -149,7 +174,7 @@ md_report = [
     f"_Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}_\n",
     "\n### Hardware & OS Info\n",
     "| Key | Value |\n",
-    "|-----|-------|\n"
+    "|-----|-------|\n",
 ]
 for k, v in system_info.items():
     md_report.append(f"| {k} | {v} |\n")
@@ -161,18 +186,28 @@ for struct, img in plot_images:
     md_report.append(f"\n**{struct}**\n\n")
     md_report.append(f'<img src="{img_path_report}" width="70%">\n')
 
+
 def table_section(title, rows):
     md = [f"\n### {title}\n"]
-    md.append("| Datatype | Size | Operation | Fory TPS | JSON TPS | Protobuf TPS | Fastest |\n")
-    md.append("|----------|------|-----------|----------|----------|--------------|---------|\n")
+    md.append(
+        "| Datatype | Size | Operation | Fory TPS | JSON TPS | Protobuf TPS | Fastest |\n"
+    )
+    md.append(
+        "|----------|------|-----------|----------|----------|--------------|---------|\n"
+    )
     for struct, size, op, f_tps, j_tps, p_tps, fastest_lib, fastest_val in rows:
         md.append(
             f"| {struct} | {size} | {op} | {f_tps:,.0f} | {j_tps:,.0f} | {p_tps:,.0f} | {fastest_lib} |\n"
         )
     return md
 
-md_report.extend(table_section("Serialize Results (sorted by fastest TPS)", serialize_rows))
-md_report.extend(table_section("Deserialize Results (sorted by fastest TPS)", deserialize_rows))
+
+md_report.extend(
+    table_section("Serialize Results (sorted by fastest TPS)", serialize_rows)
+)
+md_report.extend(
+    table_section("Deserialize Results (sorted by fastest TPS)", deserialize_rows)
+)
 
 # === Save Markdown ===
 report_path = os.path.join(output_dir, "performance_report.md")

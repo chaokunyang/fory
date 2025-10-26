@@ -1,12 +1,13 @@
 ## Performance Comparison Report
 
-_Generated on 2025-10-26 18:20:19_
+_Generated on 2025-10-26 18:36:41_
 
 How to generate performance report:
 
 ```bash
+cd rust/benches
 cargo bench 2>&1 | tee cargo_bench.log
-python benchmark_plot.py
+python benchmark_report.py --log-file cargo_bench.log --output-dir=report_output
 ```
 
 ### Hardware & OS Info
@@ -24,31 +25,45 @@ python benchmark_plot.py
 
 **company**
 
-<img src="../../docs/benchmarks/rust/company.png" width="70%">
+<p align="center">
+<img src="../../docs/benchmarks/rust/company.png" width="90%">
+</p>
 
 **ecommerce_data**
 
-<img src="../../docs/benchmarks/rust/ecommerce_data.png" width="70%">
+<p align="center">
+<img src="../../docs/benchmarks/rust/ecommerce_data.png" width="90%">
+</p>
 
 **person**
 
-<img src="../../docs/benchmarks/rust/person.png" width="70%">
+<p align="center">
+<img src="../../docs/benchmarks/rust/person.png" width="90%">
+</p>
 
 **simple_list**
 
-<img src="../../docs/benchmarks/rust/simple_list.png" width="70%">
+<p align="center">
+<img src="../../docs/benchmarks/rust/simple_list.png" width="90%">
+</p>
 
 **simple_map**
 
-<img src="../../docs/benchmarks/rust/simple_map.png" width="70%">
+<p align="center">
+<img src="../../docs/benchmarks/rust/simple_map.png" width="90%">
+</p>
 
 **simple_struct**
 
-<img src="../../docs/benchmarks/rust/simple_struct.png" width="70%">
+<p align="center">
+<img src="../../docs/benchmarks/rust/simple_struct.png" width="90%">
+</p>
 
 **system_data**
 
-<img src="../../docs/benchmarks/rust/system_data.png" width="70%">
+<p align="center">
+<img src="../../docs/benchmarks/rust/system_data.png" width="90%">
+</p>
 
 ### Serialize Results (sorted by fastest TPS)
 

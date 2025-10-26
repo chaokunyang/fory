@@ -172,6 +172,12 @@ deserialize_rows.sort(key=lambda r: r[7], reverse=True)
 md_report = [
     "## Performance Comparison Report\n",
     f"_Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}_\n",
+    "How to generate performance report:\n",
+    "```bash\n",
+    "cd rust/benches\n",
+    "cargo bench 2>&1 | tee cargo_bench.log\n",
+    "python benchmark_report.py --log-file cargo_bench.log --output-dir=report_output\n",
+    "```\n",
     "\n### Hardware & OS Info\n",
     "| Key | Value |\n",
     "|-----|-------|\n",
@@ -184,7 +190,9 @@ for struct, img in plot_images:
     img_filename = os.path.basename(img)
     img_path_report = args.plot_prefix + img_filename
     md_report.append(f"\n**{struct}**\n\n")
-    md_report.append(f'<img src="{img_path_report}" width="70%">\n')
+    md_report.append(
+        f'<p align="center">\n<img src="{img_path_report}" width="90%">\n</p>\n'
+    )
 
 
 def table_section(title, rows):
@@ -210,7 +218,7 @@ md_report.extend(
 )
 
 # === Save Markdown ===
-report_path = os.path.join(output_dir, "performance_report.md")
+report_path = os.path.join(output_dir, "README.md")
 with open(report_path, "w", encoding="utf-8") as f:
     f.writelines(md_report)
 

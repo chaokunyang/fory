@@ -84,6 +84,22 @@ Where `Struct` is a class with [100 primitive fields](https://github.com/apache/
 
 See [benchmarks](https://github.com/apache/fory/tree/main/docs/benchmarks) for more benchmarks about type forward/backward compatibility, off-heap support, zero-copy serialization.
 
+### Rust Serialization
+
+**ecommerce_data**
+
+<p align="center">
+<img src="docs/benchmarks/rust/ecommerce_data.png" width="90%">
+</p>
+
+**system_data**
+
+<p align="center">
+<img src="docs/benchmarks/rust/system_data.png" width="90%">
+</p>
+
+See [Rust Benchmarks](https://github.com/apache/fory/tree/main/rust/benches) for more benchmarks about Apache Fory Rust Serialization.
+
 ## Installation
 
 ### Java

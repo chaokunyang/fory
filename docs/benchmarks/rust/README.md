@@ -1,6 +1,14 @@
 ## Performance Comparison Report
 
-_Generated on 2025-10-26 18:19:37_
+_Generated on 2025-10-26 18:36:41_
+
+How to generate performance report:
+
+```bash
+cd rust/benches
+cargo bench 2>&1 | tee cargo_bench.log
+python benchmark_report.py --log-file cargo_bench.log --output-dir=report_output
+```
 
 ### Hardware & OS Info
 
@@ -17,31 +25,45 @@ _Generated on 2025-10-26 18:19:37_
 
 **company**
 
-<img src="company.png" width="70%">
+<p align="center">
+<img src="company.png" width="90%">
+</p>
 
 **ecommerce_data**
 
-<img src="ecommerce_data.png" width="70%">
+<p align="center">
+<img src="ecommerce_data.png" width="90%">
+</p>
 
 **person**
 
-<img src="person.png" width="70%">
+<p align="center">
+<img src="person.png" width="90%">
+</p>
 
 **simple_list**
 
-<img src="simple_list.png" width="70%">
+<p align="center">
+<img src="simple_list.png" width="90%">
+</p>
 
 **simple_map**
 
-<img src="simple_map.png" width="70%">
+<p align="center">
+<img src="simple_map.png" width="90%">
+</p>
 
 **simple_struct**
 
-<img src="simple_struct.png" width="70%">
+<p align="center">
+<img src="simple_struct.png" width="90%">
+</p>
 
 **system_data**
 
-<img src="system_data.png" width="70%">
+<p align="center">
+<img src="system_data.png" width="90%">
+</p>
 
 ### Serialize Results (sorted by fastest TPS)
 

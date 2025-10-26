@@ -5,7 +5,7 @@ import numpy as np
 from collections import defaultdict
 from datetime import datetime
 
-# === Colors you specified ===
+# === Colors specified ===
 FORY_COLOR = "#FF6f01"  # Orange for Fory
 JSON_COLOR = "#55BCC2"  # Teal for JSON
 PROTOBUF_COLOR = (1, 0.84, 0.66)  # Light gold for Protobuf
@@ -46,6 +46,10 @@ ops = ["serialize", "deserialize"]
 output_dir = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
 os.makedirs(output_dir, exist_ok=True)
 
+# Lists to hold markdown data before sorting
+serialize_rows = []
+deserialize_rows = []
+
 # Create one figure PER datatype with 3 subplots (small, medium, large)
 for struct in sorted(data.keys()):
     fig, axes = plt.subplots(1, 3, figsize=(18, 5), sharey=False)
@@ -71,6 +75,7 @@ for struct in sorted(data.keys()):
         x = np.arange(len(ops_present))
         width = 0.8 / len(lib_order)
 
+        # Plot bars
         for i, lib in enumerate(lib_order):
             if lib == "fory":
                 color = FORY_COLOR
@@ -90,13 +95,59 @@ for struct in sorted(data.keys()):
         if idx == 0:
             ax.set_ylabel("TPS (ops/sec)")
 
-    # Add legend to first subplot only
-    axes[0].legend()
-    axes[1].legend()
-    axes[2].legend()
+        # Collect markdown table rows
+        for op in ops_present:
+            f_tps = data[struct][size][op].get("fory", 0)
+            j_tps = data[struct][size][op].get("json", 0)
+            p_tps = data[struct][size][op].get("protobuf", 0)
+
+            fastest_lib, fastest_val = max(
+                [("fory", f_tps), ("json", j_tps), ("protobuf", p_tps)],
+                key=lambda kv: kv[1]
+            )
+
+            row = (struct, size, op, f_tps, j_tps, p_tps, fastest_lib, fastest_val)
+
+            if op == "serialize":
+                serialize_rows.append(row)
+            else:
+                deserialize_rows.append(row)
+
+    # Add legends to all subplots
+    for ax in axes:
+        ax.legend()
 
     plt.tight_layout(rect=[0, 0, 1, 0.95])  # leave space for suptitle
     plt.savefig(os.path.join(output_dir, f"{struct}.png"))
     plt.close()
 
+# Sort tables by highest fastest TPS value (desc)
+serialize_rows.sort(key=lambda r: r[7], reverse=True)
+deserialize_rows.sort(key=lambda r: r[7], reverse=True)
+
+# Prepare Markdown file
+md_report = [
+    "# Performance Comparison Report\n",
+    f"_Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}_\n"
+]
+
+def table_for_rows(title, rows):
+    md = [f"\n## {title}\n"]
+    md.append("| Datatype | Size | Operation | Fory TPS | JSON TPS | Protobuf TPS | Fastest |\n")
+    md.append("|----------|------|-----------|----------|----------|--------------|---------|\n")
+    for struct, size, op, f_tps, j_tps, p_tps, fastest_lib, fastest_val in rows:
+        md.append(
+            f"| {struct} | {size} | {op} | {f_tps:,.0f} | {j_tps:,.0f} | {p_tps:,.0f} | {fastest_lib} |\n"
+        )
+    return md
+
+md_report.extend(table_for_rows("Serialize Results (sorted by fastest TPS)", serialize_rows))
+md_report.extend(table_for_rows("Deserialize Results (sorted by fastest TPS)", deserialize_rows))
+
+# Save markdown file
+report_path = os.path.join(output_dir, "performance_report.md")
+with open(report_path, "w", encoding="utf-8") as f:
+    f.writelines(md_report)
+
 print(f"✅ Combined datatype plots saved in: {output_dir}")
+print(f"📄 Markdown report saved to: {report_path}")

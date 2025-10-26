@@ -1,6 +1,6 @@
 ## Performance Comparison Report
 
-_Generated on 2025-10-26 17:55:00_
+_Generated on 2025-10-26 18:20:19_
 
 How to generate performance report:
 
@@ -11,44 +11,44 @@ python benchmark_plot.py
 
 ### Hardware & OS Info
 
-| Key                  | Value                                                                                                                  |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| OS                   | Darwin 24.5.0 (Darwin Kernel Version 24.5.0: Tue Apr 22 19:53:27 PDT 2025; root:xnu-11417.121.6~2/RELEASE_ARM64_T6041) |
-| Machine              | arm64                                                                                                                  |
-| Processor            | arm                                                                                                                    |
-| CPU Cores (Physical) | 12                                                                                                                     |
-| CPU Cores (Logical)  | 12                                                                                                                     |
-| Total RAM (GB)       | 48.0                                                                                                                   |
+| Key                  | Value         |
+| -------------------- | ------------- |
+| OS                   | Darwin 24.5.0 |
+| Machine              | arm64         |
+| Processor            | arm           |
+| CPU Cores (Physical) | 12            |
+| CPU Cores (Logical)  | 12            |
+| Total RAM (GB)       | 48.0          |
 
 ### Benchmark Plots
 
 **company**
 
-![company](../../docs/benchmarks/rust/company.png)
+<img src="../../docs/benchmarks/rust/company.png" width="70%">
 
 **ecommerce_data**
 
-![ecommerce_data](../../docs/benchmarks/rust/ecommerce_data.png)
+<img src="../../docs/benchmarks/rust/ecommerce_data.png" width="70%">
 
 **person**
 
-![person](../../docs/benchmarks/rust/person.png)
+<img src="../../docs/benchmarks/rust/person.png" width="70%">
 
 **simple_list**
 
-![simple_list](../../docs/benchmarks/rust/simple_list.png)
+<img src="../../docs/benchmarks/rust/simple_list.png" width="70%">
 
 **simple_map**
 
-![simple_map](../../docs/benchmarks/rust/simple_map.png)
+<img src="../../docs/benchmarks/rust/simple_map.png" width="70%">
 
 **simple_struct**
 
-![simple_struct](../../docs/benchmarks/rust/simple_struct.png)
+<img src="../../docs/benchmarks/rust/simple_struct.png" width="70%">
 
 **system_data**
 
-![system_data](../../docs/benchmarks/rust/system_data.png)
+<img src="../../docs/benchmarks/rust/system_data.png" width="70%">
 
 ### Serialize Results (sorted by fastest TPS)
 

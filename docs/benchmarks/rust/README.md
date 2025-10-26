@@ -2,13 +2,6 @@
 
 _Generated on 2025-10-26 17:55:00_
 
-How to generate performance report:
-
-```bash
-cargo bench 2>&1 | tee cargo_bench.log
-python benchmark_plot.py
-```
-
 ### Hardware & OS Info
 
 | Key                  | Value                                                                                                                  |
@@ -24,31 +17,31 @@ python benchmark_plot.py
 
 **company**
 
-![company](../../docs/benchmarks/rust/company.png)
+![company](company.png)
 
 **ecommerce_data**
 
-![ecommerce_data](../../docs/benchmarks/rust/ecommerce_data.png)
+![ecommerce_data](ecommerce_data.png)
 
 **person**
 
-![person](../../docs/benchmarks/rust/person.png)
+![person](person.png)
 
 **simple_list**
 
-![simple_list](../../docs/benchmarks/rust/simple_list.png)
+![simple_list](simple_list.png)
 
 **simple_map**
 
-![simple_map](../../docs/benchmarks/rust/simple_map.png)
+![simple_map](simple_map.png)
 
 **simple_struct**
 
-![simple_struct](../../docs/benchmarks/rust/simple_struct.png)
+![simple_struct](simple_struct.png)
 
 **system_data**
 
-![system_data](../../docs/benchmarks/rust/system_data.png)
+![system_data](system_data.png)
 
 ### Serialize Results (sorted by fastest TPS)
 
@@ -101,37 +94,3 @@ python benchmark_plot.py
 | system_data    | large  | deserialize | 961        | 634        | 706          | fory    |
 | company        | large  | deserialize | 836        | 623        | 623          | fory    |
 | ecommerce_data | large  | deserialize | 298        | 204        | 217          | fory    |
-
-## How to generate flamegraph
-
-```bash
-cargo flamegraph --bin fory_profiler -- --operation deserialize --serializer fory -t e-commerce-data
-```
-
-detailed command:
-
-```bash
-cd benches
-rm -rf cargo-flamegraph.trace
-export CARGO_PROFILE_RELEASE_DEBUG=true &&
-cargo flamegraph \
-  --inverted \
-  --deterministic \
-  --palette rust \
-  --min-width 0.05 \
-  --bin fory_profiler -- \
-  --operation deserialize \
-  --serializer fory
-```
-
-## How to run benchmarks
-
-```bash
-cargo bench
-```
-
-To run only a specific benchmark group, you can use a command like
-
-```bash
-cargo bench --bench serialization_bench -- simple_struct
-```

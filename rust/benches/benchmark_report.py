@@ -1,5 +1,7 @@
 import os
 import re
+import platform
+import psutil
 import matplotlib.pyplot as plt
 import numpy as np
 from collections import defaultdict
@@ -46,11 +48,32 @@ ops = ["serialize", "deserialize"]
 output_dir = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
 os.makedirs(output_dir, exist_ok=True)
 
-# Lists to hold markdown data before sorting
 serialize_rows = []
 deserialize_rows = []
+plot_images = []
 
-# Create one figure PER datatype with 3 subplots (small, medium, large)
+# ------------------------------
+# Gather hardware & OS info
+# ------------------------------
+def get_system_info():
+    try:
+        info = {
+            "OS": f"{platform.system()} {platform.release()} ({platform.version()})",
+            "Machine": platform.machine(),
+            "Processor": platform.processor() or "Unknown",
+            "CPU Cores (Physical)": psutil.cpu_count(logical=False),
+            "CPU Cores (Logical)": psutil.cpu_count(logical=True),
+            "Total RAM (GB)": round(psutil.virtual_memory().total / (1024**3), 2)
+        }
+    except Exception as e:
+        info = {"Error gathering system info": str(e)}
+    return info
+
+system_info = get_system_info()
+
+# ------------------------------
+# Create plots per datatype
+# ------------------------------
 for struct in sorted(data.keys()):
     fig, axes = plt.subplots(1, 3, figsize=(18, 5), sharey=False)
     fig.suptitle(f"{struct}", fontsize=16)
@@ -67,7 +90,6 @@ for struct in sorted(data.keys()):
             {lib for op in ops_present for lib in data[struct][size][op].keys()}
         )
 
-        # Force consistent display order
         lib_order = [lib for lib in ["fory", "json", "protobuf"] if lib in libs] + [
             lib for lib in libs if lib not in ["fory", "json", "protobuf"]
         ]
@@ -75,7 +97,6 @@ for struct in sorted(data.keys()):
         x = np.arange(len(ops_present))
         width = 0.8 / len(lib_order)
 
-        # Plot bars
         for i, lib in enumerate(lib_order):
             if lib == "fory":
                 color = FORY_COLOR
@@ -95,7 +116,6 @@ for struct in sorted(data.keys()):
         if idx == 0:
             ax.set_ylabel("TPS (ops/sec)")
 
-        # Collect markdown table rows
         for op in ops_present:
             f_tps = data[struct][size][op].get("fory", 0)
             j_tps = data[struct][size][op].get("json", 0)
@@ -107,32 +127,47 @@ for struct in sorted(data.keys()):
             )
 
             row = (struct, size, op, f_tps, j_tps, p_tps, fastest_lib, fastest_val)
-
             if op == "serialize":
                 serialize_rows.append(row)
             else:
                 deserialize_rows.append(row)
 
-    # Add legends to all subplots
+    # Add legends
     for ax in axes:
         ax.legend()
 
-    plt.tight_layout(rect=[0, 0, 1, 0.95])  # leave space for suptitle
-    plt.savefig(os.path.join(output_dir, f"{struct}.png"))
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    plot_path = os.path.join(output_dir, f"{struct}.png")
+    plt.savefig(plot_path)
+    plot_images.append((struct, plot_path))
     plt.close()
 
-# Sort tables by highest fastest TPS value (desc)
+# Sort
 serialize_rows.sort(key=lambda r: r[7], reverse=True)
 deserialize_rows.sort(key=lambda r: r[7], reverse=True)
 
-# Prepare Markdown file
+# ------------------------------
+# Build Markdown report
+# ------------------------------
 md_report = [
-    "# Performance Comparison Report\n",
-    f"_Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}_\n"
+    "## Performance Comparison Report\n",
+    f"_Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}_\n",
+    "\n### Hardware & OS Info\n",
+    "| Key | Value |\n",
+    "|-----|-------|\n"
 ]
 
-def table_for_rows(title, rows):
-    md = [f"\n## {title}\n"]
+for key, val in system_info.items():
+    md_report.append(f"| {key} | {val} |\n")
+
+md_report.append("\n### Benchmark Plots\n")
+for struct, img_path in plot_images:
+    rel_path = os.path.basename(img_path)
+    md_report.append(f"\n**{struct}**\n\n")
+    md_report.append(f"![{struct}]({rel_path})\n")
+
+def table_section(title, rows):
+    md = [f"\n### {title}\n"]
     md.append("| Datatype | Size | Operation | Fory TPS | JSON TPS | Protobuf TPS | Fastest |\n")
     md.append("|----------|------|-----------|----------|----------|--------------|---------|\n")
     for struct, size, op, f_tps, j_tps, p_tps, fastest_lib, fastest_val in rows:
@@ -141,13 +176,13 @@ def table_for_rows(title, rows):
         )
     return md
 
-md_report.extend(table_for_rows("Serialize Results (sorted by fastest TPS)", serialize_rows))
-md_report.extend(table_for_rows("Deserialize Results (sorted by fastest TPS)", deserialize_rows))
+md_report.extend(table_section("Serialize Results (sorted by fastest TPS)", serialize_rows))
+md_report.extend(table_section("Deserialize Results (sorted by fastest TPS)", deserialize_rows))
 
-# Save markdown file
+# Save Markdown
 report_path = os.path.join(output_dir, "performance_report.md")
 with open(report_path, "w", encoding="utf-8") as f:
     f.writelines(md_report)
 
-print(f"✅ Combined datatype plots saved in: {output_dir}")
-print(f"📄 Markdown report saved to: {report_path}")
+print(f"✅ Plots saved in: {output_dir}")
+print(f"📄 Markdown report generated at: {report_path}")

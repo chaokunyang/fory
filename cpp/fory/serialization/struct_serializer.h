@@ -27,10 +27,12 @@
 #include "fory/serialization/serializer_traits.h"
 #include "fory/serialization/skip.h"
 #include "fory/serialization/type_resolver.h"
+#include "fory/util/string_util.h"
 #include <algorithm>
 #include <array>
 #include <memory>
 #include <numeric>
+#include <string_view>
 #include <tuple>
 #include <type_traits>
 #include <unordered_map>
@@ -189,6 +191,60 @@ struct CompileTimeFieldHelpers {
   static inline constexpr std::array<bool, FieldCount> nullable_flags =
       make_nullable_flags(std::make_index_sequence<FieldCount>{});
 
+  static inline constexpr std::array<size_t, FieldCount> snake_case_lengths =
+      []() constexpr {
+        std::array<size_t, FieldCount> lengths{};
+        if constexpr (FieldCount > 0) {
+          for (size_t i = 0; i < FieldCount; ++i) {
+            lengths[i] = ::fory::snake_case_length(Names[i]);
+          }
+        }
+        return lengths;
+      }();
+
+  static constexpr size_t compute_max_snake_length() {
+    size_t max_length = 0;
+    if constexpr (FieldCount > 0) {
+      for (size_t length : snake_case_lengths) {
+        if (length > max_length) {
+          max_length = length;
+        }
+      }
+    }
+    return max_length;
+  }
+
+  static inline constexpr size_t max_snake_case_length =
+      compute_max_snake_length();
+
+  static inline constexpr std::array<std::array<char, max_snake_case_length + 1>,
+                                     FieldCount>
+      snake_case_storage = []() constexpr {
+        std::array<std::array<char, max_snake_case_length + 1>, FieldCount>
+            storage{};
+        if constexpr (FieldCount > 0) {
+          for (size_t i = 0; i < FieldCount; ++i) {
+            const auto [buffer, length] =
+                ::fory::to_snake_case<max_snake_case_length>(Names[i]);
+            (void)length;
+            storage[i] = buffer;
+          }
+        }
+        return storage;
+      }();
+
+  static inline constexpr std::array<std::string_view, FieldCount>
+      snake_case_names = []() constexpr {
+        std::array<std::string_view, FieldCount> names{};
+        if constexpr (FieldCount > 0) {
+          for (size_t i = 0; i < FieldCount; ++i) {
+            names[i] = std::string_view(snake_case_storage[i].data(),
+                                        snake_case_lengths[i]);
+          }
+        }
+        return names;
+      }();
+
   static constexpr bool is_primitive_type_id(uint32_t tid) {
     return tid >= static_cast<uint32_t>(TypeId::BOOL) &&
            tid <= static_cast<uint32_t>(TypeId::FLOAT64);
@@ -271,16 +327,16 @@ struct CompileTimeFieldHelpers {
           return sa > sb;
         if (a_tid != b_tid)
           return a_tid < b_tid;
-        return Names[a] < Names[b];
+        return snake_case_names[a] < snake_case_names[b];
       }
 
       if (ga == 2) {
         if (a_tid != b_tid)
           return a_tid < b_tid;
-        return Names[a] < Names[b];
+        return snake_case_names[a] < snake_case_names[b];
       }
 
-      return Names[a] < Names[b];
+      return snake_case_names[a] < snake_case_names[b];
     }
   }
 
@@ -312,7 +368,7 @@ struct CompileTimeFieldHelpers {
       sorted_field_names = []() constexpr {
         std::array<std::string_view, FieldCount> arr{};
         for (size_t i = 0; i < FieldCount; ++i) {
-          arr[i] = Names[sorted_indices[i]];
+          arr[i] = snake_case_names[sorted_indices[i]];
         }
         return arr;
       }();

@@ -20,7 +20,7 @@
 #pragma once
 
 #include "fory/serialization/context.h"
-#include "fory/serialization/type_meta.h"
+#include "fory/serialization/type_resolver.h"
 #include "fory/type/type.h"
 #include "fory/util/error.h"
 #include "fory/util/result.h"

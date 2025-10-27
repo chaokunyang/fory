@@ -28,6 +28,8 @@
 namespace fory {
 namespace serialization {
 
+class TypeResolver;
+
 /// Write context for serialization operations.
 ///
 /// This class maintains the state during serialization, including:
@@ -49,8 +51,10 @@ public:
   /// @param buffer Reference to output buffer. Must remain valid during
   /// context lifetime.
   /// @param config Configuration options.
-  explicit WriteContext(Buffer &buffer, const Config &config)
-      : buffer_(buffer), config_(config), current_depth_(0) {}
+  explicit WriteContext(Buffer &buffer, const Config &config,
+                        TypeResolver &type_resolver)
+      : buffer_(buffer), config_(config), type_resolver_(type_resolver),
+        current_depth_(0) {}
 
   /// Get reference to output buffer.
   inline Buffer &buffer() { return buffer_; }
@@ -60,6 +64,12 @@ public:
 
   /// Get reference writer for tracking shared references.
   inline RefWriter &ref_writer() { return ref_writer_; }
+
+  /// Get associated type resolver.
+  inline TypeResolver &type_resolver() { return type_resolver_; }
+
+  /// Get associated type resolver (const).
+  inline const TypeResolver &type_resolver() const { return type_resolver_; }
 
   /// Check if compatible mode is enabled.
   inline bool is_compatible() const { return config_.compatible; }
@@ -126,13 +136,14 @@ public:
 
   /// Reset context for reuse.
   inline void reset() {
-  ref_writer_.reset();
+    ref_writer_.reset();
     current_depth_ = 0;
   }
 
 private:
   Buffer &buffer_;
   const Config &config_;
+  TypeResolver &type_resolver_;
   RefWriter ref_writer_;
   uint32_t current_depth_;
 };
@@ -161,8 +172,10 @@ public:
   /// @param buffer Reference to input buffer. Must remain valid during context
   /// lifetime.
   /// @param config Configuration options.
-  explicit ReadContext(Buffer &buffer, const Config &config)
-      : buffer_(buffer), config_(config), current_depth_(0) {}
+  explicit ReadContext(Buffer &buffer, const Config &config,
+                       TypeResolver &type_resolver)
+      : buffer_(buffer), config_(config), type_resolver_(type_resolver),
+        current_depth_(0) {}
 
   /// Get reference to input buffer.
   inline Buffer &buffer() { return buffer_; }
@@ -172,6 +185,12 @@ public:
 
   /// Get reference reader for reconstructing shared references.
   inline RefReader &ref_reader() { return ref_reader_; }
+
+  /// Get associated type resolver.
+  inline TypeResolver &type_resolver() { return type_resolver_; }
+
+  /// Get associated type resolver (const).
+  inline const TypeResolver &type_resolver() const { return type_resolver_; }
 
   /// Check if compatible mode is enabled.
   inline bool is_compatible() const { return config_.compatible; }
@@ -230,13 +249,14 @@ public:
 
   /// Reset context for reuse.
   inline void reset() {
-  ref_reader_.reset();
+    ref_reader_.reset();
     current_depth_ = 0;
   }
 
 private:
   Buffer &buffer_;
   const Config &config_;
+  TypeResolver &type_resolver_;
   RefReader ref_reader_;
   uint32_t current_depth_;
 };

@@ -28,10 +28,13 @@
 #include "fory/serialization/smart_ptr_serializers.h"
 #include "fory/serialization/struct_serializer.h"
 #include "fory/serialization/temporal_serializers.h"
+#include "fory/serialization/type_resolver.h"
 #include "fory/util/buffer.h"
 #include "fory/util/error.h"
 #include "fory/util/result.h"
 #include <memory>
+#include <string>
+#include <utility>
 #include <vector>
 
 namespace fory {
@@ -95,11 +98,18 @@ public:
     return *this;
   }
 
+  /// Provide a custom type resolver instance.
+  ForyBuilder &type_resolver(std::shared_ptr<TypeResolver> resolver) {
+    type_resolver_ = std::move(resolver);
+    return *this;
+  }
+
   /// Build the final Fory instance.
   Fory build();
 
 private:
   Config config_;
+  std::shared_ptr<TypeResolver> type_resolver_;
 
   friend class Fory;
 };
@@ -151,7 +161,7 @@ public:
                                     is_little_endian_system(), false,
                                     Language::CPP));
 
-    WriteContext ctx(buffer, config_);
+    WriteContext ctx(buffer, config_, *type_resolver_);
 
     // Serialize object
     FORY_RETURN_NOT_OK(Serializer<T>::write(obj, ctx, true, true));
@@ -176,7 +186,7 @@ public:
                                     is_little_endian_system(), false,
                                     Language::CPP));
 
-    WriteContext ctx(buffer, config_);
+    WriteContext ctx(buffer, config_, *type_resolver_);
     FORY_RETURN_NOT_OK(Serializer<T>::write(obj, ctx, true, true));
 
     return buffer.writer_index() - start_pos;
@@ -229,7 +239,7 @@ public:
   /// @param buffer Input buffer to read from.
   /// @return Deserialized object on success, error on failure.
   template <typename T> Result<T, Error> deserialize_from(Buffer &buffer) {
-    ReadContext ctx(buffer, config_);
+    ReadContext ctx(buffer, config_, *type_resolver_);
     auto result = Serializer<T>::read(ctx, true, true);
     if (result.ok()) {
       ctx.ref_reader().resolve_callbacks();
@@ -240,11 +250,63 @@ public:
   /// Get reference to configuration.
   const Config &config() const { return config_; }
 
+  /// Access the underlying type resolver.
+  TypeResolver &type_resolver() { return *type_resolver_; }
+  const TypeResolver &type_resolver() const { return *type_resolver_; }
+
+  // ==========================================================================
+  // Type Registration Helpers
+  // ==========================================================================
+
+  /// Register a struct type with a numeric identifier.
+  template <typename T> Result<void, Error> register_struct(uint32_t type_id) {
+    return type_resolver_->template register_by_id<T>(type_id);
+  }
+
+  /// Register a struct type with an explicit namespace and name.
+  template <typename T>
+  Result<void, Error> register_struct(const std::string &ns,
+                                      const std::string &type_name) {
+    return type_resolver_->template register_by_name<T>(ns, type_name);
+  }
+
+  /// Register a struct type using only a type name (default namespace).
+  template <typename T>
+  Result<void, Error> register_struct(const std::string &type_name) {
+    return type_resolver_->template register_by_name<T>("", type_name);
+  }
+
+  /// Register an external serializer type with a numeric identifier.
+  template <typename T>
+  Result<void, Error> register_extension_type(uint32_t type_id) {
+    return type_resolver_->template register_ext_type_by_id<T>(type_id);
+  }
+
+  /// Register an external serializer with namespace and name.
+  template <typename T>
+  Result<void, Error> register_extension_type(const std::string &ns,
+                                        const std::string &type_name) {
+    return type_resolver_->template register_ext_type_by_name<T>(ns, type_name);
+  }
+
+  /// Register an external serializer using a type name (default namespace).
+  template <typename T>
+  Result<void, Error> register_extension_type(const std::string &type_name) {
+    return type_resolver_->template register_ext_type_by_name<T>("", type_name);
+  }
+
 private:
   /// Private constructor - use builder() instead!
-  explicit Fory(const Config &config) : config_(config) {}
+  explicit Fory(const Config &config, std::shared_ptr<TypeResolver> resolver)
+      : config_(config), type_resolver_(std::move(resolver)) {
+    if (!type_resolver_) {
+      type_resolver_ = std::make_shared<TypeResolver>();
+    }
+    type_resolver_->apply_config(config_);
+  }
 
   Config config_;
+  std::shared_ptr<TypeResolver> type_resolver_;
 
   friend class ForyBuilder;
 };
@@ -253,7 +315,12 @@ private:
 // ForyBuilder Implementation
 // ============================================================================
 
-inline Fory ForyBuilder::build() { return Fory(config_); }
+inline Fory ForyBuilder::build() {
+  if (!type_resolver_) {
+    type_resolver_ = std::make_shared<TypeResolver>();
+  }
+  return Fory(config_, type_resolver_);
+}
 
 } // namespace serialization
 } // namespace fory

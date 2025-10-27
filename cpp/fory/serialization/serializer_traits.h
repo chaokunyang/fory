@@ -34,7 +34,7 @@ namespace serialization {
 
 // Forward declarations for trait detection
 template <typename T, typename Enable = void> struct Serializer;
-template <typename T> struct SerializationMeta;
+template <typename T, typename Enable = void> struct SerializationMeta;
 
 // ============================================================================
 // Container Type Detection
@@ -90,8 +90,8 @@ struct has_fory_field_info : std::false_type {};
 
 template <typename T>
 struct has_fory_field_info<
-    T, std::void_t<decltype(SerializationMeta<T>::is_serializable)>>
-    : std::bool_constant<SerializationMeta<T>::is_serializable> {};
+  T, std::void_t<decltype(SerializationMeta<T, void>::is_serializable)>>
+  : std::bool_constant<SerializationMeta<T, void>::is_serializable> {};
 
 template <typename T>
 inline constexpr bool has_fory_field_info_v = has_fory_field_info<T>::value;
@@ -104,7 +104,7 @@ struct is_fory_serializable : std::false_type {};
 template <typename T>
 struct is_fory_serializable<
     T, std::enable_if_t<has_fory_field_info_v<T> &&
-                        std::is_class_v<SerializationMeta<T>>>>
+                        std::is_class_v<SerializationMeta<T, void>>>>
     : std::true_type {};
 
 template <typename T>

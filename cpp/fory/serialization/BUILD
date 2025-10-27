@@ -3,7 +3,7 @@ load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 cc_library(
     name = "fory_serialization",
     srcs = [
-        "type_meta.cc",
+        "type_resolver.cc",
         "skip.cc",
     ],
     hdrs = [
@@ -14,7 +14,7 @@ cc_library(
         "context.h",
         "enum_serializer.h",
         "fory.h",
-    "map_serializer.h",
+        "map_serializer.h",
         "ref_resolver.h",
         "serializer.h",
         "serializer_traits.h",
@@ -22,7 +22,7 @@ cc_library(
         "smart_ptr_serializers.h",
         "struct_serializer.h",
         "temporal_serializers.h",
-        "type_meta.h",
+        "type_resolver.h",
     ],
     strip_include_prefix = "/cpp",
     deps = [

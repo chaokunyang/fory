@@ -17,7 +17,7 @@
  * under the License.
  */
 
-#include "type_meta.h"
+#include "type_resolver.h"
 #include "fory/type/type.h"
 #include <algorithm>
 #include <cstring>
@@ -32,7 +32,7 @@ constexpr size_t SMALL_NUM_FIELDS_THRESHOLD = 0b11111;
 constexpr uint8_t REGISTER_BY_NAME_FLAG = 0b100000;
 constexpr size_t FIELD_NAME_SIZE_THRESHOLD = 0b1111;
 constexpr int64_t META_SIZE_MASK = 0xfff;
-constexpr int64_t COMPRESS_META_FLAG = 0b1 << 13;
+// constexpr int64_t COMPRESS_META_FLAG = 0b1 << 13;
 constexpr int64_t HAS_FIELDS_META_FLAG = 0b1 << 12;
 constexpr int8_t NUM_HASH_BITS = 50;
 
@@ -198,6 +198,10 @@ Result<FieldInfo, Error> FieldInfo::from_bytes(Buffer &buffer) {
 TypeMeta TypeMeta::from_fields(uint32_t tid, const std::string &ns,
                                const std::string &name, bool by_name,
                                std::vector<FieldInfo> fields) {
+  for (const auto &field : fields) {
+    FORY_CHECK(!field.field_name.empty())
+        << "Type '" << name << "' contains a field with empty name";
+  }
   TypeMeta meta;
   meta.type_id = tid;
   meta.namespace_str = ns;
@@ -252,7 +256,8 @@ Result<std::vector<uint8_t>, Error> TypeMeta::to_bytes() const {
 
   // Now write global binary header
   Buffer result_buffer;
-  int64_t meta_size = layer_buffer.size();
+  const uint32_t layer_size = layer_buffer.writer_index();
+  int64_t meta_size = layer_size;
   int64_t header = std::min(META_SIZE_MASK, meta_size);
 
   bool write_meta_fields_flag = !field_infos.empty();
@@ -262,7 +267,7 @@ Result<std::vector<uint8_t>, Error> TypeMeta::to_bytes() const {
 
   // Compute hash
   std::vector<uint8_t> layer_data(layer_buffer.data(),
-                                  layer_buffer.data() + layer_buffer.size());
+                                  layer_buffer.data() + layer_size);
   int64_t meta_hash = compute_hash(layer_data);
   header |= (meta_hash << (64 - NUM_HASH_BITS));
 
@@ -275,7 +280,12 @@ Result<std::vector<uint8_t>, Error> TypeMeta::to_bytes() const {
 
   result_buffer.WriteBytes(layer_data.data(), layer_data.size());
 
-  // CRITICAL FIX: Use writer_index() not size() to get actual bytes written!
+  FORY_LOG(FORY_INFO) << "TypeMeta::to_bytes type='" << type_name
+                      << "' ns='" << namespace_str << "' fields=" << num_fields
+                      << " layer_size=" << layer_size
+                      << " result_size=" << result_buffer.writer_index();
+
+  // Use actual bytes written to construct return vector
   return std::vector<uint8_t>(result_buffer.data(),
                               result_buffer.data() + result_buffer.writer_index());
 }
@@ -303,6 +313,12 @@ TypeMeta::from_bytes(Buffer &buffer, const TypeMeta *local_type_info) {
   }
 
   int64_t meta_hash = header >> (64 - NUM_HASH_BITS);
+
+  FORY_LOG(FORY_INFO) << "TypeMeta::from_bytes: start=" << start_pos
+                      << " header_size=" << header_size
+                      << " meta_size=" << meta_size
+                      << " buffer_size=" << buffer.size()
+                      << " reader_index(after header)=" << buffer.reader_index();
 
   // Read meta header
   auto meta_header_result = buffer.ReadUint8();

@@ -490,13 +490,7 @@ Cross-language mode has additional overhead compared to Java-only mode:
 #### Cross-Language Best Practices
 
 1. **Consistent Registration**: Ensure all services register types with identical IDs/names
-2. **Version Compatibility**: Use compatible mode for schema evolution across services:
-   ```java
-   Fory fory = Fory.builder()
-       .withLanguage(Language.XLANG)
-       .withCompatibleMode(CompatibleMode.COMPATIBLE)
-       .build();
-   ```
+2. **Version Compatibility**: Use compatible mode for schema evolution across services
 
 #### Troubleshooting Cross-Language Serialization
 

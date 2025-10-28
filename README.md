@@ -511,24 +511,24 @@ For more details on row format, see [Row Format Guide](docs/guide/row_format_gui
 
 ### User Guides
 
-| Guide                            | Description                                | Source                                                                             | Website                                                                             |
-| -------------------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| **Java Serialization**           | Comprehensive guide for Java serialization | [java_serialization_guide.md](docs/guide/java_serialization_guide.md)             | [📖 View](https://fory.apache.org/docs/docs/guide/java_serialization)              |
-| **Cross-Language Serialization** | Multi-language object exchange             | [xlang_serialization_guide.md](docs/guide/xlang_serialization_guide.md)           | [📖 View](https://fory.apache.org/docs/specification/fory_xlang_serialization_spec) |
-| **Row Format**                   | Zero-copy random access format             | [row_format_guide.md](docs/guide/row_format_guide.md)                             | [📖 View](https://fory.apache.org/docs/specification/fory_row_format_spec)         |
-| **Python**                       | Python-specific features and usage         | [python_guide.md](docs/guide/python_guide.md)                                     | [📖 View](https://fory.apache.org/docs/docs/guide/python_serialization)            |
-| **Rust**                         | Rust implementation and patterns           | [rust_guide.md](docs/guide/rust_guide.md)                                         | [📖 View](https://fory.apache.org/docs/docs/guide/rust_serialization)              |
-| **Scala**                        | Scala integration and best practices       | [scala_guide.md](docs/guide/scala_guide.md)                                       | [📖 View](https://fory.apache.org/docs/docs/guide/scala_serialization)             |
-| **GraalVM**                      | Native image support and AOT compilation   | [graalvm_guide.md](docs/guide/graalvm_guide.md)                                   | [📖 View](https://fory.apache.org/docs/docs/guide/graalvm_serialization)           |
-| **Development**                  | Building and contributing to Fory          | [DEVELOPMENT.md](docs/guide/DEVELOPMENT.md)                                       | [📖 View](https://fory.apache.org/docs/docs/guide/development)                     |
+| Guide                            | Description                                | Source                                                                  | Website                                                                             |
+| -------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| **Java Serialization**           | Comprehensive guide for Java serialization | [java_serialization_guide.md](docs/guide/java_serialization_guide.md)   | [📖 View](https://fory.apache.org/docs/docs/guide/java_serialization)               |
+| **Cross-Language Serialization** | Multi-language object exchange             | [xlang_serialization_guide.md](docs/guide/xlang_serialization_guide.md) | [📖 View](https://fory.apache.org/docs/specification/fory_xlang_serialization_spec) |
+| **Row Format**                   | Zero-copy random access format             | [row_format_guide.md](docs/guide/row_format_guide.md)                   | [📖 View](https://fory.apache.org/docs/specification/fory_row_format_spec)          |
+| **Python**                       | Python-specific features and usage         | [python_guide.md](docs/guide/python_guide.md)                           | [📖 View](https://fory.apache.org/docs/docs/guide/python_serialization)             |
+| **Rust**                         | Rust implementation and patterns           | [rust_guide.md](docs/guide/rust_guide.md)                               | [📖 View](https://fory.apache.org/docs/docs/guide/rust_serialization)               |
+| **Scala**                        | Scala integration and best practices       | [scala_guide.md](docs/guide/scala_guide.md)                             | [📖 View](https://fory.apache.org/docs/docs/guide/scala_serialization)              |
+| **GraalVM**                      | Native image support and AOT compilation   | [graalvm_guide.md](docs/guide/graalvm_guide.md)                         | [📖 View](https://fory.apache.org/docs/docs/guide/graalvm_serialization)            |
+| **Development**                  | Building and contributing to Fory          | [DEVELOPMENT.md](docs/guide/DEVELOPMENT.md)                             | [📖 View](https://fory.apache.org/docs/docs/guide/development)                      |
 
 ### Protocol Specifications
 
 | Specification           | Description                    | Source                                                                        | Website                                                                             |
 | ----------------------- | ------------------------------ | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
 | **Xlang Serialization** | Cross-language binary protocol | [xlang_serialization_spec.md](docs/specification/xlang_serialization_spec.md) | [📖 View](https://fory.apache.org/docs/specification/fory_xlang_serialization_spec) |
-| **Java Serialization**  | Java-optimized protocol        | [java_serialization_spec.md](docs/specification/java_serialization_spec.md)   | [📖 View](https://fory.apache.org/docs/specification/fory_java_serialization_spec) |
-| **Row Format**          | Row-based binary format        | [row_format_spec.md](docs/specification/row_format_spec.md)                   | [📖 View](https://fory.apache.org/docs/specification/fory_row_format_spec)         |
+| **Java Serialization**  | Java-optimized protocol        | [java_serialization_spec.md](docs/specification/java_serialization_spec.md)   | [📖 View](https://fory.apache.org/docs/specification/fory_java_serialization_spec)  |
+| **Row Format**          | Row-based binary format        | [row_format_spec.md](docs/specification/row_format_spec.md)                   | [📖 View](https://fory.apache.org/docs/specification/fory_row_format_spec)          |
 | **Type Mapping**        | Cross-language type conversion | [xlang_type_mapping.md](docs/specification/xlang_type_mapping.md)             | [📖 View](https://fory.apache.org/docs/specification/fory_xlang_serialization_spec) |
 
 ## Compatibility
@@ -557,72 +557,17 @@ Apache Fory™ supports class schema forward/backward compatibility across **Jav
 
 ### Overview
 
-Serialization security varies by mode:
+Serialization security varies by protocol:
 
-- **Static Serialization** (Row Format): Relatively secure with predefined schemas
-- **Dynamic Serialization** (Java/Python native): More flexible but requires careful security configuration
+- **Row Format**: Secure with predefined schemas
+- **Object Graph Serialization** (Java/Python native): More flexible but requires careful security configuration
 
-### Security Risks
+Dynamic serialization can deserialize arbitrary types, which may introduces risks. For example, the deserialization may invoke `init` constructor or `equals/hashCode` method, if the method body contains malicious code, the system will be at risk.
 
-Dynamic serialization can deserialize arbitrary types, which introduces risks:
+Fory enables class registration **by default** for dynamic protocols, allowing only trusted registered types.
+**Do not disable class registration unless you can ensure your environment is secure**.
 
-- Malicious code execution during deserialization
-- Constructor/method invocation (`__init__`, `equals`, `hashCode`)
-- Object graph manipulation attacks
-
-### Security Controls
-
-#### Class Registration (Recommended)
-
-Fory enables class registration **by default** for dynamic protocols, allowing only trusted registered types:
-
-```java
-Fory fory = Fory.builder()
-  .withLanguage(Language.JAVA)
-  .requireClassRegistration(true)  // Default: true
-  .build();
-
-// Only registered classes can be deserialized
-fory.register(TrustedClass.class);
-```
-
-**⚠️ Warning**: Only disable class registration in trusted environments:
-
-```java
-// Only for controlled environments!
-Fory fory = Fory.builder()
-  .requireClassRegistration(false)
-  .build();
-
-// Configure custom class checker
-fory.getClassResolver().setClassChecker((classResolver, className) -> {
-  // Implement your security policy
-  return className.startsWith("com.mycompany.trusted.");
-});
-```
-
-#### Python Security
-
-```python
-import pyfory
-
-# Strict mode (recommended)
-fory = pyfory.Fory(xlang=False, ref=True, strict=True)
-fory.register(TrustedClass)
-
-# Relaxed mode - only for trusted environments
-fory = pyfory.Fory(xlang=False, strict=False, policy=my_custom_policy)
-```
-
-### Best Practices
-
-1. **Enable Class Registration**: Always use class registration in production
-2. **Validate Input**: Sanitize serialized data from untrusted sources
-3. **Limit Depth**: Configure maximum deserialization depth to prevent DoS attacks
-4. **Custom Policies**: Implement custom `ClassChecker` or `DeserializationPolicy` for fine-grained control
-5. **Security Audits**: Monitor class registration warnings (enabled by default)
-
-### Reporting Vulnerabilities
+If this option is disabled, you are responsible for serialization security. You should implement and configure a customized `ClassChecker` or `DeserializationPolicy` for fine-grained security control
 
 To report security vulnerabilities in Apache Fory™, please follow the [ASF vulnerability reporting process](https://apache.org/security/#reporting-a-vulnerability).
 

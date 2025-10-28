@@ -308,7 +308,7 @@ namespace test {
 
 template <typename T>
 void test_roundtrip(const T &original) {
-  auto fory = Fory::builder().xlang(true).track_references(false).build();
+  auto fory = Fory::builder().xlang(true).track_ref(false).build();
 
   auto serialize_result = fory.serialize(original);
   ASSERT_TRUE(serialize_result.ok())

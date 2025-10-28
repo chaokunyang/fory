@@ -72,7 +72,7 @@ FORY_STRUCT(NestedStruct, point, label, properties);
 
 template <typename T>
 bool test_serialize_write(const T &obj, const std::string &filename) {
-  auto fory = Fory::builder().xlang(true).track_references(false).build();
+  auto fory = Fory::builder().xlang(true).track_ref(false).build();
 
   // Serialize
   auto result = fory.serialize(obj);
@@ -117,7 +117,7 @@ bool test_deserialize_read(const std::string &filename, T &obj) {
   std::cout << "Read " << size << " bytes from " << filename << std::endl;
 
   // Deserialize
-  auto fory = Fory::builder().xlang(true).track_references(false).build();
+  auto fory = Fory::builder().xlang(true).track_ref(false).build();
   auto result = fory.deserialize<T>(bytes.data(), bytes.size());
   if (!result.ok()) {
     std::cerr << "Deserialization failed: " << result.error().to_string()

@@ -48,7 +48,7 @@ struct Config {
 
   /// Enable reference tracking for shared and circular references.
   /// When enabled, avoids duplicating shared objects and handles cycles.
-  bool track_references = true;
+  bool track_ref = true;
 
   /// Enable meta string compression.
   /// When enabled, compresses type and field names using encoding algorithms.

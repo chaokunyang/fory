@@ -163,7 +163,7 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
       return Result<void, Error>();
     }
 
-    if (ctx.track_references()) {
+    if (ctx.track_ref()) {
       if (ctx.ref_writer().try_write_shared_ref(ctx, ptr)) {
         return Result<void, Error>();
       }
@@ -212,7 +212,7 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
       return std::shared_ptr<T>(nullptr);
     }
 
-    const bool tracking_refs = ctx.track_references();
+    const bool tracking_refs = ctx.track_ref();
 
     if (flag == REF_FLAG) {
       if (!tracking_refs) {

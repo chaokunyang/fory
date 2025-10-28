@@ -50,8 +50,8 @@ FORY_STRUCT(UniqueHolder, value);
 
 namespace {
 
-Fory create_serializer(bool track_references) {
-  return Fory::builder().track_references(track_references).build();
+Fory create_serializer(bool track_ref) {
+  return Fory::builder().track_ref(track_ref).build();
 }
 
 TEST(SmartPtrSerializerTest, OptionalIntRoundTrip) {

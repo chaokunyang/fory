@@ -87,12 +87,12 @@ struct MapKVHeader {
 
   /// Create default header for non-polymorphic maps
   /// (most common: map<string, int>, map<int, string>, etc.)
-  static inline MapKVHeader default_header(bool track_references) {
+  static inline MapKVHeader default_header(bool track_ref) {
     return {
-        .key_track_ref = track_references,
+        .key_track_ref = track_ref,
         .key_has_null = false,
         .key_is_declared_type = true,
-        .value_track_ref = track_references,
+        .value_track_ref = track_ref,
         .value_has_null = false,
         .value_is_declared_type = true,
     };

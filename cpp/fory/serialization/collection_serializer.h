@@ -82,9 +82,9 @@ struct CollectionHeader {
 
   /// Create default header for non-polymorphic, non-null collections
   /// (most common case: vector<int>, vector<string>, etc.)
-  static inline CollectionHeader default_header(bool track_references) {
+  static inline CollectionHeader default_header(bool track_ref) {
     return {
-        .track_ref = track_references,
+        .track_ref = track_ref,
         .has_null = false,
         .is_declared_type = true,
         .is_same_type = true,
@@ -93,9 +93,9 @@ struct CollectionHeader {
 
   /// Create header for potentially polymorphic collections
   /// (e.g., vector<shared_ptr<Base>>)
-  static inline CollectionHeader polymorphic_header(bool track_references) {
+  static inline CollectionHeader polymorphic_header(bool track_ref) {
     return {
-        .track_ref = track_references,
+        .track_ref = track_ref,
         .has_null = true,
         .is_declared_type = false,
         .is_same_type = false,

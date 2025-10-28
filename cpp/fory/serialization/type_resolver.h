@@ -436,7 +436,7 @@ private:
   bool compatible_;
   bool xlang_;
   bool check_struct_version_;
-  bool track_references_;
+  bool track_ref_;
 
   mutable std::mutex struct_mutex_;
   mutable std::unordered_map<std::type_index, std::shared_ptr<TypeInfo>>
@@ -453,13 +453,13 @@ private:
 
 inline TypeResolver::TypeResolver()
     : compatible_(false), xlang_(false), check_struct_version_(true),
-      track_references_(true) {}
+      track_ref_(true) {}
 
 inline void TypeResolver::apply_config(const Config &config) {
   compatible_ = config.compatible;
   xlang_ = config.xlang;
   check_struct_version_ = config.check_struct_version;
-  track_references_ = config.track_references;
+  track_ref_ = config.track_ref;
 }
 
 template <typename T> const TypeMeta &TypeResolver::struct_meta() {

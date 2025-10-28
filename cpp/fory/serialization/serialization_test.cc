@@ -83,7 +83,7 @@ namespace test {
 
 template <typename T>
 void test_roundtrip(const T &original, bool should_equal = true) {
-  auto fory = Fory::builder().xlang(true).track_references(false).build();
+  auto fory = Fory::builder().xlang(true).track_ref(false).build();
 
   // Serialize
   auto serialize_result = fory.serialize(original);
@@ -181,7 +181,7 @@ TEST(SerializationTest, OldEnumRoundtrip) {
 }
 
 TEST(SerializationTest, EnumSerializesOrdinalValue) {
-  auto fory = Fory::builder().xlang(true).track_references(false).build();
+  auto fory = Fory::builder().xlang(true).track_ref(false).build();
 
   auto bytes_result = fory.serialize(LegacyStatus::LARGE);
   ASSERT_TRUE(bytes_result.ok())
@@ -199,7 +199,7 @@ TEST(SerializationTest, EnumSerializesOrdinalValue) {
 }
 
 TEST(SerializationTest, OldEnumSerializesOrdinalValue) {
-  auto fory = Fory::builder().xlang(true).track_references(false).build();
+  auto fory = Fory::builder().xlang(true).track_ref(false).build();
 
   auto bytes_result = fory.serialize(OldStatus::OLD_POS);
   ASSERT_TRUE(bytes_result.ok())
@@ -217,7 +217,7 @@ TEST(SerializationTest, OldEnumSerializesOrdinalValue) {
 }
 
 TEST(SerializationTest, EnumOrdinalMappingHandlesNonZeroStart) {
-  auto fory = Fory::builder().xlang(true).track_references(false).build();
+  auto fory = Fory::builder().xlang(true).track_ref(false).build();
 
   auto bytes_result = fory.serialize(LegacyStatus::NEG);
   ASSERT_TRUE(bytes_result.ok())
@@ -239,7 +239,7 @@ TEST(SerializationTest, EnumOrdinalMappingHandlesNonZeroStart) {
 }
 
 TEST(SerializationTest, EnumOrdinalMappingRejectsInvalidOrdinal) {
-  auto fory = Fory::builder().xlang(true).track_references(false).build();
+  auto fory = Fory::builder().xlang(true).track_ref(false).build();
 
   auto bytes_result = fory.serialize(LegacyStatus::NEG);
   ASSERT_TRUE(bytes_result.ok())
@@ -255,7 +255,7 @@ TEST(SerializationTest, EnumOrdinalMappingRejectsInvalidOrdinal) {
 }
 
 TEST(SerializationTest, OldEnumOrdinalMappingHandlesNonZeroStart) {
-  auto fory = Fory::builder().xlang(true).track_references(false).build();
+  auto fory = Fory::builder().xlang(true).track_ref(false).build();
 
   auto bytes_result = fory.serialize(OldStatus::OLD_NEG);
   ASSERT_TRUE(bytes_result.ok())
@@ -371,14 +371,14 @@ TEST(SerializationTest, ConfigurationBuilder) {
                    .xlang(false)
                    .check_struct_version(true)
                    .max_depth(128)
-                   .track_references(false)
+                   .track_ref(false)
                    .build();
 
   EXPECT_TRUE(fory1.config().compatible);
   EXPECT_FALSE(fory1.config().xlang);
   EXPECT_TRUE(fory1.config().check_struct_version);
   EXPECT_EQ(fory1.config().max_depth, 128);
-  EXPECT_FALSE(fory1.config().track_references);
+  EXPECT_FALSE(fory1.config().track_ref);
 }
 
 } // namespace test

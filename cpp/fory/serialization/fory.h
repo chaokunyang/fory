@@ -31,7 +31,9 @@
 #include "fory/serialization/type_resolver.h"
 #include "fory/util/buffer.h"
 #include "fory/util/error.h"
+#include "fory/util/pool.h"
 #include "fory/util/result.h"
+#include <cstring>
 #include <memory>
 #include <string>
 #include <utility>
@@ -87,8 +89,8 @@ public:
   }
 
   /// Enable/disable reference tracking for shared/circular references.
-  ForyBuilder &track_references(bool enable) {
-    config_.track_references = enable;
+  ForyBuilder &track_ref(bool enable) {
+    config_.track_ref = enable;
     return *this;
   }
 
@@ -161,14 +163,24 @@ public:
                                     is_little_endian_system(), false,
                                     Language::CPP));
 
-    WriteContext ctx(buffer, config_, *type_resolver_);
+    auto ctx_handle = write_ctx_pool_.acquire();
+    WriteContext &ctx = *ctx_handle;
+    ctx.attach(buffer);
+    ctx.reset();
+    struct WriteContextCleanup {
+      WriteContext &ctx;
+      ~WriteContextCleanup() {
+        ctx.reset();
+        ctx.detach();
+      }
+    } cleanup{ctx};
 
     // Serialize object
     FORY_RETURN_NOT_OK(Serializer<T>::write(obj, ctx, true, true));
 
     // Copy to vector
     std::vector<uint8_t> result(buffer.writer_index());
-    memcpy(result.data(), buffer.data(), buffer.writer_index());
+    std::memcpy(result.data(), buffer.data(), buffer.writer_index());
     return result;
   }
 
@@ -186,7 +198,18 @@ public:
                                     is_little_endian_system(), false,
                                     Language::CPP));
 
-    WriteContext ctx(buffer, config_, *type_resolver_);
+    auto ctx_handle = write_ctx_pool_.acquire();
+    WriteContext &ctx = *ctx_handle;
+    ctx.attach(buffer);
+    ctx.reset();
+    struct WriteContextCleanup {
+      WriteContext &ctx;
+      ~WriteContextCleanup() {
+        ctx.reset();
+        ctx.detach();
+      }
+    } cleanup{ctx};
+
     FORY_RETURN_NOT_OK(Serializer<T>::write(obj, ctx, true, true));
 
     return buffer.writer_index() - start_pos;
@@ -239,7 +262,18 @@ public:
   /// @param buffer Input buffer to read from.
   /// @return Deserialized object on success, error on failure.
   template <typename T> Result<T, Error> deserialize_from(Buffer &buffer) {
-    ReadContext ctx(buffer, config_, *type_resolver_);
+    auto ctx_handle = read_ctx_pool_.acquire();
+    ReadContext &ctx = *ctx_handle;
+    ctx.attach(buffer);
+    ctx.reset();
+    struct ReadContextCleanup {
+      ReadContext &ctx;
+      ~ReadContextCleanup() {
+        ctx.reset();
+        ctx.detach();
+      }
+    } cleanup{ctx};
+
     auto result = Serializer<T>::read(ctx, true, true);
     if (result.ok()) {
       ctx.ref_reader().resolve_callbacks();
@@ -285,7 +319,7 @@ public:
   /// Register an external serializer with namespace and name.
   template <typename T>
   Result<void, Error> register_extension_type(const std::string &ns,
-                                        const std::string &type_name) {
+                                              const std::string &type_name) {
     return type_resolver_->template register_ext_type_by_name<T>(ns, type_name);
   }
 
@@ -298,7 +332,13 @@ public:
 private:
   /// Private constructor - use builder() instead!
   explicit Fory(const Config &config, std::shared_ptr<TypeResolver> resolver)
-      : config_(config), type_resolver_(std::move(resolver)) {
+      : config_(config), type_resolver_(std::move(resolver)),
+        write_ctx_pool_([this]() {
+          return std::make_unique<WriteContext>(config_, *type_resolver_);
+        }),
+        read_ctx_pool_([this]() {
+          return std::make_unique<ReadContext>(config_, *type_resolver_);
+        }) {
     if (!type_resolver_) {
       type_resolver_ = std::make_shared<TypeResolver>();
     }
@@ -307,6 +347,8 @@ private:
 
   Config config_;
   std::shared_ptr<TypeResolver> type_resolver_;
+  util::Pool<WriteContext> write_ctx_pool_;
+  util::Pool<ReadContext> read_ctx_pool_;
 
   friend class ForyBuilder;
 };

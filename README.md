@@ -122,13 +122,13 @@ Nightly snapshot:
 <dependency>
   <groupId>org.apache.fory</groupId>
   <artifactId>fory-core</artifactId>
-  <version>0.13.0-SNAPSHOT</version>
+  <version>0.14.0-SNAPSHOT</version>
 </dependency>
 <!-- row/arrow format support -->
 <!-- <dependency>
   <groupId>org.apache.fory</groupId>x
   <artifactId>fory-format</artifactId>
-  <version>0.13.0-SNAPSHOT</version>
+  <version>0.14.0-SNAPSHOT</version>
 </dependency> -->
 ```
 

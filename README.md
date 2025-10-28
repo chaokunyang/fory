@@ -595,10 +595,8 @@ We welcome contributions! Please read our [Contributing Guide](CONTRIBUTING.md) 
 
 See [Development Guide](docs/guide/DEVELOPMENT.md) for build instructions and development workflow.
 
+See [AGENTS](AGENTS.md) for detailed guidelines and best practices for AI coding agents working on the Apache Fory codebase.
+
 ## License
 
 Apache Fory™ is licensed under the [Apache License 2.0](LICENSE).
-
-## Acknowledgments
-
-Apache Fory™ is an [Apache Software Foundation](https://apache.org/) project, developed and maintained by contributors worldwide. We thank all contributors for their valuable contributions to the project.

@@ -227,3 +227,5 @@ If you want write a blog, or update other contents about the website, please sub
 ## Development
 
 For more information, please refer to [Development Guide](https://fory.apache.org/docs/docs/guide/development).
+
+See [AGENTS](AGENTS.md) for detailed guidelines and best practices for AI coding agents working on the Apache Fory codebase.

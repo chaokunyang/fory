@@ -33,9 +33,10 @@ In addition to cross-language serialization, Apache Fory™ also features at:
 - **100% compatible** with JDK serialization API with much faster implementation: supporting JDK `writeObject`/`readObject`/`writeReplace`/`readResolve`/`readObjectNoData`/`Externalizable` API.
 - Supports **Java 8~24**, Java 17+ `record` is supported too.
 - Supports [AOT compilation serialization](docs/guide/graalvm_guide.md) for **GraalVM native image**, and no reflection/serialization json config are needed.
-- Supports shared and circular reference object serialization for golang.
+- Supports shared and circular reference object serialization for **rust/golang.**
 - Supports [scala serialization](docs/guide/scala_guide.md)
 - Supports [Kotlin serialization](kotlin/README.md)
+- Supports [Rust serialization](rust/README.md)
 - Supports automatic object serialization for golang.
 
 ## Protocols
@@ -59,8 +60,7 @@ Different serialization frameworks are suitable for different scenarios, and ben
 
 If you need to benchmark for your specific scenario, make sure all serialization frameworks are appropriately configured for that scenario.
 
-Dynamic serialization frameworks support polymorphism and references, but they often come with a higher cost compared to static serialization frameworks, unless they utilize JIT techniques like Fory does.
-To ensure accurate benchmark statistics, it is advisable to **warm up** the system before collecting data due to Fory's runtime code generation.
+To ensure accurate benchmark statistics, it is advisable to **warm up** the system before collecting data.
 
 ### Java Serialization
 
@@ -86,13 +86,9 @@ See [benchmarks](https://github.com/apache/fory/tree/main/docs/benchmarks) for m
 
 ### Rust Serialization
 
-**ecommerce_data**
-
 <p align="center">
 <img src="docs/benchmarks/rust/ecommerce_data.png" width="90%">
 </p>
-
-**system_data**
 
 <p align="center">
 <img src="docs/benchmarks/rust/system_data.png" width="90%">
@@ -178,6 +174,21 @@ libraryDependencies += "org.apache.fory" % "fory-scala_3" % "0.13.0"
 pip install pyfory
 ```
 
+### Rust
+
+Add following content to your `Cargo.toml`:
+
+```
+[dependencies]
+fory = "0.13"
+```
+
+or just execute command:
+
+```
+cargo add fory@0.13.0
+```
+
 ### Golang
 
 ```bash
@@ -188,10 +199,14 @@ go get github.com/apache/fory/go/fory
 
 Here we give a quick start about how to use Apache Fory™, see [user guide](docs/README.md) for more details about [java](docs/guide/java_serialization_guide.md), [cross language](docs/guide/xlang_serialization_guide.md), and [row format](docs/guide/row_format_guide.md).
 
-### Fory java object graph serialization
+### Native Serialization
 
-If you don't have cross-language requirements, using this mode will
-result in better performance.
+If you don't have cross-language requirements, using this mode will result in better performance and support more types since we don't have to write extra meta for xlang type system or refuse types not supported in other languages.
+
+**Always use this mode if you only have one language for serialization**
+
+#### Fory Java Serialization
+
 
 ```java
 import org.apache.fory.*;
@@ -237,7 +252,26 @@ public class Example {
 }
 ```
 
-### Cross-language object graph serialization
+#### Fory Python Serialization
+
+This mode of `pyfory` acts as a high‑performance drop‑in replacement for `pickle`/`cloudpickle`, while keeping the same simple API and adding security and performance features.
+
+```python
+import pyfory
+
+# Drop-in replacement for pickle/cloudpickle
+fory = pyfory.Fory(xlang=False, ref=True, strict=False)
+
+def make_multiplier(k):
+	def mul(x):
+		return k * x
+	return mul
+
+binary = fory.dumps(make_multiplier(10))
+assert fory.loads(binary)(3) == 30
+```
+
+### Cross-language Serialization
 
 **Java**
 
@@ -272,6 +306,7 @@ public class ReferenceExample {
   }
 }
 ```
+See https://fory.apache.org/docs/docs/guide/java_object_graph_guide for more docs.
 
 **Python**
 
@@ -293,6 +328,41 @@ data = fory.serialize(obj)
 # bytes can be data serialized by other languages.
 print(fory.deserialize(data))
 ```
+
+See https://fory.apache.org/docs/docs/guide/python_serialization for more docs.
+
+
+**Rust**
+
+```rust
+use fory::{Fory, Error, Reader};
+use fory::ForyObject;
+
+#[derive(ForyObject, Debug, PartialEq)]
+struct User {
+    name: String,
+    age: i32,
+    email: String,
+}
+
+fn main() -> Result<(), Error> {
+    let mut fory = Fory::default();
+    fory.register::<User>(1)?;
+
+    let user = User {
+        name: "Alice".to_string(),
+        age: 30,
+        email: "alice@example.com".to_string(),
+    };
+
+    let bytes = fory.serialize(&user)?;
+    let decoded: User = fory.deserialize(&bytes)?;
+    assert_eq!(user, decoded);
+    Ok(())
+}
+```
+
+See https://fory.apache.org/docs/docs/guide/rust_serialization for more docs.
 
 **Golang**
 
@@ -398,6 +468,15 @@ binary: bytes = encoder.to_row(foo).to_bytes()
 foo_row = pyfory.RowData(encoder.schema, binary)
 print(foo_row.f2[100000], foo_row.f4[100000].f1, foo_row.f4[200000].f2[5])
 ```
+
+## Documentation
+
+- Java: https://fory.apache.org/docs/docs/guide/java_object_graph_guide
+- Python: https://fory.apache.org/docs/docs/guide/python_serialization
+- Rust: https://fory.apache.org/docs/docs/guide/rust_serialization
+- Scala:https://fory.apache.org/docs/docs/guide/scala_guide
+- Kotlin: [Kotlin README](kotlin/README.md)
+- Go: [Go README](go/README.md)
 
 ## Compatibility
 

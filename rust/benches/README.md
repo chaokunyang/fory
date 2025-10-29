@@ -117,6 +117,32 @@ python benchmark_report.py --log-file cargo_bench.log --output-dir=report_output
 | system_data    | medium | deserialize | 14,322     | 9,205      | 10,565       | fory    |
 | system_data    | large  | deserialize | 961        | 634        | 706          | fory    |
 
+### Serialized data size
+
+| data type       | data size | fory    | protobuf |
+| --------------- | --------- | ------- | -------- |
+| simple-struct   | small     | 21      | 19       |
+| simple-struct   | medium    | 70      | 66       |
+| simple-struct   | large     | 220     | 216      |
+| simple-list     | small     | 36      | 16       |
+| simple-list     | medium    | 802     | 543      |
+| simple-list     | large     | 14512   | 12876    |
+| simple-map      | small     | 33      | 36       |
+| simple-map      | medium    | 795     | 1182     |
+| simple-map      | large     | 17893   | 21746    |
+| person          | small     | 122     | 118      |
+| person          | medium    | 873     | 948      |
+| person          | large     | 7531    | 7865     |
+| company         | small     | 191     | 182      |
+| company         | medium    | 9118    | 9950     |
+| company         | large     | 748105  | 782485   |
+| e-commerce-data | small     | 750     | 737      |
+| e-commerce-data | medium    | 53275   | 58025    |
+| e-commerce-data | large     | 1079358 | 1166878  |
+| system-data     | small     | 311     | 315      |
+| system-data     | medium    | 24301   | 26161    |
+| system-data     | large     | 450031  | 479988   |
+
 ## How to generate flamegraph
 
 ```bash

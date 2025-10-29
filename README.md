@@ -16,22 +16,6 @@
 > [!IMPORTANT]
 > **Apache Fory™ was previously named as Apache Fury. For versions before 0.11, please use "fury" instead of "fory" in package names, imports, and dependencies, see [Fury Docs](https://fory.apache.org/docs/0.10/docs/introduction/) for how to use Fury in older versions**.
 
-## Why Choose Apache Fory™?
-
-**Compared to Static Serialization Frameworks**:
-
-- No IDL definitions or schema management required
-- Automatic handling of complex object graphs with references
-- Native support for polymorphic types
-- Significantly faster for most workloads
-
-**Compared to Dynamic Serialization Frameworks**:
-
-- Up to 170x better performance through JIT compilation
-- Smaller serialized data size with compact binary encoding
-- Cross-language support
-- Better security with class registration and deserialization policy controls
-
 ## Key Features
 
 ### 🚀 High-Performance Serialization

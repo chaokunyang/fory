@@ -150,3 +150,9 @@ To run only a specific benchmark group, you can use a command like
 ```bash
 cargo bench --bench serialization_bench -- simple_struct
 ```
+
+## How to print serialized data size
+
+```bash
+cargo run --bin fory_profiler -- --print-all-serialized-sizes
+```

@@ -28,7 +28,6 @@ pub mod map;
 mod mutex;
 mod number;
 mod option;
-mod unsigned_number;
 mod primitive_list;
 mod rc;
 mod refcell;
@@ -37,6 +36,7 @@ pub mod skip;
 mod string;
 pub mod struct_;
 pub mod trait_object;
+mod unsigned_number;
 pub mod util;
 pub mod weak;
 

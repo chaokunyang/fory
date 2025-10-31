@@ -1052,6 +1052,14 @@ pub trait Serializer: 'static {
         false
     }
 
+    #[inline(always)]
+    fn fory_is_wrapper_type() -> bool
+    where
+        Self: Sized,
+    {
+        Self::fory_is_shared_ref()
+    }
+
     /// Get the static Fory type ID for this type.
     ///
     /// Type IDs are Fory's internal type identification system, separate from

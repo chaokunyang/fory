@@ -21,7 +21,7 @@ use crate::resolver::context::WriteContext;
 use crate::resolver::type_resolver::TypeResolver;
 use crate::serializer::primitive_list;
 use crate::serializer::{ForyDefault, Serializer};
-use crate::types::{TypeId, is_primitive_array};
+use crate::types::TypeId;
 use std::collections::{LinkedList, VecDeque};
 use std::mem;
 
@@ -31,30 +31,54 @@ use super::collection::{
 };
 
 #[inline(always)]
-fn check_primitive<T: Serializer>() -> Option<TypeId> {
-    match T::fory_static_type_id() {
-        TypeId::BOOL => Some(TypeId::BOOL_ARRAY),
-        TypeId::INT8 => Some(TypeId::INT8_ARRAY),
-        TypeId::INT16 => Some(TypeId::INT16_ARRAY),
-        TypeId::INT32 => Some(TypeId::INT32_ARRAY),
-        TypeId::INT64 => Some(TypeId::INT64_ARRAY),
-        TypeId::FLOAT32 => Some(TypeId::FLOAT32_ARRAY),
-        TypeId::FLOAT64 => Some(TypeId::FLOAT64_ARRAY),
-        TypeId::U16 => Some(TypeId::U16_ARRAY),
-        TypeId::U32 => Some(TypeId::U32_ARRAY),
-        TypeId::U64 => Some(TypeId::U64_ARRAY),
-        _ => None,
+fn get_primitive_type_id<T: Serializer>() -> TypeId {
+     if T::fory_is_wrapper_type() {
+        return TypeId::UNKNOWN;
     }
+    match T::fory_static_type_id() {
+        TypeId::BOOL => TypeId::BOOL_ARRAY,
+        TypeId::INT8 => TypeId::INT8_ARRAY,
+        TypeId::INT16 => TypeId::INT16_ARRAY,
+        TypeId::INT32 => TypeId::INT32_ARRAY,
+        TypeId::INT64 => TypeId::INT64_ARRAY,
+        TypeId::FLOAT32 => TypeId::FLOAT32_ARRAY,
+        TypeId::FLOAT64 => TypeId::FLOAT64_ARRAY,
+        TypeId::U16 => TypeId::U16_ARRAY,
+        TypeId::U32 => TypeId::U32_ARRAY,
+        TypeId::U64 => TypeId::U64_ARRAY,
+        _ => TypeId::UNKNOWN,
+    }
+}
+
+#[inline(always)]
+pub fn is_primitive_type<T: Serializer>() -> bool {
+    if T::fory_is_wrapper_type() {
+        return false;
+    }
+    matches!(
+        T::fory_static_type_id(),
+        TypeId::BOOL
+            | TypeId::INT8
+            | TypeId::INT16
+            | TypeId::INT32
+            | TypeId::INT64
+            | TypeId::FLOAT32
+            | TypeId::FLOAT64
+            | TypeId::U8
+            | TypeId::U16
+            | TypeId::U32
+            | TypeId::U64
+    )
 }
 
 impl<T: Serializer + ForyDefault> Serializer for Vec<T> {
     #[inline(always)]
     fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error> {
-        if is_primitive_array::<T>() {
+        if is_primitive_type::<T>() {
             primitive_list::fory_write_data(self, context)
         } else {
             write_collection_data(self, context, false)
-        }  
+        }
     }
 
     #[inline(always)]
@@ -63,7 +87,7 @@ impl<T: Serializer + ForyDefault> Serializer for Vec<T> {
         context: &mut WriteContext,
         has_generics: bool,
     ) -> Result<(), Error> {
-        if is_primitive_array::<T>() {
+        if is_primitive_type::<T>() {
             primitive_list::fory_write_data(self, context)
         } else {
             write_collection_data(self, context, has_generics)
@@ -72,8 +96,9 @@ impl<T: Serializer + ForyDefault> Serializer for Vec<T> {
 
     #[inline(always)]
     fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error> {
-        if is_primitive_array::<T>() {
-            primitive_list::fory_write_type_info(context, T::fory_static_type_id())
+        let id = get_primitive_type_id::<T>();
+        if id != TypeId::UNKNOWN {
+            primitive_list::fory_write_type_info(context, id)
         } else {
             write_collection_type_info(context, TypeId::LIST as u32)
         }
@@ -81,7 +106,7 @@ impl<T: Serializer + ForyDefault> Serializer for Vec<T> {
 
     #[inline(always)]
     fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
-        if is_primitive_array::<T>() {
+        if is_primitive_type::<T>() {
             primitive_list::fory_read_data(context)
         } else {
             read_collection_data(context)
@@ -90,8 +115,9 @@ impl<T: Serializer + ForyDefault> Serializer for Vec<T> {
 
     #[inline(always)]
     fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error> {
-        if is_primitive_array::<T>() {
-            primitive_list::fory_read_type_info(context, T::fory_static_type_id())
+        let id = get_primitive_type_id::<T>();
+        if id != TypeId::UNKNOWN {
+            primitive_list::fory_read_type_info(context, id)
         } else {
             read_collection_type_info(context, TypeId::LIST as u32)
         }
@@ -99,7 +125,7 @@ impl<T: Serializer + ForyDefault> Serializer for Vec<T> {
 
     #[inline(always)]
     fn fory_reserved_space() -> usize {
-        if is_primitive_array::<T>() {
+        if is_primitive_type::<T>() {
             primitive_list::fory_reserved_space::<T>()
         } else {
             // size of the vec
@@ -109,18 +135,22 @@ impl<T: Serializer + ForyDefault> Serializer for Vec<T> {
 
     #[inline(always)]
     fn fory_get_type_id(_: &TypeResolver) -> Result<u32, Error> {
-        Ok(match check_primitive::<T>() {
-            Some(type_id) => type_id as u32,
-            None => TypeId::LIST as u32,
-        })
+        let id = get_primitive_type_id::<T>();
+        if id != TypeId::UNKNOWN {
+            return Ok(id as u32);
+        } else {
+            return Ok(TypeId::LIST as u32);
+        }
     }
 
     #[inline(always)]
     fn fory_type_id_dyn(&self, _: &TypeResolver) -> Result<u32, Error> {
-        Ok(match check_primitive::<T>() {
-            Some(type_id) => type_id as u32,
-            None => TypeId::LIST as u32,
-        })
+        let id = get_primitive_type_id::<T>();
+        if id != TypeId::UNKNOWN {
+            return Ok(id as u32);
+        } else {
+            return Ok(TypeId::LIST as u32);
+        }
     }
 
     #[inline(always)]
@@ -128,9 +158,11 @@ impl<T: Serializer + ForyDefault> Serializer for Vec<T> {
     where
         Self: Sized,
     {
-        match check_primitive::<T>() {
-            Some(type_id) => type_id,
-            None => TypeId::LIST,
+        let id = get_primitive_type_id::<T>();
+        if id != TypeId::UNKNOWN {
+            return id;
+        } else {
+            return TypeId::LIST;
         }
     }
 

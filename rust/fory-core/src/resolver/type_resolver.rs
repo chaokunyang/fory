@@ -24,9 +24,11 @@ use crate::meta::{
 use crate::serializer::{ForyDefault, Serializer, StructSerializer};
 use crate::util::get_ext_actual_type_id;
 use crate::{Reader, TypeId};
+use chrono::{NaiveDate, NaiveDateTime};
 use std::collections::{HashSet, LinkedList};
 use std::rc::Rc;
 use std::vec;
+
 use std::{any::Any, collections::HashMap};
 
 type WriteFn = fn(
@@ -455,7 +457,13 @@ impl TypeResolver {
         self.register_internal_serializer::<i64>(TypeId::INT64)?;
         self.register_internal_serializer::<f32>(TypeId::FLOAT32)?;
         self.register_internal_serializer::<f64>(TypeId::FLOAT64)?;
+        self.register_internal_serializer::<u8>(TypeId::U8)?;
+        self.register_internal_serializer::<u16>(TypeId::U16)?;
+        self.register_internal_serializer::<u32>(TypeId::U32)?;
+        self.register_internal_serializer::<u64>(TypeId::U64)?;
         self.register_internal_serializer::<String>(TypeId::STRING)?;
+        self.register_internal_serializer::<NaiveDateTime>(TypeId::TIMESTAMP)?;
+        self.register_internal_serializer::<NaiveDate>(TypeId::LOCAL_DATE)?;
 
         self.register_internal_serializer::<Vec<bool>>(TypeId::BOOL_ARRAY)?;
         self.register_internal_serializer::<Vec<i8>>(TypeId::INT8_ARRAY)?;
@@ -464,6 +472,10 @@ impl TypeResolver {
         self.register_internal_serializer::<Vec<i64>>(TypeId::INT64_ARRAY)?;
         self.register_internal_serializer::<Vec<f32>>(TypeId::FLOAT32_ARRAY)?;
         self.register_internal_serializer::<Vec<f64>>(TypeId::FLOAT64_ARRAY)?;
+        self.register_internal_serializer::<Vec<u8>>(TypeId::BINARY)?;
+        self.register_internal_serializer::<Vec<u16>>(TypeId::U16_ARRAY)?;
+        self.register_internal_serializer::<Vec<u32>>(TypeId::U32_ARRAY)?;
+        self.register_internal_serializer::<Vec<u64>>(TypeId::U64_ARRAY)?;
         self.register_generic_trait::<Vec<String>>()?;
         self.register_generic_trait::<LinkedList<i32>>()?;
         self.register_generic_trait::<LinkedList<String>>()?;

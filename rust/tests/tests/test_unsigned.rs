@@ -203,16 +203,44 @@ fn test_unsigned_edge_cases() {
     let fory = Fory::default();
 
     // Test minimum values
-    assert_eq!(0u8, fory.deserialize(&fory.serialize(&0u8).unwrap()).unwrap());
-    assert_eq!(0u16, fory.deserialize(&fory.serialize(&0u16).unwrap()).unwrap());
-    assert_eq!(0u32, fory.deserialize(&fory.serialize(&0u32).unwrap()).unwrap());
-    assert_eq!(0u64, fory.deserialize(&fory.serialize(&0u64).unwrap()).unwrap());
+    assert_eq!(
+        0u8,
+        fory.deserialize(&fory.serialize(&0u8).unwrap()).unwrap()
+    );
+    assert_eq!(
+        0u16,
+        fory.deserialize(&fory.serialize(&0u16).unwrap()).unwrap()
+    );
+    assert_eq!(
+        0u32,
+        fory.deserialize(&fory.serialize(&0u32).unwrap()).unwrap()
+    );
+    assert_eq!(
+        0u64,
+        fory.deserialize(&fory.serialize(&0u64).unwrap()).unwrap()
+    );
 
     // Test maximum values
-    assert_eq!(u8::MAX, fory.deserialize(&fory.serialize(&u8::MAX).unwrap()).unwrap());
-    assert_eq!(u16::MAX, fory.deserialize(&fory.serialize(&u16::MAX).unwrap()).unwrap());
-    assert_eq!(u32::MAX, fory.deserialize(&fory.serialize(&u32::MAX).unwrap()).unwrap());
-    assert_eq!(u64::MAX, fory.deserialize(&fory.serialize(&u64::MAX).unwrap()).unwrap());
+    assert_eq!(
+        u8::MAX,
+        fory.deserialize(&fory.serialize(&u8::MAX).unwrap())
+            .unwrap()
+    );
+    assert_eq!(
+        u16::MAX,
+        fory.deserialize(&fory.serialize(&u16::MAX).unwrap())
+            .unwrap()
+    );
+    assert_eq!(
+        u32::MAX,
+        fory.deserialize(&fory.serialize(&u32::MAX).unwrap())
+            .unwrap()
+    );
+    assert_eq!(
+        u64::MAX,
+        fory.deserialize(&fory.serialize(&u64::MAX).unwrap())
+            .unwrap()
+    );
 
     // Test empty arrays
     let empty_u8: Vec<u8> = vec![];
@@ -220,10 +248,26 @@ fn test_unsigned_edge_cases() {
     let empty_u32: Vec<u32> = vec![];
     let empty_u64: Vec<u64> = vec![];
 
-    assert_eq!(empty_u8, fory.deserialize::<Vec<u8>>(&fory.serialize(&empty_u8).unwrap()).unwrap());
-    assert_eq!(empty_u16, fory.deserialize::<Vec<u16>>(&fory.serialize(&empty_u16).unwrap()).unwrap());
-    assert_eq!(empty_u32, fory.deserialize::<Vec<u32>>(&fory.serialize(&empty_u32).unwrap()).unwrap());
-    assert_eq!(empty_u64, fory.deserialize::<Vec<u64>>(&fory.serialize(&empty_u64).unwrap()).unwrap());
+    assert_eq!(
+        empty_u8,
+        fory.deserialize::<Vec<u8>>(&fory.serialize(&empty_u8).unwrap())
+            .unwrap()
+    );
+    assert_eq!(
+        empty_u16,
+        fory.deserialize::<Vec<u16>>(&fory.serialize(&empty_u16).unwrap())
+            .unwrap()
+    );
+    assert_eq!(
+        empty_u32,
+        fory.deserialize::<Vec<u32>>(&fory.serialize(&empty_u32).unwrap())
+            .unwrap()
+    );
+    assert_eq!(
+        empty_u64,
+        fory.deserialize::<Vec<u64>>(&fory.serialize(&empty_u64).unwrap())
+            .unwrap()
+    );
 }
 
 #[test]

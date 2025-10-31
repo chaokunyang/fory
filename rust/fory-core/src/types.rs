@@ -18,7 +18,6 @@
 use crate::error::Error;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::mem;
-use crate::serializer::Serializer;
 
 #[allow(dead_code)]
 pub enum StringFlag {
@@ -253,7 +252,7 @@ pub static PRIMITIVE_ARRAY_TYPE_MAP: &[(&str, u32, &str)] = &[
 ];
 
 #[inline(always)]
-pub fn is_primitive_type(type_id: TypeId) -> bool {
+pub fn is_primitive_type_id(type_id: TypeId) -> bool {
     matches!(
         type_id,
         TypeId::BOOL
@@ -263,35 +262,12 @@ pub fn is_primitive_type(type_id: TypeId) -> bool {
             | TypeId::INT64
             | TypeId::FLOAT32
             | TypeId::FLOAT64
-            | TypeId::STRING
-            | TypeId::LOCAL_DATE
-            | TypeId::TIMESTAMP
             | TypeId::U8
             | TypeId::U16
             | TypeId::U32
             | TypeId::U64
     )
 }
-
-
-#[inline(always)]
-pub fn is_primitive_array<T: Serializer>() -> bool {
-    matches!(
-        T::fory_static_type_id(),
-        TypeId::BOOL
-            | TypeId::INT8
-            | TypeId::INT16
-            | TypeId::INT32
-            | TypeId::INT64
-            | TypeId::FLOAT32
-            | TypeId::FLOAT64
-            | TypeId::U8
-            | TypeId::U16
-            | TypeId::U32
-            | TypeId::U64
-    )
-}
-
 
 #[inline(always)]
 pub fn is_internal_type(type_id: u32) -> bool {

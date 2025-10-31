@@ -137,9 +137,9 @@ impl<T: Serializer + ForyDefault> Serializer for Vec<T> {
     fn fory_get_type_id(_: &TypeResolver) -> Result<u32, Error> {
         let id = get_primitive_type_id::<T>();
         if id != TypeId::UNKNOWN {
-            return Ok(id as u32);
+            Ok(id as u32)
         } else {
-            return Ok(TypeId::LIST as u32);
+            Ok(TypeId::LIST as u32)
         }
     }
 
@@ -147,9 +147,9 @@ impl<T: Serializer + ForyDefault> Serializer for Vec<T> {
     fn fory_type_id_dyn(&self, _: &TypeResolver) -> Result<u32, Error> {
         let id = get_primitive_type_id::<T>();
         if id != TypeId::UNKNOWN {
-            return Ok(id as u32);
+            Ok(id as u32)
         } else {
-            return Ok(TypeId::LIST as u32);
+            Ok(TypeId::LIST as u32)
         }
     }
 
@@ -160,9 +160,9 @@ impl<T: Serializer + ForyDefault> Serializer for Vec<T> {
     {
         let id = get_primitive_type_id::<T>();
         if id != TypeId::UNKNOWN {
-            return id;
+            id
         } else {
-            return TypeId::LIST;
+            TypeId::LIST
         }
     }
 

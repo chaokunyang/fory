@@ -15,68 +15,31 @@
 // specific language governing permissions and limitations
 // under the License.
 
+mod test_helpers;
+
 use fory_core::fory::Fory;
 use fory_derive::ForyObject;
-use std::any::Any;
-use std::rc::Rc;
-use std::sync::Arc;
+use test_helpers::{test_arc_any, test_box_any, test_rc_any, test_roundtrip};
 
 #[test]
 fn test_unsigned_numbers() {
     let fory = Fory::default();
-
-    // Test u8
-    let val_u8: u8 = 255;
-    let bytes = fory.serialize(&val_u8).unwrap();
-    let result: u8 = fory.deserialize(&bytes).unwrap();
-    assert_eq!(val_u8, result);
-
-    // Test u16
-    let val_u16: u16 = 65535;
-    let bytes = fory.serialize(&val_u16).unwrap();
-    let result: u16 = fory.deserialize(&bytes).unwrap();
-    assert_eq!(val_u16, result);
-
-    // Test u32
-    let val_u32: u32 = 4294967295;
-    let bytes = fory.serialize(&val_u32).unwrap();
-    let result: u32 = fory.deserialize(&bytes).unwrap();
-    assert_eq!(val_u32, result);
-
-    // Test u64
-    let val_u64: u64 = 18446744073709551615;
-    let bytes = fory.serialize(&val_u64).unwrap();
-    let result: u64 = fory.deserialize(&bytes).unwrap();
-    assert_eq!(val_u64, result);
+    test_roundtrip(&fory, 255u8);
+    test_roundtrip(&fory, 65535u16);
+    test_roundtrip(&fory, 4294967295u32);
+    test_roundtrip(&fory, 18446744073709551615u64);
 }
 
 #[test]
 fn test_unsigned_arrays() {
     let fory = Fory::default();
-
-    // Test Vec<u8>
-    let vec_u8 = vec![0u8, 1, 2, 255];
-    let bytes = fory.serialize(&vec_u8).unwrap();
-    let result: Vec<u8> = fory.deserialize(&bytes).unwrap();
-    assert_eq!(vec_u8, result);
-
-    // Test Vec<u16>
-    let vec_u16 = vec![0u16, 100, 1000, 65535];
-    let bytes = fory.serialize(&vec_u16).unwrap();
-    let result: Vec<u16> = fory.deserialize(&bytes).unwrap();
-    assert_eq!(vec_u16, result);
-
-    // Test Vec<u32>
-    let vec_u32 = vec![0u32, 1000, 1000000, 4294967295];
-    let bytes = fory.serialize(&vec_u32).unwrap();
-    let result: Vec<u32> = fory.deserialize(&bytes).unwrap();
-    assert_eq!(vec_u32, result);
-
-    // Test Vec<u64>
-    let vec_u64 = vec![0u64, 1000000, 1000000000000, 18446744073709551615];
-    let bytes = fory.serialize(&vec_u64).unwrap();
-    let result: Vec<u64> = fory.deserialize(&bytes).unwrap();
-    assert_eq!(vec_u64, result);
+    test_roundtrip(&fory, vec![0u8, 1, 2, 255]);
+    test_roundtrip(&fory, vec![0u16, 100, 1000, 65535]);
+    test_roundtrip(&fory, vec![0u32, 1000, 1000000, 4294967295]);
+    test_roundtrip(
+        &fory,
+        vec![0u64, 1000000, 1000000000000, 18446744073709551615],
+    );
 }
 
 #[test]
@@ -206,71 +169,22 @@ fn test_unsigned_edge_cases() {
     let fory = Fory::default();
 
     // Test minimum values
-    assert_eq!(
-        0u8,
-        fory.deserialize(&fory.serialize(&0u8).unwrap()).unwrap()
-    );
-    assert_eq!(
-        0u16,
-        fory.deserialize(&fory.serialize(&0u16).unwrap()).unwrap()
-    );
-    assert_eq!(
-        0u32,
-        fory.deserialize(&fory.serialize(&0u32).unwrap()).unwrap()
-    );
-    assert_eq!(
-        0u64,
-        fory.deserialize(&fory.serialize(&0u64).unwrap()).unwrap()
-    );
+    test_roundtrip(&fory, 0u8);
+    test_roundtrip(&fory, 0u16);
+    test_roundtrip(&fory, 0u32);
+    test_roundtrip(&fory, 0u64);
 
     // Test maximum values
-    assert_eq!(
-        u8::MAX,
-        fory.deserialize(&fory.serialize(&u8::MAX).unwrap())
-            .unwrap()
-    );
-    assert_eq!(
-        u16::MAX,
-        fory.deserialize(&fory.serialize(&u16::MAX).unwrap())
-            .unwrap()
-    );
-    assert_eq!(
-        u32::MAX,
-        fory.deserialize(&fory.serialize(&u32::MAX).unwrap())
-            .unwrap()
-    );
-    assert_eq!(
-        u64::MAX,
-        fory.deserialize(&fory.serialize(&u64::MAX).unwrap())
-            .unwrap()
-    );
+    test_roundtrip(&fory, u8::MAX);
+    test_roundtrip(&fory, u16::MAX);
+    test_roundtrip(&fory, u32::MAX);
+    test_roundtrip(&fory, u64::MAX);
 
     // Test empty arrays
-    let empty_u8: Vec<u8> = vec![];
-    let empty_u16: Vec<u16> = vec![];
-    let empty_u32: Vec<u32> = vec![];
-    let empty_u64: Vec<u64> = vec![];
-
-    assert_eq!(
-        empty_u8,
-        fory.deserialize::<Vec<u8>>(&fory.serialize(&empty_u8).unwrap())
-            .unwrap()
-    );
-    assert_eq!(
-        empty_u16,
-        fory.deserialize::<Vec<u16>>(&fory.serialize(&empty_u16).unwrap())
-            .unwrap()
-    );
-    assert_eq!(
-        empty_u32,
-        fory.deserialize::<Vec<u32>>(&fory.serialize(&empty_u32).unwrap())
-            .unwrap()
-    );
-    assert_eq!(
-        empty_u64,
-        fory.deserialize::<Vec<u64>>(&fory.serialize(&empty_u64).unwrap())
-            .unwrap()
-    );
+    test_roundtrip(&fory, Vec::<u8>::new());
+    test_roundtrip(&fory, Vec::<u16>::new());
+    test_roundtrip(&fory, Vec::<u32>::new());
+    test_roundtrip(&fory, Vec::<u64>::new());
 }
 
 #[test]
@@ -392,141 +306,34 @@ fn test_unsigned_with_smart_pointers() {
     let fory = Fory::default();
 
     // Test Box<dyn Any> with unsigned types
-    let box_u8: Box<dyn Any> = Box::new(255u8);
-    let bytes = fory.serialize(&box_u8).unwrap();
-    let result: Box<dyn Any> = fory.deserialize(&bytes).unwrap();
-    assert_eq!(result.downcast_ref::<u8>().unwrap(), &255u8);
-
-    let box_u16: Box<dyn Any> = Box::new(65535u16);
-    let bytes = fory.serialize(&box_u16).unwrap();
-    let result: Box<dyn Any> = fory.deserialize(&bytes).unwrap();
-    assert_eq!(result.downcast_ref::<u16>().unwrap(), &65535u16);
-
-    let box_u32: Box<dyn Any> = Box::new(4294967295u32);
-    let bytes = fory.serialize(&box_u32).unwrap();
-    let result: Box<dyn Any> = fory.deserialize(&bytes).unwrap();
-    assert_eq!(result.downcast_ref::<u32>().unwrap(), &4294967295u32);
-
-    let box_u64: Box<dyn Any> = Box::new(18446744073709551615u64);
-    let bytes = fory.serialize(&box_u64).unwrap();
-    let result: Box<dyn Any> = fory.deserialize(&bytes).unwrap();
-    assert_eq!(
-        result.downcast_ref::<u64>().unwrap(),
-        &18446744073709551615u64
-    );
+    test_box_any(&fory, 255u8);
+    test_box_any(&fory, 65535u16);
+    test_box_any(&fory, 4294967295u32);
+    test_box_any(&fory, 18446744073709551615u64);
 
     // Test Rc<dyn Any> with unsigned types
-    let rc_u8: Rc<dyn Any> = Rc::new(255u8);
-    let bytes = fory.serialize(&rc_u8).unwrap();
-    let result: Rc<dyn Any> = fory.deserialize(&bytes).unwrap();
-    assert_eq!(result.downcast_ref::<u8>().unwrap(), &255u8);
-
-    let rc_u16: Rc<dyn Any> = Rc::new(65535u16);
-    let bytes = fory.serialize(&rc_u16).unwrap();
-    let result: Rc<dyn Any> = fory.deserialize(&bytes).unwrap();
-    assert_eq!(result.downcast_ref::<u16>().unwrap(), &65535u16);
-
-    let rc_u32: Rc<dyn Any> = Rc::new(4294967295u32);
-    let bytes = fory.serialize(&rc_u32).unwrap();
-    let result: Rc<dyn Any> = fory.deserialize(&bytes).unwrap();
-    assert_eq!(result.downcast_ref::<u32>().unwrap(), &4294967295u32);
-
-    let rc_u64: Rc<dyn Any> = Rc::new(18446744073709551615u64);
-    let bytes = fory.serialize(&rc_u64).unwrap();
-    let result: Rc<dyn Any> = fory.deserialize(&bytes).unwrap();
-    assert_eq!(
-        result.downcast_ref::<u64>().unwrap(),
-        &18446744073709551615u64
-    );
+    test_rc_any(&fory, 255u8);
+    test_rc_any(&fory, 65535u16);
+    test_rc_any(&fory, 4294967295u32);
+    test_rc_any(&fory, 18446744073709551615u64);
 
     // Test Arc<dyn Any> with unsigned types
-    let arc_u8: Arc<dyn Any> = Arc::new(255u8);
-    let bytes = fory.serialize(&arc_u8).unwrap();
-    let result: Arc<dyn Any> = fory.deserialize(&bytes).unwrap();
-    assert_eq!(result.downcast_ref::<u8>().unwrap(), &255u8);
-
-    let arc_u16: Arc<dyn Any> = Arc::new(65535u16);
-    let bytes = fory.serialize(&arc_u16).unwrap();
-    let result: Arc<dyn Any> = fory.deserialize(&bytes).unwrap();
-    assert_eq!(result.downcast_ref::<u16>().unwrap(), &65535u16);
-
-    let arc_u32: Arc<dyn Any> = Arc::new(4294967295u32);
-    let bytes = fory.serialize(&arc_u32).unwrap();
-    let result: Arc<dyn Any> = fory.deserialize(&bytes).unwrap();
-    assert_eq!(result.downcast_ref::<u32>().unwrap(), &4294967295u32);
-
-    let arc_u64: Arc<dyn Any> = Arc::new(18446744073709551615u64);
-    let bytes = fory.serialize(&arc_u64).unwrap();
-    let result: Arc<dyn Any> = fory.deserialize(&bytes).unwrap();
-    assert_eq!(
-        result.downcast_ref::<u64>().unwrap(),
-        &18446744073709551615u64
-    );
+    test_arc_any(&fory, 255u8);
+    test_arc_any(&fory, 65535u16);
+    test_arc_any(&fory, 4294967295u32);
+    test_arc_any(&fory, 18446744073709551615u64);
 
     // Test Box<dyn Any> with unsigned arrays
-    let box_vec_u8: Box<dyn Any> = Box::new(vec![0u8, 127, 255]);
-    let bytes = fory.serialize(&box_vec_u8).unwrap();
-    let result: Box<dyn Any> = fory.deserialize(&bytes).unwrap();
-    assert_eq!(
-        result.downcast_ref::<Vec<u8>>().unwrap(),
-        &vec![0u8, 127, 255]
-    );
-
-    let box_vec_u16: Box<dyn Any> = Box::new(vec![0u16, 1000, 65535]);
-    let bytes = fory.serialize(&box_vec_u16).unwrap();
-    let result: Box<dyn Any> = fory.deserialize(&bytes).unwrap();
-    assert_eq!(
-        result.downcast_ref::<Vec<u16>>().unwrap(),
-        &vec![0u16, 1000, 65535]
-    );
-
-    let box_vec_u32: Box<dyn Any> = Box::new(vec![0u32, 1000000, 4294967295]);
-    let bytes = fory.serialize(&box_vec_u32).unwrap();
-    let result: Box<dyn Any> = fory.deserialize(&bytes).unwrap();
-    assert_eq!(
-        result.downcast_ref::<Vec<u32>>().unwrap(),
-        &vec![0u32, 1000000, 4294967295]
-    );
-
-    let box_vec_u64: Box<dyn Any> = Box::new(vec![0u64, 1000000000000, 18446744073709551615]);
-    let bytes = fory.serialize(&box_vec_u64).unwrap();
-    let result: Box<dyn Any> = fory.deserialize(&bytes).unwrap();
-    assert_eq!(
-        result.downcast_ref::<Vec<u64>>().unwrap(),
-        &vec![0u64, 1000000000000, 18446744073709551615]
-    );
+    test_box_any(&fory, vec![0u8, 127, 255]);
+    test_box_any(&fory, vec![0u16, 1000, 65535]);
+    test_box_any(&fory, vec![0u32, 1000000, 4294967295]);
+    test_box_any(&fory, vec![0u64, 1000000000000, 18446744073709551615]);
 
     // Test Rc<dyn Any> with unsigned arrays
-    let rc_vec_u16: Rc<dyn Any> = Rc::new(vec![100u16, 200, 300, 65535]);
-    let bytes = fory.serialize(&rc_vec_u16).unwrap();
-    let result: Rc<dyn Any> = fory.deserialize(&bytes).unwrap();
-    assert_eq!(
-        result.downcast_ref::<Vec<u16>>().unwrap(),
-        &vec![100u16, 200, 300, 65535]
-    );
-
-    let rc_vec_u32: Rc<dyn Any> = Rc::new(vec![1000u32, 2000, 3000, 4294967295]);
-    let bytes = fory.serialize(&rc_vec_u32).unwrap();
-    let result: Rc<dyn Any> = fory.deserialize(&bytes).unwrap();
-    assert_eq!(
-        result.downcast_ref::<Vec<u32>>().unwrap(),
-        &vec![1000u32, 2000, 3000, 4294967295]
-    );
+    test_rc_any(&fory, vec![100u16, 200, 300, 65535]);
+    test_rc_any(&fory, vec![1000u32, 2000, 3000, 4294967295]);
 
     // Test Arc<dyn Any> with unsigned arrays
-    let arc_vec_u32: Arc<dyn Any> = Arc::new(vec![999u32, 888, 777, 4294967295]);
-    let bytes = fory.serialize(&arc_vec_u32).unwrap();
-    let result: Arc<dyn Any> = fory.deserialize(&bytes).unwrap();
-    assert_eq!(
-        result.downcast_ref::<Vec<u32>>().unwrap(),
-        &vec![999u32, 888, 777, 4294967295]
-    );
-
-    let arc_vec_u64: Arc<dyn Any> = Arc::new(vec![123u64, 456789, 987654321, 18446744073709551615]);
-    let bytes = fory.serialize(&arc_vec_u64).unwrap();
-    let result: Arc<dyn Any> = fory.deserialize(&bytes).unwrap();
-    assert_eq!(
-        result.downcast_ref::<Vec<u64>>().unwrap(),
-        &vec![123u64, 456789, 987654321, 18446744073709551615]
-    );
+    test_arc_any(&fory, vec![999u32, 888, 777, 4294967295]);
+    test_arc_any(&fory, vec![123u64, 456789, 987654321, 18446744073709551615]);
 }

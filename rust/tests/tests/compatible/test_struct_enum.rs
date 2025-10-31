@@ -101,7 +101,7 @@ fn simple_write_continuous() {
     let animal1: Animal1 = fory.deserialize_from(reader).unwrap();
     let animal2: Animal1 = fory.deserialize_from(reader).unwrap();
     let animal3: Animal1 = fory.deserialize_from(reader).unwrap();
-    let result = vec![animal1, animal2, animal3];
+    let result = [animal1, animal2, animal3];
     result.iter().for_each(|x| {
         assert_eq!(animal.f1, x.f1);
         assert_eq!(animal.f2, x.f2);

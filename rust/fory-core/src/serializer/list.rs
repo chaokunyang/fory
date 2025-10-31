@@ -40,7 +40,6 @@ fn check_primitive<T: Serializer>() -> Option<TypeId> {
         TypeId::INT64 => Some(TypeId::INT64_ARRAY),
         TypeId::FLOAT32 => Some(TypeId::FLOAT32_ARRAY),
         TypeId::FLOAT64 => Some(TypeId::FLOAT64_ARRAY),
-        TypeId::U8 => Some(TypeId::U8_ARRAY),
         TypeId::U16 => Some(TypeId::U16_ARRAY),
         TypeId::U32 => Some(TypeId::U32_ARRAY),
         TypeId::U64 => Some(TypeId::U64_ARRAY),

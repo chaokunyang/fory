@@ -89,11 +89,10 @@ pub enum TypeId {
     VAR_U32 = 68,
     VAR_U64 = 69,
     SLI_U64 = 70,
-    U8_ARRAY = 71,
-    U16_ARRAY = 72,
-    U32_ARRAY = 73,
-    U64_ARRAY = 74,
-    UNKNOWN = 63,
+    U16_ARRAY = 71,
+    U32_ARRAY = 72,
+    U64_ARRAY = 73,
+    UNKNOWN = 74,
 }
 
 pub const BOOL: u32 = TypeId::BOOL as u32;
@@ -142,7 +141,6 @@ pub const U64: u32 = TypeId::U64 as u32;
 pub const VAR_U32: u32 = TypeId::VAR_U32 as u32;
 pub const VAR_U64: u32 = TypeId::VAR_U64 as u32;
 pub const SLI_U64: u32 = TypeId::SLI_U64 as u32;
-pub const U8_ARRAY: u32 = TypeId::U8_ARRAY as u32;
 pub const U16_ARRAY: u32 = TypeId::U16_ARRAY as u32;
 pub const U32_ARRAY: u32 = TypeId::U32_ARRAY as u32;
 pub const U64_ARRAY: u32 = TypeId::U64_ARRAY as u32;
@@ -163,7 +161,7 @@ pub fn compute_string_hash(s: &str) -> u32 {
     hash as u32
 }
 
-pub static BASIC_TYPES: [TypeId; 26] = [
+pub static BASIC_TYPES: [TypeId; 25] = [
     TypeId::BOOL,
     TypeId::INT8,
     TypeId::INT16,
@@ -186,7 +184,6 @@ pub static BASIC_TYPES: [TypeId; 26] = [
     TypeId::U16,
     TypeId::U32,
     TypeId::U64,
-    TypeId::U8_ARRAY,
     TypeId::U16_ARRAY,
     TypeId::U32_ARRAY,
     TypeId::U64_ARRAY,
@@ -206,7 +203,7 @@ pub static PRIMITIVE_TYPES: [u32; 11] = [
     TypeId::U64 as u32,
 ];
 
-pub static PRIMITIVE_ARRAY_TYPES: [u32; 12] = [
+pub static PRIMITIVE_ARRAY_TYPES: [u32; 11] = [
     TypeId::BOOL_ARRAY as u32,
     TypeId::BINARY as u32,
     TypeId::INT8_ARRAY as u32,
@@ -215,7 +212,6 @@ pub static PRIMITIVE_ARRAY_TYPES: [u32; 12] = [
     TypeId::INT64_ARRAY as u32,
     TypeId::FLOAT32_ARRAY as u32,
     TypeId::FLOAT64_ARRAY as u32,
-    TypeId::U8_ARRAY as u32,
     TypeId::U16_ARRAY as u32,
     TypeId::U32_ARRAY as u32,
     TypeId::U64_ARRAY as u32,
@@ -243,7 +239,7 @@ pub static CONTAINER_TYPES: [TypeId; 3] = [TypeId::LIST, TypeId::SET, TypeId::MA
 pub static CONTAINER_TYPE_NAMES: [&str; 3] = ["Vec", "HashSet", "HashMap"];
 
 pub static PRIMITIVE_ARRAY_TYPE_MAP: &[(&str, u32, &str)] = &[
-    // ("_binary", TypeId::BINARY as u32),
+    ("u8", TypeId::BINARY as u32, "Vec<u8>"),
     ("bool", TypeId::BOOL_ARRAY as u32, "Vec<bool>"),
     ("i8", TypeId::INT8_ARRAY as u32, "Vec<i8>"),
     ("i16", TypeId::INT16_ARRAY as u32, "Vec<i16>"),
@@ -251,7 +247,6 @@ pub static PRIMITIVE_ARRAY_TYPE_MAP: &[(&str, u32, &str)] = &[
     ("i64", TypeId::INT64_ARRAY as u32, "Vec<i64>"),
     ("f32", TypeId::FLOAT32_ARRAY as u32, "Vec<f32>"),
     ("f64", TypeId::FLOAT64_ARRAY as u32, "Vec<f64>"),
-    ("u8", TypeId::U8_ARRAY as u32, "Vec<u8>"),
     ("u16", TypeId::U16_ARRAY as u32, "Vec<u16>"),
     ("u32", TypeId::U32_ARRAY as u32, "Vec<u32>"),
     ("u64", TypeId::U64_ARRAY as u32, "Vec<u64>"),

@@ -407,6 +407,10 @@ impl TypeMetaLayer {
                 TypeId::FLOAT16 => 2,
                 TypeId::FLOAT32 => 4,
                 TypeId::FLOAT64 => 8,
+                TypeId::U8 => 1,
+                TypeId::U16 => 2,
+                TypeId::U32 => 4,
+                TypeId::U64 => 8,
                 _ => unreachable!(),
             }
         }

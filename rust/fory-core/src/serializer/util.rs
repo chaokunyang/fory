@@ -21,7 +21,7 @@ use crate::resolver::context::{ReadContext, WriteContext};
 use crate::serializer::Serializer;
 use crate::types::TypeId;
 
-const NO_REF_FLAG_TYPE_IDS: [u32; 7] = [
+const NO_REF_FLAG_TYPE_IDS: [u32; 11] = [
     TypeId::BOOL as u32,
     TypeId::INT8 as u32,
     TypeId::INT16 as u32,
@@ -29,6 +29,10 @@ const NO_REF_FLAG_TYPE_IDS: [u32; 7] = [
     TypeId::INT64 as u32,
     TypeId::FLOAT32 as u32,
     TypeId::FLOAT64 as u32,
+    TypeId::U8 as u32,
+    TypeId::U16 as u32,
+    TypeId::U32 as u32,
+    TypeId::U64 as u32,
 ];
 
 #[inline(always)]

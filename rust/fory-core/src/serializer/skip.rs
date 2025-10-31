@@ -83,6 +83,14 @@ pub fn skip_value(
                     (Vec<i64> , INT64_ARRAY),
                     (Vec<f32>, FLOAT32_ARRAY),
                     (Vec<f64> , FLOAT64_ARRAY),
+                    (u8, U8),
+                    (u16, U16),
+                    (u32, U32),
+                    (u64, U64),
+                    (Vec<u8> , U8_ARRAY),
+                    (Vec<u16> , U16_ARRAY),
+                    (Vec<u32> , U32_ARRAY),
+                    (Vec<u64> , U64_ARRAY),
                 );
             } else if CONTAINER_TYPES.contains(&type_id) {
                 if type_id == TypeId::LIST || type_id == TypeId::SET {

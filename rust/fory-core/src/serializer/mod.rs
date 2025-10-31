@@ -28,6 +28,7 @@ pub mod map;
 mod mutex;
 mod number;
 mod option;
+mod unsigned_number;
 mod primitive_list;
 mod rc;
 mod refcell;

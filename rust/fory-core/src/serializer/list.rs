@@ -32,7 +32,7 @@ use super::collection::{
 
 #[inline(always)]
 fn get_primitive_type_id<T: Serializer>() -> TypeId {
-     if T::fory_is_wrapper_type() {
+    if T::fory_is_wrapper_type() {
         return TypeId::UNKNOWN;
     }
     match T::fory_static_type_id() {

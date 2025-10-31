@@ -29,6 +29,11 @@ macro_rules! impl_unsigned_num_serializer {
         impl Serializer for $ty {
             #[inline(always)]
             fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error> {
+                if context.is_xlang() {
+                    return Err(Error::not_allowed(
+                        "Unsigned types are not supported in cross-language mode",
+                    ));
+                }
                 $writer(&mut context.writer, *self);
                 Ok(())
             }

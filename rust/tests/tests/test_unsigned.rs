@@ -17,6 +17,9 @@
 
 use fory_core::fory::Fory;
 use fory_derive::ForyObject;
+use std::any::Any;
+use std::rc::Rc;
+use std::sync::Arc;
 
 #[test]
 fn test_unsigned_numbers() {
@@ -382,4 +385,148 @@ fn test_unsigned_mixed_fields_compatible() {
     assert_eq!(result.vec_u32, vec![1000, 2000, 3000]);
     assert_eq!(result.new_u64, 0); // Default value
     assert_eq!(result.new_opt_u32, None); // Default value
+}
+
+#[test]
+fn test_unsigned_with_smart_pointers() {
+    let fory = Fory::default();
+
+    // Test Box<dyn Any> with unsigned types
+    let box_u8: Box<dyn Any> = Box::new(255u8);
+    let bytes = fory.serialize(&box_u8).unwrap();
+    let result: Box<dyn Any> = fory.deserialize(&bytes).unwrap();
+    assert_eq!(result.downcast_ref::<u8>().unwrap(), &255u8);
+
+    let box_u16: Box<dyn Any> = Box::new(65535u16);
+    let bytes = fory.serialize(&box_u16).unwrap();
+    let result: Box<dyn Any> = fory.deserialize(&bytes).unwrap();
+    assert_eq!(result.downcast_ref::<u16>().unwrap(), &65535u16);
+
+    let box_u32: Box<dyn Any> = Box::new(4294967295u32);
+    let bytes = fory.serialize(&box_u32).unwrap();
+    let result: Box<dyn Any> = fory.deserialize(&bytes).unwrap();
+    assert_eq!(result.downcast_ref::<u32>().unwrap(), &4294967295u32);
+
+    let box_u64: Box<dyn Any> = Box::new(18446744073709551615u64);
+    let bytes = fory.serialize(&box_u64).unwrap();
+    let result: Box<dyn Any> = fory.deserialize(&bytes).unwrap();
+    assert_eq!(
+        result.downcast_ref::<u64>().unwrap(),
+        &18446744073709551615u64
+    );
+
+    // Test Rc<dyn Any> with unsigned types
+    let rc_u8: Rc<dyn Any> = Rc::new(255u8);
+    let bytes = fory.serialize(&rc_u8).unwrap();
+    let result: Rc<dyn Any> = fory.deserialize(&bytes).unwrap();
+    assert_eq!(result.downcast_ref::<u8>().unwrap(), &255u8);
+
+    let rc_u16: Rc<dyn Any> = Rc::new(65535u16);
+    let bytes = fory.serialize(&rc_u16).unwrap();
+    let result: Rc<dyn Any> = fory.deserialize(&bytes).unwrap();
+    assert_eq!(result.downcast_ref::<u16>().unwrap(), &65535u16);
+
+    let rc_u32: Rc<dyn Any> = Rc::new(4294967295u32);
+    let bytes = fory.serialize(&rc_u32).unwrap();
+    let result: Rc<dyn Any> = fory.deserialize(&bytes).unwrap();
+    assert_eq!(result.downcast_ref::<u32>().unwrap(), &4294967295u32);
+
+    let rc_u64: Rc<dyn Any> = Rc::new(18446744073709551615u64);
+    let bytes = fory.serialize(&rc_u64).unwrap();
+    let result: Rc<dyn Any> = fory.deserialize(&bytes).unwrap();
+    assert_eq!(
+        result.downcast_ref::<u64>().unwrap(),
+        &18446744073709551615u64
+    );
+
+    // Test Arc<dyn Any> with unsigned types
+    let arc_u8: Arc<dyn Any> = Arc::new(255u8);
+    let bytes = fory.serialize(&arc_u8).unwrap();
+    let result: Arc<dyn Any> = fory.deserialize(&bytes).unwrap();
+    assert_eq!(result.downcast_ref::<u8>().unwrap(), &255u8);
+
+    let arc_u16: Arc<dyn Any> = Arc::new(65535u16);
+    let bytes = fory.serialize(&arc_u16).unwrap();
+    let result: Arc<dyn Any> = fory.deserialize(&bytes).unwrap();
+    assert_eq!(result.downcast_ref::<u16>().unwrap(), &65535u16);
+
+    let arc_u32: Arc<dyn Any> = Arc::new(4294967295u32);
+    let bytes = fory.serialize(&arc_u32).unwrap();
+    let result: Arc<dyn Any> = fory.deserialize(&bytes).unwrap();
+    assert_eq!(result.downcast_ref::<u32>().unwrap(), &4294967295u32);
+
+    let arc_u64: Arc<dyn Any> = Arc::new(18446744073709551615u64);
+    let bytes = fory.serialize(&arc_u64).unwrap();
+    let result: Arc<dyn Any> = fory.deserialize(&bytes).unwrap();
+    assert_eq!(
+        result.downcast_ref::<u64>().unwrap(),
+        &18446744073709551615u64
+    );
+
+    // Test Box<dyn Any> with unsigned arrays
+    let box_vec_u8: Box<dyn Any> = Box::new(vec![0u8, 127, 255]);
+    let bytes = fory.serialize(&box_vec_u8).unwrap();
+    let result: Box<dyn Any> = fory.deserialize(&bytes).unwrap();
+    assert_eq!(
+        result.downcast_ref::<Vec<u8>>().unwrap(),
+        &vec![0u8, 127, 255]
+    );
+
+    let box_vec_u16: Box<dyn Any> = Box::new(vec![0u16, 1000, 65535]);
+    let bytes = fory.serialize(&box_vec_u16).unwrap();
+    let result: Box<dyn Any> = fory.deserialize(&bytes).unwrap();
+    assert_eq!(
+        result.downcast_ref::<Vec<u16>>().unwrap(),
+        &vec![0u16, 1000, 65535]
+    );
+
+    let box_vec_u32: Box<dyn Any> = Box::new(vec![0u32, 1000000, 4294967295]);
+    let bytes = fory.serialize(&box_vec_u32).unwrap();
+    let result: Box<dyn Any> = fory.deserialize(&bytes).unwrap();
+    assert_eq!(
+        result.downcast_ref::<Vec<u32>>().unwrap(),
+        &vec![0u32, 1000000, 4294967295]
+    );
+
+    let box_vec_u64: Box<dyn Any> = Box::new(vec![0u64, 1000000000000, 18446744073709551615]);
+    let bytes = fory.serialize(&box_vec_u64).unwrap();
+    let result: Box<dyn Any> = fory.deserialize(&bytes).unwrap();
+    assert_eq!(
+        result.downcast_ref::<Vec<u64>>().unwrap(),
+        &vec![0u64, 1000000000000, 18446744073709551615]
+    );
+
+    // Test Rc<dyn Any> with unsigned arrays
+    let rc_vec_u16: Rc<dyn Any> = Rc::new(vec![100u16, 200, 300, 65535]);
+    let bytes = fory.serialize(&rc_vec_u16).unwrap();
+    let result: Rc<dyn Any> = fory.deserialize(&bytes).unwrap();
+    assert_eq!(
+        result.downcast_ref::<Vec<u16>>().unwrap(),
+        &vec![100u16, 200, 300, 65535]
+    );
+
+    let rc_vec_u32: Rc<dyn Any> = Rc::new(vec![1000u32, 2000, 3000, 4294967295]);
+    let bytes = fory.serialize(&rc_vec_u32).unwrap();
+    let result: Rc<dyn Any> = fory.deserialize(&bytes).unwrap();
+    assert_eq!(
+        result.downcast_ref::<Vec<u32>>().unwrap(),
+        &vec![1000u32, 2000, 3000, 4294967295]
+    );
+
+    // Test Arc<dyn Any> with unsigned arrays
+    let arc_vec_u32: Arc<dyn Any> = Arc::new(vec![999u32, 888, 777, 4294967295]);
+    let bytes = fory.serialize(&arc_vec_u32).unwrap();
+    let result: Arc<dyn Any> = fory.deserialize(&bytes).unwrap();
+    assert_eq!(
+        result.downcast_ref::<Vec<u32>>().unwrap(),
+        &vec![999u32, 888, 777, 4294967295]
+    );
+
+    let arc_vec_u64: Arc<dyn Any> = Arc::new(vec![123u64, 456789, 987654321, 18446744073709551615]);
+    let bytes = fory.serialize(&arc_vec_u64).unwrap();
+    let result: Arc<dyn Any> = fory.deserialize(&bytes).unwrap();
+    assert_eq!(
+        result.downcast_ref::<Vec<u64>>().unwrap(),
+        &vec![123u64, 456789, 987654321, 18446744073709551615]
+    );
 }

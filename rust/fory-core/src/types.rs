@@ -302,11 +302,6 @@ pub(crate) fn need_to_write_type_for_field(type_id: TypeId) -> bool {
 }
 
 #[inline(always)]
-pub(crate) fn is_container_type(type_id: TypeId) -> bool {
-    type_id == TypeId::LIST || type_id == TypeId::SET || type_id == TypeId::MAP
-}
-
-#[inline(always)]
 pub(crate) fn is_user_type(type_id: u32) -> bool {
     matches!(
         type_id,

@@ -279,7 +279,18 @@ pub(super) fn try_vec_of_option_primitive(node: &TypeNode) -> Option<TokenStream
 
 impl fmt::Display for TypeNode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.generics.is_empty() {
+        if self.name == "Tuple" {
+            // Format as Rust tuple syntax: (T1, T2, T3)
+            write!(
+                f,
+                "({})",
+                self.generics
+                    .iter()
+                    .map(|g| g.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        } else if self.generics.is_empty() {
             write!(f, "{}", self.name)
         } else {
             write!(
@@ -301,6 +312,8 @@ pub(super) fn extract_type_name(ty: &Type) -> String {
         type_path.path.segments.last().unwrap().ident.to_string()
     } else if matches!(ty, Type::TraitObject(_)) {
         "TraitObject".to_string()
+    } else if matches!(ty, Type::Tuple(_)) {
+        "Tuple".to_string()
     } else {
         quote!(#ty).to_string()
     }
@@ -324,6 +337,19 @@ pub(super) fn parse_generic_tree(ty: &Type) -> TypeNode {
         return TypeNode {
             name: "TraitObject".to_string(),
             generics: vec![],
+        };
+    }
+
+    // Handle tuples - parse each element as a generic
+    if let Type::Tuple(tuple) = ty {
+        let generics: Vec<TypeNode> = tuple
+            .elems
+            .iter()
+            .map(|elem_ty| parse_generic_tree(elem_ty))
+            .collect();
+        return TypeNode {
+            name: "Tuple".to_string(),
+            generics,
         };
     }
 
@@ -390,7 +416,10 @@ pub(super) fn generic_tree_to_tokens(node: &TypeNode) -> TokenStream {
     // Build the syn::Type from the DISPLAY of base_node, not the original node if Option
     let ty: syn::Type = syn::parse_str(&base_node.to_string()).unwrap();
 
-    let get_type_id = if let Some(ts) = primitive_vec {
+    // Special handling for tuples: they are lists and should use TypeId::LIST directly
+    let get_type_id = if base_node.name == "Tuple" {
+        quote! { fory_core::types::TypeId::LIST as u32 }
+    } else if let Some(ts) = primitive_vec {
         ts
     } else {
         quote! {
@@ -511,6 +540,11 @@ pub(crate) fn get_type_id_by_name(ty: &str) -> u32 {
 
     if ty.starts_with("HashMap<") || ty.starts_with("BTreeMap<") {
         return TypeId::MAP as u32;
+    }
+
+    // Check tuple types (represented as "Tuple" by extract_type_name or starts with '(')
+    if ty == "Tuple" || ty.starts_with('(') {
+        return TypeId::LIST as u32;
     }
 
     // Unknown type

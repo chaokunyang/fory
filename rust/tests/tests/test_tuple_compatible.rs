@@ -24,6 +24,7 @@
 //! - Schema evolution scenarios
 
 use fory_core::fory::Fory;
+use fory_derive::ForyObject;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::sync::Arc;
@@ -56,7 +57,6 @@ fn test_tuple_size_mismatch() {
 #[test]
 fn test_tuple_with_collections_compatible() {
     let fory = Fory::default().compatible(true);
-
     // Tuple with Vec
     let tuple_vec = (vec![1, 2, 3], vec!["a".to_string(), "b".to_string()]);
     let bin = fory.serialize(&tuple_vec).unwrap();
@@ -82,6 +82,21 @@ fn test_tuple_with_collections_compatible() {
     let bin = fory.serialize(&tuple_map).unwrap();
     let obj: (HashMap<String, i32>, i32) = fory.deserialize(&bin).expect("deserialize");
     assert_eq!(tuple_map, obj);
+
+    // Test adding/missing tuple elements with collections
+    // Long to short
+    let long = (vec![1, 2, 3], vec!["a".to_string()], vec![1.0, 2.0]);
+    let bin = fory.serialize(&long).unwrap();
+    let short: (Vec<i32>,) = fory.deserialize(&bin).expect("deserialize long to short");
+    assert_eq!(short.0, vec![1, 2, 3]);
+
+    // Short to long
+    let short = (vec![10, 20, 30],);
+    let bin = fory.serialize(&short).unwrap();
+    let long: (Vec<i32>, Vec<String>, Vec<f64>) = fory.deserialize(&bin).expect("deserialize short to long");
+    assert_eq!(long.0, vec![10, 20, 30]);
+    assert_eq!(long.1, Vec::<String>::new()); // default
+    assert_eq!(long.2, Vec::<f64>::new()); // default
 }
 
 /// Test 2b: Tuple with collections - length mismatch
@@ -415,4 +430,39 @@ fn test_mixed_complex_types_size_mismatch() {
     assert_eq!(complex.1, None);
     assert_eq!(*complex.2, 0); // default Arc<i32>
     assert_eq!(complex.3, (0, 0)); // default tuple
+}
+
+/// Test compatible mode with tuples
+#[test]
+fn test_tuple_xlang_compatible_mode() {
+    let fory = Fory::default().compatible(true);
+    // Test basic tuple
+    let basic = (42i32, "hello".to_string(), vec![1, 2, 3]);
+    let bin = fory.serialize(&basic).unwrap();
+    let obj: (i32, String, Vec<i32>) = fory.deserialize(&bin).expect("deserialize basic");
+    assert_eq!(basic, obj);
+
+    // Test tuple size mismatch
+    let long = (1i32, "test".to_string(), 3.14f64, true, vec![1, 2]);
+    let bin = fory.serialize(&long).unwrap();
+    let short: (i32, String) = fory.deserialize(&bin).expect("deserialize long to short");
+    assert_eq!(short.0, 1);
+    assert_eq!(short.1, "test");
+
+    // Test short to long
+    let short = (100i32, "world".to_string());
+    let bin = fory.serialize(&short).unwrap();
+    let long: (i32, String, f64, bool) = fory.deserialize(&bin).expect("deserialize short to long");
+    assert_eq!(long.0, 100);
+    assert_eq!(long.1, "world");
+    assert_eq!(long.2, 0.0);
+    assert_eq!(long.3, false);
+
+    // Test nested tuples with size mismatch
+    let nested = ((1i32, 2i32, 3i32), ("a".to_string(), "b".to_string()));
+    let bin = fory.serialize(&nested).unwrap();
+    let smaller: ((i32, i32), (String,)) = fory.deserialize(&bin).expect("deserialize nested");
+    assert_eq!(smaller.0.0, 1);
+    assert_eq!(smaller.0.1, 2);
+    assert_eq!(smaller.1.0, "a");
 }

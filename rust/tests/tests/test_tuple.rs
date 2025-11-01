@@ -17,6 +17,7 @@
 
 use fory_core::fory::Fory;
 use std::rc::Rc;
+use fory_derive::ForyObject;
 
 // Test homogeneous tuples with primitive types
 #[test]
@@ -177,25 +178,6 @@ fn test_tuple_with_rc() {
     // Note: deserialization creates independent Rc instances, not shared ones
 }
 
-// Test tuples in compatible mode
-#[test]
-fn test_tuple_compatible_mode() {
-    let fory = Fory::default().compatible(true);
-    let tuple = (1i32, 2i32, 3i32);
-    let bin = fory.serialize(&tuple).unwrap();
-    let obj: (i32, i32, i32) = fory.deserialize(&bin).expect("deserialize");
-    assert_eq!(tuple, obj);
-}
-
-#[test]
-fn test_heterogeneous_tuple_compatible_mode() {
-    let fory = Fory::default().compatible(true);
-    let tuple = (42i32, "hello".to_string(), 3.14f64);
-    let bin = fory.serialize(&tuple).unwrap();
-    let obj: (i32, String, f64) = fory.deserialize(&bin).expect("deserialize");
-    assert_eq!(tuple, obj);
-}
-
 // Test tuples with bool
 #[test]
 fn test_homogeneous_tuple_bool() {
@@ -239,4 +221,34 @@ fn test_tuple_type_id() {
     assert_eq!(<(i32, i32)>::fory_static_type_id(), TypeId::LIST);
     assert_eq!(<(i32, String)>::fory_static_type_id(), TypeId::LIST);
     assert_eq!(<(i32,)>::fory_static_type_id(), TypeId::LIST);
+}
+
+// Test tuples in xlang mode
+#[test]
+fn test_tuple_xlang_mode() {
+    let fory = Fory::default().xlang(true);
+
+    // Test homogeneous tuple
+    let homogeneous = (1i32, 2i32, 3i32);
+    let bin = fory.serialize(&homogeneous).unwrap();
+    let obj: (i32, i32, i32) = fory.deserialize(&bin).expect("deserialize homogeneous");
+    assert_eq!(homogeneous, obj);
+
+    // Test heterogeneous tuple
+    let heterogeneous = (42i32, "hello".to_string(), 3.14f64, true);
+    let bin = fory.serialize(&heterogeneous).unwrap();
+    let obj: (i32, String, f64, bool) = fory.deserialize(&bin).expect("deserialize heterogeneous");
+    assert_eq!(heterogeneous, obj);
+
+    // Test nested tuple
+    let nested = ((1i32, "inner".to_string()), (2.5f64, vec![1, 2, 3]));
+    let bin = fory.serialize(&nested).unwrap();
+    let obj: ((i32, String), (f64, Vec<i32>)) = fory.deserialize(&bin).expect("deserialize nested");
+    assert_eq!(nested, obj);
+
+    // Test tuple with Option
+    let with_option = (Some(42i32), None::<String>, Some(vec![1, 2]));
+    let bin = fory.serialize(&with_option).unwrap();
+    let obj: (Option<i32>, Option<String>, Option<Vec<i32>>) = fory.deserialize(&bin).expect("deserialize with option");
+    assert_eq!(with_option, obj);
 }

@@ -1020,7 +1020,6 @@ fn run_struct_complex_evolution_scenario(xlang: bool) {
 
 type AttributeTuple = ((Option<bool>,), (Vec<String>, HashMap<String, i32>));
 
-/// alias field can't be recognized as tuple, in compatible mode, it will be treated as missing field
 #[test]
 fn test_tuple_alias() {
     #[derive(ForyObject, Debug, PartialEq)]
@@ -1049,8 +1048,10 @@ fn test_tuple_alias() {
     };
     let bytes1 = fory1.serialize(&record1).unwrap();
     let deserialized1: DataRecordV2 = fory2.deserialize(&bytes1).unwrap();
-    // attrs should be default/empty since type alias isn't recognized
-    assert_eq!(deserialized1.attrs, ((None,), (vec![], HashMap::new())));
+    assert_eq!(
+        deserialized1.attrs,
+        ((Some(true),), (vec!["test".to_string()], HashMap::new()))
+    );
 
     // Test record2 serialized by fory2, deserialized by fory1
     let mut map = HashMap::new();
@@ -1060,6 +1061,8 @@ fn test_tuple_alias() {
     };
     let bytes2 = fory2.serialize(&record2).unwrap();
     let deserialized2: DataRecordV1 = fory1.deserialize(&bytes2).unwrap();
-    // attrs should be default/empty since type alias isn't recognized
-    assert_eq!(deserialized2.attrs, ((None,), (vec![],)));
+    assert_eq!(
+        deserialized2.attrs,
+        ((Some(false),), (vec!["example".to_string()],))
+    );
 }

@@ -242,7 +242,7 @@ fn skip_struct(
     let field_infos = type_info_value.get_type_meta().get_field_infos().to_vec();
     context.inc_depth()?;
     for field_info in field_infos.iter() {
-        let read_ref_flag = util::field_requires_ref_flag(
+        let read_ref_flag = util::field_need_write_ref_into(
             field_info.field_type.type_id,
             field_info.field_type.nullable,
         );
@@ -288,7 +288,7 @@ fn skip_user_struct(context: &mut ReadContext, _type_id_num: u32) -> Result<(), 
     let field_infos = type_meta.get_field_infos().to_vec();
     context.inc_depth()?;
     for field_info in field_infos.iter() {
-        let read_ref_flag = util::field_requires_ref_flag(
+        let read_ref_flag = util::field_need_write_ref_into(
             field_info.field_type.type_id,
             field_info.field_type.nullable,
         );

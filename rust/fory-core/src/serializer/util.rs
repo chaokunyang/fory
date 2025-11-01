@@ -73,7 +73,7 @@ pub fn field_need_write_type_info<T: Serializer>() -> bool {
 }
 
 #[inline]
-pub fn field_requires_ref_flag(type_id: u32, nullable: bool) -> bool {
+pub fn field_need_write_ref_into(type_id: u32, nullable: bool) -> bool {
     if nullable {
         return true;
     }

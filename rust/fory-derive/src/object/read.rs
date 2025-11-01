@@ -368,7 +368,7 @@ fn gen_read_compatible_match_arm_body(field: &Field, var_name: &Ident) -> TokenS
             if skip_type_info {
                 if dec_by_option {
                     quote! {
-                        let read_ref_flag = fory_core::serializer::util::field_requires_ref_flag(
+                        let read_ref_flag = fory_core::serializer::util::field_need_write_ref_into(
                             _field.field_type.type_id,
                             _field.field_type.nullable,
                         );
@@ -380,7 +380,7 @@ fn gen_read_compatible_match_arm_body(field: &Field, var_name: &Ident) -> TokenS
                     }
                 } else {
                     quote! {
-                        let read_ref_flag = fory_core::serializer::util::field_requires_ref_flag(
+                        let read_ref_flag = fory_core::serializer::util::field_need_write_ref_into(
                             _field.field_type.type_id,
                             _field.field_type.nullable,
                         );
@@ -394,7 +394,7 @@ fn gen_read_compatible_match_arm_body(field: &Field, var_name: &Ident) -> TokenS
             } else if dec_by_option {
                 quote! {
                     let read_type_info = fory_core::serializer::util::field_need_read_type_info(_field.field_type.type_id);
-                    let read_ref_flag = fory_core::serializer::util::field_requires_ref_flag(
+                    let read_ref_flag = fory_core::serializer::util::field_need_write_ref_into(
                         _field.field_type.type_id,
                         _field.field_type.nullable,
                     );
@@ -407,7 +407,7 @@ fn gen_read_compatible_match_arm_body(field: &Field, var_name: &Ident) -> TokenS
             } else {
                 quote! {
                     let read_type_info = fory_core::serializer::util::field_need_read_type_info(_field.field_type.type_id);
-                    let read_ref_flag = fory_core::serializer::util::field_requires_ref_flag(
+                    let read_ref_flag = fory_core::serializer::util::field_need_write_ref_into(
                         _field.field_type.type_id,
                         _field.field_type.nullable,
                     );
@@ -528,7 +528,7 @@ pub fn gen_read_compatible(fields: &[&Field]) -> TokenStream {
         quote! {
             _ => {
                 let field_type = &_field.field_type;
-                let read_ref_flag = fory_core::serializer::util::field_requires_ref_flag(
+                let read_ref_flag = fory_core::serializer::util::field_need_write_ref_into(
                     field_type.type_id,
                     field_type.nullable,
                 );
@@ -552,7 +552,7 @@ pub fn gen_read_compatible(fields: &[&Field]) -> TokenStream {
         quote! {
             _ => {
                 let field_type = &_field.field_type;
-                let read_ref_flag = fory_core::serializer::util::field_requires_ref_flag(
+                let read_ref_flag = fory_core::serializer::util::field_need_write_ref_into(
                     field_type.type_id,
                     field_type.nullable,
                 );

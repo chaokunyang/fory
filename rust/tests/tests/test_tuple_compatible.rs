@@ -31,10 +31,6 @@ use std::sync::Arc;
 
 const PI_F64: f64 = std::f64::consts::PI;
 
-type NestedEvolutionTuple = ((i32, String, Vec<i32>), (f64, bool, Option<String>));
-type MetadataExpansionTuple = ((String, i32, Vec<String>), (bool, f64, Option<i32>));
-type AttributeTuple = ((Vec<String>, HashMap<String, i32>), (Option<bool>,));
-
 /// Test 1: Direct tuple size mismatch - bidirectional serialization
 #[test]
 fn test_tuple_size_mismatch() {
@@ -695,9 +691,10 @@ fn run_struct_nested_tuple_evolution(xlang: bool) {
 
     // V2: Struct with evolved nested tuple (more elements)
     #[derive(ForyObject, Debug, PartialEq)]
+    #[allow(clippy::type_complexity)]
     struct StructV2 {
         id: i32,
-        nested: NestedEvolutionTuple,
+        nested: ((i32, String, Vec<i32>), (f64, bool, Option<String>)),
     }
 
     // Use separate Fory instances with the same type ID
@@ -909,6 +906,7 @@ fn run_struct_complex_evolution_scenario(xlang: bool) {
 
     // V2: Evolved schema with complex changes
     #[derive(ForyObject, Debug, PartialEq)]
+    #[allow(clippy::type_complexity)]
     struct DataRecordV2 {
         id: i32,
         name: String,
@@ -917,13 +915,13 @@ fn run_struct_complex_evolution_scenario(xlang: bool) {
         // category reduced to single element (2 -> 1 elements)
         category: (String,),
         // metadata nested tuple expanded (both inner tuples gain elements)
-        metadata: MetadataExpansionTuple,
+        metadata: ((String, i32, Vec<String>), (bool, f64, Option<i32>)),
         // tags remains same
         tags: (Vec<String>, Vec<i32>),
         // NEW FIELD: status tuple added
         status: (bool, String, i32),
         // NEW FIELD: nested tuple with collections
-        attributes: AttributeTuple,
+        attributes: ((Vec<String>, HashMap<String, i32>), (Option<bool>,)),
     }
 
     // Use separate Fory instances with the same type ID
@@ -1018,4 +1016,50 @@ fn run_struct_complex_evolution_scenario(xlang: bool) {
     // tags unchanged
     assert_eq!(v1.tags.0, vec!["new_tag".to_string()]);
     assert_eq!(v1.tags.1, vec![10, 20]);
+}
+
+type AttributeTuple = ((Option<bool>,), (Vec<String>, HashMap<String, i32>));
+
+/// alias field can't be recognized as tuple, in compatible mode, it will be treated as missing field
+#[test]
+fn test_tuple_alias() {
+    #[derive(ForyObject, Debug, PartialEq)]
+    #[allow(clippy::type_complexity)]
+    struct DataRecordV1 {
+        attrs: ((Option<bool>,), (Vec<String>,)),
+    }
+
+    #[derive(ForyObject, Debug, PartialEq)]
+    #[allow(clippy::type_complexity)]
+    struct DataRecordV2 {
+        attrs: AttributeTuple,
+    }
+
+    // Use separate Fory instances with the same type ID
+    let mut fory1 = Fory::default().compatible(true);
+    fory1.register::<DataRecordV1>(100).unwrap();
+
+    let mut fory2 = Fory::default().compatible(true);
+    fory2.register::<DataRecordV2>(100).unwrap();
+
+    // Test record1 serialized by fory1, deserialized by fory2
+    // Type alias can't be recognized, so attrs will be treated as missing field
+    let record1 = DataRecordV1 {
+        attrs: ((Some(true),), (vec!["test".to_string()],)),
+    };
+    let bytes1 = fory1.serialize(&record1).unwrap();
+    let deserialized1: DataRecordV2 = fory2.deserialize(&bytes1).unwrap();
+    // attrs should be default/empty since type alias isn't recognized
+    assert_eq!(deserialized1.attrs, ((None,), (vec![], HashMap::new())));
+
+    // Test record2 serialized by fory2, deserialized by fory1
+    let mut map = HashMap::new();
+    map.insert("key".to_string(), 42);
+    let record2 = DataRecordV2 {
+        attrs: ((Some(false),), (vec!["example".to_string()], map)),
+    };
+    let bytes2 = fory2.serialize(&record2).unwrap();
+    let deserialized2: DataRecordV1 = fory1.deserialize(&bytes2).unwrap();
+    // attrs should be default/empty since type alias isn't recognized
+    assert_eq!(deserialized2.attrs, ((None,), (vec![],)));
 }

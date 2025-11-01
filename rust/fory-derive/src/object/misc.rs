@@ -21,9 +21,10 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use syn::Field;
 
 use super::util::{
-    classify_trait_object_field, generic_tree_to_tokens, get_sort_fields_ts, parse_generic_tree,
-    StructField,
+    classify_trait_object_field, generic_tree_to_tokens, get_sort_fields_ts,
+    get_type_id_by_type_ast, is_option, parse_generic_tree, StructField,
 };
+use fory_core::types::TypeId;
 
 // Global type ID counter that auto-grows from 0 at macro processing time
 static TYPE_ID_COUNTER: AtomicU32 = AtomicU32::new(0);
@@ -77,10 +78,24 @@ pub fn gen_field_fields_info(fields: &[&Field]) -> TokenStream {
         let name = format!("{}", field.ident.as_ref().expect("should be field name"));
         match classify_trait_object_field(ty) {
             StructField::None => {
-                let generic_tree = parse_generic_tree(ty);
-                let generic_token = generic_tree_to_tokens(&generic_tree);
-                quote! {
-                    fory_core::meta::FieldInfo::new(#name, #generic_token)
+                // Check if type is UNKNOWN at compile time (e.g., type aliases)
+                // If so, use UNKNOWN directly instead of calling fory_get_type_id at runtime
+                let type_id = get_type_id_by_type_ast(ty);
+                if type_id == TypeId::UNKNOWN as u32 {
+                    let nullable = is_option(ty);
+                    quote! {
+                        fory_core::meta::FieldInfo::new(#name, fory_core::meta::FieldType::new(
+                            fory_core::types::TypeId::UNKNOWN as u32,
+                            #nullable,
+                            vec![]
+                        ))
+                    }
+                } else {
+                    let generic_tree = parse_generic_tree(ty);
+                    let generic_token = generic_tree_to_tokens(&generic_tree);
+                    quote! {
+                        fory_core::meta::FieldInfo::new(#name, #generic_token)
+                    }
                 }
             }
             StructField::VecRc(_) | StructField::VecArc(_) => {
@@ -90,7 +105,7 @@ pub fn gen_field_fields_info(fields: &[&Field]) -> TokenStream {
                         nullable: false,
                         generics: vec![fory_core::meta::FieldType {
                             type_id: fory_core::types::TypeId::UNKNOWN as u32,
-                            nullable: false,
+                            nullable: true,
                             generics: Vec::new()
                         }]
                     })
@@ -107,7 +122,7 @@ pub fn gen_field_fields_info(fields: &[&Field]) -> TokenStream {
                             #key_generic_token,
                             fory_core::meta::FieldType {
                                 type_id: fory_core::types::TypeId::UNKNOWN as u32,
-                                nullable: false,
+                                nullable: true,
                                 generics: Vec::new()
                             }
                         ]
@@ -118,7 +133,7 @@ pub fn gen_field_fields_info(fields: &[&Field]) -> TokenStream {
                 quote! {
                     fory_core::meta::FieldInfo::new(#name, fory_core::meta::FieldType {
                         type_id: fory_core::types::TypeId::UNKNOWN as u32,
-                        nullable: false,
+                        nullable: true,
                         generics: Vec::new()
                     })
                 }

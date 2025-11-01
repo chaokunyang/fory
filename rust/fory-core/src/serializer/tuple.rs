@@ -147,6 +147,139 @@ impl<T0: ForyDefault> ForyDefault for (T0,) {
     }
 }
 
+macro_rules! fory_tuple_field {
+    ($tuple:expr, T0) => {
+        $tuple.0
+    };
+    ($tuple:expr, T1) => {
+        $tuple.1
+    };
+    ($tuple:expr, T2) => {
+        $tuple.2
+    };
+    ($tuple:expr, T3) => {
+        $tuple.3
+    };
+    ($tuple:expr, T4) => {
+        $tuple.4
+    };
+    ($tuple:expr, T5) => {
+        $tuple.5
+    };
+    ($tuple:expr, T6) => {
+        $tuple.6
+    };
+    ($tuple:expr, T7) => {
+        $tuple.7
+    };
+    ($tuple:expr, T8) => {
+        $tuple.8
+    };
+    ($tuple:expr, T9) => {
+        $tuple.9
+    };
+    ($tuple:expr, T10) => {
+        $tuple.10
+    };
+    ($tuple:expr, T11) => {
+        $tuple.11
+    };
+    ($tuple:expr, T12) => {
+        $tuple.12
+    };
+    ($tuple:expr, T13) => {
+        $tuple.13
+    };
+    ($tuple:expr, T14) => {
+        $tuple.14
+    };
+    ($tuple:expr, T15) => {
+        $tuple.15
+    };
+    ($tuple:expr, T16) => {
+        $tuple.16
+    };
+    ($tuple:expr, T17) => {
+        $tuple.17
+    };
+    ($tuple:expr, T18) => {
+        $tuple.18
+    };
+    ($tuple:expr, T19) => {
+        $tuple.19
+    };
+    ($tuple:expr, T20) => {
+        $tuple.20
+    };
+    ($tuple:expr, T21) => {
+        $tuple.21
+    };
+    ($tuple:expr, T22) => {
+        $tuple.22
+    };
+    ($tuple:expr, T23) => {
+        $tuple.23
+    };
+    ($tuple:expr, T24) => {
+        $tuple.24
+    };
+    ($tuple:expr, T25) => {
+        $tuple.25
+    };
+    ($tuple:expr, T26) => {
+        $tuple.26
+    };
+    ($tuple:expr, T27) => {
+        $tuple.27
+    };
+    ($tuple:expr, T28) => {
+        $tuple.28
+    };
+    ($tuple:expr, T29) => {
+        $tuple.29
+    };
+    ($tuple:expr, T30) => {
+        $tuple.30
+    };
+    ($tuple:expr, T31) => {
+        $tuple.31
+    };
+    ($tuple:expr, T32) => {
+        $tuple.32
+    };
+    ($tuple:expr, T33) => {
+        $tuple.33
+    };
+    ($tuple:expr, T34) => {
+        $tuple.34
+    };
+    ($tuple:expr, T35) => {
+        $tuple.35
+    };
+    ($tuple:expr, T36) => {
+        $tuple.36
+    };
+    ($tuple:expr, T37) => {
+        $tuple.37
+    };
+    ($tuple:expr, T38) => {
+        $tuple.38
+    };
+    ($tuple:expr, T39) => {
+        $tuple.39
+    };
+    ($tuple:expr, T40) => {
+        $tuple.40
+    };
+}
+
+macro_rules! fory_tuple_count {
+    ($($name:ident),+ $(,)?) => {
+        0usize $(+ fory_tuple_count!(@one $name))*
+    };
+    (@one $name:ident) => { 1usize };
+}
+
 /// Macro to implement Serializer for tuples of various sizes.
 ///
 /// This handles two serialization modes:
@@ -159,12 +292,12 @@ impl<T0: ForyDefault> ForyDefault for (T0,) {
 /// invoke this macro manually:
 ///
 /// ```rust,ignore
-/// fory::impl_tuple_serializer!(T0, T1, T2, ..., T23; 1, 2, 3, ..., 23);
+/// impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21, T22);
 /// ```
 #[macro_export]
 macro_rules! impl_tuple_serializer {
     // Multiple element tuples (2+)
-    ($T0:ident $(, $T:ident)+; $($idx:tt),+) => {
+    ($T0:ident $(, $T:ident)+ $(,)?) => {
         impl<$T0: Serializer + ForyDefault, $($T: Serializer + ForyDefault),*> Serializer for ($T0, $($T),*) {
             #[inline(always)]
             fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error> {
@@ -172,11 +305,11 @@ macro_rules! impl_tuple_serializer {
                     // Non-compatible mode: write elements directly one by one
                     write_tuple_element(&self.0, context)?;
                     $(
-                        write_tuple_element(&self.$idx, context)?;
+                        write_tuple_element(&fory_tuple_field!(self, $T), context)?;
                     )*
                 } else {
                     // Compatible mode: use collection protocol (always heterogeneous)
-                    let len = 1 $(+ { let _ = stringify!($idx); 1 })*;
+                    let len = fory_tuple_count!($T0, $($T),*);
                     context.writer.write_varuint32(len as u32);
 
                     // Write header without IS_SAME_TYPE flag
@@ -186,7 +319,7 @@ macro_rules! impl_tuple_serializer {
                     // Write each element with its type info
                     self.0.fory_write(context, true, true, false)?;
                     $(
-                        self.$idx.fory_write(context, true, true, false)?;
+                        fory_tuple_field!(self, $T).fory_write(context, true, true, false)?;
                     )*
                 }
                 Ok(())
@@ -292,24 +425,35 @@ macro_rules! impl_tuple_serializer {
 }
 
 // Implement Serializer for tuples of size 2-22
-impl_tuple_serializer!(T0, T1; 1);
-impl_tuple_serializer!(T0, T1, T2; 1, 2);
-impl_tuple_serializer!(T0, T1, T2, T3; 1, 2, 3);
-impl_tuple_serializer!(T0, T1, T2, T3, T4; 1, 2, 3, 4);
-impl_tuple_serializer!(T0, T1, T2, T3, T4, T5; 1, 2, 3, 4, 5);
-impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6; 1, 2, 3, 4, 5, 6);
-impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6, T7; 1, 2, 3, 4, 5, 6, 7);
-impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6, T7, T8; 1, 2, 3, 4, 5, 6, 7, 8);
-impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9; 1, 2, 3, 4, 5, 6, 7, 8, 9);
-impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10; 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
-impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11; 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
-impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12; 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
-impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13; 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13);
-impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14; 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14);
-impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15; 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
-impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16; 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
-impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17; 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17);
-impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18; 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18);
-impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19; 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19);
-impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20; 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20);
-impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21; 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21);
+impl_tuple_serializer!(T0, T1);
+impl_tuple_serializer!(T0, T1, T2);
+impl_tuple_serializer!(T0, T1, T2, T3);
+impl_tuple_serializer!(T0, T1, T2, T3, T4);
+impl_tuple_serializer!(T0, T1, T2, T3, T4, T5);
+impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6);
+impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6, T7);
+impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6, T7, T8);
+impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9);
+impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10);
+impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11);
+impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12);
+impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13);
+impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14);
+impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15);
+impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16);
+impl_tuple_serializer!(
+    T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17
+);
+impl_tuple_serializer!(
+    T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18
+);
+impl_tuple_serializer!(
+    T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19
+);
+impl_tuple_serializer!(
+    T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20
+);
+impl_tuple_serializer!(
+    T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20,
+    T21
+);

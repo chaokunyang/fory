@@ -747,7 +747,7 @@
 //! use fory::impl_tuple_serializer;
 //!
 //! // Support for 23-element tuples
-//! impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21, T22; 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22);
+//! impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21, T22);
 //! ```
 //!
 //! ### 7. Custom Serializers
@@ -1153,8 +1153,8 @@
 //! - **[GitHub Repository](https://github.com/apache/fory)** - Source code and issue tracking
 
 pub use fory_core::{
-    error::Error, fory::Fory, register_trait_type, row::from_row, row::to_row, types::TypeId,
-    ArcWeak, ForyDefault, RcWeak, ReadContext, Reader, Serializer, TypeResolver, WriteContext,
-    Writer,
+    error::Error, fory::Fory, impl_tuple_serializer, register_trait_type, row::from_row,
+    row::to_row, types::TypeId, ArcWeak, ForyDefault, RcWeak, ReadContext, Reader, Serializer,
+    TypeResolver, WriteContext, Writer,
 };
 pub use fory_derive::{ForyObject, ForyRow};

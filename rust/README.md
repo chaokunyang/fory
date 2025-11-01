@@ -591,11 +591,11 @@ assert_eq!(status, decoded);
 
 ### 6. Tuple Support
 
-Apache Fory™ supports tuples up to 22 elements out of the box with efficient serialization in both compatible and non-compatible modes.
+Apache Fory™ supports tuples up to 16 elements out of the box with efficient serialization in both compatible and non-compatible modes.
 
 **Features:**
 
-- Automatic serialization for tuples from 1 to 22 elements
+- Automatic serialization for tuples from 1 to 16 elements
 - Heterogeneous type support (each element can be a different type)
 - Schema evolution in Compatible mode (handles missing/extra elements)
 - Extensible via `impl_tuple_serializer!` macro for longer tuples
@@ -625,13 +625,13 @@ assert_eq!(data, decoded);
 
 **Extending for longer tuples:**
 
-For tuples with more than 22 elements, invoke the macro manually:
+For tuples with more than 16 elements, invoke the macro manually:
 
 ```rust
 use fory::impl_tuple_serializer;
 
-// Support for 23-element tuples
-impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21, T22);
+// Support for 17-element tuples
+impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17);
 ```
 
 ### 7. Custom Serializers

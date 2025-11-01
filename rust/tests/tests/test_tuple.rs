@@ -137,7 +137,7 @@ fn test_deeply_nested_tuples() {
     assert_eq!(tuple, obj);
 }
 
-// Test large tuples (up to 22 elements)
+// Test large tuples
 #[test]
 fn test_large_homogeneous_tuple() {
     let fory = Fory::default();

@@ -699,19 +699,19 @@
 //!
 //! ### 6. Tuple Support
 //!
-//! **What it does:** Supports tuples up to 22 elements with automatic heterogeneous type
+//! **What it does:** Supports tuples up to 16 elements with automatic heterogeneous type
 //! handling and schema evolution in compatible mode.
 //!
 //! **Why it matters:** Tuples provide lightweight aggregation without defining full structs,
 //! useful for temporary groupings, function return values, and ad-hoc data structures.
 //!
-//! **Technical approach:** Each tuple size (1-22) has a specialized `Serializer` implementation.
+//! **Technical approach:** Each tuple size (1-16) has a specialized `Serializer` implementation.
 //! In non-compatible mode, elements are serialized sequentially without overhead. In compatible
 //! mode, the tuple is serialized as a heterogeneous collection with type metadata for each element.
 //!
 //! **Features:**
 //!
-//! - Automatic serialization for tuples from 1 to 22 elements
+//! - Automatic serialization for tuples from 1 to 16 elements
 //! - Heterogeneous type support (each element can be a different type)
 //! - Schema evolution in Compatible mode (handles missing/extra elements)
 //! - Default values for missing elements during deserialization
@@ -741,13 +741,13 @@
 //!
 //! **Extending for longer tuples:**
 //!
-//! For tuples with more than 22 elements, invoke the `impl_tuple_serializer!` macro manually:
+//! For tuples with more than 16 elements, invoke the `impl_tuple_serializer!` macro manually:
 //!
-//! ```rust,ignore
+//! ```rust
 //! use fory::impl_tuple_serializer;
 //!
-//! // Support for 23-element tuples
-//! impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21, T22);
+//! // Support for 17-element tuples
+//! impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17);
 //! ```
 //!
 //! ### 7. Custom Serializers

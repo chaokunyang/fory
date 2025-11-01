@@ -58,7 +58,7 @@ pub fn field_need_read_type_info(type_id: u32) -> bool {
     if internal_type_id == ENUM || internal_type_id == NAMED_ENUM {
         return false;
     }
-    return is_user_type(internal_type_id);
+    is_user_type(internal_type_id)
 }
 
 pub fn field_need_write_type_info<T: Serializer>() -> bool {
@@ -69,7 +69,7 @@ pub fn field_need_write_type_info<T: Serializer>() -> bool {
     if static_type_id == ENUM || static_type_id == NAMED_ENUM {
         return false;
     }
-    return is_user_type(static_type_id);
+    is_user_type(static_type_id)
 }
 
 #[inline]

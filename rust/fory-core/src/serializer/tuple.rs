@@ -150,8 +150,18 @@ impl<T0: ForyDefault> ForyDefault for (T0,) {
 /// Macro to implement Serializer for tuples of various sizes.
 ///
 /// This handles two serialization modes:
-/// 1. Non-compatible mode: Write elements one by one without collection headers
+/// 1. Non-compatible mode: Write elements one by one without collection headers and type metadata
 /// 2. Compatible mode: Use full collection protocol with headers and type info (always heterogeneous)
+///
+/// # User Usage
+///
+/// Fory supports tuples up to 22 elements by default. For longer tuples (23+ elements),
+/// invoke this macro manually:
+///
+/// ```rust,ignore
+/// fory::impl_tuple_serializer!(T0, T1, T2, ..., T23; 1, 2, 3, ..., 23);
+/// ```
+#[macro_export]
 macro_rules! impl_tuple_serializer {
     // Multiple element tuples (2+)
     ($T0:ident $(, $T:ident)+; $($idx:tt),+) => {

@@ -589,7 +589,52 @@ let decoded: Status = fory.deserialize(&bytes)?;
 assert_eq!(status, decoded);
 ```
 
-### 6. Custom Serializers
+### 6. Tuple Support
+
+Apache Fory™ supports tuples up to 22 elements out of the box with efficient serialization in both compatible and non-compatible modes.
+
+**Features:**
+
+- Automatic serialization for tuples from 1 to 22 elements
+- Heterogeneous type support (each element can be a different type)
+- Schema evolution in Compatible mode (handles missing/extra elements)
+- Extensible via `impl_tuple_serializer!` macro for longer tuples
+
+**Serialization modes:**
+
+1. **Non-compatible mode**: Serializes elements sequentially without collection headers for minimal overhead
+2. **Compatible mode**: Uses collection protocol with type metadata for schema evolution
+
+```rust
+use fory::{Fory, Error};
+
+let mut fory = Fory::default();
+
+// Tuple with heterogeneous types
+let data: (i32, String, bool, Vec<i32>) = (
+    42,
+    "hello".to_string(),
+    true,
+    vec![1, 2, 3],
+);
+
+let bytes = fory.serialize(&data)?;
+let decoded: (i32, String, bool, Vec<i32>) = fory.deserialize(&bytes)?;
+assert_eq!(data, decoded);
+```
+
+**Extending for longer tuples:**
+
+For tuples with more than 22 elements, invoke the macro manually:
+
+```rust
+use fory::impl_tuple_serializer;
+
+// Support for 23-element tuples
+impl_tuple_serializer!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21, T22; 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22);
+```
+
+### 7. Custom Serializers
 
 For types that don't support `#[derive(ForyObject)]`, implement the `Serializer` trait manually. This is useful for:
 

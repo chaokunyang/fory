@@ -19,12 +19,13 @@ use crate::ensure;
 use crate::error::Error;
 use crate::meta::FieldType;
 use crate::resolver::context::ReadContext;
-use crate::serializer::collection::{HAS_NULL, IS_SAME_TYPE};
+use crate::serializer::collection::{DECL_ELEMENT_TYPE, HAS_NULL, IS_SAME_TYPE};
 use crate::serializer::util;
 use crate::serializer::Serializer;
 use crate::types;
 use crate::types::{is_user_type, RefFlag, TypeId, BASIC_TYPES, CONTAINER_TYPES};
 use chrono::{NaiveDate, NaiveDateTime};
+use std::rc::Rc;
 
 macro_rules! basic_type_deserialize {
     ($tid:expr, $context:expr; $(($ty:ty, $id:ident)),+ $(,)?) => {
@@ -45,7 +46,7 @@ pub fn skip_field_value(
     field_type: &FieldType,
     read_ref_flag: bool,
 ) -> Result<(), Error> {
-    skip_value(context, field_type, read_ref_flag, true)
+    skip_value(context, field_type, read_ref_flag, true, &None)
 }
 
 const UNKNOWN_FIELD_TYPPE: FieldType = FieldType {
@@ -86,16 +87,17 @@ pub fn skip_any_value(context: &mut ReadContext, read_ref_flag: bool) -> Result<
         },
     };
     // Don't read ref flag again in skip_value since we already handled it
-    skip_value(context, &field_type, false, false)
+    skip_value(context, &field_type, false, false, &None)
 }
 
 // call when is_field && is_compatible_mode
 #[allow(unreachable_code)]
-pub fn skip_value(
+fn skip_value(
     context: &mut ReadContext,
     field_type: &FieldType,
     read_ref_flag: bool,
     _is_field: bool,
+    type_info: &Option<Rc<crate::TypeInfo>>,
 ) -> Result<(), Error> {
     if read_ref_flag {
         let ref_flag = context.reader.read_i8()?;
@@ -144,10 +146,25 @@ pub fn skip_value(
                     let has_null = (header & HAS_NULL) != 0;
                     let is_same_type = (header & IS_SAME_TYPE) != 0;
                     let skip_ref_flag = is_same_type && !has_null;
-                    let elem_type = field_type.generics.first().unwrap();
+                    let is_declared = (header & DECL_ELEMENT_TYPE) != 0;
+                    let default_elem_type = field_type.generics.first().unwrap();
+                    let (type_info, elem_field_type);
+                    let elem_type = if is_same_type && !is_declared  {
+                        let type_info_rc = context.read_any_typeinfo()?;
+                        elem_field_type = FieldType {
+                            type_id: type_info_rc.get_type_id(),
+                            nullable: has_null,
+                            generics: vec![],
+                        };
+                        type_info = Some(type_info_rc);
+                        &elem_field_type
+                    } else {
+                        type_info = None;
+                        default_elem_type
+                    };
                     context.inc_depth()?;
                     for _ in 0..length {
-                        skip_value(context, elem_type, !skip_ref_flag, false)?;
+                        skip_value(context, elem_type, !skip_ref_flag, false, &type_info)?;
                     }
                     context.dec_depth();
                 } else if type_id == TypeId::MAP {
@@ -156,8 +173,8 @@ pub fn skip_value(
                         return Ok(());
                     }
                     let mut len_counter = 0;
-                    let key_type = field_type.generics.first().unwrap();
-                    let value_type = field_type.generics.get(1).unwrap();
+                    let default_key_type = field_type.generics.first().unwrap();
+                    let default_value_type = field_type.generics.get(1).unwrap();
                     loop {
                         if len_counter == length {
                             break;
@@ -170,28 +187,92 @@ pub fn skip_value(
                             continue;
                         }
                         if header & crate::serializer::map::KEY_NULL != 0 {
-                            // value_type.nullable determines whether ref flag was written
+                            // Read value type info if not declared
+                            let value_declared = (header & crate::serializer::map::DECL_VALUE_TYPE) != 0;
+                            let (value_type_info, value_field_type);
+                            let value_type = if !value_declared {
+                                let type_info = context.read_any_typeinfo()?;
+                                value_field_type = FieldType {
+                                    type_id: type_info.get_type_id(),
+                                    nullable: true,
+                                    generics: vec![],
+                                };
+                                value_type_info = Some(type_info);
+                                &value_field_type
+                            } else {
+                                value_type_info = None;
+                                default_value_type
+                            };
                             context.inc_depth()?;
-                            skip_value(context, value_type, false, false)?;
+                            skip_value(context, value_type, false, false, &value_type_info)?;
                             context.dec_depth();
                             len_counter += 1;
                             continue;
                         }
                         if header & crate::serializer::map::VALUE_NULL != 0 {
-                            // key_type.nullable determines whether ref flag was written
+                            // Read key type info if not declared
+                            let key_declared = (header & crate::serializer::map::DECL_KEY_TYPE) != 0;
+                            let (key_type_info, key_field_type);
+                            let key_type = if !key_declared {
+                                let type_info = context.read_any_typeinfo()?;
+                                key_field_type = FieldType {
+                                    type_id: type_info.get_type_id(),
+                                    nullable: true,
+                                    generics: vec![],
+                                };
+                                key_type_info = Some(type_info);
+                                &key_field_type
+                            } else {
+                                key_type_info = None;
+                                default_key_type
+                            };
                             context.inc_depth()?;
-                            skip_value(context, key_type, false, false)?;
+                            skip_value(context, key_type, false, false, &key_type_info)?;
                             context.dec_depth();
                             len_counter += 1;
                             continue;
                         }
+                        // Both key and value are non-null
                         let chunk_size = context.reader.read_u8()?;
+                        let key_declared = (header & crate::serializer::map::DECL_KEY_TYPE) != 0;
+                        let value_declared = (header & crate::serializer::map::DECL_VALUE_TYPE) != 0;
+
+                        // Read key type info if not declared
+                        let (key_type_info, key_field_type);
+                        let key_type = if !key_declared {
+                            let type_info = context.read_any_typeinfo()?;
+                            key_field_type = FieldType {
+                                type_id: type_info.get_type_id(),
+                                nullable: true,
+                                generics: vec![],
+                            };
+                            key_type_info = Some(type_info);
+                            &key_field_type
+                        } else {
+                            key_type_info = None;
+                            default_key_type
+                        };
+
+                        // Read value type info if not declared
+                        let (value_type_info, value_field_type);
+                        let value_type = if !value_declared {
+                            let type_info = context.read_any_typeinfo()?;
+                            value_field_type = FieldType {
+                                type_id: type_info.get_type_id(),
+                                nullable: true,
+                                generics: vec![],
+                            };
+                            value_type_info = Some(type_info);
+                            &value_field_type
+                        } else {
+                            value_type_info = None;
+                            default_value_type
+                        };
+
                         context.inc_depth()?;
-                        for _ in (0..chunk_size).enumerate() {
-                            // key_type.nullable determines whether ref flag was written
-                            skip_value(context, key_type, false, false)?;
-                            // value_type.nullable determines whether ref flag was written
-                            skip_value(context, value_type, false, false)?;
+                        for _ in 0..chunk_size {
+                            skip_value(context, key_type, false, false, &key_type_info)?;
+                            skip_value(context, value_type, false, false, &value_type_info)?;
                         }
                         context.dec_depth();
                         len_counter += chunk_size as u32;
@@ -202,34 +283,42 @@ pub fn skip_value(
                 let _ordinal = context.reader.read_varuint32()?;
                 Ok(())
             } else if type_id == TypeId::NAMED_COMPATIBLE_STRUCT {
-                let remote_type_id = context.reader.read_varuint32()?;
-                ensure!(
-                    type_id_num == remote_type_id,
-                    Error::type_mismatch(type_id_num, remote_type_id)
-                );
-                let meta_index = context.reader.read_varuint32()?;
-                let type_info = context.get_type_info_by_index(meta_index as usize)?;
-                let field_infos = type_info.get_type_meta().get_field_infos().to_vec();
+                let type_info_value = if type_info.is_none() {
+                    let remote_type_id = context.reader.read_varuint32()?;
+                    ensure!(
+                        type_id_num == remote_type_id,
+                        Error::type_mismatch(type_id_num, remote_type_id)
+                    );
+                    let meta_index = context.reader.read_varuint32()?;
+                    context.get_type_info_by_index(meta_index as usize)?
+                } else {
+                    type_info.as_ref().unwrap()
+                };
+                let field_infos = type_info_value.get_type_meta().get_field_infos().to_vec();
                 context.inc_depth()?;
                 for field_info in field_infos.iter() {
                     let read_ref_flag = util::field_requires_ref_flag(
                         field_info.field_type.type_id,
                         field_info.field_type.nullable,
                     );
-                    skip_value(context, &field_info.field_type, read_ref_flag, true)?;
+                    skip_value(context, &field_info.field_type, read_ref_flag, true, &None)?;
                 }
                 context.dec_depth();
                 Ok(())
             } else if type_id == TypeId::NAMED_EXT {
-                let remote_type_id = context.reader.read_varuint32()?;
-                ensure!(
-                    type_id_num == remote_type_id,
-                    Error::type_mismatch(type_id_num, remote_type_id)
-                );
-                let meta_index = context.reader.read_varuint32()?;
-                let type_info = context.get_type_info_by_index(meta_index as usize)?;
+                let type_info_value = if type_info.is_none() {
+                    let remote_type_id = context.reader.read_varuint32()?;
+                    ensure!(
+                        type_id_num == remote_type_id,
+                        Error::type_mismatch(type_id_num, remote_type_id)
+                    );
+                    let meta_index = context.reader.read_varuint32()?;
+                    context.get_type_info_by_index(meta_index as usize)?
+                } else {
+                    type_info.as_ref().unwrap()
+                };
                 let type_resolver = context.get_type_resolver();
-                let type_meta = type_info.get_type_meta();
+                let type_meta = type_info_value.get_type_meta();
                 type_resolver
                     .get_ext_name_harness(type_meta.get_namespace(), type_meta.get_type_name())?
                     .get_read_data_fn()(context)?;
@@ -261,7 +350,7 @@ pub fn skip_value(
                         field_info.field_type.type_id,
                         field_info.field_type.nullable,
                     );
-                    skip_value(context, &field_info.field_type, read_ref_flag, true)?;
+                    skip_value(context, &field_info.field_type, read_ref_flag, true, &None)?;
                 }
                 context.dec_depth();
             } else if internal_id == ENUM_ID {

@@ -252,3 +252,96 @@ fn test_tuple_xlang_mode() {
     let obj: (Option<i32>, Option<String>, Option<Vec<i32>>) = fory.deserialize(&bin).expect("deserialize with option");
     assert_eq!(with_option, obj);
 }
+
+// Helper method for struct with simple tuple fields
+fn run_struct_with_simple_tuple_fields(xlang: bool) {
+    #[derive(ForyObject, Debug, PartialEq)]
+    struct SimpleTupleStruct {
+        id: i32,
+        coordinates: (f64, f64),
+        pair: (String, i32),
+        triple: (bool, u32, i64),
+    }
+
+    let mut fory = Fory::default().xlang(xlang);
+    fory.register::<SimpleTupleStruct>(1).unwrap();
+
+    let data = SimpleTupleStruct {
+        id: 42,
+        coordinates: (10.5, 20.3),
+        pair: ("hello".to_string(), 100),
+        triple: (true, 200, -300),
+    };
+
+    // Serialize
+    let bytes = fory.serialize(&data).unwrap();
+    // Deserialize
+    let decoded: SimpleTupleStruct = fory.deserialize(&bytes).unwrap();
+    assert_eq!(data, decoded);
+}
+
+// Helper method for struct with complex tuple fields
+fn run_struct_with_complex_tuple_fields(xlang: bool) {
+    #[derive(ForyObject, Debug, PartialEq)]
+    struct ComplexTupleStruct {
+        name: String,
+        // Heterogeneous tuple
+        heterogeneous: (i32, String, f64, bool),
+        // Nested tuples
+        nested: ((i32, String), (f64, bool)),
+        // Tuple with collection
+        with_collection: (Vec<i32>, Vec<String>),
+        // Tuple with Option
+        with_option: (Option<i32>, Option<String>),
+        // Tuple with Rc (shared_ptr)
+        with_rc: (Rc<i32>, Rc<String>),
+        // Complex nested tuple with collections and options
+        complex_nested: ((Vec<i32>, Option<String>), (Rc<bool>, (i32, f64))),
+    }
+
+    let mut fory = Fory::default().xlang(xlang);
+    fory.register::<ComplexTupleStruct>(2).unwrap();
+
+    let data = ComplexTupleStruct {
+        name: "Complex Test".to_string(),
+        heterogeneous: (42, "world".to_string(), 3.14, true),
+        nested: ((100, "nested".to_string()), (2.71, false)),
+        with_collection: (vec![1, 2, 3], vec!["a".to_string(), "b".to_string()]),
+        with_option: (Some(999), None),
+        with_rc: (Rc::new(777), Rc::new("shared".to_string())),
+        complex_nested: (
+            (vec![10, 20, 30], Some("optional".to_string())),
+            (Rc::new(true), (42, 1.618)),
+        ),
+    };
+
+    // Serialize
+    let bytes = fory.serialize(&data).unwrap();
+    // Deserialize
+    let decoded: ComplexTupleStruct = fory.deserialize(&bytes).unwrap();
+    assert_eq!(data, decoded);
+}
+
+// Test struct with simple tuple fields (non-xlang mode)
+#[test]
+fn test_struct_with_simple_tuple_fields() {
+    run_struct_with_simple_tuple_fields(false);
+}
+
+// Test struct with simple tuple fields (xlang mode)
+#[test]
+fn test_struct_with_simple_tuple_fields_xlang() {
+    run_struct_with_simple_tuple_fields(true);
+}
+
+// Test struct with complex tuple fields (non-xlang mode)
+#[test]
+fn test_struct_with_complex_tuple_fields() {
+    run_struct_with_complex_tuple_fields(false);
+}
+
+// Test struct with complex tuple fields (xlang mode)
+#[test]
+fn test_struct_with_complex_tuple_fields_xlang() {
+    run_struct_with_complex_tuple_fields(true);
+}

@@ -340,16 +340,11 @@ pub(super) fn parse_generic_tree(ty: &Type) -> TypeNode {
         };
     }
 
-    // Handle tuples - parse each element as a generic
-    if let Type::Tuple(tuple) = ty {
-        let generics: Vec<TypeNode> = tuple
-            .elems
-            .iter()
-            .map(|elem_ty| parse_generic_tree(elem_ty))
-            .collect();
+    // Handle tuples - make child generics empty
+    if let Type::Tuple(_tuple) = ty {
         return TypeNode {
             name: "Tuple".to_string(),
-            generics,
+            generics: vec![],
         };
     }
 
@@ -379,11 +374,40 @@ pub(super) fn parse_generic_tree(ty: &Type) -> TypeNode {
 }
 
 pub(super) fn generic_tree_to_tokens(node: &TypeNode) -> TokenStream {
+    // Special handling for tuples: always use FieldType { LIST, nullable: true, generics: vec![UNKNOWN] }
+    if node.name == "Tuple" {
+        return quote! {
+            fory_core::meta::FieldType::new(
+                fory_core::types::TypeId::LIST as u32,
+                true,
+                vec![fory_core::meta::FieldType {
+                    type_id: fory_core::types::TypeId::UNKNOWN as u32,
+                    nullable: true,
+                    generics: vec![],
+                }]
+            )
+        };
+    }
+
     // If Option, unwrap it before generating children
     let (nullable, base_node) = if node.name == "Option" {
         if let Some(inner) = node.generics.first() {
             if inner.name == "Option" {
                 return quote! { compile_error!("Nested adjacent Option is not allowed!"); };
+            }
+            // Special handling for Option<Tuple>
+            if inner.name == "Tuple" {
+                return quote! {
+                    fory_core::meta::FieldType::new(
+                        fory_core::types::TypeId::LIST as u32,
+                        true,
+                        vec![fory_core::meta::FieldType {
+                            type_id: fory_core::types::TypeId::UNKNOWN as u32,
+                            nullable: true,
+                            generics: vec![],
+                        }]
+                    )
+                };
             }
             // Unwrap Option and propagate parsing
             (true, inner)
@@ -416,10 +440,8 @@ pub(super) fn generic_tree_to_tokens(node: &TypeNode) -> TokenStream {
     // Build the syn::Type from the DISPLAY of base_node, not the original node if Option
     let ty: syn::Type = syn::parse_str(&base_node.to_string()).unwrap();
 
-    // Special handling for tuples: they are lists and should use TypeId::LIST directly
-    let get_type_id = if base_node.name == "Tuple" {
-        quote! { fory_core::types::TypeId::LIST as u32 }
-    } else if let Some(ts) = primitive_vec {
+    // Get type ID
+    let get_type_id = if let Some(ts) = primitive_vec {
         ts
     } else {
         quote! {

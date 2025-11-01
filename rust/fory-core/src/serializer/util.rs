@@ -62,9 +62,6 @@ pub fn field_need_read_type_info(type_id: u32) -> bool {
 }
 
 pub fn field_need_write_type_info<T: Serializer>() -> bool {
-    if T::fory_is_shared_ref() || T::fory_is_option() {
-        return true;
-    }
     let static_type_id = T::fory_static_type_id() as u32;
     if static_type_id == ENUM || static_type_id == NAMED_ENUM {
         return false;

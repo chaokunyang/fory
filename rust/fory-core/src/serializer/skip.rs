@@ -36,7 +36,7 @@ pub fn skip_field_value(
     skip_value(context, field_type, read_ref_flag, true, &None)
 }
 
-const UNKNOWN_FIELD_TYPPE: FieldType = FieldType {
+const UNKNOWN_FIELD_TYPE: FieldType = FieldType {
     type_id: types::UNKNOWN,
     nullable: true,
     generics: vec![],
@@ -60,12 +60,12 @@ pub fn skip_any_value(context: &mut ReadContext, read_ref_flag: bool) -> Result<
         types::LIST | types::SET => FieldType {
             type_id,
             nullable: true,
-            generics: vec![UNKNOWN_FIELD_TYPPE.clone()],
+            generics: vec![UNKNOWN_FIELD_TYPE],
         },
         types::MAP => FieldType {
             type_id,
             nullable: true,
-            generics: vec![UNKNOWN_FIELD_TYPPE.clone(), UNKNOWN_FIELD_TYPPE.clone()],
+            generics: vec![UNKNOWN_FIELD_TYPE, UNKNOWN_FIELD_TYPE],
         },
         _ => FieldType {
             type_id,

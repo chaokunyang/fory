@@ -786,6 +786,99 @@ fn run_struct_multiple_tuple_fields_evolution(xlang: bool) {
     assert_eq!(v1.tags.1, 0); // default
 }
 
+// Test functions (non-xlang mode)
+#[test]
+fn test_struct_missing_tuple_field() {
+    run_struct_missing_tuple_field(false);
+}
+
+#[test]
+fn test_struct_added_tuple_field() {
+    run_struct_added_tuple_field(false);
+}
+
+#[test]
+fn test_struct_tuple_element_increase() {
+    run_struct_tuple_element_increase(false);
+}
+
+#[test]
+fn test_struct_tuple_element_decrease() {
+    run_struct_tuple_element_decrease(false);
+}
+
+#[test]
+fn test_struct_nested_tuple_evolution() {
+    run_struct_nested_tuple_evolution(false);
+}
+
+#[test]
+fn test_struct_multiple_tuple_fields_evolution() {
+    run_struct_multiple_tuple_fields_evolution(false);
+}
+
+// Test functions (xlang mode)
+#[test]
+fn test_struct_missing_tuple_field_xlang() {
+    run_struct_missing_tuple_field(true);
+}
+
+#[test]
+fn test_struct_added_tuple_field_xlang() {
+    run_struct_added_tuple_field(true);
+}
+
+#[test]
+fn test_struct_tuple_element_increase_xlang() {
+    run_struct_tuple_element_increase(true);
+}
+
+#[test]
+fn test_struct_tuple_element_decrease_xlang() {
+    run_struct_tuple_element_decrease(true);
+}
+
+#[test]
+fn test_struct_nested_tuple_evolution_xlang() {
+    run_struct_nested_tuple_evolution(true);
+}
+
+#[test]
+fn test_struct_multiple_tuple_fields_evolution_xlang() {
+    run_struct_multiple_tuple_fields_evolution(true);
+}
+
+// ============================================================================
+// Complex scenario tests (ignored - advanced edge cases)
+// ============================================================================
+
+/// Test complex scenario combining field-level and tuple-element evolution (non-xlang mode)
+///
+/// This test is ignored because it tests a very complex scenario that combines:
+/// - Adding new struct fields (status, attributes)
+/// - Removing struct fields (implicitly tested in reverse direction)
+/// - Expanding tuple elements (position: 2->3, metadata nested tuples)
+/// - Reducing tuple elements (category: 2->1)
+/// - Unchanged tuple fields (tags)
+/// - Mix of simple, nested, and collection-based tuples
+///
+/// This represents a realistic schema evolution scenario where multiple changes
+/// happen simultaneously across a complex data structure.
+#[test]
+fn test_struct_complex_evolution_scenario() {
+    run_struct_complex_evolution_scenario(false);
+}
+
+/// Test complex scenario combining field-level and tuple-element evolution (xlang mode)
+///
+/// Same as test_struct_complex_evolution_scenario but with xlang=true.
+/// This tests whether the cross-language serialization protocol can handle
+/// complex schema evolution scenarios.
+#[test]
+fn test_struct_complex_evolution_scenario_xlang() {
+    run_struct_complex_evolution_scenario(true);
+}
+
 /// Helper: Test very complex scenario combining field-level and tuple-element evolution
 /// This test combines:
 /// - Adding/removing struct fields
@@ -919,99 +1012,4 @@ fn run_struct_complex_evolution_scenario(xlang: bool) {
     // tags unchanged
     assert_eq!(v1.tags.0, vec!["new_tag".to_string()]);
     assert_eq!(v1.tags.1, vec![10, 20]);
-}
-
-// Test functions (non-xlang mode)
-#[test]
-fn test_struct_missing_tuple_field() {
-    run_struct_missing_tuple_field(false);
-}
-
-#[test]
-fn test_struct_added_tuple_field() {
-    run_struct_added_tuple_field(false);
-}
-
-#[test]
-fn test_struct_tuple_element_increase() {
-    run_struct_tuple_element_increase(false);
-}
-
-#[test]
-fn test_struct_tuple_element_decrease() {
-    run_struct_tuple_element_decrease(false);
-}
-
-#[test]
-fn test_struct_nested_tuple_evolution() {
-    run_struct_nested_tuple_evolution(false);
-}
-
-#[test]
-fn test_struct_multiple_tuple_fields_evolution() {
-    run_struct_multiple_tuple_fields_evolution(false);
-}
-
-// Test functions (xlang mode)
-#[test]
-fn test_struct_missing_tuple_field_xlang() {
-    run_struct_missing_tuple_field(true);
-}
-
-#[test]
-fn test_struct_added_tuple_field_xlang() {
-    run_struct_added_tuple_field(true);
-}
-
-#[test]
-fn test_struct_tuple_element_increase_xlang() {
-    run_struct_tuple_element_increase(true);
-}
-
-#[test]
-fn test_struct_tuple_element_decrease_xlang() {
-    run_struct_tuple_element_decrease(true);
-}
-
-#[test]
-fn test_struct_nested_tuple_evolution_xlang() {
-    run_struct_nested_tuple_evolution(true);
-}
-
-#[test]
-fn test_struct_multiple_tuple_fields_evolution_xlang() {
-    run_struct_multiple_tuple_fields_evolution(true);
-}
-
-// ============================================================================
-// Complex scenario tests (ignored - advanced edge cases)
-// ============================================================================
-
-/// Test complex scenario combining field-level and tuple-element evolution (non-xlang mode)
-///
-/// This test is ignored because it tests a very complex scenario that combines:
-/// - Adding new struct fields (status, attributes)
-/// - Removing struct fields (implicitly tested in reverse direction)
-/// - Expanding tuple elements (position: 2->3, metadata nested tuples)
-/// - Reducing tuple elements (category: 2->1)
-/// - Unchanged tuple fields (tags)
-/// - Mix of simple, nested, and collection-based tuples
-///
-/// This represents a realistic schema evolution scenario where multiple changes
-/// happen simultaneously across a complex data structure.
-#[test]
-#[ignore]
-fn test_struct_complex_evolution_scenario() {
-    run_struct_complex_evolution_scenario(false);
-}
-
-/// Test complex scenario combining field-level and tuple-element evolution (xlang mode)
-///
-/// Same as test_struct_complex_evolution_scenario but with xlang=true.
-/// This tests whether the cross-language serialization protocol can handle
-/// complex schema evolution scenarios.
-#[test]
-#[ignore]
-fn test_struct_complex_evolution_scenario_xlang() {
-    run_struct_complex_evolution_scenario(true);
 }

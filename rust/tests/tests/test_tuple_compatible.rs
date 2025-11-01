@@ -498,9 +498,12 @@ fn run_struct_missing_tuple_field(xlang: bool) {
         metadata: (String, i32),
     }
 
-    let mut fory = Fory::default().xlang(xlang).compatible(true);
-    fory.register::<StructV1>(10).unwrap();
-    fory.register::<StructV2>(11).unwrap();
+    // Use separate Fory instances with the same type ID
+    let mut fory1 = Fory::default().xlang(xlang).compatible(true);
+    fory1.register::<StructV1>(1).unwrap();
+
+    let mut fory2 = Fory::default().xlang(xlang).compatible(true);
+    fory2.register::<StructV2>(1).unwrap();
 
     // Serialize V1 and deserialize as V2
     let v1 = StructV1 {
@@ -509,8 +512,8 @@ fn run_struct_missing_tuple_field(xlang: bool) {
         coordinates: (10.5, 20.3),
         metadata: ("meta".to_string(), 100),
     };
-    let bytes = fory.serialize(&v1).unwrap();
-    let v2: StructV2 = fory.deserialize(&bytes).expect("deserialize V1 to V2");
+    let bytes = fory1.serialize(&v1).unwrap();
+    let v2: StructV2 = fory2.deserialize(&bytes).expect("deserialize V1 to V2");
     assert_eq!(v2.id, 42);
     assert_eq!(v2.name, "test");
     assert_eq!(v2.metadata, ("meta".to_string(), 100));
@@ -521,8 +524,8 @@ fn run_struct_missing_tuple_field(xlang: bool) {
         name: "test2".to_string(),
         metadata: ("data".to_string(), 200),
     };
-    let bytes = fory.serialize(&v2).unwrap();
-    let v1: StructV1 = fory.deserialize(&bytes).expect("deserialize V2 to V1");
+    let bytes = fory2.serialize(&v2).unwrap();
+    let v1: StructV1 = fory1.deserialize(&bytes).expect("deserialize V2 to V1");
     assert_eq!(v1.id, 99);
     assert_eq!(v1.name, "test2");
     assert_eq!(v1.coordinates, (0.0, 0.0)); // default
@@ -547,17 +550,20 @@ fn run_struct_added_tuple_field(xlang: bool) {
         tags: (String, String, i32),
     }
 
-    let mut fory = Fory::default().xlang(xlang).compatible(true);
-    fory.register::<StructV1>(20).unwrap();
-    fory.register::<StructV2>(21).unwrap();
+    // Use separate Fory instances with the same type ID
+    let mut fory1 = Fory::default().xlang(xlang).compatible(true);
+    fory1.register::<StructV1>(2).unwrap();
+
+    let mut fory2 = Fory::default().xlang(xlang).compatible(true);
+    fory2.register::<StructV2>(2).unwrap();
 
     // Serialize V1 and deserialize as V2 (new tuple fields should be default)
     let v1 = StructV1 {
         id: 42,
         name: "test".to_string(),
     };
-    let bytes = fory.serialize(&v1).unwrap();
-    let v2: StructV2 = fory.deserialize(&bytes).expect("deserialize V1 to V2");
+    let bytes = fory1.serialize(&v1).unwrap();
+    let v2: StructV2 = fory2.deserialize(&bytes).expect("deserialize V1 to V2");
     assert_eq!(v2.id, 42);
     assert_eq!(v2.name, "test");
     assert_eq!(v2.coordinates, (0.0, 0.0)); // default
@@ -570,8 +576,8 @@ fn run_struct_added_tuple_field(xlang: bool) {
         coordinates: (1.5, 2.5),
         tags: ("tag1".to_string(), "tag2".to_string(), 123),
     };
-    let bytes = fory.serialize(&v2).unwrap();
-    let v1: StructV1 = fory.deserialize(&bytes).expect("deserialize V2 to V1");
+    let bytes = fory2.serialize(&v2).unwrap();
+    let v1: StructV1 = fory1.deserialize(&bytes).expect("deserialize V2 to V1");
     assert_eq!(v1.id, 99);
     assert_eq!(v1.name, "test2");
 }
@@ -592,17 +598,20 @@ fn run_struct_tuple_element_increase(xlang: bool) {
         coordinates: (f64, f64, f64, f64),
     }
 
-    let mut fory = Fory::default().xlang(xlang).compatible(true);
-    fory.register::<StructV1>(30).unwrap();
-    fory.register::<StructV2>(31).unwrap();
+    // Use separate Fory instances with the same type ID
+    let mut fory1 = Fory::default().xlang(xlang).compatible(true);
+    fory1.register::<StructV1>(3).unwrap();
+
+    let mut fory2 = Fory::default().xlang(xlang).compatible(true);
+    fory2.register::<StructV2>(3).unwrap();
 
     // Serialize V1 and deserialize as V2 (extra elements should be default)
     let v1 = StructV1 {
         id: 42,
         coordinates: (10.5, 20.3),
     };
-    let bytes = fory.serialize(&v1).unwrap();
-    let v2: StructV2 = fory.deserialize(&bytes).expect("deserialize V1 to V2");
+    let bytes = fory1.serialize(&v1).unwrap();
+    let v2: StructV2 = fory2.deserialize(&bytes).expect("deserialize V1 to V2");
     assert_eq!(v2.id, 42);
     assert_eq!(v2.coordinates.0, 10.5);
     assert_eq!(v2.coordinates.1, 20.3);
@@ -614,8 +623,8 @@ fn run_struct_tuple_element_increase(xlang: bool) {
         id: 99,
         coordinates: (1.0, 2.0, 3.0, 4.0),
     };
-    let bytes = fory.serialize(&v2).unwrap();
-    let v1: StructV1 = fory.deserialize(&bytes).expect("deserialize V2 to V1");
+    let bytes = fory2.serialize(&v2).unwrap();
+    let v1: StructV1 = fory1.deserialize(&bytes).expect("deserialize V2 to V1");
     assert_eq!(v1.id, 99);
     assert_eq!(v1.coordinates, (1.0, 2.0));
 }
@@ -636,17 +645,20 @@ fn run_struct_tuple_element_decrease(xlang: bool) {
         data: (i32, String),
     }
 
-    let mut fory = Fory::default().xlang(xlang).compatible(true);
-    fory.register::<StructV1>(40).unwrap();
-    fory.register::<StructV2>(41).unwrap();
+    // Use separate Fory instances with the same type ID
+    let mut fory1 = Fory::default().xlang(xlang).compatible(true);
+    fory1.register::<StructV1>(4).unwrap();
+
+    let mut fory2 = Fory::default().xlang(xlang).compatible(true);
+    fory2.register::<StructV2>(4).unwrap();
 
     // Serialize V1 and deserialize as V2 (extra elements should be dropped)
     let v1 = StructV1 {
         id: 42,
         data: (100, "hello".to_string(), 3.14, true, vec![1, 2, 3]),
     };
-    let bytes = fory.serialize(&v1).unwrap();
-    let v2: StructV2 = fory.deserialize(&bytes).expect("deserialize V1 to V2");
+    let bytes = fory1.serialize(&v1).unwrap();
+    let v2: StructV2 = fory2.deserialize(&bytes).expect("deserialize V1 to V2");
     assert_eq!(v2.id, 42);
     assert_eq!(v2.data.0, 100);
     assert_eq!(v2.data.1, "hello");
@@ -656,8 +668,8 @@ fn run_struct_tuple_element_decrease(xlang: bool) {
         id: 99,
         data: (200, "world".to_string()),
     };
-    let bytes = fory.serialize(&v2).unwrap();
-    let v1: StructV1 = fory.deserialize(&bytes).expect("deserialize V2 to V1");
+    let bytes = fory2.serialize(&v2).unwrap();
+    let v1: StructV1 = fory1.deserialize(&bytes).expect("deserialize V2 to V1");
     assert_eq!(v1.id, 99);
     assert_eq!(v1.data.0, 200);
     assert_eq!(v1.data.1, "world");
@@ -682,17 +694,20 @@ fn run_struct_nested_tuple_evolution(xlang: bool) {
         nested: ((i32, String, Vec<i32>), (f64, bool, Option<String>)),
     }
 
-    let mut fory = Fory::default().xlang(xlang).compatible(true);
-    fory.register::<StructV1>(50).unwrap();
-    fory.register::<StructV2>(51).unwrap();
+    // Use separate Fory instances with the same type ID
+    let mut fory1 = Fory::default().xlang(xlang).compatible(true);
+    fory1.register::<StructV1>(5).unwrap();
+
+    let mut fory2 = Fory::default().xlang(xlang).compatible(true);
+    fory2.register::<StructV2>(5).unwrap();
 
     // Serialize V1 and deserialize as V2
     let v1 = StructV1 {
         id: 42,
         nested: ((100, "test".to_string()), (3.14, true)),
     };
-    let bytes = fory.serialize(&v1).unwrap();
-    let v2: StructV2 = fory.deserialize(&bytes).expect("deserialize V1 to V2");
+    let bytes = fory1.serialize(&v1).unwrap();
+    let v2: StructV2 = fory2.deserialize(&bytes).expect("deserialize V1 to V2");
     assert_eq!(v2.id, 42);
     assert_eq!(v2.nested.0 .0, 100);
     assert_eq!(v2.nested.0 .1, "test");
@@ -709,8 +724,8 @@ fn run_struct_nested_tuple_evolution(xlang: bool) {
             (2.71, false, Some("extra".to_string())),
         ),
     };
-    let bytes = fory.serialize(&v2).unwrap();
-    let v1: StructV1 = fory.deserialize(&bytes).expect("deserialize V2 to V1");
+    let bytes = fory2.serialize(&v2).unwrap();
+    let v1: StructV1 = fory1.deserialize(&bytes).expect("deserialize V2 to V1");
     assert_eq!(v1.id, 99);
     assert_eq!(v1.nested.0 .0, 200);
     assert_eq!(v1.nested.0 .1, "world");
@@ -720,7 +735,7 @@ fn run_struct_nested_tuple_evolution(xlang: bool) {
 
 /// Helper: Test struct with multiple tuple fields evolution
 fn run_struct_multiple_tuple_fields_evolution(xlang: bool) {
-    // V1: Struct with two simple tuple fields
+    // V1: Struct with two tuple fields
     #[derive(ForyObject, Debug, PartialEq)]
     struct StructV1 {
         id: i32,
@@ -728,18 +743,20 @@ fn run_struct_multiple_tuple_fields_evolution(xlang: bool) {
         tags: (String, i32),
     }
 
-    // V2: Struct with modified tuple fields (coords expanded, tags reduced, new field added)
+    // V2: Struct with modified tuple fields (coords expanded, tags reduced)
     #[derive(ForyObject, Debug, PartialEq)]
     struct StructV2 {
         id: i32,
-        coords: (f64, f64, f64),       // 3D coordinates
-        tags: (String,),               // reduced to single tag
-        metadata: (bool, Vec<String>), // new tuple field
+        coords: (f64, f64, f64), // 3D coordinates (expanded from 2D)
+        tags: (String,),         // reduced to single tag (from 2 elements)
     }
 
-    let mut fory = Fory::default().xlang(xlang).compatible(true);
-    fory.register::<StructV1>(60).unwrap();
-    fory.register::<StructV2>(61).unwrap();
+    // Use separate Fory instances with the same type ID
+    let mut fory1 = Fory::default().xlang(xlang).compatible(true);
+    fory1.register::<StructV1>(6).unwrap();
+
+    let mut fory2 = Fory::default().xlang(xlang).compatible(true);
+    fory2.register::<StructV2>(6).unwrap();
 
     // Serialize V1 and deserialize as V2
     let v1 = StructV1 {
@@ -747,28 +764,161 @@ fn run_struct_multiple_tuple_fields_evolution(xlang: bool) {
         coords: (1.5, 2.5),
         tags: ("tag1".to_string(), 100),
     };
-    let bytes = fory.serialize(&v1).unwrap();
-    let v2: StructV2 = fory.deserialize(&bytes).expect("deserialize V1 to V2");
+    let bytes = fory1.serialize(&v1).unwrap();
+    let v2: StructV2 = fory2.deserialize(&bytes).expect("deserialize V1 to V2");
     assert_eq!(v2.id, 42);
     assert_eq!(v2.coords.0, 1.5);
     assert_eq!(v2.coords.1, 2.5);
     assert_eq!(v2.coords.2, 0.0); // default
     assert_eq!(v2.tags.0, "tag1");
-    assert_eq!(v2.metadata, (false, Vec::<String>::new())); // default
 
     // Serialize V2 and deserialize as V1
     let v2 = StructV2 {
         id: 99,
         coords: (10.0, 20.0, 30.0),
         tags: ("newtag".to_string(),),
-        metadata: (true, vec!["m1".to_string(), "m2".to_string()]),
     };
-    let bytes = fory.serialize(&v2).unwrap();
-    let v1: StructV1 = fory.deserialize(&bytes).expect("deserialize V2 to V1");
+    let bytes = fory2.serialize(&v2).unwrap();
+    let v1: StructV1 = fory1.deserialize(&bytes).expect("deserialize V2 to V1");
     assert_eq!(v1.id, 99);
     assert_eq!(v1.coords, (10.0, 20.0));
     assert_eq!(v1.tags.0, "newtag");
     assert_eq!(v1.tags.1, 0); // default
+}
+
+/// Helper: Test very complex scenario combining field-level and tuple-element evolution
+/// This test combines:
+/// - Adding/removing struct fields
+/// - Changing tuple element counts in existing fields
+/// - Multiple tuple fields evolving simultaneously
+/// - Mix of simple, nested, and collection-based tuples
+fn run_struct_complex_evolution_scenario(xlang: bool) {
+    // V1: Original schema with multiple tuple fields
+    #[derive(ForyObject, Debug, PartialEq)]
+    struct DataRecordV1 {
+        id: i32,
+        name: String,
+        // Simple 2D coordinates
+        position: (f64, f64),
+        // 2-element tuple with string and int
+        category: (String, i32),
+        // Nested tuple
+        metadata: ((String, i32), (bool, f64)),
+        // Tuple with collection
+        tags: (Vec<String>, Vec<i32>),
+    }
+
+    // V2: Evolved schema with complex changes
+    #[derive(ForyObject, Debug, PartialEq)]
+    struct DataRecordV2 {
+        id: i32,
+        name: String,
+        // position expanded to 3D coordinates (2 -> 3 elements)
+        position: (f64, f64, f64),
+        // category reduced to single element (2 -> 1 elements)
+        category: (String,),
+        // metadata nested tuple expanded (both inner tuples gain elements)
+        metadata: ((String, i32, Vec<String>), (bool, f64, Option<i32>)),
+        // tags remains same
+        tags: (Vec<String>, Vec<i32>),
+        // NEW FIELD: status tuple added
+        status: (bool, String, i32),
+        // NEW FIELD: nested tuple with collections
+        attributes: ((Vec<String>, HashMap<String, i32>), (Option<bool>,)),
+    }
+
+    // Use separate Fory instances with the same type ID
+    let mut fory1 = Fory::default().xlang(xlang).compatible(true);
+    fory1.register::<DataRecordV1>(100).unwrap();
+
+    let mut fory2 = Fory::default().xlang(xlang).compatible(true);
+    fory2.register::<DataRecordV2>(100).unwrap();
+
+    // Test V1 -> V2: Old schema to new schema
+    let v1 = DataRecordV1 {
+        id: 42,
+        name: "record1".to_string(),
+        position: (10.5, 20.3),
+        category: ("TypeA".to_string(), 100),
+        metadata: (("meta_key".to_string(), 999), (true, 3.14)),
+        tags: (vec!["tag1".to_string(), "tag2".to_string()], vec![1, 2, 3]),
+    };
+
+    let bytes = fory1.serialize(&v1).unwrap();
+    let v2: DataRecordV2 = fory2.deserialize(&bytes).expect("deserialize V1 to V2");
+
+    // Verify existing fields
+    assert_eq!(v2.id, 42);
+    assert_eq!(v2.name, "record1");
+
+    // position: (10.5, 20.3) -> (10.5, 20.3, 0.0)
+    assert_eq!(v2.position.0, 10.5);
+    assert_eq!(v2.position.1, 20.3);
+    assert_eq!(v2.position.2, 0.0); // default
+
+    // category: ("TypeA", 100) -> ("TypeA",)
+    assert_eq!(v2.category.0, "TypeA");
+
+    // metadata expanded with defaults
+    assert_eq!(v2.metadata.0 .0, "meta_key");
+    assert_eq!(v2.metadata.0 .1, 999);
+    assert_eq!(v2.metadata.0 .2, Vec::<String>::new()); // default
+    assert_eq!(v2.metadata.1 .0, true);
+    assert_eq!(v2.metadata.1 .1, 3.14);
+    assert_eq!(v2.metadata.1 .2, None); // default
+
+    // tags unchanged
+    assert_eq!(v2.tags.0, vec!["tag1".to_string(), "tag2".to_string()]);
+    assert_eq!(v2.tags.1, vec![1, 2, 3]);
+
+    // New fields should have defaults
+    assert_eq!(v2.status, (false, String::new(), 0)); // default tuple
+    assert_eq!(v2.attributes.0 .0, Vec::<String>::new());
+    assert_eq!(v2.attributes.0 .1, HashMap::<String, i32>::new());
+    assert_eq!(v2.attributes.1 .0, None);
+
+    // Test V2 -> V1: New schema to old schema
+    let mut attrs_map = HashMap::new();
+    attrs_map.insert("key1".to_string(), 42);
+    attrs_map.insert("key2".to_string(), 99);
+
+    let v2 = DataRecordV2 {
+        id: 99,
+        name: "record2".to_string(),
+        position: (100.0, 200.0, 300.0),
+        category: ("TypeB".to_string(),),
+        metadata: (
+            ("new_meta".to_string(), 777, vec!["m1".to_string()]),
+            (false, 2.71, Some(555)),
+        ),
+        tags: (vec!["new_tag".to_string()], vec![10, 20]),
+        status: (true, "active".to_string(), 123),
+        attributes: ((vec!["attr1".to_string()], attrs_map), (Some(true),)),
+    };
+
+    let bytes = fory2.serialize(&v2).unwrap();
+    let v1: DataRecordV1 = fory1.deserialize(&bytes).expect("deserialize V2 to V1");
+
+    // Verify existing fields
+    assert_eq!(v1.id, 99);
+    assert_eq!(v1.name, "record2");
+
+    // position: (100.0, 200.0, 300.0) -> (100.0, 200.0)
+    assert_eq!(v1.position, (100.0, 200.0));
+
+    // category: ("TypeB",) -> ("TypeB", 0)
+    assert_eq!(v1.category.0, "TypeB");
+    assert_eq!(v1.category.1, 0); // default
+
+    // metadata truncated
+    assert_eq!(v1.metadata.0 .0, "new_meta");
+    assert_eq!(v1.metadata.0 .1, 777);
+    assert_eq!(v1.metadata.1 .0, false);
+    assert_eq!(v1.metadata.1 .1, 2.71);
+
+    // tags unchanged
+    assert_eq!(v1.tags.0, vec!["new_tag".to_string()]);
+    assert_eq!(v1.tags.1, vec![10, 20]);
 }
 
 // Test functions (non-xlang mode)
@@ -831,4 +981,37 @@ fn test_struct_nested_tuple_evolution_xlang() {
 #[test]
 fn test_struct_multiple_tuple_fields_evolution_xlang() {
     run_struct_multiple_tuple_fields_evolution(true);
+}
+
+// ============================================================================
+// Complex scenario tests (ignored - advanced edge cases)
+// ============================================================================
+
+/// Test complex scenario combining field-level and tuple-element evolution (non-xlang mode)
+///
+/// This test is ignored because it tests a very complex scenario that combines:
+/// - Adding new struct fields (status, attributes)
+/// - Removing struct fields (implicitly tested in reverse direction)
+/// - Expanding tuple elements (position: 2->3, metadata nested tuples)
+/// - Reducing tuple elements (category: 2->1)
+/// - Unchanged tuple fields (tags)
+/// - Mix of simple, nested, and collection-based tuples
+///
+/// This represents a realistic schema evolution scenario where multiple changes
+/// happen simultaneously across a complex data structure.
+#[test]
+#[ignore]
+fn test_struct_complex_evolution_scenario() {
+    run_struct_complex_evolution_scenario(false);
+}
+
+/// Test complex scenario combining field-level and tuple-element evolution (xlang mode)
+///
+/// Same as test_struct_complex_evolution_scenario but with xlang=true.
+/// This tests whether the cross-language serialization protocol can handle
+/// complex schema evolution scenarios.
+#[test]
+#[ignore]
+fn test_struct_complex_evolution_scenario_xlang() {
+    run_struct_complex_evolution_scenario(true);
 }

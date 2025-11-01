@@ -88,6 +88,9 @@ impl FieldType {
             x if x == TypeId::LIST as u32 || x == TypeId::SET as u32 => {
                 if let Some(generic) = self.generics.first() {
                     generic.to_bytes(writer, true, generic.nullable)?;
+                } else {
+                    let generic = FieldType::new(TypeId::UNKNOWN as u32, true, vec![]);
+                    generic.to_bytes(writer, true, generic.nullable)?;
                 }
             }
             x if x == TypeId::MAP as u32 => {

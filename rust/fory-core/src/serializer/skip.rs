@@ -23,7 +23,7 @@ use crate::serializer::collection::{HAS_NULL, IS_SAME_TYPE};
 use crate::serializer::util;
 use crate::serializer::Serializer;
 use crate::types;
-use crate::types::{RefFlag, TypeId, BASIC_TYPES, CONTAINER_TYPES, is_user_type};
+use crate::types::{is_user_type, RefFlag, TypeId, BASIC_TYPES, CONTAINER_TYPES};
 use chrono::{NaiveDate, NaiveDateTime};
 
 macro_rules! basic_type_deserialize {
@@ -48,7 +48,7 @@ pub fn skip_field_value(
     skip_value(context, field_type, read_ref_flag, true)
 }
 
-const UNKNOWN_FIELD_TYPPE : FieldType = FieldType {
+const UNKNOWN_FIELD_TYPPE: FieldType = FieldType {
     type_id: types::UNKNOWN,
     nullable: true,
     generics: vec![],
@@ -68,17 +68,17 @@ pub fn skip_any_value(context: &mut ReadContext, read_ref_flag: bool) -> Result<
     if !is_user_type(type_id) {
         type_id = context.reader.read_varuint32()?;
     }
-     let field_type = match type_id {
+    let field_type = match type_id {
         types::LIST | types::SET => FieldType {
-                    type_id,
-                    nullable: true,
-                    generics: vec![UNKNOWN_FIELD_TYPPE.clone()],
-                },
+            type_id,
+            nullable: true,
+            generics: vec![UNKNOWN_FIELD_TYPPE.clone()],
+        },
         types::MAP => FieldType {
-                    type_id,
-                    nullable: true,
-                    generics: vec![UNKNOWN_FIELD_TYPPE.clone(), UNKNOWN_FIELD_TYPPE.clone()],
-                },
+            type_id,
+            nullable: true,
+            generics: vec![UNKNOWN_FIELD_TYPPE.clone(), UNKNOWN_FIELD_TYPPE.clone()],
+        },
         _ => FieldType {
             type_id,
             nullable: true,

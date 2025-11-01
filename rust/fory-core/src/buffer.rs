@@ -420,7 +420,7 @@ impl<'a> Reader<'a> {
     pub fn peek_u8(&mut self) -> Result<u8, Error> {
         let result = self.value_at(self.cursor)?;
         Ok(result)
-    }    
+    }
 
     #[inline(always)]
     pub fn read_u8(&mut self) -> Result<u8, Error> {

@@ -27,10 +27,7 @@ use std::mem;
 /// Helper function to write a tuple element based on its type characteristics.
 /// This handles the different serialization strategies for various element types.
 #[inline(always)]
-fn write_tuple_element<T: Serializer>(
-    elem: &T,
-    context: &mut WriteContext,
-) -> Result<(), Error> {
+fn write_tuple_element<T: Serializer>(elem: &T, context: &mut WriteContext) -> Result<(), Error> {
     if T::fory_is_option() || T::fory_is_shared_ref() || T::fory_static_type_id() == TypeId::UNKNOWN
     {
         // For Option, shared references, or unknown static types, use full write with ref tracking
@@ -131,8 +128,9 @@ impl<T0: Serializer + ForyDefault> Serializer for (T0,) {
 
     #[inline(always)]
     fn fory_is_wrapper_type() -> bool
-        where
-            Self: Sized, {
+    where
+        Self: Sized,
+    {
         true
     }
 

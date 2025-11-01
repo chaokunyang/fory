@@ -52,7 +52,6 @@ fn test_tuple_size_mismatch() {
     assert_eq!(long.3, false);
 }
 
-
 /// Test 2: Tuples containing list/set/map elements
 #[test]
 fn test_tuple_with_collections_compatible() {
@@ -93,7 +92,8 @@ fn test_tuple_with_collections_compatible() {
     // Short to long
     let short = (vec![10, 20, 30],);
     let bin = fory.serialize(&short).unwrap();
-    let long: (Vec<i32>, Vec<String>, Vec<f64>) = fory.deserialize(&bin).expect("deserialize short to long");
+    let long: (Vec<i32>, Vec<String>, Vec<f64>) =
+        fory.deserialize(&bin).expect("deserialize short to long");
     assert_eq!(long.0, vec![10, 20, 30]);
     assert_eq!(long.1, Vec::<String>::new()); // default
     assert_eq!(long.2, Vec::<f64>::new()); // default
@@ -117,7 +117,8 @@ fn test_tuple_collections_size_mismatch() {
     let bin = fory.serialize(&tuple_short).unwrap();
 
     // Deserialize to tuple with 3 collections
-    let tuple_long: (Vec<i32>, Vec<String>, Vec<f64>) = fory.deserialize(&bin).expect("deserialize");
+    let tuple_long: (Vec<i32>, Vec<String>, Vec<f64>) =
+        fory.deserialize(&bin).expect("deserialize");
     assert_eq!(tuple_long.0, vec![10, 20, 30]);
     assert_eq!(tuple_long.1, Vec::<String>::new());
     assert_eq!(tuple_long.2, Vec::<f64>::new());
@@ -143,19 +144,19 @@ fn test_nested_tuple_size_mismatch() {
     let long = ((42i32, "test".to_string(), 3.14f64), (true, 100i32));
     let bin = fory.serialize(&long).unwrap();
     let short: ((i32, String), (bool,)) = fory.deserialize(&bin).expect("deserialize");
-    assert_eq!(short.0.0, 42);
-    assert_eq!(short.0.1, "test");
-    assert_eq!(short.1.0, true);
+    assert_eq!(short.0 .0, 42);
+    assert_eq!(short.0 .1, "test");
+    assert_eq!(short.1 .0, true);
 
     // Short to long
     let short = ((100i32, "hello".to_string()), (false,));
     let bin = fory.serialize(&short).unwrap();
     let long: ((i32, String, f64), (bool, i32)) = fory.deserialize(&bin).expect("deserialize");
-    assert_eq!(long.0.0, 100);
-    assert_eq!(long.0.1, "hello");
-    assert_eq!(long.0.2, 0.0); // default
-    assert_eq!(long.1.0, false);
-    assert_eq!(long.1.1, 0); // default
+    assert_eq!(long.0 .0, 100);
+    assert_eq!(long.0 .1, "hello");
+    assert_eq!(long.0 .2, 0.0); // default
+    assert_eq!(long.1 .0, false);
+    assert_eq!(long.1 .1, 0); // default
 }
 
 /// Test 3c: Deeply nested tuples with size mismatch
@@ -170,19 +171,19 @@ fn test_deeply_nested_tuple_size_mismatch() {
     // Deserialize to shallower structure
     let shallow: (i32, (i32, (i32, i32))) = fory.deserialize(&bin).expect("deserialize");
     assert_eq!(shallow.0, 1);
-    assert_eq!(shallow.1.0, 2);
-    assert_eq!(shallow.1.1.0, 3);
-    assert_eq!(shallow.1.1.1, 4);
+    assert_eq!(shallow.1 .0, 2);
+    assert_eq!(shallow.1 .1 .0, 3);
+    assert_eq!(shallow.1 .1 .1, 4);
 
     // Reverse: shallow to deep
     let shallow = (10i32, (20i32, (30i32,)));
     let bin = fory.serialize(&shallow).unwrap();
     let deep: (i32, (i32, (i32, i32, i32))) = fory.deserialize(&bin).expect("deserialize");
     assert_eq!(deep.0, 10);
-    assert_eq!(deep.1.0, 20);
-    assert_eq!(deep.1.1.0, 30);
-    assert_eq!(deep.1.1.1, 0); // default
-    assert_eq!(deep.1.1.2, 0); // default
+    assert_eq!(deep.1 .0, 20);
+    assert_eq!(deep.1 .1 .0, 30);
+    assert_eq!(deep.1 .1 .1, 0); // default
+    assert_eq!(deep.1 .1 .2, 0); // default
 }
 
 /// Test 4: Tuples with Option/Arc elements
@@ -193,7 +194,8 @@ fn test_tuple_with_option_arc_compatible() {
     // Tuple with Options
     let tuple_opt = (Some(42i32), None::<String>, Some(3.14f64));
     let bin = fory.serialize(&tuple_opt).unwrap();
-    let obj: (Option<i32>, Option<String>, Option<f64>) = fory.deserialize(&bin).expect("deserialize");
+    let obj: (Option<i32>, Option<String>, Option<f64>) =
+        fory.deserialize(&bin).expect("deserialize");
     assert_eq!(tuple_opt, obj);
 
     // Tuple with Arc
@@ -224,7 +226,12 @@ fn test_tuple_option_size_mismatch() {
     let fory = Fory::default().compatible(true);
 
     // Serialize longer tuple
-    let long = (Some(42i32), Some("hello".to_string()), Some(3.14f64), Some(true));
+    let long = (
+        Some(42i32),
+        Some("hello".to_string()),
+        Some(3.14f64),
+        Some(true),
+    );
     let bin = fory.serialize(&long).unwrap();
 
     // Deserialize to shorter tuple
@@ -341,7 +348,8 @@ fn test_tuple_element_count_evolution_complex() {
     let bin = fory.serialize(&v1).unwrap();
 
     // v2: evolved to 5-element tuple with collections
-    let v2: (i32, String, f64, bool, Vec<i32>) = fory.deserialize(&bin).expect("deserialize v1 to v2");
+    let v2: (i32, String, f64, bool, Vec<i32>) =
+        fory.deserialize(&bin).expect("deserialize v1 to v2");
     assert_eq!(v2.0, 42);
     assert_eq!(v2.1, "hello");
     assert_eq!(v2.2, 0.0);
@@ -462,7 +470,365 @@ fn test_tuple_xlang_compatible_mode() {
     let nested = ((1i32, 2i32, 3i32), ("a".to_string(), "b".to_string()));
     let bin = fory.serialize(&nested).unwrap();
     let smaller: ((i32, i32), (String,)) = fory.deserialize(&bin).expect("deserialize nested");
-    assert_eq!(smaller.0.0, 1);
-    assert_eq!(smaller.0.1, 2);
-    assert_eq!(smaller.1.0, "a");
+    assert_eq!(smaller.0 .0, 1);
+    assert_eq!(smaller.0 .1, 2);
+    assert_eq!(smaller.1 .0, "a");
+}
+
+// ============================================================================
+// Struct-based tests for tuple field compatibility
+// ============================================================================
+
+/// Helper: Test struct with missing tuple field
+fn run_struct_missing_tuple_field(xlang: bool) {
+    // V1: Struct with tuple field
+    #[derive(ForyObject, Debug, PartialEq)]
+    struct StructV1 {
+        id: i32,
+        name: String,
+        coordinates: (f64, f64),
+        metadata: (String, i32),
+    }
+
+    // V2: Struct with missing tuple field (coordinates removed)
+    #[derive(ForyObject, Debug, PartialEq)]
+    struct StructV2 {
+        id: i32,
+        name: String,
+        metadata: (String, i32),
+    }
+
+    let mut fory = Fory::default().xlang(xlang).compatible(true);
+    fory.register::<StructV1>(10).unwrap();
+    fory.register::<StructV2>(11).unwrap();
+
+    // Serialize V1 and deserialize as V2
+    let v1 = StructV1 {
+        id: 42,
+        name: "test".to_string(),
+        coordinates: (10.5, 20.3),
+        metadata: ("meta".to_string(), 100),
+    };
+    let bytes = fory.serialize(&v1).unwrap();
+    let v2: StructV2 = fory.deserialize(&bytes).expect("deserialize V1 to V2");
+    assert_eq!(v2.id, 42);
+    assert_eq!(v2.name, "test");
+    assert_eq!(v2.metadata, ("meta".to_string(), 100));
+
+    // Serialize V2 and deserialize as V1 (coordinates should be default)
+    let v2 = StructV2 {
+        id: 99,
+        name: "test2".to_string(),
+        metadata: ("data".to_string(), 200),
+    };
+    let bytes = fory.serialize(&v2).unwrap();
+    let v1: StructV1 = fory.deserialize(&bytes).expect("deserialize V2 to V1");
+    assert_eq!(v1.id, 99);
+    assert_eq!(v1.name, "test2");
+    assert_eq!(v1.coordinates, (0.0, 0.0)); // default
+    assert_eq!(v1.metadata, ("data".to_string(), 200));
+}
+
+/// Helper: Test struct with added tuple field
+fn run_struct_added_tuple_field(xlang: bool) {
+    // V1: Struct without extra tuple field
+    #[derive(ForyObject, Debug, PartialEq)]
+    struct StructV1 {
+        id: i32,
+        name: String,
+    }
+
+    // V2: Struct with added tuple field
+    #[derive(ForyObject, Debug, PartialEq)]
+    struct StructV2 {
+        id: i32,
+        name: String,
+        coordinates: (f64, f64),
+        tags: (String, String, i32),
+    }
+
+    let mut fory = Fory::default().xlang(xlang).compatible(true);
+    fory.register::<StructV1>(20).unwrap();
+    fory.register::<StructV2>(21).unwrap();
+
+    // Serialize V1 and deserialize as V2 (new tuple fields should be default)
+    let v1 = StructV1 {
+        id: 42,
+        name: "test".to_string(),
+    };
+    let bytes = fory.serialize(&v1).unwrap();
+    let v2: StructV2 = fory.deserialize(&bytes).expect("deserialize V1 to V2");
+    assert_eq!(v2.id, 42);
+    assert_eq!(v2.name, "test");
+    assert_eq!(v2.coordinates, (0.0, 0.0)); // default
+    assert_eq!(v2.tags, (String::new(), String::new(), 0)); // default
+
+    // Serialize V2 and deserialize as V1
+    let v2 = StructV2 {
+        id: 99,
+        name: "test2".to_string(),
+        coordinates: (1.5, 2.5),
+        tags: ("tag1".to_string(), "tag2".to_string(), 123),
+    };
+    let bytes = fory.serialize(&v2).unwrap();
+    let v1: StructV1 = fory.deserialize(&bytes).expect("deserialize V2 to V1");
+    assert_eq!(v1.id, 99);
+    assert_eq!(v1.name, "test2");
+}
+
+/// Helper: Test struct with tuple field element increase
+fn run_struct_tuple_element_increase(xlang: bool) {
+    // V1: Struct with 2-element tuple
+    #[derive(ForyObject, Debug, PartialEq)]
+    struct StructV1 {
+        id: i32,
+        coordinates: (f64, f64),
+    }
+
+    // V2: Struct with 4-element tuple (increased from 2)
+    #[derive(ForyObject, Debug, PartialEq)]
+    struct StructV2 {
+        id: i32,
+        coordinates: (f64, f64, f64, f64),
+    }
+
+    let mut fory = Fory::default().xlang(xlang).compatible(true);
+    fory.register::<StructV1>(30).unwrap();
+    fory.register::<StructV2>(31).unwrap();
+
+    // Serialize V1 and deserialize as V2 (extra elements should be default)
+    let v1 = StructV1 {
+        id: 42,
+        coordinates: (10.5, 20.3),
+    };
+    let bytes = fory.serialize(&v1).unwrap();
+    let v2: StructV2 = fory.deserialize(&bytes).expect("deserialize V1 to V2");
+    assert_eq!(v2.id, 42);
+    assert_eq!(v2.coordinates.0, 10.5);
+    assert_eq!(v2.coordinates.1, 20.3);
+    assert_eq!(v2.coordinates.2, 0.0); // default
+    assert_eq!(v2.coordinates.3, 0.0); // default
+
+    // Serialize V2 and deserialize as V1 (extra elements should be truncated)
+    let v2 = StructV2 {
+        id: 99,
+        coordinates: (1.0, 2.0, 3.0, 4.0),
+    };
+    let bytes = fory.serialize(&v2).unwrap();
+    let v1: StructV1 = fory.deserialize(&bytes).expect("deserialize V2 to V1");
+    assert_eq!(v1.id, 99);
+    assert_eq!(v1.coordinates, (1.0, 2.0));
+}
+
+/// Helper: Test struct with tuple field element decrease
+fn run_struct_tuple_element_decrease(xlang: bool) {
+    // V1: Struct with 5-element tuple
+    #[derive(ForyObject, Debug, PartialEq)]
+    struct StructV1 {
+        id: i32,
+        data: (i32, String, f64, bool, Vec<i32>),
+    }
+
+    // V2: Struct with 2-element tuple (decreased from 5)
+    #[derive(ForyObject, Debug, PartialEq)]
+    struct StructV2 {
+        id: i32,
+        data: (i32, String),
+    }
+
+    let mut fory = Fory::default().xlang(xlang).compatible(true);
+    fory.register::<StructV1>(40).unwrap();
+    fory.register::<StructV2>(41).unwrap();
+
+    // Serialize V1 and deserialize as V2 (extra elements should be dropped)
+    let v1 = StructV1 {
+        id: 42,
+        data: (100, "hello".to_string(), 3.14, true, vec![1, 2, 3]),
+    };
+    let bytes = fory.serialize(&v1).unwrap();
+    let v2: StructV2 = fory.deserialize(&bytes).expect("deserialize V1 to V2");
+    assert_eq!(v2.id, 42);
+    assert_eq!(v2.data.0, 100);
+    assert_eq!(v2.data.1, "hello");
+
+    // Serialize V2 and deserialize as V1 (missing elements should be default)
+    let v2 = StructV2 {
+        id: 99,
+        data: (200, "world".to_string()),
+    };
+    let bytes = fory.serialize(&v2).unwrap();
+    let v1: StructV1 = fory.deserialize(&bytes).expect("deserialize V2 to V1");
+    assert_eq!(v1.id, 99);
+    assert_eq!(v1.data.0, 200);
+    assert_eq!(v1.data.1, "world");
+    assert_eq!(v1.data.2, 0.0); // default
+    assert_eq!(v1.data.3, false); // default
+    assert_eq!(v1.data.4, Vec::<i32>::new()); // default
+}
+
+/// Helper: Test struct with complex nested tuple evolution
+fn run_struct_nested_tuple_evolution(xlang: bool) {
+    // V1: Struct with simple nested tuple
+    #[derive(ForyObject, Debug, PartialEq)]
+    struct StructV1 {
+        id: i32,
+        nested: ((i32, String), (f64, bool)),
+    }
+
+    // V2: Struct with evolved nested tuple (more elements)
+    #[derive(ForyObject, Debug, PartialEq)]
+    struct StructV2 {
+        id: i32,
+        nested: ((i32, String, Vec<i32>), (f64, bool, Option<String>)),
+    }
+
+    let mut fory = Fory::default().xlang(xlang).compatible(true);
+    fory.register::<StructV1>(50).unwrap();
+    fory.register::<StructV2>(51).unwrap();
+
+    // Serialize V1 and deserialize as V2
+    let v1 = StructV1 {
+        id: 42,
+        nested: ((100, "test".to_string()), (3.14, true)),
+    };
+    let bytes = fory.serialize(&v1).unwrap();
+    let v2: StructV2 = fory.deserialize(&bytes).expect("deserialize V1 to V2");
+    assert_eq!(v2.id, 42);
+    assert_eq!(v2.nested.0 .0, 100);
+    assert_eq!(v2.nested.0 .1, "test");
+    assert_eq!(v2.nested.0 .2, Vec::<i32>::new()); // default
+    assert_eq!(v2.nested.1 .0, 3.14);
+    assert_eq!(v2.nested.1 .1, true);
+    assert_eq!(v2.nested.1 .2, None); // default
+
+    // Serialize V2 and deserialize as V1
+    let v2 = StructV2 {
+        id: 99,
+        nested: (
+            (200, "world".to_string(), vec![1, 2, 3]),
+            (2.71, false, Some("extra".to_string())),
+        ),
+    };
+    let bytes = fory.serialize(&v2).unwrap();
+    let v1: StructV1 = fory.deserialize(&bytes).expect("deserialize V2 to V1");
+    assert_eq!(v1.id, 99);
+    assert_eq!(v1.nested.0 .0, 200);
+    assert_eq!(v1.nested.0 .1, "world");
+    assert_eq!(v1.nested.1 .0, 2.71);
+    assert_eq!(v1.nested.1 .1, false);
+}
+
+/// Helper: Test struct with multiple tuple fields evolution
+fn run_struct_multiple_tuple_fields_evolution(xlang: bool) {
+    // V1: Struct with two simple tuple fields
+    #[derive(ForyObject, Debug, PartialEq)]
+    struct StructV1 {
+        id: i32,
+        coords: (f64, f64),
+        tags: (String, i32),
+    }
+
+    // V2: Struct with modified tuple fields (coords expanded, tags reduced, new field added)
+    #[derive(ForyObject, Debug, PartialEq)]
+    struct StructV2 {
+        id: i32,
+        coords: (f64, f64, f64),       // 3D coordinates
+        tags: (String,),               // reduced to single tag
+        metadata: (bool, Vec<String>), // new tuple field
+    }
+
+    let mut fory = Fory::default().xlang(xlang).compatible(true);
+    fory.register::<StructV1>(60).unwrap();
+    fory.register::<StructV2>(61).unwrap();
+
+    // Serialize V1 and deserialize as V2
+    let v1 = StructV1 {
+        id: 42,
+        coords: (1.5, 2.5),
+        tags: ("tag1".to_string(), 100),
+    };
+    let bytes = fory.serialize(&v1).unwrap();
+    let v2: StructV2 = fory.deserialize(&bytes).expect("deserialize V1 to V2");
+    assert_eq!(v2.id, 42);
+    assert_eq!(v2.coords.0, 1.5);
+    assert_eq!(v2.coords.1, 2.5);
+    assert_eq!(v2.coords.2, 0.0); // default
+    assert_eq!(v2.tags.0, "tag1");
+    assert_eq!(v2.metadata, (false, Vec::<String>::new())); // default
+
+    // Serialize V2 and deserialize as V1
+    let v2 = StructV2 {
+        id: 99,
+        coords: (10.0, 20.0, 30.0),
+        tags: ("newtag".to_string(),),
+        metadata: (true, vec!["m1".to_string(), "m2".to_string()]),
+    };
+    let bytes = fory.serialize(&v2).unwrap();
+    let v1: StructV1 = fory.deserialize(&bytes).expect("deserialize V2 to V1");
+    assert_eq!(v1.id, 99);
+    assert_eq!(v1.coords, (10.0, 20.0));
+    assert_eq!(v1.tags.0, "newtag");
+    assert_eq!(v1.tags.1, 0); // default
+}
+
+// Test functions (non-xlang mode)
+#[test]
+fn test_struct_missing_tuple_field() {
+    run_struct_missing_tuple_field(false);
+}
+
+#[test]
+fn test_struct_added_tuple_field() {
+    run_struct_added_tuple_field(false);
+}
+
+#[test]
+fn test_struct_tuple_element_increase() {
+    run_struct_tuple_element_increase(false);
+}
+
+#[test]
+fn test_struct_tuple_element_decrease() {
+    run_struct_tuple_element_decrease(false);
+}
+
+#[test]
+fn test_struct_nested_tuple_evolution() {
+    run_struct_nested_tuple_evolution(false);
+}
+
+#[test]
+fn test_struct_multiple_tuple_fields_evolution() {
+    run_struct_multiple_tuple_fields_evolution(false);
+}
+
+// Test functions (xlang mode)
+#[test]
+fn test_struct_missing_tuple_field_xlang() {
+    run_struct_missing_tuple_field(true);
+}
+
+#[test]
+fn test_struct_added_tuple_field_xlang() {
+    run_struct_added_tuple_field(true);
+}
+
+#[test]
+fn test_struct_tuple_element_increase_xlang() {
+    run_struct_tuple_element_increase(true);
+}
+
+#[test]
+fn test_struct_tuple_element_decrease_xlang() {
+    run_struct_tuple_element_decrease(true);
+}
+
+#[test]
+fn test_struct_nested_tuple_evolution_xlang() {
+    run_struct_nested_tuple_evolution(true);
+}
+
+#[test]
+fn test_struct_multiple_tuple_fields_evolution_xlang() {
+    run_struct_multiple_tuple_fields_evolution(true);
 }

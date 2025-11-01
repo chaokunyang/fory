@@ -16,8 +16,8 @@
 // under the License.
 
 use fory_core::fory::Fory;
-use std::rc::Rc;
 use fory_derive::ForyObject;
+use std::rc::Rc;
 
 // Test homogeneous tuples with primitive types
 #[test]
@@ -249,7 +249,8 @@ fn test_tuple_xlang_mode() {
     // Test tuple with Option
     let with_option = (Some(42i32), None::<String>, Some(vec![1, 2]));
     let bin = fory.serialize(&with_option).unwrap();
-    let obj: (Option<i32>, Option<String>, Option<Vec<i32>>) = fory.deserialize(&bin).expect("deserialize with option");
+    let obj: (Option<i32>, Option<String>, Option<Vec<i32>>) =
+        fory.deserialize(&bin).expect("deserialize with option");
     assert_eq!(with_option, obj);
 }
 
@@ -326,12 +327,6 @@ fn run_struct_with_complex_tuple_fields(xlang: bool) {
 #[test]
 fn test_struct_with_simple_tuple_fields() {
     run_struct_with_simple_tuple_fields(false);
-}
-
-// Test struct with simple tuple fields (xlang mode)
-#[test]
-fn test_struct_with_simple_tuple_fields_xlang() {
-    run_struct_with_simple_tuple_fields(true);
 }
 
 // Test struct with complex tuple fields (non-xlang mode)

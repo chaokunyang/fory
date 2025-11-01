@@ -305,8 +305,7 @@ pub(crate) fn need_to_write_type_for_field(type_id: TypeId) -> bool {
 pub(crate) fn is_user_type(type_id: u32) -> bool {
     matches!(
         type_id,
-            ENUM
-            | NAMED_ENUM
+        ENUM | NAMED_ENUM
             | STRUCT
             | COMPATIBLE_STRUCT
             | NAMED_STRUCT

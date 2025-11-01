@@ -361,7 +361,7 @@ fn gen_read_compatible_match_arm_body(field: &Field, var_name: &Ident) -> TokenS
             let _base_ty = match &ty {
                 Type::Path(type_path) => Some(&type_path.path.segments.first().unwrap().ident),
                 Type::Tuple(_) => None, // Tuples don't have a simple ident
-                _ => None, // Other types also don't have a simple ident
+                _ => None,              // Other types also don't have a simple ident
             };
             let skip_type_info = should_skip_type_info_for_field(ty);
             let dec_by_option = need_declared_by_option(field);

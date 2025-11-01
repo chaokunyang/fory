@@ -77,10 +77,7 @@ pub fn skip_any_value(context: &mut ReadContext, read_ref_flag: bool) -> Result<
     skip_value(context, &field_type, false, false, &None)
 }
 
-fn skip_collection(
-    context: &mut ReadContext,
-    field_type: &FieldType,
-) -> Result<(), Error> {
+fn skip_collection(context: &mut ReadContext, field_type: &FieldType) -> Result<(), Error> {
     let length = context.reader.read_varuint32()? as usize;
     if length == 0 {
         return Ok(());

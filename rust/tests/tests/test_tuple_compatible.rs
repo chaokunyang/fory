@@ -29,13 +29,19 @@ use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::sync::Arc;
 
+const PI_F64: f64 = std::f64::consts::PI;
+
+type NestedEvolutionTuple = ((i32, String, Vec<i32>), (f64, bool, Option<String>));
+type MetadataExpansionTuple = ((String, i32, Vec<String>), (bool, f64, Option<i32>));
+type AttributeTuple = ((Vec<String>, HashMap<String, i32>), (Option<bool>,));
+
 /// Test 1: Direct tuple size mismatch - bidirectional serialization
 #[test]
 fn test_tuple_size_mismatch() {
     let fory = Fory::default().compatible(true);
 
     // Test 1a: Long tuple serialized, short tuple deserialized
-    let long = (42i32, "hello".to_string(), 3.14f64, true);
+    let long = (42i32, "hello".to_string(), PI_F64, true);
     let bin = fory.serialize(&long).unwrap();
     let short: (i32, String) = fory.deserialize(&bin).expect("deserialize long to short");
     assert_eq!(short.0, 42);
@@ -49,7 +55,7 @@ fn test_tuple_size_mismatch() {
     assert_eq!(long.1, "world");
     // Remaining fields should be default values
     assert_eq!(long.2, 0.0);
-    assert_eq!(long.3, false);
+    assert!(!long.3);
 }
 
 /// Test 2: Tuples containing list/set/map elements
@@ -129,7 +135,7 @@ fn test_tuple_collections_size_mismatch() {
 fn test_nested_tuples() {
     let fory = Fory::default().compatible(true);
 
-    let obj = ((42i32, "hello".to_string()), (3.14f64, true));
+    let obj = ((42i32, "hello".to_string()), (PI_F64, true));
     let bin = fory.serialize(&obj).unwrap();
     let deserialized: ((i32, String), (f64, bool)) = fory.deserialize(&bin).expect("deserialize");
     assert_eq!(obj, deserialized);
@@ -141,12 +147,12 @@ fn test_nested_tuple_size_mismatch() {
     let fory = Fory::default().compatible(true);
 
     // Long to short
-    let long = ((42i32, "test".to_string(), 3.14f64), (true, 100i32));
+    let long = ((42i32, "test".to_string(), PI_F64), (true, 100i32));
     let bin = fory.serialize(&long).unwrap();
     let short: ((i32, String), (bool,)) = fory.deserialize(&bin).expect("deserialize");
     assert_eq!(short.0 .0, 42);
     assert_eq!(short.0 .1, "test");
-    assert_eq!(short.1 .0, true);
+    assert!(short.1 .0);
 
     // Short to long
     let short = ((100i32, "hello".to_string()), (false,));
@@ -155,7 +161,7 @@ fn test_nested_tuple_size_mismatch() {
     assert_eq!(long.0 .0, 100);
     assert_eq!(long.0 .1, "hello");
     assert_eq!(long.0 .2, 0.0); // default
-    assert_eq!(long.1 .0, false);
+    assert!(!long.1 .0);
     assert_eq!(long.1 .1, 0); // default
 }
 
@@ -192,7 +198,7 @@ fn test_tuple_with_option_arc_compatible() {
     let fory = Fory::default().compatible(true);
 
     // Tuple with Options
-    let tuple_opt = (Some(42i32), None::<String>, Some(3.14f64));
+    let tuple_opt = (Some(42i32), None::<String>, Some(PI_F64));
     let bin = fory.serialize(&tuple_opt).unwrap();
     let obj: (Option<i32>, Option<String>, Option<f64>) =
         fory.deserialize(&bin).expect("deserialize");
@@ -229,7 +235,7 @@ fn test_tuple_option_size_mismatch() {
     let long = (
         Some(42i32),
         Some("hello".to_string()),
-        Some(3.14f64),
+        Some(PI_F64),
         Some(true),
     );
     let bin = fory.serialize(&long).unwrap();
@@ -291,14 +297,14 @@ fn test_tuple_homogeneous_to_heterogeneous() {
     assert_eq!(result, (1, 2, 3));
 
     // Now test heterogeneous tuple
-    let heterogeneous = (10i32, "hello".to_string(), 3.14f64);
+    let heterogeneous = (10i32, "hello".to_string(), PI_F64);
     let bin = fory.serialize(&heterogeneous).unwrap();
 
     // This should work because compatible mode preserves type info
     let result: (i32, String, f64) = fory.deserialize(&bin).expect("deserialize");
     assert_eq!(result.0, 10);
     assert_eq!(result.1, "hello");
-    assert_eq!(result.2, 3.14);
+    assert_eq!(result.2, PI_F64);
 }
 
 /// Test 6: Schema evolution with different element counts
@@ -313,7 +319,7 @@ fn test_tuple_element_count_evolution() {
     assert_eq!(large.0, 42);
     assert_eq!(large.1, "hello");
     assert_eq!(large.2, 0.0); // default
-    assert_eq!(large.3, false); // default
+    assert!(!large.3); // default
     assert_eq!(large.4, 0); // default
 
     // Test shrinking from 5 to 2 elements
@@ -353,11 +359,11 @@ fn test_tuple_element_count_evolution_complex() {
     assert_eq!(v2.0, 42);
     assert_eq!(v2.1, "hello");
     assert_eq!(v2.2, 0.0);
-    assert_eq!(v2.3, false);
+    assert!(!v2.3);
     assert_eq!(v2.4, Vec::<i32>::new());
 
     // v2 to v1
-    let v2 = (100i32, "world".to_string(), 3.14f64, true, vec![1, 2, 3]);
+    let v2 = (100i32, "world".to_string(), PI_F64, true, vec![1, 2, 3]);
     let bin = fory.serialize(&v2).unwrap();
     let v1: (i32, String) = fory.deserialize(&bin).expect("deserialize v2 to v1");
     assert_eq!(v1.0, 100);
@@ -451,7 +457,7 @@ fn test_tuple_xlang_compatible_mode() {
     assert_eq!(basic, obj);
 
     // Test tuple size mismatch
-    let long = (1i32, "test".to_string(), 3.14f64, true, vec![1, 2]);
+    let long = (1i32, "test".to_string(), PI_F64, true, vec![1, 2]);
     let bin = fory.serialize(&long).unwrap();
     let short: (i32, String) = fory.deserialize(&bin).expect("deserialize long to short");
     assert_eq!(short.0, 1);
@@ -464,7 +470,7 @@ fn test_tuple_xlang_compatible_mode() {
     assert_eq!(long.0, 100);
     assert_eq!(long.1, "world");
     assert_eq!(long.2, 0.0);
-    assert_eq!(long.3, false);
+    assert!(!long.3);
 
     // Test nested tuples with size mismatch
     let nested = ((1i32, 2i32, 3i32), ("a".to_string(), "b".to_string()));
@@ -655,7 +661,7 @@ fn run_struct_tuple_element_decrease(xlang: bool) {
     // Serialize V1 and deserialize as V2 (extra elements should be dropped)
     let v1 = StructV1 {
         id: 42,
-        data: (100, "hello".to_string(), 3.14, true, vec![1, 2, 3]),
+        data: (100, "hello".to_string(), PI_F64, true, vec![1, 2, 3]),
     };
     let bytes = fory1.serialize(&v1).unwrap();
     let v2: StructV2 = fory2.deserialize(&bytes).expect("deserialize V1 to V2");
@@ -674,7 +680,7 @@ fn run_struct_tuple_element_decrease(xlang: bool) {
     assert_eq!(v1.data.0, 200);
     assert_eq!(v1.data.1, "world");
     assert_eq!(v1.data.2, 0.0); // default
-    assert_eq!(v1.data.3, false); // default
+    assert!(!v1.data.3); // default
     assert_eq!(v1.data.4, Vec::<i32>::new()); // default
 }
 
@@ -691,7 +697,7 @@ fn run_struct_nested_tuple_evolution(xlang: bool) {
     #[derive(ForyObject, Debug, PartialEq)]
     struct StructV2 {
         id: i32,
-        nested: ((i32, String, Vec<i32>), (f64, bool, Option<String>)),
+        nested: NestedEvolutionTuple,
     }
 
     // Use separate Fory instances with the same type ID
@@ -704,7 +710,7 @@ fn run_struct_nested_tuple_evolution(xlang: bool) {
     // Serialize V1 and deserialize as V2
     let v1 = StructV1 {
         id: 42,
-        nested: ((100, "test".to_string()), (3.14, true)),
+        nested: ((100, "test".to_string()), (PI_F64, true)),
     };
     let bytes = fory1.serialize(&v1).unwrap();
     let v2: StructV2 = fory2.deserialize(&bytes).expect("deserialize V1 to V2");
@@ -712,8 +718,8 @@ fn run_struct_nested_tuple_evolution(xlang: bool) {
     assert_eq!(v2.nested.0 .0, 100);
     assert_eq!(v2.nested.0 .1, "test");
     assert_eq!(v2.nested.0 .2, Vec::<i32>::new()); // default
-    assert_eq!(v2.nested.1 .0, 3.14);
-    assert_eq!(v2.nested.1 .1, true);
+    assert_eq!(v2.nested.1 .0, PI_F64);
+    assert!(v2.nested.1 .1);
     assert_eq!(v2.nested.1 .2, None); // default
 
     // Serialize V2 and deserialize as V1
@@ -730,7 +736,7 @@ fn run_struct_nested_tuple_evolution(xlang: bool) {
     assert_eq!(v1.nested.0 .0, 200);
     assert_eq!(v1.nested.0 .1, "world");
     assert_eq!(v1.nested.1 .0, 2.71);
-    assert_eq!(v1.nested.1 .1, false);
+    assert!(!v1.nested.1 .1);
 }
 
 /// Helper: Test struct with multiple tuple fields evolution
@@ -911,13 +917,13 @@ fn run_struct_complex_evolution_scenario(xlang: bool) {
         // category reduced to single element (2 -> 1 elements)
         category: (String,),
         // metadata nested tuple expanded (both inner tuples gain elements)
-        metadata: ((String, i32, Vec<String>), (bool, f64, Option<i32>)),
+        metadata: MetadataExpansionTuple,
         // tags remains same
         tags: (Vec<String>, Vec<i32>),
         // NEW FIELD: status tuple added
         status: (bool, String, i32),
         // NEW FIELD: nested tuple with collections
-        attributes: ((Vec<String>, HashMap<String, i32>), (Option<bool>,)),
+        attributes: AttributeTuple,
     }
 
     // Use separate Fory instances with the same type ID
@@ -933,7 +939,7 @@ fn run_struct_complex_evolution_scenario(xlang: bool) {
         name: "record1".to_string(),
         position: (10.5, 20.3),
         category: ("TypeA".to_string(), 100),
-        metadata: (("meta_key".to_string(), 999), (true, 3.14)),
+        metadata: (("meta_key".to_string(), 999), (true, PI_F64)),
         tags: (vec!["tag1".to_string(), "tag2".to_string()], vec![1, 2, 3]),
     };
 
@@ -956,8 +962,8 @@ fn run_struct_complex_evolution_scenario(xlang: bool) {
     assert_eq!(v2.metadata.0 .0, "meta_key");
     assert_eq!(v2.metadata.0 .1, 999);
     assert_eq!(v2.metadata.0 .2, Vec::<String>::new()); // default
-    assert_eq!(v2.metadata.1 .0, true);
-    assert_eq!(v2.metadata.1 .1, 3.14);
+    assert!(v2.metadata.1 .0);
+    assert_eq!(v2.metadata.1 .1, PI_F64);
     assert_eq!(v2.metadata.1 .2, None); // default
 
     // tags unchanged
@@ -1006,7 +1012,7 @@ fn run_struct_complex_evolution_scenario(xlang: bool) {
     // metadata truncated
     assert_eq!(v1.metadata.0 .0, "new_meta");
     assert_eq!(v1.metadata.0 .1, 777);
-    assert_eq!(v1.metadata.1 .0, false);
+    assert!(!v1.metadata.1 .0);
     assert_eq!(v1.metadata.1 .1, 2.71);
 
     // tags unchanged

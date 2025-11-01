@@ -8,7 +8,7 @@
 //
 //   http://www.apache.org/licenses/LICENSE-2.0
 //
-//   Unless required by applicable law or agreed to in writing,
+// Unless required by applicable law or agreed to in writing,
 // software distributed under the License is distributed on an
 // "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
 // KIND, either express or implied.  See the License for the
@@ -18,6 +18,10 @@
 use fory_core::fory::Fory;
 use fory_derive::ForyObject;
 use std::rc::Rc;
+
+const PI_F64: f64 = std::f64::consts::PI;
+
+type ComplexNestedTuple = ((Vec<i32>, Option<String>), (Rc<bool>, (i32, f64)));
 
 // Test homogeneous tuples with primitive types
 #[test]
@@ -60,7 +64,7 @@ fn test_heterogeneous_tuple_simple() {
 #[test]
 fn test_heterogeneous_tuple_complex() {
     let fory = Fory::default();
-    let tuple = (42i32, "hello".to_string(), 3.14f64, true, vec![1, 2, 3]);
+    let tuple = (42i32, "hello".to_string(), PI_F64, true, vec![1, 2, 3]);
     let bin = fory.serialize(&tuple).unwrap();
     let obj: (i32, String, f64, bool, Vec<i32>) = fory.deserialize(&bin).expect("deserialize");
     assert_eq!(tuple, obj);
@@ -235,7 +239,7 @@ fn test_tuple_xlang_mode() {
     assert_eq!(homogeneous, obj);
 
     // Test heterogeneous tuple
-    let heterogeneous = (42i32, "hello".to_string(), 3.14f64, true);
+    let heterogeneous = (42i32, "hello".to_string(), PI_F64, true);
     let bin = fory.serialize(&heterogeneous).unwrap();
     let obj: (i32, String, f64, bool) = fory.deserialize(&bin).expect("deserialize heterogeneous");
     assert_eq!(heterogeneous, obj);
@@ -297,7 +301,7 @@ fn run_struct_with_complex_tuple_fields(xlang: bool) {
         // Tuple with Rc (shared_ptr)
         with_rc: (Rc<i32>, Rc<String>),
         // Complex nested tuple with collections and options
-        complex_nested: ((Vec<i32>, Option<String>), (Rc<bool>, (i32, f64))),
+        complex_nested: ComplexNestedTuple,
     }
 
     let mut fory = Fory::default().xlang(xlang);
@@ -305,7 +309,7 @@ fn run_struct_with_complex_tuple_fields(xlang: bool) {
 
     let data = ComplexTupleStruct {
         name: "Complex Test".to_string(),
-        heterogeneous: (42, "world".to_string(), 3.14, true),
+        heterogeneous: (42, "world".to_string(), PI_F64, true),
         nested: ((100, "nested".to_string()), (2.71, false)),
         with_collection: (vec![1, 2, 3], vec!["a".to_string(), "b".to_string()]),
         with_option: (Some(999), None),

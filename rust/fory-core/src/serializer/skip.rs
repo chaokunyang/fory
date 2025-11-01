@@ -22,7 +22,8 @@ use crate::resolver::context::ReadContext;
 use crate::serializer::collection::{HAS_NULL, IS_SAME_TYPE};
 use crate::serializer::util;
 use crate::serializer::Serializer;
-use crate::types::{RefFlag, TypeId, BASIC_TYPES, CONTAINER_TYPES};
+use crate::types;
+use crate::types::{RefFlag, TypeId, BASIC_TYPES, CONTAINER_TYPES, is_user_type};
 use chrono::{NaiveDate, NaiveDateTime};
 
 macro_rules! basic_type_deserialize {
@@ -45,6 +46,47 @@ pub fn skip_field_value(
     read_ref_flag: bool,
 ) -> Result<(), Error> {
     skip_value(context, field_type, read_ref_flag, true)
+}
+
+const UNKNOWN_FIELD_TYPPE : FieldType = FieldType {
+    type_id: types::UNKNOWN,
+    nullable: true,
+    generics: vec![],
+};
+
+pub fn skip_any_value(context: &mut ReadContext, read_ref_flag: bool) -> Result<(), Error> {
+    // Handle ref flag first if needed
+    if read_ref_flag {
+        let ref_flag = context.reader.read_i8()?;
+        if ref_flag == (RefFlag::Null as i8) {
+            return Ok(());
+        }
+    }
+
+    // Now read the type ID
+    let mut type_id = context.reader.peek_u8()? as u32;
+    if !is_user_type(type_id) {
+        type_id = context.reader.read_varuint32()?;
+    }
+     let field_type = match type_id {
+        types::LIST | types::SET => FieldType {
+                    type_id,
+                    nullable: true,
+                    generics: vec![UNKNOWN_FIELD_TYPPE.clone()],
+                },
+        types::MAP => FieldType {
+                    type_id,
+                    nullable: true,
+                    generics: vec![UNKNOWN_FIELD_TYPPE.clone(), UNKNOWN_FIELD_TYPPE.clone()],
+                },
+        _ => FieldType {
+            type_id,
+            nullable: true,
+            generics: vec![],
+        },
+    };
+    // Don't read ref flag again in skip_value since we already handled it
+    skip_value(context, &field_type, false, false)
 }
 
 // call when is_field && is_compatible_mode
@@ -192,6 +234,8 @@ pub fn skip_value(
                     .get_ext_name_harness(type_meta.get_namespace(), type_meta.get_type_name())?
                     .get_read_data_fn()(context)?;
                 Ok(())
+            } else if type_id == TypeId::UNKNOWN {
+                skip_any_value(context, false)
             } else {
                 unreachable!("unimplemented type: {:?}", type_id);
             }

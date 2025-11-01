@@ -94,7 +94,9 @@ impl FieldType {
                 }
             }
             x if x == TypeId::MAP as u32 => {
-                if let (Some(key_generic), Some(val_generic)) = (self.generics.first(), self.generics.get(1)) {
+                if let (Some(key_generic), Some(val_generic)) =
+                    (self.generics.first(), self.generics.get(1))
+                {
                     key_generic.to_bytes(writer, true, key_generic.nullable)?;
                     val_generic.to_bytes(writer, true, val_generic.nullable)?;
                 }

@@ -20,7 +20,7 @@ use crate::error::Error;
 use crate::resolver::context::{ReadContext, WriteContext};
 use crate::serializer::Serializer;
 use crate::types::TypeId;
-use crate::types::{ENUM, NAMED_ENUM, is_user_type};
+use crate::types::{is_user_type, ENUM, NAMED_ENUM};
 
 const NO_REF_FLAG_TYPE_IDS: [u32; 11] = [
     TypeId::BOOL as u32,

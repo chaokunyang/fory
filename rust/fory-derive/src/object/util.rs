@@ -450,11 +450,22 @@ pub(super) fn generic_tree_to_tokens(node: &TypeNode) -> TokenStream {
     };
 
     quote! {
-        fory_core::meta::FieldType::new(
-            #get_type_id,
-            #nullable,
-            vec![#(#children_tokens),*] as Vec<fory_core::meta::FieldType>
-        )
+        {
+            let type_id = #get_type_id;
+            let mut generics = vec![#(#children_tokens),*] as Vec<fory_core::meta::FieldType>;
+            // For tuples and sets, if no generic info is available, add UNKNOWN element
+            // This handles type aliases to tuples where we can't detect the tuple at macro time
+            if (type_id == fory_core::types::TypeId::LIST as u32
+                || type_id == fory_core::types::TypeId::SET as u32)
+                && generics.is_empty() {
+                generics.push(fory_core::meta::FieldType::new(
+                    fory_core::types::TypeId::UNKNOWN as u32,
+                    true,
+                    vec![]
+                ));
+            }
+            fory_core::meta::FieldType::new(type_id, #nullable, generics)
+        }
     }
 }
 

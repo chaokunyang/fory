@@ -17,6 +17,7 @@
 
 pub mod any;
 mod arc;
+mod array;
 mod bool;
 mod box_;
 pub mod collection;

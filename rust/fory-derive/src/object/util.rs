@@ -314,6 +314,8 @@ pub(super) fn extract_type_name(ty: &Type) -> String {
         "TraitObject".to_string()
     } else if matches!(ty, Type::Tuple(_)) {
         "Tuple".to_string()
+    } else if matches!(ty, Type::Array(_)) {
+        "Array".to_string()
     } else {
         quote!(#ty).to_string()
     }
@@ -345,6 +347,15 @@ pub(super) fn parse_generic_tree(ty: &Type) -> TypeNode {
         return TypeNode {
             name: "Tuple".to_string(),
             generics: vec![],
+        };
+    }
+
+    // Handle arrays - extract element type
+    if let Type::Array(array) = ty {
+        let elem_node = parse_generic_tree(&array.elem);
+        return TypeNode {
+            name: "Array".to_string(),
+            generics: vec![elem_node],
         };
     }
 
@@ -387,6 +398,52 @@ pub(super) fn generic_tree_to_tokens(node: &TypeNode) -> TokenStream {
                 }]
             )
         };
+    }
+
+    // Special handling for arrays: treat them as lists with element type generic
+    if node.name == "Array" {
+        if let Some(elem_node) = node.generics.first() {
+            let elem_token = generic_tree_to_tokens(elem_node);
+            // Check if element is primitive to determine the correct type ID
+            let is_primitive_elem = PRIMITIVE_TYPE_NAMES.contains(&elem_node.name.as_str());
+            if is_primitive_elem {
+                // For primitive arrays, use primitive array type ID
+                let type_id_token = match elem_node.name.as_str() {
+                    "bool" => quote! { fory_core::types::TypeId::BOOL_ARRAY as u32 },
+                    "i8" => quote! { fory_core::types::TypeId::INT8_ARRAY as u32 },
+                    "i16" => quote! { fory_core::types::TypeId::INT16_ARRAY as u32 },
+                    "i32" => quote! { fory_core::types::TypeId::INT32_ARRAY as u32 },
+                    "i64" => quote! { fory_core::types::TypeId::INT64_ARRAY as u32 },
+                    "f32" => quote! { fory_core::types::TypeId::FLOAT32_ARRAY as u32 },
+                    "f64" => quote! { fory_core::types::TypeId::FLOAT64_ARRAY as u32 },
+                    "u8" => quote! { fory_core::types::TypeId::U8 as u32 },
+                    "u16" => quote! { fory_core::types::TypeId::U16_ARRAY as u32 },
+                    "u32" => quote! { fory_core::types::TypeId::U32_ARRAY as u32 },
+                    "u64" => quote! { fory_core::types::TypeId::U64_ARRAY as u32 },
+                    "usize" => quote! { fory_core::types::TypeId::USIZE_ARRAY as u32 },
+                    _ => quote! { fory_core::types::TypeId::LIST as u32 },
+                };
+                return quote! {
+                    fory_core::meta::FieldType::new(
+                        #type_id_token,
+                        false,
+                        vec![]
+                    )
+                };
+            } else {
+                // For non-primitive arrays, use LIST type ID with element type as generic
+                return quote! {
+                    fory_core::meta::FieldType::new(
+                        fory_core::types::TypeId::LIST as u32,
+                        false,
+                        vec![#elem_token]
+                    )
+                };
+            }
+        } else {
+            // Array without element type info - shouldn't happen
+            return quote! { compile_error!("Array missing element type"); };
+        }
     }
 
     // If Option, unwrap it before generating children
@@ -543,7 +600,7 @@ pub(crate) fn get_type_id_by_name(ty: &str) -> u32 {
         _ => {}
     }
 
-    // Check primitive arrays
+    // Check primitive arrays (Vec)
     match ty {
         "Vec<bool>" => return TypeId::BOOL_ARRAY as u32,
         "Vec<i8>" => return TypeId::INT8_ARRAY as u32,
@@ -558,6 +615,32 @@ pub(crate) fn get_type_id_by_name(ty: &str) -> u32 {
         "Vec<u64>" => return TypeId::U64_ARRAY as u32,
         "Vec<usize>" => return TypeId::USIZE_ARRAY as u32,
         _ => {}
+    }
+
+    // Check primitive arrays (fixed-size arrays [T; N])
+    // These will be serialized similarly to Vec but with fixed size
+    if ty.starts_with('[') && ty.contains(';') {
+        // Extract the element type from [T; N]
+        if let Some(elem_ty) = ty.strip_prefix('[').and_then(|s| s.split(';').next()) {
+            match elem_ty {
+                "bool" => return TypeId::BOOL_ARRAY as u32,
+                "i8" => return TypeId::INT8_ARRAY as u32,
+                "i16" => return TypeId::INT16_ARRAY as u32,
+                "i32" => return TypeId::INT32_ARRAY as u32,
+                "i64" => return TypeId::INT64_ARRAY as u32,
+                "f16" => return TypeId::FLOAT16_ARRAY as u32,
+                "f32" => return TypeId::FLOAT32_ARRAY as u32,
+                "f64" => return TypeId::FLOAT64_ARRAY as u32,
+                "u16" => return TypeId::U16_ARRAY as u32,
+                "u32" => return TypeId::U32_ARRAY as u32,
+                "u64" => return TypeId::U64_ARRAY as u32,
+                "usize" => return TypeId::USIZE_ARRAY as u32,
+                _ => {
+                    // Non-primitive array elements, treat as LIST
+                    return TypeId::LIST as u32;
+                }
+            }
+        }
     }
 
     // Check collection types

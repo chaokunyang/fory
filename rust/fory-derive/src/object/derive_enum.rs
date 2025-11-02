@@ -90,10 +90,7 @@ fn xlang_variant_branches(data_enum: &DataEnum, default_variant_value: u32) -> V
         .collect()
 }
 
-fn rust_variant_branches(
-    data_enum: &DataEnum,
-    default_variant_value: u32,
-) -> Vec<TokenStream> {
+fn rust_variant_branches(data_enum: &DataEnum, default_variant_value: u32) -> Vec<TokenStream> {
     data_enum
         .variants
         .iter()
@@ -165,7 +162,6 @@ fn rust_variant_branches(
         .collect()
 }
 
-
 fn rust_compatible_variant_write_branches(
     data_enum: &DataEnum,
     default_variant_value: u32,
@@ -190,16 +186,24 @@ fn rust_compatible_variant_write_branches(
                     }
                 }
                 Fields::Unnamed(fields_unnamed) => {
-                    // For unnamed enum variants, extract fields and forward to tuple serialization
+                    // For unnamed enum variants, write using collection format (same protocol as tuple)
                     let field_idents: Vec<_> = (0..fields_unnamed.unnamed.len())
                         .map(|i| Ident::new(&temp_var_name(i), proc_macro2::Span::call_site()))
                         .collect();
 
+                    let field_count = fields_unnamed.unnamed.len();
+
                     quote! {
-                        Self::#ident( #(#field_idents),* ) => {
+                        Self::#ident( #(ref #field_idents),* ) => {
                             context.writer.write_varuint32((#tag_value << 2) | 0b1);
+                            // Write as collection format (same as tuple)
+                            context.writer.write_varuint32(#field_count as u32);
+                            let header = 0u8; // No IS_SAME_TYPE flag
+                            context.writer.write_u8(header);
                             use fory_core::serializer::Serializer;
-                            (#(#field_idents),*).fory_write_data(context)?;
+                            #(
+                                #field_idents.fory_write(context, true, true, false)?;
+                            )*
                         }
                     }
                 }
@@ -442,24 +446,46 @@ fn rust_compatible_variant_read_branches(
                     }
                 }
                 Fields::Unnamed(fields_unnamed) => {
-                    // For unnamed enum variants, read as tuple and destructure
+                    // For unnamed enum variants, read using collection format (same protocol as tuple)
                     let field_idents: Vec<_> = (0..fields_unnamed.unnamed.len())
                         .map(|i| Ident::new(&temp_var_name(i), proc_macro2::Span::call_site()))
                         .collect();
 
-                    // Build tuple type for deserialization
-                    let field_types: Vec<_> = fields_unnamed
+                    let field_count = fields_unnamed.unnamed.len();
+
+                    let read_fields: Vec<TokenStream> = fields_unnamed
                         .unnamed
                         .iter()
-                        .map(|f| &f.ty)
+                        .enumerate()
+                        .map(|(i, field)| {
+                            let field_ident = &field_idents[i];
+                            let field_ty = &field.ty;
+                            quote! {
+                                let #field_ident = if #i < len {
+                                    use fory_core::serializer::Serializer;
+                                    <#field_ty>::fory_read(context, true, true)?
+                                } else {
+                                    Default::default()
+                                }
+                            }
+                        })
                         .collect();
 
                     quote! {
                         #tag_value => {
                             // Unnamed variant should have variant_type == 0b1
-                            use fory_core::serializer::Serializer;
-                            let tuple: (#(#field_types),*) = Serializer::fory_read_data(context)?;
-                            let (#(#field_idents),*) = tuple;
+                            // Read collection format (same as tuple)
+                            let len = context.reader.read_varuint32()? as usize;
+                            let _header = context.reader.read_u8()?;
+
+                            #(#read_fields;)*
+
+                            // Skip any extra elements
+                            use fory_core::serializer::skip::skip_any_value;
+                            for _ in #field_count..len {
+                                skip_any_value(context, true)?;
+                            }
+
                             Ok(Self::#ident( #(#field_idents),* ))
                         }
                     }
@@ -520,7 +546,7 @@ pub fn gen_read_data(data_enum: &DataEnum) -> TokenStream {
         .nth(default_variant_value as usize)
         .or_else(|| data_enum.variants.first())
         .unwrap();
-    
+
     let default_variant_ident = &default_variant.ident;
     let default_variant_construction = match &default_variant.fields {
         Fields::Unit => {
@@ -559,7 +585,7 @@ pub fn gen_read_data(data_enum: &DataEnum) -> TokenStream {
                 let encoded_tag = context.reader.read_varuint32()?;
                 let tag = encoded_tag >> 2;
                 let variant_type = encoded_tag & 0b11;
-                
+
                 match tag {
                     #(#rust_compatible_variant_branches)*
                     _ => {

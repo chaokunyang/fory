@@ -466,7 +466,7 @@ fn skip_value(
 }
 
 /// Skip enum variant data in compatible mode based on variant type.
-/// 
+///
 /// # Arguments
 /// * `context` - The read context
 /// * `variant_type` - The variant type encoded in lower 2 bits:

@@ -99,3 +99,74 @@ fn named_enum() {
     assert_eq!(target1, target2);
     assert_eq!(value1, value2);
 }
+
+/// Test schema evolution for unnamed enum variants in compatible mode
+#[test]
+fn test_unnamed_enum_variant_compatible() {
+    // Original enum with 2 fields in variant
+    #[derive(ForyObject, Debug, PartialEq)]
+    enum EventV1 {
+        #[fory(default)]
+        Unknown,
+        Message(i32, String),
+    }
+
+    // Evolved enum with 3 fields in variant (added f64)
+    #[derive(ForyObject, Debug, PartialEq)]
+    enum EventV2 {
+        #[fory(default)]
+        Unknown,
+        Message(i32, String, f64),
+    }
+
+    // Test 1: Serialize v1 (2 fields), deserialize as v2 (3 fields)
+    let mut fory_v1 = Fory::default().xlang(false).compatible(true);
+    fory_v1.register::<EventV1>(2000).unwrap();
+
+    let mut fory_v2 = Fory::default().xlang(false).compatible(true);
+    fory_v2.register::<EventV2>(2000).unwrap();
+
+    let event_v1 = EventV1::Message(42, "hello".to_string());
+    let bin = fory_v1.serialize(&event_v1).unwrap();
+    let event_v2: EventV2 = fory_v2.deserialize(&bin).expect("deserialize v1 to v2");
+    match event_v2 {
+        EventV2::Message(a, b, c) => {
+            assert_eq!(a, 42);
+            assert_eq!(b, "hello");
+            assert_eq!(c, 0.0); // Default value for missing field
+        }
+        _ => panic!("Expected Message variant"),
+    }
+
+    // Test 2: Serialize v2 (3 fields), deserialize as v1 (2 fields)
+    let event_v2 = EventV2::Message(100, "world".to_string(), 3.14);
+    let bin = fory_v2.serialize(&event_v2).unwrap();
+    let event_v1: EventV1 = fory_v1.deserialize(&bin).expect("deserialize v2 to v1");
+    match event_v1 {
+        EventV1::Message(a, b) => {
+            assert_eq!(a, 100);
+            assert_eq!(b, "world");
+            // Extra field (3.14) is skipped during deserialization
+        }
+        _ => panic!("Expected Message variant"),
+    }
+
+    // Test 3: Unknown variant falls back to default
+    #[derive(ForyObject, Debug, PartialEq)]
+    enum EventV3 {
+        #[fory(default)]
+        Unknown,
+        Message(i32, String),
+        NewVariant(bool), // This variant doesn't exist in EventV1
+    }
+
+    let mut fory_v3 = Fory::default().xlang(false).compatible(true);
+    fory_v3.register::<EventV3>(2000).unwrap();
+
+    let event_v3 = EventV3::NewVariant(true);
+    let bin = fory_v3.serialize(&event_v3).unwrap();
+    let event_v1: EventV1 = fory_v1
+        .deserialize(&bin)
+        .expect("deserialize unknown variant");
+    assert_eq!(event_v1, EventV1::Unknown); // Falls back to default variant
+}

@@ -18,13 +18,10 @@
 use crate::ensure;
 use crate::error::Error;
 use crate::resolver::context::{ReadContext, WriteContext};
-use crate::resolver::type_resolver::Harness;
 use crate::serializer::{ForyDefault, Serializer};
 use crate::types::{RefFlag, TypeId};
-use crate::{TypeResolver, TypeInfo};
-use crate::meta::{TypeMeta, FieldInfo};
-use crate::meta::MetaString;
-use std::rc::Rc;
+use crate::TypeResolver;
+use crate::meta::FieldInfo;
 
 #[inline(always)]
 pub fn actual_type_id(type_id: u32, register_by_name: bool, _compatible: bool) -> u32 {
@@ -133,63 +130,3 @@ pub trait NamedEnumVariantMetaTrait: 'static {
         Ok(Vec::default())
     }
 }
-
-fn sorted_field_infos<T: NamedEnumVariantMetaTrait>(type_resolver: &TypeResolver) -> Result<Vec<FieldInfo>, Error> {
-    let mut fields_info: Vec<FieldInfo> = T::fory_fields_info(type_resolver)?;
-    let mut sorted_field_infos: Vec<FieldInfo> = Vec::with_capacity(fields_info.len());
-    for name in T::fory_get_sorted_field_names().iter() {
-        let mut found = false;
-        for i in 0..fields_info.len() {
-            if &fields_info[i].field_name == name {
-                // swap_remove is faster
-                sorted_field_infos.push(fields_info.swap_remove(i));
-                found = true;
-                break;
-            }
-        }
-        if !found {
-            unreachable!("Field {} not found in fields_info", name);
-        }
-    }
-    // assign field id in ascending order
-    for (i, field_info) in sorted_field_infos.iter_mut().enumerate() {
-        field_info.field_id = i as i16;
-    }
-    Ok(sorted_field_infos)
-}
-
-pub fn compute_named_enum_variant_meta<T: NamedEnumVariantMetaTrait>(
-    type_resolver: &TypeResolver,
-) -> Result<TypeInfo, Error> {
-    let fields_info: Vec<FieldInfo> = sorted_field_infos::<T>(type_resolver)?;
-    let type_meta = TypeMeta::from_fields(
-        TypeId::ENUM as u32,
-        MetaString::get_empty().clone(),
-        MetaString::get_empty().clone(),
-        false,
-        fields_info,
-    );
-
-    Ok(TypeInfo::new_with_type_meta(Rc::new(type_meta), Harness::stub())?)
-}
-
-/// Push named enum variant meta information to the writer
-#[inline(always)]
-pub fn push_named_enum_variant_meta<T: NamedEnumVariantMetaTrait>(
-    context: &mut WriteContext,
-) -> Result<(), Error> {
-    let meta_index = context.push_named_enum_variant_meta::<T>()? as u32;
-    context.writer.write_varuint32(meta_index);
-    Ok(())
-}
-
-/// Get named enum variant meta information from the reader
-#[inline(always)]
-pub fn get_named_enum_variant_meta<T: NamedEnumVariantMetaTrait>(
-    context: &mut ReadContext,
-) -> Result<Rc<TypeInfo>, Error> {
-    let meta_index = context.reader.read_varuint32()? as usize;
-    let type_info = context.get_type_info_by_index(meta_index)?.clone();
-    Ok(type_info)
-}
-

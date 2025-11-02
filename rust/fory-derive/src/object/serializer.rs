@@ -50,7 +50,7 @@ pub fn derive_serializer(ast: &syn::DeriveInput, debug_enabled: bool) -> TokenSt
     };
 
     // StructSerializer
-    let (actual_type_id_ts, get_sorted_field_names_ts, fields_info_ts, read_compatible_ts, enum_variant_meta_types) =
+    let (actual_type_id_ts, get_sorted_field_names_ts, fields_info_ts, variants_fields_info_ts, read_compatible_ts, enum_variant_meta_types) =
         match &ast.data {
             syn::Data::Struct(s) => {
                 let fields = sorted_fields(&s.fields);
@@ -58,6 +58,7 @@ pub fn derive_serializer(ast: &syn::DeriveInput, debug_enabled: bool) -> TokenSt
                     misc::gen_actual_type_id(),
                     misc::gen_get_sorted_field_names(&fields),
                     misc::gen_field_fields_info(&fields),
+                    quote! { Ok(Vec::new()) }, // No variants for structs
                     read::gen_read_compatible(&fields),
                     vec![], // No variant meta types for structs
                 )
@@ -69,6 +70,7 @@ pub fn derive_serializer(ast: &syn::DeriveInput, debug_enabled: bool) -> TokenSt
                     derive_enum::gen_actual_type_id(),
                     quote! { &[] },
                     derive_enum::gen_field_fields_info(s),
+                    derive_enum::gen_variants_fields_info(name, s),
                     quote! {
                         Err(fory_core::Error::not_allowed("`fory_read_compatible` should only be invoked at struct type"
                     ))
@@ -150,6 +152,10 @@ pub fn derive_serializer(ast: &syn::DeriveInput, debug_enabled: bool) -> TokenSt
 
             fn fory_fields_info(type_resolver: &fory_core::resolver::type_resolver::TypeResolver) -> Result<Vec<fory_core::meta::FieldInfo>, fory_core::error::Error> {
                 #fields_info_ts
+            }
+
+            fn fory_variants_fields_info(type_resolver: &fory_core::resolver::type_resolver::TypeResolver) -> Result<Vec<(String, std::any::TypeId, Vec<fory_core::meta::FieldInfo>)>, fory_core::error::Error> {
+                #variants_fields_info_ts
             }
 
             #[inline]

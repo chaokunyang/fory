@@ -142,13 +142,6 @@ impl<'a> WriteContext<'a> {
     }
 
     #[inline(always)]
-    pub fn push_named_enum_variant_meta<T: crate::serializer::enum_::NamedEnumVariantMetaTrait>(
-        &mut self,
-    ) -> Result<usize, Error> {
-        self.meta_resolver.push_named_enum_variant_meta::<T>(&self.type_resolver)
-    }
-
-    #[inline(always)]
     pub fn write_meta(&mut self, offset: usize) {
         let len = self.writer.len();
         self.writer
@@ -341,6 +334,11 @@ impl<'a> ReadContext<'a> {
         self.meta_resolver.get(type_index).ok_or_else(|| {
             Error::type_error(format!("TypeInfo not found for type index: {}", type_index))
         })
+    }
+
+    #[inline(always)]
+    pub fn get_meta(&self, type_index: usize) -> Result<&Rc<TypeInfo>, Error> {
+        self.get_type_info_by_index(type_index)
     }
 
     #[inline(always)]

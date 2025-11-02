@@ -1338,6 +1338,13 @@ pub trait StructSerializer: Serializer + 'static {
         Ok(Vec::default())
     }
 
+    #[allow(unused_variables)]
+    fn fory_variants_fields_info(
+        type_resolver: &TypeResolver,
+    ) -> Result<Vec<(String, std::any::TypeId, Vec<FieldInfo>)>, Error> {
+        Ok(Vec::default())
+    }
+
     /// Get the type index for fast struct type lookup.
     ///
     /// Type index provides O(1) lookup for struct types in the type registry.

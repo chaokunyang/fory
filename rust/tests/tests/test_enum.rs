@@ -170,3 +170,62 @@ fn test_unnamed_enum_variant_compatible() {
         .expect("deserialize unknown variant");
     assert_eq!(event_v1, EventV1::Unknown); // Falls back to default variant
 }
+
+/// Test schema evolution for named enum variants in compatible mode
+#[test]
+fn test_named_enum_variant_compatible() {
+    // Original enum with 2 fields
+    #[derive(ForyObject, Debug, PartialEq)]
+    enum CommandV1 {
+        #[fory(default)]
+        Noop,
+        Execute { args: i32, name: String },
+    }
+
+    // Evolved enum with 3 fields - added 'env' field
+    #[derive(ForyObject, Debug, PartialEq)]
+    enum CommandV2 {
+        #[fory(default)]
+        Noop,
+        Execute { args: i32, env: String, name: String },
+    }
+
+    let mut fory_v1 = Fory::default().xlang(false).compatible(true);
+    fory_v1.register::<CommandV1>(3000).unwrap();
+
+    let mut fory_v2 = Fory::default().xlang(false).compatible(true);
+    fory_v2.register::<CommandV2>(3000).unwrap();
+
+    // Test 1: Serialize v1, deserialize as v2 (new field gets default value)
+    let cmd_v1 = CommandV1::Execute {
+        args: 42,
+        name: "run".to_string(),
+    };
+    let bin = fory_v1.serialize(&cmd_v1).unwrap();
+    let cmd_v2: CommandV2 = fory_v2.deserialize(&bin).expect("deserialize v1 to v2");
+    match cmd_v2 {
+        CommandV2::Execute { args, env, name } => {
+            assert_eq!(args, 42);
+            assert_eq!(name, "run");
+            assert_eq!(env, ""); // Default value for missing field
+        }
+        _ => panic!("Expected Execute variant"),
+    }
+
+    // Test 2: Serialize v2, deserialize as v1 (extra field is skipped)
+    let cmd_v2 = CommandV2::Execute {
+        args: 100,
+        env: "prod".to_string(),
+        name: "test".to_string(),
+    };
+    let bin = fory_v2.serialize(&cmd_v2).unwrap();
+    let cmd_v1: CommandV1 = fory_v1.deserialize(&bin).expect("deserialize v2 to v1");
+    match cmd_v1 {
+        CommandV1::Execute { args, name } => {
+            assert_eq!(args, 100);
+            assert_eq!(name, "test");
+            // 'env' field is skipped
+        }
+        _ => panic!("Expected Execute variant"),
+    }
+}

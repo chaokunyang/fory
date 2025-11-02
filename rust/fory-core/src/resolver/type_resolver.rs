@@ -719,6 +719,72 @@ impl TypeResolver {
             self.type_info_map_by_name
                 .insert(string_key, Rc::new(type_info));
         }
+
+        // Special handling for enum variants in compatible mode
+        if self.compatible && T::fory_static_type_id() == TypeId::ENUM {
+            // Collect variants info first to avoid borrowing issues
+            let variants_info = T::fory_variants_fields_info(self)?;
+            
+            // Process each variant
+            for (idx, (variant_name, variant_type_id, mut fields_info)) in variants_info.into_iter().enumerate() {
+                // Skip empty variant info (unit/unnamed variants)
+                if fields_info.is_empty() {
+                    continue;
+                }
+                
+                // Assign field IDs in ascending order (same as struct serialization)
+                for (i, field_info) in fields_info.iter_mut().enumerate() {
+                    field_info.field_id = i as i16;
+                }
+                
+                // Create TypeMeta for the variant
+                let variant_type_meta = if register_by_name {
+                    // If enum is registered by name, use "EnumName_VariantName" as typename
+                    let variant_type_name = format!("{}_{}", type_name, variant_name);
+                    let namespace_ms = NAMESPACE_ENCODER.encode_with_encodings(namespace, NAMESPACE_ENCODINGS)?;
+                    let type_name_ms = TYPE_NAME_ENCODER.encode_with_encodings(&variant_type_name, TYPE_NAME_ENCODINGS)?;
+                    TypeMeta::from_fields(
+                        TypeId::ENUM as u32,
+                        namespace_ms,
+                        type_name_ms,
+                        true, // register by name
+                        fields_info.clone(),
+                    )
+                } else {
+                    // If enum is registered by ID, use (id << 8) + variant_index as variant type id
+                    let variant_id = (id << 8) + idx as u32;
+                    TypeMeta::from_fields(
+                        variant_id,
+                        MetaString::get_empty().clone(),
+                        MetaString::get_empty().clone(),
+                        false, // register by id
+                        fields_info,
+                    )
+                };
+                
+                let variant_type_info = TypeInfo::new_with_type_meta(Rc::new(variant_type_meta), Harness::stub())?;
+                
+                // Store variant meta type in type_info_map
+                self.type_info_map
+                    .insert(variant_type_id, Rc::new(variant_type_info.clone()));
+                
+                // Also store by name or ID
+                if register_by_name {
+                    let ms_key = (variant_type_info.namespace.clone(), variant_type_info.type_name.clone());
+                    self.type_info_map_by_meta_string_name
+                        .insert(ms_key, Rc::new(variant_type_info.clone()));
+                    let string_key = (variant_type_info.namespace.original.clone(), variant_type_info.type_name.original.clone());
+                    self.type_info_map_by_name
+                        .insert(string_key, Rc::new(variant_type_info));
+                } else {
+                    // Store by ID
+                    let variant_id = (id << 8) + idx as u32;
+                    self.type_info_map_by_id
+                        .insert(variant_id, Rc::new(variant_type_info));
+                }
+            }
+        }
+
         Ok(())
     }
 

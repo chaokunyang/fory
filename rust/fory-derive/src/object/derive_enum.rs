@@ -39,6 +39,49 @@ pub fn gen_field_fields_info(_data_enum: &DataEnum) -> TokenStream {
     }
 }
 
+pub fn gen_variants_fields_info(enum_name: &syn::Ident, data_enum: &DataEnum) -> TokenStream {
+    let variant_info: Vec<TokenStream> = data_enum
+        .variants
+        .iter()
+        .map(|v| {
+            let variant_name = v.ident.to_string();
+            match &v.fields {
+                Fields::Named(_fields_named) => {
+                    // Generate meta type identifier for this named variant
+                    let meta_type_ident = Ident::new(
+                        &format!("{}_{}VariantMeta", enum_name, v.ident),
+                        proc_macro2::Span::call_site()
+                    );
+                    
+                    quote! {
+                        (
+                            #variant_name.to_string(),
+                            std::any::TypeId::of::<#meta_type_ident>(),
+                            <#meta_type_ident as fory_core::serializer::enum_::NamedEnumVariantMetaTrait>::fory_fields_info(type_resolver)?
+                        )
+                    }
+                }
+                _ => {
+                    // Unit or unnamed variants - return empty field info
+                    quote! {
+                        (
+                            #variant_name.to_string(),
+                            std::any::TypeId::of::<()>(), // Placeholder type ID
+                            Vec::new()
+                        )
+                    }
+                }
+            }
+        })
+        .collect();
+    
+    quote! {
+        Ok(vec![
+            #(#variant_info),*
+        ])
+    }
+}
+
 pub fn gen_reserved_space() -> TokenStream {
     quote! {
        4
@@ -301,7 +344,8 @@ fn rust_compatible_variant_write_branches(
                         Self::#ident { #(#field_idents),* } => {
                             context.writer.write_varuint32((#tag_value << 2) | 0b10);
                             // Push named variant meta
-                            fory_core::serializer::enum_::push_named_enum_variant_meta::<#meta_type_ident>(context)?;
+                            let meta_index = context.push_meta(std::any::TypeId::of::<#meta_type_ident>())? as u32;
+                            context.writer.write_varuint32(meta_index);
                             // Write fields same as struct
                             #(#write_fields)*
                         }
@@ -496,9 +540,6 @@ fn rust_compatible_variant_read_branches(
     data_enum: &DataEnum,
     default_variant_value: u32,
 ) -> Vec<TokenStream> {
-    use crate::object::util::get_struct_name;
-    let enum_name = get_struct_name().expect("enum context not set");
-    
     data_enum
         .variants
         .iter()
@@ -567,12 +608,6 @@ fn rust_compatible_variant_read_branches(
                 Fields::Named(fields_named) => {
                     use crate::util::sorted_fields;
                     
-                    // Generate meta type identifier for this named variant
-                    let meta_type_ident = Ident::new(
-                        &format!("{}_{}VariantMeta", enum_name, ident),
-                        proc_macro2::Span::call_site()
-                    );
-
                     // Sort fields to match the meta type generation
                     let fields_clone = syn::Fields::Named(fields_named.clone());
                     let sorted_fields_slice = sorted_fields(&fields_clone);
@@ -587,7 +622,8 @@ fn rust_compatible_variant_read_branches(
                         #tag_value => {
                             // Named variant should have variant_type == 0b10
                             // Get named variant meta (remote schema)
-                            let type_info = fory_core::serializer::enum_::get_named_enum_variant_meta::<#meta_type_ident>(context)?;
+                            let meta_index = context.reader.read_varuint32()? as usize;
+                            let type_info = context.get_meta(meta_index)?.clone();
                             
                             // Use gen_read_compatible logic
                             #compatible_read_body

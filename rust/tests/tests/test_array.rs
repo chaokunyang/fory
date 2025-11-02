@@ -16,7 +16,10 @@
 // under the License.
 
 use fory_core::fory::Fory;
+use fory_core::register_trait_type;
+use fory_core::serializer::Serializer;
 use fory_derive::ForyObject;
+use std::rc::Rc;
 
 #[test]
 fn test_array_i32() {
@@ -210,4 +213,112 @@ fn test_array_size_mismatch() {
     // Try to deserialize as array with wrong size
     let result: Result<[i32; 3], _> = fory.deserialize(&bin);
     assert!(result.is_err());
+}
+
+// Trait object tests
+
+trait Shape: Serializer {
+    fn area(&self) -> f64;
+    fn name(&self) -> &str;
+}
+
+#[derive(ForyObject, Debug, PartialEq)]
+struct Circle {
+    radius: f64,
+}
+
+impl Shape for Circle {
+    fn area(&self) -> f64 {
+        std::f64::consts::PI * self.radius * self.radius
+    }
+    fn name(&self) -> &str {
+        "Circle"
+    }
+}
+
+#[derive(ForyObject, Debug, PartialEq)]
+struct Rectangle {
+    width: f64,
+    height: f64,
+}
+
+impl Shape for Rectangle {
+    fn area(&self) -> f64 {
+        self.width * self.height
+    }
+    fn name(&self) -> &str {
+        "Rectangle"
+    }
+}
+
+register_trait_type!(Shape, Circle, Rectangle);
+
+#[test]
+fn test_array_box_trait_objects() {
+    let mut fory = Fory::default().compatible(true);
+    fory.register::<Circle>(9001).unwrap();
+    fory.register::<Rectangle>(9002).unwrap();
+
+    // Create an array of Box<dyn Shape>
+    let shapes: [Box<dyn Shape>; 3] = [
+        Box::new(Circle { radius: 5.0 }),
+        Box::new(Rectangle {
+            width: 4.0,
+            height: 6.0,
+        }),
+        Box::new(Circle { radius: 3.0 }),
+    ];
+
+    // Calculate expected areas before serialization
+    let expected_areas: [f64; 3] = [shapes[0].area(), shapes[1].area(), shapes[2].area()];
+    let expected_names: [&str; 3] = [shapes[0].name(), shapes[1].name(), shapes[2].name()];
+
+    let bin = fory.serialize(&shapes).unwrap();
+    let deserialized: [Box<dyn Shape>; 3] = fory.deserialize(&bin).expect("deserialize");
+
+    // Verify the trait methods work correctly
+    assert_eq!(deserialized.len(), 3);
+    for i in 0..3 {
+        assert_eq!(deserialized[i].area(), expected_areas[i]);
+        assert_eq!(deserialized[i].name(), expected_names[i]);
+    }
+}
+
+#[test]
+fn test_array_rc_trait_objects() {
+    let mut fory = Fory::default().compatible(true);
+    fory.register::<Circle>(9001).unwrap();
+    fory.register::<Rectangle>(9002).unwrap();
+
+    // Create Rc<dyn Shape> instances and convert to wrappers
+    let circle1: Rc<dyn Shape> = Rc::new(Circle { radius: 2.0 });
+    let rect: Rc<dyn Shape> = Rc::new(Rectangle {
+        width: 3.0,
+        height: 4.0,
+    });
+    let circle2: Rc<dyn Shape> = Rc::new(Circle { radius: 7.0 });
+
+    // Convert to wrapper types for serialization
+    let shapes: [ShapeRc; 3] = [
+        ShapeRc::from(circle1),
+        ShapeRc::from(rect),
+        ShapeRc::from(circle2),
+    ];
+
+    // Calculate expected areas
+    let expected_areas: [f64; 3] = [
+        std::f64::consts::PI * 4.0,  // Circle radius 2.0
+        12.0,                        // Rectangle 3x4
+        std::f64::consts::PI * 49.0, // Circle radius 7.0
+    ];
+
+    let bin = fory.serialize(&shapes).unwrap();
+    let deserialized: [ShapeRc; 3] = fory.deserialize(&bin).expect("deserialize");
+
+    // Verify by unwrapping and calling trait methods
+    assert_eq!(deserialized.len(), 3);
+    for i in 0..3 {
+        let shape: Rc<dyn Shape> = deserialized[i].clone().into();
+        assert!((shape.area() - expected_areas[i]).abs() < 0.001);
+    }
 }

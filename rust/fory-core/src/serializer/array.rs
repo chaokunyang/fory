@@ -47,21 +47,6 @@ fn validate_array_length(actual: usize, expected: usize) -> Result<(), Error> {
     Ok(())
 }
 
-/// Creates an uninitialized array, with special handling for zero-sized arrays.
-#[inline(always)]
-fn create_uninit_array<T, const N: usize>() -> Result<[std::mem::MaybeUninit<T>; N], [T; N]> {
-    use std::mem::MaybeUninit;
-
-    if N == 0 {
-        // For zero-sized arrays, return initialized array immediately
-        #[allow(clippy::uninit_assumed_init)]
-        return Err(unsafe { MaybeUninit::uninit().assume_init() });
-    }
-
-    // Safety: creating uninitialized array of MaybeUninit is always safe
-    Ok(unsafe { MaybeUninit::uninit().assume_init() })
-}
-
 /// Converts initialized MaybeUninit array to a regular array.
 /// # Safety
 /// All elements in the array must be initialized.
@@ -76,6 +61,8 @@ fn read_primitive_array<T, const N: usize>(context: &mut ReadContext) -> Result<
 where
     T: Serializer + ForyDefault,
 {
+    use std::mem::MaybeUninit;
+
     // Read the size in bytes
     let size_bytes = context.reader.read_varuint32()? as usize;
     let elem_size = mem::size_of::<T>();
@@ -88,10 +75,13 @@ where
     validate_array_length(len, N)?;
 
     // Handle zero-sized arrays
-    let mut arr = match create_uninit_array::<T, N>() {
-        Ok(arr) => arr,
-        Err(zero_sized_array) => return Ok(zero_sized_array),
-    };
+    if N == 0 {
+        // Safe: std::mem::zeroed() is explicitly safe for zero-sized types
+        return Ok(unsafe { std::mem::zeroed() });
+    }
+
+    // Create uninitialized array
+    let mut arr: [MaybeUninit<T>; N] = unsafe { MaybeUninit::uninit().assume_init() };
 
     // Read bytes directly into array memory
     unsafe {
@@ -115,17 +105,12 @@ where
     // Read collection length
     let len = context.reader.read_varuint32()? as usize;
 
-    if len != N {
-        return Err(Error::invalid_data(format!(
-            "Array length mismatch: expected {}, got {}",
-            N, len
-        )));
-    }
+    validate_array_length(len, N)?;
 
-    // For zero-sized arrays, return early
+    // Handle zero-sized arrays
     if N == 0 {
-        #[allow(clippy::uninit_assumed_init)]
-        return Ok(unsafe { MaybeUninit::uninit().assume_init() });
+        // Safe: std::mem::zeroed() is explicitly safe for zero-sized types
+        return Ok(unsafe { std::mem::zeroed() });
     }
 
     // Handle polymorphic or shared ref types - need to use collection logic

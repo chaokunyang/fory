@@ -142,6 +142,13 @@ impl<'a> WriteContext<'a> {
     }
 
     #[inline(always)]
+    pub fn push_named_enum_variant_meta<T: crate::serializer::enum_::NamedEnumVariantMetaTrait>(
+        &mut self,
+    ) -> Result<usize, Error> {
+        self.meta_resolver.push_named_enum_variant_meta::<T>(&self.type_resolver)
+    }
+
+    #[inline(always)]
     pub fn write_meta(&mut self, offset: usize) {
         let len = self.writer.len();
         self.writer

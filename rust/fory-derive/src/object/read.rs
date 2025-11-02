@@ -25,7 +25,7 @@ use super::util::{
     is_primitive_type, is_skip_field, should_skip_type_info_for_field, skip_ref_flag, StructField,
 };
 
-fn create_private_field_name(field: &Field) -> Ident {
+pub(crate) fn create_private_field_name(field: &Field) -> Ident {
     format_ident!("_{}", field.ident.as_ref().unwrap())
 }
 
@@ -34,7 +34,7 @@ fn need_declared_by_option(field: &Field) -> bool {
     type_name == "Option" || !is_primitive_type(type_name.as_str())
 }
 
-fn declare_var(fields: &[&Field]) -> Vec<TokenStream> {
+pub(crate) fn declare_var(fields: &[&Field]) -> Vec<TokenStream> {
     fields
         .iter()
         .map(|field| {
@@ -68,7 +68,7 @@ fn declare_var(fields: &[&Field]) -> Vec<TokenStream> {
         .collect()
 }
 
-fn assign_value(fields: &[&Field]) -> Vec<TokenStream> {
+pub(crate) fn assign_value(fields: &[&Field]) -> Vec<TokenStream> {
     fields
         .iter()
         .map(|field| {
@@ -280,7 +280,7 @@ pub fn gen_read_data(fields: &[&Field]) -> TokenStream {
     }
 }
 
-fn gen_read_compatible_match_arm_body(field: &Field, var_name: &Ident) -> TokenStream {
+pub(crate) fn gen_read_compatible_match_arm_body(field: &Field, var_name: &Ident) -> TokenStream {
     let ty = &field.ty;
     let field_kind = classify_trait_object_field(ty);
     let is_skip_flag = is_skip_field(field);
@@ -539,6 +539,13 @@ pub fn gen_read_with_type_info(struct_ident: &Ident) -> TokenStream {
 }
 
 pub fn gen_read_compatible(fields: &[&Field]) -> TokenStream {
+    gen_read_compatible_with_construction(fields, None)
+}
+
+pub(crate) fn gen_read_compatible_with_construction(
+    fields: &[&Field],
+    variant_ident: Option<&Ident>,
+) -> TokenStream {
     let declare_ts: Vec<TokenStream> = declare_var(fields);
     let assign_ts: Vec<TokenStream> = assign_value(fields);
 
@@ -596,6 +603,21 @@ pub fn gen_read_compatible(fields: &[&Field]) -> TokenStream {
         }
     };
 
+    // Generate construction based on whether this is a struct or enum variant
+    let construction = if let Some(variant) = variant_ident {
+        quote! {
+            Ok(Self::#variant {
+                #(#assign_ts),*
+            })
+        }
+    } else {
+        quote! {
+            Ok(Self {
+                #(#assign_ts),*
+            })
+        }
+    };
+
     quote! {
         let fields = type_info.get_type_meta().get_field_infos().clone();
         #(#declare_ts)*
@@ -611,9 +633,7 @@ pub fn gen_read_compatible(fields: &[&Field]) -> TokenStream {
                     #skip_arm
                 }
             }
-            Ok(Self {
-                #(#assign_ts),*
-            })
+            #construction
         }
     }
 }

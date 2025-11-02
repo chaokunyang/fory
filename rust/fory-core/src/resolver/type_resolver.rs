@@ -76,6 +76,17 @@ impl Harness {
         }
     }
 
+    pub fn stub() -> Harness {
+        Harness::new(
+            stub_write_fn,
+            stub_read_fn,
+            stub_write_data_fn,
+            stub_read_data_fn,
+            stub_to_serializer_fn,
+            stub_sorted_field_infos,
+        )
+    }
+
     #[inline(always)]
     pub fn get_write_fn(&self) -> WriteFn {
         self.write_fn
@@ -194,6 +205,26 @@ impl TypeInfo {
             type_id,
             namespace: Rc::from(namespace_meta_string),
             type_name: Rc::from(type_name_meta_string),
+            register_by_name,
+            harness,
+        })
+    }
+
+    pub fn new_with_type_meta(
+        type_meta: Rc<TypeMeta>,
+        harness: Harness,
+    ) -> Result<TypeInfo, Error> {
+        let type_id = type_meta.get_type_id();
+        let namespace = type_meta.get_namespace();
+        let type_name = type_meta.get_type_name();
+        let register_by_name = !namespace.original.is_empty() || !type_name.original.is_empty();
+        let type_def_bytes = type_meta.to_bytes()?;
+        Ok(TypeInfo {
+            type_def: Rc::from(type_def_bytes),
+            type_meta,
+            type_id,
+            namespace,
+            type_name,
             register_by_name,
             harness,
         })

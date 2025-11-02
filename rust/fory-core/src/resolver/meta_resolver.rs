@@ -17,9 +17,10 @@
 
 use crate::buffer::{Reader, Writer};
 use crate::error::Error;
-use crate::meta::TypeMeta;
+use crate::meta::{TypeMeta, FieldInfo};
 use crate::resolver::type_resolver::TypeInfo;
-use crate::TypeResolver;
+use crate::{TypeResolver};
+use crate::serializer::enum_::{NamedEnumVariantMetaTrait, compute_named_enum_variant_meta};
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -27,6 +28,7 @@ use std::rc::Rc;
 pub struct MetaWriterResolver {
     type_defs: Vec<Rc<Vec<u8>>>,
     type_id_index_map: HashMap<std::any::TypeId, usize>,
+    named_enum_variant_meta_map: HashMap<std::any::TypeId, Rc<TypeInfo>>,
 }
 
 const MAX_PARSED_NUM_TYPE_DEFS: usize = 8192;
@@ -48,6 +50,41 @@ impl MetaWriterResolver {
                 Ok(index)
             }
             Some(index) => Ok(*index),
+        }
+    }
+
+    #[inline(always)]
+    pub fn push_named_enum_variant_meta<T: NamedEnumVariantMetaTrait>(
+        &mut self,
+        type_resolver: &TypeResolver,
+    ) -> Result<usize, Error> {
+        let type_id = std::any::TypeId::of::<T>();
+        match self.type_id_index_map.get(&type_id) {
+            None => {
+                let index = self.type_defs.len();
+                let type_info = self.get_named_enum_variant_meta::<T>(type_resolver)?;
+                self.type_defs.push(type_info.get_type_def());
+                self.type_id_index_map.insert(type_id, index);
+                Ok(index)
+            }
+            Some(index) => Ok(*index),
+        }
+    }
+
+    #[inline(always)]
+    fn get_named_enum_variant_meta<T: NamedEnumVariantMetaTrait>(
+        &mut self,
+        type_resolver: &TypeResolver,
+    ) -> Result<Rc<TypeInfo>, Error> {
+        let type_id = std::any::TypeId::of::<T>();
+        match self.named_enum_variant_meta_map.get(&type_id) {
+            Some(type_info) => Ok(type_info.clone()),
+            None => {
+                let type_info = Rc::new(compute_named_enum_variant_meta::<T>(type_resolver)?);
+                self.named_enum_variant_meta_map
+                    .insert(type_id, type_info.clone());
+                Ok(type_info)
+            }
         }
     }
 

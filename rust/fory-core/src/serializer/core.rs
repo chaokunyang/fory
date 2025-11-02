@@ -142,7 +142,7 @@ pub trait ForyDefault: Sized {
 /// - [`fory_static_type_id`]: Static type ID (defaults to TypeId::EXT for user types)
 /// - [`fory_get_type_id`]: Get registered type ID from TypeResolver
 /// - [`fory_concrete_type_id`]: Get Rust's std::any::TypeId
-/// - [`fory_is_option`]: Check if type is Option<T>
+/// - [`fory_is_option`]: Check if type is `Option<T>`
 /// - [`fory_is_none`]: Check if instance is None (for Option types)
 /// - [`fory_is_polymorphic`]: Check if type supports polymorphism
 /// - [`fory_is_shared_ref`]: Check if type is Rc/Arc

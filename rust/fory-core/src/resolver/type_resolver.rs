@@ -438,13 +438,14 @@ impl Default for TypeResolver {
 
 impl TypeResolver {
     pub fn get_type_info(&self, type_id: &std::any::TypeId) -> Result<Rc<TypeInfo>, Error> {
-        self.type_info_map.get(type_id)
-                .ok_or_else(|| {
-                    Error::type_error(format!(
-                        "TypeId {:?} not found in type_info registry, maybe you forgot to register some types",
-                        type_id
-                    ))
-                })
+        self.type_info_map
+            .get(type_id)
+            .ok_or_else(|| {
+                Error::type_error(format!(
+                    "TypeId {:?} not found in type_info registry, maybe you forgot to register some types",
+                    type_id
+                ))
+            })
             .cloned()
     }
 
@@ -728,9 +729,11 @@ impl TypeResolver {
         }
         self.type_id_index[index] = type_info.type_id;
 
-        // Insert partial type info into type_info_map_by_id for conflict checking
+        // Insert partial type info into both maps
         self.type_info_map_by_id
             .insert(actual_type_id, Rc::new(type_info.clone()));
+        self.type_info_map
+            .insert(rs_type_id, Rc::new(type_info.clone()));
         self.partial_type_infos.insert(rs_type_id, type_info);
 
         Ok(())
@@ -898,9 +901,11 @@ impl TypeResolver {
             )));
         }
 
-        // Insert partial type info into type_info_map_by_id for conflict checking
+        // Insert partial type info into both maps
         self.type_info_map_by_id
             .insert(actual_type_id, Rc::new(type_info.clone()));
+        self.type_info_map
+            .insert(rs_type_id, Rc::new(type_info.clone()));
         self.partial_type_infos.insert(rs_type_id, type_info);
         Ok(())
     }

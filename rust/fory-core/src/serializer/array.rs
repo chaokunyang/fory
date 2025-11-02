@@ -65,30 +65,24 @@ where
     // Read the size in bytes
     let size_bytes = context.reader.read_varuint32()? as usize;
     let elem_size = mem::size_of::<T>();
-
     if size_bytes % elem_size != 0 {
         return Err(Error::invalid_data("Invalid data length"));
     }
-
     let len = size_bytes / elem_size;
     validate_array_length(len, N)?;
-
     // Handle zero-sized arrays
     if N == 0 {
         // Safe: std::mem::zeroed() is explicitly safe for zero-sized types
         return Ok(unsafe { std::mem::zeroed() });
     }
-
     // Create uninitialized array
     let mut arr: [MaybeUninit<T>; N] = unsafe { MaybeUninit::uninit().assume_init() };
-
     // Read bytes directly into array memory
     unsafe {
         let dst_ptr = arr.as_mut_ptr() as *mut u8;
         let src = context.reader.read_bytes(size_bytes)?;
         std::ptr::copy_nonoverlapping(src.as_ptr(), dst_ptr, size_bytes);
     }
-
     // Safety: all elements are now initialized with data from the reader
     Ok(unsafe { assume_array_init(&arr) })
 }
@@ -267,26 +261,6 @@ impl<T: Serializer + ForyDefault, const N: usize> Serializer for [T; N] {
     }
 
     #[inline(always)]
-    fn fory_get_type_id(_: &TypeResolver) -> Result<u32, Error> {
-        let id = get_primitive_type_id::<T>();
-        if id != TypeId::UNKNOWN {
-            Ok(id as u32)
-        } else {
-            Ok(TypeId::LIST as u32)
-        }
-    }
-
-    #[inline(always)]
-    fn fory_type_id_dyn(&self, _: &TypeResolver) -> Result<u32, Error> {
-        let id = get_primitive_type_id::<T>();
-        if id != TypeId::UNKNOWN {
-            Ok(id as u32)
-        } else {
-            Ok(TypeId::LIST as u32)
-        }
-    }
-
-    #[inline(always)]
     fn fory_static_type_id() -> TypeId
     where
         Self: Sized,
@@ -297,6 +271,16 @@ impl<T: Serializer + ForyDefault, const N: usize> Serializer for [T; N] {
         } else {
             TypeId::LIST
         }
+    }
+
+    #[inline(always)]
+    fn fory_get_type_id(_: &TypeResolver) -> Result<u32, Error> {
+        Ok(Self::fory_static_type_id() as u32)
+    }
+
+    #[inline(always)]
+    fn fory_type_id_dyn(&self, _: &TypeResolver) -> Result<u32, Error> {
+        Ok(Self::fory_static_type_id() as u32)
     }
 
     #[inline(always)]

@@ -261,8 +261,9 @@ pub static PRIMITIVE_ARRAY_TYPE_MAP: &[(&str, u32, &str)] = &[
     ("usize", TypeId::USIZE_ARRAY as u32, "Vec<usize>"),
 ];
 
+/// Keep as const fn for compile time evaluation or constant folding
 #[inline(always)]
-pub fn is_primitive_type_id(type_id: TypeId) -> bool {
+pub const fn is_primitive_type_id(type_id: TypeId) -> bool {
     matches!(
         type_id,
         TypeId::BOOL
@@ -280,26 +281,27 @@ pub fn is_primitive_type_id(type_id: TypeId) -> bool {
     )
 }
 
+/// Keep as const fn for compile time evaluation or constant folding
 #[inline(always)]
-pub fn is_internal_type(type_id: u32) -> bool {
+pub const fn is_internal_type(type_id: u32) -> bool {
     if type_id == 0 || type_id >= TypeId::UNKNOWN as u32 {
         return false;
     }
-    let excluded = [
-        TypeId::ENUM as u32,
-        TypeId::NAMED_ENUM as u32,
-        TypeId::STRUCT as u32,
-        TypeId::COMPATIBLE_STRUCT as u32,
-        TypeId::NAMED_STRUCT as u32,
-        TypeId::NAMED_COMPATIBLE_STRUCT as u32,
-        TypeId::EXT as u32,
-        TypeId::NAMED_EXT as u32,
-    ];
-    !excluded.contains(&type_id)
+    !matches!(
+        type_id,
+        ENUM | NAMED_ENUM
+            | STRUCT
+            | COMPATIBLE_STRUCT
+            | NAMED_STRUCT
+            | NAMED_COMPATIBLE_STRUCT
+            | EXT
+            | NAMED_EXT
+    )
 }
 
+/// Keep as const fn for compile time evaluation or constant folding
 #[inline(always)]
-pub(crate) fn need_to_write_type_for_field(type_id: TypeId) -> bool {
+pub(crate) const fn need_to_write_type_for_field(type_id: TypeId) -> bool {
     matches!(
         type_id,
         TypeId::STRUCT
@@ -312,8 +314,9 @@ pub(crate) fn need_to_write_type_for_field(type_id: TypeId) -> bool {
     )
 }
 
+/// Keep as const fn for compile time evaluation or constant folding
 #[inline(always)]
-pub(crate) fn is_user_type(type_id: u32) -> bool {
+pub(crate) const fn is_user_type(type_id: u32) -> bool {
     matches!(
         type_id,
         ENUM | NAMED_ENUM

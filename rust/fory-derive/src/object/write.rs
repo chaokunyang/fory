@@ -208,12 +208,12 @@ pub fn gen_write_field(field: &Field, ident: &Ident, use_self: bool) -> TokenStr
                     }
                 } else if skip_ref_flag {
                     quote! {
-                        let need_type_info = fory_core::serializer::util::field_need_write_type_info::<#ty>();
+                        let need_type_info = fory_core::serializer::util::field_need_write_type_info(<#ty as fory_core::Serializer>::fory_static_type_id());
                         <#ty as fory_core::Serializer>::fory_write(&#value_ts, context, false, need_type_info, false)?;
                     }
                 } else {
                     quote! {
-                        let need_type_info = fory_core::serializer::util::field_need_write_type_info::<#ty>();
+                        let need_type_info = fory_core::serializer::util::field_need_write_type_info(<#ty as fory_core::Serializer>::fory_static_type_id());
                         <#ty as fory_core::Serializer>::fory_write(&#value_ts, context, true, need_type_info, false)?;
                     }
                 }

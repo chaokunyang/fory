@@ -23,6 +23,7 @@ use crate::serializer::primitive_list;
 use crate::serializer::{ForyDefault, Serializer};
 use crate::types::TypeId;
 use std::mem;
+use std::mem::MaybeUninit;
 
 use super::collection::{
     read_collection_type_info, write_collection_data, write_collection_type_info,
@@ -61,8 +62,6 @@ fn read_primitive_array<T, const N: usize>(context: &mut ReadContext) -> Result<
 where
     T: Serializer + ForyDefault,
 {
-    use std::mem::MaybeUninit;
-
     // Read the size in bytes
     let size_bytes = context.reader.read_varuint32()? as usize;
     let elem_size = mem::size_of::<T>();
@@ -100,41 +99,31 @@ fn read_complex_array<T, const N: usize>(context: &mut ReadContext) -> Result<[T
 where
     T: Serializer + ForyDefault,
 {
-    use std::mem::MaybeUninit;
-
     // Read collection length
     let len = context.reader.read_varuint32()? as usize;
-
     validate_array_length(len, N)?;
-
     // Handle zero-sized arrays
     if N == 0 {
         // Safe: std::mem::zeroed() is explicitly safe for zero-sized types
         return Ok(unsafe { std::mem::zeroed() });
     }
-
     // Handle polymorphic or shared ref types - need to use collection logic
     if T::fory_is_polymorphic() || T::fory_is_shared_ref() {
         return read_complex_array_dyn_ref(context, len);
     }
-
     // Read header
     let header = context.reader.read_u8()?;
     let declared = (header & DECL_ELEMENT_TYPE) != 0;
-
     if !declared {
         T::fory_read_type_info(context)?;
     }
-
     let has_null = (header & HAS_NULL) != 0;
     ensure!(
         (header & IS_SAME_TYPE) != 0,
         Error::type_error("Type inconsistent, target type is not polymorphic")
     );
-
     // Create uninitialized array
     let mut arr: [MaybeUninit<T>; N] = unsafe { MaybeUninit::uninit().assume_init() };
-
     // Read elements directly into array
     if !has_null {
         for elem_slot in &mut arr[..] {
@@ -152,7 +141,6 @@ where
             elem_slot.write(elem);
         }
     }
-
     // Safety: all elements are now initialized
     Ok(unsafe { std::ptr::read(&arr as *const _ as *const [T; N]) })
 }
@@ -166,18 +154,14 @@ fn read_complex_array_dyn_ref<T, const N: usize>(
 where
     T: Serializer + ForyDefault,
 {
-    use std::mem::MaybeUninit;
-
     // Read header
     let header = context.reader.read_u8()?;
     let is_track_ref = (header & TRACKING_REF) != 0;
     let is_same_type = (header & IS_SAME_TYPE) != 0;
     let has_null = (header & HAS_NULL) != 0;
     let is_declared = (header & DECL_ELEMENT_TYPE) != 0;
-
     // Create uninitialized array
     let mut arr: [MaybeUninit<T>; N] = unsafe { MaybeUninit::uninit().assume_init() };
-
     // Read elements
     if is_same_type {
         let type_info = if !is_declared {
@@ -186,7 +170,6 @@ where
             let rs_type_id = std::any::TypeId::of::<T>();
             context.get_type_resolver().get_type_info(&rs_type_id)?
         };
-
         if is_track_ref {
             for elem_slot in arr.iter_mut().take(len) {
                 let elem = T::fory_read_with_type_info(context, true, type_info.clone())?;
@@ -214,7 +197,6 @@ where
             elem_slot.write(elem);
         }
     }
-
     // Safety: all elements are now initialized
     Ok(unsafe { std::ptr::read(&arr as *const _ as *const [T; N]) })
 }
@@ -331,10 +313,8 @@ where
     fn fory_default() -> Self {
         // Create an array by calling fory_default() for each element
         // We use MaybeUninit for safe initialization
-        use std::mem::MaybeUninit;
 
         let mut arr: [MaybeUninit<T>; N] = unsafe { MaybeUninit::uninit().assume_init() };
-
         for elem in &mut arr {
             elem.write(T::fory_default());
         }

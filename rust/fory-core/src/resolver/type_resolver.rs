@@ -18,7 +18,7 @@
 use super::context::{ReadContext, WriteContext};
 use crate::error::Error;
 use crate::meta::{
-    FieldInfo, MetaString, TypeMeta, NAMESPACE_ENCODER, NAMESPACE_ENCODINGS, TYPE_NAME_ENCODER,
+    MetaString, TypeMeta, NAMESPACE_ENCODER, NAMESPACE_ENCODINGS, TYPE_NAME_ENCODER,
     TYPE_NAME_ENCODINGS,
 };
 use crate::serializer::{ForyDefault, Serializer, StructSerializer};
@@ -44,8 +44,7 @@ type ReadFn =
 type WriteDataFn = fn(&dyn Any, &mut WriteContext, has_generics: bool) -> Result<(), Error>;
 type ReadDataFn = fn(&mut ReadContext) -> Result<Box<dyn Any>, Error>;
 type ToSerializerFn = fn(Box<dyn Any>) -> Result<Box<dyn Serializer>, Error>;
-type BuildTypeInfosFn =
-    fn(&TypeResolver) -> Result<Vec<(Option<std::any::TypeId>, TypeInfo)>, Error>;
+type BuildTypeInfosFn = fn(&TypeResolver) -> Result<Vec<(std::any::TypeId, TypeInfo)>, Error>;
 const EMPTY_STRING: String = String::new();
 
 #[derive(Clone, Debug)]
@@ -275,9 +274,7 @@ fn stub_to_serializer_fn(_: Box<dyn Any>) -> Result<Box<dyn Serializer>, Error> 
     ))
 }
 
-fn stub_build_type_infos(
-    _: &TypeResolver,
-) -> Result<Vec<(Option<std::any::TypeId>, TypeInfo)>, Error> {
+fn stub_build_type_infos(_: &TypeResolver) -> Result<Vec<(std::any::TypeId, TypeInfo)>, Error> {
     Err(Error::type_error(
         "Cannot get type infos for unknown remote type",
     ))
@@ -286,34 +283,14 @@ fn stub_build_type_infos(
 /// Helper function to build type infos for struct types
 fn build_struct_type_infos<T: StructSerializer>(
     type_resolver: &TypeResolver,
-) -> Result<Vec<(Option<std::any::TypeId>, TypeInfo)>, Error> {
+) -> Result<Vec<(std::any::TypeId, TypeInfo)>, Error> {
     let partial_info = type_resolver
         .partial_type_infos
         .get(&std::any::TypeId::of::<T>())
         .ok_or_else(|| Error::type_error("Partial type info not found for struct"))?;
 
-    // Get sorted field infos
-    let mut fields_info = T::fory_fields_info(type_resolver)?;
-    let sorted_field_names = T::fory_get_sorted_field_names();
-    let mut sorted_field_infos: Vec<FieldInfo> = Vec::with_capacity(fields_info.len());
-    for name in sorted_field_names.iter() {
-        let mut found = false;
-        for i in 0..fields_info.len() {
-            if &fields_info[i].field_name == name {
-                // swap_remove is faster
-                sorted_field_infos.push(fields_info.swap_remove(i));
-                found = true;
-                break;
-            }
-        }
-        if !found {
-            unreachable!("Field {} not found in fields_info", name);
-        }
-    }
-    // assign field id in ascending order
-    for (i, field_info) in sorted_field_infos.iter_mut().enumerate() {
-        field_info.field_id = i as i16;
-    }
+    // Get sorted field infos (fields are already sorted and have IDs assigned by the macro)
+    let sorted_field_infos = T::fory_fields_info(type_resolver)?;
 
     // Build the main type info
     let type_meta = TypeMeta::from_fields(
@@ -334,25 +311,19 @@ fn build_struct_type_infos<T: StructSerializer>(
         harness: partial_info.harness.clone(),
     };
 
-    let mut result = vec![(None, main_type_info)]; // Main type has no variant TypeId
+    let mut result = vec![(std::any::TypeId::of::<T>(), main_type_info)];
 
     // Handle enum variants in compatible mode
     if type_resolver.compatible && T::fory_static_type_id() == TypeId::ENUM {
+        // Fields are already sorted with IDs assigned by the macro
         let variants_info = T::fory_variants_fields_info(type_resolver)?;
-
-        for (idx, (variant_name, variant_type_id, mut fields_info)) in
+        for (idx, (variant_name, variant_type_id, fields_info)) in
             variants_info.into_iter().enumerate()
         {
             // Skip empty variant info (unit/unnamed variants)
             if fields_info.is_empty() {
                 continue;
             }
-
-            // Assign field IDs in ascending order
-            for (i, field_info) in fields_info.iter_mut().enumerate() {
-                field_info.field_id = i as i16;
-            }
-
             // Create TypeMeta for the variant
             let variant_type_meta = if partial_info.register_by_name {
                 let variant_type_name =
@@ -369,7 +340,19 @@ fn build_struct_type_infos<T: StructSerializer>(
                     fields_info.clone(),
                 )
             } else {
+                // add a check to avoid collision with main enum type_id
+                // since internal id is big alealdy, `74<<8 = 18944` is big enough to avoid collision most of time
                 let variant_id = (partial_info.type_id << 8) + idx as u32;
+                
+                // Check if variant_id conflicts with any already registered type
+                if let Some(existing_info) = type_resolver.type_info_map_by_id.get(&variant_id) {
+                    return Err(Error::type_error(format!(
+                        "Enum variant type ID {} (calculated from enum type ID {} with variant index {}) conflicts with already registered type ID {}. \
+                         Please use a different type ID for the enum to avoid conflicts.",
+                        variant_id, partial_info.type_id, idx, existing_info.type_id
+                    )));
+                }
+                
                 TypeMeta::from_fields(
                     variant_id,
                     MetaString::get_empty().clone(),
@@ -382,8 +365,8 @@ fn build_struct_type_infos<T: StructSerializer>(
             let variant_type_info =
                 TypeInfo::new_with_type_meta(Rc::new(variant_type_meta), Harness::stub())?;
 
-            // Store the variant type_id for this variant's TypeId in the result
-            result.push((Some(variant_type_id), variant_type_info));
+            // Store the variant type_id with its TypeId
+            result.push((variant_type_id, variant_type_info));
         }
     }
 
@@ -393,7 +376,8 @@ fn build_struct_type_infos<T: StructSerializer>(
 /// Helper function to build type infos for serializer types (ext types)
 fn build_serializer_type_infos(
     partial_info: &TypeInfo,
-) -> Result<Vec<(Option<std::any::TypeId>, TypeInfo)>, Error> {
+    rust_type_id: std::any::TypeId,
+) -> Result<Vec<(std::any::TypeId, TypeInfo)>, Error> {
     // For ext types, we just build the type info with empty fields
     let type_meta = TypeMeta::from_fields(
         partial_info.type_id,
@@ -413,7 +397,7 @@ fn build_serializer_type_infos(
         harness: partial_info.harness.clone(),
     };
 
-    Ok(vec![(None, type_info)])
+    Ok(vec![(rust_type_id, type_info)])
 }
 
 /// TypeResolver is a resolver for fast type/serializer dispatch.
@@ -690,7 +674,7 @@ impl TypeResolver {
 
         fn build_type_infos<T: StructSerializer>(
             type_resolver: &TypeResolver,
-        ) -> Result<Vec<(Option<std::any::TypeId>, TypeInfo)>, Error> {
+        ) -> Result<Vec<(std::any::TypeId, TypeInfo)>, Error> {
             build_struct_type_infos::<T>(type_resolver)
         }
 
@@ -718,6 +702,17 @@ impl TypeResolver {
             )));
         }
 
+        // Check if type_id conflicts with any already registered type
+        // Skip check for:
+        // 1. Internal types (type_id <= TypeId::UNKNOWN) as they can be shared
+        // 2. Types registered by name (they use shared type IDs like NAMED_STRUCT)
+        if !register_by_name && actual_type_id > TypeId::UNKNOWN as u32 && self.type_info_map_by_id.contains_key(&actual_type_id) {
+            return Err(Error::type_error(format!(
+                "Type ID {} conflicts with already registered type. Please use a different type ID.",
+                actual_type_id
+            )));
+        }
+
         // Update type_id_index for fast lookup
         let index = T::fory_type_index() as usize;
         if index >= self.type_id_index.len() {
@@ -730,6 +725,8 @@ impl TypeResolver {
         }
         self.type_id_index[index] = type_info.type_id;
 
+        // Insert partial type info into type_info_map_by_id for conflict checking
+        self.type_info_map_by_id.insert(actual_type_id, Rc::new(type_info.clone()));
         self.partial_type_infos.insert(rs_type_id, type_info);
 
         Ok(())
@@ -853,12 +850,12 @@ impl TypeResolver {
 
         fn build_type_infos<T2: 'static>(
             type_resolver: &TypeResolver,
-        ) -> Result<Vec<(Option<std::any::TypeId>, TypeInfo)>, Error> {
+        ) -> Result<Vec<(std::any::TypeId, TypeInfo)>, Error> {
             let partial_info = type_resolver
                 .partial_type_infos
                 .get(&std::any::TypeId::of::<T2>())
                 .ok_or_else(|| Error::type_error("Partial type info not found for serializer"))?;
-            build_serializer_type_infos(partial_info)
+            build_serializer_type_infos(partial_info, std::any::TypeId::of::<T2>())
         }
 
         let harness = Harness::new(
@@ -886,6 +883,17 @@ impl TypeResolver {
             )));
         }
 
+        // Check if type_id conflicts with any already registered type
+        // Skip check for internal types (type_id <= TypeId::UNKNOWN) as they can be shared
+        if actual_type_id > TypeId::UNKNOWN as u32 && self.type_info_map_by_id.contains_key(&actual_type_id) {
+            return Err(Error::type_error(format!(
+                "Type ID {} conflicts with already registered type. Please use a different type ID.",
+                actual_type_id
+            )));
+        }
+
+        // Insert partial type info into type_info_map_by_id for conflict checking
+        self.type_info_map_by_id.insert(actual_type_id, Rc::new(type_info.clone()));
         self.partial_type_infos.insert(rs_type_id, type_info);
         Ok(())
     }
@@ -943,52 +951,27 @@ impl TypeResolver {
         let type_id_index = self.type_id_index.clone();
 
         // Iterate over partial_type_infos and complete them
-        for (rust_type_id, partial_type_info) in self.partial_type_infos.iter() {
+        for (_rust_type_id, partial_type_info) in self.partial_type_infos.iter() {
             let harness = &partial_type_info.harness;
             // Call build_type_infos to get all type infos (main + enum variants)
             let type_infos = (harness.build_type_infos)(self)?;
 
-            // The first type info is always the main type
-            if let Some((_variant_rust_type_id, main_type_info)) = type_infos.first() {
-                // Insert main type into all maps
-                type_info_map_by_id.insert(main_type_info.type_id, Rc::new(main_type_info.clone()));
-                type_info_map.insert(*rust_type_id, Rc::new(main_type_info.clone()));
+            // Iterate through all type infos uniformly
+            for (type_rust_id, type_info) in type_infos.iter() {
+                // Insert into type_info_map_by_id
+                type_info_map_by_id.insert(type_info.type_id, Rc::new(type_info.clone()));
 
-                // Update type_id_index
-                // We need to get the type index from the partial info somehow
-                // For now, we'll skip this as it needs to be stored in partial_type_info
+                // Insert into type_info_map with the TypeId
+                type_info_map.insert(*type_rust_id, Rc::new(type_info.clone()));
 
-                if main_type_info.register_by_name {
-                    let namespace = &main_type_info.namespace;
-                    let type_name = &main_type_info.type_name;
+                // Insert into name-based maps if registered by name
+                if type_info.register_by_name {
+                    let namespace = &type_info.namespace;
+                    let type_name = &type_info.type_name;
                     let ms_key = (namespace.clone(), type_name.clone());
-                    type_info_map_by_meta_string_name
-                        .insert(ms_key, Rc::new(main_type_info.clone()));
+                    type_info_map_by_meta_string_name.insert(ms_key, Rc::new(type_info.clone()));
                     let string_key = (namespace.original.clone(), type_name.original.clone());
-                    type_info_map_by_name.insert(string_key, Rc::new(main_type_info.clone()));
-                }
-            }
-
-            // Handle additional type infos (enum variants)
-            for (variant_rust_type_id, variant_type_info) in type_infos.iter().skip(1) {
-                type_info_map_by_id.insert(
-                    variant_type_info.type_id,
-                    Rc::new(variant_type_info.clone()),
-                );
-
-                // Insert variant into type_info_map with its variant TypeId
-                if let Some(vid) = variant_rust_type_id {
-                    type_info_map.insert(*vid, Rc::new(variant_type_info.clone()));
-                }
-
-                if variant_type_info.register_by_name {
-                    let namespace = &variant_type_info.namespace;
-                    let type_name = &variant_type_info.type_name;
-                    let ms_key = (namespace.clone(), type_name.clone());
-                    type_info_map_by_meta_string_name
-                        .insert(ms_key, Rc::new(variant_type_info.clone()));
-                    let string_key = (namespace.original.clone(), type_name.original.clone());
-                    type_info_map_by_name.insert(string_key, Rc::new(variant_type_info.clone()));
+                    type_info_map_by_name.insert(string_key, Rc::new(type_info.clone()));
                 }
             }
         }

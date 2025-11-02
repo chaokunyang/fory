@@ -242,14 +242,10 @@ fn rust_variant_branches(data_enum: &DataEnum, default_variant_value: u32) -> Ve
                     }
                 }
                 Fields::Named(fields_named) => {
-                    let mut sorted_fields: Vec<_> = fields_named.named.iter().collect();
-                    sorted_fields.sort_by(|a, b| {
-                        a.ident
-                            .as_ref()
-                            .unwrap()
-                            .to_string()
-                            .cmp(&b.ident.as_ref().unwrap().to_string())
-                    });
+                    use crate::util::sorted_fields;
+                    
+                    let fields_clone = syn::Fields::Named(fields_named.clone());
+                    let sorted_fields = sorted_fields(&fields_clone);
 
                     let field_idents: Vec<_> = sorted_fields
                         .iter()
@@ -329,14 +325,10 @@ fn rust_compatible_variant_write_branches(
                         proc_macro2::Span::call_site()
                     );
 
-                    let mut sorted_fields: Vec<_> = fields_named.named.iter().collect();
-                    sorted_fields.sort_by(|a, b| {
-                        a.ident
-                            .as_ref()
-                            .unwrap()
-                            .to_string()
-                            .cmp(&b.ident.as_ref().unwrap().to_string())
-                    });
+                    use crate::util::sorted_fields;
+                    
+                    let fields_clone = syn::Fields::Named(fields_named.clone());
+                    let sorted_fields = sorted_fields(&fields_clone);
 
                     let field_idents: Vec<_> = sorted_fields
                         .iter()
@@ -513,14 +505,10 @@ fn rust_variant_read_branches(
                     }
                 }
                 Fields::Named(fields_named) => {
-                    let mut sorted_fields: Vec<_> = fields_named.named.iter().collect();
-                    sorted_fields.sort_by(|a, b| {
-                        a.ident
-                            .as_ref()
-                            .unwrap()
-                            .to_string()
-                            .cmp(&b.ident.as_ref().unwrap().to_string())
-                    });
+                    use crate::util::sorted_fields;
+                    
+                    let fields_clone = syn::Fields::Named(fields_named.clone());
+                    let sorted_fields = sorted_fields(&fields_clone);
 
                     let field_idents: Vec<_> = sorted_fields
                         .iter()

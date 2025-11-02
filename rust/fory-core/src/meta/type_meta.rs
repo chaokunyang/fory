@@ -235,6 +235,50 @@ impl FieldInfo {
     }
 }
 
+/// Sorts field infos according to the provided sorted field names and assigns field IDs.
+///
+/// This function takes a vector of field infos and a slice of sorted field names,
+/// then reorders the field infos to match the sorted order and assigns sequential
+/// field IDs starting from 0.
+///
+/// # Arguments
+///
+/// * `fields_info` - A mutable vector of FieldInfo to be sorted and assigned IDs
+/// * `sorted_field_names` - A slice of field names in the desired sorted order
+///
+/// # Errors
+///
+/// Returns an error if a field name in `sorted_field_names` is not found in `fields_info`
+pub fn sort_fields(
+    fields_info: &mut Vec<FieldInfo>,
+    sorted_field_names: &[&str],
+) -> Result<(), Error> {
+    let mut sorted_field_infos: Vec<FieldInfo> = Vec::with_capacity(fields_info.len());
+    for name in sorted_field_names.iter() {
+        let mut found = false;
+        for i in 0..fields_info.len() {
+            if &fields_info[i].field_name == name {
+                // swap_remove is faster
+                sorted_field_infos.push(fields_info.swap_remove(i));
+                found = true;
+                break;
+            }
+        }
+        if !found {
+            return Err(Error::type_error(format!(
+                "Field {} not found in fields_info",
+                name
+            )));
+        }
+    }
+    // assign field id in ascending order
+    for (i, field_info) in sorted_field_infos.iter_mut().enumerate() {
+        field_info.field_id = i as i16;
+    }
+    *fields_info = sorted_field_infos;
+    Ok(())
+}
+
 impl PartialEq for FieldType {
     fn eq(&self, other: &Self) -> bool {
         self.type_id == other.type_id && self.generics == other.generics
@@ -604,6 +648,7 @@ impl TypeMeta {
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn from_bytes(
         reader: &mut Reader,
         type_resolver: &TypeResolver,

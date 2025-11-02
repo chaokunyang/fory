@@ -125,8 +125,14 @@ pub fn gen_field_fields_info(fields: &[&Field]) -> TokenStream {
             }
         }
     });
+    
+    // Get sorted field names for sorting
+    let static_field_names = get_sort_fields_ts(fields);
+    
     quote! {
-        let field_infos: Vec<fory_core::meta::FieldInfo> = vec![#(#field_infos),*];
+        let mut field_infos: Vec<fory_core::meta::FieldInfo> = vec![#(#field_infos),*];
+        let sorted_field_names = #static_field_names;
+        fory_core::meta::sort_fields(&mut field_infos, sorted_field_names)?;
         Ok(field_infos)
     }
 }

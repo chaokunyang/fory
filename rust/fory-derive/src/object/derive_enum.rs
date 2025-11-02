@@ -52,7 +52,6 @@ pub fn gen_variants_fields_info(enum_name: &syn::Ident, data_enum: &DataEnum) ->
                         &format!("{}_{}VariantMeta", enum_name, v.ident),
                         proc_macro2::Span::call_site()
                     );
-                    
                     quote! {
                         (
                             #variant_name.to_string(),
@@ -74,7 +73,7 @@ pub fn gen_variants_fields_info(enum_name: &syn::Ident, data_enum: &DataEnum) ->
             }
         })
         .collect();
-    
+
     quote! {
         Ok(vec![
             #(#variant_info),*
@@ -89,14 +88,21 @@ pub fn gen_reserved_space() -> TokenStream {
 }
 
 /// Generate all variant meta types for an enum with the enum name
-pub(crate) fn gen_all_variant_meta_types_with_enum_name(enum_name: &syn::Ident, data_enum: &DataEnum) -> Vec<TokenStream> {
+pub(crate) fn gen_all_variant_meta_types_with_enum_name(
+    enum_name: &syn::Ident,
+    data_enum: &DataEnum,
+) -> Vec<TokenStream> {
     data_enum
         .variants
         .iter()
         .filter_map(|v| {
             if let Fields::Named(fields_named) = &v.fields {
                 let ident = &v.ident;
-                Some(gen_named_variant_meta_type_impl_with_enum_name(enum_name, ident, fields_named))
+                Some(gen_named_variant_meta_type_impl_with_enum_name(
+                    enum_name,
+                    ident,
+                    fields_named,
+                ))
             } else {
                 None
             }
@@ -109,38 +115,41 @@ pub(crate) fn gen_all_variant_meta_types_with_enum_name(enum_name: &syn::Ident, 
 pub(crate) fn gen_named_variant_meta_type_impl_with_enum_name(
     enum_ident: &Ident,
     variant_ident: &Ident,
-    fields: &syn::FieldsNamed
+    fields: &syn::FieldsNamed,
 ) -> TokenStream {
     use crate::object::misc::gen_field_fields_info;
     use crate::object::util::{get_filtered_fields_iter, get_sorted_field_names};
     use crate::util::sorted_fields;
-    
+
     let fields_clone = syn::Fields::Named(fields.clone());
     let sorted_fields_slice = sorted_fields(&fields_clone);
     let filtered_fields: Vec<_> = get_filtered_fields_iter(&sorted_fields_slice).collect();
     let sorted_field_names_vec = get_sorted_field_names(&filtered_fields);
-    
+
     // Generate individual field name literals
-    let field_name_literals: Vec<_> = sorted_field_names_vec.iter().map(|name| {
-        quote! { #name }
-    }).collect();
-    
+    let field_name_literals: Vec<_> = sorted_field_names_vec
+        .iter()
+        .map(|name| {
+            quote! { #name }
+        })
+        .collect();
+
     let fields_info_ts = gen_field_fields_info(&sorted_fields_slice);
-    
+
     // Include enum name to make meta type unique
     let meta_type_ident = Ident::new(
         &format!("{}_{}VariantMeta", enum_ident, variant_ident),
-        proc_macro2::Span::call_site()
+        proc_macro2::Span::call_site(),
     );
-    
+
     quote! {
         struct #meta_type_ident;
-        
+
         impl fory_core::serializer::enum_::NamedEnumVariantMetaTrait for #meta_type_ident {
             fn fory_get_sorted_field_names() -> &'static [&'static str] {
                 &[#(#field_name_literals),*]
             }
-            
+
             fn fory_fields_info(type_resolver: &fory_core::TypeResolver) -> Result<Vec<fory_core::meta::FieldInfo>, fory_core::error::Error> {
                 #fields_info_ts
             }
@@ -271,7 +280,7 @@ fn rust_compatible_variant_write_branches(
 ) -> Vec<TokenStream> {
     use crate::object::util::get_struct_name;
     let enum_name = get_struct_name().expect("enum context not set");
-    
+
     data_enum
         .variants
         .iter()
@@ -607,16 +616,17 @@ fn rust_compatible_variant_read_branches(
                 }
                 Fields::Named(fields_named) => {
                     use crate::util::sorted_fields;
-                    
+
                     // Sort fields to match the meta type generation
                     let fields_clone = syn::Fields::Named(fields_named.clone());
                     let sorted_fields_slice = sorted_fields(&fields_clone);
-                    
+
                     // Generate compatible read logic using gen_read_compatible_with_construction
-                    let compatible_read_body = crate::object::read::gen_read_compatible_with_construction(
-                        &sorted_fields_slice,
-                        Some(ident),
-                    );
+                    let compatible_read_body =
+                        crate::object::read::gen_read_compatible_with_construction(
+                            &sorted_fields_slice,
+                            Some(ident),
+                        );
 
                     quote! {
                         #tag_value => {
@@ -624,7 +634,7 @@ fn rust_compatible_variant_read_branches(
                             // Get named variant meta (remote schema)
                             let meta_index = context.reader.read_varuint32()? as usize;
                             let type_info = context.get_meta(meta_index)?.clone();
-                            
+
                             // Use gen_read_compatible logic
                             #compatible_read_body
                         }

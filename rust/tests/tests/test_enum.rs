@@ -179,7 +179,10 @@ fn test_named_enum_variant_compatible() {
     enum CommandV1 {
         #[fory(default)]
         Noop,
-        Execute { args: i32, name: String },
+        Execute {
+            args: i32,
+            name: String,
+        },
     }
 
     // Evolved enum with 3 fields - added 'env' field
@@ -187,7 +190,11 @@ fn test_named_enum_variant_compatible() {
     enum CommandV2 {
         #[fory(default)]
         Noop,
-        Execute { args: i32, env: String, name: String },
+        Execute {
+            args: i32,
+            env: String,
+            name: String,
+        },
     }
 
     let mut fory_v1 = Fory::default().xlang(false).compatible(true);

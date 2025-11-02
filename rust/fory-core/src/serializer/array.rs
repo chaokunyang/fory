@@ -28,53 +28,46 @@ use super::collection::{
     read_collection_type_info, write_collection_data, write_collection_type_info,
     DECL_ELEMENT_TYPE, HAS_NULL, IS_SAME_TYPE,
 };
+use super::list::{get_primitive_type_id, is_primitive_type};
 use crate::ensure;
 use crate::types::RefFlag;
 
 // Collection header flags (matching collection.rs private constants)
 const TRACKING_REF: u8 = 0b1;
 
+/// Validates that the deserialized length matches the expected array size N.
 #[inline(always)]
-fn get_primitive_type_id<T: Serializer>() -> TypeId {
-    if T::fory_is_wrapper_type() {
-        return TypeId::UNKNOWN;
+fn validate_array_length(actual: usize, expected: usize) -> Result<(), Error> {
+    if actual != expected {
+        return Err(Error::invalid_data(format!(
+            "Array length mismatch: expected {}, got {}",
+            expected, actual
+        )));
     }
-    match T::fory_static_type_id() {
-        TypeId::BOOL => TypeId::BOOL_ARRAY,
-        TypeId::INT8 => TypeId::INT8_ARRAY,
-        TypeId::INT16 => TypeId::INT16_ARRAY,
-        TypeId::INT32 => TypeId::INT32_ARRAY,
-        TypeId::INT64 => TypeId::INT64_ARRAY,
-        TypeId::FLOAT32 => TypeId::FLOAT32_ARRAY,
-        TypeId::FLOAT64 => TypeId::FLOAT64_ARRAY,
-        TypeId::U16 => TypeId::U16_ARRAY,
-        TypeId::U32 => TypeId::U32_ARRAY,
-        TypeId::U64 => TypeId::U64_ARRAY,
-        TypeId::USIZE => TypeId::USIZE_ARRAY,
-        _ => TypeId::UNKNOWN,
-    }
+    Ok(())
 }
 
+/// Creates an uninitialized array, with special handling for zero-sized arrays.
 #[inline(always)]
-pub fn is_primitive_type<T: Serializer>() -> bool {
-    if T::fory_is_wrapper_type() {
-        return false;
+fn create_uninit_array<T, const N: usize>() -> Result<[std::mem::MaybeUninit<T>; N], [T; N]> {
+    use std::mem::MaybeUninit;
+
+    if N == 0 {
+        // For zero-sized arrays, return initialized array immediately
+        #[allow(clippy::uninit_assumed_init)]
+        return Err(unsafe { MaybeUninit::uninit().assume_init() });
     }
-    matches!(
-        T::fory_static_type_id(),
-        TypeId::BOOL
-            | TypeId::INT8
-            | TypeId::INT16
-            | TypeId::INT32
-            | TypeId::INT64
-            | TypeId::FLOAT32
-            | TypeId::FLOAT64
-            | TypeId::U8
-            | TypeId::U16
-            | TypeId::U32
-            | TypeId::U64
-            | TypeId::USIZE,
-    )
+
+    // Safety: creating uninitialized array of MaybeUninit is always safe
+    Ok(unsafe { MaybeUninit::uninit().assume_init() })
+}
+
+/// Converts initialized MaybeUninit array to a regular array.
+/// # Safety
+/// All elements in the array must be initialized.
+#[inline(always)]
+unsafe fn assume_array_init<T, const N: usize>(arr: &[std::mem::MaybeUninit<T>; N]) -> [T; N] {
+    std::ptr::read(arr as *const _ as *const [T; N])
 }
 
 /// Read primitive array directly without intermediate Vec allocation
@@ -83,8 +76,6 @@ fn read_primitive_array<T, const N: usize>(context: &mut ReadContext) -> Result<
 where
     T: Serializer + ForyDefault,
 {
-    use std::mem::MaybeUninit;
-
     // Read the size in bytes
     let size_bytes = context.reader.read_varuint32()? as usize;
     let elem_size = mem::size_of::<T>();
@@ -94,22 +85,13 @@ where
     }
 
     let len = size_bytes / elem_size;
-    if len != N {
-        return Err(Error::invalid_data(format!(
-            "Array length mismatch: expected {}, got {}",
-            N, len
-        )));
-    }
+    validate_array_length(len, N)?;
 
-    // For zero-sized arrays, return early
-    if N == 0 {
-        // Safety: zero-sized array is always valid
-        #[allow(clippy::uninit_assumed_init)]
-        return Ok(unsafe { MaybeUninit::uninit().assume_init() });
-    }
-
-    // Create uninitialized array
-    let mut arr: [MaybeUninit<T>; N] = unsafe { MaybeUninit::uninit().assume_init() };
+    // Handle zero-sized arrays
+    let mut arr = match create_uninit_array::<T, N>() {
+        Ok(arr) => arr,
+        Err(zero_sized_array) => return Ok(zero_sized_array),
+    };
 
     // Read bytes directly into array memory
     unsafe {
@@ -119,7 +101,7 @@ where
     }
 
     // Safety: all elements are now initialized with data from the reader
-    Ok(unsafe { std::ptr::read(&arr as *const _ as *const [T; N]) })
+    Ok(unsafe { assume_array_init(&arr) })
 }
 
 /// Read complex (non-primitive) array directly without intermediate Vec allocation

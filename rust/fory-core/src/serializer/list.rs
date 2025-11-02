@@ -31,7 +31,7 @@ use super::collection::{
 };
 
 #[inline(always)]
-fn get_primitive_type_id<T: Serializer>() -> TypeId {
+pub(super) fn get_primitive_type_id<T: Serializer>() -> TypeId {
     if T::fory_is_wrapper_type() {
         return TypeId::UNKNOWN;
     }
@@ -52,7 +52,7 @@ fn get_primitive_type_id<T: Serializer>() -> TypeId {
 }
 
 #[inline(always)]
-pub fn is_primitive_type<T: Serializer>() -> bool {
+pub(super) fn is_primitive_type<T: Serializer>() -> bool {
     if T::fory_is_wrapper_type() {
         return false;
     }

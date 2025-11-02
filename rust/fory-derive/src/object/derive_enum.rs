@@ -550,9 +550,18 @@ fn rust_compatible_variant_read_branches(
 
             match &v.fields {
                 Fields::Unit => {
+                    // Generate default value for this variant
+                    let default_value = quote! { Self::#ident };
+                    
                     quote! {
                         #tag_value => {
                             // Unit variant should have variant_type == 0b0
+                            if variant_type != 0b0 {
+                                // Variant type mismatch: skip the data and use default
+                                use fory_core::serializer::skip::skip_enum_variant;
+                                skip_enum_variant(context, variant_type, &None)?;
+                                return Ok(#default_value);
+                            }
                             Ok(Self::#ident)
                         }
                     }
@@ -583,9 +592,23 @@ fn rust_compatible_variant_read_branches(
                         })
                         .collect();
 
+                    // Generate default value for this variant
+                    let default_fields: Vec<TokenStream> = fields_unnamed
+                        .unnamed
+                        .iter()
+                        .map(|_| quote! { Default::default() })
+                        .collect();
+                    let default_value = quote! { Self::#ident( #(#default_fields),* ) };
+
                     quote! {
                         #tag_value => {
                             // Unnamed variant should have variant_type == 0b1
+                            if variant_type != 0b1 {
+                                // Variant type mismatch: skip the data and use default
+                                use fory_core::serializer::skip::skip_enum_variant;
+                                skip_enum_variant(context, variant_type, &None)?;
+                                return Ok(#default_value);
+                            }
                             // Read collection format (same as tuple)
                             let len = context.reader.read_varuint32()? as usize;
                             let _header = context.reader.read_u8()?;
@@ -616,13 +639,30 @@ fn rust_compatible_variant_read_branches(
                             Some(ident),
                         );
 
+                    // Generate default value for this variant
+                    let default_fields: Vec<TokenStream> = fields_named
+                        .named
+                        .iter()
+                        .map(|f| {
+                            let field_ident = f.ident.as_ref().unwrap();
+                            quote! { #field_ident: Default::default() }
+                        })
+                        .collect();
+                    let default_value = quote! { Self::#ident { #(#default_fields),* } };
+
                     quote! {
                         #tag_value => {
+                            if variant_type != 0b10 {
+                                // Variant type mismatch: peer didn't write meta for non-named variant
+                                // Skip the data and use default
+                                use fory_core::serializer::skip::skip_enum_variant;
+                                skip_enum_variant(context, variant_type, &None)?;
+                                return Ok(#default_value);
+                            }
                             // Named variant should have variant_type == 0b10
-                            // Get named variant meta (remote schema)
+                            // Read named variant meta (peer wrote this because variant_type == 0b10)
                             let meta_index = context.reader.read_varuint32()? as usize;
                             let type_info = context.get_meta(meta_index)?.clone();
-
                             // Use gen_read_compatible logic
                             #compatible_read_body
                         }
@@ -700,7 +740,9 @@ pub fn gen_read_data(data_enum: &DataEnum) -> TokenStream {
                         // Unknown variant in compatible mode: skip the data and use default variant
                         // variant_type: 0b0 = Unit, 0b1 = Unnamed, 0b10 = Named
                         use fory_core::serializer::skip::skip_enum_variant;
-                        skip_enum_variant(context, variant_type)?;
+                        // For named variants, we don't have type_info yet, so pass None
+                        // skip_enum_variant will read it from the stream
+                        skip_enum_variant(context, variant_type, &None)?;
                         Ok(#default_variant_construction)
                     }
                 }

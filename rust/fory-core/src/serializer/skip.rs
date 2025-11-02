@@ -473,7 +473,12 @@ fn skip_value(
 ///   - 0b0 = Unit variant (no data to skip)
 ///   - 0b1 = Unnamed variant (tuple data)
 ///   - 0b10 = Named variant (struct-like data)
-pub fn skip_enum_variant(context: &mut ReadContext, variant_type: u32) -> Result<(), Error> {
+/// * `type_info` - Optional type info for named variants (must be provided for 0b10)
+pub fn skip_enum_variant(
+    context: &mut ReadContext,
+    variant_type: u32,
+    type_info: &Option<Rc<crate::TypeInfo>>,
+) -> Result<(), Error> {
     match variant_type {
         0b0 => {
             // Unit variant, no data to skip
@@ -490,13 +495,19 @@ pub fn skip_enum_variant(context: &mut ReadContext, variant_type: u32) -> Result
             skip_collection(context, &field_type)
         }
         0b10 => {
-            // Named variant, skip struct-like data
-            // Read field count and skip each field
-            let field_count = context.reader.read_varuint32()?;
-            for _ in 0..field_count {
-                skip_any_value(context, false)?;
+            // Named variant, skip struct-like data using skip_struct
+            // For named variants, we need the type_info which should have been read already
+            if type_info.is_some() {
+                let type_id = type_info.as_ref().unwrap().get_type_id();
+                skip_struct(context, type_id, type_info)
+            } else {
+                // If no type_info provided, read it from the stream
+                let meta_index = context.reader.read_varuint32()?;
+                let type_info_rc = context.get_type_info_by_index(meta_index as usize)?.clone();
+                let type_id = type_info_rc.get_type_id();
+                let type_info_opt = Some(type_info_rc);
+                skip_struct(context, type_id, &type_info_opt)
             }
-            Ok(())
         }
         _ => {
             // Invalid variant type

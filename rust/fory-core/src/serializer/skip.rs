@@ -464,3 +464,46 @@ fn skip_value(
     }
     Ok(())
 }
+
+/// Skip enum variant data in compatible mode based on variant type.
+/// 
+/// # Arguments
+/// * `context` - The read context
+/// * `variant_type` - The variant type encoded in lower 2 bits:
+///   - 0b0 = Unit variant (no data to skip)
+///   - 0b1 = Unnamed variant (tuple data)
+///   - 0b10 = Named variant (struct-like data)
+pub fn skip_enum_variant(context: &mut ReadContext, variant_type: u32) -> Result<(), Error> {
+    match variant_type {
+        0b0 => {
+            // Unit variant, no data to skip
+            Ok(())
+        }
+        0b1 => {
+            // Unnamed variant, skip tuple data (which is serialized as a collection)
+            // Tuple uses collection format but doesn't write type info, so skip directly
+            let field_type = FieldType {
+                type_id: types::LIST,
+                nullable: false,
+                generics: vec![UNKNOWN_FIELD_TYPE],
+            };
+            skip_collection(context, &field_type)
+        }
+        0b10 => {
+            // Named variant, skip struct-like data
+            // Read field count and skip each field
+            let field_count = context.reader.read_varuint32()?;
+            for _ in 0..field_count {
+                skip_any_value(context, false)?;
+            }
+            Ok(())
+        }
+        _ => {
+            // Invalid variant type
+            Err(Error::type_error(format!(
+                "Invalid enum variant type: {}",
+                variant_type
+            )))
+        }
+    }
+}

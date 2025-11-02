@@ -16,13 +16,14 @@
 // under the License.
 
 use super::util::{is_default_value_variant, is_skip_enum_variant};
+use crate::object::misc;
 use crate::object::read::gen_read_field;
-
+use crate::object::util::{get_filtered_fields_iter, get_sorted_field_names};
 use crate::object::write::gen_write_field;
+use crate::util::sorted_fields;
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
 use syn::{DataEnum, Fields};
-
 fn temp_var_name(i: usize) -> String {
     format!("f{}", i)
 }
@@ -117,10 +118,6 @@ pub(crate) fn gen_named_variant_meta_type_impl_with_enum_name(
     variant_ident: &Ident,
     fields: &syn::FieldsNamed,
 ) -> TokenStream {
-    use crate::object::misc::gen_field_fields_info;
-    use crate::object::util::{get_filtered_fields_iter, get_sorted_field_names};
-    use crate::util::sorted_fields;
-
     let fields_clone = syn::Fields::Named(fields.clone());
     let sorted_fields_slice = sorted_fields(&fields_clone);
     let filtered_fields: Vec<_> = get_filtered_fields_iter(&sorted_fields_slice).collect();
@@ -134,7 +131,7 @@ pub(crate) fn gen_named_variant_meta_type_impl_with_enum_name(
         })
         .collect();
 
-    let fields_info_ts = gen_field_fields_info(&sorted_fields_slice);
+    let fields_info_ts = misc::gen_field_fields_info(&sorted_fields_slice);
 
     // Include enum name to make meta type unique
     let meta_type_ident = Ident::new(
@@ -243,7 +240,7 @@ fn rust_variant_branches(data_enum: &DataEnum, default_variant_value: u32) -> Ve
                 }
                 Fields::Named(fields_named) => {
                     use crate::util::sorted_fields;
-                    
+
                     let fields_clone = syn::Fields::Named(fields_named.clone());
                     let sorted_fields = sorted_fields(&fields_clone);
 
@@ -324,12 +321,8 @@ fn rust_compatible_variant_write_branches(
                         &format!("{}_{}VariantMeta", enum_name, ident),
                         proc_macro2::Span::call_site()
                     );
-
-                    use crate::util::sorted_fields;
-                    
                     let fields_clone = syn::Fields::Named(fields_named.clone());
                     let sorted_fields = sorted_fields(&fields_clone);
-
                     let field_idents: Vec<_> = sorted_fields
                         .iter()
                         .map(|f| f.ident.as_ref().unwrap())
@@ -505,8 +498,6 @@ fn rust_variant_read_branches(
                     }
                 }
                 Fields::Named(fields_named) => {
-                    use crate::util::sorted_fields;
-                    
                     let fields_clone = syn::Fields::Named(fields_named.clone());
                     let sorted_fields = sorted_fields(&fields_clone);
 
@@ -552,7 +543,7 @@ fn rust_compatible_variant_read_branches(
                 Fields::Unit => {
                     // Generate default value for this variant
                     let default_value = quote! { Self::#ident };
-                    
+
                     quote! {
                         #tag_value => {
                             // Unit variant should have variant_type == 0b0

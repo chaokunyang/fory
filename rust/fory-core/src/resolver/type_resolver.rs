@@ -343,7 +343,7 @@ fn build_struct_type_infos<T: StructSerializer>(
                 // add a check to avoid collision with main enum type_id
                 // since internal id is big alealdy, `74<<8 = 18944` is big enough to avoid collision most of time
                 let variant_id = (partial_info.type_id << 8) + idx as u32;
-                
+
                 // Check if variant_id conflicts with any already registered type
                 if let Some(existing_info) = type_resolver.type_info_map_by_id.get(&variant_id) {
                     return Err(Error::type_error(format!(
@@ -352,7 +352,7 @@ fn build_struct_type_infos<T: StructSerializer>(
                         variant_id, partial_info.type_id, idx, existing_info.type_id
                     )));
                 }
-                
+
                 TypeMeta::from_fields(
                     variant_id,
                     MetaString::get_empty().clone(),
@@ -706,7 +706,10 @@ impl TypeResolver {
         // Skip check for:
         // 1. Internal types (type_id <= TypeId::UNKNOWN) as they can be shared
         // 2. Types registered by name (they use shared type IDs like NAMED_STRUCT)
-        if !register_by_name && actual_type_id > TypeId::UNKNOWN as u32 && self.type_info_map_by_id.contains_key(&actual_type_id) {
+        if !register_by_name
+            && actual_type_id > TypeId::UNKNOWN as u32
+            && self.type_info_map_by_id.contains_key(&actual_type_id)
+        {
             return Err(Error::type_error(format!(
                 "Type ID {} conflicts with already registered type. Please use a different type ID.",
                 actual_type_id
@@ -726,7 +729,8 @@ impl TypeResolver {
         self.type_id_index[index] = type_info.type_id;
 
         // Insert partial type info into type_info_map_by_id for conflict checking
-        self.type_info_map_by_id.insert(actual_type_id, Rc::new(type_info.clone()));
+        self.type_info_map_by_id
+            .insert(actual_type_id, Rc::new(type_info.clone()));
         self.partial_type_infos.insert(rs_type_id, type_info);
 
         Ok(())
@@ -885,7 +889,9 @@ impl TypeResolver {
 
         // Check if type_id conflicts with any already registered type
         // Skip check for internal types (type_id <= TypeId::UNKNOWN) as they can be shared
-        if actual_type_id > TypeId::UNKNOWN as u32 && self.type_info_map_by_id.contains_key(&actual_type_id) {
+        if actual_type_id > TypeId::UNKNOWN as u32
+            && self.type_info_map_by_id.contains_key(&actual_type_id)
+        {
             return Err(Error::type_error(format!(
                 "Type ID {} conflicts with already registered type. Please use a different type ID.",
                 actual_type_id
@@ -893,7 +899,8 @@ impl TypeResolver {
         }
 
         // Insert partial type info into type_info_map_by_id for conflict checking
-        self.type_info_map_by_id.insert(actual_type_id, Rc::new(type_info.clone()));
+        self.type_info_map_by_id
+            .insert(actual_type_id, Rc::new(type_info.clone()));
         self.partial_type_infos.insert(rs_type_id, type_info);
         Ok(())
     }

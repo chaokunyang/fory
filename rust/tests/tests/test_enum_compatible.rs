@@ -59,7 +59,7 @@ fn test_unnamed_enum_variant_compatible() {
     }
 
     // Test 2: Serialize v2 (3 fields), deserialize as v1 (2 fields)
-    let event_v2 = EventV2::Message(100, "world".to_string(), 3.14);
+    let event_v2 = EventV2::Message(100, "world".to_string(), std::f64::consts::PI);
     let bin = fory_v2.serialize(&event_v2).unwrap();
     let event_v1: EventV1 = fory_v1.deserialize(&bin).expect("deserialize v2 to v1");
     match event_v1 {
@@ -179,7 +179,7 @@ fn test_named_enum_field_evolution() {
         Settings {
             timeout: i32,
             retry: bool,
-            max_connections: u32,     // New simple field
+            max_connections: u32,       // New simple field
             allowed_hosts: Vec<String>, // New complex field
         },
     }
@@ -222,7 +222,7 @@ fn test_named_enum_field_evolution() {
             allowed_hosts,
         } => {
             assert_eq!(timeout, 30);
-            assert_eq!(retry, true);
+            assert!(retry);
             assert_eq!(max_connections, 0); // Default value
             assert_eq!(allowed_hosts, Vec::<String>::new()); // Empty vector
         }
@@ -241,7 +241,7 @@ fn test_named_enum_field_evolution() {
     match config_v1 {
         ConfigV1::Settings { timeout, retry } => {
             assert_eq!(timeout, 60);
-            assert_eq!(retry, false);
+            assert!(!retry);
             // max_connections and allowed_hosts are skipped
         }
         _ => panic!("Expected Settings variant"),
@@ -363,7 +363,11 @@ fn test_named_enum_variant_add_remove() {
     let task_v3: TaskV3 = fory_v3.deserialize(&bin).expect("v2 running to v3");
     // V2's Running (index 1) maps to V3's Completed (index 1) by variant index
     match task_v3 {
-        TaskV3::Completed { task_id, result, metadata } => {
+        TaskV3::Completed {
+            task_id,
+            result,
+            metadata,
+        } => {
             // Fields are read based on V3's Completed schema, but data was from V2's Running
             // This demonstrates schema mismatch - fields get default values or partial data
             assert_eq!(task_id, 789); // task_id exists in both, so preserved
@@ -382,7 +386,11 @@ fn test_named_enum_variant_add_remove() {
     let task_v2: TaskV2 = fory_v2.deserialize(&bin).expect("v3 failed to v2");
     // V3's Failed (index 2) maps to V2's Completed (index 2) by variant index
     match task_v2 {
-        TaskV2::Completed { task_id, result, metadata } => {
+        TaskV2::Completed {
+            task_id,
+            result,
+            metadata,
+        } => {
             // Fields get default values since schemas don't match
             assert_eq!(task_id, 0); // Default value
             assert_eq!(result, Vec::<String>::new()); // Default value
@@ -401,10 +409,7 @@ fn test_named_enum_variant_add_remove() {
     let task_v2: TaskV2 = fory_v2.deserialize(&bin).expect("v3 completed to v2");
     // V3's Completed (index 1) maps to V2's Running (index 1) by variant index
     match task_v2 {
-        TaskV2::Running {
-            task_id,
-            progress,
-        } => {
+        TaskV2::Running { task_id, progress } => {
             // Fields are read based on V2's Running schema
             assert_eq!(task_id, 999); // task_id exists in both, preserved
             assert_eq!(progress, 0.0); // Default value (not in V3's Completed)
@@ -421,9 +426,11 @@ fn test_enum_variant_type_change() {
     enum StatusV1 {
         #[fory(default)]
         Unknown,
-        Active,                    // Unit variant
-        Processing(i32),           // Unnamed variant
-        Finished { code: i32 },    // Named variant
+        Active,          // Unit variant
+        Processing(i32), // Unnamed variant
+        Finished {
+            code: i32,
+        }, // Named variant
     }
 
     // Version 2: Change variant types
@@ -431,9 +438,14 @@ fn test_enum_variant_type_change() {
     enum StatusV2 {
         #[fory(default)]
         Unknown,
-        Active { timestamp: i64 },           // Unit -> Named
-        Processing { value: i32, name: String }, // Unnamed -> Named
-        Finished(i32),                       // Named -> Unnamed
+        Active {
+            timestamp: i64,
+        }, // Unit -> Named
+        Processing {
+            value: i32,
+            name: String,
+        }, // Unnamed -> Named
+        Finished(i32), // Named -> Unnamed
     }
 
     // Version 3: More type changes
@@ -441,9 +453,9 @@ fn test_enum_variant_type_change() {
     enum StatusV3 {
         #[fory(default)]
         Unknown,
-        Active,                              // Named -> Unit
-        Processing(i32, String),             // Named -> Unnamed (2 fields)
-        Finished,                            // Unnamed -> Unit
+        Active,                  // Named -> Unit
+        Processing(i32, String), // Named -> Unnamed (2 fields)
+        Finished,                // Unnamed -> Unit
     }
 
     let mut fory_v1 = Fory::default().xlang(false).compatible(true);
@@ -504,8 +516,8 @@ fn test_enum_variant_type_change() {
     let status_v3: StatusV3 = fory_v3.deserialize(&bin).expect("v2 named to v3 unnamed");
     match status_v3 {
         StatusV3::Processing(value, name) => {
-            assert_eq!(value, 0);  // Default value
-            assert_eq!(name, "");  // Default value
+            assert_eq!(value, 0); // Default value
+            assert_eq!(name, ""); // Default value
         }
         _ => panic!("Expected Processing variant with default values"),
     }
@@ -525,7 +537,9 @@ fn test_struct_with_enum_field_evolution() {
     enum StateV1 {
         #[fory(default)]
         Init,
-        Ready { id: u32 },
+        Ready {
+            id: u32,
+        },
     }
 
     #[derive(ForyObject, Debug, PartialEq)]

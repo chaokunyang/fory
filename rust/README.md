@@ -637,7 +637,7 @@ assert!(matches!(new_event, NewEvent::Click { x: 100, y: 200, timestamp: 0 }));
 - **Unknown variants** → Falls back to default variant
 - **Named variant fields** → Add/remove fields (missing fields use defaults)
 - **Unnamed variant elements** → Add/remove elements (extras skipped, missing use defaults)
-- **Variant type mismatches** → Automatically uses default variant
+- **Variant type mismatches** → Automatically uses default value for current variant
 
 **Best practices:**
 

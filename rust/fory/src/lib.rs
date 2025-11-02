@@ -754,7 +754,7 @@
 //! - Unknown variants fall back to default variant
 //! - Named variant fields: add/remove fields (missing fields use defaults)
 //! - Unnamed variant elements: add/remove elements (extras skipped, missing use defaults)
-//! - Variant type mismatches automatically use default variant
+//! - Variant type mismatches automatically use default value of current variant
 //!
 //! ### 6. Tuple Support
 //!

@@ -1179,9 +1179,10 @@
 //! - **Panic on error for backtraces**: Set `FORY_PANIC_ON_ERROR=1` (or `true`) together with
 //!   `RUST_BACKTRACE=1` while running tests or binaries to panic exactly where an error is
 //!   constructed. Unset the variable afterwards so production paths keep returning `Result`.
-//! - **Struct field tracing**: Add the `#[fory_debug]` attribute next to `#[derive(ForyObject)]`
-//!   when you need per-field instrumentation. Once compiled with debug hooks, call
-//!   `set_before_write_field_func`, `set_after_write_field_func`, `set_before_read_field_func`, or
+//! - **Struct field tracing**: Add the `#[fory(debug)]` attribute (or `#[fory(debug = true)]`)
+//!   next to `#[derive(ForyObject)]` when you need per-field instrumentation. Once compiled with
+//!   debug hooks, call `set_before_write_field_func`, `set_after_write_field_func`,
+//!   `set_before_read_field_func`, or
 //!   `set_after_read_field_func` from `fory_core::serializer::struct_` to install custom
 //!   callbacks, and use `reset_struct_debug_hooks()` to restore defaults.
 //! - **Lightweight logging**: If custom callbacks are unnecessary, enable

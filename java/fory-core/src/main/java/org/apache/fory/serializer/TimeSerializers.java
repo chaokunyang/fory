@@ -313,7 +313,7 @@ public class TimeSerializers {
       long seconds = buffer.readVarInt64();
       int nanos = buffer.readInt32();
       return Duration.ofSeconds(seconds, nanos);
-    }    
+    }
   }
 
   public static class LocalDateTimeSerializer extends ImmutableTimeSerializer<LocalDateTime> {

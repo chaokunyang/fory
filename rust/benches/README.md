@@ -145,8 +145,17 @@ python benchmark_report.py --log-file cargo_bench.log --output-dir=report_output
 
 ## How to generate flamegraph
 
+Basic command:
+
 ```bash
 cargo flamegraph --bin fory_profiler -- --operation deserialize --serializer fory -t e-commerce-data
+```
+
+Using criterion to generate flamegraph for any benchmark:
+
+```bash
+cargo bench --bench serialization_bench --features profiling -- simple_struct/fory_serialize/small --profile-time=10
+ls ../target/criterion/simple_struct/fory_serialize/small/profile/flamegraph.svg
 ```
 
 detailed command:

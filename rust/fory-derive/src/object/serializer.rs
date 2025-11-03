@@ -175,6 +175,7 @@ pub fn derive_serializer(ast: &syn::DeriveInput, debug_enabled: bool) -> TokenSt
             #[inline(always)]
             fn fory_get_type_id(type_resolver: &fory_core::resolver::type_resolver::TypeResolver) -> Result<u32, fory_core::error::Error> {
                 type_resolver.get_type_id(&std::any::TypeId::of::<Self>(), #type_idx)
+                    .map_err(fory_core::error::Error::enhance_type_error::<Self>)
             }
 
             #[inline(always)]

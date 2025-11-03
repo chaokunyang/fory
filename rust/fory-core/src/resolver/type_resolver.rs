@@ -287,7 +287,12 @@ fn build_struct_type_infos<T: StructSerializer>(
     let partial_info = type_resolver
         .partial_type_infos
         .get(&std::any::TypeId::of::<T>())
-        .ok_or_else(|| Error::type_error("Partial type info not found for struct"))?;
+        .ok_or_else(|| {
+            Error::type_error(format!(
+                "Partial type info not found for struct (type: {})",
+                std::any::type_name::<T>()
+            ))
+        })?;
 
     // Get sorted field infos (fields are already sorted and have IDs assigned by the macro)
     let sorted_field_infos = T::fory_fields_info(type_resolver)?;
@@ -861,7 +866,12 @@ impl TypeResolver {
             let partial_info = type_resolver
                 .partial_type_infos
                 .get(&std::any::TypeId::of::<T2>())
-                .ok_or_else(|| Error::type_error("Partial type info not found for serializer"))?;
+                .ok_or_else(|| {
+                    Error::type_error(format!(
+                        "Partial type info not found for serializer (type: {})",
+                        std::any::type_name::<T2>()
+                    ))
+                })?;
             build_serializer_type_infos(partial_info, std::any::TypeId::of::<T2>())
         }
 

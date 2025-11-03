@@ -1042,7 +1042,6 @@ fn test_tuple_alias() {
     fory2.register::<DataRecordV2>(100).unwrap();
 
     // Test record1 serialized by fory1, deserialized by fory2
-    // Type alias can't be recognized, so attrs will be treated as missing field
     let record1 = DataRecordV1 {
         attrs: ((Some(true),), (vec!["test".to_string()],)),
     };

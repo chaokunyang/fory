@@ -253,3 +253,36 @@ fn test_in_macro() {
         key_value.last_seen_event_time.naive_utc()
     );
 }
+
+#[test]
+fn test_unregistered_type_error_message() {
+    #[derive(ForyObject)]
+    struct Inner {
+        v: i32,
+    }
+
+    #[derive(ForyObject)]
+    struct Outer {
+        v: i32,
+        inner: Inner,
+    }
+
+    let mut fory = Fory::default();
+    // Register only the outer type; inner type is intentionally not registered
+    fory.register::<Outer>(200).unwrap();
+    let obj = Outer {
+        v: 1,
+        inner: Inner { v: 2 },
+    };
+    let err = fory
+        .serialize(&obj)
+        .expect_err("expected serialization to fail due to missing inner registration");
+    let err_str = format!("{}", err);
+    // The error should include the concrete Rust type name of the inner type (the generic T)
+    let inner_name = std::any::type_name::<Inner>();
+    assert!(
+        err_str.contains(inner_name),
+        "error did not contain inner type name; err='{}'",
+        err_str
+    );
+}

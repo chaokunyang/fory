@@ -1126,9 +1126,10 @@ pub trait Serializer: 'static {
     where
         Self: Sized,
     {
-        Ok(type_resolver
-            .get_type_info(&std::any::TypeId::of::<Self>())?
-            .get_type_id())
+        match type_resolver.get_type_info(&std::any::TypeId::of::<Self>()) {
+            Ok(info) => Ok(info.get_type_id()),
+            Err(e) => Err(Error::enhance_type_error::<Self>(e)),
+        }
     }
 
     /// **[USER IMPLEMENTATION REQUIRED]** Get the runtime type ID for this instance.

@@ -26,6 +26,7 @@ use crate::types;
 use crate::types::{is_user_type, RefFlag};
 use chrono::{NaiveDate, NaiveDateTime};
 use std::rc::Rc;
+use std::time::Duration;
 
 #[allow(unreachable_code)]
 pub fn skip_field_value(
@@ -380,6 +381,9 @@ fn skip_value(
         }
         types::TIMESTAMP => {
             <NaiveDateTime as Serializer>::fory_read_data(context)?;
+        }
+        types::DURATION => {
+            <Duration as Serializer>::fory_read_data(context)?;
         }
         types::BINARY => {
             <Vec<u8> as Serializer>::fory_read_data(context)?;

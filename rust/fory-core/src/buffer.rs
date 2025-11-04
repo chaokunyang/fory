@@ -81,23 +81,17 @@ impl<'a> Writer<'a> {
 
     #[inline(always)]
     pub fn write_bool(&mut self, value: bool) {
-        self.write_u8(if value { 1 } else { 0 });
+        self.bf.push(if value { 1 } else { 0 });
     }
 
     #[inline(always)]
     pub fn write_u8(&mut self, value: u8) {
-        let len = self.bf.len();
-        self.bf.reserve(1);
-        unsafe {
-            let ptr = self.bf.as_mut_ptr().add(len);
-            *ptr = value;
-            self.bf.set_len(len + 1);
-        }
+        self.bf.push(value);
     }
 
     #[inline(always)]
     pub fn write_i8(&mut self, value: i8) {
-        self.write_u8(value as u8);
+        self.bf.push(value as u8);
     }
 
     #[inline(always)]
@@ -199,7 +193,7 @@ impl<'a> Writer<'a> {
     #[inline(always)]
     fn _write_varuint32(&mut self, value: u32) {
         if value < 0x80 {
-            self.write_u8(value as u8);
+            self.bf.push(value as u8);
         } else if value < 0x4000 {
             // 2 bytes
             let u1 = ((value as u8) & 0x7F) | 0x80;
@@ -211,7 +205,7 @@ impl<'a> Writer<'a> {
             let u2 = (((value >> 7) as u8) & 0x7F) | 0x80;
             let u3 = (value >> 14) as u8;
             self.write_u16(((u2 as u16) << 8) | u1 as u16);
-            self.write_u8(u3);
+            self.bf.push(u3);
         } else if value < 0x10000000 {
             // 4 bytes
             let u1 = ((value as u8) & 0x7F) | 0x80;
@@ -231,7 +225,7 @@ impl<'a> Writer<'a> {
             self.write_u32(
                 ((u4 as u32) << 24) | ((u3 as u32) << 16) | ((u2 as u32) << 8) | u1 as u32,
             );
-            self.write_u8(u5);
+            self.bf.push(u5);
         }
     }
 
@@ -249,7 +243,7 @@ impl<'a> Writer<'a> {
     #[inline(always)]
     fn _write_varuint64(&mut self, value: u64) {
         if value < 0x80 {
-            self.write_u8(value as u8);
+            self.bf.push(value as u8);
         } else if value < 0x4000 {
             let u1 = ((value as u8) & 0x7F) | 0x80;
             let u2 = (value >> 7) as u8;
@@ -259,7 +253,7 @@ impl<'a> Writer<'a> {
             let u2 = (((value >> 7) as u8) & 0x7F) | 0x80;
             let u3 = (value >> 14) as u8;
             self.write_u16(((u2 as u16) << 8) | u1 as u16);
-            self.write_u8(u3);
+            self.bf.push(u3);
         } else if value < 0x10000000 {
             let u1 = ((value as u8) & 0x7F) | 0x80;
             let u2 = (((value >> 7) as u8) & 0x7F) | 0x80;
@@ -277,7 +271,7 @@ impl<'a> Writer<'a> {
             self.write_u32(
                 ((u4 as u32) << 24) | ((u3 as u32) << 16) | ((u2 as u32) << 8) | u1 as u32,
             );
-            self.write_u8(u5);
+            self.bf.push(u5);
         } else if value < 0x40000000000 {
             let u1 = ((value as u8) & 0x7F) | 0x80;
             let u2 = (((value >> 7) as u8) & 0x7F) | 0x80;
@@ -301,7 +295,7 @@ impl<'a> Writer<'a> {
                 ((u4 as u32) << 24) | ((u3 as u32) << 16) | ((u2 as u32) << 8) | u1 as u32,
             );
             self.write_u16(((u6 as u16) << 8) | u5 as u16);
-            self.write_u8(u7);
+            self.bf.push(u7);
         } else if value < 0x100000000000000 {
             let u1 = ((value as u8) & 0x7F) | 0x80;
             let u2 = (((value >> 7) as u8) & 0x7F) | 0x80;
@@ -341,7 +335,7 @@ impl<'a> Writer<'a> {
                     | (u2 as u64) << 8
                     | (u1 as u64),
             );
-            self.write_u8(u9);
+            self.bf.push(u9);
         }
     }
 
@@ -349,7 +343,7 @@ impl<'a> Writer<'a> {
     pub fn write_varuint36_small(&mut self, value: u64) {
         assert!(value < (1u64 << 36), "value too large for 36-bit varint");
         if value < 0x80 {
-            self.write_u8(value as u8);
+            self.bf.push(value as u8);
         } else if value < 0x4000 {
             let b0 = ((value & 0x7F) as u8) | 0x80;
             let b1 = (value >> 7) as u8;

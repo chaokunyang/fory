@@ -18,6 +18,27 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
 use fory_core::buffer::Writer;
 
+fn bench_write_u8(c: &mut Criterion) {
+    let mut group = c.benchmark_group("write_u8");
+    group.throughput(Throughput::Elements(1000));
+
+    let values: Vec<u8> = (0..10000).map(|i| (i % 256) as u8).collect();
+
+    group.bench_function("current", |b| {
+        let mut buf = Vec::with_capacity(10000);
+        b.iter(|| {
+            buf.clear();
+            let mut writer = Writer::from_buffer(&mut buf);
+            for &val in &values {
+                writer.write_u8(black_box(val));
+            }
+            black_box(&buf);
+        })
+    });
+
+    group.finish();
+}
+
 fn bench_write_i32(c: &mut Criterion) {
     let mut group = c.benchmark_group("write_i32");
     group.throughput(Throughput::Elements(1000));
@@ -230,6 +251,7 @@ fn bench_write_varint64_large(c: &mut Criterion) {
 
 criterion_group!(
     benches,
+    bench_write_u8,
     bench_write_i32,
     bench_write_i64,
     bench_write_f32,

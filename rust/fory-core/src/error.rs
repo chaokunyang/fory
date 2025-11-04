@@ -183,7 +183,8 @@ impl Error {
     ///
     /// let err = Error::type_mismatch(1, 2);
     /// ```
-    #[inline(never)]
+    #[inline(always)]
+    #[cold]
     #[track_caller]
     pub fn type_mismatch(type_a: u32, type_b: u32) -> Self {
         let err = Error::TypeMismatch(type_a, type_b);
@@ -203,7 +204,8 @@ impl Error {
     ///
     /// let err = Error::buffer_out_of_bound(10, 20, 25);
     /// ```
-    #[inline(never)]
+    #[inline(always)]
+    #[cold]
     #[track_caller]
     pub fn buffer_out_of_bound(offset: usize, length: usize, capacity: usize) -> Self {
         let err = Error::BufferOutOfBound(offset, length, capacity);
@@ -224,7 +226,8 @@ impl Error {
     /// let err = Error::encode_error("Failed to encode");
     /// let err = Error::encode_error(format!("Failed to encode field {}", "name"));
     /// ```
-    #[inline(never)]
+    #[inline(always)]
+    #[cold]
     #[track_caller]
     pub fn encode_error<S: Into<Cow<'static, str>>>(s: S) -> Self {
         let err = Error::EncodeError(s.into());
@@ -245,7 +248,8 @@ impl Error {
     /// let err = Error::invalid_data("Invalid data format");
     /// let err = Error::invalid_data(format!("Invalid data at position {}", 42));
     /// ```
-    #[inline(never)]
+    #[inline(always)]
+    #[cold]
     #[track_caller]
     pub fn invalid_data<S: Into<Cow<'static, str>>>(s: S) -> Self {
         let err = Error::InvalidData(s.into());
@@ -266,7 +270,8 @@ impl Error {
     /// let err = Error::invalid_ref("Invalid reference");
     /// let err = Error::invalid_ref(format!("Invalid ref id {}", 123));
     /// ```
-    #[inline(never)]
+    #[inline(always)]
+    #[cold]
     #[track_caller]
     pub fn invalid_ref<S: Into<Cow<'static, str>>>(s: S) -> Self {
         let err = Error::InvalidRef(s.into());
@@ -287,7 +292,8 @@ impl Error {
     /// let err = Error::unknown_enum("Unknown enum variant");
     /// let err = Error::unknown_enum(format!("Unknown variant {}", 5));
     /// ```
-    #[inline(never)]
+    #[inline(always)]
+    #[cold]
     #[track_caller]
     pub fn unknown_enum<S: Into<Cow<'static, str>>>(s: S) -> Self {
         let err = Error::UnknownEnum(s.into());
@@ -308,7 +314,8 @@ impl Error {
     /// let err = Error::type_error("Type error");
     /// let err = Error::type_error(format!("Expected type {}", "String"));
     /// ```
-    #[inline(never)]
+    #[inline(always)]
+    #[cold]
     #[track_caller]
     pub fn type_error<S: Into<Cow<'static, str>>>(s: S) -> Self {
         let err = Error::TypeError(s.into());
@@ -329,7 +336,8 @@ impl Error {
     /// let err = Error::encoding_error("Encoding failed");
     /// let err = Error::encoding_error(format!("Failed to encode as {}", "UTF-8"));
     /// ```
-    #[inline(never)]
+    #[inline(always)]
+    #[cold]
     #[track_caller]
     pub fn encoding_error<S: Into<Cow<'static, str>>>(s: S) -> Self {
         let err = Error::EncodingError(s.into());
@@ -350,7 +358,8 @@ impl Error {
     /// let err = Error::depth_exceed("Max depth exceeded");
     /// let err = Error::depth_exceed(format!("Depth {} exceeds max {}", 100, 64));
     /// ```
-    #[inline(never)]
+    #[inline(always)]
+    #[cold]
     #[track_caller]
     pub fn depth_exceed<S: Into<Cow<'static, str>>>(s: S) -> Self {
         let err = Error::DepthExceed(s.into());
@@ -371,7 +380,8 @@ impl Error {
     /// let err = Error::unsupported("Unsupported operation");
     /// let err = Error::unsupported(format!("Type {} not supported", "MyType"));
     /// ```
-    #[inline(never)]
+    #[inline(always)]
+    #[cold]
     #[track_caller]
     pub fn unsupported<S: Into<Cow<'static, str>>>(s: S) -> Self {
         let err = Error::Uunsupported(s.into());
@@ -392,7 +402,8 @@ impl Error {
     /// let err = Error::not_allowed("Operation not allowed");
     /// let err = Error::not_allowed(format!("Cannot perform {}", "delete"));
     /// ```
-    #[inline(never)]
+    #[inline(always)]
+    #[cold]
     #[track_caller]
     pub fn not_allowed<S: Into<Cow<'static, str>>>(s: S) -> Self {
         let err = Error::NotAllowed(s.into());
@@ -413,7 +424,8 @@ impl Error {
     /// let err = Error::struct_version_mismatch("Version mismatch");
     /// let err = Error::struct_version_mismatch(format!("Class {} version mismatch", "Foo"));
     /// ```
-    #[inline(never)]
+    #[inline(always)]
+    #[cold]
     #[track_caller]
     pub fn struct_version_mismatch<S: Into<Cow<'static, str>>>(s: S) -> Self {
         let err = Error::StructVersionMismatch(s.into());
@@ -438,7 +450,8 @@ impl Error {
     /// let err = Error::unknown("Something went wrong");
     /// let err = Error::unknown(format!("ID:{} not found", 1));
     /// ```
-    #[inline(never)]
+    #[inline(always)]
+    #[cold]
     #[track_caller]
     pub fn unknown<S: Into<Cow<'static, str>>>(s: S) -> Self {
         let err = Error::Unknown(s.into());

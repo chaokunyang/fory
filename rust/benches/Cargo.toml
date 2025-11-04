@@ -29,6 +29,16 @@ name = "serialization_bench"
 path = "benches/serialization_bench.rs"
 harness = false
 
+[[bench]]
+name = "buffer_write_bench"
+path = "benches/buffer_write_bench.rs"
+harness = false
+
+[[bench]]
+name = "buffer_read_bench"
+path = "benches/buffer_read_bench.rs"
+harness = false
+
 [dependencies]
 fory = { path = "../fory" }
 fory-core = { path = "../fory-core" }

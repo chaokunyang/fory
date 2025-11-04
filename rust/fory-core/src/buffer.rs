@@ -257,7 +257,7 @@ impl<'a> Writer<'a> {
                 self.bf.reserve(64);
             }
             let ptr = self.bf.as_mut_ptr().add(len);
-            
+
             if value < 0x80 {
                 *ptr = value as u8;
                 self.bf.set_len(len + 1);
@@ -275,16 +275,14 @@ impl<'a> Writer<'a> {
                 *ptr.add(2) = u3;
                 self.bf.set_len(len + 3);
             } else if value < 0x10000000 {
-                let combined = 
-                    ((value & 0x7F) | 0x80)
+                let combined = ((value & 0x7F) | 0x80)
                     | (((value >> 7) & 0x7F) | 0x80) << 8
                     | (((value >> 14) & 0x7F) | 0x80) << 16
                     | ((value >> 21) & 0x7F) << 24;
                 std::ptr::write_unaligned(ptr as *mut u32, combined);
                 self.bf.set_len(len + 4);
             } else {
-                let combined = 
-                    ((value & 0x7F) | 0x80)
+                let combined = ((value & 0x7F) | 0x80)
                     | (((value >> 7) & 0x7F) | 0x80) << 8
                     | (((value >> 14) & 0x7F) | 0x80) << 16
                     | (((value >> 21) & 0x7F) | 0x80) << 24;
@@ -298,18 +296,13 @@ impl<'a> Writer<'a> {
     #[inline(always)]
     pub fn write_varint64(&mut self, value: i64) {
         let zigzag = ((value << 1) ^ (value >> 63)) as u64;
-        self._write_varuint64(zigzag);
-    }
-
-    #[inline(always)]
-    pub fn write_varuint64(&mut self, value: u64) {
-        self._write_varuint64(value);
+        self.write_varuint64(zigzag);
     }
 
     /// Optimized varuint64 write using direct pointer manipulation and bulk writes
     /// SAFETY: Pre-reserves capacity, then writes directly to buffer
     #[inline(always)]
-    fn _write_varuint64(&mut self, value: u64) {
+    pub fn write_varuint64(&mut self, value: u64) {
         unsafe {
             let len = self.bf.len();
             // Reserve max 9 bytes for varuint64
@@ -317,7 +310,7 @@ impl<'a> Writer<'a> {
                 self.bf.reserve(64);
             }
             let ptr = self.bf.as_mut_ptr().add(len);
-            
+
             if value < 0x80 {
                 *ptr = value as u8;
                 self.bf.set_len(len + 1);
@@ -326,23 +319,20 @@ impl<'a> Writer<'a> {
                 std::ptr::write_unaligned(ptr as *mut u16, combined as u16);
                 self.bf.set_len(len + 2);
             } else if value < 0x200000 {
-                let combined = 
-                    ((value & 0x7F) | 0x80)
+                let combined = ((value & 0x7F) | 0x80)
                     | (((value >> 7) & 0x7F) | 0x80) << 8
                     | ((value >> 14) & 0xFF) << 16;
                 std::ptr::write_unaligned(ptr as *mut u32, combined as u32);
                 self.bf.set_len(len + 3);
             } else if value < 0x10000000 {
-                let combined = 
-                    ((value & 0x7F) | 0x80)
+                let combined = ((value & 0x7F) | 0x80)
                     | (((value >> 7) & 0x7F) | 0x80) << 8
                     | (((value >> 14) & 0x7F) | 0x80) << 16
                     | ((value >> 21) & 0xFF) << 24;
                 std::ptr::write_unaligned(ptr as *mut u32, combined as u32);
                 self.bf.set_len(len + 4);
             } else if value < 0x800000000 {
-                let combined = 
-                    ((value & 0x7F) | 0x80)
+                let combined = ((value & 0x7F) | 0x80)
                     | (((value >> 7) & 0x7F) | 0x80) << 8
                     | (((value >> 14) & 0x7F) | 0x80) << 16
                     | (((value >> 21) & 0x7F) | 0x80) << 24
@@ -350,8 +340,7 @@ impl<'a> Writer<'a> {
                 std::ptr::write_unaligned(ptr as *mut u64, combined);
                 self.bf.set_len(len + 5);
             } else if value < 0x40000000000 {
-                let combined = 
-                    ((value & 0x7F) | 0x80)
+                let combined = ((value & 0x7F) | 0x80)
                     | (((value >> 7) & 0x7F) | 0x80) << 8
                     | (((value >> 14) & 0x7F) | 0x80) << 16
                     | (((value >> 21) & 0x7F) | 0x80) << 24
@@ -360,8 +349,7 @@ impl<'a> Writer<'a> {
                 std::ptr::write_unaligned(ptr as *mut u64, combined);
                 self.bf.set_len(len + 6);
             } else if value < 0x2000000000000 {
-                let combined = 
-                    ((value & 0x7F) | 0x80)
+                let combined = ((value & 0x7F) | 0x80)
                     | (((value >> 7) & 0x7F) | 0x80) << 8
                     | (((value >> 14) & 0x7F) | 0x80) << 16
                     | (((value >> 21) & 0x7F) | 0x80) << 24
@@ -371,8 +359,7 @@ impl<'a> Writer<'a> {
                 std::ptr::write_unaligned(ptr as *mut u64, combined);
                 self.bf.set_len(len + 7);
             } else if value < 0x100000000000000 {
-                let combined = 
-                    ((value & 0x7F) | 0x80)
+                let combined = ((value & 0x7F) | 0x80)
                     | (((value >> 7) & 0x7F) | 0x80) << 8
                     | (((value >> 14) & 0x7F) | 0x80) << 16
                     | (((value >> 21) & 0x7F) | 0x80) << 24
@@ -383,8 +370,7 @@ impl<'a> Writer<'a> {
                 std::ptr::write_unaligned(ptr as *mut u64, combined);
                 self.bf.set_len(len + 8);
             } else {
-                let combined = 
-                    ((value & 0x7F) | 0x80)
+                let combined = ((value & 0x7F) | 0x80)
                     | (((value >> 7) & 0x7F) | 0x80) << 8
                     | (((value >> 14) & 0x7F) | 0x80) << 16
                     | (((value >> 21) & 0x7F) | 0x80) << 24
@@ -410,7 +396,7 @@ impl<'a> Writer<'a> {
                 self.bf.reserve(64);
             }
             let ptr = self.bf.as_mut_ptr().add(len);
-            
+
             if value < 0x80 {
                 *ptr = value as u8;
                 self.bf.set_len(len + 1);
@@ -419,28 +405,25 @@ impl<'a> Writer<'a> {
                 std::ptr::write_unaligned(ptr as *mut u16, combined);
                 self.bf.set_len(len + 2);
             } else if value < 0x200000 {
-                let combined = 
-                    ((value & 0x7F) | 0x80)
+                let combined = ((value & 0x7F) | 0x80)
                     | (((value >> 7) & 0x7F) | 0x80) << 8
-                    | ((value >> 14) & 0x7F) << 16;  // Last byte: no continuation bit, 7 bits
+                    | ((value >> 14) & 0x7F) << 16; // Last byte: no continuation bit, 7 bits
                 std::ptr::write_unaligned(ptr as *mut u32, combined as u32);
                 self.bf.set_len(len + 3);
             } else if value < 0x10000000 {
-                let combined = 
-                    ((value & 0x7F) | 0x80)
+                let combined = ((value & 0x7F) | 0x80)
                     | (((value >> 7) & 0x7F) | 0x80) << 8
                     | (((value >> 14) & 0x7F) | 0x80) << 16
-                    | ((value >> 21) & 0x7F) << 24;  // Last byte: no continuation bit, 7 bits
+                    | ((value >> 21) & 0x7F) << 24; // Last byte: no continuation bit, 7 bits
                 std::ptr::write_unaligned(ptr as *mut u32, combined as u32);
                 self.bf.set_len(len + 4);
             } else {
                 // 5 bytes: 4*7 bits + 8 bits = 36 bits total
-                let combined = 
-                    ((value & 0x7F) | 0x80)
+                let combined = ((value & 0x7F) | 0x80)
                     | (((value >> 7) & 0x7F) | 0x80) << 8
                     | (((value >> 14) & 0x7F) | 0x80) << 16
                     | (((value >> 21) & 0x7F) | 0x80) << 24
-                    | ((value >> 28) & 0xFF) << 32;  // Last byte: no continuation bit, 8 bits
+                    | ((value >> 28) & 0xFF) << 32; // Last byte: no continuation bit, 8 bits
                 std::ptr::write_unaligned(ptr as *mut u64, combined);
                 self.bf.set_len(len + 5);
             }
@@ -639,7 +622,7 @@ impl<'a> Reader<'a> {
 
     #[inline(always)]
     pub fn read_usize(&mut self) -> Result<usize, Error> {
-        Ok(self.read_u64()? as usize)
+        Ok(self.read_varuint64()? as usize)
     }
 
     #[inline(always)]
@@ -664,11 +647,11 @@ impl<'a> Reader<'a> {
         if self.cursor >= self.bf.len() {
             return self.bound_error(1);
         }
-        
+
         unsafe {
             let ptr = self.bf.as_ptr().add(self.cursor);
             let b0 = *ptr as u32;
-            
+
             if b0 < 0x80 {
                 self.cursor += 1;
                 return Ok(b0);
@@ -679,7 +662,7 @@ impl<'a> Reader<'a> {
             }
             let b1 = *ptr.add(1) as u32;
             let mut result = (b0 & 0x7F) | ((b1 & 0x7F) << 7);
-            
+
             if b1 < 0x80 {
                 self.cursor += 2;
                 return Ok(result);
@@ -690,7 +673,7 @@ impl<'a> Reader<'a> {
             }
             let b2 = *ptr.add(2) as u32;
             result |= (b2 & 0x7F) << 14;
-            
+
             if b2 < 0x80 {
                 self.cursor += 3;
                 return Ok(result);
@@ -701,7 +684,7 @@ impl<'a> Reader<'a> {
             }
             let b3 = *ptr.add(3) as u32;
             result |= (b3 & 0x7F) << 21;
-            
+
             if b3 < 0x80 {
                 self.cursor += 4;
                 return Ok(result);
@@ -730,11 +713,11 @@ impl<'a> Reader<'a> {
         if self.cursor >= self.bf.len() {
             return self.bound_error(1);
         }
-        
+
         unsafe {
             let ptr = self.bf.as_ptr().add(self.cursor);
             let b0 = *ptr as u64;
-            
+
             if b0 < 0x80 {
                 self.cursor += 1;
                 return Ok(b0);
@@ -749,7 +732,7 @@ impl<'a> Reader<'a> {
             // Fast path: we have at least 8 bytes available
             let b1 = *ptr.add(1) as u64;
             let mut result = (b0 & 0x7F) | ((b1 & 0x7F) << 7);
-            
+
             if b1 < 0x80 {
                 self.cursor += 2;
                 return Ok(result);
@@ -757,7 +740,7 @@ impl<'a> Reader<'a> {
 
             let b2 = *ptr.add(2) as u64;
             result |= (b2 & 0x7F) << 14;
-            
+
             if b2 < 0x80 {
                 self.cursor += 3;
                 return Ok(result);
@@ -765,7 +748,7 @@ impl<'a> Reader<'a> {
 
             let b3 = *ptr.add(3) as u64;
             result |= (b3 & 0x7F) << 21;
-            
+
             if b3 < 0x80 {
                 self.cursor += 4;
                 return Ok(result);
@@ -773,7 +756,7 @@ impl<'a> Reader<'a> {
 
             let b4 = *ptr.add(4) as u64;
             result |= (b4 & 0x7F) << 28;
-            
+
             if b4 < 0x80 {
                 self.cursor += 5;
                 return Ok(result);
@@ -781,7 +764,7 @@ impl<'a> Reader<'a> {
 
             let b5 = *ptr.add(5) as u64;
             result |= (b5 & 0x7F) << 35;
-            
+
             if b5 < 0x80 {
                 self.cursor += 6;
                 return Ok(result);
@@ -789,7 +772,7 @@ impl<'a> Reader<'a> {
 
             let b6 = *ptr.add(6) as u64;
             result |= (b6 & 0x7F) << 42;
-            
+
             if b6 < 0x80 {
                 self.cursor += 7;
                 return Ok(result);
@@ -797,7 +780,7 @@ impl<'a> Reader<'a> {
 
             let b7 = *ptr.add(7) as u64;
             result |= (b7 & 0x7F) << 49;
-            
+
             if b7 < 0x80 {
                 self.cursor += 8;
                 return Ok(result);
@@ -817,21 +800,21 @@ impl<'a> Reader<'a> {
     fn read_varuint64_slow(&mut self) -> Result<u64, Error> {
         let mut result = 0u64;
         let mut shift = 0;
-        
+
         loop {
             if self.cursor >= self.bf.len() {
                 return self.bound_error(1);
             }
-            
+
             let b = unsafe { *self.bf.get_unchecked(self.cursor) };
             self.cursor += 1;
-            
+
             result |= ((b & 0x7F) as u64) << shift;
-            
+
             if b < 0x80 {
                 return Ok(result);
             }
-            
+
             shift += 7;
             if shift >= 63 {
                 return Self::varuint64_overflow_error();
@@ -938,13 +921,13 @@ impl<'a> Reader<'a> {
         }
 
         let remaining = self.bf.len() - self.cursor;
-        
+
         if remaining >= 8 {
             // Fast path: bulk read u64
             unsafe {
                 let ptr = self.bf.as_ptr().add(self.cursor) as *const u64;
                 let bulk = u64::from_le(std::ptr::read_unaligned(ptr));
-                
+
                 // Extract first byte (bits 0-6)
                 let mut result = bulk & 0x7F;
                 let mut bytes_read = 1;
@@ -954,19 +937,19 @@ impl<'a> Reader<'a> {
                     bytes_read = 2;
                     // Extract byte 1 (bits 8-14 from bulk, shifted to position 7-13 in result)
                     result |= ((bulk >> 8) & 0x7F) << 7;
-                    
+
                     // Check continuation bit of byte 1 (bit 15 of bulk)
                     if (bulk & 0x8000) != 0 {
                         bytes_read = 3;
                         // Extract byte 2 (bits 16-22 from bulk, shifted to position 14-20 in result)
                         result |= ((bulk >> 16) & 0x7F) << 14;
-                        
+
                         // Check continuation bit of byte 2 (bit 23 of bulk)
                         if (bulk & 0x800000) != 0 {
                             bytes_read = 4;
                             // Extract byte 3 (bits 24-30 from bulk, shifted to position 21-27 in result)
                             result |= ((bulk >> 24) & 0x7F) << 21;
-                            
+
                             // Check continuation bit of byte 3 (bit 31 of bulk)
                             if (bulk & 0x80000000) != 0 {
                                 bytes_read = 5;
@@ -976,7 +959,7 @@ impl<'a> Reader<'a> {
                         }
                     }
                 }
-                
+
                 self.cursor += bytes_read;
                 return Ok(result);
             }
@@ -991,33 +974,33 @@ impl<'a> Reader<'a> {
         let mut result = 0u64;
         let mut shift = 0;
         let mut bytes_read = 0;
-        
+
         loop {
             if self.cursor >= self.bf.len() {
                 return self.bound_error(1);
             }
-            
+
             let b = unsafe { *self.bf.get_unchecked(self.cursor) };
             self.cursor += 1;
             bytes_read += 1;
-            
+
             // For varuint36small, bytes 1-4 use 7 bits, byte 5 uses 8 bits
             if bytes_read < 5 {
                 // Extract 7 data bits
                 result |= ((b & 0x7F) as u64) << shift;
-                
+
                 // Check continuation bit
                 if (b & 0x80) == 0 {
                     return Ok(result);
                 }
-                
+
                 shift += 7;
             } else {
                 // Byte 5: use all 8 bits (no continuation bit)
                 result |= (b as u64) << shift;
                 return Ok(result);
             }
-            
+
             if shift >= 36 {
                 return Self::varuint36small_overflow_error();
             }

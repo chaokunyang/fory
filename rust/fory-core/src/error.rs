@@ -18,7 +18,7 @@
 //! # PERFORMANCE CRITICAL MODULE
 //!
 //! **WARNING**: This module is highly performance-sensitive. Changes to error
-//! constructor attributes (`#[inline]`, `#[cold]`, `#[track_caller]`) can 
+//! constructor attributes (`#[inline]`, `#[cold]`, `#[track_caller]`) can
 //! impact serialization/deserialization performance throughout the entire codebase.
 //!
 //! ## Why This Module Is Performance Critical

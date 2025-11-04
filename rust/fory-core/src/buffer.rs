@@ -483,14 +483,21 @@ impl<'a> Reader<'a> {
     #[inline(always)]
     pub fn sub_slice(&self, start: usize, end: usize) -> Result<&[u8], Error> {
         if start >= self.bf.len() || end > self.bf.len() || end < start {
-            Err(Error::buffer_out_of_bound(
-                start,
-                self.bf.len(),
-                self.bf.len(),
-            ))
+            self.sub_slice_error(start)
         } else {
             Ok(&self.bf[start..end])
         }
+    }
+
+    /// Cold path for sub_slice error - marked inline(never) to reduce code bloat
+    #[inline(never)]
+    #[cold]
+    fn sub_slice_error(&self, start: usize) -> Result<&[u8], Error> {
+        Err(Error::buffer_out_of_bound(
+            start,
+            self.bf.len(),
+            self.bf.len(),
+        ))
     }
 
     #[inline(always)]
@@ -506,13 +513,20 @@ impl<'a> Reader<'a> {
     #[inline(always)]
     fn value_at(&self, index: usize) -> Result<u8, Error> {
         match self.bf.get(index) {
-            None => Err(Error::buffer_out_of_bound(
-                index,
-                self.bf.len(),
-                self.bf.len(),
-            )),
+            None => self.value_at_error(index),
             Some(v) => Ok(*v),
         }
+    }
+
+    /// Cold path for value_at error - marked inline(never) to reduce code bloat
+    #[inline(never)]
+    #[cold]
+    fn value_at_error(&self, index: usize) -> Result<u8, Error> {
+        Err(Error::buffer_out_of_bound(
+            index,
+            self.bf.len(),
+            self.bf.len(),
+        ))
     }
 
     #[inline(always)]
@@ -522,14 +536,23 @@ impl<'a> Reader<'a> {
         //     return Err(Error::invalid_data("buffer pointer is null"));
         // }
         if self.cursor + n > self.bf.len() {
-            Err(Error::buffer_out_of_bound(self.cursor, n, self.bf.len()))
+            self.check_bound_error(n)
         } else {
             Ok(())
         }
     }
 
+    /// Cold path for check_bound error - marked inline(never) to reduce code bloat
+    #[inline(never)]
+    #[cold]
+    fn check_bound_error(&self, n: usize) -> Result<(), Error> {
+        Err(Error::buffer_out_of_bound(self.cursor, n, self.bf.len()))
+    }
+
     /// Helper function to return buffer_out_of_bound error for current cursor position
-    #[inline(always)]
+    /// Cold path - marked inline(never) to reduce code bloat in hot paths
+    #[inline(never)]
+    #[cold]
     fn bound_error<T>(&self, n: usize) -> Result<T, Error> {
         Err(Error::buffer_out_of_bound(self.cursor, n, self.bf.len()))
     }
@@ -811,9 +834,16 @@ impl<'a> Reader<'a> {
             
             shift += 7;
             if shift >= 63 {
-                return Err(Error::encode_error("varuint64 overflow"));
+                return Self::varuint64_overflow_error();
             }
         }
+    }
+
+    /// Cold path for varuint64 overflow error - marked inline(never) to reduce code bloat
+    #[inline(never)]
+    #[cold]
+    fn varuint64_overflow_error() -> Result<u64, Error> {
+        Err(Error::encode_error("varuint64 overflow"))
     }
 
     #[inline(always)]
@@ -989,9 +1019,16 @@ impl<'a> Reader<'a> {
             }
             
             if shift >= 36 {
-                return Err(Error::encode_error("varuint36small overflow"));
+                return Self::varuint36small_overflow_error();
             }
         }
+    }
+
+    /// Cold path for varuint36small overflow error - marked inline(never) to reduce code bloat
+    #[inline(never)]
+    #[cold]
+    fn varuint36small_overflow_error() -> Result<u64, Error> {
+        Err(Error::encode_error("varuint36small overflow"))
     }
 
     #[inline(always)]

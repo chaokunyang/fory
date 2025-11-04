@@ -15,6 +15,63 @@
 // specific language governing permissions and limitations
 // under the License.
 
+//! # PERFORMANCE CRITICAL MODULE
+//!
+//! ⚠️ **WARNING**: This module is highly performance-sensitive. Any changes to error
+//! constructor attributes (`#[inline]`, `#[cold]`, `#[track_caller]`) can significantly
+//! impact serialization/deserialization performance throughout the entire codebase.
+//!
+//! ## Why This Module Is Performance Critical
+//!
+//! Error constructors are called in **every** buffer read/write operation and type check.
+//! Even though these functions are rarely executed (error paths), their mere presence and
+//! inlining behavior affects how LLVM optimizes the **hot paths** (successful operations).
+//!
+//! ## Current Optimization Strategy
+//!
+//! All error constructor functions use:
+//! ```rust
+//! #[inline(always)]
+//! #[cold]
+//! #[track_caller]
+//! pub fn error_constructor(...) -> Self { ... }
+//! ```
+//!
+//! ### Why `#[inline(always)]`?
+//!
+//! Forces the error constructor to be inlined at every call site, which allows LLVM to:
+//! - **Optimize away error checks** when combined with `#[cold]` and compile-time constants
+//! - **Eliminate dead code** in the hot path when PANIC_ON_ERROR=false
+//! - **Remove function call overhead** entirely for the error path
+//! - **Enable better branch prediction** by keeping hot path code compact and sequential
+//!
+//! ### Why `#[cold]`?
+//!
+//! Tells LLVM that this code path is rarely executed, which causes:
+//! - **Hot path optimization**: LLVM aggressively optimizes the non-error path
+//! - **Code layout improvement**: Error handling code is moved out of the instruction cache
+//! - **Better branch prediction**: CPU assumes error branches won't be taken
+//! - **Cache locality**: Hot path code stays tightly packed for better L1/L2 cache usage
+//!
+//! ### Why `#[track_caller]`?
+//!
+//! Provides better debugging with zero runtime cost when inlined:
+//! - When `PANIC_ON_ERROR` is set, shows exact error creation location in stack traces
+//! - With `#[inline(always)]`, the overhead is eliminated at compile time
+//! - Helps developers quickly identify where errors originate during debugging
+//!
+//! ## Related Modules
+//!
+//! - `buffer.rs`: Uses error constructors extensively in every read/write operation
+//! - `serializer/*.rs`: Use error constructors for type validation
+//! - `resolver/*.rs`: Use error constructors for reference resolution
+//!
+//! ## See Also
+//!
+//! - Buffer read benchmarks: `rust/benches/buffer_read_bench.rs`
+//! - Error optimization test: `rust/benches/test_bound_error.rs`
+//! - Performance documentation: `docs/benchmarks/`
+
 use std::borrow::Cow;
 
 use thiserror::Error;

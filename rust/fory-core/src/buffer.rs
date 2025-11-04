@@ -109,7 +109,7 @@ impl<'a> Writer<'a> {
         }
         #[cfg(target_endian = "big")]
         {
-            self.bf.extend_from_slice(&value.swap_bytes().to_le_bytes());
+            self.bf.extend_from_slice(&value.to_le_bytes());
         }
     }
 
@@ -127,7 +127,7 @@ impl<'a> Writer<'a> {
         }
         #[cfg(target_endian = "big")]
         {
-            self.bf.extend_from_slice(&value.swap_bytes().to_le_bytes());
+            self.bf.extend_from_slice(&value.to_le_bytes());
         }
     }
 
@@ -145,8 +145,7 @@ impl<'a> Writer<'a> {
         }
         #[cfg(target_endian = "big")]
         {
-            let bytes = value.to_bits().swap_bytes().to_le_bytes();
-            self.bf.extend_from_slice(&bytes);
+            self.bf.extend_from_slice(&value.to_bits().to_le_bytes());
         }
     }
 
@@ -164,8 +163,7 @@ impl<'a> Writer<'a> {
         }
         #[cfg(target_endian = "big")]
         {
-            let bytes = value.to_bits().swap_bytes().to_le_bytes();
-            self.bf.extend_from_slice(&bytes);
+            self.bf.extend_from_slice(&value.to_bits().to_le_bytes());
         }
     }
 
@@ -178,7 +176,7 @@ impl<'a> Writer<'a> {
         }
         #[cfg(target_endian = "big")]
         {
-            self.bf.extend_from_slice(&value.swap_bytes().to_le_bytes());
+            self.bf.extend_from_slice(&value.to_le_bytes());
         }
     }
 

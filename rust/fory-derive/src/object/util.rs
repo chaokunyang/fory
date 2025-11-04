@@ -545,6 +545,77 @@ const PRIMITIVE_TYPE_NAMES: [&str; 12] = [
     "bool", "i8", "i16", "i32", "i64", "f32", "f64", "u8", "u16", "u32", "u64", "usize",
 ];
 
+#[derive(Clone, Copy)]
+pub(crate) struct PrimitiveAccessInfo {
+    pub write_method: &'static str,
+    pub read_method: &'static str,
+}
+
+pub(crate) fn get_direct_primitive_access_info(ty: &Type) -> Option<PrimitiveAccessInfo> {
+    let type_path = match ty {
+        Type::Path(type_path) if type_path.qself.is_none() => type_path,
+        _ => return None,
+    };
+
+    let segment = type_path.path.segments.last()?;
+    if !segment.arguments.is_empty() {
+        return None;
+    }
+
+    let ident = segment.ident.to_string();
+    match ident.as_str() {
+        "bool" => Some(PrimitiveAccessInfo {
+            write_method: "write_bool",
+            read_method: "read_bool",
+        }),
+        "i8" => Some(PrimitiveAccessInfo {
+            write_method: "write_i8",
+            read_method: "read_i8",
+        }),
+        "i16" => Some(PrimitiveAccessInfo {
+            write_method: "write_i16",
+            read_method: "read_i16",
+        }),
+        "i32" => Some(PrimitiveAccessInfo {
+            write_method: "write_varint32",
+            read_method: "read_varint32",
+        }),
+        "i64" => Some(PrimitiveAccessInfo {
+            write_method: "write_varint64",
+            read_method: "read_varint64",
+        }),
+        "f32" => Some(PrimitiveAccessInfo {
+            write_method: "write_f32",
+            read_method: "read_f32",
+        }),
+        "f64" => Some(PrimitiveAccessInfo {
+            write_method: "write_f64",
+            read_method: "read_f64",
+        }),
+        "u8" => Some(PrimitiveAccessInfo {
+            write_method: "write_u8",
+            read_method: "read_u8",
+        }),
+        "u16" => Some(PrimitiveAccessInfo {
+            write_method: "write_u16",
+            read_method: "read_u16",
+        }),
+        "u32" => Some(PrimitiveAccessInfo {
+            write_method: "write_u32",
+            read_method: "read_u32",
+        }),
+        "u64" => Some(PrimitiveAccessInfo {
+            write_method: "write_u64",
+            read_method: "read_u64",
+        }),
+        "usize" => Some(PrimitiveAccessInfo {
+            write_method: "write_usize",
+            read_method: "read_usize",
+        }),
+        _ => None,
+    }
+}
+
 fn get_primitive_type_id(ty: &str) -> u32 {
     match ty {
         "bool" => TypeId::BOOL as u32,

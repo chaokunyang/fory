@@ -21,8 +21,9 @@ use syn::Field;
 
 use super::util::{
     classify_trait_object_field, compute_struct_version_hash, create_wrapper_types_arc,
-    create_wrapper_types_rc, extract_type_name, get_struct_name, is_debug_enabled,
-    is_primitive_type, is_skip_field, should_skip_type_info_for_field, skip_ref_flag, StructField,
+    create_wrapper_types_rc, extract_type_name, get_direct_primitive_access_info, get_struct_name,
+    is_debug_enabled, is_primitive_type, is_skip_field, should_skip_type_info_for_field,
+    skip_ref_flag, StructField,
 };
 
 pub(crate) fn create_private_field_name(field: &Field) -> Ident {
@@ -185,16 +186,24 @@ pub fn gen_read_field(field: &Field, private_ident: &Ident) -> TokenStream {
         _ => {
             let skip_ref_flag = skip_ref_flag(ty);
             let skip_type_info = should_skip_type_info_for_field(ty);
-            if skip_type_info {
-                // Known types (primitives, strings, collections) - skip type info at compile time
-                if skip_ref_flag {
+            if skip_type_info && skip_ref_flag {
+                if let Some(primitive) = get_direct_primitive_access_info(ty) {
+                    let read_method = proc_macro2::Ident::new(
+                        primitive.read_method,
+                        proc_macro2::Span::call_site(),
+                    );
                     quote! {
-                        let #private_ident = <#ty as fory_core::Serializer>::fory_read_data(context)?;
+                        let #private_ident = context.reader.#read_method()?;
                     }
                 } else {
                     quote! {
-                        let #private_ident = <#ty as fory_core::Serializer>::fory_read(context, true, false)?;
+                        let #private_ident = <#ty as fory_core::Serializer>::fory_read_data(context)?;
                     }
+                }
+            } else if skip_type_info {
+                // Known types (primitives, strings, collections) - skip type info at compile time
+                quote! {
+                    let #private_ident = <#ty as fory_core::Serializer>::fory_read(context, true, false)?;
                 }
             } else {
                 // Custom types (struct/enum/ext) - need runtime check for enums

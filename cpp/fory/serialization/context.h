@@ -31,6 +31,24 @@ namespace fory {
 namespace serialization {
 
 class TypeResolver;
+class ReadContext;
+
+/// RAII helper to automatically decrease depth when leaving scope
+class DepthGuard {
+public:
+  explicit DepthGuard(ReadContext &ctx) : ctx_(ctx) {}
+  
+  ~DepthGuard();
+  
+  // Non-copyable, non-movable
+  DepthGuard(const DepthGuard &) = delete;
+  DepthGuard &operator=(const DepthGuard &) = delete;
+  DepthGuard(DepthGuard &&) = delete;
+  DepthGuard &operator=(DepthGuard &&) = delete;
+
+private:
+  ReadContext &ctx_;
+};
 
 /// Write context for serialization operations.
 ///
@@ -282,6 +300,9 @@ private:
   RefReader ref_reader_;
   uint32_t current_depth_;
 };
+
+/// Implementation of DepthGuard destructor
+inline DepthGuard::~DepthGuard() { ctx_.decrease_depth(); }
 
 } // namespace serialization
 } // namespace fory

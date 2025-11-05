@@ -582,55 +582,40 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
     }
 
     FORY_RETURN_NOT_OK(ctx.increase_depth());
+    DepthGuard depth_guard(ctx);
+    
     T obj{};
     using FieldDescriptor = decltype(ForyFieldInfo(std::declval<const T &>()));
     constexpr size_t field_count = FieldDescriptor::Size;
-
-    auto finish = [&ctx]() { ctx.decrease_depth(); };
 
     if (!ctx.is_compatible() || !type_info->type_meta) {
       FORY_RETURN_NOT_OK(
           detail::read_struct_fields_impl(obj, ctx, std::make_index_sequence<field_count>{}));
-      finish();
       return obj;
     }
 
-    std::shared_ptr<TypeMeta> remote_type_meta;
-    {
-      auto result =
-          TypeMeta::from_bytes(ctx.buffer(), type_info->type_meta.get());
-      if (!result.ok()) {
-        finish();
-        return Unexpected(std::move(result).error());
-      }
-      remote_type_meta = std::move(result).value();
-    }
+    FORY_TRY(remote_type_meta,
+             TypeMeta::from_bytes(ctx.buffer(), type_info->type_meta.get()));
 
-    Result<void, Error> status;
     if (remote_type_meta->get_hash() == type_info->type_meta->get_hash()) {
-      status = detail::read_struct_fields_impl(obj, ctx, std::make_index_sequence<field_count>{});
+      FORY_RETURN_NOT_OK(
+          detail::read_struct_fields_impl(obj, ctx, std::make_index_sequence<field_count>{}));
     } else {
-      status = detail::read_struct_fields_compatible(
-          obj, ctx, remote_type_meta, std::make_index_sequence<field_count>{});
+      FORY_RETURN_NOT_OK(detail::read_struct_fields_compatible(
+          obj, ctx, remote_type_meta, std::make_index_sequence<field_count>{}));
     }
 
-    finish();
-    FORY_RETURN_NOT_OK(status);
     return obj;
   }
 
   static Result<T, Error> read_data(ReadContext &ctx) {
-    // Increase depth tracking
     FORY_RETURN_NOT_OK(ctx.increase_depth());
+    DepthGuard depth_guard(ctx);
 
-    // Read all fields in original declaration order
     T obj{};
     using FieldDescriptor = decltype(ForyFieldInfo(std::declval<const T &>()));
     constexpr size_t field_count = FieldDescriptor::Size;
     FORY_RETURN_NOT_OK(detail::read_struct_fields_impl(obj, ctx, std::make_index_sequence<field_count>{}));
-
-    // Decrease depth tracking
-    ctx.decrease_depth();
 
     return obj;
   }

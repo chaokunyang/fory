@@ -94,10 +94,6 @@ struct SerializationMeta<
 
 namespace detail {
 
-// Forward declare to avoid circular dependency
-template <typename T, std::enable_if_t<is_fory_serializable_v<T>, int> = 0>
-struct StructSerializerHelper;
-
 template <size_t... Indices, typename Func>
 void for_each_index(std::index_sequence<Indices...>, Func &&func) {
   (func(std::integral_constant<size_t, Indices>{}), ...);
@@ -388,28 +384,6 @@ Result<void, Error> write_single_field(const T &obj, WriteContext &ctx,
 template <size_t Index, typename T>
 Result<void, Error> read_single_field_by_index(T &obj, ReadContext &ctx);
 
-template <typename T, size_t Index> struct ReadSortedDispatcher {
-  using Helpers = CompileTimeFieldHelpers<T>;
-
-  static Result<void, Error> apply(T &obj, ReadContext &ctx) {
-    if constexpr (Index >= Helpers::FieldCount) {
-      (void)obj;
-      (void)ctx;
-      return Result<void, Error>();
-    } else {
-      auto result = dispatch_field_index<T>(
-          Helpers::sorted_indices[Index], [&](auto index_constant) {
-            constexpr size_t index = decltype(index_constant)::value;
-            return read_single_field_by_index<index>(obj, ctx);
-          });
-      if (!result.ok()) {
-        return result;
-      }
-      return ReadSortedDispatcher<T, Index + 1>::apply(obj, ctx);
-    }
-  }
-};
-
 /// Helper to write a single field
 template <typename T, size_t Index, typename FieldPtrs>
 Result<void, Error> write_single_field(const T &obj, WriteContext &ctx,
@@ -466,49 +440,22 @@ Result<void, Error> read_single_field_by_index(T &obj, ReadContext &ctx) {
   return Result<void, Error>();
 }
 
-/// Read struct fields recursively using index sequence (non-compatible mode)
+/// Read struct fields recursively using index sequence (sorted order - matches write order)
 template <typename T, size_t... Indices>
 Result<void, Error> read_struct_fields_impl(T &obj, ReadContext &ctx,
                                             std::index_sequence<Indices...>) {
-  // Read each field in order
+  using Helpers = CompileTimeFieldHelpers<T>;
+  
+  // Read each field in sorted order (same as write) with early return on error
   Result<void, Error> result;
-  ((result = read_single_field_by_index<Indices>(obj, ctx), result.ok()) &&
+  ((result = dispatch_field_index<T>(Helpers::sorted_indices[Indices],
+                                     [&](auto index_constant) {
+                                       constexpr size_t index =
+                                           decltype(index_constant)::value;
+                                       return read_single_field_by_index<index>(obj, ctx);
+                                     }),
+    result.ok()) &&
    ...);
-  return result;
-}
-
-/// Helper to read a field by name (looks up original index)
-template <typename T, size_t... Indices>
-Result<void, Error>
-read_field_by_name(T &obj, ReadContext &ctx, const std::string &field_name,
-                   const std::unordered_map<std::string, size_t> &name_to_index,
-                   std::index_sequence<Indices...>) {
-
-  auto iter_lookup = name_to_index.find(field_name);
-  if (iter_lookup == name_to_index.end()) {
-    return Unexpected(
-        Error::type_error("Failed to dispatch field: " + field_name));
-  }
-  size_t original_index = iter_lookup->second;
-
-  // Use fold expression to dispatch to the correct index
-  bool handled = false;
-  Result<void, Error> result;
-
-  detail::for_each_index(
-      std::index_sequence<Indices...>{}, [&](auto index_constant) {
-        constexpr size_t index = decltype(index_constant)::value;
-        if (!handled && original_index == index) {
-          handled = true;
-          result = read_single_field_by_index<index>(obj, ctx);
-        }
-      });
-
-  if (!handled) {
-    return Unexpected(
-        Error::type_error("Failed to dispatch field: " + field_name));
-  }
-
   return result;
 }
 
@@ -561,15 +508,6 @@ read_struct_fields_compatible(T &obj, ReadContext &ctx,
   }
 
   return Result<void, Error>();
-}
-
-/// Read struct fields in sorted order using local metadata
-template <typename T>
-Result<void, Error>
-read_struct_fields_sorted(T &obj, ReadContext &ctx,
-                          const TypeResolver::TypeInfo &type_info) {
-  (void)type_info;
-  return ReadSortedDispatcher<T, 0>::apply(obj, ctx);
 }
 
 } // namespace detail
@@ -652,7 +590,7 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
 
     if (!ctx.is_compatible() || !type_info->type_meta) {
       FORY_RETURN_NOT_OK(
-          detail::read_struct_fields_sorted(obj, ctx, *type_info));
+          detail::read_struct_fields_impl(obj, ctx, std::make_index_sequence<field_count>{}));
       finish();
       return obj;
     }
@@ -670,7 +608,7 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
 
     Result<void, Error> status;
     if (remote_type_meta->get_hash() == type_info->type_meta->get_hash()) {
-      status = detail::read_struct_fields_sorted(obj, ctx, *type_info);
+      status = detail::read_struct_fields_impl(obj, ctx, std::make_index_sequence<field_count>{});
     } else {
       status = detail::read_struct_fields_compatible(
           obj, ctx, remote_type_meta, std::make_index_sequence<field_count>{});
@@ -685,12 +623,11 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
     // Increase depth tracking
     FORY_RETURN_NOT_OK(ctx.increase_depth());
 
-    // Read all fields in sorted order
+    // Read all fields in original declaration order
     T obj{};
-    auto type_info = ctx.type_resolver().template get_struct_type_info<T>();
-    FORY_CHECK(type_info)
-        << "Type metadata not initialized for requested struct";
-    FORY_RETURN_NOT_OK(detail::read_struct_fields_sorted(obj, ctx, *type_info));
+    using FieldDescriptor = decltype(ForyFieldInfo(std::declval<const T &>()));
+    constexpr size_t field_count = FieldDescriptor::Size;
+    FORY_RETURN_NOT_OK(detail::read_struct_fields_impl(obj, ctx, std::make_index_sequence<field_count>{}));
 
     // Decrease depth tracking
     ctx.decrease_depth();

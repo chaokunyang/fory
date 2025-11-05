@@ -31,6 +31,7 @@
 namespace fory {
 namespace serialization {
 
+// Forward declarations
 class TypeResolver;
 class ReadContext;
 
@@ -172,6 +173,10 @@ private:
   TypeResolver *type_resolver_;
   RefWriter ref_writer_;
   uint32_t current_depth_;
+
+  // Meta sharing state (for compatible mode)
+  std::vector<std::vector<uint8_t>> write_type_defs_;
+  std::unordered_map<std::type_index, size_t> write_type_id_index_map_;
 };
 
 /// Read context for deserialization operations.
@@ -307,6 +312,10 @@ private:
   TypeResolver *type_resolver_;
   RefReader ref_reader_;
   uint32_t current_depth_;
+
+  // Meta sharing state (for compatible mode)
+  std::vector<std::shared_ptr<void>> reading_type_infos_;
+  std::unordered_map<int64_t, std::shared_ptr<void>> parsed_type_infos_;
 };
 
 /// Implementation of DepthGuard destructor

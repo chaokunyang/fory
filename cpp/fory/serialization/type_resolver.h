@@ -362,7 +362,6 @@ struct TypeInfo {
 
 class TypeResolver {
 public:
-
   TypeResolver();
   TypeResolver(const TypeResolver &) = delete;
   TypeResolver &operator=(const TypeResolver &) = delete;
@@ -400,55 +399,32 @@ public:
   std::shared_ptr<TypeInfo> get_type_info_by_id(uint32_t type_id) const;
 
   /// Get type info by namespace and type name (for namespaced types)
-  std::shared_ptr<TypeInfo> get_type_info_by_name(const std::string &ns,
-                                                   const std::string &type_name) const;
+  std::shared_ptr<TypeInfo>
+  get_type_info_by_name(const std::string &ns,
+                        const std::string &type_name) const;
 
   /// Read type information dynamically from ReadContext based on type ID.
   ///
   /// This method handles reading type info for various type categories:
   /// - COMPATIBLE_STRUCT/NAMED_COMPATIBLE_STRUCT: reads meta index
-  /// - NAMED_ENUM/NAMED_STRUCT/NAMED_EXT: reads namespace and type name (if not sharing meta)
+  /// - NAMED_ENUM/NAMED_STRUCT/NAMED_EXT: reads namespace and type name (if not
+  /// sharing meta)
   /// - Other types: looks up by type ID
   ///
   /// @return TypeInfo pointer if found, error otherwise
   Result<std::shared_ptr<TypeInfo>, Error> read_any_typeinfo(ReadContext &ctx);
-  
-  /// Read type info from stream with explicit local TypeMeta for field_id assignment
-  Result<std::shared_ptr<TypeInfo>, Error> read_any_typeinfo(ReadContext &ctx, const TypeMeta *local_type_meta);
 
-  // ============================================================================
-  // Meta Sharing API - For compatible mode serialization
-  // ============================================================================
+  /// Read type info from stream with explicit local TypeMeta for field_id
+  /// assignment
+  Result<std::shared_ptr<TypeInfo>, Error>
+  read_any_typeinfo(ReadContext &ctx, const TypeMeta *local_type_meta);
 
-  /// Push a TypeId's TypeMeta into the write collection.
-  /// Returns the index for writing as varint.
-  /// (MetaWriterResolver::push)
-  Result<size_t, Error> meta_push(const std::type_index &type_id);
-
-  /// Write all collected TypeMetas to buffer.
-  /// Format: varuint32 count + raw TypeMeta bytes
-  /// (MetaWriterResolver::to_bytes)
-  void meta_write_to_buffer(Buffer &buffer) const;
-
-  /// Check if any TypeMetas were collected.
-  /// (MetaWriterResolver::empty)
-  bool meta_empty() const;
-
-  /// Reset write meta state for reuse.
-  /// (MetaWriterResolver::reset)
-  void meta_reset_writer();
-
-  /// Get TypeInfo by meta index.
-  /// (MetaReaderResolver::get)
-  Result<std::shared_ptr<TypeInfo>, Error> meta_get_by_index(size_t index) const;
-
-  /// Load all TypeMetas from buffer at start of deserialization.
-  /// (MetaReaderResolver::load)
-  Result<size_t, Error> meta_load(Buffer &buffer);
-
-  /// Reset read meta state for reuse.
-  /// (MetaReaderResolver::reset)
-  void meta_reset_reader();
+  /// Get const reference to type_info_cache (used by WriteContext for meta
+  /// sharing)
+  const std::unordered_map<std::type_index, std::shared_ptr<TypeInfo>> &
+  get_type_info_cache() const {
+    return type_info_cache_;
+  }
 
 private:
   template <typename T> std::shared_ptr<TypeInfo> ensure_type_info();
@@ -516,14 +492,6 @@ private:
       type_info_by_id_;
   mutable std::unordered_map<std::string, std::shared_ptr<TypeInfo>>
       type_info_by_name_;
-
-  // Meta sharing state (was MetaWriterResolver)
-  std::vector<std::vector<uint8_t>> write_type_defs_;
-  std::unordered_map<std::type_index, size_t> write_type_id_index_map_;
-
-  // Meta sharing state (was MetaReaderResolver)
-  std::vector<std::shared_ptr<TypeInfo>> reading_type_infos_;
-  std::unordered_map<int64_t, std::shared_ptr<TypeInfo>> parsed_type_infos_;
 };
 
 // Alias for backward compatibility (already defined above as top-level)
@@ -570,8 +538,7 @@ TypeResolver::field_name_to_index() {
 }
 
 template <typename T>
-std::shared_ptr<TypeInfo>
-TypeResolver::get_struct_type_info() {
+std::shared_ptr<TypeInfo> TypeResolver::get_struct_type_info() {
   static_assert(is_fory_serializable_v<T>,
                 "get_struct_type_info requires FORY_STRUCT types");
   return ensure_type_info<T>();
@@ -597,8 +564,7 @@ template <typename T> uint32_t TypeResolver::struct_type_tag() {
 }
 
 template <typename T>
-std::shared_ptr<TypeInfo>
-TypeResolver::ensure_type_info() {
+std::shared_ptr<TypeInfo> TypeResolver::ensure_type_info() {
   const std::type_index key(typeid(T));
   {
     std::lock_guard<std::mutex> lock(struct_mutex_);
@@ -799,8 +765,7 @@ TypeResolver::build_ext_type_info(uint32_t type_id, std::string ns,
   return entry;
 }
 
-template <typename T>
-Harness TypeResolver::make_struct_harness() {
+template <typename T> Harness TypeResolver::make_struct_harness() {
   return Harness(&TypeResolver::harness_write_adapter<T>,
                  &TypeResolver::harness_read_adapter<T>,
                  &TypeResolver::harness_write_data_adapter<T>,
@@ -808,8 +773,7 @@ Harness TypeResolver::make_struct_harness() {
                  &TypeResolver::harness_struct_sorted_fields<T>);
 }
 
-template <typename T>
-Harness TypeResolver::make_serializer_harness() {
+template <typename T> Harness TypeResolver::make_serializer_harness() {
   return Harness(&TypeResolver::harness_write_adapter<T>,
                  &TypeResolver::harness_read_adapter<T>,
                  &TypeResolver::harness_write_data_adapter<T>,
@@ -980,7 +944,7 @@ TypeResolver::get_type_info_by_id(uint32_t type_id) const {
 
 inline std::shared_ptr<TypeInfo>
 TypeResolver::get_type_info_by_name(const std::string &ns,
-                                     const std::string &type_name) const {
+                                    const std::string &type_name) const {
   std::lock_guard<std::mutex> lock(struct_mutex_);
   auto key = make_name_key(ns, type_name);
   auto it = type_info_by_name_.find(key);
@@ -988,41 +952,6 @@ TypeResolver::get_type_info_by_name(const std::string &ns,
     return it->second;
   }
   return nullptr;
-}
-
-// ============================================================================
-// Meta Sharing implementations (after TypeInfo is defined)
-// ============================================================================
-
-inline void TypeResolver::meta_write_to_buffer(Buffer &buffer) const {
-  buffer.WriteVarUint32(static_cast<uint32_t>(write_type_defs_.size()));
-  for (const auto &type_def : write_type_defs_) {
-    buffer.WriteBytes(type_def.data(), type_def.size());
-  }
-}
-
-inline bool TypeResolver::meta_empty() const {
-  return write_type_defs_.empty();
-}
-
-inline void TypeResolver::meta_reset_writer() {
-  write_type_defs_.clear();
-  write_type_id_index_map_.clear();
-}
-
-inline Result<std::shared_ptr<TypeInfo>, Error>
-TypeResolver::meta_get_by_index(size_t index) const {
-  if (index >= reading_type_infos_.size()) {
-    return Unexpected(Error::invalid(
-        "Meta index out of bounds: " + std::to_string(index) +
-        ", size: " + std::to_string(reading_type_infos_.size())));
-  }
-  return reading_type_infos_[index];
-}
-
-inline void TypeResolver::meta_reset_reader() {
-  reading_type_infos_.clear();
-  parsed_type_infos_.clear();
 }
 
 } // namespace serialization

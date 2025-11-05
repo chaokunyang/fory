@@ -135,16 +135,14 @@ Result<void, Error> dispatch_field_index(size_t target_index, Func &&func) {
 // compatible mode uses a fast switch/jump table.
 // ------------------------------------------------------------------
 
-template <typename T>
-struct CompileTimeFieldHelpers {
+template <typename T> struct CompileTimeFieldHelpers {
   using FieldDescriptor = decltype(ForyFieldInfo(std::declval<const T &>()));
   static constexpr size_t FieldCount = FieldDescriptor::Size;
   static inline constexpr auto Names = FieldDescriptor::Names;
   static inline constexpr auto Ptrs = FieldDescriptor::Ptrs;
   using FieldPtrs = decltype(Ptrs);
 
-  template <size_t Index>
-  static constexpr uint32_t field_type_id() {
+  template <size_t Index> static constexpr uint32_t field_type_id() {
     if constexpr (FieldCount == 0) {
       return 0;
     } else {
@@ -154,8 +152,7 @@ struct CompileTimeFieldHelpers {
     }
   }
 
-  template <size_t Index>
-  static constexpr bool field_nullable() {
+  template <size_t Index> static constexpr bool field_nullable() {
     if constexpr (FieldCount == 0) {
       return false;
     } else {
@@ -217,8 +214,8 @@ struct CompileTimeFieldHelpers {
   static inline constexpr size_t max_snake_case_length =
       compute_max_snake_length();
 
-  static inline constexpr std::array<std::array<char, max_snake_case_length + 1>,
-                                     FieldCount>
+  static inline constexpr std::array<
+      std::array<char, max_snake_case_length + 1>, FieldCount>
       snake_case_storage = []() constexpr {
         std::array<std::array<char, max_snake_case_length + 1>, FieldCount>
             storage{};
@@ -278,6 +275,17 @@ struct CompileTimeFieldHelpers {
            tid == static_cast<uint32_t>(TypeId::VAR_INT64);
   }
 
+  static constexpr bool is_user_type(uint32_t tid) {
+    return tid == static_cast<uint32_t>(TypeId::ENUM) ||
+           tid == static_cast<uint32_t>(TypeId::NAMED_ENUM) ||
+           tid == static_cast<uint32_t>(TypeId::STRUCT) ||
+           tid == static_cast<uint32_t>(TypeId::COMPATIBLE_STRUCT) ||
+           tid == static_cast<uint32_t>(TypeId::NAMED_STRUCT) ||
+           tid == static_cast<uint32_t>(TypeId::NAMED_COMPATIBLE_STRUCT) ||
+           tid == static_cast<uint32_t>(TypeId::EXT) ||
+           tid == static_cast<uint32_t>(TypeId::NAMED_EXT);
+  }
+
   static constexpr int group_rank(size_t index) {
     if constexpr (FieldCount == 0) {
       return 6;
@@ -293,10 +301,9 @@ struct CompileTimeFieldHelpers {
         return 4;
       if (tid == static_cast<uint32_t>(TypeId::MAP))
         return 5;
-      if (tid >= static_cast<uint32_t>(TypeId::STRING) &&
-          tid <= static_cast<uint32_t>(TypeId::DECIMAL))
-        return 2;
-      return 6;
+      if (is_user_type(tid))
+        return 6;
+      return 2;
     }
   }
 
@@ -376,41 +383,12 @@ struct CompileTimeFieldHelpers {
 
 template <typename T, size_t Index, typename FieldPtrs>
 Result<void, Error> write_single_field(const T &obj, WriteContext &ctx,
-               const FieldPtrs &field_ptrs);
+                                       const FieldPtrs &field_ptrs);
 
 template <size_t Index, typename T>
 Result<void, Error> read_single_field_by_index(T &obj, ReadContext &ctx);
 
-template <typename T, size_t Index>
-struct WriteSortedDispatcher {
-  using Helpers = CompileTimeFieldHelpers<T>;
-  using FieldPtrs = typename Helpers::FieldPtrs;
-
-  static Result<void, Error> apply(const T &obj, WriteContext &ctx,
-                                   const FieldPtrs &field_ptrs) {
-    if constexpr (Index >= Helpers::FieldCount) {
-      (void)obj;
-      (void)ctx;
-      (void)field_ptrs;
-      return Result<void, Error>();
-    } else {
-      auto result = dispatch_field_index<T>(Helpers::sorted_indices[Index],
-                                            [&](auto index_constant) {
-                                              constexpr size_t index =
-                                                  decltype(index_constant)::value;
-                                              return write_single_field<T, index>(
-                                                  obj, ctx, field_ptrs);
-                                            });
-      if (!result.ok()) {
-        return result;
-      }
-      return WriteSortedDispatcher<T, Index + 1>::apply(obj, ctx, field_ptrs);
-    }
-  }
-};
-
-template <typename T, size_t Index>
-struct ReadSortedDispatcher {
+template <typename T, size_t Index> struct ReadSortedDispatcher {
   using Helpers = CompileTimeFieldHelpers<T>;
 
   static Result<void, Error> apply(T &obj, ReadContext &ctx) {
@@ -419,13 +397,11 @@ struct ReadSortedDispatcher {
       (void)ctx;
       return Result<void, Error>();
     } else {
-      auto result = dispatch_field_index<T>(Helpers::sorted_indices[Index],
-                                            [&](auto index_constant) {
-                                              constexpr size_t index =
-                                                  decltype(index_constant)::value;
-                                              return read_single_field_by_index<index>(
-                                                  obj, ctx);
-                                            });
+      auto result = dispatch_field_index<T>(
+          Helpers::sorted_indices[Index], [&](auto index_constant) {
+            constexpr size_t index = decltype(index_constant)::value;
+            return read_single_field_by_index<index>(obj, ctx);
+          });
       if (!result.ok()) {
         return result;
       }
@@ -433,7 +409,6 @@ struct ReadSortedDispatcher {
     }
   }
 };
-
 
 /// Helper to write a single field
 template <typename T, size_t Index, typename FieldPtrs>
@@ -450,19 +425,7 @@ Result<void, Error> write_single_field(const T &obj, WriteContext &ctx,
   return Serializer<FieldType>::write(field_value, ctx, field_needs_ref, false);
 }
 
-/// Write struct fields in sorted order (for compatible mode)
-template <typename T>
-Result<void, Error>
-write_struct_fields_sorted(const T &obj, WriteContext &ctx,
-                           const TypeResolver::TypeInfo &type_info) {
-  (void)type_info;
-
-  using Helpers = CompileTimeFieldHelpers<T>;
-  const auto &field_ptrs = Helpers::Ptrs;
-  return WriteSortedDispatcher<T, 0>::apply(obj, ctx, field_ptrs);
-}
-
-/// Write struct fields recursively using index sequence (declaration order)
+/// Write struct fields recursively using index sequence (sorted order)
 template <typename T, size_t... Indices>
 Result<void, Error> write_struct_fields_impl(const T &obj, WriteContext &ctx,
                                              std::index_sequence<Indices...>) {
@@ -470,9 +433,17 @@ Result<void, Error> write_struct_fields_impl(const T &obj, WriteContext &ctx,
   const auto field_info = ForyFieldInfo(obj);
   const auto field_ptrs = decltype(field_info)::Ptrs;
 
-  // Write each field with early return on error
+  using Helpers = CompileTimeFieldHelpers<T>;
+
+  // Write each field in sorted order with early return on error
   Result<void, Error> result;
-  ((result = write_single_field<T, Indices>(obj, ctx, field_ptrs),
+  ((result = dispatch_field_index<T>(Helpers::sorted_indices[Indices],
+                                     [&](auto index_constant) {
+                                       constexpr size_t index =
+                                           decltype(index_constant)::value;
+                                       return write_single_field<T, index>(
+                                           obj, ctx, field_ptrs);
+                                     }),
     result.ok()) &&
    ...);
   return result;
@@ -576,14 +547,15 @@ read_struct_fields_compatible(T &obj, ReadContext &ctx,
     Result<void, Error> result;
 
     // Unrolled dispatch by comparing field_id against compile-time indices.
-    detail::for_each_index(std::index_sequence<Indices...>{}, [&](auto index_constant) {
-      constexpr size_t index = decltype(index_constant)::value;
-      if (!handled && static_cast<int16_t>(index) == field_id) {
-        handled = true;
-        constexpr size_t original_index = Helpers::sorted_indices[index];
-        result = read_single_field_by_index<original_index>(obj, ctx);
-      }
-    });
+    detail::for_each_index(
+        std::index_sequence<Indices...>{}, [&](auto index_constant) {
+          constexpr size_t index = decltype(index_constant)::value;
+          if (!handled && static_cast<int16_t>(index) == field_id) {
+            handled = true;
+            constexpr size_t original_index = Helpers::sorted_indices[index];
+            result = read_single_field_by_index<original_index>(obj, ctx);
+          }
+        });
 
     if (!handled) {
       // Shouldn't happen if TypeMeta::assign_field_ids worked correctly, but
@@ -636,23 +608,26 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
       ctx.write_bytes(meta_bytes.data(), meta_bytes.size());
     }
 
-    return detail::write_struct_fields_sorted(obj, ctx, *type_info);
+    using FieldDescriptor = decltype(ForyFieldInfo(std::declval<const T &>()));
+    constexpr size_t field_count = FieldDescriptor::Size;
+    return detail::write_struct_fields_impl(
+        obj, ctx, std::make_index_sequence<field_count>{});
   }
 
   static Result<void, Error> write_data(const T &obj, WriteContext &ctx) {
-    auto type_info = ctx.type_resolver().template get_struct_type_info<T>();
-    FORY_CHECK(type_info)
-        << "Type metadata not initialized for requested struct";
-    return detail::write_struct_fields_sorted(obj, ctx, *type_info);
+    using FieldDescriptor = decltype(ForyFieldInfo(std::declval<const T &>()));
+    constexpr size_t field_count = FieldDescriptor::Size;
+    return detail::write_struct_fields_impl(
+        obj, ctx, std::make_index_sequence<field_count>{});
   }
 
   static Result<void, Error> write_data_generic(const T &obj, WriteContext &ctx,
                                                 bool has_generics) {
     (void)has_generics;
-    auto type_info = ctx.type_resolver().template get_struct_type_info<T>();
-    FORY_CHECK(type_info)
-        << "Type metadata not initialized for requested struct";
-    return detail::write_struct_fields_sorted(obj, ctx, *type_info);
+    using FieldDescriptor = decltype(ForyFieldInfo(std::declval<const T &>()));
+    constexpr size_t field_count = FieldDescriptor::Size;
+    return detail::write_struct_fields_impl(
+        obj, ctx, std::make_index_sequence<field_count>{});
   }
 
   static Result<T, Error> read(ReadContext &ctx, bool read_ref,

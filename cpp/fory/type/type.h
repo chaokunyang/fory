@@ -109,6 +109,22 @@ enum class TypeId : int32_t {
   BOUND = 64
 };
 
+inline bool IsUserType(int32_t type_id) {
+  switch (static_cast<TypeId>(type_id)) {
+  case TypeId::ENUM:
+  case TypeId::NAMED_ENUM:
+  case TypeId::STRUCT:
+  case TypeId::COMPATIBLE_STRUCT:
+  case TypeId::NAMED_STRUCT:
+  case TypeId::NAMED_COMPATIBLE_STRUCT:
+  case TypeId::EXT:
+  case TypeId::NAMED_EXT:
+    return true;
+  default:
+    return false;
+  }
+}
+
 inline bool IsNamespacedType(int32_t type_id) {
   switch (static_cast<TypeId>(type_id)) {
   case TypeId::NAMED_ENUM:

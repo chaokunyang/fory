@@ -19,268 +19,494 @@ license: |
   limitations under the License.
 ---
 
-When only java object serialization needed, this mode will have better performance compared to cross-language object
-graph serialization.
+Apache Fory™ provides blazingly-fast serialization for Java through JIT compilation and zero-copy techniques, delivering up to 170x performance improvement over traditional frameworks. This guide covers Java-specific serialization (`Language.JAVA`), optimized for Java-to-Java communication. For cross-language serialization with Python, Rust, Go, or other languages, see [Cross-Language Serialization](#cross-language-serialization) or the [Xlang Serialization Guide](xlang_serialization_guide.md).
 
 ## Quick Start
 
-Note that fory creation is not cheap, the **fory instances should be reused between serializations** instead of creating
-it everytime.
-You should keep fory to a static global variable, or instance variable of some singleton object or limited objects.
+**Important**: Fory instances are expensive to create. **Reuse them** across serializations by storing as static fields or singleton instances.
 
-Fory for single-thread usage:
+### Single-Threaded Usage
 
 ```java
-import java.util.List;
-import java.util.Arrays;
-
 import org.apache.fory.*;
 import org.apache.fory.config.*;
 
 public class Example {
   public static void main(String[] args) {
-    SomeClass object = new SomeClass();
-    // Note that Fory instances should be reused between
-    // multiple serializations of different objects.
-    Fory fory = Fory.builder().withLanguage(Language.JAVA)
-      .requireClassRegistration(true)
+    // Create Fory instance for Java-only serialization
+    // Note: Fory instances are expensive to create - reuse them!
+    Fory fory = Fory.builder()
+      .withLanguage(Language.JAVA)  // Use JAVA mode for best performance
+      .requireClassRegistration(true)  // Security: only registered types allowed
       .build();
-    // Registering types can reduce class name serialization overhead, but not mandatory.
-    // If class registration enabled, all custom types must be registered.
-    // Registration order must be consistent if id is not specified
+    
+    // Register your custom types (order matters if no explicit ID provided)
+    // Built-in types (String, Integer, List, etc.) are automatically registered
     fory.register(SomeClass.class);
-    byte[] bytes = fory.serialize(object);
-    System.out.println(fory.deserialize(bytes));
-  }
-}
-```
-
-Fory for multiple-thread usage:
-
-```java
-import java.util.List;
-import java.util.Arrays;
-
-import org.apache.fory.*;
-import org.apache.fory.config.*;
-
-public class Example {
-  public static void main(String[] args) {
+    
+    // Serialize object to bytes
     SomeClass object = new SomeClass();
-    // Note that Fory instances should be reused between
-    // multiple serializations of different objects.
-    ThreadSafeFory fory = new ThreadLocalFory(classLoader -> {
-      Fory f = Fory.builder().withLanguage(Language.JAVA)
-        .withClassLoader(classLoader).build();
-      f.register(SomeClass.class);
-      return f;
-    });
     byte[] bytes = fory.serialize(object);
-    System.out.println(fory.deserialize(bytes));
+    
+    // Deserialize bytes back to object
+    SomeClass result = (SomeClass) fory.deserialize(bytes);
   }
 }
 ```
 
-Fory instances reuse example:
+### Multi-Threaded Usage
 
 ```java
-import java.util.List;
-import java.util.Arrays;
-
 import org.apache.fory.*;
 import org.apache.fory.config.*;
 
 public class Example {
-  // reuse fory.
+  // IMPORTANT: Store Fory as static field for reuse across threads
+  // ThreadLocalFory maintains one Fory instance per thread
   private static final ThreadSafeFory fory = new ThreadLocalFory(classLoader -> {
-    Fory f = Fory.builder().withLanguage(Language.JAVA)
-      .withClassLoader(classLoader).build();
+    // This factory is called once per thread to create its Fory instance
+    Fory f = Fory.builder()
+      .withLanguage(Language.JAVA)
+      .withClassLoader(classLoader)  // Use thread's classloader
+      .build();
+    
+    // Register types for this thread's Fory instance
     f.register(SomeClass.class);
     return f;
   });
 
   public static void main(String[] args) {
     SomeClass object = new SomeClass();
+    
+    // Thread-safe: automatically uses current thread's Fory instance
     byte[] bytes = fory.serialize(object);
-    System.out.println(fory.deserialize(bytes));
+    SomeClass result = (SomeClass) fory.deserialize(bytes);
   }
 }
 ```
 
-## ForyBuilder options
+**Note for Virtual Threads**: `ThreadLocalFory` creates a Fory instance per thread. For environments using virtual threads (Project Loom), use `buildThreadSafeForyPool()` instead to avoid excessive instance creation.
 
-| Option Name                         | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Default Value                                                  |
-| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| `timeRefIgnored`                    | Whether to ignore reference tracking of all time types registered in `TimeSerializers` and subclasses of those types when ref tracking is enabled. If ignored, ref tracking of every time type can be enabled by invoking `Fory#registerSerializer(Class, Serializer)`. For example, `fory.registerSerializer(Date.class, new DateSerializer(fory, true))`. Note that enabling ref tracking should happen before serializer codegen of any types which contain time fields. Otherwise, those fields will still skip ref tracking. | `true`                                                         |
-| `compressInt`                       | Enables or disables int compression for smaller size.                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `true`                                                         |
-| `compressLong`                      | Enables or disables long compression for smaller size.                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `true`                                                         |
-| `compressIntArray`                  | Enables or disables SIMD-accelerated compression for int arrays when values can fit in smaller data types. Requires Java 16+.                                                                                                                                                                                                                                                                                                                                                                                                     | `true`                                                         |
-| `compressLongArray`                 | Enables or disables SIMD-accelerated compression for long arrays when values can fit in smaller data types. Requires Java 16+.                                                                                                                                                                                                                                                                                                                                                                                                    | `true`                                                         |
-| `compressString`                    | Enables or disables string compression for smaller size.                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | `false`                                                        |
-| `classLoader`                       | The classloader should not be updated; Fory caches class metadata. Use `LoaderBinding` or `ThreadSafeFory` for classloader updates.                                                                                                                                                                                                                                                                                                                                                                                               | `Thread.currentThread().getContextClassLoader()`               |
-| `compatibleMode`                    | Type forward/backward compatibility config. Also Related to `checkClassVersion` config. `SCHEMA_CONSISTENT`: Class schema must be consistent between serialization peer and deserialization peer. `COMPATIBLE`: Class schema can be different between serialization peer and deserialization peer. They can add/delete fields independently. [See more](#class-inconsistency-and-class-version-check).                                                                                                                            | `CompatibleMode.SCHEMA_CONSISTENT`                             |
-| `checkClassVersion`                 | Determines whether to check the consistency of the class schema. If enabled, Fory checks, writes, and checks consistency using the `classVersionHash`. It will be automatically disabled when `CompatibleMode#COMPATIBLE` is enabled. Disabling is not recommended unless you can ensure the class won't evolve.                                                                                                                                                                                                                  | `false`                                                        |
-| `checkJdkClassSerializable`         | Enables or disables checking of `Serializable` interface for classes under `java.*`. If a class under `java.*` is not `Serializable`, Fory will throw an `UnsupportedOperationException`.                                                                                                                                                                                                                                                                                                                                         | `true`                                                         |
-| `registerGuavaTypes`                | Whether to pre-register Guava types such as `RegularImmutableMap`/`RegularImmutableList`. These types are not public API, but seem pretty stable.                                                                                                                                                                                                                                                                                                                                                                                 | `true`                                                         |
-| `requireClassRegistration`          | Disabling may allow unknown classes to be deserialized, potentially causing security risks.                                                                                                                                                                                                                                                                                                                                                                                                                                       | `true`                                                         |
-| `requireClassRegistration`          | Set max depth for deserialization, when depth exceeds, an exception will be thrown. This can be used to refuse deserialization DDOS attack.                                                                                                                                                                                                                                                                                                                                                                                       | `50`                                                           |
-| `suppressClassRegistrationWarnings` | Whether to suppress class registration warnings. The warnings can be used for security audit, but may be annoying, this suppression will be enabled by default.                                                                                                                                                                                                                                                                                                                                                                   | `true`                                                         |
-| `metaShareEnabled`                  | Enables or disables meta share mode.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | `true` if `CompatibleMode.Compatible` is set, otherwise false. |
-| `scopedMetaShareEnabled`            | Scoped meta share focuses on a single serialization process. Metadata created or identified during this process is exclusive to it and is not shared with by other serializations.                                                                                                                                                                                                                                                                                                                                                | `true` if `CompatibleMode.Compatible` is set, otherwise false. |
-| `metaCompressor`                    | Set a compressor for meta compression. Note that the passed MetaCompressor should be thread-safe. By default, a `Deflater` based compressor `DeflaterMetaCompressor` will be used. Users can pass other compressor such as `zstd` for better compression rate.                                                                                                                                                                                                                                                                    | `DeflaterMetaCompressor`                                       |
-| `deserializeNonexistentClass`       | Enables or disables deserialization/skipping of data for non-existent classes.                                                                                                                                                                                                                                                                                                                                                                                                                                                    | `true` if `CompatibleMode.Compatible` is set, otherwise false. |
-| `codeGenEnabled`                    | Disabling may result in faster initial serialization but slower subsequent serializations.                                                                                                                                                                                                                                                                                                                                                                                                                                        | `true`                                                         |
-| `asyncCompilationEnabled`           | If enabled, serialization uses interpreter mode first and switches to JIT serialization after async serializer JIT for a class is finished.                                                                                                                                                                                                                                                                                                                                                                                       | `false`                                                        |
-| `scalaOptimizationEnabled`          | Enables or disables Scala-specific serialization optimization.                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | `false`                                                        |
-| `copyRef`                           | When disabled, the copy performance will be better. But fory deep copy will ignore circular and shared reference. Same reference of an object graph will be copied into different objects in one `Fory#copy`.                                                                                                                                                                                                                                                                                                                     | `true`                                                         |
-| `serializeEnumByName`               | When Enabled, fory serialize enum by name instead of ordinal.                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `false`                                                        |
+### Instance Reuse Pattern
 
-## Advanced Usage
+```java
+import org.apache.fory.*;
+import org.apache.fory.config.*;
 
-### Fory creation
+public class Example {
+  // Best Practice: Store Fory as static field for maximum reuse
+  // This single instance serves all threads in the application
+  private static final ThreadSafeFory fory = new ThreadLocalFory(classLoader -> {
+    Fory f = Fory.builder()
+      .withLanguage(Language.JAVA)
+      .withClassLoader(classLoader)
+      .build();
+    
+    // Register all types once during initialization
+    f.register(SomeClass.class);
+    return f;
+  });
 
-Single thread fory:
+  public static void main(String[] args) {
+    SomeClass object = new SomeClass();
+    
+    // The same 'fory' instance is used for all serialization operations
+    byte[] bytes = fory.serialize(object);
+    SomeClass result = (SomeClass) fory.deserialize(bytes);
+  }
+}
+```
+
+## Class Registration
+
+Class registration is essential for both **security** and **performance** in Fory serialization. By default, Fory requires explicit type registration to prevent arbitrary code execution and reduce serialization overhead.
+
+### Why Register Classes?
+
+1. **Security**: Prevents deserialization of untrusted types (prevents arbitrary code execution)
+2. **Performance**: Eliminates need to serialize full class names (uses compact numeric IDs instead)
+3. **Type Safety**: Ensures only expected types can be serialized/deserialized
+
+### Registration Methods
+
+Fory provides three ways to register classes:
+
+#### 1. Auto-Generated ID (Simplest)
+
+```java
+Fory fory = Fory.builder().build();
+
+// Fory automatically assigns sequential IDs based on registration order
+// WARNING: Order matters! All Fory instances must register in the same order
+fory.register(User.class);      // Auto-assigned ID 1 (first registration)
+fory.register(Product.class);   // Auto-assigned ID 2 (second registration)
+fory.register(Order.class);     // Auto-assigned ID 3 (third registration)
+
+// If another Fory instance registers in different order, deserialization fails:
+// fory2.register(Product.class);  // Gets ID 1 (conflict!)
+// fory2.register(User.class);      // Gets ID 2 (conflict!)
+```
+
+**Pros**:
+- Simple and convenient
+- No ID management needed
+
+**Cons**:
+- **Registration order must be identical** across all Fory instances
+- Fragile: adding a class in the middle breaks compatibility
+- Not recommended for distributed systems
+
+**Use When**: Single application, no cross-process communication, tight control over registration order.
+
+#### 2. Explicit Numeric ID (Recommended for Production)
+
+```java
+Fory fory = Fory.builder().build();
+
+// Explicit IDs allow registration in any order - most robust approach
+// IDs are variable-length encoded: smaller IDs = smaller serialized size
+fory.register(User.class, 100);     // ID 100: encodes to ~1 byte
+fory.register(Product.class, 101);   // Registration order doesn't matter
+fory.register(Order.class, 102);     // Can add new types with new IDs safely
+
+// Another Fory instance can register in different order - no problem:
+// fory2.register(Order.class, 102);    // Same ID = same type (correct!)
+// fory2.register(User.class, 100);     // Order independence ensures compatibility
+```
+
+**Pros**:
+- Registration order doesn't matter
+- Compact serialization (IDs are variable-length encoded)
+- Best performance
+- Easy to manage with constants or enums
+
+**Cons**:
+- Need to coordinate IDs across teams/services
+- Risk of ID conflicts
+
+**Best Practice**: Use constants or enums to manage IDs:
+
+```java
+// Centralize ID management to prevent conflicts and ensure consistency
+public class TypeIds {
+    // Start at 100 to avoid conflicts with Fory's internal IDs (< 100)
+    public static final int USER = 100;
+    public static final int PRODUCT = 101;
+    public static final int ORDER = 102;
+    // Reserve ranges for different modules: 100-199 user module, 200-299 product module, etc.
+}
+
+// All services/processes use the same TypeIds class to ensure consistency
+fory.register(User.class, TypeIds.USER);
+fory.register(Product.class, TypeIds.PRODUCT);
+fory.register(Order.class, TypeIds.ORDER);
+```
+
+**Use When**: Production systems, distributed applications, cross-process communication.
+
+#### 3. String-Based Type Name (Flexible but Verbose)
+
+```java
+Fory fory = Fory.builder().build();
+
+// String-based registration uses type names instead of numeric IDs
+// Namespace prevents collisions between types with same name in different packages
+fory.register(User.class, "com.example.domain", "User");
+// Empty namespace "" means global scope (use only if name is globally unique)
+fory.register(Product.class, "", "UniqueProductType");
+
+// Type name is encoded in serialized data (larger size than numeric ID)
+// But offers flexibility: no ID coordination needed between services
+```
+
+**Pros**:
+- No ID coordination needed
+- Human-readable
+- Flexible for dynamic scenarios
+
+**Cons**:
+- **Significantly larger payload** (full strings vs. compact IDs)
+- Slower serialization/deserialization
+- Not suitable for high-performance scenarios
+
+**Use When**: Prototyping, debugging, or when ID coordination is impractical.
+
+### Registration Order Considerations
+
+When using auto-generated IDs (`fory.register(Class)`), order matters:
+
+**Correct** - Same order on both sides:
+```java
+// Service A (Serializer)
+// Auto-generated IDs require identical registration order across all instances
+fory.register(User.class);      // ID: 1 (first registration)
+fory.register(Product.class);   // ID: 2 (second registration)
+fory.register(Order.class);     // ID: 3 (third registration)
+
+// Service B (Deserializer) - SAME ORDER ensures compatibility
+fory.register(User.class);      // ID: 1 matches Service A
+fory.register(Product.class);   // ID: 2 matches Service A
+fory.register(Order.class);     // ID: 3 matches Service A
+// Deserialization succeeds because IDs align with types
+```
+
+**Incorrect** - Different order causes failures:
+```java
+// Service A
+fory.register(User.class);      // ID: 1
+fory.register(Product.class);   // ID: 2
+fory.register(Order.class);     // ID: 3
+
+// Service B - WRONG ORDER causes type mismatch!
+fory.register(Order.class);     // ID: 1 (but serialized data has User at ID 1)
+fory.register(User.class);      // ID: 2 (but serialized data has Product at ID 2)
+fory.register(Product.class);   // ID: 3 (but serialized data has Order at ID 3)
+// Deserialization will fail with ClassCastException or produce corrupted objects
+```
+
+### Built-in Type Registration
+
+Fory automatically handles common types without explicit registration:
+- Primitives: `int`, `long`, `double`, `boolean`, etc.
+- Wrappers: `Integer`, `Long`, `Double`, `Boolean`, etc.
+- Standard types: `String`, `Date`, `Timestamp`, etc.
+- Collections: `List`, `ArrayList`, `HashMap`, `HashSet`, etc.
+- Arrays: `int[]`, `String[]`, `Object[]`, etc.
+
+Only register **your custom types**.
+
+### Nested Type Registration
+
+When registering types with nested objects, register **all custom types** in the object graph:
+
+```java
+public class Order {
+    private User user;           // Custom type - must register
+    private List<Product> items; // Product is custom type - must register
+    private String status;       // String is built-in - no registration needed
+    private int totalAmount;     // Primitive - no registration needed
+}
+
+// Register all custom types in the object graph
+// Fory traverses object references during serialization and needs serializers for all types
+fory.register(User.class, 100);     // Register referenced types first
+fory.register(Product.class, 101);  // Order: doesn't matter with explicit IDs
+fory.register(Order.class, 102);    // Register container type last (or any order)
+```
+
+### Polymorphic Type Registration
+
+For polymorphic scenarios, register the base class and all implementations:
+
+```java
+interface Animal { }
+class Dog implements Animal { }
+class Cat implements Animal { }
+
+// Register interface/base class first, then all implementations
+// This enables Fory to serialize the concrete type and deserialize to correct subclass
+fory.register(Animal.class, 200);  // Base interface
+fory.register(Dog.class, 201);     // Implementation 1
+fory.register(Cat.class, 202);     // Implementation 2
+
+// Fory serializes concrete type (Dog/Cat) even when declared as Animal
+List<Animal> animals = Arrays.asList(new Dog(), new Cat());
+### Disabling Class Registration (Not Recommended)
+
+For trusted environments only:
 
 ```java
 Fory fory = Fory.builder()
-  .withLanguage(Language.JAVA)
-  // enable reference tracking for shared/circular reference.
-  // Disable it will have better performance if no duplicate reference.
-  .withRefTracking(false)
-  .withCompatibleMode(CompatibleMode.SCHEMA_CONSISTENT)
-  // enable type forward/backward compatibility
-  // disable it for small size and better performance.
-  // .withCompatibleMode(CompatibleMode.COMPATIBLE)
-  // enable async multi-threaded compilation.
-  .withAsyncCompilation(true)
-  .build();
-byte[] bytes = fory.serialize(object);
-System.out.println(fory.deserialize(bytes));
+    // ⚠️ SECURITY RISK: Allows deserialization of ANY class on the classpath
+    // This bypasses Fory's security protection against arbitrary code execution
+    .requireClassRegistration(false)  // Disables security whitelist
+    .build();
+
+// No registration needed - Fory serializes full class names instead of IDs
+// Any class can now be deserialized, including potentially malicious types
+byte[] bytes = fory.serialize(anyObject);  // Works for unregistered types
+Object result = fory.deserialize(bytes);    // Can instantiate ANY class!
+``` .build();
+
+// No registration needed, but any class can be deserialized
+byte[] bytes = fory.serialize(anyObject);
 ```
 
-Thread-safe fory:
+**⚠️ Warning**: Disabling class registration allows arbitrary code execution during deserialization. Only use in completely trusted environments. See [Security](#security) for safer alternatives.
+
+### Cross-Language Registration
+
+For cross-language scenarios, types must be registered with **identical IDs or names** in all languages:
 
 ```java
+// Java
+fory.register(Person.class, 300);  // or fory.register(Person.class, "example.Person");
+
+// Python (must use same ID or name)
+fory.register_type(Person, type_id=300)  # or typename="example.Person"
+```
+
+See [Cross-Language Serialization](#cross-language-serialization) for details.
+
+## Configuration
+
+### ForyBuilder Options
+
+Configure Fory using `ForyBuilder` to optimize for your use case:
+
+| Option                              | Description                                                                                                                                                                                           | Default                                          |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `timeRefIgnored`                    | Ignore reference tracking for time types when ref tracking enabled. Enable per-type: `fory.registerSerializer(Date.class, new DateSerializer(fory, true))` before codegen.                          | `true`                                           |
+| `compressInt`                       | Variable-length int compression (1-5 bytes).                                                                                                                                                          | `true`                                           |
+| `compressLong`                      | Variable-length long compression (SLI or PVL encoding).                                                                                                                                               | `true`                                           |
+| `compressIntArray`                  | SIMD-accelerated `int[]` compression. Requires Java 16+ and `fory-simd`.                                                                                                                             | `true`                                           |
+| `compressLongArray`                 | SIMD-accelerated `long[]` compression. Requires Java 16+ and `fory-simd`.                                                                                                                            | `true`                                           |
+| `compressString`                    | String compression.                                                                                                                                                                                   | `false`                                          |
+| `classLoader`                       | ClassLoader for type resolution. Use `LoaderBinding`/`ThreadSafeFory` for dynamic classloaders.                                                                                                      | `Thread.currentThread().getContextClassLoader()` |
+| `compatibleMode`                    | `SCHEMA_CONSISTENT`: schemas must match. `COMPATIBLE`: supports field addition/deletion. See [Schema Evolution](#schema-evolution).                                                                  | `SCHEMA_CONSISTENT`                              |
+| `checkClassVersion`                 | Validate schema consistency via `classVersionHash`. Auto-disabled in `COMPATIBLE` mode.                                                                                                              | `false`                                          |
+| `checkJdkClassSerializable`         | Require `Serializable` for `java.*` classes.                                                                                                                                                         | `true`                                           |
+| `registerGuavaTypes`                | Pre-register Guava types (`RegularImmutableMap`, `RegularImmutableList`).                                                                                                                            | `true`                                           |
+| `requireClassRegistration`          | Require explicit class registration. **Disabling is a security risk!**                                                                                                                               | `true`                                           |
+| `maxDepth`                          | Maximum object graph depth (prevents stack overflow).                                                                                                                                                | `50`                                             |
+| `suppressClassRegistrationWarnings` | Suppress unregistered class warnings.                                                                                                                                                                | `true`                                           |
+| `metaShareEnabled`                  | Share metadata across serializations. Auto-enabled in `COMPATIBLE` mode.                                                                                                                             | `false` (`true` in `COMPATIBLE`)                 |
+| `scopedMetaShareEnabled`            | Per-serialization metadata sharing.                                                                                                                                                                  | `false` (`true` in `COMPATIBLE`)                 |
+| `metaCompressor`                    | Thread-safe metadata compressor (`DeflaterMetaCompressor` default, consider `zstd`).                                                                                                                 | `DeflaterMetaCompressor`                         |
+| `deserializeNonexistentClass`       | Deserialize non-existent classes into lazy `Map`. Auto-enabled in `COMPATIBLE` mode.                                                                                                                 | `false` (`true` in `COMPATIBLE`)                 |
+| `codeGenEnabled`                    | Enable JIT code generation.                                                                                                                                                                           | `true`                                           |
+| `asyncCompilationEnabled`           | Use interpreter initially while JIT compiles asynchronously.                                                                                                                                          | `false`                                          |
+| `scalaOptimizationEnabled`          | Enable Scala-specific optimizations.                                                                                                                                                                 | `false`                                          |
+| `copyRef`                           | Track references during deep copy. Disabling improves performance but breaks shared/circular references.                                                                                             | `true`                                           |
+| `serializeEnumByName`               | Serialize enums by name (better compatibility when order changes).                                                                                                                                   | `false`                                          |
+
+## Advanced Features
+
+### Custom Fory Configuration
+
+#### Single-Threaded Configuration
+
+```java
+// Configure Fory with custom options for single-threaded use
+Fory fory = Fory.builder()
+  .withLanguage(Language.JAVA)  // Java-only protocol (most efficient)
+  .withRefTracking(false)  // Disable if no shared/circular references (20-30% faster)
+  .withCompatibleMode(CompatibleMode.SCHEMA_CONSISTENT)  // Or .COMPATIBLE for schema evolution support
+  .withAsyncCompilation(true)  // Use interpreter first, compile in background (reduces latency spikes)
+  .build();
+
+// Reuse this fory instance for all serialization operations in the thread
+byte[] bytes = fory.serialize(object);
+Object result = fory.deserialize(bytes);
+```
+
+#### Thread-Safe Configuration
+
+```java
+// ThreadSafeFory wraps per-thread Fory instances for safe concurrent use
 ThreadSafeFory fory = Fory.builder()
   .withLanguage(Language.JAVA)
-  // enable reference tracking for shared/circular reference.
-  // Disable it will have better performance if no duplicate reference.
-  .withRefTracking(false)
-  // compress int for smaller size
-  // .withIntCompressed(true)
-  // compress long for smaller size
-  // .withLongCompressed(true)
-  .withCompatibleMode(CompatibleMode.SCHEMA_CONSISTENT)
-  // enable type forward/backward compatibility
-  // disable it for small size and better performance.
-  // .withCompatibleMode(CompatibleMode.COMPATIBLE)
-  // enable async multi-threaded compilation.
-  .withAsyncCompilation(true)
-  .buildThreadSafeFory();
-byte[] bytes = fory.serialize(object);
-System.out.println(fory.deserialize(bytes));
+  .withRefTracking(false)  // Disable if your data has no shared/circular references
+  .withCompatibleMode(CompatibleMode.SCHEMA_CONSISTENT)  // Schema must match exactly
+  .withAsyncCompilation(true)  // Async JIT reduces first-call latency
+  .buildThreadSafeFory();  // Creates ThreadLocalFory under the hood
+
+// Same fory instance used from multiple threads - thread-safe
+byte[] bytes = fory.serialize(object);  // Uses thread-local Fory instance
+Object result = fory.deserialize(bytes);
 ```
 
-Note that calling `buildThreadSafeFory()` on `ForyBuilder` will create an instance of `ThreadLocalFory`.
-This may not be appropriate in environments where virtual threads are used, as each thread will create its own fory instance, a relatively expensive operation.
-An alternative for virtual threads is to use `buildThreadSafeForyPool`.
+**Virtual Thread Consideration**: `buildThreadSafeFory()` creates `ThreadLocalFory`, which creates one Fory instance per thread. For virtual thread environments, use `buildThreadSafeForyPool()` to avoid excessive instance creation.
 
-### Handling Class Schema Evolution in Serialization
+### Schema Evolution
 
-In many systems, the schema of a class used for serialization may change over time. For instance, fields within a class
-may be added or removed. When serialization and deserialization processes use different versions of jars, the schema of
-the class being deserialized may differ from the one used during serialization.
+Schema evolution allows serialization and deserialization with different class versions. Enable `COMPATIBLE` mode when class definitions may change over time.
 
-By default, Fory serializes objects using the `CompatibleMode.SCHEMA_CONSISTENT` mode. This mode assumes that the
-deserialization process uses the same class schema as the serialization process, minimizing payload overhead.
-However, if there is a schema inconsistency, deserialization will fail.
+**Default Behavior** (`SCHEMA_CONSISTENT`):
+- Assumes identical schemas on both ends
+- Minimal overhead, maximum performance
+- Deserialization fails if schemas differ
 
-If the schema is expected to change, to make deserialization succeed, i.e. schema forward/backward compatibility.
-Users must configure Fory to use `CompatibleMode.COMPATIBLE`. This can be done using the
-`ForyBuilder#withCompatibleMode(CompatibleMode.COMPATIBLE)` method.
-In this compatible mode, deserialization can handle schema changes such as missing or extra fields, allowing it to
+**Compatible Mode** (`COMPATIBLE`):
+- Supports field additions and deletions
+- Forward and backward compatibility
+- Additional metadata overhead for flexibility
 succeed even when the serialization and deserialization processes have different class schemas.
 
-Here is an example of creating Fory to support schema evolution:
+**Enable Compatible Mode**:
 
 ```java
+// COMPATIBLE mode serializes class schema (field names/types) with data
+// This enables forward/backward compatibility at the cost of larger payload
 Fory fory = Fory.builder()
-  .withCompatibleMode(CompatibleMode.COMPATIBLE)
+  .withLanguage(Language.JAVA)
+  .withCompatibleMode(CompatibleMode.COMPATIBLE)  // Enable schema evolution
   .build();
 
+// Serialized data includes class metadata for compatibility
 byte[] bytes = fory.serialize(object);
-System.out.println(fory.deserialize(bytes));
+
+// Can deserialize even if class definition changed (fields added/removed)
+Object result = fory.deserialize(bytes);
 ```
 
-This compatible mode involves serializing class metadata into the serialized output. Despite Fory's use of
-sophisticated compression techniques to minimize overhead, there is still some additional space cost associated with
-class metadata.
+Compatible mode serializes class metadata (field names, types) with the data. Despite aggressive compression, this adds overhead. Fory supports [metadata sharing](https://fory.apache.org/docs/specification/fory_java_serialization_spec#meta-share) to send metadata once per connection/session, reducing costs.
 
-To further reduce metadata costs, Fory introduces a class metadata sharing mechanism, which allows the metadata to be
-sent to the deserialization process only once. For more details, please refer to the [Meta Sharing](https://fory.apache.org/docs/specification/fory_java_serialization_spec#meta-share) specification.
+### Numeric Compression
 
-### Compression
+Fory provides variable-length encoding for integers and longs, enabled by default. Disable for performance-critical numeric workloads.
 
-`ForyBuilder#withIntCompressed`/`ForyBuilder#withLongCompressed` can be used to compress int/long for smaller size.
-Normally compress int is enough.
+**Int Compression** (1-5 bytes):
+- Uses variable-length encoding with continuation bits
+- First bit indicates if more bytes follow
 
-Both compression are enabled by default, if the serialized is not important, for example, you use flatbuffers for
-serialization before, which doesn't compress anything, then you should disable compression. If your data are all
-numbers,
-the compression may bring 80% performance regression.
+**Long Compression** (SLI encoding - default):
+- Values in `[-1073741824, 1073741823]`: 4 bytes
+- Other values: 9 bytes (1 flag byte + 8 data bytes)
+- Alternative: PVL encoding with zigzag conversion for negative numbers
 
-For int compression, fory use 1~5 bytes for encoding. First bit in every byte indicate whether has next byte. if first
-bit is set, then next byte will be read util first bit of next byte is unset.
+**When to Disable**:
+- Data consists primarily of large numbers
+- Using uncompressed formats previously (e.g., Flatbuffers)
+- Compression causes >50% performance degradation for your workload
 
-For long compression, fory support two encoding:
+```java
+// Disable compression when working with large numbers or when raw speed is critical
+Fory fory = Fory.builder()
+  .withIntCompressed(false)   // Ints always use 4 bytes (faster, larger)
+  .withLongCompressed(false)  // Longs always use 8 bytes (faster, larger)
+  .build();
 
-- Fory SLI(Small long as int) Encoding (**used by default**):
-  - If long is in `[-1073741824, 1073741823]`, encode as 4 bytes int: `| little-endian: ((int) value) << 1 |`
-  - Otherwise write as 9 bytes: `| 0b1 | little-endian 8bytes long |`
-- Fory PVL(Progressive Variable-length Long) Encoding:
-  - First bit in every byte indicate whether has next byte. if first bit is set, then next byte will be read util
-    first bit of next byte is unset.
-  - Negative number will be converted to positive number by `(v << 1) ^ (v >> 63)` to reduce cost of small negative
-    numbers.
-
-If a number are `long` type, it can't be represented by smaller bytes mostly, the compression won't get good enough
-result,
-not worthy compared to performance cost. Maybe you should try to disable long compression if you find it didn't bring
-much
-space savings.
+// Trade-off: ~10-20% faster serialization but 20-40% larger payload for typical data
+```
 
 ### Array Compression
 
-Fory supports SIMD-accelerated compression for primitive arrays (`int[]` and `long[]`) when array values can fit in smaller data types. This feature is available on Java 16+ and uses the Vector API for optimal performance.
+SIMD-accelerated compression for `int[]` and `long[]` when values fit in smaller types. Requires Java 16+ and `fory-simd` module.
 
-#### How Array Compression Works
-
-Array compression analyzes arrays to determine if values can be stored using fewer bytes:
-
-- **`int[]` → `byte[]`**: When all values are in range [-128, 127] (75% size reduction)
-- **`int[]` → `short[]`**: When all values are in range [-32768, 32767] (50% size reduction)
-- **`long[]` → `int[]`**: When all values fit in integer range (50% size reduction)
-
-#### Configuration and Registration
-
-To enable array compression you must explicitly register the serializers:
+**Compression Ratios**:
+- `int[]` → `byte[]`: 75% size reduction (values in [-128, 127])
+**Configuration**:
 
 ```java
+// SIMD array compression requires Java 16+ Vector API
 Fory fory = Fory.builder()
   .withLanguage(Language.JAVA)
-  // Enable int array compression
-  .withIntArrayCompressed(true)
-  // Enable long array compression
-  .withLongArrayCompressed(true)
+  .withIntArrayCompressed(true)   // Enable int[] compression
+  .withLongArrayCompressed(true)  // Enable long[] compression
   .build();
 
-// You must explicitly register compressed array serializers
+// Must explicitly register compressed serializers (not registered by default)
+CompressedArraySerializers.registerSerializers(fory);
+
+// Now int[] and long[] use SIMD-accelerated compression
+// Example: int[] with values [1, 2, 3] compressed to byte[] (75% smaller)
+```
+// Must register compressed serializers
 CompressedArraySerializers.registerSerializers(fory);
 ```
 
-**Note**: The `fory-simd` module must be included in your dependencies for compressed array serializers to be available.
-
-For Maven:
+**Maven Dependency**:
 
 ```xml
 <dependency>
@@ -290,436 +516,295 @@ For Maven:
 </dependency>
 ```
 
-### Object deep copy
+### Deep Copy
 
-Deep copy example:
+Fory provides efficient deep copying with optional reference tracking:
+
+**With Reference Tracking** (preserves shared/circular references):
 
 ```java
+// Enable reference tracking to preserve object identity during copy
 Fory fory = Fory.builder().withRefCopy(true).build();
-SomeClass a = xxx;
-SomeClass copied = fory.copy(a);
+SomeClass copied = fory.copy(original);
+
+// Shared references preserved: if original.child == original.parent.child
+// then copied.child == copied.parent.child (same instance in copied graph)
 ```
 
-Make fory deep copy ignore circular and shared reference, this deep copy mode will ignore circular and shared reference.
-Same reference of an object graph will be copied into different objects in one `Fory#copy`.
+**Without Reference Tracking** (faster, but duplicates shared objects):
 
 ```java
+// Disable reference tracking for faster copy when object graph is a tree
 Fory fory = Fory.builder().withRefCopy(false).build();
-SomeClass a = xxx;
-SomeClass copied = fory.copy(a);
+SomeClass copied = fory.copy(original);
+
+// Shared references NOT preserved: if original.child == original.parent.child
+// then copied.child != copied.parent.child (duplicated instances)
+// Trade-off: ~30% faster but breaks object identity
 ```
 
-### Cross-Language Serialization
+## Cross-Language Serialization
 
-Apache Fory™ supports seamless data exchange between Java and other languages (Python, Rust, Go, JavaScript, etc.) through the xlang serialization format. This enables multi-language microservices, polyglot data pipelines, and cross-platform data sharing.
+Fory supports cross-language serialization via `Language.XLANG` mode, enabling data exchange between Java, Python, Rust, Go, JavaScript, and other languages. For comprehensive cross-language documentation, see the [Xlang Serialization Guide](xlang_serialization_guide.md).
 
-#### Enable Cross-Language Mode
-
-To serialize data for consumption by other languages, use `Language.XLANG` mode:
+### Quick Start
 
 ```java
 import org.apache.fory.*;
 import org.apache.fory.config.*;
 
-// Create Fory instance with XLANG mode
+// XLANG mode enables cross-language serialization (Java, Python, Rust, Go, JS, etc.)
+// Uses language-agnostic protocol with explicit type encoding
 Fory fory = Fory.builder()
-    .withLanguage(Language.XLANG)
-    .withRefTracking(true)  // Enable reference tracking for complex graphs
+    .withLanguage(Language.XLANG)  // Cross-language protocol (slower than Language.JAVA)
+    .withRefTracking(true)  // Enable for graphs with shared/circular references
     .build();
+
+// Register types with consistent IDs or names across ALL languages
+// See Type Registration section for details
 ```
-
-#### Register Types for Cross-Language Compatibility
-
-Types must be registered with **consistent IDs or names** across all languages. Fory supports two registration methods:
 
 **1. Register by ID (Recommended for Performance)**
 
 ```java
 public record Person(String name, int age) {}
 
-// Register with numeric ID - faster and more compact
-fory.register(Person.class, 1);
+// Register with numeric ID (same ID must be used in Python/Rust/Go/etc.)
+// IDs are compact (1-2 bytes) - best for performance
+fory.register(Person.class, 300);  // All languages use ID 300 for Person
 
-Person person = new Person("Alice", 30);
-byte[] bytes = fory.serialize(person);
-// bytes can be deserialized by Python, Rust, Go, etc.
+byte[] bytes = fory.serialize(new Person("Alice", 30));
+// Serialized bytes contain ID 300 instead of class name "Person"
+// Other languages deserialize using their type registered with ID 300
+```y fory = Fory.builder()
+    .withLanguage(Language.XLANG)
+    .withRefTracking(true)
+    .build();
 ```
-
-**Benefits**: Faster serialization, smaller binary size
-**Trade-offs**: Requires coordination to avoid ID conflicts across teams/services
 
 **2. Register by Name (Recommended for Flexibility)**
 
 ```java
-public record Person(String name, int age) {}
+// Register using string typename (same name used in all languages)
+// More flexible: no ID coordination needed, but larger payload (full type name)
+fory.register(Person.class, "example.Person");  // All languages use "example.Person"
 
-// Register with string name - more flexible
-fory.register(Person.class, "example.Person");
-
-Person person = new Person("Alice", 30);
-byte[] bytes = fory.serialize(person);
-// bytes can be deserialized by Python, Rust, Go, etc.
+byte[] bytes = fory.serialize(new Person("Bob", 25));
+// Serialized bytes contain type name "example.Person" (compressed via meta string)
+// Trade-off: +5-20 bytes per unique type, but no ID conflicts possible
 ```
 
-**Benefits**: Less prone to conflicts, easier management across teams, no coordination needed
-**Trade-offs**: Slightly larger binary size due to string encoding
+### Java ↔ Python Example
 
-#### Cross-Language Example: Java ↔ Python
-
-**Java (Serializer)**
+**Java**:
 
 ```java
 import org.apache.fory.*;
 import org.apache.fory.config.*;
 
+### Java ↔ Python Example
+
+**Java (Serialization)**:
+
+```java
+import org.apache.fory.*;
+import org.apache.fory.config.*;
+
+// Define Java record for person data
 public record Person(String name, int age) {}
 
-public class Example {
-    public static void main(String[] args) {
-        Fory fory = Fory.builder()
-            .withLanguage(Language.XLANG)
-            .withRefTracking(true)
-            .build();
+// Create XLANG Fory instance for cross-language serialization
+Fory fory = Fory.builder()
+    .withLanguage(Language.XLANG)  // Must use XLANG mode for cross-language
+    .build();
 
-        // Register with consistent name
-        fory.register(Person.class, "example.Person");
+// Register type with string name (must match Python registration)
+fory.register(Person.class, "example.Person");
 
-        Person person = new Person("Bob", 25);
-        byte[] bytes = fory.serialize(person);
-
-        // Send bytes to Python service via network/file/queue
-    }
-}
+// Serialize Java object to bytes
+byte[] bytes = fory.serialize(new Person("Alice", 30));
+// Send bytes to Python via network, file, or other transport...
 ```
 
-**Python (Deserializer)**
+**Python (Deserialization)**:
 
 ```python
 import pyfory
-from dataclasses import dataclass
+### Shared and Circular References
 
-@dataclass
-class Person:
-    name: str
-    age: pyfory.int32
-
-# Create Fory in xlang mode
-fory = pyfory.Fory(ref_tracking=True)
-
-# Register with the SAME name as Java
-fory.register_type(Person, typename="example.Person")
-
-# Deserialize bytes from Java
-person = fory.deserialize(bytes_from_java)
-print(f"{person.name}, {person.age}")  # Output: Bob, 25
-```
-
-#### Handling Circular and Shared References
-
-Cross-language mode supports circular and shared references when reference tracking is enabled:
+Enable reference tracking for object graphs with shared or circular references:
 
 ```java
 public class Node {
     public String value;
-    public Node next;
-    public Node parent;
+    public Node next;    // Forward reference
+    public Node parent;  // Back reference (creates cycle)
 }
 
+// Reference tracking prevents infinite recursion and duplicate data
 Fory fory = Fory.builder()
     .withLanguage(Language.XLANG)
-    .withRefTracking(true)  // Required for circular references
+    .withRefTracking(true)  // REQUIRED for circular/shared references
     .build();
 
 fory.register(Node.class, "example.Node");
 
-// Create circular reference
+// Create circular reference: A -> B -> A
 Node node1 = new Node();
 node1.value = "A";
 Node node2 = new Node();
+
 node2.value = "B";
 node1.next = node2;
-node2.parent = node1;  // Circular reference
+node2.parent = node1;  // Circular reference: A.next=B, B.parent=A
 
 byte[] bytes = fory.serialize(node1);
-// Python/Rust/Go can correctly deserialize this with circular references preserved
+// With ref tracking: each object serialized once, references encoded as IDs
+// Without ref tracking: would cause infinite recursion (stack overflow)
+// Other languages (Python, Rust, etc.) correctly deserialize circular references
 ```
 
-#### Type Mapping Considerations
+### Type Compatibility
 
-Not all Java types have equivalents in other languages. When using xlang mode:
+Use portable types for maximum cross-language compatibility:
 
-- Use **primitive types** (`int`, `long`, `double`, `String`) for maximum compatibility
-- Use **standard collections** (`List`, `Map`, `Set`) instead of language-specific ones
-- Avoid **Java-specific types** like `Optional`, `BigDecimal` (unless the target language supports them)
-- See [Type Mapping Guide](https://fory.apache.org/docs/specification/xlang_type_mapping) for complete compatibility matrix
+**Compatible**:
+- Primitives: `int`, `long`, `double`, `String`, `boolean`
+- Collections: `List`, `Map`, `Set`
+- Arrays: `int[]`, `byte[]`, `String[]`
 
-**Compatible Types**:
+**Avoid**:
+- Java-specific: `Optional`, `BigDecimal`, `EnumSet`
+- JDK implementation details
 
-```java
-public record UserData(
-    String name,           // ✅ Compatible
-    int age,               // ✅ Compatible
-    List<String> tags,     // ✅ Compatible
-    Map<String, Integer> scores  // ✅ Compatible
-) {}
-```
+### Performance Considerations
 
-**Problematic Types**:
+- **Use ID registration** for smaller payloads
+- **Disable ref tracking** if no circular references (`withRefTracking(false)`)
+- **Use Java mode** (`Language.JAVA`) when cross-language support isn't needed
 
-```java
-public record UserData(
-    Optional<String> name,    // ❌ Not cross-language compatible
-    BigDecimal balance,       // ❌ Limited support
-    EnumSet<Status> statuses  // ❌ Java-specific collection
-) {}
-```
+### Learn More
 
-#### Performance Considerations
+For comprehensive cross-language serialization documentation, including:
+- Type mapping between languages
+- Schema evolution across services
+- Advanced polymorphism support
+- Zero-copy serialization
+- Language-specific examples
 
-Cross-language mode has additional overhead compared to Java-only mode:
+See the **[Xlang Serialization Guide](xlang_serialization_guide.md)**.
 
-- **Type metadata encoding**: Adds extra bytes per type
-- **Type resolution**: Requires name/ID lookup during deserialization
+## Custom Serializers
 
-**For best performance**:
+### Implementing Custom Serializers
 
-- Use **ID-based registration** when possible (smaller encoding)
-- **Disable reference tracking** if you don't need circular references (`withRefTracking(false)`)
-- **Use Java mode** (`Language.JAVA`) when only Java serialization is needed
+Implement custom serializers for types with special requirements or to bypass inefficient JDK serialization (`writeObject`/`readObject`):
 
-#### Cross-Language Best Practices
-
-1. **Consistent Registration**: Ensure all services register types with identical IDs/names
-2. **Version Compatibility**: Use compatible mode for schema evolution across services
-
-#### Troubleshooting Cross-Language Serialization
-
-**"Type not registered" errors**:
-
-- Verify type is registered with same ID/name on both sides
-- Check if type name has typos or case differences
-
-**"Type mismatch" errors**:
-
-- Ensure field types are compatible across languages
-- Review [Type Mapping Guide](https://fory.apache.org/docs/next/specification/xlang_type_mapping)
-
-**Data corruption or unexpected values**:
-
-- Verify both sides use `Language.XLANG` mode
-- Ensure both sides have compatible Fory versions
-
-**See Also**:
-
-- [Cross-Language Serialization Specification](https://fory.apache.org/docs/next/specification/fory_xlang_serialization_spec)
-- [Type Mapping Reference](https://fory.apache.org/docs/next/specification/xlang_type_mapping)
-- [Python Cross-Language Guide](python_guide.md#cross-language-serialization)
-- [Rust Cross-Language Guide](rust_guide.md#-cross-language-serialization)
-
-### Implement a customized serializer
-
-````
-
-In some cases, you may want to implement a serializer for your type, especially some class customize serialization by
-JDK `writeObject/writeReplace/readObject/readResolve`, which is very inefficient. For example, if you don't want
-following `Foo#writeObject` got invoked, you can take following `FooSerializer` as an example:
+**Example**: Custom serializer bypassing JDK `writeObject`:
 
 ```java
+// Original class with expensive JDK serialization
 class Foo {
   public long f1;
-
+  
+  // Slow: JDK writeObject calls expensive System.out.println on every serialization
   private void writeObject(ObjectOutputStream s) throws IOException {
-    System.out.println(f1);
+    System.out.println(f1);  // Expensive I/O operation
     s.defaultWriteObject();
   }
 }
 
+// Custom Fory serializer bypasses writeObject for 10-100x speedup
 class FooSerializer extends Serializer<Foo> {
   public FooSerializer(Fory fory) {
     super(fory, Foo.class);
   }
 
+  // Direct field serialization (fast path, no writeObject called)
   @Override
   public void write(MemoryBuffer buffer, Foo value) {
-    buffer.writeInt64(value.f1);
+    buffer.writeInt64(value.f1);  // Direct write, ~10ns
   }
 
   @Override
   public Foo read(MemoryBuffer buffer) {
     Foo foo = new Foo();
-    foo.f1 = buffer.readInt64();
+    foo.f1 = buffer.readInt64();  // Direct read, ~10ns
     return foo;
   }
 }
-```
 
-Register serializer:
-
-```java
-Fory fory = getFory();
+// Register custom serializer to override default behavior
 fory.registerSerializer(Foo.class, new FooSerializer(fory));
 ```
 
-### Implement Collection Serializer
+### Collection Serializers
 
-Similar to maps, when implementing a serializer for a custom Collection type, you must extend `CollectionSerializer` or `CollectionLikeSerializer`.
-The key difference between these two is that `CollectionLikeSerializer` can serialize a class which has a collection-like structure but is not a java Collection subtype.
+When implementing collection serializers, extend `CollectionSerializer` or `CollectionLikeSerializer`. The `supportCodegenHook` parameter controls JIT optimization:
 
-For collection serializer, this is a special parameter `supportCodegenHook` needs be configured:
+- `true`: Enables JIT compilation for better performance (recommended for standard collections)
+- `false`: Uses dynamic dispatch (required for complex custom collections)
 
-- When `true`:
-  - Enables optimized access to collection elements and JIT compilation for better performance
-  - Direct serialization invocation and inline for map key-value items without dynamic serializer dispatch cost.
-  - Better performance for standard collection types
-  - Recommended for most collections
-
-- When `false`:
-  - Uses interfaced-based element access and dynamic serializer dispatch for elements, which have higher cost
-  - More flexible for custom collection types
-  - Required when collection has special serialization needs
-  - Handles complex collection implementations
-
-#### Implement Collection Serializer with JIT support
-
-When implementing a Collection serializer with JIT support, you can leverage Fory's existing binary format and collection serialization infrastructure. The key is to properly implement the `onCollectionWrite` and `newCollection` methods to handle metadata while letting Fory handle the element serialization.
-
-Here's an example:
+**With JIT Support**:
 
 ```java
+// Custom serializer for collection types supporting JIT optimization
 public class CustomCollectionSerializer<T extends Collection> extends CollectionSerializer<T> {
     public CustomCollectionSerializer(Fory fory, Class<T> cls) {
-        // supportCodegenHook controls whether to use JIT compilation
-        super(fory, cls, true);
+        // Pass true to enable JIT: Fory generates bytecode for element serialization
+        super(fory, cls, true);  // JIT compiles element writes for 2-5x speedup
     }
 
     @Override
     public Collection onCollectionWrite(MemoryBuffer buffer, T value) {
-        // Write collection size
+        // Write collection header (size)
         buffer.writeVarUint32Small7(value.size());
-        // Write any additional collection metadata
-        return value;
+        // Return collection: Fory's JIT-compiled code handles element serialization
+        return value;  // JIT writes elements using generated bytecode
     }
 
     @Override
     public Collection newCollection(MemoryBuffer buffer) {
-        // Create new collection instance
-        Collection collection = super.newCollection(buffer);
-        // Read and set collection size
-        int numElements = getAndClearNumElements();
-        setNumElements(numElements);
-        return collection;
+        // Read collection header and prepare container
+        int numElements = buffer.readVarUint32Small7();
+        setNumElements(numElements);  // Tell Fory how many elements to read
+        // Fory's JIT-compiled code populates this collection with deserialized elements
+        return new ArrayList(numElements);
     }
 }
 ```
 
-Note that please invoke `setNumElements` when implementing `newCollection` to let fory know how many elements to deserialize.
-
-#### Implement a totally-customzied Collection Serializer without JIT
-
-Sometimes you need to serialize a collection type that uses primitive arrays or has special requirements.
-In such cases, you can implement a serializer with JIT disabled and directly override the `write` and `read` methods.
-
-This approach:
-
-- Gives you full control over serialization
-- Works well with primitive arrays
-- Bypasses collection iteration overhead
-- Allows direct memory access
-
-Here's an example of a custom integer list backed by a primitive array:
+**Without JIT** (for primitive arrays or special cases):
 
 ```java
-class IntList extends AbstractCollection<Integer> {
-    private final int[] elements;
-    private final int size;
-
-    public IntList(int size) {
-        this.elements = new int[size];
-        this.size = size;
-    }
-
-    public IntList(int[] elements, int size) {
-        this.elements = elements;
-        this.size = size;
-    }
-
-    @Override
-    public Iterator<Integer> iterator() {
-        return new Iterator<Integer>() {
-            private int index = 0;
-
-            @Override
-            public boolean hasNext() {
-                return index < size;
-            }
-
-            @Override
-            public Integer next() {
-                if (!hasNext()) {
-                    throw new NoSuchElementException();
-                }
-                return elements[index++];
-            }
-        };
-    }
-
-    @Override
-    public int size() {
-        return size;
-    }
-
-    public int get(int index) {
-        if (index >= size) {
-            throw new IndexOutOfBoundsException();
-        }
-        return elements[index];
-    }
-
-    public void set(int index, int value) {
-        if (index >= size) {
-            throw new IndexOutOfBoundsException();
-        }
-        elements[index] = value;
-    }
-
-    public int[] getElements() {
-        return elements;
-    }
-}
-
+// Custom serializer for primitive collection (no JIT needed)
 class IntListSerializer extends CollectionLikeSerializer<IntList> {
     public IntListSerializer(Fory fory) {
-        // Disable JIT since we're handling serialization directly
-        super(fory, IntList.class, false);
+        // Pass false: JIT doesn't benefit primitive types (manual loop is faster)
+        super(fory, IntList.class, false);  // Disable JIT overhead
     }
 
     @Override
     public void write(MemoryBuffer buffer, IntList value) {
-        // Write size
         buffer.writeVarUint32Small7(value.size());
-
-        // Write elements directly as primitive ints
-        int[] elements = value.getElements();
+        // Manual loop for primitives: faster than JIT for simple types
         for (int i = 0; i < value.size(); i++) {
-            buffer.writeVarInt32(elements[i]);
+            buffer.writeVarInt32(value.get(i));  // Direct primitive write (~5ns/element)
         }
     }
 
     @Override
     public IntList read(MemoryBuffer buffer) {
-        // Read size
         int size = buffer.readVarUint32Small7();
-
-        // Create array and read elements
         int[] elements = new int[size];
+        // Manual loop avoids boxing/unboxing overhead
         for (int i = 0; i < size; i++) {
-            elements[i] = buffer.readVarInt32();
+            elements[i] = buffer.readVarInt32();  // Direct primitive read
         }
-
         return new IntList(elements, size);
     }
 
-    // These methods are not used when JIT is disabled
+    // These methods unused when JIT disabled (supportCodegenHook=false)
     @Override
     public Collection onCollectionWrite(MemoryBuffer buffer, IntList value) {
         throw new UnsupportedOperationException();
@@ -737,1013 +822,488 @@ class IntListSerializer extends CollectionLikeSerializer<IntList> {
 }
 ```
 
-Key Points:
+### Map Serializers
 
-1. **Primitive Array Storage**:
-   - Uses `int[]` for direct storage
-   - Avoids boxing/unboxing overhead
-   - Provides efficient memory layout
-   - Enables direct array access
+Map serializers follow similar patterns to collection serializers:
 
-2. **Direct Serialization**:
-   - Write size first
-   - Write primitive values directly
-   - No iteration overhead
-   - No boxing/unboxing during serialization
-
-3. **Direct Deserialization**:
-   - Read size first
-   - Create primitive array
-   - Read values directly into array
-   - Create list with populated array
-
-4. **Disabled JIT**:
-   - Set `supportCodegenHook=false`
-   - Override `write`/`read` methods
-   - Skip collection view pattern
-   - Full control over serialization format
-
-When to Use: this approach is best when:
-
-- Working with primitive types
-- Need maximum performance
-- Want to minimize memory overhead
-- Have special serialization requirements
-
-Usage Example:
+**With JIT Support**:
 
 ```java
-// Create and populate list
-IntList list = new IntList(3);
-list.set(0, 1);
-list.set(1, 2);
-list.set(2, 3);
-
-// Serialize
-byte[] bytes = fory.serialize(list);
-
-// Deserialize
-IntList newList = (IntList) fory.deserialize(bytes);
-```
-
-This implementation is particularly efficient for scenarios where:
-
-- You're working exclusively with integers
-- Performance is critical
-- Memory efficiency is important
-- Serialization overhead needs to be minimized
-
-Remember that while this approach gives up some of Fory's optimizations, it can provide better performance for specific use cases involving primitive types and direct array access.
-
-#### Implement Serializer for Collection-like Types
-
-Sometimes you may want to implement a serializer for a type that behaves like a collection but isn't a standard Java Collection. This section demonstrates how to implement a serializer for such types.
-
-The key principles for collection-like type serialization are:
-
-1. Extend `CollectionLikeSerializer` for custom collection-like types
-2. Enable JIT optimization with `supportCodegenHook`
-3. Provide efficient element access through views
-4. Maintain proper size tracking
-
-Here's an example:
-
-```java
-class CustomCollectionLike {
-    private final Object[] elements;
-    private final int size;
-
-    public CustomCollectionLike(int size) {
-        this.elements = new Object[size];
-        this.size = size;
-    }
-
-    // Constructor for wrapping existing array
-    public CustomCollectionLike(Object[] elements, int size) {
-        this.elements = elements;
-        this.size = size;
-    }
-
-    public Object get(int index) {
-        if (index >= size) {
-            throw new IndexOutOfBoundsException();
-        }
-        return elements[index];
-    }
-
-    public int size() {
-        return size;
-    }
-
-    public Object[] getElements() {
-        return elements;
-    }
-}
-
-// A view class that extends AbstractCollection for simpler implementation
-class CollectionView extends AbstractCollection<Object> {
-    private final Object[] elements;
-    private final int size;
-    private int writeIndex;
-
-    // Constructor for serialization (wrapping existing array)
-    public CollectionView(CustomCollectionLike collection) {
-        this.elements = collection.getElements();
-        this.size = collection.size();
-    }
-
-    // Constructor for deserialization
-    public CollectionView(int size) {
-        this.size = size;
-        this.elements = new Object[size];
-    }
-
-    @Override
-    public Iterator<Object> iterator() {
-        return new Iterator<Object>() {
-            private int index = 0;
-
-            @Override
-            public boolean hasNext() {
-                return index < size;
-            }
-
-            @Override
-            public Object next() {
-                if (!hasNext()) {
-                    throw new NoSuchElementException();
-                }
-                return elements[index++];
-            }
-        };
-    }
-
-    @Override
-    public boolean add(Object element) {
-        if (writeIndex >= size) {
-            throw new IllegalStateException("Collection is full");
-        }
-        elements[writeIndex++] = element;
-        return true;
-    }
-
-    @Override
-    public int size() {
-        return size;
-    }
-
-    public Object[] getElements() {
-        return elements;
-    }
-}
-
-class CustomCollectionSerializer extends CollectionLikeSerializer<CustomCollectionLike> {
-    public CustomCollectionSerializer(Fory fory) {
-        super(fory, CustomCollectionLike.class, true);
-    }
-
-    @Override
-    public Collection onCollectionWrite(MemoryBuffer buffer, CustomCollectionLike value) {
-        buffer.writeVarUint32Small7(value.size());
-        return new CollectionView(value);
-    }
-
-    @Override
-    public Collection newCollection(MemoryBuffer buffer) {
-        int numElements = buffer.readVarUint32Small7();
-        setNumElements(numElements);
-        return new CollectionView(numElements);
-    }
-
-    @Override
-    public CustomCollectionLike onCollectionRead(Collection collection) {
-        CollectionView view = (CollectionView) collection;
-        return new CustomCollectionLike(view.getElements(), view.size());
-    }
-}
-```
-
-Key takeways:
-
-1. **Collection Structure**:
-   - Array-based storage for elements
-   - Fixed size after creation
-   - Direct element access
-   - Size tracking
-
-2. **View Implementation**:
-   - Extends `AbstractCollection` for simplicity
-   - Provides iterator for element access
-   - Implements `add()` for deserialization
-   - Shares array reference with original type
-
-3. **Serializer Features**:
-   - Uses `supportCodegenHook=true` for JIT optimization
-   - Shares array references when possible
-   - Maintains proper size tracking
-   - Uses view pattern for serialization
-
-4. **Performance Aspects**:
-   - Direct array access
-   - Minimal object creation
-   - Array sharing between instances
-   - Efficient iteration
-
-Note that this implementation provides better performance at the cost of flexibility. Consider your specific use case when choosing this approach.
-
-### Implement Map Serializer
-
-When implementing a serializer for a custom Map type, you must extend `MapSerializer` or `MapLikeSerializer`. The key difference between these two is that `MapLikeSerializer` can serialize a class which has a map-like structure but is not a java Map subtype.
-
-Similar to collection serializer, this is a special parameter `supportCodegenHook` needs be configured:
-
-- When `true`:
-  - Enables optimized access to map elements and JIT compilation for better performance
-  - Direct serialization invocation and inline for map key-value items without dynamic serializer dispatch cost.
-  - Better performance for standard map types
-  - Recommended for most maps
-
-- When `false`:
-  - Uses interfaced-based element access and dynamic serializer dispatch for elements, which have higher cost
-  - More flexible for custom map types
-  - Required when map has special serialization needs
-  - Handles complex map implementations
-
-#### Implement Map Serializer with JIT support
-
-When implementing a Map serializer with JIT support, you can leverage Fory's existing chunk-based binary format and map serialization infrastructure. The key is to properly implement the `onMapWrite` and `newMap` methods to handle metadata while letting Fory handle the map key-value serialization.
-
-Here's an example of implementing a custom map serializer:
-
-```java
+// Custom map serializer with JIT optimization for key/value serialization
 public class CustomMapSerializer<T extends Map> extends MapSerializer<T> {
     public CustomMapSerializer(Fory fory, Class<T> cls) {
-        // supportCodegenHook is a critical parameter that determines serialization behavior
-        super(fory, cls, true);
+        // Enable JIT: Fory generates bytecode for key/value serialization
+        super(fory, cls, true);  // JIT compiles key/value writes for 2-5x speedup
     }
 
     @Override
     public Map onMapWrite(MemoryBuffer buffer, T value) {
-        // Write map size
+        // Write map header (number of entries)
         buffer.writeVarUint32Small7(value.size());
-        // Write any additional map metadata here
-        return value;
+        // Return map: Fory's JIT code handles key/value serialization
+        return value;  // JIT writes entries using generated bytecode
     }
 
     @Override
     public Map newMap(MemoryBuffer buffer) {
-        // Read map size
+        // Read map header and prepare container
         int numElements = buffer.readVarUint32Small7();
-        setNumElements(numElements);
-        // Create and return new map instance
+        setNumElements(numElements);  // Tell Fory how many entries to read
         T map = (T) new HashMap(numElements);
+        // Register map for reference tracking (important for circular refs)
         fory.getRefResolver().reference(map);
-        return map;
+        return map;  // Fory's JIT code populates with deserialized entries
     }
 }
 ```
 
-Note that please invoke `setNumElements` when implementing `newMap` to let fory know how many elements to deserialize.
+For complete collection and map serializer examples (including collection-like and map-like types), see the original documentation sections that follow.
 
-#### Implement a totally-customzied Map Serializer without JIT
+### Alternative: Externalizable
 
-Sometimes you may need complete control over the serialization process, or your map type might have special requirements that don't fit the standard patterns. In such cases, you can implement a serializer with `supportCodegenHook=false` and directly override the `write` and `read` methods.
+For classes that need custom serialization, implementing `java.io.Externalizable` is another option. Fory's `ExternalizableSerializer` handles such types automatically.
 
-This approach:
+## Memory Management
 
-- Gives you full control over serialization
-- Allows custom binary format
-- Bypasses the standard map serialization pattern
-- May be simpler for special cases
+### Custom Memory Allocation
 
-Here's an example:
+Customize memory buffer allocation for pooling, debugging, or off-heap memory:
 
 ```java
-class FixedValueMap extends AbstractMap<String, Integer> {
-    private final Set<String> keys;
-    private final int fixedValue;
-
-    public FixedValueMap(Set<String> keys, int fixedValue) {
-        this.keys = keys;
-        this.fixedValue = fixedValue;
-    }
-
-    @Override
-    public Set<Entry<String, Integer>> entrySet() {
-        Set<Entry<String, Integer>> entries = new HashSet<>();
-        for (String key : keys) {
-            entries.add(new SimpleEntry<>(key, fixedValue));
-        }
-        return entries;
-    }
-
-    @Override
-    public Integer get(Object key) {
-        return keys.contains(key) ? fixedValue : null;
-    }
-
-    public Set<String> getKeys() {
-        return keys;
-    }
-
-    public int getFixedValue() {
-        return fixedValue;
-    }
-}
-
-class FixedValueMapSerializer extends MapLikeSerializer<FixedValueMap> {
-    public FixedValueMapSerializer(Fory fory) {
-        // Disable codegen since we're handling serialization directly
-        super(fory, FixedValueMap.class, false);
-    }
-
-    @Override
-    public void write(MemoryBuffer buffer, FixedValueMap value) {
-        // Write the fixed value
-        buffer.writeInt32(value.getFixedValue());
-        // Write the number of keys
-        buffer.writeVarUint32Small7(value.getKeys().size());
-        // Write each key
-        for (String key : value.getKeys()) {
-            buffer.writeString(key);
-        }
-    }
-
-    @Override
-    public FixedValueMap read(MemoryBuffer buffer) {
-        // Read the fixed value
-        int fixedValue = buffer.readInt32();
-        // Read the number of keys
-        int size = buffer.readVarUint32Small7();
-        Set<String> keys = new HashSet<>(size);
-        for (int i = 0; i < size; i++) {
-            keys.add(buffer.readString());
-        }
-        return new FixedValueMap(keys, fixedValue);
-    }
-
-    // These methods are not used when supportCodegenHook is false
-    @Override
-    public Map onMapWrite(MemoryBuffer buffer, FixedValueMap value) {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public FixedValueMap onMapRead(Map map) {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public FixedValueMap onMapCopy(Map map) {
-        throw new UnsupportedOperationException();
-    }
-}
-```
-
-Key Points:
-
-1. **Disable Codegen**:
-   - Set `supportCodegenHook=false` in constructor
-   - Fory will use your `write`/`read` methods directly
-   - No JIT optimization will be applied
-   - Full control over serialization format
-
-2. **Write Method**:
-   - Handle all serialization manually
-   - Write custom fields first
-   - Write map entries in your preferred format
-   - Control the exact binary layout
-
-3. **Read Method**:
-   - Handle all deserialization manually
-   - Read in same order as written
-   - Create and populate map instance
-   - Restore custom fields
-
-4. **Unused Methods**:
-   - `onMapWrite`, `onMapRead`, `onMapCopy` are not used
-   - Can throw `UnsupportedOperationException`
-   - Only `write` and `read` are important
-
-When to Use: this approach is best when
-
-- Map has custom fields or metadata
-- Special serialization format is needed
-- Complete control over binary format is required
-- Standard map patterns don't fit
-
-Trade-offs
-
-1. **Advantages**:
-   - Complete control over serialization
-   - Custom binary format possible
-   - Simpler implementation for special cases
-   - Direct handling of custom fields
-
-2. **Disadvantages**:
-   - No JIT optimization
-   - Potentially lower performance
-   - Manual handling of all serialization
-   - More code to maintain
-
-Remember that disabling codegen means giving up some performance optimizations that Fory provides. Only use this approach when the standard map serialization pattern doesn't meet your needs.
-
-#### Implement Serializer for Map-like Types
-
-Sometimes you may want to implement a serializer for a type that behaves like a map but isn't a standard Java map. This section demonstrates how to implement a serializer for such types.
-
-The key principles for map-like type serialization are:
-
-1. Extend `MapLikeSerializer` for custom collection-like types
-2. Enable JIT optimization with `supportCodegenHook`
-3. Provide efficient element access through views
-4. Maintain proper size tracking
-
-Here's a complete example:
-
-```java
-// It's better to make it to implements the java.util.Map interface, in this way we don't have to implement such serializers by ourself.
-class CustomMapLike {
-    private final Object[] keyArray;
-    private final Object[] valueArray;
-    private final int size;
-
-    // Constructor for creating new instance
-    public CustomMapLike(int initialCapacity) {
-        this.keyArray = new Object[initialCapacity];
-        this.valueArray = new Object[initialCapacity];
-        this.size = 0;
-    }
-
-    // Constructor for wrapping existing arrays
-    public CustomMapLike(Object[] keyArray, Object[] valueArray, int size) {
-        this.keyArray = keyArray;
-        this.valueArray = valueArray;
-        this.size = size;
-    }
-
-    public Integer get(String key) {
-        for (int i = 0; i < size; i++) {
-            if (key.equals(keyArray[i])) {
-                return (Integer) valueArray[i];
-            }
-        }
-        return null;
-    }
-
-    public int size() {
-        return size;
-    }
-
-    public Object[] getKeyArray() {
-        return keyArray;
-    }
-
-    public Object[] getValueArray() {
-        return valueArray;
-    }
-}
-
-class MapView extends AbstractMap<Object, Object> {
-    private final Object[] keyArray;
-    private final Object[] valueArray;
-    private final int size;
-    private int writeIndex;
-
-    // Constructor for serialization (wrapping existing CustomMapLike)
-    public MapView(CustomMapLike mapLike) {
-        this.size = mapLike.size();
-        this.keyArray = mapLike.getKeyArray();
-        this.valueArray = mapLike.getValueArray();
-    }
-
-    // Constructor for deserialization
-    public MapView(int size) {
-        this.size = size;
-        this.keyArray = new Object[size];
-        this.valueArray = new Object[size];
-    }
-
-    @Override
-    public Set<Entry<Object, Object>> entrySet() {
-        return new AbstractSet<Entry<Object, Object>>() {
-            @Override
-            public Iterator<Entry<Object, Object>> iterator() {
-                return new Iterator<Entry<Object, Object>>() {
-                    private int index = 0;
-
-                    @Override
-                    public boolean hasNext() {
-                        return index < size;
-                    }
-
-                    @Override
-                    public Entry<Object, Object> next() {
-                        if (!hasNext()) {
-                            throw new NoSuchElementException();
-                        }
-                        final int currentIndex = index++;
-                        return new SimpleEntry<>(
-                            keyArray[currentIndex],
-                            valueArray[currentIndex]
-                        );
-                    }
-                };
-            }
-
-            @Override
-            public int size() {
-                return size;
-            }
-        };
-    }
-
-    @Override
-    public Object put(Object key, Object value) {
-        if (writeIndex >= size) {
-            throw new IllegalStateException("Map is full");
-        }
-        keyArray[writeIndex] = key;
-        valueArray[writeIndex] = value;
-        writeIndex++;
-        return null;
-    }
-
-    public Object[] getKeyArray() {
-        return keyArray;
-    }
-
-    public Object[] getValueArray() {
-        return valueArray;
-    }
-
-    public int size() {
-        return size;
-    }
-}
-
-class CustomMapLikeSerializer extends MapLikeSerializer<CustomMapLike> {
-    public CustomMapLikeSerializer(Fory fory) {
-        super(fory, CustomMapLike.class, true);
-    }
-
-    @Override
-    public Map onMapWrite(MemoryBuffer buffer, CustomMapLike value) {
-        buffer.writeVarUint32Small7(value.size());
-        // Return a zero-copy view using the same underlying arrays
-        return new MapView(value);
-    }
-
-    @Override
-    public Map newMap(MemoryBuffer buffer) {
-        int numElements = buffer.readVarUint32Small7();
-        setNumElements(numElements);
-        // Create a view with new arrays for deserialization
-        return new MapView(numElements);
-    }
-
-    @Override
-    public CustomMapLike onMapRead(Map map) {
-        MapView view = (MapView) map;
-        // Just pass the arrays directly - no copying needed
-        return new CustomMapLike(view.getKeyArray(), view.getValueArray(), view.size());
-    }
-
-    @Override
-    public CustomMapLike onMapCopy(Map map) {
-        MapView view = (MapView) map;
-        // Just pass the arrays directly - no copying needed
-        return new CustomMapLike(view.getKeyArray(), view.getValueArray(), view.size());
-    }
-}
-```
-
-### Register Custom Serializers
-
-After implementing your custom serializer, register it with Fory:
-
-```java
-Fory fory = Fory.builder()
-    .withLanguage(Language.JAVA)
-    .build();
-
-// Register map serializer
-fory.registerSerializer(CustomMap.class, new CustomMapSerializer<>(fory, CustomMap.class));
-
-// Register collection serializer
-fory.registerSerializer(CustomCollection.class, new CustomCollectionSerializer<>(fory, CustomCollection.class));
-```
-
-Note that when implementing custom map or collection serializers:
-
-1. Always extend the appropriate base class (`MapSerializer`/`MapLikeSerializer` for maps, `CollectionSerializer`/`CollectionLikeSerializer` for collections)
-2. Consider the impact of `supportCodegenHook` on performance and functionality
-3. Properly handle reference tracking if needed
-4. Implement proper size management using `setNumElements` and `getAndClearNumElements` when `supportCodegenHook` is `true`
-
-Besides registering serializes, one can also implement `java.io.Externalizable` for a class to customize serialization logic, such type will be serialized by fory `ExternalizableSerializer`.
-
-### Memory Allocation Customization
-
-Fory provides a `MemoryAllocator` interface that allows you to customize how memory buffers are allocated and grown during serialization operations. This can be useful for performance optimization, memory pooling, or debugging memory usage.
-
-#### MemoryAllocator Interface
-
-The `MemoryAllocator` interface defines two key methods:
-
-```java
-public interface MemoryAllocator {
-  /**
-   * Allocates a new MemoryBuffer with the specified initial capacity.
-   */
-  MemoryBuffer allocate(int initialCapacity);
-
-  /**
-   * Grows an existing buffer to accommodate the new capacity.
-   * The implementation must grow the buffer in-place by modifying
-   * the existing buffer instance.
-   */
-  MemoryBuffer grow(MemoryBuffer buffer, int newCapacity);
-}
-```
-
-#### Using Custom Memory Allocators
-
-You can set a global memory allocator that will be used by all `MemoryBuffer` instances:
-
-```java
-// Create a custom allocator
+// Custom allocator for memory pooling or special allocation strategies
 MemoryAllocator customAllocator = new MemoryAllocator() {
-  @Override
-  public MemoryBuffer allocate(int initialCapacity) {
-    // Add extra capacity for debugging or pooling
-    return MemoryBuffer.fromByteArray(new byte[initialCapacity + 100]);
-  }
-
-  @Override
-  public MemoryBuffer grow(MemoryBuffer buffer, int newCapacity) {
-    if (newCapacity <= buffer.size()) {
-      return buffer;
+    @Override
+    public MemoryBuffer allocate(int initialCapacity) {
+        // Add extra capacity to reduce reallocation frequency
+        // Or use custom allocation strategy (pooled buffers, off-heap memory, etc.)
+        return MemoryBuffer.fromByteArray(new byte[initialCapacity + 100]);
     }
 
-    // Custom growth strategy - add 100% extra capacity
-    int newSize = (int) (newCapacity * 2);
-    byte[] data = new byte[newSize];
-    buffer.copyToUnsafe(0, data, Platform.BYTE_ARRAY_OFFSET, buffer.size());
-    buffer.initHeapBuffer(data, 0, data.length);
-    return buffer;
-  }
+    @Override
+    public MemoryBuffer grow(MemoryBuffer buffer, int newCapacity) {
+        if (newCapacity <= buffer.size()) {
+            return buffer;  // No growth needed
+        }
+        // Custom growth strategy: 2x growth (default is 1.5x-2x)
+        // Aggressive growth reduces reallocations at cost of memory
+        int newSize = newCapacity * 2;
+        byte[] data = new byte[newSize];
+        // Copy existing data to new buffer
+        buffer.copyToUnsafe(0, data, Platform.BYTE_ARRAY_OFFSET, buffer.size());
+        buffer.initHeapBuffer(data, 0, data.length);
+        return buffer;
+    }
 };
 
-// Set the custom allocator globally
+// Set allocator globally for all Fory instances in this JVM
 MemoryBuffer.setGlobalAllocator(customAllocator);
-
-// All subsequent MemoryBuffer allocations will use your custom allocator
-Fory fory = Fory.builder().withLanguage(Language.JAVA).build();
-byte[] bytes = fory.serialize(someObject); // Uses custom allocator
 ```
 
-#### Default Memory Allocator Behavior
+**Use Cases**:
+- Memory pooling to reduce GC pressure
+- Custom growth strategies
+- Off-heap memory integration
+- Memory usage tracking/debugging
 
-The default allocator uses the following growth strategy:
+## Security
 
-- For buffers smaller than `BUFFER_GROW_STEP_THRESHOLD` (100MB): multiply capacity by 2
-- For larger buffers: multiply capacity by 1.5 (capped at `Integer.MAX_VALUE - 8`)
+### Class Registration
 
-This provides a balance between avoiding frequent reallocations and preventing excessive memory usage.
-
-#### Use Cases
-
-Custom memory allocators are useful for:
-
-- **Memory Pooling**: Reuse allocated buffers to reduce GC pressure
-- **Performance Tuning**: Use different growth strategies based on your workload
-- **Debugging**: Add logging or tracking to monitor memory usage
-- **Off-heap Memory**: Integrate with off-heap memory management systems
-
-### Security
-
-#### Class Registration
-
-`ForyBuilder#requireClassRegistration` can be used to disable class registration, this will allow to deserialize objects
-unknown types,
-more flexible but **may be insecure if the classes contains malicious code**.
-
-**Do not disable class registration unless you can ensure your environment is secure**.
-Malicious code in `init/equals/hashCode` can be executed when deserializing unknown/untrusted types when this option
-disabled.
-
-Class registration can not only reduce security risks, but also avoid classname serialization cost.
-
-You can register class with API `Fory#register`.
-
-Note that class registration order is important, serialization and deserialization peer
-should have same registration order.
+**Always require class registration in production** to prevent arbitrary code execution during deserialization.
 
 ```java
-Fory fory = xxx;
-fory.register(SomeClass.class);
-fory.register(SomeClass1.class, 200);
+// Default configuration: secure by default
+Fory fory = Fory.builder()
+    .requireClassRegistration(true)  // Enabled by default (security whitelist)
+    .build();
+
+// Explicitly register allowed types (whitelist approach)
+fory.register(SafeClass1.class);          // Allow SafeClass1
+fory.register(SafeClass2.class, 100);     // Allow SafeClass2 with ID 100
+// Any other type will be rejected during deserialization
 ```
 
-If you invoke `ForyBuilder#requireClassRegistration(false)` to disable class registration check,
-you can set `org.apache.fory.resolver.ClassChecker` by `ClassResolver#setClassChecker` to control which classes are
-allowed
-for serialization. For example, you can allow classes started with `org.example.*` by:
+**Disabling class registration is dangerous** and should only be done in trusted environments. If you must disable it, use a `ClassChecker`:
 
 ```java
-Fory fory = xxx;
-fory.getClassResolver().setClassChecker(
-  (classResolver, className) -> className.startsWith("org.example."));
-```
+// ⚠️ SECURITY RISK: Disabling registration requires ClassChecker for safety
+Fory fory = Fory.builder()
+    .requireClassRegistration(false)  // Allow unregistered types (dangerous!)
+    .build();
+
+// Whitelist specific packages to limit attack surface
+// Only classes matching "com.example.*" can be deserialized
+**AllowListChecker** for more sophisticated control:
 
 ```java
+// AllowListChecker provides fine-grained control over allowed classes
 AllowListChecker checker = new AllowListChecker(AllowListChecker.CheckLevel.STRICT);
+
+// Create ThreadLocalFory with AllowListChecker for thread-safe security
 ThreadSafeFory fory = new ThreadLocalFory(classLoader -> {
-  Fory f = Fory.builder().requireClassRegistration(true).withClassLoader(classLoader).build();
-  f.getClassResolver().setClassChecker(checker);
-  checker.addListener(f.getClassResolver());
-  return f;
+    Fory f = Fory.builder()
+        .requireClassRegistration(false)  // Disable registration requirement
+        .withClassLoader(classLoader)
+        .build();
+    // Install checker to validate all deserialized classes
+    f.getClassResolver().setClassChecker(checker);
+    checker.addListener(f.getClassResolver());  // Sync checker state
+    return f;
 });
-checker.allowClass("org.example.*");
-```
 
-Fory also provided a `org.apache.fory.resolver.AllowListChecker` which is allowed/disallowed list based checker to
-simplify
-the customization of class check mechanism. You can use this checker or implement more sophisticated checker by
-yourself.
+// Allow specific package patterns (supports wildcards)
+checker.allowClass("com.example.*");  // Allow all classes in com.example package
+### Depth Limiting
 
-#### Limit max deserization depth
-
-Fory also provides a `ForyBuilder#withMaxDepth` to limit max deserialization depth. The default max depth is 50.
-
-If max depth is reached, Fory will throw `ForyException`. This can be used to prevent malicious data from causing stack overflow or other issues.
-
-### Register class by name
-
-Register class by id will have better performance and smaller space overhead. But in some cases, management for a bunch
-of type id is complex. In such cases, registering class by name using API
-`register(Class<?> cls, String namespace, String typeName)` is recommended.
+Protect against deeply nested object graph attacks:
 
 ```java
-fory.register(Foo.class, "demo", "Foo");
+// Limit object graph depth to prevent stack overflow attacks
+Fory fory = Fory.builder()
+    .withMaxDepth(50)  // Default is 50 levels
+    .build();
+
+// Example attack: A -> B -> C -> ... (1000 levels deep)
+// Fory throws ForyException when depth > 50, preventing stack overflow
+// Adjust limit based on legitimate use case requirements
+```
+```java
+Fory fory = Fory.builder()
+    .withMaxDepth(50)  // Default is 50
+    .build();
 ```
 
-If there are no duplicate name for type, `namespace` can be left as empty to reduce serialized size.
+Fory throws `ForyException` when max depth is exceeded.
+### String-Based Registration (Detailed)
 
-**Do not use this API to register class since it will increase serialized size a lot compared to register
-class by id**
+When numeric ID coordination is impractical (e.g., many independent teams, dynamic class loading), use string-based registration:
+
+```java
+// With namespace (recommended): prevents naming conflicts between modules
+// Namespace acts as a package/module identifier
+fory.register(Foo.class, "com.example.models", "Foo");
+fory.register(Bar.class, "com.example.models", "Bar");
+// Another team can safely use "com.other.models::Foo" without conflict
+
+// Without namespace (risky): only if names are globally unique across all teams
+fory.register(UniqueClass.class, "", "GloballyUniqueClassName");
+// Risk: If another team uses same name, deserialization will fail
+```
+// Without namespace (only if names are globally unique)
+fory.register(UniqueClass.class, "", "UniqueClass");
+```
+
+**Trade-offs**:
+- ✅ No ID coordination needed across teams
+- ✅ Descriptive and human-readable
+- ✅ Safe from ID conflicts
+- ❌ **3-10x larger payload** (strings vs. varint IDs)
+- ❌ Slower serialization (string hashing and comparison)
+- ❌ Higher CPU usage
+
+**When to Use**:
+- Prototyping and debugging
+- Systems with hundreds of types from different teams
+- Dynamic class loading scenarios
+- When serialization performance is not critical
+
+**Production Recommendation**: Use explicit numeric IDs (see [Class Registration](#class-registration)) for better performance and smaller payloads.
 
 ### Zero-Copy Serialization
 
-```java
-import org.apache.fory.*;
-import org.apache.fory.config.*;
-import org.apache.fory.serializer.BufferObject;
-import org.apache.fory.memory.MemoryBuffer;
+Separate large buffers from main payload for zero-copy transfers:
 
+```java
+import org.apache.fory.serializer.BufferObject;
 import java.util.*;
 import java.util.stream.Collectors;
 
-public class ZeroCopyExample {
-  // Note that fory instance should be reused instead of creation every time.
-  static Fory fory = Fory.builder()
-    .withLanguage(Language.JAVA)
-    .build();
+Fory fory = Fory.builder().withLanguage(Language.JAVA).build();
 
-  // mvn exec:java -Dexec.mainClass="io.ray.fory.examples.ZeroCopyExample"
-  public static void main(String[] args) {
-    List<Object> list = Arrays.asList("str", new byte[1000], new int[100], new double[100]);
-    Collection<BufferObject> bufferObjects = new ArrayList<>();
-    byte[] bytes = fory.serialize(list, e -> !bufferObjects.add(e));
-    List<MemoryBuffer> buffers = bufferObjects.stream()
-      .map(BufferObject::toBuffer).collect(Collectors.toList());
-    System.out.println(fory.deserialize(bytes, buffers));
-  }
-}
+// Create list with large arrays that we want to transfer without copying
+List<Object> list = Arrays.asList("str", new byte[1000], new int[100]);
+
+// Serialize: extract large buffers for zero-copy transfer
+Collection<BufferObject> bufferObjects = new ArrayList<>();
+// Filter function extracts buffers: returns false to extract, true to inline
+byte[] bytes = fory.serialize(list, e -> !bufferObjects.add(e));
+
+// bufferObjects now contains large arrays (byte[1000], int[100])
+// These can be transferred via zero-copy mechanisms (e.g., direct I/O, shared memory)
+List<MemoryBuffer> buffers = bufferObjects.stream()
+    .map(BufferObject::toBuffer)  // Convert to MemoryBuffer for deserialization
+    .collect(Collectors.toList());
+
+// Deserialize: provide extracted buffers separately
+Object result = fory.deserialize(bytes, buffers);
+// Result is identical to original list, but large arrays weren't copied in serialization
 ```
 
 ### Meta Sharing
 
-Fory supports share type metadata (class name, field name, final field type information, etc.) between multiple
-serializations in a context (ex. TCP connection), and this information will be sent to the peer during the first
-serialization in the context. Based on this metadata, the peer can rebuild the same deserializer, which avoids
-transmitting metadata for subsequent serializations and reduces network traffic pressure and supports type
-forward/backward compatibility automatically.
+Share class metadata across serializations in a session/connection:
 
 ```java
-// Fory.builder()
-//   .withLanguage(Language.JAVA)
-//   .withRefTracking(false)
-//   // share meta across serialization.
-//   .withMetaContextShare(true)
-// Not thread-safe fory.
-MetaContext context = xxx;
+// Single-threaded usage: reuse MetaContext across multiple serializations
+MetaContext context = new MetaContext();
 fory.getSerializationContext().setMetaContext(context);
-byte[] bytes = fory.serialize(o);
-// Not thread-safe fory.
-MetaContext context = xxx;
-fory.getSerializationContext().setMetaContext(context);
-fory.deserialize(bytes);
+// First serialization sends full metadata (field names, types)
+byte[] bytes1 = fory.serialize(obj1);
+// Subsequent serializations reference previously sent metadata (smaller payload)
+byte[] bytes2 = fory.serialize(obj2);
 
-// Thread-safe fory
-fory.setClassLoader(beanA.getClass().getClassLoader());
-byte[] serialized = fory.execute(
-  f -> {
+// Thread-safe usage: execute lambda with per-call MetaContext
+MetaContext context = new MetaContext();
+byte[] bytes = fory.execute(f -> {
+    // Set context for this serialization only
     f.getSerializationContext().setMetaContext(context);
-    return f.serialize(beanA);
-  }
-);
-// thread-safe fory
-fory.setClassLoader(beanA.getClass().getClassLoader());
-Object newObj = fory.execute(
-  f -> {
-    f.getSerializationContext().setMetaContext(context);
-    return f.deserialize(serialized);
-  }
-);
+    return f.serialize(obj);
+});
+### Deserialize Non-Existent Classes
+
+Enable deserialization when classes don't exist on the deserializing side:
+
+```java
+// COMPATIBLE mode allows deserializing types not present on classpath
+Fory fory = Fory.builder()
+    .withCompatibleMode(CompatibleMode.COMPATIBLE)  // Enables schema evolution
+    .deserializeNonexistentClass(true)  // Auto-enabled in COMPATIBLE mode
+    .build();
+
+// If class "com.example.Foo" doesn't exist on this JVM:
+// Fory deserializes into lazy Map implementation instead of failing
+// Map keys are field names, values are field values
+// Allows forward compatibility: old services can read new types as generic data
 ```
+    .build();
+### Type Mapping Between Objects
 
-Note that `MetaContext` is not thread-safe and cannot be reused across instances of fory or multiple threads.
-In cases of multi-threading, a separate `MetaContext` must be created for each fory instance.
-
-### Deserialize non-existent classes
-
-Fory support deserializing non-existent classes, this feature can be enabled
-by `ForyBuilder#deserializeNonexistentClass(true)`. When enabled, and metadata sharing enabled, Fory will store
-the deserialized data of this type in a lazy subclass of Map. By using the lazy map implemented by Fory, the rebalance
-cost of filling map during deserialization can be avoided, which further improves performance. If this data is sent to
-another process and the class exists in this process, the data will be deserialized into the object of this type without
-losing any information.
-
-If metadata sharing is not enabled, the new class data will be skipped and an `NonexistentSkipClass` stub object will be
-returned.
-
-### Copy/Map object from one type to another type
-
-Fory support mapping object from one type to another type.
-
-> Notes:
->
-> 1. This mapping will execute a deep copy, all mapped fields are serialized into binary and
->    deserialized from that binary to map into another type.
-> 2. All struct types must be registered with same ID, otherwise Fory can not mapping to correct struct type.
->    Be careful when you use `Fory#register(Class)`, because fory will allocate an auto-grown ID which might be
->    inconsistent if you register classes with different order between Fory instance.
+Map objects from one type to another (deep copy with type conversion):
 
 ```java
-public class StructMappingExample {
-  static class Struct1 {
+static class Struct1 {
     int f1;
     String f2;
-
-    public Struct1(int f1, String f2) {
-      this.f1 = f1;
-      this.f2 = f2;
-    }
-  }
-
-  static class Struct2 {
-    int f1;
-    String f2;
-    double f3;
-  }
-
-  static ThreadSafeFory fory1 = Fory.builder()
-    .withCompatibleMode(CompatibleMode.COMPATIBLE).buildThreadSafeFory();
-  static ThreadSafeFory fory2 = Fory.builder()
-    .withCompatibleMode(CompatibleMode.COMPATIBLE).buildThreadSafeFory();
-
-  static {
-    fory1.register(Struct1.class);
-    fory2.register(Struct2.class);
-  }
-
-  public static void main(String[] args) {
-    Struct1 struct1 = new Struct1(10, "abc");
-    Struct2 struct2 = (Struct2) fory2.deserialize(fory1.serialize(struct1));
-    Assert.assertEquals(struct2.f1, struct1.f1);
-    Assert.assertEquals(struct2.f2, struct1.f2);
-    struct1 = (Struct1) fory1.deserialize(fory2.serialize(struct2));
-    Assert.assertEquals(struct1.f1, struct2.f1);
-    Assert.assertEquals(struct1.f2, struct2.f2);
-  }
 }
+
+static class Struct2 {
+    int f1;
+    String f2;
+    double f3;  // Extra field (will get default value)
+}
+
+// Create separate Fory instances for each type
+static Fory fory1 = Fory.builder()
+    .withCompatibleMode(CompatibleMode.COMPATIBLE)  // Required for type mapping
+    .build();
+static Fory fory2 = Fory.builder()
+    .withCompatibleMode(CompatibleMode.COMPATIBLE)
+    .build();
+
+static {
+    // CRITICAL: Both types must use SAME ID for type mapping to work
+    fory1.register(Struct1.class, 100);  // Struct1 uses ID 100
+    fory2.register(Struct2.class, 100);  // Struct2 also uses ID 100
+}
+
+// Serialize Struct1, deserialize as Struct2
+Struct1 struct1 = new Struct1(10, "abc");
+byte[] bytes = fory1.serialize(struct1);
+Struct2 struct2 = (Struct2) fory2.deserialize(bytes);
+// struct2.f1 == 10, struct2.f2 == "abc", struct2.f3 == 0.0 (default for missing field)
+```Map Struct1 → Struct2
+Struct1 struct1 = new Struct1(10, "abc");
+Struct2 struct2 = (Struct2) fory2.deserialize(fory1.serialize(struct1));
+// struct2.f1 == 10, struct2.f2 == "abc", struct2.f3 == 0.0 (default)
 ```
 
-## Migration
+**Requirements**:
+- Both types registered with same ID
+### Deserialize Into Different Type
 
-### JDK migration
-
-If you use jdk serialization before, and you can't upgrade your client and server at the same time, which is common for
-online application. Fory provided an util method `org.apache.fory.serializer.JavaSerializer.serializedByJDK` to check
-whether
-the binary are generated by jdk serialization, you use following pattern to make exiting serialization protocol-aware,
-then upgrade serialization to fory in an async rolling-up way:
+Deserialize POJO into a different class with schema differences:
 
 ```java
+static class Struct1 {
+    int f1;
+    String f2;
+}
+
+static class Struct2 {
+    int f1;
+    String f2;
+    double f3;  // Additional field not in Struct1
+}
+
+// Single Fory instance handles type conversion
+Fory fory = Fory.builder()
+    .withCompatibleMode(CompatibleMode.COMPATIBLE)  // Required for schema evolution
+    .build();
+
+// Serialize Struct1 with full class metadata
+Struct1 struct1 = new Struct1(10, "abc");
+byte[] data = fory.serializeJavaObject(struct1);  // Includes class schema
+
+// Deserialize into Struct2: Fory maps common fields, defaults missing fields
+Struct2 struct2 = fory.deserializeJavaObject(data, Struct2.class);
+// struct2.f1 == 10, struct2.f2 == "abc", struct2.f3 == 0.0 (default)
+```uct1 struct1 = new Struct1(10, "abc");
+byte[] data = fory.serializeJavaObject(struct1);
+### From JDK Serialization
+
+Gradually migrate from JDK serialization in production:
+
+```java
+byte[] bytes = ...; // From network/storage (may be JDK or Fory serialized)
+
+// Detect serialization format by checking magic bytes
 if (JavaSerializer.serializedByJDK(bytes)) {
-  ObjectInputStream objectInputStream=xxx;
-  return objectInputStream.readObject();
+    // Old path: deserialize using JDK serialization
+    // Checks for JDK magic bytes: 0xaced
+    ObjectInputStream ois = ...;
+    return ois.readObject();
 } else {
-  return fory.deserialize(bytes);
+    // New path: deserialize using Fory
+    // All new serializations use Fory format
+    return fory.deserialize(bytes);
+}
+
+// Strategy: New writes use Fory, reads support both formats
+// Gradually eliminates JDK-serialized data from system
+``` return ois.readObject();
+} else {
+    // New: Fory serialization
+    return fory.deserialize(bytes);
 }
 ```
 
-### Upgrade fory
+Deploy this logic, then gradually migrate writers to Fory.
 
-Currently binary compatibility is ensured for minor versions only. For example, if you are using fory`v0.2.0`, binary
-compatibility will
-be provided if you upgrade to fory `v0.2.1`. But if upgrade to fory `v0.4.1`, no binary compatibility are ensured.
-Most of the time there is no need to upgrade fory to newer major version, the current version is fast and compact
-enough,
-and we provide some minor fix for recent older versions.
+### Between Fory Versions
 
-But if you do want to upgrade fory for better performance and smaller size, you need to write fory version as header to
-serialized data
-using code like following to keep binary compatibility:
+Binary compatibility is guaranteed within minor versions (e.g., 0.13.0 → 0.13.1) but not across major versions (e.g., 0.13.x → 0.14.x).
+
+**For major version upgrades**, version the data:
 
 ```java
-MemoryBuffer buffer = xxx;
-buffer.writeVarInt32(2);
-fory.serialize(buffer, obj);
+// Serialization: embed Fory version in data stream
+MemoryBuffer buffer = ...;
+buffer.writeVarInt32(13);  // Fory version number (e.g., 13 for v0.13.x)
+fory.serialize(buffer, obj);  // Serialize object with current Fory version
+
+// Deserialization: read version and use appropriate Fory instance
+MemoryBuffer buffer = ...;
+int foryVersion = buffer.readVarInt32();  // Extract Fory version
+Fory fory = getForyInstance(foryVersion);  // Load Fory 0.13.x or 0.14.x instance
+return fory.deserialize(buffer);  // Deserialize with matching version
+
+// Use shading/relocation to run multiple Fory versions simultaneously in same JVM
 ```
 
-Then for deserialization, you need:
+## Troubleshooting
+
+### Class Schema Inconsistency
+
+**Symptom**: Unexpected serialization errors despite same class name.
+
+**Diagnosis**: Enable class version checking:
 
 ```java
-MemoryBuffer buffer = xxx;
-int foryVersion = buffer.readVarInt32();
-Fory fory = getFory(foryVersion);
-fory.deserialize(buffer);
-```
+// Enable automatic schema consistency validation
+Fory fory = Fory.builder()
+    .withClassVersionCheck(true)  // Validates classVersionHash during deserialization
+    .build();
 
-`getFory` is a method to load corresponding fory, you can shade and relocate different version of fory to different
-package, and load fory by version.
-
-If you upgrade fory by minor version, or you won't have data serialized by older fory, you can upgrade fory directly,
-no need to `versioning` the data.
-
-## Trouble shooting
-
-### Class inconsistency and class version check
-
-If you create fory without setting `CompatibleMode` to `org.apache.fory.config.CompatibleMode.COMPATIBLE`, and you got a
-strange
-serialization error, it may be caused by class inconsistency between serialization peer and deserialization peer.
-
-In such cases, you can invoke `ForyBuilder#withClassVersionCheck` to create fory to validate it, if deserialization
-throws `org.apache.fory.exception.ClassNotCompatibleException`, it shows class are inconsistent, and you should create
-fory with
-`ForyBuilder#withCompaibleMode(CompatibleMode.COMPATIBLE)`.
-
-`CompatibleMode.COMPATIBLE` has more performance and space cost, do not set it by default if your classes are always
-consistent between serialization and deserialization.
-
-### Deserialize POJO into another type
-
-Fory allows you to serialize one POJO and deserialize it into a different POJO. The different POJO means the schema inconsistency. Users must to configure Fory with
-`CompatibleMode` set to `org.apache.fory.config.CompatibleMode.COMPATIBLE`.
+// If schemas differ: throws ClassNotCompatibleException with details
+// Exception shows which fields changed between serialization and deserialization
+**Solution**: Enable compatible mode:
 
 ```java
-public class DeserializeIntoType {
-  static class Struct1 {
-    int f1;
-    String f2;
+// COMPATIBLE mode handles schema differences (field additions/deletions)
+Fory fory = Fory.builder()
+    .withCompatibleMode(CompatibleMode.COMPATIBLE)  // Enables schema evolution
+    .build();
 
-    public Struct1(int f1, String f2) {
-      this.f1 = f1;
-      this.f2 = f2;
-    }
-  }
-
-  static class Struct2 {
-    int f1;
-    String f2;
-    double f3;
-  }
-
-  static ThreadSafeFory fory = Fory.builder()
-    .withCompatibleMode(CompatibleMode.COMPATIBLE).buildThreadSafeFory();
-
-  public static void main(String[] args) {
-    Struct1 struct1 = new Struct1(10, "abc");
-    byte[] data = fory.serializeJavaObject(struct1);
-    Struct2 struct2 = (Struct2) fory.deserializeJavaObject(bytes, Struct2.class);
-  }
-}
+// Now deserialization succeeds even if serialized class had different fields
+// Trade-off: +10-30% overhead for metadata, but enables forward/backward compatibility
 ```
 
-### Use wrong API for deserialization
+**Note**: Only enable compatible mode if needed—it has performance and space overhead.
 
-If you serialize an object by invoking `Fory#serialize`, you should invoke `Fory#deserialize` for deserialization
-instead of
-`Fory#deserializeJavaObject`.
+### Wrong Deserialization API
 
-If you serialize an object by invoking `Fory#serializeJavaObject`, you should invoke `Fory#deserializeJavaObject` for
-deserialization instead of `Fory#deserializeJavaObjectAndClass`/`Fory#deserialize`.
+Use the correct deserialization method matching your serialization call:
 
-If you serialize an object by invoking `Fory#serializeJavaObjectAndClass`, you should
-invoke `Fory#deserializeJavaObjectAndClass` for deserialization instead
-of `Fory#deserializeJavaObject`/`Fory#deserialize`.
-````
+| Serialization Method             | Deserialization Method            |
+| -------------------------------- | --------------------------------- |
+| `fory.serialize(obj)`            | `fory.deserialize(bytes)`         |
+| `fory.serializeJavaObject(obj)`  | `fory.deserializeJavaObject(bytes)` or `fory.deserializeJavaObject(bytes, Class)` |
+| `fory.serializeJavaObjectAndClass(obj)` | `fory.deserializeJavaObjectAndClass(bytes)` |
+
+### Performance Issues
+
+1. **Ensure Fory reuse**: Create once, use many times
+2. **Warm up JIT**: Run serialization multiple times before measuring
+3. **Disable compression** for numeric-heavy workloads
+4. **Enable async compilation**: `withAsyncCompilation(true)`
+5. **Profile your specific workload**: Different data patterns have different optimal configurations
+
+### Registration Order Mismatch
+
+When using `fory.register(Class)` without explicit IDs, registration order must be **identical** across all Fory instances. This is a common source of errors in distributed systems.
+
+**Symptoms**:
+- `ClassCastException` during deserialization
+- Deserialized objects have wrong types
+**Example of the Problem**:
+
+```java
+// Service A (Serializer) - registrations in this order
+fory.register(User.class);      // Auto-assigned ID: 1
+fory.register(Product.class);   // Auto-assigned ID: 2
+fory.register(Order.class);     // Auto-assigned ID: 3
+
+// Service B (Deserializer) - DIFFERENT ORDER causes type mismatch!
+fory.register(Product.class);   // Auto-assigned ID: 1 (but serialized ID 1 is User!)
+fory.register(Order.class);     // Auto-assigned ID: 2 (but serialized ID 2 is Product!)
+fory.register(User.class);      // Auto-assigned ID: 3 (but serialized ID 3 is Order!)
+
+// Result: Type confusion during deserialization
+// - Serialized User (ID 1) deserialized as Product (ID 1 in Service B)
+// - ClassCastException, data corruption, or runtime errors
+```
+// Result: Wrong types deserialized, ClassCastException, or data corruption
+**Solution**: Use explicit IDs to make registration order irrelevant:
+
+```java
+// Service A - register with explicit numeric IDs
+fory.register(User.class, 100);     // User always ID 100
+fory.register(Product.class, 101);  // Product always ID 101
+fory.register(Order.class, 102);    // Order always ID 102
+
+// Service B - Registration order doesn't matter with explicit IDs!
+fory.register(Order.class, 102);    // ✅ ID 102 = Order (correct!)
+fory.register(Product.class, 101);  // ✅ ID 101 = Product (correct!)
+fory.register(User.class, 100);     // ✅ ID 100 = User (correct!)
+
+// Deserialization succeeds: IDs uniquely identify types regardless of registration order
+```y.register(Product.class, 101);  // ✅ Correct ID
+fory.register(User.class, 100);     // ✅ Correct ID
+```
+
+**See Also**: [Class Registration](#class-registration) for detailed registration strategies and best practices.
+
+## Further Reading
+
+- **[Xlang Serialization Guide](xlang_serialization_guide.md)**: Cross-language serialization with Python, Rust, Go, JavaScript
+- **[Java Serialization Spec](https://fory.apache.org/docs/specification/fory_java_serialization_spec)**: Binary protocol specification
+- **[Row Format Guide](https://fory.apache.org/docs/specification/row_format_spec)**: Zero-copy row-based format for analytics
+- **[GraalVM Guide](graalvm_guide.md)**: Native image compilation with Fory
+- **[Benchmarks](https://fory.apache.org/docs/benchmarks)**: Performance comparisons and methodology
+
+---
+
+**For questions or issues**:
+- GitHub: [apache/fory](https://github.com/apache/fory)
+- Slack: [Join the community](https://join.slack.com/t/fory-project/shared_invite/zt-36g0qouzm-kcQSvV_dtfbtBKHRwT5gsw)
+- Twitter: [@ApacheFory](https://x.com/ApacheFory)

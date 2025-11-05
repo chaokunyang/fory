@@ -64,7 +64,7 @@ ReadContext::ReadContext(const Config &config, TypeResolver &type_resolver)
 
 ReadContext::~ReadContext() = default;
 
-Result<size_t, Error> ReadContext::load_type_meta(int32_t meta_offset) {
+Result<void, Error> ReadContext::load_type_meta(int32_t meta_offset) {
   size_t current_pos = buffer_->reader_index();
   size_t meta_start = current_pos + meta_offset;
   buffer_->ReaderIndex(static_cast<uint32_t>(meta_start));
@@ -73,9 +73,7 @@ Result<size_t, Error> ReadContext::load_type_meta(int32_t meta_offset) {
     return Unexpected(std::move(result).error());
   }
   buffer_->ReaderIndex(static_cast<uint32_t>(current_pos));
-  // Return 0 - we don't need to skip anything after reading data
-  // because we're already at the start of the metadata section
-  return 0;
+  return {};
 }
 
 Result<std::shared_ptr<void>, Error>

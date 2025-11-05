@@ -153,9 +153,8 @@ public:
     Buffer buffer;
 
     // Write Fory header
-    FORY_RETURN_NOT_OK(write_header(buffer, false, config_.xlang,
-                                    is_little_endian_system(), false,
-                                    Language::CPP));
+    write_header(buffer, false, config_.xlang, is_little_endian_system(), false,
+                 Language::CPP);
 
     auto ctx_handle = write_ctx_pool_.acquire();
     WriteContext &ctx = *ctx_handle;
@@ -173,8 +172,10 @@ public:
     size_t meta_start_offset = 0;
     if (ctx.is_compatible()) {
       meta_start_offset = buffer.writer_index();
-      buffer.UnsafePut<int32_t>(meta_start_offset, -1); // Placeholder for meta offset
-      buffer.WriterIndex(static_cast<uint32_t>(meta_start_offset + sizeof(int32_t)));
+      buffer.UnsafePut<int32_t>(meta_start_offset,
+                                -1); // Placeholder for meta offset
+      buffer.WriterIndex(
+          static_cast<uint32_t>(meta_start_offset + sizeof(int32_t)));
     }
 
     // Serialize object
@@ -201,9 +202,8 @@ public:
     size_t start_pos = buffer.writer_index();
 
     // Write Fory header
-    FORY_RETURN_NOT_OK(write_header(buffer, false, config_.xlang,
-                                    is_little_endian_system(), false,
-                                    Language::CPP));
+    write_header(buffer, false, config_.xlang, is_little_endian_system(), false,
+                 Language::CPP);
 
     auto ctx_handle = write_ctx_pool_.acquire();
     WriteContext &ctx = *ctx_handle;
@@ -294,24 +294,17 @@ public:
     } cleanup{ctx};
 
     // Load TypeMetas at the beginning in compatible mode
-    size_t bytes_to_skip = 0;
     if (ctx.is_compatible()) {
       auto meta_offset_result = buffer.ReadInt32();
       FORY_RETURN_IF_ERROR(meta_offset_result);
       int32_t meta_offset = meta_offset_result.value();
       if (meta_offset != -1) {
-        FORY_ASSIGN_OR_RETURN(bytes_to_skip,
-                              ctx.load_type_meta(meta_offset));
+        FORY_RETURN_NOT_OK(ctx.load_type_meta(meta_offset));
       }
     }
 
     auto result = Serializer<T>::read(ctx, true, true);
-    
-    // Skip over the meta section
-    if (bytes_to_skip > 0) {
-      FORY_RETURN_NOT_OK(buffer.Skip(bytes_to_skip));
-    }
-    
+
     if (result.ok()) {
       ctx.ref_reader().resolve_callbacks();
     }

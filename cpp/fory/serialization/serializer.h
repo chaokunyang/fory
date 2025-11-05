@@ -74,10 +74,9 @@ enum class Language : uint8_t {
 /// @param is_little_endian Whether data is little endian
 /// @param is_oob Whether out-of-band data is present
 /// @param language Language identifier
-/// @return Success or error
-inline Result<void, Error> write_header(Buffer &buffer, bool is_null,
-                                        bool is_xlang, bool is_little_endian,
-                                        bool is_oob, Language language) {
+inline void write_header(Buffer &buffer, bool is_null, bool is_xlang,
+                         bool is_little_endian, bool is_oob,
+                         Language language) {
   // Ensure buffer has space for header (4 bytes minimum)
   buffer.Grow(4);
   uint32_t start_pos = buffer.writer_index();
@@ -112,8 +111,6 @@ inline Result<void, Error> write_header(Buffer &buffer, bool is_null,
 
   // Note: Meta start offset would be written here if meta share mode is
   // enabled For now, we skip it as meta share mode is not implemented
-
-  return Result<void, Error>();
 }
 
 /// Detect if system is little endian
@@ -219,8 +216,7 @@ inline Result<bool, Error> consume_ref_flag(ReadContext &ctx, bool read_ref) {
   }
 
   return Unexpected(Error::invalid_data(
-      "Unknown reference flag: " +
-      std::to_string(static_cast<int>(flag))));
+      "Unknown reference flag: " + std::to_string(static_cast<int>(flag))));
 }
 
 // ============================================================================

@@ -38,9 +38,9 @@ class ReadContext;
 class DepthGuard {
 public:
   explicit DepthGuard(ReadContext &ctx) : ctx_(ctx) {}
-  
+
   ~DepthGuard();
-  
+
   // Non-copyable, non-movable
   DepthGuard(const DepthGuard &) = delete;
   DepthGuard &operator=(const DepthGuard &) = delete;
@@ -299,8 +299,8 @@ public:
   }
 
   /// Load all TypeMetas from buffer at the specified offset.
-  /// Returns the number of bytes to skip after reading struct data.
-  Result<size_t, Error> load_type_meta(int32_t meta_offset);
+  /// After loading, the reader position is restored to where it was before.
+  Result<void, Error> load_type_meta(int32_t meta_offset);
 
   /// Get TypeInfo by meta index.
   /// Returns TypeResolver::TypeInfo as void* to avoid incomplete type issues.
@@ -325,5 +325,6 @@ inline DepthGuard::~DepthGuard() { ctx_.decrease_depth(); }
 } // namespace serialization
 } // namespace fory
 
-// Include type_resolver.h at the end to get MetaWriterResolver and MetaReaderResolver definitions
+// Include type_resolver.h at the end to get MetaWriterResolver and
+// MetaReaderResolver definitions
 #include "fory/serialization/type_resolver.h"

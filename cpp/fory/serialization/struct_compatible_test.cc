@@ -69,8 +69,8 @@ struct PersonV3 {
   std::string name;
   int32_t age;
   std::string email;
-  std::string phone;    // NEW FIELD
-  std::string address;  // NEW FIELD
+  std::string phone;   // NEW FIELD
+  std::string address; // NEW FIELD
 
   bool operator==(const PersonV3 &other) const {
     return name == other.name && age == other.age && email == other.email &&
@@ -180,7 +180,7 @@ FORY_STRUCT(EmployeeV1, name, home_address);
 
 struct EmployeeV2 {
   std::string name;
-  AddressV2 home_address;    // Nested struct evolved
+  AddressV2 home_address;  // Nested struct evolved
   std::string employee_id; // NEW FIELD
 
   bool operator==(const EmployeeV2 &other) const {
@@ -207,7 +207,7 @@ FORY_STRUCT(ProductV1, name, price);
 struct ProductV2 {
   std::string name;
   double price;
-  std::vector<std::string> tags;        // NEW FIELD
+  std::vector<std::string> tags;                 // NEW FIELD
   std::map<std::string, std::string> attributes; // NEW FIELD
 
   bool operator==(const ProductV2 &other) const {
@@ -227,19 +227,28 @@ namespace test {
 
 TEST(SchemaEvolutionTest, AddingSingleField) {
   // Serialize V1, deserialize as V2 (V2 should have default value for email)
-  auto fory_compat = Fory::builder().compatible(true).xlang(true).build();
+  // Create separate Fory instances for V1 and V2
+  auto fory_v1 = Fory::builder().compatible(true).xlang(true).build();
+  auto fory_v2 = Fory::builder().compatible(true).xlang(true).build();
+
+  // Register both PersonV1 and PersonV2 with the SAME type ID for schema
+  // evolution
+  constexpr uint32_t PERSON_TYPE_ID = 999;
+  auto reg1_result = fory_v1.register_struct<PersonV1>(PERSON_TYPE_ID);
+  ASSERT_TRUE(reg1_result.ok()) << reg1_result.error().to_string();
+  auto reg2_result = fory_v2.register_struct<PersonV2>(PERSON_TYPE_ID);
+  ASSERT_TRUE(reg2_result.ok()) << reg2_result.error().to_string();
 
   // Serialize PersonV1
   PersonV1 v1{"Alice", 30};
-  auto ser_result = fory_compat.serialize(v1);
+  auto ser_result = fory_v1.serialize(v1);
   ASSERT_TRUE(ser_result.ok()) << ser_result.error().to_string();
 
   std::vector<uint8_t> bytes = std::move(ser_result).value();
 
   // Deserialize as PersonV2 - email should be default-initialized (empty
   // string)
-  auto deser_result =
-      fory_compat.deserialize<PersonV2>(bytes.data(), bytes.size());
+  auto deser_result = fory_v2.deserialize<PersonV2>(bytes.data(), bytes.size());
   ASSERT_TRUE(deser_result.ok()) << deser_result.error().to_string();
 
   PersonV2 v2 = std::move(deser_result).value();
@@ -249,17 +258,21 @@ TEST(SchemaEvolutionTest, AddingSingleField) {
 }
 
 TEST(SchemaEvolutionTest, AddingMultipleFields) {
-  auto fory_compat = Fory::builder().compatible(true).xlang(true).build();
+  auto fory_v1 = Fory::builder().compatible(true).xlang(true).build();
+  auto fory_v3 = Fory::builder().compatible(true).xlang(true).build();
+
+  constexpr uint32_t PERSON_TYPE_ID = 999;
+  ASSERT_TRUE(fory_v1.register_struct<PersonV1>(PERSON_TYPE_ID).ok());
+  ASSERT_TRUE(fory_v3.register_struct<PersonV3>(PERSON_TYPE_ID).ok());
 
   // V1 -> V3 (skipping V2, adding 3 fields at once)
   PersonV1 v1{"Bob", 25};
-  auto ser_result = fory_compat.serialize(v1);
+  auto ser_result = fory_v1.serialize(v1);
   ASSERT_TRUE(ser_result.ok());
 
   std::vector<uint8_t> bytes = std::move(ser_result).value();
 
-  auto deser_result =
-      fory_compat.deserialize<PersonV3>(bytes.data(), bytes.size());
+  auto deser_result = fory_v3.deserialize<PersonV3>(bytes.data(), bytes.size());
   ASSERT_TRUE(deser_result.ok()) << deser_result.error().to_string();
 
   PersonV3 v3 = std::move(deser_result).value();
@@ -272,17 +285,22 @@ TEST(SchemaEvolutionTest, AddingMultipleFields) {
 
 TEST(SchemaEvolutionTest, RemovingFields) {
   // Serialize UserFull, deserialize as UserMinimal (should ignore extra fields)
-  auto fory_compat = Fory::builder().compatible(true).xlang(true).build();
+  auto fory_full = Fory::builder().compatible(true).xlang(true).build();
+  auto fory_minimal = Fory::builder().compatible(true).xlang(true).build();
+
+  constexpr uint32_t USER_TYPE_ID = 1000;
+  ASSERT_TRUE(fory_full.register_struct<UserFull>(USER_TYPE_ID).ok());
+  ASSERT_TRUE(fory_minimal.register_struct<UserMinimal>(USER_TYPE_ID).ok());
 
   UserFull full{12345, "johndoe", "john@example.com", "hash123", 42};
-  auto ser_result = fory_compat.serialize(full);
+  auto ser_result = fory_full.serialize(full);
   ASSERT_TRUE(ser_result.ok());
 
   std::vector<uint8_t> bytes = std::move(ser_result).value();
 
   // Deserialize as minimal - should skip email, password_hash, login_count
   auto deser_result =
-      fory_compat.deserialize<UserMinimal>(bytes.data(), bytes.size());
+      fory_minimal.deserialize<UserMinimal>(bytes.data(), bytes.size());
   ASSERT_TRUE(deser_result.ok()) << deser_result.error().to_string();
 
   UserMinimal minimal = std::move(deser_result).value();
@@ -293,16 +311,21 @@ TEST(SchemaEvolutionTest, RemovingFields) {
 TEST(SchemaEvolutionTest, FieldReordering) {
   // Serialize ConfigOriginal, deserialize as ConfigReordered
   // Field order shouldn't matter in compatible mode
-  auto fory_compat = Fory::builder().compatible(true).xlang(true).build();
+  auto fory_orig = Fory::builder().compatible(true).xlang(true).build();
+  auto fory_reord = Fory::builder().compatible(true).xlang(true).build();
+
+  constexpr uint32_t CONFIG_TYPE_ID = 1001;
+  ASSERT_TRUE(fory_orig.register_struct<ConfigOriginal>(CONFIG_TYPE_ID).ok());
+  ASSERT_TRUE(fory_reord.register_struct<ConfigReordered>(CONFIG_TYPE_ID).ok());
 
   ConfigOriginal orig{"localhost", 8080, true, "https"};
-  auto ser_result = fory_compat.serialize(orig);
+  auto ser_result = fory_orig.serialize(orig);
   ASSERT_TRUE(ser_result.ok());
 
   std::vector<uint8_t> bytes = std::move(ser_result).value();
 
   auto deser_result =
-      fory_compat.deserialize<ConfigReordered>(bytes.data(), bytes.size());
+      fory_reord.deserialize<ConfigReordered>(bytes.data(), bytes.size());
   ASSERT_TRUE(deser_result.ok()) << deser_result.error().to_string();
 
   ConfigReordered reordered = std::move(deser_result).value();
@@ -313,17 +336,21 @@ TEST(SchemaEvolutionTest, FieldReordering) {
 }
 
 TEST(SchemaEvolutionTest, BidirectionalAddRemove) {
-  auto fory_compat = Fory::builder().compatible(true).xlang(true).build();
+  auto fory_v2 = Fory::builder().compatible(true).xlang(true).build();
+  auto fory_v1 = Fory::builder().compatible(true).xlang(true).build();
+
+  constexpr uint32_t PERSON_TYPE_ID = 999;
+  ASSERT_TRUE(fory_v2.register_struct<PersonV2>(PERSON_TYPE_ID).ok());
+  ASSERT_TRUE(fory_v1.register_struct<PersonV1>(PERSON_TYPE_ID).ok());
 
   // V2 -> V1 (removing email field)
   PersonV2 v2{"Charlie", 35, "charlie@example.com"};
-  auto ser_result = fory_compat.serialize(v2);
+  auto ser_result = fory_v2.serialize(v2);
   ASSERT_TRUE(ser_result.ok());
 
   std::vector<uint8_t> bytes = std::move(ser_result).value();
 
-  auto deser_result =
-      fory_compat.deserialize<PersonV1>(bytes.data(), bytes.size());
+  auto deser_result = fory_v1.deserialize<PersonV1>(bytes.data(), bytes.size());
   ASSERT_TRUE(deser_result.ok()) << deser_result.error().to_string();
 
   PersonV1 v1 = std::move(deser_result).value();
@@ -333,17 +360,26 @@ TEST(SchemaEvolutionTest, BidirectionalAddRemove) {
 }
 
 TEST(SchemaEvolutionTest, NestedStructEvolution) {
-  auto fory_compat = Fory::builder().compatible(true).xlang(true).build();
+  auto fory_v1 = Fory::builder().compatible(true).xlang(true).build();
+  auto fory_v2 = Fory::builder().compatible(true).xlang(true).build();
+
+  constexpr uint32_t ADDRESS_TYPE_ID = 1002;
+  constexpr uint32_t EMPLOYEE_TYPE_ID = 1003;
+
+  ASSERT_TRUE(fory_v1.register_struct<AddressV1>(ADDRESS_TYPE_ID).ok());
+  ASSERT_TRUE(fory_v1.register_struct<EmployeeV1>(EMPLOYEE_TYPE_ID).ok());
+  ASSERT_TRUE(fory_v2.register_struct<AddressV2>(ADDRESS_TYPE_ID).ok());
+  ASSERT_TRUE(fory_v2.register_struct<EmployeeV2>(EMPLOYEE_TYPE_ID).ok());
 
   // Serialize EmployeeV1, deserialize as EmployeeV2
   EmployeeV1 emp_v1{"Jane Doe", {"123 Main St", "NYC"}};
-  auto ser_result = fory_compat.serialize(emp_v1);
+  auto ser_result = fory_v1.serialize(emp_v1);
   ASSERT_TRUE(ser_result.ok());
 
   std::vector<uint8_t> bytes = std::move(ser_result).value();
 
   auto deser_result =
-      fory_compat.deserialize<EmployeeV2>(bytes.data(), bytes.size());
+      fory_v2.deserialize<EmployeeV2>(bytes.data(), bytes.size());
   ASSERT_TRUE(deser_result.ok()) << deser_result.error().to_string();
 
   EmployeeV2 emp_v2 = std::move(deser_result).value();
@@ -356,17 +392,22 @@ TEST(SchemaEvolutionTest, NestedStructEvolution) {
 }
 
 TEST(SchemaEvolutionTest, CollectionFieldEvolution) {
-  auto fory_compat = Fory::builder().compatible(true).xlang(true).build();
+  auto fory_v1 = Fory::builder().compatible(true).xlang(true).build();
+  auto fory_v2 = Fory::builder().compatible(true).xlang(true).build();
+
+  constexpr uint32_t PRODUCT_TYPE_ID = 1004;
+  ASSERT_TRUE(fory_v1.register_struct<ProductV1>(PRODUCT_TYPE_ID).ok());
+  ASSERT_TRUE(fory_v2.register_struct<ProductV2>(PRODUCT_TYPE_ID).ok());
 
   // Serialize ProductV1, deserialize as ProductV2
   ProductV1 prod_v1{"Laptop", 999.99};
-  auto ser_result = fory_compat.serialize(prod_v1);
+  auto ser_result = fory_v1.serialize(prod_v1);
   ASSERT_TRUE(ser_result.ok());
 
   std::vector<uint8_t> bytes = std::move(ser_result).value();
 
   auto deser_result =
-      fory_compat.deserialize<ProductV2>(bytes.data(), bytes.size());
+      fory_v2.deserialize<ProductV2>(bytes.data(), bytes.size());
   ASSERT_TRUE(deser_result.ok()) << deser_result.error().to_string();
 
   ProductV2 prod_v2 = std::move(deser_result).value();
@@ -380,15 +421,21 @@ TEST(SchemaEvolutionTest, RoundtripWithSameVersion) {
   // Sanity check: V2 -> V2 should work perfectly
   auto fory_compat = Fory::builder().compatible(true).xlang(true).build();
 
+  constexpr uint32_t PERSON_TYPE_ID = 999;
+  ASSERT_TRUE(fory_compat.register_struct<PersonV2>(PERSON_TYPE_ID).ok());
+
   PersonV2 original{"Dave", 40, "dave@example.com"};
   auto ser_result = fory_compat.serialize(original);
   ASSERT_TRUE(ser_result.ok());
 
   std::vector<uint8_t> bytes = std::move(ser_result).value();
 
+  std::cout << "Serialized bytes size: " << bytes.size() << std::endl;
+
   auto deser_result =
       fory_compat.deserialize<PersonV2>(bytes.data(), bytes.size());
-  ASSERT_TRUE(deser_result.ok());
+  ASSERT_TRUE(deser_result.ok())
+      << "Error: " << deser_result.error().to_string();
 
   PersonV2 deserialized = std::move(deser_result).value();
   EXPECT_EQ(original, deserialized);

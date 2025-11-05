@@ -29,8 +29,7 @@ namespace serialization {
 
 WriteContext::WriteContext(const Config &config, TypeResolver &type_resolver)
     : buffer_(nullptr), config_(&config), type_resolver_(&type_resolver),
-      current_depth_(0) {
-}
+      current_depth_(0) {}
 
 WriteContext::~WriteContext() = default;
 
@@ -47,9 +46,7 @@ void WriteContext::write_meta(size_t offset) {
   type_resolver_->meta_write_to_buffer(*buffer_);
 }
 
-bool WriteContext::meta_empty() const {
-  return type_resolver_->meta_empty();
-}
+bool WriteContext::meta_empty() const { return type_resolver_->meta_empty(); }
 
 void WriteContext::reset() {
   ref_writer_.reset();
@@ -63,8 +60,7 @@ void WriteContext::reset() {
 
 ReadContext::ReadContext(const Config &config, TypeResolver &type_resolver)
     : buffer_(nullptr), config_(&config), type_resolver_(&type_resolver),
-      current_depth_(0) {
-}
+      current_depth_(0) {}
 
 ReadContext::~ReadContext() = default;
 
@@ -77,8 +73,9 @@ Result<size_t, Error> ReadContext::load_type_meta(int32_t meta_offset) {
     return Unexpected(std::move(result).error());
   }
   buffer_->ReaderIndex(static_cast<uint32_t>(current_pos));
-  // Return bytes to skip after reading data (to skip over meta section)
-  return meta_offset;
+  // Return 0 - we don't need to skip anything after reading data
+  // because we're already at the start of the metadata section
+  return 0;
 }
 
 Result<std::shared_ptr<void>, Error>

@@ -168,21 +168,14 @@ struct Serializer<std::map<K, V, Args...>> {
 
   static inline Result<std::map<K, V, Args...>, Error>
   read(ReadContext &ctx, bool read_ref, bool read_type) {
-    auto has_value_result = consume_ref_flag(ctx, read_ref);
-    if (!has_value_result.ok()) {
-      return Unexpected(std::move(has_value_result).error());
-    }
-    if (!has_value_result.value()) {
+    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
+    if (!has_value) {
       return std::map<K, V, Args...>();
     }
 
     // Read type info
     if (read_type) {
-      auto type_byte_result = ctx.read_uint8();
-      if (!type_byte_result.ok()) {
-        return Unexpected(std::move(type_byte_result).error());
-      }
-      uint8_t type_byte = type_byte_result.value();
+      FORY_TRY(type_byte, ctx.read_uint8());
       if (type_byte != static_cast<uint8_t>(type_id)) {
         return Unexpected(
             Error::type_mismatch(type_byte, static_cast<uint8_t>(type_id)));
@@ -190,25 +183,14 @@ struct Serializer<std::map<K, V, Args...>> {
     }
 
     // Read map size
-    auto size_result = ctx.read_varuint32();
-    if (!size_result.ok()) {
-      return Unexpected(std::move(size_result).error());
-    }
-    uint32_t size = size_result.value();
+    FORY_TRY(size, ctx.read_varuint32());
 
     // Read key-value pairs
     std::map<K, V, Args...> result;
     for (uint32_t i = 0; i < size; ++i) {
-      auto key_result = Serializer<K>::read(ctx, false, false);
-      if (!key_result.ok()) {
-        return Unexpected(std::move(key_result).error());
-      }
-      auto value_result = Serializer<V>::read(ctx, false, false);
-      if (!value_result.ok()) {
-        return Unexpected(std::move(value_result).error());
-      }
-      result.emplace(std::move(key_result).value(),
-                     std::move(value_result).value());
+      FORY_TRY(key, Serializer<K>::read(ctx, false, false));
+      FORY_TRY(value, Serializer<V>::read(ctx, false, false));
+      result.emplace(std::move(key), std::move(value));
     }
 
     return result;
@@ -216,23 +198,12 @@ struct Serializer<std::map<K, V, Args...>> {
 
   static inline Result<std::map<K, V, Args...>, Error>
   read_data(ReadContext &ctx) {
-    auto size_result = ctx.read_varuint32();
-    if (!size_result.ok()) {
-      return Unexpected(std::move(size_result).error());
-    }
-    uint32_t size = size_result.value();
+    FORY_TRY(size, ctx.read_varuint32());
     std::map<K, V, Args...> result;
     for (uint32_t i = 0; i < size; ++i) {
-      auto key_result = Serializer<K>::read_data(ctx);
-      if (!key_result.ok()) {
-        return Unexpected(std::move(key_result).error());
-      }
-      auto value_result = Serializer<V>::read_data(ctx);
-      if (!value_result.ok()) {
-        return Unexpected(std::move(value_result).error());
-      }
-      result.emplace(std::move(key_result).value(),
-                     std::move(value_result).value());
+      FORY_TRY(key, Serializer<K>::read_data(ctx));
+      FORY_TRY(value, Serializer<V>::read_data(ctx));
+      result.emplace(std::move(key), std::move(value));
     }
     return result;
   }
@@ -307,21 +278,14 @@ struct Serializer<std::unordered_map<K, V, Args...>> {
 
   static inline Result<std::unordered_map<K, V, Args...>, Error>
   read(ReadContext &ctx, bool read_ref, bool read_type) {
-    auto has_value_result = consume_ref_flag(ctx, read_ref);
-    if (!has_value_result.ok()) {
-      return Unexpected(std::move(has_value_result).error());
-    }
-    if (!has_value_result.value()) {
+    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
+    if (!has_value) {
       return std::unordered_map<K, V, Args...>();
     }
 
     // Read type info
     if (read_type) {
-      auto type_byte_result = ctx.read_uint8();
-      if (!type_byte_result.ok()) {
-        return Unexpected(std::move(type_byte_result).error());
-      }
-      uint8_t type_byte = type_byte_result.value();
+      FORY_TRY(type_byte, ctx.read_uint8());
       if (type_byte != static_cast<uint8_t>(type_id)) {
         return Unexpected(
             Error::type_mismatch(type_byte, static_cast<uint8_t>(type_id)));
@@ -329,26 +293,15 @@ struct Serializer<std::unordered_map<K, V, Args...>> {
     }
 
     // Read map size
-    auto size_result = ctx.read_varuint32();
-    if (!size_result.ok()) {
-      return Unexpected(std::move(size_result).error());
-    }
-    uint32_t size = size_result.value();
+    FORY_TRY(size, ctx.read_varuint32());
 
     // Read key-value pairs
     std::unordered_map<K, V, Args...> result;
     result.reserve(size);
     for (uint32_t i = 0; i < size; ++i) {
-      auto key_result = Serializer<K>::read(ctx, false, false);
-      if (!key_result.ok()) {
-        return Unexpected(std::move(key_result).error());
-      }
-      auto value_result = Serializer<V>::read(ctx, false, false);
-      if (!value_result.ok()) {
-        return Unexpected(std::move(value_result).error());
-      }
-      result.emplace(std::move(key_result).value(),
-                     std::move(value_result).value());
+      FORY_TRY(key, Serializer<K>::read(ctx, false, false));
+      FORY_TRY(value, Serializer<V>::read(ctx, false, false));
+      result.emplace(std::move(key), std::move(value));
     }
 
     return result;
@@ -356,24 +309,13 @@ struct Serializer<std::unordered_map<K, V, Args...>> {
 
   static inline Result<std::unordered_map<K, V, Args...>, Error>
   read_data(ReadContext &ctx) {
-    auto size_result = ctx.read_varuint32();
-    if (!size_result.ok()) {
-      return Unexpected(std::move(size_result).error());
-    }
-    uint32_t size = size_result.value();
+    FORY_TRY(size, ctx.read_varuint32());
     std::unordered_map<K, V, Args...> result;
     result.reserve(size);
     for (uint32_t i = 0; i < size; ++i) {
-      auto key_result = Serializer<K>::read_data(ctx);
-      if (!key_result.ok()) {
-        return Unexpected(std::move(key_result).error());
-      }
-      auto value_result = Serializer<V>::read_data(ctx);
-      if (!value_result.ok()) {
-        return Unexpected(std::move(value_result).error());
-      }
-      result.emplace(std::move(key_result).value(),
-                     std::move(value_result).value());
+      FORY_TRY(key, Serializer<K>::read_data(ctx));
+      FORY_TRY(value, Serializer<V>::read_data(ctx));
+      result.emplace(std::move(key), std::move(value));
     }
     return result;
   }

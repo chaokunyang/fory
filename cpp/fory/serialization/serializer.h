@@ -204,13 +204,7 @@ inline Result<bool, Error> consume_ref_flag(ReadContext &ctx, bool read_ref) {
   if (!read_ref) {
     return true;
   }
-
-  auto flag_result = ctx.read_int8();
-  if (!flag_result.ok()) {
-    return Unexpected(std::move(flag_result).error());
-  }
-  int8_t flag = flag_result.value();
-
+  FORY_TRY(flag, ctx.read_int8());
   if (flag == NULL_FLAG) {
     return false;
   }
@@ -218,13 +212,10 @@ inline Result<bool, Error> consume_ref_flag(ReadContext &ctx, bool read_ref) {
     return true;
   }
   if (flag == REF_FLAG) {
-    auto ref_id_result = ctx.read_varuint32();
-    if (!ref_id_result.ok()) {
-      return Unexpected(std::move(ref_id_result).error());
-    }
+    FORY_TRY(ref_id, ctx.read_varuint32());
     return Unexpected(Error::invalid_ref(
         "Unexpected reference flag for non-referencable value, ref id: " +
-        std::to_string(ref_id_result.value())));
+        std::to_string(ref_id)));
   }
 
   return Unexpected(Error::invalid_data(

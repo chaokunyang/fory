@@ -158,21 +158,14 @@ struct Serializer<std::vector<T, Alloc>,
 
   static inline Result<std::vector<T, Alloc>, Error>
   read(ReadContext &ctx, bool read_ref, bool read_type) {
-    auto has_value_result = consume_ref_flag(ctx, read_ref);
-    if (!has_value_result.ok()) {
-      return Unexpected(std::move(has_value_result).error());
-    }
-    if (!has_value_result.value()) {
+    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
+    if (!has_value) {
       return std::vector<T, Alloc>();
     }
 
     // Read type info
     if (read_type) {
-      auto type_byte_result = ctx.read_uint8();
-      if (!type_byte_result.ok()) {
-        return Unexpected(std::move(type_byte_result).error());
-      }
-      uint8_t type_byte = type_byte_result.value();
+      FORY_TRY(type_byte, ctx.read_uint8());
       if (type_byte != static_cast<uint8_t>(type_id)) {
         return Unexpected(
             Error::type_mismatch(type_byte, static_cast<uint8_t>(type_id)));
@@ -180,21 +173,14 @@ struct Serializer<std::vector<T, Alloc>,
     }
 
     // Read collection size
-    auto size_result = ctx.read_varuint32();
-    if (!size_result.ok()) {
-      return Unexpected(std::move(size_result).error());
-    }
-    uint32_t size = size_result.value();
+    FORY_TRY(size, ctx.read_varuint32());
 
     // Read elements
     std::vector<T, Alloc> result;
     result.reserve(size);
     for (uint32_t i = 0; i < size; ++i) {
-  auto elem_result = Serializer<T>::read(ctx, false, false);
-      if (!elem_result.ok()) {
-        return Unexpected(std::move(elem_result).error());
-      }
-      result.push_back(std::move(elem_result).value());
+      FORY_TRY(elem, Serializer<T>::read(ctx, false, false));
+      result.push_back(std::move(elem));
     }
 
     return result;
@@ -202,19 +188,12 @@ struct Serializer<std::vector<T, Alloc>,
 
   static inline Result<std::vector<T, Alloc>, Error>
   read_data(ReadContext &ctx) {
-    auto size_result = ctx.read_varuint32();
-    if (!size_result.ok()) {
-      return Unexpected(std::move(size_result).error());
-    }
-    uint32_t size = size_result.value();
+    FORY_TRY(size, ctx.read_varuint32());
     std::vector<T, Alloc> result;
     result.reserve(size);
     for (uint32_t i = 0; i < size; ++i) {
-      auto elem_result = Serializer<T>::read_data(ctx);
-      if (!elem_result.ok()) {
-        return Unexpected(std::move(elem_result).error());
-      }
-      result.push_back(std::move(elem_result).value());
+      FORY_TRY(elem, Serializer<T>::read_data(ctx));
+      result.push_back(std::move(elem));
     }
     return result;
   }
@@ -273,21 +252,14 @@ struct Serializer<std::set<T, Args...>> {
 
   static inline Result<std::set<T, Args...>, Error>
   read(ReadContext &ctx, bool read_ref, bool read_type) {
-    auto has_value_result = consume_ref_flag(ctx, read_ref);
-    if (!has_value_result.ok()) {
-      return Unexpected(std::move(has_value_result).error());
-    }
-    if (!has_value_result.value()) {
+    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
+    if (!has_value) {
       return std::set<T, Args...>();
     }
 
     // Read type info
     if (read_type) {
-      auto type_byte_result = ctx.read_uint8();
-      if (!type_byte_result.ok()) {
-        return Unexpected(std::move(type_byte_result).error());
-      }
-      uint8_t type_byte = type_byte_result.value();
+      FORY_TRY(type_byte, ctx.read_uint8());
       if (type_byte != static_cast<uint8_t>(type_id)) {
         return Unexpected(
             Error::type_mismatch(type_byte, static_cast<uint8_t>(type_id)));
@@ -295,20 +267,13 @@ struct Serializer<std::set<T, Args...>> {
     }
 
     // Read set size
-    auto size_result = ctx.read_varuint32();
-    if (!size_result.ok()) {
-      return Unexpected(std::move(size_result).error());
-    }
-    uint32_t size = size_result.value();
+    FORY_TRY(size, ctx.read_varuint32());
 
     // Read elements
     std::set<T, Args...> result;
     for (uint32_t i = 0; i < size; ++i) {
-  auto elem_result = Serializer<T>::read(ctx, false, false);
-      if (!elem_result.ok()) {
-        return Unexpected(std::move(elem_result).error());
-      }
-      result.insert(std::move(elem_result).value());
+      FORY_TRY(elem, Serializer<T>::read(ctx, false, false));
+      result.insert(std::move(elem));
     }
 
     return result;
@@ -316,18 +281,11 @@ struct Serializer<std::set<T, Args...>> {
 
   static inline Result<std::set<T, Args...>, Error>
   read_data(ReadContext &ctx) {
-    auto size_result = ctx.read_varuint32();
-    if (!size_result.ok()) {
-      return Unexpected(std::move(size_result).error());
-    }
-    uint32_t size = size_result.value();
+    FORY_TRY(size, ctx.read_varuint32());
     std::set<T, Args...> result;
     for (uint32_t i = 0; i < size; ++i) {
-      auto elem_result = Serializer<T>::read_data(ctx);
-      if (!elem_result.ok()) {
-        return Unexpected(std::move(elem_result).error());
-      }
-      result.insert(std::move(elem_result).value());
+      FORY_TRY(elem, Serializer<T>::read_data(ctx));
+      result.insert(std::move(elem));
     }
     return result;
   }
@@ -386,21 +344,14 @@ struct Serializer<std::unordered_set<T, Args...>> {
 
   static inline Result<std::unordered_set<T, Args...>, Error>
   read(ReadContext &ctx, bool read_ref, bool read_type) {
-    auto has_value_result = consume_ref_flag(ctx, read_ref);
-    if (!has_value_result.ok()) {
-      return Unexpected(std::move(has_value_result).error());
-    }
-    if (!has_value_result.value()) {
+    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
+    if (!has_value) {
       return std::unordered_set<T, Args...>();
     }
 
     // Read type info
     if (read_type) {
-      auto type_byte_result = ctx.read_uint8();
-      if (!type_byte_result.ok()) {
-        return Unexpected(std::move(type_byte_result).error());
-      }
-      uint8_t type_byte = type_byte_result.value();
+      FORY_TRY(type_byte, ctx.read_uint8());
       if (type_byte != static_cast<uint8_t>(type_id)) {
         return Unexpected(
             Error::type_mismatch(type_byte, static_cast<uint8_t>(type_id)));
@@ -408,21 +359,14 @@ struct Serializer<std::unordered_set<T, Args...>> {
     }
 
     // Read set size
-    auto size_result = ctx.read_varuint32();
-    if (!size_result.ok()) {
-      return Unexpected(std::move(size_result).error());
-    }
-    uint32_t size = size_result.value();
+    FORY_TRY(size, ctx.read_varuint32());
 
     // Read elements
     std::unordered_set<T, Args...> result;
     result.reserve(size);
     for (uint32_t i = 0; i < size; ++i) {
-  auto elem_result = Serializer<T>::read(ctx, false, false);
-      if (!elem_result.ok()) {
-        return Unexpected(std::move(elem_result).error());
-      }
-      result.insert(std::move(elem_result).value());
+      FORY_TRY(elem, Serializer<T>::read(ctx, false, false));
+      result.insert(std::move(elem));
     }
 
     return result;
@@ -430,19 +374,12 @@ struct Serializer<std::unordered_set<T, Args...>> {
 
   static inline Result<std::unordered_set<T, Args...>, Error>
   read_data(ReadContext &ctx) {
-    auto size_result = ctx.read_varuint32();
-    if (!size_result.ok()) {
-      return Unexpected(std::move(size_result).error());
-    }
-    uint32_t size = size_result.value();
+    FORY_TRY(size, ctx.read_varuint32());
     std::unordered_set<T, Args...> result;
     result.reserve(size);
     for (uint32_t i = 0; i < size; ++i) {
-      auto elem_result = Serializer<T>::read_data(ctx);
-      if (!elem_result.ok()) {
-        return Unexpected(std::move(elem_result).error());
-      }
-      result.insert(std::move(elem_result).value());
+      FORY_TRY(elem, Serializer<T>::read_data(ctx));
+      result.insert(std::move(elem));
     }
     return result;
   }

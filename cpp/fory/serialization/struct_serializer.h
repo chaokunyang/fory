@@ -461,12 +461,8 @@ Result<void, Error> read_single_field_by_index(T &obj, ReadContext &ctx) {
   // Always read field values with read_ref=false, read_type=false
   // (schema evolution is at struct level, not field level)
   constexpr bool field_needs_ref = requires_ref_metadata_v<FieldType>;
-  auto field_result = Serializer<FieldType>::read(ctx, field_needs_ref, false);
-  if (!field_result.ok()) {
-    return Unexpected(std::move(field_result).error());
-  }
-
-  obj.*field_ptr = std::move(field_result).value();
+  FORY_ASSIGN_OR_RETURN(
+      obj.*field_ptr, Serializer<FieldType>::read(ctx, field_needs_ref, false));
   return Result<void, Error>();
 }
 
@@ -536,10 +532,7 @@ read_struct_fields_compatible(T &obj, ReadContext &ctx,
 
     if (field_id == -1) {
       // Field unknown locally — skip its value
-      auto skip_result = skip_field_value(ctx, remote_field.field_type, false);
-      if (!skip_result.ok()) {
-        return Unexpected(std::move(skip_result).error());
-      }
+      FORY_RETURN_NOT_OK(skip_field_value(ctx, remote_field.field_type, false));
       continue;
     }
 
@@ -560,16 +553,11 @@ read_struct_fields_compatible(T &obj, ReadContext &ctx,
     if (!handled) {
       // Shouldn't happen if TypeMeta::assign_field_ids worked correctly, but
       // as a fallback skip the field value.
-      auto skip_result = skip_field_value(ctx, remote_field.field_type, false);
-      if (!skip_result.ok()) {
-        return Unexpected(std::move(skip_result).error());
-      }
+      FORY_RETURN_NOT_OK(skip_field_value(ctx, remote_field.field_type, false));
       continue;
     }
 
-    if (!result.ok()) {
-      return Unexpected(std::move(result).error());
-    }
+    FORY_RETURN_NOT_OK(result);
   }
 
   return Result<void, Error>();
@@ -633,11 +621,8 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
   static Result<T, Error> read(ReadContext &ctx, bool read_ref,
                                bool read_type) {
     // Handle reference metadata
-    auto has_value_result = consume_ref_flag(ctx, read_ref);
-    if (!has_value_result.ok()) {
-      return Unexpected(std::move(has_value_result).error());
-    }
-    if (!has_value_result.value()) {
+    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
+    if (!has_value) {
       if constexpr (std::is_default_constructible_v<T>) {
         return T();
       } else {
@@ -651,11 +636,7 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
         << "Type metadata not initialized for requested struct";
 
     if (read_type) {
-      auto type_id_result = ctx.read_varuint32();
-      if (!type_id_result.ok()) {
-        return Unexpected(std::move(type_id_result).error());
-      }
-      uint32_t type_tag = type_id_result.value();
+      FORY_TRY(type_tag, ctx.read_varuint32());
       uint32_t expected_tag = ctx.type_resolver().struct_type_tag(*type_info);
       if (type_tag != expected_tag) {
         return Unexpected(Error::type_mismatch(type_tag, expected_tag));
@@ -670,21 +651,22 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
     auto finish = [&ctx]() { ctx.decrease_depth(); };
 
     if (!ctx.is_compatible() || !type_info->type_meta) {
-      auto status = detail::read_struct_fields_sorted(obj, ctx, *type_info);
+      FORY_RETURN_NOT_OK(
+          detail::read_struct_fields_sorted(obj, ctx, *type_info));
       finish();
-      if (!status.ok()) {
-        return Unexpected(std::move(status).error());
-      }
       return obj;
     }
 
-    auto remote_type_meta_result =
-        TypeMeta::from_bytes(ctx.buffer(), type_info->type_meta.get());
-    if (!remote_type_meta_result.ok()) {
-      finish();
-      return Unexpected(std::move(remote_type_meta_result).error());
+    std::shared_ptr<TypeMeta> remote_type_meta;
+    {
+      auto result =
+          TypeMeta::from_bytes(ctx.buffer(), type_info->type_meta.get());
+      if (!result.ok()) {
+        finish();
+        return Unexpected(std::move(result).error());
+      }
+      remote_type_meta = std::move(result).value();
     }
-    auto remote_type_meta = std::move(remote_type_meta_result).value();
 
     Result<void, Error> status;
     if (remote_type_meta->get_hash() == type_info->type_meta->get_hash()) {
@@ -695,9 +677,7 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
     }
 
     finish();
-    if (!status.ok()) {
-      return Unexpected(std::move(status).error());
-    }
+    FORY_RETURN_NOT_OK(status);
     return obj;
   }
 
@@ -710,14 +690,11 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
     auto type_info = ctx.type_resolver().template get_struct_type_info<T>();
     FORY_CHECK(type_info)
         << "Type metadata not initialized for requested struct";
-    auto status = detail::read_struct_fields_sorted(obj, ctx, *type_info);
+    FORY_RETURN_NOT_OK(detail::read_struct_fields_sorted(obj, ctx, *type_info));
 
     // Decrease depth tracking
     ctx.decrease_depth();
 
-    if (!status.ok()) {
-      return Unexpected(std::move(status).error());
-    }
     return obj;
   }
 

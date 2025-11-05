@@ -67,19 +67,12 @@ struct Serializer<E, std::enable_if_t<std::is_enum_v<E>>> {
 
   static inline Result<E, Error> read(ReadContext &ctx, bool read_ref,
                                       bool read_type) {
-    auto has_value_result = consume_ref_flag(ctx, read_ref);
-    if (!has_value_result.ok()) {
-      return Unexpected(std::move(has_value_result).error());
-    }
-    if (!has_value_result.value()) {
+    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
+    if (!has_value) {
       return E{};
     }
     if (read_type) {
-      auto type_byte_result = ctx.read_uint8();
-      if (!type_byte_result.ok()) {
-        return Unexpected(std::move(type_byte_result).error());
-      }
-      uint8_t type_byte = type_byte_result.value();
+      FORY_TRY(type_byte, ctx.read_uint8());
       if (type_byte != static_cast<uint8_t>(type_id)) {
         return Unexpected(
             Error::type_mismatch(type_byte, static_cast<uint8_t>(type_id)));
@@ -89,11 +82,7 @@ struct Serializer<E, std::enable_if_t<std::is_enum_v<E>>> {
   }
 
   static inline Result<E, Error> read_data(ReadContext &ctx) {
-    auto ordinal_result = Serializer<OrdinalType>::read_data(ctx);
-    if (!ordinal_result.ok()) {
-      return Unexpected(std::move(ordinal_result).error());
-    }
-    auto ordinal = std::move(ordinal_result).value();
+    FORY_TRY(ordinal, Serializer<OrdinalType>::read_data(ctx));
     E value{};
     if (!Metadata::from_ordinal(ordinal, &value)) {
       return Unexpected(Error::unknown_enum("Invalid ordinal value"));

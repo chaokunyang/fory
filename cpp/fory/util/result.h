@@ -464,6 +464,30 @@ public:
     lhs = std::move(_result).value();                                          \
   } while (0)
 
+/// Declare and assign value from Result<T, E> or return error
+/// 
+/// ⚠️  IMPORTANT: This macro expands to multiple statements.
+/// Always use braces with control flow statements!
+///
+/// ✅ CORRECT:
+/// ```cpp
+/// if (condition) {
+///     FORY_TRY(data, load_data());
+/// }
+/// ```
+///
+/// ❌ WRONG:
+/// ```cpp
+/// if (condition)
+///     FORY_TRY(data, load_data());  // BREAKS!
+/// ```
+#define FORY_TRY(var, expr)                                                    \
+  auto _result_##var = (expr);                                                 \
+  if (FORY_PREDICT_FALSE(!_result_##var.ok())) {                               \
+    return ::fory::Unexpected(std::move(_result_##var).error());               \
+  }                                                                            \
+  auto var = std::move(_result_##var).value()
+
 // Output operators
 template <typename T, typename E>
 inline std::ostream &operator<<(std::ostream &os, const Result<T, E> &r) {

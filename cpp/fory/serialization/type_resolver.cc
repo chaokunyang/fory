@@ -153,7 +153,8 @@ Result<std::vector<uint8_t>, Error> FieldInfo::to_bytes() const {
                     field_name.size());
 
   // CRITICAL FIX: Use writer_index() not size() to get actual bytes written!
-  return std::vector<uint8_t>(buffer.data(), buffer.data() + buffer.writer_index());
+  return std::vector<uint8_t>(buffer.data(),
+                              buffer.data() + buffer.writer_index());
 }
 
 Result<FieldInfo, Error> FieldInfo::from_bytes(Buffer &buffer) {
@@ -246,11 +247,7 @@ Result<std::vector<uint8_t>, Error> TypeMeta::to_bytes() const {
 
   // Write field infos
   for (const auto &field : field_infos) {
-    auto field_bytes_result = field.to_bytes();
-    if (!field_bytes_result.ok()) {
-      return Unexpected(std::move(field_bytes_result).error());
-    }
-    const auto &field_bytes = field_bytes_result.value();
+    FORY_TRY(field_bytes, field.to_bytes());
     layer_buffer.WriteBytes(field_bytes.data(), field_bytes.size());
   }
 
@@ -280,14 +277,15 @@ Result<std::vector<uint8_t>, Error> TypeMeta::to_bytes() const {
 
   result_buffer.WriteBytes(layer_data.data(), layer_data.size());
 
-  FORY_LOG(FORY_INFO) << "TypeMeta::to_bytes type='" << type_name
-                      << "' ns='" << namespace_str << "' fields=" << num_fields
+  FORY_LOG(FORY_INFO) << "TypeMeta::to_bytes type='" << type_name << "' ns='"
+                      << namespace_str << "' fields=" << num_fields
                       << " layer_size=" << layer_size
                       << " result_size=" << result_buffer.writer_index();
 
   // Use actual bytes written to construct return vector
   return std::vector<uint8_t>(result_buffer.data(),
-                              result_buffer.data() + result_buffer.writer_index());
+                              result_buffer.data() +
+                                  result_buffer.writer_index());
 }
 
 Result<std::shared_ptr<TypeMeta>, Error>
@@ -318,7 +316,8 @@ TypeMeta::from_bytes(Buffer &buffer, const TypeMeta *local_type_info) {
                       << " header_size=" << header_size
                       << " meta_size=" << meta_size
                       << " buffer_size=" << buffer.size()
-                      << " reader_index(after header)=" << buffer.reader_index();
+                      << " reader_index(after header)="
+                      << buffer.reader_index();
 
   // Read meta header
   auto meta_header_result = buffer.ReadUint8();

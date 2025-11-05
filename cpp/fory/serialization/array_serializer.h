@@ -60,8 +60,8 @@ struct Serializer<
   }();
 
   static Result<void, Error> write(const std::array<T, N> &arr,
-                                    WriteContext &ctx, bool write_ref,
-                                    bool write_type) {
+                                   WriteContext &ctx, bool write_ref,
+                                   bool write_type) {
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
       ctx.write_uint8(static_cast<uint8_t>(type_id));
@@ -70,7 +70,7 @@ struct Serializer<
   }
 
   static Result<void, Error> write_data(const std::array<T, N> &arr,
-                                         WriteContext &ctx) {
+                                        WriteContext &ctx) {
     // Write array length
     ctx.write_varuint32(static_cast<uint32_t>(N));
 
@@ -82,26 +82,19 @@ struct Serializer<
   }
 
   static Result<void, Error> write_data_generic(const std::array<T, N> &arr,
-                                                 WriteContext &ctx,
-                                                 bool has_generics) {
+                                                WriteContext &ctx,
+                                                bool has_generics) {
     return write_data(arr, ctx);
   }
 
   static Result<std::array<T, N>, Error> read(ReadContext &ctx, bool read_ref,
-                                               bool read_type) {
-    auto has_value_result = consume_ref_flag(ctx, read_ref);
-    if (!has_value_result.ok()) {
-      return Unexpected(std::move(has_value_result).error());
-    }
-    if (!has_value_result.value()) {
+                                              bool read_type) {
+    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
+    if (!has_value) {
       return std::array<T, N>();
     }
     if (read_type) {
-      auto type_byte_result = ctx.read_uint8();
-      if (!type_byte_result.ok()) {
-        return Unexpected(std::move(type_byte_result).error());
-      }
-      uint8_t type_byte = type_byte_result.value();
+      FORY_TRY(type_byte, ctx.read_uint8());
       if (type_byte != static_cast<uint8_t>(type_id)) {
         return Unexpected(
             Error::type_mismatch(type_byte, static_cast<uint8_t>(type_id)));
@@ -112,16 +105,12 @@ struct Serializer<
 
   static Result<std::array<T, N>, Error> read_data(ReadContext &ctx) {
     // Read array length
-    auto length_result = ctx.read_varuint32();
-    if (!length_result.ok()) {
-      return Unexpected(std::move(length_result).error());
-    }
-    uint32_t length = length_result.value();
+    FORY_TRY(length, ctx.read_varuint32());
 
     if (length != N) {
       return Unexpected(Error::invalid_data("Array size mismatch: expected " +
-                                             std::to_string(N) + " but got " +
-                                             std::to_string(length)));
+                                            std::to_string(N) + " but got " +
+                                            std::to_string(length)));
     }
 
     std::array<T, N> arr;
@@ -138,8 +127,8 @@ template <size_t N> struct Serializer<std::array<bool, N>> {
   static constexpr TypeId type_id = TypeId::BOOL_ARRAY;
 
   static Result<void, Error> write(const std::array<bool, N> &arr,
-                                    WriteContext &ctx, bool write_ref,
-                                    bool write_type) {
+                                   WriteContext &ctx, bool write_ref,
+                                   bool write_type) {
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
       ctx.write_uint8(static_cast<uint8_t>(type_id));
@@ -148,7 +137,7 @@ template <size_t N> struct Serializer<std::array<bool, N>> {
   }
 
   static Result<void, Error> write_data(const std::array<bool, N> &arr,
-                                         WriteContext &ctx) {
+                                        WriteContext &ctx) {
     // Write array length
     ctx.write_varuint32(static_cast<uint32_t>(N));
 
@@ -161,27 +150,19 @@ template <size_t N> struct Serializer<std::array<bool, N>> {
   }
 
   static Result<void, Error> write_data_generic(const std::array<bool, N> &arr,
-                                                 WriteContext &ctx,
-                                                 bool has_generics) {
+                                                WriteContext &ctx,
+                                                bool has_generics) {
     return write_data(arr, ctx);
   }
 
-  static Result<std::array<bool, N>, Error> read(ReadContext &ctx,
-                                                  bool read_ref,
-                                                  bool read_type) {
-    auto has_value_result = consume_ref_flag(ctx, read_ref);
-    if (!has_value_result.ok()) {
-      return Unexpected(std::move(has_value_result).error());
-    }
-    if (!has_value_result.value()) {
+  static Result<std::array<bool, N>, Error>
+  read(ReadContext &ctx, bool read_ref, bool read_type) {
+    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
+    if (!has_value) {
       return std::array<bool, N>();
     }
     if (read_type) {
-      auto type_byte_result = ctx.read_uint8();
-      if (!type_byte_result.ok()) {
-        return Unexpected(std::move(type_byte_result).error());
-      }
-      uint8_t type_byte = type_byte_result.value();
+      FORY_TRY(type_byte, ctx.read_uint8());
       if (type_byte != static_cast<uint8_t>(type_id)) {
         return Unexpected(
             Error::type_mismatch(type_byte, static_cast<uint8_t>(type_id)));
@@ -192,25 +173,18 @@ template <size_t N> struct Serializer<std::array<bool, N>> {
 
   static Result<std::array<bool, N>, Error> read_data(ReadContext &ctx) {
     // Read array length
-    auto length_result = ctx.read_varuint32();
-    if (!length_result.ok()) {
-      return Unexpected(std::move(length_result).error());
-    }
-    uint32_t length = length_result.value();
+    FORY_TRY(length, ctx.read_varuint32());
 
     if (length != N) {
       return Unexpected(Error::invalid_data("Array size mismatch: expected " +
-                                             std::to_string(N) + " but got " +
-                                             std::to_string(length)));
+                                            std::to_string(N) + " but got " +
+                                            std::to_string(length)));
     }
 
     std::array<bool, N> arr;
     for (size_t i = 0; i < N; ++i) {
-      auto byte_result = ctx.read_uint8();
-      if (!byte_result.ok()) {
-        return Unexpected(std::move(byte_result).error());
-      }
-      arr[i] = (byte_result.value() != 0);
+      FORY_TRY(byte, ctx.read_uint8());
+      arr[i] = (byte != 0);
     }
     return arr;
   }

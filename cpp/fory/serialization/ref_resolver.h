@@ -94,8 +94,7 @@ public:
 
   RefReader() = default;
 
-  template <typename T>
-  uint32_t store_shared_ref(std::shared_ptr<T> ptr) {
+  template <typename T> uint32_t store_shared_ref(std::shared_ptr<T> ptr) {
     refs_.emplace_back(std::move(ptr));
     return static_cast<uint32_t>(refs_.size() - 1);
   }
@@ -111,22 +110,22 @@ public:
   template <typename T>
   Result<std::shared_ptr<T>, Error> get_shared_ref(uint32_t ref_id) const {
     if (ref_id >= refs_.size()) {
-      return Unexpected(Error::invalid_ref(
-          "Invalid reference ID: " + std::to_string(ref_id)));
+      return Unexpected(Error::invalid_ref("Invalid reference ID: " +
+                                           std::to_string(ref_id)));
     }
 
     const std::any &stored = refs_[ref_id];
     if (!stored.has_value()) {
-      return Unexpected(Error::invalid_ref(
-          "Reference not resolved: " + std::to_string(ref_id)));
+      return Unexpected(Error::invalid_ref("Reference not resolved: " +
+                                           std::to_string(ref_id)));
     }
 
     if (const auto *ptr = std::any_cast<std::shared_ptr<T>>(&stored)) {
       return *ptr;
     }
 
-    return Unexpected(Error::invalid_ref(
-        "Reference type mismatch for id: " + std::to_string(ref_id)));
+    return Unexpected(Error::invalid_ref("Reference type mismatch for id: " +
+                                         std::to_string(ref_id)));
   }
 
   template <typename T>
@@ -154,20 +153,13 @@ public:
 
   template <typename Reader>
   Result<RefFlag, Error> read_ref_flag(Reader &reader) const {
-    auto flag_result = reader.read_int8();
-    if (!flag_result.ok()) {
-      return Unexpected(std::move(flag_result).error());
-    }
-    return static_cast<RefFlag>(flag_result.value());
+    FORY_TRY(flag, reader.read_int8());
+    return static_cast<RefFlag>(flag);
   }
 
   template <typename Reader>
   Result<uint32_t, Error> read_ref_id(Reader &reader) const {
-    auto ref_id_result = reader.read_varuint32();
-    if (!ref_id_result.ok()) {
-      return Unexpected(std::move(ref_id_result).error());
-    }
-    return ref_id_result.value();
+    return reader.read_varuint32();
   }
 
   uint32_t reserve_ref_id() {

@@ -68,8 +68,8 @@ template <typename T> struct Serializer<std::optional<T>> {
   static Result<void, Error> write_data(const std::optional<T> &opt,
                                         WriteContext &ctx) {
     if (!opt.has_value()) {
-      return Unexpected(Error::invalid(
-          "std::optional write_data requires value present"));
+      return Unexpected(
+          Error::invalid("std::optional write_data requires value present"));
     }
     return Serializer<T>::write_data(*opt, ctx);
   }
@@ -78,8 +78,8 @@ template <typename T> struct Serializer<std::optional<T>> {
                                                 WriteContext &ctx,
                                                 bool has_generics) {
     if (!opt.has_value()) {
-      return Unexpected(Error::invalid(
-          "std::optional write_data requires value present"));
+      return Unexpected(
+          Error::invalid("std::optional write_data requires value present"));
     }
     return Serializer<T>::write_data_generic(*opt, ctx, has_generics);
   }
@@ -94,11 +94,7 @@ template <typename T> struct Serializer<std::optional<T>> {
     }
 
     const uint32_t flag_pos = ctx.buffer().reader_index();
-    auto flag_result = ctx.read_int8();
-    if (!flag_result.ok()) {
-      return Unexpected(std::move(flag_result).error());
-    }
-    int8_t flag = flag_result.value();
+    FORY_TRY(flag, ctx.read_int8());
 
     if (flag == NULL_FLAG) {
       return std::optional<T>(std::nullopt);
@@ -107,32 +103,23 @@ template <typename T> struct Serializer<std::optional<T>> {
     if constexpr (inner_requires_ref) {
       // Rewind so the inner serializer can consume the reference metadata.
       ctx.buffer().ReaderIndex(flag_pos);
-      auto value_result = Serializer<T>::read(ctx, true, read_type);
-      if (!value_result.ok()) {
-        return Unexpected(std::move(value_result).error());
-      }
-      return std::optional<T>(std::move(value_result).value());
+      FORY_TRY(value, Serializer<T>::read(ctx, true, read_type));
+      return std::optional<T>(std::move(value));
     }
 
     if (flag != NOT_NULL_VALUE_FLAG && flag != REF_VALUE_FLAG) {
-      return Unexpected(Error::invalid_ref(
-          "Unexpected reference flag for std::optional: " +
-          std::to_string(static_cast<int>(flag))));
+      return Unexpected(
+          Error::invalid_ref("Unexpected reference flag for std::optional: " +
+                             std::to_string(static_cast<int>(flag))));
     }
 
-    auto value_result = Serializer<T>::read(ctx, false, read_type);
-    if (!value_result.ok()) {
-      return Unexpected(std::move(value_result).error());
-    }
-    return std::optional<T>(std::move(value_result).value());
+    FORY_TRY(value, Serializer<T>::read(ctx, false, read_type));
+    return std::optional<T>(std::move(value));
   }
 
   static Result<std::optional<T>, Error> read_data(ReadContext &ctx) {
-    auto value_result = Serializer<T>::read_data(ctx);
-    if (!value_result.ok()) {
-      return Unexpected(std::move(value_result).error());
-    }
-    return std::optional<T>(std::move(value_result).value());
+    FORY_TRY(value, Serializer<T>::read_data(ctx));
+    return std::optional<T>(std::move(value));
   }
 };
 
@@ -154,8 +141,9 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
     constexpr bool inner_requires_ref = requires_ref_metadata_v<T>;
 
     if (!write_ref) {
-      return Unexpected(Error::invalid(
-          "std::shared_ptr requires write_ref=true to encode null/reference state"));
+      return Unexpected(
+          Error::invalid("std::shared_ptr requires write_ref=true to encode "
+                         "null/reference state"));
     }
 
     if (!ptr) {
@@ -198,8 +186,8 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
     constexpr bool inner_requires_ref = requires_ref_metadata_v<T>;
 
     if (!read_ref) {
-      return Unexpected(Error::invalid(
-          "std::shared_ptr requires read_ref=true to decode null/reference state"));
+      return Unexpected(Error::invalid("std::shared_ptr requires read_ref=true "
+                                       "to decode null/reference state"));
     }
 
     auto flag_result = ctx.read_int8();
@@ -232,9 +220,9 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
     }
 
     if (flag != NOT_NULL_VALUE_FLAG && flag != REF_VALUE_FLAG) {
-      return Unexpected(Error::invalid_ref(
-          "Unexpected reference flag value: " +
-          std::to_string(static_cast<int>(flag))));
+      return Unexpected(
+          Error::invalid_ref("Unexpected reference flag value: " +
+                             std::to_string(static_cast<int>(flag))));
     }
 
     uint32_t reserved_ref_id = 0;
@@ -246,12 +234,9 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
       reserved_ref_id = ctx.ref_reader().reserve_ref_id();
     }
 
-    auto value_result = Serializer<T>::read(ctx, inner_requires_ref, read_type);
-    if (!value_result.ok()) {
-      return Unexpected(std::move(value_result).error());
-    }
+    FORY_TRY(value, Serializer<T>::read(ctx, inner_requires_ref, read_type));
 
-    auto result = std::make_shared<T>(std::move(value_result).value());
+    auto result = std::make_shared<T>(std::move(value));
 
     if (flag == REF_VALUE_FLAG) {
       ctx.ref_reader().store_shared_ref_at(reserved_ref_id, result);
@@ -261,11 +246,8 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
   }
 
   static Result<std::shared_ptr<T>, Error> read_data(ReadContext &ctx) {
-    auto value_result = Serializer<T>::read_data(ctx);
-    if (!value_result.ok()) {
-      return Unexpected(std::move(value_result).error());
-    }
-    return std::make_shared<T>(std::move(value_result).value());
+    FORY_TRY(value, Serializer<T>::read_data(ctx));
+    return std::make_shared<T>(std::move(value));
   }
 };
 
@@ -326,31 +308,21 @@ template <typename T> struct Serializer<std::unique_ptr<T>> {
                                                 bool read_type) {
     constexpr bool inner_requires_ref = requires_ref_metadata_v<T>;
 
-    auto flag_result = ctx.read_int8();
-    if (!flag_result.ok()) {
-      return Unexpected(std::move(flag_result).error());
-    }
-    int8_t flag = flag_result.value();
+    FORY_TRY(flag, ctx.read_int8());
 
     if (flag == NULL_FLAG) {
       return std::unique_ptr<T>(nullptr);
     }
 
-    auto value_result =
-        Serializer<T>::read(ctx, inner_requires_ref && read_ref, read_type);
-    if (!value_result.ok()) {
-      return Unexpected(std::move(value_result).error());
-    }
+    FORY_TRY(value, Serializer<T>::read(ctx, inner_requires_ref && read_ref,
+                                        read_type));
 
-    return std::make_unique<T>(std::move(value_result).value());
+    return std::make_unique<T>(std::move(value));
   }
 
   static Result<std::unique_ptr<T>, Error> read_data(ReadContext &ctx) {
-    auto value_result = Serializer<T>::read_data(ctx);
-    if (!value_result.ok()) {
-      return Unexpected(std::move(value_result).error());
-    }
-    return std::make_unique<T>(std::move(value_result).value());
+    FORY_TRY(value, Serializer<T>::read_data(ctx));
+    return std::make_unique<T>(std::move(value));
   }
 };
 

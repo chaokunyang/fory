@@ -54,17 +54,19 @@ private:
 /// Write context for serialization operations.
 ///
 /// This class maintains the state during serialization, including:
-/// - Output buffer for writing data
+/// - Internal buffer for writing data (owned by context)
 /// - Reference tracking for shared/circular references
 /// - Configuration flags
 /// - Depth tracking for preventing stack overflow
 ///
+/// The WriteContext owns its own Buffer internally for reuse across
+/// serialization calls when pooled.
+///
 /// Example:
 /// ```cpp
-/// Buffer buffer;
 /// WriteContext ctx(config, type_resolver);
-/// ctx.attach(buffer);
 /// ctx.write_uint8(42);
+/// // Access buffer: ctx.buffer()
 /// ```
 class WriteContext {
 public:
@@ -74,23 +76,11 @@ public:
   /// Destructor
   ~WriteContext();
 
-  /// Attach an output buffer for the duration of current serialization call.
-  inline void attach(Buffer &buffer) { buffer_ = &buffer; }
+  /// Get reference to internal output buffer.
+  inline Buffer &buffer() { return buffer_; }
 
-  /// Detach the buffer after serialization is complete.
-  inline void detach() { buffer_ = nullptr; }
-
-  /// Get reference to output buffer.
-  inline Buffer &buffer() {
-    assert(buffer_ != nullptr);
-    return *buffer_;
-  }
-
-  /// Get const reference to output buffer.
-  inline const Buffer &buffer() const {
-    assert(buffer_ != nullptr);
-    return *buffer_;
-  }
+  /// Get const reference to internal output buffer.
+  inline const Buffer &buffer() const { return buffer_; }
 
   /// Get reference writer for tracking shared references.
   inline RefWriter &ref_writer() { return ref_writer_; }
@@ -177,7 +167,7 @@ public:
   void reset();
 
 private:
-  Buffer *buffer_;
+  Buffer buffer_;
   const Config *config_;
   TypeResolver *type_resolver_;
   RefWriter ref_writer_;

@@ -149,46 +149,22 @@ public:
   /// @return Vector of bytes on success, error on failure.
   template <typename T>
   Result<std::vector<uint8_t>, Error> serialize(const T &obj) {
-    // Allocate buffer (estimate size)
-    Buffer buffer;
-
-    // Write Fory header
-    write_header(buffer, false, config_.xlang, is_little_endian_system(), false,
-                 Language::CPP);
-
+    // Acquire WriteContext (with owned buffer) from pool
     auto ctx_handle = write_ctx_pool_.acquire();
     WriteContext &ctx = *ctx_handle;
-    ctx.attach(buffer);
-    ctx.reset();
-    struct WriteContextCleanup {
+    // RAII guard to ensure context is properly cleaned up
+    struct ContextGuard {
       WriteContext &ctx;
-      ~WriteContextCleanup() {
-        ctx.reset();
-        ctx.detach();
-      }
-    } cleanup{ctx};
+      ~ContextGuard() { ctx.reset(); }
+    } guard{ctx};
 
-    // Reserve space for meta offset in compatible mode
-    size_t meta_start_offset = 0;
-    if (ctx.is_compatible()) {
-      meta_start_offset = buffer.writer_index();
-      buffer.UnsafePut<int32_t>(meta_start_offset,
-                                -1); // Placeholder for meta offset
-      buffer.WriterIndex(
-          static_cast<uint32_t>(meta_start_offset + sizeof(int32_t)));
-    }
+    // Serialize to the context's buffer
+    FORY_TRY(bytes_written, serialize_to_impl(obj, ctx, ctx.buffer()));
 
-    // Serialize object
-    FORY_RETURN_NOT_OK(Serializer<T>::write(obj, ctx, true, true));
-
-    // Write collected TypeMetas at the end in compatible mode
-    if (ctx.is_compatible() && !ctx.meta_empty()) {
-      ctx.write_meta(meta_start_offset);
-    }
-
-    // Copy to vector
-    std::vector<uint8_t> result(buffer.writer_index());
-    std::memcpy(result.data(), buffer.data(), buffer.writer_index());
+    // Copy buffer data to vector
+    std::vector<uint8_t> result(ctx.buffer().writer_index());
+    std::memcpy(result.data(), ctx.buffer().data(),
+                ctx.buffer().writer_index());
     return result;
   }
 
@@ -199,39 +175,44 @@ public:
   /// @return Number of bytes written on success, error on failure.
   template <typename T>
   Result<size_t, Error> serialize_to(const T &obj, Buffer &buffer) {
-    size_t start_pos = buffer.writer_index();
-
-    // Write Fory header
-    write_header(buffer, false, config_.xlang, is_little_endian_system(), false,
-                 Language::CPP);
-
+    // Acquire WriteContext from pool
     auto ctx_handle = write_ctx_pool_.acquire();
     WriteContext &ctx = *ctx_handle;
-    ctx.attach(buffer);
-    ctx.reset();
-    struct WriteContextCleanup {
+    // RAII guard to ensure context is properly cleaned up
+    struct ContextGuard {
       WriteContext &ctx;
-      ~WriteContextCleanup() {
-        ctx.reset();
-        ctx.detach();
-      }
-    } cleanup{ctx};
+      ~ContextGuard() { ctx.reset(); }
+    } guard{ctx};
 
-    // Reserve space for meta offset in compatible mode
-    size_t meta_start_offset = 0;
-    if (ctx.is_compatible()) {
-      meta_start_offset = buffer.writer_index();
-      buffer.WriteInt32(-1); // Placeholder for meta offset (fixed 4 bytes)
-    }
+    // Serialize using the provided buffer (not the context's buffer)
+    return serialize_to_impl(obj, ctx, buffer);
+  }
 
-    FORY_RETURN_NOT_OK(Serializer<T>::write(obj, ctx, true, true));
+  /// Serialize an object to a byte vector (in-place).
+  ///
+  /// @param obj Object to serialize (const reference).
+  /// @param output Output vector to write to (will be resized as needed).
+  /// @return Number of bytes written on success, error on failure.
+  template <typename T>
+  Result<size_t, Error> serialize_to(const T &obj,
+                                     std::vector<uint8_t> &output) {
+    // Acquire WriteContext (with owned buffer) from pool
+    auto ctx_handle = write_ctx_pool_.acquire();
+    WriteContext &ctx = *ctx_handle;
+    // RAII guard to ensure context is properly cleaned up
+    struct ContextGuard {
+      WriteContext &ctx;
+      ~ContextGuard() { ctx.reset(); }
+    } guard{ctx};
 
-    // Write collected TypeMetas at the end in compatible mode
-    if (ctx.is_compatible() && !ctx.meta_empty()) {
-      ctx.write_meta(meta_start_offset);
-    }
+    // Serialize to the context's buffer
+    FORY_TRY(bytes_written, serialize_to_impl(obj, ctx, ctx.buffer()));
 
-    return buffer.writer_index() - start_pos;
+    // Resize output vector and copy data
+    output.resize(ctx.buffer().writer_index());
+    std::memcpy(output.data(), ctx.buffer().data(),
+                ctx.buffer().writer_index());
+    return bytes_written;
   }
 
   // ============================================================================
@@ -276,23 +257,13 @@ public:
     return deserialize_from<T>(buffer);
   }
 
-  /// Deserialize an object from an existing buffer.
+  /// Core deserialization method that takes an explicit ReadContext.
   ///
-  /// @param buffer Input buffer to read from.
+  /// @param ctx ReadContext to use for deserialization.
+  /// @param buffer Input buffer to read from (should be attached to ctx).
   /// @return Deserialized object on success, error on failure.
-  template <typename T> Result<T, Error> deserialize_from(Buffer &buffer) {
-    auto ctx_handle = read_ctx_pool_.acquire();
-    ReadContext &ctx = *ctx_handle;
-    ctx.attach(buffer);
-    ctx.reset();
-    struct ReadContextCleanup {
-      ReadContext &ctx;
-      ~ReadContextCleanup() {
-        ctx.reset();
-        ctx.detach();
-      }
-    } cleanup{ctx};
-
+  template <typename T>
+  Result<T, Error> deserialize_from(ReadContext &ctx, Buffer &buffer) {
     // Load TypeMetas at the beginning in compatible mode
     if (ctx.is_compatible()) {
       auto meta_offset_result = buffer.ReadInt32();
@@ -309,6 +280,34 @@ public:
       ctx.ref_reader().resolve_callbacks();
     }
     return result;
+  }
+
+  /// Deserialize an object from an existing buffer.
+  ///
+  /// @param buffer Input buffer to read from.
+  /// @return Deserialized object on success, error on failure.
+  template <typename T> Result<T, Error> deserialize_from(Buffer &buffer) {
+    auto ctx_handle = read_ctx_pool_.acquire();
+    ReadContext &ctx = *ctx_handle;
+    ctx.attach(buffer);
+    struct ReadContextCleanup {
+      ReadContext &ctx;
+      ~ReadContextCleanup() {
+        ctx.reset();
+        ctx.detach();
+      }
+    } cleanup{ctx};
+
+    return deserialize_from<T>(ctx, buffer);
+  }
+
+  /// Deserialize an object from a byte vector.
+  ///
+  /// @param data Vector containing serialized data.
+  /// @return Deserialized object on success, error on failure.
+  template <typename T>
+  Result<T, Error> deserialize_from(const std::vector<uint8_t> &data) {
+    return deserialize<T>(data.data(), data.size());
   }
 
   /// Get reference to configuration.
@@ -360,6 +359,39 @@ public:
   }
 
 private:
+  /// Core serialization implementation that takes WriteContext and Buffer.
+  /// All other serialization methods forward to this one.
+  ///
+  /// @param obj Object to serialize (const reference).
+  /// @param ctx WriteContext to use for serialization.
+  /// @param buffer Output buffer to write to (should be attached to ctx).
+  /// @return Number of bytes written on success, error on failure.
+  template <typename T>
+  Result<size_t, Error> serialize_to_impl(const T &obj, WriteContext &ctx,
+                                          Buffer &buffer) {
+    size_t start_pos = buffer.writer_index();
+
+    // Write Fory header
+    write_header(buffer, false, config_.xlang, is_little_endian_system(), false,
+                 Language::CPP);
+
+    // Reserve space for meta offset in compatible mode
+    size_t meta_start_offset = 0;
+    if (ctx.is_compatible()) {
+      meta_start_offset = buffer.writer_index();
+      buffer.WriteInt32(-1); // Placeholder for meta offset (fixed 4 bytes)
+    }
+
+    FORY_RETURN_NOT_OK(Serializer<T>::write(obj, ctx, true, true));
+
+    // Write collected TypeMetas at the end in compatible mode
+    if (ctx.is_compatible() && !ctx.meta_empty()) {
+      ctx.write_meta(meta_start_offset);
+    }
+
+    return buffer.writer_index() - start_pos;
+  }
+
   /// Private constructor - use builder() instead!
   explicit Fory(const Config &config, std::shared_ptr<TypeResolver> resolver)
       : config_(config), type_resolver_(std::move(resolver)),

@@ -28,7 +28,7 @@ namespace serialization {
 // ============================================================================
 
 WriteContext::WriteContext(const Config &config, TypeResolver &type_resolver)
-    : buffer_(nullptr), config_(&config), type_resolver_(&type_resolver),
+    : buffer_(), config_(&config), type_resolver_(&type_resolver),
       current_depth_(0) {}
 
 WriteContext::~WriteContext() = default;
@@ -38,12 +38,12 @@ Result<size_t, Error> WriteContext::push_meta(const std::type_index &type_id) {
 }
 
 void WriteContext::write_meta(size_t offset) {
-  size_t current_pos = buffer_->writer_index();
+  size_t current_pos = buffer_.writer_index();
   // Update the meta offset field (written as -1 initially)
   int32_t meta_size = static_cast<int32_t>(current_pos - offset - 4);
-  buffer_->UnsafePut<int32_t>(offset, meta_size);
+  buffer_.UnsafePut<int32_t>(offset, meta_size);
   // Write all collected TypeMetas
-  type_resolver_->meta_write_to_buffer(*buffer_);
+  type_resolver_->meta_write_to_buffer(buffer_);
 }
 
 bool WriteContext::meta_empty() const { return type_resolver_->meta_empty(); }
@@ -52,6 +52,9 @@ void WriteContext::reset() {
   ref_writer_.reset();
   type_resolver_->meta_reset_writer();
   current_depth_ = 0;
+  // Reset buffer for reuse
+  buffer_.WriterIndex(0);
+  buffer_.ReaderIndex(0);
 }
 
 // ============================================================================

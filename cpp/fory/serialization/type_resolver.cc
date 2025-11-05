@@ -18,6 +18,7 @@
  */
 
 #include "type_resolver.h"
+#include "context.h"
 #include "fory/type/type.h"
 #include <algorithm>
 #include <cstring>
@@ -597,27 +598,36 @@ TypeMeta::sort_field_infos(std::vector<FieldInfo> fields) {
 
 void TypeMeta::assign_field_ids(const TypeMeta *local_type,
                                 std::vector<FieldInfo> &remote_fields) {
-  // Build a map: field_name -> local_field_info
-  std::unordered_map<std::string, const FieldInfo *> local_field_map;
-  for (const auto &field : local_type->field_infos) {
-    local_field_map[field.field_name] = &field;
+  FORY_LOG(FORY_INFO) << "assign_field_ids: local_type has " << local_type->field_infos.size() << " fields";
+  
+  // Build a map: field_name -> sorted_index in local schema
+  std::unordered_map<std::string, size_t> local_field_index_map;
+  for (size_t i = 0; i < local_type->field_infos.size(); ++i) {
+    local_field_index_map[local_type->field_infos[i].field_name] = i;
+    FORY_LOG(FORY_INFO) << "  local field[" << i << "]: name='" << local_type->field_infos[i].field_name << "'";
   }
 
-  // For each remote field, assign field ID
+  // For each remote field, assign field ID (sorted index in local schema)
   for (auto &remote_field : remote_fields) {
-    auto it = local_field_map.find(remote_field.field_name);
-    if (it == local_field_map.end()) {
+    FORY_LOG(FORY_INFO) << "  remote field: name='" << remote_field.field_name << "'";
+    auto it = local_field_index_map.find(remote_field.field_name);
+    if (it == local_field_index_map.end()) {
       // Field not found in local type -> assign -1 (skip)
       remote_field.field_id = -1;
+      FORY_LOG(FORY_INFO) << "    -> NOT FOUND, field_id=-1";
     } else {
-      const FieldInfo *local_field = it->second;
+      size_t local_sorted_index = it->second;
+      const FieldInfo &local_field = local_type->field_infos[local_sorted_index];
+      
       // Check if field type matches (type_id and generics)
-      if (remote_field.field_type != local_field->field_type) {
+      if (remote_field.field_type != local_field.field_type) {
         // Type mismatch -> assign -1 (skip)
         remote_field.field_id = -1;
+        FORY_LOG(FORY_INFO) << "    -> TYPE MISMATCH, field_id=-1";
       } else {
-        // Match! -> assign local field ID
-        remote_field.field_id = local_field->field_id;
+        // Match! -> assign sorted index in local schema
+        remote_field.field_id = static_cast<int16_t>(local_sorted_index);
+        FORY_LOG(FORY_INFO) << "    -> MATCHED, field_id=" << remote_field.field_id;
       }
     }
   }
@@ -631,6 +641,148 @@ int64_t TypeMeta::compute_hash(const std::vector<uint8_t> &meta_bytes) {
     hash = hash * 31 + byte;
   }
   return static_cast<int64_t>(hash & ((1ULL << NUM_HASH_BITS) - 1));
+}
+
+// ============================================================================
+// TypeResolver::read_any_typeinfo Implementation
+// ============================================================================
+
+Result<std::shared_ptr<TypeInfo>, Error>
+TypeResolver::read_any_typeinfo(ReadContext &ctx) {
+  return read_any_typeinfo(ctx, nullptr);
+}
+
+Result<std::shared_ptr<TypeInfo>, Error>
+TypeResolver::read_any_typeinfo(ReadContext &ctx, const TypeMeta *local_type_meta) {
+  FORY_TRY(fory_type_id, ctx.read_varuint32());
+  uint32_t type_id_low = fory_type_id & 0xff;
+
+  // Handle compatible struct types (with embedded TypeMeta)
+  if (type_id_low == static_cast<uint32_t>(TypeId::NAMED_COMPATIBLE_STRUCT) ||
+      type_id_low == static_cast<uint32_t>(TypeId::COMPATIBLE_STRUCT)) {
+    // Use provided local_type_meta if available, otherwise try to get from registry
+    if (local_type_meta == nullptr) {
+      auto local_type_info = get_type_info_by_id(fory_type_id);
+      if (local_type_info && local_type_info->type_meta) {
+        local_type_meta = local_type_info->type_meta.get();
+      }
+    }
+    
+    // Read the embedded TypeMeta from stream
+    // Pass local_type_meta so that assign_field_ids is called during parsing
+    FORY_TRY(remote_meta, TypeMeta::from_bytes(ctx.buffer(), local_type_meta));
+    
+    // Create a temporary TypeInfo with the remote TypeMeta
+    auto type_info = std::make_shared<TypeInfo>();
+    type_info->type_id = fory_type_id;
+    type_info->type_meta = remote_meta;
+    // Note: We don't have type_def here since this is remote schema
+    
+    return type_info;
+  }
+
+  // Handle named types (namespace + type name)
+  if (type_id_low == static_cast<uint32_t>(TypeId::NAMED_ENUM) ||
+      type_id_low == static_cast<uint32_t>(TypeId::NAMED_EXT) ||
+      type_id_low == static_cast<uint32_t>(TypeId::NAMED_STRUCT)) {
+    // TODO: If share_meta is enabled, read meta_index instead
+    // For now, read namespace and type name
+    FORY_TRY(ns_len, ctx.read_varuint32());
+    std::string namespace_str(ns_len, '\0');
+    FORY_RETURN_NOT_OK(ctx.read_bytes(namespace_str.data(), ns_len));
+
+    FORY_TRY(name_len, ctx.read_varuint32());
+    std::string type_name(name_len, '\0');
+    FORY_RETURN_NOT_OK(ctx.read_bytes(type_name.data(), name_len));
+
+    auto type_info = get_type_info_by_name(namespace_str, type_name);
+    if (type_info) {
+      return type_info;
+    }
+    return Unexpected(Error::type_error(
+        "Type info not found for namespace '" + namespace_str +
+        "' and type name '" + type_name + "'"));
+  }
+
+  // Handle other types by ID lookup
+  auto type_info = get_type_info_by_id(fory_type_id);
+  if (type_info) {
+    return type_info;
+  }
+  return Unexpected(Error::type_error(
+      "Type info not found for type_id: " + std::to_string(fory_type_id)));
+}
+
+// ============================================================================
+// Meta Sharing Implementation  
+// ============================================================================
+
+Result<size_t, Error> TypeResolver::meta_push(const std::type_index &type_id) {
+  auto it = write_type_id_index_map_.find(type_id);
+  if (it != write_type_id_index_map_.end()) {
+    return it->second;
+  }
+
+  size_t index = write_type_defs_.size();
+  // Access type_info_cache_ directly
+  auto cache_it = type_info_cache_.find(type_id);
+  if (cache_it == type_info_cache_.end()) {
+    return Unexpected(Error::type_error("Type not registered"));
+  }
+  auto type_info = cache_it->second;
+  write_type_defs_.push_back(type_info->type_def);
+  write_type_id_index_map_[type_id] = index;
+  return index;
+}
+
+Result<size_t, Error> TypeResolver::meta_load(Buffer &buffer) {
+  size_t start_pos = buffer.reader_index();
+
+  auto meta_size_result = buffer.ReadVarUint32();
+  if (!meta_size_result.ok()) {
+    return Unexpected(std::move(meta_size_result).error());
+  }
+  uint32_t meta_size = std::move(meta_size_result).value();
+  reading_type_infos_.reserve(meta_size);
+
+  for (uint32_t i = 0; i < meta_size; i++) {
+    // Parse TypeMeta (from_bytes handles the header internally)
+    auto parsed_meta_result = TypeMeta::from_bytes(buffer, nullptr);
+    if (!parsed_meta_result.ok()) {
+      return Unexpected(std::move(parsed_meta_result).error());
+    }
+    auto parsed_meta = std::move(parsed_meta_result).value();
+
+    // Find local TypeInfo to get field_id mapping
+    std::shared_ptr<TypeInfo> local_type_info = nullptr;
+    if (parsed_meta->register_by_name) {
+      local_type_info = get_type_info_by_name(
+          parsed_meta->namespace_str, parsed_meta->type_name);
+    } else {
+      local_type_info = get_type_info_by_id(parsed_meta->type_id);
+    }
+
+    // Create TypeInfo with field_ids assigned
+    std::shared_ptr<TypeInfo> type_info;
+    if (local_type_info) {
+      // Have local type - assign field_ids by comparing schemas
+      TypeMeta::assign_field_ids(local_type_info->type_meta.get(),
+                                 parsed_meta->field_infos);
+      // Create TypeInfo using remote meta but local type_def
+      type_info = std::make_shared<TypeInfo>();
+      type_info->type_meta = parsed_meta;
+      type_info->type_def = local_type_info->type_def;
+    } else {
+      // No local type - create stub TypeInfo with parsed meta
+      type_info = std::make_shared<TypeInfo>();
+      type_info->type_meta = parsed_meta;
+      // type_def remains empty for unknown types
+    }
+
+    reading_type_infos_.push_back(type_info);
+  }
+
+  return buffer.reader_index() - start_pos;
 }
 
 } // namespace serialization

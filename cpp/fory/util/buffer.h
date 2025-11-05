@@ -260,9 +260,25 @@ public:
     IncreaseWriterIndex(1);
   }
 
+  /// Write int32_t value as fixed 4 bytes to buffer at current writer index.
+  /// Automatically grows buffer and advances writer index.
+  inline void WriteInt32(int32_t value) {
+    Grow(4);
+    UnsafePut<int32_t>(writer_index_, value);
+    IncreaseWriterIndex(4);
+  }
+
   /// Write uint32_t value as varint to buffer at current writer index.
   /// Automatically grows buffer and advances writer index.
   inline void WriteVarUint32(uint32_t value) {
+    Grow(5); // Max 5 bytes for varint32
+    uint32_t len = PutVarUint32(writer_index_, value);
+    IncreaseWriterIndex(len);
+  }
+
+  /// Write int32_t value as varint to buffer at current writer index.
+  /// Automatically grows buffer and advances writer index.
+  inline void WriteVarInt32(int32_t value) {
     Grow(5); // Max 5 bytes for varint32
     uint32_t len = PutVarUint32(writer_index_, value);
     IncreaseWriterIndex(len);
@@ -306,6 +322,17 @@ public:
     return value;
   }
 
+  /// Read int32_t value as fixed 4 bytes from buffer at current reader index.
+  /// Advances reader index and checks bounds.
+  inline Result<int32_t, Error> ReadInt32() {
+    if (reader_index_ + 4 > size_) {
+      return Unexpected(Error::buffer_out_of_bound(reader_index_, 4, size_));
+    }
+    int32_t value = Get<int32_t>(reader_index_);
+    IncreaseReaderIndex(4);
+    return value;
+  }
+
   /// Read uint32_t value as varint from buffer at current reader index.
   /// Advances reader index and checks bounds.
   inline Result<uint32_t, Error> ReadVarUint32() {
@@ -314,6 +341,18 @@ public:
     }
     uint32_t read_bytes = 0;
     uint32_t value = GetVarUint32(reader_index_, &read_bytes);
+    IncreaseReaderIndex(read_bytes);
+    return value;
+  }
+
+  /// Read int32_t value as varint from buffer at current reader index.
+  /// Advances reader index and checks bounds.
+  inline Result<int32_t, Error> ReadVarInt32() {
+    if (reader_index_ + 1 > size_) {
+      return Unexpected(Error::buffer_out_of_bound(reader_index_, 1, size_));
+    }
+    uint32_t read_bytes = 0;
+    int32_t value = GetVarUint32(reader_index_, &read_bytes);
     IncreaseReaderIndex(read_bytes);
     return value;
   }

@@ -94,12 +94,6 @@ public:
     return *this;
   }
 
-  /// Enable/disable meta string compression.
-  ForyBuilder &compress_meta_strings(bool enable) {
-    config_.compress_meta_strings = enable;
-    return *this;
-  }
-
   /// Provide a custom type resolver instance.
   ForyBuilder &type_resolver(std::shared_ptr<TypeResolver> resolver) {
     type_resolver_ = std::move(resolver);
@@ -175,8 +169,21 @@ public:
       }
     } cleanup{ctx};
 
+    // Reserve space for meta offset in compatible mode
+    size_t meta_start_offset = 0;
+    if (ctx.is_compatible()) {
+      meta_start_offset = buffer.writer_index();
+      buffer.UnsafePut<int32_t>(meta_start_offset, -1); // Placeholder for meta offset
+      buffer.WriterIndex(static_cast<uint32_t>(meta_start_offset + sizeof(int32_t)));
+    }
+
     // Serialize object
     FORY_RETURN_NOT_OK(Serializer<T>::write(obj, ctx, true, true));
+
+    // Write collected TypeMetas at the end in compatible mode
+    if (ctx.is_compatible() && !ctx.meta_empty()) {
+      ctx.write_meta(meta_start_offset);
+    }
 
     // Copy to vector
     std::vector<uint8_t> result(buffer.writer_index());
@@ -210,7 +217,19 @@ public:
       }
     } cleanup{ctx};
 
+    // Reserve space for meta offset in compatible mode
+    size_t meta_start_offset = 0;
+    if (ctx.is_compatible()) {
+      meta_start_offset = buffer.writer_index();
+      buffer.WriteInt32(-1); // Placeholder for meta offset (fixed 4 bytes)
+    }
+
     FORY_RETURN_NOT_OK(Serializer<T>::write(obj, ctx, true, true));
+
+    // Write collected TypeMetas at the end in compatible mode
+    if (ctx.is_compatible() && !ctx.meta_empty()) {
+      ctx.write_meta(meta_start_offset);
+    }
 
     return buffer.writer_index() - start_pos;
   }
@@ -274,7 +293,25 @@ public:
       }
     } cleanup{ctx};
 
+    // Load TypeMetas at the beginning in compatible mode
+    size_t bytes_to_skip = 0;
+    if (ctx.is_compatible()) {
+      auto meta_offset_result = buffer.ReadInt32();
+      FORY_RETURN_IF_ERROR(meta_offset_result);
+      int32_t meta_offset = meta_offset_result.value();
+      if (meta_offset != -1) {
+        FORY_ASSIGN_OR_RETURN(bytes_to_skip,
+                              ctx.load_type_meta(meta_offset));
+      }
+    }
+
     auto result = Serializer<T>::read(ctx, true, true);
+    
+    // Skip over the meta section
+    if (bytes_to_skip > 0) {
+      FORY_RETURN_NOT_OK(buffer.Skip(bytes_to_skip));
+    }
+    
     if (result.ok()) {
       ctx.ref_reader().resolve_callbacks();
     }

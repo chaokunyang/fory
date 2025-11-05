@@ -3,6 +3,7 @@ load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 cc_library(
     name = "fory_serialization",
     srcs = [
+        "context.cc",
         "type_resolver.cc",
         "skip.cc",
     ],

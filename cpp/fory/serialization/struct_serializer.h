@@ -42,6 +42,24 @@
 namespace fory {
 namespace serialization {
 
+/// Check if a type ID requires reference metadata at runtime
+inline bool field_requires_ref_flag(uint32_t type_id) {
+  // Types that need ref flags: nullable types, collections, objects
+  TypeId tid = static_cast<TypeId>(type_id & 0xff);
+  switch (tid) {
+    case TypeId::LIST:
+    case TypeId::SET:
+    case TypeId::MAP:
+    case TypeId::STRUCT:
+    case TypeId::COMPATIBLE_STRUCT:
+    case TypeId::NAMED_STRUCT:
+    case TypeId::NAMED_COMPATIBLE_STRUCT:
+      return true;
+    default:
+      return false;
+  }
+}
+
 /// Serialization metadata for a type.
 ///
 /// This template is populated automatically when `FORY_STRUCT` is used to
@@ -393,10 +411,13 @@ Result<void, Error> write_single_field(const T &obj, WriteContext &ctx,
       typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
   const auto &field_value = obj.*field_ptr;
 
-  // Always write field values with write_ref=false, write_type=false
-  // (schema evolution is at struct level, not field level)
+  // In compatible mode, nested structs should also write TypeMeta for schema evolution
+  // In non-compatible mode, no type info needed for fields
   constexpr bool field_needs_ref = requires_ref_metadata_v<FieldType>;
-  return Serializer<FieldType>::write(field_value, ctx, field_needs_ref, false);
+  constexpr bool is_struct_field = is_fory_serializable_v<FieldType>;
+  bool write_type = is_struct_field && ctx.is_compatible();
+  
+  return Serializer<FieldType>::write(field_value, ctx, field_needs_ref, write_type);
 }
 
 /// Write struct fields recursively using index sequence (sorted order)
@@ -432,11 +453,14 @@ Result<void, Error> read_single_field_by_index(T &obj, ReadContext &ctx) {
   using FieldType =
       typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
 
-  // Always read field values with read_ref=false, read_type=false
-  // (schema evolution is at struct level, not field level)
+  // In compatible mode, nested structs also write TypeMeta, so read_type=true
+  // In non-compatible mode, no type info for fields
   constexpr bool field_needs_ref = requires_ref_metadata_v<FieldType>;
+  constexpr bool is_struct_field = is_fory_serializable_v<FieldType>;
+  bool read_type = is_struct_field && ctx.is_compatible();
+  
   FORY_ASSIGN_OR_RETURN(
-      obj.*field_ptr, Serializer<FieldType>::read(ctx, field_needs_ref, false));
+      obj.*field_ptr, Serializer<FieldType>::read(ctx, field_needs_ref, read_type));
   return Result<void, Error>();
 }
 
@@ -460,7 +484,7 @@ Result<void, Error> read_struct_fields_impl(T &obj, ReadContext &ctx,
 }
 
 /// Read struct fields with schema evolution (compatible mode)
-/// This implements the switch/jump table approach from xlang spec
+/// Reads fields in remote schema order, dispatching by field_id to local fields
 template <typename T, size_t... Indices>
 Result<void, Error>
 read_struct_fields_compatible(T &obj, ReadContext &ctx,
@@ -469,38 +493,46 @@ read_struct_fields_compatible(T &obj, ReadContext &ctx,
 
   using Helpers = CompileTimeFieldHelpers<T>;
   const auto &remote_fields = remote_type_meta->get_field_infos();
-  const auto &remote_fields_ref = remote_fields;
 
-  // Fast dispatch: remote_field.field_id maps to local sorted index (or -1
-  // if unknown). We unroll a small if-chain over compile-time indices so the
-  // compiler can produce an efficient jump table.
-  for (const auto &remote_field : remote_fields_ref) {
+  // Iterate through remote fields in their serialization order
+  for (size_t remote_idx = 0; remote_idx < remote_fields.size(); ++remote_idx) {
+    const auto &remote_field = remote_fields[remote_idx];
     int16_t field_id = remote_field.field_id;
+    
+    FORY_LOG(FORY_INFO) << "read_struct_fields_compatible: remote_idx=" << remote_idx
+                        << " remote_field.name='" << remote_field.field_name
+                        << "' field_id=" << field_id;
+    
+    // Compute read_ref_flag based on remote field type
+    bool read_ref_flag = field_requires_ref_flag(remote_field.field_type.type_id);
 
     if (field_id == -1) {
       // Field unknown locally — skip its value
-      FORY_RETURN_NOT_OK(skip_field_value(ctx, remote_field.field_type, false));
+      FORY_LOG(FORY_INFO) << "  -> Skipping field (field_id=-1)";
+      FORY_RETURN_NOT_OK(skip_field_value(ctx, remote_field.field_type, read_ref_flag));
       continue;
     }
 
+    // Dispatch to the correct local field by field_id
     bool handled = false;
     Result<void, Error> result;
 
-    // Unrolled dispatch by comparing field_id against compile-time indices.
     detail::for_each_index(
         std::index_sequence<Indices...>{}, [&](auto index_constant) {
           constexpr size_t index = decltype(index_constant)::value;
           if (!handled && static_cast<int16_t>(index) == field_id) {
             handled = true;
             constexpr size_t original_index = Helpers::sorted_indices[index];
+            FORY_LOG(FORY_INFO) << "  -> Matched: sorted_index=" << index
+                                << " original_index=" << original_index;
             result = read_single_field_by_index<original_index>(obj, ctx);
           }
         });
 
     if (!handled) {
-      // Shouldn't happen if TypeMeta::assign_field_ids worked correctly, but
-      // as a fallback skip the field value.
-      FORY_RETURN_NOT_OK(skip_field_value(ctx, remote_field.field_type, false));
+      // Shouldn't happen if TypeMeta::assign_field_ids worked correctly
+      FORY_LOG(FORY_INFO) << "  -> NOT HANDLED, skipping";
+      FORY_RETURN_NOT_OK(skip_field_value(ctx, remote_field.field_type, read_ref_flag));
       continue;
     }
 
@@ -521,17 +553,23 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
                                    bool write_ref, bool write_type) {
     write_not_null_ref_flag(ctx, write_ref);
 
-    if (write_type) {
-      uint32_t type_tag = ctx.type_resolver().struct_type_tag<T>();
-      ctx.write_varuint32(type_tag);
-    }
-
     auto type_info = ctx.type_resolver().template get_struct_type_info<T>();
     FORY_CHECK(type_info)
         << "Type metadata not initialized for requested struct";
-    if (ctx.is_compatible() && type_info && type_info->type_meta) {
-      const auto &meta_bytes = type_info->type_def;
-      ctx.write_bytes(meta_bytes.data(), meta_bytes.size());
+
+    if (write_type) {
+      uint32_t type_tag = ctx.type_resolver().struct_type_tag<T>();
+      ctx.write_varuint32(type_tag);
+      
+      // Use meta sharing in compatible mode: push TypeId to meta_writer and write varint index
+      if (ctx.is_compatible() && type_info->type_meta) {
+        auto meta_index_result = ctx.push_meta(std::type_index(typeid(T)));
+        if (!meta_index_result.ok()) {
+          return Unexpected(std::move(meta_index_result).error());
+        }
+        size_t meta_index = std::move(meta_index_result).value();
+        ctx.write_varuint32(static_cast<uint32_t>(meta_index));
+      }
     }
 
     using FieldDescriptor = decltype(ForyFieldInfo(std::declval<const T &>()));
@@ -559,51 +597,82 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
   static Result<T, Error> read(ReadContext &ctx, bool read_ref,
                                bool read_type) {
     // Handle reference metadata
-    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
-    if (!has_value) {
+    int8_t ref_flag;
+    if (read_ref) {
+      FORY_TRY(flag, ctx.read_int8());
+      ref_flag = flag;
+    } else {
+      ref_flag = static_cast<int8_t>(RefFlag::NotNullValue);
+    }
+
+    int8_t not_null_value_flag = static_cast<int8_t>(RefFlag::NotNullValue);
+    int8_t ref_value_flag = static_cast<int8_t>(RefFlag::RefValue);
+    int8_t null_flag = static_cast<int8_t>(RefFlag::Null);
+
+    if (ref_flag == not_null_value_flag || ref_flag == ref_value_flag) {
+      if (ctx.is_compatible()) {
+        // In compatible mode: always use remote TypeMeta for schema evolution
+        if (read_type) {
+          // Read type_tag
+          FORY_TRY(type_tag, ctx.read_varuint32());
+          (void)type_tag; // type_tag not used in compatible mode
+
+          // Use meta sharing: read varint index and get TypeInfo from meta_reader
+          FORY_TRY(meta_index, ctx.read_varuint32());
+          FORY_TRY(remote_type_info_ptr, ctx.get_type_info_by_index(meta_index));
+          auto remote_type_info = std::static_pointer_cast<TypeInfo>(remote_type_info_ptr);
+          
+          return read_compatible(ctx, remote_type_info);
+        } else {
+          // read_type=false in compatible mode: same version, use sorted order (fast path)
+          return read_data(ctx);
+        }
+      } else{
+        // Non-compatible mode: read type tag if requested, then read data directly
+        if (read_type) {
+          auto local_type_info = ctx.type_resolver().template get_struct_type_info<T>();
+          FORY_CHECK(local_type_info)
+              << "Type metadata not initialized for requested struct";
+          FORY_TRY(type_tag, ctx.read_varuint32());
+          uint32_t expected_tag = ctx.type_resolver().struct_type_tag(*local_type_info);
+          if (type_tag != expected_tag) {
+            return Unexpected(Error::type_mismatch(type_tag, expected_tag));
+          }
+        }
+        return read_data(ctx);
+      }
+    } else if (ref_flag == null_flag) {
+      // Null value
       if constexpr (std::is_default_constructible_v<T>) {
         return T();
       } else {
         return Unexpected(Error::invalid_data(
             "Null value encountered for non-default-constructible struct"));
       }
+    } else {
+      return Unexpected(Error::invalid_ref(
+          "Unknown ref flag, value: " + std::to_string(ref_flag)));
     }
+  }
 
-    auto type_info = ctx.type_resolver().template get_struct_type_info<T>();
-    FORY_CHECK(type_info)
-        << "Type metadata not initialized for requested struct";
-
-    if (read_type) {
-      FORY_TRY(type_tag, ctx.read_varuint32());
-      uint32_t expected_tag = ctx.type_resolver().struct_type_tag(*type_info);
-      if (type_tag != expected_tag) {
-        return Unexpected(Error::type_mismatch(type_tag, expected_tag));
-      }
-    }
-
+  static Result<T, Error> read_compatible(
+      ReadContext &ctx, std::shared_ptr<TypeInfo> remote_type_info) {
     FORY_RETURN_NOT_OK(ctx.increase_depth());
     DepthGuard depth_guard(ctx);
-    
+
     T obj{};
     using FieldDescriptor = decltype(ForyFieldInfo(std::declval<const T &>()));
     constexpr size_t field_count = FieldDescriptor::Size;
 
-    if (!ctx.is_compatible() || !type_info->type_meta) {
-      FORY_RETURN_NOT_OK(
-          detail::read_struct_fields_impl(obj, ctx, std::make_index_sequence<field_count>{}));
-      return obj;
+    // remote_type_info is from the stream, with field_ids already assigned
+    if (!remote_type_info || !remote_type_info->type_meta) {
+      return Unexpected(Error::type_error(
+          "Remote type metadata not available"));
     }
 
-    FORY_TRY(remote_type_meta,
-             TypeMeta::from_bytes(ctx.buffer(), type_info->type_meta.get()));
-
-    if (remote_type_meta->get_hash() == type_info->type_meta->get_hash()) {
-      FORY_RETURN_NOT_OK(
-          detail::read_struct_fields_impl(obj, ctx, std::make_index_sequence<field_count>{}));
-    } else {
-      FORY_RETURN_NOT_OK(detail::read_struct_fields_compatible(
-          obj, ctx, remote_type_meta, std::make_index_sequence<field_count>{}));
-    }
+    // Use remote TypeMeta for schema evolution - field IDs already assigned
+    FORY_RETURN_NOT_OK(detail::read_struct_fields_compatible(
+        obj, ctx, remote_type_info->type_meta, std::make_index_sequence<field_count>{}));
 
     return obj;
   }
@@ -615,7 +684,8 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
     T obj{};
     using FieldDescriptor = decltype(ForyFieldInfo(std::declval<const T &>()));
     constexpr size_t field_count = FieldDescriptor::Size;
-    FORY_RETURN_NOT_OK(detail::read_struct_fields_impl(obj, ctx, std::make_index_sequence<field_count>{}));
+    FORY_RETURN_NOT_OK(detail::read_struct_fields_impl(
+        obj, ctx, std::make_index_sequence<field_count>{}));
 
     return obj;
   }
@@ -627,7 +697,7 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
   // deserializers
   static Result<T, Error>
   read_with_type_info(ReadContext &ctx, bool read_ref,
-                      const TypeResolver::TypeInfo &type_info) {
+                      const TypeInfo &type_info) {
     // Type info already validated, skip redundant type read
     return read(ctx, read_ref, false); // read_type=false
   }

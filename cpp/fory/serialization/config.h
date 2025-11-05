@@ -50,10 +50,6 @@ struct Config {
   /// When enabled, avoids duplicating shared objects and handles cycles.
   bool track_ref = true;
 
-  /// Enable meta string compression.
-  /// When enabled, compresses type and field names using encoding algorithms.
-  bool compress_meta_strings = true;
-
   /// Default constructor with sensible defaults
   Config() = default;
 };

@@ -26,6 +26,7 @@
 #include "fory/util/result.h"
 
 #include <cassert>
+#include <typeindex>
 
 namespace fory {
 namespace serialization {
@@ -68,9 +69,10 @@ private:
 class WriteContext {
 public:
   /// Construct write context with configuration and type resolver.
-  explicit WriteContext(const Config &config, TypeResolver &type_resolver)
-      : buffer_(nullptr), config_(&config), type_resolver_(&type_resolver),
-        current_depth_(0) {}
+  explicit WriteContext(const Config &config, TypeResolver &type_resolver);
+
+  /// Destructor
+  ~WriteContext();
 
   /// Attach an output buffer for the duration of current serialization call.
   inline void attach(Buffer &buffer) { buffer_ = &buffer; }
@@ -160,11 +162,19 @@ public:
     buffer().WriteBytes(data, length);
   }
 
+  /// Push a TypeId's TypeMeta into the meta collection.
+  /// Returns the index for writing as varint.
+  Result<size_t, Error> push_meta(const std::type_index &type_id);
+
+  /// Write all collected TypeMetas at the specified offset.
+  /// Updates the meta_offset field at 'offset' to point to meta section.
+  void write_meta(size_t offset);
+
+  /// Check if any TypeMetas were collected.
+  bool meta_empty() const;
+
   /// Reset context for reuse.
-  inline void reset() {
-    ref_writer_.reset();
-    current_depth_ = 0;
-  }
+  void reset();
 
 private:
   Buffer *buffer_;
@@ -195,9 +205,10 @@ private:
 class ReadContext {
 public:
   /// Construct read context with configuration and type resolver.
-  explicit ReadContext(const Config &config, TypeResolver &type_resolver)
-      : buffer_(nullptr), config_(&config), type_resolver_(&type_resolver),
-        current_depth_(0) {}
+  explicit ReadContext(const Config &config, TypeResolver &type_resolver);
+
+  /// Destructor
+  ~ReadContext();
 
   /// Attach an input buffer for the duration of current deserialization call.
   inline void attach(Buffer &buffer) { buffer_ = &buffer; }
@@ -287,11 +298,18 @@ public:
     return buffer().ReadBytes(data, length);
   }
 
+  /// Load all TypeMetas from buffer at the specified offset.
+  /// Returns the number of bytes to skip after reading struct data.
+  Result<size_t, Error> load_type_meta(int32_t meta_offset);
+
+  /// Get TypeInfo by meta index.
+  /// Returns TypeResolver::TypeInfo as void* to avoid incomplete type issues.
+  /// Implementation casts it back to TypeResolver::TypeInfo*.
+  Result<std::shared_ptr<void>, Error>
+  get_type_info_by_index(size_t index) const;
+
   /// Reset context for reuse.
-  inline void reset() {
-    ref_reader_.reset();
-    current_depth_ = 0;
-  }
+  void reset();
 
 private:
   Buffer *buffer_;
@@ -306,3 +324,6 @@ inline DepthGuard::~DepthGuard() { ctx_.decrease_depth(); }
 
 } // namespace serialization
 } // namespace fory
+
+// Include type_resolver.h at the end to get MetaWriterResolver and MetaReaderResolver definitions
+#include "fory/serialization/type_resolver.h"

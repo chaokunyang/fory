@@ -118,7 +118,7 @@ Fory Rust demonstrates competitive performance compared to other Rust serializat
 <img src="docs/benchmarks/rust/system_data.png" width="70%">
 </p>
 
-For more detailed benchmarks and methodology, see [Rust Benchmarks](rust/benches).
+For more detailed benchmarks and methodology, see [Rust Benchmarks](benchmarks/rust_benchmark).
 
 ## Installation
 

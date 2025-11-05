@@ -162,6 +162,7 @@ cargo fmt --check
 cargo doc --lib --no-deps --all-features
 
 # Run benchmarks
+cd $project_dir/benchmarks/rust_benchmark
 cargo bench
 ```
 

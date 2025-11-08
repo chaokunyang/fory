@@ -160,13 +160,24 @@ template <typename T> struct Serializer<std::optional<T>> {
 // std::shared_ptr serializer
 // ============================================================================
 
+// Helper to get type_id for shared_ptr without instantiating Serializer for polymorphic types
+template <typename T, bool IsPolymorphic>
+struct SharedPtrTypeIdHelper {
+  static constexpr TypeId value = Serializer<T>::type_id;
+};
+
+template <typename T>
+struct SharedPtrTypeIdHelper<T, true> {
+  static constexpr TypeId value = TypeId::NAMED_STRUCT;
+};
+
 /// Serializer for std::shared_ptr<T>
 ///
 /// Supports reference tracking for shared and circular references.
 /// When reference tracking is enabled, identical shared_ptr instances
 /// will serialize only once and use reference IDs for subsequent occurrences.
 template <typename T> struct Serializer<std::shared_ptr<T>> {
-  static constexpr TypeId type_id = Serializer<T>::type_id;
+  static constexpr TypeId type_id = SharedPtrTypeIdHelper<T, std::is_polymorphic_v<T>>::value;
 
   static Result<void, Error> write(const std::shared_ptr<T> &ptr,
                                    WriteContext &ctx, bool write_ref,
@@ -213,7 +224,8 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
       }
 
       // Use the harness to serialize the concrete type
-      std::any boxed = static_cast<const void*>(ptr.get());
+      const T* raw_ptr = ptr.get();
+      std::any boxed = raw_ptr;
       return it->second->harness.write_data_fn(boxed, ctx, false);
     } else {
       // Non-polymorphic path
@@ -237,7 +249,8 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
         return Unexpected(Error::type_error(
             "Concrete type not registered for polymorphic shared_ptr"));
       }
-      std::any boxed = static_cast<const void*>(ptr.get());
+      const T* raw_ptr = ptr.get();
+      std::any boxed = raw_ptr;
       return it->second->harness.write_data_fn(boxed, ctx, false);
     } else {
       return Serializer<T>::write_data(*ptr, ctx);
@@ -261,7 +274,8 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
         return Unexpected(Error::type_error(
             "Concrete type not registered for polymorphic shared_ptr"));
       }
-      std::any boxed = static_cast<const void*>(ptr.get());
+      const T* raw_ptr = ptr.get();
+      std::any boxed = raw_ptr;
       return it->second->harness.write_data_fn(boxed, ctx, has_generics);
     } else {
       return Serializer<T>::write_data_generic(*ptr, ctx, has_generics);
@@ -271,65 +285,72 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
   static Result<std::shared_ptr<T>, Error> read(ReadContext &ctx, bool read_ref,
                                                 bool read_type) {
     constexpr bool inner_requires_ref = requires_ref_metadata_v<T>;
+    constexpr bool is_polymorphic = std::is_polymorphic_v<T>;
 
-    if (!read_ref) {
-      return Unexpected(Error::invalid("std::shared_ptr requires read_ref=true "
-                                       "to decode null/reference state"));
-    }
-
-    auto flag_result = ctx.read_int8();
-    if (!flag_result.ok()) {
-      return Unexpected(std::move(flag_result).error());
-    }
-    int8_t flag = flag_result.value();
-
-    if (flag == NULL_FLAG) {
-      return std::shared_ptr<T>(nullptr);
-    }
-
-    const bool tracking_refs = ctx.track_ref();
-
-    if (flag == REF_FLAG) {
-      if (!tracking_refs) {
-        return Unexpected(Error::invalid_ref(
-            "Reference flag encountered when reference tracking disabled"));
+    if constexpr (is_polymorphic) {
+      return Unexpected(Error::type_error(
+          "Cannot deserialize polymorphic std::shared_ptr<T> without type info. "
+          "Use read_with_type_info instead."));
+    } else {
+      if (!read_ref) {
+        return Unexpected(Error::invalid("std::shared_ptr requires read_ref=true "
+                                         "to decode null/reference state"));
       }
-      auto ref_id_result = ctx.read_varuint32();
-      if (!ref_id_result.ok()) {
-        return Unexpected(std::move(ref_id_result).error());
+
+      auto flag_result = ctx.read_int8();
+      if (!flag_result.ok()) {
+        return Unexpected(std::move(flag_result).error());
       }
-      auto shared_result =
-          ctx.ref_reader().template get_shared_ref<T>(ref_id_result.value());
-      if (!shared_result.ok()) {
-        return Unexpected(std::move(shared_result).error());
+      int8_t flag = flag_result.value();
+
+      if (flag == NULL_FLAG) {
+        return std::shared_ptr<T>(nullptr);
       }
-      return shared_result.value();
-    }
 
-    if (flag != NOT_NULL_VALUE_FLAG && flag != REF_VALUE_FLAG) {
-      return Unexpected(
-          Error::invalid_ref("Unexpected reference flag value: " +
-                             std::to_string(static_cast<int>(flag))));
-    }
+      const bool tracking_refs = ctx.track_ref();
 
-    uint32_t reserved_ref_id = 0;
-    if (flag == REF_VALUE_FLAG) {
-      if (!tracking_refs) {
-        return Unexpected(Error::invalid_ref(
-            "REF_VALUE flag encountered when reference tracking disabled"));
+      if (flag == REF_FLAG) {
+        if (!tracking_refs) {
+          return Unexpected(Error::invalid_ref(
+              "Reference flag encountered when reference tracking disabled"));
+        }
+        auto ref_id_result = ctx.read_varuint32();
+        if (!ref_id_result.ok()) {
+          return Unexpected(std::move(ref_id_result).error());
+        }
+        auto shared_result =
+            ctx.ref_reader().template get_shared_ref<T>(ref_id_result.value());
+        if (!shared_result.ok()) {
+          return Unexpected(std::move(shared_result).error());
+        }
+        return shared_result.value();
       }
-      reserved_ref_id = ctx.ref_reader().reserve_ref_id();
+
+      if (flag != NOT_NULL_VALUE_FLAG && flag != REF_VALUE_FLAG) {
+        return Unexpected(
+            Error::invalid_ref("Unexpected reference flag value: " +
+                               std::to_string(static_cast<int>(flag))));
+      }
+
+      uint32_t reserved_ref_id = 0;
+      if (flag == REF_VALUE_FLAG) {
+        if (!tracking_refs) {
+          return Unexpected(Error::invalid_ref(
+              "REF_VALUE flag encountered when reference tracking disabled"));
+        }
+        reserved_ref_id = ctx.ref_reader().reserve_ref_id();
+      }
+
+      FORY_TRY(value, Serializer<T>::read(ctx, inner_requires_ref, read_type));
+
+      auto result = std::make_shared<T>(std::move(value));
+
+      if (flag == REF_VALUE_FLAG) {
+        ctx.ref_reader().store_shared_ref_at(reserved_ref_id, result);
+      }
+
+      return result;
     }
-
-    FORY_TRY(value, Serializer<T>::read(ctx, inner_requires_ref, read_type));
-
-    auto result = std::make_shared<T>(std::move(value));
-
-    if (flag == REF_VALUE_FLAG) {
-      ctx.ref_reader().store_shared_ref_at(reserved_ref_id, result);
-    }
-
-    return result;
   }
 
   static Result<std::shared_ptr<T>, Error> read_with_type_info(ReadContext &ctx, bool read_ref,

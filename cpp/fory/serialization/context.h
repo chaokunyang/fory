@@ -34,6 +34,7 @@ namespace serialization {
 // Forward declarations
 class TypeResolver;
 class ReadContext;
+struct TypeInfo;
 
 /// RAII helper to automatically decrease depth when leaving scope
 class DepthGuard {
@@ -138,6 +139,9 @@ public:
   /// Write int8_t value to buffer.
   inline void write_int8(int8_t value) { buffer().WriteInt8(value); }
 
+  /// Write uint16_t value to buffer.
+  inline void write_uint16(uint16_t value) { buffer().WriteUint16(value); }
+
   /// Write uint32_t value as varint to buffer.
   inline void write_varuint32(uint32_t value) {
     buffer().WriteVarUint32(value);
@@ -163,6 +167,21 @@ public:
 
   /// Check if any TypeMetas were collected.
   bool meta_empty() const;
+
+  /// Write type information for polymorphic types.
+  /// Handles different type categories:
+  /// - Internal types: just write type_id
+  /// - COMPATIBLE_STRUCT/NAMED_COMPATIBLE_STRUCT: write type_id and meta_index
+  /// - NAMED_ENUM/NAMED_STRUCT/NAMED_EXT: write type_id, then namespace/type_name
+  ///   (as raw strings if share_meta is disabled, or meta_index if enabled)
+  /// - Other types: just write type_id
+  ///
+  /// @param fory_type_id The static Fory type ID
+  /// @param concrete_type_id The runtime type_index for concrete type
+  /// @return TypeInfo for the written type, or error
+  Result<std::shared_ptr<TypeInfo>, Error>
+  write_any_typeinfo(uint32_t fory_type_id,
+                     const std::type_index &concrete_type_id);
 
   /// Reset context for reuse.
   void reset();
@@ -302,6 +321,18 @@ public:
   /// Implementation casts it back to TypeResolver::TypeInfo*.
   Result<std::shared_ptr<void>, Error>
   get_type_info_by_index(size_t index) const;
+
+  /// Read type information dynamically from buffer based on type ID.
+  /// This mirrors Rust's read_any_typeinfo implementation.
+  ///
+  /// Handles different type categories:
+  /// - COMPATIBLE_STRUCT/NAMED_COMPATIBLE_STRUCT: read meta_index
+  /// - NAMED_ENUM/NAMED_STRUCT/NAMED_EXT: read namespace/type_name
+  ///   (as raw strings if share_meta is disabled, or meta_index if enabled)
+  /// - Other types: look up by type_id
+  ///
+  /// @return TypeInfo for the read type, or error
+  Result<std::shared_ptr<TypeInfo>, Error> read_any_typeinfo();
 
   /// Reset context for reuse.
   void reset();

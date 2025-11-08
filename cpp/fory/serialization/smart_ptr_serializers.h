@@ -117,6 +117,39 @@ template <typename T> struct Serializer<std::optional<T>> {
     return std::optional<T>(std::move(value));
   }
 
+  static Result<std::optional<T>, Error> read_with_type_info(ReadContext &ctx, bool read_ref,
+                                                              const TypeInfo &type_info) {
+    constexpr bool inner_requires_ref = requires_ref_metadata_v<T>;
+
+    if (!read_ref) {
+      return Unexpected(Error::invalid(
+          "std::optional requires read_ref=true to decode null state"));
+    }
+
+    const uint32_t flag_pos = ctx.buffer().reader_index();
+    FORY_TRY(flag, ctx.read_int8());
+
+    if (flag == NULL_FLAG) {
+      return std::optional<T>(std::nullopt);
+    }
+
+    if constexpr (inner_requires_ref) {
+      // Rewind so the inner serializer can consume the reference metadata.
+      ctx.buffer().ReaderIndex(flag_pos);
+      FORY_TRY(value, Serializer<T>::read_with_type_info(ctx, true, type_info));
+      return std::optional<T>(std::move(value));
+    }
+
+    if (flag != NOT_NULL_VALUE_FLAG && flag != REF_VALUE_FLAG) {
+      return Unexpected(
+          Error::invalid_ref("Unexpected reference flag for std::optional: " +
+                             std::to_string(static_cast<int>(flag))));
+    }
+
+    FORY_TRY(value, Serializer<T>::read_with_type_info(ctx, false, type_info));
+    return std::optional<T>(std::move(value));
+  }
+
   static Result<std::optional<T>, Error> read_data(ReadContext &ctx) {
     FORY_TRY(value, Serializer<T>::read_data(ctx));
     return std::optional<T>(std::move(value));
@@ -139,6 +172,7 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
                                    WriteContext &ctx, bool write_ref,
                                    bool write_type) {
     constexpr bool inner_requires_ref = requires_ref_metadata_v<T>;
+    constexpr bool is_polymorphic = std::is_polymorphic_v<T>;
 
     if (!write_ref) {
       return Unexpected(
@@ -159,7 +193,32 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
       ctx.write_int8(NOT_NULL_VALUE_FLAG);
     }
 
-    return Serializer<T>::write(*ptr, ctx, inner_requires_ref, write_type);
+    // For polymorphic types, serialize the concrete type dynamically
+    if constexpr (is_polymorphic) {
+      // Get the concrete type_index from the actual object
+      std::type_index concrete_type_id = std::type_index(typeid(*ptr));
+
+      // Look up the TypeInfo for the concrete type
+      const auto &type_info_cache = ctx.type_resolver().get_type_info_cache();
+      auto it = type_info_cache.find(concrete_type_id);
+      if (it == type_info_cache.end()) {
+        return Unexpected(Error::type_error(
+            "Concrete type not registered for polymorphic shared_ptr: " +
+            std::string(concrete_type_id.name())));
+      }
+
+      // Write type info if requested
+      if (write_type) {
+        FORY_RETURN_NOT_OK(ctx.write_any_typeinfo(0, concrete_type_id));
+      }
+
+      // Use the harness to serialize the concrete type
+      std::any boxed = static_cast<const void*>(ptr.get());
+      return it->second->harness.write_data_fn(boxed, ctx, false);
+    } else {
+      // Non-polymorphic path
+      return Serializer<T>::write(*ptr, ctx, inner_requires_ref, write_type);
+    }
   }
 
   static Result<void, Error> write_data(const std::shared_ptr<T> &ptr,
@@ -168,7 +227,21 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
       return Unexpected(Error::invalid(
           "std::shared_ptr write_data requires non-null pointer"));
     }
-    return Serializer<T>::write_data(*ptr, ctx);
+
+    // For polymorphic types, use harness to serialize the concrete type
+    if constexpr (std::is_polymorphic_v<T>) {
+      std::type_index concrete_type_id = std::type_index(typeid(*ptr));
+      const auto &type_info_cache = ctx.type_resolver().get_type_info_cache();
+      auto it = type_info_cache.find(concrete_type_id);
+      if (it == type_info_cache.end()) {
+        return Unexpected(Error::type_error(
+            "Concrete type not registered for polymorphic shared_ptr"));
+      }
+      std::any boxed = static_cast<const void*>(ptr.get());
+      return it->second->harness.write_data_fn(boxed, ctx, false);
+    } else {
+      return Serializer<T>::write_data(*ptr, ctx);
+    }
   }
 
   static Result<void, Error> write_data_generic(const std::shared_ptr<T> &ptr,
@@ -178,7 +251,21 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
       return Unexpected(Error::invalid(
           "std::shared_ptr write_data requires non-null pointer"));
     }
-    return Serializer<T>::write_data_generic(*ptr, ctx, has_generics);
+
+    // For polymorphic types, use harness to serialize the concrete type
+    if constexpr (std::is_polymorphic_v<T>) {
+      std::type_index concrete_type_id = std::type_index(typeid(*ptr));
+      const auto &type_info_cache = ctx.type_resolver().get_type_info_cache();
+      auto it = type_info_cache.find(concrete_type_id);
+      if (it == type_info_cache.end()) {
+        return Unexpected(Error::type_error(
+            "Concrete type not registered for polymorphic shared_ptr"));
+      }
+      std::any boxed = static_cast<const void*>(ptr.get());
+      return it->second->harness.write_data_fn(boxed, ctx, has_generics);
+    } else {
+      return Serializer<T>::write_data_generic(*ptr, ctx, has_generics);
+    }
   }
 
   static Result<std::shared_ptr<T>, Error> read(ReadContext &ctx, bool read_ref,
@@ -243,6 +330,92 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
     }
 
     return result;
+  }
+
+  static Result<std::shared_ptr<T>, Error> read_with_type_info(ReadContext &ctx, bool read_ref,
+                                                                const TypeInfo &type_info) {
+    constexpr bool inner_requires_ref = requires_ref_metadata_v<T>;
+    constexpr bool is_polymorphic = std::is_polymorphic_v<T>;
+
+    if (!read_ref) {
+      return Unexpected(Error::invalid("std::shared_ptr requires read_ref=true "
+                                       "to decode null/reference state"));
+    }
+
+    FORY_TRY(flag, ctx.read_int8());
+
+    if (flag == NULL_FLAG) {
+      return std::shared_ptr<T>(nullptr);
+    }
+
+    const bool tracking_refs = ctx.track_ref();
+
+    if (flag == REF_FLAG) {
+      if (!tracking_refs) {
+        return Unexpected(Error::invalid_ref(
+            "Reference flag encountered when reference tracking disabled"));
+      }
+      FORY_TRY(ref_id, ctx.read_varuint32());
+      return ctx.ref_reader().template get_shared_ref<T>(ref_id);
+    }
+
+    if (flag != NOT_NULL_VALUE_FLAG && flag != REF_VALUE_FLAG) {
+      return Unexpected(
+          Error::invalid_ref("Unexpected reference flag value: " +
+                             std::to_string(static_cast<int>(flag))));
+    }
+
+    uint32_t reserved_ref_id = 0;
+    if (flag == REF_VALUE_FLAG) {
+      if (!tracking_refs) {
+        return Unexpected(Error::invalid_ref(
+            "REF_VALUE flag encountered when reference tracking disabled"));
+      }
+      reserved_ref_id = ctx.ref_reader().reserve_ref_id();
+    }
+
+    // For polymorphic types, use the harness to deserialize the concrete type
+    if constexpr (is_polymorphic) {
+      // The type_info contains information about the CONCRETE type, not T
+      // Use the harness to deserialize it
+      if (!type_info.harness.read_data_fn) {
+        return Unexpected(Error::type_error(
+            "No harness read function for polymorphic type deserialization"));
+      }
+
+      FORY_TRY(boxed, type_info.harness.read_data_fn(ctx));
+
+      // The harness returns std::any containing the concrete type
+      // We need to extract a pointer to it and wrap in shared_ptr<T>
+      // The concrete type is a derived class of T, so we can cast the pointer
+
+      // Try to extract void* from the std::any (the harness stores raw pointer)
+      if (auto ptr_ptr = std::any_cast<void*>(&boxed)) {
+        // Cast the void* to T* (this works because the concrete type derives from T)
+        T* obj_ptr = static_cast<T*>(*ptr_ptr);
+        auto result = std::shared_ptr<T>(obj_ptr);
+
+        if (flag == REF_VALUE_FLAG) {
+          ctx.ref_reader().store_shared_ref_at(reserved_ref_id, result);
+        }
+
+        return result;
+      }
+
+      return Unexpected(Error::type_error(
+          "Failed to extract polymorphic type from harness result"));
+    } else {
+      // Non-polymorphic path
+      FORY_TRY(value, Serializer<T>::read_with_type_info(ctx, inner_requires_ref, type_info));
+
+      auto result = std::make_shared<T>(std::move(value));
+
+      if (flag == REF_VALUE_FLAG) {
+        ctx.ref_reader().store_shared_ref_at(reserved_ref_id, result);
+      }
+
+      return result;
+    }
   }
 
   static Result<std::shared_ptr<T>, Error> read_data(ReadContext &ctx) {

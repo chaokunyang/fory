@@ -260,6 +260,14 @@ public:
     IncreaseWriterIndex(1);
   }
 
+  /// Write uint16_t value as fixed 2 bytes to buffer at current writer index.
+  /// Automatically grows buffer and advances writer index.
+  inline void WriteUint16(uint16_t value) {
+    Grow(2);
+    UnsafePut<uint16_t>(writer_index_, value);
+    IncreaseWriterIndex(2);
+  }
+
   /// Write int32_t value as fixed 4 bytes to buffer at current writer index.
   /// Automatically grows buffer and advances writer index.
   inline void WriteInt32(int32_t value) {

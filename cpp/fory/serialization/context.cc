@@ -19,6 +19,7 @@
 
 #include "fory/serialization/context.h"
 #include "fory/serialization/type_resolver.h"
+#include "fory/type/type.h"
 
 namespace fory {
 namespace serialization {
@@ -64,6 +65,69 @@ void WriteContext::write_meta(size_t offset) {
 }
 
 bool WriteContext::meta_empty() const { return write_type_defs_.empty(); }
+
+Result<std::shared_ptr<TypeInfo>, Error>
+WriteContext::write_any_typeinfo(uint32_t fory_type_id,
+                                 const std::type_index &concrete_type_id) {
+  // Check if it's an internal type
+  if (is_internal_type(fory_type_id)) {
+    buffer_.WriteVarUint32(fory_type_id);
+    auto type_info = type_resolver_->get_type_info_by_id(fory_type_id);
+    if (!type_info) {
+      return Unexpected(Error::type_error("Type info for internal type not found"));
+    }
+    return type_info;
+  }
+
+  // Get type info for the concrete type
+  const auto &type_info_cache = type_resolver_->get_type_info_cache();
+  auto cache_it = type_info_cache.find(concrete_type_id);
+  if (cache_it == type_info_cache.end()) {
+    return Unexpected(Error::type_error("Type not registered"));
+  }
+  auto type_info = cache_it->second;
+  uint32_t type_id = type_info->type_id;
+  const std::string &namespace_name = type_info->namespace_name;
+  const std::string &type_name = type_info->type_name;
+
+  // Write type_id
+  buffer_.WriteVarUint32(type_id);
+
+  // Handle different type categories based on low byte
+  uint32_t type_id_low = type_id & 0xff;
+  switch (type_id_low) {
+  case static_cast<uint32_t>(TypeId::NAMED_COMPATIBLE_STRUCT):
+  case static_cast<uint32_t>(TypeId::COMPATIBLE_STRUCT): {
+    // Write meta_index
+    FORY_TRY(meta_index, push_meta(concrete_type_id));
+    buffer_.WriteVarUint32(static_cast<uint32_t>(meta_index));
+    break;
+  }
+  case static_cast<uint32_t>(TypeId::NAMED_ENUM):
+  case static_cast<uint32_t>(TypeId::NAMED_EXT):
+  case static_cast<uint32_t>(TypeId::NAMED_STRUCT): {
+    if (config_->compatible) {
+      // Write meta_index (share_meta is effectively compatible in C++)
+      FORY_TRY(meta_index, push_meta(concrete_type_id));
+      buffer_.WriteVarUint32(static_cast<uint32_t>(meta_index));
+    } else {
+      // Write namespace and type_name as raw strings
+      // Note: Rust uses write_meta_string_bytes for compression,
+      // but C++ doesn't have MetaString compression yet, so we write raw strings
+      buffer_.WriteVarUint32(static_cast<uint32_t>(namespace_name.size()));
+      buffer_.WriteBytes(namespace_name.data(), namespace_name.size());
+      buffer_.WriteVarUint32(static_cast<uint32_t>(type_name.size()));
+      buffer_.WriteBytes(type_name.data(), type_name.size());
+    }
+    break;
+  }
+  default:
+    // For other types, just writing type_id is sufficient
+    break;
+  }
+
+  return type_info;
+}
 
 void WriteContext::reset() {
   ref_writer_.reset();
@@ -146,6 +210,58 @@ ReadContext::get_type_info_by_index(size_t index) const {
         ", size: " + std::to_string(reading_type_infos_.size())));
   }
   return reading_type_infos_[index];
+}
+
+Result<std::shared_ptr<TypeInfo>, Error> ReadContext::read_any_typeinfo() {
+  FORY_TRY(fory_type_id, buffer_->ReadVarUint32());
+  uint32_t type_id_low = fory_type_id & 0xff;
+
+  // Handle different type categories based on low byte
+  switch (type_id_low) {
+  case static_cast<uint32_t>(TypeId::NAMED_COMPATIBLE_STRUCT):
+  case static_cast<uint32_t>(TypeId::COMPATIBLE_STRUCT): {
+    // Read meta_index and get TypeInfo from loaded metas
+    FORY_TRY(meta_index, buffer_->ReadVarUint32());
+    FORY_TRY(type_info_void, get_type_info_by_index(meta_index));
+    // Cast back to TypeInfo
+    auto type_info = std::static_pointer_cast<TypeInfo>(type_info_void);
+    return type_info;
+  }
+  case static_cast<uint32_t>(TypeId::NAMED_ENUM):
+  case static_cast<uint32_t>(TypeId::NAMED_EXT):
+  case static_cast<uint32_t>(TypeId::NAMED_STRUCT): {
+    if (config_->compatible) {
+      // Read meta_index (share_meta is effectively compatible in C++)
+      FORY_TRY(meta_index, buffer_->ReadVarUint32());
+      FORY_TRY(type_info_void, get_type_info_by_index(meta_index));
+      auto type_info = std::static_pointer_cast<TypeInfo>(type_info_void);
+      return type_info;
+    } else {
+      // Read namespace and type_name as raw strings
+      FORY_TRY(ns_len, buffer_->ReadVarUint32());
+      std::string namespace_str(ns_len, '\0');
+      FORY_RETURN_NOT_OK(buffer_->ReadBytes(namespace_str.data(), ns_len));
+
+      FORY_TRY(name_len, buffer_->ReadVarUint32());
+      std::string type_name(name_len, '\0');
+      FORY_RETURN_NOT_OK(buffer_->ReadBytes(type_name.data(), name_len));
+
+      auto type_info = type_resolver_->get_type_info_by_name(namespace_str, type_name);
+      if (!type_info) {
+        return Unexpected(Error::type_error("Name harness not found"));
+      }
+      return type_info;
+    }
+  }
+  default: {
+    // Look up by type_id
+    auto type_info = type_resolver_->get_type_info_by_id(fory_type_id);
+    if (!type_info) {
+      return Unexpected(Error::type_error("ID harness not found"));
+    }
+    return type_info;
+  }
+  }
 }
 
 void ReadContext::reset() {

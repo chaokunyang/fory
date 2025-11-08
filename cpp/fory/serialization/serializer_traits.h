@@ -137,6 +137,59 @@ template <typename T>
 inline constexpr bool is_generic_type_v = is_generic_type<T>::value;
 
 // ============================================================================
+// Polymorphic Type Detection
+// ============================================================================
+
+/// Check if a type supports polymorphism (has virtual functions)
+/// This detects C++ polymorphic types that have virtual functions and can be
+/// used with RTTI to determine the concrete type at runtime.
+template <typename T> struct is_polymorphic : std::is_polymorphic<T> {};
+
+// Special case: shared_ptr<T> is polymorphic if T is polymorphic
+template <typename T>
+struct is_polymorphic<std::shared_ptr<T>> : std::is_polymorphic<T> {};
+
+template <typename T>
+inline constexpr bool is_polymorphic_v = is_polymorphic<T>::value;
+
+// Forward declaration for type resolver (defined in type_resolver.h)
+class TypeResolver;
+
+// ============================================================================
+// Concrete Type ID Retrieval
+// ============================================================================
+
+/// Get the concrete type_index for a value
+/// For non-polymorphic types, this is just typeid(T)
+/// For polymorphic types, this returns the runtime type using RTTI
+template <typename T>
+inline std::type_index get_concrete_type_id(const T &value) {
+  if constexpr (is_polymorphic_v<T>) {
+    // For polymorphic types, get runtime type using RTTI
+    // typeid(value) performs dynamic type lookup for polymorphic types
+    return std::type_index(typeid(value));
+  } else {
+    // For non-polymorphic types, use static type
+    return std::type_index(typeid(T));
+  }
+}
+
+// Note: get_type_id_dyn is declared here but implemented after TypeResolver is fully defined
+// See the implementation in context.h or a separate implementation file
+
+// ============================================================================
+// Shared Reference Detection
+// ============================================================================
+
+/// Check if a type is a shared reference (Rc/Arc in Rust, shared_ptr in C++)
+template <typename T> struct is_shared_ref : std::false_type {};
+
+template <typename T> struct is_shared_ref<std::shared_ptr<T>> : std::true_type {};
+
+template <typename T>
+inline constexpr bool is_shared_ref_v = is_shared_ref<T>::value;
+
+// ============================================================================
 // Reference Metadata Requirements
 // ============================================================================
 

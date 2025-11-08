@@ -74,11 +74,13 @@ cc_test(
     ],
 )
 
-cc_binary(
-    name = "schema_evolution_debug",
-    srcs = ["schema_evolution_debug.cc"],
+cc_test(
+    name = "map_serializer_test",
+    srcs = ["map_serializer_test.cc"],
     deps = [
         ":fory_serialization",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 

@@ -105,6 +105,8 @@ enum class TypeId : int32_t {
   ARROW_RECORD_BATCH = 38,
   // an arrow table object.
   ARROW_TABLE = 39,
+  // Unknown/polymorphic type marker.
+  UNKNOWN = 64,
   // Bound value, typically used as a sentinel value.
   BOUND = 64
 };

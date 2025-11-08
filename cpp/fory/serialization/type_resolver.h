@@ -305,18 +305,16 @@ class TypeResolver;
 // ============================================================================
 
 struct Harness {
-  using WriteFn = Result<void, Error> (*)(const std::any &value,
-                                          WriteContext &ctx,
+  using WriteFn = Result<void, Error> (*)(const void *value, WriteContext &ctx,
                                           bool write_ref_info,
                                           bool write_type_info,
                                           bool has_generics);
-  using ReadFn = Result<std::any, Error> (*)(ReadContext &ctx,
-                                             bool read_ref_info,
-                                             bool read_type_info);
-  using WriteDataFn = Result<void, Error> (*)(const std::any &value,
+  using ReadFn = Result<void *, Error> (*)(ReadContext &ctx, bool read_ref_info,
+                                           bool read_type_info);
+  using WriteDataFn = Result<void, Error> (*)(const void *value,
                                               WriteContext &ctx,
                                               bool has_generics);
-  using ReadDataFn = Result<std::any, Error> (*)(ReadContext &ctx);
+  using ReadDataFn = Result<void *, Error> (*)(ReadContext &ctx);
   using SortedFieldInfosFn =
       Result<std::vector<FieldInfo>, Error> (*)(TypeResolver &);
 
@@ -445,22 +443,22 @@ private:
 
   template <typename T>
   static Result<void, Error>
-  harness_write_adapter(const std::any &value, WriteContext &ctx,
+  harness_write_adapter(const void *value, WriteContext &ctx,
                         bool write_ref_info, bool write_type_info,
                         bool has_generics);
 
   template <typename T>
-  static Result<std::any, Error> harness_read_adapter(ReadContext &ctx,
-                                                      bool read_ref_info,
-                                                      bool read_type_info);
+  static Result<void *, Error> harness_read_adapter(ReadContext &ctx,
+                                                    bool read_ref_info,
+                                                    bool read_type_info);
 
   template <typename T>
-  static Result<void, Error> harness_write_data_adapter(const std::any &value,
+  static Result<void, Error> harness_write_data_adapter(const void *value,
                                                         WriteContext &ctx,
                                                         bool has_generics);
 
   template <typename T>
-  static Result<std::any, Error> harness_read_data_adapter(ReadContext &ctx);
+  static Result<void *, Error> harness_read_data_adapter(ReadContext &ctx);
 
   template <typename T>
   static Result<std::vector<FieldInfo>, Error>
@@ -469,10 +467,6 @@ private:
   template <typename T>
   static Result<std::vector<FieldInfo>, Error>
   harness_empty_sorted_fields(TypeResolver &resolver);
-
-  template <typename T> static const T *any_to_pointer(const std::any &value);
-
-  template <typename T> static std::any make_any_value(T &&value);
 
   static std::string make_name_key(const std::string &ns,
                                    const std::string &name);
@@ -600,7 +594,13 @@ Result<void, Error> TypeResolver::register_by_id(uint32_t type_id) {
         Error::invalid("type_id must be non-zero for register_by_id"));
   }
 
-  auto info_result = build_struct_type_info<T>(type_id, "", "", false);
+  // Encode type_id: shift left by 8 bits and add type category in low byte
+  uint32_t actual_type_id =
+      compatible_
+          ? (type_id << 8) + static_cast<uint32_t>(TypeId::COMPATIBLE_STRUCT)
+          : (type_id << 8) + static_cast<uint32_t>(TypeId::STRUCT);
+
+  auto info_result = build_struct_type_info<T>(actual_type_id, "", "", false);
   if (!info_result.ok()) {
     return Unexpected(std::move(info_result).error());
   }
@@ -645,7 +645,11 @@ Result<void, Error> TypeResolver::register_ext_type_by_id(uint32_t type_id) {
     return Unexpected(
         Error::invalid("type_id must be non-zero for register_ext_type_by_id"));
   }
-  auto info_result = build_ext_type_info<T>(type_id, "", "", false);
+
+  // Encode type_id: shift left by 8 bits and add type category in low byte
+  uint32_t actual_type_id = (type_id << 8) + static_cast<uint32_t>(TypeId::EXT);
+
+  auto info_result = build_ext_type_info<T>(actual_type_id, "", "", false);
   if (!info_result.ok()) {
     return Unexpected(std::move(info_result).error());
   }
@@ -783,49 +787,43 @@ template <typename T> Harness TypeResolver::make_serializer_harness() {
 
 template <typename T>
 Result<void, Error>
-TypeResolver::harness_write_adapter(const std::any &value, WriteContext &ctx,
+TypeResolver::harness_write_adapter(const void *value, WriteContext &ctx,
                                     bool write_ref_info, bool write_type_info,
                                     bool has_generics) {
   (void)has_generics;
-  const T *ptr = any_to_pointer<T>(value);
-  if (ptr == nullptr) {
-    return Unexpected(Error::type_error(
-        "Failed to extract value for serializer harness write"));
-  }
+  const T *ptr = static_cast<const T *>(value);
   return Serializer<T>::write(*ptr, ctx, write_ref_info, write_type_info);
 }
 
 template <typename T>
-Result<std::any, Error>
-TypeResolver::harness_read_adapter(ReadContext &ctx, bool read_ref_info,
-                                   bool read_type_info) {
+Result<void *, Error> TypeResolver::harness_read_adapter(ReadContext &ctx,
+                                                         bool read_ref_info,
+                                                         bool read_type_info) {
   auto value_result = Serializer<T>::read(ctx, read_ref_info, read_type_info);
   if (!value_result.ok()) {
     return Unexpected(std::move(value_result).error());
   }
-  return make_any_value<T>(std::move(value_result).value());
+  T *ptr = new T(std::move(value_result).value());
+  return ptr;
 }
 
 template <typename T>
 Result<void, Error>
-TypeResolver::harness_write_data_adapter(const std::any &value,
-                                         WriteContext &ctx, bool has_generics) {
-  const T *ptr = any_to_pointer<T>(value);
-  if (ptr == nullptr) {
-    return Unexpected(Error::type_error(
-        "Failed to extract value for serializer harness write_data"));
-  }
+TypeResolver::harness_write_data_adapter(const void *value, WriteContext &ctx,
+                                         bool has_generics) {
+  const T *ptr = static_cast<const T *>(value);
   return Serializer<T>::write_data_generic(*ptr, ctx, has_generics);
 }
 
 template <typename T>
-Result<std::any, Error>
+Result<void *, Error>
 TypeResolver::harness_read_data_adapter(ReadContext &ctx) {
   auto value_result = Serializer<T>::read_data(ctx);
   if (!value_result.ok()) {
     return Unexpected(std::move(value_result).error());
   }
-  return make_any_value<T>(std::move(value_result).value());
+  T *ptr = new T(std::move(value_result).value());
+  return ptr;
 }
 
 template <typename T>
@@ -845,46 +843,6 @@ template <typename T>
 Result<std::vector<FieldInfo>, Error>
 TypeResolver::harness_empty_sorted_fields(TypeResolver &) {
   return std::vector<FieldInfo>{};
-}
-
-template <typename T>
-const T *TypeResolver::any_to_pointer(const std::any &value) {
-  if (const auto *ptr = std::any_cast<const T>(&value)) {
-    return ptr;
-  }
-  if (const auto *ptr = std::any_cast<T>(&value)) {
-    return ptr;
-  }
-  if (const auto *ptr = std::any_cast<const T *>(&value)) {
-    return (ptr && *ptr) ? *ptr : nullptr;
-  }
-  if (const auto *ptr = std::any_cast<T *>(&value)) {
-    return (ptr && *ptr) ? *ptr : nullptr;
-  }
-  if (const auto *ref =
-          std::any_cast<std::reference_wrapper<const T>>(&value)) {
-    return &ref->get();
-  }
-  if (const auto *ref = std::any_cast<std::reference_wrapper<T>>(&value)) {
-    return &ref->get();
-  }
-  if (const auto *shared = std::any_cast<std::shared_ptr<T>>(&value)) {
-    return shared->get();
-  }
-  if (const auto *shared_const =
-          std::any_cast<std::shared_ptr<const T>>(&value)) {
-    return shared_const->get();
-  }
-  return nullptr;
-}
-
-template <typename T> std::any TypeResolver::make_any_value(T &&value) {
-  using ValueType = std::remove_reference_t<T>;
-  if constexpr (std::is_copy_constructible_v<ValueType>) {
-    return std::any(std::forward<T>(value));
-  } else {
-    return std::any(std::make_shared<ValueType>(std::forward<T>(value)));
-  }
 }
 
 inline std::string TypeResolver::make_name_key(const std::string &ns,

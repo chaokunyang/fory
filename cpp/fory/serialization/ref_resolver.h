@@ -95,7 +95,8 @@ public:
   RefReader() = default;
 
   template <typename T> uint32_t store_shared_ref(std::shared_ptr<T> ptr) {
-    refs_.emplace_back(std::move(ptr));
+    // Store as shared_ptr<void> for type erasure, maintaining reference count
+    refs_.emplace_back(std::shared_ptr<void>(ptr, ptr.get()));
     return static_cast<uint32_t>(refs_.size() - 1);
   }
 
@@ -104,7 +105,8 @@ public:
     if (ref_id >= refs_.size()) {
       refs_.resize(ref_id + 1);
     }
-    refs_[ref_id] = std::move(ptr);
+    // Store as shared_ptr<void> for type erasure
+    refs_[ref_id] = std::shared_ptr<void>(ptr, ptr.get());
   }
 
   template <typename T>
@@ -114,18 +116,15 @@ public:
                                            std::to_string(ref_id)));
     }
 
-    const std::any &stored = refs_[ref_id];
-    if (!stored.has_value()) {
+    const std::shared_ptr<void> &stored = refs_[ref_id];
+    if (!stored) {
       return Unexpected(Error::invalid_ref("Reference not resolved: " +
                                            std::to_string(ref_id)));
     }
 
-    if (const auto *ptr = std::any_cast<std::shared_ptr<T>>(&stored)) {
-      return *ptr;
-    }
-
-    return Unexpected(Error::invalid_ref("Reference type mismatch for id: " +
-                                         std::to_string(ref_id)));
+    // Alias constructor: create shared_ptr<T> that shares ownership with stored
+    // This works for polymorphic types because the void* points to the actual derived object
+    return std::shared_ptr<T>(stored, static_cast<T*>(stored.get()));
   }
 
   template <typename T>
@@ -168,7 +167,7 @@ public:
   }
 
 private:
-  std::vector<std::any> refs_;
+  std::vector<std::shared_ptr<void>> refs_;
   std::vector<UpdateCallback> callbacks_;
 };
 

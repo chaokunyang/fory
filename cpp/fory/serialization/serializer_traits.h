@@ -143,11 +143,18 @@ inline constexpr bool is_generic_type_v = is_generic_type<T>::value;
 /// Check if a type supports polymorphism (has virtual functions)
 /// This detects C++ polymorphic types that have virtual functions and can be
 /// used with RTTI to determine the concrete type at runtime.
+///
+/// For smart pointers (shared_ptr, unique_ptr), they are polymorphic if their
+/// element type is polymorphic, matching Rust's Rc<dyn Trait> behavior.
 template <typename T> struct is_polymorphic : std::is_polymorphic<T> {};
 
-// Special case: shared_ptr<T> is polymorphic if T is polymorphic
+// Smart pointers are polymorphic if their element type is polymorphic
+// This matches Rust's Rc<dyn Trait> / Arc<dyn Trait> behavior
 template <typename T>
 struct is_polymorphic<std::shared_ptr<T>> : std::is_polymorphic<T> {};
+
+template <typename T>
+struct is_polymorphic<std::unique_ptr<T>> : std::is_polymorphic<T> {};
 
 template <typename T>
 inline constexpr bool is_polymorphic_v = is_polymorphic<T>::value;
@@ -159,12 +166,33 @@ class TypeResolver;
 // Concrete Type ID Retrieval
 // ============================================================================
 
+// Helper to detect std::shared_ptr
+template <typename T> struct is_std_shared_ptr : std::false_type {};
+template <typename T> struct is_std_shared_ptr<std::shared_ptr<T>> : std::true_type {};
+template <typename T> inline constexpr bool is_std_shared_ptr_v = is_std_shared_ptr<T>::value;
+
+// Helper to detect std::unique_ptr
+template <typename T> struct is_std_unique_ptr : std::false_type {};
+template <typename T> struct is_std_unique_ptr<std::unique_ptr<T>> : std::true_type {};
+template <typename T> inline constexpr bool is_std_unique_ptr_v = is_std_unique_ptr<T>::value;
+
 /// Get the concrete type_index for a value
 /// For non-polymorphic types, this is just typeid(T)
 /// For polymorphic types, this returns the runtime type using RTTI
+/// For smart pointers, dereferences to get the actual derived type
 template <typename T>
 inline std::type_index get_concrete_type_id(const T &value) {
-  if constexpr (is_polymorphic_v<T>) {
+  if constexpr (is_std_shared_ptr_v<T> || is_std_unique_ptr_v<T>) {
+    // For shared_ptr/unique_ptr, dereference to get the concrete derived type
+    // This matches what smart_ptr_serializers.h does
+    if (value) {
+      return std::type_index(typeid(*value));
+    } else {
+      // For null pointers, return the static element type
+      using element_type = typename T::element_type;
+      return std::type_index(typeid(element_type));
+    }
+  } else if constexpr (is_polymorphic_v<T>) {
     // For polymorphic types, get runtime type using RTTI
     // typeid(value) performs dynamic type lookup for polymorphic types
     return std::type_index(typeid(value));

@@ -117,8 +117,9 @@ template <typename T> struct Serializer<std::optional<T>> {
     return std::optional<T>(std::move(value));
   }
 
-  static Result<std::optional<T>, Error> read_with_type_info(ReadContext &ctx, bool read_ref,
-                                                              const TypeInfo &type_info) {
+  static Result<std::optional<T>, Error>
+  read_with_type_info(ReadContext &ctx, bool read_ref,
+                      const TypeInfo &type_info) {
     constexpr bool inner_requires_ref = requires_ref_metadata_v<T>;
 
     if (!read_ref) {
@@ -160,14 +161,13 @@ template <typename T> struct Serializer<std::optional<T>> {
 // std::shared_ptr serializer
 // ============================================================================
 
-// Helper to get type_id for shared_ptr without instantiating Serializer for polymorphic types
-template <typename T, bool IsPolymorphic>
-struct SharedPtrTypeIdHelper {
+// Helper to get type_id for shared_ptr without instantiating Serializer for
+// polymorphic types
+template <typename T, bool IsPolymorphic> struct SharedPtrTypeIdHelper {
   static constexpr TypeId value = Serializer<T>::type_id;
 };
 
-template <typename T>
-struct SharedPtrTypeIdHelper<T, true> {
+template <typename T> struct SharedPtrTypeIdHelper<T, true> {
   static constexpr TypeId value = TypeId::NAMED_STRUCT;
 };
 
@@ -177,7 +177,8 @@ struct SharedPtrTypeIdHelper<T, true> {
 /// When reference tracking is enabled, identical shared_ptr instances
 /// will serialize only once and use reference IDs for subsequent occurrences.
 template <typename T> struct Serializer<std::shared_ptr<T>> {
-  static constexpr TypeId type_id = SharedPtrTypeIdHelper<T, std::is_polymorphic_v<T>>::value;
+  static constexpr TypeId type_id =
+      SharedPtrTypeIdHelper<T, std::is_polymorphic_v<T>>::value;
 
   static Result<void, Error> write(const std::shared_ptr<T> &ptr,
                                    WriteContext &ctx, bool write_ref,
@@ -220,13 +221,14 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
 
       // Write type info if requested
       if (write_type) {
-        FORY_RETURN_NOT_OK(ctx.write_any_typeinfo(0, concrete_type_id));
+        FORY_RETURN_NOT_OK(ctx.write_any_typeinfo(
+            static_cast<uint32_t>(TypeId::UNKNOWN), concrete_type_id));
       }
 
-      // Use the harness to serialize the concrete type
-      const T* raw_ptr = ptr.get();
-      std::any boxed = raw_ptr;
-      return it->second->harness.write_data_fn(boxed, ctx, false);
+      // Call the harness with the raw pointer (which points to DerivedType)
+      // The harness will static_cast it back to the concrete type
+      const void *value_ptr = ptr.get();
+      return it->second->harness.write_data_fn(value_ptr, ctx, false);
     } else {
       // Non-polymorphic path
       return Serializer<T>::write(*ptr, ctx, inner_requires_ref, write_type);
@@ -249,9 +251,8 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
         return Unexpected(Error::type_error(
             "Concrete type not registered for polymorphic shared_ptr"));
       }
-      const T* raw_ptr = ptr.get();
-      std::any boxed = raw_ptr;
-      return it->second->harness.write_data_fn(boxed, ctx, false);
+      const void *value_ptr = ptr.get();
+      return it->second->harness.write_data_fn(value_ptr, ctx, false);
     } else {
       return Serializer<T>::write_data(*ptr, ctx);
     }
@@ -274,9 +275,8 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
         return Unexpected(Error::type_error(
             "Concrete type not registered for polymorphic shared_ptr"));
       }
-      const T* raw_ptr = ptr.get();
-      std::any boxed = raw_ptr;
-      return it->second->harness.write_data_fn(boxed, ctx, has_generics);
+      const void *value_ptr = ptr.get();
+      return it->second->harness.write_data_fn(value_ptr, ctx, has_generics);
     } else {
       return Serializer<T>::write_data_generic(*ptr, ctx, has_generics);
     }
@@ -288,13 +288,15 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
     constexpr bool is_polymorphic = std::is_polymorphic_v<T>;
 
     if constexpr (is_polymorphic) {
-      return Unexpected(Error::type_error(
-          "Cannot deserialize polymorphic std::shared_ptr<T> without type info. "
-          "Use read_with_type_info instead."));
+      return Unexpected(
+          Error::type_error("Cannot deserialize polymorphic std::shared_ptr<T> "
+                            "without type info. "
+                            "Use read_with_type_info instead."));
     } else {
       if (!read_ref) {
-        return Unexpected(Error::invalid("std::shared_ptr requires read_ref=true "
-                                         "to decode null/reference state"));
+        return Unexpected(
+            Error::invalid("std::shared_ptr requires read_ref=true "
+                           "to decode null/reference state"));
       }
 
       auto flag_result = ctx.read_int8();
@@ -353,8 +355,9 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
     }
   }
 
-  static Result<std::shared_ptr<T>, Error> read_with_type_info(ReadContext &ctx, bool read_ref,
-                                                                const TypeInfo &type_info) {
+  static Result<std::shared_ptr<T>, Error>
+  read_with_type_info(ReadContext &ctx, bool read_ref,
+                      const TypeInfo &type_info) {
     constexpr bool inner_requires_ref = requires_ref_metadata_v<T>;
     constexpr bool is_polymorphic = std::is_polymorphic_v<T>;
 
@@ -404,30 +407,23 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
             "No harness read function for polymorphic type deserialization"));
       }
 
-      FORY_TRY(boxed, type_info.harness.read_data_fn(ctx));
+      FORY_TRY(raw_ptr, type_info.harness.read_data_fn(ctx));
 
-      // The harness returns std::any containing the concrete type
-      // We need to extract a pointer to it and wrap in shared_ptr<T>
-      // The concrete type is a derived class of T, so we can cast the pointer
+      // The harness returns void* pointing to the concrete type
+      // Cast the void* to T* (this works because the concrete type derives from
+      // T)
+      T *obj_ptr = static_cast<T *>(raw_ptr);
+      auto result = std::shared_ptr<T>(obj_ptr);
 
-      // Try to extract void* from the std::any (the harness stores raw pointer)
-      if (auto ptr_ptr = std::any_cast<void*>(&boxed)) {
-        // Cast the void* to T* (this works because the concrete type derives from T)
-        T* obj_ptr = static_cast<T*>(*ptr_ptr);
-        auto result = std::shared_ptr<T>(obj_ptr);
-
-        if (flag == REF_VALUE_FLAG) {
-          ctx.ref_reader().store_shared_ref_at(reserved_ref_id, result);
-        }
-
-        return result;
+      if (flag == REF_VALUE_FLAG) {
+        ctx.ref_reader().store_shared_ref_at(reserved_ref_id, result);
       }
 
-      return Unexpected(Error::type_error(
-          "Failed to extract polymorphic type from harness result"));
+      return result;
     } else {
       // Non-polymorphic path
-      FORY_TRY(value, Serializer<T>::read_with_type_info(ctx, inner_requires_ref, type_info));
+      FORY_TRY(value, Serializer<T>::read_with_type_info(
+                          ctx, inner_requires_ref, type_info));
 
       auto result = std::make_shared<T>(std::move(value));
 

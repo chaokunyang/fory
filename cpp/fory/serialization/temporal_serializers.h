@@ -83,19 +83,12 @@ template <> struct Serializer<Duration> {
 
   static Result<Duration, Error> read(ReadContext &ctx, bool read_ref,
                                       bool read_type) {
-    auto has_value_result = consume_ref_flag(ctx, read_ref);
-    if (!has_value_result.ok()) {
-      return Unexpected(std::move(has_value_result).error());
-    }
-    if (!has_value_result.value()) {
+    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
+    if (!has_value) {
       return Duration(0);
     }
     if (read_type) {
-      auto type_byte_result = ctx.read_uint8();
-      if (!type_byte_result.ok()) {
-        return Unexpected(std::move(type_byte_result).error());
-      }
-      uint8_t type_byte = type_byte_result.value();
+      FORY_TRY(type_byte, ctx.read_uint8());
       if (type_byte != static_cast<uint8_t>(type_id)) {
         return Unexpected(
             Error::type_mismatch(type_byte, static_cast<uint8_t>(type_id)));
@@ -145,19 +138,12 @@ template <> struct Serializer<Timestamp> {
 
   static Result<Timestamp, Error> read(ReadContext &ctx, bool read_ref,
                                        bool read_type) {
-    auto has_value_result = consume_ref_flag(ctx, read_ref);
-    if (!has_value_result.ok()) {
-      return Unexpected(std::move(has_value_result).error());
-    }
-    if (!has_value_result.value()) {
+    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
+    if (!has_value) {
       return Timestamp(Duration(0));
     }
     if (read_type) {
-      auto type_byte_result = ctx.read_uint8();
-      if (!type_byte_result.ok()) {
-        return Unexpected(std::move(type_byte_result).error());
-      }
-      uint8_t type_byte = type_byte_result.value();
+      FORY_TRY(type_byte, ctx.read_uint8());
       if (type_byte != static_cast<uint8_t>(type_id)) {
         return Unexpected(
             Error::type_mismatch(type_byte, static_cast<uint8_t>(type_id)));
@@ -205,19 +191,12 @@ template <> struct Serializer<LocalDate> {
 
   static Result<LocalDate, Error> read(ReadContext &ctx, bool read_ref,
                                        bool read_type) {
-    auto has_value_result = consume_ref_flag(ctx, read_ref);
-    if (!has_value_result.ok()) {
-      return Unexpected(std::move(has_value_result).error());
-    }
-    if (!has_value_result.value()) {
+    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
+    if (!has_value) {
       return LocalDate();
     }
     if (read_type) {
-      auto type_byte_result = ctx.read_uint8();
-      if (!type_byte_result.ok()) {
-        return Unexpected(std::move(type_byte_result).error());
-      }
-      uint8_t type_byte = type_byte_result.value();
+      FORY_TRY(type_byte, ctx.read_uint8());
       if (type_byte != static_cast<uint8_t>(type_id)) {
         return Unexpected(
             Error::type_mismatch(type_byte, static_cast<uint8_t>(type_id)));

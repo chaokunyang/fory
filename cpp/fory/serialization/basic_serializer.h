@@ -67,38 +67,25 @@ template <> struct Serializer<bool> {
   /// Read boolean with optional reference and type info
   static inline Result<bool, Error> read(ReadContext &ctx, bool read_ref,
                                          bool read_type) {
-    auto has_value_result = consume_ref_flag(ctx, read_ref);
-    if (!has_value_result.ok()) {
-      return Unexpected(std::move(has_value_result).error());
-    }
-    if (!has_value_result.value()) {
+    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
+    if (!has_value) {
       return false;
     }
     if (read_type) {
-      auto type_byte_result = ctx.read_uint8();
-      if (!type_byte_result.ok()) {
-        return Unexpected(std::move(type_byte_result).error());
-      }
-      uint8_t type_byte = type_byte_result.value();
+      FORY_TRY(type_byte, ctx.read_uint8());
       if (type_byte != static_cast<uint8_t>(type_id)) {
         return Unexpected(
             Error::type_mismatch(type_byte, static_cast<uint8_t>(type_id)));
       }
     }
-    auto value_result = ctx.read_uint8();
-    if (!value_result.ok()) {
-      return Unexpected(std::move(value_result).error());
-    }
-    return value_result.value() != 0;
+    FORY_TRY(value, ctx.read_uint8());
+    return value != 0;
   }
 
   /// Read boolean data only (no type info)
   static inline Result<bool, Error> read_data(ReadContext &ctx) {
-    auto value_result = ctx.read_uint8();
-    if (!value_result.ok()) {
-      return Unexpected(std::move(value_result).error());
-    }
-    return value_result.value() != 0;
+    FORY_TRY(value, ctx.read_uint8());
+    return value != 0;
   }
 
   /// Read boolean with generic optimization (unused for primitives)
@@ -141,19 +128,12 @@ template <> struct Serializer<int8_t> {
 
   static inline Result<int8_t, Error> read(ReadContext &ctx, bool read_ref,
                                            bool read_type) {
-    auto has_value_result = consume_ref_flag(ctx, read_ref);
-    if (!has_value_result.ok()) {
-      return Unexpected(std::move(has_value_result).error());
-    }
-    if (!has_value_result.value()) {
+    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
+    if (!has_value) {
       return static_cast<int8_t>(0);
     }
     if (read_type) {
-      auto type_byte_result = ctx.read_uint8();
-      if (!type_byte_result.ok()) {
-        return Unexpected(std::move(type_byte_result).error());
-      }
-      uint8_t type_byte = type_byte_result.value();
+      FORY_TRY(type_byte, ctx.read_uint8());
       if (type_byte != static_cast<uint8_t>(type_id)) {
         return Unexpected(
             Error::type_mismatch(type_byte, static_cast<uint8_t>(type_id)));
@@ -203,19 +183,12 @@ template <> struct Serializer<int16_t> {
 
   static inline Result<int16_t, Error> read(ReadContext &ctx, bool read_ref,
                                             bool read_type) {
-    auto has_value_result = consume_ref_flag(ctx, read_ref);
-    if (!has_value_result.ok()) {
-      return Unexpected(std::move(has_value_result).error());
-    }
-    if (!has_value_result.value()) {
+    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
+    if (!has_value) {
       return static_cast<int16_t>(0);
     }
     if (read_type) {
-      auto type_byte_result = ctx.read_uint8();
-      if (!type_byte_result.ok()) {
-        return Unexpected(std::move(type_byte_result).error());
-      }
-      uint8_t type_byte = type_byte_result.value();
+      FORY_TRY(type_byte, ctx.read_uint8());
       if (type_byte != static_cast<uint8_t>(type_id)) {
         return Unexpected(
             Error::type_mismatch(type_byte, static_cast<uint8_t>(type_id)));
@@ -269,19 +242,12 @@ template <> struct Serializer<int32_t> {
 
   static inline Result<int32_t, Error> read(ReadContext &ctx, bool read_ref,
                                             bool read_type) {
-    auto has_value_result = consume_ref_flag(ctx, read_ref);
-    if (!has_value_result.ok()) {
-      return Unexpected(std::move(has_value_result).error());
-    }
-    if (!has_value_result.value()) {
+    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
+    if (!has_value) {
       return static_cast<int32_t>(0);
     }
     if (read_type) {
-      auto type_byte_result = ctx.read_uint8();
-      if (!type_byte_result.ok()) {
-        return Unexpected(std::move(type_byte_result).error());
-      }
-      uint8_t type_byte = type_byte_result.value();
+      FORY_TRY(type_byte, ctx.read_uint8());
       if (type_byte != static_cast<uint8_t>(type_id)) {
         return Unexpected(
             Error::type_mismatch(type_byte, static_cast<uint8_t>(type_id)));
@@ -335,19 +301,12 @@ template <> struct Serializer<int64_t> {
 
   static inline Result<int64_t, Error> read(ReadContext &ctx, bool read_ref,
                                             bool read_type) {
-    auto has_value_result = consume_ref_flag(ctx, read_ref);
-    if (!has_value_result.ok()) {
-      return Unexpected(std::move(has_value_result).error());
-    }
-    if (!has_value_result.value()) {
+    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
+    if (!has_value) {
       return static_cast<int64_t>(0);
     }
     if (read_type) {
-      auto type_byte_result = ctx.read_uint8();
-      if (!type_byte_result.ok()) {
-        return Unexpected(std::move(type_byte_result).error());
-      }
-      uint8_t type_byte = type_byte_result.value();
+      FORY_TRY(type_byte, ctx.read_uint8());
       if (type_byte != static_cast<uint8_t>(type_id)) {
         return Unexpected(
             Error::type_mismatch(type_byte, static_cast<uint8_t>(type_id)));
@@ -400,19 +359,12 @@ template <> struct Serializer<float> {
 
   static inline Result<float, Error> read(ReadContext &ctx, bool read_ref,
                                           bool read_type) {
-    auto has_value_result = consume_ref_flag(ctx, read_ref);
-    if (!has_value_result.ok()) {
-      return Unexpected(std::move(has_value_result).error());
-    }
-    if (!has_value_result.value()) {
+    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
+    if (!has_value) {
       return 0.0f;
     }
     if (read_type) {
-      auto type_byte_result = ctx.read_uint8();
-      if (!type_byte_result.ok()) {
-        return Unexpected(std::move(type_byte_result).error());
-      }
-      uint8_t type_byte = type_byte_result.value();
+      FORY_TRY(type_byte, ctx.read_uint8());
       if (type_byte != static_cast<uint8_t>(type_id)) {
         return Unexpected(
             Error::type_mismatch(type_byte, static_cast<uint8_t>(type_id)));
@@ -466,19 +418,12 @@ template <> struct Serializer<double> {
 
   static inline Result<double, Error> read(ReadContext &ctx, bool read_ref,
                                            bool read_type) {
-    auto has_value_result = consume_ref_flag(ctx, read_ref);
-    if (!has_value_result.ok()) {
-      return Unexpected(std::move(has_value_result).error());
-    }
-    if (!has_value_result.value()) {
+    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
+    if (!has_value) {
       return 0.0;
     }
     if (read_type) {
-      auto type_byte_result = ctx.read_uint8();
-      if (!type_byte_result.ok()) {
-        return Unexpected(std::move(type_byte_result).error());
-      }
-      uint8_t type_byte = type_byte_result.value();
+      FORY_TRY(type_byte, ctx.read_uint8());
       if (type_byte != static_cast<uint8_t>(type_id)) {
         return Unexpected(
             Error::type_mismatch(type_byte, static_cast<uint8_t>(type_id)));
@@ -536,19 +481,12 @@ template <> struct Serializer<uint8_t> {
 
   static inline Result<uint8_t, Error> read(ReadContext &ctx, bool read_ref,
                                             bool read_type) {
-    auto has_value_result = consume_ref_flag(ctx, read_ref);
-    if (!has_value_result.ok()) {
-      return Unexpected(std::move(has_value_result).error());
-    }
-    if (!has_value_result.value()) {
+    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
+    if (!has_value) {
       return static_cast<uint8_t>(0);
     }
     if (read_type) {
-      auto type_byte_result = ctx.read_uint8();
-      if (!type_byte_result.ok()) {
-        return Unexpected(std::move(type_byte_result).error());
-      }
-      uint8_t type_byte = type_byte_result.value();
+      FORY_TRY(type_byte, ctx.read_uint8());
       if (type_byte != static_cast<uint8_t>(type_id)) {
         return Unexpected(
             Error::type_mismatch(type_byte, static_cast<uint8_t>(type_id)));
@@ -598,19 +536,12 @@ template <> struct Serializer<uint16_t> {
 
   static inline Result<uint16_t, Error> read(ReadContext &ctx, bool read_ref,
                                              bool read_type) {
-    auto has_value_result = consume_ref_flag(ctx, read_ref);
-    if (!has_value_result.ok()) {
-      return Unexpected(std::move(has_value_result).error());
-    }
-    if (!has_value_result.value()) {
+    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
+    if (!has_value) {
       return static_cast<uint16_t>(0);
     }
     if (read_type) {
-      auto type_byte_result = ctx.read_uint8();
-      if (!type_byte_result.ok()) {
-        return Unexpected(std::move(type_byte_result).error());
-      }
-      uint8_t type_byte = type_byte_result.value();
+      FORY_TRY(type_byte, ctx.read_uint8());
       if (type_byte != static_cast<uint8_t>(type_id)) {
         return Unexpected(
             Error::type_mismatch(type_byte, static_cast<uint8_t>(type_id)));
@@ -664,19 +595,12 @@ template <> struct Serializer<uint32_t> {
 
   static inline Result<uint32_t, Error> read(ReadContext &ctx, bool read_ref,
                                              bool read_type) {
-    auto has_value_result = consume_ref_flag(ctx, read_ref);
-    if (!has_value_result.ok()) {
-      return Unexpected(std::move(has_value_result).error());
-    }
-    if (!has_value_result.value()) {
+    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
+    if (!has_value) {
       return static_cast<uint32_t>(0);
     }
     if (read_type) {
-      auto type_byte_result = ctx.read_uint8();
-      if (!type_byte_result.ok()) {
-        return Unexpected(std::move(type_byte_result).error());
-      }
-      uint8_t type_byte = type_byte_result.value();
+      FORY_TRY(type_byte, ctx.read_uint8());
       if (type_byte != static_cast<uint8_t>(type_id)) {
         return Unexpected(
             Error::type_mismatch(type_byte, static_cast<uint8_t>(type_id)));
@@ -730,19 +654,12 @@ template <> struct Serializer<uint64_t> {
 
   static inline Result<uint64_t, Error> read(ReadContext &ctx, bool read_ref,
                                              bool read_type) {
-    auto has_value_result = consume_ref_flag(ctx, read_ref);
-    if (!has_value_result.ok()) {
-      return Unexpected(std::move(has_value_result).error());
-    }
-    if (!has_value_result.value()) {
+    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
+    if (!has_value) {
       return static_cast<uint64_t>(0);
     }
     if (read_type) {
-      auto type_byte_result = ctx.read_uint8();
-      if (!type_byte_result.ok()) {
-        return Unexpected(std::move(type_byte_result).error());
-      }
-      uint8_t type_byte = type_byte_result.value();
+      FORY_TRY(type_byte, ctx.read_uint8());
       if (type_byte != static_cast<uint8_t>(type_id)) {
         return Unexpected(
             Error::type_mismatch(type_byte, static_cast<uint8_t>(type_id)));
@@ -835,19 +752,12 @@ template <> struct Serializer<std::string> {
 
   static inline Result<std::string, Error> read(ReadContext &ctx, bool read_ref,
                                                 bool read_type) {
-    auto has_value_result = consume_ref_flag(ctx, read_ref);
-    if (!has_value_result.ok()) {
-      return Unexpected(std::move(has_value_result).error());
-    }
-    if (!has_value_result.value()) {
+    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
+    if (!has_value) {
       return std::string();
     }
     if (read_type) {
-      auto type_byte_result = ctx.read_uint8();
-      if (!type_byte_result.ok()) {
-        return Unexpected(std::move(type_byte_result).error());
-      }
-      uint8_t type_byte = type_byte_result.value();
+      FORY_TRY(type_byte, ctx.read_uint8());
       if (type_byte != static_cast<uint8_t>(type_id)) {
         return Unexpected(
             Error::type_mismatch(type_byte, static_cast<uint8_t>(type_id)));
@@ -858,11 +768,7 @@ template <> struct Serializer<std::string> {
 
   static inline Result<std::string, Error> read_data(ReadContext &ctx) {
     // Read size with encoding
-    auto size_with_encoding_result = ctx.read_varuint32();
-    if (!size_with_encoding_result.ok()) {
-      return Unexpected(std::move(size_with_encoding_result).error());
-    }
-    uint32_t size_with_encoding = size_with_encoding_result.value();
+    FORY_TRY(size_with_encoding, ctx.read_varuint32());
 
     // Extract size and encoding from lower 2 bits
     uint32_t length = size_with_encoding >> 2;

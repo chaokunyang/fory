@@ -598,11 +598,7 @@ Result<void, Error> TypeResolver::register_by_id(uint32_t type_id) {
           ? (type_id << 8) + static_cast<uint32_t>(TypeId::COMPATIBLE_STRUCT)
           : (type_id << 8) + static_cast<uint32_t>(TypeId::STRUCT);
 
-  auto info_result = build_struct_type_info<T>(actual_type_id, "", "", false);
-  if (!info_result.ok()) {
-    return Unexpected(std::move(info_result).error());
-  }
-  auto info = std::move(info_result).value();
+  FORY_TRY(info, build_struct_type_info<T>(actual_type_id, "", "", false));
   if (!info->harness.valid()) {
     return Unexpected(
         Error::invalid("Harness for registered type is incomplete"));
@@ -624,12 +620,7 @@ TypeResolver::register_by_name(const std::string &ns,
       compatible_ ? static_cast<uint32_t>(TypeId::NAMED_COMPATIBLE_STRUCT)
                   : static_cast<uint32_t>(TypeId::NAMED_STRUCT);
 
-  auto info_result =
-      build_struct_type_info<T>(actual_type_id, ns, type_name, true);
-  if (!info_result.ok()) {
-    return Unexpected(std::move(info_result).error());
-  }
-  auto info = std::move(info_result).value();
+  FORY_TRY(info, build_struct_type_info<T>(actual_type_id, ns, type_name, true));
   if (!info->harness.valid()) {
     return Unexpected(
         Error::invalid("Harness for registered type is incomplete"));
@@ -647,11 +638,7 @@ Result<void, Error> TypeResolver::register_ext_type_by_id(uint32_t type_id) {
   // Encode type_id: shift left by 8 bits and add type category in low byte
   uint32_t actual_type_id = (type_id << 8) + static_cast<uint32_t>(TypeId::EXT);
 
-  auto info_result = build_ext_type_info<T>(actual_type_id, "", "", false);
-  if (!info_result.ok()) {
-    return Unexpected(std::move(info_result).error());
-  }
-  auto info = std::move(info_result).value();
+  FORY_TRY(info, build_ext_type_info<T>(actual_type_id, "", "", false));
   return register_type_internal(std::type_index(typeid(T)), std::move(info));
 }
 
@@ -664,12 +651,7 @@ TypeResolver::register_ext_type_by_name(const std::string &ns,
         "type_name must be non-empty for register_ext_type_by_name"));
   }
   uint32_t actual_type_id = static_cast<uint32_t>(TypeId::NAMED_EXT);
-  auto info_result =
-      build_ext_type_info<T>(actual_type_id, ns, type_name, true);
-  if (!info_result.ok()) {
-    return Unexpected(std::move(info_result).error());
-  }
-  auto info = std::move(info_result).value();
+  FORY_TRY(info, build_ext_type_info<T>(actual_type_id, ns, type_name, true));
   return register_type_internal(std::type_index(typeid(T)), std::move(info));
 }
 
@@ -728,20 +710,14 @@ TypeResolver::build_struct_type_info(uint32_t type_id, std::string ns,
       TypeMeta::from_fields(type_id, entry->namespace_name, entry->type_name,
                             register_by_name, std::move(sorted_fields));
 
-  auto type_def_result = meta.to_bytes();
-  if (!type_def_result.ok()) {
-    return Unexpected(std::move(type_def_result).error());
-  }
-  entry->type_def = std::move(type_def_result).value();
+  FORY_TRY(type_def, meta.to_bytes());
+  entry->type_def = std::move(type_def);
 
   Buffer buffer(entry->type_def.data(),
                 static_cast<uint32_t>(entry->type_def.size()), false);
   buffer.WriterIndex(static_cast<uint32_t>(entry->type_def.size()));
-  auto parsed_meta_result = TypeMeta::from_bytes(buffer, nullptr);
-  if (!parsed_meta_result.ok()) {
-    return Unexpected(std::move(parsed_meta_result).error());
-  }
-  entry->type_meta = std::move(parsed_meta_result).value();
+  FORY_TRY(parsed_meta, TypeMeta::from_bytes(buffer, nullptr));
+  entry->type_meta = std::move(parsed_meta);
   entry->harness = make_struct_harness<T>();
 
   return entry;
@@ -797,11 +773,8 @@ template <typename T>
 Result<void *, Error> TypeResolver::harness_read_adapter(ReadContext &ctx,
                                                          bool read_ref_info,
                                                          bool read_type_info) {
-  auto value_result = Serializer<T>::read(ctx, read_ref_info, read_type_info);
-  if (!value_result.ok()) {
-    return Unexpected(std::move(value_result).error());
-  }
-  T *ptr = new T(std::move(value_result).value());
+  FORY_TRY(value, Serializer<T>::read(ctx, read_ref_info, read_type_info));
+  T *ptr = new T(std::move(value));
   return ptr;
 }
 
@@ -816,11 +789,8 @@ TypeResolver::harness_write_data_adapter(const void *value, WriteContext &ctx,
 template <typename T>
 Result<void *, Error>
 TypeResolver::harness_read_data_adapter(ReadContext &ctx) {
-  auto value_result = Serializer<T>::read_data(ctx);
-  if (!value_result.ok()) {
-    return Unexpected(std::move(value_result).error());
-  }
-  T *ptr = new T(std::move(value_result).value());
+  FORY_TRY(value, Serializer<T>::read_data(ctx));
+  T *ptr = new T(std::move(value));
   return ptr;
 }
 

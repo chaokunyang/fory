@@ -237,11 +237,7 @@ public:
                   false);
 
     // Read and validate header
-    auto header_result = read_header(buffer);
-    if (!header_result.ok()) {
-      return Unexpected(std::move(header_result).error());
-    }
-    HeaderInfo header = header_result.value();
+    FORY_TRY(header, read_header(buffer));
 
     // Check for null object
     if (header.is_null) {

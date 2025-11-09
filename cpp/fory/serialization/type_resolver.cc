@@ -75,11 +75,7 @@ Result<void, Error> FieldType::write_to(Buffer &buffer, bool write_flag,
 
 Result<FieldType, Error> FieldType::read_from(Buffer &buffer, bool read_flag,
                                               bool nullable_val) {
-  auto header_result = buffer.ReadVarUint32();
-  if (!header_result.ok()) {
-    return Unexpected(std::move(header_result).error());
-  }
-  uint32_t header = header_result.value();
+  FORY_TRY(header, buffer.ReadVarUint32());
 
   uint32_t tid;
   bool null;
@@ -96,22 +92,13 @@ Result<FieldType, Error> FieldType::read_from(Buffer &buffer, bool read_flag,
   // Read generics for list/set/map
   if (tid == static_cast<uint32_t>(TypeId::LIST) ||
       tid == static_cast<uint32_t>(TypeId::SET)) {
-    auto generic_result = FieldType::read_from(buffer, true, false);
-    if (!generic_result.ok()) {
-      return Unexpected(std::move(generic_result).error());
-    }
-    ft.generics.push_back(std::move(generic_result).value());
+    FORY_TRY(generic, FieldType::read_from(buffer, true, false));
+    ft.generics.push_back(std::move(generic));
   } else if (tid == static_cast<uint32_t>(TypeId::MAP)) {
-    auto key_result = FieldType::read_from(buffer, true, false);
-    if (!key_result.ok()) {
-      return Unexpected(std::move(key_result).error());
-    }
-    auto val_result = FieldType::read_from(buffer, true, false);
-    if (!val_result.ok()) {
-      return Unexpected(std::move(val_result).error());
-    }
-    ft.generics.push_back(std::move(key_result).value());
-    ft.generics.push_back(std::move(val_result).value());
+    FORY_TRY(key, FieldType::read_from(buffer, true, false));
+    FORY_TRY(val, FieldType::read_from(buffer, true, false));
+    ft.generics.push_back(std::move(key));
+    ft.generics.push_back(std::move(val));
   }
 
   return ft;
@@ -144,10 +131,7 @@ Result<std::vector<uint8_t>, Error> FieldInfo::to_bytes() const {
   }
 
   // Write field type
-  auto type_result = field_type.write_to(buffer, false, field_type.nullable);
-  if (!type_result.ok()) {
-    return Unexpected(std::move(type_result).error());
-  }
+  FORY_RETURN_NOT_OK(field_type.write_to(buffer, false, field_type.nullable));
 
   // Write field name
   buffer.WriteBytes(reinterpret_cast<const uint8_t *>(field_name.data()),
@@ -160,37 +144,24 @@ Result<std::vector<uint8_t>, Error> FieldInfo::to_bytes() const {
 
 Result<FieldInfo, Error> FieldInfo::from_bytes(Buffer &buffer) {
   // Read field header
-  auto header_result = buffer.ReadUint8();
-  if (!header_result.ok()) {
-    return Unexpected(std::move(header_result).error());
-  }
-  uint8_t header = header_result.value();
+  FORY_TRY(header, buffer.ReadUint8());
 
   bool nullable = (header & 2) != 0;
   size_t name_size = ((header >> 2) & FIELD_NAME_SIZE_THRESHOLD);
   if (name_size == FIELD_NAME_SIZE_THRESHOLD) {
-    auto extra_result = buffer.ReadVarUint32();
-    if (!extra_result.ok()) {
-      return Unexpected(std::move(extra_result).error());
-    }
-    name_size += extra_result.value();
+    FORY_TRY(extra, buffer.ReadVarUint32());
+    name_size += extra;
   }
   name_size += 1;
 
   // Read field type
-  auto type_result = FieldType::read_from(buffer, false, nullable);
-  if (!type_result.ok()) {
-    return Unexpected(std::move(type_result).error());
-  }
+  FORY_TRY(field_type, FieldType::read_from(buffer, false, nullable));
 
   // Read field name
   std::string field_name(name_size, '\0');
-  auto name_read_result = buffer.ReadBytes(field_name.data(), name_size);
-  if (!name_read_result.ok()) {
-    return Unexpected(std::move(name_read_result).error());
-  }
+  FORY_RETURN_NOT_OK(buffer.ReadBytes(field_name.data(), name_size));
 
-  return FieldInfo(field_name, std::move(type_result).value());
+  return FieldInfo(field_name, std::move(field_type));
 }
 
 // ============================================================================
@@ -295,19 +266,13 @@ TypeMeta::from_bytes(Buffer &buffer, const TypeMeta *local_type_info) {
 
   // Read global binary header
   int64_t header;
-  auto header_result = buffer.ReadBytes(&header, sizeof(header));
-  if (!header_result.ok()) {
-    return Unexpected(std::move(header_result).error());
-  }
+  FORY_RETURN_NOT_OK(buffer.ReadBytes(&header, sizeof(header)));
 
   size_t header_size = sizeof(header);
   int64_t meta_size = header & META_SIZE_MASK;
   if (meta_size == META_SIZE_MASK) {
-    auto extra_result = buffer.ReadVarUint32();
-    if (!extra_result.ok()) {
-      return Unexpected(std::move(extra_result).error());
-    }
-    meta_size += extra_result.value();
+    FORY_TRY(extra, buffer.ReadVarUint32());
+    meta_size += extra;
     header_size += 4; // approximate varuint32 size
   }
 
@@ -321,20 +286,13 @@ TypeMeta::from_bytes(Buffer &buffer, const TypeMeta *local_type_info) {
                       << buffer.reader_index();
 
   // Read meta header
-  auto meta_header_result = buffer.ReadUint8();
-  if (!meta_header_result.ok()) {
-    return Unexpected(std::move(meta_header_result).error());
-  }
-  uint8_t meta_header = meta_header_result.value();
+  FORY_TRY(meta_header, buffer.ReadUint8());
 
   bool register_by_name = (meta_header & REGISTER_BY_NAME_FLAG) != 0;
   size_t num_fields = meta_header & SMALL_NUM_FIELDS_THRESHOLD;
   if (num_fields == SMALL_NUM_FIELDS_THRESHOLD) {
-    auto extra_result = buffer.ReadVarUint32();
-    if (!extra_result.ok()) {
-      return Unexpected(std::move(extra_result).error());
-    }
-    num_fields += extra_result.value();
+    FORY_TRY(extra, buffer.ReadVarUint32());
+    num_fields += extra;
   }
 
   // Read type ID or namespace/type name
@@ -344,44 +302,25 @@ TypeMeta::from_bytes(Buffer &buffer, const TypeMeta *local_type_info) {
 
   if (register_by_name) {
     // Read namespace
-    auto ns_len_result = buffer.ReadVarUint32();
-    if (!ns_len_result.ok()) {
-      return Unexpected(std::move(ns_len_result).error());
-    }
-    namespace_str.resize(ns_len_result.value());
-    auto ns_read_result =
-        buffer.ReadBytes(namespace_str.data(), namespace_str.size());
-    if (!ns_read_result.ok()) {
-      return Unexpected(std::move(ns_read_result).error());
-    }
+    FORY_TRY(ns_len, buffer.ReadVarUint32());
+    namespace_str.resize(ns_len);
+    FORY_RETURN_NOT_OK(buffer.ReadBytes(namespace_str.data(), namespace_str.size()));
 
     // Read type name
-    auto tn_len_result = buffer.ReadVarUint32();
-    if (!tn_len_result.ok()) {
-      return Unexpected(std::move(tn_len_result).error());
-    }
-    type_name.resize(tn_len_result.value());
-    auto tn_read_result = buffer.ReadBytes(type_name.data(), type_name.size());
-    if (!tn_read_result.ok()) {
-      return Unexpected(std::move(tn_read_result).error());
-    }
+    FORY_TRY(tn_len, buffer.ReadVarUint32());
+    type_name.resize(tn_len);
+    FORY_RETURN_NOT_OK(buffer.ReadBytes(type_name.data(), type_name.size()));
   } else {
-    auto tid_result = buffer.ReadVarUint32();
-    if (!tid_result.ok()) {
-      return Unexpected(std::move(tid_result).error());
-    }
-    type_id = tid_result.value();
+    FORY_TRY(tid, buffer.ReadVarUint32());
+    type_id = tid;
   }
 
   // Read field infos
   std::vector<FieldInfo> field_infos;
   field_infos.reserve(num_fields);
   for (size_t i = 0; i < num_fields; ++i) {
-    auto field_result = FieldInfo::from_bytes(buffer);
-    if (!field_result.ok()) {
-      return Unexpected(std::move(field_result).error());
-    }
-    field_infos.push_back(std::move(field_result).value());
+    FORY_TRY(field, FieldInfo::from_bytes(buffer));
+    field_infos.push_back(std::move(field));
   }
 
   // Sort fields according to xlang spec
@@ -414,11 +353,8 @@ TypeMeta::from_bytes(Buffer &buffer, const TypeMeta *local_type_info) {
 Result<void, Error> TypeMeta::skip_bytes(Buffer &buffer, int64_t header) {
   int64_t meta_size = header & META_SIZE_MASK;
   if (meta_size == META_SIZE_MASK) {
-    auto extra_result = buffer.ReadVarUint32();
-    if (!extra_result.ok()) {
-      return Unexpected(std::move(extra_result).error());
-    }
-    meta_size += extra_result.value();
+    FORY_TRY(extra, buffer.ReadVarUint32());
+    meta_size += extra;
   }
   return buffer.Skip(meta_size);
 }

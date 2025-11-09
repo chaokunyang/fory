@@ -174,13 +174,11 @@ template <size_t N> struct Serializer<std::array<bool, N>> {
   static Result<std::array<bool, N>, Error> read_data(ReadContext &ctx) {
     // Read array length
     FORY_TRY(length, ctx.read_varuint32());
-
     if (length != N) {
       return Unexpected(Error::invalid_data("Array size mismatch: expected " +
                                             std::to_string(N) + " but got " +
                                             std::to_string(length)));
     }
-
     std::array<bool, N> arr;
     for (size_t i = 0; i < N; ++i) {
       FORY_TRY(byte, ctx.read_uint8());

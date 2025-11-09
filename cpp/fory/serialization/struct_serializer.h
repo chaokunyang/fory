@@ -563,11 +563,7 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
       
       // Use meta sharing in compatible mode: push TypeId to meta_writer and write varint index
       if (ctx.is_compatible() && type_info->type_meta) {
-        auto meta_index_result = ctx.push_meta(std::type_index(typeid(T)));
-        if (!meta_index_result.ok()) {
-          return Unexpected(std::move(meta_index_result).error());
-        }
-        size_t meta_index = std::move(meta_index_result).value();
+        FORY_TRY(meta_index, ctx.push_meta(std::type_index(typeid(T))));
         ctx.write_varuint32(static_cast<uint32_t>(meta_index));
       }
     }

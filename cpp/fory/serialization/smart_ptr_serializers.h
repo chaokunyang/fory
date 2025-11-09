@@ -283,34 +283,18 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
             Error::invalid("std::shared_ptr requires read_ref=true "
                            "to decode null/reference state"));
       }
-
-      auto flag_result = ctx.read_int8();
-      if (!flag_result.ok()) {
-        return Unexpected(std::move(flag_result).error());
-      }
-      int8_t flag = flag_result.value();
-
+      FORY_TRY(flag, ctx.read_int8());
       if (flag == NULL_FLAG) {
         return std::shared_ptr<T>(nullptr);
       }
-
       const bool tracking_refs = ctx.track_ref();
-
       if (flag == REF_FLAG) {
         if (!tracking_refs) {
           return Unexpected(Error::invalid_ref(
               "Reference flag encountered when reference tracking disabled"));
         }
-        auto ref_id_result = ctx.read_varuint32();
-        if (!ref_id_result.ok()) {
-          return Unexpected(std::move(ref_id_result).error());
-        }
-        auto shared_result =
-            ctx.ref_reader().template get_shared_ref<T>(ref_id_result.value());
-        if (!shared_result.ok()) {
-          return Unexpected(std::move(shared_result).error());
-        }
-        return shared_result.value();
+        FORY_TRY(ref_id, ctx.read_varuint32());
+        return ctx.ref_reader().template get_shared_ref<T>(ref_id);
       }
 
       if (flag != NOT_NULL_VALUE_FLAG && flag != REF_VALUE_FLAG) {
@@ -327,15 +311,11 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
         }
         reserved_ref_id = ctx.ref_reader().reserve_ref_id();
       }
-
       FORY_TRY(value, Serializer<T>::read(ctx, inner_requires_ref, read_type));
-
       auto result = std::make_shared<T>(std::move(value));
-
       if (flag == REF_VALUE_FLAG) {
         ctx.ref_reader().store_shared_ref_at(reserved_ref_id, result);
       }
-
       return result;
     }
   }
@@ -345,20 +325,15 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
                       const TypeInfo &type_info) {
     constexpr bool inner_requires_ref = requires_ref_metadata_v<T>;
     constexpr bool is_polymorphic = std::is_polymorphic_v<T>;
-
     if (!read_ref) {
       return Unexpected(Error::invalid("std::shared_ptr requires read_ref=true "
                                        "to decode null/reference state"));
     }
-
     FORY_TRY(flag, ctx.read_int8());
-
     if (flag == NULL_FLAG) {
       return std::shared_ptr<T>(nullptr);
     }
-
     const bool tracking_refs = ctx.track_ref();
-
     if (flag == REF_FLAG) {
       if (!tracking_refs) {
         return Unexpected(Error::invalid_ref(
@@ -399,19 +374,15 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
       // T)
       T *obj_ptr = static_cast<T *>(raw_ptr);
       auto result = std::shared_ptr<T>(obj_ptr);
-
       if (flag == REF_VALUE_FLAG) {
         ctx.ref_reader().store_shared_ref_at(reserved_ref_id, result);
       }
-
       return result;
     } else {
       // Non-polymorphic path
       FORY_TRY(value, Serializer<T>::read_with_type_info(
                           ctx, inner_requires_ref, type_info));
-
       auto result = std::make_shared<T>(std::move(value));
-
       if (flag == REF_VALUE_FLAG) {
         ctx.ref_reader().store_shared_ref_at(reserved_ref_id, result);
       }
@@ -442,7 +413,6 @@ template <typename T> struct Serializer<std::unique_ptr<T>> {
                                    WriteContext &ctx, bool write_ref,
                                    bool write_type) {
     constexpr bool inner_requires_ref = requires_ref_metadata_v<T>;
-
     if (!write_ref) {
       if (!ptr) {
         return Unexpected(Error::invalid(
@@ -450,12 +420,10 @@ template <typename T> struct Serializer<std::unique_ptr<T>> {
       }
       return Serializer<T>::write(*ptr, ctx, inner_requires_ref, write_type);
     }
-
     if (!ptr) {
       ctx.write_int8(NULL_FLAG);
       return Result<void, Error>();
     }
-
     ctx.write_int8(NOT_NULL_VALUE_FLAG);
     return Serializer<T>::write(*ptr, ctx, inner_requires_ref, write_type);
   }
@@ -482,16 +450,12 @@ template <typename T> struct Serializer<std::unique_ptr<T>> {
   static Result<std::unique_ptr<T>, Error> read(ReadContext &ctx, bool read_ref,
                                                 bool read_type) {
     constexpr bool inner_requires_ref = requires_ref_metadata_v<T>;
-
     FORY_TRY(flag, ctx.read_int8());
-
     if (flag == NULL_FLAG) {
       return std::unique_ptr<T>(nullptr);
     }
-
     FORY_TRY(value, Serializer<T>::read(ctx, inner_requires_ref && read_ref,
                                         read_type));
-
     return std::make_unique<T>(std::move(value));
   }
 

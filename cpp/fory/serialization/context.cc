@@ -147,19 +147,11 @@ Result<void, Error> ReadContext::load_type_meta(int32_t meta_offset) {
   buffer_->ReaderIndex(static_cast<uint32_t>(meta_start));
 
   // Load all TypeMetas
-  auto meta_size_result = buffer_->ReadVarUint32();
-  if (!meta_size_result.ok()) {
-    return Unexpected(std::move(meta_size_result).error());
-  }
-  uint32_t meta_size = std::move(meta_size_result).value();
+  FORY_TRY(meta_size, buffer_->ReadVarUint32());
   reading_type_infos_.reserve(meta_size);
 
   for (uint32_t i = 0; i < meta_size; i++) {
-    auto parsed_meta_result = TypeMeta::from_bytes(*buffer_, nullptr);
-    if (!parsed_meta_result.ok()) {
-      return Unexpected(std::move(parsed_meta_result).error());
-    }
-    auto parsed_meta = std::move(parsed_meta_result).value();
+    FORY_TRY(parsed_meta, TypeMeta::from_bytes(*buffer_, nullptr));
 
     // Find local TypeInfo to get field_id mapping
     std::shared_ptr<TypeInfo> local_type_info = nullptr;

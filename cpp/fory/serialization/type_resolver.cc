@@ -720,5 +720,15 @@ TypeResolver::read_any_typeinfo(ReadContext &ctx,
                                       std::to_string(fory_type_id)));
 }
 
+Result<const TypeInfo *, Error>
+TypeResolver::get_type_info(const std::type_index &type_index) const {
+  std::lock_guard<std::mutex> lock(struct_mutex_);
+  auto it = type_info_cache_.find(type_index);
+  if (it == type_info_cache_.end()) {
+    return Unexpected(Error::type_error("TypeInfo not found for type_index"));
+  }
+  return it->second.get();
+}
+
 } // namespace serialization
 } // namespace fory

@@ -417,12 +417,10 @@ public:
   Result<std::shared_ptr<TypeInfo>, Error>
   read_any_typeinfo(ReadContext &ctx, const TypeMeta *local_type_meta);
 
-  /// Get const reference to type_info_cache (used by WriteContext for meta
-  /// sharing)
-  const std::unordered_map<std::type_index, std::shared_ptr<TypeInfo>> &
-  get_type_info_cache() const {
-    return type_info_cache_;
-  }
+  /// Get TypeInfo by type_index (used for looking up registered types)
+  /// @return const pointer to TypeInfo if found, error otherwise
+  Result<const TypeInfo *, Error>
+  get_type_info(const std::type_index &type_index) const;
 
 private:
   template <typename T> std::shared_ptr<TypeInfo> ensure_type_info();

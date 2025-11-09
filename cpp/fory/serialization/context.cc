@@ -41,12 +41,7 @@ Result<size_t, Error> WriteContext::push_meta(const std::type_index &type_id) {
   }
 
   size_t index = write_type_defs_.size();
-  const auto &type_info_cache = type_resolver_->get_type_info_cache();
-  auto cache_it = type_info_cache.find(type_id);
-  if (cache_it == type_info_cache.end()) {
-    return Unexpected(Error::type_error("Type not registered"));
-  }
-  auto type_info = cache_it->second;
+  FORY_TRY(type_info, type_resolver_->get_type_info(type_id));
   write_type_defs_.push_back(type_info->type_def);
   write_type_id_index_map_[type_id] = index;
   return index;
@@ -66,7 +61,7 @@ void WriteContext::write_meta(size_t offset) {
 
 bool WriteContext::meta_empty() const { return write_type_defs_.empty(); }
 
-Result<std::shared_ptr<TypeInfo>, Error>
+Result<const TypeInfo *, Error>
 WriteContext::write_any_typeinfo(uint32_t fory_type_id,
                                  const std::type_index &concrete_type_id) {
   // Check if it's an internal type
@@ -74,18 +69,14 @@ WriteContext::write_any_typeinfo(uint32_t fory_type_id,
     buffer_.WriteVarUint32(fory_type_id);
     auto type_info = type_resolver_->get_type_info_by_id(fory_type_id);
     if (!type_info) {
-      return Unexpected(Error::type_error("Type info for internal type not found"));
+      return Unexpected(
+          Error::type_error("Type info for internal type not found"));
     }
-    return type_info;
+    return type_info.get();
   }
 
   // Get type info for the concrete type
-  const auto &type_info_cache = type_resolver_->get_type_info_cache();
-  auto cache_it = type_info_cache.find(concrete_type_id);
-  if (cache_it == type_info_cache.end()) {
-    return Unexpected(Error::type_error("Type not registered"));
-  }
-  auto type_info = cache_it->second;
+  FORY_TRY(type_info, type_resolver_->get_type_info(concrete_type_id));
   uint32_t type_id = type_info->type_id;
   const std::string &namespace_name = type_info->namespace_name;
   const std::string &type_name = type_info->type_name;
@@ -113,7 +104,8 @@ WriteContext::write_any_typeinfo(uint32_t fory_type_id,
     } else {
       // Write namespace and type_name as raw strings
       // Note: Rust uses write_meta_string_bytes for compression,
-      // but C++ doesn't have MetaString compression yet, so we write raw strings
+      // but C++ doesn't have MetaString compression yet, so we write raw
+      // strings
       buffer_.WriteVarUint32(static_cast<uint32_t>(namespace_name.size()));
       buffer_.WriteBytes(namespace_name.data(), namespace_name.size());
       buffer_.WriteVarUint32(static_cast<uint32_t>(type_name.size()));
@@ -249,7 +241,8 @@ Result<std::shared_ptr<TypeInfo>, Error> ReadContext::read_any_typeinfo() {
       std::string type_name(name_len, '\0');
       FORY_RETURN_NOT_OK(buffer_->ReadBytes(type_name.data(), name_len));
 
-      auto type_info = type_resolver_->get_type_info_by_name(namespace_str, type_name);
+      auto type_info =
+          type_resolver_->get_type_info_by_name(namespace_str, type_name);
       if (!type_info) {
         return Unexpected(Error::type_error("Name harness not found"));
       }

@@ -49,7 +49,7 @@ template <typename T> struct Serializer<std::optional<T>> {
         return Unexpected(Error::invalid(
             "std::optional requires write_ref=true to encode null state"));
       }
-      return Serializer<T>::write(*opt, ctx, inner_requires_ref, write_type);
+      return Serializer<T>::write(*opt, ctx, false, write_type);
     }
 
     if (!opt.has_value()) {
@@ -89,8 +89,8 @@ template <typename T> struct Serializer<std::optional<T>> {
     constexpr bool inner_requires_ref = requires_ref_metadata_v<T>;
 
     if (!read_ref) {
-      return Unexpected(Error::invalid(
-          "std::optional requires read_ref=true to decode null state"));
+      FORY_TRY(value, Serializer<T>::read(ctx, false, read_type));
+      return std::optional<T>(std::move(value));
     }
 
     const uint32_t flag_pos = ctx.buffer().reader_index();
@@ -123,8 +123,9 @@ template <typename T> struct Serializer<std::optional<T>> {
     constexpr bool inner_requires_ref = requires_ref_metadata_v<T>;
 
     if (!read_ref) {
-      return Unexpected(Error::invalid(
-          "std::optional requires read_ref=true to decode null state"));
+      FORY_TRY(value,
+               Serializer<T>::read_with_type_info(ctx, false, type_info));
+      return std::optional<T>(std::move(value));
     }
 
     const uint32_t flag_pos = ctx.buffer().reader_index();
@@ -168,7 +169,7 @@ template <typename T, bool IsPolymorphic> struct SharedPtrTypeIdHelper {
 };
 
 template <typename T> struct SharedPtrTypeIdHelper<T, true> {
-  static constexpr TypeId value = TypeId::NAMED_STRUCT;
+  static constexpr TypeId value = TypeId::UNKNOWN;
 };
 
 /// Serializer for std::shared_ptr<T>
@@ -211,13 +212,7 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
       std::type_index concrete_type_id = std::type_index(typeid(*ptr));
 
       // Look up the TypeInfo for the concrete type
-      const auto &type_info_cache = ctx.type_resolver().get_type_info_cache();
-      auto it = type_info_cache.find(concrete_type_id);
-      if (it == type_info_cache.end()) {
-        return Unexpected(Error::type_error(
-            "Concrete type not registered for polymorphic shared_ptr: " +
-            std::string(concrete_type_id.name())));
-      }
+      FORY_TRY(type_info, ctx.type_resolver().get_type_info(concrete_type_id));
 
       // Write type info if requested
       if (write_type) {
@@ -228,7 +223,7 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
       // Call the harness with the raw pointer (which points to DerivedType)
       // The harness will static_cast it back to the concrete type
       const void *value_ptr = ptr.get();
-      return it->second->harness.write_data_fn(value_ptr, ctx, has_generics);
+      return type_info->harness.write_data_fn(value_ptr, ctx, has_generics);
     } else {
       // Non-polymorphic path
       return Serializer<T>::write(*ptr, ctx, inner_requires_ref, write_type);
@@ -245,14 +240,9 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
     // For polymorphic types, use harness to serialize the concrete type
     if constexpr (std::is_polymorphic_v<T>) {
       std::type_index concrete_type_id = std::type_index(typeid(*ptr));
-      const auto &type_info_cache = ctx.type_resolver().get_type_info_cache();
-      auto it = type_info_cache.find(concrete_type_id);
-      if (it == type_info_cache.end()) {
-        return Unexpected(Error::type_error(
-            "Concrete type not registered for polymorphic shared_ptr"));
-      }
+      FORY_TRY(type_info, ctx.type_resolver().get_type_info(concrete_type_id));
       const void *value_ptr = ptr.get();
-      return it->second->harness.write_data_fn(value_ptr, ctx, false);
+      return type_info->harness.write_data_fn(value_ptr, ctx, false);
     } else {
       return Serializer<T>::write_data(*ptr, ctx);
     }
@@ -269,14 +259,9 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
     // For polymorphic types, use harness to serialize the concrete type
     if constexpr (std::is_polymorphic_v<T>) {
       std::type_index concrete_type_id = std::type_index(typeid(*ptr));
-      const auto &type_info_cache = ctx.type_resolver().get_type_info_cache();
-      auto it = type_info_cache.find(concrete_type_id);
-      if (it == type_info_cache.end()) {
-        return Unexpected(Error::type_error(
-            "Concrete type not registered for polymorphic shared_ptr"));
-      }
+      FORY_TRY(type_info, ctx.type_resolver().get_type_info(concrete_type_id));
       const void *value_ptr = ptr.get();
-      return it->second->harness.write_data_fn(value_ptr, ctx, has_generics);
+      return type_info->harness.write_data_fn(value_ptr, ctx, has_generics);
     } else {
       return Serializer<T>::write_data_generic(*ptr, ctx, has_generics);
     }

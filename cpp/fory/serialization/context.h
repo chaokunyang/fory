@@ -172,14 +172,15 @@ public:
   /// Handles different type categories:
   /// - Internal types: just write type_id
   /// - COMPATIBLE_STRUCT/NAMED_COMPATIBLE_STRUCT: write type_id and meta_index
-  /// - NAMED_ENUM/NAMED_STRUCT/NAMED_EXT: write type_id, then namespace/type_name
+  /// - NAMED_ENUM/NAMED_STRUCT/NAMED_EXT: write type_id, then
+  /// namespace/type_name
   ///   (as raw strings if share_meta is disabled, or meta_index if enabled)
   /// - Other types: just write type_id
   ///
   /// @param fory_type_id The static Fory type ID
   /// @param concrete_type_id The runtime type_index for concrete type
   /// @return TypeInfo for the written type, or error
-  Result<std::shared_ptr<TypeInfo>, Error>
+  Result<const TypeInfo *, Error>
   write_any_typeinfo(uint32_t fory_type_id,
                      const std::type_index &concrete_type_id);
 

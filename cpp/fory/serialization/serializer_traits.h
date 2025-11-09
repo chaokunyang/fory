@@ -205,6 +205,7 @@ inline std::type_index get_concrete_type_id(const T &value) {
 // Note: get_type_id_dyn is declared here but implemented after TypeResolver is fully defined
 // See the implementation in context.h or a separate implementation file
 
+
 // ============================================================================
 // Shared Reference Detection
 // ============================================================================

@@ -182,7 +182,7 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
 
   static Result<void, Error> write(const std::shared_ptr<T> &ptr,
                                    WriteContext &ctx, bool write_ref,
-                                   bool write_type) {
+                                   bool write_type, bool has_generics = false) {
     constexpr bool inner_requires_ref = requires_ref_metadata_v<T>;
     constexpr bool is_polymorphic = std::is_polymorphic_v<T>;
 
@@ -228,7 +228,7 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
       // Call the harness with the raw pointer (which points to DerivedType)
       // The harness will static_cast it back to the concrete type
       const void *value_ptr = ptr.get();
-      return it->second->harness.write_data_fn(value_ptr, ctx, false);
+      return it->second->harness.write_data_fn(value_ptr, ctx, has_generics);
     } else {
       // Non-polymorphic path
       return Serializer<T>::write(*ptr, ctx, inner_requires_ref, write_type);

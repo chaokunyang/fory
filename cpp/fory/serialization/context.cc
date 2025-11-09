@@ -188,6 +188,9 @@ Result<void, Error> ReadContext::load_type_meta(int32_t meta_offset) {
       type_info = std::make_shared<TypeInfo>();
       type_info->type_meta = parsed_meta;
       type_info->type_def = local_type_info->type_def;
+      // CRITICAL: Copy the harness from the registered type_info
+      type_info->harness = local_type_info->harness;
+      type_info->name_to_index = local_type_info->name_to_index;
     } else {
       // No local type - create stub TypeInfo with parsed meta
       type_info = std::make_shared<TypeInfo>();

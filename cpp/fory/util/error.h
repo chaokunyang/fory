@@ -108,7 +108,7 @@ public:
 
   /// Creates a buffer out of bound error.
   static Error buffer_out_of_bound(size_t offset, size_t length,
-                                    size_t capacity) {
+                                   size_t capacity) {
     return Error(ErrorCode::BufferOutOfBound,
                  "Buffer out of bound: " + std::to_string(offset) + " + " +
                      std::to_string(length) + " > " + std::to_string(capacity));

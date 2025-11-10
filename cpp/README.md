@@ -17,7 +17,6 @@ bazel test //:all
 bazel test //cpp/fory/serialization:all
 ```
 
-
 ## Benchmark
 
 ```bash

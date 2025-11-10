@@ -55,7 +55,7 @@ TEST_F(ResultTest, CopyValue) {
 
   ASSERT_TRUE(res2.ok());
   ASSERT_EQ(res2.value(), "hello");
-  ASSERT_EQ(res1.value(), "hello");  // Original still valid
+  ASSERT_EQ(res1.value(), "hello"); // Original still valid
 }
 
 TEST_F(ResultTest, MoveValue) {
@@ -114,7 +114,8 @@ TEST_F(ResultTest, ErrorFactoryMethods) {
   Result<int, Error> io_err = Unexpected(Error::io_error("read failed"));
   ASSERT_EQ(io_err.error().code(), ErrorCode::IOError);
 
-  Result<int, Error> encode_err = Unexpected(Error::encode_error("encode failed"));
+  Result<int, Error> encode_err =
+      Unexpected(Error::encode_error("encode failed"));
   ASSERT_EQ(encode_err.error().code(), ErrorCode::EncodeError);
 
   Result<int, Error> invalid_data = Unexpected(Error::invalid_data("bad data"));
@@ -123,7 +124,8 @@ TEST_F(ResultTest, ErrorFactoryMethods) {
   Result<int, Error> type_mismatch = Unexpected(Error::type_mismatch(1, 2));
   ASSERT_EQ(type_mismatch.error().code(), ErrorCode::TypeMismatch);
 
-  Result<int, Error> buf_oob = Unexpected(Error::buffer_out_of_bound(10, 20, 25));
+  Result<int, Error> buf_oob =
+      Unexpected(Error::buffer_out_of_bound(10, 20, 25));
   ASSERT_EQ(buf_oob.error().code(), ErrorCode::BufferOutOfBound);
 }
 
@@ -170,17 +172,13 @@ TEST_F(ResultTest, Assignment) {
 
 // ===== Test macros =====
 
-Result<void, Error> helper_ok() {
-  return Result<void, Error>();
-}
+Result<void, Error> helper_ok() { return Result<void, Error>(); }
 
 Result<void, Error> helper_error() {
   return Unexpected(Error::invalid("test error"));
 }
 
-Result<int, Error> compute_ok() {
-  return 42;
-}
+Result<int, Error> compute_ok() { return 42; }
 
 Result<int, Error> compute_error() {
   return Unexpected(Error::invalid("computation failed"));
@@ -197,7 +195,7 @@ TEST_F(ResultTest, ReturnNotOkMacro) {
 
   auto test_fn_error = []() -> Result<void, Error> {
     FORY_RETURN_NOT_OK(helper_error());
-    return Result<void, Error>();  // Should not reach here
+    return Result<void, Error>(); // Should not reach here
   };
 
   auto result_error = test_fn_error();
@@ -219,7 +217,7 @@ TEST_F(ResultTest, AssignOrReturnMacro) {
   auto test_fn_error = []() -> Result<int, Error> {
     int value;
     FORY_ASSIGN_OR_RETURN(value, compute_error());
-    return value;  // Should not reach here
+    return value; // Should not reach here
   };
 
   auto result_error = test_fn_error();

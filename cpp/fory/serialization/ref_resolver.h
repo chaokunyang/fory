@@ -123,8 +123,9 @@ public:
     }
 
     // Alias constructor: create shared_ptr<T> that shares ownership with stored
-    // This works for polymorphic types because the void* points to the actual derived object
-    return std::shared_ptr<T>(stored, static_cast<T*>(stored.get()));
+    // This works for polymorphic types because the void* points to the actual
+    // derived object
+    return std::shared_ptr<T>(stored, static_cast<T *>(stored.get()));
   }
 
   template <typename T>

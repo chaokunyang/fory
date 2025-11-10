@@ -102,8 +102,8 @@ struct AllPrimitivesStruct {
   }
 };
 FORY_STRUCT(AllPrimitivesStruct, bool_val, int8_val, int16_val, int32_val,
-            int64_val, uint8_val, uint16_val, uint32_val, uint64_val,
-            float_val, double_val);
+            int64_val, uint8_val, uint16_val, uint32_val, uint64_val, float_val,
+            double_val);
 
 // String handling
 struct StringTestStruct {
@@ -113,8 +113,8 @@ struct StringTestStruct {
   std::string long_text;
 
   bool operator==(const StringTestStruct &other) const {
-    return empty == other.empty && ascii == other.ascii &&
-           utf8 == other.utf8 && long_text == other.long_text;
+    return empty == other.empty && ascii == other.ascii && utf8 == other.utf8 &&
+           long_text == other.long_text;
   }
 };
 FORY_STRUCT(StringTestStruct, empty, ascii, utf8, long_text);
@@ -306,8 +306,7 @@ namespace fory {
 namespace serialization {
 namespace test {
 
-template <typename T>
-void test_roundtrip(const T &original) {
+template <typename T> void test_roundtrip(const T &original) {
   auto fory = Fory::builder().xlang(true).track_ref(false).build();
 
   auto serialize_result = fory.serialize(original);
@@ -352,8 +351,7 @@ TEST(StructComprehensiveTest, ManyFieldsStruct) {
 }
 
 TEST(StructComprehensiveTest, AllPrimitivesZero) {
-  test_roundtrip(
-      AllPrimitivesStruct{false, 0, 0, 0, 0, 0, 0, 0, 0, 0.0f, 0.0});
+  test_roundtrip(AllPrimitivesStruct{false, 0, 0, 0, 0, 0, 0, 0, 0, 0.0f, 0.0});
 }
 
 TEST(StructComprehensiveTest, AllPrimitivesMax) {
@@ -405,8 +403,7 @@ TEST(StructComprehensiveTest, VectorStructEmpty) {
 }
 
 TEST(StructComprehensiveTest, VectorStructMultiple) {
-  test_roundtrip(
-      VectorStruct{{1, 2, 3}, {"foo", "bar"}, {{0, 0}, {10, 10}}});
+  test_roundtrip(VectorStruct{{1, 2, 3}, {"foo", "bar"}, {{0, 0}, {10, 10}}});
 }
 
 TEST(StructComprehensiveTest, MapStructEmpty) {
@@ -420,8 +417,7 @@ TEST(StructComprehensiveTest, MapStructMultiple) {
 }
 
 TEST(StructComprehensiveTest, NestedContainers) {
-  test_roundtrip(
-      NestedContainerStruct{{{1, 2}, {3, 4}}, {{"a", {10, 20}}}});
+  test_roundtrip(NestedContainerStruct{{{1, 2}, {3, 4}}, {{"a", {10, 20}}}});
 }
 
 TEST(StructComprehensiveTest, OptionalFieldsAllEmpty) {
@@ -445,20 +441,29 @@ TEST(StructComprehensiveTest, EnumFields) {
 }
 
 TEST(StructComprehensiveTest, UserProfileBasic) {
-  test_roundtrip(
-      UserProfile{12345, "johndoe", "john@example.com", std::nullopt, {}, {},
-                  0, false});
+  test_roundtrip(UserProfile{
+      12345, "johndoe", "john@example.com", std::nullopt, {}, {}, 0, false});
 }
 
 TEST(StructComprehensiveTest, UserProfileComplete) {
-  test_roundtrip(UserProfile{
-      67890, "janedoe", "jane@example.com", "Engineer",
-      {"coding", "reading"}, {{"location", "SF"}}, 5000, true});
+  test_roundtrip(UserProfile{67890,
+                             "janedoe",
+                             "jane@example.com",
+                             "Engineer",
+                             {"coding", "reading"},
+                             {{"location", "SF"}},
+                             5000,
+                             true});
 }
 
 TEST(StructComprehensiveTest, ProductSimple) {
-  test_roundtrip(Product{1001, "Widget", "A useful widget", 19.99, 100,
-                         {"tools"}, {{"color", "blue"}}});
+  test_roundtrip(Product{1001,
+                         "Widget",
+                         "A useful widget",
+                         19.99,
+                         100,
+                         {"tools"},
+                         {{"color", "blue"}}});
 }
 
 TEST(StructComprehensiveTest, OrderEmpty) {
@@ -466,7 +471,10 @@ TEST(StructComprehensiveTest, OrderEmpty) {
 }
 
 TEST(StructComprehensiveTest, OrderMultiple) {
-  test_roundtrip(Order{2, 67890, {{1001, 2, 19.99}, {2002, 1, 299.99}}, 389.98,
+  test_roundtrip(Order{2,
+                       67890,
+                       {{1001, 2, 19.99}, {2002, 1, 299.99}},
+                       389.98,
                        Status::COMPLETED});
 }
 

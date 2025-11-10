@@ -90,8 +90,8 @@ struct has_fory_field_info : std::false_type {};
 
 template <typename T>
 struct has_fory_field_info<
-  T, std::void_t<decltype(SerializationMeta<T, void>::is_serializable)>>
-  : std::bool_constant<SerializationMeta<T, void>::is_serializable> {};
+    T, std::void_t<decltype(SerializationMeta<T, void>::is_serializable)>>
+    : std::bool_constant<SerializationMeta<T, void>::is_serializable> {};
 
 template <typename T>
 inline constexpr bool has_fory_field_info_v = has_fory_field_info<T>::value;
@@ -168,13 +168,17 @@ class TypeResolver;
 
 // Helper to detect std::shared_ptr
 template <typename T> struct is_std_shared_ptr : std::false_type {};
-template <typename T> struct is_std_shared_ptr<std::shared_ptr<T>> : std::true_type {};
-template <typename T> inline constexpr bool is_std_shared_ptr_v = is_std_shared_ptr<T>::value;
+template <typename T>
+struct is_std_shared_ptr<std::shared_ptr<T>> : std::true_type {};
+template <typename T>
+inline constexpr bool is_std_shared_ptr_v = is_std_shared_ptr<T>::value;
 
 // Helper to detect std::unique_ptr
 template <typename T> struct is_std_unique_ptr : std::false_type {};
-template <typename T> struct is_std_unique_ptr<std::unique_ptr<T>> : std::true_type {};
-template <typename T> inline constexpr bool is_std_unique_ptr_v = is_std_unique_ptr<T>::value;
+template <typename T>
+struct is_std_unique_ptr<std::unique_ptr<T>> : std::true_type {};
+template <typename T>
+inline constexpr bool is_std_unique_ptr_v = is_std_unique_ptr<T>::value;
 
 /// Get the concrete type_index for a value
 /// For non-polymorphic types, this is just typeid(T)
@@ -202,9 +206,9 @@ inline std::type_index get_concrete_type_id(const T &value) {
   }
 }
 
-// Note: get_type_id_dyn is declared here but implemented after TypeResolver is fully defined
-// See the implementation in context.h or a separate implementation file
-
+// Note: get_type_id_dyn is declared here but implemented after TypeResolver is
+// fully defined See the implementation in context.h or a separate
+// implementation file
 
 // ============================================================================
 // Shared Reference Detection
@@ -213,7 +217,8 @@ inline std::type_index get_concrete_type_id(const T &value) {
 /// Check if a type is a shared reference (Rc/Arc in Rust, shared_ptr in C++)
 template <typename T> struct is_shared_ref : std::false_type {};
 
-template <typename T> struct is_shared_ref<std::shared_ptr<T>> : std::true_type {};
+template <typename T>
+struct is_shared_ref<std::shared_ptr<T>> : std::true_type {};
 
 template <typename T>
 inline constexpr bool is_shared_ref_v = is_shared_ref<T>::value;
@@ -226,11 +231,14 @@ inline constexpr bool is_shared_ref_v = is_shared_ref<T>::value;
 /// nested inside another structure.
 template <typename T> struct requires_ref_metadata : std::false_type {};
 
-template <typename T> struct requires_ref_metadata<std::optional<T>> : std::true_type {};
+template <typename T>
+struct requires_ref_metadata<std::optional<T>> : std::true_type {};
 
-template <typename T> struct requires_ref_metadata<std::shared_ptr<T>> : std::true_type {};
+template <typename T>
+struct requires_ref_metadata<std::shared_ptr<T>> : std::true_type {};
 
-template <typename T> struct requires_ref_metadata<std::unique_ptr<T>> : std::true_type {};
+template <typename T>
+struct requires_ref_metadata<std::unique_ptr<T>> : std::true_type {};
 
 template <typename T>
 inline constexpr bool requires_ref_metadata_v = requires_ref_metadata<T>::value;

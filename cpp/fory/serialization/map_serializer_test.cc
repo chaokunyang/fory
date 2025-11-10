@@ -427,8 +427,10 @@ TEST(MapSerializerTest, PolymorphicValueTypes) {
       Fory::builder().xlang(true).track_ref(true).compatible(true).build();
 
   // Register concrete derived types for polymorphic serialization
-  ASSERT_TRUE(fory.register_struct<DerivedValueX>(DERIVED_VALUE_X_TYPE_ID).ok());
-  ASSERT_TRUE(fory.register_struct<DerivedValueY>(DERIVED_VALUE_Y_TYPE_ID).ok());
+  ASSERT_TRUE(
+      fory.register_struct<DerivedValueX>(DERIVED_VALUE_X_TYPE_ID).ok());
+  ASSERT_TRUE(
+      fory.register_struct<DerivedValueY>(DERIVED_VALUE_Y_TYPE_ID).ok());
 
   // Create map with different derived value types
   std::map<int32_t, std::shared_ptr<BaseValue>> map;
@@ -553,8 +555,10 @@ TEST(MapSerializerTest, PolymorphicKeyAndValueTypes) {
   // Register concrete derived types for polymorphic serialization
   ASSERT_TRUE(fory.register_struct<DerivedKeyA>(DERIVED_KEY_A_TYPE_ID).ok());
   ASSERT_TRUE(fory.register_struct<DerivedKeyB>(DERIVED_KEY_B_TYPE_ID).ok());
-  ASSERT_TRUE(fory.register_struct<DerivedValueX>(DERIVED_VALUE_X_TYPE_ID).ok());
-  ASSERT_TRUE(fory.register_struct<DerivedValueY>(DERIVED_VALUE_Y_TYPE_ID).ok());
+  ASSERT_TRUE(
+      fory.register_struct<DerivedValueX>(DERIVED_VALUE_X_TYPE_ID).ok());
+  ASSERT_TRUE(
+      fory.register_struct<DerivedValueY>(DERIVED_VALUE_Y_TYPE_ID).ok());
 
   // Create map with polymorphic keys and values
   std::map<std::shared_ptr<BaseKey>, std::shared_ptr<BaseValue>> map;
@@ -614,8 +618,10 @@ TEST(MapSerializerTest, PolymorphicTypesWithNulls) {
       Fory::builder().xlang(true).track_ref(true).compatible(true).build();
 
   // Register concrete derived types for polymorphic serialization
-  ASSERT_TRUE(fory.register_struct<DerivedValueX>(DERIVED_VALUE_X_TYPE_ID).ok());
-  ASSERT_TRUE(fory.register_struct<DerivedValueY>(DERIVED_VALUE_Y_TYPE_ID).ok());
+  ASSERT_TRUE(
+      fory.register_struct<DerivedValueX>(DERIVED_VALUE_X_TYPE_ID).ok());
+  ASSERT_TRUE(
+      fory.register_struct<DerivedValueY>(DERIVED_VALUE_Y_TYPE_ID).ok());
 
   // Create map with some null polymorphic values
   std::map<int32_t, std::shared_ptr<BaseValue>> map;
@@ -660,8 +666,10 @@ TEST(MapSerializerTest, PolymorphicTypesWithSharedReferences) {
       Fory::builder().xlang(true).track_ref(true).compatible(true).build();
 
   // Register concrete derived types for polymorphic serialization
-  ASSERT_TRUE(fory.register_struct<DerivedValueX>(DERIVED_VALUE_X_TYPE_ID).ok());
-  ASSERT_TRUE(fory.register_struct<DerivedValueY>(DERIVED_VALUE_Y_TYPE_ID).ok());
+  ASSERT_TRUE(
+      fory.register_struct<DerivedValueX>(DERIVED_VALUE_X_TYPE_ID).ok());
+  ASSERT_TRUE(
+      fory.register_struct<DerivedValueY>(DERIVED_VALUE_Y_TYPE_ID).ok());
 
   // Create shared polymorphic values
   auto shared_value1 = std::make_shared<DerivedValueX>("shared_x", 999);
@@ -722,8 +730,10 @@ TEST(MapSerializerTest, LargeMapWithPolymorphicValues) {
       Fory::builder().xlang(true).track_ref(true).compatible(true).build();
 
   // Register concrete derived types for polymorphic serialization
-  ASSERT_TRUE(fory.register_struct<DerivedValueX>(DERIVED_VALUE_X_TYPE_ID).ok());
-  ASSERT_TRUE(fory.register_struct<DerivedValueY>(DERIVED_VALUE_Y_TYPE_ID).ok());
+  ASSERT_TRUE(
+      fory.register_struct<DerivedValueX>(DERIVED_VALUE_X_TYPE_ID).ok());
+  ASSERT_TRUE(
+      fory.register_struct<DerivedValueY>(DERIVED_VALUE_Y_TYPE_ID).ok());
 
   // Create a large map with alternating polymorphic types
   std::map<int32_t, std::shared_ptr<BaseValue>> map;

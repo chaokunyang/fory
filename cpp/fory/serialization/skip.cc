@@ -160,8 +160,8 @@ Result<void, Error> skip_struct(ReadContext &ctx, const FieldType &field_type) {
 }
 
 Result<void, Error> skip_field_value(ReadContext &ctx,
-                                       const FieldType &field_type,
-                                       bool read_ref_flag) {
+                                     const FieldType &field_type,
+                                     bool read_ref_flag) {
   // Read ref flag if needed
   if (read_ref_flag) {
     FORY_TRY(ref_flag, ctx.read_int8());

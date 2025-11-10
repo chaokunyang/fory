@@ -62,11 +62,11 @@ TEST_F(ErrorTest, ErrorTypes) {
 
 TEST_F(ErrorTest, CopyAndMove) {
   Result<void, Error> err1 = Unexpected(Error::key_error("key not found"));
-  Result<void, Error> err2 = err1;  // Copy
+  Result<void, Error> err2 = err1; // Copy
   ASSERT_FALSE(err2.ok());
   ASSERT_EQ(err2.error().code(), ErrorCode::KeyError);
 
-  Result<void, Error> err3 = std::move(err1);  // Move
+  Result<void, Error> err3 = std::move(err1); // Move
   ASSERT_FALSE(err3.ok());
   ASSERT_EQ(err3.error().code(), ErrorCode::KeyError);
 }
@@ -130,7 +130,7 @@ TEST_F(ErrorTest, ErrorFactories) {
 
 TEST_F(ErrorTest, ErrorSize) {
   // Error should be the same size as a pointer (unique_ptr)
-  ASSERT_EQ(sizeof(Error), sizeof(void*));
+  ASSERT_EQ(sizeof(Error), sizeof(void *));
 }
 
 } // namespace fory

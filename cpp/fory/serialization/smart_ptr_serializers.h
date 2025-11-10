@@ -187,12 +187,29 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
     constexpr bool inner_requires_ref = requires_ref_metadata_v<T>;
     constexpr bool is_polymorphic = std::is_polymorphic_v<T>;
 
+    // Handle write_ref=false case (similar to Rust)
     if (!write_ref) {
-      return Unexpected(
-          Error::invalid("std::shared_ptr requires write_ref=true to encode "
-                         "null/reference state"));
+      if (!ptr) {
+        return Unexpected(Error::invalid(
+            "std::shared_ptr requires write_ref=true to encode null state"));
+      }
+      // For polymorphic types, serialize the concrete type dynamically
+      if constexpr (is_polymorphic) {
+        std::type_index concrete_type_id = std::type_index(typeid(*ptr));
+        FORY_TRY(type_info,
+                 ctx.type_resolver().get_type_info(concrete_type_id));
+        if (write_type) {
+          FORY_RETURN_NOT_OK(ctx.write_any_typeinfo(
+              static_cast<uint32_t>(TypeId::UNKNOWN), concrete_type_id));
+        }
+        const void *value_ptr = ptr.get();
+        return type_info->harness.write_data_fn(value_ptr, ctx, has_generics);
+      } else {
+        return Serializer<T>::write(*ptr, ctx, inner_requires_ref, write_type);
+      }
     }
 
+    // Handle write_ref=true case
     if (!ptr) {
       ctx.write_int8(NULL_FLAG);
       return Result<void, Error>();
@@ -272,45 +289,80 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
     constexpr bool inner_requires_ref = requires_ref_metadata_v<T>;
     constexpr bool is_polymorphic = std::is_polymorphic_v<T>;
 
-    if constexpr (is_polymorphic) {
+    // Handle read_ref=false case (similar to Rust)
+    if (!read_ref) {
+      if constexpr (is_polymorphic) {
+        // For polymorphic types, we must read type info when read_type=true
+        if (!read_type) {
+          return Unexpected(Error::type_error(
+              "Cannot deserialize polymorphic std::shared_ptr<T> "
+              "without type info (read_type=false)"));
+        }
+        // Read type info from stream to get the concrete type
+        FORY_TRY(type_info, ctx.read_any_typeinfo());
+        // Now use read_with_type_info with the concrete type info
+        return read_with_type_info(ctx, read_ref, *type_info);
+      } else {
+        FORY_TRY(value,
+                 Serializer<T>::read(ctx, inner_requires_ref, read_type));
+        return std::make_shared<T>(std::move(value));
+      }
+    }
+
+    // Handle read_ref=true case
+    FORY_TRY(flag, ctx.read_int8());
+    if (flag == NULL_FLAG) {
+      return std::shared_ptr<T>(nullptr);
+    }
+    const bool tracking_refs = ctx.track_ref();
+    if (flag == REF_FLAG) {
+      if (!tracking_refs) {
+        return Unexpected(Error::invalid_ref(
+            "Reference flag encountered when reference tracking disabled"));
+      }
+      FORY_TRY(ref_id, ctx.read_varuint32());
+      return ctx.ref_reader().template get_shared_ref<T>(ref_id);
+    }
+
+    if (flag != NOT_NULL_VALUE_FLAG && flag != REF_VALUE_FLAG) {
       return Unexpected(
-          Error::type_error("Cannot deserialize polymorphic std::shared_ptr<T> "
-                            "without type info. "
-                            "Use read_with_type_info instead."));
-    } else {
-      if (!read_ref) {
-        return Unexpected(
-            Error::invalid("std::shared_ptr requires read_ref=true "
-                           "to decode null/reference state"));
-      }
-      FORY_TRY(flag, ctx.read_int8());
-      if (flag == NULL_FLAG) {
-        return std::shared_ptr<T>(nullptr);
-      }
-      const bool tracking_refs = ctx.track_ref();
-      if (flag == REF_FLAG) {
-        if (!tracking_refs) {
-          return Unexpected(Error::invalid_ref(
-              "Reference flag encountered when reference tracking disabled"));
-        }
-        FORY_TRY(ref_id, ctx.read_varuint32());
-        return ctx.ref_reader().template get_shared_ref<T>(ref_id);
-      }
+          Error::invalid_ref("Unexpected reference flag value: " +
+                             std::to_string(static_cast<int>(flag))));
+    }
 
-      if (flag != NOT_NULL_VALUE_FLAG && flag != REF_VALUE_FLAG) {
-        return Unexpected(
-            Error::invalid_ref("Unexpected reference flag value: " +
-                               std::to_string(static_cast<int>(flag))));
+    uint32_t reserved_ref_id = 0;
+    if (flag == REF_VALUE_FLAG) {
+      if (!tracking_refs) {
+        return Unexpected(Error::invalid_ref(
+            "REF_VALUE flag encountered when reference tracking disabled"));
       }
+      reserved_ref_id = ctx.ref_reader().reserve_ref_id();
+    }
 
-      uint32_t reserved_ref_id = 0;
+    // For polymorphic types, read type info AFTER handling ref flags
+    if constexpr (is_polymorphic) {
+      if (!read_type) {
+        return Unexpected(Error::type_error(
+            "Cannot deserialize polymorphic std::shared_ptr<T> "
+            "without type info (read_type=false)"));
+      }
+      // Read type info from stream to get the concrete type
+      FORY_TRY(type_info, ctx.read_any_typeinfo());
+
+      // Use the harness to deserialize the concrete type
+      if (!type_info->harness.read_data_fn) {
+        return Unexpected(Error::type_error(
+            "No harness read function for polymorphic type deserialization"));
+      }
+      FORY_TRY(raw_ptr, type_info->harness.read_data_fn(ctx));
+      T *obj_ptr = static_cast<T *>(raw_ptr);
+      auto result = std::shared_ptr<T>(obj_ptr);
       if (flag == REF_VALUE_FLAG) {
-        if (!tracking_refs) {
-          return Unexpected(Error::invalid_ref(
-              "REF_VALUE flag encountered when reference tracking disabled"));
-        }
-        reserved_ref_id = ctx.ref_reader().reserve_ref_id();
+        ctx.ref_reader().store_shared_ref_at(reserved_ref_id, result);
       }
+      return result;
+    } else {
+      // Non-polymorphic path
       FORY_TRY(value, Serializer<T>::read(ctx, inner_requires_ref, read_type));
       auto result = std::make_shared<T>(std::move(value));
       if (flag == REF_VALUE_FLAG) {
@@ -325,10 +377,27 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
                       const TypeInfo &type_info) {
     constexpr bool inner_requires_ref = requires_ref_metadata_v<T>;
     constexpr bool is_polymorphic = std::is_polymorphic_v<T>;
+
+    // Handle read_ref=false case (similar to Rust)
     if (!read_ref) {
-      return Unexpected(Error::invalid("std::shared_ptr requires read_ref=true "
-                                       "to decode null/reference state"));
+      // For polymorphic types, use the harness to deserialize the concrete type
+      if constexpr (is_polymorphic) {
+        if (!type_info.harness.read_data_fn) {
+          return Unexpected(Error::type_error(
+              "No harness read function for polymorphic type deserialization"));
+        }
+        FORY_TRY(raw_ptr, type_info.harness.read_data_fn(ctx));
+        T *obj_ptr = static_cast<T *>(raw_ptr);
+        return std::shared_ptr<T>(obj_ptr);
+      } else {
+        // Non-polymorphic path
+        FORY_TRY(value, Serializer<T>::read_with_type_info(
+                            ctx, inner_requires_ref, type_info));
+        return std::make_shared<T>(std::move(value));
+      }
     }
+
+    // Handle read_ref=true case
     FORY_TRY(flag, ctx.read_int8());
     if (flag == NULL_FLAG) {
       return std::shared_ptr<T>(nullptr);
@@ -401,31 +470,74 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
 // std::unique_ptr serializer
 // ============================================================================
 
+// Helper to get type_id for unique_ptr without instantiating Serializer for
+// polymorphic types
+template <typename T, bool IsPolymorphic> struct UniquePtrTypeIdHelper {
+  static constexpr TypeId value = Serializer<T>::type_id;
+};
+
+template <typename T> struct UniquePtrTypeIdHelper<T, true> {
+  static constexpr TypeId value = TypeId::UNKNOWN;
+};
+
 /// Serializer for std::unique_ptr<T>
 ///
 /// Note: unique_ptr does not support reference tracking since
 /// it represents exclusive ownership. Each unique_ptr is serialized
 /// independently.
 template <typename T> struct Serializer<std::unique_ptr<T>> {
-  static constexpr TypeId type_id = Serializer<T>::type_id;
+  static constexpr TypeId type_id =
+      UniquePtrTypeIdHelper<T, std::is_polymorphic_v<T>>::value;
 
   static Result<void, Error> write(const std::unique_ptr<T> &ptr,
                                    WriteContext &ctx, bool write_ref,
                                    bool write_type) {
     constexpr bool inner_requires_ref = requires_ref_metadata_v<T>;
+    constexpr bool is_polymorphic = std::is_polymorphic_v<T>;
+
+    // Handle write_ref=false case (similar to Rust)
     if (!write_ref) {
       if (!ptr) {
         return Unexpected(Error::invalid(
             "std::unique_ptr requires write_ref=true to encode null state"));
       }
-      return Serializer<T>::write(*ptr, ctx, inner_requires_ref, write_type);
+      // For polymorphic types, serialize the concrete type dynamically
+      if constexpr (is_polymorphic) {
+        std::type_index concrete_type_id = std::type_index(typeid(*ptr));
+        FORY_TRY(type_info,
+                 ctx.type_resolver().get_type_info(concrete_type_id));
+        if (write_type) {
+          FORY_RETURN_NOT_OK(ctx.write_any_typeinfo(
+              static_cast<uint32_t>(TypeId::UNKNOWN), concrete_type_id));
+        }
+        const void *value_ptr = ptr.get();
+        return type_info->harness.write_data_fn(value_ptr, ctx, false);
+      } else {
+        return Serializer<T>::write(*ptr, ctx, inner_requires_ref, write_type);
+      }
     }
+
+    // Handle write_ref=true case
     if (!ptr) {
       ctx.write_int8(NULL_FLAG);
       return Result<void, Error>();
     }
+
     ctx.write_int8(NOT_NULL_VALUE_FLAG);
-    return Serializer<T>::write(*ptr, ctx, inner_requires_ref, write_type);
+
+    // For polymorphic types, serialize the concrete type dynamically
+    if constexpr (is_polymorphic) {
+      std::type_index concrete_type_id = std::type_index(typeid(*ptr));
+      FORY_TRY(type_info, ctx.type_resolver().get_type_info(concrete_type_id));
+      if (write_type) {
+        FORY_RETURN_NOT_OK(ctx.write_any_typeinfo(
+            static_cast<uint32_t>(TypeId::UNKNOWN), concrete_type_id));
+      }
+      const void *value_ptr = ptr.get();
+      return type_info->harness.write_data_fn(value_ptr, ctx, false);
+    } else {
+      return Serializer<T>::write(*ptr, ctx, inner_requires_ref, write_type);
+    }
   }
 
   static Result<void, Error> write_data(const std::unique_ptr<T> &ptr,
@@ -434,7 +546,15 @@ template <typename T> struct Serializer<std::unique_ptr<T>> {
       return Unexpected(Error::invalid(
           "std::unique_ptr write_data requires non-null pointer"));
     }
-    return Serializer<T>::write_data(*ptr, ctx);
+    // For polymorphic types, use harness to serialize the concrete type
+    if constexpr (std::is_polymorphic_v<T>) {
+      std::type_index concrete_type_id = std::type_index(typeid(*ptr));
+      FORY_TRY(type_info, ctx.type_resolver().get_type_info(concrete_type_id));
+      const void *value_ptr = ptr.get();
+      return type_info->harness.write_data_fn(value_ptr, ctx, false);
+    } else {
+      return Serializer<T>::write_data(*ptr, ctx);
+    }
   }
 
   static Result<void, Error> write_data_generic(const std::unique_ptr<T> &ptr,
@@ -444,19 +564,129 @@ template <typename T> struct Serializer<std::unique_ptr<T>> {
       return Unexpected(Error::invalid(
           "std::unique_ptr write_data requires non-null pointer"));
     }
-    return Serializer<T>::write_data_generic(*ptr, ctx, has_generics);
+    // For polymorphic types, use harness to serialize the concrete type
+    if constexpr (std::is_polymorphic_v<T>) {
+      std::type_index concrete_type_id = std::type_index(typeid(*ptr));
+      FORY_TRY(type_info, ctx.type_resolver().get_type_info(concrete_type_id));
+      const void *value_ptr = ptr.get();
+      return type_info->harness.write_data_fn(value_ptr, ctx, has_generics);
+    } else {
+      return Serializer<T>::write_data_generic(*ptr, ctx, has_generics);
+    }
   }
 
   static Result<std::unique_ptr<T>, Error> read(ReadContext &ctx, bool read_ref,
                                                 bool read_type) {
     constexpr bool inner_requires_ref = requires_ref_metadata_v<T>;
+    constexpr bool is_polymorphic = std::is_polymorphic_v<T>;
+
+    // Handle read_ref=false case (similar to Rust)
+    if (!read_ref) {
+      if constexpr (is_polymorphic) {
+        // For polymorphic types, we must read type info when read_type=true
+        if (!read_type) {
+          return Unexpected(Error::type_error(
+              "Cannot deserialize polymorphic std::unique_ptr<T> "
+              "without type info (read_type=false)"));
+        }
+        // Read type info from stream to get the concrete type
+        FORY_TRY(type_info, ctx.read_any_typeinfo());
+        // Now use read_with_type_info with the concrete type info
+        return read_with_type_info(ctx, read_ref, *type_info);
+      } else {
+        FORY_TRY(value,
+                 Serializer<T>::read(ctx, inner_requires_ref, read_type));
+        return std::make_unique<T>(std::move(value));
+      }
+    }
+
+    // Handle read_ref=true case
     FORY_TRY(flag, ctx.read_int8());
     if (flag == NULL_FLAG) {
       return std::unique_ptr<T>(nullptr);
     }
-    FORY_TRY(value, Serializer<T>::read(ctx, inner_requires_ref && read_ref,
-                                        read_type));
-    return std::make_unique<T>(std::move(value));
+    if (flag != NOT_NULL_VALUE_FLAG) {
+      return Unexpected(
+          Error::invalid_ref("Unexpected reference flag for unique_ptr: " +
+                             std::to_string(static_cast<int>(flag))));
+    }
+
+    // For polymorphic types, read type info AFTER handling ref flags
+    if constexpr (is_polymorphic) {
+      if (!read_type) {
+        return Unexpected(Error::type_error(
+            "Cannot deserialize polymorphic std::unique_ptr<T> "
+            "without type info (read_type=false)"));
+      }
+      // Read type info from stream to get the concrete type
+      FORY_TRY(type_info, ctx.read_any_typeinfo());
+
+      // Use the harness to deserialize the concrete type
+      if (!type_info->harness.read_data_fn) {
+        return Unexpected(Error::type_error(
+            "No harness read function for polymorphic type deserialization"));
+      }
+      FORY_TRY(raw_ptr, type_info->harness.read_data_fn(ctx));
+      T *obj_ptr = static_cast<T *>(raw_ptr);
+      return std::unique_ptr<T>(obj_ptr);
+    } else {
+      // Non-polymorphic path
+      FORY_TRY(value, Serializer<T>::read(ctx, inner_requires_ref, read_type));
+      return std::make_unique<T>(std::move(value));
+    }
+  }
+
+  static Result<std::unique_ptr<T>, Error>
+  read_with_type_info(ReadContext &ctx, bool read_ref,
+                      const TypeInfo &type_info) {
+    constexpr bool inner_requires_ref = requires_ref_metadata_v<T>;
+    constexpr bool is_polymorphic = std::is_polymorphic_v<T>;
+
+    // Handle read_ref=false case (similar to Rust)
+    if (!read_ref) {
+      // For polymorphic types, use the harness to deserialize the concrete type
+      if constexpr (is_polymorphic) {
+        if (!type_info.harness.read_data_fn) {
+          return Unexpected(Error::type_error(
+              "No harness read function for polymorphic type deserialization"));
+        }
+        FORY_TRY(raw_ptr, type_info.harness.read_data_fn(ctx));
+        T *obj_ptr = static_cast<T *>(raw_ptr);
+        return std::unique_ptr<T>(obj_ptr);
+      } else {
+        // Non-polymorphic path
+        FORY_TRY(value, Serializer<T>::read_with_type_info(
+                            ctx, inner_requires_ref, type_info));
+        return std::make_unique<T>(std::move(value));
+      }
+    }
+
+    // Handle read_ref=true case
+    FORY_TRY(flag, ctx.read_int8());
+    if (flag == NULL_FLAG) {
+      return std::unique_ptr<T>(nullptr);
+    }
+    if (flag != NOT_NULL_VALUE_FLAG) {
+      return Unexpected(
+          Error::invalid_ref("Unexpected reference flag for unique_ptr: " +
+                             std::to_string(static_cast<int>(flag))));
+    }
+
+    // For polymorphic types, use the harness to deserialize the concrete type
+    if constexpr (is_polymorphic) {
+      if (!type_info.harness.read_data_fn) {
+        return Unexpected(Error::type_error(
+            "No harness read function for polymorphic type deserialization"));
+      }
+      FORY_TRY(raw_ptr, type_info.harness.read_data_fn(ctx));
+      T *obj_ptr = static_cast<T *>(raw_ptr);
+      return std::unique_ptr<T>(obj_ptr);
+    } else {
+      // Non-polymorphic path
+      FORY_TRY(value, Serializer<T>::read_with_type_info(
+                          ctx, inner_requires_ref, type_info));
+      return std::make_unique<T>(std::move(value));
+    }
   }
 
   static Result<std::unique_ptr<T>, Error> read_data(ReadContext &ctx) {

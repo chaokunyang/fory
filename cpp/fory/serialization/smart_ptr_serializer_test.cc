@@ -62,9 +62,8 @@ TEST(SmartPtrSerializerTest, OptionalIntRoundTrip) {
   auto bytes_result = fory.serialize(original);
   ASSERT_TRUE(bytes_result.ok()) << bytes_result.error().to_string();
 
-  auto deserialize_result =
-      fory.deserialize<OptionalIntHolder>(bytes_result->data(),
-                                          bytes_result->size());
+  auto deserialize_result = fory.deserialize<OptionalIntHolder>(
+      bytes_result->data(), bytes_result->size());
   ASSERT_TRUE(deserialize_result.ok())
       << deserialize_result.error().to_string();
 
@@ -81,9 +80,8 @@ TEST(SmartPtrSerializerTest, OptionalIntNullRoundTrip) {
   auto bytes_result = fory.serialize(original);
   ASSERT_TRUE(bytes_result.ok()) << bytes_result.error().to_string();
 
-  auto deserialize_result =
-      fory.deserialize<OptionalIntHolder>(bytes_result->data(),
-                                          bytes_result->size());
+  auto deserialize_result = fory.deserialize<OptionalIntHolder>(
+      bytes_result->data(), bytes_result->size());
   ASSERT_TRUE(deserialize_result.ok())
       << deserialize_result.error().to_string();
 
@@ -99,9 +97,8 @@ TEST(SmartPtrSerializerTest, OptionalSharedPtrRoundTrip) {
   auto bytes_result = fory.serialize(original);
   ASSERT_TRUE(bytes_result.ok()) << bytes_result.error().to_string();
 
-  auto deserialize_result =
-      fory.deserialize<OptionalSharedHolder>(bytes_result->data(),
-                                             bytes_result->size());
+  auto deserialize_result = fory.deserialize<OptionalSharedHolder>(
+      bytes_result->data(), bytes_result->size());
   ASSERT_TRUE(deserialize_result.ok())
       << deserialize_result.error().to_string();
 
@@ -141,8 +138,8 @@ TEST(SmartPtrSerializerTest, UniquePtrRoundTrip) {
   auto bytes_result = fory.serialize(original);
   ASSERT_TRUE(bytes_result.ok()) << bytes_result.error().to_string();
 
-  auto deserialize_result =
-      fory.deserialize<UniqueHolder>(bytes_result->data(), bytes_result->size());
+  auto deserialize_result = fory.deserialize<UniqueHolder>(
+      bytes_result->data(), bytes_result->size());
   ASSERT_TRUE(deserialize_result.ok())
       << deserialize_result.error().to_string();
 
@@ -159,13 +156,162 @@ TEST(SmartPtrSerializerTest, UniquePtrNullRoundTrip) {
   auto bytes_result = fory.serialize(original);
   ASSERT_TRUE(bytes_result.ok()) << bytes_result.error().to_string();
 
-  auto deserialize_result =
-      fory.deserialize<UniqueHolder>(bytes_result->data(), bytes_result->size());
+  auto deserialize_result = fory.deserialize<UniqueHolder>(
+      bytes_result->data(), bytes_result->size());
   ASSERT_TRUE(deserialize_result.ok())
       << deserialize_result.error().to_string();
 
   auto deserialized = std::move(deserialize_result).value();
   EXPECT_EQ(deserialized.value, nullptr);
+}
+
+// ============================================================================
+// Polymorphic type tests
+// ============================================================================
+
+struct Base {
+  virtual ~Base() = default;
+  virtual std::string get_type() const = 0;
+  int32_t base_value = 0;
+};
+FORY_STRUCT(Base, base_value);
+
+struct Derived1 : Base {
+  std::string get_type() const override { return "Derived1"; }
+  std::string derived1_data;
+};
+FORY_STRUCT(Derived1, base_value, derived1_data);
+
+struct Derived2 : Base {
+  std::string get_type() const override { return "Derived2"; }
+  int32_t derived2_data = 0;
+};
+FORY_STRUCT(Derived2, base_value, derived2_data);
+
+struct PolymorphicSharedHolder {
+  std::shared_ptr<Base> ptr;
+};
+FORY_STRUCT(PolymorphicSharedHolder, ptr);
+
+struct PolymorphicUniqueHolder {
+  std::unique_ptr<Base> ptr;
+};
+FORY_STRUCT(PolymorphicUniqueHolder, ptr);
+
+TEST(SmartPtrSerializerTest, PolymorphicSharedPtrDerived1) {
+  auto fory = create_serializer(true);
+  auto register_result =
+      fory.type_resolver().template register_by_name<Derived1>("test",
+                                                               "Derived1");
+  ASSERT_TRUE(register_result.ok())
+      << "Failed to register Derived1: " << register_result.error().to_string();
+
+  PolymorphicSharedHolder original;
+  original.ptr = std::make_shared<Derived1>();
+  original.ptr->base_value = 42;
+  static_cast<Derived1 *>(original.ptr.get())->derived1_data = "hello";
+
+  auto bytes_result = fory.serialize(original);
+  ASSERT_TRUE(bytes_result.ok()) << bytes_result.error().to_string();
+
+  auto deserialize_result = fory.deserialize<PolymorphicSharedHolder>(
+      bytes_result->data(), bytes_result->size());
+  ASSERT_TRUE(deserialize_result.ok())
+      << deserialize_result.error().to_string();
+
+  auto deserialized = std::move(deserialize_result).value();
+  ASSERT_TRUE(deserialized.ptr);
+  EXPECT_EQ(deserialized.ptr->get_type(), "Derived1");
+  EXPECT_EQ(deserialized.ptr->base_value, 42);
+  EXPECT_EQ(static_cast<Derived1 *>(deserialized.ptr.get())->derived1_data,
+            "hello");
+}
+
+TEST(SmartPtrSerializerTest, PolymorphicSharedPtrDerived2) {
+  auto fory = create_serializer(true);
+  auto register_result =
+      fory.type_resolver().template register_by_name<Derived2>("test",
+                                                               "Derived2");
+  ASSERT_TRUE(register_result.ok())
+      << "Failed to register Derived2: " << register_result.error().to_string();
+
+  PolymorphicSharedHolder original;
+  original.ptr = std::make_shared<Derived2>();
+  original.ptr->base_value = 99;
+  static_cast<Derived2 *>(original.ptr.get())->derived2_data = 1234;
+
+  auto bytes_result = fory.serialize(original);
+  ASSERT_TRUE(bytes_result.ok()) << bytes_result.error().to_string();
+
+  auto deserialize_result = fory.deserialize<PolymorphicSharedHolder>(
+      bytes_result->data(), bytes_result->size());
+  ASSERT_TRUE(deserialize_result.ok())
+      << deserialize_result.error().to_string();
+
+  auto deserialized = std::move(deserialize_result).value();
+  ASSERT_TRUE(deserialized.ptr);
+  EXPECT_EQ(deserialized.ptr->get_type(), "Derived2");
+  EXPECT_EQ(deserialized.ptr->base_value, 99);
+  EXPECT_EQ(static_cast<Derived2 *>(deserialized.ptr.get())->derived2_data,
+            1234);
+}
+
+TEST(SmartPtrSerializerTest, PolymorphicUniquePtrDerived1) {
+  auto fory = create_serializer(true);
+  auto register_result =
+      fory.type_resolver().template register_by_name<Derived1>("test",
+                                                               "Derived1");
+  ASSERT_TRUE(register_result.ok())
+      << "Failed to register Derived1: " << register_result.error().to_string();
+
+  PolymorphicUniqueHolder original;
+  original.ptr = std::make_unique<Derived1>();
+  original.ptr->base_value = 42;
+  static_cast<Derived1 *>(original.ptr.get())->derived1_data = "world";
+
+  auto bytes_result = fory.serialize(original);
+  ASSERT_TRUE(bytes_result.ok()) << bytes_result.error().to_string();
+
+  auto deserialize_result = fory.deserialize<PolymorphicUniqueHolder>(
+      bytes_result->data(), bytes_result->size());
+  ASSERT_TRUE(deserialize_result.ok())
+      << deserialize_result.error().to_string();
+
+  auto deserialized = std::move(deserialize_result).value();
+  ASSERT_TRUE(deserialized.ptr);
+  EXPECT_EQ(deserialized.ptr->get_type(), "Derived1");
+  EXPECT_EQ(deserialized.ptr->base_value, 42);
+  EXPECT_EQ(static_cast<Derived1 *>(deserialized.ptr.get())->derived1_data,
+            "world");
+}
+
+TEST(SmartPtrSerializerTest, PolymorphicUniquePtrDerived2) {
+  auto fory = create_serializer(true);
+  auto register_result =
+      fory.type_resolver().template register_by_name<Derived2>("test",
+                                                               "Derived2");
+  ASSERT_TRUE(register_result.ok())
+      << "Failed to register Derived2: " << register_result.error().to_string();
+
+  PolymorphicUniqueHolder original;
+  original.ptr = std::make_unique<Derived2>();
+  original.ptr->base_value = 77;
+  static_cast<Derived2 *>(original.ptr.get())->derived2_data = 5678;
+
+  auto bytes_result = fory.serialize(original);
+  ASSERT_TRUE(bytes_result.ok()) << bytes_result.error().to_string();
+
+  auto deserialize_result = fory.deserialize<PolymorphicUniqueHolder>(
+      bytes_result->data(), bytes_result->size());
+  ASSERT_TRUE(deserialize_result.ok())
+      << deserialize_result.error().to_string();
+
+  auto deserialized = std::move(deserialize_result).value();
+  ASSERT_TRUE(deserialized.ptr);
+  EXPECT_EQ(deserialized.ptr->get_type(), "Derived2");
+  EXPECT_EQ(deserialized.ptr->base_value, 77);
+  EXPECT_EQ(static_cast<Derived2 *>(deserialized.ptr.get())->derived2_data,
+            5678);
 }
 
 } // namespace

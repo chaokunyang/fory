@@ -304,7 +304,8 @@ TypeMeta::from_bytes(Buffer &buffer, const TypeMeta *local_type_info) {
     // Read namespace
     FORY_TRY(ns_len, buffer.ReadVarUint32());
     namespace_str.resize(ns_len);
-    FORY_RETURN_NOT_OK(buffer.ReadBytes(namespace_str.data(), namespace_str.size()));
+    FORY_RETURN_NOT_OK(
+        buffer.ReadBytes(namespace_str.data(), namespace_str.size()));
 
     // Read type name
     FORY_TRY(tn_len, buffer.ReadVarUint32());

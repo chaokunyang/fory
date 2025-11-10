@@ -465,7 +465,7 @@ public:
   } while (0)
 
 /// Declare and assign value from Result<T, E> or return error
-/// 
+///
 /// ⚠️  IMPORTANT: This macro expands to multiple statements.
 /// Always use braces with control flow statements!
 ///

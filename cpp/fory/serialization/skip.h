@@ -29,15 +29,16 @@ namespace fory {
 namespace serialization {
 
 /// Skip a field value in the buffer based on type information
-/// This is used during schema evolution to skip fields that don't exist in the local type
+/// This is used during schema evolution to skip fields that don't exist in the
+/// local type
 ///
 /// @param ctx Read context
 /// @param field_type Field type information
 /// @param read_ref_flag Whether to read reference flag
 /// @return Result indicating success or error
 Result<void, Error> skip_field_value(ReadContext &ctx,
-                                       const FieldType &field_type,
-                                       bool read_ref_flag);
+                                     const FieldType &field_type,
+                                     bool read_ref_flag);
 
 /// Skip a varint value
 Result<void, Error> skip_varint(ReadContext &ctx);

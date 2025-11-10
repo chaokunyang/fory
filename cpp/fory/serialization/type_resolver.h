@@ -620,7 +620,8 @@ TypeResolver::register_by_name(const std::string &ns,
       compatible_ ? static_cast<uint32_t>(TypeId::NAMED_COMPATIBLE_STRUCT)
                   : static_cast<uint32_t>(TypeId::NAMED_STRUCT);
 
-  FORY_TRY(info, build_struct_type_info<T>(actual_type_id, ns, type_name, true));
+  FORY_TRY(info,
+           build_struct_type_info<T>(actual_type_id, ns, type_name, true));
   if (!info->harness.valid()) {
     return Unexpected(
         Error::invalid("Harness for registered type is incomplete"));

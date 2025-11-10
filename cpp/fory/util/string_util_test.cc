@@ -131,8 +131,7 @@ TEST(StringUtilTest, ToSnakeCaseHandlesDelimitersAndDigits) {
   constexpr std::string_view digit_name{"Field1Value"};
   constexpr size_t digit_len = snake_case_length(digit_name);
   constexpr auto digit_pair = to_snake_case<digit_len>(digit_name);
-  const std::string_view digit_view(digit_pair.first.data(),
-                                    digit_pair.second);
+  const std::string_view digit_view(digit_pair.first.data(), digit_pair.second);
   constexpr std::string_view digit_expected{"field1_value"};
   EXPECT_EQ(digit_view, digit_expected);
   EXPECT_EQ(digit_pair.second, digit_expected.size());
@@ -140,8 +139,7 @@ TEST(StringUtilTest, ToSnakeCaseHandlesDelimitersAndDigits) {
   constexpr std::string_view snake_name{"already_snake"};
   constexpr size_t snake_len = snake_case_length(snake_name);
   constexpr auto snake_pair = to_snake_case<snake_len>(snake_name);
-  const std::string_view snake_view(snake_pair.first.data(),
-                                    snake_pair.second);
+  const std::string_view snake_view(snake_pair.first.data(), snake_pair.second);
   constexpr std::string_view snake_expected{"already_snake"};
   EXPECT_EQ(snake_view, snake_expected);
   EXPECT_EQ(snake_pair.second, snake_expected.size());

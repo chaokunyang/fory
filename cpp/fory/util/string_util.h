@@ -100,17 +100,11 @@ static inline bool hasSurrogatePairFallback(const uint16_t *data, size_t size) {
 
 namespace detail {
 
-constexpr bool is_upper_ascii(char c) {
-  return c >= 'A' && c <= 'Z';
-}
+constexpr bool is_upper_ascii(char c) { return c >= 'A' && c <= 'Z'; }
 
-constexpr bool is_lower_ascii(char c) {
-  return c >= 'a' && c <= 'z';
-}
+constexpr bool is_lower_ascii(char c) { return c >= 'a' && c <= 'z'; }
 
-constexpr bool is_digit_ascii(char c) {
-  return c >= '0' && c <= '9';
-}
+constexpr bool is_digit_ascii(char c) { return c >= '0' && c <= '9'; }
 
 constexpr char to_lower_ascii(char c) {
   return is_upper_ascii(c) ? static_cast<char>(c - 'A' + 'a') : c;

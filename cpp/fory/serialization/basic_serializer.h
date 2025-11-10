@@ -89,13 +89,15 @@ template <> struct Serializer<bool> {
   }
 
   /// Read boolean with generic optimization (unused for primitives)
-  static inline Result<bool, Error> read_data_generic(ReadContext &ctx, bool has_generics) {
+  static inline Result<bool, Error> read_data_generic(ReadContext &ctx,
+                                                      bool has_generics) {
     return read_data(ctx);
   }
 
   /// Read boolean with type info (type info already validated)
-  static inline Result<bool, Error> read_with_type_info(ReadContext &ctx, bool read_ref,
-                                                         const TypeInfo &type_info) {
+  static inline Result<bool, Error>
+  read_with_type_info(ReadContext &ctx, bool read_ref,
+                      const TypeInfo &type_info) {
     // Type info already validated, skip redundant type read
     return read(ctx, read_ref, false); // read_type=false
   }
@@ -146,12 +148,14 @@ template <> struct Serializer<int8_t> {
     return ctx.read_int8();
   }
 
-  static inline Result<int8_t, Error> read_data_generic(ReadContext &ctx, bool has_generics) {
+  static inline Result<int8_t, Error> read_data_generic(ReadContext &ctx,
+                                                        bool has_generics) {
     return read_data(ctx);
   }
 
-  static inline Result<int8_t, Error> read_with_type_info(ReadContext &ctx, bool read_ref,
-                                                           const TypeInfo &type_info) {
+  static inline Result<int8_t, Error>
+  read_with_type_info(ReadContext &ctx, bool read_ref,
+                      const TypeInfo &type_info) {
     return read(ctx, read_ref, false);
   }
 };
@@ -205,12 +209,14 @@ template <> struct Serializer<int16_t> {
     return value;
   }
 
-  static inline Result<int16_t, Error> read_data_generic(ReadContext &ctx, bool has_generics) {
+  static inline Result<int16_t, Error> read_data_generic(ReadContext &ctx,
+                                                         bool has_generics) {
     return read_data(ctx);
   }
 
-  static inline Result<int16_t, Error> read_with_type_info(ReadContext &ctx, bool read_ref,
-                                                            const TypeInfo &type_info) {
+  static inline Result<int16_t, Error>
+  read_with_type_info(ReadContext &ctx, bool read_ref,
+                      const TypeInfo &type_info) {
     return read(ctx, read_ref, false);
   }
 };
@@ -264,12 +270,14 @@ template <> struct Serializer<int32_t> {
     return value;
   }
 
-  static inline Result<int32_t, Error> read_data_generic(ReadContext &ctx, bool has_generics) {
+  static inline Result<int32_t, Error> read_data_generic(ReadContext &ctx,
+                                                         bool has_generics) {
     return read_data(ctx);
   }
 
-  static inline Result<int32_t, Error> read_with_type_info(ReadContext &ctx, bool read_ref,
-                                                            const TypeInfo &type_info) {
+  static inline Result<int32_t, Error>
+  read_with_type_info(ReadContext &ctx, bool read_ref,
+                      const TypeInfo &type_info) {
     return read(ctx, read_ref, false);
   }
 };
@@ -323,12 +331,14 @@ template <> struct Serializer<int64_t> {
     return value;
   }
 
-  static inline Result<int64_t, Error> read_data_generic(ReadContext &ctx, bool has_generics) {
+  static inline Result<int64_t, Error> read_data_generic(ReadContext &ctx,
+                                                         bool has_generics) {
     return read_data(ctx);
   }
 
-  static inline Result<int64_t, Error> read_with_type_info(ReadContext &ctx, bool read_ref,
-                                                            const TypeInfo &type_info) {
+  static inline Result<int64_t, Error>
+  read_with_type_info(ReadContext &ctx, bool read_ref,
+                      const TypeInfo &type_info) {
     return read(ctx, read_ref, false);
   }
 };
@@ -381,12 +391,14 @@ template <> struct Serializer<float> {
     return value;
   }
 
-  static inline Result<float, Error> read_data_generic(ReadContext &ctx, bool has_generics) {
+  static inline Result<float, Error> read_data_generic(ReadContext &ctx,
+                                                       bool has_generics) {
     return read_data(ctx);
   }
 
-  static inline Result<float, Error> read_with_type_info(ReadContext &ctx, bool read_ref,
-                                                          const TypeInfo &type_info) {
+  static inline Result<float, Error>
+  read_with_type_info(ReadContext &ctx, bool read_ref,
+                      const TypeInfo &type_info) {
     return read(ctx, read_ref, false);
   }
 };
@@ -440,12 +452,14 @@ template <> struct Serializer<double> {
     return value;
   }
 
-  static inline Result<double, Error> read_data_generic(ReadContext &ctx, bool has_generics) {
+  static inline Result<double, Error> read_data_generic(ReadContext &ctx,
+                                                        bool has_generics) {
     return read_data(ctx);
   }
 
-  static inline Result<double, Error> read_with_type_info(ReadContext &ctx, bool read_ref,
-                                                           const TypeInfo &type_info) {
+  static inline Result<double, Error>
+  read_with_type_info(ReadContext &ctx, bool read_ref,
+                      const TypeInfo &type_info) {
     return read(ctx, read_ref, false);
   }
 };
@@ -499,12 +513,14 @@ template <> struct Serializer<uint8_t> {
     return ctx.read_uint8();
   }
 
-  static inline Result<uint8_t, Error> read_data_generic(ReadContext &ctx, bool has_generics) {
+  static inline Result<uint8_t, Error> read_data_generic(ReadContext &ctx,
+                                                         bool has_generics) {
     return read_data(ctx);
   }
 
-  static inline Result<uint8_t, Error> read_with_type_info(ReadContext &ctx, bool read_ref,
-                                                            const TypeInfo &type_info) {
+  static inline Result<uint8_t, Error>
+  read_with_type_info(ReadContext &ctx, bool read_ref,
+                      const TypeInfo &type_info) {
     return read(ctx, read_ref, false);
   }
 };
@@ -558,12 +574,14 @@ template <> struct Serializer<uint16_t> {
     return value;
   }
 
-  static inline Result<uint16_t, Error> read_data_generic(ReadContext &ctx, bool has_generics) {
+  static inline Result<uint16_t, Error> read_data_generic(ReadContext &ctx,
+                                                          bool has_generics) {
     return read_data(ctx);
   }
 
-  static inline Result<uint16_t, Error> read_with_type_info(ReadContext &ctx, bool read_ref,
-                                                             const TypeInfo &type_info) {
+  static inline Result<uint16_t, Error>
+  read_with_type_info(ReadContext &ctx, bool read_ref,
+                      const TypeInfo &type_info) {
     return read(ctx, read_ref, false);
   }
 };
@@ -617,12 +635,14 @@ template <> struct Serializer<uint32_t> {
     return value;
   }
 
-  static inline Result<uint32_t, Error> read_data_generic(ReadContext &ctx, bool has_generics) {
+  static inline Result<uint32_t, Error> read_data_generic(ReadContext &ctx,
+                                                          bool has_generics) {
     return read_data(ctx);
   }
 
-  static inline Result<uint32_t, Error> read_with_type_info(ReadContext &ctx, bool read_ref,
-                                                             const TypeInfo &type_info) {
+  static inline Result<uint32_t, Error>
+  read_with_type_info(ReadContext &ctx, bool read_ref,
+                      const TypeInfo &type_info) {
     return read(ctx, read_ref, false);
   }
 };
@@ -676,12 +696,14 @@ template <> struct Serializer<uint64_t> {
     return value;
   }
 
-  static inline Result<uint64_t, Error> read_data_generic(ReadContext &ctx, bool has_generics) {
+  static inline Result<uint64_t, Error> read_data_generic(ReadContext &ctx,
+                                                          bool has_generics) {
     return read_data(ctx);
   }
 
-  static inline Result<uint64_t, Error> read_with_type_info(ReadContext &ctx, bool read_ref,
-                                                             const TypeInfo &type_info) {
+  static inline Result<uint64_t, Error>
+  read_with_type_info(ReadContext &ctx, bool read_ref,
+                      const TypeInfo &type_info) {
     return read(ctx, read_ref, false);
   }
 };
@@ -788,12 +810,14 @@ template <> struct Serializer<std::string> {
     return result;
   }
 
-  static inline Result<std::string, Error> read_data_generic(ReadContext &ctx, bool has_generics) {
+  static inline Result<std::string, Error>
+  read_data_generic(ReadContext &ctx, bool has_generics) {
     return read_data(ctx);
   }
 
-  static inline Result<std::string, Error> read_with_type_info(ReadContext &ctx, bool read_ref,
-                                                                const TypeInfo &type_info) {
+  static inline Result<std::string, Error>
+  read_with_type_info(ReadContext &ctx, bool read_ref,
+                      const TypeInfo &type_info) {
     return read(ctx, read_ref, false);
   }
 };

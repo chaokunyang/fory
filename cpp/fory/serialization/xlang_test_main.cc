@@ -175,12 +175,11 @@ int main(int argc, char **argv) {
     if (!test_serialize_write<int64_t>(9876543210LL, dir + "/int64.bin")) {
       return 1;
     }
-    if (!test_serialize_write<double>(3.141592653589793,
-                                       dir + "/double.bin")) {
+    if (!test_serialize_write<double>(3.141592653589793, dir + "/double.bin")) {
       return 1;
     }
     if (!test_serialize_write<std::string>("Hello, Cross-Language!",
-                                            dir + "/string.bin")) {
+                                           dir + "/string.bin")) {
       return 1;
     }
 
@@ -195,8 +194,7 @@ int main(int argc, char **argv) {
       return 1;
     }
 
-    std::map<std::string, int32_t> map{
-        {"one", 1}, {"two", 2}, {"three", 3}};
+    std::map<std::string, int32_t> map{{"one", 1}, {"two", 2}, {"three", 3}};
     if (!test_serialize_write(map, dir + "/map_string_int32.bin")) {
       return 1;
     }

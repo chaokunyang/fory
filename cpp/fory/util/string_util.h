@@ -20,6 +20,7 @@
 #pragma once
 
 #include "platform.h"
+#include <array>
 #include <cstdint>
 #include <string>
 #include <string_view>

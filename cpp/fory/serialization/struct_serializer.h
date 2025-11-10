@@ -510,18 +510,12 @@ read_struct_fields_compatible(T &obj, ReadContext &ctx,
   for (size_t remote_idx = 0; remote_idx < remote_fields.size(); ++remote_idx) {
     const auto &remote_field = remote_fields[remote_idx];
     int16_t field_id = remote_field.field_id;
-
-    FORY_LOG(FORY_INFO) << "read_struct_fields_compatible: remote_idx="
-                        << remote_idx << " remote_field.name='"
-                        << remote_field.field_name << "' field_id=" << field_id;
-
     // Compute read_ref_flag based on remote field type
     bool read_ref_flag =
         field_requires_ref_flag(remote_field.field_type.type_id);
 
     if (field_id == -1) {
       // Field unknown locally — skip its value
-      FORY_LOG(FORY_INFO) << "  -> Skipping field (field_id=-1)";
       FORY_RETURN_NOT_OK(
           skip_field_value(ctx, remote_field.field_type, read_ref_flag));
       continue;
@@ -537,15 +531,12 @@ read_struct_fields_compatible(T &obj, ReadContext &ctx,
           if (!handled && static_cast<int16_t>(index) == field_id) {
             handled = true;
             constexpr size_t original_index = Helpers::sorted_indices[index];
-            FORY_LOG(FORY_INFO) << "  -> Matched: sorted_index=" << index
-                                << " original_index=" << original_index;
             result = read_single_field_by_index<original_index>(obj, ctx);
           }
         });
 
     if (!handled) {
       // Shouldn't happen if TypeMeta::assign_field_ids worked correctly
-      FORY_LOG(FORY_INFO) << "  -> NOT HANDLED, skipping";
       FORY_RETURN_NOT_OK(
           skip_field_value(ctx, remote_field.field_type, read_ref_flag));
       continue;

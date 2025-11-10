@@ -518,13 +518,13 @@ inline Result<MapType, Error> read_map_data_fast(ReadContext &ctx,
     }
     if (header & KEY_NULL) {
       // Null key - read value and skip
-      FORY_TRY(value, Serializer<V>::read(ctx, false, false));
+      FORY_RETURN_NOT_OK(Serializer<V>::read(ctx, false, false));
       len_counter++;
       continue;
     }
     if (header & VALUE_NULL) {
       // Null value - read key and skip
-      FORY_TRY(key, Serializer<K>::read(ctx, false, false));
+      FORY_RETURN_NOT_OK(Serializer<K>::read(ctx, false, false));
       len_counter++;
       continue;
     }

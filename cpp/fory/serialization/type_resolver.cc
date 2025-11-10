@@ -242,18 +242,10 @@ Result<std::vector<uint8_t>, Error> TypeMeta::to_bytes() const {
 
   result_buffer.WriteBytes(reinterpret_cast<const uint8_t *>(&header),
                            sizeof(header));
-
   if (meta_size >= META_SIZE_MASK) {
     result_buffer.WriteVarUint32(meta_size - META_SIZE_MASK);
   }
-
   result_buffer.WriteBytes(layer_data.data(), layer_data.size());
-
-  FORY_LOG(FORY_INFO) << "TypeMeta::to_bytes type='" << type_name << "' ns='"
-                      << namespace_str << "' fields=" << num_fields
-                      << " layer_size=" << layer_size
-                      << " result_size=" << result_buffer.writer_index();
-
   // Use actual bytes written to construct return vector
   return std::vector<uint8_t>(result_buffer.data(),
                               result_buffer.data() +
@@ -275,16 +267,7 @@ TypeMeta::from_bytes(Buffer &buffer, const TypeMeta *local_type_info) {
     meta_size += extra;
     header_size += 4; // approximate varuint32 size
   }
-
   int64_t meta_hash = header >> (64 - NUM_HASH_BITS);
-
-  FORY_LOG(FORY_INFO) << "TypeMeta::from_bytes: start=" << start_pos
-                      << " header_size=" << header_size
-                      << " meta_size=" << meta_size
-                      << " buffer_size=" << buffer.size()
-                      << " reader_index(after header)="
-                      << buffer.reader_index();
-
   // Read meta header
   FORY_TRY(meta_header, buffer.ReadUint8());
 
@@ -535,26 +518,18 @@ TypeMeta::sort_field_infos(std::vector<FieldInfo> fields) {
 
 void TypeMeta::assign_field_ids(const TypeMeta *local_type,
                                 std::vector<FieldInfo> &remote_fields) {
-  FORY_LOG(FORY_INFO) << "assign_field_ids: local_type has "
-                      << local_type->field_infos.size() << " fields";
-
   // Build a map: field_name -> sorted_index in local schema
   std::unordered_map<std::string, size_t> local_field_index_map;
   for (size_t i = 0; i < local_type->field_infos.size(); ++i) {
     local_field_index_map[local_type->field_infos[i].field_name] = i;
-    FORY_LOG(FORY_INFO) << "  local field[" << i << "]: name='"
-                        << local_type->field_infos[i].field_name << "'";
   }
 
   // For each remote field, assign field ID (sorted index in local schema)
   for (auto &remote_field : remote_fields) {
-    FORY_LOG(FORY_INFO) << "  remote field: name='" << remote_field.field_name
-                        << "'";
     auto it = local_field_index_map.find(remote_field.field_name);
     if (it == local_field_index_map.end()) {
       // Field not found in local type -> assign -1 (skip)
       remote_field.field_id = -1;
-      FORY_LOG(FORY_INFO) << "    -> NOT FOUND, field_id=-1";
     } else {
       size_t local_sorted_index = it->second;
       const FieldInfo &local_field =
@@ -564,12 +539,9 @@ void TypeMeta::assign_field_ids(const TypeMeta *local_type,
       if (remote_field.field_type != local_field.field_type) {
         // Type mismatch -> assign -1 (skip)
         remote_field.field_id = -1;
-        FORY_LOG(FORY_INFO) << "    -> TYPE MISMATCH, field_id=-1";
       } else {
         // Match! -> assign sorted index in local schema
         remote_field.field_id = static_cast<int16_t>(local_sorted_index);
-        FORY_LOG(FORY_INFO)
-            << "    -> MATCHED, field_id=" << remote_field.field_id;
       }
     }
   }

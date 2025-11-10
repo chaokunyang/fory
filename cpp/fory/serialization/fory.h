@@ -160,7 +160,7 @@ public:
     } guard{ctx};
 
     // Serialize to the context's buffer
-    FORY_TRY(bytes_written, serialize_to_impl(obj, ctx, ctx.buffer()));
+    FORY_RETURN_NOT_OK(serialize_to_impl(obj, ctx, ctx.buffer()));
 
     // Copy buffer data to vector
     std::vector<uint8_t> result(ctx.buffer().writer_index());
@@ -409,18 +409,15 @@ private:
   util::Pool<WriteContext> write_ctx_pool_;
   util::Pool<ReadContext> read_ctx_pool_;
 
-  /// Get or build finalized resolver (lazy, thread-safe, one-time initialization).
-  /// This mirrors Rust's OnceLock pattern.
+  /// Get or build finalized resolver (lazy, thread-safe, one-time
+  /// initialization). This mirrors Rust's OnceLock pattern.
   std::shared_ptr<TypeResolver> get_finalized_resolver() const {
     std::call_once(finalized_once_flag_, [this]() {
       auto final_result = type_resolver_->build_final_type_resolver();
-      if (!final_result.ok()) {
-        FORY_LOG(FORY_ERROR) << "Failed to build final type resolver: "
-                             << final_result.error().message();
-        finalized_resolver_ = type_resolver_;
-      } else {
-        finalized_resolver_ = std::move(final_result).value();
-      }
+      FORY_CHECK(final_result.ok())
+          << "Failed to build finalized TypeResolver: "
+          << final_result.error().to_string();
+      finalized_resolver_ = std::move(final_result).value();
     });
     return finalized_resolver_->clone();
   }

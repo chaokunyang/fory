@@ -346,7 +346,7 @@ TEST(StructComprehensiveTest, ManyFieldsStruct) {
   test_roundtrip(ManyFieldsStruct{true, 127, 32767, 2147483647,
                                   9223372036854775807LL, 3.14f, 2.718,
                                   "Hello, World!"});
-  test_roundtrip(ManyFieldsStruct{false, -128, -32768, -2147483648,
+  test_roundtrip(ManyFieldsStruct{false, -128, -32768, INT32_MIN,
                                   -9223372036854775807LL - 1, -1.0f, -1.0, ""});
 }
 

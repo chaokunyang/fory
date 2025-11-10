@@ -17,7 +17,7 @@
  * under the License.
  */
 
-#include "skip.h"
+#include "fory/serialization/skip.h"
 #include "fory/serialization/ref_resolver.h"
 #include "fory/serialization/serializer.h"
 #include "fory/util/result.h"

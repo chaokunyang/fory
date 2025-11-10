@@ -206,7 +206,7 @@ TEST_F(ResultTest, AssignOrReturnMacro) {
   auto test_fn = []() -> Result<int, Error> {
     int value;
     FORY_ASSIGN_OR_RETURN(value, compute_ok());
-    ASSERT_EQ(value, 42);
+    EXPECT_EQ(value, 42);
     return value + 1;
   };
 

@@ -17,8 +17,8 @@
  * under the License.
  */
 
-#include "type_resolver.h"
-#include "context.h"
+#include "fory/serialization/type_resolver.h"
+#include "fory/serialization/context.h"
 #include "fory/type/type.h"
 #include <algorithm>
 #include <cstring>

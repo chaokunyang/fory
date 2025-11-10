@@ -24,11 +24,10 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
-#include <mutex>
-#include <numeric>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <tuple>
 #include <type_traits>
 #include <typeindex>
@@ -422,9 +421,32 @@ public:
   Result<const TypeInfo *, Error>
   get_type_info(const std::type_index &type_index) const;
 
-private:
-  template <typename T> std::shared_ptr<TypeInfo> ensure_type_info();
+  /// Builds the final TypeResolver by completing all partial type infos
+  /// created during registration.
+  ///
+  /// This method processes all types that were registered. During registration,
+  /// types are stored in `partial_type_infos` without their complete
+  /// type metadata to avoid circular dependencies. This method:
+  ///
+  /// 1. Iterates through all partial type infos
+  /// 2. Calls their `sorted_field_infos` function to get complete field
+  /// information
+  /// 3. Builds complete TypeMeta and serializes it to bytes
+  /// 4. Returns a new TypeResolver with all type infos fully initialized
+  ///
+  /// @return A new TypeResolver with all type infos fully initialized and ready
+  /// for use.
+  Result<std::shared_ptr<TypeResolver>, Error> build_final_type_resolver();
 
+  /// Clones the TypeResolver for use in a new context.
+  ///
+  /// This method creates a shallow clone of the TypeResolver. The clone shares
+  /// the same TypeInfo objects as the original but is a separate instance.
+  ///
+  /// @return A new TypeResolver instance
+  std::shared_ptr<TypeResolver> clone() const;
+
+private:
   template <typename T>
   static Result<std::shared_ptr<TypeInfo>, Error>
   build_struct_type_info(uint32_t type_id, std::string ns,
@@ -472,18 +494,22 @@ private:
   Result<void, Error> register_type_internal(const std::type_index &type_index,
                                              std::shared_ptr<TypeInfo> info);
 
+  void check_registration_thread();
+
   bool compatible_;
   bool xlang_;
   bool check_struct_version_;
   bool track_ref_;
 
-  mutable std::mutex struct_mutex_;
-  mutable std::unordered_map<std::type_index, std::shared_ptr<TypeInfo>>
+  std::thread::id registration_thread_id_;
+  bool finalized_;
+
+  std::unordered_map<std::type_index, std::shared_ptr<TypeInfo>>
       type_info_cache_;
-  mutable std::unordered_map<uint32_t, std::shared_ptr<TypeInfo>>
-      type_info_by_id_;
-  mutable std::unordered_map<std::string, std::shared_ptr<TypeInfo>>
-      type_info_by_name_;
+  std::unordered_map<uint32_t, std::shared_ptr<TypeInfo>> type_info_by_id_;
+  std::unordered_map<std::string, std::shared_ptr<TypeInfo>> type_info_by_name_;
+  std::unordered_map<std::type_index, std::shared_ptr<TypeInfo>>
+      partial_type_infos_;
 };
 
 // Alias for backward compatibility (already defined above as top-level)
@@ -495,7 +521,8 @@ private:
 
 inline TypeResolver::TypeResolver()
     : compatible_(false), xlang_(false), check_struct_version_(true),
-      track_ref_(true) {}
+      track_ref_(true), registration_thread_id_(std::this_thread::get_id()),
+      finalized_(false) {}
 
 inline void TypeResolver::apply_config(const Config &config) {
   compatible_ = config.compatible;
@@ -504,36 +531,109 @@ inline void TypeResolver::apply_config(const Config &config) {
   track_ref_ = config.track_ref;
 }
 
+inline void TypeResolver::check_registration_thread() {
+  FORY_CHECK(std::this_thread::get_id() == registration_thread_id_)
+      << "TypeResolver registration methods must be called from the same "
+         "thread that created the TypeResolver";
+  FORY_CHECK(!finalized_)
+      << "TypeResolver has been finalized, cannot register more types";
+}
+
 template <typename T> const TypeMeta &TypeResolver::struct_meta() {
-  auto info = ensure_type_info<T>();
-  FORY_CHECK(info && info->type_meta)
+  const std::type_index key(typeid(T));
+  auto it = type_info_cache_.find(key);
+  FORY_CHECK(it != type_info_cache_.end())
+      << "Type not registered: " << typeid(T).name();
+  FORY_CHECK(it->second && it->second->type_meta)
       << "Type metadata not initialized for requested struct";
-  return *info->type_meta;
+  return *it->second->type_meta;
 }
 
 template <typename T> TypeMeta TypeResolver::clone_struct_meta() {
-  auto info = ensure_type_info<T>();
-  FORY_CHECK(info && info->type_meta)
+  const std::type_index key(typeid(T));
+  auto it = type_info_cache_.find(key);
+  FORY_CHECK(it != type_info_cache_.end())
+      << "Type not registered: " << typeid(T).name();
+  FORY_CHECK(it->second && it->second->type_meta)
       << "Type metadata not initialized for requested struct";
-  return *info->type_meta;
+  return *it->second->type_meta;
 }
 
 template <typename T>
 const std::vector<size_t> &TypeResolver::sorted_indices() {
-  return ensure_type_info<T>()->sorted_indices;
+  const std::type_index key(typeid(T));
+  auto it = type_info_cache_.find(key);
+  FORY_CHECK(it != type_info_cache_.end())
+      << "Type not registered: " << typeid(T).name();
+  return it->second->sorted_indices;
 }
 
 template <typename T>
 const std::unordered_map<std::string, size_t> &
 TypeResolver::field_name_to_index() {
-  return ensure_type_info<T>()->name_to_index;
+  const std::type_index key(typeid(T));
+  auto it = type_info_cache_.find(key);
+  FORY_CHECK(it != type_info_cache_.end())
+      << "Type not registered: " << typeid(T).name();
+  return it->second->name_to_index;
 }
 
 template <typename T>
 std::shared_ptr<TypeInfo> TypeResolver::get_struct_type_info() {
   static_assert(is_fory_serializable_v<T>,
                 "get_struct_type_info requires FORY_STRUCT types");
-  return ensure_type_info<T>();
+  const std::type_index key(typeid(T));
+  auto it = type_info_cache_.find(key);
+  if (it != type_info_cache_.end()) {
+    return it->second;
+  }
+
+  // Auto-register the type if not found (for backward compatibility)
+  // This happens when types are used without explicit registration
+  uint32_t default_type_id =
+      compatible_ ? static_cast<uint32_t>(TypeId::COMPATIBLE_STRUCT)
+                  : static_cast<uint32_t>(TypeId::STRUCT);
+  auto info_result = build_struct_type_info<T>(default_type_id, "", "", true);
+  FORY_CHECK(info_result.ok())
+      << "Failed to auto-register type: " << info_result.error().message();
+  auto info = std::move(info_result).value();
+
+  // Build complete TypeMeta immediately for auto-registered types
+  auto fields_result = info->harness.sorted_field_infos_fn(*this);
+  FORY_CHECK(fields_result.ok())
+      << "Failed to get fields: " << fields_result.error().message();
+  auto sorted_fields = std::move(fields_result).value();
+
+  TypeMeta meta = TypeMeta::from_fields(info->type_id, info->namespace_name,
+                                        info->type_name, info->register_by_name,
+                                        std::move(sorted_fields));
+
+  auto type_def_result = meta.to_bytes();
+  FORY_CHECK(type_def_result.ok())
+      << "Failed to serialize TypeMeta: " << type_def_result.error().message();
+
+  info->type_def = std::move(type_def_result).value();
+
+  // Parse back to create shared_ptr<TypeMeta>
+  Buffer buffer(info->type_def.data(),
+                static_cast<uint32_t>(info->type_def.size()), false);
+  buffer.WriterIndex(static_cast<uint32_t>(info->type_def.size()));
+  auto parsed_meta_result = TypeMeta::from_bytes(buffer, nullptr);
+  FORY_CHECK(parsed_meta_result.ok())
+      << "Failed to parse TypeMeta: " << parsed_meta_result.error().message();
+  info->type_meta = std::move(parsed_meta_result).value();
+
+  // Register in all caches
+  type_info_cache_[key] = info;
+  if (info->type_id != 0) {
+    type_info_by_id_[info->type_id] = info;
+  }
+  if (info->register_by_name) {
+    auto name_key = make_name_key(info->namespace_name, info->type_name);
+    type_info_by_name_[name_key] = info;
+  }
+
+  return info;
 }
 
 inline uint32_t TypeResolver::struct_type_tag(const TypeInfo &info) const {
@@ -556,35 +656,8 @@ template <typename T> uint32_t TypeResolver::struct_type_tag() {
 }
 
 template <typename T>
-std::shared_ptr<TypeInfo> TypeResolver::ensure_type_info() {
-  const std::type_index key(typeid(T));
-  {
-    std::lock_guard<std::mutex> lock(struct_mutex_);
-    auto it = type_info_cache_.find(key);
-    if (it != type_info_cache_.end()) {
-      return it->second;
-    }
-  }
-
-  uint32_t default_type_id =
-      compatible_ ? static_cast<uint32_t>(TypeId::COMPATIBLE_STRUCT)
-                  : static_cast<uint32_t>(TypeId::STRUCT);
-  auto info_result = build_struct_type_info<T>(default_type_id, "", "", true);
-  if (!info_result.ok()) {
-    FORY_CHECK(info_result.ok()) << info_result.error().message();
-  }
-  auto entry = std::move(info_result).value();
-
-  std::lock_guard<std::mutex> lock(struct_mutex_);
-  auto [it, inserted] = type_info_cache_.emplace(key, entry);
-  if (!inserted) {
-    return it->second;
-  }
-  return entry;
-}
-
-template <typename T>
 Result<void, Error> TypeResolver::register_by_id(uint32_t type_id) {
+  check_registration_thread();
   static_assert(is_fory_serializable_v<T>,
                 "register_by_id requires a type declared with FORY_STRUCT");
   if (type_id == 0) {
@@ -603,6 +676,9 @@ Result<void, Error> TypeResolver::register_by_id(uint32_t type_id) {
     return Unexpected(
         Error::invalid("Harness for registered type is incomplete"));
   }
+
+  const std::type_index key(typeid(T));
+  partial_type_infos_[key] = info;
   return register_type_internal(std::type_index(typeid(T)), std::move(info));
 }
 
@@ -610,6 +686,7 @@ template <typename T>
 Result<void, Error>
 TypeResolver::register_by_name(const std::string &ns,
                                const std::string &type_name) {
+  check_registration_thread();
   static_assert(is_fory_serializable_v<T>,
                 "register_by_name requires a type declared with FORY_STRUCT");
   if (type_name.empty()) {
@@ -626,11 +703,15 @@ TypeResolver::register_by_name(const std::string &ns,
     return Unexpected(
         Error::invalid("Harness for registered type is incomplete"));
   }
+
+  const std::type_index key(typeid(T));
+  partial_type_infos_[key] = info;
   return register_type_internal(std::type_index(typeid(T)), std::move(info));
 }
 
 template <typename T>
 Result<void, Error> TypeResolver::register_ext_type_by_id(uint32_t type_id) {
+  check_registration_thread();
   if (type_id == 0) {
     return Unexpected(
         Error::invalid("type_id must be non-zero for register_ext_type_by_id"));
@@ -640,6 +721,9 @@ Result<void, Error> TypeResolver::register_ext_type_by_id(uint32_t type_id) {
   uint32_t actual_type_id = (type_id << 8) + static_cast<uint32_t>(TypeId::EXT);
 
   FORY_TRY(info, build_ext_type_info<T>(actual_type_id, "", "", false));
+
+  const std::type_index key(typeid(T));
+  partial_type_infos_[key] = info;
   return register_type_internal(std::type_index(typeid(T)), std::move(info));
 }
 
@@ -647,12 +731,16 @@ template <typename T>
 Result<void, Error>
 TypeResolver::register_ext_type_by_name(const std::string &ns,
                                         const std::string &type_name) {
+  check_registration_thread();
   if (type_name.empty()) {
     return Unexpected(Error::invalid(
         "type_name must be non-empty for register_ext_type_by_name"));
   }
   uint32_t actual_type_id = static_cast<uint32_t>(TypeId::NAMED_EXT);
   FORY_TRY(info, build_ext_type_info<T>(actual_type_id, ns, type_name, true));
+
+  const std::type_index key(typeid(T));
+  partial_type_infos_[key] = info;
   return register_type_internal(std::type_index(typeid(T)), std::move(info));
 }
 
@@ -832,8 +920,6 @@ TypeResolver::register_type_internal(const std::type_index &type_index,
         Error::invalid("TypeInfo or harness is invalid during registration"));
   }
 
-  std::lock_guard<std::mutex> lock(struct_mutex_);
-
   type_info_cache_[type_index] = info;
 
   if (info->type_id != 0) {
@@ -861,7 +947,6 @@ TypeResolver::register_type_internal(const std::type_index &type_index,
 
 inline std::shared_ptr<TypeInfo>
 TypeResolver::get_type_info_by_id(uint32_t type_id) const {
-  std::lock_guard<std::mutex> lock(struct_mutex_);
   auto it = type_info_by_id_.find(type_id);
   if (it != type_info_by_id_.end()) {
     return it->second;
@@ -872,7 +957,6 @@ TypeResolver::get_type_info_by_id(uint32_t type_id) const {
 inline std::shared_ptr<TypeInfo>
 TypeResolver::get_type_info_by_name(const std::string &ns,
                                     const std::string &type_name) const {
-  std::lock_guard<std::mutex> lock(struct_mutex_);
   auto key = make_name_key(ns, type_name);
   auto it = type_info_by_name_.find(key);
   if (it != type_info_by_name_.end()) {

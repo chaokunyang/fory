@@ -35,6 +35,7 @@
 #include "fory/util/result.h"
 #include <cstring>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <utility>
 #include <vector>
@@ -391,22 +392,38 @@ private:
   /// Private constructor - use builder() instead!
   explicit Fory(const Config &config, std::shared_ptr<TypeResolver> resolver)
       : config_(config), type_resolver_(std::move(resolver)),
+        finalized_resolver_(), finalized_once_flag_(),
         write_ctx_pool_([this]() {
-          return std::make_unique<WriteContext>(config_, *type_resolver_);
+          return std::make_unique<WriteContext>(config_,
+                                                get_finalized_resolver());
         }),
         read_ctx_pool_([this]() {
-          return std::make_unique<ReadContext>(config_, *type_resolver_);
-        }) {
-    if (!type_resolver_) {
-      type_resolver_ = std::make_shared<TypeResolver>();
-    }
-    type_resolver_->apply_config(config_);
-  }
+          return std::make_unique<ReadContext>(config_,
+                                               get_finalized_resolver());
+        }) {}
 
   Config config_;
   std::shared_ptr<TypeResolver> type_resolver_;
+  mutable std::shared_ptr<TypeResolver> finalized_resolver_;
+  mutable std::once_flag finalized_once_flag_;
   util::Pool<WriteContext> write_ctx_pool_;
   util::Pool<ReadContext> read_ctx_pool_;
+
+  /// Get or build finalized resolver (lazy, thread-safe, one-time initialization).
+  /// This mirrors Rust's OnceLock pattern.
+  std::shared_ptr<TypeResolver> get_finalized_resolver() const {
+    std::call_once(finalized_once_flag_, [this]() {
+      auto final_result = type_resolver_->build_final_type_resolver();
+      if (!final_result.ok()) {
+        FORY_LOG(FORY_ERROR) << "Failed to build final type resolver: "
+                             << final_result.error().message();
+        finalized_resolver_ = type_resolver_;
+      } else {
+        finalized_resolver_ = std::move(final_result).value();
+      }
+    });
+    return finalized_resolver_->clone();
+  }
 
   friend class ForyBuilder;
 };
@@ -419,6 +436,10 @@ inline Fory ForyBuilder::build() {
   if (!type_resolver_) {
     type_resolver_ = std::make_shared<TypeResolver>();
   }
+  type_resolver_->apply_config(config_);
+
+  // Don't build final resolver yet - it will be built lazily on first use
+  // This matches Rust's OnceLock pattern
   return Fory(config_, type_resolver_);
 }
 

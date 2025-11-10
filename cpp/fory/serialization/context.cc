@@ -28,8 +28,9 @@ namespace serialization {
 // WriteContext Implementation
 // ============================================================================
 
-WriteContext::WriteContext(const Config &config, TypeResolver &type_resolver)
-    : buffer_(), config_(&config), type_resolver_(&type_resolver),
+WriteContext::WriteContext(const Config &config,
+                           std::shared_ptr<TypeResolver> type_resolver)
+    : buffer_(), config_(&config), type_resolver_(std::move(type_resolver)),
       current_depth_(0) {}
 
 WriteContext::~WriteContext() = default;
@@ -135,9 +136,10 @@ void WriteContext::reset() {
 // ReadContext Implementation
 // ============================================================================
 
-ReadContext::ReadContext(const Config &config, TypeResolver &type_resolver)
-    : buffer_(nullptr), config_(&config), type_resolver_(&type_resolver),
-      current_depth_(0) {}
+ReadContext::ReadContext(const Config &config,
+                         std::shared_ptr<TypeResolver> type_resolver)
+    : buffer_(nullptr), config_(&config),
+      type_resolver_(std::move(type_resolver)), current_depth_(0) {}
 
 ReadContext::~ReadContext() = default;
 

@@ -72,8 +72,9 @@ private:
 /// ```
 class WriteContext {
 public:
-  /// Construct write context with configuration and type resolver.
-  explicit WriteContext(const Config &config, TypeResolver &type_resolver);
+  /// Construct write context with configuration and shared type resolver.
+  explicit WriteContext(const Config &config,
+                        std::shared_ptr<TypeResolver> type_resolver);
 
   /// Destructor
   ~WriteContext();
@@ -190,7 +191,7 @@ public:
 private:
   Buffer buffer_;
   const Config *config_;
-  TypeResolver *type_resolver_;
+  std::shared_ptr<TypeResolver> type_resolver_;
   RefWriter ref_writer_;
   uint32_t current_depth_;
 
@@ -219,8 +220,9 @@ private:
 /// ```
 class ReadContext {
 public:
-  /// Construct read context with configuration and type resolver.
-  explicit ReadContext(const Config &config, TypeResolver &type_resolver);
+  /// Construct read context with configuration and shared type resolver.
+  explicit ReadContext(const Config &config,
+                       std::shared_ptr<TypeResolver> type_resolver);
 
   /// Destructor
   ~ReadContext();
@@ -341,7 +343,7 @@ public:
 private:
   Buffer *buffer_;
   const Config *config_;
-  TypeResolver *type_resolver_;
+  std::shared_ptr<TypeResolver> type_resolver_;
   RefReader ref_reader_;
   uint32_t current_depth_;
 

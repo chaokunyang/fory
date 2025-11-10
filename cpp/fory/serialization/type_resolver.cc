@@ -659,12 +659,102 @@ TypeResolver::read_any_typeinfo(ReadContext &ctx,
 
 Result<const TypeInfo *, Error>
 TypeResolver::get_type_info(const std::type_index &type_index) const {
-  std::lock_guard<std::mutex> lock(struct_mutex_);
   auto it = type_info_cache_.find(type_index);
   if (it == type_info_cache_.end()) {
     return Unexpected(Error::type_error("TypeInfo not found for type_index"));
   }
   return it->second.get();
+}
+
+Result<std::shared_ptr<TypeResolver>, Error>
+TypeResolver::build_final_type_resolver() {
+  auto final_resolver = std::make_shared<TypeResolver>();
+
+  // Copy configuration
+  final_resolver->compatible_ = compatible_;
+  final_resolver->xlang_ = xlang_;
+  final_resolver->check_struct_version_ = check_struct_version_;
+  final_resolver->track_ref_ = track_ref_;
+  final_resolver->finalized_ = true;
+
+  // Copy all existing type info maps
+  final_resolver->type_info_cache_ = type_info_cache_;
+  final_resolver->type_info_by_id_ = type_info_by_id_;
+  final_resolver->type_info_by_name_ = type_info_by_name_;
+
+  // Process all partial type infos to build complete type metadata
+  for (const auto &[rust_type_id, partial_info] : partial_type_infos_) {
+    // Call the harness's sorted_field_infos function to get complete field info
+    auto fields_result = partial_info->harness.sorted_field_infos_fn(*this);
+    if (!fields_result.ok()) {
+      return Unexpected(fields_result.error());
+    }
+    auto sorted_fields = std::move(fields_result).value();
+
+    // Build complete TypeMeta
+    TypeMeta meta = TypeMeta::from_fields(
+        partial_info->type_id, partial_info->namespace_name,
+        partial_info->type_name, partial_info->register_by_name,
+        std::move(sorted_fields));
+
+    // Serialize TypeMeta to bytes
+    auto type_def_result = meta.to_bytes();
+    if (!type_def_result.ok()) {
+      return Unexpected(type_def_result.error());
+    }
+
+    // Create complete TypeInfo
+    auto complete_info = std::make_shared<TypeInfo>(*partial_info);
+    complete_info->type_def = std::move(type_def_result).value();
+
+    // Parse the serialized TypeMeta back to create shared_ptr<TypeMeta>
+    Buffer buffer(complete_info->type_def.data(),
+                  static_cast<uint32_t>(complete_info->type_def.size()), false);
+    buffer.WriterIndex(static_cast<uint32_t>(complete_info->type_def.size()));
+    auto parsed_meta_result = TypeMeta::from_bytes(buffer, nullptr);
+    if (!parsed_meta_result.ok()) {
+      return Unexpected(parsed_meta_result.error());
+    }
+    complete_info->type_meta = std::move(parsed_meta_result).value();
+
+    // Update all maps with complete info
+    final_resolver->type_info_cache_[rust_type_id] = complete_info;
+
+    if (complete_info->type_id != 0) {
+      final_resolver->type_info_by_id_[complete_info->type_id] = complete_info;
+    }
+
+    if (complete_info->register_by_name) {
+      auto key = make_name_key(complete_info->namespace_name,
+                               complete_info->type_name);
+      final_resolver->type_info_by_name_[key] = complete_info;
+    }
+  }
+
+  // Clear partial_type_infos in the final resolver since they're all completed
+  final_resolver->partial_type_infos_.clear();
+
+  return final_resolver;
+}
+
+std::shared_ptr<TypeResolver> TypeResolver::clone() const {
+  auto cloned = std::make_shared<TypeResolver>();
+
+  // Copy configuration
+  cloned->compatible_ = compatible_;
+  cloned->xlang_ = xlang_;
+  cloned->check_struct_version_ = check_struct_version_;
+  cloned->track_ref_ = track_ref_;
+  cloned->finalized_ = finalized_;
+
+  // Shallow copy all maps (shared_ptr sharing)
+  cloned->type_info_cache_ = type_info_cache_;
+  cloned->type_info_by_id_ = type_info_by_id_;
+  cloned->type_info_by_name_ = type_info_by_name_;
+  // Don't copy partial_type_infos_ - clone should only be used on finalized
+  // resolvers
+
+  return cloned;
 }
 
 } // namespace serialization

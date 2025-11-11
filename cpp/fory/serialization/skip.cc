@@ -27,7 +27,7 @@ namespace serialization {
 
 Result<void, Error> skip_varint(ReadContext &ctx) {
   // Skip varint by reading it
-  FORY_TRY(_, ctx.read_varuint64());
+  FORY_RETURN_NOT_OK(ctx.read_varuint64());
   return {};
 }
 
@@ -54,7 +54,7 @@ Result<void, Error> skip_list(ReadContext &ctx, const FieldType &field_type) {
 
   // If not declared type, skip element type info once
   if (!is_declared_type) {
-    FORY_TRY(_, ctx.read_uint8());
+    FORY_RETURN_NOT_OK(ctx.read_uint8());
   }
 
   // Get element type

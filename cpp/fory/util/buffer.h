@@ -217,9 +217,11 @@ public:
   /// Uses PVL (Progressive Variable-length Long) encoding per xlang spec.
   inline uint32_t PutVarUint64(uint32_t offset, uint64_t value) {
     uint32_t position = offset;
-    while (value >= 0x80) {
+    int count = 0;
+    while (value >= 0x80 && count < 8) {
       data_[position++] = static_cast<uint8_t>((value & 0x7F) | 0x80);
       value >>= 7;
+      ++count;
     }
     data_[position++] = static_cast<uint8_t>(value);
     return position - offset;
@@ -232,14 +234,17 @@ public:
     uint32_t position = offset;
     uint64_t result = 0;
     int shift = 0;
-    while (true) {
+    for (int i = 0; i < 8; ++i) {
       uint8_t b = data_[position++];
       result |= static_cast<uint64_t>(b & 0x7F) << shift;
       if ((b & 0x80) == 0) {
-        break;
+        *readBytesLength = position - offset;
+        return result;
       }
       shift += 7;
     }
+    uint8_t last = data_[position++];
+    result |= static_cast<uint64_t>(last) << 56;
     *readBytesLength = position - offset;
     return result;
   }

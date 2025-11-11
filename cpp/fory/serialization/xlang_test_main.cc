@@ -158,7 +158,19 @@ uint32_t ReadVarUint32(const std::vector<uint8_t> &data, size_t &offset) {
 }
 
 uint64_t ReadVarUint64(const std::vector<uint8_t> &data, size_t &offset) {
-  return ReadVarUint(data, offset);
+  uint64_t value = 0;
+  int shift = 0;
+  for (int i = 0; i < 8; ++i) {
+    uint8_t byte = ReadByte(data, offset);
+    value |= static_cast<uint64_t>(byte & 0x7F) << shift;
+    if ((byte & 0x80) == 0) {
+      return value;
+    }
+    shift += 7;
+  }
+  uint8_t last = ReadByte(data, offset);
+  value |= static_cast<uint64_t>(last) << 56;
+  return value;
 }
 
 int32_t ReadVarInt32(const std::vector<uint8_t> &data, size_t &offset) {
@@ -216,17 +228,14 @@ void WriteVarUint32(uint32_t value, std::vector<uint8_t> &out) {
 }
 
 void WriteVarUint64(uint64_t value, std::vector<uint8_t> &out) {
-  while (true) {
-    uint8_t byte = static_cast<uint8_t>(value & 0x7F);
-    value >>= 7;
-    if (value != 0) {
-      byte |= 0x80;
-    }
+  int count = 0;
+  while (value >= 0x80 && count < 8) {
+    uint8_t byte = static_cast<uint8_t>((value & 0x7F) | 0x80);
     out.push_back(byte);
-    if (value == 0) {
-      break;
-    }
+    value >>= 7;
+    ++count;
   }
+  out.push_back(static_cast<uint8_t>(value & 0xFF));
 }
 
 void WriteVarInt32(int32_t value, std::vector<uint8_t> &out) {

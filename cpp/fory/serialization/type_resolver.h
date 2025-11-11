@@ -227,6 +227,8 @@ template <typename T> struct FieldTypeBuilder {
       return FieldType(to_type_id(TypeId::STRING), nullable);
     } else if constexpr (std::is_same_v<T, std::string_view>) {
       return FieldType(to_type_id(TypeId::STRING), nullable);
+    } else if constexpr (std::is_enum_v<T>) {
+      return FieldType(to_type_id(TypeId::ENUM), nullable);
     } else if constexpr (is_optional_v<T>) {
       using Inner = typename T::value_type;
       FieldType inner = FieldTypeBuilder<Inner>::build(true);
@@ -243,10 +245,15 @@ template <typename T> struct FieldTypeBuilder {
       inner.nullable = true;
       return inner;
     } else if constexpr (is_vector_v<T>) {
-      FieldType elem = FieldTypeBuilder<element_type_t<T>>::build(false);
-      FieldType ft(to_type_id(TypeId::LIST), nullable);
-      ft.generics.push_back(std::move(elem));
-      return ft;
+      using Element = element_type_t<T>;
+      if constexpr (std::is_same_v<Element, bool>) {
+        return FieldType(to_type_id(TypeId::BOOL_ARRAY), nullable);
+      } else {
+        FieldType elem = FieldTypeBuilder<Element>::build(false);
+        FieldType ft(to_type_id(TypeId::LIST), nullable);
+        ft.generics.push_back(std::move(elem));
+        return ft;
+      }
     } else if constexpr (is_set_like_v<T>) {
       FieldType elem = FieldTypeBuilder<element_type_t<T>>::build(false);
       FieldType ft(to_type_id(TypeId::SET), nullable);
@@ -454,6 +461,11 @@ private:
 
   template <typename T>
   static Result<std::shared_ptr<TypeInfo>, Error>
+  build_enum_type_info(uint32_t type_id, std::string ns,
+                       std::string type_name, bool register_by_name);
+
+  template <typename T>
+  static Result<std::shared_ptr<TypeInfo>, Error>
   build_ext_type_info(uint32_t type_id, std::string ns, std::string type_name,
                       bool register_by_name);
 
@@ -658,28 +670,46 @@ template <typename T> uint32_t TypeResolver::struct_type_tag() {
 template <typename T>
 Result<void, Error> TypeResolver::register_by_id(uint32_t type_id) {
   check_registration_thread();
-  static_assert(is_fory_serializable_v<T>,
-                "register_by_id requires a type declared with FORY_STRUCT");
   if (type_id == 0) {
     return Unexpected(
         Error::invalid("type_id must be non-zero for register_by_id"));
   }
 
-  // Encode type_id: shift left by 8 bits and add type category in low byte
-  uint32_t actual_type_id =
-      compatible_
-          ? (type_id << 8) + static_cast<uint32_t>(TypeId::COMPATIBLE_STRUCT)
-          : (type_id << 8) + static_cast<uint32_t>(TypeId::STRUCT);
+  if constexpr (is_fory_serializable_v<T>) {
+    // Encode type_id: shift left by 8 bits and add type category in low byte
+    uint32_t actual_type_id =
+        compatible_
+            ? (type_id << 8) + static_cast<uint32_t>(TypeId::COMPATIBLE_STRUCT)
+            : (type_id << 8) + static_cast<uint32_t>(TypeId::STRUCT);
 
-  FORY_TRY(info, build_struct_type_info<T>(actual_type_id, "", "", false));
-  if (!info->harness.valid()) {
-    return Unexpected(
-        Error::invalid("Harness for registered type is incomplete"));
+    FORY_TRY(info, build_struct_type_info<T>(actual_type_id, "", "", false));
+    if (!info->harness.valid()) {
+      return Unexpected(
+          Error::invalid("Harness for registered type is incomplete"));
+    }
+
+    const std::type_index key(typeid(T));
+    partial_type_infos_[key] = info;
+    return register_type_internal(std::type_index(typeid(T)), std::move(info));
+  } else if constexpr (std::is_enum_v<T>) {
+    uint32_t actual_type_id =
+        (type_id << 8) + static_cast<uint32_t>(TypeId::ENUM);
+
+    FORY_TRY(info, build_enum_type_info<T>(actual_type_id, "", "", false));
+    if (!info->harness.valid()) {
+      return Unexpected(
+          Error::invalid("Harness for registered enum type is incomplete"));
+    }
+
+    const std::type_index key(typeid(T));
+    partial_type_infos_[key] = info;
+    return register_type_internal(std::type_index(typeid(T)), std::move(info));
+  } else {
+    static_assert(is_fory_serializable_v<T>,
+                  "register_by_id requires a type declared with FORY_STRUCT "
+                  "or an enum type");
+    return Result<void, Error>();
   }
-
-  const std::type_index key(typeid(T));
-  partial_type_infos_[key] = info;
-  return register_type_internal(std::type_index(typeid(T)), std::move(info));
 }
 
 template <typename T>
@@ -687,26 +717,45 @@ Result<void, Error>
 TypeResolver::register_by_name(const std::string &ns,
                                const std::string &type_name) {
   check_registration_thread();
-  static_assert(is_fory_serializable_v<T>,
-                "register_by_name requires a type declared with FORY_STRUCT");
   if (type_name.empty()) {
     return Unexpected(
         Error::invalid("type_name must be non-empty for register_by_name"));
   }
-  uint32_t actual_type_id =
-      compatible_ ? static_cast<uint32_t>(TypeId::NAMED_COMPATIBLE_STRUCT)
-                  : static_cast<uint32_t>(TypeId::NAMED_STRUCT);
+  if constexpr (is_fory_serializable_v<T>) {
+    uint32_t actual_type_id =
+        compatible_ ? static_cast<uint32_t>(TypeId::NAMED_COMPATIBLE_STRUCT)
+                    : static_cast<uint32_t>(TypeId::NAMED_STRUCT);
 
-  FORY_TRY(info,
-           build_struct_type_info<T>(actual_type_id, ns, type_name, true));
-  if (!info->harness.valid()) {
-    return Unexpected(
-        Error::invalid("Harness for registered type is incomplete"));
+    FORY_TRY(info,
+             build_struct_type_info<T>(actual_type_id, ns, type_name, true));
+    if (!info->harness.valid()) {
+      return Unexpected(
+          Error::invalid("Harness for registered type is incomplete"));
+    }
+
+    const std::type_index key(typeid(T));
+    partial_type_infos_[key] = info;
+    return register_type_internal(std::type_index(typeid(T)),
+                                  std::move(info));
+  } else if constexpr (std::is_enum_v<T>) {
+    uint32_t actual_type_id = static_cast<uint32_t>(TypeId::NAMED_ENUM);
+    FORY_TRY(info,
+             build_enum_type_info<T>(actual_type_id, ns, type_name, true));
+    if (!info->harness.valid()) {
+      return Unexpected(
+          Error::invalid("Harness for registered enum type is incomplete"));
+    }
+
+    const std::type_index key(typeid(T));
+    partial_type_infos_[key] = info;
+    return register_type_internal(std::type_index(typeid(T)),
+                                  std::move(info));
+  } else {
+    static_assert(is_fory_serializable_v<T>,
+                  "register_by_name requires a type declared with FORY_STRUCT "
+                  "or an enum type");
+    return Result<void, Error>();
   }
-
-  const std::type_index key(typeid(T));
-  partial_type_infos_[key] = info;
-  return register_type_internal(std::type_index(typeid(T)), std::move(info));
 }
 
 template <typename T>
@@ -808,6 +857,40 @@ TypeResolver::build_struct_type_info(uint32_t type_id, std::string ns,
   FORY_TRY(parsed_meta, TypeMeta::from_bytes(buffer, nullptr));
   entry->type_meta = std::move(parsed_meta);
   entry->harness = make_struct_harness<T>();
+
+  return entry;
+}
+
+template <typename T>
+Result<std::shared_ptr<TypeInfo>, Error>
+TypeResolver::build_enum_type_info(uint32_t type_id, std::string ns,
+                                   std::string type_name,
+                                   bool register_by_name) {
+  static_assert(std::is_enum_v<T>,
+                "build_enum_type_info requires enum types");
+
+  if (register_by_name && type_name.empty()) {
+    return Unexpected(Error::invalid(
+        "type_name must be non-empty when register_by_name is true"));
+  }
+
+  auto entry = std::make_shared<TypeInfo>();
+  entry->type_id = type_id;
+  entry->namespace_name = std::move(ns);
+  entry->register_by_name = register_by_name;
+  entry->is_external = false;
+
+  if (!type_name.empty()) {
+    entry->type_name = std::move(type_name);
+  } else {
+    entry->type_name = std::string(typeid(T).name());
+  }
+
+  entry->harness = make_serializer_harness<T>();
+  if (!entry->harness.valid()) {
+    return Unexpected(
+        Error::invalid("Harness for enum type is incomplete"));
+  }
 
   return entry;
 }

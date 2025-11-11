@@ -89,6 +89,7 @@ cc_binary(
     srcs = ["xlang_test_main.cc"],
     deps = [
         ":fory_serialization",
+        "//cpp/fory/thirdparty:libmmh3",
     ],
     visibility = ["//visibility:public"],
 )

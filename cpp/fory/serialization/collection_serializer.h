@@ -199,6 +199,66 @@ struct Serializer<std::vector<T, Alloc>,
   }
 };
 
+/// Specialized serializer for std::vector<bool>
+template <typename Alloc>
+struct Serializer<std::vector<bool, Alloc>> {
+  static constexpr TypeId type_id = TypeId::BOOL_ARRAY;
+
+  static inline Result<void, Error>
+  write(const std::vector<bool, Alloc> &vec, WriteContext &ctx,
+        bool write_ref, bool write_type) {
+    write_not_null_ref_flag(ctx, write_ref);
+    if (write_type) {
+      ctx.write_uint8(static_cast<uint8_t>(type_id));
+    }
+    return write_data(vec, ctx);
+  }
+
+  static inline Result<void, Error>
+  write_data(const std::vector<bool, Alloc> &vec, WriteContext &ctx) {
+    ctx.write_varuint32(static_cast<uint32_t>(vec.size()));
+    for (bool value : vec) {
+      ctx.write_uint8(value ? 1 : 0);
+    }
+    return Result<void, Error>();
+  }
+
+  static inline Result<void, Error>
+  write_data_generic(const std::vector<bool, Alloc> &vec, WriteContext &ctx,
+                     bool has_generics) {
+    (void)has_generics;
+    return write_data(vec, ctx);
+  }
+
+  static inline Result<std::vector<bool, Alloc>, Error>
+  read(ReadContext &ctx, bool read_ref, bool read_type) {
+    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
+    if (!has_value) {
+      return std::vector<bool, Alloc>();
+    }
+
+    if (read_type) {
+      FORY_TRY(type_byte, ctx.read_uint8());
+      if (type_byte != static_cast<uint8_t>(type_id)) {
+        return Unexpected(
+            Error::type_mismatch(type_byte, static_cast<uint8_t>(type_id)));
+      }
+    }
+    return read_data(ctx);
+  }
+
+  static inline Result<std::vector<bool, Alloc>, Error>
+  read_data(ReadContext &ctx) {
+    FORY_TRY(size, ctx.read_varuint32());
+    std::vector<bool, Alloc> result(size);
+    for (uint32_t i = 0; i < size; ++i) {
+      FORY_TRY(byte, ctx.read_uint8());
+      result[i] = (byte != 0);
+    }
+    return result;
+  }
+};
+
 // ============================================================================
 // std::set serializer
 // ============================================================================

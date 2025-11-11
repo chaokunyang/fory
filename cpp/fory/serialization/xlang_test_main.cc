@@ -1,0 +1,1065 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+#include "fory/serialization/fory.h"
+#include "fory/serialization/temporal_serializers.h"
+#include "fory/thirdparty/MurmurHash3.h"
+
+#include <cmath>
+#include <cstdint>
+#include <cstdlib>
+#include <cstring>
+#include <fstream>
+#include <iostream>
+#include <limits>
+#include <map>
+#include <optional>
+#include <set>
+#include <stdexcept>
+#include <string>
+#include <unordered_map>
+#include <unordered_set>
+#include <utility>
+#include <vector>
+
+using ::fory::Buffer;
+using ::fory::Error;
+using ::fory::serialization::Fory;
+using ::fory::serialization::ForyBuilder;
+using ::fory::serialization::LocalDate;
+using ::fory::serialization::Timestamp;
+using ::fory::Result;
+
+[[noreturn]] void Fail(const std::string &message) {
+  throw std::runtime_error(message);
+}
+
+std::string GetDataFilePath() {
+  const char *env = std::getenv("DATA_FILE");
+  if (env == nullptr) {
+    Fail("DATA_FILE environment variable is not set");
+  }
+  return std::string(env);
+}
+
+std::vector<uint8_t> ReadFile(const std::string &path) {
+  std::ifstream input(path, std::ios::binary);
+  if (!input) {
+    Fail("Failed to open file for reading: " + path);
+  }
+  return std::vector<uint8_t>((std::istreambuf_iterator<char>(input)),
+                              std::istreambuf_iterator<char>());
+}
+
+void WriteFile(const std::string &path, const std::vector<uint8_t> &data) {
+  std::ofstream output(path, std::ios::binary | std::ios::trunc);
+  if (!output) {
+    Fail("Failed to open file for writing: " + path);
+  }
+  output.write(reinterpret_cast<const char *>(data.data()),
+               static_cast<std::streamsize>(data.size()));
+}
+
+// ---------------------------------------------------------------------------
+// Primitive buffer helpers (for compatibility tests that operate directly on
+// MemoryBuffer without using Fory serialization).
+// ---------------------------------------------------------------------------
+
+uint8_t ReadByte(const std::vector<uint8_t> &data, size_t &offset) {
+  if (offset >= data.size()) {
+    Fail("Unexpected end of buffer");
+  }
+  return data[offset++];
+}
+
+int16_t ReadInt16LE(const std::vector<uint8_t> &data, size_t &offset) {
+  if (offset + 2 > data.size()) {
+    Fail("Unexpected end of buffer while reading int16");
+  }
+  int16_t value = static_cast<int16_t>(data[offset]) |
+                  static_cast<int16_t>(data[offset + 1] << 8);
+  offset += 2;
+  return value;
+}
+
+int32_t ReadInt32LE(const std::vector<uint8_t> &data, size_t &offset) {
+  if (offset + 4 > data.size()) {
+    Fail("Unexpected end of buffer while reading int32");
+  }
+  int32_t value = 0;
+  for (int i = 3; i >= 0; --i) {
+    value = (value << 8) | data[offset + i];
+  }
+  offset += 4;
+  return value;
+}
+
+int64_t ReadInt64LE(const std::vector<uint8_t> &data, size_t &offset) {
+  if (offset + 8 > data.size()) {
+    Fail("Unexpected end of buffer while reading int64");
+  }
+  int64_t value = 0;
+  for (int i = 7; i >= 0; --i) {
+    value = (value << 8) | static_cast<int64_t>(data[offset + i]);
+  }
+  offset += 8;
+  return value;
+}
+
+float ReadFloatLE(const std::vector<uint8_t> &data, size_t &offset) {
+  int32_t raw = ReadInt32LE(data, offset);
+  float value;
+  std::memcpy(&value, &raw, sizeof(float));
+  return value;
+}
+
+double ReadDoubleLE(const std::vector<uint8_t> &data, size_t &offset) {
+  int64_t raw = ReadInt64LE(data, offset);
+  double value;
+  std::memcpy(&value, &raw, sizeof(double));
+  return value;
+}
+
+uint64_t ReadVarUint(const std::vector<uint8_t> &data, size_t &offset) {
+  uint64_t value = 0;
+  int shift = 0;
+  while (true) {
+    uint8_t byte = ReadByte(data, offset);
+    value |= static_cast<uint64_t>(byte & 0x7F) << shift;
+    if ((byte & 0x80) == 0) {
+      break;
+    }
+    shift += 7;
+    if (shift >= 64) {
+      Fail("Varint too large");
+    }
+  }
+  return value;
+}
+
+uint32_t ReadVarUint32(const std::vector<uint8_t> &data, size_t &offset) {
+  return static_cast<uint32_t>(ReadVarUint(data, offset));
+}
+
+uint64_t ReadVarUint64(const std::vector<uint8_t> &data, size_t &offset) {
+  return ReadVarUint(data, offset);
+}
+
+int32_t ReadVarInt32(const std::vector<uint8_t> &data, size_t &offset) {
+  uint32_t raw = ReadVarUint32(data, offset);
+  return static_cast<int32_t>((raw >> 1) ^ (~(raw & 1) + 1));
+}
+
+int64_t ReadVarInt64(const std::vector<uint8_t> &data, size_t &offset) {
+  uint64_t raw = ReadVarUint64(data, offset);
+  return static_cast<int64_t>((raw >> 1) ^ (~(raw & 1) + 1));
+}
+
+void WriteInt16LE(int16_t value, std::vector<uint8_t> &out) {
+  out.push_back(static_cast<uint8_t>(value & 0xFF));
+  out.push_back(static_cast<uint8_t>((value >> 8) & 0xFF));
+}
+
+void WriteInt32LE(int32_t value, std::vector<uint8_t> &out) {
+  out.push_back(static_cast<uint8_t>(value & 0xFF));
+  out.push_back(static_cast<uint8_t>((value >> 8) & 0xFF));
+  out.push_back(static_cast<uint8_t>((value >> 16) & 0xFF));
+  out.push_back(static_cast<uint8_t>((value >> 24) & 0xFF));
+}
+
+void WriteInt64LE(int64_t value, std::vector<uint8_t> &out) {
+  for (int i = 0; i < 8; ++i) {
+    out.push_back(static_cast<uint8_t>((value >> (8 * i)) & 0xFF));
+  }
+}
+
+void WriteFloatLE(float value, std::vector<uint8_t> &out) {
+  int32_t raw;
+  std::memcpy(&raw, &value, sizeof(float));
+  WriteInt32LE(raw, out);
+}
+
+void WriteDoubleLE(double value, std::vector<uint8_t> &out) {
+  int64_t raw;
+  std::memcpy(&raw, &value, sizeof(double));
+  WriteInt64LE(raw, out);
+}
+
+void WriteVarUint32(uint32_t value, std::vector<uint8_t> &out) {
+  while (true) {
+    uint8_t byte = static_cast<uint8_t>(value & 0x7F);
+    value >>= 7;
+    if (value != 0) {
+      byte |= 0x80;
+    }
+    out.push_back(byte);
+    if (value == 0) {
+      break;
+    }
+  }
+}
+
+void WriteVarUint64(uint64_t value, std::vector<uint8_t> &out) {
+  while (true) {
+    uint8_t byte = static_cast<uint8_t>(value & 0x7F);
+    value >>= 7;
+    if (value != 0) {
+      byte |= 0x80;
+    }
+    out.push_back(byte);
+    if (value == 0) {
+      break;
+    }
+  }
+}
+
+void WriteVarInt32(int32_t value, std::vector<uint8_t> &out) {
+  uint32_t zigzag =
+      (static_cast<uint32_t>(value) << 1) ^ static_cast<uint32_t>(value >> 31);
+  WriteVarUint32(zigzag, out);
+}
+
+void WriteVarInt64(int64_t value, std::vector<uint8_t> &out) {
+  uint64_t zigzag =
+      (static_cast<uint64_t>(value) << 1) ^ static_cast<uint64_t>(value >> 63);
+  WriteVarUint64(zigzag, out);
+}
+
+// ---------------------------------------------------------------------------
+// xlang model definitions shared with Java/Rust tests
+// ---------------------------------------------------------------------------
+
+enum class Color : int32_t { Green = 0, Red = 1, Blue = 2, White = 3 };
+FORY_ENUM(Color, Green, Red, Blue, White);
+
+struct Item {
+  std::optional<std::string> name;
+  bool operator==(const Item &other) const { return name == other.name; }
+};
+FORY_STRUCT(Item, name);
+
+struct SimpleStruct {
+  std::map<int32_t, double> f1;
+  int32_t f2;
+  Item f3;
+  std::optional<std::string> f4;
+  Color f5;
+  std::vector<std::optional<std::string>> f6;
+  int32_t f7;
+  std::optional<int32_t> f8;
+  std::optional<int32_t> last;
+  bool operator==(const SimpleStruct &other) const {
+    return f1 == other.f1 && f2 == other.f2 && f3 == other.f3 &&
+           f4 == other.f4 && f5 == other.f5 && f6 == other.f6 &&
+           f7 == other.f7 && f8 == other.f8 && last == other.last;
+  }
+};
+FORY_STRUCT(SimpleStruct, f1, f2, f3, f4, f5, f6, f7, f8, last);
+
+struct Item1 {
+  int32_t f1;
+  int32_t f2;
+  std::optional<int32_t> f3;
+  std::optional<int32_t> f4;
+  std::optional<int32_t> f5;
+  std::optional<int32_t> f6;
+  bool operator==(const Item1 &other) const {
+    return f1 == other.f1 && f2 == other.f2 && f3 == other.f3 &&
+           f4 == other.f4 && f5 == other.f5 && f6 == other.f6;
+  }
+};
+FORY_STRUCT(Item1, f1, f2, f3, f4, f5, f6);
+
+struct MyStruct {
+  int32_t id;
+  MyStruct() = default;
+  explicit MyStruct(int32_t v) : id(v) {}
+  bool operator==(const MyStruct &other) const { return id == other.id; }
+};
+FORY_STRUCT(MyStruct, id);
+
+struct MyExt {
+  int32_t id;
+  bool operator==(const MyExt &other) const { return id == other.id; }
+};
+FORY_STRUCT(MyExt, id);
+
+struct MyWrapper {
+  Color color;
+  MyStruct my_struct;
+  MyExt my_ext;
+  bool operator==(const MyWrapper &other) const {
+    return color == other.color && my_struct == other.my_struct &&
+           my_ext == other.my_ext;
+  }
+};
+FORY_STRUCT(MyWrapper, color, my_struct, my_ext);
+
+struct EmptyWrapper {
+  bool placeholder = false;
+  bool operator==(const EmptyWrapper &other) const {
+    return placeholder == other.placeholder;
+  }
+};
+FORY_STRUCT(EmptyWrapper, placeholder);
+
+struct VersionCheckStruct {
+  int32_t f1;
+  std::optional<std::string> f2;
+  double f3;
+  bool operator==(const VersionCheckStruct &other) const {
+    return f1 == other.f1 && f2 == other.f2 && f3 == other.f3;
+  }
+};
+FORY_STRUCT(VersionCheckStruct, f1, f2, f3);
+
+// ---------------------------------------------------------------------------
+// Helpers for interacting with Fory Result/Buffer
+// ---------------------------------------------------------------------------
+
+template <typename T>
+T Unwrap(Result<T, Error> result, const std::string &context) {
+  if (!result.ok()) {
+    Fail(context + ": " + result.error().message());
+  }
+  return std::move(result).value();
+}
+
+void EnsureOk(Result<void, Error> result, const std::string &context) {
+  if (!result.ok()) {
+    Fail(context + ": " + result.error().message());
+  }
+}
+
+Buffer MakeBuffer(std::vector<uint8_t> &bytes) {
+  Buffer buffer(bytes.data(), static_cast<uint32_t>(bytes.size()), false);
+  buffer.WriterIndex(static_cast<uint32_t>(bytes.size()));
+  buffer.ReaderIndex(0);
+  return buffer;
+}
+
+template <typename T> T ReadNext(Fory &fory, Buffer &buffer) {
+  auto result = fory.deserialize_from<T>(buffer);
+  if (!result.ok()) {
+    Fail("Failed to deserialize value: " + result.error().message());
+  }
+  return std::move(result).value();
+}
+
+template <typename T>
+void AppendSerialized(Fory &fory, const T &value, std::vector<uint8_t> &out) {
+  auto result = fory.serialize(value);
+  if (!result.ok()) {
+    Fail("Failed to serialize value: " + result.error().message());
+  }
+  const auto &bytes = result.value();
+  out.insert(out.end(), bytes.begin(), bytes.end());
+}
+
+Fory BuildFory(bool compatible = true, bool xlang = true,
+               bool check_struct_version = false) {
+  return Fory::builder()
+      .compatible(compatible)
+      .xlang(xlang)
+      .check_struct_version(check_struct_version)
+      .build();
+}
+
+void RegisterBasicStructs(Fory &fory) {
+  EnsureOk(fory.register_struct<Color>(101), "register Color");
+  EnsureOk(fory.register_struct<Item>(102), "register Item");
+  EnsureOk(fory.register_struct<SimpleStruct>(103), "register SimpleStruct");
+}
+
+// Forward declarations for test handlers
+namespace {
+void RunTestBuffer(const std::string &data_file);
+void RunTestBufferVar(const std::string &data_file);
+void RunTestMurmurHash3(const std::string &data_file);
+void RunTestStringSerializer(const std::string &data_file);
+void RunTestCrossLanguageSerializer(const std::string &data_file);
+void RunTestSimpleStruct(const std::string &data_file);
+void RunTestSimpleNamedStruct(const std::string &data_file);
+void RunTestList(const std::string &data_file);
+void RunTestMap(const std::string &data_file);
+void RunTestInteger(const std::string &data_file);
+void RunTestSkipIdCustom(const std::string &data_file);
+void RunTestSkipNameCustom(const std::string &data_file);
+void RunTestConsistentNamed(const std::string &data_file);
+void RunTestStructVersionCheck(const std::string &data_file);
+} // namespace
+
+int main(int argc, char **argv) {
+  if (argc < 2) {
+    Fail("Usage: xlang_test_main --case <test_name>");
+  }
+  std::string case_name;
+  for (int i = 1; i < argc; ++i) {
+    std::string arg(argv[i]);
+    if ((arg == "--case" || arg == "-c") && i + 1 < argc) {
+      case_name = argv[++i];
+    } else if (case_name.empty()) {
+      case_name = arg;
+    }
+  }
+  if (case_name.empty()) {
+    Fail("Missing --case argument");
+  }
+
+  const std::string data_file = GetDataFilePath();
+  try {
+    if (case_name == "test_buffer") {
+      RunTestBuffer(data_file);
+    } else if (case_name == "test_buffer_var") {
+      RunTestBufferVar(data_file);
+    } else if (case_name == "test_murmurhash3") {
+      RunTestMurmurHash3(data_file);
+    } else if (case_name == "test_string_serializer") {
+      RunTestStringSerializer(data_file);
+    } else if (case_name == "test_cross_language_serializer") {
+      RunTestCrossLanguageSerializer(data_file);
+    } else if (case_name == "test_simple_struct") {
+      RunTestSimpleStruct(data_file);
+    } else if (case_name == "test_named_simple_struct") {
+      RunTestSimpleNamedStruct(data_file);
+    } else if (case_name == "test_list") {
+      RunTestList(data_file);
+    } else if (case_name == "test_map") {
+      RunTestMap(data_file);
+    } else if (case_name == "test_integer") {
+      RunTestInteger(data_file);
+    } else if (case_name == "test_skip_id_custom") {
+      RunTestSkipIdCustom(data_file);
+    } else if (case_name == "test_skip_name_custom") {
+      RunTestSkipNameCustom(data_file);
+    } else if (case_name == "test_consistent_named") {
+      RunTestConsistentNamed(data_file);
+    } else if (case_name == "test_struct_version_check") {
+      RunTestStructVersionCheck(data_file);
+    } else {
+      Fail("Unknown test case: " + case_name);
+    }
+  } catch (const std::exception &ex) {
+    std::cerr << "xlang_test_main failed: " << ex.what() << std::endl;
+    return 1;
+  }
+  return 0;
+}
+
+namespace {
+
+void RunTestBuffer(const std::string &data_file) {
+  auto bytes = ReadFile(data_file);
+  size_t offset = 0;
+  bool bool_val = ReadByte(bytes, offset) != 0;
+  int8_t int8_val = static_cast<int8_t>(ReadByte(bytes, offset));
+  int16_t int16_val = ReadInt16LE(bytes, offset);
+  int32_t int32_val = ReadInt32LE(bytes, offset);
+  int64_t int64_val = ReadInt64LE(bytes, offset);
+  float float_val = ReadFloatLE(bytes, offset);
+  double double_val = ReadDoubleLE(bytes, offset);
+  uint32_t varint = ReadVarUint32(bytes, offset);
+  int32_t payload_len = ReadInt32LE(bytes, offset);
+  if (payload_len < 0 || offset + payload_len > bytes.size()) {
+    Fail("Invalid payload length in buffer test");
+  }
+  std::vector<uint8_t> payload(bytes.begin() + offset,
+                               bytes.begin() + offset + payload_len);
+  offset += payload_len;
+
+  if (!bool_val || int8_val != std::numeric_limits<int8_t>::max() ||
+      int16_val != std::numeric_limits<int16_t>::max() ||
+      int32_val != std::numeric_limits<int32_t>::max() ||
+      int64_val != std::numeric_limits<int64_t>::max() ||
+      std::abs(float_val + 1.1f) > 1e-6 || std::abs(double_val + 1.1) > 1e-9 ||
+      varint != 100 || payload != std::vector<uint8_t>({'a', 'b'})) {
+    Fail("Buffer test validation failed");
+  }
+
+  std::vector<uint8_t> out;
+  out.reserve(bytes.size());
+  out.push_back(1);
+  out.push_back(static_cast<uint8_t>(std::numeric_limits<int8_t>::max()));
+  WriteInt16LE(std::numeric_limits<int16_t>::max(), out);
+  WriteInt32LE(std::numeric_limits<int32_t>::max(), out);
+  WriteInt64LE(std::numeric_limits<int64_t>::max(), out);
+  WriteFloatLE(-1.1f, out);
+  WriteDoubleLE(-1.1, out);
+  WriteVarUint32(100, out);
+  WriteInt32LE(static_cast<int32_t>(payload.size()), out);
+  out.insert(out.end(), payload.begin(), payload.end());
+  WriteFile(data_file, out);
+}
+
+void RunTestBufferVar(const std::string &data_file) {
+  auto bytes = ReadFile(data_file);
+  size_t offset = 0;
+  const std::vector<int32_t> expected_varint32 = {
+      std::numeric_limits<int32_t>::min(),
+      std::numeric_limits<int32_t>::min() + 1,
+      -1000000,
+      -1000,
+      -128,
+      -1,
+      0,
+      1,
+      127,
+      128,
+      16383,
+      16384,
+      2097151,
+      2097152,
+      268435455,
+      268435456,
+      std::numeric_limits<int32_t>::max() - 1,
+      std::numeric_limits<int32_t>::max()};
+  for (int32_t value : expected_varint32) {
+    if (ReadVarInt32(bytes, offset) != value) {
+      Fail("VarInt32 mismatch");
+    }
+  }
+
+  const std::vector<uint32_t> expected_varuint32 = {
+      0u,       1u,       127u,       128u,       16383u,      16384u,
+      2097151u, 2097152u, 268435455u, 268435456u, 2147483646u, 2147483647u};
+  for (uint32_t value : expected_varuint32) {
+    if (ReadVarUint32(bytes, offset) != value) {
+      Fail("VarUint32 mismatch");
+    }
+  }
+
+  const std::vector<uint64_t> expected_varuint64 = {
+      0ull,
+      1ull,
+      127ull,
+      128ull,
+      16383ull,
+      16384ull,
+      2097151ull,
+      2097152ull,
+      268435455ull,
+      268435456ull,
+      34359738367ull,
+      34359738368ull,
+      4398046511103ull,
+      4398046511104ull,
+      562949953421311ull,
+      562949953421312ull,
+      72057594037927935ull,
+      72057594037927936ull,
+      static_cast<uint64_t>(std::numeric_limits<int64_t>::max())};
+  for (uint64_t value : expected_varuint64) {
+    if (ReadVarUint64(bytes, offset) != value) {
+      Fail("VarUint64 mismatch");
+    }
+  }
+
+  const std::vector<int64_t> expected_varint64 = {
+      std::numeric_limits<int64_t>::min(),
+      std::numeric_limits<int64_t>::min() + 1,
+      -1000000000000LL,
+      -1000000LL,
+      -1000LL,
+      -128LL,
+      -1LL,
+      0LL,
+      1LL,
+      127LL,
+      1000LL,
+      1000000LL,
+      1000000000000LL,
+      std::numeric_limits<int64_t>::max() - 1,
+      std::numeric_limits<int64_t>::max()};
+  for (int64_t value : expected_varint64) {
+    if (ReadVarInt64(bytes, offset) != value) {
+      Fail("VarInt64 mismatch");
+    }
+  }
+
+  std::vector<uint8_t> out;
+  out.reserve(bytes.size());
+  for (int32_t value : expected_varint32) {
+    WriteVarInt32(value, out);
+  }
+  for (uint32_t value : expected_varuint32) {
+    WriteVarUint32(value, out);
+  }
+  for (uint64_t value : expected_varuint64) {
+    WriteVarUint64(value, out);
+  }
+  for (int64_t value : expected_varint64) {
+    WriteVarInt64(value, out);
+  }
+  WriteFile(data_file, out);
+}
+
+void RunTestMurmurHash3(const std::string &data_file) {
+  auto bytes = ReadFile(data_file);
+  if (bytes.size() < 16) {
+    Fail("Not enough bytes for murmurhash test");
+  }
+  size_t offset = 0;
+  int64_t first = ReadInt64LE(bytes, offset);
+  int64_t second = ReadInt64LE(bytes, offset);
+  int64_t hash_out[2] = {0, 0};
+  MurmurHash3_x64_128("\x01\x02\x08", 3, 47, hash_out);
+  if (first != hash_out[0] || second != hash_out[1]) {
+    Fail("MurmurHash3 mismatch");
+  }
+}
+
+void RunTestStringSerializer(const std::string &data_file) {
+  auto bytes = ReadFile(data_file);
+  auto fory = BuildFory(true, true);
+  std::vector<std::string> test_strings = {
+      "ab",     "Rust123", "Çüéâäàåçêëèïî", "こんにちは",
+      "Привет", "𝄞🎵🎶",   "Hello, 世界",
+  };
+
+  {
+    std::vector<uint8_t> copy = bytes;
+    Buffer buffer = MakeBuffer(copy);
+    for (const auto &expected : test_strings) {
+      auto actual = ReadNext<std::string>(fory, buffer);
+      if (actual != expected) {
+        Fail("String serializer mismatch");
+      }
+    }
+  }
+
+  std::vector<uint8_t> out;
+  out.reserve(bytes.size());
+  for (const auto &s : test_strings) {
+    AppendSerialized(fory, s, out);
+  }
+  WriteFile(data_file, out);
+}
+
+void RunTestCrossLanguageSerializer(const std::string &data_file) {
+  auto bytes = ReadFile(data_file);
+  auto fory = BuildFory(true, true);
+  RegisterBasicStructs(fory);
+
+  std::vector<std::string> str_list = {"hello", "world"};
+  std::set<std::string> str_set = {"hello", "world"};
+  std::map<std::string, std::string> str_map = {{"hello", "world"},
+                                                {"foo", "bar"}};
+  LocalDate day(18954); // 2021-11-23
+  Timestamp instant(std::chrono::nanoseconds(100000000));
+
+  std::vector<uint8_t> copy = bytes;
+  Buffer buffer = MakeBuffer(copy);
+
+  auto expect_bool = [&](bool expected) {
+    if (ReadNext<bool>(fory, buffer) != expected) {
+      Fail("Boolean mismatch in cross-language serializer test");
+    }
+  };
+
+  expect_bool(true);
+  expect_bool(false);
+  if (ReadNext<int32_t>(fory, buffer) != -1 ||
+      ReadNext<int8_t>(fory, buffer) != std::numeric_limits<int8_t>::max() ||
+      ReadNext<int8_t>(fory, buffer) != std::numeric_limits<int8_t>::min() ||
+      ReadNext<int16_t>(fory, buffer) != std::numeric_limits<int16_t>::max() ||
+      ReadNext<int16_t>(fory, buffer) != std::numeric_limits<int16_t>::min() ||
+      ReadNext<int32_t>(fory, buffer) != std::numeric_limits<int32_t>::max() ||
+      ReadNext<int32_t>(fory, buffer) != std::numeric_limits<int32_t>::min() ||
+      ReadNext<int64_t>(fory, buffer) != std::numeric_limits<int64_t>::max() ||
+      ReadNext<int64_t>(fory, buffer) != std::numeric_limits<int64_t>::min()) {
+    Fail("Primitive mismatch in cross-language serializer test");
+  }
+  if (std::abs(ReadNext<float>(fory, buffer) + 1.0f) > 1e-6 ||
+      std::abs(ReadNext<double>(fory, buffer) + 1.0) > 1e-9) {
+    Fail("Float mismatch");
+  }
+  if (ReadNext<std::string>(fory, buffer) != "str") {
+    Fail("String mismatch");
+  }
+  if (ReadNext<LocalDate>(fory, buffer) != day) {
+    Fail("LocalDate mismatch");
+  }
+  if (ReadNext<Timestamp>(fory, buffer) != instant) {
+    Fail("Timestamp mismatch");
+  }
+  if (ReadNext<std::vector<bool>>(fory, buffer) !=
+      std::vector<bool>({true, false})) {
+    Fail("Boolean array mismatch");
+  }
+  if (ReadNext<std::vector<uint8_t>>(fory, buffer) !=
+      std::vector<uint8_t>({1, static_cast<uint8_t>(127)})) {
+    Fail("Byte array mismatch");
+  }
+  if (ReadNext<std::vector<int16_t>>(fory, buffer) !=
+      std::vector<int16_t>({1, std::numeric_limits<int16_t>::max()})) {
+    Fail("Short array mismatch");
+  }
+  if (ReadNext<std::vector<int32_t>>(fory, buffer) !=
+      std::vector<int32_t>({1, std::numeric_limits<int32_t>::max()})) {
+    Fail("Int array mismatch");
+  }
+  if (ReadNext<std::vector<int64_t>>(fory, buffer) !=
+      std::vector<int64_t>({1, std::numeric_limits<int64_t>::max()})) {
+    Fail("Long array mismatch");
+  }
+  if (ReadNext<std::vector<float>>(fory, buffer) !=
+      std::vector<float>({1.0f, 2.0f})) {
+    Fail("Float array mismatch");
+  }
+  if (ReadNext<std::vector<double>>(fory, buffer) !=
+      std::vector<double>({1.0, 2.0})) {
+    Fail("Double array mismatch");
+  }
+  if (ReadNext<std::vector<std::string>>(fory, buffer) != str_list) {
+    Fail("List mismatch");
+  }
+  if (ReadNext<std::set<std::string>>(fory, buffer) != str_set) {
+    Fail("Set mismatch");
+  }
+  if (ReadNext<std::map<std::string, std::string>>(fory, buffer) != str_map) {
+    Fail("Map mismatch");
+  }
+  if (ReadNext<Color>(fory, buffer) != Color::White) {
+    Fail("Color mismatch");
+  }
+
+  std::vector<uint8_t> out;
+  out.reserve(bytes.size());
+  AppendSerialized(fory, true, out);
+  AppendSerialized(fory, false, out);
+  AppendSerialized(fory, -1, out);
+  AppendSerialized(fory, std::numeric_limits<int8_t>::max(), out);
+  AppendSerialized(fory, std::numeric_limits<int8_t>::min(), out);
+  AppendSerialized(fory, std::numeric_limits<int16_t>::max(), out);
+  AppendSerialized(fory, std::numeric_limits<int16_t>::min(), out);
+  AppendSerialized(fory, std::numeric_limits<int32_t>::max(), out);
+  AppendSerialized(fory, std::numeric_limits<int32_t>::min(), out);
+  AppendSerialized(fory, std::numeric_limits<int64_t>::max(), out);
+  AppendSerialized(fory, std::numeric_limits<int64_t>::min(), out);
+  AppendSerialized(fory, -1.0f, out);
+  AppendSerialized(fory, -1.0, out);
+  AppendSerialized(fory, std::string("str"), out);
+  AppendSerialized(fory, day, out);
+  AppendSerialized(fory, instant, out);
+  AppendSerialized(fory, std::vector<bool>({true, false}), out);
+  AppendSerialized(fory, std::vector<uint8_t>({1, 127}), out);
+  AppendSerialized(
+      fory, std::vector<int16_t>({1, std::numeric_limits<int16_t>::max()}),
+      out);
+  AppendSerialized(
+      fory, std::vector<int32_t>({1, std::numeric_limits<int32_t>::max()}),
+      out);
+  AppendSerialized(
+      fory, std::vector<int64_t>({1, std::numeric_limits<int64_t>::max()}),
+      out);
+  AppendSerialized(fory, std::vector<float>({1.0f, 2.0f}), out);
+  AppendSerialized(fory, std::vector<double>({1.0, 2.0}), out);
+  AppendSerialized(fory, str_list, out);
+  AppendSerialized(fory, str_set, out);
+  AppendSerialized(fory, str_map, out);
+  AppendSerialized(fory, Color::White, out);
+  WriteFile(data_file, out);
+}
+
+SimpleStruct BuildSimpleStruct() {
+  SimpleStruct obj;
+  obj.f1 = {{1, 1.0}, {2, 2.0}};
+  obj.f2 = 39;
+  obj.f3 = Item{std::string("item")};
+  obj.f4 = std::string("f4");
+  obj.f5 = Color::White;
+  obj.f6 = {std::string("f6")};
+  obj.f7 = 40;
+  obj.f8 = 41;
+  obj.last = 42;
+  return obj;
+}
+
+void RunTestSimpleStruct(const std::string &data_file) {
+  auto bytes = ReadFile(data_file);
+  auto fory = BuildFory(true, true);
+  RegisterBasicStructs(fory);
+  auto expected = BuildSimpleStruct();
+  Buffer buffer = MakeBuffer(bytes);
+  auto value = ReadNext<SimpleStruct>(fory, buffer);
+  if (!(value == expected)) {
+    Fail("SimpleStruct mismatch");
+  }
+  std::vector<uint8_t> out;
+  AppendSerialized(fory, value, out);
+  WriteFile(data_file, out);
+}
+
+void RunTestSimpleNamedStruct(const std::string &data_file) {
+  auto bytes = ReadFile(data_file);
+  auto fory = BuildFory(true, true);
+  EnsureOk(fory.register_struct<Color>("demo", "color"), "register color");
+  EnsureOk(fory.register_struct<Item>("demo", "item"), "register item");
+  EnsureOk(fory.register_struct<SimpleStruct>("demo", "simple_struct"),
+           "register simple_struct");
+  auto expected = BuildSimpleStruct();
+  Buffer buffer = MakeBuffer(bytes);
+  auto value = ReadNext<SimpleStruct>(fory, buffer);
+  if (!(value == expected)) {
+    Fail("Named SimpleStruct mismatch");
+  }
+  std::vector<uint8_t> out;
+  AppendSerialized(fory, value, out);
+  WriteFile(data_file, out);
+}
+
+void RunTestList(const std::string &data_file) {
+  auto bytes = ReadFile(data_file);
+  auto fory = BuildFory(true, true);
+  EnsureOk(fory.register_struct<Item>(102), "register Item");
+  Buffer buffer = MakeBuffer(bytes);
+
+  std::vector<std::optional<std::string>> expected1 = {std::string("a"),
+                                                       std::string("b")};
+  std::vector<std::optional<std::string>> expected2 = {std::nullopt,
+                                                       std::string("b")};
+  Item item_a;
+  item_a.name = std::string("a");
+  Item item_b;
+  item_b.name = std::string("b");
+  Item item_c;
+  item_c.name = std::string("c");
+  std::vector<std::optional<Item>> expected_items1 = {item_a, item_b};
+  std::vector<std::optional<Item>> expected_items2 = {std::nullopt, item_c};
+
+  if (ReadNext<std::vector<std::optional<std::string>>>(fory, buffer) !=
+      expected1) {
+    Fail("List string mismatch");
+  }
+  if (ReadNext<std::vector<std::optional<std::string>>>(fory, buffer) !=
+      expected2) {
+    Fail("List string with null mismatch");
+  }
+  if (ReadNext<std::vector<std::optional<Item>>>(fory, buffer) !=
+      expected_items1) {
+    Fail("List item mismatch");
+  }
+  if (ReadNext<std::vector<std::optional<Item>>>(fory, buffer) !=
+      expected_items2) {
+    Fail("List item with null mismatch");
+  }
+
+  std::vector<uint8_t> out;
+  AppendSerialized(fory, expected1, out);
+  AppendSerialized(fory, expected2, out);
+  AppendSerialized(fory, expected_items1, out);
+  AppendSerialized(fory, expected_items2, out);
+  WriteFile(data_file, out);
+}
+
+void RunTestMap(const std::string &data_file) {
+  auto bytes = ReadFile(data_file);
+  auto fory = BuildFory(true, true);
+  EnsureOk(fory.register_struct<Item>(102), "register Item");
+  Buffer buffer = MakeBuffer(bytes);
+
+  using OptStr = std::optional<std::string>;
+  using OptItem = std::optional<Item>;
+  std::map<OptStr, OptStr> str_map = {{std::string("k1"), std::string("v1")},
+                                      {std::nullopt, std::string("v2")},
+                                      {std::string("k3"), std::nullopt},
+                                      {std::string("k4"), std::string("v4")}};
+  Item item1{std::string("item1")};
+  Item item2{std::string("item2")};
+  Item item3{std::string("item3")};
+  std::map<OptStr, OptItem> item_map = {{std::string("k1"), item1},
+                                        {std::nullopt, item2},
+                                        {std::string("k3"), std::nullopt},
+                                        {std::string("k4"), item3}};
+
+  if (ReadNext<std::map<OptStr, OptStr>>(fory, buffer) != str_map) {
+    Fail("Map<string,string> mismatch");
+  }
+  if (ReadNext<std::map<OptStr, OptItem>>(fory, buffer) != item_map) {
+    Fail("Map<string,item> mismatch");
+  }
+
+  std::vector<uint8_t> out;
+  AppendSerialized(fory, str_map, out);
+  AppendSerialized(fory, item_map, out);
+  WriteFile(data_file, out);
+}
+
+void RunTestInteger(const std::string &data_file) {
+  auto bytes = ReadFile(data_file);
+  auto fory = BuildFory(true, true);
+  EnsureOk(fory.register_struct<Item1>(101), "register Item1");
+  Buffer buffer = MakeBuffer(bytes);
+
+  Item1 expected;
+  expected.f1 = 1;
+  expected.f2 = 2;
+  expected.f3 = 3;
+  expected.f4 = 4;
+  expected.f5 = 0;
+  expected.f6 = std::nullopt;
+
+  auto item_value = ReadNext<Item1>(fory, buffer);
+  if (!(item_value == expected)) {
+    Fail("Item1 mismatch");
+  }
+  if (ReadNext<int32_t>(fory, buffer) != 1 ||
+      ReadNext<int32_t>(fory, buffer) != 2 ||
+      ReadNext<std::optional<int32_t>>(fory, buffer) != 3 ||
+      ReadNext<std::optional<int32_t>>(fory, buffer) != 4 ||
+      ReadNext<int32_t>(fory, buffer) != 0 ||
+      ReadNext<std::optional<int32_t>>(fory, buffer) != std::nullopt) {
+    Fail("Primitive integer mismatch");
+  }
+
+  std::vector<uint8_t> out;
+  AppendSerialized(fory, item_value, out);
+  AppendSerialized(fory, 1, out);
+  AppendSerialized(fory, 2, out);
+  AppendSerialized(fory, std::optional<int32_t>(3), out);
+  AppendSerialized(fory, std::optional<int32_t>(4), out);
+  AppendSerialized(fory, 0, out);
+  AppendSerialized(fory, std::optional<int32_t>(), out);
+  WriteFile(data_file, out);
+}
+
+void RunTestSkipIdCustom(const std::string &data_file) {
+  auto bytes = ReadFile(data_file);
+  auto limited = BuildFory(true, true);
+  EnsureOk(limited.register_struct<MyExt>(103), "register MyExt limited");
+  EnsureOk(limited.register_struct<EmptyWrapper>(104),
+           "register EmptyWrapper limited");
+  {
+    std::vector<uint8_t> copy = bytes;
+    Buffer buffer = MakeBuffer(copy);
+    (void)ReadNext<EmptyWrapper>(limited, buffer);
+  }
+
+  auto full = BuildFory(true, true);
+  EnsureOk(full.register_struct<Color>(101), "register Color full");
+  EnsureOk(full.register_struct<MyStruct>(102), "register MyStruct full");
+  EnsureOk(full.register_struct<MyExt>(103), "register MyExt full");
+  EnsureOk(full.register_struct<MyWrapper>(104), "register MyWrapper full");
+
+  MyWrapper wrapper;
+  wrapper.color = Color::White;
+  wrapper.my_struct = MyStruct(42);
+  wrapper.my_ext = MyExt{43};
+
+  std::vector<uint8_t> out;
+  AppendSerialized(full, wrapper, out);
+  WriteFile(data_file, out);
+}
+
+void RunTestSkipNameCustom(const std::string &data_file) {
+  auto bytes = ReadFile(data_file);
+  auto limited = BuildFory(true, true);
+  EnsureOk(limited.register_struct<MyExt>("my_ext"), "register named MyExt");
+  EnsureOk(limited.register_struct<EmptyWrapper>("my_wrapper"),
+           "register named EmptyWrapper");
+  {
+    std::vector<uint8_t> copy = bytes;
+    Buffer buffer = MakeBuffer(copy);
+    (void)ReadNext<EmptyWrapper>(limited, buffer);
+  }
+
+  auto full = BuildFory(true, true);
+  EnsureOk(full.register_struct<Color>("color"), "register named Color");
+  EnsureOk(full.register_struct<MyStruct>("my_struct"),
+           "register named MyStruct");
+  EnsureOk(full.register_struct<MyExt>("my_ext"), "register named MyExt");
+  EnsureOk(full.register_struct<MyWrapper>("my_wrapper"),
+           "register named MyWrapper");
+
+  MyWrapper wrapper;
+  wrapper.color = Color::White;
+  wrapper.my_struct = MyStruct(42);
+  wrapper.my_ext = MyExt{43};
+
+  std::vector<uint8_t> out;
+  AppendSerialized(full, wrapper, out);
+  WriteFile(data_file, out);
+}
+
+void RunTestConsistentNamed(const std::string &data_file) {
+  auto bytes = ReadFile(data_file);
+  auto fory = BuildFory(false, true, true);
+  EnsureOk(fory.register_struct<Color>("color"), "register named color");
+  EnsureOk(fory.register_struct<MyStruct>("my_struct"),
+           "register named MyStruct");
+  EnsureOk(fory.register_struct<MyExt>("my_ext"), "register named MyExt");
+
+  MyStruct my_struct(42);
+  MyExt my_ext{43};
+
+  Buffer buffer = MakeBuffer(bytes);
+  for (int i = 0; i < 3; ++i) {
+    if (ReadNext<Color>(fory, buffer) != Color::White) {
+      Fail("Consistent named color mismatch");
+    }
+  }
+  for (int i = 0; i < 3; ++i) {
+    if (!(ReadNext<MyStruct>(fory, buffer) == my_struct)) {
+      Fail("Consistent named struct mismatch");
+    }
+  }
+  for (int i = 0; i < 3; ++i) {
+    if (!(ReadNext<MyExt>(fory, buffer) == my_ext)) {
+      Fail("Consistent named ext mismatch");
+    }
+  }
+
+  std::vector<uint8_t> out;
+  for (int i = 0; i < 3; ++i) {
+    AppendSerialized(fory, Color::White, out);
+  }
+  for (int i = 0; i < 3; ++i) {
+    AppendSerialized(fory, my_struct, out);
+  }
+  for (int i = 0; i < 3; ++i) {
+    AppendSerialized(fory, my_ext, out);
+  }
+  WriteFile(data_file, out);
+}
+
+void RunTestStructVersionCheck(const std::string &data_file) {
+  auto bytes = ReadFile(data_file);
+  auto fory = BuildFory(false, true, true);
+  EnsureOk(fory.register_struct<VersionCheckStruct>(201),
+           "register VersionCheckStruct");
+
+  VersionCheckStruct expected;
+  expected.f1 = 10;
+  expected.f2 = std::string("test");
+  expected.f3 = 3.2;
+
+  Buffer buffer = MakeBuffer(bytes);
+  auto value = ReadNext<VersionCheckStruct>(fory, buffer);
+  if (!(value == expected)) {
+    Fail("VersionCheckStruct mismatch");
+  }
+
+  std::vector<uint8_t> out;
+  AppendSerialized(fory, value, out);
+  WriteFile(data_file, out);
+}
+
+} // namespace
+
+// Remaining test handlers will be defined below.

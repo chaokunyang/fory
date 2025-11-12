@@ -116,6 +116,7 @@ public abstract class XlangTestBase extends ForyTestBase {
 
   protected ExecutionContext prepareExecution(String caseName, byte[] payload) throws IOException {
     Path dataFile = createDataFile(caseName, payload);
+    System.out.println("DATA_FILE(" + caseName + "): " + dataFile);
     return new ExecutionContext(caseName, dataFile, buildCommandContext(caseName, dataFile));
   }
 

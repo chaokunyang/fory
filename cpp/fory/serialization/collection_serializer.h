@@ -19,8 +19,11 @@
 
 #pragma once
 
+#include "fory/serialization/array_serializer.h"
 #include "fory/serialization/serializer.h"
+#include <array>
 #include <cstdint>
+#include <limits>
 #include <set>
 #include <unordered_set>
 #include <vector>
@@ -107,10 +110,83 @@ struct CollectionHeader {
 // std::vector serializer
 // ============================================================================
 
-/// Vector serializer for non-bool types
+/// Vector serializer for arithmetic (non-bool) types encoded as typed arrays
 template <typename T, typename Alloc>
-struct Serializer<std::vector<T, Alloc>,
-                  std::enable_if_t<!std::is_same_v<T, bool>>> {
+struct Serializer<
+    std::vector<T, Alloc>,
+    std::enable_if_t<std::is_arithmetic_v<T> && !std::is_same_v<T, bool>>> {
+  static constexpr TypeId type_id = Serializer<std::array<T, 1>>::type_id;
+
+  static inline Result<void, Error> write(const std::vector<T, Alloc> &vec,
+                                          WriteContext &ctx, bool write_ref,
+                                          bool write_type) {
+    write_not_null_ref_flag(ctx, write_ref);
+    if (write_type) {
+      ctx.write_uint8(static_cast<uint8_t>(type_id));
+    }
+    return write_data(vec, ctx);
+  }
+
+  static inline Result<void, Error> write_data(const std::vector<T, Alloc> &vec,
+                                               WriteContext &ctx) {
+    ctx.write_varuint32(static_cast<uint32_t>(vec.size()));
+    if (!vec.empty()) {
+      uint64_t total_bytes = static_cast<uint64_t>(vec.size()) * sizeof(T);
+      if (total_bytes > std::numeric_limits<uint32_t>::max()) {
+        return Unexpected(
+            Error::invalid("Vector byte size exceeds uint32_t range"));
+      }
+      ctx.write_bytes(vec.data(), static_cast<uint32_t>(total_bytes));
+    }
+    return Result<void, Error>();
+  }
+
+  static inline Result<void, Error>
+  write_data_generic(const std::vector<T, Alloc> &vec, WriteContext &ctx,
+                     bool has_generics) {
+    (void)has_generics;
+    return write_data(vec, ctx);
+  }
+
+  static inline Result<std::vector<T, Alloc>, Error>
+  read(ReadContext &ctx, bool read_ref, bool read_type) {
+    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
+    if (!has_value) {
+      return std::vector<T, Alloc>();
+    }
+
+    if (read_type) {
+      FORY_TRY(type_byte, ctx.read_uint8());
+      if (type_byte != static_cast<uint8_t>(type_id)) {
+        return Unexpected(
+            Error::type_mismatch(type_byte, static_cast<uint8_t>(type_id)));
+      }
+    }
+    return read_data(ctx);
+  }
+
+  static inline Result<std::vector<T, Alloc>, Error>
+  read_data(ReadContext &ctx) {
+    FORY_TRY(size, ctx.read_varuint32());
+    std::vector<T, Alloc> result(size);
+    if (!result.empty()) {
+      uint64_t total_bytes = static_cast<uint64_t>(size) * sizeof(T);
+      if (total_bytes > std::numeric_limits<uint32_t>::max()) {
+        return Unexpected(
+            Error::invalid("Vector byte size exceeds uint32_t range"));
+      }
+      FORY_RETURN_NOT_OK(
+          ctx.read_bytes(result.data(), static_cast<uint32_t>(total_bytes)));
+    }
+    return result;
+  }
+};
+
+/// Vector serializer for non-bool, non-arithmetic types
+template <typename T, typename Alloc>
+struct Serializer<
+    std::vector<T, Alloc>,
+    std::enable_if_t<!std::is_same_v<T, bool> && !std::is_arithmetic_v<T>>> {
   static constexpr TypeId type_id = TypeId::LIST;
 
   static inline Result<void, Error> write(const std::vector<T, Alloc> &vec,
@@ -200,13 +276,12 @@ struct Serializer<std::vector<T, Alloc>,
 };
 
 /// Specialized serializer for std::vector<bool>
-template <typename Alloc>
-struct Serializer<std::vector<bool, Alloc>> {
+template <typename Alloc> struct Serializer<std::vector<bool, Alloc>> {
   static constexpr TypeId type_id = TypeId::BOOL_ARRAY;
 
-  static inline Result<void, Error>
-  write(const std::vector<bool, Alloc> &vec, WriteContext &ctx,
-        bool write_ref, bool write_type) {
+  static inline Result<void, Error> write(const std::vector<bool, Alloc> &vec,
+                                          WriteContext &ctx, bool write_ref,
+                                          bool write_type) {
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
       ctx.write_uint8(static_cast<uint8_t>(type_id));

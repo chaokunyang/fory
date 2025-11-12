@@ -251,7 +251,7 @@ public:
           Error::unsupported("Cross-endian deserialization not yet supported"));
     }
 
-    return deserialize_from<T>(buffer);
+    return deserialize_payload<T>(buffer);
   }
 
   /// Core deserialization method that takes an explicit ReadContext.
@@ -284,18 +284,17 @@ public:
   /// @param buffer Input buffer to read from.
   /// @return Deserialized object on success, error on failure.
   template <typename T> Result<T, Error> deserialize_from(Buffer &buffer) {
-    auto ctx_handle = read_ctx_pool_.acquire();
-    ReadContext &ctx = *ctx_handle;
-    ctx.attach(buffer);
-    struct ReadContextCleanup {
-      ReadContext &ctx;
-      ~ReadContextCleanup() {
-        ctx.reset();
-        ctx.detach();
-      }
-    } cleanup{ctx};
+    // Read and validate header from the shared buffer.
+    FORY_TRY(header, read_header(buffer));
+    if (header.is_null) {
+      return Unexpected(Error::invalid_data("Cannot deserialize null object"));
+    }
+    if (header.is_little_endian != is_little_endian_system()) {
+      return Unexpected(
+          Error::unsupported("Cross-endian deserialization not yet supported"));
+    }
 
-    return deserialize_from<T>(ctx, buffer);
+    return deserialize_payload<T>(buffer);
   }
 
   /// Deserialize an object from a byte vector.
@@ -356,6 +355,21 @@ public:
   }
 
 private:
+  template <typename T> Result<T, Error> deserialize_payload(Buffer &buffer) {
+    auto ctx_handle = read_ctx_pool_.acquire();
+    ReadContext &ctx = *ctx_handle;
+    ctx.attach(buffer);
+    struct ReadContextCleanup {
+      ReadContext &ctx;
+      ~ReadContextCleanup() {
+        ctx.reset();
+        ctx.detach();
+      }
+    } cleanup{ctx};
+
+    return deserialize_from<T>(ctx, buffer);
+  }
+
   /// Core serialization implementation that takes WriteContext and Buffer.
   /// All other serialization methods forward to this one.
   ///

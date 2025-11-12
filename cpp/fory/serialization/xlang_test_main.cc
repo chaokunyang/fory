@@ -40,11 +40,11 @@
 
 using ::fory::Buffer;
 using ::fory::Error;
+using ::fory::Result;
 using ::fory::serialization::Fory;
 using ::fory::serialization::ForyBuilder;
 using ::fory::serialization::LocalDate;
 using ::fory::serialization::Timestamp;
-using ::fory::Result;
 
 [[noreturn]] void Fail(const std::string &message) {
   throw std::runtime_error(message);
@@ -58,13 +58,36 @@ std::string GetDataFilePath() {
   return std::string(env);
 }
 
+thread_local std::string g_current_case;
+
+void MaybeDumpInput(const std::vector<uint8_t> &data) {
+  const char *dump_env = std::getenv("FORY_CPP_DUMP_CASE");
+  if (dump_env == nullptr || g_current_case != dump_env) {
+    return;
+  }
+  const char *dir = std::getenv("FORY_CPP_DUMP_DIR");
+  std::string dump_dir = dir ? std::string(dir) : std::string("/tmp");
+  std::string out_path = dump_dir + "/cpp_case_" + g_current_case + ".bin";
+  std::ofstream output(out_path, std::ios::binary | std::ios::trunc);
+  if (!output) {
+    std::cerr << "Failed to dump input to " << out_path << std::endl;
+    return;
+  }
+  output.write(reinterpret_cast<const char *>(data.data()),
+               static_cast<std::streamsize>(data.size()));
+  std::cerr << "Dumped input for case " << g_current_case << " to "
+            << out_path << std::endl;
+}
+
 std::vector<uint8_t> ReadFile(const std::string &path) {
   std::ifstream input(path, std::ios::binary);
   if (!input) {
     Fail("Failed to open file for reading: " + path);
   }
-  return std::vector<uint8_t>((std::istreambuf_iterator<char>(input)),
-                              std::istreambuf_iterator<char>());
+  std::vector<uint8_t> data((std::istreambuf_iterator<char>(input)),
+                            std::istreambuf_iterator<char>());
+  MaybeDumpInput(data);
+  return data;
 }
 
 void WriteFile(const std::string &path, const std::vector<uint8_t> &data) {
@@ -430,6 +453,8 @@ int main(int argc, char **argv) {
   if (case_name.empty()) {
     Fail("Missing --case argument");
   }
+
+  g_current_case = case_name;
 
   const std::string data_file = GetDataFilePath();
   try {

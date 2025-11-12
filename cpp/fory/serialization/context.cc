@@ -35,6 +35,32 @@ WriteContext::WriteContext(const Config &config,
 
 WriteContext::~WriteContext() = default;
 
+Result<void, Error>
+WriteContext::write_enum_type_info(const std::type_index &type,
+                                   uint32_t base_type_id) {
+  if (!type_resolver_) {
+    buffer_.WriteUint8(static_cast<uint8_t>(base_type_id));
+    return Result<void, Error>();
+  }
+  auto type_info_result = type_resolver_->get_type_info(type);
+  if (type_info_result.ok()) {
+    const TypeInfo *info = type_info_result.value();
+    if (info != nullptr) {
+      bool needs_extended =
+          info->register_by_name || !is_internal_type(info->type_id);
+      if (needs_extended) {
+        auto result = write_any_typeinfo(info->type_id, type);
+        if (!result.ok()) {
+          return Unexpected(result.error());
+        }
+        return Result<void, Error>();
+      }
+    }
+  }
+  buffer_.WriteUint8(static_cast<uint8_t>(base_type_id));
+  return Result<void, Error>();
+}
+
 Result<size_t, Error> WriteContext::push_meta(const std::type_index &type_id) {
   auto it = write_type_id_index_map_.find(type_id);
   if (it != write_type_id_index_map_.end()) {
@@ -143,6 +169,44 @@ ReadContext::ReadContext(const Config &config,
 
 ReadContext::~ReadContext() = default;
 
+Result<void, Error>
+ReadContext::read_enum_type_info(const std::type_index &type,
+                                 uint32_t base_type_id) {
+  if (!type_resolver_) {
+    FORY_TRY(type_id, read_varuint32());
+    if (type_id != base_type_id) {
+      return Unexpected(Error::type_mismatch(type_id, base_type_id));
+    }
+    return Result<void, Error>();
+  }
+
+  uint32_t start = buffer_->reader_index();
+  FORY_TRY(type_id, buffer_->ReadVarUint32());
+  if (is_internal_type(type_id)) {
+    if (type_id != base_type_id) {
+      return Unexpected(Error::type_mismatch(type_id, base_type_id));
+    }
+    return Result<void, Error>();
+  }
+
+  buffer_->ReaderIndex(start);
+  auto type_info_result = read_any_typeinfo();
+  if (!type_info_result.ok()) {
+    return Unexpected(type_info_result.error());
+  }
+
+  const auto &type_info = type_info_result.value();
+  if (!type_info) {
+    return Result<void, Error>();
+  }
+  uint32_t low = type_info->type_id & 0xff;
+  if (low == static_cast<uint32_t>(TypeId::ENUM) ||
+      low == static_cast<uint32_t>(TypeId::NAMED_ENUM)) {
+    return Result<void, Error>();
+  }
+  return Unexpected(Error::type_mismatch(low, base_type_id));
+}
+
 Result<void, Error> ReadContext::load_type_meta(int32_t meta_offset) {
   size_t current_pos = buffer_->reader_index();
   size_t meta_start = current_pos + meta_offset;
@@ -238,7 +302,12 @@ Result<std::shared_ptr<TypeInfo>, Error> ReadContext::read_any_typeinfo() {
       auto type_info =
           type_resolver_->get_type_info_by_name(namespace_str, type_name);
       if (!type_info) {
-        return Unexpected(Error::type_error("Name harness not found"));
+        auto stub = std::make_shared<TypeInfo>();
+        stub->type_id = fory_type_id;
+        stub->namespace_name = std::move(namespace_str);
+        stub->type_name = std::move(type_name);
+        stub->register_by_name = true;
+        return stub;
       }
       return type_info;
     }

@@ -134,6 +134,12 @@ public:
     }
   }
 
+  Result<void, Error> write_enum_type_info(const std::type_index &type,
+                                           uint32_t base_type_id);
+
+  uint8_t resolve_enum_type_tag(const std::type_index &type,
+                                uint8_t default_tag) const;
+
   /// Write uint8_t value to buffer.
   inline void write_uint8(uint8_t value) { buffer().WriteUint8(value); }
 
@@ -294,6 +300,9 @@ public:
     }
   }
 
+  uint8_t resolve_enum_type_tag(const std::type_index &type,
+                                uint8_t default_tag) const;
+
   /// Read uint8_t value from buffer.
   inline Result<uint8_t, Error> read_uint8() { return buffer().ReadUint8(); }
 
@@ -314,6 +323,9 @@ public:
   inline Result<void, Error> read_bytes(void *data, uint32_t length) {
     return buffer().ReadBytes(data, length);
   }
+
+  Result<void, Error> read_enum_type_info(const std::type_index &type,
+                                          uint32_t base_type_id);
 
   /// Load all TypeMetas from buffer at the specified offset.
   /// After loading, the reader position is restored to where it was before.

@@ -27,6 +27,7 @@
 #include "fory/util/result.h"
 #include <cstdint>
 #include <type_traits>
+#include <typeindex>
 
 namespace fory {
 namespace serialization {
@@ -46,7 +47,8 @@ struct Serializer<E, std::enable_if_t<std::is_enum_v<E>>> {
                                           bool write_ref, bool write_type) {
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
-      ctx.write_uint8(static_cast<uint8_t>(type_id));
+      FORY_RETURN_NOT_OK(ctx.write_enum_type_info(
+          std::type_index(typeid(E)), static_cast<uint32_t>(type_id)));
     }
     return write_data(value, ctx);
   }
@@ -72,11 +74,8 @@ struct Serializer<E, std::enable_if_t<std::is_enum_v<E>>> {
       return E{};
     }
     if (read_type) {
-      FORY_TRY(type_byte, ctx.read_uint8());
-      if (type_byte != static_cast<uint8_t>(type_id)) {
-        return Unexpected(
-            Error::type_mismatch(type_byte, static_cast<uint8_t>(type_id)));
-      }
+      FORY_RETURN_NOT_OK(ctx.read_enum_type_info(
+          std::type_index(typeid(E)), static_cast<uint32_t>(type_id)));
     }
     return read_data(ctx);
   }
@@ -85,7 +84,9 @@ struct Serializer<E, std::enable_if_t<std::is_enum_v<E>>> {
     FORY_TRY(ordinal, Serializer<OrdinalType>::read_data(ctx));
     E value{};
     if (!Metadata::from_ordinal(ordinal, &value)) {
-      return Unexpected(Error::unknown_enum("Invalid ordinal value"));
+      return Unexpected(
+          Error::unknown_enum("Invalid ordinal value: " +
+                              std::to_string(static_cast<long long>(ordinal))));
     }
     return value;
   }

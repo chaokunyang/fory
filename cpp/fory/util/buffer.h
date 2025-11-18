@@ -335,6 +335,17 @@ public:
     return value;
   }
 
+  /// Read int16_t value as fixed 2 bytes from buffer at current reader index.
+  /// Advances reader index and checks bounds.
+  inline Result<int16_t, Error> ReadInt16() {
+    if (reader_index_ + 2 > size_) {
+      return Unexpected(Error::buffer_out_of_bound(reader_index_, 2, size_));
+    }
+    int16_t value = Get<int16_t>(reader_index_);
+    IncreaseReaderIndex(2);
+    return value;
+  }
+
   /// Read int32_t value as fixed 4 bytes from buffer at current reader index.
   /// Advances reader index and checks bounds.
   inline Result<int32_t, Error> ReadInt32() {
@@ -343,6 +354,39 @@ public:
     }
     int32_t value = Get<int32_t>(reader_index_);
     IncreaseReaderIndex(4);
+    return value;
+  }
+
+  /// Read int64_t value as fixed 8 bytes from buffer at current reader index.
+  /// Advances reader index and checks bounds.
+  inline Result<int64_t, Error> ReadInt64() {
+    if (reader_index_ + 8 > size_) {
+      return Unexpected(Error::buffer_out_of_bound(reader_index_, 8, size_));
+    }
+    int64_t value = Get<int64_t>(reader_index_);
+    IncreaseReaderIndex(8);
+    return value;
+  }
+
+  /// Read float value as fixed 4 bytes from buffer at current reader index.
+  /// Advances reader index and checks bounds.
+  inline Result<float, Error> ReadFloat() {
+    if (reader_index_ + 4 > size_) {
+      return Unexpected(Error::buffer_out_of_bound(reader_index_, 4, size_));
+    }
+    float value = Get<float>(reader_index_);
+    IncreaseReaderIndex(4);
+    return value;
+  }
+
+  /// Read double value as fixed 8 bytes from buffer at current reader index.
+  /// Advances reader index and checks bounds.
+  inline Result<double, Error> ReadDouble() {
+    if (reader_index_ + 8 > size_) {
+      return Unexpected(Error::buffer_out_of_bound(reader_index_, 8, size_));
+    }
+    double value = Get<double>(reader_index_);
+    IncreaseReaderIndex(8);
     return value;
   }
 
@@ -379,6 +423,18 @@ public:
     uint32_t read_bytes = 0;
     uint64_t value = GetVarUint64(reader_index_, &read_bytes);
     IncreaseReaderIndex(read_bytes);
+    return value;
+  }
+
+  /// Read int64_t value as varint (zigzag encoded) from buffer at current
+  /// reader index. Advances reader index and checks bounds.
+  inline Result<int64_t, Error> ReadVarInt64() {
+    auto result = ReadVarUint64();
+    if (!result.ok()) {
+      return Unexpected(result.error());
+    }
+    uint64_t raw = result.value();
+    int64_t value = static_cast<int64_t>((raw >> 1) ^ (~(raw & 1) + 1));
     return value;
   }
 

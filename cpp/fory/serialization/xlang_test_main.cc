@@ -75,8 +75,8 @@ void MaybeDumpInput(const std::vector<uint8_t> &data) {
   }
   output.write(reinterpret_cast<const char *>(data.data()),
                static_cast<std::streamsize>(data.size()));
-  std::cerr << "Dumped input for case " << g_current_case << " to "
-            << out_path << std::endl;
+  std::cerr << "Dumped input for case " << g_current_case << " to " << out_path
+            << std::endl;
 }
 
 std::vector<uint8_t> ReadFile(const std::string &path) {
@@ -97,180 +97,6 @@ void WriteFile(const std::string &path, const std::vector<uint8_t> &data) {
   }
   output.write(reinterpret_cast<const char *>(data.data()),
                static_cast<std::streamsize>(data.size()));
-}
-
-// ---------------------------------------------------------------------------
-// Primitive buffer helpers (for compatibility tests that operate directly on
-// MemoryBuffer without using Fory serialization).
-// ---------------------------------------------------------------------------
-
-uint8_t ReadByte(const std::vector<uint8_t> &data, size_t &offset) {
-  if (offset >= data.size()) {
-    Fail("Unexpected end of buffer");
-  }
-  return data[offset++];
-}
-
-int16_t ReadInt16LE(const std::vector<uint8_t> &data, size_t &offset) {
-  if (offset + 2 > data.size()) {
-    Fail("Unexpected end of buffer while reading int16");
-  }
-  int16_t value = static_cast<int16_t>(data[offset]) |
-                  static_cast<int16_t>(data[offset + 1] << 8);
-  offset += 2;
-  return value;
-}
-
-int32_t ReadInt32LE(const std::vector<uint8_t> &data, size_t &offset) {
-  if (offset + 4 > data.size()) {
-    Fail("Unexpected end of buffer while reading int32");
-  }
-  int32_t value = 0;
-  for (int i = 3; i >= 0; --i) {
-    value = (value << 8) | data[offset + i];
-  }
-  offset += 4;
-  return value;
-}
-
-int64_t ReadInt64LE(const std::vector<uint8_t> &data, size_t &offset) {
-  if (offset + 8 > data.size()) {
-    Fail("Unexpected end of buffer while reading int64");
-  }
-  int64_t value = 0;
-  for (int i = 7; i >= 0; --i) {
-    value = (value << 8) | static_cast<int64_t>(data[offset + i]);
-  }
-  offset += 8;
-  return value;
-}
-
-float ReadFloatLE(const std::vector<uint8_t> &data, size_t &offset) {
-  int32_t raw = ReadInt32LE(data, offset);
-  float value;
-  std::memcpy(&value, &raw, sizeof(float));
-  return value;
-}
-
-double ReadDoubleLE(const std::vector<uint8_t> &data, size_t &offset) {
-  int64_t raw = ReadInt64LE(data, offset);
-  double value;
-  std::memcpy(&value, &raw, sizeof(double));
-  return value;
-}
-
-uint64_t ReadVarUint(const std::vector<uint8_t> &data, size_t &offset) {
-  uint64_t value = 0;
-  int shift = 0;
-  while (true) {
-    uint8_t byte = ReadByte(data, offset);
-    value |= static_cast<uint64_t>(byte & 0x7F) << shift;
-    if ((byte & 0x80) == 0) {
-      break;
-    }
-    shift += 7;
-    if (shift >= 64) {
-      Fail("Varint too large");
-    }
-  }
-  return value;
-}
-
-uint32_t ReadVarUint32(const std::vector<uint8_t> &data, size_t &offset) {
-  return static_cast<uint32_t>(ReadVarUint(data, offset));
-}
-
-uint64_t ReadVarUint64(const std::vector<uint8_t> &data, size_t &offset) {
-  uint64_t value = 0;
-  int shift = 0;
-  for (int i = 0; i < 8; ++i) {
-    uint8_t byte = ReadByte(data, offset);
-    value |= static_cast<uint64_t>(byte & 0x7F) << shift;
-    if ((byte & 0x80) == 0) {
-      return value;
-    }
-    shift += 7;
-  }
-  uint8_t last = ReadByte(data, offset);
-  value |= static_cast<uint64_t>(last) << 56;
-  return value;
-}
-
-int32_t ReadVarInt32(const std::vector<uint8_t> &data, size_t &offset) {
-  uint32_t raw = ReadVarUint32(data, offset);
-  return static_cast<int32_t>((raw >> 1) ^ (~(raw & 1) + 1));
-}
-
-int64_t ReadVarInt64(const std::vector<uint8_t> &data, size_t &offset) {
-  uint64_t raw = ReadVarUint64(data, offset);
-  return static_cast<int64_t>((raw >> 1) ^ (~(raw & 1) + 1));
-}
-
-void WriteInt16LE(int16_t value, std::vector<uint8_t> &out) {
-  out.push_back(static_cast<uint8_t>(value & 0xFF));
-  out.push_back(static_cast<uint8_t>((value >> 8) & 0xFF));
-}
-
-void WriteInt32LE(int32_t value, std::vector<uint8_t> &out) {
-  out.push_back(static_cast<uint8_t>(value & 0xFF));
-  out.push_back(static_cast<uint8_t>((value >> 8) & 0xFF));
-  out.push_back(static_cast<uint8_t>((value >> 16) & 0xFF));
-  out.push_back(static_cast<uint8_t>((value >> 24) & 0xFF));
-}
-
-void WriteInt64LE(int64_t value, std::vector<uint8_t> &out) {
-  for (int i = 0; i < 8; ++i) {
-    out.push_back(static_cast<uint8_t>((value >> (8 * i)) & 0xFF));
-  }
-}
-
-void WriteFloatLE(float value, std::vector<uint8_t> &out) {
-  int32_t raw;
-  std::memcpy(&raw, &value, sizeof(float));
-  WriteInt32LE(raw, out);
-}
-
-void WriteDoubleLE(double value, std::vector<uint8_t> &out) {
-  int64_t raw;
-  std::memcpy(&raw, &value, sizeof(double));
-  WriteInt64LE(raw, out);
-}
-
-void WriteVarUint32(uint32_t value, std::vector<uint8_t> &out) {
-  while (true) {
-    uint8_t byte = static_cast<uint8_t>(value & 0x7F);
-    value >>= 7;
-    if (value != 0) {
-      byte |= 0x80;
-    }
-    out.push_back(byte);
-    if (value == 0) {
-      break;
-    }
-  }
-}
-
-void WriteVarUint64(uint64_t value, std::vector<uint8_t> &out) {
-  int count = 0;
-  while (value >= 0x80 && count < 8) {
-    uint8_t byte = static_cast<uint8_t>((value & 0x7F) | 0x80);
-    out.push_back(byte);
-    value >>= 7;
-    ++count;
-  }
-  out.push_back(static_cast<uint8_t>(value & 0xFF));
-}
-
-void WriteVarInt32(int32_t value, std::vector<uint8_t> &out) {
-  uint32_t zigzag =
-      (static_cast<uint32_t>(value) << 1) ^ static_cast<uint32_t>(value >> 31);
-  WriteVarUint32(zigzag, out);
-}
-
-void WriteVarInt64(int64_t value, std::vector<uint8_t> &out) {
-  uint64_t zigzag =
-      (static_cast<uint64_t>(value) << 1) ^ static_cast<uint64_t>(value >> 63);
-  WriteVarUint64(zigzag, out);
 }
 
 // ---------------------------------------------------------------------------
@@ -500,22 +326,62 @@ namespace {
 
 void RunTestBuffer(const std::string &data_file) {
   auto bytes = ReadFile(data_file);
-  size_t offset = 0;
-  bool bool_val = ReadByte(bytes, offset) != 0;
-  int8_t int8_val = static_cast<int8_t>(ReadByte(bytes, offset));
-  int16_t int16_val = ReadInt16LE(bytes, offset);
-  int32_t int32_val = ReadInt32LE(bytes, offset);
-  int64_t int64_val = ReadInt64LE(bytes, offset);
-  float float_val = ReadFloatLE(bytes, offset);
-  double double_val = ReadDoubleLE(bytes, offset);
-  uint32_t varint = ReadVarUint32(bytes, offset);
-  int32_t payload_len = ReadInt32LE(bytes, offset);
-  if (payload_len < 0 || offset + payload_len > bytes.size()) {
+  Buffer buffer(bytes.data(), static_cast<uint32_t>(bytes.size()), false);
+
+  auto bool_val_result = buffer.ReadUint8();
+  if (!bool_val_result.ok())
+    Fail("Failed to read bool: " + bool_val_result.error().message());
+  bool bool_val = bool_val_result.value() != 0;
+
+  auto int8_val_result = buffer.ReadInt8();
+  if (!int8_val_result.ok())
+    Fail("Failed to read int8: " + int8_val_result.error().message());
+  int8_t int8_val = int8_val_result.value();
+
+  auto int16_val_result = buffer.ReadInt16();
+  if (!int16_val_result.ok())
+    Fail("Failed to read int16: " + int16_val_result.error().message());
+  int16_t int16_val = int16_val_result.value();
+
+  auto int32_val_result = buffer.ReadInt32();
+  if (!int32_val_result.ok())
+    Fail("Failed to read int32: " + int32_val_result.error().message());
+  int32_t int32_val = int32_val_result.value();
+
+  auto int64_val_result = buffer.ReadInt64();
+  if (!int64_val_result.ok())
+    Fail("Failed to read int64: " + int64_val_result.error().message());
+  int64_t int64_val = int64_val_result.value();
+
+  auto float_val_result = buffer.ReadFloat();
+  if (!float_val_result.ok())
+    Fail("Failed to read float: " + float_val_result.error().message());
+  float float_val = float_val_result.value();
+
+  auto double_val_result = buffer.ReadDouble();
+  if (!double_val_result.ok())
+    Fail("Failed to read double: " + double_val_result.error().message());
+  double double_val = double_val_result.value();
+
+  auto varint_result = buffer.ReadVarUint32();
+  if (!varint_result.ok())
+    Fail("Failed to read varint: " + varint_result.error().message());
+  uint32_t varint = varint_result.value();
+
+  auto payload_len_result = buffer.ReadInt32();
+  if (!payload_len_result.ok())
+    Fail("Failed to read payload len: " + payload_len_result.error().message());
+  int32_t payload_len = payload_len_result.value();
+
+  if (payload_len < 0 || buffer.reader_index() + payload_len > buffer.size()) {
     Fail("Invalid payload length in buffer test");
   }
-  std::vector<uint8_t> payload(bytes.begin() + offset,
-                               bytes.begin() + offset + payload_len);
-  offset += payload_len;
+  std::vector<uint8_t> payload(bytes.begin() + buffer.reader_index(),
+                               bytes.begin() + buffer.reader_index() +
+                                   payload_len);
+  auto skip_result = buffer.Skip(payload_len);
+  if (!skip_result.ok())
+    Fail("Failed to skip payload: " + skip_result.error().message());
 
   if (!bool_val || int8_val != std::numeric_limits<int8_t>::max() ||
       int16_val != std::numeric_limits<int16_t>::max() ||
@@ -526,24 +392,30 @@ void RunTestBuffer(const std::string &data_file) {
     Fail("Buffer test validation failed");
   }
 
-  std::vector<uint8_t> out;
-  out.reserve(bytes.size());
-  out.push_back(1);
-  out.push_back(static_cast<uint8_t>(std::numeric_limits<int8_t>::max()));
-  WriteInt16LE(std::numeric_limits<int16_t>::max(), out);
-  WriteInt32LE(std::numeric_limits<int32_t>::max(), out);
-  WriteInt64LE(std::numeric_limits<int64_t>::max(), out);
-  WriteFloatLE(-1.1f, out);
-  WriteDoubleLE(-1.1, out);
-  WriteVarUint32(100, out);
-  WriteInt32LE(static_cast<int32_t>(payload.size()), out);
-  out.insert(out.end(), payload.begin(), payload.end());
+  Buffer out_buffer;
+  out_buffer.WriteUint8(1);
+  out_buffer.WriteInt8(std::numeric_limits<int8_t>::max());
+  out_buffer.WriteUint16(std::numeric_limits<int16_t>::max());
+  out_buffer.WriteInt32(std::numeric_limits<int32_t>::max());
+  int64_t max_int64 = std::numeric_limits<int64_t>::max();
+  out_buffer.WriteBytes(&max_int64, sizeof(int64_t));
+  float neg_float = -1.1f;
+  out_buffer.WriteBytes(&neg_float, sizeof(float));
+  double neg_double = -1.1;
+  out_buffer.WriteBytes(&neg_double, sizeof(double));
+  out_buffer.WriteVarUint32(100);
+  out_buffer.WriteInt32(static_cast<int32_t>(payload.size()));
+  out_buffer.WriteBytes(payload.data(), static_cast<uint32_t>(payload.size()));
+
+  std::vector<uint8_t> out(out_buffer.data(),
+                           out_buffer.data() + out_buffer.writer_index());
   WriteFile(data_file, out);
 }
 
 void RunTestBufferVar(const std::string &data_file) {
   auto bytes = ReadFile(data_file);
-  size_t offset = 0;
+  Buffer buffer(bytes.data(), static_cast<uint32_t>(bytes.size()), false);
+
   const std::vector<int32_t> expected_varint32 = {
       std::numeric_limits<int32_t>::min(),
       std::numeric_limits<int32_t>::min() + 1,
@@ -564,7 +436,8 @@ void RunTestBufferVar(const std::string &data_file) {
       std::numeric_limits<int32_t>::max() - 1,
       std::numeric_limits<int32_t>::max()};
   for (int32_t value : expected_varint32) {
-    if (ReadVarInt32(bytes, offset) != value) {
+    auto result = buffer.ReadVarInt32();
+    if (!result.ok() || result.value() != value) {
       Fail("VarInt32 mismatch");
     }
   }
@@ -573,7 +446,8 @@ void RunTestBufferVar(const std::string &data_file) {
       0u,       1u,       127u,       128u,       16383u,      16384u,
       2097151u, 2097152u, 268435455u, 268435456u, 2147483646u, 2147483647u};
   for (uint32_t value : expected_varuint32) {
-    if (ReadVarUint32(bytes, offset) != value) {
+    auto result = buffer.ReadVarUint32();
+    if (!result.ok() || result.value() != value) {
       Fail("VarUint32 mismatch");
     }
   }
@@ -599,7 +473,8 @@ void RunTestBufferVar(const std::string &data_file) {
       72057594037927936ull,
       static_cast<uint64_t>(std::numeric_limits<int64_t>::max())};
   for (uint64_t value : expected_varuint64) {
-    if (ReadVarUint64(bytes, offset) != value) {
+    auto result = buffer.ReadVarUint64();
+    if (!result.ok() || result.value() != value) {
       Fail("VarUint64 mismatch");
     }
   }
@@ -621,25 +496,31 @@ void RunTestBufferVar(const std::string &data_file) {
       std::numeric_limits<int64_t>::max() - 1,
       std::numeric_limits<int64_t>::max()};
   for (int64_t value : expected_varint64) {
-    if (ReadVarInt64(bytes, offset) != value) {
+    auto result = buffer.ReadVarInt64();
+    if (!result.ok() || result.value() != value) {
       Fail("VarInt64 mismatch");
     }
   }
 
-  std::vector<uint8_t> out;
-  out.reserve(bytes.size());
+  Buffer out_buffer;
   for (int32_t value : expected_varint32) {
-    WriteVarInt32(value, out);
+    out_buffer.WriteVarInt32(value);
   }
   for (uint32_t value : expected_varuint32) {
-    WriteVarUint32(value, out);
+    out_buffer.WriteVarUint32(value);
   }
   for (uint64_t value : expected_varuint64) {
-    WriteVarUint64(value, out);
+    out_buffer.WriteVarUint64(value);
   }
   for (int64_t value : expected_varint64) {
-    WriteVarInt64(value, out);
+    // ZigZag encode int64 for varint
+    uint64_t zigzag = (static_cast<uint64_t>(value) << 1) ^
+                      static_cast<uint64_t>(value >> 63);
+    out_buffer.WriteVarUint64(zigzag);
   }
+
+  std::vector<uint8_t> out(out_buffer.data(),
+                           out_buffer.data() + out_buffer.writer_index());
   WriteFile(data_file, out);
 }
 
@@ -648,9 +529,18 @@ void RunTestMurmurHash3(const std::string &data_file) {
   if (bytes.size() < 16) {
     Fail("Not enough bytes for murmurhash test");
   }
-  size_t offset = 0;
-  int64_t first = ReadInt64LE(bytes, offset);
-  int64_t second = ReadInt64LE(bytes, offset);
+  Buffer buffer(bytes.data(), static_cast<uint32_t>(bytes.size()), false);
+
+  auto first_result = buffer.ReadInt64();
+  if (!first_result.ok())
+    Fail("Failed to read first int64: " + first_result.error().message());
+  int64_t first = first_result.value();
+
+  auto second_result = buffer.ReadInt64();
+  if (!second_result.ok())
+    Fail("Failed to read second int64: " + second_result.error().message());
+  int64_t second = second_result.value();
+
   int64_t hash_out[2] = {0, 0};
   MurmurHash3_x64_128("\x01\x02\x08", 3, 47, hash_out);
   if (first != hash_out[0] || second != hash_out[1]) {

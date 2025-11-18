@@ -395,14 +395,11 @@ void RunTestBuffer(const std::string &data_file) {
   Buffer out_buffer;
   out_buffer.WriteUint8(1);
   out_buffer.WriteInt8(std::numeric_limits<int8_t>::max());
-  out_buffer.WriteUint16(std::numeric_limits<int16_t>::max());
+  out_buffer.WriteInt16(std::numeric_limits<int16_t>::max());
   out_buffer.WriteInt32(std::numeric_limits<int32_t>::max());
-  int64_t max_int64 = std::numeric_limits<int64_t>::max();
-  out_buffer.WriteBytes(&max_int64, sizeof(int64_t));
-  float neg_float = -1.1f;
-  out_buffer.WriteBytes(&neg_float, sizeof(float));
-  double neg_double = -1.1;
-  out_buffer.WriteBytes(&neg_double, sizeof(double));
+  out_buffer.WriteInt64(std::numeric_limits<int64_t>::max());
+  out_buffer.WriteFloat(-1.1f);
+  out_buffer.WriteDouble(-1.1);
   out_buffer.WriteVarUint32(100);
   out_buffer.WriteInt32(static_cast<int32_t>(payload.size()));
   out_buffer.WriteBytes(payload.data(), static_cast<uint32_t>(payload.size()));
@@ -513,10 +510,7 @@ void RunTestBufferVar(const std::string &data_file) {
     out_buffer.WriteVarUint64(value);
   }
   for (int64_t value : expected_varint64) {
-    // ZigZag encode int64 for varint
-    uint64_t zigzag = (static_cast<uint64_t>(value) << 1) ^
-                      static_cast<uint64_t>(value >> 63);
-    out_buffer.WriteVarUint64(zigzag);
+    out_buffer.WriteVarInt64(value);
   }
 
   std::vector<uint8_t> out(out_buffer.data(),

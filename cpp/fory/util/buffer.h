@@ -273,12 +273,44 @@ public:
     IncreaseWriterIndex(2);
   }
 
+  /// Write int16_t value as fixed 2 bytes to buffer at current writer index.
+  /// Automatically grows buffer and advances writer index.
+  inline void WriteInt16(int16_t value) {
+    Grow(2);
+    UnsafePut<int16_t>(writer_index_, value);
+    IncreaseWriterIndex(2);
+  }
+
   /// Write int32_t value as fixed 4 bytes to buffer at current writer index.
   /// Automatically grows buffer and advances writer index.
   inline void WriteInt32(int32_t value) {
     Grow(4);
     UnsafePut<int32_t>(writer_index_, value);
     IncreaseWriterIndex(4);
+  }
+
+  /// Write int64_t value as fixed 8 bytes to buffer at current writer index.
+  /// Automatically grows buffer and advances writer index.
+  inline void WriteInt64(int64_t value) {
+    Grow(8);
+    UnsafePut<int64_t>(writer_index_, value);
+    IncreaseWriterIndex(8);
+  }
+
+  /// Write float value as fixed 4 bytes to buffer at current writer index.
+  /// Automatically grows buffer and advances writer index.
+  inline void WriteFloat(float value) {
+    Grow(4);
+    UnsafePut<float>(writer_index_, value);
+    IncreaseWriterIndex(4);
+  }
+
+  /// Write double value as fixed 8 bytes to buffer at current writer index.
+  /// Automatically grows buffer and advances writer index.
+  inline void WriteDouble(double value) {
+    Grow(8);
+    UnsafePut<double>(writer_index_, value);
+    IncreaseWriterIndex(8);
   }
 
   /// Write uint32_t value as varint to buffer at current writer index.
@@ -289,12 +321,12 @@ public:
     IncreaseWriterIndex(len);
   }
 
-  /// Write int32_t value as varint to buffer at current writer index.
-  /// Automatically grows buffer and advances writer index.
+  /// Write int32_t value as varint (zigzag encoded) to buffer at current
+  /// writer index. Automatically grows buffer and advances writer index.
   inline void WriteVarInt32(int32_t value) {
-    Grow(5); // Max 5 bytes for varint32
-    uint32_t len = PutVarUint32(writer_index_, value);
-    IncreaseWriterIndex(len);
+    uint32_t zigzag = (static_cast<uint32_t>(value) << 1) ^
+                      static_cast<uint32_t>(value >> 31);
+    WriteVarUint32(zigzag);
   }
 
   /// Write uint64_t value as varint to buffer at current writer index.
@@ -303,6 +335,14 @@ public:
     Grow(9); // Max 9 bytes for varint64
     uint32_t len = PutVarUint64(writer_index_, value);
     IncreaseWriterIndex(len);
+  }
+
+  /// Write int64_t value as varint (zigzag encoded) to buffer at current
+  /// writer index. Automatically grows buffer and advances writer index.
+  inline void WriteVarInt64(int64_t value) {
+    uint64_t zigzag = (static_cast<uint64_t>(value) << 1) ^
+                      static_cast<uint64_t>(value >> 63);
+    WriteVarUint64(zigzag);
   }
 
   /// Write raw bytes to buffer at current writer index.
@@ -402,15 +442,16 @@ public:
     return value;
   }
 
-  /// Read int32_t value as varint from buffer at current reader index.
-  /// Advances reader index and checks bounds.
+  /// Read int32_t value as varint (zigzag encoded) from buffer at current
+  /// reader index. Advances reader index and checks bounds.
   inline Result<int32_t, Error> ReadVarInt32() {
     if (reader_index_ + 1 > size_) {
       return Unexpected(Error::buffer_out_of_bound(reader_index_, 1, size_));
     }
     uint32_t read_bytes = 0;
-    int32_t value = GetVarUint32(reader_index_, &read_bytes);
+    uint32_t raw = GetVarUint32(reader_index_, &read_bytes);
     IncreaseReaderIndex(read_bytes);
+    int32_t value = static_cast<int32_t>((raw >> 1) ^ (~(raw & 1) + 1));
     return value;
   }
 

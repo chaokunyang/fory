@@ -115,27 +115,32 @@ template <typename T, typename Alloc>
 struct Serializer<
     std::vector<T, Alloc>,
     std::enable_if_t<std::is_arithmetic_v<T> && !std::is_same_v<T, bool>>> {
-  static constexpr TypeId type_id = Serializer<std::array<T, 1>>::type_id;
+  static constexpr TypeId type_id = []() {
+    if constexpr (std::is_same_v<T, int8_t> || std::is_same_v<T, uint8_t>) {
+      return TypeId::BINARY;
+    }
+    return Serializer<std::array<T, 1>>::type_id;
+  }();
 
   static inline Result<void, Error> write(const std::vector<T, Alloc> &vec,
                                           WriteContext &ctx, bool write_ref,
                                           bool write_type) {
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
-      ctx.write_uint8(static_cast<uint8_t>(type_id));
+      ctx.write_varuint32(static_cast<uint32_t>(type_id));
     }
     return write_data(vec, ctx);
   }
 
   static inline Result<void, Error> write_data(const std::vector<T, Alloc> &vec,
                                                WriteContext &ctx) {
-    ctx.write_varuint32(static_cast<uint32_t>(vec.size()));
-    if (!vec.empty()) {
-      uint64_t total_bytes = static_cast<uint64_t>(vec.size()) * sizeof(T);
-      if (total_bytes > std::numeric_limits<uint32_t>::max()) {
-        return Unexpected(
-            Error::invalid("Vector byte size exceeds uint32_t range"));
-      }
+    uint64_t total_bytes = static_cast<uint64_t>(vec.size()) * sizeof(T);
+    if (total_bytes > std::numeric_limits<uint32_t>::max()) {
+      return Unexpected(
+          Error::invalid("Vector byte size exceeds uint32_t range"));
+    }
+    ctx.write_varuint32(static_cast<uint32_t>(total_bytes));
+    if (total_bytes > 0) {
       ctx.write_bytes(vec.data(), static_cast<uint32_t>(total_bytes));
     }
     return Result<void, Error>();
@@ -156,10 +161,10 @@ struct Serializer<
     }
 
     if (read_type) {
-      FORY_TRY(type_byte, ctx.read_uint8());
-      if (type_byte != static_cast<uint8_t>(type_id)) {
+      FORY_TRY(type_id_read, ctx.read_varuint32());
+      if (type_id_read != static_cast<uint32_t>(type_id)) {
         return Unexpected(
-            Error::type_mismatch(type_byte, static_cast<uint8_t>(type_id)));
+            Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
       }
     }
     return read_data(ctx);
@@ -167,16 +172,19 @@ struct Serializer<
 
   static inline Result<std::vector<T, Alloc>, Error>
   read_data(ReadContext &ctx) {
-    FORY_TRY(size, ctx.read_varuint32());
-    std::vector<T, Alloc> result(size);
-    if (!result.empty()) {
-      uint64_t total_bytes = static_cast<uint64_t>(size) * sizeof(T);
-      if (total_bytes > std::numeric_limits<uint32_t>::max()) {
-        return Unexpected(
-            Error::invalid("Vector byte size exceeds uint32_t range"));
-      }
+    FORY_TRY(total_bytes_u32, ctx.read_varuint32());
+    if (sizeof(T) == 0) {
+      return std::vector<T, Alloc>();
+    }
+    if (total_bytes_u32 % sizeof(T) != 0) {
+      return Unexpected(Error::invalid_data(
+          "Vector byte size not aligned with element size"));
+    }
+    size_t elem_count = total_bytes_u32 / sizeof(T);
+    std::vector<T, Alloc> result(elem_count);
+    if (total_bytes_u32 > 0) {
       FORY_RETURN_NOT_OK(
-          ctx.read_bytes(result.data(), static_cast<uint32_t>(total_bytes)));
+          ctx.read_bytes(result.data(), static_cast<uint32_t>(total_bytes_u32)));
     }
     return result;
   }
@@ -195,7 +203,7 @@ struct Serializer<
     write_not_null_ref_flag(ctx, write_ref);
 
     if (write_type) {
-      ctx.write_uint8(static_cast<uint8_t>(type_id));
+      ctx.write_varuint32(static_cast<uint32_t>(type_id));
     }
 
     // Write collection size
@@ -241,10 +249,10 @@ struct Serializer<
 
     // Read type info
     if (read_type) {
-      FORY_TRY(type_byte, ctx.read_uint8());
-      if (type_byte != static_cast<uint8_t>(type_id)) {
+      FORY_TRY(type_id_read, ctx.read_varuint32());
+      if (type_id_read != static_cast<uint32_t>(type_id)) {
         return Unexpected(
-            Error::type_mismatch(type_byte, static_cast<uint8_t>(type_id)));
+            Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
       }
     }
 
@@ -284,7 +292,7 @@ template <typename Alloc> struct Serializer<std::vector<bool, Alloc>> {
                                           bool write_type) {
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
-      ctx.write_uint8(static_cast<uint8_t>(type_id));
+      ctx.write_varuint32(static_cast<uint32_t>(type_id));
     }
     return write_data(vec, ctx);
   }
@@ -313,10 +321,10 @@ template <typename Alloc> struct Serializer<std::vector<bool, Alloc>> {
     }
 
     if (read_type) {
-      FORY_TRY(type_byte, ctx.read_uint8());
-      if (type_byte != static_cast<uint8_t>(type_id)) {
+      FORY_TRY(type_id_read, ctx.read_varuint32());
+      if (type_id_read != static_cast<uint32_t>(type_id)) {
         return Unexpected(
-            Error::type_mismatch(type_byte, static_cast<uint8_t>(type_id)));
+            Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
       }
     }
     return read_data(ctx);
@@ -348,7 +356,7 @@ struct Serializer<std::set<T, Args...>> {
     write_not_null_ref_flag(ctx, write_ref);
 
     if (write_type) {
-      ctx.write_uint8(static_cast<uint8_t>(type_id));
+      ctx.write_varuint32(static_cast<uint32_t>(type_id));
     }
 
     // Write set size
@@ -394,10 +402,10 @@ struct Serializer<std::set<T, Args...>> {
 
     // Read type info
     if (read_type) {
-      FORY_TRY(type_byte, ctx.read_uint8());
-      if (type_byte != static_cast<uint8_t>(type_id)) {
+      FORY_TRY(type_id_read, ctx.read_varuint32());
+      if (type_id_read != static_cast<uint32_t>(type_id)) {
         return Unexpected(
-            Error::type_mismatch(type_byte, static_cast<uint8_t>(type_id)));
+            Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
       }
     }
 
@@ -440,7 +448,7 @@ struct Serializer<std::unordered_set<T, Args...>> {
     write_not_null_ref_flag(ctx, write_ref);
 
     if (write_type) {
-      ctx.write_uint8(static_cast<uint8_t>(type_id));
+      ctx.write_varuint32(static_cast<uint32_t>(type_id));
     }
 
     // Write set size
@@ -486,10 +494,10 @@ struct Serializer<std::unordered_set<T, Args...>> {
 
     // Read type info
     if (read_type) {
-      FORY_TRY(type_byte, ctx.read_uint8());
-      if (type_byte != static_cast<uint8_t>(type_id)) {
+      FORY_TRY(type_id_read, ctx.read_varuint32());
+      if (type_id_read != static_cast<uint32_t>(type_id)) {
         return Unexpected(
-            Error::type_mismatch(type_byte, static_cast<uint8_t>(type_id)));
+            Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
       }
     }
 

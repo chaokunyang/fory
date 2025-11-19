@@ -154,9 +154,19 @@ public:
     buffer().WriteVarUint32(value);
   }
 
+  /// Write int32_t value as zigzag varint to buffer.
+  inline void write_varint32(int32_t value) {
+    buffer().WriteVarInt32(value);
+  }
+
   /// Write uint64_t value as varint to buffer.
   inline void write_varuint64(uint64_t value) {
     buffer().WriteVarUint64(value);
+  }
+
+  /// Write int64_t value as zigzag varint to buffer.
+  inline void write_varint64(int64_t value) {
+    buffer().WriteVarInt64(value);
   }
 
   /// Write raw bytes to buffer.
@@ -314,9 +324,19 @@ public:
     return buffer().ReadVarUint32();
   }
 
+  /// Read int32_t value as zigzag varint from buffer.
+  inline Result<int32_t, Error> read_varint32() {
+    return buffer().ReadVarInt32();
+  }
+
   /// Read uint64_t value as varint from buffer.
   inline Result<uint64_t, Error> read_varuint64() {
     return buffer().ReadVarUint64();
+  }
+
+  /// Read int64_t value as zigzag varint from buffer.
+  inline Result<int64_t, Error> read_varint64() {
+    return buffer().ReadVarInt64();
   }
 
   /// Read raw bytes from buffer.
@@ -329,7 +349,8 @@ public:
 
   /// Load all TypeMetas from buffer at the specified offset.
   /// After loading, the reader position is restored to where it was before.
-  Result<void, Error> load_type_meta(int32_t meta_offset);
+  /// @return Size of the meta section in bytes, or error
+  Result<size_t, Error> load_type_meta(int32_t meta_offset);
 
   /// Get TypeInfo by meta index.
   /// Returns TypeResolver::TypeInfo as void* to avoid incomplete type issues.

@@ -26,6 +26,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <limits>
 #include <map>
@@ -592,17 +593,41 @@ void RunTestCrossLanguageSerializer(const std::string &data_file) {
 
   expect_bool(true);
   expect_bool(false);
-  if (ReadNext<int32_t>(fory, buffer) != -1 ||
-      ReadNext<int8_t>(fory, buffer) != std::numeric_limits<int8_t>::max() ||
-      ReadNext<int8_t>(fory, buffer) != std::numeric_limits<int8_t>::min() ||
-      ReadNext<int16_t>(fory, buffer) != std::numeric_limits<int16_t>::max() ||
-      ReadNext<int16_t>(fory, buffer) != std::numeric_limits<int16_t>::min() ||
-      ReadNext<int32_t>(fory, buffer) != std::numeric_limits<int32_t>::max() ||
-      ReadNext<int32_t>(fory, buffer) != std::numeric_limits<int32_t>::min() ||
-      ReadNext<int64_t>(fory, buffer) != std::numeric_limits<int64_t>::max() ||
-      ReadNext<int64_t>(fory, buffer) != std::numeric_limits<int64_t>::min()) {
-    Fail("Primitive mismatch in cross-language serializer test");
-  }
+
+  int32_t v1 = ReadNext<int32_t>(fory, buffer);
+  if (v1 != -1) Fail("int32 -1 mismatch, got: " + std::to_string(v1));
+
+  int8_t v2 = ReadNext<int8_t>(fory, buffer);
+  if (v2 != std::numeric_limits<int8_t>::max())
+    Fail("int8 max mismatch, got: " + std::to_string(v2));
+
+  int8_t v3 = ReadNext<int8_t>(fory, buffer);
+  if (v3 != std::numeric_limits<int8_t>::min())
+    Fail("int8 min mismatch, got: " + std::to_string(v3));
+
+  int16_t v4 = ReadNext<int16_t>(fory, buffer);
+  if (v4 != std::numeric_limits<int16_t>::max())
+    Fail("int16 max mismatch, got: " + std::to_string(v4));
+
+  int16_t v5 = ReadNext<int16_t>(fory, buffer);
+  if (v5 != std::numeric_limits<int16_t>::min())
+    Fail("int16 min mismatch, got: " + std::to_string(v5));
+
+  int32_t v6 = ReadNext<int32_t>(fory, buffer);
+  if (v6 != std::numeric_limits<int32_t>::max())
+    Fail("int32 max mismatch, got: " + std::to_string(v6));
+
+  int32_t v7 = ReadNext<int32_t>(fory, buffer);
+  if (v7 != std::numeric_limits<int32_t>::min())
+    Fail("int32 min mismatch, got: " + std::to_string(v7));
+
+  int64_t v8 = ReadNext<int64_t>(fory, buffer);
+  if (v8 != std::numeric_limits<int64_t>::max())
+    Fail("int64 max mismatch, got: " + std::to_string(v8));
+
+  int64_t v9 = ReadNext<int64_t>(fory, buffer);
+  if (v9 != std::numeric_limits<int64_t>::min())
+    Fail("int64 min mismatch, got: " + std::to_string(v9));
   if (std::abs(ReadNext<float>(fory, buffer) + 1.0f) > 1e-6 ||
       std::abs(ReadNext<double>(fory, buffer) + 1.0) > 1e-9) {
     Fail("Float mismatch");
@@ -917,6 +942,7 @@ void RunTestSkipNameCustom(const std::string &data_file) {
 
 void RunTestConsistentNamed(const std::string &data_file) {
   auto bytes = ReadFile(data_file);
+  // Java uses SCHEMA_CONSISTENT mode which does NOT enable meta sharing
   auto fory = BuildFory(false, true, true);
   EnsureOk(fory.register_struct<Color>("color"), "register named color");
   EnsureOk(fory.register_struct<MyStruct>("my_struct"),
@@ -958,6 +984,7 @@ void RunTestConsistentNamed(const std::string &data_file) {
 
 void RunTestStructVersionCheck(const std::string &data_file) {
   auto bytes = ReadFile(data_file);
+  // Java uses SCHEMA_CONSISTENT mode which does NOT enable meta sharing
   auto fory = BuildFory(false, true, true);
   EnsureOk(fory.register_struct<VersionCheckStruct>(201),
            "register VersionCheckStruct");

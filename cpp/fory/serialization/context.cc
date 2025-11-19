@@ -207,7 +207,7 @@ ReadContext::read_enum_type_info(const std::type_index &type,
   return Unexpected(Error::type_mismatch(low, base_type_id));
 }
 
-Result<void, Error> ReadContext::load_type_meta(int32_t meta_offset) {
+Result<size_t, Error> ReadContext::load_type_meta(int32_t meta_offset) {
   size_t current_pos = buffer_->reader_index();
   size_t meta_start = current_pos + meta_offset;
   buffer_->ReaderIndex(static_cast<uint32_t>(meta_start));
@@ -251,8 +251,13 @@ Result<void, Error> ReadContext::load_type_meta(int32_t meta_offset) {
     reading_type_infos_.push_back(std::static_pointer_cast<void>(type_info));
   }
 
+  // Calculate size of meta section
+  size_t meta_end = buffer_->reader_index();
+  size_t meta_section_size = meta_end - meta_start;
+
+  // Restore buffer position
   buffer_->ReaderIndex(static_cast<uint32_t>(current_pos));
-  return {};
+  return meta_section_size;
 }
 
 Result<std::shared_ptr<void>, Error>

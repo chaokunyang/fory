@@ -753,7 +753,7 @@ struct Serializer<std::map<K, V, Args...>> {
     write_not_null_ref_flag(ctx, write_ref);
 
     if (write_type) {
-      ctx.write_uint8(static_cast<uint8_t>(type_id));
+      ctx.write_varuint32(static_cast<uint32_t>(type_id));
     }
 
     // Dispatch to fast or slow path based on type characteristics
@@ -807,10 +807,10 @@ struct Serializer<std::map<K, V, Args...>> {
     }
 
     if (read_type) {
-      FORY_TRY(type_byte, ctx.read_uint8());
-      if (type_byte != static_cast<uint8_t>(type_id)) {
+      FORY_TRY(type_id_read, ctx.read_varuint32());
+      if (type_id_read != static_cast<uint32_t>(type_id)) {
         return Unexpected(
-            Error::type_mismatch(type_byte, static_cast<uint8_t>(type_id)));
+            Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
       }
     }
 
@@ -859,7 +859,7 @@ struct Serializer<std::unordered_map<K, V, Args...>> {
     write_not_null_ref_flag(ctx, write_ref);
 
     if (write_type) {
-      ctx.write_uint8(static_cast<uint8_t>(type_id));
+      ctx.write_varuint32(static_cast<uint32_t>(type_id));
     }
 
     constexpr bool is_fast_path =
@@ -911,10 +911,10 @@ struct Serializer<std::unordered_map<K, V, Args...>> {
     }
 
     if (read_type) {
-      FORY_TRY(type_byte, ctx.read_uint8());
-      if (type_byte != static_cast<uint8_t>(type_id)) {
+      FORY_TRY(type_id_read, ctx.read_varuint32());
+      if (type_id_read != static_cast<uint32_t>(type_id)) {
         return Unexpected(
-            Error::type_mismatch(type_byte, static_cast<uint8_t>(type_id)));
+            Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
       }
     }
 

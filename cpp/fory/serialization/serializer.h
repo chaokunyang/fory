@@ -41,16 +41,18 @@ namespace serialization {
 constexpr uint16_t MAGIC_NUMBER = 0x62d4;
 
 /// Language identifiers
+/// Must match Java's Language enum ordinal values
 enum class Language : uint8_t {
-  JAVA = 0,
-  PYTHON = 1,
-  CPP = 2,
-  GO = 3,
-  JAVASCRIPT = 4,
-  RUST = 5,
-  DART = 6,
-  SCALA = 7,
-  KOTLIN = 8,
+  XLANG = 0,
+  JAVA = 1,
+  PYTHON = 2,
+  CPP = 3,
+  GO = 4,
+  JAVASCRIPT = 5,
+  RUST = 6,
+  DART = 7,
+  SCALA = 8,
+  KOTLIN = 9,
 };
 
 // ============================================================================
@@ -77,8 +79,8 @@ enum class Language : uint8_t {
 inline void write_header(Buffer &buffer, bool is_null, bool is_xlang,
                          bool is_little_endian, bool is_oob,
                          Language language) {
-  // Ensure buffer has space for header (4 bytes minimum)
-  buffer.Grow(4);
+  // Ensure buffer has space for header (3 bytes: magic + flags, +1 for language if xlang)
+  buffer.Grow(is_xlang ? 4 : 3);
   uint32_t start_pos = buffer.writer_index();
 
   // Write magic number (2 bytes, little endian)
@@ -103,14 +105,15 @@ inline void write_header(Buffer &buffer, bool is_null, bool is_xlang,
   // Write flags byte
   buffer.UnsafePutByte(start_pos + 2, flags);
 
-  // Write language byte
-  buffer.UnsafePutByte(start_pos + 3, static_cast<uint8_t>(language));
+  // Update writer index (3 bytes written: magic + flags)
+  buffer.IncreaseWriterIndex(3);
 
-  // Update writer index
-  buffer.IncreaseWriterIndex(4);
+  // Java writes a language byte after header in xlang mode - match that format
+  if (is_xlang) {
+    buffer.WriteUint8(static_cast<uint8_t>(language));
+  }
 
-  // Note: Meta start offset would be written here if meta share mode is
-  // enabled For now, we skip it as meta share mode is not implemented
+  // Note: Meta start offset would be written here if meta share mode is enabled
 }
 
 /// Detect if system is little endian
@@ -139,10 +142,10 @@ struct HeaderInfo {
 /// @param buffer Input buffer
 /// @return Header information or error
 inline Result<HeaderInfo, Error> read_header(Buffer &buffer) {
-  // Check minimum header size (4 bytes)
-  if (buffer.reader_index() + 4 > buffer.size()) {
+  // Check minimum header size (3 bytes: magic + flags)
+  if (buffer.reader_index() + 3 > buffer.size()) {
     return Unexpected(
-        Error::buffer_out_of_bound(buffer.reader_index(), 4, buffer.size()));
+        Error::buffer_out_of_bound(buffer.reader_index(), 3, buffer.size()));
   }
 
   HeaderInfo info;
@@ -163,12 +166,16 @@ inline Result<HeaderInfo, Error> read_header(Buffer &buffer) {
   info.is_xlang = (flags & (1 << 2)) != 0;
   info.is_oob = (flags & (1 << 3)) != 0;
 
-  // Read language byte
-  uint8_t lang_byte = buffer.GetByteAs<uint8_t>(start_pos + 3);
-  info.language = static_cast<Language>(lang_byte);
+  // Update reader index (3 bytes consumed: magic + flags)
+  buffer.IncreaseReaderIndex(3);
 
-  // Update reader index
-  buffer.IncreaseReaderIndex(4);
+  // Java writes a language byte after header in xlang mode - read and ignore it
+  if (info.is_xlang) {
+    FORY_TRY(lang_byte, buffer.ReadUint8());
+    info.language = static_cast<Language>(lang_byte);
+  } else {
+    info.language = Language::JAVA;
+  }
 
   // Note: Meta start offset would be read here if present
   info.meta_start_offset = 0;

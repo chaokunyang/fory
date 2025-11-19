@@ -140,6 +140,12 @@ public:
   /// Create a builder for configuring Fory instance.
   static ForyBuilder builder() { return ForyBuilder(); }
 
+  // Disable copy and move to prevent issues with pool lambdas capturing 'this'
+  Fory(const Fory &) = delete;
+  Fory(Fory &&) = delete;
+  Fory &operator=(const Fory &) = delete;
+  Fory &operator=(Fory &&) = delete;
+
   // ============================================================================
   // Serialization Methods
   // ============================================================================
@@ -262,19 +268,27 @@ public:
   template <typename T>
   Result<T, Error> deserialize_from(ReadContext &ctx, Buffer &buffer) {
     // Load TypeMetas at the beginning in compatible mode
+    size_t bytes_to_skip = 0;
     if (ctx.is_compatible()) {
       auto meta_offset_result = buffer.ReadInt32();
       FORY_RETURN_IF_ERROR(meta_offset_result);
       int32_t meta_offset = meta_offset_result.value();
       if (meta_offset != -1) {
-        FORY_RETURN_NOT_OK(ctx.load_type_meta(meta_offset));
+        FORY_TRY(meta_size, ctx.load_type_meta(meta_offset));
+        bytes_to_skip = meta_size;
       }
     }
 
+    // Top-level deserialization: YES ref flags, yes type info
+    // Java writes ref flags via xwriteRef for top-level objects
     auto result = Serializer<T>::read(ctx, true, true);
 
     if (result.ok()) {
       ctx.ref_reader().resolve_callbacks();
+      // Skip the meta section at the end of the serialized object
+      if (bytes_to_skip > 0) {
+        buffer.IncreaseReaderIndex(static_cast<uint32_t>(bytes_to_skip));
+      }
     }
     return result;
   }
@@ -393,6 +407,8 @@ private:
       buffer.WriteInt32(-1); // Placeholder for meta offset (fixed 4 bytes)
     }
 
+    // Top-level serialization: YES ref flags, yes type info
+    // Java writes ref flags via xwriteRef for top-level objects
     FORY_RETURN_NOT_OK(Serializer<T>::write(obj, ctx, true, true));
 
     // Write collected TypeMetas at the end in compatible mode

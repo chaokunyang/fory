@@ -20,6 +20,7 @@
 #pragma once
 
 #include "fory/serialization/config.h"
+#include "fory/serialization/meta_string.h"
 #include "fory/serialization/ref_resolver.h"
 #include "fory/util/buffer.h"
 #include "fory/util/error.h"
@@ -290,6 +291,12 @@ public:
   /// Get current nesting depth.
   inline uint32_t current_depth() const { return current_depth_; }
 
+  /// Whether the peer (writer) is C++.
+  inline bool peer_is_cpp() const { return peer_is_cpp_; }
+
+  /// Set whether the peer (writer) is C++.
+  inline void set_peer_is_cpp(bool v) { peer_is_cpp_ = v; }
+
   /// Increase nesting depth by 1.
   ///
   /// @return Error if max depth exceeded, success otherwise.
@@ -380,9 +387,14 @@ private:
   RefReader ref_reader_;
   uint32_t current_depth_;
 
+  bool peer_is_cpp_ = true;
+
   // Meta sharing state (for compatible mode)
   std::vector<std::shared_ptr<void>> reading_type_infos_;
   std::unordered_map<int64_t, std::shared_ptr<void>> parsed_type_infos_;
+
+  // Dynamic meta strings used for named type/class info.
+  MetaStringTable meta_string_table_;
 };
 
 /// Implementation of DepthGuard destructor

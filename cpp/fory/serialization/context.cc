@@ -19,6 +19,7 @@
 
 #include "fory/serialization/context.h"
 #include "fory/serialization/type_resolver.h"
+#include "fory/thirdparty/MurmurHash3.h"
 #include "fory/type/type.h"
 
 namespace fory {
@@ -129,14 +130,33 @@ WriteContext::write_any_typeinfo(uint32_t fory_type_id,
       FORY_TRY(meta_index, push_meta(concrete_type_id));
       buffer_.WriteVarUint32(static_cast<uint32_t>(meta_index));
     } else {
-      // Write namespace and type_name as raw strings
-      // Note: Rust uses write_meta_string_bytes for compression,
-      // but C++ doesn't have MetaString compression yet, so we write raw
-      // strings
-      buffer_.WriteVarUint32(static_cast<uint32_t>(namespace_name.size()));
-      buffer_.WriteBytes(namespace_name.data(), namespace_name.size());
-      buffer_.WriteVarUint32(static_cast<uint32_t>(type_name.size()));
-      buffer_.WriteBytes(type_name.data(), type_name.size());
+      // Write namespace and type_name using the same format as Java's
+      // MetaStringResolver#writeMetaStringBytes (without dynamic reuse).
+      constexpr uint32_t kSmallStringThreshold = 16;
+
+      auto write_meta_string = [this](const std::string &value) -> Result<void, Error> {
+        const uint32_t len = static_cast<uint32_t>(value.size());
+        uint32_t header = len << 1; // last bit 0 => new string
+        buffer_.WriteVarUint32(header);
+
+        if (len > kSmallStringThreshold) {
+          // For strings > 16 bytes, write hashCode (int64) instead of encoding
+          int64_t hash_out[2] = {0, 0};
+          MurmurHash3_x64_128(value.data(), static_cast<int>(value.size()), 47, hash_out);
+          buffer_.WriteInt64(hash_out[0]);
+        } else {
+          // For strings <= 16 bytes, write encoding byte (0 for UTF8)
+          buffer_.WriteInt8(0);
+        }
+
+        if (len > 0) {
+          buffer_.WriteBytes(value.data(), len);
+        }
+        return Result<void, Error>();
+      };
+
+      FORY_RETURN_NOT_OK(write_meta_string(namespace_name));
+      FORY_RETURN_NOT_OK(write_meta_string(type_name));
     }
     break;
   }
@@ -295,14 +315,16 @@ Result<std::shared_ptr<TypeInfo>, Error> ReadContext::read_any_typeinfo() {
       auto type_info = std::static_pointer_cast<TypeInfo>(type_info_void);
       return type_info;
     } else {
-      // Read namespace and type_name as raw strings
-      FORY_TRY(ns_len, buffer_->ReadVarUint32());
-      std::string namespace_str(ns_len, '\0');
-      FORY_RETURN_NOT_OK(buffer_->ReadBytes(namespace_str.data(), ns_len));
+      // Read namespace and type_name using MetaStringResolver-compatible
+      // encoding. Java uses PACKAGE_DECODER ('.', '_') for namespace and
+      // TYPE_NAME_DECODER ('$', '_') for type names.
+      static const MetaStringDecoder kNamespaceDecoder('.', '_');
+      static const MetaStringDecoder kTypeNameDecoder('$', '_');
 
-      FORY_TRY(name_len, buffer_->ReadVarUint32());
-      std::string type_name(name_len, '\0');
-      FORY_RETURN_NOT_OK(buffer_->ReadBytes(type_name.data(), name_len));
+      FORY_TRY(namespace_str,
+               meta_string_table_.read_string(*buffer_, kNamespaceDecoder));
+      FORY_TRY(type_name,
+               meta_string_table_.read_string(*buffer_, kTypeNameDecoder));
 
       auto type_info =
           type_resolver_->get_type_info_by_name(namespace_str, type_name);
@@ -333,6 +355,7 @@ void ReadContext::reset() {
   reading_type_infos_.clear();
   parsed_type_infos_.clear();
   current_depth_ = 0;
+  meta_string_table_.reset();
 }
 
 } // namespace serialization

@@ -197,6 +197,86 @@ struct Serializer<
     std::enable_if_t<!std::is_same_v<T, bool> && !std::is_arithmetic_v<T>>> {
   static constexpr TypeId type_id = TypeId::LIST;
 
+  // Helper to read xlang-compatible list layout written by Java
+  static Result<std::vector<T, Alloc>, Error>
+  read_xlang(ReadContext &ctx, bool read_ref, bool read_type) {
+    // List-level reference flag (xwriteRef on Java side)
+    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
+    if (!has_value) {
+      return std::vector<T, Alloc>();
+    }
+
+    // Optional type info for polymorphic containers
+    if (read_type) {
+      FORY_TRY(type_id_read, ctx.read_varuint32());
+      uint32_t low = type_id_read & 0xffu;
+      if (low != static_cast<uint32_t>(type_id)) {
+        return Unexpected(Error::type_mismatch(
+            type_id_read, static_cast<uint32_t>(type_id)));
+      }
+    }
+
+    // Length written via writeVarUint32Small7
+    FORY_TRY(length, ctx.read_varuint32());
+
+    // Elements header bitmap (CollectionFlags)
+    FORY_TRY(bitmap_u8, ctx.read_uint8());
+    uint8_t bitmap = bitmap_u8;
+    bool track_ref = (bitmap & 0x1u) != 0;
+    bool has_null = (bitmap & 0x2u) != 0;
+    bool is_decl_type = (bitmap & 0x4u) != 0;
+    bool is_same_type = (bitmap & 0x8u) != 0;
+
+    (void)is_decl_type;
+
+    std::vector<T, Alloc> result;
+    result.reserve(length);
+
+    // Fast path: no tracking, no nulls, elements have declared type and
+    // are homogeneous. Java encodes this via DECL_SAME_TYPE_NOT_HAS_NULL.
+    if (!track_ref && !has_null && is_same_type) {
+      for (uint32_t i = 0; i < length; ++i) {
+        FORY_TRY(elem, Serializer<T>::read(ctx, false, false));
+        result.push_back(std::move(elem));
+      }
+      return result;
+    }
+
+    // General path: handle HAS_NULL and/or TRACKING_REF.
+    for (uint32_t i = 0; i < length; ++i) {
+      if (track_ref) {
+        // Java uses xwriteRef for elements in this case.
+        FORY_TRY(elem, Serializer<T>::read(ctx, true, false));
+        result.push_back(std::move(elem));
+      } else if (has_null) {
+        // Elements encoded with explicit null flag (NULL/NOT_NULL_VALUE).
+        FORY_TRY(has_value_elem, consume_ref_flag(ctx, true));
+        if (!has_value_elem) {
+          if constexpr (is_optional_v<T>) {
+            result.emplace_back(std::nullopt);
+          } else {
+            result.emplace_back();
+          }
+        } else {
+          if constexpr (is_optional_v<T>) {
+            using Inner = typename T::value_type;
+            FORY_TRY(inner, Serializer<Inner>::read(ctx, false, false));
+            result.emplace_back(std::move(inner));
+          } else {
+            FORY_TRY(elem, Serializer<T>::read(ctx, false, false));
+            result.push_back(std::move(elem));
+          }
+        }
+      } else {
+        // Fallback: behave like fast path.
+        FORY_TRY(elem, Serializer<T>::read(ctx, false, false));
+        result.push_back(std::move(elem));
+      }
+    }
+
+    return result;
+  }
+
   static inline Result<void, Error> write(const std::vector<T, Alloc> &vec,
                                           WriteContext &ctx, bool write_ref,
                                           bool write_type) {
@@ -206,12 +286,54 @@ struct Serializer<
       ctx.write_varuint32(static_cast<uint32_t>(type_id));
     }
 
-    // Write collection size
-    ctx.write_varuint32(static_cast<uint32_t>(vec.size()));
+    // C++-only path: no xlang collection header
+    if (!ctx.is_xlang()) {
+      ctx.write_varuint32(static_cast<uint32_t>(vec.size()));
+      for (const auto &elem : vec) {
+        FORY_RETURN_NOT_OK(Serializer<T>::write(elem, ctx, false, false));
+      }
+      return Result<void, Error>();
+    }
 
-    // Write elements
-    for (const auto &elem : vec) {
-      FORY_RETURN_NOT_OK(Serializer<T>::write(elem, ctx, false, false));
+    // Xlang path: match Java layout.
+    ctx.write_varuint32(static_cast<uint32_t>(vec.size()));
+    // For now, emit DECL_SAME_TYPE_NOT_HAS_NULL and rely on element
+    // serializer to encode values without per-element ref flags.
+    uint8_t bitmap = 0;
+      if (!vec.empty()) {
+        bool has_null = false;
+        for (const auto &elem : vec) {
+          if constexpr (is_optional_v<T>) {
+          if (!elem.has_value()) {
+            has_null = true;
+            break;
+          }
+        }
+      }
+      bitmap |= 0b0100; // IS_DECL_ELEMENT_TYPE
+      bitmap |= 0b1000; // IS_SAME_TYPE
+      if (has_null) {
+        bitmap |= 0b0010; // HAS_NULL
+      }
+    }
+    ctx.write_uint8(bitmap);
+
+    if (!vec.empty()) {
+      if constexpr (is_optional_v<T>) {
+        for (const auto &opt : vec) {
+          if (!opt.has_value()) {
+            ctx.write_int8(NULL_FLAG);
+          } else {
+            ctx.write_int8(NOT_NULL_VALUE_FLAG);
+            FORY_RETURN_NOT_OK(
+                Serializer<typename T::value_type>::write(*opt, ctx, false, false));
+          }
+        }
+      } else {
+        for (const auto &elem : vec) {
+          FORY_RETURN_NOT_OK(Serializer<T>::write(elem, ctx, false, false));
+        }
+      }
     }
 
     return Result<void, Error>();
@@ -242,6 +364,10 @@ struct Serializer<
 
   static inline Result<std::vector<T, Alloc>, Error>
   read(ReadContext &ctx, bool read_ref, bool read_type) {
+    if (ctx.is_xlang() && !ctx.peer_is_cpp()) {
+      return read_xlang(ctx, read_ref, read_type);
+    }
+
     FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
     if (!has_value) {
       return std::vector<T, Alloc>();

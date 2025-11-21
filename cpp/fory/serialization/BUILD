@@ -4,6 +4,7 @@ cc_library(
     name = "fory_serialization",
     srcs = [
         "context.cc",
+        "meta_string.cc",
         "type_resolver.cc",
         "skip.cc",
     ],
@@ -15,6 +16,7 @@ cc_library(
         "context.h",
         "enum_serializer.h",
         "fory.h",
+        "meta_string.h",
         "map_serializer.h",
         "ref_resolver.h",
         "serializer.h",
@@ -28,6 +30,7 @@ cc_library(
     strip_include_prefix = "/cpp",
     deps = [
         "//cpp/fory/meta:fory_meta",
+        "//cpp/fory/thirdparty:libmmh3",
         "//cpp/fory/type:fory_type",
         "//cpp/fory/util:fory_util",
     ],

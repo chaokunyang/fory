@@ -39,25 +39,43 @@
 #include <utility>
 #include <vector>
 
+#ifdef FORY_DEBUG_XLANG
+#include <iostream>
+#endif
+
 namespace fory {
 namespace serialization {
 
-/// Check if a type ID requires reference metadata at runtime
-inline bool field_requires_ref_flag(uint32_t type_id) {
-  // Types that need ref flags: nullable types, collections, objects
-  TypeId tid = static_cast<TypeId>(type_id & 0xff);
-  switch (tid) {
-  case TypeId::LIST:
-  case TypeId::SET:
-  case TypeId::MAP:
-  case TypeId::STRUCT:
-  case TypeId::COMPATIBLE_STRUCT:
-  case TypeId::NAMED_STRUCT:
-  case TypeId::NAMED_COMPATIBLE_STRUCT:
+/// Check if a field needs reference/null flags in the stream.
+///
+/// This mirrors Rust's
+/// `field_need_write_ref_into(type_id, nullable)` in
+/// rust/fory-core/src/serializer/util.rs and determines
+/// whether the writer emits a `RefFlag` byte before the
+/// field's value payload.
+inline bool field_requires_ref_flag(uint32_t type_id, bool nullable) {
+  if (nullable) {
     return true;
-  default:
-    return false;
   }
+
+  uint32_t internal = type_id & 0xffu;
+  TypeId tid = static_cast<TypeId>(internal);
+  switch (tid) {
+  case TypeId::BOOL:
+  case TypeId::INT8:
+  case TypeId::INT16:
+  case TypeId::INT32:
+  case TypeId::INT64:
+  case TypeId::FLOAT32:
+  case TypeId::FLOAT64:
+    return false;
+  default:
+    return true;
+  }
+}
+
+inline bool field_requires_ref_flag(uint32_t type_id) {
+  return field_requires_ref_flag(type_id, false);
 }
 
 /// Serialization metadata for a type.
@@ -289,15 +307,9 @@ template <typename T> struct CompileTimeFieldHelpers {
            tid == static_cast<uint32_t>(TypeId::VAR_INT64);
   }
 
-  static constexpr bool is_user_type(uint32_t tid) {
-    return tid == static_cast<uint32_t>(TypeId::ENUM) ||
-           tid == static_cast<uint32_t>(TypeId::NAMED_ENUM) ||
-           tid == static_cast<uint32_t>(TypeId::STRUCT) ||
-           tid == static_cast<uint32_t>(TypeId::COMPATIBLE_STRUCT) ||
-           tid == static_cast<uint32_t>(TypeId::NAMED_STRUCT) ||
-           tid == static_cast<uint32_t>(TypeId::NAMED_COMPATIBLE_STRUCT) ||
-           tid == static_cast<uint32_t>(TypeId::EXT) ||
-           tid == static_cast<uint32_t>(TypeId::NAMED_EXT);
+  static constexpr bool is_internal_type_id(uint32_t tid) {
+    return tid >= static_cast<uint32_t>(TypeId::STRING) &&
+           tid <= static_cast<uint32_t>(TypeId::DECIMAL);
   }
 
   static constexpr int group_rank(size_t index) {
@@ -309,15 +321,15 @@ template <typename T> struct CompileTimeFieldHelpers {
       if (is_primitive_type_id(tid)) {
         return nullable ? 1 : 0;
       }
+      if (is_internal_type_id(tid))
+        return 2;
       if (tid == static_cast<uint32_t>(TypeId::LIST))
         return 3;
       if (tid == static_cast<uint32_t>(TypeId::SET))
         return 4;
       if (tid == static_cast<uint32_t>(TypeId::MAP))
         return 5;
-      if (is_user_type(tid))
-        return 6;
-      return 2;
+      return 6;
     }
   }
 
@@ -412,8 +424,9 @@ Result<void, Error> write_single_field(const T &obj, WriteContext &ctx,
   const auto &field_value = obj.*field_ptr;
 
   // In compatible mode, nested structs should also write TypeMeta for schema
-  // evolution In non-compatible mode, no type info needed for fields EXCEPT for
-  // polymorphic types (type_id == UNKNOWN), which always need type info
+  // evolution. In non-compatible mode, no type info is needed for fields
+  // EXCEPT for polymorphic types (type_id == UNKNOWN), which always need
+  // type info.
   constexpr bool field_needs_ref = requires_ref_metadata_v<FieldType>;
   constexpr bool is_struct_field = is_fory_serializable_v<FieldType>;
   constexpr bool is_polymorphic_field =
@@ -458,19 +471,101 @@ Result<void, Error> read_single_field_by_index(T &obj, ReadContext &ctx) {
   using FieldType =
       typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
 
-  // In compatible mode, nested structs also write TypeMeta, so read_type=true
-  // In non-compatible mode, no type info for fields
-  // EXCEPT for polymorphic types (type_id == UNKNOWN), which always need type
-  // info
+  // In non-compatible mode, no type info for fields except for polymorphic
+  // types (type_id == UNKNOWN), which always need type info. In compatible
+  // mode, nested structs carry TypeMeta in the stream so that
+  // `Serializer<T>::read` can dispatch to `read_compatible` with the correct
+  // remote schema.
   constexpr bool field_needs_ref = requires_ref_metadata_v<FieldType>;
   constexpr bool is_struct_field = is_fory_serializable_v<FieldType>;
   constexpr bool is_polymorphic_field =
       Serializer<FieldType>::type_id == TypeId::UNKNOWN;
-  bool read_type =
-      (is_struct_field && ctx.is_compatible()) || is_polymorphic_field;
+  bool read_type = is_polymorphic_field;
 
-  FORY_ASSIGN_OR_RETURN(obj.*field_ptr, Serializer<FieldType>::read(
-                                            ctx, field_needs_ref, read_type));
+  // In compatible mode, nested struct fields always carry type metadata
+  // (xtypeId + meta index). We must read this metadata so that
+  // `Serializer<T>::read` can dispatch to `read_compatible` with the correct
+  // remote TypeMeta instead of treating the bytes as part of the first field
+  // value.
+  if (!is_polymorphic_field && is_struct_field && ctx.is_compatible()) {
+    read_type = true;
+  }
+
+  // Reference metadata is only present for fields whose C++ type requires it
+  // (std::optional / smart pointers). For other field types, Java does not
+  // emit a leading ref flag for nested values in compatible/xlang mode, so we
+  // must not try to consume one here.
+  bool read_ref = field_needs_ref;
+
+  // In Java xlang compatible mode, container and struct-like fields are
+  // written via xwriteRef even when they are not optional. For those field
+  // types, the value payload is always prefixed with a ref flag that must be
+  // consumed by the element serializer. Align with that behaviour by
+  // enabling ref metadata for such fields when the peer is not C++.
+  if (!field_needs_ref && ctx.is_xlang() && !ctx.peer_is_cpp()) {
+    uint32_t local_type_id =
+        static_cast<uint32_t>(Serializer<FieldType>::type_id);
+    if (field_requires_ref_flag(local_type_id)) {
+      read_ref = true;
+    }
+  }
+
+#ifdef FORY_DEBUG_XLANG
+  const auto debug_names = decltype(field_info)::Names;
+  std::cerr << "[xlang][field] T=" << typeid(T).name() << ", index=" << Index
+            << ", name=" << debug_names[Index]
+            << ", field_needs_ref=" << field_needs_ref
+            << ", read_ref=" << read_ref << ", read_type=" << read_type
+            << ", reader_index=" << ctx.buffer().reader_index() << std::endl;
+#endif
+
+  FORY_ASSIGN_OR_RETURN(obj.*field_ptr,
+                        Serializer<FieldType>::read(ctx, read_ref, read_type));
+  return Result<void, Error>();
+}
+
+/// Helper to read a single field by index in compatible mode using
+/// remote field metadata to decide reference flag presence.
+template <size_t Index, typename T>
+Result<void, Error>
+read_single_field_by_index_compatible(T &obj, ReadContext &ctx,
+                                      bool remote_ref_flag) {
+  const auto field_info = ForyFieldInfo(obj);
+  const auto field_ptrs = decltype(field_info)::Ptrs;
+  const auto field_ptr = std::get<Index>(field_ptrs);
+  using FieldType =
+      typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
+
+  constexpr bool is_struct_field = is_fory_serializable_v<FieldType>;
+  constexpr bool is_polymorphic_field =
+      Serializer<FieldType>::type_id == TypeId::UNKNOWN;
+
+  bool read_type = is_polymorphic_field;
+
+  // In compatible mode, nested struct fields always carry type metadata
+  // (xtypeId + meta index). We must read this metadata so that
+  // `Serializer<T>::read` can dispatch to `read_compatible` with the correct
+  // remote TypeMeta instead of treating the bytes as part of the first field
+  // value.
+  if (!is_polymorphic_field && is_struct_field && ctx.is_compatible()) {
+    read_type = true;
+  }
+
+  // In compatible mode we trust the remote field metadata to tell us whether
+  // a ref/null flag was written before the value payload.
+  bool read_ref = remote_ref_flag;
+
+#ifdef FORY_DEBUG_XLANG
+  const auto debug_names = decltype(field_info)::Names;
+  std::cerr << "[xlang][field][compat] T=" << typeid(T).name()
+            << ", index=" << Index << ", name=" << debug_names[Index]
+            << ", remote_ref_flag=" << remote_ref_flag
+            << ", read_ref=" << read_ref << ", read_type=" << read_type
+            << ", reader_index=" << ctx.buffer().reader_index() << std::endl;
+#endif
+
+  FORY_ASSIGN_OR_RETURN(obj.*field_ptr,
+                        Serializer<FieldType>::read(ctx, read_ref, read_type));
   return Result<void, Error>();
 }
 
@@ -511,8 +606,16 @@ read_struct_fields_compatible(T &obj, ReadContext &ctx,
     const auto &remote_field = remote_fields[remote_idx];
     int16_t field_id = remote_field.field_id;
     // Compute read_ref_flag based on remote field type
-    bool read_ref_flag =
-        field_requires_ref_flag(remote_field.field_type.type_id);
+    bool read_ref_flag = field_requires_ref_flag(
+        remote_field.field_type.type_id, remote_field.field_type.nullable);
+
+#ifdef FORY_DEBUG_XLANG
+    std::cerr << "[xlang][compat] remote_idx=" << remote_idx
+              << ", field_id=" << field_id
+              << ", name=" << remote_field.field_name
+              << ", type_id=" << remote_field.field_type.type_id
+              << ", reader_index=" << ctx.buffer().reader_index() << std::endl;
+#endif
 
     if (field_id == -1) {
       // Field unknown locally — skip its value
@@ -531,7 +634,8 @@ read_struct_fields_compatible(T &obj, ReadContext &ctx,
           if (!handled && static_cast<int16_t>(index) == field_id) {
             handled = true;
             constexpr size_t original_index = Helpers::sorted_indices[index];
-            result = read_single_field_by_index<original_index>(obj, ctx);
+            result = read_single_field_by_index_compatible<original_index>(
+                obj, ctx, read_ref_flag);
           }
         });
 
@@ -574,14 +678,19 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
         ctx.write_varuint32(static_cast<uint32_t>(meta_index));
       }
     }
-
-    using FieldDescriptor = decltype(ForyFieldInfo(std::declval<const T &>()));
-    constexpr size_t field_count = FieldDescriptor::Size;
-    return detail::write_struct_fields_impl(
-        obj, ctx, std::make_index_sequence<field_count>{});
+    return write_data(obj, ctx);
   }
 
   static Result<void, Error> write_data(const T &obj, WriteContext &ctx) {
+    if (ctx.check_struct_version()) {
+      auto type_info = ctx.type_resolver().template get_struct_type_info<T>();
+      FORY_CHECK(type_info && type_info->type_meta)
+          << "Type metadata not initialized for requested struct";
+      int32_t local_version =
+          TypeMeta::compute_struct_version(*type_info->type_meta);
+      ctx.buffer().WriteInt32(local_version);
+    }
+
     using FieldDescriptor = decltype(ForyFieldInfo(std::declval<const T &>()));
     constexpr size_t field_count = FieldDescriptor::Size;
     return detail::write_struct_fields_impl(
@@ -591,10 +700,7 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
   static Result<void, Error> write_data_generic(const T &obj, WriteContext &ctx,
                                                 bool has_generics) {
     (void)has_generics;
-    using FieldDescriptor = decltype(ForyFieldInfo(std::declval<const T &>()));
-    constexpr size_t field_count = FieldDescriptor::Size;
-    return detail::write_struct_fields_impl(
-        obj, ctx, std::make_index_sequence<field_count>{});
+    return write_data(obj, ctx);
   }
 
   static Result<T, Error> read(ReadContext &ctx, bool read_ref,
@@ -604,6 +710,12 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
     if (read_ref) {
       FORY_TRY(flag, ctx.read_int8());
       ref_flag = flag;
+#ifdef FORY_DEBUG_XLANG
+      std::cerr << "[xlang][struct] T=" << typeid(T).name()
+                << ", read_ref_flag=" << static_cast<int>(ref_flag)
+                << ", reader_index=" << ctx.buffer().reader_index()
+                << std::endl;
+#endif
     } else {
       ref_flag = static_cast<int8_t>(RefFlag::NotNullValue);
     }
@@ -692,6 +804,17 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
   static Result<T, Error> read_data(ReadContext &ctx) {
     FORY_RETURN_NOT_OK(ctx.increase_depth());
     DepthGuard depth_guard(ctx);
+
+    if (ctx.check_struct_version()) {
+      FORY_TRY(read_version, ctx.buffer().ReadInt32());
+      auto local_type_info =
+          ctx.type_resolver().template get_struct_type_info<T>();
+      FORY_CHECK(local_type_info && local_type_info->type_meta)
+          << "Type metadata not initialized for requested struct";
+      int32_t local_version = TypeMeta::compute_struct_version(*local_type_info->type_meta);
+      FORY_RETURN_NOT_OK(TypeMeta::check_struct_version(
+          read_version, local_version, local_type_info->type_name));
+    }
 
     T obj{};
     using FieldDescriptor = decltype(ForyFieldInfo(std::declval<const T &>()));

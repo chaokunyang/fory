@@ -25,6 +25,32 @@
 namespace fory {
 namespace serialization {
 
+namespace {
+
+// Mirror Rust's field_need_write_ref_into(type_id, nullable) for runtime
+// computation of whether a field writes ref/null flags before the value.
+inline bool field_need_write_ref_into_runtime(const FieldType &field_type) {
+  if (field_type.nullable) {
+    return true;
+  }
+  uint32_t internal = field_type.type_id & 0xffu;
+  TypeId tid = static_cast<TypeId>(internal);
+  switch (tid) {
+  case TypeId::BOOL:
+  case TypeId::INT8:
+  case TypeId::INT16:
+  case TypeId::INT32:
+  case TypeId::INT64:
+  case TypeId::FLOAT32:
+  case TypeId::FLOAT64:
+    return false;
+  default:
+    return true;
+  }
+}
+
+} // namespace
+
 Result<void, Error> skip_varint(ReadContext &ctx) {
   // Skip varint by reading it
   FORY_RETURN_NOT_OK(ctx.read_varuint64());
@@ -153,10 +179,38 @@ Result<void, Error> skip_map(ReadContext &ctx, const FieldType &field_type) {
 }
 
 Result<void, Error> skip_struct(ReadContext &ctx, const FieldType &field_type) {
-  // TODO: Implement proper struct skipping with type meta
-  // For now, return error as this is complex and requires read_any_typeinfo()
-  return Unexpected(
-      Error::type_error("Struct skipping not yet fully implemented"));
+  // Struct fields in compatible mode are serialized with type_tag and
+  // meta_index followed by field values. We use the loaded TypeMeta to
+  // skip all fields for the remote struct.
+
+  if (!ctx.is_compatible()) {
+    return Unexpected(Error::unsupported(
+        "Struct skipping is only supported in compatible mode"));
+  }
+
+  // Read remote type_tag (ignored for now) and meta_index
+  FORY_TRY(remote_type_tag, ctx.read_varuint32());
+  (void)remote_type_tag;
+
+  FORY_TRY(meta_index, ctx.read_varuint32());
+  FORY_TRY(type_info_void, ctx.get_type_info_by_index(meta_index));
+  auto type_info = std::static_pointer_cast<TypeInfo>(type_info_void);
+  if (!type_info || !type_info->type_meta) {
+    return Unexpected(
+        Error::type_error("TypeInfo or TypeMeta not found for struct skip"));
+  }
+
+  const auto &field_infos = type_info->type_meta->get_field_infos();
+
+  FORY_RETURN_NOT_OK(ctx.increase_depth());
+  DepthGuard guard(ctx);
+
+  for (const auto &fi : field_infos) {
+    bool read_ref = field_need_write_ref_into_runtime(fi.field_type);
+    FORY_RETURN_NOT_OK(skip_field_value(ctx, fi.field_type, read_ref));
+  }
+
+  return Result<void, Error>();
 }
 
 Result<void, Error> skip_field_value(ReadContext &ctx,
@@ -170,8 +224,14 @@ Result<void, Error> skip_field_value(ReadContext &ctx,
     }
   }
 
-  // Skip based on type ID
-  TypeId tid = static_cast<TypeId>(field_type.type_id);
+  // Skip based on low 8 bits of the type ID.
+  //
+  // xlang user types encode the user type id in the high bits and the
+  // logical TypeId in the low 8 bits (see Java XtypeResolver and Rust
+  // TypeId conventions). For skipping we only care about the logical
+  // category (STRUCT/ENUM/EXT/etc.), so mask off the user id portion.
+  uint32_t low = field_type.type_id & 0xffu;
+  TypeId tid = static_cast<TypeId>(low);
 
   switch (tid) {
   case TypeId::BOOL:
@@ -184,12 +244,28 @@ Result<void, Error> skip_field_value(ReadContext &ctx,
     ctx.buffer().IncreaseReaderIndex(2);
     return {};
 
-  case TypeId::INT32:
+  case TypeId::INT32: {
+    // INT32 values are encoded as varint32 in the C++
+    // serializer, so we must consume a varint32 here
+    // instead of assuming fixed-width encoding.
+    FORY_TRY(ignored_i32, ctx.read_varint32());
+    (void)ignored_i32;
+    return {};
+  }
+
   case TypeId::FLOAT32:
     ctx.buffer().IncreaseReaderIndex(4);
     return {};
 
-  case TypeId::INT64:
+  case TypeId::INT64: {
+    // INT64 values are encoded as varint64 in the C++
+    // serializer, so we must consume a varint64 here
+    // instead of assuming fixed-width encoding.
+    FORY_TRY(ignored_i64, ctx.read_varint64());
+    (void)ignored_i64;
+    return {};
+  }
+
   case TypeId::FLOAT64:
     ctx.buffer().IncreaseReaderIndex(8);
     return {};
@@ -209,6 +285,30 @@ Result<void, Error> skip_field_value(ReadContext &ctx,
 
   case TypeId::MAP:
     return skip_map(ctx, field_type);
+
+  case TypeId::DURATION:
+  case TypeId::TIMESTAMP: {
+    // Duration/Timestamp are stored as fixed 8-byte
+    // nanosecond counts.
+    constexpr uint32_t kBytes = static_cast<uint32_t>(sizeof(int64_t));
+    if (ctx.buffer().reader_index() + kBytes > ctx.buffer().size()) {
+      return Unexpected(Error::buffer_out_of_bound(
+          ctx.buffer().reader_index(), kBytes, ctx.buffer().size()));
+    }
+    ctx.buffer().IncreaseReaderIndex(kBytes);
+    return {};
+  }
+
+  case TypeId::LOCAL_DATE: {
+    // LocalDate is stored as fixed 4-byte day count.
+    constexpr uint32_t kBytes = static_cast<uint32_t>(sizeof(int32_t));
+    if (ctx.buffer().reader_index() + kBytes > ctx.buffer().size()) {
+      return Unexpected(Error::buffer_out_of_bound(
+          ctx.buffer().reader_index(), kBytes, ctx.buffer().size()));
+    }
+    ctx.buffer().IncreaseReaderIndex(kBytes);
+    return {};
+  }
 
   case TypeId::STRUCT:
   case TypeId::COMPATIBLE_STRUCT:
@@ -255,6 +355,14 @@ Result<void, Error> skip_field_value(ReadContext &ctx,
     // Read binary length
     FORY_TRY(len, ctx.read_varuint32());
     ctx.buffer().IncreaseReaderIndex(len);
+    return {};
+  }
+
+  case TypeId::ENUM:
+  case TypeId::NAMED_ENUM: {
+    // Enums are serialized as ordinal varuint32 values.
+    FORY_TRY(ignored, ctx.read_varuint32());
+    (void)ignored;
     return {};
   }
 

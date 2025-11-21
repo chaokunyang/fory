@@ -715,9 +715,18 @@ template <> struct Serializer<std::string> {
     UTF8 = 2,   // UTF-8
   };
 
-  /// Detect string encoding (simplified - assumes UTF-8 for now)
-  static inline StringEncoding detect_encoding(const std::string &value) {
-    // Simple heuristic: check if all characters are ASCII (< 128)
+  /// Detect string encoding.
+  ///
+  /// For cross-language (xlang) payloads we always use UTF-8 to match
+  /// the Rust implementation and the xlang specification. This keeps
+  /// the format simple and avoids Java-side coder mismatches.
+  /// For non-xlang payloads we keep a lightweight heuristic to choose
+  /// between LATIN1 and UTF8.
+  static inline StringEncoding detect_encoding_xlang_aware(const std::string &value,
+                                                           const WriteContext &ctx) {
+    if (ctx.is_xlang()) {
+      return StringEncoding::UTF8;
+    }
     bool is_latin1 = true;
     for (char c : value) {
       if (static_cast<unsigned char>(c) >= 128) {
@@ -725,7 +734,6 @@ template <> struct Serializer<std::string> {
         break;
       }
     }
-    // For simplicity, use LATIN1 for ASCII, UTF8 otherwise
     return is_latin1 ? StringEncoding::LATIN1 : StringEncoding::UTF8;
   }
 
@@ -741,8 +749,8 @@ template <> struct Serializer<std::string> {
 
   static inline Result<void, Error> write_data(const std::string &value,
                                                WriteContext &ctx) {
-    // Detect encoding
-    StringEncoding encoding = detect_encoding(value);
+    // Detect encoding (UTF-8 for xlang, simple heuristic otherwise)
+    StringEncoding encoding = detect_encoding_xlang_aware(value, ctx);
 
     // Per xlang spec: write size shifted left by 2 bits, with encoding in
     // lower 2 bits Note: Using varuint32 instead of varuint64 for practical

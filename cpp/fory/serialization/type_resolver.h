@@ -176,6 +176,25 @@ public:
   const std::string &get_type_name() const { return type_name; }
   const std::string &get_namespace() const { return namespace_str; }
 
+  /// Compute struct version hash from field metadata.
+  ///
+  /// This mirrors Rust's
+  /// `compute_struct_version_hash` in
+  /// rust/fory-derive/src/object/util.rs:
+  ///
+  ///   - Build a fingerprint string using
+  ///     `snake_case(field_name),effective_type_id,nullable;`
+  ///     for each field in the sorted order defined by the
+  ///     xlang spec (primitive, nullable primitive, internal,
+  ///     list, set, map, other).
+  ///   - Hash the fingerprint with MurmurHash3_x64_128 using
+  ///     seed 47, then take the low 32 bits as signed i32.
+  ///
+  /// Java's ObjectSerializer.computeStructHash uses the same
+  /// algorithm, so this function provides the cross-language
+  /// struct version ID used by class version checking.
+  static int32_t compute_struct_version(const TypeMeta &meta);
+
 private:
   /// Compute hash from type meta bytes
   static int64_t compute_hash(const std::vector<uint8_t> &meta_bytes);
@@ -702,15 +721,24 @@ std::shared_ptr<TypeInfo> TypeResolver::get_struct_type_info() {
 }
 
 inline uint32_t TypeResolver::struct_type_tag(const TypeInfo &info) const {
-  if (info.register_by_name) {
-    return compatible_ ? static_cast<uint32_t>(TypeId::NAMED_COMPATIBLE_STRUCT)
-                       : static_cast<uint32_t>(TypeId::NAMED_STRUCT);
-  }
-  if (compatible_) {
-    return (info.type_id << 8) |
-           static_cast<uint32_t>(TypeId::COMPATIBLE_STRUCT);
-  }
-  return (info.type_id << 8) | static_cast<uint32_t>(TypeId::STRUCT);
+  // In the xlang spec the numeric type id used on the wire for
+  // structs is the "actual" type id computed by the resolver
+  // (see Rust's `struct_::actual_type_id`). That value is already
+  // stored in `info.type_id` for both id-based and name-based
+  // registrations. Unlike the previous implementation we must not
+  // apply another layer of shifting/tagging here, otherwise the
+  // local type id will no longer match the id written by Java/Rust
+  // and struct reads will fail with `TypeMismatch`.
+  //
+  // Rust equivalent:
+  //   let type_id = T::fory_get_type_id(type_resolver)?;
+  //   context.writer.write_varuint32(type_id);
+  // and on read:
+  //   ensure!(local_type_id == remote_type_id, Error::type_mismatch(...));
+  //
+  // So we simply return the stored actual type id.
+  (void)this; // suppress unused warning in some builds
+  return info.type_id;
 }
 
 template <typename T> uint32_t TypeResolver::struct_type_tag() {

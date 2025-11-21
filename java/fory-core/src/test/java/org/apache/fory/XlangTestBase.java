@@ -110,8 +110,18 @@ public abstract class XlangTestBase extends ForyTestBase {
       throws IOException;
 
   protected ImmutableMap.Builder<String, String> envBuilder(Path dataFile) {
-    return ImmutableMap.<String, String>builder()
-        .put("DATA_FILE", dataFile.toAbsolutePath().toString());
+    ImmutableMap.Builder<String, String> builder =
+        ImmutableMap.<String, String>builder()
+            .put("DATA_FILE", dataFile.toAbsolutePath().toString());
+    String dumpCase = System.getenv("FORY_CPP_DUMP_CASE");
+    if (dumpCase != null) {
+      builder.put("FORY_CPP_DUMP_CASE", dumpCase);
+    }
+    String dumpDir = System.getenv("FORY_CPP_DUMP_DIR");
+    if (dumpDir != null) {
+      builder.put("FORY_CPP_DUMP_DIR", dumpDir);
+    }
+    return builder;
   }
 
   protected ExecutionContext prepareExecution(String caseName, byte[] payload) throws IOException {

@@ -257,7 +257,7 @@ public:
           Error::unsupported("Cross-endian deserialization not yet supported"));
     }
 
-    return deserialize_payload<T>(buffer);
+    return deserialize_payload_with_header<T>(header, buffer);
   }
 
   /// Core deserialization method that takes an explicit ReadContext.
@@ -308,7 +308,7 @@ public:
           Error::unsupported("Cross-endian deserialization not yet supported"));
     }
 
-    return deserialize_payload<T>(buffer);
+    return deserialize_payload_with_header<T>(header, buffer);
   }
 
   /// Deserialize an object from a byte vector.
@@ -369,10 +369,13 @@ public:
   }
 
 private:
-  template <typename T> Result<T, Error> deserialize_payload(Buffer &buffer) {
+  template <typename T>
+  Result<T, Error> deserialize_payload_with_header(const HeaderInfo &header,
+                                                   Buffer &buffer) {
     auto ctx_handle = read_ctx_pool_.acquire();
     ReadContext &ctx = *ctx_handle;
     ctx.attach(buffer);
+    ctx.set_peer_is_cpp(header.language == Language::CPP);
     struct ReadContextCleanup {
       ReadContext &ctx;
       ~ReadContextCleanup() {

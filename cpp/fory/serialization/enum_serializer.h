@@ -29,6 +29,10 @@
 #include <type_traits>
 #include <typeindex>
 
+#ifdef FORY_DEBUG_XLANG
+#include <iostream>
+#endif
+
 namespace fory {
 namespace serialization {
 
@@ -58,7 +62,12 @@ struct Serializer<E, std::enable_if_t<std::is_enum_v<E>>> {
     if (!Metadata::to_ordinal(value, &ordinal)) {
       return Unexpected(Error::unknown_enum("Unknown enum value"));
     }
-    return Serializer<OrdinalType>::write_data(ordinal, ctx);
+    // Enums are encoded as unsigned varints in the xlang spec and in
+    // the Java implementation (see EnumSerializer.xwrite).  Use
+    // varuint32 here instead of the generic int32 zig-zag encoding so
+    // that ordinal bytes are identical across languages.
+    ctx.write_varuint32(static_cast<uint32_t>(ordinal));
+    return Result<void, Error>();
   }
 
   static inline Result<void, Error>
@@ -69,6 +78,25 @@ struct Serializer<E, std::enable_if_t<std::is_enum_v<E>>> {
 
   static inline Result<E, Error> read(ReadContext &ctx, bool read_ref,
                                       bool read_type) {
+    // Java xlang object serializer treats enum fields (in the
+    // "other" group) as nullable values with an explicit null flag
+    // in front of the ordinal, but does not use the general
+    // reference-tracking protocol for them. When reading xlang
+    // payloads from non-C++ peers and the caller did not request
+    // reference metadata, mirror that layout: consume a single
+    // null/not-null flag and then read the ordinal.
+    if (ctx.is_xlang() && !ctx.peer_is_cpp() && !read_ref) {
+      FORY_TRY(flag, ctx.read_int8());
+      if (flag == NULL_FLAG) {
+        // Represent Java null as the default enum value.
+        return E{};
+      }
+      // For NOT_NULL_VALUE_FLAG or REF_VALUE_FLAG we simply proceed to
+      // read the ordinal; schema-consistent named enums are handled at
+      // a higher layer via type metadata.
+      return read_data(ctx);
+    }
+
     FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
     if (!has_value) {
       return E{};
@@ -81,7 +109,13 @@ struct Serializer<E, std::enable_if_t<std::is_enum_v<E>>> {
   }
 
   static inline Result<E, Error> read_data(ReadContext &ctx) {
-    FORY_TRY(ordinal, Serializer<OrdinalType>::read_data(ctx));
+    FORY_TRY(raw_ordinal, ctx.read_varuint32());
+    OrdinalType ordinal = static_cast<OrdinalType>(raw_ordinal);
+#ifdef FORY_DEBUG_XLANG
+    std::cerr << "[xlang][enum] ordinal="
+              << static_cast<long long>(ordinal)
+              << ", reader_index=" << ctx.buffer().reader_index() << std::endl;
+#endif
     E value{};
     if (!Metadata::from_ordinal(ordinal, &value)) {
       return Unexpected(

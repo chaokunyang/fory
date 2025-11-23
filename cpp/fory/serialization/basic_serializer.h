@@ -704,7 +704,7 @@ template <> struct Serializer<uint64_t> {
 // String Serializer
 // ============================================================================
 
-/// std::string serializer with encoding detection per xlang spec
+/// std::string serializer using UTF-8 encoding per xlang spec
 template <> struct Serializer<std::string> {
   static constexpr TypeId type_id = TypeId::STRING;
 
@@ -714,28 +714,6 @@ template <> struct Serializer<std::string> {
     UTF16 = 1,  // UTF-16
     UTF8 = 2,   // UTF-8
   };
-
-  /// Detect string encoding.
-  ///
-  /// For cross-language (xlang) payloads we always use UTF-8 to match
-  /// the Rust implementation and the xlang specification. This keeps
-  /// the format simple and avoids Java-side coder mismatches.
-  /// For non-xlang payloads we keep a lightweight heuristic to choose
-  /// between LATIN1 and UTF8.
-  static inline StringEncoding detect_encoding_xlang_aware(const std::string &value,
-                                                           const WriteContext &ctx) {
-    if (ctx.is_xlang()) {
-      return StringEncoding::UTF8;
-    }
-    bool is_latin1 = true;
-    for (char c : value) {
-      if (static_cast<unsigned char>(c) >= 128) {
-        is_latin1 = false;
-        break;
-      }
-    }
-    return is_latin1 ? StringEncoding::LATIN1 : StringEncoding::UTF8;
-  }
 
   static inline Result<void, Error> write(const std::string &value,
                                           WriteContext &ctx, bool write_ref,
@@ -749,14 +727,12 @@ template <> struct Serializer<std::string> {
 
   static inline Result<void, Error> write_data(const std::string &value,
                                                WriteContext &ctx) {
-    // Detect encoding (UTF-8 for xlang, simple heuristic otherwise)
-    StringEncoding encoding = detect_encoding_xlang_aware(value, ctx);
-
-    // Per xlang spec: write size shifted left by 2 bits, with encoding in
-    // lower 2 bits Note: Using varuint32 instead of varuint64 for practical
-    // size limits
-    uint32_t size_with_encoding = (static_cast<uint32_t>(value.size()) << 2) |
-                                  static_cast<uint32_t>(encoding);
+    // Always use UTF-8 encoding for cross-language compatibility.
+    // Per xlang spec: write size shifted left by 2 bits, with encoding
+    // (UTF8) in the lower 2 bits.
+    uint32_t length = static_cast<uint32_t>(value.size());
+    uint32_t size_with_encoding =
+        (length << 2) | static_cast<uint32_t>(StringEncoding::UTF8);
     ctx.write_varuint32(size_with_encoding);
 
     // Write string bytes

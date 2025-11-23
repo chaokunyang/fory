@@ -813,6 +813,11 @@ int32_t TypeMeta::compute_struct_version(const TypeMeta &meta) {
   // Rust uses the low 64 bits and then keeps low 32 bits as i32.
   uint64_t low = static_cast<uint64_t>(hash_out[0]);
   uint32_t version = static_cast<uint32_t>(low & 0xFFFF'FFFFu);
+#ifdef FORY_DEBUG_XLANG
+  std::cerr << "[xlang][debug] struct_version type_name=" << meta.type_name
+            << ", fingerprint=\"" << fingerprint << "\" version=" << version
+            << std::endl;
+#endif
   return static_cast<int32_t>(version);
 }
 

@@ -82,10 +82,10 @@ struct Serializer<E, std::enable_if_t<std::is_enum_v<E>>> {
     // "other" group) as nullable values with an explicit null flag
     // in front of the ordinal, but does not use the general
     // reference-tracking protocol for them. When reading xlang
-    // payloads from non-C++ peers and the caller did not request
-    // reference metadata, mirror that layout: consume a single
-    // null/not-null flag and then read the ordinal.
-    if (ctx.is_xlang() && !ctx.peer_is_cpp() && !read_ref) {
+    // payloads and the caller did not request reference metadata,
+    // mirror that layout: consume a single null/not-null flag and
+    // then read the ordinal.
+    if (ctx.is_xlang() && !read_ref) {
       FORY_TRY(flag, ctx.read_int8());
       if (flag == NULL_FLAG) {
         // Represent Java null as the default enum value.

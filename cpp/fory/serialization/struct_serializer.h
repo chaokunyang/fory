@@ -61,6 +61,7 @@ inline bool field_requires_ref_flag(uint32_t type_id, bool nullable) {
   uint32_t internal = type_id & 0xffu;
   TypeId tid = static_cast<TypeId>(internal);
   switch (tid) {
+  // Primitive numeric / bool types never write ref flags
   case TypeId::BOOL:
   case TypeId::INT8:
   case TypeId::INT16:
@@ -68,6 +69,12 @@ inline bool field_requires_ref_flag(uint32_t type_id, bool nullable) {
   case TypeId::INT64:
   case TypeId::FLOAT32:
   case TypeId::FLOAT64:
+    return false;
+  // Enums in xlang are written without ref flags (see Rust
+  // enum serializer and Java EnumSerializer.xwrite), so we
+  // must not try to consume a ref flag for enum fields.
+  case TypeId::ENUM:
+  case TypeId::NAMED_ENUM:
     return false;
   default:
     return true;
@@ -497,19 +504,6 @@ Result<void, Error> read_single_field_by_index(T &obj, ReadContext &ctx) {
   // must not try to consume one here.
   bool read_ref = field_needs_ref;
 
-  // In Java xlang compatible mode, container and struct-like fields are
-  // written via xwriteRef even when they are not optional. For those field
-  // types, the value payload is always prefixed with a ref flag that must be
-  // consumed by the element serializer. Align with that behaviour by
-  // enabling ref metadata for such fields when the peer is not C++.
-  if (!field_needs_ref && ctx.is_xlang() && !ctx.peer_is_cpp()) {
-    uint32_t local_type_id =
-        static_cast<uint32_t>(Serializer<FieldType>::type_id);
-    if (field_requires_ref_flag(local_type_id)) {
-      read_ref = true;
-    }
-  }
-
 #ifdef FORY_DEBUG_XLANG
   const auto debug_names = decltype(field_info)::Names;
   std::cerr << "[xlang][field] T=" << typeid(T).name() << ", index=" << Index
@@ -554,6 +548,18 @@ read_single_field_by_index_compatible(T &obj, ReadContext &ctx,
   // In compatible mode we trust the remote field metadata to tell us whether
   // a ref/null flag was written before the value payload.
   bool read_ref = remote_ref_flag;
+
+  // For nested struct fields the xlang spec (and Rust/Java
+  // implementations) only writes ref/null flags when the field is
+  // actually nullable (Option/optional/smart pointer). For plain
+  // struct fields there is no leading ref flag; only type info may be
+  // present. Rely on the local C++ type to decide this instead of the
+  // remote FieldType, so that both C++↔C++ and cross-language
+  // behavior stay consistent.
+  if (is_struct_field) {
+    constexpr bool field_needs_ref = requires_ref_metadata_v<FieldType>;
+    read_ref = field_needs_ref;
+  }
 
 #ifdef FORY_DEBUG_XLANG
   const auto debug_names = decltype(field_info)::Names;
@@ -605,9 +611,14 @@ read_struct_fields_compatible(T &obj, ReadContext &ctx,
   for (size_t remote_idx = 0; remote_idx < remote_fields.size(); ++remote_idx) {
     const auto &remote_field = remote_fields[remote_idx];
     int16_t field_id = remote_field.field_id;
-    // Compute read_ref_flag based on remote field type
-    bool read_ref_flag = field_requires_ref_flag(
-        remote_field.field_type.type_id, remote_field.field_type.nullable);
+
+    // In compatible mode, whether a field carries a ref/null flag is
+    // determined solely by the *remote* field nullability. If the
+    // remote field is nullable, writers will have emitted a ref flag
+    // before the value; otherwise they will not. This follows the
+    // guidance that compatible readers should base ref-flag
+    // consumption purely on the remote FieldType.nullable bit.
+    bool read_ref_flag = remote_field.field_type.nullable;
 
 #ifdef FORY_DEBUG_XLANG
     std::cerr << "[xlang][compat] remote_idx=" << remote_idx
@@ -747,18 +758,41 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
           return read_data(ctx);
         }
       } else {
-        // Non-compatible mode: read type tag if requested, then read data
-        // directly
+        // Non-compatible mode: read type info if requested, then read data.
+        //
+        // For xlang, we delegate type-info parsing to ReadContext so that
+        // named structs/ext/enums consume their namespace/type-name
+        // metadata exactly as Java/Rust do. This keeps the reader
+        // position aligned with the subsequent class-version hash and
+        // payload, and also validates that the concrete type id matches
+        // the expected static type.
         if (read_type) {
           auto local_type_info =
               ctx.type_resolver().template get_struct_type_info<T>();
-          FORY_CHECK(local_type_info)
+          FORY_CHECK(local_type_info && local_type_info->type_meta)
               << "Type metadata not initialized for requested struct";
-          FORY_TRY(type_tag, ctx.read_varuint32());
           uint32_t expected_tag =
               ctx.type_resolver().struct_type_tag(*local_type_info);
-          if (type_tag != expected_tag) {
-            return Unexpected(Error::type_mismatch(type_tag, expected_tag));
+
+          if (ctx.is_xlang()) {
+            // xlang: read full type info (id + any named metadata)
+            auto type_info_result = ctx.read_any_typeinfo();
+            if (!type_info_result.ok()) {
+              return Unexpected(type_info_result.error());
+            }
+            auto remote_info = type_info_result.value();
+            uint32_t remote_tag = remote_info ? remote_info->type_id : 0u;
+            if (remote_tag != expected_tag) {
+              return Unexpected(
+                  Error::type_mismatch(remote_tag, expected_tag));
+            }
+          } else {
+            // Non-xlang: type info is just the raw type id.
+            FORY_TRY(type_tag, ctx.read_varuint32());
+            if (type_tag != expected_tag) {
+              return Unexpected(
+                  Error::type_mismatch(type_tag, expected_tag));
+            }
           }
         }
         return read_data(ctx);

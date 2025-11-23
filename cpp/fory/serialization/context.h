@@ -291,11 +291,6 @@ public:
   /// Get current nesting depth.
   inline uint32_t current_depth() const { return current_depth_; }
 
-  /// Whether the peer (writer) is C++.
-  inline bool peer_is_cpp() const { return peer_is_cpp_; }
-
-  /// Set whether the peer (writer) is C++.
-  inline void set_peer_is_cpp(bool v) { peer_is_cpp_ = v; }
 
   /// Increase nesting depth by 1.
   ///
@@ -386,8 +381,6 @@ private:
   std::shared_ptr<TypeResolver> type_resolver_;
   RefReader ref_reader_;
   uint32_t current_depth_;
-
-  bool peer_is_cpp_ = true;
 
   // Meta sharing state (for compatible mode)
   std::vector<std::shared_ptr<void>> reading_type_infos_;

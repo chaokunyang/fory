@@ -364,7 +364,7 @@ struct Serializer<
 
   static inline Result<std::vector<T, Alloc>, Error>
   read(ReadContext &ctx, bool read_ref, bool read_type) {
-    if (ctx.is_xlang() && !ctx.peer_is_cpp()) {
+    if (ctx.is_xlang()) {
       return read_xlang(ctx, read_ref, read_type);
     }
 

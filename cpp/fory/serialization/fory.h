@@ -375,7 +375,6 @@ private:
     auto ctx_handle = read_ctx_pool_.acquire();
     ReadContext &ctx = *ctx_handle;
     ctx.attach(buffer);
-    ctx.set_peer_is_cpp(header.language == Language::CPP);
     struct ReadContextCleanup {
       ReadContext &ctx;
       ~ReadContextCleanup() {

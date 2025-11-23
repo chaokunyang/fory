@@ -46,6 +46,7 @@ using ::fory::serialization::Fory;
 using ::fory::serialization::ForyBuilder;
 using ::fory::serialization::LocalDate;
 using ::fory::serialization::Timestamp;
+using ::fory::serialization::Serializer;
 
 [[noreturn]] void Fail(const std::string &message) {
   throw std::runtime_error(message);
@@ -171,7 +172,12 @@ struct MyExt {
   int32_t id;
   bool operator==(const MyExt &other) const { return id == other.id; }
 };
-FORY_STRUCT(MyExt, id);
+
+// MyExt is modeled as an ext type (custom serializer) rather than a
+// struct to mirror Rust's MyExt and Java's MyExtSerializer in
+// XlangTestBase. Do not register it with FORY_STRUCT; instead we
+// provide a Serializer<MyExt> specialization and register it via
+// register_extension_type.
 
 struct MyWrapper {
   Color color;
@@ -201,6 +207,84 @@ struct VersionCheckStruct {
   }
 };
 FORY_STRUCT(VersionCheckStruct, f1, f2, f3);
+
+namespace fory {
+namespace serialization {
+
+// Custom serializer for MyExt that matches Rust's MyExt serializer
+// and Java's MyExtSerializer: it simply serializes the `id` field as
+// a varint32 in xlang mode.
+template <> struct Serializer<MyExt> {
+  static constexpr TypeId type_id = TypeId::EXT;
+
+  static Result<void, Error> write(const MyExt &value, WriteContext &ctx,
+                                   bool write_ref, bool write_type) {
+    write_not_null_ref_flag(ctx, write_ref);
+    if (write_type) {
+      // Delegate dynamic typeinfo to WriteContext so that user type
+      // ids and named registrations are encoded consistently with
+      // other ext types.
+      FORY_TRY(type_info,
+               ctx.write_any_typeinfo(static_cast<uint32_t>(TypeId::UNKNOWN),
+                                      std::type_index(typeid(MyExt))));
+      (void)type_info;
+    }
+    return write_data(value, ctx);
+  }
+
+  static Result<void, Error> write_data(const MyExt &value, WriteContext &ctx) {
+    return Serializer<int32_t>::write_data(value.id, ctx);
+  }
+
+  static Result<void, Error> write_data_generic(const MyExt &value,
+                                                WriteContext &ctx,
+                                                bool has_generics) {
+    (void)has_generics;
+    return write_data(value, ctx);
+  }
+
+  static Result<MyExt, Error> read(ReadContext &ctx, bool read_ref,
+                                   bool read_type) {
+    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
+    if (!has_value) {
+      return MyExt{};
+    }
+    if (read_type) {
+      // Validate dynamic type info and consume any named metadata.
+      FORY_TRY(type_info, ctx.read_any_typeinfo());
+      if (!type_info) {
+        return Unexpected(Error::type_error("TypeInfo for MyExt not found"));
+      }
+    }
+    MyExt value;
+    FORY_TRY(id, Serializer<int32_t>::read_data(ctx));
+    value.id = id;
+    return value;
+  }
+
+  static Result<MyExt, Error> read_data(ReadContext &ctx) {
+    MyExt value;
+    FORY_TRY(id, Serializer<int32_t>::read_data(ctx));
+    value.id = id;
+    return value;
+  }
+
+  static Result<MyExt, Error>
+  read_data_generic(ReadContext &ctx, bool has_generics) {
+    (void)has_generics;
+    return read_data(ctx);
+  }
+
+  static Result<MyExt, Error>
+  read_with_type_info(ReadContext &ctx, bool read_ref,
+                      const TypeInfo &type_info) {
+    (void)type_info;
+    return read(ctx, read_ref, false);
+  }
+};
+
+} // namespace serialization
+} // namespace fory
 
 // ---------------------------------------------------------------------------
 // Helpers for interacting with Fory Result/Buffer
@@ -925,7 +1009,8 @@ void RunTestInteger(const std::string &data_file) {
 void RunTestSkipIdCustom(const std::string &data_file) {
   auto bytes = ReadFile(data_file);
   auto limited = BuildFory(true, true);
-  EnsureOk(limited.register_struct<MyExt>(103), "register MyExt limited");
+  EnsureOk(limited.register_extension_type<MyExt>(103),
+           "register MyExt limited");
   EnsureOk(limited.register_struct<EmptyWrapper>(104),
            "register EmptyWrapper limited");
   {
@@ -937,7 +1022,7 @@ void RunTestSkipIdCustom(const std::string &data_file) {
   auto full = BuildFory(true, true);
   EnsureOk(full.register_struct<Color>(101), "register Color full");
   EnsureOk(full.register_struct<MyStruct>(102), "register MyStruct full");
-  EnsureOk(full.register_struct<MyExt>(103), "register MyExt full");
+  EnsureOk(full.register_extension_type<MyExt>(103), "register MyExt full");
   EnsureOk(full.register_struct<MyWrapper>(104), "register MyWrapper full");
 
   MyWrapper wrapper;
@@ -953,7 +1038,8 @@ void RunTestSkipIdCustom(const std::string &data_file) {
 void RunTestSkipNameCustom(const std::string &data_file) {
   auto bytes = ReadFile(data_file);
   auto limited = BuildFory(true, true);
-  EnsureOk(limited.register_struct<MyExt>("my_ext"), "register named MyExt");
+  EnsureOk(limited.register_extension_type<MyExt>("my_ext"),
+           "register named MyExt");
   EnsureOk(limited.register_struct<EmptyWrapper>("my_wrapper"),
            "register named EmptyWrapper");
   {
@@ -966,7 +1052,8 @@ void RunTestSkipNameCustom(const std::string &data_file) {
   EnsureOk(full.register_struct<Color>("color"), "register named Color");
   EnsureOk(full.register_struct<MyStruct>("my_struct"),
            "register named MyStruct");
-  EnsureOk(full.register_struct<MyExt>("my_ext"), "register named MyExt");
+  EnsureOk(full.register_extension_type<MyExt>("my_ext"),
+           "register named MyExt");
   EnsureOk(full.register_struct<MyWrapper>("my_wrapper"),
            "register named MyWrapper");
 
@@ -987,7 +1074,9 @@ void RunTestConsistentNamed(const std::string &data_file) {
   EnsureOk(fory.register_struct<Color>("color"), "register named color");
   EnsureOk(fory.register_struct<MyStruct>("my_struct"),
            "register named MyStruct");
-  EnsureOk(fory.register_struct<MyExt>("my_ext"), "register named MyExt");
+  EnsureOk(fory.register_extension_type<MyExt>("my_ext"),
+           "register named MyExt");
+
 
   MyStruct my_struct(42);
   MyExt my_ext{43};

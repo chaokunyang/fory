@@ -226,9 +226,6 @@ public final class StringSerializer extends ImmutableSerializer<String> {
     long header = buffer.readVarUint36Small();
     byte coder = (byte) (header & 0b11);
     int numBytes = (int) (header >>> 2);
-    System.err.println("[DEBUG-JAVA] readCompressedBytesString: pos=" + posBefore
-        + ", header=0x" + Long.toHexString(header) + " (" + header + ")"
-        + ", coder=" + coder + ", numBytes=" + numBytes);
     if (coder == UTF8) {
       byte[] data;
       if (writeNumUtf16BytesForUtf8Encoding) {
@@ -243,8 +240,6 @@ public final class StringSerializer extends ImmutableSerializer<String> {
     } else if (coder == LATIN1 || coder == UTF16) {
       return newBytesStringZeroCopy(coder, readBytesUnCompressedUTF16(buffer, numBytes));
     } else {
-      System.err.println("[DEBUG-JAVA] ERROR: Unknown coder type " + coder
-          + ", header was 0x" + Long.toHexString(header));
       throw new RuntimeException("Unknown coder type " + coder);
     }
   }

@@ -520,11 +520,12 @@ bool name_sorter(const FieldInfo &a, const FieldInfo &b) {
   return a.field_name < b.field_name;
 }
 
-// Check if a type ID is an internal (built-in, final) type for field grouping.
-// Internal types are STRING, DURATION, TIMESTAMP, LOCAL_DATE, DECIMAL, BINARY.
+// Check if a type ID is a "final" type for field group 2 in field ordering.
+// Final types are STRING, DURATION, TIMESTAMP, LOCAL_DATE, DECIMAL, BINARY.
+// These are types with fixed serializers that don't need type info written.
 // Excludes: ENUM (13-14), STRUCT (15-18), EXT (19-20), LIST (21), SET (22), MAP (23)
 // Note: LIST/SET/MAP are checked separately before this function is called.
-bool is_internal_type(uint32_t type_id) {
+bool is_final_type_for_grouping(uint32_t type_id) {
   return type_id == static_cast<uint32_t>(TypeId::STRING) ||
          (type_id >= static_cast<uint32_t>(TypeId::DURATION) &&
           type_id <= static_cast<uint32_t>(TypeId::BINARY));
@@ -559,7 +560,7 @@ TypeMeta::sort_field_infos(std::vector<FieldInfo> fields) {
       set_fields.push_back(std::move(field));
     } else if (type_id == static_cast<uint32_t>(TypeId::MAP)) {
       map_fields.push_back(std::move(field));
-    } else if (is_internal_type(type_id)) {
+    } else if (is_final_type_for_grouping(type_id)) {
       internal_type_fields.push_back(std::move(field));
     } else {
       other_fields.push_back(std::move(field));
@@ -818,7 +819,7 @@ int32_t TypeMeta::compute_struct_version(const TypeMeta &meta) {
   // Rust uses the low 64 bits and then keeps low 32 bits as i32.
   uint64_t low = static_cast<uint64_t>(hash_out[0]);
   uint32_t version = static_cast<uint32_t>(low & 0xFFFF'FFFFu);
-#ifdef FORY_DEBUG_XLANG
+#ifdef FORY_DEBUG
   std::cerr << "[xlang][debug] struct_version type_name=" << meta.type_name
             << ", fingerprint=\"" << fingerprint << "\" version=" << version
             << std::endl;

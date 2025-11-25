@@ -49,20 +49,49 @@ constexpr uint8_t DECL_VALUE_TYPE = 0b100000;
 // Type Info Methods
 // ============================================================================
 
-/// Write type info for a type to buffer
+// Helper to get the underlying type for optional/pointer types
+template <typename T> struct unwrap_optional { using type = T; };
+template <typename T> struct unwrap_optional<std::optional<T>> {
+  using type = T;
+};
+template <typename T>
+using unwrap_optional_t = typename unwrap_optional<T>::type;
+
+/// Write type info for a type to buffer.
+/// For struct types, this uses the TypeResolver to get the actual registered
+/// type_id. For basic types, it writes the static type_id.
 template <typename T>
 inline Result<void, Error> write_type_info(WriteContext &ctx) {
-  ctx.write_varuint32(static_cast<uint32_t>(Serializer<T>::type_id));
-  return Result<void, Error>();
+  using UnwrappedT = unwrap_optional_t<T>;
+  if constexpr (is_fory_serializable_v<UnwrappedT>) {
+    // Struct types need to write actual registered type_id + meta index
+    return Serializer<UnwrappedT>::write_type_info(ctx);
+  } else {
+    // Basic types just write the static type_id
+    ctx.write_varuint32(static_cast<uint32_t>(Serializer<T>::type_id));
+    return Result<void, Error>();
+  }
 }
 
 /// Read type info for a type from buffer
+/// Uses read_any_typeinfo() to properly handle all type categories including
+/// COMPATIBLE_STRUCT (type_id + meta_index) and NAMED_* types.
 template <typename T>
 inline Result<void, Error> read_type_info(ReadContext &ctx) {
-  FORY_TRY(type_id, ctx.read_varuint32());
-  if (type_id != static_cast<uint32_t>(Serializer<T>::type_id)) {
-    return Unexpected(Error::type_mismatch(
-        type_id, static_cast<uint32_t>(Serializer<T>::type_id)));
+  FORY_TRY(type_info, ctx.read_any_typeinfo());
+  uint32_t type_id = type_info ? type_info->type_id : 0;
+  uint32_t expected = static_cast<uint32_t>(Serializer<T>::type_id);
+  // Compare lower 8 bits for type category matching
+  uint32_t low_type = type_id & 0xffu;
+  // For structs, allow STRUCT/COMPATIBLE_STRUCT/NAMED_*/etc.
+  bool is_struct_match =
+      (expected == static_cast<uint32_t>(TypeId::STRUCT) &&
+       (low_type == static_cast<uint32_t>(TypeId::STRUCT) ||
+        low_type == static_cast<uint32_t>(TypeId::COMPATIBLE_STRUCT) ||
+        low_type == static_cast<uint32_t>(TypeId::NAMED_STRUCT) ||
+        low_type == static_cast<uint32_t>(TypeId::NAMED_COMPATIBLE_STRUCT)));
+  if (low_type != expected && !is_struct_match) {
+    return Unexpected(Error::type_mismatch(type_id, expected));
   }
   return Result<void, Error>();
 }
@@ -276,16 +305,25 @@ write_map_data_slow(const MapType &map, WriteContext &ctx, bool has_generics) {
         ctx.write_uint8(KEY_NULL | VALUE_NULL);
         continue;
       } else if (value_is_none) {
+        // Non-null key, null value
+        // Java writes: chunk_header, then ref_flag, then type_info, then data
         uint8_t chunk_header = VALUE_NULL;
-        if (key_is_shared_ref || key_needs_ref) {
+        bool write_ref = key_is_shared_ref || key_needs_ref;
+        if (write_ref) {
           chunk_header |= TRACKING_KEY_REF;
         }
         if (is_key_declared && !key_is_polymorphic) {
           chunk_header |= DECL_KEY_TYPE;
-          ctx.write_uint8(chunk_header);
-        } else {
-          ctx.write_uint8(chunk_header);
-          // Write type info for key
+        }
+        ctx.write_uint8(chunk_header);
+
+        // Write ref flag first if tracking refs
+        if (write_ref) {
+          write_not_null_ref_flag(ctx, true);
+        }
+
+        // Then write type info if not declared
+        if (!(chunk_header & DECL_KEY_TYPE)) {
           if (key_is_polymorphic) {
             auto concrete_type_id = get_concrete_type_id(key);
             if (concrete_type_id ==
@@ -299,33 +337,35 @@ write_map_data_slow(const MapType &map, WriteContext &ctx, bool has_generics) {
             FORY_RETURN_NOT_OK(write_type_info<K>(ctx));
           }
         }
-        // Write key data (type info already written above, so write_type=false)
-        if constexpr (key_is_shared_ref) {
+
+        // Write key data (ref flag and type info already written)
+        if (has_generics && is_generic_type_v<K>) {
           FORY_RETURN_NOT_OK(
-              Serializer<K>::write(key, ctx, true, false, has_generics));
-        } else if constexpr (key_needs_ref) {
-          FORY_RETURN_NOT_OK(Serializer<K>::write(key, ctx, true, false));
+              Serializer<K>::write_data_generic(key, ctx, has_generics));
         } else {
-          if (has_generics && is_generic_type_v<K>) {
-            FORY_RETURN_NOT_OK(
-                Serializer<K>::write_data_generic(key, ctx, has_generics));
-          } else {
-            FORY_RETURN_NOT_OK(Serializer<K>::write_data(key, ctx));
-          }
+          FORY_RETURN_NOT_OK(Serializer<K>::write_data(key, ctx));
         }
         continue;
       } else {
         // key_is_none
+        // Java writes: chunk_header, then ref_flag, then type_info, then data
         uint8_t chunk_header = KEY_NULL;
-        if (val_is_shared_ref || val_needs_ref) {
+        bool write_ref = val_is_shared_ref || val_needs_ref;
+        if (write_ref) {
           chunk_header |= TRACKING_VALUE_REF;
         }
         if (is_val_declared && !val_is_polymorphic) {
           chunk_header |= DECL_VALUE_TYPE;
-          ctx.write_uint8(chunk_header);
-        } else {
-          ctx.write_uint8(chunk_header);
-          // Write type info for value
+        }
+        ctx.write_uint8(chunk_header);
+
+        // Write ref flag first if tracking refs
+        if (write_ref) {
+          write_not_null_ref_flag(ctx, true);
+        }
+
+        // Then write type info if not declared
+        if (!(chunk_header & DECL_VALUE_TYPE)) {
           if (val_is_polymorphic) {
             auto concrete_type_id = get_concrete_type_id(value);
             if (concrete_type_id ==
@@ -339,20 +379,13 @@ write_map_data_slow(const MapType &map, WriteContext &ctx, bool has_generics) {
             FORY_RETURN_NOT_OK(write_type_info<V>(ctx));
           }
         }
-        // Write value data (type info already written above, so
-        // write_type=false)
-        if constexpr (val_is_shared_ref) {
+
+        // Write value data (ref flag and type info already written)
+        if (has_generics && is_generic_type_v<V>) {
           FORY_RETURN_NOT_OK(
-              Serializer<V>::write(value, ctx, true, false, has_generics));
-        } else if constexpr (val_needs_ref) {
-          FORY_RETURN_NOT_OK(Serializer<V>::write(value, ctx, true, false));
+              Serializer<V>::write_data_generic(value, ctx, has_generics));
         } else {
-          if (has_generics && is_generic_type_v<V>) {
-            FORY_RETURN_NOT_OK(
-                Serializer<V>::write_data_generic(value, ctx, has_generics));
-          } else {
-            FORY_RETURN_NOT_OK(Serializer<V>::write_data(value, ctx));
-          }
+          FORY_RETURN_NOT_OK(Serializer<V>::write_data(value, ctx));
         }
         continue;
       }
@@ -600,9 +633,25 @@ inline Result<MapType, Error> read_map_data_slow(ReadContext &ctx,
 
     if (header & KEY_NULL) {
       // Null key, non-null value
+      // Java writes: chunk_header, then ref_flag, then type_info, then data
       bool track_value_ref = (header & TRACKING_VALUE_REF) != 0;
       bool value_declared = (header & DECL_VALUE_TYPE) != 0;
 
+      // Consume ref flag first if tracking refs
+      bool has_value = true;
+      if (track_value_ref || val_is_shared_ref) {
+        FORY_TRY(ref_has_value, consume_ref_flag(ctx, true));
+        has_value = ref_has_value;
+      }
+
+      if (!has_value) {
+        // Value is null reference
+        result.emplace(K{}, V{});
+        len_counter++;
+        continue;
+      }
+
+      // Now read type info if needed
       std::shared_ptr<TypeInfo> value_type_info = nullptr;
       if (!value_declared || val_is_polymorphic) {
         if (val_is_polymorphic) {
@@ -613,18 +662,16 @@ inline Result<MapType, Error> read_map_data_slow(ReadContext &ctx,
         }
       }
 
-      bool read_ref = val_is_shared_ref || track_value_ref;
+      // Read value data (ref flag already consumed above)
       V value;
-      if (value_type_info) {
+      if constexpr (val_is_polymorphic) {
         // For polymorphic types, use read_with_type_info
-        FORY_TRY(v, Serializer<V>::read_with_type_info(ctx, read_ref,
+        FORY_TRY(v, Serializer<V>::read_with_type_info(ctx, false,
                                                        *value_type_info));
         value = std::move(v);
-      } else if (read_ref) {
-        FORY_TRY(v, Serializer<V>::read(ctx, read_ref, false));
-        value = std::move(v);
       } else {
-        FORY_TRY(v, Serializer<V>::read(ctx, false, false));
+        // Read data directly - ref flag already consumed
+        FORY_TRY(v, Serializer<V>::read_data(ctx));
         value = std::move(v);
       }
       // Insert with default-constructed key and the read value
@@ -635,9 +682,25 @@ inline Result<MapType, Error> read_map_data_slow(ReadContext &ctx,
 
     if (header & VALUE_NULL) {
       // Non-null key, null value
+      // Java writes: chunk_header, then ref_flag, then type_info, then data
       bool track_key_ref = (header & TRACKING_KEY_REF) != 0;
       bool key_declared = (header & DECL_KEY_TYPE) != 0;
 
+      // Consume ref flag first if tracking refs
+      bool has_key = true;
+      if (track_key_ref || key_is_shared_ref) {
+        FORY_TRY(ref_has_key, consume_ref_flag(ctx, true));
+        has_key = ref_has_key;
+      }
+
+      if (!has_key) {
+        // Key is null reference
+        result.emplace(K{}, V{});
+        len_counter++;
+        continue;
+      }
+
+      // Now read type info if needed
       std::shared_ptr<TypeInfo> key_type_info = nullptr;
       if (!key_declared || key_is_polymorphic) {
         if (key_is_polymorphic) {
@@ -648,17 +711,15 @@ inline Result<MapType, Error> read_map_data_slow(ReadContext &ctx,
         }
       }
 
-      bool read_ref = key_is_shared_ref || track_key_ref;
+      // Read key data (ref flag already consumed above)
       K key;
-      if (key_type_info) {
-        FORY_TRY(k, Serializer<K>::read_with_type_info(ctx, read_ref,
+      if constexpr (key_is_polymorphic) {
+        FORY_TRY(k, Serializer<K>::read_with_type_info(ctx, false,
                                                        *key_type_info));
         key = std::move(k);
-      } else if (read_ref) {
-        FORY_TRY(k, Serializer<K>::read(ctx, read_ref, false));
-        key = std::move(k);
       } else {
-        FORY_TRY(k, Serializer<K>::read(ctx, false, false));
+        // Read data directly - ref flag already consumed
+        FORY_TRY(k, Serializer<K>::read_data(ctx));
         key = std::move(k);
       }
       // Insert with the read key and default-constructed value
@@ -702,13 +763,17 @@ inline Result<MapType, Error> read_map_data_slow(ReadContext &ctx,
     }
 
     // Read chunk_size pairs
-    bool key_read_ref = key_is_shared_ref || key_needs_ref || track_key_ref;
-    bool val_read_ref = val_is_shared_ref || val_needs_ref || track_value_ref;
+    // NOTE: Only shared_ref and track_*_ref determine if ref flag was written
+    // The requires_ref_metadata trait is for top-level serialization, NOT for
+    // values inside map chunks. Map entries use write_data (no ref flag) unless
+    // the type is shared_ref or track_*_ref was set.
+    bool key_read_ref = key_is_shared_ref || track_key_ref;
+    bool val_read_ref = val_is_shared_ref || track_value_ref;
 
     for (uint8_t i = 0; i < chunk_size; ++i) {
       // Read key - use type info if available (polymorphic case)
       K key;
-      if (key_type_info) {
+      if constexpr (key_is_polymorphic) {
         FORY_TRY(k, Serializer<K>::read_with_type_info(ctx, key_read_ref,
                                                        *key_type_info));
         key = std::move(k);
@@ -716,13 +781,14 @@ inline Result<MapType, Error> read_map_data_slow(ReadContext &ctx,
         FORY_TRY(k, Serializer<K>::read(ctx, key_read_ref, false));
         key = std::move(k);
       } else {
-        FORY_TRY(k, Serializer<K>::read(ctx, false, false));
+        // No ref flag - read data directly
+        FORY_TRY(k, Serializer<K>::read_data(ctx));
         key = std::move(k);
       }
 
       // Read value - use type info if available (polymorphic case)
       V value;
-      if (value_type_info) {
+      if constexpr (val_is_polymorphic) {
         FORY_TRY(v, Serializer<V>::read_with_type_info(ctx, val_read_ref,
                                                        *value_type_info));
         value = std::move(v);
@@ -730,7 +796,8 @@ inline Result<MapType, Error> read_map_data_slow(ReadContext &ctx,
         FORY_TRY(v, Serializer<V>::read(ctx, val_read_ref, false));
         value = std::move(v);
       } else {
-        FORY_TRY(v, Serializer<V>::read(ctx, false, false));
+        // No ref flag - read data directly
+        FORY_TRY(v, Serializer<V>::read_data(ctx));
         value = std::move(v);
       }
 

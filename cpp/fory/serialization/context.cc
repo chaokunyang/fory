@@ -18,6 +18,7 @@
  */
 
 #include "fory/serialization/context.h"
+#include "fory/serialization/meta_string.h"
 #include "fory/serialization/type_resolver.h"
 #include "fory/thirdparty/MurmurHash3.h"
 #include "fory/type/type.h"
@@ -65,8 +66,6 @@ WriteContext::write_enum_type_info(const std::type_index &type,
 Result<size_t, Error> WriteContext::push_meta(const std::type_index &type_id) {
   auto it = write_type_id_index_map_.find(type_id);
   if (it != write_type_id_index_map_.end()) {
-    std::cerr << "[DEBUG] push_meta (cached): index=" << it->second
-              << std::endl;
     return it->second;
   }
 
@@ -74,9 +73,6 @@ Result<size_t, Error> WriteContext::push_meta(const std::type_index &type_id) {
   FORY_TRY(type_info, type_resolver_->get_type_info(type_id));
   write_type_defs_.push_back(type_info->type_def);
   write_type_id_index_map_[type_id] = index;
-  std::cerr << "[DEBUG] push_meta (new): index=" << index
-            << ", type_def_size=" << type_info->type_def.size() << " bytes"
-            << std::endl;
   return index;
 }
 
@@ -86,14 +82,9 @@ void WriteContext::write_meta(size_t offset) {
   int32_t meta_size = static_cast<int32_t>(current_pos - offset - 4);
   buffer_.UnsafePut<int32_t>(offset, meta_size);
   // Write all collected TypeMetas
-  std::cerr << "[DEBUG] write_meta: offset=" << offset
-            << ", current_pos=" << current_pos << ", meta_size=" << meta_size
-            << ", num_type_defs=" << write_type_defs_.size() << std::endl;
   buffer_.WriteVarUint32(static_cast<uint32_t>(write_type_defs_.size()));
   for (size_t i = 0; i < write_type_defs_.size(); ++i) {
     const auto &type_def = write_type_defs_[i];
-    std::cerr << "[DEBUG] Writing type_def[" << i << "]: " << type_def.size()
-              << " bytes" << std::endl;
     buffer_.WriteBytes(type_def.data(), type_def.size());
   }
 }
@@ -145,31 +136,54 @@ WriteContext::write_any_typeinfo(uint32_t fory_type_id,
       // MetaStringResolver#writeMetaStringBytes (without dynamic reuse).
       constexpr uint32_t kSmallStringThreshold = 16;
 
+      // Create encoders matching Java's PACKAGE_ENCODER ('.', '_') for namespace
+      // and TYPE_NAME_ENCODER ('$', '_') for type names.
+      static const MetaStringEncoder kNamespaceEncoder('.', '_');
+      static const MetaStringEncoder kTypeNameEncoder('$', '_');
+
+      // Java encoding restrictions (from Encoders.java):
+      // pkgEncodings = {UTF_8, ALL_TO_LOWER_SPECIAL, LOWER_UPPER_DIGIT_SPECIAL}
+      // typeNameEncodings = {UTF_8, ALL_TO_LOWER_SPECIAL, LOWER_UPPER_DIGIT_SPECIAL, FIRST_TO_LOWER_SPECIAL}
+      // Note: LOWER_SPECIAL is NOT allowed for either!
+      static const std::vector<MetaEncoding> kPkgEncodings = {
+          MetaEncoding::UTF8, MetaEncoding::ALL_TO_LOWER_SPECIAL,
+          MetaEncoding::LOWER_UPPER_DIGIT_SPECIAL};
+      static const std::vector<MetaEncoding> kTypeNameEncodings = {
+          MetaEncoding::UTF8, MetaEncoding::ALL_TO_LOWER_SPECIAL,
+          MetaEncoding::LOWER_UPPER_DIGIT_SPECIAL,
+          MetaEncoding::FIRST_TO_LOWER_SPECIAL};
+
       auto write_meta_string =
-          [this](const std::string &value) -> Result<void, Error> {
-        const uint32_t len = static_cast<uint32_t>(value.size());
-        uint32_t header = len << 1; // last bit 0 => new string
+          [this](const std::string &value, const MetaStringEncoder &encoder,
+                 const std::vector<MetaEncoding> &encodings) -> Result<void, Error> {
+        // Encode the string first using allowed encodings
+        FORY_TRY(encoded, encoder.encode(value, encodings));
+        const uint32_t encoded_len = static_cast<uint32_t>(encoded.bytes.size());
+        uint32_t header = encoded_len << 1; // last bit 0 => new string
         buffer_.WriteVarUint32(header);
 
-        if (len > kSmallStringThreshold) {
+        if (encoded_len > kSmallStringThreshold) {
           // For strings > 16 bytes, write hashCode (int64) instead of encoding
           int64_t hash_out[2] = {0, 0};
-          MurmurHash3_x64_128(value.data(), static_cast<int>(value.size()), 47,
+          MurmurHash3_x64_128(encoded.bytes.data(),
+                              static_cast<int>(encoded.bytes.size()), 47,
                               hash_out);
           buffer_.WriteInt64(hash_out[0]);
         } else {
-          // For strings <= 16 bytes, write encoding byte (0 for UTF8)
-          buffer_.WriteInt8(0);
+          // For strings <= 16 bytes, write encoding byte
+          buffer_.WriteInt8(static_cast<int8_t>(encoded.encoding));
         }
 
-        if (len > 0) {
-          buffer_.WriteBytes(value.data(), len);
+        if (encoded_len > 0) {
+          buffer_.WriteBytes(encoded.bytes.data(), encoded_len);
         }
         return Result<void, Error>();
       };
 
-      FORY_RETURN_NOT_OK(write_meta_string(namespace_name));
-      FORY_RETURN_NOT_OK(write_meta_string(type_name));
+      FORY_RETURN_NOT_OK(
+          write_meta_string(namespace_name, kNamespaceEncoder, kPkgEncodings));
+      FORY_RETURN_NOT_OK(
+          write_meta_string(type_name, kTypeNameEncoder, kTypeNameEncodings));
     }
     break;
   }
@@ -202,11 +216,48 @@ ReadContext::ReadContext(const Config &config,
 
 ReadContext::~ReadContext() = default;
 
+// Static decoders for NAMED_ENUM namespace/type_name - shared across calls
+static const MetaStringDecoder kNamespaceDecoder('.', '_');
+static const MetaStringDecoder kTypeNameDecoder('$', '_');
+
 Result<void, Error>
 ReadContext::read_enum_type_info(const std::type_index &type,
                                  uint32_t base_type_id) {
+  // Helper to consume namespace/type_name for NAMED_ENUM
+  auto consume_named_enum_metadata = [this]() -> Result<void, Error> {
+    if (config_->compatible) {
+      // In compatible mode, read meta_index
+      FORY_TRY(meta_index, buffer_->ReadVarUint32());
+      (void)meta_index;
+    } else {
+      // Read namespace and type_name using MetaStringResolver-compatible
+      // encoding. Java uses PACKAGE_DECODER ('.', '_') for namespace and
+      // TYPE_NAME_DECODER ('$', '_') for type names.
+      FORY_TRY(namespace_str,
+               meta_string_table_.read_string(*buffer_, kNamespaceDecoder));
+      FORY_TRY(type_name,
+               meta_string_table_.read_string(*buffer_, kTypeNameDecoder));
+      (void)namespace_str;
+      (void)type_name;
+    }
+    return Result<void, Error>();
+  };
+
   if (!type_resolver_) {
     FORY_TRY(type_id, read_varuint32());
+    // For enums, accept both ENUM and NAMED_ENUM as compatible types
+    if (base_type_id == static_cast<uint32_t>(TypeId::ENUM) ||
+        base_type_id == static_cast<uint32_t>(TypeId::NAMED_ENUM)) {
+      if (type_id != static_cast<uint32_t>(TypeId::ENUM) &&
+          type_id != static_cast<uint32_t>(TypeId::NAMED_ENUM)) {
+        return Unexpected(Error::type_mismatch(type_id, base_type_id));
+      }
+      // If NAMED_ENUM, consume namespace/type_name
+      if (type_id == static_cast<uint32_t>(TypeId::NAMED_ENUM)) {
+        return consume_named_enum_metadata();
+      }
+      return Result<void, Error>();
+    }
     if (type_id != base_type_id) {
       return Unexpected(Error::type_mismatch(type_id, base_type_id));
     }
@@ -218,6 +269,20 @@ ReadContext::read_enum_type_info(const std::type_index &type,
   // If type_id < 256, it's a base type (high byte is 0, meaning no registration
   // ID) Internal types and unregistered user types both fall in this range
   if (type_id < 256 || is_internal_type(type_id)) {
+    // For enums, accept both ENUM and NAMED_ENUM as compatible types
+    // since Java may write NAMED_ENUM when the enum is registered with a name
+    if (base_type_id == static_cast<uint32_t>(TypeId::ENUM) ||
+        base_type_id == static_cast<uint32_t>(TypeId::NAMED_ENUM)) {
+      if (type_id != static_cast<uint32_t>(TypeId::ENUM) &&
+          type_id != static_cast<uint32_t>(TypeId::NAMED_ENUM)) {
+        return Unexpected(Error::type_mismatch(type_id, base_type_id));
+      }
+      // If NAMED_ENUM, consume namespace/type_name
+      if (type_id == static_cast<uint32_t>(TypeId::NAMED_ENUM)) {
+        return consume_named_enum_metadata();
+      }
+      return Result<void, Error>();
+    }
     if (type_id != base_type_id) {
       return Unexpected(Error::type_mismatch(type_id, base_type_id));
     }
@@ -249,9 +314,6 @@ Result<size_t, Error> ReadContext::load_type_meta(int32_t meta_offset) {
 
   // Load all TypeMetas
   FORY_TRY(meta_size, buffer_->ReadVarUint32());
-  std::cerr << "[DEBUG] load_type_meta: meta_offset=" << meta_offset
-            << ", current_pos=" << current_pos << ", meta_start=" << meta_start
-            << ", meta_size=" << meta_size << std::endl;
   reading_type_infos_.reserve(meta_size);
 
   for (uint32_t i = 0; i < meta_size; i++) {
@@ -274,27 +336,24 @@ Result<size_t, Error> ReadContext::load_type_meta(int32_t meta_offset) {
       TypeMeta::assign_field_ids(local_type_info->type_meta.get(),
                                  parsed_meta->field_infos);
       type_info = std::make_shared<TypeInfo>();
+      type_info->type_id = local_type_info->type_id;
       type_info->type_meta = parsed_meta;
       type_info->type_def = local_type_info->type_def;
       // CRITICAL: Copy the harness from the registered type_info
       type_info->harness = local_type_info->harness;
       type_info->name_to_index = local_type_info->name_to_index;
+      type_info->namespace_name = local_type_info->namespace_name;
+      type_info->type_name = local_type_info->type_name;
+      type_info->register_by_name = local_type_info->register_by_name;
     } else {
       // No local type - create stub TypeInfo with parsed meta
       type_info = std::make_shared<TypeInfo>();
+      type_info->type_id = parsed_meta->type_id;
       type_info->type_meta = parsed_meta;
     }
 
     // Cast to void* to store in reading_type_infos_
     reading_type_infos_.push_back(std::static_pointer_cast<void>(type_info));
-    std::cerr << "[DEBUG] Loaded type meta " << i << ": ";
-    if (parsed_meta->register_by_name) {
-      std::cerr << "name=" << parsed_meta->namespace_str << "."
-                << parsed_meta->type_name;
-    } else {
-      std::cerr << "id=" << parsed_meta->type_id;
-    }
-    std::cerr << ", fields=" << parsed_meta->field_infos.size() << std::endl;
   }
 
   // Calculate size of meta section
@@ -308,8 +367,6 @@ Result<size_t, Error> ReadContext::load_type_meta(int32_t meta_offset) {
 
 Result<std::shared_ptr<void>, Error>
 ReadContext::get_type_info_by_index(size_t index) const {
-  std::cerr << "[DEBUG] get_type_info_by_index: index=" << index
-            << ", size=" << reading_type_infos_.size() << std::endl;
   if (index >= reading_type_infos_.size()) {
     return Unexpected(Error::invalid(
         "Meta index out of bounds: " + std::to_string(index) +
@@ -326,12 +383,21 @@ Result<std::shared_ptr<TypeInfo>, Error> ReadContext::read_any_typeinfo() {
   switch (type_id_low) {
   case static_cast<uint32_t>(TypeId::NAMED_COMPATIBLE_STRUCT):
   case static_cast<uint32_t>(TypeId::COMPATIBLE_STRUCT): {
-    // Read meta_index and get TypeInfo from loaded metas
+    // Read meta_index - may or may not have loaded metas depending on context
     FORY_TRY(meta_index, buffer_->ReadVarUint32());
-    FORY_TRY(type_info_void, get_type_info_by_index(meta_index));
-    // Cast back to TypeInfo
-    auto type_info = std::static_pointer_cast<TypeInfo>(type_info_void);
-    return type_info;
+    // Try to get TypeInfo from loaded metas
+    auto type_info_result = get_type_info_by_index(meta_index);
+    if (type_info_result.has_value()) {
+      auto type_info =
+          std::static_pointer_cast<TypeInfo>(type_info_result.value());
+      return type_info;
+    }
+    // If no loaded metas (e.g., reading list element type info at top level),
+    // return a stub TypeInfo with the type_id
+    auto stub = std::make_shared<TypeInfo>();
+    stub->type_id = fory_type_id;
+    stub->register_by_name = false;
+    return stub;
   }
   case static_cast<uint32_t>(TypeId::NAMED_ENUM):
   case static_cast<uint32_t>(TypeId::NAMED_EXT):
@@ -339,9 +405,18 @@ Result<std::shared_ptr<TypeInfo>, Error> ReadContext::read_any_typeinfo() {
     if (config_->compatible) {
       // Read meta_index (share_meta is effectively compatible in C++)
       FORY_TRY(meta_index, buffer_->ReadVarUint32());
-      FORY_TRY(type_info_void, get_type_info_by_index(meta_index));
-      auto type_info = std::static_pointer_cast<TypeInfo>(type_info_void);
-      return type_info;
+      // Try to get TypeInfo from loaded metas
+      auto type_info_result = get_type_info_by_index(meta_index);
+      if (type_info_result.has_value()) {
+        auto type_info =
+            std::static_pointer_cast<TypeInfo>(type_info_result.value());
+        return type_info;
+      }
+      // If no loaded metas, return a stub TypeInfo
+      auto stub = std::make_shared<TypeInfo>();
+      stub->type_id = fory_type_id;
+      stub->register_by_name = true;
+      return stub;
     } else {
       // Read namespace and type_name using MetaStringResolver-compatible
       // encoding. Java uses PACKAGE_DECODER ('.', '_') for namespace and
@@ -368,7 +443,15 @@ Result<std::shared_ptr<TypeInfo>, Error> ReadContext::read_any_typeinfo() {
     }
   }
   default: {
-    // Look up by type_id
+    // For internal types (STRING, TIMESTAMP, etc.), create a stub TypeInfo
+    // since they don't require registration. For user types, look up by ID.
+    if (is_internal_type(fory_type_id)) {
+      auto stub = std::make_shared<TypeInfo>();
+      stub->type_id = fory_type_id;
+      stub->register_by_name = false;
+      return stub;
+    }
+    // Look up by type_id for user types
     auto type_info = type_resolver_->get_type_info_by_id(fory_type_id);
     if (!type_info) {
       return Unexpected(Error::type_error("ID harness not found"));

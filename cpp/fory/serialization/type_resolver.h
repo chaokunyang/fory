@@ -958,6 +958,11 @@ TypeResolver::build_enum_type_info(uint32_t type_id, std::string ns,
   entry->register_by_name = register_by_name;
   entry->is_external = false;
 
+  // When a user explicitly provides a type_name via registration, Java stores
+  // and writes that exact name. The ENUM_PREFIX "2" is only added when Java
+  // auto-generates the type name from the class itself (via encodePkgAndClass).
+  // Since C++ users always explicitly provide the type name, we should NOT
+  // add the prefix.
   if (!type_name.empty()) {
     entry->type_name = std::move(type_name);
   } else {

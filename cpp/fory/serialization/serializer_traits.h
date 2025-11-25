@@ -229,11 +229,9 @@ inline constexpr bool is_shared_ref_v = is_shared_ref<T>::value;
 
 /// Determine if a type requires reference metadata (null/ref flags) even when
 /// nested inside another structure.
+/// Note: std::string does NOT require ref metadata - it's written inline without
+/// ref tracking, matching Java/Rust xlang behavior.
 template <typename T> struct requires_ref_metadata : std::false_type {};
-
-// String is a reference type that needs nullable flags in xlang mode
-template <>
-struct requires_ref_metadata<std::string> : std::true_type {};
 
 template <typename T>
 struct requires_ref_metadata<std::optional<T>> : std::true_type {};

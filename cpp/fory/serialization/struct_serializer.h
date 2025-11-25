@@ -39,7 +39,7 @@
 #include <utility>
 #include <vector>
 
-#ifdef FORY_DEBUG_XLANG
+#ifdef FORY_DEBUG
 #include <iostream>
 #endif
 
@@ -567,7 +567,7 @@ Result<void, Error> read_single_field_by_index(T &obj, ReadContext &ctx) {
   // 2. Field is non-primitive
   bool read_ref = field_needs_ref || !is_primitive_field;
 
-#ifdef FORY_DEBUG_XLANG
+#ifdef FORY_DEBUG
   const auto debug_names = decltype(field_info)::Names;
   std::cerr << "[xlang][field] T=" << typeid(T).name() << ", index=" << Index
             << ", name=" << debug_names[Index]
@@ -615,7 +615,7 @@ read_single_field_by_index_compatible(T &obj, ReadContext &ctx,
   // 2. Whether field is non-primitive (per xlang spec, all non-primitives have ref flags)
   bool read_ref = remote_ref_flag;
 
-#ifdef FORY_DEBUG_XLANG
+#ifdef FORY_DEBUG
   const auto debug_names = decltype(field_info)::Names;
   std::cerr << "[xlang][field][compat] T=" << typeid(T).name()
             << ", index=" << Index << ", name=" << debug_names[Index]
@@ -678,11 +678,14 @@ read_struct_fields_compatible(T &obj, ReadContext &ctx,
     bool read_ref_flag =
         remote_field.field_type.nullable || !is_primitive;
 
-#ifdef FORY_DEBUG_XLANG
+#ifdef FORY_DEBUG
     std::cerr << "[xlang][compat] remote_idx=" << remote_idx
               << ", field_id=" << field_id
               << ", name=" << remote_field.field_name
-              << ", type_id=" << remote_field.field_type.type_id
+              << ", type_id=" << type_id
+              << ", is_primitive=" << is_primitive
+              << ", nullable=" << remote_field.field_type.nullable
+              << ", read_ref_flag=" << read_ref_flag
               << ", reader_index=" << ctx.buffer().reader_index() << std::endl;
 #endif
 
@@ -728,6 +731,25 @@ template <typename T>
 struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
   static constexpr TypeId type_id = TypeId::STRUCT;
 
+  /// Write type info only (type_id and meta index if applicable).
+  /// This is used by collection serializers to write element type info.
+  /// Matches Rust's struct_::write_type_info.
+  static Result<void, Error> write_type_info(WriteContext &ctx) {
+    auto type_info = ctx.type_resolver().template get_struct_type_info<T>();
+    FORY_CHECK(type_info)
+        << "Type metadata not initialized for requested struct";
+
+    uint32_t type_tag = ctx.type_resolver().struct_type_tag<T>();
+    ctx.write_varuint32(type_tag);
+
+    // In compatible mode, always write meta index (matches Rust behavior)
+    if (ctx.is_compatible() && type_info->type_meta) {
+      FORY_TRY(meta_index, ctx.push_meta(std::type_index(typeid(T))));
+      ctx.write_varuint32(static_cast<uint32_t>(meta_index));
+    }
+    return Result<void, Error>();
+  }
+
   static Result<void, Error> write(const T &obj, WriteContext &ctx,
                                    bool write_ref, bool write_type,
                                    bool has_generics = false) {
@@ -739,19 +761,10 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
 
     if (write_type) {
       uint32_t type_tag = ctx.type_resolver().struct_type_tag<T>();
-      std::cerr << "[DEBUG] struct write: write_type=true, type_tag="
-                << type_tag << ", is_compatible=" << ctx.is_compatible()
-                << ", has_type_meta=" << (type_info->type_meta != nullptr)
-                << std::endl;
-      ctx.write_varuint32(type_tag);
-
-      // In compatible mode, always write meta index (matches Rust behavior)
-      if (ctx.is_compatible() && type_info->type_meta) {
-        FORY_TRY(meta_index, ctx.push_meta(std::type_index(typeid(T))));
-        std::cerr << "[DEBUG] struct write: writing meta_index=" << meta_index
-                  << std::endl;
-        ctx.write_varuint32(static_cast<uint32_t>(meta_index));
-      }
+      // Use write_any_typeinfo to handle both type_id AND namespace/type_name
+      // for NAMED_STRUCT, and meta_index for compatible mode
+      FORY_RETURN_NOT_OK(
+          ctx.write_any_typeinfo(type_tag, std::type_index(typeid(T))));
     }
     return write_data_generic(obj, ctx, has_generics);
   }
@@ -796,7 +809,7 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
     if (read_ref) {
       FORY_TRY(flag, ctx.read_int8());
       ref_flag = flag;
-#ifdef FORY_DEBUG_XLANG
+#ifdef FORY_DEBUG
       std::cerr << "[xlang][struct] T=" << typeid(T).name()
                 << ", read_ref_flag=" << static_cast<int>(ref_flag)
                 << ", reader_index=" << ctx.buffer().reader_index()
@@ -817,10 +830,6 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
         if (read_type) {
           // Read type_tag
           FORY_TRY(type_tag, ctx.read_varuint32());
-          std::cerr
-              << "[DEBUG] struct read (compatible): read_type=true, type_tag="
-              << type_tag << ", buffer_pos=" << ctx.buffer().reader_index()
-              << std::endl;
 
           // Check LOCAL type to decide if we should read meta_index (matches
           // Rust logic)
@@ -837,10 +846,6 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
             // Use meta sharing: read varint index and get TypeInfo from
             // meta_reader
             FORY_TRY(meta_index, ctx.read_varuint32());
-            std::cerr << "[DEBUG] struct read (compatible): local_type_tag="
-                      << local_type_tag << ", reading meta_index=" << meta_index
-                      << ", buffer_pos=" << ctx.buffer().reader_index()
-                      << std::endl;
             FORY_TRY(remote_type_info_ptr,
                      ctx.get_type_info_by_index(meta_index));
             auto remote_type_info =

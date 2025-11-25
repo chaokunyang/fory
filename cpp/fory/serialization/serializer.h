@@ -209,10 +209,6 @@ inline Result<bool, Error> consume_ref_flag(ReadContext &ctx, bool read_ref) {
     return true;
   }
   FORY_TRY(flag, ctx.read_int8());
-#ifdef FORY_DEBUG_XLANG
-  std::cerr << "[xlang][ref] flag=" << static_cast<int>(flag)
-            << ", reader_index=" << ctx.buffer().reader_index() << std::endl;
-#endif
   if (flag == NULL_FLAG) {
     return false;
   }

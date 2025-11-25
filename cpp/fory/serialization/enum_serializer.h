@@ -29,7 +29,7 @@
 #include <type_traits>
 #include <typeindex>
 
-#ifdef FORY_DEBUG_XLANG
+#ifdef FORY_DEBUG
 #include <iostream>
 #endif
 
@@ -112,11 +112,6 @@ struct Serializer<E, std::enable_if_t<std::is_enum_v<E>>> {
   static inline Result<E, Error> read_data(ReadContext &ctx) {
     FORY_TRY(raw_ordinal, ctx.read_varuint32());
     OrdinalType ordinal = static_cast<OrdinalType>(raw_ordinal);
-#ifdef FORY_DEBUG_XLANG
-    std::cerr << "[xlang][enum] ordinal="
-              << static_cast<long long>(ordinal)
-              << ", reader_index=" << ctx.buffer().reader_index() << std::endl;
-#endif
     E value{};
     if (!Metadata::from_ordinal(ordinal, &value)) {
       return Unexpected(

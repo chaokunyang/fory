@@ -213,6 +213,66 @@ Result<void, Error> skip_struct(ReadContext &ctx, const FieldType &field_type) {
   return Result<void, Error>();
 }
 
+Result<void, Error> skip_ext(ReadContext &ctx, const FieldType &field_type) {
+  // EXT fields in compatible mode are serialized with type_tag and meta_index
+  // (for named ext) or just the user type_id (for id-based ext).
+  // We look up the registered ext harness and call its read_data function.
+
+  if (!ctx.is_compatible()) {
+    return Unexpected(
+        Error::unsupported("Ext skipping is only supported in compatible mode"));
+  }
+
+  uint32_t full_type_id = field_type.type_id;
+  uint32_t low = full_type_id & 0xffu;
+  TypeId tid = static_cast<TypeId>(low);
+
+  std::shared_ptr<TypeInfo> type_info;
+
+  if (tid == TypeId::NAMED_EXT) {
+    // Named ext: read type_tag and meta_index
+    FORY_TRY(remote_type_tag, ctx.read_varuint32());
+    (void)remote_type_tag;
+
+    FORY_TRY(meta_index, ctx.read_varuint32());
+    FORY_TRY(type_info_void, ctx.get_type_info_by_index(meta_index));
+    type_info = std::static_pointer_cast<TypeInfo>(type_info_void);
+  } else {
+    // ID-based ext: look up by full type_id
+    // The ext fields in TypeMeta store the user type_id (high bits | EXT)
+    type_info = ctx.type_resolver().get_type_info_by_id(full_type_id);
+  }
+
+  if (!type_info) {
+    return Unexpected(
+        Error::type_error("TypeInfo not found for ext type: " +
+                          std::to_string(full_type_id)));
+  }
+
+  if (!type_info->harness.valid() || !type_info->harness.read_data_fn) {
+    return Unexpected(
+        Error::type_error("Ext harness not found or incomplete for type: " +
+                          std::to_string(full_type_id)));
+  }
+
+  FORY_RETURN_NOT_OK(ctx.increase_depth());
+  DepthGuard guard(ctx);
+
+  // Call the harness read_data_fn to skip the data
+  // The result is a pointer we need to delete
+  FORY_TRY(ptr, type_info->harness.read_data_fn(ctx));
+  if (ptr) {
+    // We just wanted to skip, but harness allocates memory - need to clean up
+    // This is not ideal but works for now. A better approach would be to
+    // have a dedicated skip_data function in harness.
+    // For now, we use operator delete which works for POD types.
+    // TODO: Consider adding a harness.skip_data_fn or harness.delete_fn
+    ::operator delete(ptr);
+  }
+
+  return Result<void, Error>();
+}
+
 Result<void, Error> skip_field_value(ReadContext &ctx,
                                      const FieldType &field_type,
                                      bool read_ref_flag) {
@@ -365,6 +425,10 @@ Result<void, Error> skip_field_value(ReadContext &ctx,
     (void)ignored;
     return {};
   }
+
+  case TypeId::EXT:
+  case TypeId::NAMED_EXT:
+    return skip_ext(ctx, field_type);
 
   default:
     return Unexpected(

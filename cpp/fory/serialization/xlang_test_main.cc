@@ -99,6 +99,9 @@ void WriteFile(const std::string &path, const std::vector<uint8_t> &data) {
   }
   output.write(reinterpret_cast<const char *>(data.data()),
                static_cast<std::streamsize>(data.size()));
+  output.flush();
+  output.close();
+  std::cerr << "[WriteFile] Wrote " << data.size() << " bytes to " << path << std::endl;
 }
 
 // ---------------------------------------------------------------------------
@@ -843,6 +846,7 @@ void RunTestCrossLanguageSerializer(const std::string &data_file) {
   AppendSerialized(fory, str_set, out);
   AppendSerialized(fory, str_map, out);
   AppendSerialized(fory, Color::White, out);
+
   WriteFile(data_file, out);
 }
 
@@ -864,7 +868,7 @@ void RunTestSimpleStruct(const std::string &data_file) {
   auto bytes = ReadFile(data_file);
   auto fory = BuildFory(true, true);
   RegisterBasicStructs(fory);
-#ifdef FORY_DEBUG_XLANG
+#ifdef FORY_DEBUG
   {
     const auto &local_meta =
         fory.type_resolver().struct_meta<SimpleStruct>();
@@ -1297,12 +1301,22 @@ void RunTestConsistentNamed(const std::string &data_file) {
   for (int i = 0; i < 3; ++i) {
     AppendSerialized(fory, Color::White, out);
   }
+  std::cerr << "[C++ WRITE] After 3 colors (" << out.size() << " bytes): ";
+  for (size_t i = 0; i < std::min(out.size(), size_t(80)); ++i) {
+    std::cerr << std::hex << std::setw(2) << std::setfill('0') << (int)(uint8_t)out[i] << " ";
+  }
+  std::cerr << std::dec << std::endl;
   for (int i = 0; i < 3; ++i) {
     AppendSerialized(fory, my_struct, out);
   }
   for (int i = 0; i < 3; ++i) {
     AppendSerialized(fory, my_ext, out);
   }
+  std::cerr << "[C++ WRITE] Total (" << out.size() << " bytes): ";
+  for (size_t i = 0; i < std::min(out.size(), size_t(200)); ++i) {
+    std::cerr << std::hex << std::setw(2) << std::setfill('0') << (int)(uint8_t)out[i] << " ";
+  }
+  std::cerr << std::dec << std::endl;
   WriteFile(data_file, out);
 }
 

@@ -315,5 +315,249 @@ Result<MetaEncoding, Error> ToMetaEncoding(uint8_t value) {
   }
 }
 
+// MetaStringEncoder implementation
+
+MetaStringEncoder::MetaStringEncoder(char special_char1, char special_char2)
+    : special_char1_(special_char1), special_char2_(special_char2) {}
+
+MetaStringEncoder::StringStatistics
+MetaStringEncoder::compute_statistics(const std::string &input) const {
+  StringStatistics stats{0, 0, true, true};
+  for (char c : input) {
+    // Check if can_lower_upper_digit_special_encoded
+    if (stats.can_lower_upper_digit_special_encoded) {
+      bool is_valid = std::islower(static_cast<unsigned char>(c)) ||
+                      std::isupper(static_cast<unsigned char>(c)) ||
+                      std::isdigit(static_cast<unsigned char>(c)) ||
+                      c == special_char1_ || c == special_char2_;
+      if (!is_valid) {
+        stats.can_lower_upper_digit_special_encoded = false;
+      }
+    }
+    // Check if can_lower_special_encoded
+    if (stats.can_lower_special_encoded) {
+      bool is_valid = std::islower(static_cast<unsigned char>(c)) ||
+                      c == '.' || c == '_' || c == '$' || c == '|';
+      if (!is_valid) {
+        stats.can_lower_special_encoded = false;
+      }
+    }
+    if (std::isdigit(static_cast<unsigned char>(c))) {
+      stats.digit_count++;
+    }
+    if (std::isupper(static_cast<unsigned char>(c))) {
+      stats.upper_count++;
+    }
+  }
+  return stats;
+}
+
+MetaEncoding MetaStringEncoder::compute_encoding(
+    const std::string &input,
+    const std::vector<MetaEncoding> &encodings) const {
+  auto allow = [&encodings](MetaEncoding e) {
+    return encodings.empty() ||
+           std::find(encodings.begin(), encodings.end(), e) != encodings.end();
+  };
+
+  StringStatistics stats = compute_statistics(input);
+
+  if (stats.can_lower_special_encoded && allow(MetaEncoding::LOWER_SPECIAL)) {
+    return MetaEncoding::LOWER_SPECIAL;
+  }
+
+  if (stats.can_lower_upper_digit_special_encoded) {
+    if (stats.digit_count != 0 &&
+        allow(MetaEncoding::LOWER_UPPER_DIGIT_SPECIAL)) {
+      return MetaEncoding::LOWER_UPPER_DIGIT_SPECIAL;
+    }
+
+    int upper_count = stats.upper_count;
+    if (upper_count == 1 && !input.empty() &&
+        std::isupper(static_cast<unsigned char>(input[0])) &&
+        allow(MetaEncoding::FIRST_TO_LOWER_SPECIAL)) {
+      return MetaEncoding::FIRST_TO_LOWER_SPECIAL;
+    }
+
+    // Check if ALL_TO_LOWER_SPECIAL is more efficient
+    // (input.len() + upper_count) * 5 < input.len() * 6
+    if ((input.size() + upper_count) * 5 < input.size() * 6 &&
+        allow(MetaEncoding::ALL_TO_LOWER_SPECIAL)) {
+      return MetaEncoding::ALL_TO_LOWER_SPECIAL;
+    }
+
+    if (allow(MetaEncoding::LOWER_UPPER_DIGIT_SPECIAL)) {
+      return MetaEncoding::LOWER_UPPER_DIGIT_SPECIAL;
+    }
+  }
+
+  return MetaEncoding::UTF8;
+}
+
+int MetaStringEncoder::lower_special_char_value(char c) const {
+  if (c >= 'a' && c <= 'z') {
+    return c - 'a';
+  }
+  switch (c) {
+  case '.':
+    return 26;
+  case '_':
+    return 27;
+  case '$':
+    return 28;
+  case '|':
+    return 29;
+  default:
+    return -1; // Invalid
+  }
+}
+
+int MetaStringEncoder::lower_upper_digit_special_char_value(char c) const {
+  if (c >= 'a' && c <= 'z') {
+    return c - 'a';
+  }
+  if (c >= 'A' && c <= 'Z') {
+    return c - 'A' + 26;
+  }
+  if (c >= '0' && c <= '9') {
+    return c - '0' + 52;
+  }
+  if (c == special_char1_) {
+    return 62;
+  }
+  if (c == special_char2_) {
+    return 63;
+  }
+  return -1; // Invalid
+}
+
+std::vector<uint8_t>
+MetaStringEncoder::encode_lower_special(const std::string &input) const {
+  const int bits_per_char = 5;
+  size_t total_bits = input.size() * bits_per_char + 1;
+  size_t byte_length = (total_bits + 7) / 8;
+  std::vector<uint8_t> bytes(byte_length, 0);
+
+  size_t current_bit = 1;
+  for (char c : input) {
+    int value = lower_special_char_value(c);
+    for (int i = bits_per_char - 1; i >= 0; --i) {
+      if ((value & (1 << i)) != 0) {
+        size_t byte_pos = current_bit / 8;
+        size_t bit_pos = current_bit % 8;
+        bytes[byte_pos] |= static_cast<uint8_t>(1 << (7 - bit_pos));
+      }
+      current_bit++;
+    }
+  }
+
+  // Set strip_last_char flag if there's room for an extra character
+  if (byte_length * 8 >= total_bits + bits_per_char) {
+    bytes[0] |= 0x80;
+  }
+
+  return bytes;
+}
+
+std::vector<uint8_t>
+MetaStringEncoder::encode_lower_upper_digit_special(const std::string &input) const {
+  const int bits_per_char = 6;
+  size_t total_bits = input.size() * bits_per_char + 1;
+  size_t byte_length = (total_bits + 7) / 8;
+  std::vector<uint8_t> bytes(byte_length, 0);
+
+  size_t current_bit = 1;
+  for (char c : input) {
+    int value = lower_upper_digit_special_char_value(c);
+    for (int i = bits_per_char - 1; i >= 0; --i) {
+      if ((value & (1 << i)) != 0) {
+        size_t byte_pos = current_bit / 8;
+        size_t bit_pos = current_bit % 8;
+        bytes[byte_pos] |= static_cast<uint8_t>(1 << (7 - bit_pos));
+      }
+      current_bit++;
+    }
+  }
+
+  // Set strip_last_char flag if there's room for an extra character
+  if (byte_length * 8 >= total_bits + bits_per_char) {
+    bytes[0] |= 0x80;
+  }
+
+  return bytes;
+}
+
+std::vector<uint8_t>
+MetaStringEncoder::encode_first_to_lower_special(const std::string &input) const {
+  if (input.empty()) {
+    return encode_lower_special("");
+  }
+
+  std::string modified = input;
+  modified[0] = static_cast<char>(std::tolower(static_cast<unsigned char>(modified[0])));
+  return encode_lower_special(modified);
+}
+
+std::vector<uint8_t>
+MetaStringEncoder::encode_all_to_lower_special(const std::string &input) const {
+  std::string modified;
+  modified.reserve(input.size() * 2); // Worst case: all uppercase
+  for (char c : input) {
+    if (std::isupper(static_cast<unsigned char>(c))) {
+      modified.push_back('|');
+      modified.push_back(
+          static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+    } else {
+      modified.push_back(c);
+    }
+  }
+  return encode_lower_special(modified);
+}
+
+Result<EncodedMetaString, Error>
+MetaStringEncoder::encode(const std::string &input,
+                          const std::vector<MetaEncoding> &encodings) const {
+  EncodedMetaString result;
+
+  if (input.empty()) {
+    result.encoding = MetaEncoding::UTF8;
+    result.bytes.clear();
+    return result;
+  }
+
+  // Check for non-ASCII characters - use UTF8 for those
+  for (char c : input) {
+    if (static_cast<unsigned char>(c) > 127) {
+      result.encoding = MetaEncoding::UTF8;
+      result.bytes.assign(input.begin(), input.end());
+      return result;
+    }
+  }
+
+  MetaEncoding encoding = compute_encoding(input, encodings);
+  result.encoding = encoding;
+
+  switch (encoding) {
+  case MetaEncoding::LOWER_SPECIAL:
+    result.bytes = encode_lower_special(input);
+    break;
+  case MetaEncoding::LOWER_UPPER_DIGIT_SPECIAL:
+    result.bytes = encode_lower_upper_digit_special(input);
+    break;
+  case MetaEncoding::FIRST_TO_LOWER_SPECIAL:
+    result.bytes = encode_first_to_lower_special(input);
+    break;
+  case MetaEncoding::ALL_TO_LOWER_SPECIAL:
+    result.bytes = encode_all_to_lower_special(input);
+    break;
+  case MetaEncoding::UTF8:
+  default:
+    result.bytes.assign(input.begin(), input.end());
+    break;
+  }
+
+  return result;
+}
+
 } // namespace serialization
 } // namespace fory

@@ -100,5 +100,47 @@ private:
 // Helper to map raw encoding byte to MetaEncoding.
 Result<MetaEncoding, Error> ToMetaEncoding(uint8_t value);
 
+// Result of encoding a string to meta string format.
+struct EncodedMetaString {
+  MetaEncoding encoding;
+  std::vector<uint8_t> bytes;
+};
+
+// Encoder for meta strings used by xlang type metadata.
+// This mirrors the behavior of Java's MetaStringEncoder.
+class MetaStringEncoder {
+public:
+  MetaStringEncoder(char special_char1, char special_char2);
+
+  // Encode a string using the best available encoding from the given options.
+  // If encodings is empty, uses all available encodings.
+  Result<EncodedMetaString, Error>
+  encode(const std::string &input,
+         const std::vector<MetaEncoding> &encodings = {}) const;
+
+private:
+  char special_char1_;
+  char special_char2_;
+
+  struct StringStatistics {
+    int digit_count;
+    int upper_count;
+    bool can_lower_special_encoded;
+    bool can_lower_upper_digit_special_encoded;
+  };
+
+  StringStatistics compute_statistics(const std::string &input) const;
+  MetaEncoding compute_encoding(const std::string &input,
+                                const std::vector<MetaEncoding> &encodings) const;
+
+  std::vector<uint8_t> encode_lower_special(const std::string &input) const;
+  std::vector<uint8_t> encode_all_to_lower_special(const std::string &input) const;
+  std::vector<uint8_t> encode_lower_upper_digit_special(const std::string &input) const;
+  std::vector<uint8_t> encode_first_to_lower_special(const std::string &input) const;
+
+  int lower_special_char_value(char c) const;
+  int lower_upper_digit_special_char_value(char c) const;
+};
+
 } // namespace serialization
 } // namespace fory

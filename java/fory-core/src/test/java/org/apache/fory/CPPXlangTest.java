@@ -129,4 +129,10 @@ public class CPPXlangTest extends XlangTestBase {
           "bazel " + args[0] + " failed with exit code " + process.exitValue());
     }
   }
+
+  @Test
+  @Override
+  public void testConsistentNamed() throws java.io.IOException {
+      super.testConsistentNamed();
+  }
 }

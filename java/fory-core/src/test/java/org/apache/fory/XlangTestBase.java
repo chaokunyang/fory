@@ -436,9 +436,40 @@ public abstract class XlangTestBase extends ForyTestBase {
     fory.serialize(buffer, new float[] {1.f, 2.f});
     fory.serialize(buffer, new double[] {1.0, 2.0});
     fory.serialize(buffer, strList);
+    int beforeSet = buffer.writerIndex();
+    System.err.printf("[JAVA DEBUG] Before strSet, buffer size = %d bytes%n", beforeSet);
     fory.serialize(buffer, strSet);
+    int setBytes = buffer.writerIndex() - beforeSet;
+    System.err.printf("[JAVA DEBUG] After strSet, buffer size = %d bytes (set=%d bytes)%n", buffer.writerIndex(), setBytes);
+    // Print set bytes
+    byte[] setBytesArr = buffer.getBytes(beforeSet, setBytes);
+    System.err.print("[JAVA DEBUG] Set bytes: ");
+    for (byte b : setBytesArr) {
+      System.err.printf("%02x ", b & 0xff);
+    }
+    System.err.println();
+    int beforeMap = buffer.writerIndex();
+    System.err.printf("[JAVA DEBUG] Before strMap, buffer size = %d bytes%n", beforeMap);
     fory.serialize(buffer, strMap);
+    int mapBytes = buffer.writerIndex() - beforeMap;
+    System.err.printf("[JAVA DEBUG] After strMap, buffer size = %d bytes (map=%d bytes)%n", buffer.writerIndex(), mapBytes);
+    // Print map bytes
+    byte[] mapBytesArr = buffer.getBytes(beforeMap, mapBytes);
+    System.err.print("[JAVA DEBUG] Map bytes: ");
+    for (byte b : mapBytesArr) {
+      System.err.printf("%02x ", b & 0xff);
+    }
+    System.err.println();
+    int strMapEnd = buffer.writerIndex();
     fory.serialize(buffer, color);
+    System.err.printf("[JAVA DEBUG] After color, buffer size = %d bytes%n", buffer.writerIndex());
+    // Print bytes around strMap end
+    byte[] allBytes = buffer.getBytes(0, buffer.writerIndex());
+    System.err.printf("[JAVA DEBUG] Bytes around strMap end (pos %d to %d): ", Math.max(0, strMapEnd - 20), Math.min(allBytes.length, strMapEnd + 20));
+    for (int i = Math.max(0, strMapEnd - 20); i < Math.min(allBytes.length, strMapEnd + 20); i++) {
+      System.err.printf("%02x ", allBytes[i] & 0xff);
+    }
+    System.err.println();
 
     BiConsumer<MemoryBuffer, Boolean> function =
         (MemoryBuffer buf, Boolean useToString) -> {
@@ -851,7 +882,16 @@ public abstract class XlangTestBase extends ForyTestBase {
 
     MemoryBuffer buffer = MemoryUtils.buffer(64);
     fory.serialize(buffer, struct1);
+    int struct1End = buffer.writerIndex();
     fory.serialize(buffer, struct2);
+
+    byte[] allBytes = buffer.getBytes(0, buffer.writerIndex());
+    System.err.print("[JAVA WRITE MAP] After struct 1 (" + struct1End + " bytes): ");
+    for (int i = 0; i < Math.min(struct1End, 100); i++) {
+      System.err.print(String.format("%02x ", allBytes[i] & 0xFF));
+    }
+    System.err.println();
+    System.err.println("[JAVA WRITE MAP] Total bytes: " + allBytes.length);
 
     ExecutionContext ctx =
         prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
@@ -1021,9 +1061,20 @@ public abstract class XlangTestBase extends ForyTestBase {
       fory.serialize(buffer, myExt);
     }
     byte[] bytes = buffer.getBytes(0, buffer.writerIndex());
+    System.err.print("[JAVA WRITE testConsistentNamed] (" + bytes.length + " bytes): ");
+    for (int i = 0; i < Math.min(bytes.length, 80); i++) {
+      System.err.printf("%02x ", bytes[i] & 0xff);
+    }
+    System.err.println();
     ExecutionContext ctx = prepareExecution(caseName, bytes);
     runPeer(ctx);
     MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
+    byte[] cppBytes = buffer2.getBytes(0, buffer2.writerIndex());
+    System.err.print("[CPP WRITE testConsistentNamed] (" + cppBytes.length + " bytes): ");
+    for (int i = 0; i < Math.min(cppBytes.length, 80); i++) {
+      System.err.printf("%02x ", cppBytes[i] & 0xff);
+    }
+    System.err.println();
     for (int i = 0; i < 3; i++) {
       Assert.assertEquals(fory.deserialize(buffer2), Color.White);
     }

@@ -442,6 +442,16 @@ Result<std::shared_ptr<TypeInfo>, Error> ReadContext::read_any_typeinfo() {
       return type_info;
     }
   }
+  case static_cast<uint32_t>(TypeId::STRUCT):
+  case static_cast<uint32_t>(TypeId::ENUM):
+  case static_cast<uint32_t>(TypeId::EXT): {
+    // Plain STRUCT/ENUM/EXT types without namespace+typename: just return a
+    // stub TypeInfo. The caller will use the local type's serializer directly.
+    auto stub = std::make_shared<TypeInfo>();
+    stub->type_id = fory_type_id;
+    stub->register_by_name = false;
+    return stub;
+  }
   default: {
     // For internal types (STRING, TIMESTAMP, etc.), create a stub TypeInfo
     // since they don't require registration. For user types, look up by ID.

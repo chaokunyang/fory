@@ -492,8 +492,8 @@ public abstract class XlangTestBase extends ForyTestBase {
     Color f5;
     List<String> f6;
     int f7;
-    Integer f8;
-    Integer last;
+    int f8;  // Changed from Integer to int to match Rust
+    int last;  // Changed from Integer to int to match Rust
   }
 
   @Test
@@ -705,6 +705,165 @@ public abstract class XlangTestBase extends ForyTestBase {
     Assert.assertEquals(fory.deserialize(buffer2), 4);
     Assert.assertEquals(fory.deserialize(buffer2), 0);
     Assert.assertNull(fory.deserialize(buffer2));
+  }
+
+  @Test
+  public void testItem() throws java.io.IOException {
+    String caseName = "test_item";
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .withCodegen(false)
+            .build();
+    fory.register(Item.class, 102);
+
+    Item item1 = new Item();
+    item1.name = "test_item_1";
+    Item item2 = new Item();
+    item2.name = "test_item_2";
+    Item item3 = new Item();
+    item3.name = null;
+
+    MemoryBuffer buffer = MemoryUtils.buffer(64);
+    fory.serialize(buffer, item1);
+    fory.serialize(buffer, item2);
+    fory.serialize(buffer, item3);
+
+    ExecutionContext ctx =
+        prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
+    runPeer(ctx);
+
+    MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
+    Item readItem1 = (Item) fory.deserialize(buffer2);
+    Assert.assertEquals(readItem1.name, "test_item_1");
+    Item readItem2 = (Item) fory.deserialize(buffer2);
+    Assert.assertEquals(readItem2.name, "test_item_2");
+    Item readItem3 = (Item) fory.deserialize(buffer2);
+    Assert.assertNull(readItem3.name);
+  }
+
+  @Test
+  public void testColor() throws java.io.IOException {
+    String caseName = "test_color";
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .withCodegen(false)
+            .build();
+    fory.register(Color.class, 101);
+
+    MemoryBuffer buffer = MemoryUtils.buffer(32);
+    fory.serialize(buffer, Color.Green);
+    fory.serialize(buffer, Color.Red);
+    fory.serialize(buffer, Color.Blue);
+    fory.serialize(buffer, Color.White);
+
+    ExecutionContext ctx =
+        prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
+    runPeer(ctx);
+
+    MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
+    Assert.assertEquals(fory.deserialize(buffer2), Color.Green);
+    Assert.assertEquals(fory.deserialize(buffer2), Color.Red);
+    Assert.assertEquals(fory.deserialize(buffer2), Color.Blue);
+    Assert.assertEquals(fory.deserialize(buffer2), Color.White);
+  }
+
+  @Data
+  static class StructWithList {
+    List<String> items;
+  }
+
+  @Test
+  public void testStructWithList() throws java.io.IOException {
+    String caseName = "test_struct_with_list";
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .withCodegen(false)
+            .build();
+    fory.register(StructWithList.class, 201);
+
+    StructWithList struct1 = new StructWithList();
+    struct1.items = Arrays.asList("a", "b", "c");
+
+    StructWithList struct2 = new StructWithList();
+    struct2.items = Arrays.asList("x", null, "z");
+
+    MemoryBuffer buffer = MemoryUtils.buffer(64);
+    fory.serialize(buffer, struct1);
+    int struct1End = buffer.writerIndex();
+    fory.serialize(buffer, struct2);
+
+    byte[] allBytes = buffer.getBytes(0, buffer.writerIndex());
+    System.err.print("[JAVA WRITE] After struct 1 (" + struct1End + " bytes): ");
+    for (int i = 0; i < Math.min(struct1End, 100); i++) {
+      System.err.print(String.format("%02x ", allBytes[i] & 0xFF));
+    }
+    System.err.println();
+    System.err.println("[JAVA WRITE] Total bytes: " + allBytes.length);
+
+    ExecutionContext ctx = prepareExecution(caseName, allBytes);
+    runPeer(ctx);
+
+    MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
+    byte[] cppBytes = buffer2.getBytes(0, buffer2.writerIndex());
+    System.err.print("[JAVA READ] C++ output (" + cppBytes.length + " bytes): ");
+    for (int i = 0; i < Math.min(cppBytes.length, 100); i++) {
+      System.err.print(String.format("%02x ", cppBytes[i] & 0xFF));
+    }
+    System.err.println();
+
+    StructWithList readStruct1 = (StructWithList) fory.deserialize(buffer2);
+    Assert.assertEquals(readStruct1.items, Arrays.asList("a", "b", "c"));
+    StructWithList readStruct2 = (StructWithList) fory.deserialize(buffer2);
+    Assert.assertEquals(readStruct2.items, Arrays.asList("x", null, "z"));
+  }
+
+  @Data
+  static class StructWithMap {
+    Map<String, String> data;
+  }
+
+  @Test
+  public void testStructWithMap() throws java.io.IOException {
+    String caseName = "test_struct_with_map";
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .withCodegen(false)
+            .build();
+    fory.register(StructWithMap.class, 202);
+
+    StructWithMap struct1 = new StructWithMap();
+    struct1.data = new HashMap<>();
+    struct1.data.put("key1", "value1");
+    struct1.data.put("key2", "value2");
+
+    StructWithMap struct2 = new StructWithMap();
+    struct2.data = new HashMap<>();
+    struct2.data.put("k1", null);
+    struct2.data.put(null, "v2");
+
+    MemoryBuffer buffer = MemoryUtils.buffer(64);
+    fory.serialize(buffer, struct1);
+    fory.serialize(buffer, struct2);
+
+    ExecutionContext ctx =
+        prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
+    runPeer(ctx);
+
+    MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
+    StructWithMap readStruct1 = (StructWithMap) fory.deserialize(buffer2);
+    Assert.assertEquals(readStruct1.data.get("key1"), "value1");
+    Assert.assertEquals(readStruct1.data.get("key2"), "value2");
+    StructWithMap readStruct2 = (StructWithMap) fory.deserialize(buffer2);
+    Assert.assertNull(readStruct2.data.get("k1"));
+    Assert.assertEquals(readStruct2.data.get(null), "v2");
   }
 
   @Data

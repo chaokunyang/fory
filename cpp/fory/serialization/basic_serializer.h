@@ -27,6 +27,8 @@
 #include "fory/util/string_util.h"
 #include <cstdint>
 #include <cstring>
+#include <iomanip>
+#include <iostream>
 #include <string>
 #include <type_traits>
 
@@ -42,14 +44,15 @@ template <> struct Serializer<bool> {
   static constexpr TypeId type_id = TypeId::BOOL;
 
   /// Write boolean with optional reference and type info
+  /// Match Rust signature: fory_write(&self, context, write_ref_info, write_type_info, has_generics)
   static inline Result<void, Error> write(bool value, WriteContext &ctx,
-                                          bool write_ref, bool write_type) {
+                                          bool write_ref, bool write_type,
+                                          bool has_generics = false) {
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
       ctx.write_varuint32(static_cast<uint32_t>(type_id));
     }
-    ctx.write_uint8(value ? 1 : 0);
-    return Result<void, Error>();
+    return write_data_generic(value, ctx, has_generics);
   }
 
   /// Write boolean data only (no type info)
@@ -108,13 +111,13 @@ template <> struct Serializer<int8_t> {
   static constexpr TypeId type_id = TypeId::INT8;
 
   static inline Result<void, Error> write(int8_t value, WriteContext &ctx,
-                                          bool write_ref, bool write_type) {
+                                          bool write_ref, bool write_type,
+                                          bool has_generics = false) {
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
       ctx.write_varuint32(static_cast<uint32_t>(type_id));
     }
-    ctx.write_int8(value);
-    return Result<void, Error>();
+    return write_data_generic(value, ctx, has_generics);
   }
 
   static inline Result<void, Error> write_data(int8_t value,
@@ -165,13 +168,13 @@ template <> struct Serializer<int16_t> {
   static constexpr TypeId type_id = TypeId::INT16;
 
   static inline Result<void, Error> write(int16_t value, WriteContext &ctx,
-                                          bool write_ref, bool write_type) {
+                                          bool write_ref, bool write_type,
+                                          bool has_generics = false) {
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
       ctx.write_varuint32(static_cast<uint32_t>(type_id));
     }
-    ctx.write_bytes(&value, sizeof(int16_t));
-    return Result<void, Error>();
+    return write_data_generic(value, ctx, has_generics);
   }
 
   static inline Result<void, Error> write_data(int16_t value,
@@ -226,13 +229,13 @@ template <> struct Serializer<int32_t> {
   static constexpr TypeId type_id = TypeId::INT32;
 
   static inline Result<void, Error> write(int32_t value, WriteContext &ctx,
-                                          bool write_ref, bool write_type) {
+                                          bool write_ref, bool write_type,
+                                          bool has_generics = false) {
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
       ctx.write_varuint32(static_cast<uint32_t>(type_id));
     }
-    ctx.write_varint32(value);
-    return Result<void, Error>();
+    return write_data_generic(value, ctx, has_generics);
   }
 
   static inline Result<void, Error> write_data(int32_t value,
@@ -283,13 +286,13 @@ template <> struct Serializer<int64_t> {
   static constexpr TypeId type_id = TypeId::INT64;
 
   static inline Result<void, Error> write(int64_t value, WriteContext &ctx,
-                                          bool write_ref, bool write_type) {
+                                          bool write_ref, bool write_type,
+                                          bool has_generics = false) {
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
       ctx.write_varuint32(static_cast<uint32_t>(type_id));
     }
-    ctx.write_varint64(value);
-    return Result<void, Error>();
+    return write_data_generic(value, ctx, has_generics);
   }
 
   static inline Result<void, Error> write_data(int64_t value,
@@ -340,13 +343,13 @@ template <> struct Serializer<float> {
   static constexpr TypeId type_id = TypeId::FLOAT32;
 
   static inline Result<void, Error> write(float value, WriteContext &ctx,
-                                          bool write_ref, bool write_type) {
+                                          bool write_ref, bool write_type,
+                                          bool has_generics = false) {
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
       ctx.write_varuint32(static_cast<uint32_t>(type_id));
     }
-    ctx.write_bytes(&value, sizeof(float));
-    return Result<void, Error>();
+    return write_data_generic(value, ctx, has_generics);
   }
 
   static inline Result<void, Error> write_data(float value, WriteContext &ctx) {
@@ -400,13 +403,13 @@ template <> struct Serializer<double> {
   static constexpr TypeId type_id = TypeId::FLOAT64;
 
   static inline Result<void, Error> write(double value, WriteContext &ctx,
-                                          bool write_ref, bool write_type) {
+                                          bool write_ref, bool write_type,
+                                          bool has_generics = false) {
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
       ctx.write_varuint32(static_cast<uint32_t>(type_id));
     }
-    ctx.write_bytes(&value, sizeof(double));
-    return Result<void, Error>();
+    return write_data_generic(value, ctx, has_generics);
   }
 
   static inline Result<void, Error> write_data(double value,
@@ -465,13 +468,13 @@ template <> struct Serializer<uint8_t> {
   static constexpr TypeId type_id = TypeId::INT8; // Same as int8
 
   static inline Result<void, Error> write(uint8_t value, WriteContext &ctx,
-                                          bool write_ref, bool write_type) {
+                                          bool write_ref, bool write_type,
+                                          bool has_generics = false) {
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
       ctx.write_varuint32(static_cast<uint32_t>(type_id));
     }
-    ctx.write_uint8(value);
-    return Result<void, Error>();
+    return write_data_generic(value, ctx, has_generics);
   }
 
   static inline Result<void, Error> write_data(uint8_t value,
@@ -522,13 +525,13 @@ template <> struct Serializer<uint16_t> {
   static constexpr TypeId type_id = TypeId::INT16;
 
   static inline Result<void, Error> write(uint16_t value, WriteContext &ctx,
-                                          bool write_ref, bool write_type) {
+                                          bool write_ref, bool write_type,
+                                          bool has_generics = false) {
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
       ctx.write_varuint32(static_cast<uint32_t>(type_id));
     }
-    ctx.write_bytes(&value, sizeof(uint16_t));
-    return Result<void, Error>();
+    return write_data_generic(value, ctx, has_generics);
   }
 
   static inline Result<void, Error> write_data(uint16_t value,
@@ -583,13 +586,13 @@ template <> struct Serializer<uint32_t> {
   static constexpr TypeId type_id = TypeId::INT32;
 
   static inline Result<void, Error> write(uint32_t value, WriteContext &ctx,
-                                          bool write_ref, bool write_type) {
+                                          bool write_ref, bool write_type,
+                                          bool has_generics = false) {
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
       ctx.write_varuint32(static_cast<uint32_t>(type_id));
     }
-    ctx.write_bytes(&value, sizeof(uint32_t));
-    return Result<void, Error>();
+    return write_data_generic(value, ctx, has_generics);
   }
 
   static inline Result<void, Error> write_data(uint32_t value,
@@ -644,13 +647,13 @@ template <> struct Serializer<uint64_t> {
   static constexpr TypeId type_id = TypeId::INT64;
 
   static inline Result<void, Error> write(uint64_t value, WriteContext &ctx,
-                                          bool write_ref, bool write_type) {
+                                          bool write_ref, bool write_type,
+                                          bool has_generics = false) {
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
       ctx.write_varuint32(static_cast<uint32_t>(type_id));
     }
-    ctx.write_bytes(&value, sizeof(uint64_t));
-    return Result<void, Error>();
+    return write_data_generic(value, ctx, has_generics);
   }
 
   static inline Result<void, Error> write_data(uint64_t value,
@@ -717,12 +720,12 @@ template <> struct Serializer<std::string> {
 
   static inline Result<void, Error> write(const std::string &value,
                                           WriteContext &ctx, bool write_ref,
-                                          bool write_type) {
+                                          bool write_type, bool has_generics = false) {
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
       ctx.write_varuint32(static_cast<uint32_t>(type_id));
     }
-    return write_data(value, ctx);
+    return write_data_generic(value, ctx, has_generics);
   }
 
   static inline Result<void, Error> write_data(const std::string &value,
@@ -733,12 +736,23 @@ template <> struct Serializer<std::string> {
     uint32_t length = static_cast<uint32_t>(value.size());
     uint32_t size_with_encoding =
         (length << 2) | static_cast<uint32_t>(StringEncoding::UTF8);
+    size_t pos_before = ctx.buffer().writer_index();
+    std::cerr << "[DEBUG] string write_data: pos_before=" << pos_before
+              << ", length=" << length
+              << ", size_with_encoding=" << size_with_encoding
+              << ", encoding=" << static_cast<uint32_t>(StringEncoding::UTF8)
+              << ", value=\"" << value << "\"" << std::endl;
     ctx.write_varuint32(size_with_encoding);
+    size_t pos_after_header = ctx.buffer().writer_index();
+    std::cerr << "[DEBUG]   wrote " << (pos_after_header - pos_before)
+              << " bytes for header, value=0x" << std::hex << size_with_encoding << std::dec << std::endl;
 
     // Write string bytes
     if (!value.empty()) {
       ctx.write_bytes(value.data(), value.size());
     }
+    size_t pos_after = ctx.buffer().writer_index();
+    std::cerr << "[DEBUG]   total bytes written=" << (pos_after - pos_before) << std::endl;
     return Result<void, Error>();
   }
 
@@ -766,11 +780,32 @@ template <> struct Serializer<std::string> {
 
   static inline Result<std::string, Error> read_data(ReadContext &ctx) {
     // Read size with encoding
+    size_t pos_before = ctx.buffer().reader_index();
     FORY_TRY(size_with_encoding, ctx.read_varuint32());
 
     // Extract size and encoding from lower 2 bits
     uint32_t length = size_with_encoding >> 2;
     StringEncoding encoding = static_cast<StringEncoding>(size_with_encoding & 0x3);
+    std::cerr << "[DEBUG] string read_data: pos=" << pos_before
+              << ", size_with_encoding=0x" << std::hex << size_with_encoding << std::dec
+              << " (" << size_with_encoding << ")"
+              << ", length=" << length
+              << ", encoding=" << static_cast<int>(encoding);
+
+    // Print surrounding bytes for debugging
+    if (static_cast<int>(encoding) > 2) {
+      std::cerr << "\n[ERROR] Invalid encoding detected! Buffer context (pos-5 to pos+10):\n  ";
+      for (int i = -5; i <= 10 && static_cast<int>(pos_before) + i < static_cast<int>(ctx.buffer().size()); ++i) {
+        int byte_pos = static_cast<int>(pos_before) + i;
+        if (byte_pos >= 0) {
+          std::cerr << std::hex << std::setw(2) << std::setfill('0')
+                    << static_cast<int>(ctx.buffer().data()[byte_pos]) << " ";
+        }
+      }
+      std::cerr << std::dec << std::endl;
+    } else {
+      std::cerr << std::endl;
+    }
 
     if (length == 0) {
       return std::string();
@@ -848,6 +883,11 @@ template <> struct Serializer<std::string> {
         return result;
       }
       default:
+        std::cerr << "[ERROR] Unknown string encoding=" << static_cast<int>(encoding)
+                  << ", size_with_encoding=0x" << std::hex << size_with_encoding << std::dec
+                  << " (" << size_with_encoding << ")"
+                  << ", length=" << length
+                  << ", buffer_pos=" << ctx.buffer().reader_index() - 1 << std::endl;
         return Unexpected(Error::encoding_error("Unknown string encoding"));
     }
   }

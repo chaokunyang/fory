@@ -48,13 +48,14 @@ struct Serializer<E, std::enable_if_t<std::is_enum_v<E>>> {
   using OrdinalType = typename Metadata::OrdinalType;
 
   static inline Result<void, Error> write(E value, WriteContext &ctx,
-                                          bool write_ref, bool write_type) {
+                                          bool write_ref, bool write_type,
+                                          bool has_generics = false) {
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
       FORY_RETURN_NOT_OK(ctx.write_enum_type_info(
           std::type_index(typeid(E)), static_cast<uint32_t>(type_id)));
     }
-    return write_data(value, ctx);
+    return write_data_generic(value, ctx, has_generics);
   }
 
   static inline Result<void, Error> write_data(E value, WriteContext &ctx) {

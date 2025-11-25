@@ -231,6 +231,10 @@ inline constexpr bool is_shared_ref_v = is_shared_ref<T>::value;
 /// nested inside another structure.
 template <typename T> struct requires_ref_metadata : std::false_type {};
 
+// String is a reference type that needs nullable flags in xlang mode
+template <>
+struct requires_ref_metadata<std::string> : std::true_type {};
+
 template <typename T>
 struct requires_ref_metadata<std::optional<T>> : std::true_type {};
 

@@ -40,7 +40,7 @@ Result<void, Error>
 WriteContext::write_enum_type_info(const std::type_index &type,
                                    uint32_t base_type_id) {
   if (!type_resolver_) {
-    buffer_.WriteUint8(static_cast<uint8_t>(base_type_id));
+    buffer_.WriteVarUint32(base_type_id);
     return Result<void, Error>();
   }
   auto type_info_result = type_resolver_->get_type_info(type);
@@ -58,13 +58,15 @@ WriteContext::write_enum_type_info(const std::type_index &type,
       }
     }
   }
-  buffer_.WriteUint8(static_cast<uint8_t>(base_type_id));
+  buffer_.WriteVarUint32(base_type_id);
   return Result<void, Error>();
 }
 
 Result<size_t, Error> WriteContext::push_meta(const std::type_index &type_id) {
   auto it = write_type_id_index_map_.find(type_id);
   if (it != write_type_id_index_map_.end()) {
+    std::cerr << "[DEBUG] push_meta (cached): index=" << it->second
+              << std::endl;
     return it->second;
   }
 
@@ -72,6 +74,9 @@ Result<size_t, Error> WriteContext::push_meta(const std::type_index &type_id) {
   FORY_TRY(type_info, type_resolver_->get_type_info(type_id));
   write_type_defs_.push_back(type_info->type_def);
   write_type_id_index_map_[type_id] = index;
+  std::cerr << "[DEBUG] push_meta (new): index=" << index
+            << ", type_def_size=" << type_info->type_def.size() << " bytes"
+            << std::endl;
   return index;
 }
 
@@ -81,8 +86,14 @@ void WriteContext::write_meta(size_t offset) {
   int32_t meta_size = static_cast<int32_t>(current_pos - offset - 4);
   buffer_.UnsafePut<int32_t>(offset, meta_size);
   // Write all collected TypeMetas
+  std::cerr << "[DEBUG] write_meta: offset=" << offset
+            << ", current_pos=" << current_pos << ", meta_size=" << meta_size
+            << ", num_type_defs=" << write_type_defs_.size() << std::endl;
   buffer_.WriteVarUint32(static_cast<uint32_t>(write_type_defs_.size()));
-  for (const auto &type_def : write_type_defs_) {
+  for (size_t i = 0; i < write_type_defs_.size(); ++i) {
+    const auto &type_def = write_type_defs_[i];
+    std::cerr << "[DEBUG] Writing type_def[" << i << "]: " << type_def.size()
+              << " bytes" << std::endl;
     buffer_.WriteBytes(type_def.data(), type_def.size());
   }
 }
@@ -134,7 +145,8 @@ WriteContext::write_any_typeinfo(uint32_t fory_type_id,
       // MetaStringResolver#writeMetaStringBytes (without dynamic reuse).
       constexpr uint32_t kSmallStringThreshold = 16;
 
-      auto write_meta_string = [this](const std::string &value) -> Result<void, Error> {
+      auto write_meta_string =
+          [this](const std::string &value) -> Result<void, Error> {
         const uint32_t len = static_cast<uint32_t>(value.size());
         uint32_t header = len << 1; // last bit 0 => new string
         buffer_.WriteVarUint32(header);
@@ -142,7 +154,8 @@ WriteContext::write_any_typeinfo(uint32_t fory_type_id,
         if (len > kSmallStringThreshold) {
           // For strings > 16 bytes, write hashCode (int64) instead of encoding
           int64_t hash_out[2] = {0, 0};
-          MurmurHash3_x64_128(value.data(), static_cast<int>(value.size()), 47, hash_out);
+          MurmurHash3_x64_128(value.data(), static_cast<int>(value.size()), 47,
+                              hash_out);
           buffer_.WriteInt64(hash_out[0]);
         } else {
           // For strings <= 16 bytes, write encoding byte (0 for UTF8)
@@ -202,7 +215,9 @@ ReadContext::read_enum_type_info(const std::type_index &type,
 
   uint32_t start = buffer_->reader_index();
   FORY_TRY(type_id, buffer_->ReadVarUint32());
-  if (is_internal_type(type_id)) {
+  // If type_id < 256, it's a base type (high byte is 0, meaning no registration
+  // ID) Internal types and unregistered user types both fall in this range
+  if (type_id < 256 || is_internal_type(type_id)) {
     if (type_id != base_type_id) {
       return Unexpected(Error::type_mismatch(type_id, base_type_id));
     }
@@ -234,6 +249,9 @@ Result<size_t, Error> ReadContext::load_type_meta(int32_t meta_offset) {
 
   // Load all TypeMetas
   FORY_TRY(meta_size, buffer_->ReadVarUint32());
+  std::cerr << "[DEBUG] load_type_meta: meta_offset=" << meta_offset
+            << ", current_pos=" << current_pos << ", meta_start=" << meta_start
+            << ", meta_size=" << meta_size << std::endl;
   reading_type_infos_.reserve(meta_size);
 
   for (uint32_t i = 0; i < meta_size; i++) {
@@ -269,6 +287,14 @@ Result<size_t, Error> ReadContext::load_type_meta(int32_t meta_offset) {
 
     // Cast to void* to store in reading_type_infos_
     reading_type_infos_.push_back(std::static_pointer_cast<void>(type_info));
+    std::cerr << "[DEBUG] Loaded type meta " << i << ": ";
+    if (parsed_meta->register_by_name) {
+      std::cerr << "name=" << parsed_meta->namespace_str << "."
+                << parsed_meta->type_name;
+    } else {
+      std::cerr << "id=" << parsed_meta->type_id;
+    }
+    std::cerr << ", fields=" << parsed_meta->field_infos.size() << std::endl;
   }
 
   // Calculate size of meta section
@@ -282,6 +308,8 @@ Result<size_t, Error> ReadContext::load_type_meta(int32_t meta_offset) {
 
 Result<std::shared_ptr<void>, Error>
 ReadContext::get_type_info_by_index(size_t index) const {
+  std::cerr << "[DEBUG] get_type_info_by_index: index=" << index
+            << ", size=" << reading_type_infos_.size() << std::endl;
   if (index >= reading_type_infos_.size()) {
     return Unexpected(Error::invalid(
         "Meta index out of bounds: " + std::to_string(index) +

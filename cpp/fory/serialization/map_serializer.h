@@ -277,7 +277,7 @@ write_map_data_slow(const MapType &map, WriteContext &ctx, bool has_generics) {
         continue;
       } else if (value_is_none) {
         uint8_t chunk_header = VALUE_NULL;
-        if (key_is_shared_ref) {
+        if (key_is_shared_ref || key_needs_ref) {
           chunk_header |= TRACKING_KEY_REF;
         }
         if (is_key_declared && !key_is_polymorphic) {
@@ -303,6 +303,8 @@ write_map_data_slow(const MapType &map, WriteContext &ctx, bool has_generics) {
         if constexpr (key_is_shared_ref) {
           FORY_RETURN_NOT_OK(
               Serializer<K>::write(key, ctx, true, false, has_generics));
+        } else if constexpr (key_needs_ref) {
+          FORY_RETURN_NOT_OK(Serializer<K>::write(key, ctx, true, false));
         } else {
           if (has_generics && is_generic_type_v<K>) {
             FORY_RETURN_NOT_OK(
@@ -315,7 +317,7 @@ write_map_data_slow(const MapType &map, WriteContext &ctx, bool has_generics) {
       } else {
         // key_is_none
         uint8_t chunk_header = KEY_NULL;
-        if (val_is_shared_ref) {
+        if (val_is_shared_ref || val_needs_ref) {
           chunk_header |= TRACKING_VALUE_REF;
         }
         if (is_val_declared && !val_is_polymorphic) {
@@ -342,6 +344,8 @@ write_map_data_slow(const MapType &map, WriteContext &ctx, bool has_generics) {
         if constexpr (val_is_shared_ref) {
           FORY_RETURN_NOT_OK(
               Serializer<V>::write(value, ctx, true, false, has_generics));
+        } else if constexpr (val_needs_ref) {
+          FORY_RETURN_NOT_OK(Serializer<V>::write(value, ctx, true, false));
         } else {
           if (has_generics && is_generic_type_v<V>) {
             FORY_RETURN_NOT_OK(
@@ -747,17 +751,22 @@ template <typename K, typename V, typename... Args>
 struct Serializer<std::map<K, V, Args...>> {
   static constexpr TypeId type_id = TypeId::MAP;
 
+  // Match Rust signature: fory_write(&self, context, write_ref_info, write_type_info, has_generics)
   static inline Result<void, Error> write(const std::map<K, V, Args...> &map,
                                           WriteContext &ctx, bool write_ref,
-                                          bool write_type) {
+                                          bool write_type, bool has_generics = false) {
     write_not_null_ref_flag(ctx, write_ref);
 
     if (write_type) {
       ctx.write_varuint32(static_cast<uint32_t>(type_id));
     }
 
-    // Dispatch to fast or slow path based on type characteristics
-    // Fast path: no polymorphism, no shared refs, no ref metadata required
+    // Delegate to write_data_generic when has_generics or xlang mode
+    if (has_generics || ctx.is_xlang()) {
+      return write_data_generic(map, ctx, has_generics);
+    }
+
+    // Non-xlang path: Dispatch to fast or slow path based on type characteristics
     constexpr bool is_fast_path =
         !is_polymorphic_v<K> && !is_polymorphic_v<V> && !is_shared_ref_v<K> &&
         !is_shared_ref_v<V> && !requires_ref_metadata_v<K> &&
@@ -766,7 +775,7 @@ struct Serializer<std::map<K, V, Args...>> {
     if constexpr (is_fast_path) {
       return write_map_data_fast<K, V>(map, ctx, false);
     } else {
-      return write_map_data_slow<K, V>(map, ctx, false);
+      return write_map_data_slow<K, V>(map, ctx, true);
     }
   }
 
@@ -780,7 +789,7 @@ struct Serializer<std::map<K, V, Args...>> {
     if constexpr (is_fast_path) {
       return write_map_data_fast<K, V>(map, ctx, false);
     } else {
-      return write_map_data_slow<K, V>(map, ctx, false);
+      return write_map_data_slow<K, V>(map, ctx, true);
     }
   }
 
@@ -829,6 +838,13 @@ struct Serializer<std::map<K, V, Args...>> {
   }
 
   static inline Result<std::map<K, V, Args...>, Error>
+  read_with_type_info(ReadContext &ctx, bool read_ref,
+                      const TypeInfo &type_info) {
+    // Type info already validated, skip redundant type read
+    return read(ctx, read_ref, false); // read_type=false
+  }
+
+  static inline Result<std::map<K, V, Args...>, Error>
   read_data(ReadContext &ctx) {
     FORY_TRY(length, ctx.read_varuint32());
 
@@ -870,7 +886,7 @@ struct Serializer<std::unordered_map<K, V, Args...>> {
     if constexpr (is_fast_path) {
       return write_map_data_fast<K, V>(map, ctx, false);
     } else {
-      return write_map_data_slow<K, V>(map, ctx, false);
+      return write_map_data_slow<K, V>(map, ctx, true);
     }
   }
 
@@ -884,7 +900,7 @@ struct Serializer<std::unordered_map<K, V, Args...>> {
     if constexpr (is_fast_path) {
       return write_map_data_fast<K, V>(map, ctx, false);
     } else {
-      return write_map_data_slow<K, V>(map, ctx, false);
+      return write_map_data_slow<K, V>(map, ctx, true);
     }
   }
 
@@ -932,6 +948,13 @@ struct Serializer<std::unordered_map<K, V, Args...>> {
       return read_map_data_slow<K, V, std::unordered_map<K, V, Args...>>(
           ctx, length);
     }
+  }
+
+  static inline Result<std::unordered_map<K, V, Args...>, Error>
+  read_with_type_info(ReadContext &ctx, bool read_ref,
+                      const TypeInfo &type_info) {
+    // Type info already validated, skip redundant type read
+    return read(ctx, read_ref, false); // read_type=false
   }
 
   static inline Result<std::unordered_map<K, V, Args...>, Error>

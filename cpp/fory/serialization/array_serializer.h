@@ -61,12 +61,12 @@ struct Serializer<
 
   static Result<void, Error> write(const std::array<T, N> &arr,
                                    WriteContext &ctx, bool write_ref,
-                                   bool write_type) {
+                                   bool write_type, bool has_generics = false) {
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
       ctx.write_varuint32(static_cast<uint32_t>(type_id));
     }
-    return write_data(arr, ctx);
+    return write_data_generic(arr, ctx, has_generics);
   }
 
   static Result<void, Error> write_data(const std::array<T, N> &arr,
@@ -128,12 +128,12 @@ template <size_t N> struct Serializer<std::array<bool, N>> {
 
   static Result<void, Error> write(const std::array<bool, N> &arr,
                                    WriteContext &ctx, bool write_ref,
-                                   bool write_type) {
+                                   bool write_type, bool has_generics = false) {
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
       ctx.write_varuint32(static_cast<uint32_t>(type_id));
     }
-    return write_data(arr, ctx);
+    return write_data_generic(arr, ctx, has_generics);
   }
 
   static Result<void, Error> write_data(const std::array<bool, N> &arr,

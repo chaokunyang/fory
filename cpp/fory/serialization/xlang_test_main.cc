@@ -122,8 +122,8 @@ struct SimpleStruct {
   Color f5;
   std::vector<std::optional<std::string>> f6;
   int32_t f7;
-  std::optional<int32_t> f8;
-  std::optional<int32_t> last;
+  int32_t f8;  // Changed from optional to match Rust
+  int32_t last;  // Changed from optional to match Rust
   bool operator==(const SimpleStruct &other) const {
     return f1 == other.f1 && f2 == other.f2 && f3 == other.f3 &&
            f4 == other.f4 && f5 == other.f5 && f6 == other.f6 &&
@@ -207,6 +207,22 @@ struct VersionCheckStruct {
   }
 };
 FORY_STRUCT(VersionCheckStruct, f1, f2, f3);
+
+struct StructWithList {
+  std::vector<std::optional<std::string>> items;
+  bool operator==(const StructWithList &other) const {
+    return items == other.items;
+  }
+};
+FORY_STRUCT(StructWithList, items);
+
+struct StructWithMap {
+  std::map<std::optional<std::string>, std::optional<std::string>> data;
+  bool operator==(const StructWithMap &other) const {
+    return data == other.data;
+  }
+};
+FORY_STRUCT(StructWithMap, data);
 
 namespace fory {
 namespace serialization {
@@ -356,6 +372,10 @@ void RunTestSimpleNamedStruct(const std::string &data_file);
 void RunTestList(const std::string &data_file);
 void RunTestMap(const std::string &data_file);
 void RunTestInteger(const std::string &data_file);
+void RunTestItem(const std::string &data_file);
+void RunTestColor(const std::string &data_file);
+void RunTestStructWithList(const std::string &data_file);
+void RunTestStructWithMap(const std::string &data_file);
 void RunTestSkipIdCustom(const std::string &data_file);
 void RunTestSkipNameCustom(const std::string &data_file);
 void RunTestConsistentNamed(const std::string &data_file);
@@ -403,6 +423,14 @@ int main(int argc, char **argv) {
       RunTestMap(data_file);
     } else if (case_name == "test_integer") {
       RunTestInteger(data_file);
+    } else if (case_name == "test_item") {
+      RunTestItem(data_file);
+    } else if (case_name == "test_color") {
+      RunTestColor(data_file);
+    } else if (case_name == "test_struct_with_list") {
+      RunTestStructWithList(data_file);
+    } else if (case_name == "test_struct_with_map") {
+      RunTestStructWithMap(data_file);
     } else if (case_name == "test_skip_id_custom") {
       RunTestSkipIdCustom(data_file);
     } else if (case_name == "test_skip_name_custom") {
@@ -1003,6 +1031,151 @@ void RunTestInteger(const std::string &data_file) {
   AppendSerialized(fory, std::optional<int32_t>(4), out);
   AppendSerialized(fory, 0, out);
   AppendSerialized(fory, std::optional<int32_t>(), out);
+  WriteFile(data_file, out);
+}
+
+void RunTestItem(const std::string &data_file) {
+  auto bytes = ReadFile(data_file);
+  auto fory = BuildFory(true, true);
+  EnsureOk(fory.register_struct<Item>(102), "register Item");
+
+  Buffer buffer = MakeBuffer(bytes);
+
+  Item expected1;
+  expected1.name = std::string("test_item_1");
+  Item expected2;
+  expected2.name = std::string("test_item_2");
+  Item expected3;
+  expected3.name = std::nullopt;
+
+  Item item1 = ReadNext<Item>(fory, buffer);
+  if (!(item1 == expected1)) {
+    Fail("Item 1 mismatch");
+  }
+  Item item2 = ReadNext<Item>(fory, buffer);
+  if (!(item2 == expected2)) {
+    Fail("Item 2 mismatch");
+  }
+  Item item3 = ReadNext<Item>(fory, buffer);
+  if (!(item3 == expected3)) {
+    Fail("Item 3 mismatch");
+  }
+
+  std::vector<uint8_t> out;
+  AppendSerialized(fory, expected1, out);
+  AppendSerialized(fory, expected2, out);
+  AppendSerialized(fory, expected3, out);
+  WriteFile(data_file, out);
+}
+
+void RunTestColor(const std::string &data_file) {
+  auto bytes = ReadFile(data_file);
+  auto fory = BuildFory(true, true);
+  EnsureOk(fory.register_struct<Color>(101), "register Color");
+
+  Buffer buffer = MakeBuffer(bytes);
+
+  if (ReadNext<Color>(fory, buffer) != Color::Green) {
+    Fail("Color Green mismatch");
+  }
+  if (ReadNext<Color>(fory, buffer) != Color::Red) {
+    Fail("Color Red mismatch");
+  }
+  if (ReadNext<Color>(fory, buffer) != Color::Blue) {
+    Fail("Color Blue mismatch");
+  }
+  if (ReadNext<Color>(fory, buffer) != Color::White) {
+    Fail("Color White mismatch");
+  }
+
+  std::vector<uint8_t> out;
+  AppendSerialized(fory, Color::Green, out);
+  AppendSerialized(fory, Color::Red, out);
+  AppendSerialized(fory, Color::Blue, out);
+  AppendSerialized(fory, Color::White, out);
+  WriteFile(data_file, out);
+}
+
+void RunTestStructWithList(const std::string &data_file) {
+  auto bytes = ReadFile(data_file);
+
+  std::cerr << "[C++ READ] Input bytes (" << bytes.size() << " bytes): ";
+  for (size_t i = 0; i < std::min(bytes.size(), size_t(200)); ++i) {
+    std::cerr << std::hex << std::setw(2) << std::setfill('0') << (int)(uint8_t)bytes[i] << " ";
+  }
+  std::cerr << std::dec << std::endl;
+
+  auto fory = BuildFory(true, true);
+  EnsureOk(fory.register_struct<StructWithList>(201), "register StructWithList");
+
+  Buffer buffer = MakeBuffer(bytes);
+
+  StructWithList expected1;
+  expected1.items = {std::string("a"), std::string("b"), std::string("c")};
+
+  StructWithList expected2;
+  expected2.items = {std::string("x"), std::nullopt, std::string("z")};
+
+  std::cerr << "[C++ READ] Attempting to read struct 1..." << std::endl;
+  StructWithList struct1 = ReadNext<StructWithList>(fory, buffer);
+  std::cerr << "[C++ READ] Struct 1 items size: " << struct1.items.size() << std::endl;
+  if (!(struct1 == expected1)) {
+    Fail("StructWithList 1 mismatch");
+  }
+
+  std::cerr << "[C++ READ] Attempting to read struct 2..." << std::endl;
+  StructWithList struct2 = ReadNext<StructWithList>(fory, buffer);
+  std::cerr << "[C++ READ] Struct 2 items size: " << struct2.items.size() << std::endl;
+  if (!(struct2 == expected2)) {
+    Fail("StructWithList 2 mismatch");
+  }
+
+  std::vector<uint8_t> out;
+  AppendSerialized(fory, expected1, out);
+
+  std::cerr << "[C++ WRITE] After struct 1 (" << out.size() << " bytes): ";
+  for (size_t i = 0; i < std::min(out.size(), size_t(100)); ++i) {
+    std::cerr << std::hex << std::setw(2) << std::setfill('0') << (int)(uint8_t)out[i] << " ";
+  }
+  std::cerr << std::dec << std::endl;
+
+  AppendSerialized(fory, expected2, out);
+
+  std::cerr << "[C++ WRITE] After struct 2 (total " << out.size() << " bytes)" << std::endl;
+
+  WriteFile(data_file, out);
+}
+
+void RunTestStructWithMap(const std::string &data_file) {
+  auto bytes = ReadFile(data_file);
+  auto fory = BuildFory(true, true);
+  EnsureOk(fory.register_struct<StructWithMap>(202), "register StructWithMap");
+
+  Buffer buffer = MakeBuffer(bytes);
+
+  StructWithMap expected1;
+  expected1.data = {
+      {std::string("key1"), std::string("value1")},
+      {std::string("key2"), std::string("value2")}};
+
+  StructWithMap expected2;
+  expected2.data = {
+      {std::string("k1"), std::nullopt},
+      {std::nullopt, std::string("v2")}};
+
+  StructWithMap struct1 = ReadNext<StructWithMap>(fory, buffer);
+  if (!(struct1 == expected1)) {
+    Fail("StructWithMap 1 mismatch");
+  }
+
+  StructWithMap struct2 = ReadNext<StructWithMap>(fory, buffer);
+  if (!(struct2 == expected2)) {
+    Fail("StructWithMap 2 mismatch");
+  }
+
+  std::vector<uint8_t> out;
+  AppendSerialized(fory, expected1, out);
+  AppendSerialized(fory, expected2, out);
   WriteFile(data_file, out);
 }
 

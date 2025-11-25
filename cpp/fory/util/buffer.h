@@ -249,6 +249,67 @@ public:
     return result;
   }
 
+  /// Put unsigned varuint36small at offset. Returns number of bytes written
+  /// (1-5). This is the special variable-length encoding used for string
+  /// headers in xlang protocol. It's optimized for small values (< 0x80).
+  inline uint32_t PutVarUint36Small(uint32_t offset, uint64_t value) {
+    if ((value >> 7) == 0) {
+      data_[offset] = static_cast<uint8_t>(value);
+      return 1;
+    }
+    if ((value >> 14) == 0) {
+      data_[offset] = static_cast<uint8_t>((value & 0x7F) | 0x80);
+      data_[offset + 1] = static_cast<uint8_t>(value >> 7);
+      return 2;
+    }
+    if ((value >> 21) == 0) {
+      data_[offset] = static_cast<uint8_t>((value & 0x7F) | 0x80);
+      data_[offset + 1] = static_cast<uint8_t>((value >> 7) | 0x80);
+      data_[offset + 2] = static_cast<uint8_t>(value >> 14);
+      return 3;
+    }
+    if ((value >> 28) == 0) {
+      data_[offset] = static_cast<uint8_t>((value & 0x7F) | 0x80);
+      data_[offset + 1] = static_cast<uint8_t>((value >> 7) | 0x80);
+      data_[offset + 2] = static_cast<uint8_t>((value >> 14) | 0x80);
+      data_[offset + 3] = static_cast<uint8_t>(value >> 21);
+      return 4;
+    }
+    data_[offset] = static_cast<uint8_t>((value & 0x7F) | 0x80);
+    data_[offset + 1] = static_cast<uint8_t>((value >> 7) | 0x80);
+    data_[offset + 2] = static_cast<uint8_t>((value >> 14) | 0x80);
+    data_[offset + 3] = static_cast<uint8_t>((value >> 21) | 0x80);
+    data_[offset + 4] = static_cast<uint8_t>(value >> 28);
+    return 5;
+  }
+
+  /// Get unsigned varuint36small from offset. Writes number of bytes read to
+  /// readBytesLength. This is the special variable-length encoding used for
+  /// string headers in xlang protocol.
+  inline uint64_t GetVarUint36Small(uint32_t offset, uint32_t *readBytesLength) {
+    uint32_t position = offset;
+    uint8_t b = data_[position++];
+    uint64_t result = b & 0x7F;
+    if ((b & 0x80) != 0) {
+      b = data_[position++];
+      result |= static_cast<uint64_t>(b & 0x7F) << 7;
+      if ((b & 0x80) != 0) {
+        b = data_[position++];
+        result |= static_cast<uint64_t>(b & 0x7F) << 14;
+        if ((b & 0x80) != 0) {
+          b = data_[position++];
+          result |= static_cast<uint64_t>(b & 0x7F) << 21;
+          if ((b & 0x80) != 0) {
+            b = data_[position++];
+            result |= static_cast<uint64_t>(b & 0x7F) << 28;
+          }
+        }
+      }
+    }
+    *readBytesLength = position - offset;
+    return result;
+  }
+
   /// Write uint8_t value to buffer at current writer index.
   /// Automatically grows buffer and advances writer index.
   inline void WriteUint8(uint8_t value) {
@@ -343,6 +404,15 @@ public:
     uint64_t zigzag = (static_cast<uint64_t>(value) << 1) ^
                       static_cast<uint64_t>(value >> 63);
     WriteVarUint64(zigzag);
+  }
+
+  /// Write uint64_t value as varuint36small to buffer at current writer index.
+  /// This is the special variable-length encoding used for string headers.
+  /// Automatically grows buffer and advances writer index.
+  inline void WriteVarUint36Small(uint64_t value) {
+    Grow(5); // Max 5 bytes for varuint36small
+    uint32_t len = PutVarUint36Small(writer_index_, value);
+    IncreaseWriterIndex(len);
   }
 
   /// Write raw bytes to buffer at current writer index.
@@ -476,6 +546,19 @@ public:
     }
     uint64_t raw = result.value();
     int64_t value = static_cast<int64_t>((raw >> 1) ^ (~(raw & 1) + 1));
+    return value;
+  }
+
+  /// Read uint64_t value as varuint36small from buffer at current reader index.
+  /// This is the special variable-length encoding used for string headers.
+  /// Advances reader index and checks bounds.
+  inline Result<uint64_t, Error> ReadVarUint36Small() {
+    if (reader_index_ + 1 > size_) {
+      return Unexpected(Error::buffer_out_of_bound(reader_index_, 1, size_));
+    }
+    uint32_t read_bytes = 0;
+    uint64_t value = GetVarUint36Small(reader_index_, &read_bytes);
+    IncreaseReaderIndex(read_bytes);
     return value;
   }
 

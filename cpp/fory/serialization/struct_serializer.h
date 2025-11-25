@@ -335,9 +335,14 @@ template <typename T> struct CompileTimeFieldHelpers {
            tid == static_cast<uint32_t>(TypeId::VAR_INT64);
   }
 
+  /// Check if a type ID is an internal (built-in, final) type for group 2.
+  /// Internal types are STRING, DURATION, TIMESTAMP, LOCAL_DATE, DECIMAL, BINARY.
+  /// Java xlang DescriptorGrouper excludes enums from finals (line 897 in XtypeResolver).
+  /// Excludes: ENUM (13-14), STRUCT (15-18), EXT (19-20), LIST (21), SET (22), MAP (23)
   static constexpr bool is_internal_type_id(uint32_t tid) {
-    return tid >= static_cast<uint32_t>(TypeId::STRING) &&
-           tid <= static_cast<uint32_t>(TypeId::DECIMAL);
+    return tid == static_cast<uint32_t>(TypeId::STRING) ||
+           (tid >= static_cast<uint32_t>(TypeId::DURATION) &&
+            tid <= static_cast<uint32_t>(TypeId::BINARY));
   }
 
   static constexpr int group_rank(size_t index) {
@@ -349,14 +354,17 @@ template <typename T> struct CompileTimeFieldHelpers {
       if (is_primitive_type_id(tid)) {
         return nullable ? 1 : 0;
       }
-      if (is_internal_type_id(tid))
-        return 2;
+      // Check LIST/SET/MAP BEFORE is_internal_type_id since they fall
+      // within the internal type range (STRING=12 to DECIMAL=27) but
+      // need their own groups for proper field ordering.
       if (tid == static_cast<uint32_t>(TypeId::LIST))
         return 3;
       if (tid == static_cast<uint32_t>(TypeId::SET))
         return 4;
       if (tid == static_cast<uint32_t>(TypeId::MAP))
         return 5;
+      if (is_internal_type_id(tid))
+        return 2;
       return 6;
     }
   }

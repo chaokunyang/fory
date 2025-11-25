@@ -520,9 +520,14 @@ bool name_sorter(const FieldInfo &a, const FieldInfo &b) {
   return a.field_name < b.field_name;
 }
 
+// Check if a type ID is an internal (built-in, final) type for field grouping.
+// Internal types are STRING, DURATION, TIMESTAMP, LOCAL_DATE, DECIMAL, BINARY.
+// Excludes: ENUM (13-14), STRUCT (15-18), EXT (19-20), LIST (21), SET (22), MAP (23)
+// Note: LIST/SET/MAP are checked separately before this function is called.
 bool is_internal_type(uint32_t type_id) {
-  return type_id >= static_cast<uint32_t>(TypeId::STRING) &&
-         type_id <= static_cast<uint32_t>(TypeId::DECIMAL);
+  return type_id == static_cast<uint32_t>(TypeId::STRING) ||
+         (type_id >= static_cast<uint32_t>(TypeId::DURATION) &&
+          type_id <= static_cast<uint32_t>(TypeId::BINARY));
 }
 
 } // anonymous namespace

@@ -885,8 +885,30 @@ void RunTestSimpleStruct(const std::string &data_file) {
   if (!(value == expected)) {
     Fail("SimpleStruct mismatch");
   }
+  // Print sorted field order
+  {
+    using Helpers = fory::serialization::detail::CompileTimeFieldHelpers<SimpleStruct>;
+    std::cerr << "[C++ DEBUG] SimpleStruct sorted field indices: ";
+    for (size_t i = 0; i < Helpers::FieldCount; ++i) {
+      std::cerr << Helpers::sorted_indices[i];
+      if (i < Helpers::FieldCount - 1) std::cerr << ", ";
+    }
+    std::cerr << std::endl;
+    std::cerr << "[C++ DEBUG] SimpleStruct sorted field names: ";
+    for (size_t i = 0; i < Helpers::FieldCount; ++i) {
+      std::cerr << Helpers::sorted_field_names[i];
+      if (i < Helpers::FieldCount - 1) std::cerr << ", ";
+    }
+    std::cerr << std::endl;
+  }
   std::vector<uint8_t> out;
   AppendSerialized(fory, value, out);
+  // Dump output bytes for debugging
+  std::cerr << "[C++ WRITE] SimpleStruct output (" << out.size() << " bytes): ";
+  for (size_t i = 0; i < std::min(out.size(), size_t(120)); ++i) {
+    std::cerr << std::hex << std::setw(2) << std::setfill('0') << (int)out[i] << " ";
+  }
+  std::cerr << std::dec << std::endl;
   WriteFile(data_file, out);
 }
 

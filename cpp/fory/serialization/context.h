@@ -170,6 +170,12 @@ public:
     buffer().WriteVarInt64(value);
   }
 
+  /// Write uint64_t value as varuint36small to buffer.
+  /// This is the special variable-length encoding used for string headers.
+  inline void write_varuint36small(uint64_t value) {
+    buffer().WriteVarUint36Small(value);
+  }
+
   /// Write raw bytes to buffer.
   inline void write_bytes(const void *data, uint32_t length) {
     buffer().WriteBytes(data, length);
@@ -339,6 +345,12 @@ public:
   /// Read int64_t value as zigzag varint from buffer.
   inline Result<int64_t, Error> read_varint64() {
     return buffer().ReadVarInt64();
+  }
+
+  /// Read uint64_t value as varuint36small from buffer.
+  /// This is the special variable-length encoding used for string headers.
+  inline Result<uint64_t, Error> read_varuint36small() {
+    return buffer().ReadVarUint36Small();
   }
 
   /// Read raw bytes from buffer.

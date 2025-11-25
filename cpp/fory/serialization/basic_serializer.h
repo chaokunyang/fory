@@ -732,27 +732,16 @@ template <> struct Serializer<std::string> {
                                                WriteContext &ctx) {
     // Always use UTF-8 encoding for cross-language compatibility.
     // Per xlang spec: write size shifted left by 2 bits, with encoding
-    // (UTF8) in the lower 2 bits.
-    uint32_t length = static_cast<uint32_t>(value.size());
-    uint32_t size_with_encoding =
-        (length << 2) | static_cast<uint32_t>(StringEncoding::UTF8);
-    size_t pos_before = ctx.buffer().writer_index();
-    std::cerr << "[DEBUG] string write_data: pos_before=" << pos_before
-              << ", length=" << length
-              << ", size_with_encoding=" << size_with_encoding
-              << ", encoding=" << static_cast<uint32_t>(StringEncoding::UTF8)
-              << ", value=\"" << value << "\"" << std::endl;
-    ctx.write_varuint32(size_with_encoding);
-    size_t pos_after_header = ctx.buffer().writer_index();
-    std::cerr << "[DEBUG]   wrote " << (pos_after_header - pos_before)
-              << " bytes for header, value=0x" << std::hex << size_with_encoding << std::dec << std::endl;
+    // (UTF8) in the lower 2 bits. Use varuint36small encoding.
+    uint64_t length = static_cast<uint64_t>(value.size());
+    uint64_t size_with_encoding =
+        (length << 2) | static_cast<uint64_t>(StringEncoding::UTF8);
+    ctx.write_varuint36small(size_with_encoding);
 
     // Write string bytes
     if (!value.empty()) {
       ctx.write_bytes(value.data(), value.size());
     }
-    size_t pos_after = ctx.buffer().writer_index();
-    std::cerr << "[DEBUG]   total bytes written=" << (pos_after - pos_before) << std::endl;
     return Result<void, Error>();
   }
 
@@ -779,33 +768,12 @@ template <> struct Serializer<std::string> {
   }
 
   static inline Result<std::string, Error> read_data(ReadContext &ctx) {
-    // Read size with encoding
-    size_t pos_before = ctx.buffer().reader_index();
-    FORY_TRY(size_with_encoding, ctx.read_varuint32());
+    // Read size with encoding using varuint36small
+    FORY_TRY(size_with_encoding, ctx.read_varuint36small());
 
     // Extract size and encoding from lower 2 bits
-    uint32_t length = size_with_encoding >> 2;
+    uint64_t length = size_with_encoding >> 2;
     StringEncoding encoding = static_cast<StringEncoding>(size_with_encoding & 0x3);
-    std::cerr << "[DEBUG] string read_data: pos=" << pos_before
-              << ", size_with_encoding=0x" << std::hex << size_with_encoding << std::dec
-              << " (" << size_with_encoding << ")"
-              << ", length=" << length
-              << ", encoding=" << static_cast<int>(encoding);
-
-    // Print surrounding bytes for debugging
-    if (static_cast<int>(encoding) > 2) {
-      std::cerr << "\n[ERROR] Invalid encoding detected! Buffer context (pos-5 to pos+10):\n  ";
-      for (int i = -5; i <= 10 && static_cast<int>(pos_before) + i < static_cast<int>(ctx.buffer().size()); ++i) {
-        int byte_pos = static_cast<int>(pos_before) + i;
-        if (byte_pos >= 0) {
-          std::cerr << std::hex << std::setw(2) << std::setfill('0')
-                    << static_cast<int>(ctx.buffer().data()[byte_pos]) << " ";
-        }
-      }
-      std::cerr << std::dec << std::endl;
-    } else {
-      std::cerr << std::endl;
-    }
 
     if (length == 0) {
       return std::string();
@@ -883,12 +851,8 @@ template <> struct Serializer<std::string> {
         return result;
       }
       default:
-        std::cerr << "[ERROR] Unknown string encoding=" << static_cast<int>(encoding)
-                  << ", size_with_encoding=0x" << std::hex << size_with_encoding << std::dec
-                  << " (" << size_with_encoding << ")"
-                  << ", length=" << length
-                  << ", buffer_pos=" << ctx.buffer().reader_index() - 1 << std::endl;
-        return Unexpected(Error::encoding_error("Unknown string encoding"));
+        return Unexpected(Error::encoding_error("Unknown string encoding: " +
+                          std::to_string(static_cast<int>(encoding))));
     }
   }
 

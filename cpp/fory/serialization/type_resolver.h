@@ -538,6 +538,10 @@ private:
 
   void check_registration_thread();
 
+  void register_builtin_types();
+
+  template <typename T> void register_internal_type(TypeId type_id);
+
   bool compatible_;
   bool xlang_;
   bool check_struct_version_;
@@ -564,7 +568,9 @@ private:
 inline TypeResolver::TypeResolver()
     : compatible_(false), xlang_(false), check_struct_version_(true),
       track_ref_(true), registration_thread_id_(std::this_thread::get_id()),
-      finalized_(false) {}
+      finalized_(false) {
+  register_builtin_types();
+}
 
 inline void TypeResolver::apply_config(const Config &config) {
   compatible_ = config.compatible;
@@ -1105,6 +1111,28 @@ TypeResolver::get_type_info_by_name(const std::string &ns,
     return it->second;
   }
   return nullptr;
+}
+
+template <typename T>
+void TypeResolver::register_internal_type(TypeId type_id) {
+  auto info = std::make_shared<TypeInfo>();
+  info->type_id = static_cast<uint32_t>(type_id);
+  info->register_by_name = false;
+  info->is_external = false;
+  info->harness = make_serializer_harness<T>();
+  type_info_by_id_[info->type_id] = info;
+  type_info_cache_[std::type_index(typeid(T))] = info;
+}
+
+inline void TypeResolver::register_builtin_types() {
+  register_internal_type<bool>(TypeId::BOOL);
+  register_internal_type<int8_t>(TypeId::INT8);
+  register_internal_type<int16_t>(TypeId::INT16);
+  register_internal_type<int32_t>(TypeId::INT32);
+  register_internal_type<int64_t>(TypeId::INT64);
+  register_internal_type<float>(TypeId::FLOAT32);
+  register_internal_type<double>(TypeId::FLOAT64);
+  register_internal_type<std::string>(TypeId::STRING);
 }
 
 } // namespace serialization

@@ -444,92 +444,61 @@ ReadContext::get_type_info_by_index(size_t index) const {
 }
 
 Result<std::shared_ptr<TypeInfo>, Error> ReadContext::read_any_typeinfo() {
-  FORY_TRY(fory_type_id, buffer_->ReadVarUint32());
-  uint32_t type_id_low = fory_type_id & 0xff;
+  FORY_TRY(type_id, buffer_->ReadVarUint32());
+  uint32_t type_id_low = type_id & 0xff;
 
-  // Handle different type categories based on low byte
+  // Mirror Rust's read_any_typeinfo using switch for jump table generation
   switch (type_id_low) {
   case static_cast<uint32_t>(TypeId::NAMED_COMPATIBLE_STRUCT):
   case static_cast<uint32_t>(TypeId::COMPATIBLE_STRUCT): {
-    // Read meta_index - may or may not have loaded metas depending on context
     FORY_TRY(meta_index, buffer_->ReadVarUint32());
-    // Try to get TypeInfo from loaded metas
-    auto type_info_result = get_type_info_by_index(meta_index);
-    if (type_info_result.has_value()) {
-      auto type_info =
-          std::static_pointer_cast<TypeInfo>(type_info_result.value());
-      return type_info;
-    }
-    // If no loaded metas (e.g., reading list element type info at top level),
-    // return a stub TypeInfo with the type_id
-    auto stub = std::make_shared<TypeInfo>();
-    stub->type_id = fory_type_id;
-    stub->register_by_name = false;
-    return stub;
+    FORY_TRY(type_info, get_type_info_by_index(meta_index));
+    return std::static_pointer_cast<TypeInfo>(type_info);
   }
   case static_cast<uint32_t>(TypeId::NAMED_ENUM):
   case static_cast<uint32_t>(TypeId::NAMED_EXT):
   case static_cast<uint32_t>(TypeId::NAMED_STRUCT): {
     if (config_->compatible) {
-      // Read meta_index (share_meta is effectively compatible in C++)
       FORY_TRY(meta_index, buffer_->ReadVarUint32());
-      // Try to get TypeInfo from loaded metas
-      auto type_info_result = get_type_info_by_index(meta_index);
-      if (type_info_result.has_value()) {
-        auto type_info =
-            std::static_pointer_cast<TypeInfo>(type_info_result.value());
-        return type_info;
-      }
-      // If no loaded metas, return a stub TypeInfo
-      auto stub = std::make_shared<TypeInfo>();
-      stub->type_id = fory_type_id;
-      stub->register_by_name = true;
-      return stub;
-    } else {
-      // Read namespace and type_name using MetaStringResolver-compatible
-      // encoding. Uses file-scope decoders: kNamespaceDecoder ('.', '_') for
-      // namespace and kTypeNameDecoder ('$', '_') for type names.
-      FORY_TRY(namespace_str,
-               meta_string_table_.read_string(*buffer_, kNamespaceDecoder));
-      FORY_TRY(type_name,
-               meta_string_table_.read_string(*buffer_, kTypeNameDecoder));
-
-      auto type_info =
-          type_resolver_->get_type_info_by_name(namespace_str, type_name);
-      if (!type_info) {
-        auto stub = std::make_shared<TypeInfo>();
-        stub->type_id = fory_type_id;
-        stub->namespace_name = std::move(namespace_str);
-        stub->type_name = std::move(type_name);
-        stub->register_by_name = true;
-        return stub;
-      }
-      return type_info;
+      FORY_TRY(type_info, get_type_info_by_index(meta_index));
+      return std::static_pointer_cast<TypeInfo>(type_info);
     }
+    FORY_TRY(namespace_str,
+             meta_string_table_.read_string(*buffer_, kNamespaceDecoder));
+    FORY_TRY(type_name,
+             meta_string_table_.read_string(*buffer_, kTypeNameDecoder));
+    auto type_info =
+        type_resolver_->get_type_info_by_name(namespace_str, type_name);
+    if (!type_info) {
+      return Unexpected(Error::type_error(
+          "Name harness not found: " + namespace_str + "." + type_name));
+    }
+    return type_info;
   }
   case static_cast<uint32_t>(TypeId::STRUCT):
   case static_cast<uint32_t>(TypeId::ENUM):
   case static_cast<uint32_t>(TypeId::EXT): {
-    // Plain STRUCT/ENUM/EXT types without namespace+typename: just return a
-    // stub TypeInfo. The caller will use the local type's serializer directly.
-    auto stub = std::make_shared<TypeInfo>();
-    stub->type_id = fory_type_id;
-    stub->register_by_name = false;
-    return stub;
+    // Base type IDs (without registration prefix) for auto-registered types.
+    // Create a stub TypeInfo since actual deserialization is handled
+    // statically at compile time - callers just need the type_id to verify.
+    auto type_info = std::make_shared<TypeInfo>();
+    type_info->type_id = type_id;
+    return type_info;
   }
   default: {
-    // For internal types (STRING, TIMESTAMP, etc.), create a stub TypeInfo
-    // since they don't require registration. For user types, look up by ID.
-    if (is_internal_type(fory_type_id)) {
-      auto stub = std::make_shared<TypeInfo>();
-      stub->type_id = fory_type_id;
-      stub->register_by_name = false;
-      return stub;
+    // For internal types (primitives, arrays, collections, etc.), create a
+    // minimal stub TypeInfo since the actual deserialization is handled
+    // statically at compile time - callers just need the type_id to verify.
+    if (is_internal_type(type_id)) {
+      auto type_info = std::make_shared<TypeInfo>();
+      type_info->type_id = type_id;
+      return type_info;
     }
-    // Look up by type_id for user types
-    auto type_info = type_resolver_->get_type_info_by_id(fory_type_id);
+    // For user types (registered by ID), look up in the resolver
+    auto type_info = type_resolver_->get_type_info_by_id(type_id);
     if (!type_info) {
-      return Unexpected(Error::type_error("ID harness not found"));
+      return Unexpected(Error::type_error("ID harness not found: " +
+                                          std::to_string(type_id)));
     }
     return type_info;
   }

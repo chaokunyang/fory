@@ -219,8 +219,8 @@ Result<void, Error> skip_ext(ReadContext &ctx, const FieldType &field_type) {
   // We look up the registered ext harness and call its read_data function.
 
   if (!ctx.is_compatible()) {
-    return Unexpected(
-        Error::unsupported("Ext skipping is only supported in compatible mode"));
+    return Unexpected(Error::unsupported(
+        "Ext skipping is only supported in compatible mode"));
   }
 
   uint32_t full_type_id = field_type.type_id;
@@ -244,9 +244,8 @@ Result<void, Error> skip_ext(ReadContext &ctx, const FieldType &field_type) {
   }
 
   if (!type_info) {
-    return Unexpected(
-        Error::type_error("TypeInfo not found for ext type: " +
-                          std::to_string(full_type_id)));
+    return Unexpected(Error::type_error("TypeInfo not found for ext type: " +
+                                        std::to_string(full_type_id)));
   }
 
   if (!type_info->harness.valid() || !type_info->harness.read_data_fn) {

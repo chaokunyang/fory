@@ -194,9 +194,10 @@ MetaStringDecoder::decode_rep_all_to_lower_special(const uint8_t *data,
 
 Result<char, Error>
 MetaStringDecoder::decode_lower_special_char(uint8_t value) const {
-  switch (value) {
-  case 0 ... 25:
+  if (value <= 25) {
     return static_cast<char>('a' + value);
+  }
+  switch (value) {
   case 26:
     return '.';
   case 27:
@@ -214,13 +215,14 @@ MetaStringDecoder::decode_lower_special_char(uint8_t value) const {
 
 Result<char, Error>
 MetaStringDecoder::decode_lower_upper_digit_special_char(uint8_t value) const {
-  switch (value) {
-  case 0 ... 25:
+  if (value <= 25) {
     return static_cast<char>('a' + value);
-  case 26 ... 51:
+  } else if (value <= 51) {
     return static_cast<char>('A' + (value - 26));
-  case 52 ... 61:
+  } else if (value <= 61) {
     return static_cast<char>('0' + (value - 52));
+  }
+  switch (value) {
   case 62:
     return special_char1_;
   case 63:

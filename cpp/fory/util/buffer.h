@@ -286,7 +286,8 @@ public:
   /// Get unsigned varuint36small from offset. Writes number of bytes read to
   /// readBytesLength. This is the special variable-length encoding used for
   /// string headers in xlang protocol.
-  inline uint64_t GetVarUint36Small(uint32_t offset, uint32_t *readBytesLength) {
+  inline uint64_t GetVarUint36Small(uint32_t offset,
+                                    uint32_t *readBytesLength) {
     uint32_t position = offset;
     uint8_t b = data_[position++];
     uint64_t result = b & 0x7F;

@@ -136,15 +136,16 @@ WriteContext::write_any_typeinfo(uint32_t fory_type_id,
       // MetaStringResolver#writeMetaStringBytes (without dynamic reuse).
       constexpr uint32_t kSmallStringThreshold = 16;
 
-      // Create encoders matching Java's PACKAGE_ENCODER ('.', '_') for namespace
-      // and TYPE_NAME_ENCODER ('$', '_') for type names.
+      // Create encoders matching Java's PACKAGE_ENCODER ('.', '_') for
+      // namespace and TYPE_NAME_ENCODER ('$', '_') for type names.
       static const MetaStringEncoder kNamespaceEncoder('.', '_');
       static const MetaStringEncoder kTypeNameEncoder('$', '_');
 
       // Java encoding restrictions (from Encoders.java):
       // pkgEncodings = {UTF_8, ALL_TO_LOWER_SPECIAL, LOWER_UPPER_DIGIT_SPECIAL}
-      // typeNameEncodings = {UTF_8, ALL_TO_LOWER_SPECIAL, LOWER_UPPER_DIGIT_SPECIAL, FIRST_TO_LOWER_SPECIAL}
-      // Note: LOWER_SPECIAL is NOT allowed for either!
+      // typeNameEncodings = {UTF_8, ALL_TO_LOWER_SPECIAL,
+      // LOWER_UPPER_DIGIT_SPECIAL, FIRST_TO_LOWER_SPECIAL} Note: LOWER_SPECIAL
+      // is NOT allowed for either!
       static const std::vector<MetaEncoding> kPkgEncodings = {
           MetaEncoding::UTF8, MetaEncoding::ALL_TO_LOWER_SPECIAL,
           MetaEncoding::LOWER_UPPER_DIGIT_SPECIAL};
@@ -155,10 +156,12 @@ WriteContext::write_any_typeinfo(uint32_t fory_type_id,
 
       auto write_meta_string =
           [this](const std::string &value, const MetaStringEncoder &encoder,
-                 const std::vector<MetaEncoding> &encodings) -> Result<void, Error> {
+                 const std::vector<MetaEncoding> &encodings)
+          -> Result<void, Error> {
         // Encode the string first using allowed encodings
         FORY_TRY(encoded, encoder.encode(value, encodings));
-        const uint32_t encoded_len = static_cast<uint32_t>(encoded.bytes.size());
+        const uint32_t encoded_len =
+            static_cast<uint32_t>(encoded.bytes.size());
         uint32_t header = encoded_len << 1; // last bit 0 => new string
         buffer_.WriteVarUint32(header);
 

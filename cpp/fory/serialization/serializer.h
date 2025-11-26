@@ -79,7 +79,8 @@ enum class Language : uint8_t {
 inline void write_header(Buffer &buffer, bool is_null, bool is_xlang,
                          bool is_little_endian, bool is_oob,
                          Language language) {
-  // Ensure buffer has space for header (3 bytes: magic + flags, +1 for language if xlang)
+  // Ensure buffer has space for header (3 bytes: magic + flags, +1 for language
+  // if xlang)
   buffer.Grow(is_xlang ? 4 : 3);
   uint32_t start_pos = buffer.writer_index();
 

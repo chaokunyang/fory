@@ -110,7 +110,8 @@ struct CollectionHeader {
 // Helper for writing element type info
 // ============================================================================
 
-/// Write type info for an element type. Delegates to Serializer<T>::write_type_info.
+/// Write type info for an element type. Delegates to
+/// Serializer<T>::write_type_info.
 template <typename T>
 inline Result<void, Error> write_element_type_info(WriteContext &ctx) {
   return Serializer<T>::write_type_info(ctx);
@@ -279,12 +280,14 @@ struct Serializer<
 
     // Read element type info if IS_SAME_TYPE is set but IS_DECL_ELEMENT_TYPE is
     // not. This matches Rust/Java behavior in compatible mode.
-    // We read the type info using read_any_typeinfo() and just consume the bytes.
-    // Type validation is relaxed for xlang compatibility - we check category matches.
+    // We read the type info using read_any_typeinfo() and just consume the
+    // bytes. Type validation is relaxed for xlang compatibility - we check
+    // category matches.
     if (is_same_type && !is_decl_type) {
       FORY_TRY(elem_type_id, ctx.read_typeinfo_type_id());
-      // Type info was consumed; we trust the sender wrote correct element types.
-      // We do a relaxed check comparing type categories using type_id_matches.
+      // Type info was consumed; we trust the sender wrote correct element
+      // types. We do a relaxed check comparing type categories using
+      // type_id_matches.
       if constexpr (is_optional_v<T>) {
         using Inner = typename T::value_type;
         uint32_t expected = static_cast<uint32_t>(Serializer<Inner>::type_id);
@@ -347,10 +350,12 @@ struct Serializer<
     return result;
   }
 
-  // Match Rust signature: fory_write(&self, context, write_ref_info, write_type_info, has_generics)
+  // Match Rust signature: fory_write(&self, context, write_ref_info,
+  // write_type_info, has_generics)
   static inline Result<void, Error> write(const std::vector<T, Alloc> &vec,
                                           WriteContext &ctx, bool write_ref,
-                                          bool write_type, bool has_generics = false) {
+                                          bool write_type,
+                                          bool has_generics = false) {
     // Write ref flag if requested (per Rust)
     write_not_null_ref_flag(ctx, write_ref);
 
@@ -607,10 +612,12 @@ template <typename Alloc> struct Serializer<std::vector<bool, Alloc>> {
     return Result<void, Error>();
   }
 
-  // Match Rust signature: fory_write(&self, context, write_ref_info, write_type_info, has_generics)
+  // Match Rust signature: fory_write(&self, context, write_ref_info,
+  // write_type_info, has_generics)
   static inline Result<void, Error> write(const std::vector<bool, Alloc> &vec,
                                           WriteContext &ctx, bool write_ref,
-                                          bool write_type, bool has_generics = false) {
+                                          bool write_type,
+                                          bool has_generics = false) {
     (void)has_generics; // vector<bool> doesn't use generics
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
@@ -686,10 +693,12 @@ struct Serializer<std::set<T, Args...>> {
     return Result<void, Error>();
   }
 
-  // Match Rust signature: fory_write(&self, context, write_ref_info, write_type_info, has_generics)
+  // Match Rust signature: fory_write(&self, context, write_ref_info,
+  // write_type_info, has_generics)
   static inline Result<void, Error> write(const std::set<T, Args...> &set,
                                           WriteContext &ctx, bool write_ref,
-                                          bool write_type, bool has_generics = false) {
+                                          bool write_type,
+                                          bool has_generics = false) {
     write_not_null_ref_flag(ctx, write_ref);
 
     if (write_type) {
@@ -788,7 +797,8 @@ struct Serializer<std::set<T, Args...>> {
     for (const auto &elem : set) {
       if (is_elem_declared) {
         if constexpr (is_generic_type_v<T>) {
-          FORY_RETURN_NOT_OK(Serializer<T>::write_data_generic(elem, ctx, true));
+          FORY_RETURN_NOT_OK(
+              Serializer<T>::write_data_generic(elem, ctx, true));
         } else {
           FORY_RETURN_NOT_OK(Serializer<T>::write_data(elem, ctx));
         }
@@ -831,7 +841,8 @@ struct Serializer<std::set<T, Args...>> {
     bool is_decl_type = (bitmap & 0x4u) != 0;
     bool is_same_type = (bitmap & 0x8u) != 0;
     // Read element type info if IS_SAME_TYPE is set but IS_DECL_ELEMENT_TYPE
-    // is not. Uses read_typeinfo_type_id() for proper handling of all type categories.
+    // is not. Uses read_typeinfo_type_id() for proper handling of all type
+    // categories.
     if (is_same_type && !is_decl_type) {
       FORY_TRY(elem_type_id, ctx.read_typeinfo_type_id());
       uint32_t expected = static_cast<uint32_t>(Serializer<T>::type_id);
@@ -897,7 +908,8 @@ template <typename T, typename... Args>
 struct Serializer<std::unordered_set<T, Args...>> {
   static constexpr TypeId type_id = TypeId::SET;
 
-  // Match Rust signature: fory_write(&self, context, write_ref_info, write_type_info, has_generics)
+  // Match Rust signature: fory_write(&self, context, write_ref_info,
+  // write_type_info, has_generics)
   static inline Result<void, Error>
   write(const std::unordered_set<T, Args...> &set, WriteContext &ctx,
         bool write_ref, bool write_type, bool has_generics = false) {
@@ -999,7 +1011,8 @@ struct Serializer<std::unordered_set<T, Args...>> {
     for (const auto &elem : set) {
       if (is_elem_declared) {
         if constexpr (is_generic_type_v<T>) {
-          FORY_RETURN_NOT_OK(Serializer<T>::write_data_generic(elem, ctx, true));
+          FORY_RETURN_NOT_OK(
+              Serializer<T>::write_data_generic(elem, ctx, true));
         } else {
           FORY_RETURN_NOT_OK(Serializer<T>::write_data(elem, ctx));
         }

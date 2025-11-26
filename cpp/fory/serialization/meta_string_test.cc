@@ -38,7 +38,8 @@ protected:
 TEST_F(MetaStringTest, ToMetaEncodingValidValues) {
   EXPECT_EQ(ToMetaEncoding(0x00).value(), MetaEncoding::UTF8);
   EXPECT_EQ(ToMetaEncoding(0x01).value(), MetaEncoding::LOWER_SPECIAL);
-  EXPECT_EQ(ToMetaEncoding(0x02).value(), MetaEncoding::LOWER_UPPER_DIGIT_SPECIAL);
+  EXPECT_EQ(ToMetaEncoding(0x02).value(),
+            MetaEncoding::LOWER_UPPER_DIGIT_SPECIAL);
   EXPECT_EQ(ToMetaEncoding(0x03).value(), MetaEncoding::FIRST_TO_LOWER_SPECIAL);
   EXPECT_EQ(ToMetaEncoding(0x04).value(), MetaEncoding::ALL_TO_LOWER_SPECIAL);
 }
@@ -102,7 +103,8 @@ TEST_F(MetaStringTest, EncodeLowerUpperDigitSpecialWithMixedCase) {
   auto result = encoder_.encode("MyClassName123");
   ASSERT_TRUE(result.ok());
   // Should pick appropriate encoding based on statistics
-  EXPECT_TRUE(result.value().encoding == MetaEncoding::LOWER_UPPER_DIGIT_SPECIAL ||
+  EXPECT_TRUE(result.value().encoding ==
+                  MetaEncoding::LOWER_UPPER_DIGIT_SPECIAL ||
               result.value().encoding == MetaEncoding::ALL_TO_LOWER_SPECIAL);
 }
 
@@ -117,13 +119,15 @@ TEST_F(MetaStringTest, EncodeFirstToLowerSpecial) {
 }
 
 TEST_F(MetaStringTest, EncodeFirstToLowerSpecialPackage) {
-  // "Org.apache.fory" has '.' which is not supported by LOWER_UPPER_DIGIT_SPECIAL
-  // so it falls back to UTF8 or ALL_TO_LOWER_SPECIAL depending on efficiency
+  // "Org.apache.fory" has '.' which is not supported by
+  // LOWER_UPPER_DIGIT_SPECIAL so it falls back to UTF8 or ALL_TO_LOWER_SPECIAL
+  // depending on efficiency
   auto result = encoder_.encode("Org.apache.fory");
   ASSERT_TRUE(result.ok());
   // With '.' and uppercase, the encoder picks ALL_TO_LOWER_SPECIAL or UTF8
   // LOWER_SPECIAL only supports [a-z._$|] - no uppercase
-  // FIRST_TO_LOWER_SPECIAL converts first char to lowercase then uses LOWER_SPECIAL
+  // FIRST_TO_LOWER_SPECIAL converts first char to lowercase then uses
+  // LOWER_SPECIAL
   EXPECT_TRUE(result.value().encoding == MetaEncoding::FIRST_TO_LOWER_SPECIAL ||
               result.value().encoding == MetaEncoding::ALL_TO_LOWER_SPECIAL ||
               result.value().encoding == MetaEncoding::UTF8);
@@ -141,7 +145,8 @@ TEST_F(MetaStringTest, EncodeAllToLowerSpecial) {
   // Depending on the efficiency calculation, could be ALL_TO_LOWER_SPECIAL
   // or LOWER_UPPER_DIGIT_SPECIAL
   EXPECT_TRUE(result.value().encoding == MetaEncoding::ALL_TO_LOWER_SPECIAL ||
-              result.value().encoding == MetaEncoding::LOWER_UPPER_DIGIT_SPECIAL);
+              result.value().encoding ==
+                  MetaEncoding::LOWER_UPPER_DIGIT_SPECIAL);
 }
 
 // ============================================================================
@@ -176,9 +181,8 @@ TEST_F(MetaStringTest, DecodeEmptyString) {
 
 TEST_F(MetaStringTest, DecodeUTF8) {
   const std::string input = "hello world";
-  auto result = decoder_.decode(
-      reinterpret_cast<const uint8_t *>(input.data()), input.size(),
-      MetaEncoding::UTF8);
+  auto result = decoder_.decode(reinterpret_cast<const uint8_t *>(input.data()),
+                                input.size(), MetaEncoding::UTF8);
   ASSERT_TRUE(result.ok());
   EXPECT_EQ(result.value(), input);
 }
@@ -193,9 +197,9 @@ TEST_F(MetaStringTest, RoundtripLowerSpecial) {
   ASSERT_TRUE(encode_result.ok());
   EXPECT_EQ(encode_result.value().encoding, MetaEncoding::LOWER_SPECIAL);
 
-  auto decode_result = decoder_.decode(
-      encode_result.value().bytes.data(), encode_result.value().bytes.size(),
-      encode_result.value().encoding);
+  auto decode_result = decoder_.decode(encode_result.value().bytes.data(),
+                                       encode_result.value().bytes.size(),
+                                       encode_result.value().encoding);
   ASSERT_TRUE(decode_result.ok());
   EXPECT_EQ(decode_result.value(), input);
 }
@@ -205,9 +209,9 @@ TEST_F(MetaStringTest, RoundtripLowerSpecialWithUnderscore) {
   auto encode_result = encoder_.encode(input);
   ASSERT_TRUE(encode_result.ok());
 
-  auto decode_result = decoder_.decode(
-      encode_result.value().bytes.data(), encode_result.value().bytes.size(),
-      encode_result.value().encoding);
+  auto decode_result = decoder_.decode(encode_result.value().bytes.data(),
+                                       encode_result.value().bytes.size(),
+                                       encode_result.value().encoding);
   ASSERT_TRUE(decode_result.ok());
   EXPECT_EQ(decode_result.value(), input);
 }
@@ -216,11 +220,12 @@ TEST_F(MetaStringTest, RoundtripFirstToLowerSpecial) {
   const std::string input = "Myclass";
   auto encode_result = encoder_.encode(input);
   ASSERT_TRUE(encode_result.ok());
-  EXPECT_EQ(encode_result.value().encoding, MetaEncoding::FIRST_TO_LOWER_SPECIAL);
+  EXPECT_EQ(encode_result.value().encoding,
+            MetaEncoding::FIRST_TO_LOWER_SPECIAL);
 
-  auto decode_result = decoder_.decode(
-      encode_result.value().bytes.data(), encode_result.value().bytes.size(),
-      encode_result.value().encoding);
+  auto decode_result = decoder_.decode(encode_result.value().bytes.data(),
+                                       encode_result.value().bytes.size(),
+                                       encode_result.value().encoding);
   ASSERT_TRUE(decode_result.ok());
   EXPECT_EQ(decode_result.value(), input);
 }
@@ -230,9 +235,9 @@ TEST_F(MetaStringTest, RoundtripLowerUpperDigitSpecial) {
   auto encode_result = encoder_.encode(input);
   ASSERT_TRUE(encode_result.ok());
 
-  auto decode_result = decoder_.decode(
-      encode_result.value().bytes.data(), encode_result.value().bytes.size(),
-      encode_result.value().encoding);
+  auto decode_result = decoder_.decode(encode_result.value().bytes.data(),
+                                       encode_result.value().bytes.size(),
+                                       encode_result.value().encoding);
   ASSERT_TRUE(decode_result.ok());
   EXPECT_EQ(decode_result.value(), input);
 }
@@ -243,9 +248,9 @@ TEST_F(MetaStringTest, RoundtripUTF8) {
   ASSERT_TRUE(encode_result.ok());
   EXPECT_EQ(encode_result.value().encoding, MetaEncoding::UTF8);
 
-  auto decode_result = decoder_.decode(
-      encode_result.value().bytes.data(), encode_result.value().bytes.size(),
-      encode_result.value().encoding);
+  auto decode_result = decoder_.decode(encode_result.value().bytes.data(),
+                                       encode_result.value().bytes.size(),
+                                       encode_result.value().encoding);
   ASSERT_TRUE(decode_result.ok());
   EXPECT_EQ(decode_result.value(), input);
 }
@@ -259,9 +264,9 @@ TEST_F(MetaStringTest, RoundtripJavaPackageName) {
   auto encode_result = encoder_.encode(input);
   ASSERT_TRUE(encode_result.ok());
 
-  auto decode_result = decoder_.decode(
-      encode_result.value().bytes.data(), encode_result.value().bytes.size(),
-      encode_result.value().encoding);
+  auto decode_result = decoder_.decode(encode_result.value().bytes.data(),
+                                       encode_result.value().bytes.size(),
+                                       encode_result.value().encoding);
   ASSERT_TRUE(decode_result.ok());
   EXPECT_EQ(decode_result.value(), input);
 }
@@ -271,9 +276,9 @@ TEST_F(MetaStringTest, RoundtripCppNamespace) {
   auto encode_result = encoder_.encode(input);
   ASSERT_TRUE(encode_result.ok());
 
-  auto decode_result = decoder_.decode(
-      encode_result.value().bytes.data(), encode_result.value().bytes.size(),
-      encode_result.value().encoding);
+  auto decode_result = decoder_.decode(encode_result.value().bytes.data(),
+                                       encode_result.value().bytes.size(),
+                                       encode_result.value().encoding);
   ASSERT_TRUE(decode_result.ok());
   EXPECT_EQ(decode_result.value(), input);
 }
@@ -283,9 +288,9 @@ TEST_F(MetaStringTest, RoundtripInnerClass) {
   auto encode_result = encoder_.encode(input);
   ASSERT_TRUE(encode_result.ok());
 
-  auto decode_result = decoder_.decode(
-      encode_result.value().bytes.data(), encode_result.value().bytes.size(),
-      encode_result.value().encoding);
+  auto decode_result = decoder_.decode(encode_result.value().bytes.data(),
+                                       encode_result.value().bytes.size(),
+                                       encode_result.value().encoding);
   ASSERT_TRUE(decode_result.ok());
   EXPECT_EQ(decode_result.value(), input);
 }
@@ -295,21 +300,22 @@ TEST_F(MetaStringTest, RoundtripSingleChar) {
   auto encode_result = encoder_.encode(input);
   ASSERT_TRUE(encode_result.ok());
 
-  auto decode_result = decoder_.decode(
-      encode_result.value().bytes.data(), encode_result.value().bytes.size(),
-      encode_result.value().encoding);
+  auto decode_result = decoder_.decode(encode_result.value().bytes.data(),
+                                       encode_result.value().bytes.size(),
+                                       encode_result.value().encoding);
   ASSERT_TRUE(decode_result.ok());
   EXPECT_EQ(decode_result.value(), input);
 }
 
 TEST_F(MetaStringTest, RoundtripLongString) {
-  const std::string input = "org.apache.fory.serialization.meta.string.test.long.class.name";
+  const std::string input =
+      "org.apache.fory.serialization.meta.string.test.long.class.name";
   auto encode_result = encoder_.encode(input);
   ASSERT_TRUE(encode_result.ok());
 
-  auto decode_result = decoder_.decode(
-      encode_result.value().bytes.data(), encode_result.value().bytes.size(),
-      encode_result.value().encoding);
+  auto decode_result = decoder_.decode(encode_result.value().bytes.data(),
+                                       encode_result.value().bytes.size(),
+                                       encode_result.value().encoding);
   ASSERT_TRUE(decode_result.ok());
   EXPECT_EQ(decode_result.value(), input);
 }
@@ -433,9 +439,9 @@ TEST_F(MetaStringTest, DifferentSpecialCharacters) {
   auto encode_result = encoder.encode(input);
   ASSERT_TRUE(encode_result.ok());
 
-  auto decode_result = decoder.decode(
-      encode_result.value().bytes.data(), encode_result.value().bytes.size(),
-      encode_result.value().encoding);
+  auto decode_result = decoder.decode(encode_result.value().bytes.data(),
+                                      encode_result.value().bytes.size(),
+                                      encode_result.value().encoding);
   ASSERT_TRUE(decode_result.ok());
   EXPECT_EQ(decode_result.value(), input);
 }
@@ -477,9 +483,9 @@ TEST_F(MetaStringTest, AllLowercaseAlphabet) {
   ASSERT_TRUE(encode_result.ok());
   EXPECT_EQ(encode_result.value().encoding, MetaEncoding::LOWER_SPECIAL);
 
-  auto decode_result = decoder_.decode(
-      encode_result.value().bytes.data(), encode_result.value().bytes.size(),
-      encode_result.value().encoding);
+  auto decode_result = decoder_.decode(encode_result.value().bytes.data(),
+                                       encode_result.value().bytes.size(),
+                                       encode_result.value().encoding);
   ASSERT_TRUE(decode_result.ok());
   EXPECT_EQ(decode_result.value(), input);
 }
@@ -488,11 +494,12 @@ TEST_F(MetaStringTest, AllDigits) {
   const std::string input = "0123456789";
   auto encode_result = encoder_.encode(input);
   ASSERT_TRUE(encode_result.ok());
-  EXPECT_EQ(encode_result.value().encoding, MetaEncoding::LOWER_UPPER_DIGIT_SPECIAL);
+  EXPECT_EQ(encode_result.value().encoding,
+            MetaEncoding::LOWER_UPPER_DIGIT_SPECIAL);
 
-  auto decode_result = decoder_.decode(
-      encode_result.value().bytes.data(), encode_result.value().bytes.size(),
-      encode_result.value().encoding);
+  auto decode_result = decoder_.decode(encode_result.value().bytes.data(),
+                                       encode_result.value().bytes.size(),
+                                       encode_result.value().encoding);
   ASSERT_TRUE(decode_result.ok());
   EXPECT_EQ(decode_result.value(), input);
 }
@@ -501,11 +508,12 @@ TEST_F(MetaStringTest, MixedAlphaDigit) {
   const std::string input = "abc123xyz";
   auto encode_result = encoder_.encode(input);
   ASSERT_TRUE(encode_result.ok());
-  EXPECT_EQ(encode_result.value().encoding, MetaEncoding::LOWER_UPPER_DIGIT_SPECIAL);
+  EXPECT_EQ(encode_result.value().encoding,
+            MetaEncoding::LOWER_UPPER_DIGIT_SPECIAL);
 
-  auto decode_result = decoder_.decode(
-      encode_result.value().bytes.data(), encode_result.value().bytes.size(),
-      encode_result.value().encoding);
+  auto decode_result = decoder_.decode(encode_result.value().bytes.data(),
+                                       encode_result.value().bytes.size(),
+                                       encode_result.value().encoding);
   ASSERT_TRUE(decode_result.ok());
   EXPECT_EQ(decode_result.value(), input);
 }

@@ -336,9 +336,10 @@ template <typename T> struct CompileTimeFieldHelpers {
   }
 
   /// Check if a type ID is an internal (built-in, final) type for group 2.
-  /// Internal types are STRING, DURATION, TIMESTAMP, LOCAL_DATE, DECIMAL, BINARY.
-  /// Java xlang DescriptorGrouper excludes enums from finals (line 897 in XtypeResolver).
-  /// Excludes: ENUM (13-14), STRUCT (15-18), EXT (19-20), LIST (21), SET (22), MAP (23)
+  /// Internal types are STRING, DURATION, TIMESTAMP, LOCAL_DATE, DECIMAL,
+  /// BINARY. Java xlang DescriptorGrouper excludes enums from finals (line 897
+  /// in XtypeResolver). Excludes: ENUM (13-14), STRUCT (15-18), EXT (19-20),
+  /// LIST (21), SET (22), MAP (23)
   static constexpr bool is_internal_type_id(uint32_t tid) {
     return tid == static_cast<uint32_t>(TypeId::STRING) ||
            (tid >= static_cast<uint32_t>(TypeId::DURATION) &&
@@ -469,13 +470,14 @@ Result<void, Error> write_single_field(const T &obj, WriteContext &ctx,
     return Serializer<FieldType>::write_data(field_value, ctx);
   }
 
-  // Per Rust: collections always use fory_write(value, context, true, false, true)
-  // Now C++ write() has matching signature with has_generics parameter
+  // Per Rust: collections always use fory_write(value, context, true, false,
+  // true) Now C++ write() has matching signature with has_generics parameter
   constexpr bool is_collection_field = field_type_id == TypeId::LIST ||
                                        field_type_id == TypeId::SET ||
                                        field_type_id == TypeId::MAP;
   if constexpr (is_collection_field) {
-    // Rust: fory_write(value, context, write_ref=true, write_type=false, has_generics=true)
+    // Rust: fory_write(value, context, write_ref=true, write_type=false,
+    // has_generics=true)
     return Serializer<FieldType>::write(field_value, ctx, true, false, true);
   }
 
@@ -491,13 +493,14 @@ Result<void, Error> write_single_field(const T &obj, WriteContext &ctx,
                              field_type_id == TypeId::COMPATIBLE_STRUCT ||
                              field_type_id == TypeId::NAMED_STRUCT ||
                              field_type_id == TypeId::NAMED_COMPATIBLE_STRUCT;
-  constexpr bool is_ext = field_type_id == TypeId::EXT ||
-                          field_type_id == TypeId::NAMED_EXT;
+  constexpr bool is_ext =
+      field_type_id == TypeId::EXT || field_type_id == TypeId::NAMED_EXT;
   constexpr bool is_polymorphic = field_type_id == TypeId::UNKNOWN;
 
   // Per C++ read logic: struct fields need type info only in compatible mode
   // Polymorphic types always need type info
-  bool write_type = is_polymorphic || ((is_struct || is_ext) && ctx.is_compatible());
+  bool write_type =
+      is_polymorphic || ((is_struct || is_ext) && ctx.is_compatible());
 
   return Serializer<FieldType>::write(field_value, ctx, write_ref, write_type);
 }
@@ -612,7 +615,8 @@ read_single_field_by_index_compatible(T &obj, ReadContext &ctx,
   // a ref/null flag was written before the value payload. The remote_ref_flag
   // is determined by read_struct_fields_compatible() based on:
   // 1. Field nullability
-  // 2. Whether field is non-primitive (per xlang spec, all non-primitives have ref flags)
+  // 2. Whether field is non-primitive (per xlang spec, all non-primitives have
+  // ref flags)
   bool read_ref = remote_ref_flag;
 
 #ifdef FORY_DEBUG
@@ -675,14 +679,12 @@ read_struct_fields_compatible(T &obj, ReadContext &ctx,
     bool is_primitive = is_primitive_type_id(static_cast<TypeId>(type_id));
 
     // Read ref flag if: nullable, or non-primitive type
-    bool read_ref_flag =
-        remote_field.field_type.nullable || !is_primitive;
+    bool read_ref_flag = remote_field.field_type.nullable || !is_primitive;
 
 #ifdef FORY_DEBUG
     std::cerr << "[xlang][compat] remote_idx=" << remote_idx
               << ", field_id=" << field_id
-              << ", name=" << remote_field.field_name
-              << ", type_id=" << type_id
+              << ", name=" << remote_field.field_name << ", type_id=" << type_id
               << ", is_primitive=" << is_primitive
               << ", nullable=" << remote_field.field_type.nullable
               << ", read_ref_flag=" << read_ref_flag

@@ -55,14 +55,14 @@ private:
   char special_char1_;
   char special_char2_;
 
-  Result<std::string, Error>
-  decode_lower_special(const uint8_t *data, size_t len) const;
+  Result<std::string, Error> decode_lower_special(const uint8_t *data,
+                                                  size_t len) const;
 
   Result<std::string, Error>
   decode_lower_upper_digit_special(const uint8_t *data, size_t len) const;
 
-  Result<std::string, Error>
-  decode_rep_first_lower_special(const uint8_t *data, size_t len) const;
+  Result<std::string, Error> decode_rep_first_lower_special(const uint8_t *data,
+                                                            size_t len) const;
 
   Result<std::string, Error>
   decode_rep_all_to_lower_special(const uint8_t *data, size_t len) const;
@@ -130,13 +130,17 @@ private:
   };
 
   StringStatistics compute_statistics(const std::string &input) const;
-  MetaEncoding compute_encoding(const std::string &input,
-                                const std::vector<MetaEncoding> &encodings) const;
+  MetaEncoding
+  compute_encoding(const std::string &input,
+                   const std::vector<MetaEncoding> &encodings) const;
 
   std::vector<uint8_t> encode_lower_special(const std::string &input) const;
-  std::vector<uint8_t> encode_all_to_lower_special(const std::string &input) const;
-  std::vector<uint8_t> encode_lower_upper_digit_special(const std::string &input) const;
-  std::vector<uint8_t> encode_first_to_lower_special(const std::string &input) const;
+  std::vector<uint8_t>
+  encode_all_to_lower_special(const std::string &input) const;
+  std::vector<uint8_t>
+  encode_lower_upper_digit_special(const std::string &input) const;
+  std::vector<uint8_t>
+  encode_first_to_lower_special(const std::string &input) const;
 
   int lower_special_char_value(char c) const;
   int lower_upper_digit_special_char_value(char c) const;

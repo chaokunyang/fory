@@ -156,9 +156,7 @@ public:
   }
 
   /// Write int32_t value as zigzag varint to buffer.
-  inline void write_varint32(int32_t value) {
-    buffer().WriteVarInt32(value);
-  }
+  inline void write_varint32(int32_t value) { buffer().WriteVarInt32(value); }
 
   /// Write uint64_t value as varint to buffer.
   inline void write_varuint64(uint64_t value) {
@@ -166,9 +164,7 @@ public:
   }
 
   /// Write int64_t value as zigzag varint to buffer.
-  inline void write_varint64(int64_t value) {
-    buffer().WriteVarInt64(value);
-  }
+  inline void write_varint64(int64_t value) { buffer().WriteVarInt64(value); }
 
   /// Write uint64_t value as varuint36small to buffer.
   /// This is the special variable-length encoding used for string headers.
@@ -296,7 +292,6 @@ public:
 
   /// Get current nesting depth.
   inline uint32_t current_depth() const { return current_depth_; }
-
 
   /// Increase nesting depth by 1.
   ///

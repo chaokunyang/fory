@@ -181,8 +181,7 @@ Result<FieldInfo, Error> FieldInfo::from_bytes(Buffer &buffer) {
 
   FORY_TRY(encoding, ToMetaEncoding(encoding_idx));
   FORY_TRY(decoded_name, kFieldNameDecoder.decode(name_bytes.data(),
-                                                  name_bytes.size(),
-                                                  encoding));
+                                                  name_bytes.size(), encoding));
 
   return FieldInfo(decoded_name, std::move(field_type));
 }
@@ -200,7 +199,7 @@ static const MetaEncoding kNamespaceEncodings[] = {
     MetaEncoding::LOWER_UPPER_DIGIT_SPECIAL};
 
 static const MetaEncoding kTypeNameEncodings[] = {
-    MetaEncoding::UTF8,       MetaEncoding::ALL_TO_LOWER_SPECIAL,
+    MetaEncoding::UTF8, MetaEncoding::ALL_TO_LOWER_SPECIAL,
     MetaEncoding::LOWER_UPPER_DIGIT_SPECIAL,
     MetaEncoding::FIRST_TO_LOWER_SPECIAL};
 
@@ -210,7 +209,8 @@ inline Result<void, Error> write_meta_name(Buffer &buffer,
   const size_t len = name.size();
 
   if (len >= BIG_NAME_THRESHOLD) {
-    uint8_t header = static_cast<uint8_t>((BIG_NAME_THRESHOLD << 2) | encoding_idx);
+    uint8_t header =
+        static_cast<uint8_t>((BIG_NAME_THRESHOLD << 2) | encoding_idx);
     buffer.WriteUint8(header);
     buffer.WriteVarUint32(static_cast<uint32_t>(len - BIG_NAME_THRESHOLD));
   } else {
@@ -233,9 +233,9 @@ read_meta_name(Buffer &buffer, const MetaStringDecoder &decoder,
   uint8_t length_prefix = header >> 2;
 
   if (encoding_idx >= enc_count) {
-    return Unexpected(Error::encoding_error(
-        "Invalid meta string encoding index: " +
-        std::to_string(static_cast<int>(encoding_idx))));
+    return Unexpected(
+        Error::encoding_error("Invalid meta string encoding index: " +
+                              std::to_string(static_cast<int>(encoding_idx))));
   }
 
   size_t length = length_prefix;
@@ -246,8 +246,8 @@ read_meta_name(Buffer &buffer, const MetaStringDecoder &decoder,
 
   std::vector<uint8_t> bytes(length);
   if (length > 0) {
-    FORY_RETURN_NOT_OK(buffer.ReadBytes(bytes.data(),
-                                        static_cast<uint32_t>(length)));
+    FORY_RETURN_NOT_OK(
+        buffer.ReadBytes(bytes.data(), static_cast<uint32_t>(length)));
   }
 
   MetaEncoding encoding = encodings[encoding_idx];
@@ -371,16 +371,14 @@ TypeMeta::from_bytes(Buffer &buffer, const TypeMeta *local_type_info) {
     static const MetaStringDecoder kNamespaceDecoder('.', '_');
     static const MetaStringDecoder kTypeNameDecoder('$', '_');
 
-    FORY_TRY(ns,
-             read_meta_name(buffer, kNamespaceDecoder, kNamespaceEncodings,
-                            sizeof(kNamespaceEncodings) /
-                                sizeof(kNamespaceEncodings[0])));
+    FORY_TRY(ns, read_meta_name(buffer, kNamespaceDecoder, kNamespaceEncodings,
+                                sizeof(kNamespaceEncodings) /
+                                    sizeof(kNamespaceEncodings[0])));
     namespace_str = std::move(ns);
 
-    FORY_TRY(tn,
-             read_meta_name(buffer, kTypeNameDecoder, kTypeNameEncodings,
-                            sizeof(kTypeNameEncodings) /
-                                sizeof(kTypeNameEncodings[0])));
+    FORY_TRY(tn, read_meta_name(buffer, kTypeNameDecoder, kTypeNameEncodings,
+                                sizeof(kTypeNameEncodings) /
+                                    sizeof(kTypeNameEncodings[0])));
     type_name = std::move(tn);
   } else {
     FORY_TRY(tid, buffer.ReadVarUint32());
@@ -523,8 +521,9 @@ bool name_sorter(const FieldInfo &a, const FieldInfo &b) {
 // Check if a type ID is a "final" type for field group 2 in field ordering.
 // Final types are STRING, DURATION, TIMESTAMP, LOCAL_DATE, DECIMAL, BINARY.
 // These are types with fixed serializers that don't need type info written.
-// Excludes: ENUM (13-14), STRUCT (15-18), EXT (19-20), LIST (21), SET (22), MAP (23)
-// Note: LIST/SET/MAP are checked separately before this function is called.
+// Excludes: ENUM (13-14), STRUCT (15-18), EXT (19-20), LIST (21), SET (22), MAP
+// (23) Note: LIST/SET/MAP are checked separately before this function is
+// called.
 bool is_final_type_for_grouping(uint32_t type_id) {
   return type_id == static_cast<uint32_t>(TypeId::STRING) ||
          (type_id >= static_cast<uint32_t>(TypeId::DURATION) &&
@@ -712,15 +711,13 @@ int64_t TypeMeta::compute_hash(const std::vector<uint8_t> &meta_bytes) {
   // TypeMeta implementation. We take the high 64 bits and then
   // keep only the lower NUM_HASH_BITS bits.
   int64_t hash_out[2] = {0, 0};
-  MurmurHash3_x64_128(meta_bytes.data(),
-                      static_cast<int>(meta_bytes.size()),
+  MurmurHash3_x64_128(meta_bytes.data(), static_cast<int>(meta_bytes.size()),
                       47, hash_out);
 
   // hash_out[0] is the low 64 bits, hash_out[1] the high 64 bits.
   uint64_t high = static_cast<uint64_t>(hash_out[1]);
-  uint64_t mask = (NUM_HASH_BITS >= 64)
-                      ? ~uint64_t{0}
-                      : ((uint64_t{1} << NUM_HASH_BITS) - 1);
+  uint64_t mask = (NUM_HASH_BITS >= 64) ? ~uint64_t{0}
+                                        : ((uint64_t{1} << NUM_HASH_BITS) - 1);
   return static_cast<int64_t>(high & mask);
 }
 
@@ -759,14 +756,14 @@ std::string ToSnakeCase(const std::string &name) {
         bool prev_lower_or_digit = static_cast<bool>(
             std::islower(static_cast<unsigned char>(prev_ch)) ||
             std::isdigit(static_cast<unsigned char>(prev_ch)));
-        bool prev_upper =
-            static_cast<bool>(std::isupper(static_cast<unsigned char>(prev_ch)));
+        bool prev_upper = static_cast<bool>(
+            std::isupper(static_cast<unsigned char>(prev_ch)));
 
         bool next_is_lower = false;
         if (i + 1 < name.size()) {
           char next = name[i + 1];
-          next_is_lower = static_cast<bool>(
-              std::islower(static_cast<unsigned char>(next)));
+          next_is_lower =
+              static_cast<bool>(std::islower(static_cast<unsigned char>(next)));
         }
 
         if (prev_lower_or_digit || (prev_upper && next_is_lower)) {
@@ -776,8 +773,8 @@ std::string ToSnakeCase(const std::string &name) {
       if (need_underscore && !result.empty() && result.back() != '_') {
         result.push_back('_');
       }
-      result.push_back(static_cast<char>(
-          std::tolower(static_cast<unsigned char>(ch))));
+      result.push_back(
+          static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
     } else {
       result.push_back(ch);
     }
@@ -812,9 +809,8 @@ int32_t TypeMeta::compute_struct_version(const TypeMeta &meta) {
   }
 
   int64_t hash_out[2] = {0, 0};
-  MurmurHash3_x64_128(
-      reinterpret_cast<const uint8_t *>(fingerprint.data()),
-      static_cast<int>(fingerprint.size()), 47, hash_out);
+  MurmurHash3_x64_128(reinterpret_cast<const uint8_t *>(fingerprint.data()),
+                      static_cast<int>(fingerprint.size()), 47, hash_out);
 
   // Rust uses the low 64 bits and then keeps low 32 bits as i32.
   uint64_t low = static_cast<uint64_t>(hash_out[0]);

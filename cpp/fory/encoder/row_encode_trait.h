@@ -28,6 +28,7 @@
 #include <utility>
 
 namespace fory {
+namespace row {
 
 namespace encoder {
 
@@ -36,31 +37,31 @@ namespace details {
 template <typename> struct ForySchemaBasicType;
 
 template <> struct ForySchemaBasicType<bool> {
-  static inline DataTypePtr value() { return fory::boolean(); }
+  static inline DataTypePtr value() { return boolean(); }
 };
 
 template <> struct ForySchemaBasicType<int8_t> {
-  static inline DataTypePtr value() { return fory::int8(); }
+  static inline DataTypePtr value() { return int8(); }
 };
 
 template <> struct ForySchemaBasicType<int16_t> {
-  static inline DataTypePtr value() { return fory::int16(); }
+  static inline DataTypePtr value() { return int16(); }
 };
 
 template <> struct ForySchemaBasicType<int32_t> {
-  static inline DataTypePtr value() { return fory::int32(); }
+  static inline DataTypePtr value() { return int32(); }
 };
 
 template <> struct ForySchemaBasicType<int64_t> {
-  static inline DataTypePtr value() { return fory::int64(); }
+  static inline DataTypePtr value() { return int64(); }
 };
 
 template <> struct ForySchemaBasicType<float> {
-  static inline DataTypePtr value() { return fory::float32(); }
+  static inline DataTypePtr value() { return float32(); }
 };
 
 template <> struct ForySchemaBasicType<double> {
-  static inline DataTypePtr value() { return fory::float64(); }
+  static inline DataTypePtr value() { return float64(); }
 };
 
 inline std::string StringViewToString(std::string_view s) {
@@ -136,9 +137,8 @@ template <typename T, typename Enable = void> struct RowEncodeTrait {
 };
 
 template <typename T>
-struct RowEncodeTrait<
-    T, std::enable_if_t<details::HasForySchemaBasicType<
-           std::remove_cv_t<T>>::value>> {
+struct RowEncodeTrait<T, std::enable_if_t<details::HasForySchemaBasicType<
+                             std::remove_cv_t<T>>::value>> {
 
   static auto Type() {
     return details::ForySchemaBasicType<std::remove_cv_t<T>>::value();
@@ -155,7 +155,7 @@ struct RowEncodeTrait<
 template <typename T>
 struct RowEncodeTrait<
     T, std::enable_if_t<details::IsString<std::remove_cv_t<T>>>> {
-  static auto Type() { return fory::utf8(); }
+  static auto Type() { return utf8(); }
 
   template <typename V, typename W,
             std::enable_if_t<meta::IsOneOf<W, RowWriter, ArrayWriter>::value,
@@ -189,10 +189,9 @@ struct RowEncodeTrait<
 private:
   template <typename FieldInfo, size_t... I>
   static FieldVector FieldVectorImpl(std::index_sequence<I...>) {
-    return {fory::field(
-        details::StringViewToString(FieldInfo::Names[I]),
-        RowEncodeTrait<meta::RemoveMemberPointerCVRefT<decltype(std::get<I>(
-            FieldInfo::Ptrs))>>::Type())...};
+    return {field(details::StringViewToString(FieldInfo::Names[I]),
+                  RowEncodeTrait<meta::RemoveMemberPointerCVRefT<
+                      decltype(std::get<I>(FieldInfo::Ptrs))>>::Type())...};
   }
 
   template <typename FieldInfo, typename V, size_t... I>
@@ -213,9 +212,9 @@ public:
         std::make_index_sequence<FieldInfo::Size>());
   }
 
-  static auto Type() { return fory::struct_(FieldVector()); }
+  static auto Type() { return struct_(FieldVector()); }
 
-  static auto Schema() { return fory::schema(FieldVector()); }
+  static auto Schema() { return schema(FieldVector()); }
 
   template <typename V>
   static auto Write(V &&visitor, const T &value, RowWriter &writer) {
@@ -231,10 +230,10 @@ public:
   static void Write(V &&visitor, const T &value, W &writer, int index) {
     auto offset = writer.cursor();
 
-    auto child_type =
-        std::dynamic_pointer_cast<StructType>(details::GetChildType(writer, index));
+    auto child_type = std::dynamic_pointer_cast<StructType>(
+        details::GetChildType(writer, index));
     auto inner_writer =
-        std::make_unique<RowWriter>(fory::schema(child_type->fields()), &writer);
+        std::make_unique<RowWriter>(schema(child_type->fields()), &writer);
 
     inner_writer->Reset();
     RowEncodeTrait<T>::Write(std::forward<V>(visitor), value,
@@ -251,7 +250,7 @@ template <typename T>
 struct RowEncodeTrait<T,
                       std::enable_if_t<details::IsArray<std::remove_cv_t<T>>>> {
   static auto Type() {
-    return fory::list(RowEncodeTrait<meta::GetValueType<T>>::Type());
+    return list(RowEncodeTrait<meta::GetValueType<T>>::Type());
   }
 
   template <typename V>
@@ -270,9 +269,10 @@ struct RowEncodeTrait<T,
   static void Write(V &&visitor, const T &value, W &writer, int index) {
     auto offset = writer.cursor();
 
-    auto inner_writer = std::make_unique<ArrayWriter>(
-        std::dynamic_pointer_cast<ListType>(details::GetChildType(writer, index)),
-        &writer);
+    auto inner_writer =
+        std::make_unique<ArrayWriter>(std::dynamic_pointer_cast<ListType>(
+                                          details::GetChildType(writer, index)),
+                                      &writer);
 
     inner_writer->Reset(value.size());
     RowEncodeTrait<T>::Write(std::forward<V>(visitor), value,
@@ -289,9 +289,8 @@ template <typename T>
 struct RowEncodeTrait<T,
                       std::enable_if_t<details::IsMap<std::remove_cv_t<T>>>> {
   static auto Type() {
-    return fory::map(
-        RowEncodeTrait<typename T::value_type::first_type>::Type(),
-        RowEncodeTrait<typename T::value_type::second_type>::Type());
+    return map(RowEncodeTrait<typename T::value_type::first_type>::Type(),
+               RowEncodeTrait<typename T::value_type::second_type>::Type());
   }
 
   template <typename V>
@@ -321,11 +320,11 @@ struct RowEncodeTrait<T,
     auto offset = writer.cursor();
     writer.WriteDirectly(-1);
 
-    auto map_type =
-        std::dynamic_pointer_cast<MapType>(details::GetChildType(writer, index));
+    auto map_type = std::dynamic_pointer_cast<MapType>(
+        details::GetChildType(writer, index));
 
-    auto key_writer = std::make_unique<ArrayWriter>(
-        fory::list(map_type->key_type()), &writer);
+    auto key_writer =
+        std::make_unique<ArrayWriter>(list(map_type->key_type()), &writer);
 
     key_writer->Reset(value.size());
     RowEncodeTrait<T>::WriteKey(std::forward<V>(visitor), value,
@@ -333,8 +332,8 @@ struct RowEncodeTrait<T,
 
     writer.WriteDirectly(offset, key_writer->size());
 
-    auto value_writer = std::make_unique<ArrayWriter>(
-        fory::list(map_type->item_type()), &writer);
+    auto value_writer =
+        std::make_unique<ArrayWriter>(list(map_type->item_type()), &writer);
 
     value_writer->Reset(value.size());
     RowEncodeTrait<T>::WriteValue(std::forward<V>(visitor), value,
@@ -351,4 +350,5 @@ struct RowEncodeTrait<T,
 
 } // namespace encoder
 
+} // namespace row
 } // namespace fory

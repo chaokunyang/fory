@@ -47,6 +47,7 @@
 #include <vector>
 
 namespace fory {
+namespace row {
 
 class DataType;
 class Field;
@@ -578,13 +579,13 @@ inline SchemaPtr schema(std::vector<FieldPtr> fields) {
   return std::make_shared<Schema>(std::move(fields));
 }
 
-inline SchemaPtr
-schema(std::vector<FieldPtr> fields,
-       std::unordered_map<std::string, std::string> metadata) {
+inline SchemaPtr schema(std::vector<FieldPtr> fields,
+                        std::unordered_map<std::string, std::string> metadata) {
   return std::make_shared<Schema>(std::move(fields), std::move(metadata));
 }
 
-/// Returns the byte width of a fixed-width type, or -1 for variable-width types.
+/// Returns the byte width of a fixed-width type, or -1 for variable-width
+/// types.
 inline int64_t get_byte_width(const DataTypePtr &dtype) {
   int bit_width = dtype->bit_width();
   if (bit_width > 0) {
@@ -593,4 +594,5 @@ inline int64_t get_byte_width(const DataTypePtr &dtype) {
   return -1;
 }
 
+} // namespace row
 } // namespace fory

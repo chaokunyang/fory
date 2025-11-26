@@ -25,6 +25,7 @@
 #include <type_traits>
 
 namespace fory {
+namespace row {
 
 namespace encoder {
 
@@ -111,4 +112,5 @@ private:
 
 } // namespace encoder
 
+} // namespace row
 } // namespace fory

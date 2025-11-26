@@ -27,19 +27,20 @@
 #include <vector>
 
 namespace fory {
+namespace row {
 
 TEST(RowTest, Write) {
-  auto f1 = fory::field("f1", fory::utf8());
-  auto f2 = fory::field("f2", fory::int32());
-  auto arr_type = fory::list(fory::int32());
-  auto f3 = fory::field("f3", arr_type);
-  auto map_type = fory::map(fory::utf8(), fory::float32());
-  auto f4 = fory::field("f4", map_type);
-  auto struct_type = std::dynamic_pointer_cast<StructType>(fory::struct_(
-      {fory::field("n1", fory::utf8()), fory::field("n2", fory::int32())}));
-  auto f5 = fory::field("f5", struct_type);
+  auto f1 = field("f1", utf8());
+  auto f2 = field("f2", int32());
+  auto arr_type = list(int32());
+  auto f3 = field("f3", arr_type);
+  auto map_type = map(utf8(), float32());
+  auto f4 = field("f4", map_type);
+  auto struct_type = std::dynamic_pointer_cast<StructType>(
+      struct_({field("n1", utf8()), field("n2", int32())}));
+  auto f5 = field("f5", struct_type);
   std::vector<FieldPtr> fields = {f1, f2, f3, f4, f5};
-  auto s = fory::schema(fields);
+  auto s = schema(fields);
 
   RowWriter row_writer(s);
   row_writer.Reset();
@@ -60,14 +61,14 @@ TEST(RowTest, Write) {
   row_writer.SetNotNullAt(3);
   int offset = row_writer.cursor();
   row_writer.WriteDirectly(-1);
-  ArrayWriter key_array_writer(fory::list(fory::utf8()), &row_writer);
+  ArrayWriter key_array_writer(list(utf8()), &row_writer);
   key_array_writer.Reset(2);
   key_array_writer.WriteString(0, "key1");
   key_array_writer.WriteString(1, "key2");
   EXPECT_EQ(key_array_writer.CopyToArrayData()->ToString(),
             std::string("[key1, key2]"));
   row_writer.WriteDirectly(offset, key_array_writer.size());
-  ArrayWriter value_array_writer(fory::list(fory::float32()), &row_writer);
+  ArrayWriter value_array_writer(list(float32()), &row_writer);
   value_array_writer.Reset(2);
   value_array_writer.Write(0, 1.0f);
   value_array_writer.Write(1, 1.0f);
@@ -77,7 +78,7 @@ TEST(RowTest, Write) {
   row_writer.SetOffsetAndSize(3, offset, size);
 
   // struct
-  RowWriter struct_writer(fory::schema(struct_type->fields()), &row_writer);
+  RowWriter struct_writer(schema(struct_type->fields()), &row_writer);
   row_writer.SetNotNullAt(4);
   offset = row_writer.cursor();
   struct_writer.Reset();
@@ -97,9 +98,9 @@ TEST(RowTest, Write) {
 }
 
 TEST(RowTest, WriteNestedRepeately) {
-  auto f0 = fory::field("f0", fory::int32());
-  auto f1 = fory::field("f1", fory::list(fory::int32()));
-  auto s = fory::schema({f0, f1});
+  auto f0 = field("f0", int32());
+  auto f1 = field("f1", list(int32()));
+  auto s = schema({f0, f1});
   int row_nums = 100;
   RowWriter row_writer(s);
   auto list_type = std::dynamic_pointer_cast<ListType>(s->field(1)->type());
@@ -132,6 +133,7 @@ TEST(ArrayTest, From) {
   EXPECT_EQ(array->num_elements(), vec.size());
 }
 
+} // namespace row
 } // namespace fory
 
 int main(int argc, char **argv) {

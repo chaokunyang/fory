@@ -26,6 +26,7 @@
 #include "fory/row/writer.h"
 
 namespace fory {
+namespace row {
 
 namespace test {
 
@@ -40,8 +41,7 @@ FORY_FIELD_INFO(A, x, y, z);
 TEST(RowEncodeTrait, Basic) {
   auto field_vector = encoder::RowEncodeTrait<A>::FieldVector();
 
-  static_assert(
-      std::is_same_v<decltype(field_vector), encoder::FieldVector>);
+  static_assert(std::is_same_v<decltype(field_vector), encoder::FieldVector>);
 
   ASSERT_EQ(field_vector.size(), 3);
   ASSERT_EQ(field_vector[0]->name(), "x");
@@ -52,7 +52,7 @@ TEST(RowEncodeTrait, Basic) {
   ASSERT_EQ(field_vector[1]->type()->name(), "float");
   ASSERT_EQ(field_vector[2]->type()->name(), "bool");
 
-  RowWriter writer(fory::schema(field_vector));
+  RowWriter writer(schema(field_vector));
   writer.Reset();
 
   A a{233, 3.14, true};
@@ -311,8 +311,7 @@ TEST(RowEncodeTrait, Map) {
 
   auto schema = encoder::RowEncodeTrait<G>::Type();
 
-  auto a_map =
-      std::dynamic_pointer_cast<MapType>(schema->field(0)->type());
+  auto a_map = std::dynamic_pointer_cast<MapType>(schema->field(0)->type());
   ASSERT_EQ(a_map->key_type()->name(), "int32");
   ASSERT_EQ(a_map->item_type()->name(), "map");
   ASSERT_EQ(std::dynamic_pointer_cast<MapType>(a_map->item_type())
@@ -324,8 +323,7 @@ TEST(RowEncodeTrait, Map) {
                 ->name(),
             "int32");
 
-  auto b_map =
-      std::dynamic_pointer_cast<MapType>(schema->field(1)->type());
+  auto b_map = std::dynamic_pointer_cast<MapType>(schema->field(1)->type());
   ASSERT_EQ(b_map->key_type()->name(), "utf8");
   ASSERT_EQ(b_map->item_type()->name(), "struct");
   ASSERT_EQ(b_map->item_type()->field(0)->type()->name(), "int32");
@@ -364,6 +362,7 @@ TEST(RowEncodeTrait, Map) {
 
 } // namespace test
 
+} // namespace row
 } // namespace fory
 
 int main(int argc, char **argv) {

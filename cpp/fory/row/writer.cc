@@ -23,6 +23,7 @@
 #include <memory>
 
 namespace fory {
+namespace row {
 
 Writer::Writer(int bytes_before_bitmap)
     : bytes_before_bitmap_(bytes_before_bitmap) {}
@@ -263,4 +264,5 @@ std::shared_ptr<ArrayData> ArrayWriter::CopyToArrayData() {
   return array_data;
 }
 
+} // namespace row
 } // namespace fory

@@ -26,6 +26,7 @@
 #include "fory/util/buffer.h"
 
 namespace fory {
+namespace row {
 
 class ArrayData;
 
@@ -318,4 +319,5 @@ private:
 
 std::ostream &operator<<(std::ostream &os, const MapData &data);
 
+} // namespace row
 } // namespace fory

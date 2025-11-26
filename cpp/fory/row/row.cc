@@ -29,6 +29,7 @@
 #include "fory/util/logging.h"
 
 namespace fory {
+namespace row {
 
 int Getter::GetBinary(int i, uint8_t **out) const {
   if (IsNullAt(i))
@@ -61,8 +62,7 @@ std::string Getter::GetString(int i) const {
   }
 }
 
-std::shared_ptr<Row> Getter::GetStruct(int i,
-                                       StructTypePtr struct_type) const {
+std::shared_ptr<Row> Getter::GetStruct(int i, StructTypePtr struct_type) const {
   if (IsNullAt(i))
     return nullptr;
   auto offsetAndSize = GetUint64(i);
@@ -97,8 +97,7 @@ std::shared_ptr<MapData> Getter::GetMap(int i, MapTypePtr map_type) const {
   return map_data;
 }
 
-void Getter::AppendValue(std::stringstream &ss, int i,
-                         DataTypePtr type) const {
+void Getter::AppendValue(std::stringstream &ss, int i, DataTypePtr type) const {
   TypeId type_id = type->id();
   if (type_id == TypeId::INT8) {
     ss << static_cast<int>(GetInt8(i));
@@ -191,22 +190,22 @@ std::shared_ptr<ArrayData> ArrayDataFrom(const value_type *data,
 
 std::shared_ptr<ArrayData> ArrayData::From(const std::vector<int32_t> &vec) {
   return ArrayDataFrom(vec.data(), static_cast<int>(vec.size()), 4,
-                       fory::list(fory::int32()));
+                       list(int32()));
 }
 
 std::shared_ptr<ArrayData> ArrayData::From(const std::vector<int64_t> &vec) {
   return ArrayDataFrom(vec.data(), static_cast<int>(vec.size()), 8,
-                       fory::list(fory::int64()));
+                       list(int64()));
 }
 
 std::shared_ptr<ArrayData> ArrayData::From(const std::vector<float> &vec) {
   return ArrayDataFrom(vec.data(), static_cast<int>(vec.size()), 4,
-                       fory::list(fory::float32()));
+                       list(float32()));
 }
 
 std::shared_ptr<ArrayData> ArrayData::From(const std::vector<double> &vec) {
   return ArrayDataFrom(vec.data(), static_cast<int>(vec.size()), 8,
-                       fory::list(fory::float64()));
+                       list(float64()));
 }
 
 ArrayData::ArrayData(ListTypePtr type) : type_(std::move(type)) {
@@ -305,8 +304,8 @@ std::ostream &operator<<(std::ostream &os, const ArrayData &data) {
 }
 
 MapData::MapData(MapTypePtr type) : type_(std::move(type)) {
-  keys_ = std::make_shared<ArrayData>(fory::list(type_->key_type()));
-  values_ = std::make_shared<ArrayData>(fory::list(type_->item_type()));
+  keys_ = std::make_shared<ArrayData>(list(type_->key_type()));
+  values_ = std::make_shared<ArrayData>(list(type_->item_type()));
 }
 
 void MapData::PointTo(std::shared_ptr<Buffer> buffer, uint32_t offset,
@@ -335,4 +334,5 @@ std::ostream &operator<<(std::ostream &os, const MapData &data) {
   return os;
 }
 
+} // namespace row
 } // namespace fory

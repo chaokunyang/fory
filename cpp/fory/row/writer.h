@@ -30,6 +30,7 @@
 #include "fory/util/logging.h"
 
 namespace fory {
+namespace row {
 
 class Writer {
 public:
@@ -221,4 +222,5 @@ private:
   int header_in_bytes_;
 };
 
+} // namespace row
 } // namespace fory

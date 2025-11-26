@@ -58,7 +58,7 @@ mvn -T16 test -Dtest=org.apache.fory.TestClass#testMethod
 
 ```bash
 # Prepare for build
-pip install pyarrow==15.0.0
+pip install pyarrow
 
 # Build C++ library
 bazel build //...

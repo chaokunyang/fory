@@ -134,14 +134,8 @@ build_pyfory() {
 }
 
 install_pyarrow() {
-  pyversion=$($PYTHON_CMD -V | cut -d' ' -f2)
-  if [[ $pyversion  ==  3.13* ]]; then
-    $PIP_CMD install pyarrow==18.0.0
-    $PIP_CMD install numpy
-  else
-    $PIP_CMD install pyarrow==15.0.0
-    # Automatically install numpy
-  fi
+  $PIP_CMD install pyarrow
+  $PIP_CMD install numpy
 }
 
 deploy_scala() {

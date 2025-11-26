@@ -55,7 +55,7 @@ template <
     typename T,
     std::enable_if_t<std::is_same_v<GetWriterType<T>, ArrayWriter>, int> = 0>
 auto GetSchemaOrType() {
-  return std::dynamic_pointer_cast<arrow::ListType>(RowEncodeTrait<T>::Type());
+  return std::dynamic_pointer_cast<ListType>(RowEncodeTrait<T>::Type());
 }
 
 } // namespace details
@@ -92,13 +92,13 @@ template <typename T> struct RowEncoder {
 
   template <typename U = WriterType,
             std::enable_if_t<std::is_same_v<U, RowWriter>, int> = 0>
-  const arrow::Schema &GetSchema() const {
+  const Schema &GetSchema() const {
     return *writer_->schema().get();
   }
 
   template <typename U = WriterType,
             std::enable_if_t<std::is_same_v<U, ArrayWriter>, int> = 0>
-  const arrow::ListType &GetType() const {
+  const ListType &GetType() const {
     return *writer_->type().get();
   }
 

@@ -6,7 +6,6 @@ cc_library(
     hdrs = glob(["*.h"]),
     strip_include_prefix = "/cpp",
     deps = [
-      "@local_config_pyarrow//:arrow",
       "//cpp/fory/row:fory_row_format",
       "//cpp/fory/meta:fory_meta"
     ],

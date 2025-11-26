@@ -61,21 +61,21 @@ std::string Getter::GetString(int i) const {
   }
 }
 
-std::shared_ptr<Row>
-Getter::GetStruct(int i, std::shared_ptr<arrow::StructType> struct_type) const {
+std::shared_ptr<Row> Getter::GetStruct(int i,
+                                       StructTypePtr struct_type) const {
   if (IsNullAt(i))
     return nullptr;
   auto offsetAndSize = GetUint64(i);
   auto relative_offset = static_cast<uint32_t>(offsetAndSize >> 32);
   auto size = static_cast<uint32_t>(offsetAndSize);
-  auto schema = arrow::schema(struct_type->fields());
-  std::shared_ptr<Row> row = std::make_shared<Row>(schema);
+  auto row_schema = schema(struct_type->fields());
+  std::shared_ptr<Row> row = std::make_shared<Row>(row_schema);
   row->PointTo(buffer(), base_offset() + relative_offset, size);
   return row;
 }
 
-std::shared_ptr<ArrayData>
-Getter::GetArray(int i, std::shared_ptr<arrow::ListType> array_type) const {
+std::shared_ptr<ArrayData> Getter::GetArray(int i,
+                                            ListTypePtr array_type) const {
   if (IsNullAt(i))
     return nullptr;
   auto offsetAndSize = GetUint64(i);
@@ -86,8 +86,7 @@ Getter::GetArray(int i, std::shared_ptr<arrow::ListType> array_type) const {
   return arr;
 }
 
-std::shared_ptr<MapData>
-Getter::GetMap(int i, std::shared_ptr<arrow::MapType> map_type) const {
+std::shared_ptr<MapData> Getter::GetMap(int i, MapTypePtr map_type) const {
   if (IsNullAt(i))
     return nullptr;
   auto offsetAndSize = GetUint64(i);
@@ -99,37 +98,38 @@ Getter::GetMap(int i, std::shared_ptr<arrow::MapType> map_type) const {
 }
 
 void Getter::AppendValue(std::stringstream &ss, int i,
-                         std::shared_ptr<arrow::DataType> type) const {
-  if (type->id() == arrow::Type::type::INT8) {
-    ss << GetInt8(i);
-  } else if (type->id() == arrow::Type::type::BOOL) {
+                         DataTypePtr type) const {
+  TypeId type_id = type->id();
+  if (type_id == TypeId::INT8) {
+    ss << static_cast<int>(GetInt8(i));
+  } else if (type_id == TypeId::BOOL) {
     ss << GetBoolean(i);
-  } else if (type->id() == arrow::Type::type::INT16) {
+  } else if (type_id == TypeId::INT16) {
     ss << GetInt16(i);
-  } else if (type->id() == arrow::Type::type::INT32) {
+  } else if (type_id == TypeId::INT32) {
     ss << GetInt32(i);
-  } else if (type->id() == arrow::Type::type::INT64) {
+  } else if (type_id == TypeId::INT64) {
     ss << GetInt64(i);
-  } else if (type->id() == arrow::Type::type::FLOAT) {
+  } else if (type_id == TypeId::FLOAT32) {
     ss << GetFloat(i);
-  } else if (type->id() == arrow::Type::type::DOUBLE) {
+  } else if (type_id == TypeId::FLOAT64) {
     ss << GetDouble(i);
-  } else if (type->id() == arrow::Type::type::STRING) {
+  } else if (type_id == TypeId::STRING) {
     ss << GetString(i);
-  } else if (type->id() == arrow::Type::type::LIST) {
+  } else if (type_id == TypeId::LIST) {
     ss << GetArray(i)->ToString();
-  } else if (type->id() == arrow::Type::type::MAP) {
+  } else if (type_id == TypeId::MAP) {
     ss << GetMap(i)->ToString();
-  } else if (type->id() == arrow::Type::type::STRUCT) {
+  } else if (type_id == TypeId::STRUCT) {
     ss << GetStruct(i)->ToString();
-  } else if (type->id() == arrow::Type::type::BINARY) {
+  } else if (type_id == TypeId::BINARY) {
     ss << GetString(i);
   } else {
-    ss << "unsupported type " << *type;
+    ss << "unsupported type " << type->ToString();
   }
 }
 
-Row::Row(const std::shared_ptr<arrow::Schema> &schema)
+Row::Row(const SchemaPtr &schema)
     : schema_(schema), num_fields_(schema->num_fields()) {
   base_offset_ = 0;
   size_bytes_ = 0;
@@ -153,12 +153,12 @@ std::string Row::ToString() const {
       if (i != 0) {
         ss << ", ";
       }
-      auto field = schema_->field(i);
-      ss << field->name() << "=";
+      auto f = schema_->field(i);
+      ss << f->name() << "=";
       if (IsNullAt(i)) {
         ss << "null";
       } else {
-        auto type = field->type();
+        auto type = f->type();
         AppendValue(ss, i, type);
       }
     }
@@ -173,9 +173,9 @@ std::ostream &operator<<(std::ostream &os, const Row &data) {
 }
 
 template <typename value_type>
-std::shared_ptr<ArrayData>
-ArrayDataFrom(const value_type *data, int num_elements, int element_size,
-              const std::shared_ptr<arrow::ListType> &type) {
+std::shared_ptr<ArrayData> ArrayDataFrom(const value_type *data,
+                                         int num_elements, int element_size,
+                                         const ListTypePtr &type) {
   auto array_data = std::make_shared<ArrayData>(type);
   std::shared_ptr<Buffer> buffer;
   auto header_bytes = ArrayData::CalculateHeaderInBytes(num_elements);
@@ -191,26 +191,25 @@ ArrayDataFrom(const value_type *data, int num_elements, int element_size,
 
 std::shared_ptr<ArrayData> ArrayData::From(const std::vector<int32_t> &vec) {
   return ArrayDataFrom(vec.data(), static_cast<int>(vec.size()), 4,
-                       fory::list(arrow::int32()));
+                       fory::list(fory::int32()));
 }
 
 std::shared_ptr<ArrayData> ArrayData::From(const std::vector<int64_t> &vec) {
   return ArrayDataFrom(vec.data(), static_cast<int>(vec.size()), 8,
-                       fory::list(arrow::int64()));
+                       fory::list(fory::int64()));
 }
 
 std::shared_ptr<ArrayData> ArrayData::From(const std::vector<float> &vec) {
   return ArrayDataFrom(vec.data(), static_cast<int>(vec.size()), 4,
-                       fory::list(arrow::float32()));
+                       fory::list(fory::float32()));
 }
 
 std::shared_ptr<ArrayData> ArrayData::From(const std::vector<double> &vec) {
   return ArrayDataFrom(vec.data(), static_cast<int>(vec.size()), 8,
-                       fory::list(arrow::float64()));
+                       fory::list(fory::float64()));
 }
 
-ArrayData::ArrayData(std::shared_ptr<arrow::ListType> type)
-    : type_(std::move(type)) {
+ArrayData::ArrayData(ListTypePtr type) : type_(std::move(type)) {
   int width = get_byte_width(type_->value_type());
   // variable-length element type
   if (width < 0) {
@@ -305,8 +304,7 @@ std::ostream &operator<<(std::ostream &os, const ArrayData &data) {
   return os;
 }
 
-MapData::MapData(std::shared_ptr<arrow::MapType> type)
-    : type_(std::move(type)) {
+MapData::MapData(MapTypePtr type) : type_(std::move(type)) {
   keys_ = std::make_shared<ArrayData>(fory::list(type_->key_type()));
   values_ = std::make_shared<ArrayData>(fory::list(type_->item_type()));
 }

@@ -85,8 +85,6 @@ pyx_library(
     ),
     deps = [
         "//cpp/fory:fory",
-        "@local_config_pyarrow//:python_numpy_headers",
-        "@local_config_pyarrow//:arrow_python_shared_library"
     ],
 )
 

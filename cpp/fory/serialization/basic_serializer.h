@@ -889,7 +889,8 @@ template <> struct Serializer<std::string> {
 
   static inline Result<void, Error> write(const std::string &value,
                                           WriteContext &ctx, bool write_ref,
-                                          bool write_type, bool has_generics = false) {
+                                          bool write_type,
+                                          bool has_generics = false) {
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
       ctx.write_varuint32(static_cast<uint32_t>(type_id));
@@ -942,7 +943,8 @@ template <> struct Serializer<std::string> {
 
     // Extract size and encoding from lower 2 bits
     uint64_t length = size_with_encoding >> 2;
-    StringEncoding encoding = static_cast<StringEncoding>(size_with_encoding & 0x3);
+    StringEncoding encoding =
+        static_cast<StringEncoding>(size_with_encoding & 0x3);
 
     if (length == 0) {
       return std::string();
@@ -950,78 +952,30 @@ template <> struct Serializer<std::string> {
 
     // Handle different encodings
     switch (encoding) {
-      case StringEncoding::LATIN1: {
-        // Latin1: each byte is a character, convert to UTF-8
-        std::vector<uint8_t> bytes(length);
-        FORY_RETURN_NOT_OK(ctx.read_bytes(bytes.data(), length));
-        std::string result;
-        result.reserve(length * 2); // Reserve extra space for multi-byte UTF-8
-        for (uint8_t byte : bytes) {
-          if (byte < 128) {
-            result.push_back(static_cast<char>(byte));
-          } else {
-            // Convert Latin1 to UTF-8 (2 bytes for chars >= 128)
-            result.push_back(static_cast<char>(0xC0 | (byte >> 6)));
-            result.push_back(static_cast<char>(0x80 | (byte & 0x3F)));
-          }
-        }
-        return result;
+    case StringEncoding::LATIN1: {
+      std::vector<uint8_t> bytes(length);
+      FORY_RETURN_NOT_OK(ctx.read_bytes(bytes.data(), length));
+      return latin1ToUtf8(bytes.data(), length);
+    }
+    case StringEncoding::UTF16: {
+      if (length % 2 != 0) {
+        return Unexpected(Error::invalid_data("UTF-16 length must be even"));
       }
-      case StringEncoding::UTF16: {
-        // UTF-16: read pairs of bytes and convert to UTF-8
-        if (length % 2 != 0) {
-          return Unexpected(Error::invalid_data("UTF-16 length must be even"));
-        }
-        std::vector<uint16_t> utf16_chars(length / 2);
-        FORY_RETURN_NOT_OK(ctx.read_bytes(reinterpret_cast<uint8_t*>(utf16_chars.data()), length));
-
-        std::string result;
-        result.reserve(length * 2); // Approximate - may need more for surrogates
-
-        for (size_t i = 0; i < utf16_chars.size(); ++i) {
-          uint16_t ch = utf16_chars[i];
-
-          // Check for surrogate pair
-          if (ch >= 0xD800 && ch <= 0xDBFF && i + 1 < utf16_chars.size()) {
-            // High surrogate
-            uint16_t low = utf16_chars[i + 1];
-            if (low >= 0xDC00 && low <= 0xDFFF) {
-              // Valid surrogate pair - convert to code point
-              uint32_t codepoint = 0x10000 + ((ch & 0x3FF) << 10) + (low & 0x3FF);
-              ++i; // Skip the low surrogate
-
-              // Encode as UTF-8 (4 bytes for supplementary planes)
-              result.push_back(static_cast<char>(0xF0 | (codepoint >> 18)));
-              result.push_back(static_cast<char>(0x80 | ((codepoint >> 12) & 0x3F)));
-              result.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
-              result.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
-              continue;
-            }
-          }
-
-          // Not a surrogate pair - encode as regular UTF-8
-          if (ch < 0x80) {
-            result.push_back(static_cast<char>(ch));
-          } else if (ch < 0x800) {
-            result.push_back(static_cast<char>(0xC0 | (ch >> 6)));
-            result.push_back(static_cast<char>(0x80 | (ch & 0x3F)));
-          } else {
-            result.push_back(static_cast<char>(0xE0 | (ch >> 12)));
-            result.push_back(static_cast<char>(0x80 | ((ch >> 6) & 0x3F)));
-            result.push_back(static_cast<char>(0x80 | (ch & 0x3F)));
-          }
-        }
-        return result;
-      }
-      case StringEncoding::UTF8: {
-        // UTF-8: read bytes directly
-        std::string result(length, '\0');
-        FORY_RETURN_NOT_OK(ctx.read_bytes(&result[0], length));
-        return result;
-      }
-      default:
-        return Unexpected(Error::encoding_error("Unknown string encoding: " +
-                          std::to_string(static_cast<int>(encoding))));
+      std::vector<uint16_t> utf16_chars(length / 2);
+      FORY_RETURN_NOT_OK(ctx.read_bytes(
+          reinterpret_cast<uint8_t *>(utf16_chars.data()), length));
+      return utf16ToUtf8(utf16_chars.data(), utf16_chars.size());
+    }
+    case StringEncoding::UTF8: {
+      // UTF-8: read bytes directly
+      std::string result(length, '\0');
+      FORY_RETURN_NOT_OK(ctx.read_bytes(&result[0], length));
+      return result;
+    }
+    default:
+      return Unexpected(
+          Error::encoding_error("Unknown string encoding: " +
+                                std::to_string(static_cast<int>(encoding))));
     }
   }
 

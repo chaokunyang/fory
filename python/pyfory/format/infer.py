@@ -18,13 +18,24 @@
 import datetime
 import typing
 
-from functools import partial
 from typing import Optional
-from pyfory.type import get_qualified_classname, TypeVisitor, infer_field
+from pyfory.type import TypeVisitor, infer_field
 from pyfory.format._format import (
-    Schema, Field, DataType, ListType, MapType, StructType, TypeId,
-    boolean, int8, int16, int32, int64, float32, float64,
-    utf8, binary, date32, timestamp, list_, map_, struct, field, schema,
+    Schema,
+    DataType,
+    TypeId,
+    boolean,
+    int64,
+    float64,
+    utf8,
+    binary,
+    date32,
+    timestamp,
+    list_,
+    map_,
+    struct,
+    field,
+    schema,
 )
 
 __type_map__ = {}
@@ -37,7 +48,7 @@ def get_cls_by_schema(schema):
         # For Fory Schema, we don't have metadata support yet
         # Try to get class name from schema if available
         cls_name = ""
-        if hasattr(schema, 'metadata') and schema.metadata:
+        if hasattr(schema, "metadata") and schema.metadata:
             cls_name = schema.metadata.get(b"cls", b"").decode()
         if cls_name:
             import importlib

@@ -90,9 +90,7 @@ def arrow_type_to_fory_type_id(arrow_type):
     raise NotImplementedError(f"Unsupported Arrow type: {arrow_type}")
 
 
-def fory_type_id_to_arrow_type(type_id, precision=None, scale=None, list_type=None,
-                               map_key_type=None, map_value_type=None,
-                               struct_fields=None):
+def fory_type_id_to_arrow_type(type_id, precision=None, scale=None, list_type=None, map_key_type=None, map_value_type=None, struct_fields=None):
     """
     Convert a Fory TypeId value to an Arrow data type.
 
@@ -112,19 +110,19 @@ def fory_type_id_to_arrow_type(type_id, precision=None, scale=None, list_type=No
         NotImplementedError: If the Fory type is not supported.
     """
     type_map = {
-        1: pa.bool_(),        # BOOL
-        2: pa.int8(),         # INT8
-        3: pa.int16(),        # INT16
-        4: pa.int32(),        # INT32
-        6: pa.int64(),        # INT64
-        9: pa.float16(),      # FLOAT16
-        10: pa.float32(),     # FLOAT32
-        11: pa.float64(),     # FLOAT64
-        12: pa.utf8(),        # STRING
+        1: pa.bool_(),  # BOOL
+        2: pa.int8(),  # INT8
+        3: pa.int16(),  # INT16
+        4: pa.int32(),  # INT32
+        6: pa.int64(),  # INT64
+        9: pa.float16(),  # FLOAT16
+        10: pa.float32(),  # FLOAT32
+        11: pa.float64(),  # FLOAT64
+        12: pa.utf8(),  # STRING
         24: pa.duration("ns"),  # DURATION
         25: pa.timestamp("us"),  # TIMESTAMP
-        26: pa.date32(),      # LOCAL_DATE
-        28: pa.binary(),      # BINARY
+        26: pa.date32(),  # LOCAL_DATE
+        28: pa.binary(),  # BINARY
     }
 
     if type_id in type_map:
@@ -181,10 +179,7 @@ def arrow_schema_to_fory_field_list(arrow_schema):
             field_spec["key_type"] = field.type.key_type
             field_spec["item_type"] = field.type.item_type
         elif pa_types.is_struct(field.type):
-            field_spec["struct_fields"] = [
-                (field.type.field(j).name, field.type.field(j).type)
-                for j in range(field.type.num_fields)
-            ]
+            field_spec["struct_fields"] = [(field.type.field(j).name, field.type.field(j).type) for j in range(field.type.num_fields)]
         elif pa_types.is_decimal(field.type):
             field_spec["precision"] = field.type.precision
             field_spec["scale"] = field.type.scale
@@ -253,11 +248,13 @@ def convert_arrow_type_recursive(arrow_type):
         spec["fields"] = []
         for i in range(arrow_type.num_fields):
             field = arrow_type.field(i)
-            spec["fields"].append({
-                "name": field.name,
-                "type": convert_arrow_type_recursive(field.type),
-                "nullable": field.nullable,
-            })
+            spec["fields"].append(
+                {
+                    "name": field.name,
+                    "type": convert_arrow_type_recursive(field.type),
+                    "nullable": field.nullable,
+                }
+            )
     elif pa_types.is_decimal(arrow_type):
         spec["precision"] = arrow_type.precision
         spec["scale"] = arrow_type.scale
@@ -288,8 +285,7 @@ def reconstruct_arrow_type(spec):
         fields = []
         for field_spec in spec["fields"]:
             field_type = reconstruct_arrow_type(field_spec["type"])
-            fields.append(pa.field(field_spec["name"], field_type,
-                                   nullable=field_spec.get("nullable", True)))
+            fields.append(pa.field(field_spec["name"], field_type, nullable=field_spec.get("nullable", True)))
         return pa.struct(fields)
     elif type_id == 27:  # DECIMAL
         return pa.decimal128(spec.get("precision", 38), spec.get("scale", 18))

@@ -17,13 +17,11 @@
 
 import datetime
 import pyfory
-import pytest
 
 from dataclasses import dataclass
 from pyfory.format.infer import infer_schema, infer_field, ForyTypeVisitor
 from pyfory.format import (
-    TypeId, int8, int16, int32, int64, float32, float64,
-    utf8, binary, list_, map_,
+    TypeId,
 )
 from typing import List, Dict
 
@@ -61,6 +59,7 @@ def test_infer_field():
     # Custom class is treated as a struct
     class X:
         pass
+
     result = _infer_field("", X)
     assert result.type.id == TypeId.STRUCT
 

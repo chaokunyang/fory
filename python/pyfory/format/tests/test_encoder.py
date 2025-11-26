@@ -20,8 +20,20 @@ import pickle
 
 import pyfory
 from pyfory.format import (
-    schema, field, int8, int16, int32, int64, float32, float64,
-    utf8, binary, boolean, date32, timestamp, list_, map_, struct,
+    schema,
+    field,
+    int8,
+    int16,
+    int32,
+    int64,
+    utf8,
+    binary,
+    boolean,
+    date32,
+    timestamp,
+    list_,
+    map_,
+    struct,
 )
 
 from dataclasses import dataclass
@@ -58,15 +70,17 @@ def create_foo():
 
 
 def foo_schema():
-    return schema([
-        field("f1", int64()),
-        field("f2", utf8()),
-        field("f3", list_(utf8())),
-        field("f4", map_(utf8(), int64())),
-        field("f5", list_(int64())),
-        field("f6", int64()),
-        field("f7", struct([field("f1", int64()), field("f2", utf8())])),
-    ])
+    return schema(
+        [
+            field("f1", int64()),
+            field("f2", utf8()),
+            field("f3", list_(utf8())),
+            field("f4", map_(utf8(), int64())),
+            field("f5", list_(int64())),
+            field("f6", int64()),
+            field("f7", struct([field("f1", int64()), field("f2", utf8())])),
+        ]
+    )
 
 
 def test_encode():
@@ -116,16 +130,18 @@ def test_dict():
 
 def test_ints():
     cls = pyfory.record_class_factory("TestNumeric", ["f" + str(i) for i in range(1, 9)])
-    s = schema([
-        field("f1", int64()),
-        field("f2", int64()),
-        field("f3", int32()),
-        field("f4", int32()),
-        field("f5", int16()),
-        field("f6", int16()),
-        field("f7", int8()),
-        field("f8", int8()),
-    ])
+    s = schema(
+        [
+            field("f1", int64()),
+            field("f2", int64()),
+            field("f3", int32()),
+            field("f4", int32()),
+            field("f5", int16()),
+            field("f6", int16()),
+            field("f7", int8()),
+            field("f8", int8()),
+        ]
+    )
     print("pyfory.cls", pyfory.get_qualified_classname(cls))
     obj = cls(
         f1=2**63 - 1,
@@ -155,13 +171,15 @@ def test_ints():
 
 def test_basic():
     cls = pyfory.record_class_factory("TestBasic", ["f" + str(i) for i in range(1, 6)])
-    s = schema([
-        field("f1", utf8()),
-        field("f2", binary()),
-        field("f3", boolean()),
-        field("f4", date32()),
-        field("f5", timestamp()),
-    ])
+    s = schema(
+        [
+            field("f1", utf8()),
+            field("f2", binary()),
+            field("f3", boolean()),
+            field("f4", date32()),
+            field("f5", timestamp()),
+        ]
+    )
     from datetime import date, datetime
 
     obj = cls(f1="str", f2=b"123456", f3=True, f4=date(1970, 1, 1), f5=datetime.now())

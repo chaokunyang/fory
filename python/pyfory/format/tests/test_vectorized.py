@@ -20,7 +20,15 @@ import pyfory as fory
 from pyfory.tests.core import require_pyarrow
 from pyfory.util import lazy_import
 from pyfory.format import (
-    schema, field, int8, int16, int32, int64, utf8, map_, to_arrow_schema,
+    schema,
+    field,
+    int8,
+    int16,
+    int32,
+    int64,
+    utf8,
+    map_,
+    to_arrow_schema,
 )
 
 pa = lazy_import("pyarrow")
@@ -31,13 +39,15 @@ def test_vectorized():
     field_names = ["f" + str(i) for i in range(1, 6)]
     cls = fory.record_class_factory("TEST_VECTORIZED", field_names)
     # Create Fory schema for the encoder
-    fory_schema = schema([
-        field("f1", int64()),
-        field("f2", int32()),
-        field("f3", int16()),
-        field("f4", int8()),
-        field("f5", utf8()),
-    ])
+    fory_schema = schema(
+        [
+            field("f1", int64()),
+            field("f2", int32()),
+            field("f3", int16()),
+            field("f4", int8()),
+            field("f5", utf8()),
+        ]
+    )
     # Convert to Arrow schema for ArrowWriter
     arrow_schema = to_arrow_schema(fory_schema)
     # Add metadata for class resolution
@@ -75,9 +85,11 @@ def test_vectorized():
 def test_vectorized_map():
     cls = fory.record_class_factory("TEST_VECTORIZED_MAP", ["f0"])
     # Create Fory schema for the encoder
-    fory_schema = schema([
-        field("f0", map_(utf8(), int32())),
-    ])
+    fory_schema = schema(
+        [
+            field("f0", map_(utf8(), int32())),
+        ]
+    )
     # Convert to Arrow schema for ArrowWriter
     arrow_schema = to_arrow_schema(fory_schema)
     # Add metadata for class resolution

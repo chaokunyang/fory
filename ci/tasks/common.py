@@ -221,7 +221,12 @@ def install_bazel():
 def install_cpp_deps():
     """Install dependencies for C++ development."""
     # Check the Python version and install the appropriate pyarrow version
-    exec_cmd("pip install pyarrow")
-    exec_cmd("pip install numpy")
+    python_version = platform.python_version()
+    if python_version.startswith("3.13"):
+        exec_cmd("pip install pyarrow==18.0.0")
+        exec_cmd("pip install numpy")
+    else:
+        exec_cmd(f"pip install pyarrow=={PYARROW_VERSION}")
+        # Automatically install numpy
     exec_cmd("pip install psutil")
     install_bazel()

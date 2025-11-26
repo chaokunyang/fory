@@ -23,6 +23,7 @@
 #include "fory/meta/type_traits.h"
 #include "fory/row/writer.h"
 #include <memory>
+#include <optional>
 #include <string_view>
 #include <type_traits>
 #include <utility>

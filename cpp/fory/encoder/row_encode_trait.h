@@ -187,29 +187,38 @@ template <typename T>
 struct RowEncodeTrait<
     T, std::enable_if_t<details::IsClassButNotBuiltin<std::remove_cv_t<T>>>> {
 private:
-  template <typename FieldInfo, size_t... I>
-  static FieldVector FieldVectorImpl(std::index_sequence<I...>) {
-    return {field(details::StringViewToString(FieldInfo::Names[I]),
-                  RowEncodeTrait<meta::RemoveMemberPointerCVRefT<
-                      decltype(std::get<I>(FieldInfo::Ptrs))>>::Type())...};
+  using FieldInfo = decltype(ForyFieldInfo(std::declval<T>()));
+
+  template <size_t I> static FieldPtr GetField() {
+    using FieldType = meta::RemoveMemberPointerCVRefT<
+        std::tuple_element_t<I, decltype(FieldInfo::Ptrs)>>;
+    return field(details::StringViewToString(FieldInfo::Names[I]),
+                 RowEncodeTrait<FieldType>::Type());
   }
 
-  template <typename FieldInfo, typename V, size_t... I>
+  template <size_t... I>
+  static encoder::FieldVector FieldVectorImpl(std::index_sequence<I...>) {
+    return {GetField<I>()...};
+  }
+
+  template <size_t I, typename V>
+  static void WriteField(V &&visitor, const T &value, RowWriter &writer) {
+    using FieldType = meta::RemoveMemberPointerCVRefT<
+        std::tuple_element_t<I, decltype(FieldInfo::Ptrs)>>;
+    RowEncodeTrait<FieldType>::Write(std::forward<V>(visitor),
+                                     value.*std::get<I>(FieldInfo::Ptrs),
+                                     writer, I);
+  }
+
+  template <typename V, size_t... I>
   static void WriteImpl(V &&visitor, const T &value, RowWriter &writer,
                         std::index_sequence<I...>) {
-    (RowEncodeTrait<meta::RemoveMemberPointerCVRefT<decltype(std::get<I>(
-         FieldInfo::Ptrs))>>::Write(std::forward<V>(visitor),
-                                    value.*std::get<I>(FieldInfo::Ptrs), writer,
-                                    I),
-     ...);
+    (WriteField<I>(std::forward<V>(visitor), value, writer), ...);
   }
 
 public:
-  static auto FieldVector() {
-    using FieldInfo = decltype(ForyFieldInfo(std::declval<T>()));
-
-    return FieldVectorImpl<FieldInfo>(
-        std::make_index_sequence<FieldInfo::Size>());
+  static encoder::FieldVector FieldVector() {
+    return FieldVectorImpl(std::make_index_sequence<FieldInfo::Size>());
   }
 
   static auto Type() { return struct_(FieldVector()); }
@@ -217,11 +226,9 @@ public:
   static auto Schema() { return schema(FieldVector()); }
 
   template <typename V>
-  static auto Write(V &&visitor, const T &value, RowWriter &writer) {
-    using FieldInfo = decltype(ForyFieldInfo(std::declval<T>()));
-
-    return WriteImpl<FieldInfo>(std::forward<V>(visitor), value, writer,
-                                std::make_index_sequence<FieldInfo::Size>());
+  static void Write(V &&visitor, const T &value, RowWriter &writer) {
+    WriteImpl(std::forward<V>(visitor), value, writer,
+              std::make_index_sequence<FieldInfo::Size>());
   }
 
   template <typename V, typename W,

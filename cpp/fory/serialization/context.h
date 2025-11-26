@@ -135,9 +135,6 @@ public:
     }
   }
 
-  Result<void, Error> write_enum_type_info(const std::type_index &type,
-                                           uint32_t base_type_id);
-
   uint8_t resolve_enum_type_tag(const std::type_index &type,
                                 uint8_t default_tag) const;
 
@@ -203,6 +200,10 @@ public:
   Result<const TypeInfo *, Error>
   write_any_typeinfo(uint32_t fory_type_id,
                      const std::type_index &concrete_type_id);
+
+  /// Write type info for a registered enum type.
+  /// Looks up the type info and delegates to write_any_typeinfo.
+  Result<void, Error> write_enum_typeinfo(const std::type_index &type);
 
   /// Reset context for reuse.
   void reset();

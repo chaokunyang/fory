@@ -27,6 +27,68 @@ namespace fory {
 namespace serialization {
 
 // ============================================================================
+// Meta String Encoding Constants (shared between encoder and writer)
+// ============================================================================
+
+static constexpr uint32_t kSmallStringThreshold = 16;
+
+// Package/namespace encoder: dots and underscores as special chars
+static const MetaStringEncoder kNamespaceEncoder('.', '_');
+
+// Type name encoder: dollar sign and underscores as special chars
+static const MetaStringEncoder kTypeNameEncoder('$', '_');
+
+// Allowed encodings for package/namespace (same as Java's pkgEncodings)
+static const std::vector<MetaEncoding> kPkgEncodings = {
+    MetaEncoding::UTF8, MetaEncoding::ALL_TO_LOWER_SPECIAL,
+    MetaEncoding::LOWER_UPPER_DIGIT_SPECIAL};
+
+// Allowed encodings for type name (same as Java's typeNameEncodings)
+static const std::vector<MetaEncoding> kTypeNameEncodings = {
+    MetaEncoding::UTF8, MetaEncoding::ALL_TO_LOWER_SPECIAL,
+    MetaEncoding::LOWER_UPPER_DIGIT_SPECIAL,
+    MetaEncoding::FIRST_TO_LOWER_SPECIAL};
+
+// ============================================================================
+// encode_meta_string - Pre-encode meta strings during registration
+// ============================================================================
+
+Result<std::shared_ptr<CachedMetaString>, Error>
+encode_meta_string(const std::string &value, bool is_namespace) {
+  auto result = std::make_shared<CachedMetaString>();
+  result->original = value;
+
+  if (value.empty()) {
+    result->bytes.clear();
+    result->encoding = static_cast<uint8_t>(MetaEncoding::UTF8);
+    result->hash = 0;
+    return result;
+  }
+
+  // Choose encoder and encodings based on whether this is namespace or type
+  // name
+  const auto &encoder = is_namespace ? kNamespaceEncoder : kTypeNameEncoder;
+  const auto &encodings = is_namespace ? kPkgEncodings : kTypeNameEncodings;
+
+  // Encode the string
+  FORY_TRY(encoded, encoder.encode(value, encodings));
+  result->bytes = std::move(encoded.bytes);
+  result->encoding = static_cast<uint8_t>(encoded.encoding);
+
+  // Pre-compute hash for large strings (>16 bytes)
+  if (result->bytes.size() > kSmallStringThreshold) {
+    int64_t hash_out[2] = {0, 0};
+    MurmurHash3_x64_128(result->bytes.data(),
+                        static_cast<int>(result->bytes.size()), 47, hash_out);
+    result->hash = hash_out[0];
+  } else {
+    result->hash = 0;
+  }
+
+  return result;
+}
+
+// ============================================================================
 // WriteContext Implementation
 // ============================================================================
 
@@ -36,32 +98,6 @@ WriteContext::WriteContext(const Config &config,
       current_depth_(0) {}
 
 WriteContext::~WriteContext() = default;
-
-Result<void, Error>
-WriteContext::write_enum_type_info(const std::type_index &type,
-                                   uint32_t base_type_id) {
-  if (!type_resolver_) {
-    buffer_.WriteVarUint32(base_type_id);
-    return Result<void, Error>();
-  }
-  auto type_info_result = type_resolver_->get_type_info(type);
-  if (type_info_result.ok()) {
-    const TypeInfo *info = type_info_result.value();
-    if (info != nullptr) {
-      bool needs_extended =
-          info->register_by_name || !is_internal_type(info->type_id);
-      if (needs_extended) {
-        auto result = write_any_typeinfo(info->type_id, type);
-        if (!result.ok()) {
-          return Unexpected(result.error());
-        }
-        return Result<void, Error>();
-      }
-    }
-  }
-  buffer_.WriteVarUint32(base_type_id);
-  return Result<void, Error>();
-}
 
 Result<size_t, Error> WriteContext::push_meta(const std::type_index &type_id) {
   auto it = write_type_id_index_map_.find(type_id);
@@ -91,6 +127,62 @@ void WriteContext::write_meta(size_t offset) {
 
 bool WriteContext::meta_empty() const { return write_type_defs_.empty(); }
 
+/// Write pre-encoded meta string to buffer (avoids re-encoding on each write)
+static void write_encoded_meta_string(Buffer &buffer,
+                                      const CachedMetaString &encoded) {
+  const uint32_t encoded_len = static_cast<uint32_t>(encoded.bytes.size());
+  uint32_t header = encoded_len << 1; // last bit 0 => new string
+  buffer.WriteVarUint32(header);
+
+  if (encoded_len > kSmallStringThreshold) {
+    // For large strings, write pre-computed hash
+    buffer.WriteInt64(encoded.hash);
+  } else {
+    // For small strings, write encoding byte
+    buffer.WriteInt8(static_cast<int8_t>(encoded.encoding));
+  }
+
+  if (encoded_len > 0) {
+    buffer.WriteBytes(encoded.bytes.data(), encoded_len);
+  }
+}
+
+Result<void, Error>
+WriteContext::write_enum_typeinfo(const std::type_index &type) {
+  auto type_info_result = type_resolver_->get_type_info(type);
+  if (!type_info_result.ok()) {
+    // Enum not registered, write plain ENUM type id
+    buffer_.WriteVarUint32(static_cast<uint32_t>(TypeId::ENUM));
+    return Result<void, Error>();
+  }
+
+  const auto &type_info = type_info_result.value();
+  uint32_t type_id = type_info->type_id;
+  uint32_t type_id_low = type_id & 0xff;
+
+  buffer_.WriteVarUint32(type_id);
+
+  if (type_id_low == static_cast<uint32_t>(TypeId::NAMED_ENUM)) {
+    if (config_->compatible) {
+      // Write meta_index
+      FORY_TRY(meta_index, push_meta(type));
+      buffer_.WriteVarUint32(static_cast<uint32_t>(meta_index));
+    } else {
+      // Write pre-encoded namespace and type_name
+      if (type_info->encoded_namespace && type_info->encoded_type_name) {
+        write_encoded_meta_string(buffer_, *type_info->encoded_namespace);
+        write_encoded_meta_string(buffer_, *type_info->encoded_type_name);
+      } else {
+        return Unexpected(
+            Error::invalid("Encoded meta strings not initialized for enum"));
+      }
+    }
+  }
+  // For plain ENUM, just writing type_id is sufficient
+
+  return Result<void, Error>();
+}
+
 Result<const TypeInfo *, Error>
 WriteContext::write_any_typeinfo(uint32_t fory_type_id,
                                  const std::type_index &concrete_type_id) {
@@ -108,8 +200,6 @@ WriteContext::write_any_typeinfo(uint32_t fory_type_id,
   // Get type info for the concrete type
   FORY_TRY(type_info, type_resolver_->get_type_info(concrete_type_id));
   uint32_t type_id = type_info->type_id;
-  const std::string &namespace_name = type_info->namespace_name;
-  const std::string &type_name = type_info->type_name;
 
   // Write type_id
   buffer_.WriteVarUint32(type_id);
@@ -132,61 +222,14 @@ WriteContext::write_any_typeinfo(uint32_t fory_type_id,
       FORY_TRY(meta_index, push_meta(concrete_type_id));
       buffer_.WriteVarUint32(static_cast<uint32_t>(meta_index));
     } else {
-      // Write namespace and type_name using the same format as Java's
-      // MetaStringResolver#writeMetaStringBytes (without dynamic reuse).
-      static constexpr uint32_t kSmallStringThreshold = 16;
-
-      // Create encoders matching Java's PACKAGE_ENCODER ('.', '_') for
-      // namespace and TYPE_NAME_ENCODER ('$', '_') for type names.
-      static const MetaStringEncoder kNamespaceEncoder('.', '_');
-      static const MetaStringEncoder kTypeNameEncoder('$', '_');
-
-      // Java encoding restrictions (from Encoders.java):
-      // pkgEncodings = {UTF_8, ALL_TO_LOWER_SPECIAL, LOWER_UPPER_DIGIT_SPECIAL}
-      // typeNameEncodings = {UTF_8, ALL_TO_LOWER_SPECIAL,
-      // LOWER_UPPER_DIGIT_SPECIAL, FIRST_TO_LOWER_SPECIAL} Note: LOWER_SPECIAL
-      // is NOT allowed for either!
-      static const std::vector<MetaEncoding> kPkgEncodings = {
-          MetaEncoding::UTF8, MetaEncoding::ALL_TO_LOWER_SPECIAL,
-          MetaEncoding::LOWER_UPPER_DIGIT_SPECIAL};
-      static const std::vector<MetaEncoding> kTypeNameEncodings = {
-          MetaEncoding::UTF8, MetaEncoding::ALL_TO_LOWER_SPECIAL,
-          MetaEncoding::LOWER_UPPER_DIGIT_SPECIAL,
-          MetaEncoding::FIRST_TO_LOWER_SPECIAL};
-
-      auto write_meta_string =
-          [this](const std::string &value, const MetaStringEncoder &encoder,
-                 const std::vector<MetaEncoding> &encodings)
-          -> Result<void, Error> {
-        // Encode the string first using allowed encodings
-        FORY_TRY(encoded, encoder.encode(value, encodings));
-        const uint32_t encoded_len =
-            static_cast<uint32_t>(encoded.bytes.size());
-        uint32_t header = encoded_len << 1; // last bit 0 => new string
-        buffer_.WriteVarUint32(header);
-
-        if (encoded_len > kSmallStringThreshold) {
-          // For strings > 16 bytes, write hashCode (int64) instead of encoding
-          int64_t hash_out[2] = {0, 0};
-          MurmurHash3_x64_128(encoded.bytes.data(),
-                              static_cast<int>(encoded.bytes.size()), 47,
-                              hash_out);
-          buffer_.WriteInt64(hash_out[0]);
-        } else {
-          // For strings <= 16 bytes, write encoding byte
-          buffer_.WriteInt8(static_cast<int8_t>(encoded.encoding));
-        }
-
-        if (encoded_len > 0) {
-          buffer_.WriteBytes(encoded.bytes.data(), encoded_len);
-        }
-        return Result<void, Error>();
-      };
-
-      FORY_RETURN_NOT_OK(
-          write_meta_string(namespace_name, kNamespaceEncoder, kPkgEncodings));
-      FORY_RETURN_NOT_OK(
-          write_meta_string(type_name, kTypeNameEncoder, kTypeNameEncodings));
+      // Write pre-encoded namespace and type_name
+      if (type_info->encoded_namespace && type_info->encoded_type_name) {
+        write_encoded_meta_string(buffer_, *type_info->encoded_namespace);
+        write_encoded_meta_string(buffer_, *type_info->encoded_type_name);
+      } else {
+        return Unexpected(
+            Error::invalid("Encoded meta strings not initialized for type"));
+      }
     }
     break;
   }

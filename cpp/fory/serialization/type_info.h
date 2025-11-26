@@ -83,6 +83,19 @@ struct Harness {
 // TypeInfo - Type metadata and serialization information
 // ============================================================================
 
+/// CachedMetaString holds the pre-encoded form of a meta string
+/// for efficient writing without re-encoding on each serialization.
+/// This extends EncodedMetaString (from meta_string.h) with additional
+/// cached data like the original string and pre-computed hash.
+struct CachedMetaString {
+  std::string original;       // Original string value
+  std::vector<uint8_t> bytes; // Encoded bytes
+  uint8_t encoding;           // Encoding type (MetaEncoding)
+  int64_t hash;               // MurmurHash3 for large strings (>16 bytes)
+
+  CachedMetaString() : encoding(0), hash(0) {}
+};
+
 /// TypeInfo holds metadata about a type for serialization purposes.
 /// This is used by read_any_typeinfo() and write_any_typeinfo() to track
 /// type information across language boundaries (xlang serialization).
@@ -97,6 +110,10 @@ struct TypeInfo {
   std::unordered_map<std::string, size_t> name_to_index;
   std::vector<uint8_t> type_def;
   Harness harness;
+  // Pre-encoded meta strings for efficient writing (avoids re-encoding on each
+  // write)
+  std::shared_ptr<CachedMetaString> encoded_namespace;
+  std::shared_ptr<CachedMetaString> encoded_type_name;
 };
 
 } // namespace serialization

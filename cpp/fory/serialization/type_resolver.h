@@ -380,6 +380,15 @@ std::vector<FieldInfo> build_field_infos(std::index_sequence<Indices...>) {
 } // namespace detail
 
 // ============================================================================
+// Helper function to encode meta strings at registration time
+// ============================================================================
+
+/// Encode a meta string for namespace or type_name using the appropriate
+/// encoder. This is called during registration to pre-compute the encoded form.
+Result<std::shared_ptr<CachedMetaString>, Error>
+encode_meta_string(const std::string &value, bool is_namespace);
+
+// ============================================================================
 // TypeResolver - central registry for type metadata and configuration
 // ============================================================================
 // Note: Harness and TypeInfo are defined in type_info.h (included via
@@ -886,6 +895,12 @@ TypeResolver::build_struct_type_info(uint32_t type_id, std::string ns,
   entry->type_meta = std::move(parsed_meta);
   entry->harness = make_struct_harness<T>();
 
+  // Pre-encode namespace and type_name for efficient writing
+  FORY_TRY(enc_ns, encode_meta_string(entry->namespace_name, true));
+  entry->encoded_namespace = std::move(enc_ns);
+  FORY_TRY(enc_tn, encode_meta_string(entry->type_name, false));
+  entry->encoded_type_name = std::move(enc_tn);
+
   return entry;
 }
 
@@ -923,6 +938,12 @@ TypeResolver::build_enum_type_info(uint32_t type_id, std::string ns,
     return Unexpected(Error::invalid("Harness for enum type is incomplete"));
   }
 
+  // Pre-encode namespace and type_name for efficient writing
+  FORY_TRY(enc_ns, encode_meta_string(entry->namespace_name, true));
+  entry->encoded_namespace = std::move(enc_ns);
+  FORY_TRY(enc_tn, encode_meta_string(entry->type_name, false));
+  entry->encoded_type_name = std::move(enc_tn);
+
   return entry;
 }
 
@@ -943,6 +964,13 @@ TypeResolver::build_ext_type_info(uint32_t type_id, std::string ns,
     return Unexpected(
         Error::invalid("Harness for external type is incomplete"));
   }
+
+  // Pre-encode namespace and type_name for efficient writing
+  FORY_TRY(enc_ns, encode_meta_string(entry->namespace_name, true));
+  entry->encoded_namespace = std::move(enc_ns);
+  FORY_TRY(enc_tn, encode_meta_string(entry->type_name, false));
+  entry->encoded_type_name = std::move(enc_tn);
+
   return entry;
 }
 

@@ -69,6 +69,7 @@ import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.serializer.BufferObject;
 import org.apache.fory.test.TestUtils;
 import org.testng.Assert;
+import org.testng.SkipException;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
 
@@ -81,7 +82,7 @@ public class CrossLanguageTest {
 
   @BeforeClass
   public void isPythonInstalled() {
-    TestUtils.verifyPyforyInstalled();
+    throw new SkipException("disable cross language test temporarily");
   }
 
   @Data

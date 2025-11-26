@@ -21,6 +21,7 @@
 
 #include "fory/util/buffer.h"
 
+#include <algorithm>
 #include <cctype>
 
 namespace fory {
@@ -99,11 +100,12 @@ MetaStringDecoder::decode_lower_special(const uint8_t *data, size_t len) const {
       if (byte_index + 1 < len) {
         two_bytes |= data[byte_index + 1];
       }
-      char_value = (static_cast<size_t>(two_bytes) >>
-                    (11 - intra_byte_index)) & bit_mask;
+      char_value = (static_cast<size_t>(two_bytes) >> (11 - intra_byte_index)) &
+                   bit_mask;
     } else {
-      char_value = (static_cast<size_t>(data[byte_index]) >>
-                    (3 - intra_byte_index)) & bit_mask;
+      char_value =
+          (static_cast<size_t>(data[byte_index]) >> (3 - intra_byte_index)) &
+          bit_mask;
     }
     bit_index += 5;
     FORY_TRY(ch, decode_lower_special_char(static_cast<uint8_t>(char_value)));
@@ -112,8 +114,9 @@ MetaStringDecoder::decode_lower_special(const uint8_t *data, size_t len) const {
   return decoded;
 }
 
-Result<std::string, Error> MetaStringDecoder::decode_lower_upper_digit_special(
-    const uint8_t *data, size_t len) const {
+Result<std::string, Error>
+MetaStringDecoder::decode_lower_upper_digit_special(const uint8_t *data,
+                                                    size_t len) const {
   std::string decoded;
   if (len == 0) {
     return decoded;
@@ -133,22 +136,24 @@ Result<std::string, Error> MetaStringDecoder::decode_lower_upper_digit_special(
       if (byte_index + 1 < len) {
         two_bytes |= data[byte_index + 1];
       }
-      char_value = (static_cast<size_t>(two_bytes) >>
-                    (10 - intra_byte_index)) & bit_mask;
+      char_value = (static_cast<size_t>(two_bytes) >> (10 - intra_byte_index)) &
+                   bit_mask;
     } else {
-      char_value = (static_cast<size_t>(data[byte_index]) >>
-                    (2 - intra_byte_index)) & bit_mask;
+      char_value =
+          (static_cast<size_t>(data[byte_index]) >> (2 - intra_byte_index)) &
+          bit_mask;
     }
     bit_index += 6;
-    FORY_TRY(ch,
-             decode_lower_upper_digit_special_char(static_cast<uint8_t>(char_value)));
+    FORY_TRY(ch, decode_lower_upper_digit_special_char(
+                     static_cast<uint8_t>(char_value)));
     decoded.push_back(ch);
   }
   return decoded;
 }
 
-Result<std::string, Error> MetaStringDecoder::decode_rep_first_lower_special(
-    const uint8_t *data, size_t len) const {
+Result<std::string, Error>
+MetaStringDecoder::decode_rep_first_lower_special(const uint8_t *data,
+                                                  size_t len) const {
   FORY_TRY(base, decode_lower_special(data, len));
   if (base.empty()) {
     return base;
@@ -162,8 +167,9 @@ Result<std::string, Error> MetaStringDecoder::decode_rep_first_lower_special(
   return result;
 }
 
-Result<std::string, Error> MetaStringDecoder::decode_rep_all_to_lower_special(
-    const uint8_t *data, size_t len) const {
+Result<std::string, Error>
+MetaStringDecoder::decode_rep_all_to_lower_special(const uint8_t *data,
+                                                   size_t len) const {
   FORY_TRY(base, decode_lower_special(data, len));
   std::string result;
   result.reserve(base.size());
@@ -229,8 +235,7 @@ MetaStringDecoder::decode_lower_upper_digit_special_char(uint8_t value) const {
 MetaStringTable::MetaStringTable() = default;
 
 Result<std::string, Error>
-MetaStringTable::read_string(Buffer &buffer,
-                             const MetaStringDecoder &decoder) {
+MetaStringTable::read_string(Buffer &buffer, const MetaStringDecoder &decoder) {
   // Header is encoded with VarUint32Small7 on Java side, but wire
   // format is still standard varuint32.
   FORY_TRY(header, buffer.ReadVarUint32());
@@ -270,8 +275,8 @@ MetaStringTable::read_string(Buffer &buffer,
     uint8_t enc_byte = static_cast<uint8_t>(enc_byte_res);
     if (len == 0) {
       if (enc_byte != 0) {
-        return Unexpected(Error::encoding_error(
-            "Empty meta string must use UTF8 encoding"));
+        return Unexpected(
+            Error::encoding_error("Empty meta string must use UTF8 encoding"));
       }
       encoding = MetaEncoding::UTF8;
     } else {
@@ -309,9 +314,9 @@ Result<MetaEncoding, Error> ToMetaEncoding(uint8_t value) {
   case 0x04:
     return MetaEncoding::ALL_TO_LOWER_SPECIAL;
   default:
-    return Unexpected(Error::encoding_error(
-        "Unsupported meta string encoding value: " +
-        std::to_string(static_cast<int>(value))));
+    return Unexpected(
+        Error::encoding_error("Unsupported meta string encoding value: " +
+                              std::to_string(static_cast<int>(value))));
   }
 }
 
@@ -336,8 +341,8 @@ MetaStringEncoder::compute_statistics(const std::string &input) const {
     }
     // Check if can_lower_special_encoded
     if (stats.can_lower_special_encoded) {
-      bool is_valid = std::islower(static_cast<unsigned char>(c)) ||
-                      c == '.' || c == '_' || c == '$' || c == '|';
+      bool is_valid = std::islower(static_cast<unsigned char>(c)) || c == '.' ||
+                      c == '_' || c == '$' || c == '|';
       if (!is_valid) {
         stats.can_lower_special_encoded = false;
       }
@@ -459,8 +464,8 @@ MetaStringEncoder::encode_lower_special(const std::string &input) const {
   return bytes;
 }
 
-std::vector<uint8_t>
-MetaStringEncoder::encode_lower_upper_digit_special(const std::string &input) const {
+std::vector<uint8_t> MetaStringEncoder::encode_lower_upper_digit_special(
+    const std::string &input) const {
   const int bits_per_char = 6;
   size_t total_bits = input.size() * bits_per_char + 1;
   size_t byte_length = (total_bits + 7) / 8;
@@ -487,14 +492,15 @@ MetaStringEncoder::encode_lower_upper_digit_special(const std::string &input) co
   return bytes;
 }
 
-std::vector<uint8_t>
-MetaStringEncoder::encode_first_to_lower_special(const std::string &input) const {
+std::vector<uint8_t> MetaStringEncoder::encode_first_to_lower_special(
+    const std::string &input) const {
   if (input.empty()) {
     return encode_lower_special("");
   }
 
   std::string modified = input;
-  modified[0] = static_cast<char>(std::tolower(static_cast<unsigned char>(modified[0])));
+  modified[0] =
+      static_cast<char>(std::tolower(static_cast<unsigned char>(modified[0])));
   return encode_lower_special(modified);
 }
 

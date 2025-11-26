@@ -45,8 +45,8 @@ using ::fory::Result;
 using ::fory::serialization::Fory;
 using ::fory::serialization::ForyBuilder;
 using ::fory::serialization::LocalDate;
-using ::fory::serialization::Timestamp;
 using ::fory::serialization::Serializer;
+using ::fory::serialization::Timestamp;
 
 [[noreturn]] void Fail(const std::string &message) {
   throw std::runtime_error(message);
@@ -101,7 +101,8 @@ void WriteFile(const std::string &path, const std::vector<uint8_t> &data) {
                static_cast<std::streamsize>(data.size()));
   output.flush();
   output.close();
-  std::cerr << "[WriteFile] Wrote " << data.size() << " bytes to " << path << std::endl;
+  std::cerr << "[WriteFile] Wrote " << data.size() << " bytes to " << path
+            << std::endl;
 }
 
 // ---------------------------------------------------------------------------
@@ -125,8 +126,8 @@ struct SimpleStruct {
   Color f5;
   std::vector<std::optional<std::string>> f6;
   int32_t f7;
-  int32_t f8;  // Changed from optional to match Rust
-  int32_t last;  // Changed from optional to match Rust
+  int32_t f8;   // Changed from optional to match Rust
+  int32_t last; // Changed from optional to match Rust
   bool operator==(const SimpleStruct &other) const {
     return f1 == other.f1 && f2 == other.f2 && f3 == other.f3 &&
            f4 == other.f4 && f5 == other.f5 && f6 == other.f6 &&
@@ -255,9 +256,8 @@ template <> struct Serializer<MyExt> {
     return Serializer<int32_t>::write_data(value.id, ctx);
   }
 
-  static Result<void, Error> write_data_generic(const MyExt &value,
-                                                WriteContext &ctx,
-                                                bool has_generics) {
+  static Result<void, Error>
+  write_data_generic(const MyExt &value, WriteContext &ctx, bool has_generics) {
     (void)has_generics;
     return write_data(value, ctx);
   }
@@ -288,15 +288,15 @@ template <> struct Serializer<MyExt> {
     return value;
   }
 
-  static Result<MyExt, Error>
-  read_data_generic(ReadContext &ctx, bool has_generics) {
+  static Result<MyExt, Error> read_data_generic(ReadContext &ctx,
+                                                bool has_generics) {
     (void)has_generics;
     return read_data(ctx);
   }
 
-  static Result<MyExt, Error>
-  read_with_type_info(ReadContext &ctx, bool read_ref,
-                      const TypeInfo &type_info) {
+  static Result<MyExt, Error> read_with_type_info(ReadContext &ctx,
+                                                  bool read_ref,
+                                                  const TypeInfo &type_info) {
     (void)type_info;
     return read(ctx, read_ref, false);
   }
@@ -724,7 +724,8 @@ void RunTestCrossLanguageSerializer(const std::string &data_file) {
   expect_bool(false);
 
   int32_t v1 = ReadNext<int32_t>(fory, buffer);
-  if (v1 != -1) Fail("int32 -1 mismatch, got: " + std::to_string(v1));
+  if (v1 != -1)
+    Fail("int32 -1 mismatch, got: " + std::to_string(v1));
 
   int8_t v2 = ReadNext<int8_t>(fory, buffer);
   if (v2 != std::numeric_limits<int8_t>::max())
@@ -870,11 +871,10 @@ void RunTestSimpleStruct(const std::string &data_file) {
   RegisterBasicStructs(fory);
 #ifdef FORY_DEBUG
   {
-    const auto &local_meta =
-        fory.type_resolver().struct_meta<SimpleStruct>();
+    const auto &local_meta = fory.type_resolver().struct_meta<SimpleStruct>();
     const auto &fields = local_meta.get_field_infos();
-    std::cerr << "[xlang][local_meta] SimpleStruct fields="
-              << fields.size() << std::endl;
+    std::cerr << "[xlang][local_meta] SimpleStruct fields=" << fields.size()
+              << std::endl;
     for (const auto &f : fields) {
       std::cerr << "  local field_id=" << f.field_id
                 << ", name=" << f.field_name
@@ -891,17 +891,20 @@ void RunTestSimpleStruct(const std::string &data_file) {
   }
   // Print sorted field order
   {
-    using Helpers = fory::serialization::detail::CompileTimeFieldHelpers<SimpleStruct>;
+    using Helpers =
+        fory::serialization::detail::CompileTimeFieldHelpers<SimpleStruct>;
     std::cerr << "[C++ DEBUG] SimpleStruct sorted field indices: ";
     for (size_t i = 0; i < Helpers::FieldCount; ++i) {
       std::cerr << Helpers::sorted_indices[i];
-      if (i < Helpers::FieldCount - 1) std::cerr << ", ";
+      if (i < Helpers::FieldCount - 1)
+        std::cerr << ", ";
     }
     std::cerr << std::endl;
     std::cerr << "[C++ DEBUG] SimpleStruct sorted field names: ";
     for (size_t i = 0; i < Helpers::FieldCount; ++i) {
       std::cerr << Helpers::sorted_field_names[i];
-      if (i < Helpers::FieldCount - 1) std::cerr << ", ";
+      if (i < Helpers::FieldCount - 1)
+        std::cerr << ", ";
     }
     std::cerr << std::endl;
   }
@@ -910,7 +913,8 @@ void RunTestSimpleStruct(const std::string &data_file) {
   // Dump output bytes for debugging
   std::cerr << "[C++ WRITE] SimpleStruct output (" << out.size() << " bytes): ";
   for (size_t i = 0; i < std::min(out.size(), size_t(120)); ++i) {
-    std::cerr << std::hex << std::setw(2) << std::setfill('0') << (int)out[i] << " ";
+    std::cerr << std::hex << std::setw(2) << std::setfill('0') << (int)out[i]
+              << " ";
   }
   std::cerr << std::dec << std::endl;
   WriteFile(data_file, out);
@@ -1033,14 +1037,10 @@ void RunTestInteger(const std::string &data_file) {
   std::cerr << "[test_integer] after Item1 reader_index="
             << buffer.reader_index() << std::endl;
   std::cerr << "[test_integer] item_value.f1=" << item_value.f1
-            << ", f2="
-            << (item_value.f2 ? *item_value.f2 : -1)
-            << ", f3="
-            << (item_value.f3 ? *item_value.f3 : -1)
-            << ", f4=" << item_value.f4
-            << ", f5=" << item_value.f5
-            << ", f6_has=" << (item_value.f6.has_value() ? 1 : 0)
-            << std::endl;
+            << ", f2=" << (item_value.f2 ? *item_value.f2 : -1)
+            << ", f3=" << (item_value.f3 ? *item_value.f3 : -1)
+            << ", f4=" << item_value.f4 << ", f5=" << item_value.f5
+            << ", f6_has=" << (item_value.f6.has_value() ? 1 : 0) << std::endl;
   if (!(item_value == expected)) {
     Fail("Item1 mismatch");
   }
@@ -1127,12 +1127,14 @@ void RunTestStructWithList(const std::string &data_file) {
 
   std::cerr << "[C++ READ] Input bytes (" << bytes.size() << " bytes): ";
   for (size_t i = 0; i < std::min(bytes.size(), size_t(200)); ++i) {
-    std::cerr << std::hex << std::setw(2) << std::setfill('0') << (int)(uint8_t)bytes[i] << " ";
+    std::cerr << std::hex << std::setw(2) << std::setfill('0')
+              << (int)(uint8_t)bytes[i] << " ";
   }
   std::cerr << std::dec << std::endl;
 
   auto fory = BuildFory(true, true);
-  EnsureOk(fory.register_struct<StructWithList>(201), "register StructWithList");
+  EnsureOk(fory.register_struct<StructWithList>(201),
+           "register StructWithList");
 
   Buffer buffer = MakeBuffer(bytes);
 
@@ -1144,14 +1146,16 @@ void RunTestStructWithList(const std::string &data_file) {
 
   std::cerr << "[C++ READ] Attempting to read struct 1..." << std::endl;
   StructWithList struct1 = ReadNext<StructWithList>(fory, buffer);
-  std::cerr << "[C++ READ] Struct 1 items size: " << struct1.items.size() << std::endl;
+  std::cerr << "[C++ READ] Struct 1 items size: " << struct1.items.size()
+            << std::endl;
   if (!(struct1 == expected1)) {
     Fail("StructWithList 1 mismatch");
   }
 
   std::cerr << "[C++ READ] Attempting to read struct 2..." << std::endl;
   StructWithList struct2 = ReadNext<StructWithList>(fory, buffer);
-  std::cerr << "[C++ READ] Struct 2 items size: " << struct2.items.size() << std::endl;
+  std::cerr << "[C++ READ] Struct 2 items size: " << struct2.items.size()
+            << std::endl;
   if (!(struct2 == expected2)) {
     Fail("StructWithList 2 mismatch");
   }
@@ -1161,13 +1165,15 @@ void RunTestStructWithList(const std::string &data_file) {
 
   std::cerr << "[C++ WRITE] After struct 1 (" << out.size() << " bytes): ";
   for (size_t i = 0; i < std::min(out.size(), size_t(100)); ++i) {
-    std::cerr << std::hex << std::setw(2) << std::setfill('0') << (int)(uint8_t)out[i] << " ";
+    std::cerr << std::hex << std::setw(2) << std::setfill('0')
+              << (int)(uint8_t)out[i] << " ";
   }
   std::cerr << std::dec << std::endl;
 
   AppendSerialized(fory, expected2, out);
 
-  std::cerr << "[C++ WRITE] After struct 2 (total " << out.size() << " bytes)" << std::endl;
+  std::cerr << "[C++ WRITE] After struct 2 (total " << out.size() << " bytes)"
+            << std::endl;
 
   WriteFile(data_file, out);
 }
@@ -1180,14 +1186,12 @@ void RunTestStructWithMap(const std::string &data_file) {
   Buffer buffer = MakeBuffer(bytes);
 
   StructWithMap expected1;
-  expected1.data = {
-      {std::string("key1"), std::string("value1")},
-      {std::string("key2"), std::string("value2")}};
+  expected1.data = {{std::string("key1"), std::string("value1")},
+                    {std::string("key2"), std::string("value2")}};
 
   StructWithMap expected2;
-  expected2.data = {
-      {std::string("k1"), std::nullopt},
-      {std::nullopt, std::string("v2")}};
+  expected2.data = {{std::string("k1"), std::nullopt},
+                    {std::nullopt, std::string("v2")}};
 
   StructWithMap struct1 = ReadNext<StructWithMap>(fory, buffer);
   if (!(struct1 == expected1)) {
@@ -1276,7 +1280,6 @@ void RunTestConsistentNamed(const std::string &data_file) {
   EnsureOk(fory.register_extension_type<MyExt>("my_ext"),
            "register named MyExt");
 
-
   MyStruct my_struct(42);
   MyExt my_ext{43};
 
@@ -1303,7 +1306,8 @@ void RunTestConsistentNamed(const std::string &data_file) {
   }
   std::cerr << "[C++ WRITE] After 3 colors (" << out.size() << " bytes): ";
   for (size_t i = 0; i < std::min(out.size(), size_t(80)); ++i) {
-    std::cerr << std::hex << std::setw(2) << std::setfill('0') << (int)(uint8_t)out[i] << " ";
+    std::cerr << std::hex << std::setw(2) << std::setfill('0')
+              << (int)(uint8_t)out[i] << " ";
   }
   std::cerr << std::dec << std::endl;
   for (int i = 0; i < 3; ++i) {
@@ -1314,7 +1318,8 @@ void RunTestConsistentNamed(const std::string &data_file) {
   }
   std::cerr << "[C++ WRITE] Total (" << out.size() << " bytes): ";
   for (size_t i = 0; i < std::min(out.size(), size_t(200)); ++i) {
-    std::cerr << std::hex << std::setw(2) << std::setfill('0') << (int)(uint8_t)out[i] << " ";
+    std::cerr << std::hex << std::setw(2) << std::setfill('0')
+              << (int)(uint8_t)out[i] << " ";
   }
   std::cerr << std::dec << std::endl;
   WriteFile(data_file, out);

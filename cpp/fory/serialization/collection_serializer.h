@@ -107,17 +107,6 @@ struct CollectionHeader {
 };
 
 // ============================================================================
-// Helper for writing element type info
-// ============================================================================
-
-/// Write type info for an element type. Delegates to
-/// Serializer<T>::write_type_info.
-template <typename T>
-inline Result<void, Error> write_element_type_info(WriteContext &ctx) {
-  return Serializer<T>::write_type_info(ctx);
-}
-
-// ============================================================================
 // std::vector serializer
 // ============================================================================
 
@@ -408,9 +397,9 @@ struct Serializer<
         // Write type info for element type
         if constexpr (is_optional_v<T>) {
           using Inner = typename T::value_type;
-          FORY_RETURN_NOT_OK(write_element_type_info<Inner>(ctx));
+          FORY_RETURN_NOT_OK(Serializer<Inner>::write_type_info(ctx));
         } else {
-          FORY_RETURN_NOT_OK(write_element_type_info<T>(ctx));
+          FORY_RETURN_NOT_OK(Serializer<T>::write_type_info(ctx));
         }
       }
 
@@ -509,9 +498,9 @@ struct Serializer<
     if (!is_elem_declared) {
       if constexpr (is_optional_v<T>) {
         using Inner = typename T::value_type;
-        FORY_RETURN_NOT_OK(write_element_type_info<Inner>(ctx));
+        FORY_RETURN_NOT_OK(Serializer<Inner>::write_type_info(ctx));
       } else {
-        FORY_RETURN_NOT_OK(write_element_type_info<T>(ctx));
+        FORY_RETURN_NOT_OK(Serializer<T>::write_type_info(ctx));
       }
     }
 
@@ -737,7 +726,7 @@ struct Serializer<std::set<T, Args...>> {
     // !is_elem_declared
     if ((bitmap & 0b1000) &&
         !(bitmap & 0b0100)) { // IS_SAME_TYPE && !IS_DECL_ELEMENT_TYPE
-      FORY_RETURN_NOT_OK(write_element_type_info<T>(ctx));
+      FORY_RETURN_NOT_OK(Serializer<T>::write_type_info(ctx));
     }
 
     // Write elements
@@ -792,7 +781,7 @@ struct Serializer<std::set<T, Args...>> {
 
     // Write element type info only if !IS_DECL_ELEMENT_TYPE
     if (!is_elem_declared) {
-      FORY_RETURN_NOT_OK(write_element_type_info<T>(ctx));
+      FORY_RETURN_NOT_OK(Serializer<T>::write_type_info(ctx));
     }
 
     // Write elements
@@ -966,7 +955,7 @@ struct Serializer<std::unordered_set<T, Args...>> {
     // !is_elem_declared
     if ((bitmap & 0b1000) &&
         !(bitmap & 0b0100)) { // IS_SAME_TYPE && !IS_DECL_ELEMENT_TYPE
-      FORY_RETURN_NOT_OK(write_element_type_info<T>(ctx));
+      FORY_RETURN_NOT_OK(Serializer<T>::write_type_info(ctx));
     }
 
     // Write elements
@@ -1021,7 +1010,7 @@ struct Serializer<std::unordered_set<T, Args...>> {
 
     // Write element type info only if !IS_DECL_ELEMENT_TYPE
     if (!is_elem_declared) {
-      FORY_RETURN_NOT_OK(write_element_type_info<T>(ctx));
+      FORY_RETURN_NOT_OK(Serializer<T>::write_type_info(ctx));
     }
 
     // Write elements

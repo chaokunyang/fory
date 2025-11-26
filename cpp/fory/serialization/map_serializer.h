@@ -580,8 +580,6 @@ inline Result<MapType, Error> read_map_data_slow(ReadContext &ctx,
   constexpr bool val_is_polymorphic = is_polymorphic_v<V>;
   constexpr bool key_is_shared_ref = is_shared_ref_v<K>;
   constexpr bool val_is_shared_ref = is_shared_ref_v<V>;
-  constexpr bool key_needs_ref = requires_ref_metadata_v<K>;
-  constexpr bool val_needs_ref = requires_ref_metadata_v<V>;
 
   uint32_t len_counter = 0;
 
@@ -679,8 +677,8 @@ inline Result<MapType, Error> read_map_data_slow(ReadContext &ctx,
       // Read key data (ref flag already consumed above)
       K key;
       if constexpr (key_is_polymorphic) {
-        FORY_TRY(k, Serializer<K>::read_with_type_info(ctx, false,
-                                                       *key_type_info));
+        FORY_TRY(
+            k, Serializer<K>::read_with_type_info(ctx, false, *key_type_info));
         key = std::move(k);
       } else {
         // Read data directly - ref flag already consumed
@@ -797,10 +795,12 @@ struct Serializer<std::map<K, V, Args...>> {
     return Result<void, Error>();
   }
 
-  // Match Rust signature: fory_write(&self, context, write_ref_info, write_type_info, has_generics)
+  // Match Rust signature: fory_write(&self, context, write_ref_info,
+  // write_type_info, has_generics)
   static inline Result<void, Error> write(const std::map<K, V, Args...> &map,
                                           WriteContext &ctx, bool write_ref,
-                                          bool write_type, bool has_generics = false) {
+                                          bool write_type,
+                                          bool has_generics = false) {
     write_not_null_ref_flag(ctx, write_ref);
 
     if (write_type) {
@@ -812,7 +812,8 @@ struct Serializer<std::map<K, V, Args...>> {
       return write_data_generic(map, ctx, has_generics);
     }
 
-    // Non-xlang path: Dispatch to fast or slow path based on type characteristics
+    // Non-xlang path: Dispatch to fast or slow path based on type
+    // characteristics
     constexpr bool is_fast_path =
         !is_polymorphic_v<K> && !is_polymorphic_v<V> && !is_shared_ref_v<K> &&
         !is_shared_ref_v<V> && !requires_ref_metadata_v<K> &&

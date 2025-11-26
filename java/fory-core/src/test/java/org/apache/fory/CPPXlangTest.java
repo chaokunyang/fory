@@ -62,18 +62,15 @@ public class CPPXlangTest extends XlangTestBase {
     try {
       ensureBinaryBuilt();
     } catch (IOException e) {
-      throw new RuntimeException(
-          "Failed to build C++ peer binary: " + BAZEL_TARGET, e);
+      throw new RuntimeException("Failed to build C++ peer binary: " + BAZEL_TARGET, e);
     }
   }
 
   @Override
-  protected CommandContext buildCommandContext(String caseName, Path dataFile)
-      throws IOException {
+  protected CommandContext buildCommandContext(String caseName, Path dataFile) throws IOException {
     ensureBinaryBuilt();
     String binaryPath =
-        new File(repoRoot(), "bazel-bin/cpp/fory/serialization/xlang_test_main")
-            .getAbsolutePath();
+        new File(repoRoot(), "bazel-bin/cpp/fory/serialization/xlang_test_main").getAbsolutePath();
     List<String> command = new ArrayList<>();
     command.add(binaryPath);
     command.add("--case");
@@ -117,22 +114,20 @@ public class CPPXlangTest extends XlangTestBase {
     try {
       if (!process.waitFor(15, TimeUnit.MINUTES)) {
         process.destroyForcibly();
-        throw new IOException(
-            "Timed out while running bazel " + String.join(" ", args));
+        throw new IOException("Timed out while running bazel " + String.join(" ", args));
       }
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       throw new IOException("Interrupted while running bazel " + args[0], e);
     }
     if (process.exitValue() != 0) {
-      throw new IOException(
-          "bazel " + args[0] + " failed with exit code " + process.exitValue());
+      throw new IOException("bazel " + args[0] + " failed with exit code " + process.exitValue());
     }
   }
 
   @Test
   @Override
   public void testConsistentNamed() throws java.io.IOException {
-      super.testConsistentNamed();
+    super.testConsistentNamed();
   }
 }

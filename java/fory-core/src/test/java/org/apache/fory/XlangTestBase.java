@@ -43,7 +43,6 @@ import org.apache.fory.serializer.Serializer;
 import org.apache.fory.test.TestUtils;
 import org.apache.fory.util.MurmurHash3;
 import org.testng.Assert;
-import org.testng.SkipException;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
 
@@ -184,8 +183,7 @@ public abstract class XlangTestBase extends ForyTestBase {
     buffer.writeInt32(bytes.length);
     buffer.writeBytes(bytes);
 
-    ExecutionContext ctx =
-        prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
+    ExecutionContext ctx = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
     runPeer(ctx);
 
     buffer = readBuffer(ctx.dataFile());
@@ -292,8 +290,7 @@ public abstract class XlangTestBase extends ForyTestBase {
       buffer.writeVarInt64(value);
     }
 
-    ExecutionContext ctx =
-        prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
+    ExecutionContext ctx = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
     runPeer(ctx);
 
     buffer = readBuffer(ctx.dataFile());
@@ -327,8 +324,7 @@ public abstract class XlangTestBase extends ForyTestBase {
             .asBytes();
     buffer.writeBytes(hash2);
 
-    ExecutionContext ctx =
-        prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
+    ExecutionContext ctx = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
     runPeer(ctx);
 
     long[] longs = MurmurHash3.murmurhash3_x64_128(new byte[] {1, 2, 8}, 0, 3, 47);
@@ -357,8 +353,7 @@ public abstract class XlangTestBase extends ForyTestBase {
     for (String s : testStrings) {
       fory.serialize(buffer, s);
     }
-    ExecutionContext ctx =
-        prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
+    ExecutionContext ctx = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
     runPeer(ctx);
     buffer = readBuffer(ctx.dataFile());
     for (String expected : testStrings) {
@@ -440,7 +435,9 @@ public abstract class XlangTestBase extends ForyTestBase {
     System.err.printf("[JAVA DEBUG] Before strSet, buffer size = %d bytes%n", beforeSet);
     fory.serialize(buffer, strSet);
     int setBytes = buffer.writerIndex() - beforeSet;
-    System.err.printf("[JAVA DEBUG] After strSet, buffer size = %d bytes (set=%d bytes)%n", buffer.writerIndex(), setBytes);
+    System.err.printf(
+        "[JAVA DEBUG] After strSet, buffer size = %d bytes (set=%d bytes)%n",
+        buffer.writerIndex(), setBytes);
     // Print set bytes
     byte[] setBytesArr = buffer.getBytes(beforeSet, setBytes);
     System.err.print("[JAVA DEBUG] Set bytes: ");
@@ -452,7 +449,9 @@ public abstract class XlangTestBase extends ForyTestBase {
     System.err.printf("[JAVA DEBUG] Before strMap, buffer size = %d bytes%n", beforeMap);
     fory.serialize(buffer, strMap);
     int mapBytes = buffer.writerIndex() - beforeMap;
-    System.err.printf("[JAVA DEBUG] After strMap, buffer size = %d bytes (map=%d bytes)%n", buffer.writerIndex(), mapBytes);
+    System.err.printf(
+        "[JAVA DEBUG] After strMap, buffer size = %d bytes (map=%d bytes)%n",
+        buffer.writerIndex(), mapBytes);
     // Print map bytes
     byte[] mapBytesArr = buffer.getBytes(beforeMap, mapBytes);
     System.err.print("[JAVA DEBUG] Map bytes: ");
@@ -465,7 +464,9 @@ public abstract class XlangTestBase extends ForyTestBase {
     System.err.printf("[JAVA DEBUG] After color, buffer size = %d bytes%n", buffer.writerIndex());
     // Print bytes around strMap end
     byte[] allBytes = buffer.getBytes(0, buffer.writerIndex());
-    System.err.printf("[JAVA DEBUG] Bytes around strMap end (pos %d to %d): ", Math.max(0, strMapEnd - 20), Math.min(allBytes.length, strMapEnd + 20));
+    System.err.printf(
+        "[JAVA DEBUG] Bytes around strMap end (pos %d to %d): ",
+        Math.max(0, strMapEnd - 20), Math.min(allBytes.length, strMapEnd + 20));
     for (int i = Math.max(0, strMapEnd - 20); i < Math.min(allBytes.length, strMapEnd + 20); i++) {
       System.err.printf("%02x ", allBytes[i] & 0xff);
     }
@@ -502,8 +503,7 @@ public abstract class XlangTestBase extends ForyTestBase {
           assertStringEquals(fory.deserialize(buf), color, useToString);
         };
     function.accept(buffer, false);
-    ExecutionContext ctx =
-        prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
+    ExecutionContext ctx = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
     runPeer(ctx);
     MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
     function.accept(buffer2, true);
@@ -523,8 +523,8 @@ public abstract class XlangTestBase extends ForyTestBase {
     Color f5;
     List<String> f6;
     int f7;
-    int f8;  // Changed from Integer to int to match Rust
-    int last;  // Changed from Integer to int to match Rust
+    int f8; // Changed from Integer to int to match Rust
+    int last; // Changed from Integer to int to match Rust
   }
 
   @Test
@@ -559,8 +559,7 @@ public abstract class XlangTestBase extends ForyTestBase {
     MemoryBuffer buffer = MemoryUtils.buffer(64);
     fory.serialize(buffer, obj);
 
-    ExecutionContext ctx =
-        prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
+    ExecutionContext ctx = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
     runPeer(ctx);
     MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
     Assert.assertEquals(fory.deserialize(buffer2), obj);
@@ -598,8 +597,7 @@ public abstract class XlangTestBase extends ForyTestBase {
     MemoryBuffer buffer = MemoryUtils.buffer(64);
     fory.serialize(buffer, obj);
 
-    ExecutionContext ctx =
-        prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
+    ExecutionContext ctx = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
     runPeer(ctx);
     MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
     Assert.assertEquals(fory.deserialize(buffer2), obj);
@@ -631,8 +629,7 @@ public abstract class XlangTestBase extends ForyTestBase {
     fory.serialize(buffer, itemList);
     fory.serialize(buffer, itemList2);
 
-    ExecutionContext ctx =
-        prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
+    ExecutionContext ctx = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
     runPeer(ctx);
     MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
     Assert.assertEquals(fory.deserialize(buffer2), strList);
@@ -670,8 +667,7 @@ public abstract class XlangTestBase extends ForyTestBase {
     itemMap.put("k4", item3);
     fory.serialize(buffer, strMap);
     fory.serialize(buffer, itemMap);
-    ExecutionContext ctx =
-        prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
+    ExecutionContext ctx = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
     runPeer(ctx);
     MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
     Assert.assertEquals(fory.deserialize(buffer2), strMap);
@@ -718,8 +714,7 @@ public abstract class XlangTestBase extends ForyTestBase {
     fory.serialize(buffer, f5);
     fory.serialize(buffer, f6);
 
-    ExecutionContext ctx =
-        prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
+    ExecutionContext ctx = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
     runPeer(ctx);
 
     MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
@@ -761,8 +756,7 @@ public abstract class XlangTestBase extends ForyTestBase {
     fory.serialize(buffer, item2);
     fory.serialize(buffer, item3);
 
-    ExecutionContext ctx =
-        prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
+    ExecutionContext ctx = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
     runPeer(ctx);
 
     MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
@@ -791,8 +785,7 @@ public abstract class XlangTestBase extends ForyTestBase {
     fory.serialize(buffer, Color.Blue);
     fory.serialize(buffer, Color.White);
 
-    ExecutionContext ctx =
-        prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
+    ExecutionContext ctx = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
     runPeer(ctx);
 
     MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
@@ -893,8 +886,7 @@ public abstract class XlangTestBase extends ForyTestBase {
     System.err.println();
     System.err.println("[JAVA WRITE MAP] Total bytes: " + allBytes.length);
 
-    ExecutionContext ctx =
-        prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
+    ExecutionContext ctx = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
     runPeer(ctx);
 
     MemoryBuffer buffer2 = readBuffer(ctx.dataFile());

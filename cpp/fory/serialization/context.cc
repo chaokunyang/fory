@@ -422,11 +422,8 @@ Result<std::shared_ptr<TypeInfo>, Error> ReadContext::read_any_typeinfo() {
       return stub;
     } else {
       // Read namespace and type_name using MetaStringResolver-compatible
-      // encoding. Java uses PACKAGE_DECODER ('.', '_') for namespace and
-      // TYPE_NAME_DECODER ('$', '_') for type names.
-      static const MetaStringDecoder kNamespaceDecoder('.', '_');
-      static const MetaStringDecoder kTypeNameDecoder('$', '_');
-
+      // encoding. Uses file-scope decoders: kNamespaceDecoder ('.', '_') for
+      // namespace and kTypeNameDecoder ('$', '_') for type names.
       FORY_TRY(namespace_str,
                meta_string_table_.read_string(*buffer_, kNamespaceDecoder));
       FORY_TRY(type_name,

@@ -908,6 +908,20 @@ template <typename T, typename... Args>
 struct Serializer<std::unordered_set<T, Args...>> {
   static constexpr TypeId type_id = TypeId::SET;
 
+  static inline Result<void, Error> write_type_info(WriteContext &ctx) {
+    ctx.write_varuint32(static_cast<uint32_t>(type_id));
+    return Result<void, Error>();
+  }
+
+  static inline Result<void, Error> read_type_info(ReadContext &ctx) {
+    FORY_TRY(actual, ctx.read_typeinfo_type_id());
+    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
+      return Unexpected(
+          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
+    }
+    return Result<void, Error>();
+  }
+
   // Match Rust signature: fory_write(&self, context, write_ref_info,
   // write_type_info, has_generics)
   static inline Result<void, Error>
@@ -1057,11 +1071,12 @@ struct Serializer<std::unordered_set<T, Args...>> {
     bool is_same_type = (bitmap & 0x8u) != 0;
 
     // Read element type info if IS_SAME_TYPE is set but IS_DECL_ELEMENT_TYPE
-    // is not
+    // is not. Uses read_typeinfo_type_id() for proper handling of all type
+    // categories.
     if (is_same_type && !is_decl_type) {
-      FORY_TRY(elem_type_id, ctx.read_varuint32());
+      FORY_TRY(elem_type_id, ctx.read_typeinfo_type_id());
       uint32_t expected = static_cast<uint32_t>(Serializer<T>::type_id);
-      if (elem_type_id != expected) {
+      if (!type_id_matches(elem_type_id, expected)) {
         return Unexpected(Error::type_mismatch(elem_type_id, expected));
       }
     }

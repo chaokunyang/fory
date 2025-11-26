@@ -27,8 +27,6 @@
 #include "fory/util/string_util.h"
 #include <cstdint>
 #include <cstring>
-#include <iomanip>
-#include <iostream>
 #include <string>
 #include <type_traits>
 
@@ -49,10 +47,10 @@ template <> struct Serializer<bool> {
     return Result<void, Error>();
   }
 
-  /// Read and validate type info
+  /// Read and validate type info (primitives use read_varuint32 directly)
   static inline Result<void, Error> read_type_info(ReadContext &ctx) {
-    FORY_TRY(actual, ctx.read_typeinfo_type_id());
-    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
+    FORY_TRY(actual, ctx.read_varuint32());
+    if (actual != static_cast<uint32_t>(type_id)) {
       return Unexpected(
           Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
     }
@@ -131,8 +129,8 @@ template <> struct Serializer<int8_t> {
   }
 
   static inline Result<void, Error> read_type_info(ReadContext &ctx) {
-    FORY_TRY(actual, ctx.read_typeinfo_type_id());
-    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
+    FORY_TRY(actual, ctx.read_varuint32());
+    if (actual != static_cast<uint32_t>(type_id)) {
       return Unexpected(
           Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
     }
@@ -202,8 +200,8 @@ template <> struct Serializer<int16_t> {
   }
 
   static inline Result<void, Error> read_type_info(ReadContext &ctx) {
-    FORY_TRY(actual, ctx.read_typeinfo_type_id());
-    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
+    FORY_TRY(actual, ctx.read_varuint32());
+    if (actual != static_cast<uint32_t>(type_id)) {
       return Unexpected(
           Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
     }
@@ -277,8 +275,8 @@ template <> struct Serializer<int32_t> {
   }
 
   static inline Result<void, Error> read_type_info(ReadContext &ctx) {
-    FORY_TRY(actual, ctx.read_typeinfo_type_id());
-    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
+    FORY_TRY(actual, ctx.read_varuint32());
+    if (actual != static_cast<uint32_t>(type_id)) {
       return Unexpected(
           Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
     }
@@ -348,8 +346,8 @@ template <> struct Serializer<int64_t> {
   }
 
   static inline Result<void, Error> read_type_info(ReadContext &ctx) {
-    FORY_TRY(actual, ctx.read_typeinfo_type_id());
-    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
+    FORY_TRY(actual, ctx.read_varuint32());
+    if (actual != static_cast<uint32_t>(type_id)) {
       return Unexpected(
           Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
     }
@@ -419,8 +417,8 @@ template <> struct Serializer<float> {
   }
 
   static inline Result<void, Error> read_type_info(ReadContext &ctx) {
-    FORY_TRY(actual, ctx.read_typeinfo_type_id());
-    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
+    FORY_TRY(actual, ctx.read_varuint32());
+    if (actual != static_cast<uint32_t>(type_id)) {
       return Unexpected(
           Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
     }
@@ -493,8 +491,8 @@ template <> struct Serializer<double> {
   }
 
   static inline Result<void, Error> read_type_info(ReadContext &ctx) {
-    FORY_TRY(actual, ctx.read_typeinfo_type_id());
-    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
+    FORY_TRY(actual, ctx.read_varuint32());
+    if (actual != static_cast<uint32_t>(type_id)) {
       return Unexpected(
           Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
     }
@@ -572,8 +570,8 @@ template <> struct Serializer<uint8_t> {
   }
 
   static inline Result<void, Error> read_type_info(ReadContext &ctx) {
-    FORY_TRY(actual, ctx.read_typeinfo_type_id());
-    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
+    FORY_TRY(actual, ctx.read_varuint32());
+    if (actual != static_cast<uint32_t>(type_id)) {
       return Unexpected(
           Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
     }
@@ -643,8 +641,8 @@ template <> struct Serializer<uint16_t> {
   }
 
   static inline Result<void, Error> read_type_info(ReadContext &ctx) {
-    FORY_TRY(actual, ctx.read_typeinfo_type_id());
-    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
+    FORY_TRY(actual, ctx.read_varuint32());
+    if (actual != static_cast<uint32_t>(type_id)) {
       return Unexpected(
           Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
     }
@@ -718,8 +716,8 @@ template <> struct Serializer<uint32_t> {
   }
 
   static inline Result<void, Error> read_type_info(ReadContext &ctx) {
-    FORY_TRY(actual, ctx.read_typeinfo_type_id());
-    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
+    FORY_TRY(actual, ctx.read_varuint32());
+    if (actual != static_cast<uint32_t>(type_id)) {
       return Unexpected(
           Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
     }
@@ -793,8 +791,8 @@ template <> struct Serializer<uint64_t> {
   }
 
   static inline Result<void, Error> read_type_info(ReadContext &ctx) {
-    FORY_TRY(actual, ctx.read_typeinfo_type_id());
-    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
+    FORY_TRY(actual, ctx.read_varuint32());
+    if (actual != static_cast<uint32_t>(type_id)) {
       return Unexpected(
           Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
     }
@@ -879,8 +877,8 @@ template <> struct Serializer<std::string> {
   }
 
   static inline Result<void, Error> read_type_info(ReadContext &ctx) {
-    FORY_TRY(actual, ctx.read_typeinfo_type_id());
-    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
+    FORY_TRY(actual, ctx.read_varuint32());
+    if (actual != static_cast<uint32_t>(type_id)) {
       return Unexpected(
           Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
     }

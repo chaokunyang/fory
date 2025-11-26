@@ -49,19 +49,10 @@ constexpr uint8_t DECL_VALUE_TYPE = 0b100000;
 // Type Info Methods
 // ============================================================================
 
-// Helper to get the underlying type for optional/pointer types
-template <typename T> struct unwrap_optional { using type = T; };
-template <typename T> struct unwrap_optional<std::optional<T>> {
-  using type = T;
-};
-template <typename T>
-using unwrap_optional_t = typename unwrap_optional<T>::type;
-
-/// Write type info for a type to buffer (handles optional unwrapping).
+/// Write type info for a type to buffer.
 template <typename T>
 inline Result<void, Error> write_type_info(WriteContext &ctx) {
-  using UnwrappedT = unwrap_optional_t<T>;
-  return Serializer<UnwrappedT>::write_type_info(ctx);
+  return Serializer<T>::write_type_info(ctx);
 }
 
 /// Read and validate type info for a type from buffer.

@@ -741,8 +741,8 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
     FORY_CHECK(type_info)
         << "Type metadata not initialized for requested struct";
 
-    uint32_t type_tag = ctx.type_resolver().struct_type_tag<T>();
-    ctx.write_varuint32(type_tag);
+    uint32_t type_id = ctx.type_resolver().get_type_id<T>();
+    ctx.write_varuint32(type_id);
 
     // In compatible mode, always write meta index (matches Rust behavior)
     if (ctx.is_compatible() && type_info->type_meta) {
@@ -773,11 +773,11 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
         << "Type metadata not initialized for requested struct";
 
     if (write_type) {
-      uint32_t type_tag = ctx.type_resolver().struct_type_tag<T>();
+      uint32_t type_id = ctx.type_resolver().get_type_id<T>();
       // Use write_any_typeinfo to handle both type_id AND namespace/type_name
       // for NAMED_STRUCT, and meta_index for compatible mode
       FORY_RETURN_NOT_OK(
-          ctx.write_any_typeinfo(type_tag, std::type_index(typeid(T))));
+          ctx.write_any_typeinfo(type_id, std::type_index(typeid(T))));
     }
     return write_data_generic(obj, ctx, has_generics);
   }
@@ -841,16 +841,16 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
       if (ctx.is_compatible()) {
         // In compatible mode: always use remote TypeMeta for schema evolution
         if (read_type) {
-          // Read type_tag
-          FORY_TRY(type_tag, ctx.read_varuint32());
+          // Read type_id
+          FORY_TRY(remote_type_id, ctx.read_varuint32());
 
           // Check LOCAL type to decide if we should read meta_index (matches
           // Rust logic)
           auto local_type_info =
               ctx.type_resolver().template get_struct_type_info<T>();
-          uint32_t local_type_tag =
-              ctx.type_resolver().struct_type_tag(*local_type_info);
-          uint8_t local_type_id_low = local_type_tag & 0xff;
+          uint32_t local_type_id =
+              ctx.type_resolver().get_type_id(*local_type_info);
+          uint8_t local_type_id_low = local_type_id & 0xff;
 
           if (local_type_id_low ==
                   static_cast<uint8_t>(TypeId::COMPATIBLE_STRUCT) ||
@@ -865,8 +865,9 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
           } else {
             // Local type is not compatible struct - verify type match and read
             // data
-            if (type_tag != local_type_tag) {
-              return Unexpected(Error::type_mismatch(type_tag, local_type_tag));
+            if (remote_type_id != local_type_id) {
+              return Unexpected(
+                  Error::type_mismatch(remote_type_id, local_type_id));
             }
             return read_data(ctx);
           }
@@ -889,8 +890,8 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
               ctx.type_resolver().template get_struct_type_info<T>();
           FORY_CHECK(local_type_info && local_type_info->type_meta)
               << "Type metadata not initialized for requested struct";
-          uint32_t expected_tag =
-              ctx.type_resolver().struct_type_tag(*local_type_info);
+          uint32_t expected_type_id =
+              ctx.type_resolver().get_type_id(*local_type_info);
 
           // xlang: read full type info (id + any named metadata)
           auto type_info_result = ctx.read_any_typeinfo();
@@ -898,9 +899,10 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
             return Unexpected(type_info_result.error());
           }
           auto remote_info = type_info_result.value();
-          uint32_t remote_tag = remote_info ? remote_info->type_id : 0u;
-          if (remote_tag != expected_tag) {
-            return Unexpected(Error::type_mismatch(remote_tag, expected_tag));
+          uint32_t remote_type_id = remote_info ? remote_info->type_id : 0u;
+          if (remote_type_id != expected_type_id) {
+            return Unexpected(
+                Error::type_mismatch(remote_type_id, expected_type_id));
           }
         }
         return read_data(ctx);

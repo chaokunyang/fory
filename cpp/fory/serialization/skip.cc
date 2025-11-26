@@ -179,7 +179,7 @@ Result<void, Error> skip_map(ReadContext &ctx, const FieldType &field_type) {
 }
 
 Result<void, Error> skip_struct(ReadContext &ctx, const FieldType &field_type) {
-  // Struct fields in compatible mode are serialized with type_tag and
+  // Struct fields in compatible mode are serialized with type_id and
   // meta_index followed by field values. We use the loaded TypeMeta to
   // skip all fields for the remote struct.
 
@@ -188,9 +188,9 @@ Result<void, Error> skip_struct(ReadContext &ctx, const FieldType &field_type) {
         "Struct skipping is only supported in compatible mode"));
   }
 
-  // Read remote type_tag (ignored for now) and meta_index
-  FORY_TRY(remote_type_tag, ctx.read_varuint32());
-  (void)remote_type_tag;
+  // Read remote type_id (ignored for now) and meta_index
+  FORY_TRY(remote_type_id, ctx.read_varuint32());
+  (void)remote_type_id;
 
   FORY_TRY(meta_index, ctx.read_varuint32());
   FORY_TRY(type_info, ctx.get_type_info_by_index(meta_index));
@@ -213,7 +213,7 @@ Result<void, Error> skip_struct(ReadContext &ctx, const FieldType &field_type) {
 }
 
 Result<void, Error> skip_ext(ReadContext &ctx, const FieldType &field_type) {
-  // EXT fields in compatible mode are serialized with type_tag and meta_index
+  // EXT fields in compatible mode are serialized with type_id and meta_index
   // (for named ext) or just the user type_id (for id-based ext).
   // We look up the registered ext harness and call its read_data function.
 
@@ -229,9 +229,9 @@ Result<void, Error> skip_ext(ReadContext &ctx, const FieldType &field_type) {
   std::shared_ptr<TypeInfo> type_info;
 
   if (tid == TypeId::NAMED_EXT) {
-    // Named ext: read type_tag and meta_index
-    FORY_TRY(remote_type_tag, ctx.read_varuint32());
-    (void)remote_type_tag;
+    // Named ext: read type_id and meta_index
+    FORY_TRY(remote_type_id, ctx.read_varuint32());
+    (void)remote_type_id;
 
     FORY_TRY(meta_index, ctx.read_varuint32());
     FORY_TRY(type_info_result, ctx.get_type_info_by_index(meta_index));

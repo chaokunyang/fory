@@ -412,9 +412,9 @@ public:
 
   template <typename T> std::shared_ptr<TypeInfo> get_struct_type_info();
 
-  uint32_t struct_type_tag(const TypeInfo &info) const;
+  uint32_t get_type_id(const TypeInfo &info) const;
 
-  template <typename T> uint32_t struct_type_tag();
+  template <typename T> uint32_t get_type_id();
 
   template <typename T> Result<void, Error> register_by_id(uint32_t type_id);
 
@@ -682,7 +682,7 @@ std::shared_ptr<TypeInfo> TypeResolver::get_struct_type_info() {
   return info;
 }
 
-inline uint32_t TypeResolver::struct_type_tag(const TypeInfo &info) const {
+inline uint32_t TypeResolver::get_type_id(const TypeInfo &info) const {
   // In the xlang spec the numeric type id used on the wire for
   // structs is the "actual" type id computed by the resolver
   // (see Rust's `struct_::actual_type_id`). That value is already
@@ -703,11 +703,11 @@ inline uint32_t TypeResolver::struct_type_tag(const TypeInfo &info) const {
   return info.type_id;
 }
 
-template <typename T> uint32_t TypeResolver::struct_type_tag() {
+template <typename T> uint32_t TypeResolver::get_type_id() {
   auto info = get_struct_type_info<T>();
   FORY_CHECK(info && info->type_meta)
       << "Type metadata not initialized for requested struct";
-  return struct_type_tag(*info);
+  return get_type_id(*info);
 }
 
 template <typename T>

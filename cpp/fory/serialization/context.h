@@ -135,9 +135,6 @@ public:
     }
   }
 
-  uint8_t resolve_enum_type_tag(const std::type_index &type,
-                                uint8_t default_tag) const;
-
   /// Write uint8_t value to buffer.
   inline void write_uint8(uint8_t value) { buffer().WriteUint8(value); }
 
@@ -313,9 +310,6 @@ public:
       current_depth_--;
     }
   }
-
-  uint8_t resolve_enum_type_tag(const std::type_index &type,
-                                uint8_t default_tag) const;
 
   /// Read uint8_t value from buffer.
   inline Result<uint8_t, Error> read_uint8() { return buffer().ReadUint8(); }

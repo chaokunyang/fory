@@ -17,16 +17,19 @@
  * under the License.
  */
 
-package org.apache.fory.format.encoder;
+package org.apache.fory.format.type;
 
-import org.apache.fory.format.row.binary.BinaryArray;
-import org.apache.fory.format.type.Field;
+/** Fixed-width primitive types with known bit width. */
+public abstract class FixedWidthType extends DataType {
+  private final int bitWidth;
 
-/** Encoder to encode/decode object in the list container by toArray/fromArray row. */
-public interface ArrayEncoder<T> extends Encoder<T> {
-  Field field();
+  protected FixedWidthType(int typeId, int bitWidth) {
+    super(typeId);
+    this.bitWidth = bitWidth;
+  }
 
-  T fromArray(BinaryArray array);
-
-  BinaryArray toArray(T obj);
+  @Override
+  public int bitWidth() {
+    return bitWidth;
+  }
 }

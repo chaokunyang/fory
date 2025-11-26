@@ -48,7 +48,6 @@ import org.apache.arrow.vector.ipc.WriteChannel;
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch;
 import org.apache.arrow.vector.ipc.message.IpcOption;
 import org.apache.arrow.vector.types.Types;
-import org.apache.arrow.vector.types.pojo.Field;
 import org.apache.arrow.vector.types.pojo.FieldType;
 import org.apache.arrow.vector.types.pojo.Schema;
 import org.apache.fory.Fory;
@@ -155,8 +154,9 @@ public class CrossLanguageTest {
       Files.write(dataFile, row.toBytes());
       LOG.info("Schema {}", row.getSchema());
       Files.write(schemaFile, DataTypes.serializeSchema(row.getSchema()));
-      Schema schema = DataTypes.deserializeSchema(Files.readAllBytes(schemaFile));
-      Assert.assertEquals(schema, row.getSchema());
+      org.apache.fory.format.type.Schema forySchema =
+          DataTypes.deserializeSchema(Files.readAllBytes(schemaFile));
+      Assert.assertEquals(forySchema, row.getSchema());
       ImmutableList<String> command =
           ImmutableList.of(
               PYTHON_EXECUTABLE,
@@ -176,12 +176,15 @@ public class CrossLanguageTest {
 
   public void testRecordBatchBasic() throws IOException {
     BufferAllocator alloc = new RootAllocator(Long.MAX_VALUE);
-    Field field = DataTypes.field("testField", DataTypes.int8());
+    org.apache.arrow.vector.types.pojo.Field arrowField =
+        org.apache.arrow.vector.types.pojo.Field.nullable(
+            "testField", Types.MinorType.TINYINT.getType());
     TinyIntVector vector =
         new TinyIntVector(
             "testField", FieldType.nullable(Types.MinorType.TINYINT.getType()), alloc);
     VectorSchemaRoot root =
-        new VectorSchemaRoot(Collections.singletonList(field), Collections.singletonList(vector));
+        new VectorSchemaRoot(
+            Collections.singletonList(arrowField), Collections.singletonList(vector));
     Path dataFile = Files.createTempFile("foo", "data");
     MemoryBuffer buffer = MemoryUtils.buffer(128);
     try (ArrowStreamWriter writer =

@@ -20,12 +20,11 @@
 package org.apache.fory.format.type;
 
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertNotNull;
 
 import com.google.common.base.CaseFormat;
 import java.util.List;
 import java.util.stream.Collectors;
-import org.apache.arrow.vector.types.pojo.Field;
-import org.apache.arrow.vector.types.pojo.Schema;
 import org.apache.fory.test.bean.BeanA;
 import org.apache.fory.type.Descriptor;
 import org.testng.annotations.Test;
@@ -36,12 +35,12 @@ public class TypeInferenceTest {
     List<Descriptor> descriptors = Descriptor.getDescriptors(BeanA.class);
     Schema schema = TypeInference.inferSchema(BeanA.class);
     List<String> fieldNames =
-        schema.getFields().stream().map(Field::getName).collect(Collectors.toList());
+        schema.fields().stream().map(Field::name).collect(Collectors.toList());
     List<String> expectedFieldNames =
         descriptors.stream()
             .map(d -> CaseFormat.LOWER_CAMEL.to(CaseFormat.LOWER_UNDERSCORE, d.getName()))
             .collect(Collectors.toList());
     assertEquals(fieldNames, expectedFieldNames);
-    schema.findField("double_list");
+    assertNotNull(schema.getFieldByName("double_list"));
   }
 }

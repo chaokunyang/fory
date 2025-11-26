@@ -57,43 +57,17 @@ template <typename T> struct unwrap_optional<std::optional<T>> {
 template <typename T>
 using unwrap_optional_t = typename unwrap_optional<T>::type;
 
-/// Write type info for a type to buffer.
-/// For struct types, this uses the TypeResolver to get the actual registered
-/// type_id. For basic types, it writes the static type_id.
+/// Write type info for a type to buffer (handles optional unwrapping).
 template <typename T>
 inline Result<void, Error> write_type_info(WriteContext &ctx) {
   using UnwrappedT = unwrap_optional_t<T>;
-  if constexpr (is_fory_serializable_v<UnwrappedT>) {
-    // Struct types need to write actual registered type_id + meta index
-    return Serializer<UnwrappedT>::write_type_info(ctx);
-  } else {
-    // Basic types just write the static type_id
-    ctx.write_varuint32(static_cast<uint32_t>(Serializer<T>::type_id));
-    return Result<void, Error>();
-  }
+  return Serializer<UnwrappedT>::write_type_info(ctx);
 }
 
-/// Read type info for a type from buffer
-/// Uses read_any_typeinfo() to properly handle all type categories including
-/// COMPATIBLE_STRUCT (type_id + meta_index) and NAMED_* types.
+/// Read and validate type info for a type from buffer.
 template <typename T>
 inline Result<void, Error> read_type_info(ReadContext &ctx) {
-  FORY_TRY(type_info, ctx.read_any_typeinfo());
-  uint32_t type_id = type_info ? type_info->type_id : 0;
-  uint32_t expected = static_cast<uint32_t>(Serializer<T>::type_id);
-  // Compare lower 8 bits for type category matching
-  uint32_t low_type = type_id & 0xffu;
-  // For structs, allow STRUCT/COMPATIBLE_STRUCT/NAMED_*/etc.
-  bool is_struct_match =
-      (expected == static_cast<uint32_t>(TypeId::STRUCT) &&
-       (low_type == static_cast<uint32_t>(TypeId::STRUCT) ||
-        low_type == static_cast<uint32_t>(TypeId::COMPATIBLE_STRUCT) ||
-        low_type == static_cast<uint32_t>(TypeId::NAMED_STRUCT) ||
-        low_type == static_cast<uint32_t>(TypeId::NAMED_COMPATIBLE_STRUCT)));
-  if (low_type != expected && !is_struct_match) {
-    return Unexpected(Error::type_mismatch(type_id, expected));
-  }
-  return Result<void, Error>();
+  return Serializer<T>::read_type_info(ctx);
 }
 
 inline Result<std::shared_ptr<TypeInfo>, Error>
@@ -324,7 +298,7 @@ write_map_data_slow(const MapType &map, WriteContext &ctx, bool has_generics) {
 
         // Then write type info if not declared
         if (!(chunk_header & DECL_KEY_TYPE)) {
-          if (key_is_polymorphic) {
+          if constexpr (key_is_polymorphic) {
             auto concrete_type_id = get_concrete_type_id(key);
             if (concrete_type_id ==
                 std::type_index(typeid(std::shared_ptr<void>))) {
@@ -366,7 +340,7 @@ write_map_data_slow(const MapType &map, WriteContext &ctx, bool has_generics) {
 
         // Then write type info if not declared
         if (!(chunk_header & DECL_VALUE_TYPE)) {
-          if (val_is_polymorphic) {
+          if constexpr (val_is_polymorphic) {
             auto concrete_type_id = get_concrete_type_id(value);
             if (concrete_type_id ==
                 std::type_index(typeid(std::shared_ptr<void>))) {
@@ -447,7 +421,7 @@ write_map_data_slow(const MapType &map, WriteContext &ctx, bool has_generics) {
       // Matches Rust: write type info here in map, then call serializer with
       // write_type=false
       if (!is_key_declared || key_is_polymorphic) {
-        if (key_is_polymorphic) {
+        if constexpr (key_is_polymorphic) {
           auto concrete_type_id = get_concrete_type_id(key);
           // Use UNKNOWN for polymorphic shared_ptr
           FORY_RETURN_NOT_OK(ctx.write_any_typeinfo(
@@ -458,7 +432,7 @@ write_map_data_slow(const MapType &map, WriteContext &ctx, bool has_generics) {
       }
 
       if (!is_val_declared || val_is_polymorphic) {
-        if (val_is_polymorphic) {
+        if constexpr (val_is_polymorphic) {
           auto concrete_type_id = get_concrete_type_id(value);
           // Use UNKNOWN for polymorphic shared_ptr
           FORY_RETURN_NOT_OK(ctx.write_any_typeinfo(
@@ -654,7 +628,7 @@ inline Result<MapType, Error> read_map_data_slow(ReadContext &ctx,
       // Now read type info if needed
       std::shared_ptr<TypeInfo> value_type_info = nullptr;
       if (!value_declared || val_is_polymorphic) {
-        if (val_is_polymorphic) {
+        if constexpr (val_is_polymorphic) {
           FORY_TRY(type_info, read_polymorphic_type_info(ctx));
           value_type_info = std::move(type_info);
         } else {
@@ -703,7 +677,7 @@ inline Result<MapType, Error> read_map_data_slow(ReadContext &ctx,
       // Now read type info if needed
       std::shared_ptr<TypeInfo> key_type_info = nullptr;
       if (!key_declared || key_is_polymorphic) {
-        if (key_is_polymorphic) {
+        if constexpr (key_is_polymorphic) {
           FORY_TRY(type_info, read_polymorphic_type_info(ctx));
           key_type_info = std::move(type_info);
         } else {
@@ -740,7 +714,7 @@ inline Result<MapType, Error> read_map_data_slow(ReadContext &ctx,
     std::shared_ptr<TypeInfo> value_type_info = nullptr;
 
     if (!key_declared || key_is_polymorphic) {
-      if (key_is_polymorphic) {
+      if constexpr (key_is_polymorphic) {
         FORY_TRY(type_info, read_polymorphic_type_info(ctx));
         key_type_info = std::move(type_info);
       } else {
@@ -748,7 +722,7 @@ inline Result<MapType, Error> read_map_data_slow(ReadContext &ctx,
       }
     }
     if (!value_declared || val_is_polymorphic) {
-      if (val_is_polymorphic) {
+      if constexpr (val_is_polymorphic) {
         FORY_TRY(type_info, read_polymorphic_type_info(ctx));
         value_type_info = std::move(type_info);
       } else {
@@ -817,6 +791,20 @@ inline Result<MapType, Error> read_map_data_slow(ReadContext &ctx,
 template <typename K, typename V, typename... Args>
 struct Serializer<std::map<K, V, Args...>> {
   static constexpr TypeId type_id = TypeId::MAP;
+
+  static inline Result<void, Error> write_type_info(WriteContext &ctx) {
+    ctx.write_varuint32(static_cast<uint32_t>(type_id));
+    return Result<void, Error>();
+  }
+
+  static inline Result<void, Error> read_type_info(ReadContext &ctx) {
+    FORY_TRY(actual, ctx.read_typeinfo_type_id());
+    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
+      return Unexpected(
+          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
+    }
+    return Result<void, Error>();
+  }
 
   // Match Rust signature: fory_write(&self, context, write_ref_info, write_type_info, has_generics)
   static inline Result<void, Error> write(const std::map<K, V, Args...> &map,

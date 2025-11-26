@@ -110,22 +110,10 @@ struct CollectionHeader {
 // Helper for writing element type info
 // ============================================================================
 
-/// Write type info for an element type. For struct types, this uses the
-/// TypeResolver to get the actual registered type_id. For basic types,
-/// it writes the static type_id.
-///
-/// This matches Rust's T::fory_write_type_info behavior where structs
-/// need to write their registered type_id plus meta index.
+/// Write type info for an element type. Delegates to Serializer<T>::write_type_info.
 template <typename T>
 inline Result<void, Error> write_element_type_info(WriteContext &ctx) {
-  if constexpr (is_fory_serializable_v<T>) {
-    // Struct types need to write actual registered type_id + meta index
-    return Serializer<T>::write_type_info(ctx);
-  } else {
-    // Basic types just write the static type_id
-    ctx.write_varuint32(static_cast<uint32_t>(Serializer<T>::type_id));
-    return Result<void, Error>();
-  }
+  return Serializer<T>::write_type_info(ctx);
 }
 
 // ============================================================================
@@ -143,6 +131,20 @@ struct Serializer<
     }
     return Serializer<std::array<T, 1>>::type_id;
   }();
+
+  static inline Result<void, Error> write_type_info(WriteContext &ctx) {
+    ctx.write_varuint32(static_cast<uint32_t>(type_id));
+    return Result<void, Error>();
+  }
+
+  static inline Result<void, Error> read_type_info(ReadContext &ctx) {
+    FORY_TRY(actual, ctx.read_typeinfo_type_id());
+    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
+      return Unexpected(
+          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
+    }
+    return Result<void, Error>();
+  }
 
   static inline Result<void, Error> write(const std::vector<T, Alloc> &vec,
                                           WriteContext &ctx, bool write_ref,
@@ -226,6 +228,20 @@ struct Serializer<
     std::enable_if_t<!std::is_same_v<T, bool> && !std::is_arithmetic_v<T>>> {
   static constexpr TypeId type_id = TypeId::LIST;
 
+  static inline Result<void, Error> write_type_info(WriteContext &ctx) {
+    ctx.write_varuint32(static_cast<uint32_t>(type_id));
+    return Result<void, Error>();
+  }
+
+  static inline Result<void, Error> read_type_info(ReadContext &ctx) {
+    FORY_TRY(actual, ctx.read_typeinfo_type_id());
+    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
+      return Unexpected(
+          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
+    }
+    return Result<void, Error>();
+  }
+
   // Helper to read xlang-compatible list layout written by Java
   static Result<std::vector<T, Alloc>, Error>
   read_xlang(ReadContext &ctx, bool read_ref, bool read_type) {
@@ -266,36 +282,18 @@ struct Serializer<
     // We read the type info using read_any_typeinfo() and just consume the bytes.
     // Type validation is relaxed for xlang compatibility - we check category matches.
     if (is_same_type && !is_decl_type) {
-      FORY_TRY(type_info, ctx.read_any_typeinfo());
+      FORY_TRY(elem_type_id, ctx.read_typeinfo_type_id());
       // Type info was consumed; we trust the sender wrote correct element types.
-      // We do a relaxed check comparing type categories (lower 8 bits).
+      // We do a relaxed check comparing type categories using type_id_matches.
       if constexpr (is_optional_v<T>) {
         using Inner = typename T::value_type;
         uint32_t expected = static_cast<uint32_t>(Serializer<Inner>::type_id);
-        uint32_t elem_type_id = type_info ? type_info->type_id : 0;
-        uint32_t low_elem = elem_type_id & 0xffu;
-        // For structs, allow STRUCT/COMPATIBLE_STRUCT/NAMED_*/etc.
-        bool is_struct_match =
-            (expected == static_cast<uint32_t>(TypeId::STRUCT) &&
-             (low_elem == static_cast<uint32_t>(TypeId::STRUCT) ||
-              low_elem == static_cast<uint32_t>(TypeId::COMPATIBLE_STRUCT) ||
-              low_elem == static_cast<uint32_t>(TypeId::NAMED_STRUCT) ||
-              low_elem == static_cast<uint32_t>(TypeId::NAMED_COMPATIBLE_STRUCT)));
-        if (low_elem != expected && !is_struct_match) {
+        if (!type_id_matches(elem_type_id, expected)) {
           return Unexpected(Error::type_mismatch(elem_type_id, expected));
         }
       } else {
         uint32_t expected = static_cast<uint32_t>(Serializer<T>::type_id);
-        uint32_t elem_type_id = type_info ? type_info->type_id : 0;
-        uint32_t low_elem = elem_type_id & 0xffu;
-        // For structs, allow STRUCT/COMPATIBLE_STRUCT/NAMED_*/etc.
-        bool is_struct_match =
-            (expected == static_cast<uint32_t>(TypeId::STRUCT) &&
-             (low_elem == static_cast<uint32_t>(TypeId::STRUCT) ||
-              low_elem == static_cast<uint32_t>(TypeId::COMPATIBLE_STRUCT) ||
-              low_elem == static_cast<uint32_t>(TypeId::NAMED_STRUCT) ||
-              low_elem == static_cast<uint32_t>(TypeId::NAMED_COMPATIBLE_STRUCT)));
-        if (low_elem != expected && !is_struct_match) {
+        if (!type_id_matches(elem_type_id, expected)) {
           return Unexpected(Error::type_mismatch(elem_type_id, expected));
         }
       }
@@ -595,6 +593,20 @@ struct Serializer<
 template <typename Alloc> struct Serializer<std::vector<bool, Alloc>> {
   static constexpr TypeId type_id = TypeId::BOOL_ARRAY;
 
+  static inline Result<void, Error> write_type_info(WriteContext &ctx) {
+    ctx.write_varuint32(static_cast<uint32_t>(type_id));
+    return Result<void, Error>();
+  }
+
+  static inline Result<void, Error> read_type_info(ReadContext &ctx) {
+    FORY_TRY(actual, ctx.read_typeinfo_type_id());
+    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
+      return Unexpected(
+          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
+    }
+    return Result<void, Error>();
+  }
+
   // Match Rust signature: fory_write(&self, context, write_ref_info, write_type_info, has_generics)
   static inline Result<void, Error> write(const std::vector<bool, Alloc> &vec,
                                           WriteContext &ctx, bool write_ref,
@@ -659,6 +671,20 @@ template <typename Alloc> struct Serializer<std::vector<bool, Alloc>> {
 template <typename T, typename... Args>
 struct Serializer<std::set<T, Args...>> {
   static constexpr TypeId type_id = TypeId::SET;
+
+  static inline Result<void, Error> write_type_info(WriteContext &ctx) {
+    ctx.write_varuint32(static_cast<uint32_t>(type_id));
+    return Result<void, Error>();
+  }
+
+  static inline Result<void, Error> read_type_info(ReadContext &ctx) {
+    FORY_TRY(actual, ctx.read_typeinfo_type_id());
+    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
+      return Unexpected(
+          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
+    }
+    return Result<void, Error>();
+  }
 
   // Match Rust signature: fory_write(&self, context, write_ref_info, write_type_info, has_generics)
   static inline Result<void, Error> write(const std::set<T, Args...> &set,
@@ -805,20 +831,11 @@ struct Serializer<std::set<T, Args...>> {
     bool is_decl_type = (bitmap & 0x4u) != 0;
     bool is_same_type = (bitmap & 0x8u) != 0;
     // Read element type info if IS_SAME_TYPE is set but IS_DECL_ELEMENT_TYPE
-    // is not. Uses read_any_typeinfo() for proper handling of all type categories.
+    // is not. Uses read_typeinfo_type_id() for proper handling of all type categories.
     if (is_same_type && !is_decl_type) {
-      FORY_TRY(type_info, ctx.read_any_typeinfo());
-      uint32_t elem_type_id = type_info ? type_info->type_id : 0;
+      FORY_TRY(elem_type_id, ctx.read_typeinfo_type_id());
       uint32_t expected = static_cast<uint32_t>(Serializer<T>::type_id);
-      uint32_t low_elem = elem_type_id & 0xffu;
-      // For structs, allow STRUCT/COMPATIBLE_STRUCT/NAMED_*/etc.
-      bool is_struct_match =
-          (expected == static_cast<uint32_t>(TypeId::STRUCT) &&
-           (low_elem == static_cast<uint32_t>(TypeId::STRUCT) ||
-            low_elem == static_cast<uint32_t>(TypeId::COMPATIBLE_STRUCT) ||
-            low_elem == static_cast<uint32_t>(TypeId::NAMED_STRUCT) ||
-            low_elem == static_cast<uint32_t>(TypeId::NAMED_COMPATIBLE_STRUCT)));
-      if (low_elem != expected && !is_struct_match) {
+      if (!type_id_matches(elem_type_id, expected)) {
         return Unexpected(Error::type_mismatch(elem_type_id, expected));
       }
     }

@@ -43,8 +43,23 @@ namespace serialization {
 template <> struct Serializer<bool> {
   static constexpr TypeId type_id = TypeId::BOOL;
 
+  /// Write type info only (for collection/map element type headers)
+  static inline Result<void, Error> write_type_info(WriteContext &ctx) {
+    ctx.write_varuint32(static_cast<uint32_t>(type_id));
+    return Result<void, Error>();
+  }
+
+  /// Read and validate type info
+  static inline Result<void, Error> read_type_info(ReadContext &ctx) {
+    FORY_TRY(actual, ctx.read_typeinfo_type_id());
+    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
+      return Unexpected(
+          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
+    }
+    return Result<void, Error>();
+  }
+
   /// Write boolean with optional reference and type info
-  /// Match Rust signature: fory_write(&self, context, write_ref_info, write_type_info, has_generics)
   static inline Result<void, Error> write(bool value, WriteContext &ctx,
                                           bool write_ref, bool write_type,
                                           bool has_generics = false) {
@@ -110,6 +125,20 @@ template <> struct Serializer<bool> {
 template <> struct Serializer<int8_t> {
   static constexpr TypeId type_id = TypeId::INT8;
 
+  static inline Result<void, Error> write_type_info(WriteContext &ctx) {
+    ctx.write_varuint32(static_cast<uint32_t>(type_id));
+    return Result<void, Error>();
+  }
+
+  static inline Result<void, Error> read_type_info(ReadContext &ctx) {
+    FORY_TRY(actual, ctx.read_typeinfo_type_id());
+    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
+      return Unexpected(
+          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
+    }
+    return Result<void, Error>();
+  }
+
   static inline Result<void, Error> write(int8_t value, WriteContext &ctx,
                                           bool write_ref, bool write_type,
                                           bool has_generics = false) {
@@ -166,6 +195,20 @@ template <> struct Serializer<int8_t> {
 /// int16_t serializer
 template <> struct Serializer<int16_t> {
   static constexpr TypeId type_id = TypeId::INT16;
+
+  static inline Result<void, Error> write_type_info(WriteContext &ctx) {
+    ctx.write_varuint32(static_cast<uint32_t>(type_id));
+    return Result<void, Error>();
+  }
+
+  static inline Result<void, Error> read_type_info(ReadContext &ctx) {
+    FORY_TRY(actual, ctx.read_typeinfo_type_id());
+    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
+      return Unexpected(
+          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
+    }
+    return Result<void, Error>();
+  }
 
   static inline Result<void, Error> write(int16_t value, WriteContext &ctx,
                                           bool write_ref, bool write_type,
@@ -228,6 +271,20 @@ template <> struct Serializer<int16_t> {
 template <> struct Serializer<int32_t> {
   static constexpr TypeId type_id = TypeId::INT32;
 
+  static inline Result<void, Error> write_type_info(WriteContext &ctx) {
+    ctx.write_varuint32(static_cast<uint32_t>(type_id));
+    return Result<void, Error>();
+  }
+
+  static inline Result<void, Error> read_type_info(ReadContext &ctx) {
+    FORY_TRY(actual, ctx.read_typeinfo_type_id());
+    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
+      return Unexpected(
+          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
+    }
+    return Result<void, Error>();
+  }
+
   static inline Result<void, Error> write(int32_t value, WriteContext &ctx,
                                           bool write_ref, bool write_type,
                                           bool has_generics = false) {
@@ -285,6 +342,20 @@ template <> struct Serializer<int32_t> {
 template <> struct Serializer<int64_t> {
   static constexpr TypeId type_id = TypeId::INT64;
 
+  static inline Result<void, Error> write_type_info(WriteContext &ctx) {
+    ctx.write_varuint32(static_cast<uint32_t>(type_id));
+    return Result<void, Error>();
+  }
+
+  static inline Result<void, Error> read_type_info(ReadContext &ctx) {
+    FORY_TRY(actual, ctx.read_typeinfo_type_id());
+    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
+      return Unexpected(
+          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
+    }
+    return Result<void, Error>();
+  }
+
   static inline Result<void, Error> write(int64_t value, WriteContext &ctx,
                                           bool write_ref, bool write_type,
                                           bool has_generics = false) {
@@ -341,6 +412,20 @@ template <> struct Serializer<int64_t> {
 /// float serializer
 template <> struct Serializer<float> {
   static constexpr TypeId type_id = TypeId::FLOAT32;
+
+  static inline Result<void, Error> write_type_info(WriteContext &ctx) {
+    ctx.write_varuint32(static_cast<uint32_t>(type_id));
+    return Result<void, Error>();
+  }
+
+  static inline Result<void, Error> read_type_info(ReadContext &ctx) {
+    FORY_TRY(actual, ctx.read_typeinfo_type_id());
+    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
+      return Unexpected(
+          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
+    }
+    return Result<void, Error>();
+  }
 
   static inline Result<void, Error> write(float value, WriteContext &ctx,
                                           bool write_ref, bool write_type,
@@ -401,6 +486,20 @@ template <> struct Serializer<float> {
 /// double serializer
 template <> struct Serializer<double> {
   static constexpr TypeId type_id = TypeId::FLOAT64;
+
+  static inline Result<void, Error> write_type_info(WriteContext &ctx) {
+    ctx.write_varuint32(static_cast<uint32_t>(type_id));
+    return Result<void, Error>();
+  }
+
+  static inline Result<void, Error> read_type_info(ReadContext &ctx) {
+    FORY_TRY(actual, ctx.read_typeinfo_type_id());
+    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
+      return Unexpected(
+          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
+    }
+    return Result<void, Error>();
+  }
 
   static inline Result<void, Error> write(double value, WriteContext &ctx,
                                           bool write_ref, bool write_type,
@@ -467,6 +566,20 @@ template <> struct Serializer<double> {
 template <> struct Serializer<uint8_t> {
   static constexpr TypeId type_id = TypeId::INT8; // Same as int8
 
+  static inline Result<void, Error> write_type_info(WriteContext &ctx) {
+    ctx.write_varuint32(static_cast<uint32_t>(type_id));
+    return Result<void, Error>();
+  }
+
+  static inline Result<void, Error> read_type_info(ReadContext &ctx) {
+    FORY_TRY(actual, ctx.read_typeinfo_type_id());
+    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
+      return Unexpected(
+          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
+    }
+    return Result<void, Error>();
+  }
+
   static inline Result<void, Error> write(uint8_t value, WriteContext &ctx,
                                           bool write_ref, bool write_type,
                                           bool has_generics = false) {
@@ -523,6 +636,20 @@ template <> struct Serializer<uint8_t> {
 /// uint16_t serializer
 template <> struct Serializer<uint16_t> {
   static constexpr TypeId type_id = TypeId::INT16;
+
+  static inline Result<void, Error> write_type_info(WriteContext &ctx) {
+    ctx.write_varuint32(static_cast<uint32_t>(type_id));
+    return Result<void, Error>();
+  }
+
+  static inline Result<void, Error> read_type_info(ReadContext &ctx) {
+    FORY_TRY(actual, ctx.read_typeinfo_type_id());
+    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
+      return Unexpected(
+          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
+    }
+    return Result<void, Error>();
+  }
 
   static inline Result<void, Error> write(uint16_t value, WriteContext &ctx,
                                           bool write_ref, bool write_type,
@@ -585,6 +712,20 @@ template <> struct Serializer<uint16_t> {
 template <> struct Serializer<uint32_t> {
   static constexpr TypeId type_id = TypeId::INT32;
 
+  static inline Result<void, Error> write_type_info(WriteContext &ctx) {
+    ctx.write_varuint32(static_cast<uint32_t>(type_id));
+    return Result<void, Error>();
+  }
+
+  static inline Result<void, Error> read_type_info(ReadContext &ctx) {
+    FORY_TRY(actual, ctx.read_typeinfo_type_id());
+    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
+      return Unexpected(
+          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
+    }
+    return Result<void, Error>();
+  }
+
   static inline Result<void, Error> write(uint32_t value, WriteContext &ctx,
                                           bool write_ref, bool write_type,
                                           bool has_generics = false) {
@@ -645,6 +786,20 @@ template <> struct Serializer<uint32_t> {
 /// uint64_t serializer
 template <> struct Serializer<uint64_t> {
   static constexpr TypeId type_id = TypeId::INT64;
+
+  static inline Result<void, Error> write_type_info(WriteContext &ctx) {
+    ctx.write_varuint32(static_cast<uint32_t>(type_id));
+    return Result<void, Error>();
+  }
+
+  static inline Result<void, Error> read_type_info(ReadContext &ctx) {
+    FORY_TRY(actual, ctx.read_typeinfo_type_id());
+    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
+      return Unexpected(
+          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
+    }
+    return Result<void, Error>();
+  }
 
   static inline Result<void, Error> write(uint64_t value, WriteContext &ctx,
                                           bool write_ref, bool write_type,
@@ -717,6 +872,20 @@ template <> struct Serializer<std::string> {
     UTF16 = 1,  // UTF-16
     UTF8 = 2,   // UTF-8
   };
+
+  static inline Result<void, Error> write_type_info(WriteContext &ctx) {
+    ctx.write_varuint32(static_cast<uint32_t>(type_id));
+    return Result<void, Error>();
+  }
+
+  static inline Result<void, Error> read_type_info(ReadContext &ctx) {
+    FORY_TRY(actual, ctx.read_typeinfo_type_id());
+    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
+      return Unexpected(
+          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
+    }
+    return Result<void, Error>();
+  }
 
   static inline Result<void, Error> write(const std::string &value,
                                           WriteContext &ctx, bool write_ref,

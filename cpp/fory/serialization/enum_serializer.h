@@ -47,6 +47,20 @@ struct Serializer<E, std::enable_if_t<std::is_enum_v<E>>> {
   using Metadata = meta::EnumMetadata<E>;
   using OrdinalType = typename Metadata::OrdinalType;
 
+  static inline Result<void, Error> write_type_info(WriteContext &ctx) {
+    return ctx.write_enum_type_info(std::type_index(typeid(E)),
+                                    static_cast<uint32_t>(type_id));
+  }
+
+  static inline Result<void, Error> read_type_info(ReadContext &ctx) {
+    FORY_TRY(actual, ctx.read_typeinfo_type_id());
+    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
+      return Unexpected(
+          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
+    }
+    return Result<void, Error>();
+  }
+
   static inline Result<void, Error> write(E value, WriteContext &ctx,
                                           bool write_ref, bool write_type,
                                           bool has_generics = false) {

@@ -471,6 +471,11 @@ Result<std::shared_ptr<TypeInfo>, Error> ReadContext::read_any_typeinfo() {
   }
 }
 
+Result<uint32_t, Error> ReadContext::read_typeinfo_type_id() {
+  FORY_TRY(type_info, read_any_typeinfo());
+  return type_info ? type_info->type_id : 0u;
+}
+
 void ReadContext::reset() {
   ref_reader_.reset();
   reading_type_infos_.clear();

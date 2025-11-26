@@ -227,6 +227,25 @@ inline Result<bool, Error> consume_ref_flag(ReadContext &ctx, bool read_ref) {
 }
 
 // ============================================================================
+// Type Info Helpers
+// ============================================================================
+
+/// Check if a type ID matches, allowing struct variants to match STRUCT.
+inline bool type_id_matches(uint32_t actual, uint32_t expected) {
+  if (actual == expected)
+    return true;
+  uint32_t low_actual = actual & 0xffu;
+  // For structs, allow STRUCT/COMPATIBLE_STRUCT/NAMED_*/etc.
+  if (expected == static_cast<uint32_t>(TypeId::STRUCT)) {
+    return low_actual == static_cast<uint32_t>(TypeId::STRUCT) ||
+           low_actual == static_cast<uint32_t>(TypeId::COMPATIBLE_STRUCT) ||
+           low_actual == static_cast<uint32_t>(TypeId::NAMED_STRUCT) ||
+           low_actual == static_cast<uint32_t>(TypeId::NAMED_COMPATIBLE_STRUCT);
+  }
+  return low_actual == expected;
+}
+
+// ============================================================================
 // Core Serializer API
 // ============================================================================
 

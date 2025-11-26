@@ -39,6 +39,14 @@ template <typename T> struct Serializer<std::optional<T>> {
   // Use the inner type's type_id
   static constexpr TypeId type_id = Serializer<T>::type_id;
 
+  static inline Result<void, Error> write_type_info(WriteContext &ctx) {
+    return Serializer<T>::write_type_info(ctx);
+  }
+
+  static inline Result<void, Error> read_type_info(ReadContext &ctx) {
+    return Serializer<T>::read_type_info(ctx);
+  }
+
   static Result<void, Error> write(const std::optional<T> &opt,
                                    WriteContext &ctx, bool write_ref,
                                    bool write_type) {
@@ -180,6 +188,27 @@ template <typename T> struct SharedPtrTypeIdHelper<T, true> {
 template <typename T> struct Serializer<std::shared_ptr<T>> {
   static constexpr TypeId type_id =
       SharedPtrTypeIdHelper<T, std::is_polymorphic_v<T>>::value;
+
+  static inline Result<void, Error> write_type_info(WriteContext &ctx) {
+    if constexpr (std::is_polymorphic_v<T>) {
+      // For polymorphic types, type info must be written dynamically
+      ctx.write_varuint32(static_cast<uint32_t>(TypeId::UNKNOWN));
+      return Result<void, Error>();
+    } else {
+      return Serializer<T>::write_type_info(ctx);
+    }
+  }
+
+  static inline Result<void, Error> read_type_info(ReadContext &ctx) {
+    if constexpr (std::is_polymorphic_v<T>) {
+      // For polymorphic types, type info is read dynamically
+      FORY_TRY(actual, ctx.read_typeinfo_type_id());
+      (void)actual; // Type checking is done at value read time
+      return Result<void, Error>();
+    } else {
+      return Serializer<T>::read_type_info(ctx);
+    }
+  }
 
   static Result<void, Error> write(const std::shared_ptr<T> &ptr,
                                    WriteContext &ctx, bool write_ref,

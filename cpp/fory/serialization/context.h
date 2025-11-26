@@ -384,6 +384,13 @@ public:
   /// @return TypeInfo for the read type, or error
   Result<std::shared_ptr<TypeInfo>, Error> read_any_typeinfo();
 
+  /// Read type info and return just the type_id.
+  /// This is a helper for serializers that need to validate type_id without
+  /// directly accessing TypeInfo (which may be incomplete in headers).
+  ///
+  /// @return type_id from the read TypeInfo, or 0 if null
+  Result<uint32_t, Error> read_typeinfo_type_id();
+
   /// Reset context for reuse.
   void reset();
 

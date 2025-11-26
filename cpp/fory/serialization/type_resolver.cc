@@ -1073,5 +1073,55 @@ std::shared_ptr<TypeResolver> TypeResolver::clone() const {
   return cloned;
 }
 
+void TypeResolver::register_builtin_types() {
+  // Register internal type IDs without harnesses (deserialization is static)
+  // These are needed so read_any_typeinfo can find them by type_id
+  auto register_type_id_only = [this](TypeId type_id) {
+    auto info = std::make_shared<TypeInfo>();
+    info->type_id = static_cast<uint32_t>(type_id);
+    info->register_by_name = false;
+    info->is_external = false;
+    type_info_by_id_[info->type_id] = info;
+  };
+
+  // Primitive types
+  register_type_id_only(TypeId::BOOL);
+  register_type_id_only(TypeId::INT8);
+  register_type_id_only(TypeId::INT16);
+  register_type_id_only(TypeId::INT32);
+  register_type_id_only(TypeId::INT64);
+  register_type_id_only(TypeId::FLOAT32);
+  register_type_id_only(TypeId::FLOAT64);
+  register_type_id_only(TypeId::STRING);
+
+  // Primitive array types
+  register_type_id_only(TypeId::BOOL_ARRAY);
+  register_type_id_only(TypeId::INT8_ARRAY);
+  register_type_id_only(TypeId::INT16_ARRAY);
+  register_type_id_only(TypeId::INT32_ARRAY);
+  register_type_id_only(TypeId::INT64_ARRAY);
+  register_type_id_only(TypeId::FLOAT16_ARRAY);
+  register_type_id_only(TypeId::FLOAT32_ARRAY);
+  register_type_id_only(TypeId::FLOAT64_ARRAY);
+  register_type_id_only(TypeId::BINARY);
+
+  // Collection types
+  register_type_id_only(TypeId::LIST);
+  register_type_id_only(TypeId::SET);
+  register_type_id_only(TypeId::MAP);
+
+  // User types (base IDs without registration prefix)
+  register_type_id_only(TypeId::STRUCT);
+  register_type_id_only(TypeId::ENUM);
+  register_type_id_only(TypeId::EXT);
+
+  // Other internal types
+  register_type_id_only(TypeId::DURATION);
+  register_type_id_only(TypeId::TIMESTAMP);
+  register_type_id_only(TypeId::LOCAL_DATE);
+  register_type_id_only(TypeId::DECIMAL);
+  register_type_id_only(TypeId::ARRAY);
+}
+
 } // namespace serialization
 } // namespace fory

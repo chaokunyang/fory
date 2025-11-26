@@ -859,10 +859,7 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
             // Use meta sharing: read varint index and get TypeInfo from
             // meta_reader
             FORY_TRY(meta_index, ctx.read_varuint32());
-            FORY_TRY(remote_type_info_ptr,
-                     ctx.get_type_info_by_index(meta_index));
-            auto remote_type_info =
-                std::static_pointer_cast<TypeInfo>(remote_type_info_ptr);
+            FORY_TRY(remote_type_info, ctx.get_type_info_by_index(meta_index));
 
             return read_compatible(ctx, remote_type_info);
           } else {

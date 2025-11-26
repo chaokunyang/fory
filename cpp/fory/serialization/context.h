@@ -354,8 +354,8 @@ public:
     return buffer().ReadBytes(data, length);
   }
 
-  Result<void, Error> read_enum_type_info(const std::type_index &type,
-                                          uint32_t base_type_id);
+  Result<std::shared_ptr<TypeInfo>, Error>
+  read_enum_type_info(const std::type_index &type, uint32_t base_type_id);
 
   /// Load all TypeMetas from buffer at the specified offset.
   /// After loading, the reader position is restored to where it was before.
@@ -363,9 +363,7 @@ public:
   Result<size_t, Error> load_type_meta(int32_t meta_offset);
 
   /// Get TypeInfo by meta index.
-  /// Returns TypeResolver::TypeInfo as void* to avoid incomplete type issues.
-  /// Implementation casts it back to TypeResolver::TypeInfo*.
-  Result<std::shared_ptr<void>, Error>
+  Result<std::shared_ptr<TypeInfo>, Error>
   get_type_info_by_index(size_t index) const;
 
   /// Read type information dynamically from buffer based on type ID.
@@ -391,8 +389,8 @@ private:
   uint32_t current_depth_;
 
   // Meta sharing state (for compatible mode)
-  std::vector<std::shared_ptr<void>> reading_type_infos_;
-  std::unordered_map<int64_t, std::shared_ptr<void>> parsed_type_infos_;
+  std::vector<std::shared_ptr<TypeInfo>> reading_type_infos_;
+  std::unordered_map<int64_t, std::shared_ptr<TypeInfo>> parsed_type_infos_;
 
   // Dynamic meta strings used for named type/class info.
   MetaStringTable meta_string_table_;

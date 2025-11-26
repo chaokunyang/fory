@@ -193,8 +193,7 @@ Result<void, Error> skip_struct(ReadContext &ctx, const FieldType &field_type) {
   (void)remote_type_tag;
 
   FORY_TRY(meta_index, ctx.read_varuint32());
-  FORY_TRY(type_info_void, ctx.get_type_info_by_index(meta_index));
-  auto type_info = std::static_pointer_cast<TypeInfo>(type_info_void);
+  FORY_TRY(type_info, ctx.get_type_info_by_index(meta_index));
   if (!type_info || !type_info->type_meta) {
     return Unexpected(
         Error::type_error("TypeInfo or TypeMeta not found for struct skip"));
@@ -235,8 +234,8 @@ Result<void, Error> skip_ext(ReadContext &ctx, const FieldType &field_type) {
     (void)remote_type_tag;
 
     FORY_TRY(meta_index, ctx.read_varuint32());
-    FORY_TRY(type_info_void, ctx.get_type_info_by_index(meta_index));
-    type_info = std::static_pointer_cast<TypeInfo>(type_info_void);
+    FORY_TRY(type_info_result, ctx.get_type_info_by_index(meta_index));
+    type_info = type_info_result;
   } else {
     // ID-based ext: look up by full type_id
     // The ext fields in TypeMeta store the user type_id (high bits | EXT)

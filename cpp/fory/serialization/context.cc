@@ -266,91 +266,18 @@ ReadContext::~ReadContext() = default;
 static const MetaStringDecoder kNamespaceDecoder('.', '_');
 static const MetaStringDecoder kTypeNameDecoder('$', '_');
 
-Result<void, Error>
+Result<std::shared_ptr<TypeInfo>, Error>
 ReadContext::read_enum_type_info(const std::type_index &type,
                                  uint32_t base_type_id) {
-  // Helper to consume namespace/type_name for NAMED_ENUM
-  auto consume_named_enum_metadata = [this]() -> Result<void, Error> {
-    if (config_->compatible) {
-      // In compatible mode, read meta_index
-      FORY_TRY(meta_index, buffer_->ReadVarUint32());
-      (void)meta_index;
-    } else {
-      // Read namespace and type_name using MetaStringResolver-compatible
-      // encoding. Java uses PACKAGE_DECODER ('.', '_') for namespace and
-      // TYPE_NAME_DECODER ('$', '_') for type names.
-      FORY_TRY(namespace_str,
-               meta_string_table_.read_string(*buffer_, kNamespaceDecoder));
-      FORY_TRY(type_name,
-               meta_string_table_.read_string(*buffer_, kTypeNameDecoder));
-      (void)namespace_str;
-      (void)type_name;
-    }
-    return Result<void, Error>();
-  };
-
-  if (!type_resolver_) {
-    FORY_TRY(type_id, read_varuint32());
-    // For enums, accept both ENUM and NAMED_ENUM as compatible types
-    if (base_type_id == static_cast<uint32_t>(TypeId::ENUM) ||
-        base_type_id == static_cast<uint32_t>(TypeId::NAMED_ENUM)) {
-      if (type_id != static_cast<uint32_t>(TypeId::ENUM) &&
-          type_id != static_cast<uint32_t>(TypeId::NAMED_ENUM)) {
-        return Unexpected(Error::type_mismatch(type_id, base_type_id));
-      }
-      // If NAMED_ENUM, consume namespace/type_name
-      if (type_id == static_cast<uint32_t>(TypeId::NAMED_ENUM)) {
-        return consume_named_enum_metadata();
-      }
-      return Result<void, Error>();
-    }
-    if (type_id != base_type_id) {
-      return Unexpected(Error::type_mismatch(type_id, base_type_id));
-    }
-    return Result<void, Error>();
+  (void)type;
+  FORY_TRY(type_info, read_any_typeinfo());
+  uint32_t type_id_low = type_info->type_id & 0xff;
+  // Accept both ENUM and NAMED_ENUM as compatible types
+  if (type_id_low != static_cast<uint32_t>(TypeId::ENUM) &&
+      type_id_low != static_cast<uint32_t>(TypeId::NAMED_ENUM)) {
+    return Unexpected(Error::type_mismatch(type_info->type_id, base_type_id));
   }
-
-  uint32_t start = buffer_->reader_index();
-  FORY_TRY(type_id, buffer_->ReadVarUint32());
-  // If type_id < 256, it's a base type (high byte is 0, meaning no registration
-  // ID) Internal types and unregistered user types both fall in this range
-  if (type_id < 256 || is_internal_type(type_id)) {
-    // For enums, accept both ENUM and NAMED_ENUM as compatible types
-    // since Java may write NAMED_ENUM when the enum is registered with a name
-    if (base_type_id == static_cast<uint32_t>(TypeId::ENUM) ||
-        base_type_id == static_cast<uint32_t>(TypeId::NAMED_ENUM)) {
-      if (type_id != static_cast<uint32_t>(TypeId::ENUM) &&
-          type_id != static_cast<uint32_t>(TypeId::NAMED_ENUM)) {
-        return Unexpected(Error::type_mismatch(type_id, base_type_id));
-      }
-      // If NAMED_ENUM, consume namespace/type_name
-      if (type_id == static_cast<uint32_t>(TypeId::NAMED_ENUM)) {
-        return consume_named_enum_metadata();
-      }
-      return Result<void, Error>();
-    }
-    if (type_id != base_type_id) {
-      return Unexpected(Error::type_mismatch(type_id, base_type_id));
-    }
-    return Result<void, Error>();
-  }
-
-  buffer_->ReaderIndex(start);
-  auto type_info_result = read_any_typeinfo();
-  if (!type_info_result.ok()) {
-    return Unexpected(type_info_result.error());
-  }
-
-  const auto &type_info = type_info_result.value();
-  if (!type_info) {
-    return Result<void, Error>();
-  }
-  uint32_t low = type_info->type_id & 0xff;
-  if (low == static_cast<uint32_t>(TypeId::ENUM) ||
-      low == static_cast<uint32_t>(TypeId::NAMED_ENUM)) {
-    return Result<void, Error>();
-  }
-  return Unexpected(Error::type_mismatch(low, base_type_id));
+  return type_info;
 }
 
 // Maximum number of parsed type defs to cache (avoid OOM from malicious input)
@@ -417,11 +344,10 @@ Result<size_t, Error> ReadContext::load_type_meta(int32_t meta_offset) {
 
     // Cache the parsed TypeInfo (with size limit to prevent OOM)
     if (parsed_type_infos_.size() < kMaxParsedNumTypeDefs) {
-      parsed_type_infos_[meta_header] =
-          std::static_pointer_cast<void>(type_info);
+      parsed_type_infos_[meta_header] = type_info;
     }
 
-    reading_type_infos_.push_back(std::static_pointer_cast<void>(type_info));
+    reading_type_infos_.push_back(type_info);
   }
 
   // Calculate size of meta section
@@ -433,7 +359,7 @@ Result<size_t, Error> ReadContext::load_type_meta(int32_t meta_offset) {
   return meta_section_size;
 }
 
-Result<std::shared_ptr<void>, Error>
+Result<std::shared_ptr<TypeInfo>, Error>
 ReadContext::get_type_info_by_index(size_t index) const {
   if (index >= reading_type_infos_.size()) {
     return Unexpected(Error::invalid(
@@ -452,16 +378,14 @@ Result<std::shared_ptr<TypeInfo>, Error> ReadContext::read_any_typeinfo() {
   case static_cast<uint32_t>(TypeId::NAMED_COMPATIBLE_STRUCT):
   case static_cast<uint32_t>(TypeId::COMPATIBLE_STRUCT): {
     FORY_TRY(meta_index, buffer_->ReadVarUint32());
-    FORY_TRY(type_info, get_type_info_by_index(meta_index));
-    return std::static_pointer_cast<TypeInfo>(type_info);
+    return get_type_info_by_index(meta_index);
   }
   case static_cast<uint32_t>(TypeId::NAMED_ENUM):
   case static_cast<uint32_t>(TypeId::NAMED_EXT):
   case static_cast<uint32_t>(TypeId::NAMED_STRUCT): {
     if (config_->compatible) {
       FORY_TRY(meta_index, buffer_->ReadVarUint32());
-      FORY_TRY(type_info, get_type_info_by_index(meta_index));
-      return std::static_pointer_cast<TypeInfo>(type_info);
+      return get_type_info_by_index(meta_index);
     }
     FORY_TRY(namespace_str,
              meta_string_table_.read_string(*buffer_, kNamespaceDecoder));
@@ -475,29 +399,11 @@ Result<std::shared_ptr<TypeInfo>, Error> ReadContext::read_any_typeinfo() {
     }
     return type_info;
   }
-  case static_cast<uint32_t>(TypeId::STRUCT):
-  case static_cast<uint32_t>(TypeId::ENUM):
-  case static_cast<uint32_t>(TypeId::EXT): {
-    // Base type IDs (without registration prefix) for auto-registered types.
-    // Create a stub TypeInfo since actual deserialization is handled
-    // statically at compile time - callers just need the type_id to verify.
-    auto type_info = std::make_shared<TypeInfo>();
-    type_info->type_id = type_id;
-    return type_info;
-  }
   default: {
-    // For internal types (primitives, arrays, collections, etc.), create a
-    // minimal stub TypeInfo since the actual deserialization is handled
-    // statically at compile time - callers just need the type_id to verify.
-    if (is_internal_type(type_id)) {
-      auto type_info = std::make_shared<TypeInfo>();
-      type_info->type_id = type_id;
-      return type_info;
-    }
-    // For user types (registered by ID), look up in the resolver
+    // All types must be registered in type_resolver
     auto type_info = type_resolver_->get_type_info_by_id(type_id);
     if (!type_info) {
-      return Unexpected(Error::type_error("ID harness not found: " +
+      return Unexpected(Error::type_error("Type not found for type_id: " +
                                           std::to_string(type_id)));
     }
     return type_info;

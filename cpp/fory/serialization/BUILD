@@ -87,6 +87,16 @@ cc_test(
     ],
 )
 
+cc_test(
+    name = "meta_string_test",
+    srcs = ["meta_string_test.cc"],
+    deps = [
+        ":fory_serialization",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
 cc_binary(
     name = "xlang_test_main",
     srcs = ["xlang_test_main.cc"],

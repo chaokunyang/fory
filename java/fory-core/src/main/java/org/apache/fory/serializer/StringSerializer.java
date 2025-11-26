@@ -222,7 +222,6 @@ public final class StringSerializer extends ImmutableSerializer<String> {
 
   @CodegenInvoke
   public String readCompressedBytesString(MemoryBuffer buffer) {
-    int posBefore = buffer.readerIndex();
     long header = buffer.readVarUint36Small();
     byte coder = (byte) (header & 0b11);
     int numBytes = (int) (header >>> 2);

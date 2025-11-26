@@ -744,9 +744,7 @@ public class XtypeResolver extends TypeResolver {
   }
 
   public ClassInfo readClassInfo(MemoryBuffer buffer) {
-    int readerIdxBefore = buffer.readerIndex();
     int xtypeId = buffer.readVarUint32Small14();
-    int readerIdxAfter = buffer.readerIndex();
     int internalTypeId = xtypeId & 0xff;
     switch (internalTypeId) {
       case Types.NAMED_ENUM:

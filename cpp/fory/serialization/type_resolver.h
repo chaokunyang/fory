@@ -155,6 +155,12 @@ public:
   static Result<std::shared_ptr<TypeMeta>, Error>
   from_bytes(Buffer &buffer, const TypeMeta *local_type_info);
 
+  /// Read type meta from buffer with pre-read header
+  /// @param buffer Source buffer (positioned after header)
+  /// @param header Pre-read 8-byte header
+  static Result<std::shared_ptr<TypeMeta>, Error>
+  from_bytes_with_header(Buffer &buffer, int64_t header);
+
   /// Skip type meta in buffer without parsing
   static Result<void, Error> skip_bytes(Buffer &buffer, int64_t header);
 

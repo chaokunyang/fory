@@ -420,6 +420,84 @@ TypeMeta::from_bytes(Buffer &buffer, const TypeMeta *local_type_info) {
   return meta;
 }
 
+Result<std::shared_ptr<TypeMeta>, Error>
+TypeMeta::from_bytes_with_header(Buffer &buffer, int64_t header) {
+  int64_t meta_size = header & META_SIZE_MASK;
+  size_t header_size = 0;
+  if (meta_size == META_SIZE_MASK) {
+    uint32_t before = buffer.reader_index();
+    FORY_TRY(extra, buffer.ReadVarUint32());
+    meta_size += extra;
+    uint32_t after = buffer.reader_index();
+    header_size = (after - before);
+  }
+  int64_t meta_hash = header >> (64 - NUM_HASH_BITS);
+
+  size_t start_pos = buffer.reader_index();
+
+  // Read meta header
+  FORY_TRY(meta_header, buffer.ReadUint8());
+
+  bool register_by_name = (meta_header & REGISTER_BY_NAME_FLAG) != 0;
+  size_t num_fields = meta_header & SMALL_NUM_FIELDS_THRESHOLD;
+  if (num_fields == SMALL_NUM_FIELDS_THRESHOLD) {
+    FORY_TRY(extra, buffer.ReadVarUint32());
+    num_fields += extra;
+  }
+
+  // Read type ID or namespace/type name
+  uint32_t type_id = 0;
+  std::string namespace_str;
+  std::string type_name;
+
+  if (register_by_name) {
+    static const MetaStringDecoder kNamespaceDecoder('.', '_');
+    static const MetaStringDecoder kTypeNameDecoder('$', '_');
+
+    FORY_TRY(ns, read_meta_name(buffer, kNamespaceDecoder, kNamespaceEncodings,
+                                sizeof(kNamespaceEncodings) /
+                                    sizeof(kNamespaceEncodings[0])));
+    namespace_str = std::move(ns);
+
+    FORY_TRY(tn, read_meta_name(buffer, kTypeNameDecoder, kTypeNameEncodings,
+                                sizeof(kTypeNameEncodings) /
+                                    sizeof(kTypeNameEncodings[0])));
+    type_name = std::move(tn);
+  } else {
+    FORY_TRY(tid, buffer.ReadVarUint32());
+    type_id = tid;
+  }
+
+  // Read field infos
+  std::vector<FieldInfo> field_infos;
+  field_infos.reserve(num_fields);
+  for (size_t i = 0; i < num_fields; ++i) {
+    FORY_TRY(field, FieldInfo::from_bytes(buffer));
+    field_infos.push_back(std::move(field));
+  }
+
+  // Sort fields according to xlang spec
+  field_infos = sort_field_infos(std::move(field_infos));
+
+  // CRITICAL FIX: Ensure we consume exactly meta_size bytes
+  size_t current_pos = buffer.reader_index();
+  size_t expected_end_pos = start_pos + meta_size - header_size;
+  if (current_pos < expected_end_pos) {
+    size_t remaining = expected_end_pos - current_pos;
+    buffer.IncreaseReaderIndex(remaining);
+  }
+
+  auto meta = std::make_shared<TypeMeta>();
+  meta->hash = meta_hash;
+  meta->type_id = type_id;
+  meta->namespace_str = std::move(namespace_str);
+  meta->type_name = std::move(type_name);
+  meta->register_by_name = register_by_name;
+  meta->field_infos = std::move(field_infos);
+
+  return meta;
+}
+
 Result<void, Error> TypeMeta::skip_bytes(Buffer &buffer, int64_t header) {
   int64_t meta_size = header & META_SIZE_MASK;
   if (meta_size == META_SIZE_MASK) {

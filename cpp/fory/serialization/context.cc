@@ -310,6 +310,9 @@ ReadContext::read_enum_type_info(const std::type_index &type,
   return Unexpected(Error::type_mismatch(low, base_type_id));
 }
 
+// Maximum number of parsed type defs to cache (avoid OOM from malicious input)
+static constexpr size_t kMaxParsedNumTypeDefs = 8192;
+
 Result<size_t, Error> ReadContext::load_type_meta(int32_t meta_offset) {
   size_t current_pos = buffer_->reader_index();
   size_t meta_start = current_pos + meta_offset;
@@ -320,7 +323,21 @@ Result<size_t, Error> ReadContext::load_type_meta(int32_t meta_offset) {
   reading_type_infos_.reserve(meta_size);
 
   for (uint32_t i = 0; i < meta_size; i++) {
-    FORY_TRY(parsed_meta, TypeMeta::from_bytes(*buffer_, nullptr));
+    // Read the 8-byte header first for caching
+    FORY_TRY(meta_header, buffer_->ReadInt64());
+
+    // Check if we already parsed this type meta (cache lookup by header)
+    auto cache_it = parsed_type_infos_.find(meta_header);
+    if (cache_it != parsed_type_infos_.end()) {
+      // Found in cache - reuse and skip the bytes
+      reading_type_infos_.push_back(cache_it->second);
+      FORY_RETURN_NOT_OK(TypeMeta::skip_bytes(*buffer_, meta_header));
+      continue;
+    }
+
+    // Not in cache - parse the TypeMeta
+    FORY_TRY(parsed_meta,
+             TypeMeta::from_bytes_with_header(*buffer_, meta_header));
 
     // Find local TypeInfo to get field_id mapping
     std::shared_ptr<TypeInfo> local_type_info = nullptr;
@@ -355,7 +372,12 @@ Result<size_t, Error> ReadContext::load_type_meta(int32_t meta_offset) {
       type_info->type_meta = parsed_meta;
     }
 
-    // Cast to void* to store in reading_type_infos_
+    // Cache the parsed TypeInfo (with size limit to prevent OOM)
+    if (parsed_type_infos_.size() < kMaxParsedNumTypeDefs) {
+      parsed_type_infos_[meta_header] =
+          std::static_pointer_cast<void>(type_info);
+    }
+
     reading_type_infos_.push_back(std::static_pointer_cast<void>(type_info));
   }
 

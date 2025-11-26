@@ -161,6 +161,8 @@ public class ArrowSchemaConverter {
             return DataTypes.int32();
           case 64:
             return DataTypes.int64();
+          default:
+            break;
         }
       }
       throw new UnsupportedOperationException("Unsupported integer type: " + arrowType);
@@ -173,6 +175,9 @@ public class ArrowSchemaConverter {
           return DataTypes.float32();
         case DOUBLE:
           return DataTypes.float64();
+        default:
+          throw new UnsupportedOperationException(
+              "Unsupported floating point precision: " + fpType.getPrecision());
       }
     } else if (arrowType instanceof ArrowType.Utf8) {
       return DataTypes.utf8();

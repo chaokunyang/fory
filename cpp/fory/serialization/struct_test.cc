@@ -306,8 +306,35 @@ namespace fory {
 namespace serialization {
 namespace test {
 
+// Helper to register all test struct types on a Fory instance
+inline void register_all_test_types(Fory &fory) {
+  uint32_t type_id = 1;
+
+  // Register all struct types used in tests
+  fory.register_struct<SingleFieldStruct>(type_id++);
+  fory.register_struct<TwoFieldStruct>(type_id++);
+  fory.register_struct<ManyFieldsStruct>(type_id++);
+  fory.register_struct<AllPrimitivesStruct>(type_id++);
+  fory.register_struct<StringTestStruct>(type_id++);
+  fory.register_struct<Point2D>(type_id++);
+  fory.register_struct<Point3D>(type_id++);
+  fory.register_struct<Rectangle>(type_id++);
+  fory.register_struct<BoundingBox>(type_id++);
+  fory.register_struct<Scene>(type_id++);
+  fory.register_struct<VectorStruct>(type_id++);
+  fory.register_struct<MapStruct>(type_id++);
+  fory.register_struct<NestedContainerStruct>(type_id++);
+  fory.register_struct<OptionalFieldsStruct>(type_id++);
+  fory.register_struct<EnumStruct>(type_id++);
+  fory.register_struct<UserProfile>(type_id++);
+  fory.register_struct<Product>(type_id++);
+  fory.register_struct<OrderItem>(type_id++);
+  fory.register_struct<Order>(type_id++);
+}
+
 template <typename T> void test_roundtrip(const T &original) {
   auto fory = Fory::builder().xlang(true).track_ref(false).build();
+  register_all_test_types(fory);
 
   auto serialize_result = fory.serialize(original);
   ASSERT_TRUE(serialize_result.ok())
@@ -482,6 +509,12 @@ TEST(StructComprehensiveTest, OrderMultiple) {
 // need clarification. The core struct serialization works correctly.
 TEST(StructComprehensiveTest, DISABLED_DepthLimitViolation) {
   auto fory = Fory::builder().xlang(true).max_depth(1).build();
+  // Register types needed for BoundingBox
+  uint32_t type_id = 1;
+  fory.register_struct<Point2D>(type_id++);
+  fory.register_struct<Rectangle>(type_id++);
+  fory.register_struct<BoundingBox>(type_id++);
+
   BoundingBox bb{{{0, 0}, {10, 10}}, "test"};
   auto result = fory.serialize(bb);
   EXPECT_FALSE(result.ok());
@@ -495,6 +528,12 @@ TEST(StructComprehensiveTest, DISABLED_DepthLimitViolation) {
 
 TEST(StructComprehensiveTest, DISABLED_SufficientDepthLimit) {
   auto fory = Fory::builder().xlang(true).max_depth(10).build();
+  // Register types needed for BoundingBox
+  uint32_t type_id = 1;
+  fory.register_struct<Point2D>(type_id++);
+  fory.register_struct<Rectangle>(type_id++);
+  fory.register_struct<BoundingBox>(type_id++);
+
   BoundingBox bb{{{0, 0}, {10, 10}}, "test"};
   auto result = fory.serialize(bb);
   ASSERT_TRUE(result.ok());
@@ -512,6 +551,9 @@ TEST(StructComprehensiveTest, LargeVectorOfStructs) {
   }
 
   auto fory = Fory::builder().xlang(true).build();
+  // Register Point2D for the vector elements
+  fory.register_struct<Point2D>(1);
+
   auto ser_result = fory.serialize(points);
   ASSERT_TRUE(ser_result.ok());
 

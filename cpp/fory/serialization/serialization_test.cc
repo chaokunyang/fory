@@ -81,9 +81,20 @@ namespace test {
 // Test Helpers
 // ============================================================================
 
+// Helper to register test struct types on a Fory instance
+inline void register_test_types(Fory &fory) {
+  uint32_t type_id = 1;
+
+  // Register all struct types used in tests
+  fory.register_struct<::SimpleStruct>(type_id++);
+  fory.register_struct<::ComplexStruct>(type_id++);
+  fory.register_struct<::NestedStruct>(type_id++);
+}
+
 template <typename T>
 void test_roundtrip(const T &original, bool should_equal = true) {
   auto fory = Fory::builder().xlang(true).track_ref(false).build();
+  register_test_types(fory);
 
   // Serialize
   auto serialize_result = fory.serialize(original);

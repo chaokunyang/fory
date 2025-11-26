@@ -54,11 +54,21 @@ Fory create_serializer(bool track_ref) {
   return Fory::builder().track_ref(track_ref).build();
 }
 
+// Helper to register all test struct types
+inline void register_smart_ptr_test_types(Fory &fory) {
+  uint32_t type_id = 100; // Start from 100 to avoid conflicts
+  fory.register_struct<OptionalIntHolder>(type_id++);
+  fory.register_struct<OptionalSharedHolder>(type_id++);
+  fory.register_struct<SharedPair>(type_id++);
+  fory.register_struct<UniqueHolder>(type_id++);
+}
+
 TEST(SmartPtrSerializerTest, OptionalIntRoundTrip) {
   OptionalIntHolder original;
   original.value = 42;
 
   auto fory = create_serializer(true);
+  register_smart_ptr_test_types(fory);
   auto bytes_result = fory.serialize(original);
   ASSERT_TRUE(bytes_result.ok()) << bytes_result.error().to_string();
 
@@ -77,6 +87,7 @@ TEST(SmartPtrSerializerTest, OptionalIntNullRoundTrip) {
   original.value.reset();
 
   auto fory = create_serializer(true);
+  register_smart_ptr_test_types(fory);
   auto bytes_result = fory.serialize(original);
   ASSERT_TRUE(bytes_result.ok()) << bytes_result.error().to_string();
 
@@ -94,6 +105,7 @@ TEST(SmartPtrSerializerTest, OptionalSharedPtrRoundTrip) {
   original.value = std::make_shared<int32_t>(42);
 
   auto fory = create_serializer(true);
+  register_smart_ptr_test_types(fory);
   auto bytes_result = fory.serialize(original);
   ASSERT_TRUE(bytes_result.ok()) << bytes_result.error().to_string();
 
@@ -113,6 +125,7 @@ TEST(SmartPtrSerializerTest, SharedPtrReferenceTracking) {
   SharedPair original{shared, shared};
 
   auto fory = create_serializer(true);
+  register_smart_ptr_test_types(fory);
   auto bytes_result = fory.serialize(original);
   ASSERT_TRUE(bytes_result.ok()) << bytes_result.error().to_string();
 
@@ -135,6 +148,7 @@ TEST(SmartPtrSerializerTest, UniquePtrRoundTrip) {
   original.value = std::make_unique<int32_t>(2025);
 
   auto fory = create_serializer(true);
+  register_smart_ptr_test_types(fory);
   auto bytes_result = fory.serialize(original);
   ASSERT_TRUE(bytes_result.ok()) << bytes_result.error().to_string();
 
@@ -153,6 +167,7 @@ TEST(SmartPtrSerializerTest, UniquePtrNullRoundTrip) {
   original.value.reset();
 
   auto fory = create_serializer(true);
+  register_smart_ptr_test_types(fory);
   auto bytes_result = fory.serialize(original);
   ASSERT_TRUE(bytes_result.ok()) << bytes_result.error().to_string();
 
@@ -200,9 +215,8 @@ FORY_STRUCT(PolymorphicUniqueHolder, ptr);
 
 TEST(SmartPtrSerializerTest, PolymorphicSharedPtrDerived1) {
   auto fory = create_serializer(true);
-  auto register_result =
-      fory.type_resolver().template register_by_name<Derived1>("test",
-                                                               "Derived1");
+  fory.register_struct<PolymorphicSharedHolder>(200);
+  auto register_result = fory.register_struct<Derived1>("test", "Derived1");
   ASSERT_TRUE(register_result.ok())
       << "Failed to register Derived1: " << register_result.error().to_string();
 
@@ -229,9 +243,8 @@ TEST(SmartPtrSerializerTest, PolymorphicSharedPtrDerived1) {
 
 TEST(SmartPtrSerializerTest, PolymorphicSharedPtrDerived2) {
   auto fory = create_serializer(true);
-  auto register_result =
-      fory.type_resolver().template register_by_name<Derived2>("test",
-                                                               "Derived2");
+  fory.register_struct<PolymorphicSharedHolder>(200);
+  auto register_result = fory.register_struct<Derived2>("test", "Derived2");
   ASSERT_TRUE(register_result.ok())
       << "Failed to register Derived2: " << register_result.error().to_string();
 
@@ -258,9 +271,8 @@ TEST(SmartPtrSerializerTest, PolymorphicSharedPtrDerived2) {
 
 TEST(SmartPtrSerializerTest, PolymorphicUniquePtrDerived1) {
   auto fory = create_serializer(true);
-  auto register_result =
-      fory.type_resolver().template register_by_name<Derived1>("test",
-                                                               "Derived1");
+  fory.register_struct<PolymorphicUniqueHolder>(201);
+  auto register_result = fory.register_struct<Derived1>("test", "Derived1");
   ASSERT_TRUE(register_result.ok())
       << "Failed to register Derived1: " << register_result.error().to_string();
 
@@ -287,9 +299,8 @@ TEST(SmartPtrSerializerTest, PolymorphicUniquePtrDerived1) {
 
 TEST(SmartPtrSerializerTest, PolymorphicUniquePtrDerived2) {
   auto fory = create_serializer(true);
-  auto register_result =
-      fory.type_resolver().template register_by_name<Derived2>("test",
-                                                               "Derived2");
+  fory.register_struct<PolymorphicUniqueHolder>(201);
+  auto register_result = fory.register_struct<Derived2>("test", "Derived2");
   ASSERT_TRUE(register_result.ok())
       << "Failed to register Derived2: " << register_result.error().to_string();
 

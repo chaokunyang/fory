@@ -737,11 +737,8 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
   /// This is used by collection serializers to write element type info.
   /// Matches Rust's struct_::write_type_info.
   static Result<void, Error> write_type_info(WriteContext &ctx) {
-    auto type_info = ctx.type_resolver().template get_struct_type_info<T>();
-    FORY_CHECK(type_info)
-        << "Type metadata not initialized for requested struct";
-
-    uint32_t type_id = ctx.type_resolver().get_type_id<T>();
+    FORY_TRY(type_info, ctx.type_resolver().template get_struct_type_info<T>());
+    FORY_TRY(type_id, ctx.type_resolver().template get_type_id<T>());
     ctx.write_varuint32(type_id);
 
     // In compatible mode, always write meta index (matches Rust behavior)
@@ -768,12 +765,8 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
                                    bool has_generics = false) {
     write_not_null_ref_flag(ctx, write_ref);
 
-    auto type_info = ctx.type_resolver().template get_struct_type_info<T>();
-    FORY_CHECK(type_info)
-        << "Type metadata not initialized for requested struct";
-
     if (write_type) {
-      uint32_t type_id = ctx.type_resolver().get_type_id<T>();
+      FORY_TRY(type_id, ctx.type_resolver().template get_type_id<T>());
       // Use write_any_typeinfo to handle both type_id AND namespace/type_name
       // for NAMED_STRUCT, and meta_index for compatible mode
       FORY_RETURN_NOT_OK(
@@ -784,9 +777,12 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
 
   static Result<void, Error> write_data(const T &obj, WriteContext &ctx) {
     if (ctx.check_struct_version()) {
-      auto type_info = ctx.type_resolver().template get_struct_type_info<T>();
-      FORY_CHECK(type_info && type_info->type_meta)
-          << "Type metadata not initialized for requested struct";
+      FORY_TRY(type_info,
+               ctx.type_resolver().template get_struct_type_info<T>());
+      if (!type_info->type_meta) {
+        return Unexpected(Error::type_error(
+            "Type metadata not initialized for requested struct"));
+      }
       int32_t local_version =
           TypeMeta::compute_struct_version(*type_info->type_meta);
       ctx.buffer().WriteInt32(local_version);
@@ -801,9 +797,12 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
   static Result<void, Error> write_data_generic(const T &obj, WriteContext &ctx,
                                                 bool has_generics) {
     if (ctx.check_struct_version()) {
-      auto type_info = ctx.type_resolver().template get_struct_type_info<T>();
-      FORY_CHECK(type_info && type_info->type_meta)
-          << "Type metadata not initialized for requested struct";
+      FORY_TRY(type_info,
+               ctx.type_resolver().template get_struct_type_info<T>());
+      if (!type_info->type_meta) {
+        return Unexpected(Error::type_error(
+            "Type metadata not initialized for requested struct"));
+      }
       int32_t local_version =
           TypeMeta::compute_struct_version(*type_info->type_meta);
       ctx.buffer().WriteInt32(local_version);
@@ -846,8 +845,8 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
 
           // Check LOCAL type to decide if we should read meta_index (matches
           // Rust logic)
-          auto local_type_info =
-              ctx.type_resolver().template get_struct_type_info<T>();
+          FORY_TRY(local_type_info,
+                   ctx.type_resolver().template get_struct_type_info<T>());
           uint32_t local_type_id =
               ctx.type_resolver().get_type_id(*local_type_info);
           uint8_t local_type_id_low = local_type_id & 0xff;
@@ -886,19 +885,17 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
         // payload, and also validates that the concrete type id matches
         // the expected static type.
         if (read_type) {
-          auto local_type_info =
-              ctx.type_resolver().template get_struct_type_info<T>();
-          FORY_CHECK(local_type_info && local_type_info->type_meta)
-              << "Type metadata not initialized for requested struct";
+          FORY_TRY(local_type_info,
+                   ctx.type_resolver().template get_struct_type_info<T>());
+          if (!local_type_info->type_meta) {
+            return Unexpected(Error::type_error(
+                "Type metadata not initialized for requested struct"));
+          }
           uint32_t expected_type_id =
               ctx.type_resolver().get_type_id(*local_type_info);
 
           // xlang: read full type info (id + any named metadata)
-          auto type_info_result = ctx.read_any_typeinfo();
-          if (!type_info_result.ok()) {
-            return Unexpected(type_info_result.error());
-          }
-          auto remote_info = type_info_result.value();
+          FORY_TRY(remote_info, ctx.read_any_typeinfo());
           uint32_t remote_type_id = remote_info ? remote_info->type_id : 0u;
           if (remote_type_id != expected_type_id) {
             return Unexpected(
@@ -930,10 +927,12 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
     // Read and verify struct version if enabled (matches write_data behavior)
     if (ctx.check_struct_version()) {
       FORY_TRY(read_version, ctx.buffer().ReadInt32());
-      auto local_type_info =
-          ctx.type_resolver().template get_struct_type_info<T>();
-      FORY_CHECK(local_type_info && local_type_info->type_meta)
-          << "Type metadata not initialized for requested struct";
+      FORY_TRY(local_type_info,
+               ctx.type_resolver().template get_struct_type_info<T>());
+      if (!local_type_info->type_meta) {
+        return Unexpected(Error::type_error(
+            "Type metadata not initialized for requested struct"));
+      }
       int32_t local_version =
           TypeMeta::compute_struct_version(*local_type_info->type_meta);
       FORY_RETURN_NOT_OK(TypeMeta::check_struct_version(
@@ -964,10 +963,12 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
 
     if (ctx.check_struct_version()) {
       FORY_TRY(read_version, ctx.buffer().ReadInt32());
-      auto local_type_info =
-          ctx.type_resolver().template get_struct_type_info<T>();
-      FORY_CHECK(local_type_info && local_type_info->type_meta)
-          << "Type metadata not initialized for requested struct";
+      FORY_TRY(local_type_info,
+               ctx.type_resolver().template get_struct_type_info<T>());
+      if (!local_type_info->type_meta) {
+        return Unexpected(Error::type_error(
+            "Type metadata not initialized for requested struct"));
+      }
       int32_t local_version =
           TypeMeta::compute_struct_version(*local_type_info->type_meta);
       FORY_RETURN_NOT_OK(TypeMeta::check_struct_version(

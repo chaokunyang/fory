@@ -52,6 +52,7 @@ namespace fory {
 namespace serialization {
 
 // Forward declarations
+class Fory;
 class TypeResolver;
 class WriteContext;
 class ReadContext;
@@ -410,24 +411,12 @@ public:
   template <typename T>
   const std::unordered_map<std::string, size_t> &field_name_to_index();
 
-  template <typename T> std::shared_ptr<TypeInfo> get_struct_type_info();
+  template <typename T>
+  Result<std::shared_ptr<TypeInfo>, Error> get_struct_type_info();
 
   uint32_t get_type_id(const TypeInfo &info) const;
 
-  template <typename T> uint32_t get_type_id();
-
-  template <typename T> Result<void, Error> register_by_id(uint32_t type_id);
-
-  template <typename T>
-  Result<void, Error> register_by_name(const std::string &ns,
-                                       const std::string &type_name);
-
-  template <typename T>
-  Result<void, Error> register_ext_type_by_id(uint32_t type_id);
-
-  template <typename T>
-  Result<void, Error> register_ext_type_by_name(const std::string &ns,
-                                                const std::string &type_name);
+  template <typename T> Result<uint32_t, Error> get_type_id();
 
   /// Get type info by type ID (for non-namespaced types)
   std::shared_ptr<TypeInfo> get_type_info_by_id(uint32_t type_id) const;
@@ -484,6 +473,21 @@ public:
   std::shared_ptr<TypeResolver> clone() const;
 
 private:
+  friend class Fory;
+
+  template <typename T> Result<void, Error> register_by_id(uint32_t type_id);
+
+  template <typename T>
+  Result<void, Error> register_by_name(const std::string &ns,
+                                       const std::string &type_name);
+
+  template <typename T>
+  Result<void, Error> register_ext_type_by_id(uint32_t type_id);
+
+  template <typename T>
+  Result<void, Error> register_ext_type_by_name(const std::string &ns,
+                                                const std::string &type_name);
+
   template <typename T>
   static Result<std::shared_ptr<TypeInfo>, Error>
   build_struct_type_info(uint32_t type_id, std::string ns,
@@ -625,7 +629,7 @@ TypeResolver::field_name_to_index() {
 }
 
 template <typename T>
-std::shared_ptr<TypeInfo> TypeResolver::get_struct_type_info() {
+Result<std::shared_ptr<TypeInfo>, Error> TypeResolver::get_struct_type_info() {
   static_assert(is_fory_serializable_v<T>,
                 "get_struct_type_info requires FORY_STRUCT types");
   const std::type_index key(typeid(T));
@@ -633,53 +637,10 @@ std::shared_ptr<TypeInfo> TypeResolver::get_struct_type_info() {
   if (it != type_info_cache_.end()) {
     return it->second;
   }
-
-  // Auto-register the type if not found (for backward compatibility)
-  // This happens when types are used without explicit registration
-  uint32_t default_type_id =
-      compatible_ ? static_cast<uint32_t>(TypeId::COMPATIBLE_STRUCT)
-                  : static_cast<uint32_t>(TypeId::STRUCT);
-  auto info_result = build_struct_type_info<T>(default_type_id, "", "", true);
-  FORY_CHECK(info_result.ok())
-      << "Failed to auto-register type: " << info_result.error().message();
-  auto info = std::move(info_result).value();
-
-  // Build complete TypeMeta immediately for auto-registered types
-  auto fields_result = info->harness.sorted_field_infos_fn(*this);
-  FORY_CHECK(fields_result.ok())
-      << "Failed to get fields: " << fields_result.error().message();
-  auto sorted_fields = std::move(fields_result).value();
-
-  TypeMeta meta = TypeMeta::from_fields(info->type_id, info->namespace_name,
-                                        info->type_name, info->register_by_name,
-                                        std::move(sorted_fields));
-
-  auto type_def_result = meta.to_bytes();
-  FORY_CHECK(type_def_result.ok())
-      << "Failed to serialize TypeMeta: " << type_def_result.error().message();
-
-  info->type_def = std::move(type_def_result).value();
-
-  // Parse back to create shared_ptr<TypeMeta>
-  Buffer buffer(info->type_def.data(),
-                static_cast<uint32_t>(info->type_def.size()), false);
-  buffer.WriterIndex(static_cast<uint32_t>(info->type_def.size()));
-  auto parsed_meta_result = TypeMeta::from_bytes(buffer, nullptr);
-  FORY_CHECK(parsed_meta_result.ok())
-      << "Failed to parse TypeMeta: " << parsed_meta_result.error().message();
-  info->type_meta = std::move(parsed_meta_result).value();
-
-  // Register in all caches
-  type_info_cache_[key] = info;
-  if (info->type_id != 0) {
-    type_info_by_id_[info->type_id] = info;
-  }
-  if (info->register_by_name) {
-    auto name_key = make_name_key(info->namespace_name, info->type_name);
-    type_info_by_name_[name_key] = info;
-  }
-
-  return info;
+  return Unexpected(Error::type_error(
+      "Type not registered: " + std::string(typeid(T).name()) +
+      ". All struct/enum/ext types must be explicitly "
+      "registered before serialization."));
 }
 
 inline uint32_t TypeResolver::get_type_id(const TypeInfo &info) const {
@@ -703,10 +664,12 @@ inline uint32_t TypeResolver::get_type_id(const TypeInfo &info) const {
   return info.type_id;
 }
 
-template <typename T> uint32_t TypeResolver::get_type_id() {
-  auto info = get_struct_type_info<T>();
-  FORY_CHECK(info && info->type_meta)
-      << "Type metadata not initialized for requested struct";
+template <typename T> Result<uint32_t, Error> TypeResolver::get_type_id() {
+  FORY_TRY(info, get_struct_type_info<T>());
+  if (!info->type_meta) {
+    return Unexpected(Error::type_error(
+        "Type metadata not initialized for requested struct"));
+  }
   return get_type_id(*info);
 }
 

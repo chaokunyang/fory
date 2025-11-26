@@ -76,6 +76,15 @@ bazel test //fory/util:buffer_test
 clang-format -i $file
 ```
 
+Run C++ xlang tests:
+
+```bash
+cd java
+mvn -T16 install -DskipTests
+cd fory-core
+FORY_CPP_JAVA_CI=1 mvn -T16 test -Dtest=org.apache.fory.CPPXlangTest
+```
+
 ### Python Development
 
 - All commands must be executed within the `python` directory.

@@ -232,9 +232,8 @@ struct Serializer<
     return Result<void, Error>();
   }
 
-  // Helper to read xlang-compatible list layout written by Java
   static Result<std::vector<T, Alloc>, Error>
-  read_xlang(ReadContext &ctx, bool read_ref, bool read_type) {
+  read(ReadContext &ctx, bool read_ref, bool read_type) {
     // List-level reference flag (xwriteRef on Java side)
     FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
     if (!has_value) {
@@ -277,19 +276,11 @@ struct Serializer<
       // Type info was consumed; we trust the sender wrote correct element
       // types. We do a relaxed check comparing type categories using
       // type_id_matches.
-      if constexpr (is_optional_v<T>) {
-        using Inner = typename T::value_type;
-        uint32_t expected = static_cast<uint32_t>(Serializer<Inner>::type_id);
-        if (!type_id_matches(elem_type_info->type_id, expected)) {
-          return Unexpected(
-              Error::type_mismatch(elem_type_info->type_id, expected));
-        }
-      } else {
-        uint32_t expected = static_cast<uint32_t>(Serializer<T>::type_id);
-        if (!type_id_matches(elem_type_info->type_id, expected)) {
-          return Unexpected(
-              Error::type_mismatch(elem_type_info->type_id, expected));
-        }
+      using ElemType = nullable_element_t<T>;
+      uint32_t expected = static_cast<uint32_t>(Serializer<ElemType>::type_id);
+      if (!type_id_matches(elem_type_info->type_id, expected)) {
+        return Unexpected(
+            Error::type_mismatch(elem_type_info->type_id, expected));
       }
     }
 
@@ -316,14 +307,11 @@ struct Serializer<
         // Elements encoded with explicit null flag (NULL/NOT_NULL_VALUE).
         FORY_TRY(has_value_elem, consume_ref_flag(ctx, true));
         if (!has_value_elem) {
-          if constexpr (is_optional_v<T>) {
-            result.emplace_back(std::nullopt);
-          } else {
-            result.emplace_back();
-          }
+          // Push null/empty value for nullable types
+          result.emplace_back();
         } else {
-          if constexpr (is_optional_v<T>) {
-            using Inner = typename T::value_type;
+          if constexpr (is_nullable_v<T>) {
+            using Inner = nullable_element_t<T>;
             FORY_TRY(inner, Serializer<Inner>::read(ctx, false, false));
             result.emplace_back(std::move(inner));
           } else {
@@ -355,73 +343,7 @@ struct Serializer<
       ctx.write_varuint32(static_cast<uint32_t>(type_id));
     }
 
-    // Delegate to appropriate data writer based on has_generics
-    // This matches Rust's internal dispatch logic
-    if (has_generics || ctx.is_xlang()) {
-      return write_data_generic(vec, ctx, has_generics);
-    }
-
-    // Non-xlang path: simple length + elements
-    ctx.write_varuint32(static_cast<uint32_t>(vec.size()));
-
-    if (!vec.empty()) {
-      // Build header bitmap
-      bool has_null = false;
-      for (const auto &elem : vec) {
-        if constexpr (is_optional_v<T>) {
-          if (!elem.has_value()) {
-            has_null = true;
-            break;
-          }
-        }
-      }
-      uint8_t bitmap = 0b1000; // IS_SAME_TYPE - all elements are same type
-      if (has_null) {
-        bitmap |= 0b0010; // HAS_NULL
-      }
-      // In xlang compatible mode (meta sharing enabled), we do NOT set
-      // IS_DECL_ELEMENT_TYPE and must write element type info instead.
-      // This matches Rust's collection.rs logic:
-      // let is_elem_declared = has_generics &&
-      // !need_to_write_type_for_field(...) For top-level collections,
-      // has_generics is false, so is_elem_declared is false.
-
-      // Write header
-      ctx.write_uint8(bitmap);
-
-      // Write element type info when IS_SAME_TYPE is set but
-      // IS_DECL_ELEMENT_TYPE is not
-      // Per xlang spec: write type info when is_same_type && !is_elem_declared
-      if ((bitmap & 0b1000) &&
-          !(bitmap & 0b0100)) { // IS_SAME_TYPE && !IS_DECL_ELEMENT_TYPE
-        // Write type info for element type
-        if constexpr (is_optional_v<T>) {
-          using Inner = typename T::value_type;
-          FORY_RETURN_NOT_OK(Serializer<Inner>::write_type_info(ctx));
-        } else {
-          FORY_RETURN_NOT_OK(Serializer<T>::write_type_info(ctx));
-        }
-      }
-
-      // Write elements
-      if constexpr (is_optional_v<T>) {
-        for (const auto &opt : vec) {
-          if (!opt.has_value()) {
-            ctx.write_int8(NULL_FLAG);
-          } else {
-            ctx.write_int8(NOT_NULL_VALUE_FLAG);
-            FORY_RETURN_NOT_OK(Serializer<typename T::value_type>::write(
-                *opt, ctx, false, false));
-          }
-        }
-      } else {
-        for (const auto &elem : vec) {
-          FORY_RETURN_NOT_OK(Serializer<T>::write(elem, ctx, false, false));
-        }
-      }
-    } // end if (!vec.empty())
-
-    return Result<void, Error>();
+    return write_data_generic(vec, ctx, has_generics);
   }
 
   static inline Result<void, Error> write_data(const std::vector<T, Alloc> &vec,
@@ -445,9 +367,9 @@ struct Serializer<
 
     // Build header bitmap
     bool has_null = false;
-    for (const auto &elem : vec) {
-      if constexpr (is_optional_v<T>) {
-        if (!elem.has_value()) {
+    if constexpr (is_nullable_v<T>) {
+      for (const auto &elem : vec) {
+        if (is_null_value(elem)) {
           has_null = true;
           break;
         }
@@ -468,24 +390,15 @@ struct Serializer<
     // NAMED_COMPATIBLE_STRUCT, EXT, NAMED_EXT
     bool is_elem_declared = false;
     if (has_generics) {
-      if constexpr (is_optional_v<T>) {
-        using Inner = typename T::value_type;
-        constexpr TypeId tid = Serializer<Inner>::type_id;
-        const bool need_type = tid == TypeId::STRUCT ||
-                               tid == TypeId::COMPATIBLE_STRUCT ||
-                               tid == TypeId::NAMED_STRUCT ||
-                               tid == TypeId::NAMED_COMPATIBLE_STRUCT ||
-                               tid == TypeId::EXT || tid == TypeId::NAMED_EXT;
-        is_elem_declared = !need_type;
-      } else {
-        constexpr TypeId tid = Serializer<T>::type_id;
-        const bool need_type = tid == TypeId::STRUCT ||
-                               tid == TypeId::COMPATIBLE_STRUCT ||
-                               tid == TypeId::NAMED_STRUCT ||
-                               tid == TypeId::NAMED_COMPATIBLE_STRUCT ||
-                               tid == TypeId::EXT || tid == TypeId::NAMED_EXT;
-        is_elem_declared = !need_type;
-      }
+      // Get the inner type for nullable types (optional, shared_ptr, etc.)
+      using ElemType = nullable_element_t<T>;
+      constexpr TypeId tid = Serializer<ElemType>::type_id;
+      const bool need_type = tid == TypeId::STRUCT ||
+                             tid == TypeId::COMPATIBLE_STRUCT ||
+                             tid == TypeId::NAMED_STRUCT ||
+                             tid == TypeId::NAMED_COMPATIBLE_STRUCT ||
+                             tid == TypeId::EXT || tid == TypeId::NAMED_EXT;
+      is_elem_declared = !need_type;
     }
     if (is_elem_declared) {
       bitmap |= 0b0100; // IS_DECL_ELEMENT_TYPE
@@ -496,20 +409,17 @@ struct Serializer<
 
     // Write element type info only if !IS_DECL_ELEMENT_TYPE
     if (!is_elem_declared) {
-      if constexpr (is_optional_v<T>) {
-        using Inner = typename T::value_type;
-        FORY_RETURN_NOT_OK(Serializer<Inner>::write_type_info(ctx));
-      } else {
-        FORY_RETURN_NOT_OK(Serializer<T>::write_type_info(ctx));
-      }
+      using ElemType = nullable_element_t<T>;
+      FORY_RETURN_NOT_OK(Serializer<ElemType>::write_type_info(ctx));
     }
 
     // Write elements
-    if constexpr (is_optional_v<T>) {
+    if constexpr (is_nullable_v<T>) {
+      using Inner = nullable_element_t<T>;
       // Only write null flags when HAS_NULL is set in bitmap
       if (has_null) {
-        for (const auto &opt : vec) {
-          if (!opt.has_value()) {
+        for (const auto &elem : vec) {
+          if (is_null_value(elem)) {
             ctx.write_int8(NULL_FLAG);
           } else {
             ctx.write_int8(NOT_NULL_VALUE_FLAG);
@@ -517,23 +427,23 @@ struct Serializer<
             // metadata
             if (is_elem_declared) {
               FORY_RETURN_NOT_OK(
-                  Serializer<typename T::value_type>::write_data(*opt, ctx));
+                  Serializer<Inner>::write_data(deref_nullable(elem), ctx));
             } else {
-              FORY_RETURN_NOT_OK(Serializer<typename T::value_type>::write(
-                  *opt, ctx, false, false));
+              FORY_RETURN_NOT_OK(Serializer<Inner>::write(deref_nullable(elem),
+                                                          ctx, false, false));
             }
           }
         }
       } else {
         // When has_null=false, all elements are non-null, write directly
-        for (const auto &opt : vec) {
+        for (const auto &elem : vec) {
           // When IS_DECL_ELEMENT_TYPE is set, use write_data
           if (is_elem_declared) {
             FORY_RETURN_NOT_OK(
-                Serializer<typename T::value_type>::write_data(*opt, ctx));
+                Serializer<Inner>::write_data(deref_nullable(elem), ctx));
           } else {
-            FORY_RETURN_NOT_OK(Serializer<typename T::value_type>::write(
-                *opt, ctx, false, false));
+            FORY_RETURN_NOT_OK(Serializer<Inner>::write(deref_nullable(elem),
+                                                        ctx, false, false));
           }
         }
       }
@@ -542,7 +452,7 @@ struct Serializer<
         // When IS_DECL_ELEMENT_TYPE is set, write elements without ref/type
         // metadata
         if (is_elem_declared) {
-          if (is_generic_type_v<T>) {
+          if constexpr (is_generic_type_v<T>) {
             FORY_RETURN_NOT_OK(
                 Serializer<T>::write_data_generic(elem, ctx, true));
           } else {
@@ -558,11 +468,6 @@ struct Serializer<
     }
 
     return Result<void, Error>();
-  }
-
-  static inline Result<std::vector<T, Alloc>, Error>
-  read(ReadContext &ctx, bool read_ref, bool read_type) {
-    return read_xlang(ctx, read_ref, read_type);
   }
 
   static inline Result<std::vector<T, Alloc>, Error>
@@ -696,45 +601,7 @@ struct Serializer<std::set<T, Args...>> {
       ctx.write_varuint32(static_cast<uint32_t>(type_id));
     }
 
-    // Delegate to write_data_generic when has_generics or xlang mode
-    if (has_generics || ctx.is_xlang()) {
-      return write_data_generic(set, ctx, has_generics);
-    }
-
-    // Non-xlang path: Write set size
-    ctx.write_varuint32(static_cast<uint32_t>(set.size()));
-
-    // Per xlang spec: | length | header | [type_info] | elements |
-    // Header and type_info are omitted when length is 0.
-    if (set.empty()) {
-      return Result<void, Error>();
-    }
-
-    // Build header bitmap
-    // Sets cannot contain null values, so has_null is always false
-    uint8_t bitmap = 0b1000; // IS_SAME_TYPE - all elements are same type
-    // HAS_NULL is 0 for sets
-    // TRACKING_REF is 0 (no ref tracking for elements by default)
-    // IS_DECL_ELEMENT_TYPE is 0 in xlang compatible mode (must write element
-    // type info)
-
-    // Write header
-    ctx.write_uint8(bitmap);
-
-    // Write element type info when IS_SAME_TYPE is set but IS_DECL_ELEMENT_TYPE
-    // is not Per xlang spec: write type info when is_same_type &&
-    // !is_elem_declared
-    if ((bitmap & 0b1000) &&
-        !(bitmap & 0b0100)) { // IS_SAME_TYPE && !IS_DECL_ELEMENT_TYPE
-      FORY_RETURN_NOT_OK(Serializer<T>::write_type_info(ctx));
-    }
-
-    // Write elements
-    for (const auto &elem : set) {
-      FORY_RETURN_NOT_OK(Serializer<T>::write(elem, ctx, false, false));
-    }
-
-    return Result<void, Error>();
+    return write_data_generic(set, ctx, has_generics);
   }
 
   static inline Result<void, Error> write_data(const std::set<T, Args...> &set,
@@ -925,45 +792,7 @@ struct Serializer<std::unordered_set<T, Args...>> {
       ctx.write_varuint32(static_cast<uint32_t>(type_id));
     }
 
-    // Delegate to write_data_generic when has_generics or xlang mode
-    if (has_generics || ctx.is_xlang()) {
-      return write_data_generic(set, ctx, has_generics);
-    }
-
-    // Non-xlang path: Write set size
-    ctx.write_varuint32(static_cast<uint32_t>(set.size()));
-
-    // Per xlang spec: | length | header | [type_info] | elements |
-    // Header and type_info are omitted when length is 0.
-    if (set.empty()) {
-      return Result<void, Error>();
-    }
-
-    // Build header bitmap
-    // Sets cannot contain null values, so has_null is always false
-    uint8_t bitmap = 0b1000; // IS_SAME_TYPE - all elements are same type
-    // HAS_NULL is 0 for sets
-    // TRACKING_REF is 0 (no ref tracking for elements by default)
-    // IS_DECL_ELEMENT_TYPE is 0 in xlang compatible mode (must write element
-    // type info)
-
-    // Write header
-    ctx.write_uint8(bitmap);
-
-    // Write element type info when IS_SAME_TYPE is set but IS_DECL_ELEMENT_TYPE
-    // is not Per xlang spec: write type info when is_same_type &&
-    // !is_elem_declared
-    if ((bitmap & 0b1000) &&
-        !(bitmap & 0b0100)) { // IS_SAME_TYPE && !IS_DECL_ELEMENT_TYPE
-      FORY_RETURN_NOT_OK(Serializer<T>::write_type_info(ctx));
-    }
-
-    // Write elements
-    for (const auto &elem : set) {
-      FORY_RETURN_NOT_OK(Serializer<T>::write(elem, ctx, false, false));
-    }
-
-    return Result<void, Error>();
+    return write_data_generic(set, ctx, has_generics);
   }
 
   static inline Result<void, Error>

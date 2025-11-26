@@ -134,7 +134,7 @@ WriteContext::write_any_typeinfo(uint32_t fory_type_id,
     } else {
       // Write namespace and type_name using the same format as Java's
       // MetaStringResolver#writeMetaStringBytes (without dynamic reuse).
-      constexpr uint32_t kSmallStringThreshold = 16;
+      static constexpr uint32_t kSmallStringThreshold = 16;
 
       // Create encoders matching Java's PACKAGE_ENCODER ('.', '_') for
       // namespace and TYPE_NAME_ENCODER ('$', '_') for type names.

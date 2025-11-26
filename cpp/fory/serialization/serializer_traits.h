@@ -22,6 +22,7 @@
 #include "fory/meta/field_info.h"
 #include "fory/meta/type_traits.h"
 #include <map>
+#include <memory>
 #include <optional>
 #include <set>
 #include <type_traits>
@@ -77,6 +78,90 @@ template <typename T> struct is_optional<std::optional<T>> : std::true_type {};
 
 template <typename T>
 inline constexpr bool is_optional_v = is_optional<T>::value;
+
+/// Detect std::weak_ptr
+template <typename T> struct is_weak_ptr : std::false_type {};
+
+template <typename T> struct is_weak_ptr<std::weak_ptr<T>> : std::true_type {};
+
+template <typename T>
+inline constexpr bool is_weak_ptr_v = is_weak_ptr<T>::value;
+
+// ============================================================================
+// Nullable Type Detection and Helpers
+// ============================================================================
+
+/// Detect types that can hold null values (optional, shared_ptr, unique_ptr,
+/// weak_ptr)
+template <typename T> struct is_nullable : std::false_type {};
+
+template <typename T> struct is_nullable<std::optional<T>> : std::true_type {};
+
+template <typename T>
+struct is_nullable<std::shared_ptr<T>> : std::true_type {};
+
+template <typename T, typename D>
+struct is_nullable<std::unique_ptr<T, D>> : std::true_type {};
+
+template <typename T> struct is_nullable<std::weak_ptr<T>> : std::true_type {};
+
+template <typename T>
+inline constexpr bool is_nullable_v = is_nullable<T>::value;
+
+/// Check if a nullable value is null
+template <typename T> inline bool is_null_value(const T &value) {
+  if constexpr (is_optional_v<T>) {
+    return !value.has_value();
+  } else if constexpr (is_weak_ptr_v<T>) {
+    return value.expired();
+  } else {
+    // shared_ptr, unique_ptr - check against nullptr
+    return value == nullptr;
+  }
+}
+
+/// Get the inner/element type of a nullable type
+template <typename T> struct nullable_element_type {
+  using type = T;
+};
+
+template <typename T> struct nullable_element_type<std::optional<T>> {
+  using type = T;
+};
+
+template <typename T> struct nullable_element_type<std::shared_ptr<T>> {
+  using type = T;
+};
+
+template <typename T, typename D>
+struct nullable_element_type<std::unique_ptr<T, D>> {
+  using type = T;
+};
+
+template <typename T> struct nullable_element_type<std::weak_ptr<T>> {
+  using type = T;
+};
+
+template <typename T>
+using nullable_element_t = typename nullable_element_type<T>::type;
+
+/// Dereference a nullable value to get the inner value
+/// Note: Caller must ensure the value is not null before calling this
+template <typename T>
+inline const nullable_element_t<T> &deref_nullable(const T &value) {
+  if constexpr (is_optional_v<T>) {
+    return *value;
+  } else if constexpr (is_weak_ptr_v<T>) {
+    // For weak_ptr, we need to lock it first
+    // This is a special case - caller should handle weak_ptr separately
+    static_assert(!is_weak_ptr_v<T>,
+                  "weak_ptr should be handled separately via lock()");
+    return *value.lock();
+  } else {
+    // shared_ptr, unique_ptr
+    return *value;
+  }
+}
 
 // ============================================================================
 // Fory Struct Detection

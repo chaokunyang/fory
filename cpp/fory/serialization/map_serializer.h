@@ -103,31 +103,6 @@ template <typename T> inline constexpr bool need_to_write_type_for_field() {
          tid == TypeId::NAMED_EXT;
 }
 
-/// Check if a value is "none" (for optional/pointer types)
-/// Returns true for:
-/// - std::optional with no value
-/// - nullptr for raw pointers
-/// - empty std::unique_ptr
-/// - empty std::shared_ptr
-template <typename T> inline bool is_none_value(const T &value) {
-  if constexpr (is_optional_v<T>) {
-    return !value.has_value();
-  } else if constexpr (std::is_pointer_v<T>) {
-    return value == nullptr;
-  } else if constexpr (is_shared_ref_v<T>) {
-    // std::shared_ptr
-    return !value;
-  } else {
-    return false;
-  }
-}
-
-/// Specialization for std::unique_ptr
-template <typename T>
-inline bool is_none_value(const std::unique_ptr<T> &value) {
-  return !value;
-}
-
 // ============================================================================
 // Map Data Writing - Fast Path (Non-Polymorphic)
 // ============================================================================
@@ -253,9 +228,16 @@ write_map_data_slow(const MapType &map, WriteContext &ctx, bool has_generics) {
   uint32_t current_val_type_id = 0;
 
   for (const auto &[key, value] : map) {
-    // Check if key or value is none (for optional/pointer types)
-    bool key_is_none = is_none_value(key);
-    bool value_is_none = is_none_value(value);
+    // Check if key or value is null (for nullable types: optional, shared_ptr,
+    // unique_ptr, weak_ptr)
+    bool key_is_none = false;
+    bool value_is_none = false;
+    if constexpr (is_nullable_v<K>) {
+      key_is_none = is_null_value(key);
+    }
+    if constexpr (is_nullable_v<V>) {
+      value_is_none = is_null_value(value);
+    }
 
     // Handle null entries - write as separate single-entry chunks
     if (key_is_none || value_is_none) {
@@ -807,23 +789,7 @@ struct Serializer<std::map<K, V, Args...>> {
       ctx.write_varuint32(static_cast<uint32_t>(type_id));
     }
 
-    // Delegate to write_data_generic when has_generics or xlang mode
-    if (has_generics || ctx.is_xlang()) {
-      return write_data_generic(map, ctx, has_generics);
-    }
-
-    // Non-xlang path: Dispatch to fast or slow path based on type
-    // characteristics
-    constexpr bool is_fast_path =
-        !is_polymorphic_v<K> && !is_polymorphic_v<V> && !is_shared_ref_v<K> &&
-        !is_shared_ref_v<V> && !requires_ref_metadata_v<K> &&
-        !requires_ref_metadata_v<V>;
-
-    if constexpr (is_fast_path) {
-      return write_map_data_fast<K, V>(map, ctx, false);
-    } else {
-      return write_map_data_slow<K, V>(map, ctx, true);
-    }
+    return write_data_generic(map, ctx, has_generics);
   }
 
   static inline Result<void, Error>

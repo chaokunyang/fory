@@ -25,6 +25,7 @@ cc_library(
         "smart_ptr_serializers.h",
         "struct_serializer.h",
         "temporal_serializers.h",
+        "type_info.h",
         "type_resolver.h",
     ],
     strip_include_prefix = "/cpp",

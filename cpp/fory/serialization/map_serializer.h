@@ -787,10 +787,10 @@ struct Serializer<std::map<K, V, Args...>> {
   }
 
   static inline Result<void, Error> read_type_info(ReadContext &ctx) {
-    FORY_TRY(actual, ctx.read_typeinfo_type_id());
-    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
-      return Unexpected(
-          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
+    FORY_TRY(type_info, ctx.read_any_typeinfo());
+    if (!type_id_matches(type_info->type_id, static_cast<uint32_t>(type_id))) {
+      return Unexpected(Error::type_mismatch(type_info->type_id,
+                                             static_cast<uint32_t>(type_id)));
     }
     return Result<void, Error>();
   }

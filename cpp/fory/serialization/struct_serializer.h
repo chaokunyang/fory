@@ -755,10 +755,10 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
   /// Read and validate type info.
   /// This consumes the type_id and meta index from the buffer.
   static Result<void, Error> read_type_info(ReadContext &ctx) {
-    FORY_TRY(actual, ctx.read_typeinfo_type_id());
-    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
-      return Unexpected(
-          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
+    FORY_TRY(type_info, ctx.read_any_typeinfo());
+    if (!type_id_matches(type_info->type_id, static_cast<uint32_t>(type_id))) {
+      return Unexpected(Error::type_mismatch(type_info->type_id,
+                                             static_cast<uint32_t>(type_id)));
     }
     return Result<void, Error>();
   }

@@ -202,8 +202,8 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
   static inline Result<void, Error> read_type_info(ReadContext &ctx) {
     if constexpr (std::is_polymorphic_v<T>) {
       // For polymorphic types, type info is read dynamically
-      FORY_TRY(actual, ctx.read_typeinfo_type_id());
-      (void)actual; // Type checking is done at value read time
+      FORY_TRY(type_info, ctx.read_any_typeinfo());
+      (void)type_info; // Type checking is done at value read time
       return Result<void, Error>();
     } else {
       return Serializer<T>::read_type_info(ctx);

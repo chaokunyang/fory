@@ -41,6 +41,7 @@
 #include "fory/serialization/config.h"
 #include "fory/serialization/serializer.h"
 #include "fory/serialization/serializer_traits.h"
+#include "fory/serialization/type_info.h"
 #include "fory/type/type.h"
 #include "fory/util/buffer.h"
 #include "fory/util/error.h"
@@ -373,68 +374,10 @@ std::vector<FieldInfo> build_field_infos(std::index_sequence<Indices...>) {
 } // namespace detail
 
 // ============================================================================
-// Forward declarations for TypeResolver
-// ============================================================================
-
-class TypeResolver;
-
-// ============================================================================
-// Harness - Function pointers for serialization/deserialization
-// ============================================================================
-
-struct Harness {
-  using WriteFn = Result<void, Error> (*)(const void *value, WriteContext &ctx,
-                                          bool write_ref_info,
-                                          bool write_type_info,
-                                          bool has_generics);
-  using ReadFn = Result<void *, Error> (*)(ReadContext &ctx, bool read_ref_info,
-                                           bool read_type_info);
-  using WriteDataFn = Result<void, Error> (*)(const void *value,
-                                              WriteContext &ctx,
-                                              bool has_generics);
-  using ReadDataFn = Result<void *, Error> (*)(ReadContext &ctx);
-  using SortedFieldInfosFn =
-      Result<std::vector<FieldInfo>, Error> (*)(TypeResolver &);
-
-  Harness() = default;
-  Harness(WriteFn write, ReadFn read, WriteDataFn write_data,
-          ReadDataFn read_data, SortedFieldInfosFn sorted_fields)
-      : write_fn(write), read_fn(read), write_data_fn(write_data),
-        read_data_fn(read_data), sorted_field_infos_fn(sorted_fields) {}
-
-  bool valid() const {
-    return write_fn != nullptr && read_fn != nullptr &&
-           write_data_fn != nullptr && read_data_fn != nullptr &&
-           sorted_field_infos_fn != nullptr;
-  }
-
-  WriteFn write_fn = nullptr;
-  ReadFn read_fn = nullptr;
-  WriteDataFn write_data_fn = nullptr;
-  ReadDataFn read_data_fn = nullptr;
-  SortedFieldInfosFn sorted_field_infos_fn = nullptr;
-};
-
-// ============================================================================
-// TypeInfo - Type metadata and serialization information
-// ============================================================================
-
-struct TypeInfo {
-  uint32_t type_id = 0;
-  std::string namespace_name;
-  std::string type_name;
-  bool register_by_name = false;
-  bool is_external = false;
-  std::shared_ptr<TypeMeta> type_meta;
-  std::vector<size_t> sorted_indices;
-  std::unordered_map<std::string, size_t> name_to_index;
-  std::vector<uint8_t> type_def;
-  Harness harness;
-};
-
-// ============================================================================
 // TypeResolver - central registry for type metadata and configuration
 // ============================================================================
+// Note: Harness and TypeInfo are defined in type_info.h (included via
+// context.h)
 
 class TypeResolver {
 public:

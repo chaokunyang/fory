@@ -139,10 +139,10 @@ struct Serializer<
   }
 
   static inline Result<void, Error> read_type_info(ReadContext &ctx) {
-    FORY_TRY(actual, ctx.read_typeinfo_type_id());
-    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
-      return Unexpected(
-          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
+    FORY_TRY(type_info, ctx.read_any_typeinfo());
+    if (!type_id_matches(type_info->type_id, static_cast<uint32_t>(type_id))) {
+      return Unexpected(Error::type_mismatch(type_info->type_id,
+                                             static_cast<uint32_t>(type_id)));
     }
     return Result<void, Error>();
   }
@@ -235,10 +235,10 @@ struct Serializer<
   }
 
   static inline Result<void, Error> read_type_info(ReadContext &ctx) {
-    FORY_TRY(actual, ctx.read_typeinfo_type_id());
-    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
-      return Unexpected(
-          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
+    FORY_TRY(type_info, ctx.read_any_typeinfo());
+    if (!type_id_matches(type_info->type_id, static_cast<uint32_t>(type_id))) {
+      return Unexpected(Error::type_mismatch(type_info->type_id,
+                                             static_cast<uint32_t>(type_id)));
     }
     return Result<void, Error>();
   }
@@ -284,20 +284,22 @@ struct Serializer<
     // bytes. Type validation is relaxed for xlang compatibility - we check
     // category matches.
     if (is_same_type && !is_decl_type) {
-      FORY_TRY(elem_type_id, ctx.read_typeinfo_type_id());
+      FORY_TRY(elem_type_info, ctx.read_any_typeinfo());
       // Type info was consumed; we trust the sender wrote correct element
       // types. We do a relaxed check comparing type categories using
       // type_id_matches.
       if constexpr (is_optional_v<T>) {
         using Inner = typename T::value_type;
         uint32_t expected = static_cast<uint32_t>(Serializer<Inner>::type_id);
-        if (!type_id_matches(elem_type_id, expected)) {
-          return Unexpected(Error::type_mismatch(elem_type_id, expected));
+        if (!type_id_matches(elem_type_info->type_id, expected)) {
+          return Unexpected(
+              Error::type_mismatch(elem_type_info->type_id, expected));
         }
       } else {
         uint32_t expected = static_cast<uint32_t>(Serializer<T>::type_id);
-        if (!type_id_matches(elem_type_id, expected)) {
-          return Unexpected(Error::type_mismatch(elem_type_id, expected));
+        if (!type_id_matches(elem_type_info->type_id, expected)) {
+          return Unexpected(
+              Error::type_mismatch(elem_type_info->type_id, expected));
         }
       }
     }
@@ -604,10 +606,10 @@ template <typename Alloc> struct Serializer<std::vector<bool, Alloc>> {
   }
 
   static inline Result<void, Error> read_type_info(ReadContext &ctx) {
-    FORY_TRY(actual, ctx.read_typeinfo_type_id());
-    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
-      return Unexpected(
-          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
+    FORY_TRY(type_info, ctx.read_any_typeinfo());
+    if (!type_id_matches(type_info->type_id, static_cast<uint32_t>(type_id))) {
+      return Unexpected(Error::type_mismatch(type_info->type_id,
+                                             static_cast<uint32_t>(type_id)));
     }
     return Result<void, Error>();
   }
@@ -685,10 +687,10 @@ struct Serializer<std::set<T, Args...>> {
   }
 
   static inline Result<void, Error> read_type_info(ReadContext &ctx) {
-    FORY_TRY(actual, ctx.read_typeinfo_type_id());
-    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
-      return Unexpected(
-          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
+    FORY_TRY(type_info, ctx.read_any_typeinfo());
+    if (!type_id_matches(type_info->type_id, static_cast<uint32_t>(type_id))) {
+      return Unexpected(Error::type_mismatch(type_info->type_id,
+                                             static_cast<uint32_t>(type_id)));
     }
     return Result<void, Error>();
   }
@@ -841,13 +843,14 @@ struct Serializer<std::set<T, Args...>> {
     bool is_decl_type = (bitmap & 0x4u) != 0;
     bool is_same_type = (bitmap & 0x8u) != 0;
     // Read element type info if IS_SAME_TYPE is set but IS_DECL_ELEMENT_TYPE
-    // is not. Uses read_typeinfo_type_id() for proper handling of all type
+    // is not. Uses read_any_typeinfo() for proper handling of all type
     // categories.
     if (is_same_type && !is_decl_type) {
-      FORY_TRY(elem_type_id, ctx.read_typeinfo_type_id());
+      FORY_TRY(elem_type_info, ctx.read_any_typeinfo());
       uint32_t expected = static_cast<uint32_t>(Serializer<T>::type_id);
-      if (!type_id_matches(elem_type_id, expected)) {
-        return Unexpected(Error::type_mismatch(elem_type_id, expected));
+      if (!type_id_matches(elem_type_info->type_id, expected)) {
+        return Unexpected(
+            Error::type_mismatch(elem_type_info->type_id, expected));
       }
     }
 
@@ -914,10 +917,10 @@ struct Serializer<std::unordered_set<T, Args...>> {
   }
 
   static inline Result<void, Error> read_type_info(ReadContext &ctx) {
-    FORY_TRY(actual, ctx.read_typeinfo_type_id());
-    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
-      return Unexpected(
-          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
+    FORY_TRY(type_info, ctx.read_any_typeinfo());
+    if (!type_id_matches(type_info->type_id, static_cast<uint32_t>(type_id))) {
+      return Unexpected(Error::type_mismatch(type_info->type_id,
+                                             static_cast<uint32_t>(type_id)));
     }
     return Result<void, Error>();
   }
@@ -1071,13 +1074,14 @@ struct Serializer<std::unordered_set<T, Args...>> {
     bool is_same_type = (bitmap & 0x8u) != 0;
 
     // Read element type info if IS_SAME_TYPE is set but IS_DECL_ELEMENT_TYPE
-    // is not. Uses read_typeinfo_type_id() for proper handling of all type
+    // is not. Uses read_any_typeinfo() for proper handling of all type
     // categories.
     if (is_same_type && !is_decl_type) {
-      FORY_TRY(elem_type_id, ctx.read_typeinfo_type_id());
+      FORY_TRY(elem_type_info, ctx.read_any_typeinfo());
       uint32_t expected = static_cast<uint32_t>(Serializer<T>::type_id);
-      if (!type_id_matches(elem_type_id, expected)) {
-        return Unexpected(Error::type_mismatch(elem_type_id, expected));
+      if (!type_id_matches(elem_type_info->type_id, expected)) {
+        return Unexpected(
+            Error::type_mismatch(elem_type_info->type_id, expected));
       }
     }
 

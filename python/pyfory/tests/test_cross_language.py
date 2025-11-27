@@ -38,6 +38,18 @@ def debug_print(*params):
     # print(*params)
 
 
+def to_dict(obj):
+    """Convert an object to a dictionary for comparison."""
+    if hasattr(obj, "as_dict"):
+        return obj.as_dict()
+    elif hasattr(obj, "__dataclass_fields__"):
+        from dataclasses import asdict
+
+        return asdict(obj)
+    else:
+        return obj
+
+
 def cross_language_test(test_func):
     env_key = "ENABLE_CROSS_LANGUAGE_TESTS"
     test_func = pytest.mark.skipif(
@@ -128,8 +140,10 @@ def test_map_encoder(data_file_path):
         data_bytes = f.read()
         obj = encoder.decode(data_bytes)
         debug_print("deserialized obj", obj)
-        assert a == obj
-        assert encoder.decode(encoder.encode(a)) == a
+        # Compare by dict since decoder returns a record class, not the original class
+        assert to_dict(obj) == to_dict(a)
+        decoded_round_trip = encoder.decode(encoder.encode(a))
+        assert to_dict(decoded_round_trip) == to_dict(a)
         f.seek(0)
         f.truncate()
         f.write(encoder.encode(a))
@@ -144,7 +158,8 @@ def test_encoder_without_schema(data_file_path):
         data_bytes = f.read()
         obj = encoder.decode(data_bytes)
         debug_print("deserialized foo", obj)
-        assert foo == obj
+        # Compare by dict since decoder returns a record class, not the original class
+        assert to_dict(obj) == to_dict(foo)
         f.seek(0)
         f.truncate()
         f.write(encoder.encode(foo))

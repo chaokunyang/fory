@@ -161,14 +161,13 @@ int main() {
     using namespace fory::row;
 
     // Create a department with nested employees
-    Department dept{
-        "Engineering",
-        {"Alice", 1000, 120000.0f},  // manager
-        {
-            {"Bob", 1001, 75000.0f},
-            {"Carol", 1002, 80000.0f},
-            {"Dave", 1003, 70000.0f},
-        }};
+    Department dept{"Engineering",
+                    {"Alice", 1000, 120000.0f}, // manager
+                    {
+                        {"Bob", 1001, 75000.0f},
+                        {"Carol", 1002, 80000.0f},
+                        {"Dave", 1003, 70000.0f},
+                    }};
 
     // Encode using RowEncoder
     encoder::RowEncoder<Department> enc;

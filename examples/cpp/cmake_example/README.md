@@ -95,6 +95,7 @@ Demonstrates Fory's high-performance serialization:
 - Enums
 
 Key concepts:
+
 - Use `FORY_STRUCT(StructName, field1, field2, ...)` to register struct fields
 - Create Fory instance with `Fory::builder().xlang(true).build()`
 - Register struct types with `fory.register_struct<Type>(type_id)`
@@ -112,6 +113,7 @@ Demonstrates Fory's row format for random access:
 - Direct array creation from vectors
 
 Key concepts:
+
 - Use `FORY_FIELD_INFO(StructName, field1, field2, ...)` for row encoding
 - Create schema with `schema({field("name", type()), ...})`
 - Write rows with `RowWriter`
@@ -153,11 +155,11 @@ target_link_libraries(your_app PRIVATE fory::fory)
 
 When building Fory, you can configure these options:
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `FORY_BUILD_TESTS` | OFF | Build Fory tests |
-| `FORY_BUILD_SHARED` | ON | Build shared libraries |
-| `FORY_BUILD_STATIC` | ON | Build static libraries |
+| Option              | Default | Description            |
+| ------------------- | ------- | ---------------------- |
+| `FORY_BUILD_TESTS`  | OFF     | Build Fory tests       |
+| `FORY_BUILD_SHARED` | ON      | Build shared libraries |
+| `FORY_BUILD_STATIC` | ON      | Build static libraries |
 
 Example:
 

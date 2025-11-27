@@ -67,15 +67,23 @@ endif()
 # Set Fory root directory for include paths (important when used as subdirectory)
 set(FORY_CPP_ROOT ${CMAKE_CURRENT_SOURCE_DIR} CACHE PATH "Fory C++ root directory")
 
-# Find dependencies (optional - Abseil for enhanced debugging)
+# Find or fetch Abseil (required for debugging support)
 find_package(absl CONFIG QUIET)
 if(absl_FOUND)
-    set(FORY_HAS_ABSEIL TRUE)
-    message(STATUS "Found Abseil - enhanced debugging enabled")
+    message(STATUS "Found Abseil - using system installation")
 else()
-    set(FORY_HAS_ABSEIL FALSE)
-    message(STATUS "Abseil not found - building without enhanced debugging")
+    message(STATUS "Abseil not found - fetching via FetchContent")
+    include(FetchContent)
+    set(ABSL_PROPAGATE_CXX_STD ON)
+    set(ABSL_BUILD_TESTING OFF)
+    FetchContent_Declare(
+        abseil-cpp
+        GIT_REPOSITORY https://github.com/abseil/abseil-cpp.git
+        GIT_TAG 20240722.0
+    )
+    FetchContent_MakeAvailable(abseil-cpp)
 endif()
+set(FORY_HAS_ABSEIL TRUE)
 
 # Add subdirectories
 add_subdirectory(fory/thirdparty)

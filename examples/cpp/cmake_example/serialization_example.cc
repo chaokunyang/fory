@@ -93,8 +93,8 @@ int main() {
 
   // Create a Fory instance with xlang (cross-language) mode enabled
   auto fory = fory::serialization::Fory::builder()
-                  .xlang(true)       // Enable cross-language serialization
-                  .track_ref(false)  // Disable reference tracking for simplicity
+                  .xlang(true)      // Enable cross-language serialization
+                  .track_ref(false) // Disable reference tracking for simplicity
                   .build();
 
   // Register struct types (required for struct serialization)
@@ -273,10 +273,9 @@ int main() {
   // ============================================================================
   std::cout << "--- Example 7: Nested Struct ---" << std::endl;
   {
-    Team original{
-        "Engineering",
-        {{"Bob", 25, {"gaming"}}, {"Carol", 28, {"music", "art"}}},
-        {100, 200}};
+    Team original{"Engineering",
+                  {{"Bob", 25, {"gaming"}}, {"Carol", 28, {"music", "art"}}},
+                  {100, 200}};
     auto bytes_result = fory.serialize(original);
     if (bytes_result.ok()) {
       auto bytes = bytes_result.value();
@@ -314,7 +313,8 @@ int main() {
         std::cout << "Original: " << static_cast<int>(original)
                   << ", Deserialized: " << static_cast<int>(result.value())
                   << std::endl;
-        std::cout << "Equal: " << (original == result.value() ? "true" : "false")
+        std::cout << "Equal: "
+                  << (original == result.value() ? "true" : "false")
                   << std::endl;
       }
     }

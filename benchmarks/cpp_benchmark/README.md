@@ -10,6 +10,15 @@ This benchmark compares serialization/deserialization performance between Apache
 
 Note: Protobuf is fetched automatically via CMake FetchContent, so no manual installation is required.
 
+## Quick Start
+
+Run the complete benchmark pipeline (build, run, generate report):
+
+```bash
+cd benchmarks/cpp_benchmark
+./run.sh
+```
+
 ## Building
 
 ```bash

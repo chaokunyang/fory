@@ -17,12 +17,12 @@
  * under the License.
  */
 
-#include "fory/serialization/meta_string.h"
+#include "fory/meta/meta_string.h"
 
 #include <gtest/gtest.h>
 
 namespace fory {
-namespace serialization {
+namespace meta {
 namespace {
 
 class MetaStringTest : public ::testing::Test {
@@ -519,5 +519,5 @@ TEST_F(MetaStringTest, MixedAlphaDigit) {
 }
 
 } // namespace
-} // namespace serialization
+} // namespace meta
 } // namespace fory

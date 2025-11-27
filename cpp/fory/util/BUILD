@@ -8,7 +8,6 @@ cc_library(
     alwayslink=True,
     linkstatic=True,
     deps = [
-        "//cpp/fory/meta:fory_meta",
         "@abseil-cpp//absl/debugging:failure_signal_handler",
         "@abseil-cpp//absl/debugging:stacktrace",
         "@abseil-cpp//absl/debugging:symbolize",

@@ -17,7 +17,7 @@
  * under the License.
  */
 
-#include "fory/serialization/meta_string.h"
+#include "fory/meta/meta_string.h"
 
 #include "fory/util/buffer.h"
 
@@ -25,7 +25,7 @@
 #include <cctype>
 
 namespace fory {
-namespace serialization {
+namespace meta {
 
 MetaStringDecoder::MetaStringDecoder(char special_char1, char special_char2)
     : special_char1_(special_char1), special_char2_(special_char2) {}
@@ -567,5 +567,5 @@ MetaStringEncoder::encode(const std::string &input,
   return result;
 }
 
-} // namespace serialization
+} // namespace meta
 } // namespace fory

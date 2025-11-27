@@ -18,13 +18,15 @@
  */
 
 #include "fory/serialization/context.h"
-#include "fory/serialization/meta_string.h"
+#include "fory/meta/meta_string.h"
 #include "fory/serialization/type_resolver.h"
 #include "fory/thirdparty/MurmurHash3.h"
 #include "fory/type/type.h"
 
 namespace fory {
 namespace serialization {
+
+using namespace meta;
 
 // ============================================================================
 // Meta String Encoding Constants (shared between encoder and writer)

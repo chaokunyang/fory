@@ -18,7 +18,7 @@
  */
 
 #include "fory/row/schema.h"
-#include "fory/serialization/meta_string.h"
+#include "fory/meta/meta_string.h"
 #include "fory/type/type.h"
 #include <algorithm>
 #include <stdexcept>
@@ -26,7 +26,7 @@
 namespace fory {
 namespace row {
 
-using namespace serialization;
+using namespace meta;
 
 namespace {
 

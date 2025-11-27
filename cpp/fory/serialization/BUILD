@@ -4,7 +4,6 @@ cc_library(
     name = "fory_serialization",
     srcs = [
         "context.cc",
-        "meta_string.cc",
         "type_resolver.cc",
         "skip.cc",
     ],
@@ -16,7 +15,6 @@ cc_library(
         "context.h",
         "enum_serializer.h",
         "fory.h",
-        "meta_string.h",
         "map_serializer.h",
         "ref_resolver.h",
         "serializer.h",
@@ -88,15 +86,6 @@ cc_test(
     ],
 )
 
-cc_test(
-    name = "meta_string_test",
-    srcs = ["meta_string_test.cc"],
-    deps = [
-        ":fory_serialization",
-        "@googletest//:gtest",
-        "@googletest//:gtest_main",
-    ],
-)
 
 cc_binary(
     name = "xlang_test_main",

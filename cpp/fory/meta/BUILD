@@ -5,6 +5,9 @@ cc_library(
     srcs = glob(["*.cc"], exclude=["*test.cc"], allow_empty = True),
     hdrs = glob(["*.h"]),
     strip_include_prefix = "/cpp",
+    deps = [
+        "//cpp/fory/util:fory_util",
+    ],
     visibility = ["//visibility:public"],
 )
 
@@ -41,5 +44,15 @@ cc_test(
     deps = [
         ":fory_meta",
         "@googletest//:gtest",
+    ],
+)
+
+cc_test(
+    name = "meta_string_test",
+    srcs = ["meta_string_test.cc"],
+    deps = [
+        ":fory_meta",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
     ],
 )

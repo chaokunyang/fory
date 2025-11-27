@@ -18,8 +18,8 @@
  */
 
 #include "fory/serialization/type_resolver.h"
+#include "fory/meta/meta_string.h"
 #include "fory/serialization/context.h"
-#include "fory/serialization/meta_string.h"
 #include "fory/thirdparty/MurmurHash3.h"
 #include "fory/type/type.h"
 #include <algorithm>
@@ -29,6 +29,8 @@
 
 namespace fory {
 namespace serialization {
+
+using namespace meta;
 
 // Constants from xlang spec
 constexpr size_t SMALL_NUM_FIELDS_THRESHOLD = 0b11111;

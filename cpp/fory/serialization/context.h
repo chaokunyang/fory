@@ -19,8 +19,8 @@
 
 #pragma once
 
+#include "fory/meta/meta_string.h"
 #include "fory/serialization/config.h"
-#include "fory/serialization/meta_string.h"
 #include "fory/serialization/ref_resolver.h"
 #include "fory/serialization/type_info.h"
 #include "fory/util/buffer.h"
@@ -387,7 +387,7 @@ private:
   std::unordered_map<int64_t, std::shared_ptr<TypeInfo>> parsed_type_infos_;
 
   // Dynamic meta strings used for named type/class info.
-  MetaStringTable meta_string_table_;
+  meta::MetaStringTable meta_string_table_;
 };
 
 /// Implementation of DepthGuard destructor

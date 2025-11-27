@@ -29,7 +29,7 @@
 #include <vector>
 
 namespace fory {
-namespace serialization {
+namespace meta {
 
 // Encoding for meta strings, aligned with Rust/Java Encoding
 // definitions in fory-core.
@@ -146,5 +146,5 @@ private:
   int lower_upper_digit_special_char_value(char c) const;
 };
 
-} // namespace serialization
+} // namespace meta
 } // namespace fory

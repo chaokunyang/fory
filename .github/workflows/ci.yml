@@ -420,6 +420,20 @@ jobs:
           cd fory-core
           mvn -T16 --no-transfer-progress test -Dtest=org.apache.fory.CPPXlangTest
 
+  cpp_cmake_example:
+    name: C++ CMake Example
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Build and run C++ CMake examples
+        run: |
+          cd examples/cpp/cmake_example
+          ./run.sh
+
   python:
     name: Python CI
     runs-on: ${{ matrix.os }}

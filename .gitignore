@@ -80,3 +80,4 @@ dist/
 **/.pytest_cache
 .venv
 **/.idea
+examples/cpp/cmake_example/build

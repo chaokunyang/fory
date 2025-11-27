@@ -52,45 +52,48 @@ Bar = pyfory.record_class_factory("Bar", ["f" + str(i) for i in range(1, 3)])
 
 
 def create_bar_schema():
-    bar_schema = pa.schema(
+    from pyfory.format import field, int32, utf8, schema
+
+    bar_schema = schema(
         [
-            ("f1", pa.int32()),
-            ("f2", pa.utf8()),
+            field("f1", int32()),
+            field("f2", utf8()),
         ]
     )
     return bar_schema
 
 
 def create_foo_schema():
-    foo_schema = pa.schema(
+    from pyfory.format import field, int32, utf8, list_, map_, struct, schema
+
+    bar_fields = [
+        field("f1", int32()),
+        field("f2", utf8()),
+    ]
+    foo_schema = schema(
         [
-            ("f1", pa.int32()),
-            ("f2", pa.utf8()),
-            ("f3", pa.list_(pa.utf8())),
-            ("f4", pa.map_(pa.utf8(), pa.int32())),
-            pa.field(
-                "f5",
-                pa.struct(create_bar_schema()),
-                metadata={"cls": pyfory.get_qualified_classname(Bar)},
-            ),
-        ],
-        metadata={"cls": pyfory.get_qualified_classname(Foo)},
+            field("f1", int32()),
+            field("f2", utf8()),
+            field("f3", list_(utf8())),
+            field("f4", map_(utf8(), int32())),
+            field("f5", struct(bar_fields)),
+        ]
     )
     return foo_schema
 
 
 @dataclass
 class FooPOJO:
-    f1: "pa.int32"
+    f1: pyfory.int32
     f2: str
     f3: List[str]
-    f4: Dict[str, "pa.int32"]
+    f4: Dict[str, pyfory.int32]
     f5: "BarPOJO"
 
 
 @dataclass
 class BarPOJO:
-    f1: "pa.int32"
+    f1: pyfory.int32
     f2: str
 
 
@@ -149,15 +152,7 @@ def test_encoder_without_schema(data_file_path):
 
 @cross_language_test
 def test_serialization_without_schema(data_file_path, schema=None):
-    from pyfory.format import from_arrow_schema, Schema
-
-    input_schema = schema or create_foo_schema()
-    # Convert PyArrow schema to Fory schema if needed
-    if isinstance(input_schema, Schema):
-        # Already a Fory schema
-        schema = input_schema
-    else:
-        schema = from_arrow_schema(input_schema)
+    schema = schema or create_foo_schema()
     encoder = pyfory.create_row_encoder(schema)
     foo = create_foo()
     with open(data_file_path, "rb+") as f:

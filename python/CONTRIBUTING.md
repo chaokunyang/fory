@@ -20,10 +20,6 @@ temporary directory it was the last time bazel ran. To remedy this run
 
 > bazel clean --expunge
 
-In this situation, you might also find it fruitful to run bazel yourself before pip:
-
-> bazel build -s //:cp_fory_so
-
 ### Environment Requirements
 
 - python 3.8+

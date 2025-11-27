@@ -60,8 +60,8 @@ mvn -T16 test -Dtest=org.apache.fory.TestClass#testMethod
 # Build C++ library
 bazel build //cpp/...
 
-# Build Cython extensions
-bazel build //:cp_fory_so
+# Build Cython extensions (replace X.Y with your Python version, e.g., 3.10)
+bazel build //:cp_fory_so --@rules_python//python/config_settings:python_version=X.Y
 
 # Run tests
 bazel test $(bazel query //cpp/...)
@@ -105,9 +105,9 @@ ruff check --fix .
 # Install
 pip install -v -e .
 
-# Build native extension when cython code changed
-bazel build //:cp_fory_so --config=x86_64 # For x86_64
-bazel build //:cp_fory_so --copt=-fsigned-char # For arm64 and aarch64
+# Build native extension when cython code changed (replace X.Y with your Python version)
+bazel build //:cp_fory_so --@rules_python//python/config_settings:python_version=X.Y --config=x86_64 # For x86_64
+bazel build //:cp_fory_so --@rules_python//python/config_settings:python_version=X.Y --copt=-fsigned-char # For arm64 and aarch64
 
 # Run tests without cython
 ENABLE_FORY_CYTHON_SERIALIZATION=0 pytest -v -s .

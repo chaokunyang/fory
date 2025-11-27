@@ -46,6 +46,7 @@ class BinaryDistribution(Distribution):
         super().__init__(attrs=attrs)
         if BAZEL_BUILD_EXT:
             import sys
+
             python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
             bazel_args = ["bazel", "build", "-s"]
             # Pass Python version to select the correct toolchain for C extension headers

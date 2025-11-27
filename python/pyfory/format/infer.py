@@ -25,7 +25,11 @@ from pyfory.format._format import (
     DataType,
     TypeId,
     boolean,
+    int8,
+    int16,
+    int32,
     int64,
+    float32,
     float64,
     utf8,
     binary,
@@ -97,6 +101,44 @@ _supported_types_mapping = {
     datetime.date: date32,
     datetime.datetime: timestamp,
 }
+
+# Add pyfory type annotations support
+from pyfory.type import (
+    int8 as int8_type,
+    int16 as int16_type,
+    int32 as int32_type,
+    int64 as int64_type,
+    float32 as float32_type,
+    float64 as float64_type,
+)
+
+_supported_types_mapping.update(
+    {
+        int8_type: int8,
+        int16_type: int16,
+        int32_type: int32,
+        int64_type: int64,
+        float32_type: float32,
+        float64_type: float64,
+    }
+)
+
+# Add numpy types if available
+try:
+    import numpy as np
+
+    _supported_types_mapping.update(
+        {
+            np.int8: int8,
+            np.int16: int16,
+            np.int32: int32,
+            np.int64: int64,
+            np.float32: float32,
+            np.float64: float64,
+        }
+    )
+except ImportError:
+    pass
 
 
 def infer_schema(clz, types_path=None) -> Schema:

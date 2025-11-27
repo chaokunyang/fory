@@ -41,7 +41,6 @@ from pyfory.serializer import (
     PyArraySerializer,
     Numpy1DArraySerializer,
 )
-from pyfory.tests.core import require_pyarrow
 from pyfory.type import TypeId
 from pyfory.util import lazy_import
 

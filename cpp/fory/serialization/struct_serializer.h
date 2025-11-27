@@ -921,9 +921,6 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
   static Result<T, Error>
   read_compatible(ReadContext &ctx,
                   std::shared_ptr<TypeInfo> remote_type_info) {
-    FORY_RETURN_NOT_OK(ctx.increase_depth());
-    DepthGuard depth_guard(ctx);
-
     // Read and verify struct version if enabled (matches write_data behavior)
     if (ctx.check_struct_version()) {
       FORY_TRY(read_version, ctx.buffer().ReadInt32());
@@ -958,9 +955,6 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
   }
 
   static Result<T, Error> read_data(ReadContext &ctx) {
-    FORY_RETURN_NOT_OK(ctx.increase_depth());
-    DepthGuard depth_guard(ctx);
-
     if (ctx.check_struct_version()) {
       FORY_TRY(read_version, ctx.buffer().ReadInt32());
       FORY_TRY(local_type_info,

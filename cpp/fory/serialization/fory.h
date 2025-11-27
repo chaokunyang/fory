@@ -57,7 +57,7 @@ class Fory;
 ///     .compatible(true)
 ///     .xlang(true)
 ///     .check_struct_version(false)
-///     .max_depth(128)
+///     .max_dyn_depth(10)
 ///     .build();
 /// ```
 class ForyBuilder {
@@ -83,9 +83,15 @@ public:
     return *this;
   }
 
-  /// Set maximum allowed nesting depth.
-  ForyBuilder &max_depth(uint32_t depth) {
-    config_.max_depth = depth;
+  /// Set maximum allowed nesting depth for dynamically-typed objects.
+  ///
+  /// This limits the maximum depth for nested polymorphic object serialization
+  /// (e.g., shared_ptr<Base>, unique_ptr<Base>). This prevents stack overflow
+  /// from deeply nested structures in dynamic serialization scenarios.
+  ///
+  /// Default value is 5.
+  ForyBuilder &max_dyn_depth(uint32_t depth) {
+    config_.max_dyn_depth = depth;
     return *this;
   }
 

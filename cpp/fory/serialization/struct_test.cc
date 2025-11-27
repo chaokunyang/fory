@@ -505,45 +505,6 @@ TEST(StructComprehensiveTest, OrderMultiple) {
                        Status::COMPLETED});
 }
 
-// Note: Depth limit tests disabled for now as depth tracking semantics
-// need clarification. The core struct serialization works correctly.
-TEST(StructComprehensiveTest, DISABLED_DepthLimitViolation) {
-  auto fory = Fory::builder().xlang(true).max_depth(1).build();
-  // Register types needed for BoundingBox
-  uint32_t type_id = 1;
-  fory.register_struct<Point2D>(type_id++);
-  fory.register_struct<Rectangle>(type_id++);
-  fory.register_struct<BoundingBox>(type_id++);
-
-  BoundingBox bb{{{0, 0}, {10, 10}}, "test"};
-  auto result = fory.serialize(bb);
-  EXPECT_FALSE(result.ok());
-  if (!result.ok()) {
-    std::string error_msg = result.error().to_string();
-    EXPECT_TRUE(error_msg.find("depth") != std::string::npos ||
-                error_msg.find("Depth") != std::string::npos)
-        << "Error should mention depth: " << error_msg;
-  }
-}
-
-TEST(StructComprehensiveTest, DISABLED_SufficientDepthLimit) {
-  auto fory = Fory::builder().xlang(true).max_depth(10).build();
-  // Register types needed for BoundingBox
-  uint32_t type_id = 1;
-  fory.register_struct<Point2D>(type_id++);
-  fory.register_struct<Rectangle>(type_id++);
-  fory.register_struct<BoundingBox>(type_id++);
-
-  BoundingBox bb{{{0, 0}, {10, 10}}, "test"};
-  auto result = fory.serialize(bb);
-  ASSERT_TRUE(result.ok());
-
-  std::vector<uint8_t> bytes = std::move(result).value();
-  auto deser = fory.deserialize<BoundingBox>(bytes.data(), bytes.size());
-  ASSERT_TRUE(deser.ok());
-  EXPECT_EQ(bb, deser.value());
-}
-
 TEST(StructComprehensiveTest, LargeVectorOfStructs) {
   std::vector<Point2D> points;
   for (int i = 0; i < 1000; ++i) {

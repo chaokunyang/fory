@@ -201,9 +201,6 @@ Result<void, Error> skip_struct(ReadContext &ctx, const FieldType &field_type) {
 
   const auto &field_infos = type_info->type_meta->get_field_infos();
 
-  FORY_RETURN_NOT_OK(ctx.increase_depth());
-  DepthGuard guard(ctx);
-
   for (const auto &fi : field_infos) {
     bool read_ref = field_need_write_ref_into_runtime(fi.field_type);
     FORY_RETURN_NOT_OK(skip_field_value(ctx, fi.field_type, read_ref));
@@ -253,8 +250,9 @@ Result<void, Error> skip_ext(ReadContext &ctx, const FieldType &field_type) {
                           std::to_string(full_type_id)));
   }
 
-  FORY_RETURN_NOT_OK(ctx.increase_depth());
-  DepthGuard guard(ctx);
+  // Check and increase dynamic depth for polymorphic deserialization
+  FORY_RETURN_NOT_OK(ctx.increase_dyn_depth());
+  DynDepthGuard dyn_depth_guard(ctx);
 
   // Call the harness read_data_fn to skip the data
   // The result is a pointer we need to delete

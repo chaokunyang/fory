@@ -37,18 +37,19 @@ namespace serialization {
 class TypeResolver;
 class ReadContext;
 
-/// RAII helper to automatically decrease depth when leaving scope
-class DepthGuard {
+/// RAII helper to automatically decrease dynamic depth when leaving scope.
+/// Used for tracking nested polymorphic type deserialization depth.
+class DynDepthGuard {
 public:
-  explicit DepthGuard(ReadContext &ctx) : ctx_(ctx) {}
+  explicit DynDepthGuard(ReadContext &ctx) : ctx_(ctx) {}
 
-  ~DepthGuard();
+  ~DynDepthGuard();
 
   // Non-copyable, non-movable
-  DepthGuard(const DepthGuard &) = delete;
-  DepthGuard &operator=(const DepthGuard &) = delete;
-  DepthGuard(DepthGuard &&) = delete;
-  DepthGuard &operator=(DepthGuard &&) = delete;
+  DynDepthGuard(const DynDepthGuard &) = delete;
+  DynDepthGuard &operator=(const DynDepthGuard &) = delete;
+  DynDepthGuard(DynDepthGuard &&) = delete;
+  DynDepthGuard &operator=(DynDepthGuard &&) = delete;
 
 private:
   ReadContext &ctx_;
@@ -109,29 +110,29 @@ public:
   /// Check if reference tracking is enabled.
   inline bool track_ref() const { return config_->track_ref; }
 
-  /// Get maximum allowed nesting depth.
-  inline uint32_t max_depth() const { return config_->max_depth; }
+  /// Get maximum allowed dynamic nesting depth for polymorphic types.
+  inline uint32_t max_dyn_depth() const { return config_->max_dyn_depth; }
 
-  /// Get current nesting depth.
-  inline uint32_t current_depth() const { return current_depth_; }
+  /// Get current dynamic nesting depth.
+  inline uint32_t current_dyn_depth() const { return current_dyn_depth_; }
 
-  /// Increase nesting depth by 1.
+  /// Increase dynamic nesting depth by 1.
   ///
-  /// @return Error if max depth exceeded, success otherwise.
-  inline Result<void, Error> increase_depth() {
-    if (current_depth_ >= config_->max_depth) {
-      return Unexpected(
-          Error::depth_exceed("Max serialization depth exceeded: " +
-                              std::to_string(config_->max_depth)));
+  /// @return Error if max dynamic depth exceeded, success otherwise.
+  inline Result<void, Error> increase_dyn_depth() {
+    if (current_dyn_depth_ >= config_->max_dyn_depth) {
+      return Unexpected<Error>(
+          Error::depth_exceed("Max dynamic serialization depth exceeded: " +
+                              std::to_string(config_->max_dyn_depth)));
     }
-    current_depth_++;
+    current_dyn_depth_++;
     return Result<void, Error>();
   }
 
-  /// Decrease nesting depth by 1.
-  inline void decrease_depth() {
-    if (current_depth_ > 0) {
-      current_depth_--;
+  /// Decrease dynamic nesting depth by 1.
+  inline void decrease_dyn_depth() {
+    if (current_dyn_depth_ > 0) {
+      current_dyn_depth_--;
     }
   }
 
@@ -210,7 +211,7 @@ private:
   const Config *config_;
   std::shared_ptr<TypeResolver> type_resolver_;
   RefWriter ref_writer_;
-  uint32_t current_depth_;
+  uint32_t current_dyn_depth_;
 
   // Meta sharing state (for compatible mode)
   std::vector<std::vector<uint8_t>> write_type_defs_;
@@ -285,29 +286,29 @@ public:
   /// Check if reference tracking is enabled.
   inline bool track_ref() const { return config_->track_ref; }
 
-  /// Get maximum allowed nesting depth.
-  inline uint32_t max_depth() const { return config_->max_depth; }
+  /// Get maximum allowed dynamic nesting depth for polymorphic types.
+  inline uint32_t max_dyn_depth() const { return config_->max_dyn_depth; }
 
-  /// Get current nesting depth.
-  inline uint32_t current_depth() const { return current_depth_; }
+  /// Get current dynamic nesting depth.
+  inline uint32_t current_dyn_depth() const { return current_dyn_depth_; }
 
-  /// Increase nesting depth by 1.
+  /// Increase dynamic nesting depth by 1.
   ///
-  /// @return Error if max depth exceeded, success otherwise.
-  inline Result<void, Error> increase_depth() {
-    if (current_depth_ >= config_->max_depth) {
-      return Unexpected(
-          Error::depth_exceed("Max deserialization depth exceeded: " +
-                              std::to_string(config_->max_depth)));
+  /// @return Error if max dynamic depth exceeded, success otherwise.
+  inline Result<void, Error> increase_dyn_depth() {
+    if (current_dyn_depth_ >= config_->max_dyn_depth) {
+      return Unexpected<Error>(
+          Error::depth_exceed("Max dynamic deserialization depth exceeded: " +
+                              std::to_string(config_->max_dyn_depth)));
     }
-    current_depth_++;
+    current_dyn_depth_++;
     return Result<void, Error>();
   }
 
-  /// Decrease nesting depth by 1.
-  inline void decrease_depth() {
-    if (current_depth_ > 0) {
-      current_depth_--;
+  /// Decrease dynamic nesting depth by 1.
+  inline void decrease_dyn_depth() {
+    if (current_dyn_depth_ > 0) {
+      current_dyn_depth_--;
     }
   }
 
@@ -380,7 +381,7 @@ private:
   const Config *config_;
   std::shared_ptr<TypeResolver> type_resolver_;
   RefReader ref_reader_;
-  uint32_t current_depth_;
+  uint32_t current_dyn_depth_;
 
   // Meta sharing state (for compatible mode)
   std::vector<std::shared_ptr<TypeInfo>> reading_type_infos_;
@@ -390,8 +391,8 @@ private:
   MetaStringTable meta_string_table_;
 };
 
-/// Implementation of DepthGuard destructor
-inline DepthGuard::~DepthGuard() { ctx_.decrease_depth(); }
+/// Implementation of DynDepthGuard destructor
+inline DynDepthGuard::~DynDepthGuard() { ctx_.decrease_dyn_depth(); }
 
 } // namespace serialization
 } // namespace fory

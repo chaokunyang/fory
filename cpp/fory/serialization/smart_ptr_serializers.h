@@ -375,6 +375,11 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
             "Cannot deserialize polymorphic std::shared_ptr<T> "
             "without type info (read_type=false)"));
       }
+
+      // Check and increase dynamic depth for polymorphic deserialization
+      FORY_RETURN_NOT_OK(ctx.increase_dyn_depth());
+      DynDepthGuard dyn_depth_guard(ctx);
+
       // Read type info from stream to get the concrete type
       FORY_TRY(type_info, ctx.read_any_typeinfo());
 
@@ -458,6 +463,10 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
 
     // For polymorphic types, use the harness to deserialize the concrete type
     if constexpr (is_polymorphic) {
+      // Check and increase dynamic depth for polymorphic deserialization
+      FORY_RETURN_NOT_OK(ctx.increase_dyn_depth());
+      DynDepthGuard dyn_depth_guard(ctx);
+
       // The type_info contains information about the CONCRETE type, not T
       // Use the harness to deserialize it
       if (!type_info.harness.read_data_fn) {
@@ -647,6 +656,11 @@ template <typename T> struct Serializer<std::unique_ptr<T>> {
             "Cannot deserialize polymorphic std::unique_ptr<T> "
             "without type info (read_type=false)"));
       }
+
+      // Check and increase dynamic depth for polymorphic deserialization
+      FORY_RETURN_NOT_OK(ctx.increase_dyn_depth());
+      DynDepthGuard dyn_depth_guard(ctx);
+
       // Read type info from stream to get the concrete type
       FORY_TRY(type_info, ctx.read_any_typeinfo());
 
@@ -703,6 +717,10 @@ template <typename T> struct Serializer<std::unique_ptr<T>> {
 
     // For polymorphic types, use the harness to deserialize the concrete type
     if constexpr (is_polymorphic) {
+      // Check and increase dynamic depth for polymorphic deserialization
+      FORY_RETURN_NOT_OK(ctx.increase_dyn_depth());
+      DynDepthGuard dyn_depth_guard(ctx);
+
       if (!type_info.harness.read_data_fn) {
         return Unexpected(Error::type_error(
             "No harness read function for polymorphic type deserialization"));

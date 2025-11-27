@@ -381,14 +381,14 @@ TEST(SerializationTest, ConfigurationBuilder) {
                    .compatible(true)
                    .xlang(false)
                    .check_struct_version(true)
-                   .max_depth(128)
+                   .max_dyn_depth(10)
                    .track_ref(false)
                    .build();
 
   EXPECT_TRUE(fory1.config().compatible);
   EXPECT_FALSE(fory1.config().xlang);
   EXPECT_TRUE(fory1.config().check_struct_version);
-  EXPECT_EQ(fory1.config().max_depth, 128);
+  EXPECT_EQ(fory1.config().max_dyn_depth, 10);
   EXPECT_FALSE(fory1.config().track_ref);
 }
 

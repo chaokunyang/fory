@@ -95,7 +95,7 @@ encode_meta_string(const std::string &value, bool is_namespace) {
 WriteContext::WriteContext(const Config &config,
                            std::shared_ptr<TypeResolver> type_resolver)
     : buffer_(), config_(&config), type_resolver_(std::move(type_resolver)),
-      current_depth_(0) {}
+      current_dyn_depth_(0) {}
 
 WriteContext::~WriteContext() = default;
 
@@ -245,7 +245,7 @@ void WriteContext::reset() {
   ref_writer_.reset();
   write_type_defs_.clear();
   write_type_id_index_map_.clear();
-  current_depth_ = 0;
+  current_dyn_depth_ = 0;
   // Reset buffer for reuse
   buffer_.WriterIndex(0);
   buffer_.ReaderIndex(0);
@@ -258,7 +258,7 @@ void WriteContext::reset() {
 ReadContext::ReadContext(const Config &config,
                          std::shared_ptr<TypeResolver> type_resolver)
     : buffer_(nullptr), config_(&config),
-      type_resolver_(std::move(type_resolver)), current_depth_(0) {}
+      type_resolver_(std::move(type_resolver)), current_dyn_depth_(0) {}
 
 ReadContext::~ReadContext() = default;
 
@@ -415,7 +415,7 @@ void ReadContext::reset() {
   ref_reader_.reset();
   reading_type_infos_.clear();
   parsed_type_infos_.clear();
-  current_depth_ = 0;
+  current_dyn_depth_ = 0;
   meta_string_table_.reset();
 }
 

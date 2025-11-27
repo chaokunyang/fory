@@ -71,7 +71,6 @@ set(FORY_CPP_ROOT ${CMAKE_CURRENT_SOURCE_DIR} CACHE PATH "Fory C++ root director
 find_package(absl CONFIG QUIET)
 if(absl_FOUND)
     message(STATUS "Found Abseil - using system installation")
-    set(FORY_ABSEIL_FROM_SYSTEM TRUE)
 else()
     message(STATUS "Abseil not found - fetching via FetchContent")
     include(FetchContent)
@@ -121,7 +120,7 @@ endif()
 
 # Installation (only when Abseil is from system, otherwise export will fail
 # because FetchContent Abseil targets are not in any export set)
-if(FORY_ABSEIL_FROM_SYSTEM)
+if(absl_FOUND)
     include(GNUInstallDirs)
     include(CMakePackageConfigHelpers)
 

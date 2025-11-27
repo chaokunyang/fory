@@ -15,19 +15,9 @@
 # specific language governing permissions and limitations
 # under the License.
 
-load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
-load("//bazel:cython_library.bzl", "pyx_library")
+# Package for Python configuration templates
 
-cc_library(
-    name = "_pyfory",
-    srcs = ["pyfory.cc"],
-    hdrs = ["pyfory.h"],
-    alwayslink=True,
-    linkstatic=True,
-    strip_include_prefix = "/cpp",
-    deps = [
-        "//cpp/fory/util:fory_util",
-        "@local_config_python//:python_headers",
-    ],
-    visibility = ["//visibility:public"],
-)
+exports_files([
+    "BUILD.tpl",
+    "variety.tpl",
+])

@@ -15,19 +15,33 @@
 # specific language governing permissions and limitations
 # under the License.
 
-load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
-load("//bazel:cython_library.bzl", "pyx_library")
+# Adapted from tensorflow/third_party/py/ and grpc/third_party/py/
+
+package(default_visibility=["//visibility:public"])
+
+config_setting(
+    name="windows",
+    values={"cpu": "x64_windows"},
+    visibility=["//visibility:public"],
+)
+
+config_setting(
+    name="python3",
+    flag_values = {"@rules_python//python:python_version": "PY3"}
+)
 
 cc_library(
-    name = "_pyfory",
-    srcs = ["pyfory.cc"],
-    hdrs = ["pyfory.h"],
-    alwayslink=True,
-    linkstatic=True,
-    strip_include_prefix = "/cpp",
-    deps = [
-        "//cpp/fory/util:fory_util",
-        "@local_config_python//:python_headers",
-    ],
-    visibility = ["//visibility:public"],
+    name = "python_lib",
+    deps = select({
+        ":python3": ["//_python3:_python3_lib"],
+        "//conditions:default": ["not-existing.lib"],
+    })
+)
+
+cc_library(
+    name = "python_headers",
+    deps = select({
+        ":python3": ["//_python3:_python3_headers"],
+        "//conditions:default": ["not-existing.headers"],
+    })
 )

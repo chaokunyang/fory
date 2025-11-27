@@ -57,20 +57,20 @@ mvn -T16 test -Dtest=org.apache.fory.TestClass#testMethod
 - private methods should be put last in class def, before private fields.
 
 ```bash
-# Prepare for build
-pip install pyarrow
-
 # Build C++ library
-bazel build //...
+bazel build //cpp/...
+
+# Build Cython extensions
+bazel build //:cp_fory_so
 
 # Run tests
-bazel test $(bazel query //...)
+bazel test $(bazel query //cpp/...)
 
 # Run serialization tests
 bazel test $(bazel query //cpp/fory/serialization/...)
 
 # Run specific test
-bazel test //fory/util:buffer_test
+bazel test //cpp/fory/util:buffer_test
 
 # format c++ code
 clang-format -i $file
@@ -383,17 +383,20 @@ Fory serialization for every language is implemented independently to minimize t
 
 #### Bazel
 
-`bazel` dir provide build support for fory c++ and cython:
+`bazel` dir provides build support for fory C++ and Cython:
 
-- `bazel/arrow`: build rules to get arrow shared libraries based on bazel template
-- `grpc-cython-copts.patch/grpc-python.patch`: patch for grpc to add `pyx_library` for cython.
+- `bazel/fory_deps_setup.bzl`: setup external dependencies for bazel build
+- `bazel/cython_library.bzl`: `pyx_library` rule for building Cython extensions
+- `bazel/cython.BUILD`: build file for external Cython dependency
+- `bazel/py/python_configure.bzl`: repository rule for Python autoconfiguration
+- `bazel/py/BUILD.tpl`: template for generated Python configuration BUILD file
+- `bazel/py/variety.tpl`: template for Python version-specific configuration
 
 #### C++
 
 - `cpp/fory/row`: Row format data structures
 - `cpp/fory/meta`: Compile-time reflection utilities for extract struct fields information.
 - `cpp/fory/encoder`: Row format encoder and decoder
-- `cpp/fory/columnar`: Interoperation between fory row format and apache arrow columnar format
 - `cpp/fory/util`: Common utilities
   - `cpp/fory/util/buffer.h`: Buffer for reading and writing data
   - `cpp/fory/util/bit_util.h`: utilities for bit manipulation
@@ -560,5 +563,5 @@ refactor(java): unify serialization exceptions hierarchy
 perf(cpp): optimize buffer allocation in encoder
 test(integration): add cross-language reference cycle tests
 ci: update build matrix for latest JDK versions
-chore(deps): update arrow dependency to 15.0.0
+chore(deps): update guava dependency to 32.0.0
 ```

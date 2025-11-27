@@ -130,21 +130,12 @@ def setup_deps():
         strip_prefix = "rules_python-0.8.0",
         url = "https://github.com/bazelbuild/rules_python/archive/refs/tags/0.8.0.tar.gz",
     )
-    auto_http_archive(
-        name = "com_github_grpc_grpc",
-        # NOTE: If you update this, also update @boringssl's hash.
-        url = "https://github.com/grpc/grpc/archive/refs/tags/v1.46.6.tar.gz",
-        sha256 = "6514b3e6eab9e9c7017304512d4420387a47b1a9c5caa986643692977ed44e8a",
-        patches = [
-            "//bazel:grpc-cython-copts.patch",
-            "//bazel:grpc-python.patch",
-        ],
-    )
+    # Cython for building Python extensions
     # leary cython failed with: `found 'CKeyValueMetadata'`
     # see https://github.com/apache/arrow/issues/28629
     auto_http_archive(
         name = "cython",
-        build_file = "@com_github_grpc_grpc//third_party:cython.BUILD",
+        build_file = "@fory//bazel:cython.BUILD",
         url = "https://github.com/cython/cython/releases/download/3.1.1/cython-3.1.1.tar.gz",
         sha256 = "505ccd413669d5132a53834d792c707974248088c4f60c497deb1b416e366397",
     )

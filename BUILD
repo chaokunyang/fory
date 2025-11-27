@@ -15,7 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-load("@com_github_grpc_grpc//bazel:cython_library.bzl", "pyx_library")
+load("//bazel:cython_library.bzl", "pyx_library")
 load("@compile_commands_extractor//:refresh_compile_commands.bzl", "refresh_compile_commands")
 
 

@@ -102,9 +102,7 @@ FORY_STRUCT(ForySample, int_value, long_value, float_value, double_value,
 // Test data creation
 // ============================================================================
 
-ForyStruct CreateForyStruct() {
-  return ForyStruct{1, 2, 3, 4, 5, 6, 7, 8};
-}
+ForyStruct CreateForyStruct() { return ForyStruct{1, 2, 3, 4, 5, 6, 7, 8}; }
 
 protobuf::Struct CreateProtoStruct() {
   protobuf::Struct s;
@@ -201,10 +199,8 @@ void RegisterForyTypes(fory::serialization::Fory &fory) {
 // ============================================================================
 
 static void BM_Fory_Struct_Serialize(benchmark::State &state) {
-  auto fory = fory::serialization::Fory::builder()
-                  .xlang(true)
-                  .track_ref(false)
-                  .build();
+  auto fory =
+      fory::serialization::Fory::builder().xlang(true).track_ref(false).build();
   RegisterForyTypes(fory);
   ForyStruct obj = CreateForyStruct();
 
@@ -228,10 +224,8 @@ static void BM_Protobuf_Struct_Serialize(benchmark::State &state) {
 BENCHMARK(BM_Protobuf_Struct_Serialize);
 
 static void BM_Fory_Struct_Deserialize(benchmark::State &state) {
-  auto fory = fory::serialization::Fory::builder()
-                  .xlang(true)
-                  .track_ref(false)
-                  .build();
+  auto fory =
+      fory::serialization::Fory::builder().xlang(true).track_ref(false).build();
   RegisterForyTypes(fory);
   ForyStruct obj = CreateForyStruct();
   auto serialized = fory.serialize(obj);
@@ -273,10 +267,8 @@ BENCHMARK(BM_Protobuf_Struct_Deserialize);
 // ============================================================================
 
 static void BM_Fory_Sample_Serialize(benchmark::State &state) {
-  auto fory = fory::serialization::Fory::builder()
-                  .xlang(true)
-                  .track_ref(false)
-                  .build();
+  auto fory =
+      fory::serialization::Fory::builder().xlang(true).track_ref(false).build();
   RegisterForyTypes(fory);
   ForySample obj = CreateForySample();
 
@@ -300,10 +292,8 @@ static void BM_Protobuf_Sample_Serialize(benchmark::State &state) {
 BENCHMARK(BM_Protobuf_Sample_Serialize);
 
 static void BM_Fory_Sample_Deserialize(benchmark::State &state) {
-  auto fory = fory::serialization::Fory::builder()
-                  .xlang(true)
-                  .track_ref(false)
-                  .build();
+  auto fory =
+      fory::serialization::Fory::builder().xlang(true).track_ref(false).build();
   RegisterForyTypes(fory);
   ForySample obj = CreateForySample();
   auto serialized = fory.serialize(obj);
@@ -346,10 +336,8 @@ BENCHMARK(BM_Protobuf_Sample_Deserialize);
 
 static void BM_PrintSerializedSizes(benchmark::State &state) {
   // Fory
-  auto fory = fory::serialization::Fory::builder()
-                  .xlang(true)
-                  .track_ref(false)
-                  .build();
+  auto fory =
+      fory::serialization::Fory::builder().xlang(true).track_ref(false).build();
   RegisterForyTypes(fory);
   ForyStruct fory_struct = CreateForyStruct();
   ForySample fory_sample = CreateForySample();

@@ -70,9 +70,7 @@ def get_system_info():
         if HAS_PSUTIL:
             info["CPU Cores (Physical)"] = psutil.cpu_count(logical=False)
             info["CPU Cores (Logical)"] = psutil.cpu_count(logical=True)
-            info["Total RAM (GB)"] = round(
-                psutil.virtual_memory().total / (1024**3), 2
-            )
+            info["Total RAM (GB)"] = round(psutil.virtual_memory().total / (1024**3), 2)
     except Exception as e:
         info = {"Error gathering system info": str(e)}
     return info
@@ -230,7 +228,9 @@ for idx, op in enumerate(operations):
     proto_tps = [1e9 / t if t > 0 else 0 for t in proto_times]
 
     bars1 = ax.bar(x - width / 2, fory_tps, width, label="Fory", color=FORY_COLOR)
-    bars2 = ax.bar(x + width / 2, proto_tps, width, label="Protobuf", color=PROTOBUF_COLOR)
+    bars2 = ax.bar(
+        x + width / 2, proto_tps, width, label="Protobuf", color=PROTOBUF_COLOR
+    )
 
     ax.set_ylabel("Throughput (ops/sec)")
     ax.set_title(f"{op.capitalize()} Throughput Comparison")

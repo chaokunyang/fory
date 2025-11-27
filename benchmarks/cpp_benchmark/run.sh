@@ -27,11 +27,69 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
+# Default values
+JOBS=16
+DATA=""
+SERIALIZER=""
+
+# Parse arguments
+usage() {
+    echo "Usage: $0 [OPTIONS]"
+    echo ""
+    echo "Build and run C++ benchmarks"
+    echo ""
+    echo "Options:"
+    echo "  --data <struct|sample>       Filter benchmark by data type"
+    echo "  --serializer <fory|protobuf> Filter benchmark by serializer"
+    echo "  --help                       Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  $0                          # Run all benchmarks"
+    echo "  $0 --data struct            # Run only Struct benchmarks"
+    echo "  $0 --serializer fory        # Run only Fory benchmarks"
+    echo "  $0 --data struct --serializer fory"
+    echo ""
+    echo "For profiling/flamegraph, use: ./profile.sh"
+    exit 0
+}
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --data)
+            DATA="$2"
+            shift 2
+            ;;
+        --serializer)
+            SERIALIZER="$2"
+            shift 2
+            ;;
+        --help|-h)
+            usage
+            ;;
+        *)
+            echo -e "${RED}Unknown option: $1${NC}"
+            usage
+            ;;
+    esac
+done
+
+# Build benchmark filter
+FILTER=""
+if [[ -n "$DATA" ]]; then
+    DATA_CAP="$(echo "${DATA:0:1}" | tr '[:lower:]' '[:upper:]')${DATA:1}"
+    FILTER="${DATA_CAP}"
+fi
+if [[ -n "$SERIALIZER" ]]; then
+    SER_CAP="$(echo "${SERIALIZER:0:1}" | tr '[:lower:]' '[:upper:]')${SERIALIZER:1}"
+    if [[ -n "$FILTER" ]]; then
+        FILTER="${SER_CAP}_${FILTER}"
+    else
+        FILTER="${SER_CAP}"
+    fi
+fi
+
 echo -e "${GREEN}=== Fory C++ Benchmark ===${NC}"
 echo ""
-
-# Number of parallel jobs for build
-JOBS=16
 
 # Step 1: Build
 echo -e "${YELLOW}[1/3] Building benchmark...${NC}"
@@ -44,7 +102,12 @@ echo ""
 
 # Step 2: Run benchmark
 echo -e "${YELLOW}[2/3] Running benchmark...${NC}"
-./fory_benchmark --benchmark_format=json --benchmark_out=benchmark_results.json
+BENCH_ARGS="--benchmark_format=json --benchmark_out=benchmark_results.json"
+if [[ -n "$FILTER" ]]; then
+    BENCH_ARGS="$BENCH_ARGS --benchmark_filter=$FILTER"
+    echo -e "Filter: ${FILTER}"
+fi
+./fory_benchmark $BENCH_ARGS
 echo -e "${GREEN}Benchmark complete!${NC}"
 echo ""
 
@@ -64,3 +127,5 @@ echo ""
 echo -e "${GREEN}=== All done! ===${NC}"
 echo -e "Report generated at: ${SCRIPT_DIR}/report/REPORT.md"
 echo -e "Plots saved in: ${SCRIPT_DIR}/report/"
+echo ""
+echo -e "For profiling/flamegraph, run: ${YELLOW}./profile.sh --help${NC}"

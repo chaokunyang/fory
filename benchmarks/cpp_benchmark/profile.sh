@@ -1,0 +1,167 @@
+#!/bin/bash
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Default values
+DATA=""
+SERIALIZER=""
+DURATION=5
+OUTPUT_DIR="profile_output"
+
+# Parse arguments
+usage() {
+    echo "Usage: $0 [OPTIONS]"
+    echo ""
+    echo "Generate flamegraph/profile for C++ benchmarks"
+    echo ""
+    echo "Options:"
+    echo "  --data <struct|sample>       Filter benchmark by data type"
+    echo "  --serializer <fory|protobuf> Filter benchmark by serializer"
+    echo "  --duration <seconds>         Profiling duration (default: 5)"
+    echo "  --output-dir <dir>           Output directory (default: profile_output)"
+    echo "  --help                       Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  $0                                    # Profile all benchmarks"
+    echo "  $0 --data struct --serializer fory   # Profile Fory Struct benchmarks"
+    echo "  $0 --serializer protobuf --duration 10"
+    echo ""
+    echo "Supported profiling tools (in order of preference):"
+    echo "  - samply (recommended): cargo install samply"
+    echo "  - perf (Linux)"
+    exit 0
+}
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --data)
+            DATA="$2"
+            shift 2
+            ;;
+        --serializer)
+            SERIALIZER="$2"
+            shift 2
+            ;;
+        --duration)
+            DURATION="$2"
+            shift 2
+            ;;
+        --output-dir)
+            OUTPUT_DIR="$2"
+            shift 2
+            ;;
+        --help|-h)
+            usage
+            ;;
+        *)
+            echo -e "${RED}Unknown option: $1${NC}"
+            usage
+            ;;
+    esac
+done
+
+# Build benchmark filter
+FILTER=""
+if [[ -n "$DATA" ]]; then
+    DATA_CAP="$(echo "${DATA:0:1}" | tr '[:lower:]' '[:upper:]')${DATA:1}"
+    FILTER="${DATA_CAP}"
+fi
+if [[ -n "$SERIALIZER" ]]; then
+    SER_CAP="$(echo "${SERIALIZER:0:1}" | tr '[:lower:]' '[:upper:]')${SERIALIZER:1}"
+    if [[ -n "$FILTER" ]]; then
+        FILTER="${SER_CAP}_${FILTER}"
+    else
+        FILTER="${SER_CAP}"
+    fi
+fi
+
+# Check if benchmark exists
+if [[ ! -f "build/fory_benchmark" ]]; then
+    echo -e "${RED}Benchmark not found. Run ./run.sh first to build.${NC}"
+    exit 1
+fi
+
+# Create output directory
+mkdir -p "$OUTPUT_DIR"
+cd build
+
+# Build benchmark command
+BENCH_CMD="./fory_benchmark --benchmark_min_time=${DURATION}s"
+if [[ -n "$FILTER" ]]; then
+    BENCH_CMD="$BENCH_CMD --benchmark_filter=$FILTER"
+fi
+
+echo -e "${GREEN}=== Fory C++ Benchmark Profiler ===${NC}"
+echo -e "Filter: ${FILTER:-all}"
+echo -e "Duration: ${DURATION}s"
+echo -e "Output: ${OUTPUT_DIR}"
+echo ""
+
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+
+# Try different profiling tools
+if command -v samply &> /dev/null; then
+    echo -e "${YELLOW}Profiling with samply...${NC}"
+    echo -e "Running: samply record $BENCH_CMD"
+    samply record $BENCH_CMD
+    echo -e "${GREEN}Done! Samply should have opened in your browser.${NC}"
+
+elif command -v perf &> /dev/null; then
+    echo -e "${YELLOW}Profiling with perf...${NC}"
+    PERF_DATA="../${OUTPUT_DIR}/perf_${TIMESTAMP}.data"
+    FLAMEGRAPH_SVG="../${OUTPUT_DIR}/flamegraph_${TIMESTAMP}.svg"
+
+    echo -e "Running: perf record -g --call-graph dwarf -o $PERF_DATA $BENCH_CMD"
+    perf record -g --call-graph dwarf -o "$PERF_DATA" $BENCH_CMD
+
+    echo -e "${GREEN}Profile saved to: ${PERF_DATA}${NC}"
+
+    # Try to generate flamegraph SVG
+    if [[ -d "$HOME/FlameGraph" ]]; then
+        echo -e "${YELLOW}Generating flamegraph SVG...${NC}"
+        perf script -i "$PERF_DATA" | "$HOME/FlameGraph/stackcollapse-perf.pl" | "$HOME/FlameGraph/flamegraph.pl" > "$FLAMEGRAPH_SVG"
+        echo -e "${GREEN}Flamegraph saved to: ${FLAMEGRAPH_SVG}${NC}"
+    elif command -v stackcollapse-perf.pl &> /dev/null && command -v flamegraph.pl &> /dev/null; then
+        echo -e "${YELLOW}Generating flamegraph SVG...${NC}"
+        perf script -i "$PERF_DATA" | stackcollapse-perf.pl | flamegraph.pl > "$FLAMEGRAPH_SVG"
+        echo -e "${GREEN}Flamegraph saved to: ${FLAMEGRAPH_SVG}${NC}"
+    else
+        echo -e "${YELLOW}To generate flamegraph SVG:${NC}"
+        echo "  git clone https://github.com/brendangregg/FlameGraph.git ~/FlameGraph"
+        echo "  perf script -i $PERF_DATA | ~/FlameGraph/stackcollapse-perf.pl | ~/FlameGraph/flamegraph.pl > flamegraph.svg"
+    fi
+
+else
+    echo -e "${RED}No profiling tool found. Please install one of:${NC}"
+    echo "  - samply: cargo install samply (recommended, cross-platform)"
+    echo "  - perf (Linux): apt install linux-tools-generic"
+    exit 1
+fi
+
+echo ""
+echo -e "${GREEN}=== Profiling complete! ===${NC}"

@@ -125,3 +125,43 @@ Options:
   --output-dir    Output directory for plots and report
   --plot-prefix   Image path prefix in Markdown report
 ```
+
+## Profiling / Flamegraph
+
+Use `profile.sh` to generate flamegraphs for performance analysis:
+
+```bash
+# Profile all benchmarks
+./profile.sh
+
+# Profile specific benchmarks
+./profile.sh --data struct --serializer fory
+
+# Profile with custom duration
+./profile.sh --serializer fory --duration 10
+```
+
+### Profile Options
+
+```bash
+./profile.sh --help
+
+Options:
+  --data <struct|sample>       Filter benchmark by data type
+  --serializer <fory|protobuf> Filter benchmark by serializer
+  --duration <seconds>         Profiling duration (default: 5)
+  --output-dir <dir>           Output directory (default: profile_output)
+```
+
+### Supported Profiling Tools
+
+The script automatically detects and uses available tools (in order of preference):
+
+1. **samply** (recommended): `cargo install samply`
+2. **perf** (Linux)
+
+For flamegraph SVG generation with `perf`, install FlameGraph tools:
+
+```bash
+git clone https://github.com/brendangregg/FlameGraph.git ~/FlameGraph
+```

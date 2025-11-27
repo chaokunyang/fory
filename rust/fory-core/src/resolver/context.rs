@@ -25,7 +25,6 @@ use crate::resolver::meta_string_resolver::{MetaStringReaderResolver, MetaString
 use crate::resolver::ref_resolver::{RefReader, RefWriter};
 use crate::resolver::type_resolver::{TypeInfo, TypeResolver};
 use crate::types;
-use crate::util::Spinlock;
 use std::rc::Rc;
 
 /// Serialization state container used on a single thread at a time.
@@ -415,41 +414,5 @@ impl<'a> ReadContext<'a> {
         self.meta_resolver.reset();
         self.meta_string_resolver.reset();
         self.ref_reader.reset();
-    }
-}
-
-pub struct Pool<T> {
-    items: Spinlock<Vec<T>>,
-    factory: Box<dyn Fn() -> T + Send + Sync>,
-}
-
-impl<T> Pool<T> {
-    pub fn new<F>(factory: F) -> Self
-    where
-        F: Fn() -> T + Send + Sync + 'static,
-    {
-        Pool {
-            items: Spinlock::new(vec![]),
-            factory: Box::new(factory),
-        }
-    }
-
-    #[inline(always)]
-    pub fn borrow_mut<Result>(&self, handler: impl FnOnce(&mut T) -> Result) -> Result {
-        let mut obj = self.get();
-        let result = handler(&mut obj);
-        self.put(obj);
-        result
-    }
-
-    #[inline(always)]
-    fn get(&self) -> T {
-        self.items.lock().pop().unwrap_or_else(|| (self.factory)())
-    }
-
-    // put back manually
-    #[inline(always)]
-    fn put(&self, item: T) {
-        self.items.lock().push(item);
     }
 }

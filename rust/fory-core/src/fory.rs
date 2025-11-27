@@ -18,8 +18,7 @@
 use crate::buffer::{Reader, Writer};
 use crate::ensure;
 use crate::error::Error;
-use crate::resolver::context::WriteContext;
-use crate::resolver::context::{Pool, ReadContext};
+use crate::resolver::context::{ReadContext, WriteContext};
 use crate::resolver::type_resolver::TypeResolver;
 use crate::serializer::ForyDefault;
 use crate::serializer::{Serializer, StructSerializer};
@@ -28,8 +27,18 @@ use crate::types::{
     config_flags::{IS_CROSS_LANGUAGE_FLAG, IS_LITTLE_ENDIAN_FLAG},
     Language, MAGIC_NUMBER, SIZE_OF_REF_AND_TYPE,
 };
+use crate::util::ThreadLocalPool;
+use std::cell::RefCell;
 use std::mem;
 use std::sync::OnceLock;
+
+// Thread-local storage for write and read contexts.
+// Each thread has its own cached context, eliminating contention when
+// multiple threads share the same Fory instance.
+thread_local! {
+    static WRITE_CONTEXT_TLS: RefCell<Option<Box<WriteContext<'static>>>> = const { RefCell::new(None) };
+    static READ_CONTEXT_TLS: RefCell<Option<Box<ReadContext<'static>>>> = const { RefCell::new(None) };
+}
 
 /// The main Fory serialization framework instance.
 ///
@@ -82,9 +91,11 @@ pub struct Fory {
     compress_string: bool,
     max_dyn_depth: u32,
     check_struct_version: bool,
-    // Lazy-initialized pools (thread-safe, one-time initialization)
-    write_context_pool: OnceLock<Result<Pool<Box<WriteContext<'static>>>, Error>>,
-    read_context_pool: OnceLock<Result<Pool<Box<ReadContext<'static>>>, Error>>,
+    // Lazy-initialized thread-local pools (thread-safe, one-time initialization)
+    // Uses thread-local storage to eliminate contention when multiple threads
+    // share the same Fory instance.
+    write_context_pool: OnceLock<Result<ThreadLocalPool<Box<WriteContext<'static>>>, Error>>,
+    read_context_pool: OnceLock<Result<ThreadLocalPool<Box<ReadContext<'static>>>, Error>>,
 }
 
 impl Default for Fory {
@@ -518,7 +529,7 @@ impl Fory {
     }
 
     #[inline(always)]
-    fn get_writer_pool(&self) -> Result<&Pool<Box<WriteContext<'static>>>, Error> {
+    fn get_writer_pool(&self) -> Result<&ThreadLocalPool<Box<WriteContext<'static>>>, Error> {
         let pool_result = self.write_context_pool.get_or_init(|| {
             let type_resolver = self.type_resolver.build_final_type_resolver()?;
             let compatible = self.compatible;
@@ -537,7 +548,7 @@ impl Fory {
                     check_struct_version,
                 ))
             };
-            Ok(Pool::new(factory))
+            Ok(ThreadLocalPool::new(factory, &WRITE_CONTEXT_TLS))
         });
         pool_result
             .as_ref()
@@ -900,7 +911,7 @@ impl Fory {
     }
 
     #[inline(always)]
-    fn get_read_pool(&self) -> Result<&Pool<Box<ReadContext<'static>>>, Error> {
+    fn get_read_pool(&self) -> Result<&ThreadLocalPool<Box<ReadContext<'static>>>, Error> {
         let pool_result = self.read_context_pool.get_or_init(|| {
             let type_resolver = self.type_resolver.build_final_type_resolver()?;
             let compatible = self.compatible;
@@ -919,7 +930,7 @@ impl Fory {
                     check_struct_version,
                 ))
             };
-            Ok(Pool::new(factory))
+            Ok(ThreadLocalPool::new(factory, &READ_CONTEXT_TLS))
         });
         pool_result
             .as_ref()

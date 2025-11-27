@@ -17,7 +17,7 @@
 
 use crate::types::TypeId;
 use chrono::NaiveDate;
-use std::cell::UnsafeCell;
+use std::cell::{RefCell, UnsafeCell};
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::{ptr, thread};
@@ -202,3 +202,100 @@ impl<'a, T> DerefMut for SpinlockGuard<'a, T> {
 /// Global flag to check if ENABLE_FORY_DEBUG_OUTPUT environment variable is set at compile time.
 /// Set ENABLE_FORY_DEBUG_OUTPUT=1 at compile time to enable debug output.
 pub const ENABLE_FORY_DEBUG_OUTPUT: bool = option_env!("ENABLE_FORY_DEBUG_OUTPUT").is_some();
+
+/// A thread-local pool that provides lock-free access to pooled objects.
+///
+/// Unlike a shared pool with locks, `ThreadLocalPool` stores objects in thread-local storage,
+/// completely eliminating contention when multiple threads use the same `Fory` instance.
+/// Each thread gets its own cached object, avoiding synchronization overhead.
+pub struct ThreadLocalPool<T: 'static> {
+    /// Thread-local storage for the pooled object. Each thread has its own Option<T>.
+    local: &'static std::thread::LocalKey<RefCell<Option<T>>>,
+    /// Factory function to create new instances when the thread-local is empty.
+    factory: Box<dyn Fn() -> T + Send + Sync>,
+}
+
+impl<T: 'static> ThreadLocalPool<T> {
+    /// Creates a new thread-local pool with the given factory function and thread-local key.
+    ///
+    /// # Arguments
+    ///
+    /// * `factory` - A function that creates new instances of `T` when needed.
+    /// * `local` - A reference to a thread-local key that stores `Option<T>`.
+    ///
+    /// # Note
+    ///
+    /// The `local` parameter must be a `&'static` reference to a `thread_local!` key.
+    /// Use the `thread_local!` macro to create the key at module level.
+    pub fn new<F>(factory: F, local: &'static std::thread::LocalKey<RefCell<Option<T>>>) -> Self
+    where
+        F: Fn() -> T + Send + Sync + 'static,
+    {
+        ThreadLocalPool {
+            local,
+            factory: Box::new(factory),
+        }
+    }
+
+    /// Borrows a mutable reference to the pooled object for the duration of the handler.
+    ///
+    /// This method is completely lock-free. It takes the object from thread-local storage,
+    /// passes it to the handler, and returns it to thread-local storage when done.
+    ///
+    /// If the thread-local storage is empty (first use on this thread), a new object
+    /// is created using the factory function.
+    #[inline(always)]
+    pub fn borrow_mut<R>(&self, handler: impl FnOnce(&mut T) -> R) -> R {
+        self.local.with(|cell| {
+            // Take the object from thread-local storage, or create a new one
+            let mut obj = cell.borrow_mut().take().unwrap_or_else(|| (self.factory)());
+            let result = handler(&mut obj);
+            // Return the object to thread-local storage for reuse
+            *cell.borrow_mut() = Some(obj);
+            result
+        })
+    }
+}
+
+/// A shared object pool using spinlock for synchronization.
+///
+/// This pool is suitable for scenarios where thread-local storage is not desirable
+/// or when objects need to be shared across threads. Note that under high contention,
+/// this pool may become a bottleneck. Consider using `ThreadLocalPool` for better
+/// multi-threaded performance.
+#[allow(dead_code)]
+pub struct Pool<T> {
+    items: Spinlock<Vec<T>>,
+    factory: Box<dyn Fn() -> T + Send + Sync>,
+}
+
+#[allow(dead_code)]
+impl<T> Pool<T> {
+    pub fn new<F>(factory: F) -> Self
+    where
+        F: Fn() -> T + Send + Sync + 'static,
+    {
+        Pool {
+            items: Spinlock::new(vec![]),
+            factory: Box::new(factory),
+        }
+    }
+
+    #[inline(always)]
+    pub fn borrow_mut<R>(&self, handler: impl FnOnce(&mut T) -> R) -> R {
+        let mut obj = self.get();
+        let result = handler(&mut obj);
+        self.put(obj);
+        result
+    }
+
+    #[inline(always)]
+    fn get(&self) -> T {
+        self.items.lock().pop().unwrap_or_else(|| (self.factory)())
+    }
+
+    #[inline(always)]
+    fn put(&self, item: T) {
+        self.items.lock().push(item);
+    }
+}

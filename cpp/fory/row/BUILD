@@ -17,6 +17,6 @@ cc_test(
     srcs = ["row_test.cc"],
     deps = [
         ":fory_row_format",
-        "@com_google_googletest//:gtest",
+        "@googletest//:gtest",
     ],
 )

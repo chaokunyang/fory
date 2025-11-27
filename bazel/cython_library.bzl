@@ -52,11 +52,21 @@ def pyx_library(name, deps = [], cc_kwargs = {}, py_deps = [], srcs = [], **kwar
     for src in pyx_srcs:
         stem = src.split(".")[0]
         shared_object_name = stem + ".so"
+
+        # Get linkopts from cc_kwargs or use empty list
+        linkopts = cc_kwargs.pop("linkopts", [])
+
         native.cc_binary(
             name = cc_kwargs.pop("name", shared_object_name),
             srcs = [stem + ".cpp"] + cc_kwargs.pop("srcs", []),
             deps = deps + ["@local_config_python//:python_headers"] + cc_kwargs.pop("deps", []),
             linkshared = cc_kwargs.pop("linkshared", 1),
+            # On macOS, use -undefined dynamic_lookup to allow Python symbols
+            # to be resolved at runtime when the extension is imported.
+            linkopts = linkopts + select({
+                "@platforms//os:macos": ["-undefined", "dynamic_lookup"],
+                "//conditions:default": [],
+            }),
             **cc_kwargs
         )
         shared_objects.append(shared_object_name)
@@ -69,7 +79,7 @@ def pyx_library(name, deps = [], cc_kwargs = {}, py_deps = [], srcs = [], **kwar
         name = name,
         srcs = py_srcs,
         deps = py_deps,
-        srcs_version = "PY2AND3",
+        srcs_version = "PY3",
         data = data,
         **kwargs
     )

@@ -43,8 +43,8 @@ cc_test(
     srcs = ["serialization_test.cc"],
     deps = [
         ":fory_serialization",
-        "@com_google_googletest//:gtest",
-        "@com_google_googletest//:gtest_main",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -53,8 +53,8 @@ cc_test(
     srcs = ["struct_test.cc"],
     deps = [
         ":fory_serialization",
-        "@com_google_googletest//:gtest",
-        "@com_google_googletest//:gtest_main",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -63,8 +63,8 @@ cc_test(
     srcs = ["struct_compatible_test.cc"],
     deps = [
         ":fory_serialization",
-        "@com_google_googletest//:gtest",
-        "@com_google_googletest//:gtest_main",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -73,8 +73,8 @@ cc_test(
     srcs = ["smart_ptr_serializer_test.cc"],
     deps = [
         ":fory_serialization",
-        "@com_google_googletest//:gtest",
-        "@com_google_googletest//:gtest_main",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -83,8 +83,8 @@ cc_test(
     srcs = ["map_serializer_test.cc"],
     deps = [
         ":fory_serialization",
-        "@com_google_googletest//:gtest",
-        "@com_google_googletest//:gtest_main",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -93,8 +93,8 @@ cc_test(
     srcs = ["meta_string_test.cc"],
     deps = [
         ":fory_serialization",
-        "@com_google_googletest//:gtest",
-        "@com_google_googletest//:gtest_main",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
     ],
 )
 

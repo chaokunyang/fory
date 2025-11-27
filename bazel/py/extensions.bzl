@@ -15,6 +15,13 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# This file is intentionally kept minimal.
-# Dependencies are managed via MODULE.bazel using bzlmod.
-# See MODULE.bazel for the list of dependencies.
+"""Module extension for Python autoconfiguration."""
+
+load("//bazel/py:python_configure.bzl", "python_configure")
+
+def _python_config_impl(ctx):
+    python_configure(name = "local_config_python")
+
+python_config = module_extension(
+    implementation = _python_config_impl,
+)

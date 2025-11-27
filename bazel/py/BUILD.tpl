@@ -8,23 +8,15 @@ config_setting(
     visibility=["//visibility:public"],
 )
 
-config_setting(
-    name="python3",
-    flag_values = {"@rules_python//python:python_version": "PY3"}
-)
+# With Bazel 8 and bzlmod, we simplify the Python configuration.
+# Python 3 is now the only supported version.
 
 cc_library(
     name = "python_lib",
-    deps = select({
-        ":python3": ["//_python3:_python3_lib"],
-        "//conditions:default": ["not-existing.lib"],
-    })
+    deps = ["//_python3:_python3_lib"],
 )
 
 cc_library(
     name = "python_headers",
-    deps = select({
-        ":python3": ["//_python3:_python3_headers"],
-        "//conditions:default": ["not-existing.headers"],
-    })
+    deps = ["//_python3:_python3_headers"],
 )

@@ -16,7 +16,7 @@
 # under the License.
 
 load("//bazel:cython_library.bzl", "pyx_library")
-load("@compile_commands_extractor//:refresh_compile_commands.bzl", "refresh_compile_commands")
+load("@hedron_compile_commands//:refresh_compile_commands.bzl", "refresh_compile_commands")
 
 
 pyx_library(
@@ -65,21 +65,24 @@ pyx_library(
         "//cpp/fory/util:fory_util",
         "//cpp/fory/type:fory_type",
         "//cpp/fory/python:_pyfory",
-        "@com_google_absl//absl/container:flat_hash_map",
+        "@abseil-cpp//absl/container:flat_hash_map",
     ],
 )
 
 pyx_library(
     name = "_format",
-    srcs = glob([
-        "python/pyfory/__init__.py",
-        "python/pyfory/includes/*.pxd",
-        "python/pyfory/_util.pxd",
-        "python/pyfory/*.pxi",
-        "python/pyfory/format/_format.pyx",
-        "python/pyfory/format/__init__.py",
-        "python/pyfory/format/*.pxi",
-    ]),
+    srcs = glob(
+        [
+            "python/pyfory/__init__.py",
+            "python/pyfory/includes/*.pxd",
+            "python/pyfory/_util.pxd",
+            "python/pyfory/*.pxi",
+            "python/pyfory/format/_format.pyx",
+            "python/pyfory/format/__init__.py",
+            "python/pyfory/format/*.pxi",
+        ],
+        allow_empty = True,
+    ),
     cc_kwargs = dict(
         linkstatic = 1,
     ),

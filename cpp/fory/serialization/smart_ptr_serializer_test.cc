@@ -325,6 +325,121 @@ TEST(SmartPtrSerializerTest, PolymorphicUniquePtrDerived2) {
             5678);
 }
 
+// ============================================================================
+// Max Dynamic Depth Tests
+// ============================================================================
+
+// Container struct for testing nested polymorphic depth limits
+struct NestedContainer {
+  virtual ~NestedContainer() = default;
+  int32_t value = 0;
+  std::shared_ptr<NestedContainer> nested;
+};
+FORY_STRUCT(NestedContainer, value, nested);
+
+inline bool operator==(const NestedContainer &a, const NestedContainer &b) {
+  if (a.value != b.value)
+    return false;
+  if (static_cast<bool>(a.nested) != static_cast<bool>(b.nested))
+    return false;
+  if (a.nested && b.nested)
+    return *a.nested == *b.nested;
+  return true;
+}
+
+// Holder struct to wrap nested container in a polymorphic shared_ptr
+struct NestedContainerHolder {
+  std::shared_ptr<NestedContainer> ptr;
+};
+FORY_STRUCT(NestedContainerHolder, ptr);
+
+TEST(SmartPtrSerializerTest, MaxDynDepthExceeded) {
+  // Create Fory with max_dyn_depth=2
+  auto fory = Fory::builder().xlang(true).max_dyn_depth(2).build();
+  fory.register_struct<NestedContainerHolder>(300);
+  fory.register_struct<NestedContainer>("test", "NestedContainer");
+
+  // Create 3 levels of nesting (exceeds max_dyn_depth=2)
+  auto level3 = std::make_shared<NestedContainer>();
+  level3->value = 3;
+  level3->nested = nullptr;
+
+  auto level2 = std::make_shared<NestedContainer>();
+  level2->value = 2;
+  level2->nested = level3;
+
+  auto level1 = std::make_shared<NestedContainer>();
+  level1->value = 1;
+  level1->nested = level2;
+
+  NestedContainerHolder holder;
+  holder.ptr = level1;
+
+  // Serialize should succeed
+  auto bytes_result = fory.serialize(holder);
+  ASSERT_TRUE(bytes_result.ok()) << bytes_result.error().to_string();
+
+  // Deserialize should fail due to max depth exceeded
+  auto deserialize_result = fory.deserialize<NestedContainerHolder>(
+      bytes_result->data(), bytes_result->size());
+  ASSERT_FALSE(deserialize_result.ok())
+      << "Expected deserialization to fail due to max depth";
+
+  // Check error message mentions depth
+  std::string error_msg = deserialize_result.error().to_string();
+  EXPECT_TRUE(error_msg.find("depth") != std::string::npos ||
+              error_msg.find("Depth") != std::string::npos)
+      << "Error should mention depth: " << error_msg;
+}
+
+TEST(SmartPtrSerializerTest, MaxDynDepthSufficient) {
+  // Create Fory with max_dyn_depth=5 (sufficient for 3 levels)
+  auto fory = Fory::builder().xlang(true).max_dyn_depth(5).build();
+  fory.register_struct<NestedContainerHolder>(300);
+  fory.register_struct<NestedContainer>("test", "NestedContainer");
+
+  // Create 3 levels of nesting
+  auto level3 = std::make_shared<NestedContainer>();
+  level3->value = 3;
+  level3->nested = nullptr;
+
+  auto level2 = std::make_shared<NestedContainer>();
+  level2->value = 2;
+  level2->nested = level3;
+
+  auto level1 = std::make_shared<NestedContainer>();
+  level1->value = 1;
+  level1->nested = level2;
+
+  NestedContainerHolder holder;
+  holder.ptr = level1;
+
+  // Serialize should succeed
+  auto bytes_result = fory.serialize(holder);
+  ASSERT_TRUE(bytes_result.ok()) << bytes_result.error().to_string();
+
+  // Deserialize should succeed with sufficient depth
+  auto deserialize_result = fory.deserialize<NestedContainerHolder>(
+      bytes_result->data(), bytes_result->size());
+  ASSERT_TRUE(deserialize_result.ok())
+      << "Deserialization failed: " << deserialize_result.error().to_string();
+
+  auto deserialized = std::move(deserialize_result).value();
+  ASSERT_TRUE(deserialized.ptr);
+  EXPECT_EQ(deserialized.ptr->value, 1);
+  ASSERT_TRUE(deserialized.ptr->nested);
+  EXPECT_EQ(deserialized.ptr->nested->value, 2);
+  ASSERT_TRUE(deserialized.ptr->nested->nested);
+  EXPECT_EQ(deserialized.ptr->nested->nested->value, 3);
+  EXPECT_FALSE(deserialized.ptr->nested->nested->nested);
+}
+
+TEST(SmartPtrSerializerTest, MaxDynDepthDefault) {
+  // Default max_dyn_depth is 5
+  auto fory = Fory::builder().xlang(true).build();
+  EXPECT_EQ(fory.config().max_dyn_depth, 5);
+}
+
 } // namespace
 } // namespace serialization
 } // namespace fory

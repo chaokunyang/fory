@@ -199,6 +199,76 @@ def _compute_hash(hash_: int, type_: DataType):
     return hash_
 
 
+def from_arrow_schema(arrow_schema) -> Schema:
+    """Convert an Arrow Schema to a Fory Schema.
+
+    This is for compatibility with code that uses PyArrow schemas.
+
+    Args:
+        arrow_schema: A PyArrow Schema object.
+
+    Returns:
+        A Fory Schema object with the same structure.
+
+    Raises:
+        ImportError: If pyarrow is not available.
+    """
+    try:
+        from pyarrow import types as pa_types
+    except ImportError:
+        raise ImportError("pyarrow is required for Arrow schema conversion")
+
+    def convert_type(arrow_type) -> DataType:
+        if pa_types.is_boolean(arrow_type):
+            return boolean()
+        elif pa_types.is_int8(arrow_type):
+            from pyfory.format._format import int8
+
+            return int8()
+        elif pa_types.is_int16(arrow_type):
+            from pyfory.format._format import int16
+
+            return int16()
+        elif pa_types.is_int32(arrow_type):
+            from pyfory.format._format import int32
+
+            return int32()
+        elif pa_types.is_int64(arrow_type):
+            return int64()
+        elif pa_types.is_float32(arrow_type):
+            from pyfory.format._format import float32
+
+            return float32()
+        elif pa_types.is_float64(arrow_type):
+            return float64()
+        elif pa_types.is_string(arrow_type) or pa_types.is_large_string(arrow_type):
+            return utf8()
+        elif pa_types.is_binary(arrow_type) or pa_types.is_large_binary(arrow_type):
+            return binary()
+        elif pa_types.is_date32(arrow_type):
+            return date32()
+        elif pa_types.is_timestamp(arrow_type):
+            return timestamp()
+        elif pa_types.is_list(arrow_type) or pa_types.is_large_list(arrow_type):
+            return list_(convert_type(arrow_type.value_type))
+        elif pa_types.is_map(arrow_type):
+            return map_(convert_type(arrow_type.key_type), convert_type(arrow_type.item_type))
+        elif pa_types.is_struct(arrow_type):
+            fields = []
+            for i in range(arrow_type.num_fields):
+                f = arrow_type.field(i)
+                fields.append(field(f.name, convert_type(f.type), nullable=f.nullable))
+            return struct(fields)
+        else:
+            raise TypeError(f"Unsupported Arrow type for Fory conversion: {arrow_type}")
+
+    fory_fields = []
+    for i in range(len(arrow_schema)):
+        f = arrow_schema.field(i)
+        fory_fields.append(field(f.name, convert_type(f.type), nullable=f.nullable))
+    return schema(fory_fields)
+
+
 def to_arrow_schema(fory_schema: Schema):
     """Convert a Fory Schema to an Arrow Schema.
 

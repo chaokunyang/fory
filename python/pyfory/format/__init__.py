@@ -60,6 +60,7 @@ try:
         infer_data_type,
         get_type_id,
         compute_schema_hash,
+        from_arrow_schema,
         to_arrow_schema,
     )
     from pyfory.format.encoder import (  # noqa: F401

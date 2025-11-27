@@ -113,7 +113,7 @@ def create_bar(cls):
 
 @dataclass
 class A:
-    f1: "pa.int32"
+    f1: int
     f2: Dict[str, str]
 
 
@@ -149,7 +149,15 @@ def test_encoder_without_schema(data_file_path):
 
 @cross_language_test
 def test_serialization_without_schema(data_file_path, schema=None):
-    schema = schema or create_foo_schema()
+    from pyfory.format import from_arrow_schema
+
+    arrow_schema = schema or create_foo_schema()
+    # Convert PyArrow schema to Fory schema if needed
+    if hasattr(arrow_schema, "to_arrow_schema"):
+        # Already a Fory schema
+        schema = arrow_schema
+    else:
+        schema = from_arrow_schema(arrow_schema)
     encoder = pyfory.create_row_encoder(schema)
     foo = create_foo()
     with open(data_file_path, "rb+") as f:

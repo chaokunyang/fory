@@ -72,7 +72,8 @@ Result<void, Error> WriteField(Buffer &buffer, const Field &field) {
   if (big_size) {
     header |= (FIELD_NAME_SIZE_THRESHOLD << 2); // bits 2-5: max value
   } else {
-    header |= ((static_cast<int>(name_size) - 1) << 2); // bits 2-5: name size - 1
+    header |=
+        ((static_cast<int>(name_size) - 1) << 2); // bits 2-5: name size - 1
   }
   if (field.nullable()) {
     header |= 0x40; // bit 6: nullable
@@ -200,8 +201,8 @@ Result<DataTypePtr, Error> ReadType(Buffer &buffer) {
         std::make_shared<StructType>(std::move(fields)));
   }
   default:
-    return Unexpected(
-        Error::invalid_data("Unknown type id: " + std::to_string(type_id_byte)));
+    return Unexpected(Error::invalid_data("Unknown type id: " +
+                                          std::to_string(type_id_byte)));
   }
 }
 
@@ -239,9 +240,9 @@ SchemaPtr Schema::FromBytes(Buffer &buffer) {
   }
   uint8_t version = version_result.value();
   if (version != SCHEMA_VERSION) {
-    throw std::runtime_error("Unsupported schema version: " +
-                             std::to_string(version) +
-                             ", expected: " + std::to_string(SCHEMA_VERSION));
+    throw std::runtime_error(
+        "Unsupported schema version: " + std::to_string(version) +
+        ", expected: " + std::to_string(SCHEMA_VERSION));
   }
 
   auto num_fields_result = buffer.ReadVarUint32();

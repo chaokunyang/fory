@@ -243,7 +243,7 @@ The text of each license is the standard Apache 2.0 license.
     Files:
       ci/format.sh
 
-* grpc (https://github.com/grpc/grpc) and tensorflow (https://github.com/tensorflow/tensorflow) and cython (https://github.com/cython/cython)
+* grpc (https://github.com/grpc/grpc)
     Files:
       bazel/cython_library.bzl
 

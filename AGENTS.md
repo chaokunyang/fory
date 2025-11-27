@@ -385,12 +385,9 @@ Fory serialization for every language is implemented independently to minimize t
 
 `bazel` dir provides build support for fory C++ and Cython:
 
-- `bazel/fory_deps_setup.bzl`: setup external dependencies for bazel build
 - `bazel/cython_library.bzl`: `pyx_library` rule for building Cython extensions
-- `bazel/cython.BUILD`: build file for external Cython dependency
-- `bazel/py/python_configure.bzl`: repository rule for Python autoconfiguration
-- `bazel/py/BUILD.tpl`: template for generated Python configuration BUILD file
-- `bazel/py/variety.tpl`: template for Python version-specific configuration
+
+Dependencies are managed via `MODULE.bazel` using bzlmod (Bazel 8+).
 
 #### C++
 

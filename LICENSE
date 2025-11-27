@@ -242,15 +242,10 @@ The text of each license is the standard Apache 2.0 license.
 * ray (https://github.com/ray-project/ray)
     Files:
       ci/format.sh
-      bazel/fory_deps_setup.bzl
 
-* grpc (https://github.com/grpc/grpc) and tensorflow (https://github.com/tensorflow/tensorflow)
+* grpc (https://github.com/grpc/grpc) and tensorflow (https://github.com/tensorflow/tensorflow) and cython (https://github.com/cython/cython)
     Files:
       bazel/cython_library.bzl
-      bazel/cython.BUILD
-      bazel/py/python_configure.bzl
-      bazel/py/BUILD.tpl
-      bazel/py/variety.tpl
 
 
 ================================================================

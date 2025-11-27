@@ -22,10 +22,11 @@
 #include "fory/util/error.h"
 #include "fory/util/result.h"
 
+#include "absl/container/flat_hash_map.h"
+
 #include <cstdint>
 #include <memory>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 namespace fory {
@@ -107,7 +108,7 @@ struct TypeInfo {
   bool is_external = false;
   std::shared_ptr<TypeMeta> type_meta;
   std::vector<size_t> sorted_indices;
-  std::unordered_map<std::string, size_t> name_to_index;
+  absl::flat_hash_map<std::string, size_t> name_to_index;
   std::vector<uint8_t> type_def;
   Harness harness;
   // Pre-encoded meta strings for efficient writing (avoids re-encoding on each

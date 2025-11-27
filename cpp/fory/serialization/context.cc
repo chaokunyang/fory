@@ -243,12 +243,58 @@ WriteContext::write_any_typeinfo(uint32_t fory_type_id,
   return type_info;
 }
 
+Result<void, Error>
+WriteContext::write_struct_type_info(const std::type_index &type_id) {
+  // Get type info with single lookup
+  FORY_TRY(type_info, type_resolver_->get_type_info(type_id));
+  uint32_t fory_type_id = type_info->type_id;
+
+  // Write type_id
+  buffer_.WriteVarUint32(fory_type_id);
+
+  // Handle different struct type categories based on low byte
+  uint32_t type_id_low = fory_type_id & 0xff;
+  switch (type_id_low) {
+  case static_cast<uint32_t>(TypeId::NAMED_COMPATIBLE_STRUCT):
+  case static_cast<uint32_t>(TypeId::COMPATIBLE_STRUCT): {
+    // Write meta_index
+    FORY_TRY(meta_index, push_meta(type_id));
+    buffer_.WriteVarUint32(static_cast<uint32_t>(meta_index));
+    break;
+  }
+  case static_cast<uint32_t>(TypeId::NAMED_STRUCT): {
+    if (config_->compatible) {
+      // Write meta_index
+      FORY_TRY(meta_index, push_meta(type_id));
+      buffer_.WriteVarUint32(static_cast<uint32_t>(meta_index));
+    } else {
+      // Write pre-encoded namespace and type_name
+      if (type_info->encoded_namespace && type_info->encoded_type_name) {
+        write_encoded_meta_string(buffer_, *type_info->encoded_namespace);
+        write_encoded_meta_string(buffer_, *type_info->encoded_type_name);
+      } else {
+        return Unexpected(
+            Error::invalid("Encoded meta strings not initialized for struct"));
+      }
+    }
+    break;
+  }
+  default:
+    // STRUCT type - just writing type_id is sufficient
+    break;
+  }
+
+  return Result<void, Error>();
+}
+
 void WriteContext::reset() {
   ref_writer_.reset();
+  // Clear meta vectors/maps - they're typically small or empty
+  // in non-compatible mode, so clear() is efficient
   write_type_defs_.clear();
   write_type_id_index_map_.clear();
   current_dyn_depth_ = 0;
-  // Reset buffer for reuse
+  // Reset buffer indices for reuse - no memory operations needed
   buffer_.WriterIndex(0);
   buffer_.ReaderIndex(0);
 }

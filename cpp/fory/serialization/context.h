@@ -27,6 +27,8 @@
 #include "fory/util/error.h"
 #include "fory/util/result.h"
 
+#include "absl/container/flat_hash_map.h"
+
 #include <cassert>
 #include <typeindex>
 
@@ -199,6 +201,14 @@ public:
   write_any_typeinfo(uint32_t fory_type_id,
                      const std::type_index &concrete_type_id);
 
+  /// Fast path for writing struct type info - does a single type lookup
+  /// and handles all struct type categories (STRUCT, NAMED_STRUCT,
+  /// COMPATIBLE_STRUCT, NAMED_COMPATIBLE_STRUCT).
+  ///
+  /// @param type_id The type_index for the struct type
+  /// @return Success or error
+  Result<void, Error> write_struct_type_info(const std::type_index &type_id);
+
   /// Write type info for a registered enum type.
   /// Looks up the type info and delegates to write_any_typeinfo.
   Result<void, Error> write_enum_typeinfo(const std::type_index &type);
@@ -215,7 +225,7 @@ private:
 
   // Meta sharing state (for compatible mode)
   std::vector<std::vector<uint8_t>> write_type_defs_;
-  std::unordered_map<std::type_index, size_t> write_type_id_index_map_;
+  absl::flat_hash_map<std::type_index, size_t> write_type_id_index_map_;
 };
 
 /// Read context for deserialization operations.
@@ -385,7 +395,7 @@ private:
 
   // Meta sharing state (for compatible mode)
   std::vector<std::shared_ptr<TypeInfo>> reading_type_infos_;
-  std::unordered_map<int64_t, std::shared_ptr<TypeInfo>> parsed_type_infos_;
+  absl::flat_hash_map<int64_t, std::shared_ptr<TypeInfo>> parsed_type_infos_;
 
   // Dynamic meta strings used for named type/class info.
   meta::MetaStringTable meta_string_table_;

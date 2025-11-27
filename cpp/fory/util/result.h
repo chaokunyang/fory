@@ -323,7 +323,8 @@ public:
 /// Result<void, E> - Specialization for operations that don't return a value
 ///
 /// This specialization is for operations that either succeed (with no return
-/// value) or fail with an error.
+/// value) or fail with an error. Uses union-based storage to avoid heap
+/// allocation for the common success case.
 ///
 /// ## Usage Example
 ///
@@ -338,48 +339,100 @@ public:
 /// ```
 template <typename E> class Result<void, E> {
 private:
-  E *error_; // nullptr for success, heap-allocated for error
+  // Union-based storage avoids heap allocation
+  union Storage {
+    char dummy_; // Placeholder for success state (1 byte)
+    E error_;
+
+    Storage() : dummy_(0) {}
+    ~Storage() {}
+  };
+
+  Storage storage_;
+  bool has_value_;
+
+  void destroy() {
+    if (!has_value_) {
+      storage_.error_.~E();
+    }
+  }
 
 public:
   // Type traits
   using error_type = E;
 
   // Construct success result
-  Result() : error_(nullptr) {}
+  Result() : has_value_(true) { storage_.dummy_ = 0; }
 
   // Construct error result
-  Result(const Unexpected<E> &unexpected) : error_(new E(unexpected.error())) {}
+  Result(const Unexpected<E> &unexpected) : has_value_(false) {
+    new (&storage_.error_) E(unexpected.error());
+  }
 
-  Result(Unexpected<E> &&unexpected)
-      : error_(new E(std::move(unexpected.error()))) {}
+  Result(Unexpected<E> &&unexpected) : has_value_(false) {
+    new (&storage_.error_) E(std::move(unexpected.error()));
+  }
 
   // Destructor
-  ~Result() { delete error_; }
+  ~Result() { destroy(); }
 
   // Copy constructor
-  Result(const Result &other)
-      : error_(other.error_ ? new E(*other.error_) : nullptr) {}
+  Result(const Result &other) : has_value_(other.has_value_) {
+    if (!has_value_) {
+      new (&storage_.error_) E(other.storage_.error_);
+    } else {
+      storage_.dummy_ = 0;
+    }
+  }
 
   // Move constructor
-  Result(Result &&other) noexcept : error_(other.error_) {
-    other.error_ = nullptr;
+  Result(Result &&other) noexcept(std::is_nothrow_move_constructible<E>::value)
+      : has_value_(other.has_value_) {
+    if (!has_value_) {
+      new (&storage_.error_) E(std::move(other.storage_.error_));
+    } else {
+      storage_.dummy_ = 0;
+    }
   }
 
   // Copy assignment
   Result &operator=(const Result &other) {
     if (this != &other) {
-      delete error_;
-      error_ = other.error_ ? new E(*other.error_) : nullptr;
+      if (has_value_ == other.has_value_) {
+        if (!has_value_) {
+          storage_.error_ = other.storage_.error_;
+        }
+      } else {
+        destroy();
+        has_value_ = other.has_value_;
+        if (!has_value_) {
+          new (&storage_.error_) E(other.storage_.error_);
+        } else {
+          storage_.dummy_ = 0;
+        }
+      }
     }
     return *this;
   }
 
   // Move assignment
-  Result &operator=(Result &&other) noexcept {
+  Result &operator=(Result &&other) noexcept(
+      std::is_nothrow_move_constructible<E>::value &&
+      std::is_nothrow_move_assignable<E>::value) {
     if (this != &other) {
-      delete error_;
-      error_ = other.error_;
-      other.error_ = nullptr;
+      if (has_value_ == other.has_value_) {
+        if (!has_value_) {
+          storage_.error_ = std::move(other.storage_.error_);
+        }
+      } else {
+        destroy();
+        has_value_ = other.has_value_;
+        if (!has_value_) {
+          new (&storage_.error_) E(std::move(other.storage_.error_));
+        } else {
+          storage_.dummy_ = 0;
+        }
+      }
     }
     return *this;
   }
@@ -387,37 +440,35 @@ public:
   // Observers
 
   /// Returns true if the Result represents success
-  constexpr bool has_value() const noexcept { return error_ == nullptr; }
+  constexpr bool has_value() const noexcept { return has_value_; }
 
   /// Returns true if the Result represents success
-  constexpr bool ok() const noexcept { return error_ == nullptr; }
+  constexpr bool ok() const noexcept { return has_value_; }
 
   /// Returns true if the Result represents success
-  constexpr explicit operator bool() const noexcept {
-    return error_ == nullptr;
-  }
+  constexpr explicit operator bool() const noexcept { return has_value_; }
 
   // Error accessors
 
   /// Returns a reference to the contained error
   E &error() & {
-    FORY_CHECK(error_ != nullptr) << "Cannot access error of successful Result";
-    return *error_;
+    FORY_CHECK(!has_value_) << "Cannot access error of successful Result";
+    return storage_.error_;
   }
 
   const E &error() const & {
-    FORY_CHECK(error_ != nullptr) << "Cannot access error of successful Result";
-    return *error_;
+    FORY_CHECK(!has_value_) << "Cannot access error of successful Result";
+    return storage_.error_;
   }
 
   E &&error() && {
-    FORY_CHECK(error_ != nullptr) << "Cannot access error of successful Result";
-    return std::move(*error_);
+    FORY_CHECK(!has_value_) << "Cannot access error of successful Result";
+    return std::move(storage_.error_);
   }
 
   const E &&error() const && {
-    FORY_CHECK(error_ != nullptr) << "Cannot access error of successful Result";
-    return std::move(*error_);
+    FORY_CHECK(!has_value_) << "Cannot access error of successful Result";
+    return std::move(storage_.error_);
   }
 };
 

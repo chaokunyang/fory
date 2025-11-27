@@ -32,6 +32,7 @@ cc_library(
         "//cpp/fory/thirdparty:libmmh3",
         "//cpp/fory/type:fory_type",
         "//cpp/fory/util:fory_util",
+        "@abseil-cpp//absl/container:flat_hash_map",
     ],
     visibility = ["//visibility:public"],
 )

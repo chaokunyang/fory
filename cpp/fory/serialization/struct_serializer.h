@@ -505,26 +505,29 @@ Result<void, Error> write_single_field(const T &obj, WriteContext &ctx,
   return Serializer<FieldType>::write(field_value, ctx, write_ref, write_type);
 }
 
+/// Helper to write a single field at compile-time sorted position
+template <typename T, size_t SortedPosition>
+Result<void, Error> write_field_at_sorted_position(const T &obj,
+                                                   WriteContext &ctx,
+                                                   bool has_generics) {
+  using Helpers = CompileTimeFieldHelpers<T>;
+  constexpr size_t original_index = Helpers::sorted_indices[SortedPosition];
+  const auto field_info = ForyFieldInfo(obj);
+  const auto field_ptrs = decltype(field_info)::Ptrs;
+  return write_single_field<T, original_index>(obj, ctx, field_ptrs,
+                                               has_generics);
+}
+
 /// Write struct fields recursively using index sequence (sorted order)
+/// Optimized to use direct compile-time indexing without runtime dispatch
 template <typename T, size_t... Indices>
 Result<void, Error> write_struct_fields_impl(const T &obj, WriteContext &ctx,
                                              std::index_sequence<Indices...>,
                                              bool has_generics) {
-  // Get field info from FORY_FIELD_INFO via ADL
-  const auto field_info = ForyFieldInfo(obj);
-  const auto field_ptrs = decltype(field_info)::Ptrs;
-
-  using Helpers = CompileTimeFieldHelpers<T>;
-
   // Write each field in sorted order with early return on error
+  // Uses direct compile-time indexing - no runtime dispatch overhead
   Result<void, Error> result;
-  ((result = dispatch_field_index<T>(Helpers::sorted_indices[Indices],
-                                     [&](auto index_constant) {
-                                       constexpr size_t index =
-                                           decltype(index_constant)::value;
-                                       return write_single_field<T, index>(
-                                           obj, ctx, field_ptrs, has_generics);
-                                     }),
+  ((result = write_field_at_sorted_position<T, Indices>(obj, ctx, has_generics),
     result.ok()) &&
    ...);
   return result;
@@ -633,22 +636,24 @@ read_single_field_by_index_compatible(T &obj, ReadContext &ctx,
   return Result<void, Error>();
 }
 
+/// Helper to read a single field at compile-time sorted position
+template <typename T, size_t SortedPosition>
+Result<void, Error> read_field_at_sorted_position(T &obj, ReadContext &ctx) {
+  using Helpers = CompileTimeFieldHelpers<T>;
+  constexpr size_t original_index = Helpers::sorted_indices[SortedPosition];
+  return read_single_field_by_index<original_index>(obj, ctx);
+}
+
 /// Read struct fields recursively using index sequence (sorted order - matches
 /// write order)
+/// Optimized to use direct compile-time indexing without runtime dispatch
 template <typename T, size_t... Indices>
 Result<void, Error> read_struct_fields_impl(T &obj, ReadContext &ctx,
                                             std::index_sequence<Indices...>) {
-  using Helpers = CompileTimeFieldHelpers<T>;
-
   // Read each field in sorted order (same as write) with early return on error
+  // Uses direct compile-time indexing - no runtime dispatch overhead
   Result<void, Error> result;
-  ((result = dispatch_field_index<T>(Helpers::sorted_indices[Indices],
-                                     [&](auto index_constant) {
-                                       constexpr size_t index =
-                                           decltype(index_constant)::value;
-                                       return read_single_field_by_index<index>(
-                                           obj, ctx);
-                                     }),
+  ((result = read_field_at_sorted_position<T, Indices>(obj, ctx),
     result.ok()) &&
    ...);
   return result;
@@ -766,11 +771,10 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
     write_not_null_ref_flag(ctx, write_ref);
 
     if (write_type) {
-      FORY_TRY(type_id, ctx.type_resolver().template get_type_id<T>());
-      // Use write_any_typeinfo to handle both type_id AND namespace/type_name
-      // for NAMED_STRUCT, and meta_index for compatible mode
+      // Use write_struct_type_info_fast to avoid double lookup
+      // (get_type_id + write_any_typeinfo both do type lookups)
       FORY_RETURN_NOT_OK(
-          ctx.write_any_typeinfo(type_id, std::type_index(typeid(T))));
+          ctx.write_struct_type_info(std::type_index(typeid(T))));
     }
     return write_data_generic(obj, ctx, has_generics);
   }

@@ -36,6 +36,8 @@
 #include <utility>
 #include <vector>
 
+#include "absl/container/flat_hash_map.h"
+
 #include "fory/meta/field_info.h"
 #include "fory/meta/type_traits.h"
 #include "fory/serialization/config.h"
@@ -409,7 +411,7 @@ public:
   template <typename T> TypeMeta clone_struct_meta();
   template <typename T> const std::vector<size_t> &sorted_indices();
   template <typename T>
-  const std::unordered_map<std::string, size_t> &field_name_to_index();
+  const absl::flat_hash_map<std::string, size_t> &field_name_to_index();
 
   template <typename T>
   Result<std::shared_ptr<TypeInfo>, Error> get_struct_type_info();
@@ -552,11 +554,12 @@ private:
   std::thread::id registration_thread_id_;
   bool finalized_;
 
-  std::unordered_map<std::type_index, std::shared_ptr<TypeInfo>>
+  absl::flat_hash_map<std::type_index, std::shared_ptr<TypeInfo>>
       type_info_cache_;
-  std::unordered_map<uint32_t, std::shared_ptr<TypeInfo>> type_info_by_id_;
-  std::unordered_map<std::string, std::shared_ptr<TypeInfo>> type_info_by_name_;
-  std::unordered_map<std::type_index, std::shared_ptr<TypeInfo>>
+  absl::flat_hash_map<uint32_t, std::shared_ptr<TypeInfo>> type_info_by_id_;
+  absl::flat_hash_map<std::string, std::shared_ptr<TypeInfo>>
+      type_info_by_name_;
+  absl::flat_hash_map<std::type_index, std::shared_ptr<TypeInfo>>
       partial_type_infos_;
 };
 
@@ -619,7 +622,7 @@ const std::vector<size_t> &TypeResolver::sorted_indices() {
 }
 
 template <typename T>
-const std::unordered_map<std::string, size_t> &
+const absl::flat_hash_map<std::string, size_t> &
 TypeResolver::field_name_to_index() {
   const std::type_index key(typeid(T));
   auto it = type_info_cache_.find(key);

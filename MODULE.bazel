@@ -32,6 +32,17 @@ bazel_dep(name = "rules_cc", version = "0.1.1")
 # Rules Python - standard Python rules
 bazel_dep(name = "rules_python", version = "1.4.1")
 
+# Configure Python toolchain to use version from BAZEL_PYTHON_VERSION env var
+# This allows building extensions with the correct Python version headers
+python = use_extension("@rules_python//python/extensions:python.bzl", "python")
+python.toolchain(python_version = "3.8")
+python.toolchain(python_version = "3.9")
+python.toolchain(python_version = "3.10")
+python.toolchain(python_version = "3.11")
+python.toolchain(python_version = "3.12")
+python.toolchain(python_version = "3.13")
+use_repo(python, "python_versions")
+
 # Cython from BCR with official rules
 bazel_dep(name = "cython", version = "3.1.3")
 

@@ -147,10 +147,18 @@ Use `profile.sh` to generate flamegraphs for performance analysis:
 ./profile.sh --help
 
 Options:
+  --filter <pattern>           Custom benchmark filter (regex pattern)
   --data <struct|sample>       Filter benchmark by data type
   --serializer <fory|protobuf> Filter benchmark by serializer
   --duration <seconds>         Profiling duration (default: 5)
   --output-dir <dir>           Output directory (default: profile_output)
+```
+
+Example with custom filter:
+
+```bash
+# Profile a specific benchmark
+./profile.sh --filter BM_Fory_Struct_Serialize
 ```
 
 ### Supported Profiling Tools

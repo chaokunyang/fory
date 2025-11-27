@@ -30,6 +30,7 @@ NC='\033[0m' # No Color
 # Default values
 DATA=""
 SERIALIZER=""
+FILTER=""
 DURATION=5
 OUTPUT_DIR="profile_output"
 
@@ -40,6 +41,7 @@ usage() {
     echo "Generate flamegraph/profile for C++ benchmarks"
     echo ""
     echo "Options:"
+    echo "  --filter <pattern>           Custom benchmark filter (regex pattern)"
     echo "  --data <struct|sample>       Filter benchmark by data type"
     echo "  --serializer <fory|protobuf> Filter benchmark by serializer"
     echo "  --duration <seconds>         Profiling duration (default: 5)"
@@ -50,6 +52,7 @@ usage() {
     echo "  $0                                    # Profile all benchmarks"
     echo "  $0 --data struct --serializer fory   # Profile Fory Struct benchmarks"
     echo "  $0 --serializer protobuf --duration 10"
+    echo "  $0 --filter BM_Fory_Struct_Serialize # Profile specific benchmark"
     echo ""
     echo "Supported profiling tools (in order of preference):"
     echo "  - samply (recommended): cargo install samply"
@@ -59,6 +62,10 @@ usage() {
 
 while [[ $# -gt 0 ]]; do
     case $1 in
+        --filter)
+            FILTER="$2"
+            shift 2
+            ;;
         --data)
             DATA="$2"
             shift 2
@@ -85,18 +92,19 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Build benchmark filter
-FILTER=""
-if [[ -n "$DATA" ]]; then
-    DATA_CAP="$(echo "${DATA:0:1}" | tr '[:lower:]' '[:upper:]')${DATA:1}"
-    FILTER="${DATA_CAP}"
-fi
-if [[ -n "$SERIALIZER" ]]; then
-    SER_CAP="$(echo "${SERIALIZER:0:1}" | tr '[:lower:]' '[:upper:]')${SERIALIZER:1}"
-    if [[ -n "$FILTER" ]]; then
-        FILTER="${SER_CAP}_${FILTER}"
-    else
-        FILTER="${SER_CAP}"
+# Build benchmark filter (only if --filter not provided)
+if [[ -z "$FILTER" ]]; then
+    if [[ -n "$DATA" ]]; then
+        DATA_CAP="$(echo "${DATA:0:1}" | tr '[:lower:]' '[:upper:]')${DATA:1}"
+        FILTER="${DATA_CAP}"
+    fi
+    if [[ -n "$SERIALIZER" ]]; then
+        SER_CAP="$(echo "${SERIALIZER:0:1}" | tr '[:lower:]' '[:upper:]')${SERIALIZER:1}"
+        if [[ -n "$FILTER" ]]; then
+            FILTER="${SER_CAP}_${FILTER}"
+        else
+            FILTER="${SER_CAP}"
+        fi
     fi
 fi
 

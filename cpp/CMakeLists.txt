@@ -67,24 +67,18 @@ endif()
 # Set Fory root directory for include paths (important when used as subdirectory)
 set(FORY_CPP_ROOT ${CMAKE_CURRENT_SOURCE_DIR} CACHE PATH "Fory C++ root directory")
 
-# Find or fetch Abseil (required for debugging support)
-find_package(absl CONFIG QUIET)
-if(absl_FOUND)
-    message(STATUS "Found Abseil - using system installation")
-else()
-    message(STATUS "Abseil not found - fetching via FetchContent")
-    include(FetchContent)
-    set(ABSL_PROPAGATE_CXX_STD ON)
-    set(ABSL_BUILD_TESTING OFF)
-    set(ABSL_ENABLE_INSTALL OFF)
-    FetchContent_Declare(
-        abseil-cpp
-        GIT_REPOSITORY https://github.com/abseil/abseil-cpp.git
-        GIT_TAG 20240722.0
-    )
-    FetchContent_MakeAvailable(abseil-cpp)
-endif()
-set(FORY_HAS_ABSEIL TRUE)
+# Fetch Abseil (required for debugging support)
+message(STATUS "Fetching Abseil via FetchContent")
+include(FetchContent)
+set(ABSL_PROPAGATE_CXX_STD ON)
+set(ABSL_BUILD_TESTING OFF)
+set(ABSL_ENABLE_INSTALL ON)
+FetchContent_Declare(
+    abseil-cpp
+    GIT_REPOSITORY https://github.com/abseil/abseil-cpp.git
+    GIT_TAG 20240722.0
+)
+FetchContent_MakeAvailable(abseil-cpp)
 
 # Add subdirectories
 add_subdirectory(fory/thirdparty)
@@ -118,65 +112,62 @@ if(FORY_BUILD_TESTS)
     add_subdirectory(tests)
 endif()
 
-# Installation (only when Abseil is from system, otherwise export will fail
-# because FetchContent Abseil targets are not in any export set)
-if(absl_FOUND)
-    include(GNUInstallDirs)
-    include(CMakePackageConfigHelpers)
+# Installation
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
 
-    # Install headers
-    install(DIRECTORY fory/
-        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/fory
-        FILES_MATCHING
-        PATTERN "*.h"
-        PATTERN "*_test.cc" EXCLUDE
-        PATTERN "python" EXCLUDE
-    )
+# Install headers
+install(DIRECTORY fory/
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/fory
+    FILES_MATCHING
+    PATTERN "*.h"
+    PATTERN "*_test.cc" EXCLUDE
+    PATTERN "python" EXCLUDE
+)
 
-    # Install libraries
-    install(TARGETS
-        fory_thirdparty
-        fory_util
-        fory_type
-        fory_meta
-        fory_serialization
-        fory_row_format
-        fory_encoder
-        fory_serialization_lib
-        fory_row_format_lib
-        fory_lib
-        EXPORT ForyTargets
-        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-        INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-    )
+# Install libraries
+install(TARGETS
+    fory_thirdparty
+    fory_util
+    fory_type
+    fory_meta
+    fory_serialization
+    fory_row_format
+    fory_encoder
+    fory_serialization_lib
+    fory_row_format_lib
+    fory_lib
+    EXPORT ForyTargets
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
 
-    # Generate and install package config files
-    write_basic_package_version_file(
-        "${CMAKE_CURRENT_BINARY_DIR}/ForyConfigVersion.cmake"
-        VERSION ${PROJECT_VERSION}
-        COMPATIBILITY SameMajorVersion
-    )
+# Generate and install package config files
+write_basic_package_version_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/ForyConfigVersion.cmake"
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion
+)
 
-    configure_package_config_file(
-        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ForyConfig.cmake.in"
-        "${CMAKE_CURRENT_BINARY_DIR}/ForyConfig.cmake"
-        INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/fory
-    )
+configure_package_config_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ForyConfig.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/ForyConfig.cmake"
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/fory
+)
 
-    install(EXPORT ForyTargets
-        FILE ForyTargets.cmake
-        NAMESPACE fory::
-        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/fory
-    )
+install(EXPORT ForyTargets
+    FILE ForyTargets.cmake
+    NAMESPACE fory::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/fory
+)
 
-    install(FILES
-        "${CMAKE_CURRENT_BINARY_DIR}/ForyConfig.cmake"
-        "${CMAKE_CURRENT_BINARY_DIR}/ForyConfigVersion.cmake"
-        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/fory
-    )
-endif()
+install(FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/ForyConfig.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/ForyConfigVersion.cmake"
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/fory
+)
 
 # Print configuration summary
 message(STATUS "")
@@ -187,5 +178,4 @@ message(STATUS "  C++ standard:   ${CMAKE_CXX_STANDARD}")
 message(STATUS "  Install prefix: ${CMAKE_INSTALL_PREFIX}")
 message(STATUS "  Build tests:    ${FORY_BUILD_TESTS}")
 message(STATUS "  AVX2 enabled:   ${FORY_USE_AVX2} (x86_64: ${FORY_IS_X86_64})")
-message(STATUS "  Abseil found:   ${FORY_HAS_ABSEIL}")
 message(STATUS "")

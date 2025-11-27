@@ -45,16 +45,13 @@ target_include_directories(fory_util
         $<INSTALL_INTERFACE:include>
 )
 
-# Link Abseil if available for enhanced debugging
-if(FORY_HAS_ABSEIL)
-    target_link_libraries(fory_util
-        PUBLIC
-            absl::failure_signal_handler
-            absl::stacktrace
-            absl::symbolize
-    )
-    target_compile_definitions(fory_util PUBLIC FORY_HAS_ABSEIL)
-endif()
+# Link Abseil for debugging support
+target_link_libraries(fory_util
+    PUBLIC
+        absl::failure_signal_handler
+        absl::stacktrace
+        absl::symbolize
+)
 
 set_target_properties(fory_util PROPERTIES
     POSITION_INDEPENDENT_CODE ON

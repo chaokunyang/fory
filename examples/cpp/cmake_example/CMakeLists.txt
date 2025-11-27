@@ -59,11 +59,15 @@ FetchContent_MakeAvailable(fory)
 # add_subdirectory(${FORY_CPP_DIR} ${CMAKE_BINARY_DIR}/fory)
 
 # Serialization example executable
-add_executable(serialization_example serialization_example.cpp)
+add_executable(serialization_example
+    ${CMAKE_CURRENT_SOURCE_DIR}/serialization_example.cc
+)
 target_link_libraries(serialization_example PRIVATE fory::serialization)
 
 # Row format example executable
-add_executable(row_format_example row_format_example.cpp)
+add_executable(row_format_example
+    ${CMAKE_CURRENT_SOURCE_DIR}/row_format_example.cc
+)
 target_link_libraries(row_format_example PRIVATE fory::row_format)
 
 # Print build info

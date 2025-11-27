@@ -420,8 +420,8 @@ jobs:
           cd fory-core
           mvn -T16 --no-transfer-progress test -Dtest=org.apache.fory.CPPXlangTest
 
-  cpp_cmake_example:
-    name: C++ CMake Example
+  cpp_example:
+    name: C++ Example
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5

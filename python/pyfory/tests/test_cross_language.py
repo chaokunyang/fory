@@ -177,9 +177,11 @@ def test_serialization_without_schema(data_file_path, schema=None):
 
 @cross_language_test
 def test_serialization_with_schema(schema_file_path, data_file_path):
+    from pyfory.format import Schema
+
     with open(schema_file_path, "rb") as f:
         schema_bytes = f.read()
-        schema = pa.ipc.read_schema(pa.py_buffer(schema_bytes))
+        schema = Schema.from_bytes(schema_bytes)
         debug_print("deserialized schema", schema)
         test_serialization_without_schema(data_file_path, schema)
 
@@ -367,61 +369,6 @@ def test_cross_language_reference(data_file_path):
         fory.serialize(new_list, buffer=new_buf)
     with open(data_file_path, "wb+") as f:
         f.write(new_buf.get_bytes(0, new_buf.writer_index))
-
-
-@cross_language_test
-def test_serialize_arrow_in_band(data_file_path):
-    with open(data_file_path, "rb") as f:
-        batch = create_record_batch(2000)
-        table = pa.Table.from_batches([batch] * 2)
-        data_bytes = f.read()
-        buffer = pyfory.Buffer(data_bytes)
-        fory = pyfory.Fory(xlang=True, ref=True)
-        new_batch = fory.deserialize(buffer)
-        assert new_batch == batch
-        new_table = fory.deserialize(buffer)
-        assert table == new_table
-
-
-@cross_language_test
-def test_serialize_arrow_out_of_band(int_band_file, out_of_band_file):
-    with open(int_band_file, "rb") as f:
-        in_band_data_bytes = f.read()
-    with open(out_of_band_file, "rb") as f:
-        out_of_band_data_bytes = f.read()
-    batch = create_record_batch(2000)
-    table = pa.Table.from_batches([batch] * 2)
-    in_band_buffer = pyfory.Buffer(in_band_data_bytes)
-    out_of_band_buffer = pyfory.Buffer(out_of_band_data_bytes)
-    len1, len2 = out_of_band_buffer.read_int32(), out_of_band_buffer.read_int32()
-    buffers = [
-        out_of_band_buffer.slice(8, len1),
-        out_of_band_buffer.slice(8 + len1, len2),
-    ]
-    fory = pyfory.Fory(xlang=True, ref=True)
-    objects = fory.deserialize(in_band_buffer, buffers=buffers)
-    assert objects == [batch, table]
-    buffer_objects = []
-    in_band_buffer = fory.serialize([batch, table], buffer_callback=buffer_objects.append)
-    buffers = [o.getbuffer() for o in buffer_objects]
-    with open(int_band_file, "wb+") as f:
-        f.write(in_band_buffer)
-    with open(out_of_band_file, "wb+") as f:
-        size_buf = pyfory.Buffer.allocate(8)
-        size_buf.write_int32(len(buffers[0]))
-        size_buf.write_int32(len(buffers[1]))
-        f.write(size_buf)
-        f.write(buffers[0])
-        f.write(buffers[1])
-
-
-@cross_language_test
-def create_record_batch(size):
-    data = [
-        pa.array([bool(i % 2) for i in range(size)]),
-        pa.array([f"test{i}" for i in range(size)]),
-    ]
-    return pa.RecordBatch.from_arrays(data, ["boolean", "varchar"])
 
 
 @dataclass

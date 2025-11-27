@@ -876,41 +876,36 @@ public class DataTypes {
   }
 
   // ============================================================================
-  // Schema serialization (uses Arrow format for cross-language compatibility)
+  // Schema serialization
   // ============================================================================
 
   /**
-   * Serializes a Fory Schema to bytes using Arrow's schema format.
+   * Serializes a Fory Schema to bytes.
    *
    * @param schema the schema to serialize
    * @return serialized bytes
    */
   public static byte[] serializeSchema(Schema schema) {
-    org.apache.arrow.vector.types.pojo.Schema arrowSchema =
-        ArrowSchemaConverter.toArrowSchema(schema);
-    return arrowSchema.toByteArray();
+    return SchemaEncoder.toBytes(schema);
   }
 
   /**
-   * Serializes a Fory Schema to a MemoryBuffer using Arrow's schema format.
+   * Serializes a Fory Schema to a MemoryBuffer.
    *
    * @param schema the schema to serialize
    * @param buffer the buffer to write to
    */
   public static void serializeSchema(Schema schema, org.apache.fory.memory.MemoryBuffer buffer) {
-    byte[] bytes = serializeSchema(schema);
-    buffer.writeBytes(bytes);
+    SchemaEncoder.toBytes(schema, buffer);
   }
 
   /**
-   * Deserializes a Fory Schema from bytes using Arrow's schema format.
+   * Deserializes a Fory Schema from bytes.
    *
    * @param bytes the serialized bytes
    * @return the deserialized schema
    */
   public static Schema deserializeSchema(byte[] bytes) {
-    org.apache.arrow.vector.types.pojo.Schema arrowSchema =
-        org.apache.arrow.vector.types.pojo.Schema.deserialize(java.nio.ByteBuffer.wrap(bytes));
-    return ArrowSchemaConverter.fromArrowSchema(arrowSchema);
+    return SchemaEncoder.fromBytes(bytes);
   }
 }

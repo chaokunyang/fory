@@ -212,10 +212,6 @@ class TypeId:
     FLOAT32_ARRAY = 36
     # one dimensional float64 array.
     FLOAT64_ARRAY = 37
-    # an arrow [record batch](https://arrow.apache.org/docs/cpp/tables.html#record-batches) object.
-    ARROW_RECORD_BATCH = 38
-    # an arrow [table](https://arrow.apache.org/docs/cpp/tables.html#tables) object.
-    ARROW_TABLE = 39
     UNKNOWN = 63
 
     # BOUND id remains at 64

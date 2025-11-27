@@ -6,6 +6,7 @@ cc_library(
     hdrs = glob(["*.h"]),
     strip_include_prefix = "/cpp",
     deps = [
+      "//cpp/fory/serialization:fory_serialization",
       "//cpp/fory/util:fory_util",
       "//cpp/fory/type:fory_type"
     ],

@@ -347,6 +347,38 @@ cdef class Schema:
     def __repr__(self) -> str:
         return f"Schema({self})"
 
+    def to_bytes(self) -> bytes:
+        """Serialize this schema to bytes.
+
+        Returns:
+            bytes: The serialized schema.
+        """
+        cdef vector[uint8_t] c_bytes = self.c_schema.get().ToBytes()
+        return bytes(c_bytes)
+
+    @staticmethod
+    def from_bytes(data) -> Schema:
+        """Deserialize a schema from bytes.
+
+        Args:
+            data: bytes containing serialized schema.
+
+        Returns:
+            Schema: The deserialized schema.
+        """
+        cdef const uint8_t* data_ptr
+        cdef Py_ssize_t data_len
+        cdef vector[uint8_t] c_bytes
+        if isinstance(data, bytes):
+            data_ptr = <const uint8_t*>(<bytes>data)
+            data_len = len(<bytes>data)
+        else:
+            py_bytes = bytes(data)
+            data_ptr = <const uint8_t*>py_bytes
+            data_len = len(py_bytes)
+        c_bytes.assign(data_ptr, data_ptr + data_len)
+        return Schema.wrap(CSchema.FromBytes(c_bytes))
+
 
 # Factory functions for creating types
 

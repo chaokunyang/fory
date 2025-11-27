@@ -77,8 +77,6 @@ cdef extern from "fory/type/type.h" namespace "fory" nogil:
         FLOAT16_ARRAY = 35
         FLOAT32_ARRAY = 36
         FLOAT64_ARRAY = 37
-        ARROW_RECORD_BATCH = 38
-        ARROW_TABLE = 39
         UNKNOWN = 64
         BOUND = 64
 
@@ -192,6 +190,10 @@ cdef extern from "fory/row/schema.h" namespace "fory::row" nogil:
         c_string ToString()
         c_bool Equals(const CSchema& other)
         c_bool Equals(shared_ptr[CSchema] other)
+        # Schema serialization methods
+        vector[uint8_t] ToBytes() const
+        @staticmethod
+        shared_ptr[CSchema] FromBytes(const vector[uint8_t]& bytes)
 
     ctypedef shared_ptr[CSchema] CSchemaPtr" fory::row::SchemaPtr"
 

@@ -40,7 +40,9 @@
 #pragma once
 
 #include "fory/type/type.h"
+#include "fory/util/buffer.h"
 #include <climits>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -517,6 +519,18 @@ public:
     }
     return Equals(*other);
   }
+
+  /// Serialize this schema to a byte vector.
+  std::vector<uint8_t> ToBytes() const;
+
+  /// Serialize this schema to a Buffer.
+  void ToBytes(Buffer &buffer) const;
+
+  /// Deserialize a schema from a byte vector.
+  static SchemaPtr FromBytes(const std::vector<uint8_t> &bytes);
+
+  /// Deserialize a schema from a Buffer.
+  static SchemaPtr FromBytes(Buffer &buffer);
 
 private:
   std::vector<FieldPtr> fields_;

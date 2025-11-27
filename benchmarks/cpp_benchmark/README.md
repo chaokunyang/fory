@@ -78,3 +78,41 @@ A complex structure containing:
 ## Proto Definition
 
 The benchmark uses `benchmarks/proto/bench.proto` which is shared with the Java benchmark for consistency.
+
+## Generating Benchmark Report
+
+A Python script is provided to generate visual reports from benchmark results.
+
+### Prerequisites for Report Generation
+
+```bash
+pip install matplotlib numpy psutil
+```
+
+### Generate Report
+
+```bash
+# Run benchmark and save JSON output
+cd build
+./fory_benchmark --benchmark_format=json --benchmark_out=benchmark_results.json
+
+# Generate report
+cd ..
+python benchmark_report.py --json-file build/benchmark_results.json --output-dir report
+```
+
+The script will generate:
+
+- PNG plots comparing Fory vs Protobuf performance
+- A markdown report (`REPORT.md`) with detailed results
+
+### Report Options
+
+```bash
+python benchmark_report.py --help
+
+Options:
+  --json-file     Benchmark JSON output file (default: benchmark_results.json)
+  --output-dir    Output directory for plots and report
+  --plot-prefix   Image path prefix in Markdown report
+```

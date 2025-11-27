@@ -1,28 +1,24 @@
 # Adapted from tensorflow/third_party/cython.BUILD
+# Using filegroup to export Cython files for direct Python invocation
+# This avoids rules_python hermetic toolchain issues in containers.
 
-py_library(
-    name="cython_lib",
-    srcs=glob(
-        ["Cython/**/*.py"],
-        exclude=[
-            "**/Tests/*.py",
+# Export all Cython files needed to run the compiler
+filegroup(
+    name = "cython_srcs",
+    srcs = glob(
+        [
+            "Cython/**/*.py",
+            "Cython/**/*.pyx",
+            "Cython/**/*.pxd",
+            "Cython/**/*.h",
+            "Cython/**/*.c",
+            "cython.py",
         ],
-    ) + ["cython.py"],
-    data=glob([
-        "Cython/**/*.pyx",
-        "Cython/Utility/*.*",
-        "Cython/Includes/**/*.pxd",
-    ]),
-    srcs_version="PY3",
-    visibility=["//visibility:public"],
+        exclude = ["**/Tests/**"],
+        allow_empty = True,
+    ),
+    visibility = ["//visibility:public"],
 )
 
-# May not be named "cython", since that conflicts with Cython/ on OSX
-py_binary(
-    name="cython_binary",
-    srcs=["cython.py"],
-    main="cython.py",
-    srcs_version="PY3",
-    visibility=["//visibility:public"],
-    deps=["cython_lib"],
-)
+# Export cython.py separately for $(location) usage
+exports_files(["cython.py"], visibility = ["//visibility:public"])

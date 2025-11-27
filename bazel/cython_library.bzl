@@ -36,16 +36,19 @@ def pyx_library(name, deps = [], cc_kwargs = {}, py_deps = [], srcs = [], **kwar
             pxd_srcs.append(src)
 
     # Invoke cython to produce the shared object libraries.
+    # Use system Python directly to avoid rules_python hermetic toolchain issues
+    # when running as root in containers.
     for filename in pyx_srcs:
         native.genrule(
             name = filename + "_cython_translation",
             srcs = [filename],
             outs = [filename.split(".")[0] + ".cpp"],
-            # Optionally use PYTHON_BIN_PATH on Linux platforms so that python 3
-            # works. Windows has issues with cython_binary so skip PYTHON_BIN_PATH.
-            cmd =
-                "PYTHONHASHSEED=0 $(location @cython//:cython_binary) --cplus $(SRCS) --output-file $(OUTS)",
-            tools = ["@cython//:cython_binary"] + pxd_srcs,
+            cmd = """
+PYTHONHASHSEED=0
+CYTHON_DIR=$$(dirname $(location @cython//:cython.py))
+python3 "$$CYTHON_DIR/cython.py" --cplus $(SRCS) --output-file $(OUTS)
+""",
+            tools = ["@cython//:cython_srcs", "@cython//:cython.py"] + pxd_srcs,
         )
 
     shared_objects = []

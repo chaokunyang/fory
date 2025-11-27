@@ -29,39 +29,6 @@ bazel_dep(name = "bazel_skylib", version = "1.7.1")
 # Rules CC (C++ rules)
 bazel_dep(name = "rules_cc", version = "0.1.1")
 
-# Rules Python - explicitly added to configure system Python toolchain
-# This is needed because it's pulled as transitive dep from googletest/abseil
-bazel_dep(name = "rules_python", version = "0.40.0")
-
-# Configure Python toolchains with ignore_root_user_error=True
-# This avoids "running as root" errors in containers
-python = use_extension("@rules_python//python/extensions:python.bzl", "python")
-python.toolchain(
-    python_version = "3.8",
-    ignore_root_user_error = True,
-)
-python.toolchain(
-    python_version = "3.9",
-    ignore_root_user_error = True,
-)
-python.toolchain(
-    python_version = "3.10",
-    ignore_root_user_error = True,
-)
-python.toolchain(
-    python_version = "3.11",
-    is_default = True,
-    ignore_root_user_error = True,
-)
-python.toolchain(
-    python_version = "3.12",
-    ignore_root_user_error = True,
-)
-python.toolchain(
-    python_version = "3.13",
-    ignore_root_user_error = True,
-)
-
 # Google Test
 bazel_dep(name = "googletest", version = "1.15.2")
 

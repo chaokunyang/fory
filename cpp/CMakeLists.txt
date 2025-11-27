@@ -18,7 +18,7 @@
 cmake_minimum_required(VERSION 3.16)
 
 project(fory
-    VERSION 0.10.0
+    VERSION 0.14.0
     DESCRIPTION "Apache Fory - A blazingly fast multi-language serialization framework"
     LANGUAGES CXX
 )
@@ -71,11 +71,13 @@ set(FORY_CPP_ROOT ${CMAKE_CURRENT_SOURCE_DIR} CACHE PATH "Fory C++ root director
 find_package(absl CONFIG QUIET)
 if(absl_FOUND)
     message(STATUS "Found Abseil - using system installation")
+    set(FORY_ABSEIL_FROM_SYSTEM TRUE)
 else()
     message(STATUS "Abseil not found - fetching via FetchContent")
     include(FetchContent)
     set(ABSL_PROPAGATE_CXX_STD ON)
     set(ABSL_BUILD_TESTING OFF)
+    set(ABSL_ENABLE_INSTALL OFF)
     FetchContent_Declare(
         abseil-cpp
         GIT_REPOSITORY https://github.com/abseil/abseil-cpp.git
@@ -117,62 +119,65 @@ if(FORY_BUILD_TESTS)
     add_subdirectory(tests)
 endif()
 
-# Installation
-include(GNUInstallDirs)
-include(CMakePackageConfigHelpers)
+# Installation (only when Abseil is from system, otherwise export will fail
+# because FetchContent Abseil targets are not in any export set)
+if(FORY_ABSEIL_FROM_SYSTEM)
+    include(GNUInstallDirs)
+    include(CMakePackageConfigHelpers)
 
-# Install headers
-install(DIRECTORY fory/
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/fory
-    FILES_MATCHING
-    PATTERN "*.h"
-    PATTERN "*_test.cc" EXCLUDE
-    PATTERN "python" EXCLUDE
-)
+    # Install headers
+    install(DIRECTORY fory/
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/fory
+        FILES_MATCHING
+        PATTERN "*.h"
+        PATTERN "*_test.cc" EXCLUDE
+        PATTERN "python" EXCLUDE
+    )
 
-# Install libraries
-install(TARGETS
-    fory_thirdparty
-    fory_util
-    fory_type
-    fory_meta
-    fory_serialization
-    fory_row_format
-    fory_encoder
-    fory_serialization_lib
-    fory_row_format_lib
-    fory_lib
-    EXPORT ForyTargets
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-)
+    # Install libraries
+    install(TARGETS
+        fory_thirdparty
+        fory_util
+        fory_type
+        fory_meta
+        fory_serialization
+        fory_row_format
+        fory_encoder
+        fory_serialization_lib
+        fory_row_format_lib
+        fory_lib
+        EXPORT ForyTargets
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    )
 
-# Generate and install package config files
-write_basic_package_version_file(
-    "${CMAKE_CURRENT_BINARY_DIR}/ForyConfigVersion.cmake"
-    VERSION ${PROJECT_VERSION}
-    COMPATIBILITY SameMajorVersion
-)
+    # Generate and install package config files
+    write_basic_package_version_file(
+        "${CMAKE_CURRENT_BINARY_DIR}/ForyConfigVersion.cmake"
+        VERSION ${PROJECT_VERSION}
+        COMPATIBILITY SameMajorVersion
+    )
 
-configure_package_config_file(
-    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ForyConfig.cmake.in"
-    "${CMAKE_CURRENT_BINARY_DIR}/ForyConfig.cmake"
-    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/fory
-)
+    configure_package_config_file(
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ForyConfig.cmake.in"
+        "${CMAKE_CURRENT_BINARY_DIR}/ForyConfig.cmake"
+        INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/fory
+    )
 
-install(EXPORT ForyTargets
-    FILE ForyTargets.cmake
-    NAMESPACE fory::
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/fory
-)
+    install(EXPORT ForyTargets
+        FILE ForyTargets.cmake
+        NAMESPACE fory::
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/fory
+    )
 
-install(FILES
-    "${CMAKE_CURRENT_BINARY_DIR}/ForyConfig.cmake"
-    "${CMAKE_CURRENT_BINARY_DIR}/ForyConfigVersion.cmake"
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/fory
-)
+    install(FILES
+        "${CMAKE_CURRENT_BINARY_DIR}/ForyConfig.cmake"
+        "${CMAKE_CURRENT_BINARY_DIR}/ForyConfigVersion.cmake"
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/fory
+    )
+endif()
 
 # Print configuration summary
 message(STATUS "")

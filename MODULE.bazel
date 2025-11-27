@@ -29,9 +29,6 @@ bazel_dep(name = "bazel_skylib", version = "1.7.1")
 # Rules CC (C++ rules)
 bazel_dep(name = "rules_cc", version = "0.1.1")
 
-# Rules Python
-bazel_dep(name = "rules_python", version = "1.1.0")
-
 # Google Test
 bazel_dep(name = "googletest", version = "1.15.2")
 

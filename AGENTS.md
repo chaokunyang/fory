@@ -548,6 +548,38 @@ Fory rust provides macro-based serialization and deserialization. Fory rust cons
 - **`lint.yml`**: Code formatting and linting
 - **`pr-lint.yml`**: PR-specific checks
 
+### Fixing GitHub CI Errors
+
+Use the GitHub CLI (`gh`) to inspect and fix CI failures:
+
+```bash
+# List all checks for a PR and their status
+gh pr checks <PR_NUMBER> --repo apache/fory
+
+# View failed job logs (get job ID from pr checks output)
+gh run view <RUN_ID> --repo apache/fory --job <JOB_ID> --log-failed
+
+# View full job logs
+gh run view <RUN_ID> --repo apache/fory --job <JOB_ID> --log
+
+# Example workflow for fixing CI errors:
+# 1. List checks to find failing jobs
+gh pr checks 2942 --repo apache/fory
+
+# 2. Get the failed job logs (RUN_ID and JOB_ID from step 1)
+gh run view 19735911308 --repo apache/fory --job 56547673283 --log-failed
+
+# 3. Fix the issues based on error messages
+# 4. Commit and push fixes
+```
+
+Common CI failures and fixes:
+
+- **Code Style Check**: Run formatters (`clang-format`, `prettier`, `spotless:apply`, etc.)
+- **Markdown Lint**: Run `prettier --write <file>` for markdown files
+- **C++ Build Errors**: Check for missing dependencies or header includes
+- **Test Failures**: Run tests locally to reproduce and fix
+
 ## Commit Message Format
 
 Use conventional commits with language scope:

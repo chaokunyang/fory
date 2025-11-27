@@ -48,7 +48,3 @@ git_override(
     remote = "https://github.com/hedronvision/bazel-compile-commands-extractor.git",
     commit = "0e990032f3c5a866e72615cf67e5ce22186dcb97",
 )
-
-# Python configuration - using module extension for local Python headers
-python_config = use_extension("//bazel/py:extensions.bzl", "python_config")
-use_repo(python_config, "local_config_python")

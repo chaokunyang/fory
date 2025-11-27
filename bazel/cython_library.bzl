@@ -56,7 +56,7 @@ def pyx_library(name, deps = [], cc_kwargs = {}, py_deps = [], srcs = [], **kwar
         native.cc_binary(
             name = cc_kwargs.pop("name", shared_object_name),
             srcs = [stem + ".cpp"] + cc_kwargs.pop("srcs", []),
-            deps = deps + ["@local_config_python//:python_headers"] + cc_kwargs.pop("deps", []),
+            deps = deps + ["@rules_python//python/cc:current_py_cc_headers"] + cc_kwargs.pop("deps", []),
             linkshared = cc_kwargs.pop("linkshared", 1),
             # On macOS, use -undefined dynamic_lookup to allow Python symbols
             # to be resolved at runtime when the extension is imported.

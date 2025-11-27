@@ -27,7 +27,7 @@ cc_library(
     strip_include_prefix = "/cpp",
     deps = [
         "//cpp/fory/util:fory_util",
-        "@local_config_python//:python_headers",
+        "@rules_python//python/cc:current_py_cc_headers",
     ],
     visibility = ["//visibility:public"],
 )

@@ -18,8 +18,9 @@
 use crate::buffer::{Reader, Writer};
 use crate::ensure;
 use crate::error::Error;
-use crate::resolver::context::WriteContext;
-use crate::resolver::context::{Pool, ReadContext};
+use crate::resolver::context::{
+    next_instance_id, ReadContext, ReadContextAccessor, WriteContext, WriteContextAccessor,
+};
 use crate::resolver::type_resolver::TypeResolver;
 use crate::serializer::ForyDefault;
 use crate::serializer::{Serializer, StructSerializer};
@@ -75,6 +76,7 @@ use std::sync::OnceLock;
 ///     .max_dyn_depth(10);
 /// ```
 pub struct Fory {
+    instance_id: u64,
     compatible: bool,
     xlang: bool,
     share_meta: bool,
@@ -82,14 +84,15 @@ pub struct Fory {
     compress_string: bool,
     max_dyn_depth: u32,
     check_struct_version: bool,
-    // Lazy-initialized pools (thread-safe, one-time initialization)
-    write_context_pool: OnceLock<Result<Pool<Box<WriteContext<'static>>>, Error>>,
-    read_context_pool: OnceLock<Result<Pool<Box<ReadContext<'static>>>, Error>>,
+    // Lazy-initialized context accessors (thread-safe, one-time initialization)
+    write_context_accessor: OnceLock<Result<WriteContextAccessor, Error>>,
+    read_context_accessor: OnceLock<Result<ReadContextAccessor, Error>>,
 }
 
 impl Default for Fory {
     fn default() -> Self {
         Fory {
+            instance_id: next_instance_id(),
             compatible: false,
             xlang: false,
             share_meta: false,
@@ -97,8 +100,8 @@ impl Default for Fory {
             compress_string: false,
             max_dyn_depth: 5,
             check_struct_version: false,
-            write_context_pool: OnceLock::new(),
-            read_context_pool: OnceLock::new(),
+            write_context_accessor: OnceLock::new(),
+            read_context_accessor: OnceLock::new(),
         }
     }
 }
@@ -363,8 +366,8 @@ impl Fory {
     /// let bytes = fory.serialize(&point);
     /// ```
     pub fn serialize<T: Serializer>(&self, record: &T) -> Result<Vec<u8>, Error> {
-        let pool = self.get_writer_pool()?;
-        pool.borrow_mut(
+        let accessor = self.get_write_context_accessor()?;
+        accessor.borrow_mut(
             |context| match self.serialize_with_context(record, context) {
                 Ok(_) => {
                     let result = context.writer.dump();
@@ -499,10 +502,10 @@ impl Fory {
         record: &T,
         buf: &mut Vec<u8>,
     ) -> Result<usize, Error> {
-        let pool = self.get_writer_pool()?;
+        let accessor = self.get_write_context_accessor()?;
         let start = buf.len();
-        pool.borrow_mut(|context| {
-            // Context go from pool would be 'static. but context hold the buffer through `writer` field, so we should make buffer live longer.
+        accessor.borrow_mut(|context| {
+            // Context from thread_local would be 'static. but context hold the buffer through `writer` field, so we should make buffer live longer.
             // After serializing, `detach_writer` will be called, the writer in context will be set to dangling pointer.
             // So it's safe to make buf live to the end of this method.
             let outlive_buffer = unsafe { mem::transmute::<&mut Vec<u8>, &mut Vec<u8>>(buf) };
@@ -518,8 +521,8 @@ impl Fory {
     }
 
     #[inline(always)]
-    fn get_writer_pool(&self) -> Result<&Pool<Box<WriteContext<'static>>>, Error> {
-        let pool_result = self.write_context_pool.get_or_init(|| {
+    fn get_write_context_accessor(&self) -> Result<&WriteContextAccessor, Error> {
+        let accessor_result = self.write_context_accessor.get_or_init(|| {
             let type_resolver = self.type_resolver.build_final_type_resolver()?;
             let compatible = self.compatible;
             let share_meta = self.share_meta;
@@ -537,9 +540,9 @@ impl Fory {
                     check_struct_version,
                 ))
             };
-            Ok(Pool::new(factory))
+            Ok(WriteContextAccessor::new(self.instance_id, factory))
         });
-        pool_result
+        accessor_result
             .as_ref()
             .map_err(|e| Error::type_error(format!("Failed to build type resolver: {}", e)))
     }
@@ -823,8 +826,8 @@ impl Fory {
     /// let deserialized: Point = fory.deserialize(&bytes).unwrap();
     /// ```
     pub fn deserialize<T: Serializer + ForyDefault>(&self, bf: &[u8]) -> Result<T, Error> {
-        let pool = self.get_read_pool()?;
-        pool.borrow_mut(|context| {
+        let accessor = self.get_read_context_accessor()?;
+        accessor.borrow_mut(|context| {
             context.init(self.max_dyn_depth);
             let outlive_buffer = unsafe { mem::transmute::<&[u8], &[u8]>(bf) };
             context.attach_reader(Reader::new(outlive_buffer));
@@ -885,8 +888,8 @@ impl Fory {
         &self,
         reader: &mut Reader,
     ) -> Result<T, Error> {
-        let pool = self.get_read_pool()?;
-        pool.borrow_mut(|context| {
+        let accessor = self.get_read_context_accessor()?;
+        accessor.borrow_mut(|context| {
             context.init(self.max_dyn_depth);
             let outlive_buffer = unsafe { mem::transmute::<&[u8], &[u8]>(reader.bf) };
             let mut new_reader = Reader::new(outlive_buffer);
@@ -900,8 +903,8 @@ impl Fory {
     }
 
     #[inline(always)]
-    fn get_read_pool(&self) -> Result<&Pool<Box<ReadContext<'static>>>, Error> {
-        let pool_result = self.read_context_pool.get_or_init(|| {
+    fn get_read_context_accessor(&self) -> Result<&ReadContextAccessor, Error> {
+        let accessor_result = self.read_context_accessor.get_or_init(|| {
             let type_resolver = self.type_resolver.build_final_type_resolver()?;
             let compatible = self.compatible;
             let share_meta = self.share_meta;
@@ -919,9 +922,9 @@ impl Fory {
                     check_struct_version,
                 ))
             };
-            Ok(Pool::new(factory))
+            Ok(ReadContextAccessor::new(self.instance_id, factory))
         });
-        pool_result
+        accessor_result
             .as_ref()
             .map_err(|e| Error::type_error(format!("Failed to build type resolver: {}", e)))
     }

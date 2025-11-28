@@ -1,69 +1,105 @@
-# Licensed to the Apache Software Foundation (ASF) under one
-# or more contributor license agreements.  See the NOTICE file
-# distributed with this work for additional information
-# regarding copyright ownership.  The ASF licenses this file
-# to you under the Apache License, Version 2.0 (the
-# "License"); you may not use this file except in compliance
-# with the License.  You may obtain a copy of the License at
-#
-#   http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing,
-# software distributed under the License is distributed on an
-# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-# KIND, either express or implied.  See the License for the
-# specific language governing permissions and limitations
-# under the License.
-
-# For more information, see https://cwiki.apache.org/confluence/display/INFRA/Git+-+.asf.yaml+features.
-
-github:
-  description: >-
-    A blazingly fast multi-language serialization framework powered by JIT and zero-copy.
-  homepage: https://fory.apache.org
-  labels:
-    - javascript
-    - python
-    - java
-    - rust
-    - fast
-    - golang
-    - encoding
-    - serialization
-    - compression
-    - lightning
-    - cpp
-    - transfer
-    - zero-copy
-    - persistence
-    - marshalling
-    - jit
-    - rpc
-    - hacktoberfest
-    - cross-language
-    - multiple-language
-  enabled_merge_buttons:
-    squash: true
-    merge: false
-    rebase: true
-  protected_branches:
-    main:
-      required_status_checks:
-        strict: false
-      required_pull_request_reviews:
-        dismiss_stale_reviews: false
-        required_approving_review_count: 1
-    releases-0.4.1: {}
-    releases-0.4.0: {}
-    releases-0.3.1: {}
-    releases-0.3.0: {}
-    releases-0.2.1: {}
-    releases-0.2.0: {}
-    releases-0.1.2: {}
-
-notifications:
-  commits: commits@fory.apache.org
-  issues: commits@fory.apache.org
-  pullrequests: commits@fory.apache.org
-  jobs: commits@fory.apache.org
-  discussions: commits@fory.apache.org
+port: 7890
+socks-port: 7891
+redir-port: 7892
+mixed-port: 7893
+allow-lan: false
+unified-delay: true
+mode: rule
+log-level: info
+ipv6: false
+external-controller: 0.0.0.0:9090
+clash-for-android:
+  append-system-dns: false
+profile:
+  tracing: true
+experimental:
+  sniff-tls-sni: true
+proxies:
+  - {name: "Traffic: 10.21 GB / 200 GB", server: oss-cn-guangzhou.solidigm-nvme.com, port: 20001, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: "Expire: 2025-12-02", server: oss-cn-guangzhou.solidigm-nvme.com, port: 20001, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: llm-ai-iproyal, cipher: aes-128-gcm, dialer-proxy: dialer, server: geo.iproyal.com, port: 12321, type: socks5, password: 0vaJ7778hvNaU0ML_country-us_state-alaska_session-NeZvo0lg_lifetime-30m, username: YBdt9EP5nYN9vmgj}
+  - {name: 🇭🇰 Hong Kong | 01, server: oss-cn-guangzhou.solidigm-nvme.com, port: 20001, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇭🇰 Hong Kong | 02, server: oss-cn-guangzhou.solidigm-nvme.com, port: 20004, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇭🇰 Hong Kong | 03, server: oss-cn-guangzhou.solidigm-nvme.com, port: 20003, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇭🇰 Hong Kong | 04, server: oss-cn-guangzhou.solidigm-nvme.com, port: 20002, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇭🇰 Hong Kong | 05, server: oss-cn-guangzhou.solidigm-nvme.com, port: 20005, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇭🇰 Hong Kong | 06, server: oss-cn-guangzhou.solidigm-nvme.com, port: 20008, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇭🇰 Hong Kong | 07, server: oss-cn-guangzhou.solidigm-nvme.com, port: 20007, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇭🇰 Hong Kong | 08, server: oss-cn-guangzhou.solidigm-nvme.com, port: 20006, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇨🇳 Taiwan | 01, server: oss-cn-guangzhou.solidigm-nvme.com, port: 20011, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇨🇳 Taiwan | 02, server: oss-cn-guangzhou.solidigm-nvme.com, port: 20014, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇨🇳 Taiwan | 03, server: oss-cn-guangzhou.solidigm-nvme.com, port: 20016, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇨🇳 Taiwan | 04, server: oss-cn-guangzhou.solidigm-nvme.com, port: 20018, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇨🇳 Taiwan | 05, server: oss-cn-guangzhou.solidigm-nvme.com, port: 20015, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇨🇳 Taiwan | 06, server: oss-cn-guangzhou.solidigm-nvme.com, port: 20017, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇨🇳 Taiwan | 07, server: oss-cn-guangzhou.solidigm-nvme.com, port: 20013, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇨🇳 Taiwan | 08, server: oss-cn-guangzhou.solidigm-nvme.com, port: 20012, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇸🇬 Singapore | 01, server: oss-cn-guangzhou.solidigm-nvme.com, port: 20021, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇸🇬 Singapore | 02, server: oss-cn-guangzhou.solidigm-nvme.com, port: 20024, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇸🇬 Singapore | 03, server: oss-cn-guangzhou.solidigm-nvme.com, port: 20026, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇸🇬 Singapore | 04, server: oss-cn-guangzhou.solidigm-nvme.com, port: 20028, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇸🇬 Singapore | 05, server: oss-cn-guangzhou.solidigm-nvme.com, port: 20025, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇸🇬 Singapore | 06, server: oss-cn-guangzhou.solidigm-nvme.com, port: 20027, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇸🇬 Singapore | 07, server: oss-cn-guangzhou.solidigm-nvme.com, port: 20023, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇸🇬 Singapore | 08, server: oss-cn-guangzhou.solidigm-nvme.com, port: 20022, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇯🇵 Japan | 01, server: oss-cn-shanghai.solidigm-nvme.com, port: 20031, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇯🇵 Japan | 02, server: oss-cn-shanghai.solidigm-nvme.com, port: 20034, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇯🇵 Japan | 03, server: oss-cn-shanghai.solidigm-nvme.com, port: 20036, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇯🇵 Japan | 04, server: oss-cn-shanghai.solidigm-nvme.com, port: 20038, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇯🇵 Japan | 05, server: oss-cn-shanghai.solidigm-nvme.com, port: 20035, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇯🇵 Japan | 06, server: oss-cn-shanghai.solidigm-nvme.com, port: 20037, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇯🇵 Japan | 07, server: oss-cn-shanghai.solidigm-nvme.com, port: 20033, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇯🇵 Japan | 08, server: oss-cn-shanghai.solidigm-nvme.com, port: 20032, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇺🇸 United States | 01, server: oss-cn-shanghai.solidigm-nvme.com, port: 20041, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇺🇸 United States | 02, server: oss-cn-shanghai.solidigm-nvme.com, port: 20044, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇺🇸 United States | 03, server: oss-cn-shanghai.solidigm-nvme.com, port: 20046, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇺🇸 United States | 04, server: oss-cn-shanghai.solidigm-nvme.com, port: 20048, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇺🇸 United States | 05, server: oss-cn-shanghai.solidigm-nvme.com, port: 20045, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇺🇸 United States | 06, server: oss-cn-shanghai.solidigm-nvme.com, port: 20047, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇺🇸 United States | 07, server: oss-cn-shanghai.solidigm-nvme.com, port: 20043, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇺🇸 United States | 08, server: oss-cn-shanghai.solidigm-nvme.com, port: 20042, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇨🇦 Canada | 01, server: oss-cn-shanghai.solidigm-nvme.com, port: 20051, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇬🇧 United Kingdom | 01, server: cos-ap-beijing.solidigm-nvme.com, port: 20052, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇬🇧 United Kingdom | 02, server: cos-ap-beijing.solidigm-nvme.com, port: 20053, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇩🇪 Germany | 01, server: cos-ap-beijing.solidigm-nvme.com, port: 20054, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇩🇪 Germany | 02, server: cos-ap-beijing.solidigm-nvme.com, port: 20055, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇳🇱 Netherlands | 01, server: cos-ap-beijing.solidigm-nvme.com, port: 20056, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇳🇱 Netherlands | 02, server: cos-ap-beijing.solidigm-nvme.com, port: 20057, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇮🇹 Italy | 01, server: cos-ap-beijing.solidigm-nvme.com, port: 20058, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇪🇸 Spain | 01, server: cos-ap-beijing.solidigm-nvme.com, port: 20059, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇹🇷 Turkey | 01, server: cos-ap-beijing.solidigm-nvme.com, port: 20060, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇦🇺 Australia | 01, server: oss-cn-guangzhou.solidigm-nvme.com, port: 20061, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇦🇷 Argentina | 01, server: oss-cn-shanghai.solidigm-nvme.com, port: 20062, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇧🇷 Brazil | 01, server: oss-cn-shanghai.solidigm-nvme.com, port: 20063, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇨🇱 Chile | 01, server: oss-cn-shanghai.solidigm-nvme.com, port: 20064, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇰🇷 Korea | 01, server: oss-cn-shanghai.solidigm-nvme.com, port: 20065, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇮🇳 India | 01, server: oss-cn-guangzhou.solidigm-nvme.com, port: 20066, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇮🇱 Israel | 01, server: cos-ap-beijing.solidigm-nvme.com, port: 20067, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇹🇭 Thailand | 01, server: oss-cn-guangzhou.solidigm-nvme.com, port: 20068, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇻🇳 Vietnam | 01, server: oss-cn-guangzhou.solidigm-nvme.com, port: 20069, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇲🇾 Malaysia | 01, server: oss-cn-guangzhou.solidigm-nvme.com, port: 20070, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+  - {name: 🇿🇦 Johannesburg | 01, server: oss-cn-guangzhou.solidigm-nvme.com, port: 20071, type: trojan, password: 47097335-664F-0545-2A99-C8F3237B7E4B, sni: cos.ap-shanghai.myqcloud.com, skip-cert-verify: true, udp: true}
+proxy-groups:
+  - name: dialer
+    type: select
+    proxies:
+      - 🇭🇰 Hong Kong | 01
+      - 🇭🇰 Hong Kong | 02
+      - 🇭🇰 Hong Kong | 03
+      - 🇭🇰 Hong Kong | 04
+      - 🇭🇰 Hong Kong | 05
+      - 🇭🇰 Hong Kong | 06
+      - 🇭🇰 Hong Kong | 07
+      - 🇭🇰 Hong Kong | 08
+  - name: 🔰 llm-ai
+    type: select
+    proxies:
+      - llm-ai-iproyal
+  
+  
+rules:
+ - DOMAIN,app.adjust.com,DIRECT
+ - DOMAIN,app.appsflyer.com,DIRECT
+ - DOMAIN,bdtj.tagtic.cn,DIRECT
+ - DOMAIN,log.mmstat.com,DIRECT
+ - DOMAIN,sycm.mmstat.com,DIRECT

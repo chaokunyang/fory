@@ -16,7 +16,10 @@
 // under the License.
 
 use crate::buffer::{Reader, Writer};
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::mem;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::error::Error;
 use crate::meta::MetaString;
@@ -25,8 +28,24 @@ use crate::resolver::meta_string_resolver::{MetaStringReaderResolver, MetaString
 use crate::resolver::ref_resolver::{RefReader, RefWriter};
 use crate::resolver::type_resolver::{TypeInfo, TypeResolver};
 use crate::types;
-use crate::util::Spinlock;
 use std::rc::Rc;
+
+/// Global atomic counter for generating unique Fory instance IDs.
+static FORY_INSTANCE_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+/// Generates a new unique Fory instance ID.
+#[inline]
+pub fn next_instance_id() -> u64 {
+    FORY_INSTANCE_COUNTER.fetch_add(1, Ordering::Relaxed)
+}
+
+type WriteContextMap = HashMap<u64, Box<WriteContext<'static>>>;
+type ReadContextMap = HashMap<u64, Box<ReadContext<'static>>>;
+
+thread_local! {
+    static WRITE_CONTEXTS: RefCell<WriteContextMap> = RefCell::new(HashMap::new());
+    static READ_CONTEXTS: RefCell<ReadContextMap> = RefCell::new(HashMap::new());
+}
 
 /// Serialization state container used on a single thread at a time.
 /// Sharing the same instance across threads simultaneously causes undefined behavior.
@@ -418,38 +437,76 @@ impl<'a> ReadContext<'a> {
     }
 }
 
-pub struct Pool<T> {
-    items: Spinlock<Vec<T>>,
-    factory: Box<dyn Fn() -> T + Send + Sync>,
+/// Thread-local context accessor for WriteContext.
+/// Each Fory instance has a unique ID, and each thread maintains its own context per Fory instance.
+pub struct WriteContextAccessor {
+    instance_id: u64,
+    factory: Box<dyn Fn() -> Box<WriteContext<'static>> + Send + Sync>,
 }
 
-impl<T> Pool<T> {
-    pub fn new<F>(factory: F) -> Self
+impl WriteContextAccessor {
+    pub fn new<F>(instance_id: u64, factory: F) -> Self
     where
-        F: Fn() -> T + Send + Sync + 'static,
+        F: Fn() -> Box<WriteContext<'static>> + Send + Sync + 'static,
     {
-        Pool {
-            items: Spinlock::new(vec![]),
+        WriteContextAccessor {
+            instance_id,
             factory: Box::new(factory),
         }
     }
 
     #[inline(always)]
-    pub fn borrow_mut<Result>(&self, handler: impl FnOnce(&mut T) -> Result) -> Result {
-        let mut obj = self.get();
-        let result = handler(&mut obj);
-        self.put(obj);
-        result
+    pub fn borrow_mut<Result>(&self, handler: impl FnOnce(&mut WriteContext<'static>) -> Result) -> Result {
+        WRITE_CONTEXTS.with(|contexts| {
+            let mut map = contexts.borrow_mut();
+            let context = map
+                .entry(self.instance_id)
+                .or_insert_with(|| (self.factory)());
+            handler(context)
+        })
+    }
+}
+
+/// Thread-local context accessor for ReadContext.
+/// Each Fory instance has a unique ID, and each thread maintains its own context per Fory instance.
+pub struct ReadContextAccessor {
+    instance_id: u64,
+    factory: Box<dyn Fn() -> Box<ReadContext<'static>> + Send + Sync>,
+}
+
+impl ReadContextAccessor {
+    pub fn new<F>(instance_id: u64, factory: F) -> Self
+    where
+        F: Fn() -> Box<ReadContext<'static>> + Send + Sync + 'static,
+    {
+        ReadContextAccessor {
+            instance_id,
+            factory: Box::new(factory),
+        }
     }
 
     #[inline(always)]
-    fn get(&self) -> T {
-        self.items.lock().pop().unwrap_or_else(|| (self.factory)())
+    pub fn borrow_mut<Result>(&self, handler: impl FnOnce(&mut ReadContext<'static>) -> Result) -> Result {
+        READ_CONTEXTS.with(|contexts| {
+            let mut map = contexts.borrow_mut();
+            let context = map
+                .entry(self.instance_id)
+                .or_insert_with(|| (self.factory)());
+            handler(context)
+        })
     }
+}
 
-    // put back manually
-    #[inline(always)]
-    fn put(&self, item: T) {
-        self.items.lock().push(item);
-    }
+/// Removes the WriteContext for the given instance_id from the current thread's storage.
+pub fn remove_write_context(instance_id: u64) {
+    WRITE_CONTEXTS.with(|contexts| {
+        contexts.borrow_mut().remove(&instance_id);
+    });
+}
+
+/// Removes the ReadContext for the given instance_id from the current thread's storage.
+pub fn remove_read_context(instance_id: u64) {
+    READ_CONTEXTS.with(|contexts| {
+        contexts.borrow_mut().remove(&instance_id);
+    });
 }

@@ -171,41 +171,89 @@ public:
     return Result<void, Error>();
   }
 
-  inline uint32_t PutVarUint32(uint32_t offset, int32_t value) {
-    if (value >> 7 == 0) {
-      data_[offset] = (int8_t)value;
+  /// Put unsigned varint32 at offset using optimized bulk writes.
+  /// Returns number of bytes written (1-5).
+  /// Uses bit manipulation to build encoded value, then single memory write.
+  inline uint32_t PutVarUint32(uint32_t offset, uint32_t value) {
+    if (value < 0x80) {
+      data_[offset] = static_cast<uint8_t>(value);
       return 1;
     }
-    if (value >> 14 == 0) {
-      data_[offset++] = (int8_t)((value & 0x7F) | 0x80);
-      data_[offset++] = (int8_t)(value >> 7);
+    // Build encoded value: place data bits with continuation bits interleaved
+    // byte0: bits 0-6 + continuation at bit 7
+    // byte1: bits 7-13 + continuation at bit 15 (in uint16/32/64)
+    // etc.
+    uint64_t encoded = (value & 0x7F) | 0x80;
+    encoded |= (static_cast<uint64_t>(value & 0x3F80) << 1);
+    if (value < 0x4000) {
+      *reinterpret_cast<uint16_t *>(data_ + offset) =
+          static_cast<uint16_t>(encoded);
       return 2;
     }
-    if (value >> 21 == 0) {
-      data_[offset++] = (int8_t)((value & 0x7F) | 0x80);
-      data_[offset++] = (int8_t)(value >> 7 | 0x80);
-      data_[offset++] = (int8_t)(value >> 14);
+    encoded |= (static_cast<uint64_t>(value & 0x1FC000) << 2) | 0x8000;
+    if (value < 0x200000) {
+      *reinterpret_cast<uint32_t *>(data_ + offset) =
+          static_cast<uint32_t>(encoded);
       return 3;
     }
-    if (value >> 28 == 0) {
-      data_[offset++] = (int8_t)((value & 0x7F) | 0x80);
-      data_[offset++] = (int8_t)(value >> 7 | 0x80);
-      data_[offset++] = (int8_t)(value >> 14 | 0x80);
-      data_[offset++] = (int8_t)(value >> 21);
+    encoded |= (static_cast<uint64_t>(value & 0xFE00000) << 3) | 0x800000;
+    if (value < 0x10000000) {
+      *reinterpret_cast<uint32_t *>(data_ + offset) =
+          static_cast<uint32_t>(encoded);
       return 4;
     }
-    data_[offset++] = (int8_t)((value & 0x7F) | 0x80);
-    data_[offset++] = (int8_t)(value >> 7 | 0x80);
-    data_[offset++] = (int8_t)(value >> 14 | 0x80);
-    data_[offset++] = (int8_t)(value >> 21 | 0x80);
-    data_[offset++] = (int8_t)(value >> 28);
+    encoded |= (static_cast<uint64_t>(value >> 28) << 32) | 0x80000000;
+    *reinterpret_cast<uint64_t *>(data_ + offset) = encoded;
     return 5;
   }
 
-  inline int32_t GetVarUint32(uint32_t offset, uint32_t *readBytesLength) {
+  /// Get unsigned varint32 from offset using optimized bulk read.
+  /// Fast path: bulk read 4 bytes + bit extraction when enough bytes available.
+  /// Slow path: byte-by-byte for buffer edge cases.
+  inline uint32_t GetVarUint32(uint32_t offset, uint32_t *readBytesLength) {
+    // Fast path: need at least 5 bytes for safe bulk read (4 bytes + potential
+    // 5th)
+    if (FORY_PREDICT_TRUE(size_ - offset >= 5)) {
+      uint32_t bulk = *reinterpret_cast<uint32_t *>(data_ + offset);
+
+      uint32_t result = bulk & 0x7F;
+      if ((bulk & 0x80) == 0) {
+        *readBytesLength = 1;
+        return result;
+      }
+      // Extract bits 7-13 from bulk (at positions 8-14 after shift)
+      result |= (bulk >> 1) & 0x3F80;
+      if ((bulk & 0x8000) == 0) {
+        *readBytesLength = 2;
+        return result;
+      }
+      // Extract bits 14-20 from bulk (at positions 16-22 after shift)
+      result |= (bulk >> 2) & 0x1FC000;
+      if ((bulk & 0x800000) == 0) {
+        *readBytesLength = 3;
+        return result;
+      }
+      // Extract bits 21-27 from bulk (at positions 24-30 after shift)
+      result |= (bulk >> 3) & 0xFE00000;
+      if ((bulk & 0x80000000) == 0) {
+        *readBytesLength = 4;
+        return result;
+      }
+      // 5th byte for bits 28-31 (only 4 bits used for uint32, but mask with
+      // 0x7F per varint spec)
+      result |= static_cast<uint32_t>(data_[offset + 4] & 0x7F) << 28;
+      *readBytesLength = 5;
+      return result;
+    }
+    // Slow path: byte-by-byte read
+    return GetVarUint32Slow(offset, readBytesLength);
+  }
+
+  /// Slow path for GetVarUint32 when not enough bytes for bulk read.
+  inline uint32_t GetVarUint32Slow(uint32_t offset, uint32_t *readBytesLength) {
     uint32_t position = offset;
     int b = data_[position++];
-    int result = b & 0x7F;
+    uint32_t result = b & 0x7F;
     if ((b & 0x80) != 0) {
       b = data_[position++];
       result |= (b & 0x7F) << 7;
@@ -226,24 +274,121 @@ public:
     return result;
   }
 
-  /// Put unsigned varint64 at offset. Returns number of bytes written (1-9).
+  /// Put unsigned varint64 at offset using optimized bulk writes.
+  /// Returns number of bytes written (1-9).
   /// Uses PVL (Progressive Variable-length Long) encoding per xlang spec.
   inline uint32_t PutVarUint64(uint32_t offset, uint64_t value) {
-    uint32_t position = offset;
-    int count = 0;
-    while (value >= 0x80 && count < 8) {
-      data_[position++] = static_cast<uint8_t>((value & 0x7F) | 0x80);
-      value >>= 7;
-      ++count;
+    if (value < 0x80) {
+      data_[offset] = static_cast<uint8_t>(value);
+      return 1;
     }
-    data_[position++] = static_cast<uint8_t>(value);
-    return position - offset;
+    // Build encoded value with continuation bits interleaved
+    uint64_t encoded = (value & 0x7F) | 0x80;
+    encoded |= ((value & 0x3F80) << 1);
+    if (value < 0x4000) {
+      *reinterpret_cast<uint16_t *>(data_ + offset) =
+          static_cast<uint16_t>(encoded);
+      return 2;
+    }
+    encoded |= ((value & 0x1FC000) << 2) | 0x8000;
+    if (value < 0x200000) {
+      *reinterpret_cast<uint32_t *>(data_ + offset) =
+          static_cast<uint32_t>(encoded);
+      return 3;
+    }
+    encoded |= ((value & 0xFE00000) << 3) | 0x800000;
+    if (value < 0x10000000) {
+      *reinterpret_cast<uint32_t *>(data_ + offset) =
+          static_cast<uint32_t>(encoded);
+      return 4;
+    }
+    encoded |= ((value & 0x7F0000000ULL) << 4) | 0x80000000;
+    if (value < 0x800000000ULL) {
+      *reinterpret_cast<uint64_t *>(data_ + offset) = encoded;
+      return 5;
+    }
+    encoded |= ((value & 0x3F800000000ULL) << 5) | 0x8000000000ULL;
+    if (value < 0x40000000000ULL) {
+      *reinterpret_cast<uint64_t *>(data_ + offset) = encoded;
+      return 6;
+    }
+    encoded |= ((value & 0x1FC0000000000ULL) << 6) | 0x800000000000ULL;
+    if (value < 0x2000000000000ULL) {
+      *reinterpret_cast<uint64_t *>(data_ + offset) = encoded;
+      return 7;
+    }
+    encoded |= ((value & 0xFE000000000000ULL) << 7) | 0x80000000000000ULL;
+    if (value < 0x100000000000000ULL) {
+      *reinterpret_cast<uint64_t *>(data_ + offset) = encoded;
+      return 8;
+    }
+    // 9 bytes: write 8 bytes + 1 byte for bits 56-63
+    encoded |= 0x8000000000000000ULL;
+    *reinterpret_cast<uint64_t *>(data_ + offset) = encoded;
+    data_[offset + 8] = static_cast<uint8_t>(value >> 56);
+    return 9;
   }
 
-  /// Get unsigned varint64 from offset. Writes number of bytes read to
-  /// readBytesLength. Uses PVL (Progressive Variable-length Long) encoding per
-  /// xlang spec.
+  /// Get unsigned varint64 from offset using optimized bulk read.
+  /// Fast path: bulk read 8 bytes + bit extraction when enough bytes available.
+  /// Slow path: byte-by-byte for buffer edge cases.
+  /// Uses PVL (Progressive Variable-length Long) encoding per xlang spec.
   inline uint64_t GetVarUint64(uint32_t offset, uint32_t *readBytesLength) {
+    // Fast path: need at least 9 bytes for safe bulk read
+    if (FORY_PREDICT_TRUE(size_ - offset >= 9)) {
+      uint64_t bulk = *reinterpret_cast<uint64_t *>(data_ + offset);
+
+      uint64_t result = bulk & 0x7F;
+      if ((bulk & 0x80) == 0) {
+        *readBytesLength = 1;
+        return result;
+      }
+      result |= (bulk >> 1) & 0x3F80;
+      if ((bulk & 0x8000) == 0) {
+        *readBytesLength = 2;
+        return result;
+      }
+      result |= (bulk >> 2) & 0x1FC000;
+      if ((bulk & 0x800000) == 0) {
+        *readBytesLength = 3;
+        return result;
+      }
+      result |= (bulk >> 3) & 0xFE00000;
+      if ((bulk & 0x80000000) == 0) {
+        *readBytesLength = 4;
+        return result;
+      }
+      result |= (bulk >> 4) & 0x7F0000000ULL;
+      if ((bulk & 0x8000000000ULL) == 0) {
+        *readBytesLength = 5;
+        return result;
+      }
+      result |= (bulk >> 5) & 0x3F800000000ULL;
+      if ((bulk & 0x800000000000ULL) == 0) {
+        *readBytesLength = 6;
+        return result;
+      }
+      result |= (bulk >> 6) & 0x1FC0000000000ULL;
+      if ((bulk & 0x80000000000000ULL) == 0) {
+        *readBytesLength = 7;
+        return result;
+      }
+      result |= (bulk >> 7) & 0xFE000000000000ULL;
+      if ((bulk & 0x8000000000000000ULL) == 0) {
+        *readBytesLength = 8;
+        return result;
+      }
+      // 9th byte for bits 56-63
+      result |= static_cast<uint64_t>(data_[offset + 8]) << 56;
+      *readBytesLength = 9;
+      return result;
+    }
+    // Slow path: byte-by-byte read
+    return GetVarUint64Slow(offset, readBytesLength);
+  }
+
+  /// Slow path for GetVarUint64 when not enough bytes for bulk read.
+  inline uint64_t GetVarUint64Slow(uint32_t offset, uint32_t *readBytesLength) {
     uint32_t position = offset;
     uint64_t result = 0;
     int shift = 0;
@@ -258,68 +403,6 @@ public:
     }
     uint8_t last = data_[position++];
     result |= static_cast<uint64_t>(last) << 56;
-    *readBytesLength = position - offset;
-    return result;
-  }
-
-  /// Put unsigned varuint36small at offset. Returns number of bytes written
-  /// (1-5). This is the special variable-length encoding used for string
-  /// headers in xlang protocol. It's optimized for small values (< 0x80).
-  inline uint32_t PutVarUint36Small(uint32_t offset, uint64_t value) {
-    if ((value >> 7) == 0) {
-      data_[offset] = static_cast<uint8_t>(value);
-      return 1;
-    }
-    if ((value >> 14) == 0) {
-      data_[offset] = static_cast<uint8_t>((value & 0x7F) | 0x80);
-      data_[offset + 1] = static_cast<uint8_t>(value >> 7);
-      return 2;
-    }
-    if ((value >> 21) == 0) {
-      data_[offset] = static_cast<uint8_t>((value & 0x7F) | 0x80);
-      data_[offset + 1] = static_cast<uint8_t>((value >> 7) | 0x80);
-      data_[offset + 2] = static_cast<uint8_t>(value >> 14);
-      return 3;
-    }
-    if ((value >> 28) == 0) {
-      data_[offset] = static_cast<uint8_t>((value & 0x7F) | 0x80);
-      data_[offset + 1] = static_cast<uint8_t>((value >> 7) | 0x80);
-      data_[offset + 2] = static_cast<uint8_t>((value >> 14) | 0x80);
-      data_[offset + 3] = static_cast<uint8_t>(value >> 21);
-      return 4;
-    }
-    data_[offset] = static_cast<uint8_t>((value & 0x7F) | 0x80);
-    data_[offset + 1] = static_cast<uint8_t>((value >> 7) | 0x80);
-    data_[offset + 2] = static_cast<uint8_t>((value >> 14) | 0x80);
-    data_[offset + 3] = static_cast<uint8_t>((value >> 21) | 0x80);
-    data_[offset + 4] = static_cast<uint8_t>(value >> 28);
-    return 5;
-  }
-
-  /// Get unsigned varuint36small from offset. Writes number of bytes read to
-  /// readBytesLength. This is the special variable-length encoding used for
-  /// string headers in xlang protocol.
-  inline uint64_t GetVarUint36Small(uint32_t offset,
-                                    uint32_t *readBytesLength) {
-    uint32_t position = offset;
-    uint8_t b = data_[position++];
-    uint64_t result = b & 0x7F;
-    if ((b & 0x80) != 0) {
-      b = data_[position++];
-      result |= static_cast<uint64_t>(b & 0x7F) << 7;
-      if ((b & 0x80) != 0) {
-        b = data_[position++];
-        result |= static_cast<uint64_t>(b & 0x7F) << 14;
-        if ((b & 0x80) != 0) {
-          b = data_[position++];
-          result |= static_cast<uint64_t>(b & 0x7F) << 21;
-          if ((b & 0x80) != 0) {
-            b = data_[position++];
-            result |= static_cast<uint64_t>(b & 0x7F) << 28;
-          }
-        }
-      }
-    }
     *readBytesLength = position - offset;
     return result;
   }
@@ -436,12 +519,44 @@ public:
   }
 
   /// Write uint64_t value as varuint36small to buffer at current writer index.
-  /// This is the special variable-length encoding used for string headers.
+  /// This is the special variable-length encoding used for string headers
+  /// in xlang protocol. Optimized for small values (< 0x80).
   /// Automatically grows buffer and advances writer index.
   inline void WriteVarUint36Small(uint64_t value) {
-    Grow(5); // Max 5 bytes for varuint36small
-    uint32_t len = PutVarUint36Small(writer_index_, value);
-    IncreaseWriterIndex(len);
+    Grow(8); // Need 8 bytes for safe bulk write
+    uint32_t offset = writer_index_;
+    if (value < 0x80) {
+      data_[offset] = static_cast<uint8_t>(value);
+      IncreaseWriterIndex(1);
+      return;
+    }
+    // Build encoded value with continuation bits interleaved
+    uint64_t encoded = (value & 0x7F) | 0x80;
+    encoded |= ((value & 0x3F80) << 1);
+    if (value < 0x4000) {
+      *reinterpret_cast<uint16_t *>(data_ + offset) =
+          static_cast<uint16_t>(encoded);
+      IncreaseWriterIndex(2);
+      return;
+    }
+    encoded |= ((value & 0x1FC000) << 2) | 0x8000;
+    if (value < 0x200000) {
+      *reinterpret_cast<uint32_t *>(data_ + offset) =
+          static_cast<uint32_t>(encoded);
+      IncreaseWriterIndex(3);
+      return;
+    }
+    encoded |= ((value & 0xFE00000) << 3) | 0x800000;
+    if (value < 0x10000000) {
+      *reinterpret_cast<uint32_t *>(data_ + offset) =
+          static_cast<uint32_t>(encoded);
+      IncreaseWriterIndex(4);
+      return;
+    }
+    // 5 bytes: bits 28-35 (up to 36 bits total)
+    encoded |= ((value & 0xFF0000000ULL) << 4) | 0x80000000;
+    *reinterpret_cast<uint64_t *>(data_ + offset) = encoded;
+    IncreaseWriterIndex(5);
   }
 
   /// Write raw bytes to buffer at current writer index.
@@ -585,10 +700,58 @@ public:
     if (reader_index_ + 1 > size_) {
       return Unexpected(Error::buffer_out_of_bound(reader_index_, 1, size_));
     }
-    uint32_t read_bytes = 0;
-    uint64_t value = GetVarUint36Small(reader_index_, &read_bytes);
-    IncreaseReaderIndex(read_bytes);
-    return value;
+    uint32_t offset = reader_index_;
+    // Fast path: need at least 8 bytes for safe bulk read
+    if (FORY_PREDICT_TRUE(size_ - offset >= 8)) {
+      uint64_t bulk = *reinterpret_cast<uint64_t *>(data_ + offset);
+
+      uint64_t result = bulk & 0x7F;
+      if ((bulk & 0x80) == 0) {
+        IncreaseReaderIndex(1);
+        return result;
+      }
+      result |= (bulk >> 1) & 0x3F80;
+      if ((bulk & 0x8000) == 0) {
+        IncreaseReaderIndex(2);
+        return result;
+      }
+      result |= (bulk >> 2) & 0x1FC000;
+      if ((bulk & 0x800000) == 0) {
+        IncreaseReaderIndex(3);
+        return result;
+      }
+      result |= (bulk >> 3) & 0xFE00000;
+      if ((bulk & 0x80000000) == 0) {
+        IncreaseReaderIndex(4);
+        return result;
+      }
+      // 5th byte for bits 28-35 (up to 36 bits)
+      result |= (bulk >> 4) & 0xFF0000000ULL;
+      IncreaseReaderIndex(5);
+      return result;
+    }
+    // Slow path: byte-by-byte read
+    uint32_t position = offset;
+    uint8_t b = data_[position++];
+    uint64_t result = b & 0x7F;
+    if ((b & 0x80) != 0) {
+      b = data_[position++];
+      result |= static_cast<uint64_t>(b & 0x7F) << 7;
+      if ((b & 0x80) != 0) {
+        b = data_[position++];
+        result |= static_cast<uint64_t>(b & 0x7F) << 14;
+        if ((b & 0x80) != 0) {
+          b = data_[position++];
+          result |= static_cast<uint64_t>(b & 0x7F) << 21;
+          if ((b & 0x80) != 0) {
+            b = data_[position++];
+            result |= static_cast<uint64_t>(b & 0xFF) << 28;
+          }
+        }
+      }
+    }
+    IncreaseReaderIndex(position - offset);
+    return result;
   }
 
   /// Read raw bytes from buffer at current reader index.

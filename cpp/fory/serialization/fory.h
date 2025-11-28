@@ -414,7 +414,9 @@ public:
   /// ```
   template <typename T>
   Result<std::vector<uint8_t>, Error> serialize(const T &obj) {
-    ensure_finalized();
+    if (FORY_PREDICT_FALSE(!finalized_)) {
+      ensure_finalized();
+    }
     write_ctx_.reset_fast();
     Buffer &buffer = write_ctx_.buffer();
 
@@ -478,7 +480,9 @@ public:
   template <typename T>
   Result<size_t, Error> serialize_to(const T &obj,
                                      std::vector<uint8_t> &output) {
-    ensure_finalized();
+    if (FORY_PREDICT_FALSE(!finalized_)) {
+      ensure_finalized();
+    }
     write_ctx_.reset_fast();
     Buffer &buffer = write_ctx_.buffer();
 
@@ -513,7 +517,9 @@ public:
   /// ```
   template <typename T>
   Result<T, Error> deserialize(const uint8_t *data, size_t size) {
-    ensure_finalized();
+    if (FORY_PREDICT_FALSE(!finalized_)) {
+      ensure_finalized();
+    }
     if (data == nullptr) {
       return Unexpected(Error::invalid("Data pointer is null"));
     }
@@ -575,8 +581,17 @@ public:
   ReadContext &read_context() { return read_ctx_; }
 
 private:
+  /// Constructor for ForyBuilder - resolver will be finalized lazily.
   explicit Fory(const Config &config, std::shared_ptr<TypeResolver> resolver)
       : BaseFory(config, std::move(resolver)), finalized_(false),
+        write_ctx_(config_, type_resolver_),
+        read_ctx_(config_, type_resolver_) {}
+
+  /// Constructor for ThreadSafeFory pool - resolver is already finalized.
+  struct PreFinalized {};
+  explicit Fory(const Config &config, std::shared_ptr<TypeResolver> resolver,
+                PreFinalized)
+      : BaseFory(config, std::move(resolver)), finalized_(true),
         write_ctx_(config_, type_resolver_),
         read_ctx_(config_, type_resolver_) {}
 
@@ -597,15 +612,19 @@ private:
   ReadContext read_ctx_;
 
   friend class ForyBuilder;
+  friend class ThreadSafeFory;
 };
 
 // ============================================================================
-// ThreadSafeFory - Thread-safe serialization with context pools
+// ThreadSafeFory - Thread-safe serialization with Fory pool
 // ============================================================================
 
 /// Thread-safe Fory serialization class.
 ///
-/// This class uses context pools to provide thread-safe serialization.
+/// This class uses a pool of Fory instances to provide thread-safe
+/// serialization. Each thread acquires a Fory instance from the pool,
+/// uses it for serialization/deserialization, and returns it when done.
+///
 /// Slightly slower than single-threaded Fory due to pool overhead, but
 /// safe to use from multiple threads concurrently.
 ///
@@ -630,26 +649,15 @@ public:
 
   /// Serialize an object to a new byte vector.
   ///
-  /// Thread-safe version that acquires a context from the pool.
+  /// Thread-safe version that acquires a Fory instance from the pool.
   ///
   /// @tparam T The type of object to serialize.
   /// @param obj The object to serialize.
   /// @return Vector containing serialized bytes, or error.
   template <typename T>
   Result<std::vector<uint8_t>, Error> serialize(const T &obj) {
-    auto ctx_handle = write_ctx_pool_.acquire();
-    WriteContext &ctx = *ctx_handle;
-    struct ContextGuard {
-      WriteContext &ctx;
-      ~ContextGuard() { ctx.reset(); }
-    } guard{ctx};
-
-    FORY_RETURN_NOT_OK(serialize_impl(obj, ctx, ctx.buffer(),
-                                      precomputed_header_, header_length_));
-
-    std::vector<uint8_t> result(ctx.buffer().writer_index());
-    std::memcpy(result.data(), ctx.buffer().data(), ctx.buffer().writer_index());
-    return result;
+    auto fory_handle = fory_pool_.acquire();
+    return fory_handle->serialize(obj);
   }
 
   /// Serialize an object to an existing Buffer.
@@ -662,14 +670,8 @@ public:
   /// @return Number of bytes written, or error.
   template <typename T>
   Result<size_t, Error> serialize_to(const T &obj, Buffer &buffer) {
-    auto ctx_handle = write_ctx_pool_.acquire();
-    WriteContext &ctx = *ctx_handle;
-    struct ContextGuard {
-      WriteContext &ctx;
-      ~ContextGuard() { ctx.reset(); }
-    } guard{ctx};
-
-    return serialize_impl(obj, ctx, buffer, precomputed_header_, header_length_);
+    auto fory_handle = fory_pool_.acquire();
+    return fory_handle->serialize_to(obj, buffer);
   }
 
   /// Serialize an object to an existing byte vector.
@@ -683,27 +685,8 @@ public:
   template <typename T>
   Result<size_t, Error> serialize_to(const T &obj,
                                      std::vector<uint8_t> &output) {
-    auto ctx_handle = write_ctx_pool_.acquire();
-    WriteContext &ctx = *ctx_handle;
-    struct ContextGuard {
-      WriteContext &ctx;
-      ~ContextGuard() { ctx.reset(); }
-    } guard{ctx};
-
-    FORY_TRY(bytes_written, serialize_impl(obj, ctx, ctx.buffer(),
-                                           precomputed_header_, header_length_));
-
-    output.resize(ctx.buffer().writer_index());
-    std::memcpy(output.data(), ctx.buffer().data(), ctx.buffer().writer_index());
-    return bytes_written;
-  }
-
-  /// Create a WriteContext for direct serialization.
-  ///
-  /// Creates a new WriteContext that can be used for advanced serialization
-  /// scenarios. The returned context is independent and thread-safe.
-  std::unique_ptr<WriteContext> create_write_context() {
-    return std::make_unique<WriteContext>(config_, get_finalized_resolver());
+    auto fory_handle = fory_pool_.acquire();
+    return fory_handle->serialize_to(obj, output);
   }
 
   // ==========================================================================
@@ -712,7 +695,7 @@ public:
 
   /// Deserialize an object from a byte array.
   ///
-  /// Thread-safe version that acquires a context from the pool.
+  /// Thread-safe version that acquires a Fory instance from the pool.
   ///
   /// @tparam T The type of object to deserialize.
   /// @param data Pointer to serialized data.
@@ -720,37 +703,8 @@ public:
   /// @return Deserialized object, or error.
   template <typename T>
   Result<T, Error> deserialize(const uint8_t *data, size_t size) {
-    if (data == nullptr) {
-      return Unexpected(Error::invalid("Data pointer is null"));
-    }
-    if (size == 0) {
-      return Unexpected(Error::invalid("Data size is zero"));
-    }
-
-    Buffer buffer(const_cast<uint8_t *>(data), static_cast<uint32_t>(size),
-                  false);
-
-    FORY_TRY(header, read_header(buffer));
-    if (header.is_null) {
-      return Unexpected(Error::invalid_data("Cannot deserialize null object"));
-    }
-    if (header.is_little_endian != is_little_endian_system()) {
-      return Unexpected(
-          Error::unsupported("Cross-endian deserialization not yet supported"));
-    }
-
-    auto ctx_handle = read_ctx_pool_.acquire();
-    ReadContext &ctx = *ctx_handle;
-    ctx.attach(buffer);
-    struct ReadContextCleanup {
-      ReadContext &ctx;
-      ~ReadContextCleanup() {
-        ctx.reset();
-        ctx.detach();
-      }
-    } cleanup{ctx};
-
-    return deserialize_impl<T>(ctx, buffer);
+    auto fory_handle = fory_pool_.acquire();
+    return fory_handle->template deserialize<T>(data, size);
   }
 
   /// Deserialize an object from a byte vector.
@@ -770,13 +724,9 @@ private:
                           std::shared_ptr<TypeResolver> resolver)
       : BaseFory(config, std::move(resolver)), finalized_resolver_(),
         finalized_once_flag_(),
-        write_ctx_pool_([this]() {
-          return std::make_unique<WriteContext>(config_,
-                                                get_finalized_resolver());
-        }),
-        read_ctx_pool_([this]() {
-          return std::make_unique<ReadContext>(config_,
-                                               get_finalized_resolver());
+        fory_pool_([this]() {
+          return std::unique_ptr<Fory>(new Fory(
+              config_, get_finalized_resolver(), Fory::PreFinalized{}));
         }) {}
 
   std::shared_ptr<TypeResolver> get_finalized_resolver() const {
@@ -792,8 +742,7 @@ private:
 
   mutable std::shared_ptr<TypeResolver> finalized_resolver_;
   mutable std::once_flag finalized_once_flag_;
-  util::Pool<WriteContext> write_ctx_pool_;
-  util::Pool<ReadContext> read_ctx_pool_;
+  util::Pool<Fory> fory_pool_;
 
   friend class ForyBuilder;
 };

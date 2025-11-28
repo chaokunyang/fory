@@ -475,6 +475,7 @@ public:
   std::shared_ptr<TypeResolver> clone() const;
 
 private:
+  friend class BaseFory;
   friend class Fory;
 
   template <typename T> Result<void, Error> register_by_id(uint32_t type_id);

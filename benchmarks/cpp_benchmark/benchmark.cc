@@ -256,8 +256,8 @@ static void BM_Fory_Struct_Serialize_ReuseBuffer(benchmark::State &state) {
 }
 BENCHMARK(BM_Fory_Struct_Serialize_ReuseBuffer);
 
-// Fory with direct serialization (bypasses pool for maximum performance)
-static void BM_Fory_Struct_Serialize_Direct(benchmark::State &state) {
+// Fory serialize to reusable buffer (fastest path)
+static void BM_Fory_Struct_Serialize_ToBuffer(benchmark::State &state) {
   auto fory = fory::serialization::Fory::builder()
                   .xlang(true)
                   .track_ref(false)
@@ -266,18 +266,17 @@ static void BM_Fory_Struct_Serialize_Direct(benchmark::State &state) {
   RegisterForyTypes(fory);
   NumericStruct obj = CreateNumericStruct();
 
-  // Create reusable context and buffer once
-  auto ctx = fory.create_write_context();
+  // Reuse internal buffer
   fory::Buffer buffer;
   buffer.Reserve(64);
 
   for (auto _ : state) {
-    ctx->reset_fast(); // Fast reset - only resets buffer index
-    fory.serialize_direct(obj, *ctx, buffer);
+    buffer.WriterIndex(0);
+    fory.serialize_to(obj, buffer);
     benchmark::DoNotOptimize(buffer.data());
   }
 }
-BENCHMARK(BM_Fory_Struct_Serialize_Direct);
+BENCHMARK(BM_Fory_Struct_Serialize_ToBuffer);
 
 // Fair comparison: convert plain C++ struct to protobuf, then serialize
 // (Same pattern as Java benchmark's buildPBStruct().toByteArray())

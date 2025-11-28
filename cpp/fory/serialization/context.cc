@@ -299,6 +299,14 @@ void WriteContext::reset() {
   buffer_.ReaderIndex(0);
 }
 
+uint32_t WriteContext::get_type_id_for_cache(const std::type_index &type_idx) {
+  auto result = type_resolver_->get_type_info(type_idx);
+  if (!result.ok()) {
+    return 0;
+  }
+  return result.value()->type_id;
+}
+
 // ============================================================================
 // ReadContext Implementation
 // ============================================================================

@@ -62,28 +62,28 @@ public:
 
   inline uint32_t reader_index() { return reader_index_; }
 
-  inline void WriterIndex(uint32_t writer_index) {
+  FORY_ALWAYS_INLINE void WriterIndex(uint32_t writer_index) {
     FORY_CHECK(writer_index < std::numeric_limits<int>::max())
         << "Buffer overflow writer_index" << writer_index_
         << " target writer_index " << writer_index;
     writer_index_ = writer_index;
   }
 
-  inline void IncreaseWriterIndex(uint32_t diff) {
+  FORY_ALWAYS_INLINE void IncreaseWriterIndex(uint32_t diff) {
     int64_t writer_index = writer_index_ + diff;
     FORY_CHECK(writer_index < std::numeric_limits<int>::max())
         << "Buffer overflow writer_index" << writer_index_ << " diff " << diff;
     writer_index_ = writer_index;
   }
 
-  inline void ReaderIndex(uint32_t reader_index) {
+  FORY_ALWAYS_INLINE void ReaderIndex(uint32_t reader_index) {
     FORY_CHECK(reader_index < std::numeric_limits<int>::max())
         << "Buffer overflow reader_index" << reader_index_
         << " target reader_index " << reader_index;
     reader_index_ = reader_index;
   }
 
-  inline void IncreaseReaderIndex(uint32_t diff) {
+  FORY_ALWAYS_INLINE void IncreaseReaderIndex(uint32_t diff) {
     int64_t reader_index = reader_index_ + diff;
     FORY_CHECK(reader_index < std::numeric_limits<int>::max())
         << "Buffer overflow reader_index" << reader_index_ << " diff " << diff;
@@ -315,7 +315,7 @@ public:
 
   /// Write uint8_t value to buffer at current writer index.
   /// Automatically grows buffer and advances writer index.
-  inline void WriteUint8(uint8_t value) {
+  FORY_ALWAYS_INLINE void WriteUint8(uint8_t value) {
     Grow(1);
     UnsafePutByte(writer_index_, value);
     IncreaseWriterIndex(1);
@@ -323,7 +323,7 @@ public:
 
   /// Write int8_t value to buffer at current writer index.
   /// Automatically grows buffer and advances writer index.
-  inline void WriteInt8(int8_t value) {
+  FORY_ALWAYS_INLINE void WriteInt8(int8_t value) {
     Grow(1);
     UnsafePutByte(writer_index_, static_cast<uint8_t>(value));
     IncreaseWriterIndex(1);
@@ -331,7 +331,7 @@ public:
 
   /// Write uint16_t value as fixed 2 bytes to buffer at current writer index.
   /// Automatically grows buffer and advances writer index.
-  inline void WriteUint16(uint16_t value) {
+  FORY_ALWAYS_INLINE void WriteUint16(uint16_t value) {
     Grow(2);
     UnsafePut<uint16_t>(writer_index_, value);
     IncreaseWriterIndex(2);
@@ -339,7 +339,7 @@ public:
 
   /// Write int16_t value as fixed 2 bytes to buffer at current writer index.
   /// Automatically grows buffer and advances writer index.
-  inline void WriteInt16(int16_t value) {
+  FORY_ALWAYS_INLINE void WriteInt16(int16_t value) {
     Grow(2);
     UnsafePut<int16_t>(writer_index_, value);
     IncreaseWriterIndex(2);
@@ -347,7 +347,7 @@ public:
 
   /// Write int32_t value as fixed 4 bytes to buffer at current writer index.
   /// Automatically grows buffer and advances writer index.
-  inline void WriteInt32(int32_t value) {
+  FORY_ALWAYS_INLINE void WriteInt32(int32_t value) {
     Grow(4);
     UnsafePut<int32_t>(writer_index_, value);
     IncreaseWriterIndex(4);
@@ -355,7 +355,7 @@ public:
 
   /// Write int64_t value as fixed 8 bytes to buffer at current writer index.
   /// Automatically grows buffer and advances writer index.
-  inline void WriteInt64(int64_t value) {
+  FORY_ALWAYS_INLINE void WriteInt64(int64_t value) {
     Grow(8);
     UnsafePut<int64_t>(writer_index_, value);
     IncreaseWriterIndex(8);
@@ -363,7 +363,7 @@ public:
 
   /// Write float value as fixed 4 bytes to buffer at current writer index.
   /// Automatically grows buffer and advances writer index.
-  inline void WriteFloat(float value) {
+  FORY_ALWAYS_INLINE void WriteFloat(float value) {
     Grow(4);
     UnsafePut<float>(writer_index_, value);
     IncreaseWriterIndex(4);
@@ -371,7 +371,7 @@ public:
 
   /// Write double value as fixed 8 bytes to buffer at current writer index.
   /// Automatically grows buffer and advances writer index.
-  inline void WriteDouble(double value) {
+  FORY_ALWAYS_INLINE void WriteDouble(double value) {
     Grow(8);
     UnsafePut<double>(writer_index_, value);
     IncreaseWriterIndex(8);
@@ -379,18 +379,33 @@ public:
 
   /// Write uint32_t value as varint to buffer at current writer index.
   /// Automatically grows buffer and advances writer index.
-  inline void WriteVarUint32(uint32_t value) {
+  FORY_ALWAYS_INLINE void WriteVarUint32(uint32_t value) {
     Grow(5); // Max 5 bytes for varint32
     uint32_t len = PutVarUint32(writer_index_, value);
     IncreaseWriterIndex(len);
   }
 
+  /// Write uint32_t value as varint WITHOUT bounds checking.
+  /// Caller must ensure buffer has enough capacity via Reserve() or Grow().
+  FORY_ALWAYS_INLINE void WriteVarUint32Unsafe(uint32_t value) {
+    uint32_t len = PutVarUint32(writer_index_, value);
+    writer_index_ += len;
+  }
+
   /// Write int32_t value as varint (zigzag encoded) to buffer at current
   /// writer index. Automatically grows buffer and advances writer index.
-  inline void WriteVarInt32(int32_t value) {
+  FORY_ALWAYS_INLINE void WriteVarInt32(int32_t value) {
     uint32_t zigzag = (static_cast<uint32_t>(value) << 1) ^
                       static_cast<uint32_t>(value >> 31);
     WriteVarUint32(zigzag);
+  }
+
+  /// Write int32_t value as varint (zigzag encoded) WITHOUT bounds checking.
+  /// Caller must ensure buffer has enough capacity.
+  FORY_ALWAYS_INLINE void WriteVarInt32Unsafe(int32_t value) {
+    uint32_t zigzag = (static_cast<uint32_t>(value) << 1) ^
+                      static_cast<uint32_t>(value >> 31);
+    WriteVarUint32Unsafe(zigzag);
   }
 
   /// Write uint64_t value as varint to buffer at current writer index.
@@ -595,7 +610,7 @@ public:
   /// Return true if both buffers are the same size and contain the same bytes
   bool Equals(const Buffer &other) const;
 
-  inline void Grow(uint32_t min_capacity) {
+  FORY_ALWAYS_INLINE void Grow(uint32_t min_capacity) {
     uint32_t len = writer_index_ + min_capacity;
     if (len > size_) {
       // NOTE: over allocate by 1.5 or 2 ?

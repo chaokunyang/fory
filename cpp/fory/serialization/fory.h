@@ -228,6 +228,25 @@ public:
     return bytes_written;
   }
 
+  /// Serialize an object using a caller-provided WriteContext and Buffer.
+  /// This bypasses the internal context pool for maximum performance.
+  ///
+  /// @param obj Object to serialize (const reference).
+  /// @param ctx WriteContext to use (caller must manage lifecycle).
+  /// @param buffer Output buffer to write to.
+  /// @return Number of bytes written on success, error on failure.
+  template <typename T>
+  Result<size_t, Error> serialize_direct(const T &obj, WriteContext &ctx,
+                                         Buffer &buffer) {
+    return serialize_to_impl(obj, ctx, buffer);
+  }
+
+  /// Create a WriteContext for use with serialize_direct.
+  /// The context can be reused across multiple serialization calls.
+  std::unique_ptr<WriteContext> create_write_context() {
+    return std::make_unique<WriteContext>(config_, get_finalized_resolver());
+  }
+
   // ============================================================================
   // Deserialization Methods
   // ============================================================================
@@ -404,9 +423,10 @@ private:
                                           Buffer &buffer) {
     size_t start_pos = buffer.writer_index();
 
-    // Write Fory header
-    write_header(buffer, false, config_.xlang, is_little_endian_system(), false,
-                 Language::CPP);
+    // Write precomputed header (4 bytes), then adjust index if not xlang
+    buffer.Grow(4);
+    buffer.UnsafePut<uint32_t>(buffer.writer_index(), precomputed_header_);
+    buffer.IncreaseWriterIndex(header_length_);
 
     // Reserve space for meta offset in compatible mode
     size_t meta_start_offset = 0;
@@ -427,10 +447,31 @@ private:
     return buffer.writer_index() - start_pos;
   }
 
+  /// Compute the precomputed header value
+  static uint32_t compute_header(bool xlang) {
+    uint32_t header = 0;
+    // Magic number (2 bytes, little endian)
+    header |= (MAGIC_NUMBER & 0xFFFF);
+    // Flags byte at position 2
+    uint8_t flags = 0;
+    if (is_little_endian_system()) {
+      flags |= (1 << 1); // bit 1: endian flag
+    }
+    if (xlang) {
+      flags |= (1 << 2); // bit 2: xlang flag
+    }
+    header |= (static_cast<uint32_t>(flags) << 16);
+    // Language byte at position 3 (only used if xlang)
+    header |= (static_cast<uint32_t>(Language::CPP) << 24);
+    return header;
+  }
+
   /// Private constructor - use builder() instead!
   explicit Fory(const Config &config, std::shared_ptr<TypeResolver> resolver)
       : config_(config), type_resolver_(std::move(resolver)),
-        finalized_resolver_(), finalized_once_flag_(),
+        precomputed_header_(compute_header(config.xlang)),
+        header_length_(config.xlang ? 4 : 3), finalized_resolver_(),
+        finalized_once_flag_(),
         write_ctx_pool_([this]() {
           return std::make_unique<WriteContext>(config_,
                                                 get_finalized_resolver());
@@ -442,6 +483,8 @@ private:
 
   Config config_;
   std::shared_ptr<TypeResolver> type_resolver_;
+  uint32_t precomputed_header_; // Precomputed header bytes
+  uint8_t header_length_;       // 3 if not xlang, 4 if xlang
   mutable std::shared_ptr<TypeResolver> finalized_resolver_;
   mutable std::once_flag finalized_once_flag_;
   util::Pool<WriteContext> write_ctx_pool_;

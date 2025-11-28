@@ -193,7 +193,8 @@ inline Result<HeaderInfo, Error> read_header(Buffer &buffer) {
 /// According to the xlang specification, when reference tracking is disabled
 /// but reference metadata is requested, serializers must still emit the
 /// NOT_NULL flag so deserializers can consume the ref prefix consistently.
-inline void write_not_null_ref_flag(WriteContext &ctx, bool write_ref) {
+FORY_ALWAYS_INLINE void write_not_null_ref_flag(WriteContext &ctx,
+                                                bool write_ref) {
   if (write_ref) {
     ctx.write_int8(NOT_NULL_VALUE_FLAG);
   }

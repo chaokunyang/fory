@@ -139,38 +139,48 @@ public:
   }
 
   /// Write uint8_t value to buffer.
-  inline void write_uint8(uint8_t value) { buffer().WriteUint8(value); }
+  FORY_ALWAYS_INLINE void write_uint8(uint8_t value) {
+    buffer().WriteUint8(value);
+  }
 
   /// Write int8_t value to buffer.
-  inline void write_int8(int8_t value) { buffer().WriteInt8(value); }
+  FORY_ALWAYS_INLINE void write_int8(int8_t value) {
+    buffer().WriteInt8(value);
+  }
 
   /// Write uint16_t value to buffer.
-  inline void write_uint16(uint16_t value) { buffer().WriteUint16(value); }
+  FORY_ALWAYS_INLINE void write_uint16(uint16_t value) {
+    buffer().WriteUint16(value);
+  }
 
   /// Write uint32_t value as varint to buffer.
-  inline void write_varuint32(uint32_t value) {
+  FORY_ALWAYS_INLINE void write_varuint32(uint32_t value) {
     buffer().WriteVarUint32(value);
   }
 
   /// Write int32_t value as zigzag varint to buffer.
-  inline void write_varint32(int32_t value) { buffer().WriteVarInt32(value); }
+  FORY_ALWAYS_INLINE void write_varint32(int32_t value) {
+    buffer().WriteVarInt32(value);
+  }
 
   /// Write uint64_t value as varint to buffer.
-  inline void write_varuint64(uint64_t value) {
+  FORY_ALWAYS_INLINE void write_varuint64(uint64_t value) {
     buffer().WriteVarUint64(value);
   }
 
   /// Write int64_t value as zigzag varint to buffer.
-  inline void write_varint64(int64_t value) { buffer().WriteVarInt64(value); }
+  FORY_ALWAYS_INLINE void write_varint64(int64_t value) {
+    buffer().WriteVarInt64(value);
+  }
 
   /// Write uint64_t value as varuint36small to buffer.
   /// This is the special variable-length encoding used for string headers.
-  inline void write_varuint36small(uint64_t value) {
+  FORY_ALWAYS_INLINE void write_varuint36small(uint64_t value) {
     buffer().WriteVarUint36Small(value);
   }
 
   /// Write raw bytes to buffer.
-  inline void write_bytes(const void *data, uint32_t length) {
+  FORY_ALWAYS_INLINE void write_bytes(const void *data, uint32_t length) {
     buffer().WriteBytes(data, length);
   }
 
@@ -209,12 +219,32 @@ public:
   /// @return Success or error
   Result<void, Error> write_struct_type_info(const std::type_index &type_id);
 
+  /// Fastest path - write struct type_id directly without any lookups.
+  /// Use this when the type_id is already known (e.g., from a cache).
+  /// Only for STRUCT types (not NAMED_STRUCT, COMPATIBLE_STRUCT, etc.)
+  ///
+  /// @param type_id The pre-computed Fory type_id
+  inline void write_struct_type_id_direct(uint32_t type_id) {
+    buffer_.WriteVarUint32(type_id);
+  }
+
+  /// Get the type_id for a type. Used to cache type_id for fast writes.
+  /// Returns 0 if type is not registered.
+  uint32_t get_type_id_for_cache(const std::type_index &type_idx);
+
   /// Write type info for a registered enum type.
   /// Looks up the type info and delegates to write_any_typeinfo.
   Result<void, Error> write_enum_typeinfo(const std::type_index &type);
 
   /// Reset context for reuse.
   void reset();
+
+  /// Fast reset for reuse - only resets buffer indices.
+  /// Use when ref tracking is disabled and compatible mode is off.
+  FORY_ALWAYS_INLINE void reset_fast() {
+    buffer_.WriterIndex(0);
+    current_dyn_depth_ = 0;
+  }
 
 private:
   Buffer buffer_;

@@ -23,13 +23,15 @@
 #include <vector>
 
 #include "bench.pb.h"
+#include "fory/serialization/context.h"
 #include "fory/serialization/fory.h"
+#include "fory/serialization/struct_serializer.h"
 
 // ============================================================================
 // Fory struct definitions (must match proto messages)
 // ============================================================================
 
-struct ForyStruct {
+struct NumericStruct {
   int32_t f1;
   int32_t f2;
   int32_t f3;
@@ -39,15 +41,15 @@ struct ForyStruct {
   int32_t f7;
   int32_t f8;
 
-  bool operator==(const ForyStruct &other) const {
+  bool operator==(const NumericStruct &other) const {
     return f1 == other.f1 && f2 == other.f2 && f3 == other.f3 &&
            f4 == other.f4 && f5 == other.f5 && f6 == other.f6 &&
            f7 == other.f7 && f8 == other.f8;
   }
 };
-FORY_STRUCT(ForyStruct, f1, f2, f3, f4, f5, f6, f7, f8);
+FORY_STRUCT(NumericStruct, f1, f2, f3, f4, f5, f6, f7, f8);
 
-struct ForySample {
+struct Sample {
   int32_t int_value;
   int64_t long_value;
   float float_value;
@@ -71,7 +73,7 @@ struct ForySample {
   std::vector<bool> boolean_array;
   std::string string;
 
-  bool operator==(const ForySample &other) const {
+  bool operator==(const Sample &other) const {
     return int_value == other.int_value && long_value == other.long_value &&
            float_value == other.float_value &&
            double_value == other.double_value &&
@@ -91,7 +93,7 @@ struct ForySample {
            boolean_array == other.boolean_array && string == other.string;
   }
 };
-FORY_STRUCT(ForySample, int_value, long_value, float_value, double_value,
+FORY_STRUCT(Sample, int_value, long_value, float_value, double_value,
             short_value, char_value, boolean_value, int_value_boxed,
             long_value_boxed, float_value_boxed, double_value_boxed,
             short_value_boxed, char_value_boxed, boolean_value_boxed, int_array,
@@ -102,23 +104,44 @@ FORY_STRUCT(ForySample, int_value, long_value, float_value, double_value,
 // Test data creation
 // ============================================================================
 
-ForyStruct CreateForyStruct() { return ForyStruct{1, 2, 3, 4, 5, 6, 7, 8}; }
+NumericStruct CreateNumericStruct() { return NumericStruct{1, 2, 3, 4, 5, 6, 7, 8}; }
 
-protobuf::Struct CreateProtoStruct() {
-  protobuf::Struct s;
-  s.set_f1(1);
-  s.set_f2(2);
-  s.set_f3(3);
-  s.set_f4(4);
-  s.set_f5(5);
-  s.set_f6(6);
-  s.set_f7(7);
-  s.set_f8(8);
-  return s;
+// ============================================================================
+// Protobuf conversion functions (like Java benchmark's buildPBStruct/fromPBObject)
+// ============================================================================
+
+/// Convert plain C++ struct to protobuf message (for serialization)
+inline protobuf::Struct ToPbStruct(const NumericStruct &obj) {
+  protobuf::Struct pb;
+  pb.set_f1(obj.f1);
+  pb.set_f2(obj.f2);
+  pb.set_f3(obj.f3);
+  pb.set_f4(obj.f4);
+  pb.set_f5(obj.f5);
+  pb.set_f6(obj.f6);
+  pb.set_f7(obj.f7);
+  pb.set_f8(obj.f8);
+  return pb;
 }
 
-ForySample CreateForySample() {
-  ForySample sample;
+/// Convert protobuf message to plain C++ struct (for deserialization)
+inline NumericStruct FromPbStruct(const protobuf::Struct &pb) {
+  NumericStruct obj;
+  obj.f1 = pb.f1();
+  obj.f2 = pb.f2();
+  obj.f3 = pb.f3();
+  obj.f4 = pb.f4();
+  obj.f5 = pb.f5();
+  obj.f6 = pb.f6();
+  obj.f7 = pb.f7();
+  obj.f8 = pb.f8();
+  return obj;
+}
+
+protobuf::Struct CreateProtoStruct() { return ToPbStruct(CreateNumericStruct()); }
+
+Sample CreateSample() {
+  Sample sample;
   sample.int_value = 42;
   sample.long_value = 1234567890123LL;
   sample.float_value = 3.14f;
@@ -190,8 +213,8 @@ protobuf::Sample CreateProtoSample() {
 // ============================================================================
 
 void RegisterForyTypes(fory::serialization::Fory &fory) {
-  fory.register_struct<ForyStruct>(1);
-  fory.register_struct<ForySample>(2);
+  fory.register_struct<NumericStruct>(1);
+  fory.register_struct<Sample>(2);
 }
 
 // ============================================================================
@@ -199,10 +222,13 @@ void RegisterForyTypes(fory::serialization::Fory &fory) {
 // ============================================================================
 
 static void BM_Fory_Struct_Serialize(benchmark::State &state) {
-  auto fory =
-      fory::serialization::Fory::builder().xlang(true).track_ref(false).build();
+  auto fory = fory::serialization::Fory::builder()
+                  .xlang(true)
+                  .track_ref(false)
+                  .check_struct_version(false)
+                  .build();
   RegisterForyTypes(fory);
-  ForyStruct obj = CreateForyStruct();
+  NumericStruct obj = CreateNumericStruct();
 
   for (auto _ : state) {
     auto result = fory.serialize(obj);
@@ -211,23 +237,70 @@ static void BM_Fory_Struct_Serialize(benchmark::State &state) {
 }
 BENCHMARK(BM_Fory_Struct_Serialize);
 
+// Fory with reused buffer (fair comparison with protobuf which reuses string)
+static void BM_Fory_Struct_Serialize_ReuseBuffer(benchmark::State &state) {
+  auto fory = fory::serialization::Fory::builder()
+                  .xlang(true)
+                  .track_ref(false)
+                  .check_struct_version(false)
+                  .build();
+  RegisterForyTypes(fory);
+  NumericStruct obj = CreateNumericStruct();
+  std::vector<uint8_t> output;
+  output.reserve(64); // Pre-allocate to avoid reallocation
+
+  for (auto _ : state) {
+    fory.serialize_to(obj, output);
+    benchmark::DoNotOptimize(output);
+  }
+}
+BENCHMARK(BM_Fory_Struct_Serialize_ReuseBuffer);
+
+// Fory with direct serialization (bypasses pool for maximum performance)
+static void BM_Fory_Struct_Serialize_Direct(benchmark::State &state) {
+  auto fory = fory::serialization::Fory::builder()
+                  .xlang(true)
+                  .track_ref(false)
+                  .check_struct_version(false)
+                  .build();
+  RegisterForyTypes(fory);
+  NumericStruct obj = CreateNumericStruct();
+
+  // Create reusable context and buffer once
+  auto ctx = fory.create_write_context();
+  fory::Buffer buffer;
+  buffer.Reserve(64);
+
+  for (auto _ : state) {
+    ctx->reset_fast(); // Fast reset - only resets buffer index
+    fory.serialize_direct(obj, *ctx, buffer);
+    benchmark::DoNotOptimize(buffer.data());
+  }
+}
+BENCHMARK(BM_Fory_Struct_Serialize_Direct);
+
+// Fair comparison: convert plain C++ struct to protobuf, then serialize
+// (Same pattern as Java benchmark's buildPBStruct().toByteArray())
 static void BM_Protobuf_Struct_Serialize(benchmark::State &state) {
-  protobuf::Struct obj = CreateProtoStruct();
+  NumericStruct obj = CreateNumericStruct();
   std::string output;
 
   for (auto _ : state) {
     output.clear();
-    obj.SerializeToString(&output);
+    ToPbStruct(obj).SerializeToString(&output);
     benchmark::DoNotOptimize(output);
   }
 }
 BENCHMARK(BM_Protobuf_Struct_Serialize);
 
 static void BM_Fory_Struct_Deserialize(benchmark::State &state) {
-  auto fory =
-      fory::serialization::Fory::builder().xlang(true).track_ref(false).build();
+  auto fory = fory::serialization::Fory::builder()
+                  .xlang(true)
+                  .track_ref(false)
+                  .check_struct_version(false)
+                  .build();
   RegisterForyTypes(fory);
-  ForyStruct obj = CreateForyStruct();
+  NumericStruct obj = CreateNumericStruct();
   auto serialized = fory.serialize(obj);
   if (!serialized.ok()) {
     state.SkipWithError("Serialization failed");
@@ -236,27 +309,30 @@ static void BM_Fory_Struct_Deserialize(benchmark::State &state) {
   auto &bytes = serialized.value();
 
   // Verify deserialization works first
-  auto test_result = fory.deserialize<ForyStruct>(bytes.data(), bytes.size());
+  auto test_result = fory.deserialize<NumericStruct>(bytes.data(), bytes.size());
   if (!test_result.ok()) {
     state.SkipWithError("Deserialization test failed");
     return;
   }
 
   for (auto _ : state) {
-    auto result = fory.deserialize<ForyStruct>(bytes.data(), bytes.size());
+    auto result = fory.deserialize<NumericStruct>(bytes.data(), bytes.size());
     benchmark::DoNotOptimize(result);
   }
 }
 BENCHMARK(BM_Fory_Struct_Deserialize);
 
+// Fair comparison: deserialize and convert protobuf to plain C++ struct
+// (Same pattern as Java benchmark's fromPBObject())
 static void BM_Protobuf_Struct_Deserialize(benchmark::State &state) {
   protobuf::Struct obj = CreateProtoStruct();
   std::string serialized;
   obj.SerializeToString(&serialized);
 
   for (auto _ : state) {
-    protobuf::Struct result;
-    result.ParseFromString(serialized);
+    protobuf::Struct pb_result;
+    pb_result.ParseFromString(serialized);
+    NumericStruct result = FromPbStruct(pb_result);
     benchmark::DoNotOptimize(result);
   }
 }
@@ -267,10 +343,13 @@ BENCHMARK(BM_Protobuf_Struct_Deserialize);
 // ============================================================================
 
 static void BM_Fory_Sample_Serialize(benchmark::State &state) {
-  auto fory =
-      fory::serialization::Fory::builder().xlang(true).track_ref(false).build();
+  auto fory = fory::serialization::Fory::builder()
+                  .xlang(true)
+                  .track_ref(false)
+                  .check_struct_version(false)
+                  .build();
   RegisterForyTypes(fory);
-  ForySample obj = CreateForySample();
+  Sample obj = CreateSample();
 
   for (auto _ : state) {
     auto result = fory.serialize(obj);
@@ -292,10 +371,13 @@ static void BM_Protobuf_Sample_Serialize(benchmark::State &state) {
 BENCHMARK(BM_Protobuf_Sample_Serialize);
 
 static void BM_Fory_Sample_Deserialize(benchmark::State &state) {
-  auto fory =
-      fory::serialization::Fory::builder().xlang(true).track_ref(false).build();
+  auto fory = fory::serialization::Fory::builder()
+                  .xlang(true)
+                  .track_ref(false)
+                  .check_struct_version(false)
+                  .build();
   RegisterForyTypes(fory);
-  ForySample obj = CreateForySample();
+  Sample obj = CreateSample();
   auto serialized = fory.serialize(obj);
   if (!serialized.ok()) {
     state.SkipWithError("Serialization failed");
@@ -304,14 +386,14 @@ static void BM_Fory_Sample_Deserialize(benchmark::State &state) {
   auto &bytes = serialized.value();
 
   // Verify deserialization works first
-  auto test_result = fory.deserialize<ForySample>(bytes.data(), bytes.size());
+  auto test_result = fory.deserialize<Sample>(bytes.data(), bytes.size());
   if (!test_result.ok()) {
     state.SkipWithError("Deserialization test failed");
     return;
   }
 
   for (auto _ : state) {
-    auto result = fory.deserialize<ForySample>(bytes.data(), bytes.size());
+    auto result = fory.deserialize<Sample>(bytes.data(), bytes.size());
     benchmark::DoNotOptimize(result);
   }
 }
@@ -336,11 +418,14 @@ BENCHMARK(BM_Protobuf_Sample_Deserialize);
 
 static void BM_PrintSerializedSizes(benchmark::State &state) {
   // Fory
-  auto fory =
-      fory::serialization::Fory::builder().xlang(true).track_ref(false).build();
+  auto fory = fory::serialization::Fory::builder()
+                  .xlang(true)
+                  .track_ref(false)
+                  .check_struct_version(false)
+                  .build();
   RegisterForyTypes(fory);
-  ForyStruct fory_struct = CreateForyStruct();
-  ForySample fory_sample = CreateForySample();
+  NumericStruct fory_struct = CreateNumericStruct();
+  Sample fory_sample = CreateSample();
   auto fory_struct_bytes = fory.serialize(fory_struct).value();
   auto fory_sample_bytes = fory.serialize(fory_sample).value();
 

@@ -22,6 +22,9 @@ use std::hint::black_box;
 use std::sync::Arc;
 use std::thread;
 
+#[cfg(feature = "profiling")]
+use pprof::criterion::{Output, PProfProfiler};
+
 #[derive(Debug, ForyObject)]
 pub struct UserSessionMetrics {
     pub request_count: u64,
@@ -95,5 +98,14 @@ fn bench_threaded_serialization(c: &mut Criterion) {
     group.finish();
 }
 
+#[cfg(feature = "profiling")]
+criterion_group! {
+    name = benches;
+    config = Criterion::default().with_profiler(PProfProfiler::new(100, Output::Flamegraph(None)));
+    targets = bench_threaded_serialization
+}
+
+#[cfg(not(feature = "profiling"))]
 criterion_group!(benches, bench_threaded_serialization);
+
 criterion_main!(benches);

@@ -18,5 +18,6 @@
 pub mod context;
 pub mod meta_resolver;
 pub mod meta_string_resolver;
+pub mod pool;
 pub mod ref_resolver;
 pub mod type_resolver;

@@ -374,26 +374,29 @@ public:
     return serialize_impl(obj, buffer);
   }
 
-  /// Serialize an object to an existing byte vector.
+  /// Serialize an object to an existing byte vector (zero-copy).
+  ///
+  /// This method appends serialized data directly to the output vector,
+  /// avoiding any intermediate copies. The vector will be resized to
+  /// fit the serialized data.
   ///
   /// @tparam T The type of object to serialize.
   /// @param obj The object to serialize.
-  /// @param output The vector to write to (will be resized).
+  /// @param output The vector to append to.
   /// @return Number of bytes written, or error.
   template <typename T>
   Result<size_t, Error> serialize_to(const T &obj,
                                      std::vector<uint8_t> &output) {
-    if (FORY_PREDICT_FALSE(!finalized_)) {
-      ensure_finalized();
-    }
-    WriteContextGuard guard(write_ctx_);
-    Buffer &buffer = write_ctx_.buffer();
+    // Wrap the output vector in a Buffer for zero-copy serialization
+    // writer_index starts at output.size() for appending
+    Buffer buffer(output);
 
-    FORY_TRY(bytes_written, serialize_impl(obj, buffer));
+    // Forward to Buffer version
+    auto result = serialize_to(obj, buffer);
 
+    // Resize vector to actual written size
     output.resize(buffer.writer_index());
-    std::memcpy(output.data(), buffer.data(), buffer.writer_index());
-    return bytes_written;
+    return result;
   }
 
   /// Deserialize an object from a byte array.
@@ -633,8 +636,7 @@ private:
   explicit ThreadSafeFory(const Config &config,
                           std::shared_ptr<TypeResolver> resolver)
       : BaseFory(config, std::move(resolver)), finalized_resolver_(),
-        finalized_once_flag_(),
-        fory_pool_([this]() {
+        finalized_once_flag_(), fory_pool_([this]() {
           return std::unique_ptr<Fory>(new Fory(
               config_, get_finalized_resolver(), Fory::PreFinalized{}));
         }) {}
@@ -667,9 +669,8 @@ inline std::shared_ptr<TypeResolver> ForyBuilder::get_finalized_resolver() {
   }
   type_resolver_->apply_config(config_);
   auto final_result = type_resolver_->build_final_type_resolver();
-  FORY_CHECK(final_result.ok())
-      << "Failed to build finalized TypeResolver: "
-      << final_result.error().to_string();
+  FORY_CHECK(final_result.ok()) << "Failed to build finalized TypeResolver: "
+                                << final_result.error().to_string();
   return std::move(final_result).value();
 }
 

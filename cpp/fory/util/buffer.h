@@ -24,6 +24,7 @@
 #include <limits>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "fory/util/bit_util.h"
 #include "fory/util/error.h"
@@ -43,6 +44,16 @@ public:
     writer_index_ = 0;
     reader_index_ = 0;
   }
+
+  /// Wrap an existing vector for zero-copy serialization.
+  /// The buffer will append to the vector starting from its current size.
+  /// After serialization, the vector is resized to writer_index().
+  ///
+  /// @param vec The vector to wrap (must outlive this Buffer).
+  explicit Buffer(std::vector<uint8_t> &vec)
+      : data_(vec.data()), size_(static_cast<uint32_t>(vec.size())),
+        own_data_(false), writer_index_(static_cast<uint32_t>(vec.size())),
+        reader_index_(0), wrapped_vector_(&vec) {}
 
   Buffer(Buffer &&buffer) noexcept;
 
@@ -626,25 +637,36 @@ public:
   /// Reserve buffer to new_size
   void Reserve(uint32_t new_size) {
     if (new_size > size_) {
-      uint8_t *new_ptr;
-      if (own_data_) {
-        new_ptr = static_cast<uint8_t *>(
-            realloc(data_, static_cast<size_t>(new_size)));
-      } else {
-        new_ptr = static_cast<uint8_t *>(malloc(static_cast<size_t>(new_size)));
-        if (new_ptr) {
-          own_data_ = true;
-        }
-      }
-      if (new_ptr) {
-        data_ = new_ptr;
+      if (wrapped_vector_) {
+        // Resize the underlying vector - zero-copy path
+        wrapped_vector_->resize(new_size);
+        data_ = wrapped_vector_->data();
         size_ = new_size;
       } else {
-        FORY_CHECK(false) << "Out of memory when grow buffer, needed_size "
-                          << size_;
+        uint8_t *new_ptr;
+        if (own_data_) {
+          new_ptr = static_cast<uint8_t *>(
+              realloc(data_, static_cast<size_t>(new_size)));
+        } else {
+          new_ptr =
+              static_cast<uint8_t *>(malloc(static_cast<size_t>(new_size)));
+          if (new_ptr) {
+            own_data_ = true;
+          }
+        }
+        if (new_ptr) {
+          data_ = new_ptr;
+          size_ = new_size;
+        } else {
+          FORY_CHECK(false)
+              << "Out of memory when grow buffer, needed_size " << size_;
+        }
       }
     }
   }
+
+  /// Check if this buffer wraps a vector.
+  bool wraps_vector() const { return wrapped_vector_ != nullptr; }
 
   /// Copy a section of the buffer into a new Buffer.
   void Copy(uint32_t start, uint32_t nbytes,
@@ -685,6 +707,7 @@ private:
   bool own_data_;
   uint32_t writer_index_;
   uint32_t reader_index_;
+  std::vector<uint8_t> *wrapped_vector_ = nullptr;
 };
 
 /// \brief Allocate a fixed-size mutable buffer from the default memory pool

@@ -239,13 +239,6 @@ public:
   /// Reset context for reuse.
   void reset();
 
-  /// Fast reset for reuse - only resets buffer indices.
-  /// Use when ref tracking is disabled and compatible mode is off.
-  FORY_ALWAYS_INLINE void reset_fast() {
-    buffer_.WriterIndex(0);
-    current_dyn_depth_ = 0;
-  }
-
 private:
   Buffer buffer_;
   const Config *config_;

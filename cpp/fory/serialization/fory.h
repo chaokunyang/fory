@@ -129,84 +129,37 @@ private:
 };
 
 // ============================================================================
-// Common serialization helpers
+// RAII Guards for Context Management
 // ============================================================================
 
-/// Compute the precomputed header value
-inline uint32_t compute_header(bool xlang) {
-  uint32_t header = 0;
-  // Magic number (2 bytes, little endian)
-  header |= (MAGIC_NUMBER & 0xFFFF);
-  // Flags byte at position 2
-  uint8_t flags = 0;
-  if (is_little_endian_system()) {
-    flags |= (1 << 1); // bit 1: endian flag
-  }
-  if (xlang) {
-    flags |= (1 << 2); // bit 2: xlang flag
-  }
-  header |= (static_cast<uint32_t>(flags) << 16);
-  // Language byte at position 3 (only used if xlang)
-  header |= (static_cast<uint32_t>(Language::CPP) << 24);
-  return header;
-}
+/// RAII guard for WriteContext - resets on destruction.
+class WriteContextGuard {
+public:
+  explicit WriteContextGuard(WriteContext &ctx) : ctx_(ctx) {}
+  ~WriteContextGuard() { ctx_.reset(); }
 
-/// Core serialization implementation
-template <typename T>
-Result<size_t, Error> serialize_impl(const T &obj, WriteContext &ctx,
-                                     Buffer &buffer, uint32_t precomputed_header,
-                                     uint8_t header_length) {
-  size_t start_pos = buffer.writer_index();
+  WriteContextGuard(const WriteContextGuard &) = delete;
+  WriteContextGuard &operator=(const WriteContextGuard &) = delete;
 
-  // Write precomputed header (4 bytes), then adjust index if not xlang
-  buffer.Grow(4);
-  buffer.UnsafePut<uint32_t>(buffer.writer_index(), precomputed_header);
-  buffer.IncreaseWriterIndex(header_length);
+private:
+  WriteContext &ctx_;
+};
 
-  // Reserve space for meta offset in compatible mode
-  size_t meta_start_offset = 0;
-  if (ctx.is_compatible()) {
-    meta_start_offset = buffer.writer_index();
-    buffer.WriteInt32(-1); // Placeholder for meta offset (fixed 4 bytes)
+/// RAII guard for ReadContext - resets and detaches on destruction.
+class ReadContextGuard {
+public:
+  explicit ReadContextGuard(ReadContext &ctx) : ctx_(ctx) {}
+  ~ReadContextGuard() {
+    ctx_.reset();
+    ctx_.detach();
   }
 
-  // Top-level serialization: YES ref flags, yes type info
-  FORY_RETURN_NOT_OK(Serializer<T>::write(obj, ctx, true, true));
+  ReadContextGuard(const ReadContextGuard &) = delete;
+  ReadContextGuard &operator=(const ReadContextGuard &) = delete;
 
-  // Write collected TypeMetas at the end in compatible mode
-  if (ctx.is_compatible() && !ctx.meta_empty()) {
-    ctx.write_meta(meta_start_offset);
-  }
-
-  return buffer.writer_index() - start_pos;
-}
-
-/// Core deserialization implementation
-template <typename T>
-Result<T, Error> deserialize_impl(ReadContext &ctx, Buffer &buffer) {
-  // Load TypeMetas at the beginning in compatible mode
-  size_t bytes_to_skip = 0;
-  if (ctx.is_compatible()) {
-    auto meta_offset_result = buffer.ReadInt32();
-    FORY_RETURN_IF_ERROR(meta_offset_result);
-    int32_t meta_offset = meta_offset_result.value();
-    if (meta_offset != -1) {
-      FORY_TRY(meta_size, ctx.load_type_meta(meta_offset));
-      bytes_to_skip = meta_size;
-    }
-  }
-
-  // Top-level deserialization: YES ref flags, yes type info
-  auto result = Serializer<T>::read(ctx, true, true);
-
-  if (result.ok()) {
-    ctx.ref_reader().resolve_callbacks();
-    if (bytes_to_skip > 0) {
-      buffer.IncreaseReaderIndex(static_cast<uint32_t>(bytes_to_skip));
-    }
-  }
-  return result;
-}
+private:
+  ReadContext &ctx_;
+};
 
 // ============================================================================
 // BaseFory - Common base class for Fory implementations
@@ -350,9 +303,7 @@ protected:
   /// Protected constructor - only derived classes can instantiate.
   explicit BaseFory(const Config &config,
                     std::shared_ptr<TypeResolver> resolver)
-      : config_(config), type_resolver_(std::move(resolver)),
-        precomputed_header_(compute_header(config.xlang)),
-        header_length_(config.xlang ? 4 : 3) {}
+      : config_(config), type_resolver_(std::move(resolver)) {}
 
   // Non-copyable
   BaseFory(const BaseFory &) = delete;
@@ -364,8 +315,6 @@ protected:
 
   Config config_;
   std::shared_ptr<TypeResolver> type_resolver_;
-  uint32_t precomputed_header_;
-  uint8_t header_length_;
 };
 
 // ============================================================================
@@ -388,133 +337,71 @@ protected:
 /// ```
 class Fory : public BaseFory {
 public:
-  /// Create a builder for configuring Fory instance.
   static ForyBuilder builder() { return ForyBuilder(); }
 
-  // ==========================================================================
-  // Serialization Methods
-  // ==========================================================================
-
   /// Serialize an object to a new byte vector.
-  ///
-  /// Creates a new vector containing the serialized data. This is the
-  /// simplest API but allocates memory on each call.
   ///
   /// @tparam T The type of object to serialize.
   /// @param obj The object to serialize.
   /// @return Vector containing serialized bytes, or error.
-  ///
-  /// Example:
-  /// ```cpp
-  /// MyStruct obj{42, "hello"};
-  /// auto result = fory.serialize(obj);
-  /// if (result.ok()) {
-  ///   std::vector<uint8_t> bytes = result.value();
-  /// }
-  /// ```
   template <typename T>
   Result<std::vector<uint8_t>, Error> serialize(const T &obj) {
     if (FORY_PREDICT_FALSE(!finalized_)) {
       ensure_finalized();
     }
-    write_ctx_.reset_fast();
+    WriteContextGuard guard(write_ctx_);
     Buffer &buffer = write_ctx_.buffer();
 
-    FORY_RETURN_NOT_OK(serialize_impl(obj, write_ctx_, buffer,
-                                      precomputed_header_, header_length_));
+    FORY_RETURN_NOT_OK(serialize_impl(obj, buffer));
 
     std::vector<uint8_t> result(buffer.writer_index());
     std::memcpy(result.data(), buffer.data(), buffer.writer_index());
     return result;
   }
 
-  /// Serialize an object to an existing Buffer.
-  ///
-  /// Writes serialized data directly to the provided buffer. This is the
-  /// fastest serialization path as it avoids memory allocation when the
-  /// buffer is pre-reserved.
+  /// Serialize an object to an existing Buffer (fastest path).
   ///
   /// @tparam T The type of object to serialize.
   /// @param obj The object to serialize.
-  /// @param buffer The buffer to write to (will be appended to).
+  /// @param buffer The buffer to write to.
   /// @return Number of bytes written, or error.
-  ///
-  /// Example:
-  /// ```cpp
-  /// fory::Buffer buffer;
-  /// buffer.Reserve(1024);  // Pre-allocate for best performance
-  ///
-  /// for (auto& obj : objects) {
-  ///   buffer.WriterIndex(0);  // Reset for reuse
-  ///   auto result = fory.serialize_to(obj, buffer);
-  ///   // Use buffer.data() and buffer.writer_index()
-  /// }
-  /// ```
   template <typename T>
   FORY_ALWAYS_INLINE Result<size_t, Error> serialize_to(const T &obj,
                                                         Buffer &buffer) {
     if (FORY_PREDICT_FALSE(!finalized_)) {
       ensure_finalized();
     }
-    return serialize_impl(obj, write_ctx_, buffer, precomputed_header_,
-                          header_length_);
+    return serialize_impl(obj, buffer);
   }
 
   /// Serialize an object to an existing byte vector.
-  ///
-  /// Resizes the output vector to fit the serialized data. The vector
-  /// is reused across calls for better performance.
   ///
   /// @tparam T The type of object to serialize.
   /// @param obj The object to serialize.
   /// @param output The vector to write to (will be resized).
   /// @return Number of bytes written, or error.
-  ///
-  /// Example:
-  /// ```cpp
-  /// std::vector<uint8_t> output;
-  /// output.reserve(1024);  // Pre-allocate for best performance
-  ///
-  /// auto result = fory.serialize_to(obj, output);
-  /// ```
   template <typename T>
   Result<size_t, Error> serialize_to(const T &obj,
                                      std::vector<uint8_t> &output) {
     if (FORY_PREDICT_FALSE(!finalized_)) {
       ensure_finalized();
     }
-    write_ctx_.reset_fast();
+    WriteContextGuard guard(write_ctx_);
     Buffer &buffer = write_ctx_.buffer();
 
-    FORY_TRY(bytes_written, serialize_impl(obj, write_ctx_, buffer,
-                                           precomputed_header_, header_length_));
+    FORY_TRY(bytes_written, serialize_impl(obj, buffer));
 
     output.resize(buffer.writer_index());
     std::memcpy(output.data(), buffer.data(), buffer.writer_index());
     return bytes_written;
   }
 
-  // ==========================================================================
-  // Deserialization Methods
-  // ==========================================================================
-
   /// Deserialize an object from a byte array.
-  ///
-  /// Reads serialized data from a raw byte pointer and reconstructs
-  /// the original object.
   ///
   /// @tparam T The type of object to deserialize.
   /// @param data Pointer to serialized data.
   /// @param size Size of serialized data in bytes.
   /// @return Deserialized object, or error.
-  ///
-  /// Example:
-  /// ```cpp
-  /// auto result = fory.deserialize<MyStruct>(bytes.data(), bytes.size());
-  /// if (result.ok()) {
-  ///   MyStruct obj = result.value();
-  /// }
-  /// ```
   template <typename T>
   Result<T, Error> deserialize(const uint8_t *data, size_t size) {
     if (FORY_PREDICT_FALSE(!finalized_)) {
@@ -539,26 +426,16 @@ public:
           Error::unsupported("Cross-endian deserialization not yet supported"));
     }
 
-    read_ctx_.reset();
     read_ctx_.attach(buffer);
-    auto result = deserialize_impl<T>(read_ctx_, buffer);
-    read_ctx_.detach();
-    return result;
+    ReadContextGuard guard(read_ctx_);
+    return deserialize_impl<T>(buffer);
   }
 
   /// Deserialize an object from a byte vector.
   ///
-  /// Convenience method that takes a vector instead of raw pointer.
-  ///
   /// @tparam T The type of object to deserialize.
   /// @param data Vector containing serialized data.
   /// @return Deserialized object, or error.
-  ///
-  /// Example:
-  /// ```cpp
-  /// std::vector<uint8_t> bytes = ...;
-  /// auto result = fory.deserialize<MyStruct>(bytes);
-  /// ```
   template <typename T>
   Result<T, Error> deserialize(const std::vector<uint8_t> &data) {
     return deserialize<T>(data.data(), data.size());
@@ -584,6 +461,8 @@ private:
   /// Constructor for ForyBuilder - resolver will be finalized lazily.
   explicit Fory(const Config &config, std::shared_ptr<TypeResolver> resolver)
       : BaseFory(config, std::move(resolver)), finalized_(false),
+        precomputed_header_(compute_header(config.xlang)),
+        header_length_(config.xlang ? 4 : 3),
         write_ctx_(config_, type_resolver_),
         read_ctx_(config_, type_resolver_) {}
 
@@ -592,10 +471,12 @@ private:
   explicit Fory(const Config &config, std::shared_ptr<TypeResolver> resolver,
                 PreFinalized)
       : BaseFory(config, std::move(resolver)), finalized_(true),
+        precomputed_header_(compute_header(config.xlang)),
+        header_length_(config.xlang ? 4 : 3),
         write_ctx_(config_, type_resolver_),
         read_ctx_(config_, type_resolver_) {}
 
-  /// Finalize the type resolver on first use
+  /// Finalize the type resolver on first use.
   void ensure_finalized() {
     if (!finalized_) {
       auto final_result = type_resolver_->build_final_type_resolver();
@@ -607,7 +488,82 @@ private:
     }
   }
 
+  /// Compute the precomputed header value.
+  static uint32_t compute_header(bool xlang) {
+    uint32_t header = 0;
+    // Magic number (2 bytes, little endian)
+    header |= (MAGIC_NUMBER & 0xFFFF);
+    // Flags byte at position 2
+    uint8_t flags = 0;
+    if (is_little_endian_system()) {
+      flags |= (1 << 1); // bit 1: endian flag
+    }
+    if (xlang) {
+      flags |= (1 << 2); // bit 2: xlang flag
+    }
+    header |= (static_cast<uint32_t>(flags) << 16);
+    // Language byte at position 3 (only used if xlang)
+    header |= (static_cast<uint32_t>(Language::CPP) << 24);
+    return header;
+  }
+
+  /// Core serialization implementation.
+  template <typename T>
+  Result<size_t, Error> serialize_impl(const T &obj, Buffer &buffer) {
+    size_t start_pos = buffer.writer_index();
+
+    // Write precomputed header (4 bytes), then adjust index if not xlang
+    buffer.Grow(4);
+    buffer.UnsafePut<uint32_t>(buffer.writer_index(), precomputed_header_);
+    buffer.IncreaseWriterIndex(header_length_);
+
+    // Reserve space for meta offset in compatible mode
+    size_t meta_start_offset = 0;
+    if (write_ctx_.is_compatible()) {
+      meta_start_offset = buffer.writer_index();
+      buffer.WriteInt32(-1); // Placeholder for meta offset (fixed 4 bytes)
+    }
+
+    // Top-level serialization: YES ref flags, yes type info
+    FORY_RETURN_NOT_OK(Serializer<T>::write(obj, write_ctx_, true, true));
+
+    // Write collected TypeMetas at the end in compatible mode
+    if (write_ctx_.is_compatible() && !write_ctx_.meta_empty()) {
+      write_ctx_.write_meta(meta_start_offset);
+    }
+
+    return buffer.writer_index() - start_pos;
+  }
+
+  /// Core deserialization implementation.
+  template <typename T> Result<T, Error> deserialize_impl(Buffer &buffer) {
+    // Load TypeMetas at the beginning in compatible mode
+    size_t bytes_to_skip = 0;
+    if (read_ctx_.is_compatible()) {
+      auto meta_offset_result = buffer.ReadInt32();
+      FORY_RETURN_IF_ERROR(meta_offset_result);
+      int32_t meta_offset = meta_offset_result.value();
+      if (meta_offset != -1) {
+        FORY_TRY(meta_size, read_ctx_.load_type_meta(meta_offset));
+        bytes_to_skip = meta_size;
+      }
+    }
+
+    // Top-level deserialization: YES ref flags, yes type info
+    auto result = Serializer<T>::read(read_ctx_, true, true);
+
+    if (result.ok()) {
+      read_ctx_.ref_reader().resolve_callbacks();
+      if (bytes_to_skip > 0) {
+        buffer.IncreaseReaderIndex(static_cast<uint32_t>(bytes_to_skip));
+      }
+    }
+    return result;
+  }
+
   bool finalized_;
+  uint32_t precomputed_header_;
+  uint8_t header_length_;
   WriteContext write_ctx_;
   ReadContext read_ctx_;
 
@@ -643,45 +599,18 @@ private:
 /// ```
 class ThreadSafeFory : public BaseFory {
 public:
-  // ==========================================================================
-  // Serialization Methods
-  // ==========================================================================
-
-  /// Serialize an object to a new byte vector.
-  ///
-  /// Thread-safe version that acquires a Fory instance from the pool.
-  ///
-  /// @tparam T The type of object to serialize.
-  /// @param obj The object to serialize.
-  /// @return Vector containing serialized bytes, or error.
   template <typename T>
   Result<std::vector<uint8_t>, Error> serialize(const T &obj) {
     auto fory_handle = fory_pool_.acquire();
     return fory_handle->serialize(obj);
   }
 
-  /// Serialize an object to an existing Buffer.
-  ///
-  /// Thread-safe version that writes directly to the provided buffer.
-  ///
-  /// @tparam T The type of object to serialize.
-  /// @param obj The object to serialize.
-  /// @param buffer The buffer to write to.
-  /// @return Number of bytes written, or error.
   template <typename T>
   Result<size_t, Error> serialize_to(const T &obj, Buffer &buffer) {
     auto fory_handle = fory_pool_.acquire();
     return fory_handle->serialize_to(obj, buffer);
   }
 
-  /// Serialize an object to an existing byte vector.
-  ///
-  /// Thread-safe version that resizes and fills the output vector.
-  ///
-  /// @tparam T The type of object to serialize.
-  /// @param obj The object to serialize.
-  /// @param output The vector to write to.
-  /// @return Number of bytes written, or error.
   template <typename T>
   Result<size_t, Error> serialize_to(const T &obj,
                                      std::vector<uint8_t> &output) {
@@ -689,31 +618,12 @@ public:
     return fory_handle->serialize_to(obj, output);
   }
 
-  // ==========================================================================
-  // Deserialization Methods
-  // ==========================================================================
-
-  /// Deserialize an object from a byte array.
-  ///
-  /// Thread-safe version that acquires a Fory instance from the pool.
-  ///
-  /// @tparam T The type of object to deserialize.
-  /// @param data Pointer to serialized data.
-  /// @param size Size of serialized data in bytes.
-  /// @return Deserialized object, or error.
   template <typename T>
   Result<T, Error> deserialize(const uint8_t *data, size_t size) {
     auto fory_handle = fory_pool_.acquire();
     return fory_handle->template deserialize<T>(data, size);
   }
 
-  /// Deserialize an object from a byte vector.
-  ///
-  /// Thread-safe convenience method that takes a vector.
-  ///
-  /// @tparam T The type of object to deserialize.
-  /// @param data Vector containing serialized data.
-  /// @return Deserialized object, or error.
   template <typename T>
   Result<T, Error> deserialize(const std::vector<uint8_t> &data) {
     return deserialize<T>(data.data(), data.size());

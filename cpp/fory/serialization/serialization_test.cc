@@ -20,10 +20,12 @@
 #include "fory/serialization/fory.h"
 #include "fory/serialization/ref_resolver.h"
 #include "gtest/gtest.h"
+#include <atomic>
 #include <cstdint>
 #include <cstring>
 #include <map>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "fory/type/type.h"
@@ -390,6 +392,47 @@ TEST(SerializationTest, ConfigurationBuilder) {
   EXPECT_TRUE(fory1.config().check_struct_version);
   EXPECT_EQ(fory1.config().max_dyn_depth, 10);
   EXPECT_FALSE(fory1.config().track_ref);
+}
+
+// ============================================================================
+// Thread Safety Tests
+// ============================================================================
+
+TEST(SerializationTest, ThreadSafeForyMultiThread) {
+  auto fory = Fory::builder().xlang(true).track_ref(false).build_thread_safe();
+  fory.register_struct<::ComplexStruct>(1);
+
+  constexpr int kNumThreads = 8;
+  constexpr int kIterationsPerThread = 100;
+  std::vector<std::thread> threads;
+  std::atomic<int> success_count{0};
+
+  for (int t = 0; t < kNumThreads; ++t) {
+    threads.emplace_back([&, t]() {
+      for (int i = 0; i < kIterationsPerThread; ++i) {
+        ::ComplexStruct original{
+            "thread" + std::to_string(t) + "_iter" + std::to_string(i),
+            t * 1000 + i,
+            {"hobby1", "hobby2"}};
+
+        auto bytes_result = fory.serialize(original);
+        if (!bytes_result.ok())
+          continue;
+
+        auto deser_result = fory.deserialize<::ComplexStruct>(
+            bytes_result.value().data(), bytes_result.value().size());
+        if (deser_result.ok() && deser_result.value() == original) {
+          success_count.fetch_add(1);
+        }
+      }
+    });
+  }
+
+  for (auto &t : threads) {
+    t.join();
+  }
+
+  EXPECT_EQ(success_count.load(), kNumThreads * kIterationsPerThread);
 }
 
 } // namespace test

@@ -27,7 +27,7 @@ use crate::types::{
     config_flags::{IS_CROSS_LANGUAGE_FLAG, IS_LITTLE_ENDIAN_FLAG},
     Language, MAGIC_NUMBER, SIZE_OF_REF_AND_TYPE,
 };
-use std::cell::RefCell;
+use std::cell::UnsafeCell;
 use std::collections::HashMap;
 use std::mem;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -36,15 +36,57 @@ use std::sync::OnceLock;
 /// Global counter to assign unique IDs to each Fory instance.
 static FORY_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
 
-thread_local! {
-    /// Thread-local storage for WriteContext instances, keyed by Fory instance ID.
-    /// This eliminates all lock contention since each thread has its own map.
-    static WRITE_CONTEXTS: RefCell<HashMap<u64, Box<WriteContext<'static>>>> =
-        RefCell::new(HashMap::new());
+/// Thread-local context cache with fast path for single Fory instance.
+/// Uses (cached_id, context) for O(1) access when using same Fory instance repeatedly.
+/// Falls back to HashMap for multiple Fory instances per thread.
+struct ContextCache<T> {
+    /// Fast path: cached context for the most recently used Fory instance
+    cached_id: u64,
+    cached_context: Option<Box<T>>,
+    /// Slow path: HashMap for other Fory instances
+    others: HashMap<u64, Box<T>>,
+}
 
-    /// Thread-local storage for ReadContext instances, keyed by Fory instance ID.
-    static READ_CONTEXTS: RefCell<HashMap<u64, Box<ReadContext<'static>>>> =
-        RefCell::new(HashMap::new());
+impl<T> ContextCache<T> {
+    fn new() -> Self {
+        ContextCache {
+            cached_id: u64::MAX,
+            cached_context: None,
+            others: HashMap::new(),
+        }
+    }
+
+    #[inline(always)]
+    fn get_or_insert(&mut self, id: u64, create: impl FnOnce() -> Box<T>) -> &mut T {
+        if self.cached_id == id {
+            // Fast path: same Fory instance as last time
+            return self.cached_context.as_mut().unwrap();
+        }
+
+        // Check if we need to swap with cached
+        if self.cached_context.is_some() {
+            // Move current cached to others
+            let old_id = self.cached_id;
+            let old_context = self.cached_context.take().unwrap();
+            self.others.insert(old_id, old_context);
+        }
+
+        // Get or create context for new id
+        let context = self.others.remove(&id).unwrap_or_else(create);
+        self.cached_id = id;
+        self.cached_context = Some(context);
+        self.cached_context.as_mut().unwrap()
+    }
+}
+
+thread_local! {
+    /// Thread-local storage for WriteContext instances with fast path caching.
+    static WRITE_CONTEXTS: UnsafeCell<ContextCache<WriteContext<'static>>> =
+        UnsafeCell::new(ContextCache::new());
+
+    /// Thread-local storage for ReadContext instances with fast path caching.
+    static READ_CONTEXTS: UnsafeCell<ContextCache<ReadContext<'static>>> =
+        UnsafeCell::new(ContextCache::new());
 }
 
 /// The main Fory serialization framework instance.
@@ -546,32 +588,40 @@ impl Fory {
 
     /// Executes a closure with mutable access to a WriteContext for this Fory instance.
     /// The context is stored in thread-local storage, eliminating all lock contention.
+    /// Uses fast path caching for O(1) access when using the same Fory instance repeatedly.
     #[inline(always)]
     fn with_write_context<R>(
         &self,
         f: impl FnOnce(&mut WriteContext) -> R,
     ) -> Result<R, Error> {
-        WRITE_CONTEXTS.with(|contexts| {
-            let mut map = contexts.borrow_mut();
-            if !map.contains_key(&self.id) {
-                // Only access self fields and clone type_resolver when creating new context
-                let type_resolver = self.get_final_type_resolver()?;
-                // TypeResolver::clone() performs deep copy, creating independent Rc instances
-                // This is safe for concurrent cloning from multiple threads
-                map.insert(
-                    self.id,
-                    Box::new(WriteContext::new(
-                        type_resolver.clone(),
-                        self.compatible,
-                        self.share_meta,
-                        self.compress_string,
-                        self.xlang,
-                        self.check_struct_version,
-                    )),
-                );
-            }
-            Ok(f(map.get_mut(&self.id).unwrap()))
-        })
+        // Pre-fetch type resolver outside the closure to handle errors
+        let type_resolver = self.get_final_type_resolver()?;
+
+        // SAFETY: Thread-local storage is only accessed from the current thread.
+        // We use UnsafeCell to avoid RefCell's runtime borrow checking overhead.
+        // The closure `f` does not recursively call with_write_context, so there's no aliasing.
+        let result = WRITE_CONTEXTS.with(|cache| {
+            let cache = unsafe { &mut *cache.get() };
+            let id = self.id;
+            let compatible = self.compatible;
+            let share_meta = self.share_meta;
+            let compress_string = self.compress_string;
+            let xlang = self.xlang;
+            let check_struct_version = self.check_struct_version;
+
+            let context = cache.get_or_insert(id, || {
+                Box::new(WriteContext::new(
+                    type_resolver.clone(),
+                    compatible,
+                    share_meta,
+                    compress_string,
+                    xlang,
+                    check_struct_version,
+                ))
+            });
+            f(context)
+        });
+        Ok(result)
     }
 
     /// Serializes a value of type `T` into a byte vector.
@@ -929,32 +979,40 @@ impl Fory {
 
     /// Executes a closure with mutable access to a ReadContext for this Fory instance.
     /// The context is stored in thread-local storage, eliminating all lock contention.
+    /// Uses fast path caching for O(1) access when using the same Fory instance repeatedly.
     #[inline(always)]
     fn with_read_context<R>(
         &self,
         f: impl FnOnce(&mut ReadContext) -> R,
     ) -> Result<R, Error> {
-        READ_CONTEXTS.with(|contexts| {
-            let mut map = contexts.borrow_mut();
-            if !map.contains_key(&self.id) {
-                // Only access self fields and clone type_resolver when creating new context
-                let type_resolver = self.get_final_type_resolver()?;
-                // TypeResolver::clone() performs deep copy, creating independent Rc instances
-                // This is safe for concurrent cloning from multiple threads
-                map.insert(
-                    self.id,
-                    Box::new(ReadContext::new(
-                        type_resolver.clone(),
-                        self.compatible,
-                        self.share_meta,
-                        self.xlang,
-                        self.max_dyn_depth,
-                        self.check_struct_version,
-                    )),
-                );
-            }
-            Ok(f(map.get_mut(&self.id).unwrap()))
-        })
+        // Pre-fetch type resolver outside the closure to handle errors
+        let type_resolver = self.get_final_type_resolver()?;
+
+        // SAFETY: Thread-local storage is only accessed from the current thread.
+        // We use UnsafeCell to avoid RefCell's runtime borrow checking overhead.
+        // The closure `f` does not recursively call with_read_context, so there's no aliasing.
+        let result = READ_CONTEXTS.with(|cache| {
+            let cache = unsafe { &mut *cache.get() };
+            let id = self.id;
+            let compatible = self.compatible;
+            let share_meta = self.share_meta;
+            let xlang = self.xlang;
+            let max_dyn_depth = self.max_dyn_depth;
+            let check_struct_version = self.check_struct_version;
+
+            let context = cache.get_or_insert(id, || {
+                Box::new(ReadContext::new(
+                    type_resolver.clone(),
+                    compatible,
+                    share_meta,
+                    xlang,
+                    max_dyn_depth,
+                    check_struct_version,
+                ))
+            });
+            f(context)
+        });
+        Ok(result)
     }
 
     #[inline(always)]

@@ -29,8 +29,8 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 /// Check if the type info represents a generic container type (LIST, SET, MAP).
-/// These types cannot be deserialized polymorphically via Box<dyn Any> because
-/// different generic instantiations (e.g., Vec<A>, Vec<B>) share the same type ID.
+/// These types cannot be deserialized polymorphically via `Box<dyn Any>` because
+/// different generic instantiations (e.g., `Vec<A>`, `Vec<B>`) share the same type ID.
 #[inline]
 fn check_generic_container_type(type_info: &TypeInfo) -> Result<(), Error> {
     let type_id = type_info.get_type_id();

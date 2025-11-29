@@ -158,44 +158,48 @@ inline constexpr bool is_primitive_type_id(TypeId type_id) {
          type_id == TypeId::FLOAT64;
 }
 
-/// Write a primitive value directly to buffer without bounds checking.
-/// Caller must ensure buffer has sufficient capacity.
+/// Write a primitive value to buffer at given offset WITHOUT updating
+/// writer_index. Returns the number of bytes written. Caller must ensure buffer
+/// has sufficient capacity.
 template <typename T>
-FORY_ALWAYS_INLINE void write_primitive_unsafe(T value, Buffer &buffer) {
+FORY_ALWAYS_INLINE uint32_t put_primitive_at(T value, Buffer &buffer,
+                                             uint32_t offset) {
   if constexpr (std::is_same_v<T, int32_t>) {
-    buffer.WriteVarInt32Unsafe(value);
+    // varint32 with zigzag encoding
+    uint32_t zigzag = (static_cast<uint32_t>(value) << 1) ^
+                      static_cast<uint32_t>(value >> 31);
+    return buffer.PutVarUint32(offset, zigzag);
   } else if constexpr (std::is_same_v<T, uint32_t>) {
-    // Unsigned 32-bit integers are written as fixed 4 bytes
-    buffer.UnsafePut<uint32_t>(buffer.writer_index(), value);
-    buffer.IncreaseWriterIndex(4);
+    buffer.UnsafePut<uint32_t>(offset, value);
+    return 4;
   } else if constexpr (std::is_same_v<T, int64_t>) {
-    // Use buffer's varint64 method - it handles zigzag encoding internally
-    buffer.WriteVarInt64(value);
+    // varint64 with zigzag encoding
+    uint64_t zigzag = (static_cast<uint64_t>(value) << 1) ^
+                      static_cast<uint64_t>(value >> 63);
+    return buffer.PutVarUint64(offset, zigzag);
   } else if constexpr (std::is_same_v<T, uint64_t>) {
-    // Unsigned 64-bit integers are written as fixed 8 bytes
-    buffer.UnsafePut<uint64_t>(buffer.writer_index(), value);
-    buffer.IncreaseWriterIndex(8);
+    buffer.UnsafePut<uint64_t>(offset, value);
+    return 8;
   } else if constexpr (std::is_same_v<T, bool>) {
-    buffer.UnsafePutByte(buffer.writer_index(),
-                         static_cast<uint8_t>(value ? 1 : 0));
-    buffer.IncreaseWriterIndex(1);
+    buffer.UnsafePutByte(offset, static_cast<uint8_t>(value ? 1 : 0));
+    return 1;
   } else if constexpr (std::is_same_v<T, int8_t> ||
                        std::is_same_v<T, uint8_t>) {
-    buffer.UnsafePutByte(buffer.writer_index(), static_cast<uint8_t>(value));
-    buffer.IncreaseWriterIndex(1);
+    buffer.UnsafePutByte(offset, static_cast<uint8_t>(value));
+    return 1;
   } else if constexpr (std::is_same_v<T, int16_t> ||
                        std::is_same_v<T, uint16_t>) {
-    buffer.UnsafePut<T>(buffer.writer_index(), value);
-    buffer.IncreaseWriterIndex(2);
+    buffer.UnsafePut<T>(offset, value);
+    return 2;
   } else if constexpr (std::is_same_v<T, float>) {
-    buffer.UnsafePut<float>(buffer.writer_index(), value);
-    buffer.IncreaseWriterIndex(4);
+    buffer.UnsafePut<float>(offset, value);
+    return 4;
   } else if constexpr (std::is_same_v<T, double>) {
-    buffer.UnsafePut<double>(buffer.writer_index(), value);
-    buffer.IncreaseWriterIndex(8);
+    buffer.UnsafePut<double>(offset, value);
+    return 8;
   } else {
-    // Fallback for other types - should not be used
     static_assert(sizeof(T) == 0, "Unsupported primitive type");
+    return 0;
   }
 }
 
@@ -619,7 +623,8 @@ template <typename T> struct CompileTimeFieldHelpers {
 };
 
 /// Fast path writer for primitive-only, non-nullable structs.
-/// Writes all fields directly without Result wrapping or bounds checking.
+/// Writes all fields directly without Result wrapping.
+/// Optimized: tracks offset locally and updates writer_index once at the end.
 template <typename T, size_t... Indices>
 FORY_ALWAYS_INLINE void
 write_primitive_fields_fast(const T &obj, Buffer &buffer,
@@ -627,6 +632,9 @@ write_primitive_fields_fast(const T &obj, Buffer &buffer,
   using Helpers = CompileTimeFieldHelpers<T>;
   const auto field_info = ForyFieldInfo(obj);
   const auto field_ptrs = decltype(field_info)::Ptrs;
+
+  // Track offset locally - single writer_index update at the end
+  uint32_t offset = buffer.writer_index();
 
   // Write each field directly in sorted order using fold expression
   (
@@ -636,9 +644,12 @@ write_primitive_fields_fast(const T &obj, Buffer &buffer,
         using FieldType =
             typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
         const auto &field_value = obj.*field_ptr;
-        write_primitive_unsafe<FieldType>(field_value, buffer);
+        offset += put_primitive_at<FieldType>(field_value, buffer, offset);
       }(),
       ...);
+
+  // Single writer_index update for all fields
+  buffer.WriterIndex(offset);
 }
 
 template <typename T, size_t Index, typename FieldPtrs>

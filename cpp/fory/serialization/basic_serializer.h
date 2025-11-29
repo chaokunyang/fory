@@ -40,7 +40,6 @@ namespace serialization {
 /// Boolean serializer
 template <> struct Serializer<bool> {
   static constexpr TypeId type_id = TypeId::BOOL;
-  static constexpr size_t max_serialized_size = 1;
 
   /// Write type info only (for collection/map element type headers)
   static inline Result<void, Error> write_type_info(WriteContext &ctx) {
@@ -269,8 +268,6 @@ template <> struct Serializer<int16_t> {
 /// int32_t serializer
 template <> struct Serializer<int32_t> {
   static constexpr TypeId type_id = TypeId::INT32;
-  /// Maximum bytes needed for serializing a single int32 value (varint)
-  static constexpr size_t max_serialized_size = 5;
 
   static inline Result<void, Error> write_type_info(WriteContext &ctx) {
     ctx.write_varuint32(static_cast<uint32_t>(type_id));
@@ -300,12 +297,6 @@ template <> struct Serializer<int32_t> {
                                                WriteContext &ctx) {
     ctx.write_varint32(value);
     return Result<void, Error>();
-  }
-
-  /// Write data WITHOUT bounds checking. Caller must pre-reserve buffer space.
-  static FORY_ALWAYS_INLINE void write_data_unsafe(int32_t value,
-                                                   WriteContext &ctx) {
-    ctx.buffer().WriteVarInt32Unsafe(value);
   }
 
   static inline Result<void, Error>

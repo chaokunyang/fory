@@ -496,27 +496,12 @@ public:
     IncreaseWriterIndex(len);
   }
 
-  /// Write uint32_t value as varint WITHOUT bounds checking.
-  /// Caller must ensure buffer has enough capacity via Reserve() or Grow().
-  FORY_ALWAYS_INLINE void WriteVarUint32Unsafe(uint32_t value) {
-    uint32_t len = PutVarUint32(writer_index_, value);
-    writer_index_ += len;
-  }
-
   /// Write int32_t value as varint (zigzag encoded) to buffer at current
   /// writer index. Automatically grows buffer and advances writer index.
   FORY_ALWAYS_INLINE void WriteVarInt32(int32_t value) {
     uint32_t zigzag = (static_cast<uint32_t>(value) << 1) ^
                       static_cast<uint32_t>(value >> 31);
     WriteVarUint32(zigzag);
-  }
-
-  /// Write int32_t value as varint (zigzag encoded) WITHOUT bounds checking.
-  /// Caller must ensure buffer has enough capacity.
-  FORY_ALWAYS_INLINE void WriteVarInt32Unsafe(int32_t value) {
-    uint32_t zigzag = (static_cast<uint32_t>(value) << 1) ^
-                      static_cast<uint32_t>(value >> 31);
-    WriteVarUint32Unsafe(zigzag);
   }
 
   /// Write uint64_t value as varint to buffer at current writer index.

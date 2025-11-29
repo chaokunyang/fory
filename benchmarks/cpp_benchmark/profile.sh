@@ -163,7 +163,7 @@ elif command -v perf &> /dev/null; then
     echo -e "Running: perf record -g --call-graph dwarf -o $PERF_DATA $BENCH_CMD"
     perf record -g --call-graph dwarf -o "$PERF_DATA" $BENCH_CMD
 
-    echo -e "${GREEN}Profile saved to: ${PERF_DATA}${NC}"
+    echo -e "${GREEN}Profile saved to: $(realpath ${PERF_DATA})${NC}"
 
     # Generate flamegraph SVG
     echo -e "${YELLOW}Generating flamegraph SVG...${NC}"
@@ -172,7 +172,7 @@ elif command -v perf &> /dev/null; then
     else
         perf script -i "$PERF_DATA" | "$FLAMEGRAPH_DIR/stackcollapse-perf.pl" | "$FLAMEGRAPH_DIR/flamegraph.pl" > "$FLAMEGRAPH_SVG"
     fi
-    echo -e "${GREEN}Flamegraph saved to: ${FLAMEGRAPH_SVG}${NC}"
+    echo -e "${GREEN}Flamegraph saved to: $(realpath ${FLAMEGRAPH_SVG})${NC}"
 
 else
     echo -e "${RED}No profiling tool found. Please install one of:${NC}"

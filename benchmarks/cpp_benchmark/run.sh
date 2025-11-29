@@ -31,6 +31,7 @@ NC='\033[0m' # No Color
 JOBS=16
 DATA=""
 SERIALIZER=""
+DEBUG_BUILD=false
 
 # Parse arguments
 usage() {
@@ -41,6 +42,7 @@ usage() {
     echo "Options:"
     echo "  --data <struct|sample>       Filter benchmark by data type"
     echo "  --serializer <fory|protobuf> Filter benchmark by serializer"
+    echo "  --debug                      Build with debug symbols and low optimization for profiling"
     echo "  --help                       Show this help message"
     echo ""
     echo "Examples:"
@@ -48,6 +50,7 @@ usage() {
     echo "  $0 --data struct            # Run only Struct benchmarks"
     echo "  $0 --serializer fory        # Run only Fory benchmarks"
     echo "  $0 --data struct --serializer fory"
+    echo "  $0 --debug                  # Build for profiling (visible function names in flamegraph)"
     echo ""
     echo "For profiling/flamegraph, use: ./profile.sh"
     exit 0
@@ -62,6 +65,10 @@ while [[ $# -gt 0 ]]; do
         --serializer)
             SERIALIZER="$2"
             shift 2
+            ;;
+        --debug)
+            DEBUG_BUILD=true
+            shift
             ;;
         --help|-h)
             usage
@@ -95,7 +102,13 @@ echo ""
 echo -e "${YELLOW}[1/3] Building benchmark...${NC}"
 mkdir -p build
 cd build
-cmake -DCMAKE_BUILD_TYPE=Release ..
+if [[ "$DEBUG_BUILD" == true ]]; then
+    echo -e "${YELLOW}Building with debug symbols for profiling...${NC}"
+    cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+          -DCMAKE_CXX_FLAGS="-O1 -g -fno-inline -fno-omit-frame-pointer" ..
+else
+    cmake -DCMAKE_BUILD_TYPE=Release ..
+fi
 cmake --build . -j"$JOBS"
 echo -e "${GREEN}Build complete!${NC}"
 echo ""

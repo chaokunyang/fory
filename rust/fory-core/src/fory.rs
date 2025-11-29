@@ -551,30 +551,27 @@ impl Fory {
         &self,
         f: impl FnOnce(&mut WriteContext) -> R,
     ) -> Result<R, Error> {
-        let type_resolver = self.get_final_type_resolver()?;
-        let id = self.id;
-        let compatible = self.compatible;
-        let share_meta = self.share_meta;
-        let compress_string = self.compress_string;
-        let xlang = self.xlang;
-        let check_struct_version = self.check_struct_version;
-
-        Ok(WRITE_CONTEXTS.with(|contexts| {
+        WRITE_CONTEXTS.with(|contexts| {
             let mut map = contexts.borrow_mut();
-            let context = map.entry(id).or_insert_with(|| {
+            if !map.contains_key(&self.id) {
+                // Only access self fields and clone type_resolver when creating new context
+                let type_resolver = self.get_final_type_resolver()?;
                 // TypeResolver::clone() performs deep copy, creating independent Rc instances
                 // This is safe for concurrent cloning from multiple threads
-                Box::new(WriteContext::new(
-                    type_resolver.clone(),
-                    compatible,
-                    share_meta,
-                    compress_string,
-                    xlang,
-                    check_struct_version,
-                ))
-            });
-            f(context)
-        }))
+                map.insert(
+                    self.id,
+                    Box::new(WriteContext::new(
+                        type_resolver.clone(),
+                        self.compatible,
+                        self.share_meta,
+                        self.compress_string,
+                        self.xlang,
+                        self.check_struct_version,
+                    )),
+                );
+            }
+            Ok(f(map.get_mut(&self.id).unwrap()))
+        })
     }
 
     /// Serializes a value of type `T` into a byte vector.
@@ -937,28 +934,27 @@ impl Fory {
         &self,
         f: impl FnOnce(&mut ReadContext) -> R,
     ) -> Result<R, Error> {
-        let type_resolver = self.get_final_type_resolver()?;
-        let id = self.id;
-        let compatible = self.compatible;
-        let share_meta = self.share_meta;
-        let xlang = self.xlang;
-        let max_dyn_depth = self.max_dyn_depth;
-        let check_struct_version = self.check_struct_version;
-
-        Ok(READ_CONTEXTS.with(|contexts| {
+        READ_CONTEXTS.with(|contexts| {
             let mut map = contexts.borrow_mut();
-            let context = map.entry(id).or_insert_with(|| {
-                Box::new(ReadContext::new(
-                    type_resolver.clone(),
-                    compatible,
-                    share_meta,
-                    xlang,
-                    max_dyn_depth,
-                    check_struct_version,
-                ))
-            });
-            f(context)
-        }))
+            if !map.contains_key(&self.id) {
+                // Only access self fields and clone type_resolver when creating new context
+                let type_resolver = self.get_final_type_resolver()?;
+                // TypeResolver::clone() performs deep copy, creating independent Rc instances
+                // This is safe for concurrent cloning from multiple threads
+                map.insert(
+                    self.id,
+                    Box::new(ReadContext::new(
+                        type_resolver.clone(),
+                        self.compatible,
+                        self.share_meta,
+                        self.xlang,
+                        self.max_dyn_depth,
+                        self.check_struct_version,
+                    )),
+                );
+            }
+            Ok(f(map.get_mut(&self.id).unwrap()))
+        })
     }
 
     #[inline(always)]

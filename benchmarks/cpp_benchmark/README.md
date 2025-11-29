@@ -168,8 +168,14 @@ The script automatically detects and uses available tools (in order of preferenc
 1. **samply** (recommended): `cargo install samply`
 2. **perf** (Linux)
 
-For flamegraph SVG generation with `perf`, install FlameGraph tools:
+### Flamegraph Output
 
-```bash
-git clone https://github.com/brendangregg/FlameGraph.git ~/FlameGraph
-```
+When using `perf` on Linux, the script automatically generates flamegraph SVG files.
+FlameGraph tools are auto-installed to `~/FlameGraph` if not found.
+
+Output files are saved to `profile_output/`:
+
+- `perf_<timestamp>.data` - Raw perf data
+- `flamegraph_<timestamp>.svg` - Interactive flamegraph visualization
+
+Open the SVG file in a browser to explore the flamegraph interactively.

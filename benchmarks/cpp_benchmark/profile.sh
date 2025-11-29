@@ -114,6 +114,22 @@ if [[ ! -f "build/fory_benchmark" ]]; then
     exit 1
 fi
 
+# Find FlameGraph tools
+FLAMEGRAPH_DIR=""
+if [[ -d "$HOME/FlameGraph" ]]; then
+    FLAMEGRAPH_DIR="$HOME/FlameGraph"
+elif [[ -d "/usr/share/FlameGraph" ]]; then
+    FLAMEGRAPH_DIR="/usr/share/FlameGraph"
+elif command -v flamegraph.pl &> /dev/null; then
+    FLAMEGRAPH_DIR="PATH"
+else
+    # Auto-install FlameGraph tools
+    echo -e "${YELLOW}FlameGraph tools not found. Installing to ~/FlameGraph...${NC}"
+    git clone --depth 1 https://github.com/brendangregg/FlameGraph.git "$HOME/FlameGraph"
+    FLAMEGRAPH_DIR="$HOME/FlameGraph"
+    echo -e "${GREEN}FlameGraph installed successfully.${NC}"
+fi
+
 # Create output directory
 mkdir -p "$OUTPUT_DIR"
 cd build
@@ -149,20 +165,14 @@ elif command -v perf &> /dev/null; then
 
     echo -e "${GREEN}Profile saved to: ${PERF_DATA}${NC}"
 
-    # Try to generate flamegraph SVG
-    if [[ -d "$HOME/FlameGraph" ]]; then
-        echo -e "${YELLOW}Generating flamegraph SVG...${NC}"
-        perf script -i "$PERF_DATA" | "$HOME/FlameGraph/stackcollapse-perf.pl" | "$HOME/FlameGraph/flamegraph.pl" > "$FLAMEGRAPH_SVG"
-        echo -e "${GREEN}Flamegraph saved to: ${FLAMEGRAPH_SVG}${NC}"
-    elif command -v stackcollapse-perf.pl &> /dev/null && command -v flamegraph.pl &> /dev/null; then
-        echo -e "${YELLOW}Generating flamegraph SVG...${NC}"
+    # Generate flamegraph SVG
+    echo -e "${YELLOW}Generating flamegraph SVG...${NC}"
+    if [[ "$FLAMEGRAPH_DIR" == "PATH" ]]; then
         perf script -i "$PERF_DATA" | stackcollapse-perf.pl | flamegraph.pl > "$FLAMEGRAPH_SVG"
-        echo -e "${GREEN}Flamegraph saved to: ${FLAMEGRAPH_SVG}${NC}"
     else
-        echo -e "${YELLOW}To generate flamegraph SVG:${NC}"
-        echo "  git clone https://github.com/brendangregg/FlameGraph.git ~/FlameGraph"
-        echo "  perf script -i $PERF_DATA | ~/FlameGraph/stackcollapse-perf.pl | ~/FlameGraph/flamegraph.pl > flamegraph.svg"
+        perf script -i "$PERF_DATA" | "$FLAMEGRAPH_DIR/stackcollapse-perf.pl" | "$FLAMEGRAPH_DIR/flamegraph.pl" > "$FLAMEGRAPH_SVG"
     fi
+    echo -e "${GREEN}Flamegraph saved to: ${FLAMEGRAPH_SVG}${NC}"
 
 else
     echo -e "${RED}No profiling tool found. Please install one of:${NC}"

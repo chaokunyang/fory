@@ -107,6 +107,17 @@ public:
     reinterpret_cast<T *>(data_ + offset)[0] = value;
   }
 
+  template <typename T> FORY_ALWAYS_INLINE T UnsafeGet(uint32_t offset) {
+    return reinterpret_cast<const T *>(data_ + offset)[0];
+  }
+
+  template <typename T, typename = std::enable_if_t<std::disjunction_v<
+                            std::is_same<T, int8_t>, std::is_same<T, uint8_t>,
+                            std::is_same<T, bool>>>>
+  FORY_ALWAYS_INLINE T UnsafeGetByteAs(uint32_t offset) {
+    return data_[offset];
+  }
+
   template <typename T, typename = std::enable_if_t<std::disjunction_v<
                             std::is_same<T, int8_t>, std::is_same<T, uint8_t>,
                             std::is_same<T, bool>>>>
@@ -568,6 +579,10 @@ public:
     UnsafePut(writer_index_, data, length);
     IncreaseWriterIndex(length);
   }
+
+  // ===========================================================================
+  // Safe read methods with bounds checking
+  // ===========================================================================
 
   /// Read uint8_t value from buffer at current reader index.
   /// Advances reader index and checks bounds.

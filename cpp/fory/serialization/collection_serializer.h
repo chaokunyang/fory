@@ -559,9 +559,20 @@ template <typename Alloc> struct Serializer<std::vector<bool, Alloc>> {
   read_data(ReadContext &ctx) {
     FORY_TRY(size, ctx.read_varuint32());
     std::vector<bool, Alloc> result(size);
-    for (uint32_t i = 0; i < size; ++i) {
-      FORY_TRY(byte, ctx.read_uint8());
-      result[i] = (byte != 0);
+    // Fast path: bulk read all bytes at once if we have enough buffer
+    Buffer &buffer = ctx.buffer();
+    if (size > 0 && buffer.reader_index() + size <= buffer.size()) {
+      const uint8_t *src = buffer.data() + buffer.reader_index();
+      for (uint32_t i = 0; i < size; ++i) {
+        result[i] = (src[i] != 0);
+      }
+      buffer.IncreaseReaderIndex(size);
+    } else {
+      // Fallback: read byte-by-byte with bounds checking
+      for (uint32_t i = 0; i < size; ++i) {
+        FORY_TRY(byte, ctx.read_uint8());
+        result[i] = (byte != 0);
+      }
     }
     return result;
   }

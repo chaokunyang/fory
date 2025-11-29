@@ -16,6 +16,7 @@
 // under the License.
 
 use crate::buffer::{Reader, Writer};
+use crate::config::Config;
 use std::collections::HashMap;
 use std::mem;
 
@@ -130,21 +131,14 @@ pub struct WriteContext<'a> {
 
 #[allow(clippy::needless_lifetimes)]
 impl<'a> WriteContext<'a> {
-    pub fn new(
-        type_resolver: TypeResolver,
-        compatible: bool,
-        share_meta: bool,
-        compress_string: bool,
-        xlang: bool,
-        check_struct_version: bool,
-    ) -> WriteContext<'a> {
+    pub fn new(type_resolver: TypeResolver, config: Config) -> WriteContext<'a> {
         WriteContext {
             type_resolver,
-            compatible,
-            share_meta,
-            compress_string,
-            xlang,
-            check_struct_version,
+            compatible: config.compatible,
+            share_meta: config.share_meta,
+            compress_string: config.compress_string,
+            xlang: config.xlang,
+            check_struct_version: config.check_struct_version,
             default_writer: None,
             writer: Writer::from_buffer(Self::get_leak_buffer()),
             meta_resolver: MetaWriterResolver::default(),
@@ -334,21 +328,14 @@ unsafe impl<'a> Send for ReadContext<'a> {}
 unsafe impl<'a> Sync for ReadContext<'a> {}
 
 impl<'a> ReadContext<'a> {
-    pub fn new(
-        type_resolver: TypeResolver,
-        compatible: bool,
-        share_meta: bool,
-        xlang: bool,
-        max_dyn_depth: u32,
-        check_struct_version: bool,
-    ) -> ReadContext<'a> {
+    pub fn new(type_resolver: TypeResolver, config: Config) -> ReadContext<'a> {
         ReadContext {
             type_resolver,
-            compatible,
-            share_meta,
-            xlang,
-            max_dyn_depth,
-            check_struct_version,
+            compatible: config.compatible,
+            share_meta: config.share_meta,
+            xlang: config.xlang,
+            max_dyn_depth: config.max_dyn_depth,
+            check_struct_version: config.check_struct_version,
             reader: Reader::default(),
             meta_resolver: MetaReaderResolver::default(),
             meta_string_resolver: MetaStringReaderResolver::default(),
@@ -391,12 +378,6 @@ impl<'a> ReadContext<'a> {
     #[inline(always)]
     pub fn max_dyn_depth(&self) -> u32 {
         self.max_dyn_depth
-    }
-
-    #[inline(always)]
-    pub fn init(&mut self, max_dyn_depth: u32) {
-        self.max_dyn_depth = max_dyn_depth;
-        self.current_depth = 0;
     }
 
     #[inline(always)]
@@ -495,5 +476,6 @@ impl<'a> ReadContext<'a> {
         self.meta_resolver.reset();
         self.meta_string_resolver.reset();
         self.ref_reader.reset();
+        self.current_depth = 0;
     }
 }

@@ -230,42 +230,6 @@ static void BM_Fory_Struct_Serialize(benchmark::State &state) {
   RegisterForyTypes(fory);
   NumericStruct obj = CreateNumericStruct();
 
-  for (auto _ : state) {
-    auto result = fory.serialize(obj);
-    benchmark::DoNotOptimize(result);
-  }
-}
-BENCHMARK(BM_Fory_Struct_Serialize);
-
-// Fory with reused buffer (fair comparison with protobuf which reuses string)
-static void BM_Fory_Struct_Serialize_ReuseBuffer(benchmark::State &state) {
-  auto fory = fory::serialization::Fory::builder()
-                  .xlang(true)
-                  .track_ref(false)
-                  .check_struct_version(false)
-                  .build();
-  RegisterForyTypes(fory);
-  NumericStruct obj = CreateNumericStruct();
-  std::vector<uint8_t> output;
-  output.reserve(64); // Pre-allocate to avoid reallocation
-
-  for (auto _ : state) {
-    fory.serialize_to(obj, output);
-    benchmark::DoNotOptimize(output);
-  }
-}
-BENCHMARK(BM_Fory_Struct_Serialize_ReuseBuffer);
-
-// Fory serialize to reusable buffer (fastest path)
-static void BM_Fory_Struct_Serialize_ToBuffer(benchmark::State &state) {
-  auto fory = fory::serialization::Fory::builder()
-                  .xlang(true)
-                  .track_ref(false)
-                  .check_struct_version(false)
-                  .build();
-  RegisterForyTypes(fory);
-  NumericStruct obj = CreateNumericStruct();
-
   // Reuse internal buffer
   fory::Buffer buffer;
   buffer.Reserve(64);
@@ -276,17 +240,19 @@ static void BM_Fory_Struct_Serialize_ToBuffer(benchmark::State &state) {
     benchmark::DoNotOptimize(buffer.data());
   }
 }
-BENCHMARK(BM_Fory_Struct_Serialize_ToBuffer);
+BENCHMARK(BM_Fory_Struct_Serialize);
 
 // Fair comparison: convert plain C++ struct to protobuf, then serialize
 // (Same pattern as Java benchmark's buildPBStruct().toByteArray())
 static void BM_Protobuf_Struct_Serialize(benchmark::State &state) {
   NumericStruct obj = CreateNumericStruct();
-  std::string output;
+  protobuf::Struct pb = ToPbStruct(obj);
+  std::vector<uint8_t> output;
+  output.resize(pb.ByteSizeLong());
 
   for (auto _ : state) {
-    output.clear();
-    ToPbStruct(obj).SerializeToString(&output);
+    pb = ToPbStruct(obj);
+    pb.SerializeToArray(output.data(), static_cast<int>(output.size()));
     benchmark::DoNotOptimize(output);
   }
 }
@@ -359,11 +325,11 @@ BENCHMARK(BM_Fory_Sample_Serialize);
 
 static void BM_Protobuf_Sample_Serialize(benchmark::State &state) {
   protobuf::Sample obj = CreateProtoSample();
-  std::string output;
+  std::vector<uint8_t> output;
+  output.resize(obj.ByteSizeLong());
 
   for (auto _ : state) {
-    output.clear();
-    obj.SerializeToString(&output);
+    obj.SerializeToArray(output.data(), static_cast<int>(output.size()));
     benchmark::DoNotOptimize(output);
   }
 }

@@ -18,7 +18,7 @@
 use crate::buffer::{Reader, Writer};
 use crate::ensure;
 use crate::error::Error;
-use crate::resolver::context::{ReadContext, WriteContext};
+use crate::resolver::context::{ContextCache, ReadContext, WriteContext};
 use crate::resolver::type_resolver::TypeResolver;
 use crate::serializer::ForyDefault;
 use crate::serializer::{Serializer, StructSerializer};
@@ -28,56 +28,12 @@ use crate::types::{
     Language, MAGIC_NUMBER, SIZE_OF_REF_AND_TYPE,
 };
 use std::cell::UnsafeCell;
-use std::collections::HashMap;
 use std::mem;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
 
 /// Global counter to assign unique IDs to each Fory instance.
 static FORY_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
-
-/// Thread-local context cache with fast path for single Fory instance.
-/// Uses (cached_id, context) for O(1) access when using same Fory instance repeatedly.
-/// Falls back to HashMap for multiple Fory instances per thread.
-struct ContextCache<T> {
-    /// Fast path: cached context for the most recently used Fory instance
-    cached_id: u64,
-    cached_context: Option<Box<T>>,
-    /// Slow path: HashMap for other Fory instances
-    others: HashMap<u64, Box<T>>,
-}
-
-impl<T> ContextCache<T> {
-    fn new() -> Self {
-        ContextCache {
-            cached_id: u64::MAX,
-            cached_context: None,
-            others: HashMap::new(),
-        }
-    }
-
-    #[inline(always)]
-    fn get_or_insert(&mut self, id: u64, create: impl FnOnce() -> Box<T>) -> &mut T {
-        if self.cached_id == id {
-            // Fast path: same Fory instance as last time
-            return self.cached_context.as_mut().unwrap();
-        }
-
-        // Check if we need to swap with cached
-        if self.cached_context.is_some() {
-            // Move current cached to others
-            let old_id = self.cached_id;
-            let old_context = self.cached_context.take().unwrap();
-            self.others.insert(old_id, old_context);
-        }
-
-        // Get or create context for new id
-        let context = self.others.remove(&id).unwrap_or_else(create);
-        self.cached_id = id;
-        self.cached_context = Some(context);
-        self.cached_context.as_mut().unwrap()
-    }
-}
 
 thread_local! {
     /// Thread-local storage for WriteContext instances with fast path caching.

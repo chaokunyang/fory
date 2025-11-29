@@ -16,6 +16,7 @@
 // under the License.
 
 use crate::buffer::{Reader, Writer};
+use std::collections::HashMap;
 use std::mem;
 
 use crate::error::Error;
@@ -26,6 +27,55 @@ use crate::resolver::ref_resolver::{RefReader, RefWriter};
 use crate::resolver::type_resolver::{TypeInfo, TypeResolver};
 use crate::types;
 use std::rc::Rc;
+
+/// Thread-local context cache with fast path for single Fory instance.
+/// Uses (cached_id, context) for O(1) access when using same Fory instance repeatedly.
+/// Falls back to HashMap for multiple Fory instances per thread.
+pub struct ContextCache<T> {
+    /// Fast path: cached context for the most recently used Fory instance
+    cached_id: u64,
+    cached_context: Option<Box<T>>,
+    /// Slow path: HashMap for other Fory instances
+    others: HashMap<u64, Box<T>>,
+}
+
+impl<T> ContextCache<T> {
+    pub fn new() -> Self {
+        ContextCache {
+            cached_id: u64::MAX,
+            cached_context: None,
+            others: HashMap::new(),
+        }
+    }
+
+    #[inline(always)]
+    pub fn get_or_insert(&mut self, id: u64, create: impl FnOnce() -> Box<T>) -> &mut T {
+        if self.cached_id == id {
+            // Fast path: same Fory instance as last time
+            return self.cached_context.as_mut().unwrap();
+        }
+
+        // Check if we need to swap with cached
+        if self.cached_context.is_some() {
+            // Move current cached to others
+            let old_id = self.cached_id;
+            let old_context = self.cached_context.take().unwrap();
+            self.others.insert(old_id, old_context);
+        }
+
+        // Get or create context for new id
+        let context = self.others.remove(&id).unwrap_or_else(create);
+        self.cached_id = id;
+        self.cached_context = Some(context);
+        self.cached_context.as_mut().unwrap()
+    }
+}
+
+impl<T> Default for ContextCache<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 /// Serialization state container used on a single thread at a time.
 /// Sharing the same instance across threads simultaneously causes undefined behavior.

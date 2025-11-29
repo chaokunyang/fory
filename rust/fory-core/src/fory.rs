@@ -571,6 +571,17 @@ impl Fory {
         record: &T,
         context: &mut WriteContext,
     ) -> Result<(), Error> {
+        let result = self.serialize_with_context_inner::<T>(record, context);
+        context.reset();
+        result
+    }
+
+    #[inline(always)]
+    fn serialize_with_context_inner<T: Serializer>(
+        &self,
+        record: &T,
+        context: &mut WriteContext,
+    ) -> Result<(), Error> {
         let is_none = record.fory_is_none();
         self.write_head::<T>(is_none, &mut context.writer);
         let meta_start_offset = context.writer.len();
@@ -583,7 +594,6 @@ impl Fory {
                 context.write_meta(meta_start_offset);
             }
         }
-        context.reset();
         Ok(())
     }
 
@@ -945,6 +955,16 @@ impl Fory {
         &self,
         context: &mut ReadContext,
     ) -> Result<T, Error> {
+        let result = self.deserialize_with_context_inner::<T>(context);
+        context.reset();
+        result
+    }
+
+    #[inline(always)]
+    fn deserialize_with_context_inner<T: Serializer + ForyDefault>(
+        &self,
+        context: &mut ReadContext,
+    ) -> Result<T, Error> {
         let is_none = self.read_head(&mut context.reader)?;
         if is_none {
             return Ok(T::fory_default());
@@ -961,7 +981,6 @@ impl Fory {
             context.reader.skip(bytes_to_skip)?;
         }
         context.ref_reader.resolve_callbacks();
-        context.reset();
         result
     }
 

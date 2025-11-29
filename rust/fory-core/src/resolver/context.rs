@@ -69,6 +69,37 @@ impl<T> ContextCache<T> {
         self.cached_context = Some(context);
         self.cached_context.as_mut().unwrap()
     }
+
+    /// Like `get_or_insert`, but the create closure returns a Result.
+    /// This allows error handling during context creation without pre-fetching resources.
+    #[inline(always)]
+    pub fn get_or_insert_result<E>(
+        &mut self,
+        id: u64,
+        create: impl FnOnce() -> Result<Box<T>, E>,
+    ) -> Result<&mut T, E> {
+        if self.cached_id == id {
+            // Fast path: same Fory instance as last time
+            return Ok(self.cached_context.as_mut().unwrap());
+        }
+
+        // Check if we need to swap with cached
+        if self.cached_context.is_some() {
+            // Move current cached to others
+            let old_id = self.cached_id;
+            let old_context = self.cached_context.take().unwrap();
+            self.others.insert(old_id, old_context);
+        }
+
+        // Get or create context for new id
+        let context = match self.others.remove(&id) {
+            Some(ctx) => ctx,
+            None => create()?,
+        };
+        self.cached_id = id;
+        self.cached_context = Some(context);
+        Ok(self.cached_context.as_mut().unwrap())
+    }
 }
 
 impl<T> Default for ContextCache<T> {

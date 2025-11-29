@@ -1083,14 +1083,14 @@ impl TypeResolver {
             .collect();
 
         // Deep clone the MetaString keys as well
-        let type_info_map_by_meta_string_name: HashMap<(Rc<MetaString>, Rc<MetaString>), Rc<TypeInfo>> = self
+        let type_info_map_by_meta_string_name: HashMap<
+            (Rc<MetaString>, Rc<MetaString>),
+            Rc<TypeInfo>,
+        > = self
             .type_info_map_by_meta_string_name
             .iter()
             .map(|(k, v)| {
-                let new_key = (
-                    Rc::new((*k.0).clone()),
-                    Rc::new((*k.1).clone()),
-                );
+                let new_key = (Rc::new((*k.0).clone()), Rc::new((*k.1).clone()));
                 (new_key, get_or_clone_type_info(v))
             })
             .collect();

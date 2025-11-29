@@ -390,7 +390,7 @@ impl Fory {
                     Err(err)
                 }
             },
-        )?
+        )
     }
 
     /// Serializes a value of type `T` into the provided byte buffer.
@@ -528,15 +528,15 @@ impl Fory {
                 Ok(_) => Ok(written_size),
                 Err(err) => Err(err),
             }
-        })?
+        })
     }
 
     /// Gets the final type resolver, building it lazily on first access.
     #[inline(always)]
     fn get_final_type_resolver(&self) -> Result<&TypeResolver, Error> {
-        let result = self.final_type_resolver.get_or_init(|| {
-            self.type_resolver.build_final_type_resolver()
-        });
+        let result = self
+            .final_type_resolver
+            .get_or_init(|| self.type_resolver.build_final_type_resolver());
         result
             .as_ref()
             .map_err(|e| Error::type_error(format!("Failed to build type resolver: {}", e)))
@@ -548,15 +548,12 @@ impl Fory {
     #[inline(always)]
     fn with_write_context<R>(
         &self,
-        f: impl FnOnce(&mut WriteContext) -> R,
+        f: impl FnOnce(&mut WriteContext) -> Result<R, Error>,
     ) -> Result<R, Error> {
-        // Pre-fetch type resolver outside the closure to handle errors
-        let type_resolver = self.get_final_type_resolver()?;
-
         // SAFETY: Thread-local storage is only accessed from the current thread.
         // We use UnsafeCell to avoid RefCell's runtime borrow checking overhead.
         // The closure `f` does not recursively call with_write_context, so there's no aliasing.
-        let result = WRITE_CONTEXTS.with(|cache| {
+        WRITE_CONTEXTS.with(|cache| {
             let cache = unsafe { &mut *cache.get() };
             let id = self.id;
             let compatible = self.compatible;
@@ -565,19 +562,20 @@ impl Fory {
             let xlang = self.xlang;
             let check_struct_version = self.check_struct_version;
 
-            let context = cache.get_or_insert(id, || {
-                Box::new(WriteContext::new(
+            let context = cache.get_or_insert_result(id, || {
+                // Only fetch type resolver when creating a new context
+                let type_resolver = self.get_final_type_resolver()?;
+                Ok(Box::new(WriteContext::new(
                     type_resolver.clone(),
                     compatible,
                     share_meta,
                     compress_string,
                     xlang,
                     check_struct_version,
-                ))
-            });
+                )))
+            })?;
             f(context)
-        });
-        Ok(result)
+        })
     }
 
     /// Serializes a value of type `T` into a byte vector.
@@ -866,7 +864,7 @@ impl Fory {
             let result = self.deserialize_with_context(context);
             context.detach_reader();
             result
-        })?
+        })
     }
 
     /// Deserializes data from a `Reader` into a value of type `T`.
@@ -930,7 +928,7 @@ impl Fory {
             let end = context.detach_reader().get_cursor();
             reader.set_cursor(end);
             result
-        })?
+        })
     }
 
     /// Executes a closure with mutable access to a ReadContext for this Fory instance.
@@ -939,15 +937,12 @@ impl Fory {
     #[inline(always)]
     fn with_read_context<R>(
         &self,
-        f: impl FnOnce(&mut ReadContext) -> R,
+        f: impl FnOnce(&mut ReadContext) -> Result<R, Error>,
     ) -> Result<R, Error> {
-        // Pre-fetch type resolver outside the closure to handle errors
-        let type_resolver = self.get_final_type_resolver()?;
-
         // SAFETY: Thread-local storage is only accessed from the current thread.
         // We use UnsafeCell to avoid RefCell's runtime borrow checking overhead.
         // The closure `f` does not recursively call with_read_context, so there's no aliasing.
-        let result = READ_CONTEXTS.with(|cache| {
+        READ_CONTEXTS.with(|cache| {
             let cache = unsafe { &mut *cache.get() };
             let id = self.id;
             let compatible = self.compatible;
@@ -956,19 +951,20 @@ impl Fory {
             let max_dyn_depth = self.max_dyn_depth;
             let check_struct_version = self.check_struct_version;
 
-            let context = cache.get_or_insert(id, || {
-                Box::new(ReadContext::new(
+            let context = cache.get_or_insert_result(id, || {
+                // Only fetch type resolver when creating a new context
+                let type_resolver = self.get_final_type_resolver()?;
+                Ok(Box::new(ReadContext::new(
                     type_resolver.clone(),
                     compatible,
                     share_meta,
                     xlang,
                     max_dyn_depth,
                     check_struct_version,
-                ))
-            });
+                )))
+            })?;
             f(context)
-        });
-        Ok(result)
+        })
     }
 
     #[inline(always)]

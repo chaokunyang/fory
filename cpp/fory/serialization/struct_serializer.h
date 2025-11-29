@@ -164,27 +164,28 @@ template <typename T>
 FORY_ALWAYS_INLINE void write_primitive_unsafe(T value, Buffer &buffer) {
   if constexpr (std::is_same_v<T, int32_t>) {
     buffer.WriteVarInt32Unsafe(value);
+  } else if constexpr (std::is_same_v<T, uint32_t>) {
+    // Unsigned 32-bit integers are written as fixed 4 bytes
+    buffer.UnsafePut<uint32_t>(buffer.writer_index(), value);
+    buffer.IncreaseWriterIndex(4);
   } else if constexpr (std::is_same_v<T, int64_t>) {
-    // Inline varint64 zigzag encoding
-    uint64_t zigzag = (static_cast<uint64_t>(value) << 1) ^
-                      static_cast<uint64_t>(value >> 63);
-    // Write varuint64 inline
-    while (zigzag >= 0x80) {
-      buffer.UnsafePutByte(buffer.writer_index(),
-                           static_cast<uint8_t>((zigzag & 0x7F) | 0x80));
-      buffer.IncreaseWriterIndex(1);
-      zigzag >>= 7;
-    }
-    buffer.UnsafePutByte(buffer.writer_index(), static_cast<uint8_t>(zigzag));
-    buffer.IncreaseWriterIndex(1);
+    // Use buffer's varint64 method - it handles zigzag encoding internally
+    buffer.WriteVarInt64(value);
+  } else if constexpr (std::is_same_v<T, uint64_t>) {
+    // Unsigned 64-bit integers are written as fixed 8 bytes
+    buffer.UnsafePut<uint64_t>(buffer.writer_index(), value);
+    buffer.IncreaseWriterIndex(8);
   } else if constexpr (std::is_same_v<T, bool>) {
-    buffer.UnsafePutByte(buffer.writer_index(), value ? 1 : 0);
+    buffer.UnsafePutByte(buffer.writer_index(),
+                         static_cast<uint8_t>(value ? 1 : 0));
     buffer.IncreaseWriterIndex(1);
-  } else if constexpr (std::is_same_v<T, int8_t> || std::is_same_v<T, uint8_t>) {
+  } else if constexpr (std::is_same_v<T, int8_t> ||
+                       std::is_same_v<T, uint8_t>) {
     buffer.UnsafePutByte(buffer.writer_index(), static_cast<uint8_t>(value));
     buffer.IncreaseWriterIndex(1);
-  } else if constexpr (std::is_same_v<T, int16_t>) {
-    buffer.UnsafePut<int16_t>(buffer.writer_index(), value);
+  } else if constexpr (std::is_same_v<T, int16_t> ||
+                       std::is_same_v<T, uint16_t>) {
+    buffer.UnsafePut<T>(buffer.writer_index(), value);
     buffer.IncreaseWriterIndex(2);
   } else if constexpr (std::is_same_v<T, float>) {
     buffer.UnsafePut<float>(buffer.writer_index(), value);
@@ -546,6 +547,75 @@ template <typename T> struct CompileTimeFieldHelpers {
 
   static inline constexpr size_t max_primitive_serialized_size =
       compute_max_primitive_size();
+
+  /// Count leading non-nullable primitive fields in sorted order.
+  /// Since fields are sorted with non-nullable primitives first (group 0),
+  /// we can fast-write these fields and slow-write the rest.
+  static constexpr size_t compute_primitive_field_count() {
+    if constexpr (FieldCount == 0) {
+      return 0;
+    } else {
+      size_t count = 0;
+      for (size_t i = 0; i < FieldCount; ++i) {
+        size_t original_idx = sorted_indices[i];
+        if (is_primitive_type_id(type_ids[original_idx]) &&
+            !nullable_flags[original_idx]) {
+          ++count;
+        } else {
+          break; // Non-nullable primitives are always first in sorted order
+        }
+      }
+      return count;
+    }
+  }
+
+  static inline constexpr size_t primitive_field_count =
+      compute_primitive_field_count();
+
+  /// Compute max serialized size for leading primitive fields only.
+  /// Used for hybrid fast/slow path buffer pre-reservation.
+  static constexpr size_t compute_max_leading_primitive_size() {
+    if constexpr (FieldCount == 0 || primitive_field_count == 0) {
+      return 0;
+    } else {
+      size_t total = 0;
+      for (size_t i = 0; i < primitive_field_count; ++i) {
+        size_t original_idx = sorted_indices[i];
+        uint32_t tid = type_ids[original_idx];
+        switch (static_cast<TypeId>(tid)) {
+        case TypeId::BOOL:
+        case TypeId::INT8:
+          total += 1;
+          break;
+        case TypeId::INT16:
+        case TypeId::FLOAT16:
+          total += 2;
+          break;
+        case TypeId::INT32:
+        case TypeId::VAR_INT32:
+          total += 5; // varint max
+          break;
+        case TypeId::FLOAT32:
+          total += 4;
+          break;
+        case TypeId::INT64:
+        case TypeId::VAR_INT64:
+        case TypeId::SLI_INT64:
+          total += 10; // varint max
+          break;
+        case TypeId::FLOAT64:
+          total += 8;
+          break;
+        default:
+          break;
+        }
+      }
+      return total;
+    }
+  }
+
+  static inline constexpr size_t max_leading_primitive_size =
+      compute_max_leading_primitive_size();
 };
 
 /// Fast path writer for primitive-only, non-nullable structs.
@@ -645,34 +715,60 @@ Result<void, Error> write_field_at_sorted_position(const T &obj,
                                                has_generics);
 }
 
+/// Helper to write remaining (non-primitive) fields starting from offset.
+/// Used in hybrid fast/slow path when some leading fields are primitives.
+template <typename T, size_t Offset, size_t... Is>
+FORY_ALWAYS_INLINE Result<void, Error>
+write_remaining_fields(const T &obj, WriteContext &ctx, bool has_generics,
+                       std::index_sequence<Is...>) {
+  constexpr size_t remaining = sizeof...(Is);
+  constexpr size_t max_bytes_per_field = 10;
+  ctx.buffer().Grow(static_cast<uint32_t>(remaining * max_bytes_per_field));
+
+  Result<void, Error> result;
+  ((result =
+        write_field_at_sorted_position<T, Offset + Is>(obj, ctx, has_generics),
+    result.ok()) &&
+   ...);
+  return result;
+}
+
 /// Write struct fields recursively using index sequence (sorted order)
-/// Optimized to use direct compile-time indexing without runtime dispatch
+/// Optimized with hybrid fast/slow path: primitive fields use direct buffer
+/// writes, non-primitive fields use full serialization with error handling.
 template <typename T, size_t... Indices>
 Result<void, Error> write_struct_fields_impl(const T &obj, WriteContext &ctx,
                                              std::index_sequence<Indices...>,
                                              bool has_generics) {
   using Helpers = CompileTimeFieldHelpers<T>;
+  constexpr size_t prim_count = Helpers::primitive_field_count;
+  constexpr size_t total_count = sizeof...(Indices);
 
-  // FAST PATH: For primitive-only, non-nullable structs, use direct buffer
-  // writes without Result wrapping or per-field Grow() calls
-  if constexpr (Helpers::all_primitives_non_nullable) {
-    // Pre-reserve exact buffer space needed
+  if constexpr (prim_count == total_count) {
+    // FAST PATH: ALL fields are non-nullable primitives
+    // Use direct buffer writes without Result wrapping or per-field Grow()
     constexpr size_t max_size = Helpers::max_primitive_serialized_size;
     ctx.buffer().Grow(static_cast<uint32_t>(max_size));
-
-    // Write all fields directly - no error checking needed for primitives
     write_primitive_fields_fast<T>(obj, ctx.buffer(),
-                                   std::index_sequence<Indices...>{});
+                                   std::make_index_sequence<prim_count>{});
     return Result<void, Error>();
-  } else {
-    // SLOW PATH: For structs with non-primitives or nullable fields
-    // Pre-reserve buffer space for all fields to avoid per-field Grow() calls
-    constexpr size_t field_count = sizeof...(Indices);
-    constexpr size_t max_bytes_per_field = 10;
-    ctx.buffer().Grow(static_cast<uint32_t>(field_count * max_bytes_per_field));
+  } else if constexpr (prim_count > 0) {
+    // HYBRID PATH: Some leading primitives + remaining non-primitives
+    // Part 1: Fast-write primitive fields (sorted indices 0 to prim_count-1)
+    constexpr size_t max_prim_size = Helpers::max_leading_primitive_size;
+    ctx.buffer().Grow(static_cast<uint32_t>(max_prim_size));
+    write_primitive_fields_fast<T>(obj, ctx.buffer(),
+                                   std::make_index_sequence<prim_count>{});
 
-    // Write each field in sorted order with early return on error
-    // Uses direct compile-time indexing - no runtime dispatch overhead
+    // Part 2: Slow-write remaining fields with full error handling
+    return write_remaining_fields<T, prim_count>(
+        obj, ctx, has_generics,
+        std::make_index_sequence<total_count - prim_count>{});
+  } else {
+    // SLOW PATH: No leading primitives - all fields need full serialization
+    constexpr size_t max_bytes_per_field = 10;
+    ctx.buffer().Grow(static_cast<uint32_t>(total_count * max_bytes_per_field));
+
     Result<void, Error> result;
     ((result =
           write_field_at_sorted_position<T, Indices>(obj, ctx, has_generics),

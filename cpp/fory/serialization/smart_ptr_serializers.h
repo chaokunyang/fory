@@ -225,7 +225,8 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
       // For polymorphic types, serialize the concrete type dynamically
       if constexpr (is_polymorphic) {
         std::type_index concrete_type_id = std::type_index(typeid(*ptr));
-        FORY_TRY(type_info, ctx.type_resolver().get_type_info(concrete_type_id));
+        FORY_TRY(type_info,
+                 ctx.type_resolver().get_type_info(concrete_type_id));
         if (write_type) {
           FORY_RETURN_NOT_OK(ctx.write_any_typeinfo(
               static_cast<uint32_t>(TypeId::UNKNOWN), concrete_type_id));
@@ -541,7 +542,8 @@ template <typename T> struct Serializer<std::unique_ptr<T>> {
       // For polymorphic types, serialize the concrete type dynamically
       if constexpr (is_polymorphic) {
         std::type_index concrete_type_id = std::type_index(typeid(*ptr));
-        FORY_TRY(type_info, ctx.type_resolver().get_type_info(concrete_type_id));
+        FORY_TRY(type_info,
+                 ctx.type_resolver().get_type_info(concrete_type_id));
         if (write_type) {
           FORY_RETURN_NOT_OK(ctx.write_any_typeinfo(
               static_cast<uint32_t>(TypeId::UNKNOWN), concrete_type_id));

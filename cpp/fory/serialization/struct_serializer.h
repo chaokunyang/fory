@@ -1232,8 +1232,7 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
 
   static Result<void, Error> write_data(const T &obj, WriteContext &ctx) {
     if (ctx.check_struct_version()) {
-      FORY_TRY(type_info,
-               ctx.type_resolver().template get_type_info<T>());
+      FORY_TRY(type_info, ctx.type_resolver().template get_type_info<T>());
       if (!type_info->type_meta) {
         return Unexpected(Error::type_error(
             "Type metadata not initialized for requested struct"));
@@ -1252,8 +1251,7 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
   static Result<void, Error> write_data_generic(const T &obj, WriteContext &ctx,
                                                 bool has_generics) {
     if (ctx.check_struct_version()) {
-      FORY_TRY(type_info,
-               ctx.type_resolver().template get_type_info<T>());
+      FORY_TRY(type_info, ctx.type_resolver().template get_type_info<T>());
       if (!type_info->type_meta) {
         return Unexpected(Error::type_error(
             "Type metadata not initialized for requested struct"));
@@ -1341,8 +1339,7 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
         // the expected static type.
         if (read_type) {
           // Direct lookup using compile-time type_index<T>() - O(1) hash lookup
-          FORY_TRY(type_info,
-                   ctx.type_resolver().template get_type_info<T>());
+          FORY_TRY(type_info, ctx.type_resolver().template get_type_info<T>());
           uint32_t expected_type_id = type_info->type_id;
 
           // FAST PATH: For simple numeric type IDs (not named types), we can

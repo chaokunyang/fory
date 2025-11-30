@@ -1208,47 +1208,28 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
     return Result<void, Error>();
   }
 
-  /// Thread-local cache for type_id and TypeInfo to avoid hash lookups on hot
-  /// path. Uses compile-time type ID for lookup, stores TypeInfo pointer for
-  /// fast access.
-  struct TypeIdCache {
-    const TypeResolver *resolver = nullptr;
-    const TypeInfo *type_info = nullptr;
-    uint32_t type_id = 0;
-  };
-
   static Result<void, Error> write(const T &obj, WriteContext &ctx,
                                    bool write_ref, bool write_type,
                                    bool has_generics = false) {
     write_not_null_ref_flag(ctx, write_ref);
 
     if (write_type) {
-      // Use thread_local cache to avoid hash lookup after first call
-      thread_local TypeIdCache cache;
-      const TypeResolver *current_resolver = &ctx.type_resolver();
-
-      if (cache.resolver != current_resolver) {
-        // Cache miss - need to lookup and cache using compile-time type ID
-        auto info_result =
-            ctx.type_resolver().template get_struct_type_info<T>();
-        if (FORY_PREDICT_TRUE(info_result.ok())) {
-          cache.type_info = info_result.value().get();
-          cache.type_id = cache.type_info->type_id;
-        } else {
-          cache.type_info = nullptr;
-          cache.type_id = 0;
-        }
-        cache.resolver = current_resolver;
+      // Direct lookup using compile-time type_index<T>() - O(1) hash lookup
+      auto info_result = ctx.type_resolver().template get_struct_type_info<T>();
+      if (FORY_PREDICT_FALSE(!info_result.ok())) {
+        return Unexpected(info_result.error());
       }
+      const TypeInfo *type_info = info_result.value().get();
+      uint32_t tid = type_info->type_id;
 
       // Fast path: check if this is a simple STRUCT type (no meta needed)
-      uint32_t type_id_low = cache.type_id & 0xff;
+      uint32_t type_id_low = tid & 0xff;
       if (type_id_low == static_cast<uint32_t>(TypeId::STRUCT)) {
         // Simple STRUCT - just write the type_id directly
-        ctx.write_struct_type_id_direct(cache.type_id);
+        ctx.write_struct_type_id_direct(tid);
       } else {
         // Complex type (NAMED_STRUCT, COMPATIBLE_STRUCT, etc.) - use TypeInfo*
-        FORY_RETURN_NOT_OK(ctx.write_struct_type_info(cache.type_info));
+        FORY_RETURN_NOT_OK(ctx.write_struct_type_info(type_info));
       }
     }
     return write_data_generic(obj, ctx, has_generics);
@@ -1365,21 +1346,12 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
         // payload, and also validates that the concrete type id matches
         // the expected static type.
         if (read_type) {
-          // OPTIMIZATION: Cache type_id per type using thread_local.
-          // First call does hash lookup, subsequent calls use cached value.
-          // sentinel 0 means not cached yet.
-          static thread_local uint32_t cached_type_id = 0;
-          uint32_t expected_type_id;
-          if (FORY_PREDICT_TRUE(cached_type_id != 0)) {
-            expected_type_id = cached_type_id;
-          } else {
-            auto type_id_result = ctx.type_resolver().template get_type_id<T>();
-            if (!type_id_result.ok()) {
-              return Unexpected(std::move(type_id_result).error());
-            }
-            expected_type_id = type_id_result.value();
-            cached_type_id = expected_type_id;
+          // Direct lookup using compile-time type_index<T>() - O(1) hash lookup
+          auto type_id_result = ctx.type_resolver().template get_type_id<T>();
+          if (FORY_PREDICT_FALSE(!type_id_result.ok())) {
+            return Unexpected(std::move(type_id_result).error());
           }
+          uint32_t expected_type_id = type_id_result.value();
 
           // FAST PATH: For simple numeric type IDs (not named types), we can
           // just read the varint and compare directly without hash lookup.

@@ -530,7 +530,7 @@ template <typename T> struct CompileTimeFieldHelpers {
           break;
         case TypeId::INT32:
         case TypeId::VAR_INT32:
-          total += 5; // varint max
+          total += 8; // varint max, but bulk write may write up to 8 bytes
           break;
         case TypeId::FLOAT32:
           total += 4;

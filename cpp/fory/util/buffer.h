@@ -503,7 +503,7 @@ public:
   /// Write uint32_t value as varint to buffer at current writer index.
   /// Automatically grows buffer and advances writer index.
   FORY_ALWAYS_INLINE void WriteVarUint32(uint32_t value) {
-    Grow(5); // Max 5 bytes for varint32
+    Grow(8); // bulk write may write 8 bytes for varint32
     uint32_t len = PutVarUint32(writer_index_, value);
     IncreaseWriterIndex(len);
   }

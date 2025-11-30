@@ -441,8 +441,6 @@ public:
   template <typename T>
   const absl::flat_hash_map<std::string, size_t> &field_name_to_index();
 
-  template <typename T> Result<const TypeInfo *, Error> get_struct_type_info();
-
   /// Get type info by type ID (for non-namespaced types)
   /// @return const pointer to TypeInfo if found, error otherwise
   Result<const TypeInfo *, Error> get_type_info_by_id(uint32_t type_id) const;
@@ -652,21 +650,6 @@ TypeResolver::field_name_to_index() {
   auto it = type_info_by_ctid_.find(ctid);
   FORY_CHECK(it != type_info_by_ctid_.end()) << "Type not registered";
   return it->second->name_to_index;
-}
-
-template <typename T>
-Result<const TypeInfo *, Error> TypeResolver::get_struct_type_info() {
-  static_assert(is_fory_serializable_v<T>,
-                "get_struct_type_info requires FORY_STRUCT types");
-  // Use compile-time type ID (uint64_t key) for fast lookup
-  constexpr uint64_t ctid = type_index<T>();
-  auto it = type_info_by_ctid_.find(ctid);
-  if (FORY_PREDICT_TRUE(it != type_info_by_ctid_.end())) {
-    return it->second;
-  }
-  return Unexpected(Error::type_error(
-      "Type not registered. All struct/enum/ext types must be explicitly "
-      "registered before serialization."));
 }
 
 template <typename T>

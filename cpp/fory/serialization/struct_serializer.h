@@ -1184,7 +1184,7 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
   /// This is used by collection serializers to write element type info.
   /// Matches Rust's struct_::write_type_info.
   static Result<void, Error> write_type_info(WriteContext &ctx) {
-    FORY_TRY(type_info, ctx.type_resolver().template get_struct_type_info<T>());
+    FORY_TRY(type_info, ctx.type_resolver().template get_type_info<T>());
     ctx.write_varuint32(type_info->type_id);
 
     // In compatible mode, always write meta index (matches Rust behavior)
@@ -1214,7 +1214,7 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
 
     if (write_type) {
       // Direct lookup using compile-time type_index<T>() - O(1) hash lookup
-      FORY_TRY(type_info, ctx.type_resolver().template get_struct_type_info<T>());
+      FORY_TRY(type_info, ctx.type_resolver().template get_type_info<T>());
       uint32_t tid = type_info->type_id;
 
       // Fast path: check if this is a simple STRUCT type (no meta needed)
@@ -1233,7 +1233,7 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
   static Result<void, Error> write_data(const T &obj, WriteContext &ctx) {
     if (ctx.check_struct_version()) {
       FORY_TRY(type_info,
-               ctx.type_resolver().template get_struct_type_info<T>());
+               ctx.type_resolver().template get_type_info<T>());
       if (!type_info->type_meta) {
         return Unexpected(Error::type_error(
             "Type metadata not initialized for requested struct"));
@@ -1253,7 +1253,7 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
                                                 bool has_generics) {
     if (ctx.check_struct_version()) {
       FORY_TRY(type_info,
-               ctx.type_resolver().template get_struct_type_info<T>());
+               ctx.type_resolver().template get_type_info<T>());
       if (!type_info->type_meta) {
         return Unexpected(Error::type_error(
             "Type metadata not initialized for requested struct"));
@@ -1302,7 +1302,7 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
           // Check LOCAL type to decide if we should read meta_index (matches
           // Rust logic)
           FORY_TRY(local_type_info,
-                   ctx.type_resolver().template get_struct_type_info<T>());
+                   ctx.type_resolver().template get_type_info<T>());
           uint32_t local_type_id = local_type_info->type_id;
           uint8_t local_type_id_low = local_type_id & 0xff;
 
@@ -1342,7 +1342,7 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
         if (read_type) {
           // Direct lookup using compile-time type_index<T>() - O(1) hash lookup
           FORY_TRY(type_info,
-                   ctx.type_resolver().template get_struct_type_info<T>());
+                   ctx.type_resolver().template get_type_info<T>());
           uint32_t expected_type_id = type_info->type_id;
 
           // FAST PATH: For simple numeric type IDs (not named types), we can
@@ -1393,7 +1393,7 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
     if (ctx.check_struct_version()) {
       FORY_TRY(read_version, ctx.buffer().ReadInt32());
       FORY_TRY(local_type_info,
-               ctx.type_resolver().template get_struct_type_info<T>());
+               ctx.type_resolver().template get_type_info<T>());
       if (!local_type_info->type_meta) {
         return Unexpected(Error::type_error(
             "Type metadata not initialized for requested struct"));
@@ -1426,7 +1426,7 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
     if (ctx.check_struct_version()) {
       FORY_TRY(read_version, ctx.buffer().ReadInt32());
       FORY_TRY(local_type_info,
-               ctx.type_resolver().template get_struct_type_info<T>());
+               ctx.type_resolver().template get_type_info<T>());
       if (!local_type_info->type_meta) {
         return Unexpected(Error::type_error(
             "Type metadata not initialized for requested struct"));

@@ -331,7 +331,9 @@ Buffer MakeBuffer(std::vector<uint8_t> &bytes) {
 }
 
 template <typename T> T ReadNext(Fory &fory, Buffer &buffer) {
-  auto result = fory.deserialize_from<T>(buffer);
+  // Use public deserialize API with data pointer and size
+  auto result = fory.deserialize<T>(buffer.data() + buffer.reader_index(),
+                                    buffer.writer_index() - buffer.reader_index());
   if (!result.ok()) {
     Fail("Failed to deserialize value: " + result.error().message());
   }

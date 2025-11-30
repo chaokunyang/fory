@@ -188,6 +188,10 @@ public:
   /// Returns the index for writing as varint.
   Result<size_t, Error> push_meta(const std::type_index &type_id);
 
+  /// Push meta using TypeInfo pointer directly (avoids type_index lookup).
+  /// Returns the index for writing as varint.
+  size_t push_meta(const TypeInfo *type_info);
+
   /// Write all collected TypeMetas at the specified offset.
   /// Updates the meta_offset field at 'offset' to point to meta section.
   void write_meta(size_t offset);
@@ -219,6 +223,13 @@ public:
   /// @return Success or error
   Result<void, Error> write_struct_type_info(const std::type_index &type_id);
 
+  /// Fastest path for writing struct type info when TypeInfo is already known.
+  /// Avoids type_index creation and lookup overhead.
+  ///
+  /// @param type_info Pointer to the TypeInfo (must be valid)
+  /// @return Success or error
+  Result<void, Error> write_struct_type_info(const TypeInfo *type_info);
+
   /// Fastest path - write struct type_id directly without any lookups.
   /// Use this when the type_id is already known (e.g., from a cache).
   /// Only for STRUCT types (not NAMED_STRUCT, COMPATIBLE_STRUCT, etc.)
@@ -236,6 +247,10 @@ public:
   /// Looks up the type info and delegates to write_any_typeinfo.
   Result<void, Error> write_enum_typeinfo(const std::type_index &type);
 
+  /// Write type info for a registered enum type using TypeInfo pointer.
+  /// Avoids type_index creation and lookup overhead.
+  Result<void, Error> write_enum_typeinfo(const TypeInfo *type_info);
+
   /// Reset context for reuse.
   void reset();
 
@@ -249,6 +264,8 @@ private:
   // Meta sharing state (for compatible mode)
   std::vector<std::vector<uint8_t>> write_type_defs_;
   absl::flat_hash_map<std::type_index, size_t> write_type_id_index_map_;
+  // Fast path: use TypeInfo pointer as key (avoids type_index hash overhead)
+  absl::flat_hash_map<const TypeInfo *, size_t> write_type_info_index_map_;
 };
 
 /// Read context for deserialization operations.
@@ -384,6 +401,10 @@ public:
 
   Result<std::shared_ptr<TypeInfo>, Error>
   read_enum_type_info(const std::type_index &type, uint32_t base_type_id);
+
+  /// Read enum type info without type_index (fast path).
+  Result<std::shared_ptr<TypeInfo>, Error>
+  read_enum_type_info(uint32_t base_type_id);
 
   /// Load all TypeMetas from buffer at the specified offset.
   /// After loading, the reader position is restored to where it was before.

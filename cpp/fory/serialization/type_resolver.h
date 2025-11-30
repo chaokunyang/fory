@@ -21,10 +21,15 @@
 
 #include <algorithm>
 #include <any>
+#include <array>
 #include <cstdint>
+#include <deque>
 #include <functional>
+#include <list>
+#include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -33,6 +38,7 @@
 #include <typeindex>
 #include <typeinfo>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -58,6 +64,28 @@ class Fory;
 class TypeResolver;
 class WriteContext;
 class ReadContext;
+
+// ============================================================================
+// TypeIndex primary template (fallback)
+// Specializations for primitives and containers are in serializer_traits.h
+// ============================================================================
+
+/// Helper function to get type-specific hash using PRETTY_FUNCTION.
+/// Must be a function because __PRETTY_FUNCTION__ is only valid inside
+/// functions.
+template <typename T> constexpr uint64_t type_fallback_hash() {
+  return fnv1a_64(FORY_PRETTY_FUNCTION);
+}
+
+/// Primary template - defaults to using PRETTY_FUNCTION fallback
+/// Specialized for: primitives, containers, FORY_STRUCT, FORY_ENUM
+/// Note: No default argument here since it's already declared in type_index.h
+template <typename T, typename Enable> struct TypeIndex {
+  // Fallback: combine Serializer<T>::type_id with type-specific hash
+  // This handles any unspecialized types (enums, structs, etc.)
+  static constexpr uint64_t value = fnv1a_64_combine(
+      static_cast<uint64_t>(Serializer<T>::type_id), type_fallback_hash<T>());
+};
 
 // ============================================================================
 // FieldType - Represents type information for a field
@@ -449,6 +477,11 @@ public:
   Result<const TypeInfo *, Error>
   get_type_info(const std::type_index &type_index) const;
 
+  /// Get TypeInfo by compile-time type ID (fast path for template types)
+  /// Works for enums, structs, and any registered type.
+  /// @return shared_ptr to TypeInfo if found, nullptr otherwise
+  template <typename T> std::shared_ptr<TypeInfo> get_type_info() const;
+
   /// Builds the final TypeResolver by completing all partial type infos
   /// created during registration.
   ///
@@ -540,8 +573,13 @@ private:
   static std::string make_name_key(const std::string &ns,
                                    const std::string &name);
 
-  Result<void, Error> register_type_internal(const std::type_index &type_index,
+  Result<void, Error> register_type_internal(uint64_t ctid,
                                              std::shared_ptr<TypeInfo> info);
+
+  // For runtime polymorphic lookups (smart pointers with dynamic types)
+  Result<void, Error>
+  register_type_internal_runtime(const std::type_index &type_index,
+                                 std::shared_ptr<TypeInfo> info);
 
   void check_registration_thread();
 
@@ -555,13 +593,17 @@ private:
   std::thread::id registration_thread_id_;
   bool finalized_;
 
-  absl::flat_hash_map<std::type_index, std::shared_ptr<TypeInfo>>
-      type_info_cache_;
+  // Primary map using compile-time type ID (uint64_t) - fast for template
+  // lookups
+  absl::flat_hash_map<uint64_t, std::shared_ptr<TypeInfo>> type_info_by_ctid_;
   absl::flat_hash_map<uint32_t, std::shared_ptr<TypeInfo>> type_info_by_id_;
   absl::flat_hash_map<std::string, std::shared_ptr<TypeInfo>>
       type_info_by_name_;
+  absl::flat_hash_map<uint64_t, std::shared_ptr<TypeInfo>> partial_type_infos_;
+
+  // For runtime polymorphic lookups (smart pointers) - uses std::type_index
   absl::flat_hash_map<std::type_index, std::shared_ptr<TypeInfo>>
-      partial_type_infos_;
+      type_info_by_runtime_type_;
 };
 
 // Alias for backward compatibility (already defined above as top-level)
@@ -594,20 +636,18 @@ inline void TypeResolver::check_registration_thread() {
 }
 
 template <typename T> const TypeMeta &TypeResolver::struct_meta() {
-  const std::type_index key(typeid(T));
-  auto it = type_info_cache_.find(key);
-  FORY_CHECK(it != type_info_cache_.end())
-      << "Type not registered: " << typeid(T).name();
+  constexpr uint64_t ctid = type_index<T>();
+  auto it = type_info_by_ctid_.find(ctid);
+  FORY_CHECK(it != type_info_by_ctid_.end()) << "Type not registered";
   FORY_CHECK(it->second && it->second->type_meta)
       << "Type metadata not initialized for requested struct";
   return *it->second->type_meta;
 }
 
 template <typename T> TypeMeta TypeResolver::clone_struct_meta() {
-  const std::type_index key(typeid(T));
-  auto it = type_info_cache_.find(key);
-  FORY_CHECK(it != type_info_cache_.end())
-      << "Type not registered: " << typeid(T).name();
+  constexpr uint64_t ctid = type_index<T>();
+  auto it = type_info_by_ctid_.find(ctid);
+  FORY_CHECK(it != type_info_by_ctid_.end()) << "Type not registered";
   FORY_CHECK(it->second && it->second->type_meta)
       << "Type metadata not initialized for requested struct";
   return *it->second->type_meta;
@@ -615,20 +655,18 @@ template <typename T> TypeMeta TypeResolver::clone_struct_meta() {
 
 template <typename T>
 const std::vector<size_t> &TypeResolver::sorted_indices() {
-  const std::type_index key(typeid(T));
-  auto it = type_info_cache_.find(key);
-  FORY_CHECK(it != type_info_cache_.end())
-      << "Type not registered: " << typeid(T).name();
+  constexpr uint64_t ctid = type_index<T>();
+  auto it = type_info_by_ctid_.find(ctid);
+  FORY_CHECK(it != type_info_by_ctid_.end()) << "Type not registered";
   return it->second->sorted_indices;
 }
 
 template <typename T>
 const absl::flat_hash_map<std::string, size_t> &
 TypeResolver::field_name_to_index() {
-  const std::type_index key(typeid(T));
-  auto it = type_info_cache_.find(key);
-  FORY_CHECK(it != type_info_cache_.end())
-      << "Type not registered: " << typeid(T).name();
+  constexpr uint64_t ctid = type_index<T>();
+  auto it = type_info_by_ctid_.find(ctid);
+  FORY_CHECK(it != type_info_by_ctid_.end()) << "Type not registered";
   return it->second->name_to_index;
 }
 
@@ -636,15 +674,26 @@ template <typename T>
 Result<std::shared_ptr<TypeInfo>, Error> TypeResolver::get_struct_type_info() {
   static_assert(is_fory_serializable_v<T>,
                 "get_struct_type_info requires FORY_STRUCT types");
-  const std::type_index key(typeid(T));
-  auto it = type_info_cache_.find(key);
-  if (it != type_info_cache_.end()) {
+  // Use compile-time type ID (uint64_t key) for fast lookup
+  constexpr uint64_t ctid = type_index<T>();
+  auto it = type_info_by_ctid_.find(ctid);
+  if (FORY_PREDICT_TRUE(it != type_info_by_ctid_.end())) {
     return it->second;
   }
   return Unexpected(Error::type_error(
-      "Type not registered: " + std::string(typeid(T).name()) +
-      ". All struct/enum/ext types must be explicitly "
+      "Type not registered. All struct/enum/ext types must be explicitly "
       "registered before serialization."));
+}
+
+template <typename T>
+std::shared_ptr<TypeInfo> TypeResolver::get_type_info() const {
+  // Use compile-time type ID (uint64_t key) for fast lookup
+  constexpr uint64_t ctid = type_index<T>();
+  auto it = type_info_by_ctid_.find(ctid);
+  if (FORY_PREDICT_TRUE(it != type_info_by_ctid_.end())) {
+    return it->second;
+  }
+  return nullptr;
 }
 
 inline uint32_t TypeResolver::get_type_id(const TypeInfo &info) const {
@@ -685,6 +734,8 @@ Result<void, Error> TypeResolver::register_by_id(uint32_t type_id) {
         Error::invalid("type_id must be non-zero for register_by_id"));
   }
 
+  constexpr uint64_t ctid = type_index<T>();
+
   if constexpr (is_fory_serializable_v<T>) {
     // Encode type_id: shift left by 8 bits and add type category in low byte
     uint32_t actual_type_id =
@@ -698,9 +749,10 @@ Result<void, Error> TypeResolver::register_by_id(uint32_t type_id) {
           Error::invalid("Harness for registered type is incomplete"));
     }
 
-    const std::type_index key(typeid(T));
-    partial_type_infos_[key] = info;
-    return register_type_internal(std::type_index(typeid(T)), std::move(info));
+    partial_type_infos_[ctid] = info;
+    // Also register for runtime polymorphic lookups (smart pointers)
+    type_info_by_runtime_type_[std::type_index(typeid(T))] = info;
+    return register_type_internal(ctid, std::move(info));
   } else if constexpr (std::is_enum_v<T>) {
     uint32_t actual_type_id =
         (type_id << 8) + static_cast<uint32_t>(TypeId::ENUM);
@@ -711,9 +763,9 @@ Result<void, Error> TypeResolver::register_by_id(uint32_t type_id) {
           Error::invalid("Harness for registered enum type is incomplete"));
     }
 
-    const std::type_index key(typeid(T));
-    partial_type_infos_[key] = info;
-    return register_type_internal(std::type_index(typeid(T)), std::move(info));
+    partial_type_infos_[ctid] = info;
+    type_info_by_runtime_type_[std::type_index(typeid(T))] = info;
+    return register_type_internal(ctid, std::move(info));
   } else {
     static_assert(is_fory_serializable_v<T>,
                   "register_by_id requires a type declared with FORY_STRUCT "
@@ -731,6 +783,9 @@ TypeResolver::register_by_name(const std::string &ns,
     return Unexpected(
         Error::invalid("type_name must be non-empty for register_by_name"));
   }
+
+  constexpr uint64_t ctid = type_index<T>();
+
   if constexpr (is_fory_serializable_v<T>) {
     uint32_t actual_type_id =
         compatible_ ? static_cast<uint32_t>(TypeId::NAMED_COMPATIBLE_STRUCT)
@@ -743,9 +798,9 @@ TypeResolver::register_by_name(const std::string &ns,
           Error::invalid("Harness for registered type is incomplete"));
     }
 
-    const std::type_index key(typeid(T));
-    partial_type_infos_[key] = info;
-    return register_type_internal(std::type_index(typeid(T)), std::move(info));
+    partial_type_infos_[ctid] = info;
+    type_info_by_runtime_type_[std::type_index(typeid(T))] = info;
+    return register_type_internal(ctid, std::move(info));
   } else if constexpr (std::is_enum_v<T>) {
     uint32_t actual_type_id = static_cast<uint32_t>(TypeId::NAMED_ENUM);
     FORY_TRY(info,
@@ -755,9 +810,9 @@ TypeResolver::register_by_name(const std::string &ns,
           Error::invalid("Harness for registered enum type is incomplete"));
     }
 
-    const std::type_index key(typeid(T));
-    partial_type_infos_[key] = info;
-    return register_type_internal(std::type_index(typeid(T)), std::move(info));
+    partial_type_infos_[ctid] = info;
+    type_info_by_runtime_type_[std::type_index(typeid(T))] = info;
+    return register_type_internal(ctid, std::move(info));
   } else {
     static_assert(is_fory_serializable_v<T>,
                   "register_by_name requires a type declared with FORY_STRUCT "
@@ -774,14 +829,16 @@ Result<void, Error> TypeResolver::register_ext_type_by_id(uint32_t type_id) {
         Error::invalid("type_id must be non-zero for register_ext_type_by_id"));
   }
 
+  constexpr uint64_t ctid = type_index<T>();
+
   // Encode type_id: shift left by 8 bits and add type category in low byte
   uint32_t actual_type_id = (type_id << 8) + static_cast<uint32_t>(TypeId::EXT);
 
   FORY_TRY(info, build_ext_type_info<T>(actual_type_id, "", "", false));
 
-  const std::type_index key(typeid(T));
-  partial_type_infos_[key] = info;
-  return register_type_internal(std::type_index(typeid(T)), std::move(info));
+  partial_type_infos_[ctid] = info;
+  type_info_by_runtime_type_[std::type_index(typeid(T))] = info;
+  return register_type_internal(ctid, std::move(info));
 }
 
 template <typename T>
@@ -793,12 +850,15 @@ TypeResolver::register_ext_type_by_name(const std::string &ns,
     return Unexpected(Error::invalid(
         "type_name must be non-empty for register_ext_type_by_name"));
   }
+
+  constexpr uint64_t ctid = type_index<T>();
+
   uint32_t actual_type_id = static_cast<uint32_t>(TypeId::NAMED_EXT);
   FORY_TRY(info, build_ext_type_info<T>(actual_type_id, ns, type_name, true));
 
-  const std::type_index key(typeid(T));
-  partial_type_infos_[key] = info;
-  return register_type_internal(std::type_index(typeid(T)), std::move(info));
+  partial_type_infos_[ctid] = info;
+  type_info_by_runtime_type_[std::type_index(typeid(T))] = info;
+  return register_type_internal(ctid, std::move(info));
 }
 
 template <typename T>
@@ -1026,14 +1086,14 @@ inline std::string TypeResolver::make_name_key(const std::string &ns,
 }
 
 inline Result<void, Error>
-TypeResolver::register_type_internal(const std::type_index &type_index,
+TypeResolver::register_type_internal(uint64_t ctid,
                                      std::shared_ptr<TypeInfo> info) {
   if (!info || !info->harness.valid()) {
     return Unexpected(
         Error::invalid("TypeInfo or harness is invalid during registration"));
   }
 
-  type_info_cache_[type_index] = info;
+  type_info_by_ctid_[ctid] = info;
 
   if (info->type_id != 0 && !info->register_by_name) {
     auto it = type_info_by_id_.find(info->type_id);
@@ -1055,6 +1115,14 @@ TypeResolver::register_type_internal(const std::type_index &type_index,
     type_info_by_name_[key] = info;
   }
 
+  return Result<void, Error>();
+}
+
+inline Result<void, Error>
+TypeResolver::register_type_internal_runtime(const std::type_index &type_index,
+                                             std::shared_ptr<TypeInfo> info) {
+  // For runtime polymorphic lookups (smart pointers)
+  type_info_by_runtime_type_[type_index] = info;
   return Result<void, Error>();
 }
 

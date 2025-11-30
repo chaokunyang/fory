@@ -977,8 +977,9 @@ TypeResolver::read_any_typeinfo(ReadContext &ctx,
 
 Result<const TypeInfo *, Error>
 TypeResolver::get_type_info(const std::type_index &type_index) const {
-  auto it = type_info_cache_.find(type_index);
-  if (it == type_info_cache_.end()) {
+  // For runtime polymorphic lookups (e.g., smart pointers with dynamic types)
+  auto it = type_info_by_runtime_type_.find(type_index);
+  if (it == type_info_by_runtime_type_.end()) {
     return Unexpected(Error::type_error("TypeInfo not found for type_index"));
   }
   return it->second.get();
@@ -996,9 +997,10 @@ TypeResolver::build_final_type_resolver() {
   final_resolver->finalized_ = true;
 
   // Copy all existing type info maps
-  final_resolver->type_info_cache_ = type_info_cache_;
+  final_resolver->type_info_by_ctid_ = type_info_by_ctid_;
   final_resolver->type_info_by_id_ = type_info_by_id_;
   final_resolver->type_info_by_name_ = type_info_by_name_;
+  final_resolver->type_info_by_runtime_type_ = type_info_by_runtime_type_;
 
   // Process all partial type infos to build complete type metadata
   for (const auto &[rust_type_id, partial_info] : partial_type_infos_) {
@@ -1036,7 +1038,7 @@ TypeResolver::build_final_type_resolver() {
     complete_info->type_meta = std::move(parsed_meta_result).value();
 
     // Update all maps with complete info
-    final_resolver->type_info_cache_[rust_type_id] = complete_info;
+    final_resolver->type_info_by_ctid_[rust_type_id] = complete_info;
 
     if (complete_info->type_id != 0) {
       final_resolver->type_info_by_id_[complete_info->type_id] = complete_info;
@@ -1066,9 +1068,10 @@ std::shared_ptr<TypeResolver> TypeResolver::clone() const {
   cloned->finalized_ = finalized_;
 
   // Shallow copy all maps (shared_ptr sharing)
-  cloned->type_info_cache_ = type_info_cache_;
+  cloned->type_info_by_ctid_ = type_info_by_ctid_;
   cloned->type_info_by_id_ = type_info_by_id_;
   cloned->type_info_by_name_ = type_info_by_name_;
+  cloned->type_info_by_runtime_type_ = type_info_by_runtime_type_;
   // Don't copy partial_type_infos_ - clone should only be used on finalized
   // resolvers
 

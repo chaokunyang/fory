@@ -55,68 +55,6 @@ enum class Language : uint8_t {
   KOTLIN = 9,
 };
 
-// ============================================================================
-// Header Writing
-// ============================================================================
-
-/// Write Fory protocol header to buffer.
-///
-/// Header format:
-/// ```
-/// |  2 bytes  |    4 bits   | 1 bit | 1 bit | 1 bit  | 1 bit |  1 byte  |
-/// optional 4 bytes |
-/// +-----------+-------------+-------+-------+--------+-------+----------+------------------+
-/// |   magic   |  reserved   |  oob  | xlang | endian | null  | language |
-/// meta start offset|
-/// ```
-///
-/// @param buffer Output buffer
-/// @param is_null Whether object is null
-/// @param is_xlang Whether to use xlang format
-/// @param is_little_endian Whether data is little endian
-/// @param is_oob Whether out-of-band data is present
-/// @param language Language identifier
-inline void write_header(Buffer &buffer, bool is_null, bool is_xlang,
-                         bool is_little_endian, bool is_oob,
-                         Language language) {
-  // Ensure buffer has space for header (3 bytes: magic + flags, +1 for language
-  // if xlang)
-  buffer.Grow(is_xlang ? 4 : 3);
-  uint32_t start_pos = buffer.writer_index();
-
-  // Write magic number (2 bytes, little endian)
-  buffer.UnsafePut<uint16_t>(start_pos, MAGIC_NUMBER);
-
-  // Build flags byte
-  uint8_t flags = 0;
-  if (is_null) {
-    flags |= (1 << 0); // bit 0: null flag
-  }
-  if (is_little_endian) {
-    flags |= (1 << 1); // bit 1: endian flag
-  }
-  if (is_xlang) {
-    flags |= (1 << 2); // bit 2: xlang flag
-  }
-  if (is_oob) {
-    flags |= (1 << 3); // bit 3: oob flag
-  }
-  // bits 4-7: reserved (set to 0)
-
-  // Write flags byte
-  buffer.UnsafePutByte(start_pos + 2, flags);
-
-  // Update writer index (3 bytes written: magic + flags)
-  buffer.IncreaseWriterIndex(3);
-
-  // Java writes a language byte after header in xlang mode - match that format
-  if (is_xlang) {
-    buffer.WriteUint8(static_cast<uint8_t>(language));
-  }
-
-  // Note: Meta start offset would be written here if meta share mode is enabled
-}
-
 /// Detect if system is little endian
 inline bool is_little_endian_system() {
   uint32_t test = 1;

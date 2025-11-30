@@ -137,6 +137,9 @@ struct SerializationMeta<
 /// myapp::Person person{"Alice", 30};
 /// auto bytes = fory.serialize(person);
 /// ```
+/// Main struct registration macro.
+/// TypeIndex uses the fallback (type_fallback_hash based on PRETTY_FUNCTION)
+/// which provides unique type identification without namespace issues.
 #define FORY_STRUCT(Type, ...)                                                 \
   FORY_FIELD_INFO(Type, __VA_ARGS__)                                           \
   inline constexpr std::true_type ForyStructMarker(const Type &) noexcept {    \
@@ -1038,9 +1041,8 @@ read_fixed_primitive_fields(T &obj, Buffer &buffer,
 
 /// Helper to read remaining fields starting from Offset
 template <typename T, size_t Offset, size_t Total, size_t... Is>
-Result<void, Error>
-read_remaining_fields_impl(T &obj, ReadContext &ctx,
-                           std::index_sequence<Is...>) {
+Result<void, Error> read_remaining_fields_impl(T &obj, ReadContext &ctx,
+                                               std::index_sequence<Is...>) {
   Result<void, Error> result;
   ((result = read_field_at_sorted_position<T, Offset + Is>(obj, ctx),
     result.ok()) &&
@@ -1056,8 +1058,9 @@ Result<void, Error> read_remaining_fields(T &obj, ReadContext &ctx) {
 
 /// Read struct fields recursively using index sequence (sorted order - matches
 /// write order)
-/// Optimized: when compatible=false and there are leading fixed-size primitives,
-/// pre-check bounds once and use UnsafeGet for those fields.
+/// Optimized: when compatible=false and there are leading fixed-size
+/// primitives, pre-check bounds once and use UnsafeGet for those fields. Note:
+/// varints (int32/int64) cannot be pre-checked since their length is unknown.
 template <typename T, size_t... Indices>
 Result<void, Error> read_struct_fields_impl(T &obj, ReadContext &ctx,
                                             std::index_sequence<Indices...>) {
@@ -1067,6 +1070,7 @@ Result<void, Error> read_struct_fields_impl(T &obj, ReadContext &ctx,
   constexpr size_t total_count = sizeof...(Indices);
 
   // FAST PATH: When compatible=false and we have leading fixed-size primitives
+  // (bool, int8, int16, float, double - NOT varints like int32/int64)
   if constexpr (fixed_count > 0 && fixed_bytes > 0) {
     if (!ctx.is_compatible()) {
       Buffer &buffer = ctx.buffer();
@@ -1089,7 +1093,7 @@ Result<void, Error> read_struct_fields_impl(T &obj, ReadContext &ctx,
     }
   }
 
-  // SLOW PATH: compatible mode or no leading fixed-size primitives
+  // NORMAL PATH: compatible mode or structs with varints/complex types
   Result<void, Error> result;
   ((result = read_field_at_sorted_position<T, Indices>(obj, ctx),
     result.ok()) &&
@@ -1186,7 +1190,8 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
 
     // In compatible mode, always write meta index (matches Rust behavior)
     if (ctx.is_compatible() && type_info->type_meta) {
-      FORY_TRY(meta_index, ctx.push_meta(std::type_index(typeid(T))));
+      // Use TypeInfo* overload to avoid type_index creation
+      size_t meta_index = ctx.push_meta(type_info.get());
       ctx.write_varuint32(static_cast<uint32_t>(meta_index));
     }
     return Result<void, Error>();
@@ -1203,9 +1208,12 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
     return Result<void, Error>();
   }
 
-  /// Thread-local cache for type_id to avoid hash lookups on hot path
+  /// Thread-local cache for type_id and TypeInfo to avoid hash lookups on hot
+  /// path. Uses compile-time type ID for lookup, stores TypeInfo pointer for
+  /// fast access.
   struct TypeIdCache {
     const TypeResolver *resolver = nullptr;
+    const TypeInfo *type_info = nullptr;
     uint32_t type_id = 0;
   };
 
@@ -1220,8 +1228,16 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
       const TypeResolver *current_resolver = &ctx.type_resolver();
 
       if (cache.resolver != current_resolver) {
-        // Cache miss - need to lookup and cache
-        cache.type_id = ctx.get_type_id_for_cache(std::type_index(typeid(T)));
+        // Cache miss - need to lookup and cache using compile-time type ID
+        auto info_result =
+            ctx.type_resolver().template get_struct_type_info<T>();
+        if (FORY_PREDICT_TRUE(info_result.ok())) {
+          cache.type_info = info_result.value().get();
+          cache.type_id = cache.type_info->type_id;
+        } else {
+          cache.type_info = nullptr;
+          cache.type_id = 0;
+        }
         cache.resolver = current_resolver;
       }
 
@@ -1231,9 +1247,8 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
         // Simple STRUCT - just write the type_id directly
         ctx.write_struct_type_id_direct(cache.type_id);
       } else {
-        // Complex type (NAMED_STRUCT, COMPATIBLE_STRUCT, etc.) - use full path
-        FORY_RETURN_NOT_OK(
-            ctx.write_struct_type_info(std::type_index(typeid(T))));
+        // Complex type (NAMED_STRUCT, COMPATIBLE_STRUCT, etc.) - use TypeInfo*
+        FORY_RETURN_NOT_OK(ctx.write_struct_type_info(cache.type_info));
       }
     }
     return write_data_generic(obj, ctx, has_generics);

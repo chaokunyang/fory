@@ -448,13 +448,14 @@ public:
   template <typename T> Result<uint32_t, Error> get_type_id();
 
   /// Get type info by type ID (for non-namespaced types)
-  /// @return const pointer to TypeInfo if found, nullptr otherwise
-  const TypeInfo *get_type_info_by_id(uint32_t type_id) const;
+  /// @return const reference to TypeInfo if found, error otherwise
+  Result<const TypeInfo &, Error> get_type_info_by_id(uint32_t type_id) const;
 
   /// Get type info by namespace and type name (for namespaced types)
-  /// @return const pointer to TypeInfo if found, nullptr otherwise
-  const TypeInfo *get_type_info_by_name(const std::string &ns,
-                                        const std::string &type_name) const;
+  /// @return const reference to TypeInfo if found, error otherwise
+  Result<const TypeInfo &, Error>
+  get_type_info_by_name(const std::string &ns,
+                        const std::string &type_name) const;
 
   /// Get TypeInfo by type_index (used for looking up registered types)
   /// @return const reference to TypeInfo if found, error otherwise
@@ -1135,24 +1136,26 @@ TypeResolver::register_type_internal_runtime(const std::type_index &type_index,
   type_info_by_runtime_type_[type_index] = info;
 }
 
-inline const TypeInfo *
+inline Result<const TypeInfo &, Error>
 TypeResolver::get_type_info_by_id(uint32_t type_id) const {
   auto it = type_info_by_id_.find(type_id);
   if (it != type_info_by_id_.end()) {
-    return it->second;
+    return *it->second;
   }
-  return nullptr;
+  return Unexpected(Error::type_error("TypeInfo not found for type_id: " +
+                                      std::to_string(type_id)));
 }
 
-inline const TypeInfo *
+inline Result<const TypeInfo &, Error>
 TypeResolver::get_type_info_by_name(const std::string &ns,
                                     const std::string &type_name) const {
   auto key = make_name_key(ns, type_name);
   auto it = type_info_by_name_.find(key);
   if (it != type_info_by_name_.end()) {
-    return it->second;
+    return *it->second;
   }
-  return nullptr;
+  return Unexpected(Error::type_error("TypeInfo not found for type: " + ns +
+                                      "." + type_name));
 }
 
 // ============================================================================
@@ -1162,12 +1165,10 @@ TypeResolver::get_type_info_by_name(const std::string &ns,
 
 template <typename E> Result<void, Error> WriteContext::write_enum_typeinfo() {
   const TypeInfo *type_info = type_resolver_->get_type_info<E>();
-  if (type_info) {
-    return write_enum_typeinfo(type_info);
+  if (!type_info) {
+    return Unexpected(Error::type_error("Enum type not registered"));
   }
-  // Enum not registered, write plain ENUM type id
-  buffer_.WriteVarUint32(static_cast<uint32_t>(TypeId::ENUM));
-  return Result<void, Error>();
+  return write_enum_typeinfo(type_info);
 }
 
 } // namespace serialization

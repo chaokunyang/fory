@@ -236,7 +236,11 @@ Result<void, Error> skip_ext(ReadContext &ctx, const FieldType &field_type) {
   } else {
     // ID-based ext: look up by full type_id
     // The ext fields in TypeMeta store the user type_id (high bits | EXT)
-    type_info = ctx.type_resolver().get_type_info_by_id(full_type_id);
+    auto result = ctx.type_resolver().get_type_info_by_id(full_type_id);
+    if (!result.ok()) {
+      return Unexpected(result.error());
+    }
+    type_info = &result.value();
   }
 
   if (!type_info) {

@@ -91,6 +91,11 @@ inline void register_test_types(Fory &fory) {
   fory.register_struct<::SimpleStruct>(type_id++);
   fory.register_struct<::ComplexStruct>(type_id++);
   fory.register_struct<::NestedStruct>(type_id++);
+
+  // Register all enum types used in tests (register_struct works for enums too)
+  fory.register_struct<Color>(type_id++);
+  fory.register_struct<LegacyStatus>(type_id++);
+  fory.register_struct<OldStatus>(type_id++);
 }
 
 template <typename T>
@@ -195,6 +200,7 @@ TEST(SerializationTest, OldEnumRoundtrip) {
 
 TEST(SerializationTest, EnumSerializesOrdinalValue) {
   auto fory = Fory::builder().xlang(true).track_ref(false).build();
+  fory.register_struct<LegacyStatus>(1);
 
   auto bytes_result = fory.serialize(LegacyStatus::LARGE);
   ASSERT_TRUE(bytes_result.ok())
@@ -202,48 +208,57 @@ TEST(SerializationTest, EnumSerializesOrdinalValue) {
 
   std::vector<uint8_t> bytes = bytes_result.value();
   // Xlang spec: enums are serialized as varuint32, not fixed int32_t
-  // Expected: 4 (header) + 1 (ref flag) + 1 (type id) + 1 (ordinal as
-  // varuint32) = 7 bytes
-  ASSERT_GE(bytes.size(), 4 + 1 + 1 + 1);
+  // With registration, type_id = (1 << 8) + ENUM = 269, which takes 2 bytes as
+  // varuint32 Expected: 4 (header) + 1 (ref flag) + 2 (type id as varuint) + 1
+  // (ordinal as varuint32) = 8 bytes
+  ASSERT_GE(bytes.size(), 4 + 1 + 2 + 1);
   size_t offset = 4;
   EXPECT_EQ(bytes[offset], static_cast<uint8_t>(NOT_NULL_VALUE_FLAG));
-  EXPECT_EQ(bytes[offset + 1], static_cast<uint8_t>(TypeId::ENUM));
+  // Type ID 269 = (1 << 8) + ENUM encoded as varuint32: 0x8D, 0x02
+  EXPECT_EQ(bytes[offset + 1], 0x8D);
+  EXPECT_EQ(bytes[offset + 2], 0x02);
   // Ordinal 2 encoded as varuint32 is just 1 byte with value 2
-  EXPECT_EQ(bytes[offset + 2], 2);
+  EXPECT_EQ(bytes[offset + 3], 2);
 }
 
 TEST(SerializationTest, OldEnumSerializesOrdinalValue) {
   auto fory = Fory::builder().xlang(true).track_ref(false).build();
+  fory.register_struct<OldStatus>(1);
 
   auto bytes_result = fory.serialize(OldStatus::OLD_POS);
   ASSERT_TRUE(bytes_result.ok())
       << "Serialization failed: " << bytes_result.error().to_string();
 
   std::vector<uint8_t> bytes = bytes_result.value();
-  // Xlang spec: enums are serialized as varuint32, not fixed int32_t
-  ASSERT_GE(bytes.size(), 4 + 1 + 1 + 1);
+  // With registration, type_id = (1 << 8) + ENUM = 269, which takes 2 bytes
+  ASSERT_GE(bytes.size(), 4 + 1 + 2 + 1);
   size_t offset = 4;
   EXPECT_EQ(bytes[offset], static_cast<uint8_t>(NOT_NULL_VALUE_FLAG));
-  EXPECT_EQ(bytes[offset + 1], static_cast<uint8_t>(TypeId::ENUM));
+  // Type ID 269 encoded as varuint32: 0x8D, 0x02
+  EXPECT_EQ(bytes[offset + 1], 0x8D);
+  EXPECT_EQ(bytes[offset + 2], 0x02);
   // Ordinal 2 encoded as varuint32 is just 1 byte with value 2
-  EXPECT_EQ(bytes[offset + 2], 2);
+  EXPECT_EQ(bytes[offset + 3], 2);
 }
 
 TEST(SerializationTest, EnumOrdinalMappingHandlesNonZeroStart) {
   auto fory = Fory::builder().xlang(true).track_ref(false).build();
+  fory.register_struct<LegacyStatus>(1);
 
   auto bytes_result = fory.serialize(LegacyStatus::NEG);
   ASSERT_TRUE(bytes_result.ok())
       << "Serialization failed: " << bytes_result.error().to_string();
 
   std::vector<uint8_t> bytes = bytes_result.value();
-  // Xlang spec: enums are serialized as varuint32, not fixed int32_t
-  ASSERT_GE(bytes.size(), 4 + 1 + 1 + 1);
+  // With registration, type_id = (1 << 8) + ENUM = 269, which takes 2 bytes
+  ASSERT_GE(bytes.size(), 4 + 1 + 2 + 1);
   size_t offset = 4;
   EXPECT_EQ(bytes[offset], static_cast<uint8_t>(NOT_NULL_VALUE_FLAG));
-  EXPECT_EQ(bytes[offset + 1], static_cast<uint8_t>(TypeId::ENUM));
+  // Type ID 269 encoded as varuint32: 0x8D, 0x02
+  EXPECT_EQ(bytes[offset + 1], 0x8D);
+  EXPECT_EQ(bytes[offset + 2], 0x02);
   // Ordinal 0 encoded as varuint32 is just 1 byte with value 0
-  EXPECT_EQ(bytes[offset + 2], 0);
+  EXPECT_EQ(bytes[offset + 3], 0);
 
   auto roundtrip = fory.deserialize<LegacyStatus>(bytes.data(), bytes.size());
   ASSERT_TRUE(roundtrip.ok())
@@ -253,6 +268,7 @@ TEST(SerializationTest, EnumOrdinalMappingHandlesNonZeroStart) {
 
 TEST(SerializationTest, EnumOrdinalMappingRejectsInvalidOrdinal) {
   auto fory = Fory::builder().xlang(true).track_ref(false).build();
+  fory.register_struct<LegacyStatus>(1);
 
   auto bytes_result = fory.serialize(LegacyStatus::NEG);
   ASSERT_TRUE(bytes_result.ok())
@@ -260,8 +276,9 @@ TEST(SerializationTest, EnumOrdinalMappingRejectsInvalidOrdinal) {
 
   std::vector<uint8_t> bytes = bytes_result.value();
   size_t offset = 4;
+  // With registration, type_id takes 2 bytes, ordinal is at offset + 3
   // Replace the valid ordinal with an invalid one (99 as varuint32)
-  bytes[offset + 2] = 99;
+  bytes[offset + 3] = 99;
 
   auto decode = fory.deserialize<LegacyStatus>(bytes.data(), bytes.size());
   EXPECT_FALSE(decode.ok());
@@ -269,19 +286,22 @@ TEST(SerializationTest, EnumOrdinalMappingRejectsInvalidOrdinal) {
 
 TEST(SerializationTest, OldEnumOrdinalMappingHandlesNonZeroStart) {
   auto fory = Fory::builder().xlang(true).track_ref(false).build();
+  fory.register_struct<OldStatus>(1);
 
   auto bytes_result = fory.serialize(OldStatus::OLD_NEG);
   ASSERT_TRUE(bytes_result.ok())
       << "Serialization failed: " << bytes_result.error().to_string();
 
   std::vector<uint8_t> bytes = bytes_result.value();
-  // Xlang spec: enums are serialized as varuint32, not fixed int32_t
-  ASSERT_GE(bytes.size(), 4 + 1 + 1 + 1);
+  // With registration, type_id = (1 << 8) + ENUM = 269, which takes 2 bytes
+  ASSERT_GE(bytes.size(), 4 + 1 + 2 + 1);
   size_t offset = 4;
   EXPECT_EQ(bytes[offset], static_cast<uint8_t>(NOT_NULL_VALUE_FLAG));
-  EXPECT_EQ(bytes[offset + 1], static_cast<uint8_t>(TypeId::ENUM));
+  // Type ID 269 encoded as varuint32: 0x8D, 0x02
+  EXPECT_EQ(bytes[offset + 1], 0x8D);
+  EXPECT_EQ(bytes[offset + 2], 0x02);
   // Ordinal 0 encoded as varuint32 is just 1 byte with value 0
-  EXPECT_EQ(bytes[offset + 2], 0);
+  EXPECT_EQ(bytes[offset + 3], 0);
 
   auto roundtrip = fory.deserialize<OldStatus>(bytes.data(), bytes.size());
   ASSERT_TRUE(roundtrip.ok())

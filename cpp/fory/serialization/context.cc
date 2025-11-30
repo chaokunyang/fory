@@ -132,9 +132,7 @@ Result<void, Error>
 WriteContext::write_enum_typeinfo(const std::type_index &type) {
   auto type_info_result = type_resolver_->get_type_info(type);
   if (!type_info_result.ok()) {
-    // Enum not registered, write plain ENUM type id
-    buffer_.WriteVarUint32(static_cast<uint32_t>(TypeId::ENUM));
-    return Result<void, Error>();
+    return Unexpected(Error::type_error("Enum type not registered"));
   }
 
   const TypeInfo &type_info = type_info_result.value();
@@ -167,9 +165,7 @@ WriteContext::write_enum_typeinfo(const std::type_index &type) {
 Result<void, Error>
 WriteContext::write_enum_typeinfo(const TypeInfo *type_info) {
   if (!type_info) {
-    // Enum not registered, write plain ENUM type id
-    buffer_.WriteVarUint32(static_cast<uint32_t>(TypeId::ENUM));
-    return Result<void, Error>();
+    return Unexpected(Error::type_error("Enum type not registered"));
   }
 
   uint32_t type_id = type_info->type_id;
@@ -204,13 +200,11 @@ WriteContext::write_any_typeinfo(uint32_t fory_type_id,
   // Check if it's an internal type
   if (is_internal_type(fory_type_id)) {
     buffer_.WriteVarUint32(fory_type_id);
-    const TypeInfo *type_info =
-        type_resolver_->get_type_info_by_id(fory_type_id);
-    if (!type_info) {
-      return Unexpected(
-          Error::type_error("Type info for internal type not found"));
+    auto type_info_result = type_resolver_->get_type_info_by_id(fory_type_id);
+    if (!type_info_result.ok()) {
+      return Unexpected(type_info_result.error());
     }
-    return type_info;
+    return &type_info_result.value();
   }
 
   // Get type info for the concrete type
@@ -435,14 +429,20 @@ Result<size_t, Error> ReadContext::load_type_meta(int32_t meta_offset) {
     FORY_TRY(parsed_meta,
              TypeMeta::from_bytes_with_header(*buffer_, meta_header));
 
-    // Find local TypeInfo to get field_id mapping
+    // Find local TypeInfo to get field_id mapping (optional for schema
+    // evolution)
     const TypeInfo *local_type_info = nullptr;
     if (parsed_meta->register_by_name) {
-      local_type_info = type_resolver_->get_type_info_by_name(
+      auto result = type_resolver_->get_type_info_by_name(
           parsed_meta->namespace_str, parsed_meta->type_name);
+      if (result.ok()) {
+        local_type_info = &result.value();
+      }
     } else {
-      local_type_info =
-          type_resolver_->get_type_info_by_id(parsed_meta->type_id);
+      auto result = type_resolver_->get_type_info_by_id(parsed_meta->type_id);
+      if (result.ok()) {
+        local_type_info = &result.value();
+      }
     }
 
     // Create TypeInfo with field_ids assigned
@@ -524,22 +524,20 @@ Result<const TypeInfo *, Error> ReadContext::read_any_typeinfo() {
              meta_string_table_.read_string(*buffer_, kNamespaceDecoder));
     FORY_TRY(type_name,
              meta_string_table_.read_string(*buffer_, kTypeNameDecoder));
-    const TypeInfo *type_info =
+    auto type_info_result =
         type_resolver_->get_type_info_by_name(namespace_str, type_name);
-    if (!type_info) {
-      return Unexpected(Error::type_error(
-          "Name harness not found: " + namespace_str + "." + type_name));
+    if (!type_info_result.ok()) {
+      return Unexpected(type_info_result.error());
     }
-    return type_info;
+    return &type_info_result.value();
   }
   default: {
     // All types must be registered in type_resolver
-    const TypeInfo *type_info = type_resolver_->get_type_info_by_id(type_id);
-    if (!type_info) {
-      return Unexpected(Error::type_error("Type not found for type_id: " +
-                                          std::to_string(type_id)));
+    auto type_info_result = type_resolver_->get_type_info_by_id(type_id);
+    if (!type_info_result.ok()) {
+      return Unexpected(type_info_result.error());
     }
-    return type_info;
+    return &type_info_result.value();
   }
   }
 }

@@ -21,6 +21,8 @@ package org.apache.fory.format.type;
 
 import static org.apache.fory.type.TypeUtils.getRawType;
 
+import java.lang.reflect.Type;
+import java.lang.reflect.TypeVariable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -134,6 +136,14 @@ public class TypeInference {
    * @return DataType of a typeToken
    */
   private static Field inferField(String name, TypeRef<?> typeRef, TypeResolutionContext ctx) {
+    // Handle TypeVariable (e.g., K, V from Map<K, V>) by resolving to its bound.
+    // This can happen with Scala 3 LTS where generic type information may not be fully resolved.
+    Type type = typeRef.getType();
+    if (type instanceof TypeVariable) {
+      TypeVariable<?> typeVariable = (TypeVariable<?>) type;
+      Type bound = typeVariable.getBounds()[0]; // First bound is a class, others are interfaces
+      return inferField(name, TypeRef.of(bound), ctx);
+    }
     Class<?> rawType = getRawType(typeRef);
     Class<?> enclosingType = ctx.getEnclosingType().getRawType();
     CustomCodec<?, ?> customEncoder =

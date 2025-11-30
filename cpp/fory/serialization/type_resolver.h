@@ -985,8 +985,8 @@ TypeResolver::build_ext_type_info(uint32_t type_id, std::string ns,
                                   bool register_by_name) {
   auto entry = std::make_shared<TypeInfo>();
   entry->type_id = type_id;
-  entry->namespace_name = std::move(ns);
-  entry->type_name = std::move(type_name);
+  entry->namespace_name = ns;
+  entry->type_name = type_name;
   entry->register_by_name = register_by_name;
   entry->is_external = true;
   entry->harness = make_serializer_harness<T>();
@@ -1001,6 +1001,15 @@ TypeResolver::build_ext_type_info(uint32_t type_id, std::string ns,
   entry->encoded_namespace = std::move(enc_ns);
   FORY_TRY(enc_tn, encode_meta_string(entry->type_name, false));
   entry->encoded_type_name = std::move(enc_tn);
+
+  // Create TypeMeta for extension type (with empty fields) and generate
+  // type_def. Extension types need type_def for meta sharing in compatible
+  // mode.
+  TypeMeta meta = TypeMeta::from_fields(type_id, entry->namespace_name,
+                                        entry->type_name, register_by_name,
+                                        std::vector<FieldInfo>{});
+  FORY_TRY(type_def, meta.to_bytes());
+  entry->type_def = std::move(type_def);
 
   return entry;
 }

@@ -444,6 +444,37 @@ public:
     return deserialize<T>(data.data(), data.size());
   }
 
+  /// Deserialize an object from a Buffer, updating the buffer's reader_index.
+  ///
+  /// This overload reads from the current reader_index position and updates
+  /// the reader_index after deserialization, allowing multiple objects to
+  /// be read from the same buffer sequentially.
+  ///
+  /// @tparam T The type of object to deserialize.
+  /// @param buffer Buffer to read from. Its reader_index will be updated.
+  /// @return Deserialized object, or error.
+  template <typename T> Result<T, Error> deserialize(Buffer &buffer) {
+    if (FORY_PREDICT_FALSE(!finalized_)) {
+      ensure_finalized();
+    }
+    if (buffer.reader_index() >= buffer.writer_index()) {
+      return Unexpected(Error::invalid("No data to read in buffer"));
+    }
+
+    FORY_TRY(header, read_header(buffer));
+    if (header.is_null) {
+      return Unexpected(Error::invalid_data("Cannot deserialize null object"));
+    }
+    if (header.is_little_endian != is_little_endian_system()) {
+      return Unexpected(
+          Error::unsupported("Cross-endian deserialization not yet supported"));
+    }
+
+    read_ctx_.attach(buffer);
+    ReadContextGuard guard(read_ctx_);
+    return deserialize_impl<T>(buffer);
+  }
+
   // ==========================================================================
   // Advanced Access
   // ==========================================================================

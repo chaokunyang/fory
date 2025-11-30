@@ -26,7 +26,6 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
-#include <iomanip>
 #include <iostream>
 #include <limits>
 #include <map>
@@ -101,8 +100,6 @@ void WriteFile(const std::string &path, const std::vector<uint8_t> &data) {
                static_cast<std::streamsize>(data.size()));
   output.flush();
   output.close();
-  std::cerr << "[WriteFile] Wrote " << data.size() << " bytes to " << path
-            << std::endl;
 }
 
 // ---------------------------------------------------------------------------
@@ -331,9 +328,8 @@ Buffer MakeBuffer(std::vector<uint8_t> &bytes) {
 }
 
 template <typename T> T ReadNext(Fory &fory, Buffer &buffer) {
-  // Use public deserialize API with data pointer and size
-  auto result = fory.deserialize<T>(buffer.data() + buffer.reader_index(),
-                                    buffer.writer_index() - buffer.reader_index());
+  // Use Buffer-based deserialize API which updates buffer's reader_index
+  auto result = fory.deserialize<T>(buffer);
   if (!result.ok()) {
     Fail("Failed to deserialize value: " + result.error().message());
   }
@@ -891,34 +887,8 @@ void RunTestSimpleStruct(const std::string &data_file) {
   if (!(value == expected)) {
     Fail("SimpleStruct mismatch");
   }
-  // Print sorted field order
-  {
-    using Helpers =
-        fory::serialization::detail::CompileTimeFieldHelpers<SimpleStruct>;
-    std::cerr << "[C++ DEBUG] SimpleStruct sorted field indices: ";
-    for (size_t i = 0; i < Helpers::FieldCount; ++i) {
-      std::cerr << Helpers::sorted_indices[i];
-      if (i < Helpers::FieldCount - 1)
-        std::cerr << ", ";
-    }
-    std::cerr << std::endl;
-    std::cerr << "[C++ DEBUG] SimpleStruct sorted field names: ";
-    for (size_t i = 0; i < Helpers::FieldCount; ++i) {
-      std::cerr << Helpers::sorted_field_names[i];
-      if (i < Helpers::FieldCount - 1)
-        std::cerr << ", ";
-    }
-    std::cerr << std::endl;
-  }
   std::vector<uint8_t> out;
   AppendSerialized(fory, value, out);
-  // Dump output bytes for debugging
-  std::cerr << "[C++ WRITE] SimpleStruct output (" << out.size() << " bytes): ";
-  for (size_t i = 0; i < std::min(out.size(), size_t(120)); ++i) {
-    std::cerr << std::hex << std::setw(2) << std::setfill('0') << (int)out[i]
-              << " ";
-  }
-  std::cerr << std::dec << std::endl;
   WriteFile(data_file, out);
 }
 
@@ -1023,10 +993,6 @@ void RunTestInteger(const std::string &data_file) {
   EnsureOk(fory.register_struct<Item1>(101), "register Item1");
   Buffer buffer = MakeBuffer(bytes);
 
-  std::cerr << "[test_integer] buffer size=" << buffer.size()
-            << ", reader_index=" << buffer.reader_index()
-            << ", writer_index=" << buffer.writer_index() << std::endl;
-
   Item1 expected;
   expected.f1 = 1;
   expected.f2 = 2;
@@ -1036,13 +1002,6 @@ void RunTestInteger(const std::string &data_file) {
   expected.f6 = std::nullopt;
 
   auto item_value = ReadNext<Item1>(fory, buffer);
-  std::cerr << "[test_integer] after Item1 reader_index="
-            << buffer.reader_index() << std::endl;
-  std::cerr << "[test_integer] item_value.f1=" << item_value.f1
-            << ", f2=" << (item_value.f2 ? *item_value.f2 : -1)
-            << ", f3=" << (item_value.f3 ? *item_value.f3 : -1)
-            << ", f4=" << item_value.f4 << ", f5=" << item_value.f5
-            << ", f6_has=" << (item_value.f6.has_value() ? 1 : 0) << std::endl;
   if (!(item_value == expected)) {
     Fail("Item1 mismatch");
   }
@@ -1126,14 +1085,6 @@ void RunTestColor(const std::string &data_file) {
 
 void RunTestStructWithList(const std::string &data_file) {
   auto bytes = ReadFile(data_file);
-
-  std::cerr << "[C++ READ] Input bytes (" << bytes.size() << " bytes): ";
-  for (size_t i = 0; i < std::min(bytes.size(), size_t(200)); ++i) {
-    std::cerr << std::hex << std::setw(2) << std::setfill('0')
-              << (int)(uint8_t)bytes[i] << " ";
-  }
-  std::cerr << std::dec << std::endl;
-
   auto fory = BuildFory(true, true);
   EnsureOk(fory.register_struct<StructWithList>(201),
            "register StructWithList");
@@ -1146,37 +1097,19 @@ void RunTestStructWithList(const std::string &data_file) {
   StructWithList expected2;
   expected2.items = {std::string("x"), std::nullopt, std::string("z")};
 
-  std::cerr << "[C++ READ] Attempting to read struct 1..." << std::endl;
   StructWithList struct1 = ReadNext<StructWithList>(fory, buffer);
-  std::cerr << "[C++ READ] Struct 1 items size: " << struct1.items.size()
-            << std::endl;
   if (!(struct1 == expected1)) {
     Fail("StructWithList 1 mismatch");
   }
 
-  std::cerr << "[C++ READ] Attempting to read struct 2..." << std::endl;
   StructWithList struct2 = ReadNext<StructWithList>(fory, buffer);
-  std::cerr << "[C++ READ] Struct 2 items size: " << struct2.items.size()
-            << std::endl;
   if (!(struct2 == expected2)) {
     Fail("StructWithList 2 mismatch");
   }
 
   std::vector<uint8_t> out;
   AppendSerialized(fory, expected1, out);
-
-  std::cerr << "[C++ WRITE] After struct 1 (" << out.size() << " bytes): ";
-  for (size_t i = 0; i < std::min(out.size(), size_t(100)); ++i) {
-    std::cerr << std::hex << std::setw(2) << std::setfill('0')
-              << (int)(uint8_t)out[i] << " ";
-  }
-  std::cerr << std::dec << std::endl;
-
   AppendSerialized(fory, expected2, out);
-
-  std::cerr << "[C++ WRITE] After struct 2 (total " << out.size() << " bytes)"
-            << std::endl;
-
   WriteFile(data_file, out);
 }
 
@@ -1250,7 +1183,10 @@ void RunTestSkipNameCustom(const std::string &data_file) {
   {
     std::vector<uint8_t> copy = bytes;
     Buffer buffer = MakeBuffer(copy);
-    (void)ReadNext<EmptyWrapper>(limited, buffer);
+    auto result = limited.deserialize<EmptyWrapper>(buffer);
+    if (!result.ok()) {
+      Fail("Failed to deserialize EmptyWrapper: " + result.error().message());
+    }
   }
 
   auto full = BuildFory(true, true);
@@ -1306,24 +1242,12 @@ void RunTestConsistentNamed(const std::string &data_file) {
   for (int i = 0; i < 3; ++i) {
     AppendSerialized(fory, Color::White, out);
   }
-  std::cerr << "[C++ WRITE] After 3 colors (" << out.size() << " bytes): ";
-  for (size_t i = 0; i < std::min(out.size(), size_t(80)); ++i) {
-    std::cerr << std::hex << std::setw(2) << std::setfill('0')
-              << (int)(uint8_t)out[i] << " ";
-  }
-  std::cerr << std::dec << std::endl;
   for (int i = 0; i < 3; ++i) {
     AppendSerialized(fory, my_struct, out);
   }
   for (int i = 0; i < 3; ++i) {
     AppendSerialized(fory, my_ext, out);
   }
-  std::cerr << "[C++ WRITE] Total (" << out.size() << " bytes): ";
-  for (size_t i = 0; i < std::min(out.size(), size_t(200)); ++i) {
-    std::cerr << std::hex << std::setw(2) << std::setfill('0')
-              << (int)(uint8_t)out[i] << " ";
-  }
-  std::cerr << std::dec << std::endl;
   WriteFile(data_file, out);
 }
 

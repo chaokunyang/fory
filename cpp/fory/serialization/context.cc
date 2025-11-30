@@ -473,8 +473,11 @@ Result<size_t, Error> ReadContext::load_type_meta(int32_t meta_offset) {
     std::shared_ptr<TypeInfo> type_info;
     if (local_type_info) {
       // Have local type - assign field_ids by comparing schemas
-      TypeMeta::assign_field_ids(local_type_info->type_meta.get(),
-                                 parsed_meta->field_infos);
+      // Note: Extension types don't have type_meta (only structs do)
+      if (local_type_info->type_meta) {
+        TypeMeta::assign_field_ids(local_type_info->type_meta.get(),
+                                   parsed_meta->field_infos);
+      }
       type_info = std::make_shared<TypeInfo>();
       type_info->type_id = local_type_info->type_id;
       type_info->type_meta = parsed_meta;

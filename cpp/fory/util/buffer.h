@@ -40,7 +40,8 @@ public:
   Buffer();
 
   Buffer(uint8_t *data, uint32_t size, bool own_data = true)
-      : data_(data), size_(size), own_data_(own_data), wrapped_vector_(nullptr) {
+      : data_(data), size_(size), own_data_(own_data),
+        wrapped_vector_(nullptr) {
     writer_index_ = 0;
     reader_index_ = 0;
   }

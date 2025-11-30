@@ -251,6 +251,10 @@ public:
   /// Avoids type_index creation and lookup overhead.
   Result<void, Error> write_enum_typeinfo(const TypeInfo *type_info);
 
+  /// Write type info for a registered enum type using compile-time type lookup.
+  /// Faster than the std::type_index version - uses type_index<E>().
+  template <typename E> Result<void, Error> write_enum_typeinfo();
+
   /// Reset context for reuse.
   void reset();
 

@@ -1146,5 +1146,20 @@ TypeResolver::get_type_info_by_name(const std::string &ns,
   return nullptr;
 }
 
+// ============================================================================
+// WriteContext template implementations (defined here because they need
+// TypeResolver to be complete)
+// ============================================================================
+
+template <typename E> Result<void, Error> WriteContext::write_enum_typeinfo() {
+  auto type_info = type_resolver_->get_type_info<E>();
+  if (type_info) {
+    return write_enum_typeinfo(type_info.get());
+  }
+  // Enum not registered, write plain ENUM type id
+  buffer_.WriteVarUint32(static_cast<uint32_t>(TypeId::ENUM));
+  return Result<void, Error>();
+}
+
 } // namespace serialization
 } // namespace fory

@@ -106,15 +106,29 @@ struct TypeInfo {
   std::string type_name;
   bool register_by_name = false;
   bool is_external = false;
-  std::shared_ptr<TypeMeta> type_meta;
+  std::unique_ptr<TypeMeta> type_meta;
   std::vector<size_t> sorted_indices;
   absl::flat_hash_map<std::string, size_t> name_to_index;
   std::vector<uint8_t> type_def;
   Harness harness;
   // Pre-encoded meta strings for efficient writing (avoids re-encoding on each
   // write)
-  std::shared_ptr<CachedMetaString> encoded_namespace;
-  std::shared_ptr<CachedMetaString> encoded_type_name;
+  std::unique_ptr<CachedMetaString> encoded_namespace;
+  std::unique_ptr<CachedMetaString> encoded_type_name;
+
+  TypeInfo() = default;
+
+  // Non-copyable due to unique_ptr members
+  TypeInfo(const TypeInfo &) = delete;
+  TypeInfo &operator=(const TypeInfo &) = delete;
+
+  // Movable
+  TypeInfo(TypeInfo &&) = default;
+  TypeInfo &operator=(TypeInfo &&) = default;
+
+  /// Creates a deep clone of this TypeInfo.
+  /// All unique_ptr members are cloned into new instances.
+  std::unique_ptr<TypeInfo> deep_clone() const;
 };
 
 } // namespace serialization

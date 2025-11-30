@@ -76,9 +76,10 @@ private:
 /// ```
 class WriteContext {
 public:
-  /// Construct write context with configuration and shared type resolver.
+  /// Construct write context with configuration and type resolver.
+  /// Takes ownership of the type resolver.
   explicit WriteContext(const Config &config,
-                        std::shared_ptr<TypeResolver> type_resolver);
+                        std::unique_ptr<TypeResolver> type_resolver);
 
   /// Destructor
   ~WriteContext();
@@ -261,7 +262,7 @@ public:
 private:
   Buffer buffer_;
   const Config *config_;
-  std::shared_ptr<TypeResolver> type_resolver_;
+  std::unique_ptr<TypeResolver> type_resolver_;
   RefWriter ref_writer_;
   uint32_t current_dyn_depth_;
 
@@ -292,9 +293,10 @@ private:
 /// ```
 class ReadContext {
 public:
-  /// Construct read context with configuration and shared type resolver.
+  /// Construct read context with configuration and type resolver.
+  /// Takes ownership of the type resolver.
   explicit ReadContext(const Config &config,
-                       std::shared_ptr<TypeResolver> type_resolver);
+                       std::unique_ptr<TypeResolver> type_resolver);
 
   /// Destructor
   ~ReadContext();
@@ -403,12 +405,11 @@ public:
     return buffer().ReadBytes(data, length);
   }
 
-  Result<std::shared_ptr<TypeInfo>, Error>
+  Result<const TypeInfo *, Error>
   read_enum_type_info(const std::type_index &type, uint32_t base_type_id);
 
   /// Read enum type info without type_index (fast path).
-  Result<std::shared_ptr<TypeInfo>, Error>
-  read_enum_type_info(uint32_t base_type_id);
+  Result<const TypeInfo *, Error> read_enum_type_info(uint32_t base_type_id);
 
   /// Load all TypeMetas from buffer at the specified offset.
   /// After loading, the reader position is restored to where it was before.
@@ -416,8 +417,8 @@ public:
   Result<size_t, Error> load_type_meta(int32_t meta_offset);
 
   /// Get TypeInfo by meta index.
-  Result<std::shared_ptr<TypeInfo>, Error>
-  get_type_info_by_index(size_t index) const;
+  /// @return const pointer to TypeInfo if found, error otherwise
+  Result<const TypeInfo *, Error> get_type_info_by_index(size_t index) const;
 
   /// Read type information dynamically from buffer based on type ID.
   /// This mirrors Rust's read_any_typeinfo implementation.
@@ -428,8 +429,8 @@ public:
   ///   (as raw strings if share_meta is disabled, or meta_index if enabled)
   /// - Other types: look up by type_id
   ///
-  /// @return TypeInfo for the read type, or error
-  Result<std::shared_ptr<TypeInfo>, Error> read_any_typeinfo();
+  /// @return const pointer to TypeInfo for the read type, or error
+  Result<const TypeInfo *, Error> read_any_typeinfo();
 
   /// Reset context for reuse.
   void reset();
@@ -437,13 +438,17 @@ public:
 private:
   Buffer *buffer_;
   const Config *config_;
-  std::shared_ptr<TypeResolver> type_resolver_;
+  std::unique_ptr<TypeResolver> type_resolver_;
   RefReader ref_reader_;
   uint32_t current_dyn_depth_;
 
   // Meta sharing state (for compatible mode)
-  std::vector<std::shared_ptr<TypeInfo>> reading_type_infos_;
-  absl::flat_hash_map<int64_t, std::shared_ptr<TypeInfo>> parsed_type_infos_;
+  // Primary storage for TypeInfo objects created during deserialization
+  std::vector<std::unique_ptr<TypeInfo>> owned_reading_type_infos_;
+  // Index-based access (pointers to owned_reading_type_infos_ or type_resolver)
+  std::vector<const TypeInfo *> reading_type_infos_;
+  // Cache by meta_header (pointers to owned_reading_type_infos_)
+  absl::flat_hash_map<int64_t, const TypeInfo *> parsed_type_infos_;
 
   // Dynamic meta strings used for named type/class info.
   meta::MetaStringTable meta_string_table_;

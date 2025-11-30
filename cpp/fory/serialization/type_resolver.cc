@@ -336,7 +336,7 @@ Result<std::vector<uint8_t>, Error> TypeMeta::to_bytes() const {
                                   result_buffer.writer_index());
 }
 
-Result<std::shared_ptr<TypeMeta>, Error>
+Result<std::unique_ptr<TypeMeta>, Error>
 TypeMeta::from_bytes(Buffer &buffer, const TypeMeta *local_type_info) {
   size_t start_pos = buffer.reader_index();
 
@@ -411,7 +411,7 @@ TypeMeta::from_bytes(Buffer &buffer, const TypeMeta *local_type_info) {
     buffer.IncreaseReaderIndex(remaining);
   }
 
-  auto meta = std::make_shared<TypeMeta>();
+  auto meta = std::make_unique<TypeMeta>();
   meta->hash = meta_hash;
   meta->type_id = type_id;
   meta->namespace_str = std::move(namespace_str);
@@ -422,7 +422,7 @@ TypeMeta::from_bytes(Buffer &buffer, const TypeMeta *local_type_info) {
   return meta;
 }
 
-Result<std::shared_ptr<TypeMeta>, Error>
+Result<std::unique_ptr<TypeMeta>, Error>
 TypeMeta::from_bytes_with_header(Buffer &buffer, int64_t header) {
   int64_t meta_size = header & META_SIZE_MASK;
   size_t header_size = 0;
@@ -489,7 +489,7 @@ TypeMeta::from_bytes_with_header(Buffer &buffer, int64_t header) {
     buffer.IncreaseReaderIndex(remaining);
   }
 
-  auto meta = std::make_shared<TypeMeta>();
+  auto meta = std::make_unique<TypeMeta>();
   meta->hash = meta_hash;
   meta->type_id = type_id;
   meta->namespace_str = std::move(namespace_str);
@@ -904,90 +904,102 @@ int32_t TypeMeta::compute_struct_version(const TypeMeta &meta) {
 }
 
 // ============================================================================
-// TypeResolver::read_any_typeinfo Implementation
+// TypeInfo::deep_clone Implementation
 // ============================================================================
 
-Result<std::shared_ptr<TypeInfo>, Error>
-TypeResolver::read_any_typeinfo(ReadContext &ctx) {
-  return read_any_typeinfo(ctx, nullptr);
+std::unique_ptr<TypeInfo> TypeInfo::deep_clone() const {
+  auto cloned = std::make_unique<TypeInfo>();
+  cloned->type_id = type_id;
+  cloned->namespace_name = namespace_name;
+  cloned->type_name = type_name;
+  cloned->register_by_name = register_by_name;
+  cloned->is_external = is_external;
+  cloned->sorted_indices = sorted_indices;
+  cloned->name_to_index = name_to_index;
+  cloned->type_def = type_def;
+  cloned->harness = harness;
+
+  // Deep clone unique_ptr members
+  if (type_meta) {
+    cloned->type_meta = std::make_unique<TypeMeta>(*type_meta);
+  }
+  if (encoded_namespace) {
+    cloned->encoded_namespace = std::make_unique<CachedMetaString>();
+    cloned->encoded_namespace->original = encoded_namespace->original;
+    cloned->encoded_namespace->bytes = encoded_namespace->bytes;
+    cloned->encoded_namespace->encoding = encoded_namespace->encoding;
+    cloned->encoded_namespace->hash = encoded_namespace->hash;
+  }
+  if (encoded_type_name) {
+    cloned->encoded_type_name = std::make_unique<CachedMetaString>();
+    cloned->encoded_type_name->original = encoded_type_name->original;
+    cloned->encoded_type_name->bytes = encoded_type_name->bytes;
+    cloned->encoded_type_name->encoding = encoded_type_name->encoding;
+    cloned->encoded_type_name->hash = encoded_type_name->hash;
+  }
+
+  return cloned;
 }
 
-Result<std::shared_ptr<TypeInfo>, Error>
-TypeResolver::read_any_typeinfo(ReadContext &ctx,
-                                const TypeMeta *local_type_meta) {
-  FORY_TRY(fory_type_id, ctx.read_varuint32());
-  uint32_t type_id_low = fory_type_id & 0xff;
+// ============================================================================
+// encode_meta_string Implementation
+// ============================================================================
 
-  // Handle compatible struct types (with embedded TypeMeta)
-  if (type_id_low == static_cast<uint32_t>(TypeId::NAMED_COMPATIBLE_STRUCT) ||
-      type_id_low == static_cast<uint32_t>(TypeId::COMPATIBLE_STRUCT)) {
-    // Use provided local_type_meta if available, otherwise try to get from
-    // registry
-    if (local_type_meta == nullptr) {
-      auto local_type_info = get_type_info_by_id(fory_type_id);
-      if (local_type_info && local_type_info->type_meta) {
-        local_type_meta = local_type_info->type_meta.get();
-      }
-    }
+Result<std::unique_ptr<CachedMetaString>, Error>
+encode_meta_string(const std::string &value, bool is_namespace) {
+  auto cached = std::make_unique<CachedMetaString>();
+  cached->original = value;
 
-    // Read the embedded TypeMeta from stream
-    // Pass local_type_meta so that assign_field_ids is called during parsing
-    FORY_TRY(remote_meta, TypeMeta::from_bytes(ctx.buffer(), local_type_meta));
-
-    // Create a temporary TypeInfo with the remote TypeMeta
-    auto type_info = std::make_shared<TypeInfo>();
-    type_info->type_id = fory_type_id;
-    type_info->type_meta = remote_meta;
-    // Note: We don't have type_def here since this is remote schema
-
-    return type_info;
+  if (value.empty()) {
+    // For empty strings, use a minimal encoding
+    cached->encoding = 0; // UTF8
+    cached->bytes.clear();
+    cached->hash = 0;
+    return cached;
   }
 
-  // Handle named types (namespace + type name)
-  if (type_id_low == static_cast<uint32_t>(TypeId::NAMED_ENUM) ||
-      type_id_low == static_cast<uint32_t>(TypeId::NAMED_EXT) ||
-      type_id_low == static_cast<uint32_t>(TypeId::NAMED_STRUCT)) {
-    // TODO: If share_meta is enabled, read meta_index instead
-    // For now, read namespace and type name
-    FORY_TRY(ns_len, ctx.read_varuint32());
-    std::string namespace_str(ns_len, '\0');
-    FORY_RETURN_NOT_OK(ctx.read_bytes(namespace_str.data(), ns_len));
+  // Use MetaStringEncoder to encode the string
+  static const MetaStringEncoder kNamespaceEncoder('.', '_');
+  static const MetaStringEncoder kTypeNameEncoder('$', '_');
 
-    FORY_TRY(name_len, ctx.read_varuint32());
-    std::string type_name(name_len, '\0');
-    FORY_RETURN_NOT_OK(ctx.read_bytes(type_name.data(), name_len));
+  static const std::vector<MetaEncoding> kNamespaceEncodings = {
+      MetaEncoding::UTF8, MetaEncoding::ALL_TO_LOWER_SPECIAL,
+      MetaEncoding::LOWER_UPPER_DIGIT_SPECIAL};
 
-    auto type_info = get_type_info_by_name(namespace_str, type_name);
-    if (type_info) {
-      return type_info;
-    }
-    return Unexpected(Error::type_error("Type info not found for namespace '" +
-                                        namespace_str + "' and type name '" +
-                                        type_name + "'"));
+  static const std::vector<MetaEncoding> kTypeNameEncodings = {
+      MetaEncoding::UTF8, MetaEncoding::ALL_TO_LOWER_SPECIAL,
+      MetaEncoding::LOWER_UPPER_DIGIT_SPECIAL,
+      MetaEncoding::FIRST_TO_LOWER_SPECIAL};
+
+  if (is_namespace) {
+    FORY_TRY(result, kNamespaceEncoder.encode(value, kNamespaceEncodings));
+    cached->encoding = static_cast<uint8_t>(result.encoding);
+    cached->bytes = std::move(result.bytes);
+  } else {
+    FORY_TRY(result, kTypeNameEncoder.encode(value, kTypeNameEncodings));
+    cached->encoding = static_cast<uint8_t>(result.encoding);
+    cached->bytes = std::move(result.bytes);
   }
 
-  // Handle other types by ID lookup
-  auto type_info = get_type_info_by_id(fory_type_id);
-  if (type_info) {
-    return type_info;
-  }
-  return Unexpected(Error::type_error("Type info not found for type_id: " +
-                                      std::to_string(fory_type_id)));
+  // Compute hash if needed (for now, just use 0)
+  cached->hash = 0;
+
+  return cached;
 }
 
-Result<const TypeInfo *, Error>
+Result<const TypeInfo &, Error>
 TypeResolver::get_type_info(const std::type_index &type_index) const {
   // For runtime polymorphic lookups (e.g., smart pointers with dynamic types)
   auto it = type_info_by_runtime_type_.find(type_index);
   if (it == type_info_by_runtime_type_.end()) {
     return Unexpected(Error::type_error("TypeInfo not found for type_index"));
   }
-  return it->second.get();
+  return *it->second;
 }
 
-Result<std::shared_ptr<TypeResolver>, Error>
+Result<std::unique_ptr<TypeResolver>, Error>
 TypeResolver::build_final_type_resolver() {
-  auto final_resolver = std::make_shared<TypeResolver>();
+  auto final_resolver = std::make_unique<TypeResolver>();
 
   // Copy configuration
   final_resolver->compatible_ = compatible_;
@@ -996,16 +1008,40 @@ TypeResolver::build_final_type_resolver() {
   final_resolver->track_ref_ = track_ref_;
   final_resolver->finalized_ = true;
 
-  // Copy all existing type info maps
-  final_resolver->type_info_by_ctid_ = type_info_by_ctid_;
-  final_resolver->type_info_by_id_ = type_info_by_id_;
-  final_resolver->type_info_by_name_ = type_info_by_name_;
-  final_resolver->type_info_by_runtime_type_ = type_info_by_runtime_type_;
+  // Build mapping from old pointers to new pointers for rebuilding lookup maps
+  absl::flat_hash_map<const TypeInfo *, TypeInfo *> ptr_map;
+
+  // Deep clone all existing TypeInfo objects
+  for (const auto &info : type_infos_) {
+    auto cloned = info->deep_clone();
+    TypeInfo *new_ptr = cloned.get();
+    ptr_map[info.get()] = new_ptr;
+    final_resolver->type_infos_.push_back(std::move(cloned));
+  }
+
+  // Rebuild lookup maps with new pointers
+  for (const auto &[key, old_ptr] : type_info_by_ctid_) {
+    final_resolver->type_info_by_ctid_[key] = ptr_map[old_ptr];
+  }
+  for (const auto &[key, old_ptr] : type_info_by_id_) {
+    final_resolver->type_info_by_id_[key] = ptr_map[old_ptr];
+  }
+  for (const auto &[key, old_ptr] : type_info_by_name_) {
+    final_resolver->type_info_by_name_[key] = ptr_map[old_ptr];
+  }
+  for (const auto &[key, old_ptr] : type_info_by_runtime_type_) {
+    final_resolver->type_info_by_runtime_type_[key] = ptr_map[old_ptr];
+  }
+  for (const auto &[key, old_ptr] : partial_type_infos_) {
+    final_resolver->partial_type_infos_[key] = ptr_map[old_ptr];
+  }
 
   // Process all partial type infos to build complete type metadata
-  for (const auto &[rust_type_id, partial_info] : partial_type_infos_) {
+  for (const auto &[rust_type_id, partial_ptr] :
+       final_resolver->partial_type_infos_) {
     // Call the harness's sorted_field_infos function to get complete field info
-    auto fields_result = partial_info->harness.sorted_field_infos_fn(*this);
+    auto fields_result =
+        partial_ptr->harness.sorted_field_infos_fn(*final_resolver);
     if (!fields_result.ok()) {
       return Unexpected(fields_result.error());
     }
@@ -1013,8 +1049,8 @@ TypeResolver::build_final_type_resolver() {
 
     // Build complete TypeMeta
     TypeMeta meta = TypeMeta::from_fields(
-        partial_info->type_id, partial_info->namespace_name,
-        partial_info->type_name, partial_info->register_by_name,
+        partial_ptr->type_id, partial_ptr->namespace_name,
+        partial_ptr->type_name, partial_ptr->register_by_name,
         std::move(sorted_fields));
 
     // Serialize TypeMeta to bytes
@@ -1023,32 +1059,18 @@ TypeResolver::build_final_type_resolver() {
       return Unexpected(type_def_result.error());
     }
 
-    // Create complete TypeInfo
-    auto complete_info = std::make_shared<TypeInfo>(*partial_info);
-    complete_info->type_def = std::move(type_def_result).value();
+    // Update the TypeInfo in place
+    partial_ptr->type_def = std::move(type_def_result).value();
 
-    // Parse the serialized TypeMeta back to create shared_ptr<TypeMeta>
-    Buffer buffer(complete_info->type_def.data(),
-                  static_cast<uint32_t>(complete_info->type_def.size()), false);
-    buffer.WriterIndex(static_cast<uint32_t>(complete_info->type_def.size()));
+    // Parse the serialized TypeMeta back to create unique_ptr<TypeMeta>
+    Buffer buffer(partial_ptr->type_def.data(),
+                  static_cast<uint32_t>(partial_ptr->type_def.size()), false);
+    buffer.WriterIndex(static_cast<uint32_t>(partial_ptr->type_def.size()));
     auto parsed_meta_result = TypeMeta::from_bytes(buffer, nullptr);
     if (!parsed_meta_result.ok()) {
       return Unexpected(parsed_meta_result.error());
     }
-    complete_info->type_meta = std::move(parsed_meta_result).value();
-
-    // Update all maps with complete info
-    final_resolver->type_info_by_ctid_[rust_type_id] = complete_info;
-
-    if (complete_info->type_id != 0) {
-      final_resolver->type_info_by_id_[complete_info->type_id] = complete_info;
-    }
-
-    if (complete_info->register_by_name) {
-      auto key = make_name_key(complete_info->namespace_name,
-                               complete_info->type_name);
-      final_resolver->type_info_by_name_[key] = complete_info;
-    }
+    partial_ptr->type_meta = std::move(parsed_meta_result).value();
   }
 
   // Clear partial_type_infos in the final resolver since they're all completed
@@ -1057,8 +1079,8 @@ TypeResolver::build_final_type_resolver() {
   return final_resolver;
 }
 
-std::shared_ptr<TypeResolver> TypeResolver::clone() const {
-  auto cloned = std::make_shared<TypeResolver>();
+std::unique_ptr<TypeResolver> TypeResolver::clone() const {
+  auto cloned = std::make_unique<TypeResolver>();
 
   // Copy configuration
   cloned->compatible_ = compatible_;
@@ -1067,13 +1089,32 @@ std::shared_ptr<TypeResolver> TypeResolver::clone() const {
   cloned->track_ref_ = track_ref_;
   cloned->finalized_ = finalized_;
 
-  // Shallow copy all maps (shared_ptr sharing)
-  cloned->type_info_by_ctid_ = type_info_by_ctid_;
-  cloned->type_info_by_id_ = type_info_by_id_;
-  cloned->type_info_by_name_ = type_info_by_name_;
-  cloned->type_info_by_runtime_type_ = type_info_by_runtime_type_;
-  // Don't copy partial_type_infos_ - clone should only be used on finalized
-  // resolvers
+  // Build mapping from old pointers to new pointers
+  absl::flat_hash_map<const TypeInfo *, TypeInfo *> ptr_map;
+
+  // Deep clone all TypeInfo objects
+  for (const auto &info : type_infos_) {
+    auto cloned_info = info->deep_clone();
+    TypeInfo *new_ptr = cloned_info.get();
+    ptr_map[info.get()] = new_ptr;
+    cloned->type_infos_.push_back(std::move(cloned_info));
+  }
+
+  // Rebuild lookup maps with new pointers
+  for (const auto &[key, old_ptr] : type_info_by_ctid_) {
+    cloned->type_info_by_ctid_[key] = ptr_map[old_ptr];
+  }
+  for (const auto &[key, old_ptr] : type_info_by_id_) {
+    cloned->type_info_by_id_[key] = ptr_map[old_ptr];
+  }
+  for (const auto &[key, old_ptr] : type_info_by_name_) {
+    cloned->type_info_by_name_[key] = ptr_map[old_ptr];
+  }
+  for (const auto &[key, old_ptr] : type_info_by_runtime_type_) {
+    cloned->type_info_by_runtime_type_[key] = ptr_map[old_ptr];
+  }
+  // Note: Don't copy partial_type_infos_ - clone should only be used on
+  // finalized resolvers
 
   return cloned;
 }
@@ -1082,11 +1123,13 @@ void TypeResolver::register_builtin_types() {
   // Register internal type IDs without harnesses (deserialization is static)
   // These are needed so read_any_typeinfo can find them by type_id
   auto register_type_id_only = [this](TypeId type_id) {
-    auto info = std::make_shared<TypeInfo>();
+    auto info = std::make_unique<TypeInfo>();
     info->type_id = static_cast<uint32_t>(type_id);
     info->register_by_name = false;
     info->is_external = false;
-    type_info_by_id_[info->type_id] = info;
+    TypeInfo *raw_ptr = info.get();
+    type_infos_.push_back(std::move(info));
+    type_info_by_id_[raw_ptr->type_id] = raw_ptr;
   };
 
   // Primitive types

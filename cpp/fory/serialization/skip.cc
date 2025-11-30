@@ -223,7 +223,7 @@ Result<void, Error> skip_ext(ReadContext &ctx, const FieldType &field_type) {
   uint32_t low = full_type_id & 0xffu;
   TypeId tid = static_cast<TypeId>(low);
 
-  std::shared_ptr<TypeInfo> type_info;
+  const TypeInfo *type_info = nullptr;
 
   if (tid == TypeId::NAMED_EXT) {
     // Named ext: read type_id and meta_index

@@ -183,13 +183,13 @@ public:
   /// Read type meta from buffer (for deserialization)
   /// @param buffer Source buffer
   /// @param local_type_info Local type information (for field ID assignment)
-  static Result<std::shared_ptr<TypeMeta>, Error>
+  static Result<std::unique_ptr<TypeMeta>, Error>
   from_bytes(Buffer &buffer, const TypeMeta *local_type_info);
 
   /// Read type meta from buffer with pre-read header
   /// @param buffer Source buffer (positioned after header)
   /// @param header Pre-read 8-byte header
-  static Result<std::shared_ptr<TypeMeta>, Error>
+  static Result<std::unique_ptr<TypeMeta>, Error>
   from_bytes_with_header(Buffer &buffer, int64_t header);
 
   /// Skip type meta in buffer without parsing
@@ -416,7 +416,7 @@ std::vector<FieldInfo> build_field_infos(std::index_sequence<Indices...>) {
 
 /// Encode a meta string for namespace or type_name using the appropriate
 /// encoder. This is called during registration to pre-compute the encoded form.
-Result<std::shared_ptr<CachedMetaString>, Error>
+Result<std::unique_ptr<CachedMetaString>, Error>
 encode_meta_string(const std::string &value, bool is_namespace);
 
 // ============================================================================
@@ -441,46 +441,30 @@ public:
   template <typename T>
   const absl::flat_hash_map<std::string, size_t> &field_name_to_index();
 
-  template <typename T>
-  Result<std::shared_ptr<TypeInfo>, Error> get_struct_type_info();
+  template <typename T> Result<const TypeInfo &, Error> get_struct_type_info();
 
   uint32_t get_type_id(const TypeInfo &info) const;
 
   template <typename T> Result<uint32_t, Error> get_type_id();
 
   /// Get type info by type ID (for non-namespaced types)
-  std::shared_ptr<TypeInfo> get_type_info_by_id(uint32_t type_id) const;
+  /// @return const pointer to TypeInfo if found, nullptr otherwise
+  const TypeInfo *get_type_info_by_id(uint32_t type_id) const;
 
   /// Get type info by namespace and type name (for namespaced types)
-  std::shared_ptr<TypeInfo>
-  get_type_info_by_name(const std::string &ns,
-                        const std::string &type_name) const;
-
-  /// Read type information dynamically from ReadContext based on type ID.
-  ///
-  /// This method handles reading type info for various type categories:
-  /// - COMPATIBLE_STRUCT/NAMED_COMPATIBLE_STRUCT: reads meta index
-  /// - NAMED_ENUM/NAMED_STRUCT/NAMED_EXT: reads namespace and type name (if not
-  /// sharing meta)
-  /// - Other types: looks up by type ID
-  ///
-  /// @return TypeInfo pointer if found, error otherwise
-  Result<std::shared_ptr<TypeInfo>, Error> read_any_typeinfo(ReadContext &ctx);
-
-  /// Read type info from stream with explicit local TypeMeta for field_id
-  /// assignment
-  Result<std::shared_ptr<TypeInfo>, Error>
-  read_any_typeinfo(ReadContext &ctx, const TypeMeta *local_type_meta);
+  /// @return const pointer to TypeInfo if found, nullptr otherwise
+  const TypeInfo *get_type_info_by_name(const std::string &ns,
+                                        const std::string &type_name) const;
 
   /// Get TypeInfo by type_index (used for looking up registered types)
-  /// @return const pointer to TypeInfo if found, error otherwise
-  Result<const TypeInfo *, Error>
+  /// @return const reference to TypeInfo if found, error otherwise
+  Result<const TypeInfo &, Error>
   get_type_info(const std::type_index &type_index) const;
 
   /// Get TypeInfo by compile-time type ID (fast path for template types)
   /// Works for enums, structs, and any registered type.
-  /// @return shared_ptr to TypeInfo if found, nullptr otherwise
-  template <typename T> std::shared_ptr<TypeInfo> get_type_info() const;
+  /// @return const pointer to TypeInfo if found, nullptr otherwise
+  template <typename T> const TypeInfo *get_type_info() const;
 
   /// Builds the final TypeResolver by completing all partial type infos
   /// created during registration.
@@ -497,15 +481,16 @@ public:
   ///
   /// @return A new TypeResolver with all type infos fully initialized and ready
   /// for use.
-  Result<std::shared_ptr<TypeResolver>, Error> build_final_type_resolver();
+  Result<std::unique_ptr<TypeResolver>, Error> build_final_type_resolver();
 
-  /// Clones the TypeResolver for use in a new context.
+  /// Deep clones the TypeResolver for use in a new context.
   ///
-  /// This method creates a shallow clone of the TypeResolver. The clone shares
-  /// the same TypeInfo objects as the original but is a separate instance.
+  /// This method creates a deep clone of the TypeResolver. All TypeInfo
+  /// objects are cloned into new instances owned by the new TypeResolver.
+  /// This ensures thread safety when cloning for use in different contexts.
   ///
-  /// @return A new TypeResolver instance
-  std::shared_ptr<TypeResolver> clone() const;
+  /// @return A new TypeResolver instance with cloned TypeInfo objects
+  std::unique_ptr<TypeResolver> clone() const;
 
 private:
   friend class BaseFory;
@@ -525,17 +510,17 @@ private:
                                                 const std::string &type_name);
 
   template <typename T>
-  static Result<std::shared_ptr<TypeInfo>, Error>
+  static Result<std::unique_ptr<TypeInfo>, Error>
   build_struct_type_info(uint32_t type_id, std::string ns,
                          std::string type_name, bool register_by_name);
 
   template <typename T>
-  static Result<std::shared_ptr<TypeInfo>, Error>
+  static Result<std::unique_ptr<TypeInfo>, Error>
   build_enum_type_info(uint32_t type_id, std::string ns, std::string type_name,
                        bool register_by_name);
 
   template <typename T>
-  static Result<std::shared_ptr<TypeInfo>, Error>
+  static Result<std::unique_ptr<TypeInfo>, Error>
   build_ext_type_info(uint32_t type_id, std::string ns, std::string type_name,
                       bool register_by_name);
 
@@ -573,13 +558,14 @@ private:
   static std::string make_name_key(const std::string &ns,
                                    const std::string &name);
 
-  Result<void, Error> register_type_internal(uint64_t ctid,
-                                             std::shared_ptr<TypeInfo> info);
+  /// Register a TypeInfo, taking ownership and storing in primary storage.
+  /// Returns pointer to the stored TypeInfo (owned by TypeResolver).
+  Result<TypeInfo *, Error>
+  register_type_internal(uint64_t ctid, std::unique_ptr<TypeInfo> info);
 
   // For runtime polymorphic lookups (smart pointers with dynamic types)
-  Result<void, Error>
-  register_type_internal_runtime(const std::type_index &type_index,
-                                 std::shared_ptr<TypeInfo> info);
+  void register_type_internal_runtime(const std::type_index &type_index,
+                                      TypeInfo *info);
 
   void check_registration_thread();
 
@@ -593,17 +579,18 @@ private:
   std::thread::id registration_thread_id_;
   bool finalized_;
 
-  // Primary map using compile-time type ID (uint64_t) - fast for template
-  // lookups
-  absl::flat_hash_map<uint64_t, std::shared_ptr<TypeInfo>> type_info_by_ctid_;
-  absl::flat_hash_map<uint32_t, std::shared_ptr<TypeInfo>> type_info_by_id_;
-  absl::flat_hash_map<std::string, std::shared_ptr<TypeInfo>>
-      type_info_by_name_;
-  absl::flat_hash_map<uint64_t, std::shared_ptr<TypeInfo>> partial_type_infos_;
+  // Primary storage - owns all TypeInfo objects
+  std::vector<std::unique_ptr<TypeInfo>> type_infos_;
+
+  // Lookup maps - store raw pointers (borrowed from primary storage)
+  // Using compile-time type ID (uint64_t) - fast for template lookups
+  absl::flat_hash_map<uint64_t, TypeInfo *> type_info_by_ctid_;
+  absl::flat_hash_map<uint32_t, TypeInfo *> type_info_by_id_;
+  absl::flat_hash_map<std::string, TypeInfo *> type_info_by_name_;
+  absl::flat_hash_map<uint64_t, TypeInfo *> partial_type_infos_;
 
   // For runtime polymorphic lookups (smart pointers) - uses std::type_index
-  absl::flat_hash_map<std::type_index, std::shared_ptr<TypeInfo>>
-      type_info_by_runtime_type_;
+  absl::flat_hash_map<std::type_index, TypeInfo *> type_info_by_runtime_type_;
 };
 
 // Alias for backward compatibility (already defined above as top-level)
@@ -671,22 +658,21 @@ TypeResolver::field_name_to_index() {
 }
 
 template <typename T>
-Result<std::shared_ptr<TypeInfo>, Error> TypeResolver::get_struct_type_info() {
+Result<const TypeInfo &, Error> TypeResolver::get_struct_type_info() {
   static_assert(is_fory_serializable_v<T>,
                 "get_struct_type_info requires FORY_STRUCT types");
   // Use compile-time type ID (uint64_t key) for fast lookup
   constexpr uint64_t ctid = type_index<T>();
   auto it = type_info_by_ctid_.find(ctid);
   if (FORY_PREDICT_TRUE(it != type_info_by_ctid_.end())) {
-    return it->second;
+    return *it->second;
   }
   return Unexpected(Error::type_error(
       "Type not registered. All struct/enum/ext types must be explicitly "
       "registered before serialization."));
 }
 
-template <typename T>
-std::shared_ptr<TypeInfo> TypeResolver::get_type_info() const {
+template <typename T> const TypeInfo *TypeResolver::get_type_info() const {
   // Use compile-time type ID (uint64_t key) for fast lookup
   constexpr uint64_t ctid = type_index<T>();
   auto it = type_info_by_ctid_.find(ctid);
@@ -718,12 +704,16 @@ inline uint32_t TypeResolver::get_type_id(const TypeInfo &info) const {
 }
 
 template <typename T> Result<uint32_t, Error> TypeResolver::get_type_id() {
-  FORY_TRY(info, get_struct_type_info<T>());
-  if (!info->type_meta) {
+  auto info_result = get_struct_type_info<T>();
+  if (!info_result.ok()) {
+    return Unexpected(info_result.error());
+  }
+  const TypeInfo &info = info_result.value();
+  if (!info.type_meta) {
     return Unexpected(Error::type_error(
         "Type metadata not initialized for requested struct"));
   }
-  return get_type_id(*info);
+  return get_type_id(info);
 }
 
 template <typename T>
@@ -749,10 +739,12 @@ Result<void, Error> TypeResolver::register_by_id(uint32_t type_id) {
           Error::invalid("Harness for registered type is incomplete"));
     }
 
-    partial_type_infos_[ctid] = info;
-    // Also register for runtime polymorphic lookups (smart pointers)
-    type_info_by_runtime_type_[std::type_index(typeid(T))] = info;
-    return register_type_internal(ctid, std::move(info));
+    // Register and get back the stored pointer
+    FORY_TRY(stored_ptr, register_type_internal(ctid, std::move(info)));
+    // Also register for runtime polymorphic lookups and partial type infos
+    partial_type_infos_[ctid] = stored_ptr;
+    register_type_internal_runtime(std::type_index(typeid(T)), stored_ptr);
+    return Result<void, Error>();
   } else if constexpr (std::is_enum_v<T>) {
     uint32_t actual_type_id =
         (type_id << 8) + static_cast<uint32_t>(TypeId::ENUM);
@@ -763,9 +755,10 @@ Result<void, Error> TypeResolver::register_by_id(uint32_t type_id) {
           Error::invalid("Harness for registered enum type is incomplete"));
     }
 
-    partial_type_infos_[ctid] = info;
-    type_info_by_runtime_type_[std::type_index(typeid(T))] = info;
-    return register_type_internal(ctid, std::move(info));
+    FORY_TRY(stored_ptr, register_type_internal(ctid, std::move(info)));
+    partial_type_infos_[ctid] = stored_ptr;
+    register_type_internal_runtime(std::type_index(typeid(T)), stored_ptr);
+    return Result<void, Error>();
   } else {
     static_assert(is_fory_serializable_v<T>,
                   "register_by_id requires a type declared with FORY_STRUCT "
@@ -798,9 +791,10 @@ TypeResolver::register_by_name(const std::string &ns,
           Error::invalid("Harness for registered type is incomplete"));
     }
 
-    partial_type_infos_[ctid] = info;
-    type_info_by_runtime_type_[std::type_index(typeid(T))] = info;
-    return register_type_internal(ctid, std::move(info));
+    FORY_TRY(stored_ptr, register_type_internal(ctid, std::move(info)));
+    partial_type_infos_[ctid] = stored_ptr;
+    register_type_internal_runtime(std::type_index(typeid(T)), stored_ptr);
+    return Result<void, Error>();
   } else if constexpr (std::is_enum_v<T>) {
     uint32_t actual_type_id = static_cast<uint32_t>(TypeId::NAMED_ENUM);
     FORY_TRY(info,
@@ -810,9 +804,10 @@ TypeResolver::register_by_name(const std::string &ns,
           Error::invalid("Harness for registered enum type is incomplete"));
     }
 
-    partial_type_infos_[ctid] = info;
-    type_info_by_runtime_type_[std::type_index(typeid(T))] = info;
-    return register_type_internal(ctid, std::move(info));
+    FORY_TRY(stored_ptr, register_type_internal(ctid, std::move(info)));
+    partial_type_infos_[ctid] = stored_ptr;
+    register_type_internal_runtime(std::type_index(typeid(T)), stored_ptr);
+    return Result<void, Error>();
   } else {
     static_assert(is_fory_serializable_v<T>,
                   "register_by_name requires a type declared with FORY_STRUCT "
@@ -836,9 +831,10 @@ Result<void, Error> TypeResolver::register_ext_type_by_id(uint32_t type_id) {
 
   FORY_TRY(info, build_ext_type_info<T>(actual_type_id, "", "", false));
 
-  partial_type_infos_[ctid] = info;
-  type_info_by_runtime_type_[std::type_index(typeid(T))] = info;
-  return register_type_internal(ctid, std::move(info));
+  FORY_TRY(stored_ptr, register_type_internal(ctid, std::move(info)));
+  partial_type_infos_[ctid] = stored_ptr;
+  register_type_internal_runtime(std::type_index(typeid(T)), stored_ptr);
+  return Result<void, Error>();
 }
 
 template <typename T>
@@ -856,13 +852,14 @@ TypeResolver::register_ext_type_by_name(const std::string &ns,
   uint32_t actual_type_id = static_cast<uint32_t>(TypeId::NAMED_EXT);
   FORY_TRY(info, build_ext_type_info<T>(actual_type_id, ns, type_name, true));
 
-  partial_type_infos_[ctid] = info;
-  type_info_by_runtime_type_[std::type_index(typeid(T))] = info;
-  return register_type_internal(ctid, std::move(info));
+  FORY_TRY(stored_ptr, register_type_internal(ctid, std::move(info)));
+  partial_type_infos_[ctid] = stored_ptr;
+  register_type_internal_runtime(std::type_index(typeid(T)), stored_ptr);
+  return Result<void, Error>();
 }
 
 template <typename T>
-Result<std::shared_ptr<TypeInfo>, Error>
+Result<std::unique_ptr<TypeInfo>, Error>
 TypeResolver::build_struct_type_info(uint32_t type_id, std::string ns,
                                      std::string type_name,
                                      bool register_by_name) {
@@ -873,7 +870,7 @@ TypeResolver::build_struct_type_info(uint32_t type_id, std::string ns,
     type_id = static_cast<uint32_t>(TypeId::STRUCT);
   }
 
-  auto entry = std::make_shared<TypeInfo>();
+  auto entry = std::make_unique<TypeInfo>();
   entry->type_id = type_id;
   entry->namespace_name = std::move(ns);
   entry->register_by_name = register_by_name;
@@ -936,7 +933,7 @@ TypeResolver::build_struct_type_info(uint32_t type_id, std::string ns,
 }
 
 template <typename T>
-Result<std::shared_ptr<TypeInfo>, Error>
+Result<std::unique_ptr<TypeInfo>, Error>
 TypeResolver::build_enum_type_info(uint32_t type_id, std::string ns,
                                    std::string type_name,
                                    bool register_by_name) {
@@ -947,7 +944,7 @@ TypeResolver::build_enum_type_info(uint32_t type_id, std::string ns,
         "type_name must be non-empty when register_by_name is true"));
   }
 
-  auto entry = std::make_shared<TypeInfo>();
+  auto entry = std::make_unique<TypeInfo>();
   entry->type_id = type_id;
   entry->namespace_name = std::move(ns);
   entry->register_by_name = register_by_name;
@@ -979,11 +976,11 @@ TypeResolver::build_enum_type_info(uint32_t type_id, std::string ns,
 }
 
 template <typename T>
-Result<std::shared_ptr<TypeInfo>, Error>
+Result<std::unique_ptr<TypeInfo>, Error>
 TypeResolver::build_ext_type_info(uint32_t type_id, std::string ns,
                                   std::string type_name,
                                   bool register_by_name) {
-  auto entry = std::make_shared<TypeInfo>();
+  auto entry = std::make_unique<TypeInfo>();
   entry->type_id = type_id;
   entry->namespace_name = ns;
   entry->type_name = type_name;
@@ -1094,48 +1091,51 @@ inline std::string TypeResolver::make_name_key(const std::string &ns,
   return key;
 }
 
-inline Result<void, Error>
+inline Result<TypeInfo *, Error>
 TypeResolver::register_type_internal(uint64_t ctid,
-                                     std::shared_ptr<TypeInfo> info) {
+                                     std::unique_ptr<TypeInfo> info) {
   if (!info || !info->harness.valid()) {
     return Unexpected(
         Error::invalid("TypeInfo or harness is invalid during registration"));
   }
 
-  type_info_by_ctid_[ctid] = info;
+  // Store in primary storage and get raw pointer
+  TypeInfo *raw_ptr = info.get();
+  type_infos_.push_back(std::move(info));
 
-  if (info->type_id != 0 && !info->register_by_name) {
-    auto it = type_info_by_id_.find(info->type_id);
-    if (it != type_info_by_id_.end() && it->second.get() != info.get()) {
+  type_info_by_ctid_[ctid] = raw_ptr;
+
+  if (raw_ptr->type_id != 0 && !raw_ptr->register_by_name) {
+    auto it = type_info_by_id_.find(raw_ptr->type_id);
+    if (it != type_info_by_id_.end() && it->second != raw_ptr) {
       return Unexpected(Error::invalid("Type id already registered: " +
-                                       std::to_string(info->type_id)));
+                                       std::to_string(raw_ptr->type_id)));
     }
-    type_info_by_id_[info->type_id] = info;
+    type_info_by_id_[raw_ptr->type_id] = raw_ptr;
   }
 
-  if (info->register_by_name) {
-    auto key = make_name_key(info->namespace_name, info->type_name);
+  if (raw_ptr->register_by_name) {
+    auto key = make_name_key(raw_ptr->namespace_name, raw_ptr->type_name);
     auto it = type_info_by_name_.find(key);
-    if (it != type_info_by_name_.end() && it->second.get() != info.get()) {
+    if (it != type_info_by_name_.end() && it->second != raw_ptr) {
       return Unexpected(Error::invalid(
-          "Type already registered for namespace '" + info->namespace_name +
-          "' and name '" + info->type_name + "'"));
+          "Type already registered for namespace '" + raw_ptr->namespace_name +
+          "' and name '" + raw_ptr->type_name + "'"));
     }
-    type_info_by_name_[key] = info;
+    type_info_by_name_[key] = raw_ptr;
   }
 
-  return Result<void, Error>();
+  return raw_ptr;
 }
 
-inline Result<void, Error>
+inline void
 TypeResolver::register_type_internal_runtime(const std::type_index &type_index,
-                                             std::shared_ptr<TypeInfo> info) {
+                                             TypeInfo *info) {
   // For runtime polymorphic lookups (smart pointers)
   type_info_by_runtime_type_[type_index] = info;
-  return Result<void, Error>();
 }
 
-inline std::shared_ptr<TypeInfo>
+inline const TypeInfo *
 TypeResolver::get_type_info_by_id(uint32_t type_id) const {
   auto it = type_info_by_id_.find(type_id);
   if (it != type_info_by_id_.end()) {
@@ -1144,7 +1144,7 @@ TypeResolver::get_type_info_by_id(uint32_t type_id) const {
   return nullptr;
 }
 
-inline std::shared_ptr<TypeInfo>
+inline const TypeInfo *
 TypeResolver::get_type_info_by_name(const std::string &ns,
                                     const std::string &type_name) const {
   auto key = make_name_key(ns, type_name);
@@ -1161,9 +1161,9 @@ TypeResolver::get_type_info_by_name(const std::string &ns,
 // ============================================================================
 
 template <typename E> Result<void, Error> WriteContext::write_enum_typeinfo() {
-  auto type_info = type_resolver_->get_type_info<E>();
+  const TypeInfo *type_info = type_resolver_->get_type_info<E>();
   if (type_info) {
-    return write_enum_typeinfo(type_info.get());
+    return write_enum_typeinfo(type_info);
   }
   // Enum not registered, write plain ENUM type id
   buffer_.WriteVarUint32(static_cast<uint32_t>(TypeId::ENUM));

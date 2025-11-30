@@ -349,8 +349,8 @@ public:
     if (FORY_PREDICT_FALSE(!finalized_)) {
       ensure_finalized();
     }
-    WriteContextGuard guard(write_ctx_);
-    Buffer &buffer = write_ctx_.buffer();
+    WriteContextGuard guard(*write_ctx_);
+    Buffer &buffer = write_ctx_->buffer();
 
     FORY_RETURN_NOT_OK(serialize_impl(obj, buffer));
 
@@ -429,8 +429,8 @@ public:
           Error::unsupported("Cross-endian deserialization not yet supported"));
     }
 
-    read_ctx_.attach(buffer);
-    ReadContextGuard guard(read_ctx_);
+    read_ctx_->attach(buffer);
+    ReadContextGuard guard(*read_ctx_);
     return deserialize_impl<T>(buffer);
   }
 
@@ -470,8 +470,8 @@ public:
           Error::unsupported("Cross-endian deserialization not yet supported"));
     }
 
-    read_ctx_.attach(buffer);
-    ReadContextGuard guard(read_ctx_);
+    read_ctx_->attach(buffer);
+    ReadContextGuard guard(*read_ctx_);
     return deserialize_impl<T>(buffer);
   }
 
@@ -483,32 +483,31 @@ public:
   ///
   /// Use this for direct manipulation of the serialization context.
   /// Most users should use the serialize() methods instead.
-  WriteContext &write_context() { return write_ctx_; }
+  WriteContext &write_context() { return *write_ctx_; }
 
   /// Access the internal ReadContext (for advanced use).
   ///
   /// Use this for direct manipulation of the deserialization context.
   /// Most users should use the deserialize() methods instead.
-  ReadContext &read_context() { return read_ctx_; }
+  ReadContext &read_context() { return *read_ctx_; }
 
 private:
   /// Constructor for ForyBuilder - resolver will be finalized lazily.
   explicit Fory(const Config &config, std::shared_ptr<TypeResolver> resolver)
       : BaseFory(config, std::move(resolver)), finalized_(false),
         precomputed_header_(compute_header(config.xlang)),
-        header_length_(config.xlang ? 4 : 3),
-        write_ctx_(config_, type_resolver_),
-        read_ctx_(config_, type_resolver_) {}
+        header_length_(config.xlang ? 4 : 3) {}
 
   /// Constructor for ThreadSafeFory pool - resolver is already finalized.
   struct PreFinalized {};
   explicit Fory(const Config &config, std::shared_ptr<TypeResolver> resolver,
                 PreFinalized)
-      : BaseFory(config, std::move(resolver)), finalized_(true),
+      : BaseFory(config, std::move(resolver)), finalized_(false),
         precomputed_header_(compute_header(config.xlang)),
-        header_length_(config.xlang ? 4 : 3),
-        write_ctx_(config_, type_resolver_),
-        read_ctx_(config_, type_resolver_) {}
+        header_length_(config.xlang ? 4 : 3) {
+    // Pre-finalized, immediately create contexts
+    ensure_finalized();
+  }
 
   /// Finalize the type resolver on first use.
   void ensure_finalized() {
@@ -517,7 +516,13 @@ private:
       FORY_CHECK(final_result.ok())
           << "Failed to build finalized TypeResolver: "
           << final_result.error().to_string();
-      type_resolver_ = std::move(final_result).value();
+      // Replace with finalized resolver
+      auto finalized_resolver = std::move(final_result).value();
+      // Create contexts with cloned resolvers
+      write_ctx_.emplace(config_, finalized_resolver->clone());
+      read_ctx_.emplace(config_, finalized_resolver->clone());
+      // Store finalized resolver
+      type_resolver_ = std::move(finalized_resolver);
       finalized_ = true;
     }
   }
@@ -553,17 +558,17 @@ private:
 
     // Reserve space for meta offset in compatible mode
     size_t meta_start_offset = 0;
-    if (write_ctx_.is_compatible()) {
+    if (write_ctx_->is_compatible()) {
       meta_start_offset = buffer.writer_index();
       buffer.WriteInt32(-1); // Placeholder for meta offset (fixed 4 bytes)
     }
 
     // Top-level serialization: YES ref flags, yes type info
-    FORY_RETURN_NOT_OK(Serializer<T>::write(obj, write_ctx_, true, true));
+    FORY_RETURN_NOT_OK(Serializer<T>::write(obj, *write_ctx_, true, true));
 
     // Write collected TypeMetas at the end in compatible mode
-    if (write_ctx_.is_compatible() && !write_ctx_.meta_empty()) {
-      write_ctx_.write_meta(meta_start_offset);
+    if (write_ctx_->is_compatible() && !write_ctx_->meta_empty()) {
+      write_ctx_->write_meta(meta_start_offset);
     }
 
     return buffer.writer_index() - start_pos;
@@ -573,21 +578,21 @@ private:
   template <typename T> Result<T, Error> deserialize_impl(Buffer &buffer) {
     // Load TypeMetas at the beginning in compatible mode
     size_t bytes_to_skip = 0;
-    if (read_ctx_.is_compatible()) {
+    if (read_ctx_->is_compatible()) {
       auto meta_offset_result = buffer.ReadInt32();
       FORY_RETURN_IF_ERROR(meta_offset_result);
       int32_t meta_offset = meta_offset_result.value();
       if (meta_offset != -1) {
-        FORY_TRY(meta_size, read_ctx_.load_type_meta(meta_offset));
+        FORY_TRY(meta_size, read_ctx_->load_type_meta(meta_offset));
         bytes_to_skip = meta_size;
       }
     }
 
     // Top-level deserialization: YES ref flags, yes type info
-    auto result = Serializer<T>::read(read_ctx_, true, true);
+    auto result = Serializer<T>::read(*read_ctx_, true, true);
 
     if (result.ok()) {
-      read_ctx_.ref_reader().resolve_callbacks();
+      read_ctx_->ref_reader().resolve_callbacks();
       if (bytes_to_skip > 0) {
         buffer.IncreaseReaderIndex(static_cast<uint32_t>(bytes_to_skip));
       }
@@ -598,8 +603,8 @@ private:
   bool finalized_;
   uint32_t precomputed_header_;
   uint8_t header_length_;
-  WriteContext write_ctx_;
-  ReadContext read_ctx_;
+  std::optional<WriteContext> write_ctx_;
+  std::optional<ReadContext> read_ctx_;
 
   friend class ForyBuilder;
   friend class ThreadSafeFory;

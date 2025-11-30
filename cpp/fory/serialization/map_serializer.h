@@ -61,7 +61,7 @@ inline Result<void, Error> read_type_info(ReadContext &ctx) {
   return Serializer<T>::read_type_info(ctx);
 }
 
-inline Result<std::shared_ptr<TypeInfo>, Error>
+inline Result<const TypeInfo *, Error>
 read_polymorphic_type_info(ReadContext &ctx) {
   return ctx.read_any_typeinfo();
 }
@@ -343,13 +343,21 @@ write_map_data_slow(const MapType &map, WriteContext &ctx, bool has_generics) {
     uint32_t val_type_id = 0;
     if constexpr (key_is_polymorphic) {
       auto concrete_type_id = get_concrete_type_id(key);
-      FORY_TRY(type_info, ctx.type_resolver().get_type_info(concrete_type_id));
-      key_type_id = type_info->type_id;
+      auto type_info_result =
+          ctx.type_resolver().get_type_info(concrete_type_id);
+      if (!type_info_result.ok()) {
+        return Unexpected(type_info_result.error());
+      }
+      key_type_id = type_info_result.value().type_id;
     }
     if constexpr (val_is_polymorphic) {
       auto concrete_type_id = get_concrete_type_id(value);
-      FORY_TRY(type_info, ctx.type_resolver().get_type_info(concrete_type_id));
-      val_type_id = type_info->type_id;
+      auto type_info_result =
+          ctx.type_resolver().get_type_info(concrete_type_id);
+      if (!type_info_result.ok()) {
+        return Unexpected(type_info_result.error());
+      }
+      val_type_id = type_info_result.value().type_id;
     }
 
     // Check if we need to start a new chunk due to type changes
@@ -597,11 +605,11 @@ inline Result<MapType, Error> read_map_data_slow(ReadContext &ctx,
       }
 
       // Now read type info if needed
-      std::shared_ptr<TypeInfo> value_type_info = nullptr;
+      const TypeInfo *value_type_info = nullptr;
       if (!value_declared || val_is_polymorphic) {
         if constexpr (val_is_polymorphic) {
           FORY_TRY(type_info, read_polymorphic_type_info(ctx));
-          value_type_info = std::move(type_info);
+          value_type_info = type_info;
         } else {
           FORY_RETURN_NOT_OK(read_type_info<V>(ctx));
         }
@@ -646,11 +654,11 @@ inline Result<MapType, Error> read_map_data_slow(ReadContext &ctx,
       }
 
       // Now read type info if needed
-      std::shared_ptr<TypeInfo> key_type_info = nullptr;
+      const TypeInfo *key_type_info = nullptr;
       if (!key_declared || key_is_polymorphic) {
         if constexpr (key_is_polymorphic) {
           FORY_TRY(type_info, read_polymorphic_type_info(ctx));
-          key_type_info = std::move(type_info);
+          key_type_info = type_info;
         } else {
           FORY_RETURN_NOT_OK(read_type_info<K>(ctx));
         }
@@ -681,13 +689,13 @@ inline Result<MapType, Error> read_map_data_slow(ReadContext &ctx,
     bool track_value_ref = (header & TRACKING_VALUE_REF) != 0;
 
     // Read type info if not declared
-    std::shared_ptr<TypeInfo> key_type_info = nullptr;
-    std::shared_ptr<TypeInfo> value_type_info = nullptr;
+    const TypeInfo *key_type_info = nullptr;
+    const TypeInfo *value_type_info = nullptr;
 
     if (!key_declared || key_is_polymorphic) {
       if constexpr (key_is_polymorphic) {
         FORY_TRY(type_info, read_polymorphic_type_info(ctx));
-        key_type_info = std::move(type_info);
+        key_type_info = type_info;
       } else {
         FORY_RETURN_NOT_OK(read_type_info<K>(ctx));
       }
@@ -695,7 +703,7 @@ inline Result<MapType, Error> read_map_data_slow(ReadContext &ctx,
     if (!value_declared || val_is_polymorphic) {
       if constexpr (val_is_polymorphic) {
         FORY_TRY(type_info, read_polymorphic_type_info(ctx));
-        value_type_info = std::move(type_info);
+        value_type_info = type_info;
       } else {
         FORY_RETURN_NOT_OK(read_type_info<V>(ctx));
       }

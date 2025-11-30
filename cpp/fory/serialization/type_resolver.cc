@@ -987,14 +987,14 @@ encode_meta_string(const std::string &value, bool is_namespace) {
   return cached;
 }
 
-Result<const TypeInfo &, Error>
+Result<const TypeInfo *, Error>
 TypeResolver::get_type_info(const std::type_index &type_index) const {
   // For runtime polymorphic lookups (e.g., smart pointers with dynamic types)
   auto it = type_info_by_runtime_type_.find(type_index);
   if (it == type_info_by_runtime_type_.end()) {
     return Unexpected(Error::type_error("TypeInfo not found for type_index"));
   }
-  return *it->second;
+  return it->second;
 }
 
 Result<std::unique_ptr<TypeResolver>, Error>

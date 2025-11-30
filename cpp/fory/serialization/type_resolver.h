@@ -441,31 +441,27 @@ public:
   template <typename T>
   const absl::flat_hash_map<std::string, size_t> &field_name_to_index();
 
-  template <typename T> Result<const TypeInfo &, Error> get_struct_type_info();
-
-  uint32_t get_type_id(const TypeInfo &info) const;
-
-  template <typename T> Result<uint32_t, Error> get_type_id();
+  template <typename T> Result<const TypeInfo *, Error> get_struct_type_info();
 
   /// Get type info by type ID (for non-namespaced types)
-  /// @return const reference to TypeInfo if found, error otherwise
-  Result<const TypeInfo &, Error> get_type_info_by_id(uint32_t type_id) const;
+  /// @return const pointer to TypeInfo if found, error otherwise
+  Result<const TypeInfo *, Error> get_type_info_by_id(uint32_t type_id) const;
 
   /// Get type info by namespace and type name (for namespaced types)
-  /// @return const reference to TypeInfo if found, error otherwise
-  Result<const TypeInfo &, Error>
+  /// @return const pointer to TypeInfo if found, error otherwise
+  Result<const TypeInfo *, Error>
   get_type_info_by_name(const std::string &ns,
                         const std::string &type_name) const;
 
   /// Get TypeInfo by type_index (used for looking up registered types)
-  /// @return const reference to TypeInfo if found, error otherwise
-  Result<const TypeInfo &, Error>
+  /// @return const pointer to TypeInfo if found, error otherwise
+  Result<const TypeInfo *, Error>
   get_type_info(const std::type_index &type_index) const;
 
   /// Get TypeInfo by compile-time type ID (fast path for template types)
   /// Works for enums, structs, and any registered type.
-  /// @return const pointer to TypeInfo if found, nullptr otherwise
-  template <typename T> const TypeInfo *get_type_info() const;
+  /// @return const pointer to TypeInfo if found, error otherwise
+  template <typename T> Result<const TypeInfo *, Error> get_type_info() const;
 
   /// Builds the final TypeResolver by completing all partial type infos
   /// created during registration.
@@ -659,62 +655,29 @@ TypeResolver::field_name_to_index() {
 }
 
 template <typename T>
-Result<const TypeInfo &, Error> TypeResolver::get_struct_type_info() {
+Result<const TypeInfo *, Error> TypeResolver::get_struct_type_info() {
   static_assert(is_fory_serializable_v<T>,
                 "get_struct_type_info requires FORY_STRUCT types");
   // Use compile-time type ID (uint64_t key) for fast lookup
   constexpr uint64_t ctid = type_index<T>();
   auto it = type_info_by_ctid_.find(ctid);
   if (FORY_PREDICT_TRUE(it != type_info_by_ctid_.end())) {
-    return *it->second;
+    return it->second;
   }
   return Unexpected(Error::type_error(
       "Type not registered. All struct/enum/ext types must be explicitly "
       "registered before serialization."));
 }
 
-template <typename T> const TypeInfo *TypeResolver::get_type_info() const {
+template <typename T>
+Result<const TypeInfo *, Error> TypeResolver::get_type_info() const {
   // Use compile-time type ID (uint64_t key) for fast lookup
   constexpr uint64_t ctid = type_index<T>();
   auto it = type_info_by_ctid_.find(ctid);
   if (FORY_PREDICT_TRUE(it != type_info_by_ctid_.end())) {
     return it->second;
   }
-  return nullptr;
-}
-
-inline uint32_t TypeResolver::get_type_id(const TypeInfo &info) const {
-  // In the xlang spec the numeric type id used on the wire for
-  // structs is the "actual" type id computed by the resolver
-  // (see Rust's `struct_::actual_type_id`). That value is already
-  // stored in `info.type_id` for both id-based and name-based
-  // registrations. Unlike the previous implementation we must not
-  // apply another layer of shifting/tagging here, otherwise the
-  // local type id will no longer match the id written by Java/Rust
-  // and struct reads will fail with `TypeMismatch`.
-  //
-  // Rust equivalent:
-  //   let type_id = T::fory_get_type_id(type_resolver)?;
-  //   context.writer.write_varuint32(type_id);
-  // and on read:
-  //   ensure!(local_type_id == remote_type_id, Error::type_mismatch(...));
-  //
-  // So we simply return the stored actual type id.
-  (void)this; // suppress unused warning in some builds
-  return info.type_id;
-}
-
-template <typename T> Result<uint32_t, Error> TypeResolver::get_type_id() {
-  auto info_result = get_struct_type_info<T>();
-  if (!info_result.ok()) {
-    return Unexpected(info_result.error());
-  }
-  const TypeInfo &info = info_result.value();
-  if (!info.type_meta) {
-    return Unexpected(Error::type_error(
-        "Type metadata not initialized for requested struct"));
-  }
-  return get_type_id(info);
+  return Unexpected(Error::type_error("Type not registered"));
 }
 
 template <typename T>
@@ -1136,23 +1099,23 @@ TypeResolver::register_type_internal_runtime(const std::type_index &type_index,
   type_info_by_runtime_type_[type_index] = info;
 }
 
-inline Result<const TypeInfo &, Error>
+inline Result<const TypeInfo *, Error>
 TypeResolver::get_type_info_by_id(uint32_t type_id) const {
   auto it = type_info_by_id_.find(type_id);
   if (it != type_info_by_id_.end()) {
-    return *it->second;
+    return it->second;
   }
   return Unexpected(Error::type_error("TypeInfo not found for type_id: " +
                                       std::to_string(type_id)));
 }
 
-inline Result<const TypeInfo &, Error>
+inline Result<const TypeInfo *, Error>
 TypeResolver::get_type_info_by_name(const std::string &ns,
                                     const std::string &type_name) const {
   auto key = make_name_key(ns, type_name);
   auto it = type_info_by_name_.find(key);
   if (it != type_info_by_name_.end()) {
-    return *it->second;
+    return it->second;
   }
   return Unexpected(Error::type_error("TypeInfo not found for type: " + ns +
                                       "." + type_name));
@@ -1164,10 +1127,7 @@ TypeResolver::get_type_info_by_name(const std::string &ns,
 // ============================================================================
 
 template <typename E> Result<void, Error> WriteContext::write_enum_typeinfo() {
-  const TypeInfo *type_info = type_resolver_->get_type_info<E>();
-  if (!type_info) {
-    return Unexpected(Error::type_error("Enum type not registered"));
-  }
+  FORY_TRY(type_info, type_resolver_->get_type_info<E>());
   return write_enum_typeinfo(type_info);
 }
 

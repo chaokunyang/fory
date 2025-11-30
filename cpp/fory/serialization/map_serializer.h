@@ -343,21 +343,15 @@ write_map_data_slow(const MapType &map, WriteContext &ctx, bool has_generics) {
     uint32_t val_type_id = 0;
     if constexpr (key_is_polymorphic) {
       auto concrete_type_id = get_concrete_type_id(key);
-      auto type_info_result =
-          ctx.type_resolver().get_type_info(concrete_type_id);
-      if (!type_info_result.ok()) {
-        return Unexpected(type_info_result.error());
-      }
-      key_type_id = type_info_result.value().type_id;
+      FORY_TRY(key_type_info,
+               ctx.type_resolver().get_type_info(concrete_type_id));
+      key_type_id = key_type_info->type_id;
     }
     if constexpr (val_is_polymorphic) {
       auto concrete_type_id = get_concrete_type_id(value);
-      auto type_info_result =
-          ctx.type_resolver().get_type_info(concrete_type_id);
-      if (!type_info_result.ok()) {
-        return Unexpected(type_info_result.error());
-      }
-      val_type_id = type_info_result.value().type_id;
+      FORY_TRY(val_type_info,
+               ctx.type_resolver().get_type_info(concrete_type_id));
+      val_type_id = val_type_info->type_id;
     }
 
     // Check if we need to start a new chunk due to type changes

@@ -225,18 +225,13 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
       // For polymorphic types, serialize the concrete type dynamically
       if constexpr (is_polymorphic) {
         std::type_index concrete_type_id = std::type_index(typeid(*ptr));
-        auto type_info_result =
-            ctx.type_resolver().get_type_info(concrete_type_id);
-        if (!type_info_result.ok()) {
-          return Unexpected(type_info_result.error());
-        }
-        const TypeInfo &type_info = type_info_result.value();
+        FORY_TRY(type_info, ctx.type_resolver().get_type_info(concrete_type_id));
         if (write_type) {
           FORY_RETURN_NOT_OK(ctx.write_any_typeinfo(
               static_cast<uint32_t>(TypeId::UNKNOWN), concrete_type_id));
         }
         const void *value_ptr = ptr.get();
-        return type_info.harness.write_data_fn(value_ptr, ctx, has_generics);
+        return type_info->harness.write_data_fn(value_ptr, ctx, has_generics);
       } else {
         return Serializer<T>::write(*ptr, ctx, inner_requires_ref, write_type);
       }
@@ -262,12 +257,7 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
       std::type_index concrete_type_id = std::type_index(typeid(*ptr));
 
       // Look up the TypeInfo for the concrete type
-      auto type_info_result =
-          ctx.type_resolver().get_type_info(concrete_type_id);
-      if (!type_info_result.ok()) {
-        return Unexpected(type_info_result.error());
-      }
-      const TypeInfo &type_info = type_info_result.value();
+      FORY_TRY(type_info, ctx.type_resolver().get_type_info(concrete_type_id));
 
       // Write type info if requested
       if (write_type) {
@@ -278,7 +268,7 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
       // Call the harness with the raw pointer (which points to DerivedType)
       // The harness will static_cast it back to the concrete type
       const void *value_ptr = ptr.get();
-      return type_info.harness.write_data_fn(value_ptr, ctx, has_generics);
+      return type_info->harness.write_data_fn(value_ptr, ctx, has_generics);
     } else {
       // Non-polymorphic path
       return Serializer<T>::write(*ptr, ctx, inner_requires_ref, write_type);
@@ -295,14 +285,9 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
     // For polymorphic types, use harness to serialize the concrete type
     if constexpr (std::is_polymorphic_v<T>) {
       std::type_index concrete_type_id = std::type_index(typeid(*ptr));
-      auto type_info_result =
-          ctx.type_resolver().get_type_info(concrete_type_id);
-      if (!type_info_result.ok()) {
-        return Unexpected(type_info_result.error());
-      }
-      const TypeInfo &type_info = type_info_result.value();
+      FORY_TRY(type_info, ctx.type_resolver().get_type_info(concrete_type_id));
       const void *value_ptr = ptr.get();
-      return type_info.harness.write_data_fn(value_ptr, ctx, false);
+      return type_info->harness.write_data_fn(value_ptr, ctx, false);
     } else {
       return Serializer<T>::write_data(*ptr, ctx);
     }
@@ -319,14 +304,9 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
     // For polymorphic types, use harness to serialize the concrete type
     if constexpr (std::is_polymorphic_v<T>) {
       std::type_index concrete_type_id = std::type_index(typeid(*ptr));
-      auto type_info_result =
-          ctx.type_resolver().get_type_info(concrete_type_id);
-      if (!type_info_result.ok()) {
-        return Unexpected(type_info_result.error());
-      }
-      const TypeInfo &type_info = type_info_result.value();
+      FORY_TRY(type_info, ctx.type_resolver().get_type_info(concrete_type_id));
       const void *value_ptr = ptr.get();
-      return type_info.harness.write_data_fn(value_ptr, ctx, has_generics);
+      return type_info->harness.write_data_fn(value_ptr, ctx, has_generics);
     } else {
       return Serializer<T>::write_data_generic(*ptr, ctx, has_generics);
     }
@@ -561,18 +541,13 @@ template <typename T> struct Serializer<std::unique_ptr<T>> {
       // For polymorphic types, serialize the concrete type dynamically
       if constexpr (is_polymorphic) {
         std::type_index concrete_type_id = std::type_index(typeid(*ptr));
-        auto type_info_result =
-            ctx.type_resolver().get_type_info(concrete_type_id);
-        if (!type_info_result.ok()) {
-          return Unexpected(type_info_result.error());
-        }
-        const TypeInfo &type_info = type_info_result.value();
+        FORY_TRY(type_info, ctx.type_resolver().get_type_info(concrete_type_id));
         if (write_type) {
           FORY_RETURN_NOT_OK(ctx.write_any_typeinfo(
               static_cast<uint32_t>(TypeId::UNKNOWN), concrete_type_id));
         }
         const void *value_ptr = ptr.get();
-        return type_info.harness.write_data_fn(value_ptr, ctx, false);
+        return type_info->harness.write_data_fn(value_ptr, ctx, false);
       } else {
         return Serializer<T>::write(*ptr, ctx, inner_requires_ref, write_type);
       }
@@ -589,18 +564,13 @@ template <typename T> struct Serializer<std::unique_ptr<T>> {
     // For polymorphic types, serialize the concrete type dynamically
     if constexpr (is_polymorphic) {
       std::type_index concrete_type_id = std::type_index(typeid(*ptr));
-      auto type_info_result =
-          ctx.type_resolver().get_type_info(concrete_type_id);
-      if (!type_info_result.ok()) {
-        return Unexpected(type_info_result.error());
-      }
-      const TypeInfo &type_info = type_info_result.value();
+      FORY_TRY(type_info, ctx.type_resolver().get_type_info(concrete_type_id));
       if (write_type) {
         FORY_RETURN_NOT_OK(ctx.write_any_typeinfo(
             static_cast<uint32_t>(TypeId::UNKNOWN), concrete_type_id));
       }
       const void *value_ptr = ptr.get();
-      return type_info.harness.write_data_fn(value_ptr, ctx, false);
+      return type_info->harness.write_data_fn(value_ptr, ctx, false);
     } else {
       return Serializer<T>::write(*ptr, ctx, inner_requires_ref, write_type);
     }
@@ -615,14 +585,9 @@ template <typename T> struct Serializer<std::unique_ptr<T>> {
     // For polymorphic types, use harness to serialize the concrete type
     if constexpr (std::is_polymorphic_v<T>) {
       std::type_index concrete_type_id = std::type_index(typeid(*ptr));
-      auto type_info_result =
-          ctx.type_resolver().get_type_info(concrete_type_id);
-      if (!type_info_result.ok()) {
-        return Unexpected(type_info_result.error());
-      }
-      const TypeInfo &type_info = type_info_result.value();
+      FORY_TRY(type_info, ctx.type_resolver().get_type_info(concrete_type_id));
       const void *value_ptr = ptr.get();
-      return type_info.harness.write_data_fn(value_ptr, ctx, false);
+      return type_info->harness.write_data_fn(value_ptr, ctx, false);
     } else {
       return Serializer<T>::write_data(*ptr, ctx);
     }
@@ -638,14 +603,9 @@ template <typename T> struct Serializer<std::unique_ptr<T>> {
     // For polymorphic types, use harness to serialize the concrete type
     if constexpr (std::is_polymorphic_v<T>) {
       std::type_index concrete_type_id = std::type_index(typeid(*ptr));
-      auto type_info_result =
-          ctx.type_resolver().get_type_info(concrete_type_id);
-      if (!type_info_result.ok()) {
-        return Unexpected(type_info_result.error());
-      }
-      const TypeInfo &type_info = type_info_result.value();
+      FORY_TRY(type_info, ctx.type_resolver().get_type_info(concrete_type_id));
       const void *value_ptr = ptr.get();
-      return type_info.harness.write_data_fn(value_ptr, ctx, has_generics);
+      return type_info->harness.write_data_fn(value_ptr, ctx, has_generics);
     } else {
       return Serializer<T>::write_data_generic(*ptr, ctx, has_generics);
     }

@@ -71,12 +71,8 @@ Result<size_t, Error> WriteContext::push_meta(const std::type_index &type_id) {
   }
 
   size_t index = write_type_defs_.size();
-  auto type_info_result = type_resolver_->get_type_info(type_id);
-  if (!type_info_result.ok()) {
-    return Unexpected(type_info_result.error());
-  }
-  const TypeInfo &type_info = type_info_result.value();
-  write_type_defs_.push_back(type_info.type_def);
+  FORY_TRY(type_info, type_resolver_->get_type_info(type_id));
+  write_type_defs_.push_back(type_info->type_def);
   write_type_id_index_map_[type_id] = index;
   return index;
 }
@@ -130,13 +126,8 @@ static void write_encoded_meta_string(Buffer &buffer,
 
 Result<void, Error>
 WriteContext::write_enum_typeinfo(const std::type_index &type) {
-  auto type_info_result = type_resolver_->get_type_info(type);
-  if (!type_info_result.ok()) {
-    return Unexpected(Error::type_error("Enum type not registered"));
-  }
-
-  const TypeInfo &type_info = type_info_result.value();
-  uint32_t type_id = type_info.type_id;
+  FORY_TRY(type_info, type_resolver_->get_type_info(type));
+  uint32_t type_id = type_info->type_id;
   uint32_t type_id_low = type_id & 0xff;
 
   buffer_.WriteVarUint32(type_id);
@@ -148,9 +139,9 @@ WriteContext::write_enum_typeinfo(const std::type_index &type) {
       buffer_.WriteVarUint32(static_cast<uint32_t>(meta_index));
     } else {
       // Write pre-encoded namespace and type_name
-      if (type_info.encoded_namespace && type_info.encoded_type_name) {
-        write_encoded_meta_string(buffer_, *type_info.encoded_namespace);
-        write_encoded_meta_string(buffer_, *type_info.encoded_type_name);
+      if (type_info->encoded_namespace && type_info->encoded_type_name) {
+        write_encoded_meta_string(buffer_, *type_info->encoded_namespace);
+        write_encoded_meta_string(buffer_, *type_info->encoded_type_name);
       } else {
         return Unexpected(
             Error::invalid("Encoded meta strings not initialized for enum"));
@@ -200,20 +191,13 @@ WriteContext::write_any_typeinfo(uint32_t fory_type_id,
   // Check if it's an internal type
   if (is_internal_type(fory_type_id)) {
     buffer_.WriteVarUint32(fory_type_id);
-    auto type_info_result = type_resolver_->get_type_info_by_id(fory_type_id);
-    if (!type_info_result.ok()) {
-      return Unexpected(type_info_result.error());
-    }
-    return &type_info_result.value();
+    FORY_TRY(type_info, type_resolver_->get_type_info_by_id(fory_type_id));
+    return type_info;
   }
 
   // Get type info for the concrete type
-  auto type_info_result = type_resolver_->get_type_info(concrete_type_id);
-  if (!type_info_result.ok()) {
-    return Unexpected(type_info_result.error());
-  }
-  const TypeInfo &type_info = type_info_result.value();
-  uint32_t type_id = type_info.type_id;
+  FORY_TRY(type_info, type_resolver_->get_type_info(concrete_type_id));
+  uint32_t type_id = type_info->type_id;
 
   // Write type_id
   buffer_.WriteVarUint32(type_id);
@@ -237,9 +221,9 @@ WriteContext::write_any_typeinfo(uint32_t fory_type_id,
       buffer_.WriteVarUint32(static_cast<uint32_t>(meta_index));
     } else {
       // Write pre-encoded namespace and type_name
-      if (type_info.encoded_namespace && type_info.encoded_type_name) {
-        write_encoded_meta_string(buffer_, *type_info.encoded_namespace);
-        write_encoded_meta_string(buffer_, *type_info.encoded_type_name);
+      if (type_info->encoded_namespace && type_info->encoded_type_name) {
+        write_encoded_meta_string(buffer_, *type_info->encoded_namespace);
+        write_encoded_meta_string(buffer_, *type_info->encoded_type_name);
       } else {
         return Unexpected(
             Error::invalid("Encoded meta strings not initialized for type"));
@@ -252,18 +236,14 @@ WriteContext::write_any_typeinfo(uint32_t fory_type_id,
     break;
   }
 
-  return &type_info;
+  return type_info;
 }
 
 Result<void, Error>
 WriteContext::write_struct_type_info(const std::type_index &type_id) {
   // Get type info with single lookup
-  auto type_info_result = type_resolver_->get_type_info(type_id);
-  if (!type_info_result.ok()) {
-    return Unexpected(type_info_result.error());
-  }
-  const TypeInfo &type_info = type_info_result.value();
-  uint32_t fory_type_id = type_info.type_id;
+  FORY_TRY(type_info, type_resolver_->get_type_info(type_id));
+  uint32_t fory_type_id = type_info->type_id;
 
   // Write type_id
   buffer_.WriteVarUint32(fory_type_id);
@@ -285,9 +265,9 @@ WriteContext::write_struct_type_info(const std::type_index &type_id) {
       buffer_.WriteVarUint32(static_cast<uint32_t>(meta_index));
     } else {
       // Write pre-encoded namespace and type_name
-      if (type_info.encoded_namespace && type_info.encoded_type_name) {
-        write_encoded_meta_string(buffer_, *type_info.encoded_namespace);
-        write_encoded_meta_string(buffer_, *type_info.encoded_type_name);
+      if (type_info->encoded_namespace && type_info->encoded_type_name) {
+        write_encoded_meta_string(buffer_, *type_info->encoded_namespace);
+        write_encoded_meta_string(buffer_, *type_info->encoded_type_name);
       } else {
         return Unexpected(
             Error::invalid("Encoded meta strings not initialized for struct"));
@@ -363,7 +343,7 @@ uint32_t WriteContext::get_type_id_for_cache(const std::type_index &type_idx) {
   if (!result.ok()) {
     return 0;
   }
-  return result.value().type_id;
+  return result.value()->type_id;
 }
 
 // ============================================================================
@@ -436,12 +416,12 @@ Result<size_t, Error> ReadContext::load_type_meta(int32_t meta_offset) {
       auto result = type_resolver_->get_type_info_by_name(
           parsed_meta->namespace_str, parsed_meta->type_name);
       if (result.ok()) {
-        local_type_info = &result.value();
+        local_type_info = result.value();
       }
     } else {
       auto result = type_resolver_->get_type_info_by_id(parsed_meta->type_id);
       if (result.ok()) {
-        local_type_info = &result.value();
+        local_type_info = result.value();
       }
     }
 
@@ -524,20 +504,14 @@ Result<const TypeInfo *, Error> ReadContext::read_any_typeinfo() {
              meta_string_table_.read_string(*buffer_, kNamespaceDecoder));
     FORY_TRY(type_name,
              meta_string_table_.read_string(*buffer_, kTypeNameDecoder));
-    auto type_info_result =
-        type_resolver_->get_type_info_by_name(namespace_str, type_name);
-    if (!type_info_result.ok()) {
-      return Unexpected(type_info_result.error());
-    }
-    return &type_info_result.value();
+    FORY_TRY(type_info,
+             type_resolver_->get_type_info_by_name(namespace_str, type_name));
+    return type_info;
   }
   default: {
     // All types must be registered in type_resolver
-    auto type_info_result = type_resolver_->get_type_info_by_id(type_id);
-    if (!type_info_result.ok()) {
-      return Unexpected(type_info_result.error());
-    }
-    return &type_info_result.value();
+    FORY_TRY(type_info, type_resolver_->get_type_info_by_id(type_id));
+    return type_info;
   }
   }
 }

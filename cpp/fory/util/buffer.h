@@ -833,6 +833,10 @@ public:
           new_ptr =
               static_cast<uint8_t *>(malloc(static_cast<size_t>(new_size)));
           if (new_ptr) {
+            // Copy existing data before switching to owned buffer
+            if (data_ && size_ > 0) {
+              std::memcpy(new_ptr, data_, size_);
+            }
             own_data_ = true;
           }
         }

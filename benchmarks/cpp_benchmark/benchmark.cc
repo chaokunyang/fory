@@ -104,10 +104,13 @@ FORY_STRUCT(Sample, int_value, long_value, float_value, double_value,
 // Test data creation
 // ============================================================================
 
-NumericStruct CreateNumericStruct() { return NumericStruct{1, 2, 3, 4, 5, 6, 7, 8}; }
+NumericStruct CreateNumericStruct() {
+  return NumericStruct{1, 2, 3, 4, 5, 6, 7, 8};
+}
 
 // ============================================================================
-// Protobuf conversion functions (like Java benchmark's buildPBStruct/fromPBObject)
+// Protobuf conversion functions (like Java benchmark's
+// buildPBStruct/fromPBObject)
 // ============================================================================
 
 /// Convert plain C++ struct to protobuf message (for serialization)
@@ -138,7 +141,9 @@ inline NumericStruct FromPbStruct(const protobuf::Struct &pb) {
   return obj;
 }
 
-protobuf::Struct CreateProtoStruct() { return ToPbStruct(CreateNumericStruct()); }
+protobuf::Struct CreateProtoStruct() {
+  return ToPbStruct(CreateNumericStruct());
+}
 
 Sample CreateSample() {
   Sample sample;
@@ -274,7 +279,8 @@ static void BM_Fory_Struct_Deserialize(benchmark::State &state) {
   auto &bytes = serialized.value();
 
   // Verify deserialization works first
-  auto test_result = fory.deserialize<NumericStruct>(bytes.data(), bytes.size());
+  auto test_result =
+      fory.deserialize<NumericStruct>(bytes.data(), bytes.size());
   if (!test_result.ok()) {
     state.SkipWithError("Deserialization test failed");
     return;

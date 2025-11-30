@@ -1005,9 +1005,9 @@ TypeResolver::build_ext_type_info(uint32_t type_id, std::string ns,
   // Create TypeMeta for extension type (with empty fields) and generate
   // type_def. Extension types need type_def for meta sharing in compatible
   // mode.
-  TypeMeta meta = TypeMeta::from_fields(type_id, entry->namespace_name,
-                                        entry->type_name, register_by_name,
-                                        std::vector<FieldInfo>{});
+  TypeMeta meta =
+      TypeMeta::from_fields(type_id, entry->namespace_name, entry->type_name,
+                            register_by_name, std::vector<FieldInfo>{});
   FORY_TRY(type_def, meta.to_bytes());
   entry->type_def = std::move(type_def);
 

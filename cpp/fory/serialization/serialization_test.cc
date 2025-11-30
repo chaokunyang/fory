@@ -410,10 +410,10 @@ TEST(SerializationTest, ThreadSafeForyMultiThread) {
   for (int t = 0; t < kNumThreads; ++t) {
     threads.emplace_back([&, t]() {
       for (int i = 0; i < kIterationsPerThread; ++i) {
-        ::ComplexStruct original{
-            "thread" + std::to_string(t) + "_iter" + std::to_string(i),
-            t * 1000 + i,
-            {"hobby1", "hobby2"}};
+        ::ComplexStruct original{"thread" + std::to_string(t) + "_iter" +
+                                     std::to_string(i),
+                                 t * 1000 + i,
+                                 {"hobby1", "hobby2"}};
 
         auto bytes_result = fory.serialize(original);
         if (!bytes_result.ok())

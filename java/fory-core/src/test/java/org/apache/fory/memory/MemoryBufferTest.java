@@ -675,4 +675,105 @@ public class MemoryBufferTest {
       assertEquals(buffer.readBytesAsInt64(2), (20 << 8) | 10);
     }
   }
+
+  /**
+   * Test unaligned memory access for int64/long values. This test specifically exercises writing
+   * 8-byte values at unaligned offsets (1, 3, 5, 7 bytes from aligned boundary). On platforms that
+   * require aligned memory access (like ARM64 with JDK 25+), this can crash with: "a fault occurred
+   * in an unsafe memory access operation" if the code doesn't handle unaligned access properly.
+   *
+   * @see <a href="https://github.com/apache/fory/issues/2785">Issue #2785</a>
+   */
+  @Test
+  public void testUnalignedInt64Access() {
+    // Print platform info for debugging CI failures
+    String arch = System.getProperty("os.arch", "");
+    String osName = System.getProperty("os.name", "");
+    int javaVersion = Platform.JAVA_VERSION;
+    System.out.println(
+        "Testing unaligned access on: arch="
+            + arch
+            + ", os="
+            + osName
+            + ", java="
+            + javaVersion
+            + ", Platform.unaligned()="
+            + Platform.unaligned());
+
+    // Test writing int64 at various unaligned offsets
+    for (int offset = 0; offset < 8; offset++) {
+      MemoryBuffer buffer = MemoryUtils.buffer(32);
+      // Skip 'offset' bytes to create unaligned position
+      for (int i = 0; i < offset; i++) {
+        buffer.writeByte((byte) i);
+      }
+      // Write int64 at unaligned position - this can crash on ARM64 JDK 25+ without proper handling
+      long testValue = 0x123456789ABCDEF0L;
+      buffer.writeInt64(testValue);
+      // Verify by reading back
+      buffer.readerIndex(offset);
+      long readValue = buffer.readInt64();
+      assertEquals(readValue, testValue, "Failed at offset " + offset);
+    }
+
+    // Test with putInt64 at unaligned offsets
+    for (int offset = 0; offset < 8; offset++) {
+      MemoryBuffer buffer = MemoryUtils.buffer(32);
+      long testValue = 0xFEDCBA9876543210L;
+      buffer.putInt64(offset, testValue);
+      assertEquals(buffer.getInt64(offset), testValue, "putInt64 failed at offset " + offset);
+    }
+
+    // Test with multiple unaligned writes in sequence (simulates CompatibleSerializer behavior)
+    MemoryBuffer buffer = MemoryUtils.buffer(64);
+    buffer.writeByte((byte) 1); // offset 1
+    buffer.writeInt64(Long.MAX_VALUE);
+    buffer.writeByte((byte) 2); // now at offset 10
+    buffer.writeInt64(Long.MIN_VALUE);
+    buffer.writeByte((byte) 3); // now at offset 19
+    buffer.writeInt64(0L);
+
+    buffer.readerIndex(0);
+    assertEquals(buffer.readByte(), (byte) 1);
+    assertEquals(buffer.readInt64(), Long.MAX_VALUE);
+    assertEquals(buffer.readByte(), (byte) 2);
+    assertEquals(buffer.readInt64(), Long.MIN_VALUE);
+    assertEquals(buffer.readByte(), (byte) 3);
+    assertEquals(buffer.readInt64(), 0L);
+  }
+
+  /**
+   * Test unaligned access for int32 values. Similar to int64 test but for 4-byte aligned access.
+   */
+  @Test
+  public void testUnalignedInt32Access() {
+    for (int offset = 0; offset < 4; offset++) {
+      MemoryBuffer buffer = MemoryUtils.buffer(16);
+      for (int i = 0; i < offset; i++) {
+        buffer.writeByte((byte) i);
+      }
+      int testValue = 0x12345678;
+      buffer.writeInt32(testValue);
+      buffer.readerIndex(offset);
+      assertEquals(buffer.readInt32(), testValue, "Failed at offset " + offset);
+    }
+  }
+
+  /**
+   * Test unaligned access for int16/short values. Similar to int64 test but for 2-byte aligned
+   * access.
+   */
+  @Test
+  public void testUnalignedInt16Access() {
+    for (int offset = 0; offset < 2; offset++) {
+      MemoryBuffer buffer = MemoryUtils.buffer(8);
+      for (int i = 0; i < offset; i++) {
+        buffer.writeByte((byte) i);
+      }
+      short testValue = (short) 0x1234;
+      buffer.writeInt16(testValue);
+      buffer.readerIndex(offset);
+      assertEquals(buffer.readInt16(), testValue, "Failed at offset " + offset);
+    }
+  }
 }

@@ -99,13 +99,25 @@ jobs:
     strategy:
       matrix:
         java-version: ["25"]
+        distribution: ["oracle", "zulu"]
     steps:
       - uses: actions/checkout@v5
-      - name: Set up JDK ${{ matrix.java-version }}
+      - name: Set up JDK ${{ matrix.java-version }} (${{ matrix.distribution }})
         uses: actions/setup-java@v4
         with:
           java-version: ${{ matrix.java-version }}
-          distribution: "temurin"
+          distribution: ${{ matrix.distribution }}
+      - name: Check alignment behavior
+        run: |
+          echo "=== System Information ==="
+          uname -a
+          cat /proc/cpuinfo | head -30
+          java -version
+          echo "=== Check alignment handling ==="
+          # Check kernel alignment fault handling
+          cat /proc/cpu/alignment 2>/dev/null || echo "alignment file not available"
+          # Check if unaligned access is emulated or faults
+          dmesg | grep -i align || echo "no alignment messages in dmesg"
       - name: Cache Maven local repository
         uses: actions/cache@v4
         with:
@@ -140,8 +152,55 @@ jobs:
         uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
-          name: surefire-reports-arm64-${{ matrix.java-version }}
+          name: surefire-reports-arm64-${{ matrix.distribution }}-${{ matrix.java-version }}
           path: "**/target/surefire-reports/**"
+
+  # Test ARM64 with QEMU emulation which may have stricter alignment checking
+  java_arm64_qemu:
+    name: ARM64 QEMU Java CI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392  # v3
+        with:
+          platforms: arm64
+      - name: Run ARM64 tests via QEMU
+        uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d  # v3.0.1
+        with:
+          arch: aarch64
+          distro: ubuntu22.04
+          githubToken: ${{ github.token }}
+          dockerRunArgs: |
+            --volume "${PWD}:/workspace"
+          install: |
+            apt-get update -q -y
+            apt-get install -q -y wget curl git maven python3 python3-pip
+            # Install JDK 25
+            wget -q https://download.oracle.com/java/25/latest/jdk-25_linux-aarch64_bin.tar.gz -O /tmp/jdk.tar.gz
+            mkdir -p /opt/java
+            tar -xzf /tmp/jdk.tar.gz -C /opt/java --strip-components=1
+            export JAVA_HOME=/opt/java
+            export PATH=$JAVA_HOME/bin:$PATH
+            java -version
+          run: |
+            export JAVA_HOME=/opt/java
+            export PATH=$JAVA_HOME/bin:$PATH
+            cd /workspace
+            echo "=== System Information ==="
+            uname -a
+            java -version
+            echo "=== Check alignment handling ==="
+            cat /proc/cpu/alignment 2>/dev/null || echo "alignment file not available"
+            echo "=== Building fory modules ==="
+            cd java
+            # Install all modules first (skip tests during build)
+            mvn -T10 --batch-mode --no-transfer-progress install -DskipTests
+            echo "=== Running unaligned access tests ==="
+            # First run the specific unaligned access tests
+            mvn -T10 --batch-mode --no-transfer-progress test -pl fory-core -Dtest=org.apache.fory.memory.MemoryBufferTest#testUnalignedInt64Access
+            # Then run CompatibleSerializer tests which triggered the original issue
+            mvn -T10 --batch-mode --no-transfer-progress test -pl fory-core -Dtest=org.apache.fory.serializer.CompatibleSerializerTest
 
   openj9:
     name: Openj9 Java CI

@@ -281,7 +281,7 @@ case $1 in
     java21)
       jdk17_plus_tests
     ;;
-    java24)
+    java25)
       jdk17_plus_tests
     ;;
     kotlin)

@@ -55,6 +55,7 @@ JDKS = {
     "17": "zulu17.44.17-ca-crac-jdk17.0.8-linux_x64",
     "21": "zulu21.28.85-ca-jdk21.0.0-linux_x64",
     "24": "zulu24.32.13-ca-fx-jdk24.0.2-linux_x64",
+    "25": "zulu25.30.17-ca-jdk25.0.1-linux_x64",
 }
 
 
@@ -323,8 +324,8 @@ def run(version=None, release=False, install_jdks=False, install_fory=False):
         run_jdk17_plus("17")
     elif version == "21":
         run_jdk17_plus("21")
-    elif version == "24":
-        run_jdk17_plus("24")
+    elif version == "25":
+        run_jdk17_plus("25")
     elif version == "windows_java21":
         run_windows_java21()
     elif version == "integration_tests":

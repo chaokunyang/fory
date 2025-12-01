@@ -246,7 +246,12 @@ public class ReflectionUtils {
       String msg = String.format("class %s doesn't have method %s", cls, methodName);
       throw new IllegalArgumentException(msg);
     }
-    return methods.get(0).getExceptionTypes().length > 0;
+    for (Method method : methods) {
+      if (method.getExceptionTypes().length > 0) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /** Returns true if any method named {@code methodName} has checked exception. */
@@ -256,9 +261,11 @@ public class ReflectionUtils {
       String msg = String.format("class %s doesn't have method %s", cls, methodName);
       throw new IllegalArgumentException(msg);
     }
-    for (Class<?> exceptionType : methods.get(0).getExceptionTypes()) {
-      if (!RuntimeException.class.isAssignableFrom(exceptionType)) {
-        return true;
+    for (Method method : methods) {
+      for (Class<?> exceptionType : method.getExceptionTypes()) {
+        if (!RuntimeException.class.isAssignableFrom(exceptionType)) {
+          return true;
+        }
       }
     }
     return false;

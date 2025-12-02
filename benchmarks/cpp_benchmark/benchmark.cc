@@ -322,9 +322,15 @@ static void BM_Fory_Sample_Serialize(benchmark::State &state) {
   RegisterForyTypes(fory);
   Sample obj = CreateSample();
 
+  // Pre-allocate buffer (like Protobuf benchmark does)
+  fory::Buffer buffer;
+  buffer.Reserve(4096);
+
   for (auto _ : state) {
-    auto result = fory.serialize(obj);
+    buffer.WriterIndex(0);
+    auto result = fory.serialize_to(obj, buffer);
     benchmark::DoNotOptimize(result);
+    benchmark::DoNotOptimize(buffer.data());
   }
 }
 BENCHMARK(BM_Fory_Sample_Serialize);

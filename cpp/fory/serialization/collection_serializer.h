@@ -133,7 +133,7 @@ struct Serializer<
       return Unexpected(Error::type_mismatch(type_info->type_id,
                                              static_cast<uint32_t>(type_id)));
     }
-    return Result<void, Error>();
+    return {};
   }
 
   static inline Result<void, Error> write(const std::vector<T, Alloc> &vec,
@@ -174,8 +174,12 @@ struct Serializer<
       return std::vector<T, Alloc>();
     }
 
+    Error error;
     if (read_type) {
-      FORY_TRY(type_id_read, ctx.read_varuint32());
+      uint32_t type_id_read = ctx.read_varuint32(&error);
+      if (FORY_PREDICT_FALSE(!error.ok())) {
+        return Unexpected(std::move(error));
+      }
       if (type_id_read != static_cast<uint32_t>(type_id)) {
         return Unexpected(
             Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
@@ -193,7 +197,11 @@ struct Serializer<
 
   static inline Result<std::vector<T, Alloc>, Error>
   read_data(ReadContext &ctx) {
-    FORY_TRY(total_bytes_u32, ctx.read_varuint32());
+    Error error;
+    uint32_t total_bytes_u32 = ctx.read_varuint32(&error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
     if (sizeof(T) == 0) {
       return std::vector<T, Alloc>();
     }
@@ -204,8 +212,11 @@ struct Serializer<
     size_t elem_count = total_bytes_u32 / sizeof(T);
     std::vector<T, Alloc> result(elem_count);
     if (total_bytes_u32 > 0) {
-      FORY_RETURN_NOT_OK(ctx.read_bytes(
-          result.data(), static_cast<uint32_t>(total_bytes_u32)));
+      ctx.read_bytes(result.data(), static_cast<uint32_t>(total_bytes_u32),
+                     &error);
+      if (FORY_PREDICT_FALSE(!error.ok())) {
+        return Unexpected(std::move(error));
+      }
     }
     return result;
   }
@@ -229,7 +240,7 @@ struct Serializer<
       return Unexpected(Error::type_mismatch(type_info->type_id,
                                              static_cast<uint32_t>(type_id)));
     }
-    return Result<void, Error>();
+    return {};
   }
 
   static Result<std::vector<T, Alloc>, Error>
@@ -240,9 +251,13 @@ struct Serializer<
       return std::vector<T, Alloc>();
     }
 
+    Error error;
     // Optional type info for polymorphic containers
     if (read_type) {
-      FORY_TRY(type_id_read, ctx.read_varuint32());
+      uint32_t type_id_read = ctx.read_varuint32(&error);
+      if (FORY_PREDICT_FALSE(!error.ok())) {
+        return Unexpected(std::move(error));
+      }
       uint32_t low = type_id_read & 0xffu;
       if (low != static_cast<uint32_t>(type_id)) {
         return Unexpected(
@@ -251,7 +266,10 @@ struct Serializer<
     }
 
     // Length written via writeVarUint32Small7
-    FORY_TRY(length, ctx.read_varuint32());
+    uint32_t length = ctx.read_varuint32(&error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
     // Per xlang spec: header and type_info are omitted when length is 0
     // This matches Rust's collection.rs behavior
     if (length == 0) {
@@ -259,8 +277,10 @@ struct Serializer<
     }
 
     // Elements header bitmap (CollectionFlags)
-    FORY_TRY(bitmap_u8, ctx.read_uint8());
-    uint8_t bitmap = bitmap_u8;
+    uint8_t bitmap = ctx.read_uint8(&error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
     bool track_ref = (bitmap & 0x1u) != 0;
     bool has_null = (bitmap & 0x2u) != 0;
     bool is_decl_type = (bitmap & 0x4u) != 0;
@@ -479,7 +499,11 @@ struct Serializer<
 
   static inline Result<std::vector<T, Alloc>, Error>
   read_data(ReadContext &ctx) {
-    FORY_TRY(size, ctx.read_varuint32());
+    Error error;
+    uint32_t size = ctx.read_varuint32(&error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
     std::vector<T, Alloc> result;
     result.reserve(size);
     for (uint32_t i = 0; i < size; ++i) {
@@ -505,7 +529,7 @@ template <typename Alloc> struct Serializer<std::vector<bool, Alloc>> {
       return Unexpected(Error::type_mismatch(type_info->type_id,
                                              static_cast<uint32_t>(type_id)));
     }
-    return Result<void, Error>();
+    return {};
   }
 
   // Match Rust signature: fory_write(&self, context, write_ref_info,
@@ -545,8 +569,12 @@ template <typename Alloc> struct Serializer<std::vector<bool, Alloc>> {
       return std::vector<bool, Alloc>();
     }
 
+    Error error;
     if (read_type) {
-      FORY_TRY(type_id_read, ctx.read_varuint32());
+      uint32_t type_id_read = ctx.read_varuint32(&error);
+      if (FORY_PREDICT_FALSE(!error.ok())) {
+        return Unexpected(std::move(error));
+      }
       if (type_id_read != static_cast<uint32_t>(type_id)) {
         return Unexpected(
             Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
@@ -557,7 +585,11 @@ template <typename Alloc> struct Serializer<std::vector<bool, Alloc>> {
 
   static inline Result<std::vector<bool, Alloc>, Error>
   read_data(ReadContext &ctx) {
-    FORY_TRY(size, ctx.read_varuint32());
+    Error error;
+    uint32_t size = ctx.read_varuint32(&error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
     std::vector<bool, Alloc> result(size);
     // Fast path: bulk read all bytes at once if we have enough buffer
     Buffer &buffer = ctx.buffer();
@@ -570,7 +602,10 @@ template <typename Alloc> struct Serializer<std::vector<bool, Alloc>> {
     } else {
       // Fallback: read byte-by-byte with bounds checking
       for (uint32_t i = 0; i < size; ++i) {
-        FORY_TRY(byte, ctx.read_uint8());
+        uint8_t byte = ctx.read_uint8(&error);
+        if (FORY_PREDICT_FALSE(!error.ok())) {
+          return Unexpected(std::move(error));
+        }
         result[i] = (byte != 0);
       }
     }
@@ -588,7 +623,7 @@ struct Serializer<std::set<T, Args...>> {
 
   static inline Result<void, Error> write_type_info(WriteContext &ctx) {
     ctx.write_varuint32(static_cast<uint32_t>(type_id));
-    return Result<void, Error>();
+    return {};
   }
 
   static inline Result<void, Error> read_type_info(ReadContext &ctx) {
@@ -597,7 +632,7 @@ struct Serializer<std::set<T, Args...>> {
       return Unexpected(Error::type_mismatch(type_info->type_id,
                                              static_cast<uint32_t>(type_id)));
     }
-    return Result<void, Error>();
+    return {};
   }
 
   // Match Rust signature: fory_write(&self, context, write_ref_info,
@@ -686,9 +721,13 @@ struct Serializer<std::set<T, Args...>> {
       return std::set<T, Args...>();
     }
 
+    Error error;
     // Read type info
     if (read_type) {
-      FORY_TRY(type_id_read, ctx.read_varuint32());
+      uint32_t type_id_read = ctx.read_varuint32(&error);
+      if (FORY_PREDICT_FALSE(!error.ok())) {
+        return Unexpected(std::move(error));
+      }
       if (type_id_read != static_cast<uint32_t>(type_id)) {
         return Unexpected(
             Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
@@ -696,15 +735,20 @@ struct Serializer<std::set<T, Args...>> {
     }
 
     // Read set size
-    FORY_TRY(size, ctx.read_varuint32());
+    uint32_t size = ctx.read_varuint32(&error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
     // Per xlang spec: header and type_info are omitted when length is 0
     if (size == 0) {
       return std::set<T, Args...>();
     }
 
     // Read elements header bitmap (CollectionFlags) in xlang mode
-    FORY_TRY(bitmap_u8, ctx.read_uint8());
-    uint8_t bitmap = bitmap_u8;
+    uint8_t bitmap = ctx.read_uint8(&error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
     bool track_ref = (bitmap & 0x1u) != 0;
     bool has_null = (bitmap & 0x2u) != 0;
     bool is_decl_type = (bitmap & 0x4u) != 0;
@@ -760,7 +804,11 @@ struct Serializer<std::set<T, Args...>> {
 
   static inline Result<std::set<T, Args...>, Error>
   read_data(ReadContext &ctx) {
-    FORY_TRY(size, ctx.read_varuint32());
+    Error error;
+    uint32_t size = ctx.read_varuint32(&error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
     std::set<T, Args...> result;
     for (uint32_t i = 0; i < size; ++i) {
       FORY_TRY(elem, Serializer<T>::read_data(ctx));
@@ -780,7 +828,7 @@ struct Serializer<std::unordered_set<T, Args...>> {
 
   static inline Result<void, Error> write_type_info(WriteContext &ctx) {
     ctx.write_varuint32(static_cast<uint32_t>(type_id));
-    return Result<void, Error>();
+    return {};
   }
 
   static inline Result<void, Error> read_type_info(ReadContext &ctx) {
@@ -789,7 +837,7 @@ struct Serializer<std::unordered_set<T, Args...>> {
       return Unexpected(Error::type_mismatch(type_info->type_id,
                                              static_cast<uint32_t>(type_id)));
     }
-    return Result<void, Error>();
+    return {};
   }
 
   // Match Rust signature: fory_write(&self, context, write_ref_info,
@@ -877,9 +925,13 @@ struct Serializer<std::unordered_set<T, Args...>> {
       return std::unordered_set<T, Args...>();
     }
 
+    Error error;
     // Read type info
     if (read_type) {
-      FORY_TRY(type_id_read, ctx.read_varuint32());
+      uint32_t type_id_read = ctx.read_varuint32(&error);
+      if (FORY_PREDICT_FALSE(!error.ok())) {
+        return Unexpected(std::move(error));
+      }
       if (type_id_read != static_cast<uint32_t>(type_id)) {
         return Unexpected(
             Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
@@ -887,7 +939,10 @@ struct Serializer<std::unordered_set<T, Args...>> {
     }
 
     // Read set size
-    FORY_TRY(size, ctx.read_varuint32());
+    uint32_t size = ctx.read_varuint32(&error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
 
     // Per xlang spec: header and type_info are omitted when length is 0
     if (size == 0) {
@@ -895,8 +950,10 @@ struct Serializer<std::unordered_set<T, Args...>> {
     }
 
     // Read elements header bitmap (CollectionFlags) in xlang mode
-    FORY_TRY(bitmap_u8, ctx.read_uint8());
-    uint8_t bitmap = bitmap_u8;
+    uint8_t bitmap = ctx.read_uint8(&error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
     bool track_ref = (bitmap & 0x1u) != 0;
     bool has_null = (bitmap & 0x2u) != 0;
     bool is_decl_type = (bitmap & 0x4u) != 0;
@@ -954,7 +1011,11 @@ struct Serializer<std::unordered_set<T, Args...>> {
 
   static inline Result<std::unordered_set<T, Args...>, Error>
   read_data(ReadContext &ctx) {
-    FORY_TRY(size, ctx.read_varuint32());
+    Error error;
+    uint32_t size = ctx.read_varuint32(&error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
     std::unordered_set<T, Args...> result;
     result.reserve(size);
     for (uint32_t i = 0; i < size; ++i) {

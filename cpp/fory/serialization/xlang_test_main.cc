@@ -456,50 +456,43 @@ void RunTestBuffer(const std::string &data_file) {
   auto bytes = ReadFile(data_file);
   Buffer buffer(bytes.data(), static_cast<uint32_t>(bytes.size()), false);
 
-  auto bool_val_result = buffer.ReadUint8();
-  if (!bool_val_result.ok())
-    Fail("Failed to read bool: " + bool_val_result.error().message());
-  bool bool_val = bool_val_result.value() != 0;
+  Error error;
+  uint8_t bool_val_raw = buffer.ReadUint8(&error);
+  if (!error.ok())
+    Fail("Failed to read bool: " + error.message());
+  bool bool_val = bool_val_raw != 0;
 
-  auto int8_val_result = buffer.ReadInt8();
-  if (!int8_val_result.ok())
-    Fail("Failed to read int8: " + int8_val_result.error().message());
-  int8_t int8_val = int8_val_result.value();
+  int8_t int8_val = buffer.ReadInt8(&error);
+  if (!error.ok())
+    Fail("Failed to read int8: " + error.message());
 
-  auto int16_val_result = buffer.ReadInt16();
-  if (!int16_val_result.ok())
-    Fail("Failed to read int16: " + int16_val_result.error().message());
-  int16_t int16_val = int16_val_result.value();
+  int16_t int16_val = buffer.ReadInt16(&error);
+  if (!error.ok())
+    Fail("Failed to read int16: " + error.message());
 
-  auto int32_val_result = buffer.ReadInt32();
-  if (!int32_val_result.ok())
-    Fail("Failed to read int32: " + int32_val_result.error().message());
-  int32_t int32_val = int32_val_result.value();
+  int32_t int32_val = buffer.ReadInt32(&error);
+  if (!error.ok())
+    Fail("Failed to read int32: " + error.message());
 
-  auto int64_val_result = buffer.ReadInt64();
-  if (!int64_val_result.ok())
-    Fail("Failed to read int64: " + int64_val_result.error().message());
-  int64_t int64_val = int64_val_result.value();
+  int64_t int64_val = buffer.ReadInt64(&error);
+  if (!error.ok())
+    Fail("Failed to read int64: " + error.message());
 
-  auto float_val_result = buffer.ReadFloat();
-  if (!float_val_result.ok())
-    Fail("Failed to read float: " + float_val_result.error().message());
-  float float_val = float_val_result.value();
+  float float_val = buffer.ReadFloat(&error);
+  if (!error.ok())
+    Fail("Failed to read float: " + error.message());
 
-  auto double_val_result = buffer.ReadDouble();
-  if (!double_val_result.ok())
-    Fail("Failed to read double: " + double_val_result.error().message());
-  double double_val = double_val_result.value();
+  double double_val = buffer.ReadDouble(&error);
+  if (!error.ok())
+    Fail("Failed to read double: " + error.message());
 
-  auto varint_result = buffer.ReadVarUint32();
-  if (!varint_result.ok())
-    Fail("Failed to read varint: " + varint_result.error().message());
-  uint32_t varint = varint_result.value();
+  uint32_t varint = buffer.ReadVarUint32(&error);
+  if (!error.ok())
+    Fail("Failed to read varint: " + error.message());
 
-  auto payload_len_result = buffer.ReadInt32();
-  if (!payload_len_result.ok())
-    Fail("Failed to read payload len: " + payload_len_result.error().message());
-  int32_t payload_len = payload_len_result.value();
+  int32_t payload_len = buffer.ReadInt32(&error);
+  if (!error.ok())
+    Fail("Failed to read payload len: " + error.message());
 
   if (payload_len < 0 || buffer.reader_index() + payload_len > buffer.size()) {
     Fail("Invalid payload length in buffer test");
@@ -507,9 +500,9 @@ void RunTestBuffer(const std::string &data_file) {
   std::vector<uint8_t> payload(bytes.begin() + buffer.reader_index(),
                                bytes.begin() + buffer.reader_index() +
                                    payload_len);
-  auto skip_result = buffer.Skip(payload_len);
-  if (!skip_result.ok())
-    Fail("Failed to skip payload: " + skip_result.error().message());
+  buffer.Skip(payload_len, &error);
+  if (!error.ok())
+    Fail("Failed to skip payload: " + error.message());
 
   if (!bool_val || int8_val != std::numeric_limits<int8_t>::max() ||
       int16_val != std::numeric_limits<int16_t>::max() ||
@@ -541,6 +534,7 @@ void RunTestBufferVar(const std::string &data_file) {
   auto bytes = ReadFile(data_file);
   Buffer buffer(bytes.data(), static_cast<uint32_t>(bytes.size()), false);
 
+  Error error;
   const std::vector<int32_t> expected_varint32 = {
       std::numeric_limits<int32_t>::min(),
       std::numeric_limits<int32_t>::min() + 1,
@@ -561,8 +555,8 @@ void RunTestBufferVar(const std::string &data_file) {
       std::numeric_limits<int32_t>::max() - 1,
       std::numeric_limits<int32_t>::max()};
   for (int32_t value : expected_varint32) {
-    auto result = buffer.ReadVarInt32();
-    if (!result.ok() || result.value() != value) {
+    int32_t result = buffer.ReadVarInt32(&error);
+    if (!error.ok() || result != value) {
       Fail("VarInt32 mismatch");
     }
   }
@@ -571,8 +565,8 @@ void RunTestBufferVar(const std::string &data_file) {
       0u,       1u,       127u,       128u,       16383u,      16384u,
       2097151u, 2097152u, 268435455u, 268435456u, 2147483646u, 2147483647u};
   for (uint32_t value : expected_varuint32) {
-    auto result = buffer.ReadVarUint32();
-    if (!result.ok() || result.value() != value) {
+    uint32_t result = buffer.ReadVarUint32(&error);
+    if (!error.ok() || result != value) {
       Fail("VarUint32 mismatch");
     }
   }
@@ -598,8 +592,8 @@ void RunTestBufferVar(const std::string &data_file) {
       72057594037927936ull,
       static_cast<uint64_t>(std::numeric_limits<int64_t>::max())};
   for (uint64_t value : expected_varuint64) {
-    auto result = buffer.ReadVarUint64();
-    if (!result.ok() || result.value() != value) {
+    uint64_t result = buffer.ReadVarUint64(&error);
+    if (!error.ok() || result != value) {
       Fail("VarUint64 mismatch");
     }
   }
@@ -621,8 +615,8 @@ void RunTestBufferVar(const std::string &data_file) {
       std::numeric_limits<int64_t>::max() - 1,
       std::numeric_limits<int64_t>::max()};
   for (int64_t value : expected_varint64) {
-    auto result = buffer.ReadVarInt64();
-    if (!result.ok() || result.value() != value) {
+    int64_t result = buffer.ReadVarInt64(&error);
+    if (!error.ok() || result != value) {
       Fail("VarInt64 mismatch");
     }
   }
@@ -653,15 +647,14 @@ void RunTestMurmurHash3(const std::string &data_file) {
   }
   Buffer buffer(bytes.data(), static_cast<uint32_t>(bytes.size()), false);
 
-  auto first_result = buffer.ReadInt64();
-  if (!first_result.ok())
-    Fail("Failed to read first int64: " + first_result.error().message());
-  int64_t first = first_result.value();
+  Error error;
+  int64_t first = buffer.ReadInt64(&error);
+  if (!error.ok())
+    Fail("Failed to read first int64: " + error.message());
 
-  auto second_result = buffer.ReadInt64();
-  if (!second_result.ok())
-    Fail("Failed to read second int64: " + second_result.error().message());
-  int64_t second = second_result.value();
+  int64_t second = buffer.ReadInt64(&error);
+  if (!error.ok())
+    Fail("Failed to read second int64: " + error.message());
 
   int64_t hash_out[2] = {0, 0};
   MurmurHash3_x64_128("\x01\x02\x08", 3, 47, hash_out);

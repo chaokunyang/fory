@@ -87,8 +87,12 @@ template <> struct Serializer<Duration> {
     if (!has_value) {
       return Duration(0);
     }
+    Error error;
     if (read_type) {
-      FORY_TRY(type_id_read, ctx.read_varuint32());
+      uint32_t type_id_read = ctx.read_varuint32(&error);
+      if (FORY_PREDICT_FALSE(!error.ok())) {
+        return Unexpected(std::move(error));
+      }
       if (type_id_read != static_cast<uint32_t>(type_id)) {
         return Unexpected(
             Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
@@ -98,8 +102,12 @@ template <> struct Serializer<Duration> {
   }
 
   static Result<Duration, Error> read_data(ReadContext &ctx) {
+    Error error;
     int64_t nanos;
-    FORY_RETURN_NOT_OK(ctx.read_bytes(&nanos, sizeof(int64_t)));
+    ctx.read_bytes(&nanos, sizeof(int64_t), &error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
     return Duration(nanos);
   }
 };
@@ -142,8 +150,12 @@ template <> struct Serializer<Timestamp> {
     if (!has_value) {
       return Timestamp(Duration(0));
     }
+    Error error;
     if (read_type) {
-      FORY_TRY(type_id_read, ctx.read_varuint32());
+      uint32_t type_id_read = ctx.read_varuint32(&error);
+      if (FORY_PREDICT_FALSE(!error.ok())) {
+        return Unexpected(std::move(error));
+      }
       if (type_id_read != static_cast<uint32_t>(type_id)) {
         return Unexpected(
             Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
@@ -153,8 +165,12 @@ template <> struct Serializer<Timestamp> {
   }
 
   static Result<Timestamp, Error> read_data(ReadContext &ctx) {
+    Error error;
     int64_t nanos;
-    FORY_RETURN_NOT_OK(ctx.read_bytes(&nanos, sizeof(int64_t)));
+    ctx.read_bytes(&nanos, sizeof(int64_t), &error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
     return Timestamp(Duration(nanos));
   }
 };
@@ -195,8 +211,12 @@ template <> struct Serializer<LocalDate> {
     if (!has_value) {
       return LocalDate();
     }
+    Error error;
     if (read_type) {
-      FORY_TRY(type_id_read, ctx.read_varuint32());
+      uint32_t type_id_read = ctx.read_varuint32(&error);
+      if (FORY_PREDICT_FALSE(!error.ok())) {
+        return Unexpected(std::move(error));
+      }
       if (type_id_read != static_cast<uint32_t>(type_id)) {
         return Unexpected(
             Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
@@ -206,8 +226,12 @@ template <> struct Serializer<LocalDate> {
   }
 
   static Result<LocalDate, Error> read_data(ReadContext &ctx) {
+    Error error;
     LocalDate date;
-    FORY_RETURN_NOT_OK(ctx.read_bytes(&date.days_since_epoch, sizeof(int32_t)));
+    ctx.read_bytes(&date.days_since_epoch, sizeof(int32_t), &error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
     return date;
   }
 };

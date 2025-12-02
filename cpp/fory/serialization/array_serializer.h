@@ -93,8 +93,12 @@ struct Serializer<
     if (!has_value) {
       return std::array<T, N>();
     }
+    Error error;
     if (read_type) {
-      FORY_TRY(type_id_read, ctx.read_varuint32());
+      uint32_t type_id_read = ctx.read_varuint32(&error);
+      if (FORY_PREDICT_FALSE(!error.ok())) {
+        return Unexpected(std::move(error));
+      }
       if (type_id_read != static_cast<uint32_t>(type_id)) {
         return Unexpected(
             Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
@@ -105,7 +109,11 @@ struct Serializer<
 
   static Result<std::array<T, N>, Error> read_data(ReadContext &ctx) {
     // Read array length
-    FORY_TRY(length, ctx.read_varuint32());
+    Error error;
+    uint32_t length = ctx.read_varuint32(&error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
 
     if (length != N) {
       return Unexpected(Error::invalid_data("Array size mismatch: expected " +
@@ -115,7 +123,10 @@ struct Serializer<
 
     std::array<T, N> arr;
     if constexpr (N > 0) {
-      FORY_RETURN_NOT_OK(ctx.read_bytes(arr.data(), N * sizeof(T)));
+      ctx.read_bytes(arr.data(), N * sizeof(T), &error);
+      if (FORY_PREDICT_FALSE(!error.ok())) {
+        return Unexpected(std::move(error));
+      }
     }
     return arr;
   }
@@ -161,8 +172,12 @@ template <size_t N> struct Serializer<std::array<bool, N>> {
     if (!has_value) {
       return std::array<bool, N>();
     }
+    Error error;
     if (read_type) {
-      FORY_TRY(type_id_read, ctx.read_varuint32());
+      uint32_t type_id_read = ctx.read_varuint32(&error);
+      if (FORY_PREDICT_FALSE(!error.ok())) {
+        return Unexpected(std::move(error));
+      }
       if (type_id_read != static_cast<uint32_t>(type_id)) {
         return Unexpected(
             Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
@@ -173,7 +188,11 @@ template <size_t N> struct Serializer<std::array<bool, N>> {
 
   static Result<std::array<bool, N>, Error> read_data(ReadContext &ctx) {
     // Read array length
-    FORY_TRY(length, ctx.read_varuint32());
+    Error error;
+    uint32_t length = ctx.read_varuint32(&error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
     if (length != N) {
       return Unexpected(Error::invalid_data("Array size mismatch: expected " +
                                             std::to_string(N) + " but got " +
@@ -181,7 +200,10 @@ template <size_t N> struct Serializer<std::array<bool, N>> {
     }
     std::array<bool, N> arr;
     for (size_t i = 0; i < N; ++i) {
-      FORY_TRY(byte, ctx.read_uint8());
+      uint8_t byte = ctx.read_uint8(&error);
+      if (FORY_PREDICT_FALSE(!error.ok())) {
+        return Unexpected(std::move(error));
+      }
       arr[i] = (byte != 0);
     }
     return arr;

@@ -389,12 +389,19 @@ Result<size_t, Error> ReadContext::load_type_meta(int32_t meta_offset) {
   buffer_->ReaderIndex(static_cast<uint32_t>(meta_start));
 
   // Load all TypeMetas
-  FORY_TRY(meta_size, buffer_->ReadVarUint32());
+  Error error;
+  uint32_t meta_size = buffer_->ReadVarUint32(&error);
+  if (FORY_PREDICT_FALSE(!error.ok())) {
+    return Unexpected(std::move(error));
+  }
   reading_type_infos_.reserve(meta_size);
 
   for (uint32_t i = 0; i < meta_size; i++) {
     // Read the 8-byte header first for caching
-    FORY_TRY(meta_header, buffer_->ReadInt64());
+    int64_t meta_header = buffer_->ReadInt64(&error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
 
     // Check if we already parsed this type meta (cache lookup by header)
     auto cache_it = parsed_type_infos_.find(meta_header);
@@ -483,21 +490,31 @@ ReadContext::get_type_info_by_index(size_t index) const {
 }
 
 Result<const TypeInfo *, Error> ReadContext::read_any_typeinfo() {
-  FORY_TRY(type_id, buffer_->ReadVarUint32());
+  Error error;
+  uint32_t type_id = buffer_->ReadVarUint32(&error);
+  if (FORY_PREDICT_FALSE(!error.ok())) {
+    return Unexpected(std::move(error));
+  }
   uint32_t type_id_low = type_id & 0xff;
 
   // Mirror Rust's read_any_typeinfo using switch for jump table generation
   switch (type_id_low) {
   case static_cast<uint32_t>(TypeId::NAMED_COMPATIBLE_STRUCT):
   case static_cast<uint32_t>(TypeId::COMPATIBLE_STRUCT): {
-    FORY_TRY(meta_index, buffer_->ReadVarUint32());
+    uint32_t meta_index = buffer_->ReadVarUint32(&error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
     return get_type_info_by_index(meta_index);
   }
   case static_cast<uint32_t>(TypeId::NAMED_ENUM):
   case static_cast<uint32_t>(TypeId::NAMED_EXT):
   case static_cast<uint32_t>(TypeId::NAMED_STRUCT): {
     if (config_->compatible) {
-      FORY_TRY(meta_index, buffer_->ReadVarUint32());
+      uint32_t meta_index = buffer_->ReadVarUint32(&error);
+      if (FORY_PREDICT_FALSE(!error.ok())) {
+        return Unexpected(std::move(error));
+      }
       return get_type_info_by_index(meta_index);
     }
     FORY_TRY(namespace_str,

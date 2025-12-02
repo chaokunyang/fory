@@ -491,10 +491,14 @@ inline Result<MapType, Error> read_map_data_fast(ReadContext &ctx,
     return result;
   }
 
+  Error error;
   uint32_t len_counter = 0;
 
   while (len_counter < length) {
-    FORY_TRY(header, ctx.read_uint8());
+    uint8_t header = ctx.read_uint8(&error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
 
     // Handle null entries (shouldn't happen in fast path, but be defensive)
     if ((header & KEY_NULL) && (header & VALUE_NULL)) {
@@ -516,7 +520,10 @@ inline Result<MapType, Error> read_map_data_fast(ReadContext &ctx,
     }
 
     // Read chunk size
-    FORY_TRY(chunk_size, ctx.read_uint8());
+    uint8_t chunk_size = ctx.read_uint8(&error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
 
     // Read type info if not declared
     if (!(header & DECL_KEY_TYPE)) {
@@ -565,10 +572,14 @@ inline Result<MapType, Error> read_map_data_slow(ReadContext &ctx,
   constexpr bool key_is_shared_ref = is_shared_ref_v<K>;
   constexpr bool val_is_shared_ref = is_shared_ref_v<V>;
 
+  Error error;
   uint32_t len_counter = 0;
 
   while (len_counter < length) {
-    FORY_TRY(header, ctx.read_uint8());
+    uint8_t header = ctx.read_uint8(&error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
 
     // Handle null entries
     if ((header & KEY_NULL) && (header & VALUE_NULL)) {
@@ -676,7 +687,10 @@ inline Result<MapType, Error> read_map_data_slow(ReadContext &ctx,
     }
 
     // Non-null key and value chunk
-    FORY_TRY(chunk_size, ctx.read_uint8());
+    uint8_t chunk_size = ctx.read_uint8(&error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
     bool key_declared = (header & DECL_KEY_TYPE) != 0;
     bool value_declared = (header & DECL_VALUE_TYPE) != 0;
     bool track_key_ref = (header & TRACKING_KEY_REF) != 0;
@@ -767,7 +781,7 @@ struct Serializer<std::map<K, V, Args...>> {
 
   static inline Result<void, Error> write_type_info(WriteContext &ctx) {
     ctx.write_varuint32(static_cast<uint32_t>(type_id));
-    return Result<void, Error>();
+    return {};
   }
 
   static inline Result<void, Error> read_type_info(ReadContext &ctx) {
@@ -776,7 +790,7 @@ struct Serializer<std::map<K, V, Args...>> {
       return Unexpected(Error::type_mismatch(type_info->type_id,
                                              static_cast<uint32_t>(type_id)));
     }
-    return Result<void, Error>();
+    return {};
   }
 
   // Match Rust signature: fory_write(&self, context, write_ref_info,
@@ -830,15 +844,22 @@ struct Serializer<std::map<K, V, Args...>> {
       return std::map<K, V, Args...>();
     }
 
+    Error error;
     if (read_type) {
-      FORY_TRY(type_id_read, ctx.read_varuint32());
+      uint32_t type_id_read = ctx.read_varuint32(&error);
+      if (FORY_PREDICT_FALSE(!error.ok())) {
+        return Unexpected(std::move(error));
+      }
       if (type_id_read != static_cast<uint32_t>(type_id)) {
         return Unexpected(
             Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
       }
     }
 
-    FORY_TRY(length, ctx.read_varuint32());
+    uint32_t length = ctx.read_varuint32(&error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
 
     constexpr bool is_fast_path =
         !is_polymorphic_v<K> && !is_polymorphic_v<V> && !is_shared_ref_v<K> &&
@@ -861,7 +882,11 @@ struct Serializer<std::map<K, V, Args...>> {
 
   static inline Result<std::map<K, V, Args...>, Error>
   read_data(ReadContext &ctx) {
-    FORY_TRY(length, ctx.read_varuint32());
+    Error error;
+    uint32_t length = ctx.read_varuint32(&error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
 
     constexpr bool is_fast_path =
         !is_polymorphic_v<K> && !is_polymorphic_v<V> && !is_shared_ref_v<K> &&
@@ -941,15 +966,22 @@ struct Serializer<std::unordered_map<K, V, Args...>> {
       return std::unordered_map<K, V, Args...>();
     }
 
+    Error error;
     if (read_type) {
-      FORY_TRY(type_id_read, ctx.read_varuint32());
+      uint32_t type_id_read = ctx.read_varuint32(&error);
+      if (FORY_PREDICT_FALSE(!error.ok())) {
+        return Unexpected(std::move(error));
+      }
       if (type_id_read != static_cast<uint32_t>(type_id)) {
         return Unexpected(
             Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
       }
     }
 
-    FORY_TRY(length, ctx.read_varuint32());
+    uint32_t length = ctx.read_varuint32(&error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
 
     constexpr bool is_fast_path =
         !is_polymorphic_v<K> && !is_polymorphic_v<V> && !is_shared_ref_v<K> &&
@@ -974,7 +1006,11 @@ struct Serializer<std::unordered_map<K, V, Args...>> {
 
   static inline Result<std::unordered_map<K, V, Args...>, Error>
   read_data(ReadContext &ctx) {
-    FORY_TRY(length, ctx.read_varuint32());
+    Error error;
+    uint32_t length = ctx.read_varuint32(&error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
 
     constexpr bool is_fast_path =
         !is_polymorphic_v<K> && !is_polymorphic_v<V> && !is_shared_ref_v<K> &&

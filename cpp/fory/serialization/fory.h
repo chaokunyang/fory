@@ -579,9 +579,11 @@ private:
     // Load TypeMetas at the beginning in compatible mode
     size_t bytes_to_skip = 0;
     if (read_ctx_->is_compatible()) {
-      auto meta_offset_result = buffer.ReadInt32();
-      FORY_RETURN_IF_ERROR(meta_offset_result);
-      int32_t meta_offset = meta_offset_result.value();
+      Error error;
+      int32_t meta_offset = buffer.ReadInt32(&error);
+      if (FORY_PREDICT_FALSE(!error.ok())) {
+        return Unexpected(std::move(error));
+      }
       if (meta_offset != -1) {
         FORY_TRY(meta_size, read_ctx_->load_type_meta(meta_offset));
         bytes_to_skip = meta_size;

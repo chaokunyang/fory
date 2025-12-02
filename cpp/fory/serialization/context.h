@@ -368,41 +368,96 @@ public:
     }
   }
 
-  /// Read uint8_t value from buffer.
-  inline Result<uint8_t, Error> read_uint8() { return buffer().ReadUint8(); }
+  // ===========================================================================
+  // Read methods with Error* parameter
+  // All methods accept Error* as parameter for reduced overhead.
+  // On success, error->ok() remains true. On failure, error is set.
+  // ===========================================================================
 
-  /// Read int8_t value from buffer.
-  inline Result<int8_t, Error> read_int8() { return buffer().ReadInt8(); }
-
-  /// Read uint32_t value as varint from buffer.
-  inline Result<uint32_t, Error> read_varuint32() {
-    return buffer().ReadVarUint32();
+  /// Read uint8_t value from buffer. Sets error on failure.
+  FORY_ALWAYS_INLINE uint8_t read_uint8(Error *error) {
+    return buffer().ReadUint8(error);
   }
 
-  /// Read int32_t value as zigzag varint from buffer.
-  inline Result<int32_t, Error> read_varint32() {
-    return buffer().ReadVarInt32();
+  /// Read int8_t value from buffer. Sets error on failure.
+  FORY_ALWAYS_INLINE int8_t read_int8(Error *error) {
+    return buffer().ReadInt8(error);
   }
 
-  /// Read uint64_t value as varint from buffer.
-  inline Result<uint64_t, Error> read_varuint64() {
-    return buffer().ReadVarUint64();
+  /// Read uint16_t value from buffer. Sets error on failure.
+  FORY_ALWAYS_INLINE uint16_t read_uint16(Error *error) {
+    return buffer().ReadUint16(error);
   }
 
-  /// Read int64_t value as zigzag varint from buffer.
-  inline Result<int64_t, Error> read_varint64() {
-    return buffer().ReadVarInt64();
+  /// Read int16_t value from buffer. Sets error on failure.
+  FORY_ALWAYS_INLINE int16_t read_int16(Error *error) {
+    return buffer().ReadInt16(error);
   }
 
-  /// Read uint64_t value as varuint36small from buffer.
-  /// This is the special variable-length encoding used for string headers.
-  inline Result<uint64_t, Error> read_varuint36small() {
-    return buffer().ReadVarUint36Small();
+  /// Read uint32_t value from buffer (fixed 4 bytes). Sets error on failure.
+  FORY_ALWAYS_INLINE uint32_t read_uint32(Error *error) {
+    return buffer().ReadUint32(error);
   }
 
-  /// Read raw bytes from buffer.
-  inline Result<void, Error> read_bytes(void *data, uint32_t length) {
-    return buffer().ReadBytes(data, length);
+  /// Read int32_t value from buffer (fixed 4 bytes). Sets error on failure.
+  FORY_ALWAYS_INLINE int32_t read_int32(Error *error) {
+    return buffer().ReadInt32(error);
+  }
+
+  /// Read uint64_t value from buffer (fixed 8 bytes). Sets error on failure.
+  FORY_ALWAYS_INLINE uint64_t read_uint64(Error *error) {
+    return buffer().ReadUint64(error);
+  }
+
+  /// Read int64_t value from buffer (fixed 8 bytes). Sets error on failure.
+  FORY_ALWAYS_INLINE int64_t read_int64(Error *error) {
+    return buffer().ReadInt64(error);
+  }
+
+  /// Read float value from buffer. Sets error on failure.
+  FORY_ALWAYS_INLINE float read_float(Error *error) {
+    return buffer().ReadFloat(error);
+  }
+
+  /// Read double value from buffer. Sets error on failure.
+  FORY_ALWAYS_INLINE double read_double(Error *error) {
+    return buffer().ReadDouble(error);
+  }
+
+  /// Read uint32_t value as varint from buffer. Sets error on failure.
+  FORY_ALWAYS_INLINE uint32_t read_varuint32(Error *error) {
+    return buffer().ReadVarUint32(error);
+  }
+
+  /// Read int32_t value as zigzag varint from buffer. Sets error on failure.
+  FORY_ALWAYS_INLINE int32_t read_varint32(Error *error) {
+    return buffer().ReadVarInt32(error);
+  }
+
+  /// Read uint64_t value as varint from buffer. Sets error on failure.
+  FORY_ALWAYS_INLINE uint64_t read_varuint64(Error *error) {
+    return buffer().ReadVarUint64(error);
+  }
+
+  /// Read int64_t value as zigzag varint from buffer. Sets error on failure.
+  FORY_ALWAYS_INLINE int64_t read_varint64(Error *error) {
+    return buffer().ReadVarInt64(error);
+  }
+
+  /// Read uint64_t value as varuint36small from buffer. Sets error on failure.
+  FORY_ALWAYS_INLINE uint64_t read_varuint36small(Error *error) {
+    return buffer().ReadVarUint36Small(error);
+  }
+
+  /// Read raw bytes from buffer. Sets error on failure.
+  FORY_ALWAYS_INLINE void read_bytes(void *data, uint32_t length,
+                                     Error *error) {
+    buffer().ReadBytes(data, length, error);
+  }
+
+  /// Skip bytes in buffer. Sets error on failure.
+  FORY_ALWAYS_INLINE void skip(uint32_t length, Error *error) {
+    buffer().Skip(length, error);
   }
 
   Result<const TypeInfo *, Error>

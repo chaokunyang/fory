@@ -129,8 +129,10 @@ TEST_F(ErrorTest, ErrorFactories) {
 }
 
 TEST_F(ErrorTest, ErrorSize) {
-  // Error should be the same size as a pointer (unique_ptr)
-  ASSERT_EQ(sizeof(Error), sizeof(void *));
+  // Error contains bool ok_ + unique_ptr<ErrorState> state_
+  // This gives us: 1 byte bool + 7 bytes padding + 8 bytes unique_ptr = 16
+  // bytes on 64-bit systems.
+  ASSERT_EQ(sizeof(Error), sizeof(void *) + sizeof(void *));
 }
 
 } // namespace fory

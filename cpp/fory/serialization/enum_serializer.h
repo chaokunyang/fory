@@ -99,7 +99,11 @@ struct Serializer<E, std::enable_if_t<std::is_enum_v<E>>> {
     // mirror that layout: consume a single null/not-null flag and
     // then read the ordinal.
     if (ctx.is_xlang() && !read_ref) {
-      FORY_TRY(flag, ctx.read_int8());
+      Error error;
+      int8_t flag = ctx.read_int8(&error);
+      if (FORY_PREDICT_FALSE(!error.ok())) {
+        return Unexpected(std::move(error));
+      }
       if (flag == NULL_FLAG) {
         // Represent Java null as the default enum value.
         return E{};
@@ -123,7 +127,11 @@ struct Serializer<E, std::enable_if_t<std::is_enum_v<E>>> {
   }
 
   static inline Result<E, Error> read_data(ReadContext &ctx) {
-    FORY_TRY(raw_ordinal, ctx.read_varuint32());
+    Error error;
+    uint32_t raw_ordinal = ctx.read_varuint32(&error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
     OrdinalType ordinal = static_cast<OrdinalType>(raw_ordinal);
     E value{};
     if (!Metadata::from_ordinal(ordinal, &value)) {

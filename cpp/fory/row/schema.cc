@@ -91,7 +91,11 @@ Result<void, Error> WriteField(Buffer &buffer, const Field &field) {
 }
 
 Result<FieldPtr, Error> ReadField(Buffer &buffer) {
-  FORY_TRY(header_byte, buffer.ReadUint8());
+  Error error;
+  uint8_t header_byte = buffer.ReadUint8(&error);
+  if (FORY_PREDICT_FALSE(!error.ok())) {
+    return Unexpected(std::move(error));
+  }
   int header = header_byte;
   int encoding_index = header & 0x03;
   int name_size_minus1 = (header >> 2) & 0x0F;
@@ -99,15 +103,20 @@ Result<FieldPtr, Error> ReadField(Buffer &buffer) {
 
   size_t name_size;
   if (name_size_minus1 == FIELD_NAME_SIZE_THRESHOLD) {
-    FORY_TRY(extra, buffer.ReadVarUint32());
+    uint32_t extra = buffer.ReadVarUint32(&error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
     name_size = extra + FIELD_NAME_SIZE_THRESHOLD;
   } else {
     name_size = name_size_minus1 + 1;
   }
 
   std::vector<uint8_t> name_bytes(name_size);
-  FORY_RETURN_NOT_OK(
-      buffer.ReadBytes(name_bytes.data(), static_cast<uint32_t>(name_size)));
+  buffer.ReadBytes(name_bytes.data(), static_cast<uint32_t>(name_size), &error);
+  if (FORY_PREDICT_FALSE(!error.ok())) {
+    return Unexpected(std::move(error));
+  }
 
   MetaEncoding encoding = FIELD_NAME_ENCODINGS[encoding_index];
   auto decode_result =
@@ -143,7 +152,11 @@ Result<void, Error> WriteType(Buffer &buffer, const DataType &type) {
 }
 
 Result<DataTypePtr, Error> ReadType(Buffer &buffer) {
-  FORY_TRY(type_id_byte, buffer.ReadUint8());
+  Error error;
+  uint8_t type_id_byte = buffer.ReadUint8(&error);
+  if (FORY_PREDICT_FALSE(!error.ok())) {
+    return Unexpected(std::move(error));
+  }
   TypeId type_id = static_cast<TypeId>(type_id_byte);
 
   switch (type_id) {
@@ -174,8 +187,14 @@ Result<DataTypePtr, Error> ReadType(Buffer &buffer) {
   case TypeId::LOCAL_DATE:
     return date32();
   case TypeId::DECIMAL: {
-    FORY_TRY(precision, buffer.ReadUint8());
-    FORY_TRY(scale, buffer.ReadUint8());
+    uint8_t precision = buffer.ReadUint8(&error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
+    uint8_t scale = buffer.ReadUint8(&error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
     return decimal(precision, scale);
   }
   case TypeId::LIST: {
@@ -190,7 +209,10 @@ Result<DataTypePtr, Error> ReadType(Buffer &buffer) {
         std::make_shared<MapType>(key_field->type(), item_field->type()));
   }
   case TypeId::STRUCT: {
-    FORY_TRY(struct_num_fields, buffer.ReadVarUint32());
+    uint32_t struct_num_fields = buffer.ReadVarUint32(&error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
     std::vector<FieldPtr> fields;
     fields.reserve(struct_num_fields);
     for (uint32_t i = 0; i < struct_num_fields; ++i) {
@@ -234,22 +256,21 @@ SchemaPtr Schema::FromBytes(const std::vector<uint8_t> &bytes) {
 }
 
 SchemaPtr Schema::FromBytes(Buffer &buffer) {
-  auto version_result = buffer.ReadUint8();
-  if (!version_result.ok()) {
-    throw std::runtime_error(version_result.error().message());
+  Error error;
+  uint8_t version = buffer.ReadUint8(&error);
+  if (!error.ok()) {
+    throw std::runtime_error(error.message());
   }
-  uint8_t version = version_result.value();
   if (version != SCHEMA_VERSION) {
     throw std::runtime_error(
         "Unsupported schema version: " + std::to_string(version) +
         ", expected: " + std::to_string(SCHEMA_VERSION));
   }
 
-  auto num_fields_result = buffer.ReadVarUint32();
-  if (!num_fields_result.ok()) {
-    throw std::runtime_error(num_fields_result.error().message());
+  uint32_t num_fields = buffer.ReadVarUint32(&error);
+  if (!error.ok()) {
+    throw std::runtime_error(error.message());
   }
-  uint32_t num_fields = num_fields_result.value();
 
   std::vector<FieldPtr> fields;
   fields.reserve(num_fields);

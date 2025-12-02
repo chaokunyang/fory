@@ -51,29 +51,30 @@ enum class ErrorCode : char {
 
 /// Error class for Fory serialization and deserialization operations.
 ///
-/// # IMPORTANT: Always Use Static Constructor Functions
+/// This class supports two usage patterns:
+/// 1. Static factory functions for creating new errors (recommended for general
+/// use)
+/// 2. Mutable error pattern for performance-critical read paths
 ///
-/// **DO NOT** construct errors directly using the constructor.
-/// **ALWAYS** use the provided static factory functions instead.
-///
-/// ## Why Use Static Functions?
-///
-/// The static factory functions provide:
-/// - Consistent error creation across the codebase
-/// - Better ergonomics and readability
-/// - Future-proof API if error construction logic needs to change
-/// - Clear semantic meaning for each error type
-///
-/// ## Examples
+/// ## Pattern 1: Static Factory Functions (General Use)
 ///
 /// ```cpp
 /// // ✅ CORRECT: Use static factory functions
 /// auto err = Error::type_error("Expected string type");
 /// auto err = Error::invalid_data("Invalid value: " + std::to_string(42));
 /// auto err = Error::type_mismatch(1, 2);
+/// ```
 ///
-/// // ❌ WRONG: Do not construct directly
-/// // auto err = Error(ErrorCode::TypeError, "Expected string type");
+/// ## Pattern 2: Mutable Error for Read Paths (Performance Critical)
+///
+/// For high-performance read paths, use a stack-allocated Error and pass
+/// pointer:
+/// ```cpp
+/// Error error;  // Default: ok_ = true
+/// buffer.ReadInt32(&error);
+/// if (FORY_PREDICT_FALSE(!error.ok())) {
+///   return Unexpected(std::move(error));
+/// }
 /// ```
 ///
 /// ## Available Constructor Functions
@@ -97,6 +98,9 @@ enum class ErrorCode : char {
 /// - Error::unknown() - For generic errors
 class Error {
 public:
+  /// Default constructor - creates an "OK" (no error) state.
+  /// Used for stack-allocated error variables in read paths.
+  Error() : ok_(true), state_(nullptr) {}
   // Static factory functions - Use these instead of constructors!
 
   /// Creates a type mismatch error with the given type IDs.
@@ -198,8 +202,46 @@ public:
   }
 
   // Accessors
-  ErrorCode code() const { return state_->code_; }
-  const std::string &message() const { return state_->msg_; }
+
+  /// Returns true if this Error is in the "OK" (no error) state.
+  bool ok() const { return ok_; }
+
+  ErrorCode code() const {
+    if (ok_) {
+      return ErrorCode::OK;
+    }
+    return state_->code_;
+  }
+
+  const std::string &message() const {
+    static const std::string empty_msg;
+    if (ok_) {
+      return empty_msg;
+    }
+    return state_->msg_;
+  }
+
+  /// Set the error state. Used for mutable error pattern in read paths.
+  /// After calling this, ok() will return false.
+  void set_error(ErrorCode code, std::string msg) {
+    ok_ = false;
+    state_.reset(new ErrorState(code, std::move(msg)));
+  }
+
+  /// Set buffer out of bound error (common case optimization).
+  void set_buffer_out_of_bound(size_t offset, size_t length, size_t capacity) {
+    ok_ = false;
+    state_.reset(new ErrorState(
+        ErrorCode::BufferOutOfBound,
+        "Buffer out of bound: " + std::to_string(offset) + " + " +
+            std::to_string(length) + " > " + std::to_string(capacity)));
+  }
+
+  /// Reset to OK state.
+  void reset() {
+    ok_ = true;
+    state_.reset();
+  }
 
   /// Returns a string representation of this error.
   std::string to_string() const;
@@ -211,15 +253,34 @@ public:
   static ErrorCode string_to_code(const std::string &str);
 
   // Copy and move semantics
-  Error(const Error &other) : state_(new ErrorState(*other.state_)) {}
-  Error(Error &&) noexcept = default;
+  Error(const Error &other) : ok_(other.ok_) {
+    if (!ok_ && other.state_) {
+      state_.reset(new ErrorState(*other.state_));
+    }
+  }
+  Error(Error &&other) noexcept
+      : ok_(other.ok_), state_(std::move(other.state_)) {
+    other.ok_ = true;
+  }
   Error &operator=(const Error &other) {
     if (this != &other) {
-      state_.reset(new ErrorState(*other.state_));
+      ok_ = other.ok_;
+      if (!ok_ && other.state_) {
+        state_.reset(new ErrorState(*other.state_));
+      } else {
+        state_.reset();
+      }
     }
     return *this;
   }
-  Error &operator=(Error &&) noexcept = default;
+  Error &operator=(Error &&other) noexcept {
+    if (this != &other) {
+      ok_ = other.ok_;
+      state_ = std::move(other.state_);
+      other.ok_ = true;
+    }
+    return *this;
+  }
 
   ~Error() = default;
 
@@ -236,8 +297,9 @@ private:
 
   // Private constructor - use static factory functions instead!
   Error(ErrorCode code, std::string msg)
-      : state_(new ErrorState(code, std::move(msg))) {}
+      : ok_(false), state_(new ErrorState(code, std::move(msg))) {}
 
+  bool ok_;
   std::unique_ptr<ErrorState> state_;
 };
 

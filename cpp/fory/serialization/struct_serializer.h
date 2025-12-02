@@ -874,6 +874,73 @@ Result<void, Error> write_struct_fields_impl(const T &obj, WriteContext &ctx,
   }
 }
 
+/// Type trait to check if a type is a raw primitive (not a wrapper like
+/// optional, shared_ptr, etc.)
+template <typename T> struct is_raw_primitive : std::false_type {};
+template <> struct is_raw_primitive<bool> : std::true_type {};
+template <> struct is_raw_primitive<int8_t> : std::true_type {};
+template <> struct is_raw_primitive<uint8_t> : std::true_type {};
+template <> struct is_raw_primitive<int16_t> : std::true_type {};
+template <> struct is_raw_primitive<uint16_t> : std::true_type {};
+template <> struct is_raw_primitive<int32_t> : std::true_type {};
+template <> struct is_raw_primitive<uint32_t> : std::true_type {};
+template <> struct is_raw_primitive<int64_t> : std::true_type {};
+template <> struct is_raw_primitive<uint64_t> : std::true_type {};
+template <> struct is_raw_primitive<float> : std::true_type {};
+template <> struct is_raw_primitive<double> : std::true_type {};
+template <typename T>
+inline constexpr bool is_raw_primitive_v = is_raw_primitive<T>::value;
+
+/// Helper to read a primitive field directly using Error* pattern.
+/// This bypasses Serializer<FieldType>::read for better performance.
+/// Returns the read value; sets error on failure.
+/// NOTE: Only use for raw primitive types, not wrappers!
+template <typename FieldType>
+FORY_ALWAYS_INLINE FieldType read_primitive_field_direct(ReadContext &ctx,
+                                                         Error *error) {
+  static_assert(is_raw_primitive_v<FieldType>,
+                "read_primitive_field_direct only supports raw primitives");
+
+  // Use the actual C++ type, not TypeId, because signed/unsigned types
+  // have different encoding (signed use varint, unsigned use fixed bytes).
+  if constexpr (std::is_same_v<FieldType, bool>) {
+    uint8_t v = ctx.read_uint8(error);
+    return v != 0;
+  } else if constexpr (std::is_same_v<FieldType, int8_t>) {
+    return ctx.read_int8(error);
+  } else if constexpr (std::is_same_v<FieldType, uint8_t>) {
+    return ctx.read_uint8(error);
+  } else if constexpr (std::is_same_v<FieldType, int16_t>) {
+    // int16_t uses fixed 2-byte encoding
+    return ctx.read_int16(error);
+  } else if constexpr (std::is_same_v<FieldType, uint16_t>) {
+    // uint16_t uses fixed 2-byte encoding
+    int16_t v = ctx.read_int16(error);
+    return static_cast<uint16_t>(v);
+  } else if constexpr (std::is_same_v<FieldType, int32_t>) {
+    // int32_t uses varint encoding
+    return ctx.read_varint32(error);
+  } else if constexpr (std::is_same_v<FieldType, uint32_t>) {
+    // uint32_t uses fixed 4-byte encoding (not varint!)
+    return static_cast<uint32_t>(ctx.read_int32(error));
+  } else if constexpr (std::is_same_v<FieldType, int64_t>) {
+    // int64_t uses varint encoding
+    return ctx.read_varint64(error);
+  } else if constexpr (std::is_same_v<FieldType, uint64_t>) {
+    // uint64_t uses fixed 8-byte encoding (not varint!)
+    return static_cast<uint64_t>(ctx.read_int64(error));
+  } else if constexpr (std::is_same_v<FieldType, float>) {
+    return ctx.read_float(error);
+  } else if constexpr (std::is_same_v<FieldType, double>) {
+    return ctx.read_double(error);
+  } else {
+    // Fallback for other types - should not be reached for primitives
+    static_assert(sizeof(FieldType) == 0,
+                  "Unexpected type in read_primitive_field_direct");
+    return FieldType{};
+  }
+}
+
 /// Helper to read a single field by index
 template <size_t Index, typename T>
 Result<void, Error> read_single_field_by_index(T &obj, ReadContext &ctx) {
@@ -923,9 +990,20 @@ Result<void, Error> read_single_field_by_index(T &obj, ReadContext &ctx) {
             << ", reader_index=" << ctx.buffer().reader_index() << std::endl;
 #endif
 
-  FORY_ASSIGN_OR_RETURN(obj.*field_ptr,
-                        Serializer<FieldType>::read(ctx, read_ref, read_type));
-  return Result<void, Error>();
+  // OPTIMIZATION: For raw primitive fields (not wrappers like optional,
+  // shared_ptr) that don't need ref metadata, bypass Serializer<T>::read
+  // and use direct buffer reads with Error*.
+  constexpr bool is_raw_prim = is_raw_primitive_v<FieldType>;
+  if constexpr (is_raw_prim && is_primitive_field && !field_needs_ref) {
+    Error error;
+    obj.*field_ptr = read_primitive_field_direct<FieldType>(ctx, &error);
+    FORY_RETURN_IF_SERDE_ERROR(&error);
+    return Result<void, Error>();
+  } else {
+    FORY_ASSIGN_OR_RETURN(
+        obj.*field_ptr, Serializer<FieldType>::read(ctx, read_ref, read_type));
+    return Result<void, Error>();
+  }
 }
 
 /// Helper to read a single field by index in compatible mode using
@@ -943,6 +1021,8 @@ read_single_field_by_index_compatible(T &obj, ReadContext &ctx,
   constexpr bool is_struct_field = is_fory_serializable_v<FieldType>;
   constexpr bool is_polymorphic_field =
       Serializer<FieldType>::type_id == TypeId::UNKNOWN;
+  constexpr TypeId field_type_id = Serializer<FieldType>::type_id;
+  constexpr bool is_primitive_field = is_primitive_type_id(field_type_id);
 
   bool read_type = is_polymorphic_field;
 
@@ -971,6 +1051,18 @@ read_single_field_by_index_compatible(T &obj, ReadContext &ctx,
             << ", read_ref=" << read_ref << ", read_type=" << read_type
             << ", reader_index=" << ctx.buffer().reader_index() << std::endl;
 #endif
+
+  // OPTIMIZATION: For raw primitive fields (not wrappers) with no ref flag,
+  // bypass Serializer<T>::read and use direct buffer reads with Error*.
+  constexpr bool is_raw_prim = is_raw_primitive_v<FieldType>;
+  if constexpr (is_raw_prim && is_primitive_field) {
+    if (!read_ref) {
+      Error error;
+      obj.*field_ptr = read_primitive_field_direct<FieldType>(ctx, &error);
+      FORY_RETURN_IF_SERDE_ERROR(&error);
+      return Result<void, Error>();
+    }
+  }
 
   FORY_ASSIGN_OR_RETURN(obj.*field_ptr,
                         Serializer<FieldType>::read(ctx, read_ref, read_type));
@@ -1271,9 +1363,12 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
                                bool read_type) {
     // Handle reference metadata
     int8_t ref_flag;
+    Error error;
     if (read_ref) {
-      FORY_TRY(flag, ctx.read_int8());
-      ref_flag = flag;
+      ref_flag = ctx.read_int8(&error);
+      if (FORY_PREDICT_FALSE(!error.ok())) {
+        return Unexpected(std::move(error));
+      }
 #ifdef FORY_DEBUG
       std::cerr << "[xlang][struct] T=" << typeid(T).name()
                 << ", read_ref_flag=" << static_cast<int>(ref_flag)
@@ -1295,7 +1390,10 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
         // In compatible mode: always use remote TypeMeta for schema evolution
         if (read_type) {
           // Read type_id
-          FORY_TRY(remote_type_id, ctx.read_varuint32());
+          uint32_t remote_type_id = ctx.read_varuint32(&error);
+          if (FORY_PREDICT_FALSE(!error.ok())) {
+            return Unexpected(std::move(error));
+          }
 
           // Check LOCAL type to decide if we should read meta_index (matches
           // Rust logic)
@@ -1310,7 +1408,10 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
                   static_cast<uint8_t>(TypeId::NAMED_COMPATIBLE_STRUCT)) {
             // Use meta sharing: read varint index and get TypeInfo from
             // meta_reader
-            FORY_TRY(meta_index, ctx.read_varuint32());
+            uint32_t meta_index = ctx.read_varuint32(&error);
+            if (FORY_PREDICT_FALSE(!error.ok())) {
+              return Unexpected(std::move(error));
+            }
             FORY_TRY(remote_type_info, ctx.get_type_info_by_index(meta_index));
 
             return read_compatible(ctx, remote_type_info);
@@ -1353,7 +1454,10 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
               expected_type_id_low !=
                   static_cast<uint8_t>(TypeId::NAMED_STRUCT)) {
             // Simple type ID - just read and compare varint directly
-            FORY_TRY(remote_type_id, ctx.read_varuint32());
+            uint32_t remote_type_id = ctx.read_varuint32(&error);
+            if (FORY_PREDICT_FALSE(!error.ok())) {
+              return Unexpected(std::move(error));
+            }
             if (remote_type_id != expected_type_id) {
               return Unexpected(
                   Error::type_mismatch(remote_type_id, expected_type_id));
@@ -1388,7 +1492,11 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
                                           const TypeInfo *remote_type_info) {
     // Read and verify struct version if enabled (matches write_data behavior)
     if (ctx.check_struct_version()) {
-      FORY_TRY(read_version, ctx.buffer().ReadInt32());
+      Error error;
+      int32_t read_version = ctx.buffer().ReadInt32(&error);
+      if (FORY_PREDICT_FALSE(!error.ok())) {
+        return Unexpected(std::move(error));
+      }
       FORY_TRY(local_type_info,
                ctx.type_resolver().template get_type_info<T>());
       if (!local_type_info->type_meta) {
@@ -1421,7 +1529,11 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
 
   static Result<T, Error> read_data(ReadContext &ctx) {
     if (ctx.check_struct_version()) {
-      FORY_TRY(read_version, ctx.buffer().ReadInt32());
+      Error error;
+      int32_t read_version = ctx.buffer().ReadInt32(&error);
+      if (FORY_PREDICT_FALSE(!error.ok())) {
+        return Unexpected(std::move(error));
+      }
       FORY_TRY(local_type_info,
                ctx.type_resolver().template get_type_info<T>());
       if (!local_type_info->type_meta) {

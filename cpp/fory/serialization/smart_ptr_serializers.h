@@ -102,7 +102,11 @@ template <typename T> struct Serializer<std::optional<T>> {
     }
 
     const uint32_t flag_pos = ctx.buffer().reader_index();
-    FORY_TRY(flag, ctx.read_int8());
+    Error error;
+    int8_t flag = ctx.read_int8(&error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
 
     if (flag == NULL_FLAG) {
       return std::optional<T>(std::nullopt);
@@ -137,7 +141,11 @@ template <typename T> struct Serializer<std::optional<T>> {
     }
 
     const uint32_t flag_pos = ctx.buffer().reader_index();
-    FORY_TRY(flag, ctx.read_int8());
+    Error error;
+    int8_t flag = ctx.read_int8(&error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
 
     if (flag == NULL_FLAG) {
       return std::optional<T>(std::nullopt);
@@ -339,7 +347,11 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
     }
 
     // Handle read_ref=true case
-    FORY_TRY(flag, ctx.read_int8());
+    Error error;
+    int8_t flag = ctx.read_int8(&error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
     if (flag == NULL_FLAG) {
       return std::shared_ptr<T>(nullptr);
     }
@@ -349,7 +361,10 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
         return Unexpected(Error::invalid_ref(
             "Reference flag encountered when reference tracking disabled"));
       }
-      FORY_TRY(ref_id, ctx.read_varuint32());
+      uint32_t ref_id = ctx.read_varuint32(&error);
+      if (FORY_PREDICT_FALSE(!error.ok())) {
+        return Unexpected(std::move(error));
+      }
       return ctx.ref_reader().template get_shared_ref<T>(ref_id);
     }
 
@@ -432,7 +447,11 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
     }
 
     // Handle read_ref=true case
-    FORY_TRY(flag, ctx.read_int8());
+    Error error;
+    int8_t flag = ctx.read_int8(&error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
     if (flag == NULL_FLAG) {
       return std::shared_ptr<T>(nullptr);
     }
@@ -442,7 +461,10 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
         return Unexpected(Error::invalid_ref(
             "Reference flag encountered when reference tracking disabled"));
       }
-      FORY_TRY(ref_id, ctx.read_varuint32());
+      uint32_t ref_id = ctx.read_varuint32(&error);
+      if (FORY_PREDICT_FALSE(!error.ok())) {
+        return Unexpected(std::move(error));
+      }
       return ctx.ref_reader().template get_shared_ref<T>(ref_id);
     }
 
@@ -639,7 +661,11 @@ template <typename T> struct Serializer<std::unique_ptr<T>> {
     }
 
     // Handle read_ref=true case
-    FORY_TRY(flag, ctx.read_int8());
+    Error error;
+    int8_t flag = ctx.read_int8(&error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
     if (flag == NULL_FLAG) {
       return std::unique_ptr<T>(nullptr);
     }
@@ -705,7 +731,11 @@ template <typename T> struct Serializer<std::unique_ptr<T>> {
     }
 
     // Handle read_ref=true case
-    FORY_TRY(flag, ctx.read_int8());
+    Error error;
+    int8_t flag = ctx.read_int8(&error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
     if (flag == NULL_FLAG) {
       return std::unique_ptr<T>(nullptr);
     }

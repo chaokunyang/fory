@@ -34,6 +34,37 @@ namespace fory {
 namespace serialization {
 
 // ============================================================================
+// Error Handling Macros for Serialization
+// ============================================================================
+
+/// Return early if the error pointer indicates an error.
+/// Use this macro when reading struct fields with the Error* pattern.
+/// The macro checks the error state and returns an Unexpected with the error.
+///
+/// Example usage:
+/// ```cpp
+/// Error error;
+/// int32_t value = buffer.ReadVarInt32(&error);
+/// FORY_RETURN_IF_SERDE_ERROR(&error);
+/// // Use value...
+/// ```
+#define FORY_RETURN_IF_SERDE_ERROR(error_ptr)                                  \
+  do {                                                                         \
+    if (FORY_PREDICT_FALSE(!(error_ptr)->ok())) {                              \
+      return ::fory::Unexpected(std::move(*(error_ptr)));                      \
+    }                                                                          \
+  } while (0)
+
+/// Return early if the error indicates an error, with a custom return type.
+/// Use this when the return type is not Result<T, Error>.
+#define FORY_RETURN_IF_SERDE_ERROR_WITH(error_ptr, return_type)                \
+  do {                                                                         \
+    if (FORY_PREDICT_FALSE(!(error_ptr)->ok())) {                              \
+      return return_type(::fory::Unexpected(std::move(*(error_ptr))));         \
+    }                                                                          \
+  } while (0)
+
+// ============================================================================
 // Protocol Constants
 // ============================================================================
 
@@ -110,7 +141,11 @@ inline Result<HeaderInfo, Error> read_header(Buffer &buffer) {
 
   // Java writes a language byte after header in xlang mode - read and ignore it
   if (info.is_xlang) {
-    FORY_TRY(lang_byte, buffer.ReadUint8());
+    Error error;
+    uint8_t lang_byte = buffer.ReadUint8(&error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
     info.language = static_cast<Language>(lang_byte);
   } else {
     info.language = Language::JAVA;
@@ -148,7 +183,11 @@ inline Result<bool, Error> consume_ref_flag(ReadContext &ctx, bool read_ref) {
   if (!read_ref) {
     return true;
   }
-  FORY_TRY(flag, ctx.read_int8());
+  Error error;
+  int8_t flag = ctx.read_int8(&error);
+  if (FORY_PREDICT_FALSE(!error.ok())) {
+    return Unexpected(std::move(error));
+  }
   if (flag == NULL_FLAG) {
     return false;
   }
@@ -156,7 +195,10 @@ inline Result<bool, Error> consume_ref_flag(ReadContext &ctx, bool read_ref) {
     return true;
   }
   if (flag == REF_FLAG) {
-    FORY_TRY(ref_id, ctx.read_varuint32());
+    uint32_t ref_id = ctx.read_varuint32(&error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
     return Unexpected(Error::invalid_ref(
         "Unexpected reference flag for non-referencable value, ref id: " +
         std::to_string(ref_id)));

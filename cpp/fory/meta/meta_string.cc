@@ -238,9 +238,13 @@ MetaStringTable::MetaStringTable() = default;
 
 Result<std::string, Error>
 MetaStringTable::read_string(Buffer &buffer, const MetaStringDecoder &decoder) {
+  Error error;
   // Header is encoded with VarUint32Small7 on Java side, but wire
   // format is still standard varuint32.
-  FORY_TRY(header, buffer.ReadVarUint32());
+  uint32_t header = buffer.ReadVarUint32(&error);
+  if (FORY_PREDICT_FALSE(!error.ok())) {
+    return Unexpected(std::move(error));
+  }
   uint32_t len_or_id = header >> 1;
   bool is_ref = (header & 0x1u) != 0;
 
@@ -264,16 +268,25 @@ MetaStringTable::read_string(Buffer &buffer, const MetaStringDecoder &decoder) {
     // The original encoding is not transmitted explicitly. For cross-language
     // purposes we treat the payload bytes as UTF8 and let callers handle any
     // higher-level semantics.
-    FORY_TRY(hash_code, buffer.ReadInt64());
+    int64_t hash_code = buffer.ReadInt64(&error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
     (void)hash_code; // hash_code is only used for Java-side caching.
     bytes.resize(len);
     if (len > 0) {
-      FORY_RETURN_NOT_OK(buffer.ReadBytes(bytes.data(), len));
+      buffer.ReadBytes(bytes.data(), len, &error);
+      if (FORY_PREDICT_FALSE(!error.ok())) {
+        return Unexpected(std::move(error));
+      }
     }
     encoding = MetaEncoding::UTF8;
   } else {
     // Small string layout: encoding(byte) + data[len]
-    FORY_TRY(enc_byte_res, buffer.ReadInt8());
+    int8_t enc_byte_res = buffer.ReadInt8(&error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
     uint8_t enc_byte = static_cast<uint8_t>(enc_byte_res);
     if (len == 0) {
       if (enc_byte != 0) {
@@ -285,7 +298,10 @@ MetaStringTable::read_string(Buffer &buffer, const MetaStringDecoder &decoder) {
       FORY_TRY(enc, ToMetaEncoding(enc_byte));
       encoding = enc;
       bytes.resize(len);
-      FORY_RETURN_NOT_OK(buffer.ReadBytes(bytes.data(), len));
+      buffer.ReadBytes(bytes.data(), len, &error);
+      if (FORY_PREDICT_FALSE(!error.ok())) {
+        return Unexpected(std::move(error));
+      }
     }
   }
 

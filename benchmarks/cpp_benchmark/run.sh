@@ -104,8 +104,17 @@ mkdir -p build
 cd build
 if [[ "$DEBUG_BUILD" == true ]]; then
     echo -e "${YELLOW}Building with debug symbols for profiling...${NC}"
-    cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-          -DCMAKE_CXX_FLAGS="-O1 -g -fno-inline -fno-omit-frame-pointer" ..
+    # Detect OS for platform-specific flags
+    OS_TYPE="$(uname -s)"
+    if [[ "$OS_TYPE" == "Darwin" ]]; then
+        # macOS: Use -gfull for complete debug info, -fno-omit-frame-pointer for stack traces
+        cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+              -DCMAKE_CXX_FLAGS="-O1 -gfull -fno-inline -fno-omit-frame-pointer -fno-optimize-sibling-calls" ..
+    else
+        # Linux
+        cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+              -DCMAKE_CXX_FLAGS="-O1 -g -fno-inline -fno-omit-frame-pointer" ..
+    fi
 else
     cmake -DCMAKE_BUILD_TYPE=Release ..
 fi

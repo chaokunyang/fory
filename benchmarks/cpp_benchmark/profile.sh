@@ -57,6 +57,8 @@ usage() {
     echo "Supported profiling tools (in order of preference):"
     echo "  - samply (recommended): cargo install samply"
     echo "  - perf (Linux)"
+    echo "  - sample (macOS built-in)"
+    echo "  - dtrace (macOS, may require sudo)"
     exit 0
 }
 
@@ -148,6 +150,9 @@ echo ""
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
+# Detect OS
+OS_TYPE="$(uname -s)"
+
 # Try different profiling tools
 if command -v samply &> /dev/null; then
     echo -e "${YELLOW}Profiling with samply...${NC}"
@@ -174,10 +179,185 @@ elif command -v perf &> /dev/null; then
     fi
     echo -e "${GREEN}Flamegraph saved to: $(realpath ${FLAMEGRAPH_SVG})${NC}"
 
+elif [[ "$OS_TYPE" == "Darwin" ]]; then
+    # macOS-specific profiling using sample command
+    echo -e "${YELLOW}Profiling on macOS using sample command...${NC}"
+    SAMPLE_OUTPUT="../${OUTPUT_DIR}/sample_${TIMESTAMP}.txt"
+    COLLAPSED_OUTPUT="../${OUTPUT_DIR}/collapsed_${TIMESTAMP}.txt"
+    FLAMEGRAPH_SVG="../${OUTPUT_DIR}/flamegraph_${TIMESTAMP}.svg"
+
+    # Start benchmark in background
+    echo -e "Starting benchmark: $BENCH_CMD"
+    $BENCH_CMD &
+    BENCH_PID=$!
+
+    # Wait a moment for the process to start
+    sleep 0.5
+
+    # Check if process is running
+    if ! kill -0 $BENCH_PID 2>/dev/null; then
+        echo -e "${RED}Benchmark process failed to start${NC}"
+        exit 1
+    fi
+
+    echo -e "Sampling process $BENCH_PID for ${DURATION} seconds..."
+    # Use sample command to profile (built-in on macOS)
+    sample $BENCH_PID $DURATION -file "$SAMPLE_OUTPUT" 2>/dev/null || true
+
+    # Wait for benchmark to complete
+    wait $BENCH_PID 2>/dev/null || true
+
+    if [[ -f "$SAMPLE_OUTPUT" ]]; then
+        echo -e "${GREEN}Sample output saved to: $(realpath ${SAMPLE_OUTPUT})${NC}"
+
+        # Convert sample output to collapsed format for flamegraph
+        echo -e "${YELLOW}Converting to flamegraph format...${NC}"
+
+        # Parse macOS sample output to collapsed stack format
+        # The sample output has a tree format with indentation and branch indicators
+        python3 - "$SAMPLE_OUTPUT" "$COLLAPSED_OUTPUT" << 'PYTHON_SCRIPT'
+import sys
+import re
+
+def parse_sample_output(input_file, output_file):
+    """
+    Parse macOS sample output tree format into collapsed stacks.
+
+    Sample format is a tree like:
+        3718 start  (in dyld) + 6076  [0x...]
+          3718 main  (in fory_benchmark) + 136  [0x...]
+            3718 benchmark::Run()  (in fory_benchmark) + 48  [0x...]
+              + 3611 BM_Serialize()  (in fory_benchmark) + 316  [0x...]
+              + ! 3301 fory::serialize()  (in fory_benchmark) + 468  [0x...]
+    """
+    stacks = {}
+
+    with open(input_file, 'r') as f:
+        lines = f.readlines()
+
+    # Find the "Call graph:" section
+    in_call_graph = False
+    stack_lines = []
+
+    for line in lines:
+        if 'Call graph:' in line:
+            in_call_graph = True
+            continue
+        if in_call_graph:
+            # Stop at next section
+            if line.strip() and not line.startswith(' ') and not any(c in line for c in ['+', '|', '!']):
+                if 'Thread_' not in line and 'Total number' in line:
+                    break
+            stack_lines.append(line)
+
+    # Parse the tree structure
+    # Each frame has format: [indent/branch chars] COUNT FUNC_NAME (in MODULE) + OFFSET [ADDR] [FILE:LINE]
+    frame_pattern = re.compile(
+        r'^([\s+!:|]*)'           # Branch indicators and indentation
+        r'(\d+)\s+'               # Sample count
+        r'(.+?)'                  # Function name
+        r'\s+\(in\s+([^)]+)\)'    # Module name
+        r'(?:\s+\+\s+[\d,]+)?'    # Optional offset
+        r'(?:\s+\[0x[0-9a-fA-F,]+\])?' # Optional address
+        r'(?:\s+[\w./]+:\d+)?'    # Optional file:line
+    )
+
+    # Track stack at each depth level
+    current_stack = []  # [(depth, func_name, count), ...]
+
+    for line in stack_lines:
+        match = frame_pattern.match(line)
+        if not match:
+            continue
+
+        prefix = match.group(1)
+        count = int(match.group(2))
+        func_name = match.group(3).strip()
+        module = match.group(4).strip()
+
+        # Skip unknown frames
+        if func_name == '???' or func_name.startswith('0x'):
+            continue
+
+        # Calculate depth based on prefix length (roughly 2 chars per level)
+        # Count actual indentation ignoring branch chars
+        depth = len(prefix.replace('+', ' ').replace('|', ' ').replace('!', ' ').replace(':', ' '))
+        depth = depth // 2
+
+        # Clean up function name for display
+        func_name = func_name.replace(';', ':')
+
+        # Pop stack until we're at the right depth
+        while current_stack and current_stack[-1][0] >= depth:
+            current_stack.pop()
+
+        # Push current frame
+        current_stack.append((depth, func_name, count))
+
+        # Build stack string (bottom to top for flamegraph)
+        stack_funcs = [f[1] for f in current_stack]
+        if stack_funcs:
+            stack_key = ';'.join(stack_funcs)
+            # Use the count at this leaf node
+            stacks[stack_key] = count
+
+    # Write collapsed format
+    with open(output_file, 'w') as f:
+        for stack, count in sorted(stacks.items(), key=lambda x: -x[1]):
+            if stack and count > 0:
+                f.write(f"{stack} {count}\n")
+
+    print(f"Extracted {len(stacks)} unique stack traces")
+    if stacks:
+        top_stacks = sorted(stacks.items(), key=lambda x: -x[1])[:5]
+        print("Top 5 hottest stacks:")
+        for stack, count in top_stacks:
+            # Show just the last few functions
+            funcs = stack.split(';')
+            short = ';'.join(funcs[-3:]) if len(funcs) > 3 else stack
+            print(f"  {count}: ...{short}")
+
+    return len(stacks)
+
+if __name__ == '__main__':
+    parse_sample_output(sys.argv[1], sys.argv[2])
+PYTHON_SCRIPT
+
+        # Generate flamegraph
+        if [[ -s "$COLLAPSED_OUTPUT" ]]; then
+            if [[ "$FLAMEGRAPH_DIR" == "PATH" ]]; then
+                flamegraph.pl "$COLLAPSED_OUTPUT" > "$FLAMEGRAPH_SVG"
+            else
+                "$FLAMEGRAPH_DIR/flamegraph.pl" "$COLLAPSED_OUTPUT" > "$FLAMEGRAPH_SVG"
+            fi
+            echo -e "${GREEN}Flamegraph saved to: $(realpath ${FLAMEGRAPH_SVG})${NC}"
+
+            # Try to open in browser
+            if command -v open &> /dev/null; then
+                echo -e "${YELLOW}Opening flamegraph in browser...${NC}"
+                open "$FLAMEGRAPH_SVG"
+            fi
+        else
+            echo -e "${YELLOW}Could not generate flamegraph from sample output.${NC}"
+            echo -e "You can view the raw sample output at: $(realpath ${SAMPLE_OUTPUT})"
+            echo -e ""
+            echo -e "${YELLOW}Tip: For better profiling results, consider using samply:${NC}"
+            echo -e "  cargo install samply"
+            echo -e "  ./profile.sh --data struct --serializer fory"
+        fi
+    else
+        echo -e "${RED}Sample command failed to produce output${NC}"
+        exit 1
+    fi
+
 else
     echo -e "${RED}No profiling tool found. Please install one of:${NC}"
     echo "  - samply: cargo install samply (recommended, cross-platform)"
-    echo "  - perf (Linux): apt install linux-tools-generic"
+    if [[ "$OS_TYPE" == "Darwin" ]]; then
+        echo "  - sample: Built-in on macOS (should be available)"
+    else
+        echo "  - perf (Linux): apt install linux-tools-generic"
+    fi
     exit 1
 fi
 

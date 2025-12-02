@@ -989,6 +989,23 @@ constexpr size_t compute_fixed_field_write_offset() {
   return offset;
 }
 
+/// Helper to write a single fixed-size primitive field at compile-time offset.
+/// No lambda overhead - direct function call that will be inlined.
+template <typename T, size_t SortedIdx>
+FORY_ALWAYS_INLINE void write_single_fixed_field(const T &obj, Buffer &buffer,
+                                                 uint32_t base_offset) {
+  using Helpers = CompileTimeFieldHelpers<T>;
+  constexpr size_t original_index = Helpers::sorted_indices[SortedIdx];
+  constexpr size_t field_offset =
+      compute_fixed_field_write_offset<T, SortedIdx>();
+  const auto field_info = ForyFieldInfo(obj);
+  const auto field_ptr = std::get<original_index>(decltype(field_info)::Ptrs);
+  using FieldType =
+      typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
+  put_fixed_primitive_at<FieldType>(obj.*field_ptr, buffer,
+                                    base_offset + field_offset);
+}
+
 /// Fast write leading fixed-size primitive fields using compile-time offsets.
 /// Caller must ensure buffer has sufficient capacity.
 /// Optimized: uses compile-time offsets and updates writer_index once at end.
@@ -997,27 +1014,27 @@ FORY_ALWAYS_INLINE void
 write_fixed_primitive_fields(const T &obj, Buffer &buffer,
                              std::index_sequence<Indices...>) {
   using Helpers = CompileTimeFieldHelpers<T>;
-  const auto field_info = ForyFieldInfo(obj);
-  const auto field_ptrs = decltype(field_info)::Ptrs;
-
   const uint32_t base_offset = buffer.writer_index();
 
-  // Write each field at its compile-time computed offset
-  (
-      [&]() {
-        constexpr size_t original_index = Helpers::sorted_indices[Indices];
-        constexpr size_t field_offset =
-            compute_fixed_field_write_offset<T, Indices>();
-        const auto field_ptr = std::get<original_index>(field_ptrs);
-        using FieldType =
-            typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
-        put_fixed_primitive_at<FieldType>(obj.*field_ptr, buffer,
-                                          base_offset + field_offset);
-      }(),
-      ...);
+  // Write each field using helper function - no lambda overhead
+  (write_single_fixed_field<T, Indices>(obj, buffer, base_offset), ...);
 
   // Update writer_index once with total fixed bytes (compile-time constant)
   buffer.WriterIndex(base_offset + Helpers::leading_fixed_size_bytes);
+}
+
+/// Helper to write a single varint primitive field.
+/// No lambda overhead - direct function call that will be inlined.
+template <typename T, size_t SortedPos>
+FORY_ALWAYS_INLINE void write_single_varint_field(const T &obj, Buffer &buffer,
+                                                  uint32_t &offset) {
+  using Helpers = CompileTimeFieldHelpers<T>;
+  constexpr size_t original_index = Helpers::sorted_indices[SortedPos];
+  const auto field_info = ForyFieldInfo(obj);
+  const auto field_ptr = std::get<original_index>(decltype(field_info)::Ptrs);
+  using FieldType =
+      typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
+  offset += put_varint_at<FieldType>(obj.*field_ptr, buffer, offset);
 }
 
 /// Fast write consecutive varint primitive fields (int32, int64).
@@ -1027,23 +1044,35 @@ template <typename T, size_t FixedCount, size_t... Indices>
 FORY_ALWAYS_INLINE void
 write_varint_primitive_fields(const T &obj, Buffer &buffer, uint32_t &offset,
                               std::index_sequence<Indices...>) {
-  using Helpers = CompileTimeFieldHelpers<T>;
-  const auto field_info = ForyFieldInfo(obj);
-  const auto field_ptrs = decltype(field_info)::Ptrs;
+  // Write each varint field using helper function - no lambda overhead
+  // Indices are 0, 1, 2, ... so actual sorted position is FixedCount + Indices
+  (write_single_varint_field<T, FixedCount + Indices>(obj, buffer, offset),
+   ...);
+}
 
-  // Write each varint field, tracking offset
-  (
-      [&]() {
-        // Indices are 0, 1, 2, ... for varint fields
-        // Actual sorted position is FixedCount + Indices
-        constexpr size_t sorted_pos = FixedCount + Indices;
-        constexpr size_t original_index = Helpers::sorted_indices[sorted_pos];
-        const auto field_ptr = std::get<original_index>(field_ptrs);
-        using FieldType =
-            typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
-        offset += put_varint_at<FieldType>(obj.*field_ptr, buffer, offset);
-      }(),
-      ...);
+/// Helper to write a single remaining primitive field.
+/// No lambda overhead - direct function call that will be inlined.
+template <typename T, size_t SortedPos>
+FORY_ALWAYS_INLINE void
+write_single_remaining_field(const T &obj, Buffer &buffer, uint32_t &offset) {
+  using Helpers = CompileTimeFieldHelpers<T>;
+  constexpr size_t original_index = Helpers::sorted_indices[SortedPos];
+  const auto field_info = ForyFieldInfo(obj);
+  const auto field_ptr = std::get<original_index>(decltype(field_info)::Ptrs);
+  using FieldType =
+      typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
+  offset += put_primitive_at<FieldType>(obj.*field_ptr, buffer, offset);
+}
+
+/// Write remaining primitive fields after fixed and varint phases.
+/// StartPos is the first sorted index to process.
+template <typename T, size_t StartPos, size_t... Indices>
+FORY_ALWAYS_INLINE void
+write_remaining_primitive_fields(const T &obj, Buffer &buffer, uint32_t &offset,
+                                 std::index_sequence<Indices...>) {
+  // Write each remaining field using helper function - no lambda overhead
+  (write_single_remaining_field<T, StartPos + Indices>(obj, buffer, offset),
+   ...);
 }
 
 /// Fast path writer for primitive-only, non-nullable structs.
@@ -1076,27 +1105,13 @@ write_primitive_fields_fast(const T &obj, Buffer &buffer,
     buffer.WriterIndex(offset);
   }
 
-  // Phase 3: Write remaining primitives (if any) using generic path
+  // Phase 3: Write remaining primitives (if any) using dedicated helper
   constexpr size_t fast_count = fixed_count + varint_count;
   if constexpr (fast_count < total_count) {
-    const auto field_info = ForyFieldInfo(obj);
-    const auto field_ptrs = decltype(field_info)::Ptrs;
     uint32_t offset = buffer.writer_index();
-
-    // Write remaining fields using fold expression with offset adjustment
-    (
-        [&]() {
-          // Only process indices >= fast_count
-          if constexpr (Indices >= fast_count) {
-            constexpr size_t original_index = Helpers::sorted_indices[Indices];
-            const auto field_ptr = std::get<original_index>(field_ptrs);
-            using FieldType =
-                typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
-            offset +=
-                put_primitive_at<FieldType>(obj.*field_ptr, buffer, offset);
-          }
-        }(),
-        ...);
+    write_remaining_primitive_fields<T, fast_count>(
+        obj, buffer, offset,
+        std::make_index_sequence<total_count - fast_count>{});
     buffer.WriterIndex(offset);
   }
 }
@@ -1433,6 +1448,30 @@ read_single_field_by_index_compatible(T &obj, ReadContext &ctx,
   return Result<void, Error>();
 }
 
+/// Helper to dispatch field reading by field_id in compatible mode.
+/// Uses fold expression with short-circuit to avoid lambda overhead.
+/// Returns the result of reading; sets handled=true if field was matched.
+template <typename T, size_t... Indices>
+FORY_ALWAYS_INLINE Result<void, Error>
+dispatch_compatible_field_read_impl(T &obj, ReadContext &ctx, int16_t field_id,
+                                    bool read_ref_flag, bool &handled,
+                                    std::index_sequence<Indices...>) {
+  using Helpers = CompileTimeFieldHelpers<T>;
+  Result<void, Error> result;
+
+  // Short-circuit fold: stops at first match
+  // Each element evaluates to bool; || short-circuits on first true
+  ((static_cast<int16_t>(Indices) == field_id
+        ? (handled = true,
+           result = read_single_field_by_index_compatible<
+               Helpers::sorted_indices[Indices]>(obj, ctx, read_ref_flag),
+           true)
+        : false) ||
+   ...);
+
+  return result;
+}
+
 /// Helper to read a single field at compile-time sorted position
 template <typename T, size_t SortedPosition>
 Result<void, Error> read_field_at_sorted_position(T &obj, ReadContext &ctx) {
@@ -1516,6 +1555,22 @@ FORY_ALWAYS_INLINE T read_fixed_primitive_at(Buffer &buffer, uint32_t offset) {
   }
 }
 
+/// Helper to read a single fixed-size primitive field at compile-time offset.
+/// No lambda overhead - direct function call that will be inlined.
+template <typename T, size_t SortedIdx>
+FORY_ALWAYS_INLINE void read_single_fixed_field(T &obj, Buffer &buffer,
+                                                uint32_t base_offset) {
+  using Helpers = CompileTimeFieldHelpers<T>;
+  constexpr size_t original_index = Helpers::sorted_indices[SortedIdx];
+  constexpr size_t field_offset = compute_fixed_field_offset<T, SortedIdx>();
+  const auto field_info = ForyFieldInfo(obj);
+  const auto field_ptr = std::get<original_index>(decltype(field_info)::Ptrs);
+  using FieldType =
+      typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
+  obj.*field_ptr =
+      read_fixed_primitive_at<FieldType>(buffer, base_offset + field_offset);
+}
+
 /// Fast read leading fixed-size primitive fields using UnsafeGet.
 /// Caller must ensure buffer bounds are pre-checked.
 /// Optimized: uses compile-time offsets and updates reader_index once at end.
@@ -1524,24 +1579,10 @@ FORY_ALWAYS_INLINE void
 read_fixed_primitive_fields(T &obj, Buffer &buffer,
                             std::index_sequence<Indices...>) {
   using Helpers = CompileTimeFieldHelpers<T>;
-  const auto field_info = ForyFieldInfo(obj);
-  const auto field_ptrs = decltype(field_info)::Ptrs;
-
   const uint32_t base_offset = buffer.reader_index();
 
-  // Read each field at its compile-time computed offset
-  (
-      [&]() {
-        constexpr size_t original_index = Helpers::sorted_indices[Indices];
-        constexpr size_t field_offset =
-            compute_fixed_field_offset<T, Indices>();
-        const auto field_ptr = std::get<original_index>(field_ptrs);
-        using FieldType =
-            typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
-        obj.*field_ptr = read_fixed_primitive_at<FieldType>(
-            buffer, base_offset + field_offset);
-      }(),
-      ...);
+  // Read each field using helper function - no lambda overhead
+  (read_single_fixed_field<T, Indices>(obj, buffer, base_offset), ...);
 
   // Update reader_index once with total fixed bytes (compile-time constant)
   buffer.ReaderIndex(base_offset + Helpers::leading_fixed_size_bytes);
@@ -1572,6 +1613,20 @@ FORY_ALWAYS_INLINE T read_varint_at(Buffer &buffer, uint32_t &offset) {
   }
 }
 
+/// Helper to read a single varint primitive field.
+/// No lambda overhead - direct function call that will be inlined.
+template <typename T, size_t SortedPos>
+FORY_ALWAYS_INLINE void read_single_varint_field(T &obj, Buffer &buffer,
+                                                 uint32_t &offset) {
+  using Helpers = CompileTimeFieldHelpers<T>;
+  constexpr size_t original_index = Helpers::sorted_indices[SortedPos];
+  const auto field_info = ForyFieldInfo(obj);
+  const auto field_ptr = std::get<original_index>(decltype(field_info)::Ptrs);
+  using FieldType =
+      typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
+  obj.*field_ptr = read_varint_at<FieldType>(buffer, offset);
+}
+
 /// Fast read consecutive varint primitive fields (int32, int64).
 /// Caller must ensure buffer bounds are pre-checked for max varint bytes.
 /// Optimized: tracks offset locally and updates reader_index once at the end.
@@ -1580,20 +1635,9 @@ template <typename T, size_t StartIdx, size_t... Is>
 FORY_ALWAYS_INLINE void
 read_varint_primitive_fields(T &obj, Buffer &buffer, uint32_t &offset,
                              std::index_sequence<Is...>) {
-  using Helpers = CompileTimeFieldHelpers<T>;
-  const auto field_info = ForyFieldInfo(obj);
-  const auto field_ptrs = decltype(field_info)::Ptrs;
-
-  (
-      [&]() {
-        constexpr size_t sorted_idx = StartIdx + Is;
-        constexpr size_t original_index = Helpers::sorted_indices[sorted_idx];
-        const auto field_ptr = std::get<original_index>(field_ptrs);
-        using FieldType =
-            typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
-        obj.*field_ptr = read_varint_at<FieldType>(buffer, offset);
-      }(),
-      ...);
+  // Read each varint field using helper function - no lambda overhead
+  // Is are 0, 1, 2, ... so actual sorted position is StartIdx + Is
+  (read_single_varint_field<T, StartIdx + Is>(obj, buffer, offset), ...);
 }
 
 /// Helper to read remaining fields starting from Offset
@@ -1683,8 +1727,6 @@ Result<void, Error>
 read_struct_fields_compatible(T &obj, ReadContext &ctx,
                               const TypeMeta *remote_type_meta,
                               std::index_sequence<Indices...>) {
-
-  using Helpers = CompileTimeFieldHelpers<T>;
   const auto &remote_fields = remote_type_meta->get_field_infos();
 
   // Iterate through remote fields in their serialization order
@@ -1721,19 +1763,11 @@ read_struct_fields_compatible(T &obj, ReadContext &ctx,
     }
 
     // Dispatch to the correct local field by field_id
+    // Uses fold expression with short-circuit - no lambda overhead
     bool handled = false;
-    Result<void, Error> result;
-
-    detail::for_each_index(
-        std::index_sequence<Indices...>{}, [&](auto index_constant) {
-          constexpr size_t index = decltype(index_constant)::value;
-          if (!handled && static_cast<int16_t>(index) == field_id) {
-            handled = true;
-            constexpr size_t original_index = Helpers::sorted_indices[index];
-            result = read_single_field_by_index_compatible<original_index>(
-                obj, ctx, read_ref_flag);
-          }
-        });
+    Result<void, Error> result = dispatch_compatible_field_read_impl<T>(
+        obj, ctx, field_id, read_ref_flag, handled,
+        std::index_sequence<Indices...>{});
 
     if (!handled) {
       // Shouldn't happen if TypeMeta::assign_field_ids worked correctly

@@ -105,7 +105,17 @@ FORY_STRUCT(Sample, int_value, long_value, float_value, double_value,
 // ============================================================================
 
 NumericStruct CreateNumericStruct() {
-  return NumericStruct{1, 2, 3, 4, 5, 6, 7, 8};
+  // Use mixed positive/negative int32 values for realistic benchmark
+  return NumericStruct{
+      -12345,      // f1: negative
+      987654321,   // f2: large positive
+      -31415,      // f3: negative
+      27182818,    // f4: positive
+      -32000,      // f5: negative (near int16 min)
+      1000000,     // f6: medium positive
+      -999999999,  // f7: large negative
+      42           // f8: small positive
+  };
 }
 
 // ============================================================================
@@ -146,70 +156,82 @@ protobuf::Struct CreateProtoStruct() {
 }
 
 Sample CreateSample() {
+  // Consistent with Java Sample.populate() for fair cross-language comparison
   Sample sample;
-  sample.int_value = 42;
-  sample.long_value = 1234567890123LL;
-  sample.float_value = 3.14f;
-  sample.double_value = 2.718281828;
-  sample.short_value = 100;
-  sample.char_value = 65;
+  sample.int_value = 123;
+  sample.long_value = 1230000LL;
+  sample.float_value = 12.345f;
+  sample.double_value = 1.234567;
+  sample.short_value = 12345;
+  sample.char_value = '!';  // 33
   sample.boolean_value = true;
-  sample.int_value_boxed = 42;
-  sample.long_value_boxed = 1234567890123LL;
-  sample.float_value_boxed = 3.14f;
-  sample.double_value_boxed = 2.718281828;
-  sample.short_value_boxed = 100;
-  sample.char_value_boxed = 65;
-  sample.boolean_value_boxed = true;
-  sample.int_array = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
-  sample.long_array = {100, 200, 300, 400, 500};
-  sample.float_array = {1.1f, 2.2f, 3.3f, 4.4f, 5.5f};
-  sample.double_array = {1.11, 2.22, 3.33, 4.44, 5.55};
-  sample.short_array = {10, 20, 30, 40, 50};
-  sample.char_array = {65, 66, 67, 68, 69};
-  sample.boolean_array = {true, false, true, false, true};
-  sample.string = "Hello, Fory benchmark!";
+
+  sample.int_value_boxed = 321;
+  sample.long_value_boxed = 3210000LL;
+  sample.float_value_boxed = 54.321f;
+  sample.double_value_boxed = 7.654321;
+  sample.short_value_boxed = 32100;
+  sample.char_value_boxed = '$';  // 36
+  sample.boolean_value_boxed = false;
+
+  // Arrays with mixed positive/negative values (same as Java)
+  sample.int_array = {-1234, -123, -12, -1, 0, 1, 12, 123, 1234};
+  sample.long_array = {-123400, -12300, -1200, -100, 0, 100, 1200, 12300, 123400};
+  sample.float_array = {-12.34f, -12.3f, -12.0f, -1.0f, 0.0f,
+                        1.0f, 12.0f, 12.3f, 12.34f};
+  sample.double_array = {-1.234, -1.23, -12.0, -1.0, 0.0, 1.0, 12.0, 1.23, 1.234};
+  sample.short_array = {-1234, -123, -12, -1, 0, 1, 12, 123, 1234};
+  sample.char_array = {'a', 's', 'd', 'f', 'A', 'S', 'D', 'F'};  // "asdfASDF"
+  sample.boolean_array = {true, false, false, true};
+
+  sample.string = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
   return sample;
 }
 
 protobuf::Sample CreateProtoSample() {
+  // Consistent with Java Sample.populate() for fair cross-language comparison
   protobuf::Sample sample;
-  sample.set_int_value(42);
-  sample.set_long_value(1234567890123LL);
-  sample.set_float_value(3.14f);
-  sample.set_double_value(2.718281828);
-  sample.set_short_value(100);
-  sample.set_char_value(65);
+  sample.set_int_value(123);
+  sample.set_long_value(1230000LL);
+  sample.set_float_value(12.345f);
+  sample.set_double_value(1.234567);
+  sample.set_short_value(12345);
+  sample.set_char_value('!');  // 33
   sample.set_boolean_value(true);
-  sample.set_int_value_boxed(42);
-  sample.set_long_value_boxed(1234567890123LL);
-  sample.set_float_value_boxed(3.14f);
-  sample.set_double_value_boxed(2.718281828);
-  sample.set_short_value_boxed(100);
-  sample.set_char_value_boxed(65);
-  sample.set_boolean_value_boxed(true);
-  for (int i = 1; i <= 10; ++i) {
-    sample.add_int_array(i);
+
+  sample.set_int_value_boxed(321);
+  sample.set_long_value_boxed(3210000LL);
+  sample.set_float_value_boxed(54.321f);
+  sample.set_double_value_boxed(7.654321);
+  sample.set_short_value_boxed(32100);
+  sample.set_char_value_boxed('$');  // 36
+  sample.set_boolean_value_boxed(false);
+
+  // Arrays with mixed positive/negative values (same as Java)
+  for (int v : {-1234, -123, -12, -1, 0, 1, 12, 123, 1234}) {
+    sample.add_int_array(v);
   }
-  for (int64_t v : {100LL, 200LL, 300LL, 400LL, 500LL}) {
+  for (int64_t v : {-123400LL, -12300LL, -1200LL, -100LL, 0LL,
+                    100LL, 1200LL, 12300LL, 123400LL}) {
     sample.add_long_array(v);
   }
-  for (float v : {1.1f, 2.2f, 3.3f, 4.4f, 5.5f}) {
+  for (float v : {-12.34f, -12.3f, -12.0f, -1.0f, 0.0f,
+                  1.0f, 12.0f, 12.3f, 12.34f}) {
     sample.add_float_array(v);
   }
-  for (double v : {1.11, 2.22, 3.33, 4.44, 5.55}) {
+  for (double v : {-1.234, -1.23, -12.0, -1.0, 0.0, 1.0, 12.0, 1.23, 1.234}) {
     sample.add_double_array(v);
   }
-  for (int v : {10, 20, 30, 40, 50}) {
+  for (int v : {-1234, -123, -12, -1, 0, 1, 12, 123, 1234}) {
     sample.add_short_array(v);
   }
-  for (int v : {65, 66, 67, 68, 69}) {
+  for (int v : {'a', 's', 'd', 'f', 'A', 'S', 'D', 'F'}) {  // "asdfASDF"
     sample.add_char_array(v);
   }
-  for (bool v : {true, false, true, false, true}) {
+  for (bool v : {true, false, false, true}) {
     sample.add_boolean_array(v);
   }
-  sample.set_string("Hello, Fory benchmark!");
+  sample.set_string("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789");
   return sample;
 }
 

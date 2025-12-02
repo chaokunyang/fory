@@ -59,54 +59,61 @@ struct LocalDate {
 template <> struct Serializer<Duration> {
   static constexpr TypeId type_id = TypeId::DURATION;
 
-  static Result<void, Error> write(const Duration &duration, WriteContext &ctx,
-                                   bool write_ref, bool write_type) {
+  static void write(const Duration &duration, WriteContext &ctx,
+                    bool write_ref, bool write_type, bool has_generics,
+                    Error *error) {
+    (void)has_generics;
+    (void)error;
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
       ctx.write_varuint32(static_cast<uint32_t>(type_id));
     }
-    return write_data(duration, ctx);
+    write_data(duration, ctx, error);
   }
 
-  static Result<void, Error> write_data(const Duration &duration,
-                                        WriteContext &ctx) {
+  static void write_data(const Duration &duration, WriteContext &ctx,
+                         Error *error) {
+    (void)error;
     int64_t nanos = duration.count();
     ctx.write_bytes(&nanos, sizeof(int64_t));
-    return Result<void, Error>();
   }
 
-  static Result<void, Error> write_data_generic(const Duration &duration,
-                                                WriteContext &ctx,
-                                                bool has_generics) {
-    return write_data(duration, ctx);
+  static void write_data_generic(const Duration &duration, WriteContext &ctx,
+                                 bool has_generics, Error *error) {
+    (void)has_generics;
+    write_data(duration, ctx, error);
   }
 
-  static Result<Duration, Error> read(ReadContext &ctx, bool read_ref,
-                                      bool read_type) {
-    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
+  static Duration read(ReadContext &ctx, bool read_ref, bool read_type,
+                       Error *error) {
+    bool has_value = consume_ref_flag(ctx, read_ref, error);
+    if (FORY_PREDICT_FALSE(!error->ok())) {
+      return Duration(0);
+    }
     if (!has_value) {
       return Duration(0);
     }
-    Error error;
     if (read_type) {
-      uint32_t type_id_read = ctx.read_varuint32(&error);
-      if (FORY_PREDICT_FALSE(!error.ok())) {
-        return Unexpected(std::move(error));
+      uint32_t type_id_read = ctx.read_varuint32(error);
+      if (FORY_PREDICT_FALSE(!error->ok())) {
+        return Duration(0);
       }
       if (type_id_read != static_cast<uint32_t>(type_id)) {
-        return Unexpected(
-            Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
+        error->set_error(ErrorCode::TypeError,
+                         Error::type_mismatch(type_id_read,
+                                              static_cast<uint32_t>(type_id))
+                             .message());
+        return Duration(0);
       }
     }
-    return read_data(ctx);
+    return read_data(ctx, error);
   }
 
-  static Result<Duration, Error> read_data(ReadContext &ctx) {
-    Error error;
+  static Duration read_data(ReadContext &ctx, Error *error) {
     int64_t nanos;
-    ctx.read_bytes(&nanos, sizeof(int64_t), &error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
+    ctx.read_bytes(&nanos, sizeof(int64_t), error);
+    if (FORY_PREDICT_FALSE(!error->ok())) {
+      return Duration(0);
     }
     return Duration(nanos);
   }
@@ -121,55 +128,61 @@ template <> struct Serializer<Duration> {
 template <> struct Serializer<Timestamp> {
   static constexpr TypeId type_id = TypeId::TIMESTAMP;
 
-  static Result<void, Error> write(const Timestamp &timestamp,
-                                   WriteContext &ctx, bool write_ref,
-                                   bool write_type) {
+  static void write(const Timestamp &timestamp, WriteContext &ctx,
+                    bool write_ref, bool write_type, bool has_generics,
+                    Error *error) {
+    (void)has_generics;
+    (void)error;
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
       ctx.write_varuint32(static_cast<uint32_t>(type_id));
     }
-    return write_data(timestamp, ctx);
+    write_data(timestamp, ctx, error);
   }
 
-  static Result<void, Error> write_data(const Timestamp &timestamp,
-                                        WriteContext &ctx) {
+  static void write_data(const Timestamp &timestamp, WriteContext &ctx,
+                         Error *error) {
+    (void)error;
     int64_t nanos = timestamp.time_since_epoch().count();
     ctx.write_bytes(&nanos, sizeof(int64_t));
-    return Result<void, Error>();
   }
 
-  static Result<void, Error> write_data_generic(const Timestamp &timestamp,
-                                                WriteContext &ctx,
-                                                bool has_generics) {
-    return write_data(timestamp, ctx);
+  static void write_data_generic(const Timestamp &timestamp, WriteContext &ctx,
+                                 bool has_generics, Error *error) {
+    (void)has_generics;
+    write_data(timestamp, ctx, error);
   }
 
-  static Result<Timestamp, Error> read(ReadContext &ctx, bool read_ref,
-                                       bool read_type) {
-    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
+  static Timestamp read(ReadContext &ctx, bool read_ref, bool read_type,
+                        Error *error) {
+    bool has_value = consume_ref_flag(ctx, read_ref, error);
+    if (FORY_PREDICT_FALSE(!error->ok())) {
+      return Timestamp(Duration(0));
+    }
     if (!has_value) {
       return Timestamp(Duration(0));
     }
-    Error error;
     if (read_type) {
-      uint32_t type_id_read = ctx.read_varuint32(&error);
-      if (FORY_PREDICT_FALSE(!error.ok())) {
-        return Unexpected(std::move(error));
+      uint32_t type_id_read = ctx.read_varuint32(error);
+      if (FORY_PREDICT_FALSE(!error->ok())) {
+        return Timestamp(Duration(0));
       }
       if (type_id_read != static_cast<uint32_t>(type_id)) {
-        return Unexpected(
-            Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
+        error->set_error(ErrorCode::TypeError,
+                         Error::type_mismatch(type_id_read,
+                                              static_cast<uint32_t>(type_id))
+                             .message());
+        return Timestamp(Duration(0));
       }
     }
-    return read_data(ctx);
+    return read_data(ctx, error);
   }
 
-  static Result<Timestamp, Error> read_data(ReadContext &ctx) {
-    Error error;
+  static Timestamp read_data(ReadContext &ctx, Error *error) {
     int64_t nanos;
-    ctx.read_bytes(&nanos, sizeof(int64_t), &error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
+    ctx.read_bytes(&nanos, sizeof(int64_t), error);
+    if (FORY_PREDICT_FALSE(!error->ok())) {
+      return Timestamp(Duration(0));
     }
     return Timestamp(Duration(nanos));
   }
@@ -184,53 +197,59 @@ template <> struct Serializer<Timestamp> {
 template <> struct Serializer<LocalDate> {
   static constexpr TypeId type_id = TypeId::LOCAL_DATE;
 
-  static Result<void, Error> write(const LocalDate &date, WriteContext &ctx,
-                                   bool write_ref, bool write_type) {
+  static void write(const LocalDate &date, WriteContext &ctx, bool write_ref,
+                    bool write_type, bool has_generics, Error *error) {
+    (void)has_generics;
+    (void)error;
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
       ctx.write_varuint32(static_cast<uint32_t>(type_id));
     }
-    return write_data(date, ctx);
+    write_data(date, ctx, error);
   }
 
-  static Result<void, Error> write_data(const LocalDate &date,
-                                        WriteContext &ctx) {
+  static void write_data(const LocalDate &date, WriteContext &ctx,
+                         Error *error) {
+    (void)error;
     ctx.write_bytes(&date.days_since_epoch, sizeof(int32_t));
-    return Result<void, Error>();
   }
 
-  static Result<void, Error> write_data_generic(const LocalDate &date,
-                                                WriteContext &ctx,
-                                                bool has_generics) {
-    return write_data(date, ctx);
+  static void write_data_generic(const LocalDate &date, WriteContext &ctx,
+                                 bool has_generics, Error *error) {
+    (void)has_generics;
+    write_data(date, ctx, error);
   }
 
-  static Result<LocalDate, Error> read(ReadContext &ctx, bool read_ref,
-                                       bool read_type) {
-    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
+  static LocalDate read(ReadContext &ctx, bool read_ref, bool read_type,
+                        Error *error) {
+    bool has_value = consume_ref_flag(ctx, read_ref, error);
+    if (FORY_PREDICT_FALSE(!error->ok())) {
+      return LocalDate();
+    }
     if (!has_value) {
       return LocalDate();
     }
-    Error error;
     if (read_type) {
-      uint32_t type_id_read = ctx.read_varuint32(&error);
-      if (FORY_PREDICT_FALSE(!error.ok())) {
-        return Unexpected(std::move(error));
+      uint32_t type_id_read = ctx.read_varuint32(error);
+      if (FORY_PREDICT_FALSE(!error->ok())) {
+        return LocalDate();
       }
       if (type_id_read != static_cast<uint32_t>(type_id)) {
-        return Unexpected(
-            Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
+        error->set_error(ErrorCode::TypeError,
+                         Error::type_mismatch(type_id_read,
+                                              static_cast<uint32_t>(type_id))
+                             .message());
+        return LocalDate();
       }
     }
-    return read_data(ctx);
+    return read_data(ctx, error);
   }
 
-  static Result<LocalDate, Error> read_data(ReadContext &ctx) {
-    Error error;
+  static LocalDate read_data(ReadContext &ctx, Error *error) {
     LocalDate date;
-    ctx.read_bytes(&date.days_since_epoch, sizeof(int32_t), &error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
+    ctx.read_bytes(&date.days_since_epoch, sizeof(int32_t), error);
+    if (FORY_PREDICT_FALSE(!error->ok())) {
+      return LocalDate();
     }
     return date;
   }

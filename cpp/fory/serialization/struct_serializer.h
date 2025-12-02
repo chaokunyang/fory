@@ -758,9 +758,15 @@ Result<void, Error> write_single_field(const T &obj, WriteContext &ctx,
   constexpr bool is_primitive_field = is_primitive_type_id(field_type_id);
   constexpr bool field_needs_ref = requires_ref_metadata_v<FieldType>;
 
+  Error error;
+
   // Per Rust implementation: primitives are written directly without ref/type
   if constexpr (is_primitive_field && !field_needs_ref) {
-    return Serializer<FieldType>::write_data(field_value, ctx);
+    Serializer<FieldType>::write_data(field_value, ctx, &error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
+    return Result<void, Error>();
   }
 
   // Per Rust: collections always use fory_write(value, context, true, false,
@@ -771,7 +777,11 @@ Result<void, Error> write_single_field(const T &obj, WriteContext &ctx,
   if constexpr (is_collection_field) {
     // Rust: fory_write(value, context, write_ref=true, write_type=false,
     // has_generics=true)
-    return Serializer<FieldType>::write(field_value, ctx, true, false, true);
+    Serializer<FieldType>::write(field_value, ctx, true, false, true, &error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
+    return Result<void, Error>();
   }
 
   // For other types, determine write_ref and write_type per Rust logic
@@ -795,7 +805,12 @@ Result<void, Error> write_single_field(const T &obj, WriteContext &ctx,
   bool write_type =
       is_polymorphic || ((is_struct || is_ext) && ctx.is_compatible());
 
-  return Serializer<FieldType>::write(field_value, ctx, write_ref, write_type);
+  Serializer<FieldType>::write(field_value, ctx, write_ref, write_type,
+                               has_generics, &error);
+  if (FORY_PREDICT_FALSE(!error.ok())) {
+    return Unexpected(std::move(error));
+  }
+  return Result<void, Error>();
 }
 
 /// Helper to write a single field at compile-time sorted position
@@ -997,11 +1012,17 @@ Result<void, Error> read_single_field_by_index(T &obj, ReadContext &ctx) {
   if constexpr (is_raw_prim && is_primitive_field && !field_needs_ref) {
     Error error;
     obj.*field_ptr = read_primitive_field_direct<FieldType>(ctx, &error);
-    FORY_RETURN_IF_SERDE_ERROR(&error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
     return Result<void, Error>();
   } else {
-    FORY_ASSIGN_OR_RETURN(
-        obj.*field_ptr, Serializer<FieldType>::read(ctx, read_ref, read_type));
+    Error error;
+    obj.*field_ptr =
+        Serializer<FieldType>::read(ctx, read_ref, read_type, &error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
     return Result<void, Error>();
   }
 }
@@ -1059,13 +1080,19 @@ read_single_field_by_index_compatible(T &obj, ReadContext &ctx,
     if (!read_ref) {
       Error error;
       obj.*field_ptr = read_primitive_field_direct<FieldType>(ctx, &error);
-      FORY_RETURN_IF_SERDE_ERROR(&error);
+      if (FORY_PREDICT_FALSE(!error.ok())) {
+        return Unexpected(std::move(error));
+      }
       return Result<void, Error>();
     }
   }
 
-  FORY_ASSIGN_OR_RETURN(obj.*field_ptr,
-                        Serializer<FieldType>::read(ctx, read_ref, read_type));
+  Error error;
+  obj.*field_ptr =
+      Serializer<FieldType>::read(ctx, read_ref, read_type, &error);
+  if (FORY_PREDICT_FALSE(!error.ok())) {
+    return Unexpected(std::move(error));
+  }
   return Result<void, Error>();
 }
 
@@ -1275,8 +1302,13 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
   /// Write type info only (type_id and meta index if applicable).
   /// This is used by collection serializers to write element type info.
   /// Matches Rust's struct_::write_type_info.
-  static Result<void, Error> write_type_info(WriteContext &ctx) {
-    FORY_TRY(type_info, ctx.type_resolver().template get_type_info<T>());
+  static void write_type_info(WriteContext &ctx, Error *error) {
+    auto type_info_result = ctx.type_resolver().template get_type_info<T>();
+    if (FORY_PREDICT_FALSE(!type_info_result.ok())) {
+      *error = std::move(type_info_result.error());
+      return;
+    }
+    const TypeInfo *type_info = type_info_result.value();
     ctx.write_varuint32(type_info->type_id);
 
     // In compatible mode, always write meta index (matches Rust behavior)
@@ -1285,28 +1317,37 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
       size_t meta_index = ctx.push_meta(type_info);
       ctx.write_varuint32(static_cast<uint32_t>(meta_index));
     }
-    return Result<void, Error>();
   }
 
   /// Read and validate type info.
   /// This consumes the type_id and meta index from the buffer.
-  static Result<void, Error> read_type_info(ReadContext &ctx) {
-    FORY_TRY(type_info, ctx.read_any_typeinfo());
-    if (!type_id_matches(type_info->type_id, static_cast<uint32_t>(type_id))) {
-      return Unexpected(Error::type_mismatch(type_info->type_id,
-                                             static_cast<uint32_t>(type_id)));
+  static void read_type_info(ReadContext &ctx, Error *error) {
+    auto type_info_result = ctx.read_any_typeinfo();
+    if (FORY_PREDICT_FALSE(!type_info_result.ok())) {
+      *error = std::move(type_info_result.error());
+      return;
     }
-    return Result<void, Error>();
+    const TypeInfo *type_info = type_info_result.value();
+    if (!type_id_matches(type_info->type_id, static_cast<uint32_t>(type_id))) {
+      error->set_error(ErrorCode::TypeMismatch,
+                       "Type mismatch: expected " +
+                           std::to_string(static_cast<uint32_t>(type_id)) +
+                           ", got " + std::to_string(type_info->type_id));
+    }
   }
 
-  static Result<void, Error> write(const T &obj, WriteContext &ctx,
-                                   bool write_ref, bool write_type,
-                                   bool has_generics = false) {
+  static void write(const T &obj, WriteContext &ctx, bool write_ref,
+                    bool write_type, bool has_generics, Error *error) {
     write_not_null_ref_flag(ctx, write_ref);
 
     if (write_type) {
       // Direct lookup using compile-time type_index<T>() - O(1) hash lookup
-      FORY_TRY(type_info, ctx.type_resolver().template get_type_info<T>());
+      auto type_info_result = ctx.type_resolver().template get_type_info<T>();
+      if (FORY_PREDICT_FALSE(!type_info_result.ok())) {
+        *error = std::move(type_info_result.error());
+        return;
+      }
+      const TypeInfo *type_info = type_info_result.value();
       uint32_t tid = type_info->type_id;
 
       // Fast path: check if this is a simple STRUCT type (no meta needed)
@@ -1316,18 +1357,28 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
         ctx.write_struct_type_id_direct(tid);
       } else {
         // Complex type (NAMED_STRUCT, COMPATIBLE_STRUCT, etc.) - use TypeInfo*
-        FORY_RETURN_NOT_OK(ctx.write_struct_type_info(type_info));
+        auto result = ctx.write_struct_type_info(type_info);
+        if (FORY_PREDICT_FALSE(!result.ok())) {
+          *error = std::move(result.error());
+          return;
+        }
       }
     }
-    return write_data_generic(obj, ctx, has_generics);
+    write_data_generic(obj, ctx, has_generics, error);
   }
 
-  static Result<void, Error> write_data(const T &obj, WriteContext &ctx) {
+  static void write_data(const T &obj, WriteContext &ctx, Error *error) {
     if (ctx.check_struct_version()) {
-      FORY_TRY(type_info, ctx.type_resolver().template get_type_info<T>());
+      auto type_info_result = ctx.type_resolver().template get_type_info<T>();
+      if (FORY_PREDICT_FALSE(!type_info_result.ok())) {
+        *error = std::move(type_info_result.error());
+        return;
+      }
+      const TypeInfo *type_info = type_info_result.value();
       if (!type_info->type_meta) {
-        return Unexpected(Error::type_error(
-            "Type metadata not initialized for requested struct"));
+        error->set_error(ErrorCode::TypeError,
+                         "Type metadata not initialized for requested struct");
+        return;
       }
       int32_t local_version =
           TypeMeta::compute_struct_version(*type_info->type_meta);
@@ -1336,17 +1387,26 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
 
     using FieldDescriptor = decltype(ForyFieldInfo(std::declval<const T &>()));
     constexpr size_t field_count = FieldDescriptor::Size;
-    return detail::write_struct_fields_impl(
+    auto result = detail::write_struct_fields_impl(
         obj, ctx, std::make_index_sequence<field_count>{}, false);
+    if (FORY_PREDICT_FALSE(!result.ok())) {
+      *error = std::move(result.error());
+    }
   }
 
-  static Result<void, Error> write_data_generic(const T &obj, WriteContext &ctx,
-                                                bool has_generics) {
+  static void write_data_generic(const T &obj, WriteContext &ctx,
+                                 bool has_generics, Error *error) {
     if (ctx.check_struct_version()) {
-      FORY_TRY(type_info, ctx.type_resolver().template get_type_info<T>());
+      auto type_info_result = ctx.type_resolver().template get_type_info<T>();
+      if (FORY_PREDICT_FALSE(!type_info_result.ok())) {
+        *error = std::move(type_info_result.error());
+        return;
+      }
+      const TypeInfo *type_info = type_info_result.value();
       if (!type_info->type_meta) {
-        return Unexpected(Error::type_error(
-            "Type metadata not initialized for requested struct"));
+        error->set_error(ErrorCode::TypeError,
+                         "Type metadata not initialized for requested struct");
+        return;
       }
       int32_t local_version =
           TypeMeta::compute_struct_version(*type_info->type_meta);
@@ -1355,19 +1415,21 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
 
     using FieldDescriptor = decltype(ForyFieldInfo(std::declval<const T &>()));
     constexpr size_t field_count = FieldDescriptor::Size;
-    return detail::write_struct_fields_impl(
+    auto result = detail::write_struct_fields_impl(
         obj, ctx, std::make_index_sequence<field_count>{}, has_generics);
+    if (FORY_PREDICT_FALSE(!result.ok())) {
+      *error = std::move(result.error());
+    }
   }
 
-  static Result<T, Error> read(ReadContext &ctx, bool read_ref,
-                               bool read_type) {
+  static T read(ReadContext &ctx, bool read_ref, bool read_type,
+                Error *error) {
     // Handle reference metadata
     int8_t ref_flag;
-    Error error;
     if (read_ref) {
-      ref_flag = ctx.read_int8(&error);
-      if (FORY_PREDICT_FALSE(!error.ok())) {
-        return Unexpected(std::move(error));
+      ref_flag = ctx.read_int8(error);
+      if (FORY_PREDICT_FALSE(!error->ok())) {
+        return T{};
       }
 #ifdef FORY_DEBUG
       std::cerr << "[xlang][struct] T=" << typeid(T).name()
@@ -1390,15 +1452,20 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
         // In compatible mode: always use remote TypeMeta for schema evolution
         if (read_type) {
           // Read type_id
-          uint32_t remote_type_id = ctx.read_varuint32(&error);
-          if (FORY_PREDICT_FALSE(!error.ok())) {
-            return Unexpected(std::move(error));
+          uint32_t remote_type_id = ctx.read_varuint32(error);
+          if (FORY_PREDICT_FALSE(!error->ok())) {
+            return T{};
           }
 
           // Check LOCAL type to decide if we should read meta_index (matches
           // Rust logic)
-          FORY_TRY(local_type_info,
-                   ctx.type_resolver().template get_type_info<T>());
+          auto local_type_info_result =
+              ctx.type_resolver().template get_type_info<T>();
+          if (FORY_PREDICT_FALSE(!local_type_info_result.ok())) {
+            *error = std::move(local_type_info_result.error());
+            return T{};
+          }
+          const TypeInfo *local_type_info = local_type_info_result.value();
           uint32_t local_type_id = local_type_info->type_id;
           uint8_t local_type_id_low = local_type_id & 0xff;
 
@@ -1408,45 +1475,48 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
                   static_cast<uint8_t>(TypeId::NAMED_COMPATIBLE_STRUCT)) {
             // Use meta sharing: read varint index and get TypeInfo from
             // meta_reader
-            uint32_t meta_index = ctx.read_varuint32(&error);
-            if (FORY_PREDICT_FALSE(!error.ok())) {
-              return Unexpected(std::move(error));
+            uint32_t meta_index = ctx.read_varuint32(error);
+            if (FORY_PREDICT_FALSE(!error->ok())) {
+              return T{};
             }
-            FORY_TRY(remote_type_info, ctx.get_type_info_by_index(meta_index));
+            auto remote_type_info_result =
+                ctx.get_type_info_by_index(meta_index);
+            if (FORY_PREDICT_FALSE(!remote_type_info_result.ok())) {
+              *error = std::move(remote_type_info_result.error());
+              return T{};
+            }
 
-            return read_compatible(ctx, remote_type_info);
+            return read_compatible(ctx, remote_type_info_result.value(), error);
           } else {
             // Local type is not compatible struct - verify type match and read
             // data
             if (remote_type_id != local_type_id) {
-              return Unexpected(
-                  Error::type_mismatch(remote_type_id, local_type_id));
+              error->set_error(ErrorCode::TypeMismatch,
+                               "Type mismatch: expected " +
+                                   std::to_string(local_type_id) + ", got " +
+                                   std::to_string(remote_type_id));
+              return T{};
             }
-            return read_data(ctx);
+            return read_data(ctx, error);
           }
         } else {
           // read_type=false in compatible mode: same version, use sorted order
           // (fast path)
-          return read_data(ctx);
+          return read_data(ctx, error);
         }
       } else {
         // Non-compatible mode: read type info if requested, then read data.
-        //
-        // For xlang, we delegate type-info parsing to ReadContext so that
-        // named structs/ext/enums consume their namespace/type-name
-        // metadata exactly as Java/Rust do. This keeps the reader
-        // position aligned with the subsequent class-version hash and
-        // payload, and also validates that the concrete type id matches
-        // the expected static type.
         if (read_type) {
           // Direct lookup using compile-time type_index<T>() - O(1) hash lookup
-          FORY_TRY(type_info, ctx.type_resolver().template get_type_info<T>());
+          auto type_info_result =
+              ctx.type_resolver().template get_type_info<T>();
+          if (FORY_PREDICT_FALSE(!type_info_result.ok())) {
+            *error = std::move(type_info_result.error());
+            return T{};
+          }
+          const TypeInfo *type_info = type_info_result.value();
           uint32_t expected_type_id = type_info->type_id;
 
-          // FAST PATH: For simple numeric type IDs (not named types), we can
-          // just read the varint and compare directly without hash lookup.
-          // Named types have type_id_low in ranges that require metadata
-          // parsing.
           uint8_t expected_type_id_low = expected_type_id & 0xff;
           if (expected_type_id_low !=
                   static_cast<uint8_t>(TypeId::NAMED_ENUM) &&
@@ -1454,59 +1524,75 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
               expected_type_id_low !=
                   static_cast<uint8_t>(TypeId::NAMED_STRUCT)) {
             // Simple type ID - just read and compare varint directly
-            uint32_t remote_type_id = ctx.read_varuint32(&error);
-            if (FORY_PREDICT_FALSE(!error.ok())) {
-              return Unexpected(std::move(error));
+            uint32_t remote_type_id = ctx.read_varuint32(error);
+            if (FORY_PREDICT_FALSE(!error->ok())) {
+              return T{};
             }
             if (remote_type_id != expected_type_id) {
-              return Unexpected(
-                  Error::type_mismatch(remote_type_id, expected_type_id));
+              error->set_error(ErrorCode::TypeMismatch,
+                               "Type mismatch: expected " +
+                                   std::to_string(expected_type_id) + ", got " +
+                                   std::to_string(remote_type_id));
+              return T{};
             }
           } else {
             // Named type - need to parse full type info
-            FORY_TRY(remote_info, ctx.read_any_typeinfo());
+            auto remote_info_result = ctx.read_any_typeinfo();
+            if (FORY_PREDICT_FALSE(!remote_info_result.ok())) {
+              *error = std::move(remote_info_result.error());
+              return T{};
+            }
+            const TypeInfo *remote_info = remote_info_result.value();
             uint32_t remote_type_id = remote_info ? remote_info->type_id : 0u;
             if (remote_type_id != expected_type_id) {
-              return Unexpected(
-                  Error::type_mismatch(remote_type_id, expected_type_id));
+              error->set_error(ErrorCode::TypeMismatch,
+                               "Type mismatch: expected " +
+                                   std::to_string(expected_type_id) + ", got " +
+                                   std::to_string(remote_type_id));
+              return T{};
             }
           }
         }
-        return read_data(ctx);
+        return read_data(ctx, error);
       }
     } else if (ref_flag == null_flag) {
       // Null value
-      if constexpr (std::is_default_constructible_v<T>) {
-        return T();
-      } else {
-        return Unexpected(Error::invalid_data(
-            "Null value encountered for non-default-constructible struct"));
-      }
+      return T{};
     } else {
-      return Unexpected(Error::invalid_ref("Unknown ref flag, value: " +
-                                           std::to_string(ref_flag)));
+      error->set_error(ErrorCode::InvalidRef,
+                       "Unknown ref flag, value: " + std::to_string(ref_flag));
+      return T{};
     }
   }
 
-  static Result<T, Error> read_compatible(ReadContext &ctx,
-                                          const TypeInfo *remote_type_info) {
+  static T read_compatible(ReadContext &ctx,
+                           const TypeInfo *remote_type_info, Error *error) {
     // Read and verify struct version if enabled (matches write_data behavior)
     if (ctx.check_struct_version()) {
-      Error error;
-      int32_t read_version = ctx.buffer().ReadInt32(&error);
-      if (FORY_PREDICT_FALSE(!error.ok())) {
-        return Unexpected(std::move(error));
+      int32_t read_version = ctx.buffer().ReadInt32(error);
+      if (FORY_PREDICT_FALSE(!error->ok())) {
+        return T{};
       }
-      FORY_TRY(local_type_info,
-               ctx.type_resolver().template get_type_info<T>());
+      auto local_type_info_result =
+          ctx.type_resolver().template get_type_info<T>();
+      if (FORY_PREDICT_FALSE(!local_type_info_result.ok())) {
+        *error = std::move(local_type_info_result.error());
+        return T{};
+      }
+      const TypeInfo *local_type_info = local_type_info_result.value();
       if (!local_type_info->type_meta) {
-        return Unexpected(Error::type_error(
-            "Type metadata not initialized for requested struct"));
+        error->set_error(ErrorCode::TypeError,
+                         "Type metadata not initialized for requested struct");
+        return T{};
       }
       int32_t local_version =
           TypeMeta::compute_struct_version(*local_type_info->type_meta);
-      FORY_RETURN_NOT_OK(TypeMeta::check_struct_version(
-          read_version, local_version, local_type_info->type_name));
+      auto version_result = TypeMeta::check_struct_version(
+          read_version, local_version, local_type_info->type_name);
+      if (FORY_PREDICT_FALSE(!version_result.ok())) {
+        *error = std::move(version_result.error());
+        return T{};
+      }
     }
 
     T obj{};
@@ -1515,44 +1601,68 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
 
     // remote_type_info is from the stream, with field_ids already assigned
     if (!remote_type_info || !remote_type_info->type_meta) {
-      return Unexpected(
-          Error::type_error("Remote type metadata not available"));
+      error->set_error(ErrorCode::TypeError,
+                       "Remote type metadata not available");
+      return T{};
     }
 
     // Use remote TypeMeta for schema evolution - field IDs already assigned
-    FORY_RETURN_NOT_OK(detail::read_struct_fields_compatible(
+    auto result = detail::read_struct_fields_compatible(
         obj, ctx, remote_type_info->type_meta.get(),
-        std::make_index_sequence<field_count>{}));
+        std::make_index_sequence<field_count>{});
+    if (FORY_PREDICT_FALSE(!result.ok())) {
+      *error = std::move(result.error());
+      return T{};
+    }
 
     return obj;
   }
 
-  static Result<T, Error> read_data(ReadContext &ctx) {
+  static T read_data(ReadContext &ctx, Error *error) {
     if (ctx.check_struct_version()) {
-      Error error;
-      int32_t read_version = ctx.buffer().ReadInt32(&error);
-      if (FORY_PREDICT_FALSE(!error.ok())) {
-        return Unexpected(std::move(error));
+      int32_t read_version = ctx.buffer().ReadInt32(error);
+      if (FORY_PREDICT_FALSE(!error->ok())) {
+        return T{};
       }
-      FORY_TRY(local_type_info,
-               ctx.type_resolver().template get_type_info<T>());
+      auto local_type_info_result =
+          ctx.type_resolver().template get_type_info<T>();
+      if (FORY_PREDICT_FALSE(!local_type_info_result.ok())) {
+        *error = std::move(local_type_info_result.error());
+        return T{};
+      }
+      const TypeInfo *local_type_info = local_type_info_result.value();
       if (!local_type_info->type_meta) {
-        return Unexpected(Error::type_error(
-            "Type metadata not initialized for requested struct"));
+        error->set_error(ErrorCode::TypeError,
+                         "Type metadata not initialized for requested struct");
+        return T{};
       }
       int32_t local_version =
           TypeMeta::compute_struct_version(*local_type_info->type_meta);
-      FORY_RETURN_NOT_OK(TypeMeta::check_struct_version(
-          read_version, local_version, local_type_info->type_name));
+      auto version_result = TypeMeta::check_struct_version(
+          read_version, local_version, local_type_info->type_name);
+      if (FORY_PREDICT_FALSE(!version_result.ok())) {
+        *error = std::move(version_result.error());
+        return T{};
+      }
     }
 
     T obj{};
     using FieldDescriptor = decltype(ForyFieldInfo(std::declval<const T &>()));
     constexpr size_t field_count = FieldDescriptor::Size;
-    FORY_RETURN_NOT_OK(detail::read_struct_fields_impl(
-        obj, ctx, std::make_index_sequence<field_count>{}));
+    auto result = detail::read_struct_fields_impl(
+        obj, ctx, std::make_index_sequence<field_count>{});
+    if (FORY_PREDICT_FALSE(!result.ok())) {
+      *error = std::move(result.error());
+      return T{};
+    }
 
     return obj;
+  }
+
+  static T read_data_generic(ReadContext &ctx, bool has_generics,
+                             Error *error) {
+    (void)has_generics;
+    return read_data(ctx, error);
   }
 
   // Optimized read when type info already known (for polymorphic collections)
@@ -1560,20 +1670,19 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
   // section 5.4.4 When deserializing List<Base> where all elements are same
   // concrete type, we read type info once and pass it to all element
   // deserializers
-  static Result<T, Error> read_with_type_info(ReadContext &ctx, bool read_ref,
-                                              const TypeInfo &type_info) {
+  static T read_with_type_info(ReadContext &ctx, bool read_ref,
+                               const TypeInfo &type_info, Error *error) {
+    (void)read_ref;
     // Note: When called from polymorphic shared_ptr, the shared_ptr has already
-    // consumed the ref flag, so we should not read it again here. The read_ref
-    // parameter is just for protocol compatibility but should not cause us to
-    // read another ref flag.
+    // consumed the ref flag, so we should not read it again here.
 
     // In compatible mode with type info provided, use schema evolution path
     if (ctx.is_compatible() && type_info.type_meta) {
-      return read_compatible(ctx, &type_info);
+      return read_compatible(ctx, &type_info, error);
     }
 
     // Otherwise use normal read path
-    return read_data(ctx);
+    return read_data(ctx, error);
   }
 };
 

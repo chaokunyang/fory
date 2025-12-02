@@ -234,68 +234,78 @@ namespace serialization {
 template <> struct Serializer<MyExt> {
   static constexpr TypeId type_id = TypeId::EXT;
 
-  static Result<void, Error> write(const MyExt &value, WriteContext &ctx,
-                                   bool write_ref, bool write_type) {
+  static void write(const MyExt &value, WriteContext &ctx, bool write_ref,
+                    bool write_type, bool has_generics, Error *error) {
+    (void)has_generics;
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
       // Delegate dynamic typeinfo to WriteContext so that user type
       // ids and named registrations are encoded consistently with
       // other ext types.
-      FORY_TRY(type_info,
-               ctx.write_any_typeinfo(static_cast<uint32_t>(TypeId::UNKNOWN),
-                                      std::type_index(typeid(MyExt))));
-      (void)type_info;
+      auto type_info_result =
+          ctx.write_any_typeinfo(static_cast<uint32_t>(TypeId::UNKNOWN),
+                                 std::type_index(typeid(MyExt)));
+      if (!type_info_result) {
+        *error = std::move(type_info_result.error());
+        return;
+      }
     }
-    return write_data(value, ctx);
+    write_data(value, ctx, error);
   }
 
-  static Result<void, Error> write_data(const MyExt &value, WriteContext &ctx) {
-    return Serializer<int32_t>::write_data(value.id, ctx);
+  static void write_data(const MyExt &value, WriteContext &ctx, Error *error) {
+    Serializer<int32_t>::write_data(value.id, ctx, error);
   }
 
-  static Result<void, Error>
-  write_data_generic(const MyExt &value, WriteContext &ctx, bool has_generics) {
+  static void write_data_generic(const MyExt &value, WriteContext &ctx,
+                                 bool has_generics, Error *error) {
     (void)has_generics;
-    return write_data(value, ctx);
+    write_data(value, ctx, error);
   }
 
-  static Result<MyExt, Error> read(ReadContext &ctx, bool read_ref,
-                                   bool read_type) {
-    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
+  static MyExt read(ReadContext &ctx, bool read_ref, bool read_type,
+                    Error *error) {
+    bool has_value = consume_ref_flag(ctx, read_ref, error);
+    if (FORY_PREDICT_FALSE(!error->ok())) {
+      return MyExt{};
+    }
     if (!has_value) {
       return MyExt{};
     }
     if (read_type) {
       // Validate dynamic type info and consume any named metadata.
-      FORY_TRY(type_info, ctx.read_any_typeinfo());
+      auto type_info_result = ctx.read_any_typeinfo();
+      if (!type_info_result) {
+        *error = std::move(type_info_result.error());
+        return MyExt{};
+      }
+      const TypeInfo *type_info = *type_info_result;
       if (!type_info) {
-        return Unexpected(Error::type_error("TypeInfo for MyExt not found"));
+        error->set_error(ErrorCode::TypeError, "TypeInfo for MyExt not found");
+        return MyExt{};
       }
     }
     MyExt value;
-    FORY_TRY(id, Serializer<int32_t>::read_data(ctx));
-    value.id = id;
+    value.id = Serializer<int32_t>::read_data(ctx, error);
     return value;
   }
 
-  static Result<MyExt, Error> read_data(ReadContext &ctx) {
+  static MyExt read_data(ReadContext &ctx, Error *error) {
     MyExt value;
-    FORY_TRY(id, Serializer<int32_t>::read_data(ctx));
-    value.id = id;
+    value.id = Serializer<int32_t>::read_data(ctx, error);
     return value;
   }
 
-  static Result<MyExt, Error> read_data_generic(ReadContext &ctx,
-                                                bool has_generics) {
+  static MyExt read_data_generic(ReadContext &ctx, bool has_generics,
+                                 Error *error) {
     (void)has_generics;
-    return read_data(ctx);
+    return read_data(ctx, error);
   }
 
-  static Result<MyExt, Error> read_with_type_info(ReadContext &ctx,
-                                                  bool read_ref,
-                                                  const TypeInfo &type_info) {
+  static MyExt read_with_type_info(ReadContext &ctx, bool read_ref,
+                                   const TypeInfo &type_info, Error *error) {
     (void)type_info;
-    return read(ctx, read_ref, false);
+    return read(ctx, read_ref, false, error);
   }
 };
 

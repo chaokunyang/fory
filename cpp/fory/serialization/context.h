@@ -64,6 +64,7 @@ private:
 /// - Reference tracking for shared/circular references
 /// - Configuration flags
 /// - Depth tracking for preventing stack overflow
+/// - Error pointer for error propagation without Result overhead
 ///
 /// The WriteContext owns its own Buffer internally for reuse across
 /// serialization calls when pooled.
@@ -80,6 +81,13 @@ public:
   /// Takes ownership of the type resolver.
   explicit WriteContext(const Config &config,
                         std::unique_ptr<TypeResolver> type_resolver);
+
+  /// Set error pointer for current serialization operation.
+  /// Must be called before serialization starts.
+  inline void set_error(Error *error) { error_ = error; }
+
+  /// Get error pointer for error propagation.
+  inline Error *error() { return error_; }
 
   /// Destructor
   ~WriteContext();
@@ -265,6 +273,7 @@ private:
   std::unique_ptr<TypeResolver> type_resolver_;
   RefWriter ref_writer_;
   uint32_t current_dyn_depth_;
+  Error *error_ = nullptr;
 
   // Meta sharing state (for compatible mode)
   std::vector<std::vector<uint8_t>> write_type_defs_;
@@ -300,6 +309,13 @@ public:
 
   /// Destructor
   ~ReadContext();
+
+  /// Set error pointer for current deserialization operation.
+  /// Must be called before deserialization starts.
+  inline void set_error(Error *error) { error_ = error; }
+
+  /// Get error pointer for error propagation.
+  inline Error *error() { return error_; }
 
   /// Attach an input buffer for the duration of current deserialization call.
   inline void attach(Buffer &buffer) { buffer_ = &buffer; }
@@ -496,6 +512,7 @@ private:
   std::unique_ptr<TypeResolver> type_resolver_;
   RefReader ref_reader_;
   uint32_t current_dyn_depth_;
+  Error *error_ = nullptr;
 
   // Meta sharing state (for compatible mode)
   // Primary storage for TypeInfo objects created during deserialization

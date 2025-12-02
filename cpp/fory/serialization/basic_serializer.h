@@ -42,95 +42,101 @@ template <> struct Serializer<bool> {
   static constexpr TypeId type_id = TypeId::BOOL;
 
   /// Write type info only (for collection/map element type headers)
-  static inline Result<void, Error> write_type_info(WriteContext &ctx) {
+  static inline void write_type_info(WriteContext &ctx, Error *error) {
+    (void)error; // Primitives don't produce write errors
     ctx.write_varuint32(static_cast<uint32_t>(type_id));
-    return Result<void, Error>();
   }
 
-  /// Read and validate type info (primitives use read_varuint32 directly)
-  static inline Result<void, Error> read_type_info(ReadContext &ctx) {
-    Error error;
-    uint32_t actual = ctx.read_varuint32(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
+  /// Read and validate type info
+  static inline void read_type_info(ReadContext &ctx, Error *error) {
+    uint32_t actual = ctx.read_varuint32(error);
+    if (FORY_PREDICT_FALSE(!error->ok())) {
+      return;
     }
     if (actual != static_cast<uint32_t>(type_id)) {
-      return Unexpected(
-          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
+      error->set_error(ErrorCode::TypeMismatch,
+                       "Type mismatch: expected " +
+                           std::to_string(static_cast<uint32_t>(type_id)) +
+                           ", got " + std::to_string(actual));
     }
-    return Result<void, Error>();
   }
 
   /// Write boolean with optional reference and type info
-  static inline Result<void, Error> write(bool value, WriteContext &ctx,
-                                          bool write_ref, bool write_type,
-                                          bool has_generics = false) {
+  static inline void write(bool value, WriteContext &ctx, bool write_ref,
+                           bool write_type, bool has_generics, Error *error) {
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
       ctx.write_varuint32(static_cast<uint32_t>(type_id));
     }
-    return write_data_generic(value, ctx, has_generics);
+    write_data_generic(value, ctx, has_generics, error);
   }
 
   /// Write boolean data only (no type info)
-  static inline Result<void, Error> write_data(bool value, WriteContext &ctx) {
+  static inline void write_data(bool value, WriteContext &ctx, Error *error) {
+    (void)error;
     ctx.write_uint8(value ? 1 : 0);
-    return Result<void, Error>();
   }
 
   /// Write boolean with generic optimization (unused for primitives)
-  static inline Result<void, Error>
-  write_data_generic(bool value, WriteContext &ctx, bool has_generics) {
-    return write_data(value, ctx);
+  static inline void write_data_generic(bool value, WriteContext &ctx,
+                                        bool has_generics, Error *error) {
+    (void)has_generics;
+    write_data(value, ctx, error);
   }
 
   /// Read boolean with optional reference and type info
-  static inline Result<bool, Error> read(ReadContext &ctx, bool read_ref,
-                                         bool read_type) {
-    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
+  static inline bool read(ReadContext &ctx, bool read_ref, bool read_type,
+                          Error *error) {
+    bool has_value = consume_ref_flag(ctx, read_ref, error);
+    if (FORY_PREDICT_FALSE(!error->ok())) {
+      return false;
+    }
     if (!has_value) {
       return false;
     }
-    Error error;
     if (read_type) {
-      uint32_t type_id_read = ctx.read_varuint32(&error);
-      if (FORY_PREDICT_FALSE(!error.ok())) {
-        return Unexpected(std::move(error));
+      uint32_t type_id_read = ctx.read_varuint32(error);
+      if (FORY_PREDICT_FALSE(!error->ok())) {
+        return false;
       }
       if (type_id_read != static_cast<uint32_t>(type_id)) {
-        return Unexpected(
-            Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
+        error->set_error(ErrorCode::TypeMismatch,
+                         "Type mismatch: expected " +
+                             std::to_string(static_cast<uint32_t>(type_id)) +
+                             ", got " + std::to_string(type_id_read));
+        return false;
       }
     }
-    uint8_t value = ctx.read_uint8(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
+    uint8_t value = ctx.read_uint8(error);
+    if (FORY_PREDICT_FALSE(!error->ok())) {
+      return false;
     }
     return value != 0;
   }
 
   /// Read boolean data only (no type info)
-  static inline Result<bool, Error> read_data(ReadContext &ctx) {
-    Error error;
-    uint8_t value = ctx.read_uint8(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
+  static inline bool read_data(ReadContext &ctx, Error *error) {
+    uint8_t value = ctx.read_uint8(error);
+    if (FORY_PREDICT_FALSE(!error->ok())) {
+      return false;
     }
     return value != 0;
   }
 
   /// Read boolean with generic optimization (unused for primitives)
-  static inline Result<bool, Error> read_data_generic(ReadContext &ctx,
-                                                      bool has_generics) {
-    return read_data(ctx);
+  static inline bool read_data_generic(ReadContext &ctx, bool has_generics,
+                                       Error *error) {
+    (void)has_generics;
+    return read_data(ctx, error);
   }
 
   /// Read boolean with type info (type info already validated)
-  static inline Result<bool, Error>
-  read_with_type_info(ReadContext &ctx, bool read_ref,
-                      const TypeInfo &type_info) {
+  static inline bool read_with_type_info(ReadContext &ctx, bool read_ref,
+                                         const TypeInfo &type_info,
+                                         Error *error) {
+    (void)type_info;
     // Type info already validated, skip redundant type read
-    return read(ctx, read_ref, false); // read_type=false
+    return read(ctx, read_ref, false, error);
   }
 };
 
@@ -138,87 +144,84 @@ template <> struct Serializer<bool> {
 template <> struct Serializer<int8_t> {
   static constexpr TypeId type_id = TypeId::INT8;
 
-  static inline Result<void, Error> write_type_info(WriteContext &ctx) {
+  static inline void write_type_info(WriteContext &ctx, Error *error) {
+    (void)error;
     ctx.write_varuint32(static_cast<uint32_t>(type_id));
-    return Result<void, Error>();
   }
 
-  static inline Result<void, Error> read_type_info(ReadContext &ctx) {
-    Error error;
-    uint32_t actual = ctx.read_varuint32(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
+  static inline void read_type_info(ReadContext &ctx, Error *error) {
+    uint32_t actual = ctx.read_varuint32(error);
+    if (FORY_PREDICT_FALSE(!error->ok())) {
+      return;
     }
     if (actual != static_cast<uint32_t>(type_id)) {
-      return Unexpected(
-          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
+      error->set_error(ErrorCode::TypeMismatch,
+                       "Type mismatch: expected " +
+                           std::to_string(static_cast<uint32_t>(type_id)) +
+                           ", got " + std::to_string(actual));
     }
-    return Result<void, Error>();
   }
 
-  static inline Result<void, Error> write(int8_t value, WriteContext &ctx,
-                                          bool write_ref, bool write_type,
-                                          bool has_generics = false) {
+  static inline void write(int8_t value, WriteContext &ctx, bool write_ref,
+                           bool write_type, bool has_generics, Error *error) {
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
       ctx.write_varuint32(static_cast<uint32_t>(type_id));
     }
-    return write_data_generic(value, ctx, has_generics);
+    write_data_generic(value, ctx, has_generics, error);
   }
 
-  static inline Result<void, Error> write_data(int8_t value,
-                                               WriteContext &ctx) {
+  static inline void write_data(int8_t value, WriteContext &ctx, Error *error) {
+    (void)error;
     ctx.write_int8(value);
-    return Result<void, Error>();
   }
 
-  static inline Result<void, Error>
-  write_data_generic(int8_t value, WriteContext &ctx, bool has_generics) {
-    return write_data(value, ctx);
+  static inline void write_data_generic(int8_t value, WriteContext &ctx,
+                                        bool has_generics, Error *error) {
+    (void)has_generics;
+    write_data(value, ctx, error);
   }
 
-  static inline Result<int8_t, Error> read(ReadContext &ctx, bool read_ref,
-                                           bool read_type) {
-    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
-    if (!has_value) {
-      return static_cast<int8_t>(0);
+  static inline int8_t read(ReadContext &ctx, bool read_ref, bool read_type,
+                            Error *error) {
+    bool has_value = consume_ref_flag(ctx, read_ref, error);
+    if (FORY_PREDICT_FALSE(!error->ok())) {
+      return 0;
     }
-    Error error;
+    if (!has_value) {
+      return 0;
+    }
     if (read_type) {
-      uint32_t type_id_read = ctx.read_varuint32(&error);
-      if (FORY_PREDICT_FALSE(!error.ok())) {
-        return Unexpected(std::move(error));
+      uint32_t type_id_read = ctx.read_varuint32(error);
+      if (FORY_PREDICT_FALSE(!error->ok())) {
+        return 0;
       }
       if (type_id_read != static_cast<uint32_t>(type_id)) {
-        return Unexpected(
-            Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
+        error->set_error(ErrorCode::TypeMismatch,
+                         "Type mismatch: expected " +
+                             std::to_string(static_cast<uint32_t>(type_id)) +
+                             ", got " + std::to_string(type_id_read));
+        return 0;
       }
     }
-    int8_t value = ctx.read_int8(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
-    }
-    return value;
+    return ctx.read_int8(error);
   }
 
-  static inline Result<int8_t, Error> read_data(ReadContext &ctx) {
-    Error error;
-    int8_t value = ctx.read_int8(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
-    }
-    return value;
+  static inline int8_t read_data(ReadContext &ctx, Error *error) {
+    return ctx.read_int8(error);
   }
 
-  static inline Result<int8_t, Error> read_data_generic(ReadContext &ctx,
-                                                        bool has_generics) {
-    return read_data(ctx);
+  static inline int8_t read_data_generic(ReadContext &ctx, bool has_generics,
+                                         Error *error) {
+    (void)has_generics;
+    return read_data(ctx, error);
   }
 
-  static inline Result<int8_t, Error>
-  read_with_type_info(ReadContext &ctx, bool read_ref,
-                      const TypeInfo &type_info) {
-    return read(ctx, read_ref, false);
+  static inline int8_t read_with_type_info(ReadContext &ctx, bool read_ref,
+                                           const TypeInfo &type_info,
+                                           Error *error) {
+    (void)type_info;
+    return read(ctx, read_ref, false, error);
   }
 };
 
@@ -226,87 +229,85 @@ template <> struct Serializer<int8_t> {
 template <> struct Serializer<int16_t> {
   static constexpr TypeId type_id = TypeId::INT16;
 
-  static inline Result<void, Error> write_type_info(WriteContext &ctx) {
+  static inline void write_type_info(WriteContext &ctx, Error *error) {
+    (void)error;
     ctx.write_varuint32(static_cast<uint32_t>(type_id));
-    return Result<void, Error>();
   }
 
-  static inline Result<void, Error> read_type_info(ReadContext &ctx) {
-    Error error;
-    uint32_t actual = ctx.read_varuint32(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
+  static inline void read_type_info(ReadContext &ctx, Error *error) {
+    uint32_t actual = ctx.read_varuint32(error);
+    if (FORY_PREDICT_FALSE(!error->ok())) {
+      return;
     }
     if (actual != static_cast<uint32_t>(type_id)) {
-      return Unexpected(
-          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
+      error->set_error(ErrorCode::TypeMismatch,
+                       "Type mismatch: expected " +
+                           std::to_string(static_cast<uint32_t>(type_id)) +
+                           ", got " + std::to_string(actual));
     }
-    return Result<void, Error>();
   }
 
-  static inline Result<void, Error> write(int16_t value, WriteContext &ctx,
-                                          bool write_ref, bool write_type,
-                                          bool has_generics = false) {
+  static inline void write(int16_t value, WriteContext &ctx, bool write_ref,
+                           bool write_type, bool has_generics, Error *error) {
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
       ctx.write_varuint32(static_cast<uint32_t>(type_id));
     }
-    return write_data_generic(value, ctx, has_generics);
+    write_data_generic(value, ctx, has_generics, error);
   }
 
-  static inline Result<void, Error> write_data(int16_t value,
-                                               WriteContext &ctx) {
+  static inline void write_data(int16_t value, WriteContext &ctx,
+                                Error *error) {
+    (void)error;
     ctx.write_bytes(&value, sizeof(int16_t));
-    return Result<void, Error>();
   }
 
-  static inline Result<void, Error>
-  write_data_generic(int16_t value, WriteContext &ctx, bool has_generics) {
-    return write_data(value, ctx);
+  static inline void write_data_generic(int16_t value, WriteContext &ctx,
+                                        bool has_generics, Error *error) {
+    (void)has_generics;
+    write_data(value, ctx, error);
   }
 
-  static inline Result<int16_t, Error> read(ReadContext &ctx, bool read_ref,
-                                            bool read_type) {
-    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
-    if (!has_value) {
-      return static_cast<int16_t>(0);
+  static inline int16_t read(ReadContext &ctx, bool read_ref, bool read_type,
+                             Error *error) {
+    bool has_value = consume_ref_flag(ctx, read_ref, error);
+    if (FORY_PREDICT_FALSE(!error->ok())) {
+      return 0;
     }
-    Error error;
+    if (!has_value) {
+      return 0;
+    }
     if (read_type) {
-      uint32_t type_id_read = ctx.read_varuint32(&error);
-      if (FORY_PREDICT_FALSE(!error.ok())) {
-        return Unexpected(std::move(error));
+      uint32_t type_id_read = ctx.read_varuint32(error);
+      if (FORY_PREDICT_FALSE(!error->ok())) {
+        return 0;
       }
       if (type_id_read != static_cast<uint32_t>(type_id)) {
-        return Unexpected(
-            Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
+        error->set_error(ErrorCode::TypeMismatch,
+                         "Type mismatch: expected " +
+                             std::to_string(static_cast<uint32_t>(type_id)) +
+                             ", got " + std::to_string(type_id_read));
+        return 0;
       }
     }
-    int16_t value = ctx.read_int16(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
-    }
-    return value;
+    return ctx.read_int16(error);
   }
 
-  static inline Result<int16_t, Error> read_data(ReadContext &ctx) {
-    Error error;
-    int16_t value = ctx.read_int16(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
-    }
-    return value;
+  static inline int16_t read_data(ReadContext &ctx, Error *error) {
+    return ctx.read_int16(error);
   }
 
-  static inline Result<int16_t, Error> read_data_generic(ReadContext &ctx,
-                                                         bool has_generics) {
-    return read_data(ctx);
+  static inline int16_t read_data_generic(ReadContext &ctx, bool has_generics,
+                                          Error *error) {
+    (void)has_generics;
+    return read_data(ctx, error);
   }
 
-  static inline Result<int16_t, Error>
-  read_with_type_info(ReadContext &ctx, bool read_ref,
-                      const TypeInfo &type_info) {
-    return read(ctx, read_ref, false);
+  static inline int16_t read_with_type_info(ReadContext &ctx, bool read_ref,
+                                            const TypeInfo &type_info,
+                                            Error *error) {
+    (void)type_info;
+    return read(ctx, read_ref, false, error);
   }
 };
 
@@ -314,87 +315,85 @@ template <> struct Serializer<int16_t> {
 template <> struct Serializer<int32_t> {
   static constexpr TypeId type_id = TypeId::INT32;
 
-  static inline Result<void, Error> write_type_info(WriteContext &ctx) {
+  static inline void write_type_info(WriteContext &ctx, Error *error) {
+    (void)error;
     ctx.write_varuint32(static_cast<uint32_t>(type_id));
-    return Result<void, Error>();
   }
 
-  static inline Result<void, Error> read_type_info(ReadContext &ctx) {
-    Error error;
-    uint32_t actual = ctx.read_varuint32(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
+  static inline void read_type_info(ReadContext &ctx, Error *error) {
+    uint32_t actual = ctx.read_varuint32(error);
+    if (FORY_PREDICT_FALSE(!error->ok())) {
+      return;
     }
     if (actual != static_cast<uint32_t>(type_id)) {
-      return Unexpected(
-          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
+      error->set_error(ErrorCode::TypeMismatch,
+                       "Type mismatch: expected " +
+                           std::to_string(static_cast<uint32_t>(type_id)) +
+                           ", got " + std::to_string(actual));
     }
-    return Result<void, Error>();
   }
 
-  static inline Result<void, Error> write(int32_t value, WriteContext &ctx,
-                                          bool write_ref, bool write_type,
-                                          bool has_generics = false) {
+  static inline void write(int32_t value, WriteContext &ctx, bool write_ref,
+                           bool write_type, bool has_generics, Error *error) {
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
       ctx.write_varuint32(static_cast<uint32_t>(type_id));
     }
-    return write_data_generic(value, ctx, has_generics);
+    write_data_generic(value, ctx, has_generics, error);
   }
 
-  static inline Result<void, Error> write_data(int32_t value,
-                                               WriteContext &ctx) {
+  static inline void write_data(int32_t value, WriteContext &ctx,
+                                Error *error) {
+    (void)error;
     ctx.write_varint32(value);
-    return Result<void, Error>();
   }
 
-  static inline Result<void, Error>
-  write_data_generic(int32_t value, WriteContext &ctx, bool has_generics) {
-    return write_data(value, ctx);
+  static inline void write_data_generic(int32_t value, WriteContext &ctx,
+                                        bool has_generics, Error *error) {
+    (void)has_generics;
+    write_data(value, ctx, error);
   }
 
-  static inline Result<int32_t, Error> read(ReadContext &ctx, bool read_ref,
-                                            bool read_type) {
-    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
-    if (!has_value) {
-      return static_cast<int32_t>(0);
+  static inline int32_t read(ReadContext &ctx, bool read_ref, bool read_type,
+                             Error *error) {
+    bool has_value = consume_ref_flag(ctx, read_ref, error);
+    if (FORY_PREDICT_FALSE(!error->ok())) {
+      return 0;
     }
-    Error error;
+    if (!has_value) {
+      return 0;
+    }
     if (read_type) {
-      uint32_t type_id_read = ctx.read_varuint32(&error);
-      if (FORY_PREDICT_FALSE(!error.ok())) {
-        return Unexpected(std::move(error));
+      uint32_t type_id_read = ctx.read_varuint32(error);
+      if (FORY_PREDICT_FALSE(!error->ok())) {
+        return 0;
       }
       if (type_id_read != static_cast<uint32_t>(type_id)) {
-        return Unexpected(
-            Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
+        error->set_error(ErrorCode::TypeMismatch,
+                         "Type mismatch: expected " +
+                             std::to_string(static_cast<uint32_t>(type_id)) +
+                             ", got " + std::to_string(type_id_read));
+        return 0;
       }
     }
-    int32_t value = ctx.read_varint32(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
-    }
-    return value;
+    return ctx.read_varint32(error);
   }
 
-  static inline Result<int32_t, Error> read_data(ReadContext &ctx) {
-    Error error;
-    int32_t value = ctx.read_varint32(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
-    }
-    return value;
+  static inline int32_t read_data(ReadContext &ctx, Error *error) {
+    return ctx.read_varint32(error);
   }
 
-  static inline Result<int32_t, Error> read_data_generic(ReadContext &ctx,
-                                                         bool has_generics) {
-    return read_data(ctx);
+  static inline int32_t read_data_generic(ReadContext &ctx, bool has_generics,
+                                          Error *error) {
+    (void)has_generics;
+    return read_data(ctx, error);
   }
 
-  static inline Result<int32_t, Error>
-  read_with_type_info(ReadContext &ctx, bool read_ref,
-                      const TypeInfo &type_info) {
-    return read(ctx, read_ref, false);
+  static inline int32_t read_with_type_info(ReadContext &ctx, bool read_ref,
+                                            const TypeInfo &type_info,
+                                            Error *error) {
+    (void)type_info;
+    return read(ctx, read_ref, false, error);
   }
 };
 
@@ -402,87 +401,85 @@ template <> struct Serializer<int32_t> {
 template <> struct Serializer<int64_t> {
   static constexpr TypeId type_id = TypeId::INT64;
 
-  static inline Result<void, Error> write_type_info(WriteContext &ctx) {
+  static inline void write_type_info(WriteContext &ctx, Error *error) {
+    (void)error;
     ctx.write_varuint32(static_cast<uint32_t>(type_id));
-    return Result<void, Error>();
   }
 
-  static inline Result<void, Error> read_type_info(ReadContext &ctx) {
-    Error error;
-    uint32_t actual = ctx.read_varuint32(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
+  static inline void read_type_info(ReadContext &ctx, Error *error) {
+    uint32_t actual = ctx.read_varuint32(error);
+    if (FORY_PREDICT_FALSE(!error->ok())) {
+      return;
     }
     if (actual != static_cast<uint32_t>(type_id)) {
-      return Unexpected(
-          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
+      error->set_error(ErrorCode::TypeMismatch,
+                       "Type mismatch: expected " +
+                           std::to_string(static_cast<uint32_t>(type_id)) +
+                           ", got " + std::to_string(actual));
     }
-    return Result<void, Error>();
   }
 
-  static inline Result<void, Error> write(int64_t value, WriteContext &ctx,
-                                          bool write_ref, bool write_type,
-                                          bool has_generics = false) {
+  static inline void write(int64_t value, WriteContext &ctx, bool write_ref,
+                           bool write_type, bool has_generics, Error *error) {
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
       ctx.write_varuint32(static_cast<uint32_t>(type_id));
     }
-    return write_data_generic(value, ctx, has_generics);
+    write_data_generic(value, ctx, has_generics, error);
   }
 
-  static inline Result<void, Error> write_data(int64_t value,
-                                               WriteContext &ctx) {
+  static inline void write_data(int64_t value, WriteContext &ctx,
+                                Error *error) {
+    (void)error;
     ctx.write_varint64(value);
-    return Result<void, Error>();
   }
 
-  static inline Result<void, Error>
-  write_data_generic(int64_t value, WriteContext &ctx, bool has_generics) {
-    return write_data(value, ctx);
+  static inline void write_data_generic(int64_t value, WriteContext &ctx,
+                                        bool has_generics, Error *error) {
+    (void)has_generics;
+    write_data(value, ctx, error);
   }
 
-  static inline Result<int64_t, Error> read(ReadContext &ctx, bool read_ref,
-                                            bool read_type) {
-    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
-    if (!has_value) {
-      return static_cast<int64_t>(0);
+  static inline int64_t read(ReadContext &ctx, bool read_ref, bool read_type,
+                             Error *error) {
+    bool has_value = consume_ref_flag(ctx, read_ref, error);
+    if (FORY_PREDICT_FALSE(!error->ok())) {
+      return 0;
     }
-    Error error;
+    if (!has_value) {
+      return 0;
+    }
     if (read_type) {
-      uint32_t type_id_read = ctx.read_varuint32(&error);
-      if (FORY_PREDICT_FALSE(!error.ok())) {
-        return Unexpected(std::move(error));
+      uint32_t type_id_read = ctx.read_varuint32(error);
+      if (FORY_PREDICT_FALSE(!error->ok())) {
+        return 0;
       }
       if (type_id_read != static_cast<uint32_t>(type_id)) {
-        return Unexpected(
-            Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
+        error->set_error(ErrorCode::TypeMismatch,
+                         "Type mismatch: expected " +
+                             std::to_string(static_cast<uint32_t>(type_id)) +
+                             ", got " + std::to_string(type_id_read));
+        return 0;
       }
     }
-    int64_t value = ctx.read_varint64(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
-    }
-    return value;
+    return ctx.read_varint64(error);
   }
 
-  static inline Result<int64_t, Error> read_data(ReadContext &ctx) {
-    Error error;
-    int64_t value = ctx.read_varint64(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
-    }
-    return value;
+  static inline int64_t read_data(ReadContext &ctx, Error *error) {
+    return ctx.read_varint64(error);
   }
 
-  static inline Result<int64_t, Error> read_data_generic(ReadContext &ctx,
-                                                         bool has_generics) {
-    return read_data(ctx);
+  static inline int64_t read_data_generic(ReadContext &ctx, bool has_generics,
+                                          Error *error) {
+    (void)has_generics;
+    return read_data(ctx, error);
   }
 
-  static inline Result<int64_t, Error>
-  read_with_type_info(ReadContext &ctx, bool read_ref,
-                      const TypeInfo &type_info) {
-    return read(ctx, read_ref, false);
+  static inline int64_t read_with_type_info(ReadContext &ctx, bool read_ref,
+                                            const TypeInfo &type_info,
+                                            Error *error) {
+    (void)type_info;
+    return read(ctx, read_ref, false, error);
   }
 };
 
@@ -490,86 +487,84 @@ template <> struct Serializer<int64_t> {
 template <> struct Serializer<float> {
   static constexpr TypeId type_id = TypeId::FLOAT32;
 
-  static inline Result<void, Error> write_type_info(WriteContext &ctx) {
+  static inline void write_type_info(WriteContext &ctx, Error *error) {
+    (void)error;
     ctx.write_varuint32(static_cast<uint32_t>(type_id));
-    return Result<void, Error>();
   }
 
-  static inline Result<void, Error> read_type_info(ReadContext &ctx) {
-    Error error;
-    uint32_t actual = ctx.read_varuint32(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
+  static inline void read_type_info(ReadContext &ctx, Error *error) {
+    uint32_t actual = ctx.read_varuint32(error);
+    if (FORY_PREDICT_FALSE(!error->ok())) {
+      return;
     }
     if (actual != static_cast<uint32_t>(type_id)) {
-      return Unexpected(
-          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
+      error->set_error(ErrorCode::TypeMismatch,
+                       "Type mismatch: expected " +
+                           std::to_string(static_cast<uint32_t>(type_id)) +
+                           ", got " + std::to_string(actual));
     }
-    return Result<void, Error>();
   }
 
-  static inline Result<void, Error> write(float value, WriteContext &ctx,
-                                          bool write_ref, bool write_type,
-                                          bool has_generics = false) {
+  static inline void write(float value, WriteContext &ctx, bool write_ref,
+                           bool write_type, bool has_generics, Error *error) {
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
       ctx.write_varuint32(static_cast<uint32_t>(type_id));
     }
-    return write_data_generic(value, ctx, has_generics);
+    write_data_generic(value, ctx, has_generics, error);
   }
 
-  static inline Result<void, Error> write_data(float value, WriteContext &ctx) {
+  static inline void write_data(float value, WriteContext &ctx, Error *error) {
+    (void)error;
     ctx.write_bytes(&value, sizeof(float));
-    return Result<void, Error>();
   }
 
-  static inline Result<void, Error>
-  write_data_generic(float value, WriteContext &ctx, bool has_generics) {
-    return write_data(value, ctx);
+  static inline void write_data_generic(float value, WriteContext &ctx,
+                                        bool has_generics, Error *error) {
+    (void)has_generics;
+    write_data(value, ctx, error);
   }
 
-  static inline Result<float, Error> read(ReadContext &ctx, bool read_ref,
-                                          bool read_type) {
-    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
+  static inline float read(ReadContext &ctx, bool read_ref, bool read_type,
+                           Error *error) {
+    bool has_value = consume_ref_flag(ctx, read_ref, error);
+    if (FORY_PREDICT_FALSE(!error->ok())) {
+      return 0.0f;
+    }
     if (!has_value) {
       return 0.0f;
     }
-    Error error;
     if (read_type) {
-      uint32_t type_id_read = ctx.read_varuint32(&error);
-      if (FORY_PREDICT_FALSE(!error.ok())) {
-        return Unexpected(std::move(error));
+      uint32_t type_id_read = ctx.read_varuint32(error);
+      if (FORY_PREDICT_FALSE(!error->ok())) {
+        return 0.0f;
       }
       if (type_id_read != static_cast<uint32_t>(type_id)) {
-        return Unexpected(
-            Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
+        error->set_error(ErrorCode::TypeMismatch,
+                         "Type mismatch: expected " +
+                             std::to_string(static_cast<uint32_t>(type_id)) +
+                             ", got " + std::to_string(type_id_read));
+        return 0.0f;
       }
     }
-    float value = ctx.read_float(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
-    }
-    return value;
+    return ctx.read_float(error);
   }
 
-  static inline Result<float, Error> read_data(ReadContext &ctx) {
-    Error error;
-    float value = ctx.read_float(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
-    }
-    return value;
+  static inline float read_data(ReadContext &ctx, Error *error) {
+    return ctx.read_float(error);
   }
 
-  static inline Result<float, Error> read_data_generic(ReadContext &ctx,
-                                                       bool has_generics) {
-    return read_data(ctx);
+  static inline float read_data_generic(ReadContext &ctx, bool has_generics,
+                                        Error *error) {
+    (void)has_generics;
+    return read_data(ctx, error);
   }
 
-  static inline Result<float, Error>
-  read_with_type_info(ReadContext &ctx, bool read_ref,
-                      const TypeInfo &type_info) {
-    return read(ctx, read_ref, false);
+  static inline float read_with_type_info(ReadContext &ctx, bool read_ref,
+                                          const TypeInfo &type_info,
+                                          Error *error) {
+    (void)type_info;
+    return read(ctx, read_ref, false, error);
   }
 };
 
@@ -577,87 +572,85 @@ template <> struct Serializer<float> {
 template <> struct Serializer<double> {
   static constexpr TypeId type_id = TypeId::FLOAT64;
 
-  static inline Result<void, Error> write_type_info(WriteContext &ctx) {
+  static inline void write_type_info(WriteContext &ctx, Error *error) {
+    (void)error;
     ctx.write_varuint32(static_cast<uint32_t>(type_id));
-    return Result<void, Error>();
   }
 
-  static inline Result<void, Error> read_type_info(ReadContext &ctx) {
-    Error error;
-    uint32_t actual = ctx.read_varuint32(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
+  static inline void read_type_info(ReadContext &ctx, Error *error) {
+    uint32_t actual = ctx.read_varuint32(error);
+    if (FORY_PREDICT_FALSE(!error->ok())) {
+      return;
     }
     if (actual != static_cast<uint32_t>(type_id)) {
-      return Unexpected(
-          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
+      error->set_error(ErrorCode::TypeMismatch,
+                       "Type mismatch: expected " +
+                           std::to_string(static_cast<uint32_t>(type_id)) +
+                           ", got " + std::to_string(actual));
     }
-    return Result<void, Error>();
   }
 
-  static inline Result<void, Error> write(double value, WriteContext &ctx,
-                                          bool write_ref, bool write_type,
-                                          bool has_generics = false) {
+  static inline void write(double value, WriteContext &ctx, bool write_ref,
+                           bool write_type, bool has_generics, Error *error) {
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
       ctx.write_varuint32(static_cast<uint32_t>(type_id));
     }
-    return write_data_generic(value, ctx, has_generics);
+    write_data_generic(value, ctx, has_generics, error);
   }
 
-  static inline Result<void, Error> write_data(double value,
-                                               WriteContext &ctx) {
+  static inline void write_data(double value, WriteContext &ctx,
+                                Error *error) {
+    (void)error;
     ctx.write_bytes(&value, sizeof(double));
-    return Result<void, Error>();
   }
 
-  static inline Result<void, Error>
-  write_data_generic(double value, WriteContext &ctx, bool has_generics) {
-    return write_data(value, ctx);
+  static inline void write_data_generic(double value, WriteContext &ctx,
+                                        bool has_generics, Error *error) {
+    (void)has_generics;
+    write_data(value, ctx, error);
   }
 
-  static inline Result<double, Error> read(ReadContext &ctx, bool read_ref,
-                                           bool read_type) {
-    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
+  static inline double read(ReadContext &ctx, bool read_ref, bool read_type,
+                            Error *error) {
+    bool has_value = consume_ref_flag(ctx, read_ref, error);
+    if (FORY_PREDICT_FALSE(!error->ok())) {
+      return 0.0;
+    }
     if (!has_value) {
       return 0.0;
     }
-    Error error;
     if (read_type) {
-      uint32_t type_id_read = ctx.read_varuint32(&error);
-      if (FORY_PREDICT_FALSE(!error.ok())) {
-        return Unexpected(std::move(error));
+      uint32_t type_id_read = ctx.read_varuint32(error);
+      if (FORY_PREDICT_FALSE(!error->ok())) {
+        return 0.0;
       }
       if (type_id_read != static_cast<uint32_t>(type_id)) {
-        return Unexpected(
-            Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
+        error->set_error(ErrorCode::TypeMismatch,
+                         "Type mismatch: expected " +
+                             std::to_string(static_cast<uint32_t>(type_id)) +
+                             ", got " + std::to_string(type_id_read));
+        return 0.0;
       }
     }
-    double value = ctx.read_double(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
-    }
-    return value;
+    return ctx.read_double(error);
   }
 
-  static inline Result<double, Error> read_data(ReadContext &ctx) {
-    Error error;
-    double value = ctx.read_double(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
-    }
-    return value;
+  static inline double read_data(ReadContext &ctx, Error *error) {
+    return ctx.read_double(error);
   }
 
-  static inline Result<double, Error> read_data_generic(ReadContext &ctx,
-                                                        bool has_generics) {
-    return read_data(ctx);
+  static inline double read_data_generic(ReadContext &ctx, bool has_generics,
+                                         Error *error) {
+    (void)has_generics;
+    return read_data(ctx, error);
   }
 
-  static inline Result<double, Error>
-  read_with_type_info(ReadContext &ctx, bool read_ref,
-                      const TypeInfo &type_info) {
-    return read(ctx, read_ref, false);
+  static inline double read_with_type_info(ReadContext &ctx, bool read_ref,
+                                           const TypeInfo &type_info,
+                                           Error *error) {
+    (void)type_info;
+    return read(ctx, read_ref, false, error);
   }
 };
 
@@ -669,87 +662,85 @@ template <> struct Serializer<double> {
 template <> struct Serializer<uint8_t> {
   static constexpr TypeId type_id = TypeId::INT8; // Same as int8
 
-  static inline Result<void, Error> write_type_info(WriteContext &ctx) {
+  static inline void write_type_info(WriteContext &ctx, Error *error) {
+    (void)error;
     ctx.write_varuint32(static_cast<uint32_t>(type_id));
-    return Result<void, Error>();
   }
 
-  static inline Result<void, Error> read_type_info(ReadContext &ctx) {
-    Error error;
-    uint32_t actual = ctx.read_varuint32(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
+  static inline void read_type_info(ReadContext &ctx, Error *error) {
+    uint32_t actual = ctx.read_varuint32(error);
+    if (FORY_PREDICT_FALSE(!error->ok())) {
+      return;
     }
     if (actual != static_cast<uint32_t>(type_id)) {
-      return Unexpected(
-          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
+      error->set_error(ErrorCode::TypeMismatch,
+                       "Type mismatch: expected " +
+                           std::to_string(static_cast<uint32_t>(type_id)) +
+                           ", got " + std::to_string(actual));
     }
-    return Result<void, Error>();
   }
 
-  static inline Result<void, Error> write(uint8_t value, WriteContext &ctx,
-                                          bool write_ref, bool write_type,
-                                          bool has_generics = false) {
+  static inline void write(uint8_t value, WriteContext &ctx, bool write_ref,
+                           bool write_type, bool has_generics, Error *error) {
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
       ctx.write_varuint32(static_cast<uint32_t>(type_id));
     }
-    return write_data_generic(value, ctx, has_generics);
+    write_data_generic(value, ctx, has_generics, error);
   }
 
-  static inline Result<void, Error> write_data(uint8_t value,
-                                               WriteContext &ctx) {
+  static inline void write_data(uint8_t value, WriteContext &ctx,
+                                Error *error) {
+    (void)error;
     ctx.write_uint8(value);
-    return Result<void, Error>();
   }
 
-  static inline Result<void, Error>
-  write_data_generic(uint8_t value, WriteContext &ctx, bool has_generics) {
-    return write_data(value, ctx);
+  static inline void write_data_generic(uint8_t value, WriteContext &ctx,
+                                        bool has_generics, Error *error) {
+    (void)has_generics;
+    write_data(value, ctx, error);
   }
 
-  static inline Result<uint8_t, Error> read(ReadContext &ctx, bool read_ref,
-                                            bool read_type) {
-    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
-    if (!has_value) {
-      return static_cast<uint8_t>(0);
+  static inline uint8_t read(ReadContext &ctx, bool read_ref, bool read_type,
+                             Error *error) {
+    bool has_value = consume_ref_flag(ctx, read_ref, error);
+    if (FORY_PREDICT_FALSE(!error->ok())) {
+      return 0;
     }
-    Error error;
+    if (!has_value) {
+      return 0;
+    }
     if (read_type) {
-      uint32_t type_id_read = ctx.read_varuint32(&error);
-      if (FORY_PREDICT_FALSE(!error.ok())) {
-        return Unexpected(std::move(error));
+      uint32_t type_id_read = ctx.read_varuint32(error);
+      if (FORY_PREDICT_FALSE(!error->ok())) {
+        return 0;
       }
       if (type_id_read != static_cast<uint32_t>(type_id)) {
-        return Unexpected(
-            Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
+        error->set_error(ErrorCode::TypeMismatch,
+                         "Type mismatch: expected " +
+                             std::to_string(static_cast<uint32_t>(type_id)) +
+                             ", got " + std::to_string(type_id_read));
+        return 0;
       }
     }
-    uint8_t value = ctx.read_uint8(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
-    }
-    return value;
+    return ctx.read_uint8(error);
   }
 
-  static inline Result<uint8_t, Error> read_data(ReadContext &ctx) {
-    Error error;
-    uint8_t value = ctx.read_uint8(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
-    }
-    return value;
+  static inline uint8_t read_data(ReadContext &ctx, Error *error) {
+    return ctx.read_uint8(error);
   }
 
-  static inline Result<uint8_t, Error> read_data_generic(ReadContext &ctx,
-                                                         bool has_generics) {
-    return read_data(ctx);
+  static inline uint8_t read_data_generic(ReadContext &ctx, bool has_generics,
+                                          Error *error) {
+    (void)has_generics;
+    return read_data(ctx, error);
   }
 
-  static inline Result<uint8_t, Error>
-  read_with_type_info(ReadContext &ctx, bool read_ref,
-                      const TypeInfo &type_info) {
-    return read(ctx, read_ref, false);
+  static inline uint8_t read_with_type_info(ReadContext &ctx, bool read_ref,
+                                            const TypeInfo &type_info,
+                                            Error *error) {
+    (void)type_info;
+    return read(ctx, read_ref, false, error);
   }
 };
 
@@ -757,87 +748,85 @@ template <> struct Serializer<uint8_t> {
 template <> struct Serializer<uint16_t> {
   static constexpr TypeId type_id = TypeId::INT16;
 
-  static inline Result<void, Error> write_type_info(WriteContext &ctx) {
+  static inline void write_type_info(WriteContext &ctx, Error *error) {
+    (void)error;
     ctx.write_varuint32(static_cast<uint32_t>(type_id));
-    return Result<void, Error>();
   }
 
-  static inline Result<void, Error> read_type_info(ReadContext &ctx) {
-    Error error;
-    uint32_t actual = ctx.read_varuint32(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
+  static inline void read_type_info(ReadContext &ctx, Error *error) {
+    uint32_t actual = ctx.read_varuint32(error);
+    if (FORY_PREDICT_FALSE(!error->ok())) {
+      return;
     }
     if (actual != static_cast<uint32_t>(type_id)) {
-      return Unexpected(
-          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
+      error->set_error(ErrorCode::TypeMismatch,
+                       "Type mismatch: expected " +
+                           std::to_string(static_cast<uint32_t>(type_id)) +
+                           ", got " + std::to_string(actual));
     }
-    return Result<void, Error>();
   }
 
-  static inline Result<void, Error> write(uint16_t value, WriteContext &ctx,
-                                          bool write_ref, bool write_type,
-                                          bool has_generics = false) {
+  static inline void write(uint16_t value, WriteContext &ctx, bool write_ref,
+                           bool write_type, bool has_generics, Error *error) {
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
       ctx.write_varuint32(static_cast<uint32_t>(type_id));
     }
-    return write_data_generic(value, ctx, has_generics);
+    write_data_generic(value, ctx, has_generics, error);
   }
 
-  static inline Result<void, Error> write_data(uint16_t value,
-                                               WriteContext &ctx) {
+  static inline void write_data(uint16_t value, WriteContext &ctx,
+                                Error *error) {
+    (void)error;
     ctx.write_bytes(&value, sizeof(uint16_t));
-    return Result<void, Error>();
   }
 
-  static inline Result<void, Error>
-  write_data_generic(uint16_t value, WriteContext &ctx, bool has_generics) {
-    return write_data(value, ctx);
+  static inline void write_data_generic(uint16_t value, WriteContext &ctx,
+                                        bool has_generics, Error *error) {
+    (void)has_generics;
+    write_data(value, ctx, error);
   }
 
-  static inline Result<uint16_t, Error> read(ReadContext &ctx, bool read_ref,
-                                             bool read_type) {
-    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
-    if (!has_value) {
-      return static_cast<uint16_t>(0);
+  static inline uint16_t read(ReadContext &ctx, bool read_ref, bool read_type,
+                              Error *error) {
+    bool has_value = consume_ref_flag(ctx, read_ref, error);
+    if (FORY_PREDICT_FALSE(!error->ok())) {
+      return 0;
     }
-    Error error;
+    if (!has_value) {
+      return 0;
+    }
     if (read_type) {
-      uint32_t type_id_read = ctx.read_varuint32(&error);
-      if (FORY_PREDICT_FALSE(!error.ok())) {
-        return Unexpected(std::move(error));
+      uint32_t type_id_read = ctx.read_varuint32(error);
+      if (FORY_PREDICT_FALSE(!error->ok())) {
+        return 0;
       }
       if (type_id_read != static_cast<uint32_t>(type_id)) {
-        return Unexpected(
-            Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
+        error->set_error(ErrorCode::TypeMismatch,
+                         "Type mismatch: expected " +
+                             std::to_string(static_cast<uint32_t>(type_id)) +
+                             ", got " + std::to_string(type_id_read));
+        return 0;
       }
     }
-    uint16_t value = ctx.read_uint16(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
-    }
-    return value;
+    return ctx.read_uint16(error);
   }
 
-  static inline Result<uint16_t, Error> read_data(ReadContext &ctx) {
-    Error error;
-    uint16_t value = ctx.read_uint16(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
-    }
-    return value;
+  static inline uint16_t read_data(ReadContext &ctx, Error *error) {
+    return ctx.read_uint16(error);
   }
 
-  static inline Result<uint16_t, Error> read_data_generic(ReadContext &ctx,
-                                                          bool has_generics) {
-    return read_data(ctx);
+  static inline uint16_t read_data_generic(ReadContext &ctx, bool has_generics,
+                                           Error *error) {
+    (void)has_generics;
+    return read_data(ctx, error);
   }
 
-  static inline Result<uint16_t, Error>
-  read_with_type_info(ReadContext &ctx, bool read_ref,
-                      const TypeInfo &type_info) {
-    return read(ctx, read_ref, false);
+  static inline uint16_t read_with_type_info(ReadContext &ctx, bool read_ref,
+                                             const TypeInfo &type_info,
+                                             Error *error) {
+    (void)type_info;
+    return read(ctx, read_ref, false, error);
   }
 };
 
@@ -845,87 +834,85 @@ template <> struct Serializer<uint16_t> {
 template <> struct Serializer<uint32_t> {
   static constexpr TypeId type_id = TypeId::INT32;
 
-  static inline Result<void, Error> write_type_info(WriteContext &ctx) {
+  static inline void write_type_info(WriteContext &ctx, Error *error) {
+    (void)error;
     ctx.write_varuint32(static_cast<uint32_t>(type_id));
-    return Result<void, Error>();
   }
 
-  static inline Result<void, Error> read_type_info(ReadContext &ctx) {
-    Error error;
-    uint32_t actual = ctx.read_varuint32(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
+  static inline void read_type_info(ReadContext &ctx, Error *error) {
+    uint32_t actual = ctx.read_varuint32(error);
+    if (FORY_PREDICT_FALSE(!error->ok())) {
+      return;
     }
     if (actual != static_cast<uint32_t>(type_id)) {
-      return Unexpected(
-          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
+      error->set_error(ErrorCode::TypeMismatch,
+                       "Type mismatch: expected " +
+                           std::to_string(static_cast<uint32_t>(type_id)) +
+                           ", got " + std::to_string(actual));
     }
-    return Result<void, Error>();
   }
 
-  static inline Result<void, Error> write(uint32_t value, WriteContext &ctx,
-                                          bool write_ref, bool write_type,
-                                          bool has_generics = false) {
+  static inline void write(uint32_t value, WriteContext &ctx, bool write_ref,
+                           bool write_type, bool has_generics, Error *error) {
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
       ctx.write_varuint32(static_cast<uint32_t>(type_id));
     }
-    return write_data_generic(value, ctx, has_generics);
+    write_data_generic(value, ctx, has_generics, error);
   }
 
-  static inline Result<void, Error> write_data(uint32_t value,
-                                               WriteContext &ctx) {
+  static inline void write_data(uint32_t value, WriteContext &ctx,
+                                Error *error) {
+    (void)error;
     ctx.write_bytes(&value, sizeof(uint32_t));
-    return Result<void, Error>();
   }
 
-  static inline Result<void, Error>
-  write_data_generic(uint32_t value, WriteContext &ctx, bool has_generics) {
-    return write_data(value, ctx);
+  static inline void write_data_generic(uint32_t value, WriteContext &ctx,
+                                        bool has_generics, Error *error) {
+    (void)has_generics;
+    write_data(value, ctx, error);
   }
 
-  static inline Result<uint32_t, Error> read(ReadContext &ctx, bool read_ref,
-                                             bool read_type) {
-    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
-    if (!has_value) {
-      return static_cast<uint32_t>(0);
+  static inline uint32_t read(ReadContext &ctx, bool read_ref, bool read_type,
+                              Error *error) {
+    bool has_value = consume_ref_flag(ctx, read_ref, error);
+    if (FORY_PREDICT_FALSE(!error->ok())) {
+      return 0;
     }
-    Error error;
+    if (!has_value) {
+      return 0;
+    }
     if (read_type) {
-      uint32_t type_id_read = ctx.read_varuint32(&error);
-      if (FORY_PREDICT_FALSE(!error.ok())) {
-        return Unexpected(std::move(error));
+      uint32_t type_id_read = ctx.read_varuint32(error);
+      if (FORY_PREDICT_FALSE(!error->ok())) {
+        return 0;
       }
       if (type_id_read != static_cast<uint32_t>(type_id)) {
-        return Unexpected(
-            Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
+        error->set_error(ErrorCode::TypeMismatch,
+                         "Type mismatch: expected " +
+                             std::to_string(static_cast<uint32_t>(type_id)) +
+                             ", got " + std::to_string(type_id_read));
+        return 0;
       }
     }
-    uint32_t value = ctx.read_uint32(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
-    }
-    return value;
+    return ctx.read_uint32(error);
   }
 
-  static inline Result<uint32_t, Error> read_data(ReadContext &ctx) {
-    Error error;
-    uint32_t value = ctx.read_uint32(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
-    }
-    return value;
+  static inline uint32_t read_data(ReadContext &ctx, Error *error) {
+    return ctx.read_uint32(error);
   }
 
-  static inline Result<uint32_t, Error> read_data_generic(ReadContext &ctx,
-                                                          bool has_generics) {
-    return read_data(ctx);
+  static inline uint32_t read_data_generic(ReadContext &ctx, bool has_generics,
+                                           Error *error) {
+    (void)has_generics;
+    return read_data(ctx, error);
   }
 
-  static inline Result<uint32_t, Error>
-  read_with_type_info(ReadContext &ctx, bool read_ref,
-                      const TypeInfo &type_info) {
-    return read(ctx, read_ref, false);
+  static inline uint32_t read_with_type_info(ReadContext &ctx, bool read_ref,
+                                             const TypeInfo &type_info,
+                                             Error *error) {
+    (void)type_info;
+    return read(ctx, read_ref, false, error);
   }
 };
 
@@ -933,87 +920,85 @@ template <> struct Serializer<uint32_t> {
 template <> struct Serializer<uint64_t> {
   static constexpr TypeId type_id = TypeId::INT64;
 
-  static inline Result<void, Error> write_type_info(WriteContext &ctx) {
+  static inline void write_type_info(WriteContext &ctx, Error *error) {
+    (void)error;
     ctx.write_varuint32(static_cast<uint32_t>(type_id));
-    return Result<void, Error>();
   }
 
-  static inline Result<void, Error> read_type_info(ReadContext &ctx) {
-    Error error;
-    uint32_t actual = ctx.read_varuint32(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
+  static inline void read_type_info(ReadContext &ctx, Error *error) {
+    uint32_t actual = ctx.read_varuint32(error);
+    if (FORY_PREDICT_FALSE(!error->ok())) {
+      return;
     }
     if (actual != static_cast<uint32_t>(type_id)) {
-      return Unexpected(
-          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
+      error->set_error(ErrorCode::TypeMismatch,
+                       "Type mismatch: expected " +
+                           std::to_string(static_cast<uint32_t>(type_id)) +
+                           ", got " + std::to_string(actual));
     }
-    return Result<void, Error>();
   }
 
-  static inline Result<void, Error> write(uint64_t value, WriteContext &ctx,
-                                          bool write_ref, bool write_type,
-                                          bool has_generics = false) {
+  static inline void write(uint64_t value, WriteContext &ctx, bool write_ref,
+                           bool write_type, bool has_generics, Error *error) {
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
       ctx.write_varuint32(static_cast<uint32_t>(type_id));
     }
-    return write_data_generic(value, ctx, has_generics);
+    write_data_generic(value, ctx, has_generics, error);
   }
 
-  static inline Result<void, Error> write_data(uint64_t value,
-                                               WriteContext &ctx) {
+  static inline void write_data(uint64_t value, WriteContext &ctx,
+                                Error *error) {
+    (void)error;
     ctx.write_bytes(&value, sizeof(uint64_t));
-    return Result<void, Error>();
   }
 
-  static inline Result<void, Error>
-  write_data_generic(uint64_t value, WriteContext &ctx, bool has_generics) {
-    return write_data(value, ctx);
+  static inline void write_data_generic(uint64_t value, WriteContext &ctx,
+                                        bool has_generics, Error *error) {
+    (void)has_generics;
+    write_data(value, ctx, error);
   }
 
-  static inline Result<uint64_t, Error> read(ReadContext &ctx, bool read_ref,
-                                             bool read_type) {
-    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
-    if (!has_value) {
-      return static_cast<uint64_t>(0);
+  static inline uint64_t read(ReadContext &ctx, bool read_ref, bool read_type,
+                              Error *error) {
+    bool has_value = consume_ref_flag(ctx, read_ref, error);
+    if (FORY_PREDICT_FALSE(!error->ok())) {
+      return 0;
     }
-    Error error;
+    if (!has_value) {
+      return 0;
+    }
     if (read_type) {
-      uint32_t type_id_read = ctx.read_varuint32(&error);
-      if (FORY_PREDICT_FALSE(!error.ok())) {
-        return Unexpected(std::move(error));
+      uint32_t type_id_read = ctx.read_varuint32(error);
+      if (FORY_PREDICT_FALSE(!error->ok())) {
+        return 0;
       }
       if (type_id_read != static_cast<uint32_t>(type_id)) {
-        return Unexpected(
-            Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
+        error->set_error(ErrorCode::TypeMismatch,
+                         "Type mismatch: expected " +
+                             std::to_string(static_cast<uint32_t>(type_id)) +
+                             ", got " + std::to_string(type_id_read));
+        return 0;
       }
     }
-    uint64_t value = ctx.read_uint64(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
-    }
-    return value;
+    return ctx.read_uint64(error);
   }
 
-  static inline Result<uint64_t, Error> read_data(ReadContext &ctx) {
-    Error error;
-    uint64_t value = ctx.read_uint64(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
-    }
-    return value;
+  static inline uint64_t read_data(ReadContext &ctx, Error *error) {
+    return ctx.read_uint64(error);
   }
 
-  static inline Result<uint64_t, Error> read_data_generic(ReadContext &ctx,
-                                                          bool has_generics) {
-    return read_data(ctx);
+  static inline uint64_t read_data_generic(ReadContext &ctx, bool has_generics,
+                                           Error *error) {
+    (void)has_generics;
+    return read_data(ctx, error);
   }
 
-  static inline Result<uint64_t, Error>
-  read_with_type_info(ReadContext &ctx, bool read_ref,
-                      const TypeInfo &type_info) {
-    return read(ctx, read_ref, false);
+  static inline uint64_t read_with_type_info(ReadContext &ctx, bool read_ref,
+                                             const TypeInfo &type_info,
+                                             Error *error) {
+    (void)type_info;
+    return read(ctx, read_ref, false, error);
   }
 };
 
@@ -1032,37 +1017,37 @@ template <> struct Serializer<std::string> {
     UTF8 = 2,   // UTF-8
   };
 
-  static inline Result<void, Error> write_type_info(WriteContext &ctx) {
+  static inline void write_type_info(WriteContext &ctx, Error *error) {
+    (void)error;
     ctx.write_varuint32(static_cast<uint32_t>(type_id));
-    return Result<void, Error>();
   }
 
-  static inline Result<void, Error> read_type_info(ReadContext &ctx) {
-    Error error;
-    uint32_t actual = ctx.read_varuint32(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
+  static inline void read_type_info(ReadContext &ctx, Error *error) {
+    uint32_t actual = ctx.read_varuint32(error);
+    if (FORY_PREDICT_FALSE(!error->ok())) {
+      return;
     }
     if (actual != static_cast<uint32_t>(type_id)) {
-      return Unexpected(
-          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
+      error->set_error(ErrorCode::TypeMismatch,
+                       "Type mismatch: expected " +
+                           std::to_string(static_cast<uint32_t>(type_id)) +
+                           ", got " + std::to_string(actual));
     }
-    return Result<void, Error>();
   }
 
-  static inline Result<void, Error> write(const std::string &value,
-                                          WriteContext &ctx, bool write_ref,
-                                          bool write_type,
-                                          bool has_generics = false) {
+  static inline void write(const std::string &value, WriteContext &ctx,
+                           bool write_ref, bool write_type, bool has_generics,
+                           Error *error) {
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
       ctx.write_varuint32(static_cast<uint32_t>(type_id));
     }
-    return write_data_generic(value, ctx, has_generics);
+    write_data_generic(value, ctx, has_generics, error);
   }
 
-  static inline Result<void, Error> write_data(const std::string &value,
-                                               WriteContext &ctx) {
+  static inline void write_data(const std::string &value, WriteContext &ctx,
+                                Error *error) {
+    (void)error;
     // Always use UTF-8 encoding for cross-language compatibility.
     // Per xlang spec: write size shifted left by 2 bits, with encoding
     // (UTF8) in the lower 2 bits. Use varuint36small encoding.
@@ -1075,41 +1060,45 @@ template <> struct Serializer<std::string> {
     if (!value.empty()) {
       ctx.write_bytes(value.data(), value.size());
     }
-    return Result<void, Error>();
   }
 
-  static inline Result<void, Error> write_data_generic(const std::string &value,
-                                                       WriteContext &ctx,
-                                                       bool has_generics) {
-    return write_data(value, ctx);
+  static inline void write_data_generic(const std::string &value,
+                                        WriteContext &ctx, bool has_generics,
+                                        Error *error) {
+    (void)has_generics;
+    write_data(value, ctx, error);
   }
 
-  static inline Result<std::string, Error> read(ReadContext &ctx, bool read_ref,
-                                                bool read_type) {
-    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
+  static inline std::string read(ReadContext &ctx, bool read_ref,
+                                 bool read_type, Error *error) {
+    bool has_value = consume_ref_flag(ctx, read_ref, error);
+    if (FORY_PREDICT_FALSE(!error->ok())) {
+      return std::string();
+    }
     if (!has_value) {
       return std::string();
     }
-    Error error;
     if (read_type) {
-      uint32_t type_id_read = ctx.read_varuint32(&error);
-      if (FORY_PREDICT_FALSE(!error.ok())) {
-        return Unexpected(std::move(error));
+      uint32_t type_id_read = ctx.read_varuint32(error);
+      if (FORY_PREDICT_FALSE(!error->ok())) {
+        return std::string();
       }
       if (type_id_read != static_cast<uint32_t>(type_id)) {
-        return Unexpected(
-            Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
+        error->set_error(ErrorCode::TypeMismatch,
+                         "Type mismatch: expected " +
+                             std::to_string(static_cast<uint32_t>(type_id)) +
+                             ", got " + std::to_string(type_id_read));
+        return std::string();
       }
     }
-    return read_data(ctx);
+    return read_data(ctx, error);
   }
 
-  static inline Result<std::string, Error> read_data(ReadContext &ctx) {
+  static inline std::string read_data(ReadContext &ctx, Error *error) {
     // Read size with encoding using varuint36small
-    Error error;
-    uint64_t size_with_encoding = ctx.read_varuint36small(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
+    uint64_t size_with_encoding = ctx.read_varuint36small(error);
+    if (FORY_PREDICT_FALSE(!error->ok())) {
+      return std::string();
     }
 
     // Extract size and encoding from lower 2 bits
@@ -1125,49 +1114,53 @@ template <> struct Serializer<std::string> {
     switch (encoding) {
     case StringEncoding::LATIN1: {
       std::vector<uint8_t> bytes(length);
-      ctx.read_bytes(bytes.data(), length, &error);
-      if (FORY_PREDICT_FALSE(!error.ok())) {
-        return Unexpected(std::move(error));
+      ctx.read_bytes(bytes.data(), length, error);
+      if (FORY_PREDICT_FALSE(!error->ok())) {
+        return std::string();
       }
       return latin1ToUtf8(bytes.data(), length);
     }
     case StringEncoding::UTF16: {
       if (length % 2 != 0) {
-        return Unexpected(Error::invalid_data("UTF-16 length must be even"));
+        error->set_error(ErrorCode::InvalidData, "UTF-16 length must be even");
+        return std::string();
       }
       std::vector<uint16_t> utf16_chars(length / 2);
       ctx.read_bytes(reinterpret_cast<uint8_t *>(utf16_chars.data()), length,
-                     &error);
-      if (FORY_PREDICT_FALSE(!error.ok())) {
-        return Unexpected(std::move(error));
+                     error);
+      if (FORY_PREDICT_FALSE(!error->ok())) {
+        return std::string();
       }
       return utf16ToUtf8(utf16_chars.data(), utf16_chars.size());
     }
     case StringEncoding::UTF8: {
       // UTF-8: read bytes directly
       std::string result(length, '\0');
-      ctx.read_bytes(&result[0], length, &error);
-      if (FORY_PREDICT_FALSE(!error.ok())) {
-        return Unexpected(std::move(error));
+      ctx.read_bytes(&result[0], length, error);
+      if (FORY_PREDICT_FALSE(!error->ok())) {
+        return std::string();
       }
       return result;
     }
     default:
-      return Unexpected(
-          Error::encoding_error("Unknown string encoding: " +
-                                std::to_string(static_cast<int>(encoding))));
+      error->set_error(ErrorCode::EncodingError,
+                       "Unknown string encoding: " +
+                           std::to_string(static_cast<int>(encoding)));
+      return std::string();
     }
   }
 
-  static inline Result<std::string, Error>
-  read_data_generic(ReadContext &ctx, bool has_generics) {
-    return read_data(ctx);
+  static inline std::string read_data_generic(ReadContext &ctx,
+                                              bool has_generics, Error *error) {
+    (void)has_generics;
+    return read_data(ctx, error);
   }
 
-  static inline Result<std::string, Error>
-  read_with_type_info(ReadContext &ctx, bool read_ref,
-                      const TypeInfo &type_info) {
-    return read(ctx, read_ref, false);
+  static inline std::string read_with_type_info(ReadContext &ctx, bool read_ref,
+                                                const TypeInfo &type_info,
+                                                Error *error) {
+    (void)type_info;
+    return read(ctx, read_ref, false, error);
   }
 };
 

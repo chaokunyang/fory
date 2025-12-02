@@ -979,16 +979,25 @@ Result<void, Error>
 TypeResolver::harness_write_adapter(const void *value, WriteContext &ctx,
                                     bool write_ref_info, bool write_type_info,
                                     bool has_generics) {
-  (void)has_generics;
   const T *ptr = static_cast<const T *>(value);
-  return Serializer<T>::write(*ptr, ctx, write_ref_info, write_type_info);
+  Error error;
+  Serializer<T>::write(*ptr, ctx, write_ref_info, write_type_info, has_generics,
+                       &error);
+  if (FORY_PREDICT_FALSE(!error.ok())) {
+    return Unexpected(std::move(error));
+  }
+  return Result<void, Error>();
 }
 
 template <typename T>
 Result<void *, Error> TypeResolver::harness_read_adapter(ReadContext &ctx,
                                                          bool read_ref_info,
                                                          bool read_type_info) {
-  FORY_TRY(value, Serializer<T>::read(ctx, read_ref_info, read_type_info));
+  Error error;
+  T value = Serializer<T>::read(ctx, read_ref_info, read_type_info, &error);
+  if (FORY_PREDICT_FALSE(!error.ok())) {
+    return Unexpected(std::move(error));
+  }
   T *ptr = new T(std::move(value));
   return ptr;
 }
@@ -998,13 +1007,22 @@ Result<void, Error>
 TypeResolver::harness_write_data_adapter(const void *value, WriteContext &ctx,
                                          bool has_generics) {
   const T *ptr = static_cast<const T *>(value);
-  return Serializer<T>::write_data_generic(*ptr, ctx, has_generics);
+  Error error;
+  Serializer<T>::write_data_generic(*ptr, ctx, has_generics, &error);
+  if (FORY_PREDICT_FALSE(!error.ok())) {
+    return Unexpected(std::move(error));
+  }
+  return Result<void, Error>();
 }
 
 template <typename T>
 Result<void *, Error>
 TypeResolver::harness_read_data_adapter(ReadContext &ctx) {
-  FORY_TRY(value, Serializer<T>::read_data(ctx));
+  Error error;
+  T value = Serializer<T>::read_data(ctx, &error);
+  if (FORY_PREDICT_FALSE(!error.ok())) {
+    return Unexpected(std::move(error));
+  }
   T *ptr = new T(std::move(value));
   return ptr;
 }

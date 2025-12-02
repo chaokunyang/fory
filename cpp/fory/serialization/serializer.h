@@ -37,30 +37,12 @@ namespace serialization {
 // Error Handling Macros for Serialization
 // ============================================================================
 
-/// Return early if the error pointer indicates an error.
-/// Use this macro when reading struct fields with the Error* pattern.
-/// The macro checks the error state and returns an Unexpected with the error.
-///
-/// Example usage:
-/// ```cpp
-/// Error error;
-/// int32_t value = buffer.ReadVarInt32(&error);
-/// FORY_RETURN_IF_SERDE_ERROR(&error);
-/// // Use value...
-/// ```
-#define FORY_RETURN_IF_SERDE_ERROR(error_ptr)                                  \
+/// Check error and return void if error occurred.
+/// Use in write methods that return void.
+#define FORY_CHECK_SERDE_ERROR_VOID(error_ptr)                                 \
   do {                                                                         \
     if (FORY_PREDICT_FALSE(!(error_ptr)->ok())) {                              \
-      return ::fory::Unexpected(std::move(*(error_ptr)));                      \
-    }                                                                          \
-  } while (0)
-
-/// Return early if the error indicates an error, with a custom return type.
-/// Use this when the return type is not Result<T, Error>.
-#define FORY_RETURN_IF_SERDE_ERROR_WITH(error_ptr, return_type)                \
-  do {                                                                         \
-    if (FORY_PREDICT_FALSE(!(error_ptr)->ok())) {                              \
-      return return_type(::fory::Unexpected(std::move(*(error_ptr))));         \
+      return;                                                                  \
     }                                                                          \
   } while (0)
 
@@ -178,15 +160,16 @@ FORY_ALWAYS_INLINE void write_not_null_ref_flag(WriteContext &ctx,
 ///
 /// @param ctx Read context
 /// @param read_ref Whether the caller requested reference metadata
+/// @param error Error pointer for error propagation
 /// @return True if the upcoming value payload is present, false if it was null
-inline Result<bool, Error> consume_ref_flag(ReadContext &ctx, bool read_ref) {
+///         or an error occurred (check error->ok())
+inline bool consume_ref_flag(ReadContext &ctx, bool read_ref, Error *error) {
   if (!read_ref) {
     return true;
   }
-  Error error;
-  int8_t flag = ctx.read_int8(&error);
-  if (FORY_PREDICT_FALSE(!error.ok())) {
-    return Unexpected(std::move(error));
+  int8_t flag = ctx.read_int8(error);
+  if (FORY_PREDICT_FALSE(!error->ok())) {
+    return false;
   }
   if (flag == NULL_FLAG) {
     return false;
@@ -195,17 +178,20 @@ inline Result<bool, Error> consume_ref_flag(ReadContext &ctx, bool read_ref) {
     return true;
   }
   if (flag == REF_FLAG) {
-    uint32_t ref_id = ctx.read_varuint32(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
+    uint32_t ref_id = ctx.read_varuint32(error);
+    if (FORY_PREDICT_FALSE(!error->ok())) {
+      return false;
     }
-    return Unexpected(Error::invalid_ref(
+    error->set_error(
+        ErrorCode::InvalidRef,
         "Unexpected reference flag for non-referencable value, ref id: " +
-        std::to_string(ref_id)));
+            std::to_string(ref_id));
+    return false;
   }
 
-  return Unexpected(Error::invalid_data(
-      "Unknown reference flag: " + std::to_string(static_cast<int>(flag))));
+  error->set_error(ErrorCode::InvalidData, "Unknown reference flag: " +
+                                               std::to_string(static_cast<int>(flag)));
+  return false;
 }
 
 // ============================================================================

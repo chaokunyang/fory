@@ -45,6 +45,7 @@
 #include "absl/container/flat_hash_map.h"
 
 #include "fory/meta/field_info.h"
+#include "fory/util/u64_ptr_map.h"
 #include "fory/meta/type_traits.h"
 #include "fory/serialization/config.h"
 #include "fory/serialization/serializer.h"
@@ -579,10 +580,11 @@ private:
 
   // Lookup maps - store raw pointers (borrowed from primary storage)
   // Using compile-time type ID (uint64_t) - fast for template lookups
-  absl::flat_hash_map<uint64_t, TypeInfo *> type_info_by_ctid_;
+  // U64Map is optimized for uint64_t keys with minimal overhead
+  util::U64Map<TypeInfo *> type_info_by_ctid_{256};
   absl::flat_hash_map<uint32_t, TypeInfo *> type_info_by_id_;
   absl::flat_hash_map<std::string, TypeInfo *> type_info_by_name_;
-  absl::flat_hash_map<uint64_t, TypeInfo *> partial_type_infos_;
+  util::U64Map<TypeInfo *> partial_type_infos_{256};
 
   // For runtime polymorphic lookups (smart pointers) - uses std::type_index
   absl::flat_hash_map<std::type_index, TypeInfo *> type_info_by_runtime_type_;
@@ -619,46 +621,46 @@ inline void TypeResolver::check_registration_thread() {
 
 template <typename T> const TypeMeta &TypeResolver::struct_meta() {
   constexpr uint64_t ctid = type_index<T>();
-  auto it = type_info_by_ctid_.find(ctid);
-  FORY_CHECK(it != type_info_by_ctid_.end()) << "Type not registered";
-  FORY_CHECK(it->second && it->second->type_meta)
+  auto *entry = type_info_by_ctid_.find(ctid);
+  FORY_CHECK(entry != nullptr) << "Type not registered";
+  FORY_CHECK(entry->value && entry->value->type_meta)
       << "Type metadata not initialized for requested struct";
-  return *it->second->type_meta;
+  return *entry->value->type_meta;
 }
 
 template <typename T> TypeMeta TypeResolver::clone_struct_meta() {
   constexpr uint64_t ctid = type_index<T>();
-  auto it = type_info_by_ctid_.find(ctid);
-  FORY_CHECK(it != type_info_by_ctid_.end()) << "Type not registered";
-  FORY_CHECK(it->second && it->second->type_meta)
+  auto *entry = type_info_by_ctid_.find(ctid);
+  FORY_CHECK(entry != nullptr) << "Type not registered";
+  FORY_CHECK(entry->value && entry->value->type_meta)
       << "Type metadata not initialized for requested struct";
-  return *it->second->type_meta;
+  return *entry->value->type_meta;
 }
 
 template <typename T>
 const std::vector<size_t> &TypeResolver::sorted_indices() {
   constexpr uint64_t ctid = type_index<T>();
-  auto it = type_info_by_ctid_.find(ctid);
-  FORY_CHECK(it != type_info_by_ctid_.end()) << "Type not registered";
-  return it->second->sorted_indices;
+  auto *entry = type_info_by_ctid_.find(ctid);
+  FORY_CHECK(entry != nullptr) << "Type not registered";
+  return entry->value->sorted_indices;
 }
 
 template <typename T>
 const absl::flat_hash_map<std::string, size_t> &
 TypeResolver::field_name_to_index() {
   constexpr uint64_t ctid = type_index<T>();
-  auto it = type_info_by_ctid_.find(ctid);
-  FORY_CHECK(it != type_info_by_ctid_.end()) << "Type not registered";
-  return it->second->name_to_index;
+  auto *entry = type_info_by_ctid_.find(ctid);
+  FORY_CHECK(entry != nullptr) << "Type not registered";
+  return entry->value->name_to_index;
 }
 
 template <typename T>
 Result<const TypeInfo *, Error> TypeResolver::get_type_info() const {
   // Use compile-time type ID (uint64_t key) for fast lookup
   constexpr uint64_t ctid = type_index<T>();
-  auto it = type_info_by_ctid_.find(ctid);
-  if (FORY_PREDICT_TRUE(it != type_info_by_ctid_.end())) {
-    return it->second;
+  auto *entry = type_info_by_ctid_.find(ctid);
+  if (FORY_PREDICT_TRUE(entry != nullptr)) {
+    return entry->value;
   }
   return Unexpected(Error::type_error("Type not registered"));
 }

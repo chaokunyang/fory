@@ -81,3 +81,13 @@ cc_test(
         "@googletest//:gtest",
     ],
 )
+
+cc_test(
+    name = "u64_ptr_map_test",
+    srcs = ["u64_ptr_map_test.cc"],
+    deps = [
+        ":fory_util",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
+    ],
+)

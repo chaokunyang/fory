@@ -144,8 +144,9 @@ Such information can be provided in other languages too:
 
 ### Type ID
 
-All internal data types are expressed using an ID in range `0~64`. Users can use `65~4096` for representing their
-custom types. User type IDs are encoded as `(user_type_id << 8) | internal_type_id`.
+All internal data types are expressed using an ID in range `0~64`. Users can use IDs in range `0~8192` for registering their
+custom types (struct/ext/enum). User type IDs are in a separate namespace and combined with internal type IDs via bit shifting:
+`(user_type_id << 8) | internal_type_id`.
 
 #### Internal Type ID Table
 
@@ -193,18 +194,26 @@ custom types. User type IDs are encoded as `(user_type_id << 8) | internal_type_
 
 #### Type ID Encoding for User Types
 
-When registering user types, the type ID is encoded as:
+When registering user types (struct/ext/enum), the full type ID combines user ID and internal type ID:
 
 ```
 Full Type ID = (user_type_id << 8) | internal_type_id
 ```
 
-For example, if a struct is registered with user ID `1`:
+**Examples:**
 
-- Schema consistent mode: `(1 << 8) | 15` = `271` (STRUCT)
-- Schema evolution mode: `(1 << 8) | 16` = `272` (COMPATIBLE_STRUCT)
+| User ID | Type              | Internal ID | Full Type ID     | Decimal |
+| ------- | ----------------- | ----------- | ---------------- | ------- |
+| 0       | STRUCT            | 15          | `(0 << 8) \| 15` | 15      |
+| 0       | ENUM              | 13          | `(0 << 8) \| 13` | 13      |
+| 1       | STRUCT            | 15          | `(1 << 8) \| 15` | 271     |
+| 1       | COMPATIBLE_STRUCT | 16          | `(1 << 8) \| 16` | 272     |
+| 2       | NAMED_STRUCT      | 17          | `(2 << 8) \| 17` | 529     |
 
-When reading type IDs, extract the internal type using: `internal_type_id = full_type_id & 0xFF`
+When reading type IDs:
+
+- Extract internal type: `internal_type_id = full_type_id & 0xFF`
+- Extract user type ID: `user_type_id = full_type_id >> 8`
 
 ### Type mapping
 
@@ -248,7 +257,7 @@ Byte 4-7: Meta start offset (only present when meta share mode is enabled)
 - **magic number**: `0x62d4` (2 bytes, little endian) - used to identify fory xlang serialization protocol.
 - **null flag** (bit 0): 1 when object is null, 0 otherwise. If an object is null, only this flag and endian flag are set.
 - **endian flag** (bit 1): 1 when data is encoded by little endian, 0 for big endian. Modern implementations always use little endian.
-- **xlang flag** (bit 2): 1 when serialization uses xlang format, 0 when serialization uses Fory java-only format.
+- **xlang flag** (bit 2): 1 when serialization uses Fory xlang format, 0 when serialization uses Fory language-native format.
 - **oob flag** (bit 3): 1 when out-of-band serialization is enabled (BufferCallback is not null), 0 otherwise.
 - **language**: 1 byte indicating the source language. This allows deserializers to optimize for specific language characteristics.
 
@@ -264,12 +273,10 @@ Byte 4-7: Meta start offset (only present when meta share mode is enabled)
 | JAVASCRIPT | 5   |
 | RUST       | 6   |
 | DART       | 7   |
-| SCALA      | 8   |
-| KOTLIN     | 9   |
 
 ### Meta Start Offset
 
-If meta share mode is enabled, an uncompressed unsigned int32 (4 bytes, little endian) is appended to indicate the start offset of metadata. During serialization, this is initially written as a placeholder (e.g., `-1` or `0`), then updated after all objects are serialized and metadata is collected.
+If compatible mode is enabled, an uncompressed unsigned int32 (4 bytes, little endian) is appended to indicate the start offset of metadata. During serialization, this is initially written as a placeholder (e.g., `-1` or `0`), then updated after all objects are serialized and metadata is collected.
 
 ## Reference Meta
 
@@ -339,32 +346,51 @@ function read_ref_or_null(buffer):
 ### When Reference Tracking is Disabled
 
 When reference tracking is disabled globally or for specific types, only the `NULL` and `NOT_NULL VALUE` flags
-will be used for reference meta. This reduces overhead for types that are known not to have circular references.
+will be used for reference meta. This reduces overhead for types that are known not to have references.
 
 ### Language-Specific Considerations
 
-**Languages with nullable types by default (Java, Python, JavaScript):**
+**Languages with nullable and reference types by default (Java, Python, JavaScript):**
 
-- All object types can be null
-- Reference tracking is fully supported
+In xlang mode, for cross-language compatibility:
+
+- All fields are treated as **not-null** by default
+- Reference tracking is **disabled** by default
+- Users can explicitly mark fields as nullable or enable reference tracking via annotations
+- `Optional` types (e.g., `java.util.Optional`, `typing.Optional`) are treated as nullable
+
+**Annotation examples:**
+
+```java
+// Java: use @ForyField annotation
+public class MyClass {
+    @ForyField(nullable = true, ref = true)
+    private Object refField;
+
+    @ForyField(nullable = false)
+    private String requiredField;
+}
+```
+
+```python
+# Python: use typing with fory field descriptors
+from pyfory import Fory, ForyField
+
+class MyClass:
+    ref_field: ForyField(SomeType, nullable=True, ref=True)
+    required_field: ForyField(str, nullable=False)
+```
 
 **Languages with non-nullable types by default:**
 
-| Language | Null Representation       | Reference Tracking Support       |
-| -------- | ------------------------- | -------------------------------- |
-| Rust     | `Option::None`            | Via `Rc<T>`, `Arc<T>`, `Weak<T>` |
-| C++      | `std::nullopt`, `nullptr` | Via `std::shared_ptr<T>`         |
-| Go       | `nil` interface/pointer   | Via pointer types                |
+| Language | Null Representation       | Reference Tracking Support              |
+| -------- | ------------------------- | --------------------------------------- |
+| Rust     | `Option::None`            | Via `Rc<T>`, `Arc<T>`, `Weak<T>`        |
+| C++      | `std::nullopt`, `nullptr` | Via `std::shared_ptr<T>`, `weak_ptr<T>` |
+| Go       | `nil` interface/pointer   | Via pointer/interface types             |
 
 **Important:** For languages like Rust that don't have implicit reference semantics, reference tracking must use
-explicit smart pointers (`Rc`, `Arc`) and may need to be disabled when interoperating with languages that expect
-direct object references.
-
-If one wants to deserialize data in languages like Java/Python/JavaScript from a language with non-nullable
-defaults, they should either:
-
-1. Mark the type with all fields as not-null by default, or
-2. Use schema-evolution mode to carry the not-null fields info in the data
+explicit smart pointers (`Rc`, `Arc`).
 
 ## Type Meta
 
@@ -1032,17 +1058,21 @@ function read_string():
 
 #### Encoding Selection by Language
 
+**Writing:**
+
 | Language     | Encoding Strategy                                        |
 | ------------ | -------------------------------------------------------- |
 | Java (JDK8)  | Detect at runtime: LATIN1 if all chars < 256, else UTF16 |
 | Java (JDK9+) | Use String's internal coder: LATIN1 or UTF16             |
-| Python       | UTF8 (cross-language default)                            |
-| C++          | UTF8 (cross-language default)                            |
-| Rust         | UTF8 (cross-language default)                            |
-| Go           | UTF8 (cross-language default)                            |
-| JavaScript   | UTF8 (cross-language default)                            |
+| Python       | Can write LATIN1, UTF16, or UTF8 based on string content |
+| C++          | UTF8 (`std::string`) or UTF16 (`std::u16string`)         |
+| Rust         | UTF8 (`String`)                                          |
+| Go           | UTF8 (`string`)                                          |
+| JavaScript   | UTF8                                                     |
 
-**Cross-language recommendation:** Use UTF-8 encoding for maximum compatibility across all languages.
+**Reading:** All languages support decoding all three encodings (LATIN1, UTF16, UTF8).
+
+**Recommendation:** Select encoding based on maximum performance - use the encoding that matches the language's native string representation to avoid conversion overhead.
 
 #### Empty String
 
@@ -1081,38 +1111,37 @@ Format:
 The elements header is a single byte that encodes metadata about the collection elements to optimize serialization:
 
 ```
-| bit 7-4 (reserved) | bit 3 | bit 2 | bit 1 | bit 0 |
-+--------------------+-------+-------+-------+-------+
-|      reserved      | same  | decl  | null  | ref   |
+| bit 7-4 (reserved) |    bit 3    |      bit 2       |   bit 1  |   bit 0   |
++--------------------+-------------+------------------+----------+-----------+
+|      reserved      | is_same_type| is_decl_elem_type| has_null | track_ref |
 ```
 
-| Bit | Name          | Value | Meaning when SET (1)                            | Meaning when UNSET (0)                  |
-| --- | ------------- | ----- | ----------------------------------------------- | --------------------------------------- |
-| 0   | TRACK_REF     | 0x01  | Track references for elements                   | Don't track element references          |
-| 1   | HAS_NULL      | 0x02  | Collection may contain null elements            | No null elements (skip null checks)     |
-| 2   | NOT_DECL_TYPE | 0x04  | Element types differ from declared generic type | All elements are the declared type      |
-| 3   | NOT_SAME_TYPE | 0x08  | Elements have different runtime types           | All elements have the same runtime type |
+| Bit | Name              | Value | Meaning when SET (1)                    | Meaning when UNSET (0)                  |
+| --- | ----------------- | ----- | --------------------------------------- | --------------------------------------- |
+| 0   | track_ref         | 0x01  | Track references for elements           | Don't track element references          |
+| 1   | has_null          | 0x02  | Collection may contain null elements    | No null elements (skip null checks)     |
+| 2   | is_decl_elem_type | 0x04  | Elements are the declared generic type  | Element types differ from declared type |
+| 3   | is_same_type      | 0x08  | All elements have the same runtime type | Elements have different runtime types   |
 
 **Common header values:**
 
-| Header | Hex | Meaning                                                         |
-| ------ | --- | --------------------------------------------------------------- |
-| 0x00   | 0   | Homogeneous, non-null, declared type, no ref tracking (optimal) |
-| 0x01   | 1   | Same as above but with reference tracking                       |
-| 0x02   | 2   | May have nulls, same type, declared type, no ref tracking       |
-| 0x04   | 4   | Not declared type (type info follows), same runtime type        |
-| 0x08   | 8   | Different runtime types (type written per element)              |
-| 0x0C   | 12  | Different types and not declared type                           |
+| Header | Hex | Meaning                                                        |
+| ------ | --- | -------------------------------------------------------------- |
+| 0x0C   | 12  | Declared type + same type, non-null, no ref tracking (optimal) |
+| 0x0D   | 13  | Declared type + same type, non-null, with ref tracking         |
+| 0x0E   | 14  | Declared type + same type, may have nulls, no ref tracking     |
+| 0x08   | 8   | Same type but not declared type (type info written once)       |
+| 0x00   | 0   | Different types, non-null, no ref tracking (type per element)  |
 
 #### Type Info After Header
 
-If bit 2 (NOT_DECL_TYPE) is set, the element type info is written once after the header:
+When `is_decl_elem_type` (bit 2) is NOT set, the element type info is written once after the header if `is_same_type` (bit 3) is set:
 
 ```
-| header (0x04) | type_id (varuint32) | elements... |
+| header (0x08) | type_id (varuint32) | elements... |
 ```
 
-If bit 3 (NOT_SAME_TYPE) is set, each element includes its own type info.
+When both `is_decl_elem_type` and `is_same_type` are NOT set, type info is written per element.
 
 #### Element Serialization Based on Header
 
@@ -1208,28 +1237,28 @@ Each chunk contains up to 255 key-value pairs with the same metadata characteris
 The KV header is a single byte encoding metadata for both keys and values:
 
 ```
-| bit 7-6 (reserved) | bit 5 | bit 4 | bit 3 | bit 2 | bit 1 | bit 0 |
-+--------------------+-------+-------+-------+-------+-------+-------+
-|      reserved      | v_typ | v_nul | v_ref | k_typ | k_nul | k_ref |
+|  bit 7-6   |     bit 5     |     bit 4    |     bit 3     |     bit 2     |     bit 1    |     bit 0     |
++------------+---------------+--------------+---------------+---------------+--------------+---------------+
+|  reserved  | val_decl_type | val_has_null | val_track_ref | key_decl_type | key_has_null | key_track_ref |
 ```
 
-| Bit | Name          | Value | Meaning when SET (1)                        |
-| --- | ------------- | ----- | ------------------------------------------- |
-| 0   | KEY_TRACK_REF | 0x01  | Track references for keys                   |
-| 1   | KEY_HAS_NULL  | 0x02  | Keys may be null (rare, usually invalid)    |
-| 2   | KEY_NOT_DECL  | 0x04  | Key type differs from declared generic type |
-| 3   | VAL_TRACK_REF | 0x08  | Track references for values                 |
-| 4   | VAL_HAS_NULL  | 0x10  | Values may be null                          |
-| 5   | VAL_NOT_DECL  | 0x20  | Value type differs from declared type       |
+| Bit | Name          | Value | Meaning when SET (1)                     |
+| --- | ------------- | ----- | ---------------------------------------- |
+| 0   | key_track_ref | 0x01  | Track references for keys                |
+| 1   | key_has_null  | 0x02  | Keys may be null (rare, usually invalid) |
+| 2   | key_decl_type | 0x04  | Key is the declared generic type         |
+| 3   | val_track_ref | 0x08  | Track references for values              |
+| 4   | val_has_null  | 0x10  | Values may be null                       |
+| 5   | val_decl_type | 0x20  | Value is the declared generic type       |
 
 **Common KV header values:**
 
-| Header | Hex | Meaning                                               |
-| ------ | --- | ----------------------------------------------------- |
-| 0x00   | 0   | Homogeneous keys and values, non-null, declared types |
-| 0x08   | 8   | Values track references                               |
-| 0x10   | 16  | Values may be null                                    |
-| 0x18   | 24  | Values track refs and may be null                     |
+| Header | Hex | Meaning                                                             |
+| ------ | --- | ------------------------------------------------------------------- |
+| 0x24   | 36  | Key + value are declared types, non-null, no ref tracking (optimal) |
+| 0x2C   | 44  | Key + value declared types, value tracks refs                       |
+| 0x34   | 52  | Key + value declared types, value may be null                       |
+| 0x00   | 0   | Key + value not declared types, non-null, no ref tracking           |
 
 #### Chunk Size
 

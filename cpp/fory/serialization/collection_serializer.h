@@ -25,11 +25,22 @@
 #include <cstdint>
 #include <limits>
 #include <set>
+#include <typeindex>
 #include <unordered_set>
 #include <vector>
 
 namespace fory {
 namespace serialization {
+
+// ============================================================================
+// Collection Header Constants
+// ============================================================================
+
+/// Collection header bit flags (per xlang spec section 5.4.4)
+constexpr uint8_t COLL_TRACKING_REF = 0b0001;
+constexpr uint8_t COLL_HAS_NULL = 0b0010;
+constexpr uint8_t COLL_DECL_ELEMENT_TYPE = 0b0100;
+constexpr uint8_t COLL_IS_SAME_TYPE = 0b1000;
 
 // ============================================================================
 // Collection Header
@@ -105,6 +116,388 @@ struct CollectionHeader {
     };
   }
 };
+
+// ============================================================================
+// Collection Serialization Helpers
+// ============================================================================
+
+/// Check if we need to write type info for a collection element type.
+/// Matches Rust's need_to_write_type_for_field.
+template <typename T> inline constexpr bool need_type_for_collection_elem() {
+  constexpr TypeId tid = Serializer<T>::type_id;
+  return tid == TypeId::STRUCT || tid == TypeId::COMPATIBLE_STRUCT ||
+         tid == TypeId::NAMED_STRUCT ||
+         tid == TypeId::NAMED_COMPATIBLE_STRUCT || tid == TypeId::EXT ||
+         tid == TypeId::NAMED_EXT;
+}
+
+/// Write collection data for non-polymorphic, non-shared-ref elements.
+/// This is the fast path for common cases like vector<int>, vector<string>.
+template <typename T, typename Container>
+inline Result<void, Error>
+write_collection_data_fast(const Container &coll, WriteContext &ctx,
+                           bool has_generics) {
+  static_assert(!is_polymorphic_v<T>,
+                "Fast path is for non-polymorphic types only");
+  static_assert(!is_shared_ref_v<T>,
+                "Fast path is for non-shared-ref types only");
+
+  // Write length
+  ctx.write_varuint32(static_cast<uint32_t>(coll.size()));
+
+  if (coll.empty()) {
+    return Result<void, Error>();
+  }
+
+  // Check for null elements
+  bool has_null = false;
+  if constexpr (is_nullable_v<T>) {
+    for (const auto &elem : coll) {
+      if (is_null_value(elem)) {
+        has_null = true;
+        break;
+      }
+    }
+  }
+
+  // Build header bitmap
+  uint8_t bitmap = COLL_IS_SAME_TYPE;
+  if (has_null) {
+    bitmap |= COLL_HAS_NULL;
+  }
+
+  // Determine if element type is declared
+  using ElemType = nullable_element_t<T>;
+  bool is_elem_declared =
+      has_generics && !need_type_for_collection_elem<ElemType>();
+  if (is_elem_declared) {
+    bitmap |= COLL_DECL_ELEMENT_TYPE;
+  }
+
+  // Write header
+  ctx.write_uint8(bitmap);
+
+  // Write element type info if not declared
+  if (!is_elem_declared) {
+    FORY_RETURN_NOT_OK(Serializer<ElemType>::write_type_info(ctx));
+  }
+
+  // Write elements
+  if constexpr (is_nullable_v<T>) {
+    using Inner = nullable_element_t<T>;
+    if (has_null) {
+      for (const auto &elem : coll) {
+        if (is_null_value(elem)) {
+          ctx.write_int8(NULL_FLAG);
+        } else {
+          ctx.write_int8(NOT_NULL_VALUE_FLAG);
+          if (is_elem_declared) {
+            FORY_RETURN_NOT_OK(
+                Serializer<Inner>::write_data(deref_nullable(elem), ctx));
+          } else {
+            FORY_RETURN_NOT_OK(
+                Serializer<Inner>::write(deref_nullable(elem), ctx, false,
+                                         false));
+          }
+        }
+      }
+    } else {
+      for (const auto &elem : coll) {
+        if (is_elem_declared) {
+          FORY_RETURN_NOT_OK(
+              Serializer<Inner>::write_data(deref_nullable(elem), ctx));
+        } else {
+          FORY_RETURN_NOT_OK(Serializer<Inner>::write(deref_nullable(elem), ctx,
+                                                      false, false));
+        }
+      }
+    }
+  } else {
+    for (const auto &elem : coll) {
+      if (is_elem_declared) {
+        if constexpr (is_generic_type_v<T>) {
+          FORY_RETURN_NOT_OK(
+              Serializer<T>::write_data_generic(elem, ctx, true));
+        } else {
+          FORY_RETURN_NOT_OK(Serializer<T>::write_data(elem, ctx));
+        }
+      } else {
+        FORY_RETURN_NOT_OK(Serializer<T>::write(elem, ctx, false, false));
+      }
+    }
+  }
+
+  return Result<void, Error>();
+}
+
+/// Write collection data for polymorphic or shared-ref elements.
+/// This is the slow path that handles runtime type checking.
+template <typename T, typename Container>
+inline Result<void, Error>
+write_collection_data_slow(const Container &coll, WriteContext &ctx,
+                           bool has_generics) {
+  // Write length
+  ctx.write_varuint32(static_cast<uint32_t>(coll.size()));
+
+  if (coll.empty()) {
+    return Result<void, Error>();
+  }
+
+  constexpr bool elem_is_polymorphic = is_polymorphic_v<T>;
+  constexpr bool elem_is_shared_ref = is_shared_ref_v<T>;
+
+  using ElemType = nullable_element_t<T>;
+  bool is_elem_declared =
+      has_generics && !need_type_for_collection_elem<ElemType>();
+
+  // Scan collection to determine header flags
+  bool has_null = false;
+  bool is_same_type = true;
+  std::type_index first_type{typeid(void)};
+  bool first_type_set = false;
+
+  for (const auto &elem : coll) {
+    // Check for nulls
+    if constexpr (is_nullable_v<T>) {
+      if (is_null_value(elem)) {
+        has_null = true;
+        continue;
+      }
+    }
+    // Check runtime types for polymorphic elements
+    if constexpr (elem_is_polymorphic) {
+      if (is_same_type) {
+        auto concrete_id = get_concrete_type_id(elem);
+        if (!first_type_set) {
+          first_type = concrete_id;
+          first_type_set = true;
+        } else if (concrete_id != first_type) {
+          is_same_type = false;
+        }
+      }
+    }
+  }
+
+  // If all polymorphic elements are null, treat as heterogeneous
+  if constexpr (elem_is_polymorphic) {
+    if (is_same_type && !first_type_set) {
+      is_same_type = false;
+    }
+  }
+
+  // Build header bitmap
+  uint8_t bitmap = 0;
+  if (has_null) {
+    bitmap |= COLL_HAS_NULL;
+  }
+  if (is_elem_declared && !elem_is_polymorphic) {
+    bitmap |= COLL_DECL_ELEMENT_TYPE;
+  }
+  if (is_same_type) {
+    bitmap |= COLL_IS_SAME_TYPE;
+  }
+  if constexpr (elem_is_shared_ref) {
+    bitmap |= COLL_TRACKING_REF;
+  }
+
+  // Write header
+  ctx.write_uint8(bitmap);
+
+  // Write element type info if IS_SAME_TYPE && !IS_DECL_ELEMENT_TYPE
+  if (is_same_type && !(bitmap & COLL_DECL_ELEMENT_TYPE)) {
+    if constexpr (elem_is_polymorphic) {
+      // Write concrete type info for polymorphic elements
+      FORY_RETURN_NOT_OK(ctx.write_any_typeinfo(
+          static_cast<uint32_t>(TypeId::UNKNOWN), first_type));
+    } else {
+      FORY_RETURN_NOT_OK(Serializer<ElemType>::write_type_info(ctx));
+    }
+  }
+
+  // Write elements
+  if (is_same_type) {
+    // All elements have same type - type info written once above
+    if (!has_null) {
+      if constexpr (elem_is_shared_ref) {
+        // Write with ref flag, without type
+        for (const auto &elem : coll) {
+          FORY_RETURN_NOT_OK(
+              Serializer<T>::write(elem, ctx, true, false, has_generics));
+        }
+      } else {
+        // Write data directly
+        for (const auto &elem : coll) {
+          if constexpr (is_nullable_v<T>) {
+            using Inner = nullable_element_t<T>;
+            FORY_RETURN_NOT_OK(
+                Serializer<Inner>::write_data(deref_nullable(elem), ctx));
+          } else {
+            if constexpr (is_generic_type_v<T>) {
+              FORY_RETURN_NOT_OK(
+                  Serializer<T>::write_data_generic(elem, ctx, has_generics));
+            } else {
+              FORY_RETURN_NOT_OK(Serializer<T>::write_data(elem, ctx));
+            }
+          }
+        }
+      }
+    } else {
+      // Has null elements - write with ref flag for null tracking
+      for (const auto &elem : coll) {
+        FORY_RETURN_NOT_OK(
+            Serializer<T>::write(elem, ctx, true, false, has_generics));
+      }
+    }
+  } else {
+    // Heterogeneous types - write type info per element
+    if (!has_null) {
+      if constexpr (elem_is_shared_ref) {
+        for (const auto &elem : coll) {
+          FORY_RETURN_NOT_OK(
+              Serializer<T>::write(elem, ctx, true, true, has_generics));
+        }
+      } else {
+        for (const auto &elem : coll) {
+          FORY_RETURN_NOT_OK(
+              Serializer<T>::write(elem, ctx, false, true, has_generics));
+        }
+      }
+    } else {
+      // Has null elements
+      for (const auto &elem : coll) {
+        FORY_RETURN_NOT_OK(
+            Serializer<T>::write(elem, ctx, true, true, has_generics));
+      }
+    }
+  }
+
+  return Result<void, Error>();
+}
+
+// Helper trait to detect if container has push_back
+template <typename Container, typename T, typename = void>
+struct has_push_back : std::false_type {};
+
+template <typename Container, typename T>
+struct has_push_back<
+    Container, T,
+    std::void_t<decltype(std::declval<Container>().push_back(std::declval<T>()))>>
+    : std::true_type {};
+
+template <typename Container, typename T>
+inline constexpr bool has_push_back_v = has_push_back<Container, T>::value;
+
+// Helper trait to detect if container has reserve
+template <typename Container, typename = void>
+struct has_reserve : std::false_type {};
+
+template <typename Container>
+struct has_reserve<Container,
+                   std::void_t<decltype(std::declval<Container>().reserve(0))>>
+    : std::true_type {};
+
+template <typename Container>
+inline constexpr bool has_reserve_v = has_reserve<Container>::value;
+
+// Helper to insert element into container (vector or set)
+template <typename Container, typename T>
+inline void collection_insert(Container &result, T &&elem) {
+  if constexpr (has_push_back_v<Container, T>) {
+    result.push_back(std::forward<T>(elem));
+  } else {
+    result.insert(std::forward<T>(elem));
+  }
+}
+
+/// Read collection data for polymorphic or shared-ref elements.
+template <typename T, typename Container>
+inline Result<Container, Error>
+read_collection_data_slow(ReadContext &ctx, uint32_t length) {
+  Container result;
+  if constexpr (has_reserve_v<Container>) {
+    result.reserve(length);
+  }
+
+  if (length == 0) {
+    return result;
+  }
+
+  constexpr bool elem_is_polymorphic = is_polymorphic_v<T>;
+  constexpr bool elem_is_shared_ref = is_shared_ref_v<T>;
+
+  Error error;
+  uint8_t bitmap = ctx.read_uint8(&error);
+  if (FORY_PREDICT_FALSE(!error.ok())) {
+    return Unexpected(std::move(error));
+  }
+
+  bool track_ref = (bitmap & COLL_TRACKING_REF) != 0;
+  bool has_null = (bitmap & COLL_HAS_NULL) != 0;
+  bool is_decl_type = (bitmap & COLL_DECL_ELEMENT_TYPE) != 0;
+  bool is_same_type = (bitmap & COLL_IS_SAME_TYPE) != 0;
+
+  // Read element type info if IS_SAME_TYPE && !IS_DECL_ELEMENT_TYPE
+  const TypeInfo *elem_type_info = nullptr;
+  if (is_same_type && !is_decl_type) {
+    FORY_TRY(type_info, ctx.read_any_typeinfo());
+    elem_type_info = type_info;
+  }
+
+  // Read elements
+  if (is_same_type) {
+    if (track_ref || elem_is_shared_ref) {
+      for (uint32_t i = 0; i < length; ++i) {
+        if constexpr (elem_is_polymorphic) {
+          FORY_TRY(elem, Serializer<T>::read_with_type_info(ctx, true,
+                                                            *elem_type_info));
+          collection_insert(result, std::move(elem));
+        } else {
+          FORY_TRY(elem, Serializer<T>::read(ctx, true, false));
+          collection_insert(result, std::move(elem));
+        }
+      }
+    } else if (!has_null) {
+      for (uint32_t i = 0; i < length; ++i) {
+        if constexpr (elem_is_polymorphic) {
+          FORY_TRY(elem, Serializer<T>::read_with_type_info(ctx, false,
+                                                            *elem_type_info));
+          collection_insert(result, std::move(elem));
+        } else {
+          FORY_TRY(elem, Serializer<T>::read(ctx, false, false));
+          collection_insert(result, std::move(elem));
+        }
+      }
+    } else {
+      // Has null elements
+      for (uint32_t i = 0; i < length; ++i) {
+        FORY_TRY(has_value, consume_ref_flag(ctx, true));
+        if (!has_value) {
+          if constexpr (has_push_back_v<Container, T>) {
+            result.push_back(T{});
+          }
+          // For sets, skip null elements
+        } else {
+          if constexpr (elem_is_polymorphic) {
+            FORY_TRY(elem, Serializer<T>::read_with_type_info(ctx, false,
+                                                              *elem_type_info));
+            collection_insert(result, std::move(elem));
+          } else {
+            FORY_TRY(elem, Serializer<T>::read(ctx, false, false));
+            collection_insert(result, std::move(elem));
+          }
+        }
+      }
+    }
+  } else {
+    // Heterogeneous types - read type info per element
+    for (uint32_t i = 0; i < length; ++i) {
+      FORY_TRY(elem, Serializer<T>::read(ctx, track_ref, true));
+      collection_insert(result, std::move(elem));
+    }
+  }
+
+  return result;
+}
 
 // ============================================================================
 // std::vector serializer
@@ -276,77 +669,74 @@ struct Serializer<
       return std::vector<T, Alloc>();
     }
 
-    // Elements header bitmap (CollectionFlags)
-    uint8_t bitmap = ctx.read_uint8(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
-    }
-    bool track_ref = (bitmap & 0x1u) != 0;
-    bool has_null = (bitmap & 0x2u) != 0;
-    bool is_decl_type = (bitmap & 0x4u) != 0;
-    bool is_same_type = (bitmap & 0x8u) != 0;
+    // Dispatch to slow path for polymorphic/shared-ref elements
+    constexpr bool is_slow_path = is_polymorphic_v<T> || is_shared_ref_v<T>;
+    if constexpr (is_slow_path) {
+      return read_collection_data_slow<T, std::vector<T, Alloc>>(ctx, length);
+    } else {
+      // Fast path for non-polymorphic, non-shared-ref elements
 
-    // Read element type info if IS_SAME_TYPE is set but IS_DECL_ELEMENT_TYPE is
-    // not. This matches Rust/Java behavior in compatible mode.
-    // We read the type info using read_any_typeinfo() and just consume the
-    // bytes. Type validation is relaxed for xlang compatibility - we check
-    // category matches.
-    if (is_same_type && !is_decl_type) {
-      FORY_TRY(elem_type_info, ctx.read_any_typeinfo());
-      // Type info was consumed; we trust the sender wrote correct element
-      // types. We do a relaxed check comparing type categories using
-      // type_id_matches.
-      using ElemType = nullable_element_t<T>;
-      uint32_t expected = static_cast<uint32_t>(Serializer<ElemType>::type_id);
-      if (!type_id_matches(elem_type_info->type_id, expected)) {
-        return Unexpected(
-            Error::type_mismatch(elem_type_info->type_id, expected));
+      // Elements header bitmap (CollectionFlags)
+      uint8_t bitmap = ctx.read_uint8(&error);
+      if (FORY_PREDICT_FALSE(!error.ok())) {
+        return Unexpected(std::move(error));
       }
-    }
+      bool track_ref = (bitmap & COLL_TRACKING_REF) != 0;
+      bool has_null = (bitmap & COLL_HAS_NULL) != 0;
+      bool is_decl_type = (bitmap & COLL_DECL_ELEMENT_TYPE) != 0;
+      bool is_same_type = (bitmap & COLL_IS_SAME_TYPE) != 0;
 
-    std::vector<T, Alloc> result;
-    result.reserve(length);
+      // Read element type info if IS_SAME_TYPE is set but IS_DECL_ELEMENT_TYPE
+      // is not. This matches Rust/Java behavior in compatible mode.
+      if (is_same_type && !is_decl_type) {
+        FORY_TRY(elem_type_info, ctx.read_any_typeinfo());
+        using ElemType = nullable_element_t<T>;
+        uint32_t expected = static_cast<uint32_t>(Serializer<ElemType>::type_id);
+        if (!type_id_matches(elem_type_info->type_id, expected)) {
+          return Unexpected(
+              Error::type_mismatch(elem_type_info->type_id, expected));
+        }
+      }
 
-    // Fast path: no tracking, no nulls, elements have declared type and
-    // are homogeneous. Java encodes this via DECL_SAME_TYPE_NOT_HAS_NULL.
-    if (!track_ref && !has_null && is_same_type) {
+      std::vector<T, Alloc> result;
+      result.reserve(length);
+
+      // Fast path: no tracking, no nulls, elements have declared type
+      if (!track_ref && !has_null && is_same_type) {
+        for (uint32_t i = 0; i < length; ++i) {
+          FORY_TRY(elem, Serializer<T>::read(ctx, false, false));
+          result.push_back(std::move(elem));
+        }
+        return result;
+      }
+
+      // General path: handle HAS_NULL and/or TRACKING_REF
       for (uint32_t i = 0; i < length; ++i) {
-        FORY_TRY(elem, Serializer<T>::read(ctx, false, false));
-        result.push_back(std::move(elem));
+        if (track_ref) {
+          FORY_TRY(elem, Serializer<T>::read(ctx, true, false));
+          result.push_back(std::move(elem));
+        } else if (has_null) {
+          FORY_TRY(has_value_elem, consume_ref_flag(ctx, true));
+          if (!has_value_elem) {
+            result.emplace_back();
+          } else {
+            if constexpr (is_nullable_v<T>) {
+              using Inner = nullable_element_t<T>;
+              FORY_TRY(inner, Serializer<Inner>::read(ctx, false, false));
+              result.emplace_back(std::move(inner));
+            } else {
+              FORY_TRY(elem, Serializer<T>::read(ctx, false, false));
+              result.push_back(std::move(elem));
+            }
+          }
+        } else {
+          FORY_TRY(elem, Serializer<T>::read(ctx, false, false));
+          result.push_back(std::move(elem));
+        }
       }
+
       return result;
     }
-
-    // General path: handle HAS_NULL and/or TRACKING_REF.
-    for (uint32_t i = 0; i < length; ++i) {
-      if (track_ref) {
-        // Java uses xwriteRef for elements in this case.
-        FORY_TRY(elem, Serializer<T>::read(ctx, true, false));
-        result.push_back(std::move(elem));
-      } else if (has_null) {
-        // Elements encoded with explicit null flag (NULL/NOT_NULL_VALUE).
-        FORY_TRY(has_value_elem, consume_ref_flag(ctx, true));
-        if (!has_value_elem) {
-          // Push null/empty value for nullable types
-          result.emplace_back();
-        } else {
-          if constexpr (is_nullable_v<T>) {
-            using Inner = nullable_element_t<T>;
-            FORY_TRY(inner, Serializer<Inner>::read(ctx, false, false));
-            result.emplace_back(std::move(inner));
-          } else {
-            FORY_TRY(elem, Serializer<T>::read(ctx, false, false));
-            result.push_back(std::move(elem));
-          }
-        }
-      } else {
-        // Fallback: behave like fast path.
-        FORY_TRY(elem, Serializer<T>::read(ctx, false, false));
-        result.push_back(std::move(elem));
-      }
-    }
-
-    return result;
   }
 
   // Match Rust signature: fory_write(&self, context, write_ref_info,
@@ -378,116 +768,15 @@ struct Serializer<
   static inline Result<void, Error>
   write_data_generic(const std::vector<T, Alloc> &vec, WriteContext &ctx,
                      bool has_generics) {
-    // Write length
-    ctx.write_varuint32(static_cast<uint32_t>(vec.size()));
+    // Dispatch to fast or slow path based on element type characteristics
+    constexpr bool is_fast_path =
+        !is_polymorphic_v<T> && !is_shared_ref_v<T>;
 
-    if (vec.empty()) {
-      return Result<void, Error>();
-    }
-
-    // Build header bitmap
-    bool has_null = false;
-    if constexpr (is_nullable_v<T>) {
-      for (const auto &elem : vec) {
-        if (is_null_value(elem)) {
-          has_null = true;
-          break;
-        }
-      }
-    }
-
-    uint8_t bitmap = 0b1000; // IS_SAME_TYPE
-    if (has_null) {
-      bitmap |= 0b0010; // HAS_NULL
-    }
-
-    // Per Rust collection.rs: is_elem_declared = has_generics &&
-    // !need_to_write_type_for_field(...)
-    // When has_generics is true (writing as struct field) AND the element type
-    // doesn't need explicit type info, set IS_DECL_ELEMENT_TYPE to indicate
-    // element type matches declared type.
-    // Types that need type info: STRUCT, COMPATIBLE_STRUCT, NAMED_STRUCT,
-    // NAMED_COMPATIBLE_STRUCT, EXT, NAMED_EXT
-    bool is_elem_declared = false;
-    if (has_generics) {
-      // Get the inner type for nullable types (optional, shared_ptr, etc.)
-      using ElemType = nullable_element_t<T>;
-      constexpr TypeId tid = Serializer<ElemType>::type_id;
-      const bool need_type = tid == TypeId::STRUCT ||
-                             tid == TypeId::COMPATIBLE_STRUCT ||
-                             tid == TypeId::NAMED_STRUCT ||
-                             tid == TypeId::NAMED_COMPATIBLE_STRUCT ||
-                             tid == TypeId::EXT || tid == TypeId::NAMED_EXT;
-      is_elem_declared = !need_type;
-    }
-    if (is_elem_declared) {
-      bitmap |= 0b0100; // IS_DECL_ELEMENT_TYPE
-    }
-
-    // Write header
-    ctx.write_uint8(bitmap);
-
-    // Write element type info only if !IS_DECL_ELEMENT_TYPE
-    if (!is_elem_declared) {
-      using ElemType = nullable_element_t<T>;
-      FORY_RETURN_NOT_OK(Serializer<ElemType>::write_type_info(ctx));
-    }
-
-    // Write elements
-    if constexpr (is_nullable_v<T>) {
-      using Inner = nullable_element_t<T>;
-      // Only write null flags when HAS_NULL is set in bitmap
-      if (has_null) {
-        for (const auto &elem : vec) {
-          if (is_null_value(elem)) {
-            ctx.write_int8(NULL_FLAG);
-          } else {
-            ctx.write_int8(NOT_NULL_VALUE_FLAG);
-            // When IS_DECL_ELEMENT_TYPE is set, use write_data to skip ref/type
-            // metadata
-            if (is_elem_declared) {
-              FORY_RETURN_NOT_OK(
-                  Serializer<Inner>::write_data(deref_nullable(elem), ctx));
-            } else {
-              FORY_RETURN_NOT_OK(Serializer<Inner>::write(deref_nullable(elem),
-                                                          ctx, false, false));
-            }
-          }
-        }
-      } else {
-        // When has_null=false, all elements are non-null, write directly
-        for (const auto &elem : vec) {
-          // When IS_DECL_ELEMENT_TYPE is set, use write_data
-          if (is_elem_declared) {
-            FORY_RETURN_NOT_OK(
-                Serializer<Inner>::write_data(deref_nullable(elem), ctx));
-          } else {
-            FORY_RETURN_NOT_OK(Serializer<Inner>::write(deref_nullable(elem),
-                                                        ctx, false, false));
-          }
-        }
-      }
+    if constexpr (is_fast_path) {
+      return write_collection_data_fast<T>(vec, ctx, has_generics);
     } else {
-      for (const auto &elem : vec) {
-        // When IS_DECL_ELEMENT_TYPE is set, write elements without ref/type
-        // metadata
-        if (is_elem_declared) {
-          if constexpr (is_generic_type_v<T>) {
-            FORY_RETURN_NOT_OK(
-                Serializer<T>::write_data_generic(elem, ctx, true));
-          } else {
-            FORY_RETURN_NOT_OK(Serializer<T>::write_data(elem, ctx));
-          }
-        } else {
-          // When IS_DECL_ELEMENT_TYPE is not set, element type info is already
-          // written in collection header, so don't write it again for each
-          // element
-          FORY_RETURN_NOT_OK(Serializer<T>::write(elem, ctx, false, false));
-        }
-      }
+      return write_collection_data_slow<T>(vec, ctx, has_generics);
     }
-
-    return Result<void, Error>();
   }
 
   static inline Result<std::vector<T, Alloc>, Error>
@@ -662,56 +951,14 @@ struct Serializer<std::set<T, Args...>> {
   static inline Result<void, Error>
   write_data_generic(const std::set<T, Args...> &set, WriteContext &ctx,
                      bool has_generics) {
-    // Write length
-    ctx.write_varuint32(static_cast<uint32_t>(set.size()));
+    // Dispatch to fast or slow path based on element type characteristics
+    constexpr bool is_fast_path = !is_polymorphic_v<T> && !is_shared_ref_v<T>;
 
-    // Per xlang spec: header and type_info are omitted when length is 0
-    if (set.empty()) {
-      return Result<void, Error>();
+    if constexpr (is_fast_path) {
+      return write_collection_data_fast<T>(set, ctx, has_generics);
+    } else {
+      return write_collection_data_slow<T>(set, ctx, has_generics);
     }
-
-    // Build header bitmap - sets cannot contain nulls
-    uint8_t bitmap = 0b1000; // IS_SAME_TYPE
-
-    // Per Rust collection.rs: is_elem_declared = has_generics &&
-    // !need_to_write_type_for_field(...)
-    bool is_elem_declared = false;
-    if (has_generics) {
-      constexpr TypeId tid = Serializer<T>::type_id;
-      const bool need_type = tid == TypeId::STRUCT ||
-                             tid == TypeId::COMPATIBLE_STRUCT ||
-                             tid == TypeId::NAMED_STRUCT ||
-                             tid == TypeId::NAMED_COMPATIBLE_STRUCT ||
-                             tid == TypeId::EXT || tid == TypeId::NAMED_EXT;
-      is_elem_declared = !need_type;
-    }
-    if (is_elem_declared) {
-      bitmap |= 0b0100; // IS_DECL_ELEMENT_TYPE
-    }
-
-    // Write header
-    ctx.write_uint8(bitmap);
-
-    // Write element type info only if !IS_DECL_ELEMENT_TYPE
-    if (!is_elem_declared) {
-      FORY_RETURN_NOT_OK(Serializer<T>::write_type_info(ctx));
-    }
-
-    // Write elements
-    for (const auto &elem : set) {
-      if (is_elem_declared) {
-        if constexpr (is_generic_type_v<T>) {
-          FORY_RETURN_NOT_OK(
-              Serializer<T>::write_data_generic(elem, ctx, true));
-        } else {
-          FORY_RETURN_NOT_OK(Serializer<T>::write_data(elem, ctx));
-        }
-      } else {
-        // Element type info already written in collection header
-        FORY_RETURN_NOT_OK(Serializer<T>::write(elem, ctx, false, false));
-      }
-    }
-    return Result<void, Error>();
   }
 
   static inline Result<std::set<T, Args...>, Error>
@@ -744,55 +991,58 @@ struct Serializer<std::set<T, Args...>> {
       return std::set<T, Args...>();
     }
 
-    // Read elements header bitmap (CollectionFlags) in xlang mode
-    uint8_t bitmap = ctx.read_uint8(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
-    }
-    bool track_ref = (bitmap & 0x1u) != 0;
-    bool has_null = (bitmap & 0x2u) != 0;
-    bool is_decl_type = (bitmap & 0x4u) != 0;
-    bool is_same_type = (bitmap & 0x8u) != 0;
-    // Read element type info if IS_SAME_TYPE is set but IS_DECL_ELEMENT_TYPE
-    // is not. Uses read_any_typeinfo() for proper handling of all type
-    // categories.
-    if (is_same_type && !is_decl_type) {
-      FORY_TRY(elem_type_info, ctx.read_any_typeinfo());
-      uint32_t expected = static_cast<uint32_t>(Serializer<T>::type_id);
-      if (!type_id_matches(elem_type_info->type_id, expected)) {
-        return Unexpected(
-            Error::type_mismatch(elem_type_info->type_id, expected));
-      }
-    }
+    // Dispatch to slow path for polymorphic/shared-ref elements
+    constexpr bool is_slow_path = is_polymorphic_v<T> || is_shared_ref_v<T>;
+    if constexpr (is_slow_path) {
+      return read_collection_data_slow<T, std::set<T, Args...>>(ctx, size);
+    } else {
+      // Fast path for non-polymorphic, non-shared-ref elements
 
-    std::set<T, Args...> result;
-    // Fast path: no tracking, no nulls, elements have declared type
-    if (!track_ref && !has_null && is_same_type) {
-      for (uint32_t i = 0; i < size; ++i) {
-        FORY_TRY(elem, Serializer<T>::read(ctx, false, false));
-        result.insert(std::move(elem));
+      // Read elements header bitmap (CollectionFlags) in xlang mode
+      uint8_t bitmap = ctx.read_uint8(&error);
+      if (FORY_PREDICT_FALSE(!error.ok())) {
+        return Unexpected(std::move(error));
       }
-      return result;
-    }
+      bool track_ref = (bitmap & COLL_TRACKING_REF) != 0;
+      bool has_null = (bitmap & COLL_HAS_NULL) != 0;
+      bool is_decl_type = (bitmap & COLL_DECL_ELEMENT_TYPE) != 0;
+      bool is_same_type = (bitmap & COLL_IS_SAME_TYPE) != 0;
 
-    // General path: handle HAS_NULL and/or TRACKING_REF
-    for (uint32_t i = 0; i < size; ++i) {
-      if (track_ref) {
-        FORY_TRY(elem, Serializer<T>::read(ctx, true, false));
-        result.insert(std::move(elem));
-      } else if (has_null) {
-        FORY_TRY(has_value_elem, consume_ref_flag(ctx, true));
-        if (has_value_elem) {
+      if (is_same_type && !is_decl_type) {
+        FORY_TRY(elem_type_info, ctx.read_any_typeinfo());
+        uint32_t expected = static_cast<uint32_t>(Serializer<T>::type_id);
+        if (!type_id_matches(elem_type_info->type_id, expected)) {
+          return Unexpected(
+              Error::type_mismatch(elem_type_info->type_id, expected));
+        }
+      }
+
+      std::set<T, Args...> result;
+      if (!track_ref && !has_null && is_same_type) {
+        for (uint32_t i = 0; i < size; ++i) {
           FORY_TRY(elem, Serializer<T>::read(ctx, false, false));
           result.insert(std::move(elem));
         }
-        // Note: Sets can't contain null, so we skip null elements
-      } else {
-        FORY_TRY(elem, Serializer<T>::read(ctx, false, false));
-        result.insert(std::move(elem));
+        return result;
       }
+
+      for (uint32_t i = 0; i < size; ++i) {
+        if (track_ref) {
+          FORY_TRY(elem, Serializer<T>::read(ctx, true, false));
+          result.insert(std::move(elem));
+        } else if (has_null) {
+          FORY_TRY(has_value_elem, consume_ref_flag(ctx, true));
+          if (has_value_elem) {
+            FORY_TRY(elem, Serializer<T>::read(ctx, false, false));
+            result.insert(std::move(elem));
+          }
+        } else {
+          FORY_TRY(elem, Serializer<T>::read(ctx, false, false));
+          result.insert(std::move(elem));
+        }
+      }
+      return result;
     }
-    return result;
   }
 
   static inline Result<std::set<T, Args...>, Error>
@@ -866,56 +1116,14 @@ struct Serializer<std::unordered_set<T, Args...>> {
   static inline Result<void, Error>
   write_data_generic(const std::unordered_set<T, Args...> &set,
                      WriteContext &ctx, bool has_generics) {
-    // Write length
-    ctx.write_varuint32(static_cast<uint32_t>(set.size()));
+    // Dispatch to fast or slow path based on element type characteristics
+    constexpr bool is_fast_path = !is_polymorphic_v<T> && !is_shared_ref_v<T>;
 
-    // Per xlang spec: header and type_info are omitted when length is 0
-    if (set.empty()) {
-      return Result<void, Error>();
+    if constexpr (is_fast_path) {
+      return write_collection_data_fast<T>(set, ctx, has_generics);
+    } else {
+      return write_collection_data_slow<T>(set, ctx, has_generics);
     }
-
-    // Build header bitmap - sets cannot contain nulls
-    uint8_t bitmap = 0b1000; // IS_SAME_TYPE
-
-    // Per Rust collection.rs: is_elem_declared = has_generics &&
-    // !need_to_write_type_for_field(...)
-    bool is_elem_declared = false;
-    if (has_generics) {
-      constexpr TypeId tid = Serializer<T>::type_id;
-      const bool need_type = tid == TypeId::STRUCT ||
-                             tid == TypeId::COMPATIBLE_STRUCT ||
-                             tid == TypeId::NAMED_STRUCT ||
-                             tid == TypeId::NAMED_COMPATIBLE_STRUCT ||
-                             tid == TypeId::EXT || tid == TypeId::NAMED_EXT;
-      is_elem_declared = !need_type;
-    }
-    if (is_elem_declared) {
-      bitmap |= 0b0100; // IS_DECL_ELEMENT_TYPE
-    }
-
-    // Write header
-    ctx.write_uint8(bitmap);
-
-    // Write element type info only if !IS_DECL_ELEMENT_TYPE
-    if (!is_elem_declared) {
-      FORY_RETURN_NOT_OK(Serializer<T>::write_type_info(ctx));
-    }
-
-    // Write elements
-    for (const auto &elem : set) {
-      if (is_elem_declared) {
-        if constexpr (is_generic_type_v<T>) {
-          FORY_RETURN_NOT_OK(
-              Serializer<T>::write_data_generic(elem, ctx, true));
-        } else {
-          FORY_RETURN_NOT_OK(Serializer<T>::write_data(elem, ctx));
-        }
-      } else {
-        // Element type info already written in collection header
-        FORY_RETURN_NOT_OK(Serializer<T>::write(elem, ctx, false, false));
-      }
-    }
-    return Result<void, Error>();
   }
 
   static inline Result<std::unordered_set<T, Args...>, Error>
@@ -949,57 +1157,60 @@ struct Serializer<std::unordered_set<T, Args...>> {
       return std::unordered_set<T, Args...>();
     }
 
-    // Read elements header bitmap (CollectionFlags) in xlang mode
-    uint8_t bitmap = ctx.read_uint8(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
-    }
-    bool track_ref = (bitmap & 0x1u) != 0;
-    bool has_null = (bitmap & 0x2u) != 0;
-    bool is_decl_type = (bitmap & 0x4u) != 0;
-    bool is_same_type = (bitmap & 0x8u) != 0;
+    // Dispatch to slow path for polymorphic/shared-ref elements
+    constexpr bool is_slow_path = is_polymorphic_v<T> || is_shared_ref_v<T>;
+    if constexpr (is_slow_path) {
+      return read_collection_data_slow<T, std::unordered_set<T, Args...>>(ctx,
+                                                                          size);
+    } else {
+      // Fast path for non-polymorphic, non-shared-ref elements
 
-    // Read element type info if IS_SAME_TYPE is set but IS_DECL_ELEMENT_TYPE
-    // is not. Uses read_any_typeinfo() for proper handling of all type
-    // categories.
-    if (is_same_type && !is_decl_type) {
-      FORY_TRY(elem_type_info, ctx.read_any_typeinfo());
-      uint32_t expected = static_cast<uint32_t>(Serializer<T>::type_id);
-      if (!type_id_matches(elem_type_info->type_id, expected)) {
-        return Unexpected(
-            Error::type_mismatch(elem_type_info->type_id, expected));
+      // Read elements header bitmap (CollectionFlags) in xlang mode
+      uint8_t bitmap = ctx.read_uint8(&error);
+      if (FORY_PREDICT_FALSE(!error.ok())) {
+        return Unexpected(std::move(error));
       }
-    }
+      bool track_ref = (bitmap & COLL_TRACKING_REF) != 0;
+      bool has_null = (bitmap & COLL_HAS_NULL) != 0;
+      bool is_decl_type = (bitmap & COLL_DECL_ELEMENT_TYPE) != 0;
+      bool is_same_type = (bitmap & COLL_IS_SAME_TYPE) != 0;
 
-    std::unordered_set<T, Args...> result;
-    result.reserve(size);
-    // Fast path: no tracking, no nulls, elements have declared type
-    if (!track_ref && !has_null && is_same_type) {
-      for (uint32_t i = 0; i < size; ++i) {
-        FORY_TRY(elem, Serializer<T>::read(ctx, false, false));
-        result.insert(std::move(elem));
+      if (is_same_type && !is_decl_type) {
+        FORY_TRY(elem_type_info, ctx.read_any_typeinfo());
+        uint32_t expected = static_cast<uint32_t>(Serializer<T>::type_id);
+        if (!type_id_matches(elem_type_info->type_id, expected)) {
+          return Unexpected(
+              Error::type_mismatch(elem_type_info->type_id, expected));
+        }
       }
-      return result;
-    }
 
-    // General path: handle HAS_NULL and/or TRACKING_REF
-    for (uint32_t i = 0; i < size; ++i) {
-      if (track_ref) {
-        FORY_TRY(elem, Serializer<T>::read(ctx, true, false));
-        result.insert(std::move(elem));
-      } else if (has_null) {
-        FORY_TRY(has_value_elem, consume_ref_flag(ctx, true));
-        if (has_value_elem) {
+      std::unordered_set<T, Args...> result;
+      result.reserve(size);
+      if (!track_ref && !has_null && is_same_type) {
+        for (uint32_t i = 0; i < size; ++i) {
           FORY_TRY(elem, Serializer<T>::read(ctx, false, false));
           result.insert(std::move(elem));
         }
-        // Note: Sets can't contain null, so we skip null elements
-      } else {
-        FORY_TRY(elem, Serializer<T>::read(ctx, false, false));
-        result.insert(std::move(elem));
+        return result;
       }
+
+      for (uint32_t i = 0; i < size; ++i) {
+        if (track_ref) {
+          FORY_TRY(elem, Serializer<T>::read(ctx, true, false));
+          result.insert(std::move(elem));
+        } else if (has_null) {
+          FORY_TRY(has_value_elem, consume_ref_flag(ctx, true));
+          if (has_value_elem) {
+            FORY_TRY(elem, Serializer<T>::read(ctx, false, false));
+            result.insert(std::move(elem));
+          }
+        } else {
+          FORY_TRY(elem, Serializer<T>::read(ctx, false, false));
+          result.insert(std::move(elem));
+        }
+      }
+      return result;
     }
-    return result;
   }
 
   static inline Result<std::unordered_set<T, Args...>, Error>

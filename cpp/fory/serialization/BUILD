@@ -87,6 +87,15 @@ cc_test(
     ],
 )
 
+cc_test(
+    name = "collection_serializer_test",
+    srcs = ["collection_serializer_test.cc"],
+    deps = [
+        ":fory_serialization",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
+    ],
+)
 
 cc_binary(
     name = "xlang_test_main",

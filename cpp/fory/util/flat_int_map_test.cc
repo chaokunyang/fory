@@ -17,7 +17,7 @@
  * under the License.
  */
 
-#include "fory/util/int_map.h"
+#include "fory/util/flat_int_map.h"
 #include <gtest/gtest.h>
 #include <random>
 #include <unordered_set>
@@ -25,21 +25,21 @@
 namespace fory {
 namespace util {
 
-class IntMapTest : public ::testing::Test {
+class FlatIntMapTest : public ::testing::Test {
 protected:
   int dummy_values_[100];
 };
 
 // ============================================================================
-// Tests for U64Map (uint64_t keys) - backward compatible
+// Tests for U64PtrMap (uint64_t keys, pointer values)
 // ============================================================================
 
-TEST_F(IntMapTest, U64Map_BasicInsertAndFind) {
-  U64Map<int *> map(16);
+TEST_F(FlatIntMapTest, U64PtrMap_BasicInsertAndFind) {
+  U64PtrMap<int> map(16);
 
-  map[1] = &dummy_values_[0];
-  map[2] = &dummy_values_[1];
-  map[3] = &dummy_values_[2];
+  map.put(1, &dummy_values_[0]);
+  map.put(2, &dummy_values_[1]);
+  map.put(3, &dummy_values_[2]);
 
   EXPECT_EQ(map.size(), 3);
 
@@ -57,20 +57,20 @@ TEST_F(IntMapTest, U64Map_BasicInsertAndFind) {
   EXPECT_EQ(entry3->value, &dummy_values_[2]);
 }
 
-TEST_F(IntMapTest, U64Map_FindNonExistent) {
-  U64Map<int *> map(16);
+TEST_F(FlatIntMapTest, U64PtrMap_FindNonExistent) {
+  U64PtrMap<int> map(16);
 
-  map[1] = &dummy_values_[0];
+  map.put(1, &dummy_values_[0]);
 
   EXPECT_EQ(map.find(2), nullptr);
   EXPECT_EQ(map.find(100), nullptr);
   EXPECT_EQ(map.find(UINT64_MAX), nullptr); // Max value is reserved as empty
 }
 
-TEST_F(IntMapTest, U64Map_ZeroKey) {
-  U64Map<int *> map(16);
+TEST_F(FlatIntMapTest, U64PtrMap_ZeroKey) {
+  U64PtrMap<int> map(16);
 
-  map[0] = &dummy_values_[0]; // 0 is now a valid key
+  map.put(0, &dummy_values_[0]); // 0 is now a valid key
   EXPECT_EQ(map.size(), 1);
 
   auto *entry = map.find(0);
@@ -78,13 +78,13 @@ TEST_F(IntMapTest, U64Map_ZeroKey) {
   EXPECT_EQ(entry->value, &dummy_values_[0]);
 }
 
-TEST_F(IntMapTest, U64Map_UpdateExistingKey) {
-  U64Map<int *> map(16);
+TEST_F(FlatIntMapTest, U64PtrMap_UpdateExistingKey) {
+  U64PtrMap<int> map(16);
 
-  map[1] = &dummy_values_[0];
+  map.put(1, &dummy_values_[0]);
   EXPECT_EQ(map.size(), 1);
 
-  map[1] = &dummy_values_[1];
+  map.put(1, &dummy_values_[1]);
   EXPECT_EQ(map.size(), 1); // Size should not increase
 
   auto *entry = map.find(1);
@@ -92,44 +92,44 @@ TEST_F(IntMapTest, U64Map_UpdateExistingKey) {
   EXPECT_EQ(entry->value, &dummy_values_[1]);
 }
 
-TEST_F(IntMapTest, U64Map_Contains) {
-  U64Map<int *> map(16);
+TEST_F(FlatIntMapTest, U64PtrMap_Contains) {
+  U64PtrMap<int> map(16);
 
-  map[42] = &dummy_values_[0];
+  map.put(42, &dummy_values_[0]);
 
   EXPECT_TRUE(map.contains(42));
   EXPECT_FALSE(map.contains(43));
   EXPECT_FALSE(map.contains(UINT64_MAX)); // Max is reserved
 }
 
-TEST_F(IntMapTest, U64Map_EmptyMap) {
-  U64Map<int *> map(16);
+TEST_F(FlatIntMapTest, U64PtrMap_EmptyMap) {
+  U64PtrMap<int> map(16);
 
   EXPECT_TRUE(map.empty());
   EXPECT_EQ(map.size(), 0);
   EXPECT_EQ(map.find(1), nullptr);
 
-  map[1] = &dummy_values_[0];
+  map.put(1, &dummy_values_[0]);
   EXPECT_FALSE(map.empty());
 }
 
-TEST_F(IntMapTest, U64Map_PowerOf2Capacity) {
-  U64Map<int *> map1(10);
+TEST_F(FlatIntMapTest, U64PtrMap_PowerOf2Capacity) {
+  U64PtrMap<int> map1(10);
   EXPECT_EQ(map1.capacity(), 16); // Rounded up to 16
 
-  U64Map<int *> map2(17);
+  U64PtrMap<int> map2(17);
   EXPECT_EQ(map2.capacity(), 32); // Rounded up to 32
 
-  U64Map<int *> map3(64);
+  U64PtrMap<int> map3(64);
   EXPECT_EQ(map3.capacity(), 64); // Already power of 2
 }
 
-TEST_F(IntMapTest, U64Map_ManyInsertions) {
-  U64Map<int *> map(256);
+TEST_F(FlatIntMapTest, U64PtrMap_ManyInsertions) {
+  U64PtrMap<int> map(256);
 
   // Insert many entries
   for (int i = 1; i <= 100; ++i) {
-    map[static_cast<uint64_t>(i)] = &dummy_values_[i % 100];
+    map.put(static_cast<uint64_t>(i), &dummy_values_[i % 100]);
   }
 
   EXPECT_EQ(map.size(), 100);
@@ -142,13 +142,13 @@ TEST_F(IntMapTest, U64Map_ManyInsertions) {
   }
 }
 
-TEST_F(IntMapTest, U64Map_CollisionHandling) {
+TEST_F(FlatIntMapTest, U64PtrMap_CollisionHandling) {
   // Use a small capacity to force collisions
-  U64Map<int *> map(8);
+  U64PtrMap<int> map(8);
 
   // Insert several entries that might collide
   for (int i = 1; i <= 5; ++i) {
-    map[static_cast<uint64_t>(i)] = &dummy_values_[i];
+    map.put(static_cast<uint64_t>(i), &dummy_values_[i]);
   }
 
   EXPECT_EQ(map.size(), 5);
@@ -161,16 +161,16 @@ TEST_F(IntMapTest, U64Map_CollisionHandling) {
   }
 }
 
-TEST_F(IntMapTest, U64Map_LargeKeys) {
-  U64Map<int *> map(16);
+TEST_F(FlatIntMapTest, U64PtrMap_LargeKeys) {
+  U64PtrMap<int> map(16);
 
   uint64_t key1 = 0xFFFFFFFFFFFFFFFEULL; // Max-1 (max is reserved)
   uint64_t key2 = 0x123456789ABCDEF0ULL;
   uint64_t key3 = 0x1ULL;
 
-  map[key1] = &dummy_values_[0];
-  map[key2] = &dummy_values_[1];
-  map[key3] = &dummy_values_[2];
+  map.put(key1, &dummy_values_[0]);
+  map.put(key2, &dummy_values_[1]);
+  map.put(key3, &dummy_values_[2]);
 
   EXPECT_EQ(map.size(), 3);
 
@@ -179,41 +179,41 @@ TEST_F(IntMapTest, U64Map_LargeKeys) {
   EXPECT_NE(map.find(key3), nullptr);
 }
 
-TEST_F(IntMapTest, U64Map_CopyConstructor) {
-  U64Map<int *> map1(16);
-  map1[1] = &dummy_values_[0];
-  map1[2] = &dummy_values_[1];
+TEST_F(FlatIntMapTest, U64PtrMap_CopyConstructor) {
+  U64PtrMap<int> map1(16);
+  map1.put(1, &dummy_values_[0]);
+  map1.put(2, &dummy_values_[1]);
 
-  U64Map<int *> map2(map1);
+  U64PtrMap<int> map2(map1);
 
   EXPECT_EQ(map2.size(), 2);
   EXPECT_NE(map2.find(1), nullptr);
   EXPECT_NE(map2.find(2), nullptr);
 
   // Modify original - copy should be independent
-  map1[3] = &dummy_values_[2];
+  map1.put(3, &dummy_values_[2]);
   EXPECT_EQ(map1.size(), 3);
   EXPECT_EQ(map2.size(), 2);
   EXPECT_EQ(map2.find(3), nullptr);
 }
 
-TEST_F(IntMapTest, U64Map_MoveConstructor) {
-  U64Map<int *> map1(16);
-  map1[1] = &dummy_values_[0];
-  map1[2] = &dummy_values_[1];
+TEST_F(FlatIntMapTest, U64PtrMap_MoveConstructor) {
+  U64PtrMap<int> map1(16);
+  map1.put(1, &dummy_values_[0]);
+  map1.put(2, &dummy_values_[1]);
 
-  U64Map<int *> map2(std::move(map1));
+  U64PtrMap<int> map2(std::move(map1));
 
   EXPECT_EQ(map2.size(), 2);
   EXPECT_NE(map2.find(1), nullptr);
   EXPECT_NE(map2.find(2), nullptr);
 }
 
-TEST_F(IntMapTest, U64Map_Iterator) {
-  U64Map<int *> map(16);
-  map[1] = &dummy_values_[0];
-  map[2] = &dummy_values_[1];
-  map[3] = &dummy_values_[2];
+TEST_F(FlatIntMapTest, U64PtrMap_Iterator) {
+  U64PtrMap<int> map(16);
+  map.put(1, &dummy_values_[0]);
+  map.put(2, &dummy_values_[1]);
+  map.put(3, &dummy_values_[2]);
 
   std::unordered_set<uint64_t> found_keys;
   for (auto it = map.begin(); it != map.end(); ++it) {
@@ -226,10 +226,10 @@ TEST_F(IntMapTest, U64Map_Iterator) {
   EXPECT_TRUE(found_keys.count(3));
 }
 
-TEST_F(IntMapTest, U64Map_RangeBasedFor) {
-  U64Map<int *> map(16);
-  map[10] = &dummy_values_[0];
-  map[20] = &dummy_values_[1];
+TEST_F(FlatIntMapTest, U64PtrMap_RangeBasedFor) {
+  U64PtrMap<int> map(16);
+  map.put(10, &dummy_values_[0]);
+  map.put(20, &dummy_values_[1]);
 
   int count = 0;
   for (const auto &entry : map) {
@@ -239,11 +239,11 @@ TEST_F(IntMapTest, U64Map_RangeBasedFor) {
   EXPECT_EQ(count, 2);
 }
 
-TEST_F(IntMapTest, U64Map_ConstFind) {
-  U64Map<int *> map(16);
-  map[1] = &dummy_values_[0];
+TEST_F(FlatIntMapTest, U64PtrMap_ConstFind) {
+  U64PtrMap<int> map(16);
+  map.put(1, &dummy_values_[0]);
 
-  const U64Map<int *> &const_map = map;
+  const U64PtrMap<int> &const_map = map;
 
   const auto *entry = const_map.find(1);
   ASSERT_NE(entry, nullptr);
@@ -251,8 +251,8 @@ TEST_F(IntMapTest, U64Map_ConstFind) {
 }
 
 // Performance-oriented test: verify lookup works well with type-index-like keys
-TEST_F(IntMapTest, U64Map_TypeIndexLikeKeys) {
-  U64Map<void *> map(128);
+TEST_F(FlatIntMapTest, U64PtrMap_TypeIndexLikeKeys) {
+  U64PtrMap<void> map(128);
 
   // Simulate type index values (typically hash-based, well-distributed)
   std::vector<uint64_t> keys;
@@ -262,7 +262,7 @@ TEST_F(IntMapTest, U64Map_TypeIndexLikeKeys) {
     key ^= static_cast<uint64_t>(i);
     key *= 0x100000001b3ULL;
     keys.push_back(key);
-    map[key] = reinterpret_cast<void *>(static_cast<uintptr_t>(i + 1));
+    map.put(key, reinterpret_cast<void *>(static_cast<uintptr_t>(i + 1)));
   }
 
   EXPECT_EQ(map.size(), 50);
@@ -277,15 +277,15 @@ TEST_F(IntMapTest, U64Map_TypeIndexLikeKeys) {
 }
 
 // ============================================================================
-// Tests for U32Map (uint32_t keys)
+// Tests for U32PtrMap (uint32_t keys, pointer values)
 // ============================================================================
 
-TEST_F(IntMapTest, U32Map_BasicInsertAndFind) {
-  U32Map<int *> map(16);
+TEST_F(FlatIntMapTest, U32PtrMap_BasicInsertAndFind) {
+  U32PtrMap<int> map(16);
 
-  map[1] = &dummy_values_[0];
-  map[2] = &dummy_values_[1];
-  map[3] = &dummy_values_[2];
+  map.put(1, &dummy_values_[0]);
+  map.put(2, &dummy_values_[1]);
+  map.put(3, &dummy_values_[2]);
 
   EXPECT_EQ(map.size(), 3);
 
@@ -303,20 +303,20 @@ TEST_F(IntMapTest, U32Map_BasicInsertAndFind) {
   EXPECT_EQ(entry3->value, &dummy_values_[2]);
 }
 
-TEST_F(IntMapTest, U32Map_FindNonExistent) {
-  U32Map<int *> map(16);
+TEST_F(FlatIntMapTest, U32PtrMap_FindNonExistent) {
+  U32PtrMap<int> map(16);
 
-  map[1] = &dummy_values_[0];
+  map.put(1, &dummy_values_[0]);
 
   EXPECT_EQ(map.find(2), nullptr);
   EXPECT_EQ(map.find(100), nullptr);
   EXPECT_EQ(map.find(UINT32_MAX), nullptr); // Max value is reserved as empty
 }
 
-TEST_F(IntMapTest, U32Map_ZeroKey) {
-  U32Map<int *> map(16);
+TEST_F(FlatIntMapTest, U32PtrMap_ZeroKey) {
+  U32PtrMap<int> map(16);
 
-  map[0] = &dummy_values_[0]; // 0 is now a valid key
+  map.put(0, &dummy_values_[0]); // 0 is now a valid key
   EXPECT_EQ(map.size(), 1);
 
   auto *entry = map.find(0);
@@ -324,13 +324,13 @@ TEST_F(IntMapTest, U32Map_ZeroKey) {
   EXPECT_EQ(entry->value, &dummy_values_[0]);
 }
 
-TEST_F(IntMapTest, U32Map_UpdateExistingKey) {
-  U32Map<int *> map(16);
+TEST_F(FlatIntMapTest, U32PtrMap_UpdateExistingKey) {
+  U32PtrMap<int> map(16);
 
-  map[1] = &dummy_values_[0];
+  map.put(1, &dummy_values_[0]);
   EXPECT_EQ(map.size(), 1);
 
-  map[1] = &dummy_values_[1];
+  map.put(1, &dummy_values_[1]);
   EXPECT_EQ(map.size(), 1); // Size should not increase
 
   auto *entry = map.find(1);
@@ -338,33 +338,33 @@ TEST_F(IntMapTest, U32Map_UpdateExistingKey) {
   EXPECT_EQ(entry->value, &dummy_values_[1]);
 }
 
-TEST_F(IntMapTest, U32Map_Contains) {
-  U32Map<int *> map(16);
+TEST_F(FlatIntMapTest, U32PtrMap_Contains) {
+  U32PtrMap<int> map(16);
 
-  map[42] = &dummy_values_[0];
+  map.put(42, &dummy_values_[0]);
 
   EXPECT_TRUE(map.contains(42));
   EXPECT_FALSE(map.contains(43));
   EXPECT_FALSE(map.contains(UINT32_MAX)); // Max is reserved
 }
 
-TEST_F(IntMapTest, U32Map_EmptyMap) {
-  U32Map<int *> map(16);
+TEST_F(FlatIntMapTest, U32PtrMap_EmptyMap) {
+  U32PtrMap<int> map(16);
 
   EXPECT_TRUE(map.empty());
   EXPECT_EQ(map.size(), 0);
   EXPECT_EQ(map.find(1), nullptr);
 
-  map[1] = &dummy_values_[0];
+  map.put(1, &dummy_values_[0]);
   EXPECT_FALSE(map.empty());
 }
 
-TEST_F(IntMapTest, U32Map_ManyInsertions) {
-  U32Map<int *> map(256);
+TEST_F(FlatIntMapTest, U32PtrMap_ManyInsertions) {
+  U32PtrMap<int> map(256);
 
   // Insert many entries
   for (uint32_t i = 1; i <= 100; ++i) {
-    map[i] = &dummy_values_[i % 100];
+    map.put(i, &dummy_values_[i % 100]);
   }
 
   EXPECT_EQ(map.size(), 100);
@@ -377,13 +377,13 @@ TEST_F(IntMapTest, U32Map_ManyInsertions) {
   }
 }
 
-TEST_F(IntMapTest, U32Map_CollisionHandling) {
+TEST_F(FlatIntMapTest, U32PtrMap_CollisionHandling) {
   // Use a small capacity to force collisions
-  U32Map<int *> map(8);
+  U32PtrMap<int> map(8);
 
   // Insert several entries that might collide
   for (uint32_t i = 1; i <= 5; ++i) {
-    map[i] = &dummy_values_[i];
+    map.put(i, &dummy_values_[i]);
   }
 
   EXPECT_EQ(map.size(), 5);
@@ -396,16 +396,16 @@ TEST_F(IntMapTest, U32Map_CollisionHandling) {
   }
 }
 
-TEST_F(IntMapTest, U32Map_LargeKeys) {
-  U32Map<int *> map(16);
+TEST_F(FlatIntMapTest, U32PtrMap_LargeKeys) {
+  U32PtrMap<int> map(16);
 
   uint32_t key1 = 0xFFFFFFFEu; // Max-1 (max is reserved)
   uint32_t key2 = 0x12345678u;
   uint32_t key3 = 0x1u;
 
-  map[key1] = &dummy_values_[0];
-  map[key2] = &dummy_values_[1];
-  map[key3] = &dummy_values_[2];
+  map.put(key1, &dummy_values_[0]);
+  map.put(key2, &dummy_values_[1]);
+  map.put(key3, &dummy_values_[2]);
 
   EXPECT_EQ(map.size(), 3);
 
@@ -414,41 +414,41 @@ TEST_F(IntMapTest, U32Map_LargeKeys) {
   EXPECT_NE(map.find(key3), nullptr);
 }
 
-TEST_F(IntMapTest, U32Map_CopyConstructor) {
-  U32Map<int *> map1(16);
-  map1[1] = &dummy_values_[0];
-  map1[2] = &dummy_values_[1];
+TEST_F(FlatIntMapTest, U32PtrMap_CopyConstructor) {
+  U32PtrMap<int> map1(16);
+  map1.put(1, &dummy_values_[0]);
+  map1.put(2, &dummy_values_[1]);
 
-  U32Map<int *> map2(map1);
+  U32PtrMap<int> map2(map1);
 
   EXPECT_EQ(map2.size(), 2);
   EXPECT_NE(map2.find(1), nullptr);
   EXPECT_NE(map2.find(2), nullptr);
 
   // Modify original - copy should be independent
-  map1[3] = &dummy_values_[2];
+  map1.put(3, &dummy_values_[2]);
   EXPECT_EQ(map1.size(), 3);
   EXPECT_EQ(map2.size(), 2);
   EXPECT_EQ(map2.find(3), nullptr);
 }
 
-TEST_F(IntMapTest, U32Map_MoveConstructor) {
-  U32Map<int *> map1(16);
-  map1[1] = &dummy_values_[0];
-  map1[2] = &dummy_values_[1];
+TEST_F(FlatIntMapTest, U32PtrMap_MoveConstructor) {
+  U32PtrMap<int> map1(16);
+  map1.put(1, &dummy_values_[0]);
+  map1.put(2, &dummy_values_[1]);
 
-  U32Map<int *> map2(std::move(map1));
+  U32PtrMap<int> map2(std::move(map1));
 
   EXPECT_EQ(map2.size(), 2);
   EXPECT_NE(map2.find(1), nullptr);
   EXPECT_NE(map2.find(2), nullptr);
 }
 
-TEST_F(IntMapTest, U32Map_Iterator) {
-  U32Map<int *> map(16);
-  map[1] = &dummy_values_[0];
-  map[2] = &dummy_values_[1];
-  map[3] = &dummy_values_[2];
+TEST_F(FlatIntMapTest, U32PtrMap_Iterator) {
+  U32PtrMap<int> map(16);
+  map.put(1, &dummy_values_[0]);
+  map.put(2, &dummy_values_[1]);
+  map.put(3, &dummy_values_[2]);
 
   std::unordered_set<uint32_t> found_keys;
   for (auto it = map.begin(); it != map.end(); ++it) {
@@ -461,10 +461,10 @@ TEST_F(IntMapTest, U32Map_Iterator) {
   EXPECT_TRUE(found_keys.count(3));
 }
 
-TEST_F(IntMapTest, U32Map_RangeBasedFor) {
-  U32Map<int *> map(16);
-  map[10] = &dummy_values_[0];
-  map[20] = &dummy_values_[1];
+TEST_F(FlatIntMapTest, U32PtrMap_RangeBasedFor) {
+  U32PtrMap<int> map(16);
+  map.put(10, &dummy_values_[0]);
+  map.put(20, &dummy_values_[1]);
 
   int count = 0;
   for (const auto &entry : map) {
@@ -474,11 +474,11 @@ TEST_F(IntMapTest, U32Map_RangeBasedFor) {
   EXPECT_EQ(count, 2);
 }
 
-TEST_F(IntMapTest, U32Map_ConstFind) {
-  U32Map<int *> map(16);
-  map[1] = &dummy_values_[0];
+TEST_F(FlatIntMapTest, U32PtrMap_ConstFind) {
+  U32PtrMap<int> map(16);
+  map.put(1, &dummy_values_[0]);
 
-  const U32Map<int *> &const_map = map;
+  const U32PtrMap<int> &const_map = map;
 
   const auto *entry = const_map.find(1);
   ASSERT_NE(entry, nullptr);
@@ -486,8 +486,8 @@ TEST_F(IntMapTest, U32Map_ConstFind) {
 }
 
 // Test for type_id lookups (simulates type_info_by_id_ usage)
-TEST_F(IntMapTest, U32Map_TypeIdLookups) {
-  U32Map<void *> map(256);
+TEST_F(FlatIntMapTest, U32PtrMap_TypeIdLookups) {
+  U32PtrMap<void> map(256);
 
   // Simulate type ID values used in TypeResolver
   std::vector<uint32_t> type_ids;
@@ -495,7 +495,7 @@ TEST_F(IntMapTest, U32Map_TypeIdLookups) {
     // Simulate encoded type_id: (user_id << 8) + TypeId
     uint32_t type_id = (i << 8) + 100; // 100 = some TypeId enum value
     type_ids.push_back(type_id);
-    map[type_id] = reinterpret_cast<void *>(static_cast<uintptr_t>(i));
+    map.put(type_id, reinterpret_cast<void *>(static_cast<uintptr_t>(i)));
   }
 
   EXPECT_EQ(map.size(), 50);
@@ -513,14 +513,14 @@ TEST_F(IntMapTest, U32Map_TypeIdLookups) {
 // Tests for auto-grow functionality
 // ============================================================================
 
-TEST_F(IntMapTest, AutoGrow_U64Map) {
+TEST_F(FlatIntMapTest, AutoGrow_U64PtrMap) {
   // Start with small capacity, default load factor 0.5
-  U64Map<int *> map(8);
+  U64PtrMap<int> map(8);
   EXPECT_EQ(map.capacity(), 8);
 
   // Insert more than capacity * load_factor (8 * 0.5 = 4)
   for (int i = 1; i <= 10; ++i) {
-    map[static_cast<uint64_t>(i)] = &dummy_values_[i % 100];
+    map.put(static_cast<uint64_t>(i), &dummy_values_[i % 100]);
   }
 
   EXPECT_EQ(map.size(), 10);
@@ -534,12 +534,12 @@ TEST_F(IntMapTest, AutoGrow_U64Map) {
   }
 }
 
-TEST_F(IntMapTest, AutoGrow_U32Map) {
-  U32Map<int *> map(8);
+TEST_F(FlatIntMapTest, AutoGrow_U32PtrMap) {
+  U32PtrMap<int> map(8);
   EXPECT_EQ(map.capacity(), 8);
 
   for (uint32_t i = 1; i <= 10; ++i) {
-    map[i] = &dummy_values_[i % 100];
+    map.put(i, &dummy_values_[i % 100]);
   }
 
   EXPECT_EQ(map.size(), 10);
@@ -552,55 +552,90 @@ TEST_F(IntMapTest, AutoGrow_U32Map) {
   }
 }
 
-TEST_F(IntMapTest, CustomLoadFactor) {
+TEST_F(FlatIntMapTest, CustomLoadFactor) {
   // Use higher load factor (0.75) - more memory efficient but slower lookup
-  U64Map<int *> map(16, 0.75f);
+  U64PtrMap<int> map(16, 0.75f);
   EXPECT_EQ(map.capacity(), 16);
 
   // Can insert up to 16 * 0.75 = 12 before grow
   for (int i = 1; i <= 12; ++i) {
-    map[static_cast<uint64_t>(i)] = &dummy_values_[i % 100];
+    map.put(static_cast<uint64_t>(i), &dummy_values_[i % 100]);
   }
   EXPECT_EQ(map.capacity(), 16); // Should not have grown yet
 
   // One more should trigger grow
-  map[13] = &dummy_values_[13];
+  map.put(13, &dummy_values_[13]);
   EXPECT_GT(map.capacity(), 16);
 }
 
-TEST_F(IntMapTest, GetMethod) {
-  U64Map<int *> map(16);
-  map[1] = &dummy_values_[0];
-  map[2] = &dummy_values_[1];
+TEST_F(FlatIntMapTest, GetOrDefault_PtrMap) {
+  U64PtrMap<int> map(16);
+  map.put(1, &dummy_values_[0]);
+  map.put(2, &dummy_values_[1]);
 
-  // Test get() returns pointer to value
-  int **val1 = map.get(1);
-  ASSERT_NE(val1, nullptr);
-  EXPECT_EQ(*val1, &dummy_values_[0]);
+  // Test get_or_default() returns value directly
+  int *val1 = map.get_or_default(1, nullptr);
+  EXPECT_EQ(val1, &dummy_values_[0]);
 
-  int **val2 = map.get(2);
-  ASSERT_NE(val2, nullptr);
-  EXPECT_EQ(*val2, &dummy_values_[1]);
+  int *val2 = map.get_or_default(2, nullptr);
+  EXPECT_EQ(val2, &dummy_values_[1]);
 
-  // Non-existent key returns nullptr
-  EXPECT_EQ(map.get(999), nullptr);
+  // Non-existent key returns default
+  int *val3 = map.get_or_default(999, nullptr);
+  EXPECT_EQ(val3, nullptr);
+
+  // Can use non-null default
+  int *val4 = map.get_or_default(999, &dummy_values_[50]);
+  EXPECT_EQ(val4, &dummy_values_[50]);
 }
 
-TEST_F(IntMapTest, ManyGrows) {
+// ============================================================================
+// Tests for U64Map (uint64_t keys, scalar values)
+// ============================================================================
+
+TEST_F(FlatIntMapTest, U64Map_ScalarValues) {
   U64Map<int> map(8);
 
   // Insert many entries to trigger multiple grows
   for (int i = 1; i <= 1000; ++i) {
-    map[static_cast<uint64_t>(i)] = i * 10;
+    map.put(static_cast<uint64_t>(i), i * 10);
   }
 
   EXPECT_EQ(map.size(), 1000);
 
-  // Verify all entries
+  // Verify all entries using get_or_default
   for (int i = 1; i <= 1000; ++i) {
-    auto *v = map.get(static_cast<uint64_t>(i));
-    ASSERT_NE(v, nullptr) << "Key " << i << " not found";
-    EXPECT_EQ(*v, i * 10);
+    int val = map.get_or_default(static_cast<uint64_t>(i), -1);
+    EXPECT_EQ(val, i * 10) << "Key " << i << " has wrong value";
+  }
+
+  // Non-existent key returns default
+  EXPECT_EQ(map.get_or_default(9999, -1), -1);
+}
+
+TEST_F(FlatIntMapTest, U64Map_GetOrDefault) {
+  U64Map<int> map(16);
+  map.put(1, 100);
+  map.put(2, 200);
+
+  EXPECT_EQ(map.get_or_default(1, -1), 100);
+  EXPECT_EQ(map.get_or_default(2, -1), 200);
+  EXPECT_EQ(map.get_or_default(3, -1), -1);
+  EXPECT_EQ(map.get_or_default(3, 999), 999);
+}
+
+TEST_F(FlatIntMapTest, U32Map_ScalarValues) {
+  U32Map<int> map(16);
+
+  for (uint32_t i = 1; i <= 100; ++i) {
+    map.put(i, static_cast<int>(i * 2));
+  }
+
+  EXPECT_EQ(map.size(), 100);
+
+  for (uint32_t i = 1; i <= 100; ++i) {
+    int val = map.get_or_default(i, -1);
+    EXPECT_EQ(val, static_cast<int>(i * 2));
   }
 }
 

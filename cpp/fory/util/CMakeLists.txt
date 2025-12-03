@@ -34,7 +34,7 @@ set(FORY_UTIL_HEADERS
     result.h
     string_util.h
     time_util.h
-    int_map.h
+    flat_int_map.h
 )
 
 add_library(fory_util ${FORY_UTIL_SOURCES})

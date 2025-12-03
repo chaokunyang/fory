@@ -53,7 +53,7 @@
 #include "fory/type/type.h"
 #include "fory/util/buffer.h"
 #include "fory/util/error.h"
-#include "fory/util/int_map.h"
+#include "fory/util/flat_int_map.h"
 #include "fory/util/logging.h"
 #include "fory/util/result.h"
 
@@ -578,11 +578,11 @@ private:
 
   // Lookup maps - store raw pointers (borrowed from primary storage)
   // Using compile-time type ID (uint64_t) - fast for template lookups
-  // IntMap is optimized for integer keys with minimal overhead
-  util::U64Map<TypeInfo *> type_info_by_ctid_{256};
-  util::U32Map<TypeInfo *> type_info_by_id_{256};
+  // FlatIntMap is optimized for integer keys with minimal overhead
+  util::U64PtrMap<TypeInfo> type_info_by_ctid_{256};
+  util::U32PtrMap<TypeInfo> type_info_by_id_{256};
   absl::flat_hash_map<std::string, TypeInfo *> type_info_by_name_;
-  util::U64Map<TypeInfo *> partial_type_infos_{256};
+  util::U64PtrMap<TypeInfo> partial_type_infos_{256};
 
   // For runtime polymorphic lookups (smart pointers) - uses std::type_index
   absl::flat_hash_map<std::type_index, TypeInfo *> type_info_by_runtime_type_;
@@ -619,37 +619,37 @@ inline void TypeResolver::check_registration_thread() {
 
 template <typename T> const TypeMeta &TypeResolver::struct_meta() {
   constexpr uint64_t ctid = type_index<T>();
-  auto *entry = type_info_by_ctid_.find(ctid);
-  FORY_CHECK(entry != nullptr) << "Type not registered";
-  FORY_CHECK(entry->value && entry->value->type_meta)
+  TypeInfo *info = type_info_by_ctid_.get_or_default(ctid, nullptr);
+  FORY_CHECK(info != nullptr) << "Type not registered";
+  FORY_CHECK(info->type_meta)
       << "Type metadata not initialized for requested struct";
-  return *entry->value->type_meta;
+  return *info->type_meta;
 }
 
 template <typename T> TypeMeta TypeResolver::clone_struct_meta() {
   constexpr uint64_t ctid = type_index<T>();
-  auto *entry = type_info_by_ctid_.find(ctid);
-  FORY_CHECK(entry != nullptr) << "Type not registered";
-  FORY_CHECK(entry->value && entry->value->type_meta)
+  TypeInfo *info = type_info_by_ctid_.get_or_default(ctid, nullptr);
+  FORY_CHECK(info != nullptr) << "Type not registered";
+  FORY_CHECK(info->type_meta)
       << "Type metadata not initialized for requested struct";
-  return *entry->value->type_meta;
+  return *info->type_meta;
 }
 
 template <typename T>
 const std::vector<size_t> &TypeResolver::sorted_indices() {
   constexpr uint64_t ctid = type_index<T>();
-  auto *entry = type_info_by_ctid_.find(ctid);
-  FORY_CHECK(entry != nullptr) << "Type not registered";
-  return entry->value->sorted_indices;
+  TypeInfo *info = type_info_by_ctid_.get_or_default(ctid, nullptr);
+  FORY_CHECK(info != nullptr) << "Type not registered";
+  return info->sorted_indices;
 }
 
 template <typename T>
 Result<const TypeInfo *, Error> TypeResolver::get_type_info() const {
   // Use compile-time type ID (uint64_t key) for fast lookup
   constexpr uint64_t ctid = type_index<T>();
-  auto *entry = type_info_by_ctid_.find(ctid);
-  if (FORY_PREDICT_TRUE(entry != nullptr)) {
-    return entry->value;
+  TypeInfo *info = type_info_by_ctid_.get_or_default(ctid, nullptr);
+  if (FORY_PREDICT_TRUE(info != nullptr)) {
+    return info;
   }
   return Unexpected(Error::type_error("Type not registered"));
 }
@@ -680,7 +680,7 @@ Result<void, Error> TypeResolver::register_by_id(uint32_t type_id) {
     // Register and get back the stored pointer
     FORY_TRY(stored_ptr, register_type_internal(ctid, std::move(info)));
     // Also register for runtime polymorphic lookups and partial type infos
-    partial_type_infos_[ctid] = stored_ptr;
+    partial_type_infos_.put(ctid, stored_ptr);
     register_type_internal_runtime(std::type_index(typeid(T)), stored_ptr);
     return Result<void, Error>();
   } else if constexpr (std::is_enum_v<T>) {
@@ -694,7 +694,7 @@ Result<void, Error> TypeResolver::register_by_id(uint32_t type_id) {
     }
 
     FORY_TRY(stored_ptr, register_type_internal(ctid, std::move(info)));
-    partial_type_infos_[ctid] = stored_ptr;
+    partial_type_infos_.put(ctid, stored_ptr);
     register_type_internal_runtime(std::type_index(typeid(T)), stored_ptr);
     return Result<void, Error>();
   } else {
@@ -730,7 +730,7 @@ TypeResolver::register_by_name(const std::string &ns,
     }
 
     FORY_TRY(stored_ptr, register_type_internal(ctid, std::move(info)));
-    partial_type_infos_[ctid] = stored_ptr;
+    partial_type_infos_.put(ctid, stored_ptr);
     register_type_internal_runtime(std::type_index(typeid(T)), stored_ptr);
     return Result<void, Error>();
   } else if constexpr (std::is_enum_v<T>) {
@@ -743,7 +743,7 @@ TypeResolver::register_by_name(const std::string &ns,
     }
 
     FORY_TRY(stored_ptr, register_type_internal(ctid, std::move(info)));
-    partial_type_infos_[ctid] = stored_ptr;
+    partial_type_infos_.put(ctid, stored_ptr);
     register_type_internal_runtime(std::type_index(typeid(T)), stored_ptr);
     return Result<void, Error>();
   } else {
@@ -770,7 +770,7 @@ Result<void, Error> TypeResolver::register_ext_type_by_id(uint32_t type_id) {
   FORY_TRY(info, build_ext_type_info<T>(actual_type_id, "", "", false));
 
   FORY_TRY(stored_ptr, register_type_internal(ctid, std::move(info)));
-  partial_type_infos_[ctid] = stored_ptr;
+  partial_type_infos_.put(ctid, stored_ptr);
   register_type_internal_runtime(std::type_index(typeid(T)), stored_ptr);
   return Result<void, Error>();
 }
@@ -791,7 +791,7 @@ TypeResolver::register_ext_type_by_name(const std::string &ns,
   FORY_TRY(info, build_ext_type_info<T>(actual_type_id, ns, type_name, true));
 
   FORY_TRY(stored_ptr, register_type_internal(ctid, std::move(info)));
-  partial_type_infos_[ctid] = stored_ptr;
+  partial_type_infos_.put(ctid, stored_ptr);
   register_type_internal_runtime(std::type_index(typeid(T)), stored_ptr);
   return Result<void, Error>();
 }
@@ -1041,15 +1041,16 @@ TypeResolver::register_type_internal(uint64_t ctid,
   TypeInfo *raw_ptr = info.get();
   type_infos_.push_back(std::move(info));
 
-  type_info_by_ctid_[ctid] = raw_ptr;
+  type_info_by_ctid_.put(ctid, raw_ptr);
 
   if (raw_ptr->type_id != 0 && !raw_ptr->register_by_name) {
-    auto *entry = type_info_by_id_.find(raw_ptr->type_id);
-    if (entry != nullptr && entry->value != raw_ptr) {
+    TypeInfo *existing =
+        type_info_by_id_.get_or_default(raw_ptr->type_id, nullptr);
+    if (existing != nullptr && existing != raw_ptr) {
       return Unexpected(Error::invalid("Type id already registered: " +
                                        std::to_string(raw_ptr->type_id)));
     }
-    type_info_by_id_[raw_ptr->type_id] = raw_ptr;
+    type_info_by_id_.put(raw_ptr->type_id, raw_ptr);
   }
 
   if (raw_ptr->register_by_name) {
@@ -1075,9 +1076,9 @@ TypeResolver::register_type_internal_runtime(const std::type_index &type_index,
 
 inline Result<const TypeInfo *, Error>
 TypeResolver::get_type_info_by_id(uint32_t type_id) const {
-  auto *entry = type_info_by_id_.find(type_id);
-  if (entry != nullptr) {
-    return entry->value;
+  TypeInfo *info = type_info_by_id_.get_or_default(type_id, nullptr);
+  if (info != nullptr) {
+    return info;
   }
   return Unexpected(Error::type_error("TypeInfo not found for type_id: " +
                                       std::to_string(type_id)));

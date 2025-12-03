@@ -83,8 +83,8 @@ cc_test(
 )
 
 cc_test(
-    name = "int_map_test",
-    srcs = ["int_map_test.cc"],
+    name = "flat_int_map_test",
+    srcs = ["flat_int_map_test.cc"],
     deps = [
         ":fory_util",
         "@googletest//:gtest",

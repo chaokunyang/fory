@@ -1080,10 +1080,10 @@ TypeResolver::build_final_type_resolver() {
 
   // Rebuild lookup maps with new pointers
   for (const auto &[key, old_ptr] : type_info_by_ctid_) {
-    final_resolver->type_info_by_ctid_[key] = ptr_map[old_ptr];
+    final_resolver->type_info_by_ctid_.put(key, ptr_map[old_ptr]);
   }
   for (const auto &[key, old_ptr] : type_info_by_id_) {
-    final_resolver->type_info_by_id_[key] = ptr_map[old_ptr];
+    final_resolver->type_info_by_id_.put(key, ptr_map[old_ptr]);
   }
   for (const auto &[key, old_ptr] : type_info_by_name_) {
     final_resolver->type_info_by_name_[key] = ptr_map[old_ptr];
@@ -1092,7 +1092,7 @@ TypeResolver::build_final_type_resolver() {
     final_resolver->type_info_by_runtime_type_[key] = ptr_map[old_ptr];
   }
   for (const auto &[key, old_ptr] : partial_type_infos_) {
-    final_resolver->partial_type_infos_[key] = ptr_map[old_ptr];
+    final_resolver->partial_type_infos_.put(key, ptr_map[old_ptr]);
   }
 
   // Process all partial type infos to build complete type metadata
@@ -1161,10 +1161,10 @@ std::unique_ptr<TypeResolver> TypeResolver::clone() const {
 
   // Rebuild lookup maps with new pointers
   for (const auto &[key, old_ptr] : type_info_by_ctid_) {
-    cloned->type_info_by_ctid_[key] = ptr_map[old_ptr];
+    cloned->type_info_by_ctid_.put(key, ptr_map[old_ptr]);
   }
   for (const auto &[key, old_ptr] : type_info_by_id_) {
-    cloned->type_info_by_id_[key] = ptr_map[old_ptr];
+    cloned->type_info_by_id_.put(key, ptr_map[old_ptr]);
   }
   for (const auto &[key, old_ptr] : type_info_by_name_) {
     cloned->type_info_by_name_[key] = ptr_map[old_ptr];
@@ -1188,7 +1188,7 @@ void TypeResolver::register_builtin_types() {
     info->is_external = false;
     TypeInfo *raw_ptr = info.get();
     type_infos_.push_back(std::move(info));
-    type_info_by_id_[raw_ptr->type_id] = raw_ptr;
+    type_info_by_id_.put(raw_ptr->type_id, raw_ptr);
   };
 
   // Primitive types

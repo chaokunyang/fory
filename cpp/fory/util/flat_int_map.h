@@ -46,9 +46,16 @@ namespace util {
 /// - Key max value is reserved as empty marker (cannot store max<K>)
 /// - No deletion support
 /// - Not thread-safe
-template <typename K, typename V> class IntMap {
+/// - Value type must be trivially copyable and small for cache efficiency
+///
+/// Usage:
+/// - Use FlatIntPtrMap<K, T> for pointer values (stores T*)
+/// - Use FlatIntMap<K, V> for small scalar values (int, uint32_t, etc.)
+template <typename K, typename V> class FlatIntMap {
   static_assert(std::is_same_v<K, uint32_t> || std::is_same_v<K, uint64_t>,
-                "IntMap key type must be uint32_t or uint64_t");
+                "FlatIntMap key type must be uint32_t or uint64_t");
+  static_assert(std::is_trivially_copyable_v<V>,
+                "FlatIntMap value type must be trivially copyable");
 
 public:
   static constexpr K kEmpty = std::numeric_limits<K>::max();
@@ -87,8 +94,8 @@ public:
     size_t index_;
   };
 
-  explicit IntMap(size_t initial_capacity = 64,
-                  float load_factor = kDefaultLoadFactor)
+  explicit FlatIntMap(size_t initial_capacity = 64,
+                      float load_factor = kDefaultLoadFactor)
       : load_factor_(load_factor) {
     capacity_ = next_power_of_2(initial_capacity < 8 ? 8 : initial_capacity);
     shift_ = 64 - __builtin_ctzll(capacity_); // 64 - log2(capacity)
@@ -98,7 +105,7 @@ public:
     size_ = 0;
   }
 
-  IntMap(const IntMap &other)
+  FlatIntMap(const FlatIntMap &other)
       : capacity_(other.capacity_), shift_(other.shift_), size_(other.size_),
         load_factor_(other.load_factor_),
         grow_threshold_(other.grow_threshold_) {
@@ -107,7 +114,7 @@ public:
                 capacity_ * sizeof(Entry));
   }
 
-  IntMap(IntMap &&other) noexcept
+  FlatIntMap(FlatIntMap &&other) noexcept
       : entries_(std::move(other.entries_)), capacity_(other.capacity_),
         shift_(other.shift_), size_(other.size_),
         load_factor_(other.load_factor_),
@@ -117,7 +124,7 @@ public:
     other.size_ = 0;
   }
 
-  IntMap &operator=(const IntMap &other) {
+  FlatIntMap &operator=(const FlatIntMap &other) {
     if (this != &other) {
       capacity_ = other.capacity_;
       shift_ = other.shift_;
@@ -131,7 +138,7 @@ public:
     return *this;
   }
 
-  IntMap &operator=(IntMap &&other) noexcept {
+  FlatIntMap &operator=(FlatIntMap &&other) noexcept {
     if (this != &other) {
       entries_ = std::move(other.entries_);
       capacity_ = other.capacity_;
@@ -146,9 +153,32 @@ public:
     return *this;
   }
 
-  /// Insert or update. May trigger grow.
+  /// Insert or update a key-value pair. May trigger grow.
   /// @param key Must not be kEmpty (max value of K)
+  /// @param value The value to store
+  /// @return Previous value if key existed, otherwise default-constructed V
+  V put(K key, V value) {
+    FORY_CHECK(key != kEmpty) << "Cannot use max value as key (reserved)";
+    if (size_ >= grow_threshold_) {
+      grow();
+    }
+    size_t idx = find_slot_for_insert(key);
+    if (entries_[idx].key == kEmpty) {
+      entries_[idx].key = key;
+      entries_[idx].value = value;
+      ++size_;
+      return V{};
+    }
+    V prev = entries_[idx].value;
+    entries_[idx].value = value;
+    return prev;
+  }
+
+  /// Insert or update via subscript operator. May trigger grow.
+  /// @param key Must not be kEmpty (max value of K)
+  /// @return Reference to the value (existing or newly inserted)
   V &operator[](K key) {
+    FORY_CHECK(key != kEmpty) << "Cannot use max value as key (reserved)";
     if (size_ >= grow_threshold_) {
       grow();
     }
@@ -178,21 +208,44 @@ public:
   }
 
   FORY_ALWAYS_INLINE const Entry *find(K key) const {
-    return const_cast<IntMap *>(this)->find(key);
+    return const_cast<FlatIntMap *>(this)->find(key);
   }
 
-  /// Direct value lookup. Returns pointer to value or nullptr.
-  FORY_ALWAYS_INLINE V *get(K key) {
-    Entry *e = find(key);
-    return e ? &e->value : nullptr;
+  /// Get value if found, otherwise return default_value.
+  /// @param key The key to look up
+  /// @param default_value Value to return if key not found
+  /// @return The stored value or default_value
+  FORY_ALWAYS_INLINE V get_or_default(K key, V default_value) const {
+    if (FORY_PREDICT_FALSE(key == kEmpty))
+      return default_value;
+    Entry *entries = entries_.get();
+    size_t mask = capacity_ - 1;
+    size_t idx = place(key);
+    while (true) {
+      K k = entries[idx].key;
+      if (k == key)
+        return entries[idx].value;
+      if (k == kEmpty)
+        return default_value;
+      idx = (idx + 1) & mask;
+    }
   }
 
-  FORY_ALWAYS_INLINE const V *get(K key) const {
-    const Entry *e = find(key);
-    return e ? &e->value : nullptr;
+  FORY_ALWAYS_INLINE bool contains(K key) const {
+    if (FORY_PREDICT_FALSE(key == kEmpty))
+      return false;
+    Entry *entries = entries_.get();
+    size_t mask = capacity_ - 1;
+    size_t idx = place(key);
+    while (true) {
+      K k = entries[idx].key;
+      if (k == key)
+        return true;
+      if (k == kEmpty)
+        return false;
+      idx = (idx + 1) & mask;
+    }
   }
-
-  bool contains(K key) const { return find(key) != nullptr; }
   size_t size() const { return size_; }
   size_t capacity() const { return capacity_; }
   bool empty() const { return size_ == 0; }
@@ -286,15 +339,17 @@ private:
   size_t grow_threshold_;
 };
 
-/// Type alias for uint64_t keys (backward compatible)
-template <typename V> using U64Map = IntMap<uint64_t, V>;
+/// FlatIntPtrMap - Map with pointer values for cache-friendly storage of large
+/// objects. User declares FlatIntPtrMap<K, T> to store T* values.
+template <typename K, typename T> using FlatIntPtrMap = FlatIntMap<K, T *>;
 
-/// Type alias for uint32_t keys
-template <typename V> using U32Map = IntMap<uint32_t, V>;
+/// Convenience type aliases for uint64_t keys
+template <typename T> using U64PtrMap = FlatIntPtrMap<uint64_t, T>;
+template <typename V> using U64Map = FlatIntMap<uint64_t, V>;
 
-/// Type alias for the common case of pointer values
-using U64PtrMap = U64Map<void *>;
-using U32PtrMap = U32Map<void *>;
+/// Convenience type aliases for uint32_t keys
+template <typename T> using U32PtrMap = FlatIntPtrMap<uint32_t, T>;
+template <typename V> using U32Map = FlatIntMap<uint32_t, V>;
 
 } // namespace util
 } // namespace fory

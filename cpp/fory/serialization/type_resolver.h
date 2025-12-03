@@ -387,9 +387,9 @@ struct FieldTypeBuilder<T, std::enable_if_t<is_tuple_v<decay_t<T>>>> {
     if constexpr (tuple_size > 0) {
       add_element_types(ft, std::make_index_sequence<tuple_size>{});
     } else {
-      // Empty tuple: use BOOL as stub element type for schema encoding
+      // Empty tuple: use STRUCT as stub element type for schema encoding
       ft.generics.push_back(
-          FieldType(static_cast<uint32_t>(TypeId::BOOL), false));
+          FieldType(static_cast<uint32_t>(TypeId::STRUCT), false));
     }
     return ft;
   }

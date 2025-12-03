@@ -366,14 +366,11 @@ template <typename... Ts> struct Serializer<std::tuple<Ts...>> {
 
   static inline Result<void, Error> write_data(const TupleType &tuple,
                                                WriteContext &ctx) {
-    // Non-xlang mode: write elements directly without collection header
-    return write_tuple_elements_direct(tuple, ctx, IndexSeq{});
-  }
+    if (!ctx.is_compatible() && !ctx.is_xlang()) {
+      // Non-compatible mode: write elements directly without collection header
+      return write_tuple_elements_direct(tuple, ctx, IndexSeq{});
+    }
 
-  static inline Result<void, Error> write_data_generic(const TupleType &tuple,
-                                                       WriteContext &ctx,
-                                                       bool has_generics) {
-    (void)has_generics;
     // xlang/compatible mode: use collection protocol
 
     // Write length
@@ -383,26 +380,20 @@ template <typename... Ts> struct Serializer<std::tuple<Ts...>> {
       return {};
     }
 
-    // Build header bitmap
+    // Build header bitmap - always heterogeneous for tuples in xlang mode
+    // (following Rust's approach for simplicity and cross-language compat)
     uint8_t bitmap = 0;
-    if constexpr (is_homogeneous) {
-      // Homogeneous: set IS_SAME_TYPE flag
-      bitmap |= COLL_IS_SAME_TYPE;
-      ctx.write_uint8(bitmap);
+    ctx.write_uint8(bitmap);
 
-      // Write element type info once
-      using ElemType = tuple_first_type_t<TupleType>;
-      FORY_RETURN_NOT_OK(Serializer<ElemType>::write_type_info(ctx));
+    // Write elements with type info per element
+    return write_tuple_elements_heterogeneous(tuple, ctx, IndexSeq{});
+  }
 
-      // Write all elements data
-      return write_tuple_elements_homogeneous(tuple, ctx, IndexSeq{});
-    } else {
-      // Heterogeneous: no IS_SAME_TYPE flag
-      ctx.write_uint8(bitmap);
-
-      // Write elements with type info per element
-      return write_tuple_elements_heterogeneous(tuple, ctx, IndexSeq{});
-    }
+  static inline Result<void, Error> write_data_generic(const TupleType &tuple,
+                                                       WriteContext &ctx,
+                                                       bool has_generics) {
+    (void)has_generics;
+    return write_data(tuple, ctx);
   }
 
   static inline Result<TupleType, Error> read(ReadContext &ctx, bool read_ref,
@@ -424,7 +415,17 @@ template <typename... Ts> struct Serializer<std::tuple<Ts...>> {
       }
     }
 
-    // xlang mode: read length and header
+    return read_data(ctx);
+  }
+
+  static inline Result<TupleType, Error> read_data(ReadContext &ctx) {
+    if (!ctx.is_compatible() && !ctx.is_xlang()) {
+      // Non-compatible mode: read elements directly
+      return read_tuple_elements_direct<TupleType>(ctx, IndexSeq{});
+    }
+
+    // xlang/compatible mode: read collection protocol
+    Error error;
     uint32_t length = ctx.read_varuint32(&error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
@@ -445,21 +446,14 @@ template <typename... Ts> struct Serializer<std::tuple<Ts...>> {
     if (is_same_type) {
       // Read element type info once
       FORY_TRY(elem_type_info, ctx.read_any_typeinfo());
-      (void)elem_type_info; // Type validation handled by element serializer
+      (void)elem_type_info;
 
-      // Read elements data only
       return read_tuple_elements_homogeneous<TupleType>(ctx, length,
                                                         IndexSeq{});
     } else {
-      // Read elements with type info per element
       return read_tuple_elements_heterogeneous<TupleType>(ctx, length,
                                                           IndexSeq{});
     }
-  }
-
-  static inline Result<TupleType, Error> read_data(ReadContext &ctx) {
-    // Non-xlang mode: read elements directly
-    return read_tuple_elements_direct<TupleType>(ctx, IndexSeq{});
   }
 
   static inline Result<TupleType, Error>

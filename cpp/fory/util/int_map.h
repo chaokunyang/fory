@@ -90,7 +90,7 @@ public:
                   float load_factor = kDefaultLoadFactor)
       : load_factor_(load_factor) {
     capacity_ = next_power_of_2(initial_capacity < 8 ? 8 : initial_capacity);
-    mask_ = capacity_ - 1;
+    shift_ = 64 - __builtin_ctzll(capacity_); // 64 - log2(capacity)
     grow_threshold_ = static_cast<size_t>(capacity_ * load_factor_);
     entries_ = std::make_unique<Entry[]>(capacity_);
     std::memset(entries_.get(), 0, capacity_ * sizeof(Entry));
@@ -98,7 +98,7 @@ public:
   }
 
   IntMap(const IntMap &other)
-      : capacity_(other.capacity_), mask_(other.mask_), size_(other.size_),
+      : capacity_(other.capacity_), shift_(other.shift_), size_(other.size_),
         load_factor_(other.load_factor_),
         grow_threshold_(other.grow_threshold_) {
     entries_ = std::make_unique<Entry[]>(capacity_);
@@ -108,18 +108,18 @@ public:
 
   IntMap(IntMap &&other) noexcept
       : entries_(std::move(other.entries_)), capacity_(other.capacity_),
-        mask_(other.mask_), size_(other.size_),
+        shift_(other.shift_), size_(other.size_),
         load_factor_(other.load_factor_),
         grow_threshold_(other.grow_threshold_) {
     other.capacity_ = 0;
-    other.mask_ = 0;
+    other.shift_ = 0;
     other.size_ = 0;
   }
 
   IntMap &operator=(const IntMap &other) {
     if (this != &other) {
       capacity_ = other.capacity_;
-      mask_ = other.mask_;
+      shift_ = other.shift_;
       size_ = other.size_;
       load_factor_ = other.load_factor_;
       grow_threshold_ = other.grow_threshold_;
@@ -134,12 +134,12 @@ public:
     if (this != &other) {
       entries_ = std::move(other.entries_);
       capacity_ = other.capacity_;
-      mask_ = other.mask_;
+      shift_ = other.shift_;
       size_ = other.size_;
       load_factor_ = other.load_factor_;
       grow_threshold_ = other.grow_threshold_;
       other.capacity_ = 0;
-      other.mask_ = 0;
+      other.shift_ = 0;
       other.size_ = 0;
     }
     return *this;
@@ -163,14 +163,15 @@ public:
     if (FORY_PREDICT_FALSE(key == kEmpty))
       return nullptr;
     Entry *entries = entries_.get();
-    size_t idx = hash(key) & mask_;
+    size_t mask = capacity_ - 1;
+    size_t idx = place(key);
     while (true) {
       K k = entries[idx].key;
       if (k == key)
         return &entries[idx];
       if (k == kEmpty)
         return nullptr;
-      idx = (idx + 1) & mask_;
+      idx = (idx + 1) & mask;
     }
   }
 
@@ -211,6 +212,7 @@ public:
 private:
   void grow() {
     size_t new_capacity = capacity_ * 2;
+    int new_shift = shift_ - 1; // Double capacity = one less shift
     size_t new_mask = new_capacity - 1;
     auto new_entries = std::make_unique<Entry[]>(new_capacity);
     std::memset(new_entries.get(), 0, new_capacity * sizeof(Entry));
@@ -218,7 +220,7 @@ private:
     // Rehash all existing entries
     for (size_t i = 0; i < capacity_; ++i) {
       if (entries_[i].key != kEmpty) {
-        size_t idx = hash(entries_[i].key) & new_mask;
+        size_t idx = place(entries_[i].key, new_shift);
         while (new_entries[idx].key != kEmpty) {
           idx = (idx + 1) & new_mask;
         }
@@ -228,26 +230,31 @@ private:
 
     entries_ = std::move(new_entries);
     capacity_ = new_capacity;
-    mask_ = new_mask;
+    shift_ = new_shift;
     grow_threshold_ = static_cast<size_t>(capacity_ * load_factor_);
   }
 
   size_t find_slot_for_insert(K key) {
-    size_t idx = hash(key) & mask_;
+    size_t mask = capacity_ - 1;
+    size_t idx = place(key);
     while (entries_[idx].key != kEmpty && entries_[idx].key != key) {
-      idx = (idx + 1) & mask_;
+      idx = (idx + 1) & mask;
     }
     return idx;
   }
 
-  FORY_ALWAYS_INLINE static size_t hash(K key) {
-    uint64_t k = static_cast<uint64_t>(key);
-    k ^= k >> 33;
-    k *= 0xff51afd7ed558ccdULL;
-    k ^= k >> 33;
-    k *= 0xc4ceb9fe1a85ec53ULL;
-    k ^= k >> 33;
-    return static_cast<size_t>(k);
+  // Fibonacci hashing: multiply by golden ratio, use high bits.
+  // Same as Java LongMap - single multiply, no mask needed for index.
+  static constexpr uint64_t kGoldenRatio = 0x9E3779B97F4A7C15ULL;
+
+  FORY_ALWAYS_INLINE size_t place(K key) const {
+    return static_cast<size_t>((static_cast<uint64_t>(key) * kGoldenRatio) >>
+                               shift_);
+  }
+
+  FORY_ALWAYS_INLINE static size_t place(K key, int shift) {
+    return static_cast<size_t>((static_cast<uint64_t>(key) * kGoldenRatio) >>
+                               shift);
   }
 
   static size_t next_power_of_2(size_t n) {
@@ -265,7 +272,7 @@ private:
 
   std::unique_ptr<Entry[]> entries_;
   size_t capacity_;
-  size_t mask_;
+  int shift_;
   size_t size_;
   float load_factor_;
   size_t grow_threshold_;

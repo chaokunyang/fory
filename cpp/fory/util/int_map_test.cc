@@ -487,6 +487,101 @@ TEST_F(IntMapTest, U32Map_TypeIdLookups) {
   }
 }
 
+// ============================================================================
+// Tests for auto-grow functionality
+// ============================================================================
+
+TEST_F(IntMapTest, AutoGrow_U64Map) {
+  // Start with small capacity, default load factor 0.5
+  U64Map<int *> map(8);
+  EXPECT_EQ(map.capacity(), 8);
+
+  // Insert more than capacity * load_factor (8 * 0.5 = 4)
+  for (int i = 1; i <= 10; ++i) {
+    map[static_cast<uint64_t>(i)] = &dummy_values_[i % 100];
+  }
+
+  EXPECT_EQ(map.size(), 10);
+  EXPECT_GT(map.capacity(), 8); // Should have grown
+
+  // Verify all entries still accessible after grow
+  for (int i = 1; i <= 10; ++i) {
+    auto *entry = map.find(static_cast<uint64_t>(i));
+    ASSERT_NE(entry, nullptr) << "Key " << i << " not found after grow";
+    EXPECT_EQ(entry->value, &dummy_values_[i % 100]);
+  }
+}
+
+TEST_F(IntMapTest, AutoGrow_U32Map) {
+  U32Map<int *> map(8);
+  EXPECT_EQ(map.capacity(), 8);
+
+  for (uint32_t i = 1; i <= 10; ++i) {
+    map[i] = &dummy_values_[i % 100];
+  }
+
+  EXPECT_EQ(map.size(), 10);
+  EXPECT_GT(map.capacity(), 8);
+
+  for (uint32_t i = 1; i <= 10; ++i) {
+    auto *entry = map.find(i);
+    ASSERT_NE(entry, nullptr);
+    EXPECT_EQ(entry->value, &dummy_values_[i % 100]);
+  }
+}
+
+TEST_F(IntMapTest, CustomLoadFactor) {
+  // Use higher load factor (0.75) - more memory efficient but slower lookup
+  U64Map<int *> map(16, 0.75f);
+  EXPECT_EQ(map.capacity(), 16);
+
+  // Can insert up to 16 * 0.75 = 12 before grow
+  for (int i = 1; i <= 12; ++i) {
+    map[static_cast<uint64_t>(i)] = &dummy_values_[i % 100];
+  }
+  EXPECT_EQ(map.capacity(), 16); // Should not have grown yet
+
+  // One more should trigger grow
+  map[13] = &dummy_values_[13];
+  EXPECT_GT(map.capacity(), 16);
+}
+
+TEST_F(IntMapTest, GetMethod) {
+  U64Map<int *> map(16);
+  map[1] = &dummy_values_[0];
+  map[2] = &dummy_values_[1];
+
+  // Test get() returns pointer to value
+  int **val1 = map.get(1);
+  ASSERT_NE(val1, nullptr);
+  EXPECT_EQ(*val1, &dummy_values_[0]);
+
+  int **val2 = map.get(2);
+  ASSERT_NE(val2, nullptr);
+  EXPECT_EQ(*val2, &dummy_values_[1]);
+
+  // Non-existent key returns nullptr
+  EXPECT_EQ(map.get(999), nullptr);
+}
+
+TEST_F(IntMapTest, ManyGrows) {
+  U64Map<int> map(8);
+
+  // Insert many entries to trigger multiple grows
+  for (int i = 1; i <= 1000; ++i) {
+    map[static_cast<uint64_t>(i)] = i * 10;
+  }
+
+  EXPECT_EQ(map.size(), 1000);
+
+  // Verify all entries
+  for (int i = 1; i <= 1000; ++i) {
+    auto *v = map.get(static_cast<uint64_t>(i));
+    ASSERT_NE(v, nullptr) << "Key " << i << " not found";
+    EXPECT_EQ(*v, i * 10);
+  }
+}
+
 } // namespace util
 } // namespace fory
 

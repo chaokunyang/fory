@@ -29,115 +29,97 @@ namespace fory {
 namespace util {
 
 /// A specialized open-addressed hash map optimized for integer keys (uint32_t
-/// or uint64_t) and pointer values.
+/// or uint64_t). Designed for read-heavy workloads: insert can be slow, but
+/// lookup must be ultra-fast.
 ///
-/// Design goals:
-/// - Minimal overhead for small maps (typical use: 10-100 entries)
-/// - Cache-friendly: key and value stored together in contiguous array
-/// - Fast lookup using linear probing
-/// - No dynamic resizing (fixed capacity, set at construction)
+/// Features:
+/// - Auto-grow when load factor exceeded
+/// - Configurable load factor (lower = faster lookup, more memory)
+/// - Cache-friendly linear probing
+/// - Power-of-2 sizing for fast modulo via bitmasking
 ///
 /// Constraints:
-/// - Key 0 is reserved as empty marker (cannot store key=0)
-/// - No deletion support (not needed for type registry use case)
-/// - Not thread-safe for concurrent modification
-///
-/// Performance characteristics:
-/// - O(1) average lookup with good hash distribution
-/// - Linear probing provides excellent cache locality
-/// - Power-of-2 sizing enables fast modulo via bitmasking
-///
-/// Template parameters:
-/// - K: Key type (uint32_t or uint64_t)
-/// - V: Value type
+/// - Key 0 is reserved as empty marker
+/// - No deletion support
+/// - Not thread-safe
 template <typename K, typename V> class IntMap {
   static_assert(std::is_same_v<K, uint32_t> || std::is_same_v<K, uint64_t>,
                 "IntMap key type must be uint32_t or uint64_t");
 
 public:
   static constexpr K kEmpty = 0;
+  static constexpr float kDefaultLoadFactor = 0.5f; // Low for fast lookup
 
   struct Entry {
     K key;
     V value;
   };
 
-  /// Iterator for range-based for loops and STL compatibility
   class Iterator {
   public:
-    using iterator_category = std::forward_iterator_tag;
-    using value_type = std::pair<const K, V>;
-    using difference_type = std::ptrdiff_t;
-    using pointer = value_type *;
-    using reference = value_type &;
-
     Iterator(Entry *entries, size_t capacity, size_t index)
         : entries_(entries), capacity_(capacity), index_(index) {
-      advance_to_valid();
+      while (index_ < capacity_ && entries_[index_].key == kEmpty)
+        ++index_;
     }
-
     std::pair<K, V> operator*() const {
       return {entries_[index_].key, entries_[index_].value};
     }
-
     const Entry *operator->() const { return &entries_[index_]; }
-
     Iterator &operator++() {
       ++index_;
-      advance_to_valid();
+      while (index_ < capacity_ && entries_[index_].key == kEmpty)
+        ++index_;
       return *this;
     }
-
     bool operator==(const Iterator &other) const {
       return index_ == other.index_;
     }
     bool operator!=(const Iterator &other) const { return !(*this == other); }
 
   private:
-    void advance_to_valid() {
-      while (index_ < capacity_ && entries_[index_].key == kEmpty) {
-        ++index_;
-      }
-    }
-
     Entry *entries_;
     size_t capacity_;
     size_t index_;
   };
 
-  /// Construct map with given capacity (will be rounded up to power of 2)
-  /// @param initial_capacity Minimum number of entries to support
-  explicit IntMap(size_t initial_capacity = 64) {
+  explicit IntMap(size_t initial_capacity = 64,
+                  float load_factor = kDefaultLoadFactor)
+      : load_factor_(load_factor) {
     capacity_ = next_power_of_2(initial_capacity < 8 ? 8 : initial_capacity);
     mask_ = capacity_ - 1;
+    grow_threshold_ = static_cast<size_t>(capacity_ * load_factor_);
     entries_ = std::make_unique<Entry[]>(capacity_);
     std::memset(entries_.get(), 0, capacity_ * sizeof(Entry));
     size_ = 0;
   }
 
-  /// Copy constructor
   IntMap(const IntMap &other)
-      : capacity_(other.capacity_), mask_(other.mask_), size_(other.size_) {
+      : capacity_(other.capacity_), mask_(other.mask_), size_(other.size_),
+        load_factor_(other.load_factor_),
+        grow_threshold_(other.grow_threshold_) {
     entries_ = std::make_unique<Entry[]>(capacity_);
     std::memcpy(entries_.get(), other.entries_.get(),
                 capacity_ * sizeof(Entry));
   }
 
-  /// Move constructor
   IntMap(IntMap &&other) noexcept
       : entries_(std::move(other.entries_)), capacity_(other.capacity_),
-        mask_(other.mask_), size_(other.size_) {
+        mask_(other.mask_), size_(other.size_),
+        load_factor_(other.load_factor_),
+        grow_threshold_(other.grow_threshold_) {
     other.capacity_ = 0;
     other.mask_ = 0;
     other.size_ = 0;
   }
 
-  /// Copy assignment
   IntMap &operator=(const IntMap &other) {
     if (this != &other) {
       capacity_ = other.capacity_;
       mask_ = other.mask_;
       size_ = other.size_;
+      load_factor_ = other.load_factor_;
+      grow_threshold_ = other.grow_threshold_;
       entries_ = std::make_unique<Entry[]>(capacity_);
       std::memcpy(entries_.get(), other.entries_.get(),
                   capacity_ * sizeof(Entry));
@@ -145,13 +127,14 @@ public:
     return *this;
   }
 
-  /// Move assignment
   IntMap &operator=(IntMap &&other) noexcept {
     if (this != &other) {
       entries_ = std::move(other.entries_);
       capacity_ = other.capacity_;
       mask_ = other.mask_;
       size_ = other.size_;
+      load_factor_ = other.load_factor_;
+      grow_threshold_ = other.grow_threshold_;
       other.capacity_ = 0;
       other.mask_ = 0;
       other.size_ = 0;
@@ -159,12 +142,12 @@ public:
     return *this;
   }
 
-  /// Insert or update a key-value pair.
-  /// @param key The key (must not be 0)
-  /// @param value The value to associate with the key
-  /// @return Reference to the stored value
+  /// Insert or update. May trigger grow.
   V &operator[](K key) {
-    size_t idx = find_slot(key);
+    if (size_ >= grow_threshold_) {
+      grow();
+    }
+    size_t idx = find_slot_for_insert(key);
     if (entries_[idx].key == kEmpty) {
       entries_[idx].key = key;
       ++size_;
@@ -172,56 +155,49 @@ public:
     return entries_[idx].value;
   }
 
-  /// Find an entry by key.
-  /// @param key The key to search for
-  /// @return Pointer to the Entry if found, nullptr otherwise
-  Entry *find(K key) {
-    if (key == kEmpty)
+  /// Ultra-fast lookup. Returns pointer to Entry or nullptr.
+  __attribute__((always_inline)) Entry *find(K key) {
+    if (__builtin_expect(key == kEmpty, 0))
       return nullptr;
-
+    Entry *entries = entries_.get();
     size_t idx = hash(key) & mask_;
-    size_t start = idx;
-
-    do {
-      if (entries_[idx].key == key) {
-        return &entries_[idx];
-      }
-      if (entries_[idx].key == kEmpty) {
+    while (true) {
+      K k = entries[idx].key;
+      if (k == key)
+        return &entries[idx];
+      if (k == kEmpty)
         return nullptr;
-      }
       idx = (idx + 1) & mask_;
-    } while (idx != start);
-
-    return nullptr;
+    }
   }
 
-  /// Find an entry by key (const version).
-  const Entry *find(K key) const {
+  __attribute__((always_inline)) const Entry *find(K key) const {
     return const_cast<IntMap *>(this)->find(key);
   }
 
-  /// Check if a key exists in the map.
+  /// Direct value lookup. Returns pointer to value or nullptr.
+  __attribute__((always_inline)) V *get(K key) {
+    Entry *e = find(key);
+    return e ? &e->value : nullptr;
+  }
+
+  __attribute__((always_inline)) const V *get(K key) const {
+    const Entry *e = find(key);
+    return e ? &e->value : nullptr;
+  }
+
   bool contains(K key) const { return find(key) != nullptr; }
-
-  /// Get the number of entries in the map.
   size_t size() const { return size_; }
-
-  /// Get the capacity of the map.
   size_t capacity() const { return capacity_; }
-
-  /// Check if the map is empty.
   bool empty() const { return size_ == 0; }
 
-  /// Clear all entries from the map.
   void clear() {
     std::memset(entries_.get(), 0, capacity_ * sizeof(Entry));
     size_ = 0;
   }
 
-  /// Iterator support
   Iterator begin() { return Iterator(entries_.get(), capacity_, 0); }
   Iterator end() { return Iterator(entries_.get(), capacity_, capacity_); }
-
   Iterator begin() const {
     return Iterator(const_cast<Entry *>(entries_.get()), capacity_, 0);
   }
@@ -230,23 +206,38 @@ public:
   }
 
 private:
-  /// Find the slot for a key (for insertion).
-  /// Returns the index where the key is found or should be inserted.
-  size_t find_slot(K key) {
-    size_t idx = hash(key) & mask_;
+  void grow() {
+    size_t new_capacity = capacity_ * 2;
+    size_t new_mask = new_capacity - 1;
+    auto new_entries = std::make_unique<Entry[]>(new_capacity);
+    std::memset(new_entries.get(), 0, new_capacity * sizeof(Entry));
 
+    // Rehash all existing entries
+    for (size_t i = 0; i < capacity_; ++i) {
+      if (entries_[i].key != kEmpty) {
+        size_t idx = hash(entries_[i].key) & new_mask;
+        while (new_entries[idx].key != kEmpty) {
+          idx = (idx + 1) & new_mask;
+        }
+        new_entries[idx] = entries_[i];
+      }
+    }
+
+    entries_ = std::move(new_entries);
+    capacity_ = new_capacity;
+    mask_ = new_mask;
+    grow_threshold_ = static_cast<size_t>(capacity_ * load_factor_);
+  }
+
+  size_t find_slot_for_insert(K key) {
+    size_t idx = hash(key) & mask_;
     while (entries_[idx].key != kEmpty && entries_[idx].key != key) {
       idx = (idx + 1) & mask_;
     }
-
     return idx;
   }
 
-  /// Hash function optimized for integer keys.
-  /// Uses splitmix64 mixing - excellent distribution for sequential or
-  /// similar keys.
-  static size_t hash(K key) {
-    // Promote to uint64_t for consistent hashing behavior
+  __attribute__((always_inline)) static size_t hash(K key) {
     uint64_t k = static_cast<uint64_t>(key);
     k ^= k >> 33;
     k *= 0xff51afd7ed558ccdULL;
@@ -256,7 +247,6 @@ private:
     return static_cast<size_t>(k);
   }
 
-  /// Round up to the next power of 2.
   static size_t next_power_of_2(size_t n) {
     if (n == 0)
       return 1;
@@ -274,6 +264,8 @@ private:
   size_t capacity_;
   size_t mask_;
   size_t size_;
+  float load_factor_;
+  size_t grow_threshold_;
 };
 
 /// Type alias for uint64_t keys (backward compatible)

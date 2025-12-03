@@ -1263,7 +1263,8 @@ The KV header is a single byte encoding metadata for both keys and values:
 #### Chunk Size
 
 - Maximum chunk size: 255 pairs (fits in 1 byte)
-- If chunk size is 0, this indicates end of chunks or special handling
+- When key or value is null, that entry is serialized as a separate chunk with implicit size 1 (chunk size byte is skipped)
+- Reader tracks accumulated count against total map size to know when to stop reading chunks
 
 #### Why Chunk-Based Format?
 
@@ -1274,22 +1275,6 @@ approach allows:
 2. **Adaptive chunking**: Start new chunk if prediction fails for a pair
 3. **Efficient reading**: Most maps fit in single chunk (< 255 pairs)
 4. **Memory efficiency**: Minimal overhead for common homogeneous maps
-
-#### Streaming Mode
-
-When streaming write is enabled (can't update written bytes), map format changes:
-
-```
-|    1 byte    |        variable bytes        |
-+--------------+------------------------------+
-|  KV header   |  key-value pairs until end   |
-```
-
-In streaming mode:
-
-- KV header must be provided via annotation (e.g., `MapFieldInfo` in Java)
-- Reader tracks count against total map size to know when to stop
-- Implementation generates different deserialization code based on header bits
 
 #### Why serialize chunk by chunk?
 
@@ -1530,7 +1515,12 @@ This section provides a step-by-step guide for implementing Fory xlang serializa
    - [ ] Support UTF-8 encoding (required for xlang)
    - [ ] Optionally support LATIN1 and UTF-16
 
-6. **Reference Tracking**
+6. **Temporal Types**
+   - [ ] Duration (seconds + nanoseconds)
+   - [ ] Timestamp (nanoseconds since epoch)
+   - [ ] LocalDate (days since epoch)
+
+7. **Reference Tracking**
    - [ ] Implement write-side object tracking (object → ref_id map)
    - [ ] Implement read-side object tracking (ref_id → object list)
    - [ ] Handle all four reference flags: NULL(-3), REF(-2), NOT_NULL(-1), REF_VALUE(0)
@@ -1538,26 +1528,26 @@ This section provides a step-by-step guide for implementing Fory xlang serializa
 
 ### Phase 3: Collection Types
 
-7. **List/Array Serialization**
+8. **List/Array Serialization**
    - [ ] Write length as varuint32
    - [ ] Write elements header byte
    - [ ] Handle homogeneous vs heterogeneous elements
    - [ ] Handle null elements
 
-8. **Map Serialization**
+9. **Map Serialization**
    - [ ] Write total size as varuint32
    - [ ] Implement chunk-based format (max 255 pairs per chunk)
    - [ ] Write KV header byte per chunk
    - [ ] Handle key and value type variations
 
-9. **Set Serialization**
-   - [ ] Same format as List (reuse implementation)
+10. **Set Serialization**
+    - [ ] Same format as List (reuse implementation)
 
 ### Phase 4: Meta String Encoding
 
-Meta strings are required for struct serialization (encoding field names, type names, namespaces).
+Meta strings are required for enum and struct serialization (encoding field names, type names, namespaces).
 
-10. **Meta String Compression**
+11. **Meta String Compression**
     - [ ] Implement LOWER_SPECIAL encoding (5 bits/char)
     - [ ] Implement LOWER_UPPER_DIGIT_SPECIAL encoding (6 bits/char)
     - [ ] Implement FIRST_TO_LOWER_SPECIAL encoding
@@ -1565,40 +1555,37 @@ Meta strings are required for struct serialization (encoding field names, type n
     - [ ] Implement encoding selection algorithm
     - [ ] Implement meta string deduplication
 
-### Phase 5: Struct Serialization
+### Phase 5: Enum Serialization
 
-11. **Type Registration**
+12. **Enum Serialization**
+    - [ ] Write ordinal as varuint32
+    - [ ] Support named enum (namespace + type name)
+
+### Phase 6: Struct Serialization
+
+13. **Type Registration**
     - [ ] Support registration by numeric ID
     - [ ] Support registration by namespace + type name
     - [ ] Maintain type → serializer mapping
     - [ ] Generate type IDs: `(user_id << 8) | internal_type_id`
 
-12. **Field Ordering**
+14. **Field Ordering**
     - [ ] Implement Fory field ordering algorithm
     - [ ] Sort primitives by size (larger first), then type ID, then name
     - [ ] Handle nullable vs non-nullable fields
     - [ ] Convert field names to snake_case for sorting
 
-13. **Schema Consistent Mode**
+15. **Schema Consistent Mode**
     - [ ] Compute type hash (MurmurHash3 of field info string)
     - [ ] Write 4-byte type hash before fields
     - [ ] Serialize fields in Fory order
 
-14. **Schema Evolution Mode** (Optional)
+16. **Schema Evolution Mode** (Optional)
     - [ ] Implement type meta writing
     - [ ] Support field addition/removal
     - [ ] Handle unknown fields (skip during read)
 
-### Phase 6: Advanced Features
-
-15. **Enum Serialization**
-    - [ ] Write ordinal as varuint32
-    - [ ] Support named enum (namespace + type name)
-
-16. **Temporal Types**
-    - [ ] Duration (seconds + nanoseconds)
-    - [ ] Timestamp (nanoseconds since epoch)
-    - [ ] LocalDate (days since epoch)
+### Phase 7: Other types
 
 17. **Binary/Array Types**
     - [ ] Primitive arrays (direct buffer copy)
@@ -1635,6 +1622,7 @@ Meta strings are required for struct serialization (encoding field names, type n
 ### C++
 
 - Compile-time reflection via macros (`FORY_STRUCT`, `FORY_FIELD_INFO`)
+- Template meta programming for type dispatch and serializer selection
 - Uses `std::shared_ptr` for reference tracking
 - Compile-time field ordering
 - No runtime code generation
@@ -1657,7 +1645,7 @@ Meta strings are required for struct serialization (encoding field names, type n
 1. **Byte Order**: Always use little-endian for multi-byte values
 2. **Varint Sign Extension**: Ensure proper handling of signed vs unsigned varints
 3. **Reference ID Ordering**: IDs must be assigned in serialization order
-4. **Field Order Consistency**: Must match exactly across languages
+4. **Field Order Consistency**: Must match exactly across languages (schema consistent mode only; in evolution mode, deserialization follows serialization field order from type meta)
 5. **String Encoding**: Use best encoding for current language
 6. **Null Handling**: Different languages represent null differently
 7. **Empty Collections**: Still write length (0) and header byte

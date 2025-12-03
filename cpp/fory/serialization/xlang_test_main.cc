@@ -226,7 +226,41 @@ struct StructWithMap {
 };
 FORY_STRUCT(StructWithMap, data);
 
+// ============================================================================
+// Struct Container Test Types
+// ============================================================================
 
+struct Dog {
+  int32_t age = 0;
+  std::optional<std::string> name;
+  bool operator==(const Dog &other) const {
+    return age == other.age && name == other.name;
+  }
+};
+FORY_STRUCT(Dog, age, name);
+
+struct Cat {
+  int32_t age = 0;
+  int32_t lives = 9;
+  bool operator==(const Cat &other) const {
+    return age == other.age && lives == other.lives;
+  }
+};
+FORY_STRUCT(Cat, age, lives);
+
+struct DogListHolder {
+  std::vector<std::optional<Dog>> dogs;
+  bool operator==(const DogListHolder &other) const { return dogs == other.dogs; }
+};
+FORY_STRUCT(DogListHolder, dogs);
+
+struct DogMapHolder {
+  std::map<std::optional<std::string>, std::optional<Dog>> dog_map;
+  bool operator==(const DogMapHolder &other) const {
+    return dog_map == other.dog_map;
+  }
+};
+FORY_STRUCT(DogMapHolder, dog_map);
 
 namespace fory {
 namespace serialization {
@@ -384,6 +418,8 @@ void RunTestSkipIdCustom(const std::string &data_file);
 void RunTestSkipNameCustom(const std::string &data_file);
 void RunTestConsistentNamed(const std::string &data_file);
 void RunTestStructVersionCheck(const std::string &data_file);
+void RunTestStructList(const std::string &data_file);
+void RunTestStructMap(const std::string &data_file);
 } // namespace
 
 int main(int argc, char **argv) {
@@ -443,6 +479,10 @@ int main(int argc, char **argv) {
       RunTestConsistentNamed(data_file);
     } else if (case_name == "test_struct_version_check") {
       RunTestStructVersionCheck(data_file);
+    } else if (case_name == "test_struct_list") {
+      RunTestStructList(data_file);
+    } else if (case_name == "test_struct_map") {
+      RunTestStructMap(data_file);
     } else {
       Fail("Unknown test case: " + case_name);
     }
@@ -1267,6 +1307,108 @@ void RunTestStructVersionCheck(const std::string &data_file) {
 
   std::vector<uint8_t> out;
   AppendSerialized(fory, value, out);
+  WriteFile(data_file, out);
+}
+
+void RunTestStructList(const std::string &data_file) {
+  auto bytes = ReadFile(data_file);
+  auto fory = BuildFory(true, true);
+  EnsureOk(fory.register_struct<Dog>(302), "register Dog");
+  EnsureOk(fory.register_struct<DogListHolder>(304), "register DogListHolder");
+
+  Buffer buffer = MakeBuffer(bytes);
+
+  // Part 1: Read List<Dog> directly
+  Dog dog1;
+  dog1.age = 3;
+  dog1.name = std::string("Buddy");
+  Dog dog2;
+  dog2.age = 5;
+  dog2.name = std::string("Max");
+  std::vector<std::optional<Dog>> expected_dogs = {dog1, dog2};
+
+  auto dogs = ReadNext<std::vector<std::optional<Dog>>>(fory, buffer);
+  if (dogs.size() != 2) {
+    Fail("Dog list size mismatch, got: " + std::to_string(dogs.size()));
+  }
+  if (!dogs[0].has_value() || dogs[0]->age != 3 ||
+      dogs[0]->name != std::string("Buddy")) {
+    Fail("First Dog mismatch");
+  }
+  if (!dogs[1].has_value() || dogs[1]->age != 5 ||
+      dogs[1]->name != std::string("Max")) {
+    Fail("Second Dog mismatch");
+  }
+
+  // Part 2: Read DogListHolder (List<Dog> as struct field)
+  auto holder = ReadNext<DogListHolder>(fory, buffer);
+  if (holder.dogs.size() != 2) {
+    Fail("DogListHolder size mismatch");
+  }
+  if (!holder.dogs[0].has_value() ||
+      holder.dogs[0]->name != std::string("Rex")) {
+    Fail("DogListHolder first dog name mismatch");
+  }
+  if (!holder.dogs[1].has_value() ||
+      holder.dogs[1]->name != std::string("Spot")) {
+    Fail("DogListHolder second dog name mismatch");
+  }
+
+  // Write back
+  std::vector<uint8_t> out;
+  AppendSerialized(fory, dogs, out);
+  AppendSerialized(fory, holder, out);
+  WriteFile(data_file, out);
+}
+
+void RunTestStructMap(const std::string &data_file) {
+  auto bytes = ReadFile(data_file);
+  auto fory = BuildFory(true, true);
+  EnsureOk(fory.register_struct<Dog>(302), "register Dog");
+  EnsureOk(fory.register_struct<DogMapHolder>(305), "register DogMapHolder");
+
+  Buffer buffer = MakeBuffer(bytes);
+
+  // Part 1: Read Map<String, Dog> directly
+  using OptStr = std::optional<std::string>;
+  using OptDog = std::optional<Dog>;
+  auto dogMap = ReadNext<std::map<OptStr, OptDog>>(fory, buffer);
+  if (dogMap.size() != 2) {
+    Fail("Dog map size mismatch, got: " + std::to_string(dogMap.size()));
+  }
+  auto dog1It = dogMap.find(std::string("dog1"));
+  if (dog1It == dogMap.end() || !dog1It->second.has_value() ||
+      dog1It->second->age != 2 ||
+      dog1It->second->name != std::string("Rex")) {
+    Fail("Dog map dog1 mismatch");
+  }
+  auto dog2It = dogMap.find(std::string("dog2"));
+  if (dog2It == dogMap.end() || !dog2It->second.has_value() ||
+      dog2It->second->age != 4 ||
+      dog2It->second->name != std::string("Spot")) {
+    Fail("Dog map dog2 mismatch");
+  }
+
+  // Part 2: Read DogMapHolder (Map<String, Dog> as struct field)
+  auto holder = ReadNext<DogMapHolder>(fory, buffer);
+  if (holder.dog_map.size() != 2) {
+    Fail("DogMapHolder size mismatch");
+  }
+  auto myDog1It = holder.dog_map.find(std::string("myDog1"));
+  if (myDog1It == holder.dog_map.end() || !myDog1It->second.has_value() ||
+      myDog1It->second->name != std::string("Fido")) {
+    Fail("DogMapHolder myDog1 name mismatch");
+  }
+  auto myDog2It = holder.dog_map.find(std::string("myDog2"));
+  if (myDog2It == holder.dog_map.end() || !myDog2It->second.has_value() ||
+      myDog2It->second->name != std::string("Bruno")) {
+    Fail("DogMapHolder myDog2 name mismatch");
+  }
+
+  // Write back
+  std::vector<uint8_t> out;
+  AppendSerialized(fory, dogMap, out);
+  AppendSerialized(fory, holder, out);
   WriteFile(data_file, out);
 }
 

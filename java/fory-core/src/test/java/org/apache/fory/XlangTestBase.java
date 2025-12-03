@@ -1114,6 +1114,137 @@ public abstract class XlangTestBase extends ForyTestBase {
     Assert.assertEquals(fory.deserialize(buffer2), obj);
   }
 
+  // ============================================================================
+  // Struct Container Tests - Test List/Map with struct element types
+  // ============================================================================
+
+  @Data
+  static class Dog {
+    int age;
+    String name;
+  }
+
+  @Data
+  static class Cat {
+    int age;
+    int lives;
+  }
+
+  @Data
+  static class DogListHolder {
+    List<Dog> dogs;
+  }
+
+  @Data
+  static class DogMapHolder {
+    Map<String, Dog> dog_map;
+  }
+
+  @Test
+  public void testStructList() throws java.io.IOException {
+    String caseName = "test_struct_list";
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .withCodegen(false)
+            .build();
+    fory.register(Dog.class, 302);
+    fory.register(DogListHolder.class, 304);
+
+    // Part 1: Test List<Dog> directly
+    Dog dog1 = new Dog();
+    dog1.age = 3;
+    dog1.name = "Buddy";
+    Dog dog2 = new Dog();
+    dog2.age = 5;
+    dog2.name = "Max";
+    List<Dog> dogs = Arrays.asList(dog1, dog2);
+
+    // Part 2: Test List<Dog> as struct field
+    DogListHolder holder = new DogListHolder();
+    Dog dog3 = new Dog();
+    dog3.age = 2;
+    dog3.name = "Rex";
+    Dog dog4 = new Dog();
+    dog4.age = 4;
+    dog4.name = "Spot";
+    holder.dogs = Arrays.asList(dog3, dog4);
+
+    MemoryBuffer buffer = MemoryUtils.buffer(128);
+    fory.serialize(buffer, dogs);
+    fory.serialize(buffer, holder);
+
+    ExecutionContext ctx = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
+    runPeer(ctx);
+
+    MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
+    List<Dog> readDogs = (List<Dog>) fory.deserialize(buffer2);
+    Assert.assertEquals(readDogs.size(), 2);
+    Assert.assertEquals(readDogs.get(0).name, "Buddy");
+    Assert.assertEquals(readDogs.get(0).age, 3);
+    Assert.assertEquals(readDogs.get(1).name, "Max");
+    Assert.assertEquals(readDogs.get(1).age, 5);
+
+    DogListHolder readHolder = (DogListHolder) fory.deserialize(buffer2);
+    Assert.assertEquals(readHolder.dogs.size(), 2);
+    Assert.assertEquals(readHolder.dogs.get(0).name, "Rex");
+    Assert.assertEquals(readHolder.dogs.get(1).name, "Spot");
+  }
+
+  @Test
+  public void testStructMap() throws java.io.IOException {
+    String caseName = "test_struct_map";
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .withCodegen(false)
+            .build();
+    fory.register(Dog.class, 302);
+    fory.register(DogMapHolder.class, 305);
+
+    // Part 1: Test Map<String, Dog> directly
+    Dog dog1 = new Dog();
+    dog1.age = 2;
+    dog1.name = "Rex";
+    Dog dog2 = new Dog();
+    dog2.age = 4;
+    dog2.name = "Spot";
+    Map<String, Dog> dogMap = new HashMap<>();
+    dogMap.put("dog1", dog1);
+    dogMap.put("dog2", dog2);
+
+    // Part 2: Test Map<String, Dog> as struct field
+    DogMapHolder holder = new DogMapHolder();
+    Dog dog3 = new Dog();
+    dog3.age = 1;
+    dog3.name = "Fido";
+    Dog dog4 = new Dog();
+    dog4.age = 3;
+    dog4.name = "Bruno";
+    holder.dog_map = new HashMap<>();
+    holder.dog_map.put("myDog1", dog3);
+    holder.dog_map.put("myDog2", dog4);
+
+    MemoryBuffer buffer = MemoryUtils.buffer(128);
+    fory.serialize(buffer, dogMap);
+    fory.serialize(buffer, holder);
+
+    ExecutionContext ctx = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
+    runPeer(ctx);
+
+    MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
+    Map<String, Dog> readDogMap = (Map<String, Dog>) fory.deserialize(buffer2);
+    Assert.assertEquals(readDogMap.size(), 2);
+    Assert.assertEquals(readDogMap.get("dog1").name, "Rex");
+    Assert.assertEquals(readDogMap.get("dog2").name, "Spot");
+
+    DogMapHolder readHolder = (DogMapHolder) fory.deserialize(buffer2);
+    Assert.assertEquals(readHolder.dog_map.size(), 2);
+    Assert.assertEquals(readHolder.dog_map.get("myDog1").name, "Fido");
+    Assert.assertEquals(readHolder.dog_map.get("myDog2").name, "Bruno");
+  }
 
   /**
    * Execute an external command.

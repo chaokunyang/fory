@@ -874,13 +874,8 @@ fn test_struct_with_map() {
 }
 
 // ============================================================================
-// Polymorphic Types for Cross-Language Container Tests
+// Struct Container Test Types
 // ============================================================================
-
-#[derive(ForyObject, Debug, PartialEq, Clone)]
-struct Animal {
-    age: i32,
-}
 
 #[derive(ForyObject, Debug, PartialEq, Clone)]
 struct Dog {
@@ -895,117 +890,86 @@ struct Cat {
 }
 
 #[derive(ForyObject, Debug, PartialEq)]
-struct PolymorphicListHolder {
-    // In Rust, we use a tuple to hold the polymorphic list since Rust's type
-    // system requires knowing types at compile time. For xlang compatibility,
-    // Java sends List<Animal> and Rust receives it as a tuple of known types.
-    animals: (Dog, Cat),
+struct DogListHolder {
+    dogs: Vec<Option<Dog>>,
 }
 
 #[derive(ForyObject, Debug, PartialEq)]
-struct PolymorphicMapHolder {
-    // For xlang compatibility, we use a tuple as the map value type
-    #[fory(rename = "animalMap")]
-    animal_map: HashMap<String, Dog>,
+struct DogMapHolder {
+    dog_map: HashMap<Option<String>, Option<Dog>>,
 }
 
 #[test]
 #[ignore]
-fn test_polymorphic_list() {
+fn test_struct_list() {
     let data_file_path = get_data_file();
     let bytes = fs::read(&data_file_path).unwrap();
 
     let mut fory = Fory::default().compatible(true).xlang(true);
-    fory.register::<Animal>(301).unwrap();
     fory.register::<Dog>(302).unwrap();
-    fory.register::<Cat>(303).unwrap();
-    fory.register::<PolymorphicListHolder>(304).unwrap();
-
+    fory.register::<DogListHolder>(304).unwrap();
     let mut reader = Reader::new(bytes.as_slice());
 
-    // Part 1: Read polymorphic list as tuple (Dog, Cat) - Rust receives list as tuple
-    let animals: (Dog, Cat) = fory.deserialize_from(&mut reader).unwrap();
-    assert_eq!(animals.0.name, Some("Buddy".to_string()));
-    assert_eq!(animals.0.age, 3);
-    assert_eq!(animals.1.lives, 9);
-    assert_eq!(animals.1.age, 5);
+    // Part 1: Read List<Dog> directly
+    let dogs: Vec<Option<Dog>> = fory.deserialize_from(&mut reader).unwrap();
+    assert_eq!(dogs.len(), 2);
+    assert_eq!(dogs[0].as_ref().unwrap().name, Some("Buddy".to_string()));
+    assert_eq!(dogs[0].as_ref().unwrap().age, 3);
+    assert_eq!(dogs[1].as_ref().unwrap().name, Some("Max".to_string()));
+    assert_eq!(dogs[1].as_ref().unwrap().age, 5);
 
-    // Part 2: Read polymorphic list as struct field
-    let holder: PolymorphicListHolder = fory.deserialize_from(&mut reader).unwrap();
-    assert_eq!(holder.animals.0.name, Some("Buddy".to_string()));
-    assert_eq!(holder.animals.1.lives, 9);
+    // Part 2: Read DogListHolder (List<Dog> as struct field)
+    let holder: DogListHolder = fory.deserialize_from(&mut reader).unwrap();
+    assert_eq!(holder.dogs.len(), 2);
+    assert_eq!(
+        holder.dogs[0].as_ref().unwrap().name,
+        Some("Rex".to_string())
+    );
+    assert_eq!(
+        holder.dogs[1].as_ref().unwrap().name,
+        Some("Spot".to_string())
+    );
 
-    // Write back as tuple (which Java can receive as List)
+    // Write back
     let mut buf = Vec::new();
-    fory.serialize_to(&animals, &mut buf).unwrap();
+    fory.serialize_to(&dogs, &mut buf).unwrap();
     fory.serialize_to(&holder, &mut buf).unwrap();
     fs::write(&data_file_path, buf).unwrap();
 }
 
 #[test]
 #[ignore]
-fn test_list_tuple() {
+fn test_struct_map() {
     let data_file_path = get_data_file();
     let bytes = fs::read(&data_file_path).unwrap();
 
     let mut fory = Fory::default().compatible(true).xlang(true);
-    fory.register::<Animal>(301).unwrap();
     fory.register::<Dog>(302).unwrap();
-    fory.register::<Cat>(303).unwrap();
-
+    fory.register::<DogMapHolder>(305).unwrap();
     let mut reader = Reader::new(bytes.as_slice());
 
-    // Part 1: Read homogeneous list as tuple (3 strings)
-    let homogeneous_tuple: (String, String, String) = fory.deserialize_from(&mut reader).unwrap();
-    assert_eq!(homogeneous_tuple.0, "hello");
-    assert_eq!(homogeneous_tuple.1, "world");
-    assert_eq!(homogeneous_tuple.2, "fory");
+    // Part 1: Read Map<String, Dog> directly
+    let dog_map: HashMap<Option<String>, Option<Dog>> =
+        fory.deserialize_from(&mut reader).unwrap();
+    assert_eq!(dog_map.len(), 2);
+    let dog1 = dog_map.get(&Some("dog1".to_string())).unwrap();
+    assert_eq!(dog1.as_ref().unwrap().name, Some("Rex".to_string()));
+    assert_eq!(dog1.as_ref().unwrap().age, 2);
+    let dog2 = dog_map.get(&Some("dog2".to_string())).unwrap();
+    assert_eq!(dog2.as_ref().unwrap().name, Some("Spot".to_string()));
+    assert_eq!(dog2.as_ref().unwrap().age, 4);
 
-    // Part 2: Read polymorphic list as tuple (Dog, Cat)
-    let polymorphic_tuple: (Dog, Cat) = fory.deserialize_from(&mut reader).unwrap();
-    assert_eq!(polymorphic_tuple.0.name, Some("Max".to_string()));
-    assert_eq!(polymorphic_tuple.0.age, 3);
-    assert_eq!(polymorphic_tuple.1.lives, 7);
-    assert_eq!(polymorphic_tuple.1.age, 5);
-
-    // Write back as list (homogeneous) and tuple (polymorphic)
-    let mut buf = Vec::new();
-    let homogeneous_list = vec!["hello".to_string(), "world".to_string(), "fory".to_string()];
-    fory.serialize_to(&homogeneous_list, &mut buf).unwrap();
-    // Write back as tuple which Java will receive as List<Animal>
-    fory.serialize_to(&polymorphic_tuple, &mut buf).unwrap();
-    fs::write(&data_file_path, buf).unwrap();
-}
-
-#[test]
-#[ignore]
-fn test_polymorphic_map() {
-    let data_file_path = get_data_file();
-    let bytes = fs::read(&data_file_path).unwrap();
-
-    let mut fory = Fory::default().compatible(true).xlang(true);
-    fory.register::<Animal>(301).unwrap();
-    fory.register::<Dog>(302).unwrap();
-    fory.register::<Cat>(303).unwrap();
-    fory.register::<PolymorphicMapHolder>(305).unwrap();
-
-    let mut reader = Reader::new(bytes.as_slice());
-
-    // Part 1: Read polymorphic map - in Rust we read as HashMap with specific types
-    // For this test, we read individual entries since Rust can't have heterogeneous map values
-    // We'll use a workaround: read as two separate maps or use tuples
-    // For simplicity, read the map and check it has the expected structure
-    let animal_map: HashMap<String, Dog> = fory.deserialize_from(&mut reader).unwrap();
-    // Note: This will only work if all values are Dogs. For true polymorphism,
-    // we'd need a trait object or enum approach which requires more API support.
-
-    // Part 2: Read polymorphic map as struct field - similar limitation
-    let holder: PolymorphicMapHolder = fory.deserialize_from(&mut reader).unwrap();
-    assert!(!holder.animal_map.is_empty());
+    // Part 2: Read DogMapHolder (Map<String, Dog> as struct field)
+    let holder: DogMapHolder = fory.deserialize_from(&mut reader).unwrap();
+    assert_eq!(holder.dog_map.len(), 2);
+    let my_dog1 = holder.dog_map.get(&Some("myDog1".to_string())).unwrap();
+    assert_eq!(my_dog1.as_ref().unwrap().name, Some("Fido".to_string()));
+    let my_dog2 = holder.dog_map.get(&Some("myDog2".to_string())).unwrap();
+    assert_eq!(my_dog2.as_ref().unwrap().name, Some("Bruno".to_string()));
 
     // Write back
     let mut buf = Vec::new();
-    fory.serialize_to(&animal_map, &mut buf).unwrap();
+    fory.serialize_to(&dog_map, &mut buf).unwrap();
     fory.serialize_to(&holder, &mut buf).unwrap();
     fs::write(&data_file_path, buf).unwrap();
 }

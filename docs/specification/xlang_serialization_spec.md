@@ -21,20 +21,16 @@ license: |
 
 ## Cross-language Serialization Specification
 
-> Format Version History:
->
-> - Version 0.1 - serialization spec formalized
+Apache Fory™ xlang serialization enables automatic cross-language object serialization with support for shared references, circular references, and polymorphism. Unlike traditional serialization frameworks that require IDL definitions and schema compilation, Fory serializes objects directly without any intermediate steps.
 
-Apache Fory™ xlang serialization is an automatic object serialization framework that supports reference and polymorphism.
-Apache Fory™ will convert an object from/to fory xlang serialization binary format.
-Apache Fory™ has two core concepts for xlang serialization:
+Key characteristics:
 
-- **Apache Fory™ xlang binary format**
-- **Framework implemented in different languages to convert object to/from Apache Fory™ xlang binary format**
+- **Automatic**: No IDL definition, no schema compilation, no manual object-to-protocol conversion
+- **Cross-language**: Same binary format works seamlessly across Java, Python, C++, Rust, Go, JavaScript, and more
+- **Reference-aware**: Handles shared references and circular references without duplication or infinite recursion
+- **Polymorphic**: Supports object polymorphism with runtime type resolution
 
-The serialization format is a dynamic binary format. The dynamics and reference/polymorphism support make Apache Fory™ flexible,
-much more easy to use, but
-also introduce more complexities compared to static serialization frameworks. So the format will be more complex.
+This specification defines the Fory xlang binary format. The format is dynamic rather than static, which enables flexibility and ease of use at the cost of additional complexity in the wire format.
 
 ## Type Systems
 

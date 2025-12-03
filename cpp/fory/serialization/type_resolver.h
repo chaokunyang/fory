@@ -439,8 +439,6 @@ public:
   template <typename T> const TypeMeta &struct_meta();
   template <typename T> TypeMeta clone_struct_meta();
   template <typename T> const std::vector<size_t> &sorted_indices();
-  template <typename T>
-  const absl::flat_hash_map<std::string, size_t> &field_name_to_index();
 
   /// Get type info by type ID (for non-namespaced types)
   /// @return const pointer to TypeInfo if found, error otherwise
@@ -643,15 +641,6 @@ const std::vector<size_t> &TypeResolver::sorted_indices() {
   auto *entry = type_info_by_ctid_.find(ctid);
   FORY_CHECK(entry != nullptr) << "Type not registered";
   return entry->value->sorted_indices;
-}
-
-template <typename T>
-const absl::flat_hash_map<std::string, size_t> &
-TypeResolver::field_name_to_index() {
-  constexpr uint64_t ctid = type_index<T>();
-  auto *entry = type_info_by_ctid_.find(ctid);
-  FORY_CHECK(entry != nullptr) << "Type not registered";
-  return entry->value->name_to_index;
 }
 
 template <typename T>

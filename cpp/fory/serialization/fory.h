@@ -28,6 +28,7 @@
 #include "fory/serialization/smart_ptr_serializers.h"
 #include "fory/serialization/struct_serializer.h"
 #include "fory/serialization/temporal_serializers.h"
+#include "fory/serialization/tuple_serializer.h"
 #include "fory/serialization/type_resolver.h"
 #include "fory/util/buffer.h"
 #include "fory/util/error.h"

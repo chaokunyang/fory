@@ -369,13 +369,39 @@ struct FieldTypeBuilder<std::basic_string_view<CharT, Traits>, void> {
   }
 };
 
+// Tuple FieldTypeBuilder - builds FieldType with all element types as generics
+template <typename T>
+struct FieldTypeBuilder<T, std::enable_if_t<is_tuple_v<decay_t<T>>>> {
+  using Tuple = decay_t<T>;
+
+  template <size_t... Is>
+  static void add_element_types(FieldType &ft, std::index_sequence<Is...>) {
+    (ft.generics.push_back(
+         FieldTypeBuilder<std::tuple_element_t<Is, Tuple>>::build(false)),
+     ...);
+  }
+
+  static FieldType build(bool nullable) {
+    constexpr size_t tuple_size = std::tuple_size_v<Tuple>;
+    FieldType ft(to_type_id(Serializer<Tuple>::type_id), nullable);
+    if constexpr (tuple_size > 0) {
+      add_element_types(ft, std::make_index_sequence<tuple_size>{});
+    } else {
+      // Empty tuple: use BOOL as stub element type for schema encoding
+      ft.generics.push_back(
+          FieldType(static_cast<uint32_t>(TypeId::BOOL), false));
+    }
+    return ft;
+  }
+};
+
 template <typename T>
 struct FieldTypeBuilder<
     T, std::enable_if_t<
            !is_optional_v<decay_t<T>> && !is_shared_ptr_v<decay_t<T>> &&
            !is_unique_ptr_v<decay_t<T>> && !is_vector_v<decay_t<T>> &&
            !is_set_like_v<decay_t<T>> && !is_map_like_v<decay_t<T>> &&
-           !is_string_view_v<decay_t<T>> &&
+           !is_string_view_v<decay_t<T>> && !is_tuple_v<decay_t<T>> &&
            has_serializer_type_id_v<decay_t<T>>>> {
   using Decayed = decay_t<T>;
   static FieldType build(bool nullable) {

@@ -33,6 +33,7 @@
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -224,6 +225,8 @@ struct StructWithMap {
   }
 };
 FORY_STRUCT(StructWithMap, data);
+
+
 
 namespace fory {
 namespace serialization {
@@ -1268,5 +1271,3 @@ void RunTestStructVersionCheck(const std::string &data_file) {
 }
 
 } // namespace
-
-// Remaining test handlers will be defined below.

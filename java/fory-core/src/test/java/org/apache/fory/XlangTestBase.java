@@ -1114,6 +1114,7 @@ public abstract class XlangTestBase extends ForyTestBase {
     Assert.assertEquals(fory.deserialize(buffer2), obj);
   }
 
+
   /**
    * Execute an external command.
    *

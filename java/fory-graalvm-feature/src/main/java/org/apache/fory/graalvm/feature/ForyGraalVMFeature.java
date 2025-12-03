@@ -19,10 +19,13 @@
 
 package org.apache.fory.graalvm.feature;
 
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.fory.util.GraalvmSupport;
+import org.apache.fory.util.record.RecordUtils;
 import org.graalvm.nativeimage.hosted.Feature;
 import org.graalvm.nativeimage.hosted.RuntimeReflection;
 
@@ -91,5 +94,16 @@ public class ForyGraalVMFeature implements Feature {
     }
 
     RuntimeReflection.register(clazz);
+
+    // Register methods and constructors for Record classes
+    // (accessor methods like f1(), f2() and the canonical constructor)
+    if (RecordUtils.isRecord(clazz)) {
+      for (Method method : clazz.getDeclaredMethods()) {
+        RuntimeReflection.register(method);
+      }
+      for (Constructor<?> constructor : clazz.getDeclaredConstructors()) {
+        RuntimeReflection.register(constructor);
+      }
+    }
   }
 }

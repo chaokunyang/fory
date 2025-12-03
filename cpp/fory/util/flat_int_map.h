@@ -26,11 +26,30 @@
 #include <type_traits>
 #include <utility>
 
+#if defined(_MSC_VER)
+#include <intrin.h>
+#endif
+
 #include "fory/util/logging.h"
 #include "fory/util/result.h"
 
 namespace fory {
 namespace util {
+
+namespace detail {
+/// Cross-platform count trailing zeros for 64-bit integers.
+/// Returns the number of trailing zero bits (0-63).
+/// Behavior is undefined if value is 0.
+inline int ctz64(uint64_t value) {
+#if defined(_MSC_VER)
+  unsigned long index;
+  _BitScanForward64(&index, value);
+  return static_cast<int>(index);
+#else
+  return __builtin_ctzll(value);
+#endif
+}
+} // namespace detail
 
 /// A specialized open-addressed hash map optimized for integer keys (uint32_t
 /// or uint64_t). Designed for read-heavy workloads: insert can be slow, but
@@ -99,7 +118,7 @@ public:
       : load_factor_(load_factor) {
     capacity_ = next_power_of_2(initial_capacity < 8 ? 8 : initial_capacity);
     mask_ = capacity_ - 1;
-    shift_ = 64 - __builtin_ctzll(capacity_); // 64 - log2(capacity)
+    shift_ = 64 - detail::ctz64(capacity_); // 64 - log2(capacity)
     grow_threshold_ = static_cast<size_t>(capacity_ * load_factor_);
     entries_ = std::make_unique<Entry[]>(capacity_);
     clear_entries(entries_.get(), capacity_);

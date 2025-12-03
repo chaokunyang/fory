@@ -22,13 +22,14 @@
 #include <cstdint>
 #include <cstring>
 #include <memory>
+#include <type_traits>
 #include <utility>
 
 namespace fory {
 namespace util {
 
-/// A specialized open-addressed hash map optimized for uint64_t keys and
-/// pointer values.
+/// A specialized open-addressed hash map optimized for integer keys (uint32_t
+/// or uint64_t) and pointer values.
 ///
 /// Design goals:
 /// - Minimal overhead for small maps (typical use: 10-100 entries)
@@ -45,12 +46,19 @@ namespace util {
 /// - O(1) average lookup with good hash distribution
 /// - Linear probing provides excellent cache locality
 /// - Power-of-2 sizing enables fast modulo via bitmasking
-template <typename V> class U64Map {
+///
+/// Template parameters:
+/// - K: Key type (uint32_t or uint64_t)
+/// - V: Value type
+template <typename K, typename V> class IntMap {
+  static_assert(std::is_same_v<K, uint32_t> || std::is_same_v<K, uint64_t>,
+                "IntMap key type must be uint32_t or uint64_t");
+
 public:
-  static constexpr uint64_t kEmpty = 0;
+  static constexpr K kEmpty = 0;
 
   struct Entry {
-    uint64_t key;
+    K key;
     V value;
   };
 
@@ -58,7 +66,7 @@ public:
   class Iterator {
   public:
     using iterator_category = std::forward_iterator_tag;
-    using value_type = std::pair<const uint64_t, V>;
+    using value_type = std::pair<const K, V>;
     using difference_type = std::ptrdiff_t;
     using pointer = value_type *;
     using reference = value_type &;
@@ -68,7 +76,7 @@ public:
       advance_to_valid();
     }
 
-    std::pair<uint64_t, V> operator*() const {
+    std::pair<K, V> operator*() const {
       return {entries_[index_].key, entries_[index_].value};
     }
 
@@ -99,7 +107,7 @@ public:
 
   /// Construct map with given capacity (will be rounded up to power of 2)
   /// @param initial_capacity Minimum number of entries to support
-  explicit U64Map(size_t initial_capacity = 64) {
+  explicit IntMap(size_t initial_capacity = 64) {
     capacity_ = next_power_of_2(initial_capacity < 8 ? 8 : initial_capacity);
     mask_ = capacity_ - 1;
     entries_ = std::make_unique<Entry[]>(capacity_);
@@ -108,7 +116,7 @@ public:
   }
 
   /// Copy constructor
-  U64Map(const U64Map &other)
+  IntMap(const IntMap &other)
       : capacity_(other.capacity_), mask_(other.mask_), size_(other.size_) {
     entries_ = std::make_unique<Entry[]>(capacity_);
     std::memcpy(entries_.get(), other.entries_.get(),
@@ -116,7 +124,7 @@ public:
   }
 
   /// Move constructor
-  U64Map(U64Map &&other) noexcept
+  IntMap(IntMap &&other) noexcept
       : entries_(std::move(other.entries_)), capacity_(other.capacity_),
         mask_(other.mask_), size_(other.size_) {
     other.capacity_ = 0;
@@ -125,7 +133,7 @@ public:
   }
 
   /// Copy assignment
-  U64Map &operator=(const U64Map &other) {
+  IntMap &operator=(const IntMap &other) {
     if (this != &other) {
       capacity_ = other.capacity_;
       mask_ = other.mask_;
@@ -138,7 +146,7 @@ public:
   }
 
   /// Move assignment
-  U64Map &operator=(U64Map &&other) noexcept {
+  IntMap &operator=(IntMap &&other) noexcept {
     if (this != &other) {
       entries_ = std::move(other.entries_);
       capacity_ = other.capacity_;
@@ -155,7 +163,7 @@ public:
   /// @param key The key (must not be 0)
   /// @param value The value to associate with the key
   /// @return Reference to the stored value
-  V &operator[](uint64_t key) {
+  V &operator[](K key) {
     size_t idx = find_slot(key);
     if (entries_[idx].key == kEmpty) {
       entries_[idx].key = key;
@@ -167,7 +175,7 @@ public:
   /// Find an entry by key.
   /// @param key The key to search for
   /// @return Pointer to the Entry if found, nullptr otherwise
-  Entry *find(uint64_t key) {
+  Entry *find(K key) {
     if (key == kEmpty)
       return nullptr;
 
@@ -188,12 +196,12 @@ public:
   }
 
   /// Find an entry by key (const version).
-  const Entry *find(uint64_t key) const {
-    return const_cast<U64Map *>(this)->find(key);
+  const Entry *find(K key) const {
+    return const_cast<IntMap *>(this)->find(key);
   }
 
   /// Check if a key exists in the map.
-  bool contains(uint64_t key) const { return find(key) != nullptr; }
+  bool contains(K key) const { return find(key) != nullptr; }
 
   /// Get the number of entries in the map.
   size_t size() const { return size_; }
@@ -224,7 +232,7 @@ public:
 private:
   /// Find the slot for a key (for insertion).
   /// Returns the index where the key is found or should be inserted.
-  size_t find_slot(uint64_t key) {
+  size_t find_slot(K key) {
     size_t idx = hash(key) & mask_;
 
     while (entries_[idx].key != kEmpty && entries_[idx].key != key) {
@@ -234,16 +242,18 @@ private:
     return idx;
   }
 
-  /// Hash function optimized for uint64_t keys.
+  /// Hash function optimized for integer keys.
   /// Uses splitmix64 mixing - excellent distribution for sequential or
   /// similar keys.
-  static size_t hash(uint64_t key) {
-    key ^= key >> 33;
-    key *= 0xff51afd7ed558ccdULL;
-    key ^= key >> 33;
-    key *= 0xc4ceb9fe1a85ec53ULL;
-    key ^= key >> 33;
-    return static_cast<size_t>(key);
+  static size_t hash(K key) {
+    // Promote to uint64_t for consistent hashing behavior
+    uint64_t k = static_cast<uint64_t>(key);
+    k ^= k >> 33;
+    k *= 0xff51afd7ed558ccdULL;
+    k ^= k >> 33;
+    k *= 0xc4ceb9fe1a85ec53ULL;
+    k ^= k >> 33;
+    return static_cast<size_t>(k);
   }
 
   /// Round up to the next power of 2.
@@ -266,8 +276,15 @@ private:
   size_t size_;
 };
 
+/// Type alias for uint64_t keys (backward compatible)
+template <typename V> using U64Map = IntMap<uint64_t, V>;
+
+/// Type alias for uint32_t keys
+template <typename V> using U32Map = IntMap<uint32_t, V>;
+
 /// Type alias for the common case of pointer values
 using U64PtrMap = U64Map<void *>;
+using U32PtrMap = U32Map<void *>;
 
 } // namespace util
 } // namespace fory

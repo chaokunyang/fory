@@ -45,7 +45,6 @@
 #include "absl/container/flat_hash_map.h"
 
 #include "fory/meta/field_info.h"
-#include "fory/util/u64_ptr_map.h"
 #include "fory/meta/type_traits.h"
 #include "fory/serialization/config.h"
 #include "fory/serialization/serializer.h"
@@ -54,6 +53,7 @@
 #include "fory/type/type.h"
 #include "fory/util/buffer.h"
 #include "fory/util/error.h"
+#include "fory/util/int_map.h"
 #include "fory/util/logging.h"
 #include "fory/util/result.h"
 
@@ -580,9 +580,9 @@ private:
 
   // Lookup maps - store raw pointers (borrowed from primary storage)
   // Using compile-time type ID (uint64_t) - fast for template lookups
-  // U64Map is optimized for uint64_t keys with minimal overhead
+  // IntMap is optimized for integer keys with minimal overhead
   util::U64Map<TypeInfo *> type_info_by_ctid_{256};
-  absl::flat_hash_map<uint32_t, TypeInfo *> type_info_by_id_;
+  util::U32Map<TypeInfo *> type_info_by_id_{256};
   absl::flat_hash_map<std::string, TypeInfo *> type_info_by_name_;
   util::U64Map<TypeInfo *> partial_type_infos_{256};
 
@@ -1055,8 +1055,8 @@ TypeResolver::register_type_internal(uint64_t ctid,
   type_info_by_ctid_[ctid] = raw_ptr;
 
   if (raw_ptr->type_id != 0 && !raw_ptr->register_by_name) {
-    auto it = type_info_by_id_.find(raw_ptr->type_id);
-    if (it != type_info_by_id_.end() && it->second != raw_ptr) {
+    auto *entry = type_info_by_id_.find(raw_ptr->type_id);
+    if (entry != nullptr && entry->value != raw_ptr) {
       return Unexpected(Error::invalid("Type id already registered: " +
                                        std::to_string(raw_ptr->type_id)));
     }
@@ -1086,9 +1086,9 @@ TypeResolver::register_type_internal_runtime(const std::type_index &type_index,
 
 inline Result<const TypeInfo *, Error>
 TypeResolver::get_type_info_by_id(uint32_t type_id) const {
-  auto it = type_info_by_id_.find(type_id);
-  if (it != type_info_by_id_.end()) {
-    return it->second;
+  auto *entry = type_info_by_id_.find(type_id);
+  if (entry != nullptr) {
+    return entry->value;
   }
   return Unexpected(Error::type_error("TypeInfo not found for type_id: " +
                                       std::to_string(type_id)));

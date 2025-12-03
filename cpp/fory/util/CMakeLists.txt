@@ -34,7 +34,7 @@ set(FORY_UTIL_HEADERS
     result.h
     string_util.h
     time_util.h
-    u64_ptr_map.h
+    int_map.h
 )
 
 add_library(fory_util ${FORY_UTIL_SOURCES})
@@ -89,7 +89,7 @@ if(FORY_BUILD_TESTS)
     target_link_libraries(fory_util_time_util_test fory_util GTest::gtest GTest::gtest_main)
     gtest_discover_tests(fory_util_time_util_test)
 
-    add_executable(fory_util_u64_ptr_map_test u64_ptr_map_test.cc)
-    target_link_libraries(fory_util_u64_ptr_map_test fory_util GTest::gtest GTest::gtest_main)
-    gtest_discover_tests(fory_util_u64_ptr_map_test)
+    add_executable(fory_util_int_map_test int_map_test.cc)
+    target_link_libraries(fory_util_int_map_test fory_util GTest::gtest GTest::gtest_main)
+    gtest_discover_tests(fory_util_int_map_test)
 endif()

@@ -23,6 +23,7 @@ cc_library(
         "smart_ptr_serializers.h",
         "struct_serializer.h",
         "temporal_serializers.h",
+        "tuple_serializer.h",
         "type_info.h",
         "type_resolver.h",
     ],
@@ -90,6 +91,16 @@ cc_test(
 cc_test(
     name = "collection_serializer_test",
     srcs = ["collection_serializer_test.cc"],
+    deps = [
+        ":fory_serialization",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "tuple_serializer_test",
+    srcs = ["tuple_serializer_test.cc"],
     deps = [
         ":fory_serialization",
         "@googletest//:gtest",

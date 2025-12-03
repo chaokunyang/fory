@@ -85,6 +85,14 @@ template <typename T> struct is_optional<std::optional<T>> : std::true_type {};
 template <typename T>
 inline constexpr bool is_optional_v = is_optional<T>::value;
 
+/// Detect std::tuple
+template <typename T> struct is_tuple : std::false_type {};
+
+template <typename... Ts>
+struct is_tuple<std::tuple<Ts...>> : std::true_type {};
+
+template <typename T> inline constexpr bool is_tuple_v = is_tuple<T>::value;
+
 /// Detect std::weak_ptr
 template <typename T> struct is_weak_ptr : std::false_type {};
 
@@ -223,6 +231,9 @@ struct is_generic_type<std::set<T, Args...>> : std::true_type {};
 
 template <typename T, typename... Args>
 struct is_generic_type<std::unordered_set<T, Args...>> : std::true_type {};
+
+template <typename... Ts>
+struct is_generic_type<std::tuple<Ts...>> : std::true_type {};
 
 template <typename T>
 inline constexpr bool is_generic_type_v = is_generic_type<T>::value;

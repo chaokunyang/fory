@@ -25,6 +25,9 @@
 #include <type_traits>
 #include <utility>
 
+#include "fory/util/logging.h"
+#include "fory/util/result.h"
+
 namespace fory {
 namespace util {
 
@@ -156,8 +159,8 @@ public:
   }
 
   /// Ultra-fast lookup. Returns pointer to Entry or nullptr.
-  __attribute__((always_inline)) Entry *find(K key) {
-    if (__builtin_expect(key == kEmpty, 0))
+  FORY_ALWAYS_INLINE Entry *find(K key) {
+    if (FORY_PREDICT_FALSE(key == kEmpty))
       return nullptr;
     Entry *entries = entries_.get();
     size_t idx = hash(key) & mask_;
@@ -171,17 +174,17 @@ public:
     }
   }
 
-  __attribute__((always_inline)) const Entry *find(K key) const {
+  FORY_ALWAYS_INLINE const Entry *find(K key) const {
     return const_cast<IntMap *>(this)->find(key);
   }
 
   /// Direct value lookup. Returns pointer to value or nullptr.
-  __attribute__((always_inline)) V *get(K key) {
+  FORY_ALWAYS_INLINE V *get(K key) {
     Entry *e = find(key);
     return e ? &e->value : nullptr;
   }
 
-  __attribute__((always_inline)) const V *get(K key) const {
+  FORY_ALWAYS_INLINE const V *get(K key) const {
     const Entry *e = find(key);
     return e ? &e->value : nullptr;
   }
@@ -237,7 +240,7 @@ private:
     return idx;
   }
 
-  __attribute__((always_inline)) static size_t hash(K key) {
+  FORY_ALWAYS_INLINE static size_t hash(K key) {
     uint64_t k = static_cast<uint64_t>(key);
     k ^= k >> 33;
     k *= 0xff51afd7ed558ccdULL;

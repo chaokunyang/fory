@@ -134,9 +134,9 @@ template <typename T> inline constexpr bool need_type_for_collection_elem() {
 /// Write collection data for non-polymorphic, non-shared-ref elements.
 /// This is the fast path for common cases like vector<int>, vector<string>.
 template <typename T, typename Container>
-inline Result<void, Error>
-write_collection_data_fast(const Container &coll, WriteContext &ctx,
-                           bool has_generics) {
+inline Result<void, Error> write_collection_data_fast(const Container &coll,
+                                                      WriteContext &ctx,
+                                                      bool has_generics) {
   static_assert(!is_polymorphic_v<T>,
                 "Fast path is for non-polymorphic types only");
   static_assert(!is_shared_ref_v<T>,
@@ -195,9 +195,8 @@ write_collection_data_fast(const Container &coll, WriteContext &ctx,
             FORY_RETURN_NOT_OK(
                 Serializer<Inner>::write_data(deref_nullable(elem), ctx));
           } else {
-            FORY_RETURN_NOT_OK(
-                Serializer<Inner>::write(deref_nullable(elem), ctx, false,
-                                         false));
+            FORY_RETURN_NOT_OK(Serializer<Inner>::write(deref_nullable(elem),
+                                                        ctx, false, false));
           }
         }
       }
@@ -233,9 +232,9 @@ write_collection_data_fast(const Container &coll, WriteContext &ctx,
 /// Write collection data for polymorphic or shared-ref elements.
 /// This is the slow path that handles runtime type checking.
 template <typename T, typename Container>
-inline Result<void, Error>
-write_collection_data_slow(const Container &coll, WriteContext &ctx,
-                           bool has_generics) {
+inline Result<void, Error> write_collection_data_slow(const Container &coll,
+                                                      WriteContext &ctx,
+                                                      bool has_generics) {
   // Write length
   ctx.write_varuint32(static_cast<uint32_t>(coll.size()));
 
@@ -379,10 +378,9 @@ template <typename Container, typename T, typename = void>
 struct has_push_back : std::false_type {};
 
 template <typename Container, typename T>
-struct has_push_back<
-    Container, T,
-    std::void_t<decltype(std::declval<Container>().push_back(std::declval<T>()))>>
-    : std::true_type {};
+struct has_push_back<Container, T,
+                     std::void_t<decltype(std::declval<Container>().push_back(
+                         std::declval<T>()))>> : std::true_type {};
 
 template <typename Container, typename T>
 inline constexpr bool has_push_back_v = has_push_back<Container, T>::value;
@@ -411,8 +409,8 @@ inline void collection_insert(Container &result, T &&elem) {
 
 /// Read collection data for polymorphic or shared-ref elements.
 template <typename T, typename Container>
-inline Result<Container, Error>
-read_collection_data_slow(ReadContext &ctx, uint32_t length) {
+inline Result<Container, Error> read_collection_data_slow(ReadContext &ctx,
+                                                          uint32_t length) {
   Container result;
   if constexpr (has_reserve_v<Container>) {
     result.reserve(length);
@@ -691,7 +689,8 @@ struct Serializer<
       if (is_same_type && !is_decl_type) {
         FORY_TRY(elem_type_info, ctx.read_any_typeinfo());
         using ElemType = nullable_element_t<T>;
-        uint32_t expected = static_cast<uint32_t>(Serializer<ElemType>::type_id);
+        uint32_t expected =
+            static_cast<uint32_t>(Serializer<ElemType>::type_id);
         if (!type_id_matches(elem_type_info->type_id, expected)) {
           return Unexpected(
               Error::type_mismatch(elem_type_info->type_id, expected));
@@ -769,8 +768,7 @@ struct Serializer<
   write_data_generic(const std::vector<T, Alloc> &vec, WriteContext &ctx,
                      bool has_generics) {
     // Dispatch to fast or slow path based on element type characteristics
-    constexpr bool is_fast_path =
-        !is_polymorphic_v<T> && !is_shared_ref_v<T>;
+    constexpr bool is_fast_path = !is_polymorphic_v<T> && !is_shared_ref_v<T>;
 
     if constexpr (is_fast_path) {
       return write_collection_data_fast<T>(vec, ctx, has_generics);

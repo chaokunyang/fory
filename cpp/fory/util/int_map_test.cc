@@ -64,7 +64,18 @@ TEST_F(IntMapTest, U64Map_FindNonExistent) {
 
   EXPECT_EQ(map.find(2), nullptr);
   EXPECT_EQ(map.find(100), nullptr);
-  EXPECT_EQ(map.find(0), nullptr); // Key 0 is reserved
+  EXPECT_EQ(map.find(UINT64_MAX), nullptr); // Max value is reserved as empty
+}
+
+TEST_F(IntMapTest, U64Map_ZeroKey) {
+  U64Map<int *> map(16);
+
+  map[0] = &dummy_values_[0]; // 0 is now a valid key
+  EXPECT_EQ(map.size(), 1);
+
+  auto *entry = map.find(0);
+  ASSERT_NE(entry, nullptr);
+  EXPECT_EQ(entry->value, &dummy_values_[0]);
 }
 
 TEST_F(IntMapTest, U64Map_UpdateExistingKey) {
@@ -88,7 +99,7 @@ TEST_F(IntMapTest, U64Map_Contains) {
 
   EXPECT_TRUE(map.contains(42));
   EXPECT_FALSE(map.contains(43));
-  EXPECT_FALSE(map.contains(0));
+  EXPECT_FALSE(map.contains(UINT64_MAX)); // Max is reserved
 }
 
 TEST_F(IntMapTest, U64Map_EmptyMap) {
@@ -153,7 +164,7 @@ TEST_F(IntMapTest, U64Map_CollisionHandling) {
 TEST_F(IntMapTest, U64Map_LargeKeys) {
   U64Map<int *> map(16);
 
-  uint64_t key1 = 0xFFFFFFFFFFFFFFFFULL;
+  uint64_t key1 = 0xFFFFFFFFFFFFFFFEULL; // Max-1 (max is reserved)
   uint64_t key2 = 0x123456789ABCDEF0ULL;
   uint64_t key3 = 0x1ULL;
 
@@ -299,7 +310,18 @@ TEST_F(IntMapTest, U32Map_FindNonExistent) {
 
   EXPECT_EQ(map.find(2), nullptr);
   EXPECT_EQ(map.find(100), nullptr);
-  EXPECT_EQ(map.find(0), nullptr); // Key 0 is reserved
+  EXPECT_EQ(map.find(UINT32_MAX), nullptr); // Max value is reserved as empty
+}
+
+TEST_F(IntMapTest, U32Map_ZeroKey) {
+  U32Map<int *> map(16);
+
+  map[0] = &dummy_values_[0]; // 0 is now a valid key
+  EXPECT_EQ(map.size(), 1);
+
+  auto *entry = map.find(0);
+  ASSERT_NE(entry, nullptr);
+  EXPECT_EQ(entry->value, &dummy_values_[0]);
 }
 
 TEST_F(IntMapTest, U32Map_UpdateExistingKey) {
@@ -323,7 +345,7 @@ TEST_F(IntMapTest, U32Map_Contains) {
 
   EXPECT_TRUE(map.contains(42));
   EXPECT_FALSE(map.contains(43));
-  EXPECT_FALSE(map.contains(0));
+  EXPECT_FALSE(map.contains(UINT32_MAX)); // Max is reserved
 }
 
 TEST_F(IntMapTest, U32Map_EmptyMap) {
@@ -377,7 +399,7 @@ TEST_F(IntMapTest, U32Map_CollisionHandling) {
 TEST_F(IntMapTest, U32Map_LargeKeys) {
   U32Map<int *> map(16);
 
-  uint32_t key1 = 0xFFFFFFFFu;
+  uint32_t key1 = 0xFFFFFFFEu; // Max-1 (max is reserved)
   uint32_t key2 = 0x12345678u;
   uint32_t key3 = 0x1u;
 

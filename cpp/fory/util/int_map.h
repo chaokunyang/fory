@@ -21,6 +21,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <memory>
 #include <type_traits>
 #include <utility>
@@ -42,7 +43,7 @@ namespace util {
 /// - Power-of-2 sizing for fast modulo via bitmasking
 ///
 /// Constraints:
-/// - Key 0 is reserved as empty marker
+/// - Key max value is reserved as empty marker (cannot store max<K>)
 /// - No deletion support
 /// - Not thread-safe
 template <typename K, typename V> class IntMap {
@@ -50,7 +51,7 @@ template <typename K, typename V> class IntMap {
                 "IntMap key type must be uint32_t or uint64_t");
 
 public:
-  static constexpr K kEmpty = 0;
+  static constexpr K kEmpty = std::numeric_limits<K>::max();
   static constexpr float kDefaultLoadFactor = 0.5f; // Low for fast lookup
 
   struct Entry {
@@ -93,7 +94,7 @@ public:
     shift_ = 64 - __builtin_ctzll(capacity_); // 64 - log2(capacity)
     grow_threshold_ = static_cast<size_t>(capacity_ * load_factor_);
     entries_ = std::make_unique<Entry[]>(capacity_);
-    std::memset(entries_.get(), 0, capacity_ * sizeof(Entry));
+    clear_entries(entries_.get(), capacity_);
     size_ = 0;
   }
 
@@ -146,6 +147,7 @@ public:
   }
 
   /// Insert or update. May trigger grow.
+  /// @param key Must not be kEmpty (max value of K)
   V &operator[](K key) {
     if (size_ >= grow_threshold_) {
       grow();
@@ -196,7 +198,7 @@ public:
   bool empty() const { return size_ == 0; }
 
   void clear() {
-    std::memset(entries_.get(), 0, capacity_ * sizeof(Entry));
+    clear_entries(entries_.get(), capacity_);
     size_ = 0;
   }
 
@@ -210,12 +212,18 @@ public:
   }
 
 private:
+  static void clear_entries(Entry *entries, size_t count) {
+    for (size_t i = 0; i < count; ++i) {
+      entries[i].key = kEmpty;
+    }
+  }
+
   void grow() {
     size_t new_capacity = capacity_ * 2;
     int new_shift = shift_ - 1; // Double capacity = one less shift
     size_t new_mask = new_capacity - 1;
     auto new_entries = std::make_unique<Entry[]>(new_capacity);
-    std::memset(new_entries.get(), 0, new_capacity * sizeof(Entry));
+    clear_entries(new_entries.get(), new_capacity);
 
     // Rehash all existing entries
     for (size_t i = 0; i < capacity_; ++i) {

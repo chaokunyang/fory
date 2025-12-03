@@ -100,6 +100,61 @@ FORY_STRUCT(Sample, int_value, long_value, float_value, double_value,
             long_array, float_array, double_array, short_array, char_array,
             boolean_array, string);
 
+// Enums for MediaContent benchmark
+enum class Player : int32_t { JAVA = 0, FLASH = 1 };
+
+enum class Size : int32_t { SMALL = 0, LARGE = 1 };
+
+struct Media {
+  std::string uri;
+  std::string title; // Can be empty (null equivalent)
+  int32_t width;
+  int32_t height;
+  std::string format;
+  int64_t duration;
+  int64_t size;
+  int32_t bitrate;
+  bool has_bitrate;
+  std::vector<std::string> persons;
+  Player player;
+  std::string copyright;
+
+  bool operator==(const Media &other) const {
+    return uri == other.uri && title == other.title && width == other.width &&
+           height == other.height && format == other.format &&
+           duration == other.duration && size == other.size &&
+           bitrate == other.bitrate && has_bitrate == other.has_bitrate &&
+           persons == other.persons && player == other.player &&
+           copyright == other.copyright;
+  }
+};
+FORY_STRUCT(Media, uri, title, width, height, format, duration, size, bitrate,
+            has_bitrate, persons, player, copyright);
+
+struct Image {
+  std::string uri;
+  std::string title; // Can be empty (null equivalent)
+  int32_t width;
+  int32_t height;
+  Size size;
+
+  bool operator==(const Image &other) const {
+    return uri == other.uri && title == other.title && width == other.width &&
+           height == other.height && size == other.size;
+  }
+};
+FORY_STRUCT(Image, uri, title, width, height, size);
+
+struct MediaContent {
+  Media media;
+  std::vector<Image> images;
+
+  bool operator==(const MediaContent &other) const {
+    return media == other.media && images == other.images;
+  }
+};
+FORY_STRUCT(MediaContent, media, images);
+
 // ============================================================================
 // Test data creation
 // ============================================================================
@@ -237,6 +292,124 @@ protobuf::Sample CreateProtoSample() {
   return sample;
 }
 
+MediaContent CreateMediaContent() {
+  // Matches Java MediaContent.populate(false) - no circular reference
+  MediaContent content;
+
+  // Media fields matching Java populate()
+  content.media.uri = "http://javaone.com/keynote.ogg";
+  content.media.title = ""; // null in Java
+  content.media.width = 641;
+  content.media.height = 481;
+  content.media.format = u8"video/theora\u1234"; // UTF-8 encoded unicode
+  content.media.duration = 18000001;
+  content.media.size = 58982401;
+  content.media.bitrate = 0;
+  content.media.has_bitrate = false;
+  content.media.persons = {"Bill Gates, Jr.", "Steven Jobs"};
+  content.media.player = Player::FLASH;
+  content.media.copyright = "Copyright (c) 2009, Scooby Dooby Doo";
+
+  // Images matching Java populate(false) - no circular reference
+  content.images = {
+      Image{"http://javaone.com/keynote_huge.jpg", u8"Javaone Keynote\u1234",
+            32000, 24000, Size::LARGE},
+      Image{"http://javaone.com/keynote_large.jpg", "", 1024, 768, Size::LARGE},
+      Image{"http://javaone.com/keynote_small.jpg", "", 320, 240, Size::SMALL}};
+
+  return content;
+}
+
+/// Convert Image to protobuf
+inline protobuf::Image ToPbImage(const Image &img) {
+  protobuf::Image pb;
+  pb.set_uri(img.uri);
+  if (!img.title.empty()) {
+    pb.set_title(img.title);
+  }
+  pb.set_width(img.width);
+  pb.set_height(img.height);
+  pb.set_size(static_cast<protobuf::Size>(img.size));
+  return pb;
+}
+
+/// Convert Media to protobuf
+inline protobuf::Media ToPbMedia(const Media &m) {
+  protobuf::Media pb;
+  pb.set_uri(m.uri);
+  if (!m.title.empty()) {
+    pb.set_title(m.title);
+  }
+  pb.set_width(m.width);
+  pb.set_height(m.height);
+  pb.set_format(m.format);
+  pb.set_duration(m.duration);
+  pb.set_size(m.size);
+  pb.set_bitrate(m.bitrate);
+  pb.set_has_bitrate(m.has_bitrate);
+  for (const auto &person : m.persons) {
+    pb.add_persons(person);
+  }
+  pb.set_player(static_cast<protobuf::Player>(m.player));
+  pb.set_copyright(m.copyright);
+  return pb;
+}
+
+/// Convert MediaContent to protobuf
+inline protobuf::MediaContent ToPbMediaContent(const MediaContent &mc) {
+  protobuf::MediaContent pb;
+  *pb.mutable_media() = ToPbMedia(mc.media);
+  for (const auto &img : mc.images) {
+    *pb.add_images() = ToPbImage(img);
+  }
+  return pb;
+}
+
+/// Convert protobuf to Image
+inline Image FromPbImage(const protobuf::Image &pb) {
+  Image img;
+  img.uri = pb.uri();
+  img.title = pb.has_title() ? pb.title() : "";
+  img.width = pb.width();
+  img.height = pb.height();
+  img.size = static_cast<Size>(pb.size());
+  return img;
+}
+
+/// Convert protobuf to Media
+inline Media FromPbMedia(const protobuf::Media &pb) {
+  Media m;
+  m.uri = pb.uri();
+  m.title = pb.has_title() ? pb.title() : "";
+  m.width = pb.width();
+  m.height = pb.height();
+  m.format = pb.format();
+  m.duration = pb.duration();
+  m.size = pb.size();
+  m.bitrate = pb.bitrate();
+  m.has_bitrate = pb.has_bitrate();
+  for (const auto &person : pb.persons()) {
+    m.persons.push_back(person);
+  }
+  m.player = static_cast<Player>(pb.player());
+  m.copyright = pb.copyright();
+  return m;
+}
+
+/// Convert protobuf to MediaContent
+inline MediaContent FromPbMediaContent(const protobuf::MediaContent &pb) {
+  MediaContent mc;
+  mc.media = FromPbMedia(pb.media());
+  for (const auto &img : pb.images()) {
+    mc.images.push_back(FromPbImage(img));
+  }
+  return mc;
+}
+
+protobuf::MediaContent CreateProtoMediaContent() {
+  return ToPbMediaContent(CreateMediaContent());
+}
+
 // ============================================================================
 // Helper to configure Fory instance
 // ============================================================================
@@ -244,6 +417,9 @@ protobuf::Sample CreateProtoSample() {
 void RegisterForyTypes(fory::serialization::Fory &fory) {
   fory.register_struct<NumericStruct>(1);
   fory.register_struct<Sample>(2);
+  fory.register_struct<Media>(3);
+  fory.register_struct<Image>(4);
+  fory.register_struct<MediaContent>(5);
 }
 
 // ============================================================================
@@ -414,6 +590,89 @@ static void BM_Protobuf_Sample_Deserialize(benchmark::State &state) {
 BENCHMARK(BM_Protobuf_Sample_Deserialize);
 
 // ============================================================================
+// MediaContent benchmarks (nested objects with strings and lists)
+// ============================================================================
+
+static void BM_Fory_MediaContent_Serialize(benchmark::State &state) {
+  auto fory = fory::serialization::Fory::builder()
+                  .xlang(true)
+                  .track_ref(false)
+                  .check_struct_version(false)
+                  .build();
+  RegisterForyTypes(fory);
+  MediaContent obj = CreateMediaContent();
+
+  // Pre-allocate buffer
+  fory::Buffer buffer;
+  buffer.Reserve(4096);
+
+  for (auto _ : state) {
+    buffer.WriterIndex(0);
+    auto result = fory.serialize_to(obj, buffer);
+    benchmark::DoNotOptimize(result);
+    benchmark::DoNotOptimize(buffer.data());
+  }
+}
+BENCHMARK(BM_Fory_MediaContent_Serialize);
+
+static void BM_Protobuf_MediaContent_Serialize(benchmark::State &state) {
+  MediaContent obj = CreateMediaContent();
+  protobuf::MediaContent pb = ToPbMediaContent(obj);
+  std::vector<uint8_t> output;
+  output.resize(pb.ByteSizeLong());
+
+  for (auto _ : state) {
+    pb = ToPbMediaContent(obj);
+    pb.SerializeToArray(output.data(), static_cast<int>(output.size()));
+    benchmark::DoNotOptimize(output);
+  }
+}
+BENCHMARK(BM_Protobuf_MediaContent_Serialize);
+
+static void BM_Fory_MediaContent_Deserialize(benchmark::State &state) {
+  auto fory = fory::serialization::Fory::builder()
+                  .xlang(true)
+                  .track_ref(false)
+                  .check_struct_version(false)
+                  .build();
+  RegisterForyTypes(fory);
+  MediaContent obj = CreateMediaContent();
+  auto serialized = fory.serialize(obj);
+  if (!serialized.ok()) {
+    state.SkipWithError("Serialization failed");
+    return;
+  }
+  auto &bytes = serialized.value();
+
+  // Verify deserialization works first
+  auto test_result = fory.deserialize<MediaContent>(bytes.data(), bytes.size());
+  if (!test_result.ok()) {
+    state.SkipWithError("Deserialization test failed");
+    return;
+  }
+
+  for (auto _ : state) {
+    auto result = fory.deserialize<MediaContent>(bytes.data(), bytes.size());
+    benchmark::DoNotOptimize(result);
+  }
+}
+BENCHMARK(BM_Fory_MediaContent_Deserialize);
+
+static void BM_Protobuf_MediaContent_Deserialize(benchmark::State &state) {
+  protobuf::MediaContent obj = CreateProtoMediaContent();
+  std::string serialized;
+  obj.SerializeToString(&serialized);
+
+  for (auto _ : state) {
+    protobuf::MediaContent pb_result;
+    pb_result.ParseFromString(serialized);
+    MediaContent result = FromPbMediaContent(pb_result);
+    benchmark::DoNotOptimize(result);
+  }
+}
+BENCHMARK(BM_Protobuf_MediaContent_Deserialize);
+
+// ============================================================================
 // Serialized size comparison (printed once at the end)
 // ============================================================================
 
@@ -427,15 +686,19 @@ static void BM_PrintSerializedSizes(benchmark::State &state) {
   RegisterForyTypes(fory);
   NumericStruct fory_struct = CreateNumericStruct();
   Sample fory_sample = CreateSample();
+  MediaContent fory_media = CreateMediaContent();
   auto fory_struct_bytes = fory.serialize(fory_struct).value();
   auto fory_sample_bytes = fory.serialize(fory_sample).value();
+  auto fory_media_bytes = fory.serialize(fory_media).value();
 
   // Protobuf
   protobuf::Struct proto_struct = CreateProtoStruct();
   protobuf::Sample proto_sample = CreateProtoSample();
-  std::string proto_struct_bytes, proto_sample_bytes;
+  protobuf::MediaContent proto_media = CreateProtoMediaContent();
+  std::string proto_struct_bytes, proto_sample_bytes, proto_media_bytes;
   proto_struct.SerializeToString(&proto_struct_bytes);
   proto_sample.SerializeToString(&proto_sample_bytes);
+  proto_media.SerializeToString(&proto_media_bytes);
 
   for (auto _ : state) {
     // Just run once to print sizes
@@ -445,5 +708,7 @@ static void BM_PrintSerializedSizes(benchmark::State &state) {
   state.counters["proto_struct_size"] = proto_struct_bytes.size();
   state.counters["fory_sample_size"] = fory_sample_bytes.size();
   state.counters["proto_sample_size"] = proto_sample_bytes.size();
+  state.counters["fory_media_size"] = fory_media_bytes.size();
+  state.counters["proto_media_size"] = proto_media_bytes.size();
 }
 BENCHMARK(BM_PrintSerializedSizes)->Iterations(1);

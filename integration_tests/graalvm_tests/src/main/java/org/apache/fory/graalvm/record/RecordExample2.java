@@ -25,7 +25,7 @@ import org.apache.fory.Fory;
 import org.apache.fory.util.Preconditions;
 
 public class RecordExample2 {
-  private record Record(int f1, String f2, List<String> f3, Map<String, Long> f4) {}
+  public record Record(int f1, String f2, List<String> f3, Map<String, Long> f4) {}
 
   static Fory fory;
 

@@ -3,6 +3,8 @@
 **/*.dylib
 **/*.pyd
 bazel-*
+.bazel_user_root/
+**/.bazel_user_root/
 .whl
 python/.cache
 python/pyfory/__pycache__/

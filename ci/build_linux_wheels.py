@@ -31,7 +31,15 @@ import os
 import shlex
 import subprocess
 import sys
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List
+
+# Maximum number of parallel container builds
+MAX_PARALLEL_WORKERS = 2
+
+# Lock for thread-safe printing
+print_lock = threading.Lock()
 
 # Define Python version sets directly in the Python script
 RELEASE_PYTHON_VERSIONS = (
@@ -96,9 +104,10 @@ def collect_images_for_arch(arch_normalized: str) -> List[str]:
     return imgs
 
 
-def build_docker_cmd(workspace: str, image: str, release: bool = False) -> List[str]:
+def build_docker_cmd(
+    workspace: str, image: str, python_version: str, release: bool = False
+) -> List[str]:
     workspace = os.path.abspath(workspace)
-    python_versions = RELEASE_PYTHON_VERSIONS if release else DEFAULT_PYTHON_VERSIONS
 
     # Get GitHub reference name from environment
     github_ref_name = os.environ.get("GITHUB_REF_NAME", "")
@@ -113,7 +122,7 @@ def build_docker_cmd(workspace: str, image: str, release: bool = False) -> List[
         "-w",
         "/work",  # (w)orking directory
         "-e",
-        f"PYTHON_VERSIONS={python_versions}",  # (e)nvironment variables
+        f"PYTHON_VERSIONS={python_version}",  # Single Python version
         "-e",
         f"RELEASE_BUILD={'1' if release else '0'}",
     ]
@@ -126,32 +135,102 @@ def build_docker_cmd(workspace: str, image: str, release: bool = False) -> List[
     return cmd
 
 
-def run_for_images(
-    images: List[str], workspace: str, dry_run: bool, release: bool = False
+def thread_safe_print(*args, **kwargs):
+    """Print with thread safety."""
+    with print_lock:
+        print(*args, **kwargs)
+
+
+def run_single_build(
+    image: str, python_version: str, workspace: str, release: bool, dry_run: bool
+) -> tuple[str, int]:
+    """Run a single container build for one Python version.
+
+    Returns:
+        Tuple of (python_version, return_code)
+    """
+    docker_cmd = build_docker_cmd(workspace, image, python_version, release=release)
+    printable = " ".join(shlex.quote(c) for c in docker_cmd)
+    thread_safe_print(f"[{python_version}] + {printable}")
+
+    if dry_run:
+        return (python_version, 0)
+
+    try:
+        completed = subprocess.run(
+            docker_cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+        output = completed.stdout.decode("utf-8", errors="replace")
+
+        if completed.returncode != 0:
+            thread_safe_print(
+                f"[{python_version}] Container exited with {completed.returncode}",
+            )
+            thread_safe_print(f"[{python_version}] Output:\n{output}")
+            return (python_version, completed.returncode)
+        else:
+            thread_safe_print(f"[{python_version}] Build completed successfully.")
+            return (python_version, 0)
+    except FileNotFoundError as e:
+        thread_safe_print(f"[{python_version}] Error running docker: {e}")
+        return (python_version, 2)
+
+
+def run_parallel_builds(
+    images: List[str],
+    python_versions: List[str],
+    workspace: str,
+    dry_run: bool,
+    release: bool = False,
 ) -> int:
+    """Run container builds in parallel with ThreadPoolExecutor.
+
+    Args:
+        images: List of Docker images to use
+        python_versions: List of Python versions to build
+        workspace: Path to the workspace directory
+        dry_run: If True, print commands without running
+        release: If True, run in release mode
+
+    Returns:
+        Overall return code (0 if all succeeded, first non-zero otherwise)
+    """
     rc_overall = 0
-    for image in images:
-        docker_cmd = build_docker_cmd(workspace, image, release=release)
-        printable = " ".join(shlex.quote(c) for c in docker_cmd)
-        print(f"+ {printable}")
-        if dry_run:
-            continue
+    failed_versions = []
+
+    # For now, we only use the first image (manylinux2014)
+    image = images[0]
+
+    print(f"Building {len(python_versions)} Python versions with max "
+          f"{MAX_PARALLEL_WORKERS} parallel workers: {python_versions}")
+
+    with ThreadPoolExecutor(max_workers=MAX_PARALLEL_WORKERS) as executor:
+        futures = {
+            executor.submit(
+                run_single_build, image, pv, workspace, release, dry_run
+            ): pv
+            for pv in python_versions
+        }
+
         try:
-            completed = subprocess.run(docker_cmd)
-            if completed.returncode != 0:
-                print(
-                    f"Container {image} exited with {completed.returncode}",
-                    file=sys.stderr,
-                )
-                rc_overall = completed.returncode if rc_overall == 0 else rc_overall
-            else:
-                print(f"Container {image} completed successfully.")
+            for future in as_completed(futures):
+                python_version, rc = future.result()
+                if rc != 0:
+                    if rc_overall == 0:
+                        rc_overall = rc
+                    failed_versions.append(python_version)
         except KeyboardInterrupt:
-            print("Interrupted by user", file=sys.stderr)
+            print("\nInterrupted by user, cancelling pending builds...", file=sys.stderr)
+            executor.shutdown(wait=False, cancel_futures=True)
             return 130
-        except FileNotFoundError as e:
-            print(f"Error running docker: {e}", file=sys.stderr)
-            return 2
+
+    if failed_versions:
+        print(f"\nFailed versions: {failed_versions}", file=sys.stderr)
+    else:
+        print(f"\nAll {len(python_versions)} versions built successfully.")
+
     return rc_overall
 
 
@@ -170,8 +249,14 @@ def main() -> int:
         print(f"Container script not found at {script_path}", file=sys.stderr)
         return 2
 
+    # Get Python versions based on release mode
+    versions_str = RELEASE_PYTHON_VERSIONS if args.release else DEFAULT_PYTHON_VERSIONS
+    python_versions = versions_str.split()
+
     print(f"Selected images for arch {args.arch}: {images}")
-    return run_for_images(images, workspace, args.dry_run, release=args.release)
+    return run_parallel_builds(
+        images, python_versions, workspace, args.dry_run, release=args.release
+    )
 
 
 if __name__ == "__main__":

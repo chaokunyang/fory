@@ -559,6 +559,15 @@ func (f *Fory) readData(buffer *ByteBuffer, value reflect.Value, serializer Seri
 		default:
 			concrete = value
 			type_ = concrete.Type()
+			// For slice types with concrete element types, prefer type-specific serializer
+			// to ensure format compatibility between serialization and deserialization.
+			// This is needed because LIST typeID is shared across all slice types,
+			// but different slice types may use different serializers with different formats.
+			if type_.Kind() == reflect.Slice && !isDynamicType(type_.Elem()) {
+				if typeSpecific, err := f.typeResolver.getSerializerByType(type_, false); err == nil && typeSpecific != nil {
+					serializer = typeSpecific
+				}
+			}
 		}
 		if err := serializer.Read(f, buffer, type_, concrete); err != nil {
 			return err

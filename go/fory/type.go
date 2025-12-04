@@ -669,6 +669,9 @@ func (r *typeResolver) getTypeInfo(value reflect.Value, create bool) (TypeInfo, 
 	} else if isMultiDimensionaSlice(value) {
 		typeID = LIST
 		return r.typeIDToTypeInfo[typeID], nil
+	} else if value.Kind() == reflect.Slice {
+		// Regular slices are treated as LIST
+		typeID = LIST
 	}
 
 	// Register the type with full metadata

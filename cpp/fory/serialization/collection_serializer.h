@@ -442,14 +442,8 @@ inline Result<Container, Error> read_collection_data_slow(ReadContext &ctx,
   }
 
   // Read elements
-  // The bitmap's track_ref flag indicates whether ref flags are present in the
-  // wire format. Java's xwriteRef writes NOT_NULL_VALUE_FLAG via
-  // NoRefResolver.writeRefOrNull even when trackingRef is disabled.
-  // We use the bitmap's track_ref flag to determine if ref flags are present.
-  bool actual_track_ref = track_ref;
-
   if (is_same_type) {
-    if (actual_track_ref) {
+    if (track_ref) {
       for (uint32_t i = 0; i < length; ++i) {
         if constexpr (elem_is_polymorphic) {
           FORY_TRY(elem, Serializer<T>::read_with_type_info(ctx, true,
@@ -494,7 +488,7 @@ inline Result<Container, Error> read_collection_data_slow(ReadContext &ctx,
     }
   } else {
     // Heterogeneous types - read type info per element
-    if (has_null && !actual_track_ref) {
+    if (has_null && !track_ref) {
       // has_null but no tracking ref - read nullability flag per element
       for (uint32_t i = 0; i < length; ++i) {
         FORY_TRY(has_value, consume_ref_flag(ctx, true));
@@ -509,9 +503,9 @@ inline Result<Container, Error> read_collection_data_slow(ReadContext &ctx,
         }
       }
     } else {
-      // Read ref flags based on actual Fory config, not bitmap flag
+      // Read ref flags based on Fory config
       for (uint32_t i = 0; i < length; ++i) {
-        FORY_TRY(elem, Serializer<T>::read(ctx, actual_track_ref, true));
+        FORY_TRY(elem, Serializer<T>::read(ctx, track_ref, true));
         collection_insert(result, std::move(elem));
       }
     }

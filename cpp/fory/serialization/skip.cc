@@ -325,6 +325,47 @@ Result<void, Error> skip_ext(ReadContext &ctx, const FieldType &field_type) {
   return Result<void, Error>();
 }
 
+Result<void, Error> skip_unknown(ReadContext &ctx) {
+  // UNKNOWN type means the actual type info is written inline.
+  // We need to read the type info and then skip based on the actual type.
+  // This is used for polymorphic fields like List<Animal>.
+  FORY_TRY(type_info, ctx.read_any_typeinfo());
+  if (!type_info) {
+    return Unexpected(Error::type_error("TypeInfo not found for UNKNOWN skip"));
+  }
+
+  // Check the actual type and skip accordingly
+  uint32_t low = type_info->type_id & 0xffu;
+  TypeId actual_tid = static_cast<TypeId>(low);
+
+  switch (actual_tid) {
+  case TypeId::STRUCT:
+  case TypeId::COMPATIBLE_STRUCT:
+  case TypeId::NAMED_STRUCT:
+  case TypeId::NAMED_COMPATIBLE_STRUCT: {
+    // For struct types, we already have the type_info with field_infos
+    if (!type_info->type_meta) {
+      return Unexpected(
+          Error::type_error("TypeMeta not found for UNKNOWN struct skip"));
+    }
+    const auto &field_infos = type_info->type_meta->get_field_infos();
+    for (const auto &fi : field_infos) {
+      bool read_ref = field_need_write_ref_into_runtime(fi.field_type);
+      FORY_RETURN_NOT_OK(skip_field_value(ctx, fi.field_type, read_ref));
+    }
+    return {};
+  }
+  default: {
+    // For non-struct types (primitives, arrays, maps, etc.),
+    // recursively call skip_field_value with the actual type
+    FieldType actual_field_type;
+    actual_field_type.type_id = type_info->type_id;
+    actual_field_type.nullable = false;
+    return skip_field_value(ctx, actual_field_type, false);
+  }
+  }
+}
+
 Result<void, Error> skip_field_value(ReadContext &ctx,
                                      const FieldType &field_type,
                                      bool read_ref_flag) {
@@ -498,29 +539,8 @@ Result<void, Error> skip_field_value(ReadContext &ctx,
   case TypeId::NAMED_EXT:
     return skip_ext(ctx, field_type);
 
-  case TypeId::UNKNOWN: {
-    // UNKNOWN type means the actual type info is written inline.
-    // We need to read the type info and then skip based on the actual type.
-    // This is used for polymorphic fields like List<Animal>.
-    FORY_TRY(type_info, ctx.read_any_typeinfo());
-    if (!type_info || !type_info->type_meta) {
-      return Unexpected(
-          Error::type_error("TypeInfo or TypeMeta not found for UNKNOWN skip"));
-    }
-
-    // Create a FieldType based on the actual type for recursive skipping
-    FieldType actual_field_type;
-    actual_field_type.type_id = type_info->type_id;
-    actual_field_type.nullable = false;
-
-    // Get field infos and skip all fields
-    const auto &field_infos = type_info->type_meta->get_field_infos();
-    for (const auto &fi : field_infos) {
-      bool read_ref = field_need_write_ref_into_runtime(fi.field_type);
-      FORY_RETURN_NOT_OK(skip_field_value(ctx, fi.field_type, read_ref));
-    }
-    return {};
-  }
+  case TypeId::UNKNOWN:
+    return skip_unknown(ctx);
 
   default:
     return Unexpected(

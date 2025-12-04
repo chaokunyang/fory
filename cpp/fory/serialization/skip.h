@@ -61,5 +61,9 @@ Result<void, Error> skip_struct(ReadContext &ctx, const FieldType &field_type);
 /// Skip an ext (extension) value
 Result<void, Error> skip_ext(ReadContext &ctx, const FieldType &field_type);
 
+/// Skip an unknown (polymorphic) value
+/// The actual type info is written inline in the buffer
+Result<void, Error> skip_unknown(ReadContext &ctx);
+
 } // namespace serialization
 } // namespace fory

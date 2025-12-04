@@ -156,6 +156,18 @@ pub fn gen_read_field(field: &Field, private_ident: &Ident) -> TokenStream {
                     .collect();
             }
         }
+        StructField::VecBox(_) => {
+            // Vec<Box<dyn Any>> uses standard Vec deserialization with polymorphic elements
+            quote! {
+                let #private_ident = <#ty as fory_core::Serializer>::fory_read(context, true, false)?;
+            }
+        }
+        StructField::HashMapBox(_, _) => {
+            // HashMap<K, Box<dyn Any>> uses standard HashMap deserialization with polymorphic values
+            quote! {
+                let #private_ident = <#ty as fory_core::Serializer>::fory_read(context, true, false)?;
+            }
+        }
         StructField::HashMapRc(key_ty, trait_name) => {
             let types = create_wrapper_types_rc(&trait_name);
             let wrapper_ty = types.wrapper_ty;
@@ -360,6 +372,18 @@ pub(crate) fn gen_read_compatible_match_arm_body(field: &Field, var_name: &Ident
                     #var_name = Some(wrapper_vec.into_iter()
                         .map(|w| std::sync::Arc::<dyn #trait_ident>::from(w))
                         .collect());
+                }
+            }
+            StructField::VecBox(_) => {
+                // Vec<Box<dyn Any>> uses standard Vec deserialization with polymorphic elements
+                quote! {
+                    #var_name = Some(<#ty as fory_core::Serializer>::fory_read(context, true, false)?);
+                }
+            }
+            StructField::HashMapBox(_, _) => {
+                // HashMap<K, Box<dyn Any>> uses standard HashMap deserialization with polymorphic values
+                quote! {
+                    #var_name = Some(<#ty as fory_core::Serializer>::fory_read(context, true, false)?);
                 }
             }
             StructField::HashMapRc(key_ty, trait_name) => {

@@ -43,6 +43,7 @@ type ReadFn =
 
 type WriteDataFn = fn(&dyn Any, &mut WriteContext, has_generics: bool) -> Result<(), Error>;
 type ReadDataFn = fn(&mut ReadContext) -> Result<Box<dyn Any>, Error>;
+type ReadCompatibleFn = fn(&mut ReadContext, Rc<TypeInfo>) -> Result<Box<dyn Any>, Error>;
 type ToSerializerFn = fn(Box<dyn Any>) -> Result<Box<dyn Serializer>, Error>;
 type BuildTypeInfosFn = fn(&TypeResolver) -> Result<Vec<(std::any::TypeId, TypeInfo)>, Error>;
 const EMPTY_STRING: String = String::new();
@@ -53,6 +54,7 @@ pub struct Harness {
     read_fn: ReadFn,
     write_data_fn: WriteDataFn,
     read_data_fn: ReadDataFn,
+    read_compatible_fn: Option<ReadCompatibleFn>,
     to_serializer: ToSerializerFn,
     build_type_infos: BuildTypeInfosFn,
 }
@@ -63,6 +65,7 @@ impl Harness {
         read_fn: ReadFn,
         write_data_fn: WriteDataFn,
         read_data_fn: ReadDataFn,
+        read_compatible_fn: Option<ReadCompatibleFn>,
         to_serializer: ToSerializerFn,
         build_type_infos: BuildTypeInfosFn,
     ) -> Harness {
@@ -71,6 +74,7 @@ impl Harness {
             read_fn,
             write_data_fn,
             read_data_fn,
+            read_compatible_fn,
             to_serializer,
             build_type_infos,
         }
@@ -82,6 +86,7 @@ impl Harness {
             stub_read_fn,
             stub_write_data_fn,
             stub_read_data_fn,
+            None,
             stub_to_serializer_fn,
             stub_build_type_infos,
         )
@@ -105,6 +110,11 @@ impl Harness {
     #[inline(always)]
     pub fn get_read_data_fn(&self) -> ReadDataFn {
         self.read_data_fn
+    }
+
+    #[inline(always)]
+    pub fn get_read_compatible_fn(&self) -> Option<ReadCompatibleFn> {
+        self.read_compatible_fn
     }
 
     #[inline(always)]
@@ -234,6 +244,7 @@ impl TypeInfo {
                 stub_read_fn,
                 stub_write_data_fn,
                 stub_read_data_fn,
+                None,
                 stub_to_serializer_fn,
                 stub_build_type_infos,
             )
@@ -700,11 +711,19 @@ impl TypeResolver {
             build_struct_type_infos::<T>(type_resolver)
         }
 
+        fn read_compatible<T2: 'static + StructSerializer + ForyDefault>(
+            context: &mut ReadContext,
+            type_info: Rc<TypeInfo>,
+        ) -> Result<Box<dyn Any>, Error> {
+            Ok(Box::new(T2::fory_read_compatible(context, type_info)?))
+        }
+
         let harness = Harness::new(
             write::<T>,
             read::<T>,
             write_data::<T>,
             read_data::<T>,
+            Some(read_compatible::<T>),
             to_serializer::<T>,
             build_type_infos::<T>,
         );
@@ -891,11 +910,13 @@ impl TypeResolver {
             build_serializer_type_infos(partial_info, std::any::TypeId::of::<T2>())
         }
 
+        // EXT types don't support fory_read_compatible
         let harness = Harness::new(
             write::<T>,
             read::<T>,
             write_data::<T>,
             read_data::<T>,
+            None,
             to_serializer::<T>,
             build_type_infos::<T>,
         );

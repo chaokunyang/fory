@@ -118,8 +118,10 @@ pub(super) enum StructField {
     BoxDyn,
     RcDyn(String),
     ArcDyn(String),
+    VecBox(String),
     VecRc(String),
     VecArc(String),
+    HashMapBox(Box<Type>, String),
     HashMapRc(Box<Type>, String),
     HashMapArc(Box<Type>, String),
     ContainsTraitObject,
@@ -199,6 +201,18 @@ fn is_forward_field_internal(ty: &Type, struct_name: &str) -> bool {
 }
 
 pub(super) fn classify_trait_object_field(ty: &Type) -> StructField {
+    // Check collections FIRST - they should be handled as collections, not forward refs
+    // This is important because is_forward_field would match Vec<Box<dyn Any>> as forward
+    if let Some(collection_info) = detect_collection_with_trait_object(ty) {
+        return match collection_info {
+            CollectionTraitInfo::VecBox(t) => StructField::VecBox(t),
+            CollectionTraitInfo::VecRc(t) => StructField::VecRc(t),
+            CollectionTraitInfo::VecArc(t) => StructField::VecArc(t),
+            CollectionTraitInfo::HashMapBox(k, t) => StructField::HashMapBox(k, t),
+            CollectionTraitInfo::HashMapRc(k, t) => StructField::HashMapRc(k, t),
+            CollectionTraitInfo::HashMapArc(k, t) => StructField::HashMapArc(k, t),
+        };
+    }
     if is_forward_field(ty) {
         return StructField::Forward;
     }
@@ -210,14 +224,6 @@ pub(super) fn classify_trait_object_field(ty: &Type) -> StructField {
     }
     if let Some((_, trait_name)) = is_arc_dyn_trait(ty) {
         return StructField::ArcDyn(trait_name);
-    }
-    if let Some(collection_info) = detect_collection_with_trait_object(ty) {
-        return match collection_info {
-            CollectionTraitInfo::VecRc(t) => StructField::VecRc(t),
-            CollectionTraitInfo::VecArc(t) => StructField::VecArc(t),
-            CollectionTraitInfo::HashMapRc(k, t) => StructField::HashMapRc(k, t),
-            CollectionTraitInfo::HashMapArc(k, t) => StructField::HashMapArc(k, t),
-        };
     }
     if contains_trait_object(ty) {
         return StructField::ContainsTraitObject;

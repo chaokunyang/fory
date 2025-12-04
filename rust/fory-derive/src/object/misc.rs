@@ -83,7 +83,7 @@ pub fn gen_field_fields_info(fields: &[&Field]) -> TokenStream {
                     fory_core::meta::FieldInfo::new(#name, #generic_token)
                 }
             }
-            StructField::VecRc(_) | StructField::VecArc(_) => {
+            StructField::VecBox(_) | StructField::VecRc(_) | StructField::VecArc(_) => {
                 quote! {
                     fory_core::meta::FieldInfo::new(#name, fory_core::meta::FieldType {
                         type_id: fory_core::types::TypeId::LIST as u32,
@@ -96,7 +96,9 @@ pub fn gen_field_fields_info(fields: &[&Field]) -> TokenStream {
                     })
                 }
             }
-            StructField::HashMapRc(key_ty, _) | StructField::HashMapArc(key_ty, _) => {
+            StructField::HashMapBox(key_ty, _)
+            | StructField::HashMapRc(key_ty, _)
+            | StructField::HashMapArc(key_ty, _) => {
                 let key_generic_tree = parse_generic_tree(key_ty.as_ref());
                 let key_generic_token = generic_tree_to_tokens(&key_generic_tree);
                 quote! {

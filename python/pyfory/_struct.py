@@ -48,37 +48,6 @@ from pyfory.type import is_subclass
 logger = logging.getLogger(__name__)
 
 
-_TYPE_HASH_SEED = 47
-
-
-def _extract_primary_type_id(type_ids):
-    if isinstance(type_ids, (list, tuple)):
-        if not type_ids:
-            return TypeId.UNKNOWN
-        return type_ids[0]
-    return type_ids
-
-
-def _normalize_type_id(raw_type_id):
-    if not isinstance(raw_type_id, int):
-        return TypeId.UNKNOWN
-    base_type = raw_type_id & 0xFF
-    if base_type >= TypeId.BOUND:
-        return TypeId.UNKNOWN
-    if TypeId.is_namespaced_type(base_type):
-        return TypeId.UNKNOWN
-    return base_type
-
-
-def _to_snow_case(name: str) -> str:
-    chars = []
-    for index, ch in enumerate(name):
-        if ch.isupper() and index > 0:
-            chars.append("_")
-        chars.append(ch.lower())
-    return "".join(chars)
-
-
 basic_types = {
     bool,
     int8,

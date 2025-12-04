@@ -185,6 +185,15 @@ cd $project_dir/benchmarks/rust_benchmark
 cargo bench
 ```
 
+Run Rust xlang tests:
+
+```bash
+cd java
+mvn -T16 install -DskipTests
+cd fory-core
+FORY_RUST_JAVA_CI=1 mvn test -Dtest=org.apache.fory.RustXlangTest
+```
+
 ### JavaScript/TypeScript Development
 
 - All commands must be executed within the `javascript` directory.

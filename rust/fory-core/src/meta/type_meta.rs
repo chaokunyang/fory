@@ -22,7 +22,36 @@ use crate::meta::{
     FIELD_NAME_ENCODER, NAMESPACE_DECODER, TYPE_NAME_DECODER,
 };
 use crate::resolver::type_resolver::{TypeInfo, TypeResolver};
-use crate::types::{TypeId, PRIMITIVE_TYPES};
+use crate::types::{
+    TypeId, COMPATIBLE_STRUCT, ENUM, EXT, NAMED_COMPATIBLE_STRUCT, NAMED_ENUM, NAMED_EXT,
+    NAMED_STRUCT, PRIMITIVE_TYPES, STRUCT, UNKNOWN,
+};
+
+/// Normalizes a type ID for comparison purposes in cross-language schema evolution.
+/// This treats all struct variants (STRUCT, COMPATIBLE_STRUCT, NAMED_STRUCT,
+/// NAMED_COMPATIBLE_STRUCT) and UNKNOWN as equivalent to STRUCT.
+/// UNKNOWN (0) is used for polymorphic types (interfaces) in cross-language serialization.
+/// Similarly for ENUM and EXT variants.
+fn normalize_type_id_for_eq(type_id: u32) -> u32 {
+    let low = type_id & 0xff;
+    match low {
+        // All struct variants and UNKNOWN normalize to STRUCT
+        _ if low == STRUCT
+            || low == COMPATIBLE_STRUCT
+            || low == NAMED_STRUCT
+            || low == NAMED_COMPATIBLE_STRUCT
+            || low == UNKNOWN =>
+        {
+            STRUCT
+        }
+        // All enum variants normalize to ENUM
+        _ if low == ENUM || low == NAMED_ENUM => ENUM,
+        // All ext variants normalize to EXT
+        _ if low == EXT || low == NAMED_EXT => EXT,
+        // Everything else stays the same
+        _ => type_id,
+    }
+}
 use std::clone::Clone;
 use std::cmp::min;
 use std::collections::HashMap;
@@ -281,7 +310,10 @@ pub fn sort_fields(
 
 impl PartialEq for FieldType {
     fn eq(&self, other: &Self) -> bool {
-        self.type_id == other.type_id && self.generics == other.generics
+        // Normalize type IDs for comparison to handle cross-language schema evolution.
+        // This allows UNKNOWN (0) polymorphic types to match STRUCT (15) in Rust.
+        normalize_type_id_for_eq(self.type_id) == normalize_type_id_for_eq(other.type_id)
+            && self.generics == other.generics
     }
 }
 
@@ -591,9 +623,9 @@ impl TypeMetaLayer {
         for field in field_infos.iter_mut() {
             match field_info_map.get(&field.field_name.clone()) {
                 Some(local_field_info) => {
-                    if field.field_type.type_id != local_field_info.field_type.type_id
-                        || field.field_type.generics != local_field_info.field_type.generics
-                    {
+                    // Use FieldType comparison which normalizes type IDs for cross-language
+                    // schema evolution (e.g., UNKNOWN=0 matches STRUCT variants)
+                    if field.field_type != local_field_info.field_type {
                         field.field_id = -1;
                     } else {
                         field.field_id = local_field_info.field_id;

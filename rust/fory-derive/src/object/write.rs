@@ -63,6 +63,18 @@ pub fn gen_reserved_space(fields: &[&Field]) -> TokenStream {
                     <Vec<#wrapper_ty> as fory_core::Serializer>::fory_reserved_space() + fory_core::types::SIZE_OF_REF_AND_TYPE
                 }
             }
+            StructField::VecBox(_) => {
+                // Vec<Box<dyn Any>> uses standard Vec serialization
+                quote! {
+                    <#ty as fory_core::Serializer>::fory_reserved_space() + fory_core::types::SIZE_OF_REF_AND_TYPE
+                }
+            }
+            StructField::HashMapBox(_, _) => {
+                // HashMap<K, Box<dyn Any>> uses standard HashMap serialization
+                quote! {
+                    <#ty as fory_core::Serializer>::fory_reserved_space() + fory_core::types::SIZE_OF_REF_AND_TYPE
+                }
+            }
             StructField::HashMapRc(key_ty, trait_name) => {
                 let types = create_wrapper_types_rc(&trait_name);
                 let wrapper_ty = types.wrapper_ty;
@@ -153,6 +165,18 @@ pub fn gen_write_field(field: &Field, ident: &Ident, use_self: bool) -> TokenStr
                     .map(|item| #wrapper_ty::from(item.clone() as std::sync::Arc<dyn #trait_ident>))
                     .collect();
                 <Vec<#wrapper_ty> as fory_core::Serializer>::fory_write(&wrapper_vec, context, true, false, true)?;
+            }
+        }
+        StructField::VecBox(_) => {
+            // Vec<Box<dyn Any>> uses standard Vec serialization with polymorphic elements
+            quote! {
+                <#ty as fory_core::Serializer>::fory_write(&#value_ts, context, true, false, true)?;
+            }
+        }
+        StructField::HashMapBox(_, _) => {
+            // HashMap<K, Box<dyn Any>> uses standard HashMap serialization with polymorphic values
+            quote! {
+                <#ty as fory_core::Serializer>::fory_write(&#value_ts, context, true, false, true)?;
             }
         }
         StructField::HashMapRc(key_ty, trait_name) => {

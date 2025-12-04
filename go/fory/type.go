@@ -215,6 +215,7 @@ var (
 	interfaceMapType   = reflect.TypeOf((*map[interface{}]interface{})(nil)).Elem()
 	boolType           = reflect.TypeOf((*bool)(nil)).Elem()
 	byteType           = reflect.TypeOf((*byte)(nil)).Elem()
+	uint8Type          = reflect.TypeOf((*uint8)(nil)).Elem()
 	int8Type           = reflect.TypeOf((*int8)(nil)).Elem()
 	int16Type          = reflect.TypeOf((*int16)(nil)).Elem()
 	int32Type          = reflect.TypeOf((*int32)(nil)).Elem()
@@ -381,18 +382,16 @@ func newTypeResolver(fory *Fory) *typeResolver {
 		typeName := type_.Name()
 		typeTag := pkgPath + "." + typeName
 
-		// Create structSerializer with codegen delegate (Python-style)
+		// Create structSerializer
 		structSer := &structSerializer{
-			typeTag:         typeTag,
-			type_:           type_,
-			codegenDelegate: codegenSerializer, // Delegate to codegen for performance
+			typeTag: typeTag,
+			type_:   type_,
 		}
-		// Create ptrToStructSerializer with codegen delegate (Python-style)
+		// Create ptrToStructSerializer
 		ptrType := reflect.PtrTo(type_)
 		ptrStructSer := &ptrToStructSerializer{
 			type_:            ptrType,
 			structSerializer: *structSer,
-			codegenDelegate:  codegenSerializer, // Delegate to codegen for performance
 		}
 
 		// 1. Basic type mappings (same as reflection)

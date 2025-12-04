@@ -40,7 +40,7 @@ func (s setSerializer) NeedWriteRef() bool {
 	return true
 }
 
-func (s setSerializer) Write(f *Fory, buf *ByteBuffer, value reflect.Value) error {
+func (s setSerializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflect.Value) error {
 	// Get all map keys (set elements)
 	keys := value.MapKeys()
 	length := len(keys)
@@ -146,13 +146,13 @@ func (s setSerializer) writeSameType(f *Fory, buf *ByteBuffer, keys []reflect.Va
 			}
 			if !refWritten {
 				// Write actual value if not a reference
-				if err := serializer.Write(f, buf, key); err != nil {
+				if err := serializer.WriteReflect(f, buf, key); err != nil {
 					return err
 				}
 			}
 		} else {
 			// Directly write value without reference tracking
-			if err := serializer.Write(f, buf, key); err != nil {
+			if err := serializer.WriteReflect(f, buf, key); err != nil {
 				return err
 			}
 		}
@@ -183,7 +183,7 @@ func (s setSerializer) writeDifferentTypes(f *Fory, buf *ByteBuffer, keys []refl
 
 		if !refWritten {
 			// Write actual value if not a reference
-			if err := typeInfo.Serializer.Write(f, buf, key); err != nil {
+			if err := typeInfo.Serializer.WriteReflect(f, buf, key); err != nil {
 				return err
 			}
 		}
@@ -192,7 +192,7 @@ func (s setSerializer) writeDifferentTypes(f *Fory, buf *ByteBuffer, keys []refl
 }
 
 // Read deserializes a set from the buffer into the provided reflect.Value
-func (s setSerializer) Read(f *Fory, buf *ByteBuffer, type_ reflect.Type, value reflect.Value) error {
+func (s setSerializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.Type, value reflect.Value) error {
 	// Read collection length from buffer
 	length := int(buf.ReadVarUint32())
 	if length == 0 {
@@ -246,7 +246,7 @@ func (s setSerializer) readSameType(f *Fory, buf *ByteBuffer, value reflect.Valu
 
 		// Create new element and deserialize from buffer
 		elem := reflect.New(typeInfo.Type).Elem()
-		if err := serializer.Read(f, buf, elem.Type(), elem); err != nil {
+		if err := serializer.ReadReflect(f, buf, elem.Type(), elem); err != nil {
 			return err
 		}
 
@@ -278,7 +278,7 @@ func (s setSerializer) readDifferentTypes(f *Fory, buf *ByteBuffer, value reflec
 
 		// Create new element and deserialize from buffer
 		elem := reflect.New(typeInfo.Type).Elem()
-		if err := typeInfo.Serializer.Read(f, buf, elem.Type(), elem); err != nil {
+		if err := typeInfo.Serializer.ReadReflect(f, buf, elem.Type(), elem); err != nil {
 			return err
 		}
 

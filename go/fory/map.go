@@ -58,7 +58,7 @@ func (s mapSerializer) NeedWriteRef() bool {
 	return true
 }
 
-func (s mapSerializer) Write(f *Fory, buf *ByteBuffer, value reflect.Value) error {
+func (s mapSerializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflect.Value) error {
 	if value.Kind() == reflect.Interface {
 		value = value.Elem()
 	}
@@ -126,7 +126,7 @@ func (s mapSerializer) Write(f *Fory, buf *ByteBuffer, value reflect.Value) erro
 							if written, err := refResolver.WriteRefOrNull(buf, entryKey); err != nil {
 								return err
 							} else if !written {
-								err := valueSerializer.Write(f, buf, entryKey)
+								err := valueSerializer.WriteReflect(f, buf, entryKey)
 								if err != nil {
 									return err
 								}
@@ -134,14 +134,14 @@ func (s mapSerializer) Write(f *Fory, buf *ByteBuffer, value reflect.Value) erro
 							if written, err := refResolver.WriteRefOrNull(buf, value); err != nil {
 								return err
 							} else if !written {
-								err := valueSerializer.Write(f, buf, entryVal)
+								err := valueSerializer.WriteReflect(f, buf, entryVal)
 								if err != nil {
 									return err
 								}
 							}
 						} else {
 							buf.WriteInt8(NULL_KEY_VALUE_DECL_TYPE)
-							err := valueSerializer.Write(f, buf, entryVal)
+							err := valueSerializer.WriteReflect(f, buf, entryVal)
 							if err != nil {
 								return err
 							}
@@ -272,10 +272,10 @@ func (s mapSerializer) Write(f *Fory, buf *ByteBuffer, value reflect.Value) erro
 }
 
 func (s mapSerializer) writeObj(f *Fory, serializer Serializer, buf *ByteBuffer, obj reflect.Value) error {
-	return serializer.Write(f, buf, obj)
+	return serializer.WriteReflect(f, buf, obj)
 }
 
-func (s mapSerializer) Read(f *Fory, buf *ByteBuffer, type_ reflect.Type, value reflect.Value) error {
+func (s mapSerializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.Type, value reflect.Value) error {
 	if s.type_ == nil {
 		s.type_ = type_
 	}
@@ -481,7 +481,7 @@ func (s mapSerializer) readObj(
 	v *reflect.Value,
 	serializer Serializer,
 ) error {
-	return serializer.Read(f, buf, v.Type(), *v)
+	return serializer.ReadReflect(f, buf, v.Type(), *v)
 }
 
 func getActualType(v reflect.Value) reflect.Type {

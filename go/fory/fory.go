@@ -381,7 +381,7 @@ func (f *Fory) writeValue(buffer *ByteBuffer, value reflect.Value, serializer Se
 	}
 
 	if serializer != nil {
-		return serializer.Write(f, buffer, value)
+		return serializer.WriteReflect(f, buffer, value)
 	}
 
 	// Get type information for the value
@@ -408,7 +408,7 @@ func (f *Fory) writeValue(buffer *ByteBuffer, value reflect.Value, serializer Se
 		serializer = typeInfo.Serializer
 	}
 	// Serialize the actual value using the serializer
-	return serializer.Write(f, buffer, value)
+	return serializer.WriteReflect(f, buffer, value)
 }
 
 func (f *Fory) WriteBufferObject(buffer *ByteBuffer, bufferObject BufferObject) error {
@@ -532,7 +532,7 @@ func (f *Fory) readReferencableBySerializer(buf *ByteBuffer, value reflect.Value
 		return nil
 	}
 	// directly read without altering serializer
-	return serializer.Read(f, buf, value.Type(), value)
+	return serializer.ReadReflect(f, buf, value.Type(), value)
 }
 
 func (f *Fory) readData(buffer *ByteBuffer, value reflect.Value, serializer Serializer) (err error) {
@@ -569,13 +569,13 @@ func (f *Fory) readData(buffer *ByteBuffer, value reflect.Value, serializer Seri
 				}
 			}
 		}
-		if err := serializer.Read(f, buffer, type_, concrete); err != nil {
+		if err := serializer.ReadReflect(f, buffer, type_, concrete); err != nil {
 			return err
 		}
 		value.Set(concrete)
 		return nil
 	}
-	return serializer.Read(f, buffer, value.Type(), value)
+	return serializer.ReadReflect(f, buffer, value.Type(), value)
 }
 
 func (f *Fory) ReadBufferObject(buffer *ByteBuffer) (*ByteBuffer, error) {

@@ -29,12 +29,13 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, ubuntu-24.04-arm]
+        python: [cp38-cp38, cp313-cp313]
     steps:
       - uses: actions/checkout@v5
       - name: Build and test wheels
-        run: ./ci/build_linux_wheels.py --arch ${{ runner.arch }}
+        run: ./ci/build_linux_wheels.py --arch ${{ runner.arch }} --python ${{ matrix.python }}
       - name: Upload wheels as artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: pyfory-wheels-containerized-${{ matrix.os }}
+          name: pyfory-wheels-${{ matrix.os }}-${{ matrix.python }}
           path: dist/*.whl

@@ -26,29 +26,22 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, ubuntu-24.04-arm]
+        python:
+          - cp38-cp38
+          - cp39-cp39
+          - cp310-cp310
+          - cp311-cp311
+          - cp312-cp312
+          - cp313-cp313
     steps:
       - uses: actions/checkout@v5
       - name: Bump version
         # Pass the tag name from the push (e.g. "v0.12.1b1"); deploy.sh will strip leading "v".
         run: ./ci/deploy.sh bump_py_version "${{ github.ref_name }}"
-      - name: Set up Python 3.8
-        uses: actions/setup-python@v5
-        with:
-          python-version: 3.8
-          cache: 'pip'
-      - name: Cache Bazel binary
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/bin/bazel
-            ~/.local/bin/bazel
-          key: bazel-binary-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.bazelversion') }}
-      - name: Install bazel
-        run: ./ci/run_ci.sh install_bazel
       - name: Build and test wheels
-        run: ./ci/build_linux_wheels.py --arch ${{ runner.arch }} --release
+        run: ./ci/build_linux_wheels.py --arch ${{ runner.arch }} --python ${{ matrix.python }} --release
       - name: Upload wheels as artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: pyfory-wheels-${{ matrix.os }}-${{ runner.arch }}-${{ github.ref_name }}
+          name: pyfory-wheels-${{ matrix.os }}-${{ matrix.python }}-${{ github.ref_name }}
           path: dist/*.whl

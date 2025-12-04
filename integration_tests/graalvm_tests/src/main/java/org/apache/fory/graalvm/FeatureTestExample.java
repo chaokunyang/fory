@@ -86,7 +86,6 @@ public class FeatureTestExample {
         Fory.builder()
             .withName(FeatureTestExample.class.getName())
             .requireClassRegistration(true)
-            .withRefTracking(true)
             .build();
 
     // register and generate serializer code at build time

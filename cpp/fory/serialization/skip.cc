@@ -498,6 +498,30 @@ Result<void, Error> skip_field_value(ReadContext &ctx,
   case TypeId::NAMED_EXT:
     return skip_ext(ctx, field_type);
 
+  case TypeId::UNKNOWN: {
+    // UNKNOWN type means the actual type info is written inline.
+    // We need to read the type info and then skip based on the actual type.
+    // This is used for polymorphic fields like List<Animal>.
+    FORY_TRY(type_info, ctx.read_any_typeinfo());
+    if (!type_info || !type_info->type_meta) {
+      return Unexpected(
+          Error::type_error("TypeInfo or TypeMeta not found for UNKNOWN skip"));
+    }
+
+    // Create a FieldType based on the actual type for recursive skipping
+    FieldType actual_field_type;
+    actual_field_type.type_id = type_info->type_id;
+    actual_field_type.nullable = false;
+
+    // Get field infos and skip all fields
+    const auto &field_infos = type_info->type_meta->get_field_infos();
+    for (const auto &fi : field_infos) {
+      bool read_ref = field_need_write_ref_into_runtime(fi.field_type);
+      FORY_RETURN_NOT_OK(skip_field_value(ctx, fi.field_type, read_ref));
+    }
+    return {};
+  }
+
   default:
     return Unexpected(
         Error::type_error("Unknown field type to skip: " +

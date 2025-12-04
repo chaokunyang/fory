@@ -1422,15 +1422,6 @@ read_single_field_by_index_compatible(T &obj, ReadContext &ctx,
   // ref flags)
   bool read_ref = remote_ref_flag;
 
-#ifdef FORY_DEBUG
-  const auto debug_names = decltype(field_info)::Names;
-  std::cerr << "[xlang][field][compat] T=" << typeid(T).name()
-            << ", index=" << Index << ", name=" << debug_names[Index]
-            << ", remote_ref_flag=" << remote_ref_flag
-            << ", read_ref=" << read_ref << ", read_type=" << read_type
-            << ", reader_index=" << ctx.buffer().reader_index() << std::endl;
-#endif
-
   // OPTIMIZATION: For raw primitive fields (not wrappers) with no ref flag,
   // bypass Serializer<T>::read and use direct buffer reads with Error*.
   constexpr bool is_raw_prim = is_raw_primitive_v<FieldType>;
@@ -1735,25 +1726,19 @@ read_struct_fields_compatible(T &obj, ReadContext &ctx,
     int16_t field_id = remote_field.field_id;
 
     // In compatible mode, whether a field carries a ref/null flag depends on:
-    // 1. If the field is nullable
-    // 2. If it's a non-primitive type (string, list, set, map, struct, etc.)
-    //    Per xlang spec, only primitive types (bool, int8-64, var_int32/64,
-    //    sli_int64, float16/32/64) don't have ref flags
+    // 1. The Fory config's trackingRef setting (ctx.track_ref())
+    // 2. If trackingRef=true: read ref flags for nullable or non-primitive
+    // types
+    // 3. If trackingRef=false: no ref flags are present at all
+    //
+    // Note: Java's default trackingRef=false means no ref flags are written,
+    // so C++ must check ctx.track_ref() to determine if ref flags are present.
     uint32_t type_id = remote_field.field_type.type_id;
     bool is_primitive = is_primitive_type_id(static_cast<TypeId>(type_id));
 
-    // Read ref flag if: nullable, or non-primitive type
-    bool read_ref_flag = remote_field.field_type.nullable || !is_primitive;
-
-#ifdef FORY_DEBUG
-    std::cerr << "[xlang][compat] remote_idx=" << remote_idx
-              << ", field_id=" << field_id
-              << ", name=" << remote_field.field_name << ", type_id=" << type_id
-              << ", is_primitive=" << is_primitive
-              << ", nullable=" << remote_field.field_type.nullable
-              << ", read_ref_flag=" << read_ref_flag
-              << ", reader_index=" << ctx.buffer().reader_index() << std::endl;
-#endif
+    // Only read ref flags if trackingRef is enabled AND field type requires it
+    bool read_ref_flag =
+        ctx.track_ref() && (remote_field.field_type.nullable || !is_primitive);
 
     if (field_id == -1) {
       // Field unknown locally — skip its value

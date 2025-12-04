@@ -724,12 +724,12 @@ inline Result<MapType, Error> read_map_data_slow(ReadContext &ctx,
     }
 
     // Read chunk_size pairs
-    // NOTE: Only shared_ref and track_*_ref determine if ref flag was written
-    // The requires_ref_metadata trait is for top-level serialization, NOT for
-    // values inside map chunks. Map entries use write_data (no ref flag) unless
-    // the type is shared_ref or track_*_ref was set.
-    bool key_read_ref = key_is_shared_ref || track_key_ref;
-    bool val_read_ref = val_is_shared_ref || track_value_ref;
+    // NOTE: In cross-language serialization, the SENDER determines whether ref
+    // flags are written via header flags. The local C++ type traits (like
+    // val_is_shared_ref) should NOT influence whether we read ref flags - only
+    // the header flags from the wire format matter.
+    bool key_read_ref = track_key_ref;
+    bool val_read_ref = track_value_ref;
 
     for (uint8_t i = 0; i < chunk_size; ++i) {
       // Read key - use type info if available (polymorphic case)

@@ -58,14 +58,18 @@ struct Harness {
                                               WriteContext &ctx,
                                               bool has_generics);
   using ReadDataFn = Result<void *, Error> (*)(ReadContext &ctx);
+  using ReadCompatibleFn = Result<void *, Error> (*)(
+      ReadContext &ctx, const struct TypeInfo *type_info);
   using SortedFieldInfosFn =
       Result<std::vector<FieldInfo>, Error> (*)(TypeResolver &);
 
   Harness() = default;
   Harness(WriteFn write, ReadFn read, WriteDataFn write_data,
-          ReadDataFn read_data, SortedFieldInfosFn sorted_fields)
+          ReadDataFn read_data, SortedFieldInfosFn sorted_fields,
+          ReadCompatibleFn read_compatible = nullptr)
       : write_fn(write), read_fn(read), write_data_fn(write_data),
-        read_data_fn(read_data), sorted_field_infos_fn(sorted_fields) {}
+        read_data_fn(read_data), sorted_field_infos_fn(sorted_fields),
+        read_compatible_fn(read_compatible) {}
 
   bool valid() const {
     return write_fn != nullptr && read_fn != nullptr &&
@@ -78,6 +82,7 @@ struct Harness {
   WriteDataFn write_data_fn = nullptr;
   ReadDataFn read_data_fn = nullptr;
   SortedFieldInfosFn sorted_field_infos_fn = nullptr;
+  ReadCompatibleFn read_compatible_fn = nullptr;
 };
 
 // ============================================================================

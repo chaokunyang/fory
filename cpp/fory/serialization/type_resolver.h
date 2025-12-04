@@ -575,6 +575,10 @@ private:
   static Result<std::vector<FieldInfo>, Error>
   harness_empty_sorted_fields(TypeResolver &resolver);
 
+  template <typename T>
+  static Result<void *, Error>
+  harness_read_compatible_adapter(ReadContext &ctx, const TypeInfo *ti);
+
   static std::string make_name_key(const std::string &ns,
                                    const std::string &name);
 
@@ -980,7 +984,8 @@ template <typename T> Harness TypeResolver::make_struct_harness() {
                  &TypeResolver::harness_read_adapter<T>,
                  &TypeResolver::harness_write_data_adapter<T>,
                  &TypeResolver::harness_read_data_adapter<T>,
-                 &TypeResolver::harness_struct_sorted_fields<T>);
+                 &TypeResolver::harness_struct_sorted_fields<T>,
+                 &TypeResolver::harness_read_compatible_adapter<T>);
 }
 
 template <typename T> Harness TypeResolver::make_serializer_harness() {
@@ -1022,6 +1027,16 @@ template <typename T>
 Result<void *, Error>
 TypeResolver::harness_read_data_adapter(ReadContext &ctx) {
   FORY_TRY(value, Serializer<T>::read_data(ctx));
+  T *ptr = new T(std::move(value));
+  return ptr;
+}
+
+template <typename T>
+Result<void *, Error>
+TypeResolver::harness_read_compatible_adapter(ReadContext &ctx,
+                                              const TypeInfo *ti) {
+  // Use read_compatible for compatible mode deserialization
+  FORY_TRY(value, Serializer<T>::read_compatible(ctx, ti));
   T *ptr = new T(std::move(value));
   return ptr;
 }

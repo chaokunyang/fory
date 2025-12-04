@@ -101,8 +101,8 @@ enum class TypeId : int32_t {
   FLOAT32_ARRAY = 36,
   // one-dimensional float64 array.
   FLOAT64_ARRAY = 37,
-  // Unknown/polymorphic type marker.
-  UNKNOWN = 64,
+  // Unknown/polymorphic type marker (must match Java Types.UNKNOWN = 63).
+  UNKNOWN = 63,
   // Bound value, typically used as a sentinel value.
   BOUND = 64
 };
@@ -150,12 +150,14 @@ inline bool IsTypeShareMeta(int32_t type_id) {
 
 /// Check if type_id represents an internal (built-in) type.
 /// Internal types are all types except user-defined types (ENUM, STRUCT, EXT).
+/// UNKNOWN is excluded because it's a marker for polymorphic types, not a
+/// concrete type.
 /// Keep as constexpr for compile time evaluation or constant folding.
 inline constexpr bool is_internal_type(uint32_t type_id) {
   if (type_id == 0 || type_id >= static_cast<uint32_t>(TypeId::BOUND)) {
     return false;
   }
-  // Internal types are all types that are NOT user types
+  // Internal types are all types that are NOT user types or UNKNOWN
   uint32_t tid_low = type_id & 0xff;
   return tid_low != static_cast<uint32_t>(TypeId::ENUM) &&
          tid_low != static_cast<uint32_t>(TypeId::NAMED_ENUM) &&
@@ -164,6 +166,7 @@ inline constexpr bool is_internal_type(uint32_t type_id) {
          tid_low != static_cast<uint32_t>(TypeId::NAMED_STRUCT) &&
          tid_low != static_cast<uint32_t>(TypeId::NAMED_COMPATIBLE_STRUCT) &&
          tid_low != static_cast<uint32_t>(TypeId::EXT) &&
-         tid_low != static_cast<uint32_t>(TypeId::NAMED_EXT);
+         tid_low != static_cast<uint32_t>(TypeId::NAMED_EXT) &&
+         tid_low != static_cast<uint32_t>(TypeId::UNKNOWN);
 }
 } // namespace fory

@@ -775,6 +775,9 @@ void TypeMeta::assign_field_ids(const TypeMeta *local_type,
     case TypeId::COMPATIBLE_STRUCT:
     case TypeId::NAMED_STRUCT:
     case TypeId::NAMED_COMPATIBLE_STRUCT:
+    case TypeId::UNKNOWN:
+      // UNKNOWN is used for polymorphic types (e.g., Java interfaces) and
+      // should match STRUCT for cross-language schema evolution.
       return static_cast<uint32_t>(TypeId::STRUCT);
     case TypeId::ENUM:
     case TypeId::NAMED_ENUM:

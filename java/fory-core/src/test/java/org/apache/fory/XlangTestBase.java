@@ -1115,34 +1115,119 @@ public abstract class XlangTestBase extends ForyTestBase {
   }
 
   // ============================================================================
-  // Struct Container Tests - Test List/Map with struct element types
+  // Polymorphic Container Tests - Test List/Map with interface element types
   // ============================================================================
 
+  /** Base interface for polymorphic testing */
+  public interface Animal {
+    int getAge();
+
+    String speak();
+  }
+
   @Data
-  static class Dog {
+  public static class Dog implements Animal {
     int age;
     String name;
+
+    @Override
+    public String speak() {
+      return "Woof";
+    }
   }
 
   @Data
-  static class Cat {
+  public static class Cat implements Animal {
     int age;
     int lives;
+
+    @Override
+    public String speak() {
+      return "Meow";
+    }
   }
 
   @Data
-  static class DogListHolder {
-    List<Dog> dogs;
+  static class AnimalListHolder {
+    List<Animal> animals;
   }
 
   @Data
-  static class DogMapHolder {
-    Map<String, Dog> dog_map;
+  static class AnimalMapHolder {
+    Map<String, Animal> animal_map;
   }
 
   @Test
-  public void testStructList() throws java.io.IOException {
-    String caseName = "test_struct_list";
+  public void testPolymorphicList() throws java.io.IOException {
+    String caseName = "test_polymorphic_list";
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .withCodegen(false)
+            .build();
+    // Register concrete types, not the interface
+    fory.register(Dog.class, 302);
+    fory.register(Cat.class, 303);
+    fory.register(AnimalListHolder.class, 304);
+
+    // Part 1: Test List<Animal> with mixed types directly
+    Dog dog = new Dog();
+    dog.age = 3;
+    dog.name = "Buddy";
+    Cat cat = new Cat();
+    cat.age = 5;
+    cat.lives = 9;
+    List<Animal> animals = Arrays.asList(dog, cat);
+
+    // Part 2: Test List<Animal> as struct field
+    AnimalListHolder holder = new AnimalListHolder();
+    Dog dog2 = new Dog();
+    dog2.age = 2;
+    dog2.name = "Rex";
+    Cat cat2 = new Cat();
+    cat2.age = 4;
+    cat2.lives = 7;
+    holder.animals = Arrays.asList(dog2, cat2);
+
+    MemoryBuffer buffer = MemoryUtils.buffer(128);
+    fory.serialize(buffer, animals);
+    int animalsEnd = buffer.writerIndex();
+    fory.serialize(buffer, holder);
+
+    // Debug output to see serialized bytes
+    byte[] allBytes = buffer.getBytes(0, buffer.writerIndex());
+    System.err.print("[JAVA WRITE] Animals list (" + animalsEnd + " bytes): ");
+    for (int i = 0; i < Math.min(animalsEnd, 100); i++) {
+      System.err.print(String.format("%02x ", allBytes[i] & 0xFF));
+    }
+    System.err.println();
+    System.err.println("[JAVA WRITE] Total bytes: " + allBytes.length);
+
+    ExecutionContext ctx = prepareExecution(caseName, allBytes);
+    runPeer(ctx);
+
+    MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
+    List<Animal> readAnimals = (List<Animal>) fory.deserialize(buffer2);
+    Assert.assertEquals(readAnimals.size(), 2);
+    Assert.assertTrue(readAnimals.get(0) instanceof Dog);
+    Assert.assertEquals(((Dog) readAnimals.get(0)).name, "Buddy");
+    Assert.assertEquals(readAnimals.get(0).getAge(), 3);
+    Assert.assertTrue(readAnimals.get(1) instanceof Cat);
+    Assert.assertEquals(((Cat) readAnimals.get(1)).lives, 9);
+    Assert.assertEquals(readAnimals.get(1).getAge(), 5);
+
+    AnimalListHolder readHolder = (AnimalListHolder) fory.deserialize(buffer2);
+    Assert.assertEquals(readHolder.animals.size(), 2);
+    Assert.assertTrue(readHolder.animals.get(0) instanceof Dog);
+    Assert.assertEquals(((Dog) readHolder.animals.get(0)).name, "Rex");
+    Assert.assertTrue(readHolder.animals.get(1) instanceof Cat);
+    Assert.assertEquals(((Cat) readHolder.animals.get(1)).lives, 7);
+  }
+
+  @Test
+  public void testPolymorphicMap() throws java.io.IOException {
+    String caseName = "test_polymorphic_map";
     Fory fory =
         Fory.builder()
             .withLanguage(Language.XLANG)
@@ -1150,100 +1235,53 @@ public abstract class XlangTestBase extends ForyTestBase {
             .withCodegen(false)
             .build();
     fory.register(Dog.class, 302);
-    fory.register(DogListHolder.class, 304);
+    fory.register(Cat.class, 303);
+    fory.register(AnimalMapHolder.class, 305);
 
-    // Part 1: Test List<Dog> directly
-    Dog dog1 = new Dog();
-    dog1.age = 3;
-    dog1.name = "Buddy";
+    // Part 1: Test Map<String, Animal> with mixed types directly
+    Dog dog = new Dog();
+    dog.age = 2;
+    dog.name = "Rex";
+    Cat cat = new Cat();
+    cat.age = 4;
+    cat.lives = 9;
+    Map<String, Animal> animalMap = new HashMap<>();
+    animalMap.put("dog1", dog);
+    animalMap.put("cat1", cat);
+
+    // Part 2: Test Map<String, Animal> as struct field
+    AnimalMapHolder holder = new AnimalMapHolder();
     Dog dog2 = new Dog();
-    dog2.age = 5;
-    dog2.name = "Max";
-    List<Dog> dogs = Arrays.asList(dog1, dog2);
-
-    // Part 2: Test List<Dog> as struct field
-    DogListHolder holder = new DogListHolder();
-    Dog dog3 = new Dog();
-    dog3.age = 2;
-    dog3.name = "Rex";
-    Dog dog4 = new Dog();
-    dog4.age = 4;
-    dog4.name = "Spot";
-    holder.dogs = Arrays.asList(dog3, dog4);
+    dog2.age = 1;
+    dog2.name = "Fido";
+    Cat cat2 = new Cat();
+    cat2.age = 3;
+    cat2.lives = 8;
+    holder.animal_map = new HashMap<>();
+    holder.animal_map.put("myDog", dog2);
+    holder.animal_map.put("myCat", cat2);
 
     MemoryBuffer buffer = MemoryUtils.buffer(128);
-    fory.serialize(buffer, dogs);
+    fory.serialize(buffer, animalMap);
     fory.serialize(buffer, holder);
 
     ExecutionContext ctx = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
     runPeer(ctx);
 
     MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
-    List<Dog> readDogs = (List<Dog>) fory.deserialize(buffer2);
-    Assert.assertEquals(readDogs.size(), 2);
-    Assert.assertEquals(readDogs.get(0).name, "Buddy");
-    Assert.assertEquals(readDogs.get(0).age, 3);
-    Assert.assertEquals(readDogs.get(1).name, "Max");
-    Assert.assertEquals(readDogs.get(1).age, 5);
+    Map<String, Animal> readAnimalMap = (Map<String, Animal>) fory.deserialize(buffer2);
+    Assert.assertEquals(readAnimalMap.size(), 2);
+    Assert.assertTrue(readAnimalMap.get("dog1") instanceof Dog);
+    Assert.assertEquals(((Dog) readAnimalMap.get("dog1")).name, "Rex");
+    Assert.assertTrue(readAnimalMap.get("cat1") instanceof Cat);
+    Assert.assertEquals(((Cat) readAnimalMap.get("cat1")).lives, 9);
 
-    DogListHolder readHolder = (DogListHolder) fory.deserialize(buffer2);
-    Assert.assertEquals(readHolder.dogs.size(), 2);
-    Assert.assertEquals(readHolder.dogs.get(0).name, "Rex");
-    Assert.assertEquals(readHolder.dogs.get(1).name, "Spot");
-  }
-
-  @Test
-  public void testStructMap() throws java.io.IOException {
-    String caseName = "test_struct_map";
-    Fory fory =
-        Fory.builder()
-            .withLanguage(Language.XLANG)
-            .withCompatibleMode(CompatibleMode.COMPATIBLE)
-            .withCodegen(false)
-            .build();
-    fory.register(Dog.class, 302);
-    fory.register(DogMapHolder.class, 305);
-
-    // Part 1: Test Map<String, Dog> directly
-    Dog dog1 = new Dog();
-    dog1.age = 2;
-    dog1.name = "Rex";
-    Dog dog2 = new Dog();
-    dog2.age = 4;
-    dog2.name = "Spot";
-    Map<String, Dog> dogMap = new HashMap<>();
-    dogMap.put("dog1", dog1);
-    dogMap.put("dog2", dog2);
-
-    // Part 2: Test Map<String, Dog> as struct field
-    DogMapHolder holder = new DogMapHolder();
-    Dog dog3 = new Dog();
-    dog3.age = 1;
-    dog3.name = "Fido";
-    Dog dog4 = new Dog();
-    dog4.age = 3;
-    dog4.name = "Bruno";
-    holder.dog_map = new HashMap<>();
-    holder.dog_map.put("myDog1", dog3);
-    holder.dog_map.put("myDog2", dog4);
-
-    MemoryBuffer buffer = MemoryUtils.buffer(128);
-    fory.serialize(buffer, dogMap);
-    fory.serialize(buffer, holder);
-
-    ExecutionContext ctx = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
-    runPeer(ctx);
-
-    MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
-    Map<String, Dog> readDogMap = (Map<String, Dog>) fory.deserialize(buffer2);
-    Assert.assertEquals(readDogMap.size(), 2);
-    Assert.assertEquals(readDogMap.get("dog1").name, "Rex");
-    Assert.assertEquals(readDogMap.get("dog2").name, "Spot");
-
-    DogMapHolder readHolder = (DogMapHolder) fory.deserialize(buffer2);
-    Assert.assertEquals(readHolder.dog_map.size(), 2);
-    Assert.assertEquals(readHolder.dog_map.get("myDog1").name, "Fido");
-    Assert.assertEquals(readHolder.dog_map.get("myDog2").name, "Bruno");
+    AnimalMapHolder readHolder = (AnimalMapHolder) fory.deserialize(buffer2);
+    Assert.assertEquals(readHolder.animal_map.size(), 2);
+    Assert.assertTrue(readHolder.animal_map.get("myDog") instanceof Dog);
+    Assert.assertEquals(((Dog) readHolder.animal_map.get("myDog")).name, "Fido");
+    Assert.assertTrue(readHolder.animal_map.get("myCat") instanceof Cat);
+    Assert.assertEquals(((Cat) readHolder.animal_map.get("myCat")).lives, 8);
   }
 
   /**

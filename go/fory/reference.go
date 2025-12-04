@@ -23,17 +23,6 @@ import (
 	"unsafe"
 )
 
-const (
-	NullFlag int8 = -3
-	// RefFlag indicates that object is a not-null value.
-	// We don't use another byte to indicate REF, so that we can save one byte.
-	RefFlag int8 = -2
-	// NotNullValueFlag indicates that the object is a non-null value.
-	NotNullValueFlag int8 = -1
-	// RefValueFlag indicates that the object is a referencable and first read.
-	RefValueFlag int8 = 0
-)
-
 // RefResolver class is used to track objects that have already been read or written.
 type RefResolver struct {
 	refTracking    bool

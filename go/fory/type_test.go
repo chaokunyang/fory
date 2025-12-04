@@ -24,13 +24,8 @@ import (
 )
 
 func TestTypeResolver(t *testing.T) {
-	fory := &Fory{
-		refResolver: newRefResolver(false),
-		refTracking: false,
-		language:    XLANG,
-		buffer:      NewByteBuffer(nil),
-	}
-	typeResolver := newTypeResolver(fory)
+	fory := NewFory(WithRefTracking(false), WithLanguage(XLANG))
+	typeResolver := fory.typeResolver
 	type A struct {
 		F1 string
 	}

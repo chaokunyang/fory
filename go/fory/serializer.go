@@ -49,7 +49,7 @@ type TypedSerializer[T any] interface {
 	NeedToWriteRef() bool
 }
 
-// AnySerializer is the non-generic interface for runtime dispatch.
+// AnySerializer is the non-generic interface for runtime dispatch using the new context-based API.
 type AnySerializer interface {
 	WriteAny(ctx *WriteContext, value any, writeRefInfo, writeTypeInfo bool) error
 	WriteDataAny(ctx *WriteContext, value any) error
@@ -59,22 +59,17 @@ type AnySerializer interface {
 	NeedToWriteRef() bool
 }
 
-// Serializer is the reflection-based interface for runtime dispatch.
-// Used by existing code that works with reflect.Value.
+// Serializer is the reflection-based interface for complex types (maps, slices, structs).
+// Uses context-based API instead of *Fory.
+// Serializer interface for reflection-based serialization of complex types (maps, slices, structs).
+// Uses WriteValue/ReadValue to avoid conflicts with TypedSerializer's Write/Read methods.
 type Serializer interface {
+	WriteValue(ctx *WriteContext, value reflect.Value) error
+	ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error
 	TypeId() TypeId
-	WriteReflect(f *Fory, buf *ByteBuffer, value reflect.Value) error
-	ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.Type, value reflect.Value) error
-	NeedWriteRef() bool
+	NeedToWriteRef() bool
 }
 
-// TypeMeta holds type information for chunk-based encoding.
-type TypeMeta struct {
-	TypeId     TypeId
-	Serializer AnySerializer
-	KeyMeta    *TypeMeta // For map keys
-	ValueMeta  *TypeMeta // For map values / slice elements
-}
 
 // FastType for switch-based fast path (avoids interface virtual method cost)
 type FastType uint8
@@ -255,6 +250,31 @@ func (r *GenericRegistry) GetByReflectType(t reflect.Type) (AnySerializer, error
 	return s.(AnySerializer), nil
 }
 
+// GetByTypeId retrieves serializer by TypeId
+func (r *GenericRegistry) GetByTypeId(typeId TypeId) (AnySerializer, error) {
+	// Fast path for primitive types
+	switch typeId {
+	case BOOL:
+		return globalBoolSerializer, nil
+	case INT8:
+		return globalInt8Serializer, nil
+	case INT16:
+		return globalInt16Serializer, nil
+	case INT32:
+		return globalInt32Serializer, nil
+	case INT64:
+		return globalInt64Serializer, nil
+	case FLOAT:
+		return globalFloat32Serializer, nil
+	case DOUBLE:
+		return globalFloat64Serializer, nil
+	case STRING:
+		return globalStringSerializer, nil
+	default:
+		return nil, fmt.Errorf("no serializer for type ID %d", typeId)
+	}
+}
+
 // ============================================================================
 // Primitive Serializers - implement both TypedSerializer and AnySerializer
 // ============================================================================
@@ -266,18 +286,6 @@ var globalBoolSerializer = boolSerializer{}
 
 func (s boolSerializer) TypeId() TypeId       { return BOOL }
 func (s boolSerializer) NeedToWriteRef() bool { return false }
-func (s boolSerializer) NeedWriteRef() bool   { return false }
-
-// Serializer interface methods (reflection-based)
-func (s boolSerializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflect.Value) error {
-	buf.WriteBool(value.Bool())
-	return nil
-}
-
-func (s boolSerializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.Type, value reflect.Value) error {
-	value.SetBool(buf.ReadBool())
-	return nil
-}
 
 // TypedSerializer interface methods
 func (s boolSerializer) Write(ctx *WriteContext, value bool, writeRefInfo, writeTypeInfo bool) error {
@@ -326,6 +334,18 @@ func (s boolSerializer) ReadDataAny(ctx *ReadContext) (any, error) {
 	return s.ReadData(ctx)
 }
 
+// Serializer interface methods (for reflection-based serialization)
+func (s boolSerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
+	return s.WriteData(ctx, value.Bool())
+}
+
+func (s boolSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	v, _ := s.ReadData(ctx)
+	value.SetBool(v)
+	return nil
+}
+
+
 // int8Serializer handles int8 type
 type int8Serializer struct{}
 
@@ -333,18 +353,6 @@ var globalInt8Serializer = int8Serializer{}
 
 func (s int8Serializer) TypeId() TypeId       { return INT8 }
 func (s int8Serializer) NeedToWriteRef() bool { return false }
-func (s int8Serializer) NeedWriteRef() bool   { return false }
-
-// Serializer interface methods (reflection-based)
-func (s int8Serializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflect.Value) error {
-	buf.WriteByte_(byte(value.Int()))
-	return nil
-}
-
-func (s int8Serializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.Type, value reflect.Value) error {
-	value.SetInt(int64(int8(buf.ReadByte_())))
-	return nil
-}
 
 // TypedSerializer interface methods
 func (s int8Serializer) Write(ctx *WriteContext, value int8, writeRefInfo, writeTypeInfo bool) error {
@@ -393,19 +401,61 @@ func (s int8Serializer) ReadDataAny(ctx *ReadContext) (any, error) {
 	return s.ReadData(ctx)
 }
 
-// byteSerializer handles byte/uint8 type
-type byteSerializer struct{}
-
-func (s byteSerializer) TypeId() TypeId     { return UINT8 }
-func (s byteSerializer) NeedWriteRef() bool { return false }
-
-func (s byteSerializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflect.Value) error {
-	buf.WriteByte_(byte(value.Uint()))
+// Serializer interface methods
+func (s int8Serializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
+	ctx.buffer.WriteInt8(int8(value.Int()))
 	return nil
 }
 
-func (s byteSerializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.Type, value reflect.Value) error {
-	value.SetUint(uint64(buf.ReadByte_()))
+func (s int8Serializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	value.SetInt(int64(ctx.buffer.ReadInt8()))
+	return nil
+}
+
+// byteSerializer handles byte/uint8 type
+type byteSerializer struct{}
+
+func (s byteSerializer) TypeId() TypeId       { return UINT8 }
+func (s byteSerializer) NeedToWriteRef() bool { return false }
+
+// AnySerializer interface methods
+func (s byteSerializer) WriteAny(ctx *WriteContext, value any, writeRefInfo, writeTypeInfo bool) error {
+	if writeRefInfo {
+		ctx.buffer.WriteInt8(NotNullValueFlag)
+	}
+	if writeTypeInfo {
+		ctx.WriteTypeId(UINT8)
+	}
+	return s.WriteDataAny(ctx, value)
+}
+
+func (s byteSerializer) WriteDataAny(ctx *WriteContext, value any) error {
+	ctx.buffer.WriteByte_(value.(byte))
+	return nil
+}
+
+func (s byteSerializer) ReadAny(ctx *ReadContext, readRefInfo, readTypeInfo bool) (any, error) {
+	if readRefInfo {
+		_ = ctx.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = ctx.buffer.ReadInt16()
+	}
+	return s.ReadDataAny(ctx)
+}
+
+func (s byteSerializer) ReadDataAny(ctx *ReadContext) (any, error) {
+	return ctx.buffer.ReadByte_(), nil
+}
+
+// Serializer interface methods
+func (s byteSerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
+	ctx.buffer.WriteByte_(byte(value.Uint()))
+	return nil
+}
+
+func (s byteSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	value.SetUint(uint64(ctx.buffer.ReadByte_()))
 	return nil
 }
 
@@ -416,18 +466,6 @@ var globalInt16Serializer = int16Serializer{}
 
 func (s int16Serializer) TypeId() TypeId       { return INT16 }
 func (s int16Serializer) NeedToWriteRef() bool { return false }
-func (s int16Serializer) NeedWriteRef() bool   { return false }
-
-// Serializer interface methods (reflection-based)
-func (s int16Serializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflect.Value) error {
-	buf.WriteInt16(int16(value.Int()))
-	return nil
-}
-
-func (s int16Serializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.Type, value reflect.Value) error {
-	value.SetInt(int64(buf.ReadInt16()))
-	return nil
-}
 
 // TypedSerializer interface methods
 func (s int16Serializer) Write(ctx *WriteContext, value int16, writeRefInfo, writeTypeInfo bool) error {
@@ -476,6 +514,17 @@ func (s int16Serializer) ReadDataAny(ctx *ReadContext) (any, error) {
 	return s.ReadData(ctx)
 }
 
+// Serializer interface methods
+func (s int16Serializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
+	ctx.buffer.WriteInt16(int16(value.Int()))
+	return nil
+}
+
+func (s int16Serializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	value.SetInt(int64(ctx.buffer.ReadInt16()))
+	return nil
+}
+
 // int32Serializer handles int32 type
 type int32Serializer struct{}
 
@@ -483,18 +532,6 @@ var globalInt32Serializer = int32Serializer{}
 
 func (s int32Serializer) TypeId() TypeId       { return INT32 }
 func (s int32Serializer) NeedToWriteRef() bool { return false }
-func (s int32Serializer) NeedWriteRef() bool   { return false }
-
-// Serializer interface methods (reflection-based)
-func (s int32Serializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflect.Value) error {
-	buf.WriteVarint32(int32(value.Int()))
-	return nil
-}
-
-func (s int32Serializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.Type, value reflect.Value) error {
-	value.SetInt(int64(buf.ReadVarint32()))
-	return nil
-}
 
 // TypedSerializer interface methods
 func (s int32Serializer) Write(ctx *WriteContext, value int32, writeRefInfo, writeTypeInfo bool) error {
@@ -508,7 +545,7 @@ func (s int32Serializer) Write(ctx *WriteContext, value int32, writeRefInfo, wri
 }
 
 func (s int32Serializer) WriteData(ctx *WriteContext, value int32) error {
-	ctx.buffer.WriteInt32(value)
+	ctx.buffer.WriteVarint32(value)
 	return nil
 }
 
@@ -523,7 +560,7 @@ func (s int32Serializer) Read(ctx *ReadContext, readRefInfo, readTypeInfo bool) 
 }
 
 func (s int32Serializer) ReadData(ctx *ReadContext) (int32, error) {
-	return ctx.buffer.ReadInt32(), nil
+	return ctx.buffer.ReadVarint32(), nil
 }
 
 // AnySerializer interface methods
@@ -543,6 +580,17 @@ func (s int32Serializer) ReadDataAny(ctx *ReadContext) (any, error) {
 	return s.ReadData(ctx)
 }
 
+// Serializer interface methods
+func (s int32Serializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
+	ctx.buffer.WriteVarint32(int32(value.Int()))
+	return nil
+}
+
+func (s int32Serializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	value.SetInt(int64(ctx.buffer.ReadVarint32()))
+	return nil
+}
+
 // int64Serializer handles int64 type
 type int64Serializer struct{}
 
@@ -550,18 +598,6 @@ var globalInt64Serializer = int64Serializer{}
 
 func (s int64Serializer) TypeId() TypeId       { return INT64 }
 func (s int64Serializer) NeedToWriteRef() bool { return false }
-func (s int64Serializer) NeedWriteRef() bool   { return false }
-
-// Serializer interface methods (reflection-based)
-func (s int64Serializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflect.Value) error {
-	buf.WriteVarint64(value.Int())
-	return nil
-}
-
-func (s int64Serializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.Type, value reflect.Value) error {
-	value.SetInt(buf.ReadVarint64())
-	return nil
-}
 
 // TypedSerializer interface methods
 func (s int64Serializer) Write(ctx *WriteContext, value int64, writeRefInfo, writeTypeInfo bool) error {
@@ -575,7 +611,7 @@ func (s int64Serializer) Write(ctx *WriteContext, value int64, writeRefInfo, wri
 }
 
 func (s int64Serializer) WriteData(ctx *WriteContext, value int64) error {
-	ctx.buffer.WriteInt64(value)
+	ctx.buffer.WriteVarint64(value)
 	return nil
 }
 
@@ -590,7 +626,7 @@ func (s int64Serializer) Read(ctx *ReadContext, readRefInfo, readTypeInfo bool) 
 }
 
 func (s int64Serializer) ReadData(ctx *ReadContext) (int64, error) {
-	return ctx.buffer.ReadInt64(), nil
+	return ctx.buffer.ReadVarint64(), nil
 }
 
 // AnySerializer interface methods
@@ -610,23 +646,65 @@ func (s int64Serializer) ReadDataAny(ctx *ReadContext) (any, error) {
 	return s.ReadData(ctx)
 }
 
-// intSerializer handles int type
-type intSerializer struct{}
-
-func (s intSerializer) TypeId() TypeId     { return -INT64 }
-func (s intSerializer) NeedWriteRef() bool { return false }
-
-func (s intSerializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflect.Value) error {
-	buf.WriteInt64(value.Int())
+// Serializer interface methods
+func (s int64Serializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
+	ctx.buffer.WriteVarint64(value.Int())
 	return nil
 }
 
-func (s intSerializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.Type, value reflect.Value) error {
-	v := buf.ReadInt64()
-	if v > MaxInt || v < MinInt {
-		return fmt.Errorf("int64 %d exceed int range", v)
+func (s int64Serializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	value.SetInt(ctx.buffer.ReadVarint64())
+	return nil
+}
+
+// intSerializer handles int type
+type intSerializer struct{}
+
+func (s intSerializer) TypeId() TypeId       { return -INT64 }
+func (s intSerializer) NeedToWriteRef() bool { return false }
+
+// AnySerializer interface methods
+func (s intSerializer) WriteAny(ctx *WriteContext, value any, writeRefInfo, writeTypeInfo bool) error {
+	if writeRefInfo {
+		ctx.buffer.WriteInt8(NotNullValueFlag)
 	}
-	value.SetInt(v)
+	if writeTypeInfo {
+		ctx.WriteTypeId(INT64)
+	}
+	return s.WriteDataAny(ctx, value)
+}
+
+func (s intSerializer) WriteDataAny(ctx *WriteContext, value any) error {
+	ctx.buffer.WriteVarint64(int64(value.(int)))
+	return nil
+}
+
+func (s intSerializer) ReadAny(ctx *ReadContext, readRefInfo, readTypeInfo bool) (any, error) {
+	if readRefInfo {
+		_ = ctx.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = ctx.buffer.ReadInt16()
+	}
+	return s.ReadDataAny(ctx)
+}
+
+func (s intSerializer) ReadDataAny(ctx *ReadContext) (any, error) {
+	v := ctx.buffer.ReadVarint64()
+	if v > MaxInt || v < MinInt {
+		return 0, fmt.Errorf("int64 %d exceed int range", v)
+	}
+	return int(v), nil
+}
+
+// Serializer interface methods
+func (s intSerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
+	ctx.buffer.WriteVarint64(value.Int())
+	return nil
+}
+
+func (s intSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	value.SetInt(ctx.buffer.ReadVarint64())
 	return nil
 }
 
@@ -637,18 +715,6 @@ var globalFloat32Serializer = float32Serializer{}
 
 func (s float32Serializer) TypeId() TypeId       { return FLOAT }
 func (s float32Serializer) NeedToWriteRef() bool { return false }
-func (s float32Serializer) NeedWriteRef() bool   { return false }
-
-// Serializer interface methods (reflection-based)
-func (s float32Serializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflect.Value) error {
-	buf.WriteFloat32(float32(value.Float()))
-	return nil
-}
-
-func (s float32Serializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.Type, value reflect.Value) error {
-	value.SetFloat(float64(buf.ReadFloat32()))
-	return nil
-}
 
 // TypedSerializer interface methods
 func (s float32Serializer) Write(ctx *WriteContext, value float32, writeRefInfo, writeTypeInfo bool) error {
@@ -697,6 +763,17 @@ func (s float32Serializer) ReadDataAny(ctx *ReadContext) (any, error) {
 	return s.ReadData(ctx)
 }
 
+// Serializer interface methods
+func (s float32Serializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
+	ctx.buffer.WriteFloat32(float32(value.Float()))
+	return nil
+}
+
+func (s float32Serializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	value.SetFloat(float64(ctx.buffer.ReadFloat32()))
+	return nil
+}
+
 // float64Serializer handles float64 type
 type float64Serializer struct{}
 
@@ -704,18 +781,6 @@ var globalFloat64Serializer = float64Serializer{}
 
 func (s float64Serializer) TypeId() TypeId       { return DOUBLE }
 func (s float64Serializer) NeedToWriteRef() bool { return false }
-func (s float64Serializer) NeedWriteRef() bool   { return false }
-
-// Serializer interface methods (reflection-based)
-func (s float64Serializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflect.Value) error {
-	buf.WriteFloat64(value.Float())
-	return nil
-}
-
-func (s float64Serializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.Type, value reflect.Value) error {
-	value.SetFloat(buf.ReadFloat64())
-	return nil
-}
 
 // TypedSerializer interface methods
 func (s float64Serializer) Write(ctx *WriteContext, value float64, writeRefInfo, writeTypeInfo bool) error {
@@ -764,6 +829,17 @@ func (s float64Serializer) ReadDataAny(ctx *ReadContext) (any, error) {
 	return s.ReadData(ctx)
 }
 
+// Serializer interface methods
+func (s float64Serializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
+	ctx.buffer.WriteFloat64(value.Float())
+	return nil
+}
+
+func (s float64Serializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	value.SetFloat(ctx.buffer.ReadFloat64())
+	return nil
+}
+
 // stringSerializer handles string type
 type stringSerializer struct{}
 
@@ -771,17 +847,6 @@ var globalStringSerializer = stringSerializer{}
 
 func (s stringSerializer) TypeId() TypeId       { return STRING }
 func (s stringSerializer) NeedToWriteRef() bool { return false }
-func (s stringSerializer) NeedWriteRef() bool   { return false }
-
-// Serializer interface methods (reflection-based)
-func (s stringSerializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflect.Value) error {
-	return writeString(buf, value.String())
-}
-
-func (s stringSerializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.Type, value reflect.Value) error {
-	value.SetString(readString(buf))
-	return nil
-}
 
 // TypedSerializer interface methods
 func (s stringSerializer) Write(ctx *WriteContext, value string, writeRefInfo, writeTypeInfo bool) error {
@@ -838,22 +903,75 @@ func (s stringSerializer) ReadDataAny(ctx *ReadContext) (any, error) {
 	return s.ReadData(ctx)
 }
 
+// Serializer interface methods
+func (s stringSerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
+	return writeString(ctx.buffer, value.String())
+}
+
+func (s stringSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	str := readString(ctx.buffer)
+	value.SetString(str)
+	return nil
+}
+
 // ptrToStringSerializer serializes a pointer to string
 type ptrToStringSerializer struct{}
 
-func (s ptrToStringSerializer) TypeId() TypeId     { return -STRING }
-func (s ptrToStringSerializer) NeedWriteRef() bool { return true }
+func (s ptrToStringSerializer) TypeId() TypeId       { return -STRING }
+func (s ptrToStringSerializer) NeedToWriteRef() bool { return true }
 
-func (s ptrToStringSerializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflect.Value) error {
-	if value.Kind() != reflect.Ptr || value.IsNil() {
-		return fmt.Errorf("expected non-nil string pointer, got %v", value.Type())
+// AnySerializer interface methods
+func (s ptrToStringSerializer) WriteAny(ctx *WriteContext, value any, writeRefInfo, writeTypeInfo bool) error {
+	if writeRefInfo {
+		ctx.buffer.WriteInt8(NotNullValueFlag)
 	}
-	return writeString(buf, value.Elem().String())
+	if writeTypeInfo {
+		ctx.WriteTypeId(STRING)
+	}
+	return s.WriteDataAny(ctx, value)
 }
 
-func (s ptrToStringSerializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.Type, value reflect.Value) error {
-	str := readString(buf)
-	value.Set(reflect.ValueOf(&str))
+func (s ptrToStringSerializer) WriteDataAny(ctx *WriteContext, value any) error {
+	str := value.(*string)
+	ctx.buffer.WriteVarUint32(uint32(len(*str)))
+	if len(*str) > 0 {
+		ctx.buffer.WriteBinary(unsafe.Slice(unsafe.StringData(*str), len(*str)))
+	}
+	return nil
+}
+
+func (s ptrToStringSerializer) ReadAny(ctx *ReadContext, readRefInfo, readTypeInfo bool) (any, error) {
+	if readRefInfo {
+		_ = ctx.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = ctx.buffer.ReadInt16()
+	}
+	return s.ReadDataAny(ctx)
+}
+
+func (s ptrToStringSerializer) ReadDataAny(ctx *ReadContext) (any, error) {
+	length := ctx.buffer.ReadVarUint32()
+	if length == 0 {
+		str := ""
+		return &str, nil
+	}
+	data := ctx.buffer.ReadBinary(int(length))
+	str := string(data)
+	return &str, nil
+}
+
+// Serializer interface methods
+func (s ptrToStringSerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
+	str := value.Interface().(*string)
+	return writeString(ctx.buffer, *str)
+}
+
+func (s ptrToStringSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	str := readString(ctx.buffer)
+	ptr := new(string)
+	*ptr = str
+	value.Set(reflect.ValueOf(ptr))
 	return nil
 }
 
@@ -866,19 +984,55 @@ type Date struct {
 
 type dateSerializer struct{}
 
-func (s dateSerializer) TypeId() TypeId     { return LOCAL_DATE }
-func (s dateSerializer) NeedWriteRef() bool { return true }
+func (s dateSerializer) TypeId() TypeId       { return LOCAL_DATE }
+func (s dateSerializer) NeedToWriteRef() bool { return true }
 
-func (s dateSerializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflect.Value) error {
-	date := value.Interface().(Date)
+// AnySerializer interface methods
+func (s dateSerializer) WriteAny(ctx *WriteContext, value any, writeRefInfo, writeTypeInfo bool) error {
+	if writeRefInfo {
+		ctx.buffer.WriteInt8(NotNullValueFlag)
+	}
+	if writeTypeInfo {
+		ctx.WriteTypeId(LOCAL_DATE)
+	}
+	return s.WriteDataAny(ctx, value)
+}
+
+func (s dateSerializer) WriteDataAny(ctx *WriteContext, value any) error {
+	date := value.(Date)
 	diff := time.Date(date.Year, date.Month, date.Day, 0, 0, 0, 0, time.Local).Sub(
 		time.Date(1970, 1, 1, 0, 0, 0, 0, time.Local))
-	buf.WriteInt32(int32(diff.Hours() / 24))
+	ctx.buffer.WriteInt32(int32(diff.Hours() / 24))
 	return nil
 }
 
-func (s dateSerializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.Type, value reflect.Value) error {
-	diff := time.Duration(buf.ReadInt32()) * 24 * time.Hour
+func (s dateSerializer) ReadAny(ctx *ReadContext, readRefInfo, readTypeInfo bool) (any, error) {
+	if readRefInfo {
+		_ = ctx.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = ctx.buffer.ReadInt16()
+	}
+	return s.ReadDataAny(ctx)
+}
+
+func (s dateSerializer) ReadDataAny(ctx *ReadContext) (any, error) {
+	diff := time.Duration(ctx.buffer.ReadInt32()) * 24 * time.Hour
+	date := time.Date(1970, 1, 1, 0, 0, 0, 0, time.Local).Add(diff)
+	return Date{date.Year(), date.Month(), date.Day()}, nil
+}
+
+// Serializer interface methods
+func (s dateSerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
+	date := value.Interface().(Date)
+	diff := time.Date(date.Year, date.Month, date.Day, 0, 0, 0, 0, time.Local).Sub(
+		time.Date(1970, 1, 1, 0, 0, 0, 0, time.Local))
+	ctx.buffer.WriteInt32(int32(diff.Hours() / 24))
+	return nil
+}
+
+func (s dateSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	diff := time.Duration(ctx.buffer.ReadInt32()) * 24 * time.Hour
 	date := time.Date(1970, 1, 1, 0, 0, 0, 0, time.Local).Add(diff)
 	value.Set(reflect.ValueOf(Date{date.Year(), date.Month(), date.Day()}))
 	return nil
@@ -886,16 +1040,47 @@ func (s dateSerializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.Type
 
 type timeSerializer struct{}
 
-func (s timeSerializer) TypeId() TypeId     { return TIMESTAMP }
-func (s timeSerializer) NeedWriteRef() bool { return true }
+func (s timeSerializer) TypeId() TypeId       { return TIMESTAMP }
+func (s timeSerializer) NeedToWriteRef() bool { return true }
 
-func (s timeSerializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflect.Value) error {
-	buf.WriteInt64(GetUnixMicro(value.Interface().(time.Time)))
+// AnySerializer interface methods
+func (s timeSerializer) WriteAny(ctx *WriteContext, value any, writeRefInfo, writeTypeInfo bool) error {
+	if writeRefInfo {
+		ctx.buffer.WriteInt8(NotNullValueFlag)
+	}
+	if writeTypeInfo {
+		ctx.WriteTypeId(TIMESTAMP)
+	}
+	return s.WriteDataAny(ctx, value)
+}
+
+func (s timeSerializer) WriteDataAny(ctx *WriteContext, value any) error {
+	ctx.buffer.WriteInt64(GetUnixMicro(value.(time.Time)))
 	return nil
 }
 
-func (s timeSerializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.Type, value reflect.Value) error {
-	value.Set(reflect.ValueOf(CreateTimeFromUnixMicro(buf.ReadInt64())))
+func (s timeSerializer) ReadAny(ctx *ReadContext, readRefInfo, readTypeInfo bool) (any, error) {
+	if readRefInfo {
+		_ = ctx.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = ctx.buffer.ReadInt16()
+	}
+	return s.ReadDataAny(ctx)
+}
+
+func (s timeSerializer) ReadDataAny(ctx *ReadContext) (any, error) {
+	return CreateTimeFromUnixMicro(ctx.buffer.ReadInt64()), nil
+}
+
+// Serializer interface methods
+func (s timeSerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
+	ctx.buffer.WriteInt64(GetUnixMicro(value.Interface().(time.Time)))
+	return nil
+}
+
+func (s timeSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	value.Set(reflect.ValueOf(CreateTimeFromUnixMicro(ctx.buffer.ReadInt64())))
 	return nil
 }
 
@@ -911,44 +1096,106 @@ func (s *ptrToValueSerializer) TypeId() TypeId {
 	return -s.valueSerializer.TypeId()
 }
 
-func (s *ptrToValueSerializer) NeedWriteRef() bool { return true }
+func (s *ptrToValueSerializer) NeedToWriteRef() bool { return true }
 
-func (s *ptrToValueSerializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflect.Value) error {
-	return s.valueSerializer.WriteReflect(f, buf, value.Elem())
+// Serializer interface methods
+func (s *ptrToValueSerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
+	// Dereference pointer and write the value
+	return s.valueSerializer.WriteValue(ctx, value.Elem())
 }
 
-func (s *ptrToValueSerializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.Type, value reflect.Value) error {
-	newValue := reflect.New(type_.Elem())
-	value.Set(newValue)
-	return s.valueSerializer.ReadReflect(f, buf, type_.Elem(), newValue.Elem())
+func (s *ptrToValueSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	// Allocate new value and read into it
+	newVal := reflect.New(type_.Elem())
+	if err := s.valueSerializer.ReadValue(ctx, type_.Elem(), newVal.Elem()); err != nil {
+		return err
+	}
+	value.Set(newVal)
+	return nil
 }
 
 // Array serializers
 
 type arraySerializer struct{}
 
-func (s arraySerializer) TypeId() TypeId     { return -LIST }
-func (s arraySerializer) NeedWriteRef() bool { return true }
+func (s arraySerializer) TypeId() TypeId       { return -LIST }
+func (s arraySerializer) NeedToWriteRef() bool { return true }
 
-func (s arraySerializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflect.Value) error {
-	length := value.Len()
-	if err := f.writeLength(buf, length); err != nil {
-		return err
+// AnySerializer interface methods
+func (s arraySerializer) WriteAny(ctx *WriteContext, value any, writeRefInfo, writeTypeInfo bool) error {
+	if writeRefInfo {
+		ctx.buffer.WriteInt8(NotNullValueFlag)
 	}
+	if writeTypeInfo {
+		ctx.WriteTypeId(-LIST)
+	}
+	return s.WriteDataAny(ctx, value)
+}
+
+func (s arraySerializer) WriteDataAny(ctx *WriteContext, value any) error {
+	rv := reflect.ValueOf(value)
+	length := rv.Len()
+	ctx.buffer.WriteVarUint32(uint32(length))
+	// TODO: For polymorphic arrays, need to write each element with type info
+	// This is a simplified implementation
 	for i := 0; i < length; i++ {
-		if err := f.WriteReferencable(buf, value.Index(i)); err != nil {
-			return err
+		elem := rv.Index(i).Interface()
+		// Write null flag and element
+		if elem == nil {
+			ctx.buffer.WriteInt8(NullFlag)
+		} else {
+			ctx.buffer.WriteInt8(NotNullValueFlag)
+			// TODO: Need to get serializer for element type and write it
 		}
 	}
 	return nil
 }
 
-func (s arraySerializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.Type, value reflect.Value) error {
-	length := f.readLength(buf)
+func (s arraySerializer) ReadAny(ctx *ReadContext, readRefInfo, readTypeInfo bool) (any, error) {
+	if readRefInfo {
+		_ = ctx.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = ctx.buffer.ReadInt16()
+	}
+	return s.ReadDataAny(ctx)
+}
+
+func (s arraySerializer) ReadDataAny(ctx *ReadContext) (any, error) {
+	length := int(ctx.buffer.ReadVarUint32())
+	// TODO: Need type information to create proper array type
+	result := make([]any, length)
 	for i := 0; i < length; i++ {
-		if err := f.ReadReferencable(buf, value.Index(i)); err != nil {
-			return err
+		flag := ctx.buffer.ReadInt8()
+		if flag == NullFlag {
+			result[i] = nil
+		} else {
+			// TODO: Read element with proper type dispatch
 		}
+	}
+	return result, nil
+}
+
+// Serializer interface methods
+func (s arraySerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
+	buf := ctx.Buffer()
+	length := value.Len()
+	buf.WriteVarUint32(uint32(length))
+	for i := 0; i < length; i++ {
+		elem := value.Index(i)
+		buf.WriteInt8(NotNullValueFlag)
+		// TODO: Write element with proper serializer
+		_ = elem
+	}
+	return nil
+}
+
+func (s arraySerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	buf := ctx.Buffer()
+	length := int(buf.ReadVarUint32())
+	for i := 0; i < length; i++ {
+		_ = buf.ReadInt8() // Read flag
+		// TODO: Read element with proper serializer
 	}
 	return nil
 }
@@ -960,26 +1207,42 @@ type arrayConcreteValueSerializer struct {
 	referencable   bool
 }
 
-func (s *arrayConcreteValueSerializer) TypeId() TypeId    { return -LIST }
-func (s arrayConcreteValueSerializer) NeedWriteRef() bool { return true }
+func (s *arrayConcreteValueSerializer) TypeId() TypeId       { return -LIST }
+func (s arrayConcreteValueSerializer) NeedToWriteRef() bool { return true }
 
-func (s *arrayConcreteValueSerializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflect.Value) error {
+// Serializer interface methods
+func (s *arrayConcreteValueSerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
+	buf := ctx.Buffer()
 	length := value.Len()
-	if err := f.writeLength(buf, length); err != nil {
-		return err
-	}
+	buf.WriteVarUint32(uint32(length))
 	for i := 0; i < length; i++ {
-		if err := writeBySerializer(f, buf, value.Index(i), s.elemSerializer, s.referencable); err != nil {
+		elem := value.Index(i)
+		if s.referencable {
+			if isNull(elem) {
+				buf.WriteInt8(NullFlag)
+				continue
+			}
+			buf.WriteInt8(NotNullValueFlag)
+		}
+		if err := s.elemSerializer.WriteValue(ctx, elem); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (s *arrayConcreteValueSerializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.Type, value reflect.Value) error {
-	length := buf.ReadLength()
-	for i := 0; i < length; i++ {
-		if err := readBySerializer(f, buf, value.Index(i), s.elemSerializer, s.referencable); err != nil {
+func (s *arrayConcreteValueSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	buf := ctx.Buffer()
+	length := int(buf.ReadVarUint32())
+	for i := 0; i < length && i < value.Len(); i++ {
+		if s.referencable {
+			flag := buf.ReadInt8()
+			if flag == NullFlag {
+				continue
+			}
+		}
+		elem := value.Index(i)
+		if err := s.elemSerializer.ReadValue(ctx, elem.Type(), elem); err != nil {
 			return err
 		}
 	}
@@ -988,47 +1251,81 @@ func (s *arrayConcreteValueSerializer) ReadReflect(f *Fory, buf *ByteBuffer, typ
 
 type byteArraySerializer struct{}
 
-func (s byteArraySerializer) TypeId() TypeId     { return -BINARY }
-func (s byteArraySerializer) NeedWriteRef() bool { return false }
+func (s byteArraySerializer) TypeId() TypeId       { return -BINARY }
+func (s byteArraySerializer) NeedToWriteRef() bool { return false }
 
-func (s byteArraySerializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflect.Value) error {
-	length := value.Len()
-	if err := f.writeLength(buf, length); err != nil {
-		return err
+// AnySerializer interface methods
+func (s byteArraySerializer) WriteAny(ctx *WriteContext, value any, writeRefInfo, writeTypeInfo bool) error {
+	if writeRefInfo {
+		ctx.buffer.WriteInt8(NotNullValueFlag)
 	}
-	if value.CanAddr() {
-		buf.WriteBinary(value.Slice(0, length).Bytes())
-		return nil
+	if writeTypeInfo {
+		ctx.WriteTypeId(-BINARY)
 	}
-	buf.grow(length)
-	reflect.Copy(reflect.ValueOf(buf.data[buf.writerIndex:]), value)
-	buf.writerIndex += length
+	return s.WriteDataAny(ctx, value)
+}
+
+func (s byteArraySerializer) WriteDataAny(ctx *WriteContext, value any) error {
+	// Handle both []byte and [N]byte
+	rv := reflect.ValueOf(value)
+	length := rv.Len()
+	ctx.buffer.WriteVarUint32(uint32(length))
+	if rv.CanAddr() {
+		ctx.buffer.WriteBinary(rv.Slice(0, length).Bytes())
+	} else {
+		// For non-addressable arrays, copy element by element
+		data := make([]byte, length)
+		for i := 0; i < length; i++ {
+			data[i] = byte(rv.Index(i).Uint())
+		}
+		ctx.buffer.WriteBinary(data)
+	}
 	return nil
 }
 
-func (s byteArraySerializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.Type, value reflect.Value) error {
-	length := buf.ReadInt32()
-	if int(length) != value.Len() {
-		return fmt.Errorf("%s has len %d, but fory has len elements %d", value.Type(), value.Len(), length)
+func (s byteArraySerializer) ReadAny(ctx *ReadContext, readRefInfo, readTypeInfo bool) (any, error) {
+	if readRefInfo {
+		_ = ctx.buffer.ReadInt8()
 	}
-	_, err := buf.Read(value.Slice(0, int(length)).Bytes())
-	return err
+	if readTypeInfo {
+		_ = ctx.buffer.ReadInt16()
+	}
+	return s.ReadDataAny(ctx)
 }
 
-// Helper functions
-
-func writeBySerializer(f *Fory, buf *ByteBuffer, value reflect.Value, serializer Serializer, referencable bool) error {
-	if referencable {
-		return f.writeReferencableBySerializer(buf, value, serializer)
-	}
-	return f.writeNonReferencableBySerializer(buf, value, serializer)
+func (s byteArraySerializer) ReadDataAny(ctx *ReadContext) (any, error) {
+	length := int(ctx.buffer.ReadVarUint32())
+	data := make([]byte, length)
+	ctx.buffer.Read(data)
+	return data, nil
 }
 
-func readBySerializer(f *Fory, buf *ByteBuffer, value reflect.Value, serializer Serializer, referencable bool) error {
-	if referencable {
-		return f.readReferencableBySerializer(buf, value, serializer)
+// Serializer interface methods
+func (s byteArraySerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
+	length := value.Len()
+	ctx.buffer.WriteVarUint32(uint32(length))
+	if value.CanAddr() {
+		ctx.buffer.WriteBinary(value.Slice(0, length).Bytes())
+	} else {
+		data := make([]byte, length)
+		for i := 0; i < length; i++ {
+			data[i] = byte(value.Index(i).Uint())
+		}
+		ctx.buffer.WriteBinary(data)
 	}
-	return f.readData(buf, value, serializer)
+	return nil
+}
+
+func (s byteArraySerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	length := int(ctx.buffer.ReadVarUint32())
+	data := make([]byte, length)
+	ctx.buffer.Read(data)
+	if value.CanSet() {
+		for i := 0; i < length && i < value.Len(); i++ {
+			value.Index(i).SetUint(uint64(data[i]))
+		}
+	}
+	return nil
 }
 
 // Marshaller interface for custom serialization
@@ -1036,6 +1333,54 @@ type Marshaller interface {
 	ExtId() int16
 	MarshalFory(f *Fory, buf *ByteBuffer) error
 	UnmarshalFory(f *Fory, buf *ByteBuffer) error
+}
+
+// Helper functions for serializer dispatch
+
+func writeBySerializer(ctx *WriteContext, value reflect.Value, serializer Serializer, referencable bool) error {
+	buf := ctx.Buffer()
+	if referencable {
+		if isNull(value) {
+			buf.WriteInt8(NullFlag)
+			return nil
+		}
+		// Check for reference
+		refWritten, err := ctx.RefResolver().WriteRefOrNull(buf, value)
+		if err != nil {
+			return err
+		}
+		if refWritten {
+			return nil
+		}
+	}
+	// If no serializer provided, look it up from typeResolver
+	if serializer == nil {
+		typeInfo, err := ctx.TypeResolver().getTypeInfo(value, true)
+		if err != nil {
+			return err
+		}
+		serializer = typeInfo.Serializer
+	}
+	return serializer.WriteValue(ctx, value)
+}
+
+func readBySerializer(ctx *ReadContext, value reflect.Value, serializer Serializer, referencable bool) error {
+	buf := ctx.Buffer()
+	if referencable {
+		refID, err := ctx.RefResolver().TryPreserveRefId(buf)
+		if err != nil {
+			return err
+		}
+		if int8(refID) < NotNullValueFlag {
+			// Reference found
+			obj := ctx.RefResolver().GetReadObject(refID)
+			if obj.IsValid() {
+				value.Set(obj)
+			}
+			return nil
+		}
+	}
+	return serializer.ReadValue(ctx, value.Type(), value)
 }
 
 // init registers all primitive serializers

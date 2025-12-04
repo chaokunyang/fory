@@ -153,7 +153,7 @@ func buildFieldDefs(fory *Fory, value reflect.Value) ([]FieldDef, error) {
 			name:         fieldName,
 			nameEncoding: nameEncoding,
 			nullable:     nullable(field.Type),
-			trackingRef:  fory.refTracking,
+			trackingRef:  fory.config.RefTracking,
 			fieldType:    ft,
 		}
 		fieldDefs = append(fieldDefs, fieldInfo)
@@ -199,7 +199,8 @@ func buildFieldDefs(fory *Fory, value reflect.Value) ([]FieldDef, error) {
 type FieldType interface {
 	TypeId() TypeId
 	write(*ByteBuffer)
-	getTypeInfo(*Fory) (TypeInfo, error) // some serializer need typeinfo as well
+	getTypeInfo(*Fory) (TypeInfo, error)                    // some serializer need typeinfo as well
+	getTypeInfoWithResolver(*typeResolver) (TypeInfo, error) // version that uses typeResolver directly
 }
 
 // BaseFieldType provides common functionality for field types
@@ -220,8 +221,24 @@ func getFieldTypeSerializer(fory *Fory, ft FieldType) (Serializer, error) {
 	return typeInfo.Serializer, nil
 }
 
+func getFieldTypeSerializerWithResolver(resolver *typeResolver, ft FieldType) (Serializer, error) {
+	typeInfo, err := ft.getTypeInfoWithResolver(resolver)
+	if err != nil {
+		return nil, err
+	}
+	return typeInfo.Serializer, nil
+}
+
 func (b *BaseFieldType) getTypeInfo(fory *Fory) (TypeInfo, error) {
 	info, err := fory.typeResolver.getTypeInfoById(b.typeId)
+	if err != nil {
+		return TypeInfo{}, err
+	}
+	return info, nil
+}
+
+func (b *BaseFieldType) getTypeInfoWithResolver(resolver *typeResolver) (TypeInfo, error) {
+	info, err := resolver.getTypeInfoById(b.typeId)
 	if err != nil {
 		return TypeInfo{}, err
 	}
@@ -287,6 +304,17 @@ func (c *CollectionFieldType) getTypeInfo(f *Fory) (TypeInfo, error) {
 	return TypeInfo{Type: collectionType, Serializer: sliceSerializer}, nil
 }
 
+func (c *CollectionFieldType) getTypeInfoWithResolver(resolver *typeResolver) (TypeInfo, error) {
+	elemInfo, err := c.elementType.getTypeInfoWithResolver(resolver)
+	elementType := elemInfo.Type
+	collectionType := reflect.SliceOf(elementType)
+	if err != nil {
+		return TypeInfo{}, err
+	}
+	sliceSerializer := &sliceSerializer{elemInfo: elemInfo, declaredType: elemInfo.Type}
+	return TypeInfo{Type: collectionType, Serializer: sliceSerializer}, nil
+}
+
 // MapFieldType represents map types
 type MapFieldType struct {
 	BaseFieldType
@@ -328,6 +356,26 @@ func (m *MapFieldType) getTypeInfo(f *Fory) (TypeInfo, error) {
 	return TypeInfo{Type: mapType, Serializer: mapSerializer}, nil
 }
 
+func (m *MapFieldType) getTypeInfoWithResolver(resolver *typeResolver) (TypeInfo, error) {
+	keyInfo, err := m.keyType.getTypeInfoWithResolver(resolver)
+	if err != nil {
+		return TypeInfo{}, err
+	}
+	valueInfo, err := m.valueType.getTypeInfoWithResolver(resolver)
+	if err != nil {
+		return TypeInfo{}, err
+	}
+	var mapType reflect.Type
+	if keyInfo.Type != nil && valueInfo.Type != nil {
+		mapType = reflect.MapOf(keyInfo.Type, valueInfo.Type)
+	}
+	mapSerializer := &mapSerializer{
+		keySerializer:   keyInfo.Serializer,
+		valueSerializer: valueInfo.Serializer,
+	}
+	return TypeInfo{Type: mapType, Serializer: mapSerializer}, nil
+}
+
 // SimpleFieldType represents object field types that aren't collection/map types
 type SimpleFieldType struct {
 	BaseFieldType
@@ -355,6 +403,11 @@ func NewDynamicFieldType(typeId TypeId) *DynamicFieldType {
 }
 
 func (d *DynamicFieldType) getTypeInfo(fory *Fory) (TypeInfo, error) {
+	// leave empty for runtime resolution, we not know the actual type here
+	return TypeInfo{Type: reflect.TypeOf((*interface{})(nil)).Elem(), Serializer: nil}, nil
+}
+
+func (d *DynamicFieldType) getTypeInfoWithResolver(resolver *typeResolver) (TypeInfo, error) {
 	// leave empty for runtime resolution, we not know the actual type here
 	return TypeInfo{Type: reflect.TypeOf((*interface{})(nil)).Elem(), Serializer: nil}, nil
 }

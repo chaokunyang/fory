@@ -325,7 +325,7 @@ func newTypeResolver(fory *Fory) *typeResolver {
 		dynamicIdToString:    map[int16]string{},
 		fory:                 fory,
 
-		language:            fory.language,
+		language:            fory.config.Language,
 		metaStringResolver:  NewMetaStringResolver(),
 		requireRegistration: false,
 
@@ -800,7 +800,7 @@ func calcTypeHash(type_ reflect.Type) uint64 {
 }
 
 func (r *typeResolver) metaShareEnabled() bool {
-	return r.fory != nil && r.fory.metaContext != nil && r.fory.compatible
+	return r.fory != nil && r.fory.metaContext != nil && r.fory.config.Compatible
 }
 
 func (r *typeResolver) writeTypeInfo(buffer *ByteBuffer, typeInfo TypeInfo) error {
@@ -836,7 +836,7 @@ func (r *typeResolver) writeTypeInfo(buffer *ByteBuffer, typeInfo TypeInfo) erro
 }
 
 func (r *typeResolver) writeSharedTypeMeta(buffer *ByteBuffer, typeInfo TypeInfo) error {
-	context := r.fory.metaContext
+	context := r.fory.MetaContext()
 	typ := typeInfo.Type
 
 	if index, exists := context.typeMap[typ]; exists {
@@ -879,7 +879,7 @@ func (r *typeResolver) getTypeDef(typ reflect.Type, create bool) (*TypeDef, erro
 }
 
 func (r *typeResolver) readSharedTypeMeta(buffer *ByteBuffer, value reflect.Value) (TypeInfo, error) {
-	context := r.fory.metaContext
+	context := r.fory.MetaContext()
 	index := buffer.ReadVarInt32() // shared meta index id
 	if index < 0 || index >= int32(len(context.readTypeInfos)) {
 		return TypeInfo{}, fmt.Errorf("TypeInfo not found for index %d", index)
@@ -903,7 +903,7 @@ func (r *typeResolver) readSharedTypeMeta(buffer *ByteBuffer, value reflect.Valu
 }
 
 func (r *typeResolver) writeTypeDefs(buffer *ByteBuffer) {
-	context := r.fory.metaContext
+	context := r.fory.MetaContext()
 	sz := len(context.writingTypeDefs)
 	buffer.WriteVarUint32Small7(uint32(sz))
 	for _, typeDef := range context.writingTypeDefs {
@@ -914,7 +914,7 @@ func (r *typeResolver) writeTypeDefs(buffer *ByteBuffer) {
 
 func (r *typeResolver) readTypeDefs(buffer *ByteBuffer) error {
 	numTypeDefs := buffer.ReadVarUint32Small7()
-	context := r.fory.metaContext
+	context := r.fory.MetaContext()
 	for i := 0; i < numTypeDefs; i++ {
 		id := buffer.ReadInt64()
 		var td *TypeDef

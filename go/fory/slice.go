@@ -42,12 +42,76 @@ func (s sliceSerializer) TypeId() TypeId {
 	return LIST
 }
 
-func (s sliceSerializer) NeedWriteRef() bool {
+func (s sliceSerializer) NeedToWriteRef() bool {
 	return true
 }
 
+// AnySerializer interface methods
+func (s sliceSerializer) WriteAny(ctx *WriteContext, value any, writeRefInfo, writeTypeInfo bool) error {
+	_ = reflect.ValueOf(value) // Used for validation
+	if writeRefInfo {
+		ctx.buffer.WriteInt8(NotNullValueFlag)
+	}
+	if writeTypeInfo {
+		ctx.WriteTypeId(LIST)
+	}
+	return s.WriteDataAny(ctx, value)
+}
+
+func (s sliceSerializer) WriteDataAny(ctx *WriteContext, value any) error {
+	// For now, delegate to the reflection-based implementation
+	// TODO: This will be replaced with direct generic implementation
+	rv := reflect.ValueOf(value)
+	length := rv.Len()
+	if length == 0 {
+		ctx.buffer.WriteVarUint32(0)
+		return nil
+	}
+	// Use simplified path for now - write as polymorphic collection
+	ctx.buffer.WriteVarUint32(uint32(length))
+	ctx.buffer.WriteInt8(CollectionDefaultFlag) // No special flags for now
+	for i := 0; i < length; i++ {
+		elem := rv.Index(i).Interface()
+		if elem == nil {
+			ctx.buffer.WriteInt8(NullFlag)
+		} else {
+			ctx.buffer.WriteInt8(NotNullValueFlag)
+			// TODO: Need proper element serialization
+		}
+	}
+	return nil
+}
+
+func (s sliceSerializer) ReadAny(ctx *ReadContext, readRefInfo, readTypeInfo bool) (any, error) {
+	if readRefInfo {
+		_ = ctx.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = ctx.buffer.ReadInt16()
+	}
+	return s.ReadDataAny(ctx)
+}
+
+func (s sliceSerializer) ReadDataAny(ctx *ReadContext) (any, error) {
+	length := int(ctx.buffer.ReadVarUint32())
+	if length == 0 {
+		return []any{}, nil
+	}
+	_ = ctx.buffer.ReadInt8() // Read collection flags
+	result := make([]any, length)
+	for i := 0; i < length; i++ {
+		flag := ctx.buffer.ReadInt8()
+		if flag == NullFlag {
+			result[i] = nil
+		}
+		// TODO: Need proper element deserialization
+	}
+	return result, nil
+}
+
 // WriteReflect serializes a slice value into the buffer
-func (s sliceSerializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflect.Value) error {
+func (s sliceSerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
+	buf := ctx.Buffer()
 	// Get slice length and handle empty slice case
 	length := value.Len()
 	if length == 0 {
@@ -56,20 +120,20 @@ func (s sliceSerializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflect.Va
 	}
 
 	// Write collection header and get type information
-	collectFlag, elemTypeInfo := s.writeHeader(f, buf, value)
+	collectFlag, elemTypeInfo := s.writeHeader(ctx, buf, value)
 
 	// Choose serialization path based on type consistency
 	if (collectFlag & CollectionIsSameType) != 0 {
-		return s.writeSameType(f, buf, value, elemTypeInfo, collectFlag) // Optimized path for same-type elements
+		return s.writeSameType(ctx, buf, value, elemTypeInfo, collectFlag) // Optimized path for same-type elements
 	}
-	return s.writeDifferentTypes(f, buf, value) // Fallback path for mixed-type elements
+	return s.writeDifferentTypes(ctx, buf, value) // Fallback path for mixed-type elements
 }
 
 // writeHeader prepares and writes collection metadata including:
 // - Collection size
 // - Type consistency flags
 // - Element type information (if homogeneous)
-func (s sliceSerializer) writeHeader(f *Fory, buf *ByteBuffer, value reflect.Value) (byte, TypeInfo) {
+func (s sliceSerializer) writeHeader(ctx *WriteContext, buf *ByteBuffer, value reflect.Value) (byte, TypeInfo) {
 	collectFlag := CollectionDefaultFlag
 	var elemTypeInfo TypeInfo
 	hasNull := false
@@ -79,7 +143,7 @@ func (s sliceSerializer) writeHeader(f *Fory, buf *ByteBuffer, value reflect.Val
 	// Empty slices leave elemTypeInfo zero-value, which is also fine because
 	// writeSameType won't do anything in that case.
 	if value.Len() > 0 {
-		elemTypeInfo, _ = f.typeResolver.getTypeInfo(value.Index(0), true)
+		elemTypeInfo, _ = ctx.TypeResolver().getTypeInfo(value.Index(0), true)
 	}
 
 	if s.declaredType != nil {
@@ -117,7 +181,7 @@ func (s sliceSerializer) writeHeader(f *Fory, buf *ByteBuffer, value reflect.Val
 	}
 
 	// Enable reference tracking if configured and element type supports it
-	if f.refTracking && (elemTypeInfo.Serializer == nil || elemTypeInfo.Serializer.NeedWriteRef()) {
+	if ctx.RefTracking() && (elemTypeInfo.Serializer == nil || elemTypeInfo.Serializer.NeedToWriteRef()) {
 		collectFlag |= CollectionTrackingRef
 	}
 
@@ -134,7 +198,7 @@ func (s sliceSerializer) writeHeader(f *Fory, buf *ByteBuffer, value reflect.Val
 }
 
 // writeSameType efficiently serializes a slice where all elements share the same type
-func (s sliceSerializer) writeSameType(f *Fory, buf *ByteBuffer, value reflect.Value, typeInfo TypeInfo, flag byte) error {
+func (s sliceSerializer) writeSameType(ctx *WriteContext, buf *ByteBuffer, value reflect.Value, typeInfo TypeInfo, flag byte) error {
 	serializer := typeInfo.Serializer
 	trackRefs := (flag & CollectionTrackingRef) != 0 // Check if reference tracking is enabled
 
@@ -150,19 +214,19 @@ func (s sliceSerializer) writeSameType(f *Fory, buf *ByteBuffer, value reflect.V
 
 		if trackRefs {
 			// Handle reference tracking if enabled
-			refWritten, err := f.refResolver.WriteRefOrNull(buf, elem)
+			refWritten, err := ctx.RefResolver().WriteRefOrNull(buf, elem)
 			if err != nil {
 				return err
 			}
 			if !refWritten {
 				// Write actual value if not a reference
-				if err := serializer.WriteReflect(f, buf, elem); err != nil {
+				if err := serializer.WriteValue(ctx, elem); err != nil {
 					return err
 				}
 			}
 		} else {
 			// Directly write value without reference tracking
-			if err := serializer.WriteReflect(f, buf, elem); err != nil {
+			if err := serializer.WriteValue(ctx, elem); err != nil {
 				return err
 			}
 		}
@@ -171,7 +235,7 @@ func (s sliceSerializer) writeSameType(f *Fory, buf *ByteBuffer, value reflect.V
 }
 
 // writeDifferentTypes handles serialization of slices with mixed element types
-func (s sliceSerializer) writeDifferentTypes(f *Fory, buf *ByteBuffer, value reflect.Value) error {
+func (s sliceSerializer) writeDifferentTypes(ctx *WriteContext, buf *ByteBuffer, value reflect.Value) error {
 	for i := 0; i < value.Len(); i++ {
 		elem := value.Index(i)
 		if elem.Kind() == reflect.Interface || elem.Kind() == reflect.Ptr {
@@ -181,7 +245,7 @@ func (s sliceSerializer) writeDifferentTypes(f *Fory, buf *ByteBuffer, value ref
 			buf.WriteInt8(NullFlag) // Write null marker
 			continue
 		}
-		// The following write logic doesn’t cover the fast path for strings, so add it here
+		// The following write logic doesn't cover the fast path for strings, so add it here
 		if elem.Kind() == reflect.String {
 			buf.WriteInt8(NotNullValueFlag)
 			buf.WriteVarInt32(STRING)
@@ -192,7 +256,7 @@ func (s sliceSerializer) writeDifferentTypes(f *Fory, buf *ByteBuffer, value ref
 			continue
 		}
 		// Handle reference tracking
-		refWritten, err := f.refResolver.WriteRefOrNull(buf, elem)
+		refWritten, err := ctx.RefResolver().WriteRefOrNull(buf, elem)
 		if err != nil {
 			return err
 		}
@@ -201,8 +265,8 @@ func (s sliceSerializer) writeDifferentTypes(f *Fory, buf *ByteBuffer, value ref
 		}
 
 		// Get and write type info for each element (since types vary)
-		typeInfo, _ := f.typeResolver.getTypeInfo(elem, true)
-		f.typeResolver.writeTypeInfo(buf, typeInfo)
+		typeInfo, _ := ctx.TypeResolver().getTypeInfo(elem, true)
+		ctx.TypeResolver().writeTypeInfo(buf, typeInfo)
 		// When writing the actual value, detect if elem is an array and convert it
 		// to the corresponding slice type so the existing slice serializer can be reused
 		if elem.Kind() == reflect.Array {
@@ -211,7 +275,7 @@ func (s sliceSerializer) writeDifferentTypes(f *Fory, buf *ByteBuffer, value ref
 			reflect.Copy(slice, elem)
 			elem = slice
 		}
-		if err := typeInfo.Serializer.WriteReflect(f, buf, elem); err != nil {
+		if err := typeInfo.Serializer.WriteValue(ctx, elem); err != nil {
 			return err
 		}
 	}
@@ -219,7 +283,8 @@ func (s sliceSerializer) writeDifferentTypes(f *Fory, buf *ByteBuffer, value ref
 }
 
 // ReadReflect deserializes a slice from the buffer into the provided reflect.Value
-func (s sliceSerializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.Type, value reflect.Value) error {
+func (s sliceSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	buf := ctx.Buffer()
 	// Read slice length from buffer
 	length := int(buf.ReadVarUint32())
 	if length == 0 {
@@ -236,7 +301,7 @@ func (s sliceSerializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.Typ
 		if (collectFlag & CollectionIsDeclElementType) == 0 {
 			typeID := buf.ReadVarInt32()
 			var err error
-			elemTypeInfo, err = f.typeResolver.getTypeInfoById(int16(typeID))
+			elemTypeInfo, err = ctx.TypeResolver().getTypeInfoById(int16(typeID))
 			if err != nil {
 				elemTypeInfo = s.elemInfo
 			}
@@ -260,17 +325,17 @@ func (s sliceSerializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.Typ
 		value.Set(value.Slice(0, length))
 	}
 	// Register reference for tracking
-	f.refResolver.Reference(value)
+	ctx.RefResolver().Reference(value)
 
 	// Choose appropriate deserialization path based on type consistency
 	if (collectFlag & CollectionIsSameType) != 0 {
-		return s.readSameType(f, buf, value, elemTypeInfo, collectFlag)
+		return s.readSameType(ctx, buf, value, elemTypeInfo, collectFlag)
 	}
-	return s.readDifferentTypes(f, buf, value)
+	return s.readDifferentTypes(ctx, buf, value)
 }
 
 // readSameType handles deserialization of slices where all elements share the same type
-func (s sliceSerializer) readSameType(f *Fory, buf *ByteBuffer, value reflect.Value, typeInfo TypeInfo, flag int8) error {
+func (s sliceSerializer) readSameType(ctx *ReadContext, buf *ByteBuffer, value reflect.Value, typeInfo TypeInfo, flag int8) error {
 	// Determine if reference tracking is enabled
 	trackRefs := (flag & CollectionTrackingRef) != 0
 	serializer := typeInfo.Serializer
@@ -279,46 +344,46 @@ func (s sliceSerializer) readSameType(f *Fory, buf *ByteBuffer, value reflect.Va
 	for i := 0; i < value.Len(); i++ {
 		if trackRefs {
 			// Handle reference tracking if enabled
-			refID, _ = f.refResolver.TryPreserveRefId(buf)
+			refID, _ = ctx.RefResolver().TryPreserveRefId(buf)
 			if int8(refID) < NotNullValueFlag {
 				// Use existing reference if available
-				value.Index(i).Set(f.refResolver.GetCurrentReadObject())
+				value.Index(i).Set(ctx.RefResolver().GetCurrentReadObject())
 				continue
 			}
 		}
 
 		// Create new element of the correct type and deserialize from buffer
 		elem := reflect.New(typeInfo.Type).Elem()
-		if err := serializer.ReadReflect(f, buf, elem.Type(), elem); err != nil {
+		if err := serializer.ReadValue(ctx, elem.Type(), elem); err != nil {
 			return err
 		}
 		// Set element in slice and register reference
 		value.Index(i).Set(elem)
-		f.refResolver.SetReadObject(refID, elem)
+		ctx.RefResolver().SetReadObject(refID, elem)
 	}
 	return nil
 }
 
 // readDifferentTypes handles deserialization of slices with mixed element types
-func (s sliceSerializer) readDifferentTypes(f *Fory, buf *ByteBuffer, value reflect.Value) error {
+func (s sliceSerializer) readDifferentTypes(ctx *ReadContext, buf *ByteBuffer, value reflect.Value) error {
 	for i := 0; i < value.Len(); i++ {
 		// Handle reference tracking for each element
-		refID, _ := f.refResolver.TryPreserveRefId(buf)
+		refID, _ := ctx.RefResolver().TryPreserveRefId(buf)
 		if int8(refID) < NotNullValueFlag {
 			// Use existing reference if available
-			value.Index(i).Set(f.refResolver.GetCurrentReadObject())
+			value.Index(i).Set(ctx.RefResolver().GetCurrentReadObject())
 			continue
 		}
 
-		typeInfo, _ := f.typeResolver.readTypeInfo(buf, value)
+		typeInfo, _ := ctx.TypeResolver().readTypeInfo(buf, value)
 
 		// Create new element and deserialize from buffer
 		elem := reflect.New(typeInfo.Type).Elem()
-		if err := typeInfo.Serializer.ReadReflect(f, buf, typeInfo.Type, elem); err != nil {
+		if err := typeInfo.Serializer.ReadValue(ctx, typeInfo.Type, elem); err != nil {
 			return err
 		}
 		// Set element in slice and register reference
-		f.refResolver.SetReadObject(refID, elem)
+		ctx.RefResolver().SetReadObject(refID, elem)
 		value.Index(i).Set(elem)
 	}
 	return nil
@@ -345,13 +410,13 @@ func (s *sliceConcreteValueSerializer) TypeId() TypeId {
 	return -LIST
 }
 
-func (s *sliceConcreteValueSerializer) NeedWriteRef() bool {
+func (s *sliceConcreteValueSerializer) NeedToWriteRef() bool {
 	return true
 }
 
-func (s *sliceConcreteValueSerializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflect.Value) error {
+func (s *sliceConcreteValueSerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
 	length := value.Len()
-	if err := f.writeLength(buf, length); err != nil {
+	if err := ctx.WriteLength(length); err != nil {
 		return err
 	}
 
@@ -367,7 +432,7 @@ func (s *sliceConcreteValueSerializer) WriteReflect(f *Fory, buf *ByteBuffer, va
 			elemSerializer = s.elemSerializer
 		}
 
-		if err := writeBySerializer(f, buf, elem, elemSerializer, s.referencable); err != nil {
+		if err := writeBySerializer(ctx, elem, elemSerializer, s.referencable); err != nil {
 			return err
 		}
 
@@ -376,14 +441,14 @@ func (s *sliceConcreteValueSerializer) WriteReflect(f *Fory, buf *ByteBuffer, va
 	return nil
 }
 
-func (s *sliceConcreteValueSerializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.Type, value reflect.Value) error {
-	length := f.readLength(buf)
+func (s *sliceConcreteValueSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	length := ctx.ReadLength()
 	if value.Cap() < length {
 		value.Set(reflect.MakeSlice(value.Type(), length, length))
 	} else if value.Len() < length {
 		value.Set(value.Slice(0, length))
 	}
-	f.refResolver.Reference(value)
+	ctx.RefResolver().Reference(value)
 	var prevType reflect.Type
 	for i := 0; i < length; i++ {
 
@@ -396,7 +461,7 @@ func (s *sliceConcreteValueSerializer) ReadReflect(f *Fory, buf *ByteBuffer, typ
 		} else {
 			elemSerializer = s.elemSerializer
 		}
-		if err := readBySerializer(f, buf, value.Index(i), elemSerializer, s.referencable); err != nil {
+		if err := readBySerializer(ctx, value.Index(i), elemSerializer, s.referencable); err != nil {
 			return err
 		}
 
@@ -412,19 +477,19 @@ func (s byteSliceSerializer) TypeId() TypeId {
 	return BINARY
 }
 
-func (s byteSliceSerializer) NeedWriteRef() bool {
+func (s byteSliceSerializer) NeedToWriteRef() bool {
 	return true
 }
 
-func (s byteSliceSerializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflect.Value) error {
-	if err := f.WriteBufferObject(buf, &ByteSliceBufferObject{value.Interface().([]byte)}); err != nil {
+func (s byteSliceSerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
+	if err := ctx.WriteBufferObject(&ByteSliceBufferObject{value.Interface().([]byte)}); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (s byteSliceSerializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.Type, value reflect.Value) error {
-	object, err := f.ReadBufferObject(buf)
+func (s byteSliceSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	object, err := ctx.ReadBufferObject()
 	if err != nil {
 		return err
 	}
@@ -470,11 +535,12 @@ func (s boolArraySerializer) TypeId() TypeId {
 	return BOOL_ARRAY
 }
 
-func (s boolArraySerializer) NeedWriteRef() bool {
+func (s boolArraySerializer) NeedToWriteRef() bool {
 	return true
 }
 
-func (s boolArraySerializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflect.Value) error {
+func (s boolArraySerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
+	buf := ctx.Buffer()
 	v := value.Interface().([]bool)
 	size := len(v)
 	if size >= MaxInt32 {
@@ -487,7 +553,8 @@ func (s boolArraySerializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflec
 	return nil
 }
 
-func (s boolArraySerializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.Type, value reflect.Value) error {
+func (s boolArraySerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	buf := ctx.Buffer()
 	length := buf.ReadLength()
 	var r reflect.Value
 	switch type_.Kind() {
@@ -515,11 +582,12 @@ func (s int8ArraySerializer) TypeId() TypeId {
 	return INT8_ARRAY
 }
 
-func (s int8ArraySerializer) NeedWriteRef() bool {
+func (s int8ArraySerializer) NeedToWriteRef() bool {
 	return true
 }
 
-func (s int8ArraySerializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflect.Value) error {
+func (s int8ArraySerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
+	buf := ctx.Buffer()
 	v := value.Interface().([]int8)
 	size := len(v)
 	if size >= MaxInt32 {
@@ -532,7 +600,8 @@ func (s int8ArraySerializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflec
 	return nil
 }
 
-func (s int8ArraySerializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.Type, value reflect.Value) error {
+func (s int8ArraySerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	buf := ctx.Buffer()
 	length := buf.ReadLength()
 	var r reflect.Value
 	switch type_.Kind() {
@@ -560,24 +629,26 @@ func (s int16ArraySerializer) TypeId() TypeId {
 	return INT16_ARRAY
 }
 
-func (s int16ArraySerializer) NeedWriteRef() bool {
+func (s int16ArraySerializer) NeedToWriteRef() bool {
 	return true
 }
 
-func (s int16ArraySerializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflect.Value) error {
-	v := value.Interface().([]int16)
-	size := len(v) * 2
+func (s int16ArraySerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
+	buf := ctx.Buffer()
+	length := value.Len()
+	size := length * 2
 	if size >= MaxInt32 {
-		return fmt.Errorf("too long slice: %d", len(v))
+		return fmt.Errorf("too long slice: %d", length)
 	}
 	buf.WriteLength(size)
-	for _, elem := range v {
-		buf.WriteInt16(elem)
+	for i := 0; i < length; i++ {
+		buf.WriteInt16(int16(value.Index(i).Int()))
 	}
 	return nil
 }
 
-func (s int16ArraySerializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.Type, value reflect.Value) error {
+func (s int16ArraySerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	buf := ctx.Buffer()
 	length := buf.ReadLength() / 2
 	var r reflect.Value
 	switch type_.Kind() {
@@ -605,11 +676,12 @@ func (s int32ArraySerializer) TypeId() TypeId {
 	return INT32_ARRAY
 }
 
-func (s int32ArraySerializer) NeedWriteRef() bool {
+func (s int32ArraySerializer) NeedToWriteRef() bool {
 	return true
 }
 
-func (s int32ArraySerializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflect.Value) error {
+func (s int32ArraySerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
+	buf := ctx.Buffer()
 	v := value.Interface().([]int32)
 	size := len(v) * 4
 	if size >= MaxInt32 {
@@ -622,7 +694,8 @@ func (s int32ArraySerializer) WriteReflect(f *Fory, buf *ByteBuffer, value refle
 	return nil
 }
 
-func (s int32ArraySerializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.Type, value reflect.Value) error {
+func (s int32ArraySerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	buf := ctx.Buffer()
 	length := buf.ReadLength() / 4
 	var r reflect.Value
 	switch type_.Kind() {
@@ -650,11 +723,12 @@ func (s int64ArraySerializer) TypeId() TypeId {
 	return INT64_ARRAY
 }
 
-func (s int64ArraySerializer) NeedWriteRef() bool {
+func (s int64ArraySerializer) NeedToWriteRef() bool {
 	return true
 }
 
-func (s int64ArraySerializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflect.Value) error {
+func (s int64ArraySerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
+	buf := ctx.Buffer()
 	v := value.Interface().([]int64)
 	size := len(v) * 8
 	if size >= MaxInt32 {
@@ -667,7 +741,8 @@ func (s int64ArraySerializer) WriteReflect(f *Fory, buf *ByteBuffer, value refle
 	return nil
 }
 
-func (s int64ArraySerializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.Type, value reflect.Value) error {
+func (s int64ArraySerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	buf := ctx.Buffer()
 	length := buf.ReadLength() / 8
 	var r reflect.Value
 	switch type_.Kind() {
@@ -695,11 +770,12 @@ func (s float32ArraySerializer) TypeId() TypeId {
 	return FLOAT32_ARRAY
 }
 
-func (s float32ArraySerializer) NeedWriteRef() bool {
+func (s float32ArraySerializer) NeedToWriteRef() bool {
 	return true
 }
 
-func (s float32ArraySerializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflect.Value) error {
+func (s float32ArraySerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
+	buf := ctx.Buffer()
 	v := value.Interface().([]float32)
 	size := len(v) * 4
 	if size >= MaxInt32 {
@@ -712,7 +788,8 @@ func (s float32ArraySerializer) WriteReflect(f *Fory, buf *ByteBuffer, value ref
 	return nil
 }
 
-func (s float32ArraySerializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.Type, value reflect.Value) error {
+func (s float32ArraySerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	buf := ctx.Buffer()
 	length := buf.ReadLength() / 4
 	var r reflect.Value
 	switch type_.Kind() {
@@ -740,11 +817,12 @@ func (s float64ArraySerializer) TypeId() TypeId {
 	return FLOAT64_ARRAY
 }
 
-func (s float64ArraySerializer) NeedWriteRef() bool {
+func (s float64ArraySerializer) NeedToWriteRef() bool {
 	return true
 }
 
-func (s float64ArraySerializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflect.Value) error {
+func (s float64ArraySerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
+	buf := ctx.Buffer()
 	v := value.Interface().([]float64)
 	size := len(v) * 8
 	if size >= MaxInt32 {
@@ -757,7 +835,8 @@ func (s float64ArraySerializer) WriteReflect(f *Fory, buf *ByteBuffer, value ref
 	return nil
 }
 
-func (s float64ArraySerializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.Type, value reflect.Value) error {
+func (s float64ArraySerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	buf := ctx.Buffer()
 	length := buf.ReadLength() / 8
 	var r reflect.Value
 	switch type_.Kind() {
@@ -786,11 +865,12 @@ func (s boolSliceSerializer) TypeId() TypeId {
 	return BOOL_ARRAY // Use legacy type ID to avoid conflicts
 }
 
-func (s boolSliceSerializer) NeedWriteRef() bool {
+func (s boolSliceSerializer) NeedToWriteRef() bool {
 	return true
 }
 
-func (s boolSliceSerializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflect.Value) error {
+func (s boolSliceSerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
+	buf := ctx.Buffer()
 	v := value.Interface().([]bool)
 	size := len(v)
 	if size >= MaxInt32 {
@@ -803,7 +883,8 @@ func (s boolSliceSerializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflec
 	return nil
 }
 
-func (s boolSliceSerializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.Type, value reflect.Value) error {
+func (s boolSliceSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	buf := ctx.Buffer()
 	length := buf.ReadLength()
 	var r reflect.Value
 	switch type_.Kind() {
@@ -831,11 +912,12 @@ func (s int16SliceSerializer) TypeId() TypeId {
 	return INT16_ARRAY
 }
 
-func (s int16SliceSerializer) NeedWriteRef() bool {
+func (s int16SliceSerializer) NeedToWriteRef() bool {
 	return true
 }
 
-func (s int16SliceSerializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflect.Value) error {
+func (s int16SliceSerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
+	buf := ctx.Buffer()
 	v := value.Interface().([]int16)
 	size := len(v) * 2
 	if size >= MaxInt32 {
@@ -848,7 +930,8 @@ func (s int16SliceSerializer) WriteReflect(f *Fory, buf *ByteBuffer, value refle
 	return nil
 }
 
-func (s int16SliceSerializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.Type, value reflect.Value) error {
+func (s int16SliceSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	buf := ctx.Buffer()
 	length := buf.ReadLength() / 2
 	var r reflect.Value
 	switch type_.Kind() {
@@ -876,11 +959,12 @@ func (s int32SliceSerializer) TypeId() TypeId {
 	return INT32_ARRAY
 }
 
-func (s int32SliceSerializer) NeedWriteRef() bool {
+func (s int32SliceSerializer) NeedToWriteRef() bool {
 	return true
 }
 
-func (s int32SliceSerializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflect.Value) error {
+func (s int32SliceSerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
+	buf := ctx.Buffer()
 	v := value.Interface().([]int32)
 	size := len(v) * 4
 	if size >= MaxInt32 {
@@ -893,7 +977,8 @@ func (s int32SliceSerializer) WriteReflect(f *Fory, buf *ByteBuffer, value refle
 	return nil
 }
 
-func (s int32SliceSerializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.Type, value reflect.Value) error {
+func (s int32SliceSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	buf := ctx.Buffer()
 	length := buf.ReadLength() / 4
 	var r reflect.Value
 	switch type_.Kind() {
@@ -921,11 +1006,12 @@ func (s int64SliceSerializer) TypeId() TypeId {
 	return INT64_ARRAY
 }
 
-func (s int64SliceSerializer) NeedWriteRef() bool {
+func (s int64SliceSerializer) NeedToWriteRef() bool {
 	return true
 }
 
-func (s int64SliceSerializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflect.Value) error {
+func (s int64SliceSerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
+	buf := ctx.Buffer()
 	v := value.Interface().([]int64)
 	size := len(v) * 8
 	if size >= MaxInt32 {
@@ -938,7 +1024,8 @@ func (s int64SliceSerializer) WriteReflect(f *Fory, buf *ByteBuffer, value refle
 	return nil
 }
 
-func (s int64SliceSerializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.Type, value reflect.Value) error {
+func (s int64SliceSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	buf := ctx.Buffer()
 	length := buf.ReadLength() / 8
 	var r reflect.Value
 	switch type_.Kind() {
@@ -966,11 +1053,12 @@ func (s float32SliceSerializer) TypeId() TypeId {
 	return FLOAT32_ARRAY
 }
 
-func (s float32SliceSerializer) NeedWriteRef() bool {
+func (s float32SliceSerializer) NeedToWriteRef() bool {
 	return true
 }
 
-func (s float32SliceSerializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflect.Value) error {
+func (s float32SliceSerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
+	buf := ctx.Buffer()
 	v := value.Interface().([]float32)
 	size := len(v) * 4
 	if size >= MaxInt32 {
@@ -983,7 +1071,8 @@ func (s float32SliceSerializer) WriteReflect(f *Fory, buf *ByteBuffer, value ref
 	return nil
 }
 
-func (s float32SliceSerializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.Type, value reflect.Value) error {
+func (s float32SliceSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	buf := ctx.Buffer()
 	length := buf.ReadLength() / 4
 	var r reflect.Value
 	switch type_.Kind() {
@@ -1011,11 +1100,12 @@ func (s float64SliceSerializer) TypeId() TypeId {
 	return FLOAT64_ARRAY
 }
 
-func (s float64SliceSerializer) NeedWriteRef() bool {
+func (s float64SliceSerializer) NeedToWriteRef() bool {
 	return true
 }
 
-func (s float64SliceSerializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflect.Value) error {
+func (s float64SliceSerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
+	buf := ctx.Buffer()
 	v := value.Interface().([]float64)
 	size := len(v) * 8
 	if size >= MaxInt32 {
@@ -1028,7 +1118,8 @@ func (s float64SliceSerializer) WriteReflect(f *Fory, buf *ByteBuffer, value ref
 	return nil
 }
 
-func (s float64SliceSerializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.Type, value reflect.Value) error {
+func (s float64SliceSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	buf := ctx.Buffer()
 	length := buf.ReadLength() / 8
 	var r reflect.Value
 	switch type_.Kind() {
@@ -1057,18 +1148,19 @@ func (s stringSliceSerializer) TypeId() TypeId {
 	return FORY_STRING_ARRAY
 }
 
-func (s stringSliceSerializer) NeedWriteRef() bool {
+func (s stringSliceSerializer) NeedToWriteRef() bool {
 	return true
 }
 
-func (s stringSliceSerializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflect.Value) error {
+func (s stringSliceSerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
+	buf := ctx.Buffer()
 	v := value.Interface().([]string)
-	err := f.writeLength(buf, len(v))
+	err := ctx.WriteLength(len(v))
 	if err != nil {
 		return err
 	}
 	for _, str := range v {
-		if refWritten, err := f.refResolver.WriteRefOrNull(buf, reflect.ValueOf(str)); err == nil {
+		if refWritten, err := ctx.RefResolver().WriteRefOrNull(buf, reflect.ValueOf(str)); err == nil {
 			if !refWritten {
 				if err := writeString(buf, str); err != nil {
 					return err
@@ -1081,8 +1173,9 @@ func (s stringSliceSerializer) WriteReflect(f *Fory, buf *ByteBuffer, value refl
 	return nil
 }
 
-func (s stringSliceSerializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.Type, value reflect.Value) (err error) {
-	length := f.readLength(buf)
+func (s stringSliceSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	buf := ctx.Buffer()
+	length := ctx.ReadLength()
 	var r reflect.Value
 	switch type_.Kind() {
 	case reflect.Slice:
@@ -1106,27 +1199,27 @@ func (s stringSliceSerializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ refle
 	}
 
 	for i := 0; i < length; i++ {
-		refFlag := f.refResolver.ReadRefOrNull(buf)
+		refFlag := ctx.RefResolver().ReadRefOrNull(buf)
 		if refFlag == RefValueFlag || refFlag == NotNullValueFlag {
 			var nextReadRefId int32
 			if refFlag == RefValueFlag {
 				var err error
-				nextReadRefId, err = f.refResolver.PreserveRefId()
+				nextReadRefId, err = ctx.RefResolver().PreserveRefId()
 				if err != nil {
 					return err
 				}
 			}
 			elem := readString(buf)
-			if f.refTracking && refFlag == RefValueFlag {
+			if ctx.RefTracking() && refFlag == RefValueFlag {
 				// If value is not nil(reflect), then value is a pointer to some variable, we can update the `value`,
 				// then record `value` in the reference resolver.
-				f.refResolver.SetReadObject(nextReadRefId, reflect.ValueOf(elem))
+				ctx.RefResolver().SetReadObject(nextReadRefId, reflect.ValueOf(elem))
 			}
 			set(i, elem)
 		} else if refFlag == NullFlag {
 			set(i, "")
 		} else { // RefNoneFlag
-			set(i, f.refResolver.GetCurrentReadObject().Interface().(string))
+			set(i, ctx.RefResolver().GetCurrentReadObject().Interface().(string))
 		}
 	}
 	value.Set(r)

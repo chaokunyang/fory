@@ -56,11 +56,12 @@ func (s *structSerializer) TypeId() TypeId {
 	return NAMED_STRUCT
 }
 
-func (s *structSerializer) NeedWriteRef() bool {
+func (s *structSerializer) NeedToWriteRef() bool {
 	return true
 }
 
-func (s *structSerializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflect.Value) error {
+func (s *structSerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
+	buf := ctx.Buffer()
 	if s.fields == nil {
 		if s.type_ == nil {
 			s.type_ = value.Type()
@@ -69,7 +70,7 @@ func (s *structSerializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflect.
 		for s.type_.Kind() == reflect.Ptr {
 			s.type_ = s.type_.Elem()
 		}
-		if err := s.initFields(f); err != nil {
+		if err := s.initFieldsFromContext(ctx); err != nil {
 			return err
 		}
 	}
@@ -97,11 +98,11 @@ func (s *structSerializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflect.
 		// Slow path for complex types or non-addressable values
 		fieldValue := value.Field(field.FieldIndex)
 		if field.Serializer != nil {
-			if err := writeBySerializer(f, buf, fieldValue, field.Serializer, field.Referencable); err != nil {
+			if err := writeBySerializer(ctx, fieldValue, field.Serializer, field.Referencable); err != nil {
 				return err
 			}
 		} else {
-			if err := f.WriteReferencable(buf, fieldValue); err != nil {
+			if err := ctx.WriteValue(fieldValue); err != nil {
 				return err
 			}
 		}
@@ -109,7 +110,8 @@ func (s *structSerializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflect.
 	return nil
 }
 
-func (s *structSerializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.Type, value reflect.Value) error {
+func (s *structSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	buf := ctx.Buffer()
 	if value.Kind() == reflect.Ptr {
 		if value.IsNil() {
 			value.Set(reflect.New(type_.Elem()))
@@ -126,7 +128,7 @@ func (s *structSerializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.T
 		for s.type_.Kind() == reflect.Ptr {
 			s.type_ = s.type_.Elem()
 		}
-		if err := s.initFields(f); err != nil {
+		if err := s.initFieldsFromContext(ctx); err != nil {
 			return err
 		}
 	}
@@ -135,7 +137,7 @@ func (s *structSerializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.T
 	}
 
 	structHash := buf.ReadInt32()
-	if !f.compatible && structHash != s.structHash {
+	if !ctx.Compatible() && structHash != s.structHash {
 		return fmt.Errorf("hash %d is not consistent with %d for type %s",
 			structHash, s.structHash, s.type_)
 	}
@@ -148,11 +150,11 @@ func (s *structSerializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.T
 			// Field doesn't exist in current struct, create temp value to discard
 			tempValue := reflect.New(field.Type).Elem()
 			if field.Serializer != nil {
-				if err := readBySerializer(f, buf, tempValue, field.Serializer, field.Referencable); err != nil {
+				if err := readBySerializer(ctx, tempValue, field.Serializer, field.Referencable); err != nil {
 					return err
 				}
 			} else {
-				if err := f.ReadReferencable(buf, tempValue); err != nil {
+				if err := ctx.ReadValue(tempValue); err != nil {
 					return err
 				}
 			}
@@ -170,11 +172,11 @@ func (s *structSerializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.T
 		// Slow path for complex types
 		fieldValue := value.Field(field.FieldIndex)
 		if field.Serializer != nil {
-			if err := readBySerializer(f, buf, fieldValue, field.Serializer, field.Referencable); err != nil {
+			if err := readBySerializer(ctx, fieldValue, field.Serializer, field.Referencable); err != nil {
 				return err
 			}
 		} else {
-			if err := f.ReadReferencable(buf, fieldValue); err != nil {
+			if err := ctx.ReadValue(fieldValue); err != nil {
 				return err
 			}
 		}
@@ -184,7 +186,8 @@ func (s *structSerializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.T
 
 // ReadCompatible reads struct data with schema evolution support
 // It reads fields based on remote schema and maps to local fields by name
-func (s *structSerializer) ReadCompatible(f *Fory, buf *ByteBuffer, type_ reflect.Type, value reflect.Value, remoteFields []*FieldInfo) error {
+func (s *structSerializer) ReadCompatible(ctx *ReadContext, type_ reflect.Type, value reflect.Value, remoteFields []*FieldInfo) error {
+	buf := ctx.Buffer()
 	if value.Kind() == reflect.Ptr {
 		if value.IsNil() {
 			value.Set(reflect.New(type_.Elem()))
@@ -208,11 +211,11 @@ func (s *structSerializer) ReadCompatible(f *Fory, buf *ByteBuffer, type_ reflec
 			// Field doesn't exist locally, discard
 			tempValue := reflect.New(remoteField.Type).Elem()
 			if remoteField.Serializer != nil {
-				if err := readBySerializer(f, buf, tempValue, remoteField.Serializer, remoteField.Referencable); err != nil {
+				if err := readBySerializer(ctx, tempValue, remoteField.Serializer, remoteField.Referencable); err != nil {
 					return err
 				}
 			} else {
-				if err := f.ReadReferencable(buf, tempValue); err != nil {
+				if err := ctx.ReadValue(tempValue); err != nil {
 					return err
 				}
 			}
@@ -230,11 +233,11 @@ func (s *structSerializer) ReadCompatible(f *Fory, buf *ByteBuffer, type_ reflec
 		// Slow path
 		fieldValue := value.Field(localField.FieldIndex)
 		if localField.Serializer != nil {
-			if err := readBySerializer(f, buf, fieldValue, localField.Serializer, localField.Referencable); err != nil {
+			if err := readBySerializer(ctx, fieldValue, localField.Serializer, localField.Referencable); err != nil {
 				return err
 			}
 		} else {
-			if err := f.ReadReferencable(buf, fieldValue); err != nil {
+			if err := ctx.ReadValue(fieldValue); err != nil {
 				return err
 			}
 		}
@@ -242,10 +245,13 @@ func (s *structSerializer) ReadCompatible(f *Fory, buf *ByteBuffer, type_ reflec
 	return nil
 }
 
-func (s *structSerializer) initFields(f *Fory) error {
+// initFieldsFromContext initializes fields using context's type resolver (for WriteContext)
+func (s *structSerializer) initFieldsFromContext(ctx interface{ TypeResolver() *typeResolver }) error {
+	typeResolver := ctx.TypeResolver()
+
 	// If we have fieldDefs from type_def (remote meta), use them
 	if len(s.fieldDefs) > 0 {
-		return s.initFieldsFromDefs(f)
+		return s.initFieldsFromDefsWithResolver(typeResolver)
 	}
 
 	// Otherwise initialize from local struct type
@@ -269,14 +275,14 @@ func (s *structSerializer) initFields(f *Fory) error {
 
 		var fieldSerializer Serializer
 		if fieldType.Kind() != reflect.Struct {
-			fieldSerializer, _ = f.typeResolver.getSerializerByType(fieldType, true)
+			fieldSerializer, _ = typeResolver.getSerializerByType(fieldType, true)
 			if fieldType.Kind() == reflect.Array {
 				elemType := fieldType.Elem()
 				sliceType := reflect.SliceOf(elemType)
-				fieldSerializer = f.typeResolver.typeToSerializers[sliceType]
+				fieldSerializer = typeResolver.typeToSerializers[sliceType]
 			} else if fieldType.Kind() == reflect.Slice && fieldType.Elem().Kind() != reflect.Interface {
 				fieldSerializer = sliceSerializer{
-					elemInfo: f.typeResolver.typesInfo[fieldType.Elem()],
+					elemInfo: typeResolver.typesInfo[fieldType.Elem()],
 				}
 			}
 		}
@@ -297,7 +303,7 @@ func (s *structSerializer) initFields(f *Fory) error {
 	}
 
 	// Sort fields according to specification
-	serializers, fieldNames = sortFields(f.typeResolver, fieldNames, serializers)
+	serializers, fieldNames = sortFields(typeResolver, fieldNames, serializers)
 	order := make(map[string]int, len(fieldNames))
 	for idx, name := range fieldNames {
 		order[name] = idx
@@ -322,8 +328,8 @@ func (s *structSerializer) initFields(f *Fory) error {
 	return nil
 }
 
-// initFieldsFromDefs initializes fields from remote fieldDefs (for schema evolution)
-func (s *structSerializer) initFieldsFromDefs(f *Fory) error {
+// initFieldsFromDefsWithResolver initializes fields from remote fieldDefs using typeResolver
+func (s *structSerializer) initFieldsFromDefsWithResolver(typeResolver *typeResolver) error {
 	type_ := s.type_
 
 	// Build map from field names to struct field indices
@@ -341,10 +347,10 @@ func (s *structSerializer) initFieldsFromDefs(f *Fory) error {
 	var fields []*FieldInfo
 
 	for _, def := range s.fieldDefs {
-		fieldSerializer, _ := getFieldTypeSerializer(f, def.fieldType)
+		fieldSerializer, _ := getFieldTypeSerializerWithResolver(typeResolver, def.fieldType)
 
 		// Get the remote type from fieldDef
-		remoteTypeInfo, _ := def.fieldType.getTypeInfo(f)
+		remoteTypeInfo, _ := def.fieldType.getTypeInfoWithResolver(typeResolver)
 		remoteType := remoteTypeInfo.Type
 		if remoteType == nil {
 			remoteType = reflect.TypeOf((*interface{})(nil)).Elem()
@@ -437,20 +443,20 @@ func (s *ptrToStructSerializer) TypeId() TypeId {
 	return FORY_TYPE_TAG
 }
 
-func (s *ptrToStructSerializer) NeedWriteRef() bool {
+func (s *ptrToStructSerializer) NeedToWriteRef() bool {
 	return true
 }
 
-func (s *ptrToStructSerializer) WriteReflect(f *Fory, buf *ByteBuffer, value reflect.Value) error {
-	return s.structSerializer.WriteReflect(f, buf, value.Elem())
+func (s *ptrToStructSerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
+	return s.structSerializer.WriteValue(ctx, value.Elem())
 }
 
-func (s *ptrToStructSerializer) ReadReflect(f *Fory, buf *ByteBuffer, type_ reflect.Type, value reflect.Value) error {
+func (s *ptrToStructSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	newValue := reflect.New(type_.Elem())
 	value.Set(newValue)
 	elem := newValue.Elem()
-	f.refResolver.Reference(newValue)
-	return s.structSerializer.ReadReflect(f, buf, type_.Elem(), elem)
+	ctx.RefResolver().Reference(newValue)
+	return s.structSerializer.ReadValue(ctx, type_.Elem(), elem)
 }
 
 // Field sorting helpers

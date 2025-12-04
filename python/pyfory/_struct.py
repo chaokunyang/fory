@@ -189,8 +189,7 @@ def group_fields(type_resolver, field_names, serializers, nullable_map=None):
         }:
             container = other_types
         else:
-            assert TypeId.LOWER_BOUND < type_id < TypeId.UNKNOWN, (type_id,)
-            assert type_id != TypeId.UNKNOWN, serializer
+            assert TypeId.UNKNOWN < type_id < TypeId.BOUND, (type_id,)
             container = internal_types
         container.append((type_id, serializer, field_name))
 

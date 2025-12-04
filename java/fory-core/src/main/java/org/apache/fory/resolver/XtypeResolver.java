@@ -494,7 +494,7 @@ public class XtypeResolver extends TypeResolver {
   }
 
   public ClassInfo getUserTypeInfo(int userTypeId) {
-    Preconditions.checkArgument((userTypeId & 0xff) < Types.UNKNOWN);
+    Preconditions.checkArgument((userTypeId & 0xff) < Types.BOUND);
     return xtypeIdToClassMap.get(userTypeId);
   }
 

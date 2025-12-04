@@ -159,6 +159,9 @@ public class Types {
   /** One dimensional float64 array. */
   public static final int FLOAT64_ARRAY = 37;
 
+  /** Bound value for range checks (types with id >= BOUND are not internal types). */
+  public static final int BOUND = 64;
+
   // Helper methods
   public static boolean isNamedType(int value) {
     assert value < 0xff;

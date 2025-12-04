@@ -1318,8 +1318,7 @@ void RunTestPolymorphicList(const std::string &data_file) {
   Buffer buffer = MakeBuffer(bytes);
 
   // Part 1: Read List<Animal> with polymorphic elements (Dog, Cat)
-  auto animals =
-      ReadNext<std::vector<std::shared_ptr<Animal>>>(fory, buffer);
+  auto animals = ReadNext<std::vector<std::shared_ptr<Animal>>>(fory, buffer);
   if (animals.size() != 2) {
     Fail("Animal list size mismatch, got: " + std::to_string(animals.size()));
   }

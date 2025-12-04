@@ -24,6 +24,7 @@ use crate::serializer::util;
 use crate::serializer::Serializer;
 use crate::types;
 use crate::types::RefFlag;
+use crate::util::ENABLE_FORY_DEBUG_OUTPUT;
 use chrono::{NaiveDate, NaiveDateTime};
 use std::rc::Rc;
 use std::time::Duration;
@@ -304,22 +305,24 @@ fn skip_struct(
         type_info.as_ref().unwrap()
     };
     let type_meta = type_info_value.get_type_meta();
-    #[cfg(feature = "debug_output")]
-    eprintln!(
-        "[skip_struct] type_name: {:?}, num_fields: {}",
-        type_meta.get_type_name(),
-        type_meta.get_field_infos().len()
-    );
+    if ENABLE_FORY_DEBUG_OUTPUT {
+        eprintln!(
+            "[skip_struct] type_name: {:?}, num_fields: {}",
+            type_meta.get_type_name(),
+            type_meta.get_field_infos().len()
+        );
+    }
     let field_infos = type_meta.get_field_infos().to_vec();
     context.inc_depth()?;
     for field_info in field_infos.iter() {
-        #[cfg(feature = "debug_output")]
-        eprintln!(
-            "[skip_struct] field: {:?}, type_id: {}, internal_id: {}",
-            field_info.field_name,
-            field_info.field_type.type_id,
-            field_info.field_type.type_id & 0xff
-        );
+        if ENABLE_FORY_DEBUG_OUTPUT {
+            eprintln!(
+                "[skip_struct] field: {:?}, type_id: {}, internal_id: {}",
+                field_info.field_name,
+                field_info.field_type.type_id,
+                field_info.field_type.type_id & 0xff
+            );
+        }
         let read_ref_flag = util::field_need_write_ref_into(
             field_info.field_type.type_id,
             field_info.field_type.nullable,

@@ -113,8 +113,8 @@ pub(super) fn create_wrapper_types_arc(trait_name: &str) -> WrapperTypes {
     }
 }
 
+#[allow(dead_code)]
 pub(super) enum StructField {
-    #[allow(unused_variables)]
     BoxDyn,
     RcDyn(String),
     ArcDyn(String),

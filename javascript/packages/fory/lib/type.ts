@@ -20,6 +20,8 @@
 import { StructTypeInfo } from "./typeInfo";
 
 export const TypeId = {
+  // Unknown/polymorphic type marker.
+  UNKNOWN: 0,
   // a boolean value (true or false).
   BOOL: 1,
   // a 8-bit signed integer.

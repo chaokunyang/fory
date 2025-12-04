@@ -254,7 +254,7 @@ class TypeResolver:
 
     def _initialize_common(self):
         register = functools.partial(self._register_type, internal=True)
-        register(None, type_id=TypeId.NA, serializer=NoneSerializer)
+        register(None, type_id=TypeId.UNKNOWN, serializer=NoneSerializer)
         register(bool, type_id=TypeId.BOOL, serializer=BooleanSerializer)
         register(int8, type_id=TypeId.INT8, serializer=ByteSerializer)
         register(int16, type_id=TypeId.INT16, serializer=Int16Serializer)

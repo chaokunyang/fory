@@ -22,8 +22,9 @@
 library;
 
 enum ObjType {
-  /// A NULL type having no physical storage
-  UNKNOWN_YET(0, false), // This value is not meaningless. For example, a field is a parent class/non-specific class, which cannot be analyzed during static code generation.
+  /// Unknown/polymorphic type marker. For example, a field is a parent class/non-specific class,
+  /// which cannot be analyzed during static code generation.
+  UNKNOWN(0, false),
 
   // x
   /// Boolean as 1 bit, LSB bit-packed ordering

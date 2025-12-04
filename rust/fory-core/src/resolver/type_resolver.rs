@@ -726,10 +726,10 @@ impl TypeResolver {
 
         // Check if type_id conflicts with any already registered type
         // Skip check for:
-        // 1. Internal types (type_id <= TypeId::UNKNOWN) as they can be shared
+        // 1. Internal types (type_id < TypeId::BOUND) as they can be shared
         // 2. Types registered by name (they use shared type IDs like NAMED_STRUCT)
         if !register_by_name
-            && actual_type_id > TypeId::UNKNOWN as u32
+            && actual_type_id >= TypeId::BOUND as u32
             && self.type_info_map_by_id.contains_key(&actual_type_id)
         {
             return Err(Error::type_error(format!(
@@ -917,8 +917,8 @@ impl TypeResolver {
         }
 
         // Check if type_id conflicts with any already registered type
-        // Skip check for internal types (type_id <= TypeId::UNKNOWN) as they can be shared
-        if actual_type_id > TypeId::UNKNOWN as u32
+        // Skip check for internal types (type_id < TypeId::BOUND) as they can be shared
+        if actual_type_id >= TypeId::BOUND as u32
             && self.type_info_map_by_id.contains_key(&actual_type_id)
         {
             return Err(Error::type_error(format!(

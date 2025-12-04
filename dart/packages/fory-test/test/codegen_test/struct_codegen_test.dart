@@ -34,7 +34,7 @@ void main(){
         [
           FieldSpec(
             'f1',
-            TypeSpec(Object, ObjType.UNKNOWN_YET, false, false, null, const [],),
+            TypeSpec(Object, ObjType.UNKNOWN, false, false, null, const [],),
             true,
             true,
             (Object inst) => (inst as ComplexObject2).f1,

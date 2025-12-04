@@ -71,7 +71,7 @@ class StructHashResolver{
       case ObjType.MAP:
         id = ObjType.MAP.id;
         break;
-      case ObjType.UNKNOWN_YET:
+      case ObjType.UNKNOWN:
         id = 0;
         break;
       default:

@@ -142,9 +142,8 @@ class TypeId:
     See `org.apache.fory.types.Type`
     """
 
-    LOWER_BOUND = 0
-    # null value
-    NA = 0
+    # Unknown/polymorphic type marker.
+    UNKNOWN = 0
     # a boolean value (true or false).
     BOOL = 1
     # a 8-bit signed integer.
@@ -224,9 +223,8 @@ class TypeId:
     FLOAT32_ARRAY = 36
     # one dimensional float64 array.
     FLOAT64_ARRAY = 37
-    UNKNOWN = 63
 
-    # BOUND id remains at 64
+    # Bound value for range checks (types with id >= BOUND are not internal types).
     BOUND = 64
 
     @staticmethod

@@ -77,7 +77,7 @@ cdef extern from "fory/type/type.h" namespace "fory" nogil:
         FLOAT16_ARRAY = 35
         FLOAT32_ARRAY = 36
         FLOAT64_ARRAY = 37
-        UNKNOWN = 64
+        UNKNOWN = 0
         BOUND = 64
 
 

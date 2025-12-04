@@ -717,7 +717,14 @@ pub fn gen_read_data(data_enum: &DataEnum) -> TokenStream {
             let ordinal = context.reader.read_varuint32()?;
             match ordinal {
                 #(#xlang_variant_branches)*
-                _ => return Err(fory_core::error::Error::unknown_enum("unknown enum value")),
+                _ => {
+                    // Unknown variant: in compatible mode, return default; otherwise error
+                    if context.is_compatible() {
+                        Ok(#default_variant_construction)
+                    } else {
+                        return Err(fory_core::error::Error::unknown_enum("unknown enum value"));
+                    }
+                }
             }
         } else {
             if context.is_compatible() {

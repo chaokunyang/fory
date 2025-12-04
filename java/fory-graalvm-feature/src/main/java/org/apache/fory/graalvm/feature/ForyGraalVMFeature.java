@@ -94,15 +94,26 @@ public class ForyGraalVMFeature implements Feature {
     }
 
     RuntimeReflection.register(clazz);
+    // Enable class lookup via Class.forName
+    RuntimeReflection.registerClassLookup(clazz);
 
     // Register methods and constructors for Record classes
     // (accessor methods like f1(), f2() and the canonical constructor)
     if (RecordUtils.isRecord(clazz)) {
+      // Register all declared fields for Record classes
+      for (Field field : clazz.getDeclaredFields()) {
+        RuntimeReflection.register(field);
+        RuntimeReflection.registerFieldLookup(clazz, field.getName());
+      }
       for (Method method : clazz.getDeclaredMethods()) {
         RuntimeReflection.register(method);
+        // Also register for method lookup via getDeclaredMethod(name, paramTypes)
+        RuntimeReflection.registerMethodLookup(clazz, method.getName(), method.getParameterTypes());
       }
       for (Constructor<?> constructor : clazz.getDeclaredConstructors()) {
         RuntimeReflection.register(constructor);
+        // Also register for constructor lookup via getDeclaredConstructor(paramTypes)
+        RuntimeReflection.registerConstructorLookup(clazz, constructor.getParameterTypes());
       }
     }
   }

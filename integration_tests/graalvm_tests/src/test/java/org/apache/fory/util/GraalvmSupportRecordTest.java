@@ -25,88 +25,44 @@ import org.testng.annotations.Test;
 
 public class GraalvmSupportRecordTest {
 
-  public static class RegularClass {
-    public int intField;
-    public String stringField;
+  public record PublicRecord(int value, String name) {}
 
-    public RegularClass() {}
+  private record PrivateRecord(int value) {}
 
-    public RegularClass(int intField, String stringField) {
-      this.intField = intField;
-      this.stringField = stringField;
-    }
+  public static class ClassWithNoArgCtor {
+    public ClassWithNoArgCtor() {}
   }
 
-  private static class PrivateClass {
-    @SuppressWarnings("unused")
-    private final int value;
-
-    @SuppressWarnings("unused")
-    public PrivateClass(int value) {
-      this.value = value;
-    }
+  public static class ClassWithoutNoArgCtor {
+    public ClassWithoutNoArgCtor(int value) {}
   }
 
   @Test
-  public void testIsRecordConstructorPublicAccessible_WithNonRecord() {
-    boolean result = GraalvmSupport.isRecordConstructorPublicAccessible(RegularClass.class);
-    Assert.assertFalse(result, "Non-Record class should return false");
-  }
-
-  @Test
-  public void testIsRecordConstructorPublicAccessible_WithObject() {
-    boolean result = GraalvmSupport.isRecordConstructorPublicAccessible(Object.class);
-    Assert.assertFalse(result, "Object class should return false");
-  }
-
-  @Test
-  public void testIsRecordConstructorPublicAccessible_WithString() {
-    boolean result = GraalvmSupport.isRecordConstructorPublicAccessible(String.class);
-    Assert.assertFalse(result, "String class should return false");
-  }
-
-  @Test
-  public void testObjectCreators_ReflectiveInstantiationFlag_WithRegularClass() {
-    boolean result = GraalvmSupport.needReflectionRegisterForCreation(RegularClass.class);
-    Assert.assertFalse(
-        result,
-        "RegularClass with no-arg constructor does not require reflective instantiation registration");
-  }
-
-  @Test
-  public void testBackwardCompatibility_OnOlderJDK() {
-    boolean result = GraalvmSupport.isRecordConstructorPublicAccessible(RegularClass.class);
-    Assert.assertFalse(result, "Should return false for non-Record classes on any JDK version");
-
-    try {
-      GraalvmSupport.isRecordConstructorPublicAccessible(Object.class);
-      GraalvmSupport.isRecordConstructorPublicAccessible(String.class);
-      GraalvmSupport.isRecordConstructorPublicAccessible(Integer.class);
-      Assert.assertTrue(true, "Method should not throw exceptions on older JDK versions");
-    } catch (Exception e) {
-      Assert.fail("Method should not throw exceptions on older JDK versions", e);
-    }
-  }
-
-  @Test
-  public void testObjectCreators_BackwardCompatibility() {
-    Assert.assertFalse(GraalvmSupport.needReflectionRegisterForCreation(RegularClass.class));
-    Assert.assertFalse(GraalvmSupport.needReflectionRegisterForCreation(Object.class));
-    Assert.assertFalse(GraalvmSupport.needReflectionRegisterForCreation(String.class));
-
-    Assert.assertTrue(GraalvmSupport.needReflectionRegisterForCreation(PrivateClass.class));
-
-    Assert.assertFalse(GraalvmSupport.needReflectionRegisterForCreation(Runnable.class));
-  }
-
-  @Test
-  public void testRecordUtilsIntegration() {
-    Assert.assertFalse(RecordUtils.isRecord(RegularClass.class));
-    Assert.assertFalse(RecordUtils.isRecord(Object.class));
+  public void testIsRecord() {
+    Assert.assertTrue(RecordUtils.isRecord(PublicRecord.class));
+    Assert.assertTrue(RecordUtils.isRecord(PrivateRecord.class));
+    Assert.assertFalse(RecordUtils.isRecord(ClassWithNoArgCtor.class));
     Assert.assertFalse(RecordUtils.isRecord(String.class));
+  }
 
-    Assert.assertFalse(GraalvmSupport.isRecordConstructorPublicAccessible(RegularClass.class));
-    Assert.assertFalse(GraalvmSupport.isRecordConstructorPublicAccessible(Object.class));
-    Assert.assertFalse(GraalvmSupport.isRecordConstructorPublicAccessible(String.class));
+  @Test
+  public void testIsRecordConstructorPublicAccessible() {
+    Assert.assertTrue(GraalvmSupport.isRecordConstructorPublicAccessible(PublicRecord.class));
+    Assert.assertFalse(GraalvmSupport.isRecordConstructorPublicAccessible(PrivateRecord.class));
+    Assert.assertFalse(GraalvmSupport.isRecordConstructorPublicAccessible(ClassWithNoArgCtor.class));
+  }
+
+  @Test
+  public void testNeedReflectionRegisterForCreation() {
+    // Public record with public constructor doesn't need reflection registration
+    Assert.assertFalse(GraalvmSupport.needReflectionRegisterForCreation(PublicRecord.class));
+    // Private record needs reflection registration
+    Assert.assertTrue(GraalvmSupport.needReflectionRegisterForCreation(PrivateRecord.class));
+    // Class with no-arg constructor doesn't need reflection registration
+    Assert.assertFalse(GraalvmSupport.needReflectionRegisterForCreation(ClassWithNoArgCtor.class));
+    // Class without no-arg constructor needs reflection registration
+    Assert.assertTrue(GraalvmSupport.needReflectionRegisterForCreation(ClassWithoutNoArgCtor.class));
+    // Interface doesn't need reflection registration
+    Assert.assertFalse(GraalvmSupport.needReflectionRegisterForCreation(Runnable.class));
   }
 }

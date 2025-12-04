@@ -25,15 +25,14 @@ import java.lang.reflect.Proxy;
 import org.apache.fory.Fory;
 import org.apache.fory.builder.Generated;
 import org.apache.fory.util.GraalvmSupport;
+import org.apache.fory.util.Preconditions;
 
 public class FeatureTestExample {
 
   public static class PrivateConstructorClass {
     private String value;
 
-    private PrivateConstructorClass() {
-      // Private constructor
-    }
+    private PrivateConstructorClass() {}
 
     public PrivateConstructorClass(String value) {
       this.value = value;
@@ -42,34 +41,23 @@ public class FeatureTestExample {
     public String getValue() {
       return value;
     }
-
-    public void setValue(String value) {
-      this.value = value;
-    }
   }
 
-  // Test interface for proxy
   public interface TestInterface {
     String getValue();
-
-    void setValue(String value);
   }
 
-  // Simple invocation handler
   public static class TestInvocationHandler implements InvocationHandler {
-    private String value;
+    private final String value;
 
     public TestInvocationHandler(String value) {
       this.value = value;
     }
 
     @Override
-    public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+    public Object invoke(Object proxy, Method method, Object[] args) {
       if ("getValue".equals(method.getName())) {
         return value;
-      } else if ("setValue".equals(method.getName())) {
-        value = (String) args[0];
-        return null;
       }
       return null;
     }
@@ -87,63 +75,36 @@ public class FeatureTestExample {
             .withName(FeatureTestExample.class.getName())
             .requireClassRegistration(true)
             .build();
-
-    // register and generate serializer code at build time
     fory.register(PrivateConstructorClass.class);
     fory.register(TestInvocationHandler.class);
-
-    // Register proxy interface
     GraalvmSupport.registerProxySupport(TestInterface.class);
-
-    // Ensure serializers are compiled at build time for GraalVM
     fory.ensureSerializersCompiled();
-
     return fory;
   }
 
   public static void main(String[] args) {
     System.out.println("Testing Fory GraalVM Feature...");
 
-    try {
-      // Test 1: Serialize/deserialize class with private constructor
-      PrivateConstructorClass original = new PrivateConstructorClass("test-value");
-      byte[] serialized = fory.serialize(original);
-      PrivateConstructorClass deserialized = (PrivateConstructorClass) fory.deserialize(serialized);
+    // Test class with private constructor
+    PrivateConstructorClass original = new PrivateConstructorClass("test-value");
+    PrivateConstructorClass deserialized =
+        (PrivateConstructorClass) fory.deserialize(fory.serialize(original));
+    Preconditions.checkArgument(
+        fory.getClassResolver().getSerializer(PrivateConstructorClass.class) instanceof Generated);
+    Preconditions.checkArgument("test-value".equals(deserialized.getValue()));
+    System.out.println("Private constructor class test passed");
 
-      // Assert that the serializer is generated
-      if (!(fory.getClassResolver().getSerializer(PrivateConstructorClass.class)
-          instanceof Generated)) {
-        throw new RuntimeException(
-            "Expected Generated serializer for PrivateConstructorClass but got: "
-                + fory.getClassResolver().getSerializer(PrivateConstructorClass.class).getClass());
-      }
+    // Test proxy serialization
+    TestInterface proxy =
+        (TestInterface)
+            Proxy.newProxyInstance(
+                TestInterface.class.getClassLoader(),
+                new Class[] {TestInterface.class},
+                new TestInvocationHandler("proxy-value"));
+    TestInterface deserializedProxy = (TestInterface) fory.deserialize(fory.serialize(proxy));
+    Preconditions.checkArgument("proxy-value".equals(deserializedProxy.getValue()));
+    System.out.println("Proxy serialization test passed");
 
-      if (!"test-value".equals(deserialized.getValue())) {
-        throw new RuntimeException("Private constructor class test failed");
-      }
-      System.out.println("Private constructor class serialization test passed");
-
-      // Test 2: Serialize/deserialize proxy object
-      TestInterface proxy =
-          (TestInterface)
-              Proxy.newProxyInstance(
-                  TestInterface.class.getClassLoader(),
-                  new Class[] {TestInterface.class},
-                  new TestInvocationHandler("proxy-value"));
-
-      byte[] proxySerialised = fory.serialize(proxy);
-      TestInterface deserializedProxy = (TestInterface) fory.deserialize(proxySerialised);
-
-      if (!"proxy-value".equals(deserializedProxy.getValue())) {
-        throw new RuntimeException("Proxy test failed");
-      }
-      System.out.println("Proxy serialization test passed");
-
-      System.out.println("All GraalVM Feature tests passed!");
-
-    } catch (Exception e) {
-      System.err.println("GraalVM Feature test failed: " + e.getMessage());
-      throw new RuntimeException(e);
-    }
+    System.out.println("FeatureTestExample succeed");
   }
 }

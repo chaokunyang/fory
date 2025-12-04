@@ -138,6 +138,7 @@ def check_varint32(buf: Buffer, value: int):
 
 @require_pyarrow
 def test_buffer_protocol():
+    # test buffer protocol compatibility with pyarrow
     buffer = Buffer.allocate(32)
     binary = b"b" * 100
     buffer.write_bytes_and_size(binary)

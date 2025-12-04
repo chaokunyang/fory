@@ -31,15 +31,11 @@ import os
 import shlex
 import subprocess
 import sys
-import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List
 
 # Maximum number of parallel container builds
 MAX_PARALLEL_WORKERS = 2
-
-# Lock for thread-safe printing
-print_lock = threading.Lock()
 
 # Define Python version sets directly in the Python script
 RELEASE_PYTHON_VERSIONS = (
@@ -135,12 +131,6 @@ def build_docker_cmd(
     return cmd
 
 
-def thread_safe_print(*args, **kwargs):
-    """Print with thread safety."""
-    with print_lock:
-        print(*args, **kwargs)
-
-
 def run_single_build(
     image: str, python_version: str, workspace: str, release: bool, dry_run: bool
 ) -> tuple[str, int]:
@@ -151,7 +141,7 @@ def run_single_build(
     """
     docker_cmd = build_docker_cmd(workspace, image, python_version, release=release)
     printable = " ".join(shlex.quote(c) for c in docker_cmd)
-    thread_safe_print(f"[{python_version}] + {printable}")
+    print(f"[{python_version}] + {printable}")
 
     if dry_run:
         return (python_version, 0)
@@ -165,16 +155,14 @@ def run_single_build(
         output = completed.stdout.decode("utf-8", errors="replace")
 
         if completed.returncode != 0:
-            thread_safe_print(
-                f"[{python_version}] Container exited with {completed.returncode}",
-            )
-            thread_safe_print(f"[{python_version}] Output:\n{output}")
+            print(f"[{python_version}] Container exited with {completed.returncode}")
+            print(f"[{python_version}] Output:\n{output}")
             return (python_version, completed.returncode)
         else:
-            thread_safe_print(f"[{python_version}] Build completed successfully.")
+            print(f"[{python_version}] Build completed successfully.")
             return (python_version, 0)
     except FileNotFoundError as e:
-        thread_safe_print(f"[{python_version}] Error running docker: {e}")
+        print(f"[{python_version}] Error running docker: {e}")
         return (python_version, 2)
 
 

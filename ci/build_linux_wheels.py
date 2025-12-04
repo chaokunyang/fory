@@ -147,16 +147,10 @@ def run_single_build(
         return (python_version, 0)
 
     try:
-        completed = subprocess.run(
-            docker_cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-        )
-        output = completed.stdout.decode("utf-8", errors="replace")
-
+        # Don't capture output - let it stream directly to show build progress
+        completed = subprocess.run(docker_cmd)
         if completed.returncode != 0:
             print(f"[{python_version}] Container exited with {completed.returncode}")
-            print(f"[{python_version}] Output:\n{output}")
             return (python_version, completed.returncode)
         else:
             print(f"[{python_version}] Build completed successfully.")
@@ -191,8 +185,10 @@ def run_parallel_builds(
     # For now, we only use the first image (manylinux2014)
     image = images[0]
 
-    print(f"Building {len(python_versions)} Python versions with max "
-          f"{MAX_PARALLEL_WORKERS} parallel workers: {python_versions}")
+    print(
+        f"Building {len(python_versions)} Python versions with max "
+        f"{MAX_PARALLEL_WORKERS} parallel workers: {python_versions}"
+    )
 
     with ThreadPoolExecutor(max_workers=MAX_PARALLEL_WORKERS) as executor:
         futures = {
@@ -210,7 +206,9 @@ def run_parallel_builds(
                         rc_overall = rc
                     failed_versions.append(python_version)
         except KeyboardInterrupt:
-            print("\nInterrupted by user, cancelling pending builds...", file=sys.stderr)
+            print(
+                "\nInterrupted by user, cancelling pending builds...", file=sys.stderr
+            )
             executor.shutdown(wait=False, cancel_futures=True)
             return 130
 

@@ -28,6 +28,36 @@ namespace fory {
 namespace serialization {
 
 // ============================================================================
+// Helper for polymorphic deserialization
+// ============================================================================
+
+/// Reads polymorphic data using the appropriate harness function based on mode.
+/// In compatible mode, uses read_compatible_fn if available to handle schema
+/// evolution. Otherwise, uses read_data_fn for direct deserialization.
+inline Result<void *, Error>
+read_polymorphic_harness_data(ReadContext &ctx, const TypeInfo *type_info) {
+  if (ctx.is_compatible()) {
+    if (!type_info->harness.read_compatible_fn) {
+      return Unexpected(Error::type_error(
+          "No harness read_compatible function for polymorphic type "
+          "deserialization in compatible mode"));
+    }
+    return type_info->harness.read_compatible_fn(ctx, type_info);
+  }
+  if (!type_info->harness.read_data_fn) {
+    return Unexpected(Error::type_error(
+        "No harness read function for polymorphic type deserialization"));
+  }
+  return type_info->harness.read_data_fn(ctx);
+}
+
+/// Overload for TypeInfo reference.
+inline Result<void *, Error>
+read_polymorphic_harness_data(ReadContext &ctx, const TypeInfo &type_info) {
+  return read_polymorphic_harness_data(ctx, &type_info);
+}
+
+// ============================================================================
 // std::optional serializer
 // ============================================================================
 
@@ -399,24 +429,7 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
       FORY_TRY(type_info, ctx.read_any_typeinfo());
 
       // Use the harness to deserialize the concrete type
-      // In compatible mode, use read_compatible_fn to handle schema evolution
-      void *raw_ptr = nullptr;
-      if (ctx.is_compatible()) {
-        if (!type_info->harness.read_compatible_fn) {
-          return Unexpected(Error::type_error(
-              "No harness read_compatible function for polymorphic type "
-              "deserialization in compatible mode"));
-        }
-        FORY_TRY(ptr, type_info->harness.read_compatible_fn(ctx, type_info));
-        raw_ptr = ptr;
-      } else {
-        if (!type_info->harness.read_data_fn) {
-          return Unexpected(Error::type_error(
-              "No harness read function for polymorphic type deserialization"));
-        }
-        FORY_TRY(ptr, type_info->harness.read_data_fn(ctx));
-        raw_ptr = ptr;
-      }
+      FORY_TRY(raw_ptr, read_polymorphic_harness_data(ctx, type_info));
       T *obj_ptr = static_cast<T *>(raw_ptr);
       auto result = std::shared_ptr<T>(obj_ptr);
       if (flag == REF_VALUE_FLAG) {
@@ -444,24 +457,7 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
     if (!read_ref) {
       // For polymorphic types, use the harness to deserialize the concrete type
       if constexpr (is_polymorphic) {
-        void *raw_ptr = nullptr;
-        if (ctx.is_compatible()) {
-          if (!type_info.harness.read_compatible_fn) {
-            return Unexpected(Error::type_error(
-                "No harness read_compatible function for polymorphic type "
-                "deserialization in compatible mode"));
-          }
-          FORY_TRY(ptr, type_info.harness.read_compatible_fn(ctx, &type_info));
-          raw_ptr = ptr;
-        } else {
-          if (!type_info.harness.read_data_fn) {
-            return Unexpected(Error::type_error(
-                "No harness read function for polymorphic type "
-                "deserialization"));
-          }
-          FORY_TRY(ptr, type_info.harness.read_data_fn(ctx));
-          raw_ptr = ptr;
-        }
+        FORY_TRY(raw_ptr, read_polymorphic_harness_data(ctx, type_info));
         T *obj_ptr = static_cast<T *>(raw_ptr);
         return std::shared_ptr<T>(obj_ptr);
       } else {
@@ -516,30 +512,8 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
       FORY_RETURN_NOT_OK(ctx.increase_dyn_depth());
       DynDepthGuard dyn_depth_guard(ctx);
 
-      // The type_info contains information about the CONCRETE type, not T
-      // Use the harness to deserialize it
-      // In compatible mode, use read_compatible_fn to handle schema evolution
-      void *raw_ptr = nullptr;
-      if (ctx.is_compatible()) {
-        if (!type_info.harness.read_compatible_fn) {
-          return Unexpected(Error::type_error(
-              "No harness read_compatible function for polymorphic type "
-              "deserialization in compatible mode"));
-        }
-        FORY_TRY(ptr, type_info.harness.read_compatible_fn(ctx, &type_info));
-        raw_ptr = ptr;
-      } else {
-        if (!type_info.harness.read_data_fn) {
-          return Unexpected(Error::type_error(
-              "No harness read function for polymorphic type deserialization"));
-        }
-        FORY_TRY(ptr, type_info.harness.read_data_fn(ctx));
-        raw_ptr = ptr;
-      }
-
-      // The harness returns void* pointing to the concrete type
-      // Cast the void* to T* (this works because the concrete type derives from
-      // T)
+      // Use the harness to deserialize the concrete type
+      FORY_TRY(raw_ptr, read_polymorphic_harness_data(ctx, type_info));
       T *obj_ptr = static_cast<T *>(raw_ptr);
       auto result = std::shared_ptr<T>(obj_ptr);
       if (flag == REF_VALUE_FLAG) {
@@ -730,24 +704,7 @@ template <typename T> struct Serializer<std::unique_ptr<T>> {
       FORY_TRY(type_info, ctx.read_any_typeinfo());
 
       // Use the harness to deserialize the concrete type
-      // In compatible mode, use read_compatible_fn to handle schema evolution
-      void *raw_ptr = nullptr;
-      if (ctx.is_compatible()) {
-        if (!type_info->harness.read_compatible_fn) {
-          return Unexpected(Error::type_error(
-              "No harness read_compatible function for polymorphic type "
-              "deserialization in compatible mode"));
-        }
-        FORY_TRY(ptr, type_info->harness.read_compatible_fn(ctx, type_info));
-        raw_ptr = ptr;
-      } else {
-        if (!type_info->harness.read_data_fn) {
-          return Unexpected(Error::type_error(
-              "No harness read function for polymorphic type deserialization"));
-        }
-        FORY_TRY(ptr, type_info->harness.read_data_fn(ctx));
-        raw_ptr = ptr;
-      }
+      FORY_TRY(raw_ptr, read_polymorphic_harness_data(ctx, type_info));
       T *obj_ptr = static_cast<T *>(raw_ptr);
       return std::unique_ptr<T>(obj_ptr);
     } else {
@@ -767,24 +724,7 @@ template <typename T> struct Serializer<std::unique_ptr<T>> {
     if (!read_ref) {
       // For polymorphic types, use the harness to deserialize the concrete type
       if constexpr (is_polymorphic) {
-        void *raw_ptr = nullptr;
-        if (ctx.is_compatible()) {
-          if (!type_info.harness.read_compatible_fn) {
-            return Unexpected(Error::type_error(
-                "No harness read_compatible function for polymorphic type "
-                "deserialization in compatible mode"));
-          }
-          FORY_TRY(ptr, type_info.harness.read_compatible_fn(ctx, &type_info));
-          raw_ptr = ptr;
-        } else {
-          if (!type_info.harness.read_data_fn) {
-            return Unexpected(Error::type_error(
-                "No harness read function for polymorphic type "
-                "deserialization"));
-          }
-          FORY_TRY(ptr, type_info.harness.read_data_fn(ctx));
-          raw_ptr = ptr;
-        }
+        FORY_TRY(raw_ptr, read_polymorphic_harness_data(ctx, type_info));
         T *obj_ptr = static_cast<T *>(raw_ptr);
         return std::unique_ptr<T>(obj_ptr);
       } else {
@@ -816,24 +756,8 @@ template <typename T> struct Serializer<std::unique_ptr<T>> {
       FORY_RETURN_NOT_OK(ctx.increase_dyn_depth());
       DynDepthGuard dyn_depth_guard(ctx);
 
-      // In compatible mode, use read_compatible_fn to handle schema evolution
-      void *raw_ptr = nullptr;
-      if (ctx.is_compatible()) {
-        if (!type_info.harness.read_compatible_fn) {
-          return Unexpected(Error::type_error(
-              "No harness read_compatible function for polymorphic type "
-              "deserialization in compatible mode"));
-        }
-        FORY_TRY(ptr, type_info.harness.read_compatible_fn(ctx, &type_info));
-        raw_ptr = ptr;
-      } else {
-        if (!type_info.harness.read_data_fn) {
-          return Unexpected(Error::type_error(
-              "No harness read function for polymorphic type deserialization"));
-        }
-        FORY_TRY(ptr, type_info.harness.read_data_fn(ctx));
-        raw_ptr = ptr;
-      }
+      // Use the harness to deserialize the concrete type
+      FORY_TRY(raw_ptr, read_polymorphic_harness_data(ctx, type_info));
       T *obj_ptr = static_cast<T *>(raw_ptr);
       return std::unique_ptr<T>(obj_ptr);
     } else {

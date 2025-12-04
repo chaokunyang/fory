@@ -121,6 +121,24 @@ impl Harness {
     pub fn get_to_serializer(&self) -> ToSerializerFn {
         self.to_serializer
     }
+
+    /// Reads polymorphic data using the appropriate function based on mode.
+    /// In compatible mode, uses read_compatible_fn if available to handle schema
+    /// evolution. Otherwise, uses read_data_fn for direct deserialization.
+    #[inline(always)]
+    pub fn read_polymorphic_data(
+        &self,
+        context: &mut ReadContext,
+        typeinfo: &Rc<TypeInfo>,
+    ) -> Result<Box<dyn Any>, Error> {
+        if context.is_compatible() {
+            if let Some(read_compatible_fn) = self.read_compatible_fn {
+                // Only clone when actually needed for compatible mode
+                return read_compatible_fn(context, typeinfo.clone());
+            }
+        }
+        (self.read_data_fn)(context)
+    }
 }
 
 #[derive(Clone, Debug)]

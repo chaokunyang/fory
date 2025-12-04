@@ -918,12 +918,16 @@ fn test_polymorphic_list() {
     assert_eq!(animals.len(), 2);
 
     // First element should be Dog
-    let dog = animals[0].downcast_ref::<Dog>().expect("First element should be Dog");
+    let dog = animals[0]
+        .downcast_ref::<Dog>()
+        .expect("First element should be Dog");
     assert_eq!(dog.age, 3);
     assert_eq!(dog.name, Some("Buddy".to_string()));
 
     // Second element should be Cat
-    let cat = animals[1].downcast_ref::<Cat>().expect("Second element should be Cat");
+    let cat = animals[1]
+        .downcast_ref::<Cat>()
+        .expect("Second element should be Cat");
     assert_eq!(cat.age, 5);
     assert_eq!(cat.lives, 9);
 
@@ -931,10 +935,14 @@ fn test_polymorphic_list() {
     let holder: AnimalListHolder = fory.deserialize_from(&mut reader).unwrap();
     assert_eq!(holder.animals.len(), 2);
 
-    let dog2 = holder.animals[0].downcast_ref::<Dog>().expect("First holder element should be Dog");
+    let dog2 = holder.animals[0]
+        .downcast_ref::<Dog>()
+        .expect("First holder element should be Dog");
     assert_eq!(dog2.name, Some("Rex".to_string()));
 
-    let cat2 = holder.animals[1].downcast_ref::<Cat>().expect("Second holder element should be Cat");
+    let cat2 = holder.animals[1]
+        .downcast_ref::<Cat>()
+        .expect("Second holder element should be Cat");
     assert_eq!(cat2.lives, 7);
 
     // Write back

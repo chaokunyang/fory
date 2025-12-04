@@ -56,18 +56,9 @@ pub fn deserialize_any_box(context: &mut ReadContext) -> Result<Box<dyn Any>, Er
     let typeinfo = context.read_any_typeinfo()?;
     // Check for generic container types which cannot be deserialized polymorphically
     check_generic_container_type(&typeinfo)?;
-    // In compatible mode, use read_compatible_fn if available to handle schema evolution
-    let result = if context.is_compatible() {
-        if let Some(read_compatible_fn) = typeinfo.get_harness().get_read_compatible_fn() {
-            read_compatible_fn(context, typeinfo)
-        } else {
-            let deserializer_fn = typeinfo.get_harness().get_read_data_fn();
-            deserializer_fn(context)
-        }
-    } else {
-        let deserializer_fn = typeinfo.get_harness().get_read_data_fn();
-        deserializer_fn(context)
-    };
+    let result = typeinfo
+        .get_harness()
+        .read_polymorphic_data(context, &typeinfo);
     context.dec_depth();
     result
 }
@@ -227,18 +218,9 @@ pub fn read_box_any(
     };
     // Check for generic container types which cannot be deserialized polymorphically
     check_generic_container_type(&typeinfo)?;
-    // In compatible mode, use read_compatible_fn if available to handle schema evolution
-    let result = if context.is_compatible() {
-        if let Some(read_compatible_fn) = typeinfo.get_harness().get_read_compatible_fn() {
-            read_compatible_fn(context, typeinfo)
-        } else {
-            let deserializer_fn = typeinfo.get_harness().get_read_data_fn();
-            deserializer_fn(context)
-        }
-    } else {
-        let deserializer_fn = typeinfo.get_harness().get_read_data_fn();
-        deserializer_fn(context)
-    };
+    let result = typeinfo
+        .get_harness()
+        .read_polymorphic_data(context, &typeinfo);
     context.dec_depth();
     result
 }
@@ -391,18 +373,9 @@ pub fn read_rc_any(
             };
             // Check for generic container types which cannot be deserialized polymorphically
             check_generic_container_type(&typeinfo)?;
-            // In compatible mode, use read_compatible_fn if available to handle schema evolution
-            let boxed = if context.is_compatible() {
-                if let Some(read_compatible_fn) = typeinfo.get_harness().get_read_compatible_fn() {
-                    read_compatible_fn(context, typeinfo)?
-                } else {
-                    let read_data_fn = typeinfo.get_harness().get_read_data_fn();
-                    read_data_fn(context)?
-                }
-            } else {
-                let read_data_fn = typeinfo.get_harness().get_read_data_fn();
-                read_data_fn(context)?
-            };
+            let boxed = typeinfo
+                .get_harness()
+                .read_polymorphic_data(context, &typeinfo)?;
             context.dec_depth();
             Ok(Rc::<dyn Any>::from(boxed))
         }
@@ -415,18 +388,9 @@ pub fn read_rc_any(
             };
             // Check for generic container types which cannot be deserialized polymorphically
             check_generic_container_type(&typeinfo)?;
-            // In compatible mode, use read_compatible_fn if available to handle schema evolution
-            let boxed = if context.is_compatible() {
-                if let Some(read_compatible_fn) = typeinfo.get_harness().get_read_compatible_fn() {
-                    read_compatible_fn(context, typeinfo)?
-                } else {
-                    let read_data_fn = typeinfo.get_harness().get_read_data_fn();
-                    read_data_fn(context)?
-                }
-            } else {
-                let read_data_fn = typeinfo.get_harness().get_read_data_fn();
-                read_data_fn(context)?
-            };
+            let boxed = typeinfo
+                .get_harness()
+                .read_polymorphic_data(context, &typeinfo)?;
             context.dec_depth();
             let rc: Rc<dyn Any> = Rc::from(boxed);
             context.ref_reader.store_rc_ref(rc.clone());
@@ -585,18 +549,9 @@ pub fn read_arc_any(
             };
             // Check for generic container types which cannot be deserialized polymorphically
             check_generic_container_type(&typeinfo)?;
-            // In compatible mode, use read_compatible_fn if available to handle schema evolution
-            let boxed = if context.is_compatible() {
-                if let Some(read_compatible_fn) = typeinfo.get_harness().get_read_compatible_fn() {
-                    read_compatible_fn(context, typeinfo)?
-                } else {
-                    let read_data_fn = typeinfo.get_harness().get_read_data_fn();
-                    read_data_fn(context)?
-                }
-            } else {
-                let read_data_fn = typeinfo.get_harness().get_read_data_fn();
-                read_data_fn(context)?
-            };
+            let boxed = typeinfo
+                .get_harness()
+                .read_polymorphic_data(context, &typeinfo)?;
             context.dec_depth();
             Ok(Arc::<dyn Any>::from(boxed))
         }
@@ -610,18 +565,9 @@ pub fn read_arc_any(
             };
             // Check for generic container types which cannot be deserialized polymorphically
             check_generic_container_type(&typeinfo)?;
-            // In compatible mode, use read_compatible_fn if available to handle schema evolution
-            let boxed = if context.is_compatible() {
-                if let Some(read_compatible_fn) = typeinfo.get_harness().get_read_compatible_fn() {
-                    read_compatible_fn(context, typeinfo)?
-                } else {
-                    let read_data_fn = typeinfo.get_harness().get_read_data_fn();
-                    read_data_fn(context)?
-                }
-            } else {
-                let read_data_fn = typeinfo.get_harness().get_read_data_fn();
-                read_data_fn(context)?
-            };
+            let boxed = typeinfo
+                .get_harness()
+                .read_polymorphic_data(context, &typeinfo)?;
             context.dec_depth();
             let arc: Arc<dyn Any> = Arc::from(boxed);
             context.ref_reader.store_arc_ref(arc.clone());

@@ -24,7 +24,6 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import org.apache.fory.Fory;
 import org.apache.fory.builder.Generated;
-import org.apache.fory.config.Language;
 import org.apache.fory.util.GraalvmSupport;
 
 public class FeatureTestExample {
@@ -76,17 +75,35 @@ public class FeatureTestExample {
     }
   }
 
-  public static void main(String[] args) {
-    System.out.println("Testing Fory GraalVM Feature...");
+  static Fory fory;
 
+  static {
+    fory = createFory();
+  }
+
+  private static Fory createFory() {
     Fory fory =
-        Fory.builder().withLanguage(Language.JAVA).withRefTracking(true).withCodegen(true).build();
+        Fory.builder()
+            .withName(FeatureTestExample.class.getName())
+            .requireClassRegistration(true)
+            .withRefTracking(true)
+            .build();
 
+    // register and generate serializer code at build time
     fory.register(PrivateConstructorClass.class);
     fory.register(TestInvocationHandler.class);
 
     // Register proxy interface
     GraalvmSupport.registerProxySupport(TestInterface.class);
+
+    // Ensure serializers are compiled at build time for GraalVM
+    fory.ensureSerializersCompiled();
+
+    return fory;
+  }
+
+  public static void main(String[] args) {
+    System.out.println("Testing Fory GraalVM Feature...");
 
     try {
       // Test 1: Serialize/deserialize class with private constructor

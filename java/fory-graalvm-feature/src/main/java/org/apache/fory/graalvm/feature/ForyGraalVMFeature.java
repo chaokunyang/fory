@@ -95,7 +95,7 @@ public class ForyGraalVMFeature implements Feature {
 
     RuntimeReflection.register(clazz);
     // Enable class lookup via Class.forName
-    RuntimeReflection.registerClassLookup(clazz);
+    RuntimeReflection.registerClassLookup(clazz.getName());
 
     // Register methods and constructors for Record classes
     // (accessor methods like f1(), f2() and the canonical constructor)

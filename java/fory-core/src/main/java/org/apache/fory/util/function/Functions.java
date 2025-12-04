@@ -76,15 +76,23 @@ public class Functions {
     } catch (NoSuchMethodException e) {
       if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
         // In GraalVM native image, getDeclaredMethod may fail for Record accessor methods
-        // Try using getMethods() which works for public methods without reflection config
+        // First try getDeclaredMethods() for private inner classes (e.g. private records)
+        // Then fall back to getMethods() for public methods
         try {
+          for (Method method : cls.getDeclaredMethods()) {
+            if (method.getName().equals(methodName) && method.getParameterCount() == 0) {
+              method.setAccessible(true);
+              return makeGetterFunction(method);
+            }
+          }
+          // Also check public methods from parent classes
           for (Method method : cls.getMethods()) {
             if (method.getName().equals(methodName) && method.getParameterCount() == 0) {
               return makeGetterFunction(method);
             }
           }
           throw new NoSuchMethodException(
-              "No public no-arg method found: " + cls.getName() + "." + methodName + "()");
+              "No no-arg method found: " + cls.getName() + "." + methodName + "()");
         } catch (NoSuchMethodException ex) {
           throw new RuntimeException(
               "Failed to create getter for " + cls.getName() + "." + methodName, ex);

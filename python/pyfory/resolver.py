@@ -192,6 +192,9 @@ class MapRefResolver(RefResolver):
             self.read_object = None
             if head_flag == REF_VALUE_FLAG:
                 return self.preserve_ref_id()
+            # For NOT_NULL_VALUE_FLAG, push -1 to read_ref_ids so reference() knows
+            # this object is not referenceable (it's a value type, not a reference type)
+            self.read_ref_ids.append(-1)
         # `head_flag` except `REF_FLAG` can be used as stub reference id because we use
         # `refId >= NOT_NULL_VALUE_FLAG` to read data.
         return head_flag
@@ -201,6 +204,11 @@ class MapRefResolver(RefResolver):
 
     def reference(self, obj):
         ref_id = self.read_ref_ids.pop()
+        # When NOT_NULL_VALUE_FLAG was read instead of REF_VALUE_FLAG,
+        # -1 is pushed to read_ref_ids. This means the object is a value type
+        # (not a reference type), so we skip reference tracking.
+        if ref_id < 0:
+            return
         self.set_read_object(ref_id, obj)
 
     def get_read_object(self, id_=None):

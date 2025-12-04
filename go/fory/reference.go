@@ -18,7 +18,6 @@
 package fory
 
 import (
-	"encoding/json"
 	"fmt"
 	"reflect"
 	"unsafe"
@@ -42,9 +41,6 @@ type RefResolver struct {
 	readObjects    []reflect.Value
 	readRefIds     []int32
 	readObject     reflect.Value // last read object which is not a reference
-
-	// basicValueCache caches boxed struct pointers keyed by their JSON representation to support reference tracking
-	basicValueCache map[interface{}]reflect.Value
 }
 
 type refKey struct {
@@ -54,9 +50,8 @@ type refKey struct {
 
 func newRefResolver(refTracking bool) *RefResolver {
 	refResolver := &RefResolver{
-		refTracking:     refTracking,
-		writtenObjects:  map[refKey]int32{},
-		basicValueCache: map[interface{}]reflect.Value{},
+		refTracking:    refTracking,
+		writtenObjects: map[refKey]int32{},
 	}
 	return refResolver
 }
@@ -98,28 +93,9 @@ func (r *RefResolver) WriteRefOrNull(buffer *ByteBuffer, value reflect.Value) (r
 	case reflect.Invalid:
 		isNil = true
 	case reflect.Struct:
-		// Adds reference tracking for struct types
-		raw, _ := json.Marshal(value.Interface())
-		key := string(raw)
-		boxed, ok := r.basicValueCache[key]
-		if !ok {
-			boxed = reflect.New(value.Type())
-			boxed.Elem().Set(value)
-			r.basicValueCache[key] = boxed
-		}
-		ptr := unsafe.Pointer(boxed.Pointer())
-		refKey := refKey{pointer: ptr, length: 0}
-		if writtenId, ok := r.writtenObjects[refKey]; ok {
-			buffer.WriteInt8(RefFlag)
-			buffer.WriteVarInt32(writtenId)
-			return true, nil
-		}
-		newWriteRefId := len(r.writtenObjects)
-		if newWriteRefId >= MaxInt32 {
-			return false, fmt.Errorf("too many objects execced %d to serialize", MaxInt32)
-		}
-		r.writtenObjects[refKey] = int32(newWriteRefId)
-		buffer.WriteInt8(RefValueFlag)
+		// Struct values are value types, not reference types.
+		// They should not participate in reference tracking.
+		buffer.WriteInt8(NotNullValueFlag)
 		return false, nil
 	default:
 		// The object is being written for the first time.

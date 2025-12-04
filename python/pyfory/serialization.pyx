@@ -201,6 +201,9 @@ cdef class MapRefResolver:
             self.read_object = None
             if head_flag == REF_VALUE_FLAG:
                 return self.preserve_ref_id()
+            # For NOT_NULL_VALUE_FLAG, push -1 to read_ref_ids so reference() knows
+            # this object is not referenceable (it's a value type, not a reference type)
+            self.read_ref_ids.push_back(-1)
             return head_flag
 
     cpdef inline int32_t last_preserved_ref_id(self):
@@ -213,6 +216,11 @@ cdef class MapRefResolver:
             return
         cdef int32_t ref_id = self.read_ref_ids.back()
         self.read_ref_ids.pop_back()
+        # When NOT_NULL_VALUE_FLAG was read instead of REF_VALUE_FLAG,
+        # -1 is pushed to read_ref_ids. This means the object is a value type
+        # (not a reference type), so we skip reference tracking.
+        if ref_id < 0:
+            return
         cdef c_bool need_inc = self.read_objects[ref_id] == NULL
         if need_inc:
             Py_INCREF(obj)

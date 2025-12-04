@@ -23,6 +23,8 @@
 
 namespace fory {
 enum class TypeId : int32_t {
+  // Unknown/polymorphic type marker.
+  UNKNOWN = 0,
   // a boolean value (true or false).
   BOOL = 1,
   // an 8-bit signed integer.
@@ -101,9 +103,8 @@ enum class TypeId : int32_t {
   FLOAT32_ARRAY = 36,
   // one-dimensional float64 array.
   FLOAT64_ARRAY = 37,
-  // Unknown/polymorphic type marker (must match Java Types.UNKNOWN = 63).
-  UNKNOWN = 63,
-  // Bound value, typically used as a sentinel value.
+  // Bound value for range checks (types with id >= BOUND are not internal
+  // types).
   BOUND = 64
 };
 

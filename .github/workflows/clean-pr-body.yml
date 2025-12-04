@@ -1,0 +1,51 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+name: "Clean PR Body"
+
+on:
+  pull_request_target:
+    types:
+      - opened
+
+permissions:
+  pull-requests: write
+
+jobs:
+  remove-comments:
+    name: Remove HTML comments from PR body
+    runs-on: ubuntu-latest
+    steps:
+      - name: Remove HTML comments from PR body
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          # Get current PR body
+          body=$(gh pr view "$PR_NUMBER" --repo ${{ github.repository }} --json body -q .body)
+
+          # Remove HTML comments using perl (handles multi-line comments)
+          # Pattern: <!-- ... --> with optional trailing newline
+          cleaned_body=$(echo "$body" | perl -0777 -pe 's/<!--.*?-->\n?//gs')
+
+          # Only update if there were changes
+          if [ "$body" != "$cleaned_body" ]; then
+            gh pr edit "$PR_NUMBER" --repo ${{ github.repository }} --body "$cleaned_body"
+            echo "PR body cleaned successfully"
+          else
+            echo "No HTML comments found in PR body"
+          fi

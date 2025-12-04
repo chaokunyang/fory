@@ -26,6 +26,9 @@ import org.apache.fory.util.Preconditions;
 
 public class Types {
 
+  /** Unknown/polymorphic type marker. */
+  public static final int UNKNOWN = 0;
+
   /** bool: a boolean value (true or false). */
   public static final int BOOL = 1;
 
@@ -156,7 +159,8 @@ public class Types {
   /** One dimensional float64 array. */
   public static final int FLOAT64_ARRAY = 37;
 
-  public static final int UNKNOWN = 63;
+  /** Bound value for range checks (types with id >= BOUND are not internal types). */
+  public static final int BOUND = 64;
 
   // Helper methods
   public static boolean isNamedType(int value) {

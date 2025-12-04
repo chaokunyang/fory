@@ -25,7 +25,7 @@ typedef TypeDecision = ({InterfaceType type, bool forceNullable});
 class ObjTypeWrapper{
   static const namedEnum = ObjTypeWrapper(ObjType.NAMED_ENUM, true,);
   static const namedStruct = ObjTypeWrapper(ObjType.NAMED_STRUCT, false);
-  static const unknownStruct = ObjTypeWrapper(ObjType.UNKNOWN_YET, false);
+  static const unknownStruct = ObjTypeWrapper(ObjType.UNKNOWN, false);
 
   final ObjType objType; // null means unsupported
   final bool certainForSer;

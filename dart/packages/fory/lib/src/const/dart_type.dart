@@ -75,7 +75,7 @@ enum DartTypeEnum{
   DECIMAL(Decimal,true, 'Decimal', 'package', 'decimal/decimal.dart', null, true, 'package:decimal/decimal.dart@Decimal'),
   DURATION(Duration,true, 'Duration', 'dart', 'core', null, true,'dart:core@Duration'),;
   
-  // NUM(num, false, 'num', 'dart', 'core', ObjType.UNKNOWN_YET, 'dart:core@num'),
+  // NUM(num, false, 'num', 'dart', 'core', ObjType.UNKNOWN, 'dart:core@num'),
 
   final String scheme;
   final String path;
@@ -108,7 +108,7 @@ enum DartTypeEnum{
   @Deprecated('use find')
   // TODO: Using this method requires that all DartTypeEnum names be unique and sorted in strict string order
   /// Returning null indicates it is definitely a Dart built-in type, which is unsupported
-  /// Returning UNKNOWN_YET means uncertain
+  /// Returning UNKNOWN means uncertain
   // TODO: Attempt to record the Dart analyzer's ID to achieve a numerical comparison
   static DartTypeEnum? _findDeprecated(String name, String scheme, String path){
     int l = 0;

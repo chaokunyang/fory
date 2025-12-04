@@ -42,6 +42,8 @@ pub enum RefFlag {
 #[allow(non_camel_case_types)]
 #[repr(i16)]
 pub enum TypeId {
+    // Unknown/polymorphic type marker.
+    UNKNOWN = 0,
     BOOL = 1,
     INT8 = 2,
     INT16 = 3,
@@ -93,7 +95,8 @@ pub enum TypeId {
     U64_ARRAY = 75,
     USIZE_ARRAY = 76,
     U128_ARRAY = 77,
-    UNKNOWN = 78,
+    // Bound value for range checks (types with id >= BOUND are not internal types).
+    BOUND = 78,
 }
 
 pub const BOOL: u32 = TypeId::BOOL as u32;
@@ -148,6 +151,7 @@ pub const U64_ARRAY: u32 = TypeId::U64_ARRAY as u32;
 pub const USIZE_ARRAY: u32 = TypeId::USIZE_ARRAY as u32;
 pub const U128_ARRAY: u32 = TypeId::U128_ARRAY as u32;
 pub const UNKNOWN: u32 = TypeId::UNKNOWN as u32;
+pub const BOUND: u32 = TypeId::BOUND as u32;
 
 const MAX_UNT32: u64 = (1 << 31) - 1;
 
@@ -289,9 +293,10 @@ pub const fn is_primitive_type_id(type_id: TypeId) -> bool {
 }
 
 /// Keep as const fn for compile time evaluation or constant folding
+/// Internal types are all types in `0 < id < BOUND` that are not struct/ext/enum types.
 #[inline(always)]
 pub const fn is_internal_type(type_id: u32) -> bool {
-    if type_id == 0 || type_id >= TypeId::UNKNOWN as u32 {
+    if type_id == UNKNOWN || type_id >= BOUND {
         return false;
     }
     !matches!(

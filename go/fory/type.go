@@ -33,8 +33,8 @@ import (
 type TypeId = int16
 
 const (
-	// NA A NullFlag type having no physical storage
-	NA TypeId = iota // NA = 0
+	// UNKNOWN Unknown/polymorphic type marker
+	UNKNOWN = 0
 	// BOOL Boolean as 1 bit LSB bit-packed ordering
 	BOOL = 1
 	// INT8 Signed 8-bit little-endian integer
@@ -113,8 +113,6 @@ const (
 	ARROW_RECORD_BATCH = 38
 	// ARROW_TABLE an arrow table object
 	ARROW_TABLE = 39
-	// UNKNOWN an unknown type
-	UNKNOWN = 63
 
 	// UINT8 Unsigned 8-bit little-endian integer
 	UINT8 = 100 // Not in mapping table, assign a higher value
@@ -671,6 +669,9 @@ func (r *typeResolver) getTypeInfo(value reflect.Value, create bool) (TypeInfo, 
 	} else if isMultiDimensionaSlice(value) {
 		typeID = LIST
 		return r.typeIDToTypeInfo[typeID], nil
+	} else if value.Kind() == reflect.Slice {
+		// Regular slices are treated as LIST
+		typeID = LIST
 	}
 
 	// Register the type with full metadata

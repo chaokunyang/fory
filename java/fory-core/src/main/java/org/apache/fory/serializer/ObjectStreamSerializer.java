@@ -88,10 +88,6 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
    * Interface for slot information used in ObjectStreamSerializer. This allows both full SlotsInfo
    * and minimal MinimalSlotsInfo implementations.
    */
-  /**
-   * Interface for slot information used in ObjectStreamSerializer. This allows both full SlotsInfo
-   * and minimal MinimalSlotsInfo implementations.
-   */
   private interface SlotInfo {
     Class<?> getCls();
 
@@ -539,7 +535,6 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
    */
   private static class MinimalSlotsInfo implements SlotInfo {
     private final Class<?> cls;
-    private final ClassInfo classInfo;
     private final StreamClassInfo streamClassInfo;
     private CompatibleSerializerBase slotsSerializer;
     private final ObjectIntMap<String> fieldIndexMap;
@@ -552,7 +547,6 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     public MinimalSlotsInfo(Fory fory, Class<?> type) {
       // Initialize with minimal required fields
       this.cls = type;
-      this.classInfo = fory.getClassResolver().newClassInfo(type, null, NO_CLASS_ID);
       this.streamClassInfo = null; // Skip problematic ObjectStreamClass lookup
 
       // Create a basic CompatibleSerializer for field handling

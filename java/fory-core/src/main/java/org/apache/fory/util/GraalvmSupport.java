@@ -31,6 +31,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.apache.fory.Fory;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.util.record.RecordUtils;
 
@@ -279,7 +280,7 @@ public class GraalvmSupport {
 
   /** GraalVM class registry. */
   public static class GraalvmClassRegistry {
-    public final List<Object> resolvers;
+    public final List<TypeResolver> resolvers;
     public final Map<Class<?>, Class<? extends Serializer>> serializerClassMap;
     public final Map<Long, Class<? extends Serializer>> deserializerClassMap;
     public final Set<Class<?>> registeredClasses;

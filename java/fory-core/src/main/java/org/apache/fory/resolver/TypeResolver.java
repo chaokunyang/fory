@@ -601,13 +601,12 @@ public abstract class TypeResolver {
 
   final Class<? extends Serializer> getSerializerClassFromGraalvmRegistry(Class<?> cls) {
     GraalvmSupport.GraalvmClassRegistry registry = getGraalvmClassRegistry();
-    @SuppressWarnings("unchecked")
-    List<ClassResolver> classResolvers = (List<ClassResolver>) (List<?>) registry.resolvers;
-    if (classResolvers.isEmpty()) {
+    List<TypeResolver> resolvers = registry.resolvers;
+    if (resolvers.isEmpty()) {
       return null;
     }
-    for (ClassResolver classResolver : classResolvers) {
-      if (classResolver != this) {
+    for (TypeResolver resolver : resolvers) {
+      if (resolver != this) {
         ClassInfo classInfo = getClassInfo(cls, false);
         if (classInfo != null && classInfo.serializer != null) {
           return classInfo.serializer.getClass();
@@ -631,9 +630,8 @@ public abstract class TypeResolver {
   private Class<? extends Serializer> getMetaSharedDeserializerClassFromGraalvmRegistry(
       Class<?> cls, ClassDef classDef) {
     GraalvmSupport.GraalvmClassRegistry registry = getGraalvmClassRegistry();
-    @SuppressWarnings("unchecked")
-    List<ClassResolver> classResolvers = (List<ClassResolver>) (List<?>) registry.resolvers;
-    if (classResolvers.isEmpty()) {
+    List<TypeResolver> resolvers = registry.resolvers;
+    if (resolvers.isEmpty()) {
       return null;
     }
     Class<? extends Serializer> deserializerClass =

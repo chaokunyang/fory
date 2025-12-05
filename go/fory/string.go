@@ -19,7 +19,9 @@ package fory
 
 import (
 	"fmt"
+	"reflect"
 	"unicode/utf16"
+	"unsafe"
 )
 
 // Encoding type constants
@@ -162,4 +164,143 @@ func WriteString(buf *ByteBuffer, value string) error {
 // This method is specifically designed for code generation to avoid reflection overhead
 func ReadString(buf *ByteBuffer) string {
 	return readString(buf)
+}
+
+// ============================================================================
+// String Serializers
+// ============================================================================
+
+// stringSerializer handles string type
+type stringSerializer struct{}
+
+var globalStringSerializer = stringSerializer{}
+
+func (s stringSerializer) TypeId() TypeId       { return STRING }
+func (s stringSerializer) NeedToWriteRef() bool { return false }
+
+// TypedSerializer interface methods
+func (s stringSerializer) Write(ctx *WriteContext, value string, writeRefInfo, writeTypeInfo bool) error {
+	if writeRefInfo {
+		ctx.buffer.WriteInt8(NotNullValueFlag)
+	}
+	if writeTypeInfo {
+		ctx.WriteTypeId(STRING)
+	}
+	return s.WriteData(ctx, value)
+}
+
+func (s stringSerializer) WriteData(ctx *WriteContext, value string) error {
+	ctx.buffer.WriteVarUint32(uint32(len(value)))
+	if len(value) > 0 {
+		ctx.buffer.WriteBinary(unsafe.Slice(unsafe.StringData(value), len(value)))
+	}
+	return nil
+}
+
+func (s stringSerializer) Read(ctx *ReadContext, readRefInfo, readTypeInfo bool) (string, error) {
+	if readRefInfo {
+		_ = ctx.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = ctx.buffer.ReadInt16()
+	}
+	return s.ReadData(ctx)
+}
+
+func (s stringSerializer) ReadData(ctx *ReadContext) (string, error) {
+	length := ctx.buffer.ReadVarUint32()
+	if length == 0 {
+		return "", nil
+	}
+	data := ctx.buffer.ReadBinary(int(length))
+	return string(data), nil
+}
+
+// AnySerializer interface methods
+func (s stringSerializer) WriteAny(ctx *WriteContext, value any, writeRefInfo, writeTypeInfo bool) error {
+	return s.Write(ctx, value.(string), writeRefInfo, writeTypeInfo)
+}
+
+func (s stringSerializer) WriteDataAny(ctx *WriteContext, value any) error {
+	return s.WriteData(ctx, value.(string))
+}
+
+func (s stringSerializer) ReadAny(ctx *ReadContext, readRefInfo, readTypeInfo bool) (any, error) {
+	return s.Read(ctx, readRefInfo, readTypeInfo)
+}
+
+func (s stringSerializer) ReadDataAny(ctx *ReadContext) (any, error) {
+	return s.ReadData(ctx)
+}
+
+// Serializer interface methods
+func (s stringSerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
+	return writeString(ctx.buffer, value.String())
+}
+
+func (s stringSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	str := readString(ctx.buffer)
+	value.SetString(str)
+	return nil
+}
+
+// ptrToStringSerializer serializes a pointer to string
+type ptrToStringSerializer struct{}
+
+func (s ptrToStringSerializer) TypeId() TypeId       { return -STRING }
+func (s ptrToStringSerializer) NeedToWriteRef() bool { return true }
+
+// AnySerializer interface methods
+func (s ptrToStringSerializer) WriteAny(ctx *WriteContext, value any, writeRefInfo, writeTypeInfo bool) error {
+	if writeRefInfo {
+		ctx.buffer.WriteInt8(NotNullValueFlag)
+	}
+	if writeTypeInfo {
+		ctx.WriteTypeId(STRING)
+	}
+	return s.WriteDataAny(ctx, value)
+}
+
+func (s ptrToStringSerializer) WriteDataAny(ctx *WriteContext, value any) error {
+	str := value.(*string)
+	ctx.buffer.WriteVarUint32(uint32(len(*str)))
+	if len(*str) > 0 {
+		ctx.buffer.WriteBinary(unsafe.Slice(unsafe.StringData(*str), len(*str)))
+	}
+	return nil
+}
+
+func (s ptrToStringSerializer) ReadAny(ctx *ReadContext, readRefInfo, readTypeInfo bool) (any, error) {
+	if readRefInfo {
+		_ = ctx.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = ctx.buffer.ReadInt16()
+	}
+	return s.ReadDataAny(ctx)
+}
+
+func (s ptrToStringSerializer) ReadDataAny(ctx *ReadContext) (any, error) {
+	length := ctx.buffer.ReadVarUint32()
+	if length == 0 {
+		str := ""
+		return &str, nil
+	}
+	data := ctx.buffer.ReadBinary(int(length))
+	str := string(data)
+	return &str, nil
+}
+
+// Serializer interface methods
+func (s ptrToStringSerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
+	str := value.Interface().(*string)
+	return writeString(ctx.buffer, *str)
+}
+
+func (s ptrToStringSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	str := readString(ctx.buffer)
+	ptr := new(string)
+	*ptr = str
+	value.Set(reflect.ValueOf(ptr))
+	return nil
 }

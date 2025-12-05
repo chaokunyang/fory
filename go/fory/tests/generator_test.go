@@ -45,7 +45,7 @@ func TestValidationDemo(t *testing.T) {
 	assert.Equal(t, true, original.E, "Original E should be true")
 
 	// 2. Serialize using generated code
-	f := fory.NewFory(true)
+	f := fory.NewFory(fory.WithRefTracking(true))
 	data, err := f.Marshal(original)
 	require.NoError(t, err, "Serialization should not fail")
 	require.NotEmpty(t, data, "Serialized data should not be empty")
@@ -79,7 +79,7 @@ func TestSliceDemo(t *testing.T) {
 	assert.NotEmpty(t, original.BoolSlice, "BoolSlice should not be empty")
 
 	// 2. Serialize using generated code
-	f := fory.NewFory(true)
+	f := fory.NewFory(fory.WithRefTracking(true))
 	data, err := f.Marshal(original)
 	require.NoError(t, err, "Serialization should not fail")
 	require.NotEmpty(t, data, "Serialized data should not be empty")
@@ -118,7 +118,7 @@ func TestDynamicSliceDemo(t *testing.T) {
 	assert.Equal(t, int64(12345), original.DynamicSlice[4], "Fifth element should be int64(12345)")
 
 	// 2. Serialize using generated code
-	f := fory.NewFory(true)
+	f := fory.NewFory(fory.WithRefTracking(true))
 	data, err := f.Marshal(original)
 	require.NoError(t, err, "Serialization should not fail")
 	require.NotEmpty(t, data, "Serialized data should not be empty")
@@ -143,7 +143,7 @@ func TestDynamicSliceDemoWithNilAndEmpty(t *testing.T) {
 	}
 
 	// Serialize using generated code
-	f := fory.NewFory(true)
+	f := fory.NewFory(fory.WithRefTracking(true))
 	data, err := f.Marshal(original)
 	require.NoError(t, err, "Serialization should not fail")
 	require.NotEmpty(t, data, "Serialized data should not be empty")
@@ -191,7 +191,7 @@ func TestMapDemo(t *testing.T) {
 	}
 
 	// Serialize with codegen
-	f := fory.NewFory(true)
+	f := fory.NewFory(fory.WithRefTracking(true))
 	data, err := f.Marshal(instance)
 	require.NoError(t, err, "Serialization failed")
 

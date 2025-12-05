@@ -222,8 +222,8 @@ type ReadContext struct {
 	buffer       *ByteBuffer
 	refReader    *RefReader
 	registry     *GenericRegistry
-	refTracking  bool // Cached flag to avoid indirection
-	compatible   bool // Schema evolution compatibility mode
+	refTracking  bool          // Cached flag to avoid indirection
+	compatible   bool          // Schema evolution compatibility mode
 	typeResolver *typeResolver // For complex type deserialization
 	refResolver  *RefResolver  // For reference tracking (legacy)
 }

@@ -349,7 +349,7 @@ func (s mapSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value ref
 							}
 						}
 					} else {
-						if err := ctx.readReferencableBySerializer( k, keySer); err != nil {
+						if err := ctx.readReferencableBySerializer(k, keySer); err != nil {
 							return fmt.Errorf("failed to deserialize key via serializer: %w", err)
 						}
 					}
@@ -375,7 +375,7 @@ func (s mapSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value ref
 							}
 						}
 					} else {
-						if err := ctx.readReferencableBySerializer( v, valSer); err != nil {
+						if err := ctx.readReferencableBySerializer(v, valSer); err != nil {
 							return fmt.Errorf("failed to deserialize map value via serializer: %w", err)
 						}
 

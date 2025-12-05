@@ -382,37 +382,32 @@ func newTypeResolver(fory *Fory) *typeResolver {
 		typeName := type_.Name()
 		typeTag := pkgPath + "." + typeName
 
-		// Create structSerializer
-		structSer := &structSerializer{
-			typeTag: typeTag,
-			type_:   type_,
-		}
-		// Create ptrToStructSerializer
+		// Create ptrToCodegenSerializer wrapper for pointer type
 		ptrType := reflect.PtrTo(type_)
-		ptrStructSer := &ptrToStructSerializer{
-			type_:            ptrType,
-			structSerializer: *structSer,
+		ptrCodegenSer := &ptrToCodegenSerializer{
+			type_:             ptrType,
+			codegenSerializer: codegenSerializer,
 		}
 
-		// 1. Basic type mappings (same as reflection)
-		r.typeToSerializers[type_] = structSer      // Value type -> structSerializer with codegen
-		r.typeToSerializers[ptrType] = ptrStructSer // Pointer type -> ptrToStructSerializer with codegen
+		// 1. Basic type mappings - use the generated serializer directly
+		r.typeToSerializers[type_] = codegenSerializer // Value type -> generated serializer
+		r.typeToSerializers[ptrType] = ptrCodegenSer   // Pointer type -> ptrToCodegenSerializer wrapper
 
-		// 2. Cross-language critical mapping (same as reflection)
-		r.typeTagToSerializers[typeTag] = ptrStructSer // "pkg.Type" -> ptrToStructSerializer
+		// 2. Cross-language critical mapping
+		r.typeTagToSerializers[typeTag] = ptrCodegenSer // "pkg.Type" -> ptrToCodegenSerializer
 
 		// 3. Register complete type information (critical for proper serialization)
-		_, err := r.registerType(type_, int32(codegenSerializer.TypeId()), pkgPath, typeName, structSer, false)
+		_, err := r.registerType(type_, int32(codegenSerializer.TypeId()), pkgPath, typeName, codegenSerializer, false)
 		if err != nil {
 			panic(fmt.Errorf("failed to register codegen type %s: %v", typeTag, err))
 		}
 		// 4. Register pointer type information
-		_, err = r.registerType(ptrType, -int32(codegenSerializer.TypeId()), pkgPath, typeName, ptrStructSer, false)
+		_, err = r.registerType(ptrType, -int32(codegenSerializer.TypeId()), pkgPath, typeName, ptrCodegenSer, false)
 		if err != nil {
 			panic(fmt.Errorf("failed to register codegen pointer type %s: %v", typeTag, err))
 		}
 
-		// 5. Type info mappings (same as reflection) - these are redundant if registerType is called
+		// 5. Type info mappings
 		r.typeToTypeInfo[type_] = "@" + typeTag    // Type -> "@pkg.Type"
 		r.typeToTypeInfo[ptrType] = "*@" + typeTag // *Type -> "*@pkg.Type"
 		r.typeInfoToType["@"+typeTag] = type_      // "@pkg.Type" -> Type
@@ -1418,7 +1413,14 @@ func isPrimitiveArrayType(typeID int16) bool {
 		INT32_ARRAY,
 		INT64_ARRAY,
 		FLOAT32_ARRAY,
-		FLOAT64_ARRAY:
+		FLOAT64_ARRAY,
+		FORY_PRIMITIVE_BOOL_ARRAY,
+		FORY_PRIMITIVE_SHORT_ARRAY,
+		FORY_PRIMITIVE_INT_ARRAY,
+		FORY_PRIMITIVE_LONG_ARRAY,
+		FORY_PRIMITIVE_FLOAT_ARRAY,
+		FORY_PRIMITIVE_DOUBLE_ARRAY,
+		FORY_STRING_ARRAY:
 		return true
 	default:
 		return false

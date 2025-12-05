@@ -70,7 +70,6 @@ type Serializer interface {
 	NeedToWriteRef() bool
 }
 
-
 // FastType for switch-based fast path (avoids interface virtual method cost)
 type FastType uint8
 
@@ -344,7 +343,6 @@ func (s boolSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value re
 	value.SetBool(v)
 	return nil
 }
-
 
 // int8Serializer handles int8 type
 type int8Serializer struct{}
@@ -1207,7 +1205,7 @@ type arrayConcreteValueSerializer struct {
 	referencable   bool
 }
 
-func (s *arrayConcreteValueSerializer) TypeId() TypeId       { return -LIST }
+func (s *arrayConcreteValueSerializer) TypeId() TypeId      { return -LIST }
 func (s arrayConcreteValueSerializer) NeedToWriteRef() bool { return true }
 
 // Serializer interface methods

@@ -199,7 +199,7 @@ func buildFieldDefs(fory *Fory, value reflect.Value) ([]FieldDef, error) {
 type FieldType interface {
 	TypeId() TypeId
 	write(*ByteBuffer)
-	getTypeInfo(*Fory) (TypeInfo, error)                    // some serializer need typeinfo as well
+	getTypeInfo(*Fory) (TypeInfo, error)                     // some serializer need typeinfo as well
 	getTypeInfoWithResolver(*typeResolver) (TypeInfo, error) // version that uses typeResolver directly
 }
 

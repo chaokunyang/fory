@@ -209,10 +209,18 @@ func (f *Fory) Unmarshal(data []byte, v interface{}) error {
 	}
 	if result != nil {
 		resultVal := reflect.ValueOf(result)
-		if resultVal.Type().AssignableTo(rv.Elem().Type()) {
+		targetType := rv.Elem().Type()
+
+		if resultVal.Type().AssignableTo(targetType) {
 			rv.Elem().Set(resultVal)
-		} else if resultVal.Type().ConvertibleTo(rv.Elem().Type()) {
-			rv.Elem().Set(resultVal.Convert(rv.Elem().Type()))
+		} else if resultVal.Type().ConvertibleTo(targetType) {
+			rv.Elem().Set(resultVal.Convert(targetType))
+		} else if resultVal.Kind() == reflect.Ptr && resultVal.Type().Elem().AssignableTo(targetType) {
+			// Handle case where result is *T but target is T: dereference the pointer
+			rv.Elem().Set(resultVal.Elem())
+		} else if resultVal.Kind() == reflect.Ptr && resultVal.Type().Elem().ConvertibleTo(targetType) {
+			// Handle case where result is *T but target is convertible from T
+			rv.Elem().Set(resultVal.Elem().Convert(targetType))
 		}
 	}
 	return nil

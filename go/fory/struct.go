@@ -281,6 +281,9 @@ func (s *structSerializer) initFieldsFromContext(ctx interface{ TypeResolver() *
 				sliceType := reflect.SliceOf(elemType)
 				fieldSerializer = typeResolver.typeToSerializers[sliceType]
 			} else if fieldType.Kind() == reflect.Slice && fieldType.Elem().Kind() != reflect.Interface {
+				// For struct fields, always use the generic sliceSerializer for cross-language compatibility
+				// The generic sliceSerializer uses collection flags and element type ID format
+				// which matches the codegen format
 				fieldSerializer = sliceSerializer{
 					elemInfo: typeResolver.typesInfo[fieldType.Elem()],
 				}
@@ -395,11 +398,23 @@ func (s *structSerializer) initFieldsFromDefsWithResolver(typeResolver *typeReso
 	return nil
 }
 
+// toSnakeCase converts CamelCase to snake_case
+func toSnakeCase(s string) string {
+	var result []rune
+	for i, r := range s {
+		if i > 0 && unicode.IsUpper(r) {
+			result = append(result, '_')
+		}
+		result = append(result, unicode.ToLower(r))
+	}
+	return string(result)
+}
+
 func (s *structSerializer) computeHash() int32 {
 	var sb strings.Builder
 
 	for _, field := range s.fields {
-		sb.WriteString(field.Name)
+		sb.WriteString(toSnakeCase(field.Name))
 		sb.WriteString(",")
 
 		var typeId TypeId
@@ -459,6 +474,34 @@ func (s *ptrToStructSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, 
 	return s.structSerializer.ReadValue(ctx, type_.Elem(), elem)
 }
 
+// ptrToCodegenSerializer wraps a generated serializer for pointer types
+type ptrToCodegenSerializer struct {
+	type_             reflect.Type
+	codegenSerializer Serializer
+}
+
+func (s *ptrToCodegenSerializer) TypeId() TypeId {
+	return FORY_TYPE_TAG
+}
+
+func (s *ptrToCodegenSerializer) NeedToWriteRef() bool {
+	return true
+}
+
+func (s *ptrToCodegenSerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
+	// Dereference pointer and delegate to the generated serializer
+	return s.codegenSerializer.WriteValue(ctx, value.Elem())
+}
+
+func (s *ptrToCodegenSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	// Allocate new value if needed
+	newValue := reflect.New(type_.Elem())
+	value.Set(newValue)
+	elem := newValue.Elem()
+	ctx.RefResolver().Reference(newValue)
+	return s.codegenSerializer.ReadValue(ctx, type_.Elem(), elem)
+}
+
 // Field sorting helpers
 
 type triple struct {
@@ -516,19 +559,19 @@ func sortFields(
 		if szI != szJ {
 			return szI > szJ
 		}
-		return ai.name < aj.name
+		return toSnakeCase(ai.name) < toSnakeCase(aj.name)
 	})
 	sortByTypeIDThenName := func(s []triple) {
 		sort.Slice(s, func(i, j int) bool {
 			if s[i].typeID != s[j].typeID {
 				return s[i].typeID < s[j].typeID
 			}
-			return s[i].name < s[j].name
+			return toSnakeCase(s[i].name) < toSnakeCase(s[j].name)
 		})
 	}
 	sortTuple := func(s []triple) {
 		sort.Slice(s, func(i, j int) bool {
-			return s[i].name < s[j].name
+			return toSnakeCase(s[i].name) < toSnakeCase(s[j].name)
 		})
 	}
 	sortByTypeIDThenName(otherInternalTypeFields)

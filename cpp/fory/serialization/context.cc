@@ -60,7 +60,7 @@ static const std::vector<MetaEncoding> kTypeNameEncodings = {
 WriteContext::WriteContext(const Config &config,
                            std::unique_ptr<TypeResolver> type_resolver)
     : buffer_(), config_(&config), type_resolver_(std::move(type_resolver)),
-      current_dyn_depth_(0) {}
+  current_dyn_depth_(0), error_() {}
 
 WriteContext::~WriteContext() = default;
 
@@ -333,6 +333,7 @@ void WriteContext::reset() {
   write_type_id_index_map_.clear();
   write_type_info_index_map_.clear();
   current_dyn_depth_ = 0;
+  error_ = Error();
   // Reset buffer indices for reuse - no memory operations needed
   buffer_.WriterIndex(0);
   buffer_.ReaderIndex(0);
@@ -353,7 +354,8 @@ uint32_t WriteContext::get_type_id_for_cache(const std::type_index &type_idx) {
 ReadContext::ReadContext(const Config &config,
                          std::unique_ptr<TypeResolver> type_resolver)
     : buffer_(nullptr), config_(&config),
-      type_resolver_(std::move(type_resolver)), current_dyn_depth_(0) {}
+  type_resolver_(std::move(type_resolver)), current_dyn_depth_(0),
+  error_() {}
 
 ReadContext::~ReadContext() = default;
 
@@ -540,6 +542,7 @@ void ReadContext::reset() {
   owned_reading_type_infos_.clear();
   current_dyn_depth_ = 0;
   meta_string_table_.reset();
+  error_ = Error();
 }
 
 } // namespace serialization

@@ -95,8 +95,11 @@ struct Serializer<
 
   static Result<std::array<T, N>, Error> read(ReadContext &ctx, bool read_ref,
                                               bool read_type) {
-    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
+    bool has_value = consume_ref_flag(ctx, read_ref);
     if (!has_value) {
+      if (ctx.has_error()) {
+        return Unexpected(ctx.error());
+      }
       return std::array<T, N>();
     }
     Error error;
@@ -181,8 +184,11 @@ template <size_t N> struct Serializer<std::array<bool, N>> {
 
   static Result<std::array<bool, N>, Error>
   read(ReadContext &ctx, bool read_ref, bool read_type) {
-    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
+    bool has_value = consume_ref_flag(ctx, read_ref);
     if (!has_value) {
+      if (ctx.has_error()) {
+        return Unexpected(ctx.error());
+      }
       return std::array<bool, N>();
     }
     Error error;

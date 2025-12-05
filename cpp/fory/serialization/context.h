@@ -99,6 +99,22 @@ public:
   /// Get associated type resolver (const).
   inline const TypeResolver &type_resolver() const { return *type_resolver_; }
 
+  /// Access current error state.
+  FORY_ALWAYS_INLINE Error &error() { return error_; }
+  /// Access current error state (const).
+  FORY_ALWAYS_INLINE const Error &error() const { return error_; }
+
+  /// Set current error state; preserve the first error as the root cause.
+  FORY_ALWAYS_INLINE void set_error(Error err) {
+    if (!error_.ok()) {
+      return;
+    }
+    error_ = std::move(err);
+  }
+
+  /// Fast check whether an error is present.
+  FORY_ALWAYS_INLINE bool has_error() const { return !error_.ok(); }
+
   /// Check if compatible mode is enabled.
   inline bool is_compatible() const { return config_->compatible; }
 
@@ -271,6 +287,8 @@ private:
   absl::flat_hash_map<std::type_index, size_t> write_type_id_index_map_;
   // Fast path: use TypeInfo pointer as key (avoids type_index hash overhead)
   absl::flat_hash_map<const TypeInfo *, size_t> write_type_info_index_map_;
+
+  Error error_;
 };
 
 /// Read context for deserialization operations.
@@ -327,6 +345,22 @@ public:
 
   /// Get associated type resolver (const).
   inline const TypeResolver &type_resolver() const { return *type_resolver_; }
+
+  /// Access current error state.
+  FORY_ALWAYS_INLINE Error &error() { return error_; }
+  /// Access current error state (const).
+  FORY_ALWAYS_INLINE const Error &error() const { return error_; }
+
+  /// Set current error state; preserve the first error as the root cause.
+  FORY_ALWAYS_INLINE void set_error(Error err) {
+    if (!error_.ok()) {
+      return;
+    }
+    error_ = std::move(err);
+  }
+
+  /// Fast check whether an error is present.
+  FORY_ALWAYS_INLINE bool has_error() const { return !error_.ok(); }
 
   /// Check if compatible mode is enabled.
   inline bool is_compatible() const { return config_->compatible; }
@@ -507,6 +541,8 @@ private:
 
   // Dynamic meta strings used for named type/class info.
   meta::MetaStringTable meta_string_table_;
+
+  Error error_;
 };
 
 /// Implementation of DynDepthGuard destructor

@@ -66,6 +66,49 @@ using tuple_first_type_t = typename tuple_first_type<Tuple>::type;
 // Tuple Serialization Helpers
 // ============================================================================
 
+template <typename Fn>
+inline Result<void, Error> invoke_write(Fn &&fn, WriteContext &ctx) {
+  using WriteReturn = std::invoke_result_t<Fn>;
+  if constexpr (std::is_void_v<WriteReturn>) {
+    fn();
+    if (FORY_PREDICT_FALSE(ctx.has_error())) {
+      return Unexpected(ctx.error());
+    }
+    return Result<void, Error>();
+  } else {
+    auto res = fn();
+    if constexpr (is_result_like_v<WriteReturn>) {
+      return res;
+    }
+    if (FORY_PREDICT_FALSE(ctx.has_error())) {
+      return Unexpected(ctx.error());
+    }
+    return Result<void, Error>();
+  }
+}
+
+template <typename Fn, typename Out>
+inline bool invoke_read_assign(Fn &&fn, ReadContext &ctx, Out &out,
+                               Error &error) {
+  using ReadReturn = std::invoke_result_t<Fn>;
+  if constexpr (is_result_like_v<ReadReturn>) {
+    auto res = fn();
+    if (FORY_PREDICT_FALSE(!res.ok())) {
+      error = std::move(res).error();
+      return false;
+    }
+    out = std::move(res).value();
+    return true;
+  } else {
+    out = fn();
+    if (FORY_PREDICT_FALSE(ctx.has_error())) {
+      error = ctx.error();
+      return false;
+    }
+    return true;
+  }
+}
+
 /// Write tuple elements directly (non-xlang mode)
 template <typename Tuple, size_t... Is>
 inline Result<void, Error>
@@ -81,9 +124,12 @@ write_tuple_elements_direct(const Tuple &tuple, WriteContext &ctx,
      // For nullable/shared types, use full write with ref tracking
      if constexpr (is_nullable_v<ElemType> || is_shared_ref_v<ElemType> ||
                    is_polymorphic_v<ElemType>) {
-       return Serializer<ElemType>::write(elem, ctx, true, false, false);
+       return invoke_write(
+           [&]() { return Serializer<ElemType>::write(elem, ctx, true, false, false); },
+           ctx);
      } else {
-       return Serializer<ElemType>::write_data(elem, ctx);
+       return invoke_write(
+           [&]() { return Serializer<ElemType>::write_data(elem, ctx); }, ctx);
      }
    }()),
    ...);
@@ -101,8 +147,12 @@ write_tuple_elements_heterogeneous(const Tuple &tuple, WriteContext &ctx,
      if (!result.ok())
        return result;
      using ElemType = std::tuple_element_t<Is, Tuple>;
-     return Serializer<ElemType>::write(std::get<Is>(tuple), ctx, true, true,
-                                        false);
+     return invoke_write(
+         [&]() {
+           return Serializer<ElemType>::write(std::get<Is>(tuple), ctx, true,
+                                              true, false);
+         },
+         ctx);
    }()),
    ...);
   return result;
@@ -119,7 +169,9 @@ write_tuple_elements_homogeneous(const Tuple &tuple, WriteContext &ctx,
      if (!result.ok())
        return result;
      using ElemType = std::tuple_element_t<Is, Tuple>;
-     return Serializer<ElemType>::write_data(std::get<Is>(tuple), ctx);
+     return invoke_write(
+         [&]() { return Serializer<ElemType>::write_data(std::get<Is>(tuple), ctx); },
+         ctx);
    }()),
    ...);
   return result;
@@ -139,19 +191,15 @@ read_tuple_elements_direct(ReadContext &ctx, std::index_sequence<Is...>) {
       // For nullable/shared types, use full read with ref tracking
       if constexpr (is_nullable_v<ElemType> || is_shared_ref_v<ElemType> ||
                     is_polymorphic_v<ElemType>) {
-        auto elem_result = Serializer<ElemType>::read(ctx, true, false);
-        if (elem_result.ok()) {
-          std::get<Is>(result) = std::move(elem_result).value();
-        } else {
-          error = std::move(elem_result).error();
+        if (!invoke_read_assign(
+                [&]() { return Serializer<ElemType>::read(ctx, true, false); },
+                ctx, std::get<Is>(result), error)) {
           has_error = true;
         }
       } else {
-        auto elem_result = Serializer<ElemType>::read_data(ctx);
-        if (elem_result.ok()) {
-          std::get<Is>(result) = std::move(elem_result).value();
-        } else {
-          error = std::move(elem_result).error();
+        if (!invoke_read_assign(
+                [&]() { return Serializer<ElemType>::read_data(ctx); }, ctx,
+                std::get<Is>(result), error)) {
           has_error = true;
         }
       }
@@ -178,11 +226,9 @@ read_tuple_elements_heterogeneous(ReadContext &ctx, uint32_t length,
   ((has_error ? void() : [&]() {
       using ElemType = std::tuple_element_t<Is, Tuple>;
       if (index < length) {
-        auto elem_result = Serializer<ElemType>::read(ctx, true, true);
-        if (elem_result.ok()) {
-          std::get<Is>(result) = std::move(elem_result).value();
-        } else {
-          error = std::move(elem_result).error();
+        if (!invoke_read_assign(
+                [&]() { return Serializer<ElemType>::read(ctx, true, true); },
+                ctx, std::get<Is>(result), error)) {
           has_error = true;
         }
         ++index;
@@ -221,11 +267,9 @@ read_tuple_elements_homogeneous(ReadContext &ctx, uint32_t length,
   ((has_error ? void() : [&]() {
       using ElemType = std::tuple_element_t<Is, Tuple>;
       if (index < length) {
-        auto elem_result = Serializer<ElemType>::read_data(ctx);
-        if (elem_result.ok()) {
-          std::get<Is>(result) = std::move(elem_result).value();
-        } else {
-          error = std::move(elem_result).error();
+        if (!invoke_read_assign(
+                [&]() { return Serializer<ElemType>::read_data(ctx); }, ctx,
+                std::get<Is>(result), error)) {
           has_error = true;
         }
         ++index;
@@ -241,9 +285,11 @@ read_tuple_elements_homogeneous(ReadContext &ctx, uint32_t length,
   // Skip any extra elements beyond tuple size
   using ElemType = tuple_first_type_t<Tuple>;
   while (index < length) {
-    auto skip_result = Serializer<ElemType>::read_data(ctx);
-    if (!skip_result.ok()) {
-      return Unexpected(std::move(skip_result).error());
+    ElemType tmp{};
+    if (!invoke_read_assign(
+            [&]() { return Serializer<ElemType>::read_data(ctx); }, ctx, tmp,
+            error)) {
+      return Unexpected(std::move(error));
     }
     ++index;
   }
@@ -300,8 +346,11 @@ template <> struct Serializer<std::tuple<>> {
 
   static inline Result<std::tuple<>, Error>
   read(ReadContext &ctx, bool read_ref, bool read_type) {
-    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
+    bool has_value = consume_ref_flag(ctx, read_ref);
     if (!has_value) {
+      if (ctx.has_error()) {
+        return Unexpected(ctx.error());
+      }
       return std::tuple<>();
     }
 
@@ -398,8 +447,11 @@ template <typename... Ts> struct Serializer<std::tuple<Ts...>> {
 
   static inline Result<TupleType, Error> read(ReadContext &ctx, bool read_ref,
                                               bool read_type) {
-    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
+    bool has_value = consume_ref_flag(ctx, read_ref);
     if (!has_value) {
+      if (ctx.has_error()) {
+        return Unexpected(ctx.error());
+      }
       return TupleType{};
     }
 

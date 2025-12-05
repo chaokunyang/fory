@@ -114,8 +114,11 @@ struct Serializer<E, std::enable_if_t<std::is_enum_v<E>>> {
       return read_data(ctx);
     }
 
-    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
+    bool has_value = consume_ref_flag(ctx, read_ref);
     if (!has_value) {
+      if (ctx.has_error()) {
+        return Unexpected(ctx.error());
+      }
       return E{};
     }
     if (read_type) {

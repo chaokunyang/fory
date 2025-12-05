@@ -1003,16 +1003,45 @@ TypeResolver::harness_write_adapter(const void *value, WriteContext &ctx,
                                     bool has_generics) {
   (void)has_generics;
   const T *ptr = static_cast<const T *>(value);
-  return Serializer<T>::write(*ptr, ctx, write_ref_info, write_type_info);
+  if constexpr (std::is_void_v<decltype(Serializer<T>::write(
+                    *ptr, ctx, write_ref_info, write_type_info))>) {
+    Serializer<T>::write(*ptr, ctx, write_ref_info, write_type_info);
+    if (FORY_PREDICT_FALSE(ctx.has_error())) {
+      return Unexpected(ctx.error());
+    }
+    return Result<void, Error>();
+  } else {
+    auto write_result =
+        Serializer<T>::write(*ptr, ctx, write_ref_info, write_type_info);
+    if constexpr (is_result_like_v<decltype(write_result)>) {
+      return write_result;
+    } else {
+      if (FORY_PREDICT_FALSE(ctx.has_error())) {
+        return Unexpected(ctx.error());
+      }
+      return Result<void, Error>();
+    }
+  }
 }
 
 template <typename T>
 Result<void *, Error> TypeResolver::harness_read_adapter(ReadContext &ctx,
                                                          bool read_ref_info,
                                                          bool read_type_info) {
-  FORY_TRY(value, Serializer<T>::read(ctx, read_ref_info, read_type_info));
-  T *ptr = new T(std::move(value));
-  return ptr;
+  auto read_result = Serializer<T>::read(ctx, read_ref_info, read_type_info);
+  if constexpr (is_result_like_v<decltype(read_result)>) {
+    if (FORY_PREDICT_FALSE(!read_result.ok())) {
+      return Unexpected(std::move(read_result).error());
+    }
+    T *ptr = new T(std::move(read_result).value());
+    return ptr;
+  } else {
+    if (FORY_PREDICT_FALSE(ctx.has_error())) {
+      return Unexpected(ctx.error());
+    }
+    T *ptr = new T(std::move(read_result));
+    return ptr;
+  }
 }
 
 template <typename T>
@@ -1020,15 +1049,45 @@ Result<void, Error>
 TypeResolver::harness_write_data_adapter(const void *value, WriteContext &ctx,
                                          bool has_generics) {
   const T *ptr = static_cast<const T *>(value);
-  return Serializer<T>::write_data_generic(*ptr, ctx, has_generics);
+  if constexpr (std::is_void_v<decltype(
+                    Serializer<T>::write_data_generic(*ptr, ctx,
+                                                       has_generics))>) {
+    Serializer<T>::write_data_generic(*ptr, ctx, has_generics);
+    if (FORY_PREDICT_FALSE(ctx.has_error())) {
+      return Unexpected(ctx.error());
+    }
+    return Result<void, Error>();
+  } else {
+    auto write_result =
+        Serializer<T>::write_data_generic(*ptr, ctx, has_generics);
+    if constexpr (is_result_like_v<decltype(write_result)>) {
+      return write_result;
+    } else {
+      if (FORY_PREDICT_FALSE(ctx.has_error())) {
+        return Unexpected(ctx.error());
+      }
+      return Result<void, Error>();
+    }
+  }
 }
 
 template <typename T>
 Result<void *, Error>
 TypeResolver::harness_read_data_adapter(ReadContext &ctx) {
-  FORY_TRY(value, Serializer<T>::read_data(ctx));
-  T *ptr = new T(std::move(value));
-  return ptr;
+  auto read_result = Serializer<T>::read_data(ctx);
+  if constexpr (is_result_like_v<decltype(read_result)>) {
+    if (FORY_PREDICT_FALSE(!read_result.ok())) {
+      return Unexpected(std::move(read_result).error());
+    }
+    T *ptr = new T(std::move(read_result).value());
+    return ptr;
+  } else {
+    if (FORY_PREDICT_FALSE(ctx.has_error())) {
+      return Unexpected(ctx.error());
+    }
+    T *ptr = new T(std::move(read_result));
+    return ptr;
+  }
 }
 
 template <typename T>
@@ -1036,9 +1095,20 @@ Result<void *, Error>
 TypeResolver::harness_read_compatible_adapter(ReadContext &ctx,
                                               const TypeInfo *ti) {
   // Use read_compatible for compatible mode deserialization
-  FORY_TRY(value, Serializer<T>::read_compatible(ctx, ti));
-  T *ptr = new T(std::move(value));
-  return ptr;
+  auto read_result = Serializer<T>::read_compatible(ctx, ti);
+  if constexpr (is_result_like_v<decltype(read_result)>) {
+    if (FORY_PREDICT_FALSE(!read_result.ok())) {
+      return Unexpected(std::move(read_result).error());
+    }
+    T *ptr = new T(std::move(read_result).value());
+    return ptr;
+  } else {
+    if (FORY_PREDICT_FALSE(ctx.has_error())) {
+      return Unexpected(ctx.error());
+    }
+    T *ptr = new T(std::move(read_result));
+    return ptr;
+  }
 }
 
 template <typename T>

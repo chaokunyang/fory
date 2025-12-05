@@ -295,8 +295,11 @@ template <> struct Serializer<MyExt> {
 
   static Result<MyExt, Error> read(ReadContext &ctx, bool read_ref,
                                    bool read_type) {
-    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
+    bool has_value = consume_ref_flag(ctx, read_ref);
     if (!has_value) {
+      if (ctx.has_error()) {
+        return Unexpected(ctx.error());
+      }
       return MyExt{};
     }
     if (read_type) {

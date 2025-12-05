@@ -38,12 +38,14 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
 namespace fory {
 namespace serialization {
 
+// Result detection helper to bridge serializers returning void vs Result
 // Forward declarations
 class Fory;
 class ThreadSafeFory;
@@ -565,7 +567,23 @@ private:
     }
 
     // Top-level serialization: YES ref flags, yes type info
-    FORY_RETURN_NOT_OK(Serializer<T>::write(obj, *write_ctx_, true, true));
+    using WriteReturn =
+        decltype(Serializer<T>::write(obj, *write_ctx_, true, true));
+    if constexpr (std::is_void_v<WriteReturn>) {
+      Serializer<T>::write(obj, *write_ctx_, true, true);
+      if (FORY_PREDICT_FALSE(write_ctx_->has_error())) {
+        return Unexpected(write_ctx_->error());
+      }
+    } else {
+      auto write_result = Serializer<T>::write(obj, *write_ctx_, true, true);
+      if constexpr (is_result_like_v<WriteReturn>) {
+        if (FORY_PREDICT_FALSE(!write_result.ok())) {
+          return Unexpected(std::move(write_result).error());
+        }
+      } else if (FORY_PREDICT_FALSE(write_ctx_->has_error())) {
+        return Unexpected(write_ctx_->error());
+      }
+    }
 
     // Write collected TypeMetas at the end in compatible mode
     if (write_ctx_->is_compatible() && !write_ctx_->meta_empty()) {
@@ -594,13 +612,24 @@ private:
     // Top-level deserialization: YES ref flags, yes type info
     auto result = Serializer<T>::read(*read_ctx_, true, true);
 
-    if (result.ok()) {
+    if constexpr (is_result_like_v<decltype(result)>) {
+      if (result.ok()) {
+        read_ctx_->ref_reader().resolve_callbacks();
+        if (bytes_to_skip > 0) {
+          buffer.IncreaseReaderIndex(static_cast<uint32_t>(bytes_to_skip));
+        }
+      }
+      return result;
+    } else {
+      if (FORY_PREDICT_FALSE(read_ctx_->has_error())) {
+        return Unexpected(read_ctx_->error());
+      }
       read_ctx_->ref_reader().resolve_callbacks();
       if (bytes_to_skip > 0) {
         buffer.IncreaseReaderIndex(static_cast<uint32_t>(bytes_to_skip));
       }
+      return result;
     }
-    return result;
   }
 
   bool finalized_;

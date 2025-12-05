@@ -1,3 +1,32 @@
+#pragma once
+
+#include <type_traits>
+
+namespace fory {
+namespace serialization {
+
+// Result detection helper so serializers can return either Result or void/value
+template <typename R, typename = void> struct is_result_like : std::false_type {};
+template <typename R>
+struct is_result_like<R, std::void_t<decltype(std::declval<R>().ok()),
+                   decltype(std::declval<R>().error())>>
+  : std::true_type {};
+template <typename R>
+inline constexpr bool is_result_like_v = is_result_like<R>::value;
+
+} // namespace serialization
+} // namespace fory
+
+#include "fory/meta/type_traits.h"
+#include "fory/serialization/context.h"
+#include "fory/serialization/ref_resolver.h"
+#include "fory/serialization/serializer_traits.h"
+#include "fory/type/type.h"
+#include "fory/util/buffer.h"
+#include "fory/util/error.h"
+#include "fory/util/result.h"
+#include <cstdint>
+#include <string>
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -17,19 +46,6 @@
  * under the License.
  */
 
-#pragma once
-
-#include "fory/meta/type_traits.h"
-#include "fory/serialization/context.h"
-#include "fory/serialization/ref_resolver.h"
-#include "fory/serialization/serializer_traits.h"
-#include "fory/type/type.h"
-#include "fory/util/buffer.h"
-#include "fory/util/error.h"
-#include "fory/util/result.h"
-#include <cstdint>
-#include <string>
-
 namespace fory {
 namespace serialization {
 
@@ -37,32 +53,7 @@ namespace serialization {
 // Error Handling Macros for Serialization
 // ============================================================================
 
-/// Return early if the error pointer indicates an error.
-/// Use this macro when reading struct fields with the Error* pattern.
-/// The macro checks the error state and returns an Unexpected with the error.
-///
-/// Example usage:
-/// ```cpp
-/// Error error;
-/// int32_t value = buffer.ReadVarInt32(&error);
-/// FORY_RETURN_IF_SERDE_ERROR(&error);
-/// // Use value...
-/// ```
-#define FORY_RETURN_IF_SERDE_ERROR(error_ptr)                                  \
-  do {                                                                         \
-    if (FORY_PREDICT_FALSE(!(error_ptr)->ok())) {                              \
-      return ::fory::Unexpected(std::move(*(error_ptr)));                      \
-    }                                                                          \
-  } while (0)
-
-/// Return early if the error indicates an error, with a custom return type.
-/// Use this when the return type is not Result<T, Error>.
-#define FORY_RETURN_IF_SERDE_ERROR_WITH(error_ptr, return_type)                \
-  do {                                                                         \
-    if (FORY_PREDICT_FALSE(!(error_ptr)->ok())) {                              \
-      return return_type(::fory::Unexpected(std::move(*(error_ptr))));         \
-    }                                                                          \
-  } while (0)
+// Deprecated error-return macros removed in favor of context error state.
 
 // ============================================================================
 // Protocol Constants
@@ -179,14 +170,18 @@ FORY_ALWAYS_INLINE void write_not_null_ref_flag(WriteContext &ctx,
 /// @param ctx Read context
 /// @param read_ref Whether the caller requested reference metadata
 /// @return True if the upcoming value payload is present, false if it was null
-inline Result<bool, Error> consume_ref_flag(ReadContext &ctx, bool read_ref) {
+inline bool consume_ref_flag(ReadContext &ctx, bool read_ref) {
   if (!read_ref) {
     return true;
+  }
+  if (ctx.has_error()) {
+    return false;
   }
   Error error;
   int8_t flag = ctx.read_int8(&error);
   if (FORY_PREDICT_FALSE(!error.ok())) {
-    return Unexpected(std::move(error));
+    ctx.set_error(std::move(error));
+    return false;
   }
   if (flag == NULL_FLAG) {
     return false;
@@ -197,15 +192,18 @@ inline Result<bool, Error> consume_ref_flag(ReadContext &ctx, bool read_ref) {
   if (flag == REF_FLAG) {
     uint32_t ref_id = ctx.read_varuint32(&error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
+      ctx.set_error(std::move(error));
+      return false;
     }
-    return Unexpected(Error::invalid_ref(
+    ctx.set_error(Error::invalid_ref(
         "Unexpected reference flag for non-referencable value, ref id: " +
         std::to_string(ref_id)));
+    return false;
   }
 
-  return Unexpected(Error::invalid_data(
+  ctx.set_error(Error::invalid_data(
       "Unknown reference flag: " + std::to_string(static_cast<int>(flag))));
+  return false;
 }
 
 // ============================================================================

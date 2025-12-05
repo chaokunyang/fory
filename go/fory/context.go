@@ -41,10 +41,10 @@ type WriteContext struct {
 	compatible     bool // Schema evolution compatibility mode
 	depth          int
 	maxDepth       int
-	typeResolver   *typeResolver                   // For complex type serialization
-	refResolver    *RefResolver                    // For reference tracking (legacy)
-	bufferCallback func(BufferObject) bool         // Callback for out-of-band buffers
-	outOfBand      bool                            // Whether out-of-band serialization is enabled
+	typeResolver   *typeResolver           // For complex type serialization
+	refResolver    *RefResolver            // For reference tracking (legacy)
+	bufferCallback func(BufferObject) bool // Callback for out-of-band buffers
+	outOfBand      bool                    // Whether out-of-band serialization is enabled
 }
 
 // NewWriteContext creates a new write context
@@ -247,13 +247,13 @@ func (c *WriteContext) writeValue(value reflect.Value, serializer Serializer) er
 
 // ReadContext holds all state needed during deserialization.
 type ReadContext struct {
-	buffer          *ByteBuffer
-	refReader       *RefReader
-	registry        *GenericRegistry
-	refTracking     bool          // Cached flag to avoid indirection
-	compatible      bool          // Schema evolution compatibility mode
-	typeResolver    *typeResolver // For complex type deserialization
-	refResolver     *RefResolver  // For reference tracking (legacy)
+	buffer           *ByteBuffer
+	refReader        *RefReader
+	registry         *GenericRegistry
+	refTracking      bool          // Cached flag to avoid indirection
+	compatible       bool          // Schema evolution compatibility mode
+	typeResolver     *typeResolver // For complex type deserialization
+	refResolver      *RefResolver  // For reference tracking (legacy)
 	outOfBandBuffers []*ByteBuffer // Out-of-band buffers for deserialization
 	outOfBandIndex   int           // Current index into out-of-band buffers
 }

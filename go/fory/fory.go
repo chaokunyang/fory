@@ -22,7 +22,6 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"sync"
 )
 
 // ============================================================================
@@ -198,12 +197,12 @@ func NewFory(opts ...Option) *Fory {
 
 // Marshal serializes a value to bytes (instance method for backward compatibility)
 func (f *Fory) Marshal(v interface{}) ([]byte, error) {
-	return SerializeAny(f, v)
+	return f.SerializeAny(v)
 }
 
 // Unmarshal deserializes bytes into the provided value (instance method for backward compatibility)
 func (f *Fory) Unmarshal(data []byte, v interface{}) error {
-	result, err := DeserializeAny(f, data)
+	result, err := f.DeserializeAny(data)
 	if err != nil {
 		return err
 	}
@@ -586,7 +585,7 @@ func serializeSlowPath[T any](f *Fory, value T) ([]byte, error) {
 	serializer, err := TryGetSerializer[T](f.registry)
 	if err != nil {
 		// Fall back to reflection-based serialization
-		return SerializeAny(f, value)
+		return f.SerializeAny(value)
 	}
 
 	// Always pass true from top level - each serializer decides internally:
@@ -670,7 +669,7 @@ func deserializeToSlowPath[T any](f *Fory, data []byte, target *T) error {
 	if err != nil {
 		// Fall back to reflection-based deserialization
 		f.readCtx.Reset()
-		result, err := DeserializeAny(f, data)
+		result, err := f.DeserializeAny(data)
 		if err != nil {
 			return err
 		}
@@ -722,7 +721,7 @@ func deserializeSlowPath[T any](f *Fory, data []byte) (T, error) {
 		// Fall back to reflection-based deserialization
 		// Reset context since we already read the header
 		f.readCtx.Reset()
-		result, err := DeserializeAny(f, data)
+		result, err := f.DeserializeAny(data)
 		if err != nil {
 			return zero, err
 		}
@@ -778,7 +777,7 @@ func deserializeSlowPath[T any](f *Fory, data []byte) (T, error) {
 
 // SerializeAny serializes polymorphic values where concrete type is unknown.
 // Uses runtime type dispatch to find the appropriate serializer.
-func SerializeAny(f *Fory, value any) ([]byte, error) {
+func (f *Fory) SerializeAny(value any) ([]byte, error) {
 	if value == nil {
 		f.writeCtx.Reset()
 		if f.metaContext != nil {
@@ -834,7 +833,7 @@ func SerializeAny(f *Fory, value any) ([]byte, error) {
 
 // DeserializeAny deserializes polymorphic values.
 // Returns the concrete type as `any`.
-func DeserializeAny(f *Fory, data []byte) (any, error) {
+func (f *Fory) DeserializeAny(data []byte) (any, error) {
 	f.readCtx.Reset()
 	if f.metaContext != nil {
 		f.metaContext.Reset()
@@ -936,125 +935,6 @@ func TryGetSerializer[T any](r *GenericRegistry) (TypedSerializer[T], error) {
 // MustGetSerializer retrieves serializer from global registry, panics if not found
 func MustGetSerializer[T any]() TypedSerializer[T] {
 	return getSerializer[T](globalGenericRegistry)
-}
-
-// ============================================================================
-// ThreadSafeFory - Thread-safe wrapper using sync.Pool
-// ============================================================================
-
-// ThreadSafeFory is a thread-safe wrapper around Fory using sync.Pool.
-// It provides the same API as Fory but is safe for concurrent use.
-type ThreadSafeFory struct {
-	pool   sync.Pool
-	config Config
-}
-
-// NewThreadSafe creates a new thread-safe Fory instance
-func NewThreadSafe(opts ...Option) *ThreadSafeFory {
-	// Create a temporary Fory to extract config
-	tmpFory := &Fory{config: defaultConfig(), registry: GetGlobalRegistry()}
-	for _, opt := range opts {
-		opt(tmpFory)
-	}
-
-	tsf := &ThreadSafeFory{
-		config: tmpFory.config,
-	}
-	tsf.pool = sync.Pool{
-		New: func() any {
-			return New(opts...)
-		},
-	}
-	return tsf
-}
-
-func (tsf *ThreadSafeFory) acquire() *Fory {
-	return tsf.pool.Get().(*Fory)
-}
-
-func (tsf *ThreadSafeFory) release(f *Fory) {
-	f.Reset()
-	tsf.pool.Put(f)
-}
-
-// Serialize serializes a value using a pooled Fory instance
-func (tsf *ThreadSafeFory) Serialize(v interface{}) ([]byte, error) {
-	f := tsf.acquire()
-	defer tsf.release(f)
-	return f.Marshal(v)
-}
-
-// Deserialize deserializes data into the provided value using a pooled Fory instance
-func (tsf *ThreadSafeFory) Deserialize(data []byte, v interface{}) error {
-	f := tsf.acquire()
-	defer tsf.release(f)
-	return f.Unmarshal(data, v)
-}
-
-// SerializeTS - type T inferred, serializer auto-resolved, thread-safe.
-func SerializeTS[T any](tsf *ThreadSafeFory, value T) ([]byte, error) {
-	f := tsf.acquire()
-	defer tsf.release(f)
-	return Serialize(f, value)
-}
-
-// DeserializeTS - serializer auto-resolved from type T, thread-safe.
-func DeserializeTS[T any](tsf *ThreadSafeFory, data []byte) (T, error) {
-	f := tsf.acquire()
-	defer tsf.release(f)
-	return Deserialize[T](f, data)
-}
-
-// SerializeAnyTS serializes polymorphic values, thread-safe.
-func SerializeAnyTS(tsf *ThreadSafeFory, value any) ([]byte, error) {
-	f := tsf.acquire()
-	defer tsf.release(f)
-	return SerializeAny(f, value)
-}
-
-// DeserializeAnyTS deserializes polymorphic values, thread-safe.
-func DeserializeAnyTS(tsf *ThreadSafeFory, data []byte) (any, error) {
-	f := tsf.acquire()
-	defer tsf.release(f)
-	return DeserializeAny(f, data)
-}
-
-// DeserializeToTS deserializes directly into target, thread-safe.
-// Reuses existing capacity for slices when possible.
-func DeserializeToTS[T any](tsf *ThreadSafeFory, data []byte, target *T) error {
-	f := tsf.acquire()
-	defer tsf.release(f)
-	return DeserializeTo(f, data, target)
-}
-
-// ============================================================================
-// Convenience Functions
-// ============================================================================
-
-// Global thread-safe Fory instance for convenience
-var globalFory = NewThreadSafe()
-
-// Marshal serializes a value using the global thread-safe instance
-func Marshal[T any](value T) ([]byte, error) {
-	return SerializeTS(globalFory, value)
-}
-
-// Unmarshal deserializes data using the global thread-safe instance (generic version)
-func Unmarshal[T any](data []byte) (T, error) {
-	return DeserializeTS[T](globalFory, data)
-}
-
-// UnmarshalTo deserializes data into the provided pointer using the global thread-safe instance
-func UnmarshalTo(data []byte, v interface{}) error {
-	f := globalFory.acquire()
-	defer globalFory.release(f)
-	return f.Unmarshal(data, v)
-}
-
-// UnmarshalToTyped deserializes data directly into target using the global thread-safe instance (generic version)
-// This is the most efficient way to deserialize when you have an existing value to reuse.
-func UnmarshalToTyped[T any](data []byte, target *T) error {
-	return DeserializeToTS(globalFory, data, target)
 }
 
 // ============================================================================

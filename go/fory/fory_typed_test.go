@@ -204,67 +204,6 @@ func TestMustGetSerializer(t *testing.T) {
 	})
 }
 
-// TestThreadSafeFory tests the thread-safe Fory wrapper
-func TestThreadSafeFory(t *testing.T) {
-	tsf := NewThreadSafe(WithRefTracking(true))
-
-	t.Run("BasicSerialization", func(t *testing.T) {
-		data, err := tsf.Serialize(int32(42))
-		require.NoError(t, err)
-
-		var result int32
-		err = tsf.Deserialize(data, &result)
-		require.NoError(t, err)
-		require.Equal(t, int32(42), result)
-	})
-
-	t.Run("GenericSerialization", func(t *testing.T) {
-		data, err := SerializeTS(tsf, "hello world")
-		require.NoError(t, err)
-
-		result, err := DeserializeTS[string](tsf, data)
-		require.NoError(t, err)
-		require.Equal(t, "hello world", result)
-	})
-
-	t.Run("ConcurrentAccess", func(t *testing.T) {
-		done := make(chan bool, 10)
-		for i := 0; i < 10; i++ {
-			go func(val int32) {
-				data, err := tsf.Serialize(val)
-				require.NoError(t, err)
-
-				var result int32
-				err = tsf.Deserialize(data, &result)
-				require.NoError(t, err)
-				require.Equal(t, val, result)
-				done <- true
-			}(int32(i))
-		}
-		for i := 0; i < 10; i++ {
-			<-done
-		}
-	})
-
-	t.Run("ConcurrentGenericAccess", func(t *testing.T) {
-		done := make(chan bool, 10)
-		for i := 0; i < 10; i++ {
-			go func(val int64) {
-				data, err := SerializeTS(tsf, val)
-				require.NoError(t, err)
-
-				result, err := DeserializeTS[int64](tsf, data)
-				require.NoError(t, err)
-				require.Equal(t, val, result)
-				done <- true
-			}(int64(i * 1000))
-		}
-		for i := 0; i < 10; i++ {
-			<-done
-		}
-	})
-}
-
 // TestSerializeDeserializeRoundTrip tests that serialized data can be correctly deserialized.
 func TestSerializeDeserializeRoundTrip(t *testing.T) {
 	f := NewFory(WithRefTracking(true))

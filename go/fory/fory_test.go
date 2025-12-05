@@ -536,15 +536,16 @@ func benchData() interface{} {
 	return []string{x, x, x, x}
 }
 
-func ExampleMarshal() {
+func ExampleFory_SerializeAny() {
+	f := New()
 	list := []interface{}{true, false, "str", -1.1, 1, make([]int32, 5), make([]float64, 5)}
-	bytes, err := Marshal(list)
+	bytes, err := f.SerializeAny(list)
 	if err != nil {
 		panic(err)
 	}
-	var newValue interface{}
 	// bytes can be data serialized by other languages.
-	if err := UnmarshalTo(bytes, &newValue); err != nil {
+	newValue, err := f.DeserializeAny(bytes)
+	if err != nil {
 		panic(err)
 	}
 	fmt.Println(newValue)
@@ -554,12 +555,13 @@ func ExampleMarshal() {
 		"k2": list,
 		"k3": -1,
 	}
-	bytes, err = Marshal(dict)
+	bytes, err = f.SerializeAny(dict)
 	if err != nil {
 		panic(err)
 	}
 	// bytes can be data serialized by other languages.
-	if err := UnmarshalTo(bytes, &newValue); err != nil {
+	newValue, err = f.DeserializeAny(bytes)
+	if err != nil {
 		panic(err)
 	}
 	fmt.Println(newValue)

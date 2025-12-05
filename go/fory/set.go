@@ -217,7 +217,7 @@ func (s setSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value ref
 	if value.IsNil() {
 		value.Set(reflect.MakeMap(type_))
 	}
-	// Register reference for tracking
+	// Register reference for tracking (handles circular references)
 	ctx.RefResolver().Reference(value)
 
 	// Choose appropriate deserialization path based on type consistency

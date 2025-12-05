@@ -235,6 +235,12 @@ func (f *Fory) Unmarshal(data []byte, v interface{}) error {
 			if converted.IsValid() {
 				rv.Elem().Set(converted)
 			}
+		} else if resultVal.Kind() == reflect.Slice && targetType.Kind() == reflect.Array {
+			// Handle []T to [N]T conversion (arrays are serialized as slices)
+			converted := convertSliceToArray(resultVal, targetType)
+			if converted.IsValid() {
+				rv.Elem().Set(converted)
+			}
 		} else if resultVal.Kind() == reflect.Map && targetType.Kind() == reflect.Map {
 			// Handle map[interface{}]interface{} to map[K]V conversion
 			converted := convertMap(resultVal, targetType)
@@ -257,6 +263,56 @@ func convertSlice(src reflect.Value, targetType reflect.Type) reflect.Value {
 	elemType := targetType.Elem()
 
 	for i := 0; i < length; i++ {
+		srcElem := src.Index(i)
+		dstElem := result.Index(i)
+
+		// Get the actual value from interface
+		if srcElem.Kind() == reflect.Interface {
+			srcElem = srcElem.Elem()
+		}
+
+		if !srcElem.IsValid() {
+			continue // nil element
+		}
+
+		srcType := srcElem.Type()
+
+		if srcType.AssignableTo(elemType) {
+			dstElem.Set(srcElem)
+		} else if srcType.ConvertibleTo(elemType) {
+			dstElem.Set(srcElem.Convert(elemType))
+		} else if elemType.Kind() == reflect.Ptr && srcType.AssignableTo(elemType.Elem()) {
+			// Target is *T, source is T - need to create pointer
+			ptr := reflect.New(elemType.Elem())
+			ptr.Elem().Set(srcElem)
+			dstElem.Set(ptr)
+		} else if elemType.Kind() == reflect.Ptr && srcType.ConvertibleTo(elemType.Elem()) {
+			ptr := reflect.New(elemType.Elem())
+			ptr.Elem().Set(srcElem.Convert(elemType.Elem()))
+			dstElem.Set(ptr)
+		}
+	}
+
+	return result
+}
+
+// convertSliceToArray converts a slice to a fixed-size array
+func convertSliceToArray(src reflect.Value, targetType reflect.Type) reflect.Value {
+	if src.Kind() != reflect.Slice || targetType.Kind() != reflect.Array {
+		return reflect.Value{}
+	}
+
+	arrayLen := targetType.Len()
+	sliceLen := src.Len()
+	copyLen := sliceLen
+	if copyLen > arrayLen {
+		copyLen = arrayLen
+	}
+
+	result := reflect.New(targetType).Elem()
+	elemType := targetType.Elem()
+
+	for i := 0; i < copyLen; i++ {
 		srcElem := src.Index(i)
 		dstElem := result.Index(i)
 

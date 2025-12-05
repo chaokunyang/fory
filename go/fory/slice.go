@@ -362,7 +362,7 @@ func (s sliceSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value r
 		}
 		readValue = value
 	}
-	// Register reference for tracking
+	// Register reference for tracking (handles circular references)
 	ctx.RefResolver().Reference(readValue)
 
 	// Choose appropriate deserialization path based on type consistency
@@ -1450,3 +1450,105 @@ type Int32Slice []int32
 type Int64Slice []int64
 type Float32Slice []float64
 type Float64Slice []float64
+
+// ============================================================================
+// GenericSliceSerializer - Type-safe generic slice serializer
+// ============================================================================
+
+// GenericSliceSerializer provides type-safe serialization for slices of type T.
+// It uses static type dispatch instead of runtime type ID lookup for collections.
+type GenericSliceSerializer[T any] struct {
+	elemSerializer Serializer
+	elemTypeId     TypeId
+}
+
+// NewGenericSliceSerializer creates a new generic slice serializer for type []T
+func NewGenericSliceSerializer[T any](elemSerializer Serializer, elemTypeId TypeId) *GenericSliceSerializer[T] {
+	return &GenericSliceSerializer[T]{
+		elemSerializer: elemSerializer,
+		elemTypeId:     elemTypeId,
+	}
+}
+
+func (s *GenericSliceSerializer[T]) TypeId() TypeId {
+	return LIST
+}
+
+func (s *GenericSliceSerializer[T]) NeedToWriteRef() bool {
+	return true
+}
+
+func (s *GenericSliceSerializer[T]) WriteValue(ctx *WriteContext, value reflect.Value) error {
+	buf := ctx.Buffer()
+	length := value.Len()
+	if length == 0 {
+		buf.WriteVarUint32(0)
+		return nil
+	}
+
+	// Write length and collection flags
+	buf.WriteVarUint32(uint32(length))
+	collectFlag := CollectionIsSameType | CollectionIsDeclElementType
+	if ctx.RefTracking() && s.elemSerializer.NeedToWriteRef() {
+		collectFlag |= CollectionTrackingRef
+	}
+	buf.WriteInt8(int8(collectFlag))
+
+	// Write elements
+	trackRefs := (collectFlag & CollectionTrackingRef) != 0
+	for i := 0; i < length; i++ {
+		elem := value.Index(i)
+		if trackRefs {
+			refWritten, err := ctx.RefResolver().WriteRefOrNull(buf, elem)
+			if err != nil {
+				return err
+			}
+			if refWritten {
+				continue
+			}
+		}
+		if err := s.elemSerializer.WriteValue(ctx, elem); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *GenericSliceSerializer[T]) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	buf := ctx.Buffer()
+	length := int(buf.ReadVarUint32())
+	if length == 0 {
+		value.Set(reflect.MakeSlice(type_, 0, 0))
+		return nil
+	}
+
+	// Read collection flags
+	collectFlag := buf.ReadInt8()
+	trackRefs := (collectFlag & CollectionTrackingRef) != 0
+
+	// Create slice
+	slice := reflect.MakeSlice(type_, length, length)
+	value.Set(slice)
+
+	// Read elements
+	for i := 0; i < length; i++ {
+		var refID int32 = -1
+		if trackRefs {
+			refID, _ = ctx.RefResolver().TryPreserveRefId(buf)
+			if int8(refID) < NotNullValueFlag {
+				// Back reference
+				value.Index(i).Set(ctx.RefResolver().GetCurrentReadObject())
+				continue
+			}
+		}
+
+		elem := value.Index(i)
+		if err := s.elemSerializer.ReadValue(ctx, elem.Type(), elem); err != nil {
+			return err
+		}
+		if trackRefs && refID >= 0 {
+			ctx.RefResolver().SetReadObject(refID, elem)
+		}
+	}
+	return nil
+}

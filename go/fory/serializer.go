@@ -24,37 +24,6 @@ import (
 	"time"
 )
 
-// TypedSerializer is the core interface for all serialization (Go 1.23+ generics).
-// Each serializer handles its own ref/type info writing internally.
-type TypedSerializer[T any] interface {
-	// Write is the entry point for serialization.
-	// It handles: 1) reference tracking, 2) type info, 3) data
-	Write(ctx *WriteContext, value T, writeRefInfo, writeTypeInfo bool) error
-
-	// WriteData serializes only the data payload (no ref/type info).
-	WriteData(ctx *WriteContext, value T) error
-
-	// Read is the entry point for deserialization.
-	// It handles: 1) reference tracking, 2) type info, 3) data
-	Read(ctx *ReadContext, readRefInfo, readTypeInfo bool) (T, error)
-
-	// ReadData deserializes only the data payload (no ref/type info).
-	ReadData(ctx *ReadContext) (T, error)
-
-	// ReadTo deserializes directly into the provided target, avoiding allocation.
-	// It handles: 1) reference tracking, 2) type info, 3) data
-	ReadTo(ctx *ReadContext, target *T, readRefInfo, readTypeInfo bool) error
-
-	// ReadDataTo deserializes only the data payload directly into target (no ref/type info).
-	ReadDataTo(ctx *ReadContext, target *T) error
-
-	// TypeId returns the Fory protocol type ID
-	TypeId() TypeId
-
-	// NeedToWriteRef returns true if this type needs reference tracking.
-	NeedToWriteRef() bool
-}
-
 // AnySerializer is the non-generic interface for runtime dispatch using the new context-based API.
 type AnySerializer interface {
 	WriteAny(ctx *WriteContext, value any, writeRefInfo, writeTypeInfo bool) error
@@ -104,32 +73,11 @@ func GetGlobalRegistry() *GenericRegistry {
 	return globalGenericRegistry
 }
 
-// Register adds a typed serializer to the global registry
-func Register[T any](serializer TypedSerializer[T]) {
-	t := reflect.TypeFor[T]()
-	globalGenericRegistry.mu.Lock()
-	globalGenericRegistry.serializers[t] = serializer
-	globalGenericRegistry.mu.Unlock()
-}
-
 // RegisterAny adds a non-generic serializer to the global registry
 func RegisterAny(t reflect.Type, serializer AnySerializer) {
 	globalGenericRegistry.mu.Lock()
 	globalGenericRegistry.serializers[t] = serializer
 	globalGenericRegistry.mu.Unlock()
-}
-
-// GetSerializer retrieves serializer with zero allocation (compile-time typed)
-func GetSerializer[T any](r *GenericRegistry) TypedSerializer[T] {
-	t := reflect.TypeFor[T]()
-	r.mu.RLock()
-	s, ok := r.serializers[t]
-	r.mu.RUnlock()
-
-	if !ok {
-		panic("fory: no serializer for type " + t.String())
-	}
-	return s.(TypedSerializer[T])
 }
 
 // GetByReflectType retrieves serializer by reflect.Type

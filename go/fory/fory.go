@@ -546,33 +546,34 @@ func Serialize[T any](f *Fory, value T) ([]byte, error) {
 	var err error
 	switch val := any(value).(type) {
 	case bool:
-		err = globalBoolSerializer.Write(f.writeCtx, val, true, true)
+		err = f.writeCtx.WriteBoolValue(val, true, true)
 	case int8:
-		err = globalInt8Serializer.Write(f.writeCtx, val, true, true)
+		err = f.writeCtx.WriteInt8Value(val, true, true)
 	case int16:
-		err = globalInt16Serializer.Write(f.writeCtx, val, true, true)
+		err = f.writeCtx.WriteInt16Value(val, true, true)
 	case int32:
-		err = globalInt32Serializer.Write(f.writeCtx, val, true, true)
+		err = f.writeCtx.WriteInt32Value(val, true, true)
 	case int64:
-		err = globalInt64Serializer.Write(f.writeCtx, val, true, true)
+		err = f.writeCtx.WriteInt64Value(val, true, true)
 	case float32:
-		err = globalFloat32Serializer.Write(f.writeCtx, val, true, true)
+		err = f.writeCtx.WriteFloat32Value(val, true, true)
 	case float64:
-		err = globalFloat64Serializer.Write(f.writeCtx, val, true, true)
+		err = f.writeCtx.WriteFloat64Value(val, true, true)
 	case string:
-		err = globalStringSerializer.Write(f.writeCtx, val, true, true)
+		err = f.writeCtx.WriteStringValue(val, true, true)
 	case []byte:
-		err = serializeByteSliceFast(f.writeCtx, val)
+		err = f.writeCtx.WriteByteSlice(val, true, true)
 	case []int32:
-		err = serializeInt32SliceFast(f.writeCtx, val)
+		err = f.writeCtx.WriteInt32Slice(val, true, true)
 	case []int64:
-		err = serializeInt64SliceFast(f.writeCtx, val)
+		err = f.writeCtx.WriteInt64Slice(val, true, true)
 	case []float64:
-		err = serializeFloat64SliceFast(f.writeCtx, val)
+		err = f.writeCtx.WriteFloat64Slice(val, true, true)
 	case []bool:
-		err = serializeBoolSliceFast(f.writeCtx, val)
+		err = f.writeCtx.WriteBoolSlice(val, true, true)
 	default:
-		return serializeSlowPath(f, value)
+		// Fall back to reflection-based serialization
+		return f.SerializeAny(value)
 	}
 
 	if err != nil {
@@ -580,25 +581,6 @@ func Serialize[T any](f *Fory, value T) ([]byte, error) {
 	}
 
 	// Return copy of buffer data
-	return f.writeCtx.buffer.GetByteSlice(0, f.writeCtx.buffer.writerIndex), nil
-}
-
-// serializeSlowPath handles serialization for types not in the fast path
-func serializeSlowPath[T any](f *Fory, value T) ([]byte, error) {
-	serializer, err := TryGetSerializer[T](f.registry)
-	if err != nil {
-		// Fall back to reflection-based serialization
-		return f.SerializeAny(value)
-	}
-
-	// Always pass true from top level - each serializer decides internally:
-	// - Value types: write NotNullValueFlag, no ref tracking
-	// - Reference types: handle null check, ref tracking if enabled
-	// - Polymorphic types: write runtime type info
-	if err := serializer.Write(f.writeCtx, value, true, true); err != nil {
-		return nil, err
-	}
-
 	return f.writeCtx.buffer.GetByteSlice(0, f.writeCtx.buffer.writerIndex), nil
 }
 
@@ -630,152 +612,72 @@ func DeserializeTo[T any](f *Fory, data []byte, target *T) error {
 	// Fast path: type switch for common types (Go compiler can optimize this)
 	switch t := any(target).(type) {
 	case *bool:
-		return globalBoolSerializer.ReadTo(f.readCtx, t, true, true)
+		return f.readCtx.ReadIntoBoolValue(t, true, true)
 	case *int8:
-		return globalInt8Serializer.ReadTo(f.readCtx, t, true, true)
+		return f.readCtx.ReadIntoInt8Value(t, true, true)
 	case *int16:
-		return globalInt16Serializer.ReadTo(f.readCtx, t, true, true)
+		return f.readCtx.ReadIntoInt16Value(t, true, true)
 	case *int32:
-		return globalInt32Serializer.ReadTo(f.readCtx, t, true, true)
+		return f.readCtx.ReadIntoInt32Value(t, true, true)
 	case *int64:
-		return globalInt64Serializer.ReadTo(f.readCtx, t, true, true)
+		return f.readCtx.ReadIntoInt64Value(t, true, true)
 	case *float32:
-		return globalFloat32Serializer.ReadTo(f.readCtx, t, true, true)
+		return f.readCtx.ReadIntoFloat32Value(t, true, true)
 	case *float64:
-		return globalFloat64Serializer.ReadTo(f.readCtx, t, true, true)
+		return f.readCtx.ReadIntoFloat64Value(t, true, true)
 	case *string:
-		return globalStringSerializer.ReadTo(f.readCtx, t, true, true)
+		return f.readCtx.ReadIntoStringValue(t, true, true)
 	case *[]byte:
-		val, err := deserializeByteSliceFast(f.readCtx)
-		if err != nil {
-			return err
-		}
-		*t = val
-		return nil
+		return f.readCtx.ReadIntoByteSlice(t, true, true)
 	case *[]int32:
-		return deserializeInt32SliceFastTo(f.readCtx, t)
+		return f.readCtx.ReadIntoInt32Slice(t, true, true)
 	case *[]int64:
-		return deserializeInt64SliceFastTo(f.readCtx, t)
+		return f.readCtx.ReadIntoInt64Slice(t, true, true)
 	case *[]float64:
-		return deserializeFloat64SliceFastTo(f.readCtx, t)
+		return f.readCtx.ReadIntoFloat64Slice(t, true, true)
 	case *[]bool:
-		return deserializeBoolSliceFastTo(f.readCtx, t)
+		return f.readCtx.ReadIntoBoolSlice(t, true, true)
 	}
 
-	// Slow path: use registry lookup or reflection
-	return deserializeToSlowPath(f, data, target)
-}
-
-// deserializeToSlowPath handles DeserializeTo for types not in the fast path
-func deserializeToSlowPath[T any](f *Fory, data []byte, target *T) error {
-	serializer, err := TryGetSerializer[T](f.registry)
+	// Slow path: use reflection-based deserialization
+	f.readCtx.Reset()
+	result, err := f.DeserializeAny(data)
 	if err != nil {
-		// Fall back to reflection-based deserialization
-		f.readCtx.Reset()
-		result, err := f.DeserializeAny(data)
-		if err != nil {
-			return err
-		}
-		if result != nil {
-			resultVal := reflect.ValueOf(result)
-			targetVal := reflect.ValueOf(target).Elem()
-			targetType := targetVal.Type()
-
-			if resultVal.Type().AssignableTo(targetType) {
-				targetVal.Set(resultVal)
-			} else if resultVal.Type().ConvertibleTo(targetType) {
-				targetVal.Set(resultVal.Convert(targetType))
-			} else if resultVal.Kind() == reflect.Ptr && resultVal.Type().Elem().AssignableTo(targetType) {
-				targetVal.Set(resultVal.Elem())
-			} else if resultVal.Kind() == reflect.Ptr && resultVal.Type().Elem().ConvertibleTo(targetType) {
-				targetVal.Set(resultVal.Elem().Convert(targetType))
-			} else if targetType.Kind() == reflect.Map && resultVal.Kind() == reflect.Map {
-				// Handle map[interface{}]interface{} to map[K]V conversion
-				converted := convertMap(resultVal, targetType)
-				if converted.IsValid() {
-					targetVal.Set(converted)
-				}
-			} else if targetType.Kind() == reflect.Slice && resultVal.Kind() == reflect.Slice {
-				// Handle []interface{} to []T conversion
-				converted := convertSlice(resultVal, targetType)
-				if converted.IsValid() {
-					targetVal.Set(converted)
-				}
-			} else if targetType.Kind() == reflect.Struct && resultVal.Kind() == reflect.Ptr {
-				elemVal := resultVal.Elem()
-				if elemVal.Type() == targetType {
-					targetVal.Set(elemVal)
-				}
-			}
-		}
-		return nil
+		return err
 	}
-
-	// Use typed serializer's ReadTo method
-	return serializer.ReadTo(f.readCtx, target, true, true)
-}
-
-// deserializeSlowPath handles deserialization for types not in the fast path
-func deserializeSlowPath[T any](f *Fory, data []byte) (T, error) {
-	var zero T
-
-	serializer, err := TryGetSerializer[T](f.registry)
-	if err != nil {
-		// Fall back to reflection-based deserialization
-		// Reset context since we already read the header
-		f.readCtx.Reset()
-		result, err := f.DeserializeAny(data)
-		if err != nil {
-			return zero, err
-		}
-		if result == nil {
-			return zero, nil
-		}
-
-		// Convert result to T
+	if result != nil {
 		resultVal := reflect.ValueOf(result)
-		targetType := reflect.TypeFor[T]()
+		targetVal := reflect.ValueOf(target).Elem()
+		targetType := targetVal.Type()
 
 		if resultVal.Type().AssignableTo(targetType) {
-			return result.(T), nil
+			targetVal.Set(resultVal)
 		} else if resultVal.Type().ConvertibleTo(targetType) {
-			return resultVal.Convert(targetType).Interface().(T), nil
+			targetVal.Set(resultVal.Convert(targetType))
 		} else if resultVal.Kind() == reflect.Ptr && resultVal.Type().Elem().AssignableTo(targetType) {
-			return resultVal.Elem().Interface().(T), nil
+			targetVal.Set(resultVal.Elem())
 		} else if resultVal.Kind() == reflect.Ptr && resultVal.Type().Elem().ConvertibleTo(targetType) {
-			return resultVal.Elem().Convert(targetType).Interface().(T), nil
-		}
-
-		// For struct types, try to copy fields
-		if targetType.Kind() == reflect.Struct && resultVal.Kind() == reflect.Ptr {
-			elemVal := resultVal.Elem()
-			if elemVal.Type() == targetType {
-				return elemVal.Interface().(T), nil
-			}
-		}
-
-		// For map types, convert map[interface{}]interface{} to target map type
-		if targetType.Kind() == reflect.Map && resultVal.Kind() == reflect.Map {
+			targetVal.Set(resultVal.Elem().Convert(targetType))
+		} else if targetType.Kind() == reflect.Map && resultVal.Kind() == reflect.Map {
+			// Handle map[interface{}]interface{} to map[K]V conversion
 			converted := convertMap(resultVal, targetType)
 			if converted.IsValid() {
-				return converted.Interface().(T), nil
+				targetVal.Set(converted)
 			}
-		}
-
-		// For slice types, convert []interface{} to target slice type
-		if targetType.Kind() == reflect.Slice && resultVal.Kind() == reflect.Slice {
+		} else if targetType.Kind() == reflect.Slice && resultVal.Kind() == reflect.Slice {
+			// Handle []interface{} to []T conversion
 			converted := convertSlice(resultVal, targetType)
 			if converted.IsValid() {
-				return converted.Interface().(T), nil
+				targetVal.Set(converted)
+			}
+		} else if targetType.Kind() == reflect.Struct && resultVal.Kind() == reflect.Ptr {
+			elemVal := resultVal.Elem()
+			if elemVal.Type() == targetType {
+				targetVal.Set(elemVal)
 			}
 		}
-
-		return zero, fmt.Errorf("cannot convert %T to %s", result, targetType)
 	}
-
-	// Always pass true from top level - each serializer decides internally
-	// how to handle ref flag and type info based on its type characteristics
-	return serializer.Read(f.readCtx, true, true)
+	return nil
 }
 
 // SerializeAny serializes polymorphic values where concrete type is unknown.
@@ -893,263 +795,5 @@ func readHeader(ctx *ReadContext) error {
 	}
 	_ = ctx.buffer.ReadByte_() // bitmap
 	_ = ctx.buffer.ReadByte_() // language
-	return nil
-}
-
-// ============================================================================
-// Registry Lookup
-// ============================================================================
-
-// getSerializer retrieves serializer with zero allocation (compile-time typed).
-// Panics if no serializer is registered for type T.
-func getSerializer[T any](r *GenericRegistry) TypedSerializer[T] {
-	t := reflect.TypeFor[T]()
-
-	r.mu.RLock()
-	s, ok := r.serializers[t]
-	r.mu.RUnlock()
-
-	if !ok {
-		panic("fory: no serializer for type " + t.String() +
-			". Use fory.Register[T]() to register a serializer")
-	}
-	return s.(TypedSerializer[T])
-}
-
-// TryGetSerializer retrieves serializer, returning error if not found
-func TryGetSerializer[T any](r *GenericRegistry) (TypedSerializer[T], error) {
-	t := reflect.TypeFor[T]()
-
-	r.mu.RLock()
-	s, ok := r.serializers[t]
-	r.mu.RUnlock()
-
-	if !ok {
-		return nil, ErrNoSerializer
-	}
-
-	typed, ok := s.(TypedSerializer[T])
-	if !ok {
-		return nil, ErrNoSerializer
-	}
-	return typed, nil
-}
-
-// MustGetSerializer retrieves serializer from global registry, panics if not found
-func MustGetSerializer[T any]() TypedSerializer[T] {
-	return getSerializer[T](globalGenericRegistry)
-}
-
-// ============================================================================
-// Fast Path Serialization Helpers
-// These functions are optimized for common types, avoiding registry lookup
-// ============================================================================
-
-// serializeByteSliceFast serializes []byte with fast path
-func serializeByteSliceFast(ctx *WriteContext, val []byte) error {
-	ctx.buffer.WriteInt8(NotNullValueFlag)
-	ctx.buffer.WriteInt16(BINARY)
-	ctx.buffer.WriteBool(true) // in-band
-	ctx.buffer.WriteLength(len(val))
-	ctx.buffer.WriteBinary(val)
-	return nil
-}
-
-// serializeInt32SliceFast serializes []int32 with fast path
-func serializeInt32SliceFast(ctx *WriteContext, val []int32) error {
-	ctx.buffer.WriteInt8(NotNullValueFlag)
-	ctx.buffer.WriteInt16(INT32_ARRAY)
-	size := len(val) * 4
-	ctx.buffer.WriteLength(size)
-	for _, elem := range val {
-		ctx.buffer.WriteInt32(elem)
-	}
-	return nil
-}
-
-// serializeInt64SliceFast serializes []int64 with fast path
-func serializeInt64SliceFast(ctx *WriteContext, val []int64) error {
-	ctx.buffer.WriteInt8(NotNullValueFlag)
-	ctx.buffer.WriteInt16(INT64_ARRAY)
-	size := len(val) * 8
-	ctx.buffer.WriteLength(size)
-	for _, elem := range val {
-		ctx.buffer.WriteInt64(elem)
-	}
-	return nil
-}
-
-// serializeFloat64SliceFast serializes []float64 with fast path
-func serializeFloat64SliceFast(ctx *WriteContext, val []float64) error {
-	ctx.buffer.WriteInt8(NotNullValueFlag)
-	ctx.buffer.WriteInt16(FLOAT64_ARRAY)
-	size := len(val) * 8
-	ctx.buffer.WriteLength(size)
-	for _, elem := range val {
-		ctx.buffer.WriteFloat64(elem)
-	}
-	return nil
-}
-
-// serializeBoolSliceFast serializes []bool with fast path
-func serializeBoolSliceFast(ctx *WriteContext, val []bool) error {
-	ctx.buffer.WriteInt8(NotNullValueFlag)
-	ctx.buffer.WriteInt16(BOOL_ARRAY)
-	ctx.buffer.WriteLength(len(val))
-	for _, elem := range val {
-		ctx.buffer.WriteBool(elem)
-	}
-	return nil
-}
-
-// ============================================================================
-// Fast Path Deserialization Helpers
-// These functions are optimized for common types, avoiding registry lookup
-// ============================================================================
-
-// deserializeByteSliceFast deserializes []byte with fast path
-func deserializeByteSliceFast(ctx *ReadContext) ([]byte, error) {
-	_ = ctx.buffer.ReadInt8()  // ref flag
-	_ = ctx.buffer.ReadInt16() // type id
-	isInBand := ctx.buffer.ReadBool()
-	if !isInBand {
-		return nil, fmt.Errorf("out-of-band byte slice not supported in fast path")
-	}
-	size := ctx.buffer.ReadLength()
-	return ctx.buffer.ReadBinary(size), nil
-}
-
-// deserializeInt32SliceFast deserializes []int32 with fast path
-func deserializeInt32SliceFast(ctx *ReadContext) ([]int32, error) {
-	_ = ctx.buffer.ReadInt8()  // ref flag
-	_ = ctx.buffer.ReadInt16() // type id
-	size := ctx.buffer.ReadLength()
-	length := size / 4
-	result := make([]int32, length)
-	for i := 0; i < length; i++ {
-		result[i] = ctx.buffer.ReadInt32()
-	}
-	return result, nil
-}
-
-// deserializeInt64SliceFast deserializes []int64 with fast path
-func deserializeInt64SliceFast(ctx *ReadContext) ([]int64, error) {
-	_ = ctx.buffer.ReadInt8()  // ref flag
-	_ = ctx.buffer.ReadInt16() // type id
-	size := ctx.buffer.ReadLength()
-	length := size / 8
-	result := make([]int64, length)
-	for i := 0; i < length; i++ {
-		result[i] = ctx.buffer.ReadInt64()
-	}
-	return result, nil
-}
-
-// deserializeFloat64SliceFast deserializes []float64 with fast path
-func deserializeFloat64SliceFast(ctx *ReadContext) ([]float64, error) {
-	_ = ctx.buffer.ReadInt8()  // ref flag
-	_ = ctx.buffer.ReadInt16() // type id
-	size := ctx.buffer.ReadLength()
-	length := size / 8
-	result := make([]float64, length)
-	for i := 0; i < length; i++ {
-		result[i] = ctx.buffer.ReadFloat64()
-	}
-	return result, nil
-}
-
-// deserializeBoolSliceFast deserializes []bool with fast path
-func deserializeBoolSliceFast(ctx *ReadContext) ([]bool, error) {
-	_ = ctx.buffer.ReadInt8()  // ref flag
-	_ = ctx.buffer.ReadInt16() // type id
-	length := ctx.buffer.ReadLength()
-	result := make([]bool, length)
-	for i := 0; i < length; i++ {
-		result[i] = ctx.buffer.ReadBool()
-	}
-	return result, nil
-}
-
-// ============================================================================
-// Fast Path Deserialization-To Helpers
-// These functions deserialize directly into existing slices, reusing capacity
-// ============================================================================
-
-// deserializeInt32SliceFastTo deserializes []int32 directly into target, reusing capacity
-func deserializeInt32SliceFastTo(ctx *ReadContext, target *[]int32) error {
-	_ = ctx.buffer.ReadInt8()  // ref flag
-	_ = ctx.buffer.ReadInt16() // type id
-	size := ctx.buffer.ReadLength()
-	length := size / 4
-
-	// Reuse existing capacity if sufficient
-	if cap(*target) >= length {
-		*target = (*target)[:length]
-	} else {
-		*target = make([]int32, length)
-	}
-
-	for i := 0; i < length; i++ {
-		(*target)[i] = ctx.buffer.ReadInt32()
-	}
-	return nil
-}
-
-// deserializeInt64SliceFastTo deserializes []int64 directly into target, reusing capacity
-func deserializeInt64SliceFastTo(ctx *ReadContext, target *[]int64) error {
-	_ = ctx.buffer.ReadInt8()  // ref flag
-	_ = ctx.buffer.ReadInt16() // type id
-	size := ctx.buffer.ReadLength()
-	length := size / 8
-
-	// Reuse existing capacity if sufficient
-	if cap(*target) >= length {
-		*target = (*target)[:length]
-	} else {
-		*target = make([]int64, length)
-	}
-
-	for i := 0; i < length; i++ {
-		(*target)[i] = ctx.buffer.ReadInt64()
-	}
-	return nil
-}
-
-// deserializeFloat64SliceFastTo deserializes []float64 directly into target, reusing capacity
-func deserializeFloat64SliceFastTo(ctx *ReadContext, target *[]float64) error {
-	_ = ctx.buffer.ReadInt8()  // ref flag
-	_ = ctx.buffer.ReadInt16() // type id
-	size := ctx.buffer.ReadLength()
-	length := size / 8
-
-	// Reuse existing capacity if sufficient
-	if cap(*target) >= length {
-		*target = (*target)[:length]
-	} else {
-		*target = make([]float64, length)
-	}
-
-	for i := 0; i < length; i++ {
-		(*target)[i] = ctx.buffer.ReadFloat64()
-	}
-	return nil
-}
-
-// deserializeBoolSliceFastTo deserializes []bool directly into target, reusing capacity
-func deserializeBoolSliceFastTo(ctx *ReadContext, target *[]bool) error {
-	_ = ctx.buffer.ReadInt8()  // ref flag
-	_ = ctx.buffer.ReadInt16() // type id
-	length := ctx.buffer.ReadLength()
-
-	// Reuse existing capacity if sufficient
-	if cap(*target) >= length {
-		*target = (*target)[:length]
-	} else {
-		*target = make([]bool, length)
-	}
-
-	for i := 0; i < length; i++ {
-		(*target)[i] = ctx.buffer.ReadBool()
-	}
 	return nil
 }

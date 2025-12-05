@@ -155,6 +155,186 @@ func (c *WriteContext) WriteLength(length int) error {
 	return nil
 }
 
+// ============================================================================
+// Typed Write Methods - Write primitives with optional ref/type info
+// ============================================================================
+
+// WriteBoolValue writes a bool with optional ref/type info
+func (c *WriteContext) WriteBoolValue(value bool, writeRefInfo, writeTypeInfo bool) error {
+	if writeRefInfo {
+		c.buffer.WriteInt8(NotNullValueFlag)
+	}
+	if writeTypeInfo {
+		c.WriteTypeId(BOOL)
+	}
+	c.buffer.WriteBool(value)
+	return nil
+}
+
+// WriteInt8Value writes an int8 with optional ref/type info
+func (c *WriteContext) WriteInt8Value(value int8, writeRefInfo, writeTypeInfo bool) error {
+	if writeRefInfo {
+		c.buffer.WriteInt8(NotNullValueFlag)
+	}
+	if writeTypeInfo {
+		c.WriteTypeId(INT8)
+	}
+	c.buffer.WriteInt8(value)
+	return nil
+}
+
+// WriteInt16Value writes an int16 with optional ref/type info
+func (c *WriteContext) WriteInt16Value(value int16, writeRefInfo, writeTypeInfo bool) error {
+	if writeRefInfo {
+		c.buffer.WriteInt8(NotNullValueFlag)
+	}
+	if writeTypeInfo {
+		c.WriteTypeId(INT16)
+	}
+	c.buffer.WriteInt16(value)
+	return nil
+}
+
+// WriteInt32Value writes an int32 with optional ref/type info
+func (c *WriteContext) WriteInt32Value(value int32, writeRefInfo, writeTypeInfo bool) error {
+	if writeRefInfo {
+		c.buffer.WriteInt8(NotNullValueFlag)
+	}
+	if writeTypeInfo {
+		c.WriteTypeId(INT32)
+	}
+	c.buffer.WriteVarint32(value)
+	return nil
+}
+
+// WriteInt64Value writes an int64 with optional ref/type info
+func (c *WriteContext) WriteInt64Value(value int64, writeRefInfo, writeTypeInfo bool) error {
+	if writeRefInfo {
+		c.buffer.WriteInt8(NotNullValueFlag)
+	}
+	if writeTypeInfo {
+		c.WriteTypeId(INT64)
+	}
+	c.buffer.WriteVarint64(value)
+	return nil
+}
+
+// WriteFloat32Value writes a float32 with optional ref/type info
+func (c *WriteContext) WriteFloat32Value(value float32, writeRefInfo, writeTypeInfo bool) error {
+	if writeRefInfo {
+		c.buffer.WriteInt8(NotNullValueFlag)
+	}
+	if writeTypeInfo {
+		c.WriteTypeId(FLOAT)
+	}
+	c.buffer.WriteFloat32(value)
+	return nil
+}
+
+// WriteFloat64Value writes a float64 with optional ref/type info
+func (c *WriteContext) WriteFloat64Value(value float64, writeRefInfo, writeTypeInfo bool) error {
+	if writeRefInfo {
+		c.buffer.WriteInt8(NotNullValueFlag)
+	}
+	if writeTypeInfo {
+		c.WriteTypeId(DOUBLE)
+	}
+	c.buffer.WriteFloat64(value)
+	return nil
+}
+
+// WriteStringValue writes a string with optional ref/type info
+func (c *WriteContext) WriteStringValue(value string, writeRefInfo, writeTypeInfo bool) error {
+	if writeRefInfo {
+		c.buffer.WriteInt8(NotNullValueFlag)
+	}
+	if writeTypeInfo {
+		c.WriteTypeId(STRING)
+	}
+	c.buffer.WriteVarUint32(uint32(len(value)))
+	if len(value) > 0 {
+		c.buffer.WriteBinary(unsafe.Slice(unsafe.StringData(value), len(value)))
+	}
+	return nil
+}
+
+// WriteBoolSlice writes []bool with ref/type info
+func (c *WriteContext) WriteBoolSlice(value []bool, writeRefInfo, writeTypeInfo bool) error {
+	if writeRefInfo {
+		c.buffer.WriteInt8(NotNullValueFlag)
+	}
+	if writeTypeInfo {
+		c.WriteTypeId(BOOL_ARRAY)
+	}
+	c.buffer.WriteLength(len(value))
+	for _, elem := range value {
+		c.buffer.WriteBool(elem)
+	}
+	return nil
+}
+
+// WriteInt32Slice writes []int32 with ref/type info
+func (c *WriteContext) WriteInt32Slice(value []int32, writeRefInfo, writeTypeInfo bool) error {
+	if writeRefInfo {
+		c.buffer.WriteInt8(NotNullValueFlag)
+	}
+	if writeTypeInfo {
+		c.WriteTypeId(INT32_ARRAY)
+	}
+	size := len(value) * 4
+	c.buffer.WriteLength(size)
+	for _, elem := range value {
+		c.buffer.WriteInt32(elem)
+	}
+	return nil
+}
+
+// WriteInt64Slice writes []int64 with ref/type info
+func (c *WriteContext) WriteInt64Slice(value []int64, writeRefInfo, writeTypeInfo bool) error {
+	if writeRefInfo {
+		c.buffer.WriteInt8(NotNullValueFlag)
+	}
+	if writeTypeInfo {
+		c.WriteTypeId(INT64_ARRAY)
+	}
+	size := len(value) * 8
+	c.buffer.WriteLength(size)
+	for _, elem := range value {
+		c.buffer.WriteInt64(elem)
+	}
+	return nil
+}
+
+// WriteFloat64Slice writes []float64 with ref/type info
+func (c *WriteContext) WriteFloat64Slice(value []float64, writeRefInfo, writeTypeInfo bool) error {
+	if writeRefInfo {
+		c.buffer.WriteInt8(NotNullValueFlag)
+	}
+	if writeTypeInfo {
+		c.WriteTypeId(FLOAT64_ARRAY)
+	}
+	size := len(value) * 8
+	c.buffer.WriteLength(size)
+	for _, elem := range value {
+		c.buffer.WriteFloat64(elem)
+	}
+	return nil
+}
+
+// WriteByteSlice writes []byte with ref/type info
+func (c *WriteContext) WriteByteSlice(value []byte, writeRefInfo, writeTypeInfo bool) error {
+	if writeRefInfo {
+		c.buffer.WriteInt8(NotNullValueFlag)
+	}
+	if writeTypeInfo {
+		c.WriteTypeId(BINARY)
+	}
+	c.buffer.WriteBool(true) // in-band
+	c.buffer.WriteLength(len(value))
+	c.buffer.WriteBinary(value)
+	return nil
+}
+
 // WriteBufferObject writes a buffer object
 // If a buffer callback is set and returns false, the buffer is written out-of-band
 func (c *WriteContext) WriteBufferObject(bufferObject BufferObject) error {
@@ -359,6 +539,394 @@ func (c *ReadContext) ReadAndValidateTypeId(expected TypeId) error {
 // ReadLength reads a length value as varint
 func (c *ReadContext) ReadLength() int {
 	return int(c.buffer.ReadVarInt32())
+}
+
+// ============================================================================
+// Typed Read Methods - Read primitives with optional ref/type info
+// ============================================================================
+
+// ReadBoolValue reads a bool with optional ref/type info
+func (c *ReadContext) ReadBoolValue(readRefInfo, readTypeInfo bool) (bool, error) {
+	if readRefInfo {
+		_ = c.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = c.buffer.ReadInt16()
+	}
+	return c.buffer.ReadBool(), nil
+}
+
+// ReadIntoBoolValue reads a bool into target with optional ref/type info
+func (c *ReadContext) ReadIntoBoolValue(target *bool, readRefInfo, readTypeInfo bool) error {
+	if readRefInfo {
+		_ = c.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = c.buffer.ReadInt16()
+	}
+	*target = c.buffer.ReadBool()
+	return nil
+}
+
+// ReadInt8Value reads an int8 with optional ref/type info
+func (c *ReadContext) ReadInt8Value(readRefInfo, readTypeInfo bool) (int8, error) {
+	if readRefInfo {
+		_ = c.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = c.buffer.ReadInt16()
+	}
+	return c.buffer.ReadInt8(), nil
+}
+
+// ReadIntoInt8Value reads an int8 into target with optional ref/type info
+func (c *ReadContext) ReadIntoInt8Value(target *int8, readRefInfo, readTypeInfo bool) error {
+	if readRefInfo {
+		_ = c.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = c.buffer.ReadInt16()
+	}
+	*target = c.buffer.ReadInt8()
+	return nil
+}
+
+// ReadInt16Value reads an int16 with optional ref/type info
+func (c *ReadContext) ReadInt16Value(readRefInfo, readTypeInfo bool) (int16, error) {
+	if readRefInfo {
+		_ = c.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = c.buffer.ReadInt16()
+	}
+	return c.buffer.ReadInt16(), nil
+}
+
+// ReadIntoInt16Value reads an int16 into target with optional ref/type info
+func (c *ReadContext) ReadIntoInt16Value(target *int16, readRefInfo, readTypeInfo bool) error {
+	if readRefInfo {
+		_ = c.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = c.buffer.ReadInt16()
+	}
+	*target = c.buffer.ReadInt16()
+	return nil
+}
+
+// ReadInt32Value reads an int32 with optional ref/type info
+func (c *ReadContext) ReadInt32Value(readRefInfo, readTypeInfo bool) (int32, error) {
+	if readRefInfo {
+		_ = c.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = c.buffer.ReadInt16()
+	}
+	return c.buffer.ReadVarint32(), nil
+}
+
+// ReadIntoInt32Value reads an int32 into target with optional ref/type info
+func (c *ReadContext) ReadIntoInt32Value(target *int32, readRefInfo, readTypeInfo bool) error {
+	if readRefInfo {
+		_ = c.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = c.buffer.ReadInt16()
+	}
+	*target = c.buffer.ReadVarint32()
+	return nil
+}
+
+// ReadInt64Value reads an int64 with optional ref/type info
+func (c *ReadContext) ReadInt64Value(readRefInfo, readTypeInfo bool) (int64, error) {
+	if readRefInfo {
+		_ = c.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = c.buffer.ReadInt16()
+	}
+	return c.buffer.ReadVarint64(), nil
+}
+
+// ReadIntoInt64Value reads an int64 into target with optional ref/type info
+func (c *ReadContext) ReadIntoInt64Value(target *int64, readRefInfo, readTypeInfo bool) error {
+	if readRefInfo {
+		_ = c.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = c.buffer.ReadInt16()
+	}
+	*target = c.buffer.ReadVarint64()
+	return nil
+}
+
+// ReadFloat32Value reads a float32 with optional ref/type info
+func (c *ReadContext) ReadFloat32Value(readRefInfo, readTypeInfo bool) (float32, error) {
+	if readRefInfo {
+		_ = c.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = c.buffer.ReadInt16()
+	}
+	return c.buffer.ReadFloat32(), nil
+}
+
+// ReadIntoFloat32Value reads a float32 into target with optional ref/type info
+func (c *ReadContext) ReadIntoFloat32Value(target *float32, readRefInfo, readTypeInfo bool) error {
+	if readRefInfo {
+		_ = c.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = c.buffer.ReadInt16()
+	}
+	*target = c.buffer.ReadFloat32()
+	return nil
+}
+
+// ReadFloat64Value reads a float64 with optional ref/type info
+func (c *ReadContext) ReadFloat64Value(readRefInfo, readTypeInfo bool) (float64, error) {
+	if readRefInfo {
+		_ = c.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = c.buffer.ReadInt16()
+	}
+	return c.buffer.ReadFloat64(), nil
+}
+
+// ReadIntoFloat64Value reads a float64 into target with optional ref/type info
+func (c *ReadContext) ReadIntoFloat64Value(target *float64, readRefInfo, readTypeInfo bool) error {
+	if readRefInfo {
+		_ = c.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = c.buffer.ReadInt16()
+	}
+	*target = c.buffer.ReadFloat64()
+	return nil
+}
+
+// ReadStringValue reads a string with optional ref/type info
+func (c *ReadContext) ReadStringValue(readRefInfo, readTypeInfo bool) (string, error) {
+	if readRefInfo {
+		_ = c.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = c.buffer.ReadInt16()
+	}
+	length := c.buffer.ReadVarUint32()
+	if length == 0 {
+		return "", nil
+	}
+	data := c.buffer.ReadBinary(int(length))
+	return string(data), nil
+}
+
+// ReadIntoStringValue reads a string into target with optional ref/type info
+func (c *ReadContext) ReadIntoStringValue(target *string, readRefInfo, readTypeInfo bool) error {
+	if readRefInfo {
+		_ = c.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = c.buffer.ReadInt16()
+	}
+	length := c.buffer.ReadVarUint32()
+	if length == 0 {
+		*target = ""
+		return nil
+	}
+	data := c.buffer.ReadBinary(int(length))
+	*target = string(data)
+	return nil
+}
+
+// ReadBoolSlice reads []bool with optional ref/type info
+func (c *ReadContext) ReadBoolSlice(readRefInfo, readTypeInfo bool) ([]bool, error) {
+	if readRefInfo {
+		_ = c.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = c.buffer.ReadInt16()
+	}
+	length := c.buffer.ReadLength()
+	result := make([]bool, length)
+	for i := 0; i < length; i++ {
+		result[i] = c.buffer.ReadBool()
+	}
+	return result, nil
+}
+
+// ReadIntoBoolSlice reads []bool into target, reusing capacity when possible
+func (c *ReadContext) ReadIntoBoolSlice(target *[]bool, readRefInfo, readTypeInfo bool) error {
+	if readRefInfo {
+		_ = c.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = c.buffer.ReadInt16()
+	}
+	length := c.buffer.ReadLength()
+	if cap(*target) >= length {
+		*target = (*target)[:length]
+	} else {
+		*target = make([]bool, length)
+	}
+	for i := 0; i < length; i++ {
+		(*target)[i] = c.buffer.ReadBool()
+	}
+	return nil
+}
+
+// ReadInt32Slice reads []int32 with optional ref/type info
+func (c *ReadContext) ReadInt32Slice(readRefInfo, readTypeInfo bool) ([]int32, error) {
+	if readRefInfo {
+		_ = c.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = c.buffer.ReadInt16()
+	}
+	size := c.buffer.ReadLength()
+	length := size / 4
+	result := make([]int32, length)
+	for i := 0; i < length; i++ {
+		result[i] = c.buffer.ReadInt32()
+	}
+	return result, nil
+}
+
+// ReadIntoInt32Slice reads []int32 into target, reusing capacity when possible
+func (c *ReadContext) ReadIntoInt32Slice(target *[]int32, readRefInfo, readTypeInfo bool) error {
+	if readRefInfo {
+		_ = c.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = c.buffer.ReadInt16()
+	}
+	size := c.buffer.ReadLength()
+	length := size / 4
+	if cap(*target) >= length {
+		*target = (*target)[:length]
+	} else {
+		*target = make([]int32, length)
+	}
+	for i := 0; i < length; i++ {
+		(*target)[i] = c.buffer.ReadInt32()
+	}
+	return nil
+}
+
+// ReadInt64Slice reads []int64 with optional ref/type info
+func (c *ReadContext) ReadInt64Slice(readRefInfo, readTypeInfo bool) ([]int64, error) {
+	if readRefInfo {
+		_ = c.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = c.buffer.ReadInt16()
+	}
+	size := c.buffer.ReadLength()
+	length := size / 8
+	result := make([]int64, length)
+	for i := 0; i < length; i++ {
+		result[i] = c.buffer.ReadInt64()
+	}
+	return result, nil
+}
+
+// ReadIntoInt64Slice reads []int64 into target, reusing capacity when possible
+func (c *ReadContext) ReadIntoInt64Slice(target *[]int64, readRefInfo, readTypeInfo bool) error {
+	if readRefInfo {
+		_ = c.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = c.buffer.ReadInt16()
+	}
+	size := c.buffer.ReadLength()
+	length := size / 8
+	if cap(*target) >= length {
+		*target = (*target)[:length]
+	} else {
+		*target = make([]int64, length)
+	}
+	for i := 0; i < length; i++ {
+		(*target)[i] = c.buffer.ReadInt64()
+	}
+	return nil
+}
+
+// ReadFloat64Slice reads []float64 with optional ref/type info
+func (c *ReadContext) ReadFloat64Slice(readRefInfo, readTypeInfo bool) ([]float64, error) {
+	if readRefInfo {
+		_ = c.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = c.buffer.ReadInt16()
+	}
+	size := c.buffer.ReadLength()
+	length := size / 8
+	result := make([]float64, length)
+	for i := 0; i < length; i++ {
+		result[i] = c.buffer.ReadFloat64()
+	}
+	return result, nil
+}
+
+// ReadIntoFloat64Slice reads []float64 into target, reusing capacity when possible
+func (c *ReadContext) ReadIntoFloat64Slice(target *[]float64, readRefInfo, readTypeInfo bool) error {
+	if readRefInfo {
+		_ = c.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = c.buffer.ReadInt16()
+	}
+	size := c.buffer.ReadLength()
+	length := size / 8
+	if cap(*target) >= length {
+		*target = (*target)[:length]
+	} else {
+		*target = make([]float64, length)
+	}
+	for i := 0; i < length; i++ {
+		(*target)[i] = c.buffer.ReadFloat64()
+	}
+	return nil
+}
+
+// ReadByteSlice reads []byte with optional ref/type info
+func (c *ReadContext) ReadByteSlice(readRefInfo, readTypeInfo bool) ([]byte, error) {
+	if readRefInfo {
+		_ = c.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = c.buffer.ReadInt16()
+	}
+	isInBand := c.buffer.ReadBool()
+	if !isInBand {
+		return nil, fmt.Errorf("out-of-band byte slice not supported in fast path")
+	}
+	size := c.buffer.ReadLength()
+	return c.buffer.ReadBinary(size), nil
+}
+
+// ReadIntoByteSlice reads []byte into target, reusing capacity when possible
+func (c *ReadContext) ReadIntoByteSlice(target *[]byte, readRefInfo, readTypeInfo bool) error {
+	if readRefInfo {
+		_ = c.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = c.buffer.ReadInt16()
+	}
+	isInBand := c.buffer.ReadBool()
+	if !isInBand {
+		return fmt.Errorf("out-of-band byte slice not supported in fast path")
+	}
+	size := c.buffer.ReadLength()
+	data := c.buffer.ReadBinary(size)
+	if cap(*target) >= size {
+		*target = (*target)[:size]
+		copy(*target, data)
+	} else {
+		*target = data
+	}
+	return nil
 }
 
 // ReadBufferObject reads a buffer object

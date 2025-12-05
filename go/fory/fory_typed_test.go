@@ -158,52 +158,6 @@ func TestSerializeGenericComplex(t *testing.T) {
 	})
 }
 
-// TestTypedSerializerLookup tests that TryGetSerializer[T] correctly looks up serializers.
-func TestTypedSerializerLookup(t *testing.T) {
-	registry := GetGlobalRegistry()
-
-	t.Run("RegisteredTypes", func(t *testing.T) {
-		// These should be registered by init()
-		boolSerializer, err := TryGetSerializer[bool](registry)
-		require.NoError(t, err)
-		require.NotNil(t, boolSerializer)
-		require.Equal(t, TypeId(BOOL), boolSerializer.TypeId())
-
-		int32Serializer, err := TryGetSerializer[int32](registry)
-		require.NoError(t, err)
-		require.NotNil(t, int32Serializer)
-		require.Equal(t, TypeId(INT32), int32Serializer.TypeId())
-
-		stringSerializer, err := TryGetSerializer[string](registry)
-		require.NoError(t, err)
-		require.NotNil(t, stringSerializer)
-		require.Equal(t, TypeId(STRING), stringSerializer.TypeId())
-	})
-
-	t.Run("UnregisteredType", func(t *testing.T) {
-		type UnregisteredStruct struct{}
-		_, err := TryGetSerializer[UnregisteredStruct](registry)
-		require.Error(t, err)
-		require.Equal(t, ErrNoSerializer, err)
-	})
-}
-
-// TestMustGetSerializer tests the panic behavior of MustGetSerializer.
-func TestMustGetSerializer(t *testing.T) {
-	t.Run("RegisteredType", func(t *testing.T) {
-		// Should not panic
-		serializer := MustGetSerializer[int32]()
-		require.NotNil(t, serializer)
-	})
-
-	t.Run("UnregisteredType", func(t *testing.T) {
-		type UnregisteredType struct{}
-		require.Panics(t, func() {
-			_ = MustGetSerializer[UnregisteredType]()
-		})
-	})
-}
-
 // TestSerializeDeserializeRoundTrip tests that serialized data can be correctly deserialized.
 func TestSerializeDeserializeRoundTrip(t *testing.T) {
 	f := NewFory(WithRefTracking(true))

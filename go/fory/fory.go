@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"reflect"
 	"sync"
+	"unsafe"
 )
 
 // ============================================================================
@@ -534,17 +535,60 @@ func (f *Fory) Reset() {
 // Falls back to reflection-based serialization for unregistered types.
 // Note: Fory instance is NOT thread-safe. Use ThreadSafeFory for concurrent use.
 func Serialize[T any](f *Fory, value T) ([]byte, error) {
-	serializer, err := TryGetSerializer[T](f.registry)
-	if err != nil {
-		// Fall back to reflection-based serialization
-		return SerializeAny(f, value)
-	}
-
 	// Reuse context, just reset state
 	f.writeCtx.Reset()
 
 	// Write protocol header
 	writeHeader(f.writeCtx, f.config)
+
+	// Fast path: type switch for common types (Go compiler can optimize this)
+	var err error
+	switch val := any(value).(type) {
+	case bool:
+		err = globalBoolSerializer.Write(f.writeCtx, val, true, true)
+	case int8:
+		err = globalInt8Serializer.Write(f.writeCtx, val, true, true)
+	case int16:
+		err = globalInt16Serializer.Write(f.writeCtx, val, true, true)
+	case int32:
+		err = globalInt32Serializer.Write(f.writeCtx, val, true, true)
+	case int64:
+		err = globalInt64Serializer.Write(f.writeCtx, val, true, true)
+	case float32:
+		err = globalFloat32Serializer.Write(f.writeCtx, val, true, true)
+	case float64:
+		err = globalFloat64Serializer.Write(f.writeCtx, val, true, true)
+	case string:
+		err = globalStringSerializer.Write(f.writeCtx, val, true, true)
+	case []byte:
+		err = serializeByteSliceFast(f.writeCtx, val)
+	case []int32:
+		err = serializeInt32SliceFast(f.writeCtx, val)
+	case []int64:
+		err = serializeInt64SliceFast(f.writeCtx, val)
+	case []float64:
+		err = serializeFloat64SliceFast(f.writeCtx, val)
+	case []bool:
+		err = serializeBoolSliceFast(f.writeCtx, val)
+	default:
+		return serializeSlowPath(f, value)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Return copy of buffer data
+	return f.writeCtx.buffer.GetByteSlice(0, f.writeCtx.buffer.writerIndex), nil
+}
+
+// serializeSlowPath handles serialization for types not in the fast path
+func serializeSlowPath[T any](f *Fory, value T) ([]byte, error) {
+	serializer, err := TryGetSerializer[T](f.registry)
+	if err != nil {
+		// Fall back to reflection-based serialization
+		return SerializeAny(f, value)
+	}
 
 	// Always pass true from top level - each serializer decides internally:
 	// - Value types: write NotNullValueFlag, no ref tracking
@@ -554,7 +598,6 @@ func Serialize[T any](f *Fory, value T) ([]byte, error) {
 		return nil, err
 	}
 
-	// Return copy of buffer data
 	return f.writeCtx.buffer.GetByteSlice(0, f.writeCtx.buffer.writerIndex), nil
 }
 
@@ -563,10 +606,113 @@ func Serialize[T any](f *Fory, value T) ([]byte, error) {
 // Falls back to reflection-based deserialization for unregistered types.
 // Note: Fory instance is NOT thread-safe. Use ThreadSafeFory for concurrent use.
 func Deserialize[T any](f *Fory, data []byte) (T, error) {
+	var zero T
+
+	// Reuse context, reset and set new data
+	f.readCtx.Reset()
+	f.readCtx.SetData(data)
+
+	// Read and validate header
+	if err := readHeader(f.readCtx); err != nil {
+		return zero, err
+	}
+
+	// Fast path: type switch for common types (Go compiler can optimize this)
+	// Uses unsafe.Pointer for zero-allocation type casting
+	switch any(zero).(type) {
+	case bool:
+		val, err := globalBoolSerializer.Read(f.readCtx, true, true)
+		if err != nil {
+			return zero, err
+		}
+		return *(*T)(unsafe.Pointer(&val)), nil
+	case int8:
+		val, err := globalInt8Serializer.Read(f.readCtx, true, true)
+		if err != nil {
+			return zero, err
+		}
+		return *(*T)(unsafe.Pointer(&val)), nil
+	case int16:
+		val, err := globalInt16Serializer.Read(f.readCtx, true, true)
+		if err != nil {
+			return zero, err
+		}
+		return *(*T)(unsafe.Pointer(&val)), nil
+	case int32:
+		val, err := globalInt32Serializer.Read(f.readCtx, true, true)
+		if err != nil {
+			return zero, err
+		}
+		return *(*T)(unsafe.Pointer(&val)), nil
+	case int64:
+		val, err := globalInt64Serializer.Read(f.readCtx, true, true)
+		if err != nil {
+			return zero, err
+		}
+		return *(*T)(unsafe.Pointer(&val)), nil
+	case float32:
+		val, err := globalFloat32Serializer.Read(f.readCtx, true, true)
+		if err != nil {
+			return zero, err
+		}
+		return *(*T)(unsafe.Pointer(&val)), nil
+	case float64:
+		val, err := globalFloat64Serializer.Read(f.readCtx, true, true)
+		if err != nil {
+			return zero, err
+		}
+		return *(*T)(unsafe.Pointer(&val)), nil
+	case string:
+		val, err := globalStringSerializer.Read(f.readCtx, true, true)
+		if err != nil {
+			return zero, err
+		}
+		return *(*T)(unsafe.Pointer(&val)), nil
+	case []byte:
+		val, err := deserializeByteSliceFast(f.readCtx)
+		if err != nil {
+			return zero, err
+		}
+		return *(*T)(unsafe.Pointer(&val)), nil
+	case []int32:
+		val, err := deserializeInt32SliceFast(f.readCtx)
+		if err != nil {
+			return zero, err
+		}
+		return *(*T)(unsafe.Pointer(&val)), nil
+	case []int64:
+		val, err := deserializeInt64SliceFast(f.readCtx)
+		if err != nil {
+			return zero, err
+		}
+		return *(*T)(unsafe.Pointer(&val)), nil
+	case []float64:
+		val, err := deserializeFloat64SliceFast(f.readCtx)
+		if err != nil {
+			return zero, err
+		}
+		return *(*T)(unsafe.Pointer(&val)), nil
+	case []bool:
+		val, err := deserializeBoolSliceFast(f.readCtx)
+		if err != nil {
+			return zero, err
+		}
+		return *(*T)(unsafe.Pointer(&val)), nil
+	}
+
+	// Slow path: use registry lookup or reflection
+	return deserializeSlowPath[T](f, data)
+}
+
+// deserializeSlowPath handles deserialization for types not in the fast path
+func deserializeSlowPath[T any](f *Fory, data []byte) (T, error) {
+	var zero T
+
 	serializer, err := TryGetSerializer[T](f.registry)
 	if err != nil {
 		// Fall back to reflection-based deserialization
-		var zero T
+		// Reset context since we already read the header
+		f.readCtx.Reset()
 		result, err := DeserializeAny(f, data)
 		if err != nil {
 			return zero, err
@@ -614,17 +760,6 @@ func Deserialize[T any](f *Fory, data []byte) (T, error) {
 		}
 
 		return zero, fmt.Errorf("cannot convert %T to %s", result, targetType)
-	}
-
-	var zero T
-
-	// Reuse context, reset and set new data
-	f.readCtx.Reset()
-	f.readCtx.SetData(data)
-
-	// Read and validate header
-	if err := readHeader(f.readCtx); err != nil {
-		return zero, err
 	}
 
 	// Always pass true from top level - each serializer decides internally
@@ -897,4 +1032,134 @@ func UnmarshalTo(data []byte, v interface{}) error {
 	f := globalFory.acquire()
 	defer globalFory.release(f)
 	return f.Unmarshal(data, v)
+}
+
+// ============================================================================
+// Fast Path Serialization Helpers
+// These functions are optimized for common types, avoiding registry lookup
+// ============================================================================
+
+// serializeByteSliceFast serializes []byte with fast path
+func serializeByteSliceFast(ctx *WriteContext, val []byte) error {
+	ctx.buffer.WriteInt8(NotNullValueFlag)
+	ctx.buffer.WriteInt16(BINARY)
+	ctx.buffer.WriteBool(true) // in-band
+	ctx.buffer.WriteLength(len(val))
+	ctx.buffer.WriteBinary(val)
+	return nil
+}
+
+// serializeInt32SliceFast serializes []int32 with fast path
+func serializeInt32SliceFast(ctx *WriteContext, val []int32) error {
+	ctx.buffer.WriteInt8(NotNullValueFlag)
+	ctx.buffer.WriteInt16(INT32_ARRAY)
+	size := len(val) * 4
+	ctx.buffer.WriteLength(size)
+	for _, elem := range val {
+		ctx.buffer.WriteInt32(elem)
+	}
+	return nil
+}
+
+// serializeInt64SliceFast serializes []int64 with fast path
+func serializeInt64SliceFast(ctx *WriteContext, val []int64) error {
+	ctx.buffer.WriteInt8(NotNullValueFlag)
+	ctx.buffer.WriteInt16(INT64_ARRAY)
+	size := len(val) * 8
+	ctx.buffer.WriteLength(size)
+	for _, elem := range val {
+		ctx.buffer.WriteInt64(elem)
+	}
+	return nil
+}
+
+// serializeFloat64SliceFast serializes []float64 with fast path
+func serializeFloat64SliceFast(ctx *WriteContext, val []float64) error {
+	ctx.buffer.WriteInt8(NotNullValueFlag)
+	ctx.buffer.WriteInt16(FLOAT64_ARRAY)
+	size := len(val) * 8
+	ctx.buffer.WriteLength(size)
+	for _, elem := range val {
+		ctx.buffer.WriteFloat64(elem)
+	}
+	return nil
+}
+
+// serializeBoolSliceFast serializes []bool with fast path
+func serializeBoolSliceFast(ctx *WriteContext, val []bool) error {
+	ctx.buffer.WriteInt8(NotNullValueFlag)
+	ctx.buffer.WriteInt16(BOOL_ARRAY)
+	ctx.buffer.WriteLength(len(val))
+	for _, elem := range val {
+		ctx.buffer.WriteBool(elem)
+	}
+	return nil
+}
+
+// ============================================================================
+// Fast Path Deserialization Helpers
+// These functions are optimized for common types, avoiding registry lookup
+// ============================================================================
+
+// deserializeByteSliceFast deserializes []byte with fast path
+func deserializeByteSliceFast(ctx *ReadContext) ([]byte, error) {
+	_ = ctx.buffer.ReadInt8()  // ref flag
+	_ = ctx.buffer.ReadInt16() // type id
+	isInBand := ctx.buffer.ReadBool()
+	if !isInBand {
+		return nil, fmt.Errorf("out-of-band byte slice not supported in fast path")
+	}
+	size := ctx.buffer.ReadLength()
+	return ctx.buffer.ReadBinary(size), nil
+}
+
+// deserializeInt32SliceFast deserializes []int32 with fast path
+func deserializeInt32SliceFast(ctx *ReadContext) ([]int32, error) {
+	_ = ctx.buffer.ReadInt8()  // ref flag
+	_ = ctx.buffer.ReadInt16() // type id
+	size := ctx.buffer.ReadLength()
+	length := size / 4
+	result := make([]int32, length)
+	for i := 0; i < length; i++ {
+		result[i] = ctx.buffer.ReadInt32()
+	}
+	return result, nil
+}
+
+// deserializeInt64SliceFast deserializes []int64 with fast path
+func deserializeInt64SliceFast(ctx *ReadContext) ([]int64, error) {
+	_ = ctx.buffer.ReadInt8()  // ref flag
+	_ = ctx.buffer.ReadInt16() // type id
+	size := ctx.buffer.ReadLength()
+	length := size / 8
+	result := make([]int64, length)
+	for i := 0; i < length; i++ {
+		result[i] = ctx.buffer.ReadInt64()
+	}
+	return result, nil
+}
+
+// deserializeFloat64SliceFast deserializes []float64 with fast path
+func deserializeFloat64SliceFast(ctx *ReadContext) ([]float64, error) {
+	_ = ctx.buffer.ReadInt8()  // ref flag
+	_ = ctx.buffer.ReadInt16() // type id
+	size := ctx.buffer.ReadLength()
+	length := size / 8
+	result := make([]float64, length)
+	for i := 0; i < length; i++ {
+		result[i] = ctx.buffer.ReadFloat64()
+	}
+	return result, nil
+}
+
+// deserializeBoolSliceFast deserializes []bool with fast path
+func deserializeBoolSliceFast(ctx *ReadContext) ([]bool, error) {
+	_ = ctx.buffer.ReadInt8()  // ref flag
+	_ = ctx.buffer.ReadInt16() // type id
+	length := ctx.buffer.ReadLength()
+	result := make([]bool, length)
+	for i := 0; i < length; i++ {
+		result[i] = ctx.buffer.ReadBool()
+	}
+	return result, nil
 }

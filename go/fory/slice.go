@@ -120,7 +120,10 @@ func (s sliceSerializer) WriteValue(ctx *WriteContext, value reflect.Value) erro
 	}
 
 	// Write collection header and get type information
-	collectFlag, elemTypeInfo := s.writeHeader(ctx, buf, value)
+	collectFlag, elemTypeInfo, err := s.writeHeader(ctx, buf, value)
+	if err != nil {
+		return err
+	}
 
 	// Choose serialization path based on type consistency
 	if (collectFlag & CollectionIsSameType) != 0 {
@@ -133,7 +136,7 @@ func (s sliceSerializer) WriteValue(ctx *WriteContext, value reflect.Value) erro
 // - Collection size
 // - Type consistency flags
 // - Element type information (if homogeneous)
-func (s sliceSerializer) writeHeader(ctx *WriteContext, buf *ByteBuffer, value reflect.Value) (byte, TypeInfo) {
+func (s sliceSerializer) writeHeader(ctx *WriteContext, buf *ByteBuffer, value reflect.Value) (byte, TypeInfo, error) {
 	collectFlag := CollectionDefaultFlag
 	var elemTypeInfo TypeInfo
 	hasNull := false
@@ -189,12 +192,23 @@ func (s sliceSerializer) writeHeader(ctx *WriteContext, buf *ByteBuffer, value r
 	buf.WriteVarUint32(uint32(value.Len())) // Collection size
 	buf.WriteInt8(int8(collectFlag))        // Collection flags
 
-	// Write element type ID if all elements have same type and not using declared type
+	// Write element type info if all elements have same type and not using declared type
 	if hasSameType && (collectFlag&CollectionIsDeclElementType == 0) {
-		buf.WriteVarInt32(elemTypeInfo.TypeID)
+		// For namespaced types, write full type info
+		internalTypeID := elemTypeInfo.TypeID
+		if elemTypeInfo.TypeID < 0 {
+			internalTypeID = -internalTypeID
+		}
+		if IsNamespacedType(TypeId(internalTypeID)) {
+			if err := ctx.TypeResolver().writeTypeInfo(buf, elemTypeInfo); err != nil {
+				return 0, TypeInfo{}, err
+			}
+		} else {
+			buf.WriteVarInt32(elemTypeInfo.TypeID)
+		}
 	}
 
-	return byte(collectFlag), elemTypeInfo
+	return byte(collectFlag), elemTypeInfo, nil
 }
 
 // writeSameType efficiently serializes a slice where all elements share the same type
@@ -204,6 +218,9 @@ func (s sliceSerializer) writeSameType(ctx *WriteContext, buf *ByteBuffer, value
 
 	for i := 0; i < value.Len(); i++ {
 		elem := value.Index(i)
+		// For reference tracking, we need to track the original value (pointer or interface),
+		// not the dereferenced value. This ensures that identical pointers are recognized.
+		origElem := elem
 		if elem.Kind() == reflect.Interface || elem.Kind() == reflect.Ptr {
 			elem = elem.Elem()
 		}
@@ -213,8 +230,9 @@ func (s sliceSerializer) writeSameType(ctx *WriteContext, buf *ByteBuffer, value
 		}
 
 		if trackRefs {
-			// Handle reference tracking if enabled
-			refWritten, err := ctx.RefResolver().WriteRefOrNull(buf, elem)
+			// Track the original element (pointer/interface) for reference tracking
+			// This ensures identical pointers are recognized as back-references
+			refWritten, err := ctx.RefResolver().WriteRefOrNull(buf, origElem)
 			if err != nil {
 				return err
 			}
@@ -301,7 +319,8 @@ func (s sliceSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value r
 		if (collectFlag & CollectionIsDeclElementType) == 0 {
 			typeID := buf.ReadVarInt32()
 			var err error
-			elemTypeInfo, err = ctx.TypeResolver().getTypeInfoById(int16(typeID))
+			// Use readTypeInfoWithTypeID which handles both namespaced and non-namespaced types
+			elemTypeInfo, err = ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID)
 			if err != nil {
 				elemTypeInfo = s.elemInfo
 			}
@@ -310,28 +329,66 @@ func (s sliceSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value r
 		}
 	}
 	// Initialize slice with proper capacity
+	isArrayType := type_.Kind() == reflect.Array
+	var arrayValue reflect.Value
+	if isArrayType {
+		arrayValue = value // Save the original array value
+		// For arrays, we'll work with a slice and copy back later
+		type_ = reflect.SliceOf(type_.Elem())
+	}
 
+	var readValue reflect.Value
 	if value.IsZero() || value.Cap() < length {
 		if type_.Kind() != reflect.Slice {
 			if type_.Kind() == reflect.Interface {
 				type_ = reflect.TypeOf([]interface{}{})
+			} else {
+				panic(fmt.Sprintf("sliceSerializer.ReadValue: unexpected type %v (kind=%v)", type_, type_.Kind()))
 			}
 		}
-		value.Set(reflect.MakeSlice(type_, length, length))
-		if value.Kind() == reflect.Interface || value.Kind() == reflect.Ptr {
-			value = value.Elem()
+		// For arrays, create a temp slice to read into
+		if isArrayType {
+			readValue = reflect.MakeSlice(type_, length, length)
+		} else {
+			value.Set(reflect.MakeSlice(type_, length, length))
+			readValue = value
+			if readValue.Kind() == reflect.Interface || readValue.Kind() == reflect.Ptr {
+				readValue = readValue.Elem()
+			}
 		}
 	} else {
-		value.Set(value.Slice(0, length))
+		if !isArrayType {
+			value.Set(value.Slice(0, length))
+		}
+		readValue = value
 	}
 	// Register reference for tracking
-	ctx.RefResolver().Reference(value)
+	ctx.RefResolver().Reference(readValue)
 
 	// Choose appropriate deserialization path based on type consistency
+	var err error
 	if (collectFlag & CollectionIsSameType) != 0 {
-		return s.readSameType(ctx, buf, value, elemTypeInfo, collectFlag)
+		err = s.readSameType(ctx, buf, readValue, elemTypeInfo, collectFlag)
+	} else {
+		err = s.readDifferentTypes(ctx, buf, readValue)
 	}
-	return s.readDifferentTypes(ctx, buf, value)
+	if err != nil {
+		return err
+	}
+
+	// For arrays, copy from the temp slice back to the array
+	if isArrayType && arrayValue.IsValid() {
+		arrayLen := arrayValue.Len()
+		copyLen := length
+		if copyLen > arrayLen {
+			copyLen = arrayLen
+		}
+		for i := 0; i < copyLen; i++ {
+			arrayValue.Index(i).Set(readValue.Index(i))
+		}
+	}
+
+	return nil
 }
 
 // readSameType handles deserialization of slices where all elements share the same type
@@ -339,27 +396,63 @@ func (s sliceSerializer) readSameType(ctx *ReadContext, buf *ByteBuffer, value r
 	// Determine if reference tracking is enabled
 	trackRefs := (flag & CollectionTrackingRef) != 0
 	serializer := typeInfo.Serializer
-	var refID int32
+
+	// Check if the slice element type is a pointer type
+	// This affects how we handle reference tracking
+	sliceElemType := value.Type().Elem()
+	isConcretePointerElem := sliceElemType.Kind() == reflect.Ptr
+	isInterfaceElem := sliceElemType.Kind() == reflect.Interface
+
+	// Check if the element type needs pointer wrapping.
+	// Struct types need to be wrapped in pointers for circular reference support.
+	// Slices, maps, and other reference types don't need pointer wrapping.
+	elemTypeNeedsPointerWrap := typeInfo.Type.Kind() == reflect.Struct
 
 	for i := 0; i < value.Len(); i++ {
+		var refID int32 = -1
 		if trackRefs {
 			// Handle reference tracking if enabled
 			refID, _ = ctx.RefResolver().TryPreserveRefId(buf)
 			if int8(refID) < NotNullValueFlag {
-				// Use existing reference if available
-				value.Index(i).Set(ctx.RefResolver().GetCurrentReadObject())
+				// Use existing reference if available - use EXACTLY what was stored
+				refObj := ctx.RefResolver().GetCurrentReadObject()
+				value.Index(i).Set(refObj)
 				continue
 			}
 		}
 
-		// Create new element of the correct type and deserialize from buffer
-		elem := reflect.New(typeInfo.Type).Elem()
-		if err := serializer.ReadValue(ctx, elem.Type(), elem); err != nil {
-			return err
+		// For concrete pointer elements ([]*T), we always need to create a pointer.
+		if isConcretePointerElem {
+			// Target is []*T, create pointer and register before reading
+			ptr := reflect.New(typeInfo.Type)
+			if trackRefs && refID >= 0 {
+				ctx.RefResolver().SetReadObject(refID, ptr)
+			}
+			if err := serializer.ReadValue(ctx, typeInfo.Type, ptr.Elem()); err != nil {
+				return err
+			}
+			value.Index(i).Set(ptr)
+		} else if isInterfaceElem && refID >= 0 && elemTypeNeedsPointerWrap {
+			// Target is []interface{} and element is a struct that was reference-tracked.
+			// Wrap struct in pointer so circular references within the struct work.
+			ptr := reflect.New(typeInfo.Type)
+			ctx.RefResolver().SetReadObject(refID, ptr)
+			if err := serializer.ReadValue(ctx, typeInfo.Type, ptr.Elem()); err != nil {
+				return err
+			}
+			value.Index(i).Set(ptr)
+		} else {
+			// Non-pointer elements, or reference types (slices/maps) that don't need wrapping:
+			// read directly into a value
+			elem := reflect.New(typeInfo.Type).Elem()
+			if err := serializer.ReadValue(ctx, elem.Type(), elem); err != nil {
+				return err
+			}
+			value.Index(i).Set(elem)
+			if trackRefs && refID >= 0 {
+				ctx.RefResolver().SetReadObject(refID, elem)
+			}
 		}
-		// Set element in slice and register reference
-		value.Index(i).Set(elem)
-		ctx.RefResolver().SetReadObject(refID, elem)
 	}
 	return nil
 }
@@ -416,56 +509,179 @@ func (s *sliceConcreteValueSerializer) NeedToWriteRef() bool {
 
 func (s *sliceConcreteValueSerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
 	length := value.Len()
-	if err := ctx.WriteLength(length); err != nil {
-		return err
+	buf := ctx.Buffer()
+
+	// Write length
+	buf.WriteVarUint32(uint32(length))
+	if length == 0 {
+		return nil
 	}
 
-	var prevType reflect.Type
+	// Determine collection flags - don't set CollectionIsDeclElementType
+	// so that the element type ID is written and can be read by generic deserializer
+	collectFlag := CollectionIsSameType
+	hasNull := false
+
+	// Check for null values first
 	for i := 0; i < length; i++ {
 		elem := value.Index(i)
-		elemType := elem.Type()
-
-		var elemSerializer Serializer
-		if i == 0 || elemType != prevType {
-			elemSerializer = nil
-		} else {
-			elemSerializer = s.elemSerializer
+		if elem.Kind() == reflect.Ptr || elem.Kind() == reflect.Interface {
+			if elem.IsNil() {
+				hasNull = true
+				break
+			}
 		}
+	}
 
-		if err := writeBySerializer(ctx, elem, elemSerializer, s.referencable); err != nil {
+	if hasNull {
+		collectFlag |= CollectionHasNull
+	}
+	if ctx.RefTracking() && s.referencable {
+		collectFlag |= CollectionTrackingRef
+	}
+	buf.WriteInt8(int8(collectFlag))
+
+	// Write element type info since CollectionIsDeclElementType is not set
+	var elemTypeInfo TypeInfo
+	if length > 0 {
+		// Get type info for the first non-nil element to get proper typeID
+		for i := 0; i < length; i++ {
+			elem := value.Index(i)
+			if elem.Kind() == reflect.Ptr || elem.Kind() == reflect.Interface {
+				if !elem.IsNil() {
+					elemTypeInfo, _ = ctx.TypeResolver().getTypeInfo(elem.Elem(), true)
+					break
+				}
+			} else {
+				elemTypeInfo, _ = ctx.TypeResolver().getTypeInfo(elem, true)
+				break
+			}
+		}
+	}
+	// Write element type info (handles namespaced types properly)
+	internalTypeID := elemTypeInfo.TypeID
+	if elemTypeInfo.TypeID < 0 {
+		internalTypeID = -internalTypeID
+	}
+	if IsNamespacedType(TypeId(internalTypeID)) {
+		if err := ctx.TypeResolver().writeTypeInfo(buf, elemTypeInfo); err != nil {
 			return err
 		}
+	} else {
+		buf.WriteVarInt32(elemTypeInfo.TypeID)
+	}
 
-		prevType = elemType
+	// Write elements
+	trackRefs := (collectFlag & CollectionTrackingRef) != 0
+
+	for i := 0; i < length; i++ {
+		elem := value.Index(i)
+
+		// Handle null values
+		if hasNull && (elem.Kind() == reflect.Ptr || elem.Kind() == reflect.Interface) && elem.IsNil() {
+			buf.WriteInt8(NullFlag)
+			continue
+		}
+
+		if trackRefs {
+			// Track the element as-is (pointer for pointer types, value for value types)
+			refWritten, err := ctx.RefResolver().WriteRefOrNull(buf, elem)
+			if err != nil {
+				return err
+			}
+			if refWritten {
+				continue
+			}
+		}
+
+		// Write the element using its serializer
+		if err := s.elemSerializer.WriteValue(ctx, elem); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
 func (s *sliceConcreteValueSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
-	length := ctx.ReadLength()
+	buf := ctx.Buffer()
+	length := int(buf.ReadVarUint32())
+	if length == 0 {
+		value.Set(reflect.MakeSlice(value.Type(), 0, 0))
+		return nil
+	}
+
+	// Read collection flags
+	collectFlag := buf.ReadInt8()
+
+	// Read element type info if not using declared type
+	if (collectFlag & CollectionIsDeclElementType) == 0 {
+		typeID := buf.ReadVarInt32()
+		// Read additional metadata for namespaced types
+		_, _ = ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID)
+	}
+
 	if value.Cap() < length {
 		value.Set(reflect.MakeSlice(value.Type(), length, length))
 	} else if value.Len() < length {
 		value.Set(value.Slice(0, length))
 	}
 	ctx.RefResolver().Reference(value)
-	var prevType reflect.Type
+
+	trackRefs := (collectFlag & CollectionTrackingRef) != 0
+	elemType := s.type_.Elem()
+
 	for i := 0; i < length; i++ {
-
 		elem := value.Index(i)
-		elemType := elem.Type()
+		var refID int32 = -1
 
-		var elemSerializer Serializer
-		if i == 0 || elemType != prevType {
-			elemSerializer = nil
+		if trackRefs {
+			refID, _ = ctx.RefResolver().TryPreserveRefId(buf)
+			if int8(refID) < NotNullValueFlag {
+				// Back-reference or null
+				if int8(refID) == NullFlag {
+					continue // elem stays zero-valued
+				}
+				elem.Set(ctx.RefResolver().GetCurrentReadObject())
+				continue
+			}
+		}
+
+		// For pointer element types, we handle allocation and reference registration
+		// ourselves since we've already read the reference flag at the collection level.
+		if elemType.Kind() == reflect.Ptr {
+			// Create a new pointer value
+			newVal := reflect.New(elemType.Elem())
+			// Register the reference BEFORE reading content (for circular refs)
+			if trackRefs && refID >= 0 {
+				ctx.RefResolver().SetReadObject(refID, newVal)
+			}
+			// Read the struct content. We need to handle different serializer types:
+			// - ptrToStructSerializer: registered named types, use underlying structSerializer
+			// - ptrToValueSerializer: generic pointer types, use underlying valueSerializer
+			switch ser := s.elemSerializer.(type) {
+			case *ptrToStructSerializer:
+				if err := ser.structSerializer.ReadValue(ctx, elemType.Elem(), newVal.Elem()); err != nil {
+					return err
+				}
+			case *ptrToValueSerializer:
+				if err := ser.valueSerializer.ReadValue(ctx, elemType.Elem(), newVal.Elem()); err != nil {
+					return err
+				}
+			default:
+				// Fallback: call serializer directly (may not work correctly for all types)
+				if err := s.elemSerializer.ReadValue(ctx, elemType, newVal); err != nil {
+					return err
+				}
+			}
+			elem.Set(newVal)
 		} else {
-			elemSerializer = s.elemSerializer
+			if err := s.elemSerializer.ReadValue(ctx, elemType, elem); err != nil {
+				return err
+			}
+			if trackRefs && refID >= 0 {
+				ctx.RefResolver().SetReadObject(refID, elem)
+			}
 		}
-		if err := readBySerializer(ctx, value.Index(i), elemSerializer, s.referencable); err != nil {
-			return err
-		}
-
-		prevType = elemType
 	}
 	return nil
 }

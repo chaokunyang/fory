@@ -430,12 +430,33 @@ func buildFieldType(fory *Fory, fieldValue reflect.Value) (FieldType, error) {
 		typeId = -typeId // restore pointer type id
 	}
 
-	// Handle slice and array types
-	if typeId == LIST || typeId == SET {
-		// Create a zero value of the element type for recursive processing
+	// Handle slice and array types by reflect.Kind
+	// For fixed-size arrays with primitive elements, use primitive array type IDs (INT16_ARRAY, etc.)
+	// For slices and arrays with non-primitive elements, use collection format
+	if fieldType.Kind() == reflect.Slice || fieldType.Kind() == reflect.Array {
 		elemType := fieldType.Elem()
-		elemValue := reflect.Zero(elemType)
 
+		// Check if element is a primitive type that maps to a primitive array type ID
+		// Only fixed-size arrays use primitive array format; slices always use LIST
+		if fieldType.Kind() == reflect.Array {
+			switch elemType.Kind() {
+			case reflect.Int8:
+				return NewSimpleFieldType(INT8_ARRAY), nil
+			case reflect.Int16:
+				return NewSimpleFieldType(INT16_ARRAY), nil
+			case reflect.Int32:
+				return NewSimpleFieldType(INT32_ARRAY), nil
+			case reflect.Int64:
+				return NewSimpleFieldType(INT64_ARRAY), nil
+			case reflect.Float32:
+				return NewSimpleFieldType(FLOAT32_ARRAY), nil
+			case reflect.Float64:
+				return NewSimpleFieldType(FLOAT64_ARRAY), nil
+			}
+		}
+
+		// For slices and non-primitive arrays, use collection format
+		elemValue := reflect.Zero(elemType)
 		elementFieldType, err := buildFieldType(fory, elemValue)
 		if err != nil {
 			return nil, fmt.Errorf("failed to build element field type: %w", err)
@@ -444,8 +465,8 @@ func buildFieldType(fory *Fory, fieldValue reflect.Value) (FieldType, error) {
 		return NewCollectionFieldType(LIST, elementFieldType), nil
 	}
 
-	// Handle map types
-	if typeId == MAP {
+	// Handle map types by reflect.Kind for consistency
+	if fieldType.Kind() == reflect.Map {
 		// Create zero values for key and value types
 		keyType := fieldType.Key()
 		valueType := fieldType.Elem()

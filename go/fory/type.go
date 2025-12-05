@@ -608,14 +608,17 @@ func (r *typeResolver) getTypeInfo(value reflect.Value, create bool) (TypeInfo, 
 	var pkgPath string
 	rawInfo, ok := r.typeToTypeInfo[type_]
 	if !ok {
-		fmt.Errorf("type %v not registered with a tag", type_)
-	}
-	clean := strings.TrimPrefix(rawInfo, "*@")
-	clean = strings.TrimPrefix(clean, "@")
-	typeName = clean
-	if idx := strings.LastIndex(clean, "."); idx != -1 {
-		pkgPath = clean[:idx]
-		typeName = clean[idx+1:]
+		// Type not explicitly registered - extract from reflect.Type
+		pkgPath = type_.PkgPath()
+		typeName = type_.Name()
+	} else {
+		clean := strings.TrimPrefix(rawInfo, "*@")
+		clean = strings.TrimPrefix(clean, "@")
+		typeName = clean
+		if idx := strings.LastIndex(clean, "."); idx != -1 {
+			pkgPath = clean[:idx]
+			typeName = clean[idx+1:]
+		}
 	}
 
 	// Handle special types that require explicit registration
@@ -807,7 +810,8 @@ func (r *typeResolver) writeTypeInfo(buffer *ByteBuffer, typeInfo TypeInfo) erro
 	}
 
 	// Write the type ID to buffer (variable-length encoding)
-	buffer.WriteVarUint32(uint32(typeID))
+	// Use WriteVarInt32 to match readTypeInfo which uses ReadVarInt32
+	buffer.WriteVarInt32(typeID)
 
 	// For namespaced types, write additional metadata:
 	if IsNamespacedType(TypeId(internalTypeID)) {
@@ -1275,6 +1279,71 @@ func (r *typeResolver) readTypeInfo(buffer *ByteBuffer, value reflect.Value) (Ty
 	}
 
 	return TypeInfo{}, nil
+}
+
+// readTypeInfoWithTypeID reads type info when the typeID has already been read from buffer.
+// This is used by collection serializers that read typeID separately before deciding how to proceed.
+func (r *typeResolver) readTypeInfoWithTypeID(buffer *ByteBuffer, typeID int32) (TypeInfo, error) {
+	internalTypeID := typeID
+	if typeID < 0 {
+		internalTypeID = -internalTypeID
+	}
+	if IsNamespacedType(TypeId(internalTypeID)) {
+		if r.metaShareEnabled() {
+			return r.readSharedTypeMeta(buffer, reflect.Value{})
+		}
+		// Read namespace and type name metadata bytes
+		nsBytes, err := r.metaStringResolver.ReadMetaStringBytes(buffer)
+		if err != nil {
+			return TypeInfo{}, fmt.Errorf("failed to read namespace bytes: %w", err)
+		}
+
+		typeBytes, err := r.metaStringResolver.ReadMetaStringBytes(buffer)
+		if err != nil {
+			return TypeInfo{}, fmt.Errorf("failed to read type bytes: %w", err)
+		}
+
+		compositeKey := nsTypeKey{nsBytes.Hashcode, typeBytes.Hashcode}
+		if typeInfo, exists := r.nsTypeToTypeInfo[compositeKey]; exists {
+			// Adjust type info for pointer vs value types
+			if typeID > 0 && typeInfo.Type.Kind() == reflect.Ptr {
+				typeInfo.Type = typeInfo.Type.Elem()
+				typeInfo.Serializer = r.typeToSerializers[typeInfo.Type]
+				typeInfo.TypeID = typeID
+			} else if typeID < 0 && typeInfo.Type.Kind() != reflect.Ptr {
+				realType := reflect.PtrTo(typeInfo.Type)
+				typeInfo.Type = realType
+				typeInfo.Serializer = r.typeToSerializers[typeInfo.Type]
+				typeInfo.TypeID = typeID
+			}
+			return typeInfo, nil
+		}
+
+		// If not found, decode the bytes to strings and try again
+		ns, err := r.namespaceDecoder.Decode(nsBytes.Data, nsBytes.Encoding)
+		if err != nil {
+			return TypeInfo{}, fmt.Errorf("namespace decode failed: %w", err)
+		}
+
+		typeName, err := r.typeNameDecoder.Decode(typeBytes.Data, typeBytes.Encoding)
+		if err != nil {
+			return TypeInfo{}, fmt.Errorf("typename decode failed: %w", err)
+		}
+
+		nameKey := [2]string{ns, typeName}
+		if typeInfo, exists := r.namedTypeToTypeInfo[nameKey]; exists {
+			r.nsTypeToTypeInfo[compositeKey] = typeInfo
+			return typeInfo, nil
+		}
+		return TypeInfo{}, fmt.Errorf("namespaced type not found: %s.%s", ns, typeName)
+	}
+
+	// Handle simple type IDs (non-namespaced types)
+	if typeInfo, exists := r.typeIDToTypeInfo[typeID]; exists {
+		return typeInfo, nil
+	}
+
+	return TypeInfo{}, fmt.Errorf("typeInfo of typeID %d not found", typeID)
 }
 
 // TypeUnregisteredError indicates when a requested type is not registered

@@ -276,16 +276,37 @@ func (s *structSerializer) initFieldsFromContext(ctx interface{ TypeResolver() *
 		var fieldSerializer Serializer
 		if fieldType.Kind() != reflect.Struct {
 			fieldSerializer, _ = typeResolver.getSerializerByType(fieldType, true)
-			if fieldType.Kind() == reflect.Array {
+			if fieldType.Kind() == reflect.Array && fieldType.Elem().Kind() != reflect.Interface {
+				// For fixed-size arrays with primitive elements, use primitive array serializers
+				// to match cross-language format (Python int8_array, int16_array, etc.)
 				elemType := fieldType.Elem()
-				sliceType := reflect.SliceOf(elemType)
-				fieldSerializer = typeResolver.typeToSerializers[sliceType]
+				switch elemType.Kind() {
+				case reflect.Int8:
+					fieldSerializer = int8ArraySerializer{}
+				case reflect.Int16:
+					fieldSerializer = int16ArraySerializer{}
+				case reflect.Int32:
+					fieldSerializer = int32ArraySerializer{}
+				case reflect.Int64:
+					fieldSerializer = int64ArraySerializer{}
+				case reflect.Float32:
+					fieldSerializer = float32ArraySerializer{}
+				case reflect.Float64:
+					fieldSerializer = float64ArraySerializer{}
+				default:
+					// For non-primitive arrays, use sliceSerializer
+					fieldSerializer = sliceSerializer{
+						elemInfo:     typeResolver.typesInfo[elemType],
+						declaredType: elemType,
+					}
+				}
 			} else if fieldType.Kind() == reflect.Slice && fieldType.Elem().Kind() != reflect.Interface {
 				// For struct fields, always use the generic sliceSerializer for cross-language compatibility
 				// The generic sliceSerializer uses collection flags and element type ID format
 				// which matches the codegen format
 				fieldSerializer = sliceSerializer{
-					elemInfo: typeResolver.typesInfo[fieldType.Elem()],
+					elemInfo:     typeResolver.typesInfo[fieldType.Elem()],
+					declaredType: fieldType.Elem(),
 				}
 			}
 		}
@@ -422,7 +443,28 @@ func (s *structSerializer) computeHash() int32 {
 			typeId = UNKNOWN
 		} else {
 			typeId = field.Serializer.TypeId()
-			if field.Type.Kind() == reflect.Slice {
+			// For fixed-size arrays with primitive elements, use primitive array type IDs
+			// This matches Python's int8_array, int16_array, etc. types
+			if field.Type.Kind() == reflect.Array {
+				elemKind := field.Type.Elem().Kind()
+				switch elemKind {
+				case reflect.Int8:
+					typeId = INT8_ARRAY
+				case reflect.Int16:
+					typeId = INT16_ARRAY
+				case reflect.Int32:
+					typeId = INT32_ARRAY
+				case reflect.Int64:
+					typeId = INT64_ARRAY
+				case reflect.Float32:
+					typeId = FLOAT32_ARRAY
+				case reflect.Float64:
+					typeId = FLOAT64_ARRAY
+				default:
+					typeId = LIST
+				}
+			} else if field.Type.Kind() == reflect.Slice {
+				// Slices use LIST type ID (maps to Python List[T])
 				typeId = LIST
 			}
 		}
@@ -463,7 +505,20 @@ func (s *ptrToStructSerializer) NeedToWriteRef() bool {
 }
 
 func (s *ptrToStructSerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
-	return s.structSerializer.WriteValue(ctx, value.Elem())
+	elemValue := value.Elem()
+
+	// In compatible mode, write typeInfo for the struct so TypeDefs are collected
+	if ctx.Compatible() {
+		typeInfo, err := ctx.TypeResolver().getTypeInfo(elemValue, true)
+		if err != nil {
+			return err
+		}
+		if err := ctx.TypeResolver().writeTypeInfo(ctx.Buffer(), typeInfo); err != nil {
+			return err
+		}
+	}
+
+	return s.structSerializer.WriteValue(ctx, elemValue)
 }
 
 func (s *ptrToStructSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
@@ -471,6 +526,9 @@ func (s *ptrToStructSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, 
 	value.Set(newValue)
 	elem := newValue.Elem()
 	ctx.RefResolver().Reference(newValue)
+
+	// In compatible mode, the structSerializer may have fieldDefs from TypeDef
+	// which were set when this ptrToStructSerializer was created by readSharedTypeMeta
 	return s.structSerializer.ReadValue(ctx, type_.Elem(), elem)
 }
 
@@ -823,7 +881,28 @@ func computeStructHash(fieldsInfo structFieldsInfo, typeResolver *typeResolver) 
 			typeId = UNKNOWN
 		} else {
 			typeId = serializer.TypeId()
-			if fieldInfo.type_.Kind() == reflect.Slice {
+			// For fixed-size arrays with primitive elements, use primitive array type IDs
+			// This matches Python's int8_array, int16_array, etc. types
+			if fieldInfo.type_.Kind() == reflect.Array {
+				elemKind := fieldInfo.type_.Elem().Kind()
+				switch elemKind {
+				case reflect.Int8:
+					typeId = INT8_ARRAY
+				case reflect.Int16:
+					typeId = INT16_ARRAY
+				case reflect.Int32:
+					typeId = INT32_ARRAY
+				case reflect.Int64:
+					typeId = INT64_ARRAY
+				case reflect.Float32:
+					typeId = FLOAT32_ARRAY
+				case reflect.Float64:
+					typeId = FLOAT64_ARRAY
+				default:
+					typeId = LIST
+				}
+			} else if fieldInfo.type_.Kind() == reflect.Slice {
+				// Slices use LIST type ID (maps to Python List[T])
 				typeId = LIST
 			}
 		}

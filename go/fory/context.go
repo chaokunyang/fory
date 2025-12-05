@@ -34,15 +34,17 @@ var ErrTypeMismatch = errors.New("fory: type ID mismatch")
 // WriteContext holds all state needed during serialization.
 // It replaces passing multiple parameters to every method.
 type WriteContext struct {
-	buffer       *ByteBuffer
-	refWriter    *RefWriter
-	registry     *GenericRegistry
-	refTracking  bool // Cached flag to avoid indirection
-	compatible   bool // Schema evolution compatibility mode
-	depth        int
-	maxDepth     int
-	typeResolver *typeResolver // For complex type serialization
-	refResolver  *RefResolver  // For reference tracking (legacy)
+	buffer         *ByteBuffer
+	refWriter      *RefWriter
+	registry       *GenericRegistry
+	refTracking    bool // Cached flag to avoid indirection
+	compatible     bool // Schema evolution compatibility mode
+	depth          int
+	maxDepth       int
+	typeResolver   *typeResolver                   // For complex type serialization
+	refResolver    *RefResolver                    // For reference tracking (legacy)
+	bufferCallback func(BufferObject) bool         // Callback for out-of-band buffers
+	outOfBand      bool                            // Whether out-of-band serialization is enabled
 }
 
 // NewWriteContext creates a new write context
@@ -61,6 +63,21 @@ func (c *WriteContext) Reset() {
 	c.buffer.Reset()
 	c.refWriter.Reset()
 	c.depth = 0
+	if c.refResolver != nil {
+		c.refResolver.resetWrite()
+	}
+	if c.typeResolver != nil {
+		c.typeResolver.resetWrite()
+	}
+}
+
+// ResetState clears internal state but NOT the buffer.
+// Use this when streaming multiple values to an external buffer.
+func (c *WriteContext) ResetState() {
+	c.refWriter.Reset()
+	c.depth = 0
+	c.bufferCallback = nil
+	c.outOfBand = false
 	if c.refResolver != nil {
 		c.refResolver.resetWrite()
 	}
@@ -139,17 +156,28 @@ func (c *WriteContext) WriteLength(length int) error {
 }
 
 // WriteBufferObject writes a buffer object
+// If a buffer callback is set and returns false, the buffer is written out-of-band
 func (c *WriteContext) WriteBufferObject(bufferObject BufferObject) error {
-	c.buffer.WriteBool(true)
-	size := bufferObject.TotalBytes()
-	c.buffer.WriteLength(size)
-	writerIndex := c.buffer.writerIndex
-	c.buffer.grow(size)
-	bufferObject.WriteTo(c.buffer.Slice(writerIndex, size))
-	c.buffer.writerIndex += size
-	if size > MaxInt32 {
-		return fmt.Errorf("length %d exceeds max int32", size)
+	// Check if we should write this buffer out-of-band
+	inBand := true
+	if c.bufferCallback != nil {
+		inBand = c.bufferCallback(bufferObject)
 	}
+
+	c.buffer.WriteBool(inBand)
+	if inBand {
+		// Write the buffer data in-band
+		size := bufferObject.TotalBytes()
+		c.buffer.WriteLength(size)
+		writerIndex := c.buffer.writerIndex
+		c.buffer.grow(size)
+		bufferObject.WriteTo(c.buffer.Slice(writerIndex, size))
+		c.buffer.writerIndex += size
+		if size > MaxInt32 {
+			return fmt.Errorf("length %d exceeds max int32", size)
+		}
+	}
+	// If out-of-band, we just write false (already done above) and the data is handled externally
 	return nil
 }
 
@@ -219,13 +247,15 @@ func (c *WriteContext) writeValue(value reflect.Value, serializer Serializer) er
 
 // ReadContext holds all state needed during deserialization.
 type ReadContext struct {
-	buffer       *ByteBuffer
-	refReader    *RefReader
-	registry     *GenericRegistry
-	refTracking  bool          // Cached flag to avoid indirection
-	compatible   bool          // Schema evolution compatibility mode
-	typeResolver *typeResolver // For complex type deserialization
-	refResolver  *RefResolver  // For reference tracking (legacy)
+	buffer          *ByteBuffer
+	refReader       *RefReader
+	registry        *GenericRegistry
+	refTracking     bool          // Cached flag to avoid indirection
+	compatible      bool          // Schema evolution compatibility mode
+	typeResolver    *typeResolver // For complex type deserialization
+	refResolver     *RefResolver  // For reference tracking (legacy)
+	outOfBandBuffers []*ByteBuffer // Out-of-band buffers for deserialization
+	outOfBandIndex   int           // Current index into out-of-band buffers
 }
 
 // NewReadContext creates a new read context
@@ -241,6 +271,8 @@ func NewReadContext(registry *GenericRegistry, refTracking bool) *ReadContext {
 // Reset clears state for reuse (called before each Deserialize)
 func (c *ReadContext) Reset() {
 	c.refReader.Reset()
+	c.outOfBandBuffers = nil
+	c.outOfBandIndex = 0
 	if c.refResolver != nil {
 		c.refResolver.resetRead()
 	}
@@ -338,7 +370,13 @@ func (c *ReadContext) ReadBufferObject() (*ByteBuffer, error) {
 		c.buffer.readerIndex += size
 		return buf, nil
 	}
-	return nil, fmt.Errorf("out-of-band buffers not supported in context mode")
+	// Out-of-band: get the next buffer from the out-of-band buffers list
+	if c.outOfBandBuffers == nil || c.outOfBandIndex >= len(c.outOfBandBuffers) {
+		return nil, fmt.Errorf("out-of-band buffer expected but not available at index %d", c.outOfBandIndex)
+	}
+	buf := c.outOfBandBuffers[c.outOfBandIndex]
+	c.outOfBandIndex++
+	return buf, nil
 }
 
 // ReadValue reads a polymorphic value with reference tracking

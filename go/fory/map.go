@@ -305,7 +305,7 @@ func (s mapSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value ref
 	}
 
 	refResolver.Reference(value)
-	size := int(buf.ReadUint8())
+	size := int(buf.ReadVarUint32())
 	var chunkHeader uint8
 	if size > 0 {
 		chunkHeader = buf.ReadUint8()

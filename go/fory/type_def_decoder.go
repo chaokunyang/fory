@@ -77,10 +77,37 @@ func decodeTypeDef(fory *Fory, buffer *ByteBuffer, header int64) (*TypeDef, erro
 		nameBytes = readingNameBytes
 		info, exists := fory.typeResolver.nsTypeToTypeInfo[nsTypeKey{nsBytes.Hashcode, nameBytes.Hashcode}]
 		if !exists {
-			return nil, fmt.Errorf("type not registered")
+			// Try fallback: decode strings and look up by name
+			ns, _ := fory.typeResolver.namespaceDecoder.Decode(nsBytes.Data, nsBytes.Encoding)
+			typeName, _ := fory.typeResolver.typeNameDecoder.Decode(nameBytes.Data, nameBytes.Encoding)
+			nameKey := [2]string{ns, typeName}
+			if fallbackInfo, fallbackExists := fory.typeResolver.namedTypeToTypeInfo[nameKey]; fallbackExists {
+				info = fallbackInfo
+				exists = true
+				fory.typeResolver.nsTypeToTypeInfo[nsTypeKey{nsBytes.Hashcode, nameBytes.Hashcode}] = info
+			}
 		}
-		typeId = TypeId(info.TypeID)
-		type_ = info.Type
+		if exists {
+			// TypeDef is always for value types, but nsTypeToTypeInfo may have pointer type
+			// if pointer type was registered after value type. Normalize to value type.
+			type_ = info.Type
+			if type_.Kind() == reflect.Ptr {
+				type_ = type_.Elem()
+				// Use positive typeId for value type
+				if info.TypeID < 0 {
+					typeId = TypeId(-info.TypeID)
+				} else {
+					typeId = TypeId(info.TypeID)
+				}
+			} else {
+				typeId = TypeId(info.TypeID)
+			}
+		} else {
+			// Type not registered - use NAMED_STRUCT as default typeId
+			// The type_ will remain nil and will be set from field definitions later
+			typeId = NAMED_STRUCT
+			type_ = nil
+		}
 	} else {
 		typeId = TypeId(metaBuffer.ReadVarInt32())
 		if info, err := fory.typeResolver.getTypeInfoById(typeId); err != nil {

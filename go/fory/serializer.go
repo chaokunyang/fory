@@ -1098,13 +1098,35 @@ func (s *ptrToValueSerializer) NeedToWriteRef() bool { return true }
 
 // Serializer interface methods
 func (s *ptrToValueSerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
-	// Dereference pointer and write the value
-	return s.valueSerializer.WriteValue(ctx, value.Elem())
+	elemValue := value.Elem()
+
+	// In compatible mode, write typeInfo for struct types so TypeDefs are collected
+	if ctx.Compatible() && s.valueSerializer.TypeId() == NAMED_STRUCT {
+		typeInfo, err := ctx.TypeResolver().getTypeInfo(elemValue, true)
+		if err != nil {
+			return err
+		}
+		if err := ctx.TypeResolver().writeTypeInfo(ctx.Buffer(), typeInfo); err != nil {
+			return err
+		}
+	}
+
+	return s.valueSerializer.WriteValue(ctx, elemValue)
 }
 
 func (s *ptrToValueSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	// Allocate new value and read into it
 	newVal := reflect.New(type_.Elem())
+
+	// In compatible mode, read typeInfo for struct types
+	if ctx.Compatible() && s.valueSerializer.TypeId() == NAMED_STRUCT {
+		// Read typeInfo (typeId + metaIndex) to consume the bytes written by WriteValue
+		_, err := ctx.TypeResolver().readTypeInfo(ctx.Buffer(), newVal.Elem())
+		if err != nil {
+			return err
+		}
+	}
+
 	if err := s.valueSerializer.ReadValue(ctx, type_.Elem(), newVal.Elem()); err != nil {
 		return err
 	}
@@ -1351,10 +1373,14 @@ func writeBySerializer(ctx *WriteContext, value reflect.Value, serializer Serial
 			return nil
 		}
 	}
-	// If no serializer provided, look it up from typeResolver
+	// If no serializer provided, look it up from typeResolver and write type info
 	if serializer == nil {
 		typeInfo, err := ctx.TypeResolver().getTypeInfo(value, true)
 		if err != nil {
+			return err
+		}
+		// Write type info for dynamic types (so reader can look up the serializer)
+		if err := ctx.TypeResolver().writeTypeInfo(buf, typeInfo); err != nil {
 			return err
 		}
 		serializer = typeInfo.Serializer

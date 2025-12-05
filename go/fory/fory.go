@@ -23,7 +23,6 @@ import (
 	"fmt"
 	"reflect"
 	"sync"
-	"unsafe"
 )
 
 // ============================================================================
@@ -606,102 +605,112 @@ func serializeSlowPath[T any](f *Fory, value T) ([]byte, error) {
 // Falls back to reflection-based deserialization for unregistered types.
 // Note: Fory instance is NOT thread-safe. Use ThreadSafeFory for concurrent use.
 func Deserialize[T any](f *Fory, data []byte) (T, error) {
-	var zero T
+	var result T
+	err := DeserializeTo(f, data, &result)
+	return result, err
+}
 
+// DeserializeTo deserializes directly into the provided target, avoiding allocation when possible.
+// For primitive types, this writes directly to the target pointer.
+// For slices, it reuses existing capacity when possible.
+// For structs, it reads directly into the struct fields.
+// Note: Fory instance is NOT thread-safe. Use ThreadSafeFory for concurrent use.
+func DeserializeTo[T any](f *Fory, data []byte, target *T) error {
 	// Reuse context, reset and set new data
 	f.readCtx.Reset()
 	f.readCtx.SetData(data)
 
 	// Read and validate header
 	if err := readHeader(f.readCtx); err != nil {
-		return zero, err
+		return err
 	}
 
 	// Fast path: type switch for common types (Go compiler can optimize this)
-	// Uses unsafe.Pointer for zero-allocation type casting
-	switch any(zero).(type) {
-	case bool:
-		val, err := globalBoolSerializer.Read(f.readCtx, true, true)
-		if err != nil {
-			return zero, err
-		}
-		return *(*T)(unsafe.Pointer(&val)), nil
-	case int8:
-		val, err := globalInt8Serializer.Read(f.readCtx, true, true)
-		if err != nil {
-			return zero, err
-		}
-		return *(*T)(unsafe.Pointer(&val)), nil
-	case int16:
-		val, err := globalInt16Serializer.Read(f.readCtx, true, true)
-		if err != nil {
-			return zero, err
-		}
-		return *(*T)(unsafe.Pointer(&val)), nil
-	case int32:
-		val, err := globalInt32Serializer.Read(f.readCtx, true, true)
-		if err != nil {
-			return zero, err
-		}
-		return *(*T)(unsafe.Pointer(&val)), nil
-	case int64:
-		val, err := globalInt64Serializer.Read(f.readCtx, true, true)
-		if err != nil {
-			return zero, err
-		}
-		return *(*T)(unsafe.Pointer(&val)), nil
-	case float32:
-		val, err := globalFloat32Serializer.Read(f.readCtx, true, true)
-		if err != nil {
-			return zero, err
-		}
-		return *(*T)(unsafe.Pointer(&val)), nil
-	case float64:
-		val, err := globalFloat64Serializer.Read(f.readCtx, true, true)
-		if err != nil {
-			return zero, err
-		}
-		return *(*T)(unsafe.Pointer(&val)), nil
-	case string:
-		val, err := globalStringSerializer.Read(f.readCtx, true, true)
-		if err != nil {
-			return zero, err
-		}
-		return *(*T)(unsafe.Pointer(&val)), nil
-	case []byte:
+	switch t := any(target).(type) {
+	case *bool:
+		return globalBoolSerializer.ReadTo(f.readCtx, t, true, true)
+	case *int8:
+		return globalInt8Serializer.ReadTo(f.readCtx, t, true, true)
+	case *int16:
+		return globalInt16Serializer.ReadTo(f.readCtx, t, true, true)
+	case *int32:
+		return globalInt32Serializer.ReadTo(f.readCtx, t, true, true)
+	case *int64:
+		return globalInt64Serializer.ReadTo(f.readCtx, t, true, true)
+	case *float32:
+		return globalFloat32Serializer.ReadTo(f.readCtx, t, true, true)
+	case *float64:
+		return globalFloat64Serializer.ReadTo(f.readCtx, t, true, true)
+	case *string:
+		return globalStringSerializer.ReadTo(f.readCtx, t, true, true)
+	case *[]byte:
 		val, err := deserializeByteSliceFast(f.readCtx)
 		if err != nil {
-			return zero, err
+			return err
 		}
-		return *(*T)(unsafe.Pointer(&val)), nil
-	case []int32:
-		val, err := deserializeInt32SliceFast(f.readCtx)
-		if err != nil {
-			return zero, err
-		}
-		return *(*T)(unsafe.Pointer(&val)), nil
-	case []int64:
-		val, err := deserializeInt64SliceFast(f.readCtx)
-		if err != nil {
-			return zero, err
-		}
-		return *(*T)(unsafe.Pointer(&val)), nil
-	case []float64:
-		val, err := deserializeFloat64SliceFast(f.readCtx)
-		if err != nil {
-			return zero, err
-		}
-		return *(*T)(unsafe.Pointer(&val)), nil
-	case []bool:
-		val, err := deserializeBoolSliceFast(f.readCtx)
-		if err != nil {
-			return zero, err
-		}
-		return *(*T)(unsafe.Pointer(&val)), nil
+		*t = val
+		return nil
+	case *[]int32:
+		return deserializeInt32SliceFastTo(f.readCtx, t)
+	case *[]int64:
+		return deserializeInt64SliceFastTo(f.readCtx, t)
+	case *[]float64:
+		return deserializeFloat64SliceFastTo(f.readCtx, t)
+	case *[]bool:
+		return deserializeBoolSliceFastTo(f.readCtx, t)
 	}
 
 	// Slow path: use registry lookup or reflection
-	return deserializeSlowPath[T](f, data)
+	return deserializeToSlowPath(f, data, target)
+}
+
+// deserializeToSlowPath handles DeserializeTo for types not in the fast path
+func deserializeToSlowPath[T any](f *Fory, data []byte, target *T) error {
+	serializer, err := TryGetSerializer[T](f.registry)
+	if err != nil {
+		// Fall back to reflection-based deserialization
+		f.readCtx.Reset()
+		result, err := DeserializeAny(f, data)
+		if err != nil {
+			return err
+		}
+		if result != nil {
+			resultVal := reflect.ValueOf(result)
+			targetVal := reflect.ValueOf(target).Elem()
+			targetType := targetVal.Type()
+
+			if resultVal.Type().AssignableTo(targetType) {
+				targetVal.Set(resultVal)
+			} else if resultVal.Type().ConvertibleTo(targetType) {
+				targetVal.Set(resultVal.Convert(targetType))
+			} else if resultVal.Kind() == reflect.Ptr && resultVal.Type().Elem().AssignableTo(targetType) {
+				targetVal.Set(resultVal.Elem())
+			} else if resultVal.Kind() == reflect.Ptr && resultVal.Type().Elem().ConvertibleTo(targetType) {
+				targetVal.Set(resultVal.Elem().Convert(targetType))
+			} else if targetType.Kind() == reflect.Map && resultVal.Kind() == reflect.Map {
+				// Handle map[interface{}]interface{} to map[K]V conversion
+				converted := convertMap(resultVal, targetType)
+				if converted.IsValid() {
+					targetVal.Set(converted)
+				}
+			} else if targetType.Kind() == reflect.Slice && resultVal.Kind() == reflect.Slice {
+				// Handle []interface{} to []T conversion
+				converted := convertSlice(resultVal, targetType)
+				if converted.IsValid() {
+					targetVal.Set(converted)
+				}
+			} else if targetType.Kind() == reflect.Struct && resultVal.Kind() == reflect.Ptr {
+				elemVal := resultVal.Elem()
+				if elemVal.Type() == targetType {
+					targetVal.Set(elemVal)
+				}
+			}
+		}
+		return nil
+	}
+
+	// Use typed serializer's ReadTo method
+	return serializer.ReadTo(f.readCtx, target, true, true)
 }
 
 // deserializeSlowPath handles deserialization for types not in the fast path
@@ -1010,6 +1019,14 @@ func DeserializeAnyTS(tsf *ThreadSafeFory, data []byte) (any, error) {
 	return DeserializeAny(f, data)
 }
 
+// DeserializeToTS deserializes directly into target, thread-safe.
+// Reuses existing capacity for slices when possible.
+func DeserializeToTS[T any](tsf *ThreadSafeFory, data []byte, target *T) error {
+	f := tsf.acquire()
+	defer tsf.release(f)
+	return DeserializeTo(f, data, target)
+}
+
 // ============================================================================
 // Convenience Functions
 // ============================================================================
@@ -1032,6 +1049,12 @@ func UnmarshalTo(data []byte, v interface{}) error {
 	f := globalFory.acquire()
 	defer globalFory.release(f)
 	return f.Unmarshal(data, v)
+}
+
+// UnmarshalToTyped deserializes data directly into target using the global thread-safe instance (generic version)
+// This is the most efficient way to deserialize when you have an existing value to reuse.
+func UnmarshalToTyped[T any](data []byte, target *T) error {
+	return DeserializeToTS(globalFory, data, target)
 }
 
 // ============================================================================
@@ -1162,4 +1185,88 @@ func deserializeBoolSliceFast(ctx *ReadContext) ([]bool, error) {
 		result[i] = ctx.buffer.ReadBool()
 	}
 	return result, nil
+}
+
+// ============================================================================
+// Fast Path Deserialization-To Helpers
+// These functions deserialize directly into existing slices, reusing capacity
+// ============================================================================
+
+// deserializeInt32SliceFastTo deserializes []int32 directly into target, reusing capacity
+func deserializeInt32SliceFastTo(ctx *ReadContext, target *[]int32) error {
+	_ = ctx.buffer.ReadInt8()  // ref flag
+	_ = ctx.buffer.ReadInt16() // type id
+	size := ctx.buffer.ReadLength()
+	length := size / 4
+
+	// Reuse existing capacity if sufficient
+	if cap(*target) >= length {
+		*target = (*target)[:length]
+	} else {
+		*target = make([]int32, length)
+	}
+
+	for i := 0; i < length; i++ {
+		(*target)[i] = ctx.buffer.ReadInt32()
+	}
+	return nil
+}
+
+// deserializeInt64SliceFastTo deserializes []int64 directly into target, reusing capacity
+func deserializeInt64SliceFastTo(ctx *ReadContext, target *[]int64) error {
+	_ = ctx.buffer.ReadInt8()  // ref flag
+	_ = ctx.buffer.ReadInt16() // type id
+	size := ctx.buffer.ReadLength()
+	length := size / 8
+
+	// Reuse existing capacity if sufficient
+	if cap(*target) >= length {
+		*target = (*target)[:length]
+	} else {
+		*target = make([]int64, length)
+	}
+
+	for i := 0; i < length; i++ {
+		(*target)[i] = ctx.buffer.ReadInt64()
+	}
+	return nil
+}
+
+// deserializeFloat64SliceFastTo deserializes []float64 directly into target, reusing capacity
+func deserializeFloat64SliceFastTo(ctx *ReadContext, target *[]float64) error {
+	_ = ctx.buffer.ReadInt8()  // ref flag
+	_ = ctx.buffer.ReadInt16() // type id
+	size := ctx.buffer.ReadLength()
+	length := size / 8
+
+	// Reuse existing capacity if sufficient
+	if cap(*target) >= length {
+		*target = (*target)[:length]
+	} else {
+		*target = make([]float64, length)
+	}
+
+	for i := 0; i < length; i++ {
+		(*target)[i] = ctx.buffer.ReadFloat64()
+	}
+	return nil
+}
+
+// deserializeBoolSliceFastTo deserializes []bool directly into target, reusing capacity
+func deserializeBoolSliceFastTo(ctx *ReadContext, target *[]bool) error {
+	_ = ctx.buffer.ReadInt8()  // ref flag
+	_ = ctx.buffer.ReadInt16() // type id
+	length := ctx.buffer.ReadLength()
+
+	// Reuse existing capacity if sufficient
+	if cap(*target) >= length {
+		*target = (*target)[:length]
+	} else {
+		*target = make([]bool, length)
+	}
+
+	for i := 0; i < length; i++ {
+		(*target)[i] = ctx.buffer.ReadBool()
+	}
+	return nil
 }

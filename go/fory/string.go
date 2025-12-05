@@ -216,6 +216,27 @@ func (s stringSerializer) ReadData(ctx *ReadContext) (string, error) {
 	return string(data), nil
 }
 
+func (s stringSerializer) ReadTo(ctx *ReadContext, target *string, readRefInfo, readTypeInfo bool) error {
+	if readRefInfo {
+		_ = ctx.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = ctx.buffer.ReadInt16()
+	}
+	return s.ReadDataTo(ctx, target)
+}
+
+func (s stringSerializer) ReadDataTo(ctx *ReadContext, target *string) error {
+	length := ctx.buffer.ReadVarUint32()
+	if length == 0 {
+		*target = ""
+		return nil
+	}
+	data := ctx.buffer.ReadBinary(int(length))
+	*target = string(data)
+	return nil
+}
+
 // AnySerializer interface methods
 func (s stringSerializer) WriteAny(ctx *WriteContext, value any, writeRefInfo, writeTypeInfo bool) error {
 	return s.Write(ctx, value.(string), writeRefInfo, writeTypeInfo)
@@ -231,6 +252,14 @@ func (s stringSerializer) ReadAny(ctx *ReadContext, readRefInfo, readTypeInfo bo
 
 func (s stringSerializer) ReadDataAny(ctx *ReadContext) (any, error) {
 	return s.ReadData(ctx)
+}
+
+func (s stringSerializer) ReadToAny(ctx *ReadContext, target any, readRefInfo, readTypeInfo bool) error {
+	return s.ReadTo(ctx, target.(*string), readRefInfo, readTypeInfo)
+}
+
+func (s stringSerializer) ReadDataToAny(ctx *ReadContext, target any) error {
+	return s.ReadDataTo(ctx, target.(*string))
 }
 
 // Serializer interface methods
@@ -289,6 +318,28 @@ func (s ptrToStringSerializer) ReadDataAny(ctx *ReadContext) (any, error) {
 	data := ctx.buffer.ReadBinary(int(length))
 	str := string(data)
 	return &str, nil
+}
+
+func (s ptrToStringSerializer) ReadToAny(ctx *ReadContext, target any, readRefInfo, readTypeInfo bool) error {
+	if readRefInfo {
+		_ = ctx.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = ctx.buffer.ReadInt16()
+	}
+	return s.ReadDataToAny(ctx, target)
+}
+
+func (s ptrToStringSerializer) ReadDataToAny(ctx *ReadContext, target any) error {
+	ptr := target.(*string)
+	length := ctx.buffer.ReadVarUint32()
+	if length == 0 {
+		*ptr = ""
+		return nil
+	}
+	data := ctx.buffer.ReadBinary(int(length))
+	*ptr = string(data)
+	return nil
 }
 
 // Serializer interface methods

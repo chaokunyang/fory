@@ -41,6 +41,13 @@ type TypedSerializer[T any] interface {
 	// ReadData deserializes only the data payload (no ref/type info).
 	ReadData(ctx *ReadContext) (T, error)
 
+	// ReadTo deserializes directly into the provided target, avoiding allocation.
+	// It handles: 1) reference tracking, 2) type info, 3) data
+	ReadTo(ctx *ReadContext, target *T, readRefInfo, readTypeInfo bool) error
+
+	// ReadDataTo deserializes only the data payload directly into target (no ref/type info).
+	ReadDataTo(ctx *ReadContext, target *T) error
+
 	// TypeId returns the Fory protocol type ID
 	TypeId() TypeId
 
@@ -54,6 +61,10 @@ type AnySerializer interface {
 	WriteDataAny(ctx *WriteContext, value any) error
 	ReadAny(ctx *ReadContext, readRefInfo, readTypeInfo bool) (any, error)
 	ReadDataAny(ctx *ReadContext) (any, error)
+	// ReadToAny deserializes directly into the provided target, avoiding allocation.
+	ReadToAny(ctx *ReadContext, target any, readRefInfo, readTypeInfo bool) error
+	// ReadDataToAny deserializes only the data payload directly into target.
+	ReadDataToAny(ctx *ReadContext, target any) error
 	TypeId() TypeId
 	NeedToWriteRef() bool
 }
@@ -64,6 +75,8 @@ type AnySerializer interface {
 // Uses WriteValue/ReadValue to avoid conflicts with TypedSerializer's Write/Read methods.
 type Serializer interface {
 	WriteValue(ctx *WriteContext, value reflect.Value) error
+	// ReadValue deserializes directly into the provided value.
+	// For non-trivial types (slices, maps), implementations should reuse existing capacity when possible.
 	ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error
 	TypeId() TypeId
 	NeedToWriteRef() bool
@@ -203,6 +216,23 @@ func (s dateSerializer) ReadDataAny(ctx *ReadContext) (any, error) {
 	return Date{date.Year(), date.Month(), date.Day()}, nil
 }
 
+func (s dateSerializer) ReadToAny(ctx *ReadContext, target any, readRefInfo, readTypeInfo bool) error {
+	if readRefInfo {
+		_ = ctx.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = ctx.buffer.ReadInt16()
+	}
+	return s.ReadDataToAny(ctx, target)
+}
+
+func (s dateSerializer) ReadDataToAny(ctx *ReadContext, target any) error {
+	diff := time.Duration(ctx.buffer.ReadInt32()) * 24 * time.Hour
+	date := time.Date(1970, 1, 1, 0, 0, 0, 0, time.Local).Add(diff)
+	*target.(*Date) = Date{date.Year(), date.Month(), date.Day()}
+	return nil
+}
+
 // Serializer interface methods
 func (s dateSerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
 	date := value.Interface().(Date)
@@ -252,6 +282,21 @@ func (s timeSerializer) ReadAny(ctx *ReadContext, readRefInfo, readTypeInfo bool
 
 func (s timeSerializer) ReadDataAny(ctx *ReadContext) (any, error) {
 	return CreateTimeFromUnixMicro(ctx.buffer.ReadInt64()), nil
+}
+
+func (s timeSerializer) ReadToAny(ctx *ReadContext, target any, readRefInfo, readTypeInfo bool) error {
+	if readRefInfo {
+		_ = ctx.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = ctx.buffer.ReadInt16()
+	}
+	return s.ReadDataToAny(ctx, target)
+}
+
+func (s timeSerializer) ReadDataToAny(ctx *ReadContext, target any) error {
+	*target.(*time.Time) = CreateTimeFromUnixMicro(ctx.buffer.ReadInt64())
+	return nil
 }
 
 // Serializer interface methods

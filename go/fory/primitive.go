@@ -186,6 +186,21 @@ func (s boolSerializer) ReadData(ctx *ReadContext) (bool, error) {
 	return ctx.buffer.ReadBool(), nil
 }
 
+func (s boolSerializer) ReadTo(ctx *ReadContext, target *bool, readRefInfo, readTypeInfo bool) error {
+	if readRefInfo {
+		_ = ctx.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = ctx.buffer.ReadInt16()
+	}
+	return s.ReadDataTo(ctx, target)
+}
+
+func (s boolSerializer) ReadDataTo(ctx *ReadContext, target *bool) error {
+	*target = ctx.buffer.ReadBool()
+	return nil
+}
+
 // AnySerializer interface methods
 func (s boolSerializer) WriteAny(ctx *WriteContext, value any, writeRefInfo, writeTypeInfo bool) error {
 	return s.Write(ctx, value.(bool), writeRefInfo, writeTypeInfo)
@@ -201,6 +216,14 @@ func (s boolSerializer) ReadAny(ctx *ReadContext, readRefInfo, readTypeInfo bool
 
 func (s boolSerializer) ReadDataAny(ctx *ReadContext) (any, error) {
 	return s.ReadData(ctx)
+}
+
+func (s boolSerializer) ReadToAny(ctx *ReadContext, target any, readRefInfo, readTypeInfo bool) error {
+	return s.ReadTo(ctx, target.(*bool), readRefInfo, readTypeInfo)
+}
+
+func (s boolSerializer) ReadDataToAny(ctx *ReadContext, target any) error {
+	return s.ReadDataTo(ctx, target.(*bool))
 }
 
 // Serializer interface methods (for reflection-based serialization)
@@ -252,6 +275,21 @@ func (s int8Serializer) ReadData(ctx *ReadContext) (int8, error) {
 	return ctx.buffer.ReadInt8(), nil
 }
 
+func (s int8Serializer) ReadTo(ctx *ReadContext, target *int8, readRefInfo, readTypeInfo bool) error {
+	if readRefInfo {
+		_ = ctx.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = ctx.buffer.ReadInt16()
+	}
+	return s.ReadDataTo(ctx, target)
+}
+
+func (s int8Serializer) ReadDataTo(ctx *ReadContext, target *int8) error {
+	*target = ctx.buffer.ReadInt8()
+	return nil
+}
+
 // AnySerializer interface methods
 func (s int8Serializer) WriteAny(ctx *WriteContext, value any, writeRefInfo, writeTypeInfo bool) error {
 	return s.Write(ctx, value.(int8), writeRefInfo, writeTypeInfo)
@@ -267,6 +305,14 @@ func (s int8Serializer) ReadAny(ctx *ReadContext, readRefInfo, readTypeInfo bool
 
 func (s int8Serializer) ReadDataAny(ctx *ReadContext) (any, error) {
 	return s.ReadData(ctx)
+}
+
+func (s int8Serializer) ReadToAny(ctx *ReadContext, target any, readRefInfo, readTypeInfo bool) error {
+	return s.ReadTo(ctx, target.(*int8), readRefInfo, readTypeInfo)
+}
+
+func (s int8Serializer) ReadDataToAny(ctx *ReadContext, target any) error {
+	return s.ReadDataTo(ctx, target.(*int8))
 }
 
 // Serializer interface methods
@@ -314,6 +360,21 @@ func (s byteSerializer) ReadAny(ctx *ReadContext, readRefInfo, readTypeInfo bool
 
 func (s byteSerializer) ReadDataAny(ctx *ReadContext) (any, error) {
 	return ctx.buffer.ReadByte_(), nil
+}
+
+func (s byteSerializer) ReadToAny(ctx *ReadContext, target any, readRefInfo, readTypeInfo bool) error {
+	if readRefInfo {
+		_ = ctx.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = ctx.buffer.ReadInt16()
+	}
+	return s.ReadDataToAny(ctx, target)
+}
+
+func (s byteSerializer) ReadDataToAny(ctx *ReadContext, target any) error {
+	*target.(*byte) = ctx.buffer.ReadByte_()
+	return nil
 }
 
 // Serializer interface methods
@@ -365,6 +426,21 @@ func (s int16Serializer) ReadData(ctx *ReadContext) (int16, error) {
 	return ctx.buffer.ReadInt16(), nil
 }
 
+func (s int16Serializer) ReadTo(ctx *ReadContext, target *int16, readRefInfo, readTypeInfo bool) error {
+	if readRefInfo {
+		_ = ctx.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = ctx.buffer.ReadInt16()
+	}
+	return s.ReadDataTo(ctx, target)
+}
+
+func (s int16Serializer) ReadDataTo(ctx *ReadContext, target *int16) error {
+	*target = ctx.buffer.ReadInt16()
+	return nil
+}
+
 // AnySerializer interface methods
 func (s int16Serializer) WriteAny(ctx *WriteContext, value any, writeRefInfo, writeTypeInfo bool) error {
 	return s.Write(ctx, value.(int16), writeRefInfo, writeTypeInfo)
@@ -380,6 +456,14 @@ func (s int16Serializer) ReadAny(ctx *ReadContext, readRefInfo, readTypeInfo boo
 
 func (s int16Serializer) ReadDataAny(ctx *ReadContext) (any, error) {
 	return s.ReadData(ctx)
+}
+
+func (s int16Serializer) ReadToAny(ctx *ReadContext, target any, readRefInfo, readTypeInfo bool) error {
+	return s.ReadTo(ctx, target.(*int16), readRefInfo, readTypeInfo)
+}
+
+func (s int16Serializer) ReadDataToAny(ctx *ReadContext, target any) error {
+	return s.ReadDataTo(ctx, target.(*int16))
 }
 
 // Serializer interface methods
@@ -431,6 +515,21 @@ func (s int32Serializer) ReadData(ctx *ReadContext) (int32, error) {
 	return ctx.buffer.ReadVarint32(), nil
 }
 
+func (s int32Serializer) ReadTo(ctx *ReadContext, target *int32, readRefInfo, readTypeInfo bool) error {
+	if readRefInfo {
+		_ = ctx.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = ctx.buffer.ReadInt16()
+	}
+	return s.ReadDataTo(ctx, target)
+}
+
+func (s int32Serializer) ReadDataTo(ctx *ReadContext, target *int32) error {
+	*target = ctx.buffer.ReadVarint32()
+	return nil
+}
+
 // AnySerializer interface methods
 func (s int32Serializer) WriteAny(ctx *WriteContext, value any, writeRefInfo, writeTypeInfo bool) error {
 	return s.Write(ctx, value.(int32), writeRefInfo, writeTypeInfo)
@@ -446,6 +545,14 @@ func (s int32Serializer) ReadAny(ctx *ReadContext, readRefInfo, readTypeInfo boo
 
 func (s int32Serializer) ReadDataAny(ctx *ReadContext) (any, error) {
 	return s.ReadData(ctx)
+}
+
+func (s int32Serializer) ReadToAny(ctx *ReadContext, target any, readRefInfo, readTypeInfo bool) error {
+	return s.ReadTo(ctx, target.(*int32), readRefInfo, readTypeInfo)
+}
+
+func (s int32Serializer) ReadDataToAny(ctx *ReadContext, target any) error {
+	return s.ReadDataTo(ctx, target.(*int32))
 }
 
 // Serializer interface methods
@@ -497,6 +604,21 @@ func (s int64Serializer) ReadData(ctx *ReadContext) (int64, error) {
 	return ctx.buffer.ReadVarint64(), nil
 }
 
+func (s int64Serializer) ReadTo(ctx *ReadContext, target *int64, readRefInfo, readTypeInfo bool) error {
+	if readRefInfo {
+		_ = ctx.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = ctx.buffer.ReadInt16()
+	}
+	return s.ReadDataTo(ctx, target)
+}
+
+func (s int64Serializer) ReadDataTo(ctx *ReadContext, target *int64) error {
+	*target = ctx.buffer.ReadVarint64()
+	return nil
+}
+
 // AnySerializer interface methods
 func (s int64Serializer) WriteAny(ctx *WriteContext, value any, writeRefInfo, writeTypeInfo bool) error {
 	return s.Write(ctx, value.(int64), writeRefInfo, writeTypeInfo)
@@ -512,6 +634,14 @@ func (s int64Serializer) ReadAny(ctx *ReadContext, readRefInfo, readTypeInfo boo
 
 func (s int64Serializer) ReadDataAny(ctx *ReadContext) (any, error) {
 	return s.ReadData(ctx)
+}
+
+func (s int64Serializer) ReadToAny(ctx *ReadContext, target any, readRefInfo, readTypeInfo bool) error {
+	return s.ReadTo(ctx, target.(*int64), readRefInfo, readTypeInfo)
+}
+
+func (s int64Serializer) ReadDataToAny(ctx *ReadContext, target any) error {
+	return s.ReadDataTo(ctx, target.(*int64))
 }
 
 // Serializer interface methods
@@ -565,6 +695,25 @@ func (s intSerializer) ReadDataAny(ctx *ReadContext) (any, error) {
 	return int(v), nil
 }
 
+func (s intSerializer) ReadToAny(ctx *ReadContext, target any, readRefInfo, readTypeInfo bool) error {
+	if readRefInfo {
+		_ = ctx.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = ctx.buffer.ReadInt16()
+	}
+	return s.ReadDataToAny(ctx, target)
+}
+
+func (s intSerializer) ReadDataToAny(ctx *ReadContext, target any) error {
+	v := ctx.buffer.ReadVarint64()
+	if v > MaxInt || v < MinInt {
+		return fmt.Errorf("int64 %d exceed int range", v)
+	}
+	*target.(*int) = int(v)
+	return nil
+}
+
 // Serializer interface methods
 func (s intSerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
 	ctx.buffer.WriteVarint64(value.Int())
@@ -614,6 +763,21 @@ func (s float32Serializer) ReadData(ctx *ReadContext) (float32, error) {
 	return ctx.buffer.ReadFloat32(), nil
 }
 
+func (s float32Serializer) ReadTo(ctx *ReadContext, target *float32, readRefInfo, readTypeInfo bool) error {
+	if readRefInfo {
+		_ = ctx.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = ctx.buffer.ReadInt16()
+	}
+	return s.ReadDataTo(ctx, target)
+}
+
+func (s float32Serializer) ReadDataTo(ctx *ReadContext, target *float32) error {
+	*target = ctx.buffer.ReadFloat32()
+	return nil
+}
+
 // AnySerializer interface methods
 func (s float32Serializer) WriteAny(ctx *WriteContext, value any, writeRefInfo, writeTypeInfo bool) error {
 	return s.Write(ctx, value.(float32), writeRefInfo, writeTypeInfo)
@@ -629,6 +793,14 @@ func (s float32Serializer) ReadAny(ctx *ReadContext, readRefInfo, readTypeInfo b
 
 func (s float32Serializer) ReadDataAny(ctx *ReadContext) (any, error) {
 	return s.ReadData(ctx)
+}
+
+func (s float32Serializer) ReadToAny(ctx *ReadContext, target any, readRefInfo, readTypeInfo bool) error {
+	return s.ReadTo(ctx, target.(*float32), readRefInfo, readTypeInfo)
+}
+
+func (s float32Serializer) ReadDataToAny(ctx *ReadContext, target any) error {
+	return s.ReadDataTo(ctx, target.(*float32))
 }
 
 // Serializer interface methods
@@ -680,6 +852,21 @@ func (s float64Serializer) ReadData(ctx *ReadContext) (float64, error) {
 	return ctx.buffer.ReadFloat64(), nil
 }
 
+func (s float64Serializer) ReadTo(ctx *ReadContext, target *float64, readRefInfo, readTypeInfo bool) error {
+	if readRefInfo {
+		_ = ctx.buffer.ReadInt8()
+	}
+	if readTypeInfo {
+		_ = ctx.buffer.ReadInt16()
+	}
+	return s.ReadDataTo(ctx, target)
+}
+
+func (s float64Serializer) ReadDataTo(ctx *ReadContext, target *float64) error {
+	*target = ctx.buffer.ReadFloat64()
+	return nil
+}
+
 // AnySerializer interface methods
 func (s float64Serializer) WriteAny(ctx *WriteContext, value any, writeRefInfo, writeTypeInfo bool) error {
 	return s.Write(ctx, value.(float64), writeRefInfo, writeTypeInfo)
@@ -695,6 +882,14 @@ func (s float64Serializer) ReadAny(ctx *ReadContext, readRefInfo, readTypeInfo b
 
 func (s float64Serializer) ReadDataAny(ctx *ReadContext) (any, error) {
 	return s.ReadData(ctx)
+}
+
+func (s float64Serializer) ReadToAny(ctx *ReadContext, target any, readRefInfo, readTypeInfo bool) error {
+	return s.ReadTo(ctx, target.(*float64), readRefInfo, readTypeInfo)
+}
+
+func (s float64Serializer) ReadDataToAny(ctx *ReadContext, target any) error {
+	return s.ReadDataTo(ctx, target.(*float64))
 }
 
 // Serializer interface methods

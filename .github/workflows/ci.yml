@@ -488,15 +488,12 @@ jobs:
   go:
     name: Golang CI
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        go-version: ["1.13", "1.18"]
     steps:
       - uses: actions/checkout@v5
-      - name: Setup Go ${{ matrix.go-version }}
+      - name: Setup Go 1.23
         uses: actions/setup-go@v4
         with:
-          go-version: ${{ matrix.go-version }}
+          go-version: "1.23"
       - name: Display Go version
         run: go version
       - name: Set up Python3.8

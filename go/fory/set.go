@@ -111,7 +111,7 @@ func (s setSerializer) writeHeader(ctx *WriteContext, buf *ByteBuffer, keys []re
 	}
 
 	// Enable reference tracking if configured
-	if ctx.RefTracking() {
+	if ctx.TrackRef() {
 		collectFlag |= CollectionTrackingRef
 	}
 

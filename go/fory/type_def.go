@@ -19,9 +19,9 @@ package fory
 
 import (
 	"fmt"
-	"reflect"
-	"github.com/spaolacci/murmur3"
 	"github.com/apache/fory/go/fory/meta"
+	"github.com/spaolacci/murmur3"
+	"reflect"
 )
 
 const (
@@ -153,7 +153,7 @@ func buildFieldDefs(fory *Fory, value reflect.Value) ([]FieldDef, error) {
 			name:         fieldName,
 			nameEncoding: nameEncoding,
 			nullable:     nullable(field.Type),
-			trackingRef:  fory.config.RefTracking,
+			trackingRef:  fory.config.TrackRef,
 			fieldType:    ft,
 		}
 		fieldDefs = append(fieldDefs, fieldInfo)
@@ -493,7 +493,6 @@ func buildFieldType(fory *Fory, fieldValue reflect.Value) (FieldType, error) {
 	return NewSimpleFieldType(typeId), nil
 }
 
-
 const (
 	SmallNumFieldsThreshold = 31
 	REGISTER_BY_NAME_FLAG   = 0b1 << 5
@@ -664,7 +663,6 @@ func writeFieldDef(typeResolver *typeResolver, buffer *ByteBuffer, field FieldDe
 	}
 	return nil
 }
-
 
 /*
 decodeTypeDef decodes a TypeDef from the buffer

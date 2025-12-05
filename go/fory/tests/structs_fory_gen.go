@@ -153,7 +153,7 @@ func (g MapDemo_ForyGenSerializer) WriteTyped(ctx *fory.WriteContext, v *MapDemo
 		if mapLen > 0 {
 			// Calculate KV header flags
 			kvHeader := uint8(0)
-			isRefTracking := ctx.RefTracking()
+			isRefTracking := ctx.TrackRef()
 			_ = isRefTracking // Mark as used to avoid warning
 			chunkSize := 0
 			_ = buf.WriterIndex()         // chunkHeaderOffset
@@ -192,7 +192,7 @@ func (g MapDemo_ForyGenSerializer) WriteTyped(ctx *fory.WriteContext, v *MapDemo
 		if mapLen > 0 {
 			// Calculate KV header flags
 			kvHeader := uint8(0)
-			isRefTracking := ctx.RefTracking()
+			isRefTracking := ctx.TrackRef()
 			_ = isRefTracking // Mark as used to avoid warning
 			if isRefTracking {
 				kvHeader |= 0x1 // track key ref
@@ -234,7 +234,7 @@ func (g MapDemo_ForyGenSerializer) WriteTyped(ctx *fory.WriteContext, v *MapDemo
 		if mapLen > 0 {
 			// Calculate KV header flags
 			kvHeader := uint8(0)
-			isRefTracking := ctx.RefTracking()
+			isRefTracking := ctx.TrackRef()
 			_ = isRefTracking // Mark as used to avoid warning
 			if isRefTracking {
 				kvHeader |= 0x1 // track key ref

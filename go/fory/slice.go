@@ -184,7 +184,7 @@ func (s sliceSerializer) writeHeader(ctx *WriteContext, buf *ByteBuffer, value r
 	}
 
 	// Enable reference tracking if configured and element type supports it
-	if ctx.RefTracking() && (elemTypeInfo.Serializer == nil || elemTypeInfo.Serializer.NeedToWriteRef()) {
+	if ctx.TrackRef() && (elemTypeInfo.Serializer == nil || elemTypeInfo.Serializer.NeedToWriteRef()) {
 		collectFlag |= CollectionTrackingRef
 	}
 
@@ -536,7 +536,7 @@ func (s *sliceConcreteValueSerializer) WriteValue(ctx *WriteContext, value refle
 	if hasNull {
 		collectFlag |= CollectionHasNull
 	}
-	if ctx.RefTracking() && s.referencable {
+	if ctx.TrackRef() && s.referencable {
 		collectFlag |= CollectionTrackingRef
 	}
 	buf.WriteInt8(int8(collectFlag))
@@ -1426,7 +1426,7 @@ func (s stringSliceSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, v
 				}
 			}
 			elem := readString(buf)
-			if ctx.RefTracking() && refFlag == RefValueFlag {
+			if ctx.TrackRef() && refFlag == RefValueFlag {
 				// If value is not nil(reflect), then value is a pointer to some variable, we can update the `value`,
 				// then record `value` in the reference resolver.
 				ctx.RefResolver().SetReadObject(nextReadRefId, reflect.ValueOf(elem))
@@ -1489,7 +1489,7 @@ func (s *GenericSliceSerializer[T]) WriteValue(ctx *WriteContext, value reflect.
 	// Write length and collection flags
 	buf.WriteVarUint32(uint32(length))
 	collectFlag := CollectionIsSameType | CollectionIsDeclElementType
-	if ctx.RefTracking() && s.elemSerializer.NeedToWriteRef() {
+	if ctx.TrackRef() && s.elemSerializer.NeedToWriteRef() {
 		collectFlag |= CollectionTrackingRef
 	}
 	buf.WriteInt8(int8(collectFlag))

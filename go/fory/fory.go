@@ -38,18 +38,16 @@ var ErrNoSerializer = errors.New("fory: no serializer registered for type")
 // Constants
 // ============================================================================
 
-// Language represents the programming language
-type Language = uint8
-
+// Language constants for protocol header
 const (
-	XLANG Language = iota
-	JAVA
-	PYTHON
-	CPP
-	GO
-	JAVASCRIPT
-	RUST
-	DART
+	LangXLANG uint8 = iota
+	LangJAVA
+	LangPYTHON
+	LangCPP
+	LangGO
+	LangJAVASCRIPT
+	LangRUST
+	LangDART
 )
 
 // Protocol constants
@@ -79,29 +77,34 @@ const (
 
 // Config holds configuration options for Fory instances
 type Config struct {
-	RefTracking bool
-	MaxDepth    int
-	Language    Language
-	Compatible  bool // Schema evolution compatibility mode
+	TrackRef   bool
+	MaxDepth   int
+	IsXlang    bool
+	Compatible bool // Schema evolution compatibility mode
 }
 
 // defaultConfig returns the default configuration
 func defaultConfig() Config {
 	return Config{
-		RefTracking: true,
-		MaxDepth:    100,
-		Language:    XLANG,
+		TrackRef: true,
+		MaxDepth: 100,
+		IsXlang:  true,
 	}
 }
 
 // Option is a function that configures a Fory instance
 type Option func(*Fory)
 
-// WithRefTracking sets reference tracking mode
-func WithRefTracking(enabled bool) Option {
+// WithTrackRef sets reference tracking mode
+func WithTrackRef(enabled bool) Option {
 	return func(f *Fory) {
-		f.config.RefTracking = enabled
+		f.config.TrackRef = enabled
 	}
+}
+
+// WithRefTracking is deprecated, use WithTrackRef instead
+func WithRefTracking(enabled bool) Option {
+	return WithTrackRef(enabled)
 }
 
 // WithMaxDepth sets the maximum serialization depth
@@ -111,10 +114,10 @@ func WithMaxDepth(depth int) Option {
 	}
 }
 
-// WithLanguage sets the language mode
-func WithLanguage(lang Language) Option {
+// WithXlang sets cross-language serialization mode
+func WithXlang(enabled bool) Option {
 	return func(f *Fory) {
-		f.config.Language = lang
+		f.config.IsXlang = enabled
 	}
 }
 
@@ -502,15 +505,15 @@ func New(opts ...Option) *Fory {
 
 	// Initialize resolvers
 	f.typeResolver = newTypeResolver(f)
-	f.refResolver = newRefResolver(f.config.RefTracking)
+	f.refResolver = newRefResolver(f.config.TrackRef)
 
 	// Initialize reusable contexts with resolvers
-	f.writeCtx = NewWriteContext(f.registry, f.config.RefTracking, f.config.MaxDepth)
+	f.writeCtx = NewWriteContext(f.registry, f.config.TrackRef, f.config.MaxDepth)
 	f.writeCtx.typeResolver = f.typeResolver
 	f.writeCtx.refResolver = f.refResolver
 	f.writeCtx.compatible = f.config.Compatible
 
-	f.readCtx = NewReadContext(f.registry, f.config.RefTracking)
+	f.readCtx = NewReadContext(f.registry, f.config.TrackRef)
 	f.readCtx.typeResolver = f.typeResolver
 	f.readCtx.refResolver = f.refResolver
 	f.readCtx.compatible = f.config.Compatible
@@ -872,14 +875,14 @@ func writeHeader(ctx *WriteContext, config Config) {
 	if nativeEndian == binary.LittleEndian {
 		bitmap |= LittleEndianFlag
 	}
-	if config.Language == XLANG {
+	if config.IsXlang {
 		bitmap |= XLangFlag
 	}
 	if ctx.outOfBand {
 		bitmap |= OutOfBandFlag
 	}
 	ctx.buffer.WriteByte_(bitmap)
-	ctx.buffer.WriteByte_(GO)
+	ctx.buffer.WriteByte_(LangGO)
 }
 
 // readHeader reads and validates the Fory protocol header

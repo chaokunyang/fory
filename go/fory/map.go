@@ -564,8 +564,8 @@ func (s *GenericMapSerializer[K, V]) WriteValue(ctx *WriteContext, value reflect
 
 	// Determine chunk header flags
 	var chunkHeader uint8 = KEY_DECL_TYPE | VALUE_DECL_TYPE
-	trackKeyRef := ctx.RefTracking() && s.keySerializer.NeedToWriteRef()
-	trackValueRef := ctx.RefTracking() && s.valueSerializer.NeedToWriteRef()
+	trackKeyRef := ctx.TrackRef() && s.keySerializer.NeedToWriteRef()
+	trackValueRef := ctx.TrackRef() && s.valueSerializer.NeedToWriteRef()
 	if trackKeyRef {
 		chunkHeader |= TRACKING_KEY_REF
 	}

@@ -37,7 +37,7 @@ type WriteContext struct {
 	buffer         *ByteBuffer
 	refWriter      *RefWriter
 	registry       *GenericRegistry
-	refTracking    bool // Cached flag to avoid indirection
+	trackRef       bool // Cached flag to avoid indirection
 	compatible     bool // Schema evolution compatibility mode
 	depth          int
 	maxDepth       int
@@ -48,13 +48,13 @@ type WriteContext struct {
 }
 
 // NewWriteContext creates a new write context
-func NewWriteContext(registry *GenericRegistry, refTracking bool, maxDepth int) *WriteContext {
+func NewWriteContext(registry *GenericRegistry, trackRef bool, maxDepth int) *WriteContext {
 	return &WriteContext{
-		buffer:      NewByteBuffer(nil),
-		refWriter:   NewRefWriter(refTracking),
-		registry:    registry,
-		refTracking: refTracking,
-		maxDepth:    maxDepth,
+		buffer:    NewByteBuffer(nil),
+		refWriter: NewRefWriter(trackRef),
+		registry:  registry,
+		trackRef:  trackRef,
+		maxDepth:  maxDepth,
 	}
 }
 
@@ -96,9 +96,9 @@ func (c *WriteContext) Registry() *GenericRegistry {
 	return c.registry
 }
 
-// RefTracking returns whether reference tracking is enabled
-func (c *WriteContext) RefTracking() bool {
-	return c.refTracking
+// TrackRef returns whether reference tracking is enabled
+func (c *WriteContext) TrackRef() bool {
+	return c.trackRef
 }
 
 // Compatible returns whether schema evolution compatibility mode is enabled
@@ -250,7 +250,7 @@ type ReadContext struct {
 	buffer           *ByteBuffer
 	refReader        *RefReader
 	registry         *GenericRegistry
-	refTracking      bool          // Cached flag to avoid indirection
+	trackRef         bool          // Cached flag to avoid indirection
 	compatible       bool          // Schema evolution compatibility mode
 	typeResolver     *typeResolver // For complex type deserialization
 	refResolver      *RefResolver  // For reference tracking (legacy)
@@ -259,12 +259,12 @@ type ReadContext struct {
 }
 
 // NewReadContext creates a new read context
-func NewReadContext(registry *GenericRegistry, refTracking bool) *ReadContext {
+func NewReadContext(registry *GenericRegistry, trackRef bool) *ReadContext {
 	return &ReadContext{
-		buffer:      NewByteBuffer(nil),
-		refReader:   NewRefReader(refTracking),
-		registry:    registry,
-		refTracking: refTracking,
+		buffer:    NewByteBuffer(nil),
+		refReader: NewRefReader(trackRef),
+		registry:  registry,
+		trackRef:  trackRef,
 	}
 }
 
@@ -296,9 +296,9 @@ func (c *ReadContext) Registry() *GenericRegistry {
 	return c.registry
 }
 
-// RefTracking returns whether reference tracking is enabled
-func (c *ReadContext) RefTracking() bool {
-	return c.refTracking
+// TrackRef returns whether reference tracking is enabled
+func (c *ReadContext) TrackRef() bool {
+	return c.trackRef
 }
 
 // Compatible returns whether schema evolution compatibility mode is enabled

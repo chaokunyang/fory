@@ -123,7 +123,7 @@ type typeResolver struct {
 
 	fory *Fory
 	//metaStringResolver  MetaStringResolver
-	language            Language
+	isXlang             bool
 	metaStringResolver  *MetaStringResolver
 	requireRegistration bool
 
@@ -166,7 +166,7 @@ func newTypeResolver(fory *Fory) *typeResolver {
 		dynamicIdToString:    map[int16]string{},
 		fory:                 fory,
 
-		language:            fory.config.Language,
+		isXlang:             fory.config.IsXlang,
 		metaStringResolver:  NewMetaStringResolver(),
 		requireRegistration: false,
 
@@ -479,7 +479,7 @@ func (r *typeResolver) getTypeInfo(value reflect.Value, create bool) (TypeInfo, 
 	// Determine type ID and registration strategy
 	var typeID int32
 	switch {
-	case r.language == XLANG && !r.requireRegistration:
+	case r.isXlang && !r.requireRegistration:
 		// Auto-assign IDs
 		typeID = 0
 	default:
@@ -611,7 +611,7 @@ func (r *typeResolver) registerType(
 	}
 
 	// Cache by type ID (for cross-language support)
-	if r.language == XLANG && !IsNamespacedType(TypeId(typeID)) {
+	if r.isXlang && !IsNamespacedType(TypeId(typeID)) {
 		/*
 		   This function is required to maintain the typeID registry: all types
 		   are registered at startup, and we keep this table updated.
@@ -797,7 +797,7 @@ func (r *typeResolver) createSerializer(type_ reflect.Type, mapInStruct bool) (s
 	case reflect.Slice:
 		elem := type_.Elem()
 		// Handle special slice types for xlang compatibility
-		if r.language == XLANG {
+		if r.isXlang {
 			// Basic type slices should use array types for efficiency
 			switch elem.Kind() {
 			case reflect.Bool:

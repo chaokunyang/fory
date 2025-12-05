@@ -330,7 +330,7 @@ func generateMapWriteInline(buf *bytes.Buffer, mapType *types.Map, fieldAccess s
 	fmt.Fprintf(buf, "\t\t\tkvHeader := uint8(0)\n")
 
 	// Check if ref tracking is enabled
-	fmt.Fprintf(buf, "\t\t\tisRefTracking := ctx.RefTracking()\n")
+	fmt.Fprintf(buf, "\t\t\tisRefTracking := ctx.TrackRef()\n")
 	fmt.Fprintf(buf, "\t\t\t_ = isRefTracking // Mark as used to avoid warning\n")
 
 	// Set header flags based on type properties

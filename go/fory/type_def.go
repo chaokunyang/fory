@@ -20,7 +20,7 @@ package fory
 import (
 	"fmt"
 	"reflect"
-
+	"github.com/spaolacci/murmur3"
 	"github.com/apache/fory/go/fory/meta"
 )
 
@@ -491,4 +491,340 @@ func buildFieldType(fory *Fory, fieldValue reflect.Value) (FieldType, error) {
 	}
 
 	return NewSimpleFieldType(typeId), nil
+}
+
+
+const (
+	SmallNumFieldsThreshold = 31
+	REGISTER_BY_NAME_FLAG   = 0b1 << 5
+	FieldNameSizeThreshold  = 15
+)
+
+// Encoding `UTF8/ALL_TO_LOWER_SPECIAL/LOWER_UPPER_DIGIT_SPECIAL/TAG_ID` for fieldName
+var fieldNameEncodings = []meta.Encoding{
+	meta.UTF_8,
+	meta.ALL_TO_LOWER_SPECIAL,
+	meta.LOWER_UPPER_DIGIT_SPECIAL,
+	// todo: add support for TAG_ID encoding
+}
+
+func getFieldNameEncodingIndex(encoding meta.Encoding) int {
+	for i, enc := range fieldNameEncodings {
+		if enc == encoding {
+			return i
+		}
+	}
+	return 0 // Default to UTF_8 if not found
+}
+
+/*
+encodingTypeDef encodes a TypeDef into binary format according to the specification
+typeDef are layout as following:
+- first 8 bytes: global header (50 bits hash + 1 bit compress flag + write fields meta + 12 bits meta size)
+- next 1 byte: meta header (2 bits reserved + 1 bit register by name flag + 5 bits num fields)
+- next variable bytes: type id (varint) or ns name + type name
+- next variable bytes: field defs (see below)
+*/
+func encodingTypeDef(typeResolver *typeResolver, typeDef *TypeDef) ([]byte, error) {
+	buffer := NewByteBuffer(nil)
+
+	if err := writeMetaHeader(buffer, typeDef); err != nil {
+		return nil, fmt.Errorf("failed to write meta header: %w", err)
+	}
+
+	if typeDef.registerByName {
+		if err := typeResolver.metaStringResolver.WriteMetaStringBytes(buffer, typeDef.nsName); err != nil {
+			return nil, err
+		}
+		if err := typeResolver.metaStringResolver.WriteMetaStringBytes(buffer, typeDef.typeName); err != nil {
+			return nil, err
+		}
+	} else {
+		buffer.WriteVarInt32(int32(typeDef.typeId))
+	}
+
+	if err := writeFieldDefs(typeResolver, buffer, typeDef.fieldDefs); err != nil {
+		return nil, fmt.Errorf("failed to write fields def: %w", err)
+	}
+
+	result, err := prependGlobalHeader(buffer, false, len(typeDef.fieldDefs) > 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to write global binary header: %w", err)
+	}
+
+	return result.GetByteSlice(0, result.WriterIndex()), nil
+}
+
+// prependGlobalHeader writes the 8-byte global header
+func prependGlobalHeader(buffer *ByteBuffer, isCompressed bool, hasFieldsMeta bool) (*ByteBuffer, error) {
+	var header uint64
+	metaSize := buffer.WriterIndex()
+
+	hashValue := murmur3.Sum64WithSeed(buffer.GetByteSlice(0, metaSize), 47)
+	header |= hashValue << (64 - NUM_HASH_BITS)
+
+	if hasFieldsMeta {
+		header |= HAS_FIELDS_META_FLAG
+	}
+
+	if isCompressed {
+		header |= COMPRESS_META_FLAG
+	}
+
+	if metaSize < META_SIZE_MASK {
+		header |= uint64(metaSize) & 0xFFF
+	} else {
+		header |= 0xFFF // Set to max value, actual size will follow
+	}
+
+	result := NewByteBuffer(make([]byte, metaSize+8))
+	result.WriteInt64(int64(header))
+
+	if metaSize >= META_SIZE_MASK {
+		result.WriteVarUint32(uint32(metaSize - META_SIZE_MASK))
+	}
+	result.WriteBinary(buffer.GetByteSlice(0, metaSize))
+
+	return result, nil
+}
+
+// writeMetaHeader writes the 1-byte meta header
+func writeMetaHeader(buffer *ByteBuffer, typeDef *TypeDef) error {
+	// 2 bits reserved + 1 bit register by name flag + 5 bits num fields
+	offset := buffer.writerIndex
+	if err := buffer.WriteByte(0xFF); err != nil {
+		return err
+	}
+	fieldInfos := typeDef.fieldDefs
+	header := len(fieldInfos)
+	if header > SmallNumFieldsThreshold {
+		header = SmallNumFieldsThreshold
+		buffer.WriteVarUint32(uint32(len(fieldInfos) - SmallNumFieldsThreshold))
+	}
+	if typeDef.registerByName {
+		header |= REGISTER_BY_NAME_FLAG
+	}
+
+	buffer.PutUint8(offset, uint8(header))
+	return nil
+}
+
+// writeFieldDefs writes field definitions according to the specification
+// field def layout as following:
+//   - first 1 byte: header (2 bits field name encoding + 4 bits size + nullability flag + ref tracking flag)
+//   - next variable bytes: FieldType info
+//   - next variable bytes: field name or tag id
+func writeFieldDefs(typeResolver *typeResolver, buffer *ByteBuffer, fieldDefs []FieldDef) error {
+	for _, field := range fieldDefs {
+		if err := writeFieldDef(typeResolver, buffer, field); err != nil {
+			return fmt.Errorf("failed to write field def for field %s: %w", field.name, err)
+		}
+	}
+	return nil
+}
+
+// writeFieldDef writes a single field's definition
+func writeFieldDef(typeResolver *typeResolver, buffer *ByteBuffer, field FieldDef) error {
+	// Write field header
+	// 2 bits field name encoding + 4 bits size + nullability flag + ref tracking flag
+	offset := buffer.writerIndex
+	if err := buffer.WriteByte(0xFF); err != nil {
+		return err
+	}
+	var header uint8
+	if field.trackingRef {
+		header |= 0b1
+	}
+	if field.nullable {
+		header |= 0b10
+	}
+	// store index of encoding in the 2 highest bits
+	encodingFlag := byte(getFieldNameEncodingIndex(field.nameEncoding))
+	header |= encodingFlag << 6
+	metaString, err := typeResolver.typeNameEncoder.EncodeWithEncoding(field.name, field.nameEncoding)
+	if err != nil {
+		return err
+	}
+	nameLen := len(metaString.GetEncodedBytes())
+	if nameLen < FieldNameSizeThreshold {
+		header |= uint8((nameLen-1)&0x0F) << 2 // 1-based encoding
+	} else {
+		header |= 0x0F << 2 // Max value, actual length will follow
+		buffer.WriteVarUint32(uint32(nameLen - FieldNameSizeThreshold))
+	}
+	buffer.PutUint8(offset, header)
+
+	// Write field type
+	field.fieldType.write(buffer)
+
+	// todo: support tag id
+	// write field name
+	if _, err := buffer.Write(metaString.GetEncodedBytes()); err != nil {
+		return err
+	}
+	return nil
+}
+
+
+/*
+decodeTypeDef decodes a TypeDef from the buffer
+typeDef are layout as following:
+  - first 8 bytes: global header (50 bits hash + 1 bit compress flag + write fields meta + 12 bits meta size)
+  - next 1 byte: meta header (2 bits reserved + 1 bit register by name flag + 5 bits num fields)
+  - next variable bytes: type id (varint) or ns name + type name
+  - next variable bytes: field definitions (see below)
+*/
+func decodeTypeDef(fory *Fory, buffer *ByteBuffer, header int64) (*TypeDef, error) {
+	// Read 8-byte global header
+	globalHeader := header
+	hasFieldsMeta := (globalHeader & HAS_FIELDS_META_FLAG) != 0
+	isCompressed := (globalHeader & COMPRESS_META_FLAG) != 0
+	metaSize := int(globalHeader & META_SIZE_MASK)
+	if metaSize == META_SIZE_MASK {
+		metaSize += int(buffer.ReadVarUint32())
+	}
+
+	// Store the encoded bytes for the TypeDef (including meta header and metadata)
+	// todo: handle compression if is_compressed is true
+	if isCompressed {
+	}
+	encoded := buffer.ReadBinary(metaSize)
+	metaBuffer := NewByteBuffer(encoded)
+
+	// Read 1-byte meta header
+	metaHeaderByte, err := metaBuffer.ReadByte()
+	if err != nil {
+		return nil, err
+	}
+	// Extract field count from lower 5 bits
+	fieldCount := int(metaHeaderByte & SmallNumFieldsThreshold)
+	if fieldCount == SmallNumFieldsThreshold {
+		fieldCount += int(metaBuffer.ReadVarUint32())
+	}
+	registeredByName := (metaHeaderByte & REGISTER_BY_NAME_FLAG) != 0
+
+	// Read name or type ID according to the registerByName flag
+	var typeId TypeId
+	var nsBytes, nameBytes *MetaStringBytes
+	var type_ reflect.Type
+	if registeredByName {
+		// Read namespace and type name for namespaced types
+		readingNsBytes, err := fory.typeResolver.metaStringResolver.ReadMetaStringBytes(metaBuffer)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read package path: %w", err)
+		}
+		nsBytes = readingNsBytes
+		readingNameBytes, err := fory.typeResolver.metaStringResolver.ReadMetaStringBytes(metaBuffer)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read type name: %w", err)
+		}
+		nameBytes = readingNameBytes
+		info, exists := fory.typeResolver.nsTypeToTypeInfo[nsTypeKey{nsBytes.Hashcode, nameBytes.Hashcode}]
+		if !exists {
+			// Try fallback: decode strings and look up by name
+			ns, _ := fory.typeResolver.namespaceDecoder.Decode(nsBytes.Data, nsBytes.Encoding)
+			typeName, _ := fory.typeResolver.typeNameDecoder.Decode(nameBytes.Data, nameBytes.Encoding)
+			nameKey := [2]string{ns, typeName}
+			if fallbackInfo, fallbackExists := fory.typeResolver.namedTypeToTypeInfo[nameKey]; fallbackExists {
+				info = fallbackInfo
+				exists = true
+				fory.typeResolver.nsTypeToTypeInfo[nsTypeKey{nsBytes.Hashcode, nameBytes.Hashcode}] = info
+			}
+		}
+		if exists {
+			// TypeDef is always for value types, but nsTypeToTypeInfo may have pointer type
+			// if pointer type was registered after value type. Normalize to value type.
+			type_ = info.Type
+			if type_.Kind() == reflect.Ptr {
+				type_ = type_.Elem()
+				// Use positive typeId for value type
+				if info.TypeID < 0 {
+					typeId = TypeId(-info.TypeID)
+				} else {
+					typeId = TypeId(info.TypeID)
+				}
+			} else {
+				typeId = TypeId(info.TypeID)
+			}
+		} else {
+			// Type not registered - use NAMED_STRUCT as default typeId
+			// The type_ will remain nil and will be set from field definitions later
+			typeId = NAMED_STRUCT
+			type_ = nil
+		}
+	} else {
+		typeId = TypeId(metaBuffer.ReadVarInt32())
+		if info, err := fory.typeResolver.getTypeInfoById(typeId); err != nil {
+			return nil, fmt.Errorf("failed to get type info by id %d: %w", typeId, err)
+		} else {
+			type_ = info.Type
+		}
+	}
+
+	// Read fields information
+	fieldInfos := make([]FieldDef, fieldCount)
+	if hasFieldsMeta {
+		for i := 0; i < fieldCount; i++ {
+			fieldInfo, err := readFieldDef(fory.typeResolver, metaBuffer)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read field def %d: %w", i, err)
+			}
+			fieldInfos[i] = fieldInfo
+		}
+	}
+
+	// Create TypeDef
+	typeDef := NewTypeDef(typeId, nsBytes, nameBytes, registeredByName, isCompressed, fieldInfos)
+	typeDef.encoded = encoded
+	typeDef.type_ = type_
+
+	return typeDef, nil
+}
+
+/*
+readFieldDef reads a single field's definition from the buffer
+field def layout as following:
+  - first 1 byte: header (2 bits field name encoding + 4 bits size + nullability flag + ref tracking flag)
+  - next variable bytes: FieldType info
+  - next variable bytes: field name or tag id
+*/
+func readFieldDef(typeResolver *typeResolver, buffer *ByteBuffer) (FieldDef, error) {
+	// Read field header
+	headerByte, err := buffer.ReadByte()
+	if err != nil {
+		return FieldDef{}, fmt.Errorf("failed to read field header: %w", err)
+	}
+
+	// Resolve the header
+	nameEncodingFlag := (headerByte >> 6) & 0b11
+	nameEncoding := fieldNameEncodings[nameEncodingFlag]
+	nameLen := int((headerByte >> 2) & 0x0F)
+	refTracking := (headerByte & 0b1) != 0
+	isNullable := (headerByte & 0b10) != 0
+	if nameLen == 0x0F {
+		nameLen = FieldNameSizeThreshold + int(buffer.ReadVarUint32())
+	} else {
+		nameLen++ // Adjust for 1-based encoding
+	}
+
+	// reading field type
+	ft, err := readFieldType(buffer)
+	if err != nil {
+		return FieldDef{}, err
+	}
+
+	// Reading field name based on encoding
+	nameBytes := buffer.ReadBinary(nameLen)
+	fieldName, err := typeResolver.typeNameDecoder.Decode(nameBytes, nameEncoding)
+	if err != nil {
+		return FieldDef{}, fmt.Errorf("failed to decode field name: %w", err)
+	}
+
+	return FieldDef{
+		name:         fieldName,
+		nameEncoding: nameEncoding,
+		fieldType:    ft,
+		nullable:     isNullable,
+		trackingRef:  refTracking,
+	}, nil
 }

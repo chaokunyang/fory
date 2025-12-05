@@ -1361,7 +1361,7 @@ type stringSliceSerializer struct {
 }
 
 func (s stringSliceSerializer) TypeId() TypeId {
-	return FORY_STRING_ARRAY
+	return LIST
 }
 
 func (s stringSliceSerializer) NeedToWriteRef() bool {

@@ -497,7 +497,7 @@ type ptrToStructSerializer struct {
 }
 
 func (s *ptrToStructSerializer) TypeId() TypeId {
-	return FORY_TYPE_TAG
+	return NAMED_STRUCT
 }
 
 func (s *ptrToStructSerializer) NeedToWriteRef() bool {
@@ -539,7 +539,7 @@ type ptrToCodegenSerializer struct {
 }
 
 func (s *ptrToCodegenSerializer) TypeId() TypeId {
-	return FORY_TYPE_TAG
+	return NAMED_STRUCT
 }
 
 func (s *ptrToCodegenSerializer) NeedToWriteRef() bool {

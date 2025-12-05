@@ -109,10 +109,6 @@ const (
 	FLOAT32_ARRAY = 36
 	// FLOAT64_ARRAY one dimensional float64 array
 	FLOAT64_ARRAY = 37
-	// ARROW_RECORD_BATCH an arrow record batch object
-	ARROW_RECORD_BATCH = 38
-	// ARROW_TABLE an arrow table object
-	ARROW_TABLE = 39
 
 	// UINT8 Unsigned 8-bit little-endian integer
 	UINT8 = 100 // Not in mapping table, assign a higher value
@@ -122,60 +118,9 @@ const (
 	UINT32 = 102
 	// UINT64 Unsigned 64-bit little-endian integer
 	UINT64 = 103
-	// FIXED_SIZE_BINARY Fixed-size binary. Each value occupies the same number of bytes
-	FIXED_SIZE_BINARY = 104
-	// DATE32 int32_t days since the UNIX epoch
-	DATE32 = 105
-	// DATE64 int64_t milliseconds since the UNIX epoch
-	DATE64 = 106
-	// TIME32 Time as signed 32-bit integer representing either seconds or milliseconds since midnight
-	TIME32 = 107
-	// TIME64 Time as signed 64-bit integer representing either microseconds or nanoseconds since midnight
-	TIME64 = 108
-	// INTERVAL_MONTHS YEAR_MONTH interval in SQL style
-	INTERVAL_MONTHS = 109
-	// INTERVAL_DAY_TIME DAY_TIME interval in SQL style
-	INTERVAL_DAY_TIME = 110
-	// DECIMAL256 Precision- and scale-based decimal type with 256 bits.
-	DECIMAL256 = 111
-	// SPARSE_UNION Sparse unions of logical types
-	SPARSE_UNION = 112
-	// DENSE_UNION Dense unions of logical types
-	DENSE_UNION = 113
-	// DICTIONARY Dictionary-encoded type also called "categorical" or "factor"
-	DICTIONARY = 114
-	// FIXED_SIZE_LIST Fixed size list of some logical type
-	FIXED_SIZE_LIST = 115
-	// LARGE_STRING Like STRING but with 64-bit offsets
-	LARGE_STRING = 116
-	// LARGE_BINARY Like BINARY but with 64-bit offsets
-	LARGE_BINARY = 117
-	// LARGE_LIST Like LIST but with 64-bit offsets
-	LARGE_LIST = 118
-	// MAX_ID Leave this at the end
-	MAX_ID = 119
-
-	DECIMAL = DECIMAL128
-
-	// Fory added type for cross-language serialization.
-	// FORY_TYPE_TAG for type identified by the tag
-	FORY_TYPE_TAG               = 256
-	FORY_SET                    = 257
-	FORY_PRIMITIVE_BOOL_ARRAY   = 258
-	FORY_PRIMITIVE_SHORT_ARRAY  = 259
-	FORY_PRIMITIVE_INT_ARRAY    = 260
-	FORY_PRIMITIVE_LONG_ARRAY   = 261
-	FORY_PRIMITIVE_FLOAT_ARRAY  = 262
-	FORY_PRIMITIVE_DOUBLE_ARRAY = 263
-	FORY_STRING_ARRAY           = 264
-	FORY_SERIALIZED_OBJECT      = 265
-	FORY_BUFFER                 = 266
-	FORY_ARROW_RECORD_BATCH     = 267
-	FORY_ARROW_TABLE            = 268
 )
 
 var namedTypes = map[TypeId]struct{}{
-	FORY_TYPE_TAG:           {},
 	NAMED_EXT:               {},
 	NAMED_ENUM:              {},
 	NAMED_STRUCT:            {},
@@ -425,7 +370,11 @@ func (r *typeResolver) initialize() {
 	}{
 		{stringType, stringSerializer{}},
 		{stringPtrType, ptrToStringSerializer{}},
-		{stringSliceType, stringSliceSerializer{}},
+		// Register interface types first so typeIDToTypeInfo maps to generic types
+		// that can hold any element type when deserializing into interface{}
+		{interfaceSliceType, sliceSerializer{}},
+		{interfaceMapType, mapSerializer{}},
+		{stringSliceType, sliceSerializer{}},
 		{byteSliceType, byteSliceSerializer{}},
 		// Map basic type slices to proper array types for xlang compatibility
 		{boolSliceType, boolArraySerializer{}},
@@ -434,8 +383,6 @@ func (r *typeResolver) initialize() {
 		{int64SliceType, int64ArraySerializer{}},
 		{float32SliceType, float32ArraySerializer{}},
 		{float64SliceType, float64ArraySerializer{}},
-		{interfaceSliceType, sliceSerializer{}},
-		{interfaceMapType, mapSerializer{}},
 		{boolType, boolSerializer{}},
 		{byteType, byteSerializer{}},
 		{int8Type, int8Serializer{}},
@@ -463,7 +410,9 @@ func (r *typeResolver) RegisterSerializer(type_ reflect.Type, s Serializer) erro
 	}
 	r.typeToSerializers[type_] = s
 	typeId := s.TypeId()
-	if typeId != FORY_TYPE_TAG {
+	// Skip type ID registration for namespaced types and collection types
+	// Collection types (LIST, SET, MAP) can have multiple Go types mapping to them
+	if !IsNamespacedType(typeId) && !isCollectionType(int16(typeId)) {
 		if typeId > NotSupportCrossLanguage {
 			if _, ok := r.typeIdToType[typeId]; ok {
 				return fmt.Errorf("type %s with id %d has been registered", type_, typeId)
@@ -1278,6 +1227,29 @@ func (r *typeResolver) readTypeInfo(buffer *ByteBuffer, value reflect.Value) (Ty
 		return typeInfo, nil
 	}
 
+	// Handle collection types (LIST, SET, MAP) that don't have specific registration
+	// Use generic types that can hold any element type
+	switch TypeId(typeID) {
+	case LIST:
+		return TypeInfo{
+			Type:       interfaceSliceType,
+			TypeID:     typeID,
+			Serializer: r.typeToSerializers[interfaceSliceType],
+		}, nil
+	case SET:
+		return TypeInfo{
+			Type:       genericSetType,
+			TypeID:     typeID,
+			Serializer: r.typeToSerializers[genericSetType],
+		}, nil
+	case MAP:
+		return TypeInfo{
+			Type:       interfaceMapType,
+			TypeID:     typeID,
+			Serializer: r.typeToSerializers[interfaceMapType],
+		}, nil
+	}
+
 	return TypeInfo{}, nil
 }
 
@@ -1341,6 +1313,29 @@ func (r *typeResolver) readTypeInfoWithTypeID(buffer *ByteBuffer, typeID int32) 
 	// Handle simple type IDs (non-namespaced types)
 	if typeInfo, exists := r.typeIDToTypeInfo[typeID]; exists {
 		return typeInfo, nil
+	}
+
+	// Handle collection types (LIST, SET, MAP) that don't have specific registration
+	// Use generic types that can hold any element type
+	switch TypeId(typeID) {
+	case LIST:
+		return TypeInfo{
+			Type:       interfaceSliceType,
+			TypeID:     typeID,
+			Serializer: r.typeToSerializers[interfaceSliceType],
+		}, nil
+	case SET:
+		return TypeInfo{
+			Type:       genericSetType,
+			TypeID:     typeID,
+			Serializer: r.typeToSerializers[genericSetType],
+		}, nil
+	case MAP:
+		return TypeInfo{
+			Type:       interfaceMapType,
+			TypeID:     typeID,
+			Serializer: r.typeToSerializers[interfaceMapType],
+		}, nil
 	}
 
 	return TypeInfo{}, fmt.Errorf("typeInfo of typeID %d not found", typeID)
@@ -1474,6 +1469,10 @@ func isMapType(typeID int16) bool {
 	return typeID == MAP
 }
 
+func isCollectionType(typeID int16) bool {
+	return typeID == LIST || typeID == SET || typeID == MAP
+}
+
 func isPrimitiveArrayType(typeID int16) bool {
 	switch typeID {
 	case BOOL_ARRAY,
@@ -1482,14 +1481,7 @@ func isPrimitiveArrayType(typeID int16) bool {
 		INT32_ARRAY,
 		INT64_ARRAY,
 		FLOAT32_ARRAY,
-		FLOAT64_ARRAY,
-		FORY_PRIMITIVE_BOOL_ARRAY,
-		FORY_PRIMITIVE_SHORT_ARRAY,
-		FORY_PRIMITIVE_INT_ARRAY,
-		FORY_PRIMITIVE_LONG_ARRAY,
-		FORY_PRIMITIVE_FLOAT_ARRAY,
-		FORY_PRIMITIVE_DOUBLE_ARRAY,
-		FORY_STRING_ARRAY:
+		FLOAT64_ARRAY:
 		return true
 	default:
 		return false

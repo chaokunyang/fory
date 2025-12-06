@@ -842,11 +842,7 @@ func (r *typeResolver) createSerializer(type_ reflect.Type, mapInStruct bool) (s
 			if err != nil {
 				return nil, err
 			}
-			return &sliceConcreteValueSerializer{
-				type_:          type_,
-				elemSerializer: elemSerializer,
-				referencable:   nullable(type_.Elem()),
-			}, nil
+			return newSliceConcreteValueSerializer(type_, elemSerializer)
 		}
 	case reflect.Array:
 		elem := type_.Elem()

@@ -735,12 +735,7 @@ func decodeTypeDef(fory *Fory, buffer *ByteBuffer, header int64) (*TypeDef, erro
 			type_ = info.Type
 			if type_.Kind() == reflect.Ptr {
 				type_ = type_.Elem()
-				// Use positive typeId for value type
-				if info.TypeID < 0 {
-					typeId = TypeId(-info.TypeID)
-				} else {
-					typeId = TypeId(info.TypeID)
-				}
+				typeId = TypeId(info.TypeID)
 			} else {
 				typeId = TypeId(info.TypeID)
 			}

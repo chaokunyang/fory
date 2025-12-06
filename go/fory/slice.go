@@ -168,9 +168,6 @@ func (s sliceSerializer) writeHeader(ctx *WriteContext, buf *ByteBuffer, value r
 	if hasSameType && (collectFlag&CollectionIsDeclElementType == 0) {
 		// For namespaced types, write full type info
 		internalTypeID := elemTypeInfo.TypeID
-		if elemTypeInfo.TypeID < 0 {
-			internalTypeID = -internalTypeID
-		}
 		if IsNamespacedType(TypeId(internalTypeID)) {
 			if err := ctx.TypeResolver().writeTypeInfo(buf, elemTypeInfo); err != nil {
 				return 0, TypeInfo{}, err
@@ -463,11 +460,29 @@ func isNull(v reflect.Value) bool {
 	}
 }
 
-// sliceConcreteValueSerializer serialize a slice whose elem is not an interface or pointer to interface
+// sliceConcreteValueSerializer serialize a slice whose elem is not an interface or pointer to interface.
+// Use newSliceConcreteValueSerializer to create instances with proper type validation.
 type sliceConcreteValueSerializer struct {
 	type_          reflect.Type
 	elemSerializer Serializer
 	referencable   bool
+}
+
+// newSliceConcreteValueSerializer creates a sliceConcreteValueSerializer for slices with concrete element types.
+// It returns an error if the element type is an interface or pointer to interface.
+func newSliceConcreteValueSerializer(type_ reflect.Type, elemSerializer Serializer) (*sliceConcreteValueSerializer, error) {
+	elem := type_.Elem()
+	if elem.Kind() == reflect.Interface {
+		return nil, fmt.Errorf("sliceConcreteValueSerializer does not support interface element type: %v", type_)
+	}
+	if elem.Kind() == reflect.Ptr && elem.Elem().Kind() == reflect.Interface {
+		return nil, fmt.Errorf("sliceConcreteValueSerializer does not support pointer to interface element type: %v", type_)
+	}
+	return &sliceConcreteValueSerializer{
+		type_:          type_,
+		elemSerializer: elemSerializer,
+		referencable:   nullable(elem),
+	}, nil
 }
 
 func (s *sliceConcreteValueSerializer) TypeId() TypeId {
@@ -504,11 +519,13 @@ func (s *sliceConcreteValueSerializer) WriteReflect(ctx *WriteContext, value ref
 	// so that the element type ID is written and can be read by generic deserializer
 	collectFlag := CollectionIsSameType
 	hasNull := false
+	elemType := s.type_.Elem()
+	isPointerElem := elemType.Kind() == reflect.Ptr
 
-	// Check for null values first
-	for i := 0; i < length; i++ {
-		elem := value.Index(i)
-		if elem.Kind() == reflect.Ptr || elem.Kind() == reflect.Interface {
+	// Check for null values first (only applicable for pointer element types)
+	if isPointerElem {
+		for i := 0; i < length; i++ {
+			elem := value.Index(i)
 			if elem.IsNil() {
 				hasNull = true
 				break
@@ -530,7 +547,7 @@ func (s *sliceConcreteValueSerializer) WriteReflect(ctx *WriteContext, value ref
 		// Get type info for the first non-nil element to get proper typeID
 		for i := 0; i < length; i++ {
 			elem := value.Index(i)
-			if elem.Kind() == reflect.Ptr || elem.Kind() == reflect.Interface {
+			if isPointerElem {
 				if !elem.IsNil() {
 					elemTypeInfo, _ = ctx.TypeResolver().getTypeInfo(elem.Elem(), true)
 					break
@@ -543,9 +560,6 @@ func (s *sliceConcreteValueSerializer) WriteReflect(ctx *WriteContext, value ref
 	}
 	// Write element type info (handles namespaced types properly)
 	internalTypeID := elemTypeInfo.TypeID
-	if elemTypeInfo.TypeID < 0 {
-		internalTypeID = -internalTypeID
-	}
 	if IsNamespacedType(TypeId(internalTypeID)) {
 		if err := ctx.TypeResolver().writeTypeInfo(buf, elemTypeInfo); err != nil {
 			return err
@@ -560,8 +574,8 @@ func (s *sliceConcreteValueSerializer) WriteReflect(ctx *WriteContext, value ref
 	for i := 0; i < length; i++ {
 		elem := value.Index(i)
 
-		// Handle null values
-		if hasNull && (elem.Kind() == reflect.Ptr || elem.Kind() == reflect.Interface) && elem.IsNil() {
+		// Handle null values (only for pointer element types)
+		if hasNull && elem.IsNil() {
 			buf.WriteInt8(NullFlag)
 			continue
 		}
@@ -1634,12 +1648,3 @@ func (s stringSliceSerializer) ReadReflect(ctx *ReadContext, type_ reflect.Type,
 	value.Set(r)
 	return nil
 }
-
-// those types will be serialized by `sliceConcreteValueSerializer`, which correspond to List types in java/python
-
-type Int8Slice []int8
-type Int16Slice []int16
-type Int32Slice []int32
-type Int64Slice []int64
-type Float32Slice []float64
-type Float64Slice []float64

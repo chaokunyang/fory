@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"reflect"
 	"unicode/utf16"
-	"unsafe"
 )
 
 // Encoding type constants
@@ -178,29 +177,11 @@ var globalStringSerializer = stringSerializer{}
 func (s stringSerializer) TypeId() TypeId       { return STRING }
 func (s stringSerializer) NeedToWriteRef() bool { return false }
 
-func (s stringSerializer) Write(ctx *WriteContext, value any) error {
-	str := value.(string)
-	ctx.buffer.WriteVarUint32(uint32(len(str)))
-	if len(str) > 0 {
-		ctx.buffer.WriteBinary(unsafe.Slice(unsafe.StringData(str), len(str)))
-	}
-	return nil
-}
-
-func (s stringSerializer) Read(ctx *ReadContext) (any, error) {
-	length := ctx.buffer.ReadVarUint32()
-	if length == 0 {
-		return "", nil
-	}
-	data := ctx.buffer.ReadBinary(int(length))
-	return string(data), nil
-}
-
-func (s stringSerializer) WriteReflect(ctx *WriteContext, value reflect.Value) error {
+func (s stringSerializer) Write(ctx *WriteContext, value reflect.Value) error {
 	return writeString(ctx.buffer, value.String())
 }
 
-func (s stringSerializer) ReadReflect(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+func (s stringSerializer) Read(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	str := readString(ctx.buffer)
 	value.SetString(str)
 	return nil
@@ -212,32 +193,12 @@ type ptrToStringSerializer struct{}
 func (s ptrToStringSerializer) TypeId() TypeId       { return -STRING }
 func (s ptrToStringSerializer) NeedToWriteRef() bool { return true }
 
-func (s ptrToStringSerializer) Write(ctx *WriteContext, value any) error {
-	str := value.(*string)
-	ctx.buffer.WriteVarUint32(uint32(len(*str)))
-	if len(*str) > 0 {
-		ctx.buffer.WriteBinary(unsafe.Slice(unsafe.StringData(*str), len(*str)))
-	}
-	return nil
-}
-
-func (s ptrToStringSerializer) Read(ctx *ReadContext) (any, error) {
-	length := ctx.buffer.ReadVarUint32()
-	if length == 0 {
-		str := ""
-		return &str, nil
-	}
-	data := ctx.buffer.ReadBinary(int(length))
-	str := string(data)
-	return &str, nil
-}
-
-func (s ptrToStringSerializer) WriteReflect(ctx *WriteContext, value reflect.Value) error {
+func (s ptrToStringSerializer) Write(ctx *WriteContext, value reflect.Value) error {
 	str := value.Interface().(*string)
 	return writeString(ctx.buffer, *str)
 }
 
-func (s ptrToStringSerializer) ReadReflect(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+func (s ptrToStringSerializer) Read(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	str := readString(ctx.buffer)
 	ptr := new(string)
 	*ptr = str

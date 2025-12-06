@@ -18,7 +18,6 @@
 package fory
 
 import (
-	"fmt"
 	"reflect"
 )
 
@@ -36,16 +35,7 @@ func (s *ptrToValueSerializer) TypeId() TypeId {
 
 func (s *ptrToValueSerializer) NeedToWriteRef() bool { return true }
 
-func (s *ptrToValueSerializer) Write(ctx *WriteContext, value any) error {
-	return s.WriteReflect(ctx, reflect.ValueOf(value))
-}
-
-func (s *ptrToValueSerializer) Read(ctx *ReadContext) (any, error) {
-	// Need to get the element type from valueSerializer
-	return nil, fmt.Errorf("ptrToValueSerializer.Read not implemented - use ReadReflect instead")
-}
-
-func (s *ptrToValueSerializer) WriteReflect(ctx *WriteContext, value reflect.Value) error {
+func (s *ptrToValueSerializer) Write(ctx *WriteContext, value reflect.Value) error {
 	elemValue := value.Elem()
 
 	// In compatible mode, write typeInfo for struct types so TypeDefs are collected
@@ -59,23 +49,23 @@ func (s *ptrToValueSerializer) WriteReflect(ctx *WriteContext, value reflect.Val
 		}
 	}
 
-	return s.valueSerializer.WriteReflect(ctx, elemValue)
+	return s.valueSerializer.Write(ctx, elemValue)
 }
 
-func (s *ptrToValueSerializer) ReadReflect(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+func (s *ptrToValueSerializer) Read(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	// Allocate new value and read into it
 	newVal := reflect.New(type_.Elem())
 
 	// In compatible mode, read typeInfo for struct types
 	if ctx.Compatible() && s.valueSerializer.TypeId() == NAMED_STRUCT {
-		// Read typeInfo (typeId + metaIndex) to consume the bytes written by WriteReflect
+		// Read typeInfo (typeId + metaIndex) to consume the bytes written by Write
 		_, err := ctx.TypeResolver().readTypeInfo(ctx.Buffer(), newVal.Elem())
 		if err != nil {
 			return err
 		}
 	}
 
-	if err := s.valueSerializer.ReadReflect(ctx, type_.Elem(), newVal.Elem()); err != nil {
+	if err := s.valueSerializer.Read(ctx, type_.Elem(), newVal.Elem()); err != nil {
 		return err
 	}
 	value.Set(newVal)

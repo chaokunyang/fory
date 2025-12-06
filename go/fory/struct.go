@@ -60,19 +60,7 @@ func (s *structSerializer) NeedToWriteRef() bool {
 	return true
 }
 
-func (s *structSerializer) Write(ctx *WriteContext, value any) error {
-	return s.WriteReflect(ctx, reflect.ValueOf(value))
-}
-
-func (s *structSerializer) Read(ctx *ReadContext) (any, error) {
-	result := reflect.New(s.type_).Elem()
-	if err := s.ReadReflect(ctx, s.type_, result); err != nil {
-		return nil, err
-	}
-	return result.Interface(), nil
-}
-
-func (s *structSerializer) WriteReflect(ctx *WriteContext, value reflect.Value) error {
+func (s *structSerializer) Write(ctx *WriteContext, value reflect.Value) error {
 	buf := ctx.Buffer()
 	if s.fields == nil {
 		if s.type_ == nil {
@@ -122,7 +110,7 @@ func (s *structSerializer) WriteReflect(ctx *WriteContext, value reflect.Value) 
 	return nil
 }
 
-func (s *structSerializer) ReadReflect(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+func (s *structSerializer) Read(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	buf := ctx.Buffer()
 	if value.Kind() == reflect.Ptr {
 		if value.IsNil() {
@@ -511,19 +499,7 @@ func (s *ptrToStructSerializer) NeedToWriteRef() bool {
 	return true
 }
 
-func (s *ptrToStructSerializer) Write(ctx *WriteContext, value any) error {
-	return s.WriteReflect(ctx, reflect.ValueOf(value))
-}
-
-func (s *ptrToStructSerializer) Read(ctx *ReadContext) (any, error) {
-	result := reflect.New(s.type_.Elem())
-	if err := s.ReadReflect(ctx, s.type_, result); err != nil {
-		return nil, err
-	}
-	return result.Interface(), nil
-}
-
-func (s *ptrToStructSerializer) WriteReflect(ctx *WriteContext, value reflect.Value) error {
+func (s *ptrToStructSerializer) Write(ctx *WriteContext, value reflect.Value) error {
 	elemValue := value.Elem()
 
 	// In compatible mode, write typeInfo for the struct so TypeDefs are collected
@@ -537,10 +513,10 @@ func (s *ptrToStructSerializer) WriteReflect(ctx *WriteContext, value reflect.Va
 		}
 	}
 
-	return s.structSerializer.WriteReflect(ctx, elemValue)
+	return s.structSerializer.Write(ctx, elemValue)
 }
 
-func (s *ptrToStructSerializer) ReadReflect(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+func (s *ptrToStructSerializer) Read(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	newValue := reflect.New(type_.Elem())
 	value.Set(newValue)
 	elem := newValue.Elem()
@@ -548,7 +524,7 @@ func (s *ptrToStructSerializer) ReadReflect(ctx *ReadContext, type_ reflect.Type
 
 	// In compatible mode, the structSerializer may have fieldDefs from TypeDef
 	// which were set when this ptrToStructSerializer was created by readSharedTypeMeta
-	return s.structSerializer.ReadReflect(ctx, type_.Elem(), elem)
+	return s.structSerializer.Read(ctx, type_.Elem(), elem)
 }
 
 // ptrToCodegenSerializer wraps a generated serializer for pointer types
@@ -565,30 +541,18 @@ func (s *ptrToCodegenSerializer) NeedToWriteRef() bool {
 	return true
 }
 
-func (s *ptrToCodegenSerializer) Write(ctx *WriteContext, value any) error {
-	return s.WriteReflect(ctx, reflect.ValueOf(value))
-}
-
-func (s *ptrToCodegenSerializer) Read(ctx *ReadContext) (any, error) {
-	result := reflect.New(s.type_.Elem())
-	if err := s.ReadReflect(ctx, s.type_, result); err != nil {
-		return nil, err
-	}
-	return result.Interface(), nil
-}
-
-func (s *ptrToCodegenSerializer) WriteReflect(ctx *WriteContext, value reflect.Value) error {
+func (s *ptrToCodegenSerializer) Write(ctx *WriteContext, value reflect.Value) error {
 	// Dereference pointer and delegate to the generated serializer
-	return s.codegenSerializer.WriteReflect(ctx, value.Elem())
+	return s.codegenSerializer.Write(ctx, value.Elem())
 }
 
-func (s *ptrToCodegenSerializer) ReadReflect(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+func (s *ptrToCodegenSerializer) Read(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	// Allocate new value if needed
 	newValue := reflect.New(type_.Elem())
 	value.Set(newValue)
 	elem := newValue.Elem()
 	ctx.RefResolver().Reference(newValue)
-	return s.codegenSerializer.ReadReflect(ctx, type_.Elem(), elem)
+	return s.codegenSerializer.Read(ctx, type_.Elem(), elem)
 }
 
 // Field sorting helpers

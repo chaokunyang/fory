@@ -22,24 +22,16 @@ import (
 )
 
 // Serializer is the unified interface for all serialization.
-// It provides both any-based API (fast for primitives) and reflect.Value-based API (for containers).
+// It provides reflect.Value-based API for efficient serialization.
 type Serializer interface {
-	// Write serializes data using any type (fast path for primitives).
+	// Write serializes using reflect.Value.
 	// Does NOT write ref/type info - caller handles that.
-	Write(ctx *WriteContext, value any) error
+	Write(ctx *WriteContext, value reflect.Value) error
 
-	// Read deserializes data and returns as any.
-	// Does NOT read ref/type info - caller handles that.
-	Read(ctx *ReadContext) (any, error)
-
-	// WriteReflect serializes using reflect.Value (efficient when value is already reflect.Value).
-	// Does NOT write ref/type info - caller handles that.
-	WriteReflect(ctx *WriteContext, value reflect.Value) error
-
-	// ReadReflect deserializes directly into the provided reflect.Value.
+	// Read deserializes directly into the provided reflect.Value.
 	// Does NOT read ref/type info - caller handles that.
 	// For non-trivial types (slices, maps), implementations should reuse existing capacity when possible.
-	ReadReflect(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error
+	Read(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error
 
 	// TypeId returns the Fory protocol type ID
 	TypeId() TypeId
@@ -78,7 +70,7 @@ func writeBySerializer(ctx *WriteContext, value reflect.Value, serializer Serial
 		}
 		serializer = typeInfo.Serializer
 	}
-	return serializer.WriteReflect(ctx, value)
+	return serializer.Write(ctx, value)
 }
 
 func readBySerializer(ctx *ReadContext, value reflect.Value, serializer Serializer, referencable bool) error {
@@ -97,5 +89,5 @@ func readBySerializer(ctx *ReadContext, value reflect.Value, serializer Serializ
 			return nil
 		}
 	}
-	return serializer.ReadReflect(ctx, value.Type(), value)
+	return serializer.Read(ctx, value.Type(), value)
 }

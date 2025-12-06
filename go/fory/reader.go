@@ -838,7 +838,7 @@ func (c *ReadContext) readReferencableBySerializer(value reflect.Value, serializ
 		return nil
 	}
 	// directly read without altering serializer
-	return serializer.ReadReflect(c, value.Type(), value)
+	return serializer.Read(c, value.Type(), value)
 }
 
 // readData reads value data using the type resolver
@@ -867,11 +867,11 @@ func (c *ReadContext) readData(value reflect.Value, serializer Serializer) error
 				}
 			}
 		}
-		if err := serializer.ReadReflect(c, type_, concrete); err != nil {
+		if err := serializer.Read(c, type_, concrete); err != nil {
 			return err
 		}
 		value.Set(concrete)
 		return nil
 	}
-	return serializer.ReadReflect(c, value.Type(), value)
+	return serializer.Read(c, value.Type(), value)
 }

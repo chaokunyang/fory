@@ -569,7 +569,7 @@ func (c *WriteContext) writeValue(value reflect.Value, serializer Serializer) er
 	}
 
 	if serializer != nil {
-		return serializer.WriteReflect(c, value)
+		return serializer.Write(c, value)
 	}
 
 	// Get type information for the value
@@ -582,5 +582,5 @@ func (c *WriteContext) writeValue(value reflect.Value, serializer Serializer) er
 		return fmt.Errorf("cannot write typeinfo for value %v: %v", value, err)
 	}
 	serializer = typeInfo.Serializer
-	return serializer.WriteReflect(c, value)
+	return serializer.Write(c, value)
 }

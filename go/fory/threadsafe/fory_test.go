@@ -39,10 +39,12 @@ func TestFory(t *testing.T) {
 	})
 
 	t.Run("GenericSerialization", func(t *testing.T) {
-		data, err := Serialize(f, "hello world")
+		val := "hello world"
+		data, err := Serialize(f, &val)
 		require.NoError(t, err)
 
-		result, err := Deserialize[string](f, data)
+		var result string
+		err = Deserialize(f, data, &result)
 		require.NoError(t, err)
 		require.Equal(t, "hello world", result)
 	})
@@ -70,10 +72,11 @@ func TestFory(t *testing.T) {
 		done := make(chan bool, 10)
 		for i := 0; i < 10; i++ {
 			go func(val int64) {
-				data, err := Serialize(f, val)
+				data, err := Serialize(f, &val)
 				require.NoError(t, err)
 
-				result, err := Deserialize[int64](f, data)
+				var result int64
+				err = Deserialize(f, data, &result)
 				require.NoError(t, err)
 				require.Equal(t, val, result)
 				done <- true
@@ -108,37 +111,39 @@ func TestSerializeAny(t *testing.T) {
 	})
 }
 
-// TestDeserializeTo tests the DeserializeTo generic function
-func TestDeserializeTo(t *testing.T) {
+// TestDeserialize tests the Deserialize generic function
+func TestDeserialize(t *testing.T) {
 	f := New(fory.WithRefTracking(true))
 
 	t.Run("Int32", func(t *testing.T) {
-		data, err := Serialize(f, int32(42))
+		val := int32(42)
+		data, err := Serialize(f, &val)
 		require.NoError(t, err)
 
 		var result int32
-		err = DeserializeTo(f, data, &result)
+		err = Deserialize(f, data, &result)
 		require.NoError(t, err)
 		require.Equal(t, int32(42), result)
 	})
 
 	t.Run("String", func(t *testing.T) {
-		data, err := Serialize(f, "hello")
+		val := "hello"
+		data, err := Serialize(f, &val)
 		require.NoError(t, err)
 
 		var result string
-		err = DeserializeTo(f, data, &result)
+		err = Deserialize(f, data, &result)
 		require.NoError(t, err)
 		require.Equal(t, "hello", result)
 	})
 
 	t.Run("Slice", func(t *testing.T) {
 		original := []int32{1, 2, 3, 4, 5}
-		data, err := Serialize(f, original)
+		data, err := Serialize(f, &original)
 		require.NoError(t, err)
 
 		var result []int32
-		err = DeserializeTo(f, data, &result)
+		err = Deserialize(f, data, &result)
 		require.NoError(t, err)
 		require.Equal(t, original, result)
 	})
@@ -147,10 +152,12 @@ func TestDeserializeTo(t *testing.T) {
 // TestGlobalFunctions tests the global convenience functions
 func TestGlobalFunctions(t *testing.T) {
 	t.Run("Marshal", func(t *testing.T) {
-		data, err := Marshal(int32(42))
+		val := int32(42)
+		data, err := Marshal(&val)
 		require.NoError(t, err)
 
-		result, err := Unmarshal[int32](data)
+		var result int32
+		err = Unmarshal(data, &result)
 		require.NoError(t, err)
 		require.Equal(t, int32(42), result)
 	})
@@ -164,15 +171,5 @@ func TestGlobalFunctions(t *testing.T) {
 		err = UnmarshalTo(data, &result)
 		require.NoError(t, err)
 		require.Equal(t, "hello", result)
-	})
-
-	t.Run("UnmarshalToTyped", func(t *testing.T) {
-		data, err := Marshal(int64(999))
-		require.NoError(t, err)
-
-		var result int64
-		err = UnmarshalToTyped(data, &result)
-		require.NoError(t, err)
-		require.Equal(t, int64(999), result)
 	})
 }

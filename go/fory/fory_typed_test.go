@@ -24,91 +24,109 @@ import (
 )
 
 // TestSerializeGenericPrimitives tests Serialize[T]/Deserialize[T] with primitives.
-// These use TypedSerializer[T] when registered, otherwise fall back to reflection.
+// Both functions take pointers to avoid interface heap allocation and struct copy.
 func TestSerializeGenericPrimitives(t *testing.T) {
 	f := NewFory(WithRefTracking(true))
 
 	t.Run("Bool", func(t *testing.T) {
-		// bool is registered with TypedSerializer
-		data, err := Serialize(f, true)
+		val := true
+		data, err := Serialize(f, &val)
 		require.NoError(t, err)
-		result, err := Deserialize[bool](f, data)
+		var result bool
+		err = Deserialize(f, data, &result)
 		require.NoError(t, err)
 		require.True(t, result)
 
-		data, err = Serialize(f, false)
+		val = false
+		data, err = Serialize(f, &val)
 		require.NoError(t, err)
-		result, err = Deserialize[bool](f, data)
+		err = Deserialize(f, data, &result)
 		require.NoError(t, err)
 		require.False(t, result)
 	})
 
 	t.Run("Int8", func(t *testing.T) {
-		data, err := Serialize(f, int8(-42))
+		val := int8(-42)
+		data, err := Serialize(f, &val)
 		require.NoError(t, err)
-		result, err := Deserialize[int8](f, data)
+		var result int8
+		err = Deserialize(f, data, &result)
 		require.NoError(t, err)
 		require.Equal(t, int8(-42), result)
 	})
 
 	t.Run("Int16", func(t *testing.T) {
-		data, err := Serialize(f, int16(1234))
+		val := int16(1234)
+		data, err := Serialize(f, &val)
 		require.NoError(t, err)
-		result, err := Deserialize[int16](f, data)
+		var result int16
+		err = Deserialize(f, data, &result)
 		require.NoError(t, err)
 		require.Equal(t, int16(1234), result)
 	})
 
 	t.Run("Int32", func(t *testing.T) {
-		data, err := Serialize(f, int32(42))
+		val := int32(42)
+		data, err := Serialize(f, &val)
 		require.NoError(t, err)
-		result, err := Deserialize[int32](f, data)
+		var result int32
+		err = Deserialize(f, data, &result)
 		require.NoError(t, err)
 		require.Equal(t, int32(42), result)
 
 		// Test negative
-		data, err = Serialize(f, int32(-12345))
+		val = int32(-12345)
+		data, err = Serialize(f, &val)
 		require.NoError(t, err)
-		result, err = Deserialize[int32](f, data)
+		err = Deserialize(f, data, &result)
 		require.NoError(t, err)
 		require.Equal(t, int32(-12345), result)
 	})
 
 	t.Run("Int64", func(t *testing.T) {
-		data, err := Serialize(f, int64(9876543210))
+		val := int64(9876543210)
+		data, err := Serialize(f, &val)
 		require.NoError(t, err)
-		result, err := Deserialize[int64](f, data)
+		var result int64
+		err = Deserialize(f, data, &result)
 		require.NoError(t, err)
 		require.Equal(t, int64(9876543210), result)
 	})
 
 	t.Run("Float32", func(t *testing.T) {
-		data, err := Serialize(f, float32(3.14))
+		val := float32(3.14)
+		data, err := Serialize(f, &val)
 		require.NoError(t, err)
-		result, err := Deserialize[float32](f, data)
+		var result float32
+		err = Deserialize(f, data, &result)
 		require.NoError(t, err)
 		require.InDelta(t, float32(3.14), result, 0.001)
 	})
 
 	t.Run("Float64", func(t *testing.T) {
-		data, err := Serialize(f, 2.71828)
+		val := 2.71828
+		data, err := Serialize(f, &val)
 		require.NoError(t, err)
-		result, err := Deserialize[float64](f, data)
+		var result float64
+		err = Deserialize(f, data, &result)
 		require.NoError(t, err)
 		require.InDelta(t, 2.71828, result, 0.00001)
 	})
 
 	t.Run("String", func(t *testing.T) {
-		data, err := Serialize(f, "hello fory")
+		val := "hello fory"
+		data, err := Serialize(f, &val)
 		require.NoError(t, err)
-		result, err := Deserialize[string](f, data)
+		var result string
+		err = Deserialize(f, data, &result)
 		require.NoError(t, err)
 		require.Equal(t, "hello fory", result)
 
 		// Test empty string
-		data, err = Serialize(f, "")
+		val = ""
+		data, err = Serialize(f, &val)
 		require.NoError(t, err)
-		result, err = Deserialize[string](f, data)
+		err = Deserialize(f, data, &result)
 		require.NoError(t, err)
 		require.Equal(t, "", result)
 	})
@@ -128,31 +146,34 @@ func TestSerializeGenericComplex(t *testing.T) {
 		require.NoError(t, err)
 
 		original := TestStruct{Name: "test", Value: 100}
-		data, err := Serialize(f, original)
+		data, err := Serialize(f, &original)
 		require.NoError(t, err)
 
 		// Use reflection-based path for deserialization
-		result, err := Deserialize[TestStruct](f, data)
+		var result TestStruct
+		err = Deserialize(f, data, &result)
 		require.NoError(t, err)
 		require.Equal(t, original, result)
 	})
 
 	t.Run("Slice", func(t *testing.T) {
 		original := []int32{1, 2, 3, 4, 5}
-		data, err := Serialize(f, original)
+		data, err := Serialize(f, &original)
 		require.NoError(t, err)
 
-		result, err := Deserialize[[]int32](f, data)
+		var result []int32
+		err = Deserialize(f, data, &result)
 		require.NoError(t, err)
 		require.Equal(t, original, result)
 	})
 
 	t.Run("Map", func(t *testing.T) {
 		original := map[string]int32{"a": 1, "b": 2, "c": 3}
-		data, err := Serialize(f, original)
+		data, err := Serialize(f, &original)
 		require.NoError(t, err)
 
-		result, err := Deserialize[map[string]int32](f, data)
+		var result map[string]int32
+		err = Deserialize(f, data, &result)
 		require.NoError(t, err)
 		require.Equal(t, original, result)
 	})
@@ -162,15 +183,16 @@ func TestSerializeGenericComplex(t *testing.T) {
 func TestSerializeDeserializeRoundTrip(t *testing.T) {
 	f := NewFory(WithRefTracking(true))
 
-	// Test that Serialize[T] uses TypedSerializer when available
+	// Test that Serialize[T] uses pointer-based fast path when available
 	t.Run("TypedSerializerPath", func(t *testing.T) {
-		// Int32 has a registered TypedSerializer
+		// Int32 has a registered fast path
 		original := int32(999)
-		data, err := Serialize(f, original)
+		data, err := Serialize(f, &original)
 		require.NoError(t, err)
 		require.NotEmpty(t, data)
 
-		result, err := Deserialize[int32](f, data)
+		var result int32
+		err = Deserialize(f, data, &result)
 		require.NoError(t, err)
 		require.Equal(t, original, result)
 	})
@@ -184,10 +206,11 @@ func TestSerializeDeserializeRoundTrip(t *testing.T) {
 		f.RegisterByNamespace(CustomStruct{}, "test", "CustomStruct")
 
 		original := CustomStruct{ID: 123, Name: "test"}
-		data, err := Serialize(f, original)
+		data, err := Serialize(f, &original)
 		require.NoError(t, err)
 
-		result, err := Deserialize[CustomStruct](f, data)
+		var result CustomStruct
+		err = Deserialize(f, data, &result)
 		require.NoError(t, err)
 		require.Equal(t, original, result)
 	})

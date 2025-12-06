@@ -535,7 +535,7 @@ func (f *Fory) Reset() {
 // The serializer handles its own ref/type info writing internally.
 // Falls back to reflection-based serialization for unregistered types.
 // Note: Fory instance is NOT thread-safe. Use ThreadSafeFory for concurrent use.
-func Serialize[T any](f *Fory, value T) ([]byte, error) {
+func Serialize[T any](f *Fory, value *T) ([]byte, error) {
 	// Reuse context, just reset state
 	f.writeCtx.Reset()
 
@@ -543,37 +543,41 @@ func Serialize[T any](f *Fory, value T) ([]byte, error) {
 	writeHeader(f.writeCtx, f.config)
 
 	// Fast path: type switch for common types (Go compiler can optimize this)
+	// Using *T avoids interface heap allocation and struct copy
+	// Store boxed value once and reuse in default case
+	v := any(value)
 	var err error
-	switch val := any(value).(type) {
-	case bool:
-		err = f.writeCtx.WriteBoolValue(val, true, true)
-	case int8:
-		err = f.writeCtx.WriteInt8Value(val, true, true)
-	case int16:
-		err = f.writeCtx.WriteInt16Value(val, true, true)
-	case int32:
-		err = f.writeCtx.WriteInt32Value(val, true, true)
-	case int64:
-		err = f.writeCtx.WriteInt64Value(val, true, true)
-	case float32:
-		err = f.writeCtx.WriteFloat32Value(val, true, true)
-	case float64:
-		err = f.writeCtx.WriteFloat64Value(val, true, true)
-	case string:
-		err = f.writeCtx.WriteStringValue(val, true, true)
-	case []byte:
-		err = f.writeCtx.WriteByteSlice(val, true, true)
-	case []int32:
-		err = f.writeCtx.WriteInt32Slice(val, true, true)
-	case []int64:
-		err = f.writeCtx.WriteInt64Slice(val, true, true)
-	case []float64:
-		err = f.writeCtx.WriteFloat64Slice(val, true, true)
-	case []bool:
-		err = f.writeCtx.WriteBoolSlice(val, true, true)
+	switch val := v.(type) {
+	case *bool:
+		err = f.writeCtx.WriteBoolValue(*val, true, true)
+	case *int8:
+		err = f.writeCtx.WriteInt8Value(*val, true, true)
+	case *int16:
+		err = f.writeCtx.WriteInt16Value(*val, true, true)
+	case *int32:
+		err = f.writeCtx.WriteInt32Value(*val, true, true)
+	case *int64:
+		err = f.writeCtx.WriteInt64Value(*val, true, true)
+	case *float32:
+		err = f.writeCtx.WriteFloat32Value(*val, true, true)
+	case *float64:
+		err = f.writeCtx.WriteFloat64Value(*val, true, true)
+	case *string:
+		err = f.writeCtx.WriteStringValue(*val, true, true)
+	case *[]byte:
+		err = f.writeCtx.WriteByteSlice(*val, true, true)
+	case *[]int32:
+		err = f.writeCtx.WriteInt32Slice(*val, true, true)
+	case *[]int64:
+		err = f.writeCtx.WriteInt64Slice(*val, true, true)
+	case *[]float64:
+		err = f.writeCtx.WriteFloat64Slice(*val, true, true)
+	case *[]bool:
+		err = f.writeCtx.WriteBoolSlice(*val, true, true)
 	default:
 		// Fall back to reflection-based serialization
-		return f.SerializeAny(value)
+		// Reuse v (already boxed) and .Elem() to get underlying value without copy
+		return f.serializeReflectValue(reflect.ValueOf(v).Elem())
 	}
 
 	if err != nil {
@@ -584,22 +588,13 @@ func Serialize[T any](f *Fory, value T) ([]byte, error) {
 	return f.writeCtx.buffer.GetByteSlice(0, f.writeCtx.buffer.writerIndex), nil
 }
 
-// Deserialize - serializer auto-resolved from type T.
-// The serializer handles its own ref/type info reading internally.
-// Falls back to reflection-based deserialization for unregistered types.
-// Note: Fory instance is NOT thread-safe. Use ThreadSafeFory for concurrent use.
-func Deserialize[T any](f *Fory, data []byte) (T, error) {
-	var result T
-	err := DeserializeTo(f, data, &result)
-	return result, err
-}
-
-// DeserializeTo deserializes directly into the provided target, avoiding allocation when possible.
+// Deserialize deserializes data directly into the provided target.
+// Takes pointer to avoid interface heap allocation and enable direct writes.
 // For primitive types, this writes directly to the target pointer.
 // For slices, it reuses existing capacity when possible.
 // For structs, it reads directly into the struct fields.
 // Note: Fory instance is NOT thread-safe. Use ThreadSafeFory for concurrent use.
-func DeserializeTo[T any](f *Fory, data []byte, target *T) error {
+func Deserialize[T any](f *Fory, data []byte, target *T) error {
 	// Reuse context, reset and set new data
 	f.readCtx.Reset()
 	f.readCtx.SetData(data)
@@ -730,6 +725,42 @@ func (f *Fory) SerializeAny(value any) ([]byte, error) {
 
 	// Use WriteValue to serialize the value through the typeResolver
 	if err := f.writeCtx.WriteValue(reflect.ValueOf(value)); err != nil {
+		return nil, err
+	}
+
+	return f.writeCtx.buffer.GetByteSlice(0, f.writeCtx.buffer.writerIndex), nil
+}
+
+// serializeReflectValue serializes a reflect.Value directly, avoiding boxing overhead.
+// This is used by Serialize[T] fallback path to avoid struct copy.
+func (f *Fory) serializeReflectValue(value reflect.Value) ([]byte, error) {
+	f.writeCtx.Reset()
+	if f.metaContext != nil {
+		f.metaContext.Reset()
+	}
+
+	// In compatible mode with meta share, we need two-phase serialization
+	if f.config.Compatible && f.metaContext != nil {
+		tempBuffer := NewByteBuffer(nil)
+		origBuffer := f.writeCtx.buffer
+		f.writeCtx.buffer = tempBuffer
+
+		if err := f.writeCtx.WriteValue(value); err != nil {
+			f.writeCtx.buffer = origBuffer
+			return nil, err
+		}
+
+		f.writeCtx.buffer = origBuffer
+		writeHeader(f.writeCtx, f.config)
+		f.typeResolver.writeTypeDefs(f.writeCtx.buffer)
+		f.writeCtx.buffer.WriteBinary(tempBuffer.GetByteSlice(0, tempBuffer.writerIndex))
+
+		return f.writeCtx.buffer.GetByteSlice(0, f.writeCtx.buffer.writerIndex), nil
+	}
+
+	// Non-compatible mode: single-phase serialization
+	writeHeader(f.writeCtx, f.config)
+	if err := f.writeCtx.WriteValue(value); err != nil {
 		return nil, err
 	}
 

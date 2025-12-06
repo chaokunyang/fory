@@ -93,26 +93,20 @@ func (f *Fory) RegisterNamedType(type_ interface{}, typeName string) error {
 // Generic package-level functions
 // ============================================================================
 
-// Serialize serializes a value with type T inferred, thread-safe
-func Serialize[T any](f *Fory, value T) ([]byte, error) {
+// Serialize serializes a value with type T inferred, thread-safe.
+// Takes pointer to avoid interface heap allocation and struct copy.
+func Serialize[T any](f *Fory, value *T) ([]byte, error) {
 	inner := f.acquire()
 	defer f.release(inner)
 	return fory.Serialize(inner, value)
 }
 
-// Deserialize deserializes data to type T, thread-safe
-func Deserialize[T any](f *Fory, data []byte) (T, error) {
+// Deserialize deserializes data directly into the provided target, thread-safe.
+// Takes pointer to avoid interface heap allocation and enable direct writes.
+func Deserialize[T any](f *Fory, data []byte, target *T) error {
 	inner := f.acquire()
 	defer f.release(inner)
-	return fory.Deserialize[T](inner, data)
-}
-
-// DeserializeTo deserializes directly into the provided target, thread-safe.
-// Reuses existing capacity for slices when possible.
-func DeserializeTo[T any](f *Fory, data []byte, target *T) error {
-	inner := f.acquire()
-	defer f.release(inner)
-	return fory.DeserializeTo(inner, data, target)
+	return fory.Deserialize(inner, data, target)
 }
 
 // ============================================================================
@@ -122,23 +116,20 @@ func DeserializeTo[T any](f *Fory, data []byte, target *T) error {
 // Global thread-safe Fory instance for convenience
 var globalFory = New()
 
-// Marshal serializes a value using the global thread-safe instance
-func Marshal[T any](value T) ([]byte, error) {
+// Marshal serializes a value using the global thread-safe instance.
+// Takes pointer to avoid interface heap allocation and struct copy.
+func Marshal[T any](value *T) ([]byte, error) {
 	return Serialize(globalFory, value)
 }
 
-// Unmarshal deserializes data using the global thread-safe instance
-func Unmarshal[T any](data []byte) (T, error) {
-	return Deserialize[T](globalFory, data)
+// Unmarshal deserializes data into the provided target using the global thread-safe instance.
+// Takes pointer to avoid interface heap allocation and enable direct writes.
+func Unmarshal[T any](data []byte, target *T) error {
+	return Deserialize(globalFory, data, target)
 }
 
-// UnmarshalTo deserializes data into the provided pointer using the global thread-safe instance
+// UnmarshalTo deserializes data into the provided pointer using the global thread-safe instance.
+// This is for non-generic use cases.
 func UnmarshalTo(data []byte, v interface{}) error {
 	return globalFory.Deserialize(data, v)
-}
-
-// UnmarshalToTyped deserializes data directly into target using the global thread-safe instance.
-// This is the most efficient way to deserialize when you have an existing value to reuse.
-func UnmarshalToTyped[T any](data []byte, target *T) error {
-	return DeserializeTo(globalFory, data, target)
 }

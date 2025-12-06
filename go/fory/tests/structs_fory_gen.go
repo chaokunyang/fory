@@ -95,7 +95,11 @@ func (g DynamicSliceDemo_ForyGenSerializer) Write(ctx *fory.WriteContext, value 
 
 // Read deserializes and returns as any (implements fory.Serializer)
 func (g DynamicSliceDemo_ForyGenSerializer) Read(ctx *fory.ReadContext) (any, error) {
-	return nil, fmt.Errorf("DynamicSliceDemo_ForyGenSerializer.Read not implemented - use ReadReflect instead")
+	var v DynamicSliceDemo
+	if err := g.ReadTyped(ctx, &v); err != nil {
+		return nil, err
+	}
+	return v, nil
 }
 
 // WriteReflect provides reflect.Value interface compatibility (implements fory.Serializer)
@@ -402,7 +406,11 @@ func (g MapDemo_ForyGenSerializer) Write(ctx *fory.WriteContext, value any) erro
 
 // Read deserializes and returns as any (implements fory.Serializer)
 func (g MapDemo_ForyGenSerializer) Read(ctx *fory.ReadContext) (any, error) {
-	return nil, fmt.Errorf("MapDemo_ForyGenSerializer.Read not implemented - use ReadReflect instead")
+	var v MapDemo
+	if err := g.ReadTyped(ctx, &v); err != nil {
+		return nil, err
+	}
+	return v, nil
 }
 
 // WriteReflect provides reflect.Value interface compatibility (implements fory.Serializer)
@@ -669,7 +677,11 @@ func (g SliceDemo_ForyGenSerializer) Write(ctx *fory.WriteContext, value any) er
 
 // Read deserializes and returns as any (implements fory.Serializer)
 func (g SliceDemo_ForyGenSerializer) Read(ctx *fory.ReadContext) (any, error) {
-	return nil, fmt.Errorf("SliceDemo_ForyGenSerializer.Read not implemented - use ReadReflect instead")
+	var v SliceDemo
+	if err := g.ReadTyped(ctx, &v); err != nil {
+		return nil, err
+	}
+	return v, nil
 }
 
 // WriteReflect provides reflect.Value interface compatibility (implements fory.Serializer)
@@ -772,7 +784,11 @@ func (g ValidationDemo_ForyGenSerializer) Write(ctx *fory.WriteContext, value an
 
 // Read deserializes and returns as any (implements fory.Serializer)
 func (g ValidationDemo_ForyGenSerializer) Read(ctx *fory.ReadContext) (any, error) {
-	return nil, fmt.Errorf("ValidationDemo_ForyGenSerializer.Read not implemented - use ReadReflect instead")
+	var v ValidationDemo
+	if err := g.ReadTyped(ctx, &v); err != nil {
+		return nil, err
+	}
+	return v, nil
 }
 
 // WriteReflect provides reflect.Value interface compatibility (implements fory.Serializer)

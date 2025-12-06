@@ -50,10 +50,17 @@ func generateWriteTyped(buf *bytes.Buffer, s *StructInfo) error {
 	return nil
 }
 
-// generateWriteInterface generates interface compatibility WriteValue method
+// generateWriteInterface generates interface compatibility methods (Write and WriteReflect)
 func generateWriteInterface(buf *bytes.Buffer, s *StructInfo) error {
-	fmt.Fprintf(buf, "// WriteValue provides reflect.Value interface compatibility (implements fory.Serializer)\n")
-	fmt.Fprintf(buf, "func (g %s_ForyGenSerializer) WriteValue(ctx *fory.WriteContext, value reflect.Value) error {\n", s.Name)
+	// Generate Write method (any-based API)
+	fmt.Fprintf(buf, "// Write serializes using any type (implements fory.Serializer)\n")
+	fmt.Fprintf(buf, "func (g %s_ForyGenSerializer) Write(ctx *fory.WriteContext, value any) error {\n", s.Name)
+	fmt.Fprintf(buf, "\treturn g.WriteReflect(ctx, reflect.ValueOf(value))\n")
+	fmt.Fprintf(buf, "}\n\n")
+
+	// Generate WriteReflect method (reflect.Value-based API)
+	fmt.Fprintf(buf, "// WriteReflect provides reflect.Value interface compatibility (implements fory.Serializer)\n")
+	fmt.Fprintf(buf, "func (g %s_ForyGenSerializer) WriteReflect(ctx *fory.WriteContext, value reflect.Value) error {\n", s.Name)
 	fmt.Fprintf(buf, "\t// Convert reflect.Value to concrete type and delegate to typed method\n")
 	fmt.Fprintf(buf, "\tvar v *%s\n", s.Name)
 	fmt.Fprintf(buf, "\tif value.Kind() == reflect.Ptr {\n")

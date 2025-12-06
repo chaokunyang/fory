@@ -52,10 +52,21 @@ func generateReadTyped(buf *bytes.Buffer, s *StructInfo) error {
 	return nil
 }
 
-// generateReadInterface generates interface compatibility ReadValue method
+// generateReadInterface generates interface compatibility methods (Read and ReadReflect)
 func generateReadInterface(buf *bytes.Buffer, s *StructInfo) error {
-	fmt.Fprintf(buf, "// ReadValue provides reflect.Value interface compatibility (implements fory.Serializer)\n")
-	fmt.Fprintf(buf, "func (g %s_ForyGenSerializer) ReadValue(ctx *fory.ReadContext, type_ reflect.Type, value reflect.Value) error {\n", s.Name)
+	// Generate Read method (any-based API)
+	fmt.Fprintf(buf, "// Read deserializes and returns as any (implements fory.Serializer)\n")
+	fmt.Fprintf(buf, "func (g %s_ForyGenSerializer) Read(ctx *fory.ReadContext) (any, error) {\n", s.Name)
+	fmt.Fprintf(buf, "\tvar v %s\n", s.Name)
+	fmt.Fprintf(buf, "\tif err := g.ReadTyped(ctx, &v); err != nil {\n")
+	fmt.Fprintf(buf, "\t\treturn nil, err\n")
+	fmt.Fprintf(buf, "\t}\n")
+	fmt.Fprintf(buf, "\treturn v, nil\n")
+	fmt.Fprintf(buf, "}\n\n")
+
+	// Generate ReadReflect method (reflect.Value-based API)
+	fmt.Fprintf(buf, "// ReadReflect provides reflect.Value interface compatibility (implements fory.Serializer)\n")
+	fmt.Fprintf(buf, "func (g %s_ForyGenSerializer) ReadReflect(ctx *fory.ReadContext, type_ reflect.Type, value reflect.Value) error {\n", s.Name)
 	fmt.Fprintf(buf, "\t// Convert reflect.Value to concrete type and delegate to typed method\n")
 	fmt.Fprintf(buf, "\tvar v *%s\n", s.Name)
 	fmt.Fprintf(buf, "\tif value.Kind() == reflect.Ptr {\n")

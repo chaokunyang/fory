@@ -101,7 +101,7 @@ struct Serializer<
     }
     Error error;
     if (read_type) {
-      uint32_t type_id_read = ctx.read_varuint32(&error);
+      uint32_t type_id_read = ctx.read_varuint32(error);
       if (FORY_PREDICT_FALSE(!error.ok())) {
         return Unexpected(std::move(error));
       }
@@ -116,7 +116,7 @@ struct Serializer<
   static Result<std::array<T, N>, Error> read_data(ReadContext &ctx) {
     // Read array length
     Error error;
-    uint32_t length = ctx.read_varuint32(&error);
+    uint32_t length = ctx.read_varuint32(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -187,7 +187,7 @@ template <size_t N> struct Serializer<std::array<bool, N>> {
     }
     Error error;
     if (read_type) {
-      uint32_t type_id_read = ctx.read_varuint32(&error);
+      uint32_t type_id_read = ctx.read_varuint32(error);
       if (FORY_PREDICT_FALSE(!error.ok())) {
         return Unexpected(std::move(error));
       }
@@ -202,7 +202,7 @@ template <size_t N> struct Serializer<std::array<bool, N>> {
   static Result<std::array<bool, N>, Error> read_data(ReadContext &ctx) {
     // Read array length
     Error error;
-    uint32_t length = ctx.read_varuint32(&error);
+    uint32_t length = ctx.read_varuint32(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -213,7 +213,7 @@ template <size_t N> struct Serializer<std::array<bool, N>> {
     }
     std::array<bool, N> arr;
     for (size_t i = 0; i < N; ++i) {
-      uint8_t byte = ctx.read_uint8(&error);
+      uint8_t byte = ctx.read_uint8(error);
       if (FORY_PREDICT_FALSE(!error.ok())) {
         return Unexpected(std::move(error));
       }

@@ -89,7 +89,7 @@ template <> struct Serializer<Duration> {
     }
     Error error;
     if (read_type) {
-      uint32_t type_id_read = ctx.read_varuint32(&error);
+      uint32_t type_id_read = ctx.read_varuint32(error);
       if (FORY_PREDICT_FALSE(!error.ok())) {
         return Unexpected(std::move(error));
       }
@@ -152,7 +152,7 @@ template <> struct Serializer<Timestamp> {
     }
     Error error;
     if (read_type) {
-      uint32_t type_id_read = ctx.read_varuint32(&error);
+      uint32_t type_id_read = ctx.read_varuint32(error);
       if (FORY_PREDICT_FALSE(!error.ok())) {
         return Unexpected(std::move(error));
       }
@@ -213,7 +213,7 @@ template <> struct Serializer<LocalDate> {
     }
     Error error;
     if (read_type) {
-      uint32_t type_id_read = ctx.read_varuint32(&error);
+      uint32_t type_id_read = ctx.read_varuint32(error);
       if (FORY_PREDICT_FALSE(!error.ok())) {
         return Unexpected(std::move(error));
       }

@@ -44,8 +44,8 @@ namespace serialization {
 /// Example usage:
 /// ```cpp
 /// Error error;
-/// int32_t value = buffer.ReadVarInt32(&error);
-/// FORY_RETURN_IF_SERDE_ERROR(&error);
+/// int32_t value = buffer.ReadVarInt32(error);
+/// FORY_RETURN_IF_SERDE_ERROR(error);
 /// // Use value...
 /// ```
 #define FORY_RETURN_IF_SERDE_ERROR(error_ptr)                                  \
@@ -142,7 +142,7 @@ inline Result<HeaderInfo, Error> read_header(Buffer &buffer) {
   // Java writes a language byte after header in xlang mode - read and ignore it
   if (info.is_xlang) {
     Error error;
-    uint8_t lang_byte = buffer.ReadUint8(&error);
+    uint8_t lang_byte = buffer.ReadUint8(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -184,7 +184,7 @@ inline Result<bool, Error> consume_ref_flag(ReadContext &ctx, bool read_ref) {
     return true;
   }
   Error error;
-  int8_t flag = ctx.read_int8(&error);
+  int8_t flag = ctx.read_int8(error);
   if (FORY_PREDICT_FALSE(!error.ok())) {
     return Unexpected(std::move(error));
   }
@@ -195,7 +195,7 @@ inline Result<bool, Error> consume_ref_flag(ReadContext &ctx, bool read_ref) {
     return true;
   }
   if (flag == REF_FLAG) {
-    uint32_t ref_id = ctx.read_varuint32(&error);
+    uint32_t ref_id = ctx.read_varuint32(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }

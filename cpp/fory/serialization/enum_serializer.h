@@ -100,7 +100,7 @@ struct Serializer<E, std::enable_if_t<std::is_enum_v<E>>> {
     // then read the ordinal.
     if (ctx.is_xlang() && !read_ref) {
       Error error;
-      int8_t flag = ctx.read_int8(&error);
+      int8_t flag = ctx.read_int8(error);
       if (FORY_PREDICT_FALSE(!error.ok())) {
         return Unexpected(std::move(error));
       }
@@ -128,7 +128,7 @@ struct Serializer<E, std::enable_if_t<std::is_enum_v<E>>> {
 
   static inline Result<E, Error> read_data(ReadContext &ctx) {
     Error error;
-    uint32_t raw_ordinal = ctx.read_varuint32(&error);
+    uint32_t raw_ordinal = ctx.read_varuint32(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }

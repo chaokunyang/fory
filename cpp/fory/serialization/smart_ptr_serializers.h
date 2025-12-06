@@ -133,7 +133,7 @@ template <typename T> struct Serializer<std::optional<T>> {
 
     const uint32_t flag_pos = ctx.buffer().reader_index();
     Error error;
-    int8_t flag = ctx.read_int8(&error);
+    int8_t flag = ctx.read_int8(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -172,7 +172,7 @@ template <typename T> struct Serializer<std::optional<T>> {
 
     const uint32_t flag_pos = ctx.buffer().reader_index();
     Error error;
-    int8_t flag = ctx.read_int8(&error);
+    int8_t flag = ctx.read_int8(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -378,7 +378,7 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
 
     // Handle read_ref=true case
     Error error;
-    int8_t flag = ctx.read_int8(&error);
+    int8_t flag = ctx.read_int8(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -391,7 +391,7 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
         return Unexpected(Error::invalid_ref(
             "Reference flag encountered when reference tracking disabled"));
       }
-      uint32_t ref_id = ctx.read_varuint32(&error);
+      uint32_t ref_id = ctx.read_varuint32(error);
       if (FORY_PREDICT_FALSE(!error.ok())) {
         return Unexpected(std::move(error));
       }
@@ -470,7 +470,7 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
 
     // Handle read_ref=true case
     Error error;
-    int8_t flag = ctx.read_int8(&error);
+    int8_t flag = ctx.read_int8(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -484,7 +484,7 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
         return Unexpected(Error::invalid_ref(
             "Reference flag encountered when reference tracking disabled"));
       }
-      uint32_t ref_id = ctx.read_varuint32(&error);
+      uint32_t ref_id = ctx.read_varuint32(error);
       if (FORY_PREDICT_FALSE(!error.ok())) {
         return Unexpected(std::move(error));
       }
@@ -675,7 +675,7 @@ template <typename T> struct Serializer<std::unique_ptr<T>> {
 
     // Handle read_ref=true case
     Error error;
-    int8_t flag = ctx.read_int8(&error);
+    int8_t flag = ctx.read_int8(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -737,7 +737,7 @@ template <typename T> struct Serializer<std::unique_ptr<T>> {
 
     // Handle read_ref=true case
     Error error;
-    int8_t flag = ctx.read_int8(&error);
+    int8_t flag = ctx.read_int8(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }

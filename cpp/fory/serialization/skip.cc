@@ -54,7 +54,7 @@ inline bool field_need_write_ref_into_runtime(const FieldType &field_type) {
 Result<void, Error> skip_varint(ReadContext &ctx) {
   // Skip varint by reading it
   Error error;
-  ctx.read_varuint64(&error);
+  ctx.read_varuint64(error);
   if (FORY_PREDICT_FALSE(!error.ok())) {
     return Unexpected(std::move(error));
   }
@@ -64,7 +64,7 @@ Result<void, Error> skip_varint(ReadContext &ctx) {
 Result<void, Error> skip_string(ReadContext &ctx) {
   // Read string length + encoding
   Error error;
-  uint64_t size_encoding = ctx.read_varuint64(&error);
+  uint64_t size_encoding = ctx.read_varuint64(error);
   if (FORY_PREDICT_FALSE(!error.ok())) {
     return Unexpected(std::move(error));
   }
@@ -78,13 +78,13 @@ Result<void, Error> skip_string(ReadContext &ctx) {
 Result<void, Error> skip_list(ReadContext &ctx, const FieldType &field_type) {
   // Read list length
   Error error;
-  uint64_t length = ctx.read_varuint64(&error);
+  uint64_t length = ctx.read_varuint64(error);
   if (FORY_PREDICT_FALSE(!error.ok())) {
     return Unexpected(std::move(error));
   }
 
   // Read elements header
-  uint8_t header = ctx.read_uint8(&error);
+  uint8_t header = ctx.read_uint8(error);
   if (FORY_PREDICT_FALSE(!error.ok())) {
     return Unexpected(std::move(error));
   }
@@ -95,7 +95,7 @@ Result<void, Error> skip_list(ReadContext &ctx, const FieldType &field_type) {
 
   // If not declared type, skip element type info once
   if (!is_declared_type) {
-    ctx.read_uint8(&error);
+    ctx.read_uint8(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -115,7 +115,7 @@ Result<void, Error> skip_list(ReadContext &ctx, const FieldType &field_type) {
   for (uint64_t i = 0; i < length; ++i) {
     if (track_ref) {
       // Read and check ref flag
-      int8_t ref_flag = ctx.read_int8(&error);
+      int8_t ref_flag = ctx.read_int8(error);
       if (FORY_PREDICT_FALSE(!error.ok())) {
         return Unexpected(std::move(error));
       }
@@ -124,7 +124,7 @@ Result<void, Error> skip_list(ReadContext &ctx, const FieldType &field_type) {
       }
     } else if (has_null) {
       // Read null flag
-      int8_t null_flag = ctx.read_int8(&error);
+      int8_t null_flag = ctx.read_int8(error);
       if (FORY_PREDICT_FALSE(!error.ok())) {
         return Unexpected(std::move(error));
       }
@@ -149,7 +149,7 @@ Result<void, Error> skip_set(ReadContext &ctx, const FieldType &field_type) {
 Result<void, Error> skip_map(ReadContext &ctx, const FieldType &field_type) {
   // Read map length
   Error error;
-  uint64_t total_length = ctx.read_varuint64(&error);
+  uint64_t total_length = ctx.read_varuint64(error);
   if (FORY_PREDICT_FALSE(!error.ok())) {
     return Unexpected(std::move(error));
   }
@@ -168,13 +168,13 @@ Result<void, Error> skip_map(ReadContext &ctx, const FieldType &field_type) {
   uint64_t read_count = 0;
   while (read_count < total_length) {
     // Read chunk header
-    uint8_t chunk_header = ctx.read_uint8(&error);
+    uint8_t chunk_header = ctx.read_uint8(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
 
     // Read chunk size
-    uint8_t chunk_size = ctx.read_uint8(&error);
+    uint8_t chunk_size = ctx.read_uint8(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -189,7 +189,7 @@ Result<void, Error> skip_map(ReadContext &ctx, const FieldType &field_type) {
     for (uint8_t i = 0; i < chunk_size; ++i) {
       // Skip key with ref flag if needed
       if (key_track_ref || key_has_null) {
-        int8_t key_ref = ctx.read_int8(&error);
+        int8_t key_ref = ctx.read_int8(error);
         if (FORY_PREDICT_FALSE(!error.ok())) {
           return Unexpected(std::move(error));
         }
@@ -201,7 +201,7 @@ Result<void, Error> skip_map(ReadContext &ctx, const FieldType &field_type) {
 
       // Skip value with ref flag if needed
       if (value_track_ref || value_has_null) {
-        int8_t val_ref = ctx.read_int8(&error);
+        int8_t val_ref = ctx.read_int8(error);
         if (FORY_PREDICT_FALSE(!error.ok())) {
           return Unexpected(std::move(error));
         }
@@ -230,13 +230,13 @@ Result<void, Error> skip_struct(ReadContext &ctx, const FieldType &field_type) {
 
   // Read remote type_id (ignored for now) and meta_index
   Error error;
-  uint32_t remote_type_id = ctx.read_varuint32(&error);
+  uint32_t remote_type_id = ctx.read_varuint32(error);
   if (FORY_PREDICT_FALSE(!error.ok())) {
     return Unexpected(std::move(error));
   }
   (void)remote_type_id;
 
-  uint32_t meta_index = ctx.read_varuint32(&error);
+  uint32_t meta_index = ctx.read_varuint32(error);
   if (FORY_PREDICT_FALSE(!error.ok())) {
     return Unexpected(std::move(error));
   }
@@ -275,13 +275,13 @@ Result<void, Error> skip_ext(ReadContext &ctx, const FieldType &field_type) {
   Error error;
   if (tid == TypeId::NAMED_EXT) {
     // Named ext: read type_id and meta_index
-    uint32_t remote_type_id = ctx.read_varuint32(&error);
+    uint32_t remote_type_id = ctx.read_varuint32(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
     (void)remote_type_id;
 
-    uint32_t meta_index = ctx.read_varuint32(&error);
+    uint32_t meta_index = ctx.read_varuint32(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -372,7 +372,7 @@ Result<void, Error> skip_field_value(ReadContext &ctx,
   Error error;
   // Read ref flag if needed
   if (read_ref_flag) {
-    int8_t ref_flag = ctx.read_int8(&error);
+    int8_t ref_flag = ctx.read_int8(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -405,7 +405,7 @@ Result<void, Error> skip_field_value(ReadContext &ctx,
     // INT32 values are encoded as varint32 in the C++
     // serializer, so we must consume a varint32 here
     // instead of assuming fixed-width encoding.
-    ctx.read_varint32(&error);
+    ctx.read_varint32(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -420,7 +420,7 @@ Result<void, Error> skip_field_value(ReadContext &ctx,
     // INT64 values are encoded as varint64 in the C++
     // serializer, so we must consume a varint64 here
     // instead of assuming fixed-width encoding.
-    ctx.read_varint64(&error);
+    ctx.read_varint64(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -487,7 +487,7 @@ Result<void, Error> skip_field_value(ReadContext &ctx,
   case TypeId::FLOAT32_ARRAY:
   case TypeId::FLOAT64_ARRAY: {
     // Read array length
-    uint32_t len = ctx.read_varuint32(&error);
+    uint32_t len = ctx.read_varuint32(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -517,7 +517,7 @@ Result<void, Error> skip_field_value(ReadContext &ctx,
 
   case TypeId::BINARY: {
     // Read binary length
-    uint32_t len = ctx.read_varuint32(&error);
+    uint32_t len = ctx.read_varuint32(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -528,7 +528,7 @@ Result<void, Error> skip_field_value(ReadContext &ctx,
   case TypeId::ENUM:
   case TypeId::NAMED_ENUM: {
     // Enums are serialized as ordinal varuint32 values.
-    ctx.read_varuint32(&error);
+    ctx.read_varuint32(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }

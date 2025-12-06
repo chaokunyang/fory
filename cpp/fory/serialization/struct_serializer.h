@@ -1376,7 +1376,7 @@ Result<void, Error> read_single_field_by_index(T &obj, ReadContext &ctx) {
   if constexpr (is_raw_prim && is_primitive_field && !field_needs_ref) {
     Error error;
     obj.*field_ptr = read_primitive_field_direct<FieldType>(ctx, &error);
-    FORY_RETURN_IF_SERDE_ERROR(&error);
+    FORY_RETURN_IF_SERDE_ERROR(error);
     return Result<void, Error>();
   } else {
     FORY_ASSIGN_OR_RETURN(
@@ -1429,7 +1429,7 @@ read_single_field_by_index_compatible(T &obj, ReadContext &ctx,
     if (!read_ref) {
       Error error;
       obj.*field_ptr = read_primitive_field_direct<FieldType>(ctx, &error);
-      FORY_RETURN_IF_SERDE_ERROR(&error);
+      FORY_RETURN_IF_SERDE_ERROR(error);
       return Result<void, Error>();
     }
   }
@@ -1867,7 +1867,7 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
     int8_t ref_flag;
     Error error;
     if (read_ref) {
-      ref_flag = ctx.read_int8(&error);
+      ref_flag = ctx.read_int8(error);
       if (FORY_PREDICT_FALSE(!error.ok())) {
         return Unexpected(std::move(error));
       }
@@ -1892,7 +1892,7 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
         // In compatible mode: always use remote TypeMeta for schema evolution
         if (read_type) {
           // Read type_id
-          uint32_t remote_type_id = ctx.read_varuint32(&error);
+          uint32_t remote_type_id = ctx.read_varuint32(error);
           if (FORY_PREDICT_FALSE(!error.ok())) {
             return Unexpected(std::move(error));
           }
@@ -1910,7 +1910,7 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
                   static_cast<uint8_t>(TypeId::NAMED_COMPATIBLE_STRUCT)) {
             // Use meta sharing: read varint index and get TypeInfo from
             // meta_reader
-            uint32_t meta_index = ctx.read_varuint32(&error);
+            uint32_t meta_index = ctx.read_varuint32(error);
             if (FORY_PREDICT_FALSE(!error.ok())) {
               return Unexpected(std::move(error));
             }
@@ -1956,7 +1956,7 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
               expected_type_id_low !=
                   static_cast<uint8_t>(TypeId::NAMED_STRUCT)) {
             // Simple type ID - just read and compare varint directly
-            uint32_t remote_type_id = ctx.read_varuint32(&error);
+            uint32_t remote_type_id = ctx.read_varuint32(error);
             if (FORY_PREDICT_FALSE(!error.ok())) {
               return Unexpected(std::move(error));
             }
@@ -1995,7 +1995,7 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
     // Read and verify struct version if enabled (matches write_data behavior)
     if (ctx.check_struct_version()) {
       Error error;
-      int32_t read_version = ctx.buffer().ReadInt32(&error);
+      int32_t read_version = ctx.buffer().ReadInt32(error);
       if (FORY_PREDICT_FALSE(!error.ok())) {
         return Unexpected(std::move(error));
       }
@@ -2032,7 +2032,7 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
   static Result<T, Error> read_data(ReadContext &ctx) {
     if (ctx.check_struct_version()) {
       Error error;
-      int32_t read_version = ctx.buffer().ReadInt32(&error);
+      int32_t read_version = ctx.buffer().ReadInt32(error);
       if (FORY_PREDICT_FALSE(!error.ok())) {
         return Unexpected(std::move(error));
       }

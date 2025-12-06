@@ -424,7 +424,7 @@ inline Result<Container, Error> read_collection_data_slow(ReadContext &ctx,
   constexpr bool elem_is_shared_ref = is_shared_ref_v<T>;
 
   Error error;
-  uint8_t bitmap = ctx.read_uint8(&error);
+  uint8_t bitmap = ctx.read_uint8(error);
   if (FORY_PREDICT_FALSE(!error.ok())) {
     return Unexpected(std::move(error));
   }
@@ -592,7 +592,7 @@ struct Serializer<
 
     Error error;
     if (read_type) {
-      uint32_t type_id_read = ctx.read_varuint32(&error);
+      uint32_t type_id_read = ctx.read_varuint32(error);
       if (FORY_PREDICT_FALSE(!error.ok())) {
         return Unexpected(std::move(error));
       }
@@ -614,7 +614,7 @@ struct Serializer<
   static inline Result<std::vector<T, Alloc>, Error>
   read_data(ReadContext &ctx) {
     Error error;
-    uint32_t total_bytes_u32 = ctx.read_varuint32(&error);
+    uint32_t total_bytes_u32 = ctx.read_varuint32(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -670,7 +670,7 @@ struct Serializer<
     Error error;
     // Optional type info for polymorphic containers
     if (read_type) {
-      uint32_t type_id_read = ctx.read_varuint32(&error);
+      uint32_t type_id_read = ctx.read_varuint32(error);
       if (FORY_PREDICT_FALSE(!error.ok())) {
         return Unexpected(std::move(error));
       }
@@ -682,7 +682,7 @@ struct Serializer<
     }
 
     // Length written via writeVarUint32Small7
-    uint32_t length = ctx.read_varuint32(&error);
+    uint32_t length = ctx.read_varuint32(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -700,7 +700,7 @@ struct Serializer<
       // Fast path for non-polymorphic, non-shared-ref elements
 
       // Elements header bitmap (CollectionFlags)
-      uint8_t bitmap = ctx.read_uint8(&error);
+      uint8_t bitmap = ctx.read_uint8(error);
       if (FORY_PREDICT_FALSE(!error.ok())) {
         return Unexpected(std::move(error));
       }
@@ -812,7 +812,7 @@ struct Serializer<
   static inline Result<std::vector<T, Alloc>, Error>
   read_data(ReadContext &ctx) {
     Error error;
-    uint32_t size = ctx.read_varuint32(&error);
+    uint32_t size = ctx.read_varuint32(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -891,7 +891,7 @@ template <typename Alloc> struct Serializer<std::vector<bool, Alloc>> {
 
     Error error;
     if (read_type) {
-      uint32_t type_id_read = ctx.read_varuint32(&error);
+      uint32_t type_id_read = ctx.read_varuint32(error);
       if (FORY_PREDICT_FALSE(!error.ok())) {
         return Unexpected(std::move(error));
       }
@@ -906,7 +906,7 @@ template <typename Alloc> struct Serializer<std::vector<bool, Alloc>> {
   static inline Result<std::vector<bool, Alloc>, Error>
   read_data(ReadContext &ctx) {
     Error error;
-    uint32_t size = ctx.read_varuint32(&error);
+    uint32_t size = ctx.read_varuint32(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -922,7 +922,7 @@ template <typename Alloc> struct Serializer<std::vector<bool, Alloc>> {
     } else {
       // Fallback: read byte-by-byte with bounds checking
       for (uint32_t i = 0; i < size; ++i) {
-        uint8_t byte = ctx.read_uint8(&error);
+        uint8_t byte = ctx.read_uint8(error);
         if (FORY_PREDICT_FALSE(!error.ok())) {
           return Unexpected(std::move(error));
         }
@@ -1002,7 +1002,7 @@ struct Serializer<std::set<T, Args...>> {
     Error error;
     // Read type info
     if (read_type) {
-      uint32_t type_id_read = ctx.read_varuint32(&error);
+      uint32_t type_id_read = ctx.read_varuint32(error);
       if (FORY_PREDICT_FALSE(!error.ok())) {
         return Unexpected(std::move(error));
       }
@@ -1013,7 +1013,7 @@ struct Serializer<std::set<T, Args...>> {
     }
 
     // Read set size
-    uint32_t size = ctx.read_varuint32(&error);
+    uint32_t size = ctx.read_varuint32(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -1030,7 +1030,7 @@ struct Serializer<std::set<T, Args...>> {
       // Fast path for non-polymorphic, non-shared-ref elements
 
       // Read elements header bitmap (CollectionFlags) in xlang mode
-      uint8_t bitmap = ctx.read_uint8(&error);
+      uint8_t bitmap = ctx.read_uint8(error);
       if (FORY_PREDICT_FALSE(!error.ok())) {
         return Unexpected(std::move(error));
       }
@@ -1086,7 +1086,7 @@ struct Serializer<std::set<T, Args...>> {
   static inline Result<std::set<T, Args...>, Error>
   read_data(ReadContext &ctx) {
     Error error;
-    uint32_t size = ctx.read_varuint32(&error);
+    uint32_t size = ctx.read_varuint32(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -1167,7 +1167,7 @@ struct Serializer<std::unordered_set<T, Args...>> {
     Error error;
     // Read type info
     if (read_type) {
-      uint32_t type_id_read = ctx.read_varuint32(&error);
+      uint32_t type_id_read = ctx.read_varuint32(error);
       if (FORY_PREDICT_FALSE(!error.ok())) {
         return Unexpected(std::move(error));
       }
@@ -1178,7 +1178,7 @@ struct Serializer<std::unordered_set<T, Args...>> {
     }
 
     // Read set size
-    uint32_t size = ctx.read_varuint32(&error);
+    uint32_t size = ctx.read_varuint32(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -1197,7 +1197,7 @@ struct Serializer<std::unordered_set<T, Args...>> {
       // Fast path for non-polymorphic, non-shared-ref elements
 
       // Read elements header bitmap (CollectionFlags) in xlang mode
-      uint8_t bitmap = ctx.read_uint8(&error);
+      uint8_t bitmap = ctx.read_uint8(error);
       if (FORY_PREDICT_FALSE(!error.ok())) {
         return Unexpected(std::move(error));
       }
@@ -1254,7 +1254,7 @@ struct Serializer<std::unordered_set<T, Args...>> {
   static inline Result<std::unordered_set<T, Args...>, Error>
   read_data(ReadContext &ctx) {
     Error error;
-    uint32_t size = ctx.read_varuint32(&error);
+    uint32_t size = ctx.read_varuint32(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }

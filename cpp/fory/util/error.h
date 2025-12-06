@@ -71,7 +71,7 @@ enum class ErrorCode : char {
 /// pointer:
 /// ```cpp
 /// Error error;  // Default: ok_ = true
-/// buffer.ReadInt32(&error);
+/// buffer.ReadInt32(error);
 /// if (FORY_PREDICT_FALSE(!error.ok())) {
 ///   return Unexpected(std::move(error));
 /// }

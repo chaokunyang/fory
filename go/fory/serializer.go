@@ -18,9 +18,7 @@
 package fory
 
 import (
-	"fmt"
 	"reflect"
-	"sync"
 )
 
 // Serializer is the unified interface for all serialization.
@@ -48,72 +46,6 @@ type Serializer interface {
 
 	// NeedToWriteRef returns true if this type needs reference tracking
 	NeedToWriteRef() bool
-}
-
-// ============================================================================
-// GenericRegistry - stores typed serializers with fast lookup
-// ============================================================================
-
-// GenericRegistry stores typed serializers with fast lookup.
-type GenericRegistry struct {
-	mu          sync.RWMutex
-	serializers map[reflect.Type]any
-	typeInfos   map[reflect.Type]*TypeInfo
-}
-
-// globalGenericRegistry is the default global registry
-var globalGenericRegistry = &GenericRegistry{
-	serializers: make(map[reflect.Type]any),
-	typeInfos:   make(map[reflect.Type]*TypeInfo),
-}
-
-// GetGlobalRegistry returns the global registry
-func GetGlobalRegistry() *GenericRegistry {
-	return globalGenericRegistry
-}
-
-// RegisterSerializer adds a serializer to the global registry
-func RegisterSerializer(t reflect.Type, serializer Serializer) {
-	globalGenericRegistry.mu.Lock()
-	globalGenericRegistry.serializers[t] = serializer
-	globalGenericRegistry.mu.Unlock()
-}
-
-// GetByReflectType retrieves serializer by reflect.Type
-func (r *GenericRegistry) GetByReflectType(t reflect.Type) (Serializer, error) {
-	r.mu.RLock()
-	s, ok := r.serializers[t]
-	r.mu.RUnlock()
-
-	if !ok {
-		return nil, fmt.Errorf("no serializer for type %v", t)
-	}
-	return s.(Serializer), nil
-}
-
-// GetByTypeId retrieves serializer by TypeId
-func (r *GenericRegistry) GetByTypeId(typeId TypeId) (Serializer, error) {
-	// Fast path for primitive types
-	switch typeId {
-	case BOOL:
-		return globalBoolSerializer, nil
-	case INT8:
-		return globalInt8Serializer, nil
-	case INT16:
-		return globalInt16Serializer, nil
-	case INT32:
-		return globalInt32Serializer, nil
-	case INT64:
-		return globalInt64Serializer, nil
-	case FLOAT:
-		return globalFloat32Serializer, nil
-	case DOUBLE:
-		return globalFloat64Serializer, nil
-	case STRING:
-		return globalStringSerializer, nil
-	default:
-		return nil, fmt.Errorf("no serializer for type ID %d", typeId)
-	}
 }
 
 // Helper functions for serializer dispatch

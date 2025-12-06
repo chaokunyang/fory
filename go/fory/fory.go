@@ -156,7 +156,6 @@ func (m *MetaContext) Reset() {
 // Note: Fory is NOT thread-safe. Use ThreadSafeFory for concurrent use.
 type Fory struct {
 	config      Config
-	registry    *GenericRegistry
 	metaContext *MetaContext
 
 	// Reusable contexts - avoid allocation on each Serialize/Deserialize call
@@ -484,8 +483,7 @@ func (f *Fory) RegisterByNamespace(type_ interface{}, namespace, typeName string
 // New creates a new Fory instance with the given options
 func New(opts ...Option) *Fory {
 	f := &Fory{
-		config:   defaultConfig(),
-		registry: GetGlobalRegistry(),
+		config: defaultConfig(),
 	}
 
 	// Apply options
@@ -508,12 +506,12 @@ func New(opts ...Option) *Fory {
 	f.refResolver = newRefResolver(f.config.TrackRef)
 
 	// Initialize reusable contexts with resolvers
-	f.writeCtx = NewWriteContext(f.registry, f.config.TrackRef, f.config.MaxDepth)
+	f.writeCtx = NewWriteContext(f.config.TrackRef, f.config.MaxDepth)
 	f.writeCtx.typeResolver = f.typeResolver
 	f.writeCtx.refResolver = f.refResolver
 	f.writeCtx.compatible = f.config.Compatible
 
-	f.readCtx = NewReadContext(f.registry, f.config.TrackRef)
+	f.readCtx = NewReadContext(f.config.TrackRef)
 	f.readCtx.typeResolver = f.typeResolver
 	f.readCtx.refResolver = f.refResolver
 	f.readCtx.compatible = f.config.Compatible

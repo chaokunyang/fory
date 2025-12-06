@@ -36,7 +36,6 @@ var ErrTypeMismatch = errors.New("fory: type ID mismatch")
 type WriteContext struct {
 	buffer         *ByteBuffer
 	refWriter      *RefWriter
-	registry       *GenericRegistry
 	trackRef       bool // Cached flag to avoid indirection
 	compatible     bool // Schema evolution compatibility mode
 	depth          int
@@ -48,11 +47,10 @@ type WriteContext struct {
 }
 
 // NewWriteContext creates a new write context
-func NewWriteContext(registry *GenericRegistry, trackRef bool, maxDepth int) *WriteContext {
+func NewWriteContext(trackRef bool, maxDepth int) *WriteContext {
 	return &WriteContext{
 		buffer:    NewByteBuffer(nil),
 		refWriter: NewRefWriter(trackRef),
-		registry:  registry,
 		trackRef:  trackRef,
 		maxDepth:  maxDepth,
 	}
@@ -89,11 +87,6 @@ func (c *WriteContext) ResetState() {
 // Buffer returns the underlying buffer
 func (c *WriteContext) Buffer() *ByteBuffer {
 	return c.buffer
-}
-
-// Registry returns the type registry
-func (c *WriteContext) Registry() *GenericRegistry {
-	return c.registry
 }
 
 // TrackRef returns whether reference tracking is enabled
@@ -429,7 +422,6 @@ func (c *WriteContext) writeValue(value reflect.Value, serializer Serializer) er
 type ReadContext struct {
 	buffer           *ByteBuffer
 	refReader        *RefReader
-	registry         *GenericRegistry
 	trackRef         bool          // Cached flag to avoid indirection
 	compatible       bool          // Schema evolution compatibility mode
 	typeResolver     *typeResolver // For complex type deserialization
@@ -439,11 +431,10 @@ type ReadContext struct {
 }
 
 // NewReadContext creates a new read context
-func NewReadContext(registry *GenericRegistry, trackRef bool) *ReadContext {
+func NewReadContext(trackRef bool) *ReadContext {
 	return &ReadContext{
 		buffer:    NewByteBuffer(nil),
 		refReader: NewRefReader(trackRef),
-		registry:  registry,
 		trackRef:  trackRef,
 	}
 }
@@ -469,11 +460,6 @@ func (c *ReadContext) SetData(data []byte) {
 // Buffer returns the underlying buffer
 func (c *ReadContext) Buffer() *ByteBuffer {
 	return c.buffer
-}
-
-// Registry returns the type registry
-func (c *ReadContext) Registry() *GenericRegistry {
-	return c.registry
 }
 
 // TrackRef returns whether reference tracking is enabled

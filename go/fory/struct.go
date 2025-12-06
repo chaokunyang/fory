@@ -255,7 +255,7 @@ func (s *structSerializer) ReadCompatible(ctx *ReadContext, type_ reflect.Type, 
 }
 
 // initFieldsFromContext initializes fields using context's type resolver (for WriteContext)
-func (s *structSerializer) initFieldsFromContext(ctx interface{ TypeResolver() *typeResolver }) error {
+func (s *structSerializer) initFieldsFromContext(ctx interface{ TypeResolver() *TypeResolver }) error {
 	typeResolver := ctx.TypeResolver()
 
 	// If we have fieldDefs from type_def (remote meta), use them
@@ -361,7 +361,7 @@ func (s *structSerializer) initFieldsFromContext(ctx interface{ TypeResolver() *
 }
 
 // initFieldsFromDefsWithResolver initializes fields from remote fieldDefs using typeResolver
-func (s *structSerializer) initFieldsFromDefsWithResolver(typeResolver *typeResolver) error {
+func (s *structSerializer) initFieldsFromDefsWithResolver(typeResolver *TypeResolver) error {
 	type_ := s.type_
 
 	// Build map from field names to struct field indices
@@ -600,7 +600,7 @@ type triple struct {
 }
 
 func sortFields(
-	typeResolver *typeResolver,
+	typeResolver *TypeResolver,
 	fieldNames []string,
 	serializers []Serializer,
 ) ([]Serializer, []string) {
@@ -898,7 +898,7 @@ func elementTypesCompatible(actual, expected reflect.Type) bool {
 	return false
 }
 
-func computeStructHash(fieldsInfo structFieldsInfo, typeResolver *typeResolver) (int32, error) {
+func computeStructHash(fieldsInfo structFieldsInfo, typeResolver *TypeResolver) (int32, error) {
 	var sb strings.Builder
 
 	for _, fieldInfo := range fieldsInfo {

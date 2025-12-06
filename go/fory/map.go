@@ -501,7 +501,7 @@ func getActualType(v reflect.Value) reflect.Type {
 	return v.Type()
 }
 
-func getActualTypeInfo(v reflect.Value, resolver *typeResolver) (TypeInfo, error) {
+func getActualTypeInfo(v reflect.Value, resolver *TypeResolver) (TypeInfo, error) {
 	if v.Kind() == reflect.Interface && !v.IsNil() {
 		elem := v.Elem()
 		if !elem.IsValid() {

@@ -18,6 +18,7 @@
 package fory
 
 import (
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"reflect"
@@ -1352,3 +1353,6 @@ func computeStringHash(str string) int32 {
 	}
 	return int32(hash)
 }
+
+// ErrTypeMismatch indicates a type ID mismatch during deserialization
+var ErrTypeMismatch = errors.New("fory: type ID mismatch")

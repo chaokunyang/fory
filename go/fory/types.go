@@ -338,3 +338,4 @@ func IsPrimitiveTypeId(typeId TypeId) bool {
 		return false
 	}
 }
+

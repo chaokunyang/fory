@@ -200,7 +200,7 @@ type FieldType interface {
 	TypeId() TypeId
 	write(*ByteBuffer)
 	getTypeInfo(*Fory) (TypeInfo, error)                     // some serializer need typeinfo as well
-	getTypeInfoWithResolver(*typeResolver) (TypeInfo, error) // version that uses typeResolver directly
+	getTypeInfoWithResolver(*TypeResolver) (TypeInfo, error) // version that uses typeResolver directly
 }
 
 // BaseFieldType provides common functionality for field types
@@ -221,7 +221,7 @@ func getFieldTypeSerializer(fory *Fory, ft FieldType) (Serializer, error) {
 	return typeInfo.Serializer, nil
 }
 
-func getFieldTypeSerializerWithResolver(resolver *typeResolver, ft FieldType) (Serializer, error) {
+func getFieldTypeSerializerWithResolver(resolver *TypeResolver, ft FieldType) (Serializer, error) {
 	typeInfo, err := ft.getTypeInfoWithResolver(resolver)
 	if err != nil {
 		return nil, err
@@ -237,7 +237,7 @@ func (b *BaseFieldType) getTypeInfo(fory *Fory) (TypeInfo, error) {
 	return info, nil
 }
 
-func (b *BaseFieldType) getTypeInfoWithResolver(resolver *typeResolver) (TypeInfo, error) {
+func (b *BaseFieldType) getTypeInfoWithResolver(resolver *TypeResolver) (TypeInfo, error) {
 	info, err := resolver.getTypeInfoById(b.typeId)
 	if err != nil {
 		return TypeInfo{}, err
@@ -304,7 +304,7 @@ func (c *CollectionFieldType) getTypeInfo(f *Fory) (TypeInfo, error) {
 	return TypeInfo{Type: collectionType, Serializer: sliceSerializer}, nil
 }
 
-func (c *CollectionFieldType) getTypeInfoWithResolver(resolver *typeResolver) (TypeInfo, error) {
+func (c *CollectionFieldType) getTypeInfoWithResolver(resolver *TypeResolver) (TypeInfo, error) {
 	elemInfo, err := c.elementType.getTypeInfoWithResolver(resolver)
 	elementType := elemInfo.Type
 	collectionType := reflect.SliceOf(elementType)
@@ -356,7 +356,7 @@ func (m *MapFieldType) getTypeInfo(f *Fory) (TypeInfo, error) {
 	return TypeInfo{Type: mapType, Serializer: mapSerializer}, nil
 }
 
-func (m *MapFieldType) getTypeInfoWithResolver(resolver *typeResolver) (TypeInfo, error) {
+func (m *MapFieldType) getTypeInfoWithResolver(resolver *TypeResolver) (TypeInfo, error) {
 	keyInfo, err := m.keyType.getTypeInfoWithResolver(resolver)
 	if err != nil {
 		return TypeInfo{}, err
@@ -407,7 +407,7 @@ func (d *DynamicFieldType) getTypeInfo(fory *Fory) (TypeInfo, error) {
 	return TypeInfo{Type: reflect.TypeOf((*interface{})(nil)).Elem(), Serializer: nil}, nil
 }
 
-func (d *DynamicFieldType) getTypeInfoWithResolver(resolver *typeResolver) (TypeInfo, error) {
+func (d *DynamicFieldType) getTypeInfoWithResolver(resolver *TypeResolver) (TypeInfo, error) {
 	// leave empty for runtime resolution, we not know the actual type here
 	return TypeInfo{Type: reflect.TypeOf((*interface{})(nil)).Elem(), Serializer: nil}, nil
 }
@@ -524,7 +524,7 @@ typeDef are layout as following:
 - next variable bytes: type id (varint) or ns name + type name
 - next variable bytes: field defs (see below)
 */
-func encodingTypeDef(typeResolver *typeResolver, typeDef *TypeDef) ([]byte, error) {
+func encodingTypeDef(typeResolver *TypeResolver, typeDef *TypeDef) ([]byte, error) {
 	buffer := NewByteBuffer(nil)
 
 	if err := writeMetaHeader(buffer, typeDef); err != nil {
@@ -613,7 +613,7 @@ func writeMetaHeader(buffer *ByteBuffer, typeDef *TypeDef) error {
 //   - first 1 byte: header (2 bits field name encoding + 4 bits size + nullability flag + ref tracking flag)
 //   - next variable bytes: FieldType info
 //   - next variable bytes: field name or tag id
-func writeFieldDefs(typeResolver *typeResolver, buffer *ByteBuffer, fieldDefs []FieldDef) error {
+func writeFieldDefs(typeResolver *TypeResolver, buffer *ByteBuffer, fieldDefs []FieldDef) error {
 	for _, field := range fieldDefs {
 		if err := writeFieldDef(typeResolver, buffer, field); err != nil {
 			return fmt.Errorf("failed to write field def for field %s: %w", field.name, err)
@@ -623,7 +623,7 @@ func writeFieldDefs(typeResolver *typeResolver, buffer *ByteBuffer, fieldDefs []
 }
 
 // writeFieldDef writes a single field's definition
-func writeFieldDef(typeResolver *typeResolver, buffer *ByteBuffer, field FieldDef) error {
+func writeFieldDef(typeResolver *TypeResolver, buffer *ByteBuffer, field FieldDef) error {
 	// Write field header
 	// 2 bits field name encoding + 4 bits size + nullability flag + ref tracking flag
 	offset := buffer.writerIndex
@@ -781,7 +781,7 @@ field def layout as following:
   - next variable bytes: FieldType info
   - next variable bytes: field name or tag id
 */
-func readFieldDef(typeResolver *typeResolver, buffer *ByteBuffer) (FieldDef, error) {
+func readFieldDef(typeResolver *TypeResolver, buffer *ByteBuffer) (FieldDef, error) {
 	// Read field header
 	headerByte, err := buffer.ReadByte()
 	if err != nil {

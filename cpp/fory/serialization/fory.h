@@ -565,7 +565,11 @@ private:
     }
 
     // Top-level serialization: YES ref flags, yes type info
-    FORY_RETURN_NOT_OK(Serializer<T>::write(obj, *write_ctx_, true, true));
+    Serializer<T>::write(obj, *write_ctx_, true, true);
+    // Check for errors at serialization boundary
+    if (FORY_PREDICT_FALSE(write_ctx_->has_error())) {
+      return Unexpected(write_ctx_->take_error());
+    }
 
     // Write collected TypeMetas at the end in compatible mode
     if (write_ctx_->is_compatible() && !write_ctx_->meta_empty()) {
@@ -592,13 +596,15 @@ private:
     }
 
     // Top-level deserialization: YES ref flags, yes type info
-    auto result = Serializer<T>::read(*read_ctx_, true, true);
+    T result = Serializer<T>::read(*read_ctx_, true, true);
+    // Check for errors at deserialization boundary
+    if (FORY_PREDICT_FALSE(read_ctx_->has_error())) {
+      return Unexpected(read_ctx_->take_error());
+    }
 
-    if (result.ok()) {
-      read_ctx_->ref_reader().resolve_callbacks();
-      if (bytes_to_skip > 0) {
-        buffer.IncreaseReaderIndex(static_cast<uint32_t>(bytes_to_skip));
-      }
+    read_ctx_->ref_reader().resolve_callbacks();
+    if (bytes_to_skip > 0) {
+      buffer.IncreaseReaderIndex(static_cast<uint32_t>(bytes_to_skip));
     }
     return result;
   }

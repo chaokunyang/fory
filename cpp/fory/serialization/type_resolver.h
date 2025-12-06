@@ -549,23 +549,19 @@ private:
   template <typename T> static Harness make_serializer_harness();
 
   template <typename T>
-  static Result<void, Error>
-  harness_write_adapter(const void *value, WriteContext &ctx,
-                        bool write_ref_info, bool write_type_info,
-                        bool has_generics);
+  static void harness_write_adapter(const void *value, WriteContext &ctx,
+                                    bool write_ref_info, bool write_type_info,
+                                    bool has_generics);
 
   template <typename T>
-  static Result<void *, Error> harness_read_adapter(ReadContext &ctx,
-                                                    bool read_ref_info,
-                                                    bool read_type_info);
+  static void *harness_read_adapter(ReadContext &ctx, bool read_ref_info,
+                                    bool read_type_info);
 
   template <typename T>
-  static Result<void, Error> harness_write_data_adapter(const void *value,
-                                                        WriteContext &ctx,
-                                                        bool has_generics);
+  static void harness_write_data_adapter(const void *value, WriteContext &ctx,
+                                         bool has_generics);
 
-  template <typename T>
-  static Result<void *, Error> harness_read_data_adapter(ReadContext &ctx);
+  template <typename T> static void *harness_read_data_adapter(ReadContext &ctx);
 
   template <typename T>
   static Result<std::vector<FieldInfo>, Error>
@@ -576,8 +572,8 @@ private:
   harness_empty_sorted_fields(TypeResolver &resolver);
 
   template <typename T>
-  static Result<void *, Error>
-  harness_read_compatible_adapter(ReadContext &ctx, const TypeInfo *ti);
+  static void *harness_read_compatible_adapter(ReadContext &ctx,
+                                               const TypeInfo *ti);
 
   static std::string make_name_key(const std::string &ns,
                                    const std::string &name);
@@ -997,48 +993,50 @@ template <typename T> Harness TypeResolver::make_serializer_harness() {
 }
 
 template <typename T>
-Result<void, Error>
-TypeResolver::harness_write_adapter(const void *value, WriteContext &ctx,
-                                    bool write_ref_info, bool write_type_info,
-                                    bool has_generics) {
+void TypeResolver::harness_write_adapter(const void *value, WriteContext &ctx,
+                                         bool write_ref_info,
+                                         bool write_type_info,
+                                         bool has_generics) {
   (void)has_generics;
   const T *ptr = static_cast<const T *>(value);
-  return Serializer<T>::write(*ptr, ctx, write_ref_info, write_type_info);
+  Serializer<T>::write(*ptr, ctx, write_ref_info, write_type_info);
 }
 
 template <typename T>
-Result<void *, Error> TypeResolver::harness_read_adapter(ReadContext &ctx,
-                                                         bool read_ref_info,
-                                                         bool read_type_info) {
-  FORY_TRY(value, Serializer<T>::read(ctx, read_ref_info, read_type_info));
-  T *ptr = new T(std::move(value));
-  return ptr;
+void *TypeResolver::harness_read_adapter(ReadContext &ctx, bool read_ref_info,
+                                         bool read_type_info) {
+  T value = Serializer<T>::read(ctx, read_ref_info, read_type_info);
+  if (FORY_PREDICT_FALSE(ctx.has_error())) {
+    return nullptr;
+  }
+  return new T(std::move(value));
 }
 
 template <typename T>
-Result<void, Error>
-TypeResolver::harness_write_data_adapter(const void *value, WriteContext &ctx,
-                                         bool has_generics) {
+void TypeResolver::harness_write_data_adapter(const void *value,
+                                              WriteContext &ctx,
+                                              bool has_generics) {
   const T *ptr = static_cast<const T *>(value);
-  return Serializer<T>::write_data_generic(*ptr, ctx, has_generics);
+  Serializer<T>::write_data_generic(*ptr, ctx, has_generics);
 }
 
 template <typename T>
-Result<void *, Error>
-TypeResolver::harness_read_data_adapter(ReadContext &ctx) {
-  FORY_TRY(value, Serializer<T>::read_data(ctx));
-  T *ptr = new T(std::move(value));
-  return ptr;
+void *TypeResolver::harness_read_data_adapter(ReadContext &ctx) {
+  T value = Serializer<T>::read_data(ctx);
+  if (FORY_PREDICT_FALSE(ctx.has_error())) {
+    return nullptr;
+  }
+  return new T(std::move(value));
 }
 
 template <typename T>
-Result<void *, Error>
-TypeResolver::harness_read_compatible_adapter(ReadContext &ctx,
-                                              const TypeInfo *ti) {
-  // Use read_compatible for compatible mode deserialization
-  FORY_TRY(value, Serializer<T>::read_compatible(ctx, ti));
-  T *ptr = new T(std::move(value));
-  return ptr;
+void *TypeResolver::harness_read_compatible_adapter(ReadContext &ctx,
+                                                    const TypeInfo *ti) {
+  T value = Serializer<T>::read_compatible(ctx, ti);
+  if (FORY_PREDICT_FALSE(ctx.has_error())) {
+    return nullptr;
+  }
+  return new T(std::move(value));
 }
 
 template <typename T>

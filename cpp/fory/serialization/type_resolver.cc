@@ -187,7 +187,7 @@ Result<FieldInfo, Error> FieldInfo::from_bytes(Buffer &buffer) {
   // special characters (same as Encoders.FIELD_NAME_DECODER).
 
   std::vector<uint8_t> name_bytes(name_size);
-  buffer.ReadBytes(name_bytes.data(), static_cast<uint32_t>(name_size), &error);
+  buffer.ReadBytes(name_bytes.data(), static_cast<uint32_t>(name_size), error);
   if (FORY_PREDICT_FALSE(!error.ok())) {
     return Unexpected(std::move(error));
   }
@@ -268,7 +268,7 @@ read_meta_name(Buffer &buffer, const MetaStringDecoder &decoder,
 
   std::vector<uint8_t> bytes(length);
   if (length > 0) {
-    buffer.ReadBytes(bytes.data(), static_cast<uint32_t>(length), &error);
+    buffer.ReadBytes(bytes.data(), static_cast<uint32_t>(length), error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -365,7 +365,7 @@ TypeMeta::from_bytes(Buffer &buffer, const TypeMeta *local_type_info) {
   // Read global binary header
   Error error;
   int64_t header;
-  buffer.ReadBytes(&header, sizeof(header), &error);
+  buffer.ReadBytes(&header, sizeof(header), error);
   if (FORY_PREDICT_FALSE(!error.ok())) {
     return Unexpected(std::move(error));
   }
@@ -561,7 +561,7 @@ Result<void, Error> TypeMeta::skip_bytes(Buffer &buffer, int64_t header) {
     }
     meta_size += extra;
   }
-  buffer.Skip(static_cast<uint32_t>(meta_size), &error);
+  buffer.Skip(static_cast<uint32_t>(meta_size), error);
   if (FORY_PREDICT_FALSE(!error.ok())) {
     return Unexpected(std::move(error));
   }

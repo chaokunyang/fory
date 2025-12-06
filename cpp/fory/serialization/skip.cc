@@ -312,7 +312,10 @@ Result<void, Error> skip_ext(ReadContext &ctx, const FieldType &field_type) {
 
   // Call the harness read_data_fn to skip the data
   // The result is a pointer we need to delete
-  FORY_TRY(ptr, type_info->harness.read_data_fn(ctx));
+  void *ptr = type_info->harness.read_data_fn(ctx);
+  if (FORY_PREDICT_FALSE(ctx.has_error())) {
+    return Unexpected(ctx.take_error());
+  }
   if (ptr) {
     // We just wanted to skip, but harness allocates memory - need to clean up
     // This is not ideal but works for now. A better approach would be to

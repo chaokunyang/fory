@@ -47,19 +47,20 @@ class FieldInfo;
 /// Harness holds type-erased function pointers for serialization operations.
 /// This allows TypeResolver to work with any registered type without
 /// knowing the concrete type at compile time.
+///
+/// Error handling: All functions store errors in the context via ctx.set_error().
+/// Callers should check ctx.has_error() after calling these functions.
 struct Harness {
-  using WriteFn = Result<void, Error> (*)(const void *value, WriteContext &ctx,
-                                          bool write_ref_info,
-                                          bool write_type_info,
-                                          bool has_generics);
-  using ReadFn = Result<void *, Error> (*)(ReadContext &ctx, bool read_ref_info,
-                                           bool read_type_info);
-  using WriteDataFn = Result<void, Error> (*)(const void *value,
-                                              WriteContext &ctx,
-                                              bool has_generics);
-  using ReadDataFn = Result<void *, Error> (*)(ReadContext &ctx);
-  using ReadCompatibleFn = Result<void *, Error> (*)(
-      ReadContext &ctx, const struct TypeInfo *type_info);
+  using WriteFn = void (*)(const void *value, WriteContext &ctx,
+                           bool write_ref_info, bool write_type_info,
+                           bool has_generics);
+  using ReadFn = void *(*)(ReadContext &ctx, bool read_ref_info,
+                           bool read_type_info);
+  using WriteDataFn = void (*)(const void *value, WriteContext &ctx,
+                               bool has_generics);
+  using ReadDataFn = void *(*)(ReadContext &ctx);
+  using ReadCompatibleFn = void *(*)(ReadContext &ctx,
+                                     const struct TypeInfo *type_info);
   using SortedFieldInfosFn =
       Result<std::vector<FieldInfo>, Error> (*)(TypeResolver &);
 

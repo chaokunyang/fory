@@ -326,6 +326,8 @@ WriteContext::write_struct_type_info(const TypeInfo *type_info) {
 }
 
 void WriteContext::reset() {
+  // Clear error state first
+  error_ = Error();
   ref_writer_.reset();
   // Clear meta vectors/maps - they're typically small or empty
   // in non-compatible mode, so clear() is efficient
@@ -533,7 +535,18 @@ Result<const TypeInfo *, Error> ReadContext::read_any_typeinfo() {
   }
 }
 
+const TypeInfo *ReadContext::read_any_typeinfo(Error &error) {
+  auto result = read_any_typeinfo();
+  if (!result.ok()) {
+    error = std::move(result).error();
+    return nullptr;
+  }
+  return result.value();
+}
+
 void ReadContext::reset() {
+  // Clear error state first
+  error_ = Error();
   ref_reader_.reset();
   reading_type_infos_.clear();
   parsed_type_infos_.clear();

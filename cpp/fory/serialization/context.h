@@ -84,6 +84,32 @@ public:
   /// Destructor
   ~WriteContext();
 
+  // ===========================================================================
+  // Error State Management
+  // Error is accumulated during serialization and checked at the end.
+  // This trades slower error path for faster success path performance.
+  // ===========================================================================
+
+  /// Check if an error has occurred during serialization.
+  FORY_ALWAYS_INLINE bool has_error() const { return !error_.ok(); }
+
+  /// Set error if no error exists yet (preserves root cause).
+  FORY_ALWAYS_INLINE void set_error(Error err) {
+    if (error_.ok()) {
+      error_ = std::move(err);
+    }
+  }
+
+  /// Get the accumulated error (moved out).
+  FORY_ALWAYS_INLINE Error take_error() { return std::move(error_); }
+
+  /// Get const reference to the error.
+  FORY_ALWAYS_INLINE const Error &error() const { return error_; }
+
+  /// Get mutable reference to the error for buffer read operations.
+  /// The buffer read methods use Error& pattern for performance.
+  FORY_ALWAYS_INLINE Error &error() { return error_; }
+
   /// Get reference to internal output buffer.
   inline Buffer &buffer() { return buffer_; }
 
@@ -260,6 +286,9 @@ public:
   void reset();
 
 private:
+  // Error state - accumulated during serialization, checked at the end
+  Error error_;
+
   Buffer buffer_;
   const Config *config_;
   std::unique_ptr<TypeResolver> type_resolver_;
@@ -300,6 +329,32 @@ public:
 
   /// Destructor
   ~ReadContext();
+
+  // ===========================================================================
+  // Error State Management
+  // Error is accumulated during deserialization and checked at the end.
+  // This trades slower error path for faster success path performance.
+  // ===========================================================================
+
+  /// Check if an error has occurred during deserialization.
+  FORY_ALWAYS_INLINE bool has_error() const { return !error_.ok(); }
+
+  /// Set error if no error exists yet (preserves root cause).
+  FORY_ALWAYS_INLINE void set_error(Error err) {
+    if (error_.ok()) {
+      error_ = std::move(err);
+    }
+  }
+
+  /// Get the accumulated error (moved out).
+  FORY_ALWAYS_INLINE Error take_error() { return std::move(error_); }
+
+  /// Get const reference to the error.
+  FORY_ALWAYS_INLINE const Error &error() const { return error_; }
+
+  /// Get mutable reference to the error for buffer read operations.
+  /// The buffer read methods use Error& pattern for performance.
+  FORY_ALWAYS_INLINE Error &error() { return error_; }
 
   /// Attach an input buffer for the duration of current deserialization call.
   inline void attach(Buffer &buffer) { buffer_ = &buffer; }
@@ -369,94 +424,94 @@ public:
   }
 
   // ===========================================================================
-  // Read methods with Error* parameter
-  // All methods accept Error* as parameter for reduced overhead.
-  // On success, error->ok() remains true. On failure, error is set.
+  // Read methods with Error& parameter
+  // All methods accept Error& as parameter for reduced overhead.
+  // On success, error.ok() remains true. On failure, error is set.
   // ===========================================================================
 
   /// Read uint8_t value from buffer. Sets error on failure.
-  FORY_ALWAYS_INLINE uint8_t read_uint8(Error *error) {
+  FORY_ALWAYS_INLINE uint8_t read_uint8(Error &error) {
     return buffer().ReadUint8(error);
   }
 
   /// Read int8_t value from buffer. Sets error on failure.
-  FORY_ALWAYS_INLINE int8_t read_int8(Error *error) {
+  FORY_ALWAYS_INLINE int8_t read_int8(Error &error) {
     return buffer().ReadInt8(error);
   }
 
   /// Read uint16_t value from buffer. Sets error on failure.
-  FORY_ALWAYS_INLINE uint16_t read_uint16(Error *error) {
+  FORY_ALWAYS_INLINE uint16_t read_uint16(Error &error) {
     return buffer().ReadUint16(error);
   }
 
   /// Read int16_t value from buffer. Sets error on failure.
-  FORY_ALWAYS_INLINE int16_t read_int16(Error *error) {
+  FORY_ALWAYS_INLINE int16_t read_int16(Error &error) {
     return buffer().ReadInt16(error);
   }
 
   /// Read uint32_t value from buffer (fixed 4 bytes). Sets error on failure.
-  FORY_ALWAYS_INLINE uint32_t read_uint32(Error *error) {
+  FORY_ALWAYS_INLINE uint32_t read_uint32(Error &error) {
     return buffer().ReadUint32(error);
   }
 
   /// Read int32_t value from buffer (fixed 4 bytes). Sets error on failure.
-  FORY_ALWAYS_INLINE int32_t read_int32(Error *error) {
+  FORY_ALWAYS_INLINE int32_t read_int32(Error &error) {
     return buffer().ReadInt32(error);
   }
 
   /// Read uint64_t value from buffer (fixed 8 bytes). Sets error on failure.
-  FORY_ALWAYS_INLINE uint64_t read_uint64(Error *error) {
+  FORY_ALWAYS_INLINE uint64_t read_uint64(Error &error) {
     return buffer().ReadUint64(error);
   }
 
   /// Read int64_t value from buffer (fixed 8 bytes). Sets error on failure.
-  FORY_ALWAYS_INLINE int64_t read_int64(Error *error) {
+  FORY_ALWAYS_INLINE int64_t read_int64(Error &error) {
     return buffer().ReadInt64(error);
   }
 
   /// Read float value from buffer. Sets error on failure.
-  FORY_ALWAYS_INLINE float read_float(Error *error) {
+  FORY_ALWAYS_INLINE float read_float(Error &error) {
     return buffer().ReadFloat(error);
   }
 
   /// Read double value from buffer. Sets error on failure.
-  FORY_ALWAYS_INLINE double read_double(Error *error) {
+  FORY_ALWAYS_INLINE double read_double(Error &error) {
     return buffer().ReadDouble(error);
   }
 
   /// Read uint32_t value as varint from buffer. Sets error on failure.
-  FORY_ALWAYS_INLINE uint32_t read_varuint32(Error *error) {
+  FORY_ALWAYS_INLINE uint32_t read_varuint32(Error &error) {
     return buffer().ReadVarUint32(error);
   }
 
   /// Read int32_t value as zigzag varint from buffer. Sets error on failure.
-  FORY_ALWAYS_INLINE int32_t read_varint32(Error *error) {
+  FORY_ALWAYS_INLINE int32_t read_varint32(Error &error) {
     return buffer().ReadVarInt32(error);
   }
 
   /// Read uint64_t value as varint from buffer. Sets error on failure.
-  FORY_ALWAYS_INLINE uint64_t read_varuint64(Error *error) {
+  FORY_ALWAYS_INLINE uint64_t read_varuint64(Error &error) {
     return buffer().ReadVarUint64(error);
   }
 
   /// Read int64_t value as zigzag varint from buffer. Sets error on failure.
-  FORY_ALWAYS_INLINE int64_t read_varint64(Error *error) {
+  FORY_ALWAYS_INLINE int64_t read_varint64(Error &error) {
     return buffer().ReadVarInt64(error);
   }
 
   /// Read uint64_t value as varuint36small from buffer. Sets error on failure.
-  FORY_ALWAYS_INLINE uint64_t read_varuint36small(Error *error) {
+  FORY_ALWAYS_INLINE uint64_t read_varuint36small(Error &error) {
     return buffer().ReadVarUint36Small(error);
   }
 
   /// Read raw bytes from buffer. Sets error on failure.
   FORY_ALWAYS_INLINE void read_bytes(void *data, uint32_t length,
-                                     Error *error) {
+                                     Error &error) {
     buffer().ReadBytes(data, length, error);
   }
 
   /// Skip bytes in buffer. Sets error on failure.
-  FORY_ALWAYS_INLINE void skip(uint32_t length, Error *error) {
+  FORY_ALWAYS_INLINE void skip(uint32_t length, Error &error) {
     buffer().Skip(length, error);
   }
 
@@ -487,10 +542,19 @@ public:
   /// @return const pointer to TypeInfo for the read type, or error
   Result<const TypeInfo *, Error> read_any_typeinfo();
 
+  /// Read type information dynamically from buffer based on type ID.
+  /// Same as above but uses context's error state instead of returning Result.
+  /// @param error Output parameter to receive any error
+  /// @return const pointer to TypeInfo for the read type, or nullptr on error
+  const TypeInfo *read_any_typeinfo(Error &error);
+
   /// Reset context for reuse.
   void reset();
 
 private:
+  // Error state - accumulated during deserialization, checked at the end
+  Error error_;
+
   Buffer *buffer_;
   const Config *config_;
   std::unique_ptr<TypeResolver> type_resolver_;

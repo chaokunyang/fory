@@ -113,7 +113,7 @@ Result<FieldPtr, Error> ReadField(Buffer &buffer) {
   }
 
   std::vector<uint8_t> name_bytes(name_size);
-  buffer.ReadBytes(name_bytes.data(), static_cast<uint32_t>(name_size), &error);
+  buffer.ReadBytes(name_bytes.data(), static_cast<uint32_t>(name_size), error);
   if (FORY_PREDICT_FALSE(!error.ok())) {
     return Unexpected(std::move(error));
   }

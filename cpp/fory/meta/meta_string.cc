@@ -275,7 +275,7 @@ MetaStringTable::read_string(Buffer &buffer, const MetaStringDecoder &decoder) {
     (void)hash_code; // hash_code is only used for Java-side caching.
     bytes.resize(len);
     if (len > 0) {
-      buffer.ReadBytes(bytes.data(), len, &error);
+      buffer.ReadBytes(bytes.data(), len, error);
       if (FORY_PREDICT_FALSE(!error.ok())) {
         return Unexpected(std::move(error));
       }
@@ -298,7 +298,7 @@ MetaStringTable::read_string(Buffer &buffer, const MetaStringDecoder &decoder) {
       FORY_TRY(enc, ToMetaEncoding(enc_byte));
       encoding = enc;
       bytes.resize(len);
-      buffer.ReadBytes(bytes.data(), len, &error);
+      buffer.ReadBytes(bytes.data(), len, error);
       if (FORY_PREDICT_FALSE(!error.ok())) {
         return Unexpected(std::move(error));
       }

@@ -50,10 +50,19 @@ var (
 	int16SliceType     = reflect.TypeOf((*[]int16)(nil)).Elem()
 	int32SliceType     = reflect.TypeOf((*[]int32)(nil)).Elem()
 	int64SliceType     = reflect.TypeOf((*[]int64)(nil)).Elem()
+	intSliceType       = reflect.TypeOf((*[]int)(nil)).Elem()
 	float32SliceType   = reflect.TypeOf((*[]float32)(nil)).Elem()
 	float64SliceType   = reflect.TypeOf((*[]float64)(nil)).Elem()
 	interfaceSliceType = reflect.TypeOf((*[]interface{})(nil)).Elem()
 	interfaceMapType   = reflect.TypeOf((*map[interface{}]interface{})(nil)).Elem()
+	stringStringMapType   = reflect.TypeOf((*map[string]string)(nil)).Elem()
+	stringInt64MapType    = reflect.TypeOf((*map[string]int64)(nil)).Elem()
+	stringIntMapType      = reflect.TypeOf((*map[string]int)(nil)).Elem()
+	stringFloat64MapType  = reflect.TypeOf((*map[string]float64)(nil)).Elem()
+	stringBoolMapType     = reflect.TypeOf((*map[string]bool)(nil)).Elem()
+	int32Int32MapType     = reflect.TypeOf((*map[int32]int32)(nil)).Elem()
+	int64Int64MapType     = reflect.TypeOf((*map[int64]int64)(nil)).Elem()
+	intIntMapType         = reflect.TypeOf((*map[int]int)(nil)).Elem()
 	boolType           = reflect.TypeOf((*bool)(nil)).Elem()
 	byteType           = reflect.TypeOf((*byte)(nil)).Elem()
 	uint8Type          = reflect.TypeOf((*uint8)(nil)).Elem()
@@ -96,7 +105,7 @@ type TypeInfo struct {
 	NameBytes     *MetaStringBytes
 	IsDynamic     bool
 	TypeID        int32
-	LocalID       int16
+	StaticId      StaticTypeId
 	Serializer    Serializer
 	NeedWriteDef  bool
 	hashValue     uint64
@@ -277,8 +286,19 @@ func (r *typeResolver) initialize() {
 		{int16SliceType, int16ArraySerializer{}},
 		{int32SliceType, int32ArraySerializer{}},
 		{int64SliceType, int64ArraySerializer{}},
+		{intSliceType, intSliceSerializer{}},
 		{float32SliceType, float32ArraySerializer{}},
 		{float64SliceType, float64ArraySerializer{}},
+		// Register common map types for fast path
+		{stringStringMapType, mapSerializer{}},
+		{stringInt64MapType, mapSerializer{}},
+		{stringIntMapType, mapSerializer{}},
+		{stringFloat64MapType, mapSerializer{}},
+		{stringBoolMapType, mapSerializer{}},
+		{int32Int32MapType, mapSerializer{}},
+		{int64Int64MapType, mapSerializer{}},
+		{intIntMapType, mapSerializer{}},
+		// Register primitive types
 		{boolType, boolSerializer{}},
 		{byteType, byteSerializer{}},
 		{int8Type, int8Serializer{}},
@@ -306,9 +326,10 @@ func (r *typeResolver) RegisterSerializer(type_ reflect.Type, s Serializer) erro
 	}
 	r.typeToSerializers[type_] = s
 	typeId := s.TypeId()
-	// Skip type ID registration for namespaced types and collection types
+	// Skip type ID registration for namespaced types, collection types, and primitive array types
 	// Collection types (LIST, SET, MAP) can have multiple Go types mapping to them
-	if !IsNamespacedType(typeId) && !isCollectionType(int16(typeId)) {
+	// Primitive array types can also have multiple Go types (e.g., []int and []int64 both map to INT64_ARRAY on 64-bit systems)
+	if !IsNamespacedType(typeId) && !isCollectionType(int16(typeId)) && !isPrimitiveArrayType(int16(typeId)) {
 		if typeId > NotSupportCrossLanguage {
 			if _, ok := r.typeIdToType[typeId]; ok {
 				return fmt.Errorf("type %s with id %d has been registered", type_, typeId)
@@ -600,7 +621,8 @@ func (r *typeResolver) registerType(
 		PkgPathBytes: nsBytes,   // Encoded namespace bytes
 		NameBytes:    typeBytes, // Encoded type name bytes
 		IsDynamic:    dynamicType,
-		hashValue:    calcTypeHash(type_), // Precomputed hash for fast lookups
+		StaticId:     GetStaticTypeId(type_), // Static type ID for fast path
+		hashValue:    calcTypeHash(type_),      // Precomputed hash for fast lookups
 	}
 	// Update resolver caches:
 	r.typesInfo[type_] = typeInfo // Cache by type string
@@ -1127,18 +1149,21 @@ func (r *typeResolver) readTypeInfo(buffer *ByteBuffer, value reflect.Value) (Ty
 			Type:       interfaceSliceType,
 			TypeID:     typeID,
 			Serializer: r.typeToSerializers[interfaceSliceType],
+			StaticId:   ConcreteTypeOther,
 		}, nil
 	case SET:
 		return TypeInfo{
 			Type:       genericSetType,
 			TypeID:     typeID,
 			Serializer: r.typeToSerializers[genericSetType],
+			StaticId:   ConcreteTypeOther,
 		}, nil
 	case MAP:
 		return TypeInfo{
 			Type:       interfaceMapType,
 			TypeID:     typeID,
 			Serializer: r.typeToSerializers[interfaceMapType],
+			StaticId:   ConcreteTypeOther,
 		}, nil
 	}
 
@@ -1215,31 +1240,25 @@ func (r *typeResolver) readTypeInfoWithTypeID(buffer *ByteBuffer, typeID int32) 
 			Type:       interfaceSliceType,
 			TypeID:     typeID,
 			Serializer: r.typeToSerializers[interfaceSliceType],
+			StaticId:   ConcreteTypeOther,
 		}, nil
 	case SET:
 		return TypeInfo{
 			Type:       genericSetType,
 			TypeID:     typeID,
 			Serializer: r.typeToSerializers[genericSetType],
+			StaticId:   ConcreteTypeOther,
 		}, nil
 	case MAP:
 		return TypeInfo{
 			Type:       interfaceMapType,
 			TypeID:     typeID,
 			Serializer: r.typeToSerializers[interfaceMapType],
+			StaticId:   ConcreteTypeOther,
 		}, nil
 	}
 
 	return TypeInfo{}, fmt.Errorf("typeInfo of typeID %d not found", typeID)
-}
-
-// TypeUnregisteredError indicates when a requested type is not registered
-type TypeUnregisteredError struct {
-	TypeName string
-}
-
-func (e *TypeUnregisteredError) Error() string {
-	return fmt.Sprintf("type %s not registered", e.TypeName)
 }
 
 func (r *typeResolver) getTypeById(id int16) (reflect.Type, error) {
@@ -1332,80 +1351,4 @@ func computeStringHash(str string) int32 {
 		}
 	}
 	return int32(hash)
-}
-
-func isPrimitiveType(typeID int16) bool {
-	switch typeID {
-	case BOOL,
-		INT8,
-		INT16,
-		INT32,
-		INT64,
-		FLOAT,
-		DOUBLE:
-		return true
-	default:
-		return false
-	}
-}
-
-func isListType(typeID int16) bool {
-	return typeID == LIST
-}
-
-func isSetType(typeID int16) bool {
-	return typeID == SET
-}
-
-func isMapType(typeID int16) bool {
-	return typeID == MAP
-}
-
-func isCollectionType(typeID int16) bool {
-	return typeID == LIST || typeID == SET || typeID == MAP
-}
-
-func isPrimitiveArrayType(typeID int16) bool {
-	switch typeID {
-	case BOOL_ARRAY,
-		INT8_ARRAY,
-		INT16_ARRAY,
-		INT32_ARRAY,
-		INT64_ARRAY,
-		FLOAT32_ARRAY,
-		FLOAT64_ARRAY:
-		return true
-	default:
-		return false
-	}
-}
-
-var primitiveTypeSizes = map[int16]int{
-	BOOL:      1,
-	INT8:      1,
-	INT16:     2,
-	INT32:     4,
-	VAR_INT32: 4,
-	INT64:     8,
-	VAR_INT64: 8,
-	FLOAT:     4,
-	DOUBLE:    8,
-}
-
-func getPrimitiveTypeSize(typeID int16) int {
-	if sz, ok := primitiveTypeSizes[typeID]; ok {
-		return sz
-	}
-	return -1
-}
-
-func isUserDefinedType(typeID int16) bool {
-	return typeID == STRUCT ||
-		typeID == COMPATIBLE_STRUCT ||
-		typeID == NAMED_STRUCT ||
-		typeID == NAMED_COMPATIBLE_STRUCT ||
-		typeID == EXT ||
-		typeID == NAMED_EXT ||
-		typeID == ENUM ||
-		typeID == NAMED_ENUM
 }

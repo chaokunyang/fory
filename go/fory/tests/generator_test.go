@@ -60,7 +60,7 @@ func TestValidationDemo(t *testing.T) {
 	// 4. Verify that serializer is properly registered and can be retrieved
 	validationSerializer := NewSerializerFor_ValidationDemo()
 	assert.NotNil(t, validationSerializer, "Serializer should not be nil")
-	assert.Equal(t, fory.NAMED_STRUCT, validationSerializer.TypeId(), "Serializer should have correct TypeId")
+	assert.Equal(t, fory.TypeId(fory.NAMED_STRUCT), validationSerializer.TypeId(), "Serializer should have correct TypeId")
 }
 
 func TestSliceDemo(t *testing.T) {
@@ -94,7 +94,7 @@ func TestSliceDemo(t *testing.T) {
 	// 4. Verify that serializer is properly registered and can be retrieved
 	sliceSerializer := NewSerializerFor_SliceDemo()
 	assert.NotNil(t, sliceSerializer, "Serializer should not be nil")
-	assert.Equal(t, fory.NAMED_STRUCT, sliceSerializer.TypeId(), "Serializer should have correct TypeId")
+	assert.Equal(t, fory.TypeId(fory.NAMED_STRUCT), sliceSerializer.TypeId(), "Serializer should have correct TypeId")
 }
 
 func TestDynamicSliceDemo(t *testing.T) {
@@ -131,9 +131,9 @@ func TestDynamicSliceDemo(t *testing.T) {
 	require.NotNil(t, result, "Deserialized result should not be nil")
 
 	// 4. Verify that serializer is properly registered and can be retrieved
-	dynamicSerializer := NewSerializerFor_DynamicSliceDemo()
-	assert.NotNil(t, dynamicSerializer, "Serializer should not be nil")
-	assert.Equal(t, fory.NAMED_STRUCT, dynamicSerializer.TypeId(), "Serializer should have correct TypeId")
+	dynamicSliceSerializer := NewSerializerFor_DynamicSliceDemo()
+	assert.NotNil(t, dynamicSliceSerializer, "Serializer should not be nil")
+	assert.Equal(t, fory.TypeId(fory.NAMED_STRUCT), dynamicSliceSerializer.TypeId(), "Serializer should have correct TypeId")
 }
 
 func TestDynamicSliceDemoWithNilAndEmpty(t *testing.T) {

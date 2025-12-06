@@ -213,6 +213,27 @@ func (c *WriteContext) WriteInt64Value(value int64, writeRefInfo, writeTypeInfo 
 	return nil
 }
 
+// WriteIntValue writes an int with optional ref/type info
+// Platform-dependent: uses int32 on 32-bit systems, int64 on 64-bit systems
+func (c *WriteContext) WriteIntValue(value int, writeRefInfo, writeTypeInfo bool) error {
+	if writeRefInfo {
+		c.buffer.WriteInt8(NotNullValueFlag)
+	}
+	if writeTypeInfo {
+		if strconv.IntSize == 64 {
+			c.WriteTypeId(INT64)
+		} else {
+			c.WriteTypeId(INT32)
+		}
+	}
+	if strconv.IntSize == 64 {
+		c.buffer.WriteVarint64(int64(value))
+	} else {
+		c.buffer.WriteVarint32(int32(value))
+	}
+	return nil
+}
+
 // WriteFloat32Value writes a float32 with optional ref/type info
 func (c *WriteContext) WriteFloat32Value(value float32, writeRefInfo, writeTypeInfo bool) error {
 	if writeRefInfo {

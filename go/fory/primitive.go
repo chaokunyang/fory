@@ -24,8 +24,8 @@ import (
 	"unsafe"
 )
 
-// WriteFast writes a value using fast path based on ConcreteTypeId
-func WriteFast(buf *ByteBuffer, ptr unsafe.Pointer, ct ConcreteTypeId) {
+// WriteFast writes a value using fast path based on StaticTypeId
+func WriteFast(buf *ByteBuffer, ptr unsafe.Pointer, ct StaticTypeId) {
 	switch ct {
 	case ConcreteTypeBool:
 		buf.WriteBool(*(*bool)(ptr))
@@ -52,8 +52,8 @@ func WriteFast(buf *ByteBuffer, ptr unsafe.Pointer, ct ConcreteTypeId) {
 	}
 }
 
-// ReadFast reads a value using fast path based on ConcreteTypeId
-func ReadFast(buf *ByteBuffer, ptr unsafe.Pointer, ct ConcreteTypeId) {
+// ReadFast reads a value using fast path based on StaticTypeId
+func ReadFast(buf *ByteBuffer, ptr unsafe.Pointer, ct StaticTypeId) {
 	switch ct {
 	case ConcreteTypeBool:
 		*(*bool)(ptr) = buf.ReadBool()

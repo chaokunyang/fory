@@ -119,15 +119,92 @@ func IsNamespacedType(typeID TypeId) bool {
 	}
 }
 
+
+func isPrimitiveType(typeID int16) bool {
+	switch typeID {
+	case BOOL,
+		INT8,
+		INT16,
+		INT32,
+		INT64,
+		FLOAT,
+		DOUBLE:
+		return true
+	default:
+		return false
+	}
+}
+
+func isListType(typeID int16) bool {
+	return typeID == LIST
+}
+
+func isSetType(typeID int16) bool {
+	return typeID == SET
+}
+
+func isMapType(typeID int16) bool {
+	return typeID == MAP
+}
+
+func isCollectionType(typeID int16) bool {
+	return typeID == LIST || typeID == SET || typeID == MAP
+}
+
+func isPrimitiveArrayType(typeID int16) bool {
+	switch typeID {
+	case BOOL_ARRAY,
+		INT8_ARRAY,
+		INT16_ARRAY,
+		INT32_ARRAY,
+		INT64_ARRAY,
+		FLOAT32_ARRAY,
+		FLOAT64_ARRAY:
+		return true
+	default:
+		return false
+	}
+}
+
+var primitiveTypeSizes = map[int16]int{
+	BOOL:      1,
+	INT8:      1,
+	INT16:     2,
+	INT32:     4,
+	VAR_INT32: 4,
+	INT64:     8,
+	VAR_INT64: 8,
+	FLOAT:     4,
+	DOUBLE:    8,
+}
+
+func getPrimitiveTypeSize(typeID int16) int {
+	if sz, ok := primitiveTypeSizes[typeID]; ok {
+		return sz
+	}
+	return -1
+}
+
+func isUserDefinedType(typeID int16) bool {
+	return typeID == STRUCT ||
+		typeID == COMPATIBLE_STRUCT ||
+		typeID == NAMED_STRUCT ||
+		typeID == NAMED_COMPATIBLE_STRUCT ||
+		typeID == EXT ||
+		typeID == NAMED_EXT ||
+		typeID == ENUM ||
+		typeID == NAMED_ENUM
+}
+
 // ============================================================================
-// ConcreteTypeId for switch-based fast path (avoids interface virtual method cost)
+// StaticTypeId for switch-based fast path (avoids interface virtual method cost)
 // ============================================================================
 
-// ConcreteTypeId identifies concrete Go types for optimized serialization dispatch
-type ConcreteTypeId uint8
+// StaticTypeId identifies concrete Go types for optimized serialization dispatch
+type StaticTypeId uint8
 
 const (
-	ConcreteTypeOther ConcreteTypeId = iota
+	ConcreteTypeOther StaticTypeId = iota
 	ConcreteTypeBool
 	ConcreteTypeInt8
 	ConcreteTypeInt16
@@ -156,8 +233,8 @@ const (
 	ConcreteTypeIntIntMap
 )
 
-// GetConcreteTypeId returns the ConcreteTypeId for a reflect.Type
-func GetConcreteTypeId(t reflect.Type) ConcreteTypeId {
+// GetStaticTypeId returns the StaticTypeId for a reflect.Type
+func GetStaticTypeId(t reflect.Type) StaticTypeId {
 	switch t.Kind() {
 	case reflect.Bool:
 		return ConcreteTypeBool
@@ -228,8 +305,8 @@ func GetConcreteTypeId(t reflect.Type) ConcreteTypeId {
 	}
 }
 
-// GetConcreteTypeIdAndTypeId returns both ConcreteTypeId and TypeId for a reflect.Type
-func GetConcreteTypeIdAndTypeId(t reflect.Type) (ConcreteTypeId, TypeId) {
+// GetConcreteTypeIdAndTypeId returns both StaticTypeId and TypeId for a reflect.Type
+func GetConcreteTypeIdAndTypeId(t reflect.Type) (StaticTypeId, TypeId) {
 	switch t.Kind() {
 	case reflect.Bool:
 		return ConcreteTypeBool, BOOL

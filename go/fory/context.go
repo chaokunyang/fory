@@ -140,6 +140,34 @@ func (c *WriteContext) WriteTypeId(id TypeId) {
 	c.buffer.WriteInt16(id)
 }
 
+// writeFast writes a value using fast path based on StaticTypeId
+func (c *WriteContext) writeFast(ptr unsafe.Pointer, ct StaticTypeId) {
+	switch ct {
+	case ConcreteTypeBool:
+		c.buffer.WriteBool(*(*bool)(ptr))
+	case ConcreteTypeInt8:
+		c.buffer.WriteByte_(*(*byte)(ptr))
+	case ConcreteTypeInt16:
+		c.buffer.WriteInt16(*(*int16)(ptr))
+	case ConcreteTypeInt32:
+		c.buffer.WriteVarint32(*(*int32)(ptr))
+	case ConcreteTypeInt:
+		if strconv.IntSize == 64 {
+			c.buffer.WriteVarint64(int64(*(*int)(ptr)))
+		} else {
+			c.buffer.WriteVarint32(int32(*(*int)(ptr)))
+		}
+	case ConcreteTypeInt64:
+		c.buffer.WriteVarint64(*(*int64)(ptr))
+	case ConcreteTypeFloat32:
+		c.buffer.WriteFloat32(*(*float32)(ptr))
+	case ConcreteTypeFloat64:
+		c.buffer.WriteFloat64(*(*float64)(ptr))
+	case ConcreteTypeString:
+		writeString(c.buffer, *(*string)(ptr))
+	}
+}
+
 // WriteLength writes a length value as varint
 func (c *WriteContext) WriteLength(length int) error {
 	if length > MaxInt32 || length < MinInt32 {
@@ -658,6 +686,34 @@ func (c *ReadContext) ReadBinary() []byte {
 
 func (c *ReadContext) ReadTypeId() TypeId {
 	return c.buffer.ReadInt16()
+}
+
+// readFast reads a value using fast path based on StaticTypeId
+func (c *ReadContext) readFast(ptr unsafe.Pointer, ct StaticTypeId) {
+	switch ct {
+	case ConcreteTypeBool:
+		*(*bool)(ptr) = c.buffer.ReadBool()
+	case ConcreteTypeInt8:
+		*(*int8)(ptr) = int8(c.buffer.ReadByte_())
+	case ConcreteTypeInt16:
+		*(*int16)(ptr) = c.buffer.ReadInt16()
+	case ConcreteTypeInt32:
+		*(*int32)(ptr) = c.buffer.ReadVarint32()
+	case ConcreteTypeInt:
+		if strconv.IntSize == 64 {
+			*(*int)(ptr) = int(c.buffer.ReadVarint64())
+		} else {
+			*(*int)(ptr) = int(c.buffer.ReadVarint32())
+		}
+	case ConcreteTypeInt64:
+		*(*int64)(ptr) = c.buffer.ReadVarint64()
+	case ConcreteTypeFloat32:
+		*(*float32)(ptr) = c.buffer.ReadFloat32()
+	case ConcreteTypeFloat64:
+		*(*float64)(ptr) = c.buffer.ReadFloat64()
+	case ConcreteTypeString:
+		*(*string)(ptr) = readString(c.buffer)
+	}
 }
 
 // ReadAndValidateTypeId reads type ID and validates it matches expected

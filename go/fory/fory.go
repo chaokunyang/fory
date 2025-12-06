@@ -22,6 +22,8 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strconv"
+	"unsafe"
 )
 
 // ============================================================================
@@ -547,57 +549,123 @@ func Serialize[T any](f *Fory, value *T) ([]byte, error) {
 	var err error
 	switch val := v.(type) {
 	case *bool:
-		err = f.writeCtx.WriteBool(*val, true, true)
+		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
+		f.writeCtx.WriteTypeId(BOOL)
+		f.writeCtx.buffer.WriteBool(*val)
 	case *int8:
-		err = f.writeCtx.WriteInt8(*val, true, true)
+		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
+		f.writeCtx.WriteTypeId(INT8)
+		f.writeCtx.buffer.WriteInt8(*val)
 	case *int16:
-		err = f.writeCtx.WriteInt16(*val, true, true)
+		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
+		f.writeCtx.WriteTypeId(INT16)
+		f.writeCtx.buffer.WriteInt16(*val)
 	case *int32:
-		err = f.writeCtx.WriteInt32(*val, true, true)
+		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
+		f.writeCtx.WriteTypeId(INT32)
+		f.writeCtx.buffer.WriteVarint32(*val)
 	case *int64:
-		err = f.writeCtx.WriteInt64(*val, true, true)
+		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
+		f.writeCtx.WriteTypeId(INT64)
+		f.writeCtx.buffer.WriteVarint64(*val)
 	case *int:
-		err = f.writeCtx.WriteInt(*val, true, true)
+		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
+		if strconv.IntSize == 64 {
+			f.writeCtx.WriteTypeId(INT64)
+			f.writeCtx.buffer.WriteVarint64(int64(*val))
+		} else {
+			f.writeCtx.WriteTypeId(INT32)
+			f.writeCtx.buffer.WriteVarint32(int32(*val))
+		}
 	case *float32:
-		err = f.writeCtx.WriteFloat32(*val, true, true)
+		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
+		f.writeCtx.WriteTypeId(FLOAT)
+		f.writeCtx.buffer.WriteFloat32(*val)
 	case *float64:
-		err = f.writeCtx.WriteFloat64(*val, true, true)
+		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
+		f.writeCtx.WriteTypeId(DOUBLE)
+		f.writeCtx.buffer.WriteFloat64(*val)
 	case *string:
-		err = f.writeCtx.WriteString(*val, true, true)
+		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
+		f.writeCtx.WriteTypeId(STRING)
+		f.writeCtx.buffer.WriteVarUint32(uint32(len(*val)))
+		if len(*val) > 0 {
+			f.writeCtx.buffer.WriteBinary(unsafe.Slice(unsafe.StringData(*val), len(*val)))
+		}
 	case *[]byte:
-		err = f.writeCtx.WriteByteSlice(*val, true, true)
+		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
+		f.writeCtx.WriteTypeId(BINARY)
+		f.writeCtx.buffer.WriteBool(true) // in-band
+		f.writeCtx.buffer.WriteLength(len(*val))
+		f.writeCtx.buffer.WriteBinary(*val)
 	case *[]int8:
-		err = f.writeCtx.WriteInt8Slice(*val, true, true)
+		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
+		f.writeCtx.WriteTypeId(INT8_ARRAY)
+		err = writeInt8Slice(f.writeCtx.buffer, *val)
 	case *[]int16:
-		err = f.writeCtx.WriteInt16Slice(*val, true, true)
+		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
+		f.writeCtx.WriteTypeId(INT16_ARRAY)
+		err = writeInt16Slice(f.writeCtx.buffer, *val)
 	case *[]int32:
-		err = f.writeCtx.WriteInt32Slice(*val, true, true)
+		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
+		f.writeCtx.WriteTypeId(INT32_ARRAY)
+		err = writeInt32Slice(f.writeCtx.buffer, *val)
 	case *[]int64:
-		err = f.writeCtx.WriteInt64Slice(*val, true, true)
+		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
+		f.writeCtx.WriteTypeId(INT64_ARRAY)
+		err = writeInt64Slice(f.writeCtx.buffer, *val)
 	case *[]int:
-		err = f.writeCtx.WriteIntSlice(*val, true, true)
+		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
+		if strconv.IntSize == 64 {
+			f.writeCtx.WriteTypeId(INT64_ARRAY)
+		} else {
+			f.writeCtx.WriteTypeId(INT32_ARRAY)
+		}
+		err = writeIntSlice(f.writeCtx.buffer, *val)
 	case *[]float32:
-		err = f.writeCtx.WriteFloat32Slice(*val, true, true)
+		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
+		f.writeCtx.WriteTypeId(FLOAT32_ARRAY)
+		err = writeFloat32Slice(f.writeCtx.buffer, *val)
 	case *[]float64:
-		err = f.writeCtx.WriteFloat64Slice(*val, true, true)
+		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
+		f.writeCtx.WriteTypeId(FLOAT64_ARRAY)
+		err = writeFloat64Slice(f.writeCtx.buffer, *val)
 	case *[]bool:
-		err = f.writeCtx.WriteBoolSlice(*val, true, true)
+		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
+		f.writeCtx.WriteTypeId(BOOL_ARRAY)
+		err = writeBoolSlice(f.writeCtx.buffer, *val)
 	case *map[string]string:
-		err = f.writeCtx.WriteStringStringMap(*val, true, true)
+		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
+		f.writeCtx.WriteTypeId(MAP)
+		writeMapStringString(f.writeCtx.buffer, *val)
 	case *map[string]int64:
-		err = f.writeCtx.WriteStringInt64Map(*val, true, true)
+		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
+		f.writeCtx.WriteTypeId(MAP)
+		writeMapStringInt64(f.writeCtx.buffer, *val)
 	case *map[string]int:
-		err = f.writeCtx.WriteStringIntMap(*val, true, true)
+		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
+		f.writeCtx.WriteTypeId(MAP)
+		writeMapStringInt(f.writeCtx.buffer, *val)
 	case *map[string]float64:
-		err = f.writeCtx.WriteStringFloat64Map(*val, true, true)
+		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
+		f.writeCtx.WriteTypeId(MAP)
+		writeMapStringFloat64(f.writeCtx.buffer, *val)
 	case *map[string]bool:
-		err = f.writeCtx.WriteStringBoolMap(*val, true, true)
+		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
+		f.writeCtx.WriteTypeId(MAP)
+		writeMapStringBool(f.writeCtx.buffer, *val)
 	case *map[int32]int32:
-		err = f.writeCtx.WriteInt32Int32Map(*val, true, true)
+		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
+		f.writeCtx.WriteTypeId(MAP)
+		writeMapInt32Int32(f.writeCtx.buffer, *val)
 	case *map[int64]int64:
-		err = f.writeCtx.WriteInt64Int64Map(*val, true, true)
+		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
+		f.writeCtx.WriteTypeId(MAP)
+		writeMapInt64Int64(f.writeCtx.buffer, *val)
 	case *map[int]int:
-		err = f.writeCtx.WriteIntIntMap(*val, true, true)
+		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
+		f.writeCtx.WriteTypeId(MAP)
+		writeMapIntInt(f.writeCtx.buffer, *val)
 	default:
 		// Fall back to reflection-based serialization
 		// Reuse v (already boxed) and .Elem() to get underlying value without copy

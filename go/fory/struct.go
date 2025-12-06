@@ -103,7 +103,7 @@ func (s *structSerializer) WriteReflect(ctx *WriteContext, value reflect.Value) 
 		// Fast path for primitive types using unsafe access
 		if canUseUnsafe && field.StaticId != ConcreteTypeOther && !field.Referencable {
 			fieldPtr := unsafe.Add(ptr, field.Offset)
-			WriteFast(buf, fieldPtr, field.StaticId)
+			ctx.writeFast(fieldPtr, field.StaticId)
 			continue
 		}
 
@@ -172,12 +172,10 @@ func (s *structSerializer) ReadReflect(ctx *ReadContext, type_ reflect.Type, val
 			}
 			continue
 		}
-
-		fieldPtr := unsafe.Add(ptr, field.Offset)
-
 		// Fast path for primitive types using switch
 		if field.StaticId != ConcreteTypeOther && !field.Referencable {
-			ReadFast(buf, fieldPtr, field.StaticId)
+			fieldPtr := unsafe.Add(ptr, field.Offset)
+			ctx.readFast(fieldPtr, field.StaticId)
 			continue
 		}
 
@@ -199,7 +197,6 @@ func (s *structSerializer) ReadReflect(ctx *ReadContext, type_ reflect.Type, val
 // ReadCompatible reads struct data with schema evolution support
 // It reads fields based on remote schema and maps to local fields by name
 func (s *structSerializer) ReadCompatible(ctx *ReadContext, type_ reflect.Type, value reflect.Value, remoteFields []*FieldInfo) error {
-	buf := ctx.Buffer()
 	if value.Kind() == reflect.Ptr {
 		if value.IsNil() {
 			value.Set(reflect.New(type_.Elem()))
@@ -238,7 +235,7 @@ func (s *structSerializer) ReadCompatible(ctx *ReadContext, type_ reflect.Type, 
 
 		// Fast path for primitive types
 		if localField.StaticId != ConcreteTypeOther && !localField.Referencable {
-			ReadFast(buf, fieldPtr, localField.StaticId)
+			ctx.readFast(fieldPtr, localField.StaticId)
 			continue
 		}
 

@@ -20,65 +20,7 @@ package fory
 import (
 	"fmt"
 	"reflect"
-	"strconv"
-	"unsafe"
 )
-
-// WriteFast writes a value using fast path based on StaticTypeId
-func WriteFast(buf *ByteBuffer, ptr unsafe.Pointer, ct StaticTypeId) {
-	switch ct {
-	case ConcreteTypeBool:
-		buf.WriteBool(*(*bool)(ptr))
-	case ConcreteTypeInt8:
-		buf.WriteByte_(*(*byte)(ptr))
-	case ConcreteTypeInt16:
-		buf.WriteInt16(*(*int16)(ptr))
-	case ConcreteTypeInt32:
-		buf.WriteVarint32(*(*int32)(ptr))
-	case ConcreteTypeInt:
-		if strconv.IntSize == 64 {
-			buf.WriteVarint64(int64(*(*int)(ptr)))
-		} else {
-			buf.WriteVarint32(int32(*(*int)(ptr)))
-		}
-	case ConcreteTypeInt64:
-		buf.WriteVarint64(*(*int64)(ptr))
-	case ConcreteTypeFloat32:
-		buf.WriteFloat32(*(*float32)(ptr))
-	case ConcreteTypeFloat64:
-		buf.WriteFloat64(*(*float64)(ptr))
-	case ConcreteTypeString:
-		writeString(buf, *(*string)(ptr))
-	}
-}
-
-// ReadFast reads a value using fast path based on StaticTypeId
-func ReadFast(buf *ByteBuffer, ptr unsafe.Pointer, ct StaticTypeId) {
-	switch ct {
-	case ConcreteTypeBool:
-		*(*bool)(ptr) = buf.ReadBool()
-	case ConcreteTypeInt8:
-		*(*int8)(ptr) = int8(buf.ReadByte_())
-	case ConcreteTypeInt16:
-		*(*int16)(ptr) = buf.ReadInt16()
-	case ConcreteTypeInt32:
-		*(*int32)(ptr) = buf.ReadVarint32()
-	case ConcreteTypeInt:
-		if strconv.IntSize == 64 {
-			*(*int)(ptr) = int(buf.ReadVarint64())
-		} else {
-			*(*int)(ptr) = int(buf.ReadVarint32())
-		}
-	case ConcreteTypeInt64:
-		*(*int64)(ptr) = buf.ReadVarint64()
-	case ConcreteTypeFloat32:
-		*(*float32)(ptr) = buf.ReadFloat32()
-	case ConcreteTypeFloat64:
-		*(*float64)(ptr) = buf.ReadFloat64()
-	case ConcreteTypeString:
-		*(*string)(ptr) = readString(buf)
-	}
-}
 
 // ============================================================================
 // Primitive Serializers - implement unified Serializer interface

@@ -81,7 +81,7 @@ Result<void, Error> FieldType::write_to(Buffer &buffer, bool write_flag,
 Result<FieldType, Error> FieldType::read_from(Buffer &buffer, bool read_flag,
                                               bool nullable_val) {
   Error error;
-  uint32_t header = buffer.ReadVarUint32(&error);
+  uint32_t header = buffer.ReadVarUint32(error);
   if (FORY_PREDICT_FALSE(!error.ok())) {
     return Unexpected(std::move(error));
   }
@@ -154,7 +154,7 @@ Result<std::vector<uint8_t>, Error> FieldInfo::to_bytes() const {
 Result<FieldInfo, Error> FieldInfo::from_bytes(Buffer &buffer) {
   // Read field header
   Error error;
-  uint8_t header = buffer.ReadUint8(&error);
+  uint8_t header = buffer.ReadUint8(error);
   if (FORY_PREDICT_FALSE(!error.ok())) {
     return Unexpected(std::move(error));
   }
@@ -168,7 +168,7 @@ Result<FieldInfo, Error> FieldInfo::from_bytes(Buffer &buffer) {
   bool nullable = (header & 0b10u) != 0;
   size_t name_size = ((header >> 2) & FIELD_NAME_SIZE_THRESHOLD);
   if (name_size == FIELD_NAME_SIZE_THRESHOLD) {
-    uint32_t extra = buffer.ReadVarUint32(&error);
+    uint32_t extra = buffer.ReadVarUint32(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -187,7 +187,7 @@ Result<FieldInfo, Error> FieldInfo::from_bytes(Buffer &buffer) {
   // special characters (same as Encoders.FIELD_NAME_DECODER).
 
   std::vector<uint8_t> name_bytes(name_size);
-  buffer.ReadBytes(name_bytes.data(), static_cast<uint32_t>(name_size), &error);
+  buffer.ReadBytes(name_bytes.data(), static_cast<uint32_t>(name_size), error);
   if (FORY_PREDICT_FALSE(!error.ok())) {
     return Unexpected(std::move(error));
   }
@@ -244,7 +244,7 @@ inline Result<std::string, Error>
 read_meta_name(Buffer &buffer, const MetaStringDecoder &decoder,
                const MetaEncoding *encodings, size_t enc_count) {
   Error error;
-  uint8_t header = buffer.ReadUint8(&error);
+  uint8_t header = buffer.ReadUint8(error);
   if (FORY_PREDICT_FALSE(!error.ok())) {
     return Unexpected(std::move(error));
   }
@@ -259,7 +259,7 @@ read_meta_name(Buffer &buffer, const MetaStringDecoder &decoder,
 
   size_t length = length_prefix;
   if (length >= BIG_NAME_THRESHOLD) {
-    uint32_t extra = buffer.ReadVarUint32(&error);
+    uint32_t extra = buffer.ReadVarUint32(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -268,7 +268,7 @@ read_meta_name(Buffer &buffer, const MetaStringDecoder &decoder,
 
   std::vector<uint8_t> bytes(length);
   if (length > 0) {
-    buffer.ReadBytes(bytes.data(), static_cast<uint32_t>(length), &error);
+    buffer.ReadBytes(bytes.data(), static_cast<uint32_t>(length), error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -365,7 +365,7 @@ TypeMeta::from_bytes(Buffer &buffer, const TypeMeta *local_type_info) {
   // Read global binary header
   Error error;
   int64_t header;
-  buffer.ReadBytes(&header, sizeof(header), &error);
+  buffer.ReadBytes(&header, sizeof(header), error);
   if (FORY_PREDICT_FALSE(!error.ok())) {
     return Unexpected(std::move(error));
   }
@@ -374,7 +374,7 @@ TypeMeta::from_bytes(Buffer &buffer, const TypeMeta *local_type_info) {
   int64_t meta_size = header & META_SIZE_MASK;
   if (meta_size == META_SIZE_MASK) {
     uint32_t before = buffer.reader_index();
-    uint32_t extra = buffer.ReadVarUint32(&error);
+    uint32_t extra = buffer.ReadVarUint32(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -384,7 +384,7 @@ TypeMeta::from_bytes(Buffer &buffer, const TypeMeta *local_type_info) {
   }
   int64_t meta_hash = header >> (64 - NUM_HASH_BITS);
   // Read meta header
-  uint8_t meta_header = buffer.ReadUint8(&error);
+  uint8_t meta_header = buffer.ReadUint8(error);
   if (FORY_PREDICT_FALSE(!error.ok())) {
     return Unexpected(std::move(error));
   }
@@ -392,7 +392,7 @@ TypeMeta::from_bytes(Buffer &buffer, const TypeMeta *local_type_info) {
   bool register_by_name = (meta_header & REGISTER_BY_NAME_FLAG) != 0;
   size_t num_fields = meta_header & SMALL_NUM_FIELDS_THRESHOLD;
   if (num_fields == SMALL_NUM_FIELDS_THRESHOLD) {
-    uint32_t extra = buffer.ReadVarUint32(&error);
+    uint32_t extra = buffer.ReadVarUint32(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -418,7 +418,7 @@ TypeMeta::from_bytes(Buffer &buffer, const TypeMeta *local_type_info) {
                                     sizeof(kTypeNameEncodings[0])));
     type_name = std::move(tn);
   } else {
-    uint32_t tid = buffer.ReadVarUint32(&error);
+    uint32_t tid = buffer.ReadVarUint32(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -467,7 +467,7 @@ TypeMeta::from_bytes_with_header(Buffer &buffer, int64_t header) {
   size_t header_size = 0;
   if (meta_size == META_SIZE_MASK) {
     uint32_t before = buffer.reader_index();
-    uint32_t extra = buffer.ReadVarUint32(&error);
+    uint32_t extra = buffer.ReadVarUint32(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -480,7 +480,7 @@ TypeMeta::from_bytes_with_header(Buffer &buffer, int64_t header) {
   size_t start_pos = buffer.reader_index();
 
   // Read meta header
-  uint8_t meta_header = buffer.ReadUint8(&error);
+  uint8_t meta_header = buffer.ReadUint8(error);
   if (FORY_PREDICT_FALSE(!error.ok())) {
     return Unexpected(std::move(error));
   }
@@ -488,7 +488,7 @@ TypeMeta::from_bytes_with_header(Buffer &buffer, int64_t header) {
   bool register_by_name = (meta_header & REGISTER_BY_NAME_FLAG) != 0;
   size_t num_fields = meta_header & SMALL_NUM_FIELDS_THRESHOLD;
   if (num_fields == SMALL_NUM_FIELDS_THRESHOLD) {
-    uint32_t extra = buffer.ReadVarUint32(&error);
+    uint32_t extra = buffer.ReadVarUint32(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -514,7 +514,7 @@ TypeMeta::from_bytes_with_header(Buffer &buffer, int64_t header) {
                                     sizeof(kTypeNameEncodings[0])));
     type_name = std::move(tn);
   } else {
-    uint32_t tid = buffer.ReadVarUint32(&error);
+    uint32_t tid = buffer.ReadVarUint32(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -555,13 +555,13 @@ Result<void, Error> TypeMeta::skip_bytes(Buffer &buffer, int64_t header) {
   Error error;
   int64_t meta_size = header & META_SIZE_MASK;
   if (meta_size == META_SIZE_MASK) {
-    uint32_t extra = buffer.ReadVarUint32(&error);
+    uint32_t extra = buffer.ReadVarUint32(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
     meta_size += extra;
   }
-  buffer.Skip(static_cast<uint32_t>(meta_size), &error);
+  buffer.Skip(static_cast<uint32_t>(meta_size), error);
   if (FORY_PREDICT_FALSE(!error.ok())) {
     return Unexpected(std::move(error));
   }

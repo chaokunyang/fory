@@ -133,7 +133,7 @@ inline Result<HeaderInfo, Error> read_header(Buffer &buffer) {
   // Java writes a language byte after header in xlang mode - read and ignore it
   if (info.is_xlang) {
     Error error;
-    uint8_t lang_byte = buffer.ReadUint8(&error);
+    uint8_t lang_byte = buffer.ReadUint8(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -178,7 +178,7 @@ inline bool consume_ref_flag(ReadContext &ctx, bool read_ref) {
     return false;
   }
   Error error;
-  int8_t flag = ctx.read_int8(&error);
+  int8_t flag = ctx.read_int8(error);
   if (FORY_PREDICT_FALSE(!error.ok())) {
     ctx.set_error(std::move(error));
     return false;
@@ -190,7 +190,7 @@ inline bool consume_ref_flag(ReadContext &ctx, bool read_ref) {
     return true;
   }
   if (flag == REF_FLAG) {
-    uint32_t ref_id = ctx.read_varuint32(&error);
+    uint32_t ref_id = ctx.read_varuint32(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       ctx.set_error(std::move(error));
       return false;

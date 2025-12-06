@@ -594,7 +594,7 @@ inline Result<MapType, Error> read_map_data_fast(ReadContext &ctx,
   uint32_t len_counter = 0;
 
   while (len_counter < length) {
-    uint8_t header = ctx.read_uint8(&error);
+    uint8_t header = ctx.read_uint8(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -625,7 +625,7 @@ inline Result<MapType, Error> read_map_data_fast(ReadContext &ctx,
     }
 
     // Read chunk size
-    uint8_t chunk_size = ctx.read_uint8(&error);
+    uint8_t chunk_size = ctx.read_uint8(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -716,7 +716,7 @@ inline Result<MapType, Error> read_map_data_slow(ReadContext &ctx,
   };
 
   while (len_counter < length) {
-    uint8_t header = ctx.read_uint8(&error);
+    uint8_t header = ctx.read_uint8(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -853,7 +853,7 @@ inline Result<MapType, Error> read_map_data_slow(ReadContext &ctx,
     }
 
     // Non-null key and value chunk
-    uint8_t chunk_size = ctx.read_uint8(&error);
+    uint8_t chunk_size = ctx.read_uint8(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -1041,7 +1041,7 @@ struct Serializer<std::map<K, V, Args...>> {
 
     Error error;
     if (read_type) {
-      uint32_t type_id_read = ctx.read_varuint32(&error);
+      uint32_t type_id_read = ctx.read_varuint32(error);
       if (FORY_PREDICT_FALSE(!error.ok())) {
         return Unexpected(std::move(error));
       }
@@ -1051,7 +1051,7 @@ struct Serializer<std::map<K, V, Args...>> {
       }
     }
 
-    uint32_t length = ctx.read_varuint32(&error);
+    uint32_t length = ctx.read_varuint32(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -1078,7 +1078,7 @@ struct Serializer<std::map<K, V, Args...>> {
   static inline Result<std::map<K, V, Args...>, Error>
   read_data(ReadContext &ctx) {
     Error error;
-    uint32_t length = ctx.read_varuint32(&error);
+    uint32_t length = ctx.read_varuint32(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -1166,7 +1166,7 @@ struct Serializer<std::unordered_map<K, V, Args...>> {
 
     Error error;
     if (read_type) {
-      uint32_t type_id_read = ctx.read_varuint32(&error);
+      uint32_t type_id_read = ctx.read_varuint32(error);
       if (FORY_PREDICT_FALSE(!error.ok())) {
         return Unexpected(std::move(error));
       }
@@ -1176,7 +1176,7 @@ struct Serializer<std::unordered_map<K, V, Args...>> {
       }
     }
 
-    uint32_t length = ctx.read_varuint32(&error);
+    uint32_t length = ctx.read_varuint32(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -1205,7 +1205,7 @@ struct Serializer<std::unordered_map<K, V, Args...>> {
   static inline Result<std::unordered_map<K, V, Args...>, Error>
   read_data(ReadContext &ctx) {
     Error error;
-    uint32_t length = ctx.read_varuint32(&error);
+    uint32_t length = ctx.read_varuint32(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }

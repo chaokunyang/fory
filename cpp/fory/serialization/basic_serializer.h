@@ -30,6 +30,7 @@
 #include <string>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 #ifndef FORY_UNUSED
 #define FORY_UNUSED(x) (void)(x)
@@ -37,6 +38,11 @@
 
 namespace fory {
 namespace serialization {
+
+// Error-handling note: we deliberately avoid early ctx.has_error() guards and
+// temporary Error locals. read_* routines take ctx.error(), which captures the
+// first failure and stops advancing on bounds issues, so continuing the code
+// path only burns a few extra cycles without altering the recorded error.
 
 // ============================================================================
 // Primitive Type Serializers
@@ -53,15 +59,7 @@ template <> struct Serializer<bool> {
 
   /// Read and validate type info (primitives use read_varuint32 directly)
   static inline void read_type_info(ReadContext &ctx) {
-    if (ctx.has_error()) {
-      return;
-    }
-    Error error;
-    uint32_t actual = ctx.read_varuint32(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      ctx.set_error(std::move(error));
-      return;
-    }
+    uint32_t actual = ctx.read_varuint32(ctx.error());
     if (actual != static_cast<uint32_t>(type_id)) {
       ctx.set_error(
           Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
@@ -91,43 +89,24 @@ template <> struct Serializer<bool> {
 
   /// Read boolean with optional reference and type info
   static inline bool read(ReadContext &ctx, bool read_ref, bool read_type) {
-    if (ctx.has_error()) {
-      return false;
-    }
     bool has_value = consume_ref_flag(ctx, read_ref);
-    if (!has_value || ctx.has_error()) {
+    if (!has_value) {
       return false;
     }
     if (read_type) {
-      Error error;
-      uint32_t type_id_read = ctx.read_varuint32(&error);
-      if (FORY_PREDICT_FALSE(!error.ok())) {
-        ctx.set_error(std::move(error));
-        return false;
-      }
+      uint32_t type_id_read = ctx.read_varuint32(ctx.error());
       if (type_id_read != static_cast<uint32_t>(type_id)) {
         ctx.set_error(Error::type_mismatch(type_id_read,
                                            static_cast<uint32_t>(type_id)));
-        return false;
       }
     }
-    Error error;
-    uint8_t value = ctx.read_uint8(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      ctx.set_error(std::move(error));
-      return false;
-    }
+    uint8_t value = ctx.read_uint8(ctx.error());
     return value != 0;
   }
 
   /// Read boolean data only (no type info)
   static inline bool read_data(ReadContext &ctx) {
-    Error error;
-    uint8_t value = ctx.read_uint8(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      ctx.set_error(std::move(error));
-      return false;
-    }
+    uint8_t value = ctx.read_uint8(ctx.error());
     return value != 0;
   }
 
@@ -153,15 +132,7 @@ template <> struct Serializer<int8_t> {
   }
 
   static inline void read_type_info(ReadContext &ctx) {
-    if (ctx.has_error()) {
-      return;
-    }
-    Error error;
-    uint32_t actual = ctx.read_varuint32(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      ctx.set_error(std::move(error));
-      return;
-    }
+    uint32_t actual = ctx.read_varuint32(ctx.error());
     if (actual != static_cast<uint32_t>(type_id)) {
       ctx.set_error(
           Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
@@ -178,9 +149,6 @@ template <> struct Serializer<int8_t> {
   }
 
   static inline void write_data(int8_t value, WriteContext &ctx) {
-    if (ctx.has_error()) {
-      return;
-    }
     ctx.write_int8(value);
   }
 
@@ -191,42 +159,24 @@ template <> struct Serializer<int8_t> {
   }
 
   static inline int8_t read(ReadContext &ctx, bool read_ref, bool read_type) {
-    if (ctx.has_error()) {
-      return static_cast<int8_t>(0);
-    }
     bool has_value = consume_ref_flag(ctx, read_ref);
-    if (!has_value || ctx.has_error()) {
+    if (!has_value) {
       return static_cast<int8_t>(0);
     }
     if (read_type) {
-      Error error;
-      uint32_t type_id_read = ctx.read_varuint32(&error);
-      if (FORY_PREDICT_FALSE(!error.ok())) {
-        ctx.set_error(std::move(error));
-        return static_cast<int8_t>(0);
-      }
+      uint32_t type_id_read = ctx.read_varuint32(ctx.error());
       if (type_id_read != static_cast<uint32_t>(type_id)) {
         ctx.set_error(Error::type_mismatch(type_id_read,
                                            static_cast<uint32_t>(type_id)));
         return static_cast<int8_t>(0);
       }
     }
-    Error error;
-    int8_t value = ctx.read_int8(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      ctx.set_error(std::move(error));
-      return static_cast<int8_t>(0);
-    }
+    int8_t value = ctx.read_int8(ctx.error());
     return value;
   }
 
   static inline int8_t read_data(ReadContext &ctx) {
-    Error error;
-    int8_t value = ctx.read_int8(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      ctx.set_error(std::move(error));
-      return static_cast<int8_t>(0);
-    }
+    int8_t value = ctx.read_int8(ctx.error());
     return value;
   }
 
@@ -251,15 +201,7 @@ template <> struct Serializer<int16_t> {
   }
 
   static inline void read_type_info(ReadContext &ctx) {
-    if (ctx.has_error()) {
-      return;
-    }
-    Error error;
-    uint32_t actual = ctx.read_varuint32(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      ctx.set_error(std::move(error));
-      return;
-    }
+    uint32_t actual = ctx.read_varuint32(ctx.error());
     if (actual != static_cast<uint32_t>(type_id)) {
       ctx.set_error(
           Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
@@ -286,42 +228,24 @@ template <> struct Serializer<int16_t> {
   }
 
   static inline int16_t read(ReadContext &ctx, bool read_ref, bool read_type) {
-    if (ctx.has_error()) {
-      return static_cast<int16_t>(0);
-    }
     bool has_value = consume_ref_flag(ctx, read_ref);
-    if (!has_value || ctx.has_error()) {
+    if (!has_value) {
       return static_cast<int16_t>(0);
     }
     if (read_type) {
-      Error error;
-      uint32_t type_id_read = ctx.read_varuint32(&error);
-      if (FORY_PREDICT_FALSE(!error.ok())) {
-        ctx.set_error(std::move(error));
-        return static_cast<int16_t>(0);
-      }
+      uint32_t type_id_read = ctx.read_varuint32(ctx.error());
       if (type_id_read != static_cast<uint32_t>(type_id)) {
         ctx.set_error(Error::type_mismatch(type_id_read,
                                            static_cast<uint32_t>(type_id)));
         return static_cast<int16_t>(0);
       }
     }
-    Error error;
-    int16_t value = ctx.read_int16(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      ctx.set_error(std::move(error));
-      return static_cast<int16_t>(0);
-    }
+    int16_t value = ctx.read_int16(ctx.error());
     return value;
   }
 
   static inline int16_t read_data(ReadContext &ctx) {
-    Error error;
-    int16_t value = ctx.read_int16(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      ctx.set_error(std::move(error));
-      return static_cast<int16_t>(0);
-    }
+    int16_t value = ctx.read_int16(ctx.error());
     return value;
   }
 
@@ -346,15 +270,7 @@ template <> struct Serializer<int32_t> {
   }
 
   static inline void read_type_info(ReadContext &ctx) {
-    if (ctx.has_error()) {
-      return;
-    }
-    Error error;
-    uint32_t actual = ctx.read_varuint32(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      ctx.set_error(std::move(error));
-      return;
-    }
+    uint32_t actual = ctx.read_varuint32(ctx.error());
     if (actual != static_cast<uint32_t>(type_id)) {
       ctx.set_error(
           Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
@@ -380,42 +296,24 @@ template <> struct Serializer<int32_t> {
   }
 
   static inline int32_t read(ReadContext &ctx, bool read_ref, bool read_type) {
-    if (ctx.has_error()) {
-      return static_cast<int32_t>(0);
-    }
     bool has_value = consume_ref_flag(ctx, read_ref);
-    if (!has_value || ctx.has_error()) {
+    if (!has_value) {
       return static_cast<int32_t>(0);
     }
     if (read_type) {
-      Error error;
-      uint32_t type_id_read = ctx.read_varuint32(&error);
-      if (FORY_PREDICT_FALSE(!error.ok())) {
-        ctx.set_error(std::move(error));
-        return static_cast<int32_t>(0);
-      }
+      uint32_t type_id_read = ctx.read_varuint32(ctx.error());
       if (type_id_read != static_cast<uint32_t>(type_id)) {
         ctx.set_error(Error::type_mismatch(type_id_read,
                                            static_cast<uint32_t>(type_id)));
         return static_cast<int32_t>(0);
       }
     }
-    Error error;
-    int32_t value = ctx.read_varint32(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      ctx.set_error(std::move(error));
-      return static_cast<int32_t>(0);
-    }
+    int32_t value = ctx.read_varint32(ctx.error());
     return value;
   }
 
   static inline int32_t read_data(ReadContext &ctx) {
-    Error error;
-    int32_t value = ctx.read_varint32(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      ctx.set_error(std::move(error));
-      return static_cast<int32_t>(0);
-    }
+    int32_t value = ctx.read_varint32(ctx.error());
     return value;
   }
 
@@ -438,15 +336,7 @@ template <> struct Serializer<int64_t> {
   }
 
   static inline void read_type_info(ReadContext &ctx) {
-    if (ctx.has_error()) {
-      return;
-    }
-    Error error;
-    uint32_t actual = ctx.read_varuint32(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      ctx.set_error(std::move(error));
-      return;
-    }
+    uint32_t actual = ctx.read_varuint32(ctx.error());
     if (actual != static_cast<uint32_t>(type_id)) {
       ctx.set_error(
           Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
@@ -472,42 +362,24 @@ template <> struct Serializer<int64_t> {
   }
 
   static inline int64_t read(ReadContext &ctx, bool read_ref, bool read_type) {
-    if (ctx.has_error()) {
-      return static_cast<int64_t>(0);
-    }
     bool has_value = consume_ref_flag(ctx, read_ref);
-    if (!has_value || ctx.has_error()) {
+    if (!has_value) {
       return static_cast<int64_t>(0);
     }
     if (read_type) {
-      Error error;
-      uint32_t type_id_read = ctx.read_varuint32(&error);
-      if (FORY_PREDICT_FALSE(!error.ok())) {
-        ctx.set_error(std::move(error));
-        return static_cast<int64_t>(0);
-      }
+      uint32_t type_id_read = ctx.read_varuint32(ctx.error());
       if (type_id_read != static_cast<uint32_t>(type_id)) {
         ctx.set_error(Error::type_mismatch(type_id_read,
                                            static_cast<uint32_t>(type_id)));
         return static_cast<int64_t>(0);
       }
     }
-    Error error;
-    int64_t value = ctx.read_varint64(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      ctx.set_error(std::move(error));
-      return static_cast<int64_t>(0);
-    }
+    int64_t value = ctx.read_varint64(ctx.error());
     return value;
   }
 
   static inline int64_t read_data(ReadContext &ctx) {
-    Error error;
-    int64_t value = ctx.read_varint64(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      ctx.set_error(std::move(error));
-      return static_cast<int64_t>(0);
-    }
+    int64_t value = ctx.read_varint64(ctx.error());
     return value;
   }
 
@@ -530,15 +402,7 @@ template <> struct Serializer<float> {
   }
 
   static inline void read_type_info(ReadContext &ctx) {
-    if (ctx.has_error()) {
-      return;
-    }
-    Error error;
-    uint32_t actual = ctx.read_varuint32(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      ctx.set_error(std::move(error));
-      return;
-    }
+    uint32_t actual = ctx.read_varuint32(ctx.error());
     if (actual != static_cast<uint32_t>(type_id)) {
       ctx.set_error(
           Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
@@ -564,42 +428,24 @@ template <> struct Serializer<float> {
   }
 
   static inline float read(ReadContext &ctx, bool read_ref, bool read_type) {
-    if (ctx.has_error()) {
-      return 0.0f;
-    }
     bool has_value = consume_ref_flag(ctx, read_ref);
-    if (!has_value || ctx.has_error()) {
+    if (!has_value) {
       return 0.0f;
     }
     if (read_type) {
-      Error error;
-      uint32_t type_id_read = ctx.read_varuint32(&error);
-      if (FORY_PREDICT_FALSE(!error.ok())) {
-        ctx.set_error(std::move(error));
-        return 0.0f;
-      }
+      uint32_t type_id_read = ctx.read_varuint32(ctx.error());
       if (type_id_read != static_cast<uint32_t>(type_id)) {
         ctx.set_error(Error::type_mismatch(type_id_read,
                                            static_cast<uint32_t>(type_id)));
         return 0.0f;
       }
     }
-    Error error;
-    float value = ctx.read_float(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      ctx.set_error(std::move(error));
-      return 0.0f;
-    }
+    float value = ctx.read_float(ctx.error());
     return value;
   }
 
   static inline float read_data(ReadContext &ctx) {
-    Error error;
-    float value = ctx.read_float(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      ctx.set_error(std::move(error));
-      return 0.0f;
-    }
+    float value = ctx.read_float(ctx.error());
     return value;
   }
 
@@ -622,15 +468,7 @@ template <> struct Serializer<double> {
   }
 
   static inline void read_type_info(ReadContext &ctx) {
-    if (ctx.has_error()) {
-      return;
-    }
-    Error error;
-    uint32_t actual = ctx.read_varuint32(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      ctx.set_error(std::move(error));
-      return;
-    }
+    uint32_t actual = ctx.read_varuint32(ctx.error());
     if (actual != static_cast<uint32_t>(type_id)) {
       ctx.set_error(
           Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
@@ -656,42 +494,24 @@ template <> struct Serializer<double> {
   }
 
   static inline double read(ReadContext &ctx, bool read_ref, bool read_type) {
-    if (ctx.has_error()) {
-      return 0.0;
-    }
     bool has_value = consume_ref_flag(ctx, read_ref);
-    if (!has_value || ctx.has_error()) {
+    if (!has_value) {
       return 0.0;
     }
     if (read_type) {
-      Error error;
-      uint32_t type_id_read = ctx.read_varuint32(&error);
-      if (FORY_PREDICT_FALSE(!error.ok())) {
-        ctx.set_error(std::move(error));
-        return 0.0;
-      }
+      uint32_t type_id_read = ctx.read_varuint32(ctx.error());
       if (type_id_read != static_cast<uint32_t>(type_id)) {
         ctx.set_error(Error::type_mismatch(type_id_read,
                                            static_cast<uint32_t>(type_id)));
         return 0.0;
       }
     }
-    Error error;
-    double value = ctx.read_double(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      ctx.set_error(std::move(error));
-      return 0.0;
-    }
+    double value = ctx.read_double(ctx.error());
     return value;
   }
 
   static inline double read_data(ReadContext &ctx) {
-    Error error;
-    double value = ctx.read_double(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      ctx.set_error(std::move(error));
-      return 0.0;
-    }
+    double value = ctx.read_double(ctx.error());
     return value;
   }
 
@@ -718,15 +538,7 @@ template <> struct Serializer<uint8_t> {
   }
 
   static inline void read_type_info(ReadContext &ctx) {
-    if (ctx.has_error()) {
-      return;
-    }
-    Error error;
-    uint32_t actual = ctx.read_varuint32(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      ctx.set_error(std::move(error));
-      return;
-    }
+    uint32_t actual = ctx.read_varuint32(ctx.error());
     if (actual != static_cast<uint32_t>(type_id)) {
       ctx.set_error(
           Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
@@ -752,42 +564,24 @@ template <> struct Serializer<uint8_t> {
   }
 
   static inline uint8_t read(ReadContext &ctx, bool read_ref, bool read_type) {
-    if (ctx.has_error()) {
-      return static_cast<uint8_t>(0);
-    }
     bool has_value = consume_ref_flag(ctx, read_ref);
-    if (!has_value || ctx.has_error()) {
+    if (!has_value) {
       return static_cast<uint8_t>(0);
     }
     if (read_type) {
-      Error error;
-      uint32_t type_id_read = ctx.read_varuint32(&error);
-      if (FORY_PREDICT_FALSE(!error.ok())) {
-        ctx.set_error(std::move(error));
-        return static_cast<uint8_t>(0);
-      }
+      uint32_t type_id_read = ctx.read_varuint32(ctx.error());
       if (type_id_read != static_cast<uint32_t>(type_id)) {
         ctx.set_error(Error::type_mismatch(type_id_read,
                                            static_cast<uint32_t>(type_id)));
         return static_cast<uint8_t>(0);
       }
     }
-    Error error;
-    uint8_t value = ctx.read_uint8(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      ctx.set_error(std::move(error));
-      return static_cast<uint8_t>(0);
-    }
+    uint8_t value = ctx.read_uint8(ctx.error());
     return value;
   }
 
   static inline uint8_t read_data(ReadContext &ctx) {
-    Error error;
-    uint8_t value = ctx.read_uint8(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      ctx.set_error(std::move(error));
-      return static_cast<uint8_t>(0);
-    }
+    uint8_t value = ctx.read_uint8(ctx.error());
     return value;
   }
 
@@ -810,15 +604,7 @@ template <> struct Serializer<uint16_t> {
   }
 
   static inline void read_type_info(ReadContext &ctx) {
-    if (ctx.has_error()) {
-      return;
-    }
-    Error error;
-    uint32_t actual = ctx.read_varuint32(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      ctx.set_error(std::move(error));
-      return;
-    }
+    uint32_t actual = ctx.read_varuint32(ctx.error());
     if (actual != static_cast<uint32_t>(type_id)) {
       ctx.set_error(
           Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
@@ -844,42 +630,24 @@ template <> struct Serializer<uint16_t> {
   }
 
   static inline uint16_t read(ReadContext &ctx, bool read_ref, bool read_type) {
-    if (ctx.has_error()) {
-      return static_cast<uint16_t>(0);
-    }
     bool has_value = consume_ref_flag(ctx, read_ref);
-    if (!has_value || ctx.has_error()) {
+    if (!has_value) {
       return static_cast<uint16_t>(0);
     }
     if (read_type) {
-      Error error;
-      uint32_t type_id_read = ctx.read_varuint32(&error);
-      if (FORY_PREDICT_FALSE(!error.ok())) {
-        ctx.set_error(std::move(error));
-        return static_cast<uint16_t>(0);
-      }
+      uint32_t type_id_read = ctx.read_varuint32(ctx.error());
       if (type_id_read != static_cast<uint32_t>(type_id)) {
         ctx.set_error(Error::type_mismatch(type_id_read,
                                            static_cast<uint32_t>(type_id)));
         return static_cast<uint16_t>(0);
       }
     }
-    Error error;
-    uint16_t value = ctx.read_uint16(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      ctx.set_error(std::move(error));
-      return static_cast<uint16_t>(0);
-    }
+    uint16_t value = ctx.read_uint16(ctx.error());
     return value;
   }
 
   static inline uint16_t read_data(ReadContext &ctx) {
-    Error error;
-    uint16_t value = ctx.read_uint16(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      ctx.set_error(std::move(error));
-      return static_cast<uint16_t>(0);
-    }
+    uint16_t value = ctx.read_uint16(ctx.error());
     return value;
   }
 
@@ -902,15 +670,7 @@ template <> struct Serializer<uint32_t> {
   }
 
   static inline void read_type_info(ReadContext &ctx) {
-    if (ctx.has_error()) {
-      return;
-    }
-    Error error;
-    uint32_t actual = ctx.read_varuint32(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      ctx.set_error(std::move(error));
-      return;
-    }
+    uint32_t actual = ctx.read_varuint32(ctx.error());
     if (actual != static_cast<uint32_t>(type_id)) {
       ctx.set_error(
           Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
@@ -936,42 +696,24 @@ template <> struct Serializer<uint32_t> {
   }
 
   static inline uint32_t read(ReadContext &ctx, bool read_ref, bool read_type) {
-    if (ctx.has_error()) {
-      return static_cast<uint32_t>(0);
-    }
     bool has_value = consume_ref_flag(ctx, read_ref);
-    if (!has_value || ctx.has_error()) {
+    if (!has_value) {
       return static_cast<uint32_t>(0);
     }
     if (read_type) {
-      Error error;
-      uint32_t type_id_read = ctx.read_varuint32(&error);
-      if (FORY_PREDICT_FALSE(!error.ok())) {
-        ctx.set_error(std::move(error));
-        return static_cast<uint32_t>(0);
-      }
+      uint32_t type_id_read = ctx.read_varuint32(ctx.error());
       if (type_id_read != static_cast<uint32_t>(type_id)) {
         ctx.set_error(Error::type_mismatch(type_id_read,
                                            static_cast<uint32_t>(type_id)));
         return static_cast<uint32_t>(0);
       }
     }
-    Error error;
-    uint32_t value = ctx.read_uint32(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      ctx.set_error(std::move(error));
-      return static_cast<uint32_t>(0);
-    }
+    uint32_t value = ctx.read_uint32(ctx.error());
     return value;
   }
 
   static inline uint32_t read_data(ReadContext &ctx) {
-    Error error;
-    uint32_t value = ctx.read_uint32(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      ctx.set_error(std::move(error));
-      return static_cast<uint32_t>(0);
-    }
+    uint32_t value = ctx.read_uint32(ctx.error());
     return value;
   }
 
@@ -994,15 +736,7 @@ template <> struct Serializer<uint64_t> {
   }
 
   static inline void read_type_info(ReadContext &ctx) {
-    if (ctx.has_error()) {
-      return;
-    }
-    Error error;
-    uint32_t actual = ctx.read_varuint32(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      ctx.set_error(std::move(error));
-      return;
-    }
+    uint32_t actual = ctx.read_varuint32(ctx.error());
     if (actual != static_cast<uint32_t>(type_id)) {
       ctx.set_error(
           Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
@@ -1028,42 +762,24 @@ template <> struct Serializer<uint64_t> {
   }
 
   static inline uint64_t read(ReadContext &ctx, bool read_ref, bool read_type) {
-    if (ctx.has_error()) {
-      return static_cast<uint64_t>(0);
-    }
     bool has_value = consume_ref_flag(ctx, read_ref);
-    if (!has_value || ctx.has_error()) {
+    if (!has_value) {
       return static_cast<uint64_t>(0);
     }
     if (read_type) {
-      Error error;
-      uint32_t type_id_read = ctx.read_varuint32(&error);
-      if (FORY_PREDICT_FALSE(!error.ok())) {
-        ctx.set_error(std::move(error));
-        return static_cast<uint64_t>(0);
-      }
+      uint32_t type_id_read = ctx.read_varuint32(ctx.error());
       if (type_id_read != static_cast<uint32_t>(type_id)) {
         ctx.set_error(Error::type_mismatch(type_id_read,
                                            static_cast<uint32_t>(type_id)));
         return static_cast<uint64_t>(0);
       }
     }
-    Error error;
-    uint64_t value = ctx.read_uint64(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      ctx.set_error(std::move(error));
-      return static_cast<uint64_t>(0);
-    }
+    uint64_t value = ctx.read_uint64(ctx.error());
     return value;
   }
 
   static inline uint64_t read_data(ReadContext &ctx) {
-    Error error;
-    uint64_t value = ctx.read_uint64(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      ctx.set_error(std::move(error));
-      return static_cast<uint64_t>(0);
-    }
+    uint64_t value = ctx.read_uint64(ctx.error());
     return value;
   }
 
@@ -1097,15 +813,7 @@ template <> struct Serializer<std::string> {
   }
 
   static inline void read_type_info(ReadContext &ctx) {
-    if (ctx.has_error()) {
-      return;
-    }
-    Error error;
-    uint32_t actual = ctx.read_varuint32(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      ctx.set_error(std::move(error));
-      return;
-    }
+    uint32_t actual = ctx.read_varuint32(ctx.error());
     if (actual != static_cast<uint32_t>(type_id)) {
       ctx.set_error(
           Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
@@ -1144,20 +852,12 @@ template <> struct Serializer<std::string> {
 
   static inline std::string read(ReadContext &ctx, bool read_ref,
                                  bool read_type) {
-    if (ctx.has_error()) {
-      return std::string();
-    }
     bool has_value = consume_ref_flag(ctx, read_ref);
-    if (!has_value || ctx.has_error()) {
+    if (!has_value) {
       return std::string();
     }
     if (read_type) {
-      Error error;
-      uint32_t type_id_read = ctx.read_varuint32(&error);
-      if (FORY_PREDICT_FALSE(!error.ok())) {
-        ctx.set_error(std::move(error));
-        return std::string();
-      }
+      uint32_t type_id_read = ctx.read_varuint32(ctx.error());
       if (type_id_read != static_cast<uint32_t>(type_id)) {
         ctx.set_error(Error::type_mismatch(type_id_read,
                                            static_cast<uint32_t>(type_id)));
@@ -1169,12 +869,7 @@ template <> struct Serializer<std::string> {
 
   static inline std::string read_data(ReadContext &ctx) {
     // Read size with encoding using varuint36small
-    Error error;
-    uint64_t size_with_encoding = ctx.read_varuint36small(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      ctx.set_error(std::move(error));
-      return std::string();
-    }
+    uint64_t size_with_encoding = ctx.read_varuint36small(ctx.error());
 
     // Extract size and encoding from lower 2 bits
     uint64_t length = size_with_encoding >> 2;
@@ -1189,11 +884,7 @@ template <> struct Serializer<std::string> {
     switch (encoding) {
     case StringEncoding::LATIN1: {
       std::vector<uint8_t> bytes(length);
-      ctx.read_bytes(bytes.data(), length, &error);
-      if (FORY_PREDICT_FALSE(!error.ok())) {
-        ctx.set_error(std::move(error));
-        return std::string();
-      }
+      ctx.read_bytes(bytes.data(), length, ctx.error());
       return latin1ToUtf8(bytes.data(), length);
     }
     case StringEncoding::UTF16: {
@@ -1203,21 +894,13 @@ template <> struct Serializer<std::string> {
       }
       std::vector<uint16_t> utf16_chars(length / 2);
       ctx.read_bytes(reinterpret_cast<uint8_t *>(utf16_chars.data()), length,
-                     &error);
-      if (FORY_PREDICT_FALSE(!error.ok())) {
-        ctx.set_error(std::move(error));
-        return std::string();
-      }
+                     ctx.error());
       return utf16ToUtf8(utf16_chars.data(), utf16_chars.size());
     }
     case StringEncoding::UTF8: {
       // UTF-8: read bytes directly
       std::string result(length, '\0');
-      ctx.read_bytes(&result[0], length, &error);
-      if (FORY_PREDICT_FALSE(!error.ok())) {
-        ctx.set_error(std::move(error));
-        return std::string();
-      }
+      ctx.read_bytes(&result[0], length, ctx.error());
       return result;
     }
     default:

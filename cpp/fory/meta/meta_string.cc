@@ -241,7 +241,7 @@ MetaStringTable::read_string(Buffer &buffer, const MetaStringDecoder &decoder) {
   Error error;
   // Header is encoded with VarUint32Small7 on Java side, but wire
   // format is still standard varuint32.
-  uint32_t header = buffer.ReadVarUint32(&error);
+  uint32_t header = buffer.ReadVarUint32(error);
   if (FORY_PREDICT_FALSE(!error.ok())) {
     return Unexpected(std::move(error));
   }
@@ -268,14 +268,14 @@ MetaStringTable::read_string(Buffer &buffer, const MetaStringDecoder &decoder) {
     // The original encoding is not transmitted explicitly. For cross-language
     // purposes we treat the payload bytes as UTF8 and let callers handle any
     // higher-level semantics.
-    int64_t hash_code = buffer.ReadInt64(&error);
+    int64_t hash_code = buffer.ReadInt64(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
     (void)hash_code; // hash_code is only used for Java-side caching.
     bytes.resize(len);
     if (len > 0) {
-      buffer.ReadBytes(bytes.data(), len, &error);
+      buffer.ReadBytes(bytes.data(), len, error);
       if (FORY_PREDICT_FALSE(!error.ok())) {
         return Unexpected(std::move(error));
       }
@@ -283,7 +283,7 @@ MetaStringTable::read_string(Buffer &buffer, const MetaStringDecoder &decoder) {
     encoding = MetaEncoding::UTF8;
   } else {
     // Small string layout: encoding(byte) + data[len]
-    int8_t enc_byte_res = buffer.ReadInt8(&error);
+    int8_t enc_byte_res = buffer.ReadInt8(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -298,7 +298,7 @@ MetaStringTable::read_string(Buffer &buffer, const MetaStringDecoder &decoder) {
       FORY_TRY(enc, ToMetaEncoding(enc_byte));
       encoding = enc;
       bytes.resize(len);
-      buffer.ReadBytes(bytes.data(), len, &error);
+      buffer.ReadBytes(bytes.data(), len, error);
       if (FORY_PREDICT_FALSE(!error.ok())) {
         return Unexpected(std::move(error));
       }

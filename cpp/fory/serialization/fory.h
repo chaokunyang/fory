@@ -599,7 +599,7 @@ private:
     size_t bytes_to_skip = 0;
     if (read_ctx_->is_compatible()) {
       Error error;
-      int32_t meta_offset = buffer.ReadInt32(&error);
+      int32_t meta_offset = buffer.ReadInt32(error);
       if (FORY_PREDICT_FALSE(!error.ok())) {
         return Unexpected(std::move(error));
       }

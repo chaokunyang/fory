@@ -92,7 +92,7 @@ template <> struct Serializer<Duration> {
     }
     Error error;
     if (read_type) {
-      uint32_t type_id_read = ctx.read_varuint32(&error);
+      uint32_t type_id_read = ctx.read_varuint32(error);
       if (FORY_PREDICT_FALSE(!error.ok())) {
         return Unexpected(std::move(error));
       }
@@ -107,7 +107,7 @@ template <> struct Serializer<Duration> {
   static Result<Duration, Error> read_data(ReadContext &ctx) {
     Error error;
     int64_t nanos;
-    ctx.read_bytes(&nanos, sizeof(int64_t), &error);
+    ctx.read_bytes(&nanos, sizeof(int64_t), error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -158,7 +158,7 @@ template <> struct Serializer<Timestamp> {
     }
     Error error;
     if (read_type) {
-      uint32_t type_id_read = ctx.read_varuint32(&error);
+      uint32_t type_id_read = ctx.read_varuint32(error);
       if (FORY_PREDICT_FALSE(!error.ok())) {
         return Unexpected(std::move(error));
       }
@@ -173,7 +173,7 @@ template <> struct Serializer<Timestamp> {
   static Result<Timestamp, Error> read_data(ReadContext &ctx) {
     Error error;
     int64_t nanos;
-    ctx.read_bytes(&nanos, sizeof(int64_t), &error);
+    ctx.read_bytes(&nanos, sizeof(int64_t), error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -222,7 +222,7 @@ template <> struct Serializer<LocalDate> {
     }
     Error error;
     if (read_type) {
-      uint32_t type_id_read = ctx.read_varuint32(&error);
+      uint32_t type_id_read = ctx.read_varuint32(error);
       if (FORY_PREDICT_FALSE(!error.ok())) {
         return Unexpected(std::move(error));
       }
@@ -237,7 +237,7 @@ template <> struct Serializer<LocalDate> {
   static Result<LocalDate, Error> read_data(ReadContext &ctx) {
     Error error;
     LocalDate date;
-    ctx.read_bytes(&date.days_since_epoch, sizeof(int32_t), &error);
+    ctx.read_bytes(&date.days_since_epoch, sizeof(int32_t), error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }

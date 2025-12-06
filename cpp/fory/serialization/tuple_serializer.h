@@ -356,7 +356,7 @@ template <> struct Serializer<std::tuple<>> {
 
     Error error;
     if (read_type) {
-      uint32_t type_id_read = ctx.read_varuint32(&error);
+      uint32_t type_id_read = ctx.read_varuint32(error);
       if (FORY_PREDICT_FALSE(!error.ok())) {
         return Unexpected(std::move(error));
       }
@@ -370,7 +370,7 @@ template <> struct Serializer<std::tuple<>> {
 
   static inline Result<std::tuple<>, Error> read_data(ReadContext &ctx) {
     Error error;
-    uint32_t length = ctx.read_varuint32(&error);
+    uint32_t length = ctx.read_varuint32(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -457,7 +457,7 @@ template <typename... Ts> struct Serializer<std::tuple<Ts...>> {
 
     Error error;
     if (read_type) {
-      uint32_t type_id_read = ctx.read_varuint32(&error);
+      uint32_t type_id_read = ctx.read_varuint32(error);
       if (FORY_PREDICT_FALSE(!error.ok())) {
         return Unexpected(std::move(error));
       }
@@ -478,7 +478,7 @@ template <typename... Ts> struct Serializer<std::tuple<Ts...>> {
 
     // xlang/compatible mode: read collection protocol
     Error error;
-    uint32_t length = ctx.read_varuint32(&error);
+    uint32_t length = ctx.read_varuint32(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -488,7 +488,7 @@ template <typename... Ts> struct Serializer<std::tuple<Ts...>> {
     }
 
     // Read header bitmap
-    uint8_t bitmap = ctx.read_uint8(&error);
+    uint8_t bitmap = ctx.read_uint8(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }

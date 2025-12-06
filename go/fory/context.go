@@ -111,20 +111,20 @@ func (c *WriteContext) RefResolver() *RefResolver {
 }
 
 // Inline primitive writes (compiler will inline these)
-func (c *WriteContext) WriteBool(v bool)        { c.buffer.WriteBool(v) }
-func (c *WriteContext) WriteInt8(v int8)        { c.buffer.WriteByte_(byte(v)) }
-func (c *WriteContext) WriteInt16(v int16)      { c.buffer.WriteInt16(v) }
-func (c *WriteContext) WriteInt32(v int32)      { c.buffer.WriteInt32(v) }
-func (c *WriteContext) WriteInt64(v int64)      { c.buffer.WriteInt64(v) }
-func (c *WriteContext) WriteFloat32(v float32)  { c.buffer.WriteFloat32(v) }
-func (c *WriteContext) WriteFloat64(v float64)  { c.buffer.WriteFloat64(v) }
+func (c *WriteContext) RawBool(v bool)        { c.buffer.WriteBool(v) }
+func (c *WriteContext) RawInt8(v int8)        { c.buffer.WriteByte_(byte(v)) }
+func (c *WriteContext) RawInt16(v int16)      { c.buffer.WriteInt16(v) }
+func (c *WriteContext) RawInt32(v int32)      { c.buffer.WriteInt32(v) }
+func (c *WriteContext) RawInt64(v int64)      { c.buffer.WriteInt64(v) }
+func (c *WriteContext) RawFloat32(v float32)  { c.buffer.WriteFloat32(v) }
+func (c *WriteContext) RawFloat64(v float64)  { c.buffer.WriteFloat64(v) }
 func (c *WriteContext) WriteVarInt32(v int32)   { c.buffer.WriteVarint32(v) }
 func (c *WriteContext) WriteVarInt64(v int64)   { c.buffer.WriteVarint64(v) }
 func (c *WriteContext) WriteVarUint32(v uint32) { c.buffer.WriteVarUint32(v) }
 func (c *WriteContext) WriteByte(v byte)        { c.buffer.WriteByte_(v) }
 func (c *WriteContext) WriteBytes(v []byte)     { c.buffer.WriteBinary(v) }
 
-func (c *WriteContext) WriteString(v string) {
+func (c *WriteContext) RawString(v string) {
 	c.buffer.WriteVarUint32(uint32(len(v)))
 	if len(v) > 0 {
 		c.buffer.WriteBinary(unsafe.Slice(unsafe.StringData(v), len(v)))
@@ -153,8 +153,8 @@ func (c *WriteContext) WriteLength(length int) error {
 // Typed Write Methods - Write primitives with optional ref/type info
 // ============================================================================
 
-// WriteBoolValue writes a bool with optional ref/type info
-func (c *WriteContext) WriteBoolValue(value bool, writeRefInfo, writeTypeInfo bool) error {
+// WriteBool writes a bool with optional ref/type info
+func (c *WriteContext) WriteBool(value bool, writeRefInfo, writeTypeInfo bool) error {
 	if writeRefInfo {
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
@@ -165,8 +165,8 @@ func (c *WriteContext) WriteBoolValue(value bool, writeRefInfo, writeTypeInfo bo
 	return nil
 }
 
-// WriteInt8Value writes an int8 with optional ref/type info
-func (c *WriteContext) WriteInt8Value(value int8, writeRefInfo, writeTypeInfo bool) error {
+// WriteInt8 writes an int8 with optional ref/type info
+func (c *WriteContext) WriteInt8(value int8, writeRefInfo, writeTypeInfo bool) error {
 	if writeRefInfo {
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
@@ -177,8 +177,8 @@ func (c *WriteContext) WriteInt8Value(value int8, writeRefInfo, writeTypeInfo bo
 	return nil
 }
 
-// WriteInt16Value writes an int16 with optional ref/type info
-func (c *WriteContext) WriteInt16Value(value int16, writeRefInfo, writeTypeInfo bool) error {
+// WriteInt16 writes an int16 with optional ref/type info
+func (c *WriteContext) WriteInt16(value int16, writeRefInfo, writeTypeInfo bool) error {
 	if writeRefInfo {
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
@@ -189,8 +189,8 @@ func (c *WriteContext) WriteInt16Value(value int16, writeRefInfo, writeTypeInfo 
 	return nil
 }
 
-// WriteInt32Value writes an int32 with optional ref/type info
-func (c *WriteContext) WriteInt32Value(value int32, writeRefInfo, writeTypeInfo bool) error {
+// WriteInt32 writes an int32 with optional ref/type info
+func (c *WriteContext) WriteInt32(value int32, writeRefInfo, writeTypeInfo bool) error {
 	if writeRefInfo {
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
@@ -201,8 +201,8 @@ func (c *WriteContext) WriteInt32Value(value int32, writeRefInfo, writeTypeInfo 
 	return nil
 }
 
-// WriteInt64Value writes an int64 with optional ref/type info
-func (c *WriteContext) WriteInt64Value(value int64, writeRefInfo, writeTypeInfo bool) error {
+// WriteInt64 writes an int64 with optional ref/type info
+func (c *WriteContext) WriteInt64(value int64, writeRefInfo, writeTypeInfo bool) error {
 	if writeRefInfo {
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
@@ -213,9 +213,9 @@ func (c *WriteContext) WriteInt64Value(value int64, writeRefInfo, writeTypeInfo 
 	return nil
 }
 
-// WriteIntValue writes an int with optional ref/type info
+// WriteInt writes an int with optional ref/type info
 // Platform-dependent: uses int32 on 32-bit systems, int64 on 64-bit systems
-func (c *WriteContext) WriteIntValue(value int, writeRefInfo, writeTypeInfo bool) error {
+func (c *WriteContext) WriteInt(value int, writeRefInfo, writeTypeInfo bool) error {
 	if writeRefInfo {
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
@@ -234,8 +234,8 @@ func (c *WriteContext) WriteIntValue(value int, writeRefInfo, writeTypeInfo bool
 	return nil
 }
 
-// WriteFloat32Value writes a float32 with optional ref/type info
-func (c *WriteContext) WriteFloat32Value(value float32, writeRefInfo, writeTypeInfo bool) error {
+// WriteFloat32 writes a float32 with optional ref/type info
+func (c *WriteContext) WriteFloat32(value float32, writeRefInfo, writeTypeInfo bool) error {
 	if writeRefInfo {
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
@@ -246,8 +246,8 @@ func (c *WriteContext) WriteFloat32Value(value float32, writeRefInfo, writeTypeI
 	return nil
 }
 
-// WriteFloat64Value writes a float64 with optional ref/type info
-func (c *WriteContext) WriteFloat64Value(value float64, writeRefInfo, writeTypeInfo bool) error {
+// WriteFloat64 writes a float64 with optional ref/type info
+func (c *WriteContext) WriteFloat64(value float64, writeRefInfo, writeTypeInfo bool) error {
 	if writeRefInfo {
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
@@ -258,8 +258,8 @@ func (c *WriteContext) WriteFloat64Value(value float64, writeRefInfo, writeTypeI
 	return nil
 }
 
-// WriteStringValue writes a string with optional ref/type info
-func (c *WriteContext) WriteStringValue(value string, writeRefInfo, writeTypeInfo bool) error {
+// WriteString writes a string with optional ref/type info
+func (c *WriteContext) WriteString(value string, writeRefInfo, writeTypeInfo bool) error {
 	if writeRefInfo {
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
@@ -630,19 +630,19 @@ func (c *ReadContext) RefResolver() *RefResolver {
 }
 
 // Inline primitive reads
-func (c *ReadContext) ReadBool() bool        { return c.buffer.ReadBool() }
-func (c *ReadContext) ReadInt8() int8        { return int8(c.buffer.ReadByte_()) }
-func (c *ReadContext) ReadInt16() int16      { return c.buffer.ReadInt16() }
-func (c *ReadContext) ReadInt32() int32      { return c.buffer.ReadInt32() }
-func (c *ReadContext) ReadInt64() int64      { return c.buffer.ReadInt64() }
-func (c *ReadContext) ReadFloat32() float32  { return c.buffer.ReadFloat32() }
-func (c *ReadContext) ReadFloat64() float64  { return c.buffer.ReadFloat64() }
+func (c *ReadContext) RawBool() bool        { return c.buffer.ReadBool() }
+func (c *ReadContext) RawInt8() int8        { return int8(c.buffer.ReadByte_()) }
+func (c *ReadContext) RawInt16() int16      { return c.buffer.ReadInt16() }
+func (c *ReadContext) RawInt32() int32      { return c.buffer.ReadInt32() }
+func (c *ReadContext) RawInt64() int64      { return c.buffer.ReadInt64() }
+func (c *ReadContext) RawFloat32() float32  { return c.buffer.ReadFloat32() }
+func (c *ReadContext) RawFloat64() float64  { return c.buffer.ReadFloat64() }
 func (c *ReadContext) ReadVarInt32() int32   { return c.buffer.ReadVarint32() }
 func (c *ReadContext) ReadVarInt64() int64   { return c.buffer.ReadVarint64() }
 func (c *ReadContext) ReadVarUint32() uint32 { return c.buffer.ReadVarUint32() }
 func (c *ReadContext) ReadByte() byte        { return c.buffer.ReadByte_() }
 
-func (c *ReadContext) ReadString() string {
+func (c *ReadContext) RawString() string {
 	length := c.buffer.ReadVarUint32()
 	if length == 0 {
 		return ""
@@ -678,8 +678,8 @@ func (c *ReadContext) ReadLength() int {
 // Typed Read Methods - Read primitives with optional ref/type info
 // ============================================================================
 
-// ReadBoolValue reads a bool with optional ref/type info
-func (c *ReadContext) ReadBoolValue(readRefInfo, readTypeInfo bool) (bool, error) {
+// ReadBool reads a bool with optional ref/type info
+func (c *ReadContext) ReadBool(readRefInfo, readTypeInfo bool) (bool, error) {
 	if readRefInfo {
 		_ = c.buffer.ReadInt8()
 	}
@@ -701,8 +701,8 @@ func (c *ReadContext) ReadBoolInto(target *bool, readRefInfo, readTypeInfo bool)
 	return nil
 }
 
-// ReadInt8Value reads an int8 with optional ref/type info
-func (c *ReadContext) ReadInt8Value(readRefInfo, readTypeInfo bool) (int8, error) {
+// ReadInt8 reads an int8 with optional ref/type info
+func (c *ReadContext) ReadInt8(readRefInfo, readTypeInfo bool) (int8, error) {
 	if readRefInfo {
 		_ = c.buffer.ReadInt8()
 	}
@@ -724,8 +724,8 @@ func (c *ReadContext) ReadInt8Into(target *int8, readRefInfo, readTypeInfo bool)
 	return nil
 }
 
-// ReadInt16Value reads an int16 with optional ref/type info
-func (c *ReadContext) ReadInt16Value(readRefInfo, readTypeInfo bool) (int16, error) {
+// ReadInt16 reads an int16 with optional ref/type info
+func (c *ReadContext) ReadInt16(readRefInfo, readTypeInfo bool) (int16, error) {
 	if readRefInfo {
 		_ = c.buffer.ReadInt8()
 	}
@@ -747,8 +747,8 @@ func (c *ReadContext) ReadInt16Into(target *int16, readRefInfo, readTypeInfo boo
 	return nil
 }
 
-// ReadInt32Value reads an int32 with optional ref/type info
-func (c *ReadContext) ReadInt32Value(readRefInfo, readTypeInfo bool) (int32, error) {
+// ReadInt32 reads an int32 with optional ref/type info
+func (c *ReadContext) ReadInt32(readRefInfo, readTypeInfo bool) (int32, error) {
 	if readRefInfo {
 		_ = c.buffer.ReadInt8()
 	}
@@ -770,8 +770,8 @@ func (c *ReadContext) ReadInt32Into(target *int32, readRefInfo, readTypeInfo boo
 	return nil
 }
 
-// ReadInt64Value reads an int64 with optional ref/type info
-func (c *ReadContext) ReadInt64Value(readRefInfo, readTypeInfo bool) (int64, error) {
+// ReadInt64 reads an int64 with optional ref/type info
+func (c *ReadContext) ReadInt64(readRefInfo, readTypeInfo bool) (int64, error) {
 	if readRefInfo {
 		_ = c.buffer.ReadInt8()
 	}
@@ -805,8 +805,8 @@ func (c *ReadContext) ReadIntInto(target *int, readRefInfo, readTypeInfo bool) e
 	return nil
 }
 
-// ReadFloat32Value reads a float32 with optional ref/type info
-func (c *ReadContext) ReadFloat32Value(readRefInfo, readTypeInfo bool) (float32, error) {
+// ReadFloat32 reads a float32 with optional ref/type info
+func (c *ReadContext) ReadFloat32(readRefInfo, readTypeInfo bool) (float32, error) {
 	if readRefInfo {
 		_ = c.buffer.ReadInt8()
 	}
@@ -828,8 +828,8 @@ func (c *ReadContext) ReadFloat32Into(target *float32, readRefInfo, readTypeInfo
 	return nil
 }
 
-// ReadFloat64Value reads a float64 with optional ref/type info
-func (c *ReadContext) ReadFloat64Value(readRefInfo, readTypeInfo bool) (float64, error) {
+// ReadFloat64 reads a float64 with optional ref/type info
+func (c *ReadContext) ReadFloat64(readRefInfo, readTypeInfo bool) (float64, error) {
 	if readRefInfo {
 		_ = c.buffer.ReadInt8()
 	}
@@ -851,8 +851,8 @@ func (c *ReadContext) ReadFloat64Into(target *float64, readRefInfo, readTypeInfo
 	return nil
 }
 
-// ReadStringValue reads a string with optional ref/type info
-func (c *ReadContext) ReadStringValue(readRefInfo, readTypeInfo bool) (string, error) {
+// ReadString reads a string with optional ref/type info
+func (c *ReadContext) ReadString(readRefInfo, readTypeInfo bool) (string, error) {
 	if readRefInfo {
 		_ = c.buffer.ReadInt8()
 	}
@@ -1467,7 +1467,7 @@ func (r *RefReader) Reset() {
 // - refId: the reference ID if flag is RefFlag
 // - needRead: true if we need to read the actual data
 func (r *RefReader) ReadRefFlag(ctx *ReadContext) (flag int8, refId int32, needRead bool) {
-	flag = ctx.ReadInt8()
+	flag = ctx.RawInt8()
 	switch flag {
 	case NullFlag:
 		return flag, 0, false

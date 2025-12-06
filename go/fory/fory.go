@@ -547,23 +547,23 @@ func Serialize[T any](f *Fory, value *T) ([]byte, error) {
 	var err error
 	switch val := v.(type) {
 	case *bool:
-		err = f.writeCtx.WriteBoolValue(*val, true, true)
+		err = f.writeCtx.WriteBool(*val, true, true)
 	case *int8:
-		err = f.writeCtx.WriteInt8Value(*val, true, true)
+		err = f.writeCtx.WriteInt8(*val, true, true)
 	case *int16:
-		err = f.writeCtx.WriteInt16Value(*val, true, true)
+		err = f.writeCtx.WriteInt16(*val, true, true)
 	case *int32:
-		err = f.writeCtx.WriteInt32Value(*val, true, true)
+		err = f.writeCtx.WriteInt32(*val, true, true)
 	case *int64:
-		err = f.writeCtx.WriteInt64Value(*val, true, true)
+		err = f.writeCtx.WriteInt64(*val, true, true)
 	case *int:
-		err = f.writeCtx.WriteIntValue(*val, true, true)
+		err = f.writeCtx.WriteInt(*val, true, true)
 	case *float32:
-		err = f.writeCtx.WriteFloat32Value(*val, true, true)
+		err = f.writeCtx.WriteFloat32(*val, true, true)
 	case *float64:
-		err = f.writeCtx.WriteFloat64Value(*val, true, true)
+		err = f.writeCtx.WriteFloat64(*val, true, true)
 	case *string:
-		err = f.writeCtx.WriteStringValue(*val, true, true)
+		err = f.writeCtx.WriteString(*val, true, true)
 	case *[]byte:
 		err = f.writeCtx.WriteByteSlice(*val, true, true)
 	case *[]int8:

@@ -58,7 +58,15 @@ func (s mapSerializer) NeedToWriteRef() bool {
 	return true
 }
 
-func (s mapSerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
+func (s mapSerializer) Write(ctx *WriteContext, value any) error {
+	return s.WriteReflect(ctx, reflect.ValueOf(value))
+}
+
+func (s mapSerializer) Read(ctx *ReadContext) (any, error) {
+	return nil, fmt.Errorf("mapSerializer.Read not implemented - use ReadReflect instead")
+}
+
+func (s mapSerializer) WriteReflect(ctx *WriteContext, value reflect.Value) error {
 	buf := ctx.Buffer()
 	if value.Kind() == reflect.Interface {
 		value = value.Elem()
@@ -127,7 +135,7 @@ func (s mapSerializer) WriteValue(ctx *WriteContext, value reflect.Value) error 
 							if written, err := refResolver.WriteRefOrNull(buf, entryKey); err != nil {
 								return err
 							} else if !written {
-								err := valueSerializer.WriteValue(ctx, entryKey)
+								err := valueSerializer.WriteReflect(ctx, entryKey)
 								if err != nil {
 									return err
 								}
@@ -135,14 +143,14 @@ func (s mapSerializer) WriteValue(ctx *WriteContext, value reflect.Value) error 
 							if written, err := refResolver.WriteRefOrNull(buf, value); err != nil {
 								return err
 							} else if !written {
-								err := valueSerializer.WriteValue(ctx, entryVal)
+								err := valueSerializer.WriteReflect(ctx, entryVal)
 								if err != nil {
 									return err
 								}
 							}
 						} else {
 							buf.WriteInt8(NULL_KEY_VALUE_DECL_TYPE)
-							err := valueSerializer.WriteValue(ctx, entryVal)
+							err := valueSerializer.WriteReflect(ctx, entryVal)
 							if err != nil {
 								return err
 							}
@@ -273,10 +281,10 @@ func (s mapSerializer) WriteValue(ctx *WriteContext, value reflect.Value) error 
 }
 
 func (s mapSerializer) writeObj(ctx *WriteContext, serializer Serializer, obj reflect.Value) error {
-	return serializer.WriteValue(ctx, obj)
+	return serializer.WriteReflect(ctx, obj)
 }
 
-func (s mapSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+func (s mapSerializer) ReadReflect(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	buf := ctx.Buffer()
 	refResolver := ctx.RefResolver()
 	if s.type_ == nil {
@@ -483,7 +491,7 @@ func (s mapSerializer) readObj(
 	v *reflect.Value,
 	serializer Serializer,
 ) error {
-	return serializer.ReadValue(ctx, v.Type(), *v)
+	return serializer.ReadReflect(ctx, v.Type(), *v)
 }
 
 func getActualType(v reflect.Value) reflect.Type {
@@ -552,7 +560,20 @@ func (s *GenericMapSerializer[K, V]) NeedToWriteRef() bool {
 	return true
 }
 
-func (s *GenericMapSerializer[K, V]) WriteValue(ctx *WriteContext, value reflect.Value) error {
+func (s *GenericMapSerializer[K, V]) Write(ctx *WriteContext, value any) error {
+	return s.WriteReflect(ctx, reflect.ValueOf(value))
+}
+
+func (s *GenericMapSerializer[K, V]) Read(ctx *ReadContext) (any, error) {
+	var result map[K]V
+	resultValue := reflect.ValueOf(&result).Elem()
+	if err := s.ReadReflect(ctx, resultValue.Type(), resultValue); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func (s *GenericMapSerializer[K, V]) WriteReflect(ctx *WriteContext, value reflect.Value) error {
 	buf := ctx.Buffer()
 	length := value.Len()
 
@@ -588,12 +609,12 @@ func (s *GenericMapSerializer[K, V]) WriteValue(ctx *WriteContext, value reflect
 				return err
 			}
 			if !refWritten {
-				if err := s.keySerializer.WriteValue(ctx, k); err != nil {
+				if err := s.keySerializer.WriteReflect(ctx, k); err != nil {
 					return err
 				}
 			}
 		} else {
-			if err := s.keySerializer.WriteValue(ctx, k); err != nil {
+			if err := s.keySerializer.WriteReflect(ctx, k); err != nil {
 				return err
 			}
 		}
@@ -605,12 +626,12 @@ func (s *GenericMapSerializer[K, V]) WriteValue(ctx *WriteContext, value reflect
 				return err
 			}
 			if !refWritten {
-				if err := s.valueSerializer.WriteValue(ctx, v); err != nil {
+				if err := s.valueSerializer.WriteReflect(ctx, v); err != nil {
 					return err
 				}
 			}
 		} else {
-			if err := s.valueSerializer.WriteValue(ctx, v); err != nil {
+			if err := s.valueSerializer.WriteReflect(ctx, v); err != nil {
 				return err
 			}
 		}
@@ -618,7 +639,7 @@ func (s *GenericMapSerializer[K, V]) WriteValue(ctx *WriteContext, value reflect
 	return nil
 }
 
-func (s *GenericMapSerializer[K, V]) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+func (s *GenericMapSerializer[K, V]) ReadReflect(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	buf := ctx.Buffer()
 	size := int(buf.ReadVarUint32())
 
@@ -646,7 +667,7 @@ func (s *GenericMapSerializer[K, V]) ReadValue(ctx *ReadContext, type_ reflect.T
 			if int8(refID) < NotNullValueFlag {
 				k = ctx.RefResolver().GetCurrentReadObject()
 			} else {
-				if err := s.keySerializer.ReadValue(ctx, keyType, k); err != nil {
+				if err := s.keySerializer.ReadReflect(ctx, keyType, k); err != nil {
 					return err
 				}
 				if refID >= 0 {
@@ -654,7 +675,7 @@ func (s *GenericMapSerializer[K, V]) ReadValue(ctx *ReadContext, type_ reflect.T
 				}
 			}
 		} else {
-			if err := s.keySerializer.ReadValue(ctx, keyType, k); err != nil {
+			if err := s.keySerializer.ReadReflect(ctx, keyType, k); err != nil {
 				return err
 			}
 		}
@@ -666,7 +687,7 @@ func (s *GenericMapSerializer[K, V]) ReadValue(ctx *ReadContext, type_ reflect.T
 			if int8(refID) < NotNullValueFlag {
 				v = ctx.RefResolver().GetCurrentReadObject()
 			} else {
-				if err := s.valueSerializer.ReadValue(ctx, valueType, v); err != nil {
+				if err := s.valueSerializer.ReadReflect(ctx, valueType, v); err != nil {
 					return err
 				}
 				if refID >= 0 {
@@ -674,7 +695,7 @@ func (s *GenericMapSerializer[K, V]) ReadValue(ctx *ReadContext, type_ reflect.T
 				}
 			}
 		} else {
-			if err := s.valueSerializer.ReadValue(ctx, valueType, v); err != nil {
+			if err := s.valueSerializer.ReadReflect(ctx, valueType, v); err != nil {
 				return err
 			}
 		}

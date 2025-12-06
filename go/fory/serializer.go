@@ -21,33 +21,32 @@ import (
 	"fmt"
 	"reflect"
 	"sync"
-	"time"
 )
 
-// AnySerializer is the non-generic interface for runtime dispatch using the new context-based API.
-type AnySerializer interface {
-	WriteAny(ctx *WriteContext, value any, writeRefInfo, writeTypeInfo bool) error
-	WriteDataAny(ctx *WriteContext, value any) error
-	ReadAny(ctx *ReadContext, readRefInfo, readTypeInfo bool) (any, error)
-	ReadDataAny(ctx *ReadContext) (any, error)
-	// ReadToAny deserializes directly into the provided target, avoiding allocation.
-	ReadToAny(ctx *ReadContext, target any, readRefInfo, readTypeInfo bool) error
-	// ReadDataToAny deserializes only the data payload directly into target.
-	ReadDataToAny(ctx *ReadContext, target any) error
-	TypeId() TypeId
-	NeedToWriteRef() bool
-}
-
-// Serializer is the reflection-based interface for complex types (maps, slices, structs).
-// Uses context-based API instead of *Fory.
-// Serializer interface for reflection-based serialization of complex types (maps, slices, structs).
-// Uses WriteValue/ReadValue to avoid conflicts with TypedSerializer's Write/Read methods.
+// Serializer is the unified interface for all serialization.
+// It provides both any-based API (fast for primitives) and reflect.Value-based API (for containers).
 type Serializer interface {
-	WriteValue(ctx *WriteContext, value reflect.Value) error
-	// ReadValue deserializes directly into the provided value.
+	// Write serializes data using any type (fast path for primitives).
+	// Does NOT write ref/type info - caller handles that.
+	Write(ctx *WriteContext, value any) error
+
+	// Read deserializes data and returns as any.
+	// Does NOT read ref/type info - caller handles that.
+	Read(ctx *ReadContext) (any, error)
+
+	// WriteReflect serializes using reflect.Value (efficient when value is already reflect.Value).
+	// Does NOT write ref/type info - caller handles that.
+	WriteReflect(ctx *WriteContext, value reflect.Value) error
+
+	// ReadReflect deserializes directly into the provided reflect.Value.
+	// Does NOT read ref/type info - caller handles that.
 	// For non-trivial types (slices, maps), implementations should reuse existing capacity when possible.
-	ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error
+	ReadReflect(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error
+
+	// TypeId returns the Fory protocol type ID
 	TypeId() TypeId
+
+	// NeedToWriteRef returns true if this type needs reference tracking
 	NeedToWriteRef() bool
 }
 
@@ -73,15 +72,15 @@ func GetGlobalRegistry() *GenericRegistry {
 	return globalGenericRegistry
 }
 
-// RegisterAny adds a non-generic serializer to the global registry
-func RegisterAny(t reflect.Type, serializer AnySerializer) {
+// RegisterSerializer adds a serializer to the global registry
+func RegisterSerializer(t reflect.Type, serializer Serializer) {
 	globalGenericRegistry.mu.Lock()
 	globalGenericRegistry.serializers[t] = serializer
 	globalGenericRegistry.mu.Unlock()
 }
 
 // GetByReflectType retrieves serializer by reflect.Type
-func (r *GenericRegistry) GetByReflectType(t reflect.Type) (AnySerializer, error) {
+func (r *GenericRegistry) GetByReflectType(t reflect.Type) (Serializer, error) {
 	r.mu.RLock()
 	s, ok := r.serializers[t]
 	r.mu.RUnlock()
@@ -89,11 +88,11 @@ func (r *GenericRegistry) GetByReflectType(t reflect.Type) (AnySerializer, error
 	if !ok {
 		return nil, fmt.Errorf("no serializer for type %v", t)
 	}
-	return s.(AnySerializer), nil
+	return s.(Serializer), nil
 }
 
 // GetByTypeId retrieves serializer by TypeId
-func (r *GenericRegistry) GetByTypeId(typeId TypeId) (AnySerializer, error) {
+func (r *GenericRegistry) GetByTypeId(typeId TypeId) (Serializer, error) {
 	// Fast path for primitive types
 	switch typeId {
 	case BOOL:
@@ -115,206 +114,6 @@ func (r *GenericRegistry) GetByTypeId(typeId TypeId) (AnySerializer, error) {
 	default:
 		return nil, fmt.Errorf("no serializer for type ID %d", typeId)
 	}
-}
-
-// Date represents an imprecise date
-type Date struct {
-	Year  int
-	Month time.Month
-	Day   int
-}
-
-type dateSerializer struct{}
-
-func (s dateSerializer) TypeId() TypeId       { return LOCAL_DATE }
-func (s dateSerializer) NeedToWriteRef() bool { return true }
-
-// AnySerializer interface methods
-func (s dateSerializer) WriteAny(ctx *WriteContext, value any, writeRefInfo, writeTypeInfo bool) error {
-	if writeRefInfo {
-		ctx.buffer.WriteInt8(NotNullValueFlag)
-	}
-	if writeTypeInfo {
-		ctx.WriteTypeId(LOCAL_DATE)
-	}
-	return s.WriteDataAny(ctx, value)
-}
-
-func (s dateSerializer) WriteDataAny(ctx *WriteContext, value any) error {
-	date := value.(Date)
-	diff := time.Date(date.Year, date.Month, date.Day, 0, 0, 0, 0, time.Local).Sub(
-		time.Date(1970, 1, 1, 0, 0, 0, 0, time.Local))
-	ctx.buffer.WriteInt32(int32(diff.Hours() / 24))
-	return nil
-}
-
-func (s dateSerializer) ReadAny(ctx *ReadContext, readRefInfo, readTypeInfo bool) (any, error) {
-	if readRefInfo {
-		_ = ctx.buffer.ReadInt8()
-	}
-	if readTypeInfo {
-		_ = ctx.buffer.ReadInt16()
-	}
-	return s.ReadDataAny(ctx)
-}
-
-func (s dateSerializer) ReadDataAny(ctx *ReadContext) (any, error) {
-	diff := time.Duration(ctx.buffer.ReadInt32()) * 24 * time.Hour
-	date := time.Date(1970, 1, 1, 0, 0, 0, 0, time.Local).Add(diff)
-	return Date{date.Year(), date.Month(), date.Day()}, nil
-}
-
-func (s dateSerializer) ReadToAny(ctx *ReadContext, target any, readRefInfo, readTypeInfo bool) error {
-	if readRefInfo {
-		_ = ctx.buffer.ReadInt8()
-	}
-	if readTypeInfo {
-		_ = ctx.buffer.ReadInt16()
-	}
-	return s.ReadDataToAny(ctx, target)
-}
-
-func (s dateSerializer) ReadDataToAny(ctx *ReadContext, target any) error {
-	diff := time.Duration(ctx.buffer.ReadInt32()) * 24 * time.Hour
-	date := time.Date(1970, 1, 1, 0, 0, 0, 0, time.Local).Add(diff)
-	*target.(*Date) = Date{date.Year(), date.Month(), date.Day()}
-	return nil
-}
-
-// Serializer interface methods
-func (s dateSerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
-	date := value.Interface().(Date)
-	diff := time.Date(date.Year, date.Month, date.Day, 0, 0, 0, 0, time.Local).Sub(
-		time.Date(1970, 1, 1, 0, 0, 0, 0, time.Local))
-	ctx.buffer.WriteInt32(int32(diff.Hours() / 24))
-	return nil
-}
-
-func (s dateSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
-	diff := time.Duration(ctx.buffer.ReadInt32()) * 24 * time.Hour
-	date := time.Date(1970, 1, 1, 0, 0, 0, 0, time.Local).Add(diff)
-	value.Set(reflect.ValueOf(Date{date.Year(), date.Month(), date.Day()}))
-	return nil
-}
-
-type timeSerializer struct{}
-
-func (s timeSerializer) TypeId() TypeId       { return TIMESTAMP }
-func (s timeSerializer) NeedToWriteRef() bool { return true }
-
-// AnySerializer interface methods
-func (s timeSerializer) WriteAny(ctx *WriteContext, value any, writeRefInfo, writeTypeInfo bool) error {
-	if writeRefInfo {
-		ctx.buffer.WriteInt8(NotNullValueFlag)
-	}
-	if writeTypeInfo {
-		ctx.WriteTypeId(TIMESTAMP)
-	}
-	return s.WriteDataAny(ctx, value)
-}
-
-func (s timeSerializer) WriteDataAny(ctx *WriteContext, value any) error {
-	ctx.buffer.WriteInt64(GetUnixMicro(value.(time.Time)))
-	return nil
-}
-
-func (s timeSerializer) ReadAny(ctx *ReadContext, readRefInfo, readTypeInfo bool) (any, error) {
-	if readRefInfo {
-		_ = ctx.buffer.ReadInt8()
-	}
-	if readTypeInfo {
-		_ = ctx.buffer.ReadInt16()
-	}
-	return s.ReadDataAny(ctx)
-}
-
-func (s timeSerializer) ReadDataAny(ctx *ReadContext) (any, error) {
-	return CreateTimeFromUnixMicro(ctx.buffer.ReadInt64()), nil
-}
-
-func (s timeSerializer) ReadToAny(ctx *ReadContext, target any, readRefInfo, readTypeInfo bool) error {
-	if readRefInfo {
-		_ = ctx.buffer.ReadInt8()
-	}
-	if readTypeInfo {
-		_ = ctx.buffer.ReadInt16()
-	}
-	return s.ReadDataToAny(ctx, target)
-}
-
-func (s timeSerializer) ReadDataToAny(ctx *ReadContext, target any) error {
-	*target.(*time.Time) = CreateTimeFromUnixMicro(ctx.buffer.ReadInt64())
-	return nil
-}
-
-// Serializer interface methods
-func (s timeSerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
-	ctx.buffer.WriteInt64(GetUnixMicro(value.Interface().(time.Time)))
-	return nil
-}
-
-func (s timeSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
-	value.Set(reflect.ValueOf(CreateTimeFromUnixMicro(ctx.buffer.ReadInt64())))
-	return nil
-}
-
-// ptrToValueSerializer serializes a pointer to a concrete value
-type ptrToValueSerializer struct {
-	valueSerializer Serializer
-}
-
-func (s *ptrToValueSerializer) TypeId() TypeId {
-	if id := s.valueSerializer.TypeId(); id < 0 {
-		return id
-	}
-	return -s.valueSerializer.TypeId()
-}
-
-func (s *ptrToValueSerializer) NeedToWriteRef() bool { return true }
-
-// Serializer interface methods
-func (s *ptrToValueSerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
-	elemValue := value.Elem()
-
-	// In compatible mode, write typeInfo for struct types so TypeDefs are collected
-	if ctx.Compatible() && s.valueSerializer.TypeId() == NAMED_STRUCT {
-		typeInfo, err := ctx.TypeResolver().getTypeInfo(elemValue, true)
-		if err != nil {
-			return err
-		}
-		if err := ctx.TypeResolver().writeTypeInfo(ctx.Buffer(), typeInfo); err != nil {
-			return err
-		}
-	}
-
-	return s.valueSerializer.WriteValue(ctx, elemValue)
-}
-
-func (s *ptrToValueSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
-	// Allocate new value and read into it
-	newVal := reflect.New(type_.Elem())
-
-	// In compatible mode, read typeInfo for struct types
-	if ctx.Compatible() && s.valueSerializer.TypeId() == NAMED_STRUCT {
-		// Read typeInfo (typeId + metaIndex) to consume the bytes written by WriteValue
-		_, err := ctx.TypeResolver().readTypeInfo(ctx.Buffer(), newVal.Elem())
-		if err != nil {
-			return err
-		}
-	}
-
-	if err := s.valueSerializer.ReadValue(ctx, type_.Elem(), newVal.Elem()); err != nil {
-		return err
-	}
-	value.Set(newVal)
-	return nil
-}
-
-// Marshaller interface for custom serialization
-type Marshaller interface {
-	ExtId() int16
-	MarshalFory(f *Fory, buf *ByteBuffer) error
-	UnmarshalFory(f *Fory, buf *ByteBuffer) error
 }
 
 // Helper functions for serializer dispatch
@@ -347,7 +146,7 @@ func writeBySerializer(ctx *WriteContext, value reflect.Value, serializer Serial
 		}
 		serializer = typeInfo.Serializer
 	}
-	return serializer.WriteValue(ctx, value)
+	return serializer.WriteReflect(ctx, value)
 }
 
 func readBySerializer(ctx *ReadContext, value reflect.Value, serializer Serializer, referencable bool) error {
@@ -366,5 +165,5 @@ func readBySerializer(ctx *ReadContext, value reflect.Value, serializer Serializ
 			return nil
 		}
 	}
-	return serializer.ReadValue(ctx, value.Type(), value)
+	return serializer.ReadReflect(ctx, value.Type(), value)
 }

@@ -167,7 +167,7 @@ func ReadString(buf *ByteBuffer) string {
 }
 
 // ============================================================================
-// String Serializers
+// String Serializers - implement unified Serializer interface
 // ============================================================================
 
 // stringSerializer handles string type
@@ -178,18 +178,7 @@ var globalStringSerializer = stringSerializer{}
 func (s stringSerializer) TypeId() TypeId       { return STRING }
 func (s stringSerializer) NeedToWriteRef() bool { return false }
 
-// AnySerializer interface methods
-func (s stringSerializer) WriteAny(ctx *WriteContext, value any, writeRefInfo, writeTypeInfo bool) error {
-	if writeRefInfo {
-		ctx.buffer.WriteInt8(NotNullValueFlag)
-	}
-	if writeTypeInfo {
-		ctx.WriteTypeId(STRING)
-	}
-	return s.WriteDataAny(ctx, value)
-}
-
-func (s stringSerializer) WriteDataAny(ctx *WriteContext, value any) error {
+func (s stringSerializer) Write(ctx *WriteContext, value any) error {
 	str := value.(string)
 	ctx.buffer.WriteVarUint32(uint32(len(str)))
 	if len(str) > 0 {
@@ -198,17 +187,7 @@ func (s stringSerializer) WriteDataAny(ctx *WriteContext, value any) error {
 	return nil
 }
 
-func (s stringSerializer) ReadAny(ctx *ReadContext, readRefInfo, readTypeInfo bool) (any, error) {
-	if readRefInfo {
-		_ = ctx.buffer.ReadInt8()
-	}
-	if readTypeInfo {
-		_ = ctx.buffer.ReadInt16()
-	}
-	return s.ReadDataAny(ctx)
-}
-
-func (s stringSerializer) ReadDataAny(ctx *ReadContext) (any, error) {
+func (s stringSerializer) Read(ctx *ReadContext) (any, error) {
 	length := ctx.buffer.ReadVarUint32()
 	if length == 0 {
 		return "", nil
@@ -217,34 +196,11 @@ func (s stringSerializer) ReadDataAny(ctx *ReadContext) (any, error) {
 	return string(data), nil
 }
 
-func (s stringSerializer) ReadToAny(ctx *ReadContext, target any, readRefInfo, readTypeInfo bool) error {
-	if readRefInfo {
-		_ = ctx.buffer.ReadInt8()
-	}
-	if readTypeInfo {
-		_ = ctx.buffer.ReadInt16()
-	}
-	return s.ReadDataToAny(ctx, target)
-}
-
-func (s stringSerializer) ReadDataToAny(ctx *ReadContext, target any) error {
-	ptr := target.(*string)
-	length := ctx.buffer.ReadVarUint32()
-	if length == 0 {
-		*ptr = ""
-		return nil
-	}
-	data := ctx.buffer.ReadBinary(int(length))
-	*ptr = string(data)
-	return nil
-}
-
-// Serializer interface methods
-func (s stringSerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
+func (s stringSerializer) WriteReflect(ctx *WriteContext, value reflect.Value) error {
 	return writeString(ctx.buffer, value.String())
 }
 
-func (s stringSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+func (s stringSerializer) ReadReflect(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	str := readString(ctx.buffer)
 	value.SetString(str)
 	return nil
@@ -256,18 +212,7 @@ type ptrToStringSerializer struct{}
 func (s ptrToStringSerializer) TypeId() TypeId       { return -STRING }
 func (s ptrToStringSerializer) NeedToWriteRef() bool { return true }
 
-// AnySerializer interface methods
-func (s ptrToStringSerializer) WriteAny(ctx *WriteContext, value any, writeRefInfo, writeTypeInfo bool) error {
-	if writeRefInfo {
-		ctx.buffer.WriteInt8(NotNullValueFlag)
-	}
-	if writeTypeInfo {
-		ctx.WriteTypeId(STRING)
-	}
-	return s.WriteDataAny(ctx, value)
-}
-
-func (s ptrToStringSerializer) WriteDataAny(ctx *WriteContext, value any) error {
+func (s ptrToStringSerializer) Write(ctx *WriteContext, value any) error {
 	str := value.(*string)
 	ctx.buffer.WriteVarUint32(uint32(len(*str)))
 	if len(*str) > 0 {
@@ -276,17 +221,7 @@ func (s ptrToStringSerializer) WriteDataAny(ctx *WriteContext, value any) error 
 	return nil
 }
 
-func (s ptrToStringSerializer) ReadAny(ctx *ReadContext, readRefInfo, readTypeInfo bool) (any, error) {
-	if readRefInfo {
-		_ = ctx.buffer.ReadInt8()
-	}
-	if readTypeInfo {
-		_ = ctx.buffer.ReadInt16()
-	}
-	return s.ReadDataAny(ctx)
-}
-
-func (s ptrToStringSerializer) ReadDataAny(ctx *ReadContext) (any, error) {
+func (s ptrToStringSerializer) Read(ctx *ReadContext) (any, error) {
 	length := ctx.buffer.ReadVarUint32()
 	if length == 0 {
 		str := ""
@@ -297,35 +232,12 @@ func (s ptrToStringSerializer) ReadDataAny(ctx *ReadContext) (any, error) {
 	return &str, nil
 }
 
-func (s ptrToStringSerializer) ReadToAny(ctx *ReadContext, target any, readRefInfo, readTypeInfo bool) error {
-	if readRefInfo {
-		_ = ctx.buffer.ReadInt8()
-	}
-	if readTypeInfo {
-		_ = ctx.buffer.ReadInt16()
-	}
-	return s.ReadDataToAny(ctx, target)
-}
-
-func (s ptrToStringSerializer) ReadDataToAny(ctx *ReadContext, target any) error {
-	ptr := target.(*string)
-	length := ctx.buffer.ReadVarUint32()
-	if length == 0 {
-		*ptr = ""
-		return nil
-	}
-	data := ctx.buffer.ReadBinary(int(length))
-	*ptr = string(data)
-	return nil
-}
-
-// Serializer interface methods
-func (s ptrToStringSerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
+func (s ptrToStringSerializer) WriteReflect(ctx *WriteContext, value reflect.Value) error {
 	str := value.Interface().(*string)
 	return writeString(ctx.buffer, *str)
 }
 
-func (s ptrToStringSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+func (s ptrToStringSerializer) ReadReflect(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	str := readString(ctx.buffer)
 	ptr := new(string)
 	*ptr = str

@@ -88,8 +88,18 @@ func (g DynamicSliceDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *
 	return nil
 }
 
-// WriteValue provides reflect.Value interface compatibility (implements fory.Serializer)
-func (g DynamicSliceDemo_ForyGenSerializer) WriteValue(ctx *fory.WriteContext, value reflect.Value) error {
+// Write serializes using any type (implements fory.Serializer)
+func (g DynamicSliceDemo_ForyGenSerializer) Write(ctx *fory.WriteContext, value any) error {
+	return g.WriteReflect(ctx, reflect.ValueOf(value))
+}
+
+// Read deserializes and returns as any (implements fory.Serializer)
+func (g DynamicSliceDemo_ForyGenSerializer) Read(ctx *fory.ReadContext) (any, error) {
+	return nil, fmt.Errorf("DynamicSliceDemo_ForyGenSerializer.Read not implemented - use ReadReflect instead")
+}
+
+// WriteReflect provides reflect.Value interface compatibility (implements fory.Serializer)
+func (g DynamicSliceDemo_ForyGenSerializer) WriteReflect(ctx *fory.WriteContext, value reflect.Value) error {
 	// Convert reflect.Value to concrete type and delegate to typed method
 	var v *DynamicSliceDemo
 	if value.Kind() == reflect.Ptr {
@@ -103,8 +113,8 @@ func (g DynamicSliceDemo_ForyGenSerializer) WriteValue(ctx *fory.WriteContext, v
 	return g.WriteTyped(ctx, v)
 }
 
-// ReadValue provides reflect.Value interface compatibility (implements fory.Serializer)
-func (g DynamicSliceDemo_ForyGenSerializer) ReadValue(ctx *fory.ReadContext, type_ reflect.Type, value reflect.Value) error {
+// ReadReflect provides reflect.Value interface compatibility (implements fory.Serializer)
+func (g DynamicSliceDemo_ForyGenSerializer) ReadReflect(ctx *fory.ReadContext, type_ reflect.Type, value reflect.Value) error {
 	// Convert reflect.Value to concrete type and delegate to typed method
 	var v *DynamicSliceDemo
 	if value.Kind() == reflect.Ptr {
@@ -385,8 +395,18 @@ func (g MapDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *MapDemo) 
 	return nil
 }
 
-// WriteValue provides reflect.Value interface compatibility (implements fory.Serializer)
-func (g MapDemo_ForyGenSerializer) WriteValue(ctx *fory.WriteContext, value reflect.Value) error {
+// Write serializes using any type (implements fory.Serializer)
+func (g MapDemo_ForyGenSerializer) Write(ctx *fory.WriteContext, value any) error {
+	return g.WriteReflect(ctx, reflect.ValueOf(value))
+}
+
+// Read deserializes and returns as any (implements fory.Serializer)
+func (g MapDemo_ForyGenSerializer) Read(ctx *fory.ReadContext) (any, error) {
+	return nil, fmt.Errorf("MapDemo_ForyGenSerializer.Read not implemented - use ReadReflect instead")
+}
+
+// WriteReflect provides reflect.Value interface compatibility (implements fory.Serializer)
+func (g MapDemo_ForyGenSerializer) WriteReflect(ctx *fory.WriteContext, value reflect.Value) error {
 	// Convert reflect.Value to concrete type and delegate to typed method
 	var v *MapDemo
 	if value.Kind() == reflect.Ptr {
@@ -400,8 +420,8 @@ func (g MapDemo_ForyGenSerializer) WriteValue(ctx *fory.WriteContext, value refl
 	return g.WriteTyped(ctx, v)
 }
 
-// ReadValue provides reflect.Value interface compatibility (implements fory.Serializer)
-func (g MapDemo_ForyGenSerializer) ReadValue(ctx *fory.ReadContext, type_ reflect.Type, value reflect.Value) error {
+// ReadReflect provides reflect.Value interface compatibility (implements fory.Serializer)
+func (g MapDemo_ForyGenSerializer) ReadReflect(ctx *fory.ReadContext, type_ reflect.Type, value reflect.Value) error {
 	// Convert reflect.Value to concrete type and delegate to typed method
 	var v *MapDemo
 	if value.Kind() == reflect.Ptr {
@@ -642,8 +662,18 @@ func (g SliceDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *SliceDe
 	return nil
 }
 
-// WriteValue provides reflect.Value interface compatibility (implements fory.Serializer)
-func (g SliceDemo_ForyGenSerializer) WriteValue(ctx *fory.WriteContext, value reflect.Value) error {
+// Write serializes using any type (implements fory.Serializer)
+func (g SliceDemo_ForyGenSerializer) Write(ctx *fory.WriteContext, value any) error {
+	return g.WriteReflect(ctx, reflect.ValueOf(value))
+}
+
+// Read deserializes and returns as any (implements fory.Serializer)
+func (g SliceDemo_ForyGenSerializer) Read(ctx *fory.ReadContext) (any, error) {
+	return nil, fmt.Errorf("SliceDemo_ForyGenSerializer.Read not implemented - use ReadReflect instead")
+}
+
+// WriteReflect provides reflect.Value interface compatibility (implements fory.Serializer)
+func (g SliceDemo_ForyGenSerializer) WriteReflect(ctx *fory.WriteContext, value reflect.Value) error {
 	// Convert reflect.Value to concrete type and delegate to typed method
 	var v *SliceDemo
 	if value.Kind() == reflect.Ptr {
@@ -657,8 +687,8 @@ func (g SliceDemo_ForyGenSerializer) WriteValue(ctx *fory.WriteContext, value re
 	return g.WriteTyped(ctx, v)
 }
 
-// ReadValue provides reflect.Value interface compatibility (implements fory.Serializer)
-func (g SliceDemo_ForyGenSerializer) ReadValue(ctx *fory.ReadContext, type_ reflect.Type, value reflect.Value) error {
+// ReadReflect provides reflect.Value interface compatibility (implements fory.Serializer)
+func (g SliceDemo_ForyGenSerializer) ReadReflect(ctx *fory.ReadContext, type_ reflect.Type, value reflect.Value) error {
 	// Convert reflect.Value to concrete type and delegate to typed method
 	var v *SliceDemo
 	if value.Kind() == reflect.Ptr {
@@ -735,8 +765,18 @@ func (g ValidationDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *Va
 	return nil
 }
 
-// WriteValue provides reflect.Value interface compatibility (implements fory.Serializer)
-func (g ValidationDemo_ForyGenSerializer) WriteValue(ctx *fory.WriteContext, value reflect.Value) error {
+// Write serializes using any type (implements fory.Serializer)
+func (g ValidationDemo_ForyGenSerializer) Write(ctx *fory.WriteContext, value any) error {
+	return g.WriteReflect(ctx, reflect.ValueOf(value))
+}
+
+// Read deserializes and returns as any (implements fory.Serializer)
+func (g ValidationDemo_ForyGenSerializer) Read(ctx *fory.ReadContext) (any, error) {
+	return nil, fmt.Errorf("ValidationDemo_ForyGenSerializer.Read not implemented - use ReadReflect instead")
+}
+
+// WriteReflect provides reflect.Value interface compatibility (implements fory.Serializer)
+func (g ValidationDemo_ForyGenSerializer) WriteReflect(ctx *fory.WriteContext, value reflect.Value) error {
 	// Convert reflect.Value to concrete type and delegate to typed method
 	var v *ValidationDemo
 	if value.Kind() == reflect.Ptr {
@@ -750,8 +790,8 @@ func (g ValidationDemo_ForyGenSerializer) WriteValue(ctx *fory.WriteContext, val
 	return g.WriteTyped(ctx, v)
 }
 
-// ReadValue provides reflect.Value interface compatibility (implements fory.Serializer)
-func (g ValidationDemo_ForyGenSerializer) ReadValue(ctx *fory.ReadContext, type_ reflect.Type, value reflect.Value) error {
+// ReadReflect provides reflect.Value interface compatibility (implements fory.Serializer)
+func (g ValidationDemo_ForyGenSerializer) ReadReflect(ctx *fory.ReadContext, type_ reflect.Type, value reflect.Value) error {
 	// Convert reflect.Value to concrete type and delegate to typed method
 	var v *ValidationDemo
 	if value.Kind() == reflect.Ptr {

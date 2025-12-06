@@ -17,7 +17,10 @@
 
 package fory
 
-import "reflect"
+import (
+	"fmt"
+	"reflect"
+)
 
 // GenericSet type.
 // TODO use golang generics; support more concrete key types
@@ -40,7 +43,15 @@ func (s setSerializer) NeedToWriteRef() bool {
 	return true
 }
 
-func (s setSerializer) WriteValue(ctx *WriteContext, value reflect.Value) error {
+func (s setSerializer) Write(ctx *WriteContext, value any) error {
+	return s.WriteReflect(ctx, reflect.ValueOf(value))
+}
+
+func (s setSerializer) Read(ctx *ReadContext) (any, error) {
+	return nil, fmt.Errorf("setSerializer.Read not implemented - use ReadReflect instead")
+}
+
+func (s setSerializer) WriteReflect(ctx *WriteContext, value reflect.Value) error {
 	buf := ctx.Buffer()
 	// Get all map keys (set elements)
 	keys := value.MapKeys()
@@ -147,13 +158,13 @@ func (s setSerializer) writeSameType(ctx *WriteContext, buf *ByteBuffer, keys []
 			}
 			if !refWritten {
 				// Write actual value if not a reference
-				if err := serializer.WriteValue(ctx, key); err != nil {
+				if err := serializer.WriteReflect(ctx, key); err != nil {
 					return err
 				}
 			}
 		} else {
 			// Directly write value without reference tracking
-			if err := serializer.WriteValue(ctx, key); err != nil {
+			if err := serializer.WriteReflect(ctx, key); err != nil {
 				return err
 			}
 		}
@@ -184,7 +195,7 @@ func (s setSerializer) writeDifferentTypes(ctx *WriteContext, buf *ByteBuffer, k
 
 		if !refWritten {
 			// Write actual value if not a reference
-			if err := typeInfo.Serializer.WriteValue(ctx, key); err != nil {
+			if err := typeInfo.Serializer.WriteReflect(ctx, key); err != nil {
 				return err
 			}
 		}
@@ -192,8 +203,8 @@ func (s setSerializer) writeDifferentTypes(ctx *WriteContext, buf *ByteBuffer, k
 	return nil
 }
 
-// Read deserializes a set from the buffer into the provided reflect.Value
-func (s setSerializer) ReadValue(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+// ReadReflect deserializes a set from the buffer into the provided reflect.Value
+func (s setSerializer) ReadReflect(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	buf := ctx.Buffer()
 	// Read collection length from buffer
 	length := int(buf.ReadVarUint32())
@@ -248,7 +259,7 @@ func (s setSerializer) readSameType(ctx *ReadContext, buf *ByteBuffer, value ref
 
 		// Create new element and deserialize from buffer
 		elem := reflect.New(typeInfo.Type).Elem()
-		if err := serializer.ReadValue(ctx, elem.Type(), elem); err != nil {
+		if err := serializer.ReadReflect(ctx, elem.Type(), elem); err != nil {
 			return err
 		}
 
@@ -280,7 +291,7 @@ func (s setSerializer) readDifferentTypes(ctx *ReadContext, buf *ByteBuffer, val
 
 		// Create new element and deserialize from buffer
 		elem := reflect.New(typeInfo.Type).Elem()
-		if err := typeInfo.Serializer.ReadValue(ctx, elem.Type(), elem); err != nil {
+		if err := typeInfo.Serializer.ReadReflect(ctx, elem.Type(), elem); err != nil {
 			return err
 		}
 

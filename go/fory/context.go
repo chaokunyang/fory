@@ -405,7 +405,7 @@ func (c *WriteContext) writeValue(value reflect.Value, serializer Serializer) er
 	}
 
 	if serializer != nil {
-		return serializer.WriteValue(c, value)
+		return serializer.WriteReflect(c, value)
 	}
 
 	// Get type information for the value
@@ -418,7 +418,7 @@ func (c *WriteContext) writeValue(value reflect.Value, serializer Serializer) er
 		return fmt.Errorf("cannot write typeinfo for value %v: %v", value, err)
 	}
 	serializer = typeInfo.Serializer
-	return serializer.WriteValue(c, value)
+	return serializer.WriteReflect(c, value)
 }
 
 // ============================================================================
@@ -992,7 +992,7 @@ func (c *ReadContext) readReferencableBySerializer(value reflect.Value, serializ
 		return nil
 	}
 	// directly read without altering serializer
-	return serializer.ReadValue(c, value.Type(), value)
+	return serializer.ReadReflect(c, value.Type(), value)
 }
 
 // readData reads value data using the type resolver
@@ -1021,13 +1021,13 @@ func (c *ReadContext) readData(value reflect.Value, serializer Serializer) error
 				}
 			}
 		}
-		if err := serializer.ReadValue(c, type_, concrete); err != nil {
+		if err := serializer.ReadReflect(c, type_, concrete); err != nil {
 			return err
 		}
 		value.Set(concrete)
 		return nil
 	}
-	return serializer.ReadValue(c, value.Type(), value)
+	return serializer.ReadReflect(c, value.Type(), value)
 }
 
 // ============================================================================

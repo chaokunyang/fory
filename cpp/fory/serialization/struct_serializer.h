@@ -271,11 +271,10 @@ void for_each_index(std::index_sequence<Indices...>, Func &&func) {
 template <typename T, typename Func, size_t... Indices>
 void dispatch_field_index_impl(size_t target_index, Func &&func,
                                std::index_sequence<Indices...>, bool &handled) {
-  handled =
-      ((target_index == Indices
-            ? (func(std::integral_constant<size_t, Indices>{}), true)
-            : false) ||
-       ...);
+  handled = ((target_index == Indices
+                  ? (func(std::integral_constant<size_t, Indices>{}), true)
+                  : false) ||
+             ...);
 }
 
 template <typename T, typename Func>
@@ -1822,9 +1821,8 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
 
     using FieldDescriptor = decltype(ForyFieldInfo(std::declval<const T &>()));
     constexpr size_t field_count = FieldDescriptor::Size;
-    detail::write_struct_fields_impl(obj, ctx,
-                                     std::make_index_sequence<field_count>{},
-                                     false);
+    detail::write_struct_fields_impl(
+        obj, ctx, std::make_index_sequence<field_count>{}, false);
   }
 
   static void write_data_generic(const T &obj, WriteContext &ctx,
@@ -1848,9 +1846,8 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
 
     using FieldDescriptor = decltype(ForyFieldInfo(std::declval<const T &>()));
     constexpr size_t field_count = FieldDescriptor::Size;
-    detail::write_struct_fields_impl(obj, ctx,
-                                     std::make_index_sequence<field_count>{},
-                                     has_generics);
+    detail::write_struct_fields_impl(
+        obj, ctx, std::make_index_sequence<field_count>{}, has_generics);
   }
 
   static T read(ReadContext &ctx, bool read_ref, bool read_type) {
@@ -1920,7 +1917,8 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
             // Local type is not compatible struct - verify type match and read
             // data
             if (remote_type_id != local_type_id) {
-              ctx.set_error(Error::type_mismatch(remote_type_id, local_type_id));
+              ctx.set_error(
+                  Error::type_mismatch(remote_type_id, local_type_id));
               return T{};
             }
             return read_data(ctx);
@@ -1941,8 +1939,7 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
         // the expected static type.
         if (read_type) {
           // Direct lookup using compile-time type_index<T>() - O(1) hash lookup
-          auto type_info_res =
-              ctx.type_resolver().template get_type_info<T>();
+          auto type_info_res = ctx.type_resolver().template get_type_info<T>();
           if (!type_info_res.ok()) {
             ctx.set_error(std::move(type_info_res).error());
             return T{};
@@ -1966,7 +1963,8 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
               return T{};
             }
             if (remote_type_id != expected_type_id) {
-              ctx.set_error(Error::type_mismatch(remote_type_id, expected_type_id));
+              ctx.set_error(
+                  Error::type_mismatch(remote_type_id, expected_type_id));
               return T{};
             }
           } else {
@@ -1977,7 +1975,8 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
             }
             uint32_t remote_type_id = remote_info ? remote_info->type_id : 0u;
             if (remote_type_id != expected_type_id) {
-              ctx.set_error(Error::type_mismatch(remote_type_id, expected_type_id));
+              ctx.set_error(
+                  Error::type_mismatch(remote_type_id, expected_type_id));
               return T{};
             }
           }
@@ -2000,8 +1999,7 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
     }
   }
 
-  static T read_compatible(ReadContext &ctx,
-                           const TypeInfo *remote_type_info) {
+  static T read_compatible(ReadContext &ctx, const TypeInfo *remote_type_info) {
     // Read and verify struct version if enabled (matches write_data behavior)
     if (ctx.check_struct_version()) {
       int32_t read_version = ctx.buffer().ReadInt32(ctx.error());

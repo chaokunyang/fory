@@ -275,7 +275,8 @@ inline void write_collection_data_slow(const Container &coll, WriteContext &ctx,
   if (is_same_type && !(bitmap & COLL_DECL_ELEMENT_TYPE)) {
     if constexpr (elem_is_polymorphic) {
       // Write concrete type info for polymorphic elements
-      ctx.write_any_typeinfo(static_cast<uint32_t>(TypeId::UNKNOWN), first_type);
+      ctx.write_any_typeinfo(static_cast<uint32_t>(TypeId::UNKNOWN),
+                             first_type);
     } else {
       Serializer<ElemType>::write_type_info(ctx);
     }
@@ -591,8 +592,8 @@ struct Serializer<
       return std::vector<T, Alloc>();
     }
     if (total_bytes_u32 % sizeof(T) != 0) {
-      ctx.set_error(
-          Error::invalid_data("Vector byte size not aligned with element size"));
+      ctx.set_error(Error::invalid_data(
+          "Vector byte size not aligned with element size"));
       return std::vector<T, Alloc>();
     }
     size_t elem_count = total_bytes_u32 / sizeof(T);
@@ -687,7 +688,8 @@ struct Serializer<
         uint32_t expected =
             static_cast<uint32_t>(Serializer<ElemType>::type_id);
         if (!type_id_matches(elem_type_info->type_id, expected)) {
-          ctx.set_error(Error::type_mismatch(elem_type_info->type_id, expected));
+          ctx.set_error(
+              Error::type_mismatch(elem_type_info->type_id, expected));
           return std::vector<T, Alloc>();
         }
       }
@@ -1005,7 +1007,8 @@ struct Serializer<std::set<T, Args...>> {
         }
         uint32_t expected = static_cast<uint32_t>(Serializer<T>::type_id);
         if (!type_id_matches(elem_type_info->type_id, expected)) {
-          ctx.set_error(Error::type_mismatch(elem_type_info->type_id, expected));
+          ctx.set_error(
+              Error::type_mismatch(elem_type_info->type_id, expected));
           return std::set<T, Args...>();
         }
       }
@@ -1110,8 +1113,9 @@ struct Serializer<std::unordered_set<T, Args...>> {
     }
   }
 
-  static inline void write_data_generic(const std::unordered_set<T, Args...> &set,
-                                        WriteContext &ctx, bool has_generics) {
+  static inline void
+  write_data_generic(const std::unordered_set<T, Args...> &set,
+                     WriteContext &ctx, bool has_generics) {
     // Dispatch to fast or slow path based on element type characteristics
     constexpr bool is_fast_path = !is_polymorphic_v<T> && !is_shared_ref_v<T>;
 
@@ -1122,9 +1126,8 @@ struct Serializer<std::unordered_set<T, Args...>> {
     }
   }
 
-  static inline std::unordered_set<T, Args...> read(ReadContext &ctx,
-                                                    bool read_ref,
-                                                    bool read_type) {
+  static inline std::unordered_set<T, Args...>
+  read(ReadContext &ctx, bool read_ref, bool read_type) {
     bool has_value = consume_ref_flag(ctx, read_ref);
     if (ctx.has_error() || !has_value) {
       return std::unordered_set<T, Args...>();
@@ -1179,7 +1182,8 @@ struct Serializer<std::unordered_set<T, Args...>> {
         }
         uint32_t expected = static_cast<uint32_t>(Serializer<T>::type_id);
         if (!type_id_matches(elem_type_info->type_id, expected)) {
-          ctx.set_error(Error::type_mismatch(elem_type_info->type_id, expected));
+          ctx.set_error(
+              Error::type_mismatch(elem_type_info->type_id, expected));
           return std::unordered_set<T, Args...>();
         }
       }

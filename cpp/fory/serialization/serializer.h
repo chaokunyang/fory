@@ -196,8 +196,8 @@ FORY_ALWAYS_INLINE bool consume_ref_flag(ReadContext &ctx, bool read_ref) {
     return false;
   }
 
-  ctx.set_error(Error::invalid_data(
-      "Unknown reference flag: " + std::to_string(static_cast<int>(flag))));
+  ctx.set_error(Error::invalid_data("Unknown reference flag: " +
+                                    std::to_string(static_cast<int>(flag))));
   return false;
 }
 

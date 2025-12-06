@@ -559,8 +559,7 @@ inline MapType read_map_data_fast(ReadContext &ctx, uint32_t length) {
 
     uint32_t cur_len = len_counter + chunk_size;
     if (cur_len > length) {
-      ctx.set_error(
-          Error::invalid_data("Chunk size exceeds total map length"));
+      ctx.set_error(Error::invalid_data("Chunk size exceeds total map length"));
       return MapType{};
     }
 
@@ -657,7 +656,8 @@ inline MapType read_map_data_slow(ReadContext &ctx, uint32_t length) {
       V value;
       if constexpr (val_is_polymorphic) {
         // For polymorphic types, use read_with_type_info
-        value = Serializer<V>::read_with_type_info(ctx, false, *value_type_info);
+        value =
+            Serializer<V>::read_with_type_info(ctx, false, *value_type_info);
         if (FORY_PREDICT_FALSE(ctx.has_error())) {
           return MapType{};
         }
@@ -766,8 +766,7 @@ inline MapType read_map_data_slow(ReadContext &ctx, uint32_t length) {
 
     uint32_t cur_len = len_counter + chunk_size;
     if (cur_len > length) {
-      ctx.set_error(
-          Error::invalid_data("Chunk size exceeds total map length"));
+      ctx.set_error(Error::invalid_data("Chunk size exceeds total map length"));
       return MapType{};
     }
 
@@ -783,8 +782,8 @@ inline MapType read_map_data_slow(ReadContext &ctx, uint32_t length) {
       // Read key - use type info if available (polymorphic case)
       K key;
       if constexpr (key_is_polymorphic) {
-        key =
-            Serializer<K>::read_with_type_info(ctx, key_read_ref, *key_type_info);
+        key = Serializer<K>::read_with_type_info(ctx, key_read_ref,
+                                                 *key_type_info);
         if (FORY_PREDICT_FALSE(ctx.has_error())) {
           return MapType{};
         }

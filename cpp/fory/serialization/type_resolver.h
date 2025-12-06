@@ -561,7 +561,8 @@ private:
   static void harness_write_data_adapter(const void *value, WriteContext &ctx,
                                          bool has_generics);
 
-  template <typename T> static void *harness_read_data_adapter(ReadContext &ctx);
+  template <typename T>
+  static void *harness_read_data_adapter(ReadContext &ctx);
 
   template <typename T>
   static Result<std::vector<FieldInfo>, Error>

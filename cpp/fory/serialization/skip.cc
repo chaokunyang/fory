@@ -218,8 +218,8 @@ void skip_struct(ReadContext &ctx, const FieldType &field_type) {
   // skip all fields for the remote struct.
 
   if (!ctx.is_compatible()) {
-    ctx.set_error(
-        Error::unsupported("Struct skipping is only supported in compatible mode"));
+    ctx.set_error(Error::unsupported(
+        "Struct skipping is only supported in compatible mode"));
     return;
   }
 
@@ -265,8 +265,8 @@ void skip_ext(ReadContext &ctx, const FieldType &field_type) {
   // We look up the registered ext harness and call its read_data function.
 
   if (!ctx.is_compatible()) {
-    ctx.set_error(
-        Error::unsupported("Ext skipping is only supported in compatible mode"));
+    ctx.set_error(Error::unsupported(
+        "Ext skipping is only supported in compatible mode"));
     return;
   }
 
@@ -569,9 +569,9 @@ void skip_field_value(ReadContext &ctx, const FieldType &field_type,
     return;
 
   default:
-    ctx.set_error(Error::type_error(
-        "Unknown field type to skip: " +
-        std::to_string(static_cast<uint32_t>(tid))));
+    ctx.set_error(
+        Error::type_error("Unknown field type to skip: " +
+                          std::to_string(static_cast<uint32_t>(tid))));
     return;
   }
 }

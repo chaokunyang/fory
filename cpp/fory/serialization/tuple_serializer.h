@@ -70,20 +70,21 @@ template <typename Tuple, size_t... Is>
 inline void write_tuple_elements_direct(const Tuple &tuple, WriteContext &ctx,
                                         std::index_sequence<Is...>) {
   // Use fold expression to write each element
-  ([&]() {
-    if (ctx.has_error())
-      return;
-    using ElemType = std::tuple_element_t<Is, Tuple>;
-    const auto &elem = std::get<Is>(tuple);
-    // For nullable/shared types, use full write with ref tracking
-    if constexpr (is_nullable_v<ElemType> || is_shared_ref_v<ElemType> ||
-                  is_polymorphic_v<ElemType>) {
-      Serializer<ElemType>::write(elem, ctx, true, false, false);
-    } else {
-      Serializer<ElemType>::write_data(elem, ctx);
-    }
-  }(),
-   ...);
+  (
+      [&]() {
+        if (ctx.has_error())
+          return;
+        using ElemType = std::tuple_element_t<Is, Tuple>;
+        const auto &elem = std::get<Is>(tuple);
+        // For nullable/shared types, use full write with ref tracking
+        if constexpr (is_nullable_v<ElemType> || is_shared_ref_v<ElemType> ||
+                      is_polymorphic_v<ElemType>) {
+          Serializer<ElemType>::write(elem, ctx, true, false, false);
+        } else {
+          Serializer<ElemType>::write_data(elem, ctx);
+        }
+      }(),
+      ...);
 }
 
 /// Write tuple elements with type info (xlang/compatible mode, heterogeneous)
@@ -92,13 +93,15 @@ inline void write_tuple_elements_heterogeneous(const Tuple &tuple,
                                                WriteContext &ctx,
                                                std::index_sequence<Is...>) {
   // Write each element with its type info
-  ([&]() {
-    if (ctx.has_error())
-      return;
-    using ElemType = std::tuple_element_t<Is, Tuple>;
-    Serializer<ElemType>::write(std::get<Is>(tuple), ctx, true, true, false);
-  }(),
-   ...);
+  (
+      [&]() {
+        if (ctx.has_error())
+          return;
+        using ElemType = std::tuple_element_t<Is, Tuple>;
+        Serializer<ElemType>::write(std::get<Is>(tuple), ctx, true, true,
+                                    false);
+      }(),
+      ...);
 }
 
 /// Write tuple elements without type info (xlang/compatible mode, homogeneous)
@@ -107,13 +110,14 @@ inline void write_tuple_elements_homogeneous(const Tuple &tuple,
                                              WriteContext &ctx,
                                              std::index_sequence<Is...>) {
   // Write each element data only (type info written once in header)
-  ([&]() {
-    if (ctx.has_error())
-      return;
-    using ElemType = std::tuple_element_t<Is, Tuple>;
-    Serializer<ElemType>::write_data(std::get<Is>(tuple), ctx);
-  }(),
-   ...);
+  (
+      [&]() {
+        if (ctx.has_error())
+          return;
+        using ElemType = std::tuple_element_t<Is, Tuple>;
+        Serializer<ElemType>::write_data(std::get<Is>(tuple), ctx);
+      }(),
+      ...);
 }
 
 /// Read tuple elements directly (non-xlang mode)
@@ -123,19 +127,20 @@ inline Tuple read_tuple_elements_direct(ReadContext &ctx,
   Tuple result;
 
   // Use fold expression to read each element
-  ([&]() {
-    if (ctx.has_error())
-      return;
-    using ElemType = std::tuple_element_t<Is, Tuple>;
-    // For nullable/shared types, use full read with ref tracking
-    if constexpr (is_nullable_v<ElemType> || is_shared_ref_v<ElemType> ||
-                  is_polymorphic_v<ElemType>) {
-      std::get<Is>(result) = Serializer<ElemType>::read(ctx, true, false);
-    } else {
-      std::get<Is>(result) = Serializer<ElemType>::read_data(ctx);
-    }
-  }(),
-   ...);
+  (
+      [&]() {
+        if (ctx.has_error())
+          return;
+        using ElemType = std::tuple_element_t<Is, Tuple>;
+        // For nullable/shared types, use full read with ref tracking
+        if constexpr (is_nullable_v<ElemType> || is_shared_ref_v<ElemType> ||
+                      is_polymorphic_v<ElemType>) {
+          std::get<Is>(result) = Serializer<ElemType>::read(ctx, true, false);
+        } else {
+          std::get<Is>(result) = Serializer<ElemType>::read_data(ctx);
+        }
+      }(),
+      ...);
 
   return result;
 }
@@ -149,17 +154,18 @@ inline Tuple read_tuple_elements_heterogeneous(ReadContext &ctx,
   uint32_t index = 0;
 
   // Read each element with its type info, handling length mismatch
-  ([&]() {
-    if (ctx.has_error())
-      return;
-    using ElemType = std::tuple_element_t<Is, Tuple>;
-    if (index < length) {
-      std::get<Is>(result) = Serializer<ElemType>::read(ctx, true, true);
-      ++index;
-    }
-    // If index >= length, use default-constructed value
-  }(),
-   ...);
+  (
+      [&]() {
+        if (ctx.has_error())
+          return;
+        using ElemType = std::tuple_element_t<Is, Tuple>;
+        if (index < length) {
+          std::get<Is>(result) = Serializer<ElemType>::read(ctx, true, true);
+          ++index;
+        }
+        // If index >= length, use default-constructed value
+      }(),
+      ...);
 
   // Skip any extra elements beyond tuple size
   while (index < length && !ctx.has_error()) {
@@ -179,17 +185,18 @@ inline Tuple read_tuple_elements_homogeneous(ReadContext &ctx, uint32_t length,
   uint32_t index = 0;
 
   // Read each element data only (type info read once in header)
-  ([&]() {
-    if (ctx.has_error())
-      return;
-    using ElemType = std::tuple_element_t<Is, Tuple>;
-    if (index < length) {
-      std::get<Is>(result) = Serializer<ElemType>::read_data(ctx);
-      ++index;
-    }
-    // If index >= length, use default-constructed value
-  }(),
-   ...);
+  (
+      [&]() {
+        if (ctx.has_error())
+          return;
+        using ElemType = std::tuple_element_t<Is, Tuple>;
+        if (index < length) {
+          std::get<Is>(result) = Serializer<ElemType>::read_data(ctx);
+          ++index;
+        }
+        // If index >= length, use default-constructed value
+      }(),
+      ...);
 
   // Skip any extra elements beyond tuple size
   using ElemType = tuple_first_type_t<Tuple>;

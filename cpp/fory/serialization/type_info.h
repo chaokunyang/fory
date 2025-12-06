@@ -48,8 +48,9 @@ class FieldInfo;
 /// This allows TypeResolver to work with any registered type without
 /// knowing the concrete type at compile time.
 ///
-/// Error handling: All functions store errors in the context via ctx.set_error().
-/// Callers should check ctx.has_error() after calling these functions.
+/// Error handling: All functions store errors in the context via
+/// ctx.set_error(). Callers should check ctx.has_error() after calling these
+/// functions.
 struct Harness {
   using WriteFn = void (*)(const void *value, WriteContext &ctx,
                            bool write_ref_info, bool write_type_info,

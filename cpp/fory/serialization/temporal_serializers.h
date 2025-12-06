@@ -159,8 +159,7 @@ template <> struct Serializer<Timestamp> {
     write_data(timestamp, ctx);
   }
 
-  static inline void write_data(const Timestamp &timestamp,
-                                WriteContext &ctx) {
+  static inline void write_data(const Timestamp &timestamp, WriteContext &ctx) {
     int64_t nanos = timestamp.time_since_epoch().count();
     ctx.write_bytes(&nanos, sizeof(int64_t));
   }

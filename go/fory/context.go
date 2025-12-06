@@ -101,7 +101,7 @@ func (c *WriteContext) Compatible() bool {
 }
 
 // TypeResolver returns the type resolver
-func (c *WriteContext) TypeResolver() *typeResolver {
+func (c *WriteContext) TypeResolver() *TypeResolver {
 	return c.typeResolver
 }
 
@@ -648,7 +648,7 @@ func (c *ReadContext) Compatible() bool {
 }
 
 // TypeResolver returns the type resolver
-func (c *ReadContext) TypeResolver() *typeResolver {
+func (c *ReadContext) TypeResolver() *TypeResolver {
 	return c.typeResolver
 }
 

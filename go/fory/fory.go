@@ -165,7 +165,7 @@ type Fory struct {
 	readCtx  *ReadContext
 
 	// Resolvers shared between contexts
-	typeResolver *typeResolver
+	typeResolver *TypeResolver
 	refResolver  *RefResolver
 }
 

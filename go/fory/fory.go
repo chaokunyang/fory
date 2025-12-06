@@ -556,6 +556,8 @@ func Serialize[T any](f *Fory, value *T) ([]byte, error) {
 		err = f.writeCtx.WriteInt32Value(*val, true, true)
 	case *int64:
 		err = f.writeCtx.WriteInt64Value(*val, true, true)
+	case *int:
+		err = f.writeCtx.WriteIntValue(*val, true, true)
 	case *float32:
 		err = f.writeCtx.WriteFloat32Value(*val, true, true)
 	case *float64:
@@ -564,14 +566,38 @@ func Serialize[T any](f *Fory, value *T) ([]byte, error) {
 		err = f.writeCtx.WriteStringValue(*val, true, true)
 	case *[]byte:
 		err = f.writeCtx.WriteByteSlice(*val, true, true)
+	case *[]int8:
+		err = f.writeCtx.WriteInt8Slice(*val, true, true)
+	case *[]int16:
+		err = f.writeCtx.WriteInt16Slice(*val, true, true)
 	case *[]int32:
 		err = f.writeCtx.WriteInt32Slice(*val, true, true)
 	case *[]int64:
 		err = f.writeCtx.WriteInt64Slice(*val, true, true)
+	case *[]int:
+		err = f.writeCtx.WriteIntSlice(*val, true, true)
+	case *[]float32:
+		err = f.writeCtx.WriteFloat32Slice(*val, true, true)
 	case *[]float64:
 		err = f.writeCtx.WriteFloat64Slice(*val, true, true)
 	case *[]bool:
 		err = f.writeCtx.WriteBoolSlice(*val, true, true)
+	case *map[string]string:
+		err = f.writeCtx.WriteStringStringMap(*val, true, true)
+	case *map[string]int64:
+		err = f.writeCtx.WriteStringInt64Map(*val, true, true)
+	case *map[string]int:
+		err = f.writeCtx.WriteStringIntMap(*val, true, true)
+	case *map[string]float64:
+		err = f.writeCtx.WriteStringFloat64Map(*val, true, true)
+	case *map[string]bool:
+		err = f.writeCtx.WriteStringBoolMap(*val, true, true)
+	case *map[int32]int32:
+		err = f.writeCtx.WriteInt32Int32Map(*val, true, true)
+	case *map[int64]int64:
+		err = f.writeCtx.WriteInt64Int64Map(*val, true, true)
+	case *map[int]int:
+		err = f.writeCtx.WriteIntIntMap(*val, true, true)
 	default:
 		// Fall back to reflection-based serialization
 		// Reuse v (already boxed) and .Elem() to get underlying value without copy
@@ -605,31 +631,57 @@ func Deserialize[T any](f *Fory, data []byte, target *T) error {
 	// Fast path: type switch for common types (Go compiler can optimize this)
 	switch t := any(target).(type) {
 	case *bool:
-		return f.readCtx.ReadIntoBoolValue(t, true, true)
+		return f.readCtx.ReadBoolInto(t, true, true)
 	case *int8:
-		return f.readCtx.ReadIntoInt8Value(t, true, true)
+		return f.readCtx.ReadInt8Into(t, true, true)
 	case *int16:
-		return f.readCtx.ReadIntoInt16Value(t, true, true)
+		return f.readCtx.ReadInt16Into(t, true, true)
 	case *int32:
-		return f.readCtx.ReadIntoInt32Value(t, true, true)
+		return f.readCtx.ReadInt32Into(t, true, true)
 	case *int64:
-		return f.readCtx.ReadIntoInt64Value(t, true, true)
+		return f.readCtx.ReadInt64Into(t, true, true)
+	case *int:
+		return f.readCtx.ReadIntInto(t, true, true)
 	case *float32:
-		return f.readCtx.ReadIntoFloat32Value(t, true, true)
+		return f.readCtx.ReadFloat32Into(t, true, true)
 	case *float64:
-		return f.readCtx.ReadIntoFloat64Value(t, true, true)
+		return f.readCtx.ReadFloat64Into(t, true, true)
 	case *string:
-		return f.readCtx.ReadIntoStringValue(t, true, true)
+		return f.readCtx.ReadStringInto(t, true, true)
 	case *[]byte:
-		return f.readCtx.ReadIntoByteSlice(t, true, true)
+		return f.readCtx.ReadByteSliceInto(t, true, true)
+	case *[]int8:
+		return f.readCtx.ReadInt8SliceInto(t, true, true)
+	case *[]int16:
+		return f.readCtx.ReadInt16SliceInto(t, true, true)
 	case *[]int32:
-		return f.readCtx.ReadIntoInt32Slice(t, true, true)
+		return f.readCtx.ReadInt32SliceInto(t, true, true)
 	case *[]int64:
-		return f.readCtx.ReadIntoInt64Slice(t, true, true)
+		return f.readCtx.ReadInt64SliceInto(t, true, true)
+	case *[]int:
+		return f.readCtx.ReadIntSliceInto(t, true, true)
+	case *[]float32:
+		return f.readCtx.ReadFloat32SliceInto(t, true, true)
 	case *[]float64:
-		return f.readCtx.ReadIntoFloat64Slice(t, true, true)
+		return f.readCtx.ReadFloat64SliceInto(t, true, true)
 	case *[]bool:
-		return f.readCtx.ReadIntoBoolSlice(t, true, true)
+		return f.readCtx.ReadBoolSliceInto(t, true, true)
+	case *map[string]string:
+		return f.readCtx.ReadStringStringMapInto(t, true, true)
+	case *map[string]int64:
+		return f.readCtx.ReadStringInt64MapInto(t, true, true)
+	case *map[string]int:
+		return f.readCtx.ReadStringIntMapInto(t, true, true)
+	case *map[string]float64:
+		return f.readCtx.ReadStringFloat64MapInto(t, true, true)
+	case *map[string]bool:
+		return f.readCtx.ReadStringBoolMapInto(t, true, true)
+	case *map[int32]int32:
+		return f.readCtx.ReadInt32Int32MapInto(t, true, true)
+	case *map[int64]int64:
+		return f.readCtx.ReadInt64Int64MapInto(t, true, true)
+	case *map[int]int:
+		return f.readCtx.ReadIntIntMapInto(t, true, true)
 	}
 
 	// Slow path: use reflection-based deserialization

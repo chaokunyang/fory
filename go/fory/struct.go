@@ -35,7 +35,7 @@ type FieldInfo struct {
 	Name         string
 	Offset       uintptr
 	Type         reflect.Type
-	FastType     FastType
+	ConcreteType ConcreteTypeId
 	Serializer   Serializer
 	Referencable bool
 	FieldIndex   int // -1 if field doesn't exist in current struct (for compatible mode)
@@ -101,9 +101,9 @@ func (s *structSerializer) WriteReflect(ctx *WriteContext, value reflect.Value) 
 
 	for _, field := range s.fields {
 		// Fast path for primitive types using unsafe access
-		if canUseUnsafe && field.FastType != FastTypeOther && !field.Referencable {
+		if canUseUnsafe && field.ConcreteType != ConcreteTypeOther && !field.Referencable {
 			fieldPtr := unsafe.Add(ptr, field.Offset)
-			WriteFast(buf, fieldPtr, field.FastType)
+			WriteFast(buf, fieldPtr, field.ConcreteType)
 			continue
 		}
 
@@ -176,8 +176,8 @@ func (s *structSerializer) ReadReflect(ctx *ReadContext, type_ reflect.Type, val
 		fieldPtr := unsafe.Add(ptr, field.Offset)
 
 		// Fast path for primitive types using switch
-		if field.FastType != FastTypeOther && !field.Referencable {
-			ReadFast(buf, fieldPtr, field.FastType)
+		if field.ConcreteType != ConcreteTypeOther && !field.Referencable {
+			ReadFast(buf, fieldPtr, field.ConcreteType)
 			continue
 		}
 
@@ -237,8 +237,8 @@ func (s *structSerializer) ReadCompatible(ctx *ReadContext, type_ reflect.Type, 
 		fieldPtr := unsafe.Add(ptr, localField.Offset)
 
 		// Fast path for primitive types
-		if localField.FastType != FastTypeOther && !localField.Referencable {
-			ReadFast(buf, fieldPtr, localField.FastType)
+		if localField.ConcreteType != ConcreteTypeOther && !localField.Referencable {
+			ReadFast(buf, fieldPtr, localField.ConcreteType)
 			continue
 		}
 
@@ -323,17 +323,15 @@ func (s *structSerializer) initFieldsFromContext(ctx interface{ TypeResolver() *
 			}
 		}
 
-		fieldInfo := &FieldInfo{
-			Name:         SnakeCase(field.Name),
-			Offset:       field.Offset,
-			Type:         fieldType,
-			FastType:     GetFastType(fieldType),
-			Serializer:   fieldSerializer,
-			Referencable: nullable(originalFieldType),
-			FieldIndex:   i,
-		}
-
-		fields = append(fields, fieldInfo)
+	fieldInfo := &FieldInfo{
+		Name:         SnakeCase(field.Name),
+		Offset:       field.Offset,
+		Type:         fieldType,
+		ConcreteType: GetConcreteTypeId(fieldType),
+		Serializer:   fieldSerializer,
+		Referencable: nullable(originalFieldType),
+		FieldIndex:   i,
+	}		fields = append(fields, fieldInfo)
 		fieldNames = append(fieldNames, fieldInfo.Name)
 		serializers = append(serializers, fieldSerializer)
 	}
@@ -414,17 +412,15 @@ func (s *structSerializer) initFieldsFromDefsWithResolver(typeResolver *typeReso
 			fieldType = remoteType
 		}
 
-		fieldInfo := &FieldInfo{
-			Name:         def.name,
-			Offset:       offset,
-			Type:         fieldType,
-			FastType:     GetFastType(fieldType),
-			Serializer:   fieldSerializer,
-			Referencable: def.nullable,
-			FieldIndex:   fieldIndex,
-		}
-
-		fields = append(fields, fieldInfo)
+	fieldInfo := &FieldInfo{
+		Name:         def.name,
+		Offset:       offset,
+		Type:         fieldType,
+		ConcreteType: GetConcreteTypeId(fieldType),
+		Serializer:   fieldSerializer,
+		Referencable: def.nullable,
+		FieldIndex:   fieldIndex,
+	}		fields = append(fields, fieldInfo)
 	}
 
 	s.fields = fields

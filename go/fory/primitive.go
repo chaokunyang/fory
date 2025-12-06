@@ -20,126 +20,62 @@ package fory
 import (
 	"fmt"
 	"reflect"
+	"strconv"
 	"unsafe"
 )
 
-// ============================================================================
-// FastType for switch-based fast path (avoids interface virtual method cost)
-// ============================================================================
-
-// FastType for switch-based fast path (avoids interface virtual method cost)
-type FastType uint8
-
-const (
-	FastTypeOther FastType = iota
-	FastTypeBool
-	FastTypeInt8
-	FastTypeInt16
-	FastTypeInt32
-	FastTypeInt64
-	FastTypeFloat32
-	FastTypeFloat64
-	FastTypeString
-)
-
-// GetFastType returns the FastType for a reflect.Type
-func GetFastType(t reflect.Type) FastType {
-	switch t.Kind() {
-	case reflect.Bool:
-		return FastTypeBool
-	case reflect.Int8:
-		return FastTypeInt8
-	case reflect.Int16:
-		return FastTypeInt16
-	case reflect.Int32:
-		return FastTypeInt32
-	case reflect.Int64:
-		return FastTypeInt64
-	case reflect.Float32:
-		return FastTypeFloat32
-	case reflect.Float64:
-		return FastTypeFloat64
-	case reflect.String:
-		return FastTypeString
-	default:
-		return FastTypeOther
-	}
-}
-
-// GetFastTypeAndId returns both FastType and TypeId for a reflect.Type
-func GetFastTypeAndId(t reflect.Type) (FastType, TypeId) {
-	switch t.Kind() {
-	case reflect.Bool:
-		return FastTypeBool, BOOL
-	case reflect.Int8:
-		return FastTypeInt8, INT8
-	case reflect.Int16:
-		return FastTypeInt16, INT16
-	case reflect.Int32:
-		return FastTypeInt32, INT32
-	case reflect.Int64:
-		return FastTypeInt64, INT64
-	case reflect.Float32:
-		return FastTypeFloat32, FLOAT
-	case reflect.Float64:
-		return FastTypeFloat64, DOUBLE
-	case reflect.String:
-		return FastTypeString, STRING
-	default:
-		return FastTypeOther, 0
-	}
-}
-
-// IsPrimitiveTypeId checks if a type ID is a primitive type
-func IsPrimitiveTypeId(typeId TypeId) bool {
-	switch typeId {
-	case BOOL, INT8, INT16, INT32, INT64, FLOAT, DOUBLE, STRING:
-		return true
-	default:
-		return false
-	}
-}
-
-// WriteFast writes a value using fast path based on FastType
-func WriteFast(buf *ByteBuffer, ptr unsafe.Pointer, ft FastType) {
-	switch ft {
-	case FastTypeBool:
+// WriteFast writes a value using fast path based on ConcreteTypeId
+func WriteFast(buf *ByteBuffer, ptr unsafe.Pointer, ct ConcreteTypeId) {
+	switch ct {
+	case ConcreteTypeBool:
 		buf.WriteBool(*(*bool)(ptr))
-	case FastTypeInt8:
+	case ConcreteTypeInt8:
 		buf.WriteByte_(*(*byte)(ptr))
-	case FastTypeInt16:
+	case ConcreteTypeInt16:
 		buf.WriteInt16(*(*int16)(ptr))
-	case FastTypeInt32:
+	case ConcreteTypeInt32:
 		buf.WriteVarint32(*(*int32)(ptr))
-	case FastTypeInt64:
+	case ConcreteTypeInt:
+		if strconv.IntSize == 64 {
+			buf.WriteVarint64(int64(*(*int)(ptr)))
+		} else {
+			buf.WriteVarint32(int32(*(*int)(ptr)))
+		}
+	case ConcreteTypeInt64:
 		buf.WriteVarint64(*(*int64)(ptr))
-	case FastTypeFloat32:
+	case ConcreteTypeFloat32:
 		buf.WriteFloat32(*(*float32)(ptr))
-	case FastTypeFloat64:
+	case ConcreteTypeFloat64:
 		buf.WriteFloat64(*(*float64)(ptr))
-	case FastTypeString:
+	case ConcreteTypeString:
 		writeString(buf, *(*string)(ptr))
 	}
 }
 
-// ReadFast reads a value using fast path based on FastType
-func ReadFast(buf *ByteBuffer, ptr unsafe.Pointer, ft FastType) {
-	switch ft {
-	case FastTypeBool:
+// ReadFast reads a value using fast path based on ConcreteTypeId
+func ReadFast(buf *ByteBuffer, ptr unsafe.Pointer, ct ConcreteTypeId) {
+	switch ct {
+	case ConcreteTypeBool:
 		*(*bool)(ptr) = buf.ReadBool()
-	case FastTypeInt8:
+	case ConcreteTypeInt8:
 		*(*int8)(ptr) = int8(buf.ReadByte_())
-	case FastTypeInt16:
+	case ConcreteTypeInt16:
 		*(*int16)(ptr) = buf.ReadInt16()
-	case FastTypeInt32:
+	case ConcreteTypeInt32:
 		*(*int32)(ptr) = buf.ReadVarint32()
-	case FastTypeInt64:
+	case ConcreteTypeInt:
+		if strconv.IntSize == 64 {
+			*(*int)(ptr) = int(buf.ReadVarint64())
+		} else {
+			*(*int)(ptr) = int(buf.ReadVarint32())
+		}
+	case ConcreteTypeInt64:
 		*(*int64)(ptr) = buf.ReadVarint64()
-	case FastTypeFloat32:
+	case ConcreteTypeFloat32:
 		*(*float32)(ptr) = buf.ReadFloat32()
-	case FastTypeFloat64:
+	case ConcreteTypeFloat64:
 		*(*float64)(ptr) = buf.ReadFloat64()
-	case FastTypeString:
+	case ConcreteTypeString:
 		*(*string)(ptr) = readString(buf)
 	}
 }

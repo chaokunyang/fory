@@ -17,6 +17,8 @@
 
 package fory
 
+import "reflect"
+
 type TypeId = int16
 
 const (
@@ -98,19 +100,162 @@ const (
 	FLOAT64_ARRAY = 37
 
 	// UINT8 Unsigned 8-bit little-endian integer
-	UINT8 = 100 // Not in mapping table, assign a higher value
+	UINT8 = 64
 	// UINT16 Unsigned 16-bit little-endian integer
-	UINT16 = 101
+	UINT16 = 65
 	// UINT32 Unsigned 32-bit little-endian integer
-	UINT32 = 102
+	UINT32 = 66
 	// UINT64 Unsigned 64-bit little-endian integer
-	UINT64 = 103
+	UINT64 = 67
 )
 
 // IsNamespacedType checks whether the given type ID is a namespace type
 func IsNamespacedType(typeID TypeId) bool {
 	switch typeID & 0xFF {
 	case NAMED_EXT, NAMED_ENUM, NAMED_STRUCT, NAMED_COMPATIBLE_STRUCT:
+		return true
+	default:
+		return false
+	}
+}
+
+// ============================================================================
+// ConcreteTypeId for switch-based fast path (avoids interface virtual method cost)
+// ============================================================================
+
+// ConcreteTypeId identifies concrete Go types for optimized serialization dispatch
+type ConcreteTypeId uint8
+
+const (
+	ConcreteTypeOther ConcreteTypeId = iota
+	ConcreteTypeBool
+	ConcreteTypeInt8
+	ConcreteTypeInt16
+	ConcreteTypeInt32
+	ConcreteTypeInt64
+	ConcreteTypeInt
+	ConcreteTypeFloat32
+	ConcreteTypeFloat64
+	ConcreteTypeString
+	ConcreteTypeByteSlice
+	ConcreteTypeInt8Slice
+	ConcreteTypeInt16Slice
+	ConcreteTypeInt32Slice
+	ConcreteTypeInt64Slice
+	ConcreteTypeIntSlice
+	ConcreteTypeFloat32Slice
+	ConcreteTypeFloat64Slice
+	ConcreteTypeBoolSlice
+	ConcreteTypeStringStringMap
+	ConcreteTypeStringInt64Map
+	ConcreteTypeStringIntMap
+	ConcreteTypeStringFloat64Map
+	ConcreteTypeStringBoolMap
+	ConcreteTypeInt32Int32Map
+	ConcreteTypeInt64Int64Map
+	ConcreteTypeIntIntMap
+)
+
+// GetConcreteTypeId returns the ConcreteTypeId for a reflect.Type
+func GetConcreteTypeId(t reflect.Type) ConcreteTypeId {
+	switch t.Kind() {
+	case reflect.Bool:
+		return ConcreteTypeBool
+	case reflect.Int8:
+		return ConcreteTypeInt8
+	case reflect.Int16:
+		return ConcreteTypeInt16
+	case reflect.Int32:
+		return ConcreteTypeInt32
+	case reflect.Int64:
+		return ConcreteTypeInt64
+	case reflect.Int:
+		return ConcreteTypeInt
+	case reflect.Float32:
+		return ConcreteTypeFloat32
+	case reflect.Float64:
+		return ConcreteTypeFloat64
+	case reflect.String:
+		return ConcreteTypeString
+	case reflect.Slice:
+		// Check for specific slice types
+		switch t.Elem().Kind() {
+		case reflect.Uint8:
+			return ConcreteTypeByteSlice
+		case reflect.Int8:
+			return ConcreteTypeInt8Slice
+		case reflect.Int16:
+			return ConcreteTypeInt16Slice
+		case reflect.Int32:
+			return ConcreteTypeInt32Slice
+		case reflect.Int64:
+			return ConcreteTypeInt64Slice
+		case reflect.Int:
+			return ConcreteTypeIntSlice
+		case reflect.Float32:
+			return ConcreteTypeFloat32Slice
+		case reflect.Float64:
+			return ConcreteTypeFloat64Slice
+		case reflect.Bool:
+			return ConcreteTypeBoolSlice
+		}
+		return ConcreteTypeOther
+	case reflect.Map:
+		// Check for specific common map types
+		if t.Key().Kind() == reflect.String {
+			switch t.Elem().Kind() {
+			case reflect.String:
+				return ConcreteTypeStringStringMap
+			case reflect.Int64:
+				return ConcreteTypeStringInt64Map
+			case reflect.Int:
+				return ConcreteTypeStringIntMap
+			case reflect.Float64:
+				return ConcreteTypeStringFloat64Map
+			case reflect.Bool:
+				return ConcreteTypeStringBoolMap
+			}
+		} else if t.Key().Kind() == reflect.Int32 && t.Elem().Kind() == reflect.Int32 {
+			return ConcreteTypeInt32Int32Map
+		} else if t.Key().Kind() == reflect.Int64 && t.Elem().Kind() == reflect.Int64 {
+			return ConcreteTypeInt64Int64Map
+		} else if t.Key().Kind() == reflect.Int && t.Elem().Kind() == reflect.Int {
+			return ConcreteTypeIntIntMap
+		}
+		return ConcreteTypeOther
+	default:
+		return ConcreteTypeOther
+	}
+}
+
+// GetConcreteTypeIdAndTypeId returns both ConcreteTypeId and TypeId for a reflect.Type
+func GetConcreteTypeIdAndTypeId(t reflect.Type) (ConcreteTypeId, TypeId) {
+	switch t.Kind() {
+	case reflect.Bool:
+		return ConcreteTypeBool, BOOL
+	case reflect.Int8:
+		return ConcreteTypeInt8, INT8
+	case reflect.Int16:
+		return ConcreteTypeInt16, INT16
+	case reflect.Int32:
+		return ConcreteTypeInt32, INT32
+	case reflect.Int64:
+		return ConcreteTypeInt64, INT64
+	case reflect.Float32:
+		return ConcreteTypeFloat32, FLOAT
+	case reflect.Float64:
+		return ConcreteTypeFloat64, DOUBLE
+	case reflect.String:
+		return ConcreteTypeString, STRING
+	default:
+		return ConcreteTypeOther, 0
+	}
+}
+
+// IsPrimitiveTypeId checks if a type ID is a primitive type
+func IsPrimitiveTypeId(typeId TypeId) bool {
+	switch typeId {
+	case BOOL, INT8, INT16, INT32, INT64, FLOAT, DOUBLE, STRING:
 		return true
 	default:
 		return false

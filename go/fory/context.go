@@ -260,11 +260,7 @@ func (c *WriteContext) WriteBoolSlice(value []bool, writeRefInfo, writeTypeInfo 
 	if writeTypeInfo {
 		c.WriteTypeId(BOOL_ARRAY)
 	}
-	c.buffer.WriteLength(len(value))
-	for _, elem := range value {
-		c.buffer.WriteBool(elem)
-	}
-	return nil
+	return writeBoolSlice(c.buffer, value)
 }
 
 // WriteInt8Slice writes []int8 with ref/type info
@@ -275,11 +271,7 @@ func (c *WriteContext) WriteInt8Slice(value []int8, writeRefInfo, writeTypeInfo 
 	if writeTypeInfo {
 		c.WriteTypeId(INT8_ARRAY)
 	}
-	c.buffer.WriteLength(len(value))
-	for _, elem := range value {
-		c.buffer.WriteInt8(elem)
-	}
-	return nil
+	return writeInt8Slice(c.buffer, value)
 }
 
 // WriteInt16Slice writes []int16 with ref/type info
@@ -290,12 +282,7 @@ func (c *WriteContext) WriteInt16Slice(value []int16, writeRefInfo, writeTypeInf
 	if writeTypeInfo {
 		c.WriteTypeId(INT16_ARRAY)
 	}
-	size := len(value) * 2
-	c.buffer.WriteLength(size)
-	for _, elem := range value {
-		c.buffer.WriteInt16(elem)
-	}
-	return nil
+	return writeInt16Slice(c.buffer, value)
 }
 
 // WriteInt32Slice writes []int32 with ref/type info
@@ -306,12 +293,7 @@ func (c *WriteContext) WriteInt32Slice(value []int32, writeRefInfo, writeTypeInf
 	if writeTypeInfo {
 		c.WriteTypeId(INT32_ARRAY)
 	}
-	size := len(value) * 4
-	c.buffer.WriteLength(size)
-	for _, elem := range value {
-		c.buffer.WriteInt32(elem)
-	}
-	return nil
+	return writeInt32Slice(c.buffer, value)
 }
 
 // WriteInt64Slice writes []int64 with ref/type info
@@ -322,12 +304,7 @@ func (c *WriteContext) WriteInt64Slice(value []int64, writeRefInfo, writeTypeInf
 	if writeTypeInfo {
 		c.WriteTypeId(INT64_ARRAY)
 	}
-	size := len(value) * 8
-	c.buffer.WriteLength(size)
-	for _, elem := range value {
-		c.buffer.WriteInt64(elem)
-	}
-	return nil
+	return writeInt64Slice(c.buffer, value)
 }
 
 // WriteIntSlice writes []int with ref/type info
@@ -342,20 +319,7 @@ func (c *WriteContext) WriteIntSlice(value []int, writeRefInfo, writeTypeInfo bo
 			c.WriteTypeId(INT32_ARRAY)
 		}
 	}
-	if strconv.IntSize == 64 {
-		size := len(value) * 8
-		c.buffer.WriteLength(size)
-		for _, elem := range value {
-			c.buffer.WriteInt64(int64(elem))
-		}
-	} else {
-		size := len(value) * 4
-		c.buffer.WriteLength(size)
-		for _, elem := range value {
-			c.buffer.WriteInt32(int32(elem))
-		}
-	}
-	return nil
+	return writeIntSlice(c.buffer, value)
 }
 
 // WriteFloat32Slice writes []float32 with ref/type info
@@ -366,12 +330,7 @@ func (c *WriteContext) WriteFloat32Slice(value []float32, writeRefInfo, writeTyp
 	if writeTypeInfo {
 		c.WriteTypeId(FLOAT32_ARRAY)
 	}
-	size := len(value) * 4
-	c.buffer.WriteLength(size)
-	for _, elem := range value {
-		c.buffer.WriteFloat32(elem)
-	}
-	return nil
+	return writeFloat32Slice(c.buffer, value)
 }
 
 // WriteFloat64Slice writes []float64 with ref/type info
@@ -382,12 +341,7 @@ func (c *WriteContext) WriteFloat64Slice(value []float64, writeRefInfo, writeTyp
 	if writeTypeInfo {
 		c.WriteTypeId(FLOAT64_ARRAY)
 	}
-	size := len(value) * 8
-	c.buffer.WriteLength(size)
-	for _, elem := range value {
-		c.buffer.WriteFloat64(elem)
-	}
-	return nil
+	return writeFloat64Slice(c.buffer, value)
 }
 
 // WriteByteSlice writes []byte with ref/type info
@@ -918,12 +872,7 @@ func (c *ReadContext) ReadBoolSlice(readRefInfo, readTypeInfo bool) ([]bool, err
 	if readTypeInfo {
 		_ = c.buffer.ReadInt16()
 	}
-	length := c.buffer.ReadLength()
-	result := make([]bool, length)
-	for i := 0; i < length; i++ {
-		result[i] = c.buffer.ReadBool()
-	}
-	return result, nil
+	return readBoolSlice(c.buffer)
 }
 
 // ReadBoolSliceInto reads []bool into target, reusing capacity when possible
@@ -934,16 +883,7 @@ func (c *ReadContext) ReadBoolSliceInto(target *[]bool, readRefInfo, readTypeInf
 	if readTypeInfo {
 		_ = c.buffer.ReadInt16()
 	}
-	length := c.buffer.ReadLength()
-	if cap(*target) >= length {
-		*target = (*target)[:length]
-	} else {
-		*target = make([]bool, length)
-	}
-	for i := 0; i < length; i++ {
-		(*target)[i] = c.buffer.ReadBool()
-	}
-	return nil
+	return readBoolSliceInto(c.buffer, target)
 }
 
 // ReadInt8Slice reads []int8 with optional ref/type info
@@ -954,12 +894,7 @@ func (c *ReadContext) ReadInt8Slice(readRefInfo, readTypeInfo bool) ([]int8, err
 	if readTypeInfo {
 		_ = c.buffer.ReadInt16()
 	}
-	length := c.buffer.ReadLength()
-	result := make([]int8, length)
-	for i := 0; i < length; i++ {
-		result[i] = c.buffer.ReadInt8()
-	}
-	return result, nil
+	return readInt8Slice(c.buffer)
 }
 
 // ReadInt8SliceInto reads []int8 into target, reusing capacity when possible
@@ -970,16 +905,7 @@ func (c *ReadContext) ReadInt8SliceInto(target *[]int8, readRefInfo, readTypeInf
 	if readTypeInfo {
 		_ = c.buffer.ReadInt16()
 	}
-	length := c.buffer.ReadLength()
-	if cap(*target) >= length {
-		*target = (*target)[:length]
-	} else {
-		*target = make([]int8, length)
-	}
-	for i := 0; i < length; i++ {
-		(*target)[i] = c.buffer.ReadInt8()
-	}
-	return nil
+	return readInt8SliceInto(c.buffer, target)
 }
 
 // ReadInt16Slice reads []int16 with optional ref/type info
@@ -990,13 +916,7 @@ func (c *ReadContext) ReadInt16Slice(readRefInfo, readTypeInfo bool) ([]int16, e
 	if readTypeInfo {
 		_ = c.buffer.ReadInt16()
 	}
-	size := c.buffer.ReadLength()
-	length := size / 2
-	result := make([]int16, length)
-	for i := 0; i < length; i++ {
-		result[i] = c.buffer.ReadInt16()
-	}
-	return result, nil
+	return readInt16Slice(c.buffer)
 }
 
 // ReadInt16SliceInto reads []int16 into target, reusing capacity when possible
@@ -1007,17 +927,7 @@ func (c *ReadContext) ReadInt16SliceInto(target *[]int16, readRefInfo, readTypeI
 	if readTypeInfo {
 		_ = c.buffer.ReadInt16()
 	}
-	size := c.buffer.ReadLength()
-	length := size / 2
-	if cap(*target) >= length {
-		*target = (*target)[:length]
-	} else {
-		*target = make([]int16, length)
-	}
-	for i := 0; i < length; i++ {
-		(*target)[i] = c.buffer.ReadInt16()
-	}
-	return nil
+	return readInt16SliceInto(c.buffer, target)
 }
 
 // ReadInt32Slice reads []int32 with optional ref/type info
@@ -1028,13 +938,7 @@ func (c *ReadContext) ReadInt32Slice(readRefInfo, readTypeInfo bool) ([]int32, e
 	if readTypeInfo {
 		_ = c.buffer.ReadInt16()
 	}
-	size := c.buffer.ReadLength()
-	length := size / 4
-	result := make([]int32, length)
-	for i := 0; i < length; i++ {
-		result[i] = c.buffer.ReadInt32()
-	}
-	return result, nil
+	return readInt32Slice(c.buffer)
 }
 
 // ReadInt32SliceInto reads []int32 into target, reusing capacity when possible
@@ -1045,17 +949,7 @@ func (c *ReadContext) ReadInt32SliceInto(target *[]int32, readRefInfo, readTypeI
 	if readTypeInfo {
 		_ = c.buffer.ReadInt16()
 	}
-	size := c.buffer.ReadLength()
-	length := size / 4
-	if cap(*target) >= length {
-		*target = (*target)[:length]
-	} else {
-		*target = make([]int32, length)
-	}
-	for i := 0; i < length; i++ {
-		(*target)[i] = c.buffer.ReadInt32()
-	}
-	return nil
+	return readInt32SliceInto(c.buffer, target)
 }
 
 // ReadInt64Slice reads []int64 with optional ref/type info
@@ -1066,13 +960,7 @@ func (c *ReadContext) ReadInt64Slice(readRefInfo, readTypeInfo bool) ([]int64, e
 	if readTypeInfo {
 		_ = c.buffer.ReadInt16()
 	}
-	size := c.buffer.ReadLength()
-	length := size / 8
-	result := make([]int64, length)
-	for i := 0; i < length; i++ {
-		result[i] = c.buffer.ReadInt64()
-	}
-	return result, nil
+	return readInt64Slice(c.buffer)
 }
 
 // ReadInt64SliceInto reads []int64 into target, reusing capacity when possible
@@ -1083,17 +971,7 @@ func (c *ReadContext) ReadInt64SliceInto(target *[]int64, readRefInfo, readTypeI
 	if readTypeInfo {
 		_ = c.buffer.ReadInt16()
 	}
-	size := c.buffer.ReadLength()
-	length := size / 8
-	if cap(*target) >= length {
-		*target = (*target)[:length]
-	} else {
-		*target = make([]int64, length)
-	}
-	for i := 0; i < length; i++ {
-		(*target)[i] = c.buffer.ReadInt64()
-	}
-	return nil
+	return readInt64SliceInto(c.buffer, target)
 }
 
 // ReadIntSlice reads []int with optional ref/type info
@@ -1104,22 +982,7 @@ func (c *ReadContext) ReadIntSlice(readRefInfo, readTypeInfo bool) ([]int, error
 	if readTypeInfo {
 		_ = c.buffer.ReadInt16()
 	}
-	size := c.buffer.ReadLength()
-	if strconv.IntSize == 64 {
-		length := size / 8
-		result := make([]int, length)
-		for i := 0; i < length; i++ {
-			result[i] = int(c.buffer.ReadInt64())
-		}
-		return result, nil
-	} else {
-		length := size / 4
-		result := make([]int, length)
-		for i := 0; i < length; i++ {
-			result[i] = int(c.buffer.ReadInt32())
-		}
-		return result, nil
-	}
+	return readIntSlice(c.buffer)
 }
 
 // ReadIntSliceInto reads []int into target, reusing capacity when possible
@@ -1130,29 +993,7 @@ func (c *ReadContext) ReadIntSliceInto(target *[]int, readRefInfo, readTypeInfo 
 	if readTypeInfo {
 		_ = c.buffer.ReadInt16()
 	}
-	size := c.buffer.ReadLength()
-	if strconv.IntSize == 64 {
-		length := size / 8
-		if cap(*target) >= length {
-			*target = (*target)[:length]
-		} else {
-			*target = make([]int, length)
-		}
-		for i := 0; i < length; i++ {
-			(*target)[i] = int(c.buffer.ReadInt64())
-		}
-	} else {
-		length := size / 4
-		if cap(*target) >= length {
-			*target = (*target)[:length]
-		} else {
-			*target = make([]int, length)
-		}
-		for i := 0; i < length; i++ {
-			(*target)[i] = int(c.buffer.ReadInt32())
-		}
-	}
-	return nil
+	return readIntSliceInto(c.buffer, target)
 }
 
 // ReadFloat32Slice reads []float32 with optional ref/type info
@@ -1163,13 +1004,7 @@ func (c *ReadContext) ReadFloat32Slice(readRefInfo, readTypeInfo bool) ([]float3
 	if readTypeInfo {
 		_ = c.buffer.ReadInt16()
 	}
-	size := c.buffer.ReadLength()
-	length := size / 4
-	result := make([]float32, length)
-	for i := 0; i < length; i++ {
-		result[i] = c.buffer.ReadFloat32()
-	}
-	return result, nil
+	return readFloat32Slice(c.buffer)
 }
 
 // ReadFloat32SliceInto reads []float32 into target, reusing capacity when possible
@@ -1180,17 +1015,7 @@ func (c *ReadContext) ReadFloat32SliceInto(target *[]float32, readRefInfo, readT
 	if readTypeInfo {
 		_ = c.buffer.ReadInt16()
 	}
-	size := c.buffer.ReadLength()
-	length := size / 4
-	if cap(*target) >= length {
-		*target = (*target)[:length]
-	} else {
-		*target = make([]float32, length)
-	}
-	for i := 0; i < length; i++ {
-		(*target)[i] = c.buffer.ReadFloat32()
-	}
-	return nil
+	return readFloat32SliceInto(c.buffer, target)
 }
 
 // ReadFloat64Slice reads []float64 with optional ref/type info
@@ -1201,13 +1026,7 @@ func (c *ReadContext) ReadFloat64Slice(readRefInfo, readTypeInfo bool) ([]float6
 	if readTypeInfo {
 		_ = c.buffer.ReadInt16()
 	}
-	size := c.buffer.ReadLength()
-	length := size / 8
-	result := make([]float64, length)
-	for i := 0; i < length; i++ {
-		result[i] = c.buffer.ReadFloat64()
-	}
-	return result, nil
+	return readFloat64Slice(c.buffer)
 }
 
 // ReadFloat64SliceInto reads []float64 into target, reusing capacity when possible
@@ -1218,17 +1037,7 @@ func (c *ReadContext) ReadFloat64SliceInto(target *[]float64, readRefInfo, readT
 	if readTypeInfo {
 		_ = c.buffer.ReadInt16()
 	}
-	size := c.buffer.ReadLength()
-	length := size / 8
-	if cap(*target) >= length {
-		*target = (*target)[:length]
-	} else {
-		*target = make([]float64, length)
-	}
-	for i := 0; i < length; i++ {
-		(*target)[i] = c.buffer.ReadFloat64()
-	}
-	return nil
+	return readFloat64SliceInto(c.buffer, target)
 }
 
 // ReadByteSlice reads []byte with optional ref/type info

@@ -10,6 +10,30 @@ This benchmark compares serialization/deserialization performance between Apache
 
 Note: Protobuf is fetched automatically via CMake FetchContent, so no manual installation is required.
 
+## Benchmark Results
+
+### Hardware & OS Info
+
+| Key                  | Value         |
+| -------------------- | ------------- |
+| OS                   | Darwin 24.5.0 |
+| Machine              | arm64         |
+| Processor            | arm           |
+| CPU Cores (Physical) | 12            |
+| CPU Cores (Logical)  | 12            |
+| Total RAM (GB)       | 48.0          |
+
+### Throughput Results (ops/sec)
+
+| Datatype     | Operation   | Fory TPS   | Protobuf TPS | Faster      |
+| ------------ | ----------- | ---------- | ------------ | ----------- |
+| Mediacontent | Serialize   | 2,312,522  | 501,867      | Fory (4.6x) |
+| Mediacontent | Deserialize | 769,157    | 398,960      | Fory (1.9x) |
+| Sample       | Serialize   | 5,046,250  | 3,182,176    | Fory (1.6x) |
+| Sample       | Deserialize | 941,637    | 721,614      | Fory (1.3x) |
+| Struct       | Serialize   | 21,424,386 | 6,024,856    | Fory (3.6x) |
+| Struct       | Deserialize | 7,904,533  | 6,515,853    | Fory (1.2x) |
+
 ## Quick Start
 
 Run the complete benchmark pipeline (build, run, generate report):

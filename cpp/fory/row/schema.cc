@@ -92,7 +92,7 @@ Result<void, Error> WriteField(Buffer &buffer, const Field &field) {
 
 Result<FieldPtr, Error> ReadField(Buffer &buffer) {
   Error error;
-  uint8_t header_byte = buffer.ReadUint8(&error);
+  uint8_t header_byte = buffer.ReadUint8(error);
   if (FORY_PREDICT_FALSE(!error.ok())) {
     return Unexpected(std::move(error));
   }
@@ -103,7 +103,7 @@ Result<FieldPtr, Error> ReadField(Buffer &buffer) {
 
   size_t name_size;
   if (name_size_minus1 == FIELD_NAME_SIZE_THRESHOLD) {
-    uint32_t extra = buffer.ReadVarUint32(&error);
+    uint32_t extra = buffer.ReadVarUint32(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -113,7 +113,7 @@ Result<FieldPtr, Error> ReadField(Buffer &buffer) {
   }
 
   std::vector<uint8_t> name_bytes(name_size);
-  buffer.ReadBytes(name_bytes.data(), static_cast<uint32_t>(name_size), &error);
+  buffer.ReadBytes(name_bytes.data(), static_cast<uint32_t>(name_size), error);
   if (FORY_PREDICT_FALSE(!error.ok())) {
     return Unexpected(std::move(error));
   }
@@ -153,7 +153,7 @@ Result<void, Error> WriteType(Buffer &buffer, const DataType &type) {
 
 Result<DataTypePtr, Error> ReadType(Buffer &buffer) {
   Error error;
-  uint8_t type_id_byte = buffer.ReadUint8(&error);
+  uint8_t type_id_byte = buffer.ReadUint8(error);
   if (FORY_PREDICT_FALSE(!error.ok())) {
     return Unexpected(std::move(error));
   }
@@ -187,11 +187,11 @@ Result<DataTypePtr, Error> ReadType(Buffer &buffer) {
   case TypeId::LOCAL_DATE:
     return date32();
   case TypeId::DECIMAL: {
-    uint8_t precision = buffer.ReadUint8(&error);
+    uint8_t precision = buffer.ReadUint8(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
-    uint8_t scale = buffer.ReadUint8(&error);
+    uint8_t scale = buffer.ReadUint8(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -209,7 +209,7 @@ Result<DataTypePtr, Error> ReadType(Buffer &buffer) {
         std::make_shared<MapType>(key_field->type(), item_field->type()));
   }
   case TypeId::STRUCT: {
-    uint32_t struct_num_fields = buffer.ReadVarUint32(&error);
+    uint32_t struct_num_fields = buffer.ReadVarUint32(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -257,7 +257,7 @@ SchemaPtr Schema::FromBytes(const std::vector<uint8_t> &bytes) {
 
 SchemaPtr Schema::FromBytes(Buffer &buffer) {
   Error error;
-  uint8_t version = buffer.ReadUint8(&error);
+  uint8_t version = buffer.ReadUint8(error);
   if (!error.ok()) {
     throw std::runtime_error(error.message());
   }
@@ -267,7 +267,7 @@ SchemaPtr Schema::FromBytes(Buffer &buffer) {
         ", expected: " + std::to_string(SCHEMA_VERSION));
   }
 
-  uint32_t num_fields = buffer.ReadVarUint32(&error);
+  uint32_t num_fields = buffer.ReadVarUint32(error);
   if (!error.ok()) {
     throw std::runtime_error(error.message());
   }

@@ -268,66 +268,69 @@ namespace serialization {
 template <> struct Serializer<MyExt> {
   static constexpr TypeId type_id = TypeId::EXT;
 
-  static Result<void, Error> write(const MyExt &value, WriteContext &ctx,
-                                   bool write_ref, bool write_type) {
+  static void write(const MyExt &value, WriteContext &ctx, bool write_ref,
+                    bool write_type, bool has_generics = false) {
+    (void)has_generics;
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
       // Delegate dynamic typeinfo to WriteContext so that user type
       // ids and named registrations are encoded consistently with
       // other ext types.
-      FORY_TRY(type_info,
-               ctx.write_any_typeinfo(static_cast<uint32_t>(TypeId::UNKNOWN),
-                                      std::type_index(typeid(MyExt))));
-      (void)type_info;
+      auto result =
+          ctx.write_any_typeinfo(static_cast<uint32_t>(TypeId::UNKNOWN),
+                                 std::type_index(typeid(MyExt)));
+      if (!result.ok()) {
+        ctx.set_error(std::move(result).error());
+        return;
+      }
     }
-    return write_data(value, ctx);
+    write_data(value, ctx);
   }
 
-  static Result<void, Error> write_data(const MyExt &value, WriteContext &ctx) {
-    return Serializer<int32_t>::write_data(value.id, ctx);
+  static void write_data(const MyExt &value, WriteContext &ctx) {
+    Serializer<int32_t>::write_data(value.id, ctx);
   }
 
-  static Result<void, Error>
-  write_data_generic(const MyExt &value, WriteContext &ctx, bool has_generics) {
+  static void write_data_generic(const MyExt &value, WriteContext &ctx,
+                                 bool has_generics) {
     (void)has_generics;
-    return write_data(value, ctx);
+    write_data(value, ctx);
   }
 
-  static Result<MyExt, Error> read(ReadContext &ctx, bool read_ref,
-                                   bool read_type) {
-    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
-    if (!has_value) {
+  static MyExt read(ReadContext &ctx, bool read_ref, bool read_type) {
+    bool has_value = consume_ref_flag(ctx, read_ref);
+    if (ctx.has_error() || !has_value) {
       return MyExt{};
     }
     if (read_type) {
       // Validate dynamic type info and consume any named metadata.
-      FORY_TRY(type_info, ctx.read_any_typeinfo());
+      const TypeInfo *type_info = ctx.read_any_typeinfo(ctx.error());
+      if (ctx.has_error()) {
+        return MyExt{};
+      }
       if (!type_info) {
-        return Unexpected(Error::type_error("TypeInfo for MyExt not found"));
+        ctx.set_error(Error::type_error("TypeInfo for MyExt not found"));
+        return MyExt{};
       }
     }
     MyExt value;
-    FORY_TRY(id, Serializer<int32_t>::read_data(ctx));
-    value.id = id;
+    value.id = Serializer<int32_t>::read_data(ctx);
     return value;
   }
 
-  static Result<MyExt, Error> read_data(ReadContext &ctx) {
+  static MyExt read_data(ReadContext &ctx) {
     MyExt value;
-    FORY_TRY(id, Serializer<int32_t>::read_data(ctx));
-    value.id = id;
+    value.id = Serializer<int32_t>::read_data(ctx);
     return value;
   }
 
-  static Result<MyExt, Error> read_data_generic(ReadContext &ctx,
-                                                bool has_generics) {
+  static MyExt read_data_generic(ReadContext &ctx, bool has_generics) {
     (void)has_generics;
     return read_data(ctx);
   }
 
-  static Result<MyExt, Error> read_with_type_info(ReadContext &ctx,
-                                                  bool read_ref,
-                                                  const TypeInfo &type_info) {
+  static MyExt read_with_type_info(ReadContext &ctx, bool read_ref,
+                                   const TypeInfo &type_info) {
     (void)type_info;
     return read(ctx, read_ref, false);
   }
@@ -497,40 +500,40 @@ void RunTestBuffer(const std::string &data_file) {
   Buffer buffer(bytes.data(), static_cast<uint32_t>(bytes.size()), false);
 
   Error error;
-  uint8_t bool_val_raw = buffer.ReadUint8(&error);
+  uint8_t bool_val_raw = buffer.ReadUint8(error);
   if (!error.ok())
     Fail("Failed to read bool: " + error.message());
   bool bool_val = bool_val_raw != 0;
 
-  int8_t int8_val = buffer.ReadInt8(&error);
+  int8_t int8_val = buffer.ReadInt8(error);
   if (!error.ok())
     Fail("Failed to read int8: " + error.message());
 
-  int16_t int16_val = buffer.ReadInt16(&error);
+  int16_t int16_val = buffer.ReadInt16(error);
   if (!error.ok())
     Fail("Failed to read int16: " + error.message());
 
-  int32_t int32_val = buffer.ReadInt32(&error);
+  int32_t int32_val = buffer.ReadInt32(error);
   if (!error.ok())
     Fail("Failed to read int32: " + error.message());
 
-  int64_t int64_val = buffer.ReadInt64(&error);
+  int64_t int64_val = buffer.ReadInt64(error);
   if (!error.ok())
     Fail("Failed to read int64: " + error.message());
 
-  float float_val = buffer.ReadFloat(&error);
+  float float_val = buffer.ReadFloat(error);
   if (!error.ok())
     Fail("Failed to read float: " + error.message());
 
-  double double_val = buffer.ReadDouble(&error);
+  double double_val = buffer.ReadDouble(error);
   if (!error.ok())
     Fail("Failed to read double: " + error.message());
 
-  uint32_t varint = buffer.ReadVarUint32(&error);
+  uint32_t varint = buffer.ReadVarUint32(error);
   if (!error.ok())
     Fail("Failed to read varint: " + error.message());
 
-  int32_t payload_len = buffer.ReadInt32(&error);
+  int32_t payload_len = buffer.ReadInt32(error);
   if (!error.ok())
     Fail("Failed to read payload len: " + error.message());
 
@@ -540,7 +543,7 @@ void RunTestBuffer(const std::string &data_file) {
   std::vector<uint8_t> payload(bytes.begin() + buffer.reader_index(),
                                bytes.begin() + buffer.reader_index() +
                                    payload_len);
-  buffer.Skip(payload_len, &error);
+  buffer.Skip(payload_len, error);
   if (!error.ok())
     Fail("Failed to skip payload: " + error.message());
 
@@ -595,7 +598,7 @@ void RunTestBufferVar(const std::string &data_file) {
       std::numeric_limits<int32_t>::max() - 1,
       std::numeric_limits<int32_t>::max()};
   for (int32_t value : expected_varint32) {
-    int32_t result = buffer.ReadVarInt32(&error);
+    int32_t result = buffer.ReadVarInt32(error);
     if (!error.ok() || result != value) {
       Fail("VarInt32 mismatch");
     }
@@ -605,7 +608,7 @@ void RunTestBufferVar(const std::string &data_file) {
       0u,       1u,       127u,       128u,       16383u,      16384u,
       2097151u, 2097152u, 268435455u, 268435456u, 2147483646u, 2147483647u};
   for (uint32_t value : expected_varuint32) {
-    uint32_t result = buffer.ReadVarUint32(&error);
+    uint32_t result = buffer.ReadVarUint32(error);
     if (!error.ok() || result != value) {
       Fail("VarUint32 mismatch");
     }
@@ -632,7 +635,7 @@ void RunTestBufferVar(const std::string &data_file) {
       72057594037927936ull,
       static_cast<uint64_t>(std::numeric_limits<int64_t>::max())};
   for (uint64_t value : expected_varuint64) {
-    uint64_t result = buffer.ReadVarUint64(&error);
+    uint64_t result = buffer.ReadVarUint64(error);
     if (!error.ok() || result != value) {
       Fail("VarUint64 mismatch");
     }
@@ -655,7 +658,7 @@ void RunTestBufferVar(const std::string &data_file) {
       std::numeric_limits<int64_t>::max() - 1,
       std::numeric_limits<int64_t>::max()};
   for (int64_t value : expected_varint64) {
-    int64_t result = buffer.ReadVarInt64(&error);
+    int64_t result = buffer.ReadVarInt64(error);
     if (!error.ok() || result != value) {
       Fail("VarInt64 mismatch");
     }
@@ -688,11 +691,11 @@ void RunTestMurmurHash3(const std::string &data_file) {
   Buffer buffer(bytes.data(), static_cast<uint32_t>(bytes.size()), false);
 
   Error error;
-  int64_t first = buffer.ReadInt64(&error);
+  int64_t first = buffer.ReadInt64(error);
   if (!error.ok())
     Fail("Failed to read first int64: " + error.message());
 
-  int64_t second = buffer.ReadInt64(&error);
+  int64_t second = buffer.ReadInt64(error);
   if (!error.ok())
     Fail("Failed to read second int64: " + error.message());
 

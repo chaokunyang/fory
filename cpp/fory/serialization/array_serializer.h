@@ -59,18 +59,33 @@ struct Serializer<
     }
   }();
 
-  static Result<void, Error> write(const std::array<T, N> &arr,
-                                   WriteContext &ctx, bool write_ref,
-                                   bool write_type, bool has_generics = false) {
+  static inline void write_type_info(WriteContext &ctx) {
+    ctx.write_varuint32(static_cast<uint32_t>(type_id));
+  }
+
+  static inline void read_type_info(ReadContext &ctx) {
+    uint32_t actual = ctx.read_varuint32(ctx.error());
+    if (FORY_PREDICT_FALSE(ctx.has_error())) {
+      return;
+    }
+    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
+      ctx.set_error(
+          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
+    }
+  }
+
+  static inline void write(const std::array<T, N> &arr, WriteContext &ctx,
+                           bool write_ref, bool write_type,
+                           bool has_generics = false) {
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
       ctx.write_varuint32(static_cast<uint32_t>(type_id));
     }
-    return write_data_generic(arr, ctx, has_generics);
+    write_data_generic(arr, ctx, has_generics);
   }
 
-  static Result<void, Error> write_data(const std::array<T, N> &arr,
-                                        WriteContext &ctx) {
+  static inline void write_data(const std::array<T, N> &arr,
+                                WriteContext &ctx) {
     Buffer &buffer = ctx.buffer();
     // bulk write may write 8 bytes for varint32
     constexpr size_t max_size = 8 + N * sizeof(T);
@@ -84,57 +99,58 @@ struct Serializer<
       buffer.UnsafePut(writer_index, arr.data(), N * sizeof(T));
     }
     buffer.WriterIndex(writer_index + N * sizeof(T));
-    return Result<void, Error>();
   }
 
-  static Result<void, Error> write_data_generic(const std::array<T, N> &arr,
-                                                WriteContext &ctx,
-                                                bool has_generics) {
-    return write_data(arr, ctx);
+  static inline void write_data_generic(const std::array<T, N> &arr,
+                                        WriteContext &ctx, bool has_generics) {
+    write_data(arr, ctx);
   }
 
-  static Result<std::array<T, N>, Error> read(ReadContext &ctx, bool read_ref,
-                                              bool read_type) {
-    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
-    if (!has_value) {
+  static inline std::array<T, N> read(ReadContext &ctx, bool read_ref,
+                                      bool read_type) {
+    bool has_value = consume_ref_flag(ctx, read_ref);
+    if (ctx.has_error() || !has_value) {
       return std::array<T, N>();
     }
-    Error error;
     if (read_type) {
-      uint32_t type_id_read = ctx.read_varuint32(&error);
-      if (FORY_PREDICT_FALSE(!error.ok())) {
-        return Unexpected(std::move(error));
+      uint32_t type_id_read = ctx.read_varuint32(ctx.error());
+      if (FORY_PREDICT_FALSE(ctx.has_error())) {
+        return std::array<T, N>();
       }
       if (type_id_read != static_cast<uint32_t>(type_id)) {
-        return Unexpected(
+        ctx.set_error(
             Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
+        return std::array<T, N>();
       }
     }
     return read_data(ctx);
   }
 
-  static Result<std::array<T, N>, Error> read_data(ReadContext &ctx) {
+  static inline std::array<T, N> read_data(ReadContext &ctx) {
     // Read array length
-    Error error;
-    uint32_t length = ctx.read_varuint32(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
+    uint32_t length = ctx.read_varuint32(ctx.error());
+    if (FORY_PREDICT_FALSE(ctx.has_error())) {
+      return std::array<T, N>();
     }
 
     if (length != N) {
-      return Unexpected(Error::invalid_data("Array size mismatch: expected " +
-                                            std::to_string(N) + " but got " +
-                                            std::to_string(length)));
+      ctx.set_error(Error::invalid_data("Array size mismatch: expected " +
+                                        std::to_string(N) + " but got " +
+                                        std::to_string(length)));
+      return std::array<T, N>();
     }
 
     std::array<T, N> arr;
     if constexpr (N > 0) {
-      ctx.read_bytes(arr.data(), N * sizeof(T), &error);
-      if (FORY_PREDICT_FALSE(!error.ok())) {
-        return Unexpected(std::move(error));
-      }
+      ctx.read_bytes(arr.data(), N * sizeof(T), ctx.error());
     }
     return arr;
+  }
+
+  static inline std::array<T, N>
+  read_with_type_info(ReadContext &ctx, bool read_ref,
+                      const TypeInfo &type_info) {
+    return read(ctx, read_ref, false);
   }
 };
 
@@ -143,18 +159,33 @@ struct Serializer<
 template <size_t N> struct Serializer<std::array<bool, N>> {
   static constexpr TypeId type_id = TypeId::BOOL_ARRAY;
 
-  static Result<void, Error> write(const std::array<bool, N> &arr,
-                                   WriteContext &ctx, bool write_ref,
-                                   bool write_type, bool has_generics = false) {
+  static inline void write_type_info(WriteContext &ctx) {
+    ctx.write_varuint32(static_cast<uint32_t>(type_id));
+  }
+
+  static inline void read_type_info(ReadContext &ctx) {
+    uint32_t actual = ctx.read_varuint32(ctx.error());
+    if (FORY_PREDICT_FALSE(ctx.has_error())) {
+      return;
+    }
+    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
+      ctx.set_error(
+          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
+    }
+  }
+
+  static inline void write(const std::array<bool, N> &arr, WriteContext &ctx,
+                           bool write_ref, bool write_type,
+                           bool has_generics = false) {
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
       ctx.write_varuint32(static_cast<uint32_t>(type_id));
     }
-    return write_data_generic(arr, ctx, has_generics);
+    write_data_generic(arr, ctx, has_generics);
   }
 
-  static Result<void, Error> write_data(const std::array<bool, N> &arr,
-                                        WriteContext &ctx) {
+  static inline void write_data(const std::array<bool, N> &arr,
+                                WriteContext &ctx) {
     Buffer &buffer = ctx.buffer();
     // bulk write may write 8 bytes for varint32
     constexpr size_t max_size = 8 + N;
@@ -163,63 +194,66 @@ template <size_t N> struct Serializer<std::array<bool, N>> {
     // Write array length
     writer_index += buffer.PutVarUint32(writer_index, static_cast<uint32_t>(N));
 
-    // Write each boolean as a byte (per spec, bool is serialized as int16,
-    // but for arrays we use packed bytes for efficiency)
+    // Write each boolean as a byte
     for (size_t i = 0; i < N; ++i) {
       buffer.UnsafePutByte(writer_index + i,
                            static_cast<uint8_t>(arr[i] ? 1 : 0));
     }
     buffer.WriterIndex(writer_index + N);
-    return Result<void, Error>();
   }
 
-  static Result<void, Error> write_data_generic(const std::array<bool, N> &arr,
-                                                WriteContext &ctx,
-                                                bool has_generics) {
-    return write_data(arr, ctx);
+  static inline void write_data_generic(const std::array<bool, N> &arr,
+                                        WriteContext &ctx, bool has_generics) {
+    write_data(arr, ctx);
   }
 
-  static Result<std::array<bool, N>, Error>
-  read(ReadContext &ctx, bool read_ref, bool read_type) {
-    FORY_TRY(has_value, consume_ref_flag(ctx, read_ref));
-    if (!has_value) {
+  static inline std::array<bool, N> read(ReadContext &ctx, bool read_ref,
+                                         bool read_type) {
+    bool has_value = consume_ref_flag(ctx, read_ref);
+    if (ctx.has_error() || !has_value) {
       return std::array<bool, N>();
     }
-    Error error;
     if (read_type) {
-      uint32_t type_id_read = ctx.read_varuint32(&error);
-      if (FORY_PREDICT_FALSE(!error.ok())) {
-        return Unexpected(std::move(error));
+      uint32_t type_id_read = ctx.read_varuint32(ctx.error());
+      if (FORY_PREDICT_FALSE(ctx.has_error())) {
+        return std::array<bool, N>();
       }
       if (type_id_read != static_cast<uint32_t>(type_id)) {
-        return Unexpected(
+        ctx.set_error(
             Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
+        return std::array<bool, N>();
       }
     }
     return read_data(ctx);
   }
 
-  static Result<std::array<bool, N>, Error> read_data(ReadContext &ctx) {
+  static inline std::array<bool, N> read_data(ReadContext &ctx) {
     // Read array length
-    Error error;
-    uint32_t length = ctx.read_varuint32(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
+    uint32_t length = ctx.read_varuint32(ctx.error());
+    if (FORY_PREDICT_FALSE(ctx.has_error())) {
+      return std::array<bool, N>();
     }
     if (length != N) {
-      return Unexpected(Error::invalid_data("Array size mismatch: expected " +
-                                            std::to_string(N) + " but got " +
-                                            std::to_string(length)));
+      ctx.set_error(Error::invalid_data("Array size mismatch: expected " +
+                                        std::to_string(N) + " but got " +
+                                        std::to_string(length)));
+      return std::array<bool, N>();
     }
     std::array<bool, N> arr;
     for (size_t i = 0; i < N; ++i) {
-      uint8_t byte = ctx.read_uint8(&error);
-      if (FORY_PREDICT_FALSE(!error.ok())) {
-        return Unexpected(std::move(error));
+      if (FORY_PREDICT_FALSE(ctx.has_error())) {
+        return arr;
       }
+      uint8_t byte = ctx.read_uint8(ctx.error());
       arr[i] = (byte != 0);
     }
     return arr;
+  }
+
+  static inline std::array<bool, N>
+  read_with_type_info(ReadContext &ctx, bool read_ref,
+                      const TypeInfo &type_info) {
+    return read(ctx, read_ref, false);
   }
 };
 

@@ -326,6 +326,8 @@ WriteContext::write_struct_type_info(const TypeInfo *type_info) {
 }
 
 void WriteContext::reset() {
+  // Clear error state first
+  error_ = Error();
   ref_writer_.reset();
   // Clear meta vectors/maps - they're typically small or empty
   // in non-compatible mode, so clear() is efficient
@@ -390,7 +392,7 @@ Result<size_t, Error> ReadContext::load_type_meta(int32_t meta_offset) {
 
   // Load all TypeMetas
   Error error;
-  uint32_t meta_size = buffer_->ReadVarUint32(&error);
+  uint32_t meta_size = buffer_->ReadVarUint32(error);
   if (FORY_PREDICT_FALSE(!error.ok())) {
     return Unexpected(std::move(error));
   }
@@ -398,7 +400,7 @@ Result<size_t, Error> ReadContext::load_type_meta(int32_t meta_offset) {
 
   for (uint32_t i = 0; i < meta_size; i++) {
     // Read the 8-byte header first for caching
-    int64_t meta_header = buffer_->ReadInt64(&error);
+    int64_t meta_header = buffer_->ReadInt64(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -491,7 +493,7 @@ ReadContext::get_type_info_by_index(size_t index) const {
 
 Result<const TypeInfo *, Error> ReadContext::read_any_typeinfo() {
   Error error;
-  uint32_t type_id = buffer_->ReadVarUint32(&error);
+  uint32_t type_id = buffer_->ReadVarUint32(error);
   if (FORY_PREDICT_FALSE(!error.ok())) {
     return Unexpected(std::move(error));
   }
@@ -501,7 +503,7 @@ Result<const TypeInfo *, Error> ReadContext::read_any_typeinfo() {
   switch (type_id_low) {
   case static_cast<uint32_t>(TypeId::NAMED_COMPATIBLE_STRUCT):
   case static_cast<uint32_t>(TypeId::COMPATIBLE_STRUCT): {
-    uint32_t meta_index = buffer_->ReadVarUint32(&error);
+    uint32_t meta_index = buffer_->ReadVarUint32(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -511,7 +513,7 @@ Result<const TypeInfo *, Error> ReadContext::read_any_typeinfo() {
   case static_cast<uint32_t>(TypeId::NAMED_EXT):
   case static_cast<uint32_t>(TypeId::NAMED_STRUCT): {
     if (config_->compatible) {
-      uint32_t meta_index = buffer_->ReadVarUint32(&error);
+      uint32_t meta_index = buffer_->ReadVarUint32(error);
       if (FORY_PREDICT_FALSE(!error.ok())) {
         return Unexpected(std::move(error));
       }
@@ -533,7 +535,18 @@ Result<const TypeInfo *, Error> ReadContext::read_any_typeinfo() {
   }
 }
 
+const TypeInfo *ReadContext::read_any_typeinfo(Error &error) {
+  auto result = read_any_typeinfo();
+  if (!result.ok()) {
+    error = std::move(result).error();
+    return nullptr;
+  }
+  return result.value();
+}
+
 void ReadContext::reset() {
+  // Clear error state first
+  error_ = Error();
   ref_reader_.reset();
   reading_type_infos_.clear();
   parsed_type_infos_.clear();

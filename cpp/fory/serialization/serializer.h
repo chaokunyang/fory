@@ -44,23 +44,14 @@ namespace serialization {
 /// Example usage:
 /// ```cpp
 /// Error error;
-/// int32_t value = buffer.ReadVarInt32(&error);
-/// FORY_RETURN_IF_SERDE_ERROR(&error);
+/// int32_t value = buffer.ReadVarInt32(error);
+/// FORY_RETURN_IF_SERDE_ERROR(error);
 /// // Use value...
 /// ```
 #define FORY_RETURN_IF_SERDE_ERROR(error_ptr)                                  \
   do {                                                                         \
     if (FORY_PREDICT_FALSE(!(error_ptr)->ok())) {                              \
       return ::fory::Unexpected(std::move(*(error_ptr)));                      \
-    }                                                                          \
-  } while (0)
-
-/// Return early if the error indicates an error, with a custom return type.
-/// Use this when the return type is not Result<T, Error>.
-#define FORY_RETURN_IF_SERDE_ERROR_WITH(error_ptr, return_type)                \
-  do {                                                                         \
-    if (FORY_PREDICT_FALSE(!(error_ptr)->ok())) {                              \
-      return return_type(::fory::Unexpected(std::move(*(error_ptr))));         \
     }                                                                          \
   } while (0)
 
@@ -142,7 +133,7 @@ inline Result<HeaderInfo, Error> read_header(Buffer &buffer) {
   // Java writes a language byte after header in xlang mode - read and ignore it
   if (info.is_xlang) {
     Error error;
-    uint8_t lang_byte = buffer.ReadUint8(&error);
+    uint8_t lang_byte = buffer.ReadUint8(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
@@ -174,19 +165,19 @@ FORY_ALWAYS_INLINE void write_not_null_ref_flag(WriteContext &ctx,
 }
 
 /// Consume a reference flag from the read context when reference metadata is
-/// expected.
+/// expected. Uses context error accumulation pattern.
 ///
 /// @param ctx Read context
 /// @param read_ref Whether the caller requested reference metadata
 /// @return True if the upcoming value payload is present, false if it was null
-inline Result<bool, Error> consume_ref_flag(ReadContext &ctx, bool read_ref) {
+///         or if an error occurred (check ctx.has_error() after calling)
+FORY_ALWAYS_INLINE bool consume_ref_flag(ReadContext &ctx, bool read_ref) {
   if (!read_ref) {
     return true;
   }
-  Error error;
-  int8_t flag = ctx.read_int8(&error);
-  if (FORY_PREDICT_FALSE(!error.ok())) {
-    return Unexpected(std::move(error));
+  int8_t flag = ctx.read_int8(ctx.error());
+  if (FORY_PREDICT_FALSE(ctx.has_error())) {
+    return false;
   }
   if (flag == NULL_FLAG) {
     return false;
@@ -195,17 +186,19 @@ inline Result<bool, Error> consume_ref_flag(ReadContext &ctx, bool read_ref) {
     return true;
   }
   if (flag == REF_FLAG) {
-    uint32_t ref_id = ctx.read_varuint32(&error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
+    uint32_t ref_id = ctx.read_varuint32(ctx.error());
+    if (FORY_PREDICT_FALSE(ctx.has_error())) {
+      return false;
     }
-    return Unexpected(Error::invalid_ref(
+    ctx.set_error(Error::invalid_ref(
         "Unexpected reference flag for non-referencable value, ref id: " +
         std::to_string(ref_id)));
+    return false;
   }
 
-  return Unexpected(Error::invalid_data(
-      "Unknown reference flag: " + std::to_string(static_cast<int>(flag))));
+  ctx.set_error(Error::invalid_data("Unknown reference flag: " +
+                                    std::to_string(static_cast<int>(flag))));
+  return false;
 }
 
 // ============================================================================

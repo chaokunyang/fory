@@ -639,6 +639,207 @@ TEST_F(FlatIntMapTest, U32Map_ScalarValues) {
   }
 }
 
+// ============================================================================
+// Tests for pointer keys
+// ============================================================================
+
+TEST_F(FlatIntMapTest, PointerKey_BasicInsertAndFind) {
+  FlatIntMap<int *, uint64_t> map(16);
+
+  int a = 1, b = 2, c = 3;
+
+  map.put(&a, 100);
+  map.put(&b, 200);
+  map.put(&c, 300);
+
+  EXPECT_EQ(map.size(), 3);
+
+  auto *entry_a = map.find(&a);
+  ASSERT_NE(entry_a, nullptr);
+  EXPECT_EQ(entry_a->key, &a);
+  EXPECT_EQ(entry_a->value, 100);
+
+  auto *entry_b = map.find(&b);
+  ASSERT_NE(entry_b, nullptr);
+  EXPECT_EQ(entry_b->value, 200);
+
+  auto *entry_c = map.find(&c);
+  ASSERT_NE(entry_c, nullptr);
+  EXPECT_EQ(entry_c->value, 300);
+}
+
+TEST_F(FlatIntMapTest, PointerKey_FindNonExistent) {
+  FlatIntMap<int *, uint64_t> map(16);
+
+  int a = 1, b = 2;
+  map.put(&a, 100);
+
+  EXPECT_EQ(map.find(&b), nullptr);
+  EXPECT_EQ(map.find(nullptr), nullptr); // nullptr is reserved as empty
+}
+
+TEST_F(FlatIntMapTest, PointerKey_UpdateExisting) {
+  FlatIntMap<int *, uint64_t> map(16);
+
+  int a = 1;
+  map.put(&a, 100);
+  EXPECT_EQ(map.size(), 1);
+
+  map.put(&a, 200);
+  EXPECT_EQ(map.size(), 1); // Size should not increase
+
+  auto *entry = map.find(&a);
+  ASSERT_NE(entry, nullptr);
+  EXPECT_EQ(entry->value, 200);
+}
+
+TEST_F(FlatIntMapTest, PointerKey_Contains) {
+  FlatIntMap<int *, uint64_t> map(16);
+
+  int a = 42;
+  map.put(&a, 100);
+
+  EXPECT_TRUE(map.contains(&a));
+  EXPECT_FALSE(map.contains(nullptr));
+
+  int b = 99;
+  EXPECT_FALSE(map.contains(&b));
+}
+
+TEST_F(FlatIntMapTest, PointerKey_GetOrDefault) {
+  FlatIntMap<int *, uint64_t> map(16);
+
+  int a = 1, b = 2;
+  map.put(&a, 100);
+  map.put(&b, 200);
+
+  EXPECT_EQ(map.get_or_default(&a, 999), 100);
+  EXPECT_EQ(map.get_or_default(&b, 999), 200);
+
+  int c = 3;
+  EXPECT_EQ(map.get_or_default(&c, 999), 999);
+  EXPECT_EQ(map.get_or_default(nullptr, 999), 999);
+}
+
+TEST_F(FlatIntMapTest, PointerKey_SubscriptOperator) {
+  FlatIntMap<int *, uint64_t> map(16);
+
+  int a = 1, b = 2;
+
+  map[&a] = 100;
+  map[&b] = 200;
+
+  EXPECT_EQ(map[&a], 100);
+  EXPECT_EQ(map[&b], 200);
+
+  map[&a] = 300; // Update
+  EXPECT_EQ(map[&a], 300);
+}
+
+TEST_F(FlatIntMapTest, PointerKey_AutoGrow) {
+  FlatIntMap<int *, uint64_t> map(8, 0.5f);
+
+  std::vector<int> values(100);
+  for (size_t i = 0; i < 100; ++i) {
+    values[i] = i;
+    map.put(&values[i], i * 10);
+  }
+
+  EXPECT_EQ(map.size(), 100);
+  EXPECT_GT(map.capacity(), 8); // Should have grown
+
+  for (size_t i = 0; i < 100; ++i) {
+    auto *entry = map.find(&values[i]);
+    ASSERT_NE(entry, nullptr);
+    EXPECT_EQ(entry->value, i * 10);
+  }
+}
+
+TEST_F(FlatIntMapTest, PointerKey_Iterator) {
+  FlatIntMap<int *, uint64_t> map(16);
+
+  std::vector<int> values = {1, 2, 3, 4, 5};
+  for (auto &v : values) {
+    map.put(&v, v * 10);
+  }
+
+  std::unordered_set<int *> seen_keys;
+  for (auto it = map.begin(); it != map.end(); ++it) {
+    seen_keys.insert(it->key);
+  }
+
+  EXPECT_EQ(seen_keys.size(), 5);
+  for (auto &v : values) {
+    EXPECT_NE(seen_keys.find(&v), seen_keys.end());
+  }
+}
+
+TEST_F(FlatIntMapTest, PointerKey_Clear) {
+  FlatIntMap<int *, uint64_t> map(16);
+
+  int a = 1, b = 2;
+  map.put(&a, 100);
+  map.put(&b, 200);
+
+  EXPECT_EQ(map.size(), 2);
+
+  map.clear();
+
+  EXPECT_EQ(map.size(), 0);
+  EXPECT_TRUE(map.empty());
+  EXPECT_EQ(map.find(&a), nullptr);
+  EXPECT_EQ(map.find(&b), nullptr);
+}
+
+TEST_F(FlatIntMapTest, PointerKey_CopyConstructor) {
+  FlatIntMap<int *, uint64_t> map1(16);
+
+  int a = 1, b = 2;
+  map1.put(&a, 100);
+  map1.put(&b, 200);
+
+  FlatIntMap<int *, uint64_t> map2(map1);
+
+  EXPECT_EQ(map2.size(), 2);
+  EXPECT_EQ(map2.find(&a)->value, 100);
+  EXPECT_EQ(map2.find(&b)->value, 200);
+}
+
+TEST_F(FlatIntMapTest, PointerKey_MoveConstructor) {
+  FlatIntMap<int *, uint64_t> map1(16);
+
+  int a = 1, b = 2;
+  map1.put(&a, 100);
+  map1.put(&b, 200);
+
+  FlatIntMap<int *, uint64_t> map2(std::move(map1));
+
+  EXPECT_EQ(map2.size(), 2);
+  EXPECT_EQ(map2.find(&a)->value, 100);
+  EXPECT_EQ(map2.find(&b)->value, 200);
+}
+
+TEST_F(FlatIntMapTest, PointerKey_PointerToPointer) {
+  FlatIntMap<int **, uint64_t> map(16);
+
+  int a = 1, b = 2;
+  int *pa = &a;
+  int *pb = &b;
+
+  map.put(&pa, 100);
+  map.put(&pb, 200);
+
+  EXPECT_EQ(map.size(), 2);
+
+  auto *entry_pa = map.find(&pa);
+  ASSERT_NE(entry_pa, nullptr);
+  EXPECT_EQ(entry_pa->value, 100);
+
+  auto *entry_pb = map.find(&pb);
+  ASSERT_NE(entry_pb, nullptr);
+  EXPECT_EQ(entry_pb->value, 200);
+}
+
 } // namespace util
 } // namespace fory
 

@@ -49,11 +49,48 @@ inline int ctz64(uint64_t value) {
   return __builtin_ctzll(value);
 #endif
 }
+
+template <typename K> struct KeyTraits {
+  static_assert(std::is_same_v<K, uint32_t> || std::is_same_v<K, uint64_t> ||
+                    std::is_pointer_v<K>,
+                "Key type must be uint32_t, uint64_t, or pointer");
+
+  using IntType = std::conditional_t<
+      std::is_pointer_v<K>, uintptr_t,
+      std::conditional_t<std::is_same_v<K, uint32_t>, uint32_t, uint64_t>>;
+
+  static constexpr IntType kEmpty =
+      std::is_pointer_v<K> ? 0 : std::numeric_limits<IntType>::max();
+
+  static inline IntType to_int(K key) {
+    if constexpr (std::is_pointer_v<K>) {
+      return reinterpret_cast<IntType>(key);
+    } else {
+      return static_cast<IntType>(key);
+    }
+  }
+
+  static inline K from_int(IntType val) {
+    if constexpr (std::is_pointer_v<K>) {
+      return reinterpret_cast<K>(val);
+    } else {
+      return static_cast<K>(val);
+    }
+  }
+
+  static inline bool is_empty(K key) {
+    if constexpr (std::is_pointer_v<K>) {
+      return key == nullptr;
+    } else {
+      return key == kEmpty;
+    }
+  }
+};
 } // namespace detail
 
-/// A specialized open-addressed hash map optimized for integer keys (uint32_t
-/// or uint64_t). Designed for read-heavy workloads: insert can be slow, but
-/// lookup must be ultra-fast.
+/// A specialized open-addressed hash map optimized for integer and pointer
+/// keys (uint32_t, uint64_t, or any pointer type). Designed for read-heavy
+/// workloads: insert can be slow, but lookup must be ultra-fast.
 ///
 /// Features:
 /// - Auto-grow when load factor exceeded
@@ -62,7 +99,10 @@ inline int ctz64(uint64_t value) {
 /// - Power-of-2 sizing for fast modulo via bitmasking
 ///
 /// Constraints:
-/// - Key max value is reserved as empty marker (cannot store max<K>)
+/// - For integer keys: max value is reserved as empty marker (cannot store
+/// max<K>)
+/// - For pointer keys: nullptr is reserved as empty marker (cannot store
+/// nullptr)
 /// - No deletion support
 /// - Not thread-safe
 /// - Value type must be trivially copyable and small for cache efficiency
@@ -70,14 +110,19 @@ inline int ctz64(uint64_t value) {
 /// Usage:
 /// - Use FlatIntPtrMap<K, T> for pointer values (stores T*)
 /// - Use FlatIntMap<K, V> for small scalar values (int, uint32_t, etc.)
+/// - Supports pointer keys: FlatIntMap<MyType*, V>
 template <typename K, typename V> class FlatIntMap {
-  static_assert(std::is_same_v<K, uint32_t> || std::is_same_v<K, uint64_t>,
-                "FlatIntMap key type must be uint32_t or uint64_t");
+  static_assert(std::is_same_v<K, uint32_t> || std::is_same_v<K, uint64_t> ||
+                    std::is_pointer_v<K>,
+                "FlatIntMap key type must be uint32_t, uint64_t, or pointer");
   static_assert(std::is_trivially_copyable_v<V>,
                 "FlatIntMap value type must be trivially copyable");
 
+  using Traits = detail::KeyTraits<K>;
+  using IntType = typename Traits::IntType;
+
 public:
-  static constexpr K kEmpty = std::numeric_limits<K>::max();
+  static constexpr IntType kEmpty = Traits::kEmpty;
   static constexpr float kDefaultLoadFactor = 0.5f; // Low for fast lookup
 
   struct Entry {
@@ -89,7 +134,7 @@ public:
   public:
     Iterator(Entry *entries, size_t capacity, size_t index)
         : entries_(entries), capacity_(capacity), index_(index) {
-      while (index_ < capacity_ && entries_[index_].key == kEmpty)
+      while (index_ < capacity_ && Traits::is_empty(entries_[index_].key))
         ++index_;
     }
     std::pair<K, V> operator*() const {
@@ -98,7 +143,7 @@ public:
     const Entry *operator->() const { return &entries_[index_]; }
     Iterator &operator++() {
       ++index_;
-      while (index_ < capacity_ && entries_[index_].key == kEmpty)
+      while (index_ < capacity_ && Traits::is_empty(entries_[index_].key))
         ++index_;
       return *this;
     }
@@ -178,16 +223,18 @@ public:
   }
 
   /// Insert or update a key-value pair. May trigger grow.
-  /// @param key Must not be kEmpty (max value of K)
+  /// @param key Must not be kEmpty (for integers: max value; for pointers:
+  /// nullptr)
   /// @param value The value to store
   /// @return Previous value if key existed, otherwise default-constructed V
   V put(K key, V value) {
-    FORY_CHECK(key != kEmpty) << "Cannot use max value as key (reserved)";
+    FORY_CHECK(!Traits::is_empty(key))
+        << "Cannot use empty value as key (reserved)";
     if (size_ >= grow_threshold_) {
       grow();
     }
     size_t idx = find_slot_for_insert(key);
-    if (entries_[idx].key == kEmpty) {
+    if (Traits::is_empty(entries_[idx].key)) {
       entries_[idx].key = key;
       entries_[idx].value = value;
       ++size_;
@@ -199,15 +246,17 @@ public:
   }
 
   /// Insert or update via subscript operator. May trigger grow.
-  /// @param key Must not be kEmpty (max value of K)
+  /// @param key Must not be kEmpty (for integers: max value; for pointers:
+  /// nullptr)
   /// @return Reference to the value (existing or newly inserted)
   V &operator[](K key) {
-    FORY_CHECK(key != kEmpty) << "Cannot use max value as key (reserved)";
+    FORY_CHECK(!Traits::is_empty(key))
+        << "Cannot use empty value as key (reserved)";
     if (size_ >= grow_threshold_) {
       grow();
     }
     size_t idx = find_slot_for_insert(key);
-    if (entries_[idx].key == kEmpty) {
+    if (Traits::is_empty(entries_[idx].key)) {
       entries_[idx].key = key;
       ++size_;
     }
@@ -216,7 +265,7 @@ public:
 
   /// Ultra-fast lookup. Returns pointer to Entry or nullptr.
   FORY_ALWAYS_INLINE Entry *find(K key) {
-    if (FORY_PREDICT_FALSE(key == kEmpty))
+    if (FORY_PREDICT_FALSE(Traits::is_empty(key)))
       return nullptr;
     Entry *entries = entries_.get();
     size_t mask = mask_;
@@ -226,7 +275,7 @@ public:
       K k = entry->key;
       if (k == key)
         return entry;
-      if (k == kEmpty)
+      if (Traits::is_empty(k))
         return nullptr;
       idx = (idx + 1) & mask;
     }
@@ -241,7 +290,7 @@ public:
   /// @param default_value Value to return if key not found
   /// @return The stored value or default_value
   FORY_ALWAYS_INLINE V get_or_default(K key, V default_value) const {
-    if (FORY_PREDICT_FALSE(key == kEmpty))
+    if (FORY_PREDICT_FALSE(Traits::is_empty(key)))
       return default_value;
     Entry *entries = entries_.get();
     size_t mask = mask_;
@@ -251,14 +300,14 @@ public:
       K k = entry->key;
       if (k == key)
         return entry->value;
-      if (k == kEmpty)
+      if (Traits::is_empty(k))
         return default_value;
       idx = (idx + 1) & mask;
     }
   }
 
   FORY_ALWAYS_INLINE bool contains(K key) const {
-    if (FORY_PREDICT_FALSE(key == kEmpty))
+    if (FORY_PREDICT_FALSE(Traits::is_empty(key)))
       return false;
     Entry *entries = entries_.get();
     size_t mask = mask_;
@@ -267,7 +316,7 @@ public:
       K k = entries[idx].key;
       if (k == key)
         return true;
-      if (k == kEmpty)
+      if (Traits::is_empty(k))
         return false;
       idx = (idx + 1) & mask;
     }
@@ -293,7 +342,11 @@ public:
 private:
   static void clear_entries(Entry *entries, size_t count) {
     for (size_t i = 0; i < count; ++i) {
-      entries[i].key = kEmpty;
+      if constexpr (std::is_pointer_v<K>) {
+        entries[i].key = nullptr;
+      } else {
+        entries[i].key = kEmpty;
+      }
     }
   }
 
@@ -306,9 +359,9 @@ private:
 
     // Rehash all existing entries
     for (size_t i = 0; i < capacity_; ++i) {
-      if (entries_[i].key != kEmpty) {
+      if (!Traits::is_empty(entries_[i].key)) {
         size_t idx = place(entries_[i].key, new_shift);
-        while (new_entries[idx].key != kEmpty) {
+        while (!Traits::is_empty(new_entries[idx].key)) {
           idx = (idx + 1) & new_mask;
         }
         new_entries[idx] = entries_[i];
@@ -325,7 +378,7 @@ private:
   size_t find_slot_for_insert(K key) {
     size_t mask = mask_;
     size_t idx = place(key);
-    while (entries_[idx].key != kEmpty && entries_[idx].key != key) {
+    while (!Traits::is_empty(entries_[idx].key) && entries_[idx].key != key) {
       idx = (idx + 1) & mask;
     }
     return idx;
@@ -336,13 +389,15 @@ private:
   static constexpr uint64_t kGoldenRatio = 0x9E3779B97F4A7C15ULL;
 
   FORY_ALWAYS_INLINE size_t place(K key) const {
-    return static_cast<size_t>((static_cast<uint64_t>(key) * kGoldenRatio) >>
-                               shift_);
+    IntType int_key = Traits::to_int(key);
+    return static_cast<size_t>(
+        (static_cast<uint64_t>(int_key) * kGoldenRatio) >> shift_);
   }
 
   FORY_ALWAYS_INLINE static size_t place(K key, int shift) {
-    return static_cast<size_t>((static_cast<uint64_t>(key) * kGoldenRatio) >>
-                               shift);
+    IntType int_key = Traits::to_int(key);
+    return static_cast<size_t>(
+        (static_cast<uint64_t>(int_key) * kGoldenRatio) >> shift);
   }
 
   static size_t next_power_of_2(size_t n) {

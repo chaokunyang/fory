@@ -51,6 +51,7 @@ from libcpp cimport bool as c_bool
 from libcpp.utility cimport pair
 from cython.operator cimport dereference as deref
 from pyfory._util cimport Buffer
+from pyfory.includes.libutil cimport FlatIntMap
 from pyfory.includes.libabsl cimport flat_hash_map
 from pyfory.meta.metastring import MetaStringDecoder
 
@@ -503,9 +504,9 @@ cdef class TypeResolver:
         object _resolver
         vector[PyObject *] _c_registered_id_to_type_info
         # cls -> TypeInfo
-        flat_hash_map[uint64_t, PyObject *] _c_types_info
+        FlatIntMap[uint64_t, PyObject *] _c_types_info
         # hash -> TypeInfo
-        flat_hash_map[pair[int64_t, int64_t], PyObject *] _c_meta_hash_to_typeinfo
+        FlatIntMap[uint64_t, PyObject *] _c_meta_hash_to_typeinfo
         MetaStringResolver meta_string_resolver
         c_bool meta_share
         readonly SerializationContext serialization_context
@@ -559,9 +560,7 @@ cdef class TypeResolver:
         if type_id > 0 and (self.fory.language == Language.PYTHON or not IsNamespacedType(type_id)):
             self._c_registered_id_to_type_info[type_id] = <PyObject *> typeinfo
         self._c_types_info[<uintptr_t> <PyObject *> typeinfo.cls] = <PyObject *> typeinfo
-        # Resize if load factor >= 0.4 (using integer arithmetic: size/capacity >= 4/10)
-        if self._c_types_info.size() * 10 >= self._c_types_info.bucket_count() * 5:
-            self._c_types_info.rehash(self._c_types_info.size() * 2)
+        # FlatIntMap auto-grows, no need for manual rehash
         if typeinfo.typename_bytes is not None:
             self._load_bytes_to_typeinfo(type_id, typeinfo.namespace_bytes, typeinfo.typename_bytes)
 
@@ -582,10 +581,10 @@ cdef class TypeResolver:
         return self.get_typeinfo(cls).serializer
 
     cpdef inline TypeInfo get_typeinfo(self, cls, create=True):
-        cdef PyObject * typeinfo_ptr = self._c_types_info[<uintptr_t> <PyObject *> cls]
+        cdef FlatIntMap[uint64_t, PyObject *].Entry * entry = self._c_types_info.find(<uint64_t> <PyObject *> cls)
         cdef TypeInfo type_info
-        if typeinfo_ptr != NULL:
-            type_info = <object> typeinfo_ptr
+        if entry != NULL:
+            type_info = <object> entry.value
             if type_info.serializer is not None:
                 return type_info
             else:
@@ -613,14 +612,13 @@ cdef class TypeResolver:
 
     cdef inline TypeInfo _load_bytes_to_typeinfo(
             self, int32_t type_id, MetaStringBytes ns_metabytes, MetaStringBytes type_metabytes):
-        cdef PyObject * typeinfo_ptr = self._c_meta_hash_to_typeinfo[
-            pair[int64_t, int64_t](ns_metabytes.hashcode, type_metabytes.hashcode)]
-        if typeinfo_ptr != NULL:
-            return <TypeInfo> typeinfo_ptr
+        # Combine two int64_t hashes into one uint64_t key using XOR
+        cdef uint64_t combined_hash = <uint64_t>(ns_metabytes.hashcode ^ type_metabytes.hashcode)
+        cdef FlatIntMap[uint64_t, PyObject *].Entry * entry = self._c_meta_hash_to_typeinfo.find(combined_hash)
+        if entry != NULL:
+            return <TypeInfo> entry.value
         typeinfo = self._resolver._load_metabytes_to_typeinfo(ns_metabytes, type_metabytes)
-        typeinfo_ptr = <PyObject *> typeinfo
-        self._c_meta_hash_to_typeinfo[pair[int64_t, int64_t](
-            ns_metabytes.hashcode, type_metabytes.hashcode)] = typeinfo_ptr
+        self._c_meta_hash_to_typeinfo[combined_hash] = <PyObject *> typeinfo
         return typeinfo
 
     cpdef inline write_typeinfo(self, Buffer buffer, TypeInfo typeinfo):

@@ -128,3 +128,24 @@ cdef extern from "fory/util/bit_util.h" namespace "fory::util" nogil:
 
 cdef extern from "fory/util/string_util.h" namespace "fory" nogil:
     c_bool utf16HasSurrogatePairs(uint16_t* data, size_t size)
+
+
+cdef extern from "fory/util/flat_int_map.h" namespace "fory::util" nogil:
+    cdef cppclass FlatIntMap[K, V]:
+        cppclass Entry:
+            K key
+            V value
+
+        FlatIntMap()
+        FlatIntMap(size_t initial_capacity)
+        FlatIntMap(size_t initial_capacity, float load_factor)
+        V put(K key, V value)
+        V& operator[](K key)
+        Entry* find(K key)
+        const Entry* find(K key) const
+        V get_or_default(K key, V default_value) const
+        c_bool contains(K key) const
+        size_t size() const
+        size_t capacity() const
+        c_bool empty() const
+        void clear()

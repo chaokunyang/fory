@@ -43,6 +43,7 @@ MODULE.bazel.lock
 **/.DS_Store
 .vscode/
 go/fory/.gocache
+go/fory/tests/xlang_test_main
 
 # Build directories for all languages
 # Java

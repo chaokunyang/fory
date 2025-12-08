@@ -318,7 +318,9 @@ impl PartialEq for FieldType {
 }
 
 #[derive(Debug)]
-pub struct TypeMetaLayer {
+pub struct TypeMeta {
+    // assigned valid value and used, only during deserializing
+    hash: i64,
     type_id: u32,
     namespace: Rc<MetaString>,
     type_name: Rc<MetaString>,
@@ -326,15 +328,16 @@ pub struct TypeMetaLayer {
     field_infos: Vec<FieldInfo>,
 }
 
-impl TypeMetaLayer {
+impl TypeMeta {
     pub fn new(
         type_id: u32,
         namespace: MetaString,
         type_name: MetaString,
         register_by_name: bool,
         field_infos: Vec<FieldInfo>,
-    ) -> TypeMetaLayer {
-        TypeMetaLayer {
+    ) -> TypeMeta {
+        TypeMeta {
+            hash: 0,
             type_id,
             namespace: Rc::from(namespace),
             type_name: Rc::from(type_name),
@@ -343,8 +346,35 @@ impl TypeMetaLayer {
         }
     }
 
-    pub fn empty() -> TypeMetaLayer {
-        TypeMetaLayer {
+    #[inline(always)]
+    pub fn get_field_infos(&self) -> &Vec<FieldInfo> {
+        &self.field_infos
+    }
+
+    #[inline(always)]
+    pub fn get_type_id(&self) -> u32 {
+        self.type_id
+    }
+
+    #[inline(always)]
+    pub fn get_hash(&self) -> i64 {
+        self.hash
+    }
+
+    #[inline(always)]
+    pub fn get_type_name(&self) -> Rc<MetaString> {
+        self.type_name.clone()
+    }
+
+    #[inline(always)]
+    pub fn get_namespace(&self) -> Rc<MetaString> {
+        self.namespace.clone()
+    }
+
+    #[inline(always)]
+    pub fn empty() -> TypeMeta {
+        TypeMeta {
+            hash: 0,
             type_id: 0,
             namespace: Rc::from(MetaString::get_empty().clone()),
             type_name: Rc::from(MetaString::get_empty().clone()),
@@ -353,32 +383,27 @@ impl TypeMetaLayer {
         }
     }
 
-    pub fn get_type_id(&self) -> u32 {
-        self.type_id
-    }
-
-    pub fn get_type_name(&self) -> Rc<MetaString> {
-        self.type_name.clone()
-    }
-
-    pub fn get_namespace(&self) -> Rc<MetaString> {
-        self.namespace.clone()
-    }
-
-    pub fn get_field_infos(&self) -> &Vec<FieldInfo> {
-        &self.field_infos
-    }
-
     /// Creates a deep clone with new Rc instances.
     /// This is safe for concurrent use from multiple threads.
-    pub fn deep_clone(&self) -> TypeMetaLayer {
-        TypeMetaLayer {
+    pub fn deep_clone(&self) -> TypeMeta {
+        TypeMeta {
+            hash: self.hash,
             type_id: self.type_id,
             namespace: Rc::new((*self.namespace).clone()),
             type_name: Rc::new((*self.type_name).clone()),
             register_by_name: self.register_by_name,
             field_infos: self.field_infos.clone(),
         }
+    }
+
+    pub(crate) fn from_fields(
+        type_id: u32,
+        namespace: MetaString,
+        type_name: MetaString,
+        register_by_name: bool,
+        field_infos: Vec<FieldInfo>,
+    ) -> TypeMeta {
+        TypeMeta::new(type_id, namespace, type_name, register_by_name, field_infos)
     }
 
     fn write_name(writer: &mut Writer, name: &MetaString, encodings: &[Encoding]) {
@@ -427,9 +452,9 @@ impl TypeMetaLayer {
         Self::read_name(reader, &TYPE_NAME_DECODER, TYPE_NAME_ENCODINGS)
     }
 
-    fn to_bytes(&self) -> Result<Vec<u8>, Error> {
+    fn to_meta_bytes(&self) -> Result<Vec<u8>, Error> {
         let mut buffer = vec![];
-        // layer_bytes:| meta_header | fields meta |
+        // meta_bytes:| meta_header | fields meta |
         let mut writer = Writer::from_buffer(&mut buffer);
         let num_fields = self.field_infos.len();
         let _internal_id = self.type_id & 0xff;
@@ -563,10 +588,10 @@ impl TypeMetaLayer {
         sorted_field_infos
     }
 
-    fn from_bytes(
+    fn from_meta_bytes(
         reader: &mut Reader,
         type_resolver: &TypeResolver,
-    ) -> Result<TypeMetaLayer, Error> {
+    ) -> Result<TypeMeta, Error> {
         let meta_header = reader.read_u8()?;
         let register_by_name = (meta_header & REGISTER_BY_NAME_FLAG) != 0;
         let mut num_fields = meta_header as usize & SMALL_NUM_FIELDS_THRESHOLD;
@@ -603,7 +628,7 @@ impl TypeMetaLayer {
             Self::assign_field_ids(&type_info_current, &mut sorted_field_infos);
         }
         // if no type found, keep all fields id as -1 to be skipped.
-        Ok(TypeMetaLayer::new(
+        Ok(TypeMeta::new(
             type_id,
             namespace,
             type_name,
@@ -637,70 +662,6 @@ impl TypeMetaLayer {
             }
         }
     }
-}
-
-#[derive(Debug)]
-pub struct TypeMeta {
-    // assigned valid value and used, only during deserializing
-    hash: i64,
-    layer: TypeMetaLayer,
-}
-
-impl TypeMeta {
-    #[inline(always)]
-    pub fn get_field_infos(&self) -> &Vec<FieldInfo> {
-        self.layer.get_field_infos()
-    }
-
-    #[inline(always)]
-    pub fn get_type_id(&self) -> u32 {
-        self.layer.get_type_id()
-    }
-
-    #[inline(always)]
-    pub fn get_hash(&self) -> i64 {
-        self.hash
-    }
-
-    #[inline(always)]
-    pub fn get_type_name(&self) -> Rc<MetaString> {
-        self.layer.get_type_name()
-    }
-
-    #[inline(always)]
-    pub fn get_namespace(&self) -> Rc<MetaString> {
-        self.layer.get_namespace()
-    }
-
-    #[inline(always)]
-    pub fn empty() -> TypeMeta {
-        TypeMeta {
-            hash: 0,
-            layer: TypeMetaLayer::empty(),
-        }
-    }
-
-    /// Creates a deep clone with new Rc instances.
-    /// This is safe for concurrent use from multiple threads.
-    pub fn deep_clone(&self) -> TypeMeta {
-        TypeMeta {
-            hash: self.hash,
-            layer: self.layer.deep_clone(),
-        }
-    }
-
-    pub(crate) fn from_fields(
-        type_id: u32,
-        namespace: MetaString,
-        type_name: MetaString,
-        register_by_name: bool,
-        field_infos: Vec<FieldInfo>,
-    ) -> TypeMeta {
-        TypeMeta {
-            hash: 0,
-            layer: TypeMetaLayer::new(type_id, namespace, type_name, register_by_name, field_infos),
-        }
-    }
 
     #[allow(dead_code)]
     pub(crate) fn from_bytes(
@@ -720,11 +681,9 @@ impl TypeMeta {
 
         // let current_meta_size = 0;
         // while current_meta_size < meta_size {}
-        let layer = TypeMetaLayer::from_bytes(reader, type_resolver)?;
-        Ok(TypeMeta {
-            layer,
-            hash: meta_hash,
-        })
+        let mut meta = Self::from_meta_bytes(reader, type_resolver)?;
+        meta.hash = meta_hash;
+        Ok(meta)
     }
 
     pub(crate) fn from_bytes_with_header(
@@ -744,11 +703,9 @@ impl TypeMeta {
 
         // let current_meta_size = 0;
         // while current_meta_size < meta_size {}
-        let layer = TypeMetaLayer::from_bytes(reader, type_resolver)?;
-        Ok(TypeMeta {
-            layer,
-            hash: meta_hash,
-        })
+        let mut meta = Self::from_meta_bytes(reader, type_resolver)?;
+        meta.hash = meta_hash;
+        Ok(meta)
     }
 
     #[inline(always)]
@@ -778,17 +735,14 @@ impl TypeMeta {
     }
 
     pub(crate) fn to_bytes(&self) -> Result<Vec<u8>, Error> {
-        // | global_binary_header | layers_bytes |
+        // | global_binary_header | meta_bytes |
         let mut buffer = vec![];
         let mut result = Writer::from_buffer(&mut buffer);
-        let mut layers_buffer = vec![];
-        let mut layers_writer = Writer::from_buffer(&mut layers_buffer);
-        // for layer in self.layers.iter() {
-        //     layers_writer.bytes(layer.to_bytes()?.as_slice());
-        // }
-        layers_writer.write_bytes(self.layer.to_bytes()?.as_slice());
+        let mut meta_buffer = vec![];
+        let mut meta_writer = Writer::from_buffer(&mut meta_buffer);
+        meta_writer.write_bytes(self.to_meta_bytes()?.as_slice());
         // global_binary_header:| hash:50bits | is_compressed:1bit | write_fields_meta:1bit | meta_size:12bits |
-        let meta_size = layers_writer.len() as i64;
+        let meta_size = meta_writer.len() as i64;
         let mut header: i64 = min(META_SIZE_MASK, meta_size);
         let write_meta_fields_flag = !self.get_field_infos().is_empty();
         if write_meta_fields_flag {
@@ -798,13 +752,13 @@ impl TypeMeta {
         if is_compressed {
             header |= COMPRESS_META_FLAG;
         }
-        let meta_hash = murmurhash3_x64_128(layers_writer.dump().as_slice(), 47).0 as i64;
+        let meta_hash = murmurhash3_x64_128(meta_writer.dump().as_slice(), 47).0 as i64;
         header |= (meta_hash << (64 - NUM_HASH_BITS)).abs();
         result.write_i64(header);
         if meta_size >= META_SIZE_MASK {
             result.write_varuint32((meta_size - META_SIZE_MASK) as u32);
         }
-        result.write_bytes(layers_buffer.as_slice());
+        result.write_bytes(meta_buffer.as_slice());
         Ok(buffer)
     }
 }

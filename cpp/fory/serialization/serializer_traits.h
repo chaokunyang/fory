@@ -100,8 +100,7 @@ template <typename T> struct is_variant : std::false_type {};
 template <typename... Ts>
 struct is_variant<std::variant<Ts...>> : std::true_type {};
 
-template <typename T>
-inline constexpr bool is_variant_v = is_variant<T>::value;
+template <typename T> inline constexpr bool is_variant_v = is_variant<T>::value;
 
 /// Detect std::weak_ptr
 template <typename T> struct is_weak_ptr : std::false_type {};

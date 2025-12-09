@@ -393,6 +393,30 @@ void skip_unknown(ReadContext &ctx) {
   }
 }
 
+void skip_union(ReadContext &ctx) {
+  // Read the variant index
+  (void)ctx.read_varuint32(ctx.error());
+  if (FORY_PREDICT_FALSE(ctx.has_error())) {
+    return;
+  }
+  // Read and skip the alternative's type info
+  const TypeInfo *type_info = ctx.read_any_typeinfo(ctx.error());
+  if (FORY_PREDICT_FALSE(ctx.has_error())) {
+    return;
+  }
+  if (!type_info) {
+    ctx.set_error(
+        Error::type_error("TypeInfo not found for UNION alternative skip"));
+    return;
+  }
+
+  // Skip the alternative's value
+  FieldType alt_field_type;
+  alt_field_type.type_id = type_info->type_id;
+  alt_field_type.nullable = false;
+  skip_field_value(ctx, alt_field_type, false);
+}
+
 void skip_field_value(ReadContext &ctx, const FieldType &field_type,
                       bool read_ref_flag) {
   // Read ref flag if needed
@@ -566,6 +590,14 @@ void skip_field_value(ReadContext &ctx, const FieldType &field_type,
 
   case TypeId::UNKNOWN:
     skip_unknown(ctx);
+    return;
+
+  case TypeId::UNION:
+    skip_union(ctx);
+    return;
+
+  case TypeId::NONE:
+    // NONE (not-applicable/monostate) has no data to skip
     return;
 
   default:

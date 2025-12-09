@@ -37,7 +37,8 @@ namespace serialization {
 /// std::monostate represents an empty state in variants. It has no data
 /// to serialize, so serialization is a no-op.
 template <> struct Serializer<std::monostate> {
-  static constexpr TypeId type_id = TypeId::NONE; // Use NONE for empty/not-applicable type
+  static constexpr TypeId type_id =
+      TypeId::NONE; // Use NONE for empty/not-applicable type
 
   static inline void write_type_info(WriteContext &ctx) {
     ctx.write_varuint32(static_cast<uint32_t>(type_id));
@@ -64,8 +65,8 @@ template <> struct Serializer<std::monostate> {
     // No data to write for monostate
   }
 
-  static inline void write_data_generic(const std::monostate &, WriteContext &ctx,
-                                        bool has_generics) {
+  static inline void write_data_generic(const std::monostate &,
+                                        WriteContext &ctx, bool has_generics) {
     // No data to write for monostate
   }
 
@@ -86,7 +87,8 @@ template <> struct Serializer<std::monostate> {
     return std::monostate{};
   }
 
-  static inline std::monostate read_with_type_info(ReadContext &ctx, bool read_ref,
+  static inline std::monostate read_with_type_info(ReadContext &ctx,
+                                                   bool read_ref,
                                                    const TypeInfo &type_info) {
     return read(ctx, read_ref, false);
   }
@@ -108,7 +110,7 @@ inline void write_variant_by_index(const Variant &variant, WriteContext &ctx,
       Serializer<AlternativeType>::write(value, ctx, false, write_type);
     } else {
       write_variant_by_index<Variant, Index + 1>(variant, ctx, active_index,
-                                                  write_type);
+                                                 write_type);
     }
   } else {
     // Should never reach here if active_index is valid
@@ -125,7 +127,8 @@ inline Variant read_variant_by_index(ReadContext &ctx, size_t stored_index,
   if constexpr (Index < std::variant_size_v<Variant>) {
     if (Index == stored_index) {
       using AlternativeType = std::variant_alternative_t<Index, Variant>;
-      AlternativeType value = Serializer<AlternativeType>::read(ctx, false, read_type);
+      AlternativeType value =
+          Serializer<AlternativeType>::read(ctx, false, read_type);
       if (FORY_PREDICT_FALSE(ctx.has_error())) {
         // Return a default-constructed variant with the first alternative
         return Variant{};
@@ -181,8 +184,8 @@ template <typename... Ts> struct Serializer<std::variant<Ts...>> {
       return;
     }
     if (!type_id_matches(type_id_read, static_cast<uint32_t>(type_id))) {
-      ctx.set_error(Error::type_mismatch(type_id_read,
-                                         static_cast<uint32_t>(type_id)));
+      ctx.set_error(
+          Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
     }
   }
 

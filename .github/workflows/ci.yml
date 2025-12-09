@@ -440,8 +440,7 @@ jobs:
     strategy:
       matrix:
         python-version: [3.8, 3.12, 3.13.3]
-        # macos-15-large is x86_64, macos-latest is arm64
-        os: [ubuntu-latest, ubuntu-24.04-arm, macos-15-large, macos-latest, windows-2022]
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-2022]
     steps:
       - uses: actions/checkout@v5
       - name: Set up Python ${{ matrix.python-version }}

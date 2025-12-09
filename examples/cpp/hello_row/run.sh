@@ -24,7 +24,7 @@ pip install cmake
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="${SCRIPT_DIR}/build"
 
-echo "=== Fory C++ CMake Example Build Script ==="
+echo "=== Fory C++ Hello Row Example Build Script ==="
 echo ""
 
 # Clean previous build if requested
@@ -52,15 +52,10 @@ echo ""
 echo "=== Build successful! ==="
 echo ""
 
-# Run examples
-echo "=== Running serialization_example ==="
+# Run example
+echo "=== Running hello_row ==="
 echo ""
-./serialization_example
+./hello_row
 
 echo ""
-echo "=== Running row_format_example ==="
-echo ""
-./row_format_example
-
-echo ""
-echo "=== All examples completed! ==="
+echo "=== Example completed! ==="

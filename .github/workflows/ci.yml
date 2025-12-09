@@ -420,8 +420,8 @@ jobs:
           cd fory-core
           mvn -T16 --no-transfer-progress test -Dtest=org.apache.fory.CPPXlangTest
 
-  cpp_example:
-    name: C++ Example
+  cpp_examples:
+    name: C++ Examples
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -429,10 +429,33 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Build and run C++ CMake examples
+      - name: Cache Bazel binary
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/bin/bazel
+            ~/.local/bin/bazel
+          key: bazel-binary-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.bazelversion') }}
+          restore-keys: |
+            bazel-binary-${{ runner.os }}-${{ runner.arch }}-
+      - name: Install bazel
+        run: python ./ci/run_ci.py cpp --install-deps-only
+      - name: Build and run C++ hello_world example (CMake)
         run: |
-          cd examples/cpp/cmake_example
+          cd examples/cpp/hello_world
           ./run.sh
+      - name: Build and run C++ hello_row example (CMake)
+        run: |
+          cd examples/cpp/hello_row
+          ./run.sh
+      - name: Build and run C++ hello_world example (Bazel)
+        run: |
+          cd examples/cpp/hello_world
+          ./run_bazel.sh
+      - name: Build and run C++ hello_row example (Bazel)
+        run: |
+          cd examples/cpp/hello_row
+          ./run_bazel.sh
 
   python:
     name: Python CI

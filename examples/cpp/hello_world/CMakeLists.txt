@@ -17,9 +17,9 @@
 
 cmake_minimum_required(VERSION 3.16)
 
-project(fory_cmake_example
+project(fory_hello_world
     VERSION 1.0.0
-    DESCRIPTION "Example project demonstrating Fory C++ CMake integration"
+    DESCRIPTION "Fory C++ Serialization Hello World Example"
     LANGUAGES CXX
 )
 
@@ -32,7 +32,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # =============================================================================
 
 # Option 1: Use FetchContent (recommended for external projects)
-# This is similar to how abseil or gtest are commonly used
 include(FetchContent)
 
 # For production use: fetch from GitHub
@@ -58,21 +57,15 @@ FetchContent_MakeAvailable(fory)
 # set(FORY_CPP_DIR "/path/to/fory/cpp" CACHE PATH "Path to Fory C++ directory")
 # add_subdirectory(${FORY_CPP_DIR} ${CMAKE_BINARY_DIR}/fory)
 
-# Serialization example executable
-add_executable(serialization_example
-    ${CMAKE_CURRENT_SOURCE_DIR}/serialization_example.cc
+# Build the example executable
+add_executable(hello_world
+    ${CMAKE_CURRENT_SOURCE_DIR}/main.cc
 )
-target_link_libraries(serialization_example PRIVATE fory::serialization)
-
-# Row format example executable
-add_executable(row_format_example
-    ${CMAKE_CURRENT_SOURCE_DIR}/row_format_example.cc
-)
-target_link_libraries(row_format_example PRIVATE fory::row_format)
+target_link_libraries(hello_world PRIVATE fory::serialization)
 
 # Print build info
 message(STATUS "")
-message(STATUS "Fory CMake Example Configuration:")
+message(STATUS "Fory Hello World Example Configuration:")
 message(STATUS "  C++ standard:   ${CMAKE_CXX_STANDARD}")
 message(STATUS "  Build type:     ${CMAKE_BUILD_TYPE}")
 message(STATUS "")

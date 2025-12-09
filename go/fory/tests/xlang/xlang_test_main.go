@@ -329,7 +329,7 @@ func testStringSerializer() {
 	dataFile := getDataFile()
 	data := readFile(dataFile)
 
-	f := fory.New(fory.WithCompatible(true))
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 
 	testStrings := []string{
 		"ab",
@@ -366,7 +366,7 @@ func testCrossLanguageSerializer() {
 	dataFile := getDataFile()
 	data := readFile(dataFile)
 
-	f := fory.New(fory.WithCompatible(true))
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 	f.RegisterNamedType(Color(0), "color")
 
 	vals := make([]interface{}, 0)
@@ -398,7 +398,7 @@ func testSimpleStruct() {
 
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 	// Use numeric IDs to match Java's fory.register(Color.class, 101), etc.
-	f.Register(Color(0), 101)
+	f.RegisterEnum(Color(0), 101)
 	f.Register(Item{}, 102)
 	f.Register(SimpleStruct{}, 103)
 
@@ -419,11 +419,11 @@ func testNamedSimpleStruct() {
 	dataFile := getDataFile()
 	data := readFile(dataFile)
 
-	f := fory.New(fory.WithCompatible(true))
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 	// Use namespace "demo" to match Java's fory.register(Color.class, "demo", "color"), etc.
-	f.RegisterByNamespace(Color(0), "demo", "color")
-	f.RegisterByNamespace(Item{}, "demo", "item")
-	f.RegisterByNamespace(SimpleStruct{}, "demo", "simple_struct")
+	f.RegisterByName(Color(0), "demo", "color")
+	f.RegisterByName(Item{}, "demo", "item")
+	f.RegisterByName(SimpleStruct{}, "demo", "simple_struct")
 
 	obj, err := f.DeserializeAny(data)
 	if err != nil {
@@ -442,7 +442,7 @@ func testList() {
 	dataFile := getDataFile()
 	data := readFile(dataFile)
 
-	f := fory.New(fory.WithCompatible(true))
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 	// Use numeric ID 102 to match Java's fory.register(Item.class, 102)
 	f.Register(Item{}, 102)
 
@@ -474,7 +474,7 @@ func testMap() {
 	dataFile := getDataFile()
 	data := readFile(dataFile)
 
-	f := fory.New(fory.WithCompatible(true))
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 	// Use numeric ID 102 to match Java's fory.register(Item.class, 102)
 	f.Register(Item{}, 102)
 
@@ -506,7 +506,7 @@ func testInteger() {
 	dataFile := getDataFile()
 	data := readFile(dataFile)
 
-	f := fory.New(fory.WithCompatible(true))
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 	// Use numeric ID 101 to match Java's fory.register(Item1.class, 101)
 	f.Register(Item1{}, 101)
 
@@ -538,7 +538,7 @@ func testItem() {
 	dataFile := getDataFile()
 	data := readFile(dataFile)
 
-	f := fory.New(fory.WithCompatible(true))
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 	// Use numeric ID 102 to match Java's fory.register(Item.class, 102)
 	f.Register(Item{}, 102)
 
@@ -570,9 +570,9 @@ func testColor() {
 	dataFile := getDataFile()
 	data := readFile(dataFile)
 
-	f := fory.New(fory.WithCompatible(true))
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 	// Use numeric ID 101 to match Java's fory.register(Color.class, 101)
-	f.Register(Color(0), 101)
+	f.RegisterEnum(Color(0), 101)
 
 	buf := fory.NewByteBuffer(data)
 	colors := make([]interface{}, 4)
@@ -602,7 +602,7 @@ func testStructWithList() {
 	dataFile := getDataFile()
 	data := readFile(dataFile)
 
-	f := fory.New(fory.WithCompatible(true))
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 	// Use numeric ID 201 to match Java's fory.register(StructWithList.class, 201)
 	f.Register(StructWithList{}, 201)
 
@@ -623,7 +623,7 @@ func testStructWithMap() {
 	dataFile := getDataFile()
 	data := readFile(dataFile)
 
-	f := fory.New(fory.WithCompatible(true))
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 	// Use numeric ID 202 to match Java's fory.register(StructWithMap.class, 202)
 	f.Register(StructWithMap{}, 202)
 
@@ -644,7 +644,7 @@ func testSkipIdCustom() {
 	dataFile := getDataFile()
 	data := readFile(dataFile)
 
-	f := fory.New(fory.WithCompatible(true))
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 	f.RegisterNamedType(MyExt{}, "my_ext")
 	f.RegisterNamedType(EmptyWrapper{}, "my_wrapper")
 
@@ -665,7 +665,7 @@ func testSkipNameCustom() {
 	dataFile := getDataFile()
 	data := readFile(dataFile)
 
-	f := fory.New(fory.WithCompatible(true))
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 	f.RegisterNamedType(MyExt{}, "my_ext")
 	f.RegisterNamedType(EmptyWrapper{}, "my_wrapper")
 
@@ -686,7 +686,7 @@ func testConsistentNamed() {
 	dataFile := getDataFile()
 	data := readFile(dataFile)
 
-	f := fory.New(fory.WithCompatible(true))
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 	f.RegisterNamedType(Color(0), "color")
 	f.RegisterNamedType(MyStruct{}, "my_struct")
 	f.RegisterNamedType(MyExt{}, "my_ext")
@@ -719,7 +719,7 @@ func testStructVersionCheck() {
 	dataFile := getDataFile()
 	data := readFile(dataFile)
 
-	f := fory.New(fory.WithCompatible(true))
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 	// Use numeric ID 201 to match Java's fory.register(VersionCheckStruct.class, 201)
 	f.Register(VersionCheckStruct{}, 201)
 
@@ -740,7 +740,7 @@ func testPolymorphicList() {
 	dataFile := getDataFile()
 	data := readFile(dataFile)
 
-	f := fory.New(fory.WithCompatible(true))
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 	// Use numeric IDs to match Java's registration: Dog=302, Cat=303, AnimalListHolder=304
 	f.Register(&Dog{}, 302)
 	f.Register(&Cat{}, 303)
@@ -774,7 +774,7 @@ func testPolymorphicMap() {
 	dataFile := getDataFile()
 	data := readFile(dataFile)
 
-	f := fory.New(fory.WithCompatible(true))
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 	// Use numeric IDs to match Java's registration: Dog=302, Cat=303, AnimalMapHolder=305
 	f.Register(&Dog{}, 302)
 	f.Register(&Cat{}, 303)

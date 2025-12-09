@@ -419,8 +419,8 @@ func (f *Fory) Deserialize(buffer *ByteBuffer, v interface{}, buffers []*ByteBuf
 	return nil
 }
 
-// RegisterByNamespace registers a type with namespace for cross-language serialization
-func (f *Fory) RegisterByNamespace(type_ interface{}, namespace, typeName string) error {
+// RegisterByName registers a type with namespace for cross-language serialization
+func (f *Fory) RegisterByName(type_ interface{}, namespace, typeName string) error {
 	var t reflect.Type
 	if rt, ok := type_.(reflect.Type); ok {
 		t = rt

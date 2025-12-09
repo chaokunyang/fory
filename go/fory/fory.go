@@ -151,10 +151,11 @@ func (f *Fory) MetaContext() *MetaContext {
 	return f.metaContext
 }
 
-// Register registers a type with a numeric type ID for cross-language serialization.
+// Register registers a struct type with a numeric ID for cross-language serialization.
 // This is compatible with Java's fory.register(Class, int) method.
 // type_ can be either a reflect.Type or an instance of the type
 // typeID should be the user type ID in the range 0-8192 (the internal type ID will be added automatically)
+// Note: For enum types, use RegisterEnum instead.
 func (f *Fory) Register(type_ interface{}, typeID int32) error {
 	var t reflect.Type
 	if rt, ok := type_.(reflect.Type); ok {
@@ -166,28 +167,56 @@ func (f *Fory) Register(type_ interface{}, typeID int32) error {
 		}
 	}
 
-	// Determine the internal type ID based on the Go type and config
+	// Only struct types are supported via Register
+	// For enums, use RegisterEnum
+	if t.Kind() != reflect.Struct {
+		return fmt.Errorf("Register only supports struct types; for enum types use RegisterEnum. Got: %v", t.Kind())
+	}
+
+	// Determine the internal type ID based on config
 	var internalTypeID TypeId
-	switch t.Kind() {
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		// Enum types in Go are typically numeric types
-		internalTypeID = ENUM
-	case reflect.Struct:
-		// Use COMPATIBLE_STRUCT when compatible mode is enabled (matches Java behavior)
-		if f.config.Compatible {
-			internalTypeID = COMPATIBLE_STRUCT
-		} else {
-			internalTypeID = STRUCT
-		}
-	default:
-		return fmt.Errorf("unsupported type for registration: %v", t.Kind())
+	// Use COMPATIBLE_STRUCT when compatible mode is enabled (matches Java behavior)
+	if f.config.Compatible {
+		internalTypeID = COMPATIBLE_STRUCT
+	} else {
+		internalTypeID = STRUCT
 	}
 
 	// Calculate full type ID: (userID << 8) | internalTypeID
 	fullTypeID := (typeID << 8) | int32(internalTypeID)
 
 	return f.typeResolver.RegisterByID(t, fullTypeID)
+}
+
+// RegisterEnum registers an enum type with a numeric ID for cross-language serialization.
+// In Go, enums are typically defined as int-based types (e.g., type Color int32).
+// This method creates an enum serializer that writes/reads the enum value as VarUint32Small7.
+// type_ can be either a reflect.Type or an instance of the enum type
+// typeID should be the user type ID in the range 0-8192 (the internal type ID will be added automatically)
+func (f *Fory) RegisterEnum(type_ interface{}, typeID int32) error {
+	var t reflect.Type
+	if rt, ok := type_.(reflect.Type); ok {
+		t = rt
+	} else {
+		t = reflect.TypeOf(type_)
+		if t.Kind() == reflect.Ptr {
+			t = t.Elem()
+		}
+	}
+
+	// Verify it's a numeric type (Go enums are int-based)
+	switch t.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		// OK
+	default:
+		return fmt.Errorf("RegisterEnum only supports numeric types (Go enums); got: %v", t.Kind())
+	}
+
+	// Calculate full type ID: (userID << 8) | ENUM
+	fullTypeID := (typeID << 8) | int32(ENUM)
+
+	return f.typeResolver.RegisterEnumByID(t, fullTypeID)
 }
 
 // RegisterNamedType registers a named type for cross-language serialization

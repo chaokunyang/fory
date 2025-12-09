@@ -384,29 +384,48 @@ func (r *TypeResolver) RegisterByID(type_ reflect.Type, fullTypeID int32) error 
 			return fmt.Errorf("failed to register pointer type by ID: %w", err)
 		}
 
+	default:
+		return fmt.Errorf("unsupported type for ID registration: %v (use RegisterEnumByID for enum types)", type_.Kind())
+	}
+
+	return nil
+}
+
+// RegisterEnumByID registers an enum type (numeric type in Go) with a full type ID
+func (r *TypeResolver) RegisterEnumByID(type_ reflect.Type, fullTypeID int32) error {
+	// Check if already registered
+	if info, ok := r.typeIDToTypeInfo[fullTypeID]; ok {
+		return fmt.Errorf("type %s with id %d has been registered", info.Type, fullTypeID)
+	}
+
+	// Verify it's a numeric type
+	switch type_.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
 		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		// For enum types (numeric types in Go), just register in typeIDToTypeInfo
-		// The actual serialization will use the primitive serializer
-		tag := type_.Name()
-		r.typeToTypeInfo[type_] = "@" + tag
-		r.typeInfoToType["@"+tag] = type_
-
-		// Directly add to typeIDToTypeInfo without going through registerType
-		// since we don't have a custom serializer for enums
-		typeInfo := TypeInfo{
-			Type:      type_,
-			TypeID:    fullTypeID,
-			IsDynamic: isDynamicType(type_),
-			StaticId:  GetStaticTypeId(type_),
-			hashValue: calcTypeHash(type_),
-		}
-		r.typeIDToTypeInfo[fullTypeID] = typeInfo
-		r.typesInfo[type_] = typeInfo
-
+		// OK
 	default:
-		return fmt.Errorf("unsupported type for ID registration: %v", type_.Kind())
+		return fmt.Errorf("RegisterEnumByID only supports numeric types; got: %v", type_.Kind())
 	}
+
+	// Create enum serializer
+	serializer := &enumSerializer{type_: type_, typeID: fullTypeID}
+	tag := type_.Name()
+
+	r.typeToSerializers[type_] = serializer
+	r.typeToTypeInfo[type_] = "@" + tag
+	r.typeInfoToType["@"+tag] = type_
+
+	// Create TypeInfo with serializer
+	typeInfo := TypeInfo{
+		Type:       type_,
+		TypeID:     fullTypeID,
+		Serializer: serializer,
+		IsDynamic:  isDynamicType(type_),
+		StaticId:   GetStaticTypeId(type_),
+		hashValue:  calcTypeHash(type_),
+	}
+	r.typeIDToTypeInfo[fullTypeID] = typeInfo
+	r.typesInfo[type_] = typeInfo
 
 	return nil
 }

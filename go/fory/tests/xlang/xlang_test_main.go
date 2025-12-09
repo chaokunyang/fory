@@ -308,21 +308,41 @@ func testMurmurHash3() {
 	data := readFile(dataFile)
 	buf := fory.NewByteBuffer(data)
 
-	_ = buf.ReadInt64()
-	_ = buf.ReadInt64()
-	_ = buf.ReadInt64()
-	_ = buf.ReadInt64()
+	if len(data) == 32 {
+		// First round: read Guava hashes (32 bytes), compute and write back
+		_ = buf.ReadInt64()
+		_ = buf.ReadInt64()
+		_ = buf.ReadInt64()
+		_ = buf.ReadInt64()
 
-	h1_1, h1_2 := murmurHash3_x64_128([]byte{1, 2, 8}, 47)
-	h2_1, h2_2 := murmurHash3_x64_128([]byte("01234567890123456789"), 47)
+		h1_1, h1_2 := murmurHash3_x64_128([]byte{1, 2, 8}, 47)
+		h2_1, h2_2 := murmurHash3_x64_128([]byte("01234567890123456789"), 47)
 
-	outBuf := fory.NewByteBuffer(make([]byte, 0, 32))
-	outBuf.WriteInt64(int64(h1_1))
-	outBuf.WriteInt64(int64(h1_2))
-	outBuf.WriteInt64(int64(h2_1))
-	outBuf.WriteInt64(int64(h2_2))
+		outBuf := fory.NewByteBuffer(make([]byte, 0, 32))
+		outBuf.WriteInt64(int64(h1_1))
+		outBuf.WriteInt64(int64(h1_2))
+		outBuf.WriteInt64(int64(h2_1))
+		outBuf.WriteInt64(int64(h2_2))
 
-	writeFile(dataFile, outBuf.GetByteSlice(0, outBuf.WriterIndex()))
+		writeFile(dataFile, outBuf.GetByteSlice(0, outBuf.WriterIndex()))
+	} else if len(data) == 16 {
+		// Second round: read MurmurHash3 hashes (16 bytes), verify
+		h1 := buf.ReadInt64()
+		h2 := buf.ReadInt64()
+
+		// Compute expected values
+		expected1, expected2 := murmurHash3_x64_128([]byte{1, 2, 8}, 47)
+
+		if h1 != int64(expected1) || h2 != int64(expected2) {
+			panic(fmt.Sprintf("MurmurHash3 mismatch: got (%d, %d), expected (%d, %d)",
+				h1, h2, int64(expected1), int64(expected2)))
+		}
+
+		// Write empty or same data to indicate success
+		writeFile(dataFile, []byte{})
+	} else {
+		panic(fmt.Sprintf("unexpected data length: %d", len(data)))
+	}
 }
 
 func testStringSerializer() {

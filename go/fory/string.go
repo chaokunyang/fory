@@ -30,32 +30,26 @@ const (
 	encodingUTF8           // UTF-8 encoding (default)
 )
 
-// writeString implements string serialization with automatic encoding detection
+// writeString implements string serialization - always uses UTF-8 encoding
 func writeString(buf *ByteBuffer, value string) error {
-	// Check if string can be encoded as Latin1
-	if isLatin1(value) {
-		return writeLatin1(buf, value)
-	}
-
-	// Check if UTF-16LE encoding is more efficient
-	if utf16Bytes, ok := tryUTF16LE(value); ok {
-		return writeUTF16LE(buf, utf16Bytes)
-	}
-
-	// Default to UTF-8 encoding
-	return writeUTF8(buf, value)
+	data := unsafeGetBytes(value)
+	header := (uint64(len(data)) << 2) | encodingUTF8
+	buf.WriteVarUint36Small(header)
+	buf.WriteBinary(data)
+	return nil
 }
 
 // readString implements string deserialization with encoding parsing
 func readString(buf *ByteBuffer) string {
-	header := buf.ReadVarUint64()
-	size := header >> 2       // Extract string length (in characters)
+	header := buf.ReadVarUint36Small()
+	size := header >> 2       // Extract byte count
 	encoding := header & 0b11 // Extract encoding type
 
 	switch encoding {
 	case encodingLatin1:
 		return readLatin1(buf, int(size))
 	case encodingUTF16LE:
+		// For UTF16LE, size is byte count, need to convert to char count
 		return readUTF16LE(buf, int(size))
 	case encodingUTF8:
 		return readUTF8(buf, int(size))
@@ -103,19 +97,26 @@ func tryUTF16LE(s string) ([]byte, bool) {
 
 // Specific encoding write methods
 func writeLatin1(buf *ByteBuffer, s string) error {
-	length := len(s)
-	header := (uint64(length) << 2) | encodingLatin1 // Pack length and encoding
+	// For Latin1 encoding, each rune becomes one byte
+	runes := []rune(s)
+	length := len(runes)
+	header := (uint64(length) << 2) | encodingLatin1 // Pack byte count and encoding
 
-	buf.WriteVarUint64(header)
-	buf.WriteBinary(unsafeGetBytes(s)) // Directly use underlying bytes (Latin1 chars are compatible with UTF-8 in Go)
+	buf.WriteVarUint36Small(header)
+	// Convert runes to Latin1 bytes
+	data := make([]byte, length)
+	for i, r := range runes {
+		data[i] = byte(r)
+	}
+	buf.WriteBinary(data)
 	return nil
 }
 
 func writeUTF16LE(buf *ByteBuffer, data []byte) error {
-	length := len(data) / 2 // Character count (2 bytes per char)
+	length := len(data) // Byte count (not character count)
 	header := (uint64(length) << 2) | encodingUTF16LE
 
-	buf.WriteVarUint64(header)
+	buf.WriteVarUint36Small(header)
 	buf.WriteBinary(data)
 	return nil
 }
@@ -124,7 +125,7 @@ func writeUTF8(buf *ByteBuffer, s string) error {
 	data := unsafeGetBytes(s)
 	header := (uint64(len(data)) << 2) | encodingUTF8
 
-	buf.WriteVarUint64(header)
+	buf.WriteVarUint36Small(header)
 	buf.WriteBinary(data)
 	return nil
 }
@@ -132,14 +133,20 @@ func writeUTF8(buf *ByteBuffer, s string) error {
 // Specific encoding read methods
 func readLatin1(buf *ByteBuffer, size int) string {
 	data := buf.ReadBinary(size)
-	return string(data) // Go automatically handles Latin1 to UTF-8 conversion
+	// Latin1 bytes need to be converted to UTF-8
+	// Each Latin1 byte is a single Unicode code point (0-255)
+	runes := make([]rune, size)
+	for i, b := range data {
+		runes[i] = rune(b)
+	}
+	return string(runes)
 }
 
-func readUTF16LE(buf *ByteBuffer, charCount int) string {
-	byteCount := charCount * 2
+func readUTF16LE(buf *ByteBuffer, byteCount int) string {
 	data := buf.ReadBinary(byteCount)
 
 	// Reconstruct UTF-16 code units
+	charCount := byteCount / 2
 	u16s := make([]uint16, charCount)
 	for i := 0; i < byteCount; i += 2 {
 		u16s[i/2] = uint16(data[i]) | uint16(data[i+1])<<8

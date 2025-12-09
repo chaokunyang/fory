@@ -356,6 +356,97 @@ func (b *ByteBuffer) WriteVarUint64(value uint64) {
 	b.writerIndex += i
 }
 
+// WriteVarUint36Small writes a varint optimized for small values (up to 36 bits)
+// Used for string headers: (length << 2) | encoding
+func (b *ByteBuffer) WriteVarUint36Small(value uint64) {
+	b.grow(5)
+	offset := b.writerIndex
+	data := b.data[offset:]
+
+	if value < 0x80 {
+		data[0] = byte(value)
+		b.writerIndex += 1
+	} else if value < 0x4000 {
+		data[0] = byte(value&0x7F) | 0x80
+		data[1] = byte(value >> 7)
+		b.writerIndex += 2
+	} else if value < 0x200000 {
+		data[0] = byte(value&0x7F) | 0x80
+		data[1] = byte((value>>7)&0x7F) | 0x80
+		data[2] = byte(value >> 14)
+		b.writerIndex += 3
+	} else if value < 0x10000000 {
+		data[0] = byte(value&0x7F) | 0x80
+		data[1] = byte((value>>7)&0x7F) | 0x80
+		data[2] = byte((value>>14)&0x7F) | 0x80
+		data[3] = byte(value >> 21)
+		b.writerIndex += 4
+	} else {
+		data[0] = byte(value&0x7F) | 0x80
+		data[1] = byte((value>>7)&0x7F) | 0x80
+		data[2] = byte((value>>14)&0x7F) | 0x80
+		data[3] = byte((value>>21)&0x7F) | 0x80
+		data[4] = byte(value >> 28)
+		b.writerIndex += 5
+	}
+}
+
+// ReadVarUint36Small reads a varint optimized for small values (up to 36 bits)
+// Used for string headers: (length << 2) | encoding
+func (b *ByteBuffer) ReadVarUint36Small() uint64 {
+	if b.remaining() >= 8 {
+		return b.readVarUint36SmallFast()
+	}
+	return b.readVarUint36SmallSlow()
+}
+
+func (b *ByteBuffer) readVarUint36SmallFast() uint64 {
+	data := b.data[b.readerIndex:]
+	bulk := uint64(data[0]) | uint64(data[1])<<8 | uint64(data[2])<<16 | uint64(data[3])<<24 |
+		uint64(data[4])<<32 | uint64(data[5])<<40 | uint64(data[6])<<48 | uint64(data[7])<<56
+
+	result := bulk & 0x7F
+	readLen := 1
+
+	if (bulk & 0x80) != 0 {
+		readLen = 2
+		result |= (bulk >> 1) & 0x3F80
+		if (bulk & 0x8000) != 0 {
+			readLen = 3
+			result |= (bulk >> 2) & 0x1FC000
+			if (bulk & 0x800000) != 0 {
+				readLen = 4
+				result |= (bulk >> 3) & 0xFE00000
+				if (bulk & 0x80000000) != 0 {
+					readLen = 5
+					result |= (bulk >> 4) & 0xFF0000000
+				}
+			}
+		}
+	}
+	b.readerIndex += readLen
+	return result
+}
+
+func (b *ByteBuffer) readVarUint36SmallSlow() uint64 {
+	var result uint64
+	var shift uint
+
+	for b.readerIndex < len(b.data) {
+		byteVal := b.data[b.readerIndex]
+		b.readerIndex++
+		result |= uint64(byteVal&0x7F) << shift
+		if (byteVal & 0x80) == 0 {
+			break
+		}
+		shift += 7
+		if shift >= 36 {
+			panic("varuint36small overflow")
+		}
+	}
+	return result
+}
+
 // ReadVarint64 reads the varint encoded with zig-zag
 func (b *ByteBuffer) ReadVarint64() int64 {
 	u := b.ReadVarUint64()

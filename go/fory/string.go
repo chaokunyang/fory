@@ -189,6 +189,10 @@ func (s stringSerializer) WriteData(ctx *WriteContext, value reflect.Value) erro
 }
 
 func (s stringSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
+	if writeRef {
+		// String is non-primitive, needs ref flag
+		ctx.buffer.WriteInt8(NotNullValueFlag)
+	}
 	if writeType {
 		ctx.buffer.WriteVarUint32Small7(uint32(STRING))
 	}
@@ -202,6 +206,14 @@ func (s stringSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value r
 }
 
 func (s stringSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
+	if readRef {
+		// String is non-primitive, needs ref flag
+		refFlag := ctx.buffer.ReadInt8()
+		if refFlag == NullFlag {
+			value.SetString("")
+			return nil
+		}
+	}
 	if readType {
 		_ = ctx.buffer.ReadVarUint32Small7()
 	}

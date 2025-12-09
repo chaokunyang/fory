@@ -24,7 +24,10 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import org.apache.fory.test.TestUtils;
 import org.testng.SkipException;
 import org.testng.annotations.Test;
 
@@ -55,10 +58,22 @@ public class GoXlangTest extends XlangTestBase {
     if (!goInstalled) {
       throw new SkipException("Skipping GoXlangTest: go not installed");
     }
+    // Build Go xlang_test_main binary
+    List<String> buildCommand =
+        Arrays.asList("go", "build", "-o", "tests/" + GO_BINARY, "tests/xlang/xlang_test_main.go");
+    boolean buildSuccess =
+        TestUtils.executeCommand(
+            buildCommand, 60, Collections.emptyMap(), new File("../../go/fory"));
+    if (!buildSuccess) {
+      throw new SkipException("Skipping GoXlangTest: failed to build " + GO_BINARY);
+    }
     // Check if binary exists
     File binaryFile = new File("../../go/fory/tests/" + GO_BINARY);
     if (!binaryFile.exists()) {
-      throw new SkipException("Skipping GoXlangTest: " + GO_BINARY + " not found. Please build it with 'cd go/fory/tests/xlang && go build -o ../xlang_test_main xlang_test_main.go'");
+      throw new SkipException(
+          "Skipping GoXlangTest: "
+              + GO_BINARY
+              + " not found after build. Please check build output.");
     }
   }
 

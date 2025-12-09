@@ -45,6 +45,8 @@ Or use the provided script:
 
 ## Building with Bazel
 
+### In-repo build (for testing within Fory repository)
+
 From the repository root:
 
 ```bash
@@ -56,6 +58,31 @@ Or use the provided script:
 
 ```bash
 ./run_bazel.sh
+```
+
+### Standalone project (using Fory as external dependency)
+
+For your own project using Fory as a dependency:
+
+1. Copy `MODULE.bazel.example` to `MODULE.bazel` in your project root
+2. Copy `BUILD.standalone` to `BUILD` in your source directory
+3. Adjust the git commit or use `local_path_override` for local development
+
+```bazel
+# In your MODULE.bazel
+bazel_dep(name = "fory", version = "0.14.0")
+git_override(
+    module_name = "fory",
+    remote = "https://github.com/apache/fory.git",
+    commit = "main",  # Use specific commit for reproducibility
+)
+
+# In your BUILD file
+cc_binary(
+    name = "my_app",
+    srcs = ["main.cc"],
+    deps = ["@fory//cpp/fory/serialization:fory_serialization"],
+)
 ```
 
 ## Example Overview

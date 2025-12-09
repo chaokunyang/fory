@@ -367,7 +367,7 @@ func testCrossLanguageSerializer() {
 	data := readFile(dataFile)
 
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
-	f.RegisterNamedType(Color(0), "color")
+	f.RegisterEnumByName(Color(0), "", "color")
 
 	vals := make([]interface{}, 0)
 	buf := fory.NewByteBuffer(data)
@@ -421,7 +421,7 @@ func testNamedSimpleStruct() {
 
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 	// Use namespace "demo" to match Java's fory.register(Color.class, "demo", "color"), etc.
-	f.RegisterByName(Color(0), "demo", "color")
+	f.RegisterEnumByName(Color(0), "demo", "color")
 	f.RegisterByName(Item{}, "demo", "item")
 	f.RegisterByName(SimpleStruct{}, "demo", "simple_struct")
 
@@ -687,7 +687,7 @@ func testConsistentNamed() {
 	data := readFile(dataFile)
 
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
-	f.RegisterNamedType(Color(0), "color")
+	f.RegisterEnumByName(Color(0), "", "color")
 	f.RegisterNamedType(MyStruct{}, "my_struct")
 	f.RegisterNamedType(MyExt{}, "my_ext")
 

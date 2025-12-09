@@ -219,8 +219,36 @@ func (f *Fory) RegisterEnum(type_ interface{}, typeID int32) error {
 	return f.typeResolver.RegisterEnumByID(t, fullTypeID)
 }
 
-// RegisterNamedType registers a named type for cross-language serialization
+// RegisterEnumByName registers an enum type with a name for cross-language serialization.
+// In Go, enums are typically defined as int-based types (e.g., type Color int32).
+// type_ can be either a reflect.Type or an instance of the enum type
+// typeName is the name to use for cross-language serialization (e.g., "demo.color" or "color")
+func (f *Fory) RegisterEnumByName(type_ interface{}, namespace, typeName string) error {
+	var t reflect.Type
+	if rt, ok := type_.(reflect.Type); ok {
+		t = rt
+	} else {
+		t = reflect.TypeOf(type_)
+		if t.Kind() == reflect.Ptr {
+			t = t.Elem()
+		}
+	}
+
+	// Verify it's a numeric type (Go enums are int-based)
+	switch t.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		// OK
+	default:
+		return fmt.Errorf("RegisterEnumByName only supports numeric types (Go enums); got: %v", t.Kind())
+	}
+
+	return f.typeResolver.RegisterEnumByName(t, namespace, typeName)
+}
+
+// RegisterNamedType registers a named struct type for cross-language serialization
 // type_ can be either a reflect.Type or an instance of the type
+// Note: For enum types, use RegisterEnumByName instead.
 func (f *Fory) RegisterNamedType(type_ interface{}, typeName string) error {
 	var t reflect.Type
 	if rt, ok := type_.(reflect.Type); ok {
@@ -230,6 +258,9 @@ func (f *Fory) RegisterNamedType(type_ interface{}, typeName string) error {
 		if t.Kind() == reflect.Ptr {
 			t = t.Elem()
 		}
+	}
+	if t.Kind() != reflect.Struct {
+		return fmt.Errorf("RegisterNamedType only supports struct types; for enum types use RegisterEnumByName. Got: %v", t.Kind())
 	}
 	return f.typeResolver.RegisterNamedType(t, 0, "", typeName)
 }

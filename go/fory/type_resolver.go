@@ -430,6 +430,56 @@ func (r *TypeResolver) RegisterEnumByID(type_ reflect.Type, fullTypeID int32) er
 	return nil
 }
 
+// RegisterEnumByName registers an enum type (numeric type in Go) with a namespace and type name
+func (r *TypeResolver) RegisterEnumByName(type_ reflect.Type, namespace, typeName string) error {
+	// Check if already registered
+	if prev, ok := r.typeToSerializers[type_]; ok {
+		return fmt.Errorf("type %s already has a serializer %s registered", type_, prev)
+	}
+
+	// Verify it's a numeric type
+	switch type_.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		// OK
+	default:
+		return fmt.Errorf("RegisterEnumByName only supports numeric types; got: %v", type_.Kind())
+	}
+
+	// Parse namespace from typeName if not provided
+	if namespace == "" {
+		if idx := strings.LastIndex(typeName, "."); idx != -1 {
+			namespace = typeName[:idx]
+			typeName = typeName[idx+1:]
+		}
+	}
+
+	// Compute type ID for NAMED_ENUM
+	typeId := int32(NAMED_ENUM)
+
+	// Create enum serializer
+	serializer := &enumSerializer{type_: type_, typeID: typeId}
+
+	var tag string
+	if namespace == "" {
+		tag = typeName
+	} else {
+		tag = namespace + "." + typeName
+	}
+
+	r.typeToSerializers[type_] = serializer
+	r.typeToTypeInfo[type_] = "@" + tag
+	r.typeInfoToType["@"+tag] = type_
+
+	// Register the type
+	_, err := r.registerType(type_, typeId, namespace, typeName, serializer, false)
+	if err != nil {
+		return fmt.Errorf("failed to register enum by name: %w", err)
+	}
+
+	return nil
+}
+
 func (r *TypeResolver) RegisterNamedType(
 	type_ reflect.Type,
 	typeId int32,

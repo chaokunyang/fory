@@ -28,7 +28,6 @@ import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.ClassDef;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.serializer.AbstractObjectSerializer;
-import org.apache.fory.serializer.CompatibleSerializerBase;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.util.Preconditions;
 
@@ -115,15 +114,6 @@ public interface Generated {
     @Override
     public void write(MemoryBuffer buffer, Object value) {
       serializer.write(buffer, value);
-    }
-  }
-
-  /** Base class for all compatible serializers. */
-  abstract class GeneratedCompatibleSerializer extends CompatibleSerializerBase
-      implements Generated {
-
-    public GeneratedCompatibleSerializer(Fory fory, Class<?> type) {
-      super(fory, type);
     }
   }
 }

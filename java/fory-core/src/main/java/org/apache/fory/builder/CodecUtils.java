@@ -29,7 +29,6 @@ import org.apache.fory.collection.Tuple2;
 import org.apache.fory.meta.ClassDef;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.ClassResolver;
-import org.apache.fory.resolver.FieldResolver;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.util.ClassLoaderUtils;
 import org.apache.fory.util.GraalvmSupport;
@@ -64,30 +63,26 @@ public class CodecUtils {
                 cls, fory, new MetaSharedCodecBuilder(TypeRef.of(cls), fory, classDef)));
   }
 
-  public static <T> Class<? extends Serializer<T>> loadOrGenCompatibleCodecClass(
-      Class<T> cls, Fory fory) {
-    return loadSerializer(
-        "loadOrGenCompatibleCodecClass",
-        cls,
-        () -> {
-          FieldResolver resolver = FieldResolver.of(fory, cls, true, false);
-          return loadOrGenCompatibleCodecClass(
-              cls, fory, resolver, Generated.GeneratedSerializer.class);
-        });
-  }
-
-  public static <T> Class<? extends Serializer<T>> loadOrGenCompatibleCodecClass(
-      Class<T> cls, Fory fory, FieldResolver fieldResolver, Class<?> parentSerializerClass) {
-    Preconditions.checkNotNull(fory);
-    return loadSerializer(
-        "loadOrGenCompatibleCodecClass",
-        cls,
-        () -> {
-          BaseObjectCodecBuilder codecBuilder =
-              new CompatibleCodecBuilder(
-                  TypeRef.of(cls), fory, fieldResolver, parentSerializerClass);
-          return loadOrGenCodecClass(cls, fory, codecBuilder);
-        });
+  /**
+   * Load or generate a JIT serializer class for single-layer meta-shared serialization. Currently
+   * returns null to indicate that JIT is not yet supported, falling back to interpreter mode.
+   *
+   * @param cls the target class
+   * @param fory the Fory instance
+   * @param layerClassDef the ClassDef for this layer only
+   * @param layerMarkerClass the marker class for this layer
+   * @param parentSerializerClass the parent serializer class
+   * @return the generated serializer class, or null if JIT is not supported
+   */
+  public static <T> Class<? extends Serializer<T>> loadOrGenMetaSharedLayerCodecClass(
+      Class<T> cls,
+      Fory fory,
+      ClassDef layerClassDef,
+      Class<?> layerMarkerClass,
+      Class<?> parentSerializerClass) {
+    // TODO: Implement JIT version of MetaSharedLayerSerializer
+    // For now, return null to fall back to interpreter mode (MetaSharedLayerSerializer)
+    return null;
   }
 
   @SuppressWarnings("unchecked")

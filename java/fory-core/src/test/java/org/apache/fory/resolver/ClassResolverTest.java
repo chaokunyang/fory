@@ -56,7 +56,6 @@ import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.longlongpkg.C1;
 import org.apache.fory.resolver.longlongpkg.C2;
 import org.apache.fory.resolver.longlongpkg.C3;
-import org.apache.fory.serializer.CompatibleSerializer;
 import org.apache.fory.serializer.ObjectSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.Serializers;
@@ -317,9 +316,10 @@ public class ClassResolverTest extends ForyTestBase {
       classResolver.setSerializer(Foo.class, new ObjectSerializer<>(fory, Foo.class));
       ClassInfo classInfo = classResolver.getClassInfo(Foo.class);
       assertSame(classInfo.getSerializer().getClass(), ObjectSerializer.class);
-      classResolver.setSerializer(Foo.class, new CompatibleSerializer<>(fory, Foo.class));
+      // Create another ObjectSerializer to test setSerializer updates the existing classInfo
+      classResolver.setSerializer(Foo.class, new ObjectSerializer<>(fory, Foo.class, true));
       Assert.assertSame(classResolver.getClassInfo(Foo.class), classInfo);
-      assertSame(classInfo.getSerializer().getClass(), CompatibleSerializer.class);
+      assertSame(classInfo.getSerializer().getClass(), ObjectSerializer.class);
     }
     {
       classResolver.register(Bar.class);
@@ -327,9 +327,10 @@ public class ClassResolverTest extends ForyTestBase {
       classResolver.setSerializer(Bar.class, new ObjectSerializer<>(fory, Bar.class));
       Assert.assertSame(classResolver.getClassInfo(Bar.class), classInfo);
       assertSame(classInfo.getSerializer().getClass(), ObjectSerializer.class);
-      classResolver.setSerializer(Bar.class, new CompatibleSerializer<>(fory, Bar.class));
+      // Create another ObjectSerializer to test setSerializer updates the existing classInfo
+      classResolver.setSerializer(Bar.class, new ObjectSerializer<>(fory, Bar.class, true));
       Assert.assertSame(classResolver.getClassInfo(Bar.class), classInfo);
-      assertSame(classInfo.getSerializer().getClass(), CompatibleSerializer.class);
+      assertSame(classInfo.getSerializer().getClass(), ObjectSerializer.class);
     }
   }
 

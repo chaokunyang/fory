@@ -19,25 +19,26 @@
 
 package org.apache.fory.serializer;
 
-import org.apache.fory.Fory;
-import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.reflect.ObjectCreator;
-
 /**
- * Base class for compatible serializer. Both JIT mode serializer and interpreter-mode serializer
- * will extend this class.
+ * Marker interface for generated layer wrapper classes. These classes serve as unique keys in
+ * {@code metaContext.classMap} to distinguish different layers in class hierarchy during
+ * serialization.
+ *
+ * <p>For a class hierarchy {@code C extends B extends A}, marker classes are generated:
+ *
+ * <ul>
+ *   <li>{@code A$ForyLayer$0} - for A's layer fields
+ *   <li>{@code B$ForyLayer$1} - for B's layer fields
+ *   <li>{@code C$ForyLayer$2} - for C's layer fields
+ * </ul>
+ *
+ * @see MetaSharedLayerSerializer
  */
-public abstract class CompatibleSerializerBase<T> extends AbstractObjectSerializer<T> {
-  public CompatibleSerializerBase(Fory fory, Class<T> type) {
-    super(fory, type);
-  }
+public interface CurrentLayerMarker {
 
-  public CompatibleSerializerBase(Fory fory, Class<T> type, ObjectCreator<T> objectCreator) {
-    super(fory, type, objectCreator);
-  }
+  /** Returns the target class this marker represents. */
+  Class<?> getTargetClass();
 
-  public T readAndSetFields(MemoryBuffer buffer, T obj) {
-    // java record object doesn't support update state.
-    throw new UnsupportedOperationException();
-  }
+  /** Returns the layer index in the class hierarchy (0 = topmost parent). */
+  int getLayerIndex();
 }

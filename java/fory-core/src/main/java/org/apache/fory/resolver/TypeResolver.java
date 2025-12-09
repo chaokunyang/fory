@@ -674,7 +674,6 @@ public abstract class TypeResolver {
     // avoid potential recursive call for seq codec generation.
     // ex. A->field1: B, B.field1: A
     final Set<Class<?>> getClassCtx = new HashSet<>();
-    final Map<Class<?>, FieldResolver> fieldResolverMap = new HashMap<>();
     final LongMap<Tuple2<ClassDef, ClassInfo>> classIdToDef = new LongMap<>();
     final Map<Class<?>, ClassDef> currentLayerClassDef = new HashMap<>();
     // Tuple2<Class, Class>: Tuple2<From Class, To Class>

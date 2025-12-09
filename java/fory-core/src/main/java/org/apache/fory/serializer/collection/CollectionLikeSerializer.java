@@ -30,7 +30,7 @@ import org.apache.fory.resolver.ClassInfoHolder;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.RefResolver;
 import org.apache.fory.resolver.TypeResolver;
-import org.apache.fory.serializer.CompatibleSerializer;
+import org.apache.fory.serializer.MetaSharedSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.type.GenericType;
 import org.apache.fory.util.Preconditions;
@@ -43,7 +43,7 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
   private MethodHandle constructor;
   private int numElements;
   protected final boolean supportCodegenHook;
-  // TODO remove elemSerializer, support generics in CompatibleSerializer.
+  // TODO remove elemSerializer, support generics in MetaSharedSerializer.
   private Serializer<?> elemSerializer;
   protected final ClassInfoHolder elementClassInfoHolder;
   private final TypeResolver typeResolver;
@@ -592,7 +592,7 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
     }
   }
 
-  /** Code path for {@link CompatibleSerializer}. */
+  /** Code path for {@link MetaSharedSerializer}. */
   private void compatibleRead(
       Fory fory,
       MemoryBuffer buffer,

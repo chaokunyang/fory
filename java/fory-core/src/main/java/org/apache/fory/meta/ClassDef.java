@@ -55,7 +55,7 @@ import org.apache.fory.resolver.ClassInfo;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.resolver.XtypeResolver;
-import org.apache.fory.serializer.CompatibleSerializer;
+import org.apache.fory.serializer.MetaSharedSerializer;
 import org.apache.fory.serializer.NonexistentClass;
 import org.apache.fory.serializer.converter.FieldConverter;
 import org.apache.fory.serializer.converter.FieldConverters;
@@ -79,7 +79,7 @@ import org.apache.fory.util.Preconditions;
  *
  * @see MetaSharedCodecBuilder
  * @see CompatibleMode#COMPATIBLE
- * @see CompatibleSerializer
+ * @see MetaSharedSerializer
  * @see ForyBuilder#withMetaShare
  * @see ReflectionUtils#getFieldOffset
  */

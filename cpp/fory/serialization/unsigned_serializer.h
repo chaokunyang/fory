@@ -33,24 +33,15 @@ namespace serialization {
 // ============================================================================
 // Unsigned Integer Type Serializers (xlang=false mode only)
 // These serializers use distinct TypeIds for unsigned types.
-// In xlang mode, unsigned types are not supported per the xlang spec.
+// Unsigned types are NOT supported in xlang mode per the xlang spec.
 // ============================================================================
 
-/// uint8_t serializer
-/// Note: uint8_t uses INT8 type id for xlang mode and U8 for native mode.
-/// The type_id constant is provided for compatibility with FieldTypeBuilder.
+/// uint8_t serializer (native mode only)
 template <> struct Serializer<uint8_t> {
-  static constexpr TypeId type_id = TypeId::INT8;
-  static constexpr TypeId xlang_type_id = TypeId::INT8;
-  static constexpr TypeId native_type_id = TypeId::U8;
-
-  static inline TypeId get_type_id(bool is_xlang) {
-    return is_xlang ? xlang_type_id : native_type_id;
-  }
+  static constexpr TypeId type_id = TypeId::U8;
 
   static inline void write_type_info(WriteContext &ctx) {
-    TypeId tid = get_type_id(ctx.is_xlang());
-    ctx.write_varuint32(static_cast<uint32_t>(tid));
+    ctx.write_varuint32(static_cast<uint32_t>(type_id));
   }
 
   static inline void read_type_info(ReadContext &ctx) {
@@ -58,10 +49,9 @@ template <> struct Serializer<uint8_t> {
     if (FORY_PREDICT_FALSE(ctx.has_error())) {
       return;
     }
-    TypeId expected = get_type_id(ctx.is_xlang());
-    if (actual != static_cast<uint32_t>(expected)) {
+    if (actual != static_cast<uint32_t>(type_id)) {
       ctx.set_error(
-          Error::type_mismatch(actual, static_cast<uint32_t>(expected)));
+          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
     }
   }
 
@@ -93,10 +83,9 @@ template <> struct Serializer<uint8_t> {
       if (FORY_PREDICT_FALSE(ctx.has_error())) {
         return 0;
       }
-      TypeId expected = get_type_id(ctx.is_xlang());
-      if (type_id_read != static_cast<uint32_t>(expected)) {
-        ctx.set_error(Error::type_mismatch(type_id_read,
-                                           static_cast<uint32_t>(expected)));
+      if (type_id_read != static_cast<uint32_t>(type_id)) {
+        ctx.set_error(
+            Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
         return 0;
       }
     }
@@ -117,19 +106,12 @@ template <> struct Serializer<uint8_t> {
   }
 };
 
-/// uint16_t serializer
+/// uint16_t serializer (native mode only)
 template <> struct Serializer<uint16_t> {
-  static constexpr TypeId type_id = TypeId::INT16;
-  static constexpr TypeId xlang_type_id = TypeId::INT16;
-  static constexpr TypeId native_type_id = TypeId::U16;
-
-  static inline TypeId get_type_id(bool is_xlang) {
-    return is_xlang ? xlang_type_id : native_type_id;
-  }
+  static constexpr TypeId type_id = TypeId::U16;
 
   static inline void write_type_info(WriteContext &ctx) {
-    TypeId tid = get_type_id(ctx.is_xlang());
-    ctx.write_varuint32(static_cast<uint32_t>(tid));
+    ctx.write_varuint32(static_cast<uint32_t>(type_id));
   }
 
   static inline void read_type_info(ReadContext &ctx) {
@@ -137,10 +119,9 @@ template <> struct Serializer<uint16_t> {
     if (FORY_PREDICT_FALSE(ctx.has_error())) {
       return;
     }
-    TypeId expected = get_type_id(ctx.is_xlang());
-    if (actual != static_cast<uint32_t>(expected)) {
+    if (actual != static_cast<uint32_t>(type_id)) {
       ctx.set_error(
-          Error::type_mismatch(actual, static_cast<uint32_t>(expected)));
+          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
     }
   }
 
@@ -172,10 +153,9 @@ template <> struct Serializer<uint16_t> {
       if (FORY_PREDICT_FALSE(ctx.has_error())) {
         return 0;
       }
-      TypeId expected = get_type_id(ctx.is_xlang());
-      if (type_id_read != static_cast<uint32_t>(expected)) {
-        ctx.set_error(Error::type_mismatch(type_id_read,
-                                           static_cast<uint32_t>(expected)));
+      if (type_id_read != static_cast<uint32_t>(type_id)) {
+        ctx.set_error(
+            Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
         return 0;
       }
     }
@@ -197,19 +177,12 @@ template <> struct Serializer<uint16_t> {
   }
 };
 
-/// uint32_t serializer
+/// uint32_t serializer (native mode only)
 template <> struct Serializer<uint32_t> {
-  static constexpr TypeId type_id = TypeId::INT32;
-  static constexpr TypeId xlang_type_id = TypeId::INT32;
-  static constexpr TypeId native_type_id = TypeId::U32;
-
-  static inline TypeId get_type_id(bool is_xlang) {
-    return is_xlang ? xlang_type_id : native_type_id;
-  }
+  static constexpr TypeId type_id = TypeId::U32;
 
   static inline void write_type_info(WriteContext &ctx) {
-    TypeId tid = get_type_id(ctx.is_xlang());
-    ctx.write_varuint32(static_cast<uint32_t>(tid));
+    ctx.write_varuint32(static_cast<uint32_t>(type_id));
   }
 
   static inline void read_type_info(ReadContext &ctx) {
@@ -217,10 +190,9 @@ template <> struct Serializer<uint32_t> {
     if (FORY_PREDICT_FALSE(ctx.has_error())) {
       return;
     }
-    TypeId expected = get_type_id(ctx.is_xlang());
-    if (actual != static_cast<uint32_t>(expected)) {
+    if (actual != static_cast<uint32_t>(type_id)) {
       ctx.set_error(
-          Error::type_mismatch(actual, static_cast<uint32_t>(expected)));
+          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
     }
   }
 
@@ -252,10 +224,9 @@ template <> struct Serializer<uint32_t> {
       if (FORY_PREDICT_FALSE(ctx.has_error())) {
         return 0;
       }
-      TypeId expected = get_type_id(ctx.is_xlang());
-      if (type_id_read != static_cast<uint32_t>(expected)) {
-        ctx.set_error(Error::type_mismatch(type_id_read,
-                                           static_cast<uint32_t>(expected)));
+      if (type_id_read != static_cast<uint32_t>(type_id)) {
+        ctx.set_error(
+            Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
         return 0;
       }
     }
@@ -277,19 +248,12 @@ template <> struct Serializer<uint32_t> {
   }
 };
 
-/// uint64_t serializer
+/// uint64_t serializer (native mode only)
 template <> struct Serializer<uint64_t> {
-  static constexpr TypeId type_id = TypeId::INT64;
-  static constexpr TypeId xlang_type_id = TypeId::INT64;
-  static constexpr TypeId native_type_id = TypeId::U64;
-
-  static inline TypeId get_type_id(bool is_xlang) {
-    return is_xlang ? xlang_type_id : native_type_id;
-  }
+  static constexpr TypeId type_id = TypeId::U64;
 
   static inline void write_type_info(WriteContext &ctx) {
-    TypeId tid = get_type_id(ctx.is_xlang());
-    ctx.write_varuint32(static_cast<uint32_t>(tid));
+    ctx.write_varuint32(static_cast<uint32_t>(type_id));
   }
 
   static inline void read_type_info(ReadContext &ctx) {
@@ -297,10 +261,9 @@ template <> struct Serializer<uint64_t> {
     if (FORY_PREDICT_FALSE(ctx.has_error())) {
       return;
     }
-    TypeId expected = get_type_id(ctx.is_xlang());
-    if (actual != static_cast<uint32_t>(expected)) {
+    if (actual != static_cast<uint32_t>(type_id)) {
       ctx.set_error(
-          Error::type_mismatch(actual, static_cast<uint32_t>(expected)));
+          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
     }
   }
 
@@ -332,10 +295,9 @@ template <> struct Serializer<uint64_t> {
       if (FORY_PREDICT_FALSE(ctx.has_error())) {
         return 0;
       }
-      TypeId expected = get_type_id(ctx.is_xlang());
-      if (type_id_read != static_cast<uint32_t>(expected)) {
-        ctx.set_error(Error::type_mismatch(type_id_read,
-                                           static_cast<uint32_t>(expected)));
+      if (type_id_read != static_cast<uint32_t>(type_id)) {
+        ctx.set_error(
+            Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
         return 0;
       }
     }
@@ -358,45 +320,16 @@ template <> struct Serializer<uint64_t> {
 };
 
 // ============================================================================
-// Unsigned Integer Array Serializers (std::array only)
-// For xlang=false mode, use distinct unsigned array TypeIds.
-// For xlang=true mode, use signed array TypeIds for compatibility.
+// Unsigned Integer Array Serializers (std::array, native mode only)
 // ============================================================================
 
-/// Helper to get array type id based on element type and xlang mode
-template <typename T> struct UnsignedArrayTypeId;
-
-template <> struct UnsignedArrayTypeId<uint8_t> {
-  static constexpr TypeId xlang_type_id = TypeId::INT8_ARRAY;
-  static constexpr TypeId native_type_id =
-      TypeId::INT8_ARRAY; // u8 uses INT8_ARRAY (BINARY)
-};
-
-template <> struct UnsignedArrayTypeId<uint16_t> {
-  static constexpr TypeId xlang_type_id = TypeId::INT16_ARRAY;
-  static constexpr TypeId native_type_id = TypeId::U16_ARRAY;
-};
-
-template <> struct UnsignedArrayTypeId<uint32_t> {
-  static constexpr TypeId xlang_type_id = TypeId::INT32_ARRAY;
-  static constexpr TypeId native_type_id = TypeId::U32_ARRAY;
-};
-
-template <> struct UnsignedArrayTypeId<uint64_t> {
-  static constexpr TypeId xlang_type_id = TypeId::INT64_ARRAY;
-  static constexpr TypeId native_type_id = TypeId::U64_ARRAY;
-};
-
-/// Serializer for std::array<T, N> of unsigned integers
+/// Serializer for std::array<uint8_t, N> (native mode only)
+/// Note: uint8_t arrays use INT8_ARRAY (BINARY) type which is compatible
 template <size_t N> struct Serializer<std::array<uint8_t, N>> {
-  static inline TypeId get_type_id(bool is_xlang) {
-    return is_xlang ? UnsignedArrayTypeId<uint8_t>::xlang_type_id
-                    : UnsignedArrayTypeId<uint8_t>::native_type_id;
-  }
+  static constexpr TypeId type_id = TypeId::INT8_ARRAY;
 
   static inline void write_type_info(WriteContext &ctx) {
-    TypeId tid = get_type_id(ctx.is_xlang());
-    ctx.write_varuint32(static_cast<uint32_t>(tid));
+    ctx.write_varuint32(static_cast<uint32_t>(type_id));
   }
 
   static inline void read_type_info(ReadContext &ctx) {
@@ -404,10 +337,9 @@ template <size_t N> struct Serializer<std::array<uint8_t, N>> {
     if (FORY_PREDICT_FALSE(ctx.has_error())) {
       return;
     }
-    TypeId expected = get_type_id(ctx.is_xlang());
-    if (!type_id_matches(actual, static_cast<uint32_t>(expected))) {
+    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
       ctx.set_error(
-          Error::type_mismatch(actual, static_cast<uint32_t>(expected)));
+          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
     }
   }
 
@@ -450,10 +382,9 @@ template <size_t N> struct Serializer<std::array<uint8_t, N>> {
       if (FORY_PREDICT_FALSE(ctx.has_error())) {
         return std::array<uint8_t, N>();
       }
-      TypeId expected = get_type_id(ctx.is_xlang());
-      if (type_id_read != static_cast<uint32_t>(expected)) {
-        ctx.set_error(Error::type_mismatch(type_id_read,
-                                           static_cast<uint32_t>(expected)));
+      if (type_id_read != static_cast<uint32_t>(type_id)) {
+        ctx.set_error(
+            Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
         return std::array<uint8_t, N>();
       }
     }
@@ -485,15 +416,12 @@ template <size_t N> struct Serializer<std::array<uint8_t, N>> {
   }
 };
 
+/// Serializer for std::array<uint16_t, N> (native mode only)
 template <size_t N> struct Serializer<std::array<uint16_t, N>> {
-  static inline TypeId get_type_id(bool is_xlang) {
-    return is_xlang ? UnsignedArrayTypeId<uint16_t>::xlang_type_id
-                    : UnsignedArrayTypeId<uint16_t>::native_type_id;
-  }
+  static constexpr TypeId type_id = TypeId::U16_ARRAY;
 
   static inline void write_type_info(WriteContext &ctx) {
-    TypeId tid = get_type_id(ctx.is_xlang());
-    ctx.write_varuint32(static_cast<uint32_t>(tid));
+    ctx.write_varuint32(static_cast<uint32_t>(type_id));
   }
 
   static inline void read_type_info(ReadContext &ctx) {
@@ -501,10 +429,9 @@ template <size_t N> struct Serializer<std::array<uint16_t, N>> {
     if (FORY_PREDICT_FALSE(ctx.has_error())) {
       return;
     }
-    TypeId expected = get_type_id(ctx.is_xlang());
-    if (!type_id_matches(actual, static_cast<uint32_t>(expected))) {
+    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
       ctx.set_error(
-          Error::type_mismatch(actual, static_cast<uint32_t>(expected)));
+          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
     }
   }
 
@@ -547,10 +474,9 @@ template <size_t N> struct Serializer<std::array<uint16_t, N>> {
       if (FORY_PREDICT_FALSE(ctx.has_error())) {
         return std::array<uint16_t, N>();
       }
-      TypeId expected = get_type_id(ctx.is_xlang());
-      if (type_id_read != static_cast<uint32_t>(expected)) {
-        ctx.set_error(Error::type_mismatch(type_id_read,
-                                           static_cast<uint32_t>(expected)));
+      if (type_id_read != static_cast<uint32_t>(type_id)) {
+        ctx.set_error(
+            Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
         return std::array<uint16_t, N>();
       }
     }
@@ -582,15 +508,12 @@ template <size_t N> struct Serializer<std::array<uint16_t, N>> {
   }
 };
 
+/// Serializer for std::array<uint32_t, N> (native mode only)
 template <size_t N> struct Serializer<std::array<uint32_t, N>> {
-  static inline TypeId get_type_id(bool is_xlang) {
-    return is_xlang ? UnsignedArrayTypeId<uint32_t>::xlang_type_id
-                    : UnsignedArrayTypeId<uint32_t>::native_type_id;
-  }
+  static constexpr TypeId type_id = TypeId::U32_ARRAY;
 
   static inline void write_type_info(WriteContext &ctx) {
-    TypeId tid = get_type_id(ctx.is_xlang());
-    ctx.write_varuint32(static_cast<uint32_t>(tid));
+    ctx.write_varuint32(static_cast<uint32_t>(type_id));
   }
 
   static inline void read_type_info(ReadContext &ctx) {
@@ -598,10 +521,9 @@ template <size_t N> struct Serializer<std::array<uint32_t, N>> {
     if (FORY_PREDICT_FALSE(ctx.has_error())) {
       return;
     }
-    TypeId expected = get_type_id(ctx.is_xlang());
-    if (!type_id_matches(actual, static_cast<uint32_t>(expected))) {
+    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
       ctx.set_error(
-          Error::type_mismatch(actual, static_cast<uint32_t>(expected)));
+          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
     }
   }
 
@@ -644,10 +566,9 @@ template <size_t N> struct Serializer<std::array<uint32_t, N>> {
       if (FORY_PREDICT_FALSE(ctx.has_error())) {
         return std::array<uint32_t, N>();
       }
-      TypeId expected = get_type_id(ctx.is_xlang());
-      if (type_id_read != static_cast<uint32_t>(expected)) {
-        ctx.set_error(Error::type_mismatch(type_id_read,
-                                           static_cast<uint32_t>(expected)));
+      if (type_id_read != static_cast<uint32_t>(type_id)) {
+        ctx.set_error(
+            Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
         return std::array<uint32_t, N>();
       }
     }
@@ -679,15 +600,12 @@ template <size_t N> struct Serializer<std::array<uint32_t, N>> {
   }
 };
 
+/// Serializer for std::array<uint64_t, N> (native mode only)
 template <size_t N> struct Serializer<std::array<uint64_t, N>> {
-  static inline TypeId get_type_id(bool is_xlang) {
-    return is_xlang ? UnsignedArrayTypeId<uint64_t>::xlang_type_id
-                    : UnsignedArrayTypeId<uint64_t>::native_type_id;
-  }
+  static constexpr TypeId type_id = TypeId::U64_ARRAY;
 
   static inline void write_type_info(WriteContext &ctx) {
-    TypeId tid = get_type_id(ctx.is_xlang());
-    ctx.write_varuint32(static_cast<uint32_t>(tid));
+    ctx.write_varuint32(static_cast<uint32_t>(type_id));
   }
 
   static inline void read_type_info(ReadContext &ctx) {
@@ -695,10 +613,9 @@ template <size_t N> struct Serializer<std::array<uint64_t, N>> {
     if (FORY_PREDICT_FALSE(ctx.has_error())) {
       return;
     }
-    TypeId expected = get_type_id(ctx.is_xlang());
-    if (!type_id_matches(actual, static_cast<uint32_t>(expected))) {
+    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
       ctx.set_error(
-          Error::type_mismatch(actual, static_cast<uint32_t>(expected)));
+          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
     }
   }
 
@@ -741,10 +658,9 @@ template <size_t N> struct Serializer<std::array<uint64_t, N>> {
       if (FORY_PREDICT_FALSE(ctx.has_error())) {
         return std::array<uint64_t, N>();
       }
-      TypeId expected = get_type_id(ctx.is_xlang());
-      if (type_id_read != static_cast<uint32_t>(expected)) {
-        ctx.set_error(Error::type_mismatch(type_id_read,
-                                           static_cast<uint32_t>(expected)));
+      if (type_id_read != static_cast<uint32_t>(type_id)) {
+        ctx.set_error(
+            Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
         return std::array<uint64_t, N>();
       }
     }
@@ -777,12 +693,11 @@ template <size_t N> struct Serializer<std::array<uint64_t, N>> {
 };
 
 // ============================================================================
-// std::vector serializers for unsigned types
+// std::vector serializers for unsigned types (native mode only)
 // ============================================================================
 
 /// Serializer for std::vector<uint8_t> (binary data)
-/// Note: uint8_t vectors use BINARY type which works in both xlang and native
-/// modes
+/// Note: uint8_t vectors use BINARY type
 template <> struct Serializer<std::vector<uint8_t>> {
   static constexpr TypeId type_id = TypeId::BINARY;
 
@@ -874,19 +789,12 @@ template <> struct Serializer<std::vector<uint8_t>> {
   }
 };
 
-/// Serializer for std::vector<uint16_t>
+/// Serializer for std::vector<uint16_t> (native mode only)
 template <> struct Serializer<std::vector<uint16_t>> {
-  static constexpr TypeId type_id = TypeId::INT16_ARRAY;
-  static constexpr TypeId xlang_type_id = TypeId::INT16_ARRAY;
-  static constexpr TypeId native_type_id = TypeId::U16_ARRAY;
-
-  static inline TypeId get_type_id(bool is_xlang) {
-    return is_xlang ? xlang_type_id : native_type_id;
-  }
+  static constexpr TypeId type_id = TypeId::U16_ARRAY;
 
   static inline void write_type_info(WriteContext &ctx) {
-    TypeId tid = get_type_id(ctx.is_xlang());
-    ctx.write_varuint32(static_cast<uint32_t>(tid));
+    ctx.write_varuint32(static_cast<uint32_t>(type_id));
   }
 
   static inline void read_type_info(ReadContext &ctx) {
@@ -894,10 +802,9 @@ template <> struct Serializer<std::vector<uint16_t>> {
     if (FORY_PREDICT_FALSE(ctx.has_error())) {
       return;
     }
-    TypeId expected = get_type_id(ctx.is_xlang());
-    if (!type_id_matches(actual, static_cast<uint32_t>(expected))) {
+    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
       ctx.set_error(
-          Error::type_mismatch(actual, static_cast<uint32_t>(expected)));
+          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
     }
   }
 
@@ -942,10 +849,9 @@ template <> struct Serializer<std::vector<uint16_t>> {
       if (FORY_PREDICT_FALSE(ctx.has_error())) {
         return std::vector<uint16_t>();
       }
-      TypeId expected = get_type_id(ctx.is_xlang());
-      if (type_id_read != static_cast<uint32_t>(expected)) {
-        ctx.set_error(Error::type_mismatch(type_id_read,
-                                           static_cast<uint32_t>(expected)));
+      if (type_id_read != static_cast<uint32_t>(type_id)) {
+        ctx.set_error(
+            Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
         return std::vector<uint16_t>();
       }
     }
@@ -976,19 +882,12 @@ template <> struct Serializer<std::vector<uint16_t>> {
   }
 };
 
-/// Serializer for std::vector<uint32_t>
+/// Serializer for std::vector<uint32_t> (native mode only)
 template <> struct Serializer<std::vector<uint32_t>> {
-  static constexpr TypeId type_id = TypeId::INT32_ARRAY;
-  static constexpr TypeId xlang_type_id = TypeId::INT32_ARRAY;
-  static constexpr TypeId native_type_id = TypeId::U32_ARRAY;
-
-  static inline TypeId get_type_id(bool is_xlang) {
-    return is_xlang ? xlang_type_id : native_type_id;
-  }
+  static constexpr TypeId type_id = TypeId::U32_ARRAY;
 
   static inline void write_type_info(WriteContext &ctx) {
-    TypeId tid = get_type_id(ctx.is_xlang());
-    ctx.write_varuint32(static_cast<uint32_t>(tid));
+    ctx.write_varuint32(static_cast<uint32_t>(type_id));
   }
 
   static inline void read_type_info(ReadContext &ctx) {
@@ -996,10 +895,9 @@ template <> struct Serializer<std::vector<uint32_t>> {
     if (FORY_PREDICT_FALSE(ctx.has_error())) {
       return;
     }
-    TypeId expected = get_type_id(ctx.is_xlang());
-    if (!type_id_matches(actual, static_cast<uint32_t>(expected))) {
+    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
       ctx.set_error(
-          Error::type_mismatch(actual, static_cast<uint32_t>(expected)));
+          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
     }
   }
 
@@ -1044,10 +942,9 @@ template <> struct Serializer<std::vector<uint32_t>> {
       if (FORY_PREDICT_FALSE(ctx.has_error())) {
         return std::vector<uint32_t>();
       }
-      TypeId expected = get_type_id(ctx.is_xlang());
-      if (type_id_read != static_cast<uint32_t>(expected)) {
-        ctx.set_error(Error::type_mismatch(type_id_read,
-                                           static_cast<uint32_t>(expected)));
+      if (type_id_read != static_cast<uint32_t>(type_id)) {
+        ctx.set_error(
+            Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
         return std::vector<uint32_t>();
       }
     }
@@ -1078,19 +975,12 @@ template <> struct Serializer<std::vector<uint32_t>> {
   }
 };
 
-/// Serializer for std::vector<uint64_t>
+/// Serializer for std::vector<uint64_t> (native mode only)
 template <> struct Serializer<std::vector<uint64_t>> {
-  static constexpr TypeId type_id = TypeId::INT64_ARRAY;
-  static constexpr TypeId xlang_type_id = TypeId::INT64_ARRAY;
-  static constexpr TypeId native_type_id = TypeId::U64_ARRAY;
-
-  static inline TypeId get_type_id(bool is_xlang) {
-    return is_xlang ? xlang_type_id : native_type_id;
-  }
+  static constexpr TypeId type_id = TypeId::U64_ARRAY;
 
   static inline void write_type_info(WriteContext &ctx) {
-    TypeId tid = get_type_id(ctx.is_xlang());
-    ctx.write_varuint32(static_cast<uint32_t>(tid));
+    ctx.write_varuint32(static_cast<uint32_t>(type_id));
   }
 
   static inline void read_type_info(ReadContext &ctx) {
@@ -1098,10 +988,9 @@ template <> struct Serializer<std::vector<uint64_t>> {
     if (FORY_PREDICT_FALSE(ctx.has_error())) {
       return;
     }
-    TypeId expected = get_type_id(ctx.is_xlang());
-    if (!type_id_matches(actual, static_cast<uint32_t>(expected))) {
+    if (!type_id_matches(actual, static_cast<uint32_t>(type_id))) {
       ctx.set_error(
-          Error::type_mismatch(actual, static_cast<uint32_t>(expected)));
+          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
     }
   }
 
@@ -1146,10 +1035,9 @@ template <> struct Serializer<std::vector<uint64_t>> {
       if (FORY_PREDICT_FALSE(ctx.has_error())) {
         return std::vector<uint64_t>();
       }
-      TypeId expected = get_type_id(ctx.is_xlang());
-      if (type_id_read != static_cast<uint32_t>(expected)) {
-        ctx.set_error(Error::type_mismatch(type_id_read,
-                                           static_cast<uint32_t>(expected)));
+      if (type_id_read != static_cast<uint32_t>(type_id)) {
+        ctx.set_error(
+            Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
         return std::vector<uint64_t>();
       }
     }

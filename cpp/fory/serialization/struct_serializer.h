@@ -150,7 +150,8 @@ namespace detail {
 
 /// Helper to check if a TypeId represents a primitive type.
 /// Per xlang spec, primitive types are: bool, int8-64, var_int32/64,
-/// sli_int64, float16/32/64. All other types (string, list, set, map, struct,
+/// sli_int64, float16/32/64. For native mode (xlang=false), also includes
+/// unsigned types: u8-64. All other types (string, list, set, map, struct,
 /// enum, etc.) are non-primitive and require ref flags.
 inline constexpr bool is_primitive_type_id(TypeId type_id) {
   return type_id == TypeId::BOOL || type_id == TypeId::INT8 ||
@@ -158,7 +159,10 @@ inline constexpr bool is_primitive_type_id(TypeId type_id) {
          type_id == TypeId::VAR_INT32 || type_id == TypeId::INT64 ||
          type_id == TypeId::VAR_INT64 || type_id == TypeId::SLI_INT64 ||
          type_id == TypeId::FLOAT16 || type_id == TypeId::FLOAT32 ||
-         type_id == TypeId::FLOAT64;
+         type_id == TypeId::FLOAT64 ||
+         // Unsigned types for native mode (xlang=false)
+         type_id == TypeId::U8 || type_id == TypeId::U16 ||
+         type_id == TypeId::U32 || type_id == TypeId::U64;
 }
 
 /// Write a primitive value to buffer at given offset WITHOUT updating

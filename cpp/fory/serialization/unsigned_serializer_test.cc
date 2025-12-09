@@ -62,11 +62,12 @@ FORY_STRUCT(UnsignedArrayStruct, u8_vec, u16_vec, u32_vec, u64_vec);
 
 // ============================================================================
 // Test Helper for Native Mode (xlang=false)
+// Unsigned types are only supported in native mode (xlang=false)
 // ============================================================================
 
-template <typename T>
-void test_roundtrip_native(const T &original, bool should_equal = true) {
-  // Test with xlang=false (native mode) to use distinct unsigned TypeIds
+template <typename T> void test_roundtrip_native(const T &original) {
+  // Test with xlang=false (native mode) - the only supported mode for unsigned
+  // types
   auto fory = Fory::builder().xlang(false).track_ref(false).build();
 
   // Serialize
@@ -85,39 +86,11 @@ void test_roundtrip_native(const T &original, bool should_equal = true) {
   T deserialized = std::move(deserialize_result).value();
 
   // Compare
-  if (should_equal) {
-    EXPECT_EQ(original, deserialized);
-  }
-}
-
-template <typename T>
-void test_roundtrip_xlang(const T &original, bool should_equal = true) {
-  // Test with xlang=true to verify xlang mode compatibility
-  auto fory = Fory::builder().xlang(true).track_ref(false).build();
-
-  // Serialize
-  auto serialize_result = fory.serialize(original);
-  ASSERT_TRUE(serialize_result.ok())
-      << "Serialization failed: " << serialize_result.error().to_string();
-
-  std::vector<uint8_t> bytes = std::move(serialize_result).value();
-  ASSERT_GT(bytes.size(), 0) << "Serialized bytes should not be empty";
-
-  // Deserialize
-  auto deserialize_result = fory.deserialize<T>(bytes.data(), bytes.size());
-  ASSERT_TRUE(deserialize_result.ok())
-      << "Deserialization failed: " << deserialize_result.error().to_string();
-
-  T deserialized = std::move(deserialize_result).value();
-
-  // Compare
-  if (should_equal) {
-    EXPECT_EQ(original, deserialized);
-  }
+  EXPECT_EQ(original, deserialized);
 }
 
 // ============================================================================
-// Unsigned Primitive Type Tests (Native Mode)
+// Unsigned Primitive Type Tests (Native Mode Only)
 // ============================================================================
 
 TEST(UnsignedSerializerTest, Uint8NativeRoundtrip) {
@@ -149,39 +122,7 @@ TEST(UnsignedSerializerTest, Uint64NativeRoundtrip) {
 }
 
 // ============================================================================
-// Unsigned Primitive Type Tests (Xlang Mode)
-// ============================================================================
-
-TEST(UnsignedSerializerTest, Uint8XlangRoundtrip) {
-  test_roundtrip_xlang<uint8_t>(0);
-  test_roundtrip_xlang<uint8_t>(127);
-  test_roundtrip_xlang<uint8_t>(255);
-  test_roundtrip_xlang<uint8_t>(42);
-}
-
-TEST(UnsignedSerializerTest, Uint16XlangRoundtrip) {
-  test_roundtrip_xlang<uint16_t>(0);
-  test_roundtrip_xlang<uint16_t>(32767);
-  test_roundtrip_xlang<uint16_t>(65535);
-  test_roundtrip_xlang<uint16_t>(12345);
-}
-
-TEST(UnsignedSerializerTest, Uint32XlangRoundtrip) {
-  test_roundtrip_xlang<uint32_t>(0);
-  test_roundtrip_xlang<uint32_t>(2147483647);
-  test_roundtrip_xlang<uint32_t>(4294967295U);
-  test_roundtrip_xlang<uint32_t>(123456789);
-}
-
-TEST(UnsignedSerializerTest, Uint64XlangRoundtrip) {
-  test_roundtrip_xlang<uint64_t>(0);
-  test_roundtrip_xlang<uint64_t>(9223372036854775807ULL);
-  test_roundtrip_xlang<uint64_t>(18446744073709551615ULL);
-  test_roundtrip_xlang<uint64_t>(123456789012345ULL);
-}
-
-// ============================================================================
-// Unsigned Vector Tests (Native Mode)
+// Unsigned Vector Tests (Native Mode Only)
 // ============================================================================
 
 TEST(UnsignedSerializerTest, VectorUint8NativeRoundtrip) {
@@ -211,37 +152,7 @@ TEST(UnsignedSerializerTest, VectorUint64NativeRoundtrip) {
 }
 
 // ============================================================================
-// Unsigned Vector Tests (Xlang Mode)
-// ============================================================================
-
-TEST(UnsignedSerializerTest, VectorUint8XlangRoundtrip) {
-  test_roundtrip_xlang(std::vector<uint8_t>{});
-  test_roundtrip_xlang(std::vector<uint8_t>{0, 127, 255});
-  test_roundtrip_xlang(std::vector<uint8_t>{1, 2, 3, 4, 5});
-}
-
-TEST(UnsignedSerializerTest, VectorUint16XlangRoundtrip) {
-  test_roundtrip_xlang(std::vector<uint16_t>{});
-  test_roundtrip_xlang(std::vector<uint16_t>{0, 32767, 65535});
-  test_roundtrip_xlang(std::vector<uint16_t>{1000, 2000, 3000});
-}
-
-TEST(UnsignedSerializerTest, VectorUint32XlangRoundtrip) {
-  test_roundtrip_xlang(std::vector<uint32_t>{});
-  test_roundtrip_xlang(std::vector<uint32_t>{0, 2147483647, 4294967295U});
-  test_roundtrip_xlang(std::vector<uint32_t>{100000, 200000, 300000});
-}
-
-TEST(UnsignedSerializerTest, VectorUint64XlangRoundtrip) {
-  test_roundtrip_xlang(std::vector<uint64_t>{});
-  test_roundtrip_xlang(std::vector<uint64_t>{0, 9223372036854775807ULL,
-                                             18446744073709551615ULL});
-  test_roundtrip_xlang(
-      std::vector<uint64_t>{1000000000000ULL, 2000000000000ULL});
-}
-
-// ============================================================================
-// Unsigned Array Tests (Native Mode)
+// Unsigned Array Tests (Native Mode Only)
 // ============================================================================
 
 TEST(UnsignedSerializerTest, ArrayUint8NativeRoundtrip) {
@@ -267,31 +178,11 @@ TEST(UnsignedSerializerTest, ArrayUint64NativeRoundtrip) {
 }
 
 // ============================================================================
-// Struct with Unsigned Fields Tests
+// Struct with Unsigned Fields Tests (Native Mode Only)
 // ============================================================================
 
 TEST(UnsignedSerializerTest, UnsignedStructNativeRoundtrip) {
   auto fory = Fory::builder().xlang(false).track_ref(false).build();
-  fory.register_struct<UnsignedStruct>(1);
-
-  UnsignedStruct original{42, 1234, 567890, 9876543210ULL};
-
-  auto serialize_result = fory.serialize(original);
-  ASSERT_TRUE(serialize_result.ok())
-      << "Serialization failed: " << serialize_result.error().to_string();
-
-  std::vector<uint8_t> bytes = std::move(serialize_result).value();
-
-  auto deserialize_result =
-      fory.deserialize<UnsignedStruct>(bytes.data(), bytes.size());
-  ASSERT_TRUE(deserialize_result.ok())
-      << "Deserialization failed: " << deserialize_result.error().to_string();
-
-  EXPECT_EQ(original, deserialize_result.value());
-}
-
-TEST(UnsignedSerializerTest, UnsignedStructXlangRoundtrip) {
-  auto fory = Fory::builder().xlang(true).track_ref(false).build();
   fory.register_struct<UnsignedStruct>(1);
 
   UnsignedStruct original{42, 1234, 567890, 9876543210ULL};
@@ -354,23 +245,29 @@ TEST(UnsignedSerializerTest, BoundaryValues) {
 // Type ID Verification Tests
 // ============================================================================
 
-TEST(UnsignedSerializerTest, NativeTypeIdsDifferFromXlang) {
-  // In native mode, unsigned types should use distinct TypeIds
-  auto fory_native = Fory::builder().xlang(false).track_ref(false).build();
-  auto fory_xlang = Fory::builder().xlang(true).track_ref(false).build();
+TEST(UnsignedSerializerTest, UnsignedTypeIdsAreDistinct) {
+  // Verify that unsigned types use distinct TypeIds (U8, U16, U32, U64)
+  EXPECT_EQ(static_cast<uint32_t>(Serializer<uint8_t>::type_id),
+            static_cast<uint32_t>(TypeId::U8));
+  EXPECT_EQ(static_cast<uint32_t>(Serializer<uint16_t>::type_id),
+            static_cast<uint32_t>(TypeId::U16));
+  EXPECT_EQ(static_cast<uint32_t>(Serializer<uint32_t>::type_id),
+            static_cast<uint32_t>(TypeId::U32));
+  EXPECT_EQ(static_cast<uint32_t>(Serializer<uint64_t>::type_id),
+            static_cast<uint32_t>(TypeId::U64));
+}
 
-  // Serialize the same value with both modes
-  uint16_t value = 42;
-
-  auto native_bytes = fory_native.serialize(value);
-  ASSERT_TRUE(native_bytes.ok());
-
-  auto xlang_bytes = fory_xlang.serialize(value);
-  ASSERT_TRUE(xlang_bytes.ok());
-
-  // The serialized bytes should be different because the TypeIds are different
-  // (U16 = 65 in native mode vs INT16 = 3 in xlang mode)
-  EXPECT_NE(native_bytes.value(), xlang_bytes.value());
+TEST(UnsignedSerializerTest, UnsignedArrayTypeIdsAreDistinct) {
+  // Verify that unsigned array types use distinct TypeIds
+  EXPECT_EQ(static_cast<uint32_t>(Serializer<std::vector<uint16_t>>::type_id),
+            static_cast<uint32_t>(TypeId::U16_ARRAY));
+  EXPECT_EQ(static_cast<uint32_t>(Serializer<std::vector<uint32_t>>::type_id),
+            static_cast<uint32_t>(TypeId::U32_ARRAY));
+  EXPECT_EQ(static_cast<uint32_t>(Serializer<std::vector<uint64_t>>::type_id),
+            static_cast<uint32_t>(TypeId::U64_ARRAY));
+  // uint8_t vector uses BINARY type
+  EXPECT_EQ(static_cast<uint32_t>(Serializer<std::vector<uint8_t>>::type_id),
+            static_cast<uint32_t>(TypeId::BINARY));
 }
 
 } // namespace test

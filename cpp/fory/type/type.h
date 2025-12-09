@@ -103,6 +103,10 @@ enum class TypeId : int32_t {
   FLOAT32_ARRAY = 36,
   // one-dimensional float64 array.
   FLOAT64_ARRAY = 37,
+  // an union type that can hold different types of values.
+  UNION = 38,
+  // a null value with no data.
+  NONE = 39,
   // Unsigned integer types (native mode only, not supported in xlang mode)
   // an 8-bit unsigned integer.
   U8 = 64,

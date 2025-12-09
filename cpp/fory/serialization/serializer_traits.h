@@ -34,6 +34,7 @@
 #include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
+#include <variant>
 #include <vector>
 
 namespace fory {
@@ -92,6 +93,15 @@ template <typename... Ts>
 struct is_tuple<std::tuple<Ts...>> : std::true_type {};
 
 template <typename T> inline constexpr bool is_tuple_v = is_tuple<T>::value;
+
+/// Detect std::variant
+template <typename T> struct is_variant : std::false_type {};
+
+template <typename... Ts>
+struct is_variant<std::variant<Ts...>> : std::true_type {};
+
+template <typename T>
+inline constexpr bool is_variant_v = is_variant<T>::value;
 
 /// Detect std::weak_ptr
 template <typename T> struct is_weak_ptr : std::false_type {};
@@ -505,6 +515,12 @@ template <typename T> struct TypeIndex<std::unique_ptr<T>> {
 template <typename... Ts> struct TypeIndex<std::tuple<Ts...>> {
   static constexpr uint64_t value =
       fnv1a_64_combine(fnv1a_64("std::tuple"), (type_index<Ts>() ^ ...));
+};
+
+// variant<Ts...>
+template <typename... Ts> struct TypeIndex<std::variant<Ts...>> {
+  static constexpr uint64_t value =
+      fnv1a_64_combine(fnv1a_64("std::variant"), (type_index<Ts>() ^ ...));
 };
 
 // ============================================================================

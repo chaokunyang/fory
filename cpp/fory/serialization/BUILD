@@ -27,6 +27,7 @@ cc_library(
         "type_info.h",
         "type_resolver.h",
         "unsigned_serializer.h",
+        "variant_serializer.h",
     ],
     strip_include_prefix = "/cpp",
     deps = [
@@ -92,6 +93,16 @@ cc_test(
 cc_test(
     name = "collection_serializer_test",
     srcs = ["collection_serializer_test.cc"],
+    deps = [
+        ":fory_serialization",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "variant_serializer_test",
+    srcs = ["variant_serializer_test.cc"],
     deps = [
         ":fory_serialization",
         "@googletest//:gtest",

@@ -30,6 +30,7 @@
 #include "fory/serialization/temporal_serializers.h"
 #include "fory/serialization/tuple_serializer.h"
 #include "fory/serialization/type_resolver.h"
+#include "fory/serialization/variant_serializer.h"
 #include "fory/util/buffer.h"
 #include "fory/util/error.h"
 #include "fory/util/pool.h"

@@ -306,8 +306,8 @@ template <size_t N> struct Serializer<std::array<uint8_t, N>> {
 
   static inline void read_type_info(ReadContext &ctx) {
     uint32_t actual = ctx.read_varuint32(ctx.error());
-    if (FORY_PREDICT_FALSE(!type_id_matches(actual,
-                                            static_cast<uint32_t>(type_id)))) {
+    if (FORY_PREDICT_FALSE(
+            !type_id_matches(actual, static_cast<uint32_t>(type_id)))) {
       ctx.set_error(
           Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
     }
@@ -390,8 +390,8 @@ template <size_t N> struct Serializer<std::array<uint16_t, N>> {
 
   static inline void read_type_info(ReadContext &ctx) {
     uint32_t actual = ctx.read_varuint32(ctx.error());
-    if (FORY_PREDICT_FALSE(!type_id_matches(actual,
-                                            static_cast<uint32_t>(type_id)))) {
+    if (FORY_PREDICT_FALSE(
+            !type_id_matches(actual, static_cast<uint32_t>(type_id)))) {
       ctx.set_error(
           Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
     }
@@ -474,8 +474,8 @@ template <size_t N> struct Serializer<std::array<uint32_t, N>> {
 
   static inline void read_type_info(ReadContext &ctx) {
     uint32_t actual = ctx.read_varuint32(ctx.error());
-    if (FORY_PREDICT_FALSE(!type_id_matches(actual,
-                                            static_cast<uint32_t>(type_id)))) {
+    if (FORY_PREDICT_FALSE(
+            !type_id_matches(actual, static_cast<uint32_t>(type_id)))) {
       ctx.set_error(
           Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
     }
@@ -558,8 +558,8 @@ template <size_t N> struct Serializer<std::array<uint64_t, N>> {
 
   static inline void read_type_info(ReadContext &ctx) {
     uint32_t actual = ctx.read_varuint32(ctx.error());
-    if (FORY_PREDICT_FALSE(!type_id_matches(actual,
-                                            static_cast<uint32_t>(type_id)))) {
+    if (FORY_PREDICT_FALSE(
+            !type_id_matches(actual, static_cast<uint32_t>(type_id)))) {
       ctx.set_error(
           Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
     }
@@ -647,8 +647,8 @@ template <> struct Serializer<std::vector<uint8_t>> {
 
   static inline void read_type_info(ReadContext &ctx) {
     uint32_t actual = ctx.read_varuint32(ctx.error());
-    if (FORY_PREDICT_FALSE(!type_id_matches(actual,
-                                            static_cast<uint32_t>(type_id)))) {
+    if (FORY_PREDICT_FALSE(
+            !type_id_matches(actual, static_cast<uint32_t>(type_id)))) {
       ctx.set_error(
           Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
     }
@@ -702,8 +702,8 @@ template <> struct Serializer<std::vector<uint8_t>> {
   static inline std::vector<uint8_t> read_data(ReadContext &ctx) {
     uint32_t length = ctx.read_varuint32(ctx.error());
     if (FORY_PREDICT_FALSE(length > ctx.buffer().remaining_size())) {
-      ctx.set_error(Error::invalid_data("Invalid length: " +
-                                        std::to_string(length)));
+      ctx.set_error(
+          Error::invalid_data("Invalid length: " + std::to_string(length)));
       return std::vector<uint8_t>();
     }
     std::vector<uint8_t> vec(length);
@@ -735,8 +735,8 @@ template <> struct Serializer<std::vector<uint16_t>> {
 
   static inline void read_type_info(ReadContext &ctx) {
     uint32_t actual = ctx.read_varuint32(ctx.error());
-    if (FORY_PREDICT_FALSE(!type_id_matches(actual,
-                                            static_cast<uint32_t>(type_id)))) {
+    if (FORY_PREDICT_FALSE(
+            !type_id_matches(actual, static_cast<uint32_t>(type_id)))) {
       ctx.set_error(
           Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
     }
@@ -792,8 +792,8 @@ template <> struct Serializer<std::vector<uint16_t>> {
     uint32_t length = ctx.read_varuint32(ctx.error());
     if (FORY_PREDICT_FALSE(length * sizeof(uint16_t) >
                            ctx.buffer().remaining_size())) {
-      ctx.set_error(Error::invalid_data("Invalid length: " +
-                                        std::to_string(length)));
+      ctx.set_error(
+          Error::invalid_data("Invalid length: " + std::to_string(length)));
       return std::vector<uint16_t>();
     }
     std::vector<uint16_t> vec(length);
@@ -825,8 +825,8 @@ template <> struct Serializer<std::vector<uint32_t>> {
 
   static inline void read_type_info(ReadContext &ctx) {
     uint32_t actual = ctx.read_varuint32(ctx.error());
-    if (FORY_PREDICT_FALSE(!type_id_matches(actual,
-                                            static_cast<uint32_t>(type_id)))) {
+    if (FORY_PREDICT_FALSE(
+            !type_id_matches(actual, static_cast<uint32_t>(type_id)))) {
       ctx.set_error(
           Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
     }
@@ -882,8 +882,8 @@ template <> struct Serializer<std::vector<uint32_t>> {
     uint32_t length = ctx.read_varuint32(ctx.error());
     if (FORY_PREDICT_FALSE(length * sizeof(uint32_t) >
                            ctx.buffer().remaining_size())) {
-      ctx.set_error(Error::invalid_data("Invalid length: " +
-                                        std::to_string(length)));
+      ctx.set_error(
+          Error::invalid_data("Invalid length: " + std::to_string(length)));
       return std::vector<uint32_t>();
     }
     std::vector<uint32_t> vec(length);
@@ -915,8 +915,8 @@ template <> struct Serializer<std::vector<uint64_t>> {
 
   static inline void read_type_info(ReadContext &ctx) {
     uint32_t actual = ctx.read_varuint32(ctx.error());
-    if (FORY_PREDICT_FALSE(!type_id_matches(actual,
-                                            static_cast<uint32_t>(type_id)))) {
+    if (FORY_PREDICT_FALSE(
+            !type_id_matches(actual, static_cast<uint32_t>(type_id)))) {
       ctx.set_error(
           Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
     }
@@ -972,8 +972,8 @@ template <> struct Serializer<std::vector<uint64_t>> {
     uint32_t length = ctx.read_varuint32(ctx.error());
     if (FORY_PREDICT_FALSE(length * sizeof(uint64_t) >
                            ctx.buffer().remaining_size())) {
-      ctx.set_error(Error::invalid_data("Invalid length: " +
-                                        std::to_string(length)));
+      ctx.set_error(
+          Error::invalid_data("Invalid length: " + std::to_string(length)));
       return std::vector<uint64_t>();
     }
     std::vector<uint64_t> vec(length);

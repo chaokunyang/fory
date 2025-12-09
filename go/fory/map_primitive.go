@@ -1,0 +1,656 @@
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
+package fory
+
+import (
+	"reflect"
+)
+
+// ============================================================================
+// Optimized map serializers for common types
+// ============================================================================
+
+// writeMapStringString writes map[string]string using chunk protocol
+func writeMapStringString(buf *ByteBuffer, m map[string]string) {
+	length := len(m)
+	buf.WriteVarUint32(uint32(length))
+	if length == 0 {
+		return
+	}
+
+	// WriteData chunks of entries
+	remaining := length
+	for remaining > 0 {
+		chunkSize := remaining
+		if chunkSize > MAX_CHUNK_SIZE {
+			chunkSize = MAX_CHUNK_SIZE
+		}
+
+		// Chunk header: -1 followed by header byte and size
+		buf.WriteInt16(-1)
+		// Header: KEY_DECL_TYPE | VALUE_DECL_TYPE (no refs for primitives)
+		buf.WriteUint8(KEY_DECL_TYPE | VALUE_DECL_TYPE)
+		buf.WriteUint8(uint8(chunkSize))
+
+		// WriteData chunk entries
+		count := 0
+		for k, v := range m {
+			writeString(buf, k)
+			writeString(buf, v)
+			count++
+			if count >= chunkSize {
+				break
+			}
+		}
+		remaining -= chunkSize
+	}
+}
+
+// readMapStringString reads map[string]string using chunk protocol
+func readMapStringString(buf *ByteBuffer) map[string]string {
+	size := int(buf.ReadVarUint32())
+	result := make(map[string]string, size)
+	if size == 0 {
+		return result
+	}
+
+	for size > 0 {
+		chunkHeader := buf.ReadUint8()
+
+		// Handle null key/value cases
+		keyHasNull := (chunkHeader & KEY_HAS_NULL) != 0
+		valueHasNull := (chunkHeader & VALUE_HAS_NULL) != 0
+
+		if keyHasNull || valueHasNull {
+			// Skip null entries (strings can't be null in Go)
+			size--
+			continue
+		}
+
+		// ReadData chunk size
+		chunkSize := int(buf.ReadUint8())
+
+		// ReadData chunk entries
+		for i := 0; i < chunkSize && size > 0; i++ {
+			k := readString(buf)
+			v := readString(buf)
+			result[k] = v
+			size--
+		}
+	}
+	return result
+}
+
+// writeMapStringInt64 writes map[string]int64 using chunk protocol
+func writeMapStringInt64(buf *ByteBuffer, m map[string]int64) {
+	length := len(m)
+	buf.WriteVarUint32(uint32(length))
+	if length == 0 {
+		return
+	}
+
+	remaining := length
+	for remaining > 0 {
+		chunkSize := remaining
+		if chunkSize > MAX_CHUNK_SIZE {
+			chunkSize = MAX_CHUNK_SIZE
+		}
+
+		buf.WriteInt16(-1)
+		buf.WriteUint8(KEY_DECL_TYPE | VALUE_DECL_TYPE)
+		buf.WriteUint8(uint8(chunkSize))
+
+		count := 0
+		for k, v := range m {
+			writeString(buf, k)
+			buf.WriteVarint64(v)
+			count++
+			if count >= chunkSize {
+				break
+			}
+		}
+		remaining -= chunkSize
+	}
+}
+
+// readMapStringInt64 reads map[string]int64 using chunk protocol
+func readMapStringInt64(buf *ByteBuffer) map[string]int64 {
+	size := int(buf.ReadVarUint32())
+	result := make(map[string]int64, size)
+	if size == 0 {
+		return result
+	}
+
+	for size > 0 {
+		chunkHeader := buf.ReadUint8()
+		keyHasNull := (chunkHeader & KEY_HAS_NULL) != 0
+		valueHasNull := (chunkHeader & VALUE_HAS_NULL) != 0
+
+		if keyHasNull || valueHasNull {
+			size--
+			continue
+		}
+
+		chunkSize := int(buf.ReadUint8())
+		for i := 0; i < chunkSize && size > 0; i++ {
+			k := readString(buf)
+			v := buf.ReadVarint64()
+			result[k] = v
+			size--
+		}
+	}
+	return result
+}
+
+// writeMapStringInt writes map[string]int using chunk protocol
+func writeMapStringInt(buf *ByteBuffer, m map[string]int) {
+	length := len(m)
+	buf.WriteVarUint32(uint32(length))
+	if length == 0 {
+		return
+	}
+
+	remaining := length
+	for remaining > 0 {
+		chunkSize := remaining
+		if chunkSize > MAX_CHUNK_SIZE {
+			chunkSize = MAX_CHUNK_SIZE
+		}
+
+		buf.WriteInt16(-1)
+		buf.WriteUint8(KEY_DECL_TYPE | VALUE_DECL_TYPE)
+		buf.WriteUint8(uint8(chunkSize))
+
+		count := 0
+		for k, v := range m {
+			writeString(buf, k)
+			buf.WriteVarint64(int64(v))
+			count++
+			if count >= chunkSize {
+				break
+			}
+		}
+		remaining -= chunkSize
+	}
+}
+
+// readMapStringInt reads map[string]int using chunk protocol
+func readMapStringInt(buf *ByteBuffer) map[string]int {
+	size := int(buf.ReadVarUint32())
+	result := make(map[string]int, size)
+	if size == 0 {
+		return result
+	}
+
+	for size > 0 {
+		chunkHeader := buf.ReadUint8()
+		keyHasNull := (chunkHeader & KEY_HAS_NULL) != 0
+		valueHasNull := (chunkHeader & VALUE_HAS_NULL) != 0
+
+		if keyHasNull || valueHasNull {
+			size--
+			continue
+		}
+
+		chunkSize := int(buf.ReadUint8())
+		for i := 0; i < chunkSize && size > 0; i++ {
+			k := readString(buf)
+			v := buf.ReadVarint64()
+			result[k] = int(v)
+			size--
+		}
+	}
+	return result
+}
+
+// writeMapStringFloat64 writes map[string]float64 using chunk protocol
+func writeMapStringFloat64(buf *ByteBuffer, m map[string]float64) {
+	length := len(m)
+	buf.WriteVarUint32(uint32(length))
+	if length == 0 {
+		return
+	}
+
+	remaining := length
+	for remaining > 0 {
+		chunkSize := remaining
+		if chunkSize > MAX_CHUNK_SIZE {
+			chunkSize = MAX_CHUNK_SIZE
+		}
+
+		buf.WriteInt16(-1)
+		buf.WriteUint8(KEY_DECL_TYPE | VALUE_DECL_TYPE)
+		buf.WriteUint8(uint8(chunkSize))
+
+		count := 0
+		for k, v := range m {
+			writeString(buf, k)
+			buf.WriteFloat64(v)
+			count++
+			if count >= chunkSize {
+				break
+			}
+		}
+		remaining -= chunkSize
+	}
+}
+
+// readMapStringFloat64 reads map[string]float64 using chunk protocol
+func readMapStringFloat64(buf *ByteBuffer) map[string]float64 {
+	size := int(buf.ReadVarUint32())
+	result := make(map[string]float64, size)
+	if size == 0 {
+		return result
+	}
+
+	for size > 0 {
+		chunkHeader := buf.ReadUint8()
+		keyHasNull := (chunkHeader & KEY_HAS_NULL) != 0
+		valueHasNull := (chunkHeader & VALUE_HAS_NULL) != 0
+
+		if keyHasNull || valueHasNull {
+			size--
+			continue
+		}
+
+		chunkSize := int(buf.ReadUint8())
+		for i := 0; i < chunkSize && size > 0; i++ {
+			k := readString(buf)
+			v := buf.ReadFloat64()
+			result[k] = v
+			size--
+		}
+	}
+	return result
+}
+
+// writeMapStringBool writes map[string]bool using chunk protocol
+func writeMapStringBool(buf *ByteBuffer, m map[string]bool) {
+	length := len(m)
+	buf.WriteVarUint32(uint32(length))
+	if length == 0 {
+		return
+	}
+
+	remaining := length
+	for remaining > 0 {
+		chunkSize := remaining
+		if chunkSize > MAX_CHUNK_SIZE {
+			chunkSize = MAX_CHUNK_SIZE
+		}
+
+		buf.WriteInt16(-1)
+		buf.WriteUint8(KEY_DECL_TYPE | VALUE_DECL_TYPE)
+		buf.WriteUint8(uint8(chunkSize))
+
+		count := 0
+		for k, v := range m {
+			writeString(buf, k)
+			buf.WriteBool(v)
+			count++
+			if count >= chunkSize {
+				break
+			}
+		}
+		remaining -= chunkSize
+	}
+}
+
+// readMapStringBool reads map[string]bool using chunk protocol
+func readMapStringBool(buf *ByteBuffer) map[string]bool {
+	size := int(buf.ReadVarUint32())
+	result := make(map[string]bool, size)
+	if size == 0 {
+		return result
+	}
+
+	for size > 0 {
+		chunkHeader := buf.ReadUint8()
+		keyHasNull := (chunkHeader & KEY_HAS_NULL) != 0
+		valueHasNull := (chunkHeader & VALUE_HAS_NULL) != 0
+
+		if keyHasNull || valueHasNull {
+			size--
+			continue
+		}
+
+		chunkSize := int(buf.ReadUint8())
+		for i := 0; i < chunkSize && size > 0; i++ {
+			k := readString(buf)
+			v := buf.ReadBool()
+			result[k] = v
+			size--
+		}
+	}
+	return result
+}
+
+// writeMapInt32Int32 writes map[int32]int32 using chunk protocol
+func writeMapInt32Int32(buf *ByteBuffer, m map[int32]int32) {
+	length := len(m)
+	buf.WriteVarUint32(uint32(length))
+	if length == 0 {
+		return
+	}
+
+	remaining := length
+	for remaining > 0 {
+		chunkSize := remaining
+		if chunkSize > MAX_CHUNK_SIZE {
+			chunkSize = MAX_CHUNK_SIZE
+		}
+
+		buf.WriteInt16(-1)
+		buf.WriteUint8(KEY_DECL_TYPE | VALUE_DECL_TYPE)
+		buf.WriteUint8(uint8(chunkSize))
+
+		count := 0
+		for k, v := range m {
+			buf.WriteVarint32(k)
+			buf.WriteVarint32(v)
+			count++
+			if count >= chunkSize {
+				break
+			}
+		}
+		remaining -= chunkSize
+	}
+}
+
+// readMapInt32Int32 reads map[int32]int32 using chunk protocol
+func readMapInt32Int32(buf *ByteBuffer) map[int32]int32 {
+	size := int(buf.ReadVarUint32())
+	result := make(map[int32]int32, size)
+	if size == 0 {
+		return result
+	}
+
+	for size > 0 {
+		chunkHeader := buf.ReadUint8()
+		keyHasNull := (chunkHeader & KEY_HAS_NULL) != 0
+		valueHasNull := (chunkHeader & VALUE_HAS_NULL) != 0
+
+		if keyHasNull || valueHasNull {
+			size--
+			continue
+		}
+
+		chunkSize := int(buf.ReadUint8())
+		for i := 0; i < chunkSize && size > 0; i++ {
+			k := buf.ReadVarint32()
+			v := buf.ReadVarint32()
+			result[k] = v
+			size--
+		}
+	}
+	return result
+}
+
+// writeMapInt64Int64 writes map[int64]int64 using chunk protocol
+func writeMapInt64Int64(buf *ByteBuffer, m map[int64]int64) {
+	length := len(m)
+	buf.WriteVarUint32(uint32(length))
+	if length == 0 {
+		return
+	}
+
+	remaining := length
+	for remaining > 0 {
+		chunkSize := remaining
+		if chunkSize > MAX_CHUNK_SIZE {
+			chunkSize = MAX_CHUNK_SIZE
+		}
+
+		buf.WriteInt16(-1)
+		buf.WriteUint8(KEY_DECL_TYPE | VALUE_DECL_TYPE)
+		buf.WriteUint8(uint8(chunkSize))
+
+		count := 0
+		for k, v := range m {
+			buf.WriteVarint64(k)
+			buf.WriteVarint64(v)
+			count++
+			if count >= chunkSize {
+				break
+			}
+		}
+		remaining -= chunkSize
+	}
+}
+
+// readMapInt64Int64 reads map[int64]int64 using chunk protocol
+func readMapInt64Int64(buf *ByteBuffer) map[int64]int64 {
+	size := int(buf.ReadVarUint32())
+	result := make(map[int64]int64, size)
+	if size == 0 {
+		return result
+	}
+
+	for size > 0 {
+		chunkHeader := buf.ReadUint8()
+		keyHasNull := (chunkHeader & KEY_HAS_NULL) != 0
+		valueHasNull := (chunkHeader & VALUE_HAS_NULL) != 0
+
+		if keyHasNull || valueHasNull {
+			size--
+			continue
+		}
+
+		chunkSize := int(buf.ReadUint8())
+		for i := 0; i < chunkSize && size > 0; i++ {
+			k := buf.ReadVarint64()
+			v := buf.ReadVarint64()
+			result[k] = v
+			size--
+		}
+	}
+	return result
+}
+
+// writeMapIntInt writes map[int]int using chunk protocol
+func writeMapIntInt(buf *ByteBuffer, m map[int]int) {
+	length := len(m)
+	buf.WriteVarUint32(uint32(length))
+	if length == 0 {
+		return
+	}
+
+	remaining := length
+	for remaining > 0 {
+		chunkSize := remaining
+		if chunkSize > MAX_CHUNK_SIZE {
+			chunkSize = MAX_CHUNK_SIZE
+		}
+
+		buf.WriteInt16(-1)
+		buf.WriteUint8(KEY_DECL_TYPE | VALUE_DECL_TYPE)
+		buf.WriteUint8(uint8(chunkSize))
+
+		count := 0
+		for k, v := range m {
+			buf.WriteVarint64(int64(k))
+			buf.WriteVarint64(int64(v))
+			count++
+			if count >= chunkSize {
+				break
+			}
+		}
+		remaining -= chunkSize
+	}
+}
+
+// readMapIntInt reads map[int]int using chunk protocol
+func readMapIntInt(buf *ByteBuffer) map[int]int {
+	size := int(buf.ReadVarUint32())
+	result := make(map[int]int, size)
+	if size == 0 {
+		return result
+	}
+
+	for size > 0 {
+		chunkHeader := buf.ReadUint8()
+		keyHasNull := (chunkHeader & KEY_HAS_NULL) != 0
+		valueHasNull := (chunkHeader & VALUE_HAS_NULL) != 0
+
+		if keyHasNull || valueHasNull {
+			size--
+			continue
+		}
+
+		chunkSize := int(buf.ReadUint8())
+		for i := 0; i < chunkSize && size > 0; i++ {
+			k := buf.ReadVarint64()
+			v := buf.ReadVarint64()
+			result[int(k)] = int(v)
+			size--
+		}
+	}
+	return result
+}
+
+// ============================================================================
+// Dedicated map serializers
+// ============================================================================
+
+type stringStringMapSerializer struct{}
+
+func (s stringStringMapSerializer) TypeId() TypeId       { return MAP }
+func (s stringStringMapSerializer) NeedToWriteRef() bool { return true }
+
+func (s stringStringMapSerializer) Write(ctx *WriteContext, value reflect.Value) error {
+	writeMapStringString(ctx.buffer, value.Interface().(map[string]string))
+	return nil
+}
+
+func (s stringStringMapSerializer) Read(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	result := readMapStringString(ctx.buffer)
+	value.Set(reflect.ValueOf(result))
+	return nil
+}
+
+type stringInt64MapSerializer struct{}
+
+func (s stringInt64MapSerializer) TypeId() TypeId       { return MAP }
+func (s stringInt64MapSerializer) NeedToWriteRef() bool { return true }
+
+func (s stringInt64MapSerializer) Write(ctx *WriteContext, value reflect.Value) error {
+	writeMapStringInt64(ctx.buffer, value.Interface().(map[string]int64))
+	return nil
+}
+
+func (s stringInt64MapSerializer) Read(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	result := readMapStringInt64(ctx.buffer)
+	value.Set(reflect.ValueOf(result))
+	return nil
+}
+
+type stringIntMapSerializer struct{}
+
+func (s stringIntMapSerializer) TypeId() TypeId       { return MAP }
+func (s stringIntMapSerializer) NeedToWriteRef() bool { return true }
+
+func (s stringIntMapSerializer) Write(ctx *WriteContext, value reflect.Value) error {
+	writeMapStringInt(ctx.buffer, value.Interface().(map[string]int))
+	return nil
+}
+
+func (s stringIntMapSerializer) Read(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	result := readMapStringInt(ctx.buffer)
+	value.Set(reflect.ValueOf(result))
+	return nil
+}
+
+type stringFloat64MapSerializer struct{}
+
+func (s stringFloat64MapSerializer) TypeId() TypeId       { return MAP }
+func (s stringFloat64MapSerializer) NeedToWriteRef() bool { return true }
+
+func (s stringFloat64MapSerializer) Write(ctx *WriteContext, value reflect.Value) error {
+	writeMapStringFloat64(ctx.buffer, value.Interface().(map[string]float64))
+	return nil
+}
+
+func (s stringFloat64MapSerializer) Read(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	result := readMapStringFloat64(ctx.buffer)
+	value.Set(reflect.ValueOf(result))
+	return nil
+}
+
+type stringBoolMapSerializer struct{}
+
+func (s stringBoolMapSerializer) TypeId() TypeId       { return MAP }
+func (s stringBoolMapSerializer) NeedToWriteRef() bool { return true }
+
+func (s stringBoolMapSerializer) Write(ctx *WriteContext, value reflect.Value) error {
+	writeMapStringBool(ctx.buffer, value.Interface().(map[string]bool))
+	return nil
+}
+
+func (s stringBoolMapSerializer) Read(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	result := readMapStringBool(ctx.buffer)
+	value.Set(reflect.ValueOf(result))
+	return nil
+}
+
+type int32Int32MapSerializer struct{}
+
+func (s int32Int32MapSerializer) TypeId() TypeId       { return MAP }
+func (s int32Int32MapSerializer) NeedToWriteRef() bool { return true }
+
+func (s int32Int32MapSerializer) Write(ctx *WriteContext, value reflect.Value) error {
+	writeMapInt32Int32(ctx.buffer, value.Interface().(map[int32]int32))
+	return nil
+}
+
+func (s int32Int32MapSerializer) Read(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	result := readMapInt32Int32(ctx.buffer)
+	value.Set(reflect.ValueOf(result))
+	return nil
+}
+
+type int64Int64MapSerializer struct{}
+
+func (s int64Int64MapSerializer) TypeId() TypeId       { return MAP }
+func (s int64Int64MapSerializer) NeedToWriteRef() bool { return true }
+
+func (s int64Int64MapSerializer) Write(ctx *WriteContext, value reflect.Value) error {
+	writeMapInt64Int64(ctx.buffer, value.Interface().(map[int64]int64))
+	return nil
+}
+
+func (s int64Int64MapSerializer) Read(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	result := readMapInt64Int64(ctx.buffer)
+	value.Set(reflect.ValueOf(result))
+	return nil
+}
+
+type intIntMapSerializer struct{}
+
+func (s intIntMapSerializer) TypeId() TypeId       { return MAP }
+func (s intIntMapSerializer) NeedToWriteRef() bool { return true }
+
+func (s intIntMapSerializer) Write(ctx *WriteContext, value reflect.Value) error {
+	writeMapIntInt(ctx.buffer, value.Interface().(map[int]int))
+	return nil
+}
+
+func (s intIntMapSerializer) Read(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	result := readMapIntInt(ctx.buffer)
+	value.Set(reflect.ValueOf(result))
+	return nil
+}

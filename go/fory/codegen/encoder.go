@@ -25,7 +25,7 @@ import (
 	"github.com/apache/fory/go/fory"
 )
 
-// generateWriteTyped generates the strongly-typed Write method
+// generateWriteTyped generates the strongly-typed WriteData method
 func generateWriteTyped(buf *bytes.Buffer, s *StructInfo) error {
 	hash := computeStructHash(s)
 
@@ -33,12 +33,12 @@ func generateWriteTyped(buf *bytes.Buffer, s *StructInfo) error {
 	fmt.Fprintf(buf, "func (g %s_ForyGenSerializer) WriteTyped(ctx *fory.WriteContext, v *%s) error {\n", s.Name, s.Name)
 	fmt.Fprintf(buf, "\tbuf := ctx.Buffer()\n")
 
-	// Write struct hash
-	fmt.Fprintf(buf, "\t// Write precomputed struct hash for compatibility checking\n")
+	// WriteData struct hash
+	fmt.Fprintf(buf, "\t// WriteData precomputed struct hash for compatibility checking\n")
 	fmt.Fprintf(buf, "\tbuf.WriteInt32(%d) // hash of %s structure\n\n", hash, s.Name)
 
-	// Write fields in sorted order
-	fmt.Fprintf(buf, "\t// Write fields in sorted order\n")
+	// WriteData fields in sorted order
+	fmt.Fprintf(buf, "\t// WriteData fields in sorted order\n")
 	for _, field := range s.Fields {
 		if err := generateFieldWriteTyped(buf, field); err != nil {
 			return err
@@ -50,11 +50,11 @@ func generateWriteTyped(buf *bytes.Buffer, s *StructInfo) error {
 	return nil
 }
 
-// generateWriteInterface generates interface compatibility method (Write)
+// generateWriteInterface generates interface compatibility method (WriteData)
 func generateWriteInterface(buf *bytes.Buffer, s *StructInfo) error {
-	// Generate Write method (reflect.Value-based API)
-	fmt.Fprintf(buf, "// Write provides reflect.Value interface compatibility (implements fory.Serializer)\n")
-	fmt.Fprintf(buf, "func (g %s_ForyGenSerializer) Write(ctx *fory.WriteContext, value reflect.Value) error {\n", s.Name)
+	// Generate WriteData method (reflect.Value-based API)
+	fmt.Fprintf(buf, "// WriteData provides reflect.Value interface compatibility (implements fory.Serializer)\n")
+	fmt.Fprintf(buf, "func (g %s_ForyGenSerializer) WriteData(ctx *fory.WriteContext, value reflect.Value) error {\n", s.Name)
 	fmt.Fprintf(buf, "\t// Convert reflect.Value to concrete type and delegate to typed method\n")
 	fmt.Fprintf(buf, "\tvar v *%s\n", s.Name)
 	fmt.Fprintf(buf, "\tif value.Kind() == reflect.Ptr {\n")
@@ -123,9 +123,8 @@ func generateFieldWriteTyped(buf *bytes.Buffer, field *FieldInfo) error {
 		case types.Float64:
 			fmt.Fprintf(buf, "\tbuf.WriteFloat64(%s)\n", fieldAccess)
 		case types.String:
-			// String is referencable but NeedWriteRef()=false
-			// In struct serialization, it writes NotNullValueFlag then value
-			fmt.Fprintf(buf, "\tbuf.WriteInt8(-1) // NotNullValueFlag\n")
+			// String serializer's NeedToWriteRef() = false
+			// So in struct serialization, no ref flag is written, just the string data
 			fmt.Fprintf(buf, "\tfory.WriteString(buf, %s)\n", fieldAccess)
 		default:
 			fmt.Fprintf(buf, "\t// TODO: unsupported basic type %s\n", basic.String())
@@ -144,14 +143,14 @@ func generateFieldWriteTyped(buf *bytes.Buffer, field *FieldInfo) error {
 			fmt.Fprintf(buf, "\tif %s == nil {\n", fieldAccess)
 			fmt.Fprintf(buf, "\t\tbuf.WriteInt8(-3) // null value flag\n")
 			fmt.Fprintf(buf, "\t} else {\n")
-			fmt.Fprintf(buf, "\t\t// Write reference flag for the slice itself\n")
+			fmt.Fprintf(buf, "\t\t// WriteData reference flag for the slice itself\n")
 			fmt.Fprintf(buf, "\t\tbuf.WriteInt8(0) // RefValueFlag\n")
-			fmt.Fprintf(buf, "\t\t// Write slice length\n")
+			fmt.Fprintf(buf, "\t\t// WriteData slice length\n")
 			fmt.Fprintf(buf, "\t\tbuf.WriteVarUint32(uint32(len(%s)))\n", fieldAccess)
-			fmt.Fprintf(buf, "\t\t// Write collection flags for dynamic slice []interface{}\n")
+			fmt.Fprintf(buf, "\t\t// WriteData collection flags for dynamic slice []interface{}\n")
 			fmt.Fprintf(buf, "\t\t// Only CollectionTrackingRef is set (no declared type, may have different types)\n")
 			fmt.Fprintf(buf, "\t\tbuf.WriteInt8(1) // CollectionTrackingRef only\n")
-			fmt.Fprintf(buf, "\t\t// Write each element using WriteValue\n")
+			fmt.Fprintf(buf, "\t\t// WriteData each element using WriteValue\n")
 			fmt.Fprintf(buf, "\t\tfor _, elem := range %s {\n", fieldAccess)
 			fmt.Fprintf(buf, "\t\t\tctx.WriteValue(reflect.ValueOf(elem))\n")
 			fmt.Fprintf(buf, "\t\t}\n")
@@ -259,10 +258,10 @@ func generateElementTypeIDWrite(buf *bytes.Buffer, elemType types.Type) error {
 func generateSliceWriteInline(buf *bytes.Buffer, sliceType *types.Slice, fieldAccess string) error {
 	elemType := sliceType.Elem()
 
-	// Write RefValueFlag first (slice is referencable)
+	// WriteData RefValueFlag first (slice is referencable)
 	fmt.Fprintf(buf, "\tbuf.WriteInt8(0) // RefValueFlag for slice\n")
 
-	// Write slice length - use block scope to avoid variable name conflicts
+	// WriteData slice length - use block scope to avoid variable name conflicts
 	fmt.Fprintf(buf, "\t{\n")
 	fmt.Fprintf(buf, "\t\tsliceLen := 0\n")
 	fmt.Fprintf(buf, "\t\tif %s != nil {\n", fieldAccess)
@@ -270,7 +269,7 @@ func generateSliceWriteInline(buf *bytes.Buffer, sliceType *types.Slice, fieldAc
 	fmt.Fprintf(buf, "\t\t}\n")
 	fmt.Fprintf(buf, "\t\tbuf.WriteVarUint32(uint32(sliceLen))\n")
 
-	// Write collection header and elements for non-empty slice
+	// WriteData collection header and elements for non-empty slice
 	fmt.Fprintf(buf, "\t\tif sliceLen > 0 {\n")
 
 	// For codegen, follow reflection's behavior:
@@ -279,12 +278,12 @@ func generateSliceWriteInline(buf *bytes.Buffer, sliceType *types.Slice, fieldAc
 	fmt.Fprintf(buf, "\t\t\tcollectFlag := 8 // CollectionIsSameType only\n")
 	fmt.Fprintf(buf, "\t\t\tbuf.WriteInt8(int8(collectFlag))\n")
 
-	// Write element type ID since CollectionIsDeclElementType is not set
+	// WriteData element type ID since CollectionIsDeclElementType is not set
 	if err := generateElementTypeIDWriteInline(buf, elemType); err != nil {
 		return err
 	}
 
-	// Write elements directly without per-element flags/type IDs
+	// WriteData elements directly without per-element flags/type IDs
 	fmt.Fprintf(buf, "\t\t\tfor _, elem := range %s {\n", fieldAccess)
 	if err := generateSliceElementWriteInline(buf, elemType, "elem"); err != nil {
 		return err
@@ -312,10 +311,10 @@ func generateMapWriteInline(buf *bytes.Buffer, mapType *types.Map, fieldAccess s
 		valueIsInterface = true
 	}
 
-	// Write RefValueFlag first (map is referencable)
+	// WriteData RefValueFlag first (map is referencable)
 	fmt.Fprintf(buf, "\tbuf.WriteInt8(0) // RefValueFlag for map\n")
 
-	// Write map length
+	// WriteData map length
 	fmt.Fprintf(buf, "\t{\n")
 	fmt.Fprintf(buf, "\t\tmapLen := 0\n")
 	fmt.Fprintf(buf, "\t\tif %s != nil {\n", fieldAccess)
@@ -323,7 +322,7 @@ func generateMapWriteInline(buf *bytes.Buffer, mapType *types.Map, fieldAccess s
 	fmt.Fprintf(buf, "\t\t}\n")
 	fmt.Fprintf(buf, "\t\tbuf.WriteVarUint32(uint32(mapLen))\n")
 
-	// Write chunks for non-empty map
+	// WriteData chunks for non-empty map
 	fmt.Fprintf(buf, "\t\tif mapLen > 0 {\n")
 
 	// Calculate KV header based on types
@@ -359,7 +358,7 @@ func generateMapWriteInline(buf *bytes.Buffer, mapType *types.Map, fieldAccess s
 		fmt.Fprintf(buf, "\t\t\tkvHeader |= 0x20 // value type not declared\n")
 	}
 
-	// Write map elements in chunks
+	// WriteData map elements in chunks
 	fmt.Fprintf(buf, "\t\t\tchunkSize := 0\n")
 	fmt.Fprintf(buf, "\t\t\t_ = buf.WriterIndex() // chunkHeaderOffset\n")
 	fmt.Fprintf(buf, "\t\t\tbuf.WriteInt8(int8(kvHeader)) // KV header\n")
@@ -368,7 +367,7 @@ func generateMapWriteInline(buf *bytes.Buffer, mapType *types.Map, fieldAccess s
 
 	fmt.Fprintf(buf, "\t\t\tfor mapKey, mapValue := range %s {\n", fieldAccess)
 
-	// Write key
+	// WriteData key
 	if keyIsInterface {
 		fmt.Fprintf(buf, "\t\t\t\tctx.WriteValue(reflect.ValueOf(mapKey))\n")
 	} else {
@@ -377,7 +376,7 @@ func generateMapWriteInline(buf *bytes.Buffer, mapType *types.Map, fieldAccess s
 		}
 	}
 
-	// Write value
+	// WriteData value
 	if valueIsInterface {
 		fmt.Fprintf(buf, "\t\t\t\tctx.WriteValue(reflect.ValueOf(mapValue))\n")
 	} else {
@@ -388,7 +387,7 @@ func generateMapWriteInline(buf *bytes.Buffer, mapType *types.Map, fieldAccess s
 
 	fmt.Fprintf(buf, "\t\t\t\tchunkSize++\n")
 	fmt.Fprintf(buf, "\t\t\t\tif chunkSize >= 255 {\n")
-	fmt.Fprintf(buf, "\t\t\t\t\t// Write chunk size and start new chunk\n")
+	fmt.Fprintf(buf, "\t\t\t\t\t// WriteData chunk size and start new chunk\n")
 	fmt.Fprintf(buf, "\t\t\t\t\tbuf.PutUint8(chunkSizeOffset, uint8(chunkSize))\n")
 	fmt.Fprintf(buf, "\t\t\t\t\tif len(%s) > chunkSize {\n", fieldAccess)
 	fmt.Fprintf(buf, "\t\t\t\t\t\tchunkSize = 0\n")
@@ -401,7 +400,7 @@ func generateMapWriteInline(buf *bytes.Buffer, mapType *types.Map, fieldAccess s
 
 	fmt.Fprintf(buf, "\t\t\t}\n") // end for loop
 
-	// Write final chunk size
+	// WriteData final chunk size
 	fmt.Fprintf(buf, "\t\t\tif chunkSize > 0 {\n")
 	fmt.Fprintf(buf, "\t\t\t\tbuf.PutUint8(chunkSizeOffset, uint8(chunkSize))\n")
 	fmt.Fprintf(buf, "\t\t\t}\n")

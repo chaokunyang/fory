@@ -25,7 +25,7 @@ import (
 	"github.com/apache/fory/go/fory"
 )
 
-// generateReadTyped generates the strongly-typed Read method
+// generateReadTyped generates the strongly-typed ReadData method
 func generateReadTyped(buf *bytes.Buffer, s *StructInfo) error {
 	hash := computeStructHash(s)
 
@@ -33,14 +33,14 @@ func generateReadTyped(buf *bytes.Buffer, s *StructInfo) error {
 	fmt.Fprintf(buf, "func (g %s_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *%s) error {\n", s.Name, s.Name)
 	fmt.Fprintf(buf, "\tbuf := ctx.Buffer()\n")
 
-	// Read and verify struct hash
-	fmt.Fprintf(buf, "\t// Read and verify struct hash\n")
+	// ReadData and verify struct hash
+	fmt.Fprintf(buf, "\t// ReadData and verify struct hash\n")
 	fmt.Fprintf(buf, "\tif got := buf.ReadInt32(); got != %d {\n", hash)
 	fmt.Fprintf(buf, "\t\treturn fmt.Errorf(\"struct hash mismatch for %s: expected %d, got %%d\", got)\n", s.Name, hash)
 	fmt.Fprintf(buf, "\t}\n\n")
 
-	// Read fields in sorted order
-	fmt.Fprintf(buf, "\t// Read fields in same order as write\n")
+	// ReadData fields in sorted order
+	fmt.Fprintf(buf, "\t// ReadData fields in same order as write\n")
 	for _, field := range s.Fields {
 		if err := generateFieldReadTyped(buf, field); err != nil {
 			return err
@@ -52,11 +52,11 @@ func generateReadTyped(buf *bytes.Buffer, s *StructInfo) error {
 	return nil
 }
 
-// generateReadInterface generates interface compatibility method (Read)
+// generateReadInterface generates interface compatibility method (ReadData)
 func generateReadInterface(buf *bytes.Buffer, s *StructInfo) error {
-	// Generate Read method (reflect.Value-based API)
-	fmt.Fprintf(buf, "// Read provides reflect.Value interface compatibility (implements fory.Serializer)\n")
-	fmt.Fprintf(buf, "func (g %s_ForyGenSerializer) Read(ctx *fory.ReadContext, type_ reflect.Type, value reflect.Value) error {\n", s.Name)
+	// Generate ReadData method (reflect.Value-based API)
+	fmt.Fprintf(buf, "// ReadData provides reflect.Value interface compatibility (implements fory.Serializer)\n")
+	fmt.Fprintf(buf, "func (g %s_ForyGenSerializer) ReadData(ctx *fory.ReadContext, type_ reflect.Type, value reflect.Value) error {\n", s.Name)
 	fmt.Fprintf(buf, "\t// Convert reflect.Value to concrete type and delegate to typed method\n")
 	fmt.Fprintf(buf, "\tvar v *%s\n", s.Name)
 	fmt.Fprintf(buf, "\tif value.Kind() == reflect.Ptr {\n")
@@ -128,11 +128,8 @@ func generateFieldReadTyped(buf *bytes.Buffer, field *FieldInfo) error {
 		case types.Float64:
 			fmt.Fprintf(buf, "\t%s = buf.ReadFloat64()\n", fieldAccess)
 		case types.String:
-			// String is referencable but NeedWriteRef()=false
-			// In struct deserialization, it reads NotNullValueFlag then value
-			fmt.Fprintf(buf, "\tif flag := buf.ReadInt8(); flag != -1 {\n")
-			fmt.Fprintf(buf, "\t\treturn fmt.Errorf(\"expected NotNullValueFlag for string field %s, got %%d\", flag)\n", field.GoName)
-			fmt.Fprintf(buf, "\t}\n")
+			// String serializer's NeedToWriteRef() = false
+			// So in struct deserialization, no ref flag is read, just the string data
 			fmt.Fprintf(buf, "\t%s = fory.ReadString(buf)\n", fieldAccess)
 		default:
 			fmt.Fprintf(buf, "\t// TODO: unsupported basic type %s\n", basic.String())
@@ -151,13 +148,13 @@ func generateFieldReadTyped(buf *bytes.Buffer, field *FieldInfo) error {
 			fmt.Fprintf(buf, "\tif flag := buf.ReadInt8(); flag == -3 {\n")
 			fmt.Fprintf(buf, "\t\t%s = nil // null slice\n", fieldAccess)
 			fmt.Fprintf(buf, "\t} else if flag == 0 {\n")
-			fmt.Fprintf(buf, "\t\t// Read slice length\n")
+			fmt.Fprintf(buf, "\t\t// ReadData slice length\n")
 			fmt.Fprintf(buf, "\t\tsliceLen := buf.ReadVarUint32()\n")
-			fmt.Fprintf(buf, "\t\t// Read collection flags (ignore for now)\n")
+			fmt.Fprintf(buf, "\t\t// ReadData collection flags (ignore for now)\n")
 			fmt.Fprintf(buf, "\t\t_ = buf.ReadInt8()\n")
 			fmt.Fprintf(buf, "\t\t// Create slice with proper capacity\n")
 			fmt.Fprintf(buf, "\t\t%s = make([]interface{}, sliceLen)\n", fieldAccess)
-			fmt.Fprintf(buf, "\t\t// Read each element using ReadValue\n")
+			fmt.Fprintf(buf, "\t\t// ReadData each element using ReadValue\n")
 			fmt.Fprintf(buf, "\t\tfor i := range %s {\n", fieldAccess)
 			fmt.Fprintf(buf, "\t\t\tctx.ReadValue(reflect.ValueOf(&%s[i]).Elem())\n", fieldAccess)
 			fmt.Fprintf(buf, "\t\t}\n")
@@ -207,7 +204,7 @@ func generateSliceRead(buf *bytes.Buffer, sliceType *types.Slice, fieldAccess st
 	elemType := sliceType.Elem()
 
 	// Use block scope to avoid variable redeclaration across multiple slice fields
-	fmt.Fprintf(buf, "\t// Read slice %s\n", fieldAccess)
+	fmt.Fprintf(buf, "\t// ReadData slice %s\n", fieldAccess)
 	fmt.Fprintf(buf, "\t{\n")
 	fmt.Fprintf(buf, "\t\tsliceLen := int(buf.ReadVarUint32())\n")
 	fmt.Fprintf(buf, "\t\tif sliceLen == 0 {\n")
@@ -215,19 +212,19 @@ func generateSliceRead(buf *bytes.Buffer, sliceType *types.Slice, fieldAccess st
 	fmt.Fprintf(buf, "\t\t\t%s = nil\n", fieldAccess)
 	fmt.Fprintf(buf, "\t\t} else {\n")
 
-	// Read collection flags for non-empty slice
-	fmt.Fprintf(buf, "\t\t\t// Read collection flags\n")
+	// ReadData collection flags for non-empty slice
+	fmt.Fprintf(buf, "\t\t\t// ReadData collection flags\n")
 	fmt.Fprintf(buf, "\t\t\tcollectFlag := buf.ReadInt8()\n")
 	fmt.Fprintf(buf, "\t\t\t// Check if CollectionIsDeclElementType flag is NOT set (meaning we need to read type ID)\n")
 	fmt.Fprintf(buf, "\t\t\tif (collectFlag & 4) == 0 {\n")
-	fmt.Fprintf(buf, "\t\t\t\t// Read element type ID (not declared, so we need to read it)\n")
+	fmt.Fprintf(buf, "\t\t\t\t// ReadData element type ID (not declared, so we need to read it)\n")
 	fmt.Fprintf(buf, "\t\t\t\t_ = buf.ReadVarInt32()\n")
 	fmt.Fprintf(buf, "\t\t\t}\n")
 
 	// Create slice
 	fmt.Fprintf(buf, "\t\t\t%s = make(%s, sliceLen)\n", fieldAccess, sliceType.String())
 
-	// Read elements - for declared type slices, use direct element reading without flags
+	// ReadData elements - for declared type slices, use direct element reading without flags
 	fmt.Fprintf(buf, "\t\t\tfor i := 0; i < sliceLen; i++ {\n")
 
 	// Generate element read code - for typed slices, read directly via serializer
@@ -328,19 +325,19 @@ func generateSliceElementRead(buf *bytes.Buffer, elemType types.Type, elemAccess
 func generateSliceReadInline(buf *bytes.Buffer, sliceType *types.Slice, fieldAccess string) error {
 	elemType := sliceType.Elem()
 
-	// Read RefValueFlag first (slice is referencable)
+	// ReadData RefValueFlag first (slice is referencable)
 	fmt.Fprintf(buf, "\tif flag := buf.ReadInt8(); flag != 0 {\n")
 	fmt.Fprintf(buf, "\t\treturn fmt.Errorf(\"expected RefValueFlag for slice field, got %%d\", flag)\n")
 	fmt.Fprintf(buf, "\t}\n")
 
-	// Read slice length - use block scope to avoid variable name conflicts
+	// ReadData slice length - use block scope to avoid variable name conflicts
 	fmt.Fprintf(buf, "\t{\n")
 	fmt.Fprintf(buf, "\t\tsliceLen := int(buf.ReadVarUint32())\n")
 	fmt.Fprintf(buf, "\t\tif sliceLen == 0 {\n")
 	fmt.Fprintf(buf, "\t\t\t%s = nil\n", fieldAccess)
 	fmt.Fprintf(buf, "\t\t} else {\n")
 
-	// Read collection header
+	// ReadData collection header
 	fmt.Fprintf(buf, "\t\t\tcollectFlag := buf.ReadInt8()\n")
 	fmt.Fprintf(buf, "\t\t\t// Check if CollectionIsDeclElementType is set (bit 2, value 4)\n")
 	fmt.Fprintf(buf, "\t\t\thasDeclType := (collectFlag & 4) != 0\n")
@@ -348,7 +345,7 @@ func generateSliceReadInline(buf *bytes.Buffer, sliceType *types.Slice, fieldAcc
 	// Create slice
 	fmt.Fprintf(buf, "\t\t\t%s = make(%s, sliceLen)\n", fieldAccess, sliceType.String())
 
-	// Read elements based on whether CollectionIsDeclElementType is set
+	// ReadData elements based on whether CollectionIsDeclElementType is set
 	fmt.Fprintf(buf, "\t\t\tif hasDeclType {\n")
 	fmt.Fprintf(buf, "\t\t\t\t// Elements are written directly without flags/type IDs\n")
 	fmt.Fprintf(buf, "\t\t\t\tfor i := 0; i < sliceLen; i++ {\n")
@@ -359,7 +356,7 @@ func generateSliceReadInline(buf *bytes.Buffer, sliceType *types.Slice, fieldAcc
 	fmt.Fprintf(buf, "\t\t\t} else {\n")
 	fmt.Fprintf(buf, "\t\t\t\t// Need to read type ID once if CollectionIsSameType is set\n")
 	fmt.Fprintf(buf, "\t\t\t\tif (collectFlag & 8) != 0 {\n")
-	fmt.Fprintf(buf, "\t\t\t\t\t// Read element type ID once for all elements\n")
+	fmt.Fprintf(buf, "\t\t\t\t\t// ReadData element type ID once for all elements\n")
 	fmt.Fprintf(buf, "\t\t\t\t\t_ = buf.ReadVarInt32()\n")
 	fmt.Fprintf(buf, "\t\t\t\t}\n")
 	fmt.Fprintf(buf, "\t\t\t\tfor i := 0; i < sliceLen; i++ {\n")
@@ -409,7 +406,7 @@ func generateElementTypeIDReadInline(buf *bytes.Buffer, elemType types.Type) err
 			return fmt.Errorf("unsupported basic type for element type ID read: %s", basic.String())
 		}
 
-		fmt.Fprintf(buf, "\t\t\t\t// Read and verify element type ID\n")
+		fmt.Fprintf(buf, "\t\t\t\t// ReadData and verify element type ID\n")
 		fmt.Fprintf(buf, "\t\t\t\tif typeID := buf.ReadVarInt32(); typeID != %d {\n", expectedTypeID)
 		fmt.Fprintf(buf, "\t\t\t\t\treturn fmt.Errorf(\"expected element type ID %d, got %%d\", typeID)\n", expectedTypeID)
 		fmt.Fprintf(buf, "\t\t\t\t}\n")
@@ -521,12 +518,12 @@ func generateMapReadInline(buf *bytes.Buffer, mapType *types.Map, fieldAccess st
 		valueIsInterface = true
 	}
 
-	// Read RefValueFlag first (map is referencable)
+	// ReadData RefValueFlag first (map is referencable)
 	fmt.Fprintf(buf, "\tif flag := buf.ReadInt8(); flag != 0 {\n")
 	fmt.Fprintf(buf, "\t\treturn fmt.Errorf(\"expected RefValueFlag for map field, got %%d\", flag)\n")
 	fmt.Fprintf(buf, "\t}\n")
 
-	// Read map length
+	// ReadData map length
 	fmt.Fprintf(buf, "\t{\n")
 	fmt.Fprintf(buf, "\t\tmapLen := int(buf.ReadVarUint32())\n")
 	fmt.Fprintf(buf, "\t\tif mapLen == 0 {\n")
@@ -535,9 +532,9 @@ func generateMapReadInline(buf *bytes.Buffer, mapType *types.Map, fieldAccess st
 	fmt.Fprintf(buf, "\t\t\t%s = make(%s, mapLen)\n", fieldAccess, mapType.String())
 	fmt.Fprintf(buf, "\t\t\tmapSize := mapLen\n")
 
-	// Read chunks
+	// ReadData chunks
 	fmt.Fprintf(buf, "\t\t\tfor mapSize > 0 {\n")
-	fmt.Fprintf(buf, "\t\t\t\t// Read KV header\n")
+	fmt.Fprintf(buf, "\t\t\t\t// ReadData KV header\n")
 	fmt.Fprintf(buf, "\t\t\t\tkvHeader := buf.ReadUint8()\n")
 	fmt.Fprintf(buf, "\t\t\t\tchunkSize := int(buf.ReadUint8())\n")
 
@@ -551,10 +548,10 @@ func generateMapReadInline(buf *bytes.Buffer, mapType *types.Map, fieldAccess st
 	fmt.Fprintf(buf, "\t\t\t\t_ = trackValueRef\n")
 	fmt.Fprintf(buf, "\t\t\t\t_ = valueNotDeclared\n")
 
-	// Read key-value pairs in this chunk
+	// ReadData key-value pairs in this chunk
 	fmt.Fprintf(buf, "\t\t\t\tfor i := 0; i < chunkSize; i++ {\n")
 
-	// Read key
+	// ReadData key
 	if keyIsInterface {
 		fmt.Fprintf(buf, "\t\t\t\t\tvar mapKey interface{}\n")
 		fmt.Fprintf(buf, "\t\t\t\t\tctx.ReadValue(reflect.ValueOf(&mapKey).Elem())\n")
@@ -567,7 +564,7 @@ func generateMapReadInline(buf *bytes.Buffer, mapType *types.Map, fieldAccess st
 		}
 	}
 
-	// Read value
+	// ReadData value
 	if valueIsInterface {
 		fmt.Fprintf(buf, "\t\t\t\t\tvar mapValue interface{}\n")
 		fmt.Fprintf(buf, "\t\t\t\t\tctx.ReadValue(reflect.ValueOf(&mapValue).Elem())\n")

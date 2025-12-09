@@ -87,7 +87,7 @@ func (r *MetaStringResolver) WriteMetaStringBytes(buf *ByteBuffer, m *MetaString
 		r.dynamicWriteStringID++
 		r.dynamicWrittenEnumString = append(r.dynamicWrittenEnumString, m)
 
-		// Write header with length and encoding info
+		// WriteData header with length and encoding info
 		header := uint32(m.Length) << 1
 		if err := writeVarUint32(buf, header); err != nil {
 			return err
@@ -117,7 +117,7 @@ func (r *MetaStringResolver) WriteMetaStringBytes(buf *ByteBuffer, m *MetaString
 
 // ReadMetaStringBytes reads a string from buffer, handling dynamic references
 func (r *MetaStringResolver) ReadMetaStringBytes(buf *ByteBuffer) (*MetaStringBytes, error) {
-	// Read header containing length/reference info
+	// ReadData header containing length/reference info
 	header, err := readVarUint32(buf)
 	if err != nil {
 		return nil, err
@@ -141,7 +141,7 @@ func (r *MetaStringResolver) ReadMetaStringBytes(buf *ByteBuffer) (*MetaStringBy
 
 	// Small string optimization
 	if length <= SmallStringThreshold {
-		// Read encoding and data
+		// ReadData encoding and data
 		encByte, _ := buf.ReadByte()
 		encoding = Encoding(encByte)
 
@@ -235,6 +235,30 @@ func (r *MetaStringResolver) GetMetaStrBytes(metastr *meta.MetaString) *MetaStri
 	m := NewMetaStringBytes(data, hashcode)
 	r.metaStrToMetaStrBytes[metastr] = m
 	return m
+}
+
+// ComputeMetaStringHash computes the hashcode for meta string bytes
+func ComputeMetaStringHash(data []byte, encoding meta.Encoding) int64 {
+	length := len(data)
+	var hashcode int64
+
+	if length <= SmallStringThreshold {
+		// Small string: use direct bytes as hash components
+		var v1, v2 int64
+		if length <= 8 {
+			v1 = bytesToInt64(data)
+		} else {
+			binary.Read(bytes.NewReader(data[:8]), binary.LittleEndian, &v1)
+			v2 = bytesToInt64(data[8:])
+		}
+		hashcode = ((v1*31 + v2) >> 8 << 8) | int64(encoding)
+	} else {
+		// Large string: use MurmurHash3
+		h64 := murmur3.Sum64WithSeed(data, 47)
+		hashcode = int64((h64 >> 8) << 8)
+		hashcode |= int64(encoding)
+	}
+	return hashcode
 }
 
 func (r *MetaStringResolver) ResetRead() {

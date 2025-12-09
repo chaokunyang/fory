@@ -177,31 +177,80 @@ var globalStringSerializer = stringSerializer{}
 func (s stringSerializer) TypeId() TypeId       { return STRING }
 func (s stringSerializer) NeedToWriteRef() bool { return false }
 
-func (s stringSerializer) Write(ctx *WriteContext, value reflect.Value) error {
+func (s stringSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	return writeString(ctx.buffer, value.String())
 }
 
-func (s stringSerializer) Read(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+func (s stringSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
+	if writeType {
+		ctx.buffer.WriteVarUint32Small7(uint32(STRING))
+	}
+	return s.WriteData(ctx, value)
+}
+
+func (s stringSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	str := readString(ctx.buffer)
 	value.SetString(str)
 	return nil
+}
+
+func (s stringSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
+	if readType {
+		_ = ctx.buffer.ReadVarUint32Small7()
+	}
+	return s.ReadData(ctx, value.Type(), value)
+}
+
+func (s stringSerializer) ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeInfo *TypeInfo, value reflect.Value) error {
+	return s.Read(ctx, readRef, false, value)
 }
 
 // ptrToStringSerializer serializes a pointer to string
 type ptrToStringSerializer struct{}
 
 func (s ptrToStringSerializer) TypeId() TypeId       { return -STRING }
-func (s ptrToStringSerializer) NeedToWriteRef() bool { return true }
+func (s ptrToStringSerializer) NeedToWriteRef() bool { return false }
 
-func (s ptrToStringSerializer) Write(ctx *WriteContext, value reflect.Value) error {
+func (s ptrToStringSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	str := value.Interface().(*string)
 	return writeString(ctx.buffer, *str)
 }
 
-func (s ptrToStringSerializer) Read(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+func (s ptrToStringSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
+	if writeRef {
+		if value.IsNil() {
+			ctx.buffer.WriteInt8(NullFlag)
+			return nil
+		}
+		ctx.buffer.WriteInt8(NotNullValueFlag)
+	}
+	if writeType {
+		ctx.buffer.WriteVarUint32Small7(uint32(STRING))
+	}
+	return s.WriteData(ctx, value)
+}
+
+func (s ptrToStringSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	str := readString(ctx.buffer)
 	ptr := new(string)
 	*ptr = str
 	value.Set(reflect.ValueOf(ptr))
 	return nil
+}
+
+func (s ptrToStringSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
+	if readRef {
+		refFlag := ctx.buffer.ReadInt8()
+		if refFlag == NullFlag {
+			return nil
+		}
+	}
+	if readType {
+		_ = ctx.buffer.ReadVarInt32()
+	}
+	return s.ReadData(ctx, value.Type(), value)
+}
+
+func (s ptrToStringSerializer) ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeInfo *TypeInfo, value reflect.Value) error {
+	return s.Read(ctx, readRef, false, value)
 }

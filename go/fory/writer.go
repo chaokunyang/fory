@@ -107,13 +107,13 @@ func (c *WriteContext) RefResolver() *RefResolver {
 }
 
 // Inline primitive writes (compiler will inline these)
-func (c *WriteContext) RawBool(v bool)        { c.buffer.WriteBool(v) }
-func (c *WriteContext) RawInt8(v int8)        { c.buffer.WriteByte_(byte(v)) }
-func (c *WriteContext) RawInt16(v int16)      { c.buffer.WriteInt16(v) }
-func (c *WriteContext) RawInt32(v int32)      { c.buffer.WriteInt32(v) }
-func (c *WriteContext) RawInt64(v int64)      { c.buffer.WriteInt64(v) }
-func (c *WriteContext) RawFloat32(v float32)  { c.buffer.WriteFloat32(v) }
-func (c *WriteContext) RawFloat64(v float64)  { c.buffer.WriteFloat64(v) }
+func (c *WriteContext) RawBool(v bool)          { c.buffer.WriteBool(v) }
+func (c *WriteContext) RawInt8(v int8)          { c.buffer.WriteByte_(byte(v)) }
+func (c *WriteContext) RawInt16(v int16)        { c.buffer.WriteInt16(v) }
+func (c *WriteContext) RawInt32(v int32)        { c.buffer.WriteInt32(v) }
+func (c *WriteContext) RawInt64(v int64)        { c.buffer.WriteInt64(v) }
+func (c *WriteContext) RawFloat32(v float32)    { c.buffer.WriteFloat32(v) }
+func (c *WriteContext) RawFloat64(v float64)    { c.buffer.WriteFloat64(v) }
 func (c *WriteContext) WriteVarInt32(v int32)   { c.buffer.WriteVarint32(v) }
 func (c *WriteContext) WriteVarInt64(v int64)   { c.buffer.WriteVarint64(v) }
 func (c *WriteContext) WriteVarUint32(v uint32) { c.buffer.WriteVarUint32(v) }
@@ -133,7 +133,8 @@ func (c *WriteContext) WriteBinary(v []byte) {
 }
 
 func (c *WriteContext) WriteTypeId(id TypeId) {
-	c.buffer.WriteInt16(id)
+	// Use VarUint32Small7 encoding to match Java's xlang serialization
+	c.buffer.WriteVarUint32Small7(uint32(id))
 }
 
 // writeFast writes a value using fast path based on StaticTypeId
@@ -174,7 +175,7 @@ func (c *WriteContext) WriteLength(length int) error {
 }
 
 // ============================================================================
-// Typed Write Methods - Write primitives with optional ref/type info
+// Typed WriteData Methods - WriteData primitives with optional ref/type info
 // ============================================================================
 
 // WriteBool writes a bool with optional ref/type info
@@ -510,7 +511,7 @@ func (c *WriteContext) WriteBufferObject(bufferObject BufferObject) error {
 
 	c.buffer.WriteBool(inBand)
 	if inBand {
-		// Write the buffer data in-band
+		// WriteData the buffer data in-band
 		size := bufferObject.TotalBytes()
 		c.buffer.WriteLength(size)
 		writerIndex := c.buffer.writerIndex
@@ -569,7 +570,7 @@ func (c *WriteContext) writeValue(value reflect.Value, serializer Serializer) er
 	}
 
 	if serializer != nil {
-		return serializer.Write(c, value)
+		return serializer.WriteData(c, value)
 	}
 
 	// Get type information for the value
@@ -582,5 +583,5 @@ func (c *WriteContext) writeValue(value reflect.Value, serializer Serializer) er
 		return fmt.Errorf("cannot write typeinfo for value %v: %v", value, err)
 	}
 	serializer = typeInfo.Serializer
-	return serializer.Write(c, value)
+	return serializer.WriteData(c, value)
 }

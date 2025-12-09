@@ -31,8 +31,7 @@ import org.testng.annotations.Test;
 /** Executes cross-language tests against the Go implementation. */
 @Test
 public class GoXlangTest extends XlangTestBase {
-  private static final String GO_EXECUTABLE = "go";
-  private static final String GO_MAIN = "xlang_test_main.go";
+  private static final String GO_BINARY = "xlang_test_main";
 
   @Override
   protected void ensurePeerReady() {
@@ -56,14 +55,17 @@ public class GoXlangTest extends XlangTestBase {
     if (!goInstalled) {
       throw new SkipException("Skipping GoXlangTest: go not installed");
     }
+    // Check if binary exists
+    File binaryFile = new File("../../go/fory/tests/" + GO_BINARY);
+    if (!binaryFile.exists()) {
+      throw new SkipException("Skipping GoXlangTest: " + GO_BINARY + " not found. Please build it with 'cd go/fory/tests/xlang && go build -o ../xlang_test_main xlang_test_main.go'");
+    }
   }
 
   @Override
   protected CommandContext buildCommandContext(String caseName, Path dataFile) {
     List<String> command = new ArrayList<>();
-    command.add(GO_EXECUTABLE);
-    command.add("run");
-    command.add(GO_MAIN);
+    command.add("./" + GO_BINARY);
     command.add("--case");
     command.add(caseName);
     ImmutableMap<String, String> env = envBuilder(dataFile).build();

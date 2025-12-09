@@ -35,10 +35,11 @@ type FieldInfo struct {
 	Name         string
 	Offset       uintptr
 	Type         reflect.Type
-	StaticId StaticTypeId
+	StaticId     StaticTypeId
 	Serializer   Serializer
 	Referencable bool
-	FieldIndex   int // -1 if field doesn't exist in current struct (for compatible mode)
+	FieldIndex   int      // -1 if field doesn't exist in current struct (for compatible mode)
+	FieldDef     FieldDef // original FieldDef from remote TypeDef (for compatible mode skip)
 }
 
 type structSerializer struct {
@@ -60,8 +61,16 @@ func (s *structSerializer) NeedToWriteRef() bool {
 	return true
 }
 
-func (s *structSerializer) Write(ctx *WriteContext, value reflect.Value) error {
+func (s *structSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	buf := ctx.Buffer()
+	// Dereference pointer if needed
+	if value.Kind() == reflect.Ptr {
+		if value.IsNil() {
+			return fmt.Errorf("cannot write nil pointer")
+		}
+		value = value.Elem()
+	}
+
 	if s.fields == nil {
 		if s.type_ == nil {
 			s.type_ = value.Type()
@@ -70,8 +79,16 @@ func (s *structSerializer) Write(ctx *WriteContext, value reflect.Value) error {
 		for s.type_.Kind() == reflect.Ptr {
 			s.type_ = s.type_.Elem()
 		}
-		if err := s.initFieldsFromContext(ctx); err != nil {
-			return err
+		// If we have fieldDefs from TypeDef (compatible mode), use them
+		// Otherwise initialize from local type structure
+		if s.fieldDefs != nil {
+			if err := s.initFieldsFromDefsWithResolver(ctx.TypeResolver()); err != nil {
+				return err
+			}
+		} else {
+			if err := s.initFieldsFromContext(ctx); err != nil {
+				return err
+			}
 		}
 	}
 	if s.structHash == 0 {
@@ -88,6 +105,22 @@ func (s *structSerializer) Write(ctx *WriteContext, value reflect.Value) error {
 	}
 
 	for _, field := range s.fields {
+		// Skip fields that don't exist in the current struct (compatible mode)
+		if field.FieldIndex < 0 {
+			// Write zero value for missing fields
+			zeroValue := reflect.Zero(field.Type)
+			if field.Serializer != nil {
+				if err := field.Serializer.Write(ctx, field.Referencable, false, zeroValue); err != nil {
+					return err
+				}
+			} else {
+				if err := ctx.WriteValue(zeroValue); err != nil {
+					return err
+				}
+			}
+			continue
+		}
+
 		// Fast path for primitive types using unsafe access
 		if canUseUnsafe && field.StaticId != ConcreteTypeOther && !field.Referencable {
 			fieldPtr := unsafe.Add(ptr, field.Offset)
@@ -98,7 +131,10 @@ func (s *structSerializer) Write(ctx *WriteContext, value reflect.Value) error {
 		// Slow path for complex types or non-addressable values
 		fieldValue := value.Field(field.FieldIndex)
 		if field.Serializer != nil {
-			if err := writeBySerializer(ctx, fieldValue, field.Serializer, field.Referencable); err != nil {
+			// For nested struct fields in compatible mode, write type info so the
+			// reader can get the correct serializer with fieldDefs
+			writeType := ctx.Compatible() && isStructField(field.Type)
+			if err := field.Serializer.Write(ctx, field.Referencable, writeType, fieldValue); err != nil {
 				return err
 			}
 		} else {
@@ -110,7 +146,34 @@ func (s *structSerializer) Write(ctx *WriteContext, value reflect.Value) error {
 	return nil
 }
 
-func (s *structSerializer) Read(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+func (s *structSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
+	if writeRef {
+		if value.Kind() == reflect.Ptr && value.IsNil() {
+			ctx.buffer.WriteInt8(NullFlag)
+			return nil
+		}
+		refWritten, err := ctx.RefResolver().WriteRefOrNull(ctx.buffer, value)
+		if err != nil {
+			return err
+		}
+		if refWritten {
+			return nil
+		}
+	}
+	if writeType {
+		// Structs have dynamic type IDs, need to look up from TypeResolver
+		typeInfo, err := ctx.TypeResolver().getTypeInfo(value, true)
+		if err != nil {
+			return err
+		}
+		if err := ctx.TypeResolver().writeTypeInfo(ctx.buffer, typeInfo); err != nil {
+			return err
+		}
+	}
+	return s.WriteData(ctx, value)
+}
+
+func (s *structSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	buf := ctx.Buffer()
 	if value.Kind() == reflect.Ptr {
 		if value.IsNil() {
@@ -128,8 +191,16 @@ func (s *structSerializer) Read(ctx *ReadContext, type_ reflect.Type, value refl
 		for s.type_.Kind() == reflect.Ptr {
 			s.type_ = s.type_.Elem()
 		}
-		if err := s.initFieldsFromContext(ctx); err != nil {
-			return err
+		// If we have fieldDefs from TypeDef (compatible mode), use them
+		// Otherwise initialize from local type structure
+		if s.fieldDefs != nil {
+			if err := s.initFieldsFromDefsWithResolver(ctx.TypeResolver()); err != nil {
+				return err
+			}
+		} else {
+			if err := s.initFieldsFromContext(ctx); err != nil {
+				return err
+			}
 		}
 	}
 	if s.structHash == 0 {
@@ -147,15 +218,29 @@ func (s *structSerializer) Read(ctx *ReadContext, type_ reflect.Type, value refl
 
 	for _, field := range s.fields {
 		if field.FieldIndex < 0 {
-			// Field doesn't exist in current struct, create temp value to discard
-			tempValue := reflect.New(field.Type).Elem()
-			if field.Serializer != nil {
-				if err := readBySerializer(ctx, tempValue, field.Serializer, field.Referencable); err != nil {
+			// Field doesn't exist or is incompatible - skip it using the original FieldDef
+			// Only use SkipFieldValue if we have a valid FieldDef (from TypeDef in compatible mode)
+			// Otherwise fall back to reading into a temp value and discarding
+			if field.FieldDef.name != "" {
+				// Check if this field had type info written based on FieldDef's fieldType
+				// We use fieldDefIsStructType instead of isStructField(field.Type) because
+				// field.Type might be interface{} if type lookup failed
+				fieldDefIsStructType := isStructFieldType(field.FieldDef.fieldType)
+				if err := SkipFieldValueWithTypeFlag(ctx, field.FieldDef, field.Referencable, ctx.Compatible() && fieldDefIsStructType); err != nil {
 					return err
 				}
 			} else {
-				if err := ctx.ReadValue(tempValue); err != nil {
-					return err
+				// No FieldDef available, read into temp value
+				tempValue := reflect.New(field.Type).Elem()
+				if field.Serializer != nil {
+					readType := ctx.Compatible() && isStructField(field.Type)
+					if err := field.Serializer.Read(ctx, field.Referencable, readType, tempValue); err != nil {
+						return err
+					}
+				} else {
+					if err := ctx.ReadValue(tempValue); err != nil {
+						return err
+					}
 				}
 			}
 			continue
@@ -166,20 +251,62 @@ func (s *structSerializer) Read(ctx *ReadContext, type_ reflect.Type, value refl
 			ctx.readFast(fieldPtr, field.StaticId)
 			continue
 		}
-
 		// Slow path for complex types
 		fieldValue := value.Field(field.FieldIndex)
 		if field.Serializer != nil {
-			if err := readBySerializer(ctx, fieldValue, field.Serializer, field.Referencable); err != nil {
+			// For nested struct fields in compatible mode, read type info to get
+			// the correct serializer with fieldDefs from the remote schema
+			readType := ctx.Compatible() && isStructField(field.Type)
+			if err := field.Serializer.Read(ctx, field.Referencable, readType, fieldValue); err != nil {
 				return err
 			}
 		} else {
+			// No serializer available, read using ctx.ReadValue which handles ref tracking
 			if err := ctx.ReadValue(fieldValue); err != nil {
 				return err
 			}
 		}
 	}
 	return nil
+}
+
+func (s *structSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
+	buf := ctx.Buffer()
+	if readRef {
+		refID, err := ctx.RefResolver().TryPreserveRefId(buf)
+		if err != nil {
+			return err
+		}
+		if int8(refID) < NotNullValueFlag {
+			// Reference found
+			obj := ctx.RefResolver().GetReadObject(refID)
+			if obj.IsValid() {
+				value.Set(obj)
+			}
+			return nil
+		}
+	}
+	if readType {
+		// Read type info - in compatible mode this returns the serializer with remote fieldDefs
+		typeID := int32(buf.ReadVarUint32Small7())
+		if IsNamespacedType(TypeId(typeID)) {
+			// For namespaced types in compatible mode, use the serializer from TypeInfo
+			typeInfo, err := ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID)
+			if err != nil {
+				return err
+			}
+			// Use the serializer from TypeInfo which has the remote field definitions
+			if structSer, ok := typeInfo.Serializer.(*structSerializer); ok && len(structSer.fieldDefs) > 0 {
+				return structSer.ReadData(ctx, value.Type(), value)
+			}
+		}
+	}
+	return s.ReadData(ctx, value.Type(), value)
+}
+
+func (s *structSerializer) ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeInfo *TypeInfo, value reflect.Value) error {
+	// typeInfo is already read, don't read it again
+	return s.Read(ctx, readRef, false, value)
 }
 
 // ReadCompatible reads struct data with schema evolution support
@@ -208,7 +335,7 @@ func (s *structSerializer) ReadCompatible(ctx *ReadContext, type_ reflect.Type, 
 			// Field doesn't exist locally, discard
 			tempValue := reflect.New(remoteField.Type).Elem()
 			if remoteField.Serializer != nil {
-				if err := readBySerializer(ctx, tempValue, remoteField.Serializer, remoteField.Referencable); err != nil {
+				if err := remoteField.Serializer.Read(ctx, remoteField.Referencable, false, tempValue); err != nil {
 					return err
 				}
 			} else {
@@ -230,7 +357,7 @@ func (s *structSerializer) ReadCompatible(ctx *ReadContext, type_ reflect.Type, 
 		// Slow path
 		fieldValue := value.Field(localField.FieldIndex)
 		if localField.Serializer != nil {
-			if err := readBySerializer(ctx, fieldValue, localField.Serializer, localField.Referencable); err != nil {
+			if err := localField.Serializer.Read(ctx, localField.Referencable, false, fieldValue); err != nil {
 				return err
 			}
 		} else {
@@ -266,60 +393,61 @@ func (s *structSerializer) initFieldsFromContext(ctx interface{ TypeResolver() *
 
 		originalFieldType := field.Type
 		fieldType := field.Type
-		if fieldType.Kind() == reflect.Interface {
-			fieldType = reflect.ValueOf(fieldType).Elem().Type()
-		}
 
 		var fieldSerializer Serializer
-		if fieldType.Kind() != reflect.Struct {
+		// For interface{} fields, don't get a serializer - use WriteValue/ReadValue instead
+		// which will handle polymorphic types dynamically
+		if fieldType.Kind() != reflect.Interface {
+			// Get serializer for all non-interface field types
 			fieldSerializer, _ = typeResolver.getSerializerByType(fieldType, true)
-			if fieldType.Kind() == reflect.Array && fieldType.Elem().Kind() != reflect.Interface {
-				// For fixed-size arrays with primitive elements, use primitive array serializers
-				// to match cross-language format (Python int8_array, int16_array, etc.)
-				elemType := fieldType.Elem()
-				switch elemType.Kind() {
-				case reflect.Int8:
-					fieldSerializer = int8ArraySerializer{}
-				case reflect.Int16:
-					fieldSerializer = int16ArraySerializer{}
-				case reflect.Int32:
-					fieldSerializer = int32ArraySerializer{}
-				case reflect.Int64:
-					fieldSerializer = int64ArraySerializer{}
-				case reflect.Float32:
-					fieldSerializer = float32ArraySerializer{}
-				case reflect.Float64:
-					fieldSerializer = float64ArraySerializer{}
-				default:
-					// For non-primitive arrays, use sliceSerializer
-					fieldSerializer = sliceSerializer{
-						elemInfo:     typeResolver.typesInfo[elemType],
-						declaredType: elemType,
-					}
-				}
-			} else if fieldType.Kind() == reflect.Slice && fieldType.Elem().Kind() != reflect.Interface {
-				// For struct fields, always use the generic sliceSerializer for cross-language compatibility
-				// The generic sliceSerializer uses collection flags and element type ID format
-				// which matches the codegen format
+		}
+
+		if fieldType.Kind() == reflect.Array && fieldType.Elem().Kind() != reflect.Interface {
+			// For fixed-size arrays with primitive elements, use primitive array serializers
+			// to match cross-language format (Python int8_array, int16_array, etc.)
+			elemType := fieldType.Elem()
+			switch elemType.Kind() {
+			case reflect.Int8:
+				fieldSerializer = int8ArraySerializer{}
+			case reflect.Int16:
+				fieldSerializer = int16ArraySerializer{}
+			case reflect.Int32:
+				fieldSerializer = int32ArraySerializer{}
+			case reflect.Int64:
+				fieldSerializer = int64ArraySerializer{}
+			case reflect.Float32:
+				fieldSerializer = float32ArraySerializer{}
+			case reflect.Float64:
+				fieldSerializer = float64ArraySerializer{}
+			default:
+				// For non-primitive arrays, use sliceSerializer
 				fieldSerializer = sliceSerializer{
-					elemInfo:     typeResolver.typesInfo[fieldType.Elem()],
-					declaredType: fieldType.Elem(),
+					elemInfo:     typeResolver.typesInfo[elemType],
+					declaredType: elemType,
 				}
+			}
+		} else if fieldType.Kind() == reflect.Slice && fieldType.Elem().Kind() != reflect.Interface {
+			// For struct fields, always use the generic sliceSerializer for cross-language compatibility
+			// The generic sliceSerializer uses collection flags and element type ID format
+			// which matches the codegen format
+			fieldSerializer = sliceSerializer{
+				elemInfo:     typeResolver.typesInfo[fieldType.Elem()],
+				declaredType: fieldType.Elem(),
 			}
 		}
 
-	fieldInfo := &FieldInfo{
-		Name:         SnakeCase(field.Name),
-		Offset:       field.Offset,
-		Type:         fieldType,
-		StaticId:     GetStaticTypeId(fieldType),
-		Serializer:   fieldSerializer,
-		Referencable: nullable(originalFieldType),
-		FieldIndex:   i,
-	}
-	fields = append(fields, fieldInfo)
-	fieldNames = append(fieldNames, fieldInfo.Name)
-	serializers = append(serializers, fieldSerializer)
+		fieldInfo := &FieldInfo{
+			Name:         SnakeCase(field.Name),
+			Offset:       field.Offset,
+			Type:         fieldType,
+			StaticId:     GetStaticTypeId(fieldType),
+			Serializer:   fieldSerializer,
+			Referencable: isReferencable(originalFieldType), // Use isReferencable instead of nullable
+			FieldIndex:   i,
+		}
+		fields = append(fields, fieldInfo)
+		fieldNames = append(fieldNames, fieldInfo.Name)
+		serializers = append(serializers, fieldSerializer)
 	}
 
 	// Sort fields according to specification
@@ -351,6 +479,33 @@ func (s *structSerializer) initFieldsFromContext(ctx interface{ TypeResolver() *
 // initFieldsFromDefsWithResolver initializes fields from remote fieldDefs using typeResolver
 func (s *structSerializer) initFieldsFromDefsWithResolver(typeResolver *TypeResolver) error {
 	type_ := s.type_
+	if type_ == nil {
+		// Type is not known - we'll create an interface{} placeholder
+		// This happens when deserializing unknown types in compatible mode
+		// For now, we'll create fields that discard all data
+		var fields []*FieldInfo
+		for _, def := range s.fieldDefs {
+			fieldSerializer, _ := getFieldTypeSerializerWithResolver(typeResolver, def.fieldType)
+			remoteTypeInfo, _ := def.fieldType.getTypeInfoWithResolver(typeResolver)
+			remoteType := remoteTypeInfo.Type
+			if remoteType == nil {
+				remoteType = reflect.TypeOf((*interface{})(nil)).Elem()
+			}
+			fieldInfo := &FieldInfo{
+				Name:         def.name,
+				Offset:       0,
+				Type:         remoteType,
+				StaticId:     GetStaticTypeId(remoteType),
+				Serializer:   fieldSerializer,
+				Referencable: isReferencable(remoteType), // Use local type, not remote nullable flag
+				FieldIndex:   -1,                         // Mark as non-existent field to discard data
+				FieldDef:     def,                        // Save original FieldDef for skipping
+			}
+			fields = append(fields, fieldInfo)
+		}
+		s.fields = fields
+		return nil
+	}
 
 	// Build map from field names to struct field indices
 	fieldNameToIndex := make(map[string]int)
@@ -367,14 +522,31 @@ func (s *structSerializer) initFieldsFromDefsWithResolver(typeResolver *TypeReso
 	var fields []*FieldInfo
 
 	for _, def := range s.fieldDefs {
-		fieldSerializer, _ := getFieldTypeSerializerWithResolver(typeResolver, def.fieldType)
+		fieldSerializer, err := getFieldTypeSerializerWithResolver(typeResolver, def.fieldType)
+		if err != nil || fieldSerializer == nil {
+			// If we can't get serializer from typeID, try to get it from the Go type
+			// This can happen when the type isn't registered in typeIDToTypeInfo
+			remoteTypeInfo, _ := def.fieldType.getTypeInfoWithResolver(typeResolver)
+			if remoteTypeInfo.Type != nil {
+				fieldSerializer, _ = typeResolver.getSerializerByType(remoteTypeInfo.Type, true)
+			}
+		}
 
 		// Get the remote type from fieldDef
 		remoteTypeInfo, _ := def.fieldType.getTypeInfoWithResolver(typeResolver)
 		remoteType := remoteTypeInfo.Type
+		// Track if type lookup failed - we'll need to skip such fields
+		// Note: DynamicFieldType.getTypeInfoWithResolver returns interface{} (not nil) when lookup fails
+		emptyInterfaceType := reflect.TypeOf((*interface{})(nil)).Elem()
+		typeLookupFailed := remoteType == nil || remoteType == emptyInterfaceType
 		if remoteType == nil {
-			remoteType = reflect.TypeOf((*interface{})(nil)).Elem()
+			remoteType = emptyInterfaceType
 		}
+
+		// For struct-like fields, even if TypeDef lookup fails, we can try to read
+		// the field because type resolution happens at read time from the buffer.
+		// The type name might map to a different local type.
+		isStructLikeField := isStructFieldType(def.fieldType)
 
 		// Try to find corresponding local field
 		fieldIndex := -1
@@ -384,30 +556,60 @@ func (s *structSerializer) initFieldsFromDefsWithResolver(typeResolver *TypeReso
 		if idx, exists := fieldNameToIndex[def.name]; exists {
 			localType := fieldNameToType[def.name]
 			// Check if types are compatible
-			if typesCompatible(localType, remoteType) {
+			// For primitive types: skip if types don't match
+			// For struct-like types: allow read even if TypeDef lookup failed,
+			// because runtime type resolution by name might work
+			shouldRead := false
+			isPolymorphicField := def.fieldType.TypeId() == UNKNOWN
+			if isPolymorphicField && localType.Kind() == reflect.Interface {
+				// For polymorphic (UNKNOWN) fields with interface{} local type,
+				// allow reading - the actual type will be determined at runtime
+				shouldRead = true
+				fieldType = localType
+			} else if typeLookupFailed && isStructLikeField {
+				// For struct fields with failed TypeDef lookup, check if local field can hold a struct
+				localKind := localType.Kind()
+				if localKind == reflect.Ptr {
+					localKind = localType.Elem().Kind()
+				}
+				if localKind == reflect.Struct || localKind == reflect.Interface {
+					shouldRead = true
+					fieldType = localType // Use local type for struct fields
+				}
+			} else if !typeLookupFailed && typesCompatible(localType, remoteType) {
+				shouldRead = true
+				fieldType = localType
+			}
+
+			if shouldRead {
 				fieldIndex = idx
 				offset = fieldNameToOffset[def.name]
-				fieldType = localType
+				// For struct-like fields with failed type lookup, get the serializer for the local type
+				if typeLookupFailed && isStructLikeField && fieldSerializer == nil {
+					fieldSerializer, _ = typeResolver.getSerializerByType(localType, true)
+				}
 			} else {
-				// Types are incompatible - use remote type but mark field as not settable
+				// Types are incompatible or unknown - use remote type but mark field as not settable
 				fieldType = remoteType
 				fieldIndex = -1
+				offset = 0 // Don't set offset for incompatible fields
 			}
 		} else {
 			// Field doesn't exist locally, use type from fieldDef
 			fieldType = remoteType
 		}
 
-	fieldInfo := &FieldInfo{
-		Name:         def.name,
-		Offset:       offset,
-		Type:         fieldType,
-		StaticId: GetStaticTypeId(fieldType),
-		Serializer:   fieldSerializer,
-		Referencable: def.nullable,
-		FieldIndex:   fieldIndex,
-	}
-	fields = append(fields, fieldInfo)
+		fieldInfo := &FieldInfo{
+			Name:         def.name,
+			Offset:       offset,
+			Type:         fieldType,
+			StaticId:     GetStaticTypeId(fieldType),
+			Serializer:   fieldSerializer,
+			Referencable: isReferencable(fieldType), // Use local type, not remote nullable flag
+			FieldIndex:   fieldIndex,
+			FieldDef:     def, // Save original FieldDef for skipping
+		}
+		fields = append(fields, fieldInfo)
 	}
 
 	s.fields = fields
@@ -424,6 +626,50 @@ func toSnakeCase(s string) string {
 		result = append(result, unicode.ToLower(r))
 	}
 	return string(result)
+}
+
+// isReferencable determines if a type needs reference tracking based on Go type semantics
+func isReferencable(t reflect.Type) bool {
+	// Pointers, maps, slices, and interfaces need reference tracking
+	kind := t.Kind()
+	switch kind {
+	case reflect.Ptr, reflect.Map, reflect.Slice, reflect.Interface:
+		return true
+	default:
+		return false
+	}
+}
+
+// isStructField checks if a type is a struct type (directly or via pointer)
+func isStructField(t reflect.Type) bool {
+	if t.Kind() == reflect.Struct {
+		return true
+	}
+	if t.Kind() == reflect.Ptr && t.Elem().Kind() == reflect.Struct {
+		return true
+	}
+	return false
+}
+
+// isStructFieldType checks if a FieldType represents a struct type
+// This is used to determine if type info was written for the field
+func isStructFieldType(ft FieldType) bool {
+	if ft == nil {
+		return false
+	}
+	typeId := ft.TypeId()
+	// Check base struct type IDs
+	if typeId == STRUCT || typeId == NAMED_STRUCT ||
+		typeId == COMPATIBLE_STRUCT || typeId == NAMED_COMPATIBLE_STRUCT {
+		return true
+	}
+	// Check for composite type IDs (customId << 8 | baseType)
+	if typeId > 255 {
+		baseType := typeId & 0xff
+		return baseType == STRUCT || baseType == NAMED_STRUCT ||
+			baseType == COMPATIBLE_STRUCT || baseType == NAMED_COMPATIBLE_STRUCT
+	}
+	return false
 }
 
 func (s *structSerializer) computeHash() int32 {
@@ -487,8 +733,8 @@ func (s *structSerializer) computeHash() int32 {
 
 // ptrToStructSerializer serializes a *struct
 type ptrToStructSerializer struct {
-	type_ reflect.Type
-	structSerializer
+	type_            reflect.Type
+	structSerializer *structSerializer
 }
 
 func (s *ptrToStructSerializer) TypeId() TypeId {
@@ -499,32 +745,93 @@ func (s *ptrToStructSerializer) NeedToWriteRef() bool {
 	return true
 }
 
-func (s *ptrToStructSerializer) Write(ctx *WriteContext, value reflect.Value) error {
+func (s *ptrToStructSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	elemValue := value.Elem()
+	return s.structSerializer.WriteData(ctx, elemValue)
+}
 
-	// In compatible mode, write typeInfo for the struct so TypeDefs are collected
-	if ctx.Compatible() {
-		typeInfo, err := ctx.TypeResolver().getTypeInfo(elemValue, true)
+func (s *ptrToStructSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	// Check if value is already a pointer type or needs to be made into one
+	if value.Kind() == reflect.Ptr {
+		// Value is already a pointer (e.g., reading into an interface{})
+		if value.IsNil() {
+			newValue := reflect.New(type_)
+			value.Set(newValue)
+		}
+		elem := value.Elem()
+		ctx.RefResolver().Reference(value)
+		return s.structSerializer.ReadData(ctx, type_, elem)
+	} else {
+		// Value is not a pointer - this happens when slice reader dereferences
+		// Just read directly into the struct value
+		return s.structSerializer.ReadData(ctx, type_, value)
+	}
+}
+
+func (s *ptrToStructSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
+	buf := ctx.Buffer()
+	if readRef {
+		refID, err := ctx.RefResolver().TryPreserveRefId(buf)
 		if err != nil {
 			return err
 		}
-		if err := ctx.TypeResolver().writeTypeInfo(ctx.Buffer(), typeInfo); err != nil {
+		if int8(refID) < NotNullValueFlag {
+			// Reference found
+			obj := ctx.RefResolver().GetReadObject(refID)
+			if obj.IsValid() {
+				value.Set(obj)
+			}
+			return nil
+		}
+	}
+	if readType {
+		// Read type info - in compatible mode this returns the serializer with remote fieldDefs
+		typeID := int32(buf.ReadVarUint32Small7())
+		if IsNamespacedType(TypeId(typeID)) {
+			// For namespaced types in compatible mode, use the serializer from TypeInfo
+			typeInfo, err := ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID)
+			if err != nil {
+				return err
+			}
+			// Use the serializer from TypeInfo which has the remote field definitions
+			if structSer, ok := typeInfo.Serializer.(*structSerializer); ok && len(structSer.fieldDefs) > 0 {
+				return structSer.ReadData(ctx, value.Type(), value)
+			}
+		}
+	}
+	return s.ReadData(ctx, value.Type(), value)
+}
+
+func (s *ptrToStructSerializer) ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeInfo *TypeInfo, value reflect.Value) error {
+	// typeInfo is already read, don't read it again
+	return s.Read(ctx, readRef, false, value)
+}
+
+func (s *ptrToStructSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
+	if writeRef {
+		if value.IsNil() {
+			ctx.buffer.WriteInt8(NullFlag)
+			return nil
+		}
+		refWritten, err := ctx.RefResolver().WriteRefOrNull(ctx.buffer, value)
+		if err != nil {
+			return err
+		}
+		if refWritten {
+			return nil
+		}
+	}
+	if writeType {
+		// Structs have dynamic type IDs, need to look up from TypeResolver
+		typeInfo, err := ctx.TypeResolver().getTypeInfo(value, true)
+		if err != nil {
+			return err
+		}
+		if err := ctx.TypeResolver().writeTypeInfo(ctx.buffer, typeInfo); err != nil {
 			return err
 		}
 	}
-
-	return s.structSerializer.Write(ctx, elemValue)
-}
-
-func (s *ptrToStructSerializer) Read(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
-	newValue := reflect.New(type_.Elem())
-	value.Set(newValue)
-	elem := newValue.Elem()
-	ctx.RefResolver().Reference(newValue)
-
-	// In compatible mode, the structSerializer may have fieldDefs from TypeDef
-	// which were set when this ptrToStructSerializer was created by readSharedTypeMeta
-	return s.structSerializer.Read(ctx, type_.Elem(), elem)
+	return s.WriteData(ctx, value)
 }
 
 // ptrToCodegenSerializer wraps a generated serializer for pointer types
@@ -541,18 +848,73 @@ func (s *ptrToCodegenSerializer) NeedToWriteRef() bool {
 	return true
 }
 
-func (s *ptrToCodegenSerializer) Write(ctx *WriteContext, value reflect.Value) error {
+func (s *ptrToCodegenSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	// Dereference pointer and delegate to the generated serializer
-	return s.codegenSerializer.Write(ctx, value.Elem())
+	return s.codegenSerializer.WriteData(ctx, value.Elem())
 }
 
-func (s *ptrToCodegenSerializer) Read(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+func (s *ptrToCodegenSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
+	if writeRef {
+		if value.IsNil() {
+			ctx.Buffer().WriteInt8(NullFlag)
+			return nil
+		}
+		refWritten, err := ctx.RefResolver().WriteRefOrNull(ctx.Buffer(), value)
+		if err != nil {
+			return err
+		}
+		if refWritten {
+			return nil
+		}
+	}
+	if writeType {
+		// Codegen structs have dynamic type IDs
+		typeInfo, err := ctx.TypeResolver().getTypeInfo(value, true)
+		if err != nil {
+			return err
+		}
+		if err := ctx.TypeResolver().writeTypeInfo(ctx.Buffer(), typeInfo); err != nil {
+			return err
+		}
+	}
+	return s.WriteData(ctx, value)
+}
+
+func (s *ptrToCodegenSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	// Allocate new value if needed
 	newValue := reflect.New(type_.Elem())
 	value.Set(newValue)
 	elem := newValue.Elem()
 	ctx.RefResolver().Reference(newValue)
-	return s.codegenSerializer.Read(ctx, type_.Elem(), elem)
+	return s.codegenSerializer.ReadData(ctx, type_.Elem(), elem)
+}
+
+func (s *ptrToCodegenSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
+	buf := ctx.Buffer()
+	if readRef {
+		refID, err := ctx.RefResolver().TryPreserveRefId(buf)
+		if err != nil {
+			return err
+		}
+		if int8(refID) < NotNullValueFlag {
+			obj := ctx.RefResolver().GetReadObject(refID)
+			if obj.IsValid() {
+				value.Set(obj)
+			}
+			return nil
+		}
+	}
+	if readType {
+		typeID := int32(buf.ReadVarUint32Small7())
+		if IsNamespacedType(TypeId(typeID)) {
+			_, _ = ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID)
+		}
+	}
+	return s.ReadData(ctx, value.Type(), value)
+}
+
+func (s *ptrToCodegenSerializer) ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeInfo *TypeInfo, value reflect.Value) error {
+	return s.Read(ctx, readRef, false, value)
 }
 
 // Field sorting helpers
@@ -823,6 +1185,10 @@ func typesCompatible(actual, expected reflect.Type) bool {
 		return false
 	}
 	if actual == expected {
+		return true
+	}
+	// interface{} can accept any value
+	if actual.Kind() == reflect.Interface && actual.NumMethod() == 0 {
 		return true
 	}
 	if actual.AssignableTo(expected) || expected.AssignableTo(actual) {

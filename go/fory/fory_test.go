@@ -228,13 +228,13 @@ func TestSerializeStructSimple(t *testing.T) {
 		serde(t, fory, A{F1: []string{"str1", "", "str2"}})
 		serde(t, fory, &A{F1: []string{"str1", "", "str2"}})
 
-		type B struct {
+		type SimpleB struct {
 			F1 []string
 			F2 map[string]int32
 		}
-		require.Nil(t, fory.RegisterNamedType(B{}, "example.B"))
-		serde(t, fory, B{})
-		serde(t, fory, B{
+		require.Nil(t, fory.RegisterNamedType(SimpleB{}, "example.SimpleB"))
+		serde(t, fory, SimpleB{})
+		serde(t, fory, SimpleB{
 			F1: []string{"str1", "", "str2"},
 			F2: map[string]int32{
 				"k1": 1,
@@ -345,18 +345,18 @@ func TestSerializeCircularReference(t *testing.T) {
 		require.Same(t, a1, a1.A1)
 	}
 	{
-		type B struct {
+		type CircularRefB struct {
 			F1 string
-			F2 *B
-			F3 *B
+			F2 *CircularRefB
+			F3 *CircularRefB
 		}
-		require.Nil(t, fory.RegisterNamedType(B{}, "example.B"))
-		b := &B{F1: "str"}
+		require.Nil(t, fory.RegisterNamedType(CircularRefB{}, "example.CircularRefB"))
+		b := &CircularRefB{F1: "str"}
 		b.F2 = b
 		b.F3 = b
 		bytes, err := fory.Marshal(b)
 		require.Nil(t, err)
-		var b1 *B
+		var b1 *CircularRefB
 		err = fory.Unmarshal(bytes, &b1)
 		require.Nil(t, err)
 		require.Equal(t, b.F1, b1.F1)
@@ -378,8 +378,8 @@ func TestSerializeComplexReference(t *testing.T) {
 		F3 *A
 		F4 *B
 	}
-	require.Nil(t, fory.RegisterNamedType(A{}, "example.A"))
-	require.Nil(t, fory.RegisterNamedType(B{}, "example.B"))
+	require.Nil(t, fory.RegisterNamedType(A{}, "example.ComplexRefA"))
+	require.Nil(t, fory.RegisterNamedType(B{}, "example.ComplexRefB"))
 
 	a := &A{F1: "str"}
 	a.F2 = a
@@ -581,8 +581,10 @@ func TestMapEachIndividually(t *testing.T) {
 	for _, srcAny := range commonMap() {
 		srcType := reflect.TypeOf(srcAny)
 		endPtr := reflect.New(srcType)
-		data, _ := fory.Marshal(srcAny)
-		_ = fory.Unmarshal(data, endPtr.Interface())
+		data, err := fory.Marshal(srcAny)
+		require.NoError(t, err, "Marshal failed for type %v", srcType)
+		err = fory.Unmarshal(data, endPtr.Interface())
+		require.NoError(t, err, "Unmarshal failed for type %v", srcType)
 		endVal := endPtr.Elem()
 		endAny := endVal.Interface()
 		require.Equal(t, srcAny, endAny)
@@ -593,9 +595,12 @@ func TestArrayEachIndividually(t *testing.T) {
 	fory := NewFory(WithRefTracking(true))
 	for _, srcAny := range commonArray() {
 		srcType := reflect.TypeOf(srcAny)
+		t.Logf("Testing type: %v", srcType)
 		endPtr := reflect.New(srcType)
-		data, _ := fory.Marshal(srcAny)
-		_ = fory.Unmarshal(data, endPtr.Interface())
+		data, err := fory.Marshal(srcAny)
+		require.NoError(t, err, "Marshal failed for type %v", srcType)
+		err = fory.Unmarshal(data, endPtr.Interface())
+		require.NoError(t, err, "Unmarshal failed for type %v", srcType)
 		endVal := endPtr.Elem()
 		endAny := endVal.Interface()
 		require.Equal(t, srcAny, endAny)
@@ -641,7 +646,9 @@ func TestStructWithNestedSlice(t *testing.T) {
 	if err := fory.Unmarshal(bytes, &deserialized2); err != nil {
 		panic(err)
 	}
-	require.Equal(t, deserialized2, example)
+	// When unmarshaling to interface{}, we get back the registered type (Example, not *Example)
+	// So we need to dereference example for comparison
+	require.Equal(t, deserialized2, *example)
 }
 
 func convertRecursively(newVal, tmplVal reflect.Value) (reflect.Value, error) {

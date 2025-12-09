@@ -346,19 +346,13 @@ func (b *ByteBuffer) WriteVarUint64(value uint64) {
 	data := b.data[offset : offset+9]
 
 	i := 0
-	for ; i < 8; i++ {
-		data[i] = byte(value & 0x7F)
+	for i < 8 && value >= 0x80 {
+		data[i] = byte(value&0x7F) | 0x80
 		value >>= 7
-		if value == 0 {
-			i++
-			break
-		}
-		data[i] |= 0x80
+		i++
 	}
-	if i == 8 {
-		data[8] = byte(value)
-		i = 9
-	}
+	data[i] = byte(value)
+	i++
 	b.writerIndex += i
 }
 
@@ -484,19 +478,13 @@ func (b *ByteBuffer) WriteVarUint32(value uint32) {
 	data := b.data[offset : offset+5]
 
 	i := 0
-	for ; i < 4; i++ {
-		data[i] = byte(value & 0x7F)
+	for value >= 0x80 {
+		data[i] = byte(value&0x7F) | 0x80
 		value >>= 7
-		if value == 0 {
-			i++
-			break
-		}
-		data[i] |= 0x80
+		i++
 	}
-	if i == 4 {
-		data[4] = byte(value)
-		i = 5
-	}
+	data[i] = byte(value)
+	i++
 	b.writerIndex += i
 }
 

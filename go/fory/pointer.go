@@ -21,26 +21,50 @@ import (
 	"reflect"
 )
 
-// ptrToValueSerializer serializes a pointer to a concrete value
+// ptrToValueSerializer serializes a pointer to a concrete (non-interface) value
 type ptrToValueSerializer struct {
 	valueSerializer Serializer
 }
 
+// ptrToInterfaceSerializer serializes a pointer to an interface value
+type ptrToInterfaceSerializer struct {
+}
+
+// ============================================================================
+// ptrToValueSerializer - pointer to concrete type
+// ============================================================================
+
 func (s *ptrToValueSerializer) TypeId() TypeId {
-	if id := s.valueSerializer.TypeId(); id < 0 {
-		return id
-	}
-	return -s.valueSerializer.TypeId()
+	return s.valueSerializer.TypeId()
 }
 
 func (s *ptrToValueSerializer) NeedToWriteRef() bool { return true }
 
-func (s *ptrToValueSerializer) Write(ctx *WriteContext, value reflect.Value) error {
+func (s *ptrToValueSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	elemValue := value.Elem()
+	// Type info is written by Write() when writeType=true, not here.
+	// This prevents double-writing of type info for nested struct fields.
+	return s.valueSerializer.WriteData(ctx, elemValue)
+}
 
-	// In compatible mode, write typeInfo for struct types so TypeDefs are collected
-	if ctx.Compatible() && s.valueSerializer.TypeId() == NAMED_STRUCT {
-		typeInfo, err := ctx.TypeResolver().getTypeInfo(elemValue, true)
+func (s *ptrToValueSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
+	if writeRef {
+		if value.IsNil() {
+			ctx.Buffer().WriteInt8(NullFlag)
+			return nil
+		}
+		refWritten, err := ctx.RefResolver().WriteRefOrNull(ctx.Buffer(), value)
+		if err != nil {
+			return err
+		}
+		if refWritten {
+			return nil
+		}
+	}
+	if writeType {
+		// Always use TypeResolver to get the correct TypeID from registered TypeInfo
+		// This ensures compatible mode uses NAMED_COMPATIBLE_STRUCT instead of NAMED_STRUCT
+		typeInfo, err := ctx.TypeResolver().getTypeInfo(value.Elem(), true)
 		if err != nil {
 			return err
 		}
@@ -48,26 +72,151 @@ func (s *ptrToValueSerializer) Write(ctx *WriteContext, value reflect.Value) err
 			return err
 		}
 	}
-
-	return s.valueSerializer.Write(ctx, elemValue)
+	return s.WriteData(ctx, value)
 }
 
-func (s *ptrToValueSerializer) Read(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
-	// Allocate new value and read into it
-	newVal := reflect.New(type_.Elem())
+func (s *ptrToValueSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	// Check if value is already allocated (for circular reference handling)
+	var newVal reflect.Value
+	if value.IsNil() {
+		// Allocate new value
+		newVal = reflect.New(type_.Elem())
+		value.Set(newVal)
+	} else {
+		// Value already allocated (circular reference case)
+		newVal = value
+	}
 
-	// In compatible mode, read typeInfo for struct types
-	if ctx.Compatible() && s.valueSerializer.TypeId() == NAMED_STRUCT {
-		// Read typeInfo (typeId + metaIndex) to consume the bytes written by Write
-		_, err := ctx.TypeResolver().readTypeInfo(ctx.Buffer(), newVal.Elem())
+	// Register the pointer for reference tracking BEFORE reading data
+	// This allows circular references to work correctly
+	ctx.RefResolver().Reference(value)
+
+	// Type info is read by Read() when readType=true, not here.
+	// This prevents double-reading of type info for nested struct fields.
+	if err := s.valueSerializer.ReadData(ctx, type_.Elem(), newVal.Elem()); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *ptrToValueSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
+	buf := ctx.Buffer()
+	var refID int32
+	if readRef {
+		var err error
+		refID, err = ctx.RefResolver().TryPreserveRefId(buf)
 		if err != nil {
 			return err
 		}
+		if int8(refID) < NotNullValueFlag {
+			// Reference found
+			obj := ctx.RefResolver().GetReadObject(refID)
+			if obj.IsValid() {
+				value.Set(obj)
+			}
+			return nil
+		}
+	}
+	if readType {
+		// Read type info - in compatible mode this contains the serializer with fieldDefs
+		typeID := int32(buf.ReadVarUint32Small7())
+		if IsNamespacedType(TypeId(typeID)) {
+			typeInfo, err := ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID)
+			if err != nil {
+				return err
+			}
+			// Use the serializer from TypeInfo which has the remote field definitions
+			if structSer, ok := typeInfo.Serializer.(*structSerializer); ok && len(structSer.fieldDefs) > 0 {
+				// Allocate the pointer value if needed
+				if value.IsNil() {
+					value.Set(reflect.New(value.Type().Elem()))
+				}
+				ctx.RefResolver().Reference(value)
+				return structSer.ReadData(ctx, value.Type().Elem(), value.Elem())
+			}
+		}
 	}
 
-	if err := s.valueSerializer.Read(ctx, type_.Elem(), newVal.Elem()); err != nil {
+	return s.ReadData(ctx, value.Type(), value)
+}
+
+func (s *ptrToValueSerializer) ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeInfo *TypeInfo, value reflect.Value) error {
+	return s.Read(ctx, readRef, false, value)
+}
+
+// ============================================================================
+// ptrToInterfaceSerializer - pointer to interface type  
+// ============================================================================
+
+func (s *ptrToInterfaceSerializer) TypeId() TypeId {
+	// Pointer to interface is polymorphic, return 0 to indicate dynamic type
+	return 0
+}
+
+func (s *ptrToInterfaceSerializer) NeedToWriteRef() bool { return true }
+
+func (s *ptrToInterfaceSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
+	// Get the concrete element that the interface pointer points to
+	elemValue := value.Elem()
+	
+	// Use WriteValue to handle the polymorphic interface value
+	return ctx.WriteValue(elemValue)
+}
+
+func (s *ptrToInterfaceSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
+	if writeRef {
+		if value.IsNil() {
+			ctx.Buffer().WriteInt8(NullFlag)
+			return nil
+		}
+		refWritten, err := ctx.RefResolver().WriteRefOrNull(ctx.Buffer(), value)
+		if err != nil {
+			return err
+		}
+		if refWritten {
+			return nil
+		}
+	}
+	
+	// For interface pointers, we don't write type info here
+	// WriteValue will handle the type info for the concrete value
+	return s.WriteData(ctx, value)
+}
+
+func (s *ptrToInterfaceSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	// Create a new interface pointer
+	newVal := reflect.New(type_.Elem())
+	
+	// Use ReadValue to handle the polymorphic interface value
+	if err := ctx.ReadValue(newVal.Elem()); err != nil {
 		return err
 	}
+	
 	value.Set(newVal)
 	return nil
+}
+
+func (s *ptrToInterfaceSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
+	buf := ctx.Buffer()
+	if readRef {
+		refID, err := ctx.RefResolver().TryPreserveRefId(buf)
+		if err != nil {
+			return err
+		}
+		if int8(refID) < NotNullValueFlag {
+			// Reference found
+			obj := ctx.RefResolver().GetReadObject(refID)
+			if obj.IsValid() {
+				value.Set(obj)
+			}
+			return nil
+		}
+	}
+	
+	return s.ReadData(ctx, value.Type(), value)
+}
+
+func (s *ptrToInterfaceSerializer) ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeInfo *TypeInfo, value reflect.Value) error {
+	return s.Read(ctx, readRef, false, value)
 }

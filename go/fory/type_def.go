@@ -68,13 +68,22 @@ func (td *TypeDef) writeTypeDef(buffer *ByteBuffer) {
 
 // buildTypeInfo constructs a TypeInfo from the TypeDef
 func (td *TypeDef) buildTypeInfo() (TypeInfo, error) {
+	type_ := td.type_
+
+	// Create structSerializer with fieldDefs set
+	// The serializer will lazy-initialize fields when ReadData/WriteData is called
+	serializer := &structSerializer{
+		type_:     type_,
+		fieldDefs: td.fieldDefs,
+	}
+
 	info := TypeInfo{
-		Type:         td.type_,
+		Type:         type_,
 		TypeID:       int32(td.typeId),
-		Serializer:   &structSerializer{type_: td.type_, fieldDefs: td.fieldDefs},
+		Serializer:   serializer,
 		PkgPathBytes: td.nsName,
 		NameBytes:    td.typeName,
-		IsDynamic:    td.typeId < 0,
+		IsDynamic:    false,
 	}
 	return info, nil
 }
@@ -89,6 +98,72 @@ func skipTypeDef(buffer *ByteBuffer, header int64) {
 		sz += int(buffer.ReadVarUint32())
 	}
 	buffer.IncreaseReaderIndex(sz)
+}
+
+const BIG_NAME_THRESHOLD = 0b111111 // 6 bits for size when using 2 bits for encoding
+
+// readPkgName reads package name from TypeDef (not the meta string format with dynamic IDs)
+// Java format: 6 bits size | 2 bits encoding flags
+// Package encodings: UTF_8=0, ALL_TO_LOWER_SPECIAL=1, LOWER_UPPER_DIGIT_SPECIAL=2
+func readPkgName(buffer *ByteBuffer, namespaceDecoder *meta.Decoder) (string, error) {
+	header := int(buffer.ReadInt8()) & 0xff
+	encodingFlags := header & 0b11 // 2 bits for encoding
+	size := header >> 2            // 6 bits for size
+	if size == BIG_NAME_THRESHOLD {
+		size = int(buffer.ReadVarUint32Small7()) + BIG_NAME_THRESHOLD
+	}
+
+	var encoding meta.Encoding
+	switch encodingFlags {
+	case 0:
+		encoding = meta.UTF_8
+	case 1:
+		encoding = meta.ALL_TO_LOWER_SPECIAL
+	case 2:
+		encoding = meta.LOWER_UPPER_DIGIT_SPECIAL
+	default:
+		return "", fmt.Errorf("invalid package encoding flags: %d", encodingFlags)
+	}
+
+	data := make([]byte, size)
+	if _, err := buffer.Read(data); err != nil {
+		return "", err
+	}
+
+	return namespaceDecoder.Decode(data, encoding)
+}
+
+// readTypeName reads type name from TypeDef (not the meta string format with dynamic IDs)
+// Java format: 6 bits size | 2 bits encoding flags
+// TypeName encodings: UTF_8=0, ALL_TO_LOWER_SPECIAL=1, LOWER_UPPER_DIGIT_SPECIAL=2, FIRST_TO_LOWER_SPECIAL=3
+func readTypeName(buffer *ByteBuffer, typeNameDecoder *meta.Decoder) (string, error) {
+	header := int(buffer.ReadInt8()) & 0xff
+	encodingFlags := header & 0b11 // 2 bits for encoding
+	size := header >> 2            // 6 bits for size
+	if size == BIG_NAME_THRESHOLD {
+		size = int(buffer.ReadVarUint32Small7()) + BIG_NAME_THRESHOLD
+	}
+
+	var encoding meta.Encoding
+	switch encodingFlags {
+	case 0:
+		encoding = meta.UTF_8
+	case 1:
+		encoding = meta.ALL_TO_LOWER_SPECIAL
+	case 2:
+		encoding = meta.LOWER_UPPER_DIGIT_SPECIAL
+	case 3:
+		encoding = meta.FIRST_TO_LOWER_SPECIAL
+	default:
+		return "", fmt.Errorf("invalid typename encoding flags: %d", encodingFlags)
+	}
+
+	data := make([]byte, size)
+	if _, err := buffer.Read(data); err != nil {
+		return "", err
+	}
+
+	return typeNameDecoder.Decode(data, encoding)
 }
 
 // buildTypeDef constructs a TypeDef from a value
@@ -251,19 +326,19 @@ func readFieldType(buffer *ByteBuffer) (FieldType, error) {
 
 	switch typeId {
 	case LIST, SET:
-		// Read element type recursively
+		// ReadData element type recursively
 		elementType, err := readFieldType(buffer)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read element type: %w", err)
 		}
 		return NewCollectionFieldType(TypeId(typeId), elementType), nil
 	case MAP:
-		// Read key type recursively
+		// ReadData key type recursively
 		keyType, err := readFieldType(buffer)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read key type: %w", err)
 		}
-		// Read value type recursively
+		// ReadData value type recursively
 		valueType, err := readFieldType(buffer)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read value type: %w", err)
@@ -408,7 +483,30 @@ func (d *DynamicFieldType) getTypeInfo(fory *Fory) (TypeInfo, error) {
 }
 
 func (d *DynamicFieldType) getTypeInfoWithResolver(resolver *TypeResolver) (TypeInfo, error) {
-	// leave empty for runtime resolution, we not know the actual type here
+	// Try to resolve the actual type from the resolver
+	// The typeId might be a composite ID (customId << 8 + baseType)
+	typeId := d.typeId
+
+	// First try direct lookup
+	info, err := resolver.getTypeInfoById(typeId)
+	if err == nil {
+		return info, nil
+	}
+
+	// If direct lookup fails and it's a composite ID, extract the custom ID
+	baseType := typeId & 0xFF
+	if baseType == NAMED_STRUCT || baseType == NAMED_COMPATIBLE_STRUCT || baseType == COMPATIBLE_STRUCT {
+		customId := typeId >> 8
+		if customId > 0 {
+			// Try looking up by the custom ID
+			info, err = resolver.getTypeInfoById(TypeId(customId))
+			if err == nil {
+				return info, nil
+			}
+		}
+	}
+
+	// Fallback to interface{} for unknown types
 	return TypeInfo{Type: reflect.TypeOf((*interface{})(nil)).Elem(), Serializer: nil}, nil
 }
 
@@ -420,17 +518,7 @@ func buildFieldType(fory *Fory, fieldValue reflect.Value) (FieldType, error) {
 		return NewDynamicFieldType(UNKNOWN), nil
 	}
 
-	var typeId TypeId
-	typeInfo, err := fory.typeResolver.getTypeInfo(fieldValue, true)
-	if err != nil {
-		return nil, err
-	}
-	typeId = TypeId(typeInfo.TypeID)
-	if typeId < 0 {
-		typeId = -typeId // restore pointer type id
-	}
-
-	// Handle slice and array types by reflect.Kind
+	// Handle slice and array types BEFORE getTypeInfo to avoid anonymous type errors
 	// For fixed-size arrays with primitive elements, use primitive array type IDs (INT16_ARRAY, etc.)
 	// For slices and arrays with non-primitive elements, use collection format
 	if fieldType.Kind() == reflect.Slice || fieldType.Kind() == reflect.Array {
@@ -465,7 +553,7 @@ func buildFieldType(fory *Fory, fieldValue reflect.Value) (FieldType, error) {
 		return NewCollectionFieldType(LIST, elementFieldType), nil
 	}
 
-	// Handle map types by reflect.Kind for consistency
+	// Handle map types BEFORE getTypeInfo to avoid anonymous type errors
 	if fieldType.Kind() == reflect.Map {
 		// Create zero values for key and value types
 		keyType := fieldType.Key()
@@ -485,6 +573,14 @@ func buildFieldType(fory *Fory, fieldValue reflect.Value) (FieldType, error) {
 
 		return NewMapFieldType(MAP, keyFieldType, valueFieldType), nil
 	}
+
+	// Now get type info for other types (primitives, structs, etc.)
+	var typeId TypeId
+	typeInfo, err := fory.typeResolver.getTypeInfo(fieldValue, true)
+	if err != nil {
+		return nil, err
+	}
+	typeId = TypeId(typeInfo.TypeID)
 
 	if isUserDefinedType(typeId) {
 		return NewDynamicFieldType(typeId), nil
@@ -524,6 +620,96 @@ typeDef are layout as following:
 - next variable bytes: type id (varint) or ns name + type name
 - next variable bytes: field defs (see below)
 */
+// writeSimpleName writes namespace using simple format (for TypeDef)
+// Format: 1 byte header (3 bits encoding flags + 5 bits size) + data bytes
+func writeSimpleName(buffer *ByteBuffer, metaBytes *MetaStringBytes, encoder *meta.Encoder) error {
+	if metaBytes == nil || len(metaBytes.Data) == 0 {
+		// WriteData header for empty namespace
+		buffer.WriteByte(0)
+		return nil
+	}
+
+	data := metaBytes.Data
+	encoding := metaBytes.Encoding
+
+	// Get encoding flags (0-4) - support all 5 encoding types
+	var encodingFlags byte
+	switch encoding {
+	case meta.UTF_8:
+		encodingFlags = 0
+	case meta.LOWER_SPECIAL:
+		encodingFlags = 1
+	case meta.LOWER_UPPER_DIGIT_SPECIAL:
+		encodingFlags = 2
+	case meta.FIRST_TO_LOWER_SPECIAL:
+		encodingFlags = 3
+	case meta.ALL_TO_LOWER_SPECIAL:
+		encodingFlags = 4
+	default:
+		return fmt.Errorf("unsupported namespace encoding: %v", encoding)
+	}
+
+	size := len(data)
+	if size >= BIG_NAME_THRESHOLD {
+		// Size doesn't fit in 5 bits, write BIG_NAME_THRESHOLD and then varuint
+		header := byte((BIG_NAME_THRESHOLD << 3) | int(encodingFlags))
+		buffer.WriteByte(header)
+		buffer.WriteVarUint32Small7(uint32(size - BIG_NAME_THRESHOLD))
+	} else {
+		// Size fits in 5 bits (3 bits for encoding, 5 bits for size)
+		header := byte((size << 3) | int(encodingFlags))
+		buffer.WriteByte(header)
+	}
+
+	buffer.Write(data)
+	return nil
+}
+
+// writeSimpleTypeName writes typename using simple format (for TypeDef)
+// Format: 1 byte header (3 bits encoding flags + 5 bits size) + data bytes
+func writeSimpleTypeName(buffer *ByteBuffer, metaBytes *MetaStringBytes, encoder *meta.Encoder) error {
+	if metaBytes == nil || len(metaBytes.Data) == 0 {
+		// WriteData header for empty typename (shouldn't happen)
+		buffer.WriteByte(0)
+		return nil
+	}
+
+	data := metaBytes.Data
+	encoding := metaBytes.Encoding
+
+	// Get encoding flags for typename (0-4) - support all 5 encoding types
+	var encodingFlags byte
+	switch encoding {
+	case meta.UTF_8:
+		encodingFlags = 0
+	case meta.LOWER_SPECIAL:
+		encodingFlags = 1
+	case meta.LOWER_UPPER_DIGIT_SPECIAL:
+		encodingFlags = 2
+	case meta.FIRST_TO_LOWER_SPECIAL:
+		encodingFlags = 3
+	case meta.ALL_TO_LOWER_SPECIAL:
+		encodingFlags = 4
+	default:
+		return fmt.Errorf("unsupported typename encoding: %v", encoding)
+	}
+
+	size := len(data)
+	if size >= BIG_NAME_THRESHOLD {
+		// Size doesn't fit in 5 bits, write BIG_NAME_THRESHOLD and then varuint
+		header := byte((BIG_NAME_THRESHOLD << 3) | int(encodingFlags))
+		buffer.WriteByte(header)
+		buffer.WriteVarUint32Small7(uint32(size - BIG_NAME_THRESHOLD))
+	} else {
+		// Size fits in 5 bits (3 bits for encoding, 5 bits for size)
+		header := byte((size << 3) | int(encodingFlags))
+		buffer.WriteByte(header)
+	}
+
+	buffer.Write(data)
+	return nil
+}
+
 func encodingTypeDef(typeResolver *TypeResolver, typeDef *TypeDef) ([]byte, error) {
 	buffer := NewByteBuffer(nil)
 
@@ -532,11 +718,13 @@ func encodingTypeDef(typeResolver *TypeResolver, typeDef *TypeDef) ([]byte, erro
 	}
 
 	if typeDef.registerByName {
-		if err := typeResolver.metaStringResolver.WriteMetaStringBytes(buffer, typeDef.nsName); err != nil {
-			return nil, err
+		// WriteData namespace and typename using simple format (NOT meta string format)
+		// Simple format: 1 byte header (2 bits encoding + 6 bits size) + data bytes
+		if err := writeSimpleName(buffer, typeDef.nsName, typeResolver.namespaceEncoder); err != nil {
+			return nil, fmt.Errorf("failed to write namespace: %w", err)
 		}
-		if err := typeResolver.metaStringResolver.WriteMetaStringBytes(buffer, typeDef.typeName); err != nil {
-			return nil, err
+		if err := writeSimpleTypeName(buffer, typeDef.typeName, typeResolver.typeNameEncoder); err != nil {
+			return nil, fmt.Errorf("failed to write typename: %w", err)
 		}
 	} else {
 		buffer.WriteVarInt32(int32(typeDef.typeId))
@@ -624,7 +812,7 @@ func writeFieldDefs(typeResolver *TypeResolver, buffer *ByteBuffer, fieldDefs []
 
 // writeFieldDef writes a single field's definition
 func writeFieldDef(typeResolver *TypeResolver, buffer *ByteBuffer, field FieldDef) error {
-	// Write field header
+	// WriteData field header
 	// 2 bits field name encoding + 4 bits size + nullability flag + ref tracking flag
 	offset := buffer.writerIndex
 	if err := buffer.WriteByte(0xFF); err != nil {
@@ -653,7 +841,7 @@ func writeFieldDef(typeResolver *TypeResolver, buffer *ByteBuffer, field FieldDe
 	}
 	buffer.PutUint8(offset, header)
 
-	// Write field type
+	// WriteData field type
 	field.fieldType.write(buffer)
 
 	// todo: support tag id
@@ -673,7 +861,7 @@ typeDef are layout as following:
   - next variable bytes: field definitions (see below)
 */
 func decodeTypeDef(fory *Fory, buffer *ByteBuffer, header int64) (*TypeDef, error) {
-	// Read 8-byte global header
+	// ReadData 8-byte global header
 	globalHeader := header
 	hasFieldsMeta := (globalHeader & HAS_FIELDS_META_FLAG) != 0
 	isCompressed := (globalHeader & COMPRESS_META_FLAG) != 0
@@ -689,7 +877,7 @@ func decodeTypeDef(fory *Fory, buffer *ByteBuffer, header int64) (*TypeDef, erro
 	encoded := buffer.ReadBinary(metaSize)
 	metaBuffer := NewByteBuffer(encoded)
 
-	// Read 1-byte meta header
+	// ReadData 1-byte meta header
 	metaHeaderByte, err := metaBuffer.ReadByte()
 	if err != nil {
 		return nil, err
@@ -701,28 +889,93 @@ func decodeTypeDef(fory *Fory, buffer *ByteBuffer, header int64) (*TypeDef, erro
 	}
 	registeredByName := (metaHeaderByte & REGISTER_BY_NAME_FLAG) != 0
 
-	// Read name or type ID according to the registerByName flag
+	// ReadData name or type ID according to the registerByName flag
 	var typeId TypeId
 	var nsBytes, nameBytes *MetaStringBytes
 	var type_ reflect.Type
 	if registeredByName {
-		// Read namespace and type name for namespaced types
-		readingNsBytes, err := fory.typeResolver.metaStringResolver.ReadMetaStringBytes(metaBuffer)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read package path: %w", err)
+		// ReadData namespace and type name for namespaced types
+		// NOTE: TypeDefs use simple name format, not meta string format with dynamic IDs
+		// ReadData namespace
+		nsHeader := int(metaBuffer.ReadInt8()) & 0xff
+		nsEncodingFlags := nsHeader & 0b111
+		nsSize := nsHeader >> 3
+		if nsSize == BIG_NAME_THRESHOLD {
+			nsSize = int(metaBuffer.ReadVarUint32Small7()) + BIG_NAME_THRESHOLD
 		}
-		nsBytes = readingNsBytes
-		readingNameBytes, err := fory.typeResolver.metaStringResolver.ReadMetaStringBytes(metaBuffer)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read type name: %w", err)
+
+		var nsEncoding meta.Encoding
+		switch nsEncodingFlags {
+		case 0:
+			nsEncoding = meta.UTF_8
+		case 1:
+			nsEncoding = meta.LOWER_SPECIAL
+		case 2:
+			nsEncoding = meta.LOWER_UPPER_DIGIT_SPECIAL
+		case 3:
+			nsEncoding = meta.FIRST_TO_LOWER_SPECIAL
+		case 4:
+			nsEncoding = meta.ALL_TO_LOWER_SPECIAL
+		default:
+			return nil, fmt.Errorf("invalid package encoding flags: %d", nsEncodingFlags)
 		}
-		nameBytes = readingNameBytes
+		nsData := make([]byte, nsSize)
+		if _, err := metaBuffer.Read(nsData); err != nil {
+			return nil, fmt.Errorf("failed to read namespace data: %w", err)
+		}
+
+		// ReadData typename
+		typeHeader := int(metaBuffer.ReadInt8()) & 0xff
+		typeEncodingFlags := typeHeader & 0b111
+		typeSize := typeHeader >> 3
+		if typeSize == BIG_NAME_THRESHOLD {
+			typeSize = int(metaBuffer.ReadVarUint32Small7()) + BIG_NAME_THRESHOLD
+		}
+
+		var typeEncoding meta.Encoding
+		switch typeEncodingFlags {
+		case 0:
+			typeEncoding = meta.UTF_8
+		case 1:
+			typeEncoding = meta.LOWER_SPECIAL
+		case 2:
+			typeEncoding = meta.LOWER_UPPER_DIGIT_SPECIAL
+		case 3:
+			typeEncoding = meta.FIRST_TO_LOWER_SPECIAL
+		case 4:
+			typeEncoding = meta.ALL_TO_LOWER_SPECIAL
+		default:
+			return nil, fmt.Errorf("invalid typename encoding flags: %d", typeEncodingFlags)
+		}
+		typeData := make([]byte, typeSize)
+		if _, err := metaBuffer.Read(typeData); err != nil {
+			return nil, fmt.Errorf("failed to read typename data: %w", err)
+		}
+
+		// Create MetaStringBytes directly from the read data
+		// Compute hash for namespace
+		nsHash := ComputeMetaStringHash(nsData, nsEncoding)
+		nsBytes = &MetaStringBytes{
+			Data:     nsData,
+			Encoding: nsEncoding,
+			Hashcode: nsHash,
+		}
+
+		// Compute hash for typename
+		typeHash := ComputeMetaStringHash(typeData, typeEncoding)
+		nameBytes = &MetaStringBytes{
+			Data:     typeData,
+			Encoding: typeEncoding,
+			Hashcode: typeHash,
+		}
+
 		info, exists := fory.typeResolver.nsTypeToTypeInfo[nsTypeKey{nsBytes.Hashcode, nameBytes.Hashcode}]
 		if !exists {
 			// Try fallback: decode strings and look up by name
 			ns, _ := fory.typeResolver.namespaceDecoder.Decode(nsBytes.Data, nsBytes.Encoding)
 			typeName, _ := fory.typeResolver.typeNameDecoder.Decode(nameBytes.Data, nameBytes.Encoding)
 			nameKey := [2]string{ns, typeName}
+
 			if fallbackInfo, fallbackExists := fory.typeResolver.namedTypeToTypeInfo[nameKey]; fallbackExists {
 				info = fallbackInfo
 				exists = true
@@ -746,15 +999,19 @@ func decodeTypeDef(fory *Fory, buffer *ByteBuffer, header int64) (*TypeDef, erro
 			type_ = nil
 		}
 	} else {
-		typeId = TypeId(metaBuffer.ReadVarInt32())
-		if info, err := fory.typeResolver.getTypeInfoById(typeId); err != nil {
-			return nil, fmt.Errorf("failed to get type info by id %d: %w", typeId, err)
-		} else {
+		// Java uses writeVarUint32 for type ID in TypeDef
+		typeId = TypeId(metaBuffer.ReadVarUint32())
+		// Try to get the type from registry, but it's OK if it doesn't exist yet
+		// The TypeDef itself will be used to construct the type dynamically
+		if info, err := fory.typeResolver.getTypeInfoById(typeId); err == nil {
 			type_ = info.Type
+		} else {
+			//Type not registered - will be built from field definitions
+			type_ = nil
 		}
 	}
 
-	// Read fields information
+	// ReadData fields information
 	fieldInfos := make([]FieldDef, fieldCount)
 	if hasFieldsMeta {
 		for i := 0; i < fieldCount; i++ {
@@ -782,7 +1039,7 @@ field def layout as following:
   - next variable bytes: field name or tag id
 */
 func readFieldDef(typeResolver *TypeResolver, buffer *ByteBuffer) (FieldDef, error) {
-	// Read field header
+	// ReadData field header
 	headerByte, err := buffer.ReadByte()
 	if err != nil {
 		return FieldDef{}, fmt.Errorf("failed to read field header: %w", err)

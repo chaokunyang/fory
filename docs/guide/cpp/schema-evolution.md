@@ -85,7 +85,7 @@ Compatible mode supports the following schema changes:
 | Add new fields     | ✅      | Missing fields use default values       |
 | Remove fields      | ✅      | Extra fields are skipped                |
 | Reorder fields     | ✅      | Fields matched by name, not position    |
-| Change nullability | ✅      | `T` ↔ `std::optional<T>`               |
+| Change nullability | ✅      | `T` ↔ `std::optional<T>`                |
 | Change field types | ❌      | Types must be compatible                |
 | Rename fields      | ❌      | Field names must match (case-sensitive) |
 

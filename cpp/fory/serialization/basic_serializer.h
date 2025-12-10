@@ -667,7 +667,8 @@ template <> struct Serializer<char16_t> {
     return value;
   }
 
-  static inline char16_t read_data_generic(ReadContext &ctx, bool has_generics) {
+  static inline char16_t read_data_generic(ReadContext &ctx,
+                                           bool has_generics) {
     return read_data(ctx);
   }
 
@@ -740,7 +741,8 @@ template <> struct Serializer<char32_t> {
     return value;
   }
 
-  static inline char32_t read_data_generic(ReadContext &ctx, bool has_generics) {
+  static inline char32_t read_data_generic(ReadContext &ctx,
+                                           bool has_generics) {
     return read_data(ctx);
   }
 

@@ -209,7 +209,7 @@ TEST(SerializationTest, Char32Roundtrip) {
   test_roundtrip<char32_t>(U'中');
   test_roundtrip<char32_t>(U'\0');
   test_roundtrip<char32_t>(static_cast<char32_t>(0x10FFFF)); // Max Unicode
-  test_roundtrip<char32_t>(static_cast<char32_t>(0x1F600)); // Emoji 😀
+  test_roundtrip<char32_t>(static_cast<char32_t>(0x1F600));  // Emoji 😀
 }
 
 // ============================================================================

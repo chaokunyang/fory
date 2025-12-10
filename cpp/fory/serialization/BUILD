@@ -21,6 +21,7 @@ cc_library(
         "serializer_traits.h",
         "skip.h",
         "smart_ptr_serializers.h",
+        "string_serializer.h",
         "struct_serializer.h",
         "temporal_serializers.h",
         "tuple_serializer.h",

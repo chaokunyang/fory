@@ -116,6 +116,12 @@ enum class TypeId : int32_t {
   U32 = 66,
   // a 64-bit unsigned integer.
   U64 = 67,
+  // 8-bits character.
+  CHAR = 68,
+  // 16-bits character
+  CHAR16 = 69,
+  // 32-bits character
+  CHAR32 = 70,
   // Unsigned integer array types (native mode only)
   // one-dimensional uint16 array.
   U16_ARRAY = 73,

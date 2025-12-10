@@ -44,7 +44,6 @@ import org.testng.annotations.Test;
 public class NonexistentClassSerializersTest extends ForyTestBase {
   @DataProvider
   public static Object[][] config() {
-    // After CompatibleSerializer removal, scoped meta share is required for automatic MetaContext
     return Sets.cartesianProduct(
             ImmutableSet.of(true, false), // referenceTracking
             ImmutableSet.of(true, false), // fory1 enable codegen

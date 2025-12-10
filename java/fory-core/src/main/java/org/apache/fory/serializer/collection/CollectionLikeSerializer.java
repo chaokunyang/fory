@@ -30,7 +30,6 @@ import org.apache.fory.resolver.ClassInfoHolder;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.RefResolver;
 import org.apache.fory.resolver.TypeResolver;
-import org.apache.fory.serializer.MetaSharedSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.type.GenericType;
 import org.apache.fory.util.Preconditions;
@@ -43,8 +42,6 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
   private MethodHandle constructor;
   private int numElements;
   protected final boolean supportCodegenHook;
-  // TODO remove elemSerializer, support generics in MetaSharedSerializer.
-  private Serializer<?> elemSerializer;
   protected final ClassInfoHolder elementClassInfoHolder;
   private final TypeResolver typeResolver;
   protected final SerializationBinding binding;
@@ -86,14 +83,6 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
       elemGenericType = genericType.getTypeParameter0();
     }
     return elemGenericType;
-  }
-
-  /**
-   * Set element serializer for next serialization, the <code>serializer</code> will be cleared when
-   * next serialization finished.
-   */
-  public void setElementSerializer(Serializer serializer) {
-    elemSerializer = serializer;
   }
 
   /**
@@ -149,19 +138,10 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
         }
       }
     } else {
-      if (elemSerializer != null) {
-        if (elemSerializer.needToWriteRef()) {
-          buffer.writeByte(CollectionFlags.DECL_SAME_TYPE_TRACKING_REF);
-          return CollectionFlags.DECL_SAME_TYPE_TRACKING_REF;
-        } else {
-          return writeNullabilityHeader(buffer, value);
-        }
+      if (fory.trackingRef()) {
+        return writeTypeHeader(buffer, value, elementClassInfoHolder);
       } else {
-        if (fory.trackingRef()) {
-          return writeTypeHeader(buffer, value, elementClassInfoHolder);
-        } else {
-          return writeTypeNullabilityHeader(buffer, value, null, elementClassInfoHolder);
-        }
+        return writeTypeNullabilityHeader(buffer, value, null, elementClassInfoHolder);
       }
     }
   }
@@ -324,47 +304,14 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
 
   protected final void writeElements(Fory fory, MemoryBuffer buffer, Collection value) {
     int flags = writeElementsHeader(buffer, value);
-    Serializer serializer = this.elemSerializer;
-    // clear the elemSerializer to avoid conflict if the nested
-    // serialization has collection field.
-    this.elemSerializer = null;
-    if (serializer == null) {
-      GenericType elemGenericType = getElementGenericType(fory);
-      if (elemGenericType != null) {
-        javaWriteWithGenerics(fory, buffer, value, elemGenericType, flags);
-      } else {
-        generalJavaWrite(fory, buffer, value, null, flags);
-      }
+    GenericType elemGenericType = getElementGenericType(fory);
+    if (elemGenericType != null) {
+      javaWriteWithGenerics(fory, buffer, value, elemGenericType, flags);
     } else {
-      compatibleWrite(buffer, value, serializer, flags);
+      generalJavaWrite(fory, buffer, value, null, flags);
     }
   }
 
-  // TODO use generics for compatible serializer.
-  private <T extends Collection> void compatibleWrite(
-      MemoryBuffer buffer, T value, Serializer serializer, int flags) {
-    if (serializer.needToWriteRef()) {
-      for (Object elem : value) {
-        binding.writeRef(buffer, elem, serializer);
-      }
-    } else {
-      boolean hasNull = (flags & CollectionFlags.HAS_NULL) == CollectionFlags.HAS_NULL;
-      if (hasNull) {
-        for (Object elem : value) {
-          if (elem == null) {
-            buffer.writeByte(Fory.NULL_FLAG);
-          } else {
-            buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
-            binding.write(buffer, serializer, elem);
-          }
-        }
-      } else {
-        for (Object elem : value) {
-          binding.write(buffer, serializer, elem);
-        }
-      }
-    }
-  }
 
   private void javaWriteWithGenerics(
       Fory fory,
@@ -575,51 +522,11 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
   protected void readElements(
       Fory fory, MemoryBuffer buffer, Collection collection, int numElements) {
     int flags = buffer.readByte();
-    Serializer serializer = this.elemSerializer;
-    // clear the elemSerializer to avoid conflict if the nested
-    // serialization has collection field.
-    // TODO use generics for compatible serializer.
-    this.elemSerializer = null;
-    if (serializer == null) {
-      GenericType elemGenericType = getElementGenericType(fory);
-      if (elemGenericType != null) {
-        javaReadWithGenerics(fory, buffer, collection, numElements, elemGenericType, flags);
-      } else {
-        generalJavaRead(fory, buffer, collection, numElements, flags, null);
-      }
+    GenericType elemGenericType = getElementGenericType(fory);
+    if (elemGenericType != null) {
+      javaReadWithGenerics(fory, buffer, collection, numElements, elemGenericType, flags);
     } else {
-      compatibleRead(fory, buffer, collection, numElements, serializer, flags);
-    }
-  }
-
-  /** Code path for {@link MetaSharedSerializer}. */
-  private void compatibleRead(
-      Fory fory,
-      MemoryBuffer buffer,
-      Collection collection,
-      int numElements,
-      Serializer serializer,
-      int flags) {
-    if (serializer.needToWriteRef()) {
-      for (int i = 0; i < numElements; i++) {
-        collection.add(binding.readRef(buffer, serializer));
-      }
-    } else {
-      if ((flags & CollectionFlags.HAS_NULL) == CollectionFlags.HAS_NULL) {
-        for (int i = 0; i < numElements; i++) {
-          if (buffer.readByte() == Fory.NULL_FLAG) {
-            collection.add(null);
-          } else {
-            Object elem = binding.read(buffer, serializer);
-            collection.add(elem);
-          }
-        }
-      } else {
-        for (int i = 0; i < numElements; i++) {
-          Object elem = binding.read(buffer, serializer);
-          collection.add(elem);
-        }
-      }
+      generalJavaRead(fory, buffer, collection, numElements, flags, null);
     }
   }
 

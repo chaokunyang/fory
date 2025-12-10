@@ -114,7 +114,6 @@ public class DuplicateFieldsTest extends ForyTestBase {
             .requireClassRegistration(false);
     Fory fory = builder.build();
     {
-      // Use MetaSharedSerializer instead of CompatibleSerializer
       MetaSharedSerializer<C> serializer =
           new MetaSharedSerializer<>(
               fory, C.class, fory.getClassResolver().getTypeDef(C.class, true));

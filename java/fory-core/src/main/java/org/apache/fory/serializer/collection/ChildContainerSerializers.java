@@ -236,7 +236,6 @@ public class ChildContainerSerializers {
     while (!superClasses.contains(cls)) {
       Serializer slotsSerializer;
       if (fory.getConfig().getCompatibleMode() == CompatibleMode.COMPATIBLE) {
-        // Use MetaSharedLayerSerializer instead of CompatibleSerializer
         ClassDef layerClassDef = fory.getClassResolver().getTypeDef(cls, false);
         // Use layer index within class hierarchy (not global counter)
         // This ensures unique marker classes without excessive array dimensions

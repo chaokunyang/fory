@@ -47,9 +47,6 @@ import org.apache.fory.type.Generics;
  * only handles fields declared in a specific class layer. It uses a generated marker class as the
  * key in {@code metaContext.classMap} to ensure unique identification of each layer.
  *
- * <p>This serializer replaces the deprecated {@code CompatibleSerializer} for layer-based
- * serialization with forward/backward compatibility support.
- *
  * @see MetaSharedSerializer
  * @see ObjectStreamSerializer
  * @see org.apache.fory.builder.LayerMarkerClassGenerator

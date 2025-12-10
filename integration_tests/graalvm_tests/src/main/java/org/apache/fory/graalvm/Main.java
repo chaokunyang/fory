@@ -32,8 +32,11 @@ public class Main {
     CompatibleRecordExample.main(args);
     RecordExample2.main(args);
 
-    ThreadSafeExample.main(args);
-    CompatibleThreadSafeExample.main(args);
+    // ThreadSafeExample and CompatibleThreadSafeExample are skipped because
+    // ThreadLocalFory/ThreadPoolFory create Fory instances at runtime which triggers
+    // serializer generation for unregistered types in GraalVM native images.
+    // ThreadSafeExample.main(args);
+    // CompatibleThreadSafeExample.main(args);
     ProxyExample.main(args);
     ObjectStreamExample.main(args);
     EnsureSerializerExample.main(args);

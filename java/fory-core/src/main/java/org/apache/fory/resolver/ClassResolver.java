@@ -158,17 +158,52 @@ import org.apache.fory.util.record.RecordUtils;
 /**
  * Class registry for types of serializing objects, responsible for reading/writing types, setting
  * up relations between serializer and types.
+ *
+ * <h2>Class ID Space</h2>
+ *
+ * <p>Fory separates user class IDs from internal class IDs to provide a clean and intuitive API:
+ *
+ * <ul>
+ *   <li><b>User ID space</b>: IDs specified via {@link #register(Class, int)} start from 0. Valid
+ *       range is [0, {@value Short#MAX_VALUE} - {@value #USER_ID_BASE} - 1] (i.e., [0, 32510]).
+ *   <li><b>Internal ID space</b>: Reserved for Fory's built-in types (primitives, common
+ *       collections, etc.). These IDs are in the range [0, {@value #USER_ID_BASE} - 1] and are
+ *       completely hidden from users.
+ * </ul>
+ *
+ * <p>When users register a class with ID N, Fory internally stores it as (N + {@value
+ * #USER_ID_BASE}). This transformation is transparent to users - they only work with their own
+ * 0-based ID space.
+ *
+ * <h2>Registration Methods</h2>
+ *
+ * <ul>
+ *   <li>{@link #register(Class)} - Auto-assigns the next available user ID
+ *   <li>{@link #register(Class, int)} - Registers with a user-specified ID (0-based)
+ *   <li>{@link #register(Class, String, String)} - Registers with namespace and type name
+ * </ul>
+ *
+ * @see #register(Class)
+ * @see #register(Class, int)
  */
 @SuppressWarnings({"rawtypes", "unchecked"})
 public class ClassResolver extends TypeResolver {
   private static final Logger LOG = LoggerFactory.getLogger(ClassResolver.class);
 
-  // preserve 0 as flag for class id not set in ClassInfo`
+  /** Flag value indicating no class ID has been assigned. */
   public static final short NO_CLASS_ID = TypeResolver.NO_CLASS_ID;
+
   public static final short LAMBDA_STUB_ID = 1;
   public static final short JDK_PROXY_STUB_ID = 2;
   public static final short REPLACE_STUB_ID = 3;
+
+  /**
+   * Base offset for user-registered class IDs. User IDs are internally stored as (userId + {@value
+   * #USER_ID_BASE}). The first {@value #USER_ID_BASE} IDs (0 to {@value #USER_ID_BASE} - 1) are
+   * reserved for Fory's internal types.
+   */
   public static final short USER_ID_BASE = 256;
+
   // Note: following pre-defined class id should be continuous, since they may be used based range.
   public static final short PRIMITIVE_VOID_CLASS_ID = (short) (REPLACE_STUB_ID + 1);
   public static final short PRIMITIVE_BOOLEAN_CLASS_ID = (short) (PRIMITIVE_VOID_CLASS_ID + 1);
@@ -373,6 +408,21 @@ public class ClassResolver extends TypeResolver {
     registerInternal(IndexOutOfBoundsException.class, ArrayIndexOutOfBoundsException.class);
   }
 
+  /**
+   * Registers a class with an auto-assigned user ID.
+   *
+   * <p>The ID is automatically assigned starting from 0 in the user ID space. Each call assigns the
+   * next available ID. If the class is already registered, this method does nothing.
+   *
+   * <p>Example:
+   *
+   * <pre>{@code
+   * fory.register(MyClass.class);      // Gets user ID 0
+   * fory.register(AnotherClass.class); // Gets user ID 1
+   * }</pre>
+   *
+   * @param cls the class to register
+   */
   @Override
   public void register(Class<?> cls) {
     if (!extRegistry.registeredClassIdMap.containsKey(cls)) {
@@ -384,19 +434,52 @@ public class ClassResolver extends TypeResolver {
     }
   }
 
+  /**
+   * Registers a class by its fully qualified name with an auto-assigned user ID.
+   *
+   * @param className the fully qualified class name
+   * @see #register(Class)
+   */
   @Override
   public void register(String className) {
     register(loadClass(className, false, 0, false));
   }
 
+  /**
+   * Registers a class by its fully qualified name with a specified user ID.
+   *
+   * @param className the fully qualified class name
+   * @param classId the user ID to assign (0-based, in user ID space)
+   * @see #register(Class, int)
+   */
   @Override
   public void register(String className, int classId) {
     register(loadClass(className, false, 0, false), classId);
   }
 
+  /**
+   * Registers a class with a user-specified ID.
+   *
+   * <p>The ID is in the user ID space, starting from 0. Fory internally transforms this to an
+   * internal ID by adding {@link #USER_ID_BASE}. This separation ensures user IDs never conflict
+   * with Fory's internal type IDs.
+   *
+   * <p>Valid user ID range: [0, 32510] (i.e., [0, Short.MAX_VALUE - USER_ID_BASE - 1])
+   *
+   * <p>Example:
+   *
+   * <pre>{@code
+   * fory.register(MyClass.class, 0);      // User ID 0 -> Internal ID 256
+   * fory.register(AnotherClass.class, 1); // User ID 1 -> Internal ID 257
+   * }</pre>
+   *
+   * @param cls the class to register
+   * @param id the user ID to assign (0-based)
+   * @throws IllegalArgumentException if the ID is out of valid range or already in use
+   */
   @Override
   public void register(Class<?> cls, int id) {
-    registerInternal(cls, id + USER_ID_BASE);
+    registerImpl(cls, id + USER_ID_BASE);
   }
 
   /**
@@ -433,13 +516,28 @@ public class ClassResolver extends TypeResolver {
     GraalvmSupport.registerClass(cls, fory.getConfig().getConfigHash());
   }
 
+  /**
+   * Registers multiple classes for internal use with auto-assigned internal IDs.
+   *
+   * <p><b>Internal API</b>: This method is for Fory's internal use only. Users should use {@link
+   * #register(Class)} instead.
+   *
+   * @param classes the classes to register
+   */
   public void registerInternal(Class<?>... classes) {
     for (Class<?> cls : classes) {
       registerInternal(cls);
     }
   }
 
-  /** register class. */
+  /**
+   * Registers a class for internal use with an auto-assigned internal ID.
+   *
+   * <p><b>Internal API</b>: This method is for Fory's internal use only. Users should use {@link
+   * #register(Class)} instead. Internal IDs are in the range [0, {@link #USER_ID_BASE} - 1].
+   *
+   * @param cls the class to register
+   */
   public void registerInternal(Class<?> cls) {
     if (!extRegistry.registeredClassIdMap.containsKey(cls)) {
       while (extRegistry.classIdGenerator < registeredId2ClassInfo.length
@@ -451,10 +549,24 @@ public class ClassResolver extends TypeResolver {
   }
 
   /**
-   * Register class with specified id. Currently class id must be `classId >= 0 && classId < 32767`.
-   * In the future this limitation may be relaxed.
+   * Registers a class for internal use with a specified internal ID.
+   *
+   * <p><b>Internal API</b>: This method is for Fory's internal use only. Users should use {@link
+   * #register(Class, int)} instead.
+   *
+   * <p>Internal IDs are reserved for Fory's built-in types and must be in the range [0, {@link
+   * #USER_ID_BASE} - 1] (i.e., [0, 255]). User IDs start from {@link #USER_ID_BASE} and above.
+   *
+   * @param cls the class to register
+   * @param classId the internal ID, must be in range [0, {@link #USER_ID_BASE} - 1]
+   * @throws IllegalArgumentException if the ID is out of range or already in use
    */
   public void registerInternal(Class<?> cls, int classId) {
+    Preconditions.checkArgument(classId >= 0 && classId < USER_ID_BASE);
+    registerImpl(cls, classId);
+  }
+
+  private void registerImpl(Class<?> cls, int classId) {
     checkRegisterAllowed();
     // class id must be less than Integer.MAX_VALUE/2 since we use bit 0 as class id flag.
     Preconditions.checkArgument(classId >= 0 && classId < Short.MAX_VALUE);

@@ -119,6 +119,35 @@ public class ClassResolverTest extends ForyTestBase {
   }
 
   @Test
+  public void testRegisterClassWithUserIds() {
+    // Test that user IDs 0 and 1 work correctly (mapped to internal IDs 256 and 257)
+    Fory fory = Fory.builder().withLanguage(Language.JAVA).requireClassRegistration(true).build();
+    ClassResolver classResolver = fory.getClassResolver();
+
+    // Register with user ID 0
+    classResolver.register(Foo.class, 0);
+    // Register with user ID 1
+    classResolver.register(Bar.class, 1);
+
+    // Verify internal IDs are offset by USER_ID_BASE (256)
+    assertEquals(
+        classResolver.getRegisteredClassId(Foo.class).shortValue(), ClassResolver.USER_ID_BASE);
+    assertEquals(
+        classResolver.getRegisteredClassId(Bar.class).shortValue(),
+        (short) (ClassResolver.USER_ID_BASE + 1));
+
+    // Verify serialization/deserialization works
+    Foo foo = new Foo();
+    foo.f1 = 42;
+    serDeCheck(fory, foo);
+
+    Bar bar = new Bar();
+    bar.f1 = 10;
+    bar.f2 = 100L;
+    serDeCheck(fory, bar);
+  }
+
+  @Test
   public void testGetSerializerClass() throws ClassNotFoundException {
     {
       Fory fory =

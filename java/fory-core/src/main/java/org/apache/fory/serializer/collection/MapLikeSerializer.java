@@ -111,8 +111,8 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
     TypeResolver classResolver = typeResolver;
     Iterator<Entry<Object, Object>> iterator = map.entrySet().iterator();
     Entry<Object, Object> entry = iterator.next();
+    Generics generics = fory.getGenerics();
     while (entry != null) {
-      Generics generics = fory.getGenerics();
       GenericType genericType = generics.nextGenericType();
       if (genericType == null) {
         entry = writeJavaNullChunk(buffer, entry, iterator, null, null);
@@ -603,6 +603,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
     if (size != 0) {
       chunkHeader = buffer.readUnsignedByte();
     }
+    Generics generics = fory.getGenerics();
     while (size > 0) {
       long sizeAndHeader =
           readJavaNullChunk(buffer, map, chunkHeader, size, null, null);
@@ -611,7 +612,6 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
       if (size == 0) {
         break;
       }
-      Generics generics = fory.getGenerics();
       GenericType genericType = generics.nextGenericType();
       if (genericType == null) {
         sizeAndHeader = readJavaChunk(fory, buffer, map, size, chunkHeader, null, null);

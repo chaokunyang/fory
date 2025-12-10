@@ -340,28 +340,7 @@ public class MapSerializers {
   public static class StringKeyMapSerializer<T> extends MapSerializer<Map<String, T>> {
 
     public StringKeyMapSerializer(Fory fory, Class<Map<String, T>> cls) {
-      super(fory, cls, false);
-    }
-
-    @Override
-    public void write(MemoryBuffer buffer, Map<String, T> value) {
-      buffer.writeVarUint32Small7(value.size());
-      for (Map.Entry<String, T> e : value.entrySet()) {
-        fory.writeJavaStringRef(buffer, e.getKey());
-        // If value is a collection, the `newCollection` method will record itself to
-        // reference map, which may get wrong index if this value is written without index.
-        fory.writeRef(buffer, e.getValue());
-      }
-    }
-
-    @Override
-    public Map<String, T> read(MemoryBuffer buffer) {
-      Map map = newMap(buffer);
-      int numElements = getAndClearNumElements();
-      for (int i = 0; i < numElements; i++) {
-        map.put(fory.readJavaStringRef(buffer), fory.readRef(buffer));
-      }
-      return (Map<String, T>) map;
+      super(fory, cls, true);
     }
 
     @Override

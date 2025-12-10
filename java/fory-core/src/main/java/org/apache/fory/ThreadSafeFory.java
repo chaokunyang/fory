@@ -22,7 +22,6 @@ package org.apache.fory;
 import java.nio.ByteBuffer;
 import java.util.function.Consumer;
 import java.util.function.Function;
-
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.resolver.ClassChecker;
 import org.apache.fory.resolver.TypeChecker;

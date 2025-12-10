@@ -114,9 +114,7 @@ public final class CompressedArraySerializers {
     resolver.registerInternalSerializer(long[].class, new CompressedLongArraySerializer(fory));
   }
 
-  /**
-   * Register compressed array serializers with the given Fory instance.
-   */
+  /** Register compressed array serializers with the given Fory instance. */
   public static void register(ThreadSafeFory fory) {
     fory.registerCallback(CompressedArraySerializers::register);
   }

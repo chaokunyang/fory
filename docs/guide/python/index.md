@@ -19,13 +19,6 @@ license: |
   limitations under the License.
 ---
 
-# Apache Fory™ Python
-
-[![Build Status](https://img.shields.io/github/actions/workflow/status/apache/fory/ci.yml?branch=main&style=for-the-badge&label=GITHUB%20ACTIONS&logo=github)](https://github.com/apache/fory/actions/workflows/ci.yml)
-[![PyPI](https://img.shields.io/pypi/v/pyfory.svg?logo=PyPI)](https://pypi.org/project/pyfory/)
-[![Python Versions](https://img.shields.io/pypi/pyversions/pyfory.svg?logo=python)](https://pypi.org/project/pyfory/)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-
 **Apache Fory™** is a blazing fast multi-language serialization framework powered by **JIT compilation** and **zero-copy** techniques, providing up to **ultra-fast performance** while maintaining ease of use and safety.
 
 `pyfory` provides the Python implementation of Apache Fory™, offering both high-performance object serialization and advanced row-format capabilities for data processing tasks.

@@ -241,9 +241,10 @@ Apache Fory™ supports polymorphic serialization through trait objects, enablin
 - `Box<dyn Trait>` - Owned trait objects
 - `Rc<dyn Trait>` - Reference-counted trait objects
 - `Arc<dyn Trait>` - Thread-safe reference-counted trait objects
+- `Box<dyn Any>`/`Rc<dyn Any>`/`Arc<dyn Any>` - Any trait type objects
 - `Vec<Box<dyn Trait>>`, `HashMap<K, Box<dyn Trait>>` - Collections of trait objects
 
-#### Basic Trait Object Serialization
+**Basic Trait Object Serialization Example:**
 
 ```rust
 use fory::{Fory, register_trait_type};
@@ -297,40 +298,6 @@ let decoded: Zoo = fory.deserialize(&bytes)?;
 assert_eq!(decoded.star_animal.name(), "Buddy");
 assert_eq!(decoded.star_animal.speak(), "Woof!");
 ```
-
-#### Serializing `dyn Any` Trait Objects
-
-Apache Fory™ supports serializing `Rc<dyn Any>` and `Arc<dyn Any>` for runtime type dispatch. This is useful when you need maximum flexibility and don't want to define a custom trait.
-
-**Key points:**
-
-- Works with any type that implements `Serializer`
-- Requires downcasting after deserialization to access the concrete type
-- Type information is preserved during serialization
-- Useful for plugin systems and dynamic type handling
-
-```rust
-use std::rc::Rc;
-use std::any::Any;
-
-let dog_rc: Rc<dyn Animal> = Rc::new(Dog {
-    name: "Rex".to_string(),
-    breed: "Golden".to_string()
-});
-
-// Convert to Rc<dyn Any> for serialization
-let dog_any: Rc<dyn Any> = dog_rc.clone();
-
-// Serialize the Any wrapper
-let bytes = fory.serialize(&dog_any);
-let decoded: Rc<dyn Any> = fory.deserialize(&bytes)?;
-
-// Downcast back to the concrete type
-let unwrapped = decoded.downcast_ref::<Dog>().unwrap();
-assert_eq!(unwrapped.name, "Rex");
-```
-
-For thread-safe scenarios, use `Arc<dyn Any>`:
 
 ### 4. Schema Evolution
 
@@ -431,42 +398,6 @@ let value = Value::Object { name: "score".to_string(), value: 100 };
 let bytes = fory.serialize(&value)?;
 let decoded: Value = fory.deserialize(&bytes)?;
 assert_eq!(value, decoded);
-```
-
-#### Schema Evolution
-
-Compatible mode enables robust schema evolution with variant type encoding (2 bits):
-
-- `0b0` = Unit, `0b1` = Unnamed, `0b10` = Named
-
-```rust
-use fory::{Fory, ForyObject};
-
-// Old version
-#[derive(ForyObject)]
-enum OldEvent {
-    Click { x: i32, y: i32 },
-    Scroll { delta: f64 },
-}
-
-// New version - added field and variant
-#[derive(Default, ForyObject)]
-enum NewEvent {
-    #[default]
-    Unknown,
-    Click { x: i32, y: i32, timestamp: u64 },  // Added field
-    Scroll { delta: f64 },
-    KeyPress(String),  // New variant
-}
-
-let mut fory = Fory::builder().compatible().build();
-
-// Serialize with old schema
-let old_bytes = fory.serialize(&OldEvent::Click { x: 100, y: 200 })?;
-
-// Deserialize with new schema - timestamp gets default value (0)
-let new_event: NewEvent = fory.deserialize(&old_bytes)?;
-assert!(matches!(new_event, NewEvent::Click { x: 100, y: 200, timestamp: 0 }));
 ```
 
 **Evolution capabilities:**
@@ -706,6 +637,7 @@ cargo bench
 - **[API Documentation](https://docs.rs/fory)** - Complete API reference
 - **[Protocol Specification](https://fory.apache.org/docs/specification/fory_xlang_serialization_spec)** - Serialization protocol details
 - **[Type Mapping](https://fory.apache.org/docs/specification/xlang_type_mapping)** - Cross-language type mappings
+- **[Source](https://github.com/apache/fory/tree/main/docs/guide/rust)** - Source code for doc
 
 ## 🎯 Use Cases
 

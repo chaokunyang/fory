@@ -64,25 +64,26 @@ public class CodecUtils {
   }
 
   /**
-   * Load or generate a JIT serializer class for single-layer meta-shared serialization. Currently
-   * returns null to indicate that JIT is not yet supported, falling back to interpreter mode.
+   * Load or generate a JIT serializer class for single-layer meta-shared serialization.
    *
    * @param cls the target class
    * @param fory the Fory instance
    * @param layerClassDef the ClassDef for this layer only
    * @param layerMarkerClass the marker class for this layer
-   * @param parentSerializerClass the parent serializer class
-   * @return the generated serializer class, or null if JIT is not supported
+   * @return the generated serializer class
    */
   public static <T> Class<? extends Serializer<T>> loadOrGenMetaSharedLayerCodecClass(
-      Class<T> cls,
-      Fory fory,
-      ClassDef layerClassDef,
-      Class<?> layerMarkerClass,
-      Class<?> parentSerializerClass) {
-    // TODO: Implement JIT version of MetaSharedLayerSerializer
-    // For now, return null to fall back to interpreter mode (MetaSharedLayerSerializer)
-    return null;
+      Class<T> cls, Fory fory, ClassDef layerClassDef, Class<?> layerMarkerClass) {
+    Preconditions.checkNotNull(fory);
+    return loadSerializer(
+        "loadOrGenMetaSharedLayerCodecClass",
+        cls,
+        () ->
+            loadOrGenCodecClass(
+                cls,
+                fory,
+                new MetaSharedLayerCodecBuilder(
+                    TypeRef.of(cls), fory, layerClassDef, layerMarkerClass)));
   }
 
   @SuppressWarnings("unchecked")

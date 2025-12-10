@@ -77,9 +77,7 @@ public class NonexistentClassSerializersTest extends ForyTestBase {
 
   @Test(dataProvider = "config")
   public void testSkipNonexistent(
-      boolean referenceTracking,
-      boolean enableCodegen1,
-      boolean enableCodegen2) {
+      boolean referenceTracking, boolean enableCodegen1, boolean enableCodegen2) {
     Fory fory =
         foryBuilder()
             .withRefTracking(referenceTracking)
@@ -183,10 +181,7 @@ public class NonexistentClassSerializersTest extends ForyTestBase {
                 "TestEnumStruct",
                 ("public class TestEnumStruct {" + " public String f1;" + "}")));
     Fory fory2 =
-        foryBuilder()
-            .withDeserializeNonexistentClass(true)
-            .withClassLoader(classLoader)
-            .build();
+        foryBuilder().withDeserializeNonexistentClass(true).withClassLoader(classLoader).build();
     Object o1 = fory2.deserialize(bytes);
     Assert.assertEquals(ReflectionUtils.getObjectFieldValue(o1, "f1"), "str");
   }
@@ -246,10 +241,7 @@ public class NonexistentClassSerializersTest extends ForyTestBase {
                 "TestArrayStruct",
                 ("public class TestArrayStruct {" + " public String f1;" + "}")));
     Fory fory2 =
-        foryBuilder()
-            .withDeserializeNonexistentClass(true)
-            .withClassLoader(classLoader)
-            .build();
+        foryBuilder().withDeserializeNonexistentClass(true).withClassLoader(classLoader).build();
     Object o1 = fory2.deserialize(bytes);
     Assert.assertEquals(ReflectionUtils.getObjectFieldValue(o1, "f1"), "str");
   }
@@ -366,10 +358,7 @@ public class NonexistentClassSerializersTest extends ForyTestBase {
     Class<?> structClass = Struct.createNumberStructClass("TestSkipNonexistentClass1", 2);
     Object pojo = Struct.createPOJO(structClass);
     Fory fory2 =
-        foryBuilder()
-            .withDeserializeNonexistentClass(false)
-            .withClassLoader(classLoader)
-            .build();
+        foryBuilder().withDeserializeNonexistentClass(false).withClassLoader(classLoader).build();
     byte[] bytes = fory.serialize(pojo);
     assertThrowsCause(RuntimeException.class, () -> fory2.deserialize(bytes));
   }

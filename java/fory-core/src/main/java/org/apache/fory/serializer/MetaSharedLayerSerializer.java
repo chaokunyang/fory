@@ -52,7 +52,7 @@ import org.apache.fory.type.Generics;
  * @see org.apache.fory.builder.LayerMarkerClassGenerator
  */
 @SuppressWarnings({"unchecked"})
-public class MetaSharedLayerSerializer<T> extends AbstractObjectSerializer<T> {
+public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<T> {
   private final ClassDef layerClassDef;
   private final Class<?> layerMarkerClass;
   private final ObjectSerializer.FinalTypeField[] finalFields;
@@ -199,6 +199,7 @@ public class MetaSharedLayerSerializer<T> extends AbstractObjectSerializer<T> {
    * @param obj the object to set field values on
    * @return the object with fields set
    */
+  @Override
   public T readAndSetFields(MemoryBuffer buffer, T obj) {
     // Read and verify layer class meta (only if meta share is enabled)
     if (fory.getConfig().isMetaShareEnabled()) {
@@ -468,8 +469,10 @@ public class MetaSharedLayerSerializer<T> extends AbstractObjectSerializer<T> {
    * @param fieldIndexMap mapping from field name to index in vals array
    * @param vals the values array from putFields
    */
+  @Override
+  @SuppressWarnings("rawtypes")
   public void setFieldValuesFromPutFields(
-      Object obj, org.apache.fory.collection.ObjectIntMap<String> fieldIndexMap, Object[] vals) {
+      Object obj, org.apache.fory.collection.ObjectIntMap fieldIndexMap, Object[] vals) {
     // Set final fields
     for (ObjectSerializer.FinalTypeField fieldInfo : finalFields) {
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
@@ -514,8 +517,10 @@ public class MetaSharedLayerSerializer<T> extends AbstractObjectSerializer<T> {
    * @param arraySize size of the result array
    * @return array of field values in putFields order
    */
+  @Override
+  @SuppressWarnings("rawtypes")
   public Object[] getFieldValuesForPutFields(
-      Object obj, org.apache.fory.collection.ObjectIntMap<String> fieldIndexMap, int arraySize) {
+      Object obj, org.apache.fory.collection.ObjectIntMap fieldIndexMap, int arraySize) {
     Object[] vals = new Object[arraySize];
     // Get final fields
     for (ObjectSerializer.FinalTypeField fieldInfo : finalFields) {

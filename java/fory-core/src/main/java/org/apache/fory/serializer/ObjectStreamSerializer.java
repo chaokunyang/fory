@@ -47,6 +47,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import org.apache.fory.Fory;
+import org.apache.fory.builder.CodecUtils;
 import org.apache.fory.builder.LayerMarkerClassGenerator;
 import org.apache.fory.collection.ObjectArray;
 import org.apache.fory.collection.ObjectIntMap;
@@ -92,7 +93,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
 
     StreamClassInfo getStreamClassInfo();
 
-    MetaSharedLayerSerializer getSlotsSerializer();
+    MetaSharedLayerSerializerBase getSlotsSerializer();
 
     ForyObjectOutputStream getObjectOutputStream();
 
@@ -411,7 +412,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     private final ClassInfo classInfo;
     private final StreamClassInfo streamClassInfo;
     // mark non-final for async-jit to update it to jit-serializer.
-    private MetaSharedLayerSerializer slotsSerializer;
+    private MetaSharedLayerSerializerBase slotsSerializer;
     private final ObjectIntMap<String> fieldIndexMap;
     private final int numPutFields;
     private final Class<?>[] putFieldTypes;
@@ -431,9 +432,24 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       // has its own SlotsInfo, and the (class, 0) pair is unique for each class.
       Class<?> layerMarkerClass = LayerMarkerClassGenerator.getOrCreate(fory, type, 0);
 
-      // Use MetaSharedLayerSerializer (JIT not yet implemented, always use interpreter mode)
-      this.slotsSerializer =
+      // Create interpreter-mode serializer first
+      MetaSharedLayerSerializer interpreterSerializer =
           new MetaSharedLayerSerializer(fory, type, layerClassDef, layerMarkerClass);
+      this.slotsSerializer = interpreterSerializer;
+
+      // Register JIT callback to replace with JIT serializer when ready
+      if (fory.getConfig().isCodeGenEnabled()) {
+        SlotsInfo thisInfo = this;
+        fory.getJITContext()
+            .registerSerializerJITCallback(
+                () -> MetaSharedLayerSerializer.class,
+                () ->
+                    CodecUtils.loadOrGenMetaSharedLayerCodecClass(
+                        type, fory, layerClassDef, layerMarkerClass),
+                c ->
+                    thisInfo.slotsSerializer =
+                        (MetaSharedLayerSerializerBase) Serializers.newSerializer(fory, type, c));
+      }
 
       // In GraalVM, ensure serializers are generated for all field types at build time
       // so they're available when new Fory instances are created at runtime
@@ -510,7 +526,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     }
 
     @Override
-    public MetaSharedLayerSerializer getSlotsSerializer() {
+    public MetaSharedLayerSerializerBase getSlotsSerializer() {
       return slotsSerializer;
     }
 
@@ -570,7 +586,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
   private static class MinimalSlotsInfo implements SlotInfo {
     private final Class<?> cls;
     private final StreamClassInfo streamClassInfo;
-    private MetaSharedLayerSerializer slotsSerializer;
+    private MetaSharedLayerSerializerBase slotsSerializer;
     private final ObjectIntMap<String> fieldIndexMap;
     private final int numPutFields;
     private final Class<?>[] putFieldTypes;
@@ -589,9 +605,24 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       // and the (class, 0) pair is unique for each class.
       Class<?> layerMarkerClass = LayerMarkerClassGenerator.getOrCreate(fory, type, 0);
 
-      // Create a MetaSharedLayerSerializer for field handling
-      this.slotsSerializer =
+      // Create interpreter-mode serializer first
+      MetaSharedLayerSerializer interpreterSerializer =
           new MetaSharedLayerSerializer(fory, type, layerClassDef, layerMarkerClass);
+      this.slotsSerializer = interpreterSerializer;
+
+      // Register JIT callback to replace with JIT serializer when ready
+      if (fory.getConfig().isCodeGenEnabled()) {
+        MinimalSlotsInfo thisInfo = this;
+        fory.getJITContext()
+            .registerSerializerJITCallback(
+                () -> MetaSharedLayerSerializer.class,
+                () ->
+                    CodecUtils.loadOrGenMetaSharedLayerCodecClass(
+                        type, fory, layerClassDef, layerMarkerClass),
+                c ->
+                    thisInfo.slotsSerializer =
+                        (MetaSharedLayerSerializerBase) Serializers.newSerializer(fory, type, c));
+      }
 
       // In GraalVM, ensure serializers are generated for all field types at build time
       // so they're available when new Fory instances are created at runtime
@@ -661,7 +692,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     }
 
     @Override
-    public MetaSharedLayerSerializer getSlotsSerializer() {
+    public MetaSharedLayerSerializerBase getSlotsSerializer() {
       return slotsSerializer;
     }
 
@@ -887,7 +918,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       if (fieldTypes != null && fieldTypes.length > 0) {
         // Write using putField format (for compatibility with readFields)
         ObjectIntMap<String> fieldIndexMap = slotsInfo.getFieldIndexMap();
-        MetaSharedLayerSerializer slotsSerializer = slotsInfo.getSlotsSerializer();
+        MetaSharedLayerSerializerBase slotsSerializer = slotsInfo.getSlotsSerializer();
         Object[] vals =
             slotsSerializer.getFieldValuesForPutFields(
                 targetObject, fieldIndexMap, fieldTypes.length);
@@ -1253,7 +1284,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
           vals[i] = readPutFieldValue(buffer, fieldTypes[i]);
         }
         // Now set matching fields on the target object
-        MetaSharedLayerSerializer slotsSerializer = slotsInfo.getSlotsSerializer();
+        MetaSharedLayerSerializerBase slotsSerializer = slotsInfo.getSlotsSerializer();
         slotsSerializer.setFieldValuesFromPutFields(targetObject, fieldIndexMap, vals);
       } else {
         // No custom writeObject/readObject, use normal serialization

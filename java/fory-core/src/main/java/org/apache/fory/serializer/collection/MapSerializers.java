@@ -42,7 +42,6 @@ import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.serializer.ReplaceResolveSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.Serializers;
-import org.apache.fory.serializer.StringSerializer;
 import org.apache.fory.util.Preconditions;
 
 /**

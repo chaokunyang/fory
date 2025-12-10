@@ -312,7 +312,6 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
     }
   }
 
-
   private void javaWriteWithGenerics(
       Fory fory,
       MemoryBuffer buffer,

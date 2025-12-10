@@ -19,10 +19,11 @@
 
 package org.apache.fory.builder;
 
-import java.lang.reflect.Array;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.fory.Fory;
-import org.apache.fory.collection.Tuple2;
+import org.apache.fory.codegen.CodeGenerator;
+import org.apache.fory.codegen.CompileUnit;
 
 /**
  * Creates unique marker classes for each layer in a class hierarchy. These marker classes serve as
@@ -37,41 +38,46 @@ import org.apache.fory.collection.Tuple2;
  *   <li>C's layer with index 2 - marker for C's layer fields
  * </ul>
  *
- * <p>This implementation uses array types to create unique Class objects without runtime code
- * generation. For each (targetClass, layerIndex) pair, we create an array type with dimensions
- * equal to (layerIndex + 1). For example:
- *
- * <ul>
- *   <li>Layer 0: Foo[].class
- *   <li>Layer 1: Foo[][].class
- *   <li>Layer 2: Foo[][][].class
- * </ul>
- *
- * <p>This approach is compatible with GraalVM native images which don't support runtime class
- * generation via Janino.
+ * <p>This implementation uses Janino to generate unique empty marker classes at runtime. Each
+ * generated class is unique and serves as a key in identity-based maps. The cache uses ClassValue
+ * for efficient per-class caching, and the classes generated at GraalVM build time will be
+ * available at runtime.
  */
 public class LayerMarkerClassGenerator {
 
-  private static final ConcurrentHashMap<Tuple2<Class<?>, Integer>, Class<?>> cache =
-      new ConcurrentHashMap<>();
-
-  private static final String LAYER_MARKER_SUFFIX = "$ForyLayer$";
+  private static final String LAYER_MARKER_SUFFIX = "_ForyLayer_";
 
   /**
-   * Get or create a marker class for the given target class and layer index.
+   * ClassValue-based cache for layer marker classes. For each target class, we store a map from
+   * layer index to the generated marker class. This approach is efficient and works well with
+   * GraalVM's class initialization.
+   */
+  private static final ClassValue<Map<Integer, Class<?>>> layerClassCache =
+      new ClassValue<Map<Integer, Class<?>>>() {
+        @Override
+        protected Map<Integer, Class<?>> computeValue(Class<?> type) {
+          return new ConcurrentHashMap<>();
+        }
+      };
+
+  /**
+   * Get or create a unique marker class for the given target class and layer index.
    *
    * <p>This method returns a unique Class object for each (targetClass, layerIndex) pair. The
-   * returned class is an array type of the target class, with dimensions equal to (layerIndex + 1).
-   * This ensures uniqueness without requiring runtime code generation.
+   * returned class is generated using Janino at runtime (or at GraalVM build time), ensuring
+   * uniqueness without requiring array instantiation.
    *
-   * @param fory the Fory instance (not used but kept for API compatibility)
+   * <p>The generated classes are cached using ClassValue, so classes generated during GraalVM build
+   * time will be available at runtime.
+   *
+   * @param fory the Fory instance
    * @param targetClass the target class this marker represents
    * @param layerIndex the layer index in the class hierarchy (0 = topmost parent)
    * @return a unique class representing this layer marker
    */
   public static Class<?> getOrCreate(Fory fory, Class<?> targetClass, int layerIndex) {
-    Tuple2<Class<?>, Integer> key = Tuple2.of(targetClass, layerIndex);
-    return cache.computeIfAbsent(key, k -> createMarkerClass(targetClass, layerIndex));
+    Map<Integer, Class<?>> layerMap = layerClassCache.get(targetClass);
+    return layerMap.computeIfAbsent(layerIndex, idx -> createMarkerClass(fory, targetClass, idx));
   }
 
   /**
@@ -82,36 +88,43 @@ public class LayerMarkerClassGenerator {
    * @return the marker class simple name
    */
   public static String getMarkerClassName(Class<?> targetClass, int layerIndex) {
-    return targetClass.getSimpleName() + LAYER_MARKER_SUFFIX + layerIndex;
+    // Replace $ with _ to handle inner class names properly
+    String simpleName = targetClass.getSimpleName().replace('$', '_');
+    return simpleName + LAYER_MARKER_SUFFIX + layerIndex;
   }
 
   /**
-   * Create a marker class for the given target class and layer index.
+   * Create a unique marker class for the given target class and layer index.
    *
-   * <p>This method creates a unique Class object by creating an array type. The array dimension is
-   * (layerIndex + 1), ensuring uniqueness for each layer. Array types are intrinsic to the JVM and
-   * don't require runtime code generation, making this approach compatible with GraalVM native
-   * images.
+   * <p>This method generates a simple empty class using the shared CodeGenerator. The class is
+   * unique for each (targetClass, layerIndex) pair, making it suitable as an identity-based map
+   * key.
    *
+   * @param fory the Fory instance
    * @param targetClass the target class
    * @param layerIndex the layer index
-   * @return a unique class representing this layer marker
+   * @return a unique class for this layer marker
    */
-  private static Class<?> createMarkerClass(Class<?> targetClass, int layerIndex) {
-    // Create an array type with (layerIndex + 1) dimensions
-    // This gives us a unique Class object for each (targetClass, layerIndex) pair
-    // without requiring runtime code generation
-    int dimensions = layerIndex + 1;
-    Class<?> markerClass = targetClass;
-    for (int i = 0; i < dimensions; i++) {
-      // Create array of this type to get the array class
-      markerClass = Array.newInstance(markerClass, 0).getClass();
-    }
-    return markerClass;
-  }
+  private static Class<?> createMarkerClass(Fory fory, Class<?> targetClass, int layerIndex) {
+    String pkg = CodeGenerator.getPackage(targetClass);
+    String className = getMarkerClassName(targetClass, layerIndex);
+    String qualifiedClassName = pkg.isEmpty() ? className : pkg + "." + className;
 
-  /** Clear the cache. Used for testing. */
-  public static void clearCache() {
-    cache.clear();
+    // Generate a simple empty marker class using the shared CodeGenerator
+    StringBuilder codeBuilder = new StringBuilder();
+    if (!pkg.isEmpty()) {
+      codeBuilder.append("package ").append(pkg).append(";\n\n");
+    }
+    codeBuilder.append("public final class ").append(className).append(" {}");
+    CompileUnit compileUnit = new CompileUnit(pkg, className, codeBuilder.toString());
+
+    CodeGenerator codeGenerator =
+        CodeGenerator.getSharedCodeGenerator(fory.getClass().getClassLoader());
+    ClassLoader classLoader = codeGenerator.compile(compileUnit);
+    try {
+      return classLoader.loadClass(qualifiedClassName);
+    } catch (ClassNotFoundException e) {
+      throw new RuntimeException("Failed to load generated marker class: " + qualifiedClassName, e);
+    }
   }
 }

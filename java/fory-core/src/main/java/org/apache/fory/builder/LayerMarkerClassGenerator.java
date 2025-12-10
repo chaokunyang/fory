@@ -19,11 +19,10 @@
 
 package org.apache.fory.builder;
 
+import java.lang.reflect.Array;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.fory.Fory;
-import org.apache.fory.codegen.CodeGenerator;
-import org.apache.fory.codegen.CompileUnit;
 
 /**
  * Creates unique marker classes for each layer in a class hierarchy. These marker classes serve as
@@ -38,19 +37,22 @@ import org.apache.fory.codegen.CompileUnit;
  *   <li>C's layer with index 2 - marker for C's layer fields
  * </ul>
  *
- * <p>This implementation uses Janino to generate unique empty marker classes at runtime. Each
- * generated class is unique and serves as a key in identity-based maps. The cache uses ClassValue
- * for efficient per-class caching, and the classes generated at GraalVM build time will be
- * available at runtime.
+ * <p>This implementation uses array classes as unique markers. For layer index N, we create an
+ * (N+3)-dimensional array class of the target class. The +3 offset ensures marker classes don't
+ * conflict with regular array types (1D, 2D arrays are common). Array classes are created by the
+ * JVM and don't require reflection registration in GraalVM.
+ *
+ * <p>Common exception hierarchy classes are pre-filled at class initialization to ensure
+ * availability in GraalVM native images.
  */
 public class LayerMarkerClassGenerator {
 
-  private static final String LAYER_MARKER_SUFFIX = "_ForyLayer_";
+  /** Maximum supported layer depth. */
+  private static final int MAX_LAYER_DEPTH = 16;
 
   /**
    * ClassValue-based cache for layer marker classes. For each target class, we store a map from
-   * layer index to the generated marker class. This approach is efficient and works well with
-   * GraalVM's class initialization.
+   * layer index to the generated array class marker.
    */
   private static final ClassValue<Map<Integer, Class<?>>> layerClassCache =
       new ClassValue<Map<Integer, Class<?>>>() {
@@ -60,71 +62,101 @@ public class LayerMarkerClassGenerator {
         }
       };
 
+  // Pre-fill common exception hierarchy to ensure GraalVM compatibility
+  static {
+    prefillCommonClasses();
+  }
+
+  /** Pre-fill marker classes for common JDK classes that use ObjectStreamSerializer. */
+  private static void prefillCommonClasses() {
+    // Exception hierarchy (most exceptions have writeObject/readObject)
+    Class<?>[] exceptionClasses = {
+      Throwable.class,
+      Exception.class,
+      RuntimeException.class,
+      Error.class,
+      // Common runtime exceptions
+      NullPointerException.class,
+      IllegalArgumentException.class,
+      IllegalStateException.class,
+      IndexOutOfBoundsException.class,
+      ArrayIndexOutOfBoundsException.class,
+      StringIndexOutOfBoundsException.class,
+      ClassCastException.class,
+      ArithmeticException.class,
+      SecurityException.class,
+      UnsupportedOperationException.class,
+      NumberFormatException.class,
+      // Common checked exceptions
+      java.io.IOException.class,
+      java.io.FileNotFoundException.class,
+      java.io.EOFException.class,
+      java.io.NotSerializableException.class,
+      java.io.InvalidClassException.class,
+      ClassNotFoundException.class,
+      NoSuchMethodException.class,
+      NoSuchFieldException.class,
+      InterruptedException.class,
+      ReflectiveOperationException.class,
+      // Common errors
+      AssertionError.class,
+      OutOfMemoryError.class,
+      StackOverflowError.class,
+      NoClassDefFoundError.class,
+      LinkageError.class,
+      ExceptionInInitializerError.class,
+      VirtualMachineError.class,
+    };
+
+    // Pre-generate marker classes for common depths (0-3 covers most hierarchies)
+    for (Class<?> cls : exceptionClasses) {
+      Map<Integer, Class<?>> layerMap = layerClassCache.get(cls);
+      for (int i = 0; i < 4; i++) {
+        layerMap.computeIfAbsent(i, idx -> createArrayClass(cls, idx));
+      }
+    }
+  }
+
   /**
    * Get or create a unique marker class for the given target class and layer index.
    *
-   * <p>This method returns a unique Class object for each (targetClass, layerIndex) pair. The
-   * returned class is generated using Janino at runtime (or at GraalVM build time), ensuring
-   * uniqueness without requiring array instantiation.
-   *
-   * <p>The generated classes are cached using ClassValue, so classes generated during GraalVM build
-   * time will be available at runtime.
-   *
-   * @param fory the Fory instance
+   * @param fory the Fory instance (unused, kept for API compatibility)
    * @param targetClass the target class this marker represents
    * @param layerIndex the layer index in the class hierarchy (0 = topmost parent)
    * @return a unique class representing this layer marker
    */
   public static Class<?> getOrCreate(Fory fory, Class<?> targetClass, int layerIndex) {
+    if (layerIndex >= MAX_LAYER_DEPTH) {
+      throw new IllegalArgumentException(
+          "Layer index " + layerIndex + " exceeds maximum depth " + MAX_LAYER_DEPTH);
+    }
     Map<Integer, Class<?>> layerMap = layerClassCache.get(targetClass);
-    return layerMap.computeIfAbsent(layerIndex, idx -> createMarkerClass(fory, targetClass, idx));
+    return layerMap.computeIfAbsent(layerIndex, idx -> createArrayClass(targetClass, idx));
   }
 
   /**
-   * Generate a marker class name for the given target class and layer index.
-   *
-   * @param targetClass the target class
-   * @param layerIndex the layer index
-   * @return the marker class simple name
+   * Base dimension offset for marker arrays. We use N+3 dimensions to avoid confusion with regular
+   * array types that users might use (1D, 2D arrays are common).
    */
-  public static String getMarkerClassName(Class<?> targetClass, int layerIndex) {
-    // Replace $ with _ to handle inner class names properly
-    String simpleName = targetClass.getSimpleName().replace('$', '_');
-    return simpleName + LAYER_MARKER_SUFFIX + layerIndex;
-  }
+  private static final int DIMENSION_OFFSET = 3;
 
   /**
-   * Create a unique marker class for the given target class and layer index.
+   * Create a unique array class marker for the given target class and layer index.
    *
-   * <p>This method generates a simple empty class using the shared CodeGenerator. The class is
-   * unique for each (targetClass, layerIndex) pair, making it suitable as an identity-based map
-   * key.
+   * <p>Uses (N+3)-dimensional array of the target class as the marker. Array classes are unique per
+   * dimension and don't require GraalVM reflection registration. The +3 offset ensures marker
+   * classes are unlikely to conflict with regular array types.
    *
-   * @param fory the Fory instance
    * @param targetClass the target class
    * @param layerIndex the layer index
-   * @return a unique class for this layer marker
+   * @return a unique array class for this layer marker
    */
-  private static Class<?> createMarkerClass(Fory fory, Class<?> targetClass, int layerIndex) {
-    String pkg = CodeGenerator.getPackage(targetClass);
-    String className = getMarkerClassName(targetClass, layerIndex);
-    String qualifiedClassName = pkg.isEmpty() ? className : pkg + "." + className;
-
-    // Generate a simple empty marker class using the shared CodeGenerator
-    StringBuilder codeBuilder = new StringBuilder();
-    if (!pkg.isEmpty()) {
-      codeBuilder.append("package ").append(pkg).append(";\n\n");
-    }
-    codeBuilder.append("public final class ").append(className).append(" {}");
-    CompileUnit compileUnit = new CompileUnit(pkg, className, codeBuilder.toString());
-
-    CodeGenerator codeGenerator =
-        CodeGenerator.getSharedCodeGenerator(fory.getClass().getClassLoader());
-    ClassLoader classLoader = codeGenerator.compile(compileUnit);
-    try {
-      return classLoader.loadClass(qualifiedClassName);
-    } catch (ClassNotFoundException e) {
-      throw new RuntimeException("Failed to load generated marker class: " + qualifiedClassName, e);
-    }
+  private static Class<?> createArrayClass(Class<?> targetClass, int layerIndex) {
+    // Create an (layerIndex+3)-dimensional array class
+    // Layer 0 -> 3D array (e.g., Foo[][][])
+    // Layer 1 -> 4D array (e.g., Foo[][][][])
+    // etc.
+    int[] dimensions = new int[layerIndex + DIMENSION_OFFSET];
+    return Array.newInstance(targetClass, dimensions).getClass();
   }
 }

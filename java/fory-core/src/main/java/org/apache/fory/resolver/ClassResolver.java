@@ -1786,8 +1786,19 @@ public class ClassResolver extends TypeResolver {
                 createSerializer0(cls);
               }
               if (cls.isArray()) {
+                // Also create serializer for the component type
                 createSerializer0(TypeUtils.getArrayComponent(cls));
               }
+            }
+            // Always ensure array class serializers and their component type serializers
+            // are registered in GraalVM registry, since ObjectArraySerializer needs
+            // the component type serializer at construction time
+            if (cls.isArray() && GraalvmSupport.isGraalBuildtime()) {
+              // First ensure component type serializer is registered
+              Class<?> componentType = TypeUtils.getArrayComponent(cls);
+              createSerializer0(componentType);
+              // Then register the array serializer
+              createSerializer0(cls);
             }
           });
       if (GraalvmSupport.isGraalBuildtime()) {

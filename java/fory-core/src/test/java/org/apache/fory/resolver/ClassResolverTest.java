@@ -98,7 +98,7 @@ public class ClassResolverTest extends ForyTestBase {
     Assert.assertThrows(
         IllegalArgumentException.class, () -> classResolver.register(C1.class, "ns", "C1"));
     Assert.assertThrows(
-        IllegalArgumentException.class, () -> classResolver.register(C1.class, 200));
+        IllegalArgumentException.class, () -> classResolver.registerInternal(C1.class, 200));
     classResolver.register(C2.class, "", "C2");
     classResolver.register(Foo.class, "ns", "Foo");
 
@@ -322,7 +322,7 @@ public class ClassResolverTest extends ForyTestBase {
       assertSame(classInfo.getSerializer().getClass(), ObjectSerializer.class);
     }
     {
-      classResolver.register(Bar.class);
+      classResolver.registerInternal(Bar.class);
       ClassInfo classInfo = classResolver.getClassInfo(Bar.class);
       classResolver.setSerializer(Bar.class, new ObjectSerializer<>(fory, Bar.class));
       Assert.assertSame(classResolver.getClassInfo(Bar.class), classInfo);

@@ -261,12 +261,12 @@ public class ImmutableCollectionSerializers {
 
   public static void registerSerializers(Fory fory) {
     ClassResolver resolver = fory.getClassResolver();
-    resolver.registerSerializer(List12, new ImmutableListSerializer(fory, List12));
-    resolver.registerSerializer(ListN, new ImmutableListSerializer(fory, ListN));
-    resolver.registerSerializer(SubList, new ImmutableListSerializer(fory, SubList));
-    resolver.registerSerializer(Set12, new ImmutableSetSerializer(fory, Set12));
-    resolver.registerSerializer(SetN, new ImmutableSetSerializer(fory, SetN));
-    resolver.registerSerializer(Map1, new ImmutableMapSerializer(fory, Map1));
-    resolver.registerSerializer(MapN, new ImmutableMapSerializer(fory, MapN));
+    resolver.registerInternalSerializer(List12, new ImmutableListSerializer(fory, List12));
+    resolver.registerInternalSerializer(ListN, new ImmutableListSerializer(fory, ListN));
+    resolver.registerInternalSerializer(SubList, new ImmutableListSerializer(fory, SubList));
+    resolver.registerInternalSerializer(Set12, new ImmutableSetSerializer(fory, Set12));
+    resolver.registerInternalSerializer(SetN, new ImmutableSetSerializer(fory, SetN));
+    resolver.registerInternalSerializer(Map1, new ImmutableMapSerializer(fory, Map1));
+    resolver.registerInternalSerializer(MapN, new ImmutableMapSerializer(fory, MapN));
   }
 }

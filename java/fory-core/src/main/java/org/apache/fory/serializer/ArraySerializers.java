@@ -718,28 +718,35 @@ public class ArraySerializers {
 
   public static void registerDefaultSerializers(Fory fory) {
     ClassResolver resolver = fory.getClassResolver();
-    resolver.registerSerializer(Object[].class, new ObjectArraySerializer<>(fory, Object[].class));
-    resolver.registerSerializer(Class[].class, new ObjectArraySerializer<>(fory, Class[].class));
-    resolver.registerSerializer(byte[].class, new ByteArraySerializer(fory));
-    resolver.registerSerializer(Byte[].class, new ObjectArraySerializer<>(fory, Byte[].class));
-    resolver.registerSerializer(char[].class, new CharArraySerializer(fory));
-    resolver.registerSerializer(
+    resolver.registerInternalSerializer(
+        Object[].class, new ObjectArraySerializer<>(fory, Object[].class));
+    resolver.registerInternalSerializer(
+        Class[].class, new ObjectArraySerializer<>(fory, Class[].class));
+    resolver.registerInternalSerializer(byte[].class, new ByteArraySerializer(fory));
+    resolver.registerInternalSerializer(
+        Byte[].class, new ObjectArraySerializer<>(fory, Byte[].class));
+    resolver.registerInternalSerializer(char[].class, new CharArraySerializer(fory));
+    resolver.registerInternalSerializer(
         Character[].class, new ObjectArraySerializer<>(fory, Character[].class));
-    resolver.registerSerializer(short[].class, new ShortArraySerializer(fory));
-    resolver.registerSerializer(Short[].class, new ObjectArraySerializer<>(fory, Short[].class));
-    resolver.registerSerializer(int[].class, new IntArraySerializer(fory));
-    resolver.registerSerializer(
+    resolver.registerInternalSerializer(short[].class, new ShortArraySerializer(fory));
+    resolver.registerInternalSerializer(
+        Short[].class, new ObjectArraySerializer<>(fory, Short[].class));
+    resolver.registerInternalSerializer(int[].class, new IntArraySerializer(fory));
+    resolver.registerInternalSerializer(
         Integer[].class, new ObjectArraySerializer<>(fory, Integer[].class));
-    resolver.registerSerializer(long[].class, new LongArraySerializer(fory));
-    resolver.registerSerializer(Long[].class, new ObjectArraySerializer<>(fory, Long[].class));
-    resolver.registerSerializer(float[].class, new FloatArraySerializer(fory));
-    resolver.registerSerializer(Float[].class, new ObjectArraySerializer<>(fory, Float[].class));
-    resolver.registerSerializer(double[].class, new DoubleArraySerializer(fory));
-    resolver.registerSerializer(Double[].class, new ObjectArraySerializer<>(fory, Double[].class));
-    resolver.registerSerializer(boolean[].class, new BooleanArraySerializer(fory));
-    resolver.registerSerializer(
+    resolver.registerInternalSerializer(long[].class, new LongArraySerializer(fory));
+    resolver.registerInternalSerializer(
+        Long[].class, new ObjectArraySerializer<>(fory, Long[].class));
+    resolver.registerInternalSerializer(float[].class, new FloatArraySerializer(fory));
+    resolver.registerInternalSerializer(
+        Float[].class, new ObjectArraySerializer<>(fory, Float[].class));
+    resolver.registerInternalSerializer(double[].class, new DoubleArraySerializer(fory));
+    resolver.registerInternalSerializer(
+        Double[].class, new ObjectArraySerializer<>(fory, Double[].class));
+    resolver.registerInternalSerializer(boolean[].class, new BooleanArraySerializer(fory));
+    resolver.registerInternalSerializer(
         Boolean[].class, new ObjectArraySerializer<>(fory, Boolean[].class));
-    resolver.registerSerializer(String[].class, new StringArraySerializer(fory));
+    resolver.registerInternalSerializer(String[].class, new StringArraySerializer(fory));
   }
 
   // ########################## utils ##########################

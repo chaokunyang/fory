@@ -214,7 +214,7 @@ public class SynchronizedSerializers {
     try {
       ClassResolver resolver = fory.getClassResolver();
       for (Tuple2<Class<?>, Function> factory : synchronizedFactories()) {
-        resolver.registerSerializer(factory.f0, createSerializer(fory, factory));
+        resolver.registerInternalSerializer(factory.f0, createSerializer(fory, factory));
       }
     } catch (Throwable e) {
       ExceptionUtils.ignore(e);

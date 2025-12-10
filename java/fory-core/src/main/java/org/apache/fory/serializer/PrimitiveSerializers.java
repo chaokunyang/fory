@@ -294,21 +294,21 @@ public class PrimitiveSerializers {
   public static void registerDefaultSerializers(Fory fory) {
     // primitive types will be boxed.
     ClassResolver resolver = fory.getClassResolver();
-    resolver.registerSerializer(boolean.class, new BooleanSerializer(fory, boolean.class));
-    resolver.registerSerializer(byte.class, new ByteSerializer(fory, byte.class));
-    resolver.registerSerializer(short.class, new ShortSerializer(fory, short.class));
-    resolver.registerSerializer(char.class, new CharSerializer(fory, char.class));
-    resolver.registerSerializer(int.class, new IntSerializer(fory, int.class));
-    resolver.registerSerializer(long.class, new LongSerializer(fory, long.class));
-    resolver.registerSerializer(float.class, new FloatSerializer(fory, float.class));
-    resolver.registerSerializer(double.class, new DoubleSerializer(fory, double.class));
-    resolver.registerSerializer(Boolean.class, new BooleanSerializer(fory, Boolean.class));
-    resolver.registerSerializer(Byte.class, new ByteSerializer(fory, Byte.class));
-    resolver.registerSerializer(Short.class, new ShortSerializer(fory, Short.class));
-    resolver.registerSerializer(Character.class, new CharSerializer(fory, Character.class));
-    resolver.registerSerializer(Integer.class, new IntSerializer(fory, Integer.class));
-    resolver.registerSerializer(Long.class, new LongSerializer(fory, Long.class));
-    resolver.registerSerializer(Float.class, new FloatSerializer(fory, Float.class));
-    resolver.registerSerializer(Double.class, new DoubleSerializer(fory, Double.class));
+    resolver.registerInternalSerializer(boolean.class, new BooleanSerializer(fory, boolean.class));
+    resolver.registerInternalSerializer(byte.class, new ByteSerializer(fory, byte.class));
+    resolver.registerInternalSerializer(short.class, new ShortSerializer(fory, short.class));
+    resolver.registerInternalSerializer(char.class, new CharSerializer(fory, char.class));
+    resolver.registerInternalSerializer(int.class, new IntSerializer(fory, int.class));
+    resolver.registerInternalSerializer(long.class, new LongSerializer(fory, long.class));
+    resolver.registerInternalSerializer(float.class, new FloatSerializer(fory, float.class));
+    resolver.registerInternalSerializer(double.class, new DoubleSerializer(fory, double.class));
+    resolver.registerInternalSerializer(Boolean.class, new BooleanSerializer(fory, Boolean.class));
+    resolver.registerInternalSerializer(Byte.class, new ByteSerializer(fory, Byte.class));
+    resolver.registerInternalSerializer(Short.class, new ShortSerializer(fory, Short.class));
+    resolver.registerInternalSerializer(Character.class, new CharSerializer(fory, Character.class));
+    resolver.registerInternalSerializer(Integer.class, new IntSerializer(fory, Integer.class));
+    resolver.registerInternalSerializer(Long.class, new LongSerializer(fory, Long.class));
+    resolver.registerInternalSerializer(Float.class, new FloatSerializer(fory, Float.class));
+    resolver.registerInternalSerializer(Double.class, new DoubleSerializer(fory, Double.class));
   }
 }

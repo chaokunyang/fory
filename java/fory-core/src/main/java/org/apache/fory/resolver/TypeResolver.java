@@ -664,6 +664,7 @@ public abstract class TypeResolver {
     // Here we set it to 1 because `NO_CLASS_ID` is 0 to avoid calculating it again in
     // `register(Class<?> cls)`.
     short classIdGenerator = 1;
+    short userIdGenerator = 0;
     SerializerFactory serializerFactory;
     final IdentityMap<Class<?>, Short> registeredClassIdMap =
         new IdentityMap<>(estimatedNumRegistered);

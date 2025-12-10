@@ -73,10 +73,10 @@ public final class CompressedArraySerializers {
     boolean compressLong = fory.getConfig().compressLongArray();
 
     if (compressInt) {
-      resolver.registerSerializer(int[].class, new CompressedIntArraySerializer(fory));
+      resolver.registerInternalSerializer(int[].class, new CompressedIntArraySerializer(fory));
     }
     if (compressLong) {
-      resolver.registerSerializer(long[].class, new CompressedLongArraySerializer(fory));
+      resolver.registerInternalSerializer(long[].class, new CompressedLongArraySerializer(fory));
     }
   }
 
@@ -91,8 +91,8 @@ public final class CompressedArraySerializers {
    */
   public static void register(Fory fory) {
     ClassResolver resolver = fory.getClassResolver();
-    resolver.registerSerializer(int[].class, new CompressedIntArraySerializer(fory));
-    resolver.registerSerializer(long[].class, new CompressedLongArraySerializer(fory));
+    resolver.registerInternalSerializer(int[].class, new CompressedIntArraySerializer(fory));
+    resolver.registerInternalSerializer(long[].class, new CompressedLongArraySerializer(fory));
   }
 
   public static final class CompressedIntArraySerializer extends PrimitiveArraySerializer<int[]> {

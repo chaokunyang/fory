@@ -60,8 +60,6 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
 
   protected MethodHandle constructor;
   protected final boolean supportCodegenHook;
-  private Serializer keySerializer;
-  private Serializer valueSerializer;
   protected final ClassInfoHolder keyClassInfoWriteCache;
   protected final ClassInfoHolder keyClassInfoReadCache;
   protected final ClassInfoHolder valueClassInfoWriteCache;
@@ -104,32 +102,9 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
     binding = SerializationBinding.createBinding(fory);
   }
 
-  /**
-   * Set key serializer for next serialization, the <code>serializer</code> will be cleared when
-   * next serialization finished.
-   */
-  public void setKeySerializer(Serializer keySerializer) {
-    this.keySerializer = keySerializer;
-  }
-
-  /**
-   * Set value serializer for next serialization, the <code>serializer</code> will be cleared when
-   * next serialization finished.
-   */
-  public void setValueSerializer(Serializer valueSerializer) {
-    this.valueSerializer = valueSerializer;
-  }
-
   @Override
   public void write(MemoryBuffer buffer, T value) {
     Map map = onMapWrite(buffer, value);
-    Serializer keySerializer = this.keySerializer;
-    Serializer valueSerializer = this.valueSerializer;
-    // clear the elemSerializer to avoid conflict if the nested
-    // serialization has collection field.
-    // TODO use generics for compatible serializer.
-    this.keySerializer = null;
-    this.valueSerializer = null;
     if (map.isEmpty()) {
       return;
     }
@@ -137,34 +112,25 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
     Iterator<Entry<Object, Object>> iterator = map.entrySet().iterator();
     Entry<Object, Object> entry = iterator.next();
     while (entry != null) {
-      if (keySerializer != null || valueSerializer != null) {
-        entry = writeJavaNullChunk(buffer, entry, iterator, keySerializer, valueSerializer);
+      Generics generics = fory.getGenerics();
+      GenericType genericType = generics.nextGenericType();
+      if (genericType == null) {
+        entry = writeJavaNullChunk(buffer, entry, iterator, null, null);
         if (entry != null) {
-          entry =
-              writeJavaChunk(
-                  classResolver, buffer, entry, iterator, keySerializer, valueSerializer);
+          entry = writeJavaChunk(classResolver, buffer, entry, iterator, null, null);
         }
       } else {
-        Generics generics = fory.getGenerics();
-        GenericType genericType = generics.nextGenericType();
-        if (genericType == null) {
-          entry = writeJavaNullChunk(buffer, entry, iterator, null, null);
-          if (entry != null) {
-            entry = writeJavaChunk(classResolver, buffer, entry, iterator, null, null);
-          }
-        } else {
-          if (genericType.getTypeParametersCount() < 2) {
-            genericType = getKVGenericType(genericType);
-          }
-          GenericType keyGenericType = genericType.getTypeParameter0();
-          GenericType valueGenericType = genericType.getTypeParameter1();
+        if (genericType.getTypeParametersCount() < 2) {
+          genericType = getKVGenericType(genericType);
+        }
+        GenericType keyGenericType = genericType.getTypeParameter0();
+        GenericType valueGenericType = genericType.getTypeParameter1();
+        entry =
+            writeJavaNullChunkGeneric(buffer, entry, iterator, keyGenericType, valueGenericType);
+        if (entry != null) {
           entry =
-              writeJavaNullChunkGeneric(buffer, entry, iterator, keyGenericType, valueGenericType);
-          if (entry != null) {
-            entry =
-                writeJavaChunkGeneric(
-                    classResolver, generics, genericType, buffer, entry, iterator);
-          }
+              writeJavaChunkGeneric(
+                  classResolver, generics, genericType, buffer, entry, iterator);
         }
       }
     }
@@ -633,37 +599,25 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
   }
 
   public void readElements(MemoryBuffer buffer, int size, Map map) {
-    Serializer keySerializer = this.keySerializer;
-    Serializer valueSerializer = this.valueSerializer;
-    // clear the elemSerializer to avoid conflict if the nested
-    // serialization has collection field.
-    // TODO use generics for compatible serializer.
-    this.keySerializer = null;
-    this.valueSerializer = null;
     int chunkHeader = 0;
     if (size != 0) {
       chunkHeader = buffer.readUnsignedByte();
     }
     while (size > 0) {
       long sizeAndHeader =
-          readJavaNullChunk(buffer, map, chunkHeader, size, keySerializer, valueSerializer);
+          readJavaNullChunk(buffer, map, chunkHeader, size, null, null);
       chunkHeader = (int) (sizeAndHeader & 0xff);
       size = (int) (sizeAndHeader >>> 8);
       if (size == 0) {
         break;
       }
-      if (keySerializer != null || valueSerializer != null) {
-        sizeAndHeader =
-            readJavaChunk(fory, buffer, map, size, chunkHeader, keySerializer, valueSerializer);
+      Generics generics = fory.getGenerics();
+      GenericType genericType = generics.nextGenericType();
+      if (genericType == null) {
+        sizeAndHeader = readJavaChunk(fory, buffer, map, size, chunkHeader, null, null);
       } else {
-        Generics generics = fory.getGenerics();
-        GenericType genericType = generics.nextGenericType();
-        if (genericType == null) {
-          sizeAndHeader = readJavaChunk(fory, buffer, map, size, chunkHeader, null, null);
-        } else {
-          sizeAndHeader =
-              readJavaChunkGeneric(fory, generics, genericType, buffer, map, size, chunkHeader);
-        }
+        sizeAndHeader =
+            readJavaChunkGeneric(fory, generics, genericType, buffer, map, size, chunkHeader);
       }
       chunkHeader = (int) (sizeAndHeader & 0xff);
       size = (int) (sizeAndHeader >>> 8);

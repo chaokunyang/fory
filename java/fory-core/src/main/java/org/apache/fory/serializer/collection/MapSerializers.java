@@ -341,7 +341,6 @@ public class MapSerializers {
 
     public StringKeyMapSerializer(Fory fory, Class<Map<String, T>> cls) {
       super(fory, cls, false);
-      setKeySerializer(new StringSerializer(fory));
     }
 
     @Override

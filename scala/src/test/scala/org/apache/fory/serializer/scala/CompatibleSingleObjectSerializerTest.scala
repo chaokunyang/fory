@@ -45,6 +45,8 @@ class CompatibleSingleObjectSerializerTest extends AnyWordSpec with Matchers {
       .requireClassRegistration(false)
       .withRefTracking(true)
       .withCompatibleMode(CompatibleMode.COMPATIBLE)
+      // Meta share is required for compatible mode after CompatibleSerializer removal
+      .withScopedMetaShare(true)
       .suppressClassRegistrationWarnings(false)
       .build()
   }

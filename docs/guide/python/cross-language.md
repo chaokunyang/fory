@@ -111,16 +111,16 @@ class TypedData:
 
 ## Type Mapping
 
-| Python | Java | Rust | Go |
-|--------|------|------|-----|
-| `str` | `String` | `String` | `string` |
-| `int` | `long` | `i64` | `int64` |
-| `pyfory.int32` | `int` | `i32` | `int32` |
-| `pyfory.int64` | `long` | `i64` | `int64` |
-| `float` | `double` | `f64` | `float64` |
-| `pyfory.float32` | `float` | `f32` | `float32` |
-| `list` | `List` | `Vec` | `[]T` |
-| `dict` | `Map` | `HashMap` | `map[K]V` |
+| Python           | Java     | Rust      | Go        |
+| ---------------- | -------- | --------- | --------- |
+| `str`            | `String` | `String`  | `string`  |
+| `int`            | `long`   | `i64`     | `int64`   |
+| `pyfory.int32`   | `int`    | `i32`     | `int32`   |
+| `pyfory.int64`   | `long`   | `i64`     | `int64`   |
+| `float`          | `double` | `f64`     | `float64` |
+| `pyfory.float32` | `float`  | `f32`     | `float32` |
+| `list`           | `List`   | `Vec`     | `[]T`     |
+| `dict`           | `Map`    | `HashMap` | `map[K]V` |
 
 ## Differences from Python Native Mode
 

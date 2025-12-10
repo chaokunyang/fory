@@ -74,12 +74,14 @@ When implementing a serializer for a custom Collection type, you must extend `Co
 This special parameter controls serialization behavior:
 
 **When `true`:**
+
 - Enables optimized access to collection elements and JIT compilation for better performance
 - Direct serialization invocation and inline for collection items without dynamic serializer dispatch cost
 - Better performance for standard collection types
 - Recommended for most collections
 
 **When `false`:**
+
 - Uses interface-based element access and dynamic serializer dispatch for elements (higher cost)
 - More flexible for custom collection types
 - Required when collection has special serialization needs
@@ -232,6 +234,7 @@ class IntListSerializer extends CollectionLikeSerializer<IntList> {
 ```
 
 **When to use this approach:**
+
 - Working with primitive types
 - Need maximum performance
 - Want to minimize memory overhead

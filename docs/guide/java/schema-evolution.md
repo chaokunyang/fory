@@ -113,6 +113,7 @@ If metadata sharing is not enabled, the new class data will be skipped and a `No
 Fory supports mapping objects from one type to another type.
 
 **Notes:**
+
 1. This mapping will execute a deep copy. All mapped fields are serialized into binary and deserialized from that binary to map into another type.
 2. All struct types must be registered with the same ID, otherwise Fory cannot map to the correct struct type. Be careful when you use `Fory#register(Class)`, because Fory will allocate an auto-grown ID which might be inconsistent if you register classes with different order between Fory instances.
 
@@ -191,14 +192,14 @@ public class DeserializeIntoType {
 
 ## Configuration Options
 
-| Option | Description | Default |
-|--------|-------------|---------|
-| `compatibleMode` | `SCHEMA_CONSISTENT` or `COMPATIBLE` | `SCHEMA_CONSISTENT` |
-| `checkClassVersion` | Check class schema consistency | `false` |
-| `metaShareEnabled` | Enable meta sharing | `true` if Compatible mode |
-| `scopedMetaShareEnabled` | Scoped meta share per serialization | `true` if Compatible mode |
-| `deserializeNonexistentClass` | Handle non-existent classes | `true` if Compatible mode |
-| `metaCompressor` | Compressor for meta compression | `DeflaterMetaCompressor` |
+| Option                        | Description                         | Default                   |
+| ----------------------------- | ----------------------------------- | ------------------------- |
+| `compatibleMode`              | `SCHEMA_CONSISTENT` or `COMPATIBLE` | `SCHEMA_CONSISTENT`       |
+| `checkClassVersion`           | Check class schema consistency      | `false`                   |
+| `metaShareEnabled`            | Enable meta sharing                 | `true` if Compatible mode |
+| `scopedMetaShareEnabled`      | Scoped meta share per serialization | `true` if Compatible mode |
+| `deserializeNonexistentClass` | Handle non-existent classes         | `true` if Compatible mode |
+| `metaCompressor`              | Compressor for meta compression     | `DeflaterMetaCompressor`  |
 
 ## Best Practices
 

@@ -133,16 +133,16 @@ See [xlang_type_mapping.md](https://fory.apache.org/docs/specification/xlang_typ
 
 ### Common Type Mappings
 
-| Rust | Java | Python |
-|------|------|--------|
-| `i32` | `int` | `int32` |
-| `i64` | `long` | `int64` |
-| `f32` | `float` | `float32` |
-| `f64` | `double` | `float64` |
-| `String` | `String` | `str` |
-| `Vec<T>` | `List<T>` | `List[T]` |
-| `HashMap<K,V>` | `Map<K,V>` | `Dict[K,V]` |
-| `Option<T>` | nullable `T` | `Optional[T]` |
+| Rust           | Java         | Python        |
+| -------------- | ------------ | ------------- |
+| `i32`          | `int`        | `int32`       |
+| `i64`          | `long`       | `int64`       |
+| `f32`          | `float`      | `float32`     |
+| `f64`          | `double`     | `float64`     |
+| `String`       | `String`     | `str`         |
+| `Vec<T>`       | `List<T>`    | `List[T]`     |
+| `HashMap<K,V>` | `Map<K,V>`   | `Dict[K,V]`   |
+| `Option<T>`    | nullable `T` | `Optional[T]` |
 
 ## Best Practices
 

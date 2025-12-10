@@ -82,13 +82,13 @@ Foo newFoo = encoder.fromRow(binaryRow);
 
 ## Key Benefits
 
-| Feature | Description |
-|---------|-------------|
-| Zero-Copy Access | Read nested fields without deserializing entire object |
-| Memory Efficiency | Memory-map large datasets directly from disk |
-| Cross-Language | Binary format compatible between Java, Python, C++ |
-| Partial Deserialization | Deserialize only specific elements you need |
-| High Performance | Skip unnecessary data parsing for analytics workloads |
+| Feature                 | Description                                            |
+| ----------------------- | ------------------------------------------------------ |
+| Zero-Copy Access        | Read nested fields without deserializing entire object |
+| Memory Efficiency       | Memory-map large datasets directly from disk           |
+| Cross-Language          | Binary format compatible between Java, Python, C++     |
+| Partial Deserialization | Deserialize only specific elements you need            |
+| High Performance        | Skip unnecessary data parsing for analytics workloads  |
 
 ## When to Use Row Format
 
@@ -169,12 +169,12 @@ std::string str = bar10->GetString(0);
 
 ## Performance Comparison
 
-| Operation | Object Format | Row Format |
-|-----------|---------------|------------|
-| Full deserialization | Allocates all objects | Zero allocation |
-| Single field access | Full deserialization required | Direct offset read |
-| Memory usage | Full object graph in memory | Only accessed fields |
-| Suitable for | Small objects, full access | Large objects, selective access |
+| Operation            | Object Format                 | Row Format                      |
+| -------------------- | ----------------------------- | ------------------------------- |
+| Full deserialization | Allocates all objects         | Zero allocation                 |
+| Single field access  | Full deserialization required | Direct offset read              |
+| Memory usage         | Full object graph in memory   | Only accessed fields            |
+| Suitable for         | Small objects, full access    | Large objects, selective access |
 
 ## Related Topics
 

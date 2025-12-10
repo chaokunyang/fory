@@ -190,14 +190,14 @@ for child in &decoded.lock().unwrap().children {
 
 ## Supported Smart Pointer Types
 
-| Type | Description |
-|------|-------------|
-| `Rc<T>` | Reference counting, shared refs tracked |
-| `Arc<T>` | Thread-safe reference counting, shared refs tracked |
-| `RcWeak<T>` | Weak reference to `Rc<T>`, breaks circular refs |
-| `ArcWeak<T>` | Weak reference to `Arc<T>`, breaks circular refs |
-| `RefCell<T>` | Interior mutability with runtime borrow checking |
-| `Mutex<T>` | Thread-safe interior mutability |
+| Type         | Description                                         |
+| ------------ | --------------------------------------------------- |
+| `Rc<T>`      | Reference counting, shared refs tracked             |
+| `Arc<T>`     | Thread-safe reference counting, shared refs tracked |
+| `RcWeak<T>`  | Weak reference to `Rc<T>`, breaks circular refs     |
+| `ArcWeak<T>` | Weak reference to `Arc<T>`, breaks circular refs    |
+| `RefCell<T>` | Interior mutability with runtime borrow checking    |
+| `Mutex<T>`   | Thread-safe interior mutability                     |
 
 ## Best Practices
 

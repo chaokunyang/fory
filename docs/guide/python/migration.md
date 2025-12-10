@@ -63,13 +63,13 @@ result = f.loads(data)
 
 ## Key Differences
 
-| Feature | pickle | JSON | pyfory |
-|---------|--------|------|--------|
-| Performance | Moderate | Slow | Fast |
-| Data Size | Large | Large | Compact |
-| Type Support | All Python | Limited | All Python |
-| Cross-Language | No | Yes | Yes (xlang mode) |
-| Security | Low | High | Configurable |
+| Feature        | pickle     | JSON    | pyfory           |
+| -------------- | ---------- | ------- | ---------------- |
+| Performance    | Moderate   | Slow    | Fast             |
+| Data Size      | Large      | Large   | Compact          |
+| Type Support   | All Python | Limited | All Python       |
+| Cross-Language | No         | Yes     | Yes (xlang mode) |
+| Security       | Low        | High    | Configurable     |
 
 ## Migration Tips
 

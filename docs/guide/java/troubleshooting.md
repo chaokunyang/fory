@@ -47,10 +47,10 @@ Fory fory = Fory.builder()
 
 Make sure you use the matching API pairs:
 
-| Serialization API | Deserialization API |
-|-------------------|---------------------|
-| `Fory#serialize` | `Fory#deserialize` |
-| `Fory#serializeJavaObject` | `Fory#deserializeJavaObject` |
+| Serialization API                  | Deserialization API                  |
+| ---------------------------------- | ------------------------------------ |
+| `Fory#serialize`                   | `Fory#deserialize`                   |
+| `Fory#serializeJavaObject`         | `Fory#deserializeJavaObject`         |
 | `Fory#serializeJavaObjectAndClass` | `Fory#deserializeJavaObjectAndClass` |
 
 **Wrong usage examples:**
@@ -179,6 +179,7 @@ Fory fory = Fory.builder()
 **Cause**: Large object graphs or reference tracking overhead.
 
 **Solutions**:
+
 - Disable reference tracking if not needed: `.withRefTracking(false)`
 - Use custom memory allocator for pooling
 - Consider row format for large datasets
@@ -188,6 +189,7 @@ Fory fory = Fory.builder()
 **Cause**: Metadata overhead or uncompressed data.
 
 **Solutions**:
+
 - Enable compression: `.withIntCompressed(true)`, `.withLongCompressed(true)`
 - Use compatible mode only when needed
 - Register classes to avoid class name serialization

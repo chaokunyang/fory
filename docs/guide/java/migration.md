@@ -37,6 +37,7 @@ if (JavaSerializer.serializedByJDK(bytes)) {
 ```
 
 This allows you to:
+
 1. Deploy new code that can read both JDK and Fory serialized data
 2. Gradually migrate serialization to Fory
 3. Eventually remove JDK serialization support

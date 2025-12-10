@@ -122,15 +122,15 @@ result = fory.deserialize(data)  # Policy hooks will be invoked
 
 ## Available Policy Hooks
 
-| Hook | Description |
-|------|-------------|
-| `validate_class(cls, is_local)` | Validate/block class types during deserialization |
-| `validate_module(module, is_local)` | Validate/block module imports |
-| `validate_function(func, is_local)` | Validate/block function references |
-| `intercept_reduce_call(callable_obj, args)` | Intercept `__reduce__` invocations |
-| `inspect_reduced_object(obj)` | Inspect/replace objects created via `__reduce__` |
-| `intercept_setstate(obj, state)` | Sanitize state before `__setstate__` |
-| `authorize_instantiation(cls, args, kwargs)` | Control class instantiation |
+| Hook                                         | Description                                       |
+| -------------------------------------------- | ------------------------------------------------- |
+| `validate_class(cls, is_local)`              | Validate/block class types during deserialization |
+| `validate_module(module, is_local)`          | Validate/block module imports                     |
+| `validate_function(func, is_local)`          | Validate/block function references                |
+| `intercept_reduce_call(callable_obj, args)`  | Intercept `__reduce__` invocations                |
+| `inspect_reduced_object(obj)`                | Inspect/replace objects created via `__reduce__`  |
+| `intercept_setstate(obj, state)`             | Sanitize state before `__setstate__`              |
+| `authorize_instantiation(cls, args, kwargs)` | Control class instantiation                       |
 
 **See also:** `pyfory/policy.py` contains detailed documentation and examples for each hook.
 

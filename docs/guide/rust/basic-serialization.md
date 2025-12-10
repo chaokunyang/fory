@@ -81,52 +81,52 @@ assert_eq!(person, decoded);
 
 ### Primitive Types
 
-| Rust Type | Description |
-|-----------|-------------|
-| `bool` | Boolean |
+| Rust Type                 | Description     |
+| ------------------------- | --------------- |
+| `bool`                    | Boolean         |
 | `i8`, `i16`, `i32`, `i64` | Signed integers |
-| `f32`, `f64` | Floating point |
-| `String` | UTF-8 string |
+| `f32`, `f64`              | Floating point  |
+| `String`                  | UTF-8 string    |
 
 ### Collections
 
-| Rust Type | Description |
-|-----------|-------------|
-| `Vec<T>` | Dynamic array |
-| `VecDeque<T>` | Double-ended queue |
-| `LinkedList<T>` | Doubly-linked list |
-| `HashMap<K, V>` | Hash map |
-| `BTreeMap<K, V>` | Ordered map |
-| `HashSet<T>` | Hash set |
-| `BTreeSet<T>` | Ordered set |
-| `BinaryHeap<T>` | Binary heap |
-| `Option<T>` | Optional value |
+| Rust Type        | Description        |
+| ---------------- | ------------------ |
+| `Vec<T>`         | Dynamic array      |
+| `VecDeque<T>`    | Double-ended queue |
+| `LinkedList<T>`  | Doubly-linked list |
+| `HashMap<K, V>`  | Hash map           |
+| `BTreeMap<K, V>` | Ordered map        |
+| `HashSet<T>`     | Hash set           |
+| `BTreeSet<T>`    | Ordered set        |
+| `BinaryHeap<T>`  | Binary heap        |
+| `Option<T>`      | Optional value     |
 
 ### Smart Pointers
 
-| Rust Type | Description |
-|-----------|-------------|
-| `Box<T>` | Heap allocation |
-| `Rc<T>` | Reference counting (shared refs tracked) |
-| `Arc<T>` | Thread-safe reference counting (shared refs tracked) |
-| `RcWeak<T>` | Weak reference to `Rc<T>` (breaks circular refs) |
-| `ArcWeak<T>` | Weak reference to `Arc<T>` (breaks circular refs) |
-| `RefCell<T>` | Interior mutability (runtime borrow checking) |
-| `Mutex<T>` | Thread-safe interior mutability |
+| Rust Type    | Description                                          |
+| ------------ | ---------------------------------------------------- |
+| `Box<T>`     | Heap allocation                                      |
+| `Rc<T>`      | Reference counting (shared refs tracked)             |
+| `Arc<T>`     | Thread-safe reference counting (shared refs tracked) |
+| `RcWeak<T>`  | Weak reference to `Rc<T>` (breaks circular refs)     |
+| `ArcWeak<T>` | Weak reference to `Arc<T>` (breaks circular refs)    |
+| `RefCell<T>` | Interior mutability (runtime borrow checking)        |
+| `Mutex<T>`   | Thread-safe interior mutability                      |
 
 ### Date and Time
 
-| Rust Type | Description |
-|-----------|-------------|
-| `chrono::NaiveDate` | Date without timezone |
+| Rust Type               | Description                |
+| ----------------------- | -------------------------- |
+| `chrono::NaiveDate`     | Date without timezone      |
 | `chrono::NaiveDateTime` | Timestamp without timezone |
 
 ### Custom Types
 
-| Macro | Description |
-|-------|-------------|
+| Macro                   | Description                |
+| ----------------------- | -------------------------- |
 | `#[derive(ForyObject)]` | Object graph serialization |
-| `#[derive(ForyRow)]` | Row-based serialization |
+| `#[derive(ForyRow)]`    | Row-based serialization    |
 
 ## Serialization APIs
 

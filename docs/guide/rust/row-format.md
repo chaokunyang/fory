@@ -103,21 +103,21 @@ assert_eq!(prefs.values().get(0), "en");
 
 ## Performance Comparison
 
-| Operation | Object Format | Row Format |
-|-----------|---------------|------------|
-| Full deserialization | Allocates all objects | Zero allocation |
-| Single field access | Full deserialization required | Direct offset read |
-| Memory usage | Full object graph in memory | Only accessed fields in memory |
-| Suitable for | Small objects, full access | Large objects, selective access |
+| Operation            | Object Format                 | Row Format                      |
+| -------------------- | ----------------------------- | ------------------------------- |
+| Full deserialization | Allocates all objects         | Zero allocation                 |
+| Single field access  | Full deserialization required | Direct offset read              |
+| Memory usage         | Full object graph in memory   | Only accessed fields in memory  |
+| Suitable for         | Small objects, full access    | Large objects, selective access |
 
 ## ForyRow vs ForyObject
 
-| Feature | `#[derive(ForyRow)]` | `#[derive(ForyObject)]` |
-|---------|----------------------|------------------------|
-| Deserialization | Zero-copy, lazy | Full object reconstruction |
-| Field access | Direct from binary | Normal struct access |
-| Memory usage | Minimal | Full object |
-| Best for | Analytics, large data | General serialization |
+| Feature         | `#[derive(ForyRow)]`  | `#[derive(ForyObject)]`    |
+| --------------- | --------------------- | -------------------------- |
+| Deserialization | Zero-copy, lazy       | Full object reconstruction |
+| Field access    | Direct from binary    | Normal struct access       |
+| Memory usage    | Minimal               | Full object                |
+| Best for        | Analytics, large data | General serialization      |
 
 ## Related Topics
 

@@ -55,13 +55,13 @@ class ThreadSafeFory:
 
 ## Parameters
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `xlang` | `bool` | `False` | Enable cross-language serialization. When `False`, enables Python-native mode supporting all Python objects. When `True`, enables cross-language mode compatible with Java, Go, Rust, etc. |
-| `ref` | `bool` | `False` | Enable reference tracking for shared/circular references. Disable for better performance if your data has no shared references. |
-| `strict` | `bool` | `True` | Require type registration for security. **Highly recommended** for production. Only disable in trusted environments. |
-| `compatible` | `bool` | `False` | Enable schema evolution in cross-language mode, allowing fields to be added/removed while maintaining compatibility. |
-| `max_depth` | `int` | `50` | Maximum deserialization depth for security, preventing stack overflow attacks. |
+| Parameter    | Type   | Default | Description                                                                                                                                                                                |
+| ------------ | ------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `xlang`      | `bool` | `False` | Enable cross-language serialization. When `False`, enables Python-native mode supporting all Python objects. When `True`, enables cross-language mode compatible with Java, Go, Rust, etc. |
+| `ref`        | `bool` | `False` | Enable reference tracking for shared/circular references. Disable for better performance if your data has no shared references.                                                            |
+| `strict`     | `bool` | `True`  | Require type registration for security. **Highly recommended** for production. Only disable in trusted environments.                                                                       |
+| `compatible` | `bool` | `False` | Enable schema evolution in cross-language mode, allowing fields to be added/removed while maintaining compatibility.                                                                       |
+| `max_depth`  | `int`  | `50`    | Maximum deserialization depth for security, preventing stack overflow attacks.                                                                                                             |
 
 ## Key Methods
 
@@ -85,17 +85,17 @@ fory.register(MyClass, typename="my.package.MyClass", serializer=custom_serializ
 
 ## Language Modes Comparison
 
-| Feature | Python Mode (`xlang=False`) | Cross-Language Mode (`xlang=True`) |
-|---------|----------------------------|-----------------------------------|
-| **Use Case** | Pure Python applications | Multi-language systems |
-| **Compatibility** | Python only | Java, Go, Rust, C++, JavaScript, etc. |
-| **Supported Types** | All Python types | Cross-language compatible types only |
-| **Functions/Lambdas** | ✓ Supported | ✗ Not allowed |
-| **Local Classes** | ✓ Supported | ✗ Not allowed |
-| **Dynamic Classes** | ✓ Supported | ✗ Not allowed |
-| **Schema Evolution** | ✓ Supported (with `compatible=True`) | ✓ Supported (with `compatible=True`) |
-| **Performance** | Extremely fast | Very fast |
-| **Data Size** | Compact | Compact with type metadata |
+| Feature               | Python Mode (`xlang=False`)          | Cross-Language Mode (`xlang=True`)    |
+| --------------------- | ------------------------------------ | ------------------------------------- |
+| **Use Case**          | Pure Python applications             | Multi-language systems                |
+| **Compatibility**     | Python only                          | Java, Go, Rust, C++, JavaScript, etc. |
+| **Supported Types**   | All Python types                     | Cross-language compatible types only  |
+| **Functions/Lambdas** | ✓ Supported                          | ✗ Not allowed                         |
+| **Local Classes**     | ✓ Supported                          | ✗ Not allowed                         |
+| **Dynamic Classes**   | ✓ Supported                          | ✗ Not allowed                         |
+| **Schema Evolution**  | ✓ Supported (with `compatible=True`) | ✓ Supported (with `compatible=True`)  |
+| **Performance**       | Extremely fast                       | Very fast                             |
+| **Data Size**         | Compact                              | Compact with type metadata            |
 
 ## Python Mode (`xlang=False`)
 

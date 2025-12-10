@@ -37,6 +37,7 @@ fory.register::<MyStruct>(100)?;  // Register before use
 ```
 
 Confirm that:
+
 - Every serializable struct or trait implementation calls `fory.register::<T>(type_id)`
 - The same IDs are reused on the deserialize side
 
@@ -45,6 +46,7 @@ Confirm that:
 **Cause**: Field types are incompatible or schema has changed.
 
 **Solution**:
+
 - Enable compatible mode for schema evolution
 - Ensure field types match across versions
 
@@ -78,6 +80,7 @@ struct MyStruct {
 ```
 
 Once compiled with debug hooks, call these functions to plug in custom callbacks:
+
 - `set_before_write_field_func`
 - `set_after_write_field_func`
 - `set_before_read_field_func`
@@ -139,6 +142,7 @@ cargo test --features tests
 ## Error Handling Best Practices
 
 Prefer the static constructors on `fory_core::error::Error`:
+
 - `Error::type_mismatch`
 - `Error::invalid_data`
 - `Error::unknown`
@@ -147,10 +151,10 @@ This keeps diagnostics consistent and makes opt-in panics work correctly.
 
 ## Quick Reference
 
-| Environment Variable | Purpose |
-|---------------------|---------|
-| `RUST_BACKTRACE=1` | Enable stack traces |
-| `FORY_PANIC_ON_ERROR=1` | Panic at error site for debugging |
+| Environment Variable         | Purpose                             |
+| ---------------------------- | ----------------------------------- |
+| `RUST_BACKTRACE=1`           | Enable stack traces                 |
+| `FORY_PANIC_ON_ERROR=1`      | Panic at error site for debugging   |
 | `ENABLE_FORY_DEBUG_OUTPUT=1` | Print field-level read/write events |
 
 ## Related Topics

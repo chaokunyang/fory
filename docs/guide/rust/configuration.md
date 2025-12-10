@@ -112,11 +112,11 @@ let fory = Fory::default()
 
 ## Configuration Summary
 
-| Option | Description | Default |
-|--------|-------------|---------|
-| `compatible(bool)` | Enable schema evolution | `false` |
-| `xlang(bool)` | Enable cross-language mode | `false` |
-| `max_dyn_depth(u32)` | Maximum nesting depth for dynamic types | `5` |
+| Option               | Description                             | Default |
+| -------------------- | --------------------------------------- | ------- |
+| `compatible(bool)`   | Enable schema evolution                 | `false` |
+| `xlang(bool)`        | Enable cross-language mode              | `false` |
+| `max_dyn_depth(u32)` | Maximum nesting depth for dynamic types | `5`     |
 
 ## Related Topics
 

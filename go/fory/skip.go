@@ -508,7 +508,7 @@ func skipValue(ctx *ReadContext, fieldDef FieldDef, readRefFlag bool, isField bo
 		return fmt.Errorf("cannot skip struct without type info")
 
 	// Enum types
-	case ENUM:
+	case ENUM, NAMED_ENUM:
 		_ = ctx.buffer.ReadVarUint32()
 		return nil
 

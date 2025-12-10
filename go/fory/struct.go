@@ -69,16 +69,45 @@ func isVarintPrimitive(staticId StaticTypeId, referencable bool) bool {
 	}
 }
 
+// isPrimitiveStaticId returns true if the staticId represents a primitive type
+func isPrimitiveStaticId(staticId StaticTypeId) bool {
+	switch staticId {
+	case ConcreteTypeBool, ConcreteTypeInt8, ConcreteTypeInt16, ConcreteTypeInt32,
+		ConcreteTypeInt64, ConcreteTypeInt, ConcreteTypeFloat32, ConcreteTypeFloat64:
+		return true
+	default:
+		return false
+	}
+}
+
+// fieldHasNonPrimitiveSerializer returns true if the field has a serializer with a non-primitive type ID.
+// This is used to skip the fast path for fields like enums where StaticId is int32 but the serializer
+// writes NAMED_ENUM format with type info.
+func fieldHasNonPrimitiveSerializer(field *FieldInfo) bool {
+	if field.Serializer == nil {
+		return false
+	}
+	typeId := field.Serializer.TypeId()
+	// NAMED_ENUM, NAMED_STRUCT, NAMED_COMPATIBLE_STRUCT, NAMED_EXT
+	// all require type info and should not use the primitive fast path
+	switch typeId {
+	case NAMED_ENUM, NAMED_STRUCT, NAMED_COMPATIBLE_STRUCT, NAMED_EXT:
+		return true
+	default:
+		return false
+	}
+}
+
 type structSerializer struct {
-	typeTag          string
-	type_            reflect.Type
-	fields           []*FieldInfo   // all fields in sorted order
-	fixedFields      []*FieldInfo   // fixed-size primitives (bool, int8, int16, float32, float64)
-	varintFields     []*FieldInfo   // varint primitives (int32, int64, int)
-	remainingFields  []*FieldInfo   // all other fields (string, slice, map, struct, etc.)
-	fieldMap         map[string]*FieldInfo // for compatible reading
-	structHash       int32
-	fieldDefs        []FieldDef // for type_def compatibility
+	typeTag         string
+	type_           reflect.Type
+	fields          []*FieldInfo          // all fields in sorted order
+	fixedFields     []*FieldInfo          // fixed-size primitives (bool, int8, int16, float32, float64)
+	varintFields    []*FieldInfo          // varint primitives (int32, int64, int)
+	remainingFields []*FieldInfo          // all other fields (string, slice, map, struct, etc.)
+	fieldMap        map[string]*FieldInfo // for compatible reading
+	structHash      int32
+	fieldDefs       []FieldDef // for type_def compatibility
 }
 
 var UNKNOWN_TYPE_ID = int16(63)
@@ -125,46 +154,100 @@ func (s *structSerializer) WriteData(ctx *WriteContext, value reflect.Value) err
 		s.structHash = s.computeHash()
 	}
 
-	buf.WriteInt32(s.structHash)
+	// In compatible mode with meta share, struct hash is not written
+	// because type meta is written separately
+	if !ctx.Compatible() {
+		buf.WriteInt32(s.structHash)
+	}
 
-	// Get base pointer for unsafe access
-	ptr := unsafe.Pointer(value.UnsafeAddr())
+	// In compatible mode with fieldDefs, write fields in order (not grouped)
+	// because Java expects fields in TypeDef order, not grouped by type
+	if s.fieldDefs != nil && ctx.Compatible() {
+		return s.writeFieldsInOrder(ctx, value)
+	}
+
+	// Check if value is addressable for unsafe access optimization
+	canUseUnsafe := value.CanAddr()
 
 	// Phase 1: Write fixed-size primitive fields (no ref flag)
-	for _, field := range s.fixedFields {
-		if field.FieldIndex < 0 {
-			s.writeZeroField(ctx, field)
-			continue
+	if canUseUnsafe {
+		ptr := unsafe.Pointer(value.UnsafeAddr())
+		for _, field := range s.fixedFields {
+			if field.FieldIndex < 0 {
+				s.writeZeroField(ctx, field)
+				continue
+			}
+			fieldPtr := unsafe.Add(ptr, field.Offset)
+			switch field.StaticId {
+			case ConcreteTypeBool:
+				buf.WriteBool(*(*bool)(fieldPtr))
+			case ConcreteTypeInt8:
+				buf.WriteByte_(*(*byte)(fieldPtr))
+			case ConcreteTypeInt16:
+				buf.WriteInt16(*(*int16)(fieldPtr))
+			case ConcreteTypeFloat32:
+				buf.WriteFloat32(*(*float32)(fieldPtr))
+			case ConcreteTypeFloat64:
+				buf.WriteFloat64(*(*float64)(fieldPtr))
+			}
 		}
-		fieldPtr := unsafe.Add(ptr, field.Offset)
-		switch field.StaticId {
-		case ConcreteTypeBool:
-			buf.WriteBool(*(*bool)(fieldPtr))
-		case ConcreteTypeInt8:
-			buf.WriteByte_(*(*byte)(fieldPtr))
-		case ConcreteTypeInt16:
-			buf.WriteInt16(*(*int16)(fieldPtr))
-		case ConcreteTypeFloat32:
-			buf.WriteFloat32(*(*float32)(fieldPtr))
-		case ConcreteTypeFloat64:
-			buf.WriteFloat64(*(*float64)(fieldPtr))
+	} else {
+		// Fallback to reflect-based access for unaddressable values
+		for _, field := range s.fixedFields {
+			if field.FieldIndex < 0 {
+				s.writeZeroField(ctx, field)
+				continue
+			}
+			fieldValue := value.Field(field.FieldIndex)
+			switch field.StaticId {
+			case ConcreteTypeBool:
+				buf.WriteBool(fieldValue.Bool())
+			case ConcreteTypeInt8:
+				buf.WriteByte_(byte(fieldValue.Int()))
+			case ConcreteTypeInt16:
+				buf.WriteInt16(int16(fieldValue.Int()))
+			case ConcreteTypeFloat32:
+				buf.WriteFloat32(float32(fieldValue.Float()))
+			case ConcreteTypeFloat64:
+				buf.WriteFloat64(fieldValue.Float())
+			}
 		}
 	}
 
 	// Phase 2: Write varint primitive fields (no ref flag)
-	for _, field := range s.varintFields {
-		if field.FieldIndex < 0 {
-			s.writeZeroField(ctx, field)
-			continue
+	if canUseUnsafe {
+		ptr := unsafe.Pointer(value.UnsafeAddr())
+		for _, field := range s.varintFields {
+			if field.FieldIndex < 0 {
+				s.writeZeroField(ctx, field)
+				continue
+			}
+			fieldPtr := unsafe.Add(ptr, field.Offset)
+			switch field.StaticId {
+			case ConcreteTypeInt32:
+				buf.WriteVarint32(*(*int32)(fieldPtr))
+			case ConcreteTypeInt64:
+				buf.WriteVarint64(*(*int64)(fieldPtr))
+			case ConcreteTypeInt:
+				buf.WriteVarint64(int64(*(*int)(fieldPtr)))
+			}
 		}
-		fieldPtr := unsafe.Add(ptr, field.Offset)
-		switch field.StaticId {
-		case ConcreteTypeInt32:
-			buf.WriteVarint32(*(*int32)(fieldPtr))
-		case ConcreteTypeInt64:
-			buf.WriteVarint64(*(*int64)(fieldPtr))
-		case ConcreteTypeInt:
-			buf.WriteVarint64(int64(*(*int)(fieldPtr)))
+	} else {
+		// Fallback to reflect-based access for unaddressable values
+		for _, field := range s.varintFields {
+			if field.FieldIndex < 0 {
+				s.writeZeroField(ctx, field)
+				continue
+			}
+			fieldValue := value.Field(field.FieldIndex)
+			switch field.StaticId {
+			case ConcreteTypeInt32:
+				buf.WriteVarint32(int32(fieldValue.Int()))
+			case ConcreteTypeInt64:
+				buf.WriteVarint64(fieldValue.Int())
+			case ConcreteTypeInt:
+				buf.WriteVarint64(fieldValue.Int())
+			}
 		}
 	}
 
@@ -179,6 +262,103 @@ func (s *structSerializer) WriteData(ctx *WriteContext, value reflect.Value) err
 			// For nested struct fields in compatible mode, write type info
 			writeType := ctx.Compatible() && isStructField(field.Type)
 			// Per xlang spec, all non-primitive fields need ref flag
+			if err := field.Serializer.Write(ctx, true, writeType, fieldValue); err != nil {
+				return err
+			}
+		} else {
+			if err := ctx.WriteValue(fieldValue); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// writeFieldsInOrder writes fields in the order they appear in s.fields (TypeDef order)
+// This is used in compatible mode where Java expects fields in TypeDef order
+func (s *structSerializer) writeFieldsInOrder(ctx *WriteContext, value reflect.Value) error {
+	buf := ctx.Buffer()
+	canUseUnsafe := value.CanAddr()
+	var ptr unsafe.Pointer
+	if canUseUnsafe {
+		ptr = unsafe.Pointer(value.UnsafeAddr())
+	}
+
+	for _, field := range s.fields {
+		if field.FieldIndex < 0 {
+			if err := s.writeZeroField(ctx, field); err != nil {
+				return err
+			}
+			continue
+		}
+
+		// Fast path for fixed-size primitive types (no ref flag)
+		if canUseUnsafe && isFixedSizePrimitive(field.StaticId, field.Referencable) {
+			fieldPtr := unsafe.Add(ptr, field.Offset)
+			switch field.StaticId {
+			case ConcreteTypeBool:
+				buf.WriteBool(*(*bool)(fieldPtr))
+			case ConcreteTypeInt8:
+				buf.WriteByte_(*(*byte)(fieldPtr))
+			case ConcreteTypeInt16:
+				buf.WriteInt16(*(*int16)(fieldPtr))
+			case ConcreteTypeFloat32:
+				buf.WriteFloat32(*(*float32)(fieldPtr))
+			case ConcreteTypeFloat64:
+				buf.WriteFloat64(*(*float64)(fieldPtr))
+			}
+			continue
+		}
+
+		// Fast path for varint primitive types (no ref flag)
+		// Skip fast path if field has a serializer with a non-primitive type (e.g., NAMED_ENUM)
+		if canUseUnsafe && isVarintPrimitive(field.StaticId, field.Referencable) && !fieldHasNonPrimitiveSerializer(field) {
+			fieldPtr := unsafe.Add(ptr, field.Offset)
+			switch field.StaticId {
+			case ConcreteTypeInt32:
+				buf.WriteVarint32(*(*int32)(fieldPtr))
+			case ConcreteTypeInt64:
+				buf.WriteVarint64(*(*int64)(fieldPtr))
+			case ConcreteTypeInt:
+				buf.WriteVarint64(int64(*(*int)(fieldPtr)))
+			}
+			continue
+		}
+
+		// Slow path for primitives when canUseUnsafe is false
+		// These don't need ref flag according to xlang spec
+		fieldValue := value.Field(field.FieldIndex)
+
+		// Handle non-nullable primitives without ref flag (slow path version)
+		if !field.Referencable && isPrimitiveStaticId(field.StaticId) {
+			switch field.StaticId {
+			case ConcreteTypeBool:
+				buf.WriteBool(fieldValue.Bool())
+			case ConcreteTypeInt8:
+				buf.WriteByte_(byte(fieldValue.Int()))
+			case ConcreteTypeInt16:
+				buf.WriteInt16(int16(fieldValue.Int()))
+			case ConcreteTypeInt32:
+				buf.WriteVarint32(int32(fieldValue.Int()))
+			case ConcreteTypeInt64, ConcreteTypeInt:
+				buf.WriteVarint64(fieldValue.Int())
+			case ConcreteTypeFloat32:
+				buf.WriteFloat32(float32(fieldValue.Float()))
+			case ConcreteTypeFloat64:
+				buf.WriteFloat64(fieldValue.Float())
+			default:
+				return fmt.Errorf("unhandled primitive type: %v", field.StaticId)
+			}
+			continue
+		}
+
+		// Slow path for non-primitives (all need ref flag per xlang spec)
+		if field.Serializer != nil {
+			// Per xlang spec:
+			// - Nullable primitives (*int32, *float64, etc.): ref flag + data (NO type info)
+			// - Other types (struct, collections, etc.): ref flag + type info + data
+			writeType := !isInternalTypeWithoutTypeMeta(field.Type)
+			// Per xlang spec, all non-primitive fields have ref flag
 			if err := field.Serializer.Write(ctx, true, writeType, fieldValue); err != nil {
 				return err
 			}
@@ -261,10 +441,20 @@ func (s *structSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value 
 		s.structHash = s.computeHash()
 	}
 
-	structHash := buf.ReadInt32()
-	if !ctx.Compatible() && structHash != s.structHash {
-		return fmt.Errorf("hash %d is not consistent with %d for type %s",
-			structHash, s.structHash, s.type_)
+	// In compatible mode with meta share, struct hash is not written
+	// because type meta is written separately
+	if !ctx.Compatible() {
+		structHash := buf.ReadInt32()
+		if structHash != s.structHash {
+			return fmt.Errorf("hash %d is not consistent with %d for type %s",
+				structHash, s.structHash, s.type_)
+		}
+	}
+
+	// In compatible mode with fieldDefs, read fields in order (not grouped)
+	// because Java writes fields in TypeDef order, not grouped by type
+	if s.fieldDefs != nil && ctx.Compatible() {
+		return s.readFieldsInOrder(ctx, value)
 	}
 
 	// Get base pointer for unsafe access
@@ -337,6 +527,73 @@ func (s *structSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value 
 	return nil
 }
 
+// readFieldsInOrder reads fields in the order they appear in s.fields (TypeDef order)
+// This is used in compatible mode where Java writes fields in TypeDef order
+func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Value) error {
+	buf := ctx.Buffer()
+	ptr := unsafe.Pointer(value.UnsafeAddr())
+
+	for _, field := range s.fields {
+		if field.FieldIndex < 0 {
+			if err := s.skipField(ctx, field); err != nil {
+				return err
+			}
+			continue
+		}
+
+		fieldPtr := unsafe.Add(ptr, field.Offset)
+
+		// Fast path for fixed-size primitive types (no ref flag)
+		if isFixedSizePrimitive(field.StaticId, field.Referencable) {
+			switch field.StaticId {
+			case ConcreteTypeBool:
+				*(*bool)(fieldPtr) = buf.ReadBool()
+			case ConcreteTypeInt8:
+				*(*int8)(fieldPtr) = int8(buf.ReadByte_())
+			case ConcreteTypeInt16:
+				*(*int16)(fieldPtr) = buf.ReadInt16()
+			case ConcreteTypeFloat32:
+				*(*float32)(fieldPtr) = buf.ReadFloat32()
+			case ConcreteTypeFloat64:
+				*(*float64)(fieldPtr) = buf.ReadFloat64()
+			}
+			continue
+		}
+
+		// Fast path for varint primitive types (no ref flag)
+		// Skip fast path if field has a serializer with a non-primitive type (e.g., NAMED_ENUM)
+		if isVarintPrimitive(field.StaticId, field.Referencable) && !fieldHasNonPrimitiveSerializer(field) {
+			switch field.StaticId {
+			case ConcreteTypeInt32:
+				*(*int32)(fieldPtr) = buf.ReadVarint32()
+			case ConcreteTypeInt64:
+				*(*int64)(fieldPtr) = buf.ReadVarint64()
+			case ConcreteTypeInt:
+				*(*int)(fieldPtr) = int(buf.ReadVarint64())
+			}
+			continue
+		}
+
+		// Slow path for non-primitives (all need ref flag per xlang spec)
+		fieldValue := value.Field(field.FieldIndex)
+		if field.Serializer != nil {
+			// Per xlang spec:
+			// - Nullable primitives (*int32, *float64, etc.): ref flag + data (NO type info)
+			// - Other types (struct, collections, etc.): ref flag + type info + data
+			readType := !isInternalTypeWithoutTypeMeta(field.Type)
+			// Per xlang spec, all non-primitive fields have ref flag
+			if err := field.Serializer.Read(ctx, true, readType, fieldValue); err != nil {
+				return err
+			}
+		} else {
+			if err := ctx.ReadValue(fieldValue); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // skipField skips a field that doesn't exist or is incompatible
 func (s *structSerializer) skipField(ctx *ReadContext, field *FieldInfo) error {
 	if field.FieldDef.name != "" {
@@ -371,8 +628,10 @@ func (s *structSerializer) Read(ctx *ReadContext, readRef bool, readType bool, v
 	if readType {
 		// Read type info - in compatible mode this returns the serializer with remote fieldDefs
 		typeID := int32(buf.ReadVarUint32Small7())
-		if IsNamespacedType(TypeId(typeID)) {
-			// For namespaced types in compatible mode, use the serializer from TypeInfo
+		internalTypeID := TypeId(typeID & 0xFF)
+		// Check if this is a struct type that needs type meta reading
+		if IsNamespacedType(TypeId(typeID)) || internalTypeID == COMPATIBLE_STRUCT || internalTypeID == STRUCT {
+			// For struct types in compatible mode, use the serializer from TypeInfo
 			typeInfo, err := ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID)
 			if err != nil {
 				return err
@@ -623,9 +882,9 @@ func (s *structSerializer) initFieldsFromDefsWithResolver(typeResolver *TypeReso
 				Type:         remoteType,
 				StaticId:     GetStaticTypeId(remoteType),
 				Serializer:   fieldSerializer,
-				Referencable: isReferencable(remoteType), // Use local type, not remote nullable flag
-				FieldIndex:   -1,                         // Mark as non-existent field to discard data
-				FieldDef:     def,                        // Save original FieldDef for skipping
+				Referencable: fieldNeedWriteRef(def.fieldType.TypeId(), def.nullable), // Use remote nullable flag
+				FieldIndex:   -1,                                                      // Mark as non-existent field to discard data
+				FieldDef:     def,                                                     // Save original FieldDef for skipping
 			}
 			fields = append(fields, fieldInfo)
 		}
@@ -715,6 +974,11 @@ func (s *structSerializer) initFieldsFromDefsWithResolver(typeResolver *TypeReso
 				if typeLookupFailed && isStructLikeField && fieldSerializer == nil {
 					fieldSerializer, _ = typeResolver.getSerializerByType(localType, true)
 				}
+				// If local type is *T and remote type is T, we need the serializer for *T
+				// This handles Java's Integer/Long (nullable boxed types) mapping to Go's *int32/*int64
+				if localType.Kind() == reflect.Ptr && localType.Elem() == remoteType {
+					fieldSerializer, _ = typeResolver.getSerializerByType(localType, true)
+				}
 			} else {
 				// Types are incompatible or unknown - use remote type but mark field as not settable
 				fieldType = remoteType
@@ -732,7 +996,7 @@ func (s *structSerializer) initFieldsFromDefsWithResolver(typeResolver *TypeReso
 			Type:         fieldType,
 			StaticId:     GetStaticTypeId(fieldType),
 			Serializer:   fieldSerializer,
-			Referencable: isReferencable(fieldType), // Use local type, not remote nullable flag
+			Referencable: fieldNeedWriteRef(def.fieldType.TypeId(), def.nullable), // Use remote nullable flag
 			FieldIndex:   fieldIndex,
 			FieldDef:     def, // Save original FieldDef for skipping
 		}
@@ -756,6 +1020,19 @@ func toSnakeCase(s string) string {
 	return string(result)
 }
 
+// isNonNullablePrimitiveKind returns true for Go kinds that map to Java primitive types
+// These are the types that cannot be null in Java and should have nullable=0 in hash computation
+func isNonNullablePrimitiveKind(kind reflect.Kind) bool {
+	switch kind {
+	case reflect.Bool, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Float32, reflect.Float64, reflect.Int, reflect.Uint:
+		return true
+	default:
+		return false
+	}
+}
+
 // isReferencable determines if a type needs reference tracking based on Go type semantics
 func isReferencable(t reflect.Type) bool {
 	// Pointers, maps, slices, and interfaces need reference tracking
@@ -766,6 +1043,41 @@ func isReferencable(t reflect.Type) bool {
 	default:
 		return false
 	}
+}
+
+// isInternalTypeWithoutTypeMeta checks if a type is serialized without type meta per xlang spec.
+// Per the spec (struct field serialization), these types use format: | ref/null flag | value data | (NO type meta)
+// - Nullable primitives (*int32, *float64, etc.): | null flag | field value |
+// - Strings (string): | null flag | value data |
+// - Binary ([]byte): | null flag | value data |
+// - List/Slice: | ref meta | value data |
+// - Set: | ref meta | value data |
+// - Map: | ref meta | value data |
+// Only struct/enum/ext types need type meta: | ref flag | type meta | value data |
+func isInternalTypeWithoutTypeMeta(t reflect.Type) bool {
+	kind := t.Kind()
+	// String type - no type meta needed
+	if kind == reflect.String {
+		return true
+	}
+	// Slice (list or byte slice) - no type meta needed
+	if kind == reflect.Slice {
+		return true
+	}
+	// Map type - no type meta needed
+	if kind == reflect.Map {
+		return true
+	}
+	// Pointer to primitive - no type meta needed
+	if kind == reflect.Ptr {
+		elemKind := t.Elem().Kind()
+		switch elemKind {
+		case reflect.Bool, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+			reflect.Int, reflect.Float32, reflect.Float64, reflect.String:
+			return true
+		}
+	}
+	return false
 }
 
 // isStructField checks if a type is a struct type (directly or via pointer)
@@ -840,9 +1152,12 @@ func (s *structSerializer) computeHash() int32 {
 		sb.WriteString(fmt.Sprintf("%d", typeId))
 		sb.WriteString(",")
 
-		nullableFlag := "0"
-		if field.Referencable {
-			nullableFlag = "1"
+		// For cross-language hash compatibility, nullable=0 only for primitive non-pointer types
+		// This matches Java's behavior where isPrimitive() returns true only for int, long, boolean, etc.
+		// Go strings and other non-primitive types should have nullable=1
+		nullableFlag := "1"
+		if isNonNullablePrimitiveKind(field.Type.Kind()) && !field.Referencable {
+			nullableFlag = "0"
 		}
 		sb.WriteString(nullableFlag)
 		sb.WriteString(";")
@@ -915,8 +1230,10 @@ func (s *ptrToStructSerializer) Read(ctx *ReadContext, readRef bool, readType bo
 	if readType {
 		// Read type info - in compatible mode this returns the serializer with remote fieldDefs
 		typeID := int32(buf.ReadVarUint32Small7())
-		if IsNamespacedType(TypeId(typeID)) {
-			// For namespaced types in compatible mode, use the serializer from TypeInfo
+		internalTypeID := TypeId(typeID & 0xFF)
+		// Check if this is a struct type that needs type meta reading
+		if IsNamespacedType(TypeId(typeID)) || internalTypeID == COMPATIBLE_STRUCT || internalTypeID == STRUCT {
+			// For struct types in compatible mode, use the serializer from TypeInfo
 			typeInfo, err := ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID)
 			if err != nil {
 				return err
@@ -1034,7 +1351,9 @@ func (s *ptrToCodegenSerializer) Read(ctx *ReadContext, readRef bool, readType b
 	}
 	if readType {
 		typeID := int32(buf.ReadVarUint32Small7())
-		if IsNamespacedType(TypeId(typeID)) {
+		internalTypeID := TypeId(typeID & 0xFF)
+		// Check if this is a struct type that needs type meta reading
+		if IsNamespacedType(TypeId(typeID)) || internalTypeID == COMPATIBLE_STRUCT || internalTypeID == STRUCT {
 			_, _ = ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID)
 		}
 	}
@@ -1415,4 +1734,58 @@ func computeStructHash(fieldsInfo structFieldsInfo, typeResolver *TypeResolver) 
 		panic(fmt.Errorf("hash for type %v is 0", fieldsInfo))
 	}
 	return hash, nil
+}
+
+// skipStructSerializer is a serializer that skips unknown struct data
+// It reads and discards field data based on fieldDefs from remote TypeDef
+type skipStructSerializer struct {
+	fieldDefs []FieldDef
+}
+
+func (s *skipStructSerializer) TypeId() TypeId {
+	return NAMED_STRUCT
+}
+
+func (s *skipStructSerializer) NeedToWriteRef() bool {
+	return true
+}
+
+func (s *skipStructSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
+	return fmt.Errorf("skipStructSerializer does not support WriteData - unknown struct type")
+}
+
+func (s *skipStructSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
+	return fmt.Errorf("skipStructSerializer does not support Write - unknown struct type")
+}
+
+func (s *skipStructSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	// Skip all fields based on fieldDefs from remote TypeDef
+	for _, fieldDef := range s.fieldDefs {
+		isStructType := isStructFieldType(fieldDef.fieldType)
+		// Use trackingRef from FieldDef for ref flag decision
+		if err := SkipFieldValueWithTypeFlag(ctx, fieldDef, fieldDef.trackingRef, ctx.Compatible() && isStructType); err != nil {
+			return fmt.Errorf("failed to skip field %s: %w", fieldDef.name, err)
+		}
+	}
+	return nil
+}
+
+func (s *skipStructSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
+	buf := ctx.Buffer()
+	if readRef {
+		refID, err := ctx.RefResolver().TryPreserveRefId(buf)
+		if err != nil {
+			return err
+		}
+		if int8(refID) < NotNullValueFlag {
+			// Reference found, nothing to skip
+			return nil
+		}
+	}
+	return s.ReadData(ctx, nil, value)
+}
+
+func (s *skipStructSerializer) ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeInfo *TypeInfo, value reflect.Value) error {
+	// typeInfo is already read, don't read it again - just skip data
+	return s.Read(ctx, readRef, false, value)
 }

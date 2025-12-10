@@ -842,7 +842,14 @@ func (c *ReadContext) ReadValue(value reflect.Value) error {
 		// Create a new instance of the actual type
 		actualType := typeInfo.Type
 		if actualType == nil {
-			return fmt.Errorf("type info has nil Type")
+			// Unknown type - skip the data using the serializer (skipStructSerializer)
+			if typeInfo.Serializer != nil {
+				if err := typeInfo.Serializer.ReadData(c, nil, reflect.Value{}); err != nil {
+					return fmt.Errorf("failed to skip unknown type data: %w", err)
+				}
+			}
+			// Leave interface value as nil for unknown types
+			return nil
 		}
 
 		// Create a new instance

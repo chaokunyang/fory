@@ -226,7 +226,7 @@ func (s int32Serializer) Write(ctx *WriteContext, writeRef bool, writeType bool,
 		ctx.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeType {
-		ctx.buffer.WriteVarUint32Small7(uint32(VAR_INT32))
+		ctx.buffer.WriteVarUint32Small7(uint32(INT32))
 	}
 	return s.WriteData(ctx, value)
 }
@@ -271,7 +271,7 @@ func (s int64Serializer) Write(ctx *WriteContext, writeRef bool, writeType bool,
 		ctx.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeType {
-		ctx.buffer.WriteVarUint32Small7(uint32(VAR_INT64))
+		ctx.buffer.WriteVarUint32Small7(uint32(INT64))
 	}
 	return s.WriteData(ctx, value)
 }
@@ -314,7 +314,7 @@ func (s intSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, v
 		ctx.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeType {
-		ctx.buffer.WriteVarUint32Small7(uint32(VAR_INT64))
+		ctx.buffer.WriteVarUint32Small7(uint32(INT64))
 	}
 	return s.WriteData(ctx, value)
 }

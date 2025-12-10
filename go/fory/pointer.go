@@ -121,7 +121,9 @@ func (s *ptrToValueSerializer) Read(ctx *ReadContext, readRef bool, readType boo
 	if readType {
 		// Read type info - in compatible mode this contains the serializer with fieldDefs
 		typeID := int32(buf.ReadVarUint32Small7())
-		if IsNamespacedType(TypeId(typeID)) {
+		internalTypeID := TypeId(typeID & 0xFF)
+		// Check if this is a struct type that needs type meta reading
+		if IsNamespacedType(TypeId(typeID)) || internalTypeID == COMPATIBLE_STRUCT || internalTypeID == STRUCT {
 			typeInfo, err := ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID)
 			if err != nil {
 				return err
@@ -146,7 +148,7 @@ func (s *ptrToValueSerializer) ReadWithTypeInfo(ctx *ReadContext, readRef bool, 
 }
 
 // ============================================================================
-// ptrToInterfaceSerializer - pointer to interface type  
+// ptrToInterfaceSerializer - pointer to interface type
 // ============================================================================
 
 func (s *ptrToInterfaceSerializer) TypeId() TypeId {
@@ -159,7 +161,7 @@ func (s *ptrToInterfaceSerializer) NeedToWriteRef() bool { return true }
 func (s *ptrToInterfaceSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	// Get the concrete element that the interface pointer points to
 	elemValue := value.Elem()
-	
+
 	// Use WriteValue to handle the polymorphic interface value
 	return ctx.WriteValue(elemValue)
 }
@@ -178,7 +180,7 @@ func (s *ptrToInterfaceSerializer) Write(ctx *WriteContext, writeRef bool, write
 			return nil
 		}
 	}
-	
+
 	// For interface pointers, we don't write type info here
 	// WriteValue will handle the type info for the concrete value
 	return s.WriteData(ctx, value)
@@ -187,12 +189,12 @@ func (s *ptrToInterfaceSerializer) Write(ctx *WriteContext, writeRef bool, write
 func (s *ptrToInterfaceSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	// Create a new interface pointer
 	newVal := reflect.New(type_.Elem())
-	
+
 	// Use ReadValue to handle the polymorphic interface value
 	if err := ctx.ReadValue(newVal.Elem()); err != nil {
 		return err
 	}
-	
+
 	value.Set(newVal)
 	return nil
 }
@@ -213,7 +215,7 @@ func (s *ptrToInterfaceSerializer) Read(ctx *ReadContext, readRef bool, readType
 			return nil
 		}
 	}
-	
+
 	return s.ReadData(ctx, value.Type(), value)
 }
 

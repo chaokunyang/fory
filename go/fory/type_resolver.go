@@ -632,18 +632,18 @@ func (r *TypeResolver) getTypeInfo(value reflect.Value, create bool) (TypeInfo, 
 	switch {
 	case type_.Kind() == reflect.Ptr:
 		elemType := type_.Elem()
-		
+
 		// Check if the element type is already registered
 		if elemInfo, ok := r.typesInfo[elemType]; ok {
 			// Element type is registered, create pointer serializer using the same type info
 			var ptrSerializer Serializer
-			
+
 			// Get the serializer for the element type
 			elemSerializer := elemInfo.Serializer
 			if elemSerializer == nil {
 				elemSerializer, _ = r.getSerializerByType(elemType, false)
 			}
-			
+
 			if elemType.Kind() == reflect.Interface {
 				// Pointer to interface
 				ptrSerializer = &ptrToInterfaceSerializer{}
@@ -651,7 +651,7 @@ func (r *TypeResolver) getTypeInfo(value reflect.Value, create bool) (TypeInfo, 
 				// Pointer to concrete value
 				ptrSerializer = &ptrToValueSerializer{valueSerializer: elemSerializer}
 			}
-			
+
 			// Create TypeInfo for pointer using element's namespace/typename
 			ptrInfo := TypeInfo{
 				Type:          type_,
@@ -665,12 +665,12 @@ func (r *TypeResolver) getTypeInfo(value reflect.Value, create bool) (TypeInfo, 
 				NeedWriteDef:  elemInfo.NeedWriteDef,
 				hashValue:     elemInfo.hashValue,
 			}
-			
+
 			// Cache the pointer type info
 			r.typesInfo[type_] = ptrInfo
 			return ptrInfo, nil
 		}
-		
+
 		// Element type not registered - try auto-registration for structs
 		if elemType.Kind() == reflect.Struct {
 			// First register the value type
@@ -686,24 +686,24 @@ func (r *TypeResolver) getTypeInfo(value reflect.Value, create bool) (TypeInfo, 
 			}
 			return TypeInfo{}, fmt.Errorf("failed to find registered pointer type %v", type_)
 		}
-		
+
 		// For primitive types and other types, we can auto-create pointer serializer
 		elemSerializer, err := r.getSerializerByType(elemType, false)
 		if err == nil && elemSerializer != nil {
 			// Create pointer serializer for primitive/basic types
 			ptrSerializer := &ptrToValueSerializer{valueSerializer: elemSerializer}
-			
+
 			// Create minimal TypeInfo for pointer (no cross-language type info for primitives)
 			ptrInfo := TypeInfo{
 				Type:       type_,
 				TypeID:     0, // Dynamic type
 				Serializer: ptrSerializer,
 			}
-			
+
 			r.typesInfo[type_] = ptrInfo
 			return ptrInfo, nil
 		}
-		
+
 		return TypeInfo{}, fmt.Errorf("pointer element type %v must be registered", elemType)
 	case type_.Kind() == reflect.Interface:
 		return TypeInfo{}, fmt.Errorf("interface types must be registered explicitly")
@@ -1026,12 +1026,20 @@ func (r *TypeResolver) readTypeDefs(buffer *ByteBuffer) error {
 			}
 			r.defIdToTypeDef[id] = newTd
 			td = newTd
+			// Note: We do NOT store remote TypeDef in typeToTypeDef.
+			// typeToTypeDef is used for WRITING and must contain locally-built TypeDefs.
+			// Remote TypeDefs have different field ordering/IDs based on the remote's struct.
+			// defIdToTypeDef caches remote TypeDefs by header hash to avoid re-parsing.
 		}
 		typeInfo, err := td.buildTypeInfo()
 		if err != nil {
 			return err
 		}
 		context.readTypeInfos = append(context.readTypeInfos, typeInfo)
+		// Note: We intentionally do NOT update the original serializer's fieldDefs here.
+		// When serializing, Go should use its own struct definition (via initFieldsFromContext),
+		// not the remote TypeDef's field list. This is important for schema evolution
+		// where Go's struct may have different fields than the remote.
 	}
 	return nil
 }
@@ -1042,23 +1050,23 @@ func (r *TypeResolver) createSerializer(type_ reflect.Type, mapInStruct bool) (s
 	case reflect.Ptr:
 		elemType := type_.Elem()
 		elemKind := elemType.Kind()
-		
+
 		// Check for pointer to pointer (not supported)
 		if elemKind == reflect.Ptr {
 			return nil, fmt.Errorf("pointer to pointer is not supported but got type %s", type_)
 		}
-		
+
 		// Check for pointer to interface
 		if elemKind == reflect.Interface {
 			return &ptrToInterfaceSerializer{}, nil
 		}
-		
+
 		// For pointer to slice/map, just use the element type's serializer directly
 		// because slices and maps are already reference types in Go
 		if elemKind == reflect.Slice || elemKind == reflect.Map {
 			return r.getSerializerByType(elemType, mapInStruct)
 		}
-		
+
 		// Pointer to concrete value (struct, primitive, etc.)
 		valueSerializer, err := r.getSerializerByType(elemType, false)
 		if err != nil {
@@ -1122,11 +1130,11 @@ func (r *TypeResolver) createSerializer(type_ reflect.Type, mapInStruct bool) (s
 		elem := type_.Elem()
 		// For primitive arrays, use the slice serializer directly (arrays are written as slices)
 		elemKind := elem.Kind()
-		if elemKind == reflect.Bool || 
-		   elemKind == reflect.Int8 || elemKind == reflect.Int16 || elemKind == reflect.Int32 || elemKind == reflect.Int64 ||
-		   elemKind == reflect.Uint8 ||
-		   elemKind == reflect.Float32 || elemKind == reflect.Float64 ||
-		   (elemKind == reflect.Int && (reflect.TypeOf(int(0)).Size() == 4 || reflect.TypeOf(int(0)).Size() == 8)) {
+		if elemKind == reflect.Bool ||
+			elemKind == reflect.Int8 || elemKind == reflect.Int16 || elemKind == reflect.Int32 || elemKind == reflect.Int64 ||
+			elemKind == reflect.Uint8 ||
+			elemKind == reflect.Float32 || elemKind == reflect.Float64 ||
+			(elemKind == reflect.Int && (reflect.TypeOf(int(0)).Size() == 4 || reflect.TypeOf(int(0)).Size() == 8)) {
 			sliceType := reflect.SliceOf(elem)
 			return r.getSerializerByType(sliceType, false)
 		}
@@ -1560,6 +1568,8 @@ func (r *TypeResolver) readTypeInfo(buffer *ByteBuffer, value reflect.Value) (Ty
 // readTypeInfoWithTypeID reads type info when the typeID has already been read from buffer.
 // This is used by collection serializers that read typeID separately before deciding how to proceed.
 func (r *TypeResolver) readTypeInfoWithTypeID(buffer *ByteBuffer, typeID int32) (TypeInfo, error) {
+	internalTypeID := TypeId(typeID & 0xFF)
+
 	if IsNamespacedType(TypeId(typeID)) {
 		if r.metaShareEnabled() {
 			return r.readSharedTypeMeta(buffer, reflect.Value{})
@@ -1619,6 +1629,11 @@ func (r *TypeResolver) readTypeInfoWithTypeID(buffer *ByteBuffer, typeID int32) 
 			return typeInfo, nil
 		}
 		return TypeInfo{}, fmt.Errorf("namespaced type not found: %s.%s", ns, typeName)
+	}
+
+	// Handle COMPATIBLE_STRUCT and STRUCT types - they also need to read shared type meta
+	if (internalTypeID == COMPATIBLE_STRUCT || internalTypeID == STRUCT) && r.metaShareEnabled() {
+		return r.readSharedTypeMeta(buffer, reflect.Value{})
 	}
 
 	// Handle simple type IDs (non-namespaced types)

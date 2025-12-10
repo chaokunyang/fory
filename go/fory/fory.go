@@ -56,7 +56,7 @@ const (
 
 // Bitmap flags for protocol header
 const (
-	NilFlag          = 0
+	IsNilFlag        = 1
 	LittleEndianFlag = 2
 	XLangFlag        = 4
 	OutOfBandFlag    = 8
@@ -85,7 +85,7 @@ type Config struct {
 // defaultConfig returns the default configuration
 func defaultConfig() Config {
 	return Config{
-		TrackRef: true,
+		TrackRef: false, // Match Java's default: reference tracking disabled
 		MaxDepth: 100,
 		IsXlang:  true,
 	}
@@ -303,9 +303,16 @@ func (f *Fory) Unmarshal(data []byte, v interface{}) error {
 		return err
 	}
 
+	// Check if the serialized object is null
+	if metaOffset == NullObjectMetaOffset {
+		// Set target to zero value (nil for pointers/interfaces)
+		rv.Elem().Set(reflect.Zero(rv.Elem().Type()))
+		return nil
+	}
+
 	// In compatible mode, load type definitions if meta offset is present
 	var finalPos int
-	if f.config.Compatible && metaOffset != -1 {
+	if f.config.Compatible && metaOffset > 0 {
 		// Save current position (after reading metaOffset, before object data)
 		dataStartPos := f.readCtx.buffer.ReaderIndex()
 
@@ -406,10 +413,20 @@ func (f *Fory) Deserialize(buffer *ByteBuffer, v interface{}, buffers []*ByteBuf
 		return err
 	}
 
+	// Check if the serialized object is null
+	if metaOffset == NullObjectMetaOffset {
+		// v must be a pointer so we can set it to nil
+		rv := reflect.ValueOf(v)
+		if rv.Kind() == reflect.Ptr && !rv.IsNil() {
+			rv.Elem().Set(reflect.Zero(rv.Elem().Type()))
+		}
+		return nil
+	}
+
 	// In compatible mode, load type definitions if meta offset is present
 	// This matches C++ deserialize_impl: read type defs BEFORE deserializing object
 	var finalPos int
-	if f.config.Compatible && metaOffset != -1 {
+	if f.config.Compatible && metaOffset > 0 {
 		// Save current position (right after meta offset field, before object data)
 		dataStartPos := buffer.ReaderIndex()
 
@@ -674,9 +691,16 @@ func Deserialize[T any](f *Fory, data []byte, target *T) error {
 	f.readCtx.SetData(data)
 
 	// ReadData and validate header
-	_, err := readHeader(f.readCtx)
+	metaOffset, err := readHeader(f.readCtx)
 	if err != nil {
 		return err
+	}
+
+	// Check if the serialized object is null
+	if metaOffset == NullObjectMetaOffset {
+		var zero T
+		*target = zero
+		return nil
 	}
 
 	// Fast path: type switch for common types (Go compiler can optimize this)
@@ -752,13 +776,15 @@ func Deserialize[T any](f *Fory, data []byte, target *T) error {
 // SerializeAny serializes polymorphic values where concrete type is unknown.
 // Uses runtime type dispatch to find the appropriate serializer.
 func (f *Fory) SerializeAny(value any) ([]byte, error) {
-	if value == nil {
+	// Check if value is nil interface OR a nil pointer/slice/map/etc.
+	// In Go, `*int32(nil)` wrapped in `any` is NOT equal to `nil`, but we need to serialize it as null.
+	if isNilValue(value) {
 		f.writeCtx.Reset()
 		if f.metaContext != nil {
 			f.metaContext.Reset()
 		}
-		writeHeader(f.writeCtx, f.config)
-		f.writeCtx.buffer.WriteInt8(NullFlag)
+		// Use Java-compatible null format: 3 bytes (magic + bitmap with isNilFlag)
+		writeNullHeader(f.writeCtx)
 		return f.writeCtx.buffer.GetByteSlice(0, f.writeCtx.buffer.writerIndex), nil
 	}
 
@@ -851,9 +877,14 @@ func (f *Fory) DeserializeAny(data []byte) (any, error) {
 		return nil, err
 	}
 
+	// Check if the serialized object is null
+	if metaOffset == NullObjectMetaOffset {
+		return nil, nil
+	}
+
 	// In compatible mode, load type definitions if meta offset is present
 	var finalPos int
-	if f.config.Compatible && metaOffset != -1 {
+	if f.config.Compatible && metaOffset > 0 {
 		// Save current position (right after meta offset field, before object data)
 		dataStartPos := f.readCtx.buffer.ReaderIndex()
 
@@ -908,14 +939,46 @@ func writeHeader(ctx *WriteContext, config Config) {
 	ctx.buffer.WriteByte_(LangGO)
 }
 
+// isNilValue checks if a value is nil, including nil pointers wrapped in interface{}
+// In Go, `*int32(nil)` wrapped in `any` is NOT equal to `nil`, but we need to treat it as null.
+func isNilValue(value any) bool {
+	if value == nil {
+		return true
+	}
+	rv := reflect.ValueOf(value)
+	switch rv.Kind() {
+	case reflect.Ptr, reflect.Slice, reflect.Map, reflect.Chan, reflect.Func, reflect.Interface:
+		return rv.IsNil()
+	}
+	return false
+}
+
+// writeNullHeader writes a null object header (3 bytes: magic + bitmap with isNilFlag)
+// This is compatible with Java's null serialization format
+func writeNullHeader(ctx *WriteContext) {
+	ctx.buffer.WriteInt16(MAGIC_NUMBER)
+	ctx.buffer.WriteByte_(IsNilFlag) // bitmap with only isNilFlag set
+}
+
+// Special return value indicating null object in readHeader
+// Using math.MinInt32 to avoid conflict with -1 which is used for "no meta offset"
+const NullObjectMetaOffset int32 = -0x7FFFFFFF
+
 // readHeader reads and validates the Fory protocol header
 // Returns the meta start offset if present (0 if not present)
+// Returns NullObjectMetaOffset if the serialized object is null
 func readHeader(ctx *ReadContext) (int32, error) {
 	magicNumber := ctx.buffer.ReadInt16()
 	if magicNumber != MAGIC_NUMBER {
 		return 0, ErrMagicNumber
 	}
-	_ = ctx.buffer.ReadByte_() // bitmap
+	bitmap := ctx.buffer.ReadByte_()
+
+	// Check if this is a null object - only magic number + bitmap with isNilFlag was written
+	if (bitmap & IsNilFlag) != 0 {
+		return NullObjectMetaOffset, nil
+	}
+
 	_ = ctx.buffer.ReadByte_() // language
 
 	// In compatible mode with meta share, Java writes a 4-byte meta offset

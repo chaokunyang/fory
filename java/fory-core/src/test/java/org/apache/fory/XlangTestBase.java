@@ -648,6 +648,7 @@ public abstract class XlangTestBase extends ForyTestBase {
     Fory fory =
         Fory.builder()
             .withLanguage(Language.XLANG)
+            .withCodegen(false)
             .withCompatibleMode(CompatibleMode.COMPATIBLE)
             .build();
     fory.register(Item1.class, 101);
@@ -724,7 +725,8 @@ public abstract class XlangTestBase extends ForyTestBase {
     Item readItem2 = (Item) fory.deserialize(buffer2);
     Assert.assertEquals(readItem2.name, "test_item_2");
     Item readItem3 = (Item) fory.deserialize(buffer2);
-    Assert.assertNull(readItem3.name);
+    // Go uses string (not *string), so null becomes empty string
+    Assert.assertEquals(readItem3.name, "");
   }
 
   @Test
@@ -1214,6 +1216,177 @@ public abstract class XlangTestBase extends ForyTestBase {
   private Object xserDe(Fory fory, Object obj) {
     byte[] bytes = fory.serialize(obj);
     return fory.deserialize(bytes);
+  }
+
+  // ============================================================================
+  // String Field Struct Tests - Test schema evolution with string fields
+  // ============================================================================
+
+  @Data
+  static class EmptyStruct {}
+
+  @Data
+  static class OneStringFieldStruct {
+    String f1;
+  }
+
+  @Data
+  static class TwoStringFieldStruct {
+    String f1;
+    String f2;
+  }
+
+  @Test
+  public void testOneStringFieldSchemaConsistent() throws java.io.IOException {
+    String caseName = "test_one_string_field_schema";
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(CompatibleMode.SCHEMA_CONSISTENT)
+            .build();
+    fory.register(OneStringFieldStruct.class, 200);
+
+    OneStringFieldStruct obj = new OneStringFieldStruct();
+    obj.f1 = "hello";
+
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(64);
+    fory.serialize(buffer, obj);
+
+    ExecutionContext ctx = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
+    runPeer(ctx);
+
+    MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
+    OneStringFieldStruct result = (OneStringFieldStruct) fory.deserialize(buffer2);
+    Assert.assertEquals(result.f1, "hello");
+  }
+
+  @Test
+  public void testOneStringFieldCompatible() throws java.io.IOException {
+    String caseName = "test_one_string_field_compatible";
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .build();
+    fory.register(OneStringFieldStruct.class, 200);
+
+    OneStringFieldStruct obj = new OneStringFieldStruct();
+    obj.f1 = "hello";
+
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(64);
+    fory.serialize(buffer, obj);
+
+    ExecutionContext ctx = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
+    runPeer(ctx);
+
+    MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
+    OneStringFieldStruct result = (OneStringFieldStruct) fory.deserialize(buffer2);
+    Assert.assertEquals(result.f1, "hello");
+  }
+
+  @Test
+  public void testTwoStringFieldCompatible() throws java.io.IOException {
+    String caseName = "test_two_string_field_compatible";
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .build();
+    fory.register(TwoStringFieldStruct.class, 201);
+
+    TwoStringFieldStruct obj = new TwoStringFieldStruct();
+    obj.f1 = "first";
+    obj.f2 = "second";
+
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(64);
+    fory.serialize(buffer, obj);
+
+    ExecutionContext ctx = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
+    runPeer(ctx);
+
+    MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
+    TwoStringFieldStruct result = (TwoStringFieldStruct) fory.deserialize(buffer2);
+    Assert.assertEquals(result.f1, "first");
+    Assert.assertEquals(result.f2, "second");
+  }
+
+  @Test
+  public void testSchemaEvolutionCompatible() throws java.io.IOException {
+    String caseName = "test_schema_evolution_compatible";
+    // Fory for TwoStringFieldStruct
+    Fory fory2 =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .build();
+    fory2.register(TwoStringFieldStruct.class, 200);
+
+    // Fory for EmptyStruct and OneStringFieldStruct with same type ID
+    Fory foryEmpty =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .build();
+    foryEmpty.register(EmptyStruct.class, 200);
+
+    Fory fory1 =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .build();
+    fory1.register(OneStringFieldStruct.class, 200);
+
+    // Test 1: Serialize TwoStringFieldStruct, deserialize as Empty
+    TwoStringFieldStruct obj2 = new TwoStringFieldStruct();
+    obj2.f1 = "first";
+    obj2.f2 = "second";
+
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(128);
+    fory2.serialize(buffer, obj2);
+
+    ExecutionContext ctx = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
+    runPeer(ctx);
+
+    MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
+
+    // Deserialize as EmptyStruct (should skip all fields)
+    EmptyStruct emptyResult = (EmptyStruct) foryEmpty.deserialize(buffer2);
+    Assert.assertNotNull(emptyResult);
+
+    // Test 2: Serialize OneStringFieldStruct, deserialize as TwoStringFieldStruct
+    OneStringFieldStruct obj1 = new OneStringFieldStruct();
+    obj1.f1 = "only_one";
+
+    buffer = MemoryBuffer.newHeapBuffer(64);
+    fory1.serialize(buffer, obj1);
+
+    // Debug: print Java output bytes
+    byte[] javaBytes = buffer.getBytes(0, buffer.writerIndex());
+    System.out.println("Java OneStringFieldStruct output " + javaBytes.length + " bytes:");
+    for (int i = 0; i < javaBytes.length; i++) {
+      if (i > 0 && i % 16 == 0) System.out.println();
+      System.out.printf("%02x ", javaBytes[i] & 0xFF);
+    }
+    System.out.println();
+
+    String caseName2 = "test_schema_evolution_compatible_reverse";
+    ExecutionContext ctx2 = prepareExecution(caseName2, javaBytes);
+    runPeer(ctx2);
+
+    MemoryBuffer buffer3 = readBuffer(ctx2.dataFile());
+    // Debug: print Go output bytes
+    byte[] goBytes = buffer3.getBytes(0, buffer3.size());
+    System.out.println("Go output " + goBytes.length + " bytes:");
+    for (int i = 0; i < goBytes.length; i++) {
+      if (i > 0 && i % 16 == 0) System.out.println();
+      System.out.printf("%02x ", goBytes[i] & 0xFF);
+    }
+    System.out.println();
+
+    TwoStringFieldStruct result2 = (TwoStringFieldStruct) fory2.deserialize(buffer3);
+    Assert.assertEquals(result2.f1, "only_one");
+    // Go uses empty string for missing fields (Go string can't be null)
+    Assert.assertEquals(result2.f2, "");
   }
 
   @SuppressWarnings("unchecked")

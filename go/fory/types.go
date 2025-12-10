@@ -119,7 +119,6 @@ func IsNamespacedType(typeID TypeId) bool {
 	}
 }
 
-
 func isPrimitiveType(typeID int16) bool {
 	switch typeID {
 	case BOOL,
@@ -338,4 +337,3 @@ func IsPrimitiveTypeId(typeId TypeId) bool {
 		return false
 	}
 }
-

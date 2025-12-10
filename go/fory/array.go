@@ -219,12 +219,12 @@ func (s *arrayConcreteValueSerializer) Write(ctx *WriteContext, writeRef bool, w
 func (s *arrayConcreteValueSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	buf := ctx.Buffer()
 	length := int(buf.ReadVarUint32())
-	
+
 	var trackRefs bool
 	if length > 0 {
 		// Read collection flags (same format as slices)
 		collectFlag := buf.ReadInt8()
-		
+
 		// Read element type info if present
 		if (collectFlag & CollectionIsSameType) != 0 {
 			if (collectFlag & CollectionIsDeclElementType) == 0 {
@@ -233,13 +233,13 @@ func (s *arrayConcreteValueSerializer) ReadData(ctx *ReadContext, type_ reflect.
 				_, _ = ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID)
 			}
 		}
-		
+
 		trackRefs = (collectFlag & CollectionTrackingRef) != 0
 	}
-	
+
 	for i := 0; i < length && i < value.Len(); i++ {
 		elem := value.Index(i)
-		
+
 		// When tracking refs, the element serializer handles ref flags
 		if trackRefs {
 			if err := s.elemSerializer.Read(ctx, true, false, elem); err != nil {

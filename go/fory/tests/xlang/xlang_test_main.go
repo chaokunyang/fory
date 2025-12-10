@@ -21,6 +21,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"runtime"
 
 	"github.com/apache/fory/go/fory"
 	"github.com/spaolacci/murmur3"
@@ -93,21 +94,41 @@ func murmurHash3_x64_128(data []byte, seed int64) (uint64, uint64) {
 type Color int32
 
 const (
-	RED   Color = 0
-	GREEN Color = 1
+	GREEN Color = 0
+	RED   Color = 1
 	BLUE  Color = 2
+	WHITE Color = 3
 )
 
 type Item struct {
 	Name string
 }
 
+// OneFieldStruct - simple struct with one int32 field for debugging
+type OneFieldStruct struct {
+	Value int32
+}
+
+// String field structs for schema evolution tests
+type EmptyStruct struct{}
+
+type OneStringFieldStruct struct {
+	F1 string
+}
+
+type TwoStringFieldStruct struct {
+	F1 string
+	F2 string
+}
+
+
 type Item1 struct {
-	A int8
-	B int16
-	C int32
-	D int64
-	E int
+	F1 int32
+	F2 int32
+	F3 *int32
+	F4 *int32
+	F5 int32  // Non-nullable: null → 0 per test expectation
+	F6 *int32 // Nullable: null stays nil
 }
 
 type SimpleStruct struct {
@@ -422,14 +443,45 @@ func testSimpleStruct() {
 	f.Register(Item{}, 102)
 	f.Register(SimpleStruct{}, 103)
 
+	fmt.Printf("=== Java serialized data (first 80 bytes) ===\n")
+	for i := 0; i < min(len(data), 80); i++ {
+		if i%16 == 0 && i > 0 {
+			fmt.Println()
+		}
+		fmt.Printf("%02x ", data[i])
+	}
+	fmt.Println()
+
 	obj, err := f.DeserializeAny(data)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
 	}
 
+	fmt.Printf("Deserialized obj: %+v\n", obj)
+
 	serialized, err := f.SerializeAny(obj)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to serialize: %v", err))
+	}
+
+	fmt.Printf("=== Go re-serialized data (first 80 bytes) ===\n")
+	for i := 0; i < min(len(serialized), 80); i++ {
+		if i%16 == 0 && i > 0 {
+			fmt.Println()
+		}
+		fmt.Printf("%02x ", serialized[i])
+	}
+	fmt.Println()
+
+	// Find byte differences
+	fmt.Println("=== Byte differences ===")
+	for i := 0; i < min(len(data), len(serialized)); i++ {
+		if data[i] != serialized[i] {
+			fmt.Printf("Position %d: Java=%02x Go=%02x\n", i, data[i], serialized[i])
+		}
+	}
+	if len(data) != len(serialized) {
+		fmt.Printf("Length mismatch: Java=%d Go=%d\n", len(data), len(serialized))
 	}
 
 	writeFile(dataFile, serialized)
@@ -468,7 +520,7 @@ func testList() {
 
 	buf := fory.NewByteBuffer(data)
 	lists := make([]interface{}, 4)
-	
+
 	for i := 0; i < 4; i++ {
 		var obj interface{}
 		err := f.Deserialize(buf, &obj, nil)
@@ -500,7 +552,7 @@ func testMap() {
 
 	buf := fory.NewByteBuffer(data)
 	maps := make([]interface{}, 2)
-	
+
 	for i := 0; i < 2; i++ {
 		var obj interface{}
 		err := f.Deserialize(buf, &obj, nil)
@@ -531,25 +583,66 @@ func testInteger() {
 	f.Register(Item1{}, 101)
 
 	buf := fory.NewByteBuffer(data)
-	values := make([]interface{}, 7)
-	
-	for i := 0; i < 7; i++ {
-		var obj interface{}
-		err := f.Deserialize(buf, &obj, nil)
-		if err != nil {
-			panic(fmt.Sprintf("Failed to deserialize value %d: %v", i, err))
-		}
-		values[i] = obj
+
+	// Deserialize Item1 struct
+	var item1 Item1
+	err := f.Deserialize(buf, &item1, nil)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to deserialize Item1: %v", err))
 	}
 
-	var outData []byte
-	for _, val := range values {
-		serialized, err := f.SerializeAny(val)
-		if err != nil {
-			panic(fmt.Sprintf("Failed to serialize: %v", err))
-		}
-		outData = append(outData, serialized...)
+	// Deserialize standalone values with specific types matching Rust:
+	// f1: int32 (non-nullable)
+	// f2: int32 (non-nullable)
+	// f3: *int32 (nullable)
+	// f4: *int32 (nullable)
+	// f5: int32 (non-nullable) - null becomes 0
+	// f6: *int32 (nullable) - null stays nil
+	var f1, f2 int32
+	var f3, f4, f6 *int32
+	var f5 int32
+
+	err = f.Deserialize(buf, &f1, nil)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to deserialize f1: %v", err))
 	}
+	err = f.Deserialize(buf, &f2, nil)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to deserialize f2: %v", err))
+	}
+	err = f.Deserialize(buf, &f3, nil)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to deserialize f3: %v", err))
+	}
+	err = f.Deserialize(buf, &f4, nil)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to deserialize f4: %v", err))
+	}
+	err = f.Deserialize(buf, &f5, nil)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to deserialize f5: %v", err))
+	}
+	err = f.Deserialize(buf, &f6, nil)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to deserialize f6: %v", err))
+	}
+
+	// Serialize back
+	var outData []byte
+	serialized, _ := f.SerializeAny(&item1)
+	outData = append(outData, serialized...)
+	serialized, _ = f.SerializeAny(f1)
+	outData = append(outData, serialized...)
+	serialized, _ = f.SerializeAny(f2)
+	outData = append(outData, serialized...)
+	serialized, _ = f.SerializeAny(f3)
+	outData = append(outData, serialized...)
+	serialized, _ = f.SerializeAny(f4)
+	outData = append(outData, serialized...)
+	serialized, _ = f.SerializeAny(f5)
+	outData = append(outData, serialized...)
+	serialized, _ = f.SerializeAny(f6)
+	outData = append(outData, serialized...)
 
 	writeFile(dataFile, outData)
 }
@@ -564,7 +657,7 @@ func testItem() {
 
 	buf := fory.NewByteBuffer(data)
 	items := make([]interface{}, 3)
-	
+
 	for i := 0; i < 3; i++ {
 		var obj interface{}
 		err := f.Deserialize(buf, &obj, nil)
@@ -596,7 +689,7 @@ func testColor() {
 
 	buf := fory.NewByteBuffer(data)
 	colors := make([]interface{}, 4)
-	
+
 	for i := 0; i < 4; i++ {
 		var obj interface{}
 		err := f.Deserialize(buf, &obj, nil)
@@ -665,8 +758,11 @@ func testSkipIdCustom() {
 	data := readFile(dataFile)
 
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
-	f.RegisterNamedType(MyExt{}, "my_ext")
-	f.RegisterNamedType(EmptyWrapper{}, "my_wrapper")
+	// Use numeric IDs to match Java's registration:
+	// fory2.register(MyExt.class, 103)
+	// fory2.register(EmptyWrapper.class, 104)
+	f.Register(MyExt{}, 103)
+	f.Register(EmptyWrapper{}, 104)
 
 	obj, err := f.DeserializeAny(data)
 	if err != nil {
@@ -713,7 +809,7 @@ func testConsistentNamed() {
 
 	buf := fory.NewByteBuffer(data)
 	values := make([]interface{}, 9)
-	
+
 	for i := 0; i < 9; i++ {
 		var obj interface{}
 		err := f.Deserialize(buf, &obj, nil)
@@ -768,7 +864,7 @@ func testPolymorphicList() {
 
 	buf := fory.NewByteBuffer(data)
 	values := make([]interface{}, 2)
-	
+
 	for i := 0; i < 2; i++ {
 		var obj interface{}
 		err := f.Deserialize(buf, &obj, nil)
@@ -802,7 +898,7 @@ func testPolymorphicMap() {
 
 	buf := fory.NewByteBuffer(data)
 	values := make([]interface{}, 2)
-	
+
 	for i := 0; i < 2; i++ {
 		var obj interface{}
 		err := f.Deserialize(buf, &obj, nil)
@@ -824,6 +920,230 @@ func testPolymorphicMap() {
 	writeFile(dataFile, outData)
 }
 
+func testOneFieldStructCompatible() {
+	dataFile := getDataFile()
+	data := readFile(dataFile)
+
+	// Debug: Print Java serialized bytes
+	fmt.Printf("Java serialized (compatible) %d bytes:\n  ", len(data))
+	for _, b := range data {
+		fmt.Printf("%02x ", b)
+	}
+	fmt.Println()
+
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
+	// Register with numeric ID 200 to match Java's fory.register(OneFieldStruct.class, 200)
+	f.Register(OneFieldStruct{}, 200)
+
+	// Parse header and meta offset manually for debugging
+	if len(data) >= 8 {
+		metaOffset := int32(data[4]) | int32(data[5])<<8 | int32(data[6])<<16 | int32(data[7])<<24
+		fmt.Printf("DEBUG: metaOffset = %d (0x%x)\n", metaOffset, metaOffset)
+		if metaOffset > 0 && int(8+metaOffset) < len(data) {
+			typeDefStart := 8 + metaOffset
+			fmt.Printf("DEBUG: TypeDefs start at byte %d\n", typeDefStart)
+			fmt.Printf("DEBUG: First bytes of TypeDefs section: ")
+			for i := 0; i < 10 && int(typeDefStart)+i < len(data); i++ {
+				fmt.Printf("%02x ", data[int(typeDefStart)+i])
+			}
+			fmt.Println()
+		}
+	}
+
+	buf := fory.NewByteBuffer(data)
+	var obj interface{}
+	err := f.Deserialize(buf, &obj, nil)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to deserialize: %v", err))
+	}
+
+	result := obj.(OneFieldStruct)
+	assertEqual(int32(42), result.Value, "value")
+
+	serialized, err := f.SerializeAny(result)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to serialize: %v", err))
+	}
+
+	// Debug: Print Go serialized bytes
+	fmt.Printf("Go serialized (compatible) %d bytes:\n  ", len(serialized))
+	for _, b := range serialized {
+		fmt.Printf("%02x ", b)
+	}
+	fmt.Println()
+
+	writeFile(dataFile, serialized)
+}
+
+func testOneFieldStructSchema() {
+	dataFile := getDataFile()
+	data := readFile(dataFile)
+
+	// Debug: Print Java serialized bytes
+	fmt.Printf("Java serialized (schema) %d bytes:\n  ", len(data))
+	for _, b := range data {
+		fmt.Printf("%02x ", b)
+	}
+	fmt.Println()
+
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(false))
+	f.Register(OneFieldStruct{}, 200)
+
+	buf := fory.NewByteBuffer(data)
+	var obj interface{}
+	err := f.Deserialize(buf, &obj, nil)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to deserialize: %v", err))
+	}
+
+	result := obj.(OneFieldStruct)
+	assertEqual(int32(42), result.Value, "value")
+
+	serialized, err := f.SerializeAny(result)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to serialize: %v", err))
+	}
+
+	// Debug: Print Go serialized bytes
+	fmt.Printf("Go serialized (schema) %d bytes:\n  ", len(serialized))
+	for _, b := range serialized {
+		fmt.Printf("%02x ", b)
+	}
+	fmt.Println()
+
+	writeFile(dataFile, serialized)
+}
+
+func testOneStringFieldSchemaConsistent() {
+	dataFile := getDataFile()
+	data := readFile(dataFile)
+
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(false))
+	f.Register(OneStringFieldStruct{}, 200)
+
+	buf := fory.NewByteBuffer(data)
+	var obj interface{}
+	err := f.Deserialize(buf, &obj, nil)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to deserialize: %v", err))
+	}
+
+	result := obj.(OneStringFieldStruct)
+	assertEqual("hello", result.F1, "f1")
+
+	serialized, err := f.SerializeAny(result)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to serialize: %v", err))
+	}
+
+	writeFile(dataFile, serialized)
+}
+
+func testOneStringFieldCompatible() {
+	dataFile := getDataFile()
+	data := readFile(dataFile)
+
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
+	f.Register(OneStringFieldStruct{}, 200)
+
+	buf := fory.NewByteBuffer(data)
+	var obj interface{}
+	err := f.Deserialize(buf, &obj, nil)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to deserialize: %v", err))
+	}
+
+	result := obj.(OneStringFieldStruct)
+	assertEqual("hello", result.F1, "f1")
+
+	serialized, err := f.SerializeAny(result)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to serialize: %v", err))
+	}
+
+	writeFile(dataFile, serialized)
+}
+
+func testTwoStringFieldCompatible() {
+	dataFile := getDataFile()
+	data := readFile(dataFile)
+
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
+	f.Register(TwoStringFieldStruct{}, 201)
+
+	buf := fory.NewByteBuffer(data)
+	var obj interface{}
+	err := f.Deserialize(buf, &obj, nil)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to deserialize: %v", err))
+	}
+
+	result := obj.(TwoStringFieldStruct)
+	assertEqual("first", result.F1, "f1")
+	assertEqual("second", result.F2, "f2")
+
+	serialized, err := f.SerializeAny(result)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to serialize: %v", err))
+	}
+
+	writeFile(dataFile, serialized)
+}
+
+func testSchemaEvolutionCompatible() {
+	dataFile := getDataFile()
+	data := readFile(dataFile)
+
+	// Read TwoStringFieldStruct data, deserialize as EmptyStruct
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
+	f.Register(EmptyStruct{}, 200)
+
+	buf := fory.NewByteBuffer(data)
+	var obj interface{}
+	err := f.Deserialize(buf, &obj, nil)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to deserialize as EmptyStruct: %v", err))
+	}
+
+	// Serialize back as EmptyStruct
+	serialized, err := f.SerializeAny(obj)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to serialize: %v", err))
+	}
+
+	writeFile(dataFile, serialized)
+}
+
+func testSchemaEvolutionCompatibleReverse() {
+	dataFile := getDataFile()
+	data := readFile(dataFile)
+
+	// Read OneStringFieldStruct data, deserialize as TwoStringFieldStruct
+	// Missing f2 field will be Go's zero value (empty string)
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
+	f.Register(TwoStringFieldStruct{}, 200)
+
+	buf := fory.NewByteBuffer(data)
+	var obj interface{}
+	err := f.Deserialize(buf, &obj, nil)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to deserialize as TwoStringFieldStruct: %v", err))
+	}
+
+	result := obj.(TwoStringFieldStruct)
+	assertEqual("only_one", result.F1, "f1")
+	// f2 should be empty string since it wasn't in the source data
+	assertEqual("", result.F2, "f2")
+
+	// Serialize back
+	serialized, err := f.SerializeAny(obj)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to serialize: %v", err))
+	}
+
+	writeFile(dataFile, serialized)
+}
+
 // ============================================================================
 // Main
 // ============================================================================
@@ -839,7 +1159,9 @@ func main() {
 
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Printf("Test case %s failed: %v\n", *caseName, r)
+			buf := make([]byte, 4096)
+			n := runtime.Stack(buf, false)
+			fmt.Printf("Test case %s failed: %v\nStack trace:\n%s\n", *caseName, r, buf[:n])
 			os.Exit(1)
 		}
 	}()
@@ -885,6 +1207,20 @@ func main() {
 		testPolymorphicList()
 	case "test_polymorphic_map":
 		testPolymorphicMap()
+	case "test_one_field_struct_compatible":
+		testOneFieldStructCompatible()
+	case "test_one_field_struct_schema":
+		testOneFieldStructSchema()
+	case "test_one_string_field_schema":
+		testOneStringFieldSchemaConsistent()
+	case "test_one_string_field_compatible":
+		testOneStringFieldCompatible()
+	case "test_two_string_field_compatible":
+		testTwoStringFieldCompatible()
+	case "test_schema_evolution_compatible":
+		testSchemaEvolutionCompatible()
+	case "test_schema_evolution_compatible_reverse":
+		testSchemaEvolutionCompatibleReverse()
 	default:
 		panic(fmt.Sprintf("Unknown test case: %s", *caseName))
 	}

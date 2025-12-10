@@ -399,7 +399,6 @@ func (s sliceSerializer) readSameType(ctx *ReadContext, buf *ByteBuffer, value r
 	return nil
 }
 
-
 // readDifferentTypes handles deserialization of slices with mixed element types
 func (s sliceSerializer) readDifferentTypes(
 	ctx *ReadContext, buf *ByteBuffer, value reflect.Value) error {

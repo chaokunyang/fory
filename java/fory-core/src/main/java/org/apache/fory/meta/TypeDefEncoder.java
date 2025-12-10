@@ -53,9 +53,9 @@ class TypeDefEncoder {
   /** Build class definition from fields of class. */
   static ClassDef buildTypeDef(Fory fory, Class<?> type) {
     DescriptorGrouper descriptorGrouper =
-        fory.getClassResolver()
+        fory.getXtypeResolver()
             .createDescriptorGrouper(
-                fory.getClassResolver().getFieldDescriptors(type, true),
+                fory.getXtypeResolver().getFieldDescriptors(type, true),
                 false,
                 Function.identity());
     ClassInfo classInfo = fory._getTypeResolver().getClassInfo(type);

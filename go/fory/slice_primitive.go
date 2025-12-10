@@ -93,7 +93,7 @@ func (s byteSliceSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, valu
 	buf := ctx.Buffer()
 	// Read length + data directly (like primitive arrays)
 	length := buf.ReadLength()
-	
+
 	var result reflect.Value
 	switch type_.Kind() {
 	case reflect.Slice:
@@ -106,7 +106,7 @@ func (s byteSliceSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, valu
 	default:
 		return fmt.Errorf("unsupported kind %v; want slice or array", type_.Kind())
 	}
-	
+
 	// Now read the bytes into the slice/array
 	raw := buf.ReadBytes(length)
 	if type_.Kind() == reflect.Slice {
@@ -118,10 +118,10 @@ func (s byteSliceSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, valu
 		// For array, use reflect.Copy
 		reflect.Copy(result, reflect.ValueOf(raw))
 	}
-	
+
 	value.Set(result)
 	ctx.RefResolver().Reference(value)
-	
+
 	return nil
 }
 

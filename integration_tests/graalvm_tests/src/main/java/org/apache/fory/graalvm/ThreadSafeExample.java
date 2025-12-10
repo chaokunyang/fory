@@ -25,17 +25,21 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import org.apache.fory.Fory;
-import org.apache.fory.ThreadLocalFory;
 import org.apache.fory.ThreadSafeFory;
 import org.apache.fory.collection.Collections;
+import org.apache.fory.pool.ThreadPoolFory;
 import org.apache.fory.util.Preconditions;
 
 public class ThreadSafeExample {
   static ThreadSafeFory fory;
 
   static {
+    // In GraalVM native images, ThreadLocalFory would create new Fory instances lazily
+    // on each thread, triggering runtime serializer generation which requires types
+    // that may not be registered. Instead, use ThreadPoolFory which pre-creates
+    // a pool of Fory instances at build time.
     fory =
-        new ThreadLocalFory(
+        new ThreadPoolFory(
             classLoader -> {
               Fory f =
                   Fory.builder()
@@ -46,7 +50,13 @@ public class ThreadSafeExample {
               f.register(Foo.class);
               f.ensureSerializersCompiled();
               return f;
-            });
+            },
+            10, // minPoolSize - create 10 Fory instances upfront
+            10, // maxPoolSize - limit to 10 instances
+            60,
+            TimeUnit.SECONDS);
+    // Eagerly initialize the pool to trigger Fory creation at build time
+    fory.serialize("warmup");
     System.out.println("Init fory at build time");
   }
 

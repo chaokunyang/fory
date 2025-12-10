@@ -21,6 +21,7 @@ package org.apache.fory.serializer;
 
 import java.util.Arrays;
 import org.apache.fory.Fory;
+import org.apache.fory.ThreadSafeFory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.resolver.ClassResolver;
@@ -83,6 +84,24 @@ public final class CompressedArraySerializers {
   /**
    * Register compressed array serializers with the given Fory instance.
    *
+   * <p>Example usage:
+   *
+   * <pre>{@code
+   * ThreadSafeFory fory = Fory.builder()
+   *     .withConfig(Config.compressIntArray(true).compressLongArray(true))
+   *     .buildThreadSafeFory();
+   * CompressedArraySerializers.registerSerializers(fory);
+   * }</pre>
+   *
+   * @param fory the ThreadSafeFory instance to register serializers with
+   */
+  public static void registerIfEnabled(ThreadSafeFory fory) {
+    fory.registerCallback(CompressedArraySerializers::registerIfEnabled);
+  }
+
+  /**
+   * Register compressed array serializers with the given Fory instance.
+   *
    * <p>This will replace the default {@code int[]} and {@code long[]} serializers with compressed
    * versions that use the Java 16+ Vector API for analysis and can serialize arrays more
    * efficiently when values fit in smaller data types.
@@ -93,6 +112,13 @@ public final class CompressedArraySerializers {
     ClassResolver resolver = fory.getClassResolver();
     resolver.registerInternalSerializer(int[].class, new CompressedIntArraySerializer(fory));
     resolver.registerInternalSerializer(long[].class, new CompressedLongArraySerializer(fory));
+  }
+
+  /**
+   * Register compressed array serializers with the given Fory instance.
+   */
+  public static void register(ThreadSafeFory fory) {
+    fory.registerCallback(CompressedArraySerializers::register);
   }
 
   public static final class CompressedIntArraySerializer extends PrimitiveArraySerializer<int[]> {

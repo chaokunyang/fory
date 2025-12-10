@@ -113,7 +113,4 @@ public abstract class AbstractThreadSafeFory implements ThreadSafeFory {
           return null;
         });
   }
-
-  @Internal
-  public abstract void registerCallback(Consumer<Fory> callback);
 }

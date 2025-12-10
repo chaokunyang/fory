@@ -20,7 +20,10 @@
 package org.apache.fory;
 
 import java.nio.ByteBuffer;
+import java.util.function.Consumer;
 import java.util.function.Function;
+
+import org.apache.fory.annotation.Internal;
 import org.apache.fory.resolver.ClassChecker;
 import org.apache.fory.resolver.TypeChecker;
 import org.apache.fory.serializer.SerializerFactory;
@@ -98,4 +101,7 @@ public interface ThreadSafeFory extends BaseFory {
    * @see LoaderBinding#clearClassLoader(ClassLoader)
    */
   void clearClassLoader(ClassLoader loader);
+
+  @Internal
+  void registerCallback(Consumer<Fory> callback);
 }

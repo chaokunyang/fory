@@ -25,7 +25,7 @@ The C++ implementation provides high-performance serialization with compile-time
 
 ## Why Apache Fory™ C++?
 
-- **🔥 Blazingly Fast**: Zero-copy deserialization and optimized binary protocols
+- **🔥 Blazingly Fast**: Fast serialization and optimized binary protocols
 - **🌍 Cross-Language**: Seamlessly serialize/deserialize data across Java, Python, C++, Go, JavaScript, and Rust
 - **🎯 Type-Safe**: Compile-time type checking with macro-based struct registration
 - **🔄 Reference Tracking**: Automatic tracking of shared and circular references
@@ -33,17 +33,101 @@ The C++ implementation provides high-performance serialization with compile-time
 - **⚡ Two Modes**: Object graph serialization and zero-copy row-based format
 - **🧵 Thread Safety**: Both single-threaded (fastest) and thread-safe variants
 
-## Build System
+## Installation
 
-The C++ implementation supports both Bazel and CMake build systems:
+The C++ implementation supports both CMake and Bazel build systems.
+
+### Prerequisites
+
+- CMake 3.16+ (for CMake build) or Bazel 8+ (for Bazel build)
+- C++17 compatible compiler (GCC 7+, Clang 5+, MSVC 2017+)
+
+### Using CMake (Recommended)
+
+The easiest way to use Fory is with CMake's `FetchContent` module:
+
+```cmake
+cmake_minimum_required(VERSION 3.16)
+project(my_project LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+include(FetchContent)
+FetchContent_Declare(
+    fory
+    GIT_REPOSITORY https://github.com/apache/fory.git
+    GIT_TAG        v0.14.0
+    SOURCE_SUBDIR  cpp
+)
+FetchContent_MakeAvailable(fory)
+
+add_executable(my_app main.cc)
+target_link_libraries(my_app PRIVATE fory::serialization)
+```
+
+Then build and run:
 
 ```bash
-# Build with Bazel
-bazel build //cpp/...
-
-# Run tests
-bazel test $(bazel query //cpp/...)
+mkdir build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release
+cmake --build . --parallel
+./my_app
 ```
+
+### Using Bazel
+
+Create a `MODULE.bazel` file in your project root:
+
+```bazel
+module(
+    name = "my_project",
+    version = "1.0.0",
+)
+
+bazel_dep(name = "rules_cc", version = "0.1.1")
+
+bazel_dep(name = "fory", version = "0.14.0")
+git_override(
+    module_name = "fory",
+    remote = "https://github.com/apache/fory.git",
+    commit = "v0.14.0",  # Or use a specific commit hash for reproducibility
+)
+```
+
+Create a `BUILD` file for your application:
+
+```bazel
+cc_binary(
+    name = "my_app",
+    srcs = ["main.cc"],
+    deps = ["@fory//cpp/fory/serialization:fory_serialization"],
+)
+```
+
+Then build and run:
+
+```bash
+bazel build //:my_app
+bazel run //:my_app
+```
+
+For local development, you can use `local_path_override` instead:
+
+```bazel
+bazel_dep(name = "fory", version = "0.14.0")
+local_path_override(
+    module_name = "fory",
+    path = "/path/to/fory",
+)
+```
+
+### Examples
+
+See the [examples/cpp](https://github.com/apache/fory/tree/main/examples/cpp) directory for complete working examples:
+
+- [hello_world](https://github.com/apache/fory/tree/main/examples/cpp/hello_world) - Object graph serialization
+- [hello_row](https://github.com/apache/fory/tree/main/examples/cpp/hello_row) - Row format encoding
 
 ## Quick Start
 

@@ -591,19 +591,19 @@ public class Serializers {
 
   public static void registerDefaultSerializers(Fory fory) {
     ClassResolver resolver = fory.getClassResolver();
-    resolver.registerSerializer(Class.class, new ClassSerializer(fory));
-    resolver.registerSerializer(StringBuilder.class, new StringBuilderSerializer(fory));
-    resolver.registerSerializer(StringBuffer.class, new StringBufferSerializer(fory));
-    resolver.registerSerializer(BigInteger.class, new BigIntegerSerializer(fory));
-    resolver.registerSerializer(BigDecimal.class, new BigDecimalSerializer(fory));
-    resolver.registerSerializer(AtomicBoolean.class, new AtomicBooleanSerializer(fory));
-    resolver.registerSerializer(AtomicInteger.class, new AtomicIntegerSerializer(fory));
-    resolver.registerSerializer(AtomicLong.class, new AtomicLongSerializer(fory));
-    resolver.registerSerializer(AtomicReference.class, new AtomicReferenceSerializer(fory));
-    resolver.registerSerializer(Currency.class, new CurrencySerializer(fory));
-    resolver.registerSerializer(URI.class, new URISerializer(fory));
-    resolver.registerSerializer(Pattern.class, new RegexSerializer(fory));
-    resolver.registerSerializer(UUID.class, new UUIDSerializer(fory));
-    resolver.registerSerializer(Object.class, new EmptyObjectSerializer(fory));
+    resolver.registerInternalSerializer(Class.class, new ClassSerializer(fory));
+    resolver.registerInternalSerializer(StringBuilder.class, new StringBuilderSerializer(fory));
+    resolver.registerInternalSerializer(StringBuffer.class, new StringBufferSerializer(fory));
+    resolver.registerInternalSerializer(BigInteger.class, new BigIntegerSerializer(fory));
+    resolver.registerInternalSerializer(BigDecimal.class, new BigDecimalSerializer(fory));
+    resolver.registerInternalSerializer(AtomicBoolean.class, new AtomicBooleanSerializer(fory));
+    resolver.registerInternalSerializer(AtomicInteger.class, new AtomicIntegerSerializer(fory));
+    resolver.registerInternalSerializer(AtomicLong.class, new AtomicLongSerializer(fory));
+    resolver.registerInternalSerializer(AtomicReference.class, new AtomicReferenceSerializer(fory));
+    resolver.registerInternalSerializer(Currency.class, new CurrencySerializer(fory));
+    resolver.registerInternalSerializer(URI.class, new URISerializer(fory));
+    resolver.registerInternalSerializer(Pattern.class, new RegexSerializer(fory));
+    resolver.registerInternalSerializer(UUID.class, new UUIDSerializer(fory));
+    resolver.registerInternalSerializer(Object.class, new EmptyObjectSerializer(fory));
   }
 }

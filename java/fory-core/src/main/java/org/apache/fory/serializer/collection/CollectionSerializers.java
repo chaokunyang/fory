@@ -1002,55 +1002,58 @@ public class CollectionSerializers {
 
   public static void registerDefaultSerializers(Fory fory) {
     ClassResolver resolver = fory.getClassResolver();
-    resolver.registerSerializer(ArrayList.class, new ArrayListSerializer(fory));
+    resolver.registerInternalSerializer(ArrayList.class, new ArrayListSerializer(fory));
     Class arrayAsListClass = Arrays.asList(1, 2).getClass();
-    resolver.registerSerializer(
+    resolver.registerInternalSerializer(
         arrayAsListClass, new ArraysAsListSerializer(fory, arrayAsListClass));
-    resolver.registerSerializer(
+    resolver.registerInternalSerializer(
         LinkedList.class, new CollectionSerializer(fory, LinkedList.class, true));
-    resolver.registerSerializer(HashSet.class, new HashSetSerializer(fory));
-    resolver.registerSerializer(LinkedHashSet.class, new LinkedHashSetSerializer(fory));
-    resolver.registerSerializer(TreeSet.class, new SortedSetSerializer<>(fory, TreeSet.class));
-    resolver.registerSerializer(
+    resolver.registerInternalSerializer(HashSet.class, new HashSetSerializer(fory));
+    resolver.registerInternalSerializer(LinkedHashSet.class, new LinkedHashSetSerializer(fory));
+    resolver.registerInternalSerializer(
+        TreeSet.class, new SortedSetSerializer<>(fory, TreeSet.class));
+    resolver.registerInternalSerializer(
         Collections.EMPTY_LIST.getClass(),
         new EmptyListSerializer(fory, (Class<List<?>>) Collections.EMPTY_LIST.getClass()));
-    resolver.registerSerializer(
+    resolver.registerInternalSerializer(
         Collections.emptySortedSet().getClass(),
         new EmptySortedSetSerializer(
             fory, (Class<SortedSet<?>>) Collections.emptySortedSet().getClass()));
-    resolver.registerSerializer(
+    resolver.registerInternalSerializer(
         Collections.EMPTY_SET.getClass(),
         new EmptySetSerializer(fory, (Class<Set<?>>) Collections.EMPTY_SET.getClass()));
-    resolver.registerSerializer(
+    resolver.registerInternalSerializer(
         Collections.singletonList(null).getClass(),
         new CollectionsSingletonListSerializer(
             fory, (Class<List<?>>) Collections.singletonList(null).getClass()));
-    resolver.registerSerializer(
+    resolver.registerInternalSerializer(
         Collections.singleton(null).getClass(),
         new CollectionsSingletonSetSerializer(
             fory, (Class<Set<?>>) Collections.singleton(null).getClass()));
-    resolver.registerSerializer(
+    resolver.registerInternalSerializer(
         ConcurrentSkipListSet.class,
         new ConcurrentSkipListSetSerializer(fory, ConcurrentSkipListSet.class));
-    resolver.registerSerializer(Vector.class, new VectorSerializer(fory, Vector.class));
-    resolver.registerSerializer(ArrayDeque.class, new ArrayDequeSerializer(fory, ArrayDeque.class));
-    resolver.registerSerializer(BitSet.class, new BitSetSerializer(fory, BitSet.class));
-    resolver.registerSerializer(
+    resolver.registerInternalSerializer(Vector.class, new VectorSerializer(fory, Vector.class));
+    resolver.registerInternalSerializer(
+        ArrayDeque.class, new ArrayDequeSerializer(fory, ArrayDeque.class));
+    resolver.registerInternalSerializer(BitSet.class, new BitSetSerializer(fory, BitSet.class));
+    resolver.registerInternalSerializer(
         PriorityQueue.class, new PriorityQueueSerializer(fory, PriorityQueue.class));
-    resolver.registerSerializer(
+    resolver.registerInternalSerializer(
         ArrayBlockingQueue.class, new ArrayBlockingQueueSerializer(fory, ArrayBlockingQueue.class));
-    resolver.registerSerializer(
+    resolver.registerInternalSerializer(
         LinkedBlockingQueue.class,
         new LinkedBlockingQueueSerializer(fory, LinkedBlockingQueue.class));
-    resolver.registerSerializer(
+    resolver.registerInternalSerializer(
         CopyOnWriteArrayList.class,
         new CopyOnWriteArrayListSerializer(fory, CopyOnWriteArrayList.class));
     final Class setFromMapClass = Collections.newSetFromMap(new HashMap<>()).getClass();
-    resolver.registerSerializer(setFromMapClass, new SetFromMapSerializer(fory, setFromMapClass));
-    resolver.registerSerializer(
+    resolver.registerInternalSerializer(
+        setFromMapClass, new SetFromMapSerializer(fory, setFromMapClass));
+    resolver.registerInternalSerializer(
         ConcurrentHashMap.KeySetView.class,
         new ConcurrentHashMapKeySetViewSerializer(fory, ConcurrentHashMap.KeySetView.class));
-    resolver.registerSerializer(
+    resolver.registerInternalSerializer(
         CopyOnWriteArraySet.class,
         new CopyOnWriteArraySetSerializer(fory, CopyOnWriteArraySet.class));
   }

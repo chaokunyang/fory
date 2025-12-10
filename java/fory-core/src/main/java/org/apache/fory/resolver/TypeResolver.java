@@ -117,26 +117,59 @@ public abstract class TypeResolver {
     }
   }
 
+  /**
+   * Registers a class with an auto-assigned user ID.
+   *
+   * @param type the class to register
+   */
   public abstract void register(Class<?> type);
 
+  /**
+   * Registers a class with a user-specified ID. Valid ID range is [0, 32510].
+   *
+   * @param type the class to register
+   * @param id the user ID to assign (0-based)
+   */
   public abstract void register(Class<?> type, int id);
 
+  /**
+   * Registers a class with a namespace and type name for cross-language serialization.
+   *
+   * @param type the class to register
+   * @param namespace the namespace (can be empty if type name has no conflict)
+   * @param typeName the type name
+   */
   public abstract void register(Class<?> type, String namespace, String typeName);
 
+  /** Registers a class by name with an auto-assigned user ID. */
   public void register(String className) {
     register(loadClass(className));
   }
 
+  /** Registers a class by name with a user-specified ID. */
   public void register(String className, int classId) {
     register(loadClass(className), classId);
   }
 
+  /** Registers a class by name with a namespace and type name. */
   public void register(String className, String namespace, String typeName) {
     register(loadClass(className), namespace, typeName);
   }
 
+  /**
+   * Registers a custom serializer for a type.
+   *
+   * @param type the class to register
+   * @param serializer the serializer instance to use
+   */
   public abstract void registerSerializer(Class<?> type, Serializer<?> serializer);
 
+  /**
+   * Registers a custom serializer class for a type.
+   *
+   * @param type the class to register
+   * @param serializerClass the serializer class (will be instantiated by Fory)
+   */
   public abstract <T> void registerSerializer(
       Class<T> type, Class<? extends Serializer> serializerClass);
 
@@ -664,6 +697,7 @@ public abstract class TypeResolver {
     // Here we set it to 1 because `NO_CLASS_ID` is 0 to avoid calculating it again in
     // `register(Class<?> cls)`.
     short classIdGenerator = 1;
+    short userIdGenerator = 0;
     SerializerFactory serializerFactory;
     final IdentityMap<Class<?>, Short> registeredClassIdMap =
         new IdentityMap<>(estimatedNumRegistered);

@@ -36,7 +36,7 @@ You can register class with API `Fory#register`:
 ```java
 Fory fory = xxx;
 fory.register(SomeClass.class);
-fory.register(SomeClass1.class, 200);
+fory.register(SomeClass1.class, 1);
 ```
 
 Note that class registration order is important. Serialization and deserialization peers should have the same registration order.

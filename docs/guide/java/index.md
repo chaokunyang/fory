@@ -69,7 +69,7 @@ public class Example {
     ThreadSafeFory fory = new ThreadLocalFory(classLoader -> {
       Fory f = Fory.builder().withLanguage(Language.JAVA)
         .withClassLoader(classLoader).build();
-      f.register(SomeClass.class);
+      f.register(SomeClass.class, 1);
       return f;
     });
     byte[] bytes = fory.serialize(object);
@@ -92,7 +92,7 @@ public class Example {
   private static final ThreadSafeFory fory = new ThreadLocalFory(classLoader -> {
     Fory f = Fory.builder().withLanguage(Language.JAVA)
       .withClassLoader(classLoader).build();
-    f.register(SomeClass.class);
+    f.register(SomeClass.class, 1);
     return f;
   });
 
@@ -116,7 +116,7 @@ Uses thread-local storage to maintain separate Fory instances per thread:
 ThreadSafeFory fory = new ThreadLocalFory(classLoader -> {
   Fory f = Fory.builder().withLanguage(Language.JAVA)
     .withClassLoader(classLoader).build();
-  f.register(SomeClass.class);
+  f.register(SomeClass.class, 1);
   return f;
 });
 byte[] bytes = fory.serialize(object);

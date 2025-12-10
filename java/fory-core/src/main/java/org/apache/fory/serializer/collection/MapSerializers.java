@@ -495,27 +495,28 @@ public class MapSerializers {
   // TODO(chaokunyang) support ConcurrentSkipListMap.SubMap mo efficiently.
   public static void registerDefaultSerializers(Fory fory) {
     ClassResolver resolver = fory.getClassResolver();
-    resolver.registerSerializer(HashMap.class, new HashMapSerializer(fory));
+    resolver.registerInternalSerializer(HashMap.class, new HashMapSerializer(fory));
     fory.getClassResolver()
-        .registerSerializer(LinkedHashMap.class, new LinkedHashMapSerializer(fory));
-    resolver.registerSerializer(TreeMap.class, new SortedMapSerializer<>(fory, TreeMap.class));
-    resolver.registerSerializer(
+        .registerInternalSerializer(LinkedHashMap.class, new LinkedHashMapSerializer(fory));
+    resolver.registerInternalSerializer(
+        TreeMap.class, new SortedMapSerializer<>(fory, TreeMap.class));
+    resolver.registerInternalSerializer(
         Collections.EMPTY_MAP.getClass(),
         new EmptyMapSerializer(fory, (Class<Map<?, ?>>) Collections.EMPTY_MAP.getClass()));
-    resolver.registerSerializer(
+    resolver.registerInternalSerializer(
         Collections.emptySortedMap().getClass(),
         new EmptySortedMapSerializer(
             fory, (Class<SortedMap<?, ?>>) Collections.emptySortedMap().getClass()));
-    resolver.registerSerializer(
+    resolver.registerInternalSerializer(
         Collections.singletonMap(null, null).getClass(),
         new SingletonMapSerializer(
             fory, (Class<Map<?, ?>>) Collections.singletonMap(null, null).getClass()));
-    resolver.registerSerializer(
+    resolver.registerInternalSerializer(
         ConcurrentHashMap.class, new ConcurrentHashMapSerializer(fory, ConcurrentHashMap.class));
-    resolver.registerSerializer(
+    resolver.registerInternalSerializer(
         ConcurrentSkipListMap.class,
         new ConcurrentSkipListMapSerializer(fory, ConcurrentSkipListMap.class));
-    resolver.registerSerializer(EnumMap.class, new EnumMapSerializer(fory));
-    resolver.registerSerializer(LazyMap.class, new LazyMapSerializer(fory));
+    resolver.registerInternalSerializer(EnumMap.class, new EnumMapSerializer(fory));
+    resolver.registerInternalSerializer(LazyMap.class, new LazyMapSerializer(fory));
   }
 }

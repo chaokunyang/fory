@@ -19,9 +19,7 @@
 
 package org.apache.fory;
 
-import java.util.function.Consumer;
 import java.util.function.Function;
-import org.apache.fory.annotation.Internal;
 import org.apache.fory.resolver.ClassChecker;
 import org.apache.fory.resolver.TypeChecker;
 import org.apache.fory.serializer.Serializer;
@@ -113,7 +111,4 @@ public abstract class AbstractThreadSafeFory implements ThreadSafeFory {
           return null;
         });
   }
-
-  @Internal
-  public abstract void registerCallback(Consumer<Fory> callback);
 }

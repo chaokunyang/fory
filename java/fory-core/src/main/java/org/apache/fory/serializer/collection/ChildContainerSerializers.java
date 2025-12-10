@@ -35,7 +35,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.Vector;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.fory.Fory;
 import org.apache.fory.builder.LayerMarkerClassGenerator;
 import org.apache.fory.config.CompatibleMode;
@@ -229,8 +228,6 @@ public class ChildContainerSerializers {
     }
   }
 
-  private static final AtomicInteger LAYER_INDEX_COUNTER = new AtomicInteger(100000);
-
   private static <T> Serializer[] buildSlotsSerializers(
       Fory fory, Set<Class<?>> superClasses, Class<T> cls) {
     Preconditions.checkArgument(!superClasses.contains(cls));
@@ -241,9 +238,9 @@ public class ChildContainerSerializers {
       if (fory.getConfig().getCompatibleMode() == CompatibleMode.COMPATIBLE) {
         // Use MetaSharedLayerSerializer instead of CompatibleSerializer
         ClassDef layerClassDef = fory.getClassResolver().getTypeDef(cls, false);
-        int globalLayerIndex = LAYER_INDEX_COUNTER.getAndIncrement();
-        Class<?> layerMarkerClass =
-            LayerMarkerClassGenerator.getOrCreate(fory, cls, globalLayerIndex);
+        // Use layer index within class hierarchy (not global counter)
+        // This ensures unique marker classes without excessive array dimensions
+        Class<?> layerMarkerClass = LayerMarkerClassGenerator.getOrCreate(fory, cls, layerIndex);
         slotsSerializer = new MetaSharedLayerSerializer(fory, cls, layerClassDef, layerMarkerClass);
       } else {
         slotsSerializer = new ObjectSerializer<>(fory, cls, false);

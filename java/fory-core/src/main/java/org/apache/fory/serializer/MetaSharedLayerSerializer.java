@@ -52,7 +52,7 @@ import org.apache.fory.type.Generics;
  *
  * @see MetaSharedSerializer
  * @see ObjectStreamSerializer
- * @see CurrentLayerMarker
+ * @see org.apache.fory.builder.LayerMarkerClassGenerator
  */
 @SuppressWarnings({"unchecked"})
 public class MetaSharedLayerSerializer<T> extends AbstractObjectSerializer<T> {

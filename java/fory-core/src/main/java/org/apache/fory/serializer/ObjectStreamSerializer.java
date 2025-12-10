@@ -391,7 +391,6 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     private final ForyObjectOutputStream objectOutputStream;
     private final ForyObjectInputStream objectInputStream;
     private final ObjectArray getFieldPool;
-    private static final AtomicInteger LAYER_INDEX_COUNTER = new AtomicInteger(0);
 
     public SlotsInfo(Fory fory, Class<?> type) {
       this.cls = type;
@@ -401,9 +400,9 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
 
       // Build single-layer ClassDef (resolveParent=false)
       ClassDef layerClassDef = fory.getClassResolver().getTypeDef(type, false);
-      // Generate marker class for this layer
-      int layerIndex = LAYER_INDEX_COUNTER.getAndIncrement();
-      Class<?> layerMarkerClass = LayerMarkerClassGenerator.getOrCreate(fory, type, layerIndex);
+      // Generate marker class for this layer. Use 0 as layer index since each class
+      // has its own SlotsInfo, and the (class, 0) pair is unique for each class.
+      Class<?> layerMarkerClass = LayerMarkerClassGenerator.getOrCreate(fory, type, 0);
 
       // Use MetaSharedLayerSerializer (JIT not yet implemented, always use interpreter mode)
       this.slotsSerializer =
@@ -545,7 +544,6 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     private final ForyObjectOutputStream objectOutputStream;
     private final ForyObjectInputStream objectInputStream;
     private final ObjectArray getFieldPool;
-    private static final AtomicInteger LAYER_INDEX_COUNTER = new AtomicInteger(10000);
 
     public MinimalSlotsInfo(Fory fory, Class<?> type) {
       // Initialize with minimal required fields
@@ -554,8 +552,9 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
 
       // Build single-layer ClassDef
       ClassDef layerClassDef = fory.getClassResolver().getTypeDef(type, false);
-      int layerIndex = LAYER_INDEX_COUNTER.getAndIncrement();
-      Class<?> layerMarkerClass = LayerMarkerClassGenerator.getOrCreate(fory, type, layerIndex);
+      // Use 0 as layer index since each class has its own MinimalSlotsInfo,
+      // and the (class, 0) pair is unique for each class.
+      Class<?> layerMarkerClass = LayerMarkerClassGenerator.getOrCreate(fory, type, 0);
 
       // Create a MetaSharedLayerSerializer for field handling
       this.slotsSerializer =

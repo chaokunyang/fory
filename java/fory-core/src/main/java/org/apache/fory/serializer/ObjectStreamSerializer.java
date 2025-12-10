@@ -320,6 +320,33 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
   }
 
   /**
+   * Ensures serializers are generated for all field types of a class during GraalVM build time.
+   * This is necessary because when a new Fory instance is created at runtime in GraalVM native
+   * images, it needs to reuse the serializers that were generated at build time.
+   *
+   * @param fory the Fory instance
+   * @param layerClassDef the ClassDef for this layer
+   * @param type the target class type
+   */
+  private static void ensureFieldSerializersGenerated(
+      Fory fory, ClassDef layerClassDef, Class<?> type) {
+    Collection<Descriptor> descriptors =
+        layerClassDef.getDescriptors(fory.getClassResolver(), type);
+    for (Descriptor descriptor : descriptors) {
+      Class<?> fieldType = descriptor.getRawType();
+      if (fieldType != null && !fieldType.isPrimitive()) {
+        try {
+          // Trigger serializer generation for this field type
+          fory.getClassResolver().getSerializerClass(fieldType);
+        } catch (Exception e) {
+          // Ignore errors - some types may not need serializers or may be handled specially
+          ExceptionUtils.ignore(e);
+        }
+      }
+    }
+  }
+
+  /**
    * Information about a class's stream methods (writeObject, readObject, readObjectNoData) and
    * their optimized MethodHandle equivalents for fast invocation.
    */
@@ -407,6 +434,12 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       // Use MetaSharedLayerSerializer (JIT not yet implemented, always use interpreter mode)
       this.slotsSerializer =
           new MetaSharedLayerSerializer(fory, type, layerClassDef, layerMarkerClass);
+
+      // In GraalVM, ensure serializers are generated for all field types at build time
+      // so they're available when new Fory instances are created at runtime
+      if (GraalvmSupport.isGraalBuildtime()) {
+        ensureFieldSerializersGenerated(fory, layerClassDef, type);
+      }
 
       fieldIndexMap = new ObjectIntMap<>(4, 0.4f);
       // Build field list from ObjectStreamClass or class fields
@@ -559,6 +592,12 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       // Create a MetaSharedLayerSerializer for field handling
       this.slotsSerializer =
           new MetaSharedLayerSerializer(fory, type, layerClassDef, layerMarkerClass);
+
+      // In GraalVM, ensure serializers are generated for all field types at build time
+      // so they're available when new Fory instances are created at runtime
+      if (GraalvmSupport.isGraalBuildtime()) {
+        ensureFieldSerializersGenerated(fory, layerClassDef, type);
+      }
 
       // Build field list from ObjectStreamClass if available
       fieldIndexMap = new ObjectIntMap<>(4, 0.4f);

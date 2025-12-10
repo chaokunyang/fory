@@ -19,8 +19,6 @@
 
 package org.apache.fory.serializer;
 
-import static org.apache.fory.resolver.ClassResolver.NO_CLASS_ID;
-
 import java.io.Externalizable;
 import java.io.IOException;
 import java.io.InvalidObjectException;
@@ -59,7 +57,6 @@ import org.apache.fory.meta.ClassDef;
 import org.apache.fory.reflect.ObjectCreator;
 import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.ReflectionUtils;
-import org.apache.fory.resolver.ClassInfo;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.util.ExceptionUtils;
 import org.apache.fory.util.GraalvmSupport;
@@ -156,21 +153,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       end = end.getSuperclass();
     }
     while (type != end) {
-      try {
-        slotsInfoList.add(new SlotsInfo(fory, type));
-      } catch (Exception e) {
-        if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
-          LOG.warn(
-              "Failed to create SlotsInfo for {} in GraalVM native image, "
-                  + "using minimal serialization support: {}",
-              type.getName(),
-              e.getMessage());
-          // Create a minimal SlotsInfo that can work with Unsafe
-          slotsInfoList.add(new MinimalSlotsInfo(fory, type));
-        } else {
-          throw e;
-        }
-      }
+      slotsInfoList.add(new SlotsInfo(fory, type));
       type = type.getSuperclass();
     }
     Collections.reverse(slotsInfoList);
@@ -364,12 +347,20 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       ObjectStreamClass objectStreamClass = safeObjectStreamClassLookup(type);
       // In JDK17, set private jdk method accessible will fail by default, use ObjectStreamClass
       // instead, since it set accessible.
-      writeObjectMethod =
-          (Method) ReflectionUtils.getObjectFieldValue(objectStreamClass, "writeObjectMethod");
-      readObjectMethod =
-          (Method) ReflectionUtils.getObjectFieldValue(objectStreamClass, "readObjectMethod");
-      readObjectNoData =
-          (Method) ReflectionUtils.getObjectFieldValue(objectStreamClass, "readObjectNoData");
+      Method writeMethod = null;
+      Method readMethod = null;
+      Method noDataMethod = null;
+      if (objectStreamClass != null) {
+        writeMethod =
+            (Method) ReflectionUtils.getObjectFieldValue(objectStreamClass, "writeObjectMethod");
+        readMethod =
+            (Method) ReflectionUtils.getObjectFieldValue(objectStreamClass, "readObjectMethod");
+        noDataMethod =
+            (Method) ReflectionUtils.getObjectFieldValue(objectStreamClass, "readObjectNoData");
+      }
+      this.writeObjectMethod = writeMethod;
+      this.readObjectMethod = readMethod;
+      this.readObjectNoData = noDataMethod;
       MethodHandles.Lookup lookup = _JDKAccess._trustedLookup(type);
       BiConsumer writeObjectFunc = null, readObjectFunc = null;
       Consumer readObjectNoDataFunc = null;
@@ -409,7 +400,6 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
    */
   private static class SlotsInfo implements SlotInfo {
     private final Class<?> cls;
-    private final ClassInfo classInfo;
     private final StreamClassInfo streamClassInfo;
     // mark non-final for async-jit to update it to jit-serializer.
     private MetaSharedLayerSerializerBase slotsSerializer;
@@ -422,7 +412,6 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
 
     public SlotsInfo(Fory fory, Class<?> type) {
       this.cls = type;
-      classInfo = fory.getClassResolver().newClassInfo(type, null, NO_CLASS_ID);
       ObjectStreamClass objectStreamClass = safeObjectStreamClassLookup(type);
       streamClassInfo = STREAM_CLASS_INFO_CACHE.get(type);
 
@@ -576,159 +565,6 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       this.name = name;
       this.type = type;
       this.declaringClass = declaringClass;
-    }
-  }
-
-  /**
-   * Minimal SlotsInfo implementation for GraalVM native image when ObjectStreamClass.lookup fails.
-   * This provides basic serialization support using Unsafe-based object creation.
-   */
-  private static class MinimalSlotsInfo implements SlotInfo {
-    private final Class<?> cls;
-    private final StreamClassInfo streamClassInfo;
-    private MetaSharedLayerSerializerBase slotsSerializer;
-    private final ObjectIntMap<String> fieldIndexMap;
-    private final int numPutFields;
-    private final Class<?>[] putFieldTypes;
-    private final ForyObjectOutputStream objectOutputStream;
-    private final ForyObjectInputStream objectInputStream;
-    private final ObjectArray getFieldPool;
-
-    public MinimalSlotsInfo(Fory fory, Class<?> type) {
-      // Initialize with minimal required fields
-      this.cls = type;
-      this.streamClassInfo = STREAM_CLASS_INFO_CACHE.get(type);
-
-      // Build single-layer ClassDef
-      ClassDef layerClassDef = fory.getClassResolver().getTypeDef(type, false);
-      // Use 0 as layer index since each class has its own MinimalSlotsInfo,
-      // and the (class, 0) pair is unique for each class.
-      Class<?> layerMarkerClass = LayerMarkerClassGenerator.getOrCreate(fory, type, 0);
-
-      // Create interpreter-mode serializer first
-      MetaSharedLayerSerializer interpreterSerializer =
-          new MetaSharedLayerSerializer(fory, type, layerClassDef, layerMarkerClass);
-      this.slotsSerializer = interpreterSerializer;
-
-      // Register JIT callback to replace with JIT serializer when ready
-      if (fory.getConfig().isCodeGenEnabled()) {
-        MinimalSlotsInfo thisInfo = this;
-        fory.getJITContext()
-            .registerSerializerJITCallback(
-                () -> MetaSharedLayerSerializer.class,
-                () ->
-                    CodecUtils.loadOrGenMetaSharedLayerCodecClass(
-                        type, fory, layerClassDef, layerMarkerClass),
-                c ->
-                    thisInfo.slotsSerializer =
-                        (MetaSharedLayerSerializerBase) Serializers.newSerializer(fory, type, c));
-      }
-
-      // In GraalVM, ensure serializers are generated for all field types at build time
-      // so they're available when new Fory instances are created at runtime
-      if (GraalvmSupport.isGraalBuildtime()) {
-        ensureFieldSerializersGenerated(fory, layerClassDef, type);
-      }
-
-      // Build field list from ObjectStreamClass if available
-      fieldIndexMap = new ObjectIntMap<>(4, 0.4f);
-      List<PutFieldInfo> putFieldInfos = new ArrayList<>();
-      ObjectStreamClass objectStreamClass = safeObjectStreamClassLookup(type);
-      if (objectStreamClass != null) {
-        for (ObjectStreamField serialField : objectStreamClass.getFields()) {
-          putFieldInfos.add(new PutFieldInfo(serialField.getName(), serialField.getType(), type));
-        }
-      }
-
-      // Initialize putFields support if needed
-      if (streamClassInfo != null
-          && (streamClassInfo.writeObjectMethod != null
-              || streamClassInfo.readObjectMethod != null)) {
-        this.numPutFields = putFieldInfos.size();
-        this.putFieldTypes = new Class<?>[numPutFields];
-        AtomicInteger idx = new AtomicInteger(0);
-        for (PutFieldInfo fieldInfo : putFieldInfos) {
-          int index = idx.getAndIncrement();
-          fieldIndexMap.put(fieldInfo.name, index);
-          putFieldTypes[index] = fieldInfo.type;
-        }
-      } else {
-        this.numPutFields = 0;
-        this.putFieldTypes = null;
-      }
-
-      // Initialize object streams if class has custom serialization methods
-      if (streamClassInfo != null && streamClassInfo.writeObjectMethod != null) {
-        try {
-          objectOutputStream = new ForyObjectOutputStream(this);
-        } catch (IOException e) {
-          Platform.throwException(e);
-          throw new IllegalStateException("unreachable");
-        }
-      } else {
-        objectOutputStream = null;
-      }
-      if (streamClassInfo != null && streamClassInfo.readObjectMethod != null) {
-        try {
-          objectInputStream = new ForyObjectInputStream(this);
-        } catch (IOException e) {
-          Platform.throwException(e);
-          throw new IllegalStateException("unreachable");
-        }
-      } else {
-        objectInputStream = null;
-      }
-      this.getFieldPool = new ObjectArray();
-    }
-
-    @Override
-    public Class<?> getCls() {
-      return cls;
-    }
-
-    @Override
-    public StreamClassInfo getStreamClassInfo() {
-      return streamClassInfo;
-    }
-
-    @Override
-    public MetaSharedLayerSerializerBase getSlotsSerializer() {
-      return slotsSerializer;
-    }
-
-    @Override
-    public ForyObjectOutputStream getObjectOutputStream() {
-      return objectOutputStream;
-    }
-
-    @Override
-    public ForyObjectInputStream getObjectInputStream() {
-      return objectInputStream;
-    }
-
-    @Override
-    public ObjectArray getFieldPool() {
-      return getFieldPool;
-    }
-
-    @Override
-    public ObjectIntMap<String> getFieldIndexMap() {
-      return fieldIndexMap;
-    }
-
-    @Override
-    public int getNumPutFields() {
-      return numPutFields;
-    }
-
-    @Override
-    public Class<?>[] getPutFieldTypes() {
-      return putFieldTypes;
-    }
-
-    @Override
-    public String toString() {
-      return "MinimalSlotsInfo{" + "cls=" + cls + '}';
     }
   }
 

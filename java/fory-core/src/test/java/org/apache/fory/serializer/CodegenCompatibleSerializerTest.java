@@ -95,8 +95,8 @@ public class CodegenCompatibleSerializerTest extends ForyTestBase {
   }
 
   @Test(dataProvider = "config")
-  public void testWriteCompatibleBasic(
-      boolean referenceTracking, boolean enableCodegen) throws Exception {
+  public void testWriteCompatibleBasic(boolean referenceTracking, boolean enableCodegen)
+      throws Exception {
     Supplier<ForyBuilder> builder =
         () ->
             Fory.builder()
@@ -143,8 +143,8 @@ public class CodegenCompatibleSerializerTest extends ForyTestBase {
   }
 
   @Test(dataProvider = "config")
-  public void testWriteCompatibleBasicCopy(
-      boolean referenceTracking, boolean enableCodegen) throws Exception {
+  public void testWriteCompatibleBasicCopy(boolean referenceTracking, boolean enableCodegen)
+      throws Exception {
     Supplier<ForyBuilder> builder =
         () ->
             Fory.builder()
@@ -175,8 +175,8 @@ public class CodegenCompatibleSerializerTest extends ForyTestBase {
   }
 
   @Test(dataProvider = "config")
-  public void testWriteCompatibleCollectionBasic(
-      boolean referenceTracking, boolean enableCodegen) throws Exception {
+  public void testWriteCompatibleCollectionBasic(boolean referenceTracking, boolean enableCodegen)
+      throws Exception {
     BeanA beanA = BeanA.createBeanA(2);
     Supplier<ForyBuilder> builder =
         () ->
@@ -240,8 +240,8 @@ public class CodegenCompatibleSerializerTest extends ForyTestBase {
   }
 
   @Test(dataProvider = "config")
-  public void testWriteCompatibleContainer(
-      boolean referenceTracking, boolean enableCodegen) throws Exception {
+  public void testWriteCompatibleContainer(boolean referenceTracking, boolean enableCodegen)
+      throws Exception {
     Supplier<ForyBuilder> builder =
         () ->
             Fory.builder()
@@ -272,8 +272,8 @@ public class CodegenCompatibleSerializerTest extends ForyTestBase {
   }
 
   @Test(dataProvider = "config")
-  public void testWriteCompatibleCollection(
-      boolean referenceTracking, boolean enableCodegen) throws Exception {
+  public void testWriteCompatibleCollection(boolean referenceTracking, boolean enableCodegen)
+      throws Exception {
     Supplier<ForyBuilder> builder =
         () ->
             Fory.builder()
@@ -324,8 +324,8 @@ public class CodegenCompatibleSerializerTest extends ForyTestBase {
   }
 
   @Test(dataProvider = "config")
-  public void testWriteCompatibleMap(
-      boolean referenceTracking, boolean enableCodegen) throws Exception {
+  public void testWriteCompatibleMap(boolean referenceTracking, boolean enableCodegen)
+      throws Exception {
     Supplier<ForyBuilder> builder =
         () ->
             Fory.builder()

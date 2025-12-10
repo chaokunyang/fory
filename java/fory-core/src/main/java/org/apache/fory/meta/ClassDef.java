@@ -30,6 +30,7 @@ import java.io.Serializable;
 import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.lang.reflect.Member;
+import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -366,7 +367,8 @@ public class ClassDef implements Serializable {
         }
       }
       // This field doesn't exist in peer class, so any legal modifier will be OK.
-      int stubModifiers = ReflectionUtils.getField(getClass(), "fieldName").getModifiers();
+      // Use constant instead of reflection to avoid GraalVM native image issues.
+      int stubModifiers = Modifier.PRIVATE | Modifier.FINAL;
       return new Descriptor(typeRef, fieldName, stubModifiers, definedClass);
     }
 

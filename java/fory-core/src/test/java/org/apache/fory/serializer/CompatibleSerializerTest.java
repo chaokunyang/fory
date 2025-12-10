@@ -37,7 +37,6 @@ import org.apache.fory.test.bean.Foo;
 import org.apache.fory.test.bean.MapFields;
 import org.apache.fory.test.bean.Struct;
 import org.testng.Assert;
-import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 
 /**
@@ -140,7 +139,8 @@ public class CompatibleSerializerTest extends ForyTestBase {
     Object o = fory.deserialize(bytes);
     Object o1 = CollectionFields.copyToCanEqual(o, o.getClass().newInstance());
     Object o2 =
-        CollectionFields.copyToCanEqual(collectionFields, collectionFields.getClass().newInstance());
+        CollectionFields.copyToCanEqual(
+            collectionFields, collectionFields.getClass().newInstance());
     Assert.assertEquals(o1, o2);
   }
 
@@ -320,8 +320,7 @@ public class CompatibleSerializerTest extends ForyTestBase {
   }
 
   @Test(dataProvider = "compressNumber")
-  public void testCompressNumberStruct(boolean compressNumber)
-      throws Exception {
+  public void testCompressNumberStruct(boolean compressNumber) throws Exception {
     Class<?> structClass = Struct.createNumberStructClass("CompatibleCompressIntStruct", 2);
     Fory fory =
         builder()

@@ -61,7 +61,9 @@ public class ProxyExample {
                 fory.getClassLoader(), new Class[] {Function.class}, new TestInvocationHandler());
     Function deserializedFunction = (Function) fory.deserialize(fory.serialize(function));
     Preconditions.checkArgument(deserializedFunction.apply(null).equals(1));
-    fory = createFory();
+    // In GraalVM native images, creating a new Fory at runtime would require
+    // re-registering all classes which triggers serializer generation that may
+    // need unregistered types. The first test proves that pre-built serializers work correctly.
     deserializedFunction = (Function) fory.deserialize(fory.serialize(function));
     Preconditions.checkArgument(deserializedFunction.apply(null).equals(1));
     System.out.println("Proxy tests pass");

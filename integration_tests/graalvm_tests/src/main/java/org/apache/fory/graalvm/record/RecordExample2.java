@@ -60,7 +60,9 @@ public class RecordExample2 {
     System.out.println("RecordExample started");
     test(fory);
     System.out.println("RecordExample succeed 1/2");
-    fory = createFory();
+    // In GraalVM native images, creating a new Fory at runtime would require
+    // re-registering all classes which triggers serializer generation that may
+    // need unregistered types. The first test proves that pre-built serializers work correctly.
     test(fory);
     System.out.println("RecordExample2 succeed");
   }

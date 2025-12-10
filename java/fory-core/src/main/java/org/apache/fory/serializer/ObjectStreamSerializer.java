@@ -560,15 +560,13 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       this.slotsSerializer =
           new MetaSharedLayerSerializer(fory, type, layerClassDef, layerMarkerClass);
 
-      // Build field list from class fields for putFields support
+      // Build field list from ObjectStreamClass if available
       fieldIndexMap = new ObjectIntMap<>(4, 0.4f);
       List<PutFieldInfo> putFieldInfos = new ArrayList<>();
-      Collection<Descriptor> descriptors =
-          layerClassDef.getDescriptors(fory.getClassResolver(), type);
-      for (Descriptor descriptor : descriptors) {
-        Field field = descriptor.getField();
-        if (field != null) {
-          putFieldInfos.add(new PutFieldInfo(field.getName(), field.getType(), type));
+      ObjectStreamClass objectStreamClass = safeObjectStreamClassLookup(type);
+      if (objectStreamClass != null) {
+        for (ObjectStreamField serialField : objectStreamClass.getFields()) {
+          putFieldInfos.add(new PutFieldInfo(serialField.getName(), serialField.getType(), type));
         }
       }
 

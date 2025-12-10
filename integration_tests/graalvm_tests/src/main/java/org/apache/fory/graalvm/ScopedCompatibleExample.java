@@ -47,11 +47,7 @@ public class ScopedCompatibleExample {
     System.out.println("ScopedCompatibleExample started");
     Example.test(fory);
     System.out.println("ScopedCompatibleExample succeed 1/2");
-    // In GraalVM native images, compatible mode with meta-sharing requires all serializer
-    // classes to be pre-generated at build time. Creating a new Fory at runtime would
-    // require re-registering all classes which triggers serializer generation that may
-    // need unregistered types (like exception classes).
-    // The first test proves that pre-built serializers work correctly.
+    fory = createFory();
     Example.test(fory);
     System.out.println("ScopedCompatibleExample succeed");
   }

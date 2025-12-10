@@ -105,14 +105,12 @@ public class DuplicateFieldsTest extends ForyTestBase {
     c.f1 = -100;
     assertEquals(((B) c).f1, 100);
     assertEquals(c.f1, -100);
-    // MetaSharedSerializer requires meta share and scoped meta share for fory.serialize/deserialize
     ForyBuilder builder =
         Fory.builder()
             .withLanguage(Language.JAVA)
             .withRefTracking(false)
             .withCodegen(true)
             .withCompatibleMode(CompatibleMode.COMPATIBLE)
-            .withScopedMetaShare(true)
             .requireClassRegistration(false);
     Fory fory = builder.build();
     {

@@ -181,8 +181,9 @@ type MyStruct struct {
 }
 
 type VersionCheckStruct struct {
-	Field1 string
-	Field2 int32
+	F1 int32
+	F2 string
+	F3 float64
 }
 
 type Dog struct {
@@ -933,7 +934,7 @@ func testStructVersionCheck() {
 	dataFile := getDataFile()
 	data := readFile(dataFile)
 
-	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(false))
 	// Use numeric ID 201 to match Java's fory.register(VersionCheckStruct.class, 201)
 	f.Register(VersionCheckStruct{}, 201)
 

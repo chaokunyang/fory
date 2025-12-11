@@ -37,6 +37,7 @@ import org.apache.fory.meta.MetaString.Encoding;
 import org.apache.fory.resolver.ClassInfo;
 import org.apache.fory.resolver.XtypeResolver;
 import org.apache.fory.serializer.NonexistentClass;
+import org.apache.fory.util.Utils;
 
 /**
  * A decoder which decode binary into {@link ClassDef}. See spec documentation:
@@ -74,7 +75,11 @@ class TypeDefDecoder {
     List<ClassDef.FieldInfo> classFields =
         readFieldsInfo(buffer, resolver, classSpec.entireClassName, numFields);
     boolean hasFieldsMeta = (id & HAS_FIELDS_META_FLAG) != 0;
-    return new ClassDef(classSpec, classFields, hasFieldsMeta, id, decoded.f1);
+    ClassDef classDef = new ClassDef(classSpec, classFields, hasFieldsMeta, id, decoded.f1);
+    if (Utils.debugOutputEnabled()) {
+      System.out.println("[Java TypeDef DECODED] " + classDef);
+    }
+    return classDef;
   }
 
   // | header + type info + field name | ... | header + type info + field name |

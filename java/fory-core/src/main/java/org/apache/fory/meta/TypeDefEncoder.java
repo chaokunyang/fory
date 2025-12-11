@@ -43,6 +43,7 @@ import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.type.Types;
 import org.apache.fory.util.Preconditions;
+import org.apache.fory.util.Utils;
 
 /**
  * An encoder which encode {@link ClassDef} into binary. See spec documentation:
@@ -87,8 +88,17 @@ class TypeDefEncoder {
     fieldInfos = new ArrayList<>(getClassFields(type, fieldInfos).values());
     MemoryBuffer encodeClassDef = encodeClassDef(resolver, type, fieldInfos);
     byte[] classDefBytes = encodeClassDef.getBytes(0, encodeClassDef.writerIndex());
-    return new ClassDef(
-        Encoders.buildClassSpec(type), fieldInfos, true, encodeClassDef.getInt64(0), classDefBytes);
+    ClassDef classDef =
+        new ClassDef(
+            Encoders.buildClassSpec(type),
+            fieldInfos,
+            true,
+            encodeClassDef.getInt64(0),
+            classDefBytes);
+    if (Utils.debugOutputEnabled()) {
+      System.out.println("[Java TypeDef BUILT] " + classDef);
+    }
+    return classDef;
   }
 
   static final int SMALL_NUM_FIELDS_THRESHOLD = 0b11111;

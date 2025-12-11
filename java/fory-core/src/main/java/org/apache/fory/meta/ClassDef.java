@@ -659,6 +659,8 @@ public class ClassDef implements Serializable {
       return "RegisteredFieldType{"
           + "isMonomorphic="
           + isMonomorphic()
+          + ", nullable="
+          + nullable()
           + ", trackingRef="
           + trackingRef()
           + ", classId="
@@ -751,6 +753,8 @@ public class ClassDef implements Serializable {
           + elementType
           + ", isFinal="
           + isMonomorphic()
+          + ", nullable="
+          + nullable()
           + ", trackingRef="
           + trackingRef()
           + '}';
@@ -827,6 +831,8 @@ public class ClassDef implements Serializable {
           + valueType
           + ", isFinal="
           + isMonomorphic()
+          + ", nullable="
+          + nullable()
           + ", trackingRef="
           + trackingRef()
           + '}';
@@ -841,6 +847,16 @@ public class ClassDef implements Serializable {
     @Override
     public TypeRef<?> toTypeToken(TypeResolver classResolver, TypeRef<?> declared) {
       return TypeRef.of(NonexistentClass.NonexistentEnum.class);
+    }
+
+    @Override
+    public String toString() {
+      return "EnumFieldType{"
+          + "xtypeId="
+          + xtypeId
+          + ", nullable="
+          + nullable
+          + '}';
     }
   }
 
@@ -923,6 +939,8 @@ public class ClassDef implements Serializable {
           + dimensions
           + ", isMonomorphic="
           + isMonomorphic
+          + ", nullable="
+          + nullable
           + ", trackingRef="
           + trackingRef
           + '}';
@@ -951,6 +969,20 @@ public class ClassDef implements Serializable {
     @Override
     public int hashCode() {
       return super.hashCode();
+    }
+
+    @Override
+    public String toString() {
+      return "ObjectFieldType{"
+          + "xtypeId="
+          + xtypeId
+          + ", isMonomorphic="
+          + isMonomorphic
+          + ", nullable="
+          + nullable
+          + ", trackingRef="
+          + trackingRef
+          + '}';
     }
   }
 

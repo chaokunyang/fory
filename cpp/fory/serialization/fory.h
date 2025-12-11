@@ -266,6 +266,64 @@ public:
     return type_resolver_->template register_by_name<T>("", type_name);
   }
 
+  /// Register an enum type with a numeric type ID.
+  ///
+  /// Use this method to register enum types for cross-language serialization
+  /// where types are identified by numeric IDs. The type ID must be unique
+  /// across all registered types and match the ID used in other languages.
+  ///
+  /// @tparam T The enum type to register (must be defined with FORY_ENUM).
+  /// @param type_id Unique numeric identifier for this type.
+  /// @return Success or error if registration fails.
+  ///
+  /// Example:
+  /// ```cpp
+  /// enum class Color { RED, GREEN, BLUE };
+  /// FORY_ENUM(Color, RED, GREEN, BLUE);
+  ///
+  /// fory.register_enum<Color>(1);
+  /// ```
+  template <typename T> Result<void, Error> register_enum(uint32_t type_id) {
+    return type_resolver_->template register_by_id<T>(type_id);
+  }
+
+  /// Register an enum type with namespace and type name.
+  ///
+  /// Use this method for named type registration, which provides more
+  /// flexibility for schema evolution and cross-language compatibility.
+  ///
+  /// @tparam T The enum type to register (must be defined with FORY_ENUM).
+  /// @param ns Namespace for the type (can be empty string).
+  /// @param type_name Name of the type within the namespace.
+  /// @return Success or error if registration fails.
+  ///
+  /// Example:
+  /// ```cpp
+  /// fory.register_enum<Color>("com.example", "Color");
+  /// ```
+  template <typename T>
+  Result<void, Error> register_enum(const std::string &ns,
+                                    const std::string &type_name) {
+    return type_resolver_->template register_by_name<T>(ns, type_name);
+  }
+
+  /// Register an enum type with type name only (no namespace).
+  ///
+  /// Convenience method for registering enum types without a namespace.
+  ///
+  /// @tparam T The enum type to register (must be defined with FORY_ENUM).
+  /// @param type_name Name of the type.
+  /// @return Success or error if registration fails.
+  ///
+  /// Example:
+  /// ```cpp
+  /// fory.register_enum<Color>("Color");
+  /// ```
+  template <typename T>
+  Result<void, Error> register_enum(const std::string &type_name) {
+    return type_resolver_->template register_by_name<T>("", type_name);
+  }
+
   /// Register an extension type with a numeric type ID.
   ///
   /// Extension types allow custom serialization logic for types that

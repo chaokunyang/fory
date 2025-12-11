@@ -92,10 +92,10 @@ inline void register_test_types(Fory &fory) {
   fory.register_struct<::ComplexStruct>(type_id++);
   fory.register_struct<::NestedStruct>(type_id++);
 
-  // Register all enum types used in tests (register_struct works for enums too)
-  fory.register_struct<Color>(type_id++);
-  fory.register_struct<LegacyStatus>(type_id++);
-  fory.register_struct<OldStatus>(type_id++);
+  // Register all enum types used in tests
+  fory.register_enum<Color>(type_id++);
+  fory.register_enum<LegacyStatus>(type_id++);
+  fory.register_enum<OldStatus>(type_id++);
 }
 
 template <typename T>
@@ -230,7 +230,7 @@ TEST(SerializationTest, OldEnumRoundtrip) {
 
 TEST(SerializationTest, EnumSerializesOrdinalValue) {
   auto fory = Fory::builder().xlang(true).track_ref(false).build();
-  fory.register_struct<LegacyStatus>(1);
+  fory.register_enum<LegacyStatus>(1);
 
   auto bytes_result = fory.serialize(LegacyStatus::LARGE);
   ASSERT_TRUE(bytes_result.ok())
@@ -253,7 +253,7 @@ TEST(SerializationTest, EnumSerializesOrdinalValue) {
 
 TEST(SerializationTest, OldEnumSerializesOrdinalValue) {
   auto fory = Fory::builder().xlang(true).track_ref(false).build();
-  fory.register_struct<OldStatus>(1);
+  fory.register_enum<OldStatus>(1);
 
   auto bytes_result = fory.serialize(OldStatus::OLD_POS);
   ASSERT_TRUE(bytes_result.ok())
@@ -273,7 +273,7 @@ TEST(SerializationTest, OldEnumSerializesOrdinalValue) {
 
 TEST(SerializationTest, EnumOrdinalMappingHandlesNonZeroStart) {
   auto fory = Fory::builder().xlang(true).track_ref(false).build();
-  fory.register_struct<LegacyStatus>(1);
+  fory.register_enum<LegacyStatus>(1);
 
   auto bytes_result = fory.serialize(LegacyStatus::NEG);
   ASSERT_TRUE(bytes_result.ok())
@@ -298,7 +298,7 @@ TEST(SerializationTest, EnumOrdinalMappingHandlesNonZeroStart) {
 
 TEST(SerializationTest, EnumOrdinalMappingRejectsInvalidOrdinal) {
   auto fory = Fory::builder().xlang(true).track_ref(false).build();
-  fory.register_struct<LegacyStatus>(1);
+  fory.register_enum<LegacyStatus>(1);
 
   auto bytes_result = fory.serialize(LegacyStatus::NEG);
   ASSERT_TRUE(bytes_result.ok())
@@ -316,7 +316,7 @@ TEST(SerializationTest, EnumOrdinalMappingRejectsInvalidOrdinal) {
 
 TEST(SerializationTest, OldEnumOrdinalMappingHandlesNonZeroStart) {
   auto fory = Fory::builder().xlang(true).track_ref(false).build();
-  fory.register_struct<OldStatus>(1);
+  fory.register_enum<OldStatus>(1);
 
   auto bytes_result = fory.serialize(OldStatus::OLD_NEG);
   ASSERT_TRUE(bytes_result.ok())

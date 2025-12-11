@@ -187,6 +187,8 @@ fory.registerSerializer(description);
 
 ```cpp
 fory.register_struct<Person>("example.Person");
+// For enums, use register_enum:
+// fory.register_enum<Color>("example.Color");
 ```
 
 ### Register by ID
@@ -215,6 +217,8 @@ fory.Register(Person{}, 100)
 
 ```cpp
 fory.register_struct<Person>(100);
+// For enums, use register_enum:
+// fory.register_enum<Color>(101);
 ```
 
 ## Hello World Example

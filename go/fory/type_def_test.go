@@ -178,3 +178,121 @@ func checkFieldTypeRecursively(t *testing.T, original, decoded FieldType, path s
 		t.Errorf("Unknown FieldType at path %s: %T", path, original)
 	}
 }
+
+// Item1 struct with mixed nullable (pointer) and non-nullable (primitive) fields
+type Item1 struct {
+	F1 int32
+	F2 int32
+	F3 *int32
+	F4 *int32
+	F5 int32  // Non-nullable: null → 0 per test expectation
+	F6 *int32 // Nullable: null stays nil
+}
+
+// TestTypeDefNullableFields verifies that pointer fields are correctly encoded as nullable
+// and primitive fields are encoded as non-nullable in TypeDef
+func TestTypeDefNullableFields(t *testing.T) {
+	fory := NewFory(WithRefTracking(false))
+
+	// Register the type
+	if err := fory.RegisterNamedType(Item1{}, "test.Item1"); err != nil {
+		t.Fatalf("Failed to register type: %v", err)
+	}
+
+	// Create test instance with some pointer fields set, some nil
+	v3, v4, v6 := int32(30), int32(40), int32(60)
+	testItem := Item1{
+		F1: 10,
+		F2: 20,
+		F3: &v3,
+		F4: &v4,
+		F5: 50,
+		F6: &v6,
+	}
+
+	// Build TypeDef
+	structValue := reflect.ValueOf(testItem)
+	typeDef, err := buildTypeDef(fory, structValue)
+	if err != nil {
+		t.Fatalf("Failed to build TypeDef: %v", err)
+	}
+
+	// Expected nullable status for each field:
+	// F1, F2, F5 = int32 = non-nullable
+	// F3, F4, F6 = *int32 = nullable
+	expectedNullable := map[string]bool{
+		"f1": false, // int32
+		"f2": false, // int32
+		"f3": true,  // *int32
+		"f4": true,  // *int32
+		"f5": false, // int32
+		"f6": true,  // *int32
+	}
+
+	// Verify original TypeDef has correct nullable flags
+	t.Run("Original TypeDef nullable flags", func(t *testing.T) {
+		for _, fieldDef := range typeDef.fieldDefs {
+			expected, ok := expectedNullable[fieldDef.name]
+			if !ok {
+				t.Errorf("Unexpected field name: %s", fieldDef.name)
+				continue
+			}
+			assert.Equal(t, expected, fieldDef.nullable,
+				"Field %s nullable mismatch: expected %v, got %v",
+				fieldDef.name, expected, fieldDef.nullable)
+		}
+	})
+
+	// Encode and decode TypeDef, then verify nullable flags are preserved
+	t.Run("Encoded/Decoded TypeDef nullable flags", func(t *testing.T) {
+		buffer := NewByteBuffer(make([]byte, 0, 256))
+		typeDef.writeTypeDef(buffer)
+
+		decodedTypeDef, err := readTypeDef(fory, buffer, int64(buffer.ReadInt64()))
+		if err != nil {
+			t.Fatalf("Failed to decode TypeDef: %v", err)
+		}
+
+		// Verify decoded TypeDef has correct nullable flags
+		for _, fieldDef := range decodedTypeDef.fieldDefs {
+			expected, ok := expectedNullable[fieldDef.name]
+			if !ok {
+				t.Errorf("Unexpected field name in decoded TypeDef: %s", fieldDef.name)
+				continue
+			}
+			assert.Equal(t, expected, fieldDef.nullable,
+				"Decoded field %s nullable mismatch: expected %v, got %v",
+				fieldDef.name, expected, fieldDef.nullable)
+		}
+	})
+
+	// Test with nil pointer fields
+	t.Run("TypeDef with nil pointer fields", func(t *testing.T) {
+		testItemWithNils := Item1{
+			F1: 10,
+			F2: 20,
+			F3: nil, // nil pointer
+			F4: &v4,
+			F5: 50,
+			F6: nil, // nil pointer
+		}
+
+		structValue := reflect.ValueOf(testItemWithNils)
+		typeDefWithNils, err := buildTypeDef(fory, structValue)
+		if err != nil {
+			t.Fatalf("Failed to build TypeDef with nils: %v", err)
+		}
+
+		// Nullable flags should be the same regardless of actual values
+		for _, fieldDef := range typeDefWithNils.fieldDefs {
+			expected, ok := expectedNullable[fieldDef.name]
+			if !ok {
+				t.Errorf("Unexpected field name: %s", fieldDef.name)
+				continue
+			}
+			assert.Equal(t, expected, fieldDef.nullable,
+				"Field %s nullable mismatch (with nils): expected %v, got %v",
+				fieldDef.name, expected, fieldDef.nullable)
+		}
+	})
+}

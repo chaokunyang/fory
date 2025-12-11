@@ -550,7 +550,7 @@ func (s *structSerializer) writeFieldsInTypeDefOrder(ctx *WriteContext, value re
 			// - Nullable primitives (*int32, *float64, etc.): ref flag + data (NO type info)
 			// - Other types (struct, collections, etc.): ref flag + type info + data
 			isPrimitive := (isFixedSizePrimitive(staticId, false) || isVarintPrimitive(staticId, false)) && !hasNonPrimitiveSer
-			writeRef := !isPrimitive || referencable // referencable means it's a pointer type
+			writeRef := !isPrimitive || referencable                               // referencable means it's a pointer type
 			writeType := !isPrimitive && !isInternalTypeWithoutTypeMeta(fieldType) // primitives never need type info
 			if err := ser.Write(ctx, writeRef, writeType, fieldValue); err != nil {
 				return err
@@ -1629,12 +1629,27 @@ type triple struct {
 	typeID     int16
 	serializer Serializer
 	name       string
+	nullable   bool
 }
 
 func sortFields(
 	typeResolver *TypeResolver,
 	fieldNames []string,
 	serializers []Serializer,
+) ([]Serializer, []string) {
+	// Default nullable to false for all fields (backwards compatible)
+	nullables := make([]bool, len(fieldNames))
+	return sortFieldsWithNullable(typeResolver, fieldNames, serializers, nullables)
+}
+
+// sortFieldsWithNullable sorts fields with nullable information to match Java's field ordering.
+// Java separates primitive types (int, long) from boxed types (Integer, Long).
+// In Go, this corresponds to non-pointer primitives vs pointer-to-primitive.
+func sortFieldsWithNullable(
+	typeResolver *TypeResolver,
+	fieldNames []string,
+	serializers []Serializer,
+	nullables []bool,
 ) ([]Serializer, []string) {
 	var (
 		typeTriples []triple
@@ -1644,17 +1659,25 @@ func sortFields(
 	for i, name := range fieldNames {
 		ser := serializers[i]
 		if ser == nil {
-			others = append(others, triple{UNKNOWN_TYPE_ID, nil, name})
+			others = append(others, triple{UNKNOWN_TYPE_ID, nil, name, nullables[i]})
 			continue
 		}
-		typeTriples = append(typeTriples, triple{ser.TypeId(), ser, name})
+		typeTriples = append(typeTriples, triple{ser.TypeId(), ser, name, nullables[i]})
 	}
-	var boxed, collection, setFields, maps, otherInternalTypeFields []triple
+	// Java orders: primitives, boxed, finals, others, collections, maps
+	// primitives = non-nullable primitive types (int, long, etc.)
+	// boxed = nullable boxed types (Integer, Long, etc. which are pointers in Go)
+	var primitives, boxed, collection, setFields, maps, otherInternalTypeFields []triple
 
 	for _, t := range typeTriples {
 		switch {
 		case isPrimitiveType(t.typeID):
-			boxed = append(boxed, t)
+			// Separate non-nullable primitives from nullable (boxed) primitives
+			if t.nullable {
+				boxed = append(boxed, t)
+			} else {
+				primitives = append(primitives, t)
+			}
 		case isListType(t.typeID), isPrimitiveArrayType(t.typeID):
 			collection = append(collection, t)
 		case isSetType(t.typeID):
@@ -1667,21 +1690,26 @@ func sortFields(
 			otherInternalTypeFields = append(otherInternalTypeFields, t)
 		}
 	}
-	sort.Slice(boxed, func(i, j int) bool {
-		ai, aj := boxed[i], boxed[j]
-		compressI := ai.typeID == INT32 || ai.typeID == INT64 ||
-			ai.typeID == VAR_INT32 || ai.typeID == VAR_INT64
-		compressJ := aj.typeID == INT32 || aj.typeID == INT64 ||
-			aj.typeID == VAR_INT32 || aj.typeID == VAR_INT64
-		if compressI != compressJ {
-			return !compressI && compressJ
-		}
-		szI, szJ := getPrimitiveTypeSize(ai.typeID), getPrimitiveTypeSize(aj.typeID)
-		if szI != szJ {
-			return szI > szJ
-		}
-		return toSnakeCase(ai.name) < toSnakeCase(aj.name)
-	})
+	// Sort primitives (non-nullable) - same logic as boxed
+	sortPrimitiveSlice := func(s []triple) {
+		sort.Slice(s, func(i, j int) bool {
+			ai, aj := s[i], s[j]
+			compressI := ai.typeID == INT32 || ai.typeID == INT64 ||
+				ai.typeID == VAR_INT32 || ai.typeID == VAR_INT64
+			compressJ := aj.typeID == INT32 || aj.typeID == INT64 ||
+				aj.typeID == VAR_INT32 || aj.typeID == VAR_INT64
+			if compressI != compressJ {
+				return !compressI && compressJ
+			}
+			szI, szJ := getPrimitiveTypeSize(ai.typeID), getPrimitiveTypeSize(aj.typeID)
+			if szI != szJ {
+				return szI > szJ
+			}
+			return toSnakeCase(ai.name) < toSnakeCase(aj.name)
+		})
+	}
+	sortPrimitiveSlice(primitives)
+	sortPrimitiveSlice(boxed)
 	sortByTypeIDThenName := func(s []triple) {
 		sort.Slice(s, func(i, j int) bool {
 			if s[i].typeID != s[j].typeID {
@@ -1700,13 +1728,15 @@ func sortFields(
 	sortTuple(collection)
 	sortTuple(maps)
 
+	// Java order: primitives, boxed, finals (otherInternalTypeFields), others, collections, maps
 	all := make([]triple, 0, len(fieldNames))
+	all = append(all, primitives...)
 	all = append(all, boxed...)
 	all = append(all, otherInternalTypeFields...)
+	all = append(all, others...)
 	all = append(all, collection...)
 	all = append(all, setFields...)
 	all = append(all, maps...)
-	all = append(all, others...)
 
 	outSer := make([]Serializer, len(all))
 	outNam := make([]string, len(all))

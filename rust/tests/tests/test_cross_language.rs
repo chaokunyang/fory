@@ -695,13 +695,13 @@ fn test_consistent_named() {
     }
     let mut buf = Vec::new();
     for _ in 0..3 {
-        fory.serialize_to(&color, &mut buf).unwrap();
+        fory.serialize_to(&mut buf, &color).unwrap();
     }
     for _ in 0..3 {
-        fory.serialize_to(&my_struct, &mut buf).unwrap();
+        fory.serialize_to(&mut buf, &my_struct).unwrap();
     }
     for _ in 0..3 {
-        fory.serialize_to(&my_ext, &mut buf).unwrap();
+        fory.serialize_to(&mut buf, &my_ext).unwrap();
     }
     fs::write(&data_file_path, buf).unwrap();
 }
@@ -774,9 +774,9 @@ fn test_item() {
     assert_eq!(remote_item3, item3);
 
     let mut buf = Vec::new();
-    fory.serialize_to(&remote_item1, &mut buf).unwrap();
-    fory.serialize_to(&remote_item2, &mut buf).unwrap();
-    fory.serialize_to(&remote_item3, &mut buf).unwrap();
+    fory.serialize_to(&mut buf, &remote_item1).unwrap();
+    fory.serialize_to(&mut buf, &remote_item2).unwrap();
+    fory.serialize_to(&mut buf, &remote_item3).unwrap();
     fs::write(&data_file_path, buf).unwrap();
 }
 
@@ -800,10 +800,10 @@ fn test_color() {
     assert_eq!(remote_white, Color::White);
 
     let mut buf = Vec::new();
-    fory.serialize_to(&Color::Green, &mut buf).unwrap();
-    fory.serialize_to(&Color::Red, &mut buf).unwrap();
-    fory.serialize_to(&Color::Blue, &mut buf).unwrap();
-    fory.serialize_to(&Color::White, &mut buf).unwrap();
+    fory.serialize_to(&mut buf, &Color::Green).unwrap();
+    fory.serialize_to(&mut buf, &Color::Red).unwrap();
+    fory.serialize_to(&mut buf, &Color::Blue).unwrap();
+    fory.serialize_to(&mut buf, &Color::White).unwrap();
     fs::write(&data_file_path, buf).unwrap();
 }
 
@@ -834,8 +834,8 @@ fn test_struct_with_list() {
     assert_eq!(remote_struct2, struct2);
 
     let mut buf = Vec::new();
-    fory.serialize_to(&remote_struct1, &mut buf).unwrap();
-    fory.serialize_to(&remote_struct2, &mut buf).unwrap();
+    fory.serialize_to(&mut buf, &remote_struct1).unwrap();
+    fory.serialize_to(&mut buf, &remote_struct2).unwrap();
     fs::write(&data_file_path, buf).unwrap();
 }
 
@@ -868,8 +868,8 @@ fn test_struct_with_map() {
     assert_eq!(remote_struct2, struct2);
 
     let mut buf = Vec::new();
-    fory.serialize_to(&remote_struct1, &mut buf).unwrap();
-    fory.serialize_to(&remote_struct2, &mut buf).unwrap();
+    fory.serialize_to(&mut buf, &remote_struct1).unwrap();
+    fory.serialize_to(&mut buf, &remote_struct2).unwrap();
     fs::write(&data_file_path, buf).unwrap();
 }
 
@@ -947,8 +947,8 @@ fn test_polymorphic_list() {
 
     // Write back
     let mut buf = Vec::new();
-    fory.serialize_to(&animals, &mut buf).unwrap();
-    fory.serialize_to(&holder, &mut buf).unwrap();
+    fory.serialize_to(&mut buf, &animals).unwrap();
+    fory.serialize_to(&mut buf, &holder).unwrap();
     fs::write(&data_file_path, buf).unwrap();
 }
 
@@ -1007,7 +1007,7 @@ fn test_polymorphic_map() {
 
     // Write back
     let mut buf = Vec::new();
-    fory.serialize_to(&animal_map, &mut buf).unwrap();
-    fory.serialize_to(&holder, &mut buf).unwrap();
+    fory.serialize_to(&mut buf, &animal_map).unwrap();
+    fory.serialize_to(&mut buf, &holder).unwrap();
     fs::write(&data_file_path, buf).unwrap();
 }

@@ -52,8 +52,8 @@ func SkipFieldValueWithTypeFlag(ctx *ReadContext, fieldDef FieldDef, readRefFlag
 		internalID := wroteTypeID & 0xff
 
 		// Check if it's an EXT type first - EXT types don't have meta info like structs
-		if internalID == uint32(EXT) || internalID == uint32(NAMED_EXT) {
-			// EXT types use custom serializers - try to find the registered serializer
+		if internalID == uint32(EXT) {
+			// EXT types with numeric ID - try to find the registered serializer
 			serializer := ctx.TypeResolver().getSerializerByTypeID(wroteTypeID)
 			if serializer != nil {
 				// Use the serializer to read and discard the value
@@ -63,6 +63,21 @@ func SkipFieldValueWithTypeFlag(ctx *ReadContext, fieldDef FieldDef, readRefFlag
 			}
 			// If no serializer is registered, we can't skip this type
 			return fmt.Errorf("cannot skip EXT type %d: no serializer registered", wroteTypeID)
+		}
+
+		// Check if it's a NAMED_EXT type - need to read type info to find serializer
+		if internalID == uint32(NAMED_EXT) {
+			typeInfo, err := ctx.TypeResolver().readTypeInfoWithTypeID(ctx.buffer, wroteTypeID)
+			if err != nil {
+				return err
+			}
+			if typeInfo.Serializer != nil {
+				// Use the serializer to read and discard the value
+				var dummy interface{}
+				dummyVal := reflect.ValueOf(&dummy).Elem()
+				return typeInfo.Serializer.Read(ctx, false, false, dummyVal)
+			}
+			return fmt.Errorf("cannot skip NAMED_EXT type: no serializer found")
 		}
 
 		// Check if it's a struct type - need to read type info and skip struct data
@@ -168,6 +183,15 @@ func SkipAnyValue(ctx *ReadContext, readRefFlag bool) error {
 
 	// Don't read ref flag again since we already handled it
 	return skipValue(ctx, fieldDef, false, false, typeInfo)
+}
+
+// readTypeInfoForSkip reads type info from buffer for struct types during skip.
+// For DynamicFieldType fields, the buffer contains: typeID + meta info (meta index or namespace/typename).
+func readTypeInfoForSkip(ctx *ReadContext, fieldTypeId TypeId) (TypeInfo, error) {
+	// Read the actual typeID from buffer (Java writes typeID for struct fields)
+	typeID := ctx.buffer.ReadVaruint32Small7()
+	// Use readTypeInfoWithTypeID which handles both namespaced and non-namespaced types correctly
+	return ctx.TypeResolver().readTypeInfoWithTypeID(ctx.buffer, typeID)
 }
 
 // skipCollection skips a collection (list/set) value
@@ -414,7 +438,9 @@ func skipStruct(ctx *ReadContext, info *TypeInfo) error {
 
 	for _, fieldDef := range fieldDefs {
 		readRefFlag := fieldNeedWriteRef(fieldDef.fieldType.TypeId(), fieldDef.nullable)
-		if err := skipValue(ctx, fieldDef, readRefFlag, true, nil); err != nil {
+		// For struct-like fields (struct, ext), type info is written in the buffer
+		readTypeInfo := isStructFieldType(fieldDef.fieldType)
+		if err := SkipFieldValueWithTypeFlag(ctx, fieldDef, readRefFlag, readTypeInfo); err != nil {
 			return err
 		}
 	}
@@ -548,7 +574,12 @@ func skipValue(ctx *ReadContext, fieldDef FieldDef, readRefFlag bool, isField bo
 		if typeInfo != nil {
 			return skipStruct(ctx, typeInfo)
 		}
-		return fmt.Errorf("cannot skip struct without type info")
+		// For DynamicFieldType fields, type info is written in the buffer - read it first
+		ti, err := readTypeInfoForSkip(ctx, TypeId(typeIDNum))
+		if err != nil {
+			return err
+		}
+		return skipStruct(ctx, &ti)
 
 	// Enum types
 	case ENUM, NAMED_ENUM:

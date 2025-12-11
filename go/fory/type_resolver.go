@@ -1153,7 +1153,7 @@ func (r *TypeResolver) readTypeDefs(buffer *ByteBuffer) error {
 			// Remote TypeDefs have different field ordering/IDs based on the remote's struct.
 			// defIdToTypeDef caches remote TypeDefs by header hash to avoid re-parsing.
 		}
-		typeInfo, err := td.buildTypeInfo()
+		typeInfo, err := td.buildTypeInfoWithResolver(r)
 		if err != nil {
 			return err
 		}

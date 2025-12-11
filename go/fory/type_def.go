@@ -188,19 +188,40 @@ func (td *TypeDef) writeTypeDef(buffer *ByteBuffer) {
 
 // buildTypeInfo constructs a TypeInfo from the TypeDef
 func (td *TypeDef) buildTypeInfo() (TypeInfo, error) {
+	return td.buildTypeInfoWithResolver(nil)
+}
+
+// buildTypeInfoWithResolver constructs a TypeInfo from the TypeDef, using registered serializer if available
+func (td *TypeDef) buildTypeInfoWithResolver(resolver *TypeResolver) (TypeInfo, error) {
 	type_ := td.type_
 
 	var serializer Serializer
-	if type_ == nil {
-		// Unknown struct type - use skipStructSerializer to skip data
-		serializer = &skipStructSerializer{
-			fieldDefs: td.fieldDefs,
+	// For extension types, use the registered serializer if available
+	if type_ != nil && resolver != nil {
+		if existingSerializer, ok := resolver.typeToSerializers[type_]; ok {
+			// Only use registered serializer for extension types (not struct types)
+			if _, isExt := existingSerializer.(*extensionSerializerAdapter); isExt {
+				serializer = existingSerializer
+			} else if ptrSer, isPtrSer := existingSerializer.(*ptrToValueSerializer); isPtrSer {
+				if _, isExtInner := ptrSer.valueSerializer.(*extensionSerializerAdapter); isExtInner {
+					serializer = existingSerializer
+				}
+			}
 		}
-	} else {
-		// Known struct type - use structSerializer with fieldDefs
-		serializer = &structSerializer{
-			type_:     type_,
-			fieldDefs: td.fieldDefs,
+	}
+	// If no extension serializer, create struct serializer
+	if serializer == nil {
+		if type_ == nil {
+			// Unknown struct type - use skipStructSerializer to skip data
+			serializer = &skipStructSerializer{
+				fieldDefs: td.fieldDefs,
+			}
+		} else {
+			// Known struct type - use structSerializer with fieldDefs
+			serializer = &structSerializer{
+				type_:     type_,
+				fieldDefs: td.fieldDefs,
+			}
 		}
 	}
 

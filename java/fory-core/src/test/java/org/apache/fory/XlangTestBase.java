@@ -1388,6 +1388,183 @@ public abstract class XlangTestBase extends ForyTestBase {
     Assert.assertEquals(result2.f2, "");
   }
 
+  // Enum field structs for testing
+  enum TestEnum {
+    VALUE_A,
+    VALUE_B,
+    VALUE_C
+  }
+
+  @Data
+  static class OneEnumFieldStruct {
+    TestEnum f1;
+  }
+
+  @Data
+  static class TwoEnumFieldStruct {
+    TestEnum f1;
+    TestEnum f2;
+  }
+
+  @Test
+  public void testOneEnumFieldSchemaConsistent() throws java.io.IOException {
+    String caseName = "test_one_enum_field_schema";
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(CompatibleMode.SCHEMA_CONSISTENT)
+            .build();
+    fory.register(TestEnum.class, 210);
+    fory.register(OneEnumFieldStruct.class, 211);
+
+    OneEnumFieldStruct obj = new OneEnumFieldStruct();
+    obj.f1 = TestEnum.VALUE_B;
+
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(64);
+    fory.serialize(buffer, obj);
+
+    ExecutionContext ctx = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
+    runPeer(ctx);
+
+    MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
+    OneEnumFieldStruct result = (OneEnumFieldStruct) fory.deserialize(buffer2);
+    Assert.assertEquals(result.f1, TestEnum.VALUE_B);
+  }
+
+  @Test
+  public void testOneEnumFieldCompatible() throws java.io.IOException {
+    String caseName = "test_one_enum_field_compatible";
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .build();
+    fory.register(TestEnum.class, 210);
+    fory.register(OneEnumFieldStruct.class, 211);
+
+    OneEnumFieldStruct obj = new OneEnumFieldStruct();
+    obj.f1 = TestEnum.VALUE_A;
+
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(64);
+    fory.serialize(buffer, obj);
+
+    ExecutionContext ctx = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
+    runPeer(ctx);
+
+    MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
+    OneEnumFieldStruct result = (OneEnumFieldStruct) fory.deserialize(buffer2);
+    Assert.assertEquals(result.f1, TestEnum.VALUE_A);
+  }
+
+  @Test
+  public void testTwoEnumFieldCompatible() throws java.io.IOException {
+    String caseName = "test_two_enum_field_compatible";
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .build();
+    fory.register(TestEnum.class, 210);
+    fory.register(TwoEnumFieldStruct.class, 212);
+
+    TwoEnumFieldStruct obj = new TwoEnumFieldStruct();
+    obj.f1 = TestEnum.VALUE_A;
+    obj.f2 = TestEnum.VALUE_C;
+
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(64);
+    fory.serialize(buffer, obj);
+
+    ExecutionContext ctx = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
+    runPeer(ctx);
+
+    MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
+    TwoEnumFieldStruct result = (TwoEnumFieldStruct) fory.deserialize(buffer2);
+    Assert.assertEquals(result.f1, TestEnum.VALUE_A);
+    Assert.assertEquals(result.f2, TestEnum.VALUE_C);
+  }
+
+  @Test
+  public void testEnumSchemaEvolutionCompatible() throws java.io.IOException {
+    String caseName = "test_enum_schema_evolution_compatible";
+    // Fory for TwoEnumFieldStruct
+    Fory fory2 =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .build();
+    fory2.register(TestEnum.class, 210);
+    fory2.register(TwoEnumFieldStruct.class, 211);
+
+    // Fory for EmptyStruct and OneEnumFieldStruct with same type ID
+    Fory foryEmpty =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .build();
+    foryEmpty.register(TestEnum.class, 210);
+    foryEmpty.register(EmptyStruct.class, 211);
+
+    Fory fory1 =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .build();
+    fory1.register(TestEnum.class, 210);
+    fory1.register(OneEnumFieldStruct.class, 211);
+
+    // Test 1: Serialize TwoEnumFieldStruct, deserialize as Empty
+    TwoEnumFieldStruct obj2 = new TwoEnumFieldStruct();
+    obj2.f1 = TestEnum.VALUE_A;
+    obj2.f2 = TestEnum.VALUE_B;
+
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(128);
+    fory2.serialize(buffer, obj2);
+
+    ExecutionContext ctx = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
+    runPeer(ctx);
+
+    MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
+
+    // Deserialize as EmptyStruct (should skip all fields)
+    EmptyStruct emptyResult = (EmptyStruct) foryEmpty.deserialize(buffer2);
+    Assert.assertNotNull(emptyResult);
+
+    // Test 2: Serialize OneEnumFieldStruct, deserialize as TwoEnumFieldStruct
+    OneEnumFieldStruct obj1 = new OneEnumFieldStruct();
+    obj1.f1 = TestEnum.VALUE_C;
+
+    buffer = MemoryBuffer.newHeapBuffer(64);
+    fory1.serialize(buffer, obj1);
+
+    // Debug: print Java output bytes
+    byte[] javaBytes = buffer.getBytes(0, buffer.writerIndex());
+    System.out.println("Java OneEnumFieldStruct output " + javaBytes.length + " bytes:");
+    for (int i = 0; i < javaBytes.length; i++) {
+      if (i > 0 && i % 16 == 0) System.out.println();
+      System.out.printf("%02x ", javaBytes[i] & 0xFF);
+    }
+    System.out.println();
+
+    String caseName2 = "test_enum_schema_evolution_compatible_reverse";
+    ExecutionContext ctx2 = prepareExecution(caseName2, javaBytes);
+    runPeer(ctx2);
+
+    MemoryBuffer buffer3 = readBuffer(ctx2.dataFile());
+    // Debug: print Go output bytes
+    byte[] goBytes = buffer3.getBytes(0, buffer3.size());
+    System.out.println("Go output " + goBytes.length + " bytes:");
+    for (int i = 0; i < goBytes.length; i++) {
+      if (i > 0 && i % 16 == 0) System.out.println();
+      System.out.printf("%02x ", goBytes[i] & 0xFF);
+    }
+    System.out.println();
+
+    TwoEnumFieldStruct result2 = (TwoEnumFieldStruct) fory2.deserialize(buffer3);
+    Assert.assertEquals(result2.f1, TestEnum.VALUE_C);
+    // Go uses zero value for missing enum fields (first enum value)
+    Assert.assertNull(result2.f2);
+  }
+
   @SuppressWarnings("unchecked")
   private void assertStringEquals(Object actual, Object expected, boolean useToString) {
     if (useToString) {

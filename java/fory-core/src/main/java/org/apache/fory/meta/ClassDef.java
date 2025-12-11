@@ -953,12 +953,7 @@ public class ClassDef implements Serializable {
 
     @Override
     public String toString() {
-      return "EnumFieldType{"
-          + "xtypeId="
-          + xtypeId
-          + ", nullable="
-          + nullable
-          + '}';
+      return "EnumFieldType{" + "xtypeId=" + xtypeId + ", nullable=" + nullable + '}';
     }
   }
 

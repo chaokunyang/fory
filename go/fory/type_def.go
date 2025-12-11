@@ -378,10 +378,18 @@ func buildFieldDefs(fory *Fory, value reflect.Value) ([]FieldDef, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to build field type for field %s: %w", fieldName, err)
 		}
+		// Treat object/enum fields as nullable to match Java's xlang TypeDef encoding.
+		nullableFlag := nullable(field.Type)
+		typeId := ft.TypeId()
+		internalId := TypeId(typeId & 0xFF)
+		if isUserDefinedType(int16(internalId)) || internalId == ENUM || internalId == NAMED_ENUM {
+			nullableFlag = true
+		}
+
 		fieldInfo = FieldDef{
 			name:         fieldName,
 			nameEncoding: nameEncoding,
-			nullable:     nullable(field.Type),
+			nullable:     nullableFlag,
 			trackingRef:  fory.config.TrackRef,
 			fieldType:    ft,
 		}

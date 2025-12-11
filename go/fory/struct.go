@@ -268,17 +268,12 @@ func (s *structSerializer) WriteData(ctx *WriteContext, value reflect.Value) err
 		}
 		fieldValue := value.Field(field.FieldIndex)
 
-		// Special handling for enum fields:
-		// - In compatible mode (meta share): write null flag + ordinal
-		// - In non-compatible mode: just write ordinal (no null flag)
-		// Java writes enum ordinals as unsigned VarUint32Small7, not signed zigzag
+		// Special handling for enum fields: always emit NotNullValueFlag then ordinal
+		// to align with Java xlang encoding (unsigned VarUint32Small7 for ordinal).
 		if field.Serializer != nil {
 			serTypeId := field.Serializer.TypeId()
 			if serTypeId == ENUM || serTypeId == NAMED_ENUM {
-				if ctx.Compatible() {
-					// In compatible mode, Java expects null flag for enum fields
-					buf.WriteInt8(NotNullValueFlag)
-				}
+				buf.WriteInt8(NotNullValueFlag)
 				if err := field.Serializer.WriteData(ctx, fieldValue); err != nil {
 					return err
 				}
@@ -1654,6 +1649,7 @@ func sortFieldsWithNullable(
 	var (
 		typeTriples []triple
 		others      []triple
+		userDefined []triple
 	)
 
 	for i, name := range fieldNames {
@@ -1684,7 +1680,9 @@ func sortFieldsWithNullable(
 			setFields = append(setFields, t)
 		case isMapType(t.typeID):
 			maps = append(maps, t)
-		case isUserDefinedType(t.typeID) || t.typeID == UNKNOWN_TYPE_ID:
+		case isUserDefinedType(t.typeID):
+			userDefined = append(userDefined, t)
+		case t.typeID == UNKNOWN_TYPE_ID:
 			others = append(others, t)
 		default:
 			otherInternalTypeFields = append(otherInternalTypeFields, t)
@@ -1727,6 +1725,7 @@ func sortFieldsWithNullable(
 	sortTuple(others)
 	sortTuple(collection)
 	sortTuple(maps)
+	sortTuple(userDefined)
 
 	// Java order: primitives, boxed, finals (otherInternalTypeFields), others, collections, maps
 	all := make([]triple, 0, len(fieldNames))
@@ -1737,6 +1736,7 @@ func sortFieldsWithNullable(
 	all = append(all, collection...)
 	all = append(all, setFields...)
 	all = append(all, maps...)
+	all = append(all, userDefined...)
 
 	outSer := make([]Serializer, len(all))
 	outNam := make([]string, len(all))

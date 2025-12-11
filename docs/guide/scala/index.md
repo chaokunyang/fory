@@ -31,6 +31,18 @@ Apache Fory™ Scala provides optimized serializers for Scala types, built on to
 
 Both Scala 2 and Scala 3 are supported.
 
+## Features
+
+Fory Scala inherits all features from Fory Java, plus Scala-specific optimizations:
+
+- **High Performance**: JIT code generation, zero-copy, 20-170x faster than traditional serialization
+- **Scala Type Support**: Optimized serializers for case classes, singletons, collections, tuples, Option, Either
+- **Default Value Support**: Automatic handling of Scala class default parameters during schema evolution
+- **Singleton Preservation**: `object` singletons maintain referential equality after deserialization
+- **Schema Evolution**: Forward/backward compatibility for class schema changes
+
+See [Java Features](../java/index.md#features) for complete feature list.
+
 ## Installation
 
 Add the dependency with sbt:

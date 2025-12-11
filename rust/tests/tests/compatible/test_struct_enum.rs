@@ -93,9 +93,9 @@ fn simple_write_continuous() {
         last: 44,
     };
     let mut buffer = vec![];
-    fory.serialize_to(&animal, &mut buffer).unwrap();
-    fory.serialize_to(&animal, &mut buffer).unwrap();
-    fory.serialize_to(&animal, &mut buffer).unwrap();
+    fory.serialize_to(&mut buffer, &animal).unwrap();
+    fory.serialize_to(&mut buffer, &animal).unwrap();
+    fory.serialize_to(&mut buffer, &animal).unwrap();
 
     let reader = &mut Reader::new(buffer.as_slice());
     let animal1: Animal1 = fory.deserialize_from(reader).unwrap();

@@ -98,7 +98,7 @@ fn test_basic_skip_functionality() {
     assert_eq!(decoded.skipped_field, String::default());
 
     let mut buf: Vec<u8> = vec![];
-    fory.serialize_to(&original, &mut buf).unwrap();
+    fory.serialize_to(&mut buf, &original).unwrap();
     let mut reader = Reader::new(&buf);
     let decoded: TestSkipFields = fory.deserialize_from(&mut reader).unwrap();
     assert_eq!(original.serialized_field, decoded.serialized_field);

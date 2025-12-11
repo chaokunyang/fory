@@ -260,7 +260,7 @@ fn test_string_serializer() {
     let fory = Fory::default().compatible(true).xlang(true);
     let mut buf = Vec::new();
     for s in &test_strings {
-        fory.serialize_to(s, &mut buf).unwrap();
+        fory.serialize_to(&mut buf, s).unwrap();
     }
     fs::write(&data_file_path, buf).unwrap();
 }
@@ -320,34 +320,34 @@ fn test_cross_language_serializer() {
     assert_de!(fory, reader, Color, color);
 
     let mut buf = Vec::new();
-    fory.serialize_to(&true, &mut buf).unwrap();
-    fory.serialize_to(&false, &mut buf).unwrap();
-    fory.serialize_to(&-1, &mut buf).unwrap();
-    fory.serialize_to(&i8::MAX, &mut buf).unwrap();
-    fory.serialize_to(&i8::MIN, &mut buf).unwrap();
-    fory.serialize_to(&i16::MAX, &mut buf).unwrap();
-    fory.serialize_to(&i16::MIN, &mut buf).unwrap();
-    fory.serialize_to(&i32::MAX, &mut buf).unwrap();
-    fory.serialize_to(&i32::MIN, &mut buf).unwrap();
-    fory.serialize_to(&i64::MAX, &mut buf).unwrap();
-    fory.serialize_to(&i64::MIN, &mut buf).unwrap();
-    fory.serialize_to(&-1f32, &mut buf).unwrap();
-    fory.serialize_to(&-1f64, &mut buf).unwrap();
-    fory.serialize_to(&"str".to_string(), &mut buf).unwrap();
-    fory.serialize_to(&day, &mut buf).unwrap();
-    fory.serialize_to(&instant, &mut buf).unwrap();
-    fory.serialize_to(&vec![true, false], &mut buf).unwrap();
-    fory.serialize_to(&vec![1, i8::MAX as u8], &mut buf)
+    fory.serialize_to(&mut buf, &true).unwrap();
+    fory.serialize_to(&mut buf, &false).unwrap();
+    fory.serialize_to(&mut buf, &-1).unwrap();
+    fory.serialize_to(&mut buf, &i8::MAX).unwrap();
+    fory.serialize_to(&mut buf, &i8::MIN).unwrap();
+    fory.serialize_to(&mut buf, &i16::MAX).unwrap();
+    fory.serialize_to(&mut buf, &i16::MIN).unwrap();
+    fory.serialize_to(&mut buf, &i32::MAX).unwrap();
+    fory.serialize_to(&mut buf, &i32::MIN).unwrap();
+    fory.serialize_to(&mut buf, &i64::MAX).unwrap();
+    fory.serialize_to(&mut buf, &i64::MIN).unwrap();
+    fory.serialize_to(&mut buf, &-1f32).unwrap();
+    fory.serialize_to(&mut buf, &-1f64).unwrap();
+    fory.serialize_to(&mut buf, &"str".to_string()).unwrap();
+    fory.serialize_to(&mut buf, &day).unwrap();
+    fory.serialize_to(&mut buf, &instant).unwrap();
+    fory.serialize_to(&mut buf, &vec![true, false]).unwrap();
+    fory.serialize_to(&mut buf, &vec![1, i8::MAX as u8])
         .unwrap();
-    fory.serialize_to(&vec![1, i16::MAX], &mut buf).unwrap();
-    fory.serialize_to(&vec![1, i32::MAX], &mut buf).unwrap();
-    fory.serialize_to(&vec![1, i64::MAX], &mut buf).unwrap();
-    fory.serialize_to(&vec![1f32, 2f32], &mut buf).unwrap();
-    fory.serialize_to(&vec![1f64, 2f64], &mut buf).unwrap();
-    fory.serialize_to(&str_list, &mut buf).unwrap();
-    fory.serialize_to(&str_set, &mut buf).unwrap();
-    fory.serialize_to(&str_map, &mut buf).unwrap();
-    fory.serialize_to(&color, &mut buf).unwrap();
+    fory.serialize_to(&mut buf, &vec![1, i16::MAX]).unwrap();
+    fory.serialize_to(&mut buf, &vec![1, i32::MAX]).unwrap();
+    fory.serialize_to(&mut buf, &vec![1, i64::MAX]).unwrap();
+    fory.serialize_to(&mut buf, &vec![1f32, 2f32]).unwrap();
+    fory.serialize_to(&mut buf, &vec![1f64, 2f64]).unwrap();
+    fory.serialize_to(&mut buf, &str_list).unwrap();
+    fory.serialize_to(&mut buf, &str_set).unwrap();
+    fory.serialize_to(&mut buf, &str_map).unwrap();
+    fory.serialize_to(&mut buf, &color).unwrap();
     fs::write(&data_file_path, buf).unwrap();
 }
 
@@ -449,10 +449,10 @@ fn test_list() {
     assert_eq!(remote_item_list2, item_list2);
 
     let mut buf = Vec::new();
-    fory.serialize_to(&remote_str_list, &mut buf).unwrap();
-    fory.serialize_to(&remote_str_list2, &mut buf).unwrap();
-    fory.serialize_to(&remote_item_list, &mut buf).unwrap();
-    fory.serialize_to(&remote_item_list2, &mut buf).unwrap();
+    fory.serialize_to(&mut buf, &remote_str_list).unwrap();
+    fory.serialize_to(&mut buf, &remote_str_list2).unwrap();
+    fory.serialize_to(&mut buf, &remote_item_list).unwrap();
+    fory.serialize_to(&mut buf, &remote_item_list2).unwrap();
 
     fs::write(&data_file_path, buf).unwrap();
 }
@@ -565,13 +565,13 @@ fn test_integer() {
     assert_eq!(remote_f6, f6);
 
     let mut buf = Vec::new();
-    fory.serialize_to(&remote_item2, &mut buf).unwrap();
-    fory.serialize_to(&remote_f1, &mut buf).unwrap();
-    fory.serialize_to(&remote_f2, &mut buf).unwrap();
-    fory.serialize_to(&remote_f3, &mut buf).unwrap();
-    fory.serialize_to(&remote_f4, &mut buf).unwrap();
-    fory.serialize_to(&remote_f5, &mut buf).unwrap();
-    fory.serialize_to(&remote_f6, &mut buf).unwrap();
+    fory.serialize_to(&mut buf, &remote_item2).unwrap();
+    fory.serialize_to(&mut buf, &remote_f1).unwrap();
+    fory.serialize_to(&mut buf, &remote_f2).unwrap();
+    fory.serialize_to(&mut buf, &remote_f3).unwrap();
+    fory.serialize_to(&mut buf, &remote_f4).unwrap();
+    fory.serialize_to(&mut buf, &remote_f5).unwrap();
+    fory.serialize_to(&mut buf, &remote_f6).unwrap();
     fs::write(&data_file_path, buf).unwrap();
 }
 

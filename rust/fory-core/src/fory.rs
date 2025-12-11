@@ -401,9 +401,9 @@ impl Fory {
     ///
     /// # Arguments
     ///
-    /// * `record` - A reference to the value to serialize.
     /// * `buf` - A mutable reference to the byte buffer to append the serialized data to.
     ///   The buffer will be resized as needed during serialization.
+    /// * `record` - A reference to the value to serialize.
     ///
     /// # Returns
     ///
@@ -431,7 +431,7 @@ impl Fory {
     /// let point = Point { x: 1, y: 2 };
     ///
     /// let mut buf = Vec::new();
-    /// let bytes_written = fory.serialize_to(&point, &mut buf).unwrap();
+    /// let bytes_written = fory.serialize_to(&mut buf, &point).unwrap();
     /// assert_eq!(bytes_written, buf.len());
     /// ```
     ///
@@ -454,11 +454,11 @@ impl Fory {
     /// let mut buf = Vec::new();
     ///
     /// // First serialization
-    /// let len1 = fory.serialize_to(&p1, &mut buf).unwrap();
+    /// let len1 = fory.serialize_to(&mut buf, &p1).unwrap();
     /// let offset1 = buf.len();
     ///
     /// // Second serialization - appends to existing data
-    /// let len2 = fory.serialize_to(&p2, &mut buf).unwrap();
+    /// let len2 = fory.serialize_to(&mut buf, &p2).unwrap();
     /// let offset2 = buf.len();
     ///
     /// assert_eq!(offset1, len1);
@@ -495,20 +495,20 @@ impl Fory {
     /// buf.resize(16, 0);  // Set length to 16 to append the write, capacity stays 1024
     ///
     /// let initial_capacity = buf.capacity();
-    /// fory.serialize_to(&point, &mut buf).unwrap();
+    /// fory.serialize_to(&mut buf, &point).unwrap();
     ///
     /// // Reset to smaller size to append the write - capacity unchanged
     /// buf.resize(16, 0);
     /// assert_eq!(buf.capacity(), initial_capacity);  // Capacity not shrunk
     ///
     /// // Reuse buffer efficiently without reallocation
-    /// fory.serialize_to(&point, &mut buf).unwrap();
+    /// fory.serialize_to(&mut buf, &point).unwrap();
     /// assert_eq!(buf.capacity(), initial_capacity);  // Still no reallocation
     /// ```
     pub fn serialize_to<T: Serializer>(
         &self,
-        record: &T,
         buf: &mut Vec<u8>,
+        record: &T,
     ) -> Result<usize, Error> {
         let start = buf.len();
         self.with_write_context(|context| {

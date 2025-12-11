@@ -19,6 +19,8 @@ package fory
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/apache/fory/go/fory/meta"
 	"github.com/spaolacci/murmur3"
 	"reflect"
@@ -60,6 +62,37 @@ func NewTypeDef(typeId uint32, nsName, typeName *MetaStringBytes, registerByName
 		fieldDefs:      fieldDefs,
 		encoded:        nil,
 	}
+}
+
+// String returns a string representation of TypeDef for debugging
+func (td *TypeDef) String() string {
+	var nsStr, typeStr string
+	if td.nsName != nil {
+		// Try to decode the namespace; if it fails, show raw data
+		decoder := meta.NewDecoder('.', '_')
+		decoded, err := decoder.Decode(td.nsName.Data, td.nsName.Encoding)
+		if err == nil {
+			nsStr = decoded
+		} else {
+			nsStr = fmt.Sprintf("data=%v,enc=%v", td.nsName.Data, td.nsName.Encoding)
+		}
+	}
+	if td.typeName != nil {
+		// Try to decode the typename; if it fails, show raw data
+		decoder := meta.NewDecoder('.', '_')
+		decoded, err := decoder.Decode(td.typeName.Data, td.typeName.Encoding)
+		if err == nil {
+			typeStr = decoded
+		} else {
+			typeStr = fmt.Sprintf("data=%v,enc=%v", td.typeName.Data, td.typeName.Encoding)
+		}
+	}
+	fieldStrs := make([]string, len(td.fieldDefs))
+	for i, fd := range td.fieldDefs {
+		fieldStrs[i] = fd.String()
+	}
+	return fmt.Sprintf("TypeDef{typeId=%d, ns=%s, type=%s, registerByName=%v, compressed=%v, fields=[%s]}",
+		td.typeId, nsStr, typeStr, td.registerByName, td.compressed, strings.Join(fieldStrs, ", "))
 }
 
 func (td *TypeDef) writeTypeDef(buffer *ByteBuffer) {
@@ -213,6 +246,31 @@ type FieldDef struct {
 	fieldType    FieldType
 }
 
+// String returns a string representation of FieldDef for debugging
+func (fd FieldDef) String() string {
+	return fmt.Sprintf("FieldDef{name=%s, nullable=%v, trackingRef=%v, fieldType=%s}",
+		fd.name, fd.nullable, fd.trackingRef, fieldTypeToString(fd.fieldType))
+}
+
+// fieldTypeToString returns a detailed string representation of a FieldType
+func fieldTypeToString(ft FieldType) string {
+	if ft == nil {
+		return "nil"
+	}
+	switch t := ft.(type) {
+	case *CollectionFieldType:
+		return fmt.Sprintf("CollectionFieldType{typeId=%d, elementType=%s}", t.TypeId(), fieldTypeToString(t.elementType))
+	case *MapFieldType:
+		return fmt.Sprintf("MapFieldType{typeId=%d, keyType=%s, valueType=%s}", t.TypeId(), fieldTypeToString(t.keyType), fieldTypeToString(t.valueType))
+	case *SimpleFieldType:
+		return fmt.Sprintf("SimpleFieldType{typeId=%d}", t.TypeId())
+	case *DynamicFieldType:
+		return fmt.Sprintf("DynamicFieldType{typeId=%d}", t.TypeId())
+	default:
+		return fmt.Sprintf("FieldType{typeId=%d}", ft.TypeId())
+	}
+}
+
 // buildFieldDefs extracts field definitions from a struct value
 func buildFieldDefs(fory *Fory, value reflect.Value) ([]FieldDef, error) {
 	var fieldDefs []FieldDef
@@ -284,6 +342,7 @@ func buildFieldDefs(fory *Fory, value reflect.Value) ([]FieldDef, error) {
 type FieldType interface {
 	TypeId() TypeId
 	write(*ByteBuffer)
+	writeWithFlags(*ByteBuffer, bool, bool)                  // writeWithFlags writes typeId with nullable/trackingRef flags
 	getTypeInfo(*Fory) (TypeInfo, error)                     // some serializer need typeinfo as well
 	getTypeInfoWithResolver(*TypeResolver) (TypeInfo, error) // version that uses typeResolver directly
 }
@@ -296,6 +355,19 @@ type BaseFieldType struct {
 func (b *BaseFieldType) TypeId() TypeId { return b.typeId }
 func (b *BaseFieldType) write(buffer *ByteBuffer) {
 	buffer.WriteVarUint32Small7(uint32(b.typeId))
+}
+
+// writeWithFlags writes the typeId with nullable and trackingRef flags packed into the value.
+// The format is: (typeId << 2) | (nullable ? 0b10 : 0) | (trackingRef ? 0b01 : 0)
+func (b *BaseFieldType) writeWithFlags(buffer *ByteBuffer, nullable bool, trackingRef bool) {
+	value := uint32(b.typeId) << 2
+	if nullable {
+		value |= 0b10
+	}
+	if trackingRef {
+		value |= 0b01
+	}
+	buffer.WriteVarUint32Small7(value)
 }
 
 func getFieldTypeSerializer(fory *Fory, ft FieldType) (Serializer, error) {
@@ -407,7 +479,15 @@ func NewCollectionFieldType(typeId TypeId, elementType FieldType) *CollectionFie
 
 func (c *CollectionFieldType) write(buffer *ByteBuffer) {
 	c.BaseFieldType.write(buffer)
-	c.elementType.write(buffer)
+	// Element types in collections are written with flags (nullable=true, trackingRef=false)
+	// This matches Java's CollectionFieldType behavior
+	c.elementType.writeWithFlags(buffer, true, false)
+}
+
+func (c *CollectionFieldType) writeWithFlags(buffer *ByteBuffer, nullable bool, trackingRef bool) {
+	c.BaseFieldType.writeWithFlags(buffer, nullable, trackingRef)
+	// Element types in collections are written with flags (nullable=true, trackingRef=false)
+	c.elementType.writeWithFlags(buffer, true, false)
 }
 
 func (c *CollectionFieldType) getTypeInfo(f *Fory) (TypeInfo, error) {
@@ -447,8 +527,17 @@ func NewMapFieldType(typeId TypeId, keyType, valueType FieldType) *MapFieldType 
 
 func (m *MapFieldType) write(buffer *ByteBuffer) {
 	m.BaseFieldType.write(buffer)
-	m.keyType.write(buffer)
-	m.valueType.write(buffer)
+	// Key and value types in maps are written with flags (nullable=true, trackingRef=false)
+	// This matches Java's MapFieldType behavior
+	m.keyType.writeWithFlags(buffer, true, false)
+	m.valueType.writeWithFlags(buffer, true, false)
+}
+
+func (m *MapFieldType) writeWithFlags(buffer *ByteBuffer, nullable bool, trackingRef bool) {
+	m.BaseFieldType.writeWithFlags(buffer, nullable, trackingRef)
+	// Key and value types in maps are written with flags (nullable=true, trackingRef=false)
+	m.keyType.writeWithFlags(buffer, true, false)
+	m.valueType.writeWithFlags(buffer, true, false)
 }
 
 func (m *MapFieldType) getTypeInfo(f *Fory) (TypeInfo, error) {

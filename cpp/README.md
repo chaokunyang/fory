@@ -39,7 +39,7 @@ int main() {
       .build();
 
   // Register type
-  fory->register_type<Person>(1);
+  fory->register_struct<Person>(1);
 
   // Create object
   Person person{"Alice", 30, "alice@example.com"};
@@ -101,8 +101,8 @@ struct Person {
 };
 
 auto fory = apache::fory::ForyBuilder().build();
-fory->register_type<Address>(100);
-fory->register_type<Person>(200);
+fory->register_struct<Address>(100);
+fory->register_struct<Person>(200);
 
 Person person{
     "John Doe",
@@ -164,12 +164,12 @@ struct PersonV2 {
 auto fory1 = apache::fory::ForyBuilder()
     .compatible(true)
     .build();
-fory1->register_type<PersonV1>(1);
+fory1->register_struct<PersonV1>(1);
 
 auto fory2 = apache::fory::ForyBuilder()
     .compatible(true)
     .build();
-fory2->register_type<PersonV2>(1);
+fory2->register_struct<PersonV2>(1);
 
 PersonV1 v1{"Alice", 30, "123 Main St"};
 auto bytes = fory1->serialize(v1).value();
@@ -260,7 +260,7 @@ auto fory = apache::fory::ForyBuilder()
     .build();
 
 // Register types with consistent IDs across languages
-fory->register_type<MyStruct>(1);
+fory->register_struct<MyStruct>(1);
 ```
 
 See [xlang_type_mapping.md](https://fory.apache.org/docs/specification/xlang_type_mapping) for type mapping across languages.

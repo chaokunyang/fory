@@ -78,6 +78,17 @@ class TypeDefDecoder {
     ClassDef classDef = new ClassDef(classSpec, classFields, hasFieldsMeta, id, decoded.f1);
     if (Utils.debugOutputEnabled()) {
       System.out.println("[Java TypeDef DECODED] " + classDef);
+      // Compute and print diff with local TypeDef
+      Class<?> cls = classSpec.type;
+      if (cls != null && cls != NonexistentClass.NonexistentMetaShared.class) {
+        ClassDef localDef = ClassDef.buildClassDef(resolver.getFory(), cls);
+        String diff = classDef.computeDiff(localDef);
+        if (diff != null) {
+          System.out.println("[Java TypeDef DIFF] " + classSpec.entireClassName + ":\n" + diff);
+        } else {
+          System.out.println("[Java TypeDef DIFF] " + classSpec.entireClassName + ": identical");
+        }
+      }
     }
     return classDef;
   }

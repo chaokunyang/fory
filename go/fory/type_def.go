@@ -95,6 +95,92 @@ func (td *TypeDef) String() string {
 		td.typeId, nsStr, typeStr, td.registerByName, td.compressed, strings.Join(fieldStrs, ", "))
 }
 
+// ComputeDiff computes the diff between this (decoded/remote) TypeDef and a local TypeDef.
+// Returns a string describing the differences, or empty string if identical.
+func (td *TypeDef) ComputeDiff(localDef *TypeDef) string {
+	if localDef == nil {
+		return "Local TypeDef is nil (type not registered locally)"
+	}
+
+	var diff strings.Builder
+
+	// Build field maps for comparison
+	remoteFields := make(map[string]FieldDef)
+	for _, fd := range td.fieldDefs {
+		remoteFields[fd.name] = fd
+	}
+	localFields := make(map[string]FieldDef)
+	for _, fd := range localDef.fieldDefs {
+		localFields[fd.name] = fd
+	}
+
+	// Find fields only in remote
+	for fieldName, fd := range remoteFields {
+		if _, exists := localFields[fieldName]; !exists {
+			diff.WriteString(fmt.Sprintf("  field '%s': only in remote, type=%s, nullable=%v\n",
+				fieldName, fieldTypeToString(fd.fieldType), fd.nullable))
+		}
+	}
+
+	// Find fields only in local
+	for fieldName, fd := range localFields {
+		if _, exists := remoteFields[fieldName]; !exists {
+			diff.WriteString(fmt.Sprintf("  field '%s': only in local, type=%s, nullable=%v\n",
+				fieldName, fieldTypeToString(fd.fieldType), fd.nullable))
+		}
+	}
+
+	// Compare common fields
+	for fieldName, remoteField := range remoteFields {
+		if localField, exists := localFields[fieldName]; exists {
+			// Compare field types
+			remoteTypeStr := fieldTypeToString(remoteField.fieldType)
+			localTypeStr := fieldTypeToString(localField.fieldType)
+			if remoteTypeStr != localTypeStr {
+				diff.WriteString(fmt.Sprintf("  field '%s': type mismatch, remote=%s, local=%s\n",
+					fieldName, remoteTypeStr, localTypeStr))
+			}
+			// Compare nullable
+			if remoteField.nullable != localField.nullable {
+				diff.WriteString(fmt.Sprintf("  field '%s': nullable mismatch, remote=%v, local=%v\n",
+					fieldName, remoteField.nullable, localField.nullable))
+			}
+		}
+	}
+
+	// Compare field order
+	if len(td.fieldDefs) == len(localDef.fieldDefs) {
+		orderDifferent := false
+		for i := range td.fieldDefs {
+			if td.fieldDefs[i].name != localDef.fieldDefs[i].name {
+				orderDifferent = true
+				break
+			}
+		}
+		if orderDifferent {
+			diff.WriteString("  field order differs:\n")
+			diff.WriteString("    remote: [")
+			for i, fd := range td.fieldDefs {
+				if i > 0 {
+					diff.WriteString(", ")
+				}
+				diff.WriteString(fd.name)
+			}
+			diff.WriteString("]\n")
+			diff.WriteString("    local:  [")
+			for i, fd := range localDef.fieldDefs {
+				if i > 0 {
+					diff.WriteString(", ")
+				}
+				diff.WriteString(fd.name)
+			}
+			diff.WriteString("]\n")
+		}
+	}
+
+	return diff.String()
+}
+
 func (td *TypeDef) writeTypeDef(buffer *ByteBuffer) {
 	buffer.WriteBinary(td.encoded)
 }
@@ -1158,6 +1244,19 @@ func decodeTypeDef(fory *Fory, buffer *ByteBuffer, header int64) (*TypeDef, erro
 
 	if DebugOutputEnabled() {
 		fmt.Printf("[Go TypeDef DECODED] %s\n", typeDef.String())
+		// Compute and print diff with local TypeDef
+		if type_ != nil {
+			localDef, err := fory.typeResolver.getTypeDef(type_, true)
+			if err == nil && localDef != nil {
+				diff := typeDef.ComputeDiff(localDef)
+				typeName := type_.String()
+				if diff != "" {
+					fmt.Printf("[Go TypeDef DIFF] %s:\n%s", typeName, diff)
+				} else {
+					fmt.Printf("[Go TypeDef DIFF] %s: identical\n", typeName)
+				}
+			}
+		}
 	}
 	return typeDef, nil
 }

@@ -995,7 +995,9 @@ public abstract class XlangTestBase extends ForyTestBase {
     runPeer(ctx);
     MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
     for (int i = 0; i < 3; i++) {
-      Assert.assertEquals(fory.deserialize(buffer2), Color.White);
+      Object deserialized = fory.deserialize(buffer2);
+      System.out.println("deserialized: " + deserialized);
+      Assert.assertEquals(deserialized, Color.White);
     }
     for (int i = 0; i < 3; i++) {
       Assert.assertEquals(fory.deserialize(buffer2), myStruct);

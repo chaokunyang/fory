@@ -289,13 +289,15 @@ func (f *Fory) Unmarshal(data []byte, v interface{}) error {
 	if rv.Kind() != reflect.Ptr || rv.IsNil() {
 		return fmt.Errorf("v must be a non-nil pointer")
 	}
-
-	// Reset context and set data
-	f.readCtx.Reset()
+	defer func() {
+		// Reset context and set data
+		f.readCtx.Reset()
+		if f.metaContext != nil {
+			f.metaContext.Reset()
+		}
+		f.readCtx.SetData(data)
+	}()
 	f.readCtx.SetData(data)
-	if f.metaContext != nil {
-		f.metaContext.Reset()
-	}
 
 	// ReadData and validate header, get meta offset if present
 	metaOffset, err := readHeader(f.readCtx)
@@ -349,15 +351,25 @@ func (f *Fory) Unmarshal(data []byte, v interface{}) error {
 // If callback is provided, it will be called for each BufferObject during serialization.
 // Return true from callback to write in-band, false for out-of-band.
 func (f *Fory) Serialize(buffer *ByteBuffer, v interface{}, callback func(BufferObject) bool) error {
-	// Reset internal state but NOT the buffer - caller manages buffer state
-	// This allows streaming multiple values to the same buffer
-	f.writeCtx.ResetState()
+	buf := f.writeCtx.buffer
+	defer func() {
+		// Reset internal state but NOT the buffer - caller manages buffer state
+		// This allows streaming multiple values to the same buffer
+		f.writeCtx.ResetState()
+		f.writeCtx.buffer = buf
+		if f.metaContext != nil {
+			f.metaContext.Reset()
+		}
+		// Set up buffer callback for out-of-band serialization
+		if callback != nil {
+			f.writeCtx.bufferCallback = nil
+			f.writeCtx.outOfBand = false
+		}
+	}()
 	f.writeCtx.buffer = buffer
-
 	if f.metaContext != nil {
 		f.metaContext.Reset()
 	}
-
 	// Set up buffer callback for out-of-band serialization
 	if callback != nil {
 		f.writeCtx.bufferCallback = callback
@@ -384,10 +396,8 @@ func (f *Fory) Serialize(buffer *ByteBuffer, v interface{}, callback func(Buffer
 		// Calculate offset from the position after meta offset field to meta section start
 		currentPos := buffer.writerIndex
 		offset := currentPos - metaStartOffset - 4
-
 		// Update the meta offset field
 		buffer.PutInt32(metaStartOffset, int32(offset))
-
 		// WriteData type definitions
 		f.typeResolver.writeTypeDefs(buffer)
 	}
@@ -569,9 +579,12 @@ func (f *Fory) Reset() {
 // Falls back to reflection-based serialization for unregistered types.
 // Note: Fory instance is NOT thread-safe. Use ThreadSafeFory for concurrent use.
 func Serialize[T any](f *Fory, value *T) ([]byte, error) {
-	// Reuse context, just reset state
-	f.writeCtx.Reset()
-
+	defer func() {
+		f.writeCtx.Reset()
+		if f.metaContext != nil {
+			f.metaContext.Reset()
+		}
+	}()
 	// WriteData protocol header
 	writeHeader(f.writeCtx, f.config)
 
@@ -810,23 +823,19 @@ func Deserialize[T any](f *Fory, data []byte, target *T) error {
 // SerializeAny serializes polymorphic values where concrete type is unknown.
 // Uses runtime type dispatch to find the appropriate serializer.
 func (f *Fory) SerializeAny(value any) ([]byte, error) {
-	// Check if value is nil interface OR a nil pointer/slice/map/etc.
-	// In Go, `*int32(nil)` wrapped in `any` is NOT equal to `nil`, but we need to serialize it as null.
-	if isNilValue(value) {
+	defer func() {
 		f.writeCtx.Reset()
 		if f.metaContext != nil {
 			f.metaContext.Reset()
 		}
+	}()
+	// Check if value is nil interface OR a nil pointer/slice/map/etc.
+	// In Go, `*int32(nil)` wrapped in `any` is NOT equal to `nil`, but we need to serialize it as null.
+	if isNilValue(value) {
 		// Use Java-compatible null format: 3 bytes (magic + bitmap with isNilFlag)
 		writeNullHeader(f.writeCtx)
 		return f.writeCtx.buffer.GetByteSlice(0, f.writeCtx.buffer.writerIndex), nil
 	}
-
-	f.writeCtx.Reset()
-	if f.metaContext != nil {
-		f.metaContext.Reset()
-	}
-
 	// WriteData protocol header
 	writeHeader(f.writeCtx, f.config)
 
@@ -847,10 +856,8 @@ func (f *Fory) SerializeAny(value any) ([]byte, error) {
 		// Calculate offset from the position after meta offset field to meta section start
 		currentPos := f.writeCtx.buffer.writerIndex
 		offset := currentPos - metaStartOffset - 4
-
 		// Update the meta offset field
 		f.writeCtx.buffer.PutInt32(metaStartOffset, int32(offset))
-
 		// WriteData type definitions
 		f.typeResolver.writeTypeDefs(f.writeCtx.buffer)
 	}
@@ -861,14 +868,8 @@ func (f *Fory) SerializeAny(value any) ([]byte, error) {
 // serializeReflectValue serializes a reflect.Value directly, avoiding boxing overhead.
 // This is used by Serialize[T] fallback path to avoid struct copy.
 func (f *Fory) serializeReflectValue(value reflect.Value) ([]byte, error) {
-	f.writeCtx.Reset()
-	if f.metaContext != nil {
-		f.metaContext.Reset()
-	}
-
 	// WriteData protocol header
 	writeHeader(f.writeCtx, f.config)
-
 	// In compatible mode, reserve space for meta offset (matches C++/Java)
 	var metaStartOffset int
 	if f.config.Compatible {
@@ -909,11 +910,12 @@ func (f *Fory) SerializeAnyTo(buf *ByteBuffer, value interface{}) error {
 		return nil
 	}
 
-	// Reset contexts but use the provided buffer
-	f.writeCtx.refResolver.reset()
-	if f.metaContext != nil {
-		f.metaContext.Reset()
-	}
+	defer func() {
+		f.writeCtx.Reset()
+		if f.metaContext != nil {
+			f.metaContext.Reset()
+		}
+	}()
 
 	// Temporarily swap buffer
 	origBuffer := f.writeCtx.buffer
@@ -950,17 +952,18 @@ func (f *Fory) SerializeAnyTo(buf *ByteBuffer, value interface{}) error {
 
 	// Restore original buffer
 	f.writeCtx.buffer = origBuffer
-
 	return nil
 }
 
 // DeserializeAny deserializes polymorphic values.
 // Returns the concrete type as `any`.
 func (f *Fory) DeserializeAny(data []byte) (any, error) {
-	f.readCtx.Reset()
-	if f.metaContext != nil {
-		f.metaContext.Reset()
-	}
+	defer func() {
+		f.readCtx.Reset()
+		if f.metaContext != nil {
+			f.metaContext.Reset()
+		}
+	}()
 	f.readCtx.SetData(data)
 
 	metaOffset, err := readHeader(f.readCtx)
@@ -1013,10 +1016,12 @@ func (f *Fory) DeserializeAny(data []byte) (any, error) {
 // This is useful when reading multiple serialized values from the same buffer.
 func (f *Fory) DeserializeAnyFrom(buf *ByteBuffer) (any, error) {
 	// Reset contexts for each independent serialized object
-	f.readCtx.refResolver.reset()
-	if f.metaContext != nil {
-		f.metaContext.Reset()
-	}
+	defer func() {
+		f.writeCtx.Reset()
+		if f.metaContext != nil {
+			f.metaContext.Reset()
+		}
+	}()
 
 	// Temporarily swap buffer
 	origBuffer := f.readCtx.buffer

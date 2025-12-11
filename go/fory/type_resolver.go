@@ -1836,6 +1836,8 @@ func (r *TypeResolver) resetWrite() {
 		r.dynamicIdToString = map[int16]string{}
 		r.dynamicStringId = 0
 	}
+	// Reset meta string resolver to ensure each serialization is independent
+	r.metaStringResolver.ResetWrite()
 }
 
 func (r *TypeResolver) resetRead() {
@@ -1844,6 +1846,8 @@ func (r *TypeResolver) resetRead() {
 		r.dynamicIdToString = map[int16]string{}
 		r.dynamicStringId = 0
 	}
+	// Reset meta string resolver to ensure each deserialization is independent
+	r.metaStringResolver.ResetRead()
 }
 
 func computeStringHash(str string) int32 {

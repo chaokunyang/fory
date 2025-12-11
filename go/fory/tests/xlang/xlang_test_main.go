@@ -917,8 +917,9 @@ func testConsistentNamed() {
 	}
 
 	var outData []byte
-	for _, val := range values {
+	for i, val := range values {
 		serialized, err := f.SerializeAny(val)
+		fmt.Printf("Serialized value %d: %+v, size: %d\n", i, val, len(serialized))
 		if err != nil {
 			panic(fmt.Sprintf("Failed to serialize: %v", err))
 		}

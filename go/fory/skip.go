@@ -40,14 +40,14 @@ func SkipFieldValueWithTypeFlag(ctx *ReadContext, fieldDef FieldDef, readRefFlag
 			}
 			if refFlag == RefFlag {
 				// Reference to already-seen object, skip the reference index
-				_ = ctx.buffer.ReadVarUint32()
+				_ = ctx.buffer.ReadVaruint32()
 				return nil
 			}
 			// RefValueFlag (0) or NotNullValueFlag (-1) means we need to read the actual object
 		}
 
 		// Read type info (typeID + meta_index)
-		wroteTypeID := int32(ctx.buffer.ReadVarUint32Small7())
+		wroteTypeID := ctx.buffer.ReadVaruint32Small7()
 		if IsNamespacedType(TypeId(wroteTypeID)) {
 			typeInfo, err := ctx.TypeResolver().readTypeInfoWithTypeID(ctx.buffer, wroteTypeID)
 			if err != nil {
@@ -78,14 +78,14 @@ func SkipAnyValue(ctx *ReadContext, readRefFlag bool) error {
 		}
 		if refFlag == RefFlag {
 			// Reference to already-seen object, skip the reference index
-			_ = ctx.buffer.ReadVarUint32()
+			_ = ctx.buffer.ReadVaruint32()
 			return nil
 		}
 		// RefValueFlag (0) or NotNullValueFlag (-1) means we need to read the actual object
 	}
 
 	// ReadData type_id first
-	typeID := ctx.buffer.ReadVarUint32Small7()
+	typeID := ctx.buffer.ReadVaruint32Small7()
 	internalID := typeID & 0xff
 
 	// For struct-like types, also read meta_index to get type_info
@@ -106,7 +106,7 @@ func SkipAnyValue(ctx *ReadContext, readRefFlag bool) error {
 	case COMPATIBLE_STRUCT, NAMED_COMPATIBLE_STRUCT, STRUCT, NAMED_STRUCT:
 		// For struct types, read meta_index to get type_info
 		if ctx.TypeResolver().metaShareEnabled() {
-			metaIndex := ctx.buffer.ReadVarUint32()
+			metaIndex := ctx.buffer.ReadVaruint32()
 			context := ctx.TypeResolver().fory.MetaContext()
 			if context == nil || int(metaIndex) >= len(context.readTypeInfos) {
 				return fmt.Errorf("invalid meta index %d", metaIndex)
@@ -144,7 +144,7 @@ func SkipAnyValue(ctx *ReadContext, readRefFlag bool) error {
 
 // skipCollection skips a collection (list/set) value
 func skipCollection(ctx *ReadContext, fieldDef FieldDef) error {
-	length := ctx.buffer.ReadVarUint32()
+	length := ctx.buffer.ReadVaruint32()
 	if length == 0 {
 		return nil
 	}
@@ -160,7 +160,7 @@ func skipCollection(ctx *ReadContext, fieldDef FieldDef) error {
 	var elemTypeInfo *TypeInfo
 	if isSameType && !isDeclared {
 		// ReadData element type info - first read the typeID from buffer
-		typeID := int32(ctx.buffer.ReadVarUint32Small7())
+		typeID := ctx.buffer.ReadVaruint32Small7()
 		typeInfo, err := ctx.TypeResolver().readTypeInfoWithTypeID(ctx.buffer, typeID)
 		if err != nil {
 			return err
@@ -210,7 +210,7 @@ func skipCollection(ctx *ReadContext, fieldDef FieldDef) error {
 
 // skipMap skips a map value
 func skipMap(ctx *ReadContext, fieldDef FieldDef) error {
-	length := ctx.buffer.ReadVarUint32()
+	length := ctx.buffer.ReadVaruint32()
 	if length == 0 {
 		return nil
 	}
@@ -241,7 +241,7 @@ func skipMap(ctx *ReadContext, fieldDef FieldDef) error {
 			var valueDef FieldDef
 			var valueTypeInfo *TypeInfo
 			if !valueDeclared {
-				typeID := int32(ctx.buffer.ReadVarUint32Small7())
+				typeID := ctx.buffer.ReadVaruint32Small7()
 				typeInfo, err := ctx.TypeResolver().readTypeInfoWithTypeID(ctx.buffer, typeID)
 				if err != nil {
 					return err
@@ -272,7 +272,7 @@ func skipMap(ctx *ReadContext, fieldDef FieldDef) error {
 			var keyDef FieldDef
 			var keyTypeInfo *TypeInfo
 			if !keyDeclared {
-				typeID := int32(ctx.buffer.ReadVarUint32Small7())
+				typeID := ctx.buffer.ReadVaruint32Small7()
 				typeInfo, err := ctx.TypeResolver().readTypeInfoWithTypeID(ctx.buffer, typeID)
 				if err != nil {
 					return err
@@ -306,7 +306,7 @@ func skipMap(ctx *ReadContext, fieldDef FieldDef) error {
 		var keyDef, valueDef FieldDef
 		var keyTypeInfo, valueTypeInfo *TypeInfo
 		if !keyDeclared {
-			typeID := int32(ctx.buffer.ReadVarUint32Small7())
+			typeID := ctx.buffer.ReadVaruint32Small7()
 			typeInfo, err := ctx.TypeResolver().readTypeInfoWithTypeID(ctx.buffer, typeID)
 			if err != nil {
 				return err
@@ -321,7 +321,7 @@ func skipMap(ctx *ReadContext, fieldDef FieldDef) error {
 		}
 
 		if !valueDeclared {
-			typeID := int32(ctx.buffer.ReadVarUint32Small7())
+			typeID := ctx.buffer.ReadVaruint32Small7()
 			typeInfo, err := ctx.TypeResolver().readTypeInfoWithTypeID(ctx.buffer, typeID)
 			if err != nil {
 				return err
@@ -401,7 +401,7 @@ func skipValue(ctx *ReadContext, fieldDef FieldDef, readRefFlag bool, isField bo
 		}
 		if refFlag == RefFlag {
 			// Reference to already-seen object, skip the reference index
-			_ = ctx.buffer.ReadVarUint32()
+			_ = ctx.buffer.ReadVaruint32()
 			return nil
 		}
 		// RefValueFlag (0) or NotNullValueFlag (-1) means we need to read the actual object
@@ -421,13 +421,13 @@ func skipValue(ctx *ReadContext, fieldDef FieldDef, readRefFlag bool, isField bo
 				return skipStruct(ctx, typeInfo)
 			}
 			// Otherwise we need to read type info
-			ti, err := ctx.TypeResolver().readTypeInfoWithTypeID(ctx.buffer, int32(typeIDNum))
+			ti, err := ctx.TypeResolver().readTypeInfoWithTypeID(ctx.buffer, typeIDNum)
 			if err != nil {
 				return err
 			}
 			return skipStruct(ctx, &ti)
 		} else if internalID == uint32(ENUM) || internalID == uint32(NAMED_ENUM) {
-			_ = ctx.buffer.ReadVarUint32()
+			_ = ctx.buffer.ReadVaruint32()
 			return nil
 		} else {
 			return fmt.Errorf("unknown type id: %d (internal_id: %d)", typeIDNum, internalID)
@@ -449,13 +449,13 @@ func skipValue(ctx *ReadContext, fieldDef FieldDef, readRefFlag bool, isField bo
 		_ = ctx.buffer.ReadInt16()
 		return nil
 	case INT32:
-		_ = int32(ctx.buffer.ReadVarUint32Small7())
+		_ = ctx.buffer.ReadVaruint32Small7()
 		return nil
 	case VAR_INT32:
-		_ = int32(ctx.buffer.ReadVarUint32Small7())
+		_ = ctx.buffer.ReadVaruint32Small7()
 		return nil
 	case INT64, VAR_INT64, SLI_INT64:
-		_ = ctx.buffer.ReadVarInt64()
+		_ = ctx.buffer.ReadVarint64()
 		return nil
 
 	// Floating point types
@@ -469,7 +469,7 @@ func skipValue(ctx *ReadContext, fieldDef FieldDef, readRefFlag bool, isField bo
 	// String types
 	case STRING:
 		// String format: varuint64 header (size << 2 | encoding) + data bytes
-		header := ctx.buffer.ReadVarUint64()
+		header := ctx.buffer.ReadVaruint64()
 		size := header >> 2
 		encoding := header & 0b11
 		switch encoding {
@@ -482,16 +482,16 @@ func skipValue(ctx *ReadContext, fieldDef FieldDef, readRefFlag bool, isField bo
 		}
 		return nil
 	case BINARY:
-		length := ctx.buffer.ReadVarUint32()
+		length := ctx.buffer.ReadVaruint32()
 		_ = ctx.buffer.ReadBinary(int(length))
 		return nil
 
 	// Date/Time types
 	case LOCAL_DATE:
-		_ = int32(ctx.buffer.ReadVarUint32Small7())
+		_ = ctx.buffer.ReadVaruint32Small7()
 		return nil
 	case TIMESTAMP:
-		_ = ctx.buffer.ReadVarInt64()
+		_ = ctx.buffer.ReadVarint64()
 		return nil
 
 	// Container types
@@ -509,7 +509,7 @@ func skipValue(ctx *ReadContext, fieldDef FieldDef, readRefFlag bool, isField bo
 
 	// Enum types
 	case ENUM, NAMED_ENUM:
-		_ = ctx.buffer.ReadVarUint32()
+		_ = ctx.buffer.ReadVaruint32()
 		return nil
 
 	// Unsigned integer types
@@ -520,10 +520,10 @@ func skipValue(ctx *ReadContext, fieldDef FieldDef, readRefFlag bool, isField bo
 		_ = ctx.buffer.ReadInt16() // No ReadUint16, but same binary representation
 		return nil
 	case UINT32:
-		_ = ctx.buffer.ReadVarUint32()
+		_ = ctx.buffer.ReadVaruint32()
 		return nil
 	case UINT64:
-		_ = ctx.buffer.ReadVarUint64()
+		_ = ctx.buffer.ReadVaruint64()
 		return nil
 
 	// Unknown (polymorphic) type - read type info and skip dynamically

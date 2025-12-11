@@ -41,14 +41,14 @@ func writeString(buf *ByteBuffer, value string) error {
 		encoding = encodingUTF8
 	}
 	header := (uint64(len(data)) << 2) | encoding
-	buf.WriteVarUint36Small(header)
+	buf.WriteVaruint36Small(header)
 	buf.WriteBinary(data)
 	return nil
 }
 
 // readString implements string deserialization with encoding parsing
 func readString(buf *ByteBuffer) string {
-	header := buf.ReadVarUint36Small()
+	header := buf.ReadVaruint36Small()
 	size := header >> 2       // Extract byte count
 	encoding := header & 0b11 // Extract encoding type
 
@@ -110,7 +110,7 @@ func writeLatin1(buf *ByteBuffer, s string) error {
 	length := len(runes)
 	header := (uint64(length) << 2) | encodingLatin1 // Pack byte count and encoding
 
-	buf.WriteVarUint36Small(header)
+	buf.WriteVaruint36Small(header)
 	// Convert runes to Latin1 bytes
 	data := make([]byte, length)
 	for i, r := range runes {
@@ -124,7 +124,7 @@ func writeUTF16LE(buf *ByteBuffer, data []byte) error {
 	length := len(data) // Byte count (not character count)
 	header := (uint64(length) << 2) | encodingUTF16LE
 
-	buf.WriteVarUint36Small(header)
+	buf.WriteVaruint36Small(header)
 	buf.WriteBinary(data)
 	return nil
 }
@@ -133,7 +133,7 @@ func writeUTF8(buf *ByteBuffer, s string) error {
 	data := unsafeGetBytes(s)
 	header := (uint64(len(data)) << 2) | encodingUTF8
 
-	buf.WriteVarUint36Small(header)
+	buf.WriteVaruint36Small(header)
 	buf.WriteBinary(data)
 	return nil
 }
@@ -202,7 +202,7 @@ func (s stringSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool
 		ctx.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeType {
-		ctx.buffer.WriteVarUint32Small7(uint32(STRING))
+		ctx.buffer.WriteVaruint32Small7(uint32(STRING))
 	}
 	return s.WriteData(ctx, value)
 }
@@ -223,7 +223,7 @@ func (s stringSerializer) Read(ctx *ReadContext, readRef bool, readType bool, va
 		}
 	}
 	if readType {
-		_ = ctx.buffer.ReadVarUint32Small7()
+		_ = ctx.buffer.ReadVaruint32Small7()
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
@@ -252,7 +252,7 @@ func (s ptrToStringSerializer) Write(ctx *WriteContext, writeRef bool, writeType
 		ctx.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeType {
-		ctx.buffer.WriteVarUint32Small7(uint32(STRING))
+		ctx.buffer.WriteVaruint32Small7(uint32(STRING))
 	}
 	return s.WriteData(ctx, value)
 }

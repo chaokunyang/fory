@@ -120,7 +120,7 @@ func (s *ptrToValueSerializer) Read(ctx *ReadContext, readRef bool, readType boo
 	}
 	if readType {
 		// Read type info - in compatible mode this contains the serializer with fieldDefs
-		typeID := int32(buf.ReadVarUint32Small7())
+		typeID := buf.ReadVaruint32Small7()
 		internalTypeID := TypeId(typeID & 0xFF)
 		// Check if this is a struct type that needs type meta reading
 		if IsNamespacedType(TypeId(typeID)) || internalTypeID == COMPATIBLE_STRUCT || internalTypeID == STRUCT {

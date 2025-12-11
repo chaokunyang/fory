@@ -107,9 +107,9 @@ func generateFieldWriteTyped(buf *bytes.Buffer, field *FieldInfo) error {
 		case types.Int16:
 			fmt.Fprintf(buf, "\tbuf.WriteInt16(%s)\n", fieldAccess)
 		case types.Int32:
-			fmt.Fprintf(buf, "\tbuf.WriteVarInt32(%s)\n", fieldAccess)
+			fmt.Fprintf(buf, "\tbuf.WriteVarint32(%s)\n", fieldAccess)
 		case types.Int, types.Int64:
-			fmt.Fprintf(buf, "\tbuf.WriteVarInt64(%s)\n", fieldAccess)
+			fmt.Fprintf(buf, "\tbuf.WriteVarint64(%s)\n", fieldAccess)
 		case types.Uint8:
 			fmt.Fprintf(buf, "\tbuf.WriteByte_(%s)\n", fieldAccess)
 		case types.Uint16:
@@ -146,7 +146,7 @@ func generateFieldWriteTyped(buf *bytes.Buffer, field *FieldInfo) error {
 			fmt.Fprintf(buf, "\t\t// WriteData reference flag for the slice itself\n")
 			fmt.Fprintf(buf, "\t\tbuf.WriteInt8(0) // RefValueFlag\n")
 			fmt.Fprintf(buf, "\t\t// WriteData slice length\n")
-			fmt.Fprintf(buf, "\t\tbuf.WriteVarUint32(uint32(len(%s)))\n", fieldAccess)
+			fmt.Fprintf(buf, "\t\tbuf.WriteVaruint32(uint32(len(%s)))\n", fieldAccess)
 			fmt.Fprintf(buf, "\t\t// WriteData collection flags for dynamic slice []interface{}\n")
 			fmt.Fprintf(buf, "\t\t// Only CollectionTrackingRef is set (no declared type, may have different types)\n")
 			fmt.Fprintf(buf, "\t\tbuf.WriteInt8(1) // CollectionTrackingRef only\n")
@@ -267,7 +267,7 @@ func generateSliceWriteInline(buf *bytes.Buffer, sliceType *types.Slice, fieldAc
 	fmt.Fprintf(buf, "\t\tif %s != nil {\n", fieldAccess)
 	fmt.Fprintf(buf, "\t\t\tsliceLen = len(%s)\n", fieldAccess)
 	fmt.Fprintf(buf, "\t\t}\n")
-	fmt.Fprintf(buf, "\t\tbuf.WriteVarUint32(uint32(sliceLen))\n")
+	fmt.Fprintf(buf, "\t\tbuf.WriteVaruint32(uint32(sliceLen))\n")
 
 	// WriteData collection header and elements for non-empty slice
 	fmt.Fprintf(buf, "\t\tif sliceLen > 0 {\n")
@@ -320,7 +320,7 @@ func generateMapWriteInline(buf *bytes.Buffer, mapType *types.Map, fieldAccess s
 	fmt.Fprintf(buf, "\t\tif %s != nil {\n", fieldAccess)
 	fmt.Fprintf(buf, "\t\t\tmapLen = len(%s)\n", fieldAccess)
 	fmt.Fprintf(buf, "\t\t}\n")
-	fmt.Fprintf(buf, "\t\tbuf.WriteVarUint32(uint32(mapLen))\n")
+	fmt.Fprintf(buf, "\t\tbuf.WriteVaruint32(uint32(mapLen))\n")
 
 	// WriteData chunks for non-empty map
 	fmt.Fprintf(buf, "\t\tif mapLen > 0 {\n")
@@ -530,9 +530,9 @@ func generateSliceElementWriteInline(buf *bytes.Buffer, elemType types.Type, ele
 		case types.Int16:
 			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteInt16(%s)\n", elemAccess)
 		case types.Int32:
-			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVarInt32(%s)\n", elemAccess)
+			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVarint32(%s)\n", elemAccess)
 		case types.Int, types.Int64:
-			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVarInt64(%s)\n", elemAccess)
+			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVarint64(%s)\n", elemAccess)
 		case types.Uint8:
 			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteByte_(%s)\n", elemAccess)
 		case types.Uint16:

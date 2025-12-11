@@ -58,7 +58,7 @@ func (s byteSliceSerializer) Write(ctx *WriteContext, writeRef bool, writeType b
 		}
 	}
 	if writeType {
-		ctx.Buffer().WriteVarUint32Small7(uint32(BINARY))
+		ctx.Buffer().WriteVaruint32Small7(uint32(BINARY))
 	}
 	return s.WriteData(ctx, value)
 }
@@ -79,7 +79,7 @@ func (s byteSliceSerializer) Read(ctx *ReadContext, readRef bool, readType bool,
 		}
 	}
 	if readType {
-		_ = buf.ReadVarUint32Small7()
+		_ = buf.ReadVaruint32Small7()
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
@@ -181,7 +181,7 @@ func (s boolArraySerializer) Write(ctx *WriteContext, writeRef bool, writeType b
 		}
 	}
 	if writeType {
-		ctx.Buffer().WriteVarUint32Small7(uint32(BOOL_ARRAY))
+		ctx.Buffer().WriteVaruint32Small7(uint32(BOOL_ARRAY))
 	}
 	return s.WriteData(ctx, value)
 }
@@ -202,7 +202,7 @@ func (s boolArraySerializer) Read(ctx *ReadContext, readRef bool, readType bool,
 		}
 	}
 	if readType {
-		_ = buf.ReadVarUint32Small7()
+		_ = buf.ReadVaruint32Small7()
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
@@ -277,7 +277,7 @@ func (s int8ArraySerializer) Write(ctx *WriteContext, writeRef bool, writeType b
 		}
 	}
 	if writeType {
-		ctx.Buffer().WriteVarUint32Small7(uint32(INT8_ARRAY))
+		ctx.Buffer().WriteVaruint32Small7(uint32(INT8_ARRAY))
 	}
 	return s.WriteData(ctx, value)
 }
@@ -321,7 +321,7 @@ func (s int8ArraySerializer) Read(ctx *ReadContext, readRef bool, readType bool,
 		}
 	}
 	if readType {
-		_ = buf.ReadVarUint32Small7()
+		_ = buf.ReadVaruint32Small7()
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
@@ -370,7 +370,7 @@ func (s int16ArraySerializer) Write(ctx *WriteContext, writeRef bool, writeType 
 		}
 	}
 	if writeType {
-		ctx.Buffer().WriteVarUint32Small7(uint32(INT16_ARRAY))
+		ctx.Buffer().WriteVaruint32Small7(uint32(INT16_ARRAY))
 	}
 	return s.WriteData(ctx, value)
 }
@@ -414,7 +414,7 @@ func (s int16ArraySerializer) Read(ctx *ReadContext, readRef bool, readType bool
 		}
 	}
 	if readType {
-		_ = buf.ReadVarUint32Small7()
+		_ = buf.ReadVaruint32Small7()
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
@@ -463,7 +463,7 @@ func (s int32ArraySerializer) Write(ctx *WriteContext, writeRef bool, writeType 
 		}
 	}
 	if writeType {
-		ctx.Buffer().WriteVarUint32Small7(uint32(INT32_ARRAY))
+		ctx.Buffer().WriteVaruint32Small7(uint32(INT32_ARRAY))
 	}
 	return s.WriteData(ctx, value)
 }
@@ -507,7 +507,7 @@ func (s int32ArraySerializer) Read(ctx *ReadContext, readRef bool, readType bool
 		}
 	}
 	if readType {
-		_ = buf.ReadVarUint32Small7()
+		_ = buf.ReadVaruint32Small7()
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
@@ -556,7 +556,7 @@ func (s int64ArraySerializer) Write(ctx *WriteContext, writeRef bool, writeType 
 		}
 	}
 	if writeType {
-		ctx.Buffer().WriteVarUint32Small7(uint32(INT64_ARRAY))
+		ctx.Buffer().WriteVaruint32Small7(uint32(INT64_ARRAY))
 	}
 	return s.WriteData(ctx, value)
 }
@@ -600,7 +600,7 @@ func (s int64ArraySerializer) Read(ctx *ReadContext, readRef bool, readType bool
 		}
 	}
 	if readType {
-		_ = buf.ReadVarUint32Small7()
+		_ = buf.ReadVaruint32Small7()
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
@@ -649,7 +649,7 @@ func (s float32ArraySerializer) Write(ctx *WriteContext, writeRef bool, writeTyp
 		}
 	}
 	if writeType {
-		ctx.Buffer().WriteVarUint32Small7(uint32(FLOAT32_ARRAY))
+		ctx.Buffer().WriteVaruint32Small7(uint32(FLOAT32_ARRAY))
 	}
 	return s.WriteData(ctx, value)
 }
@@ -693,7 +693,7 @@ func (s float32ArraySerializer) Read(ctx *ReadContext, readRef bool, readType bo
 		}
 	}
 	if readType {
-		_ = buf.ReadVarUint32Small7()
+		_ = buf.ReadVaruint32Small7()
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
@@ -742,7 +742,7 @@ func (s float64ArraySerializer) Write(ctx *WriteContext, writeRef bool, writeTyp
 		}
 	}
 	if writeType {
-		ctx.Buffer().WriteVarUint32Small7(uint32(FLOAT64_ARRAY))
+		ctx.Buffer().WriteVaruint32Small7(uint32(FLOAT64_ARRAY))
 	}
 	return s.WriteData(ctx, value)
 }
@@ -786,7 +786,7 @@ func (s float64ArraySerializer) Read(ctx *ReadContext, readRef bool, readType bo
 		}
 	}
 	if readType {
-		_ = buf.ReadVarUint32Small7()
+		_ = buf.ReadVaruint32Small7()
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
@@ -1255,7 +1255,7 @@ func (s int16SliceSerializer) Write(ctx *WriteContext, writeRef bool, writeType 
 		}
 	}
 	if writeType {
-		ctx.Buffer().WriteVarUint32Small7(uint32(s.TypeId()))
+		ctx.Buffer().WriteVaruint32Small7(uint32(s.TypeId()))
 	}
 	return s.WriteData(ctx, value)
 }
@@ -1291,7 +1291,7 @@ func (s int16SliceSerializer) Read(ctx *ReadContext, readRef bool, readType bool
 		}
 	}
 	if readType {
-		typeID := int32(buf.ReadVarUint32Small7())
+		typeID := int32(buf.ReadVaruint32Small7())
 		if typeID != int32(s.TypeId()) {
 			return fmt.Errorf("type mismatch: expected %d, got %d", s.TypeId(), typeID)
 		}
@@ -1456,7 +1456,7 @@ func (s intSliceSerializer) Write(ctx *WriteContext, writeRef bool, writeType bo
 		}
 	}
 	if writeType {
-		ctx.Buffer().WriteVarUint32Small7(uint32(INT64_ARRAY))
+		ctx.Buffer().WriteVaruint32Small7(uint32(INT64_ARRAY))
 	}
 	return s.WriteData(ctx, value)
 }
@@ -1477,7 +1477,7 @@ func (s intSliceSerializer) Read(ctx *ReadContext, readRef bool, readType bool, 
 		}
 	}
 	if readType {
-		_ = buf.ReadVarUint32Small7()
+		_ = buf.ReadVaruint32Small7()
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }

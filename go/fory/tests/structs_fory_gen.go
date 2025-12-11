@@ -67,7 +67,7 @@ func (g DynamicSliceDemo_ForyGenSerializer) WriteTyped(ctx *fory.WriteContext, v
 		// WriteData reference flag for the slice itself
 		buf.WriteInt8(0) // RefValueFlag
 		// WriteData slice length
-		buf.WriteVarUint32(uint32(len(v.DynamicSlice)))
+		buf.WriteVaruint32(uint32(len(v.DynamicSlice)))
 		// WriteData collection flags for dynamic slice []interface{}
 		// Only CollectionTrackingRef is set (no declared type, may have different types)
 		buf.WriteInt8(1) // CollectionTrackingRef only
@@ -130,7 +130,7 @@ func (g DynamicSliceDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *
 		v.DynamicSlice = nil // null slice
 	} else if flag == 0 {
 		// ReadData slice length
-		sliceLen := buf.ReadVarUint32()
+		sliceLen := buf.ReadVaruint32()
 		// ReadData collection flags (ignore for now)
 		_ = buf.ReadInt8()
 		// Create slice with proper capacity
@@ -217,7 +217,7 @@ func (g MapDemo_ForyGenSerializer) WriteTyped(ctx *fory.WriteContext, v *MapDemo
 		if v.IntMap != nil {
 			mapLen = len(v.IntMap)
 		}
-		buf.WriteVarUint32(uint32(mapLen))
+		buf.WriteVaruint32(uint32(mapLen))
 		if mapLen > 0 {
 			// Calculate KV header flags
 			kvHeader := uint8(0)
@@ -256,7 +256,7 @@ func (g MapDemo_ForyGenSerializer) WriteTyped(ctx *fory.WriteContext, v *MapDemo
 		if v.MixedMap != nil {
 			mapLen = len(v.MixedMap)
 		}
-		buf.WriteVarUint32(uint32(mapLen))
+		buf.WriteVaruint32(uint32(mapLen))
 		if mapLen > 0 {
 			// Calculate KV header flags
 			kvHeader := uint8(0)
@@ -298,7 +298,7 @@ func (g MapDemo_ForyGenSerializer) WriteTyped(ctx *fory.WriteContext, v *MapDemo
 		if v.StringMap != nil {
 			mapLen = len(v.StringMap)
 		}
-		buf.WriteVarUint32(uint32(mapLen))
+		buf.WriteVaruint32(uint32(mapLen))
 		if mapLen > 0 {
 			// Calculate KV header flags
 			kvHeader := uint8(0)
@@ -389,7 +389,7 @@ func (g MapDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *MapDemo) 
 		return fmt.Errorf("expected RefValueFlag for map field, got %d", flag)
 	}
 	{
-		mapLen := int(buf.ReadVarUint32())
+		mapLen := int(buf.ReadVaruint32())
 		if mapLen == 0 {
 			v.IntMap = make(map[int]int)
 		} else {
@@ -423,7 +423,7 @@ func (g MapDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *MapDemo) 
 		return fmt.Errorf("expected RefValueFlag for map field, got %d", flag)
 	}
 	{
-		mapLen := int(buf.ReadVarUint32())
+		mapLen := int(buf.ReadVaruint32())
 		if mapLen == 0 {
 			v.MixedMap = make(map[string]int)
 		} else {
@@ -457,7 +457,7 @@ func (g MapDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *MapDemo) 
 		return fmt.Errorf("expected RefValueFlag for map field, got %d", flag)
 	}
 	{
-		mapLen := int(buf.ReadVarUint32())
+		mapLen := int(buf.ReadVaruint32())
 		if mapLen == 0 {
 			v.StringMap = make(map[string]string)
 		} else {
@@ -561,7 +561,7 @@ func (g SliceDemo_ForyGenSerializer) WriteTyped(ctx *fory.WriteContext, v *Slice
 		if v.BoolSlice != nil {
 			sliceLen = len(v.BoolSlice)
 		}
-		buf.WriteVarUint32(uint32(sliceLen))
+		buf.WriteVaruint32(uint32(sliceLen))
 		if sliceLen > 0 {
 			collectFlag := 8 // CollectionIsSameType only
 			buf.WriteInt8(int8(collectFlag))
@@ -578,7 +578,7 @@ func (g SliceDemo_ForyGenSerializer) WriteTyped(ctx *fory.WriteContext, v *Slice
 		if v.FloatSlice != nil {
 			sliceLen = len(v.FloatSlice)
 		}
-		buf.WriteVarUint32(uint32(sliceLen))
+		buf.WriteVaruint32(uint32(sliceLen))
 		if sliceLen > 0 {
 			collectFlag := 8 // CollectionIsSameType only
 			buf.WriteInt8(int8(collectFlag))
@@ -595,13 +595,13 @@ func (g SliceDemo_ForyGenSerializer) WriteTyped(ctx *fory.WriteContext, v *Slice
 		if v.IntSlice != nil {
 			sliceLen = len(v.IntSlice)
 		}
-		buf.WriteVarUint32(uint32(sliceLen))
+		buf.WriteVaruint32(uint32(sliceLen))
 		if sliceLen > 0 {
 			collectFlag := 8 // CollectionIsSameType only
 			buf.WriteInt8(int8(collectFlag))
 			buf.WriteVaruint32(4) // INT32
 			for _, elem := range v.IntSlice {
-				buf.WriteVarInt32(elem)
+				buf.WriteVarint32(elem)
 			}
 		}
 	}
@@ -612,7 +612,7 @@ func (g SliceDemo_ForyGenSerializer) WriteTyped(ctx *fory.WriteContext, v *Slice
 		if v.StringSlice != nil {
 			sliceLen = len(v.StringSlice)
 		}
-		buf.WriteVarUint32(uint32(sliceLen))
+		buf.WriteVaruint32(uint32(sliceLen))
 		if sliceLen > 0 {
 			collectFlag := 8 // CollectionIsSameType only
 			buf.WriteInt8(int8(collectFlag))
@@ -675,7 +675,7 @@ func (g SliceDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *SliceDe
 		return fmt.Errorf("expected RefValueFlag for slice field, got %d", flag)
 	}
 	{
-		sliceLen := int(buf.ReadVarUint32())
+		sliceLen := int(buf.ReadVaruint32())
 		if sliceLen == 0 {
 			v.BoolSlice = nil
 		} else {
@@ -705,7 +705,7 @@ func (g SliceDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *SliceDe
 		return fmt.Errorf("expected RefValueFlag for slice field, got %d", flag)
 	}
 	{
-		sliceLen := int(buf.ReadVarUint32())
+		sliceLen := int(buf.ReadVaruint32())
 		if sliceLen == 0 {
 			v.FloatSlice = nil
 		} else {
@@ -735,7 +735,7 @@ func (g SliceDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *SliceDe
 		return fmt.Errorf("expected RefValueFlag for slice field, got %d", flag)
 	}
 	{
-		sliceLen := int(buf.ReadVarUint32())
+		sliceLen := int(buf.ReadVaruint32())
 		if sliceLen == 0 {
 			v.IntSlice = nil
 		} else {
@@ -746,7 +746,7 @@ func (g SliceDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *SliceDe
 			if hasDeclType {
 				// Elements are written directly without flags/type IDs
 				for i := 0; i < sliceLen; i++ {
-					v.IntSlice[i] = buf.ReadVarInt32()
+					v.IntSlice[i] = buf.ReadVarint32()
 				}
 			} else {
 				// Need to read type ID once if CollectionIsSameType is set
@@ -755,7 +755,7 @@ func (g SliceDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *SliceDe
 					_ = buf.ReadVaruint32()
 				}
 				for i := 0; i < sliceLen; i++ {
-					v.IntSlice[i] = buf.ReadVarInt32()
+					v.IntSlice[i] = buf.ReadVarint32()
 				}
 			}
 		}
@@ -765,7 +765,7 @@ func (g SliceDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *SliceDe
 		return fmt.Errorf("expected RefValueFlag for slice field, got %d", flag)
 	}
 	{
-		sliceLen := int(buf.ReadVarUint32())
+		sliceLen := int(buf.ReadVaruint32())
 		if sliceLen == 0 {
 			v.StringSlice = nil
 		} else {
@@ -863,9 +863,9 @@ func (g ValidationDemo_ForyGenSerializer) WriteTyped(ctx *fory.WriteContext, v *
 	// Field: E (bool)
 	buf.WriteBool(v.E)
 	// Field: C (int64)
-	buf.WriteVarInt64(v.C)
+	buf.WriteVarint64(v.C)
 	// Field: A (int32)
-	buf.WriteVarInt32(v.A)
+	buf.WriteVarint32(v.A)
 	// Field: B (string)
 	fory.WriteString(buf, v.B)
 	return nil
@@ -921,9 +921,9 @@ func (g ValidationDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *Va
 	// Field: E (bool)
 	v.E = buf.ReadBool()
 	// Field: C (int64)
-	v.C = buf.ReadVarInt64()
+	v.C = buf.ReadVarint64()
 	// Field: A (int32)
-	v.A = buf.ReadVarInt32()
+	v.A = buf.ReadVarint32()
 	// Field: B (string)
 	v.B = fory.ReadString(buf)
 	return nil

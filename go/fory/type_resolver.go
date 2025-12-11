@@ -105,7 +105,7 @@ type TypeInfo struct {
 	PkgPathBytes  *MetaStringBytes
 	NameBytes     *MetaStringBytes
 	IsDynamic     bool
-	TypeID        int32
+	TypeID        uint32
 	StaticId      StaticTypeId
 	Serializer    Serializer
 	NeedWriteDef  bool
@@ -145,9 +145,9 @@ type TypeResolver struct {
 
 	// Type tracking
 	dynamicWrittenMetaStr []string
-	typeIDToTypeInfo      map[int32]TypeInfo
-	typeIDCounter         int32
-	dynamicWriteStringID  int32
+	typeIDToTypeInfo      map[uint32]TypeInfo
+	typeIDCounter         uint32
+	dynamicWriteStringID  uint32
 
 	// Class registries
 	typesInfo           map[reflect.Type]TypeInfo
@@ -186,7 +186,7 @@ func newTypeResolver(fory *Fory) *TypeResolver {
 		hashToClassInfo:  make(map[uint64]TypeInfo),
 
 		dynamicWrittenMetaStr: make([]string, 0),
-		typeIDToTypeInfo:      make(map[int32]TypeInfo),
+		typeIDToTypeInfo:      make(map[uint32]TypeInfo),
 		typeIDCounter:         300,
 		dynamicWriteStringID:  0,
 
@@ -247,12 +247,12 @@ func newTypeResolver(fory *Fory) *TypeResolver {
 		r.typeTagToSerializers[typeTag] = ptrCodegenSer // "pkg.Type" -> ptrToValueSerializer
 
 		// 3. Register complete type information (critical for proper serialization)
-		_, err := r.registerType(type_, int32(codegenSerializer.TypeId()), pkgPath, typeName, codegenSerializer, false)
+		_, err := r.registerType(type_, uint32(codegenSerializer.TypeId()), pkgPath, typeName, codegenSerializer, false)
 		if err != nil {
 			panic(fmt.Errorf("failed to register codegen type %s: %v", typeTag, err))
 		}
 		// 4. Register pointer type information
-		_, err = r.registerType(ptrType, -int32(codegenSerializer.TypeId()), pkgPath, typeName, ptrCodegenSer, false)
+		_, err = r.registerType(ptrType, uint32(codegenSerializer.TypeId()), pkgPath, typeName, ptrCodegenSer, false)
 		if err != nil {
 			panic(fmt.Errorf("failed to register codegen pointer type %s: %v", typeTag, err))
 		}
@@ -314,7 +314,7 @@ func (r *TypeResolver) initialize() {
 		{genericSetType, setSerializer{}},
 	}
 	for _, elem := range serializers {
-		_, err := r.registerType(elem.Type, int32(elem.Serializer.TypeId()), "", "", elem.Serializer, true)
+		_, err := r.registerType(elem.Type, uint32(elem.Serializer.TypeId()), "", "", elem.Serializer, true)
 		if err != nil {
 			fmt.Errorf("init type error: %v", err)
 		}
@@ -343,7 +343,7 @@ func (r *TypeResolver) RegisterSerializer(type_ reflect.Type, s Serializer) erro
 
 // RegisterByID registers a type with a numeric type ID for cross-language serialization.
 // This is used when the full type ID (user_id << 8 | internal_id) is already calculated.
-func (r *TypeResolver) RegisterByID(type_ reflect.Type, fullTypeID int32) error {
+func (r *TypeResolver) RegisterByID(type_ reflect.Type, fullTypeID uint32) error {
 	// Check if already registered
 	if info, ok := r.typeIDToTypeInfo[fullTypeID]; ok {
 		return fmt.Errorf("type %s with id %d has been registered", info.Type, fullTypeID)
@@ -393,7 +393,7 @@ func (r *TypeResolver) RegisterByID(type_ reflect.Type, fullTypeID int32) error 
 }
 
 // RegisterEnumByID registers an enum type (numeric type in Go) with a full type ID
-func (r *TypeResolver) RegisterEnumByID(type_ reflect.Type, fullTypeID int32) error {
+func (r *TypeResolver) RegisterEnumByID(type_ reflect.Type, fullTypeID uint32) error {
 	// Check if already registered
 	if info, ok := r.typeIDToTypeInfo[fullTypeID]; ok {
 		return fmt.Errorf("type %s with id %d has been registered", info.Type, fullTypeID)
@@ -456,7 +456,7 @@ func (r *TypeResolver) RegisterEnumByName(type_ reflect.Type, namespace, typeNam
 	}
 
 	// Compute type ID for NAMED_ENUM
-	typeId := int32(NAMED_ENUM)
+	typeId := uint32(NAMED_ENUM)
 
 	// Create enum serializer
 	serializer := &enumSerializer{type_: type_, typeID: typeId}
@@ -483,7 +483,7 @@ func (r *TypeResolver) RegisterEnumByName(type_ reflect.Type, namespace, typeNam
 
 func (r *TypeResolver) RegisterNamedType(
 	type_ reflect.Type,
-	typeId int32,
+	typeId uint32,
 	namespace string,
 	typeName string,
 ) error {
@@ -605,7 +605,7 @@ func (r *TypeResolver) RegisterExtensionType(
 
 	// Use NAMED_STRUCT type ID to match Java's behavior
 	// (Java uses NAMED_STRUCT when register() + registerSerializer() are used)
-	typeId := int32(NAMED_STRUCT)
+	typeId := uint32(NAMED_STRUCT)
 
 	// Register both value and pointer types
 	_, err := r.registerType(type_, typeId, namespace, typeName, nil, false)
@@ -778,7 +778,7 @@ func (r *TypeResolver) getTypeInfo(value reflect.Value, create bool) (TypeInfo, 
 	}
 
 	// Determine type ID and registration strategy
-	var typeID int32
+	var typeID uint32
 	switch {
 	case r.isXlang && !r.requireRegistration:
 		// Auto-assign IDs
@@ -803,7 +803,7 @@ func (r *TypeResolver) getTypeInfo(value reflect.Value, create bool) (TypeInfo, 
 	} else if value.IsValid() && value.Kind() == reflect.Interface && value.Elem().Kind() == reflect.Struct {
 		typeID = NAMED_STRUCT
 	} else if value.IsValid() && value.Kind() == reflect.Ptr && value.Elem().Kind() == reflect.Struct {
-		typeID = -NAMED_STRUCT
+		typeID = NAMED_STRUCT
 	} else if value.Kind() == reflect.Map {
 		typeID = MAP
 	} else if value.Kind() == reflect.Array {
@@ -838,7 +838,7 @@ func isMultiDimensionaSlice(v reflect.Value) bool {
 
 func (r *TypeResolver) registerType(
 	type_ reflect.Type,
-	typeID int32,
+	typeID uint32,
 	namespace string,
 	typeName string,
 	serializer Serializer,
@@ -957,8 +957,8 @@ func (r *TypeResolver) writeTypeInfo(buffer *ByteBuffer, typeInfo TypeInfo) erro
 	// Extract the internal type ID (lower 8 bits)
 	typeID := typeInfo.TypeID
 	internalTypeID := TypeId(typeID & 0xFF)
-	// WriteData the type ID to buffer using VarUint32Small7 encoding (matches Java)
-	buffer.WriteVarUint32Small7(uint32(typeID))
+	// WriteData the type ID to buffer using Varuint32Small7 encoding (matches Java)
+	buffer.WriteVaruint32Small7(uint32(typeID))
 
 	// Handle type meta based on internal type ID (matching Java XtypeResolver.writeClassInfo)
 	switch internalTypeID {
@@ -994,12 +994,12 @@ func (r *TypeResolver) writeSharedTypeMeta(buffer *ByteBuffer, typeInfo TypeInfo
 	typ := typeInfo.Type
 
 	if index, exists := context.typeMap[typ]; exists {
-		buffer.WriteVarUint32(index)
+		buffer.WriteVaruint32(index)
 		return nil
 	}
 
 	newIndex := uint32(len(context.typeMap))
-	buffer.WriteVarUint32(newIndex)
+	buffer.WriteVaruint32(newIndex)
 	context.typeMap[typ] = newIndex
 
 	// Only build TypeDef for struct types - enums don't have field definitions
@@ -1044,7 +1044,7 @@ func (r *TypeResolver) readSharedTypeMeta(buffer *ByteBuffer, value reflect.Valu
 	if context == nil {
 		return TypeInfo{}, fmt.Errorf("MetaContext is nil - ensure compatible mode is enabled")
 	}
-	index := int32(buffer.ReadVarUint32()) // shared meta index id (unsigned)
+	index := int32(buffer.ReadVaruint32()) // shared meta index id (unsigned)
 	if index < 0 || index >= int32(len(context.readTypeInfos)) {
 		return TypeInfo{}, fmt.Errorf("TypeInfo not found for index %d (have %d type infos)", index, len(context.readTypeInfos))
 	}
@@ -1061,11 +1061,11 @@ func (r *TypeResolver) readSharedTypeMeta(buffer *ByteBuffer, value reflect.Valu
 func (r *TypeResolver) writeTypeDefs(buffer *ByteBuffer) {
 	context := r.fory.MetaContext()
 	if context == nil {
-		buffer.WriteVarUint32Small7(0)
+		buffer.WriteVaruint32Small7(0)
 		return
 	}
 	sz := len(context.writingTypeDefs)
-	buffer.WriteVarUint32Small7(uint32(sz))
+	buffer.WriteVaruint32Small7(uint32(sz))
 	for _, typeDef := range context.writingTypeDefs {
 		typeDef.writeTypeDef(buffer)
 	}
@@ -1073,7 +1073,7 @@ func (r *TypeResolver) writeTypeDefs(buffer *ByteBuffer) {
 }
 
 func (r *TypeResolver) readTypeDefs(buffer *ByteBuffer) error {
-	numTypeDefs := buffer.ReadVarUint32Small7()
+	numTypeDefs := int(buffer.ReadVaruint32Small7())
 	if numTypeDefs == 0 {
 		return nil
 	}
@@ -1432,8 +1432,8 @@ func (r *TypeResolver) readTypeByReadTag(buffer *ByteBuffer) (reflect.Type, erro
 }
 
 func (r *TypeResolver) readTypeInfo(buffer *ByteBuffer, value reflect.Value) (TypeInfo, error) {
-	// ReadData variable-length type ID using VarUint32Small7 encoding (matches Java)
-	typeID := int32(buffer.ReadVarUint32Small7())
+	// ReadData variable-length type ID using Varuint32Small7 encoding (matches Java)
+	typeID := buffer.ReadVaruint32Small7()
 	internalTypeID := TypeId(typeID & 0xFF)
 
 	// Handle type meta based on internal type ID (matching Java XtypeResolver.readClassInfo)
@@ -1635,7 +1635,7 @@ func (r *TypeResolver) readTypeInfo(buffer *ByteBuffer, value reflect.Value) (Ty
 
 // readTypeInfoWithTypeID reads type info when the typeID has already been read from buffer.
 // This is used by collection serializers that read typeID separately before deciding how to proceed.
-func (r *TypeResolver) readTypeInfoWithTypeID(buffer *ByteBuffer, typeID int32) (TypeInfo, error) {
+func (r *TypeResolver) readTypeInfoWithTypeID(buffer *ByteBuffer, typeID uint32) (TypeInfo, error) {
 	internalTypeID := TypeId(typeID & 0xFF)
 
 	if IsNamespacedType(TypeId(typeID)) {
@@ -1774,8 +1774,8 @@ func (r *TypeResolver) getTypeById(id int16) (reflect.Type, error) {
 	return type_, nil
 }
 
-func (r *TypeResolver) getTypeInfoById(id int16) (TypeInfo, error) {
-	if typeInfo, exists := r.typeIDToTypeInfo[int32(id)]; exists {
+func (r *TypeResolver) getTypeInfoById(id uint32) (TypeInfo, error) {
+	if typeInfo, exists := r.typeIDToTypeInfo[id]; exists {
 		return typeInfo, nil
 	} else {
 		return TypeInfo{}, fmt.Errorf("typeInfo of typeID %d not found", id)
@@ -1788,7 +1788,7 @@ func (r *TypeResolver) writeMetaString(buffer *ByteBuffer, str string) error {
 		r.dynamicStringId += 1
 		r.dynamicStringToId[str] = dynamicStringId
 		length := len(str)
-		buffer.WriteVaruint32(int32(length << 1))
+		buffer.WriteVaruint32(uint32(length << 1))
 		if length <= SMALL_STRING_THRESHOLD {
 			buffer.WriteByte_(uint8(meta.UTF_8))
 		} else {
@@ -1805,7 +1805,7 @@ func (r *TypeResolver) writeMetaString(buffer *ByteBuffer, str string) error {
 		}
 		buffer.WriteBinary(unsafeGetBytes(str))
 	} else {
-		buffer.WriteVaruint32(int32(((id + 1) << 1) | 1))
+		buffer.WriteVaruint32(uint32(((id + 1) << 1) | 1))
 	}
 	return nil
 }

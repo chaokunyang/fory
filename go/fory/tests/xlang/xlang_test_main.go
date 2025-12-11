@@ -211,14 +211,14 @@ type MyExtSerializer struct{}
 
 func (s *MyExtSerializer) Write(buf *fory.ByteBuffer, value interface{}) error {
 	myExt := value.(MyExt)
-	// WriteVarInt32 uses zigzag encoding (compatible with Java's writeVarInt32)
-	buf.WriteVarInt32(myExt.Id)
+	// WriteVarint32 uses zigzag encoding (compatible with Java's writeVarint32)
+	buf.WriteVarint32(myExt.Id)
 	return nil
 }
 
 func (s *MyExtSerializer) Read(buf *fory.ByteBuffer) (interface{}, error) {
-	// ReadVarInt32 uses zigzag decoding (compatible with Java's readVarInt32)
-	id := buf.ReadVarInt32()
+	// ReadVarint32 uses zigzag decoding (compatible with Java's readVarint32)
+	id := buf.ReadVarint32()
 	return MyExt{Id: id}, nil
 }
 
@@ -252,7 +252,7 @@ func testBuffer() {
 	float64Val := buf.ReadFloat64()
 	assertEqualFloat64(-1.1, float64Val, "float64")
 
-	varUint32Val := buf.ReadVarUint32()
+	varUint32Val := buf.ReadVaruint32()
 	assertEqual(uint32(100), varUint32Val, "varuint32")
 
 	length := buf.ReadInt32()
@@ -269,7 +269,7 @@ func testBuffer() {
 	outBuf.WriteInt64(9223372036854775807)
 	outBuf.WriteFloat32(-1.1)
 	outBuf.WriteFloat64(-1.1)
-	outBuf.WriteVarUint32(100)
+	outBuf.WriteVaruint32(100)
 	outBuf.WriteInt32(2)
 	outBuf.WriteBinary([]byte("ab"))
 
@@ -287,7 +287,7 @@ func testBufferVar() {
 		2147483646, 2147483647,
 	}
 	for _, expected := range varInt32Values {
-		val := buf.ReadVarInt32()
+		val := buf.ReadVarint32()
 		assertEqual(expected, val, fmt.Sprintf("varint32 %d", expected))
 	}
 
@@ -296,7 +296,7 @@ func testBufferVar() {
 		268435455, 268435456, 2147483646, 2147483647,
 	}
 	for _, expected := range varUint32Values {
-		val := buf.ReadVarUint32()
+		val := buf.ReadVaruint32()
 		assertEqual(expected, val, fmt.Sprintf("varuint32 %d", expected))
 	}
 
@@ -307,7 +307,7 @@ func testBufferVar() {
 		72057594037927935, 72057594037927936, 9223372036854775807,
 	}
 	for _, expected := range varUint64Values {
-		val := buf.ReadVarUint64()
+		val := buf.ReadVaruint64()
 		assertEqual(expected, val, fmt.Sprintf("varuint64 %d", expected))
 	}
 
@@ -317,22 +317,22 @@ func testBufferVar() {
 		1000000000000, 9223372036854775806, 9223372036854775807,
 	}
 	for _, expected := range varInt64Values {
-		val := buf.ReadVarInt64()
+		val := buf.ReadVarint64()
 		assertEqual(expected, val, fmt.Sprintf("varint64 %d", expected))
 	}
 
 	outBuf := fory.NewByteBuffer(make([]byte, 0, 512))
 	for _, val := range varInt32Values {
-		outBuf.WriteVarInt32(val)
+		outBuf.WriteVarint32(val)
 	}
 	for _, val := range varUint32Values {
-		outBuf.WriteVarUint32(val)
+		outBuf.WriteVaruint32(val)
 	}
 	for _, val := range varUint64Values {
-		outBuf.WriteVarUint64(val)
+		outBuf.WriteVaruint64(val)
 	}
 	for _, val := range varInt64Values {
-		outBuf.WriteVarInt64(val)
+		outBuf.WriteVarint64(val)
 	}
 
 	writeFile(dataFile, outBuf.GetByteSlice(0, outBuf.WriterIndex()))

@@ -112,9 +112,9 @@ func generateFieldReadTyped(buf *bytes.Buffer, field *FieldInfo) error {
 		case types.Int16:
 			fmt.Fprintf(buf, "\t%s = buf.ReadInt16()\n", fieldAccess)
 		case types.Int32:
-			fmt.Fprintf(buf, "\t%s = buf.ReadVarInt32()\n", fieldAccess)
+			fmt.Fprintf(buf, "\t%s = buf.ReadVarint32()\n", fieldAccess)
 		case types.Int, types.Int64:
-			fmt.Fprintf(buf, "\t%s = buf.ReadVarInt64()\n", fieldAccess)
+			fmt.Fprintf(buf, "\t%s = buf.ReadVarint64()\n", fieldAccess)
 		case types.Uint8:
 			fmt.Fprintf(buf, "\t%s = buf.ReadByte_()\n", fieldAccess)
 		case types.Uint16:
@@ -149,7 +149,7 @@ func generateFieldReadTyped(buf *bytes.Buffer, field *FieldInfo) error {
 			fmt.Fprintf(buf, "\t\t%s = nil // null slice\n", fieldAccess)
 			fmt.Fprintf(buf, "\t} else if flag == 0 {\n")
 			fmt.Fprintf(buf, "\t\t// ReadData slice length\n")
-			fmt.Fprintf(buf, "\t\tsliceLen := buf.ReadVarUint32()\n")
+			fmt.Fprintf(buf, "\t\tsliceLen := buf.ReadVaruint32()\n")
 			fmt.Fprintf(buf, "\t\t// ReadData collection flags (ignore for now)\n")
 			fmt.Fprintf(buf, "\t\t_ = buf.ReadInt8()\n")
 			fmt.Fprintf(buf, "\t\t// Create slice with proper capacity\n")
@@ -206,7 +206,7 @@ func generateSliceRead(buf *bytes.Buffer, sliceType *types.Slice, fieldAccess st
 	// Use block scope to avoid variable redeclaration across multiple slice fields
 	fmt.Fprintf(buf, "\t// ReadData slice %s\n", fieldAccess)
 	fmt.Fprintf(buf, "\t{\n")
-	fmt.Fprintf(buf, "\t\tsliceLen := int(buf.ReadVarUint32())\n")
+	fmt.Fprintf(buf, "\t\tsliceLen := int(buf.ReadVaruint32())\n")
 	fmt.Fprintf(buf, "\t\tif sliceLen == 0 {\n")
 	fmt.Fprintf(buf, "\t\t\t// Empty slice - matching reflection behavior where nil and empty are treated the same\n")
 	fmt.Fprintf(buf, "\t\t\t%s = nil\n", fieldAccess)
@@ -255,12 +255,12 @@ func generateSliceElementRead(buf *bytes.Buffer, elemType types.Type, elemAccess
 			fmt.Fprintf(buf, "\t\t\t\tif flag := buf.ReadInt8(); flag != -1 {\n")
 			fmt.Fprintf(buf, "\t\t\t\t\treturn fmt.Errorf(\"expected NotNullValueFlag for slice element, got %%d\", flag)\n")
 			fmt.Fprintf(buf, "\t\t\t\t}\n")
-			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadVarInt32()\n", elemAccess)
+			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadVarint32()\n", elemAccess)
 		case types.Int, types.Int64:
 			fmt.Fprintf(buf, "\t\t\t\tif flag := buf.ReadInt8(); flag != -1 {\n")
 			fmt.Fprintf(buf, "\t\t\t\t\treturn fmt.Errorf(\"expected NotNullValueFlag for slice element, got %%d\", flag)\n")
 			fmt.Fprintf(buf, "\t\t\t\t}\n")
-			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadVarInt64()\n", elemAccess)
+			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadVarint64()\n", elemAccess)
 		case types.Uint8:
 			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadByte_()\n", elemAccess)
 		case types.Uint16:
@@ -332,7 +332,7 @@ func generateSliceReadInline(buf *bytes.Buffer, sliceType *types.Slice, fieldAcc
 
 	// ReadData slice length - use block scope to avoid variable name conflicts
 	fmt.Fprintf(buf, "\t{\n")
-	fmt.Fprintf(buf, "\t\tsliceLen := int(buf.ReadVarUint32())\n")
+	fmt.Fprintf(buf, "\t\tsliceLen := int(buf.ReadVaruint32())\n")
 	fmt.Fprintf(buf, "\t\tif sliceLen == 0 {\n")
 	fmt.Fprintf(buf, "\t\t\t%s = nil\n", fieldAccess)
 	fmt.Fprintf(buf, "\t\t} else {\n")
@@ -428,9 +428,9 @@ func generateSliceElementReadInline(buf *bytes.Buffer, elemType types.Type, elem
 		case types.Int16:
 			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadInt16()\n", elemAccess)
 		case types.Int32:
-			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadVarInt32()\n", elemAccess)
+			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadVarint32()\n", elemAccess)
 		case types.Int, types.Int64:
-			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadVarInt64()\n", elemAccess)
+			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadVarint64()\n", elemAccess)
 		case types.Uint8:
 			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadByte_()\n", elemAccess)
 		case types.Uint16:
@@ -476,9 +476,9 @@ func generateSliceElementReadDirect(buf *bytes.Buffer, elemType types.Type, elem
 		case types.Int16:
 			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadInt16()\n", elemAccess)
 		case types.Int32:
-			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadVarInt32()\n", elemAccess)
+			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadVarint32()\n", elemAccess)
 		case types.Int, types.Int64:
-			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadVarInt64()\n", elemAccess)
+			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadVarint64()\n", elemAccess)
 		case types.Uint8:
 			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadByte_()\n", elemAccess)
 		case types.Uint16:
@@ -525,7 +525,7 @@ func generateMapReadInline(buf *bytes.Buffer, mapType *types.Map, fieldAccess st
 
 	// ReadData map length
 	fmt.Fprintf(buf, "\t{\n")
-	fmt.Fprintf(buf, "\t\tmapLen := int(buf.ReadVarUint32())\n")
+	fmt.Fprintf(buf, "\t\tmapLen := int(buf.ReadVaruint32())\n")
 	fmt.Fprintf(buf, "\t\tif mapLen == 0 {\n")
 	fmt.Fprintf(buf, "\t\t\t%s = make(%s)\n", fieldAccess, mapType.String())
 	fmt.Fprintf(buf, "\t\t} else {\n")

@@ -89,7 +89,7 @@ func (r *MetaStringResolver) WriteMetaStringBytes(buf *ByteBuffer, m *MetaString
 
 		// WriteData header with length and encoding info
 		header := uint32(m.Length) << 1
-		buf.WriteVarUint32Small7(header)
+		buf.WriteVaruint32Small7(header)
 
 		// Small strings store encoding in header
 		if m.Length <= SmallStringThreshold {
@@ -105,15 +105,15 @@ func (r *MetaStringResolver) WriteMetaStringBytes(buf *ByteBuffer, m *MetaString
 	} else {
 		// Subsequent occurrence: write reference ID only
 		header := uint32((m.DynamicWriteStringID+1)<<1) | 1
-		buf.WriteVarUint32Small7(header)
+		buf.WriteVaruint32Small7(header)
 	}
 	return nil
 }
 
 // ReadMetaStringBytes reads a string from buffer, handling dynamic references
 func (r *MetaStringResolver) ReadMetaStringBytes(buf *ByteBuffer) (*MetaStringBytes, error) {
-	// ReadData header containing length/reference info (uses VarUint32Small7 to match Java)
-	header := buf.ReadVarUint32Small7()
+	// ReadData header containing length/reference info (uses Varuint32Small7 to match Java)
+	header := buf.ReadVaruint32Small7()
 
 	length := int16(header >> 1)
 	if header&1 != 0 {
@@ -266,7 +266,7 @@ func (r *MetaStringResolver) ResetWrite() {
 }
 
 // Helper functions
-func writeVarUint32(buf *ByteBuffer, v uint32) error {
+func writeVaruint32(buf *ByteBuffer, v uint32) error {
 	for v >= 0x80 {
 		buf.WriteByte(byte(v) | 0x80)
 		v >>= 7
@@ -275,7 +275,7 @@ func writeVarUint32(buf *ByteBuffer, v uint32) error {
 	return nil
 }
 
-func readVarUint32(buf *ByteBuffer) (uint32, error) {
+func readVaruint32(buf *ByteBuffer) (uint32, error) {
 	var x uint32
 	var s uint
 	for {

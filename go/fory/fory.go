@@ -156,7 +156,7 @@ func (f *Fory) MetaContext() *MetaContext {
 // type_ can be either a reflect.Type or an instance of the type
 // typeID should be the user type ID in the range 0-8192 (the internal type ID will be added automatically)
 // Note: For enum types, use RegisterEnum instead.
-func (f *Fory) Register(type_ interface{}, typeID int32) error {
+func (f *Fory) Register(type_ interface{}, typeID uint32) error {
 	var t reflect.Type
 	if rt, ok := type_.(reflect.Type); ok {
 		t = rt
@@ -183,17 +183,17 @@ func (f *Fory) Register(type_ interface{}, typeID int32) error {
 	}
 
 	// Calculate full type ID: (userID << 8) | internalTypeID
-	fullTypeID := (typeID << 8) | int32(internalTypeID)
+	fullTypeID := (typeID << 8) | uint32(internalTypeID)
 
 	return f.typeResolver.RegisterByID(t, fullTypeID)
 }
 
 // RegisterEnum registers an enum type with a numeric ID for cross-language serialization.
 // In Go, enums are typically defined as int-based types (e.g., type Color int32).
-// This method creates an enum serializer that writes/reads the enum value as VarUint32Small7.
+// This method creates an enum serializer that writes/reads the enum value as Varuint32Small7.
 // type_ can be either a reflect.Type or an instance of the enum type
 // typeID should be the user type ID in the range 0-8192 (the internal type ID will be added automatically)
-func (f *Fory) RegisterEnum(type_ interface{}, typeID int32) error {
+func (f *Fory) RegisterEnum(type_ interface{}, typeID uint32) error {
 	var t reflect.Type
 	if rt, ok := type_.(reflect.Type); ok {
 		t = rt
@@ -214,7 +214,7 @@ func (f *Fory) RegisterEnum(type_ interface{}, typeID int32) error {
 	}
 
 	// Calculate full type ID: (userID << 8) | ENUM
-	fullTypeID := (typeID << 8) | int32(ENUM)
+	fullTypeID := (typeID << 8) | uint32(ENUM)
 
 	return f.typeResolver.RegisterEnumByID(t, fullTypeID)
 }
@@ -491,12 +491,12 @@ func (f *Fory) RegisterByName(type_ interface{}, namespace, typeName string) err
 //
 //	func (s *MyExtSerializer) Write(buf *ByteBuffer, value interface{}) error {
 //	    myExt := value.(MyExt)
-//	    buf.WriteVarInt32(myExt.Id)
+//	    buf.WriteVarint32(myExt.Id)
 //	    return nil
 //	}
 //
 //	func (s *MyExtSerializer) Read(buf *ByteBuffer) (interface{}, error) {
-//	    id := buf.ReadVarInt32()
+//	    id := buf.ReadVarint32()
 //	    return MyExt{Id: id}, nil
 //	}
 //
@@ -596,19 +596,19 @@ func Serialize[T any](f *Fory, value *T) ([]byte, error) {
 	case *int32:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(INT32)
-		f.writeCtx.buffer.WriteVarInt32(*val)
+		f.writeCtx.buffer.WriteVarint32(*val)
 	case *int64:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(INT64)
-		f.writeCtx.buffer.WriteVarInt64(*val)
+		f.writeCtx.buffer.WriteVarint64(*val)
 	case *int:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		if strconv.IntSize == 64 {
 			f.writeCtx.WriteTypeId(INT64)
-			f.writeCtx.buffer.WriteVarInt64(int64(*val))
+			f.writeCtx.buffer.WriteVarint64(int64(*val))
 		} else {
 			f.writeCtx.WriteTypeId(INT32)
-			f.writeCtx.buffer.WriteVarInt32(int32(*val))
+			f.writeCtx.buffer.WriteVarint32(int32(*val))
 		}
 	case *float32:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
@@ -621,7 +621,7 @@ func Serialize[T any](f *Fory, value *T) ([]byte, error) {
 	case *string:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(STRING)
-		f.writeCtx.buffer.WriteVarUint32(uint32(len(*val)))
+		f.writeCtx.buffer.WriteVaruint32(uint32(len(*val)))
 		if len(*val) > 0 {
 			f.writeCtx.buffer.WriteBinary(unsafe.Slice(unsafe.StringData(*val), len(*val)))
 		}

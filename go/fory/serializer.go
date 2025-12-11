@@ -98,12 +98,12 @@ type Serializer interface {
 //
 //	func (s *MyExtSerializer) Write(buf *ByteBuffer, value interface{}) error {
 //	    myExt := value.(MyExt)
-//	    buf.WriteVarInt32(myExt.Id)
+//	    buf.WriteVarint32(myExt.Id)
 //	    return nil
 //	}
 //
 //	func (s *MyExtSerializer) Read(buf *ByteBuffer) (interface{}, error) {
-//	    id := buf.ReadVarInt32()
+//	    id := buf.ReadVarint32()
 //	    return MyExt{Id: id}, nil
 //	}
 //

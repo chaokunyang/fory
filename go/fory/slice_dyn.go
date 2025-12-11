@@ -42,7 +42,7 @@ func (s sliceSerializer) WriteData(ctx *WriteContext, value reflect.Value) error
 	// Get slice length and handle empty slice case
 	length := value.Len()
 	if length == 0 {
-		buf.WriteVarUint32(0) // WriteData 0 for empty slice
+		buf.WriteVaruint32(0) // WriteData 0 for empty slice
 		return nil
 	}
 
@@ -142,7 +142,7 @@ func (s sliceSerializer) writeHeader(ctx *WriteContext, buf *ByteBuffer, value r
 	}
 
 	// WriteData metadata to buffer
-	buf.WriteVarUint32(uint32(value.Len())) // Collection size
+	buf.WriteVaruint32(uint32(value.Len())) // Collection size
 	buf.WriteInt8(int8(collectFlag))        // Collection flags
 
 	// WriteData element type info if all elements have same type and not using declared type
@@ -153,7 +153,7 @@ func (s sliceSerializer) writeHeader(ctx *WriteContext, buf *ByteBuffer, value r
 				return 0, TypeInfo{}, err
 			}
 		} else {
-			buf.WriteVarUint32Small7(uint32(elemTypeInfo.TypeID))
+			buf.WriteVaruint32Small7(uint32(elemTypeInfo.TypeID))
 		}
 	}
 
@@ -229,7 +229,7 @@ func (s sliceSerializer) writeDifferentTypes(ctx *WriteContext, buf *ByteBuffer,
 func (s sliceSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	buf := ctx.Buffer()
 	// ReadData slice length from buffer
-	length := int(buf.ReadVarUint32())
+	length := int(buf.ReadVaruint32())
 	if length == 0 {
 		// Initialize empty slice if length is 0
 		value.Set(reflect.MakeSlice(type_, 0, 0))
@@ -247,7 +247,7 @@ func (s sliceSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value re
 	if (collectFlag & CollectionIsSameType) != 0 {
 		if (collectFlag & CollectionIsDeclElementType) == 0 {
 			// ReadData type ID from buffer
-			typeID := int32(buf.ReadVarUint32Small7())
+			typeID := buf.ReadVaruint32Small7()
 
 			// ReadData additional metadata for namespaced types
 			if IsNamespacedType(TypeId(typeID)) {
@@ -356,7 +356,7 @@ func (s sliceSerializer) Read(ctx *ReadContext, readRef bool, readType bool, val
 	}
 	if readType {
 		// ReadData and discard type info for slices (we already know it's a list)
-		typeID := int32(buf.ReadVarUint32Small7())
+		typeID := buf.ReadVaruint32Small7()
 		if IsNamespacedType(TypeId(typeID)) {
 			// For namespaced types, need to read additional metadata
 			_, _ = ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID)

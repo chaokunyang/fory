@@ -114,27 +114,27 @@ func (c *WriteContext) RawInt32(v int32)        { c.buffer.WriteInt32(v) }
 func (c *WriteContext) RawInt64(v int64)        { c.buffer.WriteInt64(v) }
 func (c *WriteContext) RawFloat32(v float32)    { c.buffer.WriteFloat32(v) }
 func (c *WriteContext) RawFloat64(v float64)    { c.buffer.WriteFloat64(v) }
-func (c *WriteContext) WriteVarInt32(v int32)   { c.buffer.WriteVarInt32(v) }
-func (c *WriteContext) WriteVarInt64(v int64)   { c.buffer.WriteVarInt64(v) }
-func (c *WriteContext) WriteVarUint32(v uint32) { c.buffer.WriteVarUint32(v) }
+func (c *WriteContext) WriteVarint32(v int32)   { c.buffer.WriteVarint32(v) }
+func (c *WriteContext) WriteVarint64(v int64)   { c.buffer.WriteVarint64(v) }
+func (c *WriteContext) WriteVaruint32(v uint32) { c.buffer.WriteVaruint32(v) }
 func (c *WriteContext) WriteByte(v byte)        { c.buffer.WriteByte_(v) }
 func (c *WriteContext) WriteBytes(v []byte)     { c.buffer.WriteBinary(v) }
 
 func (c *WriteContext) RawString(v string) {
-	c.buffer.WriteVarUint32(uint32(len(v)))
+	c.buffer.WriteVaruint32(uint32(len(v)))
 	if len(v) > 0 {
 		c.buffer.WriteBinary(unsafe.Slice(unsafe.StringData(v), len(v)))
 	}
 }
 
 func (c *WriteContext) WriteBinary(v []byte) {
-	c.buffer.WriteVarUint32(uint32(len(v)))
+	c.buffer.WriteVaruint32(uint32(len(v)))
 	c.buffer.WriteBinary(v)
 }
 
 func (c *WriteContext) WriteTypeId(id TypeId) {
-	// Use VarUint32Small7 encoding to match Java's xlang serialization
-	c.buffer.WriteVarUint32Small7(uint32(id))
+	// Use Varuint32Small7 encoding to match Java's xlang serialization
+	c.buffer.WriteVaruint32Small7(uint32(id))
 }
 
 // writeFast writes a value using fast path based on StaticTypeId
@@ -147,15 +147,15 @@ func (c *WriteContext) writeFast(ptr unsafe.Pointer, ct StaticTypeId) {
 	case ConcreteTypeInt16:
 		c.buffer.WriteInt16(*(*int16)(ptr))
 	case ConcreteTypeInt32:
-		c.buffer.WriteVarInt32(*(*int32)(ptr))
+		c.buffer.WriteVarint32(*(*int32)(ptr))
 	case ConcreteTypeInt:
 		if strconv.IntSize == 64 {
-			c.buffer.WriteVarInt64(int64(*(*int)(ptr)))
+			c.buffer.WriteVarint64(int64(*(*int)(ptr)))
 		} else {
-			c.buffer.WriteVarInt32(int32(*(*int)(ptr)))
+			c.buffer.WriteVarint32(int32(*(*int)(ptr)))
 		}
 	case ConcreteTypeInt64:
-		c.buffer.WriteVarInt64(*(*int64)(ptr))
+		c.buffer.WriteVarint64(*(*int64)(ptr))
 	case ConcreteTypeFloat32:
 		c.buffer.WriteFloat32(*(*float32)(ptr))
 	case ConcreteTypeFloat64:
@@ -170,7 +170,7 @@ func (c *WriteContext) WriteLength(length int) error {
 	if length > MaxInt32 || length < MinInt32 {
 		return fmt.Errorf("length %d exceeds int32 range", length)
 	}
-	c.buffer.WriteVaruint32(int32(length))
+	c.buffer.WriteVaruint32(uint32(length))
 	return nil
 }
 
@@ -222,7 +222,7 @@ func (c *WriteContext) WriteInt32(value int32, writeRefInfo, writeTypeInfo bool)
 	if writeTypeInfo {
 		c.WriteTypeId(INT32)
 	}
-	c.buffer.WriteVarInt32(value)
+	c.buffer.WriteVarint32(value)
 	return nil
 }
 
@@ -234,7 +234,7 @@ func (c *WriteContext) WriteInt64(value int64, writeRefInfo, writeTypeInfo bool)
 	if writeTypeInfo {
 		c.WriteTypeId(INT64)
 	}
-	c.buffer.WriteVarInt64(value)
+	c.buffer.WriteVarint64(value)
 	return nil
 }
 
@@ -252,9 +252,9 @@ func (c *WriteContext) WriteInt(value int, writeRefInfo, writeTypeInfo bool) err
 		}
 	}
 	if strconv.IntSize == 64 {
-		c.buffer.WriteVarInt64(int64(value))
+		c.buffer.WriteVarint64(int64(value))
 	} else {
-		c.buffer.WriteVarInt32(int32(value))
+		c.buffer.WriteVarint32(int32(value))
 	}
 	return nil
 }
@@ -291,7 +291,7 @@ func (c *WriteContext) WriteString(value string, writeRefInfo, writeTypeInfo boo
 	if writeTypeInfo {
 		c.WriteTypeId(STRING)
 	}
-	c.buffer.WriteVarUint32(uint32(len(value)))
+	c.buffer.WriteVaruint32(uint32(len(value)))
 	if len(value) > 0 {
 		c.buffer.WriteBinary(unsafe.Slice(unsafe.StringData(value), len(value)))
 	}

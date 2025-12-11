@@ -64,7 +64,7 @@ func (s mapSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 		value = value.Elem()
 	}
 	length := value.Len()
-	buf.WriteVarUint32(uint32(length))
+	buf.WriteVaruint32(uint32(length))
 	if length == 0 {
 		return nil
 	}
@@ -302,7 +302,7 @@ func (s mapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value refl
 	}
 
 	refResolver.Reference(value)
-	size := int(buf.ReadVarUint32())
+	size := int(buf.ReadVaruint32())
 	var chunkHeader uint8
 	if size > 0 {
 		chunkHeader = buf.ReadUint8()
@@ -619,7 +619,7 @@ func (s mapSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value
 	}
 	if readType {
 		// ReadData and discard type info for maps (we already know it's a map)
-		typeID := int32(buf.ReadVarUint32Small7())
+		typeID := uint32(buf.ReadVaruint32Small7())
 		if IsNamespacedType(TypeId(typeID)) {
 			// For namespaced types, need to read additional metadata
 			_, _ = ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID)

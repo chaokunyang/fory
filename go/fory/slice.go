@@ -83,7 +83,7 @@ func (s *sliceConcreteValueSerializer) WriteData(ctx *WriteContext, value reflec
 	buf := ctx.Buffer()
 
 	// WriteData length
-	buf.WriteVarUint32(uint32(length))
+	buf.WriteVaruint32(uint32(length))
 	if length == 0 {
 		return nil
 	}
@@ -195,7 +195,7 @@ func (s *sliceConcreteValueSerializer) Read(ctx *ReadContext, readRef bool, read
 		}
 	}
 	if readType {
-		typeID := int32(buf.ReadVarUint32Small7())
+		typeID := buf.ReadVaruint32Small7()
 		if IsNamespacedType(TypeId(typeID)) {
 			_, _ = ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID)
 		}
@@ -210,7 +210,7 @@ func (s *sliceConcreteValueSerializer) ReadWithTypeInfo(ctx *ReadContext, readRe
 
 func (s *sliceConcreteValueSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	buf := ctx.Buffer()
-	length := int(buf.ReadVarUint32())
+	length := int(buf.ReadVaruint32())
 	if length == 0 {
 		value.Set(reflect.MakeSlice(value.Type(), 0, 0))
 		return nil
@@ -223,7 +223,7 @@ func (s *sliceConcreteValueSerializer) ReadData(ctx *ReadContext, type_ reflect.
 	// We must consume these bytes for protocol compliance
 	if (collectFlag & CollectionIsSameType) != 0 {
 		if (collectFlag & CollectionIsDeclElementType) == 0 {
-			typeID := int32(buf.ReadVarUint32Small7())
+			typeID := buf.ReadVaruint32Small7()
 			// ReadData additional metadata for namespaced types
 			_, _ = ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID)
 		}

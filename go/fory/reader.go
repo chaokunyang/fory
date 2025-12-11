@@ -103,13 +103,13 @@ func (c *ReadContext) RawInt32() int32       { return c.buffer.ReadInt32() }
 func (c *ReadContext) RawInt64() int64       { return c.buffer.ReadInt64() }
 func (c *ReadContext) RawFloat32() float32   { return c.buffer.ReadFloat32() }
 func (c *ReadContext) RawFloat64() float64   { return c.buffer.ReadFloat64() }
-func (c *ReadContext) ReadVarInt32() int32   { return c.buffer.ReadVarInt32() }
-func (c *ReadContext) ReadVarInt64() int64   { return c.buffer.ReadVarInt64() }
-func (c *ReadContext) ReadVarUint32() uint32 { return c.buffer.ReadVarUint32() }
+func (c *ReadContext) ReadVarint32() int32   { return c.buffer.ReadVarint32() }
+func (c *ReadContext) ReadVarint64() int64   { return c.buffer.ReadVarint64() }
+func (c *ReadContext) ReadVaruint32() uint32 { return c.buffer.ReadVaruint32() }
 func (c *ReadContext) ReadByte() byte        { return c.buffer.ReadByte_() }
 
 func (c *ReadContext) RawString() string {
-	length := c.buffer.ReadVarUint32()
+	length := c.buffer.ReadVaruint32()
 	if length == 0 {
 		return ""
 	}
@@ -118,13 +118,13 @@ func (c *ReadContext) RawString() string {
 }
 
 func (c *ReadContext) ReadBinary() []byte {
-	length := c.buffer.ReadVarUint32()
+	length := c.buffer.ReadVaruint32()
 	return c.buffer.ReadBinary(int(length))
 }
 
 func (c *ReadContext) ReadTypeId() TypeId {
-	// Use VarUint32Small7 encoding to match Java's xlang serialization
-	return TypeId(c.buffer.ReadVarUint32Small7())
+	// Use Varuint32Small7 encoding to match Java's xlang serialization
+	return TypeId(c.buffer.ReadVaruint32Small7())
 }
 
 // readFast reads a value using fast path based on StaticTypeId
@@ -137,15 +137,15 @@ func (c *ReadContext) readFast(ptr unsafe.Pointer, ct StaticTypeId) {
 	case ConcreteTypeInt16:
 		*(*int16)(ptr) = c.buffer.ReadInt16()
 	case ConcreteTypeInt32:
-		*(*int32)(ptr) = c.buffer.ReadVarInt32()
+		*(*int32)(ptr) = c.buffer.ReadVarint32()
 	case ConcreteTypeInt:
 		if strconv.IntSize == 64 {
-			*(*int)(ptr) = int(c.buffer.ReadVarInt64())
+			*(*int)(ptr) = int(c.buffer.ReadVarint64())
 		} else {
-			*(*int)(ptr) = int(c.buffer.ReadVarInt32())
+			*(*int)(ptr) = int(c.buffer.ReadVarint32())
 		}
 	case ConcreteTypeInt64:
-		*(*int64)(ptr) = c.buffer.ReadVarInt64()
+		*(*int64)(ptr) = c.buffer.ReadVarint64()
 	case ConcreteTypeFloat32:
 		*(*float32)(ptr) = c.buffer.ReadFloat32()
 	case ConcreteTypeFloat64:
@@ -179,7 +179,7 @@ func (c *ReadContext) ReadBool(readRefInfo, readTypeInfo bool) (bool, error) {
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
 	return c.buffer.ReadBool(), nil
 }
@@ -190,7 +190,7 @@ func (c *ReadContext) ReadBoolInto(target *bool, readRefInfo, readTypeInfo bool)
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
 	*target = c.buffer.ReadBool()
 	return nil
@@ -202,7 +202,7 @@ func (c *ReadContext) ReadInt8(readRefInfo, readTypeInfo bool) (int8, error) {
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
 	return c.buffer.ReadInt8(), nil
 }
@@ -213,7 +213,7 @@ func (c *ReadContext) ReadInt8Into(target *int8, readRefInfo, readTypeInfo bool)
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
 	*target = c.buffer.ReadInt8()
 	return nil
@@ -225,7 +225,7 @@ func (c *ReadContext) ReadInt16(readRefInfo, readTypeInfo bool) (int16, error) {
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
 	return c.buffer.ReadInt16(), nil
 }
@@ -236,7 +236,7 @@ func (c *ReadContext) ReadInt16Into(target *int16, readRefInfo, readTypeInfo boo
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
 	*target = c.buffer.ReadInt16()
 	return nil
@@ -248,9 +248,9 @@ func (c *ReadContext) ReadInt32(readRefInfo, readTypeInfo bool) (int32, error) {
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
-	return c.buffer.ReadVarInt32(), nil
+	return c.buffer.ReadVarint32(), nil
 }
 
 // ReadInt32Into reads an int32 into target with optional ref/type info
@@ -259,9 +259,9 @@ func (c *ReadContext) ReadInt32Into(target *int32, readRefInfo, readTypeInfo boo
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
-	*target = c.buffer.ReadVarInt32()
+	*target = c.buffer.ReadVarint32()
 	return nil
 }
 
@@ -271,9 +271,9 @@ func (c *ReadContext) ReadInt64(readRefInfo, readTypeInfo bool) (int64, error) {
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
-	return c.buffer.ReadVarInt64(), nil
+	return c.buffer.ReadVarint64(), nil
 }
 
 // ReadInt64Into reads an int64 into target with optional ref/type info
@@ -282,9 +282,9 @@ func (c *ReadContext) ReadInt64Into(target *int64, readRefInfo, readTypeInfo boo
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
-	*target = c.buffer.ReadVarInt64()
+	*target = c.buffer.ReadVarint64()
 	return nil
 }
 
@@ -294,9 +294,9 @@ func (c *ReadContext) ReadIntInto(target *int, readRefInfo, readTypeInfo bool) e
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
-	*target = int(c.buffer.ReadVarInt64())
+	*target = int(c.buffer.ReadVarint64())
 	return nil
 }
 
@@ -306,7 +306,7 @@ func (c *ReadContext) ReadFloat32(readRefInfo, readTypeInfo bool) (float32, erro
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
 	return c.buffer.ReadFloat32(), nil
 }
@@ -317,7 +317,7 @@ func (c *ReadContext) ReadFloat32Into(target *float32, readRefInfo, readTypeInfo
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
 	*target = c.buffer.ReadFloat32()
 	return nil
@@ -329,7 +329,7 @@ func (c *ReadContext) ReadFloat64(readRefInfo, readTypeInfo bool) (float64, erro
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
 	return c.buffer.ReadFloat64(), nil
 }
@@ -340,7 +340,7 @@ func (c *ReadContext) ReadFloat64Into(target *float64, readRefInfo, readTypeInfo
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
 	*target = c.buffer.ReadFloat64()
 	return nil
@@ -352,9 +352,9 @@ func (c *ReadContext) ReadString(readRefInfo, readTypeInfo bool) (string, error)
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
-	length := c.buffer.ReadVarUint32()
+	length := c.buffer.ReadVaruint32()
 	if length == 0 {
 		return "", nil
 	}
@@ -368,9 +368,9 @@ func (c *ReadContext) ReadStringInto(target *string, readRefInfo, readTypeInfo b
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
-	length := c.buffer.ReadVarUint32()
+	length := c.buffer.ReadVaruint32()
 	if length == 0 {
 		*target = ""
 		return nil
@@ -386,7 +386,7 @@ func (c *ReadContext) ReadBoolSlice(readRefInfo, readTypeInfo bool) ([]bool, err
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
 	return readBoolSlice(c.buffer)
 }
@@ -397,7 +397,7 @@ func (c *ReadContext) ReadBoolSliceInto(target *[]bool, readRefInfo, readTypeInf
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
 	return readBoolSliceInto(c.buffer, target)
 }
@@ -408,7 +408,7 @@ func (c *ReadContext) ReadInt8Slice(readRefInfo, readTypeInfo bool) ([]int8, err
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
 	return readInt8Slice(c.buffer)
 }
@@ -419,7 +419,7 @@ func (c *ReadContext) ReadInt8SliceInto(target *[]int8, readRefInfo, readTypeInf
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
 	return readInt8SliceInto(c.buffer, target)
 }
@@ -430,7 +430,7 @@ func (c *ReadContext) ReadInt16Slice(readRefInfo, readTypeInfo bool) ([]int16, e
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
 	return readInt16Slice(c.buffer)
 }
@@ -441,7 +441,7 @@ func (c *ReadContext) ReadInt16SliceInto(target *[]int16, readRefInfo, readTypeI
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
 	return readInt16SliceInto(c.buffer, target)
 }
@@ -452,7 +452,7 @@ func (c *ReadContext) ReadInt32Slice(readRefInfo, readTypeInfo bool) ([]int32, e
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
 	return readInt32Slice(c.buffer)
 }
@@ -463,7 +463,7 @@ func (c *ReadContext) ReadInt32SliceInto(target *[]int32, readRefInfo, readTypeI
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
 	return readInt32SliceInto(c.buffer, target)
 }
@@ -474,7 +474,7 @@ func (c *ReadContext) ReadInt64Slice(readRefInfo, readTypeInfo bool) ([]int64, e
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
 	return readInt64Slice(c.buffer)
 }
@@ -485,7 +485,7 @@ func (c *ReadContext) ReadInt64SliceInto(target *[]int64, readRefInfo, readTypeI
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
 	return readInt64SliceInto(c.buffer, target)
 }
@@ -496,7 +496,7 @@ func (c *ReadContext) ReadIntSlice(readRefInfo, readTypeInfo bool) ([]int, error
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
 	return readIntSlice(c.buffer)
 }
@@ -507,7 +507,7 @@ func (c *ReadContext) ReadIntSliceInto(target *[]int, readRefInfo, readTypeInfo 
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
 	return readIntSliceInto(c.buffer, target)
 }
@@ -518,7 +518,7 @@ func (c *ReadContext) ReadFloat32Slice(readRefInfo, readTypeInfo bool) ([]float3
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
 	return readFloat32Slice(c.buffer)
 }
@@ -529,7 +529,7 @@ func (c *ReadContext) ReadFloat32SliceInto(target *[]float32, readRefInfo, readT
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
 	return readFloat32SliceInto(c.buffer, target)
 }
@@ -540,7 +540,7 @@ func (c *ReadContext) ReadFloat64Slice(readRefInfo, readTypeInfo bool) ([]float6
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
 	return readFloat64Slice(c.buffer)
 }
@@ -551,7 +551,7 @@ func (c *ReadContext) ReadFloat64SliceInto(target *[]float64, readRefInfo, readT
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
 	return readFloat64SliceInto(c.buffer, target)
 }
@@ -562,7 +562,7 @@ func (c *ReadContext) ReadByteSlice(readRefInfo, readTypeInfo bool) ([]byte, err
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
 	isInBand := c.buffer.ReadBool()
 	if !isInBand {
@@ -578,7 +578,7 @@ func (c *ReadContext) ReadByteSliceInto(target *[]byte, readRefInfo, readTypeInf
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
 	isInBand := c.buffer.ReadBool()
 	if !isInBand {
@@ -601,7 +601,7 @@ func (c *ReadContext) ReadStringStringMap(readRefInfo, readTypeInfo bool) (map[s
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
 	return readMapStringString(c.buffer), nil
 }
@@ -612,7 +612,7 @@ func (c *ReadContext) ReadStringStringMapInto(target *map[string]string, readRef
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
 	*target = readMapStringString(c.buffer)
 	return nil
@@ -624,7 +624,7 @@ func (c *ReadContext) ReadStringInt64Map(readRefInfo, readTypeInfo bool) (map[st
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
 	return readMapStringInt64(c.buffer), nil
 }
@@ -635,7 +635,7 @@ func (c *ReadContext) ReadStringInt64MapInto(target *map[string]int64, readRefIn
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
 	*target = readMapStringInt64(c.buffer)
 	return nil
@@ -647,7 +647,7 @@ func (c *ReadContext) ReadStringIntMap(readRefInfo, readTypeInfo bool) (map[stri
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
 	return readMapStringInt(c.buffer), nil
 }
@@ -658,7 +658,7 @@ func (c *ReadContext) ReadStringIntMapInto(target *map[string]int, readRefInfo, 
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
 	*target = readMapStringInt(c.buffer)
 	return nil
@@ -670,7 +670,7 @@ func (c *ReadContext) ReadStringFloat64Map(readRefInfo, readTypeInfo bool) (map[
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
 	return readMapStringFloat64(c.buffer), nil
 }
@@ -681,7 +681,7 @@ func (c *ReadContext) ReadStringFloat64MapInto(target *map[string]float64, readR
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
 	*target = readMapStringFloat64(c.buffer)
 	return nil
@@ -693,7 +693,7 @@ func (c *ReadContext) ReadStringBoolMap(readRefInfo, readTypeInfo bool) (map[str
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
 	return readMapStringBool(c.buffer), nil
 }
@@ -704,7 +704,7 @@ func (c *ReadContext) ReadStringBoolMapInto(target *map[string]bool, readRefInfo
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
 	*target = readMapStringBool(c.buffer)
 	return nil
@@ -716,7 +716,7 @@ func (c *ReadContext) ReadInt32Int32Map(readRefInfo, readTypeInfo bool) (map[int
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
 	return readMapInt32Int32(c.buffer), nil
 }
@@ -727,7 +727,7 @@ func (c *ReadContext) ReadInt32Int32MapInto(target *map[int32]int32, readRefInfo
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
 	*target = readMapInt32Int32(c.buffer)
 	return nil
@@ -739,7 +739,7 @@ func (c *ReadContext) ReadInt64Int64Map(readRefInfo, readTypeInfo bool) (map[int
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
 	return readMapInt64Int64(c.buffer), nil
 }
@@ -750,7 +750,7 @@ func (c *ReadContext) ReadInt64Int64MapInto(target *map[int64]int64, readRefInfo
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
 	*target = readMapInt64Int64(c.buffer)
 	return nil
@@ -762,7 +762,7 @@ func (c *ReadContext) ReadIntIntMap(readRefInfo, readTypeInfo bool) (map[int]int
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
 	return readMapIntInt(c.buffer), nil
 }
@@ -773,7 +773,7 @@ func (c *ReadContext) ReadIntIntMapInto(target *map[int]int, readRefInfo, readTy
 		_ = c.buffer.ReadInt8()
 	}
 	if readTypeInfo {
-		_ = c.buffer.ReadVarUint32Small7()
+		_ = c.buffer.ReadVaruint32Small7()
 	}
 	*target = readMapIntInt(c.buffer)
 	return nil

@@ -47,7 +47,7 @@ func (s dateSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, 
 		ctx.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeType {
-		ctx.buffer.WriteVarUint32Small7(uint32(LOCAL_DATE))
+		ctx.buffer.WriteVaruint32Small7(uint32(LOCAL_DATE))
 	}
 	return s.WriteData(ctx, value)
 }
@@ -68,7 +68,7 @@ func (s dateSerializer) Read(ctx *ReadContext, readRef bool, readType bool, valu
 		}
 	}
 	if readType {
-		_ = buf.ReadVarUint32Small7()
+		_ = buf.ReadVaruint32Small7()
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
@@ -92,7 +92,7 @@ func (s timeSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, 
 		ctx.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeType {
-		ctx.buffer.WriteVarUint32Small7(uint32(TIMESTAMP))
+		ctx.buffer.WriteVaruint32Small7(uint32(TIMESTAMP))
 	}
 	return s.WriteData(ctx, value)
 }
@@ -111,7 +111,7 @@ func (s timeSerializer) Read(ctx *ReadContext, readRef bool, readType bool, valu
 		}
 	}
 	if readType {
-		_ = buf.ReadVarUint32Small7()
+		_ = buf.ReadVaruint32Small7()
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }

@@ -31,7 +31,7 @@ func (s arraySerializer) NeedToWriteRef() bool { return true }
 func (s arraySerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	buf := ctx.Buffer()
 	length := value.Len()
-	buf.WriteVarUint32(uint32(length))
+	buf.WriteVaruint32(uint32(length))
 	for i := 0; i < length; i++ {
 		elem := value.Index(i)
 		buf.WriteInt8(NotNullValueFlag)
@@ -59,7 +59,7 @@ func (s arraySerializer) Write(ctx *WriteContext, writeRef bool, writeType bool,
 
 func (s arraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	buf := ctx.Buffer()
-	length := int(buf.ReadVarUint32())
+	length := int(buf.ReadVaruint32())
 	for i := 0; i < length; i++ {
 		_ = buf.ReadInt8()
 	}
@@ -109,7 +109,7 @@ func (s *arrayConcreteValueSerializer) WriteData(ctx *WriteContext, value reflec
 	buf := ctx.Buffer()
 
 	// Write length
-	buf.WriteVarUint32(uint32(length))
+	buf.WriteVaruint32(uint32(length))
 	if length == 0 {
 		return nil
 	}
@@ -164,7 +164,7 @@ func (s *arrayConcreteValueSerializer) WriteData(ctx *WriteContext, value reflec
 			return err
 		}
 	} else {
-		buf.WriteVarUint32Small7(uint32(elemTypeInfo.TypeID))
+		buf.WriteVaruint32Small7(uint32(elemTypeInfo.TypeID))
 	}
 
 	// Write elements
@@ -218,7 +218,7 @@ func (s *arrayConcreteValueSerializer) Write(ctx *WriteContext, writeRef bool, w
 
 func (s *arrayConcreteValueSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	buf := ctx.Buffer()
-	length := int(buf.ReadVarUint32())
+	length := int(buf.ReadVaruint32())
 
 	var trackRefs bool
 	if length > 0 {
@@ -295,7 +295,7 @@ func (s byteArraySerializer) NeedToWriteRef() bool { return false }
 
 func (s byteArraySerializer) Write(ctx *WriteContext, value reflect.Value) error {
 	length := value.Len()
-	ctx.buffer.WriteVarUint32(uint32(length))
+	ctx.buffer.WriteVaruint32(uint32(length))
 	if value.CanAddr() {
 		ctx.buffer.WriteBinary(value.Slice(0, length).Bytes())
 	} else {
@@ -309,7 +309,7 @@ func (s byteArraySerializer) Write(ctx *WriteContext, value reflect.Value) error
 }
 
 func (s byteArraySerializer) Read(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
-	length := int(ctx.buffer.ReadVarUint32())
+	length := int(ctx.buffer.ReadVaruint32())
 	data := make([]byte, length)
 	ctx.buffer.Read(data)
 	if value.CanSet() {

@@ -19,6 +19,7 @@ package fory
 
 import (
 	"fmt"
+	"reflect"
 )
 
 // SkipFieldValue skips a field value in compatible mode when the field doesn't exist
@@ -48,6 +49,33 @@ func SkipFieldValueWithTypeFlag(ctx *ReadContext, fieldDef FieldDef, readRefFlag
 
 		// Read type info (typeID + meta_index)
 		wroteTypeID := ctx.buffer.ReadVaruint32Small7()
+		internalID := wroteTypeID & 0xff
+
+		// Check if it's an EXT type first - EXT types don't have meta info like structs
+		if internalID == uint32(EXT) || internalID == uint32(NAMED_EXT) {
+			// EXT types use custom serializers - try to find the registered serializer
+			serializer := ctx.TypeResolver().getSerializerByTypeID(wroteTypeID)
+			if serializer != nil {
+				// Use the serializer to read and discard the value
+				var dummy interface{}
+				dummyVal := reflect.ValueOf(&dummy).Elem()
+				return serializer.Read(ctx, false, false, dummyVal)
+			}
+			// If no serializer is registered, we can't skip this type
+			return fmt.Errorf("cannot skip EXT type %d: no serializer registered", wroteTypeID)
+		}
+
+		// Check if it's a struct type - need to read type info and skip struct data
+		if internalID == uint32(COMPATIBLE_STRUCT) || internalID == uint32(STRUCT) ||
+			internalID == uint32(NAMED_STRUCT) || internalID == uint32(NAMED_COMPATIBLE_STRUCT) {
+			typeInfo, err := ctx.TypeResolver().readTypeInfoWithTypeID(ctx.buffer, wroteTypeID)
+			if err != nil {
+				return err
+			}
+			// Now skip the struct data using the typeInfo from the written type
+			return skipStruct(ctx, &typeInfo)
+		}
+
 		if IsNamespacedType(TypeId(wroteTypeID)) {
 			typeInfo, err := ctx.TypeResolver().readTypeInfoWithTypeID(ctx.buffer, wroteTypeID)
 			if err != nil {
@@ -365,6 +393,8 @@ func skipStruct(ctx *ReadContext, info *TypeInfo) error {
 	if info.Serializer != nil {
 		if ss, ok := info.Serializer.(*structSerializer); ok && ss.fieldDefs != nil {
 			fieldDefs = ss.fieldDefs
+		} else if sss, ok := info.Serializer.(*skipStructSerializer); ok && sss.fieldDefs != nil {
+			fieldDefs = sss.fieldDefs
 		}
 	}
 
@@ -429,6 +459,19 @@ func skipValue(ctx *ReadContext, fieldDef FieldDef, readRefFlag bool, isField bo
 		} else if internalID == uint32(ENUM) || internalID == uint32(NAMED_ENUM) {
 			_ = ctx.buffer.ReadVaruint32()
 			return nil
+		} else if internalID == uint32(EXT) || internalID == uint32(NAMED_EXT) {
+			// EXT types use custom serializers - try to find the registered serializer
+			serializer := ctx.TypeResolver().getSerializerByTypeID(typeIDNum)
+			if serializer != nil {
+				// Use the serializer to read and discard the value
+				// Create a dummy value to read into
+				var dummy interface{}
+				dummyVal := reflect.ValueOf(&dummy).Elem()
+				err := serializer.Read(ctx, false, false, dummyVal)
+				return err
+			}
+			// If no serializer is registered, we can't skip this type
+			return fmt.Errorf("cannot skip EXT type %d: no serializer registered", typeIDNum)
 		} else {
 			return fmt.Errorf("unknown type id: %d (internal_id: %d)", typeIDNum, internalID)
 		}

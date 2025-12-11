@@ -619,6 +619,43 @@ func (r *TypeResolver) RegisterExtensionType(
 	return nil
 }
 
+// RegisterExtensionTypeByID registers a type as an extension type with a numeric ID.
+func (r *TypeResolver) RegisterExtensionTypeByID(
+	type_ reflect.Type,
+	userTypeID uint32,
+	userSerializer ExtensionSerializer,
+) error {
+	if userSerializer == nil {
+		return fmt.Errorf("serializer cannot be nil for extension type %s", type_)
+	}
+	if prev, ok := r.typeToSerializers[type_]; ok {
+		return fmt.Errorf("type %s already has a serializer %s registered", type_, prev)
+	}
+
+	// Create adapter wrapping the user's ExtensionSerializer
+	serializer := &extensionSerializerAdapter{type_: type_, typeTag: "", userSerial: userSerializer}
+	r.typeToSerializers[type_] = serializer
+
+	ptrType := reflect.PtrTo(type_)
+	ptrSerializer := &ptrToValueSerializer{valueSerializer: serializer}
+	r.typeToSerializers[ptrType] = ptrSerializer
+
+	// Use EXT type ID to match Java's behavior for extension types
+	fullTypeID := (userTypeID << 8) | uint32(EXT)
+
+	// Register type info for both value and pointer types
+	typeInfo := TypeInfo{
+		Type:       type_,
+		TypeID:     fullTypeID,
+		Serializer: serializer,
+	}
+	r.typeIDToTypeInfo[fullTypeID] = typeInfo
+	r.typesInfo[type_] = typeInfo
+	r.typesInfo[ptrType] = typeInfo
+
+	return nil
+}
+
 func (r *TypeResolver) getSerializerByType(type_ reflect.Type, mapInStruct bool) (Serializer, error) {
 	if serializer, ok := r.typeToSerializers[type_]; !ok {
 		if serializer, err := r.createSerializer(type_, mapInStruct); err != nil {
@@ -638,6 +675,23 @@ func (r *TypeResolver) getSerializerByTypeTag(typeTag string) (Serializer, error
 	} else {
 		return serializer, nil
 	}
+}
+
+// getSerializerByTypeID returns the serializer for a given type ID, or nil if not found.
+func (r *TypeResolver) getSerializerByTypeID(typeID uint32) Serializer {
+	// First try to get the type from typeIdToType
+	if t, ok := r.typeIdToType[int16(typeID)]; ok {
+		if serializer, ok := r.typeToSerializers[t]; ok {
+			return serializer
+		}
+	}
+	// Also check typeIDToTypeInfo for the type
+	if info, ok := r.typeIDToTypeInfo[typeID]; ok {
+		if serializer, ok := r.typeToSerializers[info.Type]; ok {
+			return serializer
+		}
+	}
+	return nil
 }
 
 func (r *TypeResolver) getTypeInfo(value reflect.Value, create bool) (TypeInfo, error) {

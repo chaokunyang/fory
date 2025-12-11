@@ -1433,23 +1433,29 @@ func isStructField(t reflect.Type) bool {
 	return false
 }
 
-// isStructFieldType checks if a FieldType represents a struct type
-// This is used to determine if type info was written for the field
+// isStructFieldType checks if a FieldType represents a type that needs type info written
+// This is used to determine if type info was written for the field in compatible mode
+// In compatible mode, Java writes type info for struct and ext types, but NOT for enum types
+// Enum fields only have null flag + ordinal, no type ID
 func isStructFieldType(ft FieldType) bool {
 	if ft == nil {
 		return false
 	}
 	typeId := ft.TypeId()
-	// Check base struct type IDs
-	if typeId == STRUCT || typeId == NAMED_STRUCT ||
-		typeId == COMPATIBLE_STRUCT || typeId == NAMED_COMPATIBLE_STRUCT {
+	// Check base type IDs that need type info (struct and ext, NOT enum)
+	switch typeId {
+	case STRUCT, NAMED_STRUCT, COMPATIBLE_STRUCT, NAMED_COMPATIBLE_STRUCT,
+		EXT, NAMED_EXT:
 		return true
 	}
 	// Check for composite type IDs (customId << 8 | baseType)
 	if typeId > 255 {
 		baseType := typeId & 0xff
-		return baseType == STRUCT || baseType == NAMED_STRUCT ||
-			baseType == COMPATIBLE_STRUCT || baseType == NAMED_COMPATIBLE_STRUCT
+		switch TypeId(baseType) {
+		case STRUCT, NAMED_STRUCT, COMPATIBLE_STRUCT, NAMED_COMPATIBLE_STRUCT,
+			EXT, NAMED_EXT:
+			return true
+		}
 	}
 	return false
 }

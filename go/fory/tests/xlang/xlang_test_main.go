@@ -173,7 +173,6 @@ type MyExt struct {
 }
 
 type EmptyWrapper struct {
-	Value interface{}
 }
 
 type MyStruct struct {
@@ -855,7 +854,7 @@ func testSkipIdCustom() {
 	// Use numeric IDs to match Java's registration:
 	// fory2.register(MyExt.class, 103)
 	// fory2.register(EmptyWrapper.class, 104)
-	f.Register(MyExt{}, 103)
+	f.RegisterExtensionTypeByID(MyExt{}, 103, &MyExtSerializer{})
 	f.Register(EmptyWrapper{}, 104)
 
 	obj, err := f.DeserializeAny(data)
@@ -876,7 +875,7 @@ func testSkipNameCustom() {
 	data := readFile(dataFile)
 
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
-	f.RegisterNamedType(MyExt{}, "my_ext")
+	f.RegisterExtensionType(MyExt{}, "my_ext", &MyExtSerializer{})
 	f.RegisterNamedType(EmptyWrapper{}, "my_wrapper")
 
 	obj, err := f.DeserializeAny(data)

@@ -525,6 +525,22 @@ func (f *Fory) RegisterExtensionType(type_ interface{}, typeName string, seriali
 	return f.typeResolver.RegisterExtensionType(t, "", typeName, serializer)
 }
 
+// RegisterExtensionTypeByID registers a type as an extension type with a numeric ID.
+// Extension types use a custom serializer provided by the user.
+// typeID should be the user type ID in the range 0-8192.
+func (f *Fory) RegisterExtensionTypeByID(type_ interface{}, typeID uint32, serializer ExtensionSerializer) error {
+	var t reflect.Type
+	if rt, ok := type_.(reflect.Type); ok {
+		t = rt
+	} else {
+		t = reflect.TypeOf(type_)
+		if t.Kind() == reflect.Ptr {
+			t = t.Elem()
+		}
+	}
+	return f.typeResolver.RegisterExtensionTypeByID(t, typeID, serializer)
+}
+
 // New creates a new Fory instance with the given options
 func New(opts ...Option) *Fory {
 	f := &Fory{

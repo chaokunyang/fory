@@ -279,7 +279,8 @@ func (r *TypeResolver) initialize() {
 		// that can hold any element type when deserializing into interface{}
 		{interfaceSliceType, sliceSerializer{}},
 		{interfaceMapType, mapSerializer{}},
-		{stringSliceType, sliceSerializer{}},
+		// stringSliceType uses sliceConcreteValueSerializer with stringSerializer as element serializer
+		// This ensures CollectionIsDeclElementType is set for Java compatibility
 		{byteSliceType, byteSliceSerializer{}},
 		// Map basic type slices to proper array types for xlang compatibility
 		{boolSliceType, boolArraySerializer{}},
@@ -558,6 +559,62 @@ func (r *TypeResolver) RegisterExt(extId int16, type_ reflect.Type) error {
 	panic("not supported")
 }
 
+// RegisterExtensionType registers a type as an extension type (NAMED_EXT).
+// Extension types serialize struct fields directly without a hash header.
+// This is used for types with custom serializers in cross-language serialization.
+func (r *TypeResolver) RegisterExtensionType(
+	type_ reflect.Type,
+	namespace string,
+	typeName string,
+) error {
+	if prev, ok := r.typeToSerializers[type_]; ok {
+		return fmt.Errorf("type %s already has a serializer %s registered", type_, prev)
+	}
+	if namespace == "" {
+		if idx := strings.LastIndex(typeName, "."); idx != -1 {
+			namespace = typeName[:idx]
+			typeName = typeName[idx+1:]
+		}
+	}
+	if typeName == "" && namespace != "" {
+		return fmt.Errorf("typeName cannot be empty if namespace is provided")
+	}
+	var tag string
+	if namespace == "" {
+		tag = typeName
+	} else {
+		tag = namespace + "." + typeName
+	}
+
+	// Use extensionSerializer instead of structSerializer
+	serializer := &extensionSerializer{type_: type_, typeTag: tag}
+	r.typeToSerializers[type_] = serializer
+	r.typeToTypeInfo[type_] = "@" + tag
+	r.typeInfoToType["@"+tag] = type_
+
+	ptrType := reflect.PtrTo(type_)
+	ptrSerializer := &ptrToValueSerializer{valueSerializer: serializer}
+	r.typeToSerializers[ptrType] = ptrSerializer
+	r.typeTagToSerializers[tag] = ptrSerializer
+	r.typeToTypeInfo[ptrType] = "*@" + tag
+	r.typeInfoToType["*@"+tag] = ptrType
+
+	// Use NAMED_STRUCT type ID to match Java's behavior
+	// (Java uses NAMED_STRUCT when register() + registerSerializer() are used)
+	typeId := int32(NAMED_STRUCT)
+
+	// Register both value and pointer types
+	_, err := r.registerType(type_, typeId, namespace, typeName, nil, false)
+	if err != nil {
+		return fmt.Errorf("failed to register extension type: %w", err)
+	}
+	_, err = r.registerType(ptrType, typeId, namespace, typeName, nil, false)
+	if err != nil {
+		return fmt.Errorf("failed to register extension type: %w", err)
+	}
+	return nil
+}
+
 func (r *TypeResolver) getSerializerByType(type_ reflect.Type, mapInStruct bool) (Serializer, error) {
 	if serializer, ok := r.typeToSerializers[type_]; !ok {
 		if serializer, err := r.createSerializer(type_, mapInStruct); err != nil {
@@ -818,12 +875,12 @@ func (r *TypeResolver) registerType(
 			}
 		}
 
-		nsMeta, _ := r.namespaceEncoder.Encode(namespace)
+		nsMeta, _ := r.namespaceEncoder.EncodePackage(namespace)
 		if nsBytes = r.metaStringResolver.GetMetaStrBytes(&nsMeta); nsBytes == nil {
 			panic("failed to encode namespace")
 		}
 
-		typeMeta, _ := r.typeNameEncoder.Encode(typeName)
+		typeMeta, _ := r.typeNameEncoder.EncodeTypeName(typeName)
 		if typeBytes = r.metaStringResolver.GetMetaStrBytes(&typeMeta); typeBytes == nil {
 			panic("failed to encode type name")
 		}
@@ -941,11 +998,18 @@ func (r *TypeResolver) writeSharedTypeMeta(buffer *ByteBuffer, typeInfo TypeInfo
 	buffer.WriteVarUint32(newIndex)
 	context.typeMap[typ] = newIndex
 
-	typeDef, err := r.getTypeDef(typeInfo.Type, true)
-	if err != nil {
-		return err
+	// Only build TypeDef for struct types - enums don't have field definitions
+	actualType := typ
+	if actualType.Kind() == reflect.Ptr {
+		actualType = actualType.Elem()
 	}
-	context.writingTypeDefs = append(context.writingTypeDefs, typeDef)
+	if actualType.Kind() == reflect.Struct {
+		typeDef, err := r.getTypeDef(typeInfo.Type, true)
+		if err != nil {
+			return err
+		}
+		context.writingTypeDefs = append(context.writingTypeDefs, typeDef)
+	}
 	return nil
 }
 

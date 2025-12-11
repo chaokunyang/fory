@@ -96,15 +96,12 @@ func (s sliceSerializer) writeHeader(ctx *WriteContext, buf *ByteBuffer, value r
 	hasNull := false
 	hasSameType := true
 
-	// Seed elemTypeInfo from the first element so writeSameType can reuse it.
-	// Empty slices leave elemTypeInfo zero-value, which is also fine because
-	// writeSameType won't do anything in that case.
-	if value.Len() > 0 {
-		elemTypeInfo, _ = ctx.TypeResolver().getTypeInfo(value.Index(0), true)
-	}
-
 	if s.declaredType != nil {
 		collectFlag |= CollectionIsDeclElementType | CollectionIsSameType
+		// Get elemTypeInfo from declared type for writeSameType
+		if value.Len() > 0 {
+			elemTypeInfo, _ = ctx.TypeResolver().getTypeInfo(reflect.New(s.declaredType).Elem(), true)
+		}
 	} else {
 		// Iterate through elements to check for nulls and type consistency
 		var firstType reflect.Type
@@ -118,10 +115,12 @@ func (s sliceSerializer) writeHeader(ctx *WriteContext, buf *ByteBuffer, value r
 				continue
 			}
 
-			// Compare each element's type with the first element's type
+			// Get type info from the first non-null element
 			if firstType == nil {
 				firstType = elem.Type()
+				elemTypeInfo, _ = ctx.TypeResolver().getTypeInfo(elem, true)
 			} else {
+				// Compare each element's type with the first element's type
 				if firstType != elem.Type() {
 					hasSameType = false
 				}
@@ -148,9 +147,8 @@ func (s sliceSerializer) writeHeader(ctx *WriteContext, buf *ByteBuffer, value r
 
 	// WriteData element type info if all elements have same type and not using declared type
 	if hasSameType && (collectFlag&CollectionIsDeclElementType == 0) {
-		// For namespaced types, write full type info
-		internalTypeID := elemTypeInfo.TypeID
-		if IsNamespacedType(TypeId(internalTypeID)) {
+		// For struct types and namespaced types, write full type info including meta share
+		if NeedsTypeMetaWrite(TypeId(elemTypeInfo.TypeID)) {
 			if err := ctx.TypeResolver().writeTypeInfo(buf, elemTypeInfo); err != nil {
 				return 0, TypeInfo{}, err
 			}
@@ -167,6 +165,7 @@ func (s sliceSerializer) writeSameType(
 	ctx *WriteContext, buf *ByteBuffer, value reflect.Value, typeInfo TypeInfo, flag byte) error {
 	serializer := typeInfo.Serializer
 	trackRefs := (flag & CollectionTrackingRef) != 0 // Check if reference tracking is enabled
+	hasNull := (flag & CollectionHasNull) != 0
 
 	for i := 0; i < value.Len(); i++ {
 		elem := value.Index(i)
@@ -184,8 +183,14 @@ func (s sliceSerializer) writeSameType(
 			if err := serializer.Write(ctx, true, false, elem); err != nil {
 				return err
 			}
+		} else if hasNull {
+			// When hasNull is set but trackRefs is not, write NotNullValueFlag before data
+			buf.WriteInt8(NotNullValueFlag)
+			if err := serializer.WriteData(ctx, elem); err != nil {
+				return err
+			}
 		} else {
-			// Directly write value without reference tracking
+			// No ref tracking and no nulls: directly write data
 			if err := serializer.WriteData(ctx, elem); err != nil {
 				return err
 			}
@@ -369,31 +374,92 @@ func (s sliceSerializer) ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeIn
 func (s sliceSerializer) readSameType(ctx *ReadContext, buf *ByteBuffer, value reflect.Value, elemType reflect.Type, serializer Serializer, flag int8) error {
 	// Determine if reference tracking is enabled
 	trackRefs := (flag & CollectionTrackingRef) != 0
+	hasNull := (flag & CollectionHasNull) != 0
 	if serializer == nil {
 		return fmt.Errorf("no serializer available for element type %v", elemType)
 	}
 
-	// Check if the slice element type is a pointer type
-	// This affects how we handle reference tracking
+	// Check if the slice element type is a pointer type or interface
+	// This affects how we handle null values
 	sliceElemType := value.Type().Elem()
-	isConcretePointerElem := sliceElemType.Kind() == reflect.Ptr
+	isNullableElem := sliceElemType.Kind() == reflect.Ptr || sliceElemType.Kind() == reflect.Interface
 
 	for i := 0; i < value.Len(); i++ {
-		// For concrete pointer elements ([]*T), we always need to create a pointer.
-		if isConcretePointerElem {
-			// Target is []*T, create pointer and read
-			ptr := reflect.New(elemType)
-			if err := serializer.Read(ctx, trackRefs, false, ptr.Elem()); err != nil {
-				return err
+		if trackRefs {
+			// When trackRefs is enabled, the serializer.Read will handle null detection
+			// via TryPreserveRefId which reads the ref flag
+			if isNullableElem {
+				// For pointer/interface elements, peek at ref flag to check for null
+				refID, err := ctx.RefResolver().TryPreserveRefId(buf)
+				if err != nil {
+					return err
+				}
+				if int8(refID) == NullFlag {
+					// Element is null, leave slice element as nil (zero value for pointer/interface)
+					continue
+				}
+				// Not null, read the element
+				if sliceElemType.Kind() == reflect.Ptr {
+					ptr := reflect.New(elemType)
+					if err := serializer.ReadData(ctx, elemType, ptr.Elem()); err != nil {
+						return err
+					}
+					ctx.RefResolver().Reference(ptr)
+					value.Index(i).Set(ptr)
+				} else {
+					// Interface element
+					elem := reflect.New(elemType).Elem()
+					if err := serializer.ReadData(ctx, elemType, elem); err != nil {
+						return err
+					}
+					ctx.RefResolver().Reference(elem)
+					value.Index(i).Set(elem)
+				}
+			} else {
+				// Non-nullable elements: read with ref tracking
+				elem := reflect.New(elemType).Elem()
+				if err := serializer.Read(ctx, true, false, elem); err != nil {
+					return err
+				}
+				value.Index(i).Set(elem)
 			}
-			value.Index(i).Set(ptr)
-		} else {
-			// Non-pointer elements: read directly into a value
+		} else if hasNull {
+			// No ref tracking, but collection may have nulls
+			// When hasNull is set, writer writes a flag byte for each element:
+			// - NullFlag (-3) for null elements
+			// - NotNullValueFlag (-1) + data for non-null elements
+			refFlag := buf.ReadInt8()
+			if refFlag == NullFlag {
+				// Element is null, leave slice element as nil (zero value)
+				continue
+			}
+			// refFlag should be NotNullValueFlag, now read the actual data
 			elem := reflect.New(elemType).Elem()
-			if err := serializer.Read(ctx, trackRefs, false, elem); err != nil {
+			if err := serializer.ReadData(ctx, elemType, elem); err != nil {
 				return err
 			}
-			value.Index(i).Set(elem)
+			if isNullableElem && sliceElemType.Kind() == reflect.Ptr {
+				ptr := reflect.New(elemType)
+				ptr.Elem().Set(elem)
+				value.Index(i).Set(ptr)
+			} else {
+				value.Index(i).Set(elem)
+			}
+		} else {
+			// No ref tracking and no nulls: directly read data
+			if isNullableElem && sliceElemType.Kind() == reflect.Ptr {
+				ptr := reflect.New(elemType)
+				if err := serializer.ReadData(ctx, elemType, ptr.Elem()); err != nil {
+					return err
+				}
+				value.Index(i).Set(ptr)
+			} else {
+				elem := reflect.New(elemType).Elem()
+				if err := serializer.ReadData(ctx, elemType, elem); err != nil {
+					return err
+				}
+				value.Index(i).Set(elem)
+			}
 		}
 	}
 	return nil

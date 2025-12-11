@@ -481,6 +481,22 @@ func (f *Fory) RegisterByName(type_ interface{}, namespace, typeName string) err
 	return f.typeResolver.RegisterNamedType(t, 0, namespace, typeName)
 }
 
+// RegisterExtensionType registers a type as an extension type (NAMED_EXT) for cross-language serialization.
+// Extension types serialize struct fields directly without a hash header.
+// This is used for types with custom serializers in cross-language serialization.
+func (f *Fory) RegisterExtensionType(type_ interface{}, typeName string) error {
+	var t reflect.Type
+	if rt, ok := type_.(reflect.Type); ok {
+		t = rt
+	} else {
+		t = reflect.TypeOf(type_)
+		if t.Kind() == reflect.Ptr {
+			t = t.Elem()
+		}
+	}
+	return f.typeResolver.RegisterExtensionType(t, "", typeName)
+}
+
 // New creates a new Fory instance with the given options
 func New(opts ...Option) *Fory {
 	f := &Fory{
@@ -863,6 +879,63 @@ func (f *Fory) serializeReflectValue(value reflect.Value) ([]byte, error) {
 	return f.writeCtx.buffer.GetByteSlice(0, f.writeCtx.buffer.writerIndex), nil
 }
 
+// SerializeAnyTo serializes a value and appends the bytes to the provided buffer.
+// This is useful when you need to write multiple serialized values to the same buffer.
+// Returns error if serialization fails.
+func (f *Fory) SerializeAnyTo(buf *ByteBuffer, value interface{}) error {
+	// Handle nil values
+	if isNilValue(value) {
+		// Use Java-compatible null format: 3 bytes (magic + bitmap with isNilFlag)
+		buf.WriteInt16(MAGIC_NUMBER)
+		buf.WriteByte_(IsNilFlag)
+		return nil
+	}
+
+	// Reset contexts but use the provided buffer
+	f.writeCtx.refResolver.reset()
+	if f.metaContext != nil {
+		f.metaContext.Reset()
+	}
+
+	// Temporarily swap buffer
+	origBuffer := f.writeCtx.buffer
+	f.writeCtx.buffer = buf
+
+	// Write protocol header
+	writeHeader(f.writeCtx, f.config)
+
+	// In compatible mode, reserve space for meta offset
+	var metaStartOffset int
+	if f.config.Compatible {
+		metaStartOffset = buf.writerIndex
+		buf.WriteInt32(-1) // Placeholder for meta offset
+	}
+
+	// Serialize the value
+	if err := f.writeCtx.WriteValue(reflect.ValueOf(value)); err != nil {
+		f.writeCtx.buffer = origBuffer
+		return err
+	}
+
+	// Write collected TypeMetas at the end in compatible mode
+	if f.config.Compatible && f.metaContext != nil && len(f.metaContext.writingTypeDefs) > 0 {
+		// Calculate offset from the position after meta offset field to meta section start
+		currentPos := buf.writerIndex
+		offset := currentPos - metaStartOffset - 4
+
+		// Update the meta offset field
+		buf.PutInt32(metaStartOffset, int32(offset))
+
+		// Write type definitions
+		f.typeResolver.writeTypeDefs(buf)
+	}
+
+	// Restore original buffer
+	f.writeCtx.buffer = origBuffer
+
+	return nil
+}
+
 // DeserializeAny deserializes polymorphic values.
 // Returns the concrete type as `any`.
 func (f *Fory) DeserializeAny(data []byte) (any, error) {
@@ -913,6 +986,72 @@ func (f *Fory) DeserializeAny(data []byte) (any, error) {
 	if finalPos > 0 {
 		f.readCtx.buffer.SetReaderIndex(finalPos)
 	}
+
+	return result, nil
+}
+
+// DeserializeAnyFrom deserializes a polymorphic value from an existing buffer.
+// The buffer's reader index is advanced as data is read.
+// This is useful when reading multiple serialized values from the same buffer.
+func (f *Fory) DeserializeAnyFrom(buf *ByteBuffer) (any, error) {
+	// Reset contexts for each independent serialized object
+	f.readCtx.refResolver.reset()
+	if f.metaContext != nil {
+		f.metaContext.Reset()
+	}
+
+	// Temporarily swap buffer
+	origBuffer := f.readCtx.buffer
+	f.readCtx.buffer = buf
+
+	metaOffset, err := readHeader(f.readCtx)
+	if err != nil {
+		f.readCtx.buffer = origBuffer
+		return nil, err
+	}
+
+	// Check if the serialized object is null
+	if metaOffset == NullObjectMetaOffset {
+		f.readCtx.buffer = origBuffer
+		return nil, nil
+	}
+
+	// In compatible mode, load type definitions if meta offset is present
+	var finalPos int
+	if f.config.Compatible && metaOffset > 0 {
+		// Save current position (right after meta offset field, before object data)
+		dataStartPos := buf.ReaderIndex()
+
+		// Jump to meta section and read type definitions
+		metaPos := dataStartPos + int(metaOffset)
+		buf.SetReaderIndex(metaPos)
+
+		if err := f.typeResolver.readTypeDefs(buf); err != nil {
+			f.readCtx.buffer = origBuffer
+			return nil, fmt.Errorf("failed to read type definitions: %w", err)
+		}
+
+		// Save final position (after reading TypeDefs)
+		finalPos = buf.ReaderIndex()
+
+		// Return to data start position to deserialize the object
+		buf.SetReaderIndex(dataStartPos)
+	}
+
+	// Use ReadValue to deserialize through the typeResolver
+	var result interface{}
+	if err := f.readCtx.ReadValue(reflect.ValueOf(&result).Elem()); err != nil {
+		f.readCtx.buffer = origBuffer
+		return nil, err
+	}
+
+	// Restore final position if we loaded type definitions
+	if finalPos > 0 {
+		buf.SetReaderIndex(finalPos)
+	}
+
+	// Restore original buffer
+	f.readCtx.buffer = origBuffer
 
 	return result, nil
 }

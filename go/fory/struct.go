@@ -82,16 +82,17 @@ func isPrimitiveStaticId(staticId StaticTypeId) bool {
 
 // fieldHasNonPrimitiveSerializer returns true if the field has a serializer with a non-primitive type ID.
 // This is used to skip the fast path for fields like enums where StaticId is int32 but the serializer
-// writes NAMED_ENUM format with type info.
+// writes a different format (e.g., unsigned varint for enum ordinals vs signed zigzag for int32).
 func fieldHasNonPrimitiveSerializer(field *FieldInfo) bool {
 	if field.Serializer == nil {
 		return false
 	}
 	typeId := field.Serializer.TypeId()
-	// NAMED_ENUM, NAMED_STRUCT, NAMED_COMPATIBLE_STRUCT, NAMED_EXT
-	// all require type info and should not use the primitive fast path
+	// ENUM (numeric ID), NAMED_ENUM (namespace/typename), NAMED_STRUCT, NAMED_COMPATIBLE_STRUCT, NAMED_EXT
+	// all require special serialization and should not use the primitive fast path
+	// Note: ENUM uses unsigned VarUint32Small7 for ordinals, not signed zigzag varint
 	switch typeId {
-	case NAMED_ENUM, NAMED_STRUCT, NAMED_COMPATIBLE_STRUCT, NAMED_EXT:
+	case ENUM, NAMED_ENUM, NAMED_STRUCT, NAMED_COMPATIBLE_STRUCT, NAMED_EXT:
 		return true
 	default:
 		return false
@@ -160,10 +161,18 @@ func (s *structSerializer) WriteData(ctx *WriteContext, value reflect.Value) err
 		buf.WriteInt32(s.structHash)
 	}
 
-	// In compatible mode with fieldDefs, write fields in order (not grouped)
-	// because Java expects fields in TypeDef order, not grouped by type
-	if s.fieldDefs != nil && ctx.Compatible() {
-		return s.writeFieldsInOrder(ctx, value)
+	// In compatible mode, we need to write fields in TypeDef order (declaration order)
+	// because the TypeMeta written to the buffer uses TypeDef order
+	if ctx.Compatible() {
+		// If we have fieldDefs from reading TypeMeta, use them
+		if s.fieldDefs != nil {
+			return s.writeFieldsInOrder(ctx, value)
+		}
+		// Otherwise, get TypeDef and use its field order
+		typeDef, err := ctx.TypeResolver().getTypeDef(s.type_, true)
+		if err == nil && typeDef != nil && len(typeDef.fieldDefs) > 0 {
+			return s.writeFieldsInTypeDefOrder(ctx, value, typeDef.fieldDefs)
+		}
 	}
 
 	// Check if value is addressable for unsafe access optimization
@@ -258,6 +267,25 @@ func (s *structSerializer) WriteData(ctx *WriteContext, value reflect.Value) err
 			continue
 		}
 		fieldValue := value.Field(field.FieldIndex)
+
+		// Special handling for enum fields:
+		// - In compatible mode (meta share): write null flag + ordinal
+		// - In non-compatible mode: just write ordinal (no null flag)
+		// Java writes enum ordinals as unsigned VarUint32Small7, not signed zigzag
+		if field.Serializer != nil {
+			serTypeId := field.Serializer.TypeId()
+			if serTypeId == ENUM || serTypeId == NAMED_ENUM {
+				if ctx.Compatible() {
+					// In compatible mode, Java expects null flag for enum fields
+					buf.WriteInt8(NotNullValueFlag)
+				}
+				if err := field.Serializer.WriteData(ctx, fieldValue); err != nil {
+					return err
+				}
+				continue
+			}
+		}
+
 		if field.Serializer != nil {
 			// For nested struct fields in compatible mode, write type info
 			writeType := ctx.Compatible() && isStructField(field.Type)
@@ -325,9 +353,29 @@ func (s *structSerializer) writeFieldsInOrder(ctx *WriteContext, value reflect.V
 			continue
 		}
 
+		// Get field value for slow paths
+		fieldValue := value.Field(field.FieldIndex)
+
+		// Special handling for enum fields:
+		// - In compatible mode (meta share): write null flag + ordinal
+		// - In non-compatible mode: just write ordinal (no null flag)
+		// Java writes enum ordinals as unsigned VarUint32Small7, not signed zigzag
+		if field.Serializer != nil {
+			serTypeId := field.Serializer.TypeId()
+			if serTypeId == ENUM || serTypeId == NAMED_ENUM {
+				if ctx.Compatible() {
+					// In compatible mode, Java expects null flag for enum fields
+					buf.WriteInt8(NotNullValueFlag)
+				}
+				if err := field.Serializer.WriteData(ctx, fieldValue); err != nil {
+					return err
+				}
+				continue
+			}
+		}
+
 		// Slow path for primitives when canUseUnsafe is false
 		// These don't need ref flag according to xlang spec
-		fieldValue := value.Field(field.FieldIndex)
 
 		// Handle non-nullable primitives without ref flag (slow path version)
 		if !field.Referencable && isPrimitiveStaticId(field.StaticId) {
@@ -378,6 +426,142 @@ func (s *structSerializer) writeZeroField(ctx *WriteContext, field *FieldInfo) e
 		return field.Serializer.Write(ctx, field.Referencable, false, zeroValue)
 	}
 	return ctx.WriteValue(zeroValue)
+}
+
+// writeFieldsInTypeDefOrder writes fields in the order specified by fieldDefs from TypeDef
+// This is used in compatible mode when we have TypeDef but s.fields might be in different order
+func (s *structSerializer) writeFieldsInTypeDefOrder(ctx *WriteContext, value reflect.Value, fieldDefs []FieldDef) error {
+	buf := ctx.Buffer()
+	canUseUnsafe := value.CanAddr()
+	var ptr unsafe.Pointer
+	if canUseUnsafe {
+		ptr = unsafe.Pointer(value.UnsafeAddr())
+	}
+
+	// Build field map for quick lookup
+	type_ := value.Type()
+	fieldMap := make(map[string]struct {
+		index  int
+		offset uintptr
+		typ    reflect.Type
+	})
+	for i := 0; i < type_.NumField(); i++ {
+		f := type_.Field(i)
+		name := SnakeCase(f.Name)
+		fieldMap[name] = struct {
+			index  int
+			offset uintptr
+			typ    reflect.Type
+		}{i, f.Offset, f.Type}
+	}
+
+	for _, def := range fieldDefs {
+		fieldInfo, exists := fieldMap[def.name]
+		if !exists {
+			// Field doesn't exist in Go struct, write zero value
+			fieldType, _ := def.fieldType.getTypeInfoWithResolver(ctx.TypeResolver())
+			if fieldType.Type == nil {
+				fieldType.Type = reflect.TypeOf((*interface{})(nil)).Elem()
+			}
+			zeroValue := reflect.Zero(fieldType.Type)
+			ser, _ := ctx.TypeResolver().getSerializerByType(fieldType.Type, true)
+			nullable := fieldNeedWriteRef(def.fieldType.TypeId(), def.nullable)
+			writeType := !isInternalTypeWithoutTypeMeta(fieldType.Type)
+			if ser != nil {
+				if err := ser.Write(ctx, nullable, writeType, zeroValue); err != nil {
+					return err
+				}
+			} else {
+				if err := ctx.WriteValue(zeroValue); err != nil {
+					return err
+				}
+			}
+			continue
+		}
+
+		// Get serializer for this field
+		fieldType := fieldInfo.typ
+		ser, _ := ctx.TypeResolver().getSerializerByType(fieldType, true)
+		staticId := GetStaticTypeId(fieldType)
+		referencable := isReferencable(fieldType)
+
+		// Check if field has a non-primitive serializer (like ENUM or NAMED_ENUM)
+		// ENUM uses unsigned VarUint32Small7 for ordinals, not signed zigzag varint
+		hasNonPrimitiveSer := ser != nil && (ser.TypeId() == ENUM || ser.TypeId() == NAMED_ENUM ||
+			ser.TypeId() == NAMED_STRUCT || ser.TypeId() == NAMED_COMPATIBLE_STRUCT || ser.TypeId() == NAMED_EXT)
+
+		// Fast path for fixed-size primitive types (no ref flag)
+		if canUseUnsafe && isFixedSizePrimitive(staticId, referencable) && !hasNonPrimitiveSer {
+			fieldPtr := unsafe.Add(ptr, fieldInfo.offset)
+			switch staticId {
+			case ConcreteTypeBool:
+				buf.WriteBool(*(*bool)(fieldPtr))
+			case ConcreteTypeInt8:
+				buf.WriteByte_(*(*byte)(fieldPtr))
+			case ConcreteTypeInt16:
+				buf.WriteInt16(*(*int16)(fieldPtr))
+			case ConcreteTypeFloat32:
+				buf.WriteFloat32(*(*float32)(fieldPtr))
+			case ConcreteTypeFloat64:
+				buf.WriteFloat64(*(*float64)(fieldPtr))
+			}
+			continue
+		}
+
+		// Fast path for varint primitive types (no ref flag)
+		if canUseUnsafe && isVarintPrimitive(staticId, referencable) && !hasNonPrimitiveSer {
+			fieldPtr := unsafe.Add(ptr, fieldInfo.offset)
+			switch staticId {
+			case ConcreteTypeInt32:
+				buf.WriteVarint32(*(*int32)(fieldPtr))
+			case ConcreteTypeInt64:
+				buf.WriteVarint64(*(*int64)(fieldPtr))
+			case ConcreteTypeInt:
+				buf.WriteVarint64(int64(*(*int)(fieldPtr)))
+			}
+			continue
+		}
+
+		// Get field value for slow paths
+		fieldValue := value.Field(fieldInfo.index)
+
+		// Special handling for enum fields:
+		// - In compatible mode (meta share): write null flag + ordinal
+		// - In non-compatible mode: just write ordinal (no null flag)
+		// Java writes enum ordinals as unsigned VarUint32Small7, not signed zigzag
+		if ser != nil {
+			serTypeId := ser.TypeId()
+			if serTypeId == ENUM || serTypeId == NAMED_ENUM {
+				if ctx.Compatible() {
+					// In compatible mode, Java expects null flag for enum fields
+					buf.WriteInt8(NotNullValueFlag)
+				}
+				if err := ser.WriteData(ctx, fieldValue); err != nil {
+					return err
+				}
+				continue
+			}
+		}
+
+		// Slow path: use serializer
+		if ser != nil {
+			// Per xlang spec:
+			// - Non-nullable primitives (int32, float64, etc.): NO ref flag, NO type info
+			// - Nullable primitives (*int32, *float64, etc.): ref flag + data (NO type info)
+			// - Other types (struct, collections, etc.): ref flag + type info + data
+			isPrimitive := (isFixedSizePrimitive(staticId, false) || isVarintPrimitive(staticId, false)) && !hasNonPrimitiveSer
+			writeRef := !isPrimitive || referencable // referencable means it's a pointer type
+			writeType := !isPrimitive && !isInternalTypeWithoutTypeMeta(fieldType) // primitives never need type info
+			if err := ser.Write(ctx, writeRef, writeType, fieldValue); err != nil {
+				return err
+			}
+		} else {
+			if err := ctx.WriteValue(fieldValue); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func (s *structSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
@@ -511,6 +695,30 @@ func (s *structSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value 
 			continue
 		}
 		fieldValue := value.Field(field.FieldIndex)
+
+		// Special handling for enum fields:
+		// - In compatible mode (meta share): read null flag + ordinal
+		// - In non-compatible mode: just read ordinal (no null flag)
+		// Java writes enum ordinals as unsigned VarUint32Small7, not signed zigzag
+		if field.Serializer != nil {
+			serTypeId := field.Serializer.TypeId()
+			if serTypeId == ENUM || serTypeId == NAMED_ENUM {
+				if ctx.Compatible() {
+					// In compatible mode, Java writes null flag for enum fields
+					nullFlag := buf.ReadInt8()
+					if nullFlag == NullFlag {
+						// Set to zero value
+						fieldValue.SetInt(0)
+						continue
+					}
+				}
+				if err := field.Serializer.ReadData(ctx, field.Type, fieldValue); err != nil {
+					return err
+				}
+				continue
+			}
+		}
+
 		if field.Serializer != nil {
 			// For nested struct fields in compatible mode, read type info
 			readType := ctx.Compatible() && isStructField(field.Type)
@@ -574,8 +782,33 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 			continue
 		}
 
-		// Slow path for non-primitives (all need ref flag per xlang spec)
+		// Get field value for slow paths
 		fieldValue := value.Field(field.FieldIndex)
+
+		// Special handling for enum fields:
+		// - In compatible mode (meta share): read null flag + ordinal
+		// - In non-compatible mode: just read ordinal (no null flag)
+		// Java writes enum ordinals as unsigned VarUint32Small7, not signed zigzag
+		if field.Serializer != nil {
+			serTypeId := field.Serializer.TypeId()
+			if serTypeId == ENUM || serTypeId == NAMED_ENUM {
+				if ctx.Compatible() {
+					// In compatible mode, Java writes null flag for enum fields
+					nullFlag := buf.ReadInt8()
+					if nullFlag == NullFlag {
+						// Set to zero value
+						fieldValue.SetInt(0)
+						continue
+					}
+				}
+				if err := field.Serializer.ReadData(ctx, field.Type, fieldValue); err != nil {
+					return err
+				}
+				continue
+			}
+		}
+
+		// Slow path for non-primitives (all need ref flag per xlang spec)
 		if field.Serializer != nil {
 			// Per xlang spec:
 			// - Nullable primitives (*int32, *float64, etc.): ref flag + data (NO type info)
@@ -851,7 +1084,11 @@ func (s *structSerializer) groupFields() {
 	s.remainingFields = nil
 
 	for _, field := range s.fields {
-		if isFixedSizePrimitive(field.StaticId, field.Referencable) {
+		// Fields with non-primitive serializers (NAMED_ENUM, NAMED_STRUCT, etc.)
+		// must go to remainingFields to use their serializer's type info writing
+		if fieldHasNonPrimitiveSerializer(field) {
+			s.remainingFields = append(s.remainingFields, field)
+		} else if isFixedSizePrimitive(field.StaticId, field.Referencable) {
 			s.fixedFields = append(s.fixedFields, field)
 		} else if isVarintPrimitive(field.StaticId, field.Referencable) {
 			s.varintFields = append(s.varintFields, field)
@@ -947,11 +1184,22 @@ func (s *structSerializer) initFieldsFromDefsWithResolver(typeResolver *TypeReso
 			// because runtime type resolution by name might work
 			shouldRead := false
 			isPolymorphicField := def.fieldType.TypeId() == UNKNOWN
+			isEnumField := def.fieldType.TypeId() == NAMED_ENUM || def.fieldType.TypeId() == ENUM
 			if isPolymorphicField && localType.Kind() == reflect.Interface {
 				// For polymorphic (UNKNOWN) fields with interface{} local type,
 				// allow reading - the actual type will be determined at runtime
 				shouldRead = true
 				fieldType = localType
+			} else if typeLookupFailed && isEnumField {
+				// For enum fields with failed TypeDef lookup (NAMED_ENUM stores by namespace/typename, not typeId),
+				// check if local field is a numeric type (Go enums are int-based)
+				localKind := localType.Kind()
+				if isNumericKind(localKind) {
+					shouldRead = true
+					fieldType = localType
+					// Get the serializer for the local type (which should be registered as enum)
+					fieldSerializer, _ = typeResolver.getSerializerByType(localType, true)
+				}
 			} else if typeLookupFailed && isStructLikeField {
 				// For struct fields with failed TypeDef lookup, check if local field can hold a struct
 				localKind := localType.Kind()
@@ -1027,6 +1275,17 @@ func isNonNullablePrimitiveKind(kind reflect.Kind) bool {
 	case reflect.Bool, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
 		reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
 		reflect.Float32, reflect.Float64, reflect.Int, reflect.Uint:
+		return true
+	default:
+		return false
+	}
+}
+
+// isNumericKind returns true for numeric types (Go enums are typically int-based)
+func isNumericKind(kind reflect.Kind) bool {
+	switch kind {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		return true
 	default:
 		return false
@@ -1787,5 +2046,294 @@ func (s *skipStructSerializer) Read(ctx *ReadContext, readRef bool, readType boo
 
 func (s *skipStructSerializer) ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeInfo *TypeInfo, value reflect.Value) error {
 	// typeInfo is already read, don't read it again - just skip data
+	return s.Read(ctx, readRef, false, value)
+}
+
+// ============================================================================
+// Extension Serializer - for NAMED_EXT types
+// Serializes struct fields directly without hash header
+// ============================================================================
+
+type extensionSerializer struct {
+	type_    reflect.Type
+	typeTag  string
+	fields   []*FieldInfo
+	fieldMap map[string]*FieldInfo
+}
+
+func (s *extensionSerializer) TypeId() TypeId { return EXT }
+
+func (s *extensionSerializer) NeedToWriteRef() bool { return true }
+
+func (s *extensionSerializer) initFieldsWrite(ctx *WriteContext) error {
+	if len(s.fields) > 0 {
+		return nil
+	}
+	typeResolver := ctx.TypeResolver()
+	type_ := s.type_
+	var fields []*FieldInfo
+
+	for i := 0; i < type_.NumField(); i++ {
+		field := type_.Field(i)
+		firstRune, _ := utf8.DecodeRuneInString(field.Name)
+		if unicode.IsLower(firstRune) {
+			continue // skip unexported fields
+		}
+
+		fieldName := SnakeCase(field.Name)
+		fieldType := field.Type
+		staticId := GetStaticTypeId(fieldType)
+		referencable := isReferencable(fieldType)
+
+		serializer, err := typeResolver.getSerializerByType(fieldType, false)
+		if err != nil {
+			return err
+		}
+
+		fields = append(fields, &FieldInfo{
+			Name:         fieldName,
+			Offset:       field.Offset,
+			Type:         fieldType,
+			StaticId:     staticId,
+			Serializer:   serializer,
+			Referencable: referencable,
+			FieldIndex:   i,
+		})
+	}
+
+	// Sort fields by name for consistent ordering
+	sort.Slice(fields, func(i, j int) bool {
+		return fields[i].Name < fields[j].Name
+	})
+
+	s.fields = fields
+	return nil
+}
+
+func (s *extensionSerializer) initFieldsRead(ctx *ReadContext) error {
+	if len(s.fields) > 0 {
+		return nil
+	}
+	typeResolver := ctx.TypeResolver()
+	type_ := s.type_
+	var fields []*FieldInfo
+
+	for i := 0; i < type_.NumField(); i++ {
+		field := type_.Field(i)
+		firstRune, _ := utf8.DecodeRuneInString(field.Name)
+		if unicode.IsLower(firstRune) {
+			continue // skip unexported fields
+		}
+
+		fieldName := SnakeCase(field.Name)
+		fieldType := field.Type
+		staticId := GetStaticTypeId(fieldType)
+		referencable := isReferencable(fieldType)
+
+		serializer, err := typeResolver.getSerializerByType(fieldType, false)
+		if err != nil {
+			return err
+		}
+
+		fields = append(fields, &FieldInfo{
+			Name:         fieldName,
+			Offset:       field.Offset,
+			Type:         fieldType,
+			StaticId:     staticId,
+			Serializer:   serializer,
+			Referencable: referencable,
+			FieldIndex:   i,
+		})
+	}
+
+	// Sort fields by name for consistent ordering
+	sort.Slice(fields, func(i, j int) bool {
+		return fields[i].Name < fields[j].Name
+	})
+
+	s.fields = fields
+	return nil
+}
+
+func (s *extensionSerializer) GetType() reflect.Type { return s.type_ }
+
+func (s *extensionSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
+	if err := s.initFieldsWrite(ctx); err != nil {
+		return err
+	}
+	buf := ctx.Buffer()
+	canUseUnsafe := value.CanAddr()
+
+	for _, field := range s.fields {
+		// Fast path for fixed-size primitive types
+		if isFixedSizePrimitive(field.StaticId, field.Referencable) {
+			if canUseUnsafe {
+				ptr := unsafe.Pointer(value.UnsafeAddr())
+				fieldPtr := unsafe.Add(ptr, field.Offset)
+				switch field.StaticId {
+				case ConcreteTypeBool:
+					buf.WriteBool(*(*bool)(fieldPtr))
+				case ConcreteTypeInt8:
+					buf.WriteByte_(*(*byte)(fieldPtr))
+				case ConcreteTypeInt16:
+					buf.WriteInt16(int16(*(*int16)(fieldPtr)))
+				case ConcreteTypeFloat32:
+					buf.WriteFloat32(*(*float32)(fieldPtr))
+				case ConcreteTypeFloat64:
+					buf.WriteFloat64(*(*float64)(fieldPtr))
+				}
+			} else {
+				fieldValue := value.Field(field.FieldIndex)
+				switch field.StaticId {
+				case ConcreteTypeBool:
+					buf.WriteBool(fieldValue.Bool())
+				case ConcreteTypeInt8:
+					buf.WriteByte_(byte(fieldValue.Int()))
+				case ConcreteTypeInt16:
+					buf.WriteInt16(int16(fieldValue.Int()))
+				case ConcreteTypeFloat32:
+					buf.WriteFloat32(float32(fieldValue.Float()))
+				case ConcreteTypeFloat64:
+					buf.WriteFloat64(fieldValue.Float())
+				}
+			}
+			continue
+		}
+
+		// Fast path for varint primitives
+		if isVarintPrimitive(field.StaticId, field.Referencable) {
+			if canUseUnsafe {
+				ptr := unsafe.Pointer(value.UnsafeAddr())
+				fieldPtr := unsafe.Add(ptr, field.Offset)
+				switch field.StaticId {
+				case ConcreteTypeInt32:
+					buf.WriteVarInt32(*(*int32)(fieldPtr))
+				case ConcreteTypeInt64:
+					buf.WriteVarint64(*(*int64)(fieldPtr))
+				case ConcreteTypeInt:
+					buf.WriteVarint64(int64(*(*int)(fieldPtr)))
+				}
+			} else {
+				fieldValue := value.Field(field.FieldIndex)
+				switch field.StaticId {
+				case ConcreteTypeInt32:
+					buf.WriteVarInt32(int32(fieldValue.Int()))
+				case ConcreteTypeInt64:
+					buf.WriteVarint64(fieldValue.Int())
+				case ConcreteTypeInt:
+					buf.WriteVarint64(fieldValue.Int())
+				}
+			}
+			continue
+		}
+
+		var fieldValue reflect.Value
+		if canUseUnsafe {
+			ptr := unsafe.Pointer(value.UnsafeAddr())
+			fieldPtr := unsafe.Add(ptr, field.Offset)
+			fieldValue = reflect.NewAt(field.Type, fieldPtr).Elem()
+		} else {
+			fieldValue = value.Field(field.FieldIndex)
+		}
+		if err := field.Serializer.Write(ctx, field.Referencable, false, fieldValue); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *extensionSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
+	buf := ctx.Buffer()
+	if writeRef {
+		refWritten, err := ctx.RefResolver().WriteRefOrNull(buf, value)
+		if err != nil {
+			return err
+		}
+		if refWritten {
+			return nil
+		}
+	}
+	if writeType {
+		// Extension types need to write type info
+		typeInfo, err := ctx.TypeResolver().getTypeInfo(value, true)
+		if err != nil {
+			return err
+		}
+		if err := ctx.TypeResolver().writeTypeInfo(buf, typeInfo); err != nil {
+			return err
+		}
+	}
+	// Don't write hash for extension types - just write fields
+	return s.WriteData(ctx, value)
+}
+
+func (s *extensionSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	if err := s.initFieldsRead(ctx); err != nil {
+		return err
+	}
+	buf := ctx.Buffer()
+	ptr := unsafe.Pointer(value.UnsafeAddr())
+
+	for _, field := range s.fields {
+		fieldPtr := unsafe.Add(ptr, field.Offset)
+
+		// Fast path for fixed-size primitive types
+		if isFixedSizePrimitive(field.StaticId, field.Referencable) {
+			switch field.StaticId {
+			case ConcreteTypeBool:
+				*(*bool)(fieldPtr) = buf.ReadBool()
+			case ConcreteTypeInt8:
+				*(*int8)(fieldPtr) = int8(buf.ReadByte_())
+			case ConcreteTypeInt16:
+				*(*int16)(fieldPtr) = int16(buf.ReadInt16())
+			case ConcreteTypeFloat32:
+				*(*float32)(fieldPtr) = buf.ReadFloat32()
+			case ConcreteTypeFloat64:
+				*(*float64)(fieldPtr) = buf.ReadFloat64()
+			}
+			continue
+		}
+
+		// Fast path for varint primitives
+		if isVarintPrimitive(field.StaticId, field.Referencable) {
+			switch field.StaticId {
+			case ConcreteTypeInt32:
+				*(*int32)(fieldPtr) = buf.ReadVarInt32()
+			case ConcreteTypeInt64:
+				*(*int64)(fieldPtr) = buf.ReadVarint64()
+			case ConcreteTypeInt:
+				*(*int)(fieldPtr) = int(buf.ReadVarint64())
+			}
+			continue
+		}
+
+		fieldValue := reflect.NewAt(field.Type, fieldPtr).Elem()
+		if err := field.Serializer.Read(ctx, field.Referencable, false, fieldValue); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *extensionSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
+	buf := ctx.Buffer()
+	if readRef {
+		refID, err := ctx.RefResolver().TryPreserveRefId(buf)
+		if err != nil {
+			return err
+		}
+		if int8(refID) < NotNullValueFlag {
+			obj := ctx.RefResolver().GetReadObject(refID)
+			if obj.IsValid() {
+				value.Set(obj)
+			}
+			return nil
+		}
+	}
+	// Don't read hash for extension types - just read fields
+	return s.ReadData(ctx, value.Type(), value)
+}
+
+func (s *extensionSerializer) ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeInfo *TypeInfo, value reflect.Value) error {
 	return s.Read(ctx, readRef, false, value)
 }

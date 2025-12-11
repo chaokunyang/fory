@@ -119,6 +119,18 @@ func IsNamespacedType(typeID TypeId) bool {
 	}
 }
 
+// NeedsTypeMetaWrite checks whether a type needs additional type meta written after type ID
+// This includes namespaced types and struct types that need meta share in compatible mode
+func NeedsTypeMetaWrite(typeID TypeId) bool {
+	internalID := typeID & 0xFF
+	switch TypeId(internalID) {
+	case NAMED_EXT, NAMED_ENUM, NAMED_STRUCT, NAMED_COMPATIBLE_STRUCT, COMPATIBLE_STRUCT, STRUCT:
+		return true
+	default:
+		return false
+	}
+}
+
 func isPrimitiveType(typeID int16) bool {
 	switch typeID {
 	case BOOL,

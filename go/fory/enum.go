@@ -30,6 +30,12 @@ type enumSerializer struct {
 }
 
 func (s *enumSerializer) TypeId() TypeId {
+	// Return the appropriate type ID based on how the enum was registered
+	// For xlang with namespace/typename, typeID will be NAMED_ENUM
+	// For numeric ID registration, it might be a user-defined ID
+	if s.typeID == int32(NAMED_ENUM) || IsNamespacedType(TypeId(s.typeID)) {
+		return NAMED_ENUM
+	}
 	return ENUM
 }
 
@@ -58,7 +64,14 @@ func (s *enumSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool,
 		ctx.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeType {
-		ctx.buffer.WriteVarUint32Small7(uint32(s.typeID))
+		// For NAMED_ENUM, need to write type info including namespace and typename meta strings
+		typeInfo, err := ctx.TypeResolver().getTypeInfo(value, true)
+		if err != nil {
+			return err
+		}
+		if err := ctx.TypeResolver().writeTypeInfo(ctx.buffer, typeInfo); err != nil {
+			return err
+		}
 	}
 	return s.WriteData(ctx, value)
 }

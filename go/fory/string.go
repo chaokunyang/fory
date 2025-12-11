@@ -30,10 +30,17 @@ const (
 	encodingUTF8           // UTF-8 encoding (default)
 )
 
-// writeString implements string serialization - always uses UTF-8 encoding
+// writeString implements string serialization
+// Uses Latin1 encoding for ASCII strings (matching Java behavior), UTF-8 for others
 func writeString(buf *ByteBuffer, value string) error {
 	data := unsafeGetBytes(value)
-	header := (uint64(len(data)) << 2) | encodingUTF8
+	var encoding uint64
+	if isLatin1(value) {
+		encoding = encodingLatin1
+	} else {
+		encoding = encodingUTF8
+	}
+	header := (uint64(len(data)) << 2) | encoding
 	buf.WriteVarUint36Small(header)
 	buf.WriteBinary(data)
 	return nil
@@ -59,10 +66,11 @@ func readString(buf *ByteBuffer) string {
 }
 
 // Encoding detection helper functions
+// isLatin1 checks if a string contains only ASCII characters (0-127)
+// For xlang compatibility with Java, we use Latin1 encoding for pure ASCII strings
 func isLatin1(s string) bool {
-	// Check if all runes fit within Latin1 range (0-255)
-	for _, r := range s {
-		if r > 0xFF {
+	for i := 0; i < len(s); i++ {
+		if s[i] > 127 {
 			return false
 		}
 	}

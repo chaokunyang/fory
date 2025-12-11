@@ -33,6 +33,10 @@ const (
 
 // Helper function to check if a value is null/nil
 func isNull(v reflect.Value) bool {
+	// Zero value (Invalid kind) is considered null
+	if !v.IsValid() {
+		return true
+	}
 	switch v.Kind() {
 	case reflect.Ptr, reflect.Interface, reflect.Slice, reflect.Map, reflect.Func:
 		return v.IsNil() // Check if reference types are nil
@@ -84,9 +88,10 @@ func (s *sliceConcreteValueSerializer) WriteData(ctx *WriteContext, value reflec
 		return nil
 	}
 
-	// Determine collection flags - don't set CollectionIsDeclElementType
-	// so that the element type ID is written and can be read by generic deserializer
-	collectFlag := CollectionIsSameType
+	// Determine collection flags
+	// Set CollectionIsDeclElementType since the element type is declared/known
+	// This matches Java behavior and avoids writing redundant element type IDs
+	collectFlag := CollectionIsSameType | CollectionIsDeclElementType
 	hasNull := false
 	elemType := s.type_.Elem()
 	isPointerElem := elemType.Kind() == reflect.Ptr
@@ -110,32 +115,8 @@ func (s *sliceConcreteValueSerializer) WriteData(ctx *WriteContext, value reflec
 	}
 	buf.WriteInt8(int8(collectFlag))
 
-	// WriteData element type info since CollectionIsDeclElementType is not set
-	var elemTypeInfo TypeInfo
-	if length > 0 {
-		// Get type info for the first non-nil element to get proper typeID
-		for i := 0; i < length; i++ {
-			elem := value.Index(i)
-			if isPointerElem {
-				if !elem.IsNil() {
-					elemTypeInfo, _ = ctx.TypeResolver().getTypeInfo(elem.Elem(), true)
-					break
-				}
-			} else {
-				elemTypeInfo, _ = ctx.TypeResolver().getTypeInfo(elem, true)
-				break
-			}
-		}
-	}
-	// WriteData element type info (handles namespaced types properly)
-	internalTypeID := elemTypeInfo.TypeID
-	if IsNamespacedType(TypeId(internalTypeID)) {
-		if err := ctx.TypeResolver().writeTypeInfo(buf, elemTypeInfo); err != nil {
-			return err
-		}
-	} else {
-		buf.WriteVarUint32Small7(uint32(elemTypeInfo.TypeID))
-	}
+	// Element type is not written because CollectionIsDeclElementType is set
+	// The reader knows the element type from the TypeDef
 
 	// WriteData elements
 	trackRefs := (collectFlag & CollectionTrackingRef) != 0

@@ -968,17 +968,17 @@ func decodeTypeDef(fory *Fory, buffer *ByteBuffer, header int64) (*TypeDef, erro
 			typeSize = int(metaBuffer.ReadVarUint32Small7()) + BIG_NAME_THRESHOLD
 		}
 
-		// Java typename encoding: 0=UTF8, 1=LOWER_UPPER_DIGIT_SPECIAL, 2=FIRST_TO_LOWER_SPECIAL, 3=ALL_TO_LOWER_SPECIAL
+		// Java typename encoding: 0=UTF8, 1=ALL_TO_LOWER_SPECIAL, 2=LOWER_UPPER_DIGIT_SPECIAL, 3=FIRST_TO_LOWER_SPECIAL
 		var typeEncoding meta.Encoding
 		switch typeEncodingFlags {
 		case 0:
 			typeEncoding = meta.UTF_8
 		case 1:
-			typeEncoding = meta.LOWER_UPPER_DIGIT_SPECIAL
-		case 2:
-			typeEncoding = meta.FIRST_TO_LOWER_SPECIAL
-		case 3:
 			typeEncoding = meta.ALL_TO_LOWER_SPECIAL
+		case 2:
+			typeEncoding = meta.LOWER_UPPER_DIGIT_SPECIAL
+		case 3:
+			typeEncoding = meta.FIRST_TO_LOWER_SPECIAL
 		default:
 			return nil, fmt.Errorf("invalid typename encoding flags: %d", typeEncodingFlags)
 		}

@@ -232,6 +232,11 @@ func (b *ByteBuffer) WriterIndex() int {
 	return b.writerIndex
 }
 
+// Bytes returns all written bytes from the buffer (from 0 to writerIndex).
+func (b *ByteBuffer) Bytes() []byte {
+	return b.GetByteSlice(0, b.writerIndex)
+}
+
 func (b *ByteBuffer) SetWriterIndex(index int) {
 	b.writerIndex = index
 }

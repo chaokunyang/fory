@@ -352,18 +352,35 @@ func (s *structSerializer) writeFieldsInOrder(ctx *WriteContext, value reflect.V
 		fieldValue := value.Field(field.FieldIndex)
 
 		// Special handling for enum fields:
-		// - In compatible mode (meta share): write null flag + ordinal
-		// - In non-compatible mode: just write ordinal (no null flag)
+		// Java always writes null flag + ordinal for enum fields (both compatible and non-compatible mode)
 		// Java writes enum ordinals as unsigned VarUint32Small7, not signed zigzag
 		if field.Serializer != nil {
 			serTypeId := field.Serializer.TypeId()
 			if serTypeId == ENUM || serTypeId == NAMED_ENUM {
-				if ctx.Compatible() {
-					// In compatible mode, Java expects null flag for enum fields
+				// Handle pointer enum fields
+				if fieldValue.Kind() == reflect.Ptr {
+					if fieldValue.IsNil() {
+						buf.WriteInt8(NullFlag)
+						continue
+					}
 					buf.WriteInt8(NotNullValueFlag)
-				}
-				if err := field.Serializer.WriteData(ctx, fieldValue); err != nil {
-					return err
+					// For pointer enum fields, the serializer is ptrToValueSerializer wrapping enumSerializer.
+					// We need to call the inner enumSerializer directly with the dereferenced value.
+					if ptrSer, ok := field.Serializer.(*ptrToValueSerializer); ok {
+						if err := ptrSer.valueSerializer.WriteData(ctx, fieldValue.Elem()); err != nil {
+							return err
+						}
+					} else {
+						if err := field.Serializer.WriteData(ctx, fieldValue.Elem()); err != nil {
+							return err
+						}
+					}
+				} else {
+					// Java always writes null flag for enum fields in struct
+					buf.WriteInt8(NotNullValueFlag)
+					if err := field.Serializer.WriteData(ctx, fieldValue); err != nil {
+						return err
+					}
 				}
 				continue
 			}
@@ -521,18 +538,35 @@ func (s *structSerializer) writeFieldsInTypeDefOrder(ctx *WriteContext, value re
 		fieldValue := value.Field(fieldInfo.index)
 
 		// Special handling for enum fields:
-		// - In compatible mode (meta share): write null flag + ordinal
-		// - In non-compatible mode: just write ordinal (no null flag)
+		// Java always writes null flag + ordinal for enum fields (both compatible and non-compatible mode)
 		// Java writes enum ordinals as unsigned VarUint32Small7, not signed zigzag
 		if ser != nil {
 			serTypeId := ser.TypeId()
 			if serTypeId == ENUM || serTypeId == NAMED_ENUM {
-				if ctx.Compatible() {
-					// In compatible mode, Java expects null flag for enum fields
+				// Handle pointer enum fields
+				if fieldValue.Kind() == reflect.Ptr {
+					if fieldValue.IsNil() {
+						buf.WriteInt8(NullFlag)
+						continue
+					}
 					buf.WriteInt8(NotNullValueFlag)
-				}
-				if err := ser.WriteData(ctx, fieldValue); err != nil {
-					return err
+					// For pointer enum fields, the serializer is ptrToValueSerializer wrapping enumSerializer.
+					// We need to call the inner enumSerializer directly with the dereferenced value.
+					if ptrSer, ok := ser.(*ptrToValueSerializer); ok {
+						if err := ptrSer.valueSerializer.WriteData(ctx, fieldValue.Elem()); err != nil {
+							return err
+						}
+					} else {
+						if err := ser.WriteData(ctx, fieldValue.Elem()); err != nil {
+							return err
+						}
+					}
+				} else {
+					// Java always writes null flag for enum fields in struct
+					buf.WriteInt8(NotNullValueFlag)
+					if err := ser.WriteData(ctx, fieldValue); err != nil {
+						return err
+					}
 				}
 				continue
 			}
@@ -692,23 +726,37 @@ func (s *structSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value 
 		fieldValue := value.Field(field.FieldIndex)
 
 		// Special handling for enum fields:
-		// - In compatible mode (meta share): read null flag + ordinal
-		// - In non-compatible mode: just read ordinal (no null flag)
+		// Java always writes null flag + ordinal for enum fields (both compatible and non-compatible mode)
 		// Java writes enum ordinals as unsigned VarUint32Small7, not signed zigzag
 		if field.Serializer != nil {
 			serTypeId := field.Serializer.TypeId()
 			if serTypeId == ENUM || serTypeId == NAMED_ENUM {
-				if ctx.Compatible() {
-					// In compatible mode, Java writes null flag for enum fields
-					nullFlag := buf.ReadInt8()
-					if nullFlag == NullFlag {
-						// Set to zero value
+				// Java always writes null flag for enum fields in struct
+				nullFlag := buf.ReadInt8()
+				if nullFlag == NullFlag {
+					// For pointer enum fields, leave as nil; for non-pointer, set to zero
+					if fieldValue.Kind() != reflect.Ptr {
 						fieldValue.SetInt(0)
-						continue
 					}
+					continue
 				}
-				if err := field.Serializer.ReadData(ctx, field.Type, fieldValue); err != nil {
-					return err
+				// For pointer enum fields, allocate a new value
+				targetValue := fieldValue
+				if fieldValue.Kind() == reflect.Ptr {
+					newVal := reflect.New(field.Type.Elem())
+					fieldValue.Set(newVal)
+					targetValue = newVal.Elem()
+				}
+				// For pointer enum fields, the serializer is ptrToValueSerializer wrapping enumSerializer.
+				// We need to call the inner enumSerializer directly with the dereferenced value.
+				if ptrSer, ok := field.Serializer.(*ptrToValueSerializer); ok {
+					if err := ptrSer.valueSerializer.ReadData(ctx, field.Type.Elem(), targetValue); err != nil {
+						return err
+					}
+				} else {
+					if err := field.Serializer.ReadData(ctx, field.Type, targetValue); err != nil {
+						return err
+					}
 				}
 				continue
 			}
@@ -781,23 +829,37 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 		fieldValue := value.Field(field.FieldIndex)
 
 		// Special handling for enum fields:
-		// - In compatible mode (meta share): read null flag + ordinal
-		// - In non-compatible mode: just read ordinal (no null flag)
+		// Java always writes null flag + ordinal for enum fields (both compatible and non-compatible mode)
 		// Java writes enum ordinals as unsigned VarUint32Small7, not signed zigzag
 		if field.Serializer != nil {
 			serTypeId := field.Serializer.TypeId()
 			if serTypeId == ENUM || serTypeId == NAMED_ENUM {
-				if ctx.Compatible() {
-					// In compatible mode, Java writes null flag for enum fields
-					nullFlag := buf.ReadInt8()
-					if nullFlag == NullFlag {
-						// Set to zero value
+				// Java always writes null flag for enum fields in struct
+				nullFlag := buf.ReadInt8()
+				if nullFlag == NullFlag {
+					// For pointer enum fields, leave as nil; for non-pointer, set to zero
+					if fieldValue.Kind() != reflect.Ptr {
 						fieldValue.SetInt(0)
-						continue
 					}
+					continue
 				}
-				if err := field.Serializer.ReadData(ctx, field.Type, fieldValue); err != nil {
-					return err
+				// For pointer enum fields, allocate a new value
+				targetValue := fieldValue
+				if fieldValue.Kind() == reflect.Ptr {
+					newVal := reflect.New(field.Type.Elem())
+					fieldValue.Set(newVal)
+					targetValue = newVal.Elem()
+				}
+				// For pointer enum fields, the serializer is ptrToValueSerializer wrapping enumSerializer.
+				// We need to call the inner enumSerializer directly with the dereferenced value.
+				if ptrSer, ok := field.Serializer.(*ptrToValueSerializer); ok {
+					if err := ptrSer.valueSerializer.ReadData(ctx, field.Type.Elem(), targetValue); err != nil {
+						return err
+					}
+				} else {
+					if err := field.Serializer.ReadData(ctx, field.Type, targetValue); err != nil {
+						return err
+					}
 				}
 				continue
 			}
@@ -1179,7 +1241,14 @@ func (s *structSerializer) initFieldsFromDefsWithResolver(typeResolver *TypeReso
 			// because runtime type resolution by name might work
 			shouldRead := false
 			isPolymorphicField := def.fieldType.TypeId() == UNKNOWN
-			isEnumField := def.fieldType.TypeId() == NAMED_ENUM || def.fieldType.TypeId() == ENUM
+			defTypeId := def.fieldType.TypeId()
+			// Check if field is an enum - either by type ID or by serializer type
+			// The type ID may be a composite value with namespace bits, so check the low 8 bits
+			internalDefTypeId := defTypeId & 0xFF
+			isEnumField := internalDefTypeId == NAMED_ENUM || internalDefTypeId == ENUM
+			if !isEnumField && fieldSerializer != nil {
+				_, isEnumField = fieldSerializer.(*enumSerializer)
+			}
 			if isPolymorphicField && localType.Kind() == reflect.Interface {
 				// For polymorphic (UNKNOWN) fields with interface{} local type,
 				// allow reading - the actual type will be determined at runtime
@@ -1188,12 +1257,21 @@ func (s *structSerializer) initFieldsFromDefsWithResolver(typeResolver *TypeReso
 			} else if typeLookupFailed && isEnumField {
 				// For enum fields with failed TypeDef lookup (NAMED_ENUM stores by namespace/typename, not typeId),
 				// check if local field is a numeric type (Go enums are int-based)
+				// Also handle pointer enum fields (*EnumType)
 				localKind := localType.Kind()
-				if isNumericKind(localKind) {
+				elemKind := localKind
+				if localKind == reflect.Ptr {
+					elemKind = localType.Elem().Kind()
+				}
+				if isNumericKind(elemKind) {
 					shouldRead = true
 					fieldType = localType
-					// Get the serializer for the local type (which should be registered as enum)
-					fieldSerializer, _ = typeResolver.getSerializerByType(localType, true)
+					// Get the serializer for the base type (the enum type, not the pointer)
+					baseType := localType
+					if localKind == reflect.Ptr {
+						baseType = localType.Elem()
+					}
+					fieldSerializer, _ = typeResolver.getSerializerByType(baseType, true)
 				}
 			} else if typeLookupFailed && isStructLikeField {
 				// For struct fields with failed TypeDef lookup, check if local field can hold a struct
@@ -1221,6 +1299,16 @@ func (s *structSerializer) initFieldsFromDefsWithResolver(typeResolver *TypeReso
 				// This handles Java's Integer/Long (nullable boxed types) mapping to Go's *int32/*int64
 				if localType.Kind() == reflect.Ptr && localType.Elem() == remoteType {
 					fieldSerializer, _ = typeResolver.getSerializerByType(localType, true)
+				}
+				// For pointer enum fields (*EnumType), get the serializer for the base enum type
+				// The struct read/write code will handle pointer dereferencing
+				if isEnumField && localType.Kind() == reflect.Ptr {
+					baseType := localType.Elem()
+					fieldSerializer, _ = typeResolver.getSerializerByType(baseType, true)
+					if DebugOutputEnabled() {
+						fmt.Printf("[fory-debug] pointer enum field %s: localType=%v baseType=%v serializer=%T\n",
+							def.name, localType, baseType, fieldSerializer)
+					}
 				}
 			} else {
 				// Types are incompatible or unknown - use remote type but mark field as not settable
@@ -1374,10 +1462,23 @@ func (s *structSerializer) computeHash() int32 {
 		sb.WriteString(",")
 
 		var typeId TypeId
+		isEnumField := false
 		if field.Serializer == nil {
 			typeId = UNKNOWN
 		} else {
 			typeId = field.Serializer.TypeId()
+			// Check if this is an enum serializer (directly or wrapped in ptrToValueSerializer)
+			if _, ok := field.Serializer.(*enumSerializer); ok {
+				isEnumField = true
+				// Java uses UNKNOWN (0) for enum types in fingerprint computation
+				typeId = UNKNOWN
+			} else if ptrSer, ok := field.Serializer.(*ptrToValueSerializer); ok {
+				if _, ok := ptrSer.valueSerializer.(*enumSerializer); ok {
+					isEnumField = true
+					// Java uses UNKNOWN (0) for enum types in fingerprint computation
+					typeId = UNKNOWN
+				}
+			}
 			// For fixed-size arrays with primitive elements, use primitive array type IDs
 			// This matches Python's int8_array, int16_array, etc. types
 			if field.Type.Kind() == reflect.Array {
@@ -1409,8 +1510,9 @@ func (s *structSerializer) computeHash() int32 {
 		// For cross-language hash compatibility, nullable=0 only for primitive non-pointer types
 		// This matches Java's behavior where isPrimitive() returns true only for int, long, boolean, etc.
 		// Go strings and other non-primitive types should have nullable=1
+		// Enum types are always nullable (like Java enums which are objects)
 		nullableFlag := "1"
-		if isNonNullablePrimitiveKind(field.Type.Kind()) && !field.Referencable {
+		if isNonNullablePrimitiveKind(field.Type.Kind()) && !field.Referencable && !isEnumField {
 			nullableFlag = "0"
 		}
 		sb.WriteString(nullableFlag)
@@ -1421,6 +1523,10 @@ func (s *structSerializer) computeHash() int32 {
 	data := []byte(hashString)
 	h1, _ := murmur3.Sum128WithSeed(data, 47)
 	hash := int32(h1 & 0xFFFFFFFF)
+
+	if DebugOutputEnabled() {
+		fmt.Printf("[fory-debug] struct %v version fingerprint=\"%s\" version hash=%d\n", s.type_, hashString, hash)
+	}
 
 	if hash == 0 {
 		panic(fmt.Errorf("hash for type %v is 0", s.type_))

@@ -210,4 +210,24 @@ public class GoXlangTest extends XlangTestBase {
   public void testSchemaEvolutionCompatible() throws java.io.IOException {
     super.testSchemaEvolutionCompatible();
   }
+
+  @Test
+  public void testOneEnumFieldSchemaConsistent() throws java.io.IOException {
+    super.testOneEnumFieldSchemaConsistent();
+  }
+
+  @Test
+  public void testOneEnumFieldCompatible() throws java.io.IOException {
+    super.testOneEnumFieldCompatible();
+  }
+
+  @Test
+  public void testTwoEnumFieldCompatible() throws java.io.IOException {
+    super.testTwoEnumFieldCompatible();
+  }
+
+  @Test
+  public void testEnumSchemaEvolutionCompatible() throws java.io.IOException {
+    super.testEnumSchemaEvolutionCompatible();
+  }
 }

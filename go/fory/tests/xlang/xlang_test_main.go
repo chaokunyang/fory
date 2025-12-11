@@ -121,6 +121,24 @@ type TwoStringFieldStruct struct {
 	F2 string
 }
 
+// Enum field structs for testing
+type TestEnum int32
+
+const (
+	VALUE_A TestEnum = 0
+	VALUE_B TestEnum = 1
+	VALUE_C TestEnum = 2
+)
+
+type OneEnumFieldStruct struct {
+	F1 TestEnum
+}
+
+type TwoEnumFieldStruct struct {
+	F1 TestEnum
+	F2 *TestEnum
+}
+
 type Item1 struct {
 	F1 int32
 	F2 int32
@@ -1224,6 +1242,154 @@ func testSchemaEvolutionCompatibleReverse() {
 	writeFile(dataFile, serialized)
 }
 
+// Enum field tests
+func testOneEnumFieldSchemaConsistent() {
+	dataFile := getDataFile()
+	data := readFile(dataFile)
+
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(false))
+	f.RegisterEnum(TestEnum(0), 210)
+	f.Register(OneEnumFieldStruct{}, 211)
+
+	buf := fory.NewByteBuffer(data)
+	var obj interface{}
+	err := f.Deserialize(buf, &obj, nil)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to deserialize: %v", err))
+	}
+
+	result := obj.(OneEnumFieldStruct)
+	if result.F1 != VALUE_B {
+		panic(fmt.Sprintf("Expected VALUE_B (1), got %v", result.F1))
+	}
+
+	serialized, err := f.SerializeAny(result)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to serialize: %v", err))
+	}
+
+	writeFile(dataFile, serialized)
+}
+
+func testOneEnumFieldCompatible() {
+	dataFile := getDataFile()
+	data := readFile(dataFile)
+
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
+	f.RegisterEnum(TestEnum(0), 210)
+	f.Register(OneEnumFieldStruct{}, 211)
+
+	buf := fory.NewByteBuffer(data)
+	var obj interface{}
+	err := f.Deserialize(buf, &obj, nil)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to deserialize: %v", err))
+	}
+
+	result := obj.(OneEnumFieldStruct)
+	if result.F1 != VALUE_A {
+		panic(fmt.Sprintf("Expected VALUE_A (0), got %v", result.F1))
+	}
+
+	serialized, err := f.SerializeAny(result)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to serialize: %v", err))
+	}
+
+	writeFile(dataFile, serialized)
+}
+
+func testTwoEnumFieldCompatible() {
+	dataFile := getDataFile()
+	data := readFile(dataFile)
+
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
+	f.RegisterEnum(TestEnum(0), 210)
+	f.Register(TwoEnumFieldStruct{}, 212)
+
+	buf := fory.NewByteBuffer(data)
+	var obj interface{}
+	err := f.Deserialize(buf, &obj, nil)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to deserialize: %v", err))
+	}
+
+	result := obj.(TwoEnumFieldStruct)
+	if result.F1 != VALUE_A {
+		panic(fmt.Sprintf("Expected F1=VALUE_A (0), got %v", result.F1))
+	}
+	if result.F2 == nil || *result.F2 != VALUE_C {
+		panic(fmt.Sprintf("Expected F2=VALUE_C (2), got %v", result.F2))
+	}
+
+	serialized, err := f.SerializeAny(result)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to serialize: %v", err))
+	}
+
+	writeFile(dataFile, serialized)
+}
+
+func testEnumSchemaEvolutionCompatible() {
+	dataFile := getDataFile()
+	data := readFile(dataFile)
+
+	// Read TwoEnumFieldStruct data, deserialize as EmptyStruct
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
+	f.RegisterEnum(TestEnum(0), 210)
+	f.Register(EmptyStruct{}, 211)
+
+	buf := fory.NewByteBuffer(data)
+	var obj interface{}
+	err := f.Deserialize(buf, &obj, nil)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to deserialize as EmptyStruct: %v", err))
+	}
+
+	// Serialize back as EmptyStruct
+	serialized, err := f.SerializeAny(obj)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to serialize: %v", err))
+	}
+
+	writeFile(dataFile, serialized)
+}
+
+func testEnumSchemaEvolutionCompatibleReverse() {
+	dataFile := getDataFile()
+	data := readFile(dataFile)
+
+	// Read OneEnumFieldStruct data, deserialize as TwoEnumFieldStruct
+	// Missing f2 field will be Go's zero value (nil for pointer)
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
+	f.RegisterEnum(TestEnum(0), 210)
+	f.Register(TwoEnumFieldStruct{}, 211)
+
+	buf := fory.NewByteBuffer(data)
+	var obj interface{}
+	err := f.Deserialize(buf, &obj, nil)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to deserialize as TwoEnumFieldStruct: %v", err))
+	}
+
+	result := obj.(TwoEnumFieldStruct)
+	if result.F1 != VALUE_C {
+		panic(fmt.Sprintf("Expected F1=VALUE_C (2), got %v", result.F1))
+	}
+	// f2 should be nil since it wasn't in the source data
+	if result.F2 != nil {
+		panic(fmt.Sprintf("Expected F2=nil, got %v", result.F2))
+	}
+
+	// Serialize back
+	serialized, err := f.SerializeAny(obj)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to serialize: %v", err))
+	}
+
+	writeFile(dataFile, serialized)
+}
+
 // ============================================================================
 // Main
 // ============================================================================
@@ -1301,6 +1467,16 @@ func main() {
 		testSchemaEvolutionCompatible()
 	case "test_schema_evolution_compatible_reverse":
 		testSchemaEvolutionCompatibleReverse()
+	case "test_one_enum_field_schema":
+		testOneEnumFieldSchemaConsistent()
+	case "test_one_enum_field_compatible":
+		testOneEnumFieldCompatible()
+	case "test_two_enum_field_compatible":
+		testTwoEnumFieldCompatible()
+	case "test_enum_schema_evolution_compatible":
+		testEnumSchemaEvolutionCompatible()
+	case "test_enum_schema_evolution_compatible_reverse":
+		testEnumSchemaEvolutionCompatibleReverse()
 	default:
 		panic(fmt.Sprintf("Unknown test case: %s", *caseName))
 	}

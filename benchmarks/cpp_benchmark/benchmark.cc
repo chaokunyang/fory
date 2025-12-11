@@ -441,7 +441,7 @@ static void BM_Fory_Struct_Serialize(benchmark::State &state) {
 
   for (auto _ : state) {
     buffer.WriterIndex(0);
-    fory.serialize_to(obj, buffer);
+    fory.serialize_to(buffer, obj);
     benchmark::DoNotOptimize(buffer.data());
   }
 }
@@ -528,7 +528,7 @@ static void BM_Fory_Sample_Serialize(benchmark::State &state) {
 
   for (auto _ : state) {
     buffer.WriterIndex(0);
-    auto result = fory.serialize_to(obj, buffer);
+    auto result = fory.serialize_to(buffer, obj);
     benchmark::DoNotOptimize(result);
     benchmark::DoNotOptimize(buffer.data());
   }
@@ -608,7 +608,7 @@ static void BM_Fory_MediaContent_Serialize(benchmark::State &state) {
 
   for (auto _ : state) {
     buffer.WriterIndex(0);
-    auto result = fory.serialize_to(obj, buffer);
+    auto result = fory.serialize_to(buffer, obj);
     benchmark::DoNotOptimize(result);
     benchmark::DoNotOptimize(buffer.data());
   }

@@ -422,12 +422,12 @@ public:
   /// Serialize an object to an existing Buffer (fastest path).
   ///
   /// @tparam T The type of object to serialize.
-  /// @param obj The object to serialize.
   /// @param buffer The buffer to write to.
+  /// @param obj The object to serialize.
   /// @return Number of bytes written, or error.
   template <typename T>
-  FORY_ALWAYS_INLINE Result<size_t, Error> serialize_to(const T &obj,
-                                                        Buffer &buffer) {
+  FORY_ALWAYS_INLINE Result<size_t, Error> serialize_to(Buffer &buffer,
+                                                        const T &obj) {
     if (FORY_PREDICT_FALSE(!finalized_)) {
       ensure_finalized();
     }
@@ -441,18 +441,18 @@ public:
   /// fit the serialized data.
   ///
   /// @tparam T The type of object to serialize.
-  /// @param obj The object to serialize.
   /// @param output The vector to append to.
+  /// @param obj The object to serialize.
   /// @return Number of bytes written, or error.
   template <typename T>
-  Result<size_t, Error> serialize_to(const T &obj,
-                                     std::vector<uint8_t> &output) {
+  Result<size_t, Error> serialize_to(std::vector<uint8_t> &output,
+                                     const T &obj) {
     // Wrap the output vector in a Buffer for zero-copy serialization
     // writer_index starts at output.size() for appending
     Buffer buffer(output);
 
     // Forward to Buffer version
-    auto result = serialize_to(obj, buffer);
+    auto result = serialize_to(buffer, obj);
 
     // Resize vector to actual written size
     output.resize(buffer.writer_index());
@@ -713,16 +713,16 @@ public:
   }
 
   template <typename T>
-  Result<size_t, Error> serialize_to(const T &obj, Buffer &buffer) {
+  Result<size_t, Error> serialize_to(Buffer &buffer, const T &obj) {
     auto fory_handle = fory_pool_.acquire();
-    return fory_handle->serialize_to(obj, buffer);
+    return fory_handle->serialize_to(buffer, obj);
   }
 
   template <typename T>
-  Result<size_t, Error> serialize_to(const T &obj,
-                                     std::vector<uint8_t> &output) {
+  Result<size_t, Error> serialize_to(std::vector<uint8_t> &output,
+                                     const T &obj) {
     auto fory_handle = fory_pool_.acquire();
-    return fory_handle->serialize_to(obj, output);
+    return fory_handle->serialize_to(output, obj);
   }
 
   template <typename T>

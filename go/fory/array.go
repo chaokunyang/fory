@@ -82,7 +82,7 @@ func (s arraySerializer) Read(ctx *ReadContext, readRef bool, readType bool, val
 		}
 	}
 	if readType {
-		typeID := buf.ReadVarInt32()
+		typeID := buf.ReadVaruint32()
 		if IsNamespacedType(TypeId(typeID)) {
 			_, _ = ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID)
 		}
@@ -228,7 +228,7 @@ func (s *arrayConcreteValueSerializer) ReadData(ctx *ReadContext, type_ reflect.
 		// Read element type info if present
 		if (collectFlag & CollectionIsSameType) != 0 {
 			if (collectFlag & CollectionIsDeclElementType) == 0 {
-				typeID := buf.ReadVarInt32()
+				typeID := buf.ReadVaruint32()
 				// Read additional metadata for namespaced types
 				_, _ = ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID)
 			}
@@ -270,7 +270,7 @@ func (s *arrayConcreteValueSerializer) Read(ctx *ReadContext, readRef bool, read
 		}
 	}
 	if readType {
-		typeID := buf.ReadVarInt32()
+		typeID := buf.ReadVaruint32()
 		if IsNamespacedType(TypeId(typeID)) {
 			_, _ = ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID)
 		}
@@ -328,7 +328,7 @@ func (s byteArraySerializer) ReadFull(ctx *ReadContext, readRef bool, readType b
 		}
 	}
 	if readType {
-		_ = ctx.buffer.ReadVarInt32()
+		_ = ctx.buffer.ReadVaruint32()
 	}
 	return s.Read(ctx, value.Type(), value)
 }

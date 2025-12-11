@@ -234,11 +234,11 @@ func (s *structSerializer) WriteData(ctx *WriteContext, value reflect.Value) err
 			fieldPtr := unsafe.Add(ptr, field.Offset)
 			switch field.StaticId {
 			case ConcreteTypeInt32:
-				buf.WriteVarint32(*(*int32)(fieldPtr))
+				buf.WriteVarInt32(*(*int32)(fieldPtr))
 			case ConcreteTypeInt64:
-				buf.WriteVarint64(*(*int64)(fieldPtr))
+				buf.WriteVarInt64(*(*int64)(fieldPtr))
 			case ConcreteTypeInt:
-				buf.WriteVarint64(int64(*(*int)(fieldPtr)))
+				buf.WriteVarInt64(int64(*(*int)(fieldPtr)))
 			}
 		}
 	} else {
@@ -251,11 +251,11 @@ func (s *structSerializer) WriteData(ctx *WriteContext, value reflect.Value) err
 			fieldValue := value.Field(field.FieldIndex)
 			switch field.StaticId {
 			case ConcreteTypeInt32:
-				buf.WriteVarint32(int32(fieldValue.Int()))
+				buf.WriteVarInt32(int32(fieldValue.Int()))
 			case ConcreteTypeInt64:
-				buf.WriteVarint64(fieldValue.Int())
+				buf.WriteVarInt64(fieldValue.Int())
 			case ConcreteTypeInt:
-				buf.WriteVarint64(fieldValue.Int())
+				buf.WriteVarInt64(fieldValue.Int())
 			}
 		}
 	}
@@ -339,11 +339,11 @@ func (s *structSerializer) writeFieldsInOrder(ctx *WriteContext, value reflect.V
 			fieldPtr := unsafe.Add(ptr, field.Offset)
 			switch field.StaticId {
 			case ConcreteTypeInt32:
-				buf.WriteVarint32(*(*int32)(fieldPtr))
+				buf.WriteVarInt32(*(*int32)(fieldPtr))
 			case ConcreteTypeInt64:
-				buf.WriteVarint64(*(*int64)(fieldPtr))
+				buf.WriteVarInt64(*(*int64)(fieldPtr))
 			case ConcreteTypeInt:
-				buf.WriteVarint64(int64(*(*int)(fieldPtr)))
+				buf.WriteVarInt64(int64(*(*int)(fieldPtr)))
 			}
 			continue
 		}
@@ -399,9 +399,9 @@ func (s *structSerializer) writeFieldsInOrder(ctx *WriteContext, value reflect.V
 			case ConcreteTypeInt16:
 				buf.WriteInt16(int16(fieldValue.Int()))
 			case ConcreteTypeInt32:
-				buf.WriteVarint32(int32(fieldValue.Int()))
+				buf.WriteVarInt32(int32(fieldValue.Int()))
 			case ConcreteTypeInt64, ConcreteTypeInt:
-				buf.WriteVarint64(fieldValue.Int())
+				buf.WriteVarInt64(fieldValue.Int())
 			case ConcreteTypeFloat32:
 				buf.WriteFloat32(float32(fieldValue.Float()))
 			case ConcreteTypeFloat64:
@@ -525,11 +525,11 @@ func (s *structSerializer) writeFieldsInTypeDefOrder(ctx *WriteContext, value re
 			fieldPtr := unsafe.Add(ptr, fieldInfo.offset)
 			switch staticId {
 			case ConcreteTypeInt32:
-				buf.WriteVarint32(*(*int32)(fieldPtr))
+				buf.WriteVarInt32(*(*int32)(fieldPtr))
 			case ConcreteTypeInt64:
-				buf.WriteVarint64(*(*int64)(fieldPtr))
+				buf.WriteVarInt64(*(*int64)(fieldPtr))
 			case ConcreteTypeInt:
-				buf.WriteVarint64(int64(*(*int)(fieldPtr)))
+				buf.WriteVarInt64(int64(*(*int)(fieldPtr)))
 			}
 			continue
 		}
@@ -707,11 +707,11 @@ func (s *structSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value 
 		fieldPtr := unsafe.Add(ptr, field.Offset)
 		switch field.StaticId {
 		case ConcreteTypeInt32:
-			*(*int32)(fieldPtr) = buf.ReadVarint32()
+			*(*int32)(fieldPtr) = buf.ReadVarInt32()
 		case ConcreteTypeInt64:
-			*(*int64)(fieldPtr) = buf.ReadVarint64()
+			*(*int64)(fieldPtr) = buf.ReadVarInt64()
 		case ConcreteTypeInt:
-			*(*int)(fieldPtr) = int(buf.ReadVarint64())
+			*(*int)(fieldPtr) = int(buf.ReadVarInt64())
 		}
 	}
 
@@ -816,11 +816,11 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 		if isVarintPrimitive(field.StaticId, field.Referencable) && !fieldHasNonPrimitiveSerializer(field) {
 			switch field.StaticId {
 			case ConcreteTypeInt32:
-				*(*int32)(fieldPtr) = buf.ReadVarint32()
+				*(*int32)(fieldPtr) = buf.ReadVarInt32()
 			case ConcreteTypeInt64:
-				*(*int64)(fieldPtr) = buf.ReadVarint64()
+				*(*int64)(fieldPtr) = buf.ReadVarInt64()
 			case ConcreteTypeInt:
-				*(*int)(fieldPtr) = int(buf.ReadVarint64())
+				*(*int)(fieldPtr) = int(buf.ReadVarInt64())
 			}
 			continue
 		}
@@ -1001,11 +1001,11 @@ func (s *structSerializer) ReadCompatible(ctx *ReadContext, type_ reflect.Type, 
 		if isVarintPrimitive(localField.StaticId, localField.Referencable) {
 			switch localField.StaticId {
 			case ConcreteTypeInt32:
-				*(*int32)(fieldPtr) = buf.ReadVarint32()
+				*(*int32)(fieldPtr) = buf.ReadVarInt32()
 			case ConcreteTypeInt64:
-				*(*int64)(fieldPtr) = buf.ReadVarint64()
+				*(*int64)(fieldPtr) = buf.ReadVarInt64()
 			case ConcreteTypeInt:
-				*(*int)(fieldPtr) = int(buf.ReadVarint64())
+				*(*int)(fieldPtr) = int(buf.ReadVarInt64())
 			}
 			continue
 		}

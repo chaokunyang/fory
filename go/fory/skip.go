@@ -455,7 +455,7 @@ func skipValue(ctx *ReadContext, fieldDef FieldDef, readRefFlag bool, isField bo
 		_ = int32(ctx.buffer.ReadVarUint32Small7())
 		return nil
 	case INT64, VAR_INT64, SLI_INT64:
-		_ = ctx.buffer.ReadVarint64()
+		_ = ctx.buffer.ReadVarInt64()
 		return nil
 
 	// Floating point types
@@ -491,7 +491,7 @@ func skipValue(ctx *ReadContext, fieldDef FieldDef, readRefFlag bool, isField bo
 		_ = int32(ctx.buffer.ReadVarUint32Small7())
 		return nil
 	case TIMESTAMP:
-		_ = ctx.buffer.ReadVarint64()
+		_ = ctx.buffer.ReadVarInt64()
 		return nil
 
 	// Container types

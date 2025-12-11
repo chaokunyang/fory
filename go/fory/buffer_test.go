@@ -56,17 +56,17 @@ func TestVarInt(t *testing.T) {
 
 func checkVarInt(t *testing.T, buf *ByteBuffer, value int32, bytesWritten int8) {
 	require.Equal(t, buf.WriterIndex(), buf.ReaderIndex())
-	actualBytesWritten := buf.WriteVarInt32(value)
+	actualBytesWritten := buf.WriteVaruint32(value)
 	require.Equal(t, bytesWritten, actualBytesWritten)
-	varInt := buf.ReadVarInt32()
+	varInt := buf.ReadVaruint32()
 	require.Equal(t, buf.ReaderIndex(), buf.WriterIndex())
 	require.Equal(t, value, varInt)
 }
 
 func checkVarIntWrite(t *testing.T, buf *ByteBuffer, value int32) {
 	require.Equal(t, buf.WriterIndex(), buf.ReaderIndex())
-	buf.WriteVarInt32(value)
-	varInt := buf.ReadVarInt32()
+	buf.WriteVaruint32(value)
+	varInt := buf.ReadVaruint32()
 	require.Equal(t, buf.ReaderIndex(), buf.WriterIndex())
 	require.Equal(t, value, varInt)
 }

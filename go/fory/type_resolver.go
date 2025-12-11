@@ -1788,7 +1788,7 @@ func (r *TypeResolver) writeMetaString(buffer *ByteBuffer, str string) error {
 		r.dynamicStringId += 1
 		r.dynamicStringToId[str] = dynamicStringId
 		length := len(str)
-		buffer.WriteVarInt32(int32(length << 1))
+		buffer.WriteVaruint32(int32(length << 1))
 		if length <= SMALL_STRING_THRESHOLD {
 			buffer.WriteByte_(uint8(meta.UTF_8))
 		} else {
@@ -1805,13 +1805,13 @@ func (r *TypeResolver) writeMetaString(buffer *ByteBuffer, str string) error {
 		}
 		buffer.WriteBinary(unsafeGetBytes(str))
 	} else {
-		buffer.WriteVarInt32(int32(((id + 1) << 1) | 1))
+		buffer.WriteVaruint32(int32(((id + 1) << 1) | 1))
 	}
 	return nil
 }
 
 func (r *TypeResolver) readMetaString(buffer *ByteBuffer) (string, error) {
-	header := buffer.ReadVarInt32()
+	header := buffer.ReadVaruint32()
 	var length = int(header >> 1)
 	if header&0b1 == 0 {
 		if length <= SMALL_STRING_THRESHOLD {

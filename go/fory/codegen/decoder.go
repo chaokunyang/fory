@@ -112,9 +112,9 @@ func generateFieldReadTyped(buf *bytes.Buffer, field *FieldInfo) error {
 		case types.Int16:
 			fmt.Fprintf(buf, "\t%s = buf.ReadInt16()\n", fieldAccess)
 		case types.Int32:
-			fmt.Fprintf(buf, "\t%s = buf.ReadVarint32()\n", fieldAccess)
+			fmt.Fprintf(buf, "\t%s = buf.ReadVarInt32()\n", fieldAccess)
 		case types.Int, types.Int64:
-			fmt.Fprintf(buf, "\t%s = buf.ReadVarint64()\n", fieldAccess)
+			fmt.Fprintf(buf, "\t%s = buf.ReadVarInt64()\n", fieldAccess)
 		case types.Uint8:
 			fmt.Fprintf(buf, "\t%s = buf.ReadByte_()\n", fieldAccess)
 		case types.Uint16:
@@ -218,7 +218,7 @@ func generateSliceRead(buf *bytes.Buffer, sliceType *types.Slice, fieldAccess st
 	fmt.Fprintf(buf, "\t\t\t// Check if CollectionIsDeclElementType flag is NOT set (meaning we need to read type ID)\n")
 	fmt.Fprintf(buf, "\t\t\tif (collectFlag & 4) == 0 {\n")
 	fmt.Fprintf(buf, "\t\t\t\t// ReadData element type ID (not declared, so we need to read it)\n")
-	fmt.Fprintf(buf, "\t\t\t\t_ = buf.ReadVarInt32()\n")
+	fmt.Fprintf(buf, "\t\t\t\t_ = buf.ReadVaruint32()\n")
 	fmt.Fprintf(buf, "\t\t\t}\n")
 
 	// Create slice
@@ -255,12 +255,12 @@ func generateSliceElementRead(buf *bytes.Buffer, elemType types.Type, elemAccess
 			fmt.Fprintf(buf, "\t\t\t\tif flag := buf.ReadInt8(); flag != -1 {\n")
 			fmt.Fprintf(buf, "\t\t\t\t\treturn fmt.Errorf(\"expected NotNullValueFlag for slice element, got %%d\", flag)\n")
 			fmt.Fprintf(buf, "\t\t\t\t}\n")
-			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadVarint32()\n", elemAccess)
+			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadVarInt32()\n", elemAccess)
 		case types.Int, types.Int64:
 			fmt.Fprintf(buf, "\t\t\t\tif flag := buf.ReadInt8(); flag != -1 {\n")
 			fmt.Fprintf(buf, "\t\t\t\t\treturn fmt.Errorf(\"expected NotNullValueFlag for slice element, got %%d\", flag)\n")
 			fmt.Fprintf(buf, "\t\t\t\t}\n")
-			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadVarint64()\n", elemAccess)
+			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadVarInt64()\n", elemAccess)
 		case types.Uint8:
 			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadByte_()\n", elemAccess)
 		case types.Uint16:
@@ -357,7 +357,7 @@ func generateSliceReadInline(buf *bytes.Buffer, sliceType *types.Slice, fieldAcc
 	fmt.Fprintf(buf, "\t\t\t\t// Need to read type ID once if CollectionIsSameType is set\n")
 	fmt.Fprintf(buf, "\t\t\t\tif (collectFlag & 8) != 0 {\n")
 	fmt.Fprintf(buf, "\t\t\t\t\t// ReadData element type ID once for all elements\n")
-	fmt.Fprintf(buf, "\t\t\t\t\t_ = buf.ReadVarInt32()\n")
+	fmt.Fprintf(buf, "\t\t\t\t\t_ = buf.ReadVaruint32()\n")
 	fmt.Fprintf(buf, "\t\t\t\t}\n")
 	fmt.Fprintf(buf, "\t\t\t\tfor i := 0; i < sliceLen; i++ {\n")
 	// For same type without declared type, read elements directly
@@ -407,7 +407,7 @@ func generateElementTypeIDReadInline(buf *bytes.Buffer, elemType types.Type) err
 		}
 
 		fmt.Fprintf(buf, "\t\t\t\t// ReadData and verify element type ID\n")
-		fmt.Fprintf(buf, "\t\t\t\tif typeID := buf.ReadVarInt32(); typeID != %d {\n", expectedTypeID)
+		fmt.Fprintf(buf, "\t\t\t\tif typeID := buf.ReadVaruint32(); typeID != %d {\n", expectedTypeID)
 		fmt.Fprintf(buf, "\t\t\t\t\treturn fmt.Errorf(\"expected element type ID %d, got %%d\", typeID)\n", expectedTypeID)
 		fmt.Fprintf(buf, "\t\t\t\t}\n")
 
@@ -428,9 +428,9 @@ func generateSliceElementReadInline(buf *bytes.Buffer, elemType types.Type, elem
 		case types.Int16:
 			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadInt16()\n", elemAccess)
 		case types.Int32:
-			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadVarint32()\n", elemAccess)
+			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadVarInt32()\n", elemAccess)
 		case types.Int, types.Int64:
-			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadVarint64()\n", elemAccess)
+			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadVarInt64()\n", elemAccess)
 		case types.Uint8:
 			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadByte_()\n", elemAccess)
 		case types.Uint16:
@@ -476,9 +476,9 @@ func generateSliceElementReadDirect(buf *bytes.Buffer, elemType types.Type, elem
 		case types.Int16:
 			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadInt16()\n", elemAccess)
 		case types.Int32:
-			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadVarint32()\n", elemAccess)
+			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadVarInt32()\n", elemAccess)
 		case types.Int, types.Int64:
-			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadVarint64()\n", elemAccess)
+			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadVarInt64()\n", elemAccess)
 		case types.Uint8:
 			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadByte_()\n", elemAccess)
 		case types.Uint16:

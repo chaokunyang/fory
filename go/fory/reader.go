@@ -103,8 +103,8 @@ func (c *ReadContext) RawInt32() int32       { return c.buffer.ReadInt32() }
 func (c *ReadContext) RawInt64() int64       { return c.buffer.ReadInt64() }
 func (c *ReadContext) RawFloat32() float32   { return c.buffer.ReadFloat32() }
 func (c *ReadContext) RawFloat64() float64   { return c.buffer.ReadFloat64() }
-func (c *ReadContext) ReadVarInt32() int32   { return c.buffer.ReadVarint32() }
-func (c *ReadContext) ReadVarInt64() int64   { return c.buffer.ReadVarint64() }
+func (c *ReadContext) ReadVarInt32() int32   { return c.buffer.ReadVarInt32() }
+func (c *ReadContext) ReadVarInt64() int64   { return c.buffer.ReadVarInt64() }
 func (c *ReadContext) ReadVarUint32() uint32 { return c.buffer.ReadVarUint32() }
 func (c *ReadContext) ReadByte() byte        { return c.buffer.ReadByte_() }
 
@@ -137,15 +137,15 @@ func (c *ReadContext) readFast(ptr unsafe.Pointer, ct StaticTypeId) {
 	case ConcreteTypeInt16:
 		*(*int16)(ptr) = c.buffer.ReadInt16()
 	case ConcreteTypeInt32:
-		*(*int32)(ptr) = c.buffer.ReadVarint32()
+		*(*int32)(ptr) = c.buffer.ReadVarInt32()
 	case ConcreteTypeInt:
 		if strconv.IntSize == 64 {
-			*(*int)(ptr) = int(c.buffer.ReadVarint64())
+			*(*int)(ptr) = int(c.buffer.ReadVarInt64())
 		} else {
-			*(*int)(ptr) = int(c.buffer.ReadVarint32())
+			*(*int)(ptr) = int(c.buffer.ReadVarInt32())
 		}
 	case ConcreteTypeInt64:
-		*(*int64)(ptr) = c.buffer.ReadVarint64()
+		*(*int64)(ptr) = c.buffer.ReadVarInt64()
 	case ConcreteTypeFloat32:
 		*(*float32)(ptr) = c.buffer.ReadFloat32()
 	case ConcreteTypeFloat64:
@@ -164,9 +164,9 @@ func (c *ReadContext) ReadAndValidateTypeId(expected TypeId) error {
 	return nil
 }
 
-// ReadLength reads a length value as varint
+// ReadLength reads a length value as varint (non-negative values)
 func (c *ReadContext) ReadLength() int {
-	return int(c.buffer.ReadVarInt32())
+	return int(c.buffer.ReadVaruint32())
 }
 
 // ============================================================================
@@ -250,7 +250,7 @@ func (c *ReadContext) ReadInt32(readRefInfo, readTypeInfo bool) (int32, error) {
 	if readTypeInfo {
 		_ = c.buffer.ReadVarUint32Small7()
 	}
-	return c.buffer.ReadVarint32(), nil
+	return c.buffer.ReadVarInt32(), nil
 }
 
 // ReadInt32Into reads an int32 into target with optional ref/type info
@@ -261,7 +261,7 @@ func (c *ReadContext) ReadInt32Into(target *int32, readRefInfo, readTypeInfo boo
 	if readTypeInfo {
 		_ = c.buffer.ReadVarUint32Small7()
 	}
-	*target = c.buffer.ReadVarint32()
+	*target = c.buffer.ReadVarInt32()
 	return nil
 }
 
@@ -273,7 +273,7 @@ func (c *ReadContext) ReadInt64(readRefInfo, readTypeInfo bool) (int64, error) {
 	if readTypeInfo {
 		_ = c.buffer.ReadVarUint32Small7()
 	}
-	return c.buffer.ReadVarint64(), nil
+	return c.buffer.ReadVarInt64(), nil
 }
 
 // ReadInt64Into reads an int64 into target with optional ref/type info
@@ -284,7 +284,7 @@ func (c *ReadContext) ReadInt64Into(target *int64, readRefInfo, readTypeInfo boo
 	if readTypeInfo {
 		_ = c.buffer.ReadVarUint32Small7()
 	}
-	*target = c.buffer.ReadVarint64()
+	*target = c.buffer.ReadVarInt64()
 	return nil
 }
 
@@ -296,7 +296,7 @@ func (c *ReadContext) ReadIntInto(target *int, readRefInfo, readTypeInfo bool) e
 	if readTypeInfo {
 		_ = c.buffer.ReadVarUint32Small7()
 	}
-	*target = int(c.buffer.ReadVarint64())
+	*target = int(c.buffer.ReadVarInt64())
 	return nil
 }
 

@@ -107,9 +107,9 @@ func generateFieldWriteTyped(buf *bytes.Buffer, field *FieldInfo) error {
 		case types.Int16:
 			fmt.Fprintf(buf, "\tbuf.WriteInt16(%s)\n", fieldAccess)
 		case types.Int32:
-			fmt.Fprintf(buf, "\tbuf.WriteVarint32(%s)\n", fieldAccess)
+			fmt.Fprintf(buf, "\tbuf.WriteVarInt32(%s)\n", fieldAccess)
 		case types.Int, types.Int64:
-			fmt.Fprintf(buf, "\tbuf.WriteVarint64(%s)\n", fieldAccess)
+			fmt.Fprintf(buf, "\tbuf.WriteVarInt64(%s)\n", fieldAccess)
 		case types.Uint8:
 			fmt.Fprintf(buf, "\tbuf.WriteByte_(%s)\n", fieldAccess)
 		case types.Uint16:
@@ -198,29 +198,29 @@ func generateElementTypeIDWrite(buf *bytes.Buffer, elemType types.Type) error {
 	if basic, ok := elemType.Underlying().(*types.Basic); ok {
 		switch basic.Kind() {
 		case types.Bool:
-			fmt.Fprintf(buf, "\t\tbuf.WriteVarInt32(%d) // BOOL\n", fory.BOOL)
+			fmt.Fprintf(buf, "\t\tbuf.WriteVaruint32(%d) // BOOL\n", fory.BOOL)
 		case types.Int8:
-			fmt.Fprintf(buf, "\t\tbuf.WriteVarInt32(%d) // INT8\n", fory.INT8)
+			fmt.Fprintf(buf, "\t\tbuf.WriteVaruint32(%d) // INT8\n", fory.INT8)
 		case types.Int16:
-			fmt.Fprintf(buf, "\t\tbuf.WriteVarInt32(%d) // INT16\n", fory.INT16)
+			fmt.Fprintf(buf, "\t\tbuf.WriteVaruint32(%d) // INT16\n", fory.INT16)
 		case types.Int32:
-			fmt.Fprintf(buf, "\t\tbuf.WriteVarInt32(%d) // INT32\n", fory.INT32)
+			fmt.Fprintf(buf, "\t\tbuf.WriteVaruint32(%d) // INT32\n", fory.INT32)
 		case types.Int, types.Int64:
-			fmt.Fprintf(buf, "\t\tbuf.WriteVarInt32(%d) // INT64\n", fory.INT64)
+			fmt.Fprintf(buf, "\t\tbuf.WriteVaruint32(%d) // INT64\n", fory.INT64)
 		case types.Uint8:
-			fmt.Fprintf(buf, "\t\tbuf.WriteVarInt32(%d) // UINT8\n", fory.UINT8)
+			fmt.Fprintf(buf, "\t\tbuf.WriteVaruint32(%d) // UINT8\n", fory.UINT8)
 		case types.Uint16:
-			fmt.Fprintf(buf, "\t\tbuf.WriteVarInt32(%d) // UINT16\n", fory.UINT16)
+			fmt.Fprintf(buf, "\t\tbuf.WriteVaruint32(%d) // UINT16\n", fory.UINT16)
 		case types.Uint32:
-			fmt.Fprintf(buf, "\t\tbuf.WriteVarInt32(%d) // UINT32\n", fory.UINT32)
+			fmt.Fprintf(buf, "\t\tbuf.WriteVaruint32(%d) // UINT32\n", fory.UINT32)
 		case types.Uint, types.Uint64:
-			fmt.Fprintf(buf, "\t\tbuf.WriteVarInt32(%d) // UINT64\n", fory.UINT64)
+			fmt.Fprintf(buf, "\t\tbuf.WriteVaruint32(%d) // UINT64\n", fory.UINT64)
 		case types.Float32:
-			fmt.Fprintf(buf, "\t\tbuf.WriteVarInt32(%d) // FLOAT\n", fory.FLOAT)
+			fmt.Fprintf(buf, "\t\tbuf.WriteVaruint32(%d) // FLOAT\n", fory.FLOAT)
 		case types.Float64:
-			fmt.Fprintf(buf, "\t\tbuf.WriteVarInt32(%d) // DOUBLE\n", fory.DOUBLE)
+			fmt.Fprintf(buf, "\t\tbuf.WriteVaruint32(%d) // DOUBLE\n", fory.DOUBLE)
 		case types.String:
-			fmt.Fprintf(buf, "\t\tbuf.WriteVarInt32(%d) // STRING\n", fory.STRING)
+			fmt.Fprintf(buf, "\t\tbuf.WriteVaruint32(%d) // STRING\n", fory.STRING)
 		default:
 			return fmt.Errorf("unsupported basic type for element type ID: %s", basic.String())
 		}
@@ -232,22 +232,22 @@ func generateElementTypeIDWrite(buf *bytes.Buffer, elemType types.Type) error {
 		typeStr := named.String()
 		switch typeStr {
 		case "time.Time":
-			fmt.Fprintf(buf, "\t\tbuf.WriteVarInt32(%d) // TIMESTAMP\n", fory.TIMESTAMP)
+			fmt.Fprintf(buf, "\t\tbuf.WriteVaruint32(%d) // TIMESTAMP\n", fory.TIMESTAMP)
 			return nil
 		case "github.com/apache/fory/go/fory.Date":
-			fmt.Fprintf(buf, "\t\tbuf.WriteVarInt32(%d) // LOCAL_DATE\n", fory.LOCAL_DATE)
+			fmt.Fprintf(buf, "\t\tbuf.WriteVaruint32(%d) // LOCAL_DATE\n", fory.LOCAL_DATE)
 			return nil
 		}
 		// Check if it's a struct
 		if _, ok := named.Underlying().(*types.Struct); ok {
-			fmt.Fprintf(buf, "\t\tbuf.WriteVarInt32(%d) // NAMED_STRUCT\n", fory.NAMED_STRUCT)
+			fmt.Fprintf(buf, "\t\tbuf.WriteVaruint32(%d) // NAMED_STRUCT\n", fory.NAMED_STRUCT)
 			return nil
 		}
 	}
 
 	// Handle struct types
 	if _, ok := elemType.Underlying().(*types.Struct); ok {
-		fmt.Fprintf(buf, "\t\tbuf.WriteVarInt32(%d) // NAMED_STRUCT\n", fory.NAMED_STRUCT)
+		fmt.Fprintf(buf, "\t\tbuf.WriteVaruint32(%d) // NAMED_STRUCT\n", fory.NAMED_STRUCT)
 		return nil
 	}
 
@@ -487,29 +487,29 @@ func generateElementTypeIDWriteInline(buf *bytes.Buffer, elemType types.Type) er
 	if basic, ok := elemType.Underlying().(*types.Basic); ok {
 		switch basic.Kind() {
 		case types.Bool:
-			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVarInt32(%d) // BOOL\n", fory.BOOL)
+			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVaruint32(%d) // BOOL\n", fory.BOOL)
 		case types.Int8:
-			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVarInt32(%d) // INT8\n", fory.INT8)
+			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVaruint32(%d) // INT8\n", fory.INT8)
 		case types.Int16:
-			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVarInt32(%d) // INT16\n", fory.INT16)
+			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVaruint32(%d) // INT16\n", fory.INT16)
 		case types.Int32:
-			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVarInt32(%d) // INT32\n", fory.INT32)
+			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVaruint32(%d) // INT32\n", fory.INT32)
 		case types.Int, types.Int64:
-			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVarInt32(%d) // INT64\n", fory.INT64)
+			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVaruint32(%d) // INT64\n", fory.INT64)
 		case types.Uint8:
-			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVarInt32(%d) // UINT8\n", fory.UINT8)
+			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVaruint32(%d) // UINT8\n", fory.UINT8)
 		case types.Uint16:
-			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVarInt32(%d) // UINT16\n", fory.UINT16)
+			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVaruint32(%d) // UINT16\n", fory.UINT16)
 		case types.Uint32:
-			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVarInt32(%d) // UINT32\n", fory.UINT32)
+			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVaruint32(%d) // UINT32\n", fory.UINT32)
 		case types.Uint, types.Uint64:
-			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVarInt32(%d) // UINT64\n", fory.UINT64)
+			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVaruint32(%d) // UINT64\n", fory.UINT64)
 		case types.Float32:
-			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVarInt32(%d) // FLOAT\n", fory.FLOAT)
+			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVaruint32(%d) // FLOAT\n", fory.FLOAT)
 		case types.Float64:
-			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVarInt32(%d) // DOUBLE\n", fory.DOUBLE)
+			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVaruint32(%d) // DOUBLE\n", fory.DOUBLE)
 		case types.String:
-			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVarInt32(%d) // STRING\n", fory.STRING)
+			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVaruint32(%d) // STRING\n", fory.STRING)
 		default:
 			return fmt.Errorf("unsupported basic type for element type ID: %s", basic.String())
 		}
@@ -530,9 +530,9 @@ func generateSliceElementWriteInline(buf *bytes.Buffer, elemType types.Type, ele
 		case types.Int16:
 			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteInt16(%s)\n", elemAccess)
 		case types.Int32:
-			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVarint32(%s)\n", elemAccess)
+			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVarInt32(%s)\n", elemAccess)
 		case types.Int, types.Int64:
-			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVarint64(%s)\n", elemAccess)
+			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVarInt64(%s)\n", elemAccess)
 		case types.Uint8:
 			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteByte_(%s)\n", elemAccess)
 		case types.Uint16:

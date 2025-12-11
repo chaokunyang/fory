@@ -47,7 +47,7 @@ func (g DynamicSliceDemo_ForyGenSerializer) Write(ctx *fory.WriteContext, writeR
 		}
 	}
 	if writeType {
-		ctx.Buffer().WriteVarInt32(int32(fory.NAMED_STRUCT))
+		ctx.Buffer().WriteVaruint32(int32(fory.NAMED_STRUCT))
 	}
 	return g.WriteData(ctx, value)
 }
@@ -110,7 +110,7 @@ func (g DynamicSliceDemo_ForyGenSerializer) Read(ctx *fory.ReadContext, readRef 
 		}
 	}
 	if readType {
-		_ = ctx.Buffer().ReadVarInt32() // Read and discard type ID
+		_ = ctx.Buffer().ReadVaruint32() // Read and discard type ID
 	}
 	return g.ReadData(ctx, value.Type(), value)
 }
@@ -198,7 +198,7 @@ func (g MapDemo_ForyGenSerializer) Write(ctx *fory.WriteContext, writeRef bool, 
 		}
 	}
 	if writeType {
-		ctx.Buffer().WriteVarInt32(int32(fory.NAMED_STRUCT))
+		ctx.Buffer().WriteVaruint32(int32(fory.NAMED_STRUCT))
 	}
 	return g.WriteData(ctx, value)
 }
@@ -370,7 +370,7 @@ func (g MapDemo_ForyGenSerializer) Read(ctx *fory.ReadContext, readRef bool, rea
 		}
 	}
 	if readType {
-		_ = ctx.Buffer().ReadVarInt32() // Read and discard type ID
+		_ = ctx.Buffer().ReadVaruint32() // Read and discard type ID
 	}
 	return g.ReadData(ctx, value.Type(), value)
 }
@@ -542,7 +542,7 @@ func (g SliceDemo_ForyGenSerializer) Write(ctx *fory.WriteContext, writeRef bool
 		}
 	}
 	if writeType {
-		ctx.Buffer().WriteVarInt32(int32(fory.NAMED_STRUCT))
+		ctx.Buffer().WriteVaruint32(int32(fory.NAMED_STRUCT))
 	}
 	return g.WriteData(ctx, value)
 }
@@ -565,7 +565,7 @@ func (g SliceDemo_ForyGenSerializer) WriteTyped(ctx *fory.WriteContext, v *Slice
 		if sliceLen > 0 {
 			collectFlag := 8 // CollectionIsSameType only
 			buf.WriteInt8(int8(collectFlag))
-			buf.WriteVarInt32(1) // BOOL
+			buf.WriteVaruint32(1) // BOOL
 			for _, elem := range v.BoolSlice {
 				buf.WriteBool(elem)
 			}
@@ -582,7 +582,7 @@ func (g SliceDemo_ForyGenSerializer) WriteTyped(ctx *fory.WriteContext, v *Slice
 		if sliceLen > 0 {
 			collectFlag := 8 // CollectionIsSameType only
 			buf.WriteInt8(int8(collectFlag))
-			buf.WriteVarInt32(11) // DOUBLE
+			buf.WriteVaruint32(11) // DOUBLE
 			for _, elem := range v.FloatSlice {
 				buf.WriteFloat64(elem)
 			}
@@ -599,9 +599,9 @@ func (g SliceDemo_ForyGenSerializer) WriteTyped(ctx *fory.WriteContext, v *Slice
 		if sliceLen > 0 {
 			collectFlag := 8 // CollectionIsSameType only
 			buf.WriteInt8(int8(collectFlag))
-			buf.WriteVarInt32(4) // INT32
+			buf.WriteVaruint32(4) // INT32
 			for _, elem := range v.IntSlice {
-				buf.WriteVarint32(elem)
+				buf.WriteVarInt32(elem)
 			}
 		}
 	}
@@ -616,7 +616,7 @@ func (g SliceDemo_ForyGenSerializer) WriteTyped(ctx *fory.WriteContext, v *Slice
 		if sliceLen > 0 {
 			collectFlag := 8 // CollectionIsSameType only
 			buf.WriteInt8(int8(collectFlag))
-			buf.WriteVarInt32(12) // STRING
+			buf.WriteVaruint32(12) // STRING
 			for _, elem := range v.StringSlice {
 				fory.WriteString(buf, elem)
 			}
@@ -656,7 +656,7 @@ func (g SliceDemo_ForyGenSerializer) Read(ctx *fory.ReadContext, readRef bool, r
 		}
 	}
 	if readType {
-		_ = ctx.Buffer().ReadVarInt32() // Read and discard type ID
+		_ = ctx.Buffer().ReadVaruint32() // Read and discard type ID
 	}
 	return g.ReadData(ctx, value.Type(), value)
 }
@@ -692,7 +692,7 @@ func (g SliceDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *SliceDe
 				// Need to read type ID once if CollectionIsSameType is set
 				if (collectFlag & 8) != 0 {
 					// ReadData element type ID once for all elements
-					_ = buf.ReadVarInt32()
+					_ = buf.ReadVaruint32()
 				}
 				for i := 0; i < sliceLen; i++ {
 					v.BoolSlice[i] = buf.ReadBool()
@@ -722,7 +722,7 @@ func (g SliceDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *SliceDe
 				// Need to read type ID once if CollectionIsSameType is set
 				if (collectFlag & 8) != 0 {
 					// ReadData element type ID once for all elements
-					_ = buf.ReadVarInt32()
+					_ = buf.ReadVaruint32()
 				}
 				for i := 0; i < sliceLen; i++ {
 					v.FloatSlice[i] = buf.ReadFloat64()
@@ -746,16 +746,16 @@ func (g SliceDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *SliceDe
 			if hasDeclType {
 				// Elements are written directly without flags/type IDs
 				for i := 0; i < sliceLen; i++ {
-					v.IntSlice[i] = buf.ReadVarint32()
+					v.IntSlice[i] = buf.ReadVarInt32()
 				}
 			} else {
 				// Need to read type ID once if CollectionIsSameType is set
 				if (collectFlag & 8) != 0 {
 					// ReadData element type ID once for all elements
-					_ = buf.ReadVarInt32()
+					_ = buf.ReadVaruint32()
 				}
 				for i := 0; i < sliceLen; i++ {
-					v.IntSlice[i] = buf.ReadVarint32()
+					v.IntSlice[i] = buf.ReadVarInt32()
 				}
 			}
 		}
@@ -782,7 +782,7 @@ func (g SliceDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *SliceDe
 				// Need to read type ID once if CollectionIsSameType is set
 				if (collectFlag & 8) != 0 {
 					// ReadData element type ID once for all elements
-					_ = buf.ReadVarInt32()
+					_ = buf.ReadVaruint32()
 				}
 				for i := 0; i < sliceLen; i++ {
 					v.StringSlice[i] = fory.ReadString(buf)
@@ -846,7 +846,7 @@ func (g ValidationDemo_ForyGenSerializer) Write(ctx *fory.WriteContext, writeRef
 		}
 	}
 	if writeType {
-		ctx.Buffer().WriteVarInt32(int32(fory.NAMED_STRUCT))
+		ctx.Buffer().WriteVaruint32(int32(fory.NAMED_STRUCT))
 	}
 	return g.WriteData(ctx, value)
 }
@@ -863,9 +863,9 @@ func (g ValidationDemo_ForyGenSerializer) WriteTyped(ctx *fory.WriteContext, v *
 	// Field: E (bool)
 	buf.WriteBool(v.E)
 	// Field: C (int64)
-	buf.WriteVarint64(v.C)
+	buf.WriteVarInt64(v.C)
 	// Field: A (int32)
-	buf.WriteVarint32(v.A)
+	buf.WriteVarInt32(v.A)
 	// Field: B (string)
 	fory.WriteString(buf, v.B)
 	return nil
@@ -902,7 +902,7 @@ func (g ValidationDemo_ForyGenSerializer) Read(ctx *fory.ReadContext, readRef bo
 		}
 	}
 	if readType {
-		_ = ctx.Buffer().ReadVarInt32() // Read and discard type ID
+		_ = ctx.Buffer().ReadVaruint32() // Read and discard type ID
 	}
 	return g.ReadData(ctx, value.Type(), value)
 }
@@ -921,9 +921,9 @@ func (g ValidationDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *Va
 	// Field: E (bool)
 	v.E = buf.ReadBool()
 	// Field: C (int64)
-	v.C = buf.ReadVarint64()
+	v.C = buf.ReadVarInt64()
 	// Field: A (int32)
-	v.A = buf.ReadVarint32()
+	v.A = buf.ReadVarInt32()
 	// Field: B (string)
 	v.B = fory.ReadString(buf)
 	return nil

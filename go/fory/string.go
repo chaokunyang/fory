@@ -273,7 +273,7 @@ func (s ptrToStringSerializer) Read(ctx *ReadContext, readRef bool, readType boo
 		}
 	}
 	if readType {
-		_ = ctx.buffer.ReadVarInt32()
+		_ = ctx.buffer.ReadVaruint32()
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }

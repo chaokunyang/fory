@@ -114,8 +114,8 @@ func (c *WriteContext) RawInt32(v int32)        { c.buffer.WriteInt32(v) }
 func (c *WriteContext) RawInt64(v int64)        { c.buffer.WriteInt64(v) }
 func (c *WriteContext) RawFloat32(v float32)    { c.buffer.WriteFloat32(v) }
 func (c *WriteContext) RawFloat64(v float64)    { c.buffer.WriteFloat64(v) }
-func (c *WriteContext) WriteVarInt32(v int32)   { c.buffer.WriteVarint32(v) }
-func (c *WriteContext) WriteVarInt64(v int64)   { c.buffer.WriteVarint64(v) }
+func (c *WriteContext) WriteVarInt32(v int32)   { c.buffer.WriteVarInt32(v) }
+func (c *WriteContext) WriteVarInt64(v int64)   { c.buffer.WriteVarInt64(v) }
 func (c *WriteContext) WriteVarUint32(v uint32) { c.buffer.WriteVarUint32(v) }
 func (c *WriteContext) WriteByte(v byte)        { c.buffer.WriteByte_(v) }
 func (c *WriteContext) WriteBytes(v []byte)     { c.buffer.WriteBinary(v) }
@@ -147,15 +147,15 @@ func (c *WriteContext) writeFast(ptr unsafe.Pointer, ct StaticTypeId) {
 	case ConcreteTypeInt16:
 		c.buffer.WriteInt16(*(*int16)(ptr))
 	case ConcreteTypeInt32:
-		c.buffer.WriteVarint32(*(*int32)(ptr))
+		c.buffer.WriteVarInt32(*(*int32)(ptr))
 	case ConcreteTypeInt:
 		if strconv.IntSize == 64 {
-			c.buffer.WriteVarint64(int64(*(*int)(ptr)))
+			c.buffer.WriteVarInt64(int64(*(*int)(ptr)))
 		} else {
-			c.buffer.WriteVarint32(int32(*(*int)(ptr)))
+			c.buffer.WriteVarInt32(int32(*(*int)(ptr)))
 		}
 	case ConcreteTypeInt64:
-		c.buffer.WriteVarint64(*(*int64)(ptr))
+		c.buffer.WriteVarInt64(*(*int64)(ptr))
 	case ConcreteTypeFloat32:
 		c.buffer.WriteFloat32(*(*float32)(ptr))
 	case ConcreteTypeFloat64:
@@ -165,12 +165,12 @@ func (c *WriteContext) writeFast(ptr unsafe.Pointer, ct StaticTypeId) {
 	}
 }
 
-// WriteLength writes a length value as varint
+// WriteLength writes a length value as varint (non-negative values)
 func (c *WriteContext) WriteLength(length int) error {
 	if length > MaxInt32 || length < MinInt32 {
 		return fmt.Errorf("length %d exceeds int32 range", length)
 	}
-	c.buffer.WriteVarInt32(int32(length))
+	c.buffer.WriteVaruint32(int32(length))
 	return nil
 }
 
@@ -222,7 +222,7 @@ func (c *WriteContext) WriteInt32(value int32, writeRefInfo, writeTypeInfo bool)
 	if writeTypeInfo {
 		c.WriteTypeId(INT32)
 	}
-	c.buffer.WriteVarint32(value)
+	c.buffer.WriteVarInt32(value)
 	return nil
 }
 
@@ -234,7 +234,7 @@ func (c *WriteContext) WriteInt64(value int64, writeRefInfo, writeTypeInfo bool)
 	if writeTypeInfo {
 		c.WriteTypeId(INT64)
 	}
-	c.buffer.WriteVarint64(value)
+	c.buffer.WriteVarInt64(value)
 	return nil
 }
 
@@ -252,9 +252,9 @@ func (c *WriteContext) WriteInt(value int, writeRefInfo, writeTypeInfo bool) err
 		}
 	}
 	if strconv.IntSize == 64 {
-		c.buffer.WriteVarint64(int64(value))
+		c.buffer.WriteVarInt64(int64(value))
 	} else {
-		c.buffer.WriteVarint32(int32(value))
+		c.buffer.WriteVarInt32(int32(value))
 	}
 	return nil
 }

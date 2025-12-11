@@ -217,7 +217,7 @@ func (s int32Serializer) TypeId() TypeId       { return INT32 }
 func (s int32Serializer) NeedToWriteRef() bool { return false }
 
 func (s int32Serializer) WriteData(ctx *WriteContext, value reflect.Value) error {
-	ctx.buffer.WriteVarint32(int32(value.Int()))
+	ctx.buffer.WriteVarInt32(int32(value.Int()))
 	return nil
 }
 
@@ -232,7 +232,7 @@ func (s int32Serializer) Write(ctx *WriteContext, writeRef bool, writeType bool,
 }
 
 func (s int32Serializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
-	value.SetInt(int64(ctx.buffer.ReadVarint32()))
+	value.SetInt(int64(ctx.buffer.ReadVarInt32()))
 	return nil
 }
 
@@ -262,7 +262,7 @@ func (s int64Serializer) TypeId() TypeId       { return INT64 }
 func (s int64Serializer) NeedToWriteRef() bool { return false }
 
 func (s int64Serializer) WriteData(ctx *WriteContext, value reflect.Value) error {
-	ctx.buffer.WriteVarint64(value.Int())
+	ctx.buffer.WriteVarInt64(value.Int())
 	return nil
 }
 
@@ -277,7 +277,7 @@ func (s int64Serializer) Write(ctx *WriteContext, writeRef bool, writeType bool,
 }
 
 func (s int64Serializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
-	value.SetInt(ctx.buffer.ReadVarint64())
+	value.SetInt(ctx.buffer.ReadVarInt64())
 	return nil
 }
 
@@ -305,7 +305,7 @@ func (s intSerializer) TypeId() TypeId       { return -INT64 }
 func (s intSerializer) NeedToWriteRef() bool { return false }
 
 func (s intSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
-	ctx.buffer.WriteVarint64(value.Int())
+	ctx.buffer.WriteVarInt64(value.Int())
 	return nil
 }
 
@@ -320,7 +320,7 @@ func (s intSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, v
 }
 
 func (s intSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
-	value.SetInt(ctx.buffer.ReadVarint64())
+	value.SetInt(ctx.buffer.ReadVarInt64())
 	return nil
 }
 

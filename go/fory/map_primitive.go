@@ -118,7 +118,7 @@ func writeMapStringInt64(buf *ByteBuffer, m map[string]int64) {
 		count := 0
 		for k, v := range m {
 			writeString(buf, k)
-			buf.WriteVarint64(v)
+			buf.WriteVarInt64(v)
 			count++
 			if count >= chunkSize {
 				break
@@ -149,7 +149,7 @@ func readMapStringInt64(buf *ByteBuffer) map[string]int64 {
 		chunkSize := int(buf.ReadUint8())
 		for i := 0; i < chunkSize && size > 0; i++ {
 			k := readString(buf)
-			v := buf.ReadVarint64()
+			v := buf.ReadVarInt64()
 			result[k] = v
 			size--
 		}
@@ -179,7 +179,7 @@ func writeMapStringInt(buf *ByteBuffer, m map[string]int) {
 		count := 0
 		for k, v := range m {
 			writeString(buf, k)
-			buf.WriteVarint64(int64(v))
+			buf.WriteVarInt64(int64(v))
 			count++
 			if count >= chunkSize {
 				break
@@ -210,7 +210,7 @@ func readMapStringInt(buf *ByteBuffer) map[string]int {
 		chunkSize := int(buf.ReadUint8())
 		for i := 0; i < chunkSize && size > 0; i++ {
 			k := readString(buf)
-			v := buf.ReadVarint64()
+			v := buf.ReadVarInt64()
 			result[k] = int(v)
 			size--
 		}
@@ -361,8 +361,8 @@ func writeMapInt32Int32(buf *ByteBuffer, m map[int32]int32) {
 
 		count := 0
 		for k, v := range m {
-			buf.WriteVarint32(k)
-			buf.WriteVarint32(v)
+			buf.WriteVarInt32(k)
+			buf.WriteVarInt32(v)
 			count++
 			if count >= chunkSize {
 				break
@@ -392,8 +392,8 @@ func readMapInt32Int32(buf *ByteBuffer) map[int32]int32 {
 
 		chunkSize := int(buf.ReadUint8())
 		for i := 0; i < chunkSize && size > 0; i++ {
-			k := buf.ReadVarint32()
-			v := buf.ReadVarint32()
+			k := buf.ReadVarInt32()
+			v := buf.ReadVarInt32()
 			result[k] = v
 			size--
 		}
@@ -422,8 +422,8 @@ func writeMapInt64Int64(buf *ByteBuffer, m map[int64]int64) {
 
 		count := 0
 		for k, v := range m {
-			buf.WriteVarint64(k)
-			buf.WriteVarint64(v)
+			buf.WriteVarInt64(k)
+			buf.WriteVarInt64(v)
 			count++
 			if count >= chunkSize {
 				break
@@ -453,8 +453,8 @@ func readMapInt64Int64(buf *ByteBuffer) map[int64]int64 {
 
 		chunkSize := int(buf.ReadUint8())
 		for i := 0; i < chunkSize && size > 0; i++ {
-			k := buf.ReadVarint64()
-			v := buf.ReadVarint64()
+			k := buf.ReadVarInt64()
+			v := buf.ReadVarInt64()
 			result[k] = v
 			size--
 		}
@@ -483,8 +483,8 @@ func writeMapIntInt(buf *ByteBuffer, m map[int]int) {
 
 		count := 0
 		for k, v := range m {
-			buf.WriteVarint64(int64(k))
-			buf.WriteVarint64(int64(v))
+			buf.WriteVarInt64(int64(k))
+			buf.WriteVarInt64(int64(v))
 			count++
 			if count >= chunkSize {
 				break
@@ -514,8 +514,8 @@ func readMapIntInt(buf *ByteBuffer) map[int]int {
 
 		chunkSize := int(buf.ReadUint8())
 		for i := 0; i < chunkSize && size > 0; i++ {
-			k := buf.ReadVarint64()
-			v := buf.ReadVarint64()
+			k := buf.ReadVarInt64()
+			v := buf.ReadVarInt64()
 			result[int(k)] = int(v)
 			size--
 		}

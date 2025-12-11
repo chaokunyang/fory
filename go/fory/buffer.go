@@ -101,11 +101,11 @@ func (b *ByteBuffer) WriteLength(value int) {
 	if value >= MaxInt32 {
 		panic(fmt.Errorf("too long: %d", value))
 	}
-	b.WriteVarInt32(int32(value))
+	b.WriteVaruint32(int32(value))
 }
 
 func (b *ByteBuffer) ReadLength() int {
-	return int(b.ReadVarInt32())
+	return int(b.ReadVaruint32())
 }
 
 func (b *ByteBuffer) WriteInt64(value int64) {
@@ -260,8 +260,9 @@ func (b *ByteBuffer) PutInt32(index int, value int32) {
 	binary.LittleEndian.PutUint32(b.data[index:], uint32(value))
 }
 
-// WriteVarInt32 WriteVarUint writes a 1-5 byte int, returns the number of bytes written.
-func (b *ByteBuffer) WriteVarInt32(value int32) int8 {
+// WriteVaruint32 writes a 1-5 byte positive int (no zigzag encoding), returns the number of bytes written.
+// Use this for lengths, type IDs, and other non-negative values.
+func (b *ByteBuffer) WriteVaruint32(value int32) int8 {
 	if value>>7 == 0 {
 		b.grow(1)
 		b.data[b.writerIndex] = byte(value)
@@ -302,8 +303,9 @@ func (b *ByteBuffer) WriteVarInt32(value int32) int8 {
 	return 5
 }
 
-// ReadVarInt32 reads the 1-5 byte int part of a varint.
-func (b *ByteBuffer) ReadVarInt32() int32 {
+// ReadVaruint32 reads the 1-5 byte positive int part of a varint (no zigzag decoding).
+// Use this for lengths, type IDs, and other non-negative values.
+func (b *ByteBuffer) ReadVaruint32() int32 {
 	readerIndex := b.readerIndex
 	byte_ := int32(b.data[readerIndex])
 	readerIndex++
@@ -338,8 +340,8 @@ type BufferObject interface {
 	ToBuffer() *ByteBuffer
 }
 
-// WriteVarint64 writes the zig-zag encoded varint
-func (b *ByteBuffer) WriteVarint64(value int64) {
+// WriteVarInt64 writes the zig-zag encoded varint (compatible with Java's writeVarInt64).
+func (b *ByteBuffer) WriteVarInt64(value int64) {
 	u := uint64((value << 1) ^ (value >> 63))
 	b.WriteVarUint64(u)
 }
@@ -452,8 +454,8 @@ func (b *ByteBuffer) readVarUint36SmallSlow() uint64 {
 	return result
 }
 
-// ReadVarint64 reads the varint encoded with zig-zag
-func (b *ByteBuffer) ReadVarint64() int64 {
+// ReadVarInt64 reads the varint encoded with zig-zag (compatible with Java's readVarInt64).
+func (b *ByteBuffer) ReadVarInt64() int64 {
 	u := b.ReadVarUint64()
 	v := int64(u >> 1)
 	if u&1 != 0 {
@@ -563,7 +565,8 @@ func (b *ByteBuffer) ReadUint8() uint8 {
 	return v
 }
 
-func (b *ByteBuffer) WriteVarint32(value int32) {
+// WriteVarInt32 writes a signed int32 using zigzag encoding (compatible with Java's writeVarInt32).
+func (b *ByteBuffer) WriteVarInt32(value int32) {
 	u := uint32((value << 1) ^ (value >> 31))
 	b.WriteVarUint32(u)
 }
@@ -584,7 +587,8 @@ func (b *ByteBuffer) WriteVarUint32(value uint32) {
 	b.writerIndex += i
 }
 
-func (b *ByteBuffer) ReadVarint32() int32 {
+// ReadVarInt32 reads a signed int32 using zigzag decoding (compatible with Java's readVarInt32).
+func (b *ByteBuffer) ReadVarInt32() int32 {
 	u := b.ReadVarUint32()
 	v := int32(u >> 1)
 	if u&1 != 0 {

@@ -211,11 +211,13 @@ type MyExtSerializer struct{}
 
 func (s *MyExtSerializer) Write(buf *fory.ByteBuffer, value interface{}) error {
 	myExt := value.(MyExt)
+	// WriteVarInt32 uses zigzag encoding (compatible with Java's writeVarInt32)
 	buf.WriteVarInt32(myExt.Id)
 	return nil
 }
 
 func (s *MyExtSerializer) Read(buf *fory.ByteBuffer) (interface{}, error) {
+	// ReadVarInt32 uses zigzag decoding (compatible with Java's readVarInt32)
 	id := buf.ReadVarInt32()
 	return MyExt{Id: id}, nil
 }
@@ -285,7 +287,7 @@ func testBufferVar() {
 		2147483646, 2147483647,
 	}
 	for _, expected := range varInt32Values {
-		val := buf.ReadVarint32()
+		val := buf.ReadVarInt32()
 		assertEqual(expected, val, fmt.Sprintf("varint32 %d", expected))
 	}
 
@@ -315,13 +317,13 @@ func testBufferVar() {
 		1000000000000, 9223372036854775806, 9223372036854775807,
 	}
 	for _, expected := range varInt64Values {
-		val := buf.ReadVarint64()
+		val := buf.ReadVarInt64()
 		assertEqual(expected, val, fmt.Sprintf("varint64 %d", expected))
 	}
 
 	outBuf := fory.NewByteBuffer(make([]byte, 0, 512))
 	for _, val := range varInt32Values {
-		outBuf.WriteVarint32(val)
+		outBuf.WriteVarInt32(val)
 	}
 	for _, val := range varUint32Values {
 		outBuf.WriteVarUint32(val)
@@ -330,7 +332,7 @@ func testBufferVar() {
 		outBuf.WriteVarUint64(val)
 	}
 	for _, val := range varInt64Values {
-		outBuf.WriteVarint64(val)
+		outBuf.WriteVarInt64(val)
 	}
 
 	writeFile(dataFile, outBuf.GetByteSlice(0, outBuf.WriterIndex()))
@@ -907,6 +909,7 @@ func testConsistentNamed() {
 	for i := 0; i < 9; i++ {
 		var obj interface{}
 		err := f.Deserialize(buf, &obj, nil)
+		fmt.Printf("Deserialized value %d: %+v\n", i, obj)
 		if err != nil {
 			panic(fmt.Sprintf("Failed to deserialize value %d: %v", i, err))
 		}

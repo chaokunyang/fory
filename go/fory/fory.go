@@ -482,9 +482,27 @@ func (f *Fory) RegisterByName(type_ interface{}, namespace, typeName string) err
 }
 
 // RegisterExtensionType registers a type as an extension type (NAMED_EXT) for cross-language serialization.
-// Extension types serialize struct fields directly without a hash header.
+// Extension types use a custom serializer provided by the user.
 // This is used for types with custom serializers in cross-language serialization.
-func (f *Fory) RegisterExtensionType(type_ interface{}, typeName string) error {
+//
+// Example:
+//
+//	type MyExtSerializer struct{}
+//
+//	func (s *MyExtSerializer) Write(buf *ByteBuffer, value interface{}) error {
+//	    myExt := value.(MyExt)
+//	    buf.WriteVarInt32(myExt.Id)
+//	    return nil
+//	}
+//
+//	func (s *MyExtSerializer) Read(buf *ByteBuffer) (interface{}, error) {
+//	    id := buf.ReadVarInt32()
+//	    return MyExt{Id: id}, nil
+//	}
+//
+//	// Register with custom serializer
+//	f.RegisterExtensionType(MyExt{}, "my_ext", &MyExtSerializer{})
+func (f *Fory) RegisterExtensionType(type_ interface{}, typeName string, serializer ExtensionSerializer) error {
 	var t reflect.Type
 	if rt, ok := type_.(reflect.Type); ok {
 		t = rt
@@ -494,7 +512,7 @@ func (f *Fory) RegisterExtensionType(type_ interface{}, typeName string) error {
 			t = t.Elem()
 		}
 	}
-	return f.typeResolver.RegisterExtensionType(t, "", typeName)
+	return f.typeResolver.RegisterExtensionType(t, "", typeName, serializer)
 }
 
 // New creates a new Fory instance with the given options

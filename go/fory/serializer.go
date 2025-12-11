@@ -84,4 +84,116 @@ type Serializer interface {
 	NeedToWriteRef() bool
 }
 
+// ExtensionSerializer is a simplified interface for user-implemented extension serializers.
+// Users implement this interface to provide custom serialization logic for types
+// registered via RegisterExtensionType.
+//
+// Unlike the full Serializer interface, ExtensionSerializer only requires implementing
+// the core data serialization logic - reference tracking, type info, and protocol
+// details are handled automatically by Fory.
+//
+// Example:
+//
+//	type MyExtSerializer struct{}
+//
+//	func (s *MyExtSerializer) Write(buf *ByteBuffer, value interface{}) error {
+//	    myExt := value.(MyExt)
+//	    buf.WriteVarInt32(myExt.Id)
+//	    return nil
+//	}
+//
+//	func (s *MyExtSerializer) Read(buf *ByteBuffer) (interface{}, error) {
+//	    id := buf.ReadVarInt32()
+//	    return MyExt{Id: id}, nil
+//	}
+//
+//	// Register with custom serializer
+//	f.RegisterExtensionType(MyExt{}, "my_ext", &MyExtSerializer{})
+type ExtensionSerializer interface {
+	// Write serializes the value's data to the buffer.
+	// Only write the data fields - don't write ref flags or type info.
+	Write(buf *ByteBuffer, value interface{}) error
+
+	// Read deserializes the value's data from the buffer.
+	// Only read the data fields - don't read ref flags or type info.
+	// Returns the deserialized value.
+	Read(buf *ByteBuffer) (interface{}, error)
+}
+
+// extensionSerializerAdapter wraps an ExtensionSerializer to implement the full Serializer interface.
+// This adapter handles reference tracking, type info writing/reading, and delegates the actual
+// data serialization to the user-provided ExtensionSerializer.
+type extensionSerializerAdapter struct {
+	type_      reflect.Type
+	typeTag    string
+	userSerial ExtensionSerializer
+}
+
+func (s *extensionSerializerAdapter) TypeId() TypeId { return NAMED_STRUCT }
+
+func (s *extensionSerializerAdapter) NeedToWriteRef() bool { return true }
+
+func (s *extensionSerializerAdapter) GetType() reflect.Type { return s.type_ }
+
+func (s *extensionSerializerAdapter) WriteData(ctx *WriteContext, value reflect.Value) error {
+	// Delegate to user's serializer
+	return s.userSerial.Write(ctx.Buffer(), value.Interface())
+}
+
+func (s *extensionSerializerAdapter) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
+	buf := ctx.Buffer()
+	if writeRef {
+		refWritten, err := ctx.RefResolver().WriteRefOrNull(buf, value)
+		if err != nil {
+			return err
+		}
+		if refWritten {
+			return nil
+		}
+	}
+	if writeType {
+		typeInfo, err := ctx.TypeResolver().getTypeInfo(value, true)
+		if err != nil {
+			return err
+		}
+		if err := ctx.TypeResolver().writeTypeInfo(buf, typeInfo); err != nil {
+			return err
+		}
+	}
+	return s.WriteData(ctx, value)
+}
+
+func (s *extensionSerializerAdapter) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	// Delegate to user's serializer
+	result, err := s.userSerial.Read(ctx.Buffer())
+	if err != nil {
+		return err
+	}
+	// Set the result into the value
+	value.Set(reflect.ValueOf(result))
+	return nil
+}
+
+func (s *extensionSerializerAdapter) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
+	buf := ctx.Buffer()
+	if readRef {
+		refID, err := ctx.RefResolver().TryPreserveRefId(buf)
+		if err != nil {
+			return err
+		}
+		if int8(refID) < NotNullValueFlag {
+			obj := ctx.RefResolver().GetReadObject(refID)
+			if obj.IsValid() {
+				value.Set(obj)
+			}
+			return nil
+		}
+	}
+	return s.ReadData(ctx, value.Type(), value)
+}
+
+func (s *extensionSerializerAdapter) ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeInfo *TypeInfo, value reflect.Value) error {
+	return s.Read(ctx, readRef, false, value)
+}
+
 // Helper functions for serializer dispatch

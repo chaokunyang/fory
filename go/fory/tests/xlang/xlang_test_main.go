@@ -204,23 +204,19 @@ type AnimalMapHolder struct {
 }
 
 // ============================================================================
-// Custom Serializer
+// Custom Serializer implementing fory.ExtensionSerializer
 // ============================================================================
 
 type MyExtSerializer struct{}
 
-func (s *MyExtSerializer) TypeId() int16 {
-	return int16(fory.NotSupportCrossLanguage)
-}
-
-func (s *MyExtSerializer) Write(ctx *fory.WriteContext, value interface{}) error {
+func (s *MyExtSerializer) Write(buf *fory.ByteBuffer, value interface{}) error {
 	myExt := value.(MyExt)
-	ctx.Buffer().WriteVarInt32(myExt.Id)
+	buf.WriteVarInt32(myExt.Id)
 	return nil
 }
 
-func (s *MyExtSerializer) Read(ctx *fory.ReadContext, type_ interface{}) (interface{}, error) {
-	id := ctx.Buffer().ReadVarInt32()
+func (s *MyExtSerializer) Read(buf *fory.ByteBuffer) (interface{}, error) {
+	id := buf.ReadVarInt32()
 	return MyExt{Id: id}, nil
 }
 
@@ -903,7 +899,7 @@ func testConsistentNamed() {
 	f.RegisterEnumByName(Color(0), "", "color")
 	f.RegisterNamedType(MyStruct{}, "my_struct")
 	// MyExt uses an extension serializer in Java (MyExtSerializer), so register as extension type
-	f.RegisterExtensionType(MyExt{}, "my_ext")
+	f.RegisterExtensionType(MyExt{}, "my_ext", &MyExtSerializer{})
 
 	buf := fory.NewByteBuffer(data)
 	values := make([]interface{}, 9)

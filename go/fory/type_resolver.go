@@ -560,13 +560,17 @@ func (r *TypeResolver) RegisterExt(extId int16, type_ reflect.Type) error {
 }
 
 // RegisterExtensionType registers a type as an extension type (NAMED_EXT).
-// Extension types serialize struct fields directly without a hash header.
+// Extension types use a user-provided serializer for custom serialization logic.
 // This is used for types with custom serializers in cross-language serialization.
 func (r *TypeResolver) RegisterExtensionType(
 	type_ reflect.Type,
 	namespace string,
 	typeName string,
+	userSerializer ExtensionSerializer,
 ) error {
+	if userSerializer == nil {
+		return fmt.Errorf("serializer cannot be nil for extension type %s", type_)
+	}
 	if prev, ok := r.typeToSerializers[type_]; ok {
 		return fmt.Errorf("type %s already has a serializer %s registered", type_, prev)
 	}
@@ -586,8 +590,8 @@ func (r *TypeResolver) RegisterExtensionType(
 		tag = namespace + "." + typeName
 	}
 
-	// Use extensionSerializer instead of structSerializer
-	serializer := &extensionSerializer{type_: type_, typeTag: tag}
+	// Create adapter wrapping the user's ExtensionSerializer
+	serializer := &extensionSerializerAdapter{type_: type_, typeTag: tag, userSerial: userSerializer}
 	r.typeToSerializers[type_] = serializer
 	r.typeToTypeInfo[type_] = "@" + tag
 	r.typeInfoToType["@"+tag] = type_

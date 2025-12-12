@@ -197,14 +197,15 @@ func getPrimitiveTypeSize(typeID int16) int {
 }
 
 func isUserDefinedType(typeID int16) bool {
-	return typeID == STRUCT ||
-		typeID == COMPATIBLE_STRUCT ||
-		typeID == NAMED_STRUCT ||
-		typeID == NAMED_COMPATIBLE_STRUCT ||
-		typeID == EXT ||
-		typeID == NAMED_EXT ||
-		typeID == ENUM ||
-		typeID == NAMED_ENUM
+	id := int(typeID & 0xff)
+	return id == STRUCT ||
+		id == COMPATIBLE_STRUCT ||
+		id == NAMED_STRUCT ||
+		id == NAMED_COMPATIBLE_STRUCT ||
+		id == EXT ||
+		id == NAMED_EXT ||
+		id == ENUM ||
+		id == NAMED_ENUM
 }
 
 // ============================================================================

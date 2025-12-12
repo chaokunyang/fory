@@ -1839,16 +1839,18 @@ func sortFieldsWithNullable(
 	sortTuple(maps)
 	sortTuple(userDefined)
 
-	// Java order: primitives, boxed, finals (otherInternalTypeFields), others, collections, maps
+	// Java order: primitives, boxed, finals, collections, maps, others
+	// finals = String and other monomorphic types (otherInternalTypeFields)
+	// others = userDefined types (structs, enums) and unknown types
 	all := make([]triple, 0, len(fieldNames))
 	all = append(all, primitives...)
 	all = append(all, boxed...)
-	all = append(all, otherInternalTypeFields...)
-	all = append(all, others...)
+	all = append(all, otherInternalTypeFields...) // finals (String, etc.)
 	all = append(all, collection...)
 	all = append(all, setFields...)
 	all = append(all, maps...)
-	all = append(all, userDefined...)
+	all = append(all, userDefined...) // others (structs, enums)
+	all = append(all, others...)      // unknown types
 
 	outSer := make([]Serializer, len(all))
 	outNam := make([]string, len(all))

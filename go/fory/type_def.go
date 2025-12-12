@@ -283,7 +283,7 @@ func readPkgName(buffer *ByteBuffer, namespaceDecoder *meta.Decoder) (string, er
 
 // readTypeName reads type name from TypeDef (not the meta string format with dynamic IDs)
 // Java format: 6 bits size | 2 bits encoding flags
-// TypeName encodings: UTF_8=0, LOWER_UPPER_DIGIT_SPECIAL=1, FIRST_TO_LOWER_SPECIAL=2, ALL_TO_LOWER_SPECIAL=3
+// TypeName encodings: UTF_8=0, ALL_TO_LOWER_SPECIAL=1, LOWER_UPPER_DIGIT_SPECIAL=2, FIRST_TO_LOWER_SPECIAL=3
 func readTypeName(buffer *ByteBuffer, typeNameDecoder *meta.Decoder) (string, error) {
 	header := int(buffer.ReadInt8()) & 0xff
 	encodingFlags := header & 0b11 // 2 bits for encoding
@@ -297,11 +297,11 @@ func readTypeName(buffer *ByteBuffer, typeNameDecoder *meta.Decoder) (string, er
 	case 0:
 		encoding = meta.UTF_8
 	case 1:
-		encoding = meta.LOWER_UPPER_DIGIT_SPECIAL
-	case 2:
-		encoding = meta.FIRST_TO_LOWER_SPECIAL
-	case 3:
 		encoding = meta.ALL_TO_LOWER_SPECIAL
+	case 2:
+		encoding = meta.LOWER_UPPER_DIGIT_SPECIAL
+	case 3:
+		encoding = meta.FIRST_TO_LOWER_SPECIAL
 	default:
 		return "", fmt.Errorf("invalid typename encoding flags: %d", encodingFlags)
 	}
@@ -925,16 +925,16 @@ func writeSimpleTypeName(buffer *ByteBuffer, metaBytes *MetaStringBytes, encoder
 	encoding := metaBytes.Encoding
 
 	// Get encoding flags (0-3) - Java uses 2 bits for typename encoding:
-	// 0=UTF8, 1=LOWER_UPPER_DIGIT_SPECIAL, 2=FIRST_TO_LOWER_SPECIAL, 3=ALL_TO_LOWER_SPECIAL
+	// 0=UTF8, 1=ALL_TO_LOWER_SPECIAL, 2=LOWER_UPPER_DIGIT_SPECIAL, 3=FIRST_TO_LOWER_SPECIAL
 	var encodingFlags byte
 	switch encoding {
 	case meta.UTF_8:
 		encodingFlags = 0
-	case meta.LOWER_UPPER_DIGIT_SPECIAL:
-		encodingFlags = 1
-	case meta.FIRST_TO_LOWER_SPECIAL:
-		encodingFlags = 2
 	case meta.ALL_TO_LOWER_SPECIAL:
+		encodingFlags = 1
+	case meta.LOWER_UPPER_DIGIT_SPECIAL:
+		encodingFlags = 2
+	case meta.FIRST_TO_LOWER_SPECIAL:
 		encodingFlags = 3
 	default:
 		return fmt.Errorf("unsupported typename encoding: %v", encoding)

@@ -31,6 +31,8 @@ import static org.apache.fory.meta.TypeDefEncoder.SMALL_NUM_FIELDS_THRESHOLD;
 import java.util.ArrayList;
 import java.util.List;
 import org.apache.fory.collection.Tuple2;
+import org.apache.fory.logging.Logger;
+import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.ClassDef.FieldType;
 import org.apache.fory.meta.MetaString.Encoding;
@@ -45,6 +47,8 @@ import org.apache.fory.util.Utils;
  * href="https://fory.apache.org/docs/specification/fory_xlang_serialization_spec">...</a>
  */
 class TypeDefDecoder {
+  private static final Logger LOG = LoggerFactory.getLogger(TypeDefDecoder.class);
+
   public static ClassDef decodeClassDef(XtypeResolver resolver, MemoryBuffer inputBuffer, long id) {
     Tuple2<byte[], byte[]> decoded = decodeClassDefBuf(inputBuffer, resolver, id);
     MemoryBuffer buffer = MemoryBuffer.fromByteArray(decoded.f0);
@@ -57,6 +61,9 @@ class TypeDefDecoder {
     if ((header & REGISTER_BY_NAME_FLAG) != 0) {
       String namespace = readPkgName(buffer);
       String typeName = readTypeName(buffer);
+      if (Utils.debugOutputEnabled()) {
+        LOG.info("Decode class {} using namespace {}", typeName, namespace);
+      }
       ClassInfo userTypeInfo = resolver.getUserTypeInfo(namespace, typeName);
       if (userTypeInfo == null) {
         classSpec = new ClassSpec(NonexistentClass.NonexistentMetaShared.class);
@@ -77,16 +84,16 @@ class TypeDefDecoder {
     boolean hasFieldsMeta = (id & HAS_FIELDS_META_FLAG) != 0;
     ClassDef classDef = new ClassDef(classSpec, classFields, hasFieldsMeta, id, decoded.f1);
     if (Utils.debugOutputEnabled()) {
-      System.out.println("[Java TypeDef DECODED] " + classDef);
+      LOG.info("[Java TypeDef DECODED] " + classDef);
       // Compute and print diff with local TypeDef
       Class<?> cls = classSpec.type;
       if (cls != null && cls != NonexistentClass.NonexistentMetaShared.class) {
         ClassDef localDef = ClassDef.buildClassDef(resolver.getFory(), cls);
         String diff = classDef.computeDiff(localDef);
         if (diff != null) {
-          System.out.println("[Java TypeDef DIFF] " + classSpec.entireClassName + ":\n" + diff);
+          LOG.info("[Java TypeDef DIFF] " + classSpec.entireClassName + ":\n" + diff);
         } else {
-          System.out.println("[Java TypeDef DIFF] " + classSpec.entireClassName + ": identical");
+          LOG.info("[Java TypeDef DIFF] " + classSpec.entireClassName + ": identical");
         }
       }
     }

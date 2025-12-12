@@ -1531,7 +1531,7 @@ func (s *structSerializer) computeHash() int32 {
 	hash := int32(h1 & 0xFFFFFFFF)
 
 	if DebugOutputEnabled() {
-		fmt.Printf("[fory-debug] struct %v version fingerprint=\"%s\" version hash=%d\n", s.type_, hashString, hash)
+		fmt.Printf("[Go][fory-debug] struct %v version fingerprint=\"%s\" version hash=%d\n", s.type_, hashString, hash)
 	}
 
 	if hash == 0 {

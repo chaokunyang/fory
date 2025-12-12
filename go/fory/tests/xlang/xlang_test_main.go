@@ -451,54 +451,21 @@ func testCrossLanguageSerializer() {
 func testSimpleStruct() {
 	dataFile := getDataFile()
 	data := readFile(dataFile)
-
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 	// Use numeric IDs to match Java's fory.register(Color.class, 101), etc.
 	f.RegisterEnum(Color(0), 101)
 	f.Register(Item{}, 102)
 	f.Register(SimpleStruct{}, 103)
 
-	fmt.Printf("=== Java serialized data (first 80 bytes) ===\n")
-	for i := 0; i < min(len(data), 80); i++ {
-		if i%16 == 0 && i > 0 {
-			fmt.Println()
-		}
-		fmt.Printf("%02x ", data[i])
-	}
-	fmt.Println()
-
 	obj, err := f.DeserializeAny(data)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
 	}
-
 	fmt.Printf("Deserialized obj: %+v\n", obj)
-
 	serialized, err := f.SerializeAny(obj)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to serialize: %v", err))
 	}
-
-	fmt.Printf("=== Go re-serialized data (first 80 bytes) ===\n")
-	for i := 0; i < min(len(serialized), 80); i++ {
-		if i%16 == 0 && i > 0 {
-			fmt.Println()
-		}
-		fmt.Printf("%02x ", serialized[i])
-	}
-	fmt.Println()
-
-	// Find byte differences
-	fmt.Println("=== Byte differences ===")
-	for i := 0; i < min(len(data), len(serialized)); i++ {
-		if data[i] != serialized[i] {
-			fmt.Printf("Position %d: Java=%02x Go=%02x\n", i, data[i], serialized[i])
-		}
-	}
-	if len(data) != len(serialized) {
-		fmt.Printf("Length mismatch: Java=%d Go=%d\n", len(data), len(serialized))
-	}
-
 	writeFile(dataFile, serialized)
 }
 
@@ -512,62 +479,15 @@ func testNamedSimpleStruct() {
 	f.RegisterByName(Item{}, "demo", "item")
 	f.RegisterByName(SimpleStruct{}, "demo", "simple_struct")
 
-	fmt.Printf("=== Java serialized data (first 120 bytes) ===\n")
-	for i := 0; i < min(len(data), 120); i++ {
-		if i%16 == 0 && i > 0 {
-			fmt.Println()
-		}
-		fmt.Printf("%02x ", data[i])
-	}
-	fmt.Println()
-
 	obj, err := f.DeserializeAny(data)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
 	}
-
 	fmt.Printf("Deserialized obj: %+v\n", obj)
-
 	serialized, err := f.SerializeAny(obj)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to serialize: %v", err))
 	}
-
-	fmt.Printf("=== Go re-serialized data (first 150 bytes) ===\n")
-	for i := 0; i < min(len(serialized), 150); i++ {
-		if i%16 == 0 && i > 0 {
-			fmt.Println()
-		}
-		fmt.Printf("%02x ", serialized[i])
-	}
-	fmt.Println()
-
-	fmt.Printf("=== Java data (first 150 bytes) ===\n")
-	for i := 0; i < min(len(data), 150); i++ {
-		if i%16 == 0 && i > 0 {
-			fmt.Println()
-		}
-		fmt.Printf("%02x ", data[i])
-	}
-	fmt.Println()
-
-	// Find first divergence point
-	fmt.Println("=== First divergence ===")
-	firstDiff := -1
-	for i := 0; i < min(len(data), len(serialized)); i++ {
-		if data[i] != serialized[i] {
-			if firstDiff == -1 {
-				firstDiff = i
-			}
-			if i < firstDiff+20 {
-				fmt.Printf("Position %d: Java=%02x Go=%02x\n", i, data[i], serialized[i])
-			}
-		}
-	}
-	if len(data) != len(serialized) {
-		fmt.Printf("Length mismatch: Java=%d Go=%d\n", len(data), len(serialized))
-	}
-
 	writeFile(dataFile, serialized)
 }
 

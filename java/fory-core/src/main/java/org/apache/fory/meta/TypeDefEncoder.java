@@ -32,6 +32,8 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.apache.fory.Fory;
+import org.apache.fory.logging.Logger;
+import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.ClassDef.FieldInfo;
 import org.apache.fory.meta.ClassDef.FieldType;
@@ -51,6 +53,8 @@ import org.apache.fory.util.Utils;
  * href="https://fory.apache.org/docs/specification/fory_xlang_serialization_spec">...</a>
  */
 class TypeDefEncoder {
+  private static final Logger LOG = LoggerFactory.getLogger(TypeDefEncoder.class);
+
   /** Build class definition from fields of class. */
   static ClassDef buildTypeDef(Fory fory, Class<?> type) {
     DescriptorGrouper descriptorGrouper =
@@ -96,7 +100,7 @@ class TypeDefEncoder {
             encodeClassDef.getInt64(0),
             classDefBytes);
     if (Utils.debugOutputEnabled()) {
-      System.out.println("[Java TypeDef BUILT] " + classDef);
+      LOG.info("[Java TypeDef BUILT] " + classDef);
     }
     return classDef;
   }

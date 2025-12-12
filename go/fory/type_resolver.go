@@ -1012,7 +1012,7 @@ func (r *TypeResolver) writeTypeInfo(buffer *ByteBuffer, typeInfo TypeInfo) erro
 	typeID := typeInfo.TypeID
 	internalTypeID := TypeId(typeID & 0xFF)
 	// WriteData the type ID to buffer using Varuint32Small7 encoding (matches Java)
-	buffer.WriteVaruint32Small7(uint32(typeID))
+	buffer.WriteVaruint32Small7(typeID)
 
 	// Handle type meta based on internal type ID (matching Java XtypeResolver.writeClassInfo)
 	switch internalTypeID {

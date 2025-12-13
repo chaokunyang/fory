@@ -232,6 +232,7 @@ func (td *TypeDef) buildTypeInfoWithResolver(resolver *TypeResolver) (TypeInfo, 
 		PkgPathBytes: td.nsName,
 		NameBytes:    td.typeName,
 		IsDynamic:    type_ == nil, // Mark as dynamic if type is unknown
+		TypeDef:      td,
 	}
 	return info, nil
 }
@@ -359,8 +360,14 @@ type FieldDef struct {
 
 // String returns a string representation of FieldDef for debugging
 func (fd FieldDef) String() string {
+	var fieldTypeStr string
+	if fd.fieldType != nil {
+		fieldTypeStr = fd.fieldType.String()
+	} else {
+		fieldTypeStr = "nil"
+	}
 	return fmt.Sprintf("FieldDef{name=%s, nullable=%v, trackingRef=%v, fieldType=%s}",
-		fd.name, fd.nullable, fd.trackingRef, fieldTypeToString(fd.fieldType))
+		fd.name, fd.nullable, fd.trackingRef, fieldTypeStr)
 }
 
 // fieldTypeToString returns a detailed string representation of a FieldType
@@ -460,6 +467,7 @@ func buildFieldDefs(fory *Fory, value reflect.Value) ([]FieldDef, error) {
 // FieldType interface represents different field types, including object, collection, and map types
 type FieldType interface {
 	TypeId() TypeId
+	String() string
 	write(*ByteBuffer)
 	writeWithFlags(*ByteBuffer, bool, bool)                  // writeWithFlags writes typeId with nullable/trackingRef flags
 	getTypeInfo(*Fory) (TypeInfo, error)                     // some serializer need typeinfo as well
@@ -472,6 +480,9 @@ type BaseFieldType struct {
 }
 
 func (b *BaseFieldType) TypeId() TypeId { return b.typeId }
+func (b *BaseFieldType) String() string {
+	return fmt.Sprintf("FieldType{typeId=%d}", b.typeId)
+}
 func (b *BaseFieldType) write(buffer *ByteBuffer) {
 	buffer.WriteVaruint32Small7(uint32(b.typeId))
 }
@@ -596,6 +607,10 @@ func NewCollectionFieldType(typeId TypeId, elementType FieldType) *CollectionFie
 	}
 }
 
+func (c *CollectionFieldType) String() string {
+	return fmt.Sprintf("CollectionFieldType{typeId=%d, elementType=%s}", c.typeId, c.elementType.String())
+}
+
 func (c *CollectionFieldType) write(buffer *ByteBuffer) {
 	c.BaseFieldType.write(buffer)
 	// Element types in collections are written with flags (nullable=true, trackingRef=false)
@@ -642,6 +657,10 @@ func NewMapFieldType(typeId TypeId, keyType, valueType FieldType) *MapFieldType 
 		keyType:       keyType,
 		valueType:     valueType,
 	}
+}
+
+func (m *MapFieldType) String() string {
+	return fmt.Sprintf("MapFieldType{typeId=%d, keyType=%s, valueType=%s}", m.typeId, m.keyType.String(), m.valueType.String())
 }
 
 func (m *MapFieldType) write(buffer *ByteBuffer) {
@@ -712,6 +731,10 @@ func NewSimpleFieldType(typeId TypeId) *SimpleFieldType {
 	}
 }
 
+func (s *SimpleFieldType) String() string {
+	return fmt.Sprintf("SimpleFieldType{typeId=%d}", s.typeId)
+}
+
 // DynamicFieldType represents a field type that is determined at runtime, like EXT or STRUCT
 type DynamicFieldType struct {
 	BaseFieldType
@@ -723,6 +746,10 @@ func NewDynamicFieldType(typeId TypeId) *DynamicFieldType {
 			typeId: typeId,
 		},
 	}
+}
+
+func (d *DynamicFieldType) String() string {
+	return fmt.Sprintf("DynamicFieldType{typeId=%d}", d.typeId)
 }
 
 func (d *DynamicFieldType) getTypeInfo(fory *Fory) (TypeInfo, error) {

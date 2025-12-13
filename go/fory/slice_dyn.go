@@ -56,7 +56,7 @@ func (s sliceSerializer) WriteData(ctx *WriteContext, value reflect.Value) error
 	if (collectFlag & CollectionIsSameType) != 0 {
 		return s.writeSameType(ctx, buf, value, elemTypeInfo, collectFlag) // Optimized path for same-type elements
 	}
-	return s.writeDifferentTypes(ctx, buf, value) // Fallback path for mixed-type elements
+	return s.writeDifferentTypes(ctx, buf, value, collectFlag) // Fallback path for mixed-type elements
 }
 
 func (s sliceSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
@@ -200,7 +200,10 @@ func (s sliceSerializer) writeSameType(
 }
 
 // writeDifferentTypes handles serialization of slices with mixed element types
-func (s sliceSerializer) writeDifferentTypes(ctx *WriteContext, buf *ByteBuffer, value reflect.Value) error {
+func (s sliceSerializer) writeDifferentTypes(ctx *WriteContext, buf *ByteBuffer, value reflect.Value, flag byte) error {
+	trackRefs := (flag & CollectionTrackingRef) != 0
+	hasNull := (flag & CollectionHasNull) != 0
+
 	for i := 0; i < value.Len(); i++ {
 		elem := value.Index(i)
 		if elem.Kind() == reflect.Interface || elem.Kind() == reflect.Ptr {
@@ -218,9 +221,39 @@ func (s sliceSerializer) writeDifferentTypes(ctx *WriteContext, buf *ByteBuffer,
 			reflect.Copy(slice, elem)
 			elem = slice
 		}
-		// Use Write with ref and type tracking enabled
-		if err := ctx.WriteValue(elem); err != nil {
+
+		// Get serializer for this element
+		typeInfo, err := ctx.TypeResolver().getTypeInfo(elem, true)
+		if err != nil {
 			return err
+		}
+
+		if trackRefs {
+			// Write ref flag, type info, and data
+			refWritten, err := ctx.RefResolver().WriteRefOrNull(buf, elem)
+			if err != nil {
+				return err
+			}
+			// Write type ID
+			buf.WriteVaruint32Small7(uint32(typeInfo.TypeID))
+			if !refWritten {
+				if err := typeInfo.Serializer.WriteData(ctx, elem); err != nil {
+					return err
+				}
+			}
+		} else if hasNull {
+			// No ref tracking but may have nulls - write NotNullValueFlag before type + data
+			buf.WriteInt8(NotNullValueFlag)
+			buf.WriteVaruint32Small7(uint32(typeInfo.TypeID))
+			if err := typeInfo.Serializer.WriteData(ctx, elem); err != nil {
+				return err
+			}
+		} else {
+			// No ref tracking and no nulls - write type + data directly
+			buf.WriteVaruint32Small7(uint32(typeInfo.TypeID))
+			if err := typeInfo.Serializer.WriteData(ctx, elem); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -246,15 +279,8 @@ func (s sliceSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value re
 	// We must consume these bytes even if we use declared type serializer
 	if (collectFlag & CollectionIsSameType) != 0 {
 		if (collectFlag & CollectionIsDeclElementType) == 0 {
-			// ReadData type ID from buffer
-			typeID := buf.ReadVaruint32Small7()
-
-			// ReadData additional metadata for namespaced types
-			if IsNamespacedType(TypeId(typeID)) {
-				elemTypeInfo, _ = ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID)
-			} else {
-				elemTypeInfo, _ = ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID)
-			}
+			// Read type info (handles namespaced types, meta sharing, etc.)
+			elemTypeInfo, _ = ctx.TypeResolver().readTypeInfo(buf, reflect.New(type_.Elem()).Elem())
 		}
 	}
 
@@ -317,7 +343,7 @@ func (s sliceSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value re
 	if (collectFlag & CollectionIsSameType) != 0 {
 		err = s.readSameType(ctx, buf, readValue, elemType, elemSerializer, collectFlag)
 	} else {
-		err = s.readDifferentTypes(ctx, buf, readValue)
+		err = s.readDifferentTypes(ctx, buf, readValue, collectFlag)
 	}
 	if err != nil {
 		return err
@@ -467,14 +493,96 @@ func (s sliceSerializer) readSameType(ctx *ReadContext, buf *ByteBuffer, value r
 
 // readDifferentTypes handles deserialization of slices with mixed element types
 func (s sliceSerializer) readDifferentTypes(
-	ctx *ReadContext, buf *ByteBuffer, value reflect.Value) error {
+	ctx *ReadContext, buf *ByteBuffer, value reflect.Value, flag int8) error {
+	trackRefs := (flag & CollectionTrackingRef) != 0
+	hasNull := (flag & CollectionHasNull) != 0
+	sliceElemType := value.Type().Elem()
+
 	for i := 0; i < value.Len(); i++ {
-		// Create new element and deserialize from buffer
-		elem := reflect.New(value.Type().Elem()).Elem()
-		if err := ctx.ReadValue(elem); err != nil {
-			return err
+		if trackRefs {
+			// Read with ref tracking: refFlag + typeId + data
+			refID, err := ctx.RefResolver().TryPreserveRefId(buf)
+			if err != nil {
+				return err
+			}
+			if int8(refID) == NullFlag {
+				// Null element
+				continue
+			}
+			if int8(refID) < NotNullValueFlag {
+				// Reference to existing object
+				obj := ctx.RefResolver().GetReadObject(refID)
+				if obj.IsValid() {
+					value.Index(i).Set(obj)
+				}
+				continue
+			}
+			// Read type info (handles namespaced types, meta sharing, etc.)
+			typeInfo, err := ctx.TypeResolver().readTypeInfo(buf, value.Index(i))
+			if err != nil {
+				return fmt.Errorf("failed to read type info: %w", err)
+			}
+			// Create new element of actual type and read data
+			elem := reflect.New(typeInfo.Type).Elem()
+			if err := typeInfo.Serializer.ReadData(ctx, typeInfo.Type, elem); err != nil {
+				return err
+			}
+			ctx.RefResolver().SetReadObject(refID, elem)
+			// Set element, handling interface/pointer types
+			setSliceElement(value.Index(i), elem, sliceElemType)
+		} else if hasNull {
+			// No ref tracking but may have nulls: headFlag + typeId + data (or just NullFlag)
+			headFlag := buf.ReadInt8()
+			if headFlag == NullFlag {
+				// Null element
+				continue
+			}
+			// headFlag should be NotNullValueFlag, read type info
+			typeInfo, err := ctx.TypeResolver().readTypeInfo(buf, value.Index(i))
+			if err != nil {
+				return fmt.Errorf("failed to read type info: %w", err)
+			}
+			elem := reflect.New(typeInfo.Type).Elem()
+			if err := typeInfo.Serializer.ReadData(ctx, typeInfo.Type, elem); err != nil {
+				return err
+			}
+			// Set element
+			setSliceElement(value.Index(i), elem, sliceElemType)
+		} else {
+			// No ref tracking and no nulls: typeId + data directly
+			typeInfo, err := ctx.TypeResolver().readTypeInfo(buf, value.Index(i))
+			if err != nil {
+				return fmt.Errorf("failed to read type info: %w", err)
+			}
+			elem := reflect.New(typeInfo.Type).Elem()
+			if err := typeInfo.Serializer.ReadData(ctx, typeInfo.Type, elem); err != nil {
+				return err
+			}
+			// Set element
+			setSliceElement(value.Index(i), elem, sliceElemType)
 		}
-		value.Index(i).Set(elem)
 	}
 	return nil
+}
+
+// setSliceElement sets an element into a slice, handling interface types where
+// the concrete type may need to be wrapped in a pointer to implement the interface.
+func setSliceElement(target, elem reflect.Value, targetType reflect.Type) {
+	if targetType.Kind() == reflect.Interface {
+		// Check if elem is directly assignable to the interface
+		if elem.Type().AssignableTo(targetType) {
+			target.Set(elem)
+		} else {
+			// Try pointer - common case where interface has pointer receivers
+			ptr := reflect.New(elem.Type())
+			ptr.Elem().Set(elem)
+			target.Set(ptr)
+		}
+	} else if targetType.Kind() == reflect.Ptr && elem.Type().Kind() != reflect.Ptr {
+		ptr := reflect.New(elem.Type())
+		ptr.Elem().Set(elem)
+		target.Set(ptr)
+	} else {
+		target.Set(elem)
+	}
 }

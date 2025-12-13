@@ -409,9 +409,15 @@ func (f *Fory) Serialize(buffer *ByteBuffer, v interface{}, callback func(Buffer
 // The third parameter is optional external buffers for out-of-band data (can be nil).
 func (f *Fory) Deserialize(buffer *ByteBuffer, v interface{}, buffers []*ByteBuffer) error {
 	// Reset context and use the provided buffer
-	f.readCtx.Reset()
 	f.readCtx.buffer = buffer
-
+	defer func() {
+		f.readCtx.Reset()
+		if f.metaContext != nil {
+			f.metaContext.Reset()
+		}
+		f.readCtx.buffer = nil
+		f.readCtx.outOfBandBuffers = nil
+	}()
 	// Set up out-of-band buffers if provided
 	if buffers != nil {
 		f.readCtx.outOfBandBuffers = buffers

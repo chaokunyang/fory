@@ -110,6 +110,7 @@ type TypeInfo struct {
 	Serializer    Serializer
 	NeedWriteDef  bool
 	hashValue     uint64
+	TypeDef       *TypeDef
 }
 type (
 	namedTypeKey [2]string

@@ -101,11 +101,11 @@ func (b *ByteBuffer) WriteLength(value int) {
 	if value >= MaxInt32 {
 		panic(fmt.Errorf("too long: %d", value))
 	}
-	b.WriteVarInt32(int32(value))
+	b.WriteVaruint32(uint32(value))
 }
 
 func (b *ByteBuffer) ReadLength() int {
-	return int(b.ReadVarInt32())
+	return int(b.ReadVaruint32())
 }
 
 func (b *ByteBuffer) WriteInt64(value int64) {
@@ -232,6 +232,11 @@ func (b *ByteBuffer) WriterIndex() int {
 	return b.writerIndex
 }
 
+// Bytes returns all written bytes from the buffer (from 0 to writerIndex).
+func (b *ByteBuffer) Bytes() []byte {
+	return b.GetByteSlice(0, b.writerIndex)
+}
+
 func (b *ByteBuffer) SetWriterIndex(index int) {
 	b.writerIndex = index
 }
@@ -255,8 +260,9 @@ func (b *ByteBuffer) PutInt32(index int, value int32) {
 	binary.LittleEndian.PutUint32(b.data[index:], uint32(value))
 }
 
-// WriteVarInt32 WriteVarUint writes a 1-5 byte int, returns the number of bytes written.
-func (b *ByteBuffer) WriteVarInt32(value int32) int8 {
+// WriteVaruint32 writes a 1-5 byte positive int (no zigzag encoding), returns the number of bytes written.
+// Use this for lengths, type IDs, and other non-negative values.
+func (b *ByteBuffer) WriteVaruint32(value uint32) int8 {
 	if value>>7 == 0 {
 		b.grow(1)
 		b.data[b.writerIndex] = byte(value)
@@ -297,74 +303,129 @@ func (b *ByteBuffer) WriteVarInt32(value int32) int8 {
 	return 5
 }
 
-// ReadVarInt32 reads the 1-5 byte int part of a varint.
-func (b *ByteBuffer) ReadVarInt32() int32 {
-	readerIndex := b.readerIndex
-	byte_ := int32(b.data[readerIndex])
-	readerIndex++
-	result := byte_ & 0x7F
-	if (byte_ & 0x80) != 0 {
-		byte_ = int32(b.data[readerIndex])
-		readerIndex++
-		result |= (byte_ & 0x7F) << 7
-		if (byte_ & 0x80) != 0 {
-			byte_ = int32(b.data[readerIndex])
-			readerIndex++
-			result |= (byte_ & 0x7F) << 14
-			if (byte_ & 0x80) != 0 {
-				byte_ = int32(b.data[readerIndex])
-				readerIndex++
-				result |= (byte_ & 0x7F) << 21
-				if (byte_ & 0x80) != 0 {
-					byte_ = int32(b.data[readerIndex])
-					readerIndex++
-					result |= (byte_ & 0x7F) << 28
-				}
-			}
-		}
-	}
-	b.readerIndex = readerIndex
-	return result
-}
-
 type BufferObject interface {
 	TotalBytes() int
 	WriteTo(buf *ByteBuffer)
 	ToBuffer() *ByteBuffer
 }
 
-// WriteVarint64 writes the zig-zag encoded varint
+// WriteVarint64 writes the zig-zag encoded varint (compatible with Java's writeVarint64).
 func (b *ByteBuffer) WriteVarint64(value int64) {
 	u := uint64((value << 1) ^ (value >> 63))
-	b.WriteVarUint64(u)
+	b.WriteVaruint64(u)
 }
 
-// WriteVarUint64 writes to unsigned varint (up to 9 bytes)
-func (b *ByteBuffer) WriteVarUint64(value uint64) {
+// WriteVaruint64 writes to unsigned varint (up to 9 bytes)
+func (b *ByteBuffer) WriteVaruint64(value uint64) {
 	b.grow(9)
 	offset := b.writerIndex
 	data := b.data[offset : offset+9]
 
 	i := 0
-	for ; i < 8; i++ {
-		data[i] = byte(value & 0x7F)
+	for i < 8 && value >= 0x80 {
+		data[i] = byte(value&0x7F) | 0x80
 		value >>= 7
-		if value == 0 {
-			i++
-			break
-		}
-		data[i] |= 0x80
+		i++
 	}
-	if i == 8 {
-		data[8] = byte(value)
-		i = 9
-	}
+	data[i] = byte(value)
+	i++
 	b.writerIndex += i
 }
 
-// ReadVarint64 reads the varint encoded with zig-zag
+// WriteVaruint36Small writes a varint optimized for small values (up to 36 bits)
+// Used for string headers: (length << 2) | encoding
+func (b *ByteBuffer) WriteVaruint36Small(value uint64) {
+	b.grow(5)
+	offset := b.writerIndex
+	data := b.data[offset:]
+
+	if value < 0x80 {
+		data[0] = byte(value)
+		b.writerIndex += 1
+	} else if value < 0x4000 {
+		data[0] = byte(value&0x7F) | 0x80
+		data[1] = byte(value >> 7)
+		b.writerIndex += 2
+	} else if value < 0x200000 {
+		data[0] = byte(value&0x7F) | 0x80
+		data[1] = byte((value>>7)&0x7F) | 0x80
+		data[2] = byte(value >> 14)
+		b.writerIndex += 3
+	} else if value < 0x10000000 {
+		data[0] = byte(value&0x7F) | 0x80
+		data[1] = byte((value>>7)&0x7F) | 0x80
+		data[2] = byte((value>>14)&0x7F) | 0x80
+		data[3] = byte(value >> 21)
+		b.writerIndex += 4
+	} else {
+		data[0] = byte(value&0x7F) | 0x80
+		data[1] = byte((value>>7)&0x7F) | 0x80
+		data[2] = byte((value>>14)&0x7F) | 0x80
+		data[3] = byte((value>>21)&0x7F) | 0x80
+		data[4] = byte(value >> 28)
+		b.writerIndex += 5
+	}
+}
+
+// ReadVaruint36Small reads a varint optimized for small values (up to 36 bits)
+// Used for string headers: (length << 2) | encoding
+func (b *ByteBuffer) ReadVaruint36Small() uint64 {
+	if b.remaining() >= 8 {
+		return b.readVaruint36SmallFast()
+	}
+	return b.readVaruint36SmallSlow()
+}
+
+func (b *ByteBuffer) readVaruint36SmallFast() uint64 {
+	data := b.data[b.readerIndex:]
+	bulk := uint64(data[0]) | uint64(data[1])<<8 | uint64(data[2])<<16 | uint64(data[3])<<24 |
+		uint64(data[4])<<32 | uint64(data[5])<<40 | uint64(data[6])<<48 | uint64(data[7])<<56
+
+	result := bulk & 0x7F
+	readLen := 1
+
+	if (bulk & 0x80) != 0 {
+		readLen = 2
+		result |= (bulk >> 1) & 0x3F80
+		if (bulk & 0x8000) != 0 {
+			readLen = 3
+			result |= (bulk >> 2) & 0x1FC000
+			if (bulk & 0x800000) != 0 {
+				readLen = 4
+				result |= (bulk >> 3) & 0xFE00000
+				if (bulk & 0x80000000) != 0 {
+					readLen = 5
+					result |= (bulk >> 4) & 0xFF0000000
+				}
+			}
+		}
+	}
+	b.readerIndex += readLen
+	return result
+}
+
+func (b *ByteBuffer) readVaruint36SmallSlow() uint64 {
+	var result uint64
+	var shift uint
+
+	for b.readerIndex < len(b.data) {
+		byteVal := b.data[b.readerIndex]
+		b.readerIndex++
+		result |= uint64(byteVal&0x7F) << shift
+		if (byteVal & 0x80) == 0 {
+			break
+		}
+		shift += 7
+		if shift >= 36 {
+			panic("varuint36small overflow")
+		}
+	}
+	return result
+}
+
+// ReadVarint64 reads the varint encoded with zig-zag (compatible with Java's readVarint64).
 func (b *ByteBuffer) ReadVarint64() int64 {
-	u := b.ReadVarUint64()
+	u := b.ReadVaruint64()
 	v := int64(u >> 1)
 	if u&1 != 0 {
 		v = ^v
@@ -372,16 +433,16 @@ func (b *ByteBuffer) ReadVarint64() int64 {
 	return v
 }
 
-// ReadVarUint64 reads unsigned varint
-func (b *ByteBuffer) ReadVarUint64() uint64 {
+// ReadVaruint64 reads unsigned varint
+func (b *ByteBuffer) ReadVaruint64() uint64 {
 	if b.remaining() >= 9 {
-		return b.readVarUint64Fast()
+		return b.readVaruint64Fast()
 	}
-	return b.readVarUint64Slow()
+	return b.readVaruint64Slow()
 }
 
 // Fast path (when the remaining bytes are sufficient)
-func (b *ByteBuffer) readVarUint64Fast() uint64 {
+func (b *ByteBuffer) readVaruint64Fast() uint64 {
 	data := b.data[b.readerIndex:]
 	var result uint64
 	var readLength int
@@ -442,7 +503,7 @@ func (b *ByteBuffer) readVarUint64Fast() uint64 {
 }
 
 // Slow path (read byte by byte)
-func (b *ByteBuffer) readVarUint64Slow() uint64 {
+func (b *ByteBuffer) readVaruint64Slow() uint64 {
 	var result uint64
 	var shift uint
 	for {
@@ -473,35 +534,15 @@ func (b *ByteBuffer) ReadUint8() uint8 {
 	return v
 }
 
-func (b *ByteBuffer) WriteVarint32(value int32) {
+// WriteVarint32 writes a signed int32 using zigzag encoding (compatible with Java's writeVarint32).
+func (b *ByteBuffer) WriteVarint32(value int32) int8 {
 	u := uint32((value << 1) ^ (value >> 31))
-	b.WriteVarUint32(u)
+	return b.WriteVaruint32(u)
 }
 
-func (b *ByteBuffer) WriteVarUint32(value uint32) {
-	b.grow(5)
-	offset := b.writerIndex
-	data := b.data[offset : offset+5]
-
-	i := 0
-	for ; i < 4; i++ {
-		data[i] = byte(value & 0x7F)
-		value >>= 7
-		if value == 0 {
-			i++
-			break
-		}
-		data[i] |= 0x80
-	}
-	if i == 4 {
-		data[4] = byte(value)
-		i = 5
-	}
-	b.writerIndex += i
-}
-
+// ReadVarint32 reads a signed int32 using zigzag decoding (compatible with Java's readVarint32).
 func (b *ByteBuffer) ReadVarint32() int32 {
-	u := b.ReadVarUint32()
+	u := b.ReadVaruint32()
 	v := int32(u >> 1)
 	if u&1 != 0 {
 		v = ^v
@@ -509,15 +550,15 @@ func (b *ByteBuffer) ReadVarint32() int32 {
 	return v
 }
 
-func (b *ByteBuffer) ReadVarUint32() uint32 {
+func (b *ByteBuffer) ReadVaruint32() uint32 {
 	if b.remaining() >= 5 {
-		return b.readVarUint32Fast()
+		return b.readVaruint32Fast()
 	}
-	return b.readVarUint32Slow()
+	return b.readVaruint32Slow()
 }
 
 // Fast path reading (when the remaining bytes are sufficient)
-func (b *ByteBuffer) readVarUint32Fast() uint32 {
+func (b *ByteBuffer) readVaruint32Fast() uint32 {
 	data := b.data[b.readerIndex:]
 	var result uint32
 	var readLength int
@@ -554,7 +595,7 @@ func (b *ByteBuffer) readVarUint32Fast() uint32 {
 }
 
 // Slow path reading (processing byte by byte)
-func (b *ByteBuffer) readVarUint32Slow() uint32 {
+func (b *ByteBuffer) readVaruint32Slow() uint32 {
 	var result uint32
 	var shift uint
 	for {
@@ -575,18 +616,18 @@ func (b *ByteBuffer) PutUint8(writerIndex int, value uint8) {
 	b.data[writerIndex] = byte(value)
 }
 
-// WriteVarUint32Small7 writes a uint32 in variable-length small-7 format
-func (b *ByteBuffer) WriteVarUint32Small7(value uint32) int {
+// WriteVaruint32Small7 writes a uint32 in variable-length small-7 format
+func (b *ByteBuffer) WriteVaruint32Small7(value uint32) int {
 	b.grow(8)
 	if value>>7 == 0 {
 		b.data[b.writerIndex] = byte(value)
 		b.writerIndex++
 		return 1
 	}
-	return b.continueWriteVarUint32Small7(value)
+	return b.continueWriteVaruint32Small7(value)
 }
 
-func (b *ByteBuffer) continueWriteVarUint32Small7(value uint32) int {
+func (b *ByteBuffer) continueWriteVaruint32Small7(value uint32) int {
 	encoded := uint64(value & 0x7F)
 	encoded |= uint64((value&0x3f80)<<1) | 0x80
 	idx := b.writerIndex
@@ -595,12 +636,12 @@ func (b *ByteBuffer) continueWriteVarUint32Small7(value uint32) int {
 		b.writerIndex += 2
 		return 2
 	}
-	d := b.continuePutVarInt36(idx, encoded, uint64(value))
+	d := b.continuePutVarint36(idx, encoded, uint64(value))
 	b.writerIndex += d
 	return d
 }
 
-func (b *ByteBuffer) continuePutVarInt36(index int, encoded, value uint64) int {
+func (b *ByteBuffer) continuePutVarint36(index int, encoded, value uint64) int {
 	// bits 14
 	encoded |= ((value & 0x1fc000) << 2) | 0x8000
 	if value>>21 == 0 {
@@ -628,39 +669,39 @@ func (b *ByteBuffer) unsafePutInt64(index int, v uint64) {
 }
 
 // ByteBuffer methods for variable-length integers
-func (b *ByteBuffer) ReadVarUint32Small7() int {
+func (b *ByteBuffer) ReadVaruint32Small7() uint32 {
 	readIdx := b.readerIndex
 	if len(b.data)-readIdx > 0 {
 		v := b.data[readIdx]
 		readIdx++
 		if v&0x80 == 0 {
 			b.readerIndex = readIdx
-			return int(v)
+			return uint32(v)
 		}
 	}
-	return b.readVarUint32Small14()
+	return b.readVaruint32Small14()
 }
 
-func (b *ByteBuffer) readVarUint32Small14() int {
+func (b *ByteBuffer) readVaruint32Small14() uint32 {
 	readIdx := b.readerIndex
 	if len(b.data)-readIdx >= 5 {
-		four := b.unsafeGetInt32(readIdx)
+		four := binary.LittleEndian.Uint32(b.data[readIdx:])
 		readIdx++
 		value := four & 0x7F
 		if four&0x80 != 0 {
 			readIdx++
 			value |= (four >> 1) & 0x3f80
 			if four&0x8000 != 0 {
-				return b.continueReadVarUint32(readIdx, four, value)
+				return b.continueReadVaruint32(readIdx, four, value)
 			}
 		}
 		b.readerIndex = readIdx
 		return value
 	}
-	return int(b.readVarUint36Slow())
+	return uint32(b.readVaruint36Slow())
 }
 
-func (b *ByteBuffer) continueReadVarUint32(readIdx, bulkRead, value int) int {
+func (b *ByteBuffer) continueReadVaruint32(readIdx int, bulkRead, value uint32) uint32 {
 	readIdx++
 	value |= (bulkRead >> 2) & 0x1fc000
 	if bulkRead&0x800000 != 0 {
@@ -669,14 +710,14 @@ func (b *ByteBuffer) continueReadVarUint32(readIdx, bulkRead, value int) int {
 		if bulkRead&0x80000000 != 0 {
 			v := b.data[readIdx]
 			readIdx++
-			value |= int(v&0x7F) << 28
+			value |= uint32(v&0x7F) << 28
 		}
 	}
 	b.readerIndex = readIdx
 	return value
 }
 
-func (b *ByteBuffer) readVarUint36Slow() uint64 {
+func (b *ByteBuffer) readVaruint36Slow() uint64 {
 	// unrolled loop
 	b0, _ := b.ReadByte()
 	result := uint64(b0 & 0x7F)

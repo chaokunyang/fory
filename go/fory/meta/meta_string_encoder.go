@@ -161,6 +161,24 @@ func (e *Encoder) ComputeEncoding(input string) Encoding {
 	return e.ComputeEncodingWith(input, allEncodings)
 }
 
+// EncodePackage encodes a package/namespace string using Java-compatible encodings.
+// Java uses: UTF_8, ALL_TO_LOWER_SPECIAL, LOWER_UPPER_DIGIT_SPECIAL for packages.
+func (e *Encoder) EncodePackage(input string) (MetaString, error) {
+	// Java pkgEncodings = {UTF_8, ALL_TO_LOWER_SPECIAL, LOWER_UPPER_DIGIT_SPECIAL}
+	pkgEncodings := []Encoding{ALL_TO_LOWER_SPECIAL, LOWER_UPPER_DIGIT_SPECIAL, UTF_8}
+	encoding := e.ComputeEncodingWith(input, pkgEncodings)
+	return e.EncodeWithEncoding(input, encoding)
+}
+
+// EncodeTypeName encodes a typename string using Java-compatible encodings.
+// Java uses: UTF_8, ALL_TO_LOWER_SPECIAL, LOWER_UPPER_DIGIT_SPECIAL, FIRST_TO_LOWER_SPECIAL for typenames.
+func (e *Encoder) EncodeTypeName(input string) (MetaString, error) {
+	// Java typeNameEncodings = {UTF_8, ALL_TO_LOWER_SPECIAL, LOWER_UPPER_DIGIT_SPECIAL, FIRST_TO_LOWER_SPECIAL}
+	typeNameEncodings := []Encoding{ALL_TO_LOWER_SPECIAL, LOWER_UPPER_DIGIT_SPECIAL, FIRST_TO_LOWER_SPECIAL, UTF_8}
+	encoding := e.ComputeEncodingWith(input, typeNameEncodings)
+	return e.EncodeWithEncoding(input, encoding)
+}
+
 func (e *Encoder) ComputeEncodingWith(input string, encodings []Encoding) Encoding {
 	encodingFlags := make(map[Encoding]bool)
 	for _, enc := range encodings {

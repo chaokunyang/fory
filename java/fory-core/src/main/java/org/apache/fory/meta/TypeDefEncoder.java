@@ -32,6 +32,8 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.apache.fory.Fory;
+import org.apache.fory.logging.Logger;
+import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.ClassDef.FieldInfo;
 import org.apache.fory.meta.ClassDef.FieldType;
@@ -43,6 +45,7 @@ import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.type.Types;
 import org.apache.fory.util.Preconditions;
+import org.apache.fory.util.Utils;
 
 /**
  * An encoder which encode {@link ClassDef} into binary. See spec documentation:
@@ -50,12 +53,14 @@ import org.apache.fory.util.Preconditions;
  * href="https://fory.apache.org/docs/specification/fory_xlang_serialization_spec">...</a>
  */
 class TypeDefEncoder {
+  private static final Logger LOG = LoggerFactory.getLogger(TypeDefEncoder.class);
+
   /** Build class definition from fields of class. */
   static ClassDef buildTypeDef(Fory fory, Class<?> type) {
     DescriptorGrouper descriptorGrouper =
-        fory.getClassResolver()
+        fory.getXtypeResolver()
             .createDescriptorGrouper(
-                fory.getClassResolver().getFieldDescriptors(type, true),
+                fory.getXtypeResolver().getFieldDescriptors(type, true),
                 false,
                 Function.identity());
     ClassInfo classInfo = fory._getTypeResolver().getClassInfo(type);
@@ -87,8 +92,17 @@ class TypeDefEncoder {
     fieldInfos = new ArrayList<>(getClassFields(type, fieldInfos).values());
     MemoryBuffer encodeClassDef = encodeClassDef(resolver, type, fieldInfos);
     byte[] classDefBytes = encodeClassDef.getBytes(0, encodeClassDef.writerIndex());
-    return new ClassDef(
-        Encoders.buildClassSpec(type), fieldInfos, true, encodeClassDef.getInt64(0), classDefBytes);
+    ClassDef classDef =
+        new ClassDef(
+            Encoders.buildClassSpec(type),
+            fieldInfos,
+            true,
+            encodeClassDef.getInt64(0),
+            classDefBytes);
+    if (Utils.debugOutputEnabled()) {
+      LOG.info("[Java TypeDef BUILT] " + classDef);
+    }
+    return classDef;
   }
 
   static final int SMALL_NUM_FIELDS_THRESHOLD = 0b11111;

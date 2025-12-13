@@ -107,33 +107,34 @@ func (c *WriteContext) RefResolver() *RefResolver {
 }
 
 // Inline primitive writes (compiler will inline these)
-func (c *WriteContext) RawBool(v bool)        { c.buffer.WriteBool(v) }
-func (c *WriteContext) RawInt8(v int8)        { c.buffer.WriteByte_(byte(v)) }
-func (c *WriteContext) RawInt16(v int16)      { c.buffer.WriteInt16(v) }
-func (c *WriteContext) RawInt32(v int32)      { c.buffer.WriteInt32(v) }
-func (c *WriteContext) RawInt64(v int64)      { c.buffer.WriteInt64(v) }
-func (c *WriteContext) RawFloat32(v float32)  { c.buffer.WriteFloat32(v) }
-func (c *WriteContext) RawFloat64(v float64)  { c.buffer.WriteFloat64(v) }
-func (c *WriteContext) WriteVarInt32(v int32)   { c.buffer.WriteVarint32(v) }
-func (c *WriteContext) WriteVarInt64(v int64)   { c.buffer.WriteVarint64(v) }
-func (c *WriteContext) WriteVarUint32(v uint32) { c.buffer.WriteVarUint32(v) }
+func (c *WriteContext) RawBool(v bool)          { c.buffer.WriteBool(v) }
+func (c *WriteContext) RawInt8(v int8)          { c.buffer.WriteByte_(byte(v)) }
+func (c *WriteContext) RawInt16(v int16)        { c.buffer.WriteInt16(v) }
+func (c *WriteContext) RawInt32(v int32)        { c.buffer.WriteInt32(v) }
+func (c *WriteContext) RawInt64(v int64)        { c.buffer.WriteInt64(v) }
+func (c *WriteContext) RawFloat32(v float32)    { c.buffer.WriteFloat32(v) }
+func (c *WriteContext) RawFloat64(v float64)    { c.buffer.WriteFloat64(v) }
+func (c *WriteContext) WriteVarint32(v int32)   { c.buffer.WriteVarint32(v) }
+func (c *WriteContext) WriteVarint64(v int64)   { c.buffer.WriteVarint64(v) }
+func (c *WriteContext) WriteVaruint32(v uint32) { c.buffer.WriteVaruint32(v) }
 func (c *WriteContext) WriteByte(v byte)        { c.buffer.WriteByte_(v) }
 func (c *WriteContext) WriteBytes(v []byte)     { c.buffer.WriteBinary(v) }
 
 func (c *WriteContext) RawString(v string) {
-	c.buffer.WriteVarUint32(uint32(len(v)))
+	c.buffer.WriteVaruint32(uint32(len(v)))
 	if len(v) > 0 {
 		c.buffer.WriteBinary(unsafe.Slice(unsafe.StringData(v), len(v)))
 	}
 }
 
 func (c *WriteContext) WriteBinary(v []byte) {
-	c.buffer.WriteVarUint32(uint32(len(v)))
+	c.buffer.WriteVaruint32(uint32(len(v)))
 	c.buffer.WriteBinary(v)
 }
 
 func (c *WriteContext) WriteTypeId(id TypeId) {
-	c.buffer.WriteInt16(id)
+	// Use Varuint32Small7 encoding to match Java's xlang serialization
+	c.buffer.WriteVaruint32Small7(uint32(id))
 }
 
 // writeFast writes a value using fast path based on StaticTypeId
@@ -164,17 +165,17 @@ func (c *WriteContext) writeFast(ptr unsafe.Pointer, ct StaticTypeId) {
 	}
 }
 
-// WriteLength writes a length value as varint
+// WriteLength writes a length value as varint (non-negative values)
 func (c *WriteContext) WriteLength(length int) error {
 	if length > MaxInt32 || length < MinInt32 {
 		return fmt.Errorf("length %d exceeds int32 range", length)
 	}
-	c.buffer.WriteVarInt32(int32(length))
+	c.buffer.WriteVaruint32(uint32(length))
 	return nil
 }
 
 // ============================================================================
-// Typed Write Methods - Write primitives with optional ref/type info
+// Typed WriteData Methods - WriteData primitives with optional ref/type info
 // ============================================================================
 
 // WriteBool writes a bool with optional ref/type info
@@ -290,7 +291,7 @@ func (c *WriteContext) WriteString(value string, writeRefInfo, writeTypeInfo boo
 	if writeTypeInfo {
 		c.WriteTypeId(STRING)
 	}
-	c.buffer.WriteVarUint32(uint32(len(value)))
+	c.buffer.WriteVaruint32(uint32(len(value)))
 	if len(value) > 0 {
 		c.buffer.WriteBinary(unsafe.Slice(unsafe.StringData(value), len(value)))
 	}
@@ -510,7 +511,7 @@ func (c *WriteContext) WriteBufferObject(bufferObject BufferObject) error {
 
 	c.buffer.WriteBool(inBand)
 	if inBand {
-		// Write the buffer data in-band
+		// WriteData the buffer data in-band
 		size := bufferObject.TotalBytes()
 		c.buffer.WriteLength(size)
 		writerIndex := c.buffer.writerIndex
@@ -527,39 +528,32 @@ func (c *WriteContext) WriteBufferObject(bufferObject BufferObject) error {
 
 // WriteValue writes a polymorphic value with reference tracking and type info.
 // This is used when the concrete type is not known at compile time.
+// Each serializer's Write method handles reference tracking internally.
 func (c *WriteContext) WriteValue(value reflect.Value) error {
-	return c.writeReferencable(value)
-}
-
-// writeReferencable writes a value with reference tracking
-func (c *WriteContext) writeReferencable(value reflect.Value) error {
-	return c.writeReferencableBySerializer(value, nil)
-}
-
-// writeReferencableBySerializer writes a value with reference tracking using a specific serializer
-func (c *WriteContext) writeReferencableBySerializer(value reflect.Value, serializer Serializer) error {
-	if refWritten, err := c.refResolver.WriteRefOrNull(c.buffer, value); err == nil && !refWritten {
-		// check ptr
-		if value.Kind() == reflect.Ptr {
-			switch value.Elem().Kind() {
-			case reflect.Ptr, reflect.Map, reflect.Slice, reflect.Interface:
-				return fmt.Errorf("pointer to reference type %s is not supported", value.Type())
-			}
-		}
-		return c.writeValue(value, serializer)
-	} else {
-		return err
-	}
-}
-
-// writeValue writes a value using the type resolver
-func (c *WriteContext) writeValue(value reflect.Value, serializer Serializer) error {
 	// Handle interface values by getting their concrete element
 	if value.Kind() == reflect.Interface {
+		if !value.IsValid() || value.IsNil() {
+			c.buffer.WriteInt8(NullFlag)
+			return nil
+		}
 		value = value.Elem()
 	}
 
-	// For array types, pre-convert the value
+	// Handle invalid values (nil interface)
+	if !value.IsValid() {
+		c.buffer.WriteInt8(NullFlag)
+		return nil
+	}
+
+	// Check for pointer to reference type (not supported)
+	if value.Kind() == reflect.Ptr {
+		switch value.Elem().Kind() {
+		case reflect.Ptr, reflect.Map, reflect.Slice, reflect.Interface:
+			return fmt.Errorf("pointer to reference type %s is not supported", value.Type())
+		}
+	}
+
+	// For array types, pre-convert the value to slice
 	if value.Kind() == reflect.Array {
 		length := value.Len()
 		sliceType := reflect.SliceOf(value.Type().Elem())
@@ -568,19 +562,12 @@ func (c *WriteContext) writeValue(value reflect.Value, serializer Serializer) er
 		value = slice
 	}
 
-	if serializer != nil {
-		return serializer.Write(c, value)
-	}
-
-	// Get type information for the value
+	// Get type information and serializer for the value
 	typeInfo, err := c.typeResolver.getTypeInfo(value, true)
 	if err != nil {
 		return fmt.Errorf("cannot get typeinfo for value %v: %v", value, err)
 	}
-	err = c.typeResolver.writeTypeInfo(c.buffer, typeInfo)
-	if err != nil {
-		return fmt.Errorf("cannot write typeinfo for value %v: %v", value, err)
-	}
-	serializer = typeInfo.Serializer
-	return serializer.Write(c, value)
+
+	// Use serializer's Write method which handles ref tracking and type info internally
+	return typeInfo.Serializer.Write(c, true, true, value)
 }

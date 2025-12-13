@@ -212,6 +212,108 @@ public class ClassDef implements Serializable {
         + '}';
   }
 
+  /**
+   * Compute diff between this (decoded/remote) ClassDef and a local ClassDef. Returns a string
+   * describing the differences, or null if they are identical.
+   */
+  public String computeDiff(ClassDef localDef) {
+    if (localDef == null) {
+      return "Local TypeDef is null (type not registered locally)";
+    }
+    StringBuilder diff = new StringBuilder();
+
+    // Compare class names
+    if (!Objects.equals(this.classSpec.entireClassName, localDef.classSpec.entireClassName)) {
+      diff.append("  className: remote=")
+          .append(this.classSpec.entireClassName)
+          .append(", local=")
+          .append(localDef.classSpec.entireClassName)
+          .append("\n");
+    }
+
+    // Build field maps for comparison
+    Map<String, FieldInfo> remoteFields = new HashMap<>();
+    for (FieldInfo fi : this.fieldsInfo) {
+      remoteFields.put(fi.getFieldName(), fi);
+    }
+    Map<String, FieldInfo> localFields = new HashMap<>();
+    for (FieldInfo fi : localDef.fieldsInfo) {
+      localFields.put(fi.getFieldName(), fi);
+    }
+
+    // Find fields only in remote
+    for (String fieldName : remoteFields.keySet()) {
+      if (!localFields.containsKey(fieldName)) {
+        diff.append("  field '")
+            .append(fieldName)
+            .append("': only in remote, type=")
+            .append(remoteFields.get(fieldName).getFieldType())
+            .append("\n");
+      }
+    }
+
+    // Find fields only in local
+    for (String fieldName : localFields.keySet()) {
+      if (!remoteFields.containsKey(fieldName)) {
+        diff.append("  field '")
+            .append(fieldName)
+            .append("': only in local, type=")
+            .append(localFields.get(fieldName).getFieldType())
+            .append("\n");
+      }
+    }
+
+    // Compare common fields
+    for (String fieldName : remoteFields.keySet()) {
+      if (localFields.containsKey(fieldName)) {
+        FieldInfo remoteField = remoteFields.get(fieldName);
+        FieldInfo localField = localFields.get(fieldName);
+        if (!Objects.equals(remoteField.getFieldType(), localField.getFieldType())) {
+          diff.append("  field '")
+              .append(fieldName)
+              .append("': type mismatch, remote=")
+              .append(remoteField.getFieldType())
+              .append(", local=")
+              .append(localField.getFieldType())
+              .append("\n");
+        }
+      }
+    }
+
+    // Compare field order
+    if (this.fieldsInfo.size() == localDef.fieldsInfo.size()) {
+      boolean orderDifferent = false;
+      for (int i = 0; i < this.fieldsInfo.size(); i++) {
+        if (!Objects.equals(
+            this.fieldsInfo.get(i).getFieldName(), localDef.fieldsInfo.get(i).getFieldName())) {
+          orderDifferent = true;
+          break;
+        }
+      }
+      if (orderDifferent) {
+        diff.append("  field order differs:\n");
+        diff.append("    remote: [");
+        for (int i = 0; i < this.fieldsInfo.size(); i++) {
+          if (i > 0) {
+            diff.append(", ");
+          }
+          diff.append(this.fieldsInfo.get(i).getFieldName());
+        }
+        diff.append("]\n");
+        diff.append("    local:  [");
+        for (int i = 0; i < localDef.fieldsInfo.size(); i++) {
+          if (i > 0) {
+            diff.append(", ");
+          }
+          diff.append(localDef.fieldsInfo.get(i).getFieldName());
+        }
+        diff.append("]\n");
+      }
+    }
+
+    return diff.length() > 0 ? diff.toString() : null;
+  }
+
   /** Write class definition to buffer. */
   public void writeClassDef(MemoryBuffer buffer) {
     buffer.writeBytes(encoded, 0, encoded.length);
@@ -659,6 +761,8 @@ public class ClassDef implements Serializable {
       return "RegisteredFieldType{"
           + "isMonomorphic="
           + isMonomorphic()
+          + ", nullable="
+          + nullable()
           + ", trackingRef="
           + trackingRef()
           + ", classId="
@@ -751,6 +855,8 @@ public class ClassDef implements Serializable {
           + elementType
           + ", isFinal="
           + isMonomorphic()
+          + ", nullable="
+          + nullable()
           + ", trackingRef="
           + trackingRef()
           + '}';
@@ -827,6 +933,8 @@ public class ClassDef implements Serializable {
           + valueType
           + ", isFinal="
           + isMonomorphic()
+          + ", nullable="
+          + nullable()
           + ", trackingRef="
           + trackingRef()
           + '}';
@@ -841,6 +949,11 @@ public class ClassDef implements Serializable {
     @Override
     public TypeRef<?> toTypeToken(TypeResolver classResolver, TypeRef<?> declared) {
       return TypeRef.of(NonexistentClass.NonexistentEnum.class);
+    }
+
+    @Override
+    public String toString() {
+      return "EnumFieldType{" + "xtypeId=" + xtypeId + ", nullable=" + nullable + '}';
     }
   }
 
@@ -923,6 +1036,8 @@ public class ClassDef implements Serializable {
           + dimensions
           + ", isMonomorphic="
           + isMonomorphic
+          + ", nullable="
+          + nullable
           + ", trackingRef="
           + trackingRef
           + '}';
@@ -951,6 +1066,20 @@ public class ClassDef implements Serializable {
     @Override
     public int hashCode() {
       return super.hashCode();
+    }
+
+    @Override
+    public String toString() {
+      return "ObjectFieldType{"
+          + "xtypeId="
+          + xtypeId
+          + ", isMonomorphic="
+          + isMonomorphic
+          + ", nullable="
+          + nullable
+          + ", trackingRef="
+          + trackingRef
+          + '}';
     }
   }
 

@@ -229,7 +229,7 @@ def compute_struct_meta(type_resolver, field_names, serializers, nullable_map=No
         type_hash_32 = type_hash_32 - 0x100000000
     assert type_hash_32 != 0
     if os.environ.get("ENABLE_FORY_DEBUG_OUTPUT", "").lower() in ("1", "true"):
-        print(f'[fory-debug] struct version fingerprint="{hash_str}" version hash={type_hash_32}')
+        print(f'[Python][fory-debug] struct version fingerprint="{hash_str}" version hash={type_hash_32}')
 
     # Flatten all groups in correct order (already sorted from group_fields)
     all_types = boxed_types + nullable_boxed_types + internal_types + collection_types + set_types + map_types + other_types

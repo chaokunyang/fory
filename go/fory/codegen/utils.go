@@ -447,18 +447,15 @@ func computeStructHash(s *StructInfo) int32 {
 // This matches the reflection implementation's nullable() function
 func isNullableType(t types.Type) bool {
 	// Check pointer, slice, map, interface directly
+	// These are referencable types that need nullable flag = 1
 	switch t.(type) {
-	case *types.Pointer, *types.Slice, *types.Map, *types.Interface, *types.Array:
+	case *types.Pointer, *types.Slice, *types.Map, *types.Interface:
 		return true
 	}
 
-	// Check basic types (String is nullable)
-	if basic, ok := t.Underlying().(*types.Basic); ok {
-		return basic.Kind() == types.String
-	}
-
-	// For named types (e.g., time.Time, fory.Date), check underlying type
-	// Struct types are not nullable unless they're pointers
+	// String is NOT referencable in fory Go (unlike some other languages)
+	// This matches the reflection code's isReferencable() function
+	// Arrays are also not referencable
 	return false
 }
 

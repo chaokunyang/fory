@@ -32,9 +32,9 @@ type Date struct {
 type dateSerializer struct{}
 
 func (s dateSerializer) TypeId() TypeId       { return LOCAL_DATE }
-func (s dateSerializer) NeedToWriteRef() bool { return true }
+func (s dateSerializer) NeedToWriteRef() bool { return false }
 
-func (s dateSerializer) Write(ctx *WriteContext, value reflect.Value) error {
+func (s dateSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	date := value.Interface().(Date)
 	diff := time.Date(date.Year, date.Month, date.Day, 0, 0, 0, 0, time.Local).Sub(
 		time.Date(1970, 1, 1, 0, 0, 0, 0, time.Local))
@@ -42,24 +42,80 @@ func (s dateSerializer) Write(ctx *WriteContext, value reflect.Value) error {
 	return nil
 }
 
-func (s dateSerializer) Read(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+func (s dateSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
+	if writeRef {
+		ctx.buffer.WriteInt8(NotNullValueFlag)
+	}
+	if writeType {
+		ctx.buffer.WriteVaruint32Small7(uint32(LOCAL_DATE))
+	}
+	return s.WriteData(ctx, value)
+}
+
+func (s dateSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	diff := time.Duration(ctx.buffer.ReadInt32()) * 24 * time.Hour
 	date := time.Date(1970, 1, 1, 0, 0, 0, 0, time.Local).Add(diff)
 	value.Set(reflect.ValueOf(Date{date.Year(), date.Month(), date.Day()}))
 	return nil
 }
 
+func (s dateSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
+	buf := ctx.buffer
+	if readRef {
+		refFlag := buf.ReadInt8()
+		if refFlag == NullFlag {
+			return nil
+		}
+	}
+	if readType {
+		_ = buf.ReadVaruint32Small7()
+	}
+	return s.ReadData(ctx, value.Type(), value)
+}
+
+func (s dateSerializer) ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeInfo *TypeInfo, value reflect.Value) error {
+	return s.Read(ctx, readRef, false, value)
+}
+
 type timeSerializer struct{}
 
 func (s timeSerializer) TypeId() TypeId       { return TIMESTAMP }
-func (s timeSerializer) NeedToWriteRef() bool { return true }
+func (s timeSerializer) NeedToWriteRef() bool { return false }
 
-func (s timeSerializer) Write(ctx *WriteContext, value reflect.Value) error {
+func (s timeSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	ctx.buffer.WriteInt64(GetUnixMicro(value.Interface().(time.Time)))
 	return nil
 }
 
-func (s timeSerializer) Read(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+func (s timeSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
+	if writeRef {
+		ctx.buffer.WriteInt8(NotNullValueFlag)
+	}
+	if writeType {
+		ctx.buffer.WriteVaruint32Small7(uint32(TIMESTAMP))
+	}
+	return s.WriteData(ctx, value)
+}
+
+func (s timeSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	value.Set(reflect.ValueOf(CreateTimeFromUnixMicro(ctx.buffer.ReadInt64())))
 	return nil
+}
+
+func (s timeSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
+	buf := ctx.buffer
+	if readRef {
+		refFlag := buf.ReadInt8()
+		if refFlag == NullFlag {
+			return nil
+		}
+	}
+	if readType {
+		_ = buf.ReadVaruint32Small7()
+	}
+	return s.ReadData(ctx, value.Type(), value)
+}
+
+func (s timeSerializer) ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeInfo *TypeInfo, value reflect.Value) error {
+	return s.Read(ctx, readRef, false, value)
 }

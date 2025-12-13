@@ -99,7 +99,7 @@ func (r *RefResolver) WriteRefOrNull(buffer *ByteBuffer, value reflect.Value) (r
 		if writtenId, ok := r.writtenObjects[refKey]; ok {
 			// The obj has been written previously.
 			buffer.WriteInt8(RefFlag)
-			buffer.WriteVarInt32(writtenId)
+			buffer.WriteVaruint32(uint32(writtenId))
 			return true, nil
 		} else {
 			// The id should be consistent with `nextReadRefId`
@@ -124,8 +124,8 @@ func (r *RefResolver) ReadRefOrNull(buffer *ByteBuffer) int8 {
 	}
 	if refTag == RefFlag {
 		// read ref id and get object from ref resolver
-		refId := buffer.ReadVarInt32()
-		r.readObject = r.GetReadObject(refId)
+		refId := buffer.ReadVaruint32()
+		r.readObject = r.GetReadObject(int32(refId))
 		return RefFlag
 	} else {
 		r.readObject = reflect.Value{}
@@ -154,8 +154,8 @@ func (r *RefResolver) TryPreserveRefId(buffer *ByteBuffer) (int32, error) {
 	headFlag := buffer.ReadInt8()
 	if headFlag == RefFlag {
 		// read ref id and get object from ref resolver
-		refId := buffer.ReadVarInt32()
-		r.readObject = r.GetReadObject(refId)
+		refId := buffer.ReadVaruint32()
+		r.readObject = r.GetReadObject(int32(refId))
 	} else {
 		r.readObject = reflect.Value{}
 		if headFlag == RefValueFlag {
@@ -289,7 +289,7 @@ func (w *RefWriter) TryWriteRef(ctx *WriteContext, ptr uintptr) bool {
 	}
 	if refId, exists := w.refs[ptr]; exists {
 		ctx.buffer.WriteInt8(RefFlag)
-		ctx.buffer.WriteVarint32(refId)
+		ctx.buffer.WriteVaruint32(uint32(refId))
 		return true
 	}
 	// First time seeing this reference
@@ -343,7 +343,7 @@ func (r *RefReader) ReadRefFlag(ctx *ReadContext) (flag int8, refId int32, needR
 	case NullFlag:
 		return flag, 0, false
 	case RefFlag:
-		refId = ctx.ReadVarInt32()
+		refId = ctx.ReadVarint32()
 		return flag, refId, false
 	default: // RefValueFlag or NotNullValueFlag
 		return flag, 0, true

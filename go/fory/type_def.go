@@ -19,9 +19,12 @@ package fory
 
 import (
 	"fmt"
+	"strings"
+
+	"reflect"
+
 	"github.com/apache/fory/go/fory/meta"
 	"github.com/spaolacci/murmur3"
-	"reflect"
 )
 
 const (
@@ -40,7 +43,7 @@ typeDef are layout as following:
   - next variable bytes: field definitions (see below)
 */
 type TypeDef struct {
-	typeId         TypeId
+	typeId         uint32 // Full composite type ID (userId << 8 | internalTypeId)
 	nsName         *MetaStringBytes
 	typeName       *MetaStringBytes
 	compressed     bool
@@ -50,7 +53,7 @@ type TypeDef struct {
 	type_          reflect.Type
 }
 
-func NewTypeDef(typeId TypeId, nsName, typeName *MetaStringBytes, registerByName, compressed bool, fieldDefs []FieldDef) *TypeDef {
+func NewTypeDef(typeId uint32, nsName, typeName *MetaStringBytes, registerByName, compressed bool, fieldDefs []FieldDef) *TypeDef {
 	return &TypeDef{
 		typeId:         typeId,
 		nsName:         nsName,
@@ -62,19 +65,174 @@ func NewTypeDef(typeId TypeId, nsName, typeName *MetaStringBytes, registerByName
 	}
 }
 
+// String returns a string representation of TypeDef for debugging
+func (td *TypeDef) String() string {
+	var nsStr, typeStr string
+	if td.nsName != nil {
+		// Try to decode the namespace; if it fails, show raw data
+		decoder := meta.NewDecoder('.', '_')
+		decoded, err := decoder.Decode(td.nsName.Data, td.nsName.Encoding)
+		if err == nil {
+			nsStr = decoded
+		} else {
+			nsStr = fmt.Sprintf("data=%v,enc=%v", td.nsName.Data, td.nsName.Encoding)
+		}
+	}
+	if td.typeName != nil {
+		// Try to decode the typename; if it fails, show raw data
+		decoder := meta.NewDecoder('.', '_')
+		decoded, err := decoder.Decode(td.typeName.Data, td.typeName.Encoding)
+		if err == nil {
+			typeStr = decoded
+		} else {
+			typeStr = fmt.Sprintf("data=%v,enc=%v", td.typeName.Data, td.typeName.Encoding)
+		}
+	}
+	fieldStrs := make([]string, len(td.fieldDefs))
+	for i, fd := range td.fieldDefs {
+		fieldStrs[i] = fd.String()
+	}
+	return fmt.Sprintf("TypeDef{typeId=%d, ns=%s, type=%s, registerByName=%v, compressed=%v, fields=[%s]}",
+		td.typeId, nsStr, typeStr, td.registerByName, td.compressed, strings.Join(fieldStrs, ", "))
+}
+
+// ComputeDiff computes the diff between this (decoded/remote) TypeDef and a local TypeDef.
+// Returns a string describing the differences, or empty string if identical.
+func (td *TypeDef) ComputeDiff(localDef *TypeDef) string {
+	if localDef == nil {
+		return "Local TypeDef is nil (type not registered locally)"
+	}
+
+	var diff strings.Builder
+
+	// Build field maps for comparison
+	remoteFields := make(map[string]FieldDef)
+	for _, fd := range td.fieldDefs {
+		remoteFields[fd.name] = fd
+	}
+	localFields := make(map[string]FieldDef)
+	for _, fd := range localDef.fieldDefs {
+		localFields[fd.name] = fd
+	}
+
+	// Find fields only in remote
+	for fieldName, fd := range remoteFields {
+		if _, exists := localFields[fieldName]; !exists {
+			diff.WriteString(fmt.Sprintf("  field '%s': only in remote, type=%s, nullable=%v\n",
+				fieldName, fieldTypeToString(fd.fieldType), fd.nullable))
+		}
+	}
+
+	// Find fields only in local
+	for fieldName, fd := range localFields {
+		if _, exists := remoteFields[fieldName]; !exists {
+			diff.WriteString(fmt.Sprintf("  field '%s': only in local, type=%s, nullable=%v\n",
+				fieldName, fieldTypeToString(fd.fieldType), fd.nullable))
+		}
+	}
+
+	// Compare common fields
+	for fieldName, remoteField := range remoteFields {
+		if localField, exists := localFields[fieldName]; exists {
+			// Compare field types
+			remoteTypeStr := fieldTypeToString(remoteField.fieldType)
+			localTypeStr := fieldTypeToString(localField.fieldType)
+			if remoteTypeStr != localTypeStr {
+				diff.WriteString(fmt.Sprintf("  field '%s': type mismatch, remote=%s, local=%s\n",
+					fieldName, remoteTypeStr, localTypeStr))
+			}
+			// Compare nullable
+			if remoteField.nullable != localField.nullable {
+				diff.WriteString(fmt.Sprintf("  field '%s': nullable mismatch, remote=%v, local=%v\n",
+					fieldName, remoteField.nullable, localField.nullable))
+			}
+		}
+	}
+
+	// Compare field order
+	if len(td.fieldDefs) == len(localDef.fieldDefs) {
+		orderDifferent := false
+		for i := range td.fieldDefs {
+			if td.fieldDefs[i].name != localDef.fieldDefs[i].name {
+				orderDifferent = true
+				break
+			}
+		}
+		if orderDifferent {
+			diff.WriteString("  field order differs:\n")
+			diff.WriteString("    remote: [")
+			for i, fd := range td.fieldDefs {
+				if i > 0 {
+					diff.WriteString(", ")
+				}
+				diff.WriteString(fd.name)
+			}
+			diff.WriteString("]\n")
+			diff.WriteString("    local:  [")
+			for i, fd := range localDef.fieldDefs {
+				if i > 0 {
+					diff.WriteString(", ")
+				}
+				diff.WriteString(fd.name)
+			}
+			diff.WriteString("]\n")
+		}
+	}
+
+	return diff.String()
+}
+
 func (td *TypeDef) writeTypeDef(buffer *ByteBuffer) {
 	buffer.WriteBinary(td.encoded)
 }
 
 // buildTypeInfo constructs a TypeInfo from the TypeDef
 func (td *TypeDef) buildTypeInfo() (TypeInfo, error) {
+	return td.buildTypeInfoWithResolver(nil)
+}
+
+// buildTypeInfoWithResolver constructs a TypeInfo from the TypeDef, using registered serializer if available
+func (td *TypeDef) buildTypeInfoWithResolver(resolver *TypeResolver) (TypeInfo, error) {
+	type_ := td.type_
+
+	var serializer Serializer
+	// For extension types, use the registered serializer if available
+	if type_ != nil && resolver != nil {
+		if existingSerializer, ok := resolver.typeToSerializers[type_]; ok {
+			// Only use registered serializer for extension types (not struct types)
+			if _, isExt := existingSerializer.(*extensionSerializerAdapter); isExt {
+				serializer = existingSerializer
+			} else if ptrSer, isPtrSer := existingSerializer.(*ptrToValueSerializer); isPtrSer {
+				if _, isExtInner := ptrSer.valueSerializer.(*extensionSerializerAdapter); isExtInner {
+					serializer = existingSerializer
+				}
+			}
+		}
+	}
+	// If no extension serializer, create struct serializer
+	if serializer == nil {
+		if type_ == nil {
+			// Unknown struct type - use skipStructSerializer to skip data
+			serializer = &skipStructSerializer{
+				fieldDefs: td.fieldDefs,
+			}
+		} else {
+			// Known struct type - use structSerializer with fieldDefs
+			serializer = &structSerializer{
+				type_:     type_,
+				fieldDefs: td.fieldDefs,
+			}
+		}
+	}
+
 	info := TypeInfo{
-		Type:         td.type_,
-		TypeID:       int32(td.typeId),
-		Serializer:   &structSerializer{type_: td.type_, fieldDefs: td.fieldDefs},
+		Type:         type_,
+		TypeID:       td.typeId,
+		Serializer:   serializer,
 		PkgPathBytes: td.nsName,
 		NameBytes:    td.typeName,
-		IsDynamic:    td.typeId < 0,
+		IsDynamic:    type_ == nil, // Mark as dynamic if type is unknown
+		TypeDef:      td,
 	}
 	return info, nil
 }
@@ -86,9 +244,75 @@ func readTypeDef(fory *Fory, buffer *ByteBuffer, header int64) (*TypeDef, error)
 func skipTypeDef(buffer *ByteBuffer, header int64) {
 	sz := int(header & META_SIZE_MASK)
 	if sz == META_SIZE_MASK {
-		sz += int(buffer.ReadVarUint32())
+		sz += int(buffer.ReadVaruint32())
 	}
 	buffer.IncreaseReaderIndex(sz)
+}
+
+const BIG_NAME_THRESHOLD = 0b111111 // 6 bits for size when using 2 bits for encoding
+
+// readPkgName reads package name from TypeDef (not the meta string format with dynamic IDs)
+// Java format: 6 bits size | 2 bits encoding flags
+// Package encodings: UTF_8=0, ALL_TO_LOWER_SPECIAL=1, LOWER_UPPER_DIGIT_SPECIAL=2
+func readPkgName(buffer *ByteBuffer, namespaceDecoder *meta.Decoder) (string, error) {
+	header := int(buffer.ReadInt8()) & 0xff
+	encodingFlags := header & 0b11 // 2 bits for encoding
+	size := header >> 2            // 6 bits for size
+	if size == BIG_NAME_THRESHOLD {
+		size = int(buffer.ReadVaruint32Small7()) + BIG_NAME_THRESHOLD
+	}
+
+	var encoding meta.Encoding
+	switch encodingFlags {
+	case 0:
+		encoding = meta.UTF_8
+	case 1:
+		encoding = meta.ALL_TO_LOWER_SPECIAL
+	case 2:
+		encoding = meta.LOWER_UPPER_DIGIT_SPECIAL
+	default:
+		return "", fmt.Errorf("invalid package encoding flags: %d", encodingFlags)
+	}
+
+	data := make([]byte, size)
+	if _, err := buffer.Read(data); err != nil {
+		return "", err
+	}
+
+	return namespaceDecoder.Decode(data, encoding)
+}
+
+// readTypeName reads type name from TypeDef (not the meta string format with dynamic IDs)
+// Java format: 6 bits size | 2 bits encoding flags
+// TypeName encodings: UTF_8=0, ALL_TO_LOWER_SPECIAL=1, LOWER_UPPER_DIGIT_SPECIAL=2, FIRST_TO_LOWER_SPECIAL=3
+func readTypeName(buffer *ByteBuffer, typeNameDecoder *meta.Decoder) (string, error) {
+	header := int(buffer.ReadInt8()) & 0xff
+	encodingFlags := header & 0b11 // 2 bits for encoding
+	size := header >> 2            // 6 bits for size
+	if size == BIG_NAME_THRESHOLD {
+		size = int(buffer.ReadVaruint32Small7()) + BIG_NAME_THRESHOLD
+	}
+
+	var encoding meta.Encoding
+	switch encodingFlags {
+	case 0:
+		encoding = meta.UTF_8
+	case 1:
+		encoding = meta.ALL_TO_LOWER_SPECIAL
+	case 2:
+		encoding = meta.LOWER_UPPER_DIGIT_SPECIAL
+	case 3:
+		encoding = meta.FIRST_TO_LOWER_SPECIAL
+	default:
+		return "", fmt.Errorf("invalid typename encoding flags: %d", encodingFlags)
+	}
+
+	data := make([]byte, size)
+	if _, err := buffer.Read(data); err != nil {
+		return "", err
+	}
+
+	return typeNameDecoder.Decode(data, encoding)
 }
 
 // buildTypeDef constructs a TypeDef from a value
@@ -102,8 +326,8 @@ func buildTypeDef(fory *Fory, value reflect.Value) (*TypeDef, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get type info for value %v: %w", value, err)
 	}
-	typeId := TypeId(info.TypeID)
-	registerByName := IsNamespacedType(typeId)
+	typeId := uint32(info.TypeID) // Use full uint32 type ID
+	registerByName := IsNamespacedType(TypeId(typeId & 0xFF))
 	typeDef := NewTypeDef(typeId, info.PkgPathBytes, info.NameBytes, registerByName, false, fieldDefs)
 
 	// encoding the typeDef, and save the encoded bytes
@@ -113,6 +337,9 @@ func buildTypeDef(fory *Fory, value reflect.Value) (*TypeDef, error) {
 	}
 
 	typeDef.encoded = encoded
+	if DebugOutputEnabled() {
+		fmt.Printf("[Go TypeDef BUILT] %s\n", typeDef.String())
+	}
 	return typeDef, nil
 }
 
@@ -129,6 +356,37 @@ type FieldDef struct {
 	nullable     bool
 	trackingRef  bool
 	fieldType    FieldType
+}
+
+// String returns a string representation of FieldDef for debugging
+func (fd FieldDef) String() string {
+	var fieldTypeStr string
+	if fd.fieldType != nil {
+		fieldTypeStr = fd.fieldType.String()
+	} else {
+		fieldTypeStr = "nil"
+	}
+	return fmt.Sprintf("FieldDef{name=%s, nullable=%v, trackingRef=%v, fieldType=%s}",
+		fd.name, fd.nullable, fd.trackingRef, fieldTypeStr)
+}
+
+// fieldTypeToString returns a detailed string representation of a FieldType
+func fieldTypeToString(ft FieldType) string {
+	if ft == nil {
+		return "nil"
+	}
+	switch t := ft.(type) {
+	case *CollectionFieldType:
+		return fmt.Sprintf("CollectionFieldType{typeId=%d, elementType=%s}", t.TypeId(), fieldTypeToString(t.elementType))
+	case *MapFieldType:
+		return fmt.Sprintf("MapFieldType{typeId=%d, keyType=%s, valueType=%s}", t.TypeId(), fieldTypeToString(t.keyType), fieldTypeToString(t.valueType))
+	case *SimpleFieldType:
+		return fmt.Sprintf("SimpleFieldType{typeId=%d}", t.TypeId())
+	case *DynamicFieldType:
+		return fmt.Sprintf("DynamicFieldType{typeId=%d}", t.TypeId())
+	default:
+		return fmt.Sprintf("FieldType{typeId=%d}", ft.TypeId())
+	}
 }
 
 // buildFieldDefs extracts field definitions from a struct value
@@ -149,10 +407,18 @@ func buildFieldDefs(fory *Fory, value reflect.Value) ([]FieldDef, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to build field type for field %s: %w", fieldName, err)
 		}
+		// Treat object/enum fields as nullable to match Java's xlang TypeDef encoding.
+		nullableFlag := nullable(field.Type)
+		typeId := ft.TypeId()
+		internalId := TypeId(typeId & 0xFF)
+		if isUserDefinedType(int16(internalId)) || internalId == ENUM || internalId == NAMED_ENUM {
+			nullableFlag = true
+		}
+
 		fieldInfo = FieldDef{
 			name:         fieldName,
 			nameEncoding: nameEncoding,
-			nullable:     nullable(field.Type),
+			nullable:     nullableFlag,
 			trackingRef:  fory.config.TrackRef,
 			fieldType:    ft,
 		}
@@ -161,9 +427,10 @@ func buildFieldDefs(fory *Fory, value reflect.Value) ([]FieldDef, error) {
 
 	// Sort field definitions
 	if len(fieldDefs) > 1 {
-		// Extract serializers and names for sorting
+		// Extract serializers, names, and nullable info for sorting
 		serializers := make([]Serializer, len(fieldDefs))
 		fieldNames := make([]string, len(fieldDefs))
+		nullables := make([]bool, len(fieldDefs))
 		for i, fieldDef := range fieldDefs {
 			serializer, err := getFieldTypeSerializer(fory, fieldDef.fieldType)
 			if err != nil {
@@ -173,10 +440,12 @@ func buildFieldDefs(fory *Fory, value reflect.Value) ([]FieldDef, error) {
 				serializers[i] = serializer
 			}
 			fieldNames[i] = fieldDef.name
+			nullables[i] = fieldDef.nullable
 		}
 
-		// Use existing sortFields function to get optimal order
-		_, sortedNames := sortFields(fory.typeResolver, fieldNames, serializers)
+		// Use sortFieldsWithNullable to match Java's field ordering
+		// (primitives before boxed/nullable primitives)
+		_, sortedNames := sortFieldsWithNullable(fory.typeResolver, fieldNames, serializers, nullables)
 
 		// Rebuild fieldInfos in the sorted order
 		nameToFieldInfo := make(map[string]FieldDef)
@@ -198,7 +467,9 @@ func buildFieldDefs(fory *Fory, value reflect.Value) ([]FieldDef, error) {
 // FieldType interface represents different field types, including object, collection, and map types
 type FieldType interface {
 	TypeId() TypeId
+	String() string
 	write(*ByteBuffer)
+	writeWithFlags(*ByteBuffer, bool, bool)                  // writeWithFlags writes typeId with nullable/trackingRef flags
 	getTypeInfo(*Fory) (TypeInfo, error)                     // some serializer need typeinfo as well
 	getTypeInfoWithResolver(*TypeResolver) (TypeInfo, error) // version that uses typeResolver directly
 }
@@ -209,8 +480,24 @@ type BaseFieldType struct {
 }
 
 func (b *BaseFieldType) TypeId() TypeId { return b.typeId }
+func (b *BaseFieldType) String() string {
+	return fmt.Sprintf("FieldType{typeId=%d}", b.typeId)
+}
 func (b *BaseFieldType) write(buffer *ByteBuffer) {
-	buffer.WriteVarUint32Small7(uint32(b.typeId))
+	buffer.WriteVaruint32Small7(uint32(b.typeId))
+}
+
+// writeWithFlags writes the typeId with nullable and trackingRef flags packed into the value.
+// The format is: (typeId << 2) | (nullable ? 0b10 : 0) | (trackingRef ? 0b01 : 0)
+func (b *BaseFieldType) writeWithFlags(buffer *ByteBuffer, nullable bool, trackingRef bool) {
+	value := uint32(b.typeId) << 2
+	if nullable {
+		value |= 0b10
+	}
+	if trackingRef {
+		value |= 0b01
+	}
+	buffer.WriteVaruint32Small7(value)
 }
 
 func getFieldTypeSerializer(fory *Fory, ft FieldType) (Serializer, error) {
@@ -230,7 +517,7 @@ func getFieldTypeSerializerWithResolver(resolver *TypeResolver, ft FieldType) (S
 }
 
 func (b *BaseFieldType) getTypeInfo(fory *Fory) (TypeInfo, error) {
-	info, err := fory.typeResolver.getTypeInfoById(b.typeId)
+	info, err := fory.typeResolver.getTypeInfoById(uint32(b.typeId))
 	if err != nil {
 		return TypeInfo{}, err
 	}
@@ -238,7 +525,7 @@ func (b *BaseFieldType) getTypeInfo(fory *Fory) (TypeInfo, error) {
 }
 
 func (b *BaseFieldType) getTypeInfoWithResolver(resolver *TypeResolver) (TypeInfo, error) {
-	info, err := resolver.getTypeInfoById(b.typeId)
+	info, err := resolver.getTypeInfoById(uint32(b.typeId))
 	if err != nil {
 		return TypeInfo{}, err
 	}
@@ -246,25 +533,57 @@ func (b *BaseFieldType) getTypeInfoWithResolver(resolver *TypeResolver) (TypeInf
 }
 
 // readFieldType reads field type info from the buffer according to the TypeId
+// This is called for top-level field types where flags are NOT embedded in the type ID
 func readFieldType(buffer *ByteBuffer) (FieldType, error) {
-	typeId := buffer.ReadVarUint32Small7()
+	typeId := buffer.ReadVaruint32Small7()
 
 	switch typeId {
 	case LIST, SET:
-		// Read element type recursively
-		elementType, err := readFieldType(buffer)
+		// For nested types, flags ARE embedded in the type ID
+		elementType, err := readFieldTypeWithFlags(buffer)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read element type: %w", err)
 		}
 		return NewCollectionFieldType(TypeId(typeId), elementType), nil
 	case MAP:
-		// Read key type recursively
-		keyType, err := readFieldType(buffer)
+		// For nested types, flags ARE embedded in the type ID
+		keyType, err := readFieldTypeWithFlags(buffer)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read key type: %w", err)
 		}
-		// Read value type recursively
-		valueType, err := readFieldType(buffer)
+		valueType, err := readFieldTypeWithFlags(buffer)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read value type: %w", err)
+		}
+		return NewMapFieldType(TypeId(typeId), keyType, valueType), nil
+	case UNKNOWN, EXT, STRUCT, NAMED_STRUCT, COMPATIBLE_STRUCT, NAMED_COMPATIBLE_STRUCT:
+		return NewDynamicFieldType(TypeId(typeId)), nil
+	}
+	return NewSimpleFieldType(TypeId(typeId)), nil
+}
+
+// readFieldTypeWithFlags reads field type info where flags are embedded in the type ID
+// Format: (typeId << 2) | (nullable ? 0b10 : 0) | (trackingRef ? 0b1 : 0)
+func readFieldTypeWithFlags(buffer *ByteBuffer) (FieldType, error) {
+	rawValue := buffer.ReadVaruint32Small7()
+	// Extract flags (lower 2 bits)
+	// trackingRef := (rawValue & 0b1) != 0  // Not used currently
+	// nullable := (rawValue & 0b10) != 0    // Not used currently
+	typeId := rawValue >> 2
+
+	switch typeId {
+	case LIST, SET:
+		elementType, err := readFieldTypeWithFlags(buffer)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read element type: %w", err)
+		}
+		return NewCollectionFieldType(TypeId(typeId), elementType), nil
+	case MAP:
+		keyType, err := readFieldTypeWithFlags(buffer)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read key type: %w", err)
+		}
+		valueType, err := readFieldTypeWithFlags(buffer)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read value type: %w", err)
 		}
@@ -288,29 +607,39 @@ func NewCollectionFieldType(typeId TypeId, elementType FieldType) *CollectionFie
 	}
 }
 
+func (c *CollectionFieldType) String() string {
+	return fmt.Sprintf("CollectionFieldType{typeId=%d, elementType=%s}", c.typeId, c.elementType.String())
+}
+
 func (c *CollectionFieldType) write(buffer *ByteBuffer) {
 	c.BaseFieldType.write(buffer)
-	c.elementType.write(buffer)
+	// Element types in collections are written with flags (nullable=true, trackingRef=false)
+	// This matches Java's CollectionFieldType behavior
+	c.elementType.writeWithFlags(buffer, true, false)
+}
+
+func (c *CollectionFieldType) writeWithFlags(buffer *ByteBuffer, nullable bool, trackingRef bool) {
+	c.BaseFieldType.writeWithFlags(buffer, nullable, trackingRef)
+	// Element types in collections are written with flags (nullable=true, trackingRef=false)
+	c.elementType.writeWithFlags(buffer, true, false)
 }
 
 func (c *CollectionFieldType) getTypeInfo(f *Fory) (TypeInfo, error) {
 	elemInfo, err := c.elementType.getTypeInfo(f)
-	elementType := elemInfo.Type
-	collectionType := reflect.SliceOf(elementType)
 	if err != nil {
 		return TypeInfo{}, err
 	}
+	collectionType := reflect.SliceOf(elemInfo.Type)
 	sliceSerializer := &sliceSerializer{elemInfo: elemInfo, declaredType: elemInfo.Type}
 	return TypeInfo{Type: collectionType, Serializer: sliceSerializer}, nil
 }
 
 func (c *CollectionFieldType) getTypeInfoWithResolver(resolver *TypeResolver) (TypeInfo, error) {
 	elemInfo, err := c.elementType.getTypeInfoWithResolver(resolver)
-	elementType := elemInfo.Type
-	collectionType := reflect.SliceOf(elementType)
 	if err != nil {
 		return TypeInfo{}, err
 	}
+	collectionType := reflect.SliceOf(elemInfo.Type)
 	sliceSerializer := &sliceSerializer{elemInfo: elemInfo, declaredType: elemInfo.Type}
 	return TypeInfo{Type: collectionType, Serializer: sliceSerializer}, nil
 }
@@ -330,10 +659,23 @@ func NewMapFieldType(typeId TypeId, keyType, valueType FieldType) *MapFieldType 
 	}
 }
 
+func (m *MapFieldType) String() string {
+	return fmt.Sprintf("MapFieldType{typeId=%d, keyType=%s, valueType=%s}", m.typeId, m.keyType.String(), m.valueType.String())
+}
+
 func (m *MapFieldType) write(buffer *ByteBuffer) {
 	m.BaseFieldType.write(buffer)
-	m.keyType.write(buffer)
-	m.valueType.write(buffer)
+	// Key and value types in maps are written with flags (nullable=true, trackingRef=false)
+	// This matches Java's MapFieldType behavior
+	m.keyType.writeWithFlags(buffer, true, false)
+	m.valueType.writeWithFlags(buffer, true, false)
+}
+
+func (m *MapFieldType) writeWithFlags(buffer *ByteBuffer, nullable bool, trackingRef bool) {
+	m.BaseFieldType.writeWithFlags(buffer, nullable, trackingRef)
+	// Key and value types in maps are written with flags (nullable=true, trackingRef=false)
+	m.keyType.writeWithFlags(buffer, true, false)
+	m.valueType.writeWithFlags(buffer, true, false)
 }
 
 func (m *MapFieldType) getTypeInfo(f *Fory) (TypeInfo, error) {
@@ -389,6 +731,10 @@ func NewSimpleFieldType(typeId TypeId) *SimpleFieldType {
 	}
 }
 
+func (s *SimpleFieldType) String() string {
+	return fmt.Sprintf("SimpleFieldType{typeId=%d}", s.typeId)
+}
+
 // DynamicFieldType represents a field type that is determined at runtime, like EXT or STRUCT
 type DynamicFieldType struct {
 	BaseFieldType
@@ -402,13 +748,40 @@ func NewDynamicFieldType(typeId TypeId) *DynamicFieldType {
 	}
 }
 
+func (d *DynamicFieldType) String() string {
+	return fmt.Sprintf("DynamicFieldType{typeId=%d}", d.typeId)
+}
+
 func (d *DynamicFieldType) getTypeInfo(fory *Fory) (TypeInfo, error) {
 	// leave empty for runtime resolution, we not know the actual type here
 	return TypeInfo{Type: reflect.TypeOf((*interface{})(nil)).Elem(), Serializer: nil}, nil
 }
 
 func (d *DynamicFieldType) getTypeInfoWithResolver(resolver *TypeResolver) (TypeInfo, error) {
-	// leave empty for runtime resolution, we not know the actual type here
+	// Try to resolve the actual type from the resolver
+	// The typeId might be a composite ID (customId << 8 + baseType)
+	typeId := d.typeId
+
+	// First try direct lookup
+	info, err := resolver.getTypeInfoById(uint32(typeId))
+	if err == nil {
+		return info, nil
+	}
+
+	// If direct lookup fails and it's a composite ID, extract the custom ID
+	baseType := typeId & 0xFF
+	if baseType == NAMED_STRUCT || baseType == NAMED_COMPATIBLE_STRUCT || baseType == COMPATIBLE_STRUCT {
+		customId := typeId >> 8
+		if customId > 0 {
+			// Try looking up by the custom ID
+			info, err = resolver.getTypeInfoById(uint32(customId))
+			if err == nil {
+				return info, nil
+			}
+		}
+	}
+
+	// Fallback to interface{} for unknown types
 	return TypeInfo{Type: reflect.TypeOf((*interface{})(nil)).Elem(), Serializer: nil}, nil
 }
 
@@ -420,17 +793,7 @@ func buildFieldType(fory *Fory, fieldValue reflect.Value) (FieldType, error) {
 		return NewDynamicFieldType(UNKNOWN), nil
 	}
 
-	var typeId TypeId
-	typeInfo, err := fory.typeResolver.getTypeInfo(fieldValue, true)
-	if err != nil {
-		return nil, err
-	}
-	typeId = TypeId(typeInfo.TypeID)
-	if typeId < 0 {
-		typeId = -typeId // restore pointer type id
-	}
-
-	// Handle slice and array types by reflect.Kind
+	// Handle slice and array types BEFORE getTypeInfo to avoid anonymous type errors
 	// For fixed-size arrays with primitive elements, use primitive array type IDs (INT16_ARRAY, etc.)
 	// For slices and arrays with non-primitive elements, use collection format
 	if fieldType.Kind() == reflect.Slice || fieldType.Kind() == reflect.Array {
@@ -465,7 +828,7 @@ func buildFieldType(fory *Fory, fieldValue reflect.Value) (FieldType, error) {
 		return NewCollectionFieldType(LIST, elementFieldType), nil
 	}
 
-	// Handle map types by reflect.Kind for consistency
+	// Handle map types BEFORE getTypeInfo to avoid anonymous type errors
 	if fieldType.Kind() == reflect.Map {
 		// Create zero values for key and value types
 		keyType := fieldType.Key()
@@ -485,6 +848,14 @@ func buildFieldType(fory *Fory, fieldValue reflect.Value) (FieldType, error) {
 
 		return NewMapFieldType(MAP, keyFieldType, valueFieldType), nil
 	}
+
+	// Now get type info for other types (primitives, structs, etc.)
+	var typeId TypeId
+	typeInfo, err := fory.typeResolver.getTypeInfo(fieldValue, true)
+	if err != nil {
+		return nil, err
+	}
+	typeId = TypeId(typeInfo.TypeID)
 
 	if isUserDefinedType(typeId) {
 		return NewDynamicFieldType(typeId), nil
@@ -524,6 +895,94 @@ typeDef are layout as following:
 - next variable bytes: type id (varint) or ns name + type name
 - next variable bytes: field defs (see below)
 */
+// writeSimpleName writes namespace using simple format (for TypeDef)
+// Format: 1 byte header (6 bits size | 2 bits encoding flags) + data bytes
+// This matches Java's format in ClassDefEncoder.writeName()
+func writeSimpleName(buffer *ByteBuffer, metaBytes *MetaStringBytes, encoder *meta.Encoder) error {
+	if metaBytes == nil || len(metaBytes.Data) == 0 {
+		// WriteData header for empty namespace
+		buffer.WriteByte(0)
+		return nil
+	}
+
+	data := metaBytes.Data
+	encoding := metaBytes.Encoding
+
+	// Get encoding flags (0-2) - Java uses 2 bits for package encoding:
+	// 0=UTF8, 1=ALL_TO_LOWER_SPECIAL, 2=LOWER_UPPER_DIGIT_SPECIAL
+	var encodingFlags byte
+	switch encoding {
+	case meta.UTF_8:
+		encodingFlags = 0
+	case meta.ALL_TO_LOWER_SPECIAL:
+		encodingFlags = 1
+	case meta.LOWER_UPPER_DIGIT_SPECIAL:
+		encodingFlags = 2
+	default:
+		return fmt.Errorf("unsupported namespace encoding: %v", encoding)
+	}
+
+	size := len(data)
+	if size >= BIG_NAME_THRESHOLD {
+		// Size doesn't fit in 6 bits, write BIG_NAME_THRESHOLD and then varuint
+		header := byte((BIG_NAME_THRESHOLD << 2) | int(encodingFlags))
+		buffer.WriteByte(header)
+		buffer.WriteVaruint32Small7(uint32(size - BIG_NAME_THRESHOLD))
+	} else {
+		// Size fits in 6 bits (6 bits for size, 2 bits for encoding)
+		header := byte((size << 2) | int(encodingFlags))
+		buffer.WriteByte(header)
+	}
+
+	buffer.Write(data)
+	return nil
+}
+
+// writeSimpleTypeName writes typename using simple format (for TypeDef)
+// Format: 1 byte header (6 bits size | 2 bits encoding flags) + data bytes
+// This matches Java's format in ClassDefEncoder.writeName()
+func writeSimpleTypeName(buffer *ByteBuffer, metaBytes *MetaStringBytes, encoder *meta.Encoder) error {
+	if metaBytes == nil || len(metaBytes.Data) == 0 {
+		// WriteData header for empty typename (shouldn't happen)
+		buffer.WriteByte(0)
+		return nil
+	}
+
+	data := metaBytes.Data
+	encoding := metaBytes.Encoding
+
+	// Get encoding flags (0-3) - Java uses 2 bits for typename encoding:
+	// 0=UTF8, 1=ALL_TO_LOWER_SPECIAL, 2=LOWER_UPPER_DIGIT_SPECIAL, 3=FIRST_TO_LOWER_SPECIAL
+	var encodingFlags byte
+	switch encoding {
+	case meta.UTF_8:
+		encodingFlags = 0
+	case meta.ALL_TO_LOWER_SPECIAL:
+		encodingFlags = 1
+	case meta.LOWER_UPPER_DIGIT_SPECIAL:
+		encodingFlags = 2
+	case meta.FIRST_TO_LOWER_SPECIAL:
+		encodingFlags = 3
+	default:
+		return fmt.Errorf("unsupported typename encoding: %v", encoding)
+	}
+
+	size := len(data)
+	if size >= BIG_NAME_THRESHOLD {
+		// Size doesn't fit in 6 bits, write BIG_NAME_THRESHOLD and then varuint
+		header := byte((BIG_NAME_THRESHOLD << 2) | int(encodingFlags))
+		buffer.WriteByte(header)
+		buffer.WriteVaruint32Small7(uint32(size - BIG_NAME_THRESHOLD))
+	} else {
+		// Size fits in 6 bits (6 bits for size, 2 bits for encoding)
+		header := byte((size << 2) | int(encodingFlags))
+		buffer.WriteByte(header)
+	}
+
+	buffer.Write(data)
+	return nil
+}
+
 func encodingTypeDef(typeResolver *TypeResolver, typeDef *TypeDef) ([]byte, error) {
 	buffer := NewByteBuffer(nil)
 
@@ -532,14 +991,18 @@ func encodingTypeDef(typeResolver *TypeResolver, typeDef *TypeDef) ([]byte, erro
 	}
 
 	if typeDef.registerByName {
-		if err := typeResolver.metaStringResolver.WriteMetaStringBytes(buffer, typeDef.nsName); err != nil {
-			return nil, err
+		// WriteData namespace and typename using simple format (NOT meta string format)
+		// Simple format: 1 byte header (6 bits size | 2 bits encoding) + data bytes
+		if err := writeSimpleName(buffer, typeDef.nsName, typeResolver.namespaceEncoder); err != nil {
+			return nil, fmt.Errorf("failed to write namespace: %w", err)
 		}
-		if err := typeResolver.metaStringResolver.WriteMetaStringBytes(buffer, typeDef.typeName); err != nil {
-			return nil, err
+		if err := writeSimpleTypeName(buffer, typeDef.typeName, typeResolver.typeNameEncoder); err != nil {
+			return nil, fmt.Errorf("failed to write typename: %w", err)
 		}
 	} else {
-		buffer.WriteVarInt32(int32(typeDef.typeId))
+		// Java uses writeVaruint32 for type ID (unsigned varint)
+		// typeDef.typeId is already int32, no need for conversion
+		buffer.WriteVaruint32(uint32(typeDef.typeId))
 	}
 
 	if err := writeFieldDefs(typeResolver, buffer, typeDef.fieldDefs); err != nil {
@@ -580,7 +1043,7 @@ func prependGlobalHeader(buffer *ByteBuffer, isCompressed bool, hasFieldsMeta bo
 	result.WriteInt64(int64(header))
 
 	if metaSize >= META_SIZE_MASK {
-		result.WriteVarUint32(uint32(metaSize - META_SIZE_MASK))
+		result.WriteVaruint32(uint32(metaSize - META_SIZE_MASK))
 	}
 	result.WriteBinary(buffer.GetByteSlice(0, metaSize))
 
@@ -598,7 +1061,7 @@ func writeMetaHeader(buffer *ByteBuffer, typeDef *TypeDef) error {
 	header := len(fieldInfos)
 	if header > SmallNumFieldsThreshold {
 		header = SmallNumFieldsThreshold
-		buffer.WriteVarUint32(uint32(len(fieldInfos) - SmallNumFieldsThreshold))
+		buffer.WriteVaruint32(uint32(len(fieldInfos) - SmallNumFieldsThreshold))
 	}
 	if typeDef.registerByName {
 		header |= REGISTER_BY_NAME_FLAG
@@ -624,7 +1087,7 @@ func writeFieldDefs(typeResolver *TypeResolver, buffer *ByteBuffer, fieldDefs []
 
 // writeFieldDef writes a single field's definition
 func writeFieldDef(typeResolver *TypeResolver, buffer *ByteBuffer, field FieldDef) error {
-	// Write field header
+	// WriteData field header
 	// 2 bits field name encoding + 4 bits size + nullability flag + ref tracking flag
 	offset := buffer.writerIndex
 	if err := buffer.WriteByte(0xFF); err != nil {
@@ -649,11 +1112,11 @@ func writeFieldDef(typeResolver *TypeResolver, buffer *ByteBuffer, field FieldDe
 		header |= uint8((nameLen-1)&0x0F) << 2 // 1-based encoding
 	} else {
 		header |= 0x0F << 2 // Max value, actual length will follow
-		buffer.WriteVarUint32(uint32(nameLen - FieldNameSizeThreshold))
+		buffer.WriteVaruint32(uint32(nameLen - FieldNameSizeThreshold))
 	}
 	buffer.PutUint8(offset, header)
 
-	// Write field type
+	// WriteData field type
 	field.fieldType.write(buffer)
 
 	// todo: support tag id
@@ -673,13 +1136,13 @@ typeDef are layout as following:
   - next variable bytes: field definitions (see below)
 */
 func decodeTypeDef(fory *Fory, buffer *ByteBuffer, header int64) (*TypeDef, error) {
-	// Read 8-byte global header
+	// ReadData 8-byte global header
 	globalHeader := header
 	hasFieldsMeta := (globalHeader & HAS_FIELDS_META_FLAG) != 0
 	isCompressed := (globalHeader & COMPRESS_META_FLAG) != 0
 	metaSize := int(globalHeader & META_SIZE_MASK)
 	if metaSize == META_SIZE_MASK {
-		metaSize += int(buffer.ReadVarUint32())
+		metaSize += int(buffer.ReadVaruint32())
 	}
 
 	// Store the encoded bytes for the TypeDef (including meta header and metadata)
@@ -689,7 +1152,7 @@ func decodeTypeDef(fory *Fory, buffer *ByteBuffer, header int64) (*TypeDef, erro
 	encoded := buffer.ReadBinary(metaSize)
 	metaBuffer := NewByteBuffer(encoded)
 
-	// Read 1-byte meta header
+	// ReadData 1-byte meta header
 	metaHeaderByte, err := metaBuffer.ReadByte()
 	if err != nil {
 		return nil, err
@@ -697,32 +1160,95 @@ func decodeTypeDef(fory *Fory, buffer *ByteBuffer, header int64) (*TypeDef, erro
 	// Extract field count from lower 5 bits
 	fieldCount := int(metaHeaderByte & SmallNumFieldsThreshold)
 	if fieldCount == SmallNumFieldsThreshold {
-		fieldCount += int(metaBuffer.ReadVarUint32())
+		fieldCount += int(metaBuffer.ReadVaruint32())
 	}
 	registeredByName := (metaHeaderByte & REGISTER_BY_NAME_FLAG) != 0
 
-	// Read name or type ID according to the registerByName flag
-	var typeId TypeId
+	// ReadData name or type ID according to the registerByName flag
+	var typeId uint32
 	var nsBytes, nameBytes *MetaStringBytes
 	var type_ reflect.Type
 	if registeredByName {
-		// Read namespace and type name for namespaced types
-		readingNsBytes, err := fory.typeResolver.metaStringResolver.ReadMetaStringBytes(metaBuffer)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read package path: %w", err)
+		// ReadData namespace and type name for namespaced types
+		// NOTE: TypeDefs use simple name format, not meta string format with dynamic IDs
+		// Format: 1 byte header (6 bits size | 2 bits encoding flags) + data bytes
+		// ReadData namespace
+		nsHeader := int(metaBuffer.ReadInt8()) & 0xff
+		nsEncodingFlags := nsHeader & 0b11 // 2 bits for encoding
+		nsSize := nsHeader >> 2            // 6 bits for size
+		if nsSize == BIG_NAME_THRESHOLD {
+			nsSize = int(metaBuffer.ReadVaruint32Small7()) + BIG_NAME_THRESHOLD
 		}
-		nsBytes = readingNsBytes
-		readingNameBytes, err := fory.typeResolver.metaStringResolver.ReadMetaStringBytes(metaBuffer)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read type name: %w", err)
+
+		// Java pkg encoding: 0=UTF8, 1=ALL_TO_LOWER_SPECIAL, 2=LOWER_UPPER_DIGIT_SPECIAL
+		var nsEncoding meta.Encoding
+		switch nsEncodingFlags {
+		case 0:
+			nsEncoding = meta.UTF_8
+		case 1:
+			nsEncoding = meta.ALL_TO_LOWER_SPECIAL
+		case 2:
+			nsEncoding = meta.LOWER_UPPER_DIGIT_SPECIAL
+		default:
+			return nil, fmt.Errorf("invalid package encoding flags: %d", nsEncodingFlags)
 		}
-		nameBytes = readingNameBytes
+		nsData := make([]byte, nsSize)
+		if _, err := metaBuffer.Read(nsData); err != nil {
+			return nil, fmt.Errorf("failed to read namespace data: %w", err)
+		}
+
+		// ReadData typename
+		// Format: 1 byte header (6 bits size | 2 bits encoding flags) + data bytes
+		typeHeader := int(metaBuffer.ReadInt8()) & 0xff
+		typeEncodingFlags := typeHeader & 0b11 // 2 bits for encoding
+		typeSize := typeHeader >> 2            // 6 bits for size
+		if typeSize == BIG_NAME_THRESHOLD {
+			typeSize = int(metaBuffer.ReadVaruint32Small7()) + BIG_NAME_THRESHOLD
+		}
+
+		// Java typename encoding: 0=UTF8, 1=ALL_TO_LOWER_SPECIAL, 2=LOWER_UPPER_DIGIT_SPECIAL, 3=FIRST_TO_LOWER_SPECIAL
+		var typeEncoding meta.Encoding
+		switch typeEncodingFlags {
+		case 0:
+			typeEncoding = meta.UTF_8
+		case 1:
+			typeEncoding = meta.ALL_TO_LOWER_SPECIAL
+		case 2:
+			typeEncoding = meta.LOWER_UPPER_DIGIT_SPECIAL
+		case 3:
+			typeEncoding = meta.FIRST_TO_LOWER_SPECIAL
+		default:
+			return nil, fmt.Errorf("invalid typename encoding flags: %d", typeEncodingFlags)
+		}
+		typeData := make([]byte, typeSize)
+		if _, err := metaBuffer.Read(typeData); err != nil {
+			return nil, fmt.Errorf("failed to read typename data: %w", err)
+		}
+
+		// Create MetaStringBytes directly from the read data
+		// Compute hash for namespace
+		nsHash := ComputeMetaStringHash(nsData, nsEncoding)
+		nsBytes = &MetaStringBytes{
+			Data:     nsData,
+			Encoding: nsEncoding,
+			Hashcode: nsHash,
+		}
+
+		// Compute hash for typename
+		typeHash := ComputeMetaStringHash(typeData, typeEncoding)
+		nameBytes = &MetaStringBytes{
+			Data:     typeData,
+			Encoding: typeEncoding,
+			Hashcode: typeHash,
+		}
+
 		info, exists := fory.typeResolver.nsTypeToTypeInfo[nsTypeKey{nsBytes.Hashcode, nameBytes.Hashcode}]
 		if !exists {
 			// Try fallback: decode strings and look up by name
 			ns, _ := fory.typeResolver.namespaceDecoder.Decode(nsBytes.Data, nsBytes.Encoding)
 			typeName, _ := fory.typeResolver.typeNameDecoder.Decode(nameBytes.Data, nameBytes.Encoding)
 			nameKey := [2]string{ns, typeName}
+
 			if fallbackInfo, fallbackExists := fory.typeResolver.namedTypeToTypeInfo[nameKey]; fallbackExists {
 				info = fallbackInfo
 				exists = true
@@ -735,26 +1261,28 @@ func decodeTypeDef(fory *Fory, buffer *ByteBuffer, header int64) (*TypeDef, erro
 			type_ = info.Type
 			if type_.Kind() == reflect.Ptr {
 				type_ = type_.Elem()
-				typeId = TypeId(info.TypeID)
-			} else {
-				typeId = TypeId(info.TypeID)
 			}
+			typeId = uint32(info.TypeID)
 		} else {
 			// Type not registered - use NAMED_STRUCT as default typeId
 			// The type_ will remain nil and will be set from field definitions later
-			typeId = NAMED_STRUCT
+			typeId = uint32(NAMED_STRUCT)
 			type_ = nil
 		}
 	} else {
-		typeId = TypeId(metaBuffer.ReadVarInt32())
-		if info, err := fory.typeResolver.getTypeInfoById(typeId); err != nil {
-			return nil, fmt.Errorf("failed to get type info by id %d: %w", typeId, err)
-		} else {
+		// Java uses writeVaruint32 for type ID in TypeDef
+		// The type ID is a composite: (userID << 8) | internalTypeID
+		typeId = metaBuffer.ReadVaruint32()
+		// Try to get the type from registry using the full type ID
+		if info, exists := fory.typeResolver.typeIDToTypeInfo[typeId]; exists {
 			type_ = info.Type
+		} else {
+			//Type not registered - will be built from field definitions
+			type_ = nil
 		}
 	}
 
-	// Read fields information
+	// ReadData fields information
 	fieldInfos := make([]FieldDef, fieldCount)
 	if hasFieldsMeta {
 		for i := 0; i < fieldCount; i++ {
@@ -771,6 +1299,22 @@ func decodeTypeDef(fory *Fory, buffer *ByteBuffer, header int64) (*TypeDef, erro
 	typeDef.encoded = encoded
 	typeDef.type_ = type_
 
+	if DebugOutputEnabled() {
+		fmt.Printf("[Go TypeDef DECODED] %s\n", typeDef.String())
+		// Compute and print diff with local TypeDef
+		if type_ != nil {
+			localDef, err := fory.typeResolver.getTypeDef(type_, true)
+			if err == nil && localDef != nil {
+				diff := typeDef.ComputeDiff(localDef)
+				typeName := type_.String()
+				if diff != "" {
+					fmt.Printf("[Go TypeDef DIFF] %s:\n%s", typeName, diff)
+				} else {
+					fmt.Printf("[Go TypeDef DIFF] %s: identical\n", typeName)
+				}
+			}
+		}
+	}
 	return typeDef, nil
 }
 
@@ -782,7 +1326,7 @@ field def layout as following:
   - next variable bytes: field name or tag id
 */
 func readFieldDef(typeResolver *TypeResolver, buffer *ByteBuffer) (FieldDef, error) {
-	// Read field header
+	// ReadData field header
 	headerByte, err := buffer.ReadByte()
 	if err != nil {
 		return FieldDef{}, fmt.Errorf("failed to read field header: %w", err)
@@ -795,7 +1339,7 @@ func readFieldDef(typeResolver *TypeResolver, buffer *ByteBuffer) (FieldDef, err
 	refTracking := (headerByte & 0b1) != 0
 	isNullable := (headerByte & 0b10) != 0
 	if nameLen == 0x0F {
-		nameLen = FieldNameSizeThreshold + int(buffer.ReadVarUint32())
+		nameLen = FieldNameSizeThreshold + int(buffer.ReadVaruint32())
 	} else {
 		nameLen++ // Adjust for 1-based encoding
 	}

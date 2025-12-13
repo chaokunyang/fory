@@ -87,11 +87,9 @@ func (r *MetaStringResolver) WriteMetaStringBytes(buf *ByteBuffer, m *MetaString
 		r.dynamicWriteStringID++
 		r.dynamicWrittenEnumString = append(r.dynamicWrittenEnumString, m)
 
-		// Write header with length and encoding info
+		// WriteData header with length and encoding info
 		header := uint32(m.Length) << 1
-		if err := writeVarUint32(buf, header); err != nil {
-			return err
-		}
+		buf.WriteVaruint32Small7(header)
 
 		// Small strings store encoding in header
 		if m.Length <= SmallStringThreshold {
@@ -107,21 +105,15 @@ func (r *MetaStringResolver) WriteMetaStringBytes(buf *ByteBuffer, m *MetaString
 	} else {
 		// Subsequent occurrence: write reference ID only
 		header := uint32((m.DynamicWriteStringID+1)<<1) | 1
-		err := writeVarUint32(buf, header)
-		if err != nil {
-			return err
-		}
+		buf.WriteVaruint32Small7(header)
 	}
 	return nil
 }
 
 // ReadMetaStringBytes reads a string from buffer, handling dynamic references
 func (r *MetaStringResolver) ReadMetaStringBytes(buf *ByteBuffer) (*MetaStringBytes, error) {
-	// Read header containing length/reference info
-	header, err := readVarUint32(buf)
-	if err != nil {
-		return nil, err
-	}
+	// ReadData header containing length/reference info (uses Varuint32Small7 to match Java)
+	header := buf.ReadVaruint32Small7()
 
 	length := int16(header >> 1)
 	if header&1 != 0 {
@@ -141,7 +133,7 @@ func (r *MetaStringResolver) ReadMetaStringBytes(buf *ByteBuffer) (*MetaStringBy
 
 	// Small string optimization
 	if length <= SmallStringThreshold {
-		// Read encoding and data
+		// ReadData encoding and data
 		encByte, _ := buf.ReadByte()
 		encoding = Encoding(encByte)
 
@@ -237,6 +229,30 @@ func (r *MetaStringResolver) GetMetaStrBytes(metastr *meta.MetaString) *MetaStri
 	return m
 }
 
+// ComputeMetaStringHash computes the hashcode for meta string bytes
+func ComputeMetaStringHash(data []byte, encoding meta.Encoding) int64 {
+	length := len(data)
+	var hashcode int64
+
+	if length <= SmallStringThreshold {
+		// Small string: use direct bytes as hash components
+		var v1, v2 int64
+		if length <= 8 {
+			v1 = bytesToInt64(data)
+		} else {
+			binary.Read(bytes.NewReader(data[:8]), binary.LittleEndian, &v1)
+			v2 = bytesToInt64(data[8:])
+		}
+		hashcode = ((v1*31 + v2) >> 8 << 8) | int64(encoding)
+	} else {
+		// Large string: use MurmurHash3
+		h64 := murmur3.Sum64WithSeed(data, 47)
+		hashcode = int64((h64 >> 8) << 8)
+		hashcode |= int64(encoding)
+	}
+	return hashcode
+}
+
 func (r *MetaStringResolver) ResetRead() {
 	r.dynamicIDToEnumString = nil
 }
@@ -250,7 +266,7 @@ func (r *MetaStringResolver) ResetWrite() {
 }
 
 // Helper functions
-func writeVarUint32(buf *ByteBuffer, v uint32) error {
+func writeVaruint32(buf *ByteBuffer, v uint32) error {
 	for v >= 0x80 {
 		buf.WriteByte(byte(v) | 0x80)
 		v >>= 7
@@ -259,7 +275,7 @@ func writeVarUint32(buf *ByteBuffer, v uint32) error {
 	return nil
 }
 
-func readVarUint32(buf *ByteBuffer) (uint32, error) {
+func readVaruint32(buf *ByteBuffer) (uint32, error) {
 	var x uint32
 	var s uint
 	for {

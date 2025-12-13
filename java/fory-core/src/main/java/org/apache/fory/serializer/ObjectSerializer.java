@@ -380,7 +380,7 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
       String className =
           sorted.isEmpty() ? "<unknown>" : String.valueOf(sorted.get(0).getDeclaringClass());
       LOG.info(
-          "[fory-debug] struct "
+          "[Java][fory-debug] struct "
               + className
               + " version fingerprint=\""
               + fingerprint

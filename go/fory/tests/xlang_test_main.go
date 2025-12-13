@@ -99,21 +99,28 @@ const (
 )
 
 type Item struct {
-	Name   string
-	Amount int32
+	Name string
 }
 
 type Item1 struct {
-	A int8
-	B int16
-	C int32
-	D int64
-	E int
+	F1 int32
+	F2 int32
+	F3 *int32  // nullable Integer in Java
+	F4 *int32  // nullable Integer in Java
+	F5 *int32  // nullable Integer in Java
+	F6 *int32  // nullable Integer in Java
 }
 
 type SimpleStruct struct {
-	Color Color
-	Item  Item
+	F1   map[int32]float64
+	F2   int32
+	F3   Item
+	F4   string
+	F5   Color
+	F6   []string
+	F7   int32
+	F8   int32
+	Last int32
 }
 
 type StructWithList struct {
@@ -121,65 +128,54 @@ type StructWithList struct {
 }
 
 type StructWithMap struct {
-	Data map[string]int32
+	Data map[string]string
 }
 
 type MyExt struct {
 	Id int32
 }
 
-type EmptyWrapper struct {
-	Value interface{}
+type MyWrapper struct {
+	Color    Color
+	MyExt    *MyExt
+	MyStruct *MyStruct
 }
 
+type EmptyWrapper struct {}
+
 type MyStruct struct {
-	A int32
-	B string
+	Id int32
 }
 
 type VersionCheckStruct struct {
-	Field1 string
-	Field2 int32
+	F1 int32
+	F2 string
+	F3 float64
 }
 
 type Dog struct {
-	Name string
 	Age  int32
+	Name string
 }
 
 type Cat struct {
-	Name  string
-	Color string
+	Age   int32
+	Lives int32
 }
 
 type AnimalListHolder struct {
-	Animals []interface{}
+	Animals []interface{} // List<Animal> in Java
 }
 
 type AnimalMapHolder struct {
-	Animals map[string]interface{}
+	AnimalMap map[string]interface{} // Map<String, Animal> in Java
 }
 
 // ============================================================================
 // Custom Serializer
 // ============================================================================
 
-type MyExtSerializer struct{}
-
-func (s *MyExtSerializer) TypeId() int16 {
-	return int16(fory.NotSupportCrossLanguage)
-}
-
-func (s *MyExtSerializer) Write(ctx *fory.WriteContext, value interface{}) error {
-	myExt := value.(MyExt)
-	ctx.Buffer().WriteVarInt32(myExt.Id)
-	return nil
-}
-
-func (s *MyExtSerializer) Read(ctx *fory.ReadContext, type_ interface{}) (interface{}, error) {
-	id := ctx.Buffer().ReadVarInt32()
-	return MyExt{Id: id}, nil
-}
+// MyExtSerializer is not needed in Go tests - Java handles custom serialization
 
 // ============================================================================
 // Test Cases
@@ -246,7 +242,7 @@ func testBufferVar() {
 		2147483646, 2147483647,
 	}
 	for _, expected := range varInt32Values {
-		val := buf.ReadVarInt32()
+		val := buf.ReadVarint32()
 		assertEqual(expected, val, fmt.Sprintf("varint32 %d", expected))
 	}
 
@@ -282,7 +278,7 @@ func testBufferVar() {
 
 	outBuf := fory.NewByteBuffer(make([]byte, 0, 512))
 	for _, val := range varInt32Values {
-		outBuf.WriteVarInt32(val)
+		outBuf.WriteVarint32(val)
 	}
 	for _, val := range varUint32Values {
 		outBuf.WriteVarUint32(val)
@@ -361,7 +357,8 @@ func testCrossLanguageSerializer() {
 	data := readFile(dataFile)
 
 	f := fory.New(fory.WithCompatible(true))
-	f.RegisterNamedType(Color(0), "color")
+	// Use namespace to match Java's fory.register(Color.class, "demo", "color")
+	f.RegisterByNamespace(Color(0), "demo", "color")
 
 	vals := make([]interface{}, 0)
 	buf := fory.NewByteBuffer(data)
@@ -390,10 +387,11 @@ func testSimpleStruct() {
 	dataFile := getDataFile()
 	data := readFile(dataFile)
 
-	f := fory.New(fory.WithCompatible(true))
-	f.RegisterNamedType(Color(0), "color")
-	f.RegisterNamedType(Item{}, "item")
-	f.RegisterNamedType(SimpleStruct{}, "simple_struct")
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
+	// Use numeric IDs to match Java's fory.register(Color.class, 101), etc.
+	f.Register(Color(0), 101)
+	f.Register(Item{}, 102)
+	f.Register(SimpleStruct{}, 103)
 
 	obj, err := f.DeserializeAny(data)
 	if err != nil {
@@ -413,9 +411,10 @@ func testNamedSimpleStruct() {
 	data := readFile(dataFile)
 
 	f := fory.New(fory.WithCompatible(true))
-	f.RegisterNamedType(Color(0), "demo.color")
-	f.RegisterNamedType(Item{}, "demo.item")
-	f.RegisterNamedType(SimpleStruct{}, "demo.simple_struct")
+	// Use namespace "demo" to match Java's fory.register(Color.class, "demo", "color"), etc.
+	f.RegisterByNamespace(Color(0), "demo", "color")
+	f.RegisterByNamespace(Item{}, "demo", "item")
+	f.RegisterByNamespace(SimpleStruct{}, "demo", "simple_struct")
 
 	obj, err := f.DeserializeAny(data)
 	if err != nil {
@@ -435,7 +434,8 @@ func testList() {
 	data := readFile(dataFile)
 
 	f := fory.New(fory.WithCompatible(true))
-	f.RegisterNamedType(Item{}, "item")
+	// Use numeric ID 102 to match Java's fory.register(Item.class, 102)
+	f.Register(Item{}, 102)
 
 	buf := fory.NewByteBuffer(data)
 	lists := make([]interface{}, 4)
@@ -466,7 +466,8 @@ func testMap() {
 	data := readFile(dataFile)
 
 	f := fory.New(fory.WithCompatible(true))
-	f.RegisterNamedType(Item{}, "item")
+	// Use numeric ID 102 to match Java's fory.register(Item.class, 102)
+	f.Register(Item{}, 102)
 
 	buf := fory.NewByteBuffer(data)
 	maps := make([]interface{}, 2)
@@ -497,7 +498,8 @@ func testInteger() {
 	data := readFile(dataFile)
 
 	f := fory.New(fory.WithCompatible(true))
-	f.RegisterNamedType(Item1{}, "item1")
+	// Use numeric ID 101 to match Java's fory.register(Item1.class, 101)
+	f.Register(Item1{}, 101)
 
 	buf := fory.NewByteBuffer(data)
 	values := make([]interface{}, 7)
@@ -528,7 +530,8 @@ func testItem() {
 	data := readFile(dataFile)
 
 	f := fory.New(fory.WithCompatible(true))
-	f.RegisterNamedType(Item{}, "item")
+	// Use numeric ID 102 to match Java's fory.register(Item.class, 102)
+	f.Register(Item{}, 102)
 
 	buf := fory.NewByteBuffer(data)
 	items := make([]interface{}, 3)
@@ -559,7 +562,8 @@ func testColor() {
 	data := readFile(dataFile)
 
 	f := fory.New(fory.WithCompatible(true))
-	f.RegisterNamedType(Color(0), "color")
+	// Use numeric ID 101 to match Java's fory.register(Color.class, 101)
+	f.Register(Color(0), 101)
 
 	buf := fory.NewByteBuffer(data)
 	colors := make([]interface{}, 4)
@@ -590,7 +594,8 @@ func testStructWithList() {
 	data := readFile(dataFile)
 
 	f := fory.New(fory.WithCompatible(true))
-	f.RegisterNamedType(StructWithList{}, "struct_with_list")
+	// Use numeric ID 201 to match Java's fory.register(StructWithList.class, 201)
+	f.Register(StructWithList{}, 201)
 
 	obj, err := f.DeserializeAny(data)
 	if err != nil {
@@ -610,7 +615,8 @@ func testStructWithMap() {
 	data := readFile(dataFile)
 
 	f := fory.New(fory.WithCompatible(true))
-	f.RegisterNamedType(StructWithMap{}, "struct_with_map")
+	// Use numeric ID 202 to match Java's fory.register(StructWithMap.class, 202)
+	f.Register(StructWithMap{}, 202)
 
 	obj, err := f.DeserializeAny(data)
 	if err != nil {
@@ -630,8 +636,9 @@ func testSkipIdCustom() {
 	data := readFile(dataFile)
 
 	f := fory.New(fory.WithCompatible(true))
-	f.RegisterNamedType(MyExt{}, "my_ext")
-	f.RegisterNamedType(EmptyWrapper{}, "my_wrapper")
+	// Use numeric IDs to match Java: MyExt=103, EmptyWrapper=104
+	f.Register(MyExt{}, 103)
+	f.Register(EmptyWrapper{}, 104)
 
 	obj, err := f.DeserializeAny(data)
 	if err != nil {
@@ -651,8 +658,9 @@ func testSkipNameCustom() {
 	data := readFile(dataFile)
 
 	f := fory.New(fory.WithCompatible(true))
-	f.RegisterNamedType(MyExt{}, "my_ext")
-	f.RegisterNamedType(EmptyWrapper{}, "my_wrapper")
+	// Use namespace registration to match Java
+	f.RegisterByNamespace(MyExt{}, "", "my_ext")
+	f.RegisterByNamespace(EmptyWrapper{}, "", "my_wrapper")
 
 	obj, err := f.DeserializeAny(data)
 	if err != nil {
@@ -672,9 +680,10 @@ func testConsistentNamed() {
 	data := readFile(dataFile)
 
 	f := fory.New(fory.WithCompatible(true))
-	f.RegisterNamedType(Color(0), "color")
-	f.RegisterNamedType(MyStruct{}, "my_struct")
-	f.RegisterNamedType(MyExt{}, "my_ext")
+	// Use namespace registration to match Java
+	f.RegisterByNamespace(Color(0), "", "color")
+	f.RegisterByNamespace(MyStruct{}, "", "my_struct")
+	f.RegisterByNamespace(MyExt{}, "", "my_ext")
 
 	buf := fory.NewByteBuffer(data)
 	values := make([]interface{}, 9)
@@ -705,7 +714,8 @@ func testStructVersionCheck() {
 	data := readFile(dataFile)
 
 	f := fory.New(fory.WithCompatible(true))
-	f.RegisterNamedType(VersionCheckStruct{}, "version_check_struct")
+	// Use numeric ID 201 to match Java's fory.register(VersionCheckStruct.class, 201)
+	f.Register(VersionCheckStruct{}, 201)
 
 	obj, err := f.DeserializeAny(data)
 	if err != nil {
@@ -725,9 +735,10 @@ func testPolymorphicList() {
 	data := readFile(dataFile)
 
 	f := fory.New(fory.WithCompatible(true))
-	f.RegisterNamedType(&Dog{}, "dog")
-	f.RegisterNamedType(&Cat{}, "cat")
-	f.RegisterNamedType(AnimalListHolder{}, "animal_list_holder")
+	// Use numeric IDs to match Java's registration: Dog=302, Cat=303, AnimalListHolder=304
+	f.Register(&Dog{}, 302)
+	f.Register(&Cat{}, 303)
+	f.Register(AnimalListHolder{}, 304)
 
 	buf := fory.NewByteBuffer(data)
 	values := make([]interface{}, 2)
@@ -758,9 +769,10 @@ func testPolymorphicMap() {
 	data := readFile(dataFile)
 
 	f := fory.New(fory.WithCompatible(true))
-	f.RegisterNamedType(&Dog{}, "dog")
-	f.RegisterNamedType(&Cat{}, "cat")
-	f.RegisterNamedType(AnimalMapHolder{}, "animal_map_holder")
+	// Use numeric IDs to match Java's registration: Dog=302, Cat=303, AnimalMapHolder=305
+	f.Register(&Dog{}, 302)
+	f.Register(&Cat{}, 303)
+	f.Register(AnimalMapHolder{}, 305)
 
 	buf := fory.NewByteBuffer(data)
 	values := make([]interface{}, 2)

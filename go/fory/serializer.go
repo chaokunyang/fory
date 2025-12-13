@@ -24,14 +24,58 @@ import (
 // Serializer is the unified interface for all serialization.
 // It provides reflect.Value-based API for efficient serialization.
 type Serializer interface {
-	// Write serializes using reflect.Value.
-	// Does NOT write ref/type info - caller handles that.
-	Write(ctx *WriteContext, value reflect.Value) error
+	// Write is the entry point for serialization (mirrors Rust's fory_write).
+	//
+	// This method orchestrates the complete serialization process, handling reference tracking,
+	// type information, and delegating to Write for the actual data serialization.
+	//
+	// Parameters:
+	//
+	// * writeRef - When true, WRITES reference flag. When false, SKIPS writing ref flag.
+	// * writeType - When true, WRITES type information. When false, SKIPS writing type info.
+	//
+	Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error
 
-	// Read deserializes directly into the provided reflect.Value.
+	// WriteData serializes using reflect.Value.
+	// Does NOT write ref/type info - caller handles that.
+	WriteData(ctx *WriteContext, value reflect.Value) error
+
+	// Read is the entry point for deserialization.
+	//
+	// This method orchestrates the complete deserialization process, handling reference tracking,
+	// type information validation, and delegating to Read for the actual data deserialization.
+	//
+	// Parameters:
+	//
+	// * readRef - When true, READS reference flag from buffer. When false, SKIPS reading ref flag.
+	// * readType - When true, READS type information from buffer. When false, SKIPS reading type info.
+	//
+	Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error
+
+	// ReadData deserializes directly into the provided reflect.Value.
 	// Does NOT read ref/type info - caller handles that.
 	// For non-trivial types (slices, maps), implementations should reuse existing capacity when possible.
-	Read(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error
+	// This method should ONLY be used by collection serializers for nested element deserialization.
+	// For general deserialization, use ReadFull instead.
+	ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error
+
+	// ReadWithTypeInfo deserializes with pre-read type information.
+	//
+	// This method is used when type information has already been read from the buffer
+	// and needs to be passed to the deserialization logic. This is common in polymorphic
+	// deserialization scenarios where the runtime type differs from the static type.
+	//
+	// Parameters:
+	//
+	// * readRef - When true, READS reference flag from buffer. When false, SKIPS reading ref flag.
+	// * typeInfo - Type information that has already been read ahead. DO NOT read type info again from buffer.
+	//
+	// Important:
+	//
+	// DO NOT read type info from the buffer in this method. The typeInfo parameter
+	// contains the already-read type metadata. Reading it again will cause buffer position errors.
+	//
+	ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeInfo *TypeInfo, value reflect.Value) error
 
 	// TypeId returns the Fory protocol type ID
 	TypeId() TypeId
@@ -40,16 +84,65 @@ type Serializer interface {
 	NeedToWriteRef() bool
 }
 
-// Helper functions for serializer dispatch
+// ExtensionSerializer is a simplified interface for user-implemented extension serializers.
+// Users implement this interface to provide custom serialization logic for types
+// registered via RegisterExtensionType.
+//
+// Unlike the full Serializer interface, ExtensionSerializer only requires implementing
+// the core data serialization logic - reference tracking, type info, and protocol
+// details are handled automatically by Fory.
+//
+// Example:
+//
+//	type MyExtSerializer struct{}
+//
+//	func (s *MyExtSerializer) Write(buf *ByteBuffer, value interface{}) error {
+//	    myExt := value.(MyExt)
+//	    buf.WriteVarint32(myExt.Id)
+//	    return nil
+//	}
+//
+//	func (s *MyExtSerializer) Read(buf *ByteBuffer) (interface{}, error) {
+//	    id := buf.ReadVarint32()
+//	    return MyExt{Id: id}, nil
+//	}
+//
+//	// Register with custom serializer
+//	f.RegisterExtensionType(MyExt{}, "my_ext", &MyExtSerializer{})
+type ExtensionSerializer interface {
+	// Write serializes the value's data to the buffer.
+	// Only write the data fields - don't write ref flags or type info.
+	Write(buf *ByteBuffer, value interface{}) error
 
-func writeBySerializer(ctx *WriteContext, value reflect.Value, serializer Serializer, referencable bool) error {
+	// Read deserializes the value's data from the buffer.
+	// Only read the data fields - don't read ref flags or type info.
+	// Returns the deserialized value.
+	Read(buf *ByteBuffer) (interface{}, error)
+}
+
+// extensionSerializerAdapter wraps an ExtensionSerializer to implement the full Serializer interface.
+// This adapter handles reference tracking, type info writing/reading, and delegates the actual
+// data serialization to the user-provided ExtensionSerializer.
+type extensionSerializerAdapter struct {
+	type_      reflect.Type
+	typeTag    string
+	userSerial ExtensionSerializer
+}
+
+func (s *extensionSerializerAdapter) TypeId() TypeId { return NAMED_STRUCT }
+
+func (s *extensionSerializerAdapter) NeedToWriteRef() bool { return true }
+
+func (s *extensionSerializerAdapter) GetType() reflect.Type { return s.type_ }
+
+func (s *extensionSerializerAdapter) WriteData(ctx *WriteContext, value reflect.Value) error {
+	// Delegate to user's serializer
+	return s.userSerial.Write(ctx.Buffer(), value.Interface())
+}
+
+func (s *extensionSerializerAdapter) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
 	buf := ctx.Buffer()
-	if referencable {
-		if isNull(value) {
-			buf.WriteInt8(NullFlag)
-			return nil
-		}
-		// Check for reference
+	if writeRef {
 		refWritten, err := ctx.RefResolver().WriteRefOrNull(buf, value)
 		if err != nil {
 			return err
@@ -58,30 +151,37 @@ func writeBySerializer(ctx *WriteContext, value reflect.Value, serializer Serial
 			return nil
 		}
 	}
-	// If no serializer provided, look it up from typeResolver and write type info
-	if serializer == nil {
+	if writeType {
 		typeInfo, err := ctx.TypeResolver().getTypeInfo(value, true)
 		if err != nil {
 			return err
 		}
-		// Write type info for dynamic types (so reader can look up the serializer)
 		if err := ctx.TypeResolver().writeTypeInfo(buf, typeInfo); err != nil {
 			return err
 		}
-		serializer = typeInfo.Serializer
 	}
-	return serializer.Write(ctx, value)
+	return s.WriteData(ctx, value)
 }
 
-func readBySerializer(ctx *ReadContext, value reflect.Value, serializer Serializer, referencable bool) error {
+func (s *extensionSerializerAdapter) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	// Delegate to user's serializer
+	result, err := s.userSerial.Read(ctx.Buffer())
+	if err != nil {
+		return err
+	}
+	// Set the result into the value
+	value.Set(reflect.ValueOf(result))
+	return nil
+}
+
+func (s *extensionSerializerAdapter) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
 	buf := ctx.Buffer()
-	if referencable {
+	if readRef {
 		refID, err := ctx.RefResolver().TryPreserveRefId(buf)
 		if err != nil {
 			return err
 		}
 		if int8(refID) < NotNullValueFlag {
-			// Reference found
 			obj := ctx.RefResolver().GetReadObject(refID)
 			if obj.IsValid() {
 				value.Set(obj)
@@ -89,5 +189,11 @@ func readBySerializer(ctx *ReadContext, value reflect.Value, serializer Serializ
 			return nil
 		}
 	}
-	return serializer.Read(ctx, value.Type(), value)
+	return s.ReadData(ctx, value.Type(), value)
 }
+
+func (s *extensionSerializerAdapter) ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeInfo *TypeInfo, value reflect.Value) error {
+	return s.Read(ctx, readRef, false, value)
+}
+
+// Helper functions for serializer dispatch

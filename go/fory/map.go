@@ -582,13 +582,14 @@ func (s mapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value refl
 					return fmt.Errorf("failed to read map value in chunk: %w", err)
 				}
 			}
+			// Unwrap interfaces if they're not the map's type
 			if k.Kind() == reflect.Interface {
 				k = k.Elem()
 			}
 			if v.Kind() == reflect.Interface {
 				v = v.Elem()
 			}
-			value.SetMapIndex(k, v)
+			setMapValue(value, k, v)
 			size--
 		}
 
@@ -669,4 +670,35 @@ func UnwrapReflectValue(v reflect.Value) reflect.Value {
 func isValid(v reflect.Value) bool {
 	// Zero values are valid, so apply this change temporarily.
 	return v.IsValid()
+}
+
+// setMapValue sets a key-value pair into a map, handling interface types where
+// the concrete type may need to be wrapped in a pointer to implement the interface.
+func setMapValue(mapVal, key, value reflect.Value) {
+	mapKeyType := mapVal.Type().Key()
+	mapValueType := mapVal.Type().Elem()
+
+	// Handle key
+	finalKey := key
+	if mapKeyType.Kind() == reflect.Interface {
+		if !key.Type().AssignableTo(mapKeyType) {
+			// Try pointer - common case where interface has pointer receivers
+			ptr := reflect.New(key.Type())
+			ptr.Elem().Set(key)
+			finalKey = ptr
+		}
+	}
+
+	// Handle value
+	finalValue := value
+	if mapValueType.Kind() == reflect.Interface {
+		if !value.Type().AssignableTo(mapValueType) {
+			// Try pointer - common case where interface has pointer receivers
+			ptr := reflect.New(value.Type())
+			ptr.Elem().Set(value)
+			finalValue = ptr
+		}
+	}
+
+	mapVal.SetMapIndex(finalKey, finalValue)
 }

@@ -380,8 +380,8 @@ func (r *TypeResolver) RegisterByID(type_ reflect.Type, fullTypeID uint32) error
 			return fmt.Errorf("failed to register type by ID: %w", err)
 		}
 
-		// Register pointer type with -fullTypeID
-		_, err = r.registerType(ptrType, -fullTypeID, "", "", ptrSerializer, false)
+		// Register pointer type with same fullTypeID (Java treats value and pointer types the same)
+		_, err = r.registerType(ptrType, fullTypeID, "", "", ptrSerializer, false)
 		if err != nil {
 			return fmt.Errorf("failed to register pointer type by ID: %w", err)
 		}

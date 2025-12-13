@@ -229,14 +229,16 @@ func (s sliceSerializer) writeDifferentTypes(ctx *WriteContext, buf *ByteBuffer,
 		}
 
 		if trackRefs {
-			// Write ref flag, type info, and data
+			// Write ref flag, and if not a reference, write type info and data
 			refWritten, err := ctx.RefResolver().WriteRefOrNull(buf, elem)
 			if err != nil {
 				return err
 			}
-			// Write type ID
-			buf.WriteVaruint32Small7(uint32(typeInfo.TypeID))
 			if !refWritten {
+				// Write full type info (handles namespaced types with meta string encoding)
+				if err := ctx.TypeResolver().writeTypeInfo(buf, typeInfo); err != nil {
+					return err
+				}
 				if err := typeInfo.Serializer.WriteData(ctx, elem); err != nil {
 					return err
 				}
@@ -244,13 +246,19 @@ func (s sliceSerializer) writeDifferentTypes(ctx *WriteContext, buf *ByteBuffer,
 		} else if hasNull {
 			// No ref tracking but may have nulls - write NotNullValueFlag before type + data
 			buf.WriteInt8(NotNullValueFlag)
-			buf.WriteVaruint32Small7(uint32(typeInfo.TypeID))
+			// Write full type info (handles namespaced types with meta string encoding)
+			if err := ctx.TypeResolver().writeTypeInfo(buf, typeInfo); err != nil {
+				return err
+			}
 			if err := typeInfo.Serializer.WriteData(ctx, elem); err != nil {
 				return err
 			}
 		} else {
 			// No ref tracking and no nulls - write type + data directly
-			buf.WriteVaruint32Small7(uint32(typeInfo.TypeID))
+			// Write full type info (handles namespaced types with meta string encoding)
+			if err := ctx.TypeResolver().writeTypeInfo(buf, typeInfo); err != nil {
+				return err
+			}
 			if err := typeInfo.Serializer.WriteData(ctx, elem); err != nil {
 				return err
 			}

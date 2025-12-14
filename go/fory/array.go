@@ -21,6 +21,46 @@ import (
 	"reflect"
 )
 
+// writeArrayRefAndType handles reference and type writing for array serializers.
+// Arrays are value types, so ref handling is simpler than slices.
+// Returns true if the value was already written, false if data should be written.
+func writeArrayRefAndType(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value, typeId TypeId) (bool, error) {
+	if writeRef {
+		// Arrays are value types, just write NotNullValueFlag
+		ctx.Buffer().WriteInt8(NotNullValueFlag)
+	}
+	if writeType {
+		ctx.Buffer().WriteVaruint32Small7(uint32(typeId))
+	}
+	return false, nil
+}
+
+// readArrayRefAndType handles reference and type reading for array serializers.
+// Returns true if a reference was resolved (value already set), false if data should be read.
+func readArrayRefAndType(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) (bool, error) {
+	buf := ctx.Buffer()
+	if readRef {
+		refID, err := ctx.RefResolver().TryPreserveRefId(buf)
+		if err != nil {
+			return false, err
+		}
+		if int8(refID) < NotNullValueFlag {
+			obj := ctx.RefResolver().GetReadObject(refID)
+			if obj.IsValid() {
+				value.Set(obj)
+			}
+			return true, nil
+		}
+	}
+	if readType {
+		typeID := buf.ReadVaruint32Small7()
+		if IsNamespacedType(TypeId(typeID)) {
+			_, _ = ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID)
+		}
+	}
+	return false, nil
+}
+
 // Array serializers
 
 type arraySerializer struct{}
@@ -41,18 +81,9 @@ func (s arraySerializer) WriteData(ctx *WriteContext, value reflect.Value) error
 }
 
 func (s arraySerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	if writeRef {
-		ctx.buffer.WriteInt8(NotNullValueFlag)
-	}
-	if writeType {
-		// For polymorphic array elements, need to write full type info
-		typeInfo, err := ctx.TypeResolver().getTypeInfo(value, true)
-		if err != nil {
-			return err
-		}
-		if err := ctx.TypeResolver().writeTypeInfo(ctx.buffer, typeInfo); err != nil {
-			return err
-		}
+	_, err := writeArrayRefAndType(ctx, writeRef, writeType, value, -LIST)
+	if err != nil {
+		return err
 	}
 	return s.WriteData(ctx, value)
 }
@@ -67,25 +98,9 @@ func (s arraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value re
 }
 
 func (s arraySerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
-	buf := ctx.Buffer()
-	if readRef {
-		refID, err := ctx.RefResolver().TryPreserveRefId(buf)
-		if err != nil {
-			return err
-		}
-		if int8(refID) < NotNullValueFlag {
-			obj := ctx.RefResolver().GetReadObject(refID)
-			if obj.IsValid() {
-				value.Set(obj)
-			}
-			return nil
-		}
-	}
-	if readType {
-		typeID := buf.ReadVaruint32()
-		if IsNamespacedType(TypeId(typeID)) {
-			_, _ = ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID)
-		}
+	done, err := readArrayRefAndType(ctx, readRef, readType, value)
+	if done || err != nil {
+		return err
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
@@ -203,18 +218,9 @@ func (s *arrayConcreteValueSerializer) WriteData(ctx *WriteContext, value reflec
 }
 
 func (s *arrayConcreteValueSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	if writeRef {
-		ctx.Buffer().WriteInt8(NotNullValueFlag)
-	}
-	if writeType {
-		// Generic array type, need to write full type info
-		typeInfo, err := ctx.TypeResolver().getTypeInfo(value, true)
-		if err != nil {
-			return err
-		}
-		if err := ctx.TypeResolver().writeTypeInfo(ctx.Buffer(), typeInfo); err != nil {
-			return err
-		}
+	_, err := writeArrayRefAndType(ctx, writeRef, writeType, value, -LIST)
+	if err != nil {
+		return err
 	}
 	return s.WriteData(ctx, value)
 }
@@ -258,25 +264,9 @@ func (s *arrayConcreteValueSerializer) ReadData(ctx *ReadContext, type_ reflect.
 }
 
 func (s *arrayConcreteValueSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
-	buf := ctx.Buffer()
-	if readRef {
-		refID, err := ctx.RefResolver().TryPreserveRefId(buf)
-		if err != nil {
-			return err
-		}
-		if int8(refID) < NotNullValueFlag {
-			obj := ctx.RefResolver().GetReadObject(refID)
-			if obj.IsValid() {
-				value.Set(obj)
-			}
-			return nil
-		}
-	}
-	if readType {
-		typeID := buf.ReadVaruint32()
-		if IsNamespacedType(TypeId(typeID)) {
-			_, _ = ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID)
-		}
+	done, err := readArrayRefAndType(ctx, readRef, readType, value)
+	if done || err != nil {
+		return err
 	}
 	if err := s.ReadData(ctx, value.Type(), value); err != nil {
 		return err
@@ -293,28 +283,38 @@ func (s *arrayConcreteValueSerializer) ReadWithTypeInfo(ctx *ReadContext, readRe
 
 type byteArraySerializer struct{}
 
-func (s byteArraySerializer) TypeId() TypeId       { return -BINARY }
+func (s byteArraySerializer) TypeId() TypeId       { return BINARY }
 func (s byteArraySerializer) NeedToWriteRef() bool { return false }
 
-func (s byteArraySerializer) Write(ctx *WriteContext, value reflect.Value) error {
+func (s byteArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
+	buf := ctx.Buffer()
 	length := value.Len()
-	ctx.buffer.WriteVaruint32(uint32(length))
+	buf.WriteLength(length)
 	if value.CanAddr() {
-		ctx.buffer.WriteBinary(value.Slice(0, length).Bytes())
+		buf.WriteBinary(value.Slice(0, length).Bytes())
 	} else {
 		data := make([]byte, length)
 		for i := 0; i < length; i++ {
 			data[i] = byte(value.Index(i).Uint())
 		}
-		ctx.buffer.WriteBinary(data)
+		buf.WriteBinary(data)
 	}
 	return nil
 }
 
-func (s byteArraySerializer) Read(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
-	length := int(ctx.buffer.ReadVaruint32())
+func (s byteArraySerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
+	_, err := writeArrayRefAndType(ctx, writeRef, writeType, value, BINARY)
+	if err != nil {
+		return err
+	}
+	return s.WriteData(ctx, value)
+}
+
+func (s byteArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	buf := ctx.Buffer()
+	length := buf.ReadLength()
 	data := make([]byte, length)
-	ctx.buffer.Read(data)
+	buf.Read(data)
 	if value.CanSet() {
 		for i := 0; i < length && i < value.Len(); i++ {
 			value.Index(i).SetUint(uint64(data[i]))
@@ -323,19 +323,14 @@ func (s byteArraySerializer) Read(ctx *ReadContext, type_ reflect.Type, value re
 	return nil
 }
 
-func (s byteArraySerializer) ReadFull(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
-	if readRef {
-		refFlag := ctx.buffer.ReadInt8()
-		if refFlag == NullFlag {
-			return nil
-		}
+func (s byteArraySerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
+	done, err := readArrayRefAndType(ctx, readRef, readType, value)
+	if done || err != nil {
+		return err
 	}
-	if readType {
-		_ = ctx.buffer.ReadVaruint32()
-	}
-	return s.Read(ctx, value.Type(), value)
+	return s.ReadData(ctx, value.Type(), value)
 }
 
 func (s byteArraySerializer) ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeInfo *TypeInfo, value reflect.Value) error {
-	return s.ReadFull(ctx, readRef, false, value)
+	return s.Read(ctx, readRef, false, value)
 }

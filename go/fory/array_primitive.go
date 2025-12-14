@@ -46,8 +46,9 @@ func (s boolArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) e
 }
 
 func (s boolArraySerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	if writeType {
-		ctx.Buffer().WriteVaruint32Small7(uint32(BOOL_ARRAY))
+	_, err := writeArrayRefAndType(ctx, writeRef, writeType, value, BOOL_ARRAY)
+	if err != nil {
+		return err
 	}
 	return s.WriteData(ctx, value)
 }
@@ -65,8 +66,9 @@ func (s boolArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, valu
 }
 
 func (s boolArraySerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
-	if readType {
-		_ = ctx.Buffer().ReadVaruint32Small7()
+	done, err := readArrayRefAndType(ctx, readRef, readType, value)
+	if done || err != nil {
+		return err
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
@@ -99,8 +101,9 @@ func (s int8ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) e
 }
 
 func (s int8ArraySerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	if writeType {
-		ctx.Buffer().WriteVaruint32Small7(uint32(INT8_ARRAY))
+	_, err := writeArrayRefAndType(ctx, writeRef, writeType, value, INT8_ARRAY)
+	if err != nil {
+		return err
 	}
 	return s.WriteData(ctx, value)
 }
@@ -118,8 +121,9 @@ func (s int8ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, valu
 }
 
 func (s int8ArraySerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
-	if readType {
-		_ = ctx.Buffer().ReadVaruint32Small7()
+	done, err := readArrayRefAndType(ctx, readRef, readType, value)
+	if done || err != nil {
+		return err
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
@@ -152,8 +156,9 @@ func (s int16ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) 
 }
 
 func (s int16ArraySerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	if writeType {
-		ctx.Buffer().WriteVaruint32Small7(uint32(INT16_ARRAY))
+	_, err := writeArrayRefAndType(ctx, writeRef, writeType, value, INT16_ARRAY)
+	if err != nil {
+		return err
 	}
 	return s.WriteData(ctx, value)
 }
@@ -171,8 +176,9 @@ func (s int16ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, val
 }
 
 func (s int16ArraySerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
-	if readType {
-		_ = ctx.Buffer().ReadVaruint32Small7()
+	done, err := readArrayRefAndType(ctx, readRef, readType, value)
+	if done || err != nil {
+		return err
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
@@ -205,8 +211,9 @@ func (s int32ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) 
 }
 
 func (s int32ArraySerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	if writeType {
-		ctx.Buffer().WriteVaruint32Small7(uint32(INT32_ARRAY))
+	_, err := writeArrayRefAndType(ctx, writeRef, writeType, value, INT32_ARRAY)
+	if err != nil {
+		return err
 	}
 	return s.WriteData(ctx, value)
 }
@@ -224,8 +231,9 @@ func (s int32ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, val
 }
 
 func (s int32ArraySerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
-	if readType {
-		_ = ctx.Buffer().ReadVaruint32Small7()
+	done, err := readArrayRefAndType(ctx, readRef, readType, value)
+	if done || err != nil {
+		return err
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
@@ -258,8 +266,9 @@ func (s int64ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) 
 }
 
 func (s int64ArraySerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	if writeType {
-		ctx.Buffer().WriteVaruint32Small7(uint32(INT64_ARRAY))
+	_, err := writeArrayRefAndType(ctx, writeRef, writeType, value, INT64_ARRAY)
+	if err != nil {
+		return err
 	}
 	return s.WriteData(ctx, value)
 }
@@ -277,8 +286,9 @@ func (s int64ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, val
 }
 
 func (s int64ArraySerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
-	if readType {
-		_ = ctx.Buffer().ReadVaruint32Small7()
+	done, err := readArrayRefAndType(ctx, readRef, readType, value)
+	if done || err != nil {
+		return err
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
@@ -311,8 +321,9 @@ func (s float32ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value
 }
 
 func (s float32ArraySerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	if writeType {
-		ctx.Buffer().WriteVaruint32Small7(uint32(FLOAT32_ARRAY))
+	_, err := writeArrayRefAndType(ctx, writeRef, writeType, value, FLOAT32_ARRAY)
+	if err != nil {
+		return err
 	}
 	return s.WriteData(ctx, value)
 }
@@ -330,8 +341,9 @@ func (s float32ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, v
 }
 
 func (s float32ArraySerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
-	if readType {
-		_ = ctx.Buffer().ReadVaruint32Small7()
+	done, err := readArrayRefAndType(ctx, readRef, readType, value)
+	if done || err != nil {
+		return err
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
@@ -364,8 +376,9 @@ func (s float64ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value
 }
 
 func (s float64ArraySerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	if writeType {
-		ctx.Buffer().WriteVaruint32Small7(uint32(FLOAT64_ARRAY))
+	_, err := writeArrayRefAndType(ctx, writeRef, writeType, value, FLOAT64_ARRAY)
+	if err != nil {
+		return err
 	}
 	return s.WriteData(ctx, value)
 }
@@ -383,8 +396,9 @@ func (s float64ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, v
 }
 
 func (s float64ArraySerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
-	if readType {
-		_ = ctx.Buffer().ReadVaruint32Small7()
+	done, err := readArrayRefAndType(ctx, readRef, readType, value)
+	if done || err != nil {
+		return err
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
@@ -417,8 +431,9 @@ func (s uint8ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) 
 }
 
 func (s uint8ArraySerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	if writeType {
-		ctx.Buffer().WriteVaruint32Small7(uint32(BINARY))
+	_, err := writeArrayRefAndType(ctx, writeRef, writeType, value, BINARY)
+	if err != nil {
+		return err
 	}
 	return s.WriteData(ctx, value)
 }
@@ -436,8 +451,9 @@ func (s uint8ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, val
 }
 
 func (s uint8ArraySerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
-	if readType {
-		_ = ctx.Buffer().ReadVaruint32Small7()
+	done, err := readArrayRefAndType(ctx, readRef, readType, value)
+	if done || err != nil {
+		return err
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }

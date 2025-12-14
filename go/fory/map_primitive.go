@@ -41,8 +41,6 @@ func writeMapStringString(buf *ByteBuffer, m map[string]string) {
 			chunkSize = MAX_CHUNK_SIZE
 		}
 
-		// Chunk header: -1 followed by header byte and size
-		buf.WriteInt16(-1)
 		// Header: KEY_DECL_TYPE | VALUE_DECL_TYPE (no refs for primitives)
 		buf.WriteUint8(KEY_DECL_TYPE | VALUE_DECL_TYPE)
 		buf.WriteUint8(uint8(chunkSize))
@@ -111,7 +109,6 @@ func writeMapStringInt64(buf *ByteBuffer, m map[string]int64) {
 			chunkSize = MAX_CHUNK_SIZE
 		}
 
-		buf.WriteInt16(-1)
 		buf.WriteUint8(KEY_DECL_TYPE | VALUE_DECL_TYPE)
 		buf.WriteUint8(uint8(chunkSize))
 
@@ -172,7 +169,6 @@ func writeMapStringInt(buf *ByteBuffer, m map[string]int) {
 			chunkSize = MAX_CHUNK_SIZE
 		}
 
-		buf.WriteInt16(-1)
 		buf.WriteUint8(KEY_DECL_TYPE | VALUE_DECL_TYPE)
 		buf.WriteUint8(uint8(chunkSize))
 
@@ -233,7 +229,6 @@ func writeMapStringFloat64(buf *ByteBuffer, m map[string]float64) {
 			chunkSize = MAX_CHUNK_SIZE
 		}
 
-		buf.WriteInt16(-1)
 		buf.WriteUint8(KEY_DECL_TYPE | VALUE_DECL_TYPE)
 		buf.WriteUint8(uint8(chunkSize))
 
@@ -294,7 +289,6 @@ func writeMapStringBool(buf *ByteBuffer, m map[string]bool) {
 			chunkSize = MAX_CHUNK_SIZE
 		}
 
-		buf.WriteInt16(-1)
 		buf.WriteUint8(KEY_DECL_TYPE | VALUE_DECL_TYPE)
 		buf.WriteUint8(uint8(chunkSize))
 
@@ -355,7 +349,6 @@ func writeMapInt32Int32(buf *ByteBuffer, m map[int32]int32) {
 			chunkSize = MAX_CHUNK_SIZE
 		}
 
-		buf.WriteInt16(-1)
 		buf.WriteUint8(KEY_DECL_TYPE | VALUE_DECL_TYPE)
 		buf.WriteUint8(uint8(chunkSize))
 
@@ -416,7 +409,6 @@ func writeMapInt64Int64(buf *ByteBuffer, m map[int64]int64) {
 			chunkSize = MAX_CHUNK_SIZE
 		}
 
-		buf.WriteInt16(-1)
 		buf.WriteUint8(KEY_DECL_TYPE | VALUE_DECL_TYPE)
 		buf.WriteUint8(uint8(chunkSize))
 
@@ -477,7 +469,6 @@ func writeMapIntInt(buf *ByteBuffer, m map[int]int) {
 			chunkSize = MAX_CHUNK_SIZE
 		}
 
-		buf.WriteInt16(-1)
 		buf.WriteUint8(KEY_DECL_TYPE | VALUE_DECL_TYPE)
 		buf.WriteUint8(uint8(chunkSize))
 

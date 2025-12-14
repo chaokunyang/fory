@@ -868,9 +868,65 @@ func (r *TypeResolver) getTypeInfo(value reflect.Value, create bool) (*TypeInfo,
 	} else if value.Kind() == reflect.Map {
 		typeID = MAP
 	} else if value.Kind() == reflect.Array {
-		type_ = reflect.SliceOf(type_.Elem())
-		info := r.typesInfo[type_]
-		return &info, nil
+		// Handle primitive arrays with specific type IDs
+		elemKind := type_.Elem().Kind()
+		var arrayTypeID uint32
+		var serializer Serializer
+		switch elemKind {
+		case reflect.Bool:
+			arrayTypeID = BOOL_ARRAY
+			serializer = boolArraySerializer{arrayType: type_}
+		case reflect.Int8:
+			arrayTypeID = INT8_ARRAY
+			serializer = int8ArraySerializer{arrayType: type_}
+		case reflect.Int16:
+			arrayTypeID = INT16_ARRAY
+			serializer = int16ArraySerializer{arrayType: type_}
+		case reflect.Int32:
+			arrayTypeID = INT32_ARRAY
+			serializer = int32ArraySerializer{arrayType: type_}
+		case reflect.Int64:
+			arrayTypeID = INT64_ARRAY
+			serializer = int64ArraySerializer{arrayType: type_}
+		case reflect.Uint8:
+			arrayTypeID = BINARY
+			serializer = uint8ArraySerializer{arrayType: type_}
+		case reflect.Float32:
+			arrayTypeID = FLOAT32_ARRAY
+			serializer = float32ArraySerializer{arrayType: type_}
+		case reflect.Float64:
+			arrayTypeID = FLOAT64_ARRAY
+			serializer = float64ArraySerializer{arrayType: type_}
+		case reflect.Int:
+			if intSize == 8 {
+				arrayTypeID = INT64_ARRAY
+				serializer = int64ArraySerializer{arrayType: type_}
+			} else {
+				arrayTypeID = INT32_ARRAY
+				serializer = int32ArraySerializer{arrayType: type_}
+			}
+		default:
+			// Generic array - use LIST type ID
+			arrayTypeID = LIST
+			// Create arrayConcreteValueSerializer for non-primitive arrays
+			elemSerializer, err := r.createSerializer(type_.Elem(), false)
+			if err == nil && elemSerializer != nil {
+				serializer = &arrayConcreteValueSerializer{
+					type_:          type_,
+					elemSerializer: elemSerializer,
+					referencable:   nullable(type_.Elem()),
+				}
+			}
+		}
+		// Create and cache type info for the array
+		arrayInfo := TypeInfo{
+			Type:       type_,
+			TypeID:     arrayTypeID,
+			Serializer: serializer,
+		}
+		r.typesInfo[type_] = arrayInfo
+		storedInfo := r.typesInfo[type_]
+		return &storedInfo, nil
 	} else if isMultiDimensionaSlice(value) {
 		typeID = LIST
 		info := r.typeIDToTypeInfo[typeID]

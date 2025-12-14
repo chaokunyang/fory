@@ -168,7 +168,7 @@ func (s mapSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 			chunkHeader |= KEY_DECL_TYPE
 		} else {
 			keyTypeInfo, _ := getActualTypeInfo(entryKey, typeResolver)
-			if err := typeResolver.writeTypeInfo(buf, &keyTypeInfo); err != nil {
+			if err := typeResolver.writeTypeInfo(buf, keyTypeInfo); err != nil {
 				return err
 			}
 			keySerializer = keyTypeInfo.Serializer
@@ -177,7 +177,7 @@ func (s mapSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 			chunkHeader |= VALUE_DECL_TYPE
 		} else {
 			valueTypeInfo, _ := getActualTypeInfo(entryVal, typeResolver)
-			if err := typeResolver.writeTypeInfo(buf, &valueTypeInfo); err != nil {
+			if err := typeResolver.writeTypeInfo(buf, valueTypeInfo); err != nil {
 				return err
 			}
 			valueSerializer = valueTypeInfo.Serializer
@@ -262,7 +262,7 @@ func (s mapSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, v
 		if err != nil {
 			return err
 		}
-		if err := ctx.TypeResolver().writeTypeInfo(ctx.buffer, &typeInfo); err != nil {
+		if err := ctx.TypeResolver().writeTypeInfo(ctx.buffer, typeInfo); err != nil {
 			return err
 		}
 	}
@@ -649,11 +649,11 @@ func getActualType(v reflect.Value) reflect.Type {
 	return v.Type()
 }
 
-func getActualTypeInfo(v reflect.Value, resolver *TypeResolver) (TypeInfo, error) {
+func getActualTypeInfo(v reflect.Value, resolver *TypeResolver) (*TypeInfo, error) {
 	if v.Kind() == reflect.Interface && !v.IsNil() {
 		elem := v.Elem()
 		if !elem.IsValid() {
-			return TypeInfo{}, fmt.Errorf("invalid interface value")
+			return nil, fmt.Errorf("invalid interface value")
 		}
 		return resolver.getTypeInfo(elem, true)
 	}

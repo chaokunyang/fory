@@ -391,7 +391,7 @@ func (c *ReadContext) ReadBoolSlice(readRefInfo, readTypeInfo bool) ([]bool, err
 	return readBoolSlice(c.buffer)
 }
 
-// ReadBoolSliceInto reads []bool into target, reusing capacity when possible
+// ReadBoolSliceInto reads []bool into target
 func (c *ReadContext) ReadBoolSliceInto(target *[]bool, readRefInfo, readTypeInfo bool) error {
 	if readRefInfo {
 		_ = c.buffer.ReadInt8()
@@ -399,7 +399,12 @@ func (c *ReadContext) ReadBoolSliceInto(target *[]bool, readRefInfo, readTypeInf
 	if readTypeInfo {
 		_ = c.buffer.ReadVaruint32Small7()
 	}
-	return readBoolSliceInto(c.buffer, target)
+	result, err := readBoolSlice(c.buffer)
+	if err != nil {
+		return err
+	}
+	*target = result
+	return nil
 }
 
 // ReadInt8Slice reads []int8 with optional ref/type info
@@ -413,7 +418,7 @@ func (c *ReadContext) ReadInt8Slice(readRefInfo, readTypeInfo bool) ([]int8, err
 	return readInt8Slice(c.buffer)
 }
 
-// ReadInt8SliceInto reads []int8 into target, reusing capacity when possible
+// ReadInt8SliceInto reads []int8 into target
 func (c *ReadContext) ReadInt8SliceInto(target *[]int8, readRefInfo, readTypeInfo bool) error {
 	if readRefInfo {
 		_ = c.buffer.ReadInt8()
@@ -421,7 +426,12 @@ func (c *ReadContext) ReadInt8SliceInto(target *[]int8, readRefInfo, readTypeInf
 	if readTypeInfo {
 		_ = c.buffer.ReadVaruint32Small7()
 	}
-	return readInt8SliceInto(c.buffer, target)
+	result, err := readInt8Slice(c.buffer)
+	if err != nil {
+		return err
+	}
+	*target = result
+	return nil
 }
 
 // ReadInt16Slice reads []int16 with optional ref/type info
@@ -435,7 +445,7 @@ func (c *ReadContext) ReadInt16Slice(readRefInfo, readTypeInfo bool) ([]int16, e
 	return readInt16Slice(c.buffer)
 }
 
-// ReadInt16SliceInto reads []int16 into target, reusing capacity when possible
+// ReadInt16SliceInto reads []int16 into target
 func (c *ReadContext) ReadInt16SliceInto(target *[]int16, readRefInfo, readTypeInfo bool) error {
 	if readRefInfo {
 		_ = c.buffer.ReadInt8()
@@ -443,7 +453,12 @@ func (c *ReadContext) ReadInt16SliceInto(target *[]int16, readRefInfo, readTypeI
 	if readTypeInfo {
 		_ = c.buffer.ReadVaruint32Small7()
 	}
-	return readInt16SliceInto(c.buffer, target)
+	result, err := readInt16Slice(c.buffer)
+	if err != nil {
+		return err
+	}
+	*target = result
+	return nil
 }
 
 // ReadInt32Slice reads []int32 with optional ref/type info
@@ -457,7 +472,7 @@ func (c *ReadContext) ReadInt32Slice(readRefInfo, readTypeInfo bool) ([]int32, e
 	return readInt32Slice(c.buffer)
 }
 
-// ReadInt32SliceInto reads []int32 into target, reusing capacity when possible
+// ReadInt32SliceInto reads []int32 into target
 func (c *ReadContext) ReadInt32SliceInto(target *[]int32, readRefInfo, readTypeInfo bool) error {
 	if readRefInfo {
 		_ = c.buffer.ReadInt8()
@@ -465,7 +480,12 @@ func (c *ReadContext) ReadInt32SliceInto(target *[]int32, readRefInfo, readTypeI
 	if readTypeInfo {
 		_ = c.buffer.ReadVaruint32Small7()
 	}
-	return readInt32SliceInto(c.buffer, target)
+	result, err := readInt32Slice(c.buffer)
+	if err != nil {
+		return err
+	}
+	*target = result
+	return nil
 }
 
 // ReadInt64Slice reads []int64 with optional ref/type info
@@ -479,7 +499,7 @@ func (c *ReadContext) ReadInt64Slice(readRefInfo, readTypeInfo bool) ([]int64, e
 	return readInt64Slice(c.buffer)
 }
 
-// ReadInt64SliceInto reads []int64 into target, reusing capacity when possible
+// ReadInt64SliceInto reads []int64 into target
 func (c *ReadContext) ReadInt64SliceInto(target *[]int64, readRefInfo, readTypeInfo bool) error {
 	if readRefInfo {
 		_ = c.buffer.ReadInt8()
@@ -487,7 +507,12 @@ func (c *ReadContext) ReadInt64SliceInto(target *[]int64, readRefInfo, readTypeI
 	if readTypeInfo {
 		_ = c.buffer.ReadVaruint32Small7()
 	}
-	return readInt64SliceInto(c.buffer, target)
+	result, err := readInt64Slice(c.buffer)
+	if err != nil {
+		return err
+	}
+	*target = result
+	return nil
 }
 
 // ReadIntSlice reads []int with optional ref/type info
@@ -501,7 +526,7 @@ func (c *ReadContext) ReadIntSlice(readRefInfo, readTypeInfo bool) ([]int, error
 	return readIntSlice(c.buffer)
 }
 
-// ReadIntSliceInto reads []int into target, reusing capacity when possible
+// ReadIntSliceInto reads []int into target
 func (c *ReadContext) ReadIntSliceInto(target *[]int, readRefInfo, readTypeInfo bool) error {
 	if readRefInfo {
 		_ = c.buffer.ReadInt8()
@@ -509,7 +534,12 @@ func (c *ReadContext) ReadIntSliceInto(target *[]int, readRefInfo, readTypeInfo 
 	if readTypeInfo {
 		_ = c.buffer.ReadVaruint32Small7()
 	}
-	return readIntSliceInto(c.buffer, target)
+	result, err := readIntSlice(c.buffer)
+	if err != nil {
+		return err
+	}
+	*target = result
+	return nil
 }
 
 // ReadFloat32Slice reads []float32 with optional ref/type info
@@ -523,7 +553,7 @@ func (c *ReadContext) ReadFloat32Slice(readRefInfo, readTypeInfo bool) ([]float3
 	return readFloat32Slice(c.buffer)
 }
 
-// ReadFloat32SliceInto reads []float32 into target, reusing capacity when possible
+// ReadFloat32SliceInto reads []float32 into target
 func (c *ReadContext) ReadFloat32SliceInto(target *[]float32, readRefInfo, readTypeInfo bool) error {
 	if readRefInfo {
 		_ = c.buffer.ReadInt8()
@@ -531,7 +561,12 @@ func (c *ReadContext) ReadFloat32SliceInto(target *[]float32, readRefInfo, readT
 	if readTypeInfo {
 		_ = c.buffer.ReadVaruint32Small7()
 	}
-	return readFloat32SliceInto(c.buffer, target)
+	result, err := readFloat32Slice(c.buffer)
+	if err != nil {
+		return err
+	}
+	*target = result
+	return nil
 }
 
 // ReadFloat64Slice reads []float64 with optional ref/type info
@@ -545,7 +580,7 @@ func (c *ReadContext) ReadFloat64Slice(readRefInfo, readTypeInfo bool) ([]float6
 	return readFloat64Slice(c.buffer)
 }
 
-// ReadFloat64SliceInto reads []float64 into target, reusing capacity when possible
+// ReadFloat64SliceInto reads []float64 into target
 func (c *ReadContext) ReadFloat64SliceInto(target *[]float64, readRefInfo, readTypeInfo bool) error {
 	if readRefInfo {
 		_ = c.buffer.ReadInt8()
@@ -553,7 +588,12 @@ func (c *ReadContext) ReadFloat64SliceInto(target *[]float64, readRefInfo, readT
 	if readTypeInfo {
 		_ = c.buffer.ReadVaruint32Small7()
 	}
-	return readFloat64SliceInto(c.buffer, target)
+	result, err := readFloat64Slice(c.buffer)
+	if err != nil {
+		return err
+	}
+	*target = result
+	return nil
 }
 
 // ReadByteSlice reads []byte with optional ref/type info

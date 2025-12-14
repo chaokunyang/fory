@@ -613,7 +613,7 @@ func (s *structSerializer) Write(ctx *WriteContext, writeRef bool, writeType boo
 		if err != nil {
 			return err
 		}
-		if err := ctx.TypeResolver().writeTypeInfo(ctx.buffer, &typeInfo); err != nil {
+		if err := ctx.TypeResolver().writeTypeInfo(ctx.buffer, typeInfo); err != nil {
 			return err
 		}
 	}
@@ -1675,7 +1675,7 @@ func (s *ptrToStructSerializer) Write(ctx *WriteContext, writeRef bool, writeTyp
 		if err != nil {
 			return err
 		}
-		if err := ctx.TypeResolver().writeTypeInfo(ctx.buffer, &typeInfo); err != nil {
+		if err := ctx.TypeResolver().writeTypeInfo(ctx.buffer, typeInfo); err != nil {
 			return err
 		}
 	}
@@ -1721,7 +1721,7 @@ func (s *ptrToCodegenSerializer) Write(ctx *WriteContext, writeRef bool, writeTy
 		if err != nil {
 			return err
 		}
-		if err := ctx.TypeResolver().writeTypeInfo(ctx.Buffer(), &typeInfo); err != nil {
+		if err := ctx.TypeResolver().writeTypeInfo(ctx.Buffer(), typeInfo); err != nil {
 			return err
 		}
 	}

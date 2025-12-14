@@ -156,7 +156,7 @@ func (s *extensionSerializerAdapter) Write(ctx *WriteContext, writeRef bool, wri
 		if err != nil {
 			return err
 		}
-		if err := ctx.TypeResolver().writeTypeInfo(buf, &typeInfo); err != nil {
+		if err := ctx.TypeResolver().writeTypeInfo(buf, typeInfo); err != nil {
 			return err
 		}
 	}

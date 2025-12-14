@@ -50,7 +50,7 @@ func (s arraySerializer) Write(ctx *WriteContext, writeRef bool, writeType bool,
 		if err != nil {
 			return err
 		}
-		if err := ctx.TypeResolver().writeTypeInfo(ctx.buffer, &typeInfo); err != nil {
+		if err := ctx.TypeResolver().writeTypeInfo(ctx.buffer, typeInfo); err != nil {
 			return err
 		}
 	}
@@ -140,7 +140,7 @@ func (s *arrayConcreteValueSerializer) WriteData(ctx *WriteContext, value reflec
 	buf.WriteInt8(int8(collectFlag))
 
 	// Write element type info
-	var elemTypeInfo TypeInfo
+	var elemTypeInfo *TypeInfo
 	if length > 0 {
 		// Get type info for the first non-nil element
 		for i := 0; i < length; i++ {
@@ -158,13 +158,16 @@ func (s *arrayConcreteValueSerializer) WriteData(ctx *WriteContext, value reflec
 	}
 
 	// Write element type info (handles namespaced types)
-	internalTypeID := elemTypeInfo.TypeID
+	var internalTypeID uint32
+	if elemTypeInfo != nil {
+		internalTypeID = elemTypeInfo.TypeID
+	}
 	if IsNamespacedType(TypeId(internalTypeID)) {
-		if err := ctx.TypeResolver().writeTypeInfo(buf, &elemTypeInfo); err != nil {
+		if err := ctx.TypeResolver().writeTypeInfo(buf, elemTypeInfo); err != nil {
 			return err
 		}
 	} else {
-		buf.WriteVaruint32Small7(uint32(elemTypeInfo.TypeID))
+		buf.WriteVaruint32Small7(uint32(internalTypeID))
 	}
 
 	// Write elements
@@ -209,7 +212,7 @@ func (s *arrayConcreteValueSerializer) Write(ctx *WriteContext, writeRef bool, w
 		if err != nil {
 			return err
 		}
-		if err := ctx.TypeResolver().writeTypeInfo(ctx.Buffer(), &typeInfo); err != nil {
+		if err := ctx.TypeResolver().writeTypeInfo(ctx.Buffer(), typeInfo); err != nil {
 			return err
 		}
 	}

@@ -172,7 +172,7 @@ func (s *sliceConcreteValueSerializer) Write(ctx *WriteContext, writeRef bool, w
 		if err != nil {
 			return err
 		}
-		if err := ctx.TypeResolver().writeTypeInfo(ctx.Buffer(), &typeInfo); err != nil {
+		if err := ctx.TypeResolver().writeTypeInfo(ctx.Buffer(), typeInfo); err != nil {
 			return err
 		}
 	}

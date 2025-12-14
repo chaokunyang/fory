@@ -322,13 +322,13 @@ func buildTypeDef(fory *Fory, value reflect.Value) (*TypeDef, error) {
 		return nil, fmt.Errorf("failed to extract field infos: %w", err)
 	}
 
-	info, err := fory.typeResolver.getTypeInfo(value, true)
+	infoPtr, err := fory.typeResolver.getTypeInfo(value, true)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get type info for value %v: %w", value, err)
 	}
-	typeId := uint32(info.TypeID) // Use full uint32 type ID
+	typeId := uint32(infoPtr.TypeID) // Use full uint32 type ID
 	registerByName := IsNamespacedType(TypeId(typeId & 0xFF))
-	typeDef := NewTypeDef(typeId, info.PkgPathBytes, info.NameBytes, registerByName, false, fieldDefs)
+	typeDef := NewTypeDef(typeId, infoPtr.PkgPathBytes, infoPtr.NameBytes, registerByName, false, fieldDefs)
 
 	// encoding the typeDef, and save the encoded bytes
 	encoded, err := encodingTypeDef(fory.typeResolver, typeDef)

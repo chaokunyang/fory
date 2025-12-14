@@ -69,7 +69,7 @@ func (s *enumSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool,
 		if err != nil {
 			return err
 		}
-		if err := ctx.TypeResolver().writeTypeInfo(ctx.buffer, &typeInfo); err != nil {
+		if err := ctx.TypeResolver().writeTypeInfo(ctx.buffer, typeInfo); err != nil {
 			return err
 		}
 	}

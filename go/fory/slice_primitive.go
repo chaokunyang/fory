@@ -725,20 +725,6 @@ func readBoolSlice(buf *ByteBuffer) ([]bool, error) {
 	return result, nil
 }
 
-// readBoolSliceInto reads []bool into target, reusing capacity when possible
-func readBoolSliceInto(buf *ByteBuffer, target *[]bool) error {
-	length := buf.ReadLength()
-	if cap(*target) >= length {
-		*target = (*target)[:length]
-	} else {
-		*target = make([]bool, length)
-	}
-	for i := 0; i < length; i++ {
-		(*target)[i] = buf.ReadBool()
-	}
-	return nil
-}
-
 // writeInt8Slice writes []int8 to buffer
 func writeInt8Slice(buf *ByteBuffer, value []int8) error {
 	size := len(value)
@@ -760,20 +746,6 @@ func readInt8Slice(buf *ByteBuffer) ([]int8, error) {
 		result[i] = buf.ReadInt8()
 	}
 	return result, nil
-}
-
-// readInt8SliceInto reads []int8 into target, reusing capacity when possible
-func readInt8SliceInto(buf *ByteBuffer, target *[]int8) error {
-	length := buf.ReadLength()
-	if cap(*target) >= length {
-		*target = (*target)[:length]
-	} else {
-		*target = make([]int8, length)
-	}
-	for i := 0; i < length; i++ {
-		(*target)[i] = buf.ReadInt8()
-	}
-	return nil
 }
 
 // writeInt16Slice writes []int16 to buffer
@@ -800,21 +772,6 @@ func readInt16Slice(buf *ByteBuffer) ([]int16, error) {
 	return result, nil
 }
 
-// readInt16SliceInto reads []int16 into target, reusing capacity when possible
-func readInt16SliceInto(buf *ByteBuffer, target *[]int16) error {
-	size := buf.ReadLength()
-	length := size / 2
-	if cap(*target) >= length {
-		*target = (*target)[:length]
-	} else {
-		*target = make([]int16, length)
-	}
-	for i := 0; i < length; i++ {
-		(*target)[i] = buf.ReadInt16()
-	}
-	return nil
-}
-
 // writeInt32Slice writes []int32 to buffer
 func writeInt32Slice(buf *ByteBuffer, value []int32) error {
 	size := len(value) * 4
@@ -839,21 +796,6 @@ func readInt32Slice(buf *ByteBuffer) ([]int32, error) {
 	return result, nil
 }
 
-// readInt32SliceInto reads []int32 into target, reusing capacity when possible
-func readInt32SliceInto(buf *ByteBuffer, target *[]int32) error {
-	size := buf.ReadLength()
-	length := size / 4
-	if cap(*target) >= length {
-		*target = (*target)[:length]
-	} else {
-		*target = make([]int32, length)
-	}
-	for i := 0; i < length; i++ {
-		(*target)[i] = buf.ReadInt32()
-	}
-	return nil
-}
-
 // writeInt64Slice writes []int64 to buffer
 func writeInt64Slice(buf *ByteBuffer, value []int64) error {
 	size := len(value) * 8
@@ -876,21 +818,6 @@ func readInt64Slice(buf *ByteBuffer) ([]int64, error) {
 		result[i] = buf.ReadInt64()
 	}
 	return result, nil
-}
-
-// readInt64SliceInto reads []int64 into target, reusing capacity when possible
-func readInt64SliceInto(buf *ByteBuffer, target *[]int64) error {
-	size := buf.ReadLength()
-	length := size / 8
-	if cap(*target) >= length {
-		*target = (*target)[:length]
-	} else {
-		*target = make([]int64, length)
-	}
-	for i := 0; i < length; i++ {
-		(*target)[i] = buf.ReadInt64()
-	}
-	return nil
 }
 
 // writeIntSlice writes []int to buffer
@@ -937,33 +864,6 @@ func readIntSlice(buf *ByteBuffer) ([]int, error) {
 	}
 }
 
-// readIntSliceInto reads []int into target, reusing capacity when possible
-func readIntSliceInto(buf *ByteBuffer, target *[]int) error {
-	size := buf.ReadLength()
-	if strconv.IntSize == 64 {
-		length := size / 8
-		if cap(*target) >= length {
-			*target = (*target)[:length]
-		} else {
-			*target = make([]int, length)
-		}
-		for i := 0; i < length; i++ {
-			(*target)[i] = int(buf.ReadInt64())
-		}
-	} else {
-		length := size / 4
-		if cap(*target) >= length {
-			*target = (*target)[:length]
-		} else {
-			*target = make([]int, length)
-		}
-		for i := 0; i < length; i++ {
-			(*target)[i] = int(buf.ReadInt32())
-		}
-	}
-	return nil
-}
-
 // writeFloat32Slice writes []float32 to buffer
 func writeFloat32Slice(buf *ByteBuffer, value []float32) error {
 	size := len(value) * 4
@@ -988,21 +888,6 @@ func readFloat32Slice(buf *ByteBuffer) ([]float32, error) {
 	return result, nil
 }
 
-// readFloat32SliceInto reads []float32 into target, reusing capacity when possible
-func readFloat32SliceInto(buf *ByteBuffer, target *[]float32) error {
-	size := buf.ReadLength()
-	length := size / 4
-	if cap(*target) >= length {
-		*target = (*target)[:length]
-	} else {
-		*target = make([]float32, length)
-	}
-	for i := 0; i < length; i++ {
-		(*target)[i] = buf.ReadFloat32()
-	}
-	return nil
-}
-
 // writeFloat64Slice writes []float64 to buffer
 func writeFloat64Slice(buf *ByteBuffer, value []float64) error {
 	size := len(value) * 8
@@ -1025,21 +910,6 @@ func readFloat64Slice(buf *ByteBuffer) ([]float64, error) {
 		result[i] = buf.ReadFloat64()
 	}
 	return result, nil
-}
-
-// readFloat64SliceInto reads []float64 into target, reusing capacity when possible
-func readFloat64SliceInto(buf *ByteBuffer, target *[]float64) error {
-	size := buf.ReadLength()
-	length := size / 8
-	if cap(*target) >= length {
-		*target = (*target)[:length]
-	} else {
-		*target = make([]float64, length)
-	}
-	for i := 0; i < length; i++ {
-		(*target)[i] = buf.ReadFloat64()
-	}
-	return nil
 }
 
 type intSliceSerializer struct {

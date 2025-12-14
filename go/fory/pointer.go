@@ -68,7 +68,7 @@ func (s *ptrToValueSerializer) Write(ctx *WriteContext, writeRef bool, writeType
 		if err != nil {
 			return err
 		}
-		if err := ctx.TypeResolver().writeTypeInfo(ctx.Buffer(), &typeInfo); err != nil {
+		if err := ctx.TypeResolver().writeTypeInfo(ctx.Buffer(), typeInfo); err != nil {
 			return err
 		}
 	}

@@ -87,7 +87,7 @@ func (s setSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, v
 		if err != nil {
 			return err
 		}
-		if err := ctx.TypeResolver().writeTypeInfo(ctx.buffer, &typeInfo); err != nil {
+		if err := ctx.TypeResolver().writeTypeInfo(ctx.buffer, typeInfo); err != nil {
 			return err
 		}
 	}
@@ -98,10 +98,10 @@ func (s setSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, v
 // - Collection size
 // - Type consistency flags
 // - Element type information (if homogeneous)
-func (s setSerializer) writeHeader(ctx *WriteContext, buf *ByteBuffer, keys []reflect.Value) (byte, TypeInfo) {
+func (s setSerializer) writeHeader(ctx *WriteContext, buf *ByteBuffer, keys []reflect.Value) (byte, *TypeInfo) {
 	// Initialize collection flags and type tracking variables
 	collectFlag := CollectionDefaultFlag
-	var elemTypeInfo TypeInfo
+	var elemTypeInfo *TypeInfo
 	hasNull := false
 	hasSameType := true
 
@@ -127,7 +127,14 @@ func (s setSerializer) writeHeader(ctx *WriteContext, buf *ByteBuffer, keys []re
 
 		// Compare each element's type with the reference type
 		currentTypeInfo, _ := ctx.TypeResolver().getTypeInfo(key, true)
-		if currentTypeInfo.TypeID != elemTypeInfo.TypeID {
+		var elemTypeID, currentTypeID uint32
+		if elemTypeInfo != nil {
+			elemTypeID = elemTypeInfo.TypeID
+		}
+		if currentTypeInfo != nil {
+			currentTypeID = currentTypeInfo.TypeID
+		}
+		if currentTypeID != elemTypeID {
 			hasSameType = false
 		}
 	}
@@ -150,7 +157,7 @@ func (s setSerializer) writeHeader(ctx *WriteContext, buf *ByteBuffer, keys []re
 	buf.WriteInt8(int8(collectFlag))      // Collection flags
 
 	// WriteData element type ID if all elements have same type
-	if hasSameType {
+	if hasSameType && elemTypeInfo != nil {
 		buf.WriteVaruint32Small7(uint32(elemTypeInfo.TypeID))
 	}
 
@@ -158,7 +165,10 @@ func (s setSerializer) writeHeader(ctx *WriteContext, buf *ByteBuffer, keys []re
 }
 
 // writeSameType efficiently serializes a collection where all elements share the same type
-func (s setSerializer) writeSameType(ctx *WriteContext, buf *ByteBuffer, keys []reflect.Value, typeInfo TypeInfo, flag byte) error {
+func (s setSerializer) writeSameType(ctx *WriteContext, buf *ByteBuffer, keys []reflect.Value, typeInfo *TypeInfo, flag byte) error {
+	if typeInfo == nil {
+		return nil
+	}
 	serializer := typeInfo.Serializer
 	trackRefs := (flag & CollectionTrackingRef) != 0 // Check if reference tracking is enabled
 

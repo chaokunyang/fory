@@ -698,7 +698,7 @@ func (r *TypeResolver) getSerializerByTypeID(typeID uint32) Serializer {
 	return nil
 }
 
-func (r *TypeResolver) getTypeInfo(value reflect.Value, create bool) (TypeInfo, error) {
+func (r *TypeResolver) getTypeInfo(value reflect.Value, create bool) (*TypeInfo, error) {
 	// First check if type info exists in cache
 	if value.Kind() == reflect.Interface {
 		// make sure the concrete value don't miss its real typeInfo
@@ -709,7 +709,7 @@ func (r *TypeResolver) getTypeInfo(value reflect.Value, create bool) (TypeInfo, 
 		if info.Serializer == nil {
 			/*
 			   Lazy initialize serializer if not created yet
-			   mapInStruct equals false because this path isn’t taken when extracting field info from structs;
+			   mapInStruct equals false because this path isn't taken when extracting field info from structs;
 			   for all other map cases, it remains false
 			*/
 			serializer, err := r.createSerializer(value.Type(), false)
@@ -719,7 +719,8 @@ func (r *TypeResolver) getTypeInfo(value reflect.Value, create bool) (TypeInfo, 
 			info.Serializer = serializer
 			r.typesInfo[typeString] = info // Update the map with the new serializer
 		}
-		return info, nil
+		storedInfo := r.typesInfo[typeString]
+		return &storedInfo, nil
 	}
 
 	var internal = false
@@ -787,7 +788,8 @@ func (r *TypeResolver) getTypeInfo(value reflect.Value, create bool) (TypeInfo, 
 
 			// Cache the pointer type info
 			r.typesInfo[type_] = ptrInfo
-			return ptrInfo, nil
+			storedInfo := r.typesInfo[type_]
+			return &storedInfo, nil
 		}
 
 		// Element type not registered - try auto-registration for structs
@@ -801,9 +803,9 @@ func (r *TypeResolver) getTypeInfo(value reflect.Value, create bool) (TypeInfo, 
 			}
 			// Now the pointer type should be registered
 			if info, ok := r.typesInfo[type_]; ok {
-				return info, nil
+				return &info, nil
 			}
-			return TypeInfo{}, fmt.Errorf("failed to find registered pointer type %v", type_)
+			return nil, fmt.Errorf("failed to find registered pointer type %v", type_)
 		}
 
 		// For primitive types and other types, we can auto-create pointer serializer
@@ -820,17 +822,18 @@ func (r *TypeResolver) getTypeInfo(value reflect.Value, create bool) (TypeInfo, 
 			}
 
 			r.typesInfo[type_] = ptrInfo
-			return ptrInfo, nil
+			storedInfo := r.typesInfo[type_]
+			return &storedInfo, nil
 		}
 
-		return TypeInfo{}, fmt.Errorf("pointer element type %v must be registered", elemType)
+		return nil, fmt.Errorf("pointer element type %v must be registered", elemType)
 	case type_.Kind() == reflect.Interface:
-		return TypeInfo{}, fmt.Errorf("interface types must be registered explicitly")
+		return nil, fmt.Errorf("interface types must be registered explicitly")
 	case pkgPath == "" && typeName == "":
 		// Allow anonymous collection types (maps, slices, arrays) without registration
 		kind := type_.Kind()
 		if kind != reflect.Map && kind != reflect.Slice && kind != reflect.Array {
-			return TypeInfo{}, fmt.Errorf("anonymous types must be registered explicitly")
+			return nil, fmt.Errorf("anonymous types must be registered explicitly")
 		}
 		// For collections, continue with auto-registration below
 	}
@@ -866,10 +869,12 @@ func (r *TypeResolver) getTypeInfo(value reflect.Value, create bool) (TypeInfo, 
 		typeID = MAP
 	} else if value.Kind() == reflect.Array {
 		type_ = reflect.SliceOf(type_.Elem())
-		return r.typesInfo[type_], nil
+		info := r.typesInfo[type_]
+		return &info, nil
 	} else if isMultiDimensionaSlice(value) {
 		typeID = LIST
-		return r.typeIDToTypeInfo[typeID], nil
+		info := r.typeIDToTypeInfo[typeID]
+		return &info, nil
 	} else if value.Kind() == reflect.Slice {
 		// Regular slices are treated as LIST
 		typeID = LIST
@@ -894,16 +899,6 @@ func isMultiDimensionaSlice(v reflect.Value) bool {
 	return t.Elem().Kind() == reflect.Slice
 }
 
-// getTypeInfoPtr returns a pointer to TypeInfo to avoid copy overhead.
-// This is used for performance-critical paths where we want to avoid copying TypeInfo.
-func (r *TypeResolver) getTypeInfoPtr(value reflect.Value, create bool) (*TypeInfo, error) {
-	info, err := r.getTypeInfo(value, create)
-	if err != nil {
-		return nil, err
-	}
-	return &info, nil
-}
-
 func (r *TypeResolver) registerType(
 	type_ reflect.Type,
 	typeID uint32,
@@ -911,7 +906,7 @@ func (r *TypeResolver) registerType(
 	typeName string,
 	serializer Serializer,
 	internal bool,
-) (TypeInfo, error) {
+) (*TypeInfo, error) {
 	// Input validation
 	if type_ == nil {
 		panic("nil type")
@@ -1005,7 +1000,8 @@ func (r *TypeResolver) registerType(
 			r.typeIDToTypeInfo[typeID] = typeInfo
 		}
 	}
-	return typeInfo, nil
+	storedInfo := r.typesInfo[type_]
+	return &storedInfo, nil
 }
 
 func calcTypeHash(type_ reflect.Type) uint64 {

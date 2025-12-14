@@ -50,42 +50,17 @@ func (s byteSliceSerializer) WriteData(ctx *WriteContext, value reflect.Value) e
 }
 
 func (s byteSliceSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	if writeRef {
-		if isNilSlice(value) {
-			ctx.Buffer().WriteInt8(NullFlag)
-			return nil
-		}
-		refWritten, err := ctx.RefResolver().WriteRefOrNull(ctx.Buffer(), value)
-		if err != nil {
-			return err
-		}
-		if refWritten {
-			return nil
-		}
-	}
-	if writeType {
-		ctx.Buffer().WriteVaruint32Small7(uint32(BINARY))
+	done, err := writeSliceRefAndType(ctx, writeRef, writeType, value, BINARY)
+	if done || err != nil {
+		return err
 	}
 	return s.WriteData(ctx, value)
 }
 
 func (s byteSliceSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
-	buf := ctx.Buffer()
-	if readRef {
-		refID, err := ctx.RefResolver().TryPreserveRefId(buf)
-		if err != nil {
-			return err
-		}
-		if int8(refID) < NotNullValueFlag {
-			obj := ctx.RefResolver().GetReadObject(refID)
-			if obj.IsValid() {
-				value.Set(obj)
-			}
-			return nil
-		}
-	}
-	if readType {
-		_ = buf.ReadVaruint32Small7()
+	done, err := readSliceRefAndType(ctx, readRef, readType, value)
+	if done || err != nil {
+		return err
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
@@ -150,42 +125,17 @@ func (s boolSliceSerializer) WriteData(ctx *WriteContext, value reflect.Value) e
 }
 
 func (s boolSliceSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	if writeRef {
-		if isNilSlice(value) {
-			ctx.Buffer().WriteInt8(NullFlag)
-			return nil
-		}
-		refWritten, err := ctx.RefResolver().WriteRefOrNull(ctx.Buffer(), value)
-		if err != nil {
-			return err
-		}
-		if refWritten {
-			return nil
-		}
-	}
-	if writeType {
-		ctx.Buffer().WriteVaruint32Small7(uint32(BOOL_ARRAY))
+	done, err := writeSliceRefAndType(ctx, writeRef, writeType, value, BOOL_ARRAY)
+	if done || err != nil {
+		return err
 	}
 	return s.WriteData(ctx, value)
 }
 
 func (s boolSliceSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
-	buf := ctx.Buffer()
-	if readRef {
-		refID, err := ctx.RefResolver().TryPreserveRefId(buf)
-		if err != nil {
-			return err
-		}
-		if int8(refID) < NotNullValueFlag {
-			obj := ctx.RefResolver().GetReadObject(refID)
-			if obj.IsValid() {
-				value.Set(obj)
-			}
-			return nil
-		}
-	}
-	if readType {
-		_ = buf.ReadVaruint32Small7()
+	done, err := readSliceRefAndType(ctx, readRef, readType, value)
+	if done || err != nil {
+		return err
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
@@ -232,21 +182,9 @@ func (s int8SliceSerializer) WriteData(ctx *WriteContext, value reflect.Value) e
 }
 
 func (s int8SliceSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	if writeRef {
-		if isNilSlice(value) {
-			ctx.Buffer().WriteInt8(NullFlag)
-			return nil
-		}
-		refWritten, err := ctx.RefResolver().WriteRefOrNull(ctx.Buffer(), value)
-		if err != nil {
-			return err
-		}
-		if refWritten {
-			return nil
-		}
-	}
-	if writeType {
-		ctx.Buffer().WriteVaruint32Small7(uint32(INT8_ARRAY))
+	done, err := writeSliceRefAndType(ctx, writeRef, writeType, value, INT8_ARRAY)
+	if done || err != nil {
+		return err
 	}
 	return s.WriteData(ctx, value)
 }
@@ -264,22 +202,9 @@ func (s int8SliceSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, valu
 }
 
 func (s int8SliceSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
-	buf := ctx.Buffer()
-	if readRef {
-		refID, err := ctx.RefResolver().TryPreserveRefId(buf)
-		if err != nil {
-			return err
-		}
-		if int8(refID) < NotNullValueFlag {
-			obj := ctx.RefResolver().GetReadObject(refID)
-			if obj.IsValid() {
-				value.Set(obj)
-			}
-			return nil
-		}
-	}
-	if readType {
-		_ = buf.ReadVaruint32Small7()
+	done, err := readSliceRefAndType(ctx, readRef, readType, value)
+	if done || err != nil {
+		return err
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
@@ -314,21 +239,9 @@ func (s int16SliceSerializer) WriteData(ctx *WriteContext, value reflect.Value) 
 }
 
 func (s int16SliceSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	if writeRef {
-		if isNilSlice(value) {
-			ctx.Buffer().WriteInt8(NullFlag)
-			return nil
-		}
-		refWritten, err := ctx.RefResolver().WriteRefOrNull(ctx.Buffer(), value)
-		if err != nil {
-			return err
-		}
-		if refWritten {
-			return nil
-		}
-	}
-	if writeType {
-		ctx.Buffer().WriteVaruint32Small7(uint32(INT16_ARRAY))
+	done, err := writeSliceRefAndType(ctx, writeRef, writeType, value, INT16_ARRAY)
+	if done || err != nil {
+		return err
 	}
 	return s.WriteData(ctx, value)
 }
@@ -346,22 +259,9 @@ func (s int16SliceSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, val
 }
 
 func (s int16SliceSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
-	buf := ctx.Buffer()
-	if readRef {
-		refID, err := ctx.RefResolver().TryPreserveRefId(buf)
-		if err != nil {
-			return err
-		}
-		if int8(refID) < NotNullValueFlag {
-			obj := ctx.RefResolver().GetReadObject(refID)
-			if obj.IsValid() {
-				value.Set(obj)
-			}
-			return nil
-		}
-	}
-	if readType {
-		_ = buf.ReadVaruint32Small7()
+	done, err := readSliceRefAndType(ctx, readRef, readType, value)
+	if done || err != nil {
+		return err
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
@@ -396,21 +296,9 @@ func (s int32SliceSerializer) WriteData(ctx *WriteContext, value reflect.Value) 
 }
 
 func (s int32SliceSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	if writeRef {
-		if isNilSlice(value) {
-			ctx.Buffer().WriteInt8(NullFlag)
-			return nil
-		}
-		refWritten, err := ctx.RefResolver().WriteRefOrNull(ctx.Buffer(), value)
-		if err != nil {
-			return err
-		}
-		if refWritten {
-			return nil
-		}
-	}
-	if writeType {
-		ctx.Buffer().WriteVaruint32Small7(uint32(INT32_ARRAY))
+	done, err := writeSliceRefAndType(ctx, writeRef, writeType, value, INT32_ARRAY)
+	if done || err != nil {
+		return err
 	}
 	return s.WriteData(ctx, value)
 }
@@ -428,22 +316,9 @@ func (s int32SliceSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, val
 }
 
 func (s int32SliceSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
-	buf := ctx.Buffer()
-	if readRef {
-		refID, err := ctx.RefResolver().TryPreserveRefId(buf)
-		if err != nil {
-			return err
-		}
-		if int8(refID) < NotNullValueFlag {
-			obj := ctx.RefResolver().GetReadObject(refID)
-			if obj.IsValid() {
-				value.Set(obj)
-			}
-			return nil
-		}
-	}
-	if readType {
-		_ = buf.ReadVaruint32Small7()
+	done, err := readSliceRefAndType(ctx, readRef, readType, value)
+	if done || err != nil {
+		return err
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
@@ -478,21 +353,9 @@ func (s int64SliceSerializer) WriteData(ctx *WriteContext, value reflect.Value) 
 }
 
 func (s int64SliceSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	if writeRef {
-		if isNilSlice(value) {
-			ctx.Buffer().WriteInt8(NullFlag)
-			return nil
-		}
-		refWritten, err := ctx.RefResolver().WriteRefOrNull(ctx.Buffer(), value)
-		if err != nil {
-			return err
-		}
-		if refWritten {
-			return nil
-		}
-	}
-	if writeType {
-		ctx.Buffer().WriteVaruint32Small7(uint32(INT64_ARRAY))
+	done, err := writeSliceRefAndType(ctx, writeRef, writeType, value, INT64_ARRAY)
+	if done || err != nil {
+		return err
 	}
 	return s.WriteData(ctx, value)
 }
@@ -510,22 +373,9 @@ func (s int64SliceSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, val
 }
 
 func (s int64SliceSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
-	buf := ctx.Buffer()
-	if readRef {
-		refID, err := ctx.RefResolver().TryPreserveRefId(buf)
-		if err != nil {
-			return err
-		}
-		if int8(refID) < NotNullValueFlag {
-			obj := ctx.RefResolver().GetReadObject(refID)
-			if obj.IsValid() {
-				value.Set(obj)
-			}
-			return nil
-		}
-	}
-	if readType {
-		_ = buf.ReadVaruint32Small7()
+	done, err := readSliceRefAndType(ctx, readRef, readType, value)
+	if done || err != nil {
+		return err
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
@@ -560,21 +410,9 @@ func (s float32SliceSerializer) WriteData(ctx *WriteContext, value reflect.Value
 }
 
 func (s float32SliceSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	if writeRef {
-		if isNilSlice(value) {
-			ctx.Buffer().WriteInt8(NullFlag)
-			return nil
-		}
-		refWritten, err := ctx.RefResolver().WriteRefOrNull(ctx.Buffer(), value)
-		if err != nil {
-			return err
-		}
-		if refWritten {
-			return nil
-		}
-	}
-	if writeType {
-		ctx.Buffer().WriteVaruint32Small7(uint32(FLOAT32_ARRAY))
+	done, err := writeSliceRefAndType(ctx, writeRef, writeType, value, FLOAT32_ARRAY)
+	if done || err != nil {
+		return err
 	}
 	return s.WriteData(ctx, value)
 }
@@ -592,22 +430,9 @@ func (s float32SliceSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, v
 }
 
 func (s float32SliceSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
-	buf := ctx.Buffer()
-	if readRef {
-		refID, err := ctx.RefResolver().TryPreserveRefId(buf)
-		if err != nil {
-			return err
-		}
-		if int8(refID) < NotNullValueFlag {
-			obj := ctx.RefResolver().GetReadObject(refID)
-			if obj.IsValid() {
-				value.Set(obj)
-			}
-			return nil
-		}
-	}
-	if readType {
-		_ = buf.ReadVaruint32Small7()
+	done, err := readSliceRefAndType(ctx, readRef, readType, value)
+	if done || err != nil {
+		return err
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
@@ -642,21 +467,9 @@ func (s float64SliceSerializer) WriteData(ctx *WriteContext, value reflect.Value
 }
 
 func (s float64SliceSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	if writeRef {
-		if isNilSlice(value) {
-			ctx.Buffer().WriteInt8(NullFlag)
-			return nil
-		}
-		refWritten, err := ctx.RefResolver().WriteRefOrNull(ctx.Buffer(), value)
-		if err != nil {
-			return err
-		}
-		if refWritten {
-			return nil
-		}
-	}
-	if writeType {
-		ctx.Buffer().WriteVaruint32Small7(uint32(FLOAT64_ARRAY))
+	done, err := writeSliceRefAndType(ctx, writeRef, writeType, value, FLOAT64_ARRAY)
+	if done || err != nil {
+		return err
 	}
 	return s.WriteData(ctx, value)
 }
@@ -674,22 +487,9 @@ func (s float64SliceSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, v
 }
 
 func (s float64SliceSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
-	buf := ctx.Buffer()
-	if readRef {
-		refID, err := ctx.RefResolver().TryPreserveRefId(buf)
-		if err != nil {
-			return err
-		}
-		if int8(refID) < NotNullValueFlag {
-			obj := ctx.RefResolver().GetReadObject(refID)
-			if obj.IsValid() {
-				value.Set(obj)
-			}
-			return nil
-		}
-	}
-	if readType {
-		_ = buf.ReadVaruint32Small7()
+	done, err := readSliceRefAndType(ctx, readRef, readType, value)
+	if done || err != nil {
+		return err
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
@@ -933,42 +733,17 @@ func (s intSliceSerializer) WriteData(ctx *WriteContext, value reflect.Value) er
 }
 
 func (s intSliceSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	if writeRef {
-		if isNilSlice(value) {
-			ctx.Buffer().WriteInt8(NullFlag)
-			return nil
-		}
-		refWritten, err := ctx.RefResolver().WriteRefOrNull(ctx.Buffer(), value)
-		if err != nil {
-			return err
-		}
-		if refWritten {
-			return nil
-		}
-	}
-	if writeType {
-		ctx.Buffer().WriteVaruint32Small7(uint32(s.TypeId()))
+	done, err := writeSliceRefAndType(ctx, writeRef, writeType, value, s.TypeId())
+	if done || err != nil {
+		return err
 	}
 	return s.WriteData(ctx, value)
 }
 
 func (s intSliceSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
-	buf := ctx.Buffer()
-	if readRef {
-		refID, err := ctx.RefResolver().TryPreserveRefId(buf)
-		if err != nil {
-			return err
-		}
-		if int8(refID) < NotNullValueFlag {
-			obj := ctx.RefResolver().GetReadObject(refID)
-			if obj.IsValid() {
-				value.Set(obj)
-			}
-			return nil
-		}
-	}
-	if readType {
-		_ = buf.ReadVaruint32Small7()
+	done, err := readSliceRefAndType(ctx, readRef, readType, value)
+	if done || err != nil {
+		return err
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
@@ -1045,42 +820,17 @@ func (s uintSliceSerializer) WriteData(ctx *WriteContext, value reflect.Value) e
 }
 
 func (s uintSliceSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	if writeRef {
-		if isNilSlice(value) {
-			ctx.Buffer().WriteInt8(NullFlag)
-			return nil
-		}
-		refWritten, err := ctx.RefResolver().WriteRefOrNull(ctx.Buffer(), value)
-		if err != nil {
-			return err
-		}
-		if refWritten {
-			return nil
-		}
-	}
-	if writeType {
-		ctx.Buffer().WriteVaruint32Small7(uint32(s.TypeId()))
+	done, err := writeSliceRefAndType(ctx, writeRef, writeType, value, s.TypeId())
+	if done || err != nil {
+		return err
 	}
 	return s.WriteData(ctx, value)
 }
 
 func (s uintSliceSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
-	buf := ctx.Buffer()
-	if readRef {
-		refID, err := ctx.RefResolver().TryPreserveRefId(buf)
-		if err != nil {
-			return err
-		}
-		if int8(refID) < NotNullValueFlag {
-			obj := ctx.RefResolver().GetReadObject(refID)
-			if obj.IsValid() {
-				value.Set(obj)
-			}
-			return nil
-		}
-	}
-	if readType {
-		_ = buf.ReadVaruint32Small7()
+	done, err := readSliceRefAndType(ctx, readRef, readType, value)
+	if done || err != nil {
+		return err
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }

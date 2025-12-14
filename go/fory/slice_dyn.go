@@ -98,22 +98,9 @@ func (s sliceDynSerializer) WriteData(ctx *WriteContext, value reflect.Value) er
 }
 
 func (s sliceDynSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	if writeRef {
-		if value.IsNil() {
-			ctx.buffer.WriteInt8(NullFlag)
-			return nil
-		}
-		refWritten, err := ctx.RefResolver().WriteRefOrNull(ctx.buffer, value)
-		if err != nil {
-			return err
-		}
-		if refWritten {
-			return nil
-		}
-	}
-	if writeType {
-		// Write LIST type ID directly - no need to call getTypeInfo
-		ctx.buffer.WriteVaruint32Small7(uint32(LIST))
+	done, err := writeSliceRefAndType(ctx, writeRef, writeType, value, LIST)
+	if done || err != nil {
+		return err
 	}
 	return s.WriteData(ctx, value)
 }
@@ -414,28 +401,9 @@ func (s sliceDynSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value
 }
 
 func (s sliceDynSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
-	buf := ctx.Buffer()
-	if readRef {
-		refID, err := ctx.RefResolver().TryPreserveRefId(buf)
-		if err != nil {
-			return err
-		}
-		if int8(refID) < NotNullValueFlag {
-			// Reference found
-			obj := ctx.RefResolver().GetReadObject(refID)
-			if obj.IsValid() {
-				value.Set(obj)
-			}
-			return nil
-		}
-	}
-	if readType {
-		// ReadData and discard type info for slices (we already know it's a list)
-		typeID := buf.ReadVaruint32Small7()
-		if IsNamespacedType(TypeId(typeID)) {
-			// For namespaced types, need to read additional metadata
-			_, _ = ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID)
-		}
+	done, err := readSliceRefAndType(ctx, readRef, readType, value)
+	if done || err != nil {
+		return err
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }

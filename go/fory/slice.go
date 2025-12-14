@@ -31,6 +31,54 @@ const (
 	CollectionDeclSameType      = CollectionIsSameType | CollectionIsDeclElementType
 )
 
+// writeSliceRefAndType handles reference and type writing for slice serializers.
+// Returns true if the value was already written (nil or ref), false if data should be written.
+func writeSliceRefAndType(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value, typeId TypeId) (bool, error) {
+	if writeRef {
+		if value.Kind() == reflect.Slice && value.IsNil() {
+			ctx.Buffer().WriteInt8(NullFlag)
+			return true, nil
+		}
+		refWritten, err := ctx.RefResolver().WriteRefOrNull(ctx.Buffer(), value)
+		if err != nil {
+			return false, err
+		}
+		if refWritten {
+			return true, nil
+		}
+	}
+	if writeType {
+		ctx.Buffer().WriteVaruint32Small7(uint32(typeId))
+	}
+	return false, nil
+}
+
+// readSliceRefAndType handles reference and type reading for slice serializers.
+// Returns true if a reference was resolved (value already set), false if data should be read.
+func readSliceRefAndType(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) (bool, error) {
+	buf := ctx.Buffer()
+	if readRef {
+		refID, err := ctx.RefResolver().TryPreserveRefId(buf)
+		if err != nil {
+			return false, err
+		}
+		if int8(refID) < NotNullValueFlag {
+			obj := ctx.RefResolver().GetReadObject(refID)
+			if obj.IsValid() {
+				value.Set(obj)
+			}
+			return true, nil
+		}
+	}
+	if readType {
+		typeID := buf.ReadVaruint32Small7()
+		if IsNamespacedType(TypeId(typeID)) {
+			_, _ = ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID)
+		}
+	}
+	return false, nil
+}
+
 // Helper function to check if a value is null/nil
 func isNull(v reflect.Value) bool {
 	// Zero value (Invalid kind) is considered null
@@ -154,51 +202,17 @@ func (s *sliceConcreteValueSerializer) WriteData(ctx *WriteContext, value reflec
 }
 
 func (s *sliceConcreteValueSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	if writeRef {
-		if value.IsNil() {
-			ctx.Buffer().WriteInt8(NullFlag)
-			return nil
-		}
-		refWritten, err := ctx.RefResolver().WriteRefOrNull(ctx.Buffer(), value)
-		if err != nil {
-			return err
-		}
-		if refWritten {
-			return nil
-		}
-	}
-	if writeType {
-		typeInfo, err := ctx.TypeResolver().getTypeInfo(value, true)
-		if err != nil {
-			return err
-		}
-		if err := ctx.TypeResolver().writeTypeInfo(ctx.Buffer(), typeInfo); err != nil {
-			return err
-		}
+	done, err := writeSliceRefAndType(ctx, writeRef, writeType, value, -LIST)
+	if done || err != nil {
+		return err
 	}
 	return s.WriteData(ctx, value)
 }
 
 func (s *sliceConcreteValueSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
-	buf := ctx.Buffer()
-	if readRef {
-		refID, err := ctx.RefResolver().TryPreserveRefId(buf)
-		if err != nil {
-			return err
-		}
-		if int8(refID) < NotNullValueFlag {
-			obj := ctx.RefResolver().GetReadObject(refID)
-			if obj.IsValid() {
-				value.Set(obj)
-			}
-			return nil
-		}
-	}
-	if readType {
-		typeID := buf.ReadVaruint32Small7()
-		if IsNamespacedType(TypeId(typeID)) {
-			_, _ = ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID)
-		}
+	done, err := readSliceRefAndType(ctx, readRef, readType, value)
+	if done || err != nil {
+		return err
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }

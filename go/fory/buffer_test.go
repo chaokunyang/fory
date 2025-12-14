@@ -59,7 +59,7 @@ func checkVarint(t *testing.T, buf *ByteBuffer, value int32, bytesWritten int8) 
 	require.Equal(t, buf.WriterIndex(), buf.ReaderIndex())
 	actualBytesWritten := buf.WriteVarint32(value)
 	require.Equal(t, bytesWritten, actualBytesWritten)
-	varInt := buf.ReadVaruint32()
+	varInt := buf.ReadVarint32()
 	require.Equal(t, buf.ReaderIndex(), buf.WriterIndex())
 	require.Equal(t, value, varInt)
 }

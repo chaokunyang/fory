@@ -613,7 +613,7 @@ func (s *structSerializer) Write(ctx *WriteContext, writeRef bool, writeType boo
 		if err != nil {
 			return err
 		}
-		if err := ctx.TypeResolver().writeTypeInfo(ctx.buffer, typeInfo); err != nil {
+		if err := ctx.TypeResolver().writeTypeInfo(ctx.buffer, &typeInfo); err != nil {
 			return err
 		}
 	}
@@ -1078,19 +1078,15 @@ func (s *structSerializer) initFieldsFromContext(ctx interface{ TypeResolver() *
 				fieldSerializer = float64ArraySerializer{}
 			default:
 				// For non-primitive arrays, use sliceDynSerializer
-				fieldSerializer = sliceDynSerializer{
-					elemInfo:     typeResolver.typesInfo[elemType],
-					declaredType: elemType,
-				}
+				fieldSerializer = newSliceDynSerializerWithTypeInfo(
+					typeResolver.typesInfo[elemType], elemType)
 			}
 		} else if fieldType.Kind() == reflect.Slice && fieldType.Elem().Kind() != reflect.Interface {
 			// For struct fields, always use the generic sliceDynSerializer for cross-language compatibility
 			// The generic sliceDynSerializer uses collection flags and element type ID format
 			// which matches the codegen format
-			fieldSerializer = sliceDynSerializer{
-				elemInfo:     typeResolver.typesInfo[fieldType.Elem()],
-				declaredType: fieldType.Elem(),
-			}
+			fieldSerializer = newSliceDynSerializerWithTypeInfo(
+				typeResolver.typesInfo[fieldType.Elem()], fieldType.Elem())
 		}
 
 		fieldInfo := &FieldInfo{
@@ -1638,7 +1634,7 @@ func (s *ptrToStructSerializer) Write(ctx *WriteContext, writeRef bool, writeTyp
 		if err != nil {
 			return err
 		}
-		if err := ctx.TypeResolver().writeTypeInfo(ctx.buffer, typeInfo); err != nil {
+		if err := ctx.TypeResolver().writeTypeInfo(ctx.buffer, &typeInfo); err != nil {
 			return err
 		}
 	}
@@ -1684,7 +1680,7 @@ func (s *ptrToCodegenSerializer) Write(ctx *WriteContext, writeRef bool, writeTy
 		if err != nil {
 			return err
 		}
-		if err := ctx.TypeResolver().writeTypeInfo(ctx.Buffer(), typeInfo); err != nil {
+		if err := ctx.TypeResolver().writeTypeInfo(ctx.Buffer(), &typeInfo); err != nil {
 			return err
 		}
 	}
@@ -1905,9 +1901,8 @@ func createStructFieldInfos(f *Fory, type_ reflect.Type) (structFieldsInfo, erro
 				fieldSerializer = f.typeResolver.typeToSerializers[sliceType]
 			} else if field.Type.Kind() == reflect.Slice {
 				if field.Type.Elem().Kind() != reflect.Interface {
-					fieldSerializer = sliceDynSerializer{
-						elemInfo: f.typeResolver.typesInfo[field.Type.Elem()],
-					}
+					fieldSerializer = newSliceDynSerializerWithTypeInfo(
+						f.typeResolver.typesInfo[field.Type.Elem()], field.Type.Elem())
 				}
 			}
 		}

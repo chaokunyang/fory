@@ -52,6 +52,7 @@ var (
 	int32SliceType       = reflect.TypeOf((*[]int32)(nil)).Elem()
 	int64SliceType       = reflect.TypeOf((*[]int64)(nil)).Elem()
 	intSliceType         = reflect.TypeOf((*[]int)(nil)).Elem()
+	uintSliceType        = reflect.TypeOf((*[]uint)(nil)).Elem()
 	float32SliceType     = reflect.TypeOf((*[]float32)(nil)).Elem()
 	float64SliceType     = reflect.TypeOf((*[]float64)(nil)).Elem()
 	interfaceSliceType   = reflect.TypeOf((*[]interface{})(nil)).Elem()
@@ -289,6 +290,7 @@ func (r *TypeResolver) initialize() {
 		{int32SliceType, int32ArraySerializer{}},
 		{int64SliceType, int64ArraySerializer{}},
 		{intSliceType, intSliceSerializer{}},
+		{uintSliceType, uintSliceSerializer{}},
 		{float32SliceType, float32ArraySerializer{}},
 		{float64SliceType, float64ArraySerializer{}},
 		// Register common map types for fast path
@@ -891,6 +893,16 @@ func isMultiDimensionaSlice(v reflect.Value) bool {
 	return t.Elem().Kind() == reflect.Slice
 }
 
+// getTypeInfoPtr returns a pointer to TypeInfo to avoid copy overhead.
+// This is used for performance-critical paths where we want to avoid copying TypeInfo.
+func (r *TypeResolver) getTypeInfoPtr(value reflect.Value, create bool) (*TypeInfo, error) {
+	info, err := r.getTypeInfo(value, create)
+	if err != nil {
+		return nil, err
+	}
+	return &info, nil
+}
+
 func (r *TypeResolver) registerType(
 	type_ reflect.Type,
 	typeID uint32,
@@ -1008,7 +1020,10 @@ func (r *TypeResolver) metaShareEnabled() bool {
 	return r.fory != nil && r.fory.metaContext != nil && r.fory.config.Compatible
 }
 
-func (r *TypeResolver) writeTypeInfo(buffer *ByteBuffer, typeInfo TypeInfo) error {
+func (r *TypeResolver) writeTypeInfo(buffer *ByteBuffer, typeInfo *TypeInfo) error {
+	if typeInfo == nil {
+		return nil
+	}
 	// Extract the internal type ID (lower 8 bits)
 	typeID := typeInfo.TypeID
 	internalTypeID := TypeId(typeID & 0xFF)
@@ -1044,7 +1059,7 @@ func (r *TypeResolver) writeTypeInfo(buffer *ByteBuffer, typeInfo TypeInfo) erro
 	return nil
 }
 
-func (r *TypeResolver) writeSharedTypeMeta(buffer *ByteBuffer, typeInfo TypeInfo) error {
+func (r *TypeResolver) writeSharedTypeMeta(buffer *ByteBuffer, typeInfo *TypeInfo) error {
 	context := r.fory.MetaContext()
 	typ := typeInfo.Type
 
@@ -1233,10 +1248,18 @@ func (r *TypeResolver) createSerializer(type_ reflect.Type, mapInStruct bool) (s
 				if type_ == float64SliceType {
 					return float64ArraySerializer{}, nil
 				}
-			case reflect.Int, reflect.Uint:
-				// Platform-dependent types should use LIST for cross-platform compatibility
-				// We treat them as dynamic types to force LIST serialization
-				return sliceDynSerializer{}, nil
+			case reflect.Int:
+				// Platform-dependent int type uses intSliceSerializer which selects
+				// INT32_ARRAY or INT64_ARRAY based on platform
+				if type_ == intSliceType {
+					return intSliceSerializer{}, nil
+				}
+			case reflect.Uint:
+				// Platform-dependent uint type uses uintSliceSerializer which selects
+				// INT32_ARRAY or INT64_ARRAY based on platform
+				if type_ == uintSliceType {
+					return uintSliceSerializer{}, nil
+				}
 			}
 		}
 		// For dynamic types or non-xlang mode, use generic slice serializer

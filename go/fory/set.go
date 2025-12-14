@@ -87,7 +87,7 @@ func (s setSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, v
 		if err != nil {
 			return err
 		}
-		if err := ctx.TypeResolver().writeTypeInfo(ctx.buffer, typeInfo); err != nil {
+		if err := ctx.TypeResolver().writeTypeInfo(ctx.buffer, &typeInfo); err != nil {
 			return err
 		}
 	}

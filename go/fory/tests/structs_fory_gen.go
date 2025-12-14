@@ -47,7 +47,7 @@ func (g DynamicSliceDemo_ForyGenSerializer) Write(ctx *fory.WriteContext, writeR
 		}
 	}
 	if writeType {
-		ctx.Buffer().WriteVaruint32(int32(fory.NAMED_STRUCT))
+		ctx.Buffer().WriteVaruint32(uint32(fory.NAMED_STRUCT))
 	}
 	return g.WriteData(ctx, value)
 }
@@ -198,7 +198,7 @@ func (g MapDemo_ForyGenSerializer) Write(ctx *fory.WriteContext, writeRef bool, 
 		}
 	}
 	if writeType {
-		ctx.Buffer().WriteVaruint32(int32(fory.NAMED_STRUCT))
+		ctx.Buffer().WriteVaruint32(uint32(fory.NAMED_STRUCT))
 	}
 	return g.WriteData(ctx, value)
 }
@@ -542,7 +542,7 @@ func (g SliceDemo_ForyGenSerializer) Write(ctx *fory.WriteContext, writeRef bool
 		}
 	}
 	if writeType {
-		ctx.Buffer().WriteVaruint32(int32(fory.NAMED_STRUCT))
+		ctx.Buffer().WriteVaruint32(uint32(fory.NAMED_STRUCT))
 	}
 	return g.WriteData(ctx, value)
 }
@@ -846,7 +846,7 @@ func (g ValidationDemo_ForyGenSerializer) Write(ctx *fory.WriteContext, writeRef
 		}
 	}
 	if writeType {
-		ctx.Buffer().WriteVaruint32(int32(fory.NAMED_STRUCT))
+		ctx.Buffer().WriteVaruint32(uint32(fory.NAMED_STRUCT))
 	}
 	return g.WriteData(ctx, value)
 }

@@ -536,7 +536,7 @@ func benchData() interface{} {
 	return []string{x, x, x, x}
 }
 
-func ExampleFory_SerializeAny() {
+func ExampleFory_Serialize() {
 	f := New()
 	list := []interface{}{true, false, "str", -1.1, 1, make([]int32, 5), make([]float64, 5)}
 	bytes, err := f.Serialize(list)

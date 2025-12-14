@@ -22,11 +22,49 @@ import (
 	"reflect"
 )
 
-// sliceDynSerializer provides the dynamic slice implementation(e.g. []interface{}) that inspects
-// element values at runtime
+// sliceDynSerializer provides the dynamic slice implementation that inspects
+// element values at runtime.
+// This serializer is designed for slices with any interface element type
+// (e.g., []interface{}, []io.Reader, []fmt.Stringer, or pointers to interfaces).
 type sliceDynSerializer struct {
 	elemInfo     TypeInfo
 	declaredType reflect.Type
+}
+
+// newSliceDynSerializer creates a new sliceDynSerializer.
+// This serializer is ONLY for slices with interface or pointer to interface element types.
+// For other slice types, use sliceConcreteValueSerializer instead.
+func newSliceDynSerializer(elemType reflect.Type) (sliceDynSerializer, error) {
+	// Nil element type is allowed for fully dynamic slices (e.g., []interface{})
+	if elemType == nil {
+		return sliceDynSerializer{}, nil
+	}
+	// Validate element type is interface or pointer to interface
+	if elemType.Kind() != reflect.Interface &&
+		!(elemType.Kind() == reflect.Ptr && elemType.Elem().Kind() == reflect.Interface) {
+		return sliceDynSerializer{}, fmt.Errorf(
+			"sliceDynSerializer only supports interface or pointer to interface element types, got %v; use sliceConcreteValueSerializer for other types", elemType)
+	}
+	return sliceDynSerializer{}, nil
+}
+
+// newSliceDynSerializerWithTypeInfo creates a sliceDynSerializer with declared type information.
+// This is used when the element type is known at registration time (e.g., struct fields).
+func newSliceDynSerializerWithTypeInfo(elemInfo TypeInfo, declaredType reflect.Type) *sliceDynSerializer {
+	return &sliceDynSerializer{
+		elemInfo:     elemInfo,
+		declaredType: declaredType,
+	}
+}
+
+// mustNewSliceDynSerializer is like newSliceDynSerializer but panics on error.
+// Used for initialization code where the element type is known to be valid.
+func mustNewSliceDynSerializer(elemType reflect.Type) sliceDynSerializer {
+	s, err := newSliceDynSerializer(elemType)
+	if err != nil {
+		panic(err)
+	}
+	return s
 }
 
 func (s sliceDynSerializer) TypeId() TypeId {
@@ -74,14 +112,8 @@ func (s sliceDynSerializer) Write(ctx *WriteContext, writeRef bool, writeType bo
 		}
 	}
 	if writeType {
-		// For polymorphic slice elements, need to write full type info
-		typeInfo, err := ctx.TypeResolver().getTypeInfo(value, true)
-		if err != nil {
-			return err
-		}
-		if err := ctx.TypeResolver().writeTypeInfo(ctx.buffer, typeInfo); err != nil {
-			return err
-		}
+		// Write LIST type ID directly - no need to call getTypeInfo
+		ctx.buffer.WriteVaruint32Small7(uint32(LIST))
 	}
 	return s.WriteData(ctx, value)
 }
@@ -90,9 +122,10 @@ func (s sliceDynSerializer) Write(ctx *WriteContext, writeRef bool, writeType bo
 // - Collection size
 // - Type consistency flags
 // - Element type information (if homogeneous)
-func (s sliceDynSerializer) writeHeader(ctx *WriteContext, buf *ByteBuffer, value reflect.Value) (byte, TypeInfo, error) {
+// Returns pointer to TypeInfo to avoid copy overhead.
+func (s sliceDynSerializer) writeHeader(ctx *WriteContext, buf *ByteBuffer, value reflect.Value) (byte, *TypeInfo, error) {
 	collectFlag := CollectionDefaultFlag
-	var elemTypeInfo TypeInfo
+	var elemTypeInfo *TypeInfo
 	hasNull := false
 	hasSameType := true
 
@@ -100,7 +133,7 @@ func (s sliceDynSerializer) writeHeader(ctx *WriteContext, buf *ByteBuffer, valu
 		collectFlag |= CollectionIsDeclElementType | CollectionIsSameType
 		// Get elemTypeInfo from declared type for writeSameType
 		if value.Len() > 0 {
-			elemTypeInfo, _ = ctx.TypeResolver().getTypeInfo(reflect.New(s.declaredType).Elem(), true)
+			elemTypeInfo, _ = ctx.TypeResolver().getTypeInfoPtr(reflect.New(s.declaredType).Elem(), true)
 		}
 	} else {
 		// Iterate through elements to check for nulls and type consistency
@@ -118,7 +151,7 @@ func (s sliceDynSerializer) writeHeader(ctx *WriteContext, buf *ByteBuffer, valu
 			// Get type info from the first non-null element
 			if firstType == nil {
 				firstType = elem.Type()
-				elemTypeInfo, _ = ctx.TypeResolver().getTypeInfo(elem, true)
+				elemTypeInfo, _ = ctx.TypeResolver().getTypeInfoPtr(elem, true)
 			} else {
 				// Compare each element's type with the first element's type
 				if firstType != elem.Type() {
@@ -137,7 +170,7 @@ func (s sliceDynSerializer) writeHeader(ctx *WriteContext, buf *ByteBuffer, valu
 	}
 
 	// Enable reference tracking if configured and element type supports it
-	if ctx.TrackRef() && (elemTypeInfo.Serializer == nil || elemTypeInfo.Serializer.NeedToWriteRef()) {
+	if ctx.TrackRef() && (elemTypeInfo == nil || elemTypeInfo.Serializer == nil || elemTypeInfo.Serializer.NeedToWriteRef()) {
 		collectFlag |= CollectionTrackingRef
 	}
 
@@ -146,11 +179,11 @@ func (s sliceDynSerializer) writeHeader(ctx *WriteContext, buf *ByteBuffer, valu
 	buf.WriteInt8(int8(collectFlag))        // Collection flags
 
 	// WriteData element type info if all elements have same type and not using declared type
-	if hasSameType && (collectFlag&CollectionIsDeclElementType == 0) {
+	if hasSameType && (collectFlag&CollectionIsDeclElementType == 0) && elemTypeInfo != nil {
 		// For struct types and namespaced types, write full type info including meta share
 		if NeedsTypeMetaWrite(TypeId(elemTypeInfo.TypeID)) {
 			if err := ctx.TypeResolver().writeTypeInfo(buf, elemTypeInfo); err != nil {
-				return 0, TypeInfo{}, err
+				return 0, nil, err
 			}
 		} else {
 			buf.WriteVaruint32Small7(elemTypeInfo.TypeID)
@@ -162,7 +195,10 @@ func (s sliceDynSerializer) writeHeader(ctx *WriteContext, buf *ByteBuffer, valu
 
 // writeSameType efficiently serializes a slice where all elements share the same type
 func (s sliceDynSerializer) writeSameType(
-	ctx *WriteContext, buf *ByteBuffer, value reflect.Value, typeInfo TypeInfo, flag byte) error {
+	ctx *WriteContext, buf *ByteBuffer, value reflect.Value, typeInfo *TypeInfo, flag byte) error {
+	if typeInfo == nil {
+		return nil
+	}
 	serializer := typeInfo.Serializer
 	trackRefs := (flag & CollectionTrackingRef) != 0 // Check if reference tracking is enabled
 	hasNull := (flag & CollectionHasNull) != 0
@@ -236,7 +272,7 @@ func (s sliceDynSerializer) writeDifferentTypes(ctx *WriteContext, buf *ByteBuff
 			}
 			if !refWritten {
 				// Write full type info (handles namespaced types with meta string encoding)
-				if err := ctx.TypeResolver().writeTypeInfo(buf, typeInfo); err != nil {
+				if err := ctx.TypeResolver().writeTypeInfo(buf, &typeInfo); err != nil {
 					return err
 				}
 				if err := typeInfo.Serializer.WriteData(ctx, elem); err != nil {
@@ -247,7 +283,7 @@ func (s sliceDynSerializer) writeDifferentTypes(ctx *WriteContext, buf *ByteBuff
 			// No ref tracking but may have nulls - write NotNullValueFlag before type + data
 			buf.WriteInt8(NotNullValueFlag)
 			// Write full type info (handles namespaced types with meta string encoding)
-			if err := ctx.TypeResolver().writeTypeInfo(buf, typeInfo); err != nil {
+			if err := ctx.TypeResolver().writeTypeInfo(buf, &typeInfo); err != nil {
 				return err
 			}
 			if err := typeInfo.Serializer.WriteData(ctx, elem); err != nil {
@@ -256,7 +292,7 @@ func (s sliceDynSerializer) writeDifferentTypes(ctx *WriteContext, buf *ByteBuff
 		} else {
 			// No ref tracking and no nulls - write type + data directly
 			// Write full type info (handles namespaced types with meta string encoding)
-			if err := ctx.TypeResolver().writeTypeInfo(buf, typeInfo); err != nil {
+			if err := ctx.TypeResolver().writeTypeInfo(buf, &typeInfo); err != nil {
 				return err
 			}
 			if err := typeInfo.Serializer.WriteData(ctx, elem); err != nil {

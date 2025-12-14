@@ -23,6 +23,12 @@ import (
 	"strconv"
 )
 
+// isNilSlice checks if a value is a nil slice. Safe to call on any value type.
+// Returns false for arrays and other non-slice types.
+func isNilSlice(v reflect.Value) bool {
+	return v.Kind() == reflect.Slice && v.IsNil()
+}
+
 type byteSliceSerializer struct {
 }
 
@@ -45,7 +51,7 @@ func (s byteSliceSerializer) WriteData(ctx *WriteContext, value reflect.Value) e
 
 func (s byteSliceSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
 	if writeRef {
-		if value.IsNil() {
+		if isNilSlice(value) {
 			ctx.Buffer().WriteInt8(NullFlag)
 			return nil
 		}
@@ -168,7 +174,7 @@ func (s boolArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) e
 
 func (s boolArraySerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
 	if writeRef {
-		if value.IsNil() {
+		if isNilSlice(value) {
 			ctx.Buffer().WriteInt8(NullFlag)
 			return nil
 		}
@@ -264,7 +270,7 @@ func (s int8ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) e
 
 func (s int8ArraySerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
 	if writeRef {
-		if value.IsNil() {
+		if isNilSlice(value) {
 			ctx.Buffer().WriteInt8(NullFlag)
 			return nil
 		}
@@ -357,7 +363,7 @@ func (s int16ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) 
 
 func (s int16ArraySerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
 	if writeRef {
-		if value.IsNil() {
+		if isNilSlice(value) {
 			ctx.Buffer().WriteInt8(NullFlag)
 			return nil
 		}
@@ -450,7 +456,7 @@ func (s int32ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) 
 
 func (s int32ArraySerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
 	if writeRef {
-		if value.IsNil() {
+		if isNilSlice(value) {
 			ctx.Buffer().WriteInt8(NullFlag)
 			return nil
 		}
@@ -543,7 +549,7 @@ func (s int64ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) 
 
 func (s int64ArraySerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
 	if writeRef {
-		if value.IsNil() {
+		if isNilSlice(value) {
 			ctx.Buffer().WriteInt8(NullFlag)
 			return nil
 		}
@@ -636,7 +642,7 @@ func (s float32ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value
 
 func (s float32ArraySerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
 	if writeRef {
-		if value.IsNil() {
+		if isNilSlice(value) {
 			ctx.Buffer().WriteInt8(NullFlag)
 			return nil
 		}
@@ -729,7 +735,7 @@ func (s float64ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value
 
 func (s float64ArraySerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
 	if writeRef {
-		if value.IsNil() {
+		if isNilSlice(value) {
 			ctx.Buffer().WriteInt8(NullFlag)
 			return nil
 		}
@@ -1242,7 +1248,7 @@ func (s int16SliceSerializer) NeedToWriteRef() bool {
 
 func (s int16SliceSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
 	if writeRef {
-		if value.IsNil() {
+		if isNilSlice(value) {
 			ctx.Buffer().WriteInt8(NullFlag)
 			return nil
 		}
@@ -1443,7 +1449,7 @@ func (s intSliceSerializer) WriteData(ctx *WriteContext, value reflect.Value) er
 
 func (s intSliceSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
 	if writeRef {
-		if value.IsNil() {
+		if isNilSlice(value) {
 			ctx.Buffer().WriteInt8(NullFlag)
 			return nil
 		}
@@ -1456,7 +1462,7 @@ func (s intSliceSerializer) Write(ctx *WriteContext, writeRef bool, writeType bo
 		}
 	}
 	if writeType {
-		ctx.Buffer().WriteVaruint32Small7(uint32(INT64_ARRAY))
+		ctx.Buffer().WriteVaruint32Small7(uint32(s.TypeId()))
 	}
 	return s.WriteData(ctx, value)
 }
@@ -1518,6 +1524,129 @@ func (s intSliceSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value
 		}
 	}
 	value.Set(r)
+	ctx.RefResolver().Reference(value)
+	return nil
+}
+
+// uintSliceSerializer handles []uint serialization.
+// This serializer only supports pure Go mode (xlang=false) because uint has
+// platform-dependent size which doesn't have a direct cross-language equivalent.
+type uintSliceSerializer struct {
+}
+
+func (s uintSliceSerializer) TypeId() TypeId {
+	if strconv.IntSize == 64 {
+		return INT64_ARRAY
+	}
+	return INT32_ARRAY
+}
+
+func (s uintSliceSerializer) NeedToWriteRef() bool {
+	return true
+}
+
+func (s uintSliceSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
+	buf := ctx.Buffer()
+	v := value.Interface().([]uint)
+	if strconv.IntSize == 64 {
+		size := len(v) * 8
+		if size >= MaxInt32 {
+			return fmt.Errorf("too long slice: %d", len(v))
+		}
+		buf.WriteLength(size)
+		for _, elem := range v {
+			buf.WriteInt64(int64(elem))
+		}
+	} else {
+		size := len(v) * 4
+		if size >= MaxInt32 {
+			return fmt.Errorf("too long slice: %d", len(v))
+		}
+		buf.WriteLength(size)
+		for _, elem := range v {
+			buf.WriteInt32(int32(elem))
+		}
+	}
+	return nil
+}
+
+func (s uintSliceSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
+	if writeRef {
+		if isNilSlice(value) {
+			ctx.Buffer().WriteInt8(NullFlag)
+			return nil
+		}
+		refWritten, err := ctx.RefResolver().WriteRefOrNull(ctx.Buffer(), value)
+		if err != nil {
+			return err
+		}
+		if refWritten {
+			return nil
+		}
+	}
+	if writeType {
+		ctx.Buffer().WriteVaruint32Small7(uint32(s.TypeId()))
+	}
+	return s.WriteData(ctx, value)
+}
+
+func (s uintSliceSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
+	buf := ctx.Buffer()
+	if readRef {
+		refID, err := ctx.RefResolver().TryPreserveRefId(buf)
+		if err != nil {
+			return err
+		}
+		if int8(refID) < NotNullValueFlag {
+			obj := ctx.RefResolver().GetReadObject(refID)
+			if obj.IsValid() {
+				value.Set(obj)
+			}
+			return nil
+		}
+	}
+	if readType {
+		_ = buf.ReadVaruint32Small7()
+	}
+	return s.ReadData(ctx, value.Type(), value)
+}
+
+func (s uintSliceSerializer) ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeInfo *TypeInfo, value reflect.Value) error {
+	return s.Read(ctx, readRef, false, value)
+}
+
+func (s uintSliceSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+	buf := ctx.Buffer()
+	size := buf.ReadLength()
+	var length int
+	if strconv.IntSize == 64 {
+		length = size / 8
+	} else {
+		length = size / 4
+	}
+	var r reflect.Value
+	switch type_.Kind() {
+	case reflect.Slice:
+		r = reflect.MakeSlice(type_, length, length)
+	case reflect.Array:
+		if length != type_.Len() {
+			return fmt.Errorf("length %d does not match array type %v", length, type_)
+		}
+		r = reflect.New(type_).Elem()
+	default:
+		return fmt.Errorf("unsupported kind %v, want slice/array", type_.Kind())
+	}
+	if strconv.IntSize == 64 {
+		for i := 0; i < length; i++ {
+			r.Index(i).SetUint(uint64(buf.ReadInt64()))
+		}
+	} else {
+		for i := 0; i < length; i++ {
+			r.Index(i).SetUint(uint64(buf.ReadInt32()))
+		}
+	}
+	value.Set(r)
+	ctx.RefResolver().Reference(value)
 	return nil
 }
 

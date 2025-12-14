@@ -176,10 +176,10 @@ func TestCompatibleSerializationScenarios(t *testing.T) {
 				}
 			}(),
 			writerSetup: func(f *Fory) error {
-				return f.RegisterNamedType(ComplexObject2{}, "test.ComplexObject2")
+				return f.RegisterByName(ComplexObject2{}, "test.ComplexObject2")
 			},
 			readerSetup: func(f *Fory) error {
-				return f.RegisterNamedType(ComplexObject2{}, "test.ComplexObject2")
+				return f.RegisterByName(ComplexObject2{}, "test.ComplexObject2")
 			},
 			assertFunc: func(t *testing.T, input interface{}, output interface{}) {
 				in := input.(ComplexObject1)
@@ -335,10 +335,10 @@ func TestCompatibleSerializationScenarios(t *testing.T) {
 				}
 			}(),
 			writerSetup: func(f *Fory) error {
-				return f.RegisterNamedType(SimpleDataClass{}, "SimpleDataClass")
+				return f.RegisterByName(SimpleDataClass{}, "SimpleDataClass")
 			},
 			readerSetup: func(f *Fory) error {
-				return f.RegisterNamedType(SimpleDataClass{}, "SimpleDataClass")
+				return f.RegisterByName(SimpleDataClass{}, "SimpleDataClass")
 			},
 			assertFunc: func(t *testing.T, input interface{}, output interface{}) {
 				in := input.(PointerDataClass)
@@ -363,10 +363,10 @@ func TestCompatibleSerializationScenarios(t *testing.T) {
 				}
 			}(),
 			writerSetup: func(f *Fory) error {
-				return f.RegisterNamedType(SimpleDataClass{}, "SimpleDataClass")
+				return f.RegisterByName(SimpleDataClass{}, "SimpleDataClass")
 			},
 			readerSetup: func(f *Fory) error {
-				return f.RegisterNamedType(InconsistentDataClass{}, "SimpleDataClass")
+				return f.RegisterByName(InconsistentDataClass{}, "SimpleDataClass")
 			},
 			assertFunc: func(t *testing.T, input interface{}, output interface{}) {
 				in := input.(PointerDataClass)
@@ -412,13 +412,13 @@ func TestCompatibleSerializationScenarios(t *testing.T) {
 				Inner: SimpleDataClass{Name: "inner", Age: 18, Active: true},
 			},
 			writerSetup: func(f *Fory) error {
-				if err := f.RegisterNamedType(SimpleDataClass{}, "SimpleDataClass"); err != nil {
+				if err := f.RegisterByName(SimpleDataClass{}, "SimpleDataClass"); err != nil {
 					return err
 				}
 				return nil
 			},
 			readerSetup: func(f *Fory) error {
-				if err := f.RegisterNamedType(SimpleDataClass{}, "SimpleDataClass"); err != nil {
+				if err := f.RegisterByName(SimpleDataClass{}, "SimpleDataClass"); err != nil {
 					return err
 				}
 				return nil
@@ -440,13 +440,13 @@ func TestCompatibleSerializationScenarios(t *testing.T) {
 				Inner: SimpleDataClass{Name: "inner", Age: 18, Active: true},
 			},
 			writerSetup: func(f *Fory) error {
-				if err := f.RegisterNamedType(SimpleDataClass{}, "SimpleDataClass"); err != nil {
+				if err := f.RegisterByName(SimpleDataClass{}, "SimpleDataClass"); err != nil {
 					return err
 				}
 				return nil
 			},
 			readerSetup: func(f *Fory) error {
-				if err := f.RegisterNamedType(InconsistentDataClass{}, "SimpleDataClass"); err != nil {
+				if err := f.RegisterByName(InconsistentDataClass{}, "SimpleDataClass"); err != nil {
 					return err
 				}
 				return nil
@@ -488,7 +488,7 @@ func runCompatibilityCase(t *testing.T, tc compatibilityCase) {
 		err := tc.writerSetup(writer)
 		assert.NoError(t, err)
 	}
-	err := writer.RegisterNamedType(tc.writeType, tc.tag)
+	err := writer.RegisterByName(tc.writeType, tc.tag)
 	assert.NoError(t, err)
 
 	data, err := writer.Marshal(tc.input)
@@ -499,7 +499,7 @@ func runCompatibilityCase(t *testing.T, tc compatibilityCase) {
 		err = tc.readerSetup(reader)
 		assert.NoError(t, err)
 	}
-	err = reader.RegisterNamedType(tc.readType, tc.tag)
+	err = reader.RegisterByName(tc.readType, tc.tag)
 	assert.NoError(t, err)
 
 	target := reflect.New(reflect.TypeOf(tc.readType))

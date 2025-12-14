@@ -278,7 +278,7 @@ func (r *TypeResolver) initialize() {
 		{stringPtrType, ptrToStringSerializer{}},
 		// Register interface types first so typeIDToTypeInfo maps to generic types
 		// that can hold any element type when deserializing into interface{}
-		{interfaceSliceType, sliceSerializer{}},
+		{interfaceSliceType, sliceDynSerializer{}},
 		{interfaceMapType, mapSerializer{}},
 		// stringSliceType uses sliceConcreteValueSerializer with stringSerializer as element serializer
 		// This ensures CollectionIsDeclElementType is set for Java compatibility
@@ -1236,12 +1236,12 @@ func (r *TypeResolver) createSerializer(type_ reflect.Type, mapInStruct bool) (s
 			case reflect.Int, reflect.Uint:
 				// Platform-dependent types should use LIST for cross-platform compatibility
 				// We treat them as dynamic types to force LIST serialization
-				return sliceSerializer{}, nil
+				return sliceDynSerializer{}, nil
 			}
 		}
 		// For dynamic types or non-xlang mode, use generic slice serializer
 		if isDynamicType(elem) {
-			return sliceSerializer{}, nil
+			return sliceDynSerializer{}, nil
 		} else {
 			elemSerializer, err := r.getSerializerByType(type_.Elem(), false)
 			if err != nil {

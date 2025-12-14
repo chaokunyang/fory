@@ -496,9 +496,9 @@ func testNamedSimpleStruct() {
 
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 	// Use namespace "demo" to match Java's fory.register(Color.class, "demo", "color"), etc.
-	f.RegisterEnumByName(Color(0), "demo", "color")
-	f.RegisterByName(Item{}, "demo", "item")
-	f.RegisterByName(SimpleStruct{}, "demo", "simple_struct")
+	f.RegisterEnumByName(Color(0), "demo.color")
+	f.RegisterByName(Item{}, "demo.item")
+	f.RegisterByName(SimpleStruct{}, "demo.simple_struct")
 
 	obj, err := f.Deserialize(data)
 	if err != nil {
@@ -795,7 +795,7 @@ func testSkipIdCustom() {
 	// Use numeric IDs to match Java's registration:
 	// fory2.register(MyExt.class, 103)
 	// fory2.register(EmptyWrapper.class, 104)
-	f.RegisterExtensionTypeByID(MyExt{}, 103, &MyExtSerializer{})
+	f.RegisterExtensionType(MyExt{}, 103, &MyExtSerializer{})
 	f.Register(EmptyWrapper{}, 104)
 
 	obj, err := f.Deserialize(data)
@@ -816,8 +816,8 @@ func testSkipNameCustom() {
 	data := readFile(dataFile)
 
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
-	f.RegisterExtensionType(MyExt{}, "my_ext", &MyExtSerializer{})
-	f.RegisterNamedType(EmptyWrapper{}, "my_wrapper")
+	f.RegisterExtensionTypeByName(MyExt{}, "my_ext", &MyExtSerializer{})
+	f.RegisterByName(EmptyWrapper{}, "my_wrapper")
 
 	obj, err := f.Deserialize(data)
 	if err != nil {
@@ -839,10 +839,10 @@ func testConsistentNamed() {
 	// Java uses SCHEMA_CONSISTENT mode which doesn't enable metaShare
 	// So Go should NOT expect meta offset field
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(false))
-	f.RegisterEnumByName(Color(0), "", "color")
-	f.RegisterNamedType(MyStruct{}, "my_struct")
+	f.RegisterEnumByName(Color(0), "color")
+	f.RegisterByName(MyStruct{}, "my_struct")
 	// MyExt uses an extension serializer in Java (MyExtSerializer), so register as extension type
-	f.RegisterExtensionType(MyExt{}, "my_ext", &MyExtSerializer{})
+	f.RegisterExtensionTypeByName(MyExt{}, "my_ext", &MyExtSerializer{})
 
 	buf := fory.NewByteBuffer(data)
 	values := make([]interface{}, 9)

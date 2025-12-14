@@ -138,6 +138,15 @@ go build
 go generate ./...
 ```
 
+Run Go xlang tests:
+
+```bash
+cd java
+mvn -T16 install -DskipTests
+cd fory-core
+FORY_GO_JAVA_CI=1 ENABLE_FORY_DEBUG_OUTPUT=1 mvn test -Dtest=org.apache.fory.GoXlangTest
+```
+
 ### Rust Development
 
 - All cargo commands must be executed within the `rust` directory.

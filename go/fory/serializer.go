@@ -86,7 +86,7 @@ type Serializer interface {
 
 // ExtensionSerializer is a simplified interface for user-implemented extension serializers.
 // Users implement this interface to provide custom serialization logic for types
-// registered via RegisterExtensionType.
+// registered via RegisterExtensionTypeByName.
 //
 // Unlike the full Serializer interface, ExtensionSerializer only requires implementing
 // the core data serialization logic - reference tracking, type info, and protocol
@@ -108,7 +108,7 @@ type Serializer interface {
 //	}
 //
 //	// Register with custom serializer
-//	f.RegisterExtensionType(MyExt{}, "my_ext", &MyExtSerializer{})
+//	f.RegisterExtensionTypeByName(MyExt{}, "my_ext", &MyExtSerializer{})
 type ExtensionSerializer interface {
 	// Write serializes the value's data to the buffer.
 	// Only write the data fields - don't write ref flags or type info.

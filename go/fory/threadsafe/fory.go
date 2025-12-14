@@ -86,7 +86,7 @@ func (f *Fory) DeserializeAny(data []byte) (any, error) {
 func (f *Fory) RegisterNamedType(type_ interface{}, typeName string) error {
 	inner := f.acquire()
 	defer f.release(inner)
-	return inner.RegisterNamedType(type_, typeName)
+	return inner.RegisterByName(type_, typeName)
 }
 
 // ============================================================================

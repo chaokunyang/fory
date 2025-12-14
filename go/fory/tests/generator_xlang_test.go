@@ -66,7 +66,7 @@ func TestValidationDemoXlang(t *testing.T) {
 
 	// Reflect mode (register with full name)
 	foryForReflect := forygo.NewFory(forygo.WithRefTracking(true))
-	err := foryForReflect.RegisterNamedType(ReflectStruct{}, expectedTypeTag)
+	err := foryForReflect.RegisterByName(ReflectStruct{}, expectedTypeTag)
 	require.NoError(t, err, "Should be able to register ReflectStruct with full name")
 
 	// Serialization test
@@ -131,7 +131,7 @@ func TestSliceDemoXlang(t *testing.T) {
 
 	// Reflect mode - enable reference tracking
 	foryForReflect := forygo.NewFory(forygo.WithRefTracking(true))
-	err := foryForReflect.RegisterNamedType(ReflectSliceStruct{}, expectedTypeTag)
+	err := foryForReflect.RegisterByName(ReflectSliceStruct{}, expectedTypeTag)
 	require.NoError(t, err, "Should be able to register ReflectSliceStruct with full name")
 
 	// Serialization test
@@ -204,7 +204,7 @@ func TestDynamicSliceDemoXlang(t *testing.T) {
 
 	// Reflect mode - enable reference tracking
 	foryForReflect := forygo.NewFory(forygo.WithRefTracking(true))
-	err := foryForReflect.RegisterNamedType(ReflectDynamicStruct{}, expectedTypeTag)
+	err := foryForReflect.RegisterByName(ReflectDynamicStruct{}, expectedTypeTag)
 	require.NoError(t, err, "Should be able to register ReflectDynamicStruct with full name")
 
 	// Serialization test

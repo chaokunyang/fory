@@ -108,7 +108,7 @@ func TestTypeDefEncodingDecoding(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			fory := NewFory(WithRefTracking(false))
 
-			if err := fory.RegisterNamedType(tt.testStruct, tt.tagName); err != nil {
+			if err := fory.RegisterByName(tt.testStruct, tt.tagName); err != nil {
 				t.Fatalf("Failed to register tag type: %v", err)
 			}
 
@@ -195,7 +195,7 @@ func TestTypeDefNullableFields(t *testing.T) {
 	fory := NewFory(WithRefTracking(false))
 
 	// Register the type
-	if err := fory.RegisterNamedType(Item1{}, "test.Item1"); err != nil {
+	if err := fory.RegisterByName(Item1{}, "test.Item1"); err != nil {
 		t.Fatalf("Failed to register type: %v", err)
 	}
 

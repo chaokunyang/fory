@@ -1077,17 +1077,17 @@ func (s *structSerializer) initFieldsFromContext(ctx interface{ TypeResolver() *
 			case reflect.Float64:
 				fieldSerializer = float64ArraySerializer{}
 			default:
-				// For non-primitive arrays, use sliceSerializer
-				fieldSerializer = sliceSerializer{
+				// For non-primitive arrays, use sliceDynSerializer
+				fieldSerializer = sliceDynSerializer{
 					elemInfo:     typeResolver.typesInfo[elemType],
 					declaredType: elemType,
 				}
 			}
 		} else if fieldType.Kind() == reflect.Slice && fieldType.Elem().Kind() != reflect.Interface {
-			// For struct fields, always use the generic sliceSerializer for cross-language compatibility
-			// The generic sliceSerializer uses collection flags and element type ID format
+			// For struct fields, always use the generic sliceDynSerializer for cross-language compatibility
+			// The generic sliceDynSerializer uses collection flags and element type ID format
 			// which matches the codegen format
-			fieldSerializer = sliceSerializer{
+			fieldSerializer = sliceDynSerializer{
 				elemInfo:     typeResolver.typesInfo[fieldType.Elem()],
 				declaredType: fieldType.Elem(),
 			}
@@ -1905,7 +1905,7 @@ func createStructFieldInfos(f *Fory, type_ reflect.Type) (structFieldsInfo, erro
 				fieldSerializer = f.typeResolver.typeToSerializers[sliceType]
 			} else if field.Type.Kind() == reflect.Slice {
 				if field.Type.Elem().Kind() != reflect.Interface {
-					fieldSerializer = sliceSerializer{
+					fieldSerializer = sliceDynSerializer{
 						elemInfo: f.typeResolver.typesInfo[field.Type.Elem()],
 					}
 				}

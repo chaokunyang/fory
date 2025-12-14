@@ -88,7 +88,7 @@ func TestFory(t *testing.T) {
 	})
 }
 
-// TestSerializeAny tests the SerializeAny/DeserializeAny methods
+// TestSerializeAny tests the Serialize/Deserialize methods
 func TestSerializeAny(t *testing.T) {
 	f := New(fory.WithRefTracking(true))
 
@@ -163,7 +163,7 @@ func TestGlobalFunctions(t *testing.T) {
 	})
 
 	t.Run("UnmarshalTo", func(t *testing.T) {
-		// Use non-generic Serialize for compatibility with non-generic UnmarshalTo
+		// Use non-generic SerializeWithCallback for compatibility with non-generic UnmarshalTo
 		data, err := globalFory.SerializeAny("hello")
 		require.NoError(t, err)
 

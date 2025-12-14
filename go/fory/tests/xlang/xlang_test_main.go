@@ -420,7 +420,7 @@ func testStringSerializer() {
 	buf := fory.NewByteBuffer(data)
 	for range testStrings {
 		var result string
-		err := f.Deserialize(buf, &result, nil)
+		err := f.DeserializeWithCallbackBuffers(buf, &result, nil)
 		if err != nil {
 			panic(fmt.Sprintf("Failed to deserialize: %v", err))
 		}
@@ -428,7 +428,7 @@ func testStringSerializer() {
 
 	var outData []byte
 	for _, s := range testStrings {
-		serialized, err := f.SerializeAny(s)
+		serialized, err := f.Serialize(s)
 		if err != nil {
 			panic(fmt.Sprintf("Failed to serialize: %v", err))
 		}
@@ -450,7 +450,7 @@ func testCrossLanguageSerializer() {
 	buf := fory.NewByteBuffer(data)
 	for buf.ReaderIndex() < len(data) {
 		var val interface{}
-		err := f.Deserialize(buf, &val, nil)
+		err := f.DeserializeWithCallbackBuffers(buf, &val, nil)
 		if err != nil {
 			panic(fmt.Sprintf("Failed to deserialize at index %d: %v", len(vals), err))
 		}
@@ -459,7 +459,7 @@ func testCrossLanguageSerializer() {
 
 	var outData []byte
 	for _, val := range vals {
-		serialized, err := f.SerializeAny(val)
+		serialized, err := f.Serialize(val)
 		if err != nil {
 			panic(fmt.Sprintf("Failed to serialize: %v", err))
 		}
@@ -478,12 +478,12 @@ func testSimpleStruct() {
 	f.Register(Item{}, 102)
 	f.Register(SimpleStruct{}, 103)
 
-	obj, err := f.DeserializeAny(data)
+	obj, err := f.Deserialize(data)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
 	}
 	fmt.Printf("Deserialized obj: %+v\n", obj)
-	serialized, err := f.SerializeAny(obj)
+	serialized, err := f.Serialize(obj)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to serialize: %v", err))
 	}
@@ -500,12 +500,12 @@ func testNamedSimpleStruct() {
 	f.RegisterByName(Item{}, "demo", "item")
 	f.RegisterByName(SimpleStruct{}, "demo", "simple_struct")
 
-	obj, err := f.DeserializeAny(data)
+	obj, err := f.Deserialize(data)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
 	}
 	fmt.Printf("Deserialized obj: %+v\n", obj)
-	serialized, err := f.SerializeAny(obj)
+	serialized, err := f.Serialize(obj)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to serialize: %v", err))
 	}
@@ -525,7 +525,7 @@ func testList() {
 
 	for i := 0; i < 4; i++ {
 		var obj interface{}
-		err := f.Deserialize(buf, &obj, nil)
+		err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 		if err != nil {
 			panic(fmt.Sprintf("Failed to deserialize list %d: %v", i, err))
 		}
@@ -534,7 +534,7 @@ func testList() {
 
 	var outData []byte
 	for i, list := range lists {
-		serialized, err := f.SerializeAny(list)
+		serialized, err := f.Serialize(list)
 		if err != nil {
 			panic(fmt.Sprintf("Failed to serialize list %d: %v", i, err))
 		}
@@ -557,7 +557,7 @@ func testMap() {
 
 	for i := 0; i < 2; i++ {
 		var obj interface{}
-		err := f.Deserialize(buf, &obj, nil)
+		err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 		if err != nil {
 			panic(fmt.Sprintf("Failed to deserialize map %d: %v", i, err))
 		}
@@ -566,7 +566,7 @@ func testMap() {
 
 	var outData []byte
 	for _, m := range maps {
-		serialized, err := f.SerializeAny(m)
+		serialized, err := f.Serialize(m)
 		if err != nil {
 			panic(fmt.Sprintf("Failed to serialize: %v", err))
 		}
@@ -586,14 +586,14 @@ func testInteger() {
 
 	buf := fory.NewByteBuffer(data)
 
-	// Deserialize Item1 struct
+	// DeserializeWithCallbackBuffers Item1 struct
 	var item1 Item1
-	err := f.Deserialize(buf, &item1, nil)
+	err := f.DeserializeWithCallbackBuffers(buf, &item1, nil)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize Item1: %v", err))
 	}
 
-	// Deserialize standalone values with specific types matching Rust:
+	// DeserializeWithCallbackBuffers standalone values with specific types matching Rust:
 	// f1: int32 (non-nullable)
 	// f2: int32 (non-nullable)
 	// f3: *int32 (nullable)
@@ -604,46 +604,46 @@ func testInteger() {
 	var f3, f4, f6 *int32
 	var f5 int32
 
-	err = f.Deserialize(buf, &f1, nil)
+	err = f.DeserializeWithCallbackBuffers(buf, &f1, nil)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize f1: %v", err))
 	}
-	err = f.Deserialize(buf, &f2, nil)
+	err = f.DeserializeWithCallbackBuffers(buf, &f2, nil)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize f2: %v", err))
 	}
-	err = f.Deserialize(buf, &f3, nil)
+	err = f.DeserializeWithCallbackBuffers(buf, &f3, nil)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize f3: %v", err))
 	}
-	err = f.Deserialize(buf, &f4, nil)
+	err = f.DeserializeWithCallbackBuffers(buf, &f4, nil)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize f4: %v", err))
 	}
-	err = f.Deserialize(buf, &f5, nil)
+	err = f.DeserializeWithCallbackBuffers(buf, &f5, nil)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize f5: %v", err))
 	}
-	err = f.Deserialize(buf, &f6, nil)
+	err = f.DeserializeWithCallbackBuffers(buf, &f6, nil)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize f6: %v", err))
 	}
 
-	// Serialize back
+	// SerializeWithCallback back
 	var outData []byte
-	serialized, _ := f.SerializeAny(&item1)
+	serialized, _ := f.Serialize(&item1)
 	outData = append(outData, serialized...)
-	serialized, _ = f.SerializeAny(f1)
+	serialized, _ = f.Serialize(f1)
 	outData = append(outData, serialized...)
-	serialized, _ = f.SerializeAny(f2)
+	serialized, _ = f.Serialize(f2)
 	outData = append(outData, serialized...)
-	serialized, _ = f.SerializeAny(f3)
+	serialized, _ = f.Serialize(f3)
 	outData = append(outData, serialized...)
-	serialized, _ = f.SerializeAny(f4)
+	serialized, _ = f.Serialize(f4)
 	outData = append(outData, serialized...)
-	serialized, _ = f.SerializeAny(f5)
+	serialized, _ = f.Serialize(f5)
 	outData = append(outData, serialized...)
-	serialized, _ = f.SerializeAny(f6)
+	serialized, _ = f.Serialize(f6)
 	outData = append(outData, serialized...)
 
 	writeFile(dataFile, outData)
@@ -662,7 +662,7 @@ func testItem() {
 
 	for i := 0; i < 3; i++ {
 		var obj interface{}
-		err := f.Deserialize(buf, &obj, nil)
+		err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 		if err != nil {
 			panic(fmt.Sprintf("Failed to deserialize item %d: %v", i, err))
 		}
@@ -671,7 +671,7 @@ func testItem() {
 
 	var outData []byte
 	for _, item := range items {
-		serialized, err := f.SerializeAny(item)
+		serialized, err := f.Serialize(item)
 		if err != nil {
 			panic(fmt.Sprintf("Failed to serialize: %v", err))
 		}
@@ -694,7 +694,7 @@ func testColor() {
 
 	for i := 0; i < 4; i++ {
 		var obj interface{}
-		err := f.Deserialize(buf, &obj, nil)
+		err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 		if err != nil {
 			panic(fmt.Sprintf("Failed to deserialize color %d: %v", i, err))
 		}
@@ -703,7 +703,7 @@ func testColor() {
 
 	var outData []byte
 	for _, color := range colors {
-		serialized, err := f.SerializeAny(color)
+		serialized, err := f.Serialize(color)
 		if err != nil {
 			panic(fmt.Sprintf("Failed to serialize: %v", err))
 		}
@@ -724,12 +724,12 @@ func testStructWithList() {
 	// Java serializes two objects to the same buffer, so we need to deserialize twice
 	readBuf := fory.NewByteBuffer(data)
 
-	obj1, err := f.DeserializeAnyFrom(readBuf)
+	obj1, err := f.DeserializeFrom(readBuf)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize first object: %v", err))
 	}
 
-	obj2, err := f.DeserializeAnyFrom(readBuf)
+	obj2, err := f.DeserializeFrom(readBuf)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize second object: %v", err))
 	}
@@ -737,12 +737,12 @@ func testStructWithList() {
 	// Java reads two objects from the same buffer, so we need to serialize twice
 	writeBuf := fory.NewByteBuffer(nil)
 
-	err = f.SerializeAnyTo(writeBuf, obj1)
+	err = f.SerializeTo(writeBuf, obj1)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to serialize first object: %v", err))
 	}
 
-	err = f.SerializeAnyTo(writeBuf, obj2)
+	err = f.SerializeTo(writeBuf, obj2)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to serialize second object: %v", err))
 	}
@@ -761,12 +761,12 @@ func testStructWithMap() {
 	// Java serializes two objects to the same buffer, so we need to deserialize twice
 	readBuf := fory.NewByteBuffer(data)
 
-	obj1, err := f.DeserializeAnyFrom(readBuf)
+	obj1, err := f.DeserializeFrom(readBuf)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize first object: %v", err))
 	}
 
-	obj2, err := f.DeserializeAnyFrom(readBuf)
+	obj2, err := f.DeserializeFrom(readBuf)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize second object: %v", err))
 	}
@@ -774,12 +774,12 @@ func testStructWithMap() {
 	// Java reads two objects from the same buffer, so we need to serialize twice
 	writeBuf := fory.NewByteBuffer(nil)
 
-	err = f.SerializeAnyTo(writeBuf, obj1)
+	err = f.SerializeTo(writeBuf, obj1)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to serialize first object: %v", err))
 	}
 
-	err = f.SerializeAnyTo(writeBuf, obj2)
+	err = f.SerializeTo(writeBuf, obj2)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to serialize second object: %v", err))
 	}
@@ -798,12 +798,12 @@ func testSkipIdCustom() {
 	f.RegisterExtensionTypeByID(MyExt{}, 103, &MyExtSerializer{})
 	f.Register(EmptyWrapper{}, 104)
 
-	obj, err := f.DeserializeAny(data)
+	obj, err := f.Deserialize(data)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
 	}
 
-	serialized, err := f.SerializeAny(obj)
+	serialized, err := f.Serialize(obj)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to serialize: %v", err))
 	}
@@ -819,12 +819,12 @@ func testSkipNameCustom() {
 	f.RegisterExtensionType(MyExt{}, "my_ext", &MyExtSerializer{})
 	f.RegisterNamedType(EmptyWrapper{}, "my_wrapper")
 
-	obj, err := f.DeserializeAny(data)
+	obj, err := f.Deserialize(data)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
 	}
 
-	serialized, err := f.SerializeAny(obj)
+	serialized, err := f.Serialize(obj)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to serialize: %v", err))
 	}
@@ -849,7 +849,7 @@ func testConsistentNamed() {
 
 	for i := 0; i < 9; i++ {
 		var obj interface{}
-		err := f.Deserialize(buf, &obj, nil)
+		err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 		fmt.Printf("Deserialized value %d: %+v\n", i, obj)
 		if err != nil {
 			panic(fmt.Sprintf("Failed to deserialize value %d: %v", i, err))
@@ -859,7 +859,7 @@ func testConsistentNamed() {
 
 	var outData []byte
 	for i, val := range values {
-		serialized, err := f.SerializeAny(val)
+		serialized, err := f.Serialize(val)
 		fmt.Printf("Serialized value %d: %+v, size: %d\n", i, val, len(serialized))
 		if err != nil {
 			panic(fmt.Sprintf("Failed to serialize: %v", err))
@@ -878,12 +878,12 @@ func testStructVersionCheck() {
 	// Use numeric ID 201 to match Java's fory.register(VersionCheckStruct.class, 201)
 	f.Register(VersionCheckStruct{}, 201)
 
-	obj, err := f.DeserializeAny(data)
+	obj, err := f.Deserialize(data)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
 	}
 
-	serialized, err := f.SerializeAny(obj)
+	serialized, err := f.Serialize(obj)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to serialize: %v", err))
 	}
@@ -906,7 +906,7 @@ func testPolymorphicList() {
 
 	for i := 0; i < 2; i++ {
 		var obj interface{}
-		err := f.Deserialize(buf, &obj, nil)
+		err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 		fmt.Printf("Deserialized: %v", obj)
 		if err != nil {
 			panic(fmt.Sprintf("Failed to deserialize value %d: %v", i, err))
@@ -916,7 +916,7 @@ func testPolymorphicList() {
 
 	var outData []byte
 	for _, val := range values {
-		serialized, err := f.SerializeAny(val)
+		serialized, err := f.Serialize(val)
 		if err != nil {
 			panic(fmt.Sprintf("Failed to serialize: %v", err))
 		}
@@ -941,7 +941,7 @@ func testPolymorphicMap() {
 
 	for i := 0; i < 2; i++ {
 		var obj interface{}
-		err := f.Deserialize(buf, &obj, nil)
+		err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 		if err != nil {
 			panic(fmt.Sprintf("Failed to deserialize value %d: %v", i, err))
 		}
@@ -950,7 +950,7 @@ func testPolymorphicMap() {
 
 	var outData []byte
 	for _, val := range values {
-		serialized, err := f.SerializeAny(val)
+		serialized, err := f.Serialize(val)
 		if err != nil {
 			panic(fmt.Sprintf("Failed to serialize: %v", err))
 		}
@@ -992,7 +992,7 @@ func testOneFieldStructCompatible() {
 
 	buf := fory.NewByteBuffer(data)
 	var obj interface{}
-	err := f.Deserialize(buf, &obj, nil)
+	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
 	}
@@ -1000,7 +1000,7 @@ func testOneFieldStructCompatible() {
 	result := obj.(OneFieldStruct)
 	assertEqual(int32(42), result.Value, "value")
 
-	serialized, err := f.SerializeAny(result)
+	serialized, err := f.Serialize(result)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to serialize: %v", err))
 	}
@@ -1031,7 +1031,7 @@ func testOneFieldStructSchema() {
 
 	buf := fory.NewByteBuffer(data)
 	var obj interface{}
-	err := f.Deserialize(buf, &obj, nil)
+	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
 	}
@@ -1039,7 +1039,7 @@ func testOneFieldStructSchema() {
 	result := obj.(OneFieldStruct)
 	assertEqual(int32(42), result.Value, "value")
 
-	serialized, err := f.SerializeAny(result)
+	serialized, err := f.Serialize(result)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to serialize: %v", err))
 	}
@@ -1063,7 +1063,7 @@ func testOneStringFieldSchemaConsistent() {
 
 	buf := fory.NewByteBuffer(data)
 	var obj interface{}
-	err := f.Deserialize(buf, &obj, nil)
+	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
 	}
@@ -1071,7 +1071,7 @@ func testOneStringFieldSchemaConsistent() {
 	result := obj.(OneStringFieldStruct)
 	assertEqual("hello", result.F1, "f1")
 
-	serialized, err := f.SerializeAny(result)
+	serialized, err := f.Serialize(result)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to serialize: %v", err))
 	}
@@ -1088,7 +1088,7 @@ func testOneStringFieldCompatible() {
 
 	buf := fory.NewByteBuffer(data)
 	var obj interface{}
-	err := f.Deserialize(buf, &obj, nil)
+	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
 	}
@@ -1096,7 +1096,7 @@ func testOneStringFieldCompatible() {
 	result := obj.(OneStringFieldStruct)
 	assertEqual("hello", result.F1, "f1")
 
-	serialized, err := f.SerializeAny(result)
+	serialized, err := f.Serialize(result)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to serialize: %v", err))
 	}
@@ -1113,7 +1113,7 @@ func testTwoStringFieldCompatible() {
 
 	buf := fory.NewByteBuffer(data)
 	var obj interface{}
-	err := f.Deserialize(buf, &obj, nil)
+	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
 	}
@@ -1122,7 +1122,7 @@ func testTwoStringFieldCompatible() {
 	assertEqual("first", result.F1, "f1")
 	assertEqual("second", result.F2, "f2")
 
-	serialized, err := f.SerializeAny(result)
+	serialized, err := f.Serialize(result)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to serialize: %v", err))
 	}
@@ -1140,13 +1140,13 @@ func testSchemaEvolutionCompatible() {
 
 	buf := fory.NewByteBuffer(data)
 	var obj interface{}
-	err := f.Deserialize(buf, &obj, nil)
+	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize as EmptyStruct: %v", err))
 	}
 
-	// Serialize back as EmptyStruct
-	serialized, err := f.SerializeAny(obj)
+	// SerializeWithCallback back as EmptyStruct
+	serialized, err := f.Serialize(obj)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to serialize: %v", err))
 	}
@@ -1165,7 +1165,7 @@ func testSchemaEvolutionCompatibleReverse() {
 
 	buf := fory.NewByteBuffer(data)
 	var obj interface{}
-	err := f.Deserialize(buf, &obj, nil)
+	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize as TwoStringFieldStruct: %v", err))
 	}
@@ -1175,8 +1175,8 @@ func testSchemaEvolutionCompatibleReverse() {
 	// f2 should be empty string since it wasn't in the source data
 	assertEqual("", result.F2, "f2")
 
-	// Serialize back
-	serialized, err := f.SerializeAny(obj)
+	// SerializeWithCallback back
+	serialized, err := f.Serialize(obj)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to serialize: %v", err))
 	}
@@ -1195,7 +1195,7 @@ func testOneEnumFieldSchemaConsistent() {
 
 	buf := fory.NewByteBuffer(data)
 	var obj interface{}
-	err := f.Deserialize(buf, &obj, nil)
+	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
 	}
@@ -1205,7 +1205,7 @@ func testOneEnumFieldSchemaConsistent() {
 		panic(fmt.Sprintf("Expected VALUE_B (1), got %v", result.F1))
 	}
 
-	serialized, err := f.SerializeAny(result)
+	serialized, err := f.Serialize(result)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to serialize: %v", err))
 	}
@@ -1223,7 +1223,7 @@ func testOneEnumFieldCompatible() {
 
 	buf := fory.NewByteBuffer(data)
 	var obj interface{}
-	err := f.Deserialize(buf, &obj, nil)
+	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
 	}
@@ -1233,7 +1233,7 @@ func testOneEnumFieldCompatible() {
 		panic(fmt.Sprintf("Expected VALUE_A (0), got %v", result.F1))
 	}
 
-	serialized, err := f.SerializeAny(result)
+	serialized, err := f.Serialize(result)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to serialize: %v", err))
 	}
@@ -1251,7 +1251,7 @@ func testTwoEnumFieldCompatible() {
 
 	buf := fory.NewByteBuffer(data)
 	var obj interface{}
-	err := f.Deserialize(buf, &obj, nil)
+	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
 	}
@@ -1264,7 +1264,7 @@ func testTwoEnumFieldCompatible() {
 		panic(fmt.Sprintf("Expected F2=VALUE_C (2), got %v", result.F2))
 	}
 
-	serialized, err := f.SerializeAny(result)
+	serialized, err := f.Serialize(result)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to serialize: %v", err))
 	}
@@ -1283,13 +1283,13 @@ func testEnumSchemaEvolutionCompatible() {
 
 	buf := fory.NewByteBuffer(data)
 	var obj interface{}
-	err := f.Deserialize(buf, &obj, nil)
+	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize as EmptyStruct: %v", err))
 	}
 
-	// Serialize back as EmptyStruct
-	serialized, err := f.SerializeAny(obj)
+	// SerializeWithCallback back as EmptyStruct
+	serialized, err := f.Serialize(obj)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to serialize: %v", err))
 	}
@@ -1309,7 +1309,7 @@ func testEnumSchemaEvolutionCompatibleReverse() {
 
 	buf := fory.NewByteBuffer(data)
 	var obj interface{}
-	err := f.Deserialize(buf, &obj, nil)
+	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize as TwoEnumFieldStruct: %v", err))
 	}
@@ -1323,8 +1323,8 @@ func testEnumSchemaEvolutionCompatibleReverse() {
 		panic(fmt.Sprintf("Expected F2=nil, got %v", result.F2))
 	}
 
-	// Serialize back
-	serialized, err := f.SerializeAny(obj)
+	// SerializeWithCallback back
+	serialized, err := f.Serialize(obj)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to serialize: %v", err))
 	}

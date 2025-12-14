@@ -23,7 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestSerializeGenericPrimitives tests Serialize[T]/Deserialize[T] with primitives.
+// TestSerializeGenericPrimitives tests Serialize[T]/DeserializeWithCallbackBuffers[T] with primitives.
 // Both functions take pointers to avoid interface heap allocation and struct copy.
 func TestSerializeGenericPrimitives(t *testing.T) {
 	f := NewFory(WithRefTracking(true))
@@ -132,7 +132,7 @@ func TestSerializeGenericPrimitives(t *testing.T) {
 	})
 }
 
-// TestSerializeGenericComplex tests Serialize[T]/Deserialize[T] with complex types.
+// TestSerializeGenericComplex tests Serialize[T]/DeserializeWithCallbackBuffers[T] with complex types.
 // These fall back to reflection-based serialization.
 func TestSerializeGenericComplex(t *testing.T) {
 	f := NewFory(WithRefTracking(true))
@@ -183,7 +183,7 @@ func TestSerializeGenericComplex(t *testing.T) {
 func TestSerializeDeserializeRoundTrip(t *testing.T) {
 	f := NewFory(WithRefTracking(true))
 
-	// Test that Serialize[T] uses pointer-based fast path when available
+	// Test that SerializeWithCallback[T] uses pointer-based fast path when available
 	t.Run("TypedSerializerPath", func(t *testing.T) {
 		// Int32 has a registered fast path
 		original := int32(999)

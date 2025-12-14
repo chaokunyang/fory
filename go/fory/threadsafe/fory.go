@@ -72,14 +72,14 @@ func (f *Fory) Deserialize(data []byte, v interface{}) error {
 func (f *Fory) SerializeAny(value any) ([]byte, error) {
 	inner := f.acquire()
 	defer f.release(inner)
-	return inner.SerializeAny(value)
+	return inner.Serialize(value)
 }
 
 // DeserializeAny deserializes polymorphic values
 func (f *Fory) DeserializeAny(data []byte) (any, error) {
 	inner := f.acquire()
 	defer f.release(inner)
-	return inner.DeserializeAny(data)
+	return inner.Deserialize(data)
 }
 
 // RegisterNamedType registers a named type for cross-language serialization

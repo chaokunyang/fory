@@ -262,7 +262,7 @@ func TestMapDemoXlang(t *testing.T) {
 
 	// No need to register MapDemo - it has codegen serializer automatically
 
-	// Serialize both instances
+	// SerializeWithCallback both instances
 	codegenData, err := foryForCodegen.Marshal(codegenInstance)
 	require.NoError(t, err, "Codegen serialization should not fail")
 

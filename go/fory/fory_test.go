@@ -430,7 +430,7 @@ func TestSerializeZeroCopy(t *testing.T) {
 	list := []interface{}{"str", make([]byte, 1000)}
 	buf := NewByteBuffer(nil)
 	var bufferObjects []BufferObject
-	require.Nil(t, fory.Serialize(buf, list, func(o BufferObject) bool {
+	require.Nil(t, fory.SerializeWithCallback(buf, list, func(o BufferObject) bool {
 		bufferObjects = append(bufferObjects, o)
 		return false
 	}))
@@ -440,7 +440,7 @@ func TestSerializeZeroCopy(t *testing.T) {
 	for _, o := range bufferObjects {
 		buffers = append(buffers, o.ToBuffer())
 	}
-	err := fory.Deserialize(buf, &newList, buffers)
+	err := fory.DeserializeWithCallbackBuffers(buf, &newList, buffers)
 	require.Nil(t, err)
 	require.Equal(t, list, newList)
 }
@@ -539,12 +539,12 @@ func benchData() interface{} {
 func ExampleFory_SerializeAny() {
 	f := New()
 	list := []interface{}{true, false, "str", -1.1, 1, make([]int32, 5), make([]float64, 5)}
-	bytes, err := f.SerializeAny(list)
+	bytes, err := f.Serialize(list)
 	if err != nil {
 		panic(err)
 	}
 	// bytes can be data serialized by other languages.
-	newValue, err := f.DeserializeAny(bytes)
+	newValue, err := f.Deserialize(bytes)
 	if err != nil {
 		panic(err)
 	}
@@ -555,12 +555,12 @@ func ExampleFory_SerializeAny() {
 		"k2": list,
 		"k3": -1,
 	}
-	bytes, err = f.SerializeAny(dict)
+	bytes, err = f.Serialize(dict)
 	if err != nil {
 		panic(err)
 	}
 	// bytes can be data serialized by other languages.
-	newValue, err = f.DeserializeAny(bytes)
+	newValue, err = f.Deserialize(bytes)
 	if err != nil {
 		panic(err)
 	}

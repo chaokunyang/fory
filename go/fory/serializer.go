@@ -24,16 +24,20 @@ import (
 // Serializer is the unified interface for all serialization.
 // It provides reflect.Value-based API for efficient serialization.
 type Serializer interface {
-	// Write is the entry point for serialization (mirrors Rust's fory_write).
+	// Write is the entry point for serialization.
 	//
 	// This method orchestrates the complete serialization process, handling reference tracking,
-	// type information, and delegating to Write for the actual data serialization.
+	// type information, and delegating to WriteData for the actual data serialization.
+	//
+	// Unlike Java's unified ref tracking approach, Go uses per-serializer ref/type handling.
+	// Map, Slice, Interface, and Pointer types each have different ref tracking requirements,
+	// so each serializer controls how to write ref/type info. This allows more efficient
+	// serialization by avoiding unnecessary ref checks for value types and enabling
+	// type-specific optimizations.
 	//
 	// Parameters:
-	//
-	// * writeRef - When true, WRITES reference flag. When false, SKIPS writing ref flag.
-	// * writeType - When true, WRITES type information. When false, SKIPS writing type info.
-	//
+	//   - writeRef: when true, writes reference flag; when false, skips it
+	//   - writeType: when true, writes type information; when false, skips it
 	Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error
 
 	// WriteData serializes using reflect.Value.
@@ -43,13 +47,17 @@ type Serializer interface {
 	// Read is the entry point for deserialization.
 	//
 	// This method orchestrates the complete deserialization process, handling reference tracking,
-	// type information validation, and delegating to Read for the actual data deserialization.
+	// type information validation, and delegating to ReadData for the actual data deserialization.
+	//
+	// Unlike Java's unified ref tracking approach, Go uses per-serializer ref/type handling.
+	// Map, Slice, Interface, and Pointer types each have different ref tracking requirements,
+	// so each serializer controls how to read ref/type info. This allows more efficient
+	// deserialization by avoiding unnecessary ref checks for value types and enabling
+	// type-specific optimizations.
 	//
 	// Parameters:
-	//
-	// * readRef - When true, READS reference flag from buffer. When false, SKIPS reading ref flag.
-	// * readType - When true, READS type information from buffer. When false, SKIPS reading type info.
-	//
+	//   - readRef: when true, reads reference flag from buffer; when false, skips it
+	//   - readType: when true, reads type information from buffer; when false, skips it
 	Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error
 
 	// ReadData deserializes directly into the provided reflect.Value.
@@ -66,15 +74,12 @@ type Serializer interface {
 	// deserialization scenarios where the runtime type differs from the static type.
 	//
 	// Parameters:
+	//   - readRef: when true, reads reference flag from buffer; when false, skips it
+	//   - typeInfo: pre-read type information; do NOT read type info again from buffer
 	//
-	// * readRef - When true, READS reference flag from buffer. When false, SKIPS reading ref flag.
-	// * typeInfo - Type information that has already been read ahead. DO NOT read type info again from buffer.
-	//
-	// Important:
-	//
-	// DO NOT read type info from the buffer in this method. The typeInfo parameter
-	// contains the already-read type metadata. Reading it again will cause buffer position errors.
-	//
+	// Important: do NOT read type info from the buffer in this method. The typeInfo
+	// parameter contains the already-read type metadata. Reading it again will cause
+	// buffer position errors.
 	ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeInfo *TypeInfo, value reflect.Value) error
 
 	// TypeId returns the Fory protocol type ID

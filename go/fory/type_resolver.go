@@ -284,15 +284,16 @@ func (r *TypeResolver) initialize() {
 		// stringSliceType uses sliceConcreteValueSerializer with stringSerializer as element serializer
 		// This ensures CollectionIsDeclElementType is set for Java compatibility
 		{byteSliceType, byteSliceSerializer{}},
-		// Map basic type slices to proper array types for xlang compatibility
-		{boolSliceType, boolArraySerializer{}},
-		{int16SliceType, int16ArraySerializer{}},
-		{int32SliceType, int32ArraySerializer{}},
-		{int64SliceType, int64ArraySerializer{}},
+		// Map basic type slices to slice serializers for xlang compatibility
+		{boolSliceType, boolSliceSerializer{}},
+		{int8SliceType, int8SliceSerializer{}},
+		{int16SliceType, int16SliceSerializer{}},
+		{int32SliceType, int32SliceSerializer{}},
+		{int64SliceType, int64SliceSerializer{}},
 		{intSliceType, intSliceSerializer{}},
 		{uintSliceType, uintSliceSerializer{}},
-		{float32SliceType, float32ArraySerializer{}},
-		{float64SliceType, float64ArraySerializer{}},
+		{float32SliceType, float32SliceSerializer{}},
+		{float64SliceType, float64SliceSerializer{}},
 		// Register common map types for fast path
 		{stringStringMapType, mapSerializer{}},
 		{stringInt64MapType, mapSerializer{}},
@@ -1218,35 +1219,35 @@ func (r *TypeResolver) createSerializer(type_ reflect.Type, mapInStruct bool) (s
 		elem := type_.Elem()
 		// Handle special slice types for xlang compatibility
 		if r.isXlang {
-			// Basic type slices should use array types for efficiency
+			// Basic type slices should use slice serializers for efficiency
 			switch elem.Kind() {
 			case reflect.Bool:
 				if type_ == boolSliceType {
-					return boolArraySerializer{}, nil
+					return boolSliceSerializer{}, nil
 				}
 			case reflect.Int8:
 				if type_ == int8SliceType {
-					return int8ArraySerializer{}, nil
+					return int8SliceSerializer{}, nil
 				}
 			case reflect.Int16:
 				if type_ == int16SliceType {
-					return int16ArraySerializer{}, nil
+					return int16SliceSerializer{}, nil
 				}
 			case reflect.Int32:
 				if type_ == int32SliceType {
-					return int32ArraySerializer{}, nil
+					return int32SliceSerializer{}, nil
 				}
 			case reflect.Int64:
 				if type_ == int64SliceType {
-					return int64ArraySerializer{}, nil
+					return int64SliceSerializer{}, nil
 				}
 			case reflect.Float32:
 				if type_ == float32SliceType {
-					return float32ArraySerializer{}, nil
+					return float32SliceSerializer{}, nil
 				}
 			case reflect.Float64:
 				if type_ == float64SliceType {
-					return float64ArraySerializer{}, nil
+					return float64SliceSerializer{}, nil
 				}
 			case reflect.Int:
 				// Platform-dependent int type uses intSliceSerializer which selects
@@ -1274,15 +1275,31 @@ func (r *TypeResolver) createSerializer(type_ reflect.Type, mapInStruct bool) (s
 		}
 	case reflect.Array:
 		elem := type_.Elem()
-		// For primitive arrays, use the slice serializer directly (arrays are written as slices)
+		// For primitive arrays, use the array serializers from array_primitive.go
 		elemKind := elem.Kind()
-		if elemKind == reflect.Bool ||
-			elemKind == reflect.Int8 || elemKind == reflect.Int16 || elemKind == reflect.Int32 || elemKind == reflect.Int64 ||
-			elemKind == reflect.Uint8 ||
-			elemKind == reflect.Float32 || elemKind == reflect.Float64 ||
-			(elemKind == reflect.Int && (reflect.TypeOf(int(0)).Size() == 4 || reflect.TypeOf(int(0)).Size() == 8)) {
-			sliceType := reflect.SliceOf(elem)
-			return r.getSerializerByType(sliceType, false)
+		switch elemKind {
+		case reflect.Bool:
+			return boolArraySerializer{arrayType: type_}, nil
+		case reflect.Int8:
+			return int8ArraySerializer{arrayType: type_}, nil
+		case reflect.Int16:
+			return int16ArraySerializer{arrayType: type_}, nil
+		case reflect.Int32:
+			return int32ArraySerializer{arrayType: type_}, nil
+		case reflect.Int64:
+			return int64ArraySerializer{arrayType: type_}, nil
+		case reflect.Uint8:
+			return uint8ArraySerializer{arrayType: type_}, nil
+		case reflect.Float32:
+			return float32ArraySerializer{arrayType: type_}, nil
+		case reflect.Float64:
+			return float64ArraySerializer{arrayType: type_}, nil
+		case reflect.Int:
+			// Platform-dependent int type - use int32 or int64 array serializer
+			if reflect.TypeOf(int(0)).Size() == 8 {
+				return int64ArraySerializer{arrayType: type_}, nil
+			}
+			return int32ArraySerializer{arrayType: type_}, nil
 		}
 		if isDynamicType(elem) {
 			return arraySerializer{}, nil

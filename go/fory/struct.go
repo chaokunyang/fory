@@ -1064,18 +1064,29 @@ func (s *structSerializer) initFieldsFromContext(ctx interface{ TypeResolver() *
 			// to match cross-language format (Python int8_array, int16_array, etc.)
 			elemType := fieldType.Elem()
 			switch elemType.Kind() {
+			case reflect.Bool:
+				fieldSerializer = boolArraySerializer{arrayType: fieldType}
 			case reflect.Int8:
-				fieldSerializer = int8ArraySerializer{}
+				fieldSerializer = int8ArraySerializer{arrayType: fieldType}
 			case reflect.Int16:
-				fieldSerializer = int16ArraySerializer{}
+				fieldSerializer = int16ArraySerializer{arrayType: fieldType}
 			case reflect.Int32:
-				fieldSerializer = int32ArraySerializer{}
+				fieldSerializer = int32ArraySerializer{arrayType: fieldType}
 			case reflect.Int64:
-				fieldSerializer = int64ArraySerializer{}
+				fieldSerializer = int64ArraySerializer{arrayType: fieldType}
+			case reflect.Uint8:
+				fieldSerializer = uint8ArraySerializer{arrayType: fieldType}
 			case reflect.Float32:
-				fieldSerializer = float32ArraySerializer{}
+				fieldSerializer = float32ArraySerializer{arrayType: fieldType}
 			case reflect.Float64:
-				fieldSerializer = float64ArraySerializer{}
+				fieldSerializer = float64ArraySerializer{arrayType: fieldType}
+			case reflect.Int:
+				// Platform-dependent int type
+				if reflect.TypeOf(int(0)).Size() == 8 {
+					fieldSerializer = int64ArraySerializer{arrayType: fieldType}
+				} else {
+					fieldSerializer = int32ArraySerializer{arrayType: fieldType}
+				}
 			default:
 				// For non-primitive arrays, use sliceDynSerializer
 				fieldSerializer = newSliceDynSerializerWithTypeInfo(
@@ -1304,6 +1315,36 @@ func (s *structSerializer) initFieldsFromDefsWithResolver(typeResolver *TypeReso
 					if DebugOutputEnabled() {
 						fmt.Printf("[fory-debug] pointer enum field %s: localType=%v baseType=%v serializer=%T\n",
 							def.name, localType, baseType, fieldSerializer)
+					}
+				}
+				// For array fields, use array serializers (not slice serializers) even if typeID maps to slice serializer
+				// The typeID (INT16_ARRAY, etc.) is shared between arrays and slices, but we need the correct
+				// serializer based on the actual Go type
+				if localType.Kind() == reflect.Array {
+					elemType := localType.Elem()
+					switch elemType.Kind() {
+					case reflect.Bool:
+						fieldSerializer = boolArraySerializer{arrayType: localType}
+					case reflect.Int8:
+						fieldSerializer = int8ArraySerializer{arrayType: localType}
+					case reflect.Int16:
+						fieldSerializer = int16ArraySerializer{arrayType: localType}
+					case reflect.Int32:
+						fieldSerializer = int32ArraySerializer{arrayType: localType}
+					case reflect.Int64:
+						fieldSerializer = int64ArraySerializer{arrayType: localType}
+					case reflect.Uint8:
+						fieldSerializer = uint8ArraySerializer{arrayType: localType}
+					case reflect.Float32:
+						fieldSerializer = float32ArraySerializer{arrayType: localType}
+					case reflect.Float64:
+						fieldSerializer = float64ArraySerializer{arrayType: localType}
+					case reflect.Int:
+						if reflect.TypeOf(int(0)).Size() == 8 {
+							fieldSerializer = int64ArraySerializer{arrayType: localType}
+						} else {
+							fieldSerializer = int32ArraySerializer{arrayType: localType}
+						}
 					}
 				}
 			} else {
@@ -1896,9 +1937,33 @@ func createStructFieldInfos(f *Fory, type_ reflect.Type) (structFieldsInfo, erro
 			var _ error
 			fieldSerializer, _ = f.typeResolver.getSerializerByType(field.Type, true)
 			if field.Type.Kind() == reflect.Array {
+				// For arrays, use array serializers not slice serializers
 				elemType := field.Type.Elem()
-				sliceType := reflect.SliceOf(elemType)
-				fieldSerializer = f.typeResolver.typeToSerializers[sliceType]
+				switch elemType.Kind() {
+				case reflect.Bool:
+					fieldSerializer = boolArraySerializer{arrayType: field.Type}
+				case reflect.Int8:
+					fieldSerializer = int8ArraySerializer{arrayType: field.Type}
+				case reflect.Int16:
+					fieldSerializer = int16ArraySerializer{arrayType: field.Type}
+				case reflect.Int32:
+					fieldSerializer = int32ArraySerializer{arrayType: field.Type}
+				case reflect.Int64:
+					fieldSerializer = int64ArraySerializer{arrayType: field.Type}
+				case reflect.Uint8:
+					fieldSerializer = uint8ArraySerializer{arrayType: field.Type}
+				case reflect.Float32:
+					fieldSerializer = float32ArraySerializer{arrayType: field.Type}
+				case reflect.Float64:
+					fieldSerializer = float64ArraySerializer{arrayType: field.Type}
+				case reflect.Int:
+					// Platform-dependent int type
+					if reflect.TypeOf(int(0)).Size() == 8 {
+						fieldSerializer = int64ArraySerializer{arrayType: field.Type}
+					} else {
+						fieldSerializer = int32ArraySerializer{arrayType: field.Type}
+					}
+				}
 			} else if field.Type.Kind() == reflect.Slice {
 				if field.Type.Elem().Kind() != reflect.Interface {
 					fieldSerializer = newSliceDynSerializerWithTypeInfo(

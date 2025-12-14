@@ -40,6 +40,54 @@ const (
 	NULL_VALUE_KEY_DECL_TYPE_TRACKING_REF = VALUE_HAS_NULL | KEY_DECL_TYPE | TRACKING_KEY_REF   // 0b00010101
 )
 
+// writeMapRefAndType handles reference and type writing for map serializers.
+// Returns true if the value was already written (nil or ref), false if data should be written.
+func writeMapRefAndType(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) (bool, error) {
+	if writeRef {
+		if value.IsNil() {
+			ctx.buffer.WriteInt8(NullFlag)
+			return true, nil
+		}
+		refWritten, err := ctx.RefResolver().WriteRefOrNull(ctx.buffer, value)
+		if err != nil {
+			return false, err
+		}
+		if refWritten {
+			return true, nil
+		}
+	}
+	if writeType {
+		ctx.buffer.WriteVaruint32Small7(uint32(MAP))
+	}
+	return false, nil
+}
+
+// readMapRefAndType handles reference and type reading for map serializers.
+// Returns true if a reference was resolved (value already set), false if data should be read.
+func readMapRefAndType(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) (bool, error) {
+	buf := ctx.Buffer()
+	if readRef {
+		refID, err := ctx.RefResolver().TryPreserveRefId(buf)
+		if err != nil {
+			return false, err
+		}
+		if int8(refID) < NotNullValueFlag {
+			obj := ctx.RefResolver().GetReadObject(refID)
+			if obj.IsValid() {
+				value.Set(obj)
+			}
+			return true, nil
+		}
+	}
+	if readType {
+		typeID := uint32(buf.ReadVaruint32Small7())
+		if IsNamespacedType(TypeId(typeID)) {
+			_, _ = ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID)
+		}
+	}
+	return false, nil
+}
+
 type mapSerializer struct {
 	type_             reflect.Type
 	keySerializer     Serializer
@@ -243,28 +291,9 @@ func (s mapSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 }
 
 func (s mapSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	if writeRef {
-		if value.IsNil() {
-			ctx.buffer.WriteInt8(NullFlag)
-			return nil
-		}
-		refWritten, err := ctx.RefResolver().WriteRefOrNull(ctx.buffer, value)
-		if err != nil {
-			return err
-		}
-		if refWritten {
-			return nil
-		}
-	}
-	if writeType {
-		// For polymorphic map key/values, need to write full type info
-		typeInfo, err := ctx.TypeResolver().getTypeInfo(value, true)
-		if err != nil {
-			return err
-		}
-		if err := ctx.TypeResolver().writeTypeInfo(ctx.buffer, typeInfo); err != nil {
-			return err
-		}
+	done, err := writeMapRefAndType(ctx, writeRef, writeType, value)
+	if done || err != nil {
+		return err
 	}
 	return s.WriteData(ctx, value)
 }
@@ -603,28 +632,9 @@ func (s mapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value refl
 }
 
 func (s mapSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
-	buf := ctx.Buffer()
-	if readRef {
-		refID, err := ctx.RefResolver().TryPreserveRefId(buf)
-		if err != nil {
-			return err
-		}
-		if int8(refID) < NotNullValueFlag {
-			// Reference found
-			obj := ctx.RefResolver().GetReadObject(refID)
-			if obj.IsValid() {
-				value.Set(obj)
-			}
-			return nil
-		}
-	}
-	if readType {
-		// ReadData and discard type info for maps (we already know it's a map)
-		typeID := uint32(buf.ReadVaruint32Small7())
-		if IsNamespacedType(TypeId(typeID)) {
-			// For namespaced types, need to read additional metadata
-			_, _ = ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID)
-		}
+	done, err := readMapRefAndType(ctx, readRef, readType, value)
+	if done || err != nil {
+		return err
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }

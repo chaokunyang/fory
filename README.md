@@ -119,6 +119,16 @@ Fory Rust demonstrates competitive performance compared to other Rust serializat
 
 For more detailed benchmarks and methodology, see [Rust Benchmarks](benchmarks/rust_benchmark).
 
+### C++ Serialization Performance
+
+Fory Rust demonstrates competitive performance compared to protobuf c++ serialization framework.
+
+<p align="center">
+<img src="docs/benchmarks/cpp/throughput.png" width="50%">
+</p>
+
+For more detailed benchmarks and methodology, see [C++ Benchmarks](benchmarks/cpp_benchmark).
+
 ## Installation
 
 **Java**:

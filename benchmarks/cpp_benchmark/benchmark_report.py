@@ -243,9 +243,9 @@ for idx, op in enumerate(operations):
     ax.ticklabel_format(style="scientific", axis="y", scilimits=(0, 0))
 
 fig.tight_layout()
-combined_plot_path = os.path.join(output_dir, "throughput_comparison.png")
+combined_plot_path = os.path.join(output_dir, "throughput.png")
 plt.savefig(combined_plot_path, dpi=150)
-plot_images.append(("throughput_comparison", combined_plot_path))
+plot_images.append(("throughput", combined_plot_path))
 plt.close()
 
 # === Markdown report ===

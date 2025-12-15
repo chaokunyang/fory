@@ -137,7 +137,7 @@ For more detailed benchmarks and methodology, see [C++ Benchmarks](benchmarks/cp
 <dependency>
   <groupId>org.apache.fory</groupId>
   <artifactId>fory-core</artifactId>
-  <version>0.13.2</version>
+  <version>0.14.0</version>
 </dependency>
 ```
 
@@ -147,10 +147,10 @@ Snapshots are available from `https://repository.apache.org/snapshots/` (version
 
 ```sbt
 // Scala 2.13
-libraryDependencies += "org.apache.fory" % "fory-scala_2.13" % "0.13.2"
+libraryDependencies += "org.apache.fory" % "fory-scala_2.13" % "0.14.0"
 
 // Scala 3
-libraryDependencies += "org.apache.fory" % "fory-scala_3" % "0.13.2"
+libraryDependencies += "org.apache.fory" % "fory-scala_3" % "0.14.0"
 ```
 
 **Kotlin**:
@@ -159,7 +159,7 @@ libraryDependencies += "org.apache.fory" % "fory-scala_3" % "0.13.2"
 <dependency>
   <groupId>org.apache.fory</groupId>
   <artifactId>fory-kotlin</artifactId>
-  <version>0.13.2</version>
+  <version>0.14.0</version>
 </dependency>
 ```
 

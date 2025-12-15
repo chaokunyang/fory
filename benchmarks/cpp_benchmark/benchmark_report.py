@@ -233,7 +233,7 @@ for idx, op in enumerate(operations):
     )
 
     ax.set_ylabel("Throughput (ops/sec)")
-    ax.set_title(f"{op.capitalize()} Throughput Comparison")
+    ax.set_title(f"{op.capitalize()} Throughput (higher is better)")
     ax.set_xticks(x)
     ax.set_xticklabels([dt.capitalize() for dt in datatypes])
     ax.legend()

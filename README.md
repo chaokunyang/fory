@@ -124,7 +124,7 @@ For more detailed benchmarks and methodology, see [Rust Benchmarks](benchmarks/r
 Fory Rust demonstrates competitive performance compared to protobuf c++ serialization framework.
 
 <p align="center">
-<img src="docs/benchmarks/cpp/throughput.png" width="50%">
+<img src="docs/benchmarks/cpp/throughput.png" width="70%">
 </p>
 
 For more detailed benchmarks and methodology, see [C++ Benchmarks](benchmarks/cpp_benchmark).

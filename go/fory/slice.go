@@ -142,10 +142,6 @@ func newSliceConcreteValueSerializerWithTypeId(type_ reflect.Type, elemSerialize
 	}, nil
 }
 
-func (s *sliceConcreteValueSerializer) TypeId() TypeId {
-	return s.typeId
-}
-
 func (s *sliceConcreteValueSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	length := value.Len()
 	buf := ctx.Buffer()

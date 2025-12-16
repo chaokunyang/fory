@@ -90,9 +90,6 @@ type Serializer interface {
 	// parameter contains the already-read type metadata. Reading it again will cause
 	// buffer position errors.
 	ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error
-
-	// TypeId returns the Fory protocol type ID
-	TypeId() TypeId
 }
 
 // ExtensionSerializer is a simplified interface for user-implemented extension serializers.
@@ -139,8 +136,6 @@ type extensionSerializerAdapter struct {
 	typeTag    string
 	userSerial ExtensionSerializer
 }
-
-func (s *extensionSerializerAdapter) TypeId() TypeId { return NAMED_STRUCT }
 
 func (s *extensionSerializerAdapter) GetType() reflect.Type { return s.type_ }
 

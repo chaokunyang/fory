@@ -35,10 +35,6 @@ func (s GenericSet) Add(values ...interface{}) {
 type setSerializer struct {
 }
 
-func (s setSerializer) TypeId() TypeId {
-	return SET
-}
-
 func (s setSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	buf := ctx.Buffer()
 	// Get all map keys (set elements)

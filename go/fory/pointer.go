@@ -34,10 +34,6 @@ type ptrToInterfaceSerializer struct {
 // ptrToValueSerializer - pointer to concrete type
 // ============================================================================
 
-func (s *ptrToValueSerializer) TypeId() TypeId {
-	return s.valueSerializer.TypeId()
-}
-
 func (s *ptrToValueSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	elemValue := value.Elem()
 	// Type info is written by Write() when writeType=true, not here.
@@ -159,11 +155,6 @@ func (s *ptrToValueSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMod
 // ============================================================================
 // ptrToInterfaceSerializer - pointer to interface type
 // ============================================================================
-
-func (s *ptrToInterfaceSerializer) TypeId() TypeId {
-	// Pointer to interface is polymorphic, return 0 to indicate dynamic type
-	return 0
-}
 
 func (s *ptrToInterfaceSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	// Get the concrete element that the interface pointer points to

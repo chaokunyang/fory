@@ -36,6 +36,7 @@ type FieldInfo struct {
 	Offset       uintptr
 	Type         reflect.Type
 	StaticId     StaticTypeId
+	TypeId       TypeId     // Fory type ID for the serializer
 	Serializer   Serializer
 	Referencable bool
 	FieldIndex   int      // -1 if field doesn't exist in current struct (for compatible mode)
@@ -87,11 +88,10 @@ func fieldHasNonPrimitiveSerializer(field *FieldInfo) bool {
 	if field.Serializer == nil {
 		return false
 	}
-	typeId := field.Serializer.TypeId()
 	// ENUM (numeric ID), NAMED_ENUM (namespace/typename), NAMED_STRUCT, NAMED_COMPATIBLE_STRUCT, NAMED_EXT
 	// all require special serialization and should not use the primitive fast path
 	// Note: ENUM uses unsigned Varuint32Small7 for ordinals, not signed zigzag varint
-	switch typeId {
+	switch field.TypeId {
 	case ENUM, NAMED_ENUM, NAMED_STRUCT, NAMED_COMPATIBLE_STRUCT, NAMED_EXT:
 		return true
 	default:
@@ -112,10 +112,6 @@ type structSerializer struct {
 }
 
 var UNKNOWN_TYPE_ID = int16(63)
-
-func (s *structSerializer) TypeId() TypeId {
-	return NAMED_STRUCT
-}
 
 func (s *structSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	buf := ctx.Buffer()
@@ -267,8 +263,9 @@ func (s *structSerializer) WriteData(ctx *WriteContext, value reflect.Value) err
 		// Special handling for enum fields: always emit NotNullValueFlag then ordinal
 		// to align with Java xlang encoding (unsigned Varuint32Small7 for ordinal).
 		if field.Serializer != nil {
-			serTypeId := field.Serializer.TypeId()
-			if serTypeId == ENUM || serTypeId == NAMED_ENUM {
+			// Check internal type ID (mask off namespace bits)
+			internalTypeId := field.TypeId & 0xFF
+			if internalTypeId == ENUM || internalTypeId == NAMED_ENUM {
 				buf.WriteInt8(NotNullValueFlag)
 				if err := field.Serializer.WriteData(ctx, fieldValue); err != nil {
 					return err
@@ -351,8 +348,9 @@ func (s *structSerializer) writeFieldsInOrder(ctx *WriteContext, value reflect.V
 		// Java always writes null flag + ordinal for enum fields (both compatible and non-compatible mode)
 		// Java writes enum ordinals as unsigned Varuint32Small7, not signed zigzag
 		if field.Serializer != nil {
-			serTypeId := field.Serializer.TypeId()
-			if serTypeId == ENUM || serTypeId == NAMED_ENUM {
+			// Check internal type ID (mask off namespace bits)
+			internalTypeId := field.TypeId & 0xFF
+			if internalTypeId == ENUM || internalTypeId == NAMED_ENUM {
 				// Handle pointer enum fields
 				if fieldValue.Kind() == reflect.Ptr {
 					if fieldValue.IsNil() {
@@ -510,8 +508,9 @@ func (s *structSerializer) writeFieldsInTypeDefOrder(ctx *WriteContext, value re
 
 		// Check if field has a non-primitive serializer (like ENUM or NAMED_ENUM)
 		// ENUM uses unsigned Varuint32Small7 for ordinals, not signed zigzag varint
-		hasNonPrimitiveSer := ser != nil && (ser.TypeId() == ENUM || ser.TypeId() == NAMED_ENUM ||
-			ser.TypeId() == NAMED_STRUCT || ser.TypeId() == NAMED_COMPATIBLE_STRUCT || ser.TypeId() == NAMED_EXT)
+		serTypeId := ctx.TypeResolver().getTypeIdByType(fieldType)
+		hasNonPrimitiveSer := ser != nil && (serTypeId == ENUM || serTypeId == NAMED_ENUM ||
+			serTypeId == NAMED_STRUCT || serTypeId == NAMED_COMPATIBLE_STRUCT || serTypeId == NAMED_EXT)
 
 		// Fast path for fixed-size primitive types (no ref flag)
 		if canUseUnsafe && isFixedSizePrimitive(staticId, referencable) && !hasNonPrimitiveSer {
@@ -552,7 +551,6 @@ func (s *structSerializer) writeFieldsInTypeDefOrder(ctx *WriteContext, value re
 		// Java always writes null flag + ordinal for enum fields (both compatible and non-compatible mode)
 		// Java writes enum ordinals as unsigned Varuint32Small7, not signed zigzag
 		if ser != nil {
-			serTypeId := ser.TypeId()
 			if serTypeId == ENUM || serTypeId == NAMED_ENUM {
 				// Handle pointer enum fields
 				if fieldValue.Kind() == reflect.Ptr {
@@ -751,8 +749,9 @@ func (s *structSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value 
 		// Java always writes null flag + ordinal for enum fields (both compatible and non-compatible mode)
 		// Java writes enum ordinals as unsigned Varuint32Small7, not signed zigzag
 		if field.Serializer != nil {
-			serTypeId := field.Serializer.TypeId()
-			if serTypeId == ENUM || serTypeId == NAMED_ENUM {
+			// Check internal type ID (mask off namespace bits)
+			internalTypeId := field.TypeId & 0xFF
+			if internalTypeId == ENUM || internalTypeId == NAMED_ENUM {
 				// Java always writes null flag for enum fields in struct
 				nullFlag := buf.ReadInt8()
 				if nullFlag == NullFlag {
@@ -854,8 +853,9 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 		// Java always writes null flag + ordinal for enum fields (both compatible and non-compatible mode)
 		// Java writes enum ordinals as unsigned Varuint32Small7, not signed zigzag
 		if field.Serializer != nil {
-			serTypeId := field.Serializer.TypeId()
-			if serTypeId == ENUM || serTypeId == NAMED_ENUM {
+			// Check internal type ID (mask off namespace bits)
+			internalTypeId := field.TypeId & 0xFF
+			if internalTypeId == ENUM || internalTypeId == NAMED_ENUM {
 				// Java always writes null flag for enum fields in struct
 				nullFlag := buf.ReadInt8()
 				if nullFlag == NullFlag {
@@ -1086,6 +1086,7 @@ func (s *structSerializer) initFieldsFromContext(ctx interface{ TypeResolver() *
 	var fields []*FieldInfo
 	var fieldNames []string
 	var serializers []Serializer
+	var typeIds []TypeId
 
 	for i := 0; i < type_.NumField(); i++ {
 		field := type_.Field(i)
@@ -1147,11 +1148,17 @@ func (s *structSerializer) initFieldsFromContext(ctx interface{ TypeResolver() *
 			fieldSerializer = mustNewSliceDynSerializer(fieldType.Elem())
 		}
 
+		// Get TypeId for the serializer, fallback to deriving from kind
+		fieldTypeId := typeResolver.getTypeIdByType(fieldType)
+		if fieldTypeId == 0 {
+			fieldTypeId = typeIdFromKind(fieldType)
+		}
 		fieldInfo := &FieldInfo{
 			Name:         SnakeCase(field.Name),
 			Offset:       field.Offset,
 			Type:         fieldType,
 			StaticId:     GetStaticTypeId(fieldType),
+			TypeId:       fieldTypeId,
 			Serializer:   fieldSerializer,
 			Referencable: isReferencable(originalFieldType), // Use isReferencable instead of nullable
 			FieldIndex:   i,
@@ -1159,10 +1166,11 @@ func (s *structSerializer) initFieldsFromContext(ctx interface{ TypeResolver() *
 		fields = append(fields, fieldInfo)
 		fieldNames = append(fieldNames, fieldInfo.Name)
 		serializers = append(serializers, fieldSerializer)
+		typeIds = append(typeIds, fieldTypeId)
 	}
 
 	// Sort fields according to specification
-	serializers, fieldNames = sortFields(typeResolver, fieldNames, serializers)
+	serializers, fieldNames = sortFields(typeResolver, fieldNames, serializers, typeIds)
 	order := make(map[string]int, len(fieldNames))
 	for idx, name := range fieldNames {
 		order[name] = idx
@@ -1224,11 +1232,14 @@ func (s *structSerializer) initFieldsFromDefsWithResolver(typeResolver *TypeReso
 			if remoteType == nil {
 				remoteType = reflect.TypeOf((*interface{})(nil)).Elem()
 			}
+			// Get TypeId from FieldType's TypeId method
+			fieldTypeId := def.fieldType.TypeId()
 			fieldInfo := &FieldInfo{
 				Name:         def.name,
 				Offset:       0,
 				Type:         remoteType,
 				StaticId:     GetStaticTypeId(remoteType),
+				TypeId:       fieldTypeId,
 				Serializer:   fieldSerializer,
 				Referencable: fieldNeedWriteRef(def.fieldType.TypeId(), def.nullable), // Use remote nullable flag
 				FieldIndex:   -1,                                                      // Mark as non-existent field to discard data
@@ -1419,11 +1430,14 @@ func (s *structSerializer) initFieldsFromDefsWithResolver(typeResolver *TypeReso
 			fieldType = remoteType
 		}
 
+		// Get TypeId from FieldType's TypeId method
+		fieldTypeId := def.fieldType.TypeId()
 		fieldInfo := &FieldInfo{
 			Name:         def.name,
 			Offset:       offset,
 			Type:         fieldType,
 			StaticId:     GetStaticTypeId(fieldType),
+			TypeId:       fieldTypeId,
 			Serializer:   fieldSerializer,
 			Referencable: fieldNeedWriteRef(def.fieldType.TypeId(), def.nullable), // Use remote nullable flag
 			FieldIndex:   fieldIndex,
@@ -1570,7 +1584,7 @@ func (s *structSerializer) computeHash() int32 {
 		if field.Serializer == nil {
 			typeId = UNKNOWN
 		} else {
-			typeId = field.Serializer.TypeId()
+			typeId = field.TypeId
 			// Check if this is an enum serializer (directly or wrapped in ptrToValueSerializer)
 			if _, ok := field.Serializer.(*enumSerializer); ok {
 				isEnumField = true
@@ -1642,10 +1656,6 @@ func (s *structSerializer) computeHash() int32 {
 type ptrToStructSerializer struct {
 	type_            reflect.Type
 	structSerializer *structSerializer
-}
-
-func (s *ptrToStructSerializer) TypeId() TypeId {
-	return NAMED_STRUCT
 }
 
 func (s *ptrToStructSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
@@ -1758,10 +1768,6 @@ type ptrToCodegenSerializer struct {
 	codegenSerializer Serializer
 }
 
-func (s *ptrToCodegenSerializer) TypeId() TypeId {
-	return NAMED_STRUCT
-}
-
 func (s *ptrToCodegenSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	// Dereference pointer and delegate to the generated serializer
 	return s.codegenSerializer.WriteData(ctx, value.Elem())
@@ -1859,10 +1865,11 @@ func sortFields(
 	typeResolver *TypeResolver,
 	fieldNames []string,
 	serializers []Serializer,
+	typeIds []TypeId,
 ) ([]Serializer, []string) {
 	// Default nullable to false for all fields (backwards compatible)
 	nullables := make([]bool, len(fieldNames))
-	return sortFieldsWithNullable(typeResolver, fieldNames, serializers, nullables)
+	return sortFieldsWithNullable(typeResolver, fieldNames, serializers, typeIds, nullables)
 }
 
 // sortFieldsWithNullable sorts fields with nullable information to match Java's field ordering.
@@ -1872,6 +1879,7 @@ func sortFieldsWithNullable(
 	typeResolver *TypeResolver,
 	fieldNames []string,
 	serializers []Serializer,
+	typeIds []TypeId,
 	nullables []bool,
 ) ([]Serializer, []string) {
 	var (
@@ -1886,7 +1894,7 @@ func sortFieldsWithNullable(
 			others = append(others, triple{UNKNOWN_TYPE_ID, nil, name, nullables[i]})
 			continue
 		}
-		typeTriples = append(typeTriples, triple{ser.TypeId(), ser, name, nullables[i]})
+		typeTriples = append(typeTriples, triple{typeIds[i], ser, name, nullables[i]})
 	}
 	// Java orders: primitives, boxed, finals, others, collections, maps
 	// primitives = non-nullable primitive types (int, long, etc.)
@@ -2001,6 +2009,7 @@ func createStructFieldInfos(f *Fory, type_ reflect.Type) (structFieldsInfo, erro
 	var fields structFieldsInfo
 	serializers := make([]Serializer, 0)
 	fieldnames := make([]string, 0)
+	typeIds := make([]TypeId, 0)
 	for i := 0; i < type_.NumField(); i++ {
 		field := type_.Field(i)
 		firstRune, _ := utf8.DecodeRuneInString(field.Name)
@@ -2053,7 +2062,8 @@ func createStructFieldInfos(f *Fory, type_ reflect.Type) (structFieldsInfo, erro
 				}
 			}
 		}
-		f := fieldInfo{
+			fieldTypeId := f.typeResolver.getTypeIdByType(field.Type)
+		fi := fieldInfo{
 			name:         SnakeCase(field.Name),
 			field:        field,
 			fieldIndex:   i,
@@ -2061,14 +2071,15 @@ func createStructFieldInfos(f *Fory, type_ reflect.Type) (structFieldsInfo, erro
 			referencable: nullable(originalFieldType),
 			serializer:   fieldSerializer,
 		}
-		fields = append(fields, &f)
+		fields = append(fields, &fi)
 		serializers = append(serializers, fieldSerializer)
-		fieldnames = append(fieldnames, f.name)
+		fieldnames = append(fieldnames, fi.name)
+		typeIds = append(typeIds, fieldTypeId)
 	}
 	sort.Sort(fields)
-	fieldPairs := make([]fieldPair, len(fieldnames))
+	fieldPairs := make([]fieldPairWithTypeId, len(fieldnames))
 	for i := range fieldPairs {
-		fieldPairs[i] = fieldPair{name: fieldnames[i], ser: serializers[i]}
+		fieldPairs[i] = fieldPairWithTypeId{name: fieldnames[i], ser: serializers[i], typeId: typeIds[i]}
 	}
 
 	sort.Slice(fieldPairs, func(i, j int) bool {
@@ -2078,8 +2089,9 @@ func createStructFieldInfos(f *Fory, type_ reflect.Type) (structFieldsInfo, erro
 	for i, p := range fieldPairs {
 		fieldnames[i] = p.name
 		serializers[i] = p.ser
+		typeIds[i] = p.typeId
 	}
-	serializers, fieldnames = sortFields(f.typeResolver, fieldnames, serializers)
+	serializers, fieldnames = sortFields(f.typeResolver, fieldnames, serializers, typeIds)
 	order := make(map[string]int, len(fieldnames))
 	for idx, name := range fieldnames {
 		order[name] = idx
@@ -2104,6 +2116,12 @@ func createStructFieldInfos(f *Fory, type_ reflect.Type) (structFieldsInfo, erro
 type fieldPair struct {
 	name string
 	ser  Serializer
+}
+
+type fieldPairWithTypeId struct {
+	name   string
+	ser    Serializer
+	typeId TypeId
 }
 
 // createStructFieldInfosFromFieldDefs creates structFieldsInfo from fieldDefs
@@ -2220,6 +2238,48 @@ func elementTypesCompatible(actual, expected reflect.Type) bool {
 	return false
 }
 
+// typeIdFromKind derives a TypeId from a reflect.Type's kind
+// This is used when the type is not registered in typesInfo
+func typeIdFromKind(type_ reflect.Type) TypeId {
+	switch type_.Kind() {
+	case reflect.Bool:
+		return BOOL
+	case reflect.Int8:
+		return INT8
+	case reflect.Int16:
+		return INT16
+	case reflect.Int32:
+		return INT32
+	case reflect.Int64, reflect.Int:
+		return INT64
+	case reflect.Uint8:
+		return UINT8
+	case reflect.Uint16:
+		return UINT16
+	case reflect.Uint32:
+		return UINT32
+	case reflect.Uint64, reflect.Uint:
+		return UINT64
+	case reflect.Float32:
+		return FLOAT
+	case reflect.Float64:
+		return DOUBLE
+	case reflect.String:
+		return STRING
+	case reflect.Slice:
+		return LIST
+	case reflect.Map:
+		return MAP
+	case reflect.Struct:
+		return NAMED_STRUCT
+	case reflect.Ptr:
+		// For pointer types, get the type ID of the element type
+		return typeIdFromKind(type_.Elem())
+	default:
+		return UNKNOWN
+	}
+}
+
 func computeStructHash(fieldsInfo structFieldsInfo, typeResolver *TypeResolver) (int32, error) {
 	var sb strings.Builder
 
@@ -2233,7 +2293,9 @@ func computeStructHash(fieldsInfo structFieldsInfo, typeResolver *TypeResolver) 
 		if serializer == nil {
 			typeId = UNKNOWN
 		} else {
-			typeId = serializer.TypeId()
+			// Derive typeId from the field type's kind for hash computation
+			// This matches codegen's getTypeIDForHash behavior
+			typeId = typeIdFromKind(fieldInfo.type_)
 			// For fixed-size arrays with primitive elements, use primitive array type IDs
 			// This matches Python's int8_array, int16_array, etc. types
 			if fieldInfo.type_.Kind() == reflect.Array {
@@ -2285,10 +2347,6 @@ func computeStructHash(fieldsInfo structFieldsInfo, typeResolver *TypeResolver) 
 // It reads and discards field data based on fieldDefs from remote TypeDef
 type skipStructSerializer struct {
 	fieldDefs []FieldDef
-}
-
-func (s *skipStructSerializer) TypeId() TypeId {
-	return NAMED_STRUCT
 }
 
 func (s *skipStructSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {

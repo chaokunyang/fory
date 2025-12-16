@@ -250,12 +250,13 @@ func newTypeResolver(fory *Fory) *TypeResolver {
 		r.typeTagToSerializers[typeTag] = ptrCodegenSer // "pkg.Type" -> ptrToValueSerializer
 
 		// 3. Register complete type information (critical for proper serialization)
-		_, err := r.registerType(type_, uint32(codegenSerializer.TypeId()), pkgPath, typeName, codegenSerializer, false)
+		// Codegen serializers are for named structs
+		_, err := r.registerType(type_, uint32(NAMED_STRUCT), pkgPath, typeName, codegenSerializer, false)
 		if err != nil {
 			panic(fmt.Errorf("failed to register codegen type %s: %v", typeTag, err))
 		}
 		// 4. Register pointer type information
-		_, err = r.registerType(ptrType, uint32(codegenSerializer.TypeId()), pkgPath, typeName, ptrCodegenSer, false)
+		_, err = r.registerType(ptrType, uint32(NAMED_STRUCT), pkgPath, typeName, ptrCodegenSer, false)
 		if err != nil {
 			panic(fmt.Errorf("failed to register codegen pointer type %s: %v", typeTag, err))
 		}
@@ -274,73 +275,73 @@ func newTypeResolver(fory *Fory) *TypeResolver {
 func (r *TypeResolver) initialize() {
 	serializers := []struct {
 		reflect.Type
+		TypeId
 		Serializer
 	}{
-		{stringType, stringSerializer{}},
-		{stringPtrType, ptrToStringSerializer{}},
+		{stringType, STRING, stringSerializer{}},
+		{stringPtrType, STRING, ptrToStringSerializer{}},
 		// Register interface types first so typeIDToTypeInfo maps to generic types
 		// that can hold any element type when deserializing into interface{}
-		{interfaceSliceType, sliceDynSerializer{}},
-		{interfaceMapType, mapSerializer{}},
+		{interfaceSliceType, LIST, sliceDynSerializer{}},
+		{interfaceMapType, MAP, mapSerializer{}},
 		// stringSliceType uses sliceConcreteValueSerializer with stringSerializer as element serializer
 		// This ensures CollectionIsDeclElementType is set for Java compatibility
-		{byteSliceType, byteSliceSerializer{}},
+		{byteSliceType, BINARY, byteSliceSerializer{}},
 		// Map basic type slices to slice serializers for xlang compatibility
-		{boolSliceType, boolSliceSerializer{}},
-		{int8SliceType, int8SliceSerializer{}},
-		{int16SliceType, int16SliceSerializer{}},
-		{int32SliceType, int32SliceSerializer{}},
-		{int64SliceType, int64SliceSerializer{}},
-		{intSliceType, intSliceSerializer{}},
-		{uintSliceType, uintSliceSerializer{}},
-		{float32SliceType, float32SliceSerializer{}},
-		{float64SliceType, float64SliceSerializer{}},
+		{boolSliceType, BOOL_ARRAY, boolSliceSerializer{}},
+		{int8SliceType, INT8_ARRAY, int8SliceSerializer{}},
+		{int16SliceType, INT16_ARRAY, int16SliceSerializer{}},
+		{int32SliceType, INT32_ARRAY, int32SliceSerializer{}},
+		{int64SliceType, INT64_ARRAY, int64SliceSerializer{}},
+		{intSliceType, INT64_ARRAY, intSliceSerializer{}}, // int is typically 64-bit
+		{uintSliceType, INT64_ARRAY, uintSliceSerializer{}},
+		{float32SliceType, FLOAT32_ARRAY, float32SliceSerializer{}},
+		{float64SliceType, FLOAT64_ARRAY, float64SliceSerializer{}},
 		// Register common map types for fast path with optimized serializers
-		{stringStringMapType, stringStringMapSerializer{}},
-		{stringInt64MapType, stringInt64MapSerializer{}},
-		{stringIntMapType, stringIntMapSerializer{}},
-		{stringFloat64MapType, stringFloat64MapSerializer{}},
-		{stringBoolMapType, stringBoolMapSerializer{}},
-		{int32Int32MapType, int32Int32MapSerializer{}},
-		{int64Int64MapType, int64Int64MapSerializer{}},
-		{intIntMapType, intIntMapSerializer{}},
+		{stringStringMapType, MAP, stringStringMapSerializer{}},
+		{stringInt64MapType, MAP, stringInt64MapSerializer{}},
+		{stringIntMapType, MAP, stringIntMapSerializer{}},
+		{stringFloat64MapType, MAP, stringFloat64MapSerializer{}},
+		{stringBoolMapType, MAP, stringBoolMapSerializer{}},
+		{int32Int32MapType, MAP, int32Int32MapSerializer{}},
+		{int64Int64MapType, MAP, int64Int64MapSerializer{}},
+		{intIntMapType, MAP, intIntMapSerializer{}},
 		// Register primitive types
-		{boolType, boolSerializer{}},
-		{byteType, byteSerializer{}},
-		{int8Type, int8Serializer{}},
-		{int16Type, int16Serializer{}},
-		{int32Type, int32Serializer{}},
-		{int64Type, int64Serializer{}},
-		{intType, intSerializer{}},
-		{float32Type, float32Serializer{}},
-		{float64Type, float64Serializer{}},
-		{dateType, dateSerializer{}},
-		{timestampType, timeSerializer{}},
-		{genericSetType, setSerializer{}},
+		{boolType, BOOL, boolSerializer{}},
+		{byteType, UINT8, byteSerializer{}},
+		{int8Type, INT8, int8Serializer{}},
+		{int16Type, INT16, int16Serializer{}},
+		{int32Type, INT32, int32Serializer{}},
+		{int64Type, INT64, int64Serializer{}},
+		{intType, INT64, intSerializer{}}, // int maps to int64 for xlang
+		{float32Type, FLOAT, float32Serializer{}},
+		{float64Type, DOUBLE, float64Serializer{}},
+		{dateType, LOCAL_DATE, dateSerializer{}},
+		{timestampType, TIMESTAMP, timeSerializer{}},
+		{genericSetType, SET, setSerializer{}},
 	}
 	for _, elem := range serializers {
-		_, err := r.registerType(elem.Type, uint32(elem.Serializer.TypeId()), "", "", elem.Serializer, true)
+		_, err := r.registerType(elem.Type, uint32(elem.TypeId), "", "", elem.Serializer, true)
 		if err != nil {
 			fmt.Errorf("init type error: %v", err)
 		}
 	}
 }
 
-func (r *TypeResolver) RegisterSerializer(type_ reflect.Type, s Serializer) error {
+func (r *TypeResolver) registerSerializer(type_ reflect.Type, typeId TypeId, s Serializer) error {
 	if prev, ok := r.typeToSerializers[type_]; ok {
 		return fmt.Errorf("type %s already has a serializer %s registered", type_, prev)
 	}
 	r.typeToSerializers[type_] = s
-	typeId := s.TypeId()
 	// Skip type ID registration for namespaced types, collection types, and primitive array types
 	// Collection types (LIST, SET, MAP) can have multiple Go types mapping to them
 	// Primitive array types can also have multiple Go types (e.g., []int and []int64 both map to INT64_ARRAY on 64-bit systems)
+	// Also skip if type ID already registered (e.g., string and *string both map to STRING)
 	if !IsNamespacedType(typeId) && !isCollectionType(int16(typeId)) && !isPrimitiveArrayType(int16(typeId)) {
 		if typeId > NotSupportCrossLanguage {
-			if _, ok := r.typeIdToType[typeId]; ok {
-				return fmt.Errorf("type %s with id %d has been registered", type_, typeId)
+			if _, ok := r.typeIdToType[typeId]; !ok {
+				r.typeIdToType[typeId] = type_
 			}
-			r.typeIdToType[typeId] = type_
 		}
 	}
 	return nil
@@ -674,6 +675,15 @@ func (r *TypeResolver) getSerializerByType(type_ reflect.Type, mapInStruct bool)
 	}
 }
 
+// getTypeIdByType returns the TypeId for a given type, or 0 if not found in typesInfo.
+// This is used to get the type ID without calling Serializer.TypeId().
+func (r *TypeResolver) getTypeIdByType(type_ reflect.Type) TypeId {
+	if info, ok := r.typesInfo[type_]; ok {
+		return TypeId(info.TypeID & 0xFF) // Extract base type ID
+	}
+	return 0
+}
+
 func (r *TypeResolver) getSerializerByTypeTag(typeTag string) (Serializer, error) {
 	if serializer, ok := r.typeTagToSerializers[typeTag]; !ok {
 		return nil, fmt.Errorf("type %s not supported", typeTag)
@@ -972,7 +982,7 @@ func (r *TypeResolver) registerType(
 		panic("namespace provided without typeName")
 	}
 	if internal && serializer != nil {
-		if err := r.RegisterSerializer(type_, serializer); err != nil {
+		if err := r.registerSerializer(type_, TypeId(typeID&0xFF), serializer); err != nil {
 			panic(fmt.Errorf("impossible error: %s", err))
 		}
 	}

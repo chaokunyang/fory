@@ -398,11 +398,6 @@ func generateStructSerializer(buf *bytes.Buffer, s *StructInfo) error {
 	fmt.Fprintf(buf, "\treturn %s_ForyGenSerializer{}\n", s.Name)
 	fmt.Fprintf(buf, "}\n\n")
 
-	// Generate TypeId method
-	fmt.Fprintf(buf, "func (%s_ForyGenSerializer) TypeId() fory.TypeId {\n", s.Name)
-	fmt.Fprintf(buf, "\treturn fory.NAMED_STRUCT\n")
-	fmt.Fprintf(buf, "}\n\n")
-
 	// Generate Write method (entry point with ref/type handling)
 	if err := generateWriteMethod(buf, s); err != nil {
 		return err

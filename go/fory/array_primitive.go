@@ -27,10 +27,6 @@ type boolArraySerializer struct {
 	arrayType reflect.Type
 }
 
-func (s boolArraySerializer) TypeId() TypeId {
-	return BOOL_ARRAY
-}
-
 func (s boolArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	buf := ctx.Buffer()
 	length := value.Len()
@@ -76,10 +72,6 @@ func (s boolArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode,
 // int8ArraySerializer handles [N]int8 fixed-size arrays
 type int8ArraySerializer struct {
 	arrayType reflect.Type
-}
-
-func (s int8ArraySerializer) TypeId() TypeId {
-	return INT8_ARRAY
 }
 
 func (s int8ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
@@ -129,10 +121,6 @@ type int16ArraySerializer struct {
 	arrayType reflect.Type
 }
 
-func (s int16ArraySerializer) TypeId() TypeId {
-	return INT16_ARRAY
-}
-
 func (s int16ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	buf := ctx.Buffer()
 	length := value.Len()
@@ -178,10 +166,6 @@ func (s int16ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode
 // int32ArraySerializer handles [N]int32 fixed-size arrays
 type int32ArraySerializer struct {
 	arrayType reflect.Type
-}
-
-func (s int32ArraySerializer) TypeId() TypeId {
-	return INT32_ARRAY
 }
 
 func (s int32ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
@@ -231,10 +215,6 @@ type int64ArraySerializer struct {
 	arrayType reflect.Type
 }
 
-func (s int64ArraySerializer) TypeId() TypeId {
-	return INT64_ARRAY
-}
-
 func (s int64ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	buf := ctx.Buffer()
 	length := value.Len()
@@ -280,10 +260,6 @@ func (s int64ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode
 // float32ArraySerializer handles [N]float32 fixed-size arrays
 type float32ArraySerializer struct {
 	arrayType reflect.Type
-}
-
-func (s float32ArraySerializer) TypeId() TypeId {
-	return FLOAT32_ARRAY
 }
 
 func (s float32ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
@@ -333,10 +309,6 @@ type float64ArraySerializer struct {
 	arrayType reflect.Type
 }
 
-func (s float64ArraySerializer) TypeId() TypeId {
-	return FLOAT64_ARRAY
-}
-
 func (s float64ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	buf := ctx.Buffer()
 	length := value.Len()
@@ -382,10 +354,6 @@ func (s float64ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMo
 // uint8ArraySerializer handles [N]uint8 (byte) fixed-size arrays
 type uint8ArraySerializer struct {
 	arrayType reflect.Type
-}
-
-func (s uint8ArraySerializer) TypeId() TypeId {
-	return BINARY
 }
 
 func (s uint8ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) error {

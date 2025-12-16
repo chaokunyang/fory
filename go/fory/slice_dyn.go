@@ -58,10 +58,6 @@ func mustNewSliceDynSerializer(elemType reflect.Type) sliceDynSerializer {
 	return s
 }
 
-func (s sliceDynSerializer) TypeId() TypeId {
-	return LIST
-}
-
 func (s sliceDynSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	buf := ctx.Buffer()
 	// Get slice length and handle empty slice case

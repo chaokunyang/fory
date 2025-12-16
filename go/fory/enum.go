@@ -29,17 +29,6 @@ type enumSerializer struct {
 	typeID uint32 // Full type ID including user ID
 }
 
-func (s *enumSerializer) TypeId() TypeId {
-	// Return the appropriate type ID based on how the enum was registered
-	// For xlang with namespace/typename, typeID will be NAMED_ENUM
-	// For numeric ID registration, it might be a user-defined ID
-	if s.typeID == uint32(NAMED_ENUM) || IsNamespacedType(TypeId(s.typeID)) {
-		return NAMED_ENUM
-	}
-	return ENUM
-}
-
-
 func (s *enumSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	// Convert the enum value to its integer ordinal
 	var ordinal uint32

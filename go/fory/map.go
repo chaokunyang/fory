@@ -108,10 +108,6 @@ type mapSerializer struct {
 
 }
 
-func (s mapSerializer) TypeId() TypeId {
-	return MAP
-}
-
 func (s mapSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	buf := ctx.Buffer()
 	if value.Kind() == reflect.Interface {

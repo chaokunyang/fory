@@ -23,10 +23,6 @@ func NewSerializerFor_DynamicSliceDemo() fory.Serializer {
 	return DynamicSliceDemo_ForyGenSerializer{}
 }
 
-func (DynamicSliceDemo_ForyGenSerializer) TypeId() fory.TypeId {
-	return fory.NAMED_STRUCT
-}
-
 // Write is the entry point for serialization with ref/type handling
 func (g DynamicSliceDemo_ForyGenSerializer) Write(ctx *fory.WriteContext, refMode fory.RefMode, writeType bool, value reflect.Value) error {
 	switch refMode {
@@ -181,10 +177,6 @@ type MapDemo_ForyGenSerializer struct{}
 
 func NewSerializerFor_MapDemo() fory.Serializer {
 	return MapDemo_ForyGenSerializer{}
-}
-
-func (MapDemo_ForyGenSerializer) TypeId() fory.TypeId {
-	return fory.NAMED_STRUCT
 }
 
 // Write is the entry point for serialization with ref/type handling
@@ -536,10 +528,6 @@ func NewSerializerFor_SliceDemo() fory.Serializer {
 	return SliceDemo_ForyGenSerializer{}
 }
 
-func (SliceDemo_ForyGenSerializer) TypeId() fory.TypeId {
-	return fory.NAMED_STRUCT
-}
-
 // Write is the entry point for serialization with ref/type handling
 func (g SliceDemo_ForyGenSerializer) Write(ctx *fory.WriteContext, refMode fory.RefMode, writeType bool, value reflect.Value) error {
 	switch refMode {
@@ -847,10 +835,6 @@ type ValidationDemo_ForyGenSerializer struct{}
 
 func NewSerializerFor_ValidationDemo() fory.Serializer {
 	return ValidationDemo_ForyGenSerializer{}
-}
-
-func (ValidationDemo_ForyGenSerializer) TypeId() fory.TypeId {
-	return fory.NAMED_STRUCT
 }
 
 // Write is the entry point for serialization with ref/type handling

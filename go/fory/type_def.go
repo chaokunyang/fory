@@ -630,7 +630,10 @@ func (c *CollectionFieldType) getTypeInfo(f *Fory) (TypeInfo, error) {
 		return TypeInfo{}, err
 	}
 	collectionType := reflect.SliceOf(elemInfo.Type)
-	sliceSerializer := newSliceDynSerializerWithTypeInfo(elemInfo, elemInfo.Type)
+	sliceSerializer, err := newSliceConcreteValueSerializerForXlang(collectionType, elemInfo.Serializer)
+	if err != nil {
+		return TypeInfo{}, err
+	}
 	return TypeInfo{Type: collectionType, Serializer: sliceSerializer}, nil
 }
 
@@ -640,7 +643,10 @@ func (c *CollectionFieldType) getTypeInfoWithResolver(resolver *TypeResolver) (T
 		return TypeInfo{}, err
 	}
 	collectionType := reflect.SliceOf(elemInfo.Type)
-	sliceSerializer := newSliceDynSerializerWithTypeInfo(elemInfo, elemInfo.Type)
+	sliceSerializer, err := newSliceConcreteValueSerializerForXlang(collectionType, elemInfo.Serializer)
+	if err != nil {
+		return TypeInfo{}, err
+	}
 	return TypeInfo{Type: collectionType, Serializer: sliceSerializer}, nil
 }
 

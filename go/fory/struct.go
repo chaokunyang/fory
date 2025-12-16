@@ -418,8 +418,15 @@ func (s *structSerializer) writeFieldsInOrder(ctx *WriteContext, value reflect.V
 			// - Nullable primitives (*int32, *float64, etc.): ref flag + data (NO type info)
 			// - Other types (struct, collections, etc.): ref flag + type info + data
 			writeType := !isInternalTypeWithoutTypeMeta(field.Type)
-			// Per xlang spec, all non-primitive fields have ref flag
-			if err := field.Serializer.Write(ctx, RefModeTracking, writeType, fieldValue); err != nil {
+			// Determine RefMode based on FieldDef's trackingRef and nullable flags
+			// In compatible mode with TypeDef, we must use the flags from the TypeDef
+			refMode := RefModeNone
+			if field.FieldDef.trackingRef {
+				refMode = RefModeTracking
+			} else if field.FieldDef.nullable || field.Referencable {
+				refMode = RefModeNullOnly
+			}
+			if err := field.Serializer.Write(ctx, refMode, writeType, fieldValue); err != nil {
 				return err
 			}
 		} else {
@@ -890,8 +897,15 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 			// - Nullable primitives (*int32, *float64, etc.): ref flag + data (NO type info)
 			// - Other types (struct, collections, etc.): ref flag + type info + data
 			readType := !isInternalTypeWithoutTypeMeta(field.Type)
-			// Per xlang spec, all non-primitive fields have ref flag
-			if err := field.Serializer.Read(ctx, RefModeTracking, readType, fieldValue); err != nil {
+			// Determine RefMode based on FieldDef's trackingRef and nullable flags
+			// In compatible mode with TypeDef, we must use the flags from the remote TypeDef
+			refMode := RefModeNone
+			if field.FieldDef.trackingRef {
+				refMode = RefModeTracking
+			} else if field.FieldDef.nullable || field.Referencable {
+				refMode = RefModeNullOnly
+			}
+			if err := field.Serializer.Read(ctx, refMode, readType, fieldValue); err != nil {
 				return err
 			}
 		} else {
@@ -907,7 +921,10 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 func (s *structSerializer) skipField(ctx *ReadContext, field *FieldInfo) error {
 	if field.FieldDef.name != "" {
 		fieldDefIsStructType := isStructFieldType(field.FieldDef.fieldType)
-		return SkipFieldValueWithTypeFlag(ctx, field.FieldDef, field.Referencable, ctx.Compatible() && fieldDefIsStructType)
+		// Use FieldDef's trackingRef and nullable to determine if ref flag was written by Java
+		// Java writes ref flag based on its FieldDef, not Go's field type
+		readRefFlag := field.FieldDef.trackingRef || field.FieldDef.nullable
+		return SkipFieldValueWithTypeFlag(ctx, field.FieldDef, readRefFlag, ctx.Compatible() && fieldDefIsStructType)
 	}
 	// No FieldDef available, read into temp value
 	tempValue := reflect.New(field.Type).Elem()
@@ -1121,16 +1138,17 @@ func (s *structSerializer) initFieldsFromContext(ctx interface{ TypeResolver() *
 					fieldSerializer = int32ArraySerializer{arrayType: fieldType}
 				}
 			default:
-				// For non-primitive arrays, use sliceDynSerializer
-				fieldSerializer = newSliceDynSerializerWithTypeInfo(
-					typeResolver.typesInfo[elemType], elemType)
+				// For non-primitive arrays, use sliceConcreteValueSerializer with xlang TypeId
+				elemTypeInfo := typeResolver.typesInfo[elemType]
+				fieldSerializer, _ = newSliceConcreteValueSerializerForXlang(fieldType, elemTypeInfo.Serializer)
 			}
 		} else if fieldType.Kind() == reflect.Slice && fieldType.Elem().Kind() != reflect.Interface {
-			// For struct fields, always use the generic sliceDynSerializer for cross-language compatibility
-			// The generic sliceDynSerializer uses collection flags and element type ID format
-			// which matches the codegen format
-			fieldSerializer = newSliceDynSerializerWithTypeInfo(
-				typeResolver.typesInfo[fieldType.Elem()], fieldType.Elem())
+			// For struct fields with concrete element types, use sliceConcreteValueSerializer with xlang TypeId
+			elemTypeInfo := typeResolver.typesInfo[fieldType.Elem()]
+			fieldSerializer, _ = newSliceConcreteValueSerializerForXlang(fieldType, elemTypeInfo.Serializer)
+		} else if fieldType.Kind() == reflect.Slice && fieldType.Elem().Kind() == reflect.Interface {
+			// For struct fields with interface element types, use sliceDynSerializer
+			fieldSerializer = mustNewSliceDynSerializer(fieldType.Elem())
 		}
 
 		fieldInfo := &FieldInfo{
@@ -1323,6 +1341,14 @@ func (s *structSerializer) initFieldsFromDefsWithResolver(typeResolver *TypeReso
 					shouldRead = true
 					fieldType = localType // Use local type for struct fields
 				}
+			} else if typeLookupFailed && (defTypeId == LIST || defTypeId == SET) {
+				// For collection fields with failed type lookup (e.g., List<Animal> with interface element type),
+				// check if local type is a slice with interface element type (e.g., []Animal)
+				// The type lookup fails because sliceConcreteValueSerializer doesn't support interface elements
+				if localType.Kind() == reflect.Slice && localType.Elem().Kind() == reflect.Interface {
+					shouldRead = true
+					fieldType = localType
+				}
 			} else if !typeLookupFailed && typesCompatible(localType, remoteType) {
 				shouldRead = true
 				fieldType = localType
@@ -1334,6 +1360,12 @@ func (s *structSerializer) initFieldsFromDefsWithResolver(typeResolver *TypeReso
 				// For struct-like fields with failed type lookup, get the serializer for the local type
 				if typeLookupFailed && isStructLikeField && fieldSerializer == nil {
 					fieldSerializer, _ = typeResolver.getSerializerByType(localType, true)
+				}
+				// For collection fields with interface element types, use sliceDynSerializer
+				if typeLookupFailed && (defTypeId == LIST || defTypeId == SET) && fieldSerializer == nil {
+					if localType.Kind() == reflect.Slice && localType.Elem().Kind() == reflect.Interface {
+						fieldSerializer = mustNewSliceDynSerializer(localType.Elem())
+					}
 				}
 				// If local type is *T and remote type is T, we need the serializer for *T
 				// This handles Java's Integer/Long (nullable boxed types) mapping to Go's *int32/*int64
@@ -2025,8 +2057,11 @@ func createStructFieldInfos(f *Fory, type_ reflect.Type) (structFieldsInfo, erro
 				}
 			} else if field.Type.Kind() == reflect.Slice {
 				if field.Type.Elem().Kind() != reflect.Interface {
-					fieldSerializer = newSliceDynSerializerWithTypeInfo(
-						f.typeResolver.typesInfo[field.Type.Elem()], field.Type.Elem())
+					elemTypeInfo := f.typeResolver.typesInfo[field.Type.Elem()]
+					fieldSerializer, _ = newSliceConcreteValueSerializerForXlang(field.Type, elemTypeInfo.Serializer)
+				} else {
+					// For struct fields with interface element types, use sliceDynSerializer
+					fieldSerializer = mustNewSliceDynSerializer(field.Type.Elem())
 				}
 			}
 		}

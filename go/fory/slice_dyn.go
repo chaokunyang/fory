@@ -26,9 +26,8 @@ import (
 // element values at runtime.
 // This serializer is designed for slices with any interface element type
 // (e.g., []interface{}, []io.Reader, []fmt.Stringer, or pointers to interfaces).
+// For slices with concrete element types, use sliceConcreteValueSerializer instead.
 type sliceDynSerializer struct {
-	elemInfo     TypeInfo
-	declaredType reflect.Type
 }
 
 // newSliceDynSerializer creates a new sliceDynSerializer.
@@ -48,14 +47,6 @@ func newSliceDynSerializer(elemType reflect.Type) (sliceDynSerializer, error) {
 	return sliceDynSerializer{}, nil
 }
 
-// newSliceDynSerializerWithTypeInfo creates a sliceDynSerializer with declared type information.
-// This is used when the element type is known at registration time (e.g., struct fields).
-func newSliceDynSerializerWithTypeInfo(elemInfo TypeInfo, declaredType reflect.Type) *sliceDynSerializer {
-	return &sliceDynSerializer{
-		elemInfo:     elemInfo,
-		declaredType: declaredType,
-	}
-}
 
 // mustNewSliceDynSerializer is like newSliceDynSerializer but panics on error.
 // Used for initialization code where the element type is known to be valid.
@@ -116,41 +107,33 @@ func (s sliceDynSerializer) writeHeader(ctx *WriteContext, buf *ByteBuffer, valu
 	hasNull := false
 	hasSameType := true
 
-	if s.declaredType != nil {
-		collectFlag |= CollectionIsDeclElementType | CollectionIsSameType
-		// Get elemTypeInfo from declared type for writeSameType
-		if value.Len() > 0 {
-			elemTypeInfo, _ = ctx.TypeResolver().getTypeInfo(reflect.New(s.declaredType).Elem(), true)
+	// Iterate through elements to check for nulls and type consistency
+	var firstType reflect.Type
+	var firstElem reflect.Value
+	for i := 0; i < value.Len(); i++ {
+		elem := value.Index(i)
+		if elem.Kind() == reflect.Interface || elem.Kind() == reflect.Ptr {
+			elem = elem.Elem()
 		}
-	} else {
-		// Iterate through elements to check for nulls and type consistency
-		var firstType reflect.Type
-		var firstElem reflect.Value
-		for i := 0; i < value.Len(); i++ {
-			elem := value.Index(i)
-			if elem.Kind() == reflect.Interface || elem.Kind() == reflect.Ptr {
-				elem = elem.Elem()
-			}
-			if isNull(elem) {
-				hasNull = true
-				continue
-			}
+		if isNull(elem) {
+			hasNull = true
+			continue
+		}
 
-			// Track first non-null element type
-			if firstType == nil {
-				firstType = elem.Type()
-				firstElem = elem
-			} else {
-				// Compare each element's type with the first element's type
-				if firstType != elem.Type() {
-					hasSameType = false
-				}
+		// Track first non-null element type
+		if firstType == nil {
+			firstType = elem.Type()
+			firstElem = elem
+		} else {
+			// Compare each element's type with the first element's type
+			if firstType != elem.Type() {
+				hasSameType = false
 			}
 		}
-		// Only get elemTypeInfo if all elements have same type
-		if hasSameType && firstElem.IsValid() {
-			elemTypeInfo, _ = ctx.TypeResolver().getTypeInfo(firstElem, true)
-		}
+	}
+	// Only get elemTypeInfo if all elements have same type
+	if hasSameType && firstElem.IsValid() {
+		elemTypeInfo, _ = ctx.TypeResolver().getTypeInfo(firstElem, true)
 	}
 
 	// Set collection flags based on findings
@@ -320,12 +303,8 @@ func (s sliceDynSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value
 		}
 	}
 
-	// Priority 1: Use declared type and its serializer if available
-	if s.declaredType != nil {
-		elemType = s.declaredType
-		elemSerializer = s.elemInfo.Serializer
-	} else if type_.Elem().Kind() != reflect.Interface {
-		// Priority 2: Use the slice's element type to get serializer
+	// Priority 1: Use the slice's element type to get serializer (for non-interface element types)
+	if type_.Elem().Kind() != reflect.Interface {
 		elemType = type_.Elem()
 		typeInfoPtr, err := ctx.TypeResolver().getTypeInfo(reflect.New(elemType).Elem(), true)
 		if err == nil && typeInfoPtr != nil {
@@ -333,7 +312,7 @@ func (s sliceDynSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value
 			elemSerializer = elemTypeInfo.Serializer
 		}
 	} else if elemTypeInfo.Serializer != nil {
-		// Priority 3: Use type info read from buffer (for interface{} slices)
+		// Priority 2: Use type info read from buffer (for interface{} slices)
 		elemType = elemTypeInfo.Type
 		elemSerializer = elemTypeInfo.Serializer
 	}

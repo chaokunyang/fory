@@ -437,7 +437,9 @@ func skipStruct(ctx *ReadContext, info *TypeInfo) error {
 	defer ctx.decDepth()
 
 	for _, fieldDef := range fieldDefs {
-		readRefFlag := fieldNeedWriteRef(fieldDef.fieldType.TypeId(), fieldDef.nullable)
+		// Use FieldDef's trackingRef and nullable to determine if ref flag was written by Java
+		// Java writes ref flag based on its FieldDef, not based on type rules
+		readRefFlag := fieldDef.trackingRef || fieldDef.nullable
 		// For struct-like fields (struct, ext), type info is written in the buffer
 		readTypeInfo := isStructFieldType(fieldDef.fieldType)
 		if err := SkipFieldValueWithTypeFlag(ctx, fieldDef, readRefFlag, readTypeInfo); err != nil {

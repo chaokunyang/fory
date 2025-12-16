@@ -489,16 +489,16 @@ For more details on row format, see [Row Format Guide](docs/guide/row_format_gui
 
 ### User Guides
 
-| Guide                            | Description                                | Source                                                                  | Website                                                                             |
-| -------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| **Java Serialization**           | Comprehensive guide for Java serialization | [java_serialization_guide.md](docs/guide/java_serialization_guide.md)   | [📖 View](https://fory.apache.org/docs/docs/guide/java_serialization)               |
-| **Cross-Language Serialization** | Multi-language object exchange             | [xlang_serialization_guide.md](docs/guide/xlang_serialization_guide.md) | [📖 View](https://fory.apache.org/docs/specification/fory_xlang_serialization_spec) |
-| **Row Format**                   | Zero-copy random access format             | [row_format_guide.md](docs/guide/row_format_guide.md)                   | [📖 View](https://fory.apache.org/docs/specification/fory_row_format_spec)          |
-| **Python**                       | Python-specific features and usage         | [python_guide.md](docs/guide/python_guide.md)                           | [📖 View](https://fory.apache.org/docs/docs/guide/python_serialization)             |
-| **Rust**                         | Rust implementation and patterns           | [rust_guide.md](docs/guide/rust_guide.md)                               | [📖 View](https://fory.apache.org/docs/docs/guide/rust_serialization)               |
-| **Scala**                        | Scala integration and best practices       | [scala_guide.md](docs/guide/scala_guide.md)                             | [📖 View](https://fory.apache.org/docs/docs/guide/scala_serialization)              |
-| **GraalVM**                      | Native image support and AOT compilation   | [graalvm_guide.md](docs/guide/graalvm_guide.md)                         | [📖 View](https://fory.apache.org/docs/docs/guide/graalvm_serialization)            |
-| **Development**                  | Building and contributing to Fory          | [DEVELOPMENT.md](docs/guide/DEVELOPMENT.md)                             | [📖 View](https://fory.apache.org/docs/docs/guide/development)                      |
+| Guide                            | Description                                | Source                                          | Website                                                        |
+| -------------------------------- | ------------------------------------------ | ----------------------------------------------- | -------------------------------------------------------------- |
+| **Java Serialization**           | Comprehensive guide for Java serialization | [java](docs/guide/java)                         | [📖 View](https://fory.apache.org/docs/docs/guide/java/)       |
+| **Python**                       | Python-specific features and usage         | [python](docs/guide/python)                     | [📖 View](https://fory.apache.org/docs/docs/guide/python/)     |
+| **Rust**                         | Rust implementation and patterns           | [rust](docs/guide/rust)                         | [📖 View](https://fory.apache.org/docs/docs/guide/rust/)       |
+| **C++**                          | C++ implementation and patterns            | [cpp](docs/guide/cpp)                           | [📖 View](https://fory.apache.org/docs/docs/guide/cpp/)        |
+| **Scala**                        | Scala integration and best practices       | [scala](docs/guide/scala)                       | [📖 View](https://fory.apache.org/docs/docs/guide/scala/)      |
+| **Cross-Language Serialization** | Multi-language object exchange             | [xlang](docs/guide/xlang)                       | [📖 View](https://fory.apache.org/docs/docs/guide/xlang/)      |
+| **GraalVM**                      | Native image support and AOT compilation   | [graalvm_guide.md](docs/guide/graalvm_guide.md) | [📖 View](https://fory.apache.org/docs/docs/guide/graalvm/)    |
+| **Development**                  | Building and contributing to Fory          | [DEVELOPMENT.md](docs/guide/DEVELOPMENT.md)     | [📖 View](https://fory.apache.org/docs/docs/guide/development) |
 
 ### Protocol Specifications
 

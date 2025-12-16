@@ -110,6 +110,7 @@ type TypeInfo struct {
 	StaticId      StaticTypeId
 	Serializer    Serializer
 	NeedWriteDef  bool
+	NeedWriteRef  bool // Whether this type needs reference tracking
 	hashValue     uint64
 	TypeDef       *TypeDef
 }
@@ -1019,6 +1020,7 @@ func (r *TypeResolver) registerType(
 		IsDynamic:    isDynamicType(type_),
 		StaticId:     GetStaticTypeId(type_), // Static type ID for fast path
 		hashValue:    calcTypeHash(type_),    // Precomputed hash for fast lookups
+		NeedWriteRef: NeedWriteRef(TypeId(typeID)),
 	}
 	// Update resolver caches:
 	r.typesInfo[type_] = typeInfo // Cache by type string

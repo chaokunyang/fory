@@ -39,10 +39,6 @@ func (s setSerializer) TypeId() TypeId {
 	return SET
 }
 
-func (s setSerializer) NeedToWriteRef() bool {
-	return true
-}
-
 func (s setSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	buf := ctx.Buffer()
 	// Get all map keys (set elements)

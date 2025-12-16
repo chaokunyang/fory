@@ -117,10 +117,6 @@ func (s *structSerializer) TypeId() TypeId {
 	return NAMED_STRUCT
 }
 
-func (s *structSerializer) NeedToWriteRef() bool {
-	return true
-}
-
 func (s *structSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	buf := ctx.Buffer()
 	// Dereference pointer if needed
@@ -1652,10 +1648,6 @@ func (s *ptrToStructSerializer) TypeId() TypeId {
 	return NAMED_STRUCT
 }
 
-func (s *ptrToStructSerializer) NeedToWriteRef() bool {
-	return true
-}
-
 func (s *ptrToStructSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	elemValue := value.Elem()
 	return s.structSerializer.WriteData(ctx, elemValue)
@@ -1768,10 +1760,6 @@ type ptrToCodegenSerializer struct {
 
 func (s *ptrToCodegenSerializer) TypeId() TypeId {
 	return NAMED_STRUCT
-}
-
-func (s *ptrToCodegenSerializer) NeedToWriteRef() bool {
-	return true
 }
 
 func (s *ptrToCodegenSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
@@ -2301,10 +2289,6 @@ type skipStructSerializer struct {
 
 func (s *skipStructSerializer) TypeId() TypeId {
 	return NAMED_STRUCT
-}
-
-func (s *skipStructSerializer) NeedToWriteRef() bool {
-	return true
 }
 
 func (s *skipStructSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {

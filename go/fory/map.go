@@ -112,10 +112,6 @@ func (s mapSerializer) TypeId() TypeId {
 	return MAP
 }
 
-func (s mapSerializer) NeedToWriteRef() bool {
-	return true
-}
-
 func (s mapSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	buf := ctx.Buffer()
 	if value.Kind() == reflect.Interface {
@@ -152,8 +148,7 @@ func (s mapSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 					break
 				}
 				if keySerializer != nil {
-					trackKeyRef := keySerializer.NeedToWriteRef()
-					if trackKeyRef {
+					if s.keyReferencable {
 						buf.WriteInt8(NULL_VALUE_KEY_DECL_TYPE_TRACKING_REF)
 						err := keySerializer.Write(ctx, RefModeTracking, false, entryKey)
 						if err != nil {
@@ -176,8 +171,7 @@ func (s mapSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 			} else {
 				if valValid {
 					if valueSerializer != nil {
-						trackValRef := valueSerializer.NeedToWriteRef()
-						if trackValRef {
+						if s.valueReferencable {
 							buf.WriteInt8(NULL_KEY_VALUE_DECL_TYPE_TRACKING_REF)
 							err := valueSerializer.Write(ctx, RefModeTracking, false, entryVal)
 							if err != nil {
@@ -222,6 +216,8 @@ func (s mapSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 		buf.WriteInt16(-1)
 		chunkSizeOffset := buf.writerIndex
 		chunkHeader := 0
+		keyWriteRef := s.keyReferencable
+		valueWriteRef := s.valueReferencable
 		if keySerializer != nil {
 			chunkHeader |= KEY_DECL_TYPE
 		} else {
@@ -230,6 +226,7 @@ func (s mapSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 				return err
 			}
 			keySerializer = keyTypeInfo.Serializer
+			keyWriteRef = keyTypeInfo.NeedWriteRef
 		}
 		if valueSerializer != nil {
 			chunkHeader |= VALUE_DECL_TYPE
@@ -239,18 +236,7 @@ func (s mapSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 				return err
 			}
 			valueSerializer = valueTypeInfo.Serializer
-		}
-		keyWriteRef := s.keyReferencable
-		if keySerializer != nil {
-			keyWriteRef = keySerializer.NeedToWriteRef()
-		} else {
-			keyWriteRef = false
-		}
-		valueWriteRef := s.valueReferencable
-		if valueSerializer != nil {
-			valueWriteRef = valueSerializer.NeedToWriteRef()
-		} else {
-			valueWriteRef = false
+			valueWriteRef = valueTypeInfo.NeedWriteRef
 		}
 
 		if keyWriteRef {

@@ -146,6 +146,20 @@ func isPrimitiveType(typeID int16) bool {
 	}
 }
 
+// NeedWriteRef returns whether a type with the given type ID needs reference tracking.
+// Primitive types, strings, and time types don't need reference tracking.
+// Collections, structs, and other complex types need reference tracking.
+func NeedWriteRef(typeID TypeId) bool {
+	switch typeID {
+	case BOOL, INT8, INT16, INT32, INT64, VAR_INT32, VAR_INT64, SLI_INT64,
+		FLOAT, DOUBLE, HALF_FLOAT,
+		STRING, TIMESTAMP, LOCAL_DATE, DURATION:
+		return false
+	default:
+		return true
+	}
+}
+
 func isListType(typeID int16) bool {
 	return typeID == LIST
 }

@@ -38,8 +38,6 @@ func (s *ptrToValueSerializer) TypeId() TypeId {
 	return s.valueSerializer.TypeId()
 }
 
-func (s *ptrToValueSerializer) NeedToWriteRef() bool { return true }
-
 func (s *ptrToValueSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	elemValue := value.Elem()
 	// Type info is written by Write() when writeType=true, not here.
@@ -166,8 +164,6 @@ func (s *ptrToInterfaceSerializer) TypeId() TypeId {
 	// Pointer to interface is polymorphic, return 0 to indicate dynamic type
 	return 0
 }
-
-func (s *ptrToInterfaceSerializer) NeedToWriteRef() bool { return true }
 
 func (s *ptrToInterfaceSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	// Get the concrete element that the interface pointer points to

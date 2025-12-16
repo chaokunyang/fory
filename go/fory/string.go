@@ -189,8 +189,7 @@ type stringSerializer struct{}
 
 var globalStringSerializer = stringSerializer{}
 
-func (s stringSerializer) TypeId() TypeId       { return STRING }
-func (s stringSerializer) NeedToWriteRef() bool { return false }
+func (s stringSerializer) TypeId() TypeId { return STRING }
 
 func (s stringSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	return writeString(ctx.buffer, value.String())
@@ -235,8 +234,7 @@ func (s stringSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, ty
 // ptrToStringSerializer serializes a pointer to string
 type ptrToStringSerializer struct{}
 
-func (s ptrToStringSerializer) TypeId() TypeId       { return -STRING }
-func (s ptrToStringSerializer) NeedToWriteRef() bool { return false }
+func (s ptrToStringSerializer) TypeId() TypeId { return -STRING }
 
 func (s ptrToStringSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	str := value.Interface().(*string)

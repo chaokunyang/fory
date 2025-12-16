@@ -30,8 +30,7 @@ type boolSerializer struct{}
 
 var globalBoolSerializer = boolSerializer{}
 
-func (s boolSerializer) TypeId() TypeId       { return BOOL }
-func (s boolSerializer) NeedToWriteRef() bool { return false }
+func (s boolSerializer) TypeId() TypeId { return BOOL }
 
 func (s boolSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	ctx.buffer.WriteBool(value.Bool())
@@ -78,8 +77,7 @@ type int8Serializer struct{}
 
 var globalInt8Serializer = int8Serializer{}
 
-func (s int8Serializer) TypeId() TypeId       { return INT8 }
-func (s int8Serializer) NeedToWriteRef() bool { return false }
+func (s int8Serializer) TypeId() TypeId { return INT8 }
 
 func (s int8Serializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	ctx.buffer.WriteInt8(int8(value.Int()))
@@ -123,8 +121,7 @@ type byteSerializer struct{}
 
 var globalByteSerializer = byteSerializer{}
 
-func (s byteSerializer) TypeId() TypeId       { return UINT8 }
-func (s byteSerializer) NeedToWriteRef() bool { return false }
+func (s byteSerializer) TypeId() TypeId { return UINT8 }
 
 func (s byteSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	ctx.buffer.WriteUint8(uint8(value.Uint()))
@@ -168,8 +165,7 @@ type int16Serializer struct{}
 
 var globalInt16Serializer = int16Serializer{}
 
-func (s int16Serializer) TypeId() TypeId       { return INT16 }
-func (s int16Serializer) NeedToWriteRef() bool { return false }
+func (s int16Serializer) TypeId() TypeId { return INT16 }
 
 func (s int16Serializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	ctx.buffer.WriteInt16(int16(value.Int()))
@@ -213,8 +209,7 @@ type int32Serializer struct{}
 
 var globalInt32Serializer = int32Serializer{}
 
-func (s int32Serializer) TypeId() TypeId       { return INT32 }
-func (s int32Serializer) NeedToWriteRef() bool { return false }
+func (s int32Serializer) TypeId() TypeId { return INT32 }
 
 func (s int32Serializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	ctx.buffer.WriteVarint32(int32(value.Int()))
@@ -258,8 +253,7 @@ type int64Serializer struct{}
 
 var globalInt64Serializer = int64Serializer{}
 
-func (s int64Serializer) TypeId() TypeId       { return INT64 }
-func (s int64Serializer) NeedToWriteRef() bool { return false }
+func (s int64Serializer) TypeId() TypeId { return INT64 }
 
 func (s int64Serializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	ctx.buffer.WriteVarint64(value.Int())
@@ -301,8 +295,7 @@ func (s int64Serializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typ
 // intSerializer handles int type
 type intSerializer struct{}
 
-func (s intSerializer) TypeId() TypeId       { return -INT64 }
-func (s intSerializer) NeedToWriteRef() bool { return false }
+func (s intSerializer) TypeId() TypeId { return -INT64 }
 
 func (s intSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	ctx.buffer.WriteVarint64(value.Int())
@@ -346,8 +339,7 @@ type float32Serializer struct{}
 
 var globalFloat32Serializer = float32Serializer{}
 
-func (s float32Serializer) TypeId() TypeId       { return FLOAT }
-func (s float32Serializer) NeedToWriteRef() bool { return false }
+func (s float32Serializer) TypeId() TypeId { return FLOAT }
 
 func (s float32Serializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	ctx.buffer.WriteFloat32(float32(value.Float()))
@@ -391,8 +383,7 @@ type float64Serializer struct{}
 
 var globalFloat64Serializer = float64Serializer{}
 
-func (s float64Serializer) TypeId() TypeId       { return DOUBLE }
-func (s float64Serializer) NeedToWriteRef() bool { return false }
+func (s float64Serializer) TypeId() TypeId { return DOUBLE }
 
 func (s float64Serializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	ctx.buffer.WriteFloat64(value.Float())

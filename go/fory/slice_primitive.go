@@ -36,10 +36,6 @@ func (s byteSliceSerializer) TypeId() TypeId {
 	return BINARY
 }
 
-func (s byteSliceSerializer) NeedToWriteRef() bool {
-	return true
-}
-
 func (s byteSliceSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	data := value.Interface().([]byte)
 	buf := ctx.Buffer()
@@ -106,10 +102,6 @@ func (s boolSliceSerializer) TypeId() TypeId {
 	return BOOL_ARRAY
 }
 
-func (s boolSliceSerializer) NeedToWriteRef() bool {
-	return true
-}
-
 func (s boolSliceSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	buf := ctx.Buffer()
 	v := value.Interface().([]bool)
@@ -161,10 +153,6 @@ type int8SliceSerializer struct {
 
 func (s int8SliceSerializer) TypeId() TypeId {
 	return INT8_ARRAY
-}
-
-func (s int8SliceSerializer) NeedToWriteRef() bool {
-	return true
 }
 
 func (s int8SliceSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
@@ -220,10 +208,6 @@ func (s int16SliceSerializer) TypeId() TypeId {
 	return INT16_ARRAY
 }
 
-func (s int16SliceSerializer) NeedToWriteRef() bool {
-	return true
-}
-
 func (s int16SliceSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	buf := ctx.Buffer()
 	v := value.Interface().([]int16)
@@ -275,10 +259,6 @@ type int32SliceSerializer struct {
 
 func (s int32SliceSerializer) TypeId() TypeId {
 	return INT32_ARRAY
-}
-
-func (s int32SliceSerializer) NeedToWriteRef() bool {
-	return true
 }
 
 func (s int32SliceSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
@@ -334,10 +314,6 @@ func (s int64SliceSerializer) TypeId() TypeId {
 	return INT64_ARRAY
 }
 
-func (s int64SliceSerializer) NeedToWriteRef() bool {
-	return true
-}
-
 func (s int64SliceSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	buf := ctx.Buffer()
 	v := value.Interface().([]int64)
@@ -391,10 +367,6 @@ func (s float32SliceSerializer) TypeId() TypeId {
 	return FLOAT32_ARRAY
 }
 
-func (s float32SliceSerializer) NeedToWriteRef() bool {
-	return true
-}
-
 func (s float32SliceSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	buf := ctx.Buffer()
 	v := value.Interface().([]float32)
@@ -446,10 +418,6 @@ type float64SliceSerializer struct {
 
 func (s float64SliceSerializer) TypeId() TypeId {
 	return FLOAT64_ARRAY
-}
-
-func (s float64SliceSerializer) NeedToWriteRef() bool {
-	return true
 }
 
 func (s float64SliceSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
@@ -722,10 +690,6 @@ func (s intSliceSerializer) TypeId() TypeId {
 	return INT32_ARRAY
 }
 
-func (s intSliceSerializer) NeedToWriteRef() bool {
-	return true
-}
-
 func (s intSliceSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	buf := ctx.Buffer()
 	v := value.Interface().([]int)
@@ -788,10 +752,6 @@ func (s uintSliceSerializer) TypeId() TypeId {
 		return INT64_ARRAY
 	}
 	return INT32_ARRAY
-}
-
-func (s uintSliceSerializer) NeedToWriteRef() bool {
-	return true
 }
 
 func (s uintSliceSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
@@ -869,10 +829,6 @@ type stringSliceSerializer struct {
 
 func (s stringSliceSerializer) TypeId() TypeId {
 	return LIST
-}
-
-func (s stringSliceSerializer) NeedToWriteRef() bool {
-	return true
 }
 
 func (s stringSliceSerializer) Write(ctx *WriteContext, value reflect.Value) error {

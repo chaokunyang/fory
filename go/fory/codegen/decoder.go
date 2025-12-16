@@ -128,7 +128,7 @@ func generateFieldReadTyped(buf *bytes.Buffer, field *FieldInfo) error {
 		case types.Float64:
 			fmt.Fprintf(buf, "\t%s = buf.ReadFloat64()\n", fieldAccess)
 		case types.String:
-			// String serializer's NeedToWriteRef() = false
+			// String type has NeedWriteRef = false
 			// So in struct deserialization, no ref flag is read, just the string data
 			fmt.Fprintf(buf, "\t%s = fory.ReadString(buf)\n", fieldAccess)
 		default:

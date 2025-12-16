@@ -403,11 +403,6 @@ func generateStructSerializer(buf *bytes.Buffer, s *StructInfo) error {
 	fmt.Fprintf(buf, "\treturn fory.NAMED_STRUCT\n")
 	fmt.Fprintf(buf, "}\n\n")
 
-	// Generate NeedToWriteRef method (note: method name is NeedToWriteRef, not NeedWriteRef)
-	fmt.Fprintf(buf, "func (%s_ForyGenSerializer) NeedToWriteRef() bool {\n", s.Name)
-	fmt.Fprintf(buf, "\treturn true\n")
-	fmt.Fprintf(buf, "}\n\n")
-
 	// Generate Write method (entry point with ref/type handling)
 	if err := generateWriteMethod(buf, s); err != nil {
 		return err

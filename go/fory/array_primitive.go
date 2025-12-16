@@ -31,10 +31,6 @@ func (s boolArraySerializer) TypeId() TypeId {
 	return BOOL_ARRAY
 }
 
-func (s boolArraySerializer) NeedToWriteRef() bool {
-	return false // Arrays are value types, no ref tracking needed
-}
-
 func (s boolArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	buf := ctx.Buffer()
 	length := value.Len()
@@ -84,10 +80,6 @@ type int8ArraySerializer struct {
 
 func (s int8ArraySerializer) TypeId() TypeId {
 	return INT8_ARRAY
-}
-
-func (s int8ArraySerializer) NeedToWriteRef() bool {
-	return false
 }
 
 func (s int8ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
@@ -141,10 +133,6 @@ func (s int16ArraySerializer) TypeId() TypeId {
 	return INT16_ARRAY
 }
 
-func (s int16ArraySerializer) NeedToWriteRef() bool {
-	return false
-}
-
 func (s int16ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	buf := ctx.Buffer()
 	length := value.Len()
@@ -194,10 +182,6 @@ type int32ArraySerializer struct {
 
 func (s int32ArraySerializer) TypeId() TypeId {
 	return INT32_ARRAY
-}
-
-func (s int32ArraySerializer) NeedToWriteRef() bool {
-	return false
 }
 
 func (s int32ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
@@ -251,10 +235,6 @@ func (s int64ArraySerializer) TypeId() TypeId {
 	return INT64_ARRAY
 }
 
-func (s int64ArraySerializer) NeedToWriteRef() bool {
-	return false
-}
-
 func (s int64ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	buf := ctx.Buffer()
 	length := value.Len()
@@ -304,10 +284,6 @@ type float32ArraySerializer struct {
 
 func (s float32ArraySerializer) TypeId() TypeId {
 	return FLOAT32_ARRAY
-}
-
-func (s float32ArraySerializer) NeedToWriteRef() bool {
-	return false
 }
 
 func (s float32ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
@@ -361,10 +337,6 @@ func (s float64ArraySerializer) TypeId() TypeId {
 	return FLOAT64_ARRAY
 }
 
-func (s float64ArraySerializer) NeedToWriteRef() bool {
-	return false
-}
-
 func (s float64ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	buf := ctx.Buffer()
 	length := value.Len()
@@ -414,10 +386,6 @@ type uint8ArraySerializer struct {
 
 func (s uint8ArraySerializer) TypeId() TypeId {
 	return BINARY
-}
-
-func (s uint8ArraySerializer) NeedToWriteRef() bool {
-	return false // Arrays are value types, no ref tracking needed
 }
 
 func (s uint8ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) error {

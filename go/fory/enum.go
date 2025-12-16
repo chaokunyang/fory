@@ -39,10 +39,6 @@ func (s *enumSerializer) TypeId() TypeId {
 	return ENUM
 }
 
-func (s *enumSerializer) NeedToWriteRef() bool {
-	// Enums are primitive values, no reference tracking needed
-	return false
-}
 
 func (s *enumSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	// Convert the enum value to its integer ordinal

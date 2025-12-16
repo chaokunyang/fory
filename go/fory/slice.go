@@ -146,10 +146,6 @@ func (s *sliceConcreteValueSerializer) TypeId() TypeId {
 	return s.typeId
 }
 
-func (s *sliceConcreteValueSerializer) NeedToWriteRef() bool {
-	return true
-}
-
 func (s *sliceConcreteValueSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	length := value.Len()
 	buf := ctx.Buffer()

@@ -65,8 +65,7 @@ func readArrayRefAndType(ctx *ReadContext, refMode RefMode, readType bool, value
 
 type arraySerializer struct{}
 
-func (s arraySerializer) TypeId() TypeId       { return -LIST }
-func (s arraySerializer) NeedToWriteRef() bool { return true }
+func (s arraySerializer) TypeId() TypeId { return -LIST }
 
 func (s arraySerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	buf := ctx.Buffer()
@@ -116,8 +115,7 @@ type arrayConcreteValueSerializer struct {
 	referencable   bool
 }
 
-func (s *arrayConcreteValueSerializer) TypeId() TypeId      { return -LIST }
-func (s arrayConcreteValueSerializer) NeedToWriteRef() bool { return true }
+func (s *arrayConcreteValueSerializer) TypeId() TypeId { return -LIST }
 
 func (s *arrayConcreteValueSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	length := value.Len()
@@ -283,8 +281,7 @@ func (s *arrayConcreteValueSerializer) ReadWithTypeInfo(ctx *ReadContext, refMod
 
 type byteArraySerializer struct{}
 
-func (s byteArraySerializer) TypeId() TypeId       { return BINARY }
-func (s byteArraySerializer) NeedToWriteRef() bool { return false }
+func (s byteArraySerializer) TypeId() TypeId { return BINARY }
 
 func (s byteArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	buf := ctx.Buffer()

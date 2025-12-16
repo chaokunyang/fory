@@ -31,8 +31,7 @@ type Date struct {
 
 type dateSerializer struct{}
 
-func (s dateSerializer) TypeId() TypeId       { return LOCAL_DATE }
-func (s dateSerializer) NeedToWriteRef() bool { return false }
+func (s dateSerializer) TypeId() TypeId { return LOCAL_DATE }
 
 func (s dateSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	date := value.Interface().(Date)
@@ -79,8 +78,7 @@ func (s dateSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, type
 
 type timeSerializer struct{}
 
-func (s timeSerializer) TypeId() TypeId       { return TIMESTAMP }
-func (s timeSerializer) NeedToWriteRef() bool { return false }
+func (s timeSerializer) TypeId() TypeId { return TIMESTAMP }
 
 func (s timeSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	ctx.buffer.WriteInt64(GetUnixMicro(value.Interface().(time.Time)))

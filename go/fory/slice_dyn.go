@@ -62,10 +62,6 @@ func (s sliceDynSerializer) TypeId() TypeId {
 	return LIST
 }
 
-func (s sliceDynSerializer) NeedToWriteRef() bool {
-	return true
-}
-
 func (s sliceDynSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	buf := ctx.Buffer()
 	// Get slice length and handle empty slice case
@@ -145,7 +141,7 @@ func (s sliceDynSerializer) writeHeader(ctx *WriteContext, buf *ByteBuffer, valu
 	}
 
 	// Enable reference tracking if configured and element type supports it
-	if ctx.TrackRef() && (elemTypeInfo == nil || elemTypeInfo.Serializer == nil || elemTypeInfo.Serializer.NeedToWriteRef()) {
+	if ctx.TrackRef() && (elemTypeInfo == nil || elemTypeInfo.NeedWriteRef) {
 		collectFlag |= CollectionTrackingRef
 	}
 

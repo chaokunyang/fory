@@ -93,9 +93,6 @@ type Serializer interface {
 
 	// TypeId returns the Fory protocol type ID
 	TypeId() TypeId
-
-	// NeedToWriteRef returns true if this type needs reference tracking
-	NeedToWriteRef() bool
 }
 
 // ExtensionSerializer is a simplified interface for user-implemented extension serializers.
@@ -144,8 +141,6 @@ type extensionSerializerAdapter struct {
 }
 
 func (s *extensionSerializerAdapter) TypeId() TypeId { return NAMED_STRUCT }
-
-func (s *extensionSerializerAdapter) NeedToWriteRef() bool { return true }
 
 func (s *extensionSerializerAdapter) GetType() reflect.Type { return s.type_ }
 

@@ -123,7 +123,7 @@ func generateFieldWriteTyped(buf *bytes.Buffer, field *FieldInfo) error {
 		case types.Float64:
 			fmt.Fprintf(buf, "\tbuf.WriteFloat64(%s)\n", fieldAccess)
 		case types.String:
-			// String serializer's NeedToWriteRef() = false
+			// String type has NeedWriteRef = false
 			// So in struct serialization, no ref flag is written, just the string data
 			fmt.Fprintf(buf, "\tfory.WriteString(buf, %s)\n", fieldAccess)
 		default:

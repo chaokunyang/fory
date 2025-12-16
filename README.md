@@ -176,8 +176,12 @@ pip install pyfory[format]
 
 ```toml
 [dependencies]
-fory = "0.13"
+fory = "0.14"
 ```
+
+**C++**:
+
+Fory C++ supports both CMake and Bazel build systems. See [C++ Installation Guide](https://fory.apache.org/docs/docs/guide/cpp/#installation) for detailed instructions.
 
 **Golang**:
 
@@ -228,7 +232,7 @@ public class Example {
 }
 ```
 
-For detailed Java usage including compatibility modes, compression, and advanced features, see [Java Serialization Guide](docs/guide/java_serialization_guide.md) and [java/README.md](java/README.md).
+For detailed Java usage including compatibility modes, compression, and advanced features, see [Java Serialization Guide](docs/guide/java) and [java/README.md](java/README.md).
 
 #### Python Serialization
 
@@ -253,7 +257,67 @@ result = fory.deserialize(data)
 print(result.name, result.age)  # Output: chaokunyang 28
 ```
 
-For detailed Python usage including type hints, compatibility modes, and advanced features, see [Python Guide](docs/guide/python_guide.md).
+For detailed Python usage including type hints, compatibility modes, and advanced features, see [Python Guide](docs/guide/python).
+
+#### Rust Serialization
+
+Rust native mode provides compile-time code generation via derive macros for high-performance serialization without runtime overhead.
+
+```rust
+use fory::{Fory, ForyObject};
+
+#[derive(ForyObject, Debug, PartialEq)]
+struct Person {
+    name: String,
+    age: i32,
+}
+
+fn main() -> Result<(), fory::Error> {
+    // Create Fory instance - should be reused across serializations
+    let mut fory = Fory::default();
+    // Register your structs (required when class registration is enabled)
+    fory.register::<Person>(1);
+    let person = Person {
+        name: "chaokunyang".to_string(),
+        age: 28,
+    };
+    let bytes = fory.serialize(&person);
+    let result: Person = fory.deserialize(&bytes)?;
+    println!("{} {}", result.name, result.age); // Output: chaokunyang 28
+    Ok(())
+}
+```
+
+For detailed Rust usage including collections, references, and custom serializers, see [Rust Guide](docs/guide/rust).
+
+#### C++ Serialization
+
+C++ native mode provides compile-time reflection via the `FORY_STRUCT` macro for efficient serialization with zero runtime overhead.
+
+```cpp
+#include "fory/serialization/fory.h"
+
+using namespace fory::serialization;
+
+struct Person {
+    std::string name;
+    int32_t age;
+};
+FORY_STRUCT(Person, name, age);
+
+int main() {
+    // Create Fory instance - should be reused across serializations
+    auto fory = Fory::builder().build();
+    // Register your structs (required when class registration is enabled)
+    fory.register_struct<Person>(1);
+    Person person{"chaokunyang", 28};
+    auto bytes = fory.serialize(person).value();
+    auto result = fory.deserialize<Person>(bytes).value();
+    std::cout << result.name << " " << result.age << std::endl;  // Output: chaokunyang 28
+}
+```
+
+For detailed C++ usage including collections, smart pointers, and error handling, see [C++ Guide](docs/guide/cpp).
 
 #### Scala Serialization
 
@@ -284,7 +348,7 @@ object Example {
 }
 ```
 
-For detailed Scala usage including collection serialization and integration patterns, see [Scala Guide](docs/guide/scala_guide.md).
+For detailed Scala usage including collection serialization and integration patterns, see [Scala Guide](docs/guide/scala).
 
 #### Kotlin Serialization
 
@@ -385,9 +449,9 @@ fn main() -> Result<(), Error> {
 
 For examples with **circular references**, **shared references**, and **polymorphism** across languages, see:
 
-- [Cross-Language Serialization Guide](docs/guide/xlang_serialization_guide.md)
-- [Java Serialization Guide - Cross Language](docs/guide/java_serialization_guide.md#cross-language-serialization)
-- [Python Guide - Cross Language](docs/guide/python_guide.md#cross-language-serialization)
+- [Cross-Language Serialization Guide](docs/guide/xlang)
+- [Java Serialization Guide - Cross Language](docs/guide/java)
+- [Python Guide - Cross Language](docs/guide/python)
 
 ### Row Format Encoding
 
@@ -483,7 +547,7 @@ print(foo_row.f4[100000].f1)        # Access nested field
 print(foo_row.f4[200000].f2[5])     # Access deeply nested field
 ```
 
-For more details on row format, see [Row Format Guide](docs/guide/row_format_guide.md).
+For more details on row format, see [Row Format Specification](docs/specification/row_format_spec.md).
 
 ## Documentation
 
@@ -527,7 +591,7 @@ Apache Fory™ supports class schema forward/backward compatibility across **Jav
 
 - Version your serialized data by Fory major version
 - Plan migration strategies when upgrading major versions
-- See [upgrade guide](docs/guide/java_serialization_guide.md#upgrade-fory) for details
+- See [upgrade guide](docs/guide/java) for details
 
 **Future**: Binary compatibility will be guaranteed starting from Fory 1.0 release.
 

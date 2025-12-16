@@ -45,8 +45,8 @@ func (s boolArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) e
 	return nil
 }
 
-func (s boolArraySerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	_, err := writeArrayRefAndType(ctx, writeRef, writeType, value, BOOL_ARRAY)
+func (s boolArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
+	_, err := writeArrayRefAndType(ctx, refMode, writeType, value, BOOL_ARRAY)
 	if err != nil {
 		return err
 	}
@@ -65,16 +65,16 @@ func (s boolArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, valu
 	return nil
 }
 
-func (s boolArraySerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
-	done, err := readArrayRefAndType(ctx, readRef, readType, value)
+func (s boolArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
+	done, err := readArrayRefAndType(ctx, refMode, readType, value)
 	if done || err != nil {
 		return err
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
 
-func (s boolArraySerializer) ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeInfo *TypeInfo, value reflect.Value) error {
-	return s.Read(ctx, readRef, false, value)
+func (s boolArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
+	return s.Read(ctx, refMode, false, value)
 }
 
 // int8ArraySerializer handles [N]int8 fixed-size arrays
@@ -100,8 +100,8 @@ func (s int8ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) e
 	return nil
 }
 
-func (s int8ArraySerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	_, err := writeArrayRefAndType(ctx, writeRef, writeType, value, INT8_ARRAY)
+func (s int8ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
+	_, err := writeArrayRefAndType(ctx, refMode, writeType, value, INT8_ARRAY)
 	if err != nil {
 		return err
 	}
@@ -120,16 +120,16 @@ func (s int8ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, valu
 	return nil
 }
 
-func (s int8ArraySerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
-	done, err := readArrayRefAndType(ctx, readRef, readType, value)
+func (s int8ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
+	done, err := readArrayRefAndType(ctx, refMode, readType, value)
 	if done || err != nil {
 		return err
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
 
-func (s int8ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeInfo *TypeInfo, value reflect.Value) error {
-	return s.Read(ctx, readRef, false, value)
+func (s int8ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
+	return s.Read(ctx, refMode, false, value)
 }
 
 // int16ArraySerializer handles [N]int16 fixed-size arrays
@@ -155,8 +155,8 @@ func (s int16ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) 
 	return nil
 }
 
-func (s int16ArraySerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	_, err := writeArrayRefAndType(ctx, writeRef, writeType, value, INT16_ARRAY)
+func (s int16ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
+	_, err := writeArrayRefAndType(ctx, refMode, writeType, value, INT16_ARRAY)
 	if err != nil {
 		return err
 	}
@@ -175,16 +175,16 @@ func (s int16ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, val
 	return nil
 }
 
-func (s int16ArraySerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
-	done, err := readArrayRefAndType(ctx, readRef, readType, value)
+func (s int16ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
+	done, err := readArrayRefAndType(ctx, refMode, readType, value)
 	if done || err != nil {
 		return err
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
 
-func (s int16ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeInfo *TypeInfo, value reflect.Value) error {
-	return s.Read(ctx, readRef, false, value)
+func (s int16ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
+	return s.Read(ctx, refMode, false, value)
 }
 
 // int32ArraySerializer handles [N]int32 fixed-size arrays
@@ -210,8 +210,8 @@ func (s int32ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) 
 	return nil
 }
 
-func (s int32ArraySerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	_, err := writeArrayRefAndType(ctx, writeRef, writeType, value, INT32_ARRAY)
+func (s int32ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
+	_, err := writeArrayRefAndType(ctx, refMode, writeType, value, INT32_ARRAY)
 	if err != nil {
 		return err
 	}
@@ -230,16 +230,16 @@ func (s int32ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, val
 	return nil
 }
 
-func (s int32ArraySerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
-	done, err := readArrayRefAndType(ctx, readRef, readType, value)
+func (s int32ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
+	done, err := readArrayRefAndType(ctx, refMode, readType, value)
 	if done || err != nil {
 		return err
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
 
-func (s int32ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeInfo *TypeInfo, value reflect.Value) error {
-	return s.Read(ctx, readRef, false, value)
+func (s int32ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
+	return s.Read(ctx, refMode, false, value)
 }
 
 // int64ArraySerializer handles [N]int64 fixed-size arrays
@@ -265,8 +265,8 @@ func (s int64ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) 
 	return nil
 }
 
-func (s int64ArraySerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	_, err := writeArrayRefAndType(ctx, writeRef, writeType, value, INT64_ARRAY)
+func (s int64ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
+	_, err := writeArrayRefAndType(ctx, refMode, writeType, value, INT64_ARRAY)
 	if err != nil {
 		return err
 	}
@@ -285,16 +285,16 @@ func (s int64ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, val
 	return nil
 }
 
-func (s int64ArraySerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
-	done, err := readArrayRefAndType(ctx, readRef, readType, value)
+func (s int64ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
+	done, err := readArrayRefAndType(ctx, refMode, readType, value)
 	if done || err != nil {
 		return err
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
 
-func (s int64ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeInfo *TypeInfo, value reflect.Value) error {
-	return s.Read(ctx, readRef, false, value)
+func (s int64ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
+	return s.Read(ctx, refMode, false, value)
 }
 
 // float32ArraySerializer handles [N]float32 fixed-size arrays
@@ -320,8 +320,8 @@ func (s float32ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value
 	return nil
 }
 
-func (s float32ArraySerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	_, err := writeArrayRefAndType(ctx, writeRef, writeType, value, FLOAT32_ARRAY)
+func (s float32ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
+	_, err := writeArrayRefAndType(ctx, refMode, writeType, value, FLOAT32_ARRAY)
 	if err != nil {
 		return err
 	}
@@ -340,16 +340,16 @@ func (s float32ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, v
 	return nil
 }
 
-func (s float32ArraySerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
-	done, err := readArrayRefAndType(ctx, readRef, readType, value)
+func (s float32ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
+	done, err := readArrayRefAndType(ctx, refMode, readType, value)
 	if done || err != nil {
 		return err
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
 
-func (s float32ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeInfo *TypeInfo, value reflect.Value) error {
-	return s.Read(ctx, readRef, false, value)
+func (s float32ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
+	return s.Read(ctx, refMode, false, value)
 }
 
 // float64ArraySerializer handles [N]float64 fixed-size arrays
@@ -375,8 +375,8 @@ func (s float64ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value
 	return nil
 }
 
-func (s float64ArraySerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	_, err := writeArrayRefAndType(ctx, writeRef, writeType, value, FLOAT64_ARRAY)
+func (s float64ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
+	_, err := writeArrayRefAndType(ctx, refMode, writeType, value, FLOAT64_ARRAY)
 	if err != nil {
 		return err
 	}
@@ -395,16 +395,16 @@ func (s float64ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, v
 	return nil
 }
 
-func (s float64ArraySerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
-	done, err := readArrayRefAndType(ctx, readRef, readType, value)
+func (s float64ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
+	done, err := readArrayRefAndType(ctx, refMode, readType, value)
 	if done || err != nil {
 		return err
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
 
-func (s float64ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeInfo *TypeInfo, value reflect.Value) error {
-	return s.Read(ctx, readRef, false, value)
+func (s float64ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
+	return s.Read(ctx, refMode, false, value)
 }
 
 // uint8ArraySerializer handles [N]uint8 (byte) fixed-size arrays
@@ -430,8 +430,8 @@ func (s uint8ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) 
 	return nil
 }
 
-func (s uint8ArraySerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	_, err := writeArrayRefAndType(ctx, writeRef, writeType, value, BINARY)
+func (s uint8ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
+	_, err := writeArrayRefAndType(ctx, refMode, writeType, value, BINARY)
 	if err != nil {
 		return err
 	}
@@ -450,14 +450,14 @@ func (s uint8ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, val
 	return nil
 }
 
-func (s uint8ArraySerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
-	done, err := readArrayRefAndType(ctx, readRef, readType, value)
+func (s uint8ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
+	done, err := readArrayRefAndType(ctx, refMode, readType, value)
 	if done || err != nil {
 		return err
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
 
-func (s uint8ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeInfo *TypeInfo, value reflect.Value) error {
-	return s.Read(ctx, readRef, false, value)
+func (s uint8ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
+	return s.Read(ctx, refMode, false, value)
 }

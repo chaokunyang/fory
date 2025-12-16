@@ -633,7 +633,7 @@ func Deserialize[T any](f *Fory, data []byte, target *T) error {
 	}
 
 	// Use Read to deserialize directly into target
-	return serializer.Read(f.readCtx, true, true, targetVal)
+	return serializer.Read(f.readCtx, RefModeTracking, true, targetVal)
 }
 
 // ============================================================================

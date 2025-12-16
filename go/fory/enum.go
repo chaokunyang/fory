@@ -59,8 +59,8 @@ func (s *enumSerializer) WriteData(ctx *WriteContext, value reflect.Value) error
 	return nil
 }
 
-func (s *enumSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	if writeRef {
+func (s *enumSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
+	if refMode != RefModeNone {
 		ctx.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeType {
@@ -91,8 +91,8 @@ func (s *enumSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value re
 	return nil
 }
 
-func (s *enumSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
-	if readRef {
+func (s *enumSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
+	if refMode != RefModeNone {
 		refFlag := ctx.buffer.ReadInt8()
 		if refFlag == NullFlag {
 			return nil
@@ -104,8 +104,8 @@ func (s *enumSerializer) Read(ctx *ReadContext, readRef bool, readType bool, val
 	return s.ReadData(ctx, value.Type(), value)
 }
 
-func (s *enumSerializer) ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeInfo *TypeInfo, value reflect.Value) error {
-	return s.Read(ctx, readRef, false, value)
+func (s *enumSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
+	return s.Read(ctx, refMode, false, value)
 }
 
 func (s *enumSerializer) GetType() reflect.Type {

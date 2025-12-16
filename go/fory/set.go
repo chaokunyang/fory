@@ -67,8 +67,8 @@ func (s setSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	return s.writeDifferentTypes(ctx, buf, keys, collectFlag)
 }
 
-func (s setSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	if writeRef {
+func (s setSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
+	if refMode != RefModeNone {
 		if value.IsNil() {
 			ctx.buffer.WriteInt8(NullFlag)
 			return nil
@@ -399,9 +399,9 @@ func setMapKey(mapValue, key reflect.Value, keyType reflect.Type) {
 	}
 }
 
-func (s setSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
+func (s setSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
 	buf := ctx.Buffer()
-	if readRef {
+	if refMode != RefModeNone {
 		refID, err := ctx.RefResolver().TryPreserveRefId(buf)
 		if err != nil {
 			return err
@@ -425,6 +425,6 @@ func (s setSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value
 	return s.ReadData(ctx, value.Type(), value)
 }
 
-func (s setSerializer) ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeInfo *TypeInfo, value reflect.Value) error {
-	return s.Read(ctx, readRef, false, value)
+func (s setSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
+	return s.Read(ctx, refMode, false, value)
 }

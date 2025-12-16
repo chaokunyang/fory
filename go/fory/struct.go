@@ -285,7 +285,7 @@ func (s *structSerializer) WriteData(ctx *WriteContext, value reflect.Value) err
 			// For nested struct fields in compatible mode, write type info
 			writeType := ctx.Compatible() && isStructField(field.Type)
 			// Per xlang spec, all non-primitive fields need ref flag
-			if err := field.Serializer.Write(ctx, true, writeType, fieldValue); err != nil {
+			if err := field.Serializer.Write(ctx, RefModeTracking, writeType, fieldValue); err != nil {
 				return err
 			}
 		} else {
@@ -419,7 +419,7 @@ func (s *structSerializer) writeFieldsInOrder(ctx *WriteContext, value reflect.V
 			// - Other types (struct, collections, etc.): ref flag + type info + data
 			writeType := !isInternalTypeWithoutTypeMeta(field.Type)
 			// Per xlang spec, all non-primitive fields have ref flag
-			if err := field.Serializer.Write(ctx, true, writeType, fieldValue); err != nil {
+			if err := field.Serializer.Write(ctx, RefModeTracking, writeType, fieldValue); err != nil {
 				return err
 			}
 		} else {
@@ -435,7 +435,11 @@ func (s *structSerializer) writeFieldsInOrder(ctx *WriteContext, value reflect.V
 func (s *structSerializer) writeZeroField(ctx *WriteContext, field *FieldInfo) error {
 	zeroValue := reflect.Zero(field.Type)
 	if field.Serializer != nil {
-		return field.Serializer.Write(ctx, field.Referencable, false, zeroValue)
+		refMode := RefModeNone
+		if field.Referencable {
+			refMode = RefModeTracking
+		}
+		return field.Serializer.Write(ctx, refMode, false, zeroValue)
 	}
 	return ctx.WriteValue(zeroValue)
 }
@@ -479,8 +483,12 @@ func (s *structSerializer) writeFieldsInTypeDefOrder(ctx *WriteContext, value re
 			ser, _ := ctx.TypeResolver().getSerializerByType(fieldType.Type, true)
 			nullable := fieldNeedWriteRef(def.fieldType.TypeId(), def.nullable)
 			writeType := !isInternalTypeWithoutTypeMeta(fieldType.Type)
+			refMode := RefModeNone
+			if nullable {
+				refMode = RefModeTracking
+			}
 			if ser != nil {
-				if err := ser.Write(ctx, nullable, writeType, zeroValue); err != nil {
+				if err := ser.Write(ctx, refMode, writeType, zeroValue); err != nil {
 					return err
 				}
 			} else {
@@ -581,7 +589,11 @@ func (s *structSerializer) writeFieldsInTypeDefOrder(ctx *WriteContext, value re
 			isPrimitive := (isFixedSizePrimitive(staticId, false) || isVarintPrimitive(staticId, false)) && !hasNonPrimitiveSer
 			writeRef := !isPrimitive || referencable                               // referencable means it's a pointer type
 			writeType := !isPrimitive && !isInternalTypeWithoutTypeMeta(fieldType) // primitives never need type info
-			if err := ser.Write(ctx, writeRef, writeType, fieldValue); err != nil {
+			fieldRefMode := RefModeNone
+			if writeRef {
+				fieldRefMode = RefModeTracking
+			}
+			if err := ser.Write(ctx, fieldRefMode, writeType, fieldValue); err != nil {
 				return err
 			}
 		} else {
@@ -593,8 +605,9 @@ func (s *structSerializer) writeFieldsInTypeDefOrder(ctx *WriteContext, value re
 	return nil
 }
 
-func (s *structSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	if writeRef {
+func (s *structSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
+	switch refMode {
+	case RefModeTracking:
 		if value.Kind() == reflect.Ptr && value.IsNil() {
 			ctx.buffer.WriteInt8(NullFlag)
 			return nil
@@ -606,6 +619,12 @@ func (s *structSerializer) Write(ctx *WriteContext, writeRef bool, writeType boo
 		if refWritten {
 			return nil
 		}
+	case RefModeNullOnly:
+		if value.Kind() == reflect.Ptr && value.IsNil() {
+			ctx.buffer.WriteInt8(NullFlag)
+			return nil
+		}
+		ctx.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeType {
 		// Structs have dynamic type IDs, need to look up from TypeResolver
@@ -766,7 +785,7 @@ func (s *structSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value 
 			// For nested struct fields in compatible mode, read type info
 			readType := ctx.Compatible() && isStructField(field.Type)
 			// Per xlang spec, all non-primitive fields have ref flag
-			if err := field.Serializer.Read(ctx, true, readType, fieldValue); err != nil {
+			if err := field.Serializer.Read(ctx, RefModeTracking, readType, fieldValue); err != nil {
 				return err
 			}
 		} else {
@@ -872,7 +891,7 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 			// - Other types (struct, collections, etc.): ref flag + type info + data
 			readType := !isInternalTypeWithoutTypeMeta(field.Type)
 			// Per xlang spec, all non-primitive fields have ref flag
-			if err := field.Serializer.Read(ctx, true, readType, fieldValue); err != nil {
+			if err := field.Serializer.Read(ctx, RefModeTracking, readType, fieldValue); err != nil {
 				return err
 			}
 		} else {
@@ -894,14 +913,19 @@ func (s *structSerializer) skipField(ctx *ReadContext, field *FieldInfo) error {
 	tempValue := reflect.New(field.Type).Elem()
 	if field.Serializer != nil {
 		readType := ctx.Compatible() && isStructField(field.Type)
-		return field.Serializer.Read(ctx, field.Referencable, readType, tempValue)
+		refMode := RefModeNone
+		if field.Referencable {
+			refMode = RefModeTracking
+		}
+		return field.Serializer.Read(ctx, refMode, readType, tempValue)
 	}
 	return ctx.ReadValue(tempValue)
 }
 
-func (s *structSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
+func (s *structSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
 	buf := ctx.Buffer()
-	if readRef {
+	switch refMode {
+	case RefModeTracking:
 		refID, err := ctx.RefResolver().TryPreserveRefId(buf)
 		if err != nil {
 			return err
@@ -912,6 +936,11 @@ func (s *structSerializer) Read(ctx *ReadContext, readRef bool, readType bool, v
 			if obj.IsValid() {
 				value.Set(obj)
 			}
+			return nil
+		}
+	case RefModeNullOnly:
+		flag := buf.ReadInt8()
+		if flag == NullFlag {
 			return nil
 		}
 	}
@@ -935,9 +964,9 @@ func (s *structSerializer) Read(ctx *ReadContext, readRef bool, readType bool, v
 	return s.ReadData(ctx, value.Type(), value)
 }
 
-func (s *structSerializer) ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeInfo *TypeInfo, value reflect.Value) error {
+func (s *structSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
 	// typeInfo is already read, don't read it again
-	return s.Read(ctx, readRef, false, value)
+	return s.Read(ctx, refMode, false, value)
 }
 
 // ReadCompatible reads struct data with schema evolution support
@@ -967,7 +996,11 @@ func (s *structSerializer) ReadCompatible(ctx *ReadContext, type_ reflect.Type, 
 			// Field doesn't exist locally, discard
 			tempValue := reflect.New(remoteField.Type).Elem()
 			if remoteField.Serializer != nil {
-				if err := remoteField.Serializer.Read(ctx, remoteField.Referencable, false, tempValue); err != nil {
+				refMode := RefModeNone
+				if remoteField.Referencable {
+					refMode = RefModeTracking
+				}
+				if err := remoteField.Serializer.Read(ctx, refMode, false, tempValue); err != nil {
 					return err
 				}
 			} else {
@@ -1014,7 +1047,7 @@ func (s *structSerializer) ReadCompatible(ctx *ReadContext, type_ reflect.Type, 
 		fieldValue := value.Field(localField.FieldIndex)
 		if localField.Serializer != nil {
 			// Per xlang spec, all non-primitive fields have ref flag
-			if err := localField.Serializer.Read(ctx, true, false, fieldValue); err != nil {
+			if err := localField.Serializer.Read(ctx, RefModeTracking, false, fieldValue); err != nil {
 				return err
 			}
 		} else {
@@ -1614,9 +1647,10 @@ func (s *ptrToStructSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, v
 	}
 }
 
-func (s *ptrToStructSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
+func (s *ptrToStructSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
 	buf := ctx.Buffer()
-	if readRef {
+	switch refMode {
+	case RefModeTracking:
 		refID, err := ctx.RefResolver().TryPreserveRefId(buf)
 		if err != nil {
 			return err
@@ -1627,6 +1661,11 @@ func (s *ptrToStructSerializer) Read(ctx *ReadContext, readRef bool, readType bo
 			if obj.IsValid() {
 				value.Set(obj)
 			}
+			return nil
+		}
+	case RefModeNullOnly:
+		flag := buf.ReadInt8()
+		if flag == NullFlag {
 			return nil
 		}
 	}
@@ -1650,13 +1689,14 @@ func (s *ptrToStructSerializer) Read(ctx *ReadContext, readRef bool, readType bo
 	return s.ReadData(ctx, value.Type(), value)
 }
 
-func (s *ptrToStructSerializer) ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeInfo *TypeInfo, value reflect.Value) error {
+func (s *ptrToStructSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
 	// typeInfo is already read, don't read it again
-	return s.Read(ctx, readRef, false, value)
+	return s.Read(ctx, refMode, false, value)
 }
 
-func (s *ptrToStructSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	if writeRef {
+func (s *ptrToStructSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
+	switch refMode {
+	case RefModeTracking:
 		if value.IsNil() {
 			ctx.buffer.WriteInt8(NullFlag)
 			return nil
@@ -1668,6 +1708,12 @@ func (s *ptrToStructSerializer) Write(ctx *WriteContext, writeRef bool, writeTyp
 		if refWritten {
 			return nil
 		}
+	case RefModeNullOnly:
+		if value.IsNil() {
+			ctx.buffer.WriteInt8(NullFlag)
+			return nil
+		}
+		ctx.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeType {
 		// Structs have dynamic type IDs, need to look up from TypeResolver
@@ -1701,8 +1747,9 @@ func (s *ptrToCodegenSerializer) WriteData(ctx *WriteContext, value reflect.Valu
 	return s.codegenSerializer.WriteData(ctx, value.Elem())
 }
 
-func (s *ptrToCodegenSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	if writeRef {
+func (s *ptrToCodegenSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
+	switch refMode {
+	case RefModeTracking:
 		if value.IsNil() {
 			ctx.Buffer().WriteInt8(NullFlag)
 			return nil
@@ -1714,6 +1761,12 @@ func (s *ptrToCodegenSerializer) Write(ctx *WriteContext, writeRef bool, writeTy
 		if refWritten {
 			return nil
 		}
+	case RefModeNullOnly:
+		if value.IsNil() {
+			ctx.Buffer().WriteInt8(NullFlag)
+			return nil
+		}
+		ctx.Buffer().WriteInt8(NotNullValueFlag)
 	}
 	if writeType {
 		// Codegen structs have dynamic type IDs
@@ -1737,9 +1790,10 @@ func (s *ptrToCodegenSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, 
 	return s.codegenSerializer.ReadData(ctx, type_.Elem(), elem)
 }
 
-func (s *ptrToCodegenSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
+func (s *ptrToCodegenSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
 	buf := ctx.Buffer()
-	if readRef {
+	switch refMode {
+	case RefModeTracking:
 		refID, err := ctx.RefResolver().TryPreserveRefId(buf)
 		if err != nil {
 			return err
@@ -1749,6 +1803,11 @@ func (s *ptrToCodegenSerializer) Read(ctx *ReadContext, readRef bool, readType b
 			if obj.IsValid() {
 				value.Set(obj)
 			}
+			return nil
+		}
+	case RefModeNullOnly:
+		flag := buf.ReadInt8()
+		if flag == NullFlag {
 			return nil
 		}
 	}
@@ -1763,8 +1822,8 @@ func (s *ptrToCodegenSerializer) Read(ctx *ReadContext, readRef bool, readType b
 	return s.ReadData(ctx, value.Type(), value)
 }
 
-func (s *ptrToCodegenSerializer) ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeInfo *TypeInfo, value reflect.Value) error {
-	return s.Read(ctx, readRef, false, value)
+func (s *ptrToCodegenSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
+	return s.Read(ctx, refMode, false, value)
 }
 
 // Field sorting helpers
@@ -2217,7 +2276,7 @@ func (s *skipStructSerializer) WriteData(ctx *WriteContext, value reflect.Value)
 	return fmt.Errorf("skipStructSerializer does not support WriteData - unknown struct type")
 }
 
-func (s *skipStructSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
+func (s *skipStructSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
 	return fmt.Errorf("skipStructSerializer does not support Write - unknown struct type")
 }
 
@@ -2233,9 +2292,10 @@ func (s *skipStructSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, va
 	return nil
 }
 
-func (s *skipStructSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
+func (s *skipStructSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
 	buf := ctx.Buffer()
-	if readRef {
+	switch refMode {
+	case RefModeTracking:
 		refID, err := ctx.RefResolver().TryPreserveRefId(buf)
 		if err != nil {
 			return err
@@ -2244,11 +2304,16 @@ func (s *skipStructSerializer) Read(ctx *ReadContext, readRef bool, readType boo
 			// Reference found, nothing to skip
 			return nil
 		}
+	case RefModeNullOnly:
+		flag := buf.ReadInt8()
+		if flag == NullFlag {
+			return nil
+		}
 	}
 	return s.ReadData(ctx, nil, value)
 }
 
-func (s *skipStructSerializer) ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeInfo *TypeInfo, value reflect.Value) error {
+func (s *skipStructSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
 	// typeInfo is already read, don't read it again - just skip data
-	return s.Read(ctx, readRef, false, value)
+	return s.Read(ctx, refMode, false, value)
 }

@@ -528,8 +528,8 @@ func (s stringStringMapSerializer) WriteData(ctx *WriteContext, value reflect.Va
 	return nil
 }
 
-func (s stringStringMapSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	done, err := writeMapRefAndType(ctx, writeRef, writeType, value)
+func (s stringStringMapSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
+	done, err := writeMapRefAndType(ctx, refMode, writeType, value)
 	if done || err != nil {
 		return err
 	}
@@ -546,16 +546,16 @@ func (s stringStringMapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type
 	return nil
 }
 
-func (s stringStringMapSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
-	done, err := readMapRefAndType(ctx, readRef, readType, value)
+func (s stringStringMapSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
+	done, err := readMapRefAndType(ctx, refMode, readType, value)
 	if done || err != nil {
 		return err
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
 
-func (s stringStringMapSerializer) ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeInfo *TypeInfo, value reflect.Value) error {
-	return s.Read(ctx, readRef, false, value)
+func (s stringStringMapSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
+	return s.Read(ctx, refMode, false, value)
 }
 
 type stringInt64MapSerializer struct{}
@@ -568,8 +568,8 @@ func (s stringInt64MapSerializer) WriteData(ctx *WriteContext, value reflect.Val
 	return nil
 }
 
-func (s stringInt64MapSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	done, err := writeMapRefAndType(ctx, writeRef, writeType, value)
+func (s stringInt64MapSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
+	done, err := writeMapRefAndType(ctx, refMode, writeType, value)
 	if done || err != nil {
 		return err
 	}
@@ -586,16 +586,16 @@ func (s stringInt64MapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type,
 	return nil
 }
 
-func (s stringInt64MapSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
-	done, err := readMapRefAndType(ctx, readRef, readType, value)
+func (s stringInt64MapSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
+	done, err := readMapRefAndType(ctx, refMode, readType, value)
 	if done || err != nil {
 		return err
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
 
-func (s stringInt64MapSerializer) ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeInfo *TypeInfo, value reflect.Value) error {
-	return s.Read(ctx, readRef, false, value)
+func (s stringInt64MapSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
+	return s.Read(ctx, refMode, false, value)
 }
 
 type stringIntMapSerializer struct{}
@@ -608,8 +608,8 @@ func (s stringIntMapSerializer) WriteData(ctx *WriteContext, value reflect.Value
 	return nil
 }
 
-func (s stringIntMapSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	done, err := writeMapRefAndType(ctx, writeRef, writeType, value)
+func (s stringIntMapSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
+	done, err := writeMapRefAndType(ctx, refMode, writeType, value)
 	if done || err != nil {
 		return err
 	}
@@ -626,16 +626,16 @@ func (s stringIntMapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, v
 	return nil
 }
 
-func (s stringIntMapSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
-	done, err := readMapRefAndType(ctx, readRef, readType, value)
+func (s stringIntMapSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
+	done, err := readMapRefAndType(ctx, refMode, readType, value)
 	if done || err != nil {
 		return err
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
 
-func (s stringIntMapSerializer) ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeInfo *TypeInfo, value reflect.Value) error {
-	return s.Read(ctx, readRef, false, value)
+func (s stringIntMapSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
+	return s.Read(ctx, refMode, false, value)
 }
 
 type stringFloat64MapSerializer struct{}
@@ -648,8 +648,8 @@ func (s stringFloat64MapSerializer) WriteData(ctx *WriteContext, value reflect.V
 	return nil
 }
 
-func (s stringFloat64MapSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	done, err := writeMapRefAndType(ctx, writeRef, writeType, value)
+func (s stringFloat64MapSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
+	done, err := writeMapRefAndType(ctx, refMode, writeType, value)
 	if done || err != nil {
 		return err
 	}
@@ -666,16 +666,16 @@ func (s stringFloat64MapSerializer) ReadData(ctx *ReadContext, type_ reflect.Typ
 	return nil
 }
 
-func (s stringFloat64MapSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
-	done, err := readMapRefAndType(ctx, readRef, readType, value)
+func (s stringFloat64MapSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
+	done, err := readMapRefAndType(ctx, refMode, readType, value)
 	if done || err != nil {
 		return err
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
 
-func (s stringFloat64MapSerializer) ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeInfo *TypeInfo, value reflect.Value) error {
-	return s.Read(ctx, readRef, false, value)
+func (s stringFloat64MapSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
+	return s.Read(ctx, refMode, false, value)
 }
 
 type stringBoolMapSerializer struct{}
@@ -688,8 +688,8 @@ func (s stringBoolMapSerializer) WriteData(ctx *WriteContext, value reflect.Valu
 	return nil
 }
 
-func (s stringBoolMapSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	done, err := writeMapRefAndType(ctx, writeRef, writeType, value)
+func (s stringBoolMapSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
+	done, err := writeMapRefAndType(ctx, refMode, writeType, value)
 	if done || err != nil {
 		return err
 	}
@@ -706,16 +706,16 @@ func (s stringBoolMapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, 
 	return nil
 }
 
-func (s stringBoolMapSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
-	done, err := readMapRefAndType(ctx, readRef, readType, value)
+func (s stringBoolMapSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
+	done, err := readMapRefAndType(ctx, refMode, readType, value)
 	if done || err != nil {
 		return err
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
 
-func (s stringBoolMapSerializer) ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeInfo *TypeInfo, value reflect.Value) error {
-	return s.Read(ctx, readRef, false, value)
+func (s stringBoolMapSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
+	return s.Read(ctx, refMode, false, value)
 }
 
 type int32Int32MapSerializer struct{}
@@ -728,8 +728,8 @@ func (s int32Int32MapSerializer) WriteData(ctx *WriteContext, value reflect.Valu
 	return nil
 }
 
-func (s int32Int32MapSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	done, err := writeMapRefAndType(ctx, writeRef, writeType, value)
+func (s int32Int32MapSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
+	done, err := writeMapRefAndType(ctx, refMode, writeType, value)
 	if done || err != nil {
 		return err
 	}
@@ -746,16 +746,16 @@ func (s int32Int32MapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, 
 	return nil
 }
 
-func (s int32Int32MapSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
-	done, err := readMapRefAndType(ctx, readRef, readType, value)
+func (s int32Int32MapSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
+	done, err := readMapRefAndType(ctx, refMode, readType, value)
 	if done || err != nil {
 		return err
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
 
-func (s int32Int32MapSerializer) ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeInfo *TypeInfo, value reflect.Value) error {
-	return s.Read(ctx, readRef, false, value)
+func (s int32Int32MapSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
+	return s.Read(ctx, refMode, false, value)
 }
 
 type int64Int64MapSerializer struct{}
@@ -768,8 +768,8 @@ func (s int64Int64MapSerializer) WriteData(ctx *WriteContext, value reflect.Valu
 	return nil
 }
 
-func (s int64Int64MapSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	done, err := writeMapRefAndType(ctx, writeRef, writeType, value)
+func (s int64Int64MapSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
+	done, err := writeMapRefAndType(ctx, refMode, writeType, value)
 	if done || err != nil {
 		return err
 	}
@@ -786,16 +786,16 @@ func (s int64Int64MapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, 
 	return nil
 }
 
-func (s int64Int64MapSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
-	done, err := readMapRefAndType(ctx, readRef, readType, value)
+func (s int64Int64MapSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
+	done, err := readMapRefAndType(ctx, refMode, readType, value)
 	if done || err != nil {
 		return err
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
 
-func (s int64Int64MapSerializer) ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeInfo *TypeInfo, value reflect.Value) error {
-	return s.Read(ctx, readRef, false, value)
+func (s int64Int64MapSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
+	return s.Read(ctx, refMode, false, value)
 }
 
 type intIntMapSerializer struct{}
@@ -808,8 +808,8 @@ func (s intIntMapSerializer) WriteData(ctx *WriteContext, value reflect.Value) e
 	return nil
 }
 
-func (s intIntMapSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	done, err := writeMapRefAndType(ctx, writeRef, writeType, value)
+func (s intIntMapSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
+	done, err := writeMapRefAndType(ctx, refMode, writeType, value)
 	if done || err != nil {
 		return err
 	}
@@ -826,14 +826,14 @@ func (s intIntMapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, valu
 	return nil
 }
 
-func (s intIntMapSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
-	done, err := readMapRefAndType(ctx, readRef, readType, value)
+func (s intIntMapSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
+	done, err := readMapRefAndType(ctx, refMode, readType, value)
 	if done || err != nil {
 		return err
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
 
-func (s intIntMapSerializer) ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeInfo *TypeInfo, value reflect.Value) error {
-	return s.Read(ctx, readRef, false, value)
+func (s intIntMapSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
+	return s.Read(ctx, refMode, false, value)
 }

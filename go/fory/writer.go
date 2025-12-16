@@ -569,5 +569,5 @@ func (c *WriteContext) WriteValue(value reflect.Value) error {
 	}
 
 	// Use serializer's Write method which handles ref tracking and type info internally
-	return typeInfo.Serializer.Write(c, true, true, value)
+	return typeInfo.Serializer.Write(c, RefModeTracking, true, value)
 }

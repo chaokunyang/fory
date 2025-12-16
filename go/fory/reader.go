@@ -924,11 +924,11 @@ func (c *ReadContext) ReadValue(value reflect.Value) error {
 	}
 
 	// Read handles ref tracking and type info internally
-	return serializer.Read(c, true, true, value)
+	return serializer.Read(c, RefModeTracking, true, value)
 }
 
 // ReadInto reads a value using a specific serializer with optional ref/type info
-func (c *ReadContext) ReadInto(value reflect.Value, serializer Serializer, readRefInfo, readTypeInfo bool) error {
+func (c *ReadContext) ReadInto(value reflect.Value, serializer Serializer, refMode RefMode, readTypeInfo bool) error {
 	if !value.IsValid() {
 		return fmt.Errorf("invalid reflect.Value")
 	}
@@ -936,5 +936,5 @@ func (c *ReadContext) ReadInto(value reflect.Value, serializer Serializer, readR
 		return fmt.Errorf("serializer cannot be nil")
 	}
 
-	return serializer.Read(c, readRefInfo, readTypeInfo, value)
+	return serializer.Read(c, refMode, readTypeInfo, value)
 }

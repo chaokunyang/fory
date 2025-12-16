@@ -97,8 +97,8 @@ func (s sliceDynSerializer) WriteData(ctx *WriteContext, value reflect.Value) er
 	return s.writeDifferentTypes(ctx, buf, value, collectFlag) // Fallback path for mixed-type elements
 }
 
-func (s sliceDynSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	done, err := writeSliceRefAndType(ctx, writeRef, writeType, value, LIST)
+func (s sliceDynSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
+	done, err := writeSliceRefAndType(ctx, refMode, writeType, value, LIST)
 	if done || err != nil {
 		return err
 	}
@@ -208,7 +208,7 @@ func (s sliceDynSerializer) writeSameType(
 		if trackRefs {
 			// Use Write with ref tracking enabled
 			// serializer.Write will handle writing ref flags
-			if err := serializer.Write(ctx, true, false, elem); err != nil {
+			if err := serializer.Write(ctx, RefModeTracking, false, elem); err != nil {
 				return err
 			}
 		} else if hasNull {
@@ -400,17 +400,17 @@ func (s sliceDynSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value
 	return nil
 }
 
-func (s sliceDynSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
-	done, err := readSliceRefAndType(ctx, readRef, readType, value)
+func (s sliceDynSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
+	done, err := readSliceRefAndType(ctx, refMode, readType, value)
 	if done || err != nil {
 		return err
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
 
-func (s sliceDynSerializer) ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeInfo *TypeInfo, value reflect.Value) error {
+func (s sliceDynSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
 	// typeInfo is already read, don't read it again
-	return s.Read(ctx, readRef, false, value)
+	return s.Read(ctx, refMode, false, value)
 }
 
 // readSameType handles deserialization of slices where all elements share the same type
@@ -461,7 +461,7 @@ func (s sliceDynSerializer) readSameType(ctx *ReadContext, buf *ByteBuffer, valu
 			} else {
 				// Non-nullable elements: read with ref tracking
 				elem := reflect.New(elemType).Elem()
-				if err := serializer.Read(ctx, true, false, elem); err != nil {
+				if err := serializer.Read(ctx, RefModeTracking, false, elem); err != nil {
 					return err
 				}
 				value.Index(i).Set(elem)

@@ -36,9 +36,12 @@ type Serializer interface {
 	// type-specific optimizations.
 	//
 	// Parameters:
-	//   - writeRef: when true, writes reference flag; when false, skips it
+	//   - refMode: controls reference/null handling behavior:
+	//     - RefModeNone: skip ref handling entirely
+	//     - RefModeNullOnly: only write null flag (NullFlag or NotNullValueFlag)
+	//     - RefModeTracking: full reference tracking with WriteRefOrNull
 	//   - writeType: when true, writes type information; when false, skips it
-	Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error
+	Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error
 
 	// WriteData serializes using reflect.Value.
 	// Does NOT write ref/type info - caller handles that.
@@ -56,9 +59,12 @@ type Serializer interface {
 	// type-specific optimizations.
 	//
 	// Parameters:
-	//   - readRef: when true, reads reference flag from buffer; when false, skips it
+	//   - refMode: controls reference/null handling behavior:
+	//     - RefModeNone: skip ref handling entirely
+	//     - RefModeNullOnly: only read null flag
+	//     - RefModeTracking: full reference tracking with TryPreserveRefId
 	//   - readType: when true, reads type information from buffer; when false, skips it
-	Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error
+	Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error
 
 	// ReadData deserializes directly into the provided reflect.Value.
 	// Does NOT read ref/type info - caller handles that.
@@ -74,13 +80,16 @@ type Serializer interface {
 	// deserialization scenarios where the runtime type differs from the static type.
 	//
 	// Parameters:
-	//   - readRef: when true, reads reference flag from buffer; when false, skips it
+	//   - refMode: controls reference/null handling behavior:
+	//     - RefModeNone: skip ref handling entirely
+	//     - RefModeNullOnly: only read null flag
+	//     - RefModeTracking: full reference tracking with TryPreserveRefId
 	//   - typeInfo: pre-read type information; do NOT read type info again from buffer
 	//
 	// Important: do NOT read type info from the buffer in this method. The typeInfo
 	// parameter contains the already-read type metadata. Reading it again will cause
 	// buffer position errors.
-	ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeInfo *TypeInfo, value reflect.Value) error
+	ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error
 
 	// TypeId returns the Fory protocol type ID
 	TypeId() TypeId
@@ -145,9 +154,10 @@ func (s *extensionSerializerAdapter) WriteData(ctx *WriteContext, value reflect.
 	return s.userSerial.Write(ctx.Buffer(), value.Interface())
 }
 
-func (s *extensionSerializerAdapter) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
+func (s *extensionSerializerAdapter) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
 	buf := ctx.Buffer()
-	if writeRef {
+	switch refMode {
+	case RefModeTracking:
 		refWritten, err := ctx.RefResolver().WriteRefOrNull(buf, value)
 		if err != nil {
 			return err
@@ -155,6 +165,12 @@ func (s *extensionSerializerAdapter) Write(ctx *WriteContext, writeRef bool, wri
 		if refWritten {
 			return nil
 		}
+	case RefModeNullOnly:
+		if isNil(value) {
+			buf.WriteInt8(NullFlag)
+			return nil
+		}
+		buf.WriteInt8(NotNullValueFlag)
 	}
 	if writeType {
 		typeInfo, err := ctx.TypeResolver().getTypeInfo(value, true)
@@ -179,9 +195,10 @@ func (s *extensionSerializerAdapter) ReadData(ctx *ReadContext, type_ reflect.Ty
 	return nil
 }
 
-func (s *extensionSerializerAdapter) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
+func (s *extensionSerializerAdapter) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
 	buf := ctx.Buffer()
-	if readRef {
+	switch refMode {
+	case RefModeTracking:
 		refID, err := ctx.RefResolver().TryPreserveRefId(buf)
 		if err != nil {
 			return err
@@ -193,12 +210,17 @@ func (s *extensionSerializerAdapter) Read(ctx *ReadContext, readRef bool, readTy
 			}
 			return nil
 		}
+	case RefModeNullOnly:
+		flag := buf.ReadInt8()
+		if flag == NullFlag {
+			return nil
+		}
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
 
-func (s *extensionSerializerAdapter) ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeInfo *TypeInfo, value reflect.Value) error {
-	return s.Read(ctx, readRef, false, value)
+func (s *extensionSerializerAdapter) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
+	return s.Read(ctx, refMode, false, value)
 }
 
 // Helper functions for serializer dispatch

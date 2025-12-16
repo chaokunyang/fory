@@ -33,8 +33,9 @@ const (
 
 // writeSliceRefAndType handles reference and type writing for slice serializers.
 // Returns true if the value was already written (nil or ref), false if data should be written.
-func writeSliceRefAndType(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value, typeId TypeId) (bool, error) {
-	if writeRef {
+func writeSliceRefAndType(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value, typeId TypeId) (bool, error) {
+	switch refMode {
+	case RefModeTracking:
 		if value.Kind() == reflect.Slice && value.IsNil() {
 			ctx.Buffer().WriteInt8(NullFlag)
 			return true, nil
@@ -46,6 +47,12 @@ func writeSliceRefAndType(ctx *WriteContext, writeRef bool, writeType bool, valu
 		if refWritten {
 			return true, nil
 		}
+	case RefModeNullOnly:
+		if value.Kind() == reflect.Slice && value.IsNil() {
+			ctx.Buffer().WriteInt8(NullFlag)
+			return true, nil
+		}
+		ctx.Buffer().WriteInt8(NotNullValueFlag)
 	}
 	if writeType {
 		ctx.Buffer().WriteVaruint32Small7(uint32(typeId))
@@ -55,9 +62,10 @@ func writeSliceRefAndType(ctx *WriteContext, writeRef bool, writeType bool, valu
 
 // readSliceRefAndType handles reference and type reading for slice serializers.
 // Returns true if a reference was resolved (value already set), false if data should be read.
-func readSliceRefAndType(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) (bool, error) {
+func readSliceRefAndType(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) (bool, error) {
 	buf := ctx.Buffer()
-	if readRef {
+	switch refMode {
+	case RefModeTracking:
 		refID, err := ctx.RefResolver().TryPreserveRefId(buf)
 		if err != nil {
 			return false, err
@@ -69,12 +77,14 @@ func readSliceRefAndType(ctx *ReadContext, readRef bool, readType bool, value re
 			}
 			return true, nil
 		}
+	case RefModeNullOnly:
+		flag := buf.ReadInt8()
+		if flag == NullFlag {
+			return true, nil
+		}
 	}
 	if readType {
-		typeID := buf.ReadVaruint32Small7()
-		if IsNamespacedType(TypeId(typeID)) {
-			_, _ = ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID)
-		}
+		buf.ReadVaruint32Small7()
 	}
 	return false, nil
 }
@@ -168,6 +178,10 @@ func (s *sliceConcreteValueSerializer) WriteData(ctx *WriteContext, value reflec
 
 	// WriteData elements
 	trackRefs := (collectFlag & CollectionTrackingRef) != 0
+	elemRefMode := RefModeNone
+	if trackRefs {
+		elemRefMode = RefModeTracking
+	}
 
 	for i := 0; i < length; i++ {
 		elem := value.Index(i)
@@ -176,7 +190,7 @@ func (s *sliceConcreteValueSerializer) WriteData(ctx *WriteContext, value reflec
 		if hasNull && elem.IsNil() {
 			if trackRefs {
 				// When tracking refs, the element serializer will write the null flag
-				if err := s.elemSerializer.Write(ctx, true, false, elem); err != nil {
+				if err := s.elemSerializer.Write(ctx, elemRefMode, false, elem); err != nil {
 					return err
 				}
 			} else {
@@ -188,7 +202,7 @@ func (s *sliceConcreteValueSerializer) WriteData(ctx *WriteContext, value reflec
 		if trackRefs {
 			// Use Write with ref tracking enabled
 			// The element serializer will handle writing ref flags
-			if err := s.elemSerializer.Write(ctx, true, false, elem); err != nil {
+			if err := s.elemSerializer.Write(ctx, elemRefMode, false, elem); err != nil {
 				return err
 			}
 		} else {
@@ -201,25 +215,25 @@ func (s *sliceConcreteValueSerializer) WriteData(ctx *WriteContext, value reflec
 	return nil
 }
 
-func (s *sliceConcreteValueSerializer) Write(ctx *WriteContext, writeRef bool, writeType bool, value reflect.Value) error {
-	done, err := writeSliceRefAndType(ctx, writeRef, writeType, value, -LIST)
+func (s *sliceConcreteValueSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
+	done, err := writeSliceRefAndType(ctx, refMode, writeType, value, -LIST)
 	if done || err != nil {
 		return err
 	}
 	return s.WriteData(ctx, value)
 }
 
-func (s *sliceConcreteValueSerializer) Read(ctx *ReadContext, readRef bool, readType bool, value reflect.Value) error {
-	done, err := readSliceRefAndType(ctx, readRef, readType, value)
+func (s *sliceConcreteValueSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
+	done, err := readSliceRefAndType(ctx, refMode, readType, value)
 	if done || err != nil {
 		return err
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
 
-func (s *sliceConcreteValueSerializer) ReadWithTypeInfo(ctx *ReadContext, readRef bool, typeInfo *TypeInfo, value reflect.Value) error {
+func (s *sliceConcreteValueSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
 	// typeInfo is already read, don't read it again
-	return s.Read(ctx, readRef, false, value)
+	return s.Read(ctx, refMode, false, value)
 }
 
 func (s *sliceConcreteValueSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
@@ -251,6 +265,10 @@ func (s *sliceConcreteValueSerializer) ReadData(ctx *ReadContext, type_ reflect.
 	ctx.RefResolver().Reference(value)
 
 	trackRefs := (collectFlag & CollectionTrackingRef) != 0
+	elemRefMode := RefModeNone
+	if trackRefs {
+		elemRefMode = RefModeTracking
+	}
 
 	for i := 0; i < length; i++ {
 		elem := value.Index(i)
@@ -258,7 +276,7 @@ func (s *sliceConcreteValueSerializer) ReadData(ctx *ReadContext, type_ reflect.
 		// Call element serializer's Read method
 		// When trackRefs is true, elemSerializer will read the ref flag via TryPreserveRefId
 		// For pointer types, elemSerializer will handle allocation and reference tracking
-		if err := s.elemSerializer.Read(ctx, trackRefs, false, elem); err != nil {
+		if err := s.elemSerializer.Read(ctx, elemRefMode, false, elem); err != nil {
 			return err
 		}
 	}

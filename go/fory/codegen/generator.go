@@ -448,8 +448,9 @@ func generateStructSerializer(buf *bytes.Buffer, s *StructInfo) error {
 // generateWriteMethod generates the Write method that handles ref/type flags
 func generateWriteMethod(buf *bytes.Buffer, s *StructInfo) error {
 	fmt.Fprintf(buf, "// Write is the entry point for serialization with ref/type handling\n")
-	fmt.Fprintf(buf, "func (g %s_ForyGenSerializer) Write(ctx *fory.WriteContext, writeRef bool, writeType bool, value reflect.Value) error {\n", s.Name)
-	fmt.Fprintf(buf, "\tif writeRef {\n")
+	fmt.Fprintf(buf, "func (g %s_ForyGenSerializer) Write(ctx *fory.WriteContext, refMode fory.RefMode, writeType bool, value reflect.Value) error {\n", s.Name)
+	fmt.Fprintf(buf, "\tswitch refMode {\n")
+	fmt.Fprintf(buf, "\tcase fory.RefModeTracking:\n")
 	fmt.Fprintf(buf, "\t\tif !value.IsValid() || (value.Kind() == reflect.Ptr && value.IsNil()) {\n")
 	fmt.Fprintf(buf, "\t\t\tctx.Buffer().WriteInt8(-3) // NullFlag\n")
 	fmt.Fprintf(buf, "\t\t\treturn nil\n")
@@ -461,6 +462,12 @@ func generateWriteMethod(buf *bytes.Buffer, s *StructInfo) error {
 	fmt.Fprintf(buf, "\t\tif refWritten {\n")
 	fmt.Fprintf(buf, "\t\t\treturn nil\n")
 	fmt.Fprintf(buf, "\t\t}\n")
+	fmt.Fprintf(buf, "\tcase fory.RefModeNullOnly:\n")
+	fmt.Fprintf(buf, "\t\tif !value.IsValid() || (value.Kind() == reflect.Ptr && value.IsNil()) {\n")
+	fmt.Fprintf(buf, "\t\t\tctx.Buffer().WriteInt8(-3) // NullFlag\n")
+	fmt.Fprintf(buf, "\t\t\treturn nil\n")
+	fmt.Fprintf(buf, "\t\t}\n")
+	fmt.Fprintf(buf, "\t\tctx.Buffer().WriteInt8(-1) // NotNullValueFlag\n")
 	fmt.Fprintf(buf, "\t}\n")
 	fmt.Fprintf(buf, "\tif writeType {\n")
 	fmt.Fprintf(buf, "\t\tctx.Buffer().WriteVaruint32(int32(fory.NAMED_STRUCT))\n")
@@ -473,8 +480,9 @@ func generateWriteMethod(buf *bytes.Buffer, s *StructInfo) error {
 // generateReadMethod generates the Read method that handles ref/type flags
 func generateReadMethod(buf *bytes.Buffer, s *StructInfo) error {
 	fmt.Fprintf(buf, "// Read is the entry point for deserialization with ref/type handling\n")
-	fmt.Fprintf(buf, "func (g %s_ForyGenSerializer) Read(ctx *fory.ReadContext, readRef bool, readType bool, value reflect.Value) error {\n", s.Name)
-	fmt.Fprintf(buf, "\tif readRef {\n")
+	fmt.Fprintf(buf, "func (g %s_ForyGenSerializer) Read(ctx *fory.ReadContext, refMode fory.RefMode, readType bool, value reflect.Value) error {\n", s.Name)
+	fmt.Fprintf(buf, "\tswitch refMode {\n")
+	fmt.Fprintf(buf, "\tcase fory.RefModeTracking:\n")
 	fmt.Fprintf(buf, "\t\trefID, err := ctx.RefResolver().TryPreserveRefId(ctx.Buffer())\n")
 	fmt.Fprintf(buf, "\t\tif err != nil {\n")
 	fmt.Fprintf(buf, "\t\t\treturn err\n")
@@ -484,6 +492,11 @@ func generateReadMethod(buf *bytes.Buffer, s *StructInfo) error {
 	fmt.Fprintf(buf, "\t\t\tif obj.IsValid() {\n")
 	fmt.Fprintf(buf, "\t\t\t\tvalue.Set(obj)\n")
 	fmt.Fprintf(buf, "\t\t\t}\n")
+	fmt.Fprintf(buf, "\t\t\treturn nil\n")
+	fmt.Fprintf(buf, "\t\t}\n")
+	fmt.Fprintf(buf, "\tcase fory.RefModeNullOnly:\n")
+	fmt.Fprintf(buf, "\t\tflag := ctx.Buffer().ReadInt8()\n")
+	fmt.Fprintf(buf, "\t\tif flag == -3 { // NullFlag\n")
 	fmt.Fprintf(buf, "\t\t\treturn nil\n")
 	fmt.Fprintf(buf, "\t\t}\n")
 	fmt.Fprintf(buf, "\t}\n")
@@ -498,8 +511,8 @@ func generateReadMethod(buf *bytes.Buffer, s *StructInfo) error {
 // generateReadWithTypeInfoMethod generates the ReadWithTypeInfo method
 func generateReadWithTypeInfoMethod(buf *bytes.Buffer, s *StructInfo) error {
 	fmt.Fprintf(buf, "// ReadWithTypeInfo deserializes with pre-read type information\n")
-	fmt.Fprintf(buf, "func (g %s_ForyGenSerializer) ReadWithTypeInfo(ctx *fory.ReadContext, readRef bool, typeInfo *fory.TypeInfo, value reflect.Value) error {\n", s.Name)
-	fmt.Fprintf(buf, "\treturn g.Read(ctx, readRef, false, value)\n")
+	fmt.Fprintf(buf, "func (g %s_ForyGenSerializer) ReadWithTypeInfo(ctx *fory.ReadContext, refMode fory.RefMode, typeInfo *fory.TypeInfo, value reflect.Value) error {\n", s.Name)
+	fmt.Fprintf(buf, "\treturn g.Read(ctx, refMode, false, value)\n")
 	fmt.Fprintf(buf, "}\n\n")
 	return nil
 }

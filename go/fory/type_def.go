@@ -218,10 +218,7 @@ func (td *TypeDef) buildTypeInfoWithResolver(resolver *TypeResolver) (TypeInfo, 
 			}
 		} else {
 			// Known struct type - use structSerializer with fieldDefs
-			serializer = &structSerializer{
-				type_:     type_,
-				fieldDefs: td.fieldDefs,
-			}
+			serializer = newStructSerializer(type_, "", td.fieldDefs)
 		}
 	}
 

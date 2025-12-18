@@ -920,7 +920,7 @@ func (r *TypeResolver) getTypeInfo(value reflect.Value, create bool) (*TypeInfo,
 			// Generic array - use LIST type ID
 			arrayTypeID = LIST
 			// Create arrayConcreteValueSerializer for non-primitive arrays
-			elemSerializer, err := r.createSerializer(type_.Elem(), false)
+			elemSerializer, err := r.getSerializerByType(type_.Elem(), false)
 			if err == nil && elemSerializer != nil {
 				serializer = &arrayConcreteValueSerializer{
 					type_:          type_,
@@ -1675,21 +1675,21 @@ func (r *TypeResolver) readTypeInfo(buffer *ByteBuffer, value reflect.Value) (Ty
 	// Handle collection types (LIST, SET, MAP) that don't have specific registration
 	// Use generic types that can hold any element type
 	switch TypeId(typeID) {
-	case LIST:
+	case LIST, -LIST:
 		return TypeInfo{
 			Type:       interfaceSliceType,
 			TypeID:     typeID,
 			Serializer: r.typeToSerializers[interfaceSliceType],
 			StaticId:   ConcreteTypeOther,
 		}, nil
-	case SET:
+	case SET, -SET:
 		return TypeInfo{
 			Type:       genericSetType,
 			TypeID:     typeID,
 			Serializer: r.typeToSerializers[genericSetType],
 			StaticId:   ConcreteTypeOther,
 		}, nil
-	case MAP:
+	case MAP, -MAP:
 		return TypeInfo{
 			Type:       interfaceMapType,
 			TypeID:     typeID,

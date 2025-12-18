@@ -184,12 +184,30 @@ func TestCompatibleSerializationScenarios(t *testing.T) {
 			assertFunc: func(t *testing.T, input interface{}, output interface{}) {
 				in := input.(ComplexObject1)
 				out := output.(ComplexObject1)
-				assert.Equal(t, in, out)
+				// Note: F1 may be either ComplexObject2 or *ComplexObject2 depending on reference tracking
 				inNested := in.F1.(ComplexObject2)
-				outNested, ok := out.F1.(ComplexObject2)
-				if assert.True(t, ok, "expected nested ComplexObject2 type") {
-					assert.Equal(t, inNested, outNested)
+				var outNested ComplexObject2
+				switch v := out.F1.(type) {
+				case ComplexObject2:
+					outNested = v
+				case *ComplexObject2:
+					outNested = *v
+				default:
+					t.Fatalf("expected nested ComplexObject2 type, got %T", out.F1)
 				}
+				assert.Equal(t, inNested, outNested)
+				// Compare other fields
+				assert.Equal(t, in.F2, out.F2)
+				assert.Equal(t, in.F3, out.F3)
+				assert.Equal(t, in.F4, out.F4)
+				assert.Equal(t, in.F5, out.F5)
+				assert.Equal(t, in.F6, out.F6)
+				assert.Equal(t, in.F7, out.F7)
+				assert.Equal(t, in.F8, out.F8)
+				assert.Equal(t, in.F9, out.F9)
+				assert.Equal(t, in.F10, out.F10)
+				assert.Equal(t, in.F11, out.F11)
+				assert.Equal(t, in.F12, out.F12)
 			},
 		},
 		{

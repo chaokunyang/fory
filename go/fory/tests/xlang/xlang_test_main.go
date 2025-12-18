@@ -60,6 +60,53 @@ func assertEqual(expected, actual interface{}, name string) {
 	}
 }
 
+// getStructValue extracts the struct value from either a struct or a pointer to struct.
+// This handles the case where deserialization may return either type depending on
+// reference tracking settings.
+func getOneStringFieldStruct(obj interface{}) OneStringFieldStruct {
+	switch v := obj.(type) {
+	case OneStringFieldStruct:
+		return v
+	case *OneStringFieldStruct:
+		return *v
+	default:
+		panic(fmt.Sprintf("expected OneStringFieldStruct, got %T", obj))
+	}
+}
+
+func getTwoStringFieldStruct(obj interface{}) TwoStringFieldStruct {
+	switch v := obj.(type) {
+	case TwoStringFieldStruct:
+		return v
+	case *TwoStringFieldStruct:
+		return *v
+	default:
+		panic(fmt.Sprintf("expected TwoStringFieldStruct, got %T", obj))
+	}
+}
+
+func getOneEnumFieldStruct(obj interface{}) OneEnumFieldStruct {
+	switch v := obj.(type) {
+	case OneEnumFieldStruct:
+		return v
+	case *OneEnumFieldStruct:
+		return *v
+	default:
+		panic(fmt.Sprintf("expected OneEnumFieldStruct, got %T", obj))
+	}
+}
+
+func getTwoEnumFieldStruct(obj interface{}) TwoEnumFieldStruct {
+	switch v := obj.(type) {
+	case TwoEnumFieldStruct:
+		return v
+	case *TwoEnumFieldStruct:
+		return *v
+	default:
+		panic(fmt.Sprintf("expected TwoEnumFieldStruct, got %T", obj))
+	}
+}
+
 func assertEqualFloat32(expected, actual float32, name string) {
 	diff := expected - actual
 	if diff < 0 {
@@ -1068,7 +1115,7 @@ func testOneStringFieldSchemaConsistent() {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
 	}
 
-	result := obj.(OneStringFieldStruct)
+	result := getOneStringFieldStruct(obj)
 	assertEqual("hello", result.F1, "f1")
 
 	serialized, err := f.Serialize(result)
@@ -1093,7 +1140,7 @@ func testOneStringFieldCompatible() {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
 	}
 
-	result := obj.(OneStringFieldStruct)
+	result := getOneStringFieldStruct(obj)
 	assertEqual("hello", result.F1, "f1")
 
 	serialized, err := f.Serialize(result)
@@ -1118,7 +1165,7 @@ func testTwoStringFieldCompatible() {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
 	}
 
-	result := obj.(TwoStringFieldStruct)
+	result := getTwoStringFieldStruct(obj)
 	assertEqual("first", result.F1, "f1")
 	assertEqual("second", result.F2, "f2")
 
@@ -1170,13 +1217,13 @@ func testSchemaEvolutionCompatibleReverse() {
 		panic(fmt.Sprintf("Failed to deserialize as TwoStringFieldStruct: %v", err))
 	}
 
-	result := obj.(TwoStringFieldStruct)
+	result := getTwoStringFieldStruct(obj)
 	assertEqual("only_one", result.F1, "f1")
 	// f2 should be empty string since it wasn't in the source data
 	assertEqual("", result.F2, "f2")
 
 	// SerializeWithCallback back
-	serialized, err := f.Serialize(obj)
+	serialized, err := f.Serialize(result)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to serialize: %v", err))
 	}
@@ -1200,7 +1247,7 @@ func testOneEnumFieldSchemaConsistent() {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
 	}
 
-	result := obj.(OneEnumFieldStruct)
+	result := getOneEnumFieldStruct(obj)
 	if result.F1 != VALUE_B {
 		panic(fmt.Sprintf("Expected VALUE_B (1), got %v", result.F1))
 	}
@@ -1228,7 +1275,7 @@ func testOneEnumFieldCompatible() {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
 	}
 
-	result := obj.(OneEnumFieldStruct)
+	result := getOneEnumFieldStruct(obj)
 	if result.F1 != VALUE_A {
 		panic(fmt.Sprintf("Expected VALUE_A (0), got %v", result.F1))
 	}
@@ -1256,7 +1303,7 @@ func testTwoEnumFieldCompatible() {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
 	}
 
-	result := obj.(TwoEnumFieldStruct)
+	result := getTwoEnumFieldStruct(obj)
 	if result.F1 != VALUE_A {
 		panic(fmt.Sprintf("Expected F1=VALUE_A (0), got %v", result.F1))
 	}
@@ -1314,7 +1361,7 @@ func testEnumSchemaEvolutionCompatibleReverse() {
 		panic(fmt.Sprintf("Failed to deserialize as TwoEnumFieldStruct: %v", err))
 	}
 
-	result := obj.(TwoEnumFieldStruct)
+	result := getTwoEnumFieldStruct(obj)
 	if result.F1 != VALUE_C {
 		panic(fmt.Sprintf("Expected F1=VALUE_C (2), got %v", result.F1))
 	}
@@ -1324,7 +1371,7 @@ func testEnumSchemaEvolutionCompatibleReverse() {
 	}
 
 	// SerializeWithCallback back
-	serialized, err := f.Serialize(obj)
+	serialized, err := f.Serialize(result)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to serialize: %v", err))
 	}

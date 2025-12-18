@@ -30,15 +30,22 @@ func TestVarint(t *testing.T) {
 			buf.WriteByte_(1) // make address unaligned.
 			buf.ReadByte_()
 		}
+		// Zigzag encoding doubles positive values: zigzag(n) = n * 2 for positive n
+		// So boundary values for positive numbers are:
+		// 1 byte: 0-63 (zigzag 0-126, fits in 7 bits)
+		// 2 bytes: 64-8191 (zigzag 128-16382, fits in 14 bits)
+		// 3 bytes: 8192-1048575 (zigzag fits in 21 bits)
+		// 4 bytes: 1048576-134217727 (zigzag fits in 28 bits)
+		// 5 bytes: 134217728+ (zigzag fits in 32 bits)
 		checkVarint(t, buf, 1, 1)
-		checkVarint(t, buf, 1<<6, 1)
-		checkVarint(t, buf, 1<<7, 2)
-		checkVarint(t, buf, 1<<13, 2)
-		checkVarint(t, buf, 1<<14, 3)
-		checkVarint(t, buf, 1<<20, 3)
-		checkVarint(t, buf, 1<<21, 4)
-		checkVarint(t, buf, 1<<27, 4)
-		checkVarint(t, buf, 1<<28, 5)
+		checkVarint(t, buf, 63, 1)        // max 1-byte positive: zigzag(63)=126
+		checkVarint(t, buf, 64, 2)        // min 2-byte positive: zigzag(64)=128
+		checkVarint(t, buf, 8191, 2)      // max 2-byte positive: zigzag(8191)=16382
+		checkVarint(t, buf, 8192, 3)      // min 3-byte positive: zigzag(8192)=16384
+		checkVarint(t, buf, 1048575, 3)   // max 3-byte positive
+		checkVarint(t, buf, 1048576, 4)   // min 4-byte positive
+		checkVarint(t, buf, 134217727, 4) // max 4-byte positive
+		checkVarint(t, buf, 134217728, 5) // min 5-byte positive
 		checkVarint(t, buf, MaxInt32, 5)
 		checkVarintWrite(t, buf, -1)
 		checkVarintWrite(t, buf, -1<<6)

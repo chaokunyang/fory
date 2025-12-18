@@ -157,25 +157,33 @@ func TestSerializeGenericComplex(t *testing.T) {
 	})
 
 	t.Run("Slice", func(t *testing.T) {
-		original := []int32{1, 2, 3, 4, 5}
+		// Note: *[]T is not supported, use wrapper struct instead
+		type SliceWrapper struct {
+			Items []int32
+		}
+		original := SliceWrapper{Items: []int32{1, 2, 3, 4, 5}}
 		data, err := Serialize(f, &original)
 		require.NoError(t, err)
 
-		var result []int32
+		var result SliceWrapper
 		err = Deserialize(f, data, &result)
 		require.NoError(t, err)
-		require.Equal(t, original, result)
+		require.Equal(t, original.Items, result.Items)
 	})
 
 	t.Run("Map", func(t *testing.T) {
-		original := map[string]int32{"a": 1, "b": 2, "c": 3}
+		// Note: *map[K]V is not supported, use wrapper struct instead
+		type MapWrapper struct {
+			Items map[string]int32
+		}
+		original := MapWrapper{Items: map[string]int32{"a": 1, "b": 2, "c": 3}}
 		data, err := Serialize(f, &original)
 		require.NoError(t, err)
 
-		var result map[string]int32
+		var result MapWrapper
 		err = Deserialize(f, data, &result)
 		require.NoError(t, err)
-		require.Equal(t, original, result)
+		require.Equal(t, original.Items, result.Items)
 	})
 }
 

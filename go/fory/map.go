@@ -135,6 +135,9 @@ func (s mapSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 		entryVal = entryVal.Elem()
 	}
 	hasNext := true
+	// For xlang struct fields (mapInStruct = true), use declared types (set DECL_TYPE flags)
+	// For internal Go serialization (mapInStruct = false), always write type info (don't set DECL_TYPE flags)
+	isXlang := s.mapInStruct
 	for hasNext {
 		for {
 			keyValid := isValid(entryKey)
@@ -143,7 +146,8 @@ func (s mapSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 				if valValid {
 					break
 				}
-				if keySerializer != nil {
+				// Null value case - use DECL_TYPE only for xlang struct fields
+				if isXlang && keySerializer != nil {
 					if s.keyReferencable {
 						buf.WriteInt8(NULL_VALUE_KEY_DECL_TYPE_TRACKING_REF)
 						err := keySerializer.Write(ctx, RefModeTracking, false, entryKey)
@@ -166,7 +170,8 @@ func (s mapSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 				}
 			} else {
 				if valValid {
-					if valueSerializer != nil {
+					// Null key case - use DECL_TYPE only for xlang struct fields
+					if isXlang && valueSerializer != nil {
 						if s.valueReferencable {
 							buf.WriteInt8(NULL_KEY_VALUE_DECL_TYPE_TRACKING_REF)
 							err := valueSerializer.Write(ctx, RefModeTracking, false, entryVal)
@@ -214,7 +219,9 @@ func (s mapSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 		chunkHeader := 0
 		keyWriteRef := s.keyReferencable
 		valueWriteRef := s.valueReferencable
-		if keySerializer != nil {
+		// For xlang struct fields, use declared types (set DECL_TYPE flags)
+		// For internal Go serialization, always write type info
+		if isXlang && keySerializer != nil {
 			chunkHeader |= KEY_DECL_TYPE
 		} else {
 			keyTypeInfo, _ := getActualTypeInfo(entryKey, typeResolver)
@@ -224,7 +231,7 @@ func (s mapSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 			keySerializer = keyTypeInfo.Serializer
 			keyWriteRef = keyTypeInfo.NeedWriteRef
 		}
-		if valueSerializer != nil {
+		if isXlang && valueSerializer != nil {
 			chunkHeader |= VALUE_DECL_TYPE
 		} else {
 			valueTypeInfo, _ := getActualTypeInfo(entryVal, typeResolver)

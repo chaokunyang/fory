@@ -123,8 +123,12 @@ func generateFieldWriteTyped(buf *bytes.Buffer, field *FieldInfo) error {
 		case types.Float64:
 			fmt.Fprintf(buf, "\tbuf.WriteFloat64(%s)\n", fieldAccess)
 		case types.String:
-			// String type has NeedWriteRef = false
-			// So in struct serialization, no ref flag is written, just the string data
+			// String is referencable in xlang spec (nullable=1 in hash)
+			// For struct field serialization, we need to write ref flag when tracking is enabled
+			// This matches the reflection behavior where strings get RefModeTracking or RefModeNullOnly
+			fmt.Fprintf(buf, "\tif ctx.TrackRef() {\n")
+			fmt.Fprintf(buf, "\t\tbuf.WriteInt8(-1) // NotNullValueFlag for string\n")
+			fmt.Fprintf(buf, "\t}\n")
 			fmt.Fprintf(buf, "\tctx.WriteString(%s)\n", fieldAccess)
 		default:
 			fmt.Fprintf(buf, "\t// TODO: unsupported basic type %s\n", basic.String())

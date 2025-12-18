@@ -287,6 +287,10 @@ func (s sliceDynSerializer) ReadData(ctx *ReadContext, _ reflect.Type, value ref
 		if elemTypeInfo.Serializer != nil {
 			elemType = elemTypeInfo.Type
 			elemSerializer = elemTypeInfo.Serializer
+		} else {
+			// When CollectionIsDeclElementType is set, get serializer from the declared element type
+			elemType = sliceType.Elem()
+			elemSerializer, _ = ctx.TypeResolver().getSerializerByType(elemType, false)
 		}
 		return s.readSameType(ctx, buf, value, elemType, elemSerializer, collectFlag)
 	}
@@ -309,6 +313,12 @@ func (s sliceDynSerializer) readSameType(ctx *ReadContext, buf *ByteBuffer, valu
 	// Wrap serializer to produce pointers if needed for interface implementation
 	elemType, serializer = s.wrapSerializerIfNeeded(elemType, serializer)
 
+	// Check if element is a named struct type (needs pointer for circular ref support)
+	isNamedStruct := false
+	if _, ok := serializer.(*structSerializer); ok && elemType.Kind() == reflect.Struct {
+		isNamedStruct = true
+	}
+
 	for i := 0; i < value.Len(); i++ {
 		if trackRefs {
 			refID, err := ctx.RefResolver().TryPreserveRefId(buf)
@@ -318,11 +328,33 @@ func (s sliceDynSerializer) readSameType(ctx *ReadContext, buf *ByteBuffer, valu
 			if int8(refID) == NullFlag {
 				continue
 			}
-			elem := reflect.New(elemType).Elem()
-			if err := serializer.ReadData(ctx, elemType, elem); err != nil {
-				return err
+			// Handle RefFlag - element references a previously read object
+			if int8(refID) < NotNullValueFlag {
+				obj := ctx.RefResolver().GetReadObject(refID)
+				if obj.IsValid() {
+					value.Index(i).Set(obj)
+				}
+				continue
 			}
-			ctx.RefResolver().Reference(elem)
+
+			// For named struct types, use pointer for circular reference support
+			var elem reflect.Value
+			if isNamedStruct {
+				// Create pointer to struct: *B
+				elem = reflect.New(elemType)
+				// Register reference BEFORE reading data for circular ref support
+				ctx.RefResolver().SetReadObject(refID, elem)
+				// Read into the struct element
+				if err := serializer.ReadData(ctx, elemType, elem.Elem()); err != nil {
+					return err
+				}
+			} else {
+				elem = reflect.New(elemType).Elem()
+				if err := serializer.ReadData(ctx, elemType, elem); err != nil {
+					return err
+				}
+				ctx.RefResolver().Reference(elem)
+			}
 			value.Index(i).Set(elem)
 		} else if hasNull {
 			refFlag := buf.ReadInt8()

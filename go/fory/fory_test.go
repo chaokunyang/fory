@@ -131,7 +131,8 @@ func TestSerializeInterface(t *testing.T) {
 		var a interface{}
 		a = -1
 		serde(t, fory, a)
-		b := []interface{}{1, 2, "str"}
+		// Use int64 for interface values since fory deserializes integers to int64 for cross-language compatibility
+		b := []interface{}{int64(1), int64(2), "str"}
 		serde(t, fory, b)
 		var newB []interface{}
 		serDeserializeTo(t, fory, b, &newB)
@@ -314,8 +315,9 @@ func TestSerializeStruct(t *testing.T) {
 		require.Nil(t, fory.RegisterByName(A{}, "example.A"))
 		serde(t, fory, A{})
 		serde(t, fory, &A{})
-		serde(t, fory, A{F1: Bar{F1: 1, F2: "str"}, F2: -1})
-		serde(t, fory, &A{F1: Bar{F1: 1, F2: "str"}, F2: -1})
+		// Use int64 for interface{} fields since xlang deserializes integers to int64
+		serde(t, fory, A{F1: Bar{F1: 1, F2: "str"}, F2: int64(-1)})
+		serde(t, fory, &A{F1: Bar{F1: 1, F2: "str"}, F2: int64(-1)})
 
 		require.Nil(t, fory.RegisterByName(Foo{}, "example.Foo"))
 		foo := newFoo()

@@ -128,8 +128,12 @@ func generateFieldReadTyped(buf *bytes.Buffer, field *FieldInfo) error {
 		case types.Float64:
 			fmt.Fprintf(buf, "\t%s = buf.ReadFloat64()\n", fieldAccess)
 		case types.String:
-			// String type has NeedWriteRef = false
-			// So in struct deserialization, no ref flag is read, just the string data
+			// String is referencable in xlang spec (nullable=1 in hash)
+			// For struct field deserialization, we need to read ref flag when tracking is enabled
+			// This matches the reflection behavior where strings get RefModeTracking or RefModeNullOnly
+			fmt.Fprintf(buf, "\tif ctx.TrackRef() {\n")
+			fmt.Fprintf(buf, "\t\t_ = buf.ReadInt8() // Read NotNullValueFlag for string\n")
+			fmt.Fprintf(buf, "\t}\n")
 			fmt.Fprintf(buf, "\t%s = ctx.ReadString()\n", fieldAccess)
 		default:
 			fmt.Fprintf(buf, "\t// TODO: unsupported basic type %s\n", basic.String())

@@ -178,10 +178,11 @@ func TestDynamicSliceDemoXlang(t *testing.T) {
 	expectedTypeTag := pkgPath + "." + typeName
 
 	// Create test data with simpler types to avoid reflection issues
+	// Use int64 for interface values since fory deserializes integers to int64 for cross-language compatibility
 	codegenInstance := &DynamicSliceDemo{
 		DynamicSlice: []interface{}{
 			"first",
-			200, // Testing mixed types in dynamic slice
+			int64(200), // Testing mixed types in dynamic slice
 			"third",
 		},
 	}
@@ -194,7 +195,7 @@ func TestDynamicSliceDemoXlang(t *testing.T) {
 	reflectInstance := &ReflectDynamicStruct{
 		DynamicSlice: []interface{}{
 			"first",
-			200, // Testing mixed types in dynamic slice
+			int64(200), // Testing mixed types in dynamic slice
 			"third",
 		},
 	}

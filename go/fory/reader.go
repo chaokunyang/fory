@@ -448,26 +448,56 @@ func (c *ReadContext) ReadValue(value reflect.Value) error {
 
 		// Create a new instance
 		var newValue reflect.Value
+		var valueToSet reflect.Value
+		internalTypeID := TypeId(typeInfo.TypeID & 0xFF)
+
+		// For named struct types, create a pointer type to support circular references.
+		// In Java/xlang serialization, objects are always by reference, so when deserializing
+		// into interface{}, we need to use pointers to maintain reference semantics.
+		isNamedStruct := actualType.Kind() == reflect.Struct &&
+			(internalTypeID == NAMED_STRUCT || internalTypeID == NAMED_COMPATIBLE_STRUCT ||
+				internalTypeID == COMPATIBLE_STRUCT || internalTypeID == STRUCT)
+
 		if actualType.Kind() == reflect.Ptr {
 			// For pointer types, create a pointer directly
 			// The serializer's ReadData will handle allocating and reading the element
 			newValue = reflect.New(actualType).Elem()
+			valueToSet = newValue
+		} else if isNamedStruct {
+			// For named struct types, create a pointer to support circular references
+			// Create *A instead of A
+			newValue = reflect.New(actualType)
+			valueToSet = newValue
 		} else {
 			newValue = reflect.New(actualType).Elem()
+			valueToSet = newValue
 		}
 
-		// Read the data using the actual type's serializer
-		if err := typeInfo.Serializer.ReadData(c, actualType, newValue); err != nil {
+		// For named structs, register the pointer BEFORE reading data
+		// This is critical for circular references to work correctly
+		if isNamedStruct && int8(refID) >= NotNullValueFlag {
+			c.RefResolver().SetReadObject(refID, newValue)
+		}
+
+		// For named structs, read into the pointer's element
+		var readTarget reflect.Value
+		if isNamedStruct {
+			readTarget = newValue.Elem()
+		} else {
+			readTarget = newValue
+		}
+
+		if err := typeInfo.Serializer.ReadData(c, actualType, readTarget); err != nil {
 			return err
 		}
 
-		// Register reference after reading data (ref tracking for the value itself)
-		if int8(refID) >= NotNullValueFlag {
+		// Register reference after reading data for non-struct types
+		if !isNamedStruct && int8(refID) >= NotNullValueFlag {
 			c.RefResolver().SetReadObject(refID, newValue)
 		}
 
 		// Set the interface value
-		value.Set(newValue)
+		value.Set(valueToSet)
 		return nil
 	}
 

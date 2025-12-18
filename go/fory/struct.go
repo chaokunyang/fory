@@ -259,7 +259,13 @@ func (s *structSerializer) WriteData(ctx *WriteContext, value reflect.Value) err
 		buf.WriteInt32(s.structHash)
 	}
 
-	// In compatible mode with fieldDefs, write fields in TypeDef order (declaration order)
+	// In compatible mode, always write fields in sorted order to match TypeDef order
+	// This ensures consistency with the read path which uses readFieldsInOrder
+	if ctx.Compatible() {
+		return s.writeFieldsInOrder(ctx, value)
+	}
+
+	// Non-compatible mode with fieldDefs still uses writeFieldsInOrder
 	if s.fieldDefs != nil {
 		return s.writeFieldsInOrder(ctx, value)
 	}
@@ -367,8 +373,15 @@ func (s *structSerializer) WriteData(ctx *WriteContext, value reflect.Value) err
 		if field.Serializer != nil {
 			// For nested struct fields in compatible mode, write type info
 			writeType := ctx.Compatible() && isStructField(field.Type)
-			// Per xlang spec, all non-primitive fields need ref flag
-			if err := field.Serializer.Write(ctx, RefModeTracking, writeType, fieldValue); err != nil {
+			// Determine RefMode based on ctx.TrackRef() and field.Referencable
+			// This must match the read path logic which uses FieldDef.trackingRef/nullable
+			refMode := RefModeNone
+			if ctx.TrackRef() && field.Referencable {
+				refMode = RefModeTracking
+			} else if field.Referencable {
+				refMode = RefModeNullOnly
+			}
+			if err := field.Serializer.Write(ctx, refMode, writeType, fieldValue); err != nil {
 				return err
 			}
 		} else {
@@ -800,6 +813,7 @@ func (s *structSerializer) initFieldsFromContext(ctx interface{ TypeResolver() *
 	var fieldNames []string
 	var serializers []Serializer
 	var typeIds []TypeId
+	var nullables []bool
 
 	for i := 0; i < type_.NumField(); i++ {
 		field := type_.Field(i)
@@ -808,7 +822,6 @@ func (s *structSerializer) initFieldsFromContext(ctx interface{ TypeResolver() *
 			continue // skip unexported fields
 		}
 
-		originalFieldType := field.Type
 		fieldType := field.Type
 
 		var fieldSerializer Serializer
@@ -866,6 +879,13 @@ func (s *structSerializer) initFieldsFromContext(ctx interface{ TypeResolver() *
 		if fieldTypeId == 0 {
 			fieldTypeId = typeIdFromKind(fieldType)
 		}
+		// Calculate nullable flag to match buildFieldDefs logic in type_def.go
+		// This ensures writer and reader use the same field ordering and ref mode
+		nullableFlag := nullable(fieldType)
+		internalId := TypeId(fieldTypeId & 0xFF)
+		if isUserDefinedType(int16(internalId)) || internalId == ENUM || internalId == NAMED_ENUM {
+			nullableFlag = true
+		}
 		fieldInfo := &FieldInfo{
 			Name:         SnakeCase(field.Name),
 			Offset:       field.Offset,
@@ -873,17 +893,18 @@ func (s *structSerializer) initFieldsFromContext(ctx interface{ TypeResolver() *
 			StaticId:     GetStaticTypeId(fieldType),
 			TypeId:       fieldTypeId,
 			Serializer:   fieldSerializer,
-			Referencable: isReferencable(originalFieldType), // Use isReferencable instead of nullable
+			Referencable: nullableFlag, // Use same logic as TypeDef's nullable flag for consistent ref handling
 			FieldIndex:   i,
 		}
 		fields = append(fields, fieldInfo)
 		fieldNames = append(fieldNames, fieldInfo.Name)
 		serializers = append(serializers, fieldSerializer)
 		typeIds = append(typeIds, fieldTypeId)
+		nullables = append(nullables, nullableFlag)
 	}
 
-	// Sort fields according to specification
-	serializers, fieldNames = sortFields(typeResolver, fieldNames, serializers, typeIds)
+	// Sort fields according to specification using nullable info for consistent ordering
+	serializers, fieldNames = sortFieldsWithNullable(typeResolver, fieldNames, serializers, typeIds, nullables)
 	order := make(map[string]int, len(fieldNames))
 	for idx, name := range fieldNames {
 		order[name] = idx
@@ -1654,6 +1675,28 @@ func typeIdFromKind(type_ reflect.Type) TypeId {
 		return STRING
 	case reflect.Slice:
 		return LIST
+	case reflect.Array:
+		// For arrays, return the appropriate primitive array type ID based on element type
+		elemKind := type_.Elem().Kind()
+		switch elemKind {
+		case reflect.Bool:
+			return BOOL_ARRAY
+		case reflect.Int8:
+			return INT8_ARRAY
+		case reflect.Int16:
+			return INT16_ARRAY
+		case reflect.Int32:
+			return INT32_ARRAY
+		case reflect.Int64, reflect.Int:
+			return INT64_ARRAY
+		case reflect.Float32:
+			return FLOAT32_ARRAY
+		case reflect.Float64:
+			return FLOAT64_ARRAY
+		default:
+			// Non-primitive arrays use LIST
+			return LIST
+		}
 	case reflect.Map:
 		return MAP
 	case reflect.Struct:

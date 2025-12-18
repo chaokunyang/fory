@@ -879,7 +879,7 @@ func (g ValidationDemo_ForyGenSerializer) Write(ctx *fory.WriteContext, refMode 
 func (g ValidationDemo_ForyGenSerializer) WriteTyped(ctx *fory.WriteContext, v *ValidationDemo) error {
 	buf := ctx.Buffer()
 	// WriteData precomputed struct hash for compatibility checking
-	buf.WriteInt32(-2084390673) // hash of ValidationDemo structure
+	buf.WriteInt32(728169998) // hash of ValidationDemo structure
 
 	// WriteData fields in sorted order
 	// Field: D (float64)
@@ -891,6 +891,9 @@ func (g ValidationDemo_ForyGenSerializer) WriteTyped(ctx *fory.WriteContext, v *
 	// Field: A (int32)
 	buf.WriteVarint32(v.A)
 	// Field: B (string)
+	if ctx.TrackRef() {
+		buf.WriteInt8(-1) // NotNullValueFlag for string
+	}
 	ctx.WriteString(v.B)
 	return nil
 }
@@ -941,8 +944,8 @@ func (g ValidationDemo_ForyGenSerializer) Read(ctx *fory.ReadContext, refMode fo
 func (g ValidationDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *ValidationDemo) error {
 	buf := ctx.Buffer()
 	// ReadData and verify struct hash
-	if got := buf.ReadInt32(); got != -2084390673 {
-		return fmt.Errorf("struct hash mismatch for ValidationDemo: expected -2084390673, got %d", got)
+	if got := buf.ReadInt32(); got != 728169998 {
+		return fmt.Errorf("struct hash mismatch for ValidationDemo: expected 728169998, got %d", got)
 	}
 
 	// ReadData fields in same order as write
@@ -955,6 +958,9 @@ func (g ValidationDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *Va
 	// Field: A (int32)
 	v.A = buf.ReadVarint32()
 	// Field: B (string)
+	if ctx.TrackRef() {
+		_ = buf.ReadInt8() // Read NotNullValueFlag for string
+	}
 	v.B = ctx.ReadString()
 	return nil
 }

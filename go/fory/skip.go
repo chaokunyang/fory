@@ -267,14 +267,29 @@ func skipMap(ctx *ReadContext, fieldDef FieldDef) error {
 		return nil
 	}
 
-	// Use unknown types for key and value by default
-	defaultKeyDef := FieldDef{
-		fieldType: NewSimpleFieldType(UNKNOWN),
-		nullable:  true,
-	}
-	defaultValueDef := FieldDef{
-		fieldType: NewSimpleFieldType(UNKNOWN),
-		nullable:  true,
+	// Extract key/value types from MapFieldType if available
+	// When KEY_DECL_TYPE/VALUE_DECL_TYPE flags are set, the type info is NOT written
+	// to the buffer, so we must use the declared types from the FieldDef
+	var declaredKeyDef, declaredValueDef FieldDef
+	if mapFieldType, ok := fieldDef.fieldType.(*MapFieldType); ok {
+		declaredKeyDef = FieldDef{
+			fieldType: mapFieldType.keyType,
+			nullable:  true,
+		}
+		declaredValueDef = FieldDef{
+			fieldType: mapFieldType.valueType,
+			nullable:  true,
+		}
+	} else {
+		// Fallback to unknown types if MapFieldType is not available
+		declaredKeyDef = FieldDef{
+			fieldType: NewSimpleFieldType(UNKNOWN),
+			nullable:  true,
+		}
+		declaredValueDef = FieldDef{
+			fieldType: NewSimpleFieldType(UNKNOWN),
+			nullable:  true,
+		}
 	}
 
 	var lenCounter uint32
@@ -304,7 +319,7 @@ func skipMap(ctx *ReadContext, fieldDef FieldDef) error {
 				}
 				valueTypeInfo = &typeInfo
 			} else {
-				valueDef = defaultValueDef
+				valueDef = declaredValueDef
 			}
 			if err := ctx.incDepth(); err != nil {
 				return err
@@ -335,7 +350,7 @@ func skipMap(ctx *ReadContext, fieldDef FieldDef) error {
 				}
 				keyTypeInfo = &typeInfo
 			} else {
-				keyDef = defaultKeyDef
+				keyDef = declaredKeyDef
 			}
 			if err := ctx.incDepth(); err != nil {
 				return err
@@ -369,7 +384,7 @@ func skipMap(ctx *ReadContext, fieldDef FieldDef) error {
 			}
 			keyTypeInfo = &typeInfo
 		} else {
-			keyDef = defaultKeyDef
+			keyDef = declaredKeyDef
 		}
 
 		if !valueDeclared {
@@ -384,18 +399,22 @@ func skipMap(ctx *ReadContext, fieldDef FieldDef) error {
 			}
 			valueTypeInfo = &typeInfo
 		} else {
-			valueDef = defaultValueDef
+			valueDef = declaredValueDef
 		}
+
+		// Check if ref tracking is enabled for keys and values
+		keyTrackingRef := (header & TRACKING_KEY_REF) != 0
+		valueTrackingRef := (header & TRACKING_VALUE_REF) != 0
 
 		if err := ctx.incDepth(); err != nil {
 			return err
 		}
 		for i := byte(0); i < chunkSize; i++ {
-			if err := skipValue(ctx, keyDef, false, false, keyTypeInfo); err != nil {
+			if err := skipValue(ctx, keyDef, keyTrackingRef, false, keyTypeInfo); err != nil {
 				ctx.decDepth()
 				return err
 			}
-			if err := skipValue(ctx, valueDef, false, false, valueTypeInfo); err != nil {
+			if err := skipValue(ctx, valueDef, valueTrackingRef, false, valueTypeInfo); err != nil {
 				ctx.decDepth()
 				return err
 			}

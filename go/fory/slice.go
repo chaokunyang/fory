@@ -153,9 +153,13 @@ func (s *sliceConcreteValueSerializer) WriteData(ctx *WriteContext, value reflec
 	}
 
 	// Determine collection flags
-	// Set CollectionIsDeclElementType since the element type is declared/known
-	// This matches Java behavior and avoids writing redundant element type IDs
-	collectFlag := CollectionIsSameType | CollectionIsDeclElementType
+	// For xlang (positive typeId): Set CollectionIsDeclElementType since Java knows the type from struct definition
+	// For internal Go serialization (negative typeId): Don't set CollectionIsDeclElementType, write element type info
+	collectFlag := CollectionIsSameType
+	isXlang := s.typeId > 0
+	if isXlang {
+		collectFlag |= CollectionIsDeclElementType
+	}
 	hasNull := false
 	elemType := s.type_.Elem()
 	isPointerElem := elemType.Kind() == reflect.Ptr
@@ -179,8 +183,14 @@ func (s *sliceConcreteValueSerializer) WriteData(ctx *WriteContext, value reflec
 	}
 	buf.WriteInt8(int8(collectFlag))
 
-	// Element type is not written because CollectionIsDeclElementType is set
-	// The reader knows the element type from the TypeDef
+	// Write element type info for internal Go serialization (not xlang)
+	// so the reader knows what type to deserialize
+	if !isXlang {
+		elemTypeInfo, _ := ctx.TypeResolver().getTypeInfo(reflect.New(elemType).Elem(), false)
+		if err := ctx.TypeResolver().writeTypeInfo(buf, elemTypeInfo); err != nil {
+			return err
+		}
+	}
 
 	// WriteData elements
 	trackRefs := (collectFlag & CollectionTrackingRef) != 0

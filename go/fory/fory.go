@@ -952,15 +952,193 @@ func (f *Fory) Unmarshal(data []byte, v interface{}) error {
 	target := reflect.ValueOf(v).Elem()
 	src := reflect.ValueOf(newValue)
 
-	// Handle case where target is a pointer and src is a value
+	// Handle type conversions between src and target
 	if target.Kind() == reflect.Ptr && src.Kind() != reflect.Ptr {
-		// Create a pointer to the value and set it
+		// Target expects pointer, src is value - wrap src in pointer
 		ptr := reflect.New(src.Type())
 		ptr.Elem().Set(src)
 		target.Set(ptr)
+	} else if target.Kind() != reflect.Ptr && src.Kind() == reflect.Ptr {
+		// Target expects value, src is pointer - dereference src
+		// This happens when deserializing named structs into interface{} returns pointer for circular ref support
+		if !src.IsNil() {
+			target.Set(src.Elem())
+		}
+	} else if target.Kind() == reflect.Slice && src.Kind() == reflect.Slice {
+		// Handle slice type conversion (e.g., []interface{} -> []*B)
+		if err := convertSlice(src, target); err != nil {
+			return err
+		}
+	} else if target.Kind() == reflect.Map && src.Kind() == reflect.Map {
+		// Handle map type conversion (e.g., map[interface{}]interface{} -> map[string]bool)
+		if err := convertMap(src, target); err != nil {
+			return err
+		}
+	} else if target.Kind() == reflect.Array && src.Kind() == reflect.Slice {
+		// Handle slice to array conversion (arrays are serialized as slices)
+		if src.Len() != target.Len() {
+			return fmt.Errorf("cannot convert slice of length %d to array of length %d", src.Len(), target.Len())
+		}
+		targetElemType := target.Type().Elem()
+		for i := 0; i < src.Len(); i++ {
+			srcElem := src.Index(i)
+			targetElem := target.Index(i)
+
+			// Handle interface{} elements
+			if srcElem.Kind() == reflect.Interface {
+				srcElem = srcElem.Elem()
+			}
+
+			if !srcElem.IsValid() {
+				continue // nil element
+			}
+
+			// Try direct assignment or conversion
+			if srcElem.Type().AssignableTo(targetElemType) {
+				targetElem.Set(srcElem)
+			} else if srcElem.Type().ConvertibleTo(targetElemType) {
+				targetElem.Set(srcElem.Convert(targetElemType))
+			} else {
+				return fmt.Errorf("cannot convert array element %v to %v", srcElem.Type(), targetElemType)
+			}
+		}
 	} else {
 		target.Set(src)
 	}
+	return nil
+}
+
+// convertSlice converts a source slice to target slice type, handling element type conversions
+func convertSlice(src, target reflect.Value) error {
+	if src.Type().AssignableTo(target.Type()) {
+		target.Set(src)
+		return nil
+	}
+
+	// Create a new slice of the target type
+	targetElemType := target.Type().Elem()
+	length := src.Len()
+	newSlice := reflect.MakeSlice(target.Type(), length, length)
+
+	for i := 0; i < length; i++ {
+		srcElem := src.Index(i)
+		targetElem := newSlice.Index(i)
+
+		// Handle interface{} elements
+		if srcElem.Kind() == reflect.Interface {
+			srcElem = srcElem.Elem()
+		}
+
+		if !srcElem.IsValid() {
+			continue // nil element
+		}
+
+		// Try direct assignment
+		if srcElem.Type().AssignableTo(targetElemType) {
+			targetElem.Set(srcElem)
+		} else if targetElemType.Kind() == reflect.Ptr && srcElem.Kind() == reflect.Ptr {
+			// Both are pointers - check if the pointed-to types match
+			if srcElem.Type() == targetElemType {
+				targetElem.Set(srcElem)
+			} else if srcElem.Elem().Type().AssignableTo(targetElemType.Elem()) {
+				targetElem.Set(srcElem)
+			} else {
+				return fmt.Errorf("cannot convert %v to %v", srcElem.Type(), targetElemType)
+			}
+		} else if targetElemType.Kind() == reflect.Ptr && srcElem.Kind() != reflect.Ptr {
+			// Target is pointer, src is value - wrap in pointer
+			ptr := reflect.New(srcElem.Type())
+			ptr.Elem().Set(srcElem)
+			targetElem.Set(ptr)
+		} else if targetElemType.Kind() != reflect.Ptr && srcElem.Kind() == reflect.Ptr {
+			// Target is value, src is pointer - dereference
+			if !srcElem.IsNil() {
+				targetElem.Set(srcElem.Elem())
+			}
+		} else {
+			return fmt.Errorf("cannot convert %v to %v", srcElem.Type(), targetElemType)
+		}
+	}
+
+	target.Set(newSlice)
+	return nil
+}
+
+// convertMap converts a source map to target map type, handling key/value type conversions
+func convertMap(src, target reflect.Value) error {
+	if src.Type().AssignableTo(target.Type()) {
+		target.Set(src)
+		return nil
+	}
+
+	// Create a new map of the target type
+	targetKeyType := target.Type().Key()
+	targetValType := target.Type().Elem()
+	newMap := reflect.MakeMap(target.Type())
+
+	iter := src.MapRange()
+	for iter.Next() {
+		srcKey := iter.Key()
+		srcVal := iter.Value()
+
+		// Handle interface{} keys
+		if srcKey.Kind() == reflect.Interface {
+			srcKey = srcKey.Elem()
+		}
+		// Handle interface{} values
+		if srcVal.Kind() == reflect.Interface {
+			srcVal = srcVal.Elem()
+		}
+
+		// Convert key
+		var targetKey reflect.Value
+		if !srcKey.IsValid() {
+			targetKey = reflect.Zero(targetKeyType)
+		} else if srcKey.Type().AssignableTo(targetKeyType) {
+			targetKey = srcKey
+		} else if srcKey.Type().ConvertibleTo(targetKeyType) {
+			targetKey = srcKey.Convert(targetKeyType)
+		} else {
+			return fmt.Errorf("cannot convert map key %v to %v", srcKey.Type(), targetKeyType)
+		}
+
+		// Convert value
+		var targetVal reflect.Value
+		if !srcVal.IsValid() {
+			targetVal = reflect.Zero(targetValType)
+		} else if srcVal.Type().AssignableTo(targetValType) {
+			targetVal = srcVal
+		} else if srcVal.Type().ConvertibleTo(targetValType) {
+			targetVal = srcVal.Convert(targetValType)
+		} else if targetValType.Kind() == reflect.Ptr && srcVal.Kind() == reflect.Ptr {
+			// Both are pointers
+			if srcVal.Type() == targetValType {
+				targetVal = srcVal
+			} else if srcVal.Elem().Type().AssignableTo(targetValType.Elem()) {
+				targetVal = srcVal
+			} else {
+				return fmt.Errorf("cannot convert map value %v to %v", srcVal.Type(), targetValType)
+			}
+		} else if targetValType.Kind() == reflect.Ptr && srcVal.Kind() != reflect.Ptr {
+			// Target is pointer, src is value - wrap in pointer
+			ptr := reflect.New(srcVal.Type())
+			ptr.Elem().Set(srcVal)
+			targetVal = ptr
+		} else if targetValType.Kind() != reflect.Ptr && srcVal.Kind() == reflect.Ptr {
+			// Target is value, src is pointer - dereference
+			if !srcVal.IsNil() {
+				targetVal = srcVal.Elem()
+			} else {
+				targetVal = reflect.Zero(targetValType)
+			}
+		} else {
+			return fmt.Errorf("cannot convert map value %v to %v", srcVal.Type(), targetValType)
+		}
+
+		newMap.SetMapIndex(targetKey, targetVal)
+	}
+
+	target.Set(newMap)
 	return nil
 }
 

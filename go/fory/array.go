@@ -275,6 +275,64 @@ func (s *arrayConcreteValueSerializer) ReadWithTypeInfo(ctx *ReadContext, refMod
 	return s.Read(ctx, refMode, false, value)
 }
 
+// arrayDynSerializer wraps sliceDynSerializer for arrays with interface element types.
+// It converts arrays to slices and delegates to sliceDynSerializer.
+type arrayDynSerializer struct {
+	sliceSerializer sliceDynSerializer
+}
+
+func newArrayDynSerializer(elemType reflect.Type) (arrayDynSerializer, error) {
+	sliceSer, err := newSliceDynSerializer(elemType)
+	if err != nil {
+		return arrayDynSerializer{}, err
+	}
+	return arrayDynSerializer{sliceSerializer: sliceSer}, nil
+}
+
+func (s arrayDynSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
+	// Convert array to slice and forward to sliceDynSerializer
+	slice := value.Slice(0, value.Len())
+	return s.sliceSerializer.WriteData(ctx, slice)
+}
+
+func (s arrayDynSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
+	_, err := writeArrayRefAndType(ctx, refMode, writeType, value, LIST)
+	if err != nil {
+		return err
+	}
+	return s.WriteData(ctx, value)
+}
+
+func (s arrayDynSerializer) ReadData(ctx *ReadContext, _ reflect.Type, value reflect.Value) error {
+	// Create a temp slice to read into, then copy back to array
+	sliceType := reflect.SliceOf(value.Type().Elem())
+	tempSlice := reflect.MakeSlice(sliceType, value.Len(), value.Len())
+	if err := s.sliceSerializer.ReadData(ctx, sliceType, tempSlice); err != nil {
+		return err
+	}
+	// Copy elements from temp slice to array
+	copyLen := tempSlice.Len()
+	if copyLen > value.Len() {
+		copyLen = value.Len()
+	}
+	for i := 0; i < copyLen; i++ {
+		value.Index(i).Set(tempSlice.Index(i))
+	}
+	return nil
+}
+
+func (s arrayDynSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
+	done, err := readArrayRefAndType(ctx, refMode, readType, value)
+	if done || err != nil {
+		return err
+	}
+	return s.ReadData(ctx, value.Type(), value)
+}
+
+func (s arrayDynSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
+	return s.Read(ctx, refMode, false, value)
+}
+
 type byteArraySerializer struct{}
 
 func (s byteArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) error {

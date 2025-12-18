@@ -792,18 +792,13 @@ type stringSliceSerializer struct {
 func (s stringSliceSerializer) Write(ctx *WriteContext, value reflect.Value) error {
 	buf := ctx.Buffer()
 	v := value.Interface().([]string)
-	err := ctx.WriteLength(len(v))
-	if err != nil {
+	if err := ctx.WriteLength(len(v)); err != nil {
 		return err
 	}
+	// Strings don't need reference tracking, but xlang format requires NotNullValueFlag per element
 	for _, str := range v {
-		if refWritten, err := ctx.RefResolver().WriteRefOrNull(buf, reflect.ValueOf(str)); err == nil {
-			if !refWritten {
-				if err := writeString(buf, str); err != nil {
-					return err
-				}
-			}
-		} else {
+		buf.WriteInt8(NotNullValueFlag)
+		if err := writeString(buf, str); err != nil {
 			return err
 		}
 	}
@@ -815,36 +810,20 @@ func (s stringSliceSerializer) Read(ctx *ReadContext, type_ reflect.Type, value 
 	length := ctx.ReadLength()
 	r := reflect.MakeSlice(type_, length, length)
 	elemTyp := type_.Elem()
-	set := func(i int, s string) {
-		if elemTyp.Kind() == reflect.String {
-			r.Index(i).SetString(s)
-		} else {
-			r.Index(i).Set(reflect.ValueOf(s).Convert(elemTyp))
-		}
-	}
 
+	// Strings don't need reference tracking, but xlang format has a flag byte per element
 	for i := 0; i < length; i++ {
-		refFlag := ctx.RefResolver().ReadRefOrNull(buf)
-		if refFlag == RefValueFlag || refFlag == NotNullValueFlag {
-			var nextReadRefId int32
-			if refFlag == RefValueFlag {
-				var err error
-				nextReadRefId, err = ctx.RefResolver().PreserveRefId()
-				if err != nil {
-					return err
-				}
-			}
-			elem := readString(buf)
-			if ctx.TrackRef() && refFlag == RefValueFlag {
-				// If value is not nil(reflect), then value is a pointer to some variable, we can update the `value`,
-				// then record `value` in the reference resolver.
-				ctx.RefResolver().SetReadObject(nextReadRefId, reflect.ValueOf(elem))
-			}
-			set(i, elem)
-		} else if refFlag == NullFlag {
-			set(i, "")
-		} else { // RefNoneFlag
-			set(i, ctx.RefResolver().GetCurrentReadObject().Interface().(string))
+		refFlag := buf.ReadInt8()
+		var str string
+		if refFlag == NullFlag {
+			str = ""
+		} else {
+			str = readString(buf)
+		}
+		if elemTyp.Kind() == reflect.String {
+			r.Index(i).SetString(str)
+		} else {
+			r.Index(i).Set(reflect.ValueOf(str).Convert(elemTyp))
 		}
 	}
 	value.Set(r)

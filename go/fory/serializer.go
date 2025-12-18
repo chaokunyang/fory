@@ -212,5 +212,3 @@ func (s *extensionSerializerAdapter) Read(ctx *ReadContext, refMode RefMode, rea
 func (s *extensionSerializerAdapter) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
 	return s.Read(ctx, refMode, false, value)
 }
-
-// Helper functions for serializer dispatch

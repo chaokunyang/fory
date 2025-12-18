@@ -393,8 +393,9 @@ func (f *Fory) Reset() {
 // Serialize - type T inferred, serializer auto-resolved.
 // The serializer handles its own ref/type info writing internally.
 // Falls back to reflection-based serialization for unregistered types.
+// Note: For structs, T must be a pointer to struct (*MyStruct), not struct value.
 // Note: Fory instance is NOT thread-safe. Use ThreadSafeFory for concurrent use.
-func Serialize[T any](f *Fory, value *T) ([]byte, error) {
+func Serialize[T any](f *Fory, value T) ([]byte, error) {
 	defer func() {
 		f.writeCtx.Reset()
 		if f.metaContext != nil {
@@ -405,133 +406,130 @@ func Serialize[T any](f *Fory, value *T) ([]byte, error) {
 	writeHeader(f.writeCtx, f.config)
 
 	// Fast path: type switch for common types (Go compiler can optimize this)
-	// Using *T avoids interface heap allocation and struct copy
-	// Store boxed value once and reuse in default case
 	v := any(value)
 	var err error
 	switch val := v.(type) {
-	case *bool:
+	case bool:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(BOOL)
-		f.writeCtx.buffer.WriteBool(*val)
-	case *int8:
+		f.writeCtx.buffer.WriteBool(val)
+	case int8:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(INT8)
-		f.writeCtx.buffer.WriteInt8(*val)
-	case *int16:
+		f.writeCtx.buffer.WriteInt8(val)
+	case int16:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(INT16)
-		f.writeCtx.buffer.WriteInt16(*val)
-	case *int32:
+		f.writeCtx.buffer.WriteInt16(val)
+	case int32:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(INT32)
-		f.writeCtx.buffer.WriteVarint32(*val)
-	case *int64:
+		f.writeCtx.buffer.WriteVarint32(val)
+	case int64:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(INT64)
-		f.writeCtx.buffer.WriteVarint64(*val)
-	case *int:
+		f.writeCtx.buffer.WriteVarint64(val)
+	case int:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		if strconv.IntSize == 64 {
 			f.writeCtx.WriteTypeId(INT64)
-			f.writeCtx.buffer.WriteVarint64(int64(*val))
+			f.writeCtx.buffer.WriteVarint64(int64(val))
 		} else {
 			f.writeCtx.WriteTypeId(INT32)
-			f.writeCtx.buffer.WriteVarint32(int32(*val))
+			f.writeCtx.buffer.WriteVarint32(int32(val))
 		}
-	case *float32:
+	case float32:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(FLOAT)
-		f.writeCtx.buffer.WriteFloat32(*val)
-	case *float64:
+		f.writeCtx.buffer.WriteFloat32(val)
+	case float64:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(DOUBLE)
-		f.writeCtx.buffer.WriteFloat64(*val)
-	case *string:
+		f.writeCtx.buffer.WriteFloat64(val)
+	case string:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(STRING)
-		f.writeCtx.buffer.WriteVaruint32(uint32(len(*val)))
-		if len(*val) > 0 {
-			f.writeCtx.buffer.WriteBinary(unsafe.Slice(unsafe.StringData(*val), len(*val)))
+		f.writeCtx.buffer.WriteVaruint32(uint32(len(val)))
+		if len(val) > 0 {
+			f.writeCtx.buffer.WriteBinary(unsafe.Slice(unsafe.StringData(val), len(val)))
 		}
-	case *[]byte:
+	case []byte:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(BINARY)
 		f.writeCtx.buffer.WriteBool(true) // in-band
-		f.writeCtx.buffer.WriteLength(len(*val))
-		f.writeCtx.buffer.WriteBinary(*val)
-	case *[]int8:
+		f.writeCtx.buffer.WriteLength(len(val))
+		f.writeCtx.buffer.WriteBinary(val)
+	case []int8:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(INT8_ARRAY)
-		err = writeInt8Slice(f.writeCtx.buffer, *val)
-	case *[]int16:
+		err = writeInt8Slice(f.writeCtx.buffer, val)
+	case []int16:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(INT16_ARRAY)
-		err = writeInt16Slice(f.writeCtx.buffer, *val)
-	case *[]int32:
+		err = writeInt16Slice(f.writeCtx.buffer, val)
+	case []int32:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(INT32_ARRAY)
-		err = writeInt32Slice(f.writeCtx.buffer, *val)
-	case *[]int64:
+		err = writeInt32Slice(f.writeCtx.buffer, val)
+	case []int64:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(INT64_ARRAY)
-		err = writeInt64Slice(f.writeCtx.buffer, *val)
-	case *[]int:
+		err = writeInt64Slice(f.writeCtx.buffer, val)
+	case []int:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		if strconv.IntSize == 64 {
 			f.writeCtx.WriteTypeId(INT64_ARRAY)
 		} else {
 			f.writeCtx.WriteTypeId(INT32_ARRAY)
 		}
-		err = writeIntSlice(f.writeCtx.buffer, *val)
-	case *[]float32:
+		err = writeIntSlice(f.writeCtx.buffer, val)
+	case []float32:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(FLOAT32_ARRAY)
-		err = writeFloat32Slice(f.writeCtx.buffer, *val)
-	case *[]float64:
+		err = writeFloat32Slice(f.writeCtx.buffer, val)
+	case []float64:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(FLOAT64_ARRAY)
-		err = writeFloat64Slice(f.writeCtx.buffer, *val)
-	case *[]bool:
+		err = writeFloat64Slice(f.writeCtx.buffer, val)
+	case []bool:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(BOOL_ARRAY)
-		err = writeBoolSlice(f.writeCtx.buffer, *val)
-	case *map[string]string:
+		err = writeBoolSlice(f.writeCtx.buffer, val)
+	case map[string]string:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(MAP)
-		writeMapStringString(f.writeCtx.buffer, *val)
-	case *map[string]int64:
+		writeMapStringString(f.writeCtx.buffer, val)
+	case map[string]int64:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(MAP)
-		writeMapStringInt64(f.writeCtx.buffer, *val)
-	case *map[string]int:
+		writeMapStringInt64(f.writeCtx.buffer, val)
+	case map[string]int:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(MAP)
-		writeMapStringInt(f.writeCtx.buffer, *val)
-	case *map[string]float64:
+		writeMapStringInt(f.writeCtx.buffer, val)
+	case map[string]float64:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(MAP)
-		writeMapStringFloat64(f.writeCtx.buffer, *val)
-	case *map[string]bool:
+		writeMapStringFloat64(f.writeCtx.buffer, val)
+	case map[string]bool:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(MAP)
-		writeMapStringBool(f.writeCtx.buffer, *val)
-	case *map[int32]int32:
+		writeMapStringBool(f.writeCtx.buffer, val)
+	case map[int32]int32:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(MAP)
-		writeMapInt32Int32(f.writeCtx.buffer, *val)
-	case *map[int64]int64:
+		writeMapInt32Int32(f.writeCtx.buffer, val)
+	case map[int64]int64:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(MAP)
-		writeMapInt64Int64(f.writeCtx.buffer, *val)
-	case *map[int]int:
+		writeMapInt64Int64(f.writeCtx.buffer, val)
+	case map[int]int:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(MAP)
-		writeMapIntInt(f.writeCtx.buffer, *val)
+		writeMapIntInt(f.writeCtx.buffer, val)
 	default:
 		// Fall back to reflection-based serialization
-		// Reuse v (already boxed) and .Elem() to get underlying value without copy
-		return f.serializeReflectValue(reflect.ValueOf(v).Elem())
+		return f.serializeReflectValue(reflect.ValueOf(v))
 	}
 
 	if err != nil {
@@ -569,71 +567,133 @@ func Deserialize[T any](f *Fory, data []byte, target *T) error {
 	// Fast path: type switch for common types (Go compiler can optimize this)
 	switch t := any(target).(type) {
 	case *bool:
-		return f.readCtx.ReadBoolInto(t, true, true)
+		*t = f.readCtx.ReadBool(RefModeNullOnly, true)
+		return nil
 	case *int8:
-		return f.readCtx.ReadInt8Into(t, true, true)
+		*t = f.readCtx.ReadInt8(RefModeNullOnly, true)
+		return nil
 	case *int16:
-		return f.readCtx.ReadInt16Into(t, true, true)
+		*t = f.readCtx.ReadInt16(RefModeNullOnly, true)
+		return nil
 	case *int32:
-		return f.readCtx.ReadInt32Into(t, true, true)
+		*t = f.readCtx.ReadInt32(RefModeNullOnly, true)
+		return nil
 	case *int64:
-		return f.readCtx.ReadInt64Into(t, true, true)
+		*t = f.readCtx.ReadInt64(RefModeNullOnly, true)
+		return nil
 	case *int:
-		return f.readCtx.ReadIntInto(t, true, true)
+		*t = f.readCtx.ReadInt(RefModeNullOnly, true)
+		return nil
 	case *float32:
-		return f.readCtx.ReadFloat32Into(t, true, true)
+		*t = f.readCtx.ReadFloat32(RefModeNullOnly, true)
+		return nil
 	case *float64:
-		return f.readCtx.ReadFloat64Into(t, true, true)
+		*t = f.readCtx.ReadFloat64(RefModeNullOnly, true)
+		return nil
 	case *string:
-		return f.readCtx.ReadStringInto(t, true, true)
+		*t = f.readCtx.ReadString(RefModeNullOnly, true)
+		return nil
 	case *[]byte:
-		return f.readCtx.ReadByteSliceInto(t, true, true)
+		v, err := f.readCtx.ReadByteSlice(RefModeNullOnly, true)
+		if err != nil {
+			return err
+		}
+		*t = v
+		return nil
 	case *[]int8:
-		return f.readCtx.ReadInt8SliceInto(t, true, true)
+		v, err := f.readCtx.ReadInt8Slice(RefModeNullOnly, true)
+		if err != nil {
+			return err
+		}
+		*t = v
+		return nil
 	case *[]int16:
-		return f.readCtx.ReadInt16SliceInto(t, true, true)
+		v, err := f.readCtx.ReadInt16Slice(RefModeNullOnly, true)
+		if err != nil {
+			return err
+		}
+		*t = v
+		return nil
 	case *[]int32:
-		return f.readCtx.ReadInt32SliceInto(t, true, true)
+		v, err := f.readCtx.ReadInt32Slice(RefModeNullOnly, true)
+		if err != nil {
+			return err
+		}
+		*t = v
+		return nil
 	case *[]int64:
-		return f.readCtx.ReadInt64SliceInto(t, true, true)
+		v, err := f.readCtx.ReadInt64Slice(RefModeNullOnly, true)
+		if err != nil {
+			return err
+		}
+		*t = v
+		return nil
 	case *[]int:
-		return f.readCtx.ReadIntSliceInto(t, true, true)
+		v, err := f.readCtx.ReadIntSlice(RefModeNullOnly, true)
+		if err != nil {
+			return err
+		}
+		*t = v
+		return nil
 	case *[]float32:
-		return f.readCtx.ReadFloat32SliceInto(t, true, true)
+		v, err := f.readCtx.ReadFloat32Slice(RefModeNullOnly, true)
+		if err != nil {
+			return err
+		}
+		*t = v
+		return nil
 	case *[]float64:
-		return f.readCtx.ReadFloat64SliceInto(t, true, true)
+		v, err := f.readCtx.ReadFloat64Slice(RefModeNullOnly, true)
+		if err != nil {
+			return err
+		}
+		*t = v
+		return nil
 	case *[]bool:
-		return f.readCtx.ReadBoolSliceInto(t, true, true)
+		v, err := f.readCtx.ReadBoolSlice(RefModeNullOnly, true)
+		if err != nil {
+			return err
+		}
+		*t = v
+		return nil
 	case *map[string]string:
-		return f.readCtx.ReadStringStringMapInto(t, true, true)
+		*t = f.readCtx.ReadStringStringMap(RefModeNullOnly, true)
+		return nil
 	case *map[string]int64:
-		return f.readCtx.ReadStringInt64MapInto(t, true, true)
+		*t = f.readCtx.ReadStringInt64Map(RefModeNullOnly, true)
+		return nil
 	case *map[string]int:
-		return f.readCtx.ReadStringIntMapInto(t, true, true)
+		*t = f.readCtx.ReadStringIntMap(RefModeNullOnly, true)
+		return nil
 	case *map[string]float64:
-		return f.readCtx.ReadStringFloat64MapInto(t, true, true)
+		*t = f.readCtx.ReadStringFloat64Map(RefModeNullOnly, true)
+		return nil
 	case *map[string]bool:
-		return f.readCtx.ReadStringBoolMapInto(t, true, true)
+		*t = f.readCtx.ReadStringBoolMap(RefModeNullOnly, true)
+		return nil
 	case *map[int32]int32:
-		return f.readCtx.ReadInt32Int32MapInto(t, true, true)
+		*t = f.readCtx.ReadInt32Int32Map(RefModeNullOnly, true)
+		return nil
 	case *map[int64]int64:
-		return f.readCtx.ReadInt64Int64MapInto(t, true, true)
+		*t = f.readCtx.ReadInt64Int64Map(RefModeNullOnly, true)
+		return nil
 	case *map[int]int:
-		return f.readCtx.ReadIntIntMapInto(t, true, true)
+		*t = f.readCtx.ReadIntIntMap(RefModeNullOnly, true)
+		return nil
+	default:
+		// Slow path: use serializer-based deserialization
+		targetVal := reflect.ValueOf(target).Elem()
+		targetType := targetVal.Type()
+
+		// Get serializer for the target type
+		serializer, err := f.typeResolver.getSerializerByType(targetType, false)
+		if err != nil {
+			return fmt.Errorf("failed to get serializer for type %v: %w", targetType, err)
+		}
+
+		// Use Read to deserialize directly into target
+		return serializer.Read(f.readCtx, RefModeTracking, true, targetVal)
 	}
-
-	// Slow path: use serializer-based deserialization
-	targetVal := reflect.ValueOf(target).Elem()
-	targetType := targetVal.Type()
-
-	// Get serializer for the target type
-	serializer, err := f.typeResolver.getSerializerByType(targetType, false)
-	if err != nil {
-		return fmt.Errorf("failed to get serializer for type %v: %w", targetType, err)
-	}
-
-	// Use Read to deserialize directly into target
-	return serializer.Read(f.readCtx, RefModeTracking, true, targetVal)
 }
 
 // ============================================================================
@@ -1031,8 +1091,13 @@ func (f *Fory) DeserializeWithCallbackBuffers(buffer *ByteBuffer, v interface{},
 
 // serializeReflectValue serializes a reflect.Value directly, avoiding boxing overhead.
 // This is used by Serialize[T] fallback path to avoid struct copy.
+// For structs, the value must be a pointer to struct, not struct value.
 func (f *Fory) serializeReflectValue(value reflect.Value) ([]byte, error) {
-	// WriteDder(f.writeCtx, f.config)
+	// Check that structs are passed as pointers
+	if value.Kind() == reflect.Struct {
+		return nil, fmt.Errorf("cannot serialize struct %s directly, use pointer to struct (*%s) instead", value.Type(), value.Type())
+	}
+
 	// In compatible mode, reserve space for meta offset (matches C++/Java)
 	var metaStartOffset int
 	if f.config.Compatible {

@@ -179,8 +179,8 @@ func (c *WriteContext) WriteLength(length int) error {
 // ============================================================================
 
 // WriteBool writes a bool with optional ref/type info
-func (c *WriteContext) WriteBool(value bool, writeRefInfo, writeTypeInfo bool) error {
-	if writeRefInfo {
+func (c *WriteContext) WriteBool(value bool, refMode RefMode, writeTypeInfo bool) error {
+	if refMode != RefModeNone {
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {
@@ -191,8 +191,8 @@ func (c *WriteContext) WriteBool(value bool, writeRefInfo, writeTypeInfo bool) e
 }
 
 // WriteInt8 writes an int8 with optional ref/type info
-func (c *WriteContext) WriteInt8(value int8, writeRefInfo, writeTypeInfo bool) error {
-	if writeRefInfo {
+func (c *WriteContext) WriteInt8(value int8, refMode RefMode, writeTypeInfo bool) error {
+	if refMode != RefModeNone {
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {
@@ -203,8 +203,8 @@ func (c *WriteContext) WriteInt8(value int8, writeRefInfo, writeTypeInfo bool) e
 }
 
 // WriteInt16 writes an int16 with optional ref/type info
-func (c *WriteContext) WriteInt16(value int16, writeRefInfo, writeTypeInfo bool) error {
-	if writeRefInfo {
+func (c *WriteContext) WriteInt16(value int16, refMode RefMode, writeTypeInfo bool) error {
+	if refMode != RefModeNone {
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {
@@ -215,8 +215,8 @@ func (c *WriteContext) WriteInt16(value int16, writeRefInfo, writeTypeInfo bool)
 }
 
 // WriteInt32 writes an int32 with optional ref/type info
-func (c *WriteContext) WriteInt32(value int32, writeRefInfo, writeTypeInfo bool) error {
-	if writeRefInfo {
+func (c *WriteContext) WriteInt32(value int32, refMode RefMode, writeTypeInfo bool) error {
+	if refMode != RefModeNone {
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {
@@ -227,8 +227,8 @@ func (c *WriteContext) WriteInt32(value int32, writeRefInfo, writeTypeInfo bool)
 }
 
 // WriteInt64 writes an int64 with optional ref/type info
-func (c *WriteContext) WriteInt64(value int64, writeRefInfo, writeTypeInfo bool) error {
-	if writeRefInfo {
+func (c *WriteContext) WriteInt64(value int64, refMode RefMode, writeTypeInfo bool) error {
+	if refMode != RefModeNone {
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {
@@ -240,8 +240,8 @@ func (c *WriteContext) WriteInt64(value int64, writeRefInfo, writeTypeInfo bool)
 
 // WriteInt writes an int with optional ref/type info
 // Platform-dependent: uses int32 on 32-bit systems, int64 on 64-bit systems
-func (c *WriteContext) WriteInt(value int, writeRefInfo, writeTypeInfo bool) error {
-	if writeRefInfo {
+func (c *WriteContext) WriteInt(value int, refMode RefMode, writeTypeInfo bool) error {
+	if refMode != RefModeNone {
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {
@@ -260,8 +260,8 @@ func (c *WriteContext) WriteInt(value int, writeRefInfo, writeTypeInfo bool) err
 }
 
 // WriteFloat32 writes a float32 with optional ref/type info
-func (c *WriteContext) WriteFloat32(value float32, writeRefInfo, writeTypeInfo bool) error {
-	if writeRefInfo {
+func (c *WriteContext) WriteFloat32(value float32, refMode RefMode, writeTypeInfo bool) error {
+	if refMode != RefModeNone {
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {
@@ -272,8 +272,8 @@ func (c *WriteContext) WriteFloat32(value float32, writeRefInfo, writeTypeInfo b
 }
 
 // WriteFloat64 writes a float64 with optional ref/type info
-func (c *WriteContext) WriteFloat64(value float64, writeRefInfo, writeTypeInfo bool) error {
-	if writeRefInfo {
+func (c *WriteContext) WriteFloat64(value float64, refMode RefMode, writeTypeInfo bool) error {
+	if refMode != RefModeNone {
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {
@@ -284,8 +284,8 @@ func (c *WriteContext) WriteFloat64(value float64, writeRefInfo, writeTypeInfo b
 }
 
 // WriteString writes a string with optional ref/type info
-func (c *WriteContext) WriteString(value string, writeRefInfo, writeTypeInfo bool) error {
-	if writeRefInfo {
+func (c *WriteContext) WriteString(value string, refMode RefMode, writeTypeInfo bool) error {
+	if refMode != RefModeNone {
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {
@@ -299,8 +299,8 @@ func (c *WriteContext) WriteString(value string, writeRefInfo, writeTypeInfo boo
 }
 
 // WriteBoolSlice writes []bool with ref/type info
-func (c *WriteContext) WriteBoolSlice(value []bool, writeRefInfo, writeTypeInfo bool) error {
-	if writeRefInfo {
+func (c *WriteContext) WriteBoolSlice(value []bool, refMode RefMode, writeTypeInfo bool) error {
+	if refMode != RefModeNone {
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {
@@ -310,8 +310,8 @@ func (c *WriteContext) WriteBoolSlice(value []bool, writeRefInfo, writeTypeInfo 
 }
 
 // WriteInt8Slice writes []int8 with ref/type info
-func (c *WriteContext) WriteInt8Slice(value []int8, writeRefInfo, writeTypeInfo bool) error {
-	if writeRefInfo {
+func (c *WriteContext) WriteInt8Slice(value []int8, refMode RefMode, writeTypeInfo bool) error {
+	if refMode != RefModeNone {
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {
@@ -321,8 +321,8 @@ func (c *WriteContext) WriteInt8Slice(value []int8, writeRefInfo, writeTypeInfo 
 }
 
 // WriteInt16Slice writes []int16 with ref/type info
-func (c *WriteContext) WriteInt16Slice(value []int16, writeRefInfo, writeTypeInfo bool) error {
-	if writeRefInfo {
+func (c *WriteContext) WriteInt16Slice(value []int16, refMode RefMode, writeTypeInfo bool) error {
+	if refMode != RefModeNone {
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {
@@ -332,8 +332,8 @@ func (c *WriteContext) WriteInt16Slice(value []int16, writeRefInfo, writeTypeInf
 }
 
 // WriteInt32Slice writes []int32 with ref/type info
-func (c *WriteContext) WriteInt32Slice(value []int32, writeRefInfo, writeTypeInfo bool) error {
-	if writeRefInfo {
+func (c *WriteContext) WriteInt32Slice(value []int32, refMode RefMode, writeTypeInfo bool) error {
+	if refMode != RefModeNone {
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {
@@ -343,8 +343,8 @@ func (c *WriteContext) WriteInt32Slice(value []int32, writeRefInfo, writeTypeInf
 }
 
 // WriteInt64Slice writes []int64 with ref/type info
-func (c *WriteContext) WriteInt64Slice(value []int64, writeRefInfo, writeTypeInfo bool) error {
-	if writeRefInfo {
+func (c *WriteContext) WriteInt64Slice(value []int64, refMode RefMode, writeTypeInfo bool) error {
+	if refMode != RefModeNone {
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {
@@ -354,8 +354,8 @@ func (c *WriteContext) WriteInt64Slice(value []int64, writeRefInfo, writeTypeInf
 }
 
 // WriteIntSlice writes []int with ref/type info
-func (c *WriteContext) WriteIntSlice(value []int, writeRefInfo, writeTypeInfo bool) error {
-	if writeRefInfo {
+func (c *WriteContext) WriteIntSlice(value []int, refMode RefMode, writeTypeInfo bool) error {
+	if refMode != RefModeNone {
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {
@@ -369,8 +369,8 @@ func (c *WriteContext) WriteIntSlice(value []int, writeRefInfo, writeTypeInfo bo
 }
 
 // WriteFloat32Slice writes []float32 with ref/type info
-func (c *WriteContext) WriteFloat32Slice(value []float32, writeRefInfo, writeTypeInfo bool) error {
-	if writeRefInfo {
+func (c *WriteContext) WriteFloat32Slice(value []float32, refMode RefMode, writeTypeInfo bool) error {
+	if refMode != RefModeNone {
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {
@@ -380,8 +380,8 @@ func (c *WriteContext) WriteFloat32Slice(value []float32, writeRefInfo, writeTyp
 }
 
 // WriteFloat64Slice writes []float64 with ref/type info
-func (c *WriteContext) WriteFloat64Slice(value []float64, writeRefInfo, writeTypeInfo bool) error {
-	if writeRefInfo {
+func (c *WriteContext) WriteFloat64Slice(value []float64, refMode RefMode, writeTypeInfo bool) error {
+	if refMode != RefModeNone {
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {
@@ -391,8 +391,8 @@ func (c *WriteContext) WriteFloat64Slice(value []float64, writeRefInfo, writeTyp
 }
 
 // WriteByteSlice writes []byte with ref/type info
-func (c *WriteContext) WriteByteSlice(value []byte, writeRefInfo, writeTypeInfo bool) error {
-	if writeRefInfo {
+func (c *WriteContext) WriteByteSlice(value []byte, refMode RefMode, writeTypeInfo bool) error {
+	if refMode != RefModeNone {
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {
@@ -405,8 +405,8 @@ func (c *WriteContext) WriteByteSlice(value []byte, writeRefInfo, writeTypeInfo 
 }
 
 // WriteStringStringMap writes map[string]string with ref/type info
-func (c *WriteContext) WriteStringStringMap(value map[string]string, writeRefInfo, writeTypeInfo bool) error {
-	if writeRefInfo {
+func (c *WriteContext) WriteStringStringMap(value map[string]string, refMode RefMode, writeTypeInfo bool) error {
+	if refMode != RefModeNone {
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {
@@ -417,8 +417,8 @@ func (c *WriteContext) WriteStringStringMap(value map[string]string, writeRefInf
 }
 
 // WriteStringInt64Map writes map[string]int64 with ref/type info
-func (c *WriteContext) WriteStringInt64Map(value map[string]int64, writeRefInfo, writeTypeInfo bool) error {
-	if writeRefInfo {
+func (c *WriteContext) WriteStringInt64Map(value map[string]int64, refMode RefMode, writeTypeInfo bool) error {
+	if refMode != RefModeNone {
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {
@@ -429,8 +429,8 @@ func (c *WriteContext) WriteStringInt64Map(value map[string]int64, writeRefInfo,
 }
 
 // WriteStringIntMap writes map[string]int with ref/type info
-func (c *WriteContext) WriteStringIntMap(value map[string]int, writeRefInfo, writeTypeInfo bool) error {
-	if writeRefInfo {
+func (c *WriteContext) WriteStringIntMap(value map[string]int, refMode RefMode, writeTypeInfo bool) error {
+	if refMode != RefModeNone {
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {
@@ -441,8 +441,8 @@ func (c *WriteContext) WriteStringIntMap(value map[string]int, writeRefInfo, wri
 }
 
 // WriteStringFloat64Map writes map[string]float64 with ref/type info
-func (c *WriteContext) WriteStringFloat64Map(value map[string]float64, writeRefInfo, writeTypeInfo bool) error {
-	if writeRefInfo {
+func (c *WriteContext) WriteStringFloat64Map(value map[string]float64, refMode RefMode, writeTypeInfo bool) error {
+	if refMode != RefModeNone {
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {
@@ -453,8 +453,8 @@ func (c *WriteContext) WriteStringFloat64Map(value map[string]float64, writeRefI
 }
 
 // WriteStringBoolMap writes map[string]bool with ref/type info
-func (c *WriteContext) WriteStringBoolMap(value map[string]bool, writeRefInfo, writeTypeInfo bool) error {
-	if writeRefInfo {
+func (c *WriteContext) WriteStringBoolMap(value map[string]bool, refMode RefMode, writeTypeInfo bool) error {
+	if refMode != RefModeNone {
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {
@@ -465,8 +465,8 @@ func (c *WriteContext) WriteStringBoolMap(value map[string]bool, writeRefInfo, w
 }
 
 // WriteInt32Int32Map writes map[int32]int32 with ref/type info
-func (c *WriteContext) WriteInt32Int32Map(value map[int32]int32, writeRefInfo, writeTypeInfo bool) error {
-	if writeRefInfo {
+func (c *WriteContext) WriteInt32Int32Map(value map[int32]int32, refMode RefMode, writeTypeInfo bool) error {
+	if refMode != RefModeNone {
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {
@@ -477,8 +477,8 @@ func (c *WriteContext) WriteInt32Int32Map(value map[int32]int32, writeRefInfo, w
 }
 
 // WriteInt64Int64Map writes map[int64]int64 with ref/type info
-func (c *WriteContext) WriteInt64Int64Map(value map[int64]int64, writeRefInfo, writeTypeInfo bool) error {
-	if writeRefInfo {
+func (c *WriteContext) WriteInt64Int64Map(value map[int64]int64, refMode RefMode, writeTypeInfo bool) error {
+	if refMode != RefModeNone {
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {
@@ -489,8 +489,8 @@ func (c *WriteContext) WriteInt64Int64Map(value map[int64]int64, writeRefInfo, w
 }
 
 // WriteIntIntMap writes map[int]int with ref/type info
-func (c *WriteContext) WriteIntIntMap(value map[int]int, writeRefInfo, writeTypeInfo bool) error {
-	if writeRefInfo {
+func (c *WriteContext) WriteIntIntMap(value map[int]int, refMode RefMode, writeTypeInfo bool) error {
+	if refMode != RefModeNone {
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {

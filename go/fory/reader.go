@@ -164,6 +164,17 @@ func (c *ReadContext) ReadAndValidateTypeId(expected TypeId) error {
 	return nil
 }
 
+// SkipValueMeta skips the value metadata (ref info and type info) in the buffer.
+// This is used to skip the header bytes before reading the actual value data.
+func (c *ReadContext) SkipValueMeta(readRef, readType bool) {
+	if readRef {
+		_ = c.buffer.ReadInt8()
+	}
+	if readType {
+		_ = c.buffer.ReadVaruint32Small7()
+	}
+}
+
 // ReadLength reads a length value as varint (non-negative values)
 func (c *ReadContext) ReadLength() int {
 	return int(c.buffer.ReadVaruint32())
@@ -174,435 +185,204 @@ func (c *ReadContext) ReadLength() int {
 // ============================================================================
 
 // ReadBool reads a bool with optional ref/type info
-func (c *ReadContext) ReadBool(readRefInfo, readTypeInfo bool) (bool, error) {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
+func (c *ReadContext) ReadBool(refMode RefMode, readType bool) bool {
+	if refMode != RefModeNone {
+		c.buffer.ReadInt8() // Skip ref flag
 	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
+	if readType {
+		c.ReadTypeId() // Skip type id
 	}
-	return c.buffer.ReadBool(), nil
-}
-
-// ReadBoolInto reads a bool into target with optional ref/type info
-func (c *ReadContext) ReadBoolInto(target *bool, readRefInfo, readTypeInfo bool) error {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
-	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
-	}
-	*target = c.buffer.ReadBool()
-	return nil
+	return c.buffer.ReadBool()
 }
 
 // ReadInt8 reads an int8 with optional ref/type info
-func (c *ReadContext) ReadInt8(readRefInfo, readTypeInfo bool) (int8, error) {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
+func (c *ReadContext) ReadInt8(refMode RefMode, readType bool) int8 {
+	if refMode != RefModeNone {
+		c.buffer.ReadInt8() // Skip ref flag
 	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
+	if readType {
+		c.ReadTypeId() // Skip type id
 	}
-	return c.buffer.ReadInt8(), nil
-}
-
-// ReadInt8Into reads an int8 into target with optional ref/type info
-func (c *ReadContext) ReadInt8Into(target *int8, readRefInfo, readTypeInfo bool) error {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
-	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
-	}
-	*target = c.buffer.ReadInt8()
-	return nil
+	return c.buffer.ReadInt8()
 }
 
 // ReadInt16 reads an int16 with optional ref/type info
-func (c *ReadContext) ReadInt16(readRefInfo, readTypeInfo bool) (int16, error) {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
+func (c *ReadContext) ReadInt16(refMode RefMode, readType bool) int16 {
+	if refMode != RefModeNone {
+		c.buffer.ReadInt8() // Skip ref flag
 	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
+	if readType {
+		c.ReadTypeId() // Skip type id
 	}
-	return c.buffer.ReadInt16(), nil
+	return c.buffer.ReadInt16()
 }
 
-// ReadInt16Into reads an int16 into target with optional ref/type info
-func (c *ReadContext) ReadInt16Into(target *int16, readRefInfo, readTypeInfo bool) error {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
+// ReadInt32 reads an int32 (varint encoded) with optional ref/type info
+func (c *ReadContext) ReadInt32(refMode RefMode, readType bool) int32 {
+	if refMode != RefModeNone {
+		c.buffer.ReadInt8() // Skip ref flag
 	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
+	if readType {
+		c.ReadTypeId() // Skip type id
 	}
-	*target = c.buffer.ReadInt16()
-	return nil
+	return c.buffer.ReadVarint32()
 }
 
-// ReadInt32 reads an int32 with optional ref/type info
-func (c *ReadContext) ReadInt32(readRefInfo, readTypeInfo bool) (int32, error) {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
+// ReadInt64 reads an int64 (varint encoded) with optional ref/type info
+func (c *ReadContext) ReadInt64(refMode RefMode, readType bool) int64 {
+	if refMode != RefModeNone {
+		c.buffer.ReadInt8() // Skip ref flag
 	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
+	if readType {
+		c.ReadTypeId() // Skip type id
 	}
-	return c.buffer.ReadVarint32(), nil
+	return c.buffer.ReadVarint64()
 }
 
-// ReadInt32Into reads an int32 into target with optional ref/type info
-func (c *ReadContext) ReadInt32Into(target *int32, readRefInfo, readTypeInfo bool) error {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
+// ReadInt reads an int (varint encoded) with optional ref/type info
+func (c *ReadContext) ReadInt(refMode RefMode, readType bool) int {
+	if refMode != RefModeNone {
+		c.buffer.ReadInt8() // Skip ref flag
 	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
+	if readType {
+		c.ReadTypeId() // Skip type id
 	}
-	*target = c.buffer.ReadVarint32()
-	return nil
-}
-
-// ReadInt64 reads an int64 with optional ref/type info
-func (c *ReadContext) ReadInt64(readRefInfo, readTypeInfo bool) (int64, error) {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
-	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
-	}
-	return c.buffer.ReadVarint64(), nil
-}
-
-// ReadInt64Into reads an int64 into target with optional ref/type info
-func (c *ReadContext) ReadInt64Into(target *int64, readRefInfo, readTypeInfo bool) error {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
-	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
-	}
-	*target = c.buffer.ReadVarint64()
-	return nil
-}
-
-// ReadIntInto reads an int into target with optional ref/type info
-func (c *ReadContext) ReadIntInto(target *int, readRefInfo, readTypeInfo bool) error {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
-	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
-	}
-	*target = int(c.buffer.ReadVarint64())
-	return nil
+	return int(c.buffer.ReadVarint64())
 }
 
 // ReadFloat32 reads a float32 with optional ref/type info
-func (c *ReadContext) ReadFloat32(readRefInfo, readTypeInfo bool) (float32, error) {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
+func (c *ReadContext) ReadFloat32(refMode RefMode, readType bool) float32 {
+	if refMode != RefModeNone {
+		c.buffer.ReadInt8() // Skip ref flag
 	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
+	if readType {
+		c.ReadTypeId() // Skip type id
 	}
-	return c.buffer.ReadFloat32(), nil
-}
-
-// ReadFloat32Into reads a float32 into target with optional ref/type info
-func (c *ReadContext) ReadFloat32Into(target *float32, readRefInfo, readTypeInfo bool) error {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
-	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
-	}
-	*target = c.buffer.ReadFloat32()
-	return nil
+	return c.buffer.ReadFloat32()
 }
 
 // ReadFloat64 reads a float64 with optional ref/type info
-func (c *ReadContext) ReadFloat64(readRefInfo, readTypeInfo bool) (float64, error) {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
+func (c *ReadContext) ReadFloat64(refMode RefMode, readType bool) float64 {
+	if refMode != RefModeNone {
+		c.buffer.ReadInt8() // Skip ref flag
 	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
+	if readType {
+		c.ReadTypeId() // Skip type id
 	}
-	return c.buffer.ReadFloat64(), nil
-}
-
-// ReadFloat64Into reads a float64 into target with optional ref/type info
-func (c *ReadContext) ReadFloat64Into(target *float64, readRefInfo, readTypeInfo bool) error {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
-	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
-	}
-	*target = c.buffer.ReadFloat64()
-	return nil
+	return c.buffer.ReadFloat64()
 }
 
 // ReadString reads a string with optional ref/type info
-func (c *ReadContext) ReadString(readRefInfo, readTypeInfo bool) (string, error) {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
+func (c *ReadContext) ReadString(refMode RefMode, readType bool) string {
+	if refMode != RefModeNone {
+		c.buffer.ReadInt8() // Skip ref flag
 	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
-	}
-	length := c.buffer.ReadVaruint32()
-	if length == 0 {
-		return "", nil
-	}
-	data := c.buffer.ReadBinary(int(length))
-	return string(data), nil
-}
-
-// ReadStringInto reads a string into target with optional ref/type info
-func (c *ReadContext) ReadStringInto(target *string, readRefInfo, readTypeInfo bool) error {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
-	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
+	if readType {
+		c.ReadTypeId() // Skip type id
 	}
 	length := c.buffer.ReadVaruint32()
 	if length == 0 {
-		*target = ""
-		return nil
+		return ""
 	}
 	data := c.buffer.ReadBinary(int(length))
-	*target = string(data)
-	return nil
+	return string(data)
 }
 
 // ReadBoolSlice reads []bool with optional ref/type info
-func (c *ReadContext) ReadBoolSlice(readRefInfo, readTypeInfo bool) ([]bool, error) {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
+func (c *ReadContext) ReadBoolSlice(refMode RefMode, readType bool) ([]bool, error) {
+	if refMode != RefModeNone {
+		c.buffer.ReadInt8() // Skip ref flag
 	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
+	if readType {
+		c.ReadTypeId() // Skip type id
 	}
 	return readBoolSlice(c.buffer)
 }
 
-// ReadBoolSliceInto reads []bool into target
-func (c *ReadContext) ReadBoolSliceInto(target *[]bool, readRefInfo, readTypeInfo bool) error {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
-	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
-	}
-	result, err := readBoolSlice(c.buffer)
-	if err != nil {
-		return err
-	}
-	*target = result
-	return nil
-}
-
 // ReadInt8Slice reads []int8 with optional ref/type info
-func (c *ReadContext) ReadInt8Slice(readRefInfo, readTypeInfo bool) ([]int8, error) {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
+func (c *ReadContext) ReadInt8Slice(refMode RefMode, readType bool) ([]int8, error) {
+	if refMode != RefModeNone {
+		c.buffer.ReadInt8() // Skip ref flag
 	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
+	if readType {
+		c.ReadTypeId() // Skip type id
 	}
 	return readInt8Slice(c.buffer)
 }
 
-// ReadInt8SliceInto reads []int8 into target
-func (c *ReadContext) ReadInt8SliceInto(target *[]int8, readRefInfo, readTypeInfo bool) error {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
-	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
-	}
-	result, err := readInt8Slice(c.buffer)
-	if err != nil {
-		return err
-	}
-	*target = result
-	return nil
-}
-
 // ReadInt16Slice reads []int16 with optional ref/type info
-func (c *ReadContext) ReadInt16Slice(readRefInfo, readTypeInfo bool) ([]int16, error) {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
+func (c *ReadContext) ReadInt16Slice(refMode RefMode, readType bool) ([]int16, error) {
+	if refMode != RefModeNone {
+		c.buffer.ReadInt8() // Skip ref flag
 	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
+	if readType {
+		c.ReadTypeId() // Skip type id
 	}
 	return readInt16Slice(c.buffer)
 }
 
-// ReadInt16SliceInto reads []int16 into target
-func (c *ReadContext) ReadInt16SliceInto(target *[]int16, readRefInfo, readTypeInfo bool) error {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
-	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
-	}
-	result, err := readInt16Slice(c.buffer)
-	if err != nil {
-		return err
-	}
-	*target = result
-	return nil
-}
-
 // ReadInt32Slice reads []int32 with optional ref/type info
-func (c *ReadContext) ReadInt32Slice(readRefInfo, readTypeInfo bool) ([]int32, error) {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
+func (c *ReadContext) ReadInt32Slice(refMode RefMode, readType bool) ([]int32, error) {
+	if refMode != RefModeNone {
+		c.buffer.ReadInt8() // Skip ref flag
 	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
+	if readType {
+		c.ReadTypeId() // Skip type id
 	}
 	return readInt32Slice(c.buffer)
 }
 
-// ReadInt32SliceInto reads []int32 into target
-func (c *ReadContext) ReadInt32SliceInto(target *[]int32, readRefInfo, readTypeInfo bool) error {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
-	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
-	}
-	result, err := readInt32Slice(c.buffer)
-	if err != nil {
-		return err
-	}
-	*target = result
-	return nil
-}
-
 // ReadInt64Slice reads []int64 with optional ref/type info
-func (c *ReadContext) ReadInt64Slice(readRefInfo, readTypeInfo bool) ([]int64, error) {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
+func (c *ReadContext) ReadInt64Slice(refMode RefMode, readType bool) ([]int64, error) {
+	if refMode != RefModeNone {
+		c.buffer.ReadInt8() // Skip ref flag
 	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
+	if readType {
+		c.ReadTypeId() // Skip type id
 	}
 	return readInt64Slice(c.buffer)
 }
 
-// ReadInt64SliceInto reads []int64 into target
-func (c *ReadContext) ReadInt64SliceInto(target *[]int64, readRefInfo, readTypeInfo bool) error {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
-	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
-	}
-	result, err := readInt64Slice(c.buffer)
-	if err != nil {
-		return err
-	}
-	*target = result
-	return nil
-}
-
 // ReadIntSlice reads []int with optional ref/type info
-func (c *ReadContext) ReadIntSlice(readRefInfo, readTypeInfo bool) ([]int, error) {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
+func (c *ReadContext) ReadIntSlice(refMode RefMode, readType bool) ([]int, error) {
+	if refMode != RefModeNone {
+		c.buffer.ReadInt8() // Skip ref flag
 	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
+	if readType {
+		c.ReadTypeId() // Skip type id
 	}
 	return readIntSlice(c.buffer)
 }
 
-// ReadIntSliceInto reads []int into target
-func (c *ReadContext) ReadIntSliceInto(target *[]int, readRefInfo, readTypeInfo bool) error {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
-	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
-	}
-	result, err := readIntSlice(c.buffer)
-	if err != nil {
-		return err
-	}
-	*target = result
-	return nil
-}
-
 // ReadFloat32Slice reads []float32 with optional ref/type info
-func (c *ReadContext) ReadFloat32Slice(readRefInfo, readTypeInfo bool) ([]float32, error) {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
+func (c *ReadContext) ReadFloat32Slice(refMode RefMode, readType bool) ([]float32, error) {
+	if refMode != RefModeNone {
+		c.buffer.ReadInt8() // Skip ref flag
 	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
+	if readType {
+		c.ReadTypeId() // Skip type id
 	}
 	return readFloat32Slice(c.buffer)
 }
 
-// ReadFloat32SliceInto reads []float32 into target
-func (c *ReadContext) ReadFloat32SliceInto(target *[]float32, readRefInfo, readTypeInfo bool) error {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
-	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
-	}
-	result, err := readFloat32Slice(c.buffer)
-	if err != nil {
-		return err
-	}
-	*target = result
-	return nil
-}
-
 // ReadFloat64Slice reads []float64 with optional ref/type info
-func (c *ReadContext) ReadFloat64Slice(readRefInfo, readTypeInfo bool) ([]float64, error) {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
+func (c *ReadContext) ReadFloat64Slice(refMode RefMode, readType bool) ([]float64, error) {
+	if refMode != RefModeNone {
+		c.buffer.ReadInt8() // Skip ref flag
 	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
+	if readType {
+		c.ReadTypeId() // Skip type id
 	}
 	return readFloat64Slice(c.buffer)
 }
 
-// ReadFloat64SliceInto reads []float64 into target
-func (c *ReadContext) ReadFloat64SliceInto(target *[]float64, readRefInfo, readTypeInfo bool) error {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
-	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
-	}
-	result, err := readFloat64Slice(c.buffer)
-	if err != nil {
-		return err
-	}
-	*target = result
-	return nil
-}
-
 // ReadByteSlice reads []byte with optional ref/type info
-func (c *ReadContext) ReadByteSlice(readRefInfo, readTypeInfo bool) ([]byte, error) {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
+func (c *ReadContext) ReadByteSlice(refMode RefMode, readType bool) ([]byte, error) {
+	if refMode != RefModeNone {
+		c.buffer.ReadInt8() // Skip ref flag
 	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
+	if readType {
+		c.ReadTypeId() // Skip type id
 	}
 	isInBand := c.buffer.ReadBool()
 	if !isInBand {
@@ -612,211 +392,92 @@ func (c *ReadContext) ReadByteSlice(readRefInfo, readTypeInfo bool) ([]byte, err
 	return c.buffer.ReadBinary(size), nil
 }
 
-// ReadByteSliceInto reads []byte into target, reusing capacity when possible
-func (c *ReadContext) ReadByteSliceInto(target *[]byte, readRefInfo, readTypeInfo bool) error {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
-	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
-	}
-	isInBand := c.buffer.ReadBool()
-	if !isInBand {
-		return fmt.Errorf("out-of-band byte slice not supported in fast path")
-	}
-	size := c.buffer.ReadLength()
-	data := c.buffer.ReadBinary(size)
-	if cap(*target) >= size {
-		*target = (*target)[:size]
-		copy(*target, data)
-	} else {
-		*target = data
-	}
-	return nil
-}
-
 // ReadStringStringMap reads map[string]string with optional ref/type info
-func (c *ReadContext) ReadStringStringMap(readRefInfo, readTypeInfo bool) (map[string]string, error) {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
+func (c *ReadContext) ReadStringStringMap(refMode RefMode, readType bool) map[string]string {
+	if refMode != RefModeNone {
+		c.buffer.ReadInt8() // Skip ref flag
 	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
+	if readType {
+		c.ReadTypeId() // Skip type id
 	}
-	return readMapStringString(c.buffer), nil
-}
-
-// ReadStringStringMapInto reads map[string]string into target
-func (c *ReadContext) ReadStringStringMapInto(target *map[string]string, readRefInfo, readTypeInfo bool) error {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
-	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
-	}
-	*target = readMapStringString(c.buffer)
-	return nil
+	return readMapStringString(c.buffer)
 }
 
 // ReadStringInt64Map reads map[string]int64 with optional ref/type info
-func (c *ReadContext) ReadStringInt64Map(readRefInfo, readTypeInfo bool) (map[string]int64, error) {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
+func (c *ReadContext) ReadStringInt64Map(refMode RefMode, readType bool) map[string]int64 {
+	if refMode != RefModeNone {
+		c.buffer.ReadInt8() // Skip ref flag
 	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
+	if readType {
+		c.ReadTypeId() // Skip type id
 	}
-	return readMapStringInt64(c.buffer), nil
-}
-
-// ReadStringInt64MapInto reads map[string]int64 into target
-func (c *ReadContext) ReadStringInt64MapInto(target *map[string]int64, readRefInfo, readTypeInfo bool) error {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
-	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
-	}
-	*target = readMapStringInt64(c.buffer)
-	return nil
+	return readMapStringInt64(c.buffer)
 }
 
 // ReadStringIntMap reads map[string]int with optional ref/type info
-func (c *ReadContext) ReadStringIntMap(readRefInfo, readTypeInfo bool) (map[string]int, error) {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
+func (c *ReadContext) ReadStringIntMap(refMode RefMode, readType bool) map[string]int {
+	if refMode != RefModeNone {
+		c.buffer.ReadInt8() // Skip ref flag
 	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
+	if readType {
+		c.ReadTypeId() // Skip type id
 	}
-	return readMapStringInt(c.buffer), nil
-}
-
-// ReadStringIntMapInto reads map[string]int into target
-func (c *ReadContext) ReadStringIntMapInto(target *map[string]int, readRefInfo, readTypeInfo bool) error {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
-	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
-	}
-	*target = readMapStringInt(c.buffer)
-	return nil
+	return readMapStringInt(c.buffer)
 }
 
 // ReadStringFloat64Map reads map[string]float64 with optional ref/type info
-func (c *ReadContext) ReadStringFloat64Map(readRefInfo, readTypeInfo bool) (map[string]float64, error) {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
+func (c *ReadContext) ReadStringFloat64Map(refMode RefMode, readType bool) map[string]float64 {
+	if refMode != RefModeNone {
+		c.buffer.ReadInt8() // Skip ref flag
 	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
+	if readType {
+		c.ReadTypeId() // Skip type id
 	}
-	return readMapStringFloat64(c.buffer), nil
-}
-
-// ReadStringFloat64MapInto reads map[string]float64 into target
-func (c *ReadContext) ReadStringFloat64MapInto(target *map[string]float64, readRefInfo, readTypeInfo bool) error {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
-	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
-	}
-	*target = readMapStringFloat64(c.buffer)
-	return nil
+	return readMapStringFloat64(c.buffer)
 }
 
 // ReadStringBoolMap reads map[string]bool with optional ref/type info
-func (c *ReadContext) ReadStringBoolMap(readRefInfo, readTypeInfo bool) (map[string]bool, error) {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
+func (c *ReadContext) ReadStringBoolMap(refMode RefMode, readType bool) map[string]bool {
+	if refMode != RefModeNone {
+		c.buffer.ReadInt8() // Skip ref flag
 	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
+	if readType {
+		c.ReadTypeId() // Skip type id
 	}
-	return readMapStringBool(c.buffer), nil
-}
-
-// ReadStringBoolMapInto reads map[string]bool into target
-func (c *ReadContext) ReadStringBoolMapInto(target *map[string]bool, readRefInfo, readTypeInfo bool) error {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
-	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
-	}
-	*target = readMapStringBool(c.buffer)
-	return nil
+	return readMapStringBool(c.buffer)
 }
 
 // ReadInt32Int32Map reads map[int32]int32 with optional ref/type info
-func (c *ReadContext) ReadInt32Int32Map(readRefInfo, readTypeInfo bool) (map[int32]int32, error) {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
+func (c *ReadContext) ReadInt32Int32Map(refMode RefMode, readType bool) map[int32]int32 {
+	if refMode != RefModeNone {
+		c.buffer.ReadInt8() // Skip ref flag
 	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
+	if readType {
+		c.ReadTypeId() // Skip type id
 	}
-	return readMapInt32Int32(c.buffer), nil
-}
-
-// ReadInt32Int32MapInto reads map[int32]int32 into target
-func (c *ReadContext) ReadInt32Int32MapInto(target *map[int32]int32, readRefInfo, readTypeInfo bool) error {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
-	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
-	}
-	*target = readMapInt32Int32(c.buffer)
-	return nil
+	return readMapInt32Int32(c.buffer)
 }
 
 // ReadInt64Int64Map reads map[int64]int64 with optional ref/type info
-func (c *ReadContext) ReadInt64Int64Map(readRefInfo, readTypeInfo bool) (map[int64]int64, error) {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
+func (c *ReadContext) ReadInt64Int64Map(refMode RefMode, readType bool) map[int64]int64 {
+	if refMode != RefModeNone {
+		c.buffer.ReadInt8() // Skip ref flag
 	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
+	if readType {
+		c.ReadTypeId() // Skip type id
 	}
-	return readMapInt64Int64(c.buffer), nil
-}
-
-// ReadInt64Int64MapInto reads map[int64]int64 into target
-func (c *ReadContext) ReadInt64Int64MapInto(target *map[int64]int64, readRefInfo, readTypeInfo bool) error {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
-	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
-	}
-	*target = readMapInt64Int64(c.buffer)
-	return nil
+	return readMapInt64Int64(c.buffer)
 }
 
 // ReadIntIntMap reads map[int]int with optional ref/type info
-func (c *ReadContext) ReadIntIntMap(readRefInfo, readTypeInfo bool) (map[int]int, error) {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
+func (c *ReadContext) ReadIntIntMap(refMode RefMode, readType bool) map[int]int {
+	if refMode != RefModeNone {
+		c.buffer.ReadInt8() // Skip ref flag
 	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
+	if readType {
+		c.ReadTypeId() // Skip type id
 	}
-	return readMapIntInt(c.buffer), nil
-}
-
-// ReadIntIntMapInto reads map[int]int into target
-func (c *ReadContext) ReadIntIntMapInto(target *map[int]int, readRefInfo, readTypeInfo bool) error {
-	if readRefInfo {
-		_ = c.buffer.ReadInt8()
-	}
-	if readTypeInfo {
-		_ = c.buffer.ReadVaruint32Small7()
-	}
-	*target = readMapIntInt(c.buffer)
-	return nil
+	return readMapIntInt(c.buffer)
 }
 
 // ReadBufferObject reads a buffer object

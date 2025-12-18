@@ -48,8 +48,8 @@ func writeMapStringString(buf *ByteBuffer, m map[string]string) {
 		// WriteData chunk entries
 		count := 0
 		for k, v := range m {
-			writeString(buf, k)
-			writeString(buf, v)
+			WriteString(buf, k)
+			WriteString(buf, v)
 			count++
 			if count >= chunkSize {
 				break
@@ -85,8 +85,8 @@ func readMapStringString(buf *ByteBuffer) map[string]string {
 
 		// ReadData chunk entries
 		for i := 0; i < chunkSize && size > 0; i++ {
-			k := readString(buf)
-			v := readString(buf)
+			k := ReadString(buf)
+			v := ReadString(buf)
 			result[k] = v
 			size--
 		}
@@ -114,7 +114,7 @@ func writeMapStringInt64(buf *ByteBuffer, m map[string]int64) {
 
 		count := 0
 		for k, v := range m {
-			writeString(buf, k)
+			WriteString(buf, k)
 			buf.WriteVarint64(v)
 			count++
 			if count >= chunkSize {
@@ -145,7 +145,7 @@ func readMapStringInt64(buf *ByteBuffer) map[string]int64 {
 
 		chunkSize := int(buf.ReadUint8())
 		for i := 0; i < chunkSize && size > 0; i++ {
-			k := readString(buf)
+			k := ReadString(buf)
 			v := buf.ReadVarint64()
 			result[k] = v
 			size--
@@ -174,7 +174,7 @@ func writeMapStringInt(buf *ByteBuffer, m map[string]int) {
 
 		count := 0
 		for k, v := range m {
-			writeString(buf, k)
+			WriteString(buf, k)
 			buf.WriteVarint64(int64(v))
 			count++
 			if count >= chunkSize {
@@ -205,7 +205,7 @@ func readMapStringInt(buf *ByteBuffer) map[string]int {
 
 		chunkSize := int(buf.ReadUint8())
 		for i := 0; i < chunkSize && size > 0; i++ {
-			k := readString(buf)
+			k := ReadString(buf)
 			v := buf.ReadVarint64()
 			result[k] = int(v)
 			size--
@@ -234,7 +234,7 @@ func writeMapStringFloat64(buf *ByteBuffer, m map[string]float64) {
 
 		count := 0
 		for k, v := range m {
-			writeString(buf, k)
+			WriteString(buf, k)
 			buf.WriteFloat64(v)
 			count++
 			if count >= chunkSize {
@@ -265,7 +265,7 @@ func readMapStringFloat64(buf *ByteBuffer) map[string]float64 {
 
 		chunkSize := int(buf.ReadUint8())
 		for i := 0; i < chunkSize && size > 0; i++ {
-			k := readString(buf)
+			k := ReadString(buf)
 			v := buf.ReadFloat64()
 			result[k] = v
 			size--
@@ -294,7 +294,7 @@ func writeMapStringBool(buf *ByteBuffer, m map[string]bool) {
 
 		count := 0
 		for k, v := range m {
-			writeString(buf, k)
+			WriteString(buf, k)
 			buf.WriteBool(v)
 			count++
 			if count >= chunkSize {
@@ -325,7 +325,7 @@ func readMapStringBool(buf *ByteBuffer) map[string]bool {
 
 		chunkSize := int(buf.ReadUint8())
 		for i := 0; i < chunkSize && size > 0; i++ {
-			k := readString(buf)
+			k := ReadString(buf)
 			v := buf.ReadBool()
 			result[k] = v
 			size--

@@ -161,7 +161,7 @@ func (c *WriteContext) writeFast(ptr unsafe.Pointer, ct StaticTypeId) {
 	case ConcreteTypeFloat64:
 		c.buffer.WriteFloat64(*(*float64)(ptr))
 	case ConcreteTypeString:
-		writeString(c.buffer, *(*string)(ptr))
+		WriteString(c.buffer, *(*string)(ptr))
 	}
 }
 

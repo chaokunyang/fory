@@ -151,7 +151,7 @@ func (c *ReadContext) readFast(ptr unsafe.Pointer, ct StaticTypeId) {
 	case ConcreteTypeFloat64:
 		*(*float64)(ptr) = c.buffer.ReadFloat64()
 	case ConcreteTypeString:
-		*(*string)(ptr) = readString(c.buffer)
+		*(*string)(ptr) = ReadString(c.buffer)
 	}
 }
 

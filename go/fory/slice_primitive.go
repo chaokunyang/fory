@@ -798,7 +798,7 @@ func (s stringSliceSerializer) Write(ctx *WriteContext, value reflect.Value) err
 	// Strings don't need reference tracking, but xlang format requires NotNullValueFlag per element
 	for _, str := range v {
 		buf.WriteInt8(NotNullValueFlag)
-		if err := writeString(buf, str); err != nil {
+		if err := WriteString(buf, str); err != nil {
 			return err
 		}
 	}
@@ -818,7 +818,7 @@ func (s stringSliceSerializer) Read(ctx *ReadContext, type_ reflect.Type, value 
 		if refFlag == NullFlag {
 			str = ""
 		} else {
-			str = readString(buf)
+			str = ReadString(buf)
 		}
 		if elemTyp.Kind() == reflect.String {
 			r.Index(i).SetString(str)

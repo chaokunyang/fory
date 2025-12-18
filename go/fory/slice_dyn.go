@@ -57,7 +57,6 @@ func newSliceDynSerializer(elemType reflect.Type) (sliceDynSerializer, error) {
 	}, nil
 }
 
-
 // mustNewSliceDynSerializer is like newSliceDynSerializer but panics on error.
 // Used for initialization code where the element type is known to be valid.
 func mustNewSliceDynSerializer(elemType reflect.Type) sliceDynSerializer {
@@ -403,9 +402,9 @@ func (s sliceDynSerializer) readDifferentTypes(
 }
 
 // wrapSerializerIfNeeded wraps the serializer with ptrToValueSerializer if:
-// 1. Slice element type is pointer-to-interface and the deserialized type is not a pointer, OR
-// 2. Slice element type is interface and the deserialized type doesn't directly implement it
-//    but the pointer type does (common case where interface has pointer receivers)
+//  1. Slice element type is pointer-to-interface and the deserialized type is not a pointer, OR
+//  2. Slice element type is interface and the deserialized type doesn't directly implement it
+//     but the pointer type does (common case where interface has pointer receivers)
 func (s sliceDynSerializer) wrapSerializerIfNeeded(elemType reflect.Type, serializer Serializer) (reflect.Type, Serializer) {
 	if elemType.Kind() == reflect.Ptr {
 		return elemType, serializer

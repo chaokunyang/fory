@@ -36,7 +36,7 @@ type FieldInfo struct {
 	Offset       uintptr
 	Type         reflect.Type
 	StaticId     StaticTypeId
-	TypeId       TypeId     // Fory type ID for the serializer
+	TypeId       TypeId // Fory type ID for the serializer
 	Serializer   Serializer
 	Referencable bool
 	FieldIndex   int      // -1 if field doesn't exist in current struct (for compatible mode)
@@ -184,7 +184,6 @@ func newStructSerializer(type_ reflect.Type, typeTag string, fieldDefs []FieldDe
 		fieldDefs: fieldDefs,
 	}
 }
-
 
 func (s *structSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
 	switch refMode {
@@ -1165,7 +1164,6 @@ func (s *structSerializer) initFieldsFromDefsWithResolver(typeResolver *TypeReso
 	return nil
 }
 
-
 // isNonNullablePrimitiveKind returns true for Go kinds that map to Java primitive types
 // These are the types that cannot be null in Java and should have nullable=0 in hash computation
 func isNonNullablePrimitiveKind(kind reflect.Kind) bool {
@@ -1577,7 +1575,6 @@ func sortFieldsWithNullable(
 	}
 	return outSer, outNam
 }
-
 
 func typesCompatible(actual, expected reflect.Type) bool {
 	if actual == nil || expected == nil {

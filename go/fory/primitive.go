@@ -52,14 +52,11 @@ func (s boolSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value ref
 
 func (s boolSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
 	if refMode != RefModeNone {
-		refFlag := ctx.buffer.ReadInt8()
-		if refFlag == NullFlag {
-			return nil // Keep zero value
+		if ctx.buffer.ReadInt8() == NullFlag {
+			return nil
 		}
-		// For primitives, we only expect NotNullValueFlag
 	}
 	if readType {
-		// Skip type info - for primitives we know the type
 		_ = ctx.buffer.ReadVaruint32Small7()
 	}
 	return s.ReadData(ctx, value.Type(), value)
@@ -97,9 +94,8 @@ func (s int8Serializer) ReadData(ctx *ReadContext, type_ reflect.Type, value ref
 
 func (s int8Serializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
 	if refMode != RefModeNone {
-		refFlag := ctx.buffer.ReadInt8()
-		if refFlag == NullFlag {
-			return nil // Keep zero value
+		if ctx.buffer.ReadInt8() == NullFlag {
+			return nil
 		}
 	}
 	if readType {
@@ -139,8 +135,7 @@ func (s byteSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value ref
 
 func (s byteSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
 	if refMode != RefModeNone {
-		refFlag := ctx.buffer.ReadInt8()
-		if refFlag == NullFlag {
+		if ctx.buffer.ReadInt8() == NullFlag {
 			return nil
 		}
 	}
@@ -181,8 +176,7 @@ func (s int16Serializer) ReadData(ctx *ReadContext, type_ reflect.Type, value re
 
 func (s int16Serializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
 	if refMode != RefModeNone {
-		refFlag := ctx.buffer.ReadInt8()
-		if refFlag == NullFlag {
+		if ctx.buffer.ReadInt8() == NullFlag {
 			return nil
 		}
 	}
@@ -223,8 +217,7 @@ func (s int32Serializer) ReadData(ctx *ReadContext, type_ reflect.Type, value re
 
 func (s int32Serializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
 	if refMode != RefModeNone {
-		refFlag := ctx.buffer.ReadInt8()
-		if refFlag == NullFlag {
+		if ctx.buffer.ReadInt8() == NullFlag {
 			return nil
 		}
 	}
@@ -265,8 +258,7 @@ func (s int64Serializer) ReadData(ctx *ReadContext, type_ reflect.Type, value re
 
 func (s int64Serializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
 	if refMode != RefModeNone {
-		refFlag := ctx.buffer.ReadInt8()
-		if refFlag == NullFlag {
+		if ctx.buffer.ReadInt8() == NullFlag {
 			return nil
 		}
 	}
@@ -305,8 +297,7 @@ func (s intSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value refl
 
 func (s intSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
 	if refMode != RefModeNone {
-		refFlag := ctx.buffer.ReadInt8()
-		if refFlag == NullFlag {
+		if ctx.buffer.ReadInt8() == NullFlag {
 			return nil
 		}
 	}
@@ -347,8 +338,7 @@ func (s float32Serializer) ReadData(ctx *ReadContext, type_ reflect.Type, value 
 
 func (s float32Serializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
 	if refMode != RefModeNone {
-		refFlag := ctx.buffer.ReadInt8()
-		if refFlag == NullFlag {
+		if ctx.buffer.ReadInt8() == NullFlag {
 			return nil
 		}
 	}
@@ -389,8 +379,7 @@ func (s float64Serializer) ReadData(ctx *ReadContext, type_ reflect.Type, value 
 
 func (s float64Serializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
 	if refMode != RefModeNone {
-		refFlag := ctx.buffer.ReadInt8()
-		if refFlag == NullFlag {
+		if ctx.buffer.ReadInt8() == NullFlag {
 			return nil
 		}
 	}

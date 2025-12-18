@@ -23,6 +23,46 @@ import (
 	"unsafe"
 )
 
+
+// ============================================================================
+// RefMode - Controls reference handling behavior in serialization
+// ============================================================================
+
+// RefMode controls reference handling behavior in serialization/deserialization.
+// It determines how null checks and reference tracking are performed.
+type RefMode uint8
+
+const (
+	// RefModeNone - skip ref handling entirely.
+	// The serializer should not read/write any ref/null flags.
+	// Used for non-nullable primitives or when caller handles ref externally.
+	RefModeNone RefMode = iota
+
+	// RefModeNullOnly - only null check without reference tracking.
+	// Write: NullFlag (-3) for nil, NotNullValueFlag (-1) for non-nil.
+	// Read: Read flag and return early if null.
+	// No circular reference tracking is performed.
+	RefModeNullOnly
+
+	// RefModeTracking - full reference tracking with circular reference support.
+	// Write: Uses WriteRefOrNull which writes NullFlag, RefFlag+refId, or RefValueFlag.
+	// Read: Uses TryPreserveRefId with reference resolution.
+	RefModeTracking
+)
+
+// ============================================================================
+// Reference flags
+const (
+	NullFlag         int8 = -3
+	RefFlag          int8 = -2
+	NotNullValueFlag int8 = -1
+	RefValueFlag     int8 = 0
+)
+
+// ============================================================================
+// RefResolver - Tracks references during serialization/deserialization
+// ============================================================================
+
 // RefResolver class is used to track objects that have already been read or written.
 type RefResolver struct {
 	refTracking    bool

@@ -125,7 +125,7 @@ func generateFieldWriteTyped(buf *bytes.Buffer, field *FieldInfo) error {
 		case types.String:
 			// String type has NeedWriteRef = false
 			// So in struct serialization, no ref flag is written, just the string data
-			fmt.Fprintf(buf, "\tfory.WriteString(buf, %s)\n", fieldAccess)
+			fmt.Fprintf(buf, "\tctx.WriteString(%s)\n", fieldAccess)
 		default:
 			fmt.Fprintf(buf, "\t// TODO: unsupported basic type %s\n", basic.String())
 		}
@@ -258,6 +258,9 @@ func generateElementTypeIDWrite(buf *bytes.Buffer, elemType types.Type) error {
 func generateSliceWriteInline(buf *bytes.Buffer, sliceType *types.Slice, fieldAccess string) error {
 	elemType := sliceType.Elem()
 
+	// Check if element type is referencable (needs ref tracking)
+	elemIsReferencable := isReferencableType(elemType)
+
 	// WriteData RefValueFlag first (slice is referencable)
 	fmt.Fprintf(buf, "\tbuf.WriteInt8(0) // RefValueFlag for slice\n")
 
@@ -272,19 +275,29 @@ func generateSliceWriteInline(buf *bytes.Buffer, sliceType *types.Slice, fieldAc
 	// WriteData collection header and elements for non-empty slice
 	fmt.Fprintf(buf, "\t\tif sliceLen > 0 {\n")
 
-	// For codegen, follow reflection's behavior:
-	// For typed slices, reflection only sets CollectionIsSameType (not CollectionIsDeclElementType)
-	// because sliceSerializer.declaredType is nil
-	fmt.Fprintf(buf, "\t\t\tcollectFlag := 8 // CollectionIsSameType only\n")
+	// For codegen, follow reflection's behavior for struct fields:
+	// Set both CollectionIsSameType and CollectionIsDeclElementType
+	// Add CollectionTrackingRef when ref tracking is enabled AND element is referencable
+	// This matches sliceConcreteValueSerializer.WriteData which adds CollectionTrackingRef for referencable elements
+	fmt.Fprintf(buf, "\t\t\tcollectFlag := 12 // CollectionIsSameType | CollectionIsDeclElementType\n")
+	if elemIsReferencable {
+		fmt.Fprintf(buf, "\t\t\tif ctx.TrackRef() {\n")
+		fmt.Fprintf(buf, "\t\t\t\tcollectFlag |= 1 // CollectionTrackingRef for referencable element type\n")
+		fmt.Fprintf(buf, "\t\t\t}\n")
+	}
 	fmt.Fprintf(buf, "\t\t\tbuf.WriteInt8(int8(collectFlag))\n")
 
-	// WriteData element type ID since CollectionIsDeclElementType is not set
-	if err := generateElementTypeIDWriteInline(buf, elemType); err != nil {
-		return err
-	}
+	// Element type ID is NOT written when CollectionIsDeclElementType is set
+	// The reader knows the element type from the field type
 
-	// WriteData elements directly without per-element flags/type IDs
+	// WriteData elements - with ref flags if element is referencable and tracking is enabled
 	fmt.Fprintf(buf, "\t\t\tfor _, elem := range %s {\n", fieldAccess)
+	if elemIsReferencable {
+		// For referencable elements (like strings), need to write ref flag when tracking
+		fmt.Fprintf(buf, "\t\t\t\tif ctx.TrackRef() {\n")
+		fmt.Fprintf(buf, "\t\t\t\t\tbuf.WriteInt8(-1) // NotNullValueFlag for element\n")
+		fmt.Fprintf(buf, "\t\t\t\t}\n")
+	}
 	if err := generateSliceElementWriteInline(buf, elemType, "elem"); err != nil {
 		return err
 	}
@@ -447,7 +460,7 @@ func generateMapKeyWrite(buf *bytes.Buffer, keyType types.Type, varName string) 
 			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteInt64(int64(%s))\n", varName)
 		case types.String:
 			// stringSerializer.NeedWriteRef() = false, write directly
-			fmt.Fprintf(buf, "\t\t\t\tfory.WriteString(buf, %s)\n", varName)
+			fmt.Fprintf(buf, "\t\t\t\tctx.WriteString(%s)\n", varName)
 		default:
 			return fmt.Errorf("unsupported map key type: %v", keyType)
 		}
@@ -469,7 +482,7 @@ func generateMapValueWrite(buf *bytes.Buffer, valueType types.Type, varName stri
 			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteInt64(int64(%s))\n", varName)
 		case types.String:
 			// stringSerializer.NeedWriteRef() = false, write directly
-			fmt.Fprintf(buf, "\t\t\t\tfory.WriteString(buf, %s)\n", varName)
+			fmt.Fprintf(buf, "\t\t\t\tctx.WriteString(%s)\n", varName)
 		default:
 			return fmt.Errorf("unsupported map value type: %v", valueType)
 		}
@@ -546,7 +559,7 @@ func generateSliceElementWriteInline(buf *bytes.Buffer, elemType types.Type, ele
 		case types.Float64:
 			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteFloat64(%s)\n", elemAccess)
 		case types.String:
-			fmt.Fprintf(buf, "\t\t\t\tfory.WriteString(buf, %s)\n", elemAccess)
+			fmt.Fprintf(buf, "\t\t\t\tctx.WriteString(%s)\n", elemAccess)
 		default:
 			return fmt.Errorf("unsupported basic type for element write: %s", basic.String())
 		}

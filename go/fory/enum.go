@@ -78,8 +78,7 @@ func (s *enumSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value re
 
 func (s *enumSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
 	if refMode != RefModeNone {
-		refFlag := ctx.buffer.ReadInt8()
-		if refFlag == NullFlag {
+		if ctx.buffer.ReadInt8() == NullFlag {
 			return nil
 		}
 	}

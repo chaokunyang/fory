@@ -161,7 +161,7 @@ func (c *WriteContext) writeFast(ptr unsafe.Pointer, ct StaticTypeId) {
 	case ConcreteTypeFloat64:
 		c.buffer.WriteFloat64(*(*float64)(ptr))
 	case ConcreteTypeString:
-		WriteString(c.buffer, *(*string)(ptr))
+		writeString(c.buffer, *(*string)(ptr))
 	}
 }
 
@@ -175,127 +175,15 @@ func (c *WriteContext) WriteLength(length int) error {
 }
 
 // ============================================================================
-// Typed WriteData Methods - WriteData primitives with optional ref/type info
+// Typed Write Methods - Fastpath for codegen
+// For primitive numeric types, use ctx.Buffer().WriteXXX()
+// For strings, use ctx.WriteString()
+// For slices/maps, use these methods which handle ref tracking
 // ============================================================================
 
-// WriteBool writes a bool with optional ref/type info
-func (c *WriteContext) WriteBool(value bool, refMode RefMode, writeTypeInfo bool) error {
-	if refMode != RefModeNone {
-		c.buffer.WriteInt8(NotNullValueFlag)
-	}
-	if writeTypeInfo {
-		c.WriteTypeId(BOOL)
-	}
-	c.buffer.WriteBool(value)
-	return nil
-}
-
-// WriteInt8 writes an int8 with optional ref/type info
-func (c *WriteContext) WriteInt8(value int8, refMode RefMode, writeTypeInfo bool) error {
-	if refMode != RefModeNone {
-		c.buffer.WriteInt8(NotNullValueFlag)
-	}
-	if writeTypeInfo {
-		c.WriteTypeId(INT8)
-	}
-	c.buffer.WriteInt8(value)
-	return nil
-}
-
-// WriteInt16 writes an int16 with optional ref/type info
-func (c *WriteContext) WriteInt16(value int16, refMode RefMode, writeTypeInfo bool) error {
-	if refMode != RefModeNone {
-		c.buffer.WriteInt8(NotNullValueFlag)
-	}
-	if writeTypeInfo {
-		c.WriteTypeId(INT16)
-	}
-	c.buffer.WriteInt16(value)
-	return nil
-}
-
-// WriteInt32 writes an int32 with optional ref/type info
-func (c *WriteContext) WriteInt32(value int32, refMode RefMode, writeTypeInfo bool) error {
-	if refMode != RefModeNone {
-		c.buffer.WriteInt8(NotNullValueFlag)
-	}
-	if writeTypeInfo {
-		c.WriteTypeId(INT32)
-	}
-	c.buffer.WriteVarint32(value)
-	return nil
-}
-
-// WriteInt64 writes an int64 with optional ref/type info
-func (c *WriteContext) WriteInt64(value int64, refMode RefMode, writeTypeInfo bool) error {
-	if refMode != RefModeNone {
-		c.buffer.WriteInt8(NotNullValueFlag)
-	}
-	if writeTypeInfo {
-		c.WriteTypeId(INT64)
-	}
-	c.buffer.WriteVarint64(value)
-	return nil
-}
-
-// WriteInt writes an int with optional ref/type info
-// Platform-dependent: uses int32 on 32-bit systems, int64 on 64-bit systems
-func (c *WriteContext) WriteInt(value int, refMode RefMode, writeTypeInfo bool) error {
-	if refMode != RefModeNone {
-		c.buffer.WriteInt8(NotNullValueFlag)
-	}
-	if writeTypeInfo {
-		if strconv.IntSize == 64 {
-			c.WriteTypeId(INT64)
-		} else {
-			c.WriteTypeId(INT32)
-		}
-	}
-	if strconv.IntSize == 64 {
-		c.buffer.WriteVarint64(int64(value))
-	} else {
-		c.buffer.WriteVarint32(int32(value))
-	}
-	return nil
-}
-
-// WriteFloat32 writes a float32 with optional ref/type info
-func (c *WriteContext) WriteFloat32(value float32, refMode RefMode, writeTypeInfo bool) error {
-	if refMode != RefModeNone {
-		c.buffer.WriteInt8(NotNullValueFlag)
-	}
-	if writeTypeInfo {
-		c.WriteTypeId(FLOAT)
-	}
-	c.buffer.WriteFloat32(value)
-	return nil
-}
-
-// WriteFloat64 writes a float64 with optional ref/type info
-func (c *WriteContext) WriteFloat64(value float64, refMode RefMode, writeTypeInfo bool) error {
-	if refMode != RefModeNone {
-		c.buffer.WriteInt8(NotNullValueFlag)
-	}
-	if writeTypeInfo {
-		c.WriteTypeId(DOUBLE)
-	}
-	c.buffer.WriteFloat64(value)
-	return nil
-}
-
-// WriteString writes a string with optional ref/type info
-func (c *WriteContext) WriteString(value string, refMode RefMode, writeTypeInfo bool) error {
-	if refMode != RefModeNone {
-		c.buffer.WriteInt8(NotNullValueFlag)
-	}
-	if writeTypeInfo {
-		c.WriteTypeId(STRING)
-	}
-	c.buffer.WriteVaruint32(uint32(len(value)))
-	if len(value) > 0 {
-		c.buffer.WriteBinary(unsafe.Slice(unsafe.StringData(value), len(value)))
-	}
-	return nil
+// WriteString writes a string value (caller handles nullable/type meta)
+func (c *WriteContext) WriteString(value string) error {
+	return writeString(c.buffer, value)
 }
 
 // WriteBoolSlice writes []bool with ref/type info

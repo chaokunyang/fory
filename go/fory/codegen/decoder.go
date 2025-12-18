@@ -130,7 +130,7 @@ func generateFieldReadTyped(buf *bytes.Buffer, field *FieldInfo) error {
 		case types.String:
 			// String type has NeedWriteRef = false
 			// So in struct deserialization, no ref flag is read, just the string data
-			fmt.Fprintf(buf, "\t%s = fory.ReadString(buf)\n", fieldAccess)
+			fmt.Fprintf(buf, "\t%s = ctx.ReadString()\n", fieldAccess)
 		default:
 			fmt.Fprintf(buf, "\t// TODO: unsupported basic type %s\n", basic.String())
 		}
@@ -277,7 +277,7 @@ func generateSliceElementRead(buf *bytes.Buffer, elemType types.Type, elemAccess
 			fmt.Fprintf(buf, "\t\t\t\tif flag := buf.ReadInt8(); flag != 0 {\n")
 			fmt.Fprintf(buf, "\t\t\t\t\treturn fmt.Errorf(\"expected RefValueFlag for string element, got %%d\", flag)\n")
 			fmt.Fprintf(buf, "\t\t\t\t}\n")
-			fmt.Fprintf(buf, "\t\t\t\t%s = fory.ReadString(buf)\n", elemAccess)
+			fmt.Fprintf(buf, "\t\t\t\t%s = ctx.ReadString()\n", elemAccess)
 		default:
 			fmt.Fprintf(buf, "\t\t\t\t// TODO: unsupported basic type %s\n", basic.String())
 		}
@@ -325,6 +325,9 @@ func generateSliceElementRead(buf *bytes.Buffer, elemType types.Type, elemAccess
 func generateSliceReadInline(buf *bytes.Buffer, sliceType *types.Slice, fieldAccess string) error {
 	elemType := sliceType.Elem()
 
+	// Check if element type is referencable (needs ref tracking)
+	elemIsReferencable := isReferencableType(elemType)
+
 	// ReadData RefValueFlag first (slice is referencable)
 	fmt.Fprintf(buf, "\tif flag := buf.ReadInt8(); flag != 0 {\n")
 	fmt.Fprintf(buf, "\t\treturn fmt.Errorf(\"expected RefValueFlag for slice field, got %%d\", flag)\n")
@@ -341,14 +344,24 @@ func generateSliceReadInline(buf *bytes.Buffer, sliceType *types.Slice, fieldAcc
 	fmt.Fprintf(buf, "\t\t\tcollectFlag := buf.ReadInt8()\n")
 	fmt.Fprintf(buf, "\t\t\t// Check if CollectionIsDeclElementType is set (bit 2, value 4)\n")
 	fmt.Fprintf(buf, "\t\t\thasDeclType := (collectFlag & 4) != 0\n")
+	if elemIsReferencable {
+		fmt.Fprintf(buf, "\t\t\t// Check if CollectionTrackingRef is set (bit 0, value 1)\n")
+		fmt.Fprintf(buf, "\t\t\ttrackRefs := (collectFlag & 1) != 0\n")
+	}
 
 	// Create slice
 	fmt.Fprintf(buf, "\t\t\t%s = make(%s, sliceLen)\n", fieldAccess, sliceType.String())
 
 	// ReadData elements based on whether CollectionIsDeclElementType is set
 	fmt.Fprintf(buf, "\t\t\tif hasDeclType {\n")
-	fmt.Fprintf(buf, "\t\t\t\t// Elements are written directly without flags/type IDs\n")
+	fmt.Fprintf(buf, "\t\t\t\t// Elements are written directly without type IDs\n")
 	fmt.Fprintf(buf, "\t\t\t\tfor i := 0; i < sliceLen; i++ {\n")
+	if elemIsReferencable {
+		// For referencable elements (like strings), need to read ref flag when tracking
+		fmt.Fprintf(buf, "\t\t\t\t\tif trackRefs {\n")
+		fmt.Fprintf(buf, "\t\t\t\t\t\t_ = buf.ReadInt8() // Read ref flag (NotNullValueFlag)\n")
+		fmt.Fprintf(buf, "\t\t\t\t\t}\n")
+	}
 	if err := generateSliceElementReadDirect(buf, elemType, fmt.Sprintf("%s[i]", fieldAccess)); err != nil {
 		return err
 	}
@@ -360,6 +373,12 @@ func generateSliceReadInline(buf *bytes.Buffer, sliceType *types.Slice, fieldAcc
 	fmt.Fprintf(buf, "\t\t\t\t\t_ = buf.ReadVaruint32()\n")
 	fmt.Fprintf(buf, "\t\t\t\t}\n")
 	fmt.Fprintf(buf, "\t\t\t\tfor i := 0; i < sliceLen; i++ {\n")
+	if elemIsReferencable {
+		// For referencable elements (like strings), need to read ref flag when tracking
+		fmt.Fprintf(buf, "\t\t\t\t\tif trackRefs {\n")
+		fmt.Fprintf(buf, "\t\t\t\t\t\t_ = buf.ReadInt8() // Read ref flag (NotNullValueFlag)\n")
+		fmt.Fprintf(buf, "\t\t\t\t\t}\n")
+	}
 	// For same type without declared type, read elements directly
 	if err := generateSliceElementReadDirect(buf, elemType, fmt.Sprintf("%s[i]", fieldAccess)); err != nil {
 		return err
@@ -444,7 +463,7 @@ func generateSliceElementReadInline(buf *bytes.Buffer, elemType types.Type, elem
 		case types.Float64:
 			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadFloat64()\n", elemAccess)
 		case types.String:
-			fmt.Fprintf(buf, "\t\t\t\t%s = fory.ReadString(buf)\n", elemAccess)
+			fmt.Fprintf(buf, "\t\t\t\t%s = ctx.ReadString()\n", elemAccess)
 		default:
 			return fmt.Errorf("unsupported basic type for element read: %s", basic.String())
 		}
@@ -493,7 +512,7 @@ func generateSliceElementReadDirect(buf *bytes.Buffer, elemType types.Type, elem
 			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadFloat64()\n", elemAccess)
 		case types.String:
 			// String serializer reads directly without flags
-			fmt.Fprintf(buf, "\t\t\t\t%s = fory.ReadString(buf)\n", elemAccess)
+			fmt.Fprintf(buf, "\t\t\t\t%s = ctx.ReadString()\n", elemAccess)
 		default:
 			return fmt.Errorf("unsupported basic type for direct element read: %s", basic.String())
 		}
@@ -616,7 +635,7 @@ func generateMapKeyRead(buf *bytes.Buffer, keyType types.Type, varName string) e
 			fmt.Fprintf(buf, "\t\t\t\t\t%s = int(buf.ReadInt64())\n", varName)
 		case types.String:
 			// stringSerializer.NeedWriteRef() = false, read directly
-			fmt.Fprintf(buf, "\t\t\t\t\t%s = fory.ReadString(buf)\n", varName)
+			fmt.Fprintf(buf, "\t\t\t\t\t%s = ctx.ReadString()\n", varName)
 		default:
 			return fmt.Errorf("unsupported map key type: %v", keyType)
 		}
@@ -638,7 +657,7 @@ func generateMapValueRead(buf *bytes.Buffer, valueType types.Type, varName strin
 			fmt.Fprintf(buf, "\t\t\t\t\t%s = int(buf.ReadInt64())\n", varName)
 		case types.String:
 			// stringSerializer.NeedWriteRef() = false, read directly
-			fmt.Fprintf(buf, "\t\t\t\t\t%s = fory.ReadString(buf)\n", varName)
+			fmt.Fprintf(buf, "\t\t\t\t\t%s = ctx.ReadString()\n", varName)
 		default:
 			return fmt.Errorf("unsupported map value type: %v", valueType)
 		}

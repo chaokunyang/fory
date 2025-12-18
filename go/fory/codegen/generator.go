@@ -460,7 +460,7 @@ func generateWriteMethod(buf *bytes.Buffer, s *StructInfo) error {
 	fmt.Fprintf(buf, "\t\tctx.Buffer().WriteInt8(-1) // NotNullValueFlag\n")
 	fmt.Fprintf(buf, "\t}\n")
 	fmt.Fprintf(buf, "\tif writeType {\n")
-	fmt.Fprintf(buf, "\t\tctx.Buffer().WriteVaruint32(int32(fory.NAMED_STRUCT))\n")
+	fmt.Fprintf(buf, "\t\tctx.Buffer().WriteVaruint32(uint32(fory.NAMED_STRUCT))\n")
 	fmt.Fprintf(buf, "\t}\n")
 	fmt.Fprintf(buf, "\treturn g.WriteData(ctx, value)\n")
 	fmt.Fprintf(buf, "}\n\n")

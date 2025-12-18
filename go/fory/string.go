@@ -30,9 +30,8 @@ const (
 	encodingUTF8           // UTF-8 encoding (default)
 )
 
-// WriteString provides public API for zero-reflection string serialization
-// This method is specifically designed for code generation to avoid reflection overhead
-func WriteString(buf *ByteBuffer, value string) error {
+// writeString writes a string to buffer using xlang encoding
+func writeString(buf *ByteBuffer, value string) error {
 	data := unsafeGetBytes(value)
 	header := (uint64(len(data)) << 2) | encodingUTF8
 	buf.WriteVaruint36Small(header)
@@ -40,9 +39,8 @@ func WriteString(buf *ByteBuffer, value string) error {
 	return nil
 }
 
-// ReadString provides public API for zero-reflection string deserialization
-// This method is specifically designed for code generation to avoid reflection overhead
-func ReadString(buf *ByteBuffer) string {
+// readString reads a string from buffer using xlang encoding
+func readString(buf *ByteBuffer) string {
 	header := buf.ReadVaruint36Small()
 	size := header >> 2       // Extract byte count
 	encoding := header & 0b11 // Extract encoding type
@@ -100,7 +98,7 @@ type stringSerializer struct{}
 var globalStringSerializer = stringSerializer{}
 
 func (s stringSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
-	return WriteString(ctx.buffer, value.String())
+	return writeString(ctx.buffer, value.String())
 }
 
 func (s stringSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
@@ -115,7 +113,7 @@ func (s stringSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bo
 }
 
 func (s stringSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
-	str := ReadString(ctx.buffer)
+	str := readString(ctx.buffer)
 	value.SetString(str)
 	return nil
 }
@@ -158,24 +156,23 @@ func (s ptrToStringSerializer) Write(ctx *WriteContext, refMode RefMode, writeTy
 
 func (s ptrToStringSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	str := value.Interface().(*string)
-	return WriteString(ctx.buffer, *str)
+	return writeString(ctx.buffer, *str)
 }
 
 func (s ptrToStringSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
 	if refMode != RefModeNone {
-		refFlag := ctx.buffer.ReadInt8()
-		if refFlag == NullFlag {
+		if ctx.buffer.ReadInt8() == NullFlag {
 			return nil
 		}
 	}
 	if readType {
-		_ = ctx.buffer.ReadVaruint32()
+		_ = ctx.buffer.ReadVaruint32Small7()
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
 
 func (s ptrToStringSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
-	str := ReadString(ctx.buffer)
+	str := readString(ctx.buffer)
 	ptr := new(string)
 	*ptr = str
 	value.Set(reflect.ValueOf(ptr))

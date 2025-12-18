@@ -63,14 +63,6 @@ const (
 	OutOfBandFlag    = 8
 )
 
-// Reference flags
-const (
-	NullFlag         int8 = -3
-	RefFlag          int8 = -2
-	NotNullValueFlag int8 = -1
-	RefValueFlag     int8 = 0
-)
-
 // ============================================================================
 // Config
 // ============================================================================
@@ -565,33 +557,53 @@ func Deserialize[T any](f *Fory, data []byte, target *T) error {
 	}
 
 	// Fast path: type switch for common types (Go compiler can optimize this)
+	// For primitives, read null flag, skip type ID, then read value from buffer
+	buf := f.readCtx.buffer
 	switch t := any(target).(type) {
 	case *bool:
-		*t = f.readCtx.ReadBool(RefModeNullOnly, true)
+		_ = buf.ReadInt8() // null flag
+		_ = buf.ReadVaruint32Small7() // type ID
+		*t = buf.ReadBool()
 		return nil
 	case *int8:
-		*t = f.readCtx.ReadInt8(RefModeNullOnly, true)
+		_ = buf.ReadInt8()
+		_ = buf.ReadVaruint32Small7()
+		*t = buf.ReadInt8()
 		return nil
 	case *int16:
-		*t = f.readCtx.ReadInt16(RefModeNullOnly, true)
+		_ = buf.ReadInt8()
+		_ = buf.ReadVaruint32Small7()
+		*t = buf.ReadInt16()
 		return nil
 	case *int32:
-		*t = f.readCtx.ReadInt32(RefModeNullOnly, true)
+		_ = buf.ReadInt8()
+		_ = buf.ReadVaruint32Small7()
+		*t = buf.ReadVarint32()
 		return nil
 	case *int64:
-		*t = f.readCtx.ReadInt64(RefModeNullOnly, true)
+		_ = buf.ReadInt8()
+		_ = buf.ReadVaruint32Small7()
+		*t = buf.ReadVarint64()
 		return nil
 	case *int:
-		*t = f.readCtx.ReadInt(RefModeNullOnly, true)
+		_ = buf.ReadInt8()
+		_ = buf.ReadVaruint32Small7()
+		*t = int(buf.ReadVarint64())
 		return nil
 	case *float32:
-		*t = f.readCtx.ReadFloat32(RefModeNullOnly, true)
+		_ = buf.ReadInt8()
+		_ = buf.ReadVaruint32Small7()
+		*t = buf.ReadFloat32()
 		return nil
 	case *float64:
-		*t = f.readCtx.ReadFloat64(RefModeNullOnly, true)
+		_ = buf.ReadInt8()
+		_ = buf.ReadVaruint32Small7()
+		*t = buf.ReadFloat64()
 		return nil
 	case *string:
-		*t = f.readCtx.ReadString(RefModeNullOnly, true)
+		_ = buf.ReadInt8() // null flag
+		_ = buf.ReadVaruint32Small7() // type ID
+		*t = f.readCtx.ReadString()
 		return nil
 	case *[]byte:
 		v, err := f.readCtx.ReadByteSlice(RefModeNullOnly, true)

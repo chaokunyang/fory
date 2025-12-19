@@ -93,19 +93,21 @@ func TestSerializeAny(t *testing.T) {
 	f := New(fory.WithRefTracking(true))
 
 	t.Run("Primitives", func(t *testing.T) {
-		data, err := f.SerializeAny(int32(42))
+		data, err := f.Serialize(int32(42))
 		require.NoError(t, err)
 
-		result, err := f.DeserializeAny(data)
+		var result int32
+		err = f.Deserialize(data, &result)
 		require.NoError(t, err)
 		require.Equal(t, int32(42), result)
 	})
 
 	t.Run("String", func(t *testing.T) {
-		data, err := f.SerializeAny("hello")
+		data, err := f.Serialize("hello")
 		require.NoError(t, err)
 
-		result, err := f.DeserializeAny(data)
+		var result string
+		err = f.Deserialize(data, &result)
 		require.NoError(t, err)
 		require.Equal(t, "hello", result)
 	})
@@ -167,8 +169,8 @@ func TestGlobalFunctions(t *testing.T) {
 	})
 
 	t.Run("UnmarshalTo", func(t *testing.T) {
-		// Use non-generic SerializeWithCallback for compatibility with non-generic UnmarshalTo
-		data, err := globalFory.SerializeAny("hello")
+		// Use non-generic Serialize for compatibility with non-generic UnmarshalTo
+		data, err := globalFory.Serialize("hello")
 		require.NoError(t, err)
 
 		var result string

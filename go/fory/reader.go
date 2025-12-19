@@ -411,6 +411,11 @@ func (c *ReadContext) ReadValue(value reflect.Value) error {
 		return fmt.Errorf("invalid reflect.Value")
 	}
 
+	// Handle array targets (arrays are serialized as slices)
+	if value.Type().Kind() == reflect.Array {
+		return c.readArrayValue(value)
+	}
+
 	// For interface{} types, we need to read the actual type from the buffer first
 	if value.Type().Kind() == reflect.Interface {
 		// Read ref flag
@@ -521,4 +526,57 @@ func (c *ReadContext) ReadInto(value reflect.Value, serializer Serializer, refMo
 	}
 
 	return serializer.Read(c, refMode, readTypeInfo, value)
+}
+
+// readArrayValue handles array targets when stream contains slice data
+// Arrays are serialized as slices in xlang protocol
+func (c *ReadContext) readArrayValue(target reflect.Value) error {
+	// Read ref flag
+	refID, err := c.RefResolver().TryPreserveRefId(c.buffer)
+	if err != nil {
+		return err
+	}
+	if int8(refID) < NotNullValueFlag {
+		// Reference to existing object
+		obj := c.RefResolver().GetReadObject(refID)
+		if obj.IsValid() {
+			reflect.Copy(target, obj)
+		}
+		return nil
+	}
+
+	// Read type ID (will be slice type in stream)
+	c.buffer.ReadVaruint32Small7()
+
+	// Get slice serializer to read the data
+	sliceType := reflect.SliceOf(target.Type().Elem())
+	serializer, err := c.typeResolver.getSerializerByType(sliceType, false)
+	if err != nil {
+		return fmt.Errorf("failed to get serializer for slice type %v: %w", sliceType, err)
+	}
+
+	// Create addressable temporary slice using reflect.New
+	tempSlicePtr := reflect.New(sliceType)
+	tempSlice := tempSlicePtr.Elem()
+	tempSlice.Set(reflect.MakeSlice(sliceType, target.Len(), target.Len()))
+
+	// Use ReadData to read slice data (ref/type already handled)
+	if err := serializer.ReadData(c, sliceType, tempSlice); err != nil {
+		return err
+	}
+
+	// Verify length matches
+	if tempSlice.Len() != target.Len() {
+		return fmt.Errorf("array length mismatch: got %d, want %d", tempSlice.Len(), target.Len())
+	}
+
+	// Copy to array
+	reflect.Copy(target, tempSlice)
+
+	// Register for circular refs
+	if int8(refID) >= NotNullValueFlag {
+		c.RefResolver().SetReadObject(refID, target)
+	}
+
+	return nil
 }

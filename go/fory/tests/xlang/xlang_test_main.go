@@ -525,8 +525,8 @@ func testSimpleStruct() {
 	f.Register(Item{}, 102)
 	f.Register(SimpleStruct{}, 103)
 
-	obj, err := f.Deserialize(data)
-	if err != nil {
+	var obj SimpleStruct
+	if err := f.Deserialize(data, &obj); err != nil {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
 	}
 	fmt.Printf("Deserialized obj: %+v\n", obj)
@@ -547,8 +547,8 @@ func testNamedSimpleStruct() {
 	f.RegisterByName(Item{}, "demo.item")
 	f.RegisterByName(SimpleStruct{}, "demo.simple_struct")
 
-	obj, err := f.Deserialize(data)
-	if err != nil {
+	var obj SimpleStruct
+	if err := f.Deserialize(data, &obj); err != nil {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
 	}
 	fmt.Printf("Deserialized obj: %+v\n", obj)
@@ -771,20 +771,20 @@ func testStructWithList() {
 	// Java serializes two objects to the same buffer, so we need to deserialize twice
 	readBuf := fory.NewByteBuffer(data)
 
-	obj1, err := f.DeserializeFrom(readBuf)
-	if err != nil {
+	var obj1 StructWithList
+	if err := f.DeserializeFrom(readBuf, &obj1); err != nil {
 		panic(fmt.Sprintf("Failed to deserialize first object: %v", err))
 	}
 
-	obj2, err := f.DeserializeFrom(readBuf)
-	if err != nil {
+	var obj2 StructWithList
+	if err := f.DeserializeFrom(readBuf, &obj2); err != nil {
 		panic(fmt.Sprintf("Failed to deserialize second object: %v", err))
 	}
 
 	// Java reads two objects from the same buffer, so we need to serialize twice
 	writeBuf := fory.NewByteBuffer(nil)
 
-	err = f.SerializeTo(writeBuf, obj1)
+	err := f.SerializeTo(writeBuf, obj1)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to serialize first object: %v", err))
 	}
@@ -808,20 +808,20 @@ func testStructWithMap() {
 	// Java serializes two objects to the same buffer, so we need to deserialize twice
 	readBuf := fory.NewByteBuffer(data)
 
-	obj1, err := f.DeserializeFrom(readBuf)
-	if err != nil {
+	var obj1 StructWithMap
+	if err := f.DeserializeFrom(readBuf, &obj1); err != nil {
 		panic(fmt.Sprintf("Failed to deserialize first object: %v", err))
 	}
 
-	obj2, err := f.DeserializeFrom(readBuf)
-	if err != nil {
+	var obj2 StructWithMap
+	if err := f.DeserializeFrom(readBuf, &obj2); err != nil {
 		panic(fmt.Sprintf("Failed to deserialize second object: %v", err))
 	}
 
 	// Java reads two objects from the same buffer, so we need to serialize twice
 	writeBuf := fory.NewByteBuffer(nil)
 
-	err = f.SerializeTo(writeBuf, obj1)
+	err := f.SerializeTo(writeBuf, obj1)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to serialize first object: %v", err))
 	}
@@ -845,8 +845,8 @@ func testSkipIdCustom() {
 	f.RegisterExtensionType(MyExt{}, 103, &MyExtSerializer{})
 	f.Register(EmptyWrapper{}, 104)
 
-	obj, err := f.Deserialize(data)
-	if err != nil {
+	var obj EmptyWrapper
+	if err := f.Deserialize(data, &obj); err != nil {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
 	}
 
@@ -866,8 +866,8 @@ func testSkipNameCustom() {
 	f.RegisterExtensionTypeByName(MyExt{}, "my_ext", &MyExtSerializer{})
 	f.RegisterByName(EmptyWrapper{}, "my_wrapper")
 
-	obj, err := f.Deserialize(data)
-	if err != nil {
+	var obj EmptyWrapper
+	if err := f.Deserialize(data, &obj); err != nil {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
 	}
 
@@ -925,8 +925,8 @@ func testStructVersionCheck() {
 	// Use numeric ID 201 to match Java's fory.register(VersionCheckStruct.class, 201)
 	f.Register(VersionCheckStruct{}, 201)
 
-	obj, err := f.Deserialize(data)
-	if err != nil {
+	var obj VersionCheckStruct
+	if err := f.Deserialize(data, &obj); err != nil {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
 	}
 

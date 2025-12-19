@@ -546,8 +546,8 @@ func ExampleFory_Serialize() {
 		panic(err)
 	}
 	// bytes can be data serialized by other languages.
-	newValue, err := f.Deserialize(bytes)
-	if err != nil {
+	var newValue interface{}
+	if err = f.Deserialize(bytes, &newValue); err != nil {
 		panic(err)
 	}
 	fmt.Println(newValue)
@@ -562,8 +562,7 @@ func ExampleFory_Serialize() {
 		panic(err)
 	}
 	// bytes can be data serialized by other languages.
-	newValue, err = f.Deserialize(bytes)
-	if err != nil {
+	if err = f.Deserialize(bytes, &newValue); err != nil {
 		panic(err)
 	}
 	fmt.Println(newValue)
@@ -648,9 +647,9 @@ func TestStructWithNestedSlice(t *testing.T) {
 	if err := fory.Unmarshal(bytes, &deserialized2); err != nil {
 		panic(err)
 	}
-	// When unmarshaling to interface{}, we get back the registered type (Example, not *Example)
-	// So we need to dereference example for comparison
-	require.Equal(t, deserialized2, *example)
+	// When unmarshaling to interface{}, named structs are returned as pointers
+	// for circular reference support
+	require.Equal(t, deserialized2, example)
 }
 
 func convertRecursively(newVal, tmplVal reflect.Value) (reflect.Value, error) {
@@ -741,6 +740,12 @@ func convertRecursively(newVal, tmplVal reflect.Value) (reflect.Value, error) {
 		}
 		return out, nil
 	default:
+		// Handle pointer-to-value conversion (common when deserializing named structs into interface{})
+		if newVal.Kind() == reflect.Ptr && tmplVal.Kind() == reflect.Struct {
+			if !newVal.IsNil() && newVal.Elem().Type() == tmplVal.Type() {
+				return newVal.Elem(), nil
+			}
+		}
 		if newVal.Type().ConvertibleTo(tmplVal.Type()) {
 			return newVal.Convert(tmplVal.Type()), nil
 		}

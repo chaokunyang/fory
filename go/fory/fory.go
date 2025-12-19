@@ -757,9 +757,9 @@ func (f *Fory) Serialize(value any) ([]byte, error) {
 	return f.writeCtx.buffer.GetByteSlice(0, f.writeCtx.buffer.writerIndex), nil
 }
 
-// Deserialize deserializes polymorphic values.
-// Returns the concrete type as `any`.
-func (f *Fory) Deserialize(data []byte) (any, error) {
+// Deserialize deserializes data directly into the provided target value.
+// The target must be a pointer to the value to deserialize into.
+func (f *Fory) Deserialize(data []byte, v interface{}) error {
 	defer func() {
 		f.readCtx.Reset()
 		if f.metaContext != nil {
@@ -770,12 +770,12 @@ func (f *Fory) Deserialize(data []byte) (any, error) {
 
 	metaOffset, err := readHeader(f.readCtx)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// Check if the serialized object is null
 	if metaOffset == NullObjectMetaOffset {
-		return nil, nil
+		return nil
 	}
 
 	// In compatible mode, load type definitions if meta offset is present
@@ -789,7 +789,7 @@ func (f *Fory) Deserialize(data []byte) (any, error) {
 		f.readCtx.buffer.SetReaderIndex(metaPos)
 
 		if err := f.typeResolver.readTypeDefs(f.readCtx.buffer); err != nil {
-			return nil, fmt.Errorf("failed to read type definitions: %w", err)
+			return fmt.Errorf("failed to read type definitions: %w", err)
 		}
 
 		// Save final position (after reading TypeDefs)
@@ -799,10 +799,10 @@ func (f *Fory) Deserialize(data []byte) (any, error) {
 		f.readCtx.buffer.SetReaderIndex(dataStartPos)
 	}
 
-	// Use ReadValue to deserialize through the typeResolver
-	var result interface{}
-	if err := f.readCtx.ReadValue(reflect.ValueOf(&result).Elem()); err != nil {
-		return nil, err
+	// Read directly into target value
+	target := reflect.ValueOf(v).Elem()
+	if err := f.readCtx.ReadValue(target); err != nil {
+		return err
 	}
 
 	// Restore final position if we loaded type definitions
@@ -810,7 +810,7 @@ func (f *Fory) Deserialize(data []byte) (any, error) {
 		f.readCtx.buffer.SetReaderIndex(finalPos)
 	}
 
-	return result, nil
+	return nil
 }
 
 // SerializeTo serializes a value and appends the bytes to the provided buffer.
@@ -870,13 +870,13 @@ func (f *Fory) SerializeTo(buf *ByteBuffer, value interface{}) error {
 	return nil
 }
 
-// DeserializeFrom deserializes a polymorphic value from an existing buffer.
+// DeserializeFrom deserializes data from an existing buffer directly into the provided target value.
 // The buffer's reader index is advanced as data is read.
 // This is useful when reading multiple serialized values from the same buffer.
-func (f *Fory) DeserializeFrom(buf *ByteBuffer) (any, error) {
+func (f *Fory) DeserializeFrom(buf *ByteBuffer, v interface{}) error {
 	// Reset contexts for each independent serialized object
 	defer func() {
-		f.writeCtx.Reset()
+		f.readCtx.Reset()
 		if f.metaContext != nil {
 			f.metaContext.Reset()
 		}
@@ -889,13 +889,13 @@ func (f *Fory) DeserializeFrom(buf *ByteBuffer) (any, error) {
 	metaOffset, err := readHeader(f.readCtx)
 	if err != nil {
 		f.readCtx.buffer = origBuffer
-		return nil, err
+		return err
 	}
 
 	// Check if the serialized object is null
 	if metaOffset == NullObjectMetaOffset {
 		f.readCtx.buffer = origBuffer
-		return nil, nil
+		return nil
 	}
 
 	// In compatible mode, load type definitions if meta offset is present
@@ -910,7 +910,7 @@ func (f *Fory) DeserializeFrom(buf *ByteBuffer) (any, error) {
 
 		if err := f.typeResolver.readTypeDefs(buf); err != nil {
 			f.readCtx.buffer = origBuffer
-			return nil, fmt.Errorf("failed to read type definitions: %w", err)
+			return fmt.Errorf("failed to read type definitions: %w", err)
 		}
 
 		// Save final position (after reading TypeDefs)
@@ -920,11 +920,11 @@ func (f *Fory) DeserializeFrom(buf *ByteBuffer) (any, error) {
 		buf.SetReaderIndex(dataStartPos)
 	}
 
-	// Use ReadValue to deserialize through the typeResolver
-	var result interface{}
-	if err := f.readCtx.ReadValue(reflect.ValueOf(&result).Elem()); err != nil {
+	// Read directly into target value
+	target := reflect.ValueOf(v).Elem()
+	if err := f.readCtx.ReadValue(target); err != nil {
 		f.readCtx.buffer = origBuffer
-		return nil, err
+		return err
 	}
 
 	// Restore final position if we loaded type definitions
@@ -935,211 +935,17 @@ func (f *Fory) DeserializeFrom(buf *ByteBuffer) (any, error) {
 	// Restore original buffer
 	f.readCtx.buffer = origBuffer
 
-	return result, nil
+	return nil
 }
 
-// Marshal serializes a value to bytes (instance method for backward compatibility)
+// Marshal serializes a value to bytes.
 func (f *Fory) Marshal(v interface{}) ([]byte, error) {
 	return f.Serialize(v)
 }
 
-// Unmarshal deserializes bytes into the provided value (instance method for backward compatibility)
+// Unmarshal deserializes bytes into the provided value.
 func (f *Fory) Unmarshal(data []byte, v interface{}) error {
-	newValue, err := f.Deserialize(data)
-	if err != nil {
-		return err
-	}
-	target := reflect.ValueOf(v).Elem()
-	src := reflect.ValueOf(newValue)
-
-	// Handle type conversions between src and target
-	if target.Kind() == reflect.Ptr && src.Kind() != reflect.Ptr {
-		// Target expects pointer, src is value - wrap src in pointer
-		ptr := reflect.New(src.Type())
-		ptr.Elem().Set(src)
-		target.Set(ptr)
-	} else if target.Kind() != reflect.Ptr && src.Kind() == reflect.Ptr {
-		// Target expects value, src is pointer - dereference src
-		// This happens when deserializing named structs into interface{} returns pointer for circular ref support
-		if !src.IsNil() {
-			target.Set(src.Elem())
-		}
-	} else if target.Kind() == reflect.Slice && src.Kind() == reflect.Slice {
-		// Handle slice type conversion (e.g., []interface{} -> []*B)
-		if err := convertSlice(src, target); err != nil {
-			return err
-		}
-	} else if target.Kind() == reflect.Map && src.Kind() == reflect.Map {
-		// Handle map type conversion (e.g., map[interface{}]interface{} -> map[string]bool)
-		if err := convertMap(src, target); err != nil {
-			return err
-		}
-	} else if target.Kind() == reflect.Array && src.Kind() == reflect.Slice {
-		// Handle slice to array conversion (arrays are serialized as slices)
-		if src.Len() != target.Len() {
-			return fmt.Errorf("cannot convert slice of length %d to array of length %d", src.Len(), target.Len())
-		}
-		targetElemType := target.Type().Elem()
-		for i := 0; i < src.Len(); i++ {
-			srcElem := src.Index(i)
-			targetElem := target.Index(i)
-
-			// Handle interface{} elements
-			if srcElem.Kind() == reflect.Interface {
-				srcElem = srcElem.Elem()
-			}
-
-			if !srcElem.IsValid() {
-				continue // nil element
-			}
-
-			// Try direct assignment or conversion
-			if srcElem.Type().AssignableTo(targetElemType) {
-				targetElem.Set(srcElem)
-			} else if srcElem.Type().ConvertibleTo(targetElemType) {
-				targetElem.Set(srcElem.Convert(targetElemType))
-			} else {
-				return fmt.Errorf("cannot convert array element %v to %v", srcElem.Type(), targetElemType)
-			}
-		}
-	} else {
-		target.Set(src)
-	}
-	return nil
-}
-
-// convertSlice converts a source slice to target slice type, handling element type conversions
-func convertSlice(src, target reflect.Value) error {
-	if src.Type().AssignableTo(target.Type()) {
-		target.Set(src)
-		return nil
-	}
-
-	// Create a new slice of the target type
-	targetElemType := target.Type().Elem()
-	length := src.Len()
-	newSlice := reflect.MakeSlice(target.Type(), length, length)
-
-	for i := 0; i < length; i++ {
-		srcElem := src.Index(i)
-		targetElem := newSlice.Index(i)
-
-		// Handle interface{} elements
-		if srcElem.Kind() == reflect.Interface {
-			srcElem = srcElem.Elem()
-		}
-
-		if !srcElem.IsValid() {
-			continue // nil element
-		}
-
-		// Try direct assignment
-		if srcElem.Type().AssignableTo(targetElemType) {
-			targetElem.Set(srcElem)
-		} else if targetElemType.Kind() == reflect.Ptr && srcElem.Kind() == reflect.Ptr {
-			// Both are pointers - check if the pointed-to types match
-			if srcElem.Type() == targetElemType {
-				targetElem.Set(srcElem)
-			} else if srcElem.Elem().Type().AssignableTo(targetElemType.Elem()) {
-				targetElem.Set(srcElem)
-			} else {
-				return fmt.Errorf("cannot convert %v to %v", srcElem.Type(), targetElemType)
-			}
-		} else if targetElemType.Kind() == reflect.Ptr && srcElem.Kind() != reflect.Ptr {
-			// Target is pointer, src is value - wrap in pointer
-			ptr := reflect.New(srcElem.Type())
-			ptr.Elem().Set(srcElem)
-			targetElem.Set(ptr)
-		} else if targetElemType.Kind() != reflect.Ptr && srcElem.Kind() == reflect.Ptr {
-			// Target is value, src is pointer - dereference
-			if !srcElem.IsNil() {
-				targetElem.Set(srcElem.Elem())
-			}
-		} else {
-			return fmt.Errorf("cannot convert %v to %v", srcElem.Type(), targetElemType)
-		}
-	}
-
-	target.Set(newSlice)
-	return nil
-}
-
-// convertMap converts a source map to target map type, handling key/value type conversions
-func convertMap(src, target reflect.Value) error {
-	if src.Type().AssignableTo(target.Type()) {
-		target.Set(src)
-		return nil
-	}
-
-	// Create a new map of the target type
-	targetKeyType := target.Type().Key()
-	targetValType := target.Type().Elem()
-	newMap := reflect.MakeMap(target.Type())
-
-	iter := src.MapRange()
-	for iter.Next() {
-		srcKey := iter.Key()
-		srcVal := iter.Value()
-
-		// Handle interface{} keys
-		if srcKey.Kind() == reflect.Interface {
-			srcKey = srcKey.Elem()
-		}
-		// Handle interface{} values
-		if srcVal.Kind() == reflect.Interface {
-			srcVal = srcVal.Elem()
-		}
-
-		// Convert key
-		var targetKey reflect.Value
-		if !srcKey.IsValid() {
-			targetKey = reflect.Zero(targetKeyType)
-		} else if srcKey.Type().AssignableTo(targetKeyType) {
-			targetKey = srcKey
-		} else if srcKey.Type().ConvertibleTo(targetKeyType) {
-			targetKey = srcKey.Convert(targetKeyType)
-		} else {
-			return fmt.Errorf("cannot convert map key %v to %v", srcKey.Type(), targetKeyType)
-		}
-
-		// Convert value
-		var targetVal reflect.Value
-		if !srcVal.IsValid() {
-			targetVal = reflect.Zero(targetValType)
-		} else if srcVal.Type().AssignableTo(targetValType) {
-			targetVal = srcVal
-		} else if srcVal.Type().ConvertibleTo(targetValType) {
-			targetVal = srcVal.Convert(targetValType)
-		} else if targetValType.Kind() == reflect.Ptr && srcVal.Kind() == reflect.Ptr {
-			// Both are pointers
-			if srcVal.Type() == targetValType {
-				targetVal = srcVal
-			} else if srcVal.Elem().Type().AssignableTo(targetValType.Elem()) {
-				targetVal = srcVal
-			} else {
-				return fmt.Errorf("cannot convert map value %v to %v", srcVal.Type(), targetValType)
-			}
-		} else if targetValType.Kind() == reflect.Ptr && srcVal.Kind() != reflect.Ptr {
-			// Target is pointer, src is value - wrap in pointer
-			ptr := reflect.New(srcVal.Type())
-			ptr.Elem().Set(srcVal)
-			targetVal = ptr
-		} else if targetValType.Kind() != reflect.Ptr && srcVal.Kind() == reflect.Ptr {
-			// Target is value, src is pointer - dereference
-			if !srcVal.IsNil() {
-				targetVal = srcVal.Elem()
-			} else {
-				targetVal = reflect.Zero(targetValType)
-			}
-		} else {
-			return fmt.Errorf("cannot convert map value %v to %v", srcVal.Type(), targetValType)
-		}
-
-		newMap.SetMapIndex(targetKey, targetVal)
-	}
-
-	target.Set(newMap)
-	return nil
+	return f.Deserialize(data, v)
 }
 
 // SerializeWithCallback serializes a value to buffer (for streaming/cross-language use).

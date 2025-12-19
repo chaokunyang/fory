@@ -187,7 +187,7 @@ func (s *sliceConcreteValueSerializer) WriteData(ctx *WriteContext, value reflec
 	// so the reader knows what type to deserialize
 	if !isXlang {
 		elemTypeInfo, _ := ctx.TypeResolver().getTypeInfo(reflect.New(elemType).Elem(), false)
-		if err := ctx.TypeResolver().writeTypeInfo(buf, elemTypeInfo); err != nil {
+		if err := ctx.TypeResolver().WriteTypeInfo(buf, elemTypeInfo); err != nil {
 			return err
 		}
 	}

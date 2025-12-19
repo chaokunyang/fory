@@ -1085,7 +1085,9 @@ func (r *TypeResolver) metaShareEnabled() bool {
 	return r.fory != nil && r.fory.metaContext != nil && r.fory.config.Compatible
 }
 
-func (r *TypeResolver) writeTypeInfo(buffer *ByteBuffer, typeInfo *TypeInfo) error {
+// WriteTypeInfo writes type info to buffer.
+// This is exported for use by generated code.
+func (r *TypeResolver) WriteTypeInfo(buffer *ByteBuffer, typeInfo *TypeInfo) error {
 	if typeInfo == nil {
 		return nil
 	}
@@ -1590,7 +1592,9 @@ func (r *TypeResolver) readTypeByReadTag(buffer *ByteBuffer) (reflect.Type, erro
 	return nil, fmt.Errorf("failed to extract type from serializer for %s", metaString)
 }
 
-func (r *TypeResolver) readTypeInfo(buffer *ByteBuffer, value reflect.Value) (TypeInfo, error) {
+// ReadTypeInfo reads type info from buffer and returns it.
+// This is exported for use by generated code.
+func (r *TypeResolver) ReadTypeInfo(buffer *ByteBuffer, value reflect.Value) (TypeInfo, error) {
 	// ReadData variable-length type ID using Varuint32Small7 encoding (matches Java)
 	typeID := buffer.ReadVaruint32Small7()
 	internalTypeID := TypeId(typeID & 0xFF)

@@ -212,7 +212,7 @@ func (s *structSerializer) Write(ctx *WriteContext, refMode RefMode, writeType b
 		if err != nil {
 			return err
 		}
-		if err := ctx.TypeResolver().writeTypeInfo(ctx.buffer, typeInfo); err != nil {
+		if err := ctx.TypeResolver().WriteTypeInfo(ctx.buffer, typeInfo); err != nil {
 			return err
 		}
 	}
@@ -1412,7 +1412,7 @@ func (s *ptrToCodegenSerializer) Write(ctx *WriteContext, refMode RefMode, write
 		if err != nil {
 			return err
 		}
-		if err := ctx.TypeResolver().writeTypeInfo(ctx.Buffer(), typeInfo); err != nil {
+		if err := ctx.TypeResolver().WriteTypeInfo(ctx.Buffer(), typeInfo); err != nil {
 			return err
 		}
 	}

@@ -172,7 +172,7 @@ func (s *arrayConcreteValueSerializer) WriteData(ctx *WriteContext, value reflec
 		internalTypeID = elemTypeInfo.TypeID
 	}
 	if IsNamespacedType(TypeId(internalTypeID)) {
-		if err := ctx.TypeResolver().writeTypeInfo(buf, elemTypeInfo); err != nil {
+		if err := ctx.TypeResolver().WriteTypeInfo(buf, elemTypeInfo); err != nil {
 			return err
 		}
 	} else {

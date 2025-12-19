@@ -79,7 +79,7 @@ func (s setSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool,
 		if err != nil {
 			return err
 		}
-		if err := ctx.TypeResolver().writeTypeInfo(ctx.buffer, typeInfo); err != nil {
+		if err := ctx.TypeResolver().WriteTypeInfo(ctx.buffer, typeInfo); err != nil {
 			return err
 		}
 	}
@@ -255,7 +255,7 @@ func (s setSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value refl
 
 	// If all elements are same type, read the shared type info
 	if (collectFlag & CollectionIsSameType) != 0 {
-		elemTypeInfo, _ = ctx.TypeResolver().readTypeInfo(buf, reflect.New(type_.Key()).Elem())
+		elemTypeInfo, _ = ctx.TypeResolver().ReadTypeInfo(buf, reflect.New(type_.Key()).Elem())
 	}
 
 	// Initialize set if nil
@@ -329,7 +329,7 @@ func (s setSerializer) readDifferentTypes(ctx *ReadContext, buf *ByteBuffer, val
 				continue
 			}
 			// Read type info (handles namespaced types, meta sharing, etc.)
-			typeInfo, err := ctx.TypeResolver().readTypeInfo(buf, reflect.New(keyType).Elem())
+			typeInfo, err := ctx.TypeResolver().ReadTypeInfo(buf, reflect.New(keyType).Elem())
 			if err != nil {
 				return fmt.Errorf("failed to read type info: %w", err)
 			}
@@ -348,7 +348,7 @@ func (s setSerializer) readDifferentTypes(ctx *ReadContext, buf *ByteBuffer, val
 				continue
 			}
 			// headFlag should be NotNullValueFlag, read type info
-			typeInfo, err := ctx.TypeResolver().readTypeInfo(buf, reflect.New(keyType).Elem())
+			typeInfo, err := ctx.TypeResolver().ReadTypeInfo(buf, reflect.New(keyType).Elem())
 			if err != nil {
 				return fmt.Errorf("failed to read type info: %w", err)
 			}
@@ -359,7 +359,7 @@ func (s setSerializer) readDifferentTypes(ctx *ReadContext, buf *ByteBuffer, val
 			setMapKey(value, elem, keyType)
 		} else {
 			// No ref tracking and no nulls: typeId + data directly
-			typeInfo, err := ctx.TypeResolver().readTypeInfo(buf, reflect.New(keyType).Elem())
+			typeInfo, err := ctx.TypeResolver().ReadTypeInfo(buf, reflect.New(keyType).Elem())
 			if err != nil {
 				return fmt.Errorf("failed to read type info: %w", err)
 			}

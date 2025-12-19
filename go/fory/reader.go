@@ -433,7 +433,7 @@ func (c *ReadContext) ReadValue(value reflect.Value) error {
 		}
 
 		// Read type info to determine the actual type
-		typeInfo, err := c.typeResolver.readTypeInfo(c.buffer, value)
+		typeInfo, err := c.typeResolver.ReadTypeInfo(c.buffer, value)
 		if err != nil {
 			return fmt.Errorf("failed to read type info for interface: %w", err)
 		}

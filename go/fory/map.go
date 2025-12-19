@@ -225,7 +225,7 @@ func (s mapSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 			chunkHeader |= KEY_DECL_TYPE
 		} else {
 			keyTypeInfo, _ := getActualTypeInfo(entryKey, typeResolver)
-			if err := typeResolver.writeTypeInfo(buf, keyTypeInfo); err != nil {
+			if err := typeResolver.WriteTypeInfo(buf, keyTypeInfo); err != nil {
 				return err
 			}
 			keySerializer = keyTypeInfo.Serializer
@@ -235,7 +235,7 @@ func (s mapSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 			chunkHeader |= VALUE_DECL_TYPE
 		} else {
 			valueTypeInfo, _ := getActualTypeInfo(entryVal, typeResolver)
-			if err := typeResolver.writeTypeInfo(buf, valueTypeInfo); err != nil {
+			if err := typeResolver.WriteTypeInfo(buf, valueTypeInfo); err != nil {
 				return err
 			}
 			valueSerializer = valueTypeInfo.Serializer
@@ -389,7 +389,7 @@ func (s mapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value refl
 						}
 
 						// Read type info
-						ti, err := typeResolver.readTypeInfo(buf, value)
+						ti, err := typeResolver.ReadTypeInfo(buf, value)
 						if err != nil {
 							return err
 						}
@@ -414,7 +414,7 @@ func (s mapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value refl
 						// ReadData type info if not declared
 						var keyTypeInfo *TypeInfo
 						if !keyDeclared {
-							ti, err := typeResolver.readTypeInfo(buf, value)
+							ti, err := typeResolver.ReadTypeInfo(buf, value)
 							if err != nil {
 								return err
 							}
@@ -480,7 +480,7 @@ func (s mapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value refl
 						}
 
 						// Read type info
-						ti, err := typeResolver.readTypeInfo(buf, value)
+						ti, err := typeResolver.ReadTypeInfo(buf, value)
 						if err != nil {
 							return err
 						}
@@ -505,7 +505,7 @@ func (s mapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value refl
 						// ReadData type info if not declared
 						var valueTypeInfo *TypeInfo
 						if !valueDeclared {
-							ti, err := typeResolver.readTypeInfo(buf, value)
+							ti, err := typeResolver.ReadTypeInfo(buf, value)
 							if err != nil {
 								return err
 							}
@@ -563,7 +563,7 @@ func (s mapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value refl
 		// ReadData type info if not declared
 		var keyTypeInfo *TypeInfo
 		if !keyDeclType {
-			ti, err := typeResolver.readTypeInfo(buf, value)
+			ti, err := typeResolver.ReadTypeInfo(buf, value)
 			if err != nil {
 				return err
 			}
@@ -576,7 +576,7 @@ func (s mapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value refl
 		}
 		var valueTypeInfo *TypeInfo
 		if !valDeclType {
-			ti, err := typeResolver.readTypeInfo(buf, value)
+			ti, err := typeResolver.ReadTypeInfo(buf, value)
 			if err != nil {
 				return err
 			}

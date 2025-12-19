@@ -36,8 +36,6 @@ type ptrToInterfaceSerializer struct {
 
 func (s *ptrToValueSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
 	elemValue := value.Elem()
-	// Type info is written by Write() when writeType=true, not here.
-	// This prevents double-writing of type info for nested struct fields.
 	return s.valueSerializer.WriteData(ctx, elemValue)
 }
 
@@ -69,7 +67,7 @@ func (s *ptrToValueSerializer) Write(ctx *WriteContext, refMode RefMode, writeTy
 		if err != nil {
 			return err
 		}
-		if err := ctx.TypeResolver().writeTypeInfo(ctx.Buffer(), typeInfo); err != nil {
+		if err := ctx.TypeResolver().WriteTypeInfo(ctx.Buffer(), typeInfo); err != nil {
 			return err
 		}
 	}
@@ -92,13 +90,7 @@ func (s *ptrToValueSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, va
 	// This allows circular references to work correctly
 	ctx.RefResolver().Reference(value)
 
-	// Type info is read by Read() when readType=true, not here.
-	// This prevents double-reading of type info for nested struct fields.
-	if err := s.valueSerializer.ReadData(ctx, type_.Elem(), newVal.Elem()); err != nil {
-		return err
-	}
-
-	return nil
+	return s.valueSerializer.ReadData(ctx, type_.Elem(), newVal.Elem())
 }
 
 func (s *ptrToValueSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {

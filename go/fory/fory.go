@@ -561,7 +561,7 @@ func Deserialize[T any](f *Fory, data []byte, target *T) error {
 	buf := f.readCtx.buffer
 	switch t := any(target).(type) {
 	case *bool:
-		_ = buf.ReadInt8() // null flag
+		_ = buf.ReadInt8()            // null flag
 		_ = buf.ReadVaruint32Small7() // type ID
 		*t = buf.ReadBool()
 		return nil
@@ -601,7 +601,7 @@ func Deserialize[T any](f *Fory, data []byte, target *T) error {
 		*t = buf.ReadFloat64()
 		return nil
 	case *string:
-		_ = buf.ReadInt8() // null flag
+		_ = buf.ReadInt8()            // null flag
 		_ = buf.ReadVaruint32Small7() // type ID
 		*t = f.readCtx.ReadString()
 		return nil

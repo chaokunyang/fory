@@ -123,7 +123,7 @@ func writeMapStringInt64(buf *ByteBuffer, m map[string]int64) {
 
 		buf.WriteUint8(0) // no DECL_TYPE flags
 		buf.WriteUint8(uint8(chunkSize))
-		buf.WriteVaruint32Small7(uint32(STRING))   // key type
+		buf.WriteVaruint32Small7(uint32(STRING))    // key type
 		buf.WriteVaruint32Small7(uint32(VAR_INT64)) // value type
 
 		count := 0
@@ -192,7 +192,7 @@ func writeMapStringInt(buf *ByteBuffer, m map[string]int) {
 
 		buf.WriteUint8(0) // no DECL_TYPE flags
 		buf.WriteUint8(uint8(chunkSize))
-		buf.WriteVaruint32Small7(uint32(STRING))   // key type
+		buf.WriteVaruint32Small7(uint32(STRING))    // key type
 		buf.WriteVaruint32Small7(uint32(VAR_INT64)) // value type (int serialized as varint64)
 
 		count := 0

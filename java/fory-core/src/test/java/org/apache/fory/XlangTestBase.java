@@ -726,7 +726,10 @@ public abstract class XlangTestBase extends ForyTestBase {
     Assert.assertEquals(readItem2.name, "test_item_2");
     Item readItem3 = (Item) fory.deserialize(buffer2);
     // Go uses string (not *string), so null becomes empty string
-    Assert.assertEquals(readItem3.name, "");
+    // Rust uses Option<String>, so null stays null
+    Assert.assertTrue(
+        readItem3.name == null || readItem3.name.isEmpty(),
+        "Expected null or empty string but got: " + readItem3.name);
   }
 
   @Test
@@ -1389,7 +1392,10 @@ public abstract class XlangTestBase extends ForyTestBase {
     TwoStringFieldStruct result2 = (TwoStringFieldStruct) fory2.deserialize(buffer3);
     Assert.assertEquals(result2.f1, "only_one");
     // Go uses empty string for missing fields (Go string can't be null)
-    Assert.assertEquals(result2.f2, "");
+    // Rust uses Option<String>, so missing fields are None/null
+    Assert.assertTrue(
+        result2.f2 == null || result2.f2.isEmpty(),
+        "Expected null or empty string but got: " + result2.f2);
   }
 
   // Enum field structs for testing

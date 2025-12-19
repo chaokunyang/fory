@@ -991,7 +991,10 @@ pub(crate) fn compute_struct_version_hash(fields: &[&Field]) -> i32 {
     for field in fields {
         let name = field.ident.as_ref().unwrap().to_string();
         let type_id = get_type_id_by_type_ast(&field.ty);
-        let nullable = is_option(&field.ty);
+        // Match Java's behavior: primitives are non-nullable, everything else is nullable
+        // In Java: char nullable = rawType.isPrimitive() ? '0' : '1';
+        let type_name = extract_type_name(&field.ty);
+        let nullable = !is_primitive_type(&type_name);
         field_info_map.insert(name, (type_id, nullable));
     }
 

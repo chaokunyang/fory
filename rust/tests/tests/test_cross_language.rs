@@ -724,6 +724,44 @@ struct StructWithMap {
     data: HashMap<Option<String>, Option<String>>,
 }
 
+// ============================================================================
+// Schema Evolution Test Types
+// ============================================================================
+
+#[derive(ForyObject, Debug, PartialEq)]
+struct EmptyStructEvolution {}
+
+#[derive(ForyObject, Debug, PartialEq)]
+struct OneStringFieldStruct {
+    f1: Option<String>,
+}
+
+#[derive(ForyObject, Debug, PartialEq)]
+struct TwoStringFieldStruct {
+    f1: String,            // non-nullable, like Go's string
+    f2: Option<String>,    // nullable, like Go's *string
+}
+
+#[allow(non_camel_case_types)]
+#[derive(ForyObject, Debug, PartialEq, Default, Clone)]
+enum TestEnum {
+    #[default]
+    VALUE_A,
+    VALUE_B,
+    VALUE_C,
+}
+
+#[derive(ForyObject, Debug, PartialEq)]
+struct OneEnumFieldStruct {
+    f1: TestEnum,
+}
+
+#[derive(ForyObject, Debug, PartialEq)]
+struct TwoEnumFieldStruct {
+    f1: TestEnum,
+    f2: Option<TestEnum>,
+}
+
 #[test]
 #[ignore]
 fn test_struct_version_check() {
@@ -764,6 +802,7 @@ fn test_item() {
     let item2 = Item {
         name: Some("test_item_2".to_string()),
     };
+    // Java sends null, Rust deserializes as None
     let item3 = Item { name: None };
 
     let remote_item1: Item = fory.deserialize_from(&mut reader).unwrap();
@@ -1010,4 +1049,192 @@ fn test_polymorphic_map() {
     fory.serialize_to(&animal_map, &mut buf).unwrap();
     fory.serialize_to(&holder, &mut buf).unwrap();
     fs::write(&data_file_path, buf).unwrap();
+}
+
+// ============================================================================
+// Schema Evolution Tests - String Fields
+// ============================================================================
+
+#[test]
+#[ignore]
+fn test_one_string_field_schema() {
+    let data_file_path = get_data_file();
+    let bytes = fs::read(&data_file_path).unwrap();
+
+    let mut fory = Fory::default().compatible(false).xlang(true);
+    fory.register::<OneStringFieldStruct>(200).unwrap();
+
+    let value: OneStringFieldStruct = fory.deserialize(&bytes).unwrap();
+    assert_eq!(value.f1, Some("hello".to_string()));
+
+    let new_bytes = fory.serialize(&value).unwrap();
+    fs::write(&data_file_path, new_bytes).unwrap();
+}
+
+#[test]
+#[ignore]
+fn test_one_string_field_compatible() {
+    let data_file_path = get_data_file();
+    let bytes = fs::read(&data_file_path).unwrap();
+
+    let mut fory = Fory::default().compatible(true).xlang(true);
+    fory.register::<OneStringFieldStruct>(200).unwrap();
+
+    let value: OneStringFieldStruct = fory.deserialize(&bytes).unwrap();
+    assert_eq!(value.f1, Some("hello".to_string()));
+
+    let new_bytes = fory.serialize(&value).unwrap();
+    fs::write(&data_file_path, new_bytes).unwrap();
+}
+
+#[test]
+#[ignore]
+fn test_two_string_field_compatible() {
+    let data_file_path = get_data_file();
+    let bytes = fs::read(&data_file_path).unwrap();
+
+    let mut fory = Fory::default().compatible(true).xlang(true);
+    fory.register::<TwoStringFieldStruct>(201).unwrap();
+
+    let value: TwoStringFieldStruct = fory.deserialize(&bytes).unwrap();
+    assert_eq!(value.f1, "first".to_string());
+    assert_eq!(value.f2, Some("second".to_string()));
+
+    let new_bytes = fory.serialize(&value).unwrap();
+    fs::write(&data_file_path, new_bytes).unwrap();
+}
+
+#[test]
+#[ignore]
+fn test_schema_evolution_compatible() {
+    let data_file_path = get_data_file();
+    let bytes = fs::read(&data_file_path).unwrap();
+
+    // Read TwoStringFieldStruct data as EmptyStructEvolution
+    let mut fory = Fory::default().compatible(true).xlang(true);
+    fory.register::<EmptyStructEvolution>(200).unwrap();
+
+    let value: EmptyStructEvolution = fory.deserialize(&bytes).unwrap();
+
+    // Serialize back as EmptyStructEvolution
+    let new_bytes = fory.serialize(&value).unwrap();
+    fs::write(&data_file_path, new_bytes).unwrap();
+}
+
+#[test]
+#[ignore]
+fn test_schema_evolution_compatible_reverse() {
+    let data_file_path = get_data_file();
+    let bytes = fs::read(&data_file_path).unwrap();
+
+    // Read OneStringFieldStruct data as TwoStringFieldStruct (missing f2)
+    let mut fory = Fory::default().compatible(true).xlang(true);
+    fory.register::<TwoStringFieldStruct>(200).unwrap();
+
+    let value: TwoStringFieldStruct = fory.deserialize(&bytes).unwrap();
+
+    // f1 (String) should be "only_one", f2 (Option<String>) should be None (not present in source data)
+    assert_eq!(value.f1, "only_one".to_string());
+    assert_eq!(value.f2, None);
+
+    // Serialize back
+    let new_bytes = fory.serialize(&value).unwrap();
+    fs::write(&data_file_path, new_bytes).unwrap();
+}
+
+// ============================================================================
+// Schema Evolution Tests - Enum Fields
+// ============================================================================
+
+#[test]
+#[ignore]
+fn test_one_enum_field_schema() {
+    let data_file_path = get_data_file();
+    let bytes = fs::read(&data_file_path).unwrap();
+
+    let mut fory = Fory::default().compatible(false).xlang(true);
+    fory.register::<TestEnum>(210).unwrap();
+    fory.register::<OneEnumFieldStruct>(211).unwrap();
+
+    let value: OneEnumFieldStruct = fory.deserialize(&bytes).unwrap();
+    assert_eq!(value.f1, TestEnum::VALUE_B);
+
+    let new_bytes = fory.serialize(&value).unwrap();
+    fs::write(&data_file_path, new_bytes).unwrap();
+}
+
+#[test]
+#[ignore]
+fn test_one_enum_field_compatible() {
+    let data_file_path = get_data_file();
+    let bytes = fs::read(&data_file_path).unwrap();
+
+    let mut fory = Fory::default().compatible(true).xlang(true);
+    fory.register::<TestEnum>(210).unwrap();
+    fory.register::<OneEnumFieldStruct>(211).unwrap();
+
+    let value: OneEnumFieldStruct = fory.deserialize(&bytes).unwrap();
+    assert_eq!(value.f1, TestEnum::VALUE_A);
+
+    let new_bytes = fory.serialize(&value).unwrap();
+    fs::write(&data_file_path, new_bytes).unwrap();
+}
+
+#[test]
+#[ignore]
+fn test_two_enum_field_compatible() {
+    let data_file_path = get_data_file();
+    let bytes = fs::read(&data_file_path).unwrap();
+
+    let mut fory = Fory::default().compatible(true).xlang(true);
+    fory.register::<TestEnum>(210).unwrap();
+    fory.register::<TwoEnumFieldStruct>(212).unwrap();
+
+    let value: TwoEnumFieldStruct = fory.deserialize(&bytes).unwrap();
+    assert_eq!(value.f1, TestEnum::VALUE_A);
+    assert_eq!(value.f2, Some(TestEnum::VALUE_C));
+
+    let new_bytes = fory.serialize(&value).unwrap();
+    fs::write(&data_file_path, new_bytes).unwrap();
+}
+
+#[test]
+#[ignore]
+fn test_enum_schema_evolution_compatible() {
+    let data_file_path = get_data_file();
+    let bytes = fs::read(&data_file_path).unwrap();
+
+    // Read TwoEnumFieldStruct data as EmptyStructEvolution
+    let mut fory = Fory::default().compatible(true).xlang(true);
+    fory.register::<TestEnum>(210).unwrap();
+    fory.register::<EmptyStructEvolution>(211).unwrap();
+
+    let value: EmptyStructEvolution = fory.deserialize(&bytes).unwrap();
+
+    // Serialize back as EmptyStructEvolution
+    let new_bytes = fory.serialize(&value).unwrap();
+    fs::write(&data_file_path, new_bytes).unwrap();
+}
+
+#[test]
+#[ignore]
+fn test_enum_schema_evolution_compatible_reverse() {
+    let data_file_path = get_data_file();
+    let bytes = fs::read(&data_file_path).unwrap();
+
+    // Read OneEnumFieldStruct data as TwoEnumFieldStruct (missing f2)
+    let mut fory = Fory::default().compatible(true).xlang(true);
+    fory.register::<TestEnum>(210).unwrap();
+    fory.register::<TwoEnumFieldStruct>(211).unwrap();
+
+    let value: TwoEnumFieldStruct = fory.deserialize(&bytes).unwrap();
+
+    // f1 should be ValueC
+    assert_eq!(value.f1, TestEnum::VALUE_C);
+    // f2 should be None (not present in source data)
+    assert_eq!(value.f2, None);
+
+    // Serialize back
+    let new_bytes = fory.serialize(&value).unwrap();
+    fs::write(&data_file_path, new_bytes).unwrap();
 }

@@ -259,6 +259,55 @@ struct AnimalMapHolder {
 };
 FORY_STRUCT(AnimalMapHolder, animal_map);
 
+// ============================================================================
+// Schema Evolution Test Types
+// ============================================================================
+
+struct EmptyStructEvolution {
+  bool placeholder = false;  // C++ templates require at least one field
+  bool operator==(const EmptyStructEvolution &other) const {
+    return placeholder == other.placeholder;
+  }
+};
+FORY_STRUCT(EmptyStructEvolution, placeholder);
+
+struct OneStringFieldStruct {
+  std::optional<std::string> f1;
+  bool operator==(const OneStringFieldStruct &other) const {
+    return f1 == other.f1;
+  }
+};
+FORY_STRUCT(OneStringFieldStruct, f1);
+
+struct TwoStringFieldStruct {
+  std::optional<std::string> f1;
+  std::optional<std::string> f2;
+  bool operator==(const TwoStringFieldStruct &other) const {
+    return f1 == other.f1 && f2 == other.f2;
+  }
+};
+FORY_STRUCT(TwoStringFieldStruct, f1, f2);
+
+enum class TestEnum : int32_t { VALUE_A = 0, VALUE_B = 1, VALUE_C = 2 };
+FORY_ENUM(TestEnum, VALUE_A, VALUE_B, VALUE_C);
+
+struct OneEnumFieldStruct {
+  TestEnum f1;
+  bool operator==(const OneEnumFieldStruct &other) const {
+    return f1 == other.f1;
+  }
+};
+FORY_STRUCT(OneEnumFieldStruct, f1);
+
+struct TwoEnumFieldStruct {
+  TestEnum f1;
+  std::optional<TestEnum> f2;
+  bool operator==(const TwoEnumFieldStruct &other) const {
+    return f1 == other.f1 && f2 == other.f2;
+  }
+};
+FORY_STRUCT(TwoEnumFieldStruct, f1, f2);
+
 namespace fory {
 namespace serialization {
 
@@ -420,6 +469,16 @@ void RunTestConsistentNamed(const std::string &data_file);
 void RunTestStructVersionCheck(const std::string &data_file);
 void RunTestPolymorphicList(const std::string &data_file);
 void RunTestPolymorphicMap(const std::string &data_file);
+void RunTestOneStringFieldSchema(const std::string &data_file);
+void RunTestOneStringFieldCompatible(const std::string &data_file);
+void RunTestTwoStringFieldCompatible(const std::string &data_file);
+void RunTestSchemaEvolutionCompatible(const std::string &data_file);
+void RunTestSchemaEvolutionCompatibleReverse(const std::string &data_file);
+void RunTestOneEnumFieldSchema(const std::string &data_file);
+void RunTestOneEnumFieldCompatible(const std::string &data_file);
+void RunTestTwoEnumFieldCompatible(const std::string &data_file);
+void RunTestEnumSchemaEvolutionCompatible(const std::string &data_file);
+void RunTestEnumSchemaEvolutionCompatibleReverse(const std::string &data_file);
 } // namespace
 
 int main(int argc, char **argv) {
@@ -483,6 +542,26 @@ int main(int argc, char **argv) {
       RunTestPolymorphicList(data_file);
     } else if (case_name == "test_polymorphic_map") {
       RunTestPolymorphicMap(data_file);
+    } else if (case_name == "test_one_string_field_schema") {
+      RunTestOneStringFieldSchema(data_file);
+    } else if (case_name == "test_one_string_field_compatible") {
+      RunTestOneStringFieldCompatible(data_file);
+    } else if (case_name == "test_two_string_field_compatible") {
+      RunTestTwoStringFieldCompatible(data_file);
+    } else if (case_name == "test_schema_evolution_compatible") {
+      RunTestSchemaEvolutionCompatible(data_file);
+    } else if (case_name == "test_schema_evolution_compatible_reverse") {
+      RunTestSchemaEvolutionCompatibleReverse(data_file);
+    } else if (case_name == "test_one_enum_field_schema") {
+      RunTestOneEnumFieldSchema(data_file);
+    } else if (case_name == "test_one_enum_field_compatible") {
+      RunTestOneEnumFieldCompatible(data_file);
+    } else if (case_name == "test_two_enum_field_compatible") {
+      RunTestTwoEnumFieldCompatible(data_file);
+    } else if (case_name == "test_enum_schema_evolution_compatible") {
+      RunTestEnumSchemaEvolutionCompatible(data_file);
+    } else if (case_name == "test_enum_schema_evolution_compatible_reverse") {
+      RunTestEnumSchemaEvolutionCompatibleReverse(data_file);
     } else {
       Fail("Unknown test case: " + case_name);
     }
@@ -1433,6 +1512,229 @@ void RunTestPolymorphicMap(const std::string &data_file) {
   std::vector<uint8_t> out;
   AppendSerialized(fory, animalMap, out);
   AppendSerialized(fory, holder, out);
+  WriteFile(data_file, out);
+}
+
+// ============================================================================
+// Schema Evolution Tests - String Fields
+// ============================================================================
+
+void RunTestOneStringFieldSchema(const std::string &data_file) {
+  auto bytes = ReadFile(data_file);
+  auto fory = BuildFory(false, true); // SCHEMA_CONSISTENT mode
+  EnsureOk(fory.register_struct<OneStringFieldStruct>(200),
+           "register OneStringFieldStruct");
+
+  Buffer buffer = MakeBuffer(bytes);
+  auto value = ReadNext<OneStringFieldStruct>(fory, buffer);
+
+  OneStringFieldStruct expected;
+  expected.f1 = std::string("hello");
+  if (!(value == expected)) {
+    Fail("OneStringFieldStruct schema mismatch: got f1=" +
+         value.f1.value_or("null"));
+  }
+
+  std::vector<uint8_t> out;
+  AppendSerialized(fory, value, out);
+  WriteFile(data_file, out);
+}
+
+void RunTestOneStringFieldCompatible(const std::string &data_file) {
+  auto bytes = ReadFile(data_file);
+  auto fory = BuildFory(true, true); // COMPATIBLE mode
+  EnsureOk(fory.register_struct<OneStringFieldStruct>(200),
+           "register OneStringFieldStruct");
+
+  Buffer buffer = MakeBuffer(bytes);
+  auto value = ReadNext<OneStringFieldStruct>(fory, buffer);
+
+  OneStringFieldStruct expected;
+  expected.f1 = std::string("hello");
+  if (!(value == expected)) {
+    Fail("OneStringFieldStruct compatible mismatch: got f1=" +
+         value.f1.value_or("null"));
+  }
+
+  std::vector<uint8_t> out;
+  AppendSerialized(fory, value, out);
+  WriteFile(data_file, out);
+}
+
+void RunTestTwoStringFieldCompatible(const std::string &data_file) {
+  auto bytes = ReadFile(data_file);
+  auto fory = BuildFory(true, true); // COMPATIBLE mode
+  EnsureOk(fory.register_struct<TwoStringFieldStruct>(201),
+           "register TwoStringFieldStruct");
+
+  Buffer buffer = MakeBuffer(bytes);
+  auto value = ReadNext<TwoStringFieldStruct>(fory, buffer);
+
+  TwoStringFieldStruct expected;
+  expected.f1 = std::string("first");
+  expected.f2 = std::string("second");
+  if (!(value == expected)) {
+    Fail("TwoStringFieldStruct compatible mismatch: got f1=" +
+         value.f1.value_or("null") + ", f2=" + value.f2.value_or("null"));
+  }
+
+  std::vector<uint8_t> out;
+  AppendSerialized(fory, value, out);
+  WriteFile(data_file, out);
+}
+
+void RunTestSchemaEvolutionCompatible(const std::string &data_file) {
+  auto bytes = ReadFile(data_file);
+  // Read TwoStringFieldStruct data as EmptyStructEvolution
+  auto fory = BuildFory(true, true); // COMPATIBLE mode
+  EnsureOk(fory.register_struct<EmptyStructEvolution>(200),
+           "register EmptyStructEvolution");
+
+  Buffer buffer = MakeBuffer(bytes);
+  auto value = ReadNext<EmptyStructEvolution>(fory, buffer);
+
+  // Serialize back as EmptyStructEvolution
+  std::vector<uint8_t> out;
+  AppendSerialized(fory, value, out);
+  WriteFile(data_file, out);
+}
+
+void RunTestSchemaEvolutionCompatibleReverse(const std::string &data_file) {
+  auto bytes = ReadFile(data_file);
+  // Read OneStringFieldStruct data as TwoStringFieldStruct (missing f2)
+  auto fory = BuildFory(true, true); // COMPATIBLE mode
+  EnsureOk(fory.register_struct<TwoStringFieldStruct>(200),
+           "register TwoStringFieldStruct");
+
+  Buffer buffer = MakeBuffer(bytes);
+  auto value = ReadNext<TwoStringFieldStruct>(fory, buffer);
+
+  // f1 should be "only_one", f2 should be empty/null
+  if (!value.f1.has_value() || value.f1.value() != "only_one") {
+    Fail("Schema evolution reverse mismatch: expected f1='only_one', got f1=" +
+         value.f1.value_or("null"));
+  }
+  // f2 should be empty (not present in source data)
+  if (value.f2.has_value()) {
+    Fail("Schema evolution reverse mismatch: expected f2=null, got f2=" +
+         value.f2.value());
+  }
+
+  // Serialize back
+  std::vector<uint8_t> out;
+  AppendSerialized(fory, value, out);
+  WriteFile(data_file, out);
+}
+
+// ============================================================================
+// Schema Evolution Tests - Enum Fields
+// ============================================================================
+
+void RunTestOneEnumFieldSchema(const std::string &data_file) {
+  auto bytes = ReadFile(data_file);
+  auto fory = BuildFory(false, true); // SCHEMA_CONSISTENT mode
+  EnsureOk(fory.register_struct<TestEnum>(210), "register TestEnum");
+  EnsureOk(fory.register_struct<OneEnumFieldStruct>(211),
+           "register OneEnumFieldStruct");
+
+  Buffer buffer = MakeBuffer(bytes);
+  auto value = ReadNext<OneEnumFieldStruct>(fory, buffer);
+
+  if (value.f1 != TestEnum::VALUE_B) {
+    Fail("OneEnumFieldStruct schema mismatch: expected VALUE_B, got " +
+         std::to_string(static_cast<int32_t>(value.f1)));
+  }
+
+  std::vector<uint8_t> out;
+  AppendSerialized(fory, value, out);
+  WriteFile(data_file, out);
+}
+
+void RunTestOneEnumFieldCompatible(const std::string &data_file) {
+  auto bytes = ReadFile(data_file);
+  auto fory = BuildFory(true, true); // COMPATIBLE mode
+  EnsureOk(fory.register_struct<TestEnum>(210), "register TestEnum");
+  EnsureOk(fory.register_struct<OneEnumFieldStruct>(211),
+           "register OneEnumFieldStruct");
+
+  Buffer buffer = MakeBuffer(bytes);
+  auto value = ReadNext<OneEnumFieldStruct>(fory, buffer);
+
+  if (value.f1 != TestEnum::VALUE_A) {
+    Fail("OneEnumFieldStruct compatible mismatch: expected VALUE_A, got " +
+         std::to_string(static_cast<int32_t>(value.f1)));
+  }
+
+  std::vector<uint8_t> out;
+  AppendSerialized(fory, value, out);
+  WriteFile(data_file, out);
+}
+
+void RunTestTwoEnumFieldCompatible(const std::string &data_file) {
+  auto bytes = ReadFile(data_file);
+  auto fory = BuildFory(true, true); // COMPATIBLE mode
+  EnsureOk(fory.register_struct<TestEnum>(210), "register TestEnum");
+  EnsureOk(fory.register_struct<TwoEnumFieldStruct>(212),
+           "register TwoEnumFieldStruct");
+
+  Buffer buffer = MakeBuffer(bytes);
+  auto value = ReadNext<TwoEnumFieldStruct>(fory, buffer);
+
+  if (value.f1 != TestEnum::VALUE_A) {
+    Fail("TwoEnumFieldStruct compatible mismatch: expected f1=VALUE_A, got " +
+         std::to_string(static_cast<int32_t>(value.f1)));
+  }
+  if (!value.f2.has_value() || value.f2.value() != TestEnum::VALUE_C) {
+    Fail("TwoEnumFieldStruct compatible mismatch: expected f2=VALUE_C");
+  }
+
+  std::vector<uint8_t> out;
+  AppendSerialized(fory, value, out);
+  WriteFile(data_file, out);
+}
+
+void RunTestEnumSchemaEvolutionCompatible(const std::string &data_file) {
+  auto bytes = ReadFile(data_file);
+  // Read TwoEnumFieldStruct data as EmptyStructEvolution
+  auto fory = BuildFory(true, true); // COMPATIBLE mode
+  EnsureOk(fory.register_struct<TestEnum>(210), "register TestEnum");
+  EnsureOk(fory.register_struct<EmptyStructEvolution>(211),
+           "register EmptyStructEvolution");
+
+  Buffer buffer = MakeBuffer(bytes);
+  auto value = ReadNext<EmptyStructEvolution>(fory, buffer);
+
+  // Serialize back as EmptyStructEvolution
+  std::vector<uint8_t> out;
+  AppendSerialized(fory, value, out);
+  WriteFile(data_file, out);
+}
+
+void RunTestEnumSchemaEvolutionCompatibleReverse(const std::string &data_file) {
+  auto bytes = ReadFile(data_file);
+  // Read OneEnumFieldStruct data as TwoEnumFieldStruct (missing f2)
+  auto fory = BuildFory(true, true); // COMPATIBLE mode
+  EnsureOk(fory.register_struct<TestEnum>(210), "register TestEnum");
+  EnsureOk(fory.register_struct<TwoEnumFieldStruct>(211),
+           "register TwoEnumFieldStruct");
+
+  Buffer buffer = MakeBuffer(bytes);
+  auto value = ReadNext<TwoEnumFieldStruct>(fory, buffer);
+
+  // f1 should be VALUE_C
+  if (value.f1 != TestEnum::VALUE_C) {
+    Fail("Enum schema evolution reverse mismatch: expected f1=VALUE_C, got " +
+         std::to_string(static_cast<int32_t>(value.f1)));
+  }
+  // f2 should be empty (not present in source data)
+  if (value.f2.has_value()) {
+    Fail("Enum schema evolution reverse mismatch: expected f2=null, got " +
+         std::to_string(static_cast<int32_t>(value.f2.value())));
+  }
+
+  // Serialize back
+  std::vector<uint8_t> out;
+  AppendSerialized(fory, value, out);
   WriteFile(data_file, out);
 }
 

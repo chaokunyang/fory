@@ -1686,19 +1686,25 @@ void read_struct_fields_compatible(T &obj, ReadContext &ctx,
     int16_t field_id = remote_field.field_id;
 
     // In compatible mode, whether a field carries a ref/null flag depends on:
-    // 1. The Fory config's trackingRef setting (ctx.track_ref())
-    // 2. If trackingRef=true: read ref flags for nullable or non-primitive
-    // types
-    // 3. If trackingRef=false: no ref flags are present at all
+    // 1. The field's nullable flag from TypeDef (Java marks enum fields and
+    //    other reference types as nullable)
+    // 2. The Fory config's trackingRef setting (ctx.track_ref())
     //
-    // Note: Java's default trackingRef=false means no ref flags are written,
-    // so C++ must check ctx.track_ref() to determine if ref flags are present.
+    // Java's ObjectSerializer writes null/not-null flags for:
+    // - Nullable fields (regardless of trackingRef)
+    // - Non-primitive fields when trackingRef is enabled
+    //
+    // For enum fields specifically, Java always marks them as nullable in
+    // the TypeDef (via EnumFieldType with nullable=true).
     uint32_t type_id = remote_field.field_type.type_id;
     bool is_primitive = is_primitive_type_id(static_cast<TypeId>(type_id));
 
-    // Only read ref flags if trackingRef is enabled AND field type requires it
+    // Read ref flags if:
+    // 1. Field is marked as nullable in TypeDef (Java writes flag), OR
+    // 2. trackingRef is enabled AND field is non-primitive
     bool read_ref_flag =
-        ctx.track_ref() && (remote_field.field_type.nullable || !is_primitive);
+        remote_field.field_type.nullable ||
+        (ctx.track_ref() && !is_primitive);
 
     if (field_id == -1) {
       // Field unknown locally — skip its value

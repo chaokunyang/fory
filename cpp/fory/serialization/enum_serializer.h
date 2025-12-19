@@ -87,20 +87,12 @@ struct Serializer<E, std::enable_if_t<std::is_enum_v<E>>> {
   }
 
   static inline E read(ReadContext &ctx, bool read_ref, bool read_type) {
-    // Java xlang object serializer treats enum fields as nullable values
-    // with an explicit null flag in front of the ordinal
-    if (ctx.is_xlang() && !read_ref) {
-      int8_t flag = ctx.read_int8(ctx.error());
-      if (FORY_PREDICT_FALSE(ctx.has_error())) {
-        return E{};
-      }
-      if (flag == NULL_FLAG) {
-        // Represent Java null as the default enum value.
-        return E{};
-      }
-      return read_data(ctx);
-    }
-
+    // Handle null/ref flag if requested.
+    // In compatible mode, the caller (read_struct_fields_compatible) determines
+    // whether to pass read_ref=true based on the remote TypeDef's nullable flag.
+    // In non-compatible mode, read_ref is based on C++ type traits.
+    // When reading through std::optional, the optional serializer already handles
+    // the null flag and calls us with read_ref=false.
     bool has_value = consume_ref_flag(ctx, read_ref);
     if (ctx.has_error() || !has_value) {
       return E{};

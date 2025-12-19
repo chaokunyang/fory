@@ -941,8 +941,12 @@ int32_t TypeMeta::compute_struct_version(const TypeMeta &meta) {
     fingerprint.append(snake);
     fingerprint.push_back(',');
 
+    // Java's ObjectSerializer.getTypeId returns Types.UNKNOWN (0) for:
+    // - abstract classes, interfaces, and enum types
+    // This aligns the hash computation with Java's behavior.
     uint32_t effective_type_id = fi.field_type.type_id;
-    if (effective_type_id == static_cast<uint32_t>(TypeId::UNKNOWN)) {
+    if (effective_type_id == static_cast<uint32_t>(TypeId::ENUM) ||
+        effective_type_id == static_cast<uint32_t>(TypeId::NAMED_ENUM)) {
       effective_type_id = static_cast<uint32_t>(TypeId::UNKNOWN);
     }
     fingerprint.append(std::to_string(effective_type_id));

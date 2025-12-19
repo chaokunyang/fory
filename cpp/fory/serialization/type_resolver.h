@@ -395,6 +395,18 @@ struct FieldTypeBuilder<T, std::enable_if_t<is_tuple_v<decay_t<T>>>> {
   }
 };
 
+// Specialization for enum types - Java always marks enum fields as nullable
+template <typename T>
+struct FieldTypeBuilder<T, std::enable_if_t<std::is_enum_v<decay_t<T>>>> {
+  using Decayed = decay_t<T>;
+  static FieldType build(bool /* nullable */) {
+    // Java's ClassDef.EnumFieldType always sets nullable=true for enum fields
+    // since enums are reference types in Java. We need to match this for
+    // consistent struct version hashes across languages.
+    return FieldType(to_type_id(Serializer<Decayed>::type_id), true);
+  }
+};
+
 template <typename T>
 struct FieldTypeBuilder<
     T, std::enable_if_t<
@@ -402,7 +414,7 @@ struct FieldTypeBuilder<
            !is_unique_ptr_v<decay_t<T>> && !is_vector_v<decay_t<T>> &&
            !is_set_like_v<decay_t<T>> && !is_map_like_v<decay_t<T>> &&
            !is_string_view_v<decay_t<T>> && !is_tuple_v<decay_t<T>> &&
-           has_serializer_type_id_v<decay_t<T>>>> {
+           !std::is_enum_v<decay_t<T>> && has_serializer_type_id_v<decay_t<T>>>> {
   using Decayed = decay_t<T>;
   static FieldType build(bool nullable) {
     return FieldType(to_type_id(Serializer<Decayed>::type_id), nullable);

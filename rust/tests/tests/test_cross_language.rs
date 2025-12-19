@@ -738,8 +738,8 @@ struct OneStringFieldStruct {
 
 #[derive(ForyObject, Debug, PartialEq)]
 struct TwoStringFieldStruct {
-    f1: String,            // non-nullable, like Go's string
-    f2: Option<String>,    // nullable, like Go's *string
+    f1: String,         // non-nullable, like Go's string
+    f2: Option<String>, // nullable, like Go's *string
 }
 
 #[allow(non_camel_case_types)]

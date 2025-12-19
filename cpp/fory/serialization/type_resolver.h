@@ -409,12 +409,13 @@ struct FieldTypeBuilder<T, std::enable_if_t<std::is_enum_v<decay_t<T>>>> {
 
 template <typename T>
 struct FieldTypeBuilder<
-    T, std::enable_if_t<
-           !is_optional_v<decay_t<T>> && !is_shared_ptr_v<decay_t<T>> &&
-           !is_unique_ptr_v<decay_t<T>> && !is_vector_v<decay_t<T>> &&
-           !is_set_like_v<decay_t<T>> && !is_map_like_v<decay_t<T>> &&
-           !is_string_view_v<decay_t<T>> && !is_tuple_v<decay_t<T>> &&
-           !std::is_enum_v<decay_t<T>> && has_serializer_type_id_v<decay_t<T>>>> {
+    T,
+    std::enable_if_t<
+        !is_optional_v<decay_t<T>> && !is_shared_ptr_v<decay_t<T>> &&
+        !is_unique_ptr_v<decay_t<T>> && !is_vector_v<decay_t<T>> &&
+        !is_set_like_v<decay_t<T>> && !is_map_like_v<decay_t<T>> &&
+        !is_string_view_v<decay_t<T>> && !is_tuple_v<decay_t<T>> &&
+        !std::is_enum_v<decay_t<T>> && has_serializer_type_id_v<decay_t<T>>>> {
   using Decayed = decay_t<T>;
   static FieldType build(bool nullable) {
     return FieldType(to_type_id(Serializer<Decayed>::type_id), nullable);

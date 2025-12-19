@@ -34,7 +34,9 @@ import org.testng.annotations.Test;
 /** Executes cross-language tests against the Go implementation. */
 @Test
 public class GoXlangTest extends XlangTestBase {
-  private static final String GO_BINARY = "xlang_test_main";
+  private static final boolean IS_WINDOWS =
+      System.getProperty("os.name").toLowerCase().contains("windows");
+  private static final String GO_BINARY = IS_WINDOWS ? "xlang_test_main.exe" : "xlang_test_main";
 
   @Override
   protected void ensurePeerReady() {
@@ -80,7 +82,8 @@ public class GoXlangTest extends XlangTestBase {
   @Override
   protected CommandContext buildCommandContext(String caseName, Path dataFile) {
     List<String> command = new ArrayList<>();
-    command.add("./" + GO_BINARY);
+    // On Windows, use the binary name directly; on Unix, use ./ prefix
+    command.add(IS_WINDOWS ? GO_BINARY : "./" + GO_BINARY);
     command.add("--case");
     command.add(caseName);
     ImmutableMap<String, String> env = envBuilder(dataFile).build();

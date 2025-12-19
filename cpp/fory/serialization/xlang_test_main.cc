@@ -264,7 +264,7 @@ FORY_STRUCT(AnimalMapHolder, animal_map);
 // ============================================================================
 
 struct EmptyStructEvolution {
-  bool placeholder = false;  // C++ templates require at least one field
+  bool placeholder = false; // C++ templates require at least one field
   bool operator==(const EmptyStructEvolution &other) const {
     return placeholder == other.placeholder;
   }
@@ -1521,7 +1521,8 @@ void RunTestPolymorphicMap(const std::string &data_file) {
 
 void RunTestOneStringFieldSchema(const std::string &data_file) {
   auto bytes = ReadFile(data_file);
-  // SCHEMA_CONSISTENT mode: compatible=false, xlang=true, check_struct_version=true
+  // SCHEMA_CONSISTENT mode: compatible=false, xlang=true,
+  // check_struct_version=true
   auto fory = BuildFory(false, true, true);
   EnsureOk(fory.register_struct<OneStringFieldStruct>(200),
            "register OneStringFieldStruct");
@@ -1633,7 +1634,8 @@ void RunTestSchemaEvolutionCompatibleReverse(const std::string &data_file) {
 
 void RunTestOneEnumFieldSchema(const std::string &data_file) {
   auto bytes = ReadFile(data_file);
-  // SCHEMA_CONSISTENT mode: compatible=false, xlang=true, check_struct_version=true
+  // SCHEMA_CONSISTENT mode: compatible=false, xlang=true,
+  // check_struct_version=true
   auto fory = BuildFory(false, true, true);
   EnsureOk(fory.register_struct<TestEnum>(210), "register TestEnum");
   EnsureOk(fory.register_struct<OneEnumFieldStruct>(211),

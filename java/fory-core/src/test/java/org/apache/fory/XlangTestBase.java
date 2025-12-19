@@ -875,7 +875,7 @@ public abstract class XlangTestBase extends ForyTestBase {
 
     @Override
     public void xwrite(MemoryBuffer buffer, MyExt value) {
-      System.out.println("Writer Index Before write myext: "+ buffer.writerIndex());
+      System.out.println("Writer Index Before write myext: " + buffer.writerIndex());
       buffer.writeVarInt32(value.id);
       System.out.println("Write id " + value.id);
     }

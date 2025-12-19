@@ -112,9 +112,9 @@ import org.apache.fory.resolver.ClassInfoHolder;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.RefResolver;
 import org.apache.fory.resolver.TypeResolver;
-import org.apache.fory.serializer.CompatibleSerializer;
 import org.apache.fory.serializer.EnumSerializer;
 import org.apache.fory.serializer.FinalFieldReplaceResolveSerializer;
+import org.apache.fory.serializer.MetaSharedSerializer;
 import org.apache.fory.serializer.ObjectSerializer;
 import org.apache.fory.serializer.PrimitiveSerializers.LongSerializer;
 import org.apache.fory.serializer.ReplaceResolveSerializer;
@@ -358,7 +358,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     ctx.addImport(Generated.class);
     ctx.addImports(LazyInitBeanSerializer.class, EnumSerializer.class);
     ctx.addImports(Serializer.class, StringSerializer.class);
-    ctx.addImports(ObjectSerializer.class, CompatibleSerializer.class);
+    ctx.addImports(ObjectSerializer.class, MetaSharedSerializer.class);
     ctx.addImports(CollectionLikeSerializer.class, MapLikeSerializer.class);
   }
 
@@ -725,7 +725,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
         }
         if (serializerClass == LazyInitBeanSerializer.class
             || serializerClass == ObjectSerializer.class
-            || serializerClass == CompatibleSerializer.class) {
+            || serializerClass == MetaSharedSerializer.class) {
           // field init may get jit serializer, which will cause cast exception if not use base
           // type.
           serializerClass = Serializer.class;

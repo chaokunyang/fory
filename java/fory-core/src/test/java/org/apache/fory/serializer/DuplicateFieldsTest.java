@@ -98,8 +98,8 @@ public class DuplicateFieldsTest extends ForyTestBase {
     }
   }
 
-  @Test(dataProvider = "scopedMetaShare")
-  public void testDuplicateFieldsCompatible(boolean scopedMetaShare) {
+  @Test
+  public void testDuplicateFieldsCompatible() {
     C c = new C();
     ((B) c).f1 = 100;
     c.f1 = -100;
@@ -111,11 +111,12 @@ public class DuplicateFieldsTest extends ForyTestBase {
             .withRefTracking(false)
             .withCodegen(true)
             .withCompatibleMode(CompatibleMode.COMPATIBLE)
-            .withScopedMetaShare(scopedMetaShare)
             .requireClassRegistration(false);
     Fory fory = builder.build();
     {
-      CompatibleSerializer<C> serializer = new CompatibleSerializer<>(fory, C.class);
+      MetaSharedSerializer<C> serializer =
+          new MetaSharedSerializer<>(
+              fory, C.class, fory.getClassResolver().getTypeDef(C.class, true));
       MemoryBuffer buffer = MemoryUtils.buffer(32);
       serializer.write(buffer, c);
       C newC = serializer.read(buffer);
@@ -124,9 +125,13 @@ public class DuplicateFieldsTest extends ForyTestBase {
       assertEquals(newC, c);
     }
     {
+      // Use MetaSharedSerializer JIT version
       Serializer<C> serializer =
           Serializers.newSerializer(
-              fory, C.class, CodecUtils.loadOrGenCompatibleCodecClass(C.class, fory));
+              fory,
+              C.class,
+              CodecUtils.loadOrGenMetaSharedCodecClass(
+                  fory, C.class, fory.getClassResolver().getTypeDef(C.class, true)));
       MemoryBuffer buffer = MemoryUtils.buffer(32);
       serializer.write(buffer, c);
       C newC = serializer.read(buffer);
@@ -137,7 +142,7 @@ public class DuplicateFieldsTest extends ForyTestBase {
     {
       // FallbackSerializer/CodegenSerializer will set itself to ClassResolver.
       Fory fory1 = builder.build();
-      C newC = serDeCheckSerializer(fory1, c, scopedMetaShare ? ".*Codec" : "(Compatible)?.*Codec");
+      C newC = serDeCheckSerializer(fory1, c, ".*Codec|.*Serializer");
       assertEquals(newC.f1, c.f1);
       assertEquals(((B) newC).f1, ((B) c).f1);
       assertEquals(newC, c);

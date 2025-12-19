@@ -223,6 +223,10 @@ class TypeId:
     FLOAT32_ARRAY = 36
     # one dimensional float64 array.
     FLOAT64_ARRAY = 37
+    # a tagged union type that can hold one of several alternative types.
+    UNION = 38
+    # represents an empty/unit value with no data (e.g., for empty union alternatives).
+    NONE = 39
 
     # Bound value for range checks (types with id >= BOUND are not internal types).
     BOUND = 64
@@ -467,6 +471,9 @@ def infer_field(field_name, type_, visitor: TypeVisitor, types_path=None):
         elif origin is dict or origin == typing.Dict:
             key_type, value_type = args
             return visitor.visit_dict(field_name, key_type, value_type, types_path=types_path)
+        elif origin is typing.Union:
+            # Union types are treated as "other" types and handled by UnionSerializer
+            return visitor.visit_other(field_name, type_, types_path=types_path)
         else:
             raise TypeError(f"Collection types should be {list, dict} instead of {type_}")
     else:

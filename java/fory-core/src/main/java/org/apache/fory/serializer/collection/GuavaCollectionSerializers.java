@@ -404,63 +404,63 @@ public class GuavaCollectionSerializers {
     ClassResolver resolver = fory.getClassResolver();
     Class cls =
         loadClass(pkg + ".RegularImmutableBiMap", ImmutableBiMap.of("k1", 1, "k2", 4).getClass());
-    resolver.registerSerializer(cls, new ImmutableBiMapSerializer(fory, cls));
+    resolver.registerInternalSerializer(cls, new ImmutableBiMapSerializer(fory, cls));
     cls = loadClass(pkg + ".SingletonImmutableBiMap", ImmutableBiMap.of(1, 2).getClass());
-    resolver.registerSerializer(cls, new ImmutableBiMapSerializer(fory, cls));
+    resolver.registerInternalSerializer(cls, new ImmutableBiMapSerializer(fory, cls));
     cls = loadClass(pkg + ".RegularImmutableMap", ImmutableMap.of("k1", 1, "k2", 2).getClass());
-    resolver.registerSerializer(cls, new ImmutableMapSerializer(fory, cls));
+    resolver.registerInternalSerializer(cls, new ImmutableMapSerializer(fory, cls));
     cls = loadClass(pkg + ".RegularImmutableList", ImmutableList.of().getClass());
-    resolver.registerSerializer(cls, new RegularImmutableListSerializer(fory, cls));
+    resolver.registerInternalSerializer(cls, new RegularImmutableListSerializer(fory, cls));
     cls = loadClass(pkg + ".SingletonImmutableList", ImmutableList.of(1).getClass());
-    resolver.registerSerializer(cls, new ImmutableListSerializer(fory, cls));
+    resolver.registerInternalSerializer(cls, new ImmutableListSerializer(fory, cls));
     cls = loadClass(pkg + ".RegularImmutableSet", ImmutableSet.of(1, 2).getClass());
-    resolver.registerSerializer(cls, new ImmutableSetSerializer(fory, cls));
+    resolver.registerInternalSerializer(cls, new ImmutableSetSerializer(fory, cls));
     cls = loadClass(pkg + ".SingletonImmutableSet", ImmutableSet.of(1).getClass());
-    resolver.registerSerializer(cls, new ImmutableSetSerializer(fory, cls));
+    resolver.registerInternalSerializer(cls, new ImmutableSetSerializer(fory, cls));
     // sorted set/map doesn't support xlang.
     cls = loadClass(pkg + ".RegularImmutableSortedSet", ImmutableSortedSet.of(1, 2).getClass());
-    resolver.registerSerializer(cls, new ImmutableSortedSetSerializer<>(fory, cls));
+    resolver.registerInternalSerializer(cls, new ImmutableSortedSetSerializer<>(fory, cls));
     cls = loadClass(pkg + ".ImmutableSortedMap", ImmutableSortedMap.of(1, 2).getClass());
-    resolver.registerSerializer(cls, new ImmutableSortedMapSerializer<>(fory, cls));
+    resolver.registerInternalSerializer(cls, new ImmutableSortedMapSerializer<>(fory, cls));
 
     // Guava version before 19.0, of() return
     // EmptyImmutableSet/EmptyImmutableBiMap/EmptyImmutableSortedMap/EmptyImmutableSortedSet
     // we register if class exist or register empty to deserialize.
     if (checkClassExist(pkg + ".EmptyImmutableSet")) {
       cls = loadClass(pkg + ".EmptyImmutableSet", ImmutableSet.of().getClass());
-      resolver.registerSerializer(cls, new ImmutableSetSerializer(fory, cls));
+      resolver.registerInternalSerializer(cls, new ImmutableSetSerializer(fory, cls));
     } else {
       class GuavaEmptySet {}
 
       cls = GuavaEmptySet.class;
-      resolver.registerSerializer(cls, new ImmutableSetSerializer(fory, cls));
+      resolver.registerInternalSerializer(cls, new ImmutableSetSerializer(fory, cls));
     }
     if (checkClassExist(pkg + ".EmptyImmutableBiMap")) {
       cls = loadClass(pkg + ".EmptyImmutableBiMap", ImmutableBiMap.of().getClass());
-      resolver.registerSerializer(cls, new ImmutableMapSerializer(fory, cls));
+      resolver.registerInternalSerializer(cls, new ImmutableMapSerializer(fory, cls));
     } else {
       class GuavaEmptyBiMap {}
 
       cls = GuavaEmptyBiMap.class;
-      resolver.registerSerializer(cls, new ImmutableMapSerializer(fory, cls));
+      resolver.registerInternalSerializer(cls, new ImmutableMapSerializer(fory, cls));
     }
     if (checkClassExist(pkg + ".EmptyImmutableSortedSet")) {
       cls = loadClass(pkg + ".EmptyImmutableSortedSet", ImmutableSortedSet.of().getClass());
-      resolver.registerSerializer(cls, new ImmutableSortedSetSerializer(fory, cls));
+      resolver.registerInternalSerializer(cls, new ImmutableSortedSetSerializer(fory, cls));
     } else {
       class GuavaEmptySortedSet {}
 
       cls = GuavaEmptySortedSet.class;
-      resolver.registerSerializer(cls, new ImmutableSortedSetSerializer(fory, cls));
+      resolver.registerInternalSerializer(cls, new ImmutableSortedSetSerializer(fory, cls));
     }
     if (checkClassExist(pkg + ".EmptyImmutableSortedMap")) {
       cls = loadClass(pkg + ".EmptyImmutableSortedMap", ImmutableSortedMap.of().getClass());
-      resolver.registerSerializer(cls, new ImmutableSortedMapSerializer(fory, cls));
+      resolver.registerInternalSerializer(cls, new ImmutableSortedMapSerializer(fory, cls));
     } else {
       class GuavaEmptySortedMap {}
 
       cls = GuavaEmptySortedMap.class;
-      resolver.registerSerializer(cls, new ImmutableSortedMapSerializer(fory, cls));
+      resolver.registerInternalSerializer(cls, new ImmutableSortedMapSerializer(fory, cls));
     }
   }
 

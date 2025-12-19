@@ -56,7 +56,6 @@ import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.longlongpkg.C1;
 import org.apache.fory.resolver.longlongpkg.C2;
 import org.apache.fory.resolver.longlongpkg.C3;
-import org.apache.fory.serializer.CompatibleSerializer;
 import org.apache.fory.serializer.ObjectSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.Serializers;
@@ -99,7 +98,7 @@ public class ClassResolverTest extends ForyTestBase {
     Assert.assertThrows(
         IllegalArgumentException.class, () -> classResolver.register(C1.class, "ns", "C1"));
     Assert.assertThrows(
-        IllegalArgumentException.class, () -> classResolver.register(C1.class, 200));
+        IllegalArgumentException.class, () -> classResolver.registerInternal(C1.class, 200));
     classResolver.register(C2.class, "", "C2");
     classResolver.register(Foo.class, "ns", "Foo");
 
@@ -117,6 +116,35 @@ public class ClassResolverTest extends ForyTestBase {
   @Test
   public void testRegisterClass() {
     Fory fory = Fory.builder().withLanguage(Language.JAVA).requireClassRegistration(false).build();
+  }
+
+  @Test
+  public void testRegisterClassWithUserIds() {
+    // Test that user IDs 0 and 1 work correctly (mapped to internal IDs 256 and 257)
+    Fory fory = Fory.builder().withLanguage(Language.JAVA).requireClassRegistration(true).build();
+    ClassResolver classResolver = fory.getClassResolver();
+
+    // Register with user ID 0
+    classResolver.register(Foo.class, 0);
+    // Register with user ID 1
+    classResolver.register(Bar.class, 1);
+
+    // Verify internal IDs are offset by USER_ID_BASE (256)
+    assertEquals(
+        classResolver.getRegisteredClassId(Foo.class).shortValue(), ClassResolver.USER_ID_BASE);
+    assertEquals(
+        classResolver.getRegisteredClassId(Bar.class).shortValue(),
+        (short) (ClassResolver.USER_ID_BASE + 1));
+
+    // Verify serialization/deserialization works
+    Foo foo = new Foo();
+    foo.f1 = 42;
+    serDeCheck(fory, foo);
+
+    Bar bar = new Bar();
+    bar.f1 = 10;
+    bar.f2 = 100L;
+    serDeCheck(fory, bar);
   }
 
   @Test
@@ -317,19 +345,21 @@ public class ClassResolverTest extends ForyTestBase {
       classResolver.setSerializer(Foo.class, new ObjectSerializer<>(fory, Foo.class));
       ClassInfo classInfo = classResolver.getClassInfo(Foo.class);
       assertSame(classInfo.getSerializer().getClass(), ObjectSerializer.class);
-      classResolver.setSerializer(Foo.class, new CompatibleSerializer<>(fory, Foo.class));
+      // Create another ObjectSerializer to test setSerializer updates the existing classInfo
+      classResolver.setSerializer(Foo.class, new ObjectSerializer<>(fory, Foo.class, true));
       Assert.assertSame(classResolver.getClassInfo(Foo.class), classInfo);
-      assertSame(classInfo.getSerializer().getClass(), CompatibleSerializer.class);
+      assertSame(classInfo.getSerializer().getClass(), ObjectSerializer.class);
     }
     {
-      classResolver.register(Bar.class);
+      classResolver.registerInternal(Bar.class);
       ClassInfo classInfo = classResolver.getClassInfo(Bar.class);
       classResolver.setSerializer(Bar.class, new ObjectSerializer<>(fory, Bar.class));
       Assert.assertSame(classResolver.getClassInfo(Bar.class), classInfo);
       assertSame(classInfo.getSerializer().getClass(), ObjectSerializer.class);
-      classResolver.setSerializer(Bar.class, new CompatibleSerializer<>(fory, Bar.class));
+      // Create another ObjectSerializer to test setSerializer updates the existing classInfo
+      classResolver.setSerializer(Bar.class, new ObjectSerializer<>(fory, Bar.class, true));
       Assert.assertSame(classResolver.getClassInfo(Bar.class), classInfo);
-      assertSame(classInfo.getSerializer().getClass(), CompatibleSerializer.class);
+      assertSame(classInfo.getSerializer().getClass(), ObjectSerializer.class);
     }
   }
 

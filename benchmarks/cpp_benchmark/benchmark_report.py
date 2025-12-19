@@ -233,7 +233,7 @@ for idx, op in enumerate(operations):
     )
 
     ax.set_ylabel("Throughput (ops/sec)")
-    ax.set_title(f"{op.capitalize()} Throughput Comparison")
+    ax.set_title(f"{op.capitalize()} Throughput (higher is better)")
     ax.set_xticks(x)
     ax.set_xticklabels([dt.capitalize() for dt in datatypes])
     ax.legend()
@@ -243,9 +243,9 @@ for idx, op in enumerate(operations):
     ax.ticklabel_format(style="scientific", axis="y", scilimits=(0, 0))
 
 fig.tight_layout()
-combined_plot_path = os.path.join(output_dir, "throughput_comparison.png")
+combined_plot_path = os.path.join(output_dir, "throughput.png")
 plt.savefig(combined_plot_path, dpi=150)
-plot_images.append(("throughput_comparison", combined_plot_path))
+plot_images.append(("throughput", combined_plot_path))
 plt.close()
 
 # === Markdown report ===

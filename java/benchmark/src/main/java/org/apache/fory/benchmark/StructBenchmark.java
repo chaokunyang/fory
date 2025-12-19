@@ -42,10 +42,7 @@ public class StructBenchmark {
   private static byte[] pbBytes;
 
   private static final Fory fory =
-      Fory.builder()
-          .withCompatibleMode(CompatibleMode.COMPATIBLE)
-          .withScopedMetaShare(true)
-          .build();
+      Fory.builder().withCompatibleMode(CompatibleMode.COMPATIBLE).build();
 
   private static final Fory foryStrict =
       Fory.builder().withCompatibleMode(CompatibleMode.SCHEMA_CONSISTENT).build();

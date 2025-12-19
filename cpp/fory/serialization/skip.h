@@ -52,6 +52,9 @@ void skip_set(ReadContext &ctx, const FieldType &field_type);
 /// Skip a map value
 void skip_map(ReadContext &ctx, const FieldType &field_type);
 
+/// Skip a union (variant) value
+void skip_union(ReadContext &ctx);
+
 /// Skip a struct value
 void skip_struct(ReadContext &ctx, const FieldType &field_type);
 

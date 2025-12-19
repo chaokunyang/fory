@@ -30,6 +30,7 @@
 #include "fory/serialization/temporal_serializers.h"
 #include "fory/serialization/tuple_serializer.h"
 #include "fory/serialization/type_resolver.h"
+#include "fory/serialization/variant_serializer.h"
 #include "fory/util/buffer.h"
 #include "fory/util/error.h"
 #include "fory/util/pool.h"
@@ -265,6 +266,64 @@ public:
     return type_resolver_->template register_by_name<T>("", type_name);
   }
 
+  /// Register an enum type with a numeric type ID.
+  ///
+  /// Use this method to register enum types for cross-language serialization
+  /// where types are identified by numeric IDs. The type ID must be unique
+  /// across all registered types and match the ID used in other languages.
+  ///
+  /// @tparam T The enum type to register (must be defined with FORY_ENUM).
+  /// @param type_id Unique numeric identifier for this type.
+  /// @return Success or error if registration fails.
+  ///
+  /// Example:
+  /// ```cpp
+  /// enum class Color { RED, GREEN, BLUE };
+  /// FORY_ENUM(Color, RED, GREEN, BLUE);
+  ///
+  /// fory.register_enum<Color>(1);
+  /// ```
+  template <typename T> Result<void, Error> register_enum(uint32_t type_id) {
+    return type_resolver_->template register_by_id<T>(type_id);
+  }
+
+  /// Register an enum type with namespace and type name.
+  ///
+  /// Use this method for named type registration, which provides more
+  /// flexibility for schema evolution and cross-language compatibility.
+  ///
+  /// @tparam T The enum type to register (must be defined with FORY_ENUM).
+  /// @param ns Namespace for the type (can be empty string).
+  /// @param type_name Name of the type within the namespace.
+  /// @return Success or error if registration fails.
+  ///
+  /// Example:
+  /// ```cpp
+  /// fory.register_enum<Color>("com.example", "Color");
+  /// ```
+  template <typename T>
+  Result<void, Error> register_enum(const std::string &ns,
+                                    const std::string &type_name) {
+    return type_resolver_->template register_by_name<T>(ns, type_name);
+  }
+
+  /// Register an enum type with type name only (no namespace).
+  ///
+  /// Convenience method for registering enum types without a namespace.
+  ///
+  /// @tparam T The enum type to register (must be defined with FORY_ENUM).
+  /// @param type_name Name of the type.
+  /// @return Success or error if registration fails.
+  ///
+  /// Example:
+  /// ```cpp
+  /// fory.register_enum<Color>("Color");
+  /// ```
+  template <typename T>
+  Result<void, Error> register_enum(const std::string &type_name) {
+    return type_resolver_->template register_by_name<T>("", type_name);
+  }
+
   /// Register an extension type with a numeric type ID.
   ///
   /// Extension types allow custom serialization logic for types that
@@ -363,12 +422,12 @@ public:
   /// Serialize an object to an existing Buffer (fastest path).
   ///
   /// @tparam T The type of object to serialize.
-  /// @param obj The object to serialize.
   /// @param buffer The buffer to write to.
+  /// @param obj The object to serialize.
   /// @return Number of bytes written, or error.
   template <typename T>
-  FORY_ALWAYS_INLINE Result<size_t, Error> serialize_to(const T &obj,
-                                                        Buffer &buffer) {
+  FORY_ALWAYS_INLINE Result<size_t, Error> serialize_to(Buffer &buffer,
+                                                        const T &obj) {
     if (FORY_PREDICT_FALSE(!finalized_)) {
       ensure_finalized();
     }
@@ -382,18 +441,18 @@ public:
   /// fit the serialized data.
   ///
   /// @tparam T The type of object to serialize.
-  /// @param obj The object to serialize.
   /// @param output The vector to append to.
+  /// @param obj The object to serialize.
   /// @return Number of bytes written, or error.
   template <typename T>
-  Result<size_t, Error> serialize_to(const T &obj,
-                                     std::vector<uint8_t> &output) {
+  Result<size_t, Error> serialize_to(std::vector<uint8_t> &output,
+                                     const T &obj) {
     // Wrap the output vector in a Buffer for zero-copy serialization
     // writer_index starts at output.size() for appending
     Buffer buffer(output);
 
     // Forward to Buffer version
-    auto result = serialize_to(obj, buffer);
+    auto result = serialize_to(buffer, obj);
 
     // Resize vector to actual written size
     output.resize(buffer.writer_index());
@@ -654,16 +713,16 @@ public:
   }
 
   template <typename T>
-  Result<size_t, Error> serialize_to(const T &obj, Buffer &buffer) {
+  Result<size_t, Error> serialize_to(Buffer &buffer, const T &obj) {
     auto fory_handle = fory_pool_.acquire();
-    return fory_handle->serialize_to(obj, buffer);
+    return fory_handle->serialize_to(buffer, obj);
   }
 
   template <typename T>
-  Result<size_t, Error> serialize_to(const T &obj,
-                                     std::vector<uint8_t> &output) {
+  Result<size_t, Error> serialize_to(std::vector<uint8_t> &output,
+                                     const T &obj) {
     auto fory_handle = fory_pool_.acquire();
-    return fory_handle->serialize_to(obj, output);
+    return fory_handle->serialize_to(output, obj);
   }
 
   template <typename T>

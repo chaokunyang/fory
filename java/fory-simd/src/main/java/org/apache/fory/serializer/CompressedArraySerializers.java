@@ -21,6 +21,7 @@ package org.apache.fory.serializer;
 
 import java.util.Arrays;
 import org.apache.fory.Fory;
+import org.apache.fory.ThreadSafeFory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.resolver.ClassResolver;
@@ -73,11 +74,29 @@ public final class CompressedArraySerializers {
     boolean compressLong = fory.getConfig().compressLongArray();
 
     if (compressInt) {
-      resolver.registerSerializer(int[].class, new CompressedIntArraySerializer(fory));
+      resolver.registerInternalSerializer(int[].class, new CompressedIntArraySerializer(fory));
     }
     if (compressLong) {
-      resolver.registerSerializer(long[].class, new CompressedLongArraySerializer(fory));
+      resolver.registerInternalSerializer(long[].class, new CompressedLongArraySerializer(fory));
     }
+  }
+
+  /**
+   * Register compressed array serializers with the given Fory instance.
+   *
+   * <p>Example usage:
+   *
+   * <pre>{@code
+   * ThreadSafeFory fory = Fory.builder()
+   *     .withConfig(Config.compressIntArray(true).compressLongArray(true))
+   *     .buildThreadSafeFory();
+   * CompressedArraySerializers.registerSerializers(fory);
+   * }</pre>
+   *
+   * @param fory the ThreadSafeFory instance to register serializers with
+   */
+  public static void registerIfEnabled(ThreadSafeFory fory) {
+    fory.registerCallback(CompressedArraySerializers::registerIfEnabled);
   }
 
   /**
@@ -91,8 +110,13 @@ public final class CompressedArraySerializers {
    */
   public static void register(Fory fory) {
     ClassResolver resolver = fory.getClassResolver();
-    resolver.registerSerializer(int[].class, new CompressedIntArraySerializer(fory));
-    resolver.registerSerializer(long[].class, new CompressedLongArraySerializer(fory));
+    resolver.registerInternalSerializer(int[].class, new CompressedIntArraySerializer(fory));
+    resolver.registerInternalSerializer(long[].class, new CompressedLongArraySerializer(fory));
+  }
+
+  /** Register compressed array serializers with the given Fory instance. */
+  public static void register(ThreadSafeFory fory) {
+    fory.registerCallback(CompressedArraySerializers::register);
   }
 
   public static final class CompressedIntArraySerializer extends PrimitiveArraySerializer<int[]> {

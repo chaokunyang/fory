@@ -47,6 +47,7 @@ import org.apache.fory.builder.Generated;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
+import org.apache.fory.meta.ClassDef;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.util.ExceptionUtils;
@@ -85,8 +86,9 @@ public class Serializers {
       if (serializerClass == ObjectSerializer.class) {
         return new ObjectSerializer(fory, type);
       }
-      if (serializerClass == CompatibleSerializer.class) {
-        return new CompatibleSerializer(fory, type);
+      if (serializerClass == MetaSharedSerializer.class) {
+        ClassDef classDef = fory.getClassResolver().getTypeDef(type, true);
+        return new MetaSharedSerializer(fory, type, classDef);
       }
       Tuple2<MethodType, MethodHandle> ctrInfo = CTR_MAP.getIfPresent(serializerClass);
       if (ctrInfo != null) {
@@ -589,19 +591,19 @@ public class Serializers {
 
   public static void registerDefaultSerializers(Fory fory) {
     ClassResolver resolver = fory.getClassResolver();
-    resolver.registerSerializer(Class.class, new ClassSerializer(fory));
-    resolver.registerSerializer(StringBuilder.class, new StringBuilderSerializer(fory));
-    resolver.registerSerializer(StringBuffer.class, new StringBufferSerializer(fory));
-    resolver.registerSerializer(BigInteger.class, new BigIntegerSerializer(fory));
-    resolver.registerSerializer(BigDecimal.class, new BigDecimalSerializer(fory));
-    resolver.registerSerializer(AtomicBoolean.class, new AtomicBooleanSerializer(fory));
-    resolver.registerSerializer(AtomicInteger.class, new AtomicIntegerSerializer(fory));
-    resolver.registerSerializer(AtomicLong.class, new AtomicLongSerializer(fory));
-    resolver.registerSerializer(AtomicReference.class, new AtomicReferenceSerializer(fory));
-    resolver.registerSerializer(Currency.class, new CurrencySerializer(fory));
-    resolver.registerSerializer(URI.class, new URISerializer(fory));
-    resolver.registerSerializer(Pattern.class, new RegexSerializer(fory));
-    resolver.registerSerializer(UUID.class, new UUIDSerializer(fory));
-    resolver.registerSerializer(Object.class, new EmptyObjectSerializer(fory));
+    resolver.registerInternalSerializer(Class.class, new ClassSerializer(fory));
+    resolver.registerInternalSerializer(StringBuilder.class, new StringBuilderSerializer(fory));
+    resolver.registerInternalSerializer(StringBuffer.class, new StringBufferSerializer(fory));
+    resolver.registerInternalSerializer(BigInteger.class, new BigIntegerSerializer(fory));
+    resolver.registerInternalSerializer(BigDecimal.class, new BigDecimalSerializer(fory));
+    resolver.registerInternalSerializer(AtomicBoolean.class, new AtomicBooleanSerializer(fory));
+    resolver.registerInternalSerializer(AtomicInteger.class, new AtomicIntegerSerializer(fory));
+    resolver.registerInternalSerializer(AtomicLong.class, new AtomicLongSerializer(fory));
+    resolver.registerInternalSerializer(AtomicReference.class, new AtomicReferenceSerializer(fory));
+    resolver.registerInternalSerializer(Currency.class, new CurrencySerializer(fory));
+    resolver.registerInternalSerializer(URI.class, new URISerializer(fory));
+    resolver.registerInternalSerializer(Pattern.class, new RegexSerializer(fory));
+    resolver.registerInternalSerializer(UUID.class, new UUIDSerializer(fory));
+    resolver.registerInternalSerializer(Object.class, new EmptyObjectSerializer(fory));
   }
 }

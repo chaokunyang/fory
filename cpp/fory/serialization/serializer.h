@@ -242,3 +242,5 @@ template <typename T, typename Enable> struct Serializer {
 // Include all specialized serializers
 #include "fory/serialization/basic_serializer.h"
 #include "fory/serialization/enum_serializer.h"
+#include "fory/serialization/string_serializer.h"
+#include "fory/serialization/unsigned_serializer.h"

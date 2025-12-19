@@ -21,11 +21,14 @@ cc_library(
         "serializer_traits.h",
         "skip.h",
         "smart_ptr_serializers.h",
+        "string_serializer.h",
         "struct_serializer.h",
         "temporal_serializers.h",
         "tuple_serializer.h",
         "type_info.h",
         "type_resolver.h",
+        "unsigned_serializer.h",
+        "variant_serializer.h",
     ],
     strip_include_prefix = "/cpp",
     deps = [
@@ -99,8 +102,28 @@ cc_test(
 )
 
 cc_test(
+    name = "variant_serializer_test",
+    srcs = ["variant_serializer_test.cc"],
+    deps = [
+        ":fory_serialization",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
     name = "tuple_serializer_test",
     srcs = ["tuple_serializer_test.cc"],
+    deps = [
+        ":fory_serialization",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "unsigned_serializer_test",
+    srcs = ["unsigned_serializer_test.cc"],
     deps = [
         ":fory_serialization",
         "@googletest//:gtest",

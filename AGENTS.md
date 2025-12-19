@@ -54,6 +54,8 @@ mvn -T16 test -Dtest=org.apache.fory.TestClass#testMethod
 - Fory c++ use c++ 17, you must not use features from higher version of C++.
 - Whnen you updated the code, use `clang-format` to update the code
 - When invoking a method that returns `Result`, always use `FORY_TRY` unless in a control flow context.
+- Wrap error checks with `FORY_PREDICT_FALSE` for branch prediction optimization.
+- Continue on error for trivial errors; only return early for critical errors like buffer overflow.
 - private methods should be put last in class def, before private fields.
 
 ```bash

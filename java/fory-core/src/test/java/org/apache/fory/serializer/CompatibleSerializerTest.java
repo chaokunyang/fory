@@ -19,14 +19,9 @@
 
 package org.apache.fory.serializer;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 import lombok.Data;
 import org.apache.fory.Fory;
@@ -44,42 +39,50 @@ import org.apache.fory.test.bean.Struct;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
+/**
+ * Tests for compatible mode serialization using meta-shared approach. These tests verify
+ * forward/backward compatibility when using {@link CompatibleMode#COMPATIBLE} with scoped meta
+ * share.
+ */
 public class CompatibleSerializerTest extends ForyTestBase {
-  @Test(dataProvider = "referenceTrackingConfig")
-  public void testWrite(boolean referenceTracking) {
+
+  @Test
+  public void testWrite() {
     Fory fory =
         Fory.builder()
             .withLanguage(Language.JAVA)
-            .withRefTracking(referenceTracking)
+            .withRefTracking(true)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
             .requireClassRegistration(false)
             .build();
-    fory.registerSerializer(Foo.class, new CompatibleSerializer<>(fory, Foo.class));
-    fory.registerSerializer(BeanA.class, new CompatibleSerializer<>(fory, BeanA.class));
-    fory.registerSerializer(BeanB.class, new CompatibleSerializer<>(fory, BeanB.class));
     serDeCheck(fory, Foo.create());
     serDeCheck(fory, BeanB.createBeanB(2));
     serDeCheck(fory, BeanA.createBeanA(2));
   }
 
-  @Test(dataProvider = "foryCopyConfig")
-  public void testCopy(Fory fory) {
-    fory.registerSerializer(Foo.class, new CompatibleSerializer<>(fory, Foo.class));
-    fory.registerSerializer(BeanA.class, new CompatibleSerializer<>(fory, BeanA.class));
-    fory.registerSerializer(BeanB.class, new CompatibleSerializer<>(fory, BeanB.class));
+  @Test
+  public void testCopy() {
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.JAVA)
+            .withRefTracking(true)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .requireClassRegistration(false)
+            .build();
     copyCheck(fory, Foo.create());
     copyCheck(fory, BeanB.createBeanB(2));
     copyCheck(fory, BeanA.createBeanA(2));
   }
 
-  @Test(dataProvider = "referenceTrackingConfig")
-  public void testWriteCompatibleBasic(boolean referenceTrackingConfig) throws Exception {
+  @Test
+  public void testWriteCompatibleBasic() throws Exception {
     Fory fory =
         Fory.builder()
             .withLanguage(Language.JAVA)
-            .withRefTracking(referenceTrackingConfig)
+            .withRefTracking(true)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
             .requireClassRegistration(false)
             .build();
-    fory.registerSerializer(Foo.class, new CompatibleSerializer<>(fory, Foo.class));
     Object foo = Foo.create();
     for (Class<?> fooClass :
         new Class<?>[] {
@@ -90,11 +93,11 @@ public class CompatibleSerializerTest extends ForyTestBase {
       Fory newFory =
           Fory.builder()
               .withLanguage(Language.JAVA)
-              .withRefTracking(referenceTrackingConfig)
+              .withRefTracking(true)
+              .withCompatibleMode(CompatibleMode.COMPATIBLE)
               .requireClassRegistration(false)
               .withClassLoader(fooClass.getClassLoader())
               .build();
-      newFory.registerSerializer(fooClass, new CompatibleSerializer<>(newFory, fooClass));
       {
         byte[] foo1Bytes = newFory.serialize(newFoo);
         Object deserialized = fory.deserialize(foo1Bytes);
@@ -116,88 +119,69 @@ public class CompatibleSerializerTest extends ForyTestBase {
         Assert.assertTrue(ReflectionUtils.objectFieldsEquals(new HashSet<>(fields), o2, foo));
       }
       {
-        Fory fory2 =
-            Fory.builder()
-                .withLanguage(Language.JAVA)
-                .withRefTracking(referenceTrackingConfig)
-                .requireClassRegistration(false)
-                .withClassLoader(fooClass.getClassLoader())
-                .build();
-        fory2.registerSerializer(Foo.class, new CompatibleSerializer<>(newFory, Foo.class));
         Object o3 = fory.deserialize(newFory.serialize(foo));
         Assert.assertTrue(ReflectionUtils.objectFieldsEquals(o3, foo));
       }
     }
   }
 
-  @Data
-  public static class CollectionOuter {
-    public List<BeanB> beanBList;
-  }
-
-  @Test(dataProvider = "referenceTrackingConfig")
-  public void testWriteNestedCollection(boolean referenceTrackingConfig) throws Exception {
+  @Test
+  public void testWriteNestedCollection() throws Exception {
     Fory fory =
         Fory.builder()
             .withLanguage(Language.JAVA)
-            .withRefTracking(referenceTrackingConfig)
+            .withRefTracking(true)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
             .requireClassRegistration(false)
             .build();
-    fory.registerSerializer(
-        CollectionOuter.class, new CompatibleSerializer<>(fory, CollectionOuter.class));
-    fory.registerSerializer(BeanB.class, new ObjectSerializer<>(fory, BeanB.class));
-    CollectionOuter collectionOuter = new CollectionOuter();
-    collectionOuter.beanBList = new ArrayList<>(ImmutableList.of(BeanB.createBeanB(2)));
-    byte[] newBeanABytes = fory.serialize(collectionOuter);
-    Object deserialized = fory.deserialize(newBeanABytes);
-    Assert.assertEquals(deserialized, collectionOuter);
+    CollectionFields collectionFields = UnmodifiableSerializersTest.createCollectionFields();
+    byte[] bytes = fory.serialize(collectionFields);
+    Object o = fory.deserialize(bytes);
+    Object o1 = CollectionFields.copyToCanEqual(o, o.getClass().newInstance());
+    Object o2 =
+        CollectionFields.copyToCanEqual(
+            collectionFields, collectionFields.getClass().newInstance());
+    Assert.assertEquals(o1, o2);
   }
 
-  @Data
-  public static class MapOuter {
-    public Map<String, BeanB> stringBeanBMap;
-  }
-
-  @Test(dataProvider = "referenceTrackingConfig")
-  public void testWriteNestedMap(boolean referenceTrackingConfig) throws Exception {
+  @Test
+  public void testWriteNestedMap() throws Exception {
     Fory fory =
         Fory.builder()
             .withLanguage(Language.JAVA)
-            .withRefTracking(referenceTrackingConfig)
+            .withRefTracking(true)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
             .requireClassRegistration(false)
             .build();
-    fory.registerSerializer(MapOuter.class, new CompatibleSerializer<>(fory, MapOuter.class));
-    fory.registerSerializer(BeanB.class, new ObjectSerializer<>(fory, BeanB.class));
-    MapOuter outerCollection = new MapOuter();
-    outerCollection.stringBeanBMap = new HashMap<>(ImmutableMap.of("k", BeanB.createBeanB(2)));
-    byte[] newBeanABytes = fory.serialize(outerCollection);
-    Object deserialized = fory.deserialize(newBeanABytes);
-    Assert.assertEquals(deserialized, outerCollection);
+    MapFields mapFields = UnmodifiableSerializersTest.createMapFields();
+    byte[] bytes = fory.serialize(mapFields);
+    Object o = fory.deserialize(bytes);
+    Object o1 = MapFields.copyToCanEqual(o, o.getClass().newInstance());
+    Object o2 = MapFields.copyToCanEqual(mapFields, mapFields.getClass().newInstance());
+    Assert.assertEquals(o1, o2);
   }
 
-  @Test(dataProvider = "referenceTrackingConfig")
-  public void testWriteCompatibleContainer(boolean referenceTrackingConfig) throws Exception {
+  @Test
+  public void testWriteCompatibleContainer() throws Exception {
     Fory fory =
         Fory.builder()
             .withLanguage(Language.JAVA)
-            .withRefTracking(referenceTrackingConfig)
+            .withRefTracking(true)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
             .requireClassRegistration(false)
             .build();
-    fory.registerSerializer(BeanA.class, new CompatibleSerializer<>(fory, BeanA.class));
-    fory.registerSerializer(BeanB.class, new ObjectSerializer<>(fory, BeanB.class));
     BeanA beanA = BeanA.createBeanA(2);
-    Class<?> cls = createCompatibleClass1();
+    Class<?> cls = ClassUtils.createCompatibleClass1();
     Object newBeanA = cls.newInstance();
     ReflectionUtils.unsafeCopy(beanA, newBeanA);
     Fory newFory =
         Fory.builder()
             .withLanguage(Language.JAVA)
-            .withRefTracking(referenceTrackingConfig)
+            .withRefTracking(true)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
             .requireClassRegistration(false)
             .withClassLoader(cls.getClassLoader())
             .build();
-    newFory.registerSerializer(cls, new CompatibleSerializer<>(newFory, cls));
-    newFory.registerSerializer(BeanB.class, new ObjectSerializer<>(newFory, BeanB.class));
     byte[] newBeanABytes = newFory.serialize(newBeanA);
     Object deserialized = fory.deserialize(newBeanABytes);
     Assert.assertTrue(ReflectionUtils.objectCommonFieldsEquals(deserialized, newBeanA));
@@ -211,50 +195,15 @@ public class CompatibleSerializerTest extends ForyTestBase {
     Assert.assertTrue(ReflectionUtils.objectCommonFieldsEquals(obj2, newBeanA));
   }
 
-  public static Class<?> createCompatibleClass1() {
-    String pkg = BeanA.class.getPackage().getName();
-    String code =
-        ""
-            + "package "
-            + pkg
-            + ";\n"
-            + "import java.util.*;\n"
-            + "import java.math.*;\n"
-            + "public class BeanA {\n"
-            + "  private Float f4;\n"
-            + "  private double f5;\n"
-            + "  private BeanB beanB;\n"
-            + "  private BeanB beanB_added;\n"
-            + "  private int[] intArray;\n"
-            + "  private int[] intArray_added;\n"
-            + "  private byte[] bytes;\n"
-            + "  private transient BeanB f13;\n"
-            + "  public BigDecimal f16;\n"
-            + "  public String f17;\n"
-            + "  public String longStringNameField_added;\n"
-            + "  private List<Double> doubleList;\n"
-            + "  private Iterable<BeanB> beanBIterable;\n"
-            + "  private List<BeanB> beanBList;\n"
-            + "  private List<BeanB> beanBList_added;\n"
-            + "  private Map<String, BeanB> stringBeanBMap;\n"
-            + "  private Map<String, String> stringStringMap_added;\n"
-            + "  private int[][] int2DArray;\n"
-            + "  private int[][] int2DArray_added;\n"
-            + "}";
-    return ClassUtils.loadClass(
-        BeanA.class, code, CompatibleSerializerTest.class + "createCompatibleClass1");
-  }
-
-  @Test(dataProvider = "referenceTrackingConfig")
-  public void testWriteCompatibleCollection(boolean referenceTrackingConfig) throws Exception {
+  @Test
+  public void testWriteCompatibleCollection() throws Exception {
     Fory fory =
         Fory.builder()
             .withLanguage(Language.JAVA)
-            .withRefTracking(referenceTrackingConfig)
+            .withRefTracking(true)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
             .requireClassRegistration(false)
             .build();
-    fory.registerSerializer(
-        CollectionFields.class, new CompatibleSerializer<>(fory, CollectionFields.class));
     CollectionFields collectionFields = UnmodifiableSerializersTest.createCollectionFields();
     {
       Object o = serDe(fory, collectionFields);
@@ -264,16 +213,17 @@ public class CompatibleSerializerTest extends ForyTestBase {
               collectionFields, collectionFields.getClass().newInstance());
       Assert.assertEquals(o1, o2);
     }
-    Class<?> cls = createCompatibleClass2();
+    Class<?> cls = ClassUtils.createCompatibleClass2();
     Object newObj = cls.newInstance();
     ReflectionUtils.unsafeCopy(collectionFields, newObj);
     Fory newFory =
         Fory.builder()
             .withLanguage(Language.JAVA)
-            .withRefTracking(referenceTrackingConfig)
+            .withRefTracking(true)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
             .requireClassRegistration(false)
+            .withClassLoader(cls.getClassLoader())
             .build();
-    newFory.registerSerializer(cls, new CompatibleSerializer<>(newFory, cls));
     byte[] bytes1 = newFory.serialize(newObj);
     Object deserialized = fory.deserialize(bytes1);
     Assert.assertTrue(
@@ -296,43 +246,15 @@ public class CompatibleSerializerTest extends ForyTestBase {
             CollectionFields.copyToCanEqual(newObj, newObj.getClass().newInstance())));
   }
 
-  public static Class<?> createCompatibleClass2() {
-    String pkg = CollectionFields.class.getPackage().getName();
-    String code =
-        ""
-            + "package "
-            + pkg
-            + ";\n"
-            + "import java.util.*;\n"
-            + "public class CollectionFields {\n"
-            + "  public Collection<Integer> collection2;\n"
-            + "  public List<Integer> collection3;\n"
-            + "  public Collection<String> randomAccessList2;\n"
-            + "  public List<String> randomAccessList3;\n"
-            + "  public Collection list;\n"
-            + "  public Collection<String> list2;\n"
-            + "  public List<String> list3;\n"
-            + "  public Collection<String> set2;\n"
-            + "  public Set<String> set3;\n"
-            + "  public Collection<String> sortedSet2;\n"
-            + "  public SortedSet<String> sortedSet3;\n"
-            + "  public Map map;\n"
-            + "  public Map<String, String> map2;\n"
-            + "  public SortedMap<Integer, Integer> sortedMap3;"
-            + "}";
-    return ClassUtils.loadClass(
-        CollectionFields.class, code, CompatibleSerializerTest.class + "createCompatibleClass2");
-  }
-
-  @Test(dataProvider = "referenceTrackingConfig")
-  public void testWriteCompatibleMap(boolean referenceTrackingConfig) throws Exception {
+  @Test
+  public void testWriteCompatibleMap() throws Exception {
     Fory fory =
         Fory.builder()
             .withLanguage(Language.JAVA)
-            .withRefTracking(referenceTrackingConfig)
+            .withRefTracking(true)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
             .requireClassRegistration(false)
             .build();
-    fory.registerSerializer(MapFields.class, new CompatibleSerializer<>(fory, MapFields.class));
     MapFields mapFields = UnmodifiableSerializersTest.createMapFields();
     {
       Object o = serDe(fory, mapFields);
@@ -340,16 +262,17 @@ public class CompatibleSerializerTest extends ForyTestBase {
       Object o2 = MapFields.copyToCanEqual(mapFields, mapFields.getClass().newInstance());
       Assert.assertEquals(o1, o2);
     }
-    Class<?> cls = createCompatibleClass3();
+    Class<?> cls = ClassUtils.createCompatibleClass3();
     Object newObj = cls.newInstance();
     ReflectionUtils.unsafeCopy(mapFields, newObj);
     Fory newFory =
         Fory.builder()
             .withLanguage(Language.JAVA)
-            .withRefTracking(referenceTrackingConfig)
+            .withRefTracking(true)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
             .requireClassRegistration(false)
+            .withClassLoader(cls.getClassLoader())
             .build();
-    newFory.registerSerializer(cls, new CompatibleSerializer<>(newFory, cls));
     byte[] bytes1 = newFory.serialize(newObj);
     Object deserialized = fory.deserialize(bytes1);
     Assert.assertTrue(
@@ -372,45 +295,66 @@ public class CompatibleSerializerTest extends ForyTestBase {
             MapFields.copyToCanEqual(newObj, newObj.getClass().newInstance())));
   }
 
-  public static Class<?> createCompatibleClass3() {
-    String pkg = MapFields.class.getPackage().getName();
-    String code =
-        ""
-            + "package "
-            + pkg
-            + ";\n"
-            + "import java.util.*;\n"
-            + "import java.util.concurrent.*;\n"
-            + "public class MapFields {\n"
-            + " public Map map;\n"
-            + "  public Map<String, Integer> map2;\n"
-            + "  public Map linkedHashMap;\n"
-            + "  public LinkedHashMap<String, Integer> linkedHashMap3;\n"
-            + "  public SortedMap sortedMap;\n"
-            + "  public SortedMap<String, Integer> sortedMap2;\n"
-            + "  public Map concurrentHashMap;\n"
-            + "  public ConcurrentHashMap<String, Integer> concurrentHashMap2;\n"
-            + "  public ConcurrentSkipListMap skipListMap2;\n"
-            + "  public ConcurrentSkipListMap<String, Integer> skipListMap3;\n"
-            + "  public EnumMap enumMap2;\n"
-            + "  public Map emptyMap;\n"
-            + "  public Map singletonMap;\n"
-            + "  public Map<String, Integer> singletonMap2;\n"
-            + "}";
-    return ClassUtils.loadClass(
-        MapFields.class, code, CompatibleSerializerTest.class + "createCompatibleClass3");
+  @Data
+  public static class CompressTestClass {
+    public int f1;
+    public int f2;
+    public int f3;
   }
 
-  @Test(dataProvider = "compressNumberScopedMetaShare")
-  public void testCompressInt(boolean compressNumber, boolean scopedMetaShare) throws Exception {
+  @Test(dataProvider = "compressNumber")
+  public void testCompressInt(boolean compressNumber) throws Exception {
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.JAVA)
+            .withRefTracking(true)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .withNumberCompressed(compressNumber)
+            .requireClassRegistration(false)
+            .build();
+    CompressTestClass o = new CompressTestClass();
+    o.f1 = 100;
+    o.f2 = Integer.MAX_VALUE;
+    o.f3 = Integer.MIN_VALUE;
+    serDeCheck(fory, o);
+  }
+
+  @Test(dataProvider = "compressNumber")
+  public void testCompressNumberStruct(boolean compressNumber) throws Exception {
     Class<?> structClass = Struct.createNumberStructClass("CompatibleCompressIntStruct", 2);
     Fory fory =
         builder()
             .withNumberCompressed(compressNumber)
             .withCompatibleMode(CompatibleMode.COMPATIBLE)
             .withClassLoader(structClass.getClassLoader())
-            .withScopedMetaShare(scopedMetaShare)
             .build();
     serDeCheck(fory, Struct.createPOJO(structClass));
+  }
+
+  @Test
+  public void testSerializeJavaObject() {
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.JAVA)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .requireClassRegistration(false)
+            .build();
+    BeanA beanA = BeanA.createBeanA(2);
+    Assert.assertEquals(fory.deserialize(fory.serialize(beanA)), beanA);
+    byte[] serialized = fory.serializeJavaObject(beanA);
+    Assert.assertEquals(fory.deserializeJavaObject(serialized, BeanA.class), beanA);
+  }
+
+  @Test
+  public void testSerializeJavaObjectWithClassInfo() {
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.JAVA)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .requireClassRegistration(false)
+            .build();
+    BeanA beanA = BeanA.createBeanA(2);
+    byte[] serialized = fory.serializeJavaObjectAndClass(beanA);
+    Assert.assertEquals(fory.deserializeJavaObjectAndClass(serialized), beanA);
   }
 }

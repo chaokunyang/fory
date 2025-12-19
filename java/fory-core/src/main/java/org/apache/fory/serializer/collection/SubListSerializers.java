@@ -70,9 +70,10 @@ public class SubListSerializers {
     for (Class<?> cls :
         new Class[] {SubListClass, RandomAccessSubListClass, ArrayListSubListClass}) {
       if (fory.trackingRef() && preserveView && !fory.isCrossLanguage()) {
-        classResolver.registerSerializer(cls, new SubListViewSerializer(fory, cls));
+        classResolver.registerInternalSerializer(cls, new SubListViewSerializer(fory, cls));
       } else {
-        classResolver.registerSerializer(cls, new SubListSerializer(fory, (Class<List>) cls));
+        classResolver.registerInternalSerializer(
+            cls, new SubListSerializer(fory, (Class<List>) cls));
       }
     }
   }

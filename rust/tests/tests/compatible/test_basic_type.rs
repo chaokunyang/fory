@@ -44,82 +44,82 @@ const FLOAT64_ARRAY: [f64; 1] = [53.0];
 
 fn serialize_non_null(fory: &Fory) -> Vec<u8> {
     let mut buf = Vec::new();
-    fory.serialize_to(&BOOL_VAL, &mut buf).unwrap();
-    fory.serialize_to(&I8_VAL, &mut buf).unwrap();
-    fory.serialize_to(&I16_VAL, &mut buf).unwrap();
-    fory.serialize_to(&I32_VAL, &mut buf).unwrap();
-    fory.serialize_to(&I64_VAL, &mut buf).unwrap();
-    fory.serialize_to(&F32_VAL, &mut buf).unwrap();
-    fory.serialize_to(&F64_VAL, &mut buf).unwrap();
-    fory.serialize_to(&STR_LATIN1_VAL.to_string(), &mut buf)
+    fory.serialize_to(&mut buf, &BOOL_VAL).unwrap();
+    fory.serialize_to(&mut buf, &I8_VAL).unwrap();
+    fory.serialize_to(&mut buf, &I16_VAL).unwrap();
+    fory.serialize_to(&mut buf, &I32_VAL).unwrap();
+    fory.serialize_to(&mut buf, &I64_VAL).unwrap();
+    fory.serialize_to(&mut buf, &F32_VAL).unwrap();
+    fory.serialize_to(&mut buf, &F64_VAL).unwrap();
+    fory.serialize_to(&mut buf, &STR_LATIN1_VAL.to_string())
         .unwrap();
-    fory.serialize_to(&LOCAL_DATE_VAL, &mut buf).unwrap();
-    fory.serialize_to(&TIMESTAMP_VAL, &mut buf).unwrap();
-    fory.serialize_to(&BOOL_ARRAY.to_vec(), &mut buf).unwrap();
-    fory.serialize_to(&INT8_ARRAY.to_vec(), &mut buf).unwrap();
-    fory.serialize_to(&INT16_ARRAY.to_vec(), &mut buf).unwrap();
-    fory.serialize_to(&INT32_ARRAY.to_vec(), &mut buf).unwrap();
-    fory.serialize_to(&INT64_ARRAY.to_vec(), &mut buf).unwrap();
-    fory.serialize_to(&FLOAT32_ARRAY.to_vec(), &mut buf)
+    fory.serialize_to(&mut buf, &LOCAL_DATE_VAL).unwrap();
+    fory.serialize_to(&mut buf, &TIMESTAMP_VAL).unwrap();
+    fory.serialize_to(&mut buf, &BOOL_ARRAY.to_vec()).unwrap();
+    fory.serialize_to(&mut buf, &INT8_ARRAY.to_vec()).unwrap();
+    fory.serialize_to(&mut buf, &INT16_ARRAY.to_vec()).unwrap();
+    fory.serialize_to(&mut buf, &INT32_ARRAY.to_vec()).unwrap();
+    fory.serialize_to(&mut buf, &INT64_ARRAY.to_vec()).unwrap();
+    fory.serialize_to(&mut buf, &FLOAT32_ARRAY.to_vec())
         .unwrap();
-    fory.serialize_to(&FLOAT64_ARRAY.to_vec(), &mut buf)
+    fory.serialize_to(&mut buf, &FLOAT64_ARRAY.to_vec())
         .unwrap();
     buf
 }
 
 fn serialize_nullable(fory: &Fory) -> Vec<u8> {
     let mut buf = Vec::new();
-    fory.serialize_to(&Some(BOOL_VAL), &mut buf).unwrap();
-    fory.serialize_to(&Some(I8_VAL), &mut buf).unwrap();
-    fory.serialize_to(&Some(I16_VAL), &mut buf).unwrap();
-    fory.serialize_to(&Some(I32_VAL), &mut buf).unwrap();
-    fory.serialize_to(&Some(I64_VAL), &mut buf).unwrap();
-    fory.serialize_to(&Some(F32_VAL), &mut buf).unwrap();
-    fory.serialize_to(&Some(F64_VAL), &mut buf).unwrap();
-    fory.serialize_to(&Some(STR_LATIN1_VAL.to_string()), &mut buf)
+    fory.serialize_to(&mut buf, &Some(BOOL_VAL)).unwrap();
+    fory.serialize_to(&mut buf, &Some(I8_VAL)).unwrap();
+    fory.serialize_to(&mut buf, &Some(I16_VAL)).unwrap();
+    fory.serialize_to(&mut buf, &Some(I32_VAL)).unwrap();
+    fory.serialize_to(&mut buf, &Some(I64_VAL)).unwrap();
+    fory.serialize_to(&mut buf, &Some(F32_VAL)).unwrap();
+    fory.serialize_to(&mut buf, &Some(F64_VAL)).unwrap();
+    fory.serialize_to(&mut buf, &Some(STR_LATIN1_VAL.to_string()))
         .unwrap();
-    fory.serialize_to(&Some(LOCAL_DATE_VAL), &mut buf).unwrap();
-    fory.serialize_to(&Some(TIMESTAMP_VAL), &mut buf).unwrap();
-    fory.serialize_to(&Some(BOOL_ARRAY.to_vec()), &mut buf)
+    fory.serialize_to(&mut buf, &Some(LOCAL_DATE_VAL)).unwrap();
+    fory.serialize_to(&mut buf, &Some(TIMESTAMP_VAL)).unwrap();
+    fory.serialize_to(&mut buf, &Some(BOOL_ARRAY.to_vec()))
         .unwrap();
-    fory.serialize_to(&Some(INT8_ARRAY.to_vec()), &mut buf)
+    fory.serialize_to(&mut buf, &Some(INT8_ARRAY.to_vec()))
         .unwrap();
-    fory.serialize_to(&Some(INT16_ARRAY.to_vec()), &mut buf)
+    fory.serialize_to(&mut buf, &Some(INT16_ARRAY.to_vec()))
         .unwrap();
-    fory.serialize_to(&Some(INT32_ARRAY.to_vec()), &mut buf)
+    fory.serialize_to(&mut buf, &Some(INT32_ARRAY.to_vec()))
         .unwrap();
-    fory.serialize_to(&Some(INT64_ARRAY.to_vec()), &mut buf)
+    fory.serialize_to(&mut buf, &Some(INT64_ARRAY.to_vec()))
         .unwrap();
-    fory.serialize_to(&Some(FLOAT32_ARRAY.to_vec()), &mut buf)
+    fory.serialize_to(&mut buf, &Some(FLOAT32_ARRAY.to_vec()))
         .unwrap();
-    fory.serialize_to(&Some(FLOAT64_ARRAY.to_vec()), &mut buf)
+    fory.serialize_to(&mut buf, &Some(FLOAT64_ARRAY.to_vec()))
         .unwrap();
-    fory.serialize_to(&Option::<bool>::None, &mut buf).unwrap();
-    fory.serialize_to(&Option::<i8>::None, &mut buf).unwrap();
-    fory.serialize_to(&Option::<i16>::None, &mut buf).unwrap();
-    fory.serialize_to(&Option::<i32>::None, &mut buf).unwrap();
-    fory.serialize_to(&Option::<i64>::None, &mut buf).unwrap();
-    fory.serialize_to(&Option::<f32>::None, &mut buf).unwrap();
-    fory.serialize_to(&Option::<f64>::None, &mut buf).unwrap();
-    fory.serialize_to(&Option::<String>::None, &mut buf)
+    fory.serialize_to(&mut buf, &Option::<bool>::None).unwrap();
+    fory.serialize_to(&mut buf, &Option::<i8>::None).unwrap();
+    fory.serialize_to(&mut buf, &Option::<i16>::None).unwrap();
+    fory.serialize_to(&mut buf, &Option::<i32>::None).unwrap();
+    fory.serialize_to(&mut buf, &Option::<i64>::None).unwrap();
+    fory.serialize_to(&mut buf, &Option::<f32>::None).unwrap();
+    fory.serialize_to(&mut buf, &Option::<f64>::None).unwrap();
+    fory.serialize_to(&mut buf, &Option::<String>::None)
         .unwrap();
-    fory.serialize_to(&Option::<NaiveDate>::None, &mut buf)
+    fory.serialize_to(&mut buf, &Option::<NaiveDate>::None)
         .unwrap();
-    fory.serialize_to(&Option::<NaiveDateTime>::None, &mut buf)
+    fory.serialize_to(&mut buf, &Option::<NaiveDateTime>::None)
         .unwrap();
-    fory.serialize_to(&Option::<Vec<bool>>::None, &mut buf)
+    fory.serialize_to(&mut buf, &Option::<Vec<bool>>::None)
         .unwrap();
-    fory.serialize_to(&Option::<Vec<i8>>::None, &mut buf)
+    fory.serialize_to(&mut buf, &Option::<Vec<i8>>::None)
         .unwrap();
-    fory.serialize_to(&Option::<Vec<i16>>::None, &mut buf)
+    fory.serialize_to(&mut buf, &Option::<Vec<i16>>::None)
         .unwrap();
-    fory.serialize_to(&Option::<Vec<i32>>::None, &mut buf)
+    fory.serialize_to(&mut buf, &Option::<Vec<i32>>::None)
         .unwrap();
-    fory.serialize_to(&Option::<Vec<i64>>::None, &mut buf)
+    fory.serialize_to(&mut buf, &Option::<Vec<i64>>::None)
         .unwrap();
-    fory.serialize_to(&Option::<Vec<f32>>::None, &mut buf)
+    fory.serialize_to(&mut buf, &Option::<Vec<f32>>::None)
         .unwrap();
-    fory.serialize_to(&Option::<Vec<f64>>::None, &mut buf)
+    fory.serialize_to(&mut buf, &Option::<Vec<f64>>::None)
         .unwrap();
     buf
 }

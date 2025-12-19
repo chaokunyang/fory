@@ -41,7 +41,7 @@
 //! - **🔄 Circular References**: Automatic tracking of shared and circular references with `Rc`/`Arc` and weak pointers
 //! - **🧬 Polymorphic**: Serialize trait objects with `Box<dyn Trait>`, `Rc<dyn Trait>`, and `Arc<dyn Trait>`
 //! - **📦 Schema Evolution**: Compatible mode for independent schema changes
-//! - **⚡ Two Modes**: Object graph serialization and zero-copy row-based format
+//! - **⚡ Two Formats**: Object graph serialization and zero-copy row-based format
 //!
 //! ## Quick Start
 //!
@@ -83,7 +83,7 @@
 //!
 //! // Serialize to specified buffer and deserialize from it
 //! let mut buf: Vec<u8> = vec![];
-//! fory.serialize_to(&user, &mut buf)?;
+//! fory.serialize_to(&mut buf, &user)?;
 //! let mut reader = Reader::new(&buf);
 //! let decoded: User = fory.deserialize_from(&mut reader)?;
 //! assert_eq!(user, decoded);

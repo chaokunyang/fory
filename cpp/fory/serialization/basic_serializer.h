@@ -23,11 +23,7 @@
 #include "fory/serialization/serializer_traits.h"
 #include "fory/type/type.h"
 #include "fory/util/error.h"
-#include "fory/util/result.h"
-#include "fory/util/string_util.h"
 #include <cstdint>
-#include <cstring>
-#include <string>
 #include <type_traits>
 
 namespace fory {
@@ -535,12 +531,12 @@ template <> struct Serializer<double> {
 };
 
 // ============================================================================
-// Unsigned Integer Type Serializers
+// Character Type Serializers (C++ native only, not supported in xlang mode)
 // ============================================================================
 
-/// uint8_t serializer
-template <> struct Serializer<uint8_t> {
-  static constexpr TypeId type_id = TypeId::INT8;
+/// char serializer (C++ native only, type_id = 68)
+template <> struct Serializer<char> {
+  static constexpr TypeId type_id = TypeId::CHAR;
 
   static inline void write_type_info(WriteContext &ctx) {
     ctx.write_varuint32(static_cast<uint32_t>(type_id));
@@ -557,7 +553,7 @@ template <> struct Serializer<uint8_t> {
     }
   }
 
-  static inline void write(uint8_t value, WriteContext &ctx, bool write_ref,
+  static inline void write(char value, WriteContext &ctx, bool write_ref,
                            bool write_type, bool has_generics = false) {
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
@@ -566,51 +562,51 @@ template <> struct Serializer<uint8_t> {
     write_data(value, ctx);
   }
 
-  static inline void write_data(uint8_t value, WriteContext &ctx) {
-    ctx.write_uint8(value);
+  static inline void write_data(char value, WriteContext &ctx) {
+    ctx.write_int8(static_cast<int8_t>(value));
   }
 
-  static inline void write_data_generic(uint8_t value, WriteContext &ctx,
+  static inline void write_data_generic(char value, WriteContext &ctx,
                                         bool has_generics) {
     write_data(value, ctx);
   }
 
-  static inline uint8_t read(ReadContext &ctx, bool read_ref, bool read_type) {
+  static inline char read(ReadContext &ctx, bool read_ref, bool read_type) {
     bool has_value = consume_ref_flag(ctx, read_ref);
     if (ctx.has_error() || !has_value) {
-      return 0;
+      return '\0';
     }
     if (read_type) {
       uint32_t type_id_read = ctx.read_varuint32(ctx.error());
       if (FORY_PREDICT_FALSE(ctx.has_error())) {
-        return 0;
+        return '\0';
       }
       if (type_id_read != static_cast<uint32_t>(type_id)) {
         ctx.set_error(
             Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
-        return 0;
+        return '\0';
       }
     }
-    return ctx.read_uint8(ctx.error());
-  }
-
-  static inline uint8_t read_data(ReadContext &ctx) {
-    return ctx.read_uint8(ctx.error());
-  }
-
-  static inline uint8_t read_data_generic(ReadContext &ctx, bool has_generics) {
     return read_data(ctx);
   }
 
-  static inline uint8_t read_with_type_info(ReadContext &ctx, bool read_ref,
-                                            const TypeInfo &type_info) {
+  static inline char read_data(ReadContext &ctx) {
+    return static_cast<char>(ctx.read_int8(ctx.error()));
+  }
+
+  static inline char read_data_generic(ReadContext &ctx, bool has_generics) {
+    return read_data(ctx);
+  }
+
+  static inline char read_with_type_info(ReadContext &ctx, bool read_ref,
+                                         const TypeInfo &type_info) {
     return read(ctx, read_ref, false);
   }
 };
 
-/// uint16_t serializer
-template <> struct Serializer<uint16_t> {
-  static constexpr TypeId type_id = TypeId::INT16;
+/// char16_t serializer (C++ native only, type_id = 69)
+template <> struct Serializer<char16_t> {
+  static constexpr TypeId type_id = TypeId::CHAR16;
 
   static inline void write_type_info(WriteContext &ctx) {
     ctx.write_varuint32(static_cast<uint32_t>(type_id));
@@ -627,7 +623,7 @@ template <> struct Serializer<uint16_t> {
     }
   }
 
-  static inline void write(uint16_t value, WriteContext &ctx, bool write_ref,
+  static inline void write(char16_t value, WriteContext &ctx, bool write_ref,
                            bool write_type, bool has_generics = false) {
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
@@ -636,52 +632,55 @@ template <> struct Serializer<uint16_t> {
     write_data(value, ctx);
   }
 
-  static inline void write_data(uint16_t value, WriteContext &ctx) {
-    ctx.write_bytes(&value, sizeof(uint16_t));
+  static inline void write_data(char16_t value, WriteContext &ctx) {
+    ctx.write_bytes(&value, sizeof(char16_t));
   }
 
-  static inline void write_data_generic(uint16_t value, WriteContext &ctx,
+  static inline void write_data_generic(char16_t value, WriteContext &ctx,
                                         bool has_generics) {
     write_data(value, ctx);
   }
 
-  static inline uint16_t read(ReadContext &ctx, bool read_ref, bool read_type) {
+  static inline char16_t read(ReadContext &ctx, bool read_ref, bool read_type) {
     bool has_value = consume_ref_flag(ctx, read_ref);
     if (ctx.has_error() || !has_value) {
-      return 0;
+      return u'\0';
     }
     if (read_type) {
       uint32_t type_id_read = ctx.read_varuint32(ctx.error());
       if (FORY_PREDICT_FALSE(ctx.has_error())) {
-        return 0;
+        return u'\0';
       }
       if (type_id_read != static_cast<uint32_t>(type_id)) {
         ctx.set_error(
             Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
-        return 0;
+        return u'\0';
       }
     }
-    return ctx.read_uint16(ctx.error());
+    return read_data(ctx);
   }
 
-  static inline uint16_t read_data(ReadContext &ctx) {
-    return ctx.read_uint16(ctx.error());
+  static inline char16_t read_data(ReadContext &ctx) {
+    char16_t value;
+    ctx.read_bytes(reinterpret_cast<uint8_t *>(&value), sizeof(char16_t),
+                   ctx.error());
+    return value;
   }
 
-  static inline uint16_t read_data_generic(ReadContext &ctx,
+  static inline char16_t read_data_generic(ReadContext &ctx,
                                            bool has_generics) {
     return read_data(ctx);
   }
 
-  static inline uint16_t read_with_type_info(ReadContext &ctx, bool read_ref,
+  static inline char16_t read_with_type_info(ReadContext &ctx, bool read_ref,
                                              const TypeInfo &type_info) {
     return read(ctx, read_ref, false);
   }
 };
 
-/// uint32_t serializer
-template <> struct Serializer<uint32_t> {
-  static constexpr TypeId type_id = TypeId::INT32;
+/// char32_t serializer (C++ native only, type_id = 70)
+template <> struct Serializer<char32_t> {
+  static constexpr TypeId type_id = TypeId::CHAR32;
 
   static inline void write_type_info(WriteContext &ctx) {
     ctx.write_varuint32(static_cast<uint32_t>(type_id));
@@ -698,7 +697,7 @@ template <> struct Serializer<uint32_t> {
     }
   }
 
-  static inline void write(uint32_t value, WriteContext &ctx, bool write_ref,
+  static inline void write(char32_t value, WriteContext &ctx, bool write_ref,
                            bool write_type, bool has_generics = false) {
     write_not_null_ref_flag(ctx, write_ref);
     if (write_type) {
@@ -707,269 +706,48 @@ template <> struct Serializer<uint32_t> {
     write_data(value, ctx);
   }
 
-  static inline void write_data(uint32_t value, WriteContext &ctx) {
-    ctx.write_bytes(&value, sizeof(uint32_t));
+  static inline void write_data(char32_t value, WriteContext &ctx) {
+    ctx.write_bytes(&value, sizeof(char32_t));
   }
 
-  static inline void write_data_generic(uint32_t value, WriteContext &ctx,
+  static inline void write_data_generic(char32_t value, WriteContext &ctx,
                                         bool has_generics) {
     write_data(value, ctx);
   }
 
-  static inline uint32_t read(ReadContext &ctx, bool read_ref, bool read_type) {
+  static inline char32_t read(ReadContext &ctx, bool read_ref, bool read_type) {
     bool has_value = consume_ref_flag(ctx, read_ref);
     if (ctx.has_error() || !has_value) {
-      return 0;
+      return U'\0';
     }
     if (read_type) {
       uint32_t type_id_read = ctx.read_varuint32(ctx.error());
       if (FORY_PREDICT_FALSE(ctx.has_error())) {
-        return 0;
+        return U'\0';
       }
       if (type_id_read != static_cast<uint32_t>(type_id)) {
         ctx.set_error(
             Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
-        return 0;
+        return U'\0';
       }
     }
-    return ctx.read_uint32(ctx.error());
+    return read_data(ctx);
   }
 
-  static inline uint32_t read_data(ReadContext &ctx) {
-    return ctx.read_uint32(ctx.error());
+  static inline char32_t read_data(ReadContext &ctx) {
+    char32_t value;
+    ctx.read_bytes(reinterpret_cast<uint8_t *>(&value), sizeof(char32_t),
+                   ctx.error());
+    return value;
   }
 
-  static inline uint32_t read_data_generic(ReadContext &ctx,
+  static inline char32_t read_data_generic(ReadContext &ctx,
                                            bool has_generics) {
     return read_data(ctx);
   }
 
-  static inline uint32_t read_with_type_info(ReadContext &ctx, bool read_ref,
+  static inline char32_t read_with_type_info(ReadContext &ctx, bool read_ref,
                                              const TypeInfo &type_info) {
-    return read(ctx, read_ref, false);
-  }
-};
-
-/// uint64_t serializer
-template <> struct Serializer<uint64_t> {
-  static constexpr TypeId type_id = TypeId::INT64;
-
-  static inline void write_type_info(WriteContext &ctx) {
-    ctx.write_varuint32(static_cast<uint32_t>(type_id));
-  }
-
-  static inline void read_type_info(ReadContext &ctx) {
-    uint32_t actual = ctx.read_varuint32(ctx.error());
-    if (FORY_PREDICT_FALSE(ctx.has_error())) {
-      return;
-    }
-    if (actual != static_cast<uint32_t>(type_id)) {
-      ctx.set_error(
-          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
-    }
-  }
-
-  static inline void write(uint64_t value, WriteContext &ctx, bool write_ref,
-                           bool write_type, bool has_generics = false) {
-    write_not_null_ref_flag(ctx, write_ref);
-    if (write_type) {
-      ctx.write_varuint32(static_cast<uint32_t>(type_id));
-    }
-    write_data(value, ctx);
-  }
-
-  static inline void write_data(uint64_t value, WriteContext &ctx) {
-    ctx.write_bytes(&value, sizeof(uint64_t));
-  }
-
-  static inline void write_data_generic(uint64_t value, WriteContext &ctx,
-                                        bool has_generics) {
-    write_data(value, ctx);
-  }
-
-  static inline uint64_t read(ReadContext &ctx, bool read_ref, bool read_type) {
-    bool has_value = consume_ref_flag(ctx, read_ref);
-    if (ctx.has_error() || !has_value) {
-      return 0;
-    }
-    if (read_type) {
-      uint32_t type_id_read = ctx.read_varuint32(ctx.error());
-      if (FORY_PREDICT_FALSE(ctx.has_error())) {
-        return 0;
-      }
-      if (type_id_read != static_cast<uint32_t>(type_id)) {
-        ctx.set_error(
-            Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
-        return 0;
-      }
-    }
-    return ctx.read_uint64(ctx.error());
-  }
-
-  static inline uint64_t read_data(ReadContext &ctx) {
-    return ctx.read_uint64(ctx.error());
-  }
-
-  static inline uint64_t read_data_generic(ReadContext &ctx,
-                                           bool has_generics) {
-    return read_data(ctx);
-  }
-
-  static inline uint64_t read_with_type_info(ReadContext &ctx, bool read_ref,
-                                             const TypeInfo &type_info) {
-    return read(ctx, read_ref, false);
-  }
-};
-
-// ============================================================================
-// String Serializer
-// ============================================================================
-
-/// std::string serializer using UTF-8 encoding per xlang spec
-template <> struct Serializer<std::string> {
-  static constexpr TypeId type_id = TypeId::STRING;
-
-  // String encoding types as per xlang spec
-  enum class StringEncoding : uint8_t {
-    LATIN1 = 0, // Latin1/ISO-8859-1
-    UTF16 = 1,  // UTF-16
-    UTF8 = 2,   // UTF-8
-  };
-
-  static inline void write_type_info(WriteContext &ctx) {
-    ctx.write_varuint32(static_cast<uint32_t>(type_id));
-  }
-
-  static inline void read_type_info(ReadContext &ctx) {
-    uint32_t actual = ctx.read_varuint32(ctx.error());
-    if (FORY_PREDICT_FALSE(ctx.has_error())) {
-      return;
-    }
-    if (actual != static_cast<uint32_t>(type_id)) {
-      ctx.set_error(
-          Error::type_mismatch(actual, static_cast<uint32_t>(type_id)));
-    }
-  }
-
-  static inline void write(const std::string &value, WriteContext &ctx,
-                           bool write_ref, bool write_type,
-                           bool has_generics = false) {
-    write_not_null_ref_flag(ctx, write_ref);
-    if (write_type) {
-      ctx.write_varuint32(static_cast<uint32_t>(type_id));
-    }
-    write_data(value, ctx);
-  }
-
-  static inline void write_data(const std::string &value, WriteContext &ctx) {
-    // Always use UTF-8 encoding for cross-language compatibility.
-    // Per xlang spec: write size shifted left by 2 bits, with encoding
-    // (UTF8) in the lower 2 bits. Use varuint36small encoding.
-    uint64_t length = static_cast<uint64_t>(value.size());
-    uint64_t size_with_encoding =
-        (length << 2) | static_cast<uint64_t>(StringEncoding::UTF8);
-    ctx.write_varuint36small(size_with_encoding);
-
-    // Write string bytes
-    if (!value.empty()) {
-      ctx.write_bytes(value.data(), value.size());
-    }
-  }
-
-  static inline void write_data_generic(const std::string &value,
-                                        WriteContext &ctx, bool has_generics) {
-    write_data(value, ctx);
-  }
-
-  static inline std::string read(ReadContext &ctx, bool read_ref,
-                                 bool read_type) {
-    bool has_value = consume_ref_flag(ctx, read_ref);
-    if (ctx.has_error() || !has_value) {
-      return std::string();
-    }
-    if (read_type) {
-      uint32_t type_id_read = ctx.read_varuint32(ctx.error());
-      if (FORY_PREDICT_FALSE(ctx.has_error())) {
-        return std::string();
-      }
-      if (type_id_read != static_cast<uint32_t>(type_id)) {
-        ctx.set_error(
-            Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
-        return std::string();
-      }
-    }
-    return read_data(ctx);
-  }
-
-  static inline std::string read_data(ReadContext &ctx) {
-    // Read size with encoding using varuint36small
-    uint64_t size_with_encoding = ctx.read_varuint36small(ctx.error());
-    if (FORY_PREDICT_FALSE(ctx.has_error())) {
-      return std::string();
-    }
-
-    // Extract size and encoding from lower 2 bits
-    uint64_t length = size_with_encoding >> 2;
-    StringEncoding encoding =
-        static_cast<StringEncoding>(size_with_encoding & 0x3);
-
-    if (length == 0) {
-      return std::string();
-    }
-
-    // Validate length against buffer remaining size
-    if (length > ctx.buffer().remaining_size()) {
-      ctx.set_error(Error::invalid_data("String length exceeds buffer size"));
-      return std::string();
-    }
-
-    // Handle different encodings
-    switch (encoding) {
-    case StringEncoding::LATIN1: {
-      std::vector<uint8_t> bytes(length);
-      ctx.read_bytes(bytes.data(), length, ctx.error());
-      if (FORY_PREDICT_FALSE(ctx.has_error())) {
-        return std::string();
-      }
-      return latin1ToUtf8(bytes.data(), length);
-    }
-    case StringEncoding::UTF16: {
-      if (length % 2 != 0) {
-        ctx.set_error(Error::invalid_data("UTF-16 length must be even"));
-        return std::string();
-      }
-      std::vector<uint16_t> utf16_chars(length / 2);
-      ctx.read_bytes(reinterpret_cast<uint8_t *>(utf16_chars.data()), length,
-                     ctx.error());
-      if (FORY_PREDICT_FALSE(ctx.has_error())) {
-        return std::string();
-      }
-      return utf16ToUtf8(utf16_chars.data(), utf16_chars.size());
-    }
-    case StringEncoding::UTF8: {
-      // UTF-8: read bytes directly
-      std::string result(length, '\0');
-      ctx.read_bytes(&result[0], length, ctx.error());
-      if (FORY_PREDICT_FALSE(ctx.has_error())) {
-        return std::string();
-      }
-      return result;
-    }
-    default:
-      ctx.set_error(
-          Error::encoding_error("Unknown string encoding: " +
-                                std::to_string(static_cast<int>(encoding))));
-      return std::string();
-    }
-  }
-
-  static inline std::string read_data_generic(ReadContext &ctx,
-                                              bool has_generics) {
-    return read_data(ctx);
-  }
-
-  static inline std::string read_with_type_info(ReadContext &ctx, bool read_ref,
-                                                const TypeInfo &type_info) {
     return read(ctx, read_ref, false);
   }
 };

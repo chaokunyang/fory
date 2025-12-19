@@ -36,15 +36,16 @@ import java.util.Set;
 import java.util.Vector;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.fory.Fory;
+import org.apache.fory.builder.LayerMarkerClassGenerator;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.meta.ClassDef;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.ClassResolver;
-import org.apache.fory.resolver.FieldResolver;
 import org.apache.fory.serializer.AbstractObjectSerializer;
 import org.apache.fory.serializer.AbstractObjectSerializer.InternalFieldInfo;
-import org.apache.fory.serializer.CompatibleSerializer;
 import org.apache.fory.serializer.JavaSerializer;
+import org.apache.fory.serializer.MetaSharedLayerSerializer;
 import org.apache.fory.serializer.ObjectSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.util.Preconditions;
@@ -231,16 +232,21 @@ public class ChildContainerSerializers {
       Fory fory, Set<Class<?>> superClasses, Class<T> cls) {
     Preconditions.checkArgument(!superClasses.contains(cls));
     List<Serializer> serializers = new ArrayList<>();
+    int layerIndex = 0;
     while (!superClasses.contains(cls)) {
       Serializer slotsSerializer;
       if (fory.getConfig().getCompatibleMode() == CompatibleMode.COMPATIBLE) {
-        slotsSerializer =
-            new CompatibleSerializer(fory, cls, FieldResolver.of(fory, cls, false, false));
+        ClassDef layerClassDef = fory.getClassResolver().getTypeDef(cls, false);
+        // Use layer index within class hierarchy (not global counter)
+        // This ensures unique marker classes for each layer
+        Class<?> layerMarkerClass = LayerMarkerClassGenerator.getOrCreate(fory, cls, layerIndex);
+        slotsSerializer = new MetaSharedLayerSerializer(fory, cls, layerClassDef, layerMarkerClass);
       } else {
         slotsSerializer = new ObjectSerializer<>(fory, cls, false);
       }
       serializers.add(slotsSerializer);
       cls = (Class<T>) cls.getSuperclass();
+      layerIndex++;
     }
     Collections.reverse(serializers);
     return serializers.toArray(new Serializer[0]);
@@ -249,8 +255,8 @@ public class ChildContainerSerializers {
   private static void readAndSetFields(
       MemoryBuffer buffer, Object collection, Serializer[] slotsSerializers) {
     for (Serializer slotsSerializer : slotsSerializers) {
-      if (slotsSerializer.getClass() == CompatibleSerializer.class) {
-        ((CompatibleSerializer) slotsSerializer).readAndSetFields(buffer, collection);
+      if (slotsSerializer instanceof MetaSharedLayerSerializer) {
+        ((MetaSharedLayerSerializer) slotsSerializer).readAndSetFields(buffer, collection);
       } else {
         ((ObjectSerializer) slotsSerializer).readAndSetFields(buffer, collection);
       }

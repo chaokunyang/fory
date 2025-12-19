@@ -103,9 +103,35 @@ enum class TypeId : int32_t {
   FLOAT32_ARRAY = 36,
   // one-dimensional float64 array.
   FLOAT64_ARRAY = 37,
+  // an union type that can hold different types of values.
+  UNION = 38,
+  // a null value with no data.
+  NONE = 39,
+  // Unsigned integer types (native mode only, not supported in xlang mode)
+  // an 8-bit unsigned integer.
+  U8 = 64,
+  // a 16-bit unsigned integer.
+  U16 = 65,
+  // a 32-bit unsigned integer.
+  U32 = 66,
+  // a 64-bit unsigned integer.
+  U64 = 67,
+  // 8-bits character.
+  CHAR = 68,
+  // 16-bits character
+  CHAR16 = 69,
+  // 32-bits character
+  CHAR32 = 70,
+  // Unsigned integer array types (native mode only)
+  // one-dimensional uint16 array.
+  U16_ARRAY = 73,
+  // one-dimensional uint32 array.
+  U32_ARRAY = 74,
+  // one-dimensional uint64 array.
+  U64_ARRAY = 75,
   // Bound value for range checks (types with id >= BOUND are not internal
   // types).
-  BOUND = 64
+  BOUND = 78
 };
 
 inline bool IsUserType(int32_t type_id) {

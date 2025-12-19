@@ -132,9 +132,9 @@ public final class OptionalSerializers {
 
   public static void registerDefaultSerializers(Fory fory) {
     ClassResolver resolver = fory.getClassResolver();
-    resolver.registerSerializer(Optional.class, new OptionalSerializer(fory));
-    resolver.registerSerializer(OptionalInt.class, new OptionalIntSerializer(fory));
-    resolver.registerSerializer(OptionalLong.class, new OptionalLongSerializer(fory));
-    resolver.registerSerializer(OptionalDouble.class, new OptionalDoubleSerializer(fory));
+    resolver.registerInternalSerializer(Optional.class, new OptionalSerializer(fory));
+    resolver.registerInternalSerializer(OptionalInt.class, new OptionalIntSerializer(fory));
+    resolver.registerInternalSerializer(OptionalLong.class, new OptionalLongSerializer(fory));
+    resolver.registerInternalSerializer(OptionalDouble.class, new OptionalDoubleSerializer(fory));
   }
 }

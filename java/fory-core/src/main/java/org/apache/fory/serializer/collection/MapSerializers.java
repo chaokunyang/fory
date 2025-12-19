@@ -42,7 +42,6 @@ import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.serializer.ReplaceResolveSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.Serializers;
-import org.apache.fory.serializer.StringSerializer;
 import org.apache.fory.util.Preconditions;
 
 /**
@@ -340,29 +339,7 @@ public class MapSerializers {
   public static class StringKeyMapSerializer<T> extends MapSerializer<Map<String, T>> {
 
     public StringKeyMapSerializer(Fory fory, Class<Map<String, T>> cls) {
-      super(fory, cls, false);
-      setKeySerializer(new StringSerializer(fory));
-    }
-
-    @Override
-    public void write(MemoryBuffer buffer, Map<String, T> value) {
-      buffer.writeVarUint32Small7(value.size());
-      for (Map.Entry<String, T> e : value.entrySet()) {
-        fory.writeJavaStringRef(buffer, e.getKey());
-        // If value is a collection, the `newCollection` method will record itself to
-        // reference map, which may get wrong index if this value is written without index.
-        fory.writeRef(buffer, e.getValue());
-      }
-    }
-
-    @Override
-    public Map<String, T> read(MemoryBuffer buffer) {
-      Map map = newMap(buffer);
-      int numElements = getAndClearNumElements();
-      for (int i = 0; i < numElements; i++) {
-        map.put(fory.readJavaStringRef(buffer), fory.readRef(buffer));
-      }
-      return (Map<String, T>) map;
+      super(fory, cls, true);
     }
 
     @Override
@@ -518,27 +495,28 @@ public class MapSerializers {
   // TODO(chaokunyang) support ConcurrentSkipListMap.SubMap mo efficiently.
   public static void registerDefaultSerializers(Fory fory) {
     ClassResolver resolver = fory.getClassResolver();
-    resolver.registerSerializer(HashMap.class, new HashMapSerializer(fory));
+    resolver.registerInternalSerializer(HashMap.class, new HashMapSerializer(fory));
     fory.getClassResolver()
-        .registerSerializer(LinkedHashMap.class, new LinkedHashMapSerializer(fory));
-    resolver.registerSerializer(TreeMap.class, new SortedMapSerializer<>(fory, TreeMap.class));
-    resolver.registerSerializer(
+        .registerInternalSerializer(LinkedHashMap.class, new LinkedHashMapSerializer(fory));
+    resolver.registerInternalSerializer(
+        TreeMap.class, new SortedMapSerializer<>(fory, TreeMap.class));
+    resolver.registerInternalSerializer(
         Collections.EMPTY_MAP.getClass(),
         new EmptyMapSerializer(fory, (Class<Map<?, ?>>) Collections.EMPTY_MAP.getClass()));
-    resolver.registerSerializer(
+    resolver.registerInternalSerializer(
         Collections.emptySortedMap().getClass(),
         new EmptySortedMapSerializer(
             fory, (Class<SortedMap<?, ?>>) Collections.emptySortedMap().getClass()));
-    resolver.registerSerializer(
+    resolver.registerInternalSerializer(
         Collections.singletonMap(null, null).getClass(),
         new SingletonMapSerializer(
             fory, (Class<Map<?, ?>>) Collections.singletonMap(null, null).getClass()));
-    resolver.registerSerializer(
+    resolver.registerInternalSerializer(
         ConcurrentHashMap.class, new ConcurrentHashMapSerializer(fory, ConcurrentHashMap.class));
-    resolver.registerSerializer(
+    resolver.registerInternalSerializer(
         ConcurrentSkipListMap.class,
         new ConcurrentSkipListMapSerializer(fory, ConcurrentSkipListMap.class));
-    resolver.registerSerializer(EnumMap.class, new EnumMapSerializer(fory));
-    resolver.registerSerializer(LazyMap.class, new LazyMapSerializer(fory));
+    resolver.registerInternalSerializer(EnumMap.class, new EnumMapSerializer(fory));
+    resolver.registerInternalSerializer(LazyMap.class, new LazyMapSerializer(fory));
   }
 }

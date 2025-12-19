@@ -282,7 +282,7 @@ public final class NonexistentClassSerializers {
                   "Serializer of class %s should be set in ClassResolver#getMetaSharedClassInfo",
                   className));
         } else {
-          return new CompatibleSerializer(fory, cls);
+          return new ObjectSerializer(fory, cls);
         }
       }
     }

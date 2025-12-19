@@ -709,22 +709,22 @@ public class TimeSerializers {
 
   public static void registerDefaultSerializers(Fory fory) {
     ClassResolver resolver = fory.getClassResolver();
-    resolver.registerSerializer(Date.class, new DateSerializer(fory));
-    resolver.registerSerializer(java.sql.Date.class, new SqlDateSerializer(fory));
-    resolver.registerSerializer(Time.class, new SqlTimeSerializer(fory));
-    resolver.registerSerializer(Timestamp.class, new TimestampSerializer(fory));
-    resolver.registerSerializer(LocalDate.class, new LocalDateSerializer(fory));
-    resolver.registerSerializer(LocalTime.class, new LocalTimeSerializer(fory));
-    resolver.registerSerializer(LocalDateTime.class, new LocalDateTimeSerializer(fory));
-    resolver.registerSerializer(Instant.class, new InstantSerializer(fory));
-    resolver.registerSerializer(Duration.class, new DurationSerializer(fory));
-    resolver.registerSerializer(ZoneOffset.class, new ZoneOffsetSerializer(fory));
-    resolver.registerSerializer(ZonedDateTime.class, new ZonedDateTimeSerializer(fory));
-    resolver.registerSerializer(Year.class, new YearSerializer(fory));
-    resolver.registerSerializer(YearMonth.class, new YearMonthSerializer(fory));
-    resolver.registerSerializer(MonthDay.class, new MonthDaySerializer(fory));
-    resolver.registerSerializer(Period.class, new PeriodSerializer(fory));
-    resolver.registerSerializer(OffsetTime.class, new OffsetTimeSerializer(fory));
-    resolver.registerSerializer(OffsetDateTime.class, new OffsetDateTimeSerializer(fory));
+    resolver.registerInternalSerializer(Date.class, new DateSerializer(fory));
+    resolver.registerInternalSerializer(java.sql.Date.class, new SqlDateSerializer(fory));
+    resolver.registerInternalSerializer(Time.class, new SqlTimeSerializer(fory));
+    resolver.registerInternalSerializer(Timestamp.class, new TimestampSerializer(fory));
+    resolver.registerInternalSerializer(LocalDate.class, new LocalDateSerializer(fory));
+    resolver.registerInternalSerializer(LocalTime.class, new LocalTimeSerializer(fory));
+    resolver.registerInternalSerializer(LocalDateTime.class, new LocalDateTimeSerializer(fory));
+    resolver.registerInternalSerializer(Instant.class, new InstantSerializer(fory));
+    resolver.registerInternalSerializer(Duration.class, new DurationSerializer(fory));
+    resolver.registerInternalSerializer(ZoneOffset.class, new ZoneOffsetSerializer(fory));
+    resolver.registerInternalSerializer(ZonedDateTime.class, new ZonedDateTimeSerializer(fory));
+    resolver.registerInternalSerializer(Year.class, new YearSerializer(fory));
+    resolver.registerInternalSerializer(YearMonth.class, new YearMonthSerializer(fory));
+    resolver.registerInternalSerializer(MonthDay.class, new MonthDaySerializer(fory));
+    resolver.registerInternalSerializer(Period.class, new PeriodSerializer(fory));
+    resolver.registerInternalSerializer(OffsetTime.class, new OffsetTimeSerializer(fory));
+    resolver.registerInternalSerializer(OffsetDateTime.class, new OffsetDateTimeSerializer(fory));
   }
 }

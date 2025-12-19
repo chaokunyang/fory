@@ -35,7 +35,6 @@ public class ScopedCompatibleExample {
             .withName(ScopedCompatibleExample.class.getName())
             .requireClassRegistration(true)
             .withCompatibleMode(CompatibleMode.COMPATIBLE)
-            .withScopedMetaShare(true)
             .build();
     // register and generate serializer code.
     fory.register(Foo.class);

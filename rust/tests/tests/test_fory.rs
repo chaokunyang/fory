@@ -63,12 +63,12 @@ fn test_serialize_to_appends_bytes() {
     let expected_second = fory.serialize(&p2).unwrap();
 
     let mut buf = Vec::new();
-    let len_first = fory.serialize_to(&p1, &mut buf).unwrap();
+    let len_first = fory.serialize_to(&mut buf, &p1).unwrap();
     assert_eq!(len_first, expected_first.len());
     assert_eq!(buf.len(), len_first);
     assert_eq!(&buf[..len_first], &expected_first);
 
-    let len_second = fory.serialize_to(&p2, &mut buf).unwrap();
+    let len_second = fory.serialize_to(&mut buf, &p2).unwrap();
     assert_eq!(len_second, expected_second.len());
     assert_eq!(buf.len(), len_first + len_second);
     assert_eq!(&buf[len_first..], &expected_second);
@@ -96,7 +96,7 @@ fn test_serialize_to_detailed() {
     // Test 1: Basic serialization to empty buffer
     let p1 = Point { x: 10, y: 20 };
     let mut buf = Vec::new();
-    let len1 = fory.serialize_to(&p1, &mut buf).unwrap();
+    let len1 = fory.serialize_to(&mut buf, &p1).unwrap();
     assert_eq!(len1, buf.len());
     let deserialized1: Point = fory.deserialize_from(&mut Reader::new(&buf)).unwrap();
     assert_eq!(p1, deserialized1);
@@ -106,9 +106,9 @@ fn test_serialize_to_detailed() {
     let p3 = Point { x: 0, y: 0 };
 
     buf.clear();
-    let len2_first = fory.serialize_to(&p2, &mut buf).unwrap();
+    let len2_first = fory.serialize_to(&mut buf, &p2).unwrap();
     let offset1 = buf.len();
-    let len2_second = fory.serialize_to(&p3, &mut buf).unwrap();
+    let len2_second = fory.serialize_to(&mut buf, &p3).unwrap();
     let offset2 = buf.len();
 
     assert_eq!(offset1, len2_first);
@@ -129,7 +129,7 @@ fn test_serialize_to_detailed() {
     };
 
     buf.clear();
-    let len3 = fory.serialize_to(&line, &mut buf).unwrap();
+    let len3 = fory.serialize_to(&mut buf, &line).unwrap();
     assert_eq!(len3, buf.len());
     let deserialized_line: Line = fory.deserialize_from(&mut Reader::new(&buf)).unwrap();
     assert_eq!(line, deserialized_line);
@@ -143,7 +143,7 @@ fn test_serialize_to_detailed() {
     let header_size = buf.len();
 
     // Serialize data after header
-    let data_len = fory.serialize_to(&p4, &mut buf).unwrap();
+    let data_len = fory.serialize_to(&mut buf, &p4).unwrap();
 
     // Write the data length into the header
     buf[0..8].copy_from_slice(&(data_len as u64).to_le_bytes());
@@ -164,14 +164,14 @@ fn test_serialize_to_detailed() {
     buf_with_capacity.resize(16, 0);
 
     let initial_capacity = buf_with_capacity.capacity();
-    fory.serialize_to(&p1, &mut buf_with_capacity).unwrap();
+    fory.serialize_to(&mut buf_with_capacity, &p1).unwrap();
 
     // Reset to smaller size - capacity should remain unchanged
     buf_with_capacity.resize(16, 0);
     assert_eq!(buf_with_capacity.capacity(), initial_capacity);
 
     // Serialize again - should not reallocate
-    fory.serialize_to(&p2, &mut buf_with_capacity).unwrap();
+    fory.serialize_to(&mut buf_with_capacity, &p2).unwrap();
     assert_eq!(buf_with_capacity.capacity(), initial_capacity);
 
     // Test 6: Serializing many objects sequentially
@@ -185,7 +185,7 @@ fn test_serialize_to_detailed() {
     ];
 
     for point in &points {
-        fory.serialize_to(point, &mut buf).unwrap();
+        fory.serialize_to(&mut buf, point).unwrap();
     }
 
     // Deserialize all objects and verify using a single reader

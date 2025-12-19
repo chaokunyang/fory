@@ -44,13 +44,17 @@ import org.testng.Assert;
 import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 
+/**
+ * Tests for compatible mode serialization using meta-shared approach with codegen. These tests
+ * verify forward/backward compatibility when using {@link CompatibleMode#COMPATIBLE} with scoped
+ * meta share and codegen enabled.
+ */
 public class CodegenCompatibleSerializerTest extends ForyTestBase {
 
   @DataProvider(name = "config")
   public static Object[][] config() {
     return Sets.cartesianProduct(
             ImmutableSet.of(true, false), // referenceTracking
-            ImmutableSet.of(true, false), // scopedMetaShare
             ImmutableSet.of(true, false)) // enable codegen
         .stream()
         .map(List::toArray)
@@ -65,12 +69,11 @@ public class CodegenCompatibleSerializerTest extends ForyTestBase {
   }
 
   @Test(dataProvider = "config")
-  public void testWrite(boolean referenceTracking, boolean scopedMetaShare, boolean enableCodegen) {
+  public void testWrite(boolean referenceTracking, boolean enableCodegen) {
     Fory fory =
         foryBuilder()
             .withRefTracking(referenceTracking)
             .withCodegen(enableCodegen)
-            .withScopedMetaShare(scopedMetaShare)
             .withCompatibleMode(CompatibleMode.COMPATIBLE)
             .build();
     serDeCheck(fory, Foo.create());
@@ -79,12 +82,11 @@ public class CodegenCompatibleSerializerTest extends ForyTestBase {
   }
 
   @Test(dataProvider = "config")
-  public void testCopy(boolean referenceTracking, boolean scopedMetaShare, boolean enableCodegen) {
+  public void testCopy(boolean referenceTracking, boolean enableCodegen) {
     Fory fory =
         foryBuilder()
             .withRefCopy(referenceTracking)
             .withCodegen(enableCodegen)
-            .withScopedMetaShare(scopedMetaShare)
             .withCompatibleMode(CompatibleMode.COMPATIBLE)
             .build();
     copyCheck(fory, Foo.create());
@@ -93,8 +95,8 @@ public class CodegenCompatibleSerializerTest extends ForyTestBase {
   }
 
   @Test(dataProvider = "config")
-  public void testWriteCompatibleBasic(
-      boolean referenceTracking, boolean scopedMetaShare, boolean enableCodegen) throws Exception {
+  public void testWriteCompatibleBasic(boolean referenceTracking, boolean enableCodegen)
+      throws Exception {
     Supplier<ForyBuilder> builder =
         () ->
             Fory.builder()
@@ -102,7 +104,6 @@ public class CodegenCompatibleSerializerTest extends ForyTestBase {
                 .withRefTracking(referenceTracking)
                 .withCodegen(enableCodegen)
                 .withCompatibleMode(CompatibleMode.COMPATIBLE)
-                .withScopedMetaShare(scopedMetaShare)
                 .requireClassRegistration(false);
     Fory fory = builder.get().build();
     Object foo = Foo.create();
@@ -142,8 +143,8 @@ public class CodegenCompatibleSerializerTest extends ForyTestBase {
   }
 
   @Test(dataProvider = "config")
-  public void testWriteCompatibleBasicCopy(
-      boolean referenceTracking, boolean scopedMetaShare, boolean enableCodegen) throws Exception {
+  public void testWriteCompatibleBasicCopy(boolean referenceTracking, boolean enableCodegen)
+      throws Exception {
     Supplier<ForyBuilder> builder =
         () ->
             Fory.builder()
@@ -151,7 +152,6 @@ public class CodegenCompatibleSerializerTest extends ForyTestBase {
                 .withRefCopy(referenceTracking)
                 .withCodegen(enableCodegen)
                 .withCompatibleMode(CompatibleMode.COMPATIBLE)
-                .withScopedMetaShare(scopedMetaShare)
                 .requireClassRegistration(false);
     Fory fory = builder.get().build();
     Object foo = Foo.create();
@@ -175,8 +175,8 @@ public class CodegenCompatibleSerializerTest extends ForyTestBase {
   }
 
   @Test(dataProvider = "config")
-  public void testWriteCompatibleCollectionBasic(
-      boolean referenceTracking, boolean scopedMetaShare, boolean enableCodegen) throws Exception {
+  public void testWriteCompatibleCollectionBasic(boolean referenceTracking, boolean enableCodegen)
+      throws Exception {
     BeanA beanA = BeanA.createBeanA(2);
     Supplier<ForyBuilder> builder =
         () ->
@@ -185,7 +185,6 @@ public class CodegenCompatibleSerializerTest extends ForyTestBase {
                 .withRefTracking(referenceTracking)
                 .withCodegen(enableCodegen)
                 .withCompatibleMode(CompatibleMode.COMPATIBLE)
-                .withScopedMetaShare(scopedMetaShare)
                 .requireClassRegistration(false);
     Fory fory = builder.get().build();
     String pkg = BeanA.class.getPackage().getName();
@@ -241,8 +240,8 @@ public class CodegenCompatibleSerializerTest extends ForyTestBase {
   }
 
   @Test(dataProvider = "config")
-  public void testWriteCompatibleContainer(
-      boolean referenceTracking, boolean scopedMetaShare, boolean enableCodegen) throws Exception {
+  public void testWriteCompatibleContainer(boolean referenceTracking, boolean enableCodegen)
+      throws Exception {
     Supplier<ForyBuilder> builder =
         () ->
             Fory.builder()
@@ -250,7 +249,6 @@ public class CodegenCompatibleSerializerTest extends ForyTestBase {
                 .withRefTracking(referenceTracking)
                 .withCodegen(enableCodegen)
                 .withCompatibleMode(CompatibleMode.COMPATIBLE)
-                .withScopedMetaShare(scopedMetaShare)
                 .requireClassRegistration(false);
     Fory fory = builder.get().build();
     BeanA beanA = BeanA.createBeanA(2);
@@ -274,8 +272,8 @@ public class CodegenCompatibleSerializerTest extends ForyTestBase {
   }
 
   @Test(dataProvider = "config")
-  public void testWriteCompatibleCollection(
-      boolean referenceTracking, boolean scopedMetaShare, boolean enableCodegen) throws Exception {
+  public void testWriteCompatibleCollection(boolean referenceTracking, boolean enableCodegen)
+      throws Exception {
     Supplier<ForyBuilder> builder =
         () ->
             Fory.builder()
@@ -283,7 +281,6 @@ public class CodegenCompatibleSerializerTest extends ForyTestBase {
                 .withRefTracking(referenceTracking)
                 .withCodegen(enableCodegen)
                 .withCompatibleMode(CompatibleMode.COMPATIBLE)
-                .withScopedMetaShare(scopedMetaShare)
                 .requireClassRegistration(false);
     Fory fory = builder.get().build();
     CollectionFields collectionFields = UnmodifiableSerializersTest.createCollectionFields();
@@ -327,8 +324,8 @@ public class CodegenCompatibleSerializerTest extends ForyTestBase {
   }
 
   @Test(dataProvider = "config")
-  public void testWriteCompatibleMap(
-      boolean referenceTracking, boolean scopedMetaShare, boolean enableCodegen) throws Exception {
+  public void testWriteCompatibleMap(boolean referenceTracking, boolean enableCodegen)
+      throws Exception {
     Supplier<ForyBuilder> builder =
         () ->
             Fory.builder()
@@ -336,7 +333,6 @@ public class CodegenCompatibleSerializerTest extends ForyTestBase {
                 .withRefTracking(referenceTracking)
                 .withCodegen(enableCodegen)
                 .withCompatibleMode(CompatibleMode.COMPATIBLE)
-                .withScopedMetaShare(scopedMetaShare)
                 .requireClassRegistration(false);
     Fory fory = builder.get().build();
     MapFields mapFields = UnmodifiableSerializersTest.createMapFields();

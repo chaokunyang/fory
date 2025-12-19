@@ -128,7 +128,7 @@ public class ForyState {
               .withRefTracking(references)
               .requireClassRegistration(false);
       if (compatible()) {
-        foryBuilder.withCompatibleMode(CompatibleMode.COMPATIBLE).withScopedMetaShare(true);
+        foryBuilder.withCompatibleMode(CompatibleMode.COMPATIBLE);
       }
       fory = foryBuilder.build();
       switch (objectType) {

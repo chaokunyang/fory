@@ -338,7 +338,7 @@ jobs:
     name: C++ CI
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-14, macos-latest, windows-2022]  # macos-13: x86, macos-14: arm64
+        os: [ubuntu-latest, macos-latest, windows-2022]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
@@ -420,38 +420,8 @@ jobs:
           cd fory-core
           mvn -T16 --no-transfer-progress test -Dtest=org.apache.fory.CPPXlangTest
 
-  go_xlang:
-    name: Go Xlang Test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.21'
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          java-version: 21
-          distribution: "temurin"
-      - name: Cache Maven local repository
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven-
-      - name: Run Go Xlang Test
-        env:
-          FORY_GO_JAVA_CI: "1"
-        run: |
-          cd java
-          mvn -T16 --no-transfer-progress clean install -DskipTests
-          cd fory-core
-          mvn -T16 --no-transfer-progress test -Dtest=org.apache.fory.GoXlangTest
-
-  cpp_example:
-    name: C++ Example
+  cpp_examples:
+    name: C++ Examples
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -459,10 +429,33 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Build and run C++ CMake examples
+      - name: Cache Bazel binary
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/bin/bazel
+            ~/.local/bin/bazel
+          key: bazel-binary-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.bazelversion') }}
+          restore-keys: |
+            bazel-binary-${{ runner.os }}-${{ runner.arch }}-
+      - name: Install bazel
+        run: python ./ci/run_ci.py cpp --install-deps-only
+      - name: Build and run C++ hello_world example (CMake)
         run: |
-          cd examples/cpp/cmake_example
+          cd examples/cpp/hello_world
           ./run.sh
+      - name: Build and run C++ hello_row example (CMake)
+        run: |
+          cd examples/cpp/hello_row
+          ./run.sh
+      - name: Build and run C++ hello_world example (Bazel)
+        run: |
+          cd examples/cpp/hello_world
+          ./run_bazel.sh
+      - name: Build and run C++ hello_row example (Bazel)
+        run: |
+          cd examples/cpp/hello_row
+          ./run_bazel.sh
 
   python:
     name: Python CI
@@ -470,7 +463,7 @@ jobs:
     strategy:
       matrix:
         python-version: [3.8, 3.12, 3.13.3]
-        os: [ubuntu-latest, ubuntu-24.04-arm, macos-13, macos-14, windows-2022]
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-2022]
     steps:
       - uses: actions/checkout@v5
       - name: Set up Python ${{ matrix.python-version }}
@@ -549,6 +542,36 @@ jobs:
         run: pip install -e python/
       - name: Run Golang CI
         run: python ./ci/run_ci.py go
+
+  go_xlang:
+    name: Go Xlang Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: 21
+          distribution: "temurin"
+      - name: Cache Maven local repository
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+      - name: Run Go Xlang Test
+        env:
+          FORY_GO_JAVA_CI: "1"
+        run: |
+          cd java
+          mvn -T16 --no-transfer-progress clean install -DskipTests
+          cd fory-core
+          mvn -T16 --no-transfer-progress test -Dtest=org.apache.fory.GoXlangTest
 
   lint:
     name: Code Style Check

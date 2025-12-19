@@ -35,10 +35,14 @@ set(FORY_SERIALIZATION_HEADERS
     serializer_traits.h
     skip.h
     smart_ptr_serializers.h
+    string_serializer.h
     struct_serializer.h
     temporal_serializers.h
+    tuple_serializer.h
     type_info.h
     type_resolver.h
+    unsigned_serializer.h
+    variant_serializer.h
 )
 
 add_library(fory_serialization ${FORY_SERIALIZATION_SOURCES})
@@ -85,6 +89,10 @@ if(FORY_BUILD_TESTS)
     add_executable(fory_serialization_map_test map_serializer_test.cc)
     target_link_libraries(fory_serialization_map_test fory_serialization GTest::gtest GTest::gtest_main)
     gtest_discover_tests(fory_serialization_map_test)
+
+    add_executable(fory_serialization_variant_test variant_serializer_test.cc)
+    target_link_libraries(fory_serialization_variant_test fory_serialization GTest::gtest GTest::gtest_main)
+    gtest_discover_tests(fory_serialization_variant_test)
 endif()
 
 # xlang test binary

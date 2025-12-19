@@ -92,10 +92,10 @@ inline void register_test_types(Fory &fory) {
   fory.register_struct<::ComplexStruct>(type_id++);
   fory.register_struct<::NestedStruct>(type_id++);
 
-  // Register all enum types used in tests (register_struct works for enums too)
-  fory.register_struct<Color>(type_id++);
-  fory.register_struct<LegacyStatus>(type_id++);
-  fory.register_struct<OldStatus>(type_id++);
+  // Register all enum types used in tests
+  fory.register_enum<Color>(type_id++);
+  fory.register_enum<LegacyStatus>(type_id++);
+  fory.register_enum<OldStatus>(type_id++);
 }
 
 template <typename T>
@@ -183,6 +183,36 @@ TEST(SerializationTest, StringRoundtrip) {
 }
 
 // ============================================================================
+// Character Type Tests (C++ native only)
+// ============================================================================
+
+TEST(SerializationTest, CharRoundtrip) {
+  test_roundtrip<char>('A');
+  test_roundtrip<char>('z');
+  test_roundtrip<char>('0');
+  test_roundtrip<char>('\0');
+  test_roundtrip<char>('\n');
+  test_roundtrip<char>(static_cast<char>(127));
+  test_roundtrip<char>(static_cast<char>(-128));
+}
+
+TEST(SerializationTest, Char16Roundtrip) {
+  test_roundtrip<char16_t>(u'A');
+  test_roundtrip<char16_t>(u'中');
+  test_roundtrip<char16_t>(u'\0');
+  test_roundtrip<char16_t>(static_cast<char16_t>(0xFFFF));
+  test_roundtrip<char16_t>(static_cast<char16_t>(0x4E2D)); // 中
+}
+
+TEST(SerializationTest, Char32Roundtrip) {
+  test_roundtrip<char32_t>(U'A');
+  test_roundtrip<char32_t>(U'中');
+  test_roundtrip<char32_t>(U'\0');
+  test_roundtrip<char32_t>(static_cast<char32_t>(0x10FFFF)); // Max Unicode
+  test_roundtrip<char32_t>(static_cast<char32_t>(0x1F600));  // Emoji 😀
+}
+
+// ============================================================================
 // Enum Tests
 // ============================================================================
 
@@ -200,7 +230,7 @@ TEST(SerializationTest, OldEnumRoundtrip) {
 
 TEST(SerializationTest, EnumSerializesOrdinalValue) {
   auto fory = Fory::builder().xlang(true).track_ref(false).build();
-  fory.register_struct<LegacyStatus>(1);
+  fory.register_enum<LegacyStatus>(1);
 
   auto bytes_result = fory.serialize(LegacyStatus::LARGE);
   ASSERT_TRUE(bytes_result.ok())
@@ -223,7 +253,7 @@ TEST(SerializationTest, EnumSerializesOrdinalValue) {
 
 TEST(SerializationTest, OldEnumSerializesOrdinalValue) {
   auto fory = Fory::builder().xlang(true).track_ref(false).build();
-  fory.register_struct<OldStatus>(1);
+  fory.register_enum<OldStatus>(1);
 
   auto bytes_result = fory.serialize(OldStatus::OLD_POS);
   ASSERT_TRUE(bytes_result.ok())
@@ -243,7 +273,7 @@ TEST(SerializationTest, OldEnumSerializesOrdinalValue) {
 
 TEST(SerializationTest, EnumOrdinalMappingHandlesNonZeroStart) {
   auto fory = Fory::builder().xlang(true).track_ref(false).build();
-  fory.register_struct<LegacyStatus>(1);
+  fory.register_enum<LegacyStatus>(1);
 
   auto bytes_result = fory.serialize(LegacyStatus::NEG);
   ASSERT_TRUE(bytes_result.ok())
@@ -268,7 +298,7 @@ TEST(SerializationTest, EnumOrdinalMappingHandlesNonZeroStart) {
 
 TEST(SerializationTest, EnumOrdinalMappingRejectsInvalidOrdinal) {
   auto fory = Fory::builder().xlang(true).track_ref(false).build();
-  fory.register_struct<LegacyStatus>(1);
+  fory.register_enum<LegacyStatus>(1);
 
   auto bytes_result = fory.serialize(LegacyStatus::NEG);
   ASSERT_TRUE(bytes_result.ok())
@@ -286,7 +316,7 @@ TEST(SerializationTest, EnumOrdinalMappingRejectsInvalidOrdinal) {
 
 TEST(SerializationTest, OldEnumOrdinalMappingHandlesNonZeroStart) {
   auto fory = Fory::builder().xlang(true).track_ref(false).build();
-  fory.register_struct<OldStatus>(1);
+  fory.register_enum<OldStatus>(1);
 
   auto bytes_result = fory.serialize(OldStatus::OLD_NEG);
   ASSERT_TRUE(bytes_result.ok())

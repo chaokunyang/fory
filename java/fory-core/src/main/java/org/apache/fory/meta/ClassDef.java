@@ -30,6 +30,7 @@ import java.io.Serializable;
 import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.lang.reflect.Member;
+import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -55,7 +56,7 @@ import org.apache.fory.resolver.ClassInfo;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.resolver.XtypeResolver;
-import org.apache.fory.serializer.CompatibleSerializer;
+import org.apache.fory.serializer.MetaSharedSerializer;
 import org.apache.fory.serializer.NonexistentClass;
 import org.apache.fory.serializer.converter.FieldConverter;
 import org.apache.fory.serializer.converter.FieldConverters;
@@ -79,7 +80,7 @@ import org.apache.fory.util.Preconditions;
  *
  * @see MetaSharedCodecBuilder
  * @see CompatibleMode#COMPATIBLE
- * @see CompatibleSerializer
+ * @see MetaSharedSerializer
  * @see ForyBuilder#withMetaShare
  * @see ReflectionUtils#getFieldOffset
  */
@@ -468,7 +469,8 @@ public class ClassDef implements Serializable {
         }
       }
       // This field doesn't exist in peer class, so any legal modifier will be OK.
-      int stubModifiers = ReflectionUtils.getField(getClass(), "fieldName").getModifiers();
+      // Use constant instead of reflection to avoid GraalVM native image issues.
+      int stubModifiers = Modifier.PRIVATE | Modifier.FINAL;
       return new Descriptor(typeRef, fieldName, stubModifiers, definedClass);
     }
 

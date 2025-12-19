@@ -1,0 +1,228 @@
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
+package fory
+
+import "fmt"
+
+// ErrorKind represents categories of serialization errors for fast dispatch.
+// Using an enum allows for efficient error checking on the hot path.
+type ErrorKind uint8
+
+const (
+	// ErrKindOK indicates no error occurred
+	ErrKindOK ErrorKind = iota
+	// ErrKindBufferOutOfBound indicates a read/write beyond buffer bounds
+	ErrKindBufferOutOfBound
+	// ErrKindTypeMismatch indicates type ID mismatch during deserialization
+	ErrKindTypeMismatch
+	// ErrKindUnknownType indicates an unregistered or unknown type
+	ErrKindUnknownType
+	// ErrKindSerializationFailed indicates a general serialization failure
+	ErrKindSerializationFailed
+	// ErrKindDeserializationFailed indicates a general deserialization failure
+	ErrKindDeserializationFailed
+	// ErrKindMaxDepthExceeded indicates recursion depth limit exceeded
+	ErrKindMaxDepthExceeded
+	// ErrKindNilPointer indicates an unexpected nil pointer
+	ErrKindNilPointer
+	// ErrKindInvalidRefId indicates an invalid reference ID
+	ErrKindInvalidRefId
+	// ErrKindHashMismatch indicates struct hash mismatch
+	ErrKindHashMismatch
+)
+
+// Error is a lightweight error type optimized for hot path performance.
+// It stores error details without allocating until Error() is called.
+type Error struct {
+	kind    ErrorKind
+	message string // pre-formatted message or lazy format template
+	// For buffer out of bound errors
+	offset int
+	need   int
+	size   int
+	// For type errors
+	actualType   TypeId
+	expectedType TypeId
+	// For hash mismatch
+	actualHash   int32
+	expectedHash int32
+}
+
+// Ok returns true if no error occurred
+func (e Error) Ok() bool {
+	return e.kind == ErrKindOK
+}
+
+// HasError returns true if an error occurred
+func (e Error) HasError() bool {
+	return e.kind != ErrKindOK
+}
+
+// Kind returns the error kind for fast dispatch
+func (e Error) Kind() ErrorKind {
+	return e.kind
+}
+
+// Error implements the error interface with lazy formatting
+func (e Error) Error() string {
+	switch e.kind {
+	case ErrKindOK:
+		return ""
+	case ErrKindBufferOutOfBound:
+		if e.message != "" {
+			return e.message
+		}
+		return fmt.Sprintf("buffer out of bound: offset=%d, need=%d, size=%d", e.offset, e.need, e.size)
+	case ErrKindTypeMismatch:
+		if e.message != "" {
+			return e.message
+		}
+		return fmt.Sprintf("type mismatch: actual=%d, expected=%d", e.actualType, e.expectedType)
+	case ErrKindHashMismatch:
+		if e.message != "" {
+			return e.message
+		}
+		return fmt.Sprintf("hash mismatch: actual=%d, expected=%d", e.actualHash, e.expectedHash)
+	default:
+		if e.message != "" {
+			return e.message
+		}
+		return fmt.Sprintf("fory error: kind=%d", e.kind)
+	}
+}
+
+// BufferOutOfBoundError creates a buffer out of bound error
+func BufferOutOfBoundError(offset, need, size int) Error {
+	return Error{
+		kind:   ErrKindBufferOutOfBound,
+		offset: offset,
+		need:   need,
+		size:   size,
+	}
+}
+
+// TypeMismatchError creates a type mismatch error
+func TypeMismatchError(actual, expected TypeId) Error {
+	return Error{
+		kind:         ErrKindTypeMismatch,
+		actualType:   actual,
+		expectedType: expected,
+	}
+}
+
+// UnknownTypeError creates an unknown type error
+func UnknownTypeError(typeId TypeId) Error {
+	return Error{
+		kind:       ErrKindUnknownType,
+		actualType: typeId,
+		message:    fmt.Sprintf("unknown type: typeId=%d", typeId),
+	}
+}
+
+// HashMismatchError creates a struct hash mismatch error
+func HashMismatchError(actual, expected int32, typeName string) Error {
+	return Error{
+		kind:         ErrKindHashMismatch,
+		actualHash:   actual,
+		expectedHash: expected,
+		message:      fmt.Sprintf("hash %d is not consistent with %d for type %s", actual, expected, typeName),
+	}
+}
+
+// SerializationError creates a general serialization error
+func SerializationError(msg string) Error {
+	return Error{
+		kind:    ErrKindSerializationFailed,
+		message: msg,
+	}
+}
+
+// SerializationErrorf creates a formatted serialization error
+func SerializationErrorf(format string, args ...interface{}) Error {
+	return Error{
+		kind:    ErrKindSerializationFailed,
+		message: fmt.Sprintf(format, args...),
+	}
+}
+
+// DeserializationError creates a general deserialization error
+func DeserializationError(msg string) Error {
+	return Error{
+		kind:    ErrKindDeserializationFailed,
+		message: msg,
+	}
+}
+
+// DeserializationErrorf creates a formatted deserialization error
+func DeserializationErrorf(format string, args ...interface{}) Error {
+	return Error{
+		kind:    ErrKindDeserializationFailed,
+		message: fmt.Sprintf(format, args...),
+	}
+}
+
+// MaxDepthExceededError creates a max depth exceeded error
+func MaxDepthExceededError(depth int) Error {
+	return Error{
+		kind:    ErrKindMaxDepthExceeded,
+		message: fmt.Sprintf("max depth exceeded: depth=%d", depth),
+	}
+}
+
+// NilPointerError creates a nil pointer error
+func NilPointerError(msg string) Error {
+	return Error{
+		kind:    ErrKindNilPointer,
+		message: msg,
+	}
+}
+
+// InvalidRefIdError creates an invalid reference ID error
+func InvalidRefIdError(refId int32) Error {
+	return Error{
+		kind:    ErrKindInvalidRefId,
+		message: fmt.Sprintf("invalid reference id: %d", refId),
+	}
+}
+
+// WrapError wraps a standard error into a fory Error
+func WrapError(err error, kind ErrorKind) Error {
+	if err == nil {
+		return Error{kind: ErrKindOK}
+	}
+	return Error{
+		kind:    kind,
+		message: err.Error(),
+	}
+}
+
+// FromError converts a standard error to a fory Error
+// If err is already a fory Error, it returns it as-is
+// Otherwise wraps it as a deserialization error
+func FromError(err error) Error {
+	if err == nil {
+		return Error{kind: ErrKindOK}
+	}
+	if e, ok := err.(Error); ok {
+		return e
+	}
+	return Error{
+		kind:    ErrKindDeserializationFailed,
+		message: err.Error(),
+	}
+}

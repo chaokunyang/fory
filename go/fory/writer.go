@@ -41,6 +41,7 @@ type WriteContext struct {
 	refResolver    *RefResolver            // For reference tracking (legacy)
 	bufferCallback func(BufferObject) bool // Callback for out-of-band buffers
 	outOfBand      bool                    // Whether out-of-band serialization is enabled
+	err            Error                   // Accumulated error state for deferred checking
 }
 
 // NewWriteContext creates a new write context
@@ -58,6 +59,7 @@ func (c *WriteContext) Reset() {
 	c.buffer.Reset()
 	c.refWriter.Reset()
 	c.depth = 0
+	c.err = Error{} // Clear error state
 	if c.refResolver != nil {
 		c.refResolver.resetWrite()
 	}
@@ -104,6 +106,42 @@ func (c *WriteContext) TypeResolver() *TypeResolver {
 // RefResolver returns the reference resolver (legacy)
 func (c *WriteContext) RefResolver() *RefResolver {
 	return c.refResolver
+}
+
+// ============================================================================
+// Error State Methods - For deferred error checking pattern
+// ============================================================================
+
+// HasError returns true if an error has occurred
+func (c *WriteContext) HasError() bool {
+	return c.err.HasError()
+}
+
+// Err returns a pointer to the accumulated error
+func (c *WriteContext) Err() *Error {
+	return &c.err
+}
+
+// SetError sets the error state if no error has occurred yet (first error wins)
+func (c *WriteContext) SetError(e Error) {
+	if c.err.Ok() {
+		c.err = e
+	}
+}
+
+// TakeError returns the current error and resets the error state
+func (c *WriteContext) TakeError() Error {
+	e := c.err
+	c.err = Error{}
+	return e
+}
+
+// CheckError checks if an error has occurred and returns it as a standard error
+func (c *WriteContext) CheckError() error {
+	if c.err.HasError() {
+		return c.TakeError()
+	}
+	return nil
 }
 
 // Inline primitive writes (compiler will inline these)

@@ -598,10 +598,13 @@ func (s *structSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value 
 	// In compatible mode with meta share, struct hash is not written
 	// because type meta is written separately
 	if !ctx.Compatible() {
-		structHash := buf.ReadInt32()
+		err := ctx.Err()
+		structHash := buf.ReadInt32E(err)
+		if ctx.HasError() {
+			return ctx.TakeError()
+		}
 		if structHash != s.structHash {
-			return fmt.Errorf("hash %d is not consistent with %d for type %s",
-				structHash, s.structHash, s.type_)
+			return HashMismatchError(structHash, s.structHash, s.type_.String())
 		}
 	}
 
@@ -612,62 +615,74 @@ func (s *structSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value 
 
 	// Get base pointer for unsafe access
 	ptr := unsafe.Pointer(value.UnsafeAddr())
+	err := ctx.Err()
 
 	// Phase 1: Read fixed-size primitive fields (no ref flag)
+	// Use deferred error checking - read all fields, check once at end
 	for _, field := range s.fixedFields {
 		if field.FieldIndex < 0 {
-			if err := s.skipField(ctx, field); err != nil {
-				return err
+			if skipErr := s.skipField(ctx, field); skipErr != nil {
+				return skipErr
 			}
 			continue
 		}
 		fieldPtr := unsafe.Add(ptr, field.Offset)
 		switch field.StaticId {
 		case ConcreteTypeBool:
-			*(*bool)(fieldPtr) = buf.ReadBool()
+			*(*bool)(fieldPtr) = buf.ReadBoolE(err)
 		case ConcreteTypeInt8:
-			*(*int8)(fieldPtr) = int8(buf.ReadByte_())
+			*(*int8)(fieldPtr) = buf.ReadInt8E(err)
 		case ConcreteTypeInt16:
-			*(*int16)(fieldPtr) = buf.ReadInt16()
+			*(*int16)(fieldPtr) = buf.ReadInt16E(err)
 		case ConcreteTypeFloat32:
-			*(*float32)(fieldPtr) = buf.ReadFloat32()
+			*(*float32)(fieldPtr) = buf.ReadFloat32E(err)
 		case ConcreteTypeFloat64:
-			*(*float64)(fieldPtr) = buf.ReadFloat64()
+			*(*float64)(fieldPtr) = buf.ReadFloat64E(err)
 		}
+	}
+
+	// Deferred error check after fixed-size primitives
+	if ctx.HasError() {
+		return ctx.TakeError()
 	}
 
 	// Phase 2: Read varint primitive fields (no ref flag)
 	for _, field := range s.varintFields {
 		if field.FieldIndex < 0 {
-			if err := s.skipField(ctx, field); err != nil {
-				return err
+			if skipErr := s.skipField(ctx, field); skipErr != nil {
+				return skipErr
 			}
 			continue
 		}
 		fieldPtr := unsafe.Add(ptr, field.Offset)
 		switch field.StaticId {
 		case ConcreteTypeInt32:
-			*(*int32)(fieldPtr) = buf.ReadVarint32()
+			*(*int32)(fieldPtr) = buf.ReadVarint32E(err)
 		case ConcreteTypeInt64:
-			*(*int64)(fieldPtr) = buf.ReadVarint64()
+			*(*int64)(fieldPtr) = buf.ReadVarint64E(err)
 		case ConcreteTypeInt:
-			*(*int)(fieldPtr) = int(buf.ReadVarint64())
+			*(*int)(fieldPtr) = int(buf.ReadVarint64E(err))
 		}
+	}
+
+	// Deferred error check after varint primitives
+	if ctx.HasError() {
+		return ctx.TakeError()
 	}
 
 	// Phase 3: Read remaining fields (all non-primitives have ref flag per xlang spec)
 	for _, field := range s.remainingFields {
 		if field.FieldIndex < 0 {
-			if err := s.skipField(ctx, field); err != nil {
-				return err
+			if skipErr := s.skipField(ctx, field); skipErr != nil {
+				return skipErr
 			}
 			continue
 		}
 		fieldValue := value.Field(field.FieldIndex)
 
 		if isEnumField(field) {
-			if err := readEnumField(ctx, field, fieldValue); err != nil {
-				return err
+			if enumErr := readEnumField(ctx, field, fieldValue); enumErr != nil {
+				return enumErr
 			}
 			continue
 		}
@@ -676,12 +691,12 @@ func (s *structSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value 
 			// For nested struct fields in compatible mode, read type info
 			readType := ctx.Compatible() && isStructField(field.Type)
 			// Per xlang spec, all non-primitive fields have ref flag
-			if err := field.Serializer.Read(ctx, RefModeTracking, readType, fieldValue); err != nil {
-				return err
+			if serErr := field.Serializer.Read(ctx, RefModeTracking, readType, fieldValue); serErr != nil {
+				return serErr
 			}
 		} else {
-			if err := ctx.ReadValue(fieldValue); err != nil {
-				return err
+			if readErr := ctx.ReadValue(fieldValue); readErr != nil {
+				return readErr
 			}
 		}
 	}
@@ -693,11 +708,12 @@ func (s *structSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value 
 func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Value) error {
 	buf := ctx.Buffer()
 	ptr := unsafe.Pointer(value.UnsafeAddr())
+	err := ctx.Err()
 
 	for _, field := range s.fields {
 		if field.FieldIndex < 0 {
-			if err := s.skipField(ctx, field); err != nil {
-				return err
+			if skipErr := s.skipField(ctx, field); skipErr != nil {
+				return skipErr
 			}
 			continue
 		}
@@ -705,18 +721,19 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 		fieldPtr := unsafe.Add(ptr, field.Offset)
 
 		// Fast path for fixed-size primitive types (no ref flag)
+		// Use error-aware methods with deferred checking
 		if isFixedSizePrimitive(field.StaticId, field.Referencable) {
 			switch field.StaticId {
 			case ConcreteTypeBool:
-				*(*bool)(fieldPtr) = buf.ReadBool()
+				*(*bool)(fieldPtr) = buf.ReadBoolE(err)
 			case ConcreteTypeInt8:
-				*(*int8)(fieldPtr) = int8(buf.ReadByte_())
+				*(*int8)(fieldPtr) = buf.ReadInt8E(err)
 			case ConcreteTypeInt16:
-				*(*int16)(fieldPtr) = buf.ReadInt16()
+				*(*int16)(fieldPtr) = buf.ReadInt16E(err)
 			case ConcreteTypeFloat32:
-				*(*float32)(fieldPtr) = buf.ReadFloat32()
+				*(*float32)(fieldPtr) = buf.ReadFloat32E(err)
 			case ConcreteTypeFloat64:
-				*(*float64)(fieldPtr) = buf.ReadFloat64()
+				*(*float64)(fieldPtr) = buf.ReadFloat64E(err)
 			}
 			continue
 		}
@@ -726,21 +743,26 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 		if isVarintPrimitive(field.StaticId, field.Referencable) && !fieldHasNonPrimitiveSerializer(field) {
 			switch field.StaticId {
 			case ConcreteTypeInt32:
-				*(*int32)(fieldPtr) = buf.ReadVarint32()
+				*(*int32)(fieldPtr) = buf.ReadVarint32E(err)
 			case ConcreteTypeInt64:
-				*(*int64)(fieldPtr) = buf.ReadVarint64()
+				*(*int64)(fieldPtr) = buf.ReadVarint64E(err)
 			case ConcreteTypeInt:
-				*(*int)(fieldPtr) = int(buf.ReadVarint64())
+				*(*int)(fieldPtr) = int(buf.ReadVarint64E(err))
 			}
 			continue
+		}
+
+		// Check for accumulated errors before slow path (complex types)
+		if ctx.HasError() {
+			return ctx.TakeError()
 		}
 
 		// Get field value for slow paths
 		fieldValue := value.Field(field.FieldIndex)
 
 		if isEnumField(field) {
-			if err := readEnumField(ctx, field, fieldValue); err != nil {
-				return err
+			if enumErr := readEnumField(ctx, field, fieldValue); enumErr != nil {
+				return enumErr
 			}
 			continue
 		}
@@ -759,12 +781,12 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 			} else if field.FieldDef.nullable || field.Referencable {
 				refMode = RefModeNullOnly
 			}
-			if err := field.Serializer.Read(ctx, refMode, readType, fieldValue); err != nil {
-				return err
+			if serErr := field.Serializer.Read(ctx, refMode, readType, fieldValue); serErr != nil {
+				return serErr
 			}
 		} else {
-			if err := ctx.ReadValue(fieldValue); err != nil {
-				return err
+			if readErr := ctx.ReadValue(fieldValue); readErr != nil {
+				return readErr
 			}
 		}
 	}

@@ -783,3 +783,285 @@ func (b *ByteBuffer) ReadBytes(n int) []byte {
 	b.readerIndex += n
 	return p
 }
+
+// ============================================================================
+// Error-aware read methods (ReadXxxE)
+// These methods accept an *Error parameter and set it on buffer out of bound.
+// This enables deferred error checking for better hot-path performance.
+// ============================================================================
+
+// ReadBoolE reads a bool and sets error on bounds violation
+func (b *ByteBuffer) ReadBoolE(err *Error) bool {
+	if b.readerIndex+1 > len(b.data) {
+		*err = BufferOutOfBoundError(b.readerIndex, 1, len(b.data))
+		return false
+	}
+	v := b.data[b.readerIndex]
+	b.readerIndex++
+	return v != 0
+}
+
+// ReadInt8E reads an int8 and sets error on bounds violation
+func (b *ByteBuffer) ReadInt8E(err *Error) int8 {
+	if b.readerIndex+1 > len(b.data) {
+		*err = BufferOutOfBoundError(b.readerIndex, 1, len(b.data))
+		return 0
+	}
+	v := int8(b.data[b.readerIndex])
+	b.readerIndex++
+	return v
+}
+
+// ReadByteE reads a byte and sets error on bounds violation
+func (b *ByteBuffer) ReadByteE(err *Error) byte {
+	if b.readerIndex+1 > len(b.data) {
+		*err = BufferOutOfBoundError(b.readerIndex, 1, len(b.data))
+		return 0
+	}
+	v := b.data[b.readerIndex]
+	b.readerIndex++
+	return v
+}
+
+// ReadInt16E reads an int16 and sets error on bounds violation
+func (b *ByteBuffer) ReadInt16E(err *Error) int16 {
+	if b.readerIndex+2 > len(b.data) {
+		*err = BufferOutOfBoundError(b.readerIndex, 2, len(b.data))
+		return 0
+	}
+	v := int16(binary.LittleEndian.Uint16(b.data[b.readerIndex:]))
+	b.readerIndex += 2
+	return v
+}
+
+// ReadInt32E reads an int32 and sets error on bounds violation
+func (b *ByteBuffer) ReadInt32E(err *Error) int32 {
+	if b.readerIndex+4 > len(b.data) {
+		*err = BufferOutOfBoundError(b.readerIndex, 4, len(b.data))
+		return 0
+	}
+	v := int32(binary.LittleEndian.Uint32(b.data[b.readerIndex:]))
+	b.readerIndex += 4
+	return v
+}
+
+// ReadInt64E reads an int64 and sets error on bounds violation
+func (b *ByteBuffer) ReadInt64E(err *Error) int64 {
+	if b.readerIndex+8 > len(b.data) {
+		*err = BufferOutOfBoundError(b.readerIndex, 8, len(b.data))
+		return 0
+	}
+	v := int64(binary.LittleEndian.Uint64(b.data[b.readerIndex:]))
+	b.readerIndex += 8
+	return v
+}
+
+// ReadFloat32E reads a float32 and sets error on bounds violation
+func (b *ByteBuffer) ReadFloat32E(err *Error) float32 {
+	if b.readerIndex+4 > len(b.data) {
+		*err = BufferOutOfBoundError(b.readerIndex, 4, len(b.data))
+		return 0
+	}
+	v := Float32frombits(binary.LittleEndian.Uint32(b.data[b.readerIndex:]))
+	b.readerIndex += 4
+	return v
+}
+
+// ReadFloat64E reads a float64 and sets error on bounds violation
+func (b *ByteBuffer) ReadFloat64E(err *Error) float64 {
+	if b.readerIndex+8 > len(b.data) {
+		*err = BufferOutOfBoundError(b.readerIndex, 8, len(b.data))
+		return 0
+	}
+	v := Float64frombits(binary.LittleEndian.Uint64(b.data[b.readerIndex:]))
+	b.readerIndex += 8
+	return v
+}
+
+// ReadVarint32E reads a zigzag-encoded int32 and sets error on bounds violation
+func (b *ByteBuffer) ReadVarint32E(err *Error) int32 {
+	u := b.ReadVaruint32E(err)
+	v := int32(u >> 1)
+	if u&1 != 0 {
+		v = ^v
+	}
+	return v
+}
+
+// ReadVaruint32E reads a varuint32 and sets error on bounds violation
+func (b *ByteBuffer) ReadVaruint32E(err *Error) uint32 {
+	if b.remaining() >= 5 {
+		return b.readVaruint32Fast()
+	}
+	return b.readVaruint32SlowE(err)
+}
+
+// readVaruint32SlowE is the slow path with error checking
+func (b *ByteBuffer) readVaruint32SlowE(err *Error) uint32 {
+	var result uint32
+	var shift uint
+	for {
+		if b.readerIndex >= len(b.data) {
+			*err = BufferOutOfBoundError(b.readerIndex, 1, len(b.data))
+			return 0
+		}
+		byteVal := b.data[b.readerIndex]
+		b.readerIndex++
+		result |= (uint32(byteVal) & 0x7F) << shift
+		if byteVal < 0x80 {
+			break
+		}
+		shift += 7
+		if shift >= 35 {
+			*err = DeserializationError("varuint32 overflow")
+			return 0
+		}
+	}
+	return result
+}
+
+// ReadVarint64E reads a zigzag-encoded int64 and sets error on bounds violation
+func (b *ByteBuffer) ReadVarint64E(err *Error) int64 {
+	u := b.ReadVaruint64E(err)
+	v := int64(u >> 1)
+	if u&1 != 0 {
+		v = ^v
+	}
+	return v
+}
+
+// ReadVaruint64E reads a varuint64 and sets error on bounds violation
+func (b *ByteBuffer) ReadVaruint64E(err *Error) uint64 {
+	if b.remaining() >= 9 {
+		return b.readVaruint64Fast()
+	}
+	return b.readVaruint64SlowE(err)
+}
+
+// readVaruint64SlowE is the slow path with error checking
+func (b *ByteBuffer) readVaruint64SlowE(err *Error) uint64 {
+	var result uint64
+	var shift uint
+	for {
+		if b.readerIndex >= len(b.data) {
+			*err = BufferOutOfBoundError(b.readerIndex, 1, len(b.data))
+			return 0
+		}
+		byteVal := b.data[b.readerIndex]
+		b.readerIndex++
+		result |= (uint64(byteVal) & 0x7F) << shift
+		if byteVal < 0x80 {
+			break
+		}
+		shift += 7
+		if shift >= 64 {
+			*err = DeserializationError("varuint64 overflow")
+			return 0
+		}
+	}
+	return result
+}
+
+// ReadVaruint32Small7E reads a varuint32 in small-7 format with error checking
+func (b *ByteBuffer) ReadVaruint32Small7E(err *Error) uint32 {
+	if b.readerIndex >= len(b.data) {
+		*err = BufferOutOfBoundError(b.readerIndex, 1, len(b.data))
+		return 0
+	}
+	readIdx := b.readerIndex
+	v := b.data[readIdx]
+	readIdx++
+	if v&0x80 == 0 {
+		b.readerIndex = readIdx
+		return uint32(v)
+	}
+	return b.readVaruint32Small14E(err)
+}
+
+// readVaruint32Small14E continues reading small-7 format with error checking
+func (b *ByteBuffer) readVaruint32Small14E(err *Error) uint32 {
+	readIdx := b.readerIndex
+	if len(b.data)-readIdx >= 5 {
+		four := binary.LittleEndian.Uint32(b.data[readIdx:])
+		readIdx++
+		value := four & 0x7F
+		if four&0x80 != 0 {
+			readIdx++
+			value |= (four >> 1) & 0x3f80
+			if four&0x8000 != 0 {
+				return b.continueReadVaruint32(readIdx, four, value)
+			}
+		}
+		b.readerIndex = readIdx
+		return value
+	}
+	return uint32(b.readVaruint36SlowE(err))
+}
+
+// readVaruint36SlowE is the slow path for varuint36 with error checking
+func (b *ByteBuffer) readVaruint36SlowE(err *Error) uint64 {
+	if b.readerIndex >= len(b.data) {
+		*err = BufferOutOfBoundError(b.readerIndex, 1, len(b.data))
+		return 0
+	}
+	b0 := b.data[b.readerIndex]
+	b.readerIndex++
+	result := uint64(b0 & 0x7F)
+	if b0&0x80 != 0 {
+		if b.readerIndex >= len(b.data) {
+			*err = BufferOutOfBoundError(b.readerIndex, 1, len(b.data))
+			return 0
+		}
+		b1 := b.data[b.readerIndex]
+		b.readerIndex++
+		result |= uint64(b1&0x7F) << 7
+		if b1&0x80 != 0 {
+			if b.readerIndex >= len(b.data) {
+				*err = BufferOutOfBoundError(b.readerIndex, 1, len(b.data))
+				return 0
+			}
+			b2 := b.data[b.readerIndex]
+			b.readerIndex++
+			result |= uint64(b2&0x7F) << 14
+			if b2&0x80 != 0 {
+				if b.readerIndex >= len(b.data) {
+					*err = BufferOutOfBoundError(b.readerIndex, 1, len(b.data))
+					return 0
+				}
+				b3 := b.data[b.readerIndex]
+				b.readerIndex++
+				result |= uint64(b3&0x7F) << 21
+				if b3&0x80 != 0 {
+					if b.readerIndex >= len(b.data) {
+						*err = BufferOutOfBoundError(b.readerIndex, 1, len(b.data))
+						return 0
+					}
+					b4 := b.data[b.readerIndex]
+					b.readerIndex++
+					result |= uint64(b4) << 28
+				}
+			}
+		}
+	}
+	return result
+}
+
+// ReadBinaryE reads n bytes and sets error on bounds violation
+func (b *ByteBuffer) ReadBinaryE(length int, err *Error) []byte {
+	if b.readerIndex+length > len(b.data) {
+		*err = BufferOutOfBoundError(b.readerIndex, length, len(b.data))
+		return nil
+	}
+	v := b.data[b.readerIndex : b.readerIndex+length]
+	b.readerIndex += length
+	return v
+}
+
+// SkipE skips n bytes and sets error on bounds violation
+func (b *ByteBuffer) SkipE(length int, err *Error) {
+	if b.readerIndex+length > len(b.data) {
+		*err = BufferOutOfBoundError(b.readerIndex, length, len(b.data))
+		return
+	}
+	b.readerIndex += length
+}

@@ -40,6 +40,7 @@ type ReadContext struct {
 	outOfBandIndex   int           // Current index into out-of-band buffers
 	depth            int           // Current nesting depth for cycle detection
 	maxDepth         int           // Maximum allowed nesting depth
+	err              Error         // Accumulated error state for deferred checking
 }
 
 // NewReadContext creates a new read context
@@ -57,6 +58,7 @@ func (c *ReadContext) Reset() {
 	c.refReader.Reset()
 	c.outOfBandBuffers = nil
 	c.outOfBandIndex = 0
+	c.err = Error{} // Clear error state
 	if c.refResolver != nil {
 		c.refResolver.resetRead()
 	}
@@ -93,6 +95,43 @@ func (c *ReadContext) TypeResolver() *TypeResolver {
 // RefResolver returns the reference resolver (legacy)
 func (c *ReadContext) RefResolver() *RefResolver {
 	return c.refResolver
+}
+
+// ============================================================================
+// Error State Methods - For deferred error checking pattern
+// ============================================================================
+
+// HasError returns true if an error has occurred
+func (c *ReadContext) HasError() bool {
+	return c.err.HasError()
+}
+
+// Err returns a pointer to the accumulated error for passing to buffer methods
+func (c *ReadContext) Err() *Error {
+	return &c.err
+}
+
+// SetError sets the error state if no error has occurred yet (first error wins)
+func (c *ReadContext) SetError(e Error) {
+	if c.err.Ok() {
+		c.err = e
+	}
+}
+
+// TakeError returns the current error and resets the error state
+func (c *ReadContext) TakeError() Error {
+	e := c.err
+	c.err = Error{}
+	return e
+}
+
+// CheckError checks if an error has occurred and returns it as a standard error
+// This is used at strategic points for deferred error checking
+func (c *ReadContext) CheckError() error {
+	if c.err.HasError() {
+		return c.TakeError()
+	}
+	return nil
 }
 
 // Inline primitive reads

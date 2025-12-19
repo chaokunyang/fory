@@ -32,11 +32,15 @@ func generateReadTyped(buf *bytes.Buffer, s *StructInfo) error {
 	fmt.Fprintf(buf, "// ReadTyped provides strongly-typed deserialization with no reflection overhead\n")
 	fmt.Fprintf(buf, "func (g %s_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *%s) error {\n", s.Name, s.Name)
 	fmt.Fprintf(buf, "\tbuf := ctx.Buffer()\n")
+	fmt.Fprintf(buf, "\terr := ctx.Err() // Get error pointer for deferred error checking\n\n")
 
 	// ReadData and verify struct hash
 	fmt.Fprintf(buf, "\t// ReadData and verify struct hash\n")
-	fmt.Fprintf(buf, "\tif got := buf.ReadInt32(); got != %d {\n", hash)
-	fmt.Fprintf(buf, "\t\treturn fmt.Errorf(\"struct hash mismatch for %s: expected %d, got %%d\", got)\n", s.Name, hash)
+	fmt.Fprintf(buf, "\tif got := buf.ReadInt32E(err); got != %d {\n", hash)
+	fmt.Fprintf(buf, "\t\tif ctx.HasError() {\n")
+	fmt.Fprintf(buf, "\t\t\treturn ctx.TakeError()\n")
+	fmt.Fprintf(buf, "\t\t}\n")
+	fmt.Fprintf(buf, "\t\treturn fory.HashMismatchError(got, %d, \"%s\")\n", hash, s.Name)
 	fmt.Fprintf(buf, "\t}\n\n")
 
 	// ReadData fields in sorted order
@@ -47,6 +51,11 @@ func generateReadTyped(buf *bytes.Buffer, s *StructInfo) error {
 		}
 	}
 
+	// Final error check for any accumulated errors
+	fmt.Fprintf(buf, "\n\t// Final deferred error check\n")
+	fmt.Fprintf(buf, "\tif ctx.HasError() {\n")
+	fmt.Fprintf(buf, "\t\treturn ctx.TakeError()\n")
+	fmt.Fprintf(buf, "\t}\n")
 	fmt.Fprintf(buf, "\treturn nil\n")
 	fmt.Fprintf(buf, "}\n\n")
 	return nil
@@ -103,36 +112,37 @@ func generateFieldReadTyped(buf *bytes.Buffer, field *FieldInfo) error {
 
 	// Handle basic types
 	// Note: primitive serializers read values directly without NotNullValueFlag check
+	// Use error-aware methods for deferred error checking
 	if basic, ok := field.Type.Underlying().(*types.Basic); ok {
 		switch basic.Kind() {
 		case types.Bool:
-			fmt.Fprintf(buf, "\t%s = buf.ReadBool()\n", fieldAccess)
+			fmt.Fprintf(buf, "\t%s = buf.ReadBoolE(err)\n", fieldAccess)
 		case types.Int8:
-			fmt.Fprintf(buf, "\t%s = int8(buf.ReadByte_())\n", fieldAccess)
+			fmt.Fprintf(buf, "\t%s = buf.ReadInt8E(err)\n", fieldAccess)
 		case types.Int16:
-			fmt.Fprintf(buf, "\t%s = buf.ReadInt16()\n", fieldAccess)
+			fmt.Fprintf(buf, "\t%s = buf.ReadInt16E(err)\n", fieldAccess)
 		case types.Int32:
-			fmt.Fprintf(buf, "\t%s = buf.ReadVarint32()\n", fieldAccess)
+			fmt.Fprintf(buf, "\t%s = buf.ReadVarint32E(err)\n", fieldAccess)
 		case types.Int, types.Int64:
-			fmt.Fprintf(buf, "\t%s = buf.ReadVarint64()\n", fieldAccess)
+			fmt.Fprintf(buf, "\t%s = buf.ReadVarint64E(err)\n", fieldAccess)
 		case types.Uint8:
-			fmt.Fprintf(buf, "\t%s = buf.ReadByte_()\n", fieldAccess)
+			fmt.Fprintf(buf, "\t%s = buf.ReadByteE(err)\n", fieldAccess)
 		case types.Uint16:
-			fmt.Fprintf(buf, "\t%s = uint16(buf.ReadInt16())\n", fieldAccess)
+			fmt.Fprintf(buf, "\t%s = uint16(buf.ReadInt16E(err))\n", fieldAccess)
 		case types.Uint32:
-			fmt.Fprintf(buf, "\t%s = uint32(buf.ReadInt32())\n", fieldAccess)
+			fmt.Fprintf(buf, "\t%s = uint32(buf.ReadInt32E(err))\n", fieldAccess)
 		case types.Uint, types.Uint64:
-			fmt.Fprintf(buf, "\t%s = uint64(buf.ReadInt64())\n", fieldAccess)
+			fmt.Fprintf(buf, "\t%s = uint64(buf.ReadInt64E(err))\n", fieldAccess)
 		case types.Float32:
-			fmt.Fprintf(buf, "\t%s = buf.ReadFloat32()\n", fieldAccess)
+			fmt.Fprintf(buf, "\t%s = buf.ReadFloat32E(err)\n", fieldAccess)
 		case types.Float64:
-			fmt.Fprintf(buf, "\t%s = buf.ReadFloat64()\n", fieldAccess)
+			fmt.Fprintf(buf, "\t%s = buf.ReadFloat64E(err)\n", fieldAccess)
 		case types.String:
 			// String is referencable in xlang spec (nullable=1 in hash)
 			// For struct field deserialization, we need to read ref flag when tracking is enabled
 			// This matches the reflection behavior where strings get RefModeTracking or RefModeNullOnly
 			fmt.Fprintf(buf, "\tif ctx.TrackRef() {\n")
-			fmt.Fprintf(buf, "\t\t_ = buf.ReadInt8() // Read NotNullValueFlag for string\n")
+			fmt.Fprintf(buf, "\t\t_ = buf.ReadInt8E(err) // Read NotNullValueFlag for string\n")
 			fmt.Fprintf(buf, "\t}\n")
 			fmt.Fprintf(buf, "\t%s = ctx.ReadString()\n", fieldAccess)
 		default:
@@ -326,6 +336,7 @@ func generateSliceElementRead(buf *bytes.Buffer, elemType types.Type, elemAccess
 }
 
 // generateSliceReadInline generates inline slice deserialization code to match encoder behavior exactly
+// Uses error-aware methods for deferred error checking
 func generateSliceReadInline(buf *bytes.Buffer, sliceType *types.Slice, fieldAccess string) error {
 	elemType := sliceType.Elem()
 
@@ -333,19 +344,21 @@ func generateSliceReadInline(buf *bytes.Buffer, sliceType *types.Slice, fieldAcc
 	elemIsReferencable := isReferencableType(elemType)
 
 	// ReadData RefValueFlag first (slice is referencable)
-	fmt.Fprintf(buf, "\tif flag := buf.ReadInt8(); flag != 0 {\n")
-	fmt.Fprintf(buf, "\t\treturn fmt.Errorf(\"expected RefValueFlag for slice field, got %%d\", flag)\n")
+	fmt.Fprintf(buf, "\tif flag := buf.ReadInt8E(err); flag != 0 {\n")
+	fmt.Fprintf(buf, "\t\tif !ctx.HasError() {\n")
+	fmt.Fprintf(buf, "\t\t\treturn fmt.Errorf(\"expected RefValueFlag for slice field, got %%d\", flag)\n")
+	fmt.Fprintf(buf, "\t\t}\n")
 	fmt.Fprintf(buf, "\t}\n")
 
 	// ReadData slice length - use block scope to avoid variable name conflicts
 	fmt.Fprintf(buf, "\t{\n")
-	fmt.Fprintf(buf, "\t\tsliceLen := int(buf.ReadVaruint32())\n")
+	fmt.Fprintf(buf, "\t\tsliceLen := int(buf.ReadVaruint32E(err))\n")
 	fmt.Fprintf(buf, "\t\tif sliceLen == 0 {\n")
 	fmt.Fprintf(buf, "\t\t\t%s = nil\n", fieldAccess)
 	fmt.Fprintf(buf, "\t\t} else {\n")
 
 	// ReadData collection header
-	fmt.Fprintf(buf, "\t\t\tcollectFlag := buf.ReadInt8()\n")
+	fmt.Fprintf(buf, "\t\t\tcollectFlag := buf.ReadInt8E(err)\n")
 	fmt.Fprintf(buf, "\t\t\t// Check if CollectionIsDeclElementType is set (bit 2, value 4)\n")
 	fmt.Fprintf(buf, "\t\t\thasDeclType := (collectFlag & 4) != 0\n")
 	if elemIsReferencable {
@@ -363,7 +376,7 @@ func generateSliceReadInline(buf *bytes.Buffer, sliceType *types.Slice, fieldAcc
 	if elemIsReferencable {
 		// For referencable elements (like strings), need to read ref flag when tracking
 		fmt.Fprintf(buf, "\t\t\t\t\tif trackRefs {\n")
-		fmt.Fprintf(buf, "\t\t\t\t\t\t_ = buf.ReadInt8() // Read ref flag (NotNullValueFlag)\n")
+		fmt.Fprintf(buf, "\t\t\t\t\t\t_ = buf.ReadInt8E(err) // Read ref flag (NotNullValueFlag)\n")
 		fmt.Fprintf(buf, "\t\t\t\t\t}\n")
 	}
 	if err := generateSliceElementReadDirect(buf, elemType, fmt.Sprintf("%s[i]", fieldAccess)); err != nil {
@@ -374,13 +387,13 @@ func generateSliceReadInline(buf *bytes.Buffer, sliceType *types.Slice, fieldAcc
 	fmt.Fprintf(buf, "\t\t\t\t// Need to read type ID once if CollectionIsSameType is set\n")
 	fmt.Fprintf(buf, "\t\t\t\tif (collectFlag & 8) != 0 {\n")
 	fmt.Fprintf(buf, "\t\t\t\t\t// ReadData element type ID once for all elements\n")
-	fmt.Fprintf(buf, "\t\t\t\t\t_ = buf.ReadVaruint32()\n")
+	fmt.Fprintf(buf, "\t\t\t\t\t_ = buf.ReadVaruint32E(err)\n")
 	fmt.Fprintf(buf, "\t\t\t\t}\n")
 	fmt.Fprintf(buf, "\t\t\t\tfor i := 0; i < sliceLen; i++ {\n")
 	if elemIsReferencable {
 		// For referencable elements (like strings), need to read ref flag when tracking
 		fmt.Fprintf(buf, "\t\t\t\t\tif trackRefs {\n")
-		fmt.Fprintf(buf, "\t\t\t\t\t\t_ = buf.ReadInt8() // Read ref flag (NotNullValueFlag)\n")
+		fmt.Fprintf(buf, "\t\t\t\t\t\t_ = buf.ReadInt8E(err) // Read ref flag (NotNullValueFlag)\n")
 		fmt.Fprintf(buf, "\t\t\t\t\t}\n")
 	}
 	// For same type without declared type, read elements directly
@@ -488,32 +501,34 @@ func generateSliceElementReadInline(buf *bytes.Buffer, elemType types.Type, elem
 
 // generateSliceElementReadDirect generates code to read slice elements directly via their serializers
 // This is used for typed slices with CollectionIsDeclElementType where no flags/type IDs are written per element
+// Uses error-aware methods for deferred error checking
 func generateSliceElementReadDirect(buf *bytes.Buffer, elemType types.Type, elemAccess string) error {
 	// Handle basic types - read directly using their serializers (no flags)
+	// Use error-aware methods for deferred error checking
 	if basic, ok := elemType.Underlying().(*types.Basic); ok {
 		switch basic.Kind() {
 		case types.Bool:
-			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadBool()\n", elemAccess)
+			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadBoolE(err)\n", elemAccess)
 		case types.Int8:
-			fmt.Fprintf(buf, "\t\t\t\t%s = int8(buf.ReadByte_())\n", elemAccess)
+			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadInt8E(err)\n", elemAccess)
 		case types.Int16:
-			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadInt16()\n", elemAccess)
+			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadInt16E(err)\n", elemAccess)
 		case types.Int32:
-			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadVarint32()\n", elemAccess)
+			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadVarint32E(err)\n", elemAccess)
 		case types.Int, types.Int64:
-			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadVarint64()\n", elemAccess)
+			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadVarint64E(err)\n", elemAccess)
 		case types.Uint8:
-			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadByte_()\n", elemAccess)
+			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadByteE(err)\n", elemAccess)
 		case types.Uint16:
-			fmt.Fprintf(buf, "\t\t\t\t%s = uint16(buf.ReadInt16())\n", elemAccess)
+			fmt.Fprintf(buf, "\t\t\t\t%s = uint16(buf.ReadInt16E(err))\n", elemAccess)
 		case types.Uint32:
-			fmt.Fprintf(buf, "\t\t\t\t%s = uint32(buf.ReadInt32())\n", elemAccess)
+			fmt.Fprintf(buf, "\t\t\t\t%s = uint32(buf.ReadInt32E(err))\n", elemAccess)
 		case types.Uint, types.Uint64:
-			fmt.Fprintf(buf, "\t\t\t\t%s = uint64(buf.ReadInt64())\n", elemAccess)
+			fmt.Fprintf(buf, "\t\t\t\t%s = uint64(buf.ReadInt64E(err))\n", elemAccess)
 		case types.Float32:
-			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadFloat32()\n", elemAccess)
+			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadFloat32E(err)\n", elemAccess)
 		case types.Float64:
-			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadFloat64()\n", elemAccess)
+			fmt.Fprintf(buf, "\t\t\t\t%s = buf.ReadFloat64E(err)\n", elemAccess)
 		case types.String:
 			// String serializer reads directly without flags
 			fmt.Fprintf(buf, "\t\t\t\t%s = ctx.ReadString()\n", elemAccess)
@@ -527,6 +542,7 @@ func generateSliceElementReadDirect(buf *bytes.Buffer, elemType types.Type, elem
 }
 
 // generateMapReadInline generates inline map deserialization code following the chunk-based format
+// Uses error-aware methods for deferred error checking
 func generateMapReadInline(buf *bytes.Buffer, mapType *types.Map, fieldAccess string) error {
 	keyType := mapType.Key()
 	valueType := mapType.Elem()
@@ -542,13 +558,15 @@ func generateMapReadInline(buf *bytes.Buffer, mapType *types.Map, fieldAccess st
 	}
 
 	// ReadData RefValueFlag first (map is referencable)
-	fmt.Fprintf(buf, "\tif flag := buf.ReadInt8(); flag != 0 {\n")
-	fmt.Fprintf(buf, "\t\treturn fmt.Errorf(\"expected RefValueFlag for map field, got %%d\", flag)\n")
+	fmt.Fprintf(buf, "\tif flag := buf.ReadInt8E(err); flag != 0 {\n")
+	fmt.Fprintf(buf, "\t\tif !ctx.HasError() {\n")
+	fmt.Fprintf(buf, "\t\t\treturn fmt.Errorf(\"expected RefValueFlag for map field, got %%d\", flag)\n")
+	fmt.Fprintf(buf, "\t\t}\n")
 	fmt.Fprintf(buf, "\t}\n")
 
 	// ReadData map length
 	fmt.Fprintf(buf, "\t{\n")
-	fmt.Fprintf(buf, "\t\tmapLen := int(buf.ReadVaruint32())\n")
+	fmt.Fprintf(buf, "\t\tmapLen := int(buf.ReadVaruint32E(err))\n")
 	fmt.Fprintf(buf, "\t\tif mapLen == 0 {\n")
 	fmt.Fprintf(buf, "\t\t\t%s = make(%s)\n", fieldAccess, mapType.String())
 	fmt.Fprintf(buf, "\t\t} else {\n")
@@ -558,8 +576,8 @@ func generateMapReadInline(buf *bytes.Buffer, mapType *types.Map, fieldAccess st
 	// ReadData chunks
 	fmt.Fprintf(buf, "\t\t\tfor mapSize > 0 {\n")
 	fmt.Fprintf(buf, "\t\t\t\t// ReadData KV header\n")
-	fmt.Fprintf(buf, "\t\t\t\tkvHeader := buf.ReadUint8()\n")
-	fmt.Fprintf(buf, "\t\t\t\tchunkSize := int(buf.ReadUint8())\n")
+	fmt.Fprintf(buf, "\t\t\t\tkvHeader := buf.ReadByteE(err)\n")
+	fmt.Fprintf(buf, "\t\t\t\tchunkSize := int(buf.ReadByteE(err))\n")
 
 	// Parse header flags
 	fmt.Fprintf(buf, "\t\t\t\ttrackKeyRef := (kvHeader & 0x1) != 0\n")
@@ -630,13 +648,14 @@ func getGoTypeString(t types.Type) string {
 }
 
 // generateMapKeyRead generates code to read a map key
+// Uses error-aware methods for deferred error checking
 func generateMapKeyRead(buf *bytes.Buffer, keyType types.Type, varName string) error {
 	// For basic types, match reflection's serializer behavior
 	if basic, ok := keyType.Underlying().(*types.Basic); ok {
 		switch basic.Kind() {
 		case types.Int:
 			// intSerializer uses ReadInt64, not ReadVarint64
-			fmt.Fprintf(buf, "\t\t\t\t\t%s = int(buf.ReadInt64())\n", varName)
+			fmt.Fprintf(buf, "\t\t\t\t\t%s = int(buf.ReadInt64E(err))\n", varName)
 		case types.String:
 			// stringSerializer.NeedWriteRef() = false, read directly
 			fmt.Fprintf(buf, "\t\t\t\t\t%s = ctx.ReadString()\n", varName)
@@ -652,13 +671,14 @@ func generateMapKeyRead(buf *bytes.Buffer, keyType types.Type, varName string) e
 }
 
 // generateMapValueRead generates code to read a map value
+// Uses error-aware methods for deferred error checking
 func generateMapValueRead(buf *bytes.Buffer, valueType types.Type, varName string) error {
 	// For basic types, match reflection's serializer behavior
 	if basic, ok := valueType.Underlying().(*types.Basic); ok {
 		switch basic.Kind() {
 		case types.Int:
 			// intSerializer uses ReadInt64, not ReadVarint64
-			fmt.Fprintf(buf, "\t\t\t\t\t%s = int(buf.ReadInt64())\n", varName)
+			fmt.Fprintf(buf, "\t\t\t\t\t%s = int(buf.ReadInt64E(err))\n", varName)
 		case types.String:
 			// stringSerializer.NeedWriteRef() = false, read directly
 			fmt.Fprintf(buf, "\t\t\t\t\t%s = ctx.ReadString()\n", varName)

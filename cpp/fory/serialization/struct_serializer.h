@@ -1703,8 +1703,7 @@ void read_struct_fields_compatible(T &obj, ReadContext &ctx,
     // 1. Field is marked as nullable in TypeDef (Java writes flag), OR
     // 2. trackingRef is enabled AND field is non-primitive
     bool read_ref_flag =
-        remote_field.field_type.nullable ||
-        (ctx.track_ref() && !is_primitive);
+        remote_field.field_type.nullable || (ctx.track_ref() && !is_primitive);
 
     if (field_id == -1) {
       // Field unknown locally — skip its value

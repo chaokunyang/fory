@@ -89,9 +89,9 @@ struct Serializer<E, std::enable_if_t<std::is_enum_v<E>>> {
   static inline E read(ReadContext &ctx, bool read_ref, bool read_type) {
     // Handle null/ref flag if requested.
     // In compatible mode, the caller (read_struct_fields_compatible) determines
-    // whether to pass read_ref=true based on the remote TypeDef's nullable flag.
-    // In non-compatible mode, read_ref is based on C++ type traits.
-    // When reading through std::optional, the optional serializer already handles
+    // whether to pass read_ref=true based on the remote TypeDef's nullable
+    // flag. In non-compatible mode, read_ref is based on C++ type traits. When
+    // reading through std::optional, the optional serializer already handles
     // the null flag and calls us with read_ref=false.
     bool has_value = consume_ref_flag(ctx, read_ref);
     if (ctx.has_error() || !has_value) {

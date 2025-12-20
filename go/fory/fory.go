@@ -454,19 +454,19 @@ func Serialize[T any](f *Fory, value T) ([]byte, error) {
 	case []int8:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(INT8_ARRAY)
-		err = writeInt8Slice(f.writeCtx.buffer, val)
+		writeInt8Slice(f.writeCtx.buffer, val, f.writeCtx.Err())
 	case []int16:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(INT16_ARRAY)
-		err = writeInt16Slice(f.writeCtx.buffer, val)
+		writeInt16Slice(f.writeCtx.buffer, val, f.writeCtx.Err())
 	case []int32:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(INT32_ARRAY)
-		err = writeInt32Slice(f.writeCtx.buffer, val)
+		writeInt32Slice(f.writeCtx.buffer, val, f.writeCtx.Err())
 	case []int64:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(INT64_ARRAY)
-		err = writeInt64Slice(f.writeCtx.buffer, val)
+		writeInt64Slice(f.writeCtx.buffer, val, f.writeCtx.Err())
 	case []int:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		if strconv.IntSize == 64 {
@@ -474,19 +474,19 @@ func Serialize[T any](f *Fory, value T) ([]byte, error) {
 		} else {
 			f.writeCtx.WriteTypeId(INT32_ARRAY)
 		}
-		err = writeIntSlice(f.writeCtx.buffer, val)
+		writeIntSlice(f.writeCtx.buffer, val, f.writeCtx.Err())
 	case []float32:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(FLOAT32_ARRAY)
-		err = writeFloat32Slice(f.writeCtx.buffer, val)
+		writeFloat32Slice(f.writeCtx.buffer, val, f.writeCtx.Err())
 	case []float64:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(FLOAT64_ARRAY)
-		err = writeFloat64Slice(f.writeCtx.buffer, val)
+		writeFloat64Slice(f.writeCtx.buffer, val, f.writeCtx.Err())
 	case []bool:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(BOOL_ARRAY)
-		err = writeBoolSlice(f.writeCtx.buffer, val)
+		writeBoolSlice(f.writeCtx.buffer, val, f.writeCtx.Err())
 	case map[string]string:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(MAP)
@@ -607,68 +607,32 @@ func Deserialize[T any](f *Fory, data []byte, target *T) error {
 		*t = f.readCtx.ReadString()
 		return f.readCtx.CheckError()
 	case *[]byte:
-		v, err := f.readCtx.ReadByteSlice(RefModeNullOnly, true)
-		if err != nil {
-			return err
-		}
-		*t = v
-		return nil
+		*t = f.readCtx.ReadByteSlice(RefModeNullOnly, true)
+		return f.readCtx.CheckError()
 	case *[]int8:
-		v, err := f.readCtx.ReadInt8Slice(RefModeNullOnly, true)
-		if err != nil {
-			return err
-		}
-		*t = v
-		return nil
+		*t = f.readCtx.ReadInt8Slice(RefModeNullOnly, true)
+		return f.readCtx.CheckError()
 	case *[]int16:
-		v, err := f.readCtx.ReadInt16Slice(RefModeNullOnly, true)
-		if err != nil {
-			return err
-		}
-		*t = v
-		return nil
+		*t = f.readCtx.ReadInt16Slice(RefModeNullOnly, true)
+		return f.readCtx.CheckError()
 	case *[]int32:
-		v, err := f.readCtx.ReadInt32Slice(RefModeNullOnly, true)
-		if err != nil {
-			return err
-		}
-		*t = v
-		return nil
+		*t = f.readCtx.ReadInt32Slice(RefModeNullOnly, true)
+		return f.readCtx.CheckError()
 	case *[]int64:
-		v, err := f.readCtx.ReadInt64Slice(RefModeNullOnly, true)
-		if err != nil {
-			return err
-		}
-		*t = v
-		return nil
+		*t = f.readCtx.ReadInt64Slice(RefModeNullOnly, true)
+		return f.readCtx.CheckError()
 	case *[]int:
-		v, err := f.readCtx.ReadIntSlice(RefModeNullOnly, true)
-		if err != nil {
-			return err
-		}
-		*t = v
-		return nil
+		*t = f.readCtx.ReadIntSlice(RefModeNullOnly, true)
+		return f.readCtx.CheckError()
 	case *[]float32:
-		v, err := f.readCtx.ReadFloat32Slice(RefModeNullOnly, true)
-		if err != nil {
-			return err
-		}
-		*t = v
-		return nil
+		*t = f.readCtx.ReadFloat32Slice(RefModeNullOnly, true)
+		return f.readCtx.CheckError()
 	case *[]float64:
-		v, err := f.readCtx.ReadFloat64Slice(RefModeNullOnly, true)
-		if err != nil {
-			return err
-		}
-		*t = v
-		return nil
+		*t = f.readCtx.ReadFloat64Slice(RefModeNullOnly, true)
+		return f.readCtx.CheckError()
 	case *[]bool:
-		v, err := f.readCtx.ReadBoolSlice(RefModeNullOnly, true)
-		if err != nil {
-			return err
-		}
-		*t = v
-		return nil
+		*t = f.readCtx.ReadBoolSlice(RefModeNullOnly, true)
+		return f.readCtx.CheckError()
 	case *map[string]string:
 		*t = f.readCtx.ReadStringStringMap(RefModeNullOnly, true)
 		return nil
@@ -705,7 +669,8 @@ func Deserialize[T any](f *Fory, data []byte, target *T) error {
 		}
 
 		// Use Read to deserialize directly into target
-		return serializer.Read(f.readCtx, RefModeTracking, true, targetVal)
+		serializer.Read(f.readCtx, RefModeTracking, true, targetVal)
+		return f.readCtx.CheckError()
 	}
 }
 
@@ -740,8 +705,9 @@ func (f *Fory) Serialize(value any) ([]byte, error) {
 	}
 
 	// SerializeWithCallback the value
-	if err := f.writeCtx.WriteValue(reflect.ValueOf(value)); err != nil {
-		return nil, err
+	f.writeCtx.WriteValue(reflect.ValueOf(value))
+	if f.writeCtx.HasError() {
+		return nil, f.writeCtx.TakeError()
 	}
 
 	// WriteData collected TypeMetas at the end in compatible mode (matches C++/Java)
@@ -802,8 +768,9 @@ func (f *Fory) Deserialize(data []byte, v interface{}) error {
 
 	// Read directly into target value
 	target := reflect.ValueOf(v).Elem()
-	if err := f.readCtx.ReadValue(target); err != nil {
-		return err
+	f.readCtx.ReadValue(target)
+	if f.readCtx.HasError() {
+		return f.readCtx.TakeError()
 	}
 
 	// Restore final position if we loaded type definitions
@@ -848,9 +815,10 @@ func (f *Fory) SerializeTo(buf *ByteBuffer, value interface{}) error {
 	}
 
 	// SerializeWithCallback the value
-	if err := f.writeCtx.WriteValue(reflect.ValueOf(value)); err != nil {
+	f.writeCtx.WriteValue(reflect.ValueOf(value))
+	if f.writeCtx.HasError() {
 		f.writeCtx.buffer = origBuffer
-		return err
+		return f.writeCtx.TakeError()
 	}
 
 	// Write collected TypeMetas at the end in compatible mode
@@ -923,9 +891,10 @@ func (f *Fory) DeserializeFrom(buf *ByteBuffer, v interface{}) error {
 
 	// Read directly into target value
 	target := reflect.ValueOf(v).Elem()
-	if err := f.readCtx.ReadValue(target); err != nil {
+	f.readCtx.ReadValue(target)
+	if f.readCtx.HasError() {
 		f.readCtx.buffer = origBuffer
-		return err
+		return f.readCtx.TakeError()
 	}
 
 	// Restore final position if we loaded type definitions
@@ -990,8 +959,9 @@ func (f *Fory) SerializeWithCallback(buffer *ByteBuffer, v interface{}, callback
 	}
 
 	// SerializeWithCallback the value
-	if err := f.writeCtx.WriteValue(reflect.ValueOf(v)); err != nil {
-		return err
+	f.writeCtx.WriteValue(reflect.ValueOf(v))
+	if f.writeCtx.HasError() {
+		return f.writeCtx.TakeError()
 	}
 
 	// WriteData collected TypeMetas at the end in compatible mode (matches C++/Java)
@@ -1076,8 +1046,9 @@ func (f *Fory) DeserializeWithCallbackBuffers(buffer *ByteBuffer, v interface{},
 		return fmt.Errorf("v must be a non-nil pointer")
 	}
 	// DeserializeWithCallbackBuffers directly into v
-	if err := f.readCtx.ReadValue(rv.Elem()); err != nil {
-		return err
+	f.readCtx.ReadValue(rv.Elem())
+	if f.readCtx.HasError() {
+		return f.readCtx.TakeError()
 	}
 	// Restore final position if we loaded type definitions
 	if finalPos > 0 {
@@ -1103,8 +1074,9 @@ func (f *Fory) serializeReflectValue(value reflect.Value) ([]byte, error) {
 	}
 
 	// SerializeWithCallback the value
-	if err := f.writeCtx.WriteValue(value); err != nil {
-		return nil, err
+	f.writeCtx.WriteValue(value)
+	if f.writeCtx.HasError() {
+		return nil, f.writeCtx.TakeError()
 	}
 
 	// WriteData collected TypeMetas at the end in compatible mode (matches C++/Java)

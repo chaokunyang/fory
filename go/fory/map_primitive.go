@@ -599,296 +599,280 @@ func readMapIntInt(buf *ByteBuffer, err *Error) map[int]int {
 
 type stringStringMapSerializer struct{}
 
-func (s stringStringMapSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
+func (s stringStringMapSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 	writeMapStringString(ctx.buffer, value.Interface().(map[string]string))
-	return nil
 }
 
-func (s stringStringMapSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
-	done, err := writeMapRefAndType(ctx, refMode, writeType, value)
-	if done || err != nil {
-		return err
+func (s stringStringMapSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
+	done := writeMapRefAndType(ctx, refMode, writeType, value)
+	if done || ctx.HasError() {
+		return
 	}
-	return s.WriteData(ctx, value)
+	s.WriteData(ctx, value)
 }
 
-func (s stringStringMapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+func (s stringStringMapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
 	if value.IsNil() {
 		value.Set(reflect.MakeMap(type_))
 	}
 	ctx.RefResolver().Reference(value)
 	result := readMapStringString(ctx.buffer, ctx.Err())
 	value.Set(reflect.ValueOf(result))
-	return nil
 }
 
-func (s stringStringMapSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
-	done, err := readMapRefAndType(ctx, refMode, readType, value)
-	if done || err != nil {
-		return err
+func (s stringStringMapSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) {
+	done := readMapRefAndType(ctx, refMode, readType, value)
+	if done || ctx.HasError() {
+		return
 	}
-	return s.ReadData(ctx, value.Type(), value)
+	s.ReadData(ctx, value.Type(), value)
 }
 
-func (s stringStringMapSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
-	return s.Read(ctx, refMode, false, value)
+func (s stringStringMapSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
+	s.Read(ctx, refMode, false, value)
 }
 
 type stringInt64MapSerializer struct{}
 
-func (s stringInt64MapSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
+func (s stringInt64MapSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 	writeMapStringInt64(ctx.buffer, value.Interface().(map[string]int64))
-	return nil
 }
 
-func (s stringInt64MapSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
-	done, err := writeMapRefAndType(ctx, refMode, writeType, value)
-	if done || err != nil {
-		return err
+func (s stringInt64MapSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
+	done := writeMapRefAndType(ctx, refMode, writeType, value)
+	if done || ctx.HasError() {
+		return
 	}
-	return s.WriteData(ctx, value)
+	s.WriteData(ctx, value)
 }
 
-func (s stringInt64MapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+func (s stringInt64MapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
 	if value.IsNil() {
 		value.Set(reflect.MakeMap(type_))
 	}
 	ctx.RefResolver().Reference(value)
 	result := readMapStringInt64(ctx.buffer, ctx.Err())
 	value.Set(reflect.ValueOf(result))
-	return nil
 }
 
-func (s stringInt64MapSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
-	done, err := readMapRefAndType(ctx, refMode, readType, value)
-	if done || err != nil {
-		return err
+func (s stringInt64MapSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) {
+	done := readMapRefAndType(ctx, refMode, readType, value)
+	if done || ctx.HasError() {
+		return
 	}
-	return s.ReadData(ctx, value.Type(), value)
+	s.ReadData(ctx, value.Type(), value)
 }
 
-func (s stringInt64MapSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
-	return s.Read(ctx, refMode, false, value)
+func (s stringInt64MapSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
+	s.Read(ctx, refMode, false, value)
 }
 
 type stringIntMapSerializer struct{}
 
-func (s stringIntMapSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
+func (s stringIntMapSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 	writeMapStringInt(ctx.buffer, value.Interface().(map[string]int))
-	return nil
 }
 
-func (s stringIntMapSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
-	done, err := writeMapRefAndType(ctx, refMode, writeType, value)
-	if done || err != nil {
-		return err
+func (s stringIntMapSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
+	done := writeMapRefAndType(ctx, refMode, writeType, value)
+	if done || ctx.HasError() {
+		return
 	}
-	return s.WriteData(ctx, value)
+	s.WriteData(ctx, value)
 }
 
-func (s stringIntMapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+func (s stringIntMapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
 	if value.IsNil() {
 		value.Set(reflect.MakeMap(type_))
 	}
 	ctx.RefResolver().Reference(value)
 	result := readMapStringInt(ctx.buffer, ctx.Err())
 	value.Set(reflect.ValueOf(result))
-	return nil
 }
 
-func (s stringIntMapSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
-	done, err := readMapRefAndType(ctx, refMode, readType, value)
-	if done || err != nil {
-		return err
+func (s stringIntMapSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) {
+	done := readMapRefAndType(ctx, refMode, readType, value)
+	if done || ctx.HasError() {
+		return
 	}
-	return s.ReadData(ctx, value.Type(), value)
+	s.ReadData(ctx, value.Type(), value)
 }
 
-func (s stringIntMapSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
-	return s.Read(ctx, refMode, false, value)
+func (s stringIntMapSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
+	s.Read(ctx, refMode, false, value)
 }
 
 type stringFloat64MapSerializer struct{}
 
-func (s stringFloat64MapSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
+func (s stringFloat64MapSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 	writeMapStringFloat64(ctx.buffer, value.Interface().(map[string]float64))
-	return nil
 }
 
-func (s stringFloat64MapSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
-	done, err := writeMapRefAndType(ctx, refMode, writeType, value)
-	if done || err != nil {
-		return err
+func (s stringFloat64MapSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
+	done := writeMapRefAndType(ctx, refMode, writeType, value)
+	if done || ctx.HasError() {
+		return
 	}
-	return s.WriteData(ctx, value)
+	s.WriteData(ctx, value)
 }
 
-func (s stringFloat64MapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+func (s stringFloat64MapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
 	if value.IsNil() {
 		value.Set(reflect.MakeMap(type_))
 	}
 	ctx.RefResolver().Reference(value)
 	result := readMapStringFloat64(ctx.buffer, ctx.Err())
 	value.Set(reflect.ValueOf(result))
-	return nil
 }
 
-func (s stringFloat64MapSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
-	done, err := readMapRefAndType(ctx, refMode, readType, value)
-	if done || err != nil {
-		return err
+func (s stringFloat64MapSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) {
+	done := readMapRefAndType(ctx, refMode, readType, value)
+	if done || ctx.HasError() {
+		return
 	}
-	return s.ReadData(ctx, value.Type(), value)
+	s.ReadData(ctx, value.Type(), value)
 }
 
-func (s stringFloat64MapSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
-	return s.Read(ctx, refMode, false, value)
+func (s stringFloat64MapSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
+	s.Read(ctx, refMode, false, value)
 }
 
 type stringBoolMapSerializer struct{}
 
-func (s stringBoolMapSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
+func (s stringBoolMapSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 	writeMapStringBool(ctx.buffer, value.Interface().(map[string]bool))
-	return nil
 }
 
-func (s stringBoolMapSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
-	done, err := writeMapRefAndType(ctx, refMode, writeType, value)
-	if done || err != nil {
-		return err
+func (s stringBoolMapSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
+	done := writeMapRefAndType(ctx, refMode, writeType, value)
+	if done || ctx.HasError() {
+		return
 	}
-	return s.WriteData(ctx, value)
+	s.WriteData(ctx, value)
 }
 
-func (s stringBoolMapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+func (s stringBoolMapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
 	if value.IsNil() {
 		value.Set(reflect.MakeMap(type_))
 	}
 	ctx.RefResolver().Reference(value)
 	result := readMapStringBool(ctx.buffer, ctx.Err())
 	value.Set(reflect.ValueOf(result))
-	return nil
 }
 
-func (s stringBoolMapSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
-	done, err := readMapRefAndType(ctx, refMode, readType, value)
-	if done || err != nil {
-		return err
+func (s stringBoolMapSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) {
+	done := readMapRefAndType(ctx, refMode, readType, value)
+	if done || ctx.HasError() {
+		return
 	}
-	return s.ReadData(ctx, value.Type(), value)
+	s.ReadData(ctx, value.Type(), value)
 }
 
-func (s stringBoolMapSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
-	return s.Read(ctx, refMode, false, value)
+func (s stringBoolMapSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
+	s.Read(ctx, refMode, false, value)
 }
 
 type int32Int32MapSerializer struct{}
 
-func (s int32Int32MapSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
+func (s int32Int32MapSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 	writeMapInt32Int32(ctx.buffer, value.Interface().(map[int32]int32))
-	return nil
 }
 
-func (s int32Int32MapSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
-	done, err := writeMapRefAndType(ctx, refMode, writeType, value)
-	if done || err != nil {
-		return err
+func (s int32Int32MapSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
+	done := writeMapRefAndType(ctx, refMode, writeType, value)
+	if done || ctx.HasError() {
+		return
 	}
-	return s.WriteData(ctx, value)
+	s.WriteData(ctx, value)
 }
 
-func (s int32Int32MapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+func (s int32Int32MapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
 	if value.IsNil() {
 		value.Set(reflect.MakeMap(type_))
 	}
 	ctx.RefResolver().Reference(value)
 	result := readMapInt32Int32(ctx.buffer, ctx.Err())
 	value.Set(reflect.ValueOf(result))
-	return nil
 }
 
-func (s int32Int32MapSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
-	done, err := readMapRefAndType(ctx, refMode, readType, value)
-	if done || err != nil {
-		return err
+func (s int32Int32MapSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) {
+	done := readMapRefAndType(ctx, refMode, readType, value)
+	if done || ctx.HasError() {
+		return
 	}
-	return s.ReadData(ctx, value.Type(), value)
+	s.ReadData(ctx, value.Type(), value)
 }
 
-func (s int32Int32MapSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
-	return s.Read(ctx, refMode, false, value)
+func (s int32Int32MapSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
+	s.Read(ctx, refMode, false, value)
 }
 
 type int64Int64MapSerializer struct{}
 
-func (s int64Int64MapSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
+func (s int64Int64MapSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 	writeMapInt64Int64(ctx.buffer, value.Interface().(map[int64]int64))
-	return nil
 }
 
-func (s int64Int64MapSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
-	done, err := writeMapRefAndType(ctx, refMode, writeType, value)
-	if done || err != nil {
-		return err
+func (s int64Int64MapSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
+	done := writeMapRefAndType(ctx, refMode, writeType, value)
+	if done || ctx.HasError() {
+		return
 	}
-	return s.WriteData(ctx, value)
+	s.WriteData(ctx, value)
 }
 
-func (s int64Int64MapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+func (s int64Int64MapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
 	if value.IsNil() {
 		value.Set(reflect.MakeMap(type_))
 	}
 	ctx.RefResolver().Reference(value)
 	result := readMapInt64Int64(ctx.buffer, ctx.Err())
 	value.Set(reflect.ValueOf(result))
-	return nil
 }
 
-func (s int64Int64MapSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
-	done, err := readMapRefAndType(ctx, refMode, readType, value)
-	if done || err != nil {
-		return err
+func (s int64Int64MapSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) {
+	done := readMapRefAndType(ctx, refMode, readType, value)
+	if done || ctx.HasError() {
+		return
 	}
-	return s.ReadData(ctx, value.Type(), value)
+	s.ReadData(ctx, value.Type(), value)
 }
 
-func (s int64Int64MapSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
-	return s.Read(ctx, refMode, false, value)
+func (s int64Int64MapSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
+	s.Read(ctx, refMode, false, value)
 }
 
 type intIntMapSerializer struct{}
 
-func (s intIntMapSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
+func (s intIntMapSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 	writeMapIntInt(ctx.buffer, value.Interface().(map[int]int))
-	return nil
 }
 
-func (s intIntMapSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
-	done, err := writeMapRefAndType(ctx, refMode, writeType, value)
-	if done || err != nil {
-		return err
+func (s intIntMapSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
+	done := writeMapRefAndType(ctx, refMode, writeType, value)
+	if done || ctx.HasError() {
+		return
 	}
-	return s.WriteData(ctx, value)
+	s.WriteData(ctx, value)
 }
 
-func (s intIntMapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+func (s intIntMapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
 	if value.IsNil() {
 		value.Set(reflect.MakeMap(type_))
 	}
 	ctx.RefResolver().Reference(value)
 	result := readMapIntInt(ctx.buffer, ctx.Err())
 	value.Set(reflect.ValueOf(result))
-	return nil
 }
 
-func (s intIntMapSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
-	done, err := readMapRefAndType(ctx, refMode, readType, value)
-	if done || err != nil {
-		return err
+func (s intIntMapSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) {
+	done := readMapRefAndType(ctx, refMode, readType, value)
+	if done || ctx.HasError() {
+		return
 	}
-	return s.ReadData(ctx, value.Type(), value)
+	s.ReadData(ctx, value.Type(), value)
 }
 
-func (s intIntMapSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
-	return s.Read(ctx, refMode, false, value)
+func (s intIntMapSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
+	s.Read(ctx, refMode, false, value)
 }

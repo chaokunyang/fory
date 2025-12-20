@@ -65,7 +65,7 @@ func generateReadTyped(buf *bytes.Buffer, s *StructInfo) error {
 func generateReadInterface(buf *bytes.Buffer, s *StructInfo) error {
 	// Generate ReadData method (reflect.Value-based API)
 	fmt.Fprintf(buf, "// ReadData provides reflect.Value interface compatibility (implements fory.Serializer)\n")
-	fmt.Fprintf(buf, "func (g %s_ForyGenSerializer) ReadData(ctx *fory.ReadContext, type_ reflect.Type, value reflect.Value) error {\n", s.Name)
+	fmt.Fprintf(buf, "func (g %s_ForyGenSerializer) ReadData(ctx *fory.ReadContext, type_ reflect.Type, value reflect.Value) {\n", s.Name)
 	fmt.Fprintf(buf, "\t// Convert reflect.Value to concrete type and delegate to typed method\n")
 	fmt.Fprintf(buf, "\tvar v *%s\n", s.Name)
 	fmt.Fprintf(buf, "\tif value.Kind() == reflect.Ptr {\n")
@@ -79,7 +79,9 @@ func generateReadInterface(buf *bytes.Buffer, s *StructInfo) error {
 	fmt.Fprintf(buf, "\t\tv = value.Addr().Interface().(*%s)\n", s.Name)
 	fmt.Fprintf(buf, "\t}\n")
 	fmt.Fprintf(buf, "\t// Delegate to strongly-typed method for maximum performance\n")
-	fmt.Fprintf(buf, "\treturn g.ReadTyped(ctx, v)\n")
+	fmt.Fprintf(buf, "\tif err := g.ReadTyped(ctx, v); err != nil {\n")
+	fmt.Fprintf(buf, "\t\tctx.SetError(fory.FromError(err))\n")
+	fmt.Fprintf(buf, "\t}\n")
 	fmt.Fprintf(buf, "}\n\n")
 	return nil
 }

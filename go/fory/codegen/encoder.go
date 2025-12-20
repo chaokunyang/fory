@@ -54,7 +54,7 @@ func generateWriteTyped(buf *bytes.Buffer, s *StructInfo) error {
 func generateWriteInterface(buf *bytes.Buffer, s *StructInfo) error {
 	// Generate WriteData method (reflect.Value-based API)
 	fmt.Fprintf(buf, "// WriteData provides reflect.Value interface compatibility (implements fory.Serializer)\n")
-	fmt.Fprintf(buf, "func (g %s_ForyGenSerializer) WriteData(ctx *fory.WriteContext, value reflect.Value) error {\n", s.Name)
+	fmt.Fprintf(buf, "func (g %s_ForyGenSerializer) WriteData(ctx *fory.WriteContext, value reflect.Value) {\n", s.Name)
 	fmt.Fprintf(buf, "\t// Convert reflect.Value to concrete type and delegate to typed method\n")
 	fmt.Fprintf(buf, "\tvar v *%s\n", s.Name)
 	fmt.Fprintf(buf, "\tif value.Kind() == reflect.Ptr {\n")
@@ -65,7 +65,9 @@ func generateWriteInterface(buf *bytes.Buffer, s *StructInfo) error {
 	fmt.Fprintf(buf, "\t\tv = &temp\n")
 	fmt.Fprintf(buf, "\t}\n")
 	fmt.Fprintf(buf, "\t// Delegate to strongly-typed method for maximum performance\n")
-	fmt.Fprintf(buf, "\treturn g.WriteTyped(ctx, v)\n")
+	fmt.Fprintf(buf, "\tif err := g.WriteTyped(ctx, v); err != nil {\n")
+	fmt.Fprintf(buf, "\t\tctx.SetError(fory.FromError(err))\n")
+	fmt.Fprintf(buf, "\t}\n")
 	fmt.Fprintf(buf, "}\n\n")
 	return nil
 }

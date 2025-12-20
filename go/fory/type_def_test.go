@@ -121,7 +121,8 @@ func TestTypeDefEncodingDecoding(t *testing.T) {
 			buffer := NewByteBuffer(make([]byte, 0, 256))
 			originalTypeDef.writeTypeDef(buffer)
 
-			decodedTypeDef, err := readTypeDef(fory, buffer, int64(buffer.ReadInt64(err)))
+			readErr := &Error{}
+			decodedTypeDef, err := readTypeDef(fory, buffer, int64(buffer.ReadInt64(readErr)))
 			if err != nil {
 				t.Fatalf("Failed to decode TypeDef: %v", err)
 			}
@@ -248,7 +249,8 @@ func TestTypeDefNullableFields(t *testing.T) {
 		buffer := NewByteBuffer(make([]byte, 0, 256))
 		typeDef.writeTypeDef(buffer)
 
-		decodedTypeDef, err := readTypeDef(fory, buffer, int64(buffer.ReadInt64(err)))
+		readErr := &Error{}
+		decodedTypeDef, err := readTypeDef(fory, buffer, int64(buffer.ReadInt64(readErr)))
 		if err != nil {
 			t.Fatalf("Failed to decode TypeDef: %v", err)
 		}

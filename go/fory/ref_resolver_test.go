@@ -42,9 +42,10 @@ func TestReferenceResolver(t *testing.T) {
 		require.True(t, refWritten)
 	}
 	refResolver.readObjects = make([]reflect.Value, len(refResolver.writtenObjects))
+	ctxErr := &Error{}
 	for range values {
-		require.Equal(t, refResolver.ReadRefOrNull(buf), RefValueFlag)
-		require.Equal(t, refResolver.ReadRefOrNull(buf), RefFlag)
+		require.Equal(t, refResolver.ReadRefOrNull(buf, ctxErr), RefValueFlag)
+		require.Equal(t, refResolver.ReadRefOrNull(buf, ctxErr), RefFlag)
 	}
 	{
 		s := []int{1, 2, 3}
@@ -79,9 +80,10 @@ func TestNonReferenceResolver(t *testing.T) {
 		require.Nil(t, err)
 		require.False(t, refWritten)
 	}
+	ctxErr := &Error{}
 	for range values {
-		require.Equal(t, refResolver.ReadRefOrNull(buf), NotNullValueFlag)
-		require.Equal(t, refResolver.ReadRefOrNull(buf), NotNullValueFlag)
+		require.Equal(t, refResolver.ReadRefOrNull(buf, ctxErr), NotNullValueFlag)
+		require.Equal(t, refResolver.ReadRefOrNull(buf, ctxErr), NotNullValueFlag)
 	}
 }
 

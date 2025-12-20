@@ -24,31 +24,32 @@ func NewSerializerFor_DynamicSliceDemo() fory.Serializer {
 }
 
 // Write is the entry point for serialization with ref/type handling
-func (g DynamicSliceDemo_ForyGenSerializer) Write(ctx *fory.WriteContext, refMode fory.RefMode, writeType bool, value reflect.Value) error {
+func (g DynamicSliceDemo_ForyGenSerializer) Write(ctx *fory.WriteContext, refMode fory.RefMode, writeType bool, value reflect.Value) {
 	switch refMode {
 	case fory.RefModeTracking:
 		if !value.IsValid() || (value.Kind() == reflect.Ptr && value.IsNil()) {
 			ctx.Buffer().WriteInt8(-3) // NullFlag
-			return nil
+			return
 		}
 		refWritten, err := ctx.RefResolver().WriteRefOrNull(ctx.Buffer(), value)
 		if err != nil {
-			return err
+			ctx.SetError(fory.FromError(err))
+			return
 		}
 		if refWritten {
-			return nil
+			return
 		}
 	case fory.RefModeNullOnly:
 		if !value.IsValid() || (value.Kind() == reflect.Ptr && value.IsNil()) {
 			ctx.Buffer().WriteInt8(-3) // NullFlag
-			return nil
+			return
 		}
 		ctx.Buffer().WriteInt8(-1) // NotNullValueFlag
 	}
 	if writeType {
 		ctx.Buffer().WriteVaruint32(uint32(fory.NAMED_STRUCT))
 	}
-	return g.WriteData(ctx, value)
+	g.WriteData(ctx, value)
 }
 
 // WriteTyped provides strongly-typed serialization with no reflection overhead
@@ -79,7 +80,7 @@ func (g DynamicSliceDemo_ForyGenSerializer) WriteTyped(ctx *fory.WriteContext, v
 }
 
 // WriteData provides reflect.Value interface compatibility (implements fory.Serializer)
-func (g DynamicSliceDemo_ForyGenSerializer) WriteData(ctx *fory.WriteContext, value reflect.Value) error {
+func (g DynamicSliceDemo_ForyGenSerializer) WriteData(ctx *fory.WriteContext, value reflect.Value) {
 	// Convert reflect.Value to concrete type and delegate to typed method
 	var v *DynamicSliceDemo
 	if value.Kind() == reflect.Ptr {
@@ -90,37 +91,41 @@ func (g DynamicSliceDemo_ForyGenSerializer) WriteData(ctx *fory.WriteContext, va
 		v = &temp
 	}
 	// Delegate to strongly-typed method for maximum performance
-	return g.WriteTyped(ctx, v)
+	if err := g.WriteTyped(ctx, v); err != nil {
+		ctx.SetError(fory.FromError(err))
+	}
 }
 
 // Read is the entry point for deserialization with ref/type handling
-func (g DynamicSliceDemo_ForyGenSerializer) Read(ctx *fory.ReadContext, refMode fory.RefMode, readType bool, value reflect.Value) error {
+func (g DynamicSliceDemo_ForyGenSerializer) Read(ctx *fory.ReadContext, refMode fory.RefMode, readType bool, value reflect.Value) {
 	err := ctx.Err() // Get error pointer for deferred error checking
 	switch refMode {
 	case fory.RefModeTracking:
 		refID, refErr := ctx.RefResolver().TryPreserveRefId(ctx.Buffer())
 		if refErr != nil {
-			return refErr
+			ctx.SetError(fory.FromError(refErr))
+			return
 		}
 		if int8(refID) < -1 { // NotNullValueFlag
 			obj := ctx.RefResolver().GetReadObject(refID)
 			if obj.IsValid() {
 				value.Set(obj)
 			}
-			return nil
+			return
 		}
 	case fory.RefModeNullOnly:
 		flag := ctx.Buffer().ReadInt8(err)
 		if flag == -3 { // NullFlag
-			return ctx.CheckError()
+			return
 		}
 	}
 	if readType {
 		if _, tiErr := ctx.TypeResolver().ReadTypeInfo(ctx.Buffer(), value); tiErr != nil {
-			return tiErr
+			ctx.SetError(fory.FromError(tiErr))
+			return
 		}
 	}
-	return g.ReadData(ctx, value.Type(), value)
+	g.ReadData(ctx, value.Type(), value)
 }
 
 // ReadTyped provides strongly-typed deserialization with no reflection overhead
@@ -164,7 +169,7 @@ func (g DynamicSliceDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *
 }
 
 // ReadData provides reflect.Value interface compatibility (implements fory.Serializer)
-func (g DynamicSliceDemo_ForyGenSerializer) ReadData(ctx *fory.ReadContext, type_ reflect.Type, value reflect.Value) error {
+func (g DynamicSliceDemo_ForyGenSerializer) ReadData(ctx *fory.ReadContext, type_ reflect.Type, value reflect.Value) {
 	// Convert reflect.Value to concrete type and delegate to typed method
 	var v *DynamicSliceDemo
 	if value.Kind() == reflect.Ptr {
@@ -178,12 +183,14 @@ func (g DynamicSliceDemo_ForyGenSerializer) ReadData(ctx *fory.ReadContext, type
 		v = value.Addr().Interface().(*DynamicSliceDemo)
 	}
 	// Delegate to strongly-typed method for maximum performance
-	return g.ReadTyped(ctx, v)
+	if err := g.ReadTyped(ctx, v); err != nil {
+		ctx.SetError(fory.FromError(err))
+	}
 }
 
 // ReadWithTypeInfo deserializes with pre-read type information
-func (g DynamicSliceDemo_ForyGenSerializer) ReadWithTypeInfo(ctx *fory.ReadContext, refMode fory.RefMode, typeInfo *fory.TypeInfo, value reflect.Value) error {
-	return g.Read(ctx, refMode, false, value)
+func (g DynamicSliceDemo_ForyGenSerializer) ReadWithTypeInfo(ctx *fory.ReadContext, refMode fory.RefMode, typeInfo *fory.TypeInfo, value reflect.Value) {
+	g.Read(ctx, refMode, false, value)
 }
 
 type MapDemo_ForyGenSerializer struct{}
@@ -193,31 +200,32 @@ func NewSerializerFor_MapDemo() fory.Serializer {
 }
 
 // Write is the entry point for serialization with ref/type handling
-func (g MapDemo_ForyGenSerializer) Write(ctx *fory.WriteContext, refMode fory.RefMode, writeType bool, value reflect.Value) error {
+func (g MapDemo_ForyGenSerializer) Write(ctx *fory.WriteContext, refMode fory.RefMode, writeType bool, value reflect.Value) {
 	switch refMode {
 	case fory.RefModeTracking:
 		if !value.IsValid() || (value.Kind() == reflect.Ptr && value.IsNil()) {
 			ctx.Buffer().WriteInt8(-3) // NullFlag
-			return nil
+			return
 		}
 		refWritten, err := ctx.RefResolver().WriteRefOrNull(ctx.Buffer(), value)
 		if err != nil {
-			return err
+			ctx.SetError(fory.FromError(err))
+			return
 		}
 		if refWritten {
-			return nil
+			return
 		}
 	case fory.RefModeNullOnly:
 		if !value.IsValid() || (value.Kind() == reflect.Ptr && value.IsNil()) {
 			ctx.Buffer().WriteInt8(-3) // NullFlag
-			return nil
+			return
 		}
 		ctx.Buffer().WriteInt8(-1) // NotNullValueFlag
 	}
 	if writeType {
 		ctx.Buffer().WriteVaruint32(uint32(fory.NAMED_STRUCT))
 	}
-	return g.WriteData(ctx, value)
+	g.WriteData(ctx, value)
 }
 
 // WriteTyped provides strongly-typed serialization with no reflection overhead
@@ -357,7 +365,7 @@ func (g MapDemo_ForyGenSerializer) WriteTyped(ctx *fory.WriteContext, v *MapDemo
 }
 
 // WriteData provides reflect.Value interface compatibility (implements fory.Serializer)
-func (g MapDemo_ForyGenSerializer) WriteData(ctx *fory.WriteContext, value reflect.Value) error {
+func (g MapDemo_ForyGenSerializer) WriteData(ctx *fory.WriteContext, value reflect.Value) {
 	// Convert reflect.Value to concrete type and delegate to typed method
 	var v *MapDemo
 	if value.Kind() == reflect.Ptr {
@@ -368,37 +376,41 @@ func (g MapDemo_ForyGenSerializer) WriteData(ctx *fory.WriteContext, value refle
 		v = &temp
 	}
 	// Delegate to strongly-typed method for maximum performance
-	return g.WriteTyped(ctx, v)
+	if err := g.WriteTyped(ctx, v); err != nil {
+		ctx.SetError(fory.FromError(err))
+	}
 }
 
 // Read is the entry point for deserialization with ref/type handling
-func (g MapDemo_ForyGenSerializer) Read(ctx *fory.ReadContext, refMode fory.RefMode, readType bool, value reflect.Value) error {
+func (g MapDemo_ForyGenSerializer) Read(ctx *fory.ReadContext, refMode fory.RefMode, readType bool, value reflect.Value) {
 	err := ctx.Err() // Get error pointer for deferred error checking
 	switch refMode {
 	case fory.RefModeTracking:
 		refID, refErr := ctx.RefResolver().TryPreserveRefId(ctx.Buffer())
 		if refErr != nil {
-			return refErr
+			ctx.SetError(fory.FromError(refErr))
+			return
 		}
 		if int8(refID) < -1 { // NotNullValueFlag
 			obj := ctx.RefResolver().GetReadObject(refID)
 			if obj.IsValid() {
 				value.Set(obj)
 			}
-			return nil
+			return
 		}
 	case fory.RefModeNullOnly:
 		flag := ctx.Buffer().ReadInt8(err)
 		if flag == -3 { // NullFlag
-			return ctx.CheckError()
+			return
 		}
 	}
 	if readType {
 		if _, tiErr := ctx.TypeResolver().ReadTypeInfo(ctx.Buffer(), value); tiErr != nil {
-			return tiErr
+			ctx.SetError(fory.FromError(tiErr))
+			return
 		}
 	}
-	return g.ReadData(ctx, value.Type(), value)
+	g.ReadData(ctx, value.Type(), value)
 }
 
 // ReadTyped provides strongly-typed deserialization with no reflection overhead
@@ -532,7 +544,7 @@ func (g MapDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *MapDemo) 
 }
 
 // ReadData provides reflect.Value interface compatibility (implements fory.Serializer)
-func (g MapDemo_ForyGenSerializer) ReadData(ctx *fory.ReadContext, type_ reflect.Type, value reflect.Value) error {
+func (g MapDemo_ForyGenSerializer) ReadData(ctx *fory.ReadContext, type_ reflect.Type, value reflect.Value) {
 	// Convert reflect.Value to concrete type and delegate to typed method
 	var v *MapDemo
 	if value.Kind() == reflect.Ptr {
@@ -546,12 +558,14 @@ func (g MapDemo_ForyGenSerializer) ReadData(ctx *fory.ReadContext, type_ reflect
 		v = value.Addr().Interface().(*MapDemo)
 	}
 	// Delegate to strongly-typed method for maximum performance
-	return g.ReadTyped(ctx, v)
+	if err := g.ReadTyped(ctx, v); err != nil {
+		ctx.SetError(fory.FromError(err))
+	}
 }
 
 // ReadWithTypeInfo deserializes with pre-read type information
-func (g MapDemo_ForyGenSerializer) ReadWithTypeInfo(ctx *fory.ReadContext, refMode fory.RefMode, typeInfo *fory.TypeInfo, value reflect.Value) error {
-	return g.Read(ctx, refMode, false, value)
+func (g MapDemo_ForyGenSerializer) ReadWithTypeInfo(ctx *fory.ReadContext, refMode fory.RefMode, typeInfo *fory.TypeInfo, value reflect.Value) {
+	g.Read(ctx, refMode, false, value)
 }
 
 type SliceDemo_ForyGenSerializer struct{}
@@ -561,31 +575,32 @@ func NewSerializerFor_SliceDemo() fory.Serializer {
 }
 
 // Write is the entry point for serialization with ref/type handling
-func (g SliceDemo_ForyGenSerializer) Write(ctx *fory.WriteContext, refMode fory.RefMode, writeType bool, value reflect.Value) error {
+func (g SliceDemo_ForyGenSerializer) Write(ctx *fory.WriteContext, refMode fory.RefMode, writeType bool, value reflect.Value) {
 	switch refMode {
 	case fory.RefModeTracking:
 		if !value.IsValid() || (value.Kind() == reflect.Ptr && value.IsNil()) {
 			ctx.Buffer().WriteInt8(-3) // NullFlag
-			return nil
+			return
 		}
 		refWritten, err := ctx.RefResolver().WriteRefOrNull(ctx.Buffer(), value)
 		if err != nil {
-			return err
+			ctx.SetError(fory.FromError(err))
+			return
 		}
 		if refWritten {
-			return nil
+			return
 		}
 	case fory.RefModeNullOnly:
 		if !value.IsValid() || (value.Kind() == reflect.Ptr && value.IsNil()) {
 			ctx.Buffer().WriteInt8(-3) // NullFlag
-			return nil
+			return
 		}
 		ctx.Buffer().WriteInt8(-1) // NotNullValueFlag
 	}
 	if writeType {
 		ctx.Buffer().WriteVaruint32(uint32(fory.NAMED_STRUCT))
 	}
-	return g.WriteData(ctx, value)
+	g.WriteData(ctx, value)
 }
 
 // WriteTyped provides strongly-typed serialization with no reflection overhead
@@ -669,7 +684,7 @@ func (g SliceDemo_ForyGenSerializer) WriteTyped(ctx *fory.WriteContext, v *Slice
 }
 
 // WriteData provides reflect.Value interface compatibility (implements fory.Serializer)
-func (g SliceDemo_ForyGenSerializer) WriteData(ctx *fory.WriteContext, value reflect.Value) error {
+func (g SliceDemo_ForyGenSerializer) WriteData(ctx *fory.WriteContext, value reflect.Value) {
 	// Convert reflect.Value to concrete type and delegate to typed method
 	var v *SliceDemo
 	if value.Kind() == reflect.Ptr {
@@ -680,37 +695,41 @@ func (g SliceDemo_ForyGenSerializer) WriteData(ctx *fory.WriteContext, value ref
 		v = &temp
 	}
 	// Delegate to strongly-typed method for maximum performance
-	return g.WriteTyped(ctx, v)
+	if err := g.WriteTyped(ctx, v); err != nil {
+		ctx.SetError(fory.FromError(err))
+	}
 }
 
 // Read is the entry point for deserialization with ref/type handling
-func (g SliceDemo_ForyGenSerializer) Read(ctx *fory.ReadContext, refMode fory.RefMode, readType bool, value reflect.Value) error {
+func (g SliceDemo_ForyGenSerializer) Read(ctx *fory.ReadContext, refMode fory.RefMode, readType bool, value reflect.Value) {
 	err := ctx.Err() // Get error pointer for deferred error checking
 	switch refMode {
 	case fory.RefModeTracking:
 		refID, refErr := ctx.RefResolver().TryPreserveRefId(ctx.Buffer())
 		if refErr != nil {
-			return refErr
+			ctx.SetError(fory.FromError(refErr))
+			return
 		}
 		if int8(refID) < -1 { // NotNullValueFlag
 			obj := ctx.RefResolver().GetReadObject(refID)
 			if obj.IsValid() {
 				value.Set(obj)
 			}
-			return nil
+			return
 		}
 	case fory.RefModeNullOnly:
 		flag := ctx.Buffer().ReadInt8(err)
 		if flag == -3 { // NullFlag
-			return ctx.CheckError()
+			return
 		}
 	}
 	if readType {
 		if _, tiErr := ctx.TypeResolver().ReadTypeInfo(ctx.Buffer(), value); tiErr != nil {
-			return tiErr
+			ctx.SetError(fory.FromError(tiErr))
+			return
 		}
 	}
-	return g.ReadData(ctx, value.Type(), value)
+	g.ReadData(ctx, value.Type(), value)
 }
 
 // ReadTyped provides strongly-typed deserialization with no reflection overhead
@@ -872,7 +891,7 @@ func (g SliceDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *SliceDe
 }
 
 // ReadData provides reflect.Value interface compatibility (implements fory.Serializer)
-func (g SliceDemo_ForyGenSerializer) ReadData(ctx *fory.ReadContext, type_ reflect.Type, value reflect.Value) error {
+func (g SliceDemo_ForyGenSerializer) ReadData(ctx *fory.ReadContext, type_ reflect.Type, value reflect.Value) {
 	// Convert reflect.Value to concrete type and delegate to typed method
 	var v *SliceDemo
 	if value.Kind() == reflect.Ptr {
@@ -886,12 +905,14 @@ func (g SliceDemo_ForyGenSerializer) ReadData(ctx *fory.ReadContext, type_ refle
 		v = value.Addr().Interface().(*SliceDemo)
 	}
 	// Delegate to strongly-typed method for maximum performance
-	return g.ReadTyped(ctx, v)
+	if err := g.ReadTyped(ctx, v); err != nil {
+		ctx.SetError(fory.FromError(err))
+	}
 }
 
 // ReadWithTypeInfo deserializes with pre-read type information
-func (g SliceDemo_ForyGenSerializer) ReadWithTypeInfo(ctx *fory.ReadContext, refMode fory.RefMode, typeInfo *fory.TypeInfo, value reflect.Value) error {
-	return g.Read(ctx, refMode, false, value)
+func (g SliceDemo_ForyGenSerializer) ReadWithTypeInfo(ctx *fory.ReadContext, refMode fory.RefMode, typeInfo *fory.TypeInfo, value reflect.Value) {
+	g.Read(ctx, refMode, false, value)
 }
 
 type ValidationDemo_ForyGenSerializer struct{}
@@ -901,31 +922,32 @@ func NewSerializerFor_ValidationDemo() fory.Serializer {
 }
 
 // Write is the entry point for serialization with ref/type handling
-func (g ValidationDemo_ForyGenSerializer) Write(ctx *fory.WriteContext, refMode fory.RefMode, writeType bool, value reflect.Value) error {
+func (g ValidationDemo_ForyGenSerializer) Write(ctx *fory.WriteContext, refMode fory.RefMode, writeType bool, value reflect.Value) {
 	switch refMode {
 	case fory.RefModeTracking:
 		if !value.IsValid() || (value.Kind() == reflect.Ptr && value.IsNil()) {
 			ctx.Buffer().WriteInt8(-3) // NullFlag
-			return nil
+			return
 		}
 		refWritten, err := ctx.RefResolver().WriteRefOrNull(ctx.Buffer(), value)
 		if err != nil {
-			return err
+			ctx.SetError(fory.FromError(err))
+			return
 		}
 		if refWritten {
-			return nil
+			return
 		}
 	case fory.RefModeNullOnly:
 		if !value.IsValid() || (value.Kind() == reflect.Ptr && value.IsNil()) {
 			ctx.Buffer().WriteInt8(-3) // NullFlag
-			return nil
+			return
 		}
 		ctx.Buffer().WriteInt8(-1) // NotNullValueFlag
 	}
 	if writeType {
 		ctx.Buffer().WriteVaruint32(uint32(fory.NAMED_STRUCT))
 	}
-	return g.WriteData(ctx, value)
+	g.WriteData(ctx, value)
 }
 
 // WriteTyped provides strongly-typed serialization with no reflection overhead
@@ -952,7 +974,7 @@ func (g ValidationDemo_ForyGenSerializer) WriteTyped(ctx *fory.WriteContext, v *
 }
 
 // WriteData provides reflect.Value interface compatibility (implements fory.Serializer)
-func (g ValidationDemo_ForyGenSerializer) WriteData(ctx *fory.WriteContext, value reflect.Value) error {
+func (g ValidationDemo_ForyGenSerializer) WriteData(ctx *fory.WriteContext, value reflect.Value) {
 	// Convert reflect.Value to concrete type and delegate to typed method
 	var v *ValidationDemo
 	if value.Kind() == reflect.Ptr {
@@ -963,37 +985,41 @@ func (g ValidationDemo_ForyGenSerializer) WriteData(ctx *fory.WriteContext, valu
 		v = &temp
 	}
 	// Delegate to strongly-typed method for maximum performance
-	return g.WriteTyped(ctx, v)
+	if err := g.WriteTyped(ctx, v); err != nil {
+		ctx.SetError(fory.FromError(err))
+	}
 }
 
 // Read is the entry point for deserialization with ref/type handling
-func (g ValidationDemo_ForyGenSerializer) Read(ctx *fory.ReadContext, refMode fory.RefMode, readType bool, value reflect.Value) error {
+func (g ValidationDemo_ForyGenSerializer) Read(ctx *fory.ReadContext, refMode fory.RefMode, readType bool, value reflect.Value) {
 	err := ctx.Err() // Get error pointer for deferred error checking
 	switch refMode {
 	case fory.RefModeTracking:
 		refID, refErr := ctx.RefResolver().TryPreserveRefId(ctx.Buffer())
 		if refErr != nil {
-			return refErr
+			ctx.SetError(fory.FromError(refErr))
+			return
 		}
 		if int8(refID) < -1 { // NotNullValueFlag
 			obj := ctx.RefResolver().GetReadObject(refID)
 			if obj.IsValid() {
 				value.Set(obj)
 			}
-			return nil
+			return
 		}
 	case fory.RefModeNullOnly:
 		flag := ctx.Buffer().ReadInt8(err)
 		if flag == -3 { // NullFlag
-			return ctx.CheckError()
+			return
 		}
 	}
 	if readType {
 		if _, tiErr := ctx.TypeResolver().ReadTypeInfo(ctx.Buffer(), value); tiErr != nil {
-			return tiErr
+			ctx.SetError(fory.FromError(tiErr))
+			return
 		}
 	}
-	return g.ReadData(ctx, value.Type(), value)
+	g.ReadData(ctx, value.Type(), value)
 }
 
 // ReadTyped provides strongly-typed deserialization with no reflection overhead
@@ -1032,7 +1058,7 @@ func (g ValidationDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *Va
 }
 
 // ReadData provides reflect.Value interface compatibility (implements fory.Serializer)
-func (g ValidationDemo_ForyGenSerializer) ReadData(ctx *fory.ReadContext, type_ reflect.Type, value reflect.Value) error {
+func (g ValidationDemo_ForyGenSerializer) ReadData(ctx *fory.ReadContext, type_ reflect.Type, value reflect.Value) {
 	// Convert reflect.Value to concrete type and delegate to typed method
 	var v *ValidationDemo
 	if value.Kind() == reflect.Ptr {
@@ -1046,12 +1072,14 @@ func (g ValidationDemo_ForyGenSerializer) ReadData(ctx *fory.ReadContext, type_ 
 		v = value.Addr().Interface().(*ValidationDemo)
 	}
 	// Delegate to strongly-typed method for maximum performance
-	return g.ReadTyped(ctx, v)
+	if err := g.ReadTyped(ctx, v); err != nil {
+		ctx.SetError(fory.FromError(err))
+	}
 }
 
 // ReadWithTypeInfo deserializes with pre-read type information
-func (g ValidationDemo_ForyGenSerializer) ReadWithTypeInfo(ctx *fory.ReadContext, refMode fory.RefMode, typeInfo *fory.TypeInfo, value reflect.Value) error {
-	return g.Read(ctx, refMode, false, value)
+func (g ValidationDemo_ForyGenSerializer) ReadWithTypeInfo(ctx *fory.ReadContext, refMode fory.RefMode, typeInfo *fory.TypeInfo, value reflect.Value) {
+	g.Read(ctx, refMode, false, value)
 }
 
 // Compile-time guards: These ensure struct definitions haven't changed

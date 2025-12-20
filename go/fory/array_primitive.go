@@ -18,7 +18,6 @@
 package fory
 
 import (
-	"fmt"
 	"reflect"
 )
 
@@ -27,50 +26,49 @@ type boolArraySerializer struct {
 	arrayType reflect.Type
 }
 
-func (s boolArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
+func (s boolArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 	buf := ctx.Buffer()
 	length := value.Len()
 	buf.WriteLength(length)
 	for i := 0; i < length; i++ {
 		buf.WriteBool(value.Index(i).Bool())
 	}
-	return nil
 }
 
-func (s boolArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
-	_, err := writeArrayRefAndType(ctx, refMode, writeType, value, BOOL_ARRAY)
-	if err != nil {
-		return err
+func (s boolArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
+	writeArrayRefAndType(ctx, refMode, writeType, value, BOOL_ARRAY)
+	if ctx.HasError() {
+		return
 	}
-	return s.WriteData(ctx, value)
+	s.WriteData(ctx, value)
 }
 
-func (s boolArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+func (s boolArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
 	buf := ctx.Buffer()
 	err := ctx.Err()
 	length := buf.ReadLength(err)
 	if ctx.HasError() {
-		return ctx.TakeError()
+		return
 	}
 	if length != type_.Len() {
-		return fmt.Errorf("array length %d does not match type %v", length, type_)
+		ctx.SetError(DeserializationErrorf("array length %d does not match type %v", length, type_))
+		return
 	}
 	for i := 0; i < length; i++ {
 		value.Index(i).SetBool(buf.ReadBool(err))
 	}
-	return ctx.CheckError()
 }
 
-func (s boolArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
-	done, err := readArrayRefAndType(ctx, refMode, readType, value)
-	if done || err != nil {
-		return err
+func (s boolArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) {
+	done := readArrayRefAndType(ctx, refMode, readType, value)
+	if done || ctx.HasError() {
+		return
 	}
-	return s.ReadData(ctx, value.Type(), value)
+	s.ReadData(ctx, value.Type(), value)
 }
 
-func (s boolArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
-	return s.Read(ctx, refMode, false, value)
+func (s boolArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
+	s.Read(ctx, refMode, false, value)
 }
 
 // int8ArraySerializer handles [N]int8 fixed-size arrays
@@ -78,50 +76,49 @@ type int8ArraySerializer struct {
 	arrayType reflect.Type
 }
 
-func (s int8ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
+func (s int8ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 	buf := ctx.Buffer()
 	length := value.Len()
 	buf.WriteLength(length)
 	for i := 0; i < length; i++ {
 		buf.WriteByte_(byte(value.Index(i).Int()))
 	}
-	return nil
 }
 
-func (s int8ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
-	_, err := writeArrayRefAndType(ctx, refMode, writeType, value, INT8_ARRAY)
-	if err != nil {
-		return err
+func (s int8ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
+	writeArrayRefAndType(ctx, refMode, writeType, value, INT8_ARRAY)
+	if ctx.HasError() {
+		return
 	}
-	return s.WriteData(ctx, value)
+	s.WriteData(ctx, value)
 }
 
-func (s int8ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+func (s int8ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
 	buf := ctx.Buffer()
 	err := ctx.Err()
 	length := buf.ReadLength(err)
 	if ctx.HasError() {
-		return ctx.TakeError()
+		return
 	}
 	if length != type_.Len() {
-		return fmt.Errorf("array length %d does not match type %v", length, type_)
+		ctx.SetError(DeserializationErrorf("array length %d does not match type %v", length, type_))
+		return
 	}
 	for i := 0; i < length; i++ {
 		value.Index(i).SetInt(int64(int8(buf.ReadByte(err))))
 	}
-	return ctx.CheckError()
 }
 
-func (s int8ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
-	done, err := readArrayRefAndType(ctx, refMode, readType, value)
-	if done || err != nil {
-		return err
+func (s int8ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) {
+	done := readArrayRefAndType(ctx, refMode, readType, value)
+	if done || ctx.HasError() {
+		return
 	}
-	return s.ReadData(ctx, value.Type(), value)
+	s.ReadData(ctx, value.Type(), value)
 }
 
-func (s int8ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
-	return s.Read(ctx, refMode, false, value)
+func (s int8ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
+	s.Read(ctx, refMode, false, value)
 }
 
 // int16ArraySerializer handles [N]int16 fixed-size arrays
@@ -129,50 +126,49 @@ type int16ArraySerializer struct {
 	arrayType reflect.Type
 }
 
-func (s int16ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
+func (s int16ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 	buf := ctx.Buffer()
 	length := value.Len()
 	buf.WriteLength(length * 2)
 	for i := 0; i < length; i++ {
 		buf.WriteInt16(int16(value.Index(i).Int()))
 	}
-	return nil
 }
 
-func (s int16ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
-	_, err := writeArrayRefAndType(ctx, refMode, writeType, value, INT16_ARRAY)
-	if err != nil {
-		return err
+func (s int16ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
+	writeArrayRefAndType(ctx, refMode, writeType, value, INT16_ARRAY)
+	if ctx.HasError() {
+		return
 	}
-	return s.WriteData(ctx, value)
+	s.WriteData(ctx, value)
 }
 
-func (s int16ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+func (s int16ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
 	buf := ctx.Buffer()
 	err := ctx.Err()
 	length := buf.ReadLength(err) / 2
 	if ctx.HasError() {
-		return ctx.TakeError()
+		return
 	}
 	if length != type_.Len() {
-		return fmt.Errorf("array length %d does not match type %v", length, type_)
+		ctx.SetError(DeserializationErrorf("array length %d does not match type %v", length, type_))
+		return
 	}
 	for i := 0; i < length; i++ {
 		value.Index(i).SetInt(int64(buf.ReadInt16(err)))
 	}
-	return ctx.CheckError()
 }
 
-func (s int16ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
-	done, err := readArrayRefAndType(ctx, refMode, readType, value)
-	if done || err != nil {
-		return err
+func (s int16ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) {
+	done := readArrayRefAndType(ctx, refMode, readType, value)
+	if done || ctx.HasError() {
+		return
 	}
-	return s.ReadData(ctx, value.Type(), value)
+	s.ReadData(ctx, value.Type(), value)
 }
 
-func (s int16ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
-	return s.Read(ctx, refMode, false, value)
+func (s int16ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
+	s.Read(ctx, refMode, false, value)
 }
 
 // int32ArraySerializer handles [N]int32 fixed-size arrays
@@ -180,50 +176,49 @@ type int32ArraySerializer struct {
 	arrayType reflect.Type
 }
 
-func (s int32ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
+func (s int32ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 	buf := ctx.Buffer()
 	length := value.Len()
 	buf.WriteLength(length * 4)
 	for i := 0; i < length; i++ {
 		buf.WriteInt32(int32(value.Index(i).Int()))
 	}
-	return nil
 }
 
-func (s int32ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
-	_, err := writeArrayRefAndType(ctx, refMode, writeType, value, INT32_ARRAY)
-	if err != nil {
-		return err
+func (s int32ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
+	writeArrayRefAndType(ctx, refMode, writeType, value, INT32_ARRAY)
+	if ctx.HasError() {
+		return
 	}
-	return s.WriteData(ctx, value)
+	s.WriteData(ctx, value)
 }
 
-func (s int32ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+func (s int32ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
 	buf := ctx.Buffer()
 	err := ctx.Err()
 	length := buf.ReadLength(err) / 4
 	if ctx.HasError() {
-		return ctx.TakeError()
+		return
 	}
 	if length != type_.Len() {
-		return fmt.Errorf("array length %d does not match type %v", length, type_)
+		ctx.SetError(DeserializationErrorf("array length %d does not match type %v", length, type_))
+		return
 	}
 	for i := 0; i < length; i++ {
 		value.Index(i).SetInt(int64(buf.ReadInt32(err)))
 	}
-	return ctx.CheckError()
 }
 
-func (s int32ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
-	done, err := readArrayRefAndType(ctx, refMode, readType, value)
-	if done || err != nil {
-		return err
+func (s int32ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) {
+	done := readArrayRefAndType(ctx, refMode, readType, value)
+	if done || ctx.HasError() {
+		return
 	}
-	return s.ReadData(ctx, value.Type(), value)
+	s.ReadData(ctx, value.Type(), value)
 }
 
-func (s int32ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
-	return s.Read(ctx, refMode, false, value)
+func (s int32ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
+	s.Read(ctx, refMode, false, value)
 }
 
 // int64ArraySerializer handles [N]int64 fixed-size arrays
@@ -231,50 +226,49 @@ type int64ArraySerializer struct {
 	arrayType reflect.Type
 }
 
-func (s int64ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
+func (s int64ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 	buf := ctx.Buffer()
 	length := value.Len()
 	buf.WriteLength(length * 8)
 	for i := 0; i < length; i++ {
 		buf.WriteInt64(value.Index(i).Int())
 	}
-	return nil
 }
 
-func (s int64ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
-	_, err := writeArrayRefAndType(ctx, refMode, writeType, value, INT64_ARRAY)
-	if err != nil {
-		return err
+func (s int64ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
+	writeArrayRefAndType(ctx, refMode, writeType, value, INT64_ARRAY)
+	if ctx.HasError() {
+		return
 	}
-	return s.WriteData(ctx, value)
+	s.WriteData(ctx, value)
 }
 
-func (s int64ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+func (s int64ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
 	buf := ctx.Buffer()
 	err := ctx.Err()
 	length := buf.ReadLength(err) / 8
 	if ctx.HasError() {
-		return ctx.TakeError()
+		return
 	}
 	if length != type_.Len() {
-		return fmt.Errorf("array length %d does not match type %v", length, type_)
+		ctx.SetError(DeserializationErrorf("array length %d does not match type %v", length, type_))
+		return
 	}
 	for i := 0; i < length; i++ {
 		value.Index(i).SetInt(buf.ReadInt64(err))
 	}
-	return ctx.CheckError()
 }
 
-func (s int64ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
-	done, err := readArrayRefAndType(ctx, refMode, readType, value)
-	if done || err != nil {
-		return err
+func (s int64ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) {
+	done := readArrayRefAndType(ctx, refMode, readType, value)
+	if done || ctx.HasError() {
+		return
 	}
-	return s.ReadData(ctx, value.Type(), value)
+	s.ReadData(ctx, value.Type(), value)
 }
 
-func (s int64ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
-	return s.Read(ctx, refMode, false, value)
+func (s int64ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
+	s.Read(ctx, refMode, false, value)
 }
 
 // float32ArraySerializer handles [N]float32 fixed-size arrays
@@ -282,50 +276,49 @@ type float32ArraySerializer struct {
 	arrayType reflect.Type
 }
 
-func (s float32ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
+func (s float32ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 	buf := ctx.Buffer()
 	length := value.Len()
 	buf.WriteLength(length * 4)
 	for i := 0; i < length; i++ {
 		buf.WriteFloat32(float32(value.Index(i).Float()))
 	}
-	return nil
 }
 
-func (s float32ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
-	_, err := writeArrayRefAndType(ctx, refMode, writeType, value, FLOAT32_ARRAY)
-	if err != nil {
-		return err
+func (s float32ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
+	writeArrayRefAndType(ctx, refMode, writeType, value, FLOAT32_ARRAY)
+	if ctx.HasError() {
+		return
 	}
-	return s.WriteData(ctx, value)
+	s.WriteData(ctx, value)
 }
 
-func (s float32ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+func (s float32ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
 	buf := ctx.Buffer()
 	err := ctx.Err()
 	length := buf.ReadLength(err) / 4
 	if ctx.HasError() {
-		return ctx.TakeError()
+		return
 	}
 	if length != type_.Len() {
-		return fmt.Errorf("array length %d does not match type %v", length, type_)
+		ctx.SetError(DeserializationErrorf("array length %d does not match type %v", length, type_))
+		return
 	}
 	for i := 0; i < length; i++ {
 		value.Index(i).SetFloat(float64(buf.ReadFloat32(err)))
 	}
-	return ctx.CheckError()
 }
 
-func (s float32ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
-	done, err := readArrayRefAndType(ctx, refMode, readType, value)
-	if done || err != nil {
-		return err
+func (s float32ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) {
+	done := readArrayRefAndType(ctx, refMode, readType, value)
+	if done || ctx.HasError() {
+		return
 	}
-	return s.ReadData(ctx, value.Type(), value)
+	s.ReadData(ctx, value.Type(), value)
 }
 
-func (s float32ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
-	return s.Read(ctx, refMode, false, value)
+func (s float32ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
+	s.Read(ctx, refMode, false, value)
 }
 
 // float64ArraySerializer handles [N]float64 fixed-size arrays
@@ -333,50 +326,49 @@ type float64ArraySerializer struct {
 	arrayType reflect.Type
 }
 
-func (s float64ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
+func (s float64ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 	buf := ctx.Buffer()
 	length := value.Len()
 	buf.WriteLength(length * 8)
 	for i := 0; i < length; i++ {
 		buf.WriteFloat64(value.Index(i).Float())
 	}
-	return nil
 }
 
-func (s float64ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
-	_, err := writeArrayRefAndType(ctx, refMode, writeType, value, FLOAT64_ARRAY)
-	if err != nil {
-		return err
+func (s float64ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
+	writeArrayRefAndType(ctx, refMode, writeType, value, FLOAT64_ARRAY)
+	if ctx.HasError() {
+		return
 	}
-	return s.WriteData(ctx, value)
+	s.WriteData(ctx, value)
 }
 
-func (s float64ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+func (s float64ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
 	buf := ctx.Buffer()
 	err := ctx.Err()
 	length := buf.ReadLength(err) / 8
 	if ctx.HasError() {
-		return ctx.TakeError()
+		return
 	}
 	if length != type_.Len() {
-		return fmt.Errorf("array length %d does not match type %v", length, type_)
+		ctx.SetError(DeserializationErrorf("array length %d does not match type %v", length, type_))
+		return
 	}
 	for i := 0; i < length; i++ {
 		value.Index(i).SetFloat(buf.ReadFloat64(err))
 	}
-	return ctx.CheckError()
 }
 
-func (s float64ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
-	done, err := readArrayRefAndType(ctx, refMode, readType, value)
-	if done || err != nil {
-		return err
+func (s float64ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) {
+	done := readArrayRefAndType(ctx, refMode, readType, value)
+	if done || ctx.HasError() {
+		return
 	}
-	return s.ReadData(ctx, value.Type(), value)
+	s.ReadData(ctx, value.Type(), value)
 }
 
-func (s float64ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
-	return s.Read(ctx, refMode, false, value)
+func (s float64ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
+	s.Read(ctx, refMode, false, value)
 }
 
 // uint8ArraySerializer handles [N]uint8 (byte) fixed-size arrays
@@ -384,48 +376,47 @@ type uint8ArraySerializer struct {
 	arrayType reflect.Type
 }
 
-func (s uint8ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
+func (s uint8ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 	buf := ctx.Buffer()
 	length := value.Len()
 	buf.WriteLength(length)
 	for i := 0; i < length; i++ {
 		buf.WriteByte_(byte(value.Index(i).Uint()))
 	}
-	return nil
 }
 
-func (s uint8ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
-	_, err := writeArrayRefAndType(ctx, refMode, writeType, value, BINARY)
-	if err != nil {
-		return err
+func (s uint8ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
+	writeArrayRefAndType(ctx, refMode, writeType, value, BINARY)
+	if ctx.HasError() {
+		return
 	}
-	return s.WriteData(ctx, value)
+	s.WriteData(ctx, value)
 }
 
-func (s uint8ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+func (s uint8ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
 	buf := ctx.Buffer()
 	err := ctx.Err()
 	length := buf.ReadLength(err)
 	if ctx.HasError() {
-		return ctx.TakeError()
+		return
 	}
 	if length != type_.Len() {
-		return fmt.Errorf("array length %d does not match type %v", length, type_)
+		ctx.SetError(DeserializationErrorf("array length %d does not match type %v", length, type_))
+		return
 	}
 	for i := 0; i < length; i++ {
 		value.Index(i).SetUint(uint64(buf.ReadByte(err)))
 	}
-	return ctx.CheckError()
 }
 
-func (s uint8ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
-	done, err := readArrayRefAndType(ctx, refMode, readType, value)
-	if done || err != nil {
-		return err
+func (s uint8ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) {
+	done := readArrayRefAndType(ctx, refMode, readType, value)
+	if done || ctx.HasError() {
+		return
 	}
-	return s.ReadData(ctx, value.Type(), value)
+	s.ReadData(ctx, value.Type(), value)
 }
 
-func (s uint8ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
-	return s.Read(ctx, refMode, false, value)
+func (s uint8ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
+	s.Read(ctx, refMode, false, value)
 }

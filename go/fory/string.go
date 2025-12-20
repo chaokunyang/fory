@@ -31,12 +31,11 @@ const (
 )
 
 // writeString writes a string to buffer using xlang encoding
-func writeString(buf *ByteBuffer, value string) error {
+func writeString(buf *ByteBuffer, value string) {
 	data := unsafeGetBytes(value)
 	header := (uint64(len(data)) << 2) | encodingUTF8
 	buf.WriteVaruint36Small(header)
 	buf.WriteBinary(data)
-	return nil
 }
 
 // readStringE reads a string from buffer using xlang encoding with error handling
@@ -98,11 +97,11 @@ type stringSerializer struct{}
 
 var globalStringSerializer = stringSerializer{}
 
-func (s stringSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
-	return writeString(ctx.buffer, value.String())
+func (s stringSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
+	writeString(ctx.buffer, value.String())
 }
 
-func (s stringSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
+func (s stringSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
 	if refMode != RefModeNone {
 		// String is non-primitive, needs ref flag
 		ctx.buffer.WriteInt8(NotNullValueFlag)
@@ -110,92 +109,90 @@ func (s stringSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bo
 	if writeType {
 		ctx.buffer.WriteVaruint32Small7(uint32(STRING))
 	}
-	return s.WriteData(ctx, value)
+	s.WriteData(ctx, value)
 }
 
-func (s stringSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+func (s stringSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
 	err := ctx.Err()
 	str := readStringE(ctx.buffer, err)
 	if ctx.HasError() {
-		return ctx.TakeError()
+		return
 	}
 	value.SetString(str)
-	return nil
 }
 
-func (s stringSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
+func (s stringSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) {
 	err := ctx.Err()
 	if refMode != RefModeNone {
 		// String is non-primitive, needs ref flag
 		refFlag := ctx.buffer.ReadInt8(err)
 		if refFlag == NullFlag {
 			value.SetString("")
-			return ctx.CheckError()
+			return
 		}
 	}
 	if readType {
 		_ = ctx.buffer.ReadVaruint32Small7(err)
 	}
 	if ctx.HasError() {
-		return ctx.TakeError()
+		return
 	}
-	return s.ReadData(ctx, value.Type(), value)
+	s.ReadData(ctx, value.Type(), value)
 }
 
-func (s stringSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
-	return s.Read(ctx, refMode, false, value)
+func (s stringSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
+	s.Read(ctx, refMode, false, value)
 }
 
 // ptrToStringSerializer serializes a pointer to string
 type ptrToStringSerializer struct{}
 
-func (s ptrToStringSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) error {
+func (s ptrToStringSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
 	if refMode != RefModeNone {
 		if value.IsNil() {
 			ctx.buffer.WriteInt8(NullFlag)
-			return nil
+			return
 		}
 		ctx.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeType {
 		ctx.buffer.WriteVaruint32Small7(uint32(STRING))
 	}
-	return s.WriteData(ctx, value)
+	s.WriteData(ctx, value)
 }
 
-func (s ptrToStringSerializer) WriteData(ctx *WriteContext, value reflect.Value) error {
+func (s ptrToStringSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 	str := value.Interface().(*string)
-	return writeString(ctx.buffer, *str)
+	writeString(ctx.buffer, *str)
 }
 
-func (s ptrToStringSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
+func (s ptrToStringSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) {
 	err := ctx.Err()
 	if refMode != RefModeNone {
 		if ctx.buffer.ReadInt8(err) == NullFlag {
-			return ctx.CheckError()
+			return
 		}
 	}
 	if readType {
 		_ = ctx.buffer.ReadVaruint32Small7(err)
 	}
 	if ctx.HasError() {
-		return ctx.TakeError()
+		return
 	}
-	return s.ReadData(ctx, value.Type(), value)
+	s.ReadData(ctx, value.Type(), value)
 }
 
-func (s ptrToStringSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
+func (s ptrToStringSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
 	err := ctx.Err()
 	str := readStringE(ctx.buffer, err)
 	if ctx.HasError() {
-		return ctx.TakeError()
+		return
 	}
 	ptr := new(string)
 	*ptr = str
 	value.Set(reflect.ValueOf(ptr))
-	return nil
 }
 
-func (s ptrToStringSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
-	return s.Read(ctx, refMode, false, value)
+func (s ptrToStringSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
+	s.Read(ctx, refMode, false, value)
 }

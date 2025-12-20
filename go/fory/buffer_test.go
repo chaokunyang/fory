@@ -24,6 +24,7 @@ import (
 )
 
 func TestVarint(t *testing.T) {
+	err := &Error{}
 	for i := 1; i <= 32; i++ {
 		buf := NewByteBuffer(nil)
 		for j := 0; j < i; j++ {
@@ -63,6 +64,7 @@ func TestVarint(t *testing.T) {
 }
 
 func checkVarint(t *testing.T, buf *ByteBuffer, value int32, bytesWritten int8) {
+	err := &Error{}
 	require.Equal(t, buf.WriterIndex(), buf.ReaderIndex())
 	actualBytesWritten := buf.WriteVarint32(value)
 	require.Equal(t, bytesWritten, actualBytesWritten)
@@ -72,6 +74,7 @@ func checkVarint(t *testing.T, buf *ByteBuffer, value int32, bytesWritten int8) 
 }
 
 func checkVarintWrite(t *testing.T, buf *ByteBuffer, value int32) {
+	err := &Error{}
 	require.Equal(t, buf.WriterIndex(), buf.ReaderIndex())
 	buf.WriteVarint32(value)
 	varInt := buf.ReadVarint32(err)

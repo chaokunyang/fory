@@ -95,11 +95,12 @@ func (s *ptrToValueSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, va
 
 func (s *ptrToValueSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
 	buf := ctx.Buffer()
+	ctxErr := ctx.Err()
 	switch refMode {
 	case RefModeTracking:
-		refID, err := ctx.RefResolver().TryPreserveRefId(buf)
-		if err != nil {
-			return err
+		refID, refErr := ctx.RefResolver().TryPreserveRefId(buf)
+		if refErr != nil {
+			return refErr
 		}
 		if int8(refID) < NotNullValueFlag {
 			// Reference found
@@ -110,20 +111,23 @@ func (s *ptrToValueSerializer) Read(ctx *ReadContext, refMode RefMode, readType 
 			return nil
 		}
 	case RefModeNullOnly:
-		flag := buf.ReadInt8()
+		flag := buf.ReadInt8(ctxErr)
 		if flag == NullFlag {
-			return nil
+			return ctx.CheckError()
 		}
 	}
 	if readType {
 		// Read type info - in compatible mode this contains the serializer with fieldDefs
-		typeID := buf.ReadVaruint32Small7()
+		typeID := buf.ReadVaruint32Small7(ctxErr)
+		if ctx.HasError() {
+			return ctx.TakeError()
+		}
 		internalTypeID := TypeId(typeID & 0xFF)
 		// Check if this is a struct type that needs type meta reading
 		if IsNamespacedType(TypeId(typeID)) || internalTypeID == COMPATIBLE_STRUCT || internalTypeID == STRUCT {
-			typeInfo, err := ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID)
-			if err != nil {
-				return err
+			typeInfo, typeErr := ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID)
+			if typeErr != nil {
+				return typeErr
 			}
 			// Use the serializer from TypeInfo which has the remote field definitions
 			if structSer, ok := typeInfo.Serializer.(*structSerializer); ok && len(structSer.fieldDefs) > 0 {
@@ -198,11 +202,12 @@ func (s *ptrToInterfaceSerializer) ReadData(ctx *ReadContext, type_ reflect.Type
 
 func (s *ptrToInterfaceSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
 	buf := ctx.Buffer()
+	ctxErr := ctx.Err()
 	switch refMode {
 	case RefModeTracking:
-		refID, err := ctx.RefResolver().TryPreserveRefId(buf)
-		if err != nil {
-			return err
+		refID, refErr := ctx.RefResolver().TryPreserveRefId(buf)
+		if refErr != nil {
+			return refErr
 		}
 		if int8(refID) < NotNullValueFlag {
 			// Reference found
@@ -213,9 +218,9 @@ func (s *ptrToInterfaceSerializer) Read(ctx *ReadContext, refMode RefMode, readT
 			return nil
 		}
 	case RefModeNullOnly:
-		flag := buf.ReadInt8()
+		flag := buf.ReadInt8(ctxErr)
 		if flag == NullFlag {
-			return nil
+			return ctx.CheckError()
 		}
 	}
 

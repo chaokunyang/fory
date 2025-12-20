@@ -39,10 +39,11 @@ func writeArrayRefAndType(ctx *WriteContext, refMode RefMode, writeType bool, va
 // Returns true if a reference was resolved (value already set), false if data should be read.
 func readArrayRefAndType(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) (bool, error) {
 	buf := ctx.Buffer()
+	err := ctx.Err()
 	if refMode != RefModeNone {
-		refID, err := ctx.RefResolver().TryPreserveRefId(buf)
-		if err != nil {
-			return false, err
+		refID, refErr := ctx.RefResolver().TryPreserveRefId(buf)
+		if refErr != nil {
+			return false, refErr
 		}
 		if int8(refID) < NotNullValueFlag {
 			obj := ctx.RefResolver().GetReadObject(refID)
@@ -53,7 +54,10 @@ func readArrayRefAndType(ctx *ReadContext, refMode RefMode, readType bool, value
 		}
 	}
 	if readType {
-		typeID := buf.ReadVaruint32Small7()
+		typeID := buf.ReadVaruint32Small7(err)
+		if ctx.HasError() {
+			return false, ctx.TakeError()
+		}
 		if IsNamespacedType(TypeId(typeID)) {
 			_, _ = ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID)
 		}
@@ -87,11 +91,12 @@ func (s arraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType boo
 
 func (s arraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	buf := ctx.Buffer()
-	length := int(buf.ReadVaruint32())
+	err := ctx.Err()
+	length := int(buf.ReadVaruint32(err))
 	for i := 0; i < length; i++ {
-		_ = buf.ReadInt8()
+		_ = buf.ReadInt8(err)
 	}
-	return nil
+	return ctx.CheckError()
 }
 
 func (s arraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
@@ -221,17 +226,24 @@ func (s *arrayConcreteValueSerializer) Write(ctx *WriteContext, refMode RefMode,
 
 func (s *arrayConcreteValueSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	buf := ctx.Buffer()
-	length := int(buf.ReadVaruint32())
+	err := ctx.Err()
+	length := int(buf.ReadVaruint32(err))
 
 	var trackRefs bool
 	if length > 0 {
 		// Read collection flags (same format as slices)
-		collectFlag := buf.ReadInt8()
+		collectFlag := buf.ReadInt8(err)
+		if ctx.HasError() {
+			return ctx.TakeError()
+		}
 
 		// Read element type info if present
 		if (collectFlag & CollectionIsSameType) != 0 {
 			if (collectFlag & CollectionIsDeclElementType) == 0 {
-				typeID := buf.ReadVaruint32()
+				typeID := buf.ReadVaruint32(err)
+				if ctx.HasError() {
+					return ctx.TakeError()
+				}
 				// Read additional metadata for namespaced types
 				_, _ = ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID)
 			}
@@ -245,12 +257,12 @@ func (s *arrayConcreteValueSerializer) ReadData(ctx *ReadContext, type_ reflect.
 
 		// When tracking refs, the element serializer handles ref flags
 		if trackRefs {
-			if err := s.elemSerializer.Read(ctx, RefModeTracking, false, elem); err != nil {
-				return err
+			if serErr := s.elemSerializer.Read(ctx, RefModeTracking, false, elem); serErr != nil {
+				return serErr
 			}
 		} else {
-			if err := s.elemSerializer.ReadData(ctx, elem.Type(), elem); err != nil {
-				return err
+			if serErr := s.elemSerializer.ReadData(ctx, elem.Type(), elem); serErr != nil {
+				return serErr
 			}
 		}
 	}
@@ -361,7 +373,11 @@ func (s byteArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType
 
 func (s byteArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	buf := ctx.Buffer()
-	length := buf.ReadLength()
+	err := ctx.Err()
+	length := buf.ReadLength(err)
+	if ctx.HasError() {
+		return ctx.TakeError()
+	}
 	data := make([]byte, length)
 	buf.Read(data)
 	if value.CanSet() {

@@ -156,14 +156,14 @@ func (r *RefResolver) WriteRefOrNull(buffer *ByteBuffer, value reflect.Value) (r
 // ReadRefOrNull returns RefFlag if a ref to a previously read object
 // was read. Returns NullFlag if the object is null. Returns RefValueFlag if the object is not
 // null and ref tracking is not enabled or the object is first read.
-func (r *RefResolver) ReadRefOrNull(buffer *ByteBuffer) int8 {
-	refTag := buffer.ReadInt8()
+func (r *RefResolver) ReadRefOrNull(buffer *ByteBuffer, ctxErr *Error) int8 {
+	refTag := buffer.ReadInt8(ctxErr)
 	if !r.refTracking {
 		return refTag
 	}
 	if refTag == RefFlag {
 		// read ref id and get object from ref resolver
-		refId := buffer.ReadVaruint32()
+		refId := buffer.ReadVaruint32(ctxErr)
 		r.readObject = r.GetReadObject(int32(refId))
 		return RefFlag
 	} else {
@@ -190,10 +190,17 @@ func (r *RefResolver) PreserveRefId() (int32, error) {
 }
 
 func (r *RefResolver) TryPreserveRefId(buffer *ByteBuffer) (int32, error) {
-	headFlag := buffer.ReadInt8()
+	var ctxErr Error
+	headFlag := buffer.ReadInt8(&ctxErr)
+	if ctxErr.HasError() {
+		return 0, ctxErr
+	}
 	if headFlag == RefFlag {
 		// read ref id and get object from ref resolver
-		refId := buffer.ReadVaruint32()
+		refId := buffer.ReadVaruint32(&ctxErr)
+		if ctxErr.HasError() {
+			return 0, ctxErr
+		}
 		r.readObject = r.GetReadObject(int32(refId))
 	} else {
 		r.readObject = reflect.Value{}

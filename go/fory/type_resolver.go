@@ -1181,7 +1181,11 @@ func (r *TypeResolver) readSharedTypeMeta(buffer *ByteBuffer, value reflect.Valu
 	if context == nil {
 		return TypeInfo{}, fmt.Errorf("MetaContext is nil - ensure compatible mode is enabled")
 	}
-	index := int32(buffer.ReadVaruint32()) // shared meta index id (unsigned)
+	var bufErr Error
+	index := int32(buffer.ReadVaruint32(&bufErr)) // shared meta index id (unsigned)
+	if bufErr.HasError() {
+		return TypeInfo{}, bufErr.CheckError()
+	}
 	if index < 0 || index >= int32(len(context.readTypeInfos)) {
 		return TypeInfo{}, fmt.Errorf("TypeInfo not found for index %d (have %d type infos)", index, len(context.readTypeInfos))
 	}
@@ -1210,7 +1214,11 @@ func (r *TypeResolver) writeTypeDefs(buffer *ByteBuffer) {
 }
 
 func (r *TypeResolver) readTypeDefs(buffer *ByteBuffer) error {
-	numTypeDefs := int(buffer.ReadVaruint32Small7())
+	var bufErr Error
+	numTypeDefs := int(buffer.ReadVaruint32Small7(&bufErr))
+	if bufErr.HasError() {
+		return bufErr.CheckError()
+	}
 	if numTypeDefs == 0 {
 		return nil
 	}
@@ -1219,10 +1227,16 @@ func (r *TypeResolver) readTypeDefs(buffer *ByteBuffer) error {
 		return fmt.Errorf("MetaContext is nil but type definitions are present")
 	}
 	for i := 0; i < numTypeDefs; i++ {
-		id := buffer.ReadInt64()
+		id := buffer.ReadInt64(&bufErr)
+		if bufErr.HasError() {
+			return bufErr.CheckError()
+		}
 		var td *TypeDef
 		if existingTd, exists := r.defIdToTypeDef[id]; exists {
-			skipTypeDef(buffer, id)
+			skipTypeDef(buffer, id, &bufErr)
+			if bufErr.HasError() {
+				return bufErr.CheckError()
+			}
 			td = existingTd
 		} else {
 			newTd, err := readTypeDef(r.fory, buffer, id)
@@ -1595,8 +1609,12 @@ func (r *TypeResolver) readTypeByReadTag(buffer *ByteBuffer) (reflect.Type, erro
 // ReadTypeInfo reads type info from buffer and returns it.
 // This is exported for use by generated code.
 func (r *TypeResolver) ReadTypeInfo(buffer *ByteBuffer, value reflect.Value) (TypeInfo, error) {
+	var bufErr Error
 	// ReadData variable-length type ID using Varuint32Small7 encoding (matches Java)
-	typeID := buffer.ReadVaruint32Small7()
+	typeID := buffer.ReadVaruint32Small7(&bufErr)
+	if bufErr.HasError() {
+		return TypeInfo{}, bufErr.CheckError()
+	}
 	internalTypeID := TypeId(typeID & 0xFF)
 
 	// Handle type meta based on internal type ID (matching Java XtypeResolver.readClassInfo)
@@ -1606,14 +1624,14 @@ func (r *TypeResolver) ReadTypeInfo(buffer *ByteBuffer, value reflect.Value) (Ty
 			return r.readSharedTypeMeta(buffer, value)
 		}
 		// ReadData namespace and type name metadata bytes
-		nsBytes, err := r.metaStringResolver.ReadMetaStringBytes(buffer)
-		if err != nil {
-			return TypeInfo{}, fmt.Errorf("failed to read namespace bytes: %w", err)
+		nsBytes, nsErr := r.metaStringResolver.ReadMetaStringBytes(buffer, &bufErr)
+		if nsErr != nil {
+			return TypeInfo{}, fmt.Errorf("failed to read namespace bytes: %w", nsErr)
 		}
 
-		typeBytes, err := r.metaStringResolver.ReadMetaStringBytes(buffer)
-		if err != nil {
-			return TypeInfo{}, fmt.Errorf("failed to read type bytes: %w", err)
+		typeBytes, tbErr := r.metaStringResolver.ReadMetaStringBytes(buffer, &bufErr)
+		if tbErr != nil {
+			return TypeInfo{}, fmt.Errorf("failed to read type bytes: %w", tbErr)
 		}
 
 		compositeKey := nsTypeKey{nsBytes.Hashcode, typeBytes.Hashcode}
@@ -1805,15 +1823,16 @@ func (r *TypeResolver) readTypeInfoWithTypeID(buffer *ByteBuffer, typeID uint32)
 		if r.metaShareEnabled() {
 			return r.readSharedTypeMeta(buffer, reflect.Value{})
 		}
+		var bufErr Error
 		// ReadData namespace and type name metadata bytes
-		nsBytes, err := r.metaStringResolver.ReadMetaStringBytes(buffer)
-		if err != nil {
-			return TypeInfo{}, fmt.Errorf("failed to read namespace bytes: %w", err)
+		nsBytes, nsErr := r.metaStringResolver.ReadMetaStringBytes(buffer, &bufErr)
+		if nsErr != nil {
+			return TypeInfo{}, fmt.Errorf("failed to read namespace bytes: %w", nsErr)
 		}
 
-		typeBytes, err := r.metaStringResolver.ReadMetaStringBytes(buffer)
-		if err != nil {
-			return TypeInfo{}, fmt.Errorf("failed to read type bytes: %w", err)
+		typeBytes, tbErr := r.metaStringResolver.ReadMetaStringBytes(buffer, &bufErr)
+		if tbErr != nil {
+			return TypeInfo{}, fmt.Errorf("failed to read type bytes: %w", tbErr)
 		}
 
 		compositeKey := nsTypeKey{nsBytes.Hashcode, typeBytes.Hashcode}
@@ -1974,16 +1993,23 @@ func (r *TypeResolver) writeMetaString(buffer *ByteBuffer, str string) error {
 }
 
 func (r *TypeResolver) readMetaString(buffer *ByteBuffer) (string, error) {
-	header := buffer.ReadVaruint32()
+	var bufErr Error
+	header := buffer.ReadVaruint32(&bufErr)
+	if bufErr.HasError() {
+		return "", bufErr.CheckError()
+	}
 	var length = int(header >> 1)
 	if header&0b1 == 0 {
 		if length <= SMALL_STRING_THRESHOLD {
-			buffer.ReadByte_()
+			buffer.ReadByte(&bufErr)
 		} else {
 			// TODO support use computed hash
-			buffer.ReadInt64()
+			buffer.ReadInt64(&bufErr)
 		}
-		str := string(buffer.ReadBinary(length))
+		str := string(buffer.ReadBinary(length, &bufErr))
+		if bufErr.HasError() {
+			return "", bufErr.CheckError()
+		}
 		dynamicStringId := r.dynamicStringId
 		r.dynamicStringId += 1
 		r.dynamicIdToString[dynamicStringId] = str

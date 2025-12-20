@@ -30,6 +30,7 @@ func TestMetaStringResolver(t *testing.T) {
 	resolver := fory.NewMetaStringResolver()
 	encoder := meta.NewEncoder('$', '_')
 	buffer := fory.NewByteBuffer(make([]byte, 512)) // Allocate enough space
+	var bufErr fory.Error
 
 	// Test 1: Regular English string
 	metaStr1, _ := encoder.Encode("hello, world")
@@ -37,7 +38,7 @@ func TestMetaStringResolver(t *testing.T) {
 	if err := resolver.WriteMetaStringBytes(buffer, metaBytes1); err != nil {
 		t.Fatalf("write failed: %v", err)
 	}
-	got1, _ := resolver.ReadMetaStringBytes(buffer)
+	got1, _ := resolver.ReadMetaStringBytes(buffer, &bufErr)
 	if got1.Hashcode != metaBytes1.Hashcode || !bytes.Equal(got1.Data, metaBytes1.Data) {
 		t.Errorf("Mismatch in English string")
 	}
@@ -48,7 +49,7 @@ func TestMetaStringResolver(t *testing.T) {
 	if err := resolver.WriteMetaStringBytes(buffer, metaBytes2); err != nil {
 		t.Fatalf("write failed: %v", err)
 	}
-	got2, _ := resolver.ReadMetaStringBytes(buffer)
+	got2, _ := resolver.ReadMetaStringBytes(buffer, &bufErr)
 	if got2.Hashcode != metaBytes2.Hashcode || !bytes.Equal(got2.Data, metaBytes2.Data) {
 		t.Errorf("Mismatch in custom data")
 	}
@@ -59,7 +60,7 @@ func TestMetaStringResolver(t *testing.T) {
 	if err := resolver.WriteMetaStringBytes(buffer, metaBytes3); err != nil {
 		t.Fatalf("write failed: %v", err)
 	}
-	got3, _ := resolver.ReadMetaStringBytes(buffer)
+	got3, _ := resolver.ReadMetaStringBytes(buffer, &bufErr)
 	if got3.Hashcode != metaBytes3.Hashcode || !bytes.Equal(got3.Data, metaBytes3.Data) {
 		t.Errorf("Mismatch in empty string")
 	}
@@ -70,7 +71,7 @@ func TestMetaStringResolver(t *testing.T) {
 	if err := resolver.WriteMetaStringBytes(buffer, metaBytes4); err != nil {
 		t.Fatalf("write failed: %v", err)
 	}
-	got4, _ := resolver.ReadMetaStringBytes(buffer)
+	got4, _ := resolver.ReadMetaStringBytes(buffer, &bufErr)
 	if got4.Hashcode != metaBytes4.Hashcode || !bytes.Equal(got4.Data, metaBytes4.Data) {
 		t.Errorf("Mismatch in Chinese string")
 	}
@@ -81,7 +82,7 @@ func TestMetaStringResolver(t *testing.T) {
 	if err := resolver.WriteMetaStringBytes(buffer, metaBytes5); err != nil {
 		t.Fatalf("write failed: %v", err)
 	}
-	got5, _ := resolver.ReadMetaStringBytes(buffer)
+	got5, _ := resolver.ReadMetaStringBytes(buffer, &bufErr)
 	if got5.Hashcode != metaBytes5.Hashcode || !bytes.Equal(got5.Data, metaBytes5.Data) {
 		t.Errorf("Mismatch in Japanese string")
 	}
@@ -93,7 +94,7 @@ func TestMetaStringResolver(t *testing.T) {
 	if err := resolver.WriteMetaStringBytes(buffer, metaBytes6); err != nil {
 		t.Fatalf("write failed: %v", err)
 	}
-	got6, _ := resolver.ReadMetaStringBytes(buffer)
+	got6, _ := resolver.ReadMetaStringBytes(buffer, &bufErr)
 	if got6.Hashcode != metaBytes6.Hashcode || !bytes.Equal(got6.Data, metaBytes6.Data) {
 		t.Errorf("Mismatch in long string")
 	}

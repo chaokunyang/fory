@@ -64,15 +64,16 @@ func (s byteSliceSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode,
 
 func (s byteSliceSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	buf := ctx.Buffer()
-	length := buf.ReadLength()
+	ctxErr := ctx.Err()
+	length := buf.ReadLength(ctxErr)
 	result := reflect.MakeSlice(type_, length, length)
-	raw := buf.ReadBytes(length)
+	raw := buf.ReadBytes(length, ctxErr)
 	for i := 0; i < length; i++ {
 		result.Index(i).SetUint(uint64(raw[i]))
 	}
 	value.Set(result)
 	ctx.RefResolver().Reference(value)
-	return nil
+	return ctx.CheckError()
 }
 
 type ByteSliceBufferObject struct {
@@ -130,14 +131,15 @@ func (s boolSliceSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode,
 
 func (s boolSliceSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	buf := ctx.Buffer()
-	length := buf.ReadLength()
+	ctxErr := ctx.Err()
+	length := buf.ReadLength(ctxErr)
 	r := reflect.MakeSlice(type_, length, length)
 	for i := 0; i < length; i++ {
-		r.Index(i).SetBool(buf.ReadBool())
+		r.Index(i).SetBool(buf.ReadBool(ctxErr))
 	}
 	value.Set(r)
 	ctx.RefResolver().Reference(value)
-	return nil
+	return ctx.CheckError()
 }
 
 type int8SliceSerializer struct {
@@ -167,14 +169,15 @@ func (s int8SliceSerializer) Write(ctx *WriteContext, refMode RefMode, writeType
 
 func (s int8SliceSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	buf := ctx.Buffer()
-	length := buf.ReadLength()
+	ctxErr := ctx.Err()
+	length := buf.ReadLength(ctxErr)
 	r := reflect.MakeSlice(type_, length, length)
 	for i := 0; i < length; i++ {
-		r.Index(i).SetInt(int64(int8(buf.ReadByte_())))
+		r.Index(i).SetInt(int64(int8(buf.ReadByte(ctxErr))))
 	}
 	value.Set(r)
 	ctx.RefResolver().Reference(value)
-	return nil
+	return ctx.CheckError()
 }
 
 func (s int8SliceSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
@@ -216,14 +219,15 @@ func (s int16SliceSerializer) Write(ctx *WriteContext, refMode RefMode, writeTyp
 
 func (s int16SliceSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	buf := ctx.Buffer()
-	length := buf.ReadLength() / 2
+	ctxErr := ctx.Err()
+	length := buf.ReadLength(ctxErr) / 2
 	r := reflect.MakeSlice(type_, length, length)
 	for i := 0; i < length; i++ {
-		r.Index(i).SetInt(int64(buf.ReadInt16()))
+		r.Index(i).SetInt(int64(buf.ReadInt16(ctxErr)))
 	}
 	value.Set(r)
 	ctx.RefResolver().Reference(value)
-	return nil
+	return ctx.CheckError()
 }
 
 func (s int16SliceSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
@@ -265,14 +269,15 @@ func (s int32SliceSerializer) Write(ctx *WriteContext, refMode RefMode, writeTyp
 
 func (s int32SliceSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	buf := ctx.Buffer()
-	length := buf.ReadLength() / 4
+	ctxErr := ctx.Err()
+	length := buf.ReadLength(ctxErr) / 4
 	r := reflect.MakeSlice(type_, length, length)
 	for i := 0; i < length; i++ {
-		r.Index(i).SetInt(int64(buf.ReadInt32()))
+		r.Index(i).SetInt(int64(buf.ReadInt32(ctxErr)))
 	}
 	value.Set(r)
 	ctx.RefResolver().Reference(value)
-	return nil
+	return ctx.CheckError()
 }
 
 func (s int32SliceSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
@@ -314,14 +319,15 @@ func (s int64SliceSerializer) Write(ctx *WriteContext, refMode RefMode, writeTyp
 
 func (s int64SliceSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	buf := ctx.Buffer()
-	length := buf.ReadLength() / 8
+	ctxErr := ctx.Err()
+	length := buf.ReadLength(ctxErr) / 8
 	r := reflect.MakeSlice(type_, length, length)
 	for i := 0; i < length; i++ {
-		r.Index(i).SetInt(buf.ReadInt64())
+		r.Index(i).SetInt(buf.ReadInt64(ctxErr))
 	}
 	value.Set(r)
 	ctx.RefResolver().Reference(value)
-	return nil
+	return ctx.CheckError()
 }
 
 func (s int64SliceSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
@@ -363,14 +369,15 @@ func (s float32SliceSerializer) Write(ctx *WriteContext, refMode RefMode, writeT
 
 func (s float32SliceSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	buf := ctx.Buffer()
-	length := buf.ReadLength() / 4
+	ctxErr := ctx.Err()
+	length := buf.ReadLength(ctxErr) / 4
 	r := reflect.MakeSlice(type_, length, length)
 	for i := 0; i < length; i++ {
-		r.Index(i).SetFloat(float64(buf.ReadFloat32()))
+		r.Index(i).SetFloat(float64(buf.ReadFloat32(ctxErr)))
 	}
 	value.Set(r)
 	ctx.RefResolver().Reference(value)
-	return nil
+	return ctx.CheckError()
 }
 
 func (s float32SliceSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
@@ -412,14 +419,15 @@ func (s float64SliceSerializer) Write(ctx *WriteContext, refMode RefMode, writeT
 
 func (s float64SliceSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	buf := ctx.Buffer()
-	length := buf.ReadLength() / 8
+	ctxErr := ctx.Err()
+	length := buf.ReadLength(ctxErr) / 8
 	r := reflect.MakeSlice(type_, length, length)
 	for i := 0; i < length; i++ {
-		r.Index(i).SetFloat(buf.ReadFloat64())
+		r.Index(i).SetFloat(buf.ReadFloat64(ctxErr))
 	}
 	value.Set(r)
 	ctx.RefResolver().Reference(value)
-	return nil
+	return ctx.CheckError()
 }
 
 func (s float64SliceSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
@@ -452,13 +460,13 @@ func writeBoolSlice(buf *ByteBuffer, value []bool) error {
 }
 
 // readBoolSlice reads []bool from buffer
-func readBoolSlice(buf *ByteBuffer) ([]bool, error) {
-	length := buf.ReadLength()
+func readBoolSlice(buf *ByteBuffer, err *Error) []bool {
+	length := buf.ReadLength(err)
 	result := make([]bool, length)
 	for i := 0; i < length; i++ {
-		result[i] = buf.ReadBool()
+		result[i] = buf.ReadBool(err)
 	}
-	return result, nil
+	return result
 }
 
 // writeInt8Slice writes []int8 to buffer
@@ -475,13 +483,13 @@ func writeInt8Slice(buf *ByteBuffer, value []int8) error {
 }
 
 // readInt8Slice reads []int8 from buffer
-func readInt8Slice(buf *ByteBuffer) ([]int8, error) {
-	length := buf.ReadLength()
+func readInt8Slice(buf *ByteBuffer, err *Error) []int8 {
+	length := buf.ReadLength(err)
 	result := make([]int8, length)
 	for i := 0; i < length; i++ {
-		result[i] = buf.ReadInt8()
+		result[i] = buf.ReadInt8(err)
 	}
-	return result, nil
+	return result
 }
 
 // writeInt16Slice writes []int16 to buffer
@@ -498,14 +506,14 @@ func writeInt16Slice(buf *ByteBuffer, value []int16) error {
 }
 
 // readInt16Slice reads []int16 from buffer
-func readInt16Slice(buf *ByteBuffer) ([]int16, error) {
-	size := buf.ReadLength()
+func readInt16Slice(buf *ByteBuffer, err *Error) []int16 {
+	size := buf.ReadLength(err)
 	length := size / 2
 	result := make([]int16, length)
 	for i := 0; i < length; i++ {
-		result[i] = buf.ReadInt16()
+		result[i] = buf.ReadInt16(err)
 	}
-	return result, nil
+	return result
 }
 
 // writeInt32Slice writes []int32 to buffer
@@ -522,14 +530,14 @@ func writeInt32Slice(buf *ByteBuffer, value []int32) error {
 }
 
 // readInt32Slice reads []int32 from buffer
-func readInt32Slice(buf *ByteBuffer) ([]int32, error) {
-	size := buf.ReadLength()
+func readInt32Slice(buf *ByteBuffer, err *Error) []int32 {
+	size := buf.ReadLength(err)
 	length := size / 4
 	result := make([]int32, length)
 	for i := 0; i < length; i++ {
-		result[i] = buf.ReadInt32()
+		result[i] = buf.ReadInt32(err)
 	}
-	return result, nil
+	return result
 }
 
 // writeInt64Slice writes []int64 to buffer
@@ -546,14 +554,14 @@ func writeInt64Slice(buf *ByteBuffer, value []int64) error {
 }
 
 // readInt64Slice reads []int64 from buffer
-func readInt64Slice(buf *ByteBuffer) ([]int64, error) {
-	size := buf.ReadLength()
+func readInt64Slice(buf *ByteBuffer, err *Error) []int64 {
+	size := buf.ReadLength(err)
 	length := size / 8
 	result := make([]int64, length)
 	for i := 0; i < length; i++ {
-		result[i] = buf.ReadInt64()
+		result[i] = buf.ReadInt64(err)
 	}
-	return result, nil
+	return result
 }
 
 // writeIntSlice writes []int to buffer
@@ -581,22 +589,22 @@ func writeIntSlice(buf *ByteBuffer, value []int) error {
 }
 
 // readIntSlice reads []int from buffer
-func readIntSlice(buf *ByteBuffer) ([]int, error) {
-	size := buf.ReadLength()
+func readIntSlice(buf *ByteBuffer, err *Error) []int {
+	size := buf.ReadLength(err)
 	if strconv.IntSize == 64 {
 		length := size / 8
 		result := make([]int, length)
 		for i := 0; i < length; i++ {
-			result[i] = int(buf.ReadInt64())
+			result[i] = int(buf.ReadInt64(err))
 		}
-		return result, nil
+		return result
 	} else {
 		length := size / 4
 		result := make([]int, length)
 		for i := 0; i < length; i++ {
-			result[i] = int(buf.ReadInt32())
+			result[i] = int(buf.ReadInt32(err))
 		}
-		return result, nil
+		return result
 	}
 }
 
@@ -614,14 +622,14 @@ func writeFloat32Slice(buf *ByteBuffer, value []float32) error {
 }
 
 // readFloat32Slice reads []float32 from buffer
-func readFloat32Slice(buf *ByteBuffer) ([]float32, error) {
-	size := buf.ReadLength()
+func readFloat32Slice(buf *ByteBuffer, err *Error) []float32 {
+	size := buf.ReadLength(err)
 	length := size / 4
 	result := make([]float32, length)
 	for i := 0; i < length; i++ {
-		result[i] = buf.ReadFloat32()
+		result[i] = buf.ReadFloat32(err)
 	}
-	return result, nil
+	return result
 }
 
 // writeFloat64Slice writes []float64 to buffer
@@ -638,14 +646,14 @@ func writeFloat64Slice(buf *ByteBuffer, value []float64) error {
 }
 
 // readFloat64Slice reads []float64 from buffer
-func readFloat64Slice(buf *ByteBuffer) ([]float64, error) {
-	size := buf.ReadLength()
+func readFloat64Slice(buf *ByteBuffer, err *Error) []float64 {
+	size := buf.ReadLength(err)
 	length := size / 8
 	result := make([]float64, length)
 	for i := 0; i < length; i++ {
-		result[i] = buf.ReadFloat64()
+		result[i] = buf.ReadFloat64(err)
 	}
-	return result, nil
+	return result
 }
 
 type intSliceSerializer struct {
@@ -684,7 +692,8 @@ func (s intSliceSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, 
 
 func (s intSliceSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	buf := ctx.Buffer()
-	size := buf.ReadLength()
+	ctxErr := ctx.Err()
+	size := buf.ReadLength(ctxErr)
 	var length int
 	if strconv.IntSize == 64 {
 		length = size / 8
@@ -694,16 +703,16 @@ func (s intSliceSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value
 	r := reflect.MakeSlice(type_, length, length)
 	if strconv.IntSize == 64 {
 		for i := 0; i < length; i++ {
-			r.Index(i).SetInt(buf.ReadInt64())
+			r.Index(i).SetInt(buf.ReadInt64(ctxErr))
 		}
 	} else {
 		for i := 0; i < length; i++ {
-			r.Index(i).SetInt(int64(buf.ReadInt32()))
+			r.Index(i).SetInt(int64(buf.ReadInt32(ctxErr)))
 		}
 	}
 	value.Set(r)
 	ctx.RefResolver().Reference(value)
-	return nil
+	return ctx.CheckError()
 }
 
 // uintSliceSerializer handles []uint serialization.
@@ -763,7 +772,8 @@ func (s uintSliceSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode,
 
 func (s uintSliceSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	buf := ctx.Buffer()
-	size := buf.ReadLength()
+	ctxErr := ctx.Err()
+	size := buf.ReadLength(ctxErr)
 	var length int
 	if strconv.IntSize == 64 {
 		length = size / 8
@@ -773,16 +783,16 @@ func (s uintSliceSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, valu
 	r := reflect.MakeSlice(type_, length, length)
 	if strconv.IntSize == 64 {
 		for i := 0; i < length; i++ {
-			r.Index(i).SetUint(uint64(buf.ReadInt64()))
+			r.Index(i).SetUint(uint64(buf.ReadInt64(ctxErr)))
 		}
 	} else {
 		for i := 0; i < length; i++ {
-			r.Index(i).SetUint(uint64(buf.ReadInt32()))
+			r.Index(i).SetUint(uint64(buf.ReadInt32(ctxErr)))
 		}
 	}
 	value.Set(r)
 	ctx.RefResolver().Reference(value)
-	return nil
+	return ctx.CheckError()
 }
 
 type stringSliceSerializer struct {
@@ -807,18 +817,19 @@ func (s stringSliceSerializer) Write(ctx *WriteContext, value reflect.Value) err
 
 func (s stringSliceSerializer) Read(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	buf := ctx.Buffer()
+	ctxErr := ctx.Err()
 	length := ctx.ReadLength()
 	r := reflect.MakeSlice(type_, length, length)
 	elemTyp := type_.Elem()
 
 	// Strings don't need reference tracking, but xlang format has a flag byte per element
 	for i := 0; i < length; i++ {
-		refFlag := buf.ReadInt8()
+		refFlag := buf.ReadInt8(ctxErr)
 		var str string
 		if refFlag == NullFlag {
 			str = ""
 		} else {
-			str = readString(buf)
+			str = readStringE(buf, ctxErr)
 		}
 		if elemTyp.Kind() == reflect.String {
 			r.Index(i).SetString(str)
@@ -827,5 +838,5 @@ func (s stringSliceSerializer) Read(ctx *ReadContext, type_ reflect.Type, value 
 		}
 	}
 	value.Set(r)
-	return nil
+	return ctx.CheckError()
 }

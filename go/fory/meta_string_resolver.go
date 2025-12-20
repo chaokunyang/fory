@@ -111,9 +111,12 @@ func (r *MetaStringResolver) WriteMetaStringBytes(buf *ByteBuffer, m *MetaString
 }
 
 // ReadMetaStringBytes reads a string from buffer, handling dynamic references
-func (r *MetaStringResolver) ReadMetaStringBytes(buf *ByteBuffer) (*MetaStringBytes, error) {
+func (r *MetaStringResolver) ReadMetaStringBytes(buf *ByteBuffer, ctxErr *Error) (*MetaStringBytes, error) {
 	// ReadData header containing length/reference info (uses Varuint32Small7 to match Java)
-	header := buf.ReadVaruint32Small7()
+	header := buf.ReadVaruint32Small7(ctxErr)
+	if ctxErr.HasError() {
+		return nil, *ctxErr
+	}
 
 	length := int16(header >> 1)
 	if header&1 != 0 {
@@ -134,7 +137,7 @@ func (r *MetaStringResolver) ReadMetaStringBytes(buf *ByteBuffer) (*MetaStringBy
 	// Small string optimization
 	if length <= SmallStringThreshold {
 		// ReadData encoding and data
-		encByte, _ := buf.ReadByte()
+		encByte := buf.ReadByte(ctxErr)
 		encoding = Encoding(encByte)
 
 		data = make([]byte, length)
@@ -275,13 +278,13 @@ func writeVaruint32(buf *ByteBuffer, v uint32) error {
 	return nil
 }
 
-func readVaruint32(buf *ByteBuffer) (uint32, error) {
+func readVaruint32E(buf *ByteBuffer, ctxErr *Error) uint32 {
 	var x uint32
 	var s uint
 	for {
-		b, err := buf.ReadByte()
-		if err != nil {
-			return 0, err
+		b := buf.ReadByte(ctxErr)
+		if ctxErr.HasError() {
+			return 0
 		}
 		x |= uint32(b&0x7F) << s
 		if b < 0x80 {
@@ -289,7 +292,7 @@ func readVaruint32(buf *ByteBuffer) (uint32, error) {
 		}
 		s += 7
 	}
-	return x, nil
+	return x
 }
 
 func bytesToInt64(b []byte) int64 {

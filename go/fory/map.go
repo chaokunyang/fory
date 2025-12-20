@@ -73,11 +73,12 @@ func writeMapRefAndType(ctx *WriteContext, refMode RefMode, writeType bool, valu
 // Returns true if a reference was resolved (value already set), false if data should be read.
 func readMapRefAndType(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) (bool, error) {
 	buf := ctx.Buffer()
+	ctxErr := ctx.Err()
 	switch refMode {
 	case RefModeTracking:
-		refID, err := ctx.RefResolver().TryPreserveRefId(buf)
-		if err != nil {
-			return false, err
+		refID, refErr := ctx.RefResolver().TryPreserveRefId(buf)
+		if refErr != nil {
+			return false, refErr
 		}
 		if int8(refID) < NotNullValueFlag {
 			obj := ctx.RefResolver().GetReadObject(refID)
@@ -87,15 +88,15 @@ func readMapRefAndType(ctx *ReadContext, refMode RefMode, readType bool, value r
 			return true, nil
 		}
 	case RefModeNullOnly:
-		flag := buf.ReadInt8()
+		flag := buf.ReadInt8(ctxErr)
 		if flag == NullFlag {
-			return true, nil
+			return true, ctx.CheckError()
 		}
 	}
 	if readType {
-		buf.ReadVaruint32Small7()
+		buf.ReadVaruint32Small7(ctxErr)
 	}
-	return false, nil
+	return false, ctx.CheckError()
 }
 
 type mapSerializer struct {
@@ -311,6 +312,7 @@ func (s mapSerializer) writeObj(ctx *WriteContext, serializer Serializer, obj re
 
 func (s mapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	buf := ctx.Buffer()
+	ctxErr := ctx.Err()
 	refResolver := ctx.RefResolver()
 	if s.type_ == nil {
 		s.type_ = type_
@@ -338,10 +340,13 @@ func (s mapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value refl
 	}
 
 	refResolver.Reference(value)
-	size := int(buf.ReadVaruint32())
+	size := int(buf.ReadVaruint32(ctxErr))
 	var chunkHeader uint8
 	if size > 0 {
-		chunkHeader = buf.ReadUint8()
+		chunkHeader = buf.ReadUint8(ctxErr)
+	}
+	if ctx.HasError() {
+		return ctx.TakeError()
 	}
 
 	keyType := type_.Key()
@@ -384,7 +389,7 @@ func (s mapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value refl
 							if size == 0 {
 								return nil
 							}
-							chunkHeader = buf.ReadUint8()
+							chunkHeader = buf.ReadUint8(ctxErr)
 							continue
 						}
 
@@ -475,7 +480,7 @@ func (s mapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value refl
 							if size == 0 {
 								return nil
 							}
-							chunkHeader = buf.ReadUint8()
+							chunkHeader = buf.ReadUint8(ctxErr)
 							continue
 						}
 
@@ -550,7 +555,7 @@ func (s mapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value refl
 			if size == 0 {
 				return nil
 			} else {
-				chunkHeader = buf.ReadUint8()
+				chunkHeader = buf.ReadUint8(ctxErr)
 			}
 		}
 
@@ -558,7 +563,7 @@ func (s mapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value refl
 		trackValRef := (chunkHeader & TRACKING_VALUE_REF) != 0
 		keyDeclType := (chunkHeader & KEY_DECL_TYPE) != 0
 		valDeclType := (chunkHeader & VALUE_DECL_TYPE) != 0
-		chunkSize := int(buf.ReadUint8())
+		chunkSize := int(buf.ReadUint8(ctxErr))
 
 		// ReadData type info if not declared
 		var keyTypeInfo *TypeInfo
@@ -648,7 +653,7 @@ func (s mapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value refl
 		keySer = s.keySerializer
 		valSer = s.valueSerializer
 		if size > 0 {
-			chunkHeader = buf.ReadUint8()
+			chunkHeader = buf.ReadUint8(ctxErr)
 		}
 	}
 	return nil

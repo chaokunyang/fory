@@ -111,7 +111,7 @@ type Serializer interface {
 //	}
 //
 //	func (s *MyExtSerializer) Read(buf *ByteBuffer) (interface{}, error) {
-//	    id := buf.ReadVarint32()
+//	    id := buf.ReadVarint32(err)
 //	    return MyExt{Id: id}, nil
 //	}
 //
@@ -187,11 +187,12 @@ func (s *extensionSerializerAdapter) ReadData(ctx *ReadContext, type_ reflect.Ty
 
 func (s *extensionSerializerAdapter) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
 	buf := ctx.Buffer()
+	ctxErr := ctx.Err()
 	switch refMode {
 	case RefModeTracking:
-		refID, err := ctx.RefResolver().TryPreserveRefId(buf)
-		if err != nil {
-			return err
+		refID, refErr := ctx.RefResolver().TryPreserveRefId(buf)
+		if refErr != nil {
+			return refErr
 		}
 		if int8(refID) < NotNullValueFlag {
 			obj := ctx.RefResolver().GetReadObject(refID)
@@ -201,9 +202,9 @@ func (s *extensionSerializerAdapter) Read(ctx *ReadContext, refMode RefMode, rea
 			return nil
 		}
 	case RefModeNullOnly:
-		flag := buf.ReadInt8()
+		flag := buf.ReadInt8(ctxErr)
 		if flag == NullFlag {
-			return nil
+			return ctx.CheckError()
 		}
 	}
 	return s.ReadData(ctx, value.Type(), value)

@@ -353,7 +353,7 @@ func (f *Fory) RegisterExtensionType(type_ interface{}, typeID uint32, serialize
 //	}
 //
 //	func (s *MyExtSerializer) Read(buf *ByteBuffer) (interface{}, error) {
-//	    id := buf.ReadVarint32()
+//	    id := buf.ReadVarint32(err)
 //	    return MyExt{Id: id}, nil
 //	}
 //
@@ -544,9 +544,9 @@ func Deserialize[T any](f *Fory, data []byte, target *T) error {
 	f.readCtx.SetData(data)
 
 	// ReadData and validate header
-	metaOffset, err := readHeader(f.readCtx)
-	if err != nil {
-		return err
+	metaOffset := readHeader(f.readCtx)
+	if f.readCtx.HasError() {
+		return f.readCtx.TakeError()
 	}
 
 	// Check if the serialized object is null
@@ -559,52 +559,53 @@ func Deserialize[T any](f *Fory, data []byte, target *T) error {
 	// Fast path: type switch for common types (Go compiler can optimize this)
 	// For primitives, read null flag, skip type ID, then read value from buffer
 	buf := f.readCtx.buffer
+	err := f.readCtx.Err()
 	switch t := any(target).(type) {
 	case *bool:
-		_ = buf.ReadInt8()            // null flag
-		_ = buf.ReadVaruint32Small7() // type ID
-		*t = buf.ReadBool()
-		return nil
+		_ = buf.ReadInt8(err)            // null flag
+		_ = buf.ReadVaruint32Small7(err) // type ID
+		*t = buf.ReadBool(err)
+		return f.readCtx.CheckError()
 	case *int8:
-		_ = buf.ReadInt8()
-		_ = buf.ReadVaruint32Small7()
-		*t = buf.ReadInt8()
-		return nil
+		_ = buf.ReadInt8(err)
+		_ = buf.ReadVaruint32Small7(err)
+		*t = buf.ReadInt8(err)
+		return f.readCtx.CheckError()
 	case *int16:
-		_ = buf.ReadInt8()
-		_ = buf.ReadVaruint32Small7()
-		*t = buf.ReadInt16()
-		return nil
+		_ = buf.ReadInt8(err)
+		_ = buf.ReadVaruint32Small7(err)
+		*t = buf.ReadInt16(err)
+		return f.readCtx.CheckError()
 	case *int32:
-		_ = buf.ReadInt8()
-		_ = buf.ReadVaruint32Small7()
-		*t = buf.ReadVarint32()
-		return nil
+		_ = buf.ReadInt8(err)
+		_ = buf.ReadVaruint32Small7(err)
+		*t = buf.ReadVarint32(err)
+		return f.readCtx.CheckError()
 	case *int64:
-		_ = buf.ReadInt8()
-		_ = buf.ReadVaruint32Small7()
-		*t = buf.ReadVarint64()
-		return nil
+		_ = buf.ReadInt8(err)
+		_ = buf.ReadVaruint32Small7(err)
+		*t = buf.ReadVarint64(err)
+		return f.readCtx.CheckError()
 	case *int:
-		_ = buf.ReadInt8()
-		_ = buf.ReadVaruint32Small7()
-		*t = int(buf.ReadVarint64())
-		return nil
+		_ = buf.ReadInt8(err)
+		_ = buf.ReadVaruint32Small7(err)
+		*t = int(buf.ReadVarint64(err))
+		return f.readCtx.CheckError()
 	case *float32:
-		_ = buf.ReadInt8()
-		_ = buf.ReadVaruint32Small7()
-		*t = buf.ReadFloat32()
-		return nil
+		_ = buf.ReadInt8(err)
+		_ = buf.ReadVaruint32Small7(err)
+		*t = buf.ReadFloat32(err)
+		return f.readCtx.CheckError()
 	case *float64:
-		_ = buf.ReadInt8()
-		_ = buf.ReadVaruint32Small7()
-		*t = buf.ReadFloat64()
-		return nil
+		_ = buf.ReadInt8(err)
+		_ = buf.ReadVaruint32Small7(err)
+		*t = buf.ReadFloat64(err)
+		return f.readCtx.CheckError()
 	case *string:
-		_ = buf.ReadInt8()            // null flag
-		_ = buf.ReadVaruint32Small7() // type ID
+		_ = buf.ReadInt8(err)            // null flag
+		_ = buf.ReadVaruint32Small7(err) // type ID
 		*t = f.readCtx.ReadString()
-		return nil
+		return f.readCtx.CheckError()
 	case *[]byte:
 		v, err := f.readCtx.ReadByteSlice(RefModeNullOnly, true)
 		if err != nil {
@@ -768,9 +769,9 @@ func (f *Fory) Deserialize(data []byte, v interface{}) error {
 	}()
 	f.readCtx.SetData(data)
 
-	metaOffset, err := readHeader(f.readCtx)
-	if err != nil {
-		return err
+	metaOffset := readHeader(f.readCtx)
+	if f.readCtx.HasError() {
+		return f.readCtx.TakeError()
 	}
 
 	// Check if the serialized object is null
@@ -886,10 +887,10 @@ func (f *Fory) DeserializeFrom(buf *ByteBuffer, v interface{}) error {
 	origBuffer := f.readCtx.buffer
 	f.readCtx.buffer = buf
 
-	metaOffset, err := readHeader(f.readCtx)
-	if err != nil {
+	metaOffset := readHeader(f.readCtx)
+	if f.readCtx.HasError() {
 		f.readCtx.buffer = origBuffer
-		return err
+		return f.readCtx.TakeError()
 	}
 
 	// Check if the serialized object is null
@@ -1026,9 +1027,9 @@ func (f *Fory) DeserializeWithCallbackBuffers(buffer *ByteBuffer, v interface{},
 	}
 
 	// ReadData and validate header, get meta offset if present
-	metaOffset, err := readHeader(f.readCtx)
-	if err != nil {
-		return err
+	metaOffset := readHeader(f.readCtx)
+	if f.readCtx.HasError() {
+		return f.readCtx.TakeError()
 	}
 
 	// Check if the serialized object is null
@@ -1172,26 +1173,32 @@ const NullObjectMetaOffset int32 = -0x7FFFFFFF
 // readHeader reads and validates the Fory protocol header
 // Returns the meta start offset if present (0 if not present)
 // Returns NullObjectMetaOffset if the serialized object is null
-func readHeader(ctx *ReadContext) (int32, error) {
-	magicNumber := ctx.buffer.ReadInt16()
-	if magicNumber != MAGIC_NUMBER {
-		return 0, ErrMagicNumber
+// Sets error on ctx if header is invalid (use ctx.HasError() to check)
+func readHeader(ctx *ReadContext) int32 {
+	err := ctx.Err()
+	magicNumber := ctx.buffer.ReadInt16(err)
+	if ctx.HasError() {
+		return 0
 	}
-	bitmap := ctx.buffer.ReadByte_()
+	if magicNumber != MAGIC_NUMBER {
+		ctx.SetError(DeserializationError("invalid magic number"))
+		return 0
+	}
+	bitmap := ctx.buffer.ReadByte(err)
 
 	// Check if this is a null object - only magic number + bitmap with isNilFlag was written
 	if (bitmap & IsNilFlag) != 0 {
-		return NullObjectMetaOffset, nil
+		return NullObjectMetaOffset
 	}
 
-	_ = ctx.buffer.ReadByte_() // language
+	_ = ctx.buffer.ReadByte(err) // language
 
 	// In compatible mode with meta share, Java writes a 4-byte meta offset
 	// We need to read it but we'll handle type defs later
 	if ctx.compatible {
-		metaOffset := ctx.buffer.ReadInt32()
-		return metaOffset, nil
+		metaOffset := ctx.buffer.ReadInt32(err)
+		return metaOffset
 	}
 
-	return 0, nil
+	return 0
 }

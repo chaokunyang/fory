@@ -134,15 +134,19 @@ func writeEnumField(ctx *WriteContext, field *FieldInfo, fieldValue reflect.Valu
 
 // readEnumField reads an enum field with null flag + ordinal.
 // Java always writes null flag for enum fields in struct.
-func readEnumField(ctx *ReadContext, field *FieldInfo, fieldValue reflect.Value) error {
+// Uses context error state for deferred error checking.
+func readEnumField(ctx *ReadContext, field *FieldInfo, fieldValue reflect.Value) {
 	buf := ctx.Buffer()
-	nullFlag := buf.ReadInt8()
+	nullFlag := buf.ReadInt8(ctx.Err())
+	if ctx.HasError() {
+		return
+	}
 	if nullFlag == NullFlag {
 		// For pointer enum fields, leave as nil; for non-pointer, set to zero
 		if fieldValue.Kind() != reflect.Ptr {
 			fieldValue.SetInt(0)
 		}
-		return nil
+		return
 	}
 	// For pointer enum fields, allocate a new value
 	targetValue := fieldValue
@@ -153,10 +157,15 @@ func readEnumField(ctx *ReadContext, field *FieldInfo, fieldValue reflect.Value)
 	}
 	// For pointer enum fields, the serializer is ptrToValueSerializer wrapping enumSerializer.
 	// We need to call the inner enumSerializer directly with the dereferenced value.
+	var err error
 	if ptrSer, ok := field.Serializer.(*ptrToValueSerializer); ok {
-		return ptrSer.valueSerializer.ReadData(ctx, field.Type.Elem(), targetValue)
+		err = ptrSer.valueSerializer.ReadData(ctx, field.Type.Elem(), targetValue)
+	} else {
+		err = field.Serializer.ReadData(ctx, field.Type, targetValue)
 	}
-	return field.Serializer.ReadData(ctx, field.Type, targetValue)
+	if err != nil {
+		ctx.SetError(FromError(err))
+	}
 }
 
 type structSerializer struct {
@@ -521,11 +530,12 @@ func (s *structSerializer) writeZeroField(ctx *WriteContext, field *FieldInfo) e
 
 func (s *structSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
 	buf := ctx.Buffer()
+	ctxErr := ctx.Err()
 	switch refMode {
 	case RefModeTracking:
-		refID, err := ctx.RefResolver().TryPreserveRefId(buf)
-		if err != nil {
-			return err
+		refID, refErr := ctx.RefResolver().TryPreserveRefId(buf)
+		if refErr != nil {
+			return refErr
 		}
 		if int8(refID) < NotNullValueFlag {
 			// Reference found
@@ -536,21 +546,21 @@ func (s *structSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool
 			return nil
 		}
 	case RefModeNullOnly:
-		flag := buf.ReadInt8()
+		flag := buf.ReadInt8(ctxErr)
 		if flag == NullFlag {
-			return nil
+			return ctx.CheckError()
 		}
 	}
 	if readType {
 		// Read type info - in compatible mode this returns the serializer with remote fieldDefs
-		typeID := buf.ReadVaruint32Small7()
+		typeID := buf.ReadVaruint32Small7(ctxErr)
 		internalTypeID := TypeId(typeID & 0xFF)
 		// Check if this is a struct type that needs type meta reading
 		if IsNamespacedType(TypeId(typeID)) || internalTypeID == COMPATIBLE_STRUCT || internalTypeID == STRUCT {
 			// For struct types in compatible mode, use the serializer from TypeInfo
-			typeInfo, err := ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID)
-			if err != nil {
-				return err
+			typeInfo, tiErr := ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID)
+			if tiErr != nil {
+				return tiErr
 			}
 			// Use the serializer from TypeInfo which has the remote field definitions
 			if structSer, ok := typeInfo.Serializer.(*structSerializer); ok && len(structSer.fieldDefs) > 0 {
@@ -599,7 +609,7 @@ func (s *structSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value 
 	// because type meta is written separately
 	if !ctx.Compatible() {
 		err := ctx.Err()
-		structHash := buf.ReadInt32E(err)
+		structHash := buf.ReadInt32(err)
 		if ctx.HasError() {
 			return ctx.TakeError()
 		}
@@ -621,23 +631,24 @@ func (s *structSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value 
 	// Use deferred error checking - read all fields, check once at end
 	for _, field := range s.fixedFields {
 		if field.FieldIndex < 0 {
-			if skipErr := s.skipField(ctx, field); skipErr != nil {
-				return skipErr
+			s.skipField(ctx, field)
+			if ctx.HasError() {
+				return ctx.TakeError()
 			}
 			continue
 		}
 		fieldPtr := unsafe.Add(ptr, field.Offset)
 		switch field.StaticId {
 		case ConcreteTypeBool:
-			*(*bool)(fieldPtr) = buf.ReadBoolE(err)
+			*(*bool)(fieldPtr) = buf.ReadBool(err)
 		case ConcreteTypeInt8:
-			*(*int8)(fieldPtr) = buf.ReadInt8E(err)
+			*(*int8)(fieldPtr) = buf.ReadInt8(err)
 		case ConcreteTypeInt16:
-			*(*int16)(fieldPtr) = buf.ReadInt16E(err)
+			*(*int16)(fieldPtr) = buf.ReadInt16(err)
 		case ConcreteTypeFloat32:
-			*(*float32)(fieldPtr) = buf.ReadFloat32E(err)
+			*(*float32)(fieldPtr) = buf.ReadFloat32(err)
 		case ConcreteTypeFloat64:
-			*(*float64)(fieldPtr) = buf.ReadFloat64E(err)
+			*(*float64)(fieldPtr) = buf.ReadFloat64(err)
 		}
 	}
 
@@ -649,19 +660,20 @@ func (s *structSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value 
 	// Phase 2: Read varint primitive fields (no ref flag)
 	for _, field := range s.varintFields {
 		if field.FieldIndex < 0 {
-			if skipErr := s.skipField(ctx, field); skipErr != nil {
-				return skipErr
+			s.skipField(ctx, field)
+			if ctx.HasError() {
+				return ctx.TakeError()
 			}
 			continue
 		}
 		fieldPtr := unsafe.Add(ptr, field.Offset)
 		switch field.StaticId {
 		case ConcreteTypeInt32:
-			*(*int32)(fieldPtr) = buf.ReadVarint32E(err)
+			*(*int32)(fieldPtr) = buf.ReadVarint32(err)
 		case ConcreteTypeInt64:
-			*(*int64)(fieldPtr) = buf.ReadVarint64E(err)
+			*(*int64)(fieldPtr) = buf.ReadVarint64(err)
 		case ConcreteTypeInt:
-			*(*int)(fieldPtr) = int(buf.ReadVarint64E(err))
+			*(*int)(fieldPtr) = int(buf.ReadVarint64(err))
 		}
 	}
 
@@ -673,16 +685,18 @@ func (s *structSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value 
 	// Phase 3: Read remaining fields (all non-primitives have ref flag per xlang spec)
 	for _, field := range s.remainingFields {
 		if field.FieldIndex < 0 {
-			if skipErr := s.skipField(ctx, field); skipErr != nil {
-				return skipErr
+			s.skipField(ctx, field)
+			if ctx.HasError() {
+				return ctx.TakeError()
 			}
 			continue
 		}
 		fieldValue := value.Field(field.FieldIndex)
 
 		if isEnumField(field) {
-			if enumErr := readEnumField(ctx, field, fieldValue); enumErr != nil {
-				return enumErr
+			readEnumField(ctx, field, fieldValue)
+			if ctx.HasError() {
+				return ctx.TakeError()
 			}
 			continue
 		}
@@ -712,8 +726,9 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 
 	for _, field := range s.fields {
 		if field.FieldIndex < 0 {
-			if skipErr := s.skipField(ctx, field); skipErr != nil {
-				return skipErr
+			s.skipField(ctx, field)
+			if ctx.HasError() {
+				return ctx.TakeError()
 			}
 			continue
 		}
@@ -725,15 +740,15 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 		if isFixedSizePrimitive(field.StaticId, field.Referencable) {
 			switch field.StaticId {
 			case ConcreteTypeBool:
-				*(*bool)(fieldPtr) = buf.ReadBoolE(err)
+				*(*bool)(fieldPtr) = buf.ReadBool(err)
 			case ConcreteTypeInt8:
-				*(*int8)(fieldPtr) = buf.ReadInt8E(err)
+				*(*int8)(fieldPtr) = buf.ReadInt8(err)
 			case ConcreteTypeInt16:
-				*(*int16)(fieldPtr) = buf.ReadInt16E(err)
+				*(*int16)(fieldPtr) = buf.ReadInt16(err)
 			case ConcreteTypeFloat32:
-				*(*float32)(fieldPtr) = buf.ReadFloat32E(err)
+				*(*float32)(fieldPtr) = buf.ReadFloat32(err)
 			case ConcreteTypeFloat64:
-				*(*float64)(fieldPtr) = buf.ReadFloat64E(err)
+				*(*float64)(fieldPtr) = buf.ReadFloat64(err)
 			}
 			continue
 		}
@@ -743,11 +758,11 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 		if isVarintPrimitive(field.StaticId, field.Referencable) && !fieldHasNonPrimitiveSerializer(field) {
 			switch field.StaticId {
 			case ConcreteTypeInt32:
-				*(*int32)(fieldPtr) = buf.ReadVarint32E(err)
+				*(*int32)(fieldPtr) = buf.ReadVarint32(err)
 			case ConcreteTypeInt64:
-				*(*int64)(fieldPtr) = buf.ReadVarint64E(err)
+				*(*int64)(fieldPtr) = buf.ReadVarint64(err)
 			case ConcreteTypeInt:
-				*(*int)(fieldPtr) = int(buf.ReadVarint64E(err))
+				*(*int)(fieldPtr) = int(buf.ReadVarint64(err))
 			}
 			continue
 		}
@@ -761,8 +776,9 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 		fieldValue := value.Field(field.FieldIndex)
 
 		if isEnumField(field) {
-			if enumErr := readEnumField(ctx, field, fieldValue); enumErr != nil {
-				return enumErr
+			readEnumField(ctx, field, fieldValue)
+			if ctx.HasError() {
+				return ctx.TakeError()
 			}
 			continue
 		}
@@ -794,25 +810,32 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 }
 
 // skipField skips a field that doesn't exist or is incompatible
-func (s *structSerializer) skipField(ctx *ReadContext, field *FieldInfo) error {
+// Uses context error state for deferred error checking.
+func (s *structSerializer) skipField(ctx *ReadContext, field *FieldInfo) {
 	if field.FieldDef.name != "" {
 		fieldDefIsStructType := isStructFieldType(field.FieldDef.fieldType)
 		// Use FieldDef's trackingRef and nullable to determine if ref flag was written by Java
 		// Java writes ref flag based on its FieldDef, not Go's field type
 		readRefFlag := field.FieldDef.trackingRef || field.FieldDef.nullable
-		return SkipFieldValueWithTypeFlag(ctx, field.FieldDef, readRefFlag, ctx.Compatible() && fieldDefIsStructType)
+		SkipFieldValueWithTypeFlag(ctx, field.FieldDef, readRefFlag, ctx.Compatible() && fieldDefIsStructType)
+		return
 	}
 	// No FieldDef available, read into temp value
 	tempValue := reflect.New(field.Type).Elem()
+	var err error
 	if field.Serializer != nil {
 		readType := ctx.Compatible() && isStructField(field.Type)
 		refMode := RefModeNone
 		if field.Referencable {
 			refMode = RefModeTracking
 		}
-		return field.Serializer.Read(ctx, refMode, readType, tempValue)
+		err = field.Serializer.Read(ctx, refMode, readType, tempValue)
+	} else {
+		err = ctx.ReadValue(tempValue)
 	}
-	return ctx.ReadValue(tempValue)
+	if err != nil {
+		ctx.SetError(FromError(err))
+	}
 }
 
 func (s *structSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
@@ -1452,11 +1475,12 @@ func (s *ptrToCodegenSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, 
 
 func (s *ptrToCodegenSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
 	buf := ctx.Buffer()
+	ctxErr := ctx.Err()
 	switch refMode {
 	case RefModeTracking:
-		refID, err := ctx.RefResolver().TryPreserveRefId(buf)
-		if err != nil {
-			return err
+		refID, refErr := ctx.RefResolver().TryPreserveRefId(buf)
+		if refErr != nil {
+			return refErr
 		}
 		if int8(refID) < NotNullValueFlag {
 			obj := ctx.RefResolver().GetReadObject(refID)
@@ -1466,13 +1490,13 @@ func (s *ptrToCodegenSerializer) Read(ctx *ReadContext, refMode RefMode, readTyp
 			return nil
 		}
 	case RefModeNullOnly:
-		flag := buf.ReadInt8()
+		flag := buf.ReadInt8(ctxErr)
 		if flag == NullFlag {
-			return nil
+			return ctx.CheckError()
 		}
 	}
 	if readType {
-		typeID := buf.ReadVaruint32Small7()
+		typeID := buf.ReadVaruint32Small7(ctxErr)
 		internalTypeID := TypeId(typeID & 0xFF)
 		// Check if this is a struct type that needs type meta reading
 		if IsNamespacedType(TypeId(typeID)) || internalTypeID == COMPATIBLE_STRUCT || internalTypeID == STRUCT {
@@ -1750,8 +1774,9 @@ func (s *skipStructSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, va
 	for _, fieldDef := range s.fieldDefs {
 		isStructType := isStructFieldType(fieldDef.fieldType)
 		// Use trackingRef from FieldDef for ref flag decision
-		if err := SkipFieldValueWithTypeFlag(ctx, fieldDef, fieldDef.trackingRef, ctx.Compatible() && isStructType); err != nil {
-			return fmt.Errorf("failed to skip field %s: %w", fieldDef.name, err)
+		SkipFieldValueWithTypeFlag(ctx, fieldDef, fieldDef.trackingRef, ctx.Compatible() && isStructType)
+		if ctx.HasError() {
+			return fmt.Errorf("failed to skip field %s: %w", fieldDef.name, ctx.TakeError())
 		}
 	}
 	return nil
@@ -1759,20 +1784,21 @@ func (s *skipStructSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, va
 
 func (s *skipStructSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
 	buf := ctx.Buffer()
+	ctxErr := ctx.Err()
 	switch refMode {
 	case RefModeTracking:
-		refID, err := ctx.RefResolver().TryPreserveRefId(buf)
-		if err != nil {
-			return err
+		refID, refErr := ctx.RefResolver().TryPreserveRefId(buf)
+		if refErr != nil {
+			return refErr
 		}
 		if int8(refID) < NotNullValueFlag {
 			// Reference found, nothing to skip
 			return nil
 		}
 	case RefModeNullOnly:
-		flag := buf.ReadInt8()
+		flag := buf.ReadInt8(ctxErr)
 		if flag == NullFlag {
-			return nil
+			return ctx.CheckError()
 		}
 	}
 	return s.ReadData(ctx, nil, value)

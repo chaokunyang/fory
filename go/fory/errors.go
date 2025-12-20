@@ -226,3 +226,45 @@ func FromError(err error) Error {
 		message: err.Error(),
 	}
 }
+
+// Pointer receiver methods for *Error (used for error accumulation)
+
+// SetIfOk sets the error if no error has occurred yet (first-error-wins)
+func (e *Error) SetIfOk(err error) {
+	if e == nil || e.kind != ErrKindOK {
+		return
+	}
+	if foryErr, ok := err.(Error); ok {
+		*e = foryErr
+	} else if err != nil {
+		*e = Error{
+			kind:    ErrKindDeserializationFailed,
+			message: err.Error(),
+		}
+	}
+}
+
+// Set sets the error unconditionally
+func (e *Error) Set(err Error) {
+	if e != nil {
+		*e = err
+	}
+}
+
+// TakeError returns the error and clears it
+func (e *Error) TakeError() error {
+	if e == nil || e.kind == ErrKindOK {
+		return nil
+	}
+	result := *e
+	*e = Error{kind: ErrKindOK}
+	return result
+}
+
+// CheckError returns the error if one occurred, nil otherwise
+func (e *Error) CheckError() error {
+	if e == nil || e.kind == ErrKindOK {
+		return nil
+	}
+	return *e
+}

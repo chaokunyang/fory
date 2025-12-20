@@ -285,8 +285,12 @@ func (s *MyExtSerializer) Write(buf *fory.ByteBuffer, value interface{}) error {
 }
 
 func (s *MyExtSerializer) Read(buf *fory.ByteBuffer) (interface{}, error) {
+	var bufErr fory.Error
 	// ReadVarint32 uses zigzag decoding (compatible with Java's readVarint32)
-	id := buf.ReadVarint32()
+	id := buf.ReadVarint32(&bufErr)
+	if bufErr.HasError() {
+		return nil, bufErr.CheckError()
+	}
 	return MyExt{Id: id}, nil
 }
 
@@ -298,33 +302,34 @@ func testBuffer() {
 	dataFile := getDataFile()
 	data := readFile(dataFile)
 	buf := fory.NewByteBuffer(data)
+	var bufErr fory.Error
 
-	boolVal := buf.ReadBool()
+	boolVal := buf.ReadBool(&bufErr)
 	assertEqual(true, boolVal, "bool")
 
-	byteVal, _ := buf.ReadByte()
+	byteVal := buf.ReadByte(&bufErr)
 	assertEqual(byte(0x7F), byteVal, "byte")
 
-	int16Val := buf.ReadInt16()
+	int16Val := buf.ReadInt16(&bufErr)
 	assertEqual(int16(32767), int16Val, "int16")
 
-	int32Val := buf.ReadInt32()
+	int32Val := buf.ReadInt32(&bufErr)
 	assertEqual(int32(2147483647), int32Val, "int32")
 
-	int64Val := buf.ReadInt64()
+	int64Val := buf.ReadInt64(&bufErr)
 	assertEqual(int64(9223372036854775807), int64Val, "int64")
 
-	float32Val := buf.ReadFloat32()
+	float32Val := buf.ReadFloat32(&bufErr)
 	assertEqualFloat32(-1.1, float32Val, "float32")
 
-	float64Val := buf.ReadFloat64()
+	float64Val := buf.ReadFloat64(&bufErr)
 	assertEqualFloat64(-1.1, float64Val, "float64")
 
-	varUint32Val := buf.ReadVaruint32()
+	varUint32Val := buf.ReadVaruint32(&bufErr)
 	assertEqual(uint32(100), varUint32Val, "varuint32")
 
-	length := buf.ReadInt32()
-	bytes := buf.ReadBinary(int(length))
+	length := buf.ReadInt32(&bufErr)
+	bytes := buf.ReadBinary(int(length), &bufErr)
 	if string(bytes) != "ab" {
 		panic(fmt.Sprintf("bytes: expected 'ab', got '%s'", string(bytes)))
 	}
@@ -354,8 +359,9 @@ func testBufferVar() {
 		127, 128, 16383, 16384, 2097151, 2097152, 268435455, 268435456,
 		2147483646, 2147483647,
 	}
+	var bufErr fory.Error
 	for _, expected := range varInt32Values {
-		val := buf.ReadVarint32()
+		val := buf.ReadVarint32(&bufErr)
 		assertEqual(expected, val, fmt.Sprintf("varint32 %d", expected))
 	}
 
@@ -364,7 +370,7 @@ func testBufferVar() {
 		268435455, 268435456, 2147483646, 2147483647,
 	}
 	for _, expected := range varUint32Values {
-		val := buf.ReadVaruint32()
+		val := buf.ReadVaruint32(&bufErr)
 		assertEqual(expected, val, fmt.Sprintf("varuint32 %d", expected))
 	}
 
@@ -375,7 +381,7 @@ func testBufferVar() {
 		72057594037927935, 72057594037927936, 9223372036854775807,
 	}
 	for _, expected := range varUint64Values {
-		val := buf.ReadVaruint64()
+		val := buf.ReadVaruint64(&bufErr)
 		assertEqual(expected, val, fmt.Sprintf("varuint64 %d", expected))
 	}
 
@@ -385,7 +391,7 @@ func testBufferVar() {
 		1000000000000, 9223372036854775806, 9223372036854775807,
 	}
 	for _, expected := range varInt64Values {
-		val := buf.ReadVarint64()
+		val := buf.ReadVarint64(&bufErr)
 		assertEqual(expected, val, fmt.Sprintf("varint64 %d", expected))
 	}
 
@@ -410,13 +416,14 @@ func testMurmurHash3() {
 	dataFile := getDataFile()
 	data := readFile(dataFile)
 	buf := fory.NewByteBuffer(data)
+	var bufErr fory.Error
 
 	if len(data) == 32 {
 		// First round: read Guava hashes (32 bytes), compute and write back
-		_ = buf.ReadInt64()
-		_ = buf.ReadInt64()
-		_ = buf.ReadInt64()
-		_ = buf.ReadInt64()
+		_ = buf.ReadInt64(&bufErr)
+		_ = buf.ReadInt64(&bufErr)
+		_ = buf.ReadInt64(&bufErr)
+		_ = buf.ReadInt64(&bufErr)
 
 		h1_1, h1_2 := murmurHash3_x64_128([]byte{1, 2, 8}, 47)
 		h2_1, h2_2 := murmurHash3_x64_128([]byte("01234567890123456789"), 47)
@@ -430,8 +437,8 @@ func testMurmurHash3() {
 		writeFile(dataFile, outBuf.GetByteSlice(0, outBuf.WriterIndex()))
 	} else if len(data) == 16 {
 		// Second round: read MurmurHash3 hashes (16 bytes), verify
-		h1 := buf.ReadInt64()
-		h2 := buf.ReadInt64()
+		h1 := buf.ReadInt64(&bufErr)
+		h2 := buf.ReadInt64(&bufErr)
 
 		// Compute expected values
 		expected1, expected2 := murmurHash3_x64_128([]byte{1, 2, 8}, 47)

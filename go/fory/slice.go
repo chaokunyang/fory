@@ -64,11 +64,12 @@ func writeSliceRefAndType(ctx *WriteContext, refMode RefMode, writeType bool, va
 // Returns true if a reference was resolved (value already set), false if data should be read.
 func readSliceRefAndType(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) (bool, error) {
 	buf := ctx.Buffer()
+	ctxErr := ctx.Err()
 	switch refMode {
 	case RefModeTracking:
-		refID, err := ctx.RefResolver().TryPreserveRefId(buf)
-		if err != nil {
-			return false, err
+		refID, refErr := ctx.RefResolver().TryPreserveRefId(buf)
+		if refErr != nil {
+			return false, refErr
 		}
 		if int8(refID) < NotNullValueFlag {
 			obj := ctx.RefResolver().GetReadObject(refID)
@@ -78,15 +79,15 @@ func readSliceRefAndType(ctx *ReadContext, refMode RefMode, readType bool, value
 			return true, nil
 		}
 	case RefModeNullOnly:
-		flag := buf.ReadInt8()
+		flag := buf.ReadInt8(ctxErr)
 		if flag == NullFlag {
-			return true, nil
+			return true, ctx.CheckError()
 		}
 	}
 	if readType {
-		buf.ReadVaruint32Small7()
+		buf.ReadVaruint32Small7(ctxErr)
 	}
-	return false, nil
+	return false, ctx.CheckError()
 }
 
 // Helper function to check if a value is null/nil
@@ -260,24 +261,25 @@ func (s *sliceConcreteValueSerializer) ReadWithTypeInfo(ctx *ReadContext, refMod
 
 func (s *sliceConcreteValueSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	buf := ctx.Buffer()
-	length := int(buf.ReadVaruint32())
+	ctxErr := ctx.Err()
+	length := int(buf.ReadVaruint32(ctxErr))
 	isArrayType := type_.Kind() == reflect.Array
 
 	if length == 0 {
 		if !isArrayType {
 			value.Set(reflect.MakeSlice(value.Type(), 0, 0))
 		}
-		return nil
+		return ctx.CheckError()
 	}
 
 	// ReadData collection flags
-	collectFlag := buf.ReadInt8()
+	collectFlag := buf.ReadInt8(ctxErr)
 
 	// ReadData element type info if present in buffer
 	// We must consume these bytes for protocol compliance
 	if (collectFlag & CollectionIsSameType) != 0 {
 		if (collectFlag & CollectionIsDeclElementType) == 0 {
-			typeID := buf.ReadVaruint32Small7()
+			typeID := buf.ReadVaruint32Small7(ctxErr)
 			// ReadData additional metadata for namespaced types
 			_, _ = ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID)
 		}
@@ -320,7 +322,7 @@ func (s *sliceConcreteValueSerializer) ReadData(ctx *ReadContext, type_ reflect.
 			// When hasNull is set, read a flag byte for each element:
 			// - NullFlag (-3) for null elements
 			// - NotNullValueFlag (-1) + data for non-null elements
-			refFlag := buf.ReadInt8()
+			refFlag := buf.ReadInt8(ctxErr)
 			if refFlag == NullFlag {
 				// Element is null, leave slice element as nil (zero value)
 				continue

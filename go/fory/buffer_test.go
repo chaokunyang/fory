@@ -28,7 +28,7 @@ func TestVarint(t *testing.T) {
 		buf := NewByteBuffer(nil)
 		for j := 0; j < i; j++ {
 			buf.WriteByte_(1) // make address unaligned.
-			buf.ReadByte_()
+			buf.ReadByte(err)
 		}
 		// Zigzag encoding doubles positive values: zigzag(n) = n * 2 for positive n
 		// So boundary values for positive numbers are:
@@ -66,7 +66,7 @@ func checkVarint(t *testing.T, buf *ByteBuffer, value int32, bytesWritten int8) 
 	require.Equal(t, buf.WriterIndex(), buf.ReaderIndex())
 	actualBytesWritten := buf.WriteVarint32(value)
 	require.Equal(t, bytesWritten, actualBytesWritten)
-	varInt := buf.ReadVarint32()
+	varInt := buf.ReadVarint32(err)
 	require.Equal(t, buf.ReaderIndex(), buf.WriterIndex())
 	require.Equal(t, value, varInt)
 }
@@ -74,7 +74,7 @@ func checkVarint(t *testing.T, buf *ByteBuffer, value int32, bytesWritten int8) 
 func checkVarintWrite(t *testing.T, buf *ByteBuffer, value int32) {
 	require.Equal(t, buf.WriterIndex(), buf.ReaderIndex())
 	buf.WriteVarint32(value)
-	varInt := buf.ReadVarint32()
+	varInt := buf.ReadVarint32(err)
 	require.Equal(t, buf.ReaderIndex(), buf.WriterIndex())
 	require.Equal(t, value, varInt)
 }

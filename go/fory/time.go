@@ -50,22 +50,27 @@ func (s dateSerializer) WriteData(ctx *WriteContext, value reflect.Value) error 
 }
 
 func (s dateSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
+	err := ctx.Err()
 	if refMode != RefModeNone {
-		if ctx.buffer.ReadInt8() == NullFlag {
-			return nil
+		if ctx.buffer.ReadInt8(err) == NullFlag {
+			return ctx.CheckError()
 		}
 	}
 	if readType {
-		_ = ctx.buffer.ReadVaruint32Small7()
+		_ = ctx.buffer.ReadVaruint32Small7(err)
+	}
+	if ctx.HasError() {
+		return ctx.TakeError()
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
 
 func (s dateSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
-	diff := time.Duration(ctx.buffer.ReadInt32()) * 24 * time.Hour
+	err := ctx.Err()
+	diff := time.Duration(ctx.buffer.ReadInt32(err)) * 24 * time.Hour
 	date := time.Date(1970, 1, 1, 0, 0, 0, 0, time.Local).Add(diff)
 	value.Set(reflect.ValueOf(Date{date.Year(), date.Month(), date.Day()}))
-	return nil
+	return ctx.CheckError()
 }
 
 func (s dateSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) error {
@@ -90,18 +95,23 @@ func (s timeSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool
 }
 
 func (s timeSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
-	value.Set(reflect.ValueOf(CreateTimeFromUnixMicro(ctx.buffer.ReadInt64())))
-	return nil
+	err := ctx.Err()
+	value.Set(reflect.ValueOf(CreateTimeFromUnixMicro(ctx.buffer.ReadInt64(err))))
+	return ctx.CheckError()
 }
 
 func (s timeSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
+	err := ctx.Err()
 	if refMode != RefModeNone {
-		if ctx.buffer.ReadInt8() == NullFlag {
-			return nil
+		if ctx.buffer.ReadInt8(err) == NullFlag {
+			return ctx.CheckError()
 		}
 	}
 	if readType {
-		_ = ctx.buffer.ReadVaruint32Small7()
+		_ = ctx.buffer.ReadVaruint32Small7(err)
+	}
+	if ctx.HasError() {
+		return ctx.TakeError()
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }

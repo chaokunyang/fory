@@ -46,18 +46,23 @@ func (s boolSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool
 }
 
 func (s boolSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
-	value.SetBool(ctx.buffer.ReadBool())
-	return nil
+	err := ctx.Err()
+	value.SetBool(ctx.buffer.ReadBool(err))
+	return ctx.CheckError()
 }
 
 func (s boolSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
+	err := ctx.Err()
 	if refMode != RefModeNone {
-		if ctx.buffer.ReadInt8() == NullFlag {
-			return nil
+		if ctx.buffer.ReadInt8(err) == NullFlag {
+			return ctx.CheckError()
 		}
 	}
 	if readType {
-		_ = ctx.buffer.ReadVaruint32Small7()
+		_ = ctx.buffer.ReadVaruint32Small7(err)
+	}
+	if ctx.HasError() {
+		return ctx.TakeError()
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
@@ -88,18 +93,23 @@ func (s int8Serializer) Write(ctx *WriteContext, refMode RefMode, writeType bool
 }
 
 func (s int8Serializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
-	value.SetInt(int64(ctx.buffer.ReadInt8()))
-	return nil
+	err := ctx.Err()
+	value.SetInt(int64(ctx.buffer.ReadInt8(err)))
+	return ctx.CheckError()
 }
 
 func (s int8Serializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
+	err := ctx.Err()
 	if refMode != RefModeNone {
-		if ctx.buffer.ReadInt8() == NullFlag {
-			return nil
+		if ctx.buffer.ReadInt8(err) == NullFlag {
+			return ctx.CheckError()
 		}
 	}
 	if readType {
-		_ = ctx.buffer.ReadVaruint32Small7()
+		_ = ctx.buffer.ReadVaruint32Small7(err)
+	}
+	if ctx.HasError() {
+		return ctx.TakeError()
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
@@ -129,18 +139,23 @@ func (s byteSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool
 }
 
 func (s byteSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
-	value.SetUint(uint64(ctx.buffer.ReadUint8()))
-	return nil
+	err := ctx.Err()
+	value.SetUint(uint64(ctx.buffer.ReadUint8(err)))
+	return ctx.CheckError()
 }
 
 func (s byteSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
+	err := ctx.Err()
 	if refMode != RefModeNone {
-		if ctx.buffer.ReadInt8() == NullFlag {
-			return nil
+		if ctx.buffer.ReadInt8(err) == NullFlag {
+			return ctx.CheckError()
 		}
 	}
 	if readType {
-		_ = ctx.buffer.ReadVaruint32Small7()
+		_ = ctx.buffer.ReadVaruint32Small7(err)
+	}
+	if ctx.HasError() {
+		return ctx.TakeError()
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
@@ -170,18 +185,23 @@ func (s int16Serializer) Write(ctx *WriteContext, refMode RefMode, writeType boo
 }
 
 func (s int16Serializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
-	value.SetInt(int64(ctx.buffer.ReadInt16()))
-	return nil
+	err := ctx.Err()
+	value.SetInt(int64(ctx.buffer.ReadInt16(err)))
+	return ctx.CheckError()
 }
 
 func (s int16Serializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
+	err := ctx.Err()
 	if refMode != RefModeNone {
-		if ctx.buffer.ReadInt8() == NullFlag {
-			return nil
+		if ctx.buffer.ReadInt8(err) == NullFlag {
+			return ctx.CheckError()
 		}
 	}
 	if readType {
-		_ = ctx.buffer.ReadVaruint32Small7()
+		_ = ctx.buffer.ReadVaruint32Small7(err)
+	}
+	if ctx.HasError() {
+		return ctx.TakeError()
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
@@ -211,18 +231,23 @@ func (s int32Serializer) Write(ctx *WriteContext, refMode RefMode, writeType boo
 }
 
 func (s int32Serializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
-	value.SetInt(int64(ctx.buffer.ReadVarint32()))
-	return nil
+	err := ctx.Err()
+	value.SetInt(int64(ctx.buffer.ReadVarint32(err)))
+	return ctx.CheckError()
 }
 
 func (s int32Serializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
+	err := ctx.Err()
 	if refMode != RefModeNone {
-		if ctx.buffer.ReadInt8() == NullFlag {
-			return nil
+		if ctx.buffer.ReadInt8(err) == NullFlag {
+			return ctx.CheckError()
 		}
 	}
 	if readType {
-		_ = ctx.buffer.ReadVaruint32Small7()
+		_ = ctx.buffer.ReadVaruint32Small7(err)
+	}
+	if ctx.HasError() {
+		return ctx.TakeError()
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
@@ -252,18 +277,23 @@ func (s int64Serializer) Write(ctx *WriteContext, refMode RefMode, writeType boo
 }
 
 func (s int64Serializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
-	value.SetInt(ctx.buffer.ReadVarint64())
-	return nil
+	err := ctx.Err()
+	value.SetInt(ctx.buffer.ReadVarint64(err))
+	return ctx.CheckError()
 }
 
 func (s int64Serializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
+	err := ctx.Err()
 	if refMode != RefModeNone {
-		if ctx.buffer.ReadInt8() == NullFlag {
-			return nil
+		if ctx.buffer.ReadInt8(err) == NullFlag {
+			return ctx.CheckError()
 		}
 	}
 	if readType {
-		_ = ctx.buffer.ReadVaruint32Small7()
+		_ = ctx.buffer.ReadVaruint32Small7(err)
+	}
+	if ctx.HasError() {
+		return ctx.TakeError()
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
@@ -291,18 +321,23 @@ func (s intSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool,
 }
 
 func (s intSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
-	value.SetInt(ctx.buffer.ReadVarint64())
-	return nil
+	err := ctx.Err()
+	value.SetInt(ctx.buffer.ReadVarint64(err))
+	return ctx.CheckError()
 }
 
 func (s intSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
+	err := ctx.Err()
 	if refMode != RefModeNone {
-		if ctx.buffer.ReadInt8() == NullFlag {
-			return nil
+		if ctx.buffer.ReadInt8(err) == NullFlag {
+			return ctx.CheckError()
 		}
 	}
 	if readType {
-		_ = ctx.buffer.ReadVaruint32Small7()
+		_ = ctx.buffer.ReadVaruint32Small7(err)
+	}
+	if ctx.HasError() {
+		return ctx.TakeError()
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
@@ -332,18 +367,23 @@ func (s float32Serializer) Write(ctx *WriteContext, refMode RefMode, writeType b
 }
 
 func (s float32Serializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
-	value.SetFloat(float64(ctx.buffer.ReadFloat32()))
-	return nil
+	err := ctx.Err()
+	value.SetFloat(float64(ctx.buffer.ReadFloat32(err)))
+	return ctx.CheckError()
 }
 
 func (s float32Serializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
+	err := ctx.Err()
 	if refMode != RefModeNone {
-		if ctx.buffer.ReadInt8() == NullFlag {
-			return nil
+		if ctx.buffer.ReadInt8(err) == NullFlag {
+			return ctx.CheckError()
 		}
 	}
 	if readType {
-		_ = ctx.buffer.ReadVaruint32Small7()
+		_ = ctx.buffer.ReadVaruint32Small7(err)
+	}
+	if ctx.HasError() {
+		return ctx.TakeError()
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }
@@ -373,18 +413,23 @@ func (s float64Serializer) Write(ctx *WriteContext, refMode RefMode, writeType b
 }
 
 func (s float64Serializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
-	value.SetFloat(ctx.buffer.ReadFloat64())
-	return nil
+	err := ctx.Err()
+	value.SetFloat(ctx.buffer.ReadFloat64(err))
+	return ctx.CheckError()
 }
 
 func (s float64Serializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
+	err := ctx.Err()
 	if refMode != RefModeNone {
-		if ctx.buffer.ReadInt8() == NullFlag {
-			return nil
+		if ctx.buffer.ReadInt8(err) == NullFlag {
+			return ctx.CheckError()
 		}
 	}
 	if readType {
-		_ = ctx.buffer.ReadVaruint32Small7()
+		_ = ctx.buffer.ReadVaruint32Small7(err)
+	}
+	if ctx.HasError() {
+		return ctx.TakeError()
 	}
 	return s.ReadData(ctx, value.Type(), value)
 }

@@ -47,14 +47,18 @@ func (s boolArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType
 
 func (s boolArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	buf := ctx.Buffer()
-	length := buf.ReadLength()
+	err := ctx.Err()
+	length := buf.ReadLength(err)
+	if ctx.HasError() {
+		return ctx.TakeError()
+	}
 	if length != type_.Len() {
 		return fmt.Errorf("array length %d does not match type %v", length, type_)
 	}
 	for i := 0; i < length; i++ {
-		value.Index(i).SetBool(buf.ReadBool())
+		value.Index(i).SetBool(buf.ReadBool(err))
 	}
-	return nil
+	return ctx.CheckError()
 }
 
 func (s boolArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
@@ -94,14 +98,18 @@ func (s int8ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType
 
 func (s int8ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	buf := ctx.Buffer()
-	length := buf.ReadLength()
+	err := ctx.Err()
+	length := buf.ReadLength(err)
+	if ctx.HasError() {
+		return ctx.TakeError()
+	}
 	if length != type_.Len() {
 		return fmt.Errorf("array length %d does not match type %v", length, type_)
 	}
 	for i := 0; i < length; i++ {
-		value.Index(i).SetInt(int64(int8(buf.ReadByte_())))
+		value.Index(i).SetInt(int64(int8(buf.ReadByte(err))))
 	}
-	return nil
+	return ctx.CheckError()
 }
 
 func (s int8ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
@@ -141,14 +149,18 @@ func (s int16ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeTyp
 
 func (s int16ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	buf := ctx.Buffer()
-	length := buf.ReadLength() / 2
+	err := ctx.Err()
+	length := buf.ReadLength(err) / 2
+	if ctx.HasError() {
+		return ctx.TakeError()
+	}
 	if length != type_.Len() {
 		return fmt.Errorf("array length %d does not match type %v", length, type_)
 	}
 	for i := 0; i < length; i++ {
-		value.Index(i).SetInt(int64(buf.ReadInt16()))
+		value.Index(i).SetInt(int64(buf.ReadInt16(err)))
 	}
-	return nil
+	return ctx.CheckError()
 }
 
 func (s int16ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
@@ -188,14 +200,18 @@ func (s int32ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeTyp
 
 func (s int32ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	buf := ctx.Buffer()
-	length := buf.ReadLength() / 4
+	err := ctx.Err()
+	length := buf.ReadLength(err) / 4
+	if ctx.HasError() {
+		return ctx.TakeError()
+	}
 	if length != type_.Len() {
 		return fmt.Errorf("array length %d does not match type %v", length, type_)
 	}
 	for i := 0; i < length; i++ {
-		value.Index(i).SetInt(int64(buf.ReadInt32()))
+		value.Index(i).SetInt(int64(buf.ReadInt32(err)))
 	}
-	return nil
+	return ctx.CheckError()
 }
 
 func (s int32ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
@@ -235,14 +251,18 @@ func (s int64ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeTyp
 
 func (s int64ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	buf := ctx.Buffer()
-	length := buf.ReadLength() / 8
+	err := ctx.Err()
+	length := buf.ReadLength(err) / 8
+	if ctx.HasError() {
+		return ctx.TakeError()
+	}
 	if length != type_.Len() {
 		return fmt.Errorf("array length %d does not match type %v", length, type_)
 	}
 	for i := 0; i < length; i++ {
-		value.Index(i).SetInt(buf.ReadInt64())
+		value.Index(i).SetInt(buf.ReadInt64(err))
 	}
-	return nil
+	return ctx.CheckError()
 }
 
 func (s int64ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
@@ -282,14 +302,18 @@ func (s float32ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeT
 
 func (s float32ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	buf := ctx.Buffer()
-	length := buf.ReadLength() / 4
+	err := ctx.Err()
+	length := buf.ReadLength(err) / 4
+	if ctx.HasError() {
+		return ctx.TakeError()
+	}
 	if length != type_.Len() {
 		return fmt.Errorf("array length %d does not match type %v", length, type_)
 	}
 	for i := 0; i < length; i++ {
-		value.Index(i).SetFloat(float64(buf.ReadFloat32()))
+		value.Index(i).SetFloat(float64(buf.ReadFloat32(err)))
 	}
-	return nil
+	return ctx.CheckError()
 }
 
 func (s float32ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
@@ -329,14 +353,18 @@ func (s float64ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeT
 
 func (s float64ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	buf := ctx.Buffer()
-	length := buf.ReadLength() / 8
+	err := ctx.Err()
+	length := buf.ReadLength(err) / 8
+	if ctx.HasError() {
+		return ctx.TakeError()
+	}
 	if length != type_.Len() {
 		return fmt.Errorf("array length %d does not match type %v", length, type_)
 	}
 	for i := 0; i < length; i++ {
-		value.Index(i).SetFloat(buf.ReadFloat64())
+		value.Index(i).SetFloat(buf.ReadFloat64(err))
 	}
-	return nil
+	return ctx.CheckError()
 }
 
 func (s float64ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {
@@ -376,14 +404,18 @@ func (s uint8ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeTyp
 
 func (s uint8ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) error {
 	buf := ctx.Buffer()
-	length := buf.ReadLength()
+	err := ctx.Err()
+	length := buf.ReadLength(err)
+	if ctx.HasError() {
+		return ctx.TakeError()
+	}
 	if length != type_.Len() {
 		return fmt.Errorf("array length %d does not match type %v", length, type_)
 	}
 	for i := 0; i < length; i++ {
-		value.Index(i).SetUint(uint64(buf.ReadByte_()))
+		value.Index(i).SetUint(uint64(buf.ReadByte(err)))
 	}
-	return nil
+	return ctx.CheckError()
 }
 
 func (s uint8ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) error {

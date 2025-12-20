@@ -996,9 +996,8 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       this.fieldAccessor = d.getField() != null ? FieldAccessor.createAccessor(d.getField()) : null;
       fieldConverter = d.getFieldConverter();
       nullable = d.isNullable();
-      if (fory.trackingRef()) {
-        trackingRef = d.isTrackingRef();
-      }
+      // descriptor.isTrackingRef() already includes the needToWriteRef check
+      trackingRef = d.isTrackingRef();
     }
 
     @Override

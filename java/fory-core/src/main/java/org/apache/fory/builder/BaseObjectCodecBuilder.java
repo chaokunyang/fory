@@ -404,13 +404,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       Expression fieldValue, Expression buffer, Descriptor descriptor) {
     TypeRef<?> typeRef = descriptor.getTypeRef();
     boolean nullable = descriptor.isNullable();
-
-    boolean useRefTracking;
-    if (needWriteRef(typeRef)) {
-      useRefTracking = descriptor.isTrackingRef();
-    } else {
-      useRefTracking = false;
-    }
+    // descriptor.isTrackingRef() already includes the needWriteRef check
+    boolean useRefTracking = descriptor.isTrackingRef();
 
     if (useRefTracking) {
       return new If(
@@ -1774,14 +1769,10 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       Expression buffer, Descriptor descriptor, Function<Expression, Expression> callback) {
     TypeRef<?> typeRef = descriptor.getTypeRef();
     boolean nullable = descriptor.isNullable();
-
+    // descriptor.isTrackingRef() already includes the needWriteRef check
+    boolean useRefTracking = descriptor.isTrackingRef();
+    // Check if type normally needs ref (for preserveRefId when ref tracking is disabled)
     boolean typeNeedsRef = needWriteRef(typeRef);
-    boolean useRefTracking;
-    if (needWriteRef(typeRef)) {
-      useRefTracking = descriptor.isTrackingRef();
-    } else {
-      useRefTracking = false;
-    }
 
     if (useRefTracking) {
       return readRef(buffer, callback, () -> deserializeForNotNullForField(buffer, typeRef, null));

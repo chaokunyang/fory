@@ -1226,21 +1226,25 @@ public class ClassResolver extends TypeResolver {
             return;
           }
 
-          boolean shouldTrack = fory.trackingRef();
+          boolean globalRefTracking = fory.trackingRef();
           boolean hasForyField = descriptor.getForyField() != null;
-          // update ref tracking if
-          // - global ref tracking is enabled but field is not tracking ref (@ForyField#ref not set)
-          // - global ref tracking is disabled but field is tracking ref (@ForyField#ref set)
-          boolean needsUpdate =
-              (shouldTrack && !hasForyField)
-                  || (!shouldTrack && hasForyField && descriptor.isTrackingRef());
+          // Compute the final isTrackingRef value:
+          // 1. If global ref tracking is enabled and no @ForyField, use global setting
+          // 2. If @ForyField(ref=true) is set, use that (but can be overridden if global is off)
+          // 3. Additionally, check if the type actually supports ref tracking
+          boolean wantsRefTracking =
+              (globalRefTracking && !hasForyField)
+                  || (hasForyField && descriptor.isTrackingRef() && globalRefTracking);
+          // Compute the final tracking: type must support refs AND user/global wants tracking
+          boolean finalTrackingRef = wantsRefTracking && needToWriteRef(descriptor.getTypeRef());
+          boolean needsUpdate = finalTrackingRef != descriptor.isTrackingRef();
 
           if (needsUpdate) {
             if (newDescriptors[0] == null) {
               newDescriptors[0] = new HashMap<>();
             }
             Descriptor newDescriptor =
-                new DescriptorBuilder(descriptor).trackingRef(shouldTrack).build();
+                new DescriptorBuilder(descriptor).trackingRef(finalTrackingRef).build();
             result.add(newDescriptor);
             newDescriptors[0].put(member, newDescriptor);
           } else {

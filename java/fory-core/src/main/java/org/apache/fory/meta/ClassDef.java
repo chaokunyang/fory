@@ -363,22 +363,25 @@ public class ClassDef implements Serializable {
         }
 
         if (e.getKey() instanceof Field) {
-          boolean refTracking = resolver.getFory().trackingRef();
+          boolean globalRefTracking = resolver.getFory().trackingRef();
           ForyField foryField = desc.getForyField();
-          // update ref tracking if
-          // - global ref tracking is disabled but field is tracking ref (@ForyField#ref set)
-          // - global ref tracking is enabled but field is not tracking ref (@ForyField#ref not set)
-          boolean needsUpdate =
-              (refTracking && foryField == null && !desc.isTrackingRef())
-                  || (foryField != null && desc.isTrackingRef());
+          // Compute the final isTrackingRef value:
+          // 1. If global ref tracking is enabled and no @ForyField, use global setting
+          // 2. If @ForyField(ref=true) is set, use that (but can be overridden if global is off)
+          // 3. Additionally, check if the type actually supports ref tracking
+          boolean wantsRefTracking =
+              (globalRefTracking && foryField == null)
+                  || (foryField != null && desc.isTrackingRef() && globalRefTracking);
+          // Compute the final tracking: type must support refs AND user/global wants tracking
+          boolean finalTrackingRef = wantsRefTracking && resolver.needToWriteRef(desc.getTypeRef());
+          boolean needsUpdate = finalTrackingRef != desc.isTrackingRef();
 
           if (needsUpdate) {
             if (newDescriptors[0] == null) {
               newDescriptors[0] = new HashMap<>();
             }
-            boolean newTrackingRef = refTracking && foryField == null;
             Descriptor newDescriptor =
-                new DescriptorBuilder(desc).trackingRef(newTrackingRef).build();
+                new DescriptorBuilder(desc).trackingRef(finalTrackingRef).build();
 
             descriptorsMap.put(fullName, newDescriptor);
             desc = newDescriptor;

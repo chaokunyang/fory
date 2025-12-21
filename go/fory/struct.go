@@ -81,6 +81,182 @@ func isPrimitiveStaticId(staticId StaticTypeId) bool {
 	}
 }
 
+// getPrimitiveSliceElemKind returns the element kind if the type is a primitive slice,
+// or reflect.Invalid if not a primitive slice.
+func getPrimitiveSliceElemKind(t reflect.Type) reflect.Kind {
+	if t.Kind() != reflect.Slice {
+		return reflect.Invalid
+	}
+	switch t.Elem().Kind() {
+	case reflect.Int32, reflect.Int64, reflect.Float32, reflect.Float64,
+		reflect.Bool, reflect.Int8, reflect.Uint8, reflect.Int16:
+		return t.Elem().Kind()
+	default:
+		return reflect.Invalid
+	}
+}
+
+// readPrimitiveSliceToField reads a primitive slice directly and sets it at the field offset using unsafe.
+// This bypasses reflect.ValueOf and value.Set overhead.
+// Returns true if handled (success or error), false if not a primitive slice.
+func readPrimitiveSliceToField(ctx *ReadContext, ptr unsafe.Pointer, field *FieldInfo) bool {
+	elemKind := getPrimitiveSliceElemKind(field.Type)
+	if elemKind == reflect.Invalid {
+		return false
+	}
+
+	buf := ctx.Buffer()
+	ctxErr := ctx.Err()
+
+	// Read ref flag (all non-primitive fields have ref flag per xlang spec)
+	refID, refErr := ctx.RefResolver().TryPreserveRefId(buf)
+	if refErr != nil {
+		ctx.SetError(FromError(refErr))
+		return true
+	}
+	if int8(refID) == NullFlag {
+		// Nil slice, leave as zero value
+		return true
+	}
+	if int8(refID) < NotNullValueFlag {
+		// This is a reference to existing object - not supported for primitive slices
+		// Fall back to slow path
+		return false
+	}
+
+	// Read length
+	length := int(buf.ReadVaruint32(ctxErr))
+	if length == 0 {
+		// Empty slice - set to non-nil empty slice
+		fieldPtr := unsafe.Add(ptr, field.Offset)
+		switch elemKind {
+		case reflect.Int32:
+			*(*[]int32)(fieldPtr) = make([]int32, 0)
+		case reflect.Int64:
+			*(*[]int64)(fieldPtr) = make([]int64, 0)
+		case reflect.Float32:
+			*(*[]float32)(fieldPtr) = make([]float32, 0)
+		case reflect.Float64:
+			*(*[]float64)(fieldPtr) = make([]float64, 0)
+		case reflect.Bool:
+			*(*[]bool)(fieldPtr) = make([]bool, 0)
+		case reflect.Int8:
+			*(*[]int8)(fieldPtr) = make([]int8, 0)
+		case reflect.Uint8:
+			*(*[]uint8)(fieldPtr) = make([]uint8, 0)
+		case reflect.Int16:
+			*(*[]int16)(fieldPtr) = make([]int16, 0)
+		}
+		return true
+	}
+
+	// Read collection flags
+	collectFlag := buf.ReadInt8(ctxErr)
+
+	// Read element type info if present (for non-xlang)
+	if (collectFlag & CollectionIsSameType) != 0 {
+		if (collectFlag & CollectionIsDeclElementType) == 0 {
+			typeID := buf.ReadVaruint32Small7(ctxErr)
+			_, _ = ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID)
+		}
+	}
+
+	// For primitive slices, we should not have ref tracking or nulls
+	trackRefs := (collectFlag & CollectionTrackingRef) != 0
+	hasNull := (collectFlag & CollectionHasNull) != 0
+	if trackRefs || hasNull {
+		// Fall back to slow path
+		return false
+	}
+
+	fieldPtr := unsafe.Add(ptr, field.Offset)
+
+	// Read slice data directly using unsafe
+	switch elemKind {
+	case reflect.Float32:
+		slice := make([]float32, length)
+		if isLittleEndian {
+			raw := buf.ReadBinary(length*4, ctxErr)
+			if raw != nil {
+				copy(unsafe.Slice((*byte)(unsafe.Pointer(&slice[0])), length*4), raw)
+			}
+		} else {
+			for i := 0; i < length; i++ {
+				slice[i] = buf.ReadFloat32(ctxErr)
+			}
+		}
+		*(*[]float32)(fieldPtr) = slice
+	case reflect.Float64:
+		slice := make([]float64, length)
+		if isLittleEndian {
+			raw := buf.ReadBinary(length*8, ctxErr)
+			if raw != nil {
+				copy(unsafe.Slice((*byte)(unsafe.Pointer(&slice[0])), length*8), raw)
+			}
+		} else {
+			for i := 0; i < length; i++ {
+				slice[i] = buf.ReadFloat64(ctxErr)
+			}
+		}
+		*(*[]float64)(fieldPtr) = slice
+	case reflect.Bool:
+		slice := make([]bool, length)
+		raw := buf.ReadBinary(length, ctxErr)
+		if raw != nil {
+			copy(unsafe.Slice((*byte)(unsafe.Pointer(&slice[0])), length), raw)
+		}
+		*(*[]bool)(fieldPtr) = slice
+	case reflect.Int8:
+		slice := make([]int8, length)
+		raw := buf.ReadBinary(length, ctxErr)
+		if raw != nil {
+			copy(unsafe.Slice((*byte)(unsafe.Pointer(&slice[0])), length), raw)
+		}
+		*(*[]int8)(fieldPtr) = slice
+	case reflect.Uint8:
+		slice := make([]uint8, length)
+		raw := buf.ReadBinary(length, ctxErr)
+		if raw != nil {
+			copy(slice, raw)
+		}
+		*(*[]uint8)(fieldPtr) = slice
+	case reflect.Int16:
+		slice := make([]int16, length)
+		for i := 0; i < length; i++ {
+			slice[i] = buf.ReadInt16(ctxErr)
+		}
+		*(*[]int16)(fieldPtr) = slice
+	case reflect.Int32:
+		slice := make([]int32, length)
+		if buf.remaining() >= length*5 {
+			for i := 0; i < length; i++ {
+				slice[i] = buf.UnsafeReadVarint32()
+			}
+		} else {
+			for i := 0; i < length; i++ {
+				slice[i] = buf.ReadVarint32(ctxErr)
+			}
+		}
+		*(*[]int32)(fieldPtr) = slice
+	case reflect.Int64:
+		slice := make([]int64, length)
+		if buf.remaining() >= length*10 {
+			for i := 0; i < length; i++ {
+				slice[i] = buf.UnsafeReadVarint64()
+			}
+		} else {
+			for i := 0; i < length; i++ {
+				slice[i] = buf.ReadVarint64(ctxErr)
+			}
+		}
+		*(*[]int64)(fieldPtr) = slice
+	default:
+		return false
+	}
+
+	return true
+}
+
 // fieldHasNonPrimitiveSerializer returns true if the field has a serializer with a non-primitive type ID.
 // This is used to skip the fast path for fields like enums where StaticId is int32 but the serializer
 // writes a different format (e.g., unsigned varint for enum ordinals vs signed zigzag for int32).
@@ -693,22 +869,47 @@ func (s *structSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value 
 	}
 
 	// Phase 2: Read varint primitive fields (no ref flag)
-	for _, field := range s.varintFields {
-		if field.FieldIndex < 0 {
-			s.skipField(ctx, field)
-			if ctx.HasError() {
-				return
+	// Use pre-calculated max bytes for all varint fields (5 bytes per int32, 10 bytes per int64)
+	if s.varintFieldsSize > 0 && buf.remaining() >= s.varintFieldsSize {
+		// Fast path: use unsafe reads without bounds checking for each varint
+		for _, field := range s.varintFields {
+			if field.FieldIndex < 0 {
+				// Cannot use fast path if we need to skip fields
+				s.skipField(ctx, field)
+				if ctx.HasError() {
+					return
+				}
+				continue
 			}
-			continue
+			fieldPtr := unsafe.Add(ptr, field.Offset)
+			switch field.StaticId {
+			case ConcreteTypeInt32:
+				*(*int32)(fieldPtr) = buf.UnsafeReadVarint32()
+			case ConcreteTypeInt64:
+				*(*int64)(fieldPtr) = buf.UnsafeReadVarint64()
+			case ConcreteTypeInt:
+				*(*int)(fieldPtr) = int(buf.UnsafeReadVarint64())
+			}
 		}
-		fieldPtr := unsafe.Add(ptr, field.Offset)
-		switch field.StaticId {
-		case ConcreteTypeInt32:
-			*(*int32)(fieldPtr) = buf.ReadVarint32(err)
-		case ConcreteTypeInt64:
-			*(*int64)(fieldPtr) = buf.ReadVarint64(err)
-		case ConcreteTypeInt:
-			*(*int)(fieldPtr) = int(buf.ReadVarint64(err))
+	} else {
+		// Slow path: use safe reads with bounds checking
+		for _, field := range s.varintFields {
+			if field.FieldIndex < 0 {
+				s.skipField(ctx, field)
+				if ctx.HasError() {
+					return
+				}
+				continue
+			}
+			fieldPtr := unsafe.Add(ptr, field.Offset)
+			switch field.StaticId {
+			case ConcreteTypeInt32:
+				*(*int32)(fieldPtr) = buf.ReadVarint32(err)
+			case ConcreteTypeInt64:
+				*(*int64)(fieldPtr) = buf.ReadVarint64(err)
+			case ConcreteTypeInt:
+				*(*int)(fieldPtr) = int(buf.ReadVarint64(err))
+			}
 		}
 	}
 
@@ -726,6 +927,15 @@ func (s *structSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value 
 			}
 			continue
 		}
+
+		// Fast path for primitive slices: read directly using unsafe to avoid reflect.ValueOf overhead
+		if readPrimitiveSliceToField(ctx, ptr, field) {
+			if ctx.HasError() {
+				return
+			}
+			continue
+		}
+
 		fieldValue := value.Field(field.FieldIndex)
 
 		if isEnumField(field) {

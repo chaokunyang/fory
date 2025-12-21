@@ -303,21 +303,9 @@ func (b *ByteBuffer) Reserve(n int) {
 		b.data = b.data[:cap(b.data)]
 	} else {
 		newCap := 2 * needed
-		if newCap < 64 {
-			newCap = 64
-		}
 		newBuf := make([]byte, newCap, newCap)
 		copy(newBuf, b.data)
 		b.data = newBuf
-	}
-}
-
-// UnsafeWriteInt32s writes multiple int32 values using unsafe memory access.
-// Caller must ensure buffer has enough space (call Reserve first).
-func (b *ByteBuffer) UnsafeWriteInt32s(values []int32) {
-	for _, v := range values {
-		binary.LittleEndian.PutUint32(b.data[b.writerIndex:], uint32(v))
-		b.writerIndex += 4
 	}
 }
 
@@ -372,28 +360,10 @@ func (b *ByteBuffer) UnsafeWriteByte(v byte) {
 	b.writerIndex++
 }
 
-// UnsafeWriteInt8 writes an int8 without grow check.
-func (b *ByteBuffer) UnsafeWriteInt8(v int8) {
-	b.data[b.writerIndex] = byte(v)
-	b.writerIndex++
-}
-
 // UnsafeWriteInt16 writes an int16 without grow check.
 func (b *ByteBuffer) UnsafeWriteInt16(v int16) {
 	binary.LittleEndian.PutUint16(b.data[b.writerIndex:], uint16(v))
 	b.writerIndex += 2
-}
-
-// UnsafeWriteInt32 writes an int32 without grow check.
-func (b *ByteBuffer) UnsafeWriteInt32(v int32) {
-	binary.LittleEndian.PutUint32(b.data[b.writerIndex:], uint32(v))
-	b.writerIndex += 4
-}
-
-// UnsafeWriteInt64 writes an int64 without grow check.
-func (b *ByteBuffer) UnsafeWriteInt64(v int64) {
-	binary.LittleEndian.PutUint64(b.data[b.writerIndex:], uint64(v))
-	b.writerIndex += 8
 }
 
 // UnsafeWriteFloat32 writes a float32 without grow check.
@@ -429,12 +399,6 @@ func (b *ByteBuffer) UnsafeWriteVarint64(value int64) {
 	}
 	b.data[b.writerIndex] = byte(u)
 	b.writerIndex++
-}
-
-// UnsafeWriteBytes writes bytes without grow check.
-func (b *ByteBuffer) UnsafeWriteBytes(data []byte) {
-	copy(b.data[b.writerIndex:], data)
-	b.writerIndex += len(data)
 }
 
 func (b *ByteBuffer) PutInt32(index int, value int32) {
@@ -742,6 +706,28 @@ func (b *ByteBuffer) ReadVarint32(err *Error) int32 {
 	return v
 }
 
+// UnsafeReadVarint32 reads a varint32 without bounds checking.
+// Caller must ensure remaining() >= 5 before calling.
+func (b *ByteBuffer) UnsafeReadVarint32() int32 {
+	u := b.readVaruint32Fast()
+	v := int32(u >> 1)
+	if u&1 != 0 {
+		v = ^v
+	}
+	return v
+}
+
+// UnsafeReadVarint64 reads a varint64 without bounds checking.
+// Caller must ensure remaining() >= 10 before calling.
+func (b *ByteBuffer) UnsafeReadVarint64() int64 {
+	u := b.readVaruint64Fast()
+	v := int64(u >> 1)
+	if u&1 != 0 {
+		v = ^v
+	}
+	return v
+}
+
 // ReadVaruint32 reads a varuint32 and sets error on bounds violation
 func (b *ByteBuffer) ReadVaruint32(err *Error) uint32 {
 	if b.remaining() >= 5 {
@@ -973,36 +959,6 @@ func (b *ByteBuffer) unsafeGetInt32(idx int) int {
 // IncreaseReaderIndex advances readerIndex
 func (b *ByteBuffer) IncreaseReaderIndex(n int) {
 	b.readerIndex += n
-}
-
-// ReadBytesAsInt64 reads up to 8 bytes and returns as uint64
-// fast path using underlying 64-bit read
-func (b *ByteBuffer) ReadBytesAsInt64(length int, err *Error) uint64 {
-	readerIdx := b.readerIndex
-	remaining := len(b.data) - readerIdx
-	if remaining >= length {
-		// fast: read full 8 bytes then mask
-		v := binary.LittleEndian.Uint64(b.data[readerIdx:])
-		b.readerIndex = readerIdx + length
-		// mask off unused high bytes
-		mask := uint64(0xffffffffffffffff) >> uint((8-length)*8)
-		return v & mask
-	}
-	return b.slowReadBytesAsInt64(remaining, length, err)
-}
-
-func (b *ByteBuffer) slowReadBytesAsInt64(remaining, length int, err *Error) uint64 {
-	if remaining < length {
-		*err = BufferOutOfBoundError(b.readerIndex, length, len(b.data))
-		return 0
-	}
-	readerIdx := b.readerIndex
-	b.readerIndex = readerIdx + length
-	var result uint64
-	for i := 0; i < length; i++ {
-		result |= uint64(b.data[readerIdx+i]&0xff) << (i * 8)
-	}
-	return result
 }
 
 // ReadBytes reads n bytes and sets error on bounds violation

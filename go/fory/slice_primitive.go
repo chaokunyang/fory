@@ -71,12 +71,15 @@ func (s byteSliceSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, valu
 	buf := ctx.Buffer()
 	ctxErr := ctx.Err()
 	length := buf.ReadLength(ctxErr)
-	result := reflect.MakeSlice(type_, length, length)
-	raw := buf.ReadBytes(length, ctxErr)
-	for i := 0; i < length; i++ {
-		result.Index(i).SetUint(uint64(raw[i]))
+	if length == 0 {
+		value.Set(reflect.MakeSlice(type_, 0, 0))
+		return
 	}
-	value.Set(result)
+	// Allocate slice and read directly into it
+	result := make([]byte, length)
+	raw := buf.ReadBytes(length, ctxErr)
+	copy(result, raw)
+	value.Set(reflect.ValueOf(result))
 	ctx.RefResolver().Reference(value)
 }
 
@@ -108,9 +111,11 @@ func (s boolSliceSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 		return
 	}
 	buf.WriteLength(size)
-	for _, elem := range v {
-		buf.WriteBool(elem)
+	if size == 0 {
+		return
 	}
+	// Bools are 1 byte each in Go, direct memory copy works
+	buf.WriteBinary(unsafe.Slice((*byte)(unsafe.Pointer(&v[0])), size))
 }
 
 func (s boolSliceSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
@@ -137,11 +142,16 @@ func (s boolSliceSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, valu
 	buf := ctx.Buffer()
 	ctxErr := ctx.Err()
 	length := buf.ReadLength(ctxErr)
-	r := reflect.MakeSlice(type_, length, length)
-	for i := 0; i < length; i++ {
-		r.Index(i).SetBool(buf.ReadBool(ctxErr))
+	if length == 0 {
+		value.Set(reflect.MakeSlice(type_, 0, 0))
+		return
 	}
-	value.Set(r)
+	// Allocate slice and read directly into it
+	result := make([]bool, length)
+	// Bools are 1 byte each in Go, direct memory copy works
+	raw := buf.ReadBytes(length, ctxErr)
+	copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), length), raw)
+	value.Set(reflect.ValueOf(result))
 	ctx.RefResolver().Reference(value)
 }
 
@@ -157,9 +167,11 @@ func (s int8SliceSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 		return
 	}
 	buf.WriteLength(size)
-	for _, elem := range v {
-		buf.WriteByte_(byte(elem))
+	if size == 0 {
+		return
 	}
+	// int8 is byte-sized, direct memory copy works
+	buf.WriteBinary(unsafe.Slice((*byte)(unsafe.Pointer(&v[0])), size))
 }
 
 func (s int8SliceSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
@@ -174,11 +186,16 @@ func (s int8SliceSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, valu
 	buf := ctx.Buffer()
 	ctxErr := ctx.Err()
 	length := buf.ReadLength(ctxErr)
-	r := reflect.MakeSlice(type_, length, length)
-	for i := 0; i < length; i++ {
-		r.Index(i).SetInt(int64(int8(buf.ReadByte(ctxErr))))
+	if length == 0 {
+		value.Set(reflect.MakeSlice(type_, 0, 0))
+		return
 	}
-	value.Set(r)
+	// Allocate slice and read directly into it
+	result := make([]int8, length)
+	// int8 is byte-sized, direct memory copy works
+	raw := buf.ReadBytes(length, ctxErr)
+	copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), length), raw)
+	value.Set(reflect.ValueOf(result))
 	ctx.RefResolver().Reference(value)
 }
 
@@ -206,8 +223,16 @@ func (s int16SliceSerializer) WriteData(ctx *WriteContext, value reflect.Value) 
 		return
 	}
 	buf.WriteLength(size)
-	for _, elem := range v {
-		buf.WriteInt16(elem)
+	if len(v) == 0 {
+		return
+	}
+	if isLittleEndian {
+		// Direct memory copy for little-endian systems
+		buf.WriteBinary(unsafe.Slice((*byte)(unsafe.Pointer(&v[0])), size))
+	} else {
+		for _, elem := range v {
+			buf.WriteInt16(elem)
+		}
 	}
 }
 
@@ -222,12 +247,24 @@ func (s int16SliceSerializer) Write(ctx *WriteContext, refMode RefMode, writeTyp
 func (s int16SliceSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
 	buf := ctx.Buffer()
 	ctxErr := ctx.Err()
-	length := buf.ReadLength(ctxErr) / 2
-	r := reflect.MakeSlice(type_, length, length)
-	for i := 0; i < length; i++ {
-		r.Index(i).SetInt(int64(buf.ReadInt16(ctxErr)))
+	size := buf.ReadLength(ctxErr)
+	length := size / 2
+	if length == 0 {
+		value.Set(reflect.MakeSlice(type_, 0, 0))
+		return
 	}
-	value.Set(r)
+	// Allocate slice and read directly into it
+	result := make([]int16, length)
+	if isLittleEndian {
+		// Direct memory copy for little-endian systems
+		raw := buf.ReadBytes(size, ctxErr)
+		copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+	} else {
+		for i := 0; i < length; i++ {
+			result[i] = buf.ReadInt16(ctxErr)
+		}
+	}
+	value.Set(reflect.ValueOf(result))
 	ctx.RefResolver().Reference(value)
 }
 
@@ -255,8 +292,16 @@ func (s int32SliceSerializer) WriteData(ctx *WriteContext, value reflect.Value) 
 		return
 	}
 	buf.WriteLength(size)
-	for _, elem := range v {
-		buf.WriteInt32(elem)
+	if len(v) == 0 {
+		return
+	}
+	if isLittleEndian {
+		// Direct memory copy for little-endian systems
+		buf.WriteBinary(unsafe.Slice((*byte)(unsafe.Pointer(&v[0])), size))
+	} else {
+		for _, elem := range v {
+			buf.WriteInt32(elem)
+		}
 	}
 }
 
@@ -271,12 +316,24 @@ func (s int32SliceSerializer) Write(ctx *WriteContext, refMode RefMode, writeTyp
 func (s int32SliceSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
 	buf := ctx.Buffer()
 	ctxErr := ctx.Err()
-	length := buf.ReadLength(ctxErr) / 4
-	r := reflect.MakeSlice(type_, length, length)
-	for i := 0; i < length; i++ {
-		r.Index(i).SetInt(int64(buf.ReadInt32(ctxErr)))
+	size := buf.ReadLength(ctxErr)
+	length := size / 4
+	if length == 0 {
+		value.Set(reflect.MakeSlice(type_, 0, 0))
+		return
 	}
-	value.Set(r)
+	// Allocate slice and read directly into it
+	result := make([]int32, length)
+	if isLittleEndian {
+		// Direct memory copy for little-endian systems
+		raw := buf.ReadBytes(size, ctxErr)
+		copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+	} else {
+		for i := 0; i < length; i++ {
+			result[i] = buf.ReadInt32(ctxErr)
+		}
+	}
+	value.Set(reflect.ValueOf(result))
 	ctx.RefResolver().Reference(value)
 }
 
@@ -304,8 +361,16 @@ func (s int64SliceSerializer) WriteData(ctx *WriteContext, value reflect.Value) 
 		return
 	}
 	buf.WriteLength(size)
-	for _, elem := range v {
-		buf.WriteInt64(elem)
+	if len(v) == 0 {
+		return
+	}
+	if isLittleEndian {
+		// Direct memory copy for little-endian systems
+		buf.WriteBinary(unsafe.Slice((*byte)(unsafe.Pointer(&v[0])), size))
+	} else {
+		for _, elem := range v {
+			buf.WriteInt64(elem)
+		}
 	}
 }
 
@@ -320,12 +385,24 @@ func (s int64SliceSerializer) Write(ctx *WriteContext, refMode RefMode, writeTyp
 func (s int64SliceSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
 	buf := ctx.Buffer()
 	ctxErr := ctx.Err()
-	length := buf.ReadLength(ctxErr) / 8
-	r := reflect.MakeSlice(type_, length, length)
-	for i := 0; i < length; i++ {
-		r.Index(i).SetInt(buf.ReadInt64(ctxErr))
+	size := buf.ReadLength(ctxErr)
+	length := size / 8
+	if length == 0 {
+		value.Set(reflect.MakeSlice(type_, 0, 0))
+		return
 	}
-	value.Set(r)
+	// Allocate slice and read directly into it
+	result := make([]int64, length)
+	if isLittleEndian {
+		// Direct memory copy for little-endian systems
+		raw := buf.ReadBytes(size, ctxErr)
+		copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+	} else {
+		for i := 0; i < length; i++ {
+			result[i] = buf.ReadInt64(ctxErr)
+		}
+	}
+	value.Set(reflect.ValueOf(result))
 	ctx.RefResolver().Reference(value)
 }
 
@@ -353,8 +430,16 @@ func (s float32SliceSerializer) WriteData(ctx *WriteContext, value reflect.Value
 		return
 	}
 	buf.WriteLength(size)
-	for _, elem := range v {
-		buf.WriteFloat32(elem)
+	if len(v) == 0 {
+		return
+	}
+	if isLittleEndian {
+		// Direct memory copy for little-endian systems
+		buf.WriteBinary(unsafe.Slice((*byte)(unsafe.Pointer(&v[0])), size))
+	} else {
+		for _, elem := range v {
+			buf.WriteFloat32(elem)
+		}
 	}
 }
 
@@ -369,12 +454,24 @@ func (s float32SliceSerializer) Write(ctx *WriteContext, refMode RefMode, writeT
 func (s float32SliceSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
 	buf := ctx.Buffer()
 	ctxErr := ctx.Err()
-	length := buf.ReadLength(ctxErr) / 4
-	r := reflect.MakeSlice(type_, length, length)
-	for i := 0; i < length; i++ {
-		r.Index(i).SetFloat(float64(buf.ReadFloat32(ctxErr)))
+	size := buf.ReadLength(ctxErr)
+	length := size / 4
+	if length == 0 {
+		value.Set(reflect.MakeSlice(type_, 0, 0))
+		return
 	}
-	value.Set(r)
+	// Allocate slice and read directly into it
+	result := make([]float32, length)
+	if isLittleEndian {
+		// Direct memory copy for little-endian systems
+		raw := buf.ReadBytes(size, ctxErr)
+		copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+	} else {
+		for i := 0; i < length; i++ {
+			result[i] = buf.ReadFloat32(ctxErr)
+		}
+	}
+	value.Set(reflect.ValueOf(result))
 	ctx.RefResolver().Reference(value)
 }
 
@@ -402,8 +499,16 @@ func (s float64SliceSerializer) WriteData(ctx *WriteContext, value reflect.Value
 		return
 	}
 	buf.WriteLength(size)
-	for _, elem := range v {
-		buf.WriteFloat64(elem)
+	if len(v) == 0 {
+		return
+	}
+	if isLittleEndian {
+		// Direct memory copy for little-endian systems
+		buf.WriteBinary(unsafe.Slice((*byte)(unsafe.Pointer(&v[0])), size))
+	} else {
+		for _, elem := range v {
+			buf.WriteFloat64(elem)
+		}
 	}
 }
 
@@ -418,12 +523,24 @@ func (s float64SliceSerializer) Write(ctx *WriteContext, refMode RefMode, writeT
 func (s float64SliceSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
 	buf := ctx.Buffer()
 	ctxErr := ctx.Err()
-	length := buf.ReadLength(ctxErr) / 8
-	r := reflect.MakeSlice(type_, length, length)
-	for i := 0; i < length; i++ {
-		r.Index(i).SetFloat(buf.ReadFloat64(ctxErr))
+	size := buf.ReadLength(ctxErr)
+	length := size / 8
+	if length == 0 {
+		value.Set(reflect.MakeSlice(type_, 0, 0))
+		return
 	}
-	value.Set(r)
+	// Allocate slice and read directly into it
+	result := make([]float64, length)
+	if isLittleEndian {
+		// Direct memory copy for little-endian systems
+		raw := buf.ReadBytes(size, ctxErr)
+		copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+	} else {
+		for i := 0; i < length; i++ {
+			result[i] = buf.ReadFloat64(ctxErr)
+		}
+	}
+	value.Set(reflect.ValueOf(result))
 	ctx.RefResolver().Reference(value)
 }
 

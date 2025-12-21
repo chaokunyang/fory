@@ -349,7 +349,117 @@ func (s *sliceConcreteValueSerializer) ReadData(ctx *ReadContext, type_ reflect.
 		}
 	}
 
-	// Handle slice vs array allocation
+	trackRefs := (collectFlag & CollectionTrackingRef) != 0
+	hasNull := (collectFlag & CollectionHasNull) != 0
+	elemType := s.type_.Elem()
+
+	// Fast path: direct read for primitive types without ref tracking or nulls
+	// Use make() directly instead of reflect.MakeSlice for better performance
+	if !trackRefs && !hasNull && !isArrayType {
+		switch elemType.Kind() {
+		case reflect.Float32:
+			slice := make([]float32, length)
+			if isLittleEndian {
+				// Direct memory copy for floats on little-endian
+				raw := buf.ReadBinary(length*4, ctxErr)
+				if raw != nil {
+					copy(unsafe.Slice((*byte)(unsafe.Pointer(&slice[0])), length*4), raw)
+				}
+			} else {
+				// Big-endian fallback: iterate
+				for i := 0; i < length; i++ {
+					slice[i] = buf.ReadFloat32(ctxErr)
+				}
+			}
+			value.Set(reflect.ValueOf(slice))
+			ctx.RefResolver().Reference(value)
+			return
+		case reflect.Float64:
+			slice := make([]float64, length)
+			if isLittleEndian {
+				// Direct memory copy for doubles on little-endian
+				raw := buf.ReadBinary(length*8, ctxErr)
+				if raw != nil {
+					copy(unsafe.Slice((*byte)(unsafe.Pointer(&slice[0])), length*8), raw)
+				}
+			} else {
+				// Big-endian fallback: iterate
+				for i := 0; i < length; i++ {
+					slice[i] = buf.ReadFloat64(ctxErr)
+				}
+			}
+			value.Set(reflect.ValueOf(slice))
+			ctx.RefResolver().Reference(value)
+			return
+		case reflect.Int8:
+			slice := make([]int8, length)
+			raw := buf.ReadBinary(length, ctxErr)
+			if raw != nil {
+				copy(unsafe.Slice((*byte)(unsafe.Pointer(&slice[0])), length), raw)
+			}
+			value.Set(reflect.ValueOf(slice))
+			ctx.RefResolver().Reference(value)
+			return
+		case reflect.Uint8:
+			slice := make([]uint8, length)
+			raw := buf.ReadBinary(length, ctxErr)
+			if raw != nil {
+				copy(slice, raw)
+			}
+			value.Set(reflect.ValueOf(slice))
+			ctx.RefResolver().Reference(value)
+			return
+		case reflect.Bool:
+			slice := make([]bool, length)
+			raw := buf.ReadBinary(length, ctxErr)
+			if raw != nil {
+				copy(unsafe.Slice((*byte)(unsafe.Pointer(&slice[0])), length), raw)
+			}
+			value.Set(reflect.ValueOf(slice))
+			ctx.RefResolver().Reference(value)
+			return
+		case reflect.Int32:
+			slice := make([]int32, length)
+			// Use unsafe read if we have enough remaining bytes (5 bytes max per varint32)
+			if buf.remaining() >= length*5 {
+				for i := 0; i < length; i++ {
+					slice[i] = buf.UnsafeReadVarint32()
+				}
+			} else {
+				for i := 0; i < length; i++ {
+					slice[i] = buf.ReadVarint32(ctxErr)
+				}
+			}
+			value.Set(reflect.ValueOf(slice))
+			ctx.RefResolver().Reference(value)
+			return
+		case reflect.Int64:
+			slice := make([]int64, length)
+			// Use unsafe read if we have enough remaining bytes (10 bytes max per varint64)
+			if buf.remaining() >= length*10 {
+				for i := 0; i < length; i++ {
+					slice[i] = buf.UnsafeReadVarint64()
+				}
+			} else {
+				for i := 0; i < length; i++ {
+					slice[i] = buf.ReadVarint64(ctxErr)
+				}
+			}
+			value.Set(reflect.ValueOf(slice))
+			ctx.RefResolver().Reference(value)
+			return
+		case reflect.Int16:
+			slice := make([]int16, length)
+			for i := 0; i < length; i++ {
+				slice[i] = buf.ReadInt16(ctxErr)
+			}
+			value.Set(reflect.ValueOf(slice))
+			ctx.RefResolver().Reference(value)
+			return
+		}
+	}
+
+	// Slow path: Handle slice vs array allocation for non-primitive types
 	if isArrayType {
 		// For arrays, verify the length matches (arrays have fixed size)
 		if value.Len() < length {
@@ -366,14 +476,12 @@ func (s *sliceConcreteValueSerializer) ReadData(ctx *ReadContext, type_ reflect.
 	}
 	ctx.RefResolver().Reference(value)
 
-	trackRefs := (collectFlag & CollectionTrackingRef) != 0
-	hasNull := (collectFlag & CollectionHasNull) != 0
 	elemRefMode := RefModeNone
 	if trackRefs {
 		elemRefMode = RefModeTracking
 	}
 
-	elemType := s.type_.Elem()
+	// Slow path: general deserialization with ref tracking or nulls
 	for i := 0; i < length; i++ {
 		elem := value.Index(i)
 

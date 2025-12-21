@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"unsafe"
 )
 
 type ByteBuffer struct {
@@ -523,9 +524,14 @@ func (b *ByteBuffer) ReadVaruint36Small(err *Error) uint64 {
 }
 
 func (b *ByteBuffer) readVaruint36SmallFast() uint64 {
-	data := b.data[b.readerIndex:]
-	bulk := uint64(data[0]) | uint64(data[1])<<8 | uint64(data[2])<<16 | uint64(data[3])<<24 |
-		uint64(data[4])<<32 | uint64(data[5])<<40 | uint64(data[6])<<48 | uint64(data[7])<<56
+	// Single instruction load using unsafe pointer cast (little-endian only)
+	// On big-endian systems, use binary.LittleEndian which the compiler optimizes
+	var bulk uint64
+	if isLittleEndian {
+		bulk = *(*uint64)(unsafe.Pointer(&b.data[b.readerIndex]))
+	} else {
+		bulk = binary.LittleEndian.Uint64(b.data[b.readerIndex:])
+	}
 
 	result := bulk & 0x7F
 	readLen := 1
@@ -591,52 +597,41 @@ func (b *ByteBuffer) ReadVaruint64(err *Error) uint64 {
 
 // Fast path (when the remaining bytes are sufficient)
 func (b *ByteBuffer) readVaruint64Fast() uint64 {
-	data := b.data[b.readerIndex:]
-	var result uint64
-	var readLength int
-
-	b0 := data[0]
-	result = uint64(b0 & 0x7F)
-	if b0 < 0x80 {
-		readLength = 1
+	// Single instruction load using unsafe pointer cast (little-endian only)
+	var bulk uint64
+	if isLittleEndian {
+		bulk = *(*uint64)(unsafe.Pointer(&b.data[b.readerIndex]))
 	} else {
-		b1 := data[1]
-		result |= uint64(b1&0x7F) << 7
-		if b1 < 0x80 {
-			readLength = 2
-		} else {
-			b2 := data[2]
-			result |= uint64(b2&0x7F) << 14
-			if b2 < 0x80 {
-				readLength = 3
-			} else {
-				b3 := data[3]
-				result |= uint64(b3&0x7F) << 21
-				if b3 < 0x80 {
-					readLength = 4
-				} else {
-					b4 := data[4]
-					result |= uint64(b4&0x7F) << 28
-					if b4 < 0x80 {
-						readLength = 5
-					} else {
-						b5 := data[5]
-						result |= uint64(b5&0x7F) << 35
-						if b5 < 0x80 {
-							readLength = 6
-						} else {
-							b6 := data[6]
-							result |= uint64(b6&0x7F) << 42
-							if b6 < 0x80 {
-								readLength = 7
-							} else {
-								b7 := data[7]
-								result |= uint64(b7&0x7F) << 49
-								if b7 < 0x80 {
-									readLength = 8
-								} else {
-									b8 := data[8]
-									result |= uint64(b8) << 56
+		bulk = binary.LittleEndian.Uint64(b.data[b.readerIndex:])
+	}
+
+	result := bulk & 0x7F
+	readLength := 1
+
+	if (bulk & 0x80) != 0 {
+		result |= (bulk >> 1) & 0x3F80
+		readLength = 2
+		if (bulk & 0x8000) != 0 {
+			result |= (bulk >> 2) & 0x1FC000
+			readLength = 3
+			if (bulk & 0x800000) != 0 {
+				result |= (bulk >> 3) & 0xFE00000
+				readLength = 4
+				if (bulk & 0x80000000) != 0 {
+					result |= (bulk >> 4) & 0x7F0000000
+					readLength = 5
+					if (bulk & 0x8000000000) != 0 {
+						result |= (bulk >> 5) & 0x3F800000000
+						readLength = 6
+						if (bulk & 0x800000000000) != 0 {
+							result |= (bulk >> 6) & 0x1FC0000000000
+							readLength = 7
+							if (bulk & 0x80000000000000) != 0 {
+								result |= (bulk >> 7) & 0xFE000000000000
+								readLength = 8
+								if (bulk & 0x8000000000000000) != 0 {
+									// Need 9th byte
+									result |= uint64(b.data[b.readerIndex+8]) << 56
 									readLength = 9
 								}
 							}
@@ -738,32 +733,29 @@ func (b *ByteBuffer) ReadVaruint32(err *Error) uint32 {
 
 // Fast path reading (when the remaining bytes are sufficient)
 func (b *ByteBuffer) readVaruint32Fast() uint32 {
-	data := b.data[b.readerIndex:]
-	var result uint32
-	var readLength int
-
-	b0 := data[0]
-	result = uint32(b0 & 0x7F)
-	if b0 < 0x80 {
-		readLength = 1
+	// Single instruction load using unsafe pointer cast (little-endian only)
+	// On big-endian systems, use binary.LittleEndian which the compiler optimizes
+	var bulk uint64
+	if isLittleEndian {
+		bulk = *(*uint64)(unsafe.Pointer(&b.data[b.readerIndex]))
 	} else {
-		b1 := data[1]
-		result |= uint32(b1&0x7F) << 7
-		if b1 < 0x80 {
-			readLength = 2
-		} else {
-			b2 := data[2]
-			result |= uint32(b2&0x7F) << 14
-			if b2 < 0x80 {
-				readLength = 3
-			} else {
-				b3 := data[3]
-				result |= uint32(b3&0x7F) << 21
-				if b3 < 0x80 {
-					readLength = 4
-				} else {
-					b4 := data[4]
-					result |= uint32(b4&0x7F) << 28
+		bulk = binary.LittleEndian.Uint64(b.data[b.readerIndex:])
+	}
+
+	result := uint32(bulk & 0x7F)
+	readLength := 1
+
+	if (bulk & 0x80) != 0 {
+		result |= uint32((bulk >> 1) & 0x3F80)
+		readLength = 2
+		if (bulk & 0x8000) != 0 {
+			result |= uint32((bulk >> 2) & 0x1FC000)
+			readLength = 3
+			if (bulk & 0x800000) != 0 {
+				result |= uint32((bulk >> 3) & 0xFE00000)
+				readLength = 4
+				if (bulk & 0x80000000) != 0 {
+					result |= uint32((bulk >> 4) & 0xF0000000)
 					readLength = 5
 				}
 			}

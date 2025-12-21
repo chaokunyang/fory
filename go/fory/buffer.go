@@ -21,6 +21,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"math"
 )
 
 type ByteBuffer struct {
@@ -281,7 +282,159 @@ func (b *ByteBuffer) SetReaderIndex(index int) {
 func (b *ByteBuffer) Reset() {
 	b.readerIndex = 0
 	b.writerIndex = 0
-	b.data = nil
+	// Keep the underlying buffer if it's reasonable sized to reduce allocations
+	// Only nil it out if we want to release memory
+	if cap(b.data) > 64*1024 {
+		b.data = nil
+	}
+	// Note: We keep b.data as-is (with its current length) to avoid issues
+	// with grow() needing to expand the slice on first write
+}
+
+// Reserve ensures buffer has at least n bytes available for writing from current position.
+// Call this before multiple unsafe writes to avoid repeated grow() calls.
+func (b *ByteBuffer) Reserve(n int) {
+	needed := b.writerIndex + n
+	if needed <= len(b.data) {
+		return // Already have enough space
+	}
+	// Need to expand - calculate new size
+	if needed <= cap(b.data) {
+		b.data = b.data[:cap(b.data)]
+	} else {
+		newCap := 2 * needed
+		if newCap < 64 {
+			newCap = 64
+		}
+		newBuf := make([]byte, newCap, newCap)
+		copy(newBuf, b.data)
+		b.data = newBuf
+	}
+}
+
+// UnsafeWriteInt32s writes multiple int32 values using unsafe memory access.
+// Caller must ensure buffer has enough space (call Reserve first).
+func (b *ByteBuffer) UnsafeWriteInt32s(values []int32) {
+	for _, v := range values {
+		binary.LittleEndian.PutUint32(b.data[b.writerIndex:], uint32(v))
+		b.writerIndex += 4
+	}
+}
+
+// UnsafeWriteVarint32 writes a varint32 without grow check.
+// Caller must have called Reserve(5) beforehand.
+func (b *ByteBuffer) UnsafeWriteVarint32(value int32) int8 {
+	u := uint32((value << 1) ^ (value >> 31))
+	return b.UnsafeWriteVaruint32(u)
+}
+
+// UnsafeWriteVaruint32 writes a varuint32 without grow check.
+// Caller must have called Reserve(5) beforehand.
+func (b *ByteBuffer) UnsafeWriteVaruint32(value uint32) int8 {
+	if value>>7 == 0 {
+		b.data[b.writerIndex] = byte(value)
+		b.writerIndex++
+		return 1
+	}
+	if value>>14 == 0 {
+		b.data[b.writerIndex] = byte((value & 0x7F) | 0x80)
+		b.data[b.writerIndex+1] = byte(value >> 7)
+		b.writerIndex += 2
+		return 2
+	}
+	if value>>21 == 0 {
+		b.data[b.writerIndex] = byte((value & 0x7F) | 0x80)
+		b.data[b.writerIndex+1] = byte(value>>7 | 0x80)
+		b.data[b.writerIndex+2] = byte(value >> 14)
+		b.writerIndex += 3
+		return 3
+	}
+	if value>>28 == 0 {
+		b.data[b.writerIndex] = byte((value & 0x7F) | 0x80)
+		b.data[b.writerIndex+1] = byte(value>>7 | 0x80)
+		b.data[b.writerIndex+2] = byte(value>>14 | 0x80)
+		b.data[b.writerIndex+3] = byte(value >> 21)
+		b.writerIndex += 4
+		return 4
+	}
+	b.data[b.writerIndex] = byte((value & 0x7F) | 0x80)
+	b.data[b.writerIndex+1] = byte(value>>7 | 0x80)
+	b.data[b.writerIndex+2] = byte(value>>14 | 0x80)
+	b.data[b.writerIndex+3] = byte(value>>21 | 0x80)
+	b.data[b.writerIndex+4] = byte(value >> 28)
+	b.writerIndex += 5
+	return 5
+}
+
+// UnsafeWriteByte writes a single byte without grow check.
+func (b *ByteBuffer) UnsafeWriteByte(v byte) {
+	b.data[b.writerIndex] = v
+	b.writerIndex++
+}
+
+// UnsafeWriteInt8 writes an int8 without grow check.
+func (b *ByteBuffer) UnsafeWriteInt8(v int8) {
+	b.data[b.writerIndex] = byte(v)
+	b.writerIndex++
+}
+
+// UnsafeWriteInt16 writes an int16 without grow check.
+func (b *ByteBuffer) UnsafeWriteInt16(v int16) {
+	binary.LittleEndian.PutUint16(b.data[b.writerIndex:], uint16(v))
+	b.writerIndex += 2
+}
+
+// UnsafeWriteInt32 writes an int32 without grow check.
+func (b *ByteBuffer) UnsafeWriteInt32(v int32) {
+	binary.LittleEndian.PutUint32(b.data[b.writerIndex:], uint32(v))
+	b.writerIndex += 4
+}
+
+// UnsafeWriteInt64 writes an int64 without grow check.
+func (b *ByteBuffer) UnsafeWriteInt64(v int64) {
+	binary.LittleEndian.PutUint64(b.data[b.writerIndex:], uint64(v))
+	b.writerIndex += 8
+}
+
+// UnsafeWriteFloat32 writes a float32 without grow check.
+func (b *ByteBuffer) UnsafeWriteFloat32(v float32) {
+	binary.LittleEndian.PutUint32(b.data[b.writerIndex:], math.Float32bits(v))
+	b.writerIndex += 4
+}
+
+// UnsafeWriteFloat64 writes a float64 without grow check.
+func (b *ByteBuffer) UnsafeWriteFloat64(v float64) {
+	binary.LittleEndian.PutUint64(b.data[b.writerIndex:], math.Float64bits(v))
+	b.writerIndex += 8
+}
+
+// UnsafeWriteBool writes a bool without grow check.
+func (b *ByteBuffer) UnsafeWriteBool(v bool) {
+	if v {
+		b.data[b.writerIndex] = 1
+	} else {
+		b.data[b.writerIndex] = 0
+	}
+	b.writerIndex++
+}
+
+// UnsafeWriteVarint64 writes a varint64 without grow check.
+// Caller must have called Reserve(10) beforehand.
+func (b *ByteBuffer) UnsafeWriteVarint64(value int64) {
+	u := uint64((value << 1) ^ (value >> 63))
+	for u >= 0x80 {
+		b.data[b.writerIndex] = byte(u) | 0x80
+		b.writerIndex++
+		u >>= 7
+	}
+	b.data[b.writerIndex] = byte(u)
+	b.writerIndex++
+}
+
+// UnsafeWriteBytes writes bytes without grow check.
+func (b *ByteBuffer) UnsafeWriteBytes(data []byte) {
+	copy(b.data[b.writerIndex:], data)
+	b.writerIndex += len(data)
 }
 
 func (b *ByteBuffer) PutInt32(index int, value int32) {

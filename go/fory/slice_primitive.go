@@ -20,7 +20,14 @@ package fory
 import (
 	"reflect"
 	"strconv"
+	"unsafe"
 )
+
+// isLittleEndian is true if the current system is little-endian
+var isLittleEndian = func() bool {
+	var x uint16 = 0x0102
+	return *(*byte)(unsafe.Pointer(&x)) == 0x02
+}()
 
 // isNilSlice checks if a value is a nil slice. Safe to call on any value type.
 // Returns false for arrays and other non-slice types.
@@ -467,9 +474,11 @@ func writeInt8Slice(buf *ByteBuffer, value []int8, err *Error) {
 		return
 	}
 	buf.WriteLength(size)
-	for _, elem := range value {
-		buf.WriteInt8(elem)
+	if size == 0 {
+		return
 	}
+	// int8 is byte-sized, direct copy always works
+	buf.WriteBinary(unsafe.Slice((*byte)(unsafe.Pointer(&value[0])), size))
 }
 
 // readInt8Slice reads []int8 from buffer
@@ -490,8 +499,16 @@ func writeInt16Slice(buf *ByteBuffer, value []int16, err *Error) {
 		return
 	}
 	buf.WriteLength(size)
-	for _, elem := range value {
-		buf.WriteInt16(elem)
+	if len(value) == 0 {
+		return
+	}
+	if isLittleEndian {
+		// Direct memory copy for little-endian systems
+		buf.WriteBinary(unsafe.Slice((*byte)(unsafe.Pointer(&value[0])), size))
+	} else {
+		for _, elem := range value {
+			buf.WriteInt16(elem)
+		}
 	}
 }
 
@@ -514,8 +531,16 @@ func writeInt32Slice(buf *ByteBuffer, value []int32, err *Error) {
 		return
 	}
 	buf.WriteLength(size)
-	for _, elem := range value {
-		buf.WriteInt32(elem)
+	if len(value) == 0 {
+		return
+	}
+	if isLittleEndian {
+		// Direct memory copy for little-endian systems
+		buf.WriteBinary(unsafe.Slice((*byte)(unsafe.Pointer(&value[0])), size))
+	} else {
+		for _, elem := range value {
+			buf.WriteInt32(elem)
+		}
 	}
 }
 
@@ -538,8 +563,16 @@ func writeInt64Slice(buf *ByteBuffer, value []int64, err *Error) {
 		return
 	}
 	buf.WriteLength(size)
-	for _, elem := range value {
-		buf.WriteInt64(elem)
+	if len(value) == 0 {
+		return
+	}
+	if isLittleEndian {
+		// Direct memory copy for little-endian systems
+		buf.WriteBinary(unsafe.Slice((*byte)(unsafe.Pointer(&value[0])), size))
+	} else {
+		for _, elem := range value {
+			buf.WriteInt64(elem)
+		}
 	}
 }
 
@@ -607,8 +640,16 @@ func writeFloat32Slice(buf *ByteBuffer, value []float32, err *Error) {
 		return
 	}
 	buf.WriteLength(size)
-	for _, elem := range value {
-		buf.WriteFloat32(elem)
+	if len(value) == 0 {
+		return
+	}
+	if isLittleEndian {
+		// Direct memory copy for little-endian systems
+		buf.WriteBinary(unsafe.Slice((*byte)(unsafe.Pointer(&value[0])), size))
+	} else {
+		for _, elem := range value {
+			buf.WriteFloat32(elem)
+		}
 	}
 }
 
@@ -631,8 +672,16 @@ func writeFloat64Slice(buf *ByteBuffer, value []float64, err *Error) {
 		return
 	}
 	buf.WriteLength(size)
-	for _, elem := range value {
-		buf.WriteFloat64(elem)
+	if len(value) == 0 {
+		return
+	}
+	if isLittleEndian {
+		// Direct memory copy for little-endian systems
+		buf.WriteBinary(unsafe.Slice((*byte)(unsafe.Pointer(&value[0])), size))
+	} else {
+		for _, elem := range value {
+			buf.WriteFloat64(elem)
+		}
 	}
 }
 

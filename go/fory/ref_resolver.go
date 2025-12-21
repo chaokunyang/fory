@@ -272,9 +272,8 @@ func (r *RefResolver) resetRead() {
 }
 
 func (r *RefResolver) resetWrite() {
-	if len(r.writtenObjects) > 0 {
-		r.writtenObjects = map[refKey]int32{}
-	}
+	// Use clear() instead of allocating a new map to reduce allocations
+	clear(r.writtenObjects)
 }
 
 func nullable(type_ reflect.Type) bool {

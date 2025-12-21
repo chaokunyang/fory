@@ -27,9 +27,22 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unsafe"
 
 	"github.com/apache/fory/go/fory/meta"
 )
+
+// typePointer extracts the underlying pointer from a reflect.Type for fast cache lookup
+// reflect.Type is actually an interface containing a *rtype pointer
+func typePointer(t reflect.Type) uintptr {
+	// reflect.Type is an interface, and the concrete type is *rtype
+	// We use unsafe to extract the data pointer for O(1) cache lookup
+	type iface struct {
+		_    uintptr // type pointer (itab)
+		data uintptr // data pointer (*rtype)
+	}
+	return (*iface)(unsafe.Pointer(&t)).data
+}
 
 const (
 	NotSupportCrossLanguage = 0
@@ -166,6 +179,9 @@ type TypeResolver struct {
 	// meta share related
 	typeToTypeDef  map[reflect.Type]*TypeDef
 	defIdToTypeDef map[int64]*TypeDef
+
+	// Fast type cache for O(1) lookup using type pointer
+	typePointerCache map[uintptr]*TypeInfo
 }
 
 func newTypeResolver(fory *Fory) *TypeResolver {
@@ -202,8 +218,9 @@ func newTypeResolver(fory *Fory) *TypeResolver {
 		typeNameEncoder:  meta.NewEncoder('$', '_'),
 		typeNameDecoder:  meta.NewDecoder('$', '_'),
 
-		typeToTypeDef:  make(map[reflect.Type]*TypeDef),
-		defIdToTypeDef: make(map[int64]*TypeDef),
+		typeToTypeDef:    make(map[reflect.Type]*TypeDef),
+		defIdToTypeDef:   make(map[int64]*TypeDef),
+		typePointerCache: make(map[uintptr]*TypeInfo),
 	}
 	// base type info for encode/decode types.
 	// composite types info will be constructed dynamically.
@@ -715,7 +732,15 @@ func (r *TypeResolver) getTypeInfo(value reflect.Value, create bool) (*TypeInfo,
 		// make sure the concrete value don't miss its real typeInfo
 		value = value.Elem()
 	}
+
+	// Fast path: check type pointer cache for O(1) lookup
 	typeString := value.Type()
+	typePtr := typePointer(typeString)
+	if cachedInfo, ok := r.typePointerCache[typePtr]; ok {
+		return cachedInfo, nil
+	}
+
+	// Slow path: map lookup by reflect.Type
 	if info, ok := r.typesInfo[typeString]; ok {
 		if info.Serializer == nil {
 			/*
@@ -731,6 +756,8 @@ func (r *TypeResolver) getTypeInfo(value reflect.Value, create bool) (*TypeInfo,
 			r.typesInfo[typeString] = info // Update the map with the new serializer
 		}
 		storedInfo := r.typesInfo[typeString]
+		// Cache for future fast lookups
+		r.typePointerCache[typePtr] = &storedInfo
 		return &storedInfo, nil
 	}
 
@@ -1297,53 +1324,32 @@ func (r *TypeResolver) createSerializer(type_ reflect.Type, mapInStruct bool) (s
 		return &ptrToValueSerializer{valueSerializer}, nil
 	case reflect.Slice:
 		elem := type_.Elem()
-		// Handle special slice types for xlang compatibility
-		if r.isXlang {
-			// Basic type slices should use slice serializers for efficiency
-			switch elem.Kind() {
-			case reflect.Bool:
-				if type_ == boolSliceType {
-					return boolSliceSerializer{}, nil
-				}
-			case reflect.Int8:
-				if type_ == int8SliceType {
-					return int8SliceSerializer{}, nil
-				}
-			case reflect.Int16:
-				if type_ == int16SliceType {
-					return int16SliceSerializer{}, nil
-				}
-			case reflect.Int32:
-				if type_ == int32SliceType {
-					return int32SliceSerializer{}, nil
-				}
-			case reflect.Int64:
-				if type_ == int64SliceType {
-					return int64SliceSerializer{}, nil
-				}
-			case reflect.Float32:
-				if type_ == float32SliceType {
-					return float32SliceSerializer{}, nil
-				}
-			case reflect.Float64:
-				if type_ == float64SliceType {
-					return float64SliceSerializer{}, nil
-				}
-			case reflect.Int:
-				// Platform-dependent int type uses intSliceSerializer which selects
-				// INT32_ARRAY or INT64_ARRAY based on platform
-				if type_ == intSliceType {
-					return intSliceSerializer{}, nil
-				}
-			case reflect.Uint:
-				// Platform-dependent uint type uses uintSliceSerializer which selects
-				// INT32_ARRAY or INT64_ARRAY based on platform
-				if type_ == uintSliceType {
-					return uintSliceSerializer{}, nil
-				}
-			}
+		// Use optimized primitive slice serializers for all primitive numeric types
+		// These use direct memory copy on little-endian systems for maximum performance
+		switch elem.Kind() {
+		case reflect.Bool:
+			return boolSliceSerializer{}, nil
+		case reflect.Int8:
+			return int8SliceSerializer{}, nil
+		case reflect.Int16:
+			return int16SliceSerializer{}, nil
+		case reflect.Int32:
+			return int32SliceSerializer{}, nil
+		case reflect.Int64:
+			return int64SliceSerializer{}, nil
+		case reflect.Float32:
+			return float32SliceSerializer{}, nil
+		case reflect.Float64:
+			return float64SliceSerializer{}, nil
+		case reflect.Int:
+			return intSliceSerializer{}, nil
+		case reflect.Uint:
+			return uintSliceSerializer{}, nil
+		case reflect.Uint8:
+			// []byte uses byteSliceSerializer
+			return byteSliceSerializer{}, nil
 		}
-		// For dynamic types or non-xlang mode, use generic slice serializer
+		// For dynamic types, use dynamic slice serializer
 		if isDynamicType(elem) {
 			return sliceDynSerializer{}, nil
 		} else {

@@ -176,6 +176,9 @@ type structSerializer struct {
 	fieldMap        map[string]*FieldInfo // for compatible reading
 	structHash      int32
 	fieldDefs       []FieldDef // for type_def compatibility
+	// Pre-computed sizes for batch buffer reservation
+	fixedFieldsSize  int // total bytes for fixed-size primitives
+	varintFieldsSize int // max bytes for varint primitives (5 bytes per int32, 10 bytes per int64)
 }
 
 // newStructSerializer creates a new structSerializer with the given parameters.
@@ -288,8 +291,13 @@ func (s *structSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 	// Check if value is addressable for unsafe access optimization
 	canUseUnsafe := value.CanAddr()
 
+	// Reserve buffer space upfront for all fixed fields + varints to avoid repeated grow() calls
+	if canUseUnsafe && (s.fixedFieldsSize > 0 || s.varintFieldsSize > 0) {
+		buf.Reserve(s.fixedFieldsSize + s.varintFieldsSize)
+	}
+
 	// Phase 1: Write fixed-size primitive fields (no ref flag)
-	if canUseUnsafe {
+	if canUseUnsafe && len(s.fixedFields) > 0 {
 		ptr := unsafe.Pointer(value.UnsafeAddr())
 		for _, field := range s.fixedFields {
 			if field.FieldIndex < 0 {
@@ -299,18 +307,18 @@ func (s *structSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 			fieldPtr := unsafe.Add(ptr, field.Offset)
 			switch field.StaticId {
 			case ConcreteTypeBool:
-				buf.WriteBool(*(*bool)(fieldPtr))
+				buf.UnsafeWriteBool(*(*bool)(fieldPtr))
 			case ConcreteTypeInt8:
-				buf.WriteByte_(*(*byte)(fieldPtr))
+				buf.UnsafeWriteByte(*(*byte)(fieldPtr))
 			case ConcreteTypeInt16:
-				buf.WriteInt16(*(*int16)(fieldPtr))
+				buf.UnsafeWriteInt16(*(*int16)(fieldPtr))
 			case ConcreteTypeFloat32:
-				buf.WriteFloat32(*(*float32)(fieldPtr))
+				buf.UnsafeWriteFloat32(*(*float32)(fieldPtr))
 			case ConcreteTypeFloat64:
-				buf.WriteFloat64(*(*float64)(fieldPtr))
+				buf.UnsafeWriteFloat64(*(*float64)(fieldPtr))
 			}
 		}
-	} else {
+	} else if len(s.fixedFields) > 0 {
 		// Fallback to reflect-based access for unaddressable values
 		for _, field := range s.fixedFields {
 			if field.FieldIndex < 0 {
@@ -334,7 +342,8 @@ func (s *structSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 	}
 
 	// Phase 2: Write varint primitive fields (no ref flag)
-	if canUseUnsafe {
+	// Buffer space already reserved above
+	if canUseUnsafe && len(s.varintFields) > 0 {
 		ptr := unsafe.Pointer(value.UnsafeAddr())
 		for _, field := range s.varintFields {
 			if field.FieldIndex < 0 {
@@ -344,14 +353,14 @@ func (s *structSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 			fieldPtr := unsafe.Add(ptr, field.Offset)
 			switch field.StaticId {
 			case ConcreteTypeInt32:
-				buf.WriteVarint32(*(*int32)(fieldPtr))
+				buf.UnsafeWriteVarint32(*(*int32)(fieldPtr))
 			case ConcreteTypeInt64:
-				buf.WriteVarint64(*(*int64)(fieldPtr))
+				buf.UnsafeWriteVarint64(*(*int64)(fieldPtr))
 			case ConcreteTypeInt:
-				buf.WriteVarint64(int64(*(*int)(fieldPtr)))
+				buf.UnsafeWriteVarint64(int64(*(*int)(fieldPtr)))
 			}
 		}
-	} else {
+	} else if len(s.varintFields) > 0 {
 		// Fallback to reflect-based access for unaddressable values
 		for _, field := range s.varintFields {
 			if field.FieldIndex < 0 {
@@ -1000,10 +1009,13 @@ func (s *structSerializer) initFieldsFromContext(ctx interface{ TypeResolver() *
 }
 
 // groupFields categorizes fields into fixedFields, varintFields, and remainingFields
+// Also computes pre-computed sizes for batch buffer reservation
 func (s *structSerializer) groupFields() {
 	s.fixedFields = nil
 	s.varintFields = nil
 	s.remainingFields = nil
+	s.fixedFieldsSize = 0
+	s.varintFieldsSize = 0
 
 	for _, field := range s.fields {
 		// Fields with non-primitive serializers (NAMED_ENUM, NAMED_STRUCT, etc.)
@@ -1012,8 +1024,26 @@ func (s *structSerializer) groupFields() {
 			s.remainingFields = append(s.remainingFields, field)
 		} else if isFixedSizePrimitive(field.StaticId, field.Referencable) {
 			s.fixedFields = append(s.fixedFields, field)
+			// Compute size for each fixed primitive
+			switch field.StaticId {
+			case ConcreteTypeBool, ConcreteTypeInt8:
+				s.fixedFieldsSize += 1
+			case ConcreteTypeInt16:
+				s.fixedFieldsSize += 2
+			case ConcreteTypeFloat32:
+				s.fixedFieldsSize += 4
+			case ConcreteTypeFloat64:
+				s.fixedFieldsSize += 8
+			}
 		} else if isVarintPrimitive(field.StaticId, field.Referencable) {
 			s.varintFields = append(s.varintFields, field)
+			// Max bytes per varint (5 for int32, 10 for int64)
+			switch field.StaticId {
+			case ConcreteTypeInt32:
+				s.varintFieldsSize += 5
+			case ConcreteTypeInt64, ConcreteTypeInt:
+				s.varintFieldsSize += 10
+			}
 		} else {
 			s.remainingFields = append(s.remainingFields, field)
 		}

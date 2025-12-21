@@ -814,12 +814,41 @@ func (f *Fory) SerializeTo(buf *ByteBuffer, value interface{}) error {
 		buf.WriteInt32(-1) // Placeholder for meta offset
 	}
 
-	// SerializeWithCallback the value
-	f.writeCtx.WriteValue(reflect.ValueOf(value))
+	// Fast path for pointer-to-struct types (bypasses ptrToValueSerializer wrapper)
+	rv := reflect.ValueOf(value)
+	if rv.Kind() == reflect.Ptr && !rv.IsNil() && rv.Elem().Kind() == reflect.Struct && !f.config.TrackRef {
+		// Get TypeInfo using fast pointer cache
+		elemValue := rv.Elem()
+		typeInfo, err := f.typeResolver.getTypeInfo(rv, true)
+		if err == nil && typeInfo != nil && typeInfo.Serializer != nil {
+			// Write not-null flag and type ID directly
+			buf.WriteInt8(NotNullValueFlag)
+			if err := f.typeResolver.WriteTypeInfo(buf, typeInfo); err != nil {
+				f.writeCtx.buffer = origBuffer
+				return err
+			}
+			// Call the underlying struct serializer's WriteData directly
+			if ptrSer, ok := typeInfo.Serializer.(*ptrToValueSerializer); ok {
+				ptrSer.valueSerializer.WriteData(f.writeCtx, elemValue)
+			} else {
+				typeInfo.Serializer.WriteData(f.writeCtx, elemValue)
+			}
+			if f.writeCtx.HasError() {
+				f.writeCtx.buffer = origBuffer
+				return f.writeCtx.TakeError()
+			}
+			goto finish
+		}
+	}
+
+	// Standard path
+	f.writeCtx.WriteValue(rv)
 	if f.writeCtx.HasError() {
 		f.writeCtx.buffer = origBuffer
 		return f.writeCtx.TakeError()
 	}
+
+finish:
 
 	// Write collected TypeMetas at the end in compatible mode
 	if f.config.Compatible && f.metaContext != nil && len(f.metaContext.writingTypeDefs) > 0 {

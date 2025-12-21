@@ -20,6 +20,7 @@ package fory
 import (
 	"fmt"
 	"reflect"
+	"unsafe"
 )
 
 const (
@@ -203,6 +204,72 @@ func (s *sliceConcreteValueSerializer) WriteData(ctx *WriteContext, value reflec
 		elemRefMode = RefModeTracking
 	}
 
+	// Fast path: direct write for primitive types without ref tracking or nulls
+	// Use unsafe pointer iteration to avoid reflect.Value.Index overhead
+	if !trackRefs && !hasNull {
+		ptr := unsafe.Pointer(value.Pointer())
+		switch elemType.Kind() {
+		case reflect.Float32:
+			if isLittleEndian {
+				// Direct memory copy for floats on little-endian
+				buf.WriteBinary(unsafe.Slice((*byte)(ptr), length*4))
+				return
+			}
+			// Big-endian fallback: iterate using unsafe pointer
+			buf.Reserve(length * 4)
+			slice := unsafe.Slice((*float32)(ptr), length)
+			for _, v := range slice {
+				buf.UnsafeWriteFloat32(v)
+			}
+			return
+		case reflect.Float64:
+			if isLittleEndian {
+				// Direct memory copy for doubles on little-endian
+				buf.WriteBinary(unsafe.Slice((*byte)(ptr), length*8))
+				return
+			}
+			// Big-endian fallback: iterate using unsafe pointer
+			buf.Reserve(length * 8)
+			slice := unsafe.Slice((*float64)(ptr), length)
+			for _, v := range slice {
+				buf.UnsafeWriteFloat64(v)
+			}
+			return
+		case reflect.Int8, reflect.Uint8:
+			buf.WriteBinary(unsafe.Slice((*byte)(ptr), length))
+			return
+		case reflect.Bool:
+			// Bools are 1 byte each, direct copy works on all platforms
+			buf.WriteBinary(unsafe.Slice((*byte)(ptr), length))
+			return
+		case reflect.Int32:
+			// Varint encoding: pre-reserve max space and iterate using unsafe pointer
+			buf.Reserve(length * 5)
+			slice := unsafe.Slice((*int32)(ptr), length)
+			for _, v := range slice {
+				buf.UnsafeWriteVarint32(v)
+			}
+			return
+		case reflect.Int64:
+			// Varint encoding: pre-reserve max space and iterate using unsafe pointer
+			buf.Reserve(length * 10)
+			slice := unsafe.Slice((*int64)(ptr), length)
+			for _, v := range slice {
+				buf.UnsafeWriteVarint64(v)
+			}
+			return
+		case reflect.Int16:
+			// Fixed 2-byte encoding: iterate using unsafe pointer
+			buf.Reserve(length * 2)
+			slice := unsafe.Slice((*int16)(ptr), length)
+			for _, v := range slice {
+				buf.UnsafeWriteInt16(v)
+			}
+			return
+		}
+	}
+
+	// Slow path: general serialization with ref tracking or nulls
 	for i := 0; i < length; i++ {
 		elem := value.Index(i)
 

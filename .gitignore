@@ -84,3 +84,13 @@ dist/
 .venv
 **/.idea
 examples/cpp/cmake_example/build
+
+**/*.pb.go
+**/*.pb.cc
+**/*.pb.h
+
+**/benchmark_results.txt
+**/benchmark_results.json
+**/benchmark_report.md
+**/benchmark_*.png
+**/results/

@@ -393,12 +393,7 @@ func (f *Fory) Reset() {
 // Note: For structs, T must be a pointer to struct (*MyStruct), not struct value.
 // Note: Fory instance is NOT thread-safe. Use ThreadSafeFory for concurrent use.
 func Serialize[T any](f *Fory, value T) ([]byte, error) {
-	defer func() {
-		f.writeCtx.Reset()
-		if f.metaContext != nil {
-			f.metaContext.Reset()
-		}
-	}()
+	defer f.resetWriteState()
 	// WriteData protocol header
 	writeHeader(f.writeCtx, f.config)
 
@@ -686,12 +681,7 @@ func Deserialize[T any](f *Fory, data []byte, target *T) error {
 // Serialize serializes polymorphic values where concrete type is unknown.
 // Uses runtime type dispatch to find the appropriate serializer.
 func (f *Fory) Serialize(value any) ([]byte, error) {
-	defer func() {
-		f.writeCtx.Reset()
-		if f.metaContext != nil {
-			f.metaContext.Reset()
-		}
-	}()
+	defer f.resetWriteState()
 	// Check if value is nil interface OR a nil pointer/slice/map/etc.
 	// In Go, `*int32(nil)` wrapped in `any` is NOT equal to `nil`, but we need to serialize it as null.
 	if isNilValue(value) {
@@ -732,12 +722,7 @@ func (f *Fory) Serialize(value any) ([]byte, error) {
 // Deserialize deserializes data directly into the provided target value.
 // The target must be a pointer to the value to deserialize into.
 func (f *Fory) Deserialize(data []byte, v interface{}) error {
-	defer func() {
-		f.readCtx.Reset()
-		if f.metaContext != nil {
-			f.metaContext.Reset()
-		}
-	}()
+	defer f.resetReadState()
 	f.readCtx.SetData(data)
 
 	metaOffset := readHeader(f.readCtx)
@@ -786,6 +771,22 @@ func (f *Fory) Deserialize(data []byte, v interface{}) error {
 	return nil
 }
 
+// resetReadState resets read context state without allocation
+func (f *Fory) resetReadState() {
+	f.readCtx.Reset()
+	if f.metaContext != nil {
+		f.metaContext.Reset()
+	}
+}
+
+// resetWriteState resets write context state without allocation
+func (f *Fory) resetWriteState() {
+	f.writeCtx.Reset()
+	if f.metaContext != nil {
+		f.metaContext.Reset()
+	}
+}
+
 // SerializeTo serializes a value and appends the bytes to the provided buffer.
 // This is useful when you need to write multiple serialized values to the same buffer.
 // Returns error if serialization fails.
@@ -798,12 +799,7 @@ func (f *Fory) SerializeTo(buf *ByteBuffer, value interface{}) error {
 		return nil
 	}
 
-	defer func() {
-		f.writeCtx.Reset()
-		if f.metaContext != nil {
-			f.metaContext.Reset()
-		}
-	}()
+	defer f.resetWriteState()
 
 	// Temporarily swap buffer
 	origBuffer := f.writeCtx.buffer
@@ -878,12 +874,7 @@ finish:
 // This is useful when reading multiple serialized values from the same buffer.
 func (f *Fory) DeserializeFrom(buf *ByteBuffer, v interface{}) error {
 	// Reset contexts for each independent serialized object
-	defer func() {
-		f.readCtx.Reset()
-		if f.metaContext != nil {
-			f.metaContext.Reset()
-		}
-	}()
+	defer f.resetReadState()
 
 	// Temporarily swap buffer
 	origBuffer := f.readCtx.buffer

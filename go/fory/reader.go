@@ -67,8 +67,15 @@ func (c *ReadContext) Reset() {
 }
 
 // SetData sets new input data (for buffer reuse)
+// Reuses existing buffer to avoid allocation
 func (c *ReadContext) SetData(data []byte) {
-	c.buffer = NewByteBuffer(data)
+	if c.buffer == nil {
+		c.buffer = NewByteBuffer(data)
+	} else {
+		c.buffer.data = data
+		c.buffer.readerIndex = 0
+		c.buffer.writerIndex = len(data)
+	}
 }
 
 // Buffer returns the underlying buffer

@@ -218,7 +218,14 @@ func (td *TypeDef) buildTypeInfoWithResolver(resolver *TypeResolver) (TypeInfo, 
 			}
 		} else {
 			// Known struct type - use structSerializer with fieldDefs
-			serializer = newStructSerializer(type_, "", td.fieldDefs)
+			structSer := newStructSerializer(type_, "", td.fieldDefs)
+			// Eagerly initialize the struct serializer with pre-computed field metadata
+			if resolver != nil {
+				if err := structSer.initialize(resolver); err != nil {
+					return TypeInfo{}, err
+				}
+			}
+			serializer = structSer
 		}
 	}
 

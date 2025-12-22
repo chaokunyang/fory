@@ -289,6 +289,16 @@ func newTypeResolver(fory *Fory) *TypeResolver {
 	return r
 }
 
+// TrackRef returns whether reference tracking is enabled for this Fory instance
+func (r *TypeResolver) TrackRef() bool {
+	return r.fory.config.TrackRef
+}
+
+// Compatible returns whether schema evolution compatibility mode is enabled
+func (r *TypeResolver) Compatible() bool {
+	return r.fory.config.Compatible
+}
+
 func (r *TypeResolver) initialize() {
 	serializers := []struct {
 		reflect.Type

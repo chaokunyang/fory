@@ -19,6 +19,7 @@ package fory
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"math"
 	"reflect"
@@ -47,6 +48,10 @@ type FieldInfo struct {
 	// Pre-computed sizes and offsets (for fixed primitives)
 	FixedSize   int // 0 if not fixed-size, else 1/2/4/8
 	WriteOffset int // Offset within fixed-fields buffer region (sum of preceding field sizes)
+
+	// Pre-computed flags for serialization (computed at init time)
+	RefMode   RefMode // ref mode for serializer.Write/Read
+	WriteType bool    // whether to write type info (true for struct fields in compatible mode)
 }
 
 // readPrimitiveSliceToField reads a primitive slice directly and sets it at the field offset using unsafe.
@@ -240,6 +245,44 @@ func newStructSerializer(type_ reflect.Type, typeTag string, fieldDefs []FieldDe
 	}
 }
 
+// initialize performs eager initialization of the struct serializer.
+// This should be called at registration time to pre-compute all field metadata.
+func (s *structSerializer) initialize(typeResolver *TypeResolver) error {
+	if s.initialized {
+		return nil
+	}
+
+	// Ensure type is set
+	if s.type_ == nil {
+		return errors.New("struct type not set")
+	}
+
+	// Normalize pointer types
+	for s.type_.Kind() == reflect.Ptr {
+		s.type_ = s.type_.Elem()
+	}
+
+	// Build fields from type or fieldDefs
+	if s.fieldDefs != nil {
+		if err := s.initFieldsFromDefsWithResolver(typeResolver); err != nil {
+			return err
+		}
+	} else {
+		if err := s.initFieldsFromTypeResolver(typeResolver); err != nil {
+			return err
+		}
+	}
+
+	// Compute struct hash
+	s.structHash = s.computeHash()
+
+	// Set compatible mode flag
+	s.isCompatibleMode = typeResolver.Compatible()
+
+	s.initialized = true
+	return nil
+}
+
 func (s *structSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
 	switch refMode {
 	case RefModeTracking:
@@ -283,6 +326,14 @@ func (s *structSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 		return
 	}
 
+	// Lazy initialization
+	if !s.initialized {
+		if err := s.initialize(ctx.TypeResolver()); err != nil {
+			ctx.SetError(FromError(err))
+			return
+		}
+	}
+
 	buf := ctx.Buffer()
 
 	// Dereference pointer if needed
@@ -294,42 +345,9 @@ func (s *structSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 		value = value.Elem()
 	}
 
-	// Lazy initialization (will be removed when eager init is fully wired up)
-	if s.fields == nil {
-		if s.type_ == nil {
-			s.type_ = value.Type()
-		}
-		for s.type_.Kind() == reflect.Ptr {
-			s.type_ = s.type_.Elem()
-		}
-		if s.fieldDefs != nil {
-			if err := s.initFieldsFromDefsWithResolver(ctx.TypeResolver()); err != nil {
-				ctx.SetError(FromError(err))
-				return
-			}
-		} else {
-			if err := s.initFieldsFromContext(ctx); err != nil {
-				ctx.SetError(FromError(err))
-				return
-			}
-		}
-	}
-	if s.structHash == 0 {
-		s.structHash = s.computeHash()
-	}
-
 	// In compatible mode with meta share, struct hash is not written
 	if !ctx.Compatible() {
 		buf.WriteInt32(s.structHash)
-	}
-
-	// In compatible mode, always use ordered writing because:
-	// - Reader receives TypeDef from meta share and creates a serializer with fieldDefs
-	// - Reader then uses readFieldsInOrder which reads in TypeDef/sorted order
-	// - Writer must match this order, not grouped order
-	if ctx.Compatible() || s.fieldDefs != nil {
-		s.writeFieldsInOrder(ctx, value)
-		return
 	}
 
 	// Check if value is addressable for unsafe access
@@ -456,150 +474,11 @@ func (s *structSerializer) writeRemainingField(ctx *WriteContext, ptr unsafe.Poi
 	}
 
 	if field.Serializer != nil {
-		// For nested struct fields in compatible mode, write type info
-		writeType := ctx.Compatible() && isStructField(field.Type)
-		// Determine RefMode based on ctx.TrackRef() and field.Referencable
-		refMode := RefModeNone
-		if ctx.TrackRef() && field.Referencable {
-			refMode = RefModeTracking
-		} else if field.Referencable {
-			refMode = RefModeNullOnly
-		}
-		field.Serializer.Write(ctx, refMode, writeType, fieldValue)
+		// Use pre-computed RefMode and WriteType from field initialization
+		field.Serializer.Write(ctx, field.RefMode, field.WriteType, fieldValue)
 	} else {
 		ctx.WriteValue(fieldValue)
 	}
-}
-
-// writeFieldsInOrder writes fields in the order they appear in s.fields (TypeDef order)
-// This is used in compatible mode where Java expects fields in TypeDef order
-func (s *structSerializer) writeFieldsInOrder(ctx *WriteContext, value reflect.Value) {
-	buf := ctx.Buffer()
-	canUseUnsafe := value.CanAddr()
-	var ptr unsafe.Pointer
-	if canUseUnsafe {
-		ptr = unsafe.Pointer(value.UnsafeAddr())
-	}
-
-	for _, field := range s.fields {
-		if field.FieldIndex < 0 {
-			s.writeZeroField(ctx, field)
-			if ctx.HasError() {
-				return
-			}
-			continue
-		}
-
-		// Fast path for fixed-size primitive types (no ref flag)
-		if canUseUnsafe && isFixedSizePrimitive(field.StaticId, field.Referencable) {
-			fieldPtr := unsafe.Add(ptr, field.Offset)
-			switch field.StaticId {
-			case ConcreteTypeBool:
-				buf.WriteBool(*(*bool)(fieldPtr))
-			case ConcreteTypeInt8:
-				buf.WriteByte_(*(*byte)(fieldPtr))
-			case ConcreteTypeInt16:
-				buf.WriteInt16(*(*int16)(fieldPtr))
-			case ConcreteTypeFloat32:
-				buf.WriteFloat32(*(*float32)(fieldPtr))
-			case ConcreteTypeFloat64:
-				buf.WriteFloat64(*(*float64)(fieldPtr))
-			}
-			continue
-		}
-
-		// Fast path for varint primitive types (no ref flag)
-		// Skip fast path if field has a serializer with a non-primitive type (e.g., NAMED_ENUM)
-		if canUseUnsafe && isVarintPrimitive(field.StaticId, field.Referencable) && !fieldHasNonPrimitiveSerializer(field) {
-			fieldPtr := unsafe.Add(ptr, field.Offset)
-			switch field.StaticId {
-			case ConcreteTypeInt32:
-				buf.WriteVarint32(*(*int32)(fieldPtr))
-			case ConcreteTypeInt64:
-				buf.WriteVarint64(*(*int64)(fieldPtr))
-			case ConcreteTypeInt:
-				buf.WriteVarint64(int64(*(*int)(fieldPtr)))
-			}
-			continue
-		}
-
-		// Get field value for slow paths
-		fieldValue := value.Field(field.FieldIndex)
-
-		if isEnumField(field) {
-			writeEnumField(ctx, field, fieldValue)
-			if ctx.HasError() {
-				return
-			}
-			continue
-		}
-
-		// Slow path for primitives when canUseUnsafe is false
-		// These don't need ref flag according to xlang spec
-
-		// Handle non-nullable primitives without ref flag (slow path version)
-		if !field.Referencable && isPrimitiveStaticId(field.StaticId) {
-			switch field.StaticId {
-			case ConcreteTypeBool:
-				buf.WriteBool(fieldValue.Bool())
-			case ConcreteTypeInt8:
-				buf.WriteByte_(byte(fieldValue.Int()))
-			case ConcreteTypeInt16:
-				buf.WriteInt16(int16(fieldValue.Int()))
-			case ConcreteTypeInt32:
-				buf.WriteVarint32(int32(fieldValue.Int()))
-			case ConcreteTypeInt64, ConcreteTypeInt:
-				buf.WriteVarint64(fieldValue.Int())
-			case ConcreteTypeFloat32:
-				buf.WriteFloat32(float32(fieldValue.Float()))
-			case ConcreteTypeFloat64:
-				buf.WriteFloat64(fieldValue.Float())
-			default:
-				ctx.SetError(SerializationErrorf("unhandled primitive type: %v", field.StaticId))
-				return
-			}
-			continue
-		}
-
-		// Slow path for non-primitives (all need ref flag per xlang spec)
-		if field.Serializer != nil {
-			// Per xlang spec:
-			// - Nullable primitives (*int32, *float64, etc.): ref flag + data (NO type info)
-			// - Other types (struct, collections, etc.): ref flag + type info + data
-			writeType := !isInternalTypeWithoutTypeMeta(field.Type)
-			// Determine RefMode based on FieldDef's trackingRef and nullable flags
-			// In compatible mode with TypeDef, we must use the flags from the TypeDef
-			refMode := RefModeNone
-			if field.FieldDef.trackingRef {
-				refMode = RefModeTracking
-			} else if field.FieldDef.nullable || field.Referencable {
-				refMode = RefModeNullOnly
-			}
-			field.Serializer.Write(ctx, refMode, writeType, fieldValue)
-			if ctx.HasError() {
-				return
-			}
-		} else {
-			ctx.WriteValue(fieldValue)
-			if ctx.HasError() {
-				return
-			}
-		}
-	}
-}
-
-// writeZeroField writes a zero value for a field that doesn't exist in the current struct
-func (s *structSerializer) writeZeroField(ctx *WriteContext, field *FieldInfo) {
-	zeroValue := reflect.Zero(field.Type)
-	if field.Serializer != nil {
-		refMode := RefModeNone
-		if field.Referencable {
-			refMode = RefModeTracking
-		}
-		field.Serializer.Write(ctx, refMode, false, zeroValue)
-		return
-	}
-	ctx.WriteValue(zeroValue)
 }
 
 func (s *structSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) {
@@ -660,6 +539,14 @@ func (s *structSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value 
 		return
 	}
 
+	// Lazy initialization
+	if !s.initialized {
+		if err := s.initialize(ctx.TypeResolver()); err != nil {
+			ctx.SetError(FromError(err))
+			return
+		}
+	}
+
 	buf := ctx.Buffer()
 	if value.Kind() == reflect.Ptr {
 		if value.IsNil() {
@@ -667,30 +554,6 @@ func (s *structSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value 
 		}
 		value = value.Elem()
 		type_ = type_.Elem()
-	}
-
-	// Lazy initialization (will be removed when eager init is fully wired up)
-	if s.fields == nil {
-		if s.type_ == nil {
-			s.type_ = type_
-		}
-		for s.type_.Kind() == reflect.Ptr {
-			s.type_ = s.type_.Elem()
-		}
-		if s.fieldDefs != nil {
-			if err := s.initFieldsFromDefsWithResolver(ctx.TypeResolver()); err != nil {
-				ctx.SetError(FromError(err))
-				return
-			}
-		} else {
-			if err := s.initFieldsFromContext(ctx); err != nil {
-				ctx.SetError(FromError(err))
-				return
-			}
-		}
-	}
-	if s.structHash == 0 {
-		s.structHash = s.computeHash()
 	}
 
 	// In compatible mode with meta share, struct hash is not written
@@ -706,9 +569,9 @@ func (s *structSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value 
 		}
 	}
 
-	// In compatible mode, always use ordered reading to match write path ordering
-	// Also use ordered reading when we have fieldDefs from TypeDef
-	if ctx.Compatible() || s.fieldDefs != nil {
+	// Use ordered reading only when TypeDef differs from local type (schema evolution)
+	// When types match (typeDefDiffers=false), use grouped reading for better performance
+	if s.typeDefDiffers {
 		s.readFieldsInOrder(ctx, value)
 		return
 	}
@@ -815,10 +678,8 @@ func (s *structSerializer) readRemainingField(ctx *ReadContext, ptr unsafe.Point
 	}
 
 	if field.Serializer != nil {
-		// For nested struct fields in compatible mode, read type info
-		readType := ctx.Compatible() && isStructField(field.Type)
-		// Per xlang spec, all non-primitive fields have ref flag
-		field.Serializer.Read(ctx, RefModeTracking, readType, fieldValue)
+		// Use pre-computed RefMode and WriteType from field initialization
+		field.Serializer.Read(ctx, field.RefMode, field.WriteType, fieldValue)
 	} else {
 		ctx.ReadValue(fieldValue)
 	}
@@ -923,19 +784,8 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 
 		// Slow path for non-primitives (all need ref flag per xlang spec)
 		if field.Serializer != nil {
-			// Per xlang spec:
-			// - Nullable primitives (*int32, *float64, etc.): ref flag + data (NO type info)
-			// - Other types (struct, collections, etc.): ref flag + type info + data
-			readType := !isInternalTypeWithoutTypeMeta(field.Type)
-			// Determine RefMode based on FieldDef's trackingRef and nullable flags
-			// In compatible mode with TypeDef, we must use the flags from the remote TypeDef
-			refMode := RefModeNone
-			if field.FieldDef.trackingRef {
-				refMode = RefModeTracking
-			} else if field.FieldDef.nullable || field.Referencable {
-				refMode = RefModeNullOnly
-			}
-			field.Serializer.Read(ctx, refMode, readType, fieldValue)
+			// Use pre-computed RefMode and WriteType from field initialization
+			field.Serializer.Read(ctx, field.RefMode, field.WriteType, fieldValue)
 			if ctx.HasError() {
 				return
 			}
@@ -979,9 +829,8 @@ func (s *structSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, t
 }
 
 // initFieldsFromContext initializes fields using context's type resolver (for WriteContext)
-func (s *structSerializer) initFieldsFromContext(ctx interface{ TypeResolver() *TypeResolver }) error {
-	typeResolver := ctx.TypeResolver()
-
+// initFieldsFromTypeResolver initializes fields from local struct type using TypeResolver
+func (s *structSerializer) initFieldsFromTypeResolver(typeResolver *TypeResolver) error {
 	// If we have fieldDefs from type_def (remote meta), use them
 	if len(s.fieldDefs) > 0 {
 		return s.initFieldsFromDefsWithResolver(typeResolver)
@@ -1034,6 +883,15 @@ func (s *structSerializer) initFieldsFromContext(ctx interface{ TypeResolver() *
 		if isUserDefinedType(int16(internalId)) || internalId == ENUM || internalId == NAMED_ENUM {
 			nullableFlag = true
 		}
+		// Pre-compute RefMode based on trackRef and nullable flag
+		refMode := RefModeNone
+		if typeResolver.TrackRef() && nullableFlag {
+			refMode = RefModeTracking
+		} else if nullableFlag {
+			refMode = RefModeNullOnly
+		}
+		// Pre-compute WriteType: true for struct fields in compatible mode
+		writeType := typeResolver.Compatible() && isStructField(fieldType)
 		fieldInfo := &FieldInfo{
 			Name:         SnakeCase(field.Name),
 			Offset:       field.Offset,
@@ -1043,6 +901,8 @@ func (s *structSerializer) initFieldsFromContext(ctx interface{ TypeResolver() *
 			Serializer:   fieldSerializer,
 			Referencable: nullableFlag, // Use same logic as TypeDef's nullable flag for consistent ref handling
 			FieldIndex:   i,
+			RefMode:      refMode,
+			WriteType:    writeType,
 		}
 		fields = append(fields, fieldInfo)
 		fieldNames = append(fieldNames, fieldInfo.Name)
@@ -1124,6 +984,16 @@ func (s *structSerializer) initFieldsFromDefsWithResolver(typeResolver *TypeReso
 			}
 			// Get TypeId from FieldType's TypeId method
 			fieldTypeId := def.fieldType.TypeId()
+			referencable := fieldNeedWriteRef(def.fieldType.TypeId(), def.nullable)
+			// Pre-compute RefMode based on trackRef and FieldDef flags
+			refMode := RefModeNone
+			if def.trackingRef {
+				refMode = RefModeTracking
+			} else if referencable || def.nullable {
+				refMode = RefModeNullOnly
+			}
+			// Pre-compute WriteType: true for struct fields in compatible mode
+			writeType := typeResolver.Compatible() && isStructField(remoteType)
 			fieldInfo := &FieldInfo{
 				Name:         def.name,
 				Offset:       0,
@@ -1131,14 +1001,17 @@ func (s *structSerializer) initFieldsFromDefsWithResolver(typeResolver *TypeReso
 				StaticId:     GetStaticTypeId(remoteType),
 				TypeId:       fieldTypeId,
 				Serializer:   fieldSerializer,
-				Referencable: fieldNeedWriteRef(def.fieldType.TypeId(), def.nullable), // Use remote nullable flag
-				FieldIndex:   -1,                                                      // Mark as non-existent field to discard data
-				FieldDef:     def,                                                     // Save original FieldDef for skipping
+				Referencable: referencable, // Use remote nullable flag
+				FieldIndex:   -1,           // Mark as non-existent field to discard data
+				FieldDef:     def,          // Save original FieldDef for skipping
+				RefMode:      refMode,
+				WriteType:    writeType,
 			}
 			fields = append(fields, fieldInfo)
 		}
 		s.fields = fields
 		s.groupFields()
+		s.typeDefDiffers = true // Unknown type, must use ordered reading
 		return nil
 	}
 
@@ -1322,6 +1195,16 @@ func (s *structSerializer) initFieldsFromDefsWithResolver(typeResolver *TypeReso
 
 		// Get TypeId from FieldType's TypeId method
 		fieldTypeId := def.fieldType.TypeId()
+		referencable := fieldNeedWriteRef(def.fieldType.TypeId(), def.nullable)
+		// Pre-compute RefMode based on FieldDef flags (trackingRef and nullable)
+		refMode := RefModeNone
+		if def.trackingRef {
+			refMode = RefModeTracking
+		} else if referencable || def.nullable {
+			refMode = RefModeNullOnly
+		}
+		// Pre-compute WriteType: true for struct fields in compatible mode
+		writeType := typeResolver.Compatible() && isStructField(fieldType)
 		fieldInfo := &FieldInfo{
 			Name:         def.name,
 			Offset:       offset,
@@ -1329,15 +1212,29 @@ func (s *structSerializer) initFieldsFromDefsWithResolver(typeResolver *TypeReso
 			StaticId:     GetStaticTypeId(fieldType),
 			TypeId:       fieldTypeId,
 			Serializer:   fieldSerializer,
-			Referencable: fieldNeedWriteRef(def.fieldType.TypeId(), def.nullable), // Use remote nullable flag
+			Referencable: referencable, // Use remote nullable flag
 			FieldIndex:   fieldIndex,
 			FieldDef:     def, // Save original FieldDef for skipping
+			RefMode:      refMode,
+			WriteType:    writeType,
 		}
 		fields = append(fields, fieldInfo)
 	}
 
 	s.fields = fields
 	s.groupFields()
+
+	// Compute typeDefDiffers: true if any field doesn't exist locally or has type mismatch
+	// When typeDefDiffers is false, we can use grouped reading for better performance
+	s.typeDefDiffers = false
+	for _, field := range fields {
+		if field.FieldIndex < 0 {
+			// Field exists in remote TypeDef but not locally
+			s.typeDefDiffers = true
+			break
+		}
+	}
+
 	return nil
 }
 

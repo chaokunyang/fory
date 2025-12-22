@@ -438,7 +438,8 @@ func generateStructSerializer(buf *bytes.Buffer, s *StructInfo) error {
 // generateWriteMethod generates the Write method that handles ref/type flags
 func generateWriteMethod(buf *bytes.Buffer, s *StructInfo) error {
 	fmt.Fprintf(buf, "// Write is the entry point for serialization with ref/type handling\n")
-	fmt.Fprintf(buf, "func (g %s_ForyGenSerializer) Write(ctx *fory.WriteContext, refMode fory.RefMode, writeType bool, value reflect.Value) {\n", s.Name)
+	fmt.Fprintf(buf, "func (g %s_ForyGenSerializer) Write(ctx *fory.WriteContext, refMode fory.RefMode, writeType bool, hasGenerics bool, value reflect.Value) {\n", s.Name)
+	fmt.Fprintf(buf, "\t_ = hasGenerics // not used for struct serializers\n")
 	fmt.Fprintf(buf, "\tswitch refMode {\n")
 	fmt.Fprintf(buf, "\tcase fory.RefModeTracking:\n")
 	fmt.Fprintf(buf, "\t\tif !value.IsValid() || (value.Kind() == reflect.Ptr && value.IsNil()) {\n")
@@ -471,7 +472,8 @@ func generateWriteMethod(buf *bytes.Buffer, s *StructInfo) error {
 // generateReadMethod generates the Read method that handles ref/type flags
 func generateReadMethod(buf *bytes.Buffer, s *StructInfo) error {
 	fmt.Fprintf(buf, "// Read is the entry point for deserialization with ref/type handling\n")
-	fmt.Fprintf(buf, "func (g %s_ForyGenSerializer) Read(ctx *fory.ReadContext, refMode fory.RefMode, readType bool, value reflect.Value) {\n", s.Name)
+	fmt.Fprintf(buf, "func (g %s_ForyGenSerializer) Read(ctx *fory.ReadContext, refMode fory.RefMode, readType bool, hasGenerics bool, value reflect.Value) {\n", s.Name)
+	fmt.Fprintf(buf, "\t_ = hasGenerics // not used for struct serializers\n")
 	fmt.Fprintf(buf, "\terr := ctx.Err() // Get error pointer for deferred error checking\n")
 	fmt.Fprintf(buf, "\tswitch refMode {\n")
 	fmt.Fprintf(buf, "\tcase fory.RefModeTracking:\n")
@@ -508,7 +510,7 @@ func generateReadMethod(buf *bytes.Buffer, s *StructInfo) error {
 func generateReadWithTypeInfoMethod(buf *bytes.Buffer, s *StructInfo) error {
 	fmt.Fprintf(buf, "// ReadWithTypeInfo deserializes with pre-read type information\n")
 	fmt.Fprintf(buf, "func (g %s_ForyGenSerializer) ReadWithTypeInfo(ctx *fory.ReadContext, refMode fory.RefMode, typeInfo *fory.TypeInfo, value reflect.Value) {\n", s.Name)
-	fmt.Fprintf(buf, "\tg.Read(ctx, refMode, false, value)\n")
+	fmt.Fprintf(buf, "\tg.Read(ctx, refMode, false, false, value)\n")
 	fmt.Fprintf(buf, "}\n\n")
 	return nil
 }

@@ -62,7 +62,7 @@ func SkipFieldValueWithTypeFlag(ctx *ReadContext, fieldDef FieldDef, readRefFlag
                 // Use the serializer to read and discard the value
                 var dummy interface{}
                 dummyVal := reflect.ValueOf(&dummy).Elem()
-                serializer.Read(ctx, RefModeNone, false, dummyVal)
+                serializer.Read(ctx, RefModeNone, false, false, dummyVal)
                 return
             }
             // If no serializer is registered, we can't skip this type
@@ -77,7 +77,7 @@ func SkipFieldValueWithTypeFlag(ctx *ReadContext, fieldDef FieldDef, readRefFlag
                 // Use the serializer to read and discard the value
                 var dummy interface{}
                 dummyVal := reflect.ValueOf(&dummy).Elem()
-                typeInfo.Serializer.Read(ctx, RefModeNone, false, dummyVal)
+                typeInfo.Serializer.Read(ctx, RefModeNone, false, false, dummyVal)
                 return
             }
             ctx.SetError(DeserializationError("cannot skip NAMED_EXT type: no serializer found"))
@@ -557,7 +557,7 @@ func skipValue(ctx *ReadContext, fieldDef FieldDef, readRefFlag bool, isField bo
                 // Create a dummy value to read into
                 var dummy interface{}
                 dummyVal := reflect.ValueOf(&dummy).Elem()
-                serializer.Read(ctx, RefModeNone, false, dummyVal)
+                serializer.Read(ctx, RefModeNone, false, false, dummyVal)
                 return
             }
             // If no serializer is registered, we can't skip this type

@@ -328,15 +328,16 @@ func (c *WriteContext) WriteByteSlice(value []byte, refMode RefMode, writeTypeIn
 	c.buffer.WriteBinary(value)
 }
 
-// WriteStringSlice writes []string with ref/type info using LIST protocol
-func (c *WriteContext) WriteStringSlice(value []string, refMode RefMode, writeTypeInfo bool) {
+// WriteStringSlice writes []string with ref/type info using LIST protocol.
+// hasGenerics indicates whether element type is known from TypeDef/generics (struct field context).
+func (c *WriteContext) WriteStringSlice(value []string, refMode RefMode, writeTypeInfo bool, hasGenerics bool) {
 	if refMode != RefModeNone {
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {
 		c.WriteTypeId(LIST)
 	}
-	WriteStringSlice(c.buffer, value)
+	WriteStringSlice(c.buffer, value, hasGenerics)
 }
 
 // WriteStringStringMap writes map[string]string with ref/type info
@@ -497,5 +498,5 @@ func (c *WriteContext) WriteValue(value reflect.Value) {
 	}
 
 	// Use serializer's Write method which handles ref tracking and type info internally
-	typeInfo.Serializer.Write(c, RefModeTracking, true, value)
+	typeInfo.Serializer.Write(c, RefModeTracking, true, false, value)
 }

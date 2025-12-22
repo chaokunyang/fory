@@ -81,7 +81,7 @@ func (s arraySerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 	}
 }
 
-func (s arraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
+func (s arraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
 	writeArrayRefAndType(ctx, refMode, writeType, value, -LIST)
 	if ctx.HasError() {
 		return
@@ -98,7 +98,7 @@ func (s arraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value re
 	}
 }
 
-func (s arraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) {
+func (s arraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, hasGenerics bool, value reflect.Value) {
 	done := readArrayRefAndType(ctx, refMode, readType, value)
 	if done || ctx.HasError() {
 		return
@@ -107,7 +107,7 @@ func (s arraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, 
 }
 
 func (s arraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
-	s.Read(ctx, refMode, false, value)
+	s.Read(ctx, refMode, false, false, value)
 }
 
 // arrayConcreteValueSerializer serialize an array/*array
@@ -190,7 +190,7 @@ func (s *arrayConcreteValueSerializer) WriteData(ctx *WriteContext, value reflec
 		// Handle null values (only for pointer element types)
 		if hasNull && elem.IsNil() {
 			if trackRefs {
-				s.elemSerializer.Write(ctx, RefModeTracking, false, elem)
+				s.elemSerializer.Write(ctx, RefModeTracking, false, false, elem)
 				if ctx.HasError() {
 					return
 				}
@@ -202,7 +202,7 @@ func (s *arrayConcreteValueSerializer) WriteData(ctx *WriteContext, value reflec
 
 		// Write element
 		if trackRefs {
-			s.elemSerializer.Write(ctx, RefModeTracking, false, elem)
+			s.elemSerializer.Write(ctx, RefModeTracking, false, false, elem)
 			if ctx.HasError() {
 				return
 			}
@@ -215,7 +215,7 @@ func (s *arrayConcreteValueSerializer) WriteData(ctx *WriteContext, value reflec
 	}
 }
 
-func (s *arrayConcreteValueSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
+func (s *arrayConcreteValueSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
 	writeArrayRefAndType(ctx, refMode, writeType, value, -LIST)
 	if ctx.HasError() {
 		return
@@ -256,7 +256,7 @@ func (s *arrayConcreteValueSerializer) ReadData(ctx *ReadContext, type_ reflect.
 
 		// When tracking refs, the element serializer handles ref flags
 		if trackRefs {
-			s.elemSerializer.Read(ctx, RefModeTracking, false, elem)
+			s.elemSerializer.Read(ctx, RefModeTracking, false, false, elem)
 		} else {
 			s.elemSerializer.ReadData(ctx, elem.Type(), elem)
 		}
@@ -266,7 +266,7 @@ func (s *arrayConcreteValueSerializer) ReadData(ctx *ReadContext, type_ reflect.
 	}
 }
 
-func (s *arrayConcreteValueSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) {
+func (s *arrayConcreteValueSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, hasGenerics bool, value reflect.Value) {
 	done := readArrayRefAndType(ctx, refMode, readType, value)
 	if done || ctx.HasError() {
 		return
@@ -281,7 +281,7 @@ func (s *arrayConcreteValueSerializer) Read(ctx *ReadContext, refMode RefMode, r
 }
 
 func (s *arrayConcreteValueSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
-	s.Read(ctx, refMode, false, value)
+	s.Read(ctx, refMode, false, false, value)
 }
 
 // arrayDynSerializer wraps sliceDynSerializer for arrays with interface element types.
@@ -304,7 +304,7 @@ func (s arrayDynSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 	s.sliceSerializer.WriteData(ctx, slice)
 }
 
-func (s arrayDynSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
+func (s arrayDynSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
 	writeArrayRefAndType(ctx, refMode, writeType, value, LIST)
 	if ctx.HasError() {
 		return
@@ -330,7 +330,7 @@ func (s arrayDynSerializer) ReadData(ctx *ReadContext, _ reflect.Type, value ref
 	}
 }
 
-func (s arrayDynSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) {
+func (s arrayDynSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, hasGenerics bool, value reflect.Value) {
 	done := readArrayRefAndType(ctx, refMode, readType, value)
 	if done || ctx.HasError() {
 		return
@@ -339,7 +339,7 @@ func (s arrayDynSerializer) Read(ctx *ReadContext, refMode RefMode, readType boo
 }
 
 func (s arrayDynSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
-	s.Read(ctx, refMode, false, value)
+	s.Read(ctx, refMode, false, false, value)
 }
 
 type byteArraySerializer struct{}
@@ -359,7 +359,7 @@ func (s byteArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 	}
 }
 
-func (s byteArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
+func (s byteArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
 	writeArrayRefAndType(ctx, refMode, writeType, value, BINARY)
 	if ctx.HasError() {
 		return
@@ -383,7 +383,7 @@ func (s byteArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, valu
 	}
 }
 
-func (s byteArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) {
+func (s byteArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, hasGenerics bool, value reflect.Value) {
 	done := readArrayRefAndType(ctx, refMode, readType, value)
 	if done || ctx.HasError() {
 		return
@@ -392,5 +392,5 @@ func (s byteArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bo
 }
 
 func (s byteArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
-	s.Read(ctx, refMode, false, value)
+	s.Read(ctx, refMode, false, false, value)
 }

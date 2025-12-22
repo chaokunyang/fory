@@ -133,7 +133,7 @@ func (s stringSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 	writeString(ctx.buffer, value.String())
 }
 
-func (s stringSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
+func (s stringSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
 	if refMode != RefModeNone {
 		// String is non-primitive, needs ref flag
 		ctx.buffer.WriteInt8(NotNullValueFlag)
@@ -153,7 +153,7 @@ func (s stringSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value r
 	value.SetString(str)
 }
 
-func (s stringSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) {
+func (s stringSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, hasGenerics bool, value reflect.Value) {
 	err := ctx.Err()
 	if refMode != RefModeNone {
 		// String is non-primitive, needs ref flag
@@ -173,13 +173,13 @@ func (s stringSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool,
 }
 
 func (s stringSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
-	s.Read(ctx, refMode, false, value)
+	s.Read(ctx, refMode, false, false, value)
 }
 
 // ptrToStringSerializer serializes a pointer to string
 type ptrToStringSerializer struct{}
 
-func (s ptrToStringSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
+func (s ptrToStringSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
 	if refMode != RefModeNone {
 		if value.IsNil() {
 			ctx.buffer.WriteInt8(NullFlag)
@@ -198,7 +198,7 @@ func (s ptrToStringSerializer) WriteData(ctx *WriteContext, value reflect.Value)
 	writeString(ctx.buffer, *str)
 }
 
-func (s ptrToStringSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) {
+func (s ptrToStringSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, hasGenerics bool, value reflect.Value) {
 	err := ctx.Err()
 	if refMode != RefModeNone {
 		if ctx.buffer.ReadInt8(err) == NullFlag {
@@ -226,5 +226,5 @@ func (s ptrToStringSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, va
 }
 
 func (s ptrToStringSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
-	s.Read(ctx, refMode, false, value)
+	s.Read(ctx, refMode, false, false, value)
 }

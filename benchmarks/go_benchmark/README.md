@@ -89,12 +89,12 @@ Example results on Apple M1 Pro:
 
 | Data Type    | Operation   | Fory (ops/s) | Protobuf (ops/s) | Msgpack (ops/s) | Fory vs PB | Fory vs MP |
 | ------------ | ----------- | ------------ | ---------------- | --------------- | ---------- | ---------- |
-| Struct       | Serialize   | 8.40M        | 4.11M            | 2.08M           | 2.04x      | 4.04x      |
-| Struct       | Deserialize | 4.35M        | 4.74M            | 1.29M           | 0.92x      | 3.37x      |
-| Sample       | Serialize   | 1.78M        | 1.33M            | 288K            | 1.34x      | 6.18x      |
-| Sample       | Deserialize | 452K         | 1.00M            | 150K            | 0.45x      | 3.02x      |
-| Mediacontent | Serialize   | 1.42M        | 952K             | 479K            | 1.49x      | 2.96x      |
-| Mediacontent | Deserialize | 761K         | 736K             | 307K            | 1.03x      | 2.48x      |
+| Struct       | Serialize   | 23.52M       | 10.83M           | 5.19M           | 2.17x      | 4.54x      |
+| Struct       | Deserialize | 15.01M       | 11.97M           | 3.28M           | 1.25x      | 4.58x      |
+| Sample       | Serialize   | 8.26M        | 3.01M            | 750K            | 2.75x      | 11.01x     |
+| Sample       | Deserialize | 4.52M        | 2.51M            | 387K            | 1.80x      | 11.70x     |
+| Mediacontent | Serialize   | 4.93M        | 2.30M            | 1.17M           | 2.14x      | 4.21x      |
+| Mediacontent | Deserialize | 2.74M        | 1.87M            | 751K            | 1.46x      | 3.65x      |
 
 _Note: Results vary by hardware. Run benchmarks on your own system for accurate comparisons._
 

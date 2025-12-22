@@ -153,7 +153,7 @@ func (s mapSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 				if isXlang && keySerializer != nil {
 					if s.keyReferencable {
 						buf.WriteInt8(NULL_VALUE_KEY_DECL_TYPE_TRACKING_REF)
-						keySerializer.Write(ctx, RefModeTracking, false, entryKey)
+						keySerializer.Write(ctx, RefModeTracking, false, false, entryKey)
 						if ctx.HasError() {
 							return
 						}
@@ -177,7 +177,7 @@ func (s mapSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 					if isXlang && valueSerializer != nil {
 						if s.valueReferencable {
 							buf.WriteInt8(NULL_KEY_VALUE_DECL_TYPE_TRACKING_REF)
-							valueSerializer.Write(ctx, RefModeTracking, false, entryVal)
+							valueSerializer.Write(ctx, RefModeTracking, false, false, entryVal)
 							if ctx.HasError() {
 								return
 							}
@@ -263,13 +263,13 @@ func (s mapSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 			}
 
 			// WriteData key with optional ref tracking
-			keySerializer.Write(ctx, keyRefMode, false, entryKey)
+			keySerializer.Write(ctx, keyRefMode, false, false, entryKey)
 			if ctx.HasError() {
 				return
 			}
 
 			// WriteData value with optional ref tracking
-			valueSerializer.Write(ctx, valueRefMode, false, entryVal)
+			valueSerializer.Write(ctx, valueRefMode, false, false, entryVal)
 			if ctx.HasError() {
 				return
 			}
@@ -295,7 +295,7 @@ func (s mapSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 	}
 }
 
-func (s mapSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
+func (s mapSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
 	done := writeMapRefAndType(ctx, refMode, writeType, value)
 	if done || ctx.HasError() {
 		return
@@ -440,7 +440,7 @@ func (s mapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value refl
 						if keyTypeInfo != nil {
 							keySer.ReadWithTypeInfo(ctx, keyRefMode, keyTypeInfo, k)
 						} else {
-							keySer.Read(ctx, keyRefMode, false, k)
+							keySer.Read(ctx, keyRefMode, false, false, k)
 						}
 						if ctx.HasError() {
 							return
@@ -531,7 +531,7 @@ func (s mapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value refl
 						if valueTypeInfo != nil {
 							valSer.ReadWithTypeInfo(ctx, valueRefMode, valueTypeInfo, v)
 						} else {
-							valSer.Read(ctx, valueRefMode, false, v)
+							valSer.Read(ctx, valueRefMode, false, false, v)
 						}
 						if ctx.HasError() {
 							return
@@ -610,7 +610,7 @@ func (s mapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value refl
 			if keyTypeInfo != nil {
 				keySer.ReadWithTypeInfo(ctx, keyRefMode, keyTypeInfo, k)
 			} else {
-				keySer.Read(ctx, keyRefMode, false, k)
+				keySer.Read(ctx, keyRefMode, false, false, k)
 			}
 			if ctx.HasError() {
 				return
@@ -627,7 +627,7 @@ func (s mapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value refl
 			if valueTypeInfo != nil {
 				valSer.ReadWithTypeInfo(ctx, valRefMode, valueTypeInfo, v)
 			} else {
-				valSer.Read(ctx, valRefMode, false, v)
+				valSer.Read(ctx, valRefMode, false, false, v)
 			}
 			if ctx.HasError() {
 				return
@@ -651,7 +651,7 @@ func (s mapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value refl
 	}
 }
 
-func (s mapSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) {
+func (s mapSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, hasGenerics bool, value reflect.Value) {
 	done := readMapRefAndType(ctx, refMode, readType, value)
 	if done || ctx.HasError() {
 		return
@@ -661,7 +661,7 @@ func (s mapSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, va
 
 func (s mapSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
 	// typeInfo is already read, don't read it again
-	s.Read(ctx, refMode, false, value)
+	s.Read(ctx, refMode, false, false, value)
 }
 
 func (s mapSerializer) readObj(

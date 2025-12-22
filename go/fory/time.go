@@ -31,7 +31,7 @@ type Date struct {
 
 type dateSerializer struct{}
 
-func (s dateSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
+func (s dateSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
 	if refMode != RefModeNone {
 		ctx.buffer.WriteInt8(NotNullValueFlag)
 	}
@@ -48,7 +48,7 @@ func (s dateSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 	ctx.buffer.WriteInt32(int32(diff.Hours() / 24))
 }
 
-func (s dateSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) {
+func (s dateSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, hasGenerics bool, value reflect.Value) {
 	err := ctx.Err()
 	if refMode != RefModeNone {
 		if ctx.buffer.ReadInt8(err) == NullFlag {
@@ -72,7 +72,7 @@ func (s dateSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value ref
 }
 
 func (s dateSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
-	s.Read(ctx, refMode, false, value)
+	s.Read(ctx, refMode, false, false, value)
 }
 
 type timeSerializer struct{}
@@ -81,7 +81,7 @@ func (s timeSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 	ctx.buffer.WriteInt64(GetUnixMicro(value.Interface().(time.Time)))
 }
 
-func (s timeSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
+func (s timeSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
 	if refMode != RefModeNone {
 		ctx.buffer.WriteInt8(NotNullValueFlag)
 	}
@@ -96,7 +96,7 @@ func (s timeSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value ref
 	value.Set(reflect.ValueOf(CreateTimeFromUnixMicro(ctx.buffer.ReadInt64(err))))
 }
 
-func (s timeSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) {
+func (s timeSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, hasGenerics bool, value reflect.Value) {
 	err := ctx.Err()
 	if refMode != RefModeNone {
 		if ctx.buffer.ReadInt8(err) == NullFlag {
@@ -113,5 +113,5 @@ func (s timeSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, v
 }
 
 func (s timeSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
-	s.Read(ctx, refMode, false, value)
+	s.Read(ctx, refMode, false, false, value)
 }

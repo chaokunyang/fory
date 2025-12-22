@@ -43,10 +43,12 @@ type Serializer interface {
 	//     - RefModeNullOnly: only write null flag (NullFlag or NotNullValueFlag)
 	//     - RefModeTracking: full reference tracking with WriteRefOrNull
 	//   - writeType: when true, writes type information; when false, skips it
+	//   - hasGenerics: when true, indicates element types are known from TypeDef (struct field context),
+	//     so container serializers can skip writing element type info
 	//
 	// Errors are set on the context via ctx.SetError() and should be checked
 	// at appropriate boundaries using ctx.HasError() or ctx.CheckError().
-	Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value)
+	Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value)
 
 	// WriteData serializes using reflect.Value.
 	// Does NOT write ref/type info - caller handles that.
@@ -70,10 +72,12 @@ type Serializer interface {
 	//     - RefModeNullOnly: only read null flag
 	//     - RefModeTracking: full reference tracking with TryPreserveRefId
 	//   - readType: when true, reads type information from buffer; when false, skips it
+	//   - hasGenerics: when true, indicates element types are known from TypeDef (struct field context),
+	//     so container serializers can skip reading element type info
 	//
 	// Errors are set on the context via ctx.SetError() and should be checked
 	// at appropriate boundaries using ctx.HasError() or ctx.CheckError().
-	Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value)
+	Read(ctx *ReadContext, refMode RefMode, readType bool, hasGenerics bool, value reflect.Value)
 
 	// ReadData deserializes directly into the provided reflect.Value.
 	// Does NOT read ref/type info - caller handles that.
@@ -157,7 +161,8 @@ func (s *extensionSerializerAdapter) WriteData(ctx *WriteContext, value reflect.
 	}
 }
 
-func (s *extensionSerializerAdapter) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
+func (s *extensionSerializerAdapter) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
+	_ = hasGenerics // not used for extension serializers
 	buf := ctx.Buffer()
 	switch refMode {
 	case RefModeTracking:
@@ -198,7 +203,8 @@ func (s *extensionSerializerAdapter) ReadData(ctx *ReadContext, type_ reflect.Ty
 	value.Set(reflect.ValueOf(result))
 }
 
-func (s *extensionSerializerAdapter) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) {
+func (s *extensionSerializerAdapter) Read(ctx *ReadContext, refMode RefMode, readType bool, hasGenerics bool, value reflect.Value) {
+	_ = hasGenerics // not used for extension serializers
 	buf := ctx.Buffer()
 	ctxErr := ctx.Err()
 	switch refMode {
@@ -225,5 +231,5 @@ func (s *extensionSerializerAdapter) Read(ctx *ReadContext, refMode RefMode, rea
 }
 
 func (s *extensionSerializerAdapter) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
-	s.Read(ctx, refMode, false, value)
+	s.Read(ctx, refMode, false, false, value)
 }

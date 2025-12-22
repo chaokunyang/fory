@@ -52,7 +52,7 @@ func (s boolArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 	}
 }
 
-func (s boolArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
+func (s boolArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
 	writeArrayRefAndType(ctx, refMode, writeType, value, BOOL_ARRAY)
 	if ctx.HasError() {
 		return
@@ -79,7 +79,7 @@ func (s boolArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, valu
 	}
 }
 
-func (s boolArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) {
+func (s boolArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, hasGenerics bool, value reflect.Value) {
 	done := readArrayRefAndType(ctx, refMode, readType, value)
 	if done || ctx.HasError() {
 		return
@@ -88,7 +88,7 @@ func (s boolArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bo
 }
 
 func (s boolArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
-	s.Read(ctx, refMode, false, value)
+	s.Read(ctx, refMode, false, false, value)
 }
 
 // ============================================================================
@@ -117,7 +117,7 @@ func (s int8ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 	}
 }
 
-func (s int8ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
+func (s int8ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
 	writeArrayRefAndType(ctx, refMode, writeType, value, INT8_ARRAY)
 	if ctx.HasError() {
 		return
@@ -144,7 +144,7 @@ func (s int8ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, valu
 	}
 }
 
-func (s int8ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) {
+func (s int8ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, hasGenerics bool, value reflect.Value) {
 	done := readArrayRefAndType(ctx, refMode, readType, value)
 	if done || ctx.HasError() {
 		return
@@ -153,7 +153,7 @@ func (s int8ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bo
 }
 
 func (s int8ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
-	s.Read(ctx, refMode, false, value)
+	s.Read(ctx, refMode, false, false, value)
 }
 
 // ============================================================================
@@ -183,7 +183,7 @@ func (s int16ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) 
 	}
 }
 
-func (s int16ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
+func (s int16ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
 	writeArrayRefAndType(ctx, refMode, writeType, value, INT16_ARRAY)
 	if ctx.HasError() {
 		return
@@ -216,7 +216,7 @@ func (s int16ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, val
 	}
 }
 
-func (s int16ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) {
+func (s int16ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, hasGenerics bool, value reflect.Value) {
 	done := readArrayRefAndType(ctx, refMode, readType, value)
 	if done || ctx.HasError() {
 		return
@@ -225,7 +225,7 @@ func (s int16ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType b
 }
 
 func (s int16ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
-	s.Read(ctx, refMode, false, value)
+	s.Read(ctx, refMode, false, false, value)
 }
 
 // ============================================================================
@@ -255,7 +255,7 @@ func (s int32ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) 
 	}
 }
 
-func (s int32ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
+func (s int32ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
 	writeArrayRefAndType(ctx, refMode, writeType, value, INT32_ARRAY)
 	if ctx.HasError() {
 		return
@@ -288,7 +288,7 @@ func (s int32ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, val
 	}
 }
 
-func (s int32ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) {
+func (s int32ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, hasGenerics bool, value reflect.Value) {
 	done := readArrayRefAndType(ctx, refMode, readType, value)
 	if done || ctx.HasError() {
 		return
@@ -297,7 +297,7 @@ func (s int32ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType b
 }
 
 func (s int32ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
-	s.Read(ctx, refMode, false, value)
+	s.Read(ctx, refMode, false, false, value)
 }
 
 // ============================================================================
@@ -327,7 +327,7 @@ func (s int64ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) 
 	}
 }
 
-func (s int64ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
+func (s int64ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
 	writeArrayRefAndType(ctx, refMode, writeType, value, INT64_ARRAY)
 	if ctx.HasError() {
 		return
@@ -360,7 +360,7 @@ func (s int64ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, val
 	}
 }
 
-func (s int64ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) {
+func (s int64ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, hasGenerics bool, value reflect.Value) {
 	done := readArrayRefAndType(ctx, refMode, readType, value)
 	if done || ctx.HasError() {
 		return
@@ -369,7 +369,7 @@ func (s int64ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType b
 }
 
 func (s int64ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
-	s.Read(ctx, refMode, false, value)
+	s.Read(ctx, refMode, false, false, value)
 }
 
 // ============================================================================
@@ -399,7 +399,7 @@ func (s float32ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value
 	}
 }
 
-func (s float32ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
+func (s float32ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
 	writeArrayRefAndType(ctx, refMode, writeType, value, FLOAT32_ARRAY)
 	if ctx.HasError() {
 		return
@@ -432,7 +432,7 @@ func (s float32ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, v
 	}
 }
 
-func (s float32ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) {
+func (s float32ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, hasGenerics bool, value reflect.Value) {
 	done := readArrayRefAndType(ctx, refMode, readType, value)
 	if done || ctx.HasError() {
 		return
@@ -441,7 +441,7 @@ func (s float32ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType
 }
 
 func (s float32ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
-	s.Read(ctx, refMode, false, value)
+	s.Read(ctx, refMode, false, false, value)
 }
 
 // ============================================================================
@@ -471,7 +471,7 @@ func (s float64ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value
 	}
 }
 
-func (s float64ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
+func (s float64ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
 	writeArrayRefAndType(ctx, refMode, writeType, value, FLOAT64_ARRAY)
 	if ctx.HasError() {
 		return
@@ -504,7 +504,7 @@ func (s float64ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, v
 	}
 }
 
-func (s float64ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) {
+func (s float64ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, hasGenerics bool, value reflect.Value) {
 	done := readArrayRefAndType(ctx, refMode, readType, value)
 	if done || ctx.HasError() {
 		return
@@ -513,7 +513,7 @@ func (s float64ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType
 }
 
 func (s float64ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
-	s.Read(ctx, refMode, false, value)
+	s.Read(ctx, refMode, false, false, value)
 }
 
 // ============================================================================
@@ -542,7 +542,7 @@ func (s uint8ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) 
 	}
 }
 
-func (s uint8ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
+func (s uint8ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
 	writeArrayRefAndType(ctx, refMode, writeType, value, BINARY)
 	if ctx.HasError() {
 		return
@@ -569,7 +569,7 @@ func (s uint8ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, val
 	}
 }
 
-func (s uint8ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) {
+func (s uint8ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, hasGenerics bool, value reflect.Value) {
 	done := readArrayRefAndType(ctx, refMode, readType, value)
 	if done || ctx.HasError() {
 		return
@@ -578,5 +578,5 @@ func (s uint8ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType b
 }
 
 func (s uint8ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
-	s.Read(ctx, refMode, false, value)
+	s.Read(ctx, refMode, false, false, value)
 }

@@ -607,7 +607,7 @@ func (c *ReadContext) ReadValue(value reflect.Value) {
 	}
 
 	// Read handles ref tracking and type info internally
-	serializer.Read(c, RefModeTracking, true, value)
+	serializer.Read(c, RefModeTracking, true, false, value)
 }
 
 // ReadStruct reads a struct value with optimized type resolution.
@@ -695,7 +695,7 @@ func (c *ReadContext) ReadInto(value reflect.Value, serializer Serializer, refMo
 		return
 	}
 
-	serializer.Read(c, refMode, readTypeInfo, value)
+	serializer.Read(c, refMode, readTypeInfo, false, value)
 }
 
 // readArrayValue handles array targets when stream contains slice data

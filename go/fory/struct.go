@@ -50,8 +50,9 @@ type FieldInfo struct {
 	WriteOffset int // Offset within fixed-fields buffer region (sum of preceding field sizes)
 
 	// Pre-computed flags for serialization (computed at init time)
-	RefMode   RefMode // ref mode for serializer.Write/Read
-	WriteType bool    // whether to write type info (true for struct fields in compatible mode)
+	RefMode     RefMode // ref mode for serializer.Write/Read
+	WriteType   bool    // whether to write type info (true for struct fields in compatible mode)
+	HasGenerics bool    // whether element types are known from TypeDef (for container fields)
 }
 
 // fieldHasNonPrimitiveSerializer returns true if the field has a serializer with a non-primitive type ID.
@@ -216,7 +217,7 @@ func (s *structSerializer) initialize(typeResolver *TypeResolver) error {
 	return nil
 }
 
-func (s *structSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
+func (s *structSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
 	switch refMode {
 	case RefModeTracking:
 		if value.Kind() == reflect.Ptr && value.IsNil() {
@@ -423,7 +424,7 @@ func (s *structSerializer) writeRemainingField(ctx *WriteContext, ptr unsafe.Poi
 				buf.WriteInt8(NullFlag)
 				return
 			}
-			ctx.WriteStringSlice(v, RefModeNullOnly, false)
+			ctx.WriteStringSlice(v, RefModeNullOnly, false, true)
 			return
 		case ConcreteTypeBoolSlice:
 			if field.RefMode == RefModeTracking {
@@ -530,13 +531,13 @@ func (s *structSerializer) writeRemainingField(ctx *WriteContext, ptr unsafe.Poi
 	// Slow path: use full serializer
 	fieldValue := value.Field(field.FieldIndex)
 	if field.Serializer != nil {
-		field.Serializer.Write(ctx, field.RefMode, field.WriteType, fieldValue)
+		field.Serializer.Write(ctx, field.RefMode, field.WriteType, field.HasGenerics, fieldValue)
 	} else {
 		ctx.WriteValue(fieldValue)
 	}
 }
 
-func (s *structSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) {
+func (s *structSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, hasGenerics bool, value reflect.Value) {
 	buf := ctx.Buffer()
 	ctxErr := ctx.Err()
 	switch refMode {
@@ -838,7 +839,7 @@ func (s *structSerializer) readRemainingField(ctx *ReadContext, ptr unsafe.Point
 	fieldValue := value.Field(field.FieldIndex)
 
 	if field.Serializer != nil {
-		field.Serializer.Read(ctx, field.RefMode, field.WriteType, fieldValue)
+		field.Serializer.Read(ctx, field.RefMode, field.WriteType, field.HasGenerics, fieldValue)
 	} else {
 		ctx.ReadValue(fieldValue)
 	}
@@ -936,7 +937,7 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 		// Slow path for non-primitives (all need ref flag per xlang spec)
 		if field.Serializer != nil {
 			// Use pre-computed RefMode and WriteType from field initialization
-			field.Serializer.Read(ctx, field.RefMode, field.WriteType, fieldValue)
+			field.Serializer.Read(ctx, field.RefMode, field.WriteType, field.HasGenerics, fieldValue)
 		} else {
 			ctx.ReadValue(fieldValue)
 		}
@@ -962,7 +963,7 @@ func (s *structSerializer) skipField(ctx *ReadContext, field *FieldInfo) {
 		if field.Referencable {
 			refMode = RefModeTracking
 		}
-		field.Serializer.Read(ctx, refMode, readType, tempValue)
+		field.Serializer.Read(ctx, refMode, readType, false, tempValue)
 	} else {
 		ctx.ReadValue(tempValue)
 	}
@@ -970,7 +971,7 @@ func (s *structSerializer) skipField(ctx *ReadContext, field *FieldInfo) {
 
 func (s *structSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
 	// typeInfo is already read, don't read it again
-	s.Read(ctx, refMode, false, value)
+	s.Read(ctx, refMode, false, false, value)
 }
 
 // initFieldsFromContext initializes fields using context's type resolver (for WriteContext)
@@ -1061,6 +1062,7 @@ func (s *structSerializer) initFieldsFromTypeResolver(typeResolver *TypeResolver
 			FieldIndex:   i,
 			RefMode:      refMode,
 			WriteType:    writeType,
+			HasGenerics:  isCollectionType(fieldTypeId), // Container fields have declared element types
 		}
 		fields = append(fields, fieldInfo)
 		fieldNames = append(fieldNames, fieldInfo.Name)
@@ -1177,6 +1179,7 @@ func (s *structSerializer) initFieldsFromDefsWithResolver(typeResolver *TypeReso
 				FieldDef:     def,          // Save original FieldDef for skipping
 				RefMode:      refMode,
 				WriteType:    writeType,
+				HasGenerics:  isCollectionType(fieldTypeId), // Container fields have declared element types
 			}
 			fields = append(fields, fieldInfo)
 		}
@@ -1401,6 +1404,7 @@ func (s *structSerializer) initFieldsFromDefsWithResolver(typeResolver *TypeReso
 			FieldDef:     def, // Save original FieldDef for skipping
 			RefMode:      refMode,
 			WriteType:    writeType,
+			HasGenerics:  isCollectionType(fieldTypeId), // Container fields have declared element types
 		}
 		fields = append(fields, fieldInfo)
 	}
@@ -1852,7 +1856,7 @@ func (s *skipStructSerializer) WriteData(ctx *WriteContext, value reflect.Value)
 	ctx.SetError(SerializationError("skipStructSerializer does not support WriteData - unknown struct type"))
 }
 
-func (s *skipStructSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
+func (s *skipStructSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
 	ctx.SetError(SerializationError("skipStructSerializer does not support Write - unknown struct type"))
 }
 
@@ -1868,7 +1872,7 @@ func (s *skipStructSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, va
 	}
 }
 
-func (s *skipStructSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) {
+func (s *skipStructSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, hasGenerics bool, value reflect.Value) {
 	buf := ctx.Buffer()
 	ctxErr := ctx.Err()
 	switch refMode {
@@ -1896,5 +1900,5 @@ func (s *skipStructSerializer) Read(ctx *ReadContext, refMode RefMode, readType 
 
 func (s *skipStructSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
 	// typeInfo is already read, don't read it again - just skip data
-	s.Read(ctx, refMode, false, value)
+	s.Read(ctx, refMode, false, false, value)
 }

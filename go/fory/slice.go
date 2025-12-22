@@ -141,6 +141,10 @@ func newSliceConcreteValueSerializer(type_ reflect.Type, elemSerializer Serializ
 }
 
 func (s *sliceConcreteValueSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
+	s.writeDataWithGenerics(ctx, value, false)
+}
+
+func (s *sliceConcreteValueSerializer) writeDataWithGenerics(ctx *WriteContext, value reflect.Value, hasGenerics bool) {
 	length := value.Len()
 	buf := ctx.Buffer()
 
@@ -151,7 +155,14 @@ func (s *sliceConcreteValueSerializer) WriteData(ctx *WriteContext, value reflec
 	}
 
 	// Determine collection flags
-	collectFlag := CollectionIsSameType
+	// When hasGenerics is true, element type is known from TypeDef, use CollectionDeclSameType
+	// When hasGenerics is false, write element type info, use CollectionIsSameType
+	var collectFlag int
+	if hasGenerics {
+		collectFlag = CollectionDeclSameType
+	} else {
+		collectFlag = CollectionIsSameType
+	}
 	hasNull := false
 	elemType := s.type_.Elem()
 	isPointerElem := elemType.Kind() == reflect.Ptr
@@ -175,9 +186,12 @@ func (s *sliceConcreteValueSerializer) WriteData(ctx *WriteContext, value reflec
 	}
 	buf.WriteInt8(int8(collectFlag))
 
-	// Write element type info for deserialization
-	elemTypeInfo, _ := ctx.TypeResolver().getTypeInfo(reflect.New(elemType).Elem(), false)
-	ctx.TypeResolver().WriteTypeInfo(buf, elemTypeInfo, ctx.Err())
+	// Write element type info for deserialization only when hasGenerics is false
+	// When hasGenerics is true, the element type is known from the struct's TypeDef
+	if !hasGenerics {
+		elemTypeInfo, _ := ctx.TypeResolver().getTypeInfo(reflect.New(elemType).Elem(), false)
+		ctx.TypeResolver().WriteTypeInfo(buf, elemTypeInfo, ctx.Err())
+	}
 
 	// WriteData elements
 	trackRefs := (collectFlag & CollectionTrackingRef) != 0
@@ -194,7 +208,7 @@ func (s *sliceConcreteValueSerializer) WriteData(ctx *WriteContext, value reflec
 		if hasNull && elem.IsNil() {
 			if trackRefs {
 				// When tracking refs, the element serializer will write the null flag
-				s.elemSerializer.Write(ctx, elemRefMode, false, elem)
+				s.elemSerializer.Write(ctx, elemRefMode, false, false, elem)
 			} else {
 				buf.WriteInt8(NullFlag)
 			}
@@ -204,7 +218,7 @@ func (s *sliceConcreteValueSerializer) WriteData(ctx *WriteContext, value reflec
 		if trackRefs {
 			// Use Write with ref tracking enabled
 			// The element serializer will handle writing ref flags
-			s.elemSerializer.Write(ctx, elemRefMode, false, elem)
+			s.elemSerializer.Write(ctx, elemRefMode, false, false, elem)
 		} else if hasNull {
 			// When hasNull is set but trackRefs is not, write NotNullValueFlag before data
 			buf.WriteInt8(NotNullValueFlag)
@@ -219,15 +233,15 @@ func (s *sliceConcreteValueSerializer) WriteData(ctx *WriteContext, value reflec
 	}
 }
 
-func (s *sliceConcreteValueSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
+func (s *sliceConcreteValueSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
 	done := writeSliceRefAndType(ctx, refMode, writeType, value, LIST)
 	if done || ctx.HasError() {
 		return
 	}
-	s.WriteData(ctx, value)
+	s.writeDataWithGenerics(ctx, value, hasGenerics)
 }
 
-func (s *sliceConcreteValueSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) {
+func (s *sliceConcreteValueSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, hasGenerics bool, value reflect.Value) {
 	done := readSliceRefAndType(ctx, refMode, readType, value)
 	if done || ctx.HasError() {
 		return
@@ -237,7 +251,7 @@ func (s *sliceConcreteValueSerializer) Read(ctx *ReadContext, refMode RefMode, r
 
 func (s *sliceConcreteValueSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
 	// typeInfo is already read, don't read it again
-	s.Read(ctx, refMode, false, value)
+	s.Read(ctx, refMode, false, false, value)
 }
 
 func (s *sliceConcreteValueSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
@@ -299,7 +313,7 @@ func (s *sliceConcreteValueSerializer) ReadData(ctx *ReadContext, type_ reflect.
 		if trackRefs {
 			// When trackRefs is true, elemSerializer will read the ref flag via TryPreserveRefId
 			// For pointer types, elemSerializer will handle allocation and reference tracking
-			s.elemSerializer.Read(ctx, elemRefMode, false, elem)
+			s.elemSerializer.Read(ctx, elemRefMode, false, false, elem)
 		} else if hasNull {
 			// When hasNull is set, read a flag byte for each element:
 			// - NullFlag (-3) for null elements

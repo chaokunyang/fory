@@ -336,6 +336,18 @@ func (c *ReadContext) ReadByteSlice(refMode RefMode, readType bool) []byte {
 	return c.buffer.ReadBinary(size, err)
 }
 
+// ReadStringSlice reads []string with optional ref/type info using LIST protocol
+func (c *ReadContext) ReadStringSlice(refMode RefMode, readType bool) []string {
+	err := c.Err()
+	if refMode != RefModeNone {
+		_ = c.buffer.ReadInt8(err)
+	}
+	if readType {
+		_ = c.buffer.ReadVaruint32Small7(err)
+	}
+	return ReadStringSlice(c.buffer, err)
+}
+
 // ReadStringStringMap reads map[string]string with optional ref/type info
 func (c *ReadContext) ReadStringStringMap(refMode RefMode, readType bool) map[string]string {
 	err := c.Err()

@@ -1091,3 +1091,41 @@ func ReadIntSlice(buf *ByteBuffer, err *Error) []int {
 		return result
 	}
 }
+
+// WriteStringSlice writes []string to buffer using LIST protocol
+// Format: length + collection_flags + element_type + elements
+func WriteStringSlice(buf *ByteBuffer, value []string) {
+	length := len(value)
+	buf.WriteVaruint32(uint32(length))
+	if length > 0 {
+		buf.WriteInt8(int8(CollectionIsSameType))
+		buf.WriteVaruint32Small7(uint32(STRING))
+		for i := 0; i < length; i++ {
+			writeString(buf, value[i])
+		}
+	}
+}
+
+// ReadStringSlice reads []string from buffer using LIST protocol
+func ReadStringSlice(buf *ByteBuffer, err *Error) []string {
+	length := int(buf.ReadVaruint32(err))
+	if length == 0 {
+		return make([]string, 0)
+	}
+	collectFlag := buf.ReadInt8(err)
+	if (collectFlag&CollectionIsSameType) != 0 && (collectFlag&CollectionIsDeclElementType) == 0 {
+		_ = buf.ReadVaruint32Small7(err) // Read and discard element type ID
+	}
+	result := make([]string, length)
+	trackRefs := (collectFlag & CollectionTrackingRef) != 0
+	for i := 0; i < length; i++ {
+		if trackRefs {
+			rf := buf.ReadInt8(err)
+			if rf == NullFlag {
+				continue
+			}
+		}
+		result[i] = readString(buf, err)
+	}
+	return result
+}

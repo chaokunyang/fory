@@ -328,6 +328,17 @@ func (c *WriteContext) WriteByteSlice(value []byte, refMode RefMode, writeTypeIn
 	c.buffer.WriteBinary(value)
 }
 
+// WriteStringSlice writes []string with ref/type info using LIST protocol
+func (c *WriteContext) WriteStringSlice(value []string, refMode RefMode, writeTypeInfo bool) {
+	if refMode != RefModeNone {
+		c.buffer.WriteInt8(NotNullValueFlag)
+	}
+	if writeTypeInfo {
+		c.WriteTypeId(LIST)
+	}
+	WriteStringSlice(c.buffer, value)
+}
+
 // WriteStringStringMap writes map[string]string with ref/type info
 func (c *WriteContext) WriteStringStringMap(value map[string]string, refMode RefMode, writeTypeInfo bool) {
 	if refMode != RefModeNone {

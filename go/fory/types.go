@@ -258,6 +258,7 @@ const (
 	ConcreteTypeInt32Int32Map
 	ConcreteTypeInt64Int64Map
 	ConcreteTypeIntIntMap
+	ConcreteTypeEnum // Enum types (both ENUM and NAMED_ENUM)
 )
 
 // GetStaticTypeId returns the StaticTypeId for a reflect.Type

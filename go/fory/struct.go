@@ -54,69 +54,6 @@ type FieldInfo struct {
 	WriteType bool    // whether to write type info (true for struct fields in compatible mode)
 }
 
-// readPrimitiveSliceToField reads a primitive slice directly and sets it at the field offset using unsafe.
-// This bypasses reflect.ValueOf and value.Set overhead.
-// Returns true if handled (success or error), false if not a primitive slice.
-// Note: Primitive slices use ARRAY protocol (size bytes + binary), not LIST protocol.
-// Dispatches to helper functions in slice_primitive.go based on field.StaticId.
-func readPrimitiveSliceToField(ctx *ReadContext, ptr unsafe.Pointer, field *FieldInfo) bool {
-	// Check if this is a primitive slice type using StaticId
-	switch field.StaticId {
-	case ConcreteTypeBoolSlice, ConcreteTypeInt8Slice, ConcreteTypeByteSlice,
-		ConcreteTypeInt16Slice, ConcreteTypeInt32Slice, ConcreteTypeInt64Slice,
-		ConcreteTypeIntSlice, ConcreteTypeFloat32Slice, ConcreteTypeFloat64Slice:
-		// Valid primitive slice type
-	default:
-		return false
-	}
-
-	buf := ctx.Buffer()
-	ctxErr := ctx.Err()
-
-	// Read ref flag (all non-primitive fields have ref flag per xlang spec)
-	refID, refErr := ctx.RefResolver().TryPreserveRefId(buf)
-	if refErr != nil {
-		ctx.SetError(FromError(refErr))
-		return true
-	}
-	if int8(refID) == NullFlag {
-		// Nil slice, leave as zero value
-		return true
-	}
-	if int8(refID) < NotNullValueFlag {
-		// This is a reference to existing object - not supported for primitive slices
-		// Fall back to slow path
-		return false
-	}
-
-	fieldPtr := unsafe.Add(ptr, field.Offset)
-
-	// Dispatch to helper functions from slice_primitive.go based on StaticId
-	switch field.StaticId {
-	case ConcreteTypeBoolSlice:
-		*(*[]bool)(fieldPtr) = ReadBoolSlice(buf, ctxErr)
-	case ConcreteTypeInt8Slice:
-		*(*[]int8)(fieldPtr) = ReadInt8Slice(buf, ctxErr)
-	case ConcreteTypeByteSlice:
-		*(*[]byte)(fieldPtr) = ReadByteSlice(buf, ctxErr)
-	case ConcreteTypeInt16Slice:
-		*(*[]int16)(fieldPtr) = ReadInt16Slice(buf, ctxErr)
-	case ConcreteTypeInt32Slice:
-		*(*[]int32)(fieldPtr) = ReadInt32Slice(buf, ctxErr)
-	case ConcreteTypeInt64Slice:
-		*(*[]int64)(fieldPtr) = ReadInt64Slice(buf, ctxErr)
-	case ConcreteTypeIntSlice:
-		*(*[]int)(fieldPtr) = ReadIntSlice(buf, ctxErr)
-	case ConcreteTypeFloat32Slice:
-		*(*[]float32)(fieldPtr) = ReadFloat32Slice(buf, ctxErr)
-	case ConcreteTypeFloat64Slice:
-		*(*[]float64)(fieldPtr) = ReadFloat64Slice(buf, ctxErr)
-	default:
-		return false
-	}
-
-	return true
-}
 
 // fieldHasNonPrimitiveSerializer returns true if the field has a serializer with a non-primitive type ID.
 // This is used to skip the fast path for fields like enums where StaticId is int32 but the serializer
@@ -466,15 +403,140 @@ func (s *structSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 
 // writeRemainingField writes a non-primitive field (string, slice, map, struct, enum)
 func (s *structSerializer) writeRemainingField(ctx *WriteContext, ptr unsafe.Pointer, field *FieldInfo, value reflect.Value) {
-	fieldValue := value.Field(field.FieldIndex)
+	buf := ctx.Buffer()
 
-	if isEnumField(field) {
-		writeEnumField(ctx, field, fieldValue)
-		return
+	// Fast path dispatch using pre-computed StaticId
+	// ptr must be valid (addressable value)
+	if ptr != nil {
+		fieldPtr := unsafe.Add(ptr, field.Offset)
+		switch field.StaticId {
+		case ConcreteTypeString:
+			if field.RefMode == RefModeTracking {
+				break // Fall through to slow path
+			}
+			buf.WriteInt8(NotNullValueFlag)
+			ctx.WriteString(*(*string)(fieldPtr))
+			return
+		case ConcreteTypeEnum:
+			// Enums don't track refs - always use fast path
+			writeEnumField(ctx, field, value.Field(field.FieldIndex))
+			return
+		case ConcreteTypeStringSlice:
+			if field.RefMode == RefModeTracking {
+				break
+			}
+			v := *(*[]string)(fieldPtr)
+			if v == nil {
+				buf.WriteInt8(NullFlag)
+				return
+			}
+			ctx.WriteStringSlice(v, RefModeNullOnly, false)
+			return
+		case ConcreteTypeBoolSlice:
+			if field.RefMode == RefModeTracking {
+				break
+			}
+			v := *(*[]bool)(fieldPtr)
+			if v == nil {
+				buf.WriteInt8(NullFlag)
+				return
+			}
+			ctx.WriteBoolSlice(v, RefModeNullOnly, false)
+			return
+		case ConcreteTypeInt8Slice:
+			if field.RefMode == RefModeTracking {
+				break
+			}
+			v := *(*[]int8)(fieldPtr)
+			if v == nil {
+				buf.WriteInt8(NullFlag)
+				return
+			}
+			ctx.WriteInt8Slice(v, RefModeNullOnly, false)
+			return
+		case ConcreteTypeByteSlice:
+			if field.RefMode == RefModeTracking {
+				break
+			}
+			v := *(*[]byte)(fieldPtr)
+			if v == nil {
+				buf.WriteInt8(NullFlag)
+				return
+			}
+			ctx.WriteByteSlice(v, RefModeNullOnly, false)
+			return
+		case ConcreteTypeInt16Slice:
+			if field.RefMode == RefModeTracking {
+				break
+			}
+			v := *(*[]int16)(fieldPtr)
+			if v == nil {
+				buf.WriteInt8(NullFlag)
+				return
+			}
+			ctx.WriteInt16Slice(v, RefModeNullOnly, false)
+			return
+		case ConcreteTypeInt32Slice:
+			if field.RefMode == RefModeTracking {
+				break
+			}
+			v := *(*[]int32)(fieldPtr)
+			if v == nil {
+				buf.WriteInt8(NullFlag)
+				return
+			}
+			ctx.WriteInt32Slice(v, RefModeNullOnly, false)
+			return
+		case ConcreteTypeInt64Slice:
+			if field.RefMode == RefModeTracking {
+				break
+			}
+			v := *(*[]int64)(fieldPtr)
+			if v == nil {
+				buf.WriteInt8(NullFlag)
+				return
+			}
+			ctx.WriteInt64Slice(v, RefModeNullOnly, false)
+			return
+		case ConcreteTypeIntSlice:
+			if field.RefMode == RefModeTracking {
+				break
+			}
+			v := *(*[]int)(fieldPtr)
+			if v == nil {
+				buf.WriteInt8(NullFlag)
+				return
+			}
+			ctx.WriteIntSlice(v, RefModeNullOnly, false)
+			return
+		case ConcreteTypeFloat32Slice:
+			if field.RefMode == RefModeTracking {
+				break
+			}
+			v := *(*[]float32)(fieldPtr)
+			if v == nil {
+				buf.WriteInt8(NullFlag)
+				return
+			}
+			ctx.WriteFloat32Slice(v, RefModeNullOnly, false)
+			return
+		case ConcreteTypeFloat64Slice:
+			if field.RefMode == RefModeTracking {
+				break
+			}
+			v := *(*[]float64)(fieldPtr)
+			if v == nil {
+				buf.WriteInt8(NullFlag)
+				return
+			}
+			ctx.WriteFloat64Slice(v, RefModeNullOnly, false)
+			return
+		}
 	}
 
+	// Slow path: use full serializer
+	fieldValue := value.Field(field.FieldIndex)
 	if field.Serializer != nil {
-		// Use pre-computed RefMode and WriteType from field initialization
 		field.Serializer.Write(ctx, field.RefMode, field.WriteType, fieldValue)
 	} else {
 		ctx.WriteValue(fieldValue)
@@ -665,20 +727,137 @@ func (s *structSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value 
 
 // readRemainingField reads a non-primitive field (string, slice, map, struct, enum)
 func (s *structSerializer) readRemainingField(ctx *ReadContext, ptr unsafe.Pointer, field *FieldInfo, value reflect.Value) {
-	// Fast path for primitive slices: read directly using unsafe to avoid reflect.ValueOf overhead
-	if readPrimitiveSliceToField(ctx, ptr, field) {
-		return
+	buf := ctx.Buffer()
+	ctxErr := ctx.Err()
+
+	// Fast path dispatch using pre-computed StaticId
+	// ptr must be valid (addressable value)
+	if ptr != nil {
+		fieldPtr := unsafe.Add(ptr, field.Offset)
+		switch field.StaticId {
+		case ConcreteTypeString:
+			if field.RefMode == RefModeTracking {
+				break // Fall through to slow path for ref tracking
+			}
+			refFlag := buf.ReadInt8(ctxErr)
+			if refFlag == NullFlag {
+				*(*string)(fieldPtr) = ""
+				return
+			}
+			*(*string)(fieldPtr) = ctx.ReadString()
+			return
+		case ConcreteTypeEnum:
+			// Enums don't track refs - always use fast path
+			fieldValue := value.Field(field.FieldIndex)
+			readEnumField(ctx, field, fieldValue)
+			return
+		case ConcreteTypeStringSlice:
+			if field.RefMode == RefModeTracking {
+				break
+			}
+			refFlag := buf.ReadInt8(ctxErr)
+			if refFlag == NullFlag {
+				return // nil slice
+			}
+			*(*[]string)(fieldPtr) = ctx.ReadStringSlice(RefModeNone, false)
+			return
+		case ConcreteTypeBoolSlice:
+			if field.RefMode == RefModeTracking {
+				break
+			}
+			refFlag := buf.ReadInt8(ctxErr)
+			if refFlag == NullFlag {
+				return
+			}
+			*(*[]bool)(fieldPtr) = ctx.ReadBoolSlice(RefModeNone, false)
+			return
+		case ConcreteTypeInt8Slice:
+			if field.RefMode == RefModeTracking {
+				break
+			}
+			refFlag := buf.ReadInt8(ctxErr)
+			if refFlag == NullFlag {
+				return
+			}
+			*(*[]int8)(fieldPtr) = ctx.ReadInt8Slice(RefModeNone, false)
+			return
+		case ConcreteTypeByteSlice:
+			if field.RefMode == RefModeTracking {
+				break
+			}
+			refFlag := buf.ReadInt8(ctxErr)
+			if refFlag == NullFlag {
+				return
+			}
+			*(*[]byte)(fieldPtr) = ctx.ReadByteSlice(RefModeNone, false)
+			return
+		case ConcreteTypeInt16Slice:
+			if field.RefMode == RefModeTracking {
+				break
+			}
+			refFlag := buf.ReadInt8(ctxErr)
+			if refFlag == NullFlag {
+				return
+			}
+			*(*[]int16)(fieldPtr) = ctx.ReadInt16Slice(RefModeNone, false)
+			return
+		case ConcreteTypeInt32Slice:
+			if field.RefMode == RefModeTracking {
+				break
+			}
+			refFlag := buf.ReadInt8(ctxErr)
+			if refFlag == NullFlag {
+				return
+			}
+			*(*[]int32)(fieldPtr) = ctx.ReadInt32Slice(RefModeNone, false)
+			return
+		case ConcreteTypeInt64Slice:
+			if field.RefMode == RefModeTracking {
+				break
+			}
+			refFlag := buf.ReadInt8(ctxErr)
+			if refFlag == NullFlag {
+				return
+			}
+			*(*[]int64)(fieldPtr) = ctx.ReadInt64Slice(RefModeNone, false)
+			return
+		case ConcreteTypeIntSlice:
+			if field.RefMode == RefModeTracking {
+				break
+			}
+			refFlag := buf.ReadInt8(ctxErr)
+			if refFlag == NullFlag {
+				return
+			}
+			*(*[]int)(fieldPtr) = ctx.ReadIntSlice(RefModeNone, false)
+			return
+		case ConcreteTypeFloat32Slice:
+			if field.RefMode == RefModeTracking {
+				break
+			}
+			refFlag := buf.ReadInt8(ctxErr)
+			if refFlag == NullFlag {
+				return
+			}
+			*(*[]float32)(fieldPtr) = ctx.ReadFloat32Slice(RefModeNone, false)
+			return
+		case ConcreteTypeFloat64Slice:
+			if field.RefMode == RefModeTracking {
+				break
+			}
+			refFlag := buf.ReadInt8(ctxErr)
+			if refFlag == NullFlag {
+				return
+			}
+			*(*[]float64)(fieldPtr) = ctx.ReadFloat64Slice(RefModeNone, false)
+			return
+		}
 	}
 
+	// Slow path: use full serializer
 	fieldValue := value.Field(field.FieldIndex)
 
-	if isEnumField(field) {
-		readEnumField(ctx, field, fieldValue)
-		return
-	}
-
 	if field.Serializer != nil {
-		// Use pre-computed RefMode and WriteType from field initialization
 		field.Serializer.Read(ctx, field.RefMode, field.WriteType, fieldValue)
 	} else {
 		ctx.ReadValue(fieldValue)
@@ -892,11 +1071,24 @@ func (s *structSerializer) initFieldsFromTypeResolver(typeResolver *TypeResolver
 		}
 		// Pre-compute WriteType: true for struct fields in compatible mode
 		writeType := typeResolver.Compatible() && isStructField(fieldType)
+
+		// Pre-compute StaticId, with special handling for enum fields
+		staticId := GetStaticTypeId(fieldType)
+		if fieldSerializer != nil {
+			if _, ok := fieldSerializer.(*enumSerializer); ok {
+				staticId = ConcreteTypeEnum
+			} else if ptrSer, ok := fieldSerializer.(*ptrToValueSerializer); ok {
+				if _, ok := ptrSer.valueSerializer.(*enumSerializer); ok {
+					staticId = ConcreteTypeEnum
+				}
+			}
+		}
+
 		fieldInfo := &FieldInfo{
 			Name:         SnakeCase(field.Name),
 			Offset:       field.Offset,
 			Type:         fieldType,
-			StaticId:     GetStaticTypeId(fieldType),
+			StaticId:     staticId,
 			TypeId:       fieldTypeId,
 			Serializer:   fieldSerializer,
 			Referencable: nullableFlag, // Use same logic as TypeDef's nullable flag for consistent ref handling
@@ -994,11 +1186,24 @@ func (s *structSerializer) initFieldsFromDefsWithResolver(typeResolver *TypeReso
 			}
 			// Pre-compute WriteType: true for struct fields in compatible mode
 			writeType := typeResolver.Compatible() && isStructField(remoteType)
+
+			// Pre-compute StaticId, with special handling for enum fields
+			staticId := GetStaticTypeId(remoteType)
+			if fieldSerializer != nil {
+				if _, ok := fieldSerializer.(*enumSerializer); ok {
+					staticId = ConcreteTypeEnum
+				} else if ptrSer, ok := fieldSerializer.(*ptrToValueSerializer); ok {
+					if _, ok := ptrSer.valueSerializer.(*enumSerializer); ok {
+						staticId = ConcreteTypeEnum
+					}
+				}
+			}
+
 			fieldInfo := &FieldInfo{
 				Name:         def.name,
 				Offset:       0,
 				Type:         remoteType,
-				StaticId:     GetStaticTypeId(remoteType),
+				StaticId:     staticId,
 				TypeId:       fieldTypeId,
 				Serializer:   fieldSerializer,
 				Referencable: referencable, // Use remote nullable flag
@@ -1205,11 +1410,24 @@ func (s *structSerializer) initFieldsFromDefsWithResolver(typeResolver *TypeReso
 		}
 		// Pre-compute WriteType: true for struct fields in compatible mode
 		writeType := typeResolver.Compatible() && isStructField(fieldType)
+
+		// Pre-compute StaticId, with special handling for enum fields
+		staticId := GetStaticTypeId(fieldType)
+		if fieldSerializer != nil {
+			if _, ok := fieldSerializer.(*enumSerializer); ok {
+				staticId = ConcreteTypeEnum
+			} else if ptrSer, ok := fieldSerializer.(*ptrToValueSerializer); ok {
+				if _, ok := ptrSer.valueSerializer.(*enumSerializer); ok {
+					staticId = ConcreteTypeEnum
+				}
+			}
+		}
+
 		fieldInfo := &FieldInfo{
 			Name:         def.name,
 			Offset:       offset,
 			Type:         fieldType,
-			StaticId:     GetStaticTypeId(fieldType),
+			StaticId:     staticId,
 			TypeId:       fieldTypeId,
 			Serializer:   fieldSerializer,
 			Referencable: referencable, // Use remote nullable flag

@@ -367,3 +367,80 @@ func IsPrimitiveTypeId(typeId TypeId) bool {
 		return false
 	}
 }
+
+// isFixedSizePrimitive returns true for non-nullable fixed-size primitives
+func isFixedSizePrimitive(staticId StaticTypeId, referencable bool) bool {
+	if referencable {
+		return false
+	}
+	switch staticId {
+	case ConcreteTypeBool, ConcreteTypeInt8, ConcreteTypeInt16,
+		ConcreteTypeFloat32, ConcreteTypeFloat64:
+		return true
+	default:
+		return false
+	}
+}
+
+// isVarintPrimitive returns true for non-nullable varint primitives
+func isVarintPrimitive(staticId StaticTypeId, referencable bool) bool {
+	if referencable {
+		return false
+	}
+	switch staticId {
+	case ConcreteTypeInt32, ConcreteTypeInt64, ConcreteTypeInt:
+		return true
+	default:
+		return false
+	}
+}
+
+// isPrimitiveStaticId returns true if the staticId represents a primitive type
+func isPrimitiveStaticId(staticId StaticTypeId) bool {
+	switch staticId {
+	case ConcreteTypeBool, ConcreteTypeInt8, ConcreteTypeInt16, ConcreteTypeInt32,
+		ConcreteTypeInt64, ConcreteTypeInt, ConcreteTypeFloat32, ConcreteTypeFloat64:
+		return true
+	default:
+		return false
+	}
+}
+
+// isNumericKind returns true for numeric types (Go enums are typically int-based)
+func isNumericKind(kind reflect.Kind) bool {
+	switch kind {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return true
+	default:
+		return false
+	}
+}
+
+// getFixedSizeByStaticId returns byte size for fixed primitives (0 if not fixed)
+func getFixedSizeByStaticId(staticId StaticTypeId) int {
+	switch staticId {
+	case ConcreteTypeBool, ConcreteTypeInt8:
+		return 1
+	case ConcreteTypeInt16:
+		return 2
+	case ConcreteTypeFloat32:
+		return 4
+	case ConcreteTypeFloat64:
+		return 8
+	default:
+		return 0
+	}
+}
+
+// getVarintMaxSizeByStaticId returns max byte size for varint primitives (0 if not varint)
+func getVarintMaxSizeByStaticId(staticId StaticTypeId) int {
+	switch staticId {
+	case ConcreteTypeInt32:
+		return 5
+	case ConcreteTypeInt64, ConcreteTypeInt:
+		return 10
+	default:
+		return 0
+	}
+}

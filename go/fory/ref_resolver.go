@@ -76,6 +76,18 @@ type refKey struct {
 	length  int // for slice and *array only
 }
 
+// isReferencable determines if a type needs reference tracking based on Go type semantics
+func isReferencable(t reflect.Type) bool {
+	// Pointers, maps, slices, and interfaces need reference tracking
+	kind := t.Kind()
+	switch kind {
+	case reflect.Ptr, reflect.Map, reflect.Slice, reflect.Interface:
+		return true
+	default:
+		return false
+	}
+}
+
 func newRefResolver(refTracking bool) *RefResolver {
 	refResolver := &RefResolver{
 		refTracking:    refTracking,

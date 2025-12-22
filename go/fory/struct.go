@@ -18,7 +18,9 @@
 package fory
 
 import (
+	"encoding/binary"
 	"fmt"
+	"math"
 	"reflect"
 	"sort"
 	"strings"
@@ -29,8 +31,8 @@ import (
 	"github.com/spaolacci/murmur3"
 )
 
-// FieldInfo stores field metadata computed at init time
-// Uses offset for unsafe direct memory access at runtime
+// FieldInfo stores field metadata computed ENTIRELY at init time.
+// All flags and decisions are pre-computed to eliminate runtime checks.
 type FieldInfo struct {
 	Name         string
 	Offset       uintptr
@@ -41,44 +43,10 @@ type FieldInfo struct {
 	Referencable bool
 	FieldIndex   int      // -1 if field doesn't exist in current struct (for compatible mode)
 	FieldDef     FieldDef // original FieldDef from remote TypeDef (for compatible mode skip)
-}
 
-// isFixedSizePrimitive returns true for non-nullable fixed-size primitives
-func isFixedSizePrimitive(staticId StaticTypeId, referencable bool) bool {
-	if referencable {
-		return false
-	}
-	switch staticId {
-	case ConcreteTypeBool, ConcreteTypeInt8, ConcreteTypeInt16,
-		ConcreteTypeFloat32, ConcreteTypeFloat64:
-		return true
-	default:
-		return false
-	}
-}
-
-// isVarintPrimitive returns true for non-nullable varint primitives
-func isVarintPrimitive(staticId StaticTypeId, referencable bool) bool {
-	if referencable {
-		return false
-	}
-	switch staticId {
-	case ConcreteTypeInt32, ConcreteTypeInt64, ConcreteTypeInt:
-		return true
-	default:
-		return false
-	}
-}
-
-// isPrimitiveStaticId returns true if the staticId represents a primitive type
-func isPrimitiveStaticId(staticId StaticTypeId) bool {
-	switch staticId {
-	case ConcreteTypeBool, ConcreteTypeInt8, ConcreteTypeInt16, ConcreteTypeInt32,
-		ConcreteTypeInt64, ConcreteTypeInt, ConcreteTypeFloat32, ConcreteTypeFloat64:
-		return true
-	default:
-		return false
-	}
+	// Pre-computed sizes and offsets (for fixed primitives)
+	FixedSize   int // 0 if not fixed-size, else 1/2/4/8
+	WriteOffset int // Offset within fixed-fields buffer region (sum of preceding field sizes)
 }
 
 // readPrimitiveSliceToField reads a primitive slice directly and sets it at the field offset using unsafe.
@@ -231,18 +199,31 @@ func readEnumField(ctx *ReadContext, field *FieldInfo, fieldValue reflect.Value)
 }
 
 type structSerializer struct {
-	typeTag         string
-	type_           reflect.Type
-	fields          []*FieldInfo          // all fields in sorted order
-	fixedFields     []*FieldInfo          // fixed-size primitives (bool, int8, int16, float32, float64)
-	varintFields    []*FieldInfo          // varint primitives (int32, int64, int)
-	remainingFields []*FieldInfo          // all other fields (string, slice, map, struct, etc.)
-	fieldMap        map[string]*FieldInfo // for compatible reading
-	structHash      int32
-	fieldDefs       []FieldDef // for type_def compatibility
-	// Pre-computed sizes for batch buffer reservation
-	fixedFieldsSize  int // total bytes for fixed-size primitives
-	varintFieldsSize int // max bytes for varint primitives (5 bytes per int32, 10 bytes per int64)
+	// Identity
+	typeTag    string
+	type_      reflect.Type
+	structHash int32
+
+	// Pre-sorted field lists by category (computed at init)
+	fixedFields     []*FieldInfo // fixed-size primitives (bool, int8, int16, float32, float64)
+	varintFields    []*FieldInfo // varint primitives (int32, int64, int)
+	remainingFields []*FieldInfo // all other fields (string, slice, map, struct, etc.)
+
+	// All fields in protocol order (for compatible mode)
+	fields    []*FieldInfo          // all fields in sorted order
+	fieldMap  map[string]*FieldInfo // for compatible reading
+	fieldDefs []FieldDef            // for type_def compatibility
+
+	// Pre-computed buffer sizes
+	fixedSize     int // Total bytes for fixed-size primitives
+	maxVarintSize int // Max bytes for varints (5 per int32, 10 per int64)
+
+	// Mode flags (set at init)
+	isCompatibleMode bool // true when compatible=true
+	typeDefDiffers   bool // true when compatible=true AND remote TypeDef != local (requires ordered read)
+
+	// Initialization state
+	initialized bool
 }
 
 // newStructSerializer creates a new structSerializer with the given parameters.
@@ -297,7 +278,13 @@ func (s *structSerializer) Write(ctx *WriteContext, refMode RefMode, writeType b
 }
 
 func (s *structSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
+	// Early error check - skip all intermediate checks for normal path performance
+	if ctx.HasError() {
+		return
+	}
+
 	buf := ctx.Buffer()
+
 	// Dereference pointer if needed
 	if value.Kind() == reflect.Ptr {
 		if value.IsNil() {
@@ -307,16 +294,14 @@ func (s *structSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 		value = value.Elem()
 	}
 
+	// Lazy initialization (will be removed when eager init is fully wired up)
 	if s.fields == nil {
 		if s.type_ == nil {
 			s.type_ = value.Type()
 		}
-		// Ensure s.type_ is the struct type, not a pointer type
 		for s.type_.Kind() == reflect.Ptr {
 			s.type_ = s.type_.Elem()
 		}
-		// If we have fieldDefs from TypeDef (compatible mode), use them
-		// Otherwise initialize from local type structure
 		if s.fieldDefs != nil {
 			if err := s.initFieldsFromDefsWithResolver(ctx.TypeResolver()); err != nil {
 				ctx.SetError(FromError(err))
@@ -334,61 +319,73 @@ func (s *structSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 	}
 
 	// In compatible mode with meta share, struct hash is not written
-	// because type meta is written separately
 	if !ctx.Compatible() {
 		buf.WriteInt32(s.structHash)
 	}
 
-	// In compatible mode, always write fields in sorted order to match TypeDef order
-	// This ensures consistency with the read path which uses readFieldsInOrder
-	if ctx.Compatible() {
+	// In compatible mode, always use ordered writing because:
+	// - Reader receives TypeDef from meta share and creates a serializer with fieldDefs
+	// - Reader then uses readFieldsInOrder which reads in TypeDef/sorted order
+	// - Writer must match this order, not grouped order
+	if ctx.Compatible() || s.fieldDefs != nil {
 		s.writeFieldsInOrder(ctx, value)
 		return
 	}
 
-	// Non-compatible mode with fieldDefs still uses writeFieldsInOrder
-	if s.fieldDefs != nil {
-		s.writeFieldsInOrder(ctx, value)
-		return
-	}
-
-	// Check if value is addressable for unsafe access optimization
+	// Check if value is addressable for unsafe access
 	canUseUnsafe := value.CanAddr()
-
-	// Reserve buffer space upfront for all fixed fields + varints to avoid repeated grow() calls
-	if canUseUnsafe && (s.fixedFieldsSize > 0 || s.varintFieldsSize > 0) {
-		buf.Reserve(s.fixedFieldsSize + s.varintFieldsSize)
+	var ptr unsafe.Pointer
+	if canUseUnsafe {
+		ptr = unsafe.Pointer(value.UnsafeAddr())
 	}
 
-	// Phase 1: Write fixed-size primitive fields (no ref flag)
-	if canUseUnsafe && len(s.fixedFields) > 0 {
-		ptr := unsafe.Pointer(value.UnsafeAddr())
+	// ==========================================================================
+	// Phase 1: Fixed-size primitives (bool, int8, int16, float32, float64)
+	// - Reserve once, inline unsafe writes with endian handling, update index once
+	// - field.WriteOffset computed at init time
+	// ==========================================================================
+	if canUseUnsafe && s.fixedSize > 0 {
+		buf.Reserve(s.fixedSize)
+		baseOffset := buf.WriterIndex()
+		data := buf.GetData()
+
 		for _, field := range s.fixedFields {
-			if field.FieldIndex < 0 {
-				s.writeZeroField(ctx, field)
-				continue
-			}
 			fieldPtr := unsafe.Add(ptr, field.Offset)
+			bufOffset := baseOffset + field.WriteOffset
 			switch field.StaticId {
 			case ConcreteTypeBool:
-				buf.UnsafeWriteBool(*(*bool)(fieldPtr))
+				if *(*bool)(fieldPtr) {
+					data[bufOffset] = 1
+				} else {
+					data[bufOffset] = 0
+				}
 			case ConcreteTypeInt8:
-				buf.UnsafeWriteByte(*(*byte)(fieldPtr))
+				data[bufOffset] = *(*byte)(fieldPtr)
 			case ConcreteTypeInt16:
-				buf.UnsafeWriteInt16(*(*int16)(fieldPtr))
+				if isLittleEndian {
+					*(*int16)(unsafe.Pointer(&data[bufOffset])) = *(*int16)(fieldPtr)
+				} else {
+					binary.LittleEndian.PutUint16(data[bufOffset:], uint16(*(*int16)(fieldPtr)))
+				}
 			case ConcreteTypeFloat32:
-				buf.UnsafeWriteFloat32(*(*float32)(fieldPtr))
+				if isLittleEndian {
+					*(*float32)(unsafe.Pointer(&data[bufOffset])) = *(*float32)(fieldPtr)
+				} else {
+					binary.LittleEndian.PutUint32(data[bufOffset:], math.Float32bits(*(*float32)(fieldPtr)))
+				}
 			case ConcreteTypeFloat64:
-				buf.UnsafeWriteFloat64(*(*float64)(fieldPtr))
+				if isLittleEndian {
+					*(*float64)(unsafe.Pointer(&data[bufOffset])) = *(*float64)(fieldPtr)
+				} else {
+					binary.LittleEndian.PutUint64(data[bufOffset:], math.Float64bits(*(*float64)(fieldPtr)))
+				}
 			}
 		}
+		// Update writer index ONCE after all fixed fields
+		buf.SetWriterIndex(baseOffset + s.fixedSize)
 	} else if len(s.fixedFields) > 0 {
 		// Fallback to reflect-based access for unaddressable values
 		for _, field := range s.fixedFields {
-			if field.FieldIndex < 0 {
-				s.writeZeroField(ctx, field)
-				continue
-			}
 			fieldValue := value.Field(field.FieldIndex)
 			switch field.StaticId {
 			case ConcreteTypeBool:
@@ -405,81 +402,72 @@ func (s *structSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 		}
 	}
 
-	// Phase 2: Write varint primitive fields (no ref flag)
-	// Buffer space already reserved above
-	if canUseUnsafe && len(s.varintFields) > 0 {
-		ptr := unsafe.Pointer(value.UnsafeAddr())
+	// ==========================================================================
+	// Phase 2: Varint primitives (int32, int64, int)
+	// - Reserve max size, track offset locally, update index once at end
+	// ==========================================================================
+	if canUseUnsafe && s.maxVarintSize > 0 {
+		buf.Reserve(s.maxVarintSize)
+		offset := buf.WriterIndex()
+
 		for _, field := range s.varintFields {
-			if field.FieldIndex < 0 {
-				s.writeZeroField(ctx, field)
-				continue
-			}
 			fieldPtr := unsafe.Add(ptr, field.Offset)
 			switch field.StaticId {
 			case ConcreteTypeInt32:
-				buf.UnsafeWriteVarint32(*(*int32)(fieldPtr))
+				offset += buf.UnsafePutVarInt32(offset, *(*int32)(fieldPtr))
 			case ConcreteTypeInt64:
-				buf.UnsafeWriteVarint64(*(*int64)(fieldPtr))
+				offset += buf.UnsafePutVarInt64(offset, *(*int64)(fieldPtr))
 			case ConcreteTypeInt:
-				buf.UnsafeWriteVarint64(int64(*(*int)(fieldPtr)))
+				offset += buf.UnsafePutVarInt64(offset, int64(*(*int)(fieldPtr)))
 			}
 		}
+		// Update writer index ONCE after all varint fields
+		buf.SetWriterIndex(offset)
 	} else if len(s.varintFields) > 0 {
 		// Fallback to reflect-based access for unaddressable values
 		for _, field := range s.varintFields {
-			if field.FieldIndex < 0 {
-				s.writeZeroField(ctx, field)
-				continue
-			}
 			fieldValue := value.Field(field.FieldIndex)
 			switch field.StaticId {
 			case ConcreteTypeInt32:
 				buf.WriteVarint32(int32(fieldValue.Int()))
-			case ConcreteTypeInt64:
-				buf.WriteVarint64(fieldValue.Int())
-			case ConcreteTypeInt:
+			case ConcreteTypeInt64, ConcreteTypeInt:
 				buf.WriteVarint64(fieldValue.Int())
 			}
 		}
 	}
 
-	// Phase 3: Write remaining fields (all non-primitives need ref flag per xlang spec)
+	// ==========================================================================
+	// Phase 3: Remaining fields (strings, slices, maps, structs, enums)
+	// - These require per-field handling (ref flags, type info, serializers)
+	// - No intermediate error checks - trade error path performance for normal path
+	// ==========================================================================
 	for _, field := range s.remainingFields {
-		if field.FieldIndex < 0 {
-			s.writeZeroField(ctx, field)
-			continue
-		}
-		fieldValue := value.Field(field.FieldIndex)
+		s.writeRemainingField(ctx, ptr, field, value)
+	}
+}
 
-		if isEnumField(field) {
-			writeEnumField(ctx, field, fieldValue)
-			if ctx.HasError() {
-				return
-			}
-			continue
-		}
+// writeRemainingField writes a non-primitive field (string, slice, map, struct, enum)
+func (s *structSerializer) writeRemainingField(ctx *WriteContext, ptr unsafe.Pointer, field *FieldInfo, value reflect.Value) {
+	fieldValue := value.Field(field.FieldIndex)
 
-		if field.Serializer != nil {
-			// For nested struct fields in compatible mode, write type info
-			writeType := ctx.Compatible() && isStructField(field.Type)
-			// Determine RefMode based on ctx.TrackRef() and field.Referencable
-			// This must match the read path logic which uses FieldDef.trackingRef/nullable
-			refMode := RefModeNone
-			if ctx.TrackRef() && field.Referencable {
-				refMode = RefModeTracking
-			} else if field.Referencable {
-				refMode = RefModeNullOnly
-			}
-			field.Serializer.Write(ctx, refMode, writeType, fieldValue)
-			if ctx.HasError() {
-				return
-			}
-		} else {
-			ctx.WriteValue(fieldValue)
-			if ctx.HasError() {
-				return
-			}
+	if isEnumField(field) {
+		writeEnumField(ctx, field, fieldValue)
+		return
+	}
+
+	if field.Serializer != nil {
+		// For nested struct fields in compatible mode, write type info
+		writeType := ctx.Compatible() && isStructField(field.Type)
+		// Determine RefMode based on ctx.TrackRef() and field.Referencable
+		refMode := RefModeNone
+		if ctx.TrackRef() && field.Referencable {
+			refMode = RefModeTracking
+		} else if field.Referencable {
+			refMode = RefModeNullOnly
 		}
+		field.Serializer.Write(ctx, refMode, writeType, fieldValue)
+	} else {
+		ctx.WriteValue(fieldValue)
 	}
 }
 
@@ -667,6 +655,11 @@ func (s *structSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool
 }
 
 func (s *structSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
+	// Early error check - skip all intermediate checks for normal path performance
+	if ctx.HasError() {
+		return
+	}
+
 	buf := ctx.Buffer()
 	if value.Kind() == reflect.Ptr {
 		if value.IsNil() {
@@ -676,16 +669,14 @@ func (s *structSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value 
 		type_ = type_.Elem()
 	}
 
+	// Lazy initialization (will be removed when eager init is fully wired up)
 	if s.fields == nil {
 		if s.type_ == nil {
 			s.type_ = type_
 		}
-		// Ensure s.type_ is the struct type, not a pointer type
 		for s.type_.Kind() == reflect.Ptr {
 			s.type_ = s.type_.Elem()
 		}
-		// If we have fieldDefs from TypeDef (compatible mode), use them
-		// Otherwise initialize from local type structure
 		if s.fieldDefs != nil {
 			if err := s.initFieldsFromDefsWithResolver(ctx.TypeResolver()); err != nil {
 				ctx.SetError(FromError(err))
@@ -703,7 +694,6 @@ func (s *structSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value 
 	}
 
 	// In compatible mode with meta share, struct hash is not written
-	// because type meta is written separately
 	if !ctx.Compatible() {
 		err := ctx.Err()
 		structHash := buf.ReadInt32(err)
@@ -716,59 +706,67 @@ func (s *structSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value 
 		}
 	}
 
-	// In compatible mode with fieldDefs, read fields in TypeDef order (not grouped)
-	if s.fieldDefs != nil {
+	// In compatible mode, always use ordered reading to match write path ordering
+	// Also use ordered reading when we have fieldDefs from TypeDef
+	if ctx.Compatible() || s.fieldDefs != nil {
 		s.readFieldsInOrder(ctx, value)
 		return
 	}
 
-	// Get base pointer for unsafe access
-	ptr := unsafe.Pointer(value.UnsafeAddr())
-	err := ctx.Err()
-
-	// Phase 1: Read fixed-size primitive fields (no ref flag)
-	// Use deferred error checking - read all fields, check once at end
-	for _, field := range s.fixedFields {
-		if field.FieldIndex < 0 {
-			s.skipField(ctx, field)
-			if ctx.HasError() {
-				return
-			}
-			continue
-		}
-		fieldPtr := unsafe.Add(ptr, field.Offset)
-		switch field.StaticId {
-		case ConcreteTypeBool:
-			*(*bool)(fieldPtr) = buf.ReadBool(err)
-		case ConcreteTypeInt8:
-			*(*int8)(fieldPtr) = buf.ReadInt8(err)
-		case ConcreteTypeInt16:
-			*(*int16)(fieldPtr) = buf.ReadInt16(err)
-		case ConcreteTypeFloat32:
-			*(*float32)(fieldPtr) = buf.ReadFloat32(err)
-		case ConcreteTypeFloat64:
-			*(*float64)(fieldPtr) = buf.ReadFloat64(err)
-		}
-	}
-
-	// Deferred error check after fixed-size primitives
-	if ctx.HasError() {
+	// Check if value is addressable for unsafe access
+	if !value.CanAddr() {
+		s.readFieldsInOrder(ctx, value)
 		return
 	}
 
-	// Phase 2: Read varint primitive fields (no ref flag)
-	// Use pre-calculated max bytes for all varint fields (5 bytes per int32, 10 bytes per int64)
-	if s.varintFieldsSize > 0 && buf.remaining() >= s.varintFieldsSize {
-		// Fast path: use unsafe reads without bounds checking for each varint
-		for _, field := range s.varintFields {
-			if field.FieldIndex < 0 {
-				// Cannot use fast path if we need to skip fields
-				s.skipField(ctx, field)
-				if ctx.HasError() {
-					return
+	// ==========================================================================
+	// Grouped reading for matching types (optimized path)
+	// - Types match, so all fields exist locally (no FieldIndex < 0 checks)
+	// - Use UnsafeGet at pre-computed offsets, update reader index once per phase
+	// ==========================================================================
+	ptr := unsafe.Pointer(value.UnsafeAddr())
+
+	// Phase 1: Fixed-size primitives (inline unsafe reads with endian handling)
+	if s.fixedSize > 0 {
+		baseOffset := buf.ReaderIndex()
+		data := buf.GetData()
+
+		for _, field := range s.fixedFields {
+			fieldPtr := unsafe.Add(ptr, field.Offset)
+			bufOffset := baseOffset + field.WriteOffset
+			switch field.StaticId {
+			case ConcreteTypeBool:
+				*(*bool)(fieldPtr) = data[bufOffset] != 0
+			case ConcreteTypeInt8:
+				*(*int8)(fieldPtr) = int8(data[bufOffset])
+			case ConcreteTypeInt16:
+				if isLittleEndian {
+					*(*int16)(fieldPtr) = *(*int16)(unsafe.Pointer(&data[bufOffset]))
+				} else {
+					*(*int16)(fieldPtr) = int16(binary.LittleEndian.Uint16(data[bufOffset:]))
 				}
-				continue
+			case ConcreteTypeFloat32:
+				if isLittleEndian {
+					*(*float32)(fieldPtr) = *(*float32)(unsafe.Pointer(&data[bufOffset]))
+				} else {
+					*(*float32)(fieldPtr) = math.Float32frombits(binary.LittleEndian.Uint32(data[bufOffset:]))
+				}
+			case ConcreteTypeFloat64:
+				if isLittleEndian {
+					*(*float64)(fieldPtr) = *(*float64)(unsafe.Pointer(&data[bufOffset]))
+				} else {
+					*(*float64)(fieldPtr) = math.Float64frombits(binary.LittleEndian.Uint64(data[bufOffset:]))
+				}
 			}
+		}
+		// Update reader index ONCE after all fixed fields
+		buf.SetReaderIndex(baseOffset + s.fixedSize)
+	}
+
+	// Phase 2: Varint primitives (must read sequentially - variable length)
+	// Use unsafe reads when we have enough buffer remaining
+	if s.maxVarintSize > 0 && buf.remaining() >= s.maxVarintSize {
+		for _, field := range s.varintFields {
 			fieldPtr := unsafe.Add(ptr, field.Offset)
 			switch field.StaticId {
 			case ConcreteTypeInt32:
@@ -779,16 +777,10 @@ func (s *structSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value 
 				*(*int)(fieldPtr) = int(buf.UnsafeReadVarint64())
 			}
 		}
-	} else {
-		// Slow path: use safe reads with bounds checking
+	} else if len(s.varintFields) > 0 {
+		// Slow path with bounds checking
+		err := ctx.Err()
 		for _, field := range s.varintFields {
-			if field.FieldIndex < 0 {
-				s.skipField(ctx, field)
-				if ctx.HasError() {
-					return
-				}
-				continue
-			}
 			fieldPtr := unsafe.Add(ptr, field.Offset)
 			switch field.StaticId {
 			case ConcreteTypeInt32:
@@ -801,53 +793,34 @@ func (s *structSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value 
 		}
 	}
 
-	// Deferred error check after varint primitives
-	if ctx.HasError() {
+	// Phase 3: Remaining fields (strings, slices, maps, structs, enums)
+	// No intermediate error checks - trade error path performance for normal path
+	for _, field := range s.remainingFields {
+		s.readRemainingField(ctx, ptr, field, value)
+	}
+}
+
+// readRemainingField reads a non-primitive field (string, slice, map, struct, enum)
+func (s *structSerializer) readRemainingField(ctx *ReadContext, ptr unsafe.Pointer, field *FieldInfo, value reflect.Value) {
+	// Fast path for primitive slices: read directly using unsafe to avoid reflect.ValueOf overhead
+	if readPrimitiveSliceToField(ctx, ptr, field) {
 		return
 	}
 
-	// Phase 3: Read remaining fields (all non-primitives have ref flag per xlang spec)
-	for _, field := range s.remainingFields {
-		if field.FieldIndex < 0 {
-			s.skipField(ctx, field)
-			if ctx.HasError() {
-				return
-			}
-			continue
-		}
+	fieldValue := value.Field(field.FieldIndex)
 
-		// Fast path for primitive slices: read directly using unsafe to avoid reflect.ValueOf overhead
-		if readPrimitiveSliceToField(ctx, ptr, field) {
-			if ctx.HasError() {
-				return
-			}
-			continue
-		}
+	if isEnumField(field) {
+		readEnumField(ctx, field, fieldValue)
+		return
+	}
 
-		fieldValue := value.Field(field.FieldIndex)
-
-		if isEnumField(field) {
-			readEnumField(ctx, field, fieldValue)
-			if ctx.HasError() {
-				return
-			}
-			continue
-		}
-
-		if field.Serializer != nil {
-			// For nested struct fields in compatible mode, read type info
-			readType := ctx.Compatible() && isStructField(field.Type)
-			// Per xlang spec, all non-primitive fields have ref flag
-			field.Serializer.Read(ctx, RefModeTracking, readType, fieldValue)
-			if ctx.HasError() {
-				return
-			}
-		} else {
-			ctx.ReadValue(fieldValue)
-			if ctx.HasError() {
-				return
-			}
-		}
+	if field.Serializer != nil {
+		// For nested struct fields in compatible mode, read type info
+		readType := ctx.Compatible() && isStructField(field.Type)
+		// Per xlang spec, all non-primitive fields have ref flag
+		field.Serializer.Read(ctx, RefModeTracking, readType, fieldValue)
+	} else {
+		ctx.ReadValue(fieldValue)
 	}
 }
 
@@ -855,7 +828,11 @@ func (s *structSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value 
 // This is used in compatible mode where Java writes fields in TypeDef order
 func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Value) {
 	buf := ctx.Buffer()
-	ptr := unsafe.Pointer(value.UnsafeAddr())
+	canUseUnsafe := value.CanAddr()
+	var ptr unsafe.Pointer
+	if canUseUnsafe {
+		ptr = unsafe.Pointer(value.UnsafeAddr())
+	}
 	err := ctx.Err()
 
 	for _, field := range s.fields {
@@ -867,11 +844,10 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 			continue
 		}
 
-		fieldPtr := unsafe.Add(ptr, field.Offset)
-
 		// Fast path for fixed-size primitive types (no ref flag)
 		// Use error-aware methods with deferred checking
-		if isFixedSizePrimitive(field.StaticId, field.Referencable) {
+		if canUseUnsafe && isFixedSizePrimitive(field.StaticId, field.Referencable) {
+			fieldPtr := unsafe.Add(ptr, field.Offset)
 			switch field.StaticId {
 			case ConcreteTypeBool:
 				*(*bool)(fieldPtr) = buf.ReadBool(err)
@@ -889,7 +865,8 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 
 		// Fast path for varint primitive types (no ref flag)
 		// Skip fast path if field has a serializer with a non-primitive type (e.g., NAMED_ENUM)
-		if isVarintPrimitive(field.StaticId, field.Referencable) && !fieldHasNonPrimitiveSerializer(field) {
+		if canUseUnsafe && isVarintPrimitive(field.StaticId, field.Referencable) && !fieldHasNonPrimitiveSerializer(field) {
+			fieldPtr := unsafe.Add(ptr, field.Offset)
 			switch field.StaticId {
 			case ConcreteTypeInt32:
 				*(*int32)(fieldPtr) = buf.ReadVarint32(err)
@@ -908,6 +885,33 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 
 		// Get field value for slow paths
 		fieldValue := value.Field(field.FieldIndex)
+
+		// Slow path for primitives when not addressable
+		if !canUseUnsafe && isFixedSizePrimitive(field.StaticId, field.Referencable) {
+			switch field.StaticId {
+			case ConcreteTypeBool:
+				fieldValue.SetBool(buf.ReadBool(err))
+			case ConcreteTypeInt8:
+				fieldValue.SetInt(int64(buf.ReadInt8(err)))
+			case ConcreteTypeInt16:
+				fieldValue.SetInt(int64(buf.ReadInt16(err)))
+			case ConcreteTypeFloat32:
+				fieldValue.SetFloat(float64(buf.ReadFloat32(err)))
+			case ConcreteTypeFloat64:
+				fieldValue.SetFloat(buf.ReadFloat64(err))
+			}
+			continue
+		}
+
+		if !canUseUnsafe && isVarintPrimitive(field.StaticId, field.Referencable) && !fieldHasNonPrimitiveSerializer(field) {
+			switch field.StaticId {
+			case ConcreteTypeInt32:
+				fieldValue.SetInt(int64(buf.ReadVarint32(err)))
+			case ConcreteTypeInt64, ConcreteTypeInt:
+				fieldValue.SetInt(buf.ReadVarint64(err))
+			}
+			continue
+		}
 
 		if isEnumField(field) {
 			readEnumField(ctx, field, fieldValue)
@@ -1048,7 +1052,7 @@ func (s *structSerializer) initFieldsFromContext(ctx interface{ TypeResolver() *
 	}
 
 	// Sort fields according to specification using nullable info for consistent ordering
-	serializers, fieldNames = sortFieldsWithNullable(typeResolver, fieldNames, serializers, typeIds, nullables)
+	serializers, fieldNames = sortFields(typeResolver, fieldNames, serializers, typeIds, nullables)
 	order := make(map[string]int, len(fieldNames))
 	for idx, name := range fieldNames {
 		order[name] = idx
@@ -1074,14 +1078,14 @@ func (s *structSerializer) initFieldsFromContext(ctx interface{ TypeResolver() *
 	return nil
 }
 
-// groupFields categorizes fields into fixedFields, varintFields, and remainingFields
-// Also computes pre-computed sizes for batch buffer reservation
+// groupFields categorizes fields into fixedFields, varintFields, and remainingFields.
+// Also computes pre-computed sizes and WriteOffset for batch buffer reservation.
 func (s *structSerializer) groupFields() {
 	s.fixedFields = nil
 	s.varintFields = nil
 	s.remainingFields = nil
-	s.fixedFieldsSize = 0
-	s.varintFieldsSize = 0
+	s.fixedSize = 0
+	s.maxVarintSize = 0
 
 	for _, field := range s.fields {
 		// Fields with non-primitive serializers (NAMED_ENUM, NAMED_STRUCT, etc.)
@@ -1089,27 +1093,14 @@ func (s *structSerializer) groupFields() {
 		if fieldHasNonPrimitiveSerializer(field) {
 			s.remainingFields = append(s.remainingFields, field)
 		} else if isFixedSizePrimitive(field.StaticId, field.Referencable) {
+			// Compute FixedSize and WriteOffset for this field
+			field.FixedSize = getFixedSizeByStaticId(field.StaticId)
+			field.WriteOffset = s.fixedSize
+			s.fixedSize += field.FixedSize
 			s.fixedFields = append(s.fixedFields, field)
-			// Compute size for each fixed primitive
-			switch field.StaticId {
-			case ConcreteTypeBool, ConcreteTypeInt8:
-				s.fixedFieldsSize += 1
-			case ConcreteTypeInt16:
-				s.fixedFieldsSize += 2
-			case ConcreteTypeFloat32:
-				s.fixedFieldsSize += 4
-			case ConcreteTypeFloat64:
-				s.fixedFieldsSize += 8
-			}
 		} else if isVarintPrimitive(field.StaticId, field.Referencable) {
+			s.maxVarintSize += getVarintMaxSizeByStaticId(field.StaticId)
 			s.varintFields = append(s.varintFields, field)
-			// Max bytes per varint (5 for int32, 10 for int64)
-			switch field.StaticId {
-			case ConcreteTypeInt32:
-				s.varintFieldsSize += 5
-			case ConcreteTypeInt64, ConcreteTypeInt:
-				s.varintFieldsSize += 10
-			}
 		} else {
 			s.remainingFields = append(s.remainingFields, field)
 		}
@@ -1363,29 +1354,6 @@ func isNonNullablePrimitiveKind(kind reflect.Kind) bool {
 	}
 }
 
-// isNumericKind returns true for numeric types (Go enums are typically int-based)
-func isNumericKind(kind reflect.Kind) bool {
-	switch kind {
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return true
-	default:
-		return false
-	}
-}
-
-// isReferencable determines if a type needs reference tracking based on Go type semantics
-func isReferencable(t reflect.Type) bool {
-	// Pointers, maps, slices, and interfaces need reference tracking
-	kind := t.Kind()
-	switch kind {
-	case reflect.Ptr, reflect.Map, reflect.Slice, reflect.Interface:
-		return true
-	default:
-		return false
-	}
-}
-
 // isInternalTypeWithoutTypeMeta checks if a type is serialized without type meta per xlang spec.
 // Per the spec (struct field serialization), these types use format: | ref/null flag | value data | (NO type meta)
 // - Nullable primitives (*int32, *float64, etc.): | null flag | field value |
@@ -1539,107 +1507,6 @@ func (s *structSerializer) computeHash() int32 {
 	return hash
 }
 
-// ptrToCodegenSerializer wraps a generated serializer for pointer types
-type ptrToCodegenSerializer struct {
-	type_             reflect.Type
-	codegenSerializer Serializer
-}
-
-func (s *ptrToCodegenSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
-	// Dereference pointer and delegate to the generated serializer
-	s.codegenSerializer.WriteData(ctx, value.Elem())
-}
-
-func (s *ptrToCodegenSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
-	switch refMode {
-	case RefModeTracking:
-		if value.IsNil() {
-			ctx.Buffer().WriteInt8(NullFlag)
-			return
-		}
-		refWritten, err := ctx.RefResolver().WriteRefOrNull(ctx.Buffer(), value)
-		if err != nil {
-			ctx.SetError(FromError(err))
-			return
-		}
-		if refWritten {
-			return
-		}
-	case RefModeNullOnly:
-		if value.IsNil() {
-			ctx.Buffer().WriteInt8(NullFlag)
-			return
-		}
-		ctx.Buffer().WriteInt8(NotNullValueFlag)
-	}
-	if writeType {
-		// Codegen structs have dynamic type IDs
-		typeInfo, err := ctx.TypeResolver().getTypeInfo(value, true)
-		if err != nil {
-			ctx.SetError(FromError(err))
-			return
-		}
-		if err := ctx.TypeResolver().WriteTypeInfo(ctx.Buffer(), typeInfo); err != nil {
-			ctx.SetError(FromError(err))
-			return
-		}
-	}
-	s.WriteData(ctx, value)
-}
-
-func (s *ptrToCodegenSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
-	// Allocate new value if needed
-	newValue := reflect.New(type_.Elem())
-	value.Set(newValue)
-	elem := newValue.Elem()
-	ctx.RefResolver().Reference(newValue)
-	s.codegenSerializer.ReadData(ctx, type_.Elem(), elem)
-}
-
-func (s *ptrToCodegenSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) {
-	buf := ctx.Buffer()
-	ctxErr := ctx.Err()
-	switch refMode {
-	case RefModeTracking:
-		refID, refErr := ctx.RefResolver().TryPreserveRefId(buf)
-		if refErr != nil {
-			ctx.SetError(FromError(refErr))
-			return
-		}
-		if int8(refID) < NotNullValueFlag {
-			obj := ctx.RefResolver().GetReadObject(refID)
-			if obj.IsValid() {
-				value.Set(obj)
-			}
-			return
-		}
-	case RefModeNullOnly:
-		flag := buf.ReadInt8(ctxErr)
-		if flag == NullFlag {
-			return
-		}
-	}
-	if ctx.HasError() {
-		return
-	}
-	if readType {
-		typeID := buf.ReadVaruint32Small7(ctxErr)
-		if ctx.HasError() {
-			return
-		}
-		internalTypeID := TypeId(typeID & 0xFF)
-		// Check if this is a struct type that needs type meta reading
-		if IsNamespacedType(TypeId(typeID)) || internalTypeID == COMPATIBLE_STRUCT || internalTypeID == STRUCT {
-			_, _ = ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID)
-		}
-	}
-	s.ReadData(ctx, value.Type(), value)
-}
-
-func (s *ptrToCodegenSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
-	s.Read(ctx, refMode, false, value)
-}
-
 // Field sorting helpers
 
 type triple struct {
@@ -1649,21 +1516,10 @@ type triple struct {
 	nullable   bool
 }
 
-func sortFields(
-	typeResolver *TypeResolver,
-	fieldNames []string,
-	serializers []Serializer,
-	typeIds []TypeId,
-) ([]Serializer, []string) {
-	// Default nullable to false for all fields (backwards compatible)
-	nullables := make([]bool, len(fieldNames))
-	return sortFieldsWithNullable(typeResolver, fieldNames, serializers, typeIds, nullables)
-}
-
-// sortFieldsWithNullable sorts fields with nullable information to match Java's field ordering.
+// sortFields sorts fields with nullable information to match Java's field ordering.
 // Java separates primitive types (int, long) from boxed types (Integer, Long).
 // In Go, this corresponds to non-pointer primitives vs pointer-to-primitive.
-func sortFieldsWithNullable(
+func sortFields(
 	typeResolver *TypeResolver,
 	fieldNames []string,
 	serializers []Serializer,
@@ -1850,7 +1706,27 @@ func typeIdFromKind(type_ reflect.Type) TypeId {
 	case reflect.String:
 		return STRING
 	case reflect.Slice:
-		return LIST
+		// For slices, return the appropriate primitive array type ID based on element type
+		elemKind := type_.Elem().Kind()
+		switch elemKind {
+		case reflect.Bool:
+			return BOOL_ARRAY
+		case reflect.Int8:
+			return INT8_ARRAY
+		case reflect.Int16:
+			return INT16_ARRAY
+		case reflect.Int32:
+			return INT32_ARRAY
+		case reflect.Int64, reflect.Int:
+			return INT64_ARRAY
+		case reflect.Float32:
+			return FLOAT32_ARRAY
+		case reflect.Float64:
+			return FLOAT64_ARRAY
+		default:
+			// Non-primitive slices use LIST
+			return LIST
+		}
 	case reflect.Array:
 		// For arrays, return the appropriate primitive array type ID based on element type
 		elemKind := type_.Elem().Kind()

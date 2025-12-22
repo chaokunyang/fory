@@ -402,6 +402,70 @@ func (b *ByteBuffer) UnsafeWriteVarint64(value int64) {
 	b.writerIndex++
 }
 
+// UnsafePutVarInt32 writes a zigzag-encoded varint32 at the given offset without advancing writerIndex.
+// Caller must have called Reserve() to ensure capacity.
+// Returns the number of bytes written (1-5).
+func (b *ByteBuffer) UnsafePutVarInt32(offset int, value int32) int {
+	u := uint32((value << 1) ^ (value >> 31))
+	return b.UnsafePutVaruint32(offset, u)
+}
+
+// UnsafePutVaruint32 writes an unsigned varuint32 at the given offset without advancing writerIndex.
+// Caller must have called Reserve() to ensure capacity.
+// Returns the number of bytes written (1-5).
+func (b *ByteBuffer) UnsafePutVaruint32(offset int, value uint32) int {
+	if value>>7 == 0 {
+		b.data[offset] = byte(value)
+		return 1
+	}
+	if value>>14 == 0 {
+		b.data[offset] = byte((value & 0x7F) | 0x80)
+		b.data[offset+1] = byte(value >> 7)
+		return 2
+	}
+	if value>>21 == 0 {
+		b.data[offset] = byte((value & 0x7F) | 0x80)
+		b.data[offset+1] = byte(value>>7 | 0x80)
+		b.data[offset+2] = byte(value >> 14)
+		return 3
+	}
+	if value>>28 == 0 {
+		b.data[offset] = byte((value & 0x7F) | 0x80)
+		b.data[offset+1] = byte(value>>7 | 0x80)
+		b.data[offset+2] = byte(value>>14 | 0x80)
+		b.data[offset+3] = byte(value >> 21)
+		return 4
+	}
+	b.data[offset] = byte((value & 0x7F) | 0x80)
+	b.data[offset+1] = byte(value>>7 | 0x80)
+	b.data[offset+2] = byte(value>>14 | 0x80)
+	b.data[offset+3] = byte(value>>21 | 0x80)
+	b.data[offset+4] = byte(value >> 28)
+	return 5
+}
+
+// UnsafePutVarInt64 writes a zigzag-encoded varint64 at the given offset without advancing writerIndex.
+// Caller must have called Reserve() to ensure capacity.
+// Returns the number of bytes written (1-10).
+func (b *ByteBuffer) UnsafePutVarInt64(offset int, value int64) int {
+	u := uint64((value << 1) ^ (value >> 63))
+	return b.UnsafePutVaruint64(offset, u)
+}
+
+// UnsafePutVaruint64 writes an unsigned varuint64 at the given offset without advancing writerIndex.
+// Caller must have called Reserve() to ensure capacity.
+// Returns the number of bytes written (1-10).
+func (b *ByteBuffer) UnsafePutVaruint64(offset int, value uint64) int {
+	i := 0
+	for value >= 0x80 {
+		b.data[offset+i] = byte(value&0x7F) | 0x80
+		value >>= 7
+		i++
+	}
+	b.data[offset+i] = byte(value)
+	return i + 1
+}
+
 func (b *ByteBuffer) PutInt32(index int, value int32) {
 	b.grow(4)
 	binary.LittleEndian.PutUint32(b.data[index:], uint32(value))

@@ -442,9 +442,9 @@ func buildFieldDefs(fory *Fory, value reflect.Value) ([]FieldDef, error) {
 			nullables[i] = fieldDef.nullable
 		}
 
-		// Use sortFieldsWithNullable to match Java's field ordering
+		// Use sortFields to match Java's field ordering
 		// (primitives before boxed/nullable primitives)
-		_, sortedNames := sortFieldsWithNullable(fory.typeResolver, fieldNames, serializers, typeIds, nullables)
+		_, sortedNames := sortFields(fory.typeResolver, fieldNames, serializers, typeIds, nullables)
 
 		// Rebuild fieldInfos in the sorted order
 		nameToFieldInfo := make(map[string]FieldDef)

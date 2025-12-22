@@ -18,7 +18,6 @@
 package fory
 
 import (
-	"fmt"
 	"reflect"
 )
 
@@ -82,10 +81,7 @@ func (s setSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool,
 			ctx.SetError(FromError(err))
 			return
 		}
-		if err := ctx.TypeResolver().WriteTypeInfo(ctx.buffer, typeInfo); err != nil {
-			ctx.SetError(FromError(err))
-			return
-		}
+		ctx.TypeResolver().WriteTypeInfo(ctx.buffer, typeInfo, ctx.Err())
 	}
 	s.WriteData(ctx, value)
 }
@@ -261,11 +257,11 @@ func (s setSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value refl
 
 	// ReadData collection flags that indicate special characteristics
 	collectFlag := buf.ReadInt8(err)
-	var elemTypeInfo TypeInfo
+	var elemTypeInfo *TypeInfo
 
 	// If all elements are same type, read the shared type info
 	if (collectFlag & CollectionIsSameType) != 0 {
-		elemTypeInfo, _ = ctx.TypeResolver().ReadTypeInfo(buf, reflect.New(type_.Key()).Elem())
+		elemTypeInfo = ctx.TypeResolver().ReadTypeInfo(buf, err)
 	}
 
 	// Initialize set if nil
@@ -284,7 +280,7 @@ func (s setSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value refl
 }
 
 // readSameType handles deserialization of sets where all elements share the same type
-func (s setSerializer) readSameType(ctx *ReadContext, buf *ByteBuffer, value reflect.Value, typeInfo TypeInfo, flag int8, length int) {
+func (s setSerializer) readSameType(ctx *ReadContext, buf *ByteBuffer, value reflect.Value, typeInfo *TypeInfo, flag int8, length int) {
 	// Determine if reference tracking is enabled
 	trackRefs := (flag & CollectionTrackingRef) != 0
 	serializer := typeInfo.Serializer
@@ -343,9 +339,8 @@ func (s setSerializer) readDifferentTypes(ctx *ReadContext, buf *ByteBuffer, val
 				continue
 			}
 			// Read type info (handles namespaced types, meta sharing, etc.)
-			typeInfo, tiErr := ctx.TypeResolver().ReadTypeInfo(buf, reflect.New(keyType).Elem())
-			if tiErr != nil {
-				ctx.SetError(FromError(fmt.Errorf("failed to read type info: %w", tiErr)))
+			typeInfo := ctx.TypeResolver().ReadTypeInfo(buf, ctxErr)
+			if ctxErr.HasError() {
 				return
 			}
 			// Create new element and deserialize from buffer
@@ -364,9 +359,8 @@ func (s setSerializer) readDifferentTypes(ctx *ReadContext, buf *ByteBuffer, val
 				continue
 			}
 			// headFlag should be NotNullValueFlag, read type info
-			typeInfo, tiErr := ctx.TypeResolver().ReadTypeInfo(buf, reflect.New(keyType).Elem())
-			if tiErr != nil {
-				ctx.SetError(FromError(fmt.Errorf("failed to read type info: %w", tiErr)))
+			typeInfo := ctx.TypeResolver().ReadTypeInfo(buf, ctxErr)
+			if ctxErr.HasError() {
 				return
 			}
 			elem := reflect.New(typeInfo.Type).Elem()
@@ -377,9 +371,8 @@ func (s setSerializer) readDifferentTypes(ctx *ReadContext, buf *ByteBuffer, val
 			setMapKey(value, elem, keyType)
 		} else {
 			// No ref tracking and no nulls: typeId + data directly
-			typeInfo, tiErr := ctx.TypeResolver().ReadTypeInfo(buf, reflect.New(keyType).Elem())
-			if tiErr != nil {
-				ctx.SetError(FromError(fmt.Errorf("failed to read type info: %w", tiErr)))
+			typeInfo := ctx.TypeResolver().ReadTypeInfo(buf, ctxErr)
+			if ctxErr.HasError() {
 				return
 			}
 			elem := reflect.New(typeInfo.Type).Elem()
@@ -432,7 +425,7 @@ func (s setSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, va
 		// ReadData and discard type info for sets
 		typeID := uint32(buf.ReadVaruint32Small7(ctxErr))
 		if IsNamespacedType(TypeId(typeID)) {
-			_, _ = ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID)
+			ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID, ctxErr)
 		}
 	}
 	s.ReadData(ctx, value.Type(), value)

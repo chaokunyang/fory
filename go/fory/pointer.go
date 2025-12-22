@@ -69,10 +69,7 @@ func (s *ptrToValueSerializer) Write(ctx *WriteContext, refMode RefMode, writeTy
 			ctx.SetError(FromError(err))
 			return
 		}
-		if err := ctx.TypeResolver().WriteTypeInfo(ctx.Buffer(), typeInfo); err != nil {
-			ctx.SetError(FromError(err))
-			return
-		}
+		ctx.TypeResolver().WriteTypeInfo(ctx.Buffer(), typeInfo, ctx.Err())
 	}
 	s.WriteData(ctx, value)
 }
@@ -129,11 +126,7 @@ func (s *ptrToValueSerializer) Read(ctx *ReadContext, refMode RefMode, readType 
 		internalTypeID := TypeId(typeID & 0xFF)
 		// Check if this is a struct type that needs type meta reading
 		if IsNamespacedType(TypeId(typeID)) || internalTypeID == COMPATIBLE_STRUCT || internalTypeID == STRUCT {
-			typeInfo, typeErr := ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID)
-			if typeErr != nil {
-				ctx.SetError(FromError(typeErr))
-				return
-			}
+			typeInfo := ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID, ctxErr)
 			// Use the serializer from TypeInfo which has the remote field definitions
 			if structSer, ok := typeInfo.Serializer.(*structSerializer); ok && len(structSer.fieldDefs) > 0 {
 				// Allocate the pointer value if needed

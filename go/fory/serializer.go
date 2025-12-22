@@ -182,10 +182,7 @@ func (s *extensionSerializerAdapter) Write(ctx *WriteContext, refMode RefMode, w
 			ctx.SetError(FromError(err))
 			return
 		}
-		if err := ctx.TypeResolver().WriteTypeInfo(buf, typeInfo); err != nil {
-			ctx.SetError(FromError(err))
-			return
-		}
+		ctx.TypeResolver().WriteTypeInfo(buf, typeInfo, ctx.Err())
 	}
 	s.WriteData(ctx, value)
 }

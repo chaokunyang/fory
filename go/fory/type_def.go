@@ -182,7 +182,7 @@ func (td *TypeDef) ComputeDiff(localDef *TypeDef) string {
 	return diff.String()
 }
 
-func (td *TypeDef) writeTypeDef(buffer *ByteBuffer) {
+func (td *TypeDef) writeTypeDef(buffer *ByteBuffer, err *Error) {
 	buffer.WriteBinary(td.encoded)
 }
 
@@ -241,8 +241,13 @@ func (td *TypeDef) buildTypeInfoWithResolver(resolver *TypeResolver) (TypeInfo, 
 	return info, nil
 }
 
-func readTypeDef(fory *Fory, buffer *ByteBuffer, header int64) (*TypeDef, error) {
-	return decodeTypeDef(fory, buffer, header)
+func readTypeDef(fory *Fory, buffer *ByteBuffer, header int64, err *Error) *TypeDef {
+	td, decodeErr := decodeTypeDef(fory, buffer, header)
+	if decodeErr != nil {
+		err.SetIfOk(decodeErr)
+		return nil
+	}
+	return td
 }
 
 func skipTypeDef(buffer *ByteBuffer, header int64, err *Error) {
@@ -527,7 +532,10 @@ func (b *BaseFieldType) getTypeInfo(fory *Fory) (TypeInfo, error) {
 	if err != nil {
 		return TypeInfo{}, err
 	}
-	return info, nil
+	if info == nil {
+		return TypeInfo{}, nil
+	}
+	return *info, nil
 }
 
 func (b *BaseFieldType) getTypeInfoWithResolver(resolver *TypeResolver) (TypeInfo, error) {
@@ -535,7 +543,10 @@ func (b *BaseFieldType) getTypeInfoWithResolver(resolver *TypeResolver) (TypeInf
 	if err != nil {
 		return TypeInfo{}, err
 	}
-	return info, nil
+	if info == nil {
+		return TypeInfo{}, nil
+	}
+	return *info, nil
 }
 
 // readFieldType reads field type info from the buffer according to the TypeId
@@ -778,8 +789,8 @@ func (d *DynamicFieldType) getTypeInfoWithResolver(resolver *TypeResolver) (Type
 
 	// First try direct lookup
 	info, err := resolver.getTypeInfoById(uint32(typeId))
-	if err == nil {
-		return info, nil
+	if err == nil && info != nil {
+		return *info, nil
 	}
 
 	// If direct lookup fails and it's a composite ID, extract the custom ID
@@ -789,8 +800,8 @@ func (d *DynamicFieldType) getTypeInfoWithResolver(resolver *TypeResolver) (Type
 		if customId > 0 {
 			// Try looking up by the custom ID
 			info, err = resolver.getTypeInfoById(uint32(customId))
-			if err == nil {
-				return info, nil
+			if err == nil && info != nil {
+				return *info, nil
 			}
 		}
 	}

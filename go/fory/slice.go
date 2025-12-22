@@ -177,10 +177,7 @@ func (s *sliceConcreteValueSerializer) WriteData(ctx *WriteContext, value reflec
 
 	// Write element type info for deserialization
 	elemTypeInfo, _ := ctx.TypeResolver().getTypeInfo(reflect.New(elemType).Elem(), false)
-	if err := ctx.TypeResolver().WriteTypeInfo(buf, elemTypeInfo); err != nil {
-		ctx.SetError(FromError(err))
-		return
-	}
+	ctx.TypeResolver().WriteTypeInfo(buf, elemTypeInfo, ctx.Err())
 
 	// WriteData elements
 	trackRefs := (collectFlag & CollectionTrackingRef) != 0
@@ -265,7 +262,7 @@ func (s *sliceConcreteValueSerializer) ReadData(ctx *ReadContext, type_ reflect.
 		if (collectFlag & CollectionIsDeclElementType) == 0 {
 			typeID := buf.ReadVaruint32Small7(ctxErr)
 			// ReadData additional metadata for namespaced types
-			_, _ = ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID)
+			ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID, ctxErr)
 		}
 	}
 

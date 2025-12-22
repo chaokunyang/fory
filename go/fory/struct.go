@@ -54,7 +54,6 @@ type FieldInfo struct {
 	WriteType bool    // whether to write type info (true for struct fields in compatible mode)
 }
 
-
 // fieldHasNonPrimitiveSerializer returns true if the field has a serializer with a non-primitive type ID.
 // This is used to skip the fast path for fields like enums where StaticId is int32 but the serializer
 // writes a different format (e.g., unsigned varint for enum ordinals vs signed zigzag for int32).
@@ -114,9 +113,6 @@ func writeEnumField(ctx *WriteContext, field *FieldInfo, fieldValue reflect.Valu
 func readEnumField(ctx *ReadContext, field *FieldInfo, fieldValue reflect.Value) {
 	buf := ctx.Buffer()
 	nullFlag := buf.ReadInt8(ctx.Err())
-	if ctx.HasError() {
-		return
-	}
 	if nullFlag == NullFlag {
 		// For pointer enum fields, leave as nil; for non-pointer, set to zero
 		if fieldValue.Kind() != reflect.Ptr {
@@ -249,10 +245,7 @@ func (s *structSerializer) Write(ctx *WriteContext, refMode RefMode, writeType b
 			ctx.SetError(FromError(err))
 			return
 		}
-		if err := ctx.TypeResolver().WriteTypeInfo(ctx.buffer, typeInfo); err != nil {
-			ctx.SetError(FromError(err))
-			return
-		}
+		ctx.TypeResolver().WriteTypeInfo(ctx.buffer, typeInfo, ctx.Err())
 	}
 	s.WriteData(ctx, value)
 }
@@ -567,24 +560,14 @@ func (s *structSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool
 			return
 		}
 	}
-	if ctx.HasError() {
-		return
-	}
 	if readType {
 		// Read type info - in compatible mode this returns the serializer with remote fieldDefs
 		typeID := buf.ReadVaruint32Small7(ctxErr)
-		if ctx.HasError() {
-			return
-		}
 		internalTypeID := TypeId(typeID & 0xFF)
 		// Check if this is a struct type that needs type meta reading
 		if IsNamespacedType(TypeId(typeID)) || internalTypeID == COMPATIBLE_STRUCT || internalTypeID == STRUCT {
 			// For struct types in compatible mode, use the serializer from TypeInfo
-			typeInfo, tiErr := ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID)
-			if tiErr != nil {
-				ctx.SetError(FromError(tiErr))
-				return
-			}
+			typeInfo := ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID, ctxErr)
 			// Use the serializer from TypeInfo which has the remote field definitions
 			if structSer, ok := typeInfo.Serializer.(*structSerializer); ok && len(structSer.fieldDefs) > 0 {
 				structSer.ReadData(ctx, value.Type(), value)
@@ -622,9 +605,6 @@ func (s *structSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value 
 	if !ctx.Compatible() {
 		err := ctx.Err()
 		structHash := buf.ReadInt32(err)
-		if ctx.HasError() {
-			return
-		}
 		if structHash != s.structHash {
 			ctx.SetError(HashMismatchError(structHash, s.structHash, s.type_.String()))
 			return
@@ -918,11 +898,6 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 			continue
 		}
 
-		// Check for accumulated errors before slow path (complex types)
-		if ctx.HasError() {
-			return
-		}
-
 		// Get field value for slow paths
 		fieldValue := value.Field(field.FieldIndex)
 
@@ -955,9 +930,6 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 
 		if isEnumField(field) {
 			readEnumField(ctx, field, fieldValue)
-			if ctx.HasError() {
-				return
-			}
 			continue
 		}
 
@@ -965,14 +937,8 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 		if field.Serializer != nil {
 			// Use pre-computed RefMode and WriteType from field initialization
 			field.Serializer.Read(ctx, field.RefMode, field.WriteType, fieldValue)
-			if ctx.HasError() {
-				return
-			}
 		} else {
 			ctx.ReadValue(fieldValue)
-			if ctx.HasError() {
-				return
-			}
 		}
 	}
 }

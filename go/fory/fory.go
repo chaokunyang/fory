@@ -155,7 +155,7 @@ func New(opts ...Option) *Fory {
 		f.metaContext = &MetaContext{
 			typeMap:               make(map[reflect.Type]uint32),
 			writingTypeDefs:       make([]*TypeDef, 0),
-			readTypeInfos:         make([]TypeInfo, 0),
+			readTypeInfos:         make([]*TypeInfo, 0),
 			scopedMetaShareEnable: true,
 		}
 	}
@@ -713,7 +713,7 @@ func (f *Fory) Serialize(value any) ([]byte, error) {
 		// Update the meta offset field
 		f.writeCtx.buffer.PutInt32(metaStartOffset, int32(offset))
 		// WriteData type definitions
-		f.typeResolver.writeTypeDefs(f.writeCtx.buffer)
+		f.typeResolver.writeTypeDefs(f.writeCtx.buffer, f.writeCtx.Err())
 	}
 
 	return f.writeCtx.buffer.GetByteSlice(0, f.writeCtx.buffer.writerIndex), nil
@@ -745,8 +745,9 @@ func (f *Fory) Deserialize(data []byte, v interface{}) error {
 		metaPos := dataStartPos + int(metaOffset)
 		f.readCtx.buffer.SetReaderIndex(metaPos)
 
-		if err := f.typeResolver.readTypeDefs(f.readCtx.buffer); err != nil {
-			return fmt.Errorf("failed to read type definitions: %w", err)
+		f.typeResolver.readTypeDefs(f.readCtx.buffer, f.readCtx.Err())
+		if f.readCtx.HasError() {
+			return fmt.Errorf("failed to read type definitions: %w", f.readCtx.TakeError())
 		}
 
 		// Save final position (after reading TypeDefs)
@@ -824,10 +825,7 @@ func (f *Fory) SerializeTo(buf *ByteBuffer, value interface{}) error {
 		if err == nil && typeInfo != nil && typeInfo.Serializer != nil {
 			// Write not-null flag and type ID directly
 			buf.WriteInt8(NotNullValueFlag)
-			if err := f.typeResolver.WriteTypeInfo(buf, typeInfo); err != nil {
-				f.writeCtx.buffer = origBuffer
-				return err
-			}
+			f.typeResolver.WriteTypeInfo(buf, typeInfo, f.writeCtx.Err())
 			// Call the underlying struct serializer's WriteData directly
 			if ptrSer, ok := typeInfo.Serializer.(*ptrToValueSerializer); ok {
 				ptrSer.valueSerializer.WriteData(f.writeCtx, elemValue)
@@ -861,7 +859,7 @@ finish:
 		buf.PutInt32(metaStartOffset, int32(offset))
 
 		// Write type definitions
-		f.typeResolver.writeTypeDefs(buf)
+		f.typeResolver.writeTypeDefs(buf, f.writeCtx.Err())
 	}
 
 	// Restore original buffer
@@ -902,9 +900,10 @@ func (f *Fory) DeserializeFrom(buf *ByteBuffer, v interface{}) error {
 		metaPos := dataStartPos + int(metaOffset)
 		buf.SetReaderIndex(metaPos)
 
-		if err := f.typeResolver.readTypeDefs(buf); err != nil {
+		f.typeResolver.readTypeDefs(buf, f.readCtx.Err())
+		if f.readCtx.HasError() {
 			f.readCtx.buffer = origBuffer
-			return fmt.Errorf("failed to read type definitions: %w", err)
+			return fmt.Errorf("failed to read type definitions: %w", f.readCtx.TakeError())
 		}
 
 		// Save final position (after reading TypeDefs)
@@ -997,7 +996,7 @@ func (f *Fory) SerializeWithCallback(buffer *ByteBuffer, v interface{}, callback
 		// Update the meta offset field
 		buffer.PutInt32(metaStartOffset, int32(offset))
 		// WriteData type definitions
-		f.typeResolver.writeTypeDefs(buffer)
+		f.typeResolver.writeTypeDefs(buffer, f.writeCtx.Err())
 	}
 
 	return nil
@@ -1048,8 +1047,9 @@ func (f *Fory) DeserializeWithCallbackBuffers(buffer *ByteBuffer, v interface{},
 		metaPos := dataStartPos + int(metaOffset)
 		buffer.SetReaderIndex(metaPos)
 
-		if err := f.typeResolver.readTypeDefs(buffer); err != nil {
-			return fmt.Errorf("failed to read type definitions: %w", err)
+		f.typeResolver.readTypeDefs(buffer, f.readCtx.Err())
+		if f.readCtx.HasError() {
+			return fmt.Errorf("failed to read type definitions: %w", f.readCtx.TakeError())
 		}
 
 		// Save final position (after reading TypeDefs)
@@ -1114,7 +1114,7 @@ func (f *Fory) serializeReflectValue(value reflect.Value) ([]byte, error) {
 		f.writeCtx.buffer.PutInt32(metaStartOffset, int32(offset))
 
 		// WriteData type definitions
-		f.typeResolver.writeTypeDefs(f.writeCtx.buffer)
+		f.typeResolver.writeTypeDefs(f.writeCtx.buffer, f.writeCtx.Err())
 	}
 
 	return f.writeCtx.buffer.GetByteSlice(0, f.writeCtx.buffer.writerIndex), nil

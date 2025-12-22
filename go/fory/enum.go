@@ -54,10 +54,7 @@ func (s *enumSerializer) Write(ctx *WriteContext, refMode RefMode, writeType boo
 			ctx.SetError(FromError(err))
 			return
 		}
-		if err := ctx.TypeResolver().WriteTypeInfo(ctx.buffer, typeInfo); err != nil {
-			ctx.SetError(FromError(err))
-			return
-		}
+		ctx.TypeResolver().WriteTypeInfo(ctx.buffer, typeInfo, ctx.Err())
 	}
 	s.WriteData(ctx, value)
 }

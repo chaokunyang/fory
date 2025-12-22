@@ -80,7 +80,7 @@ func NewMetaStringResolver() *MetaStringResolver {
 	}
 }
 
-func (r *MetaStringResolver) WriteMetaStringBytes(buf *ByteBuffer, m *MetaStringBytes) error {
+func (r *MetaStringResolver) WriteMetaStringBytes(buf *ByteBuffer, m *MetaStringBytes, err *Error) {
 	if m.DynamicWriteStringID == DefaultDynamicWriteMetaStrID {
 		// First occurrence: write full string data
 		m.DynamicWriteStringID = r.dynamicWriteStringID
@@ -96,9 +96,10 @@ func (r *MetaStringResolver) WriteMetaStringBytes(buf *ByteBuffer, m *MetaString
 			buf.WriteByte(byte(m.Encoding))
 		} else {
 			// Large strings include full hash
-			err := binary.Write(buf, binary.LittleEndian, m.Hashcode)
-			if err != nil {
-				return err
+			binErr := binary.Write(buf, binary.LittleEndian, m.Hashcode)
+			if binErr != nil {
+				err.SetIfOk(binErr)
+				return
 			}
 		}
 		buf.Write(m.Data)
@@ -107,7 +108,6 @@ func (r *MetaStringResolver) WriteMetaStringBytes(buf *ByteBuffer, m *MetaString
 		header := uint32((m.DynamicWriteStringID+1)<<1) | 1
 		buf.WriteVaruint32Small7(header)
 	}
-	return nil
 }
 
 // ReadMetaStringBytes reads a string from buffer, handling dynamic references

@@ -515,9 +515,9 @@ func (c *ReadContext) ReadValue(value reflect.Value) {
 		}
 
 		// Read type info to determine the actual type
-		typeInfo, err := c.typeResolver.ReadTypeInfo(c.buffer, value)
-		if err != nil {
-			c.SetError(DeserializationErrorf("failed to read type info for interface: %v", err))
+		ctxErr := c.Err()
+		typeInfo := c.typeResolver.ReadTypeInfo(c.buffer, ctxErr)
+		if ctxErr.HasError() {
 			return
 		}
 
@@ -588,15 +588,100 @@ func (c *ReadContext) ReadValue(value reflect.Value) {
 		return
 	}
 
+	// For struct types, use optimized ReadStruct path
+	valueType := value.Type()
+	if valueType.Kind() == reflect.Struct {
+		c.ReadStruct(value)
+		return
+	}
+	if valueType.Kind() == reflect.Ptr && valueType.Elem().Kind() == reflect.Struct {
+		c.ReadStruct(value)
+		return
+	}
+
 	// Get serializer for the value's type
-	serializer, err := c.typeResolver.getSerializerByType(value.Type(), false)
+	serializer, err := c.typeResolver.getSerializerByType(valueType, false)
 	if err != nil {
-		c.SetError(DeserializationErrorf("failed to get serializer for type %v: %v", value.Type(), err))
+		c.SetError(DeserializationErrorf("failed to get serializer for type %v: %v", valueType, err))
 		return
 	}
 
 	// Read handles ref tracking and type info internally
 	serializer.Read(c, RefModeTracking, true, value)
+}
+
+// ReadStruct reads a struct value with optimized type resolution.
+// This method uses ReadTypeInfoForType to avoid expensive type resolution via map lookups
+// when the expected type is already known.
+func (c *ReadContext) ReadStruct(value reflect.Value) {
+	if !value.IsValid() {
+		c.SetError(DeserializationError("invalid reflect.Value"))
+		return
+	}
+
+	// Handle pointer to struct
+	valueType := value.Type()
+	isPtr := valueType.Kind() == reflect.Ptr
+	var structType reflect.Type
+	if isPtr {
+		structType = valueType.Elem()
+	} else {
+		structType = valueType
+	}
+
+	// Read ref flag
+	refID, err := c.RefResolver().TryPreserveRefId(c.buffer)
+	if err != nil {
+		c.SetError(FromError(err))
+		return
+	}
+
+	// Handle null
+	if int8(refID) == NullFlag {
+		if isPtr {
+			value.Set(reflect.Zero(valueType))
+		}
+		return
+	}
+
+	// Handle reference to existing object
+	if int8(refID) < NotNullValueFlag {
+		obj := c.RefResolver().GetReadObject(refID)
+		if obj.IsValid() {
+			value.Set(obj)
+		}
+		return
+	}
+
+	// Use ReadTypeInfoForType to get serializer directly by type - avoids map lookups
+	ctxErr := c.Err()
+	serializer := c.typeResolver.ReadTypeInfoForType(c.buffer, structType, ctxErr)
+	if ctxErr.HasError() || serializer == nil {
+		if !ctxErr.HasError() {
+			c.SetError(DeserializationErrorf("no serializer registered for struct %v", structType))
+		}
+		return
+	}
+
+	// Allocate pointer if needed
+	var readTarget reflect.Value
+	if isPtr {
+		if value.IsNil() {
+			value.Set(reflect.New(structType))
+		}
+		readTarget = value.Elem()
+		// Register reference before reading (for circular references)
+		c.RefResolver().SetReadObject(refID, value)
+	} else {
+		readTarget = value
+		// For non-pointer structs, register a pointer to enable circular ref resolution
+		if value.CanAddr() {
+			c.RefResolver().SetReadObject(refID, value.Addr())
+		}
+	}
+
+	// Read struct data directly
+	serializer.ReadData(c, structType, readTarget)
 }
 
 // ReadInto reads a value using a specific serializer with optional ref/type info

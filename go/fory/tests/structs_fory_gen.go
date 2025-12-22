@@ -120,8 +120,8 @@ func (g DynamicSliceDemo_ForyGenSerializer) Read(ctx *fory.ReadContext, refMode 
 		}
 	}
 	if readType {
-		if _, tiErr := ctx.TypeResolver().ReadTypeInfo(ctx.Buffer(), value); tiErr != nil {
-			ctx.SetError(fory.FromError(tiErr))
+		ctx.TypeResolver().ReadTypeInfo(ctx.Buffer(), ctx.Err())
+		if ctx.HasError() {
 			return
 		}
 	}
@@ -405,8 +405,8 @@ func (g MapDemo_ForyGenSerializer) Read(ctx *fory.ReadContext, refMode fory.RefM
 		}
 	}
 	if readType {
-		if _, tiErr := ctx.TypeResolver().ReadTypeInfo(ctx.Buffer(), value); tiErr != nil {
-			ctx.SetError(fory.FromError(tiErr))
+		ctx.TypeResolver().ReadTypeInfo(ctx.Buffer(), ctx.Err())
+		if ctx.HasError() {
 			return
 		}
 	}
@@ -685,8 +685,8 @@ func (g SliceDemo_ForyGenSerializer) Read(ctx *fory.ReadContext, refMode fory.Re
 		}
 	}
 	if readType {
-		if _, tiErr := ctx.TypeResolver().ReadTypeInfo(ctx.Buffer(), value); tiErr != nil {
-			ctx.SetError(fory.FromError(tiErr))
+		ctx.TypeResolver().ReadTypeInfo(ctx.Buffer(), ctx.Err())
+		if ctx.HasError() {
 			return
 		}
 	}
@@ -900,8 +900,8 @@ func (g ValidationDemo_ForyGenSerializer) Read(ctx *fory.ReadContext, refMode fo
 		}
 	}
 	if readType {
-		if _, tiErr := ctx.TypeResolver().ReadTypeInfo(ctx.Buffer(), value); tiErr != nil {
-			ctx.SetError(fory.FromError(tiErr))
+		ctx.TypeResolver().ReadTypeInfo(ctx.Buffer(), ctx.Err())
+		if ctx.HasError() {
 			return
 		}
 	}

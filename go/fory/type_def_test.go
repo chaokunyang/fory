@@ -119,12 +119,12 @@ func TestTypeDefEncodingDecoding(t *testing.T) {
 			}
 
 			buffer := NewByteBuffer(make([]byte, 0, 256))
-			originalTypeDef.writeTypeDef(buffer)
-
 			readErr := &Error{}
-			decodedTypeDef, err := readTypeDef(fory, buffer, int64(buffer.ReadInt64(readErr)))
-			if err != nil {
-				t.Fatalf("Failed to decode TypeDef: %v", err)
+			originalTypeDef.writeTypeDef(buffer, readErr)
+
+			decodedTypeDef := readTypeDef(fory, buffer, int64(buffer.ReadInt64(readErr)), readErr)
+			if readErr.HasError() {
+				t.Fatalf("Failed to decode TypeDef: %v", readErr.Error())
 			}
 
 			// basic checks
@@ -247,12 +247,12 @@ func TestTypeDefNullableFields(t *testing.T) {
 	// Encode and decode TypeDef, then verify nullable flags are preserved
 	t.Run("Encoded/Decoded TypeDef nullable flags", func(t *testing.T) {
 		buffer := NewByteBuffer(make([]byte, 0, 256))
-		typeDef.writeTypeDef(buffer)
-
 		readErr := &Error{}
-		decodedTypeDef, err := readTypeDef(fory, buffer, int64(buffer.ReadInt64(readErr)))
-		if err != nil {
-			t.Fatalf("Failed to decode TypeDef: %v", err)
+		typeDef.writeTypeDef(buffer, readErr)
+
+		decodedTypeDef := readTypeDef(fory, buffer, int64(buffer.ReadInt64(readErr)), readErr)
+		if readErr.HasError() {
+			t.Fatalf("Failed to decode TypeDef: %v", readErr.Error())
 		}
 
 		// Verify decoded TypeDef has correct nullable flags

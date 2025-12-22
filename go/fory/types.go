@@ -249,6 +249,7 @@ const (
 	ConcreteTypeFloat32Slice
 	ConcreteTypeFloat64Slice
 	ConcreteTypeBoolSlice
+	ConcreteTypeStringSlice
 	ConcreteTypeStringStringMap
 	ConcreteTypeStringInt64Map
 	ConcreteTypeStringIntMap
@@ -301,6 +302,8 @@ func GetStaticTypeId(t reflect.Type) StaticTypeId {
 			return ConcreteTypeFloat64Slice
 		case reflect.Bool:
 			return ConcreteTypeBoolSlice
+		case reflect.String:
+			return ConcreteTypeStringSlice
 		}
 		return ConcreteTypeOther
 	case reflect.Map:

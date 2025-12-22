@@ -264,6 +264,11 @@ func generateElementTypeIDWrite(buf *bytes.Buffer, elemType types.Type) error {
 func generateSliceWriteInline(buf *bytes.Buffer, sliceType *types.Slice, fieldAccess string) error {
 	elemType := sliceType.Elem()
 
+	// Check if element type is a primitive type that uses ARRAY protocol
+	if isPrimitiveSliceElemType(elemType) {
+		return generatePrimitiveSliceWriteInline(buf, sliceType, fieldAccess)
+	}
+
 	// Check if element type is referencable (needs ref tracking)
 	elemIsReferencable := isReferencableType(elemType)
 
@@ -311,6 +316,54 @@ func generateSliceWriteInline(buf *bytes.Buffer, sliceType *types.Slice, fieldAc
 	fmt.Fprintf(buf, "\t\t\t}\n")
 	fmt.Fprintf(buf, "\t\t}\n")
 	fmt.Fprintf(buf, "\t}\n")
+
+	return nil
+}
+
+// isPrimitiveSliceElemType checks if the element type is a primitive type that uses ARRAY protocol
+func isPrimitiveSliceElemType(elemType types.Type) bool {
+	if basic, ok := elemType.Underlying().(*types.Basic); ok {
+		switch basic.Kind() {
+		case types.Bool, types.Int8, types.Int16, types.Int32, types.Int64,
+			types.Uint8, types.Float32, types.Float64:
+			return true
+		}
+	}
+	return false
+}
+
+// generatePrimitiveSliceWriteInline generates inline serialization code for primitive slices using ARRAY protocol
+func generatePrimitiveSliceWriteInline(buf *bytes.Buffer, sliceType *types.Slice, fieldAccess string) error {
+	elemType := sliceType.Elem()
+	basic := elemType.Underlying().(*types.Basic)
+
+	// WriteData RefValueFlag first (slice is referencable)
+	fmt.Fprintf(buf, "\tbuf.WriteInt8(0) // RefValueFlag for slice\n")
+
+	// Call the exported helper function for each primitive type
+	switch basic.Kind() {
+	case types.Bool:
+		fmt.Fprintf(buf, "\tfory.WriteBoolSlice(buf, %s)\n", fieldAccess)
+	case types.Int8:
+		fmt.Fprintf(buf, "\tfory.WriteInt8Slice(buf, %s)\n", fieldAccess)
+	case types.Uint8:
+		fmt.Fprintf(buf, "\tbuf.WriteLength(len(%s))\n", fieldAccess)
+		fmt.Fprintf(buf, "\tif len(%s) > 0 {\n", fieldAccess)
+		fmt.Fprintf(buf, "\t\tbuf.WriteBinary(%s)\n", fieldAccess)
+		fmt.Fprintf(buf, "\t}\n")
+	case types.Int16:
+		fmt.Fprintf(buf, "\tfory.WriteInt16Slice(buf, %s)\n", fieldAccess)
+	case types.Int32:
+		fmt.Fprintf(buf, "\tfory.WriteInt32Slice(buf, %s)\n", fieldAccess)
+	case types.Int64:
+		fmt.Fprintf(buf, "\tfory.WriteInt64Slice(buf, %s)\n", fieldAccess)
+	case types.Float32:
+		fmt.Fprintf(buf, "\tfory.WriteFloat32Slice(buf, %s)\n", fieldAccess)
+	case types.Float64:
+		fmt.Fprintf(buf, "\tfory.WriteFloat64Slice(buf, %s)\n", fieldAccess)
+	default:
+		return fmt.Errorf("unsupported primitive type for ARRAY protocol: %s", basic.String())
+	}
 
 	return nil
 }

@@ -96,8 +96,8 @@ func readMapStringString(buf *ByteBuffer, err *Error) map[string]string {
 
 		// ReadData chunk entries
 		for i := 0; i < chunkSize && size > 0; i++ {
-			k := readStringE(buf, err)
-			v := readStringE(buf, err)
+			k := readString(buf, err)
+			v := readString(buf, err)
 			result[k] = v
 			size--
 		}
@@ -165,7 +165,7 @@ func readMapStringInt64(buf *ByteBuffer, err *Error) map[string]int64 {
 			buf.ReadVaruint32Small7(err)
 		}
 		for i := 0; i < chunkSize && size > 0; i++ {
-			k := readStringE(buf, err)
+			k := readString(buf, err)
 			v := buf.ReadVarint64(err)
 			result[k] = v
 			size--
@@ -234,7 +234,7 @@ func readMapStringInt(buf *ByteBuffer, err *Error) map[string]int {
 			buf.ReadVaruint32Small7(err)
 		}
 		for i := 0; i < chunkSize && size > 0; i++ {
-			k := readStringE(buf, err)
+			k := readString(buf, err)
 			v := buf.ReadVarint64(err)
 			result[k] = int(v)
 			size--
@@ -303,7 +303,7 @@ func readMapStringFloat64(buf *ByteBuffer, err *Error) map[string]float64 {
 			buf.ReadVaruint32Small7(err)
 		}
 		for i := 0; i < chunkSize && size > 0; i++ {
-			k := readStringE(buf, err)
+			k := readString(buf, err)
 			v := buf.ReadFloat64(err)
 			result[k] = v
 			size--
@@ -377,7 +377,7 @@ func readMapStringBool(buf *ByteBuffer, err *Error) map[string]bool {
 		}
 
 		for i := 0; i < chunkSize && size > 0; i++ {
-			k := readStringE(buf, err)
+			k := readString(buf, err)
 			v := buf.ReadBool(err)
 			result[k] = v
 			size--

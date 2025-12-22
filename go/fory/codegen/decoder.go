@@ -342,6 +342,11 @@ func generateSliceElementRead(buf *bytes.Buffer, elemType types.Type, elemAccess
 func generateSliceReadInline(buf *bytes.Buffer, sliceType *types.Slice, fieldAccess string) error {
 	elemType := sliceType.Elem()
 
+	// Check if element type is a primitive type that uses ARRAY protocol
+	if isPrimitiveSliceElemType(elemType) {
+		return generatePrimitiveSliceReadInline(buf, sliceType, fieldAccess)
+	}
+
 	// Check if element type is referencable (needs ref tracking)
 	elemIsReferencable := isReferencableType(elemType)
 
@@ -406,6 +411,52 @@ func generateSliceReadInline(buf *bytes.Buffer, sliceType *types.Slice, fieldAcc
 	fmt.Fprintf(buf, "\t\t\t}\n")
 	fmt.Fprintf(buf, "\t\t}\n")
 	fmt.Fprintf(buf, "\t}\n")
+
+	return nil
+}
+
+// generatePrimitiveSliceReadInline generates inline deserialization code for primitive slices using ARRAY protocol
+func generatePrimitiveSliceReadInline(buf *bytes.Buffer, sliceType *types.Slice, fieldAccess string) error {
+	elemType := sliceType.Elem()
+	basic := elemType.Underlying().(*types.Basic)
+
+	// ReadData RefValueFlag first (slice is referencable)
+	fmt.Fprintf(buf, "\tif flag := buf.ReadInt8(err); flag != 0 {\n")
+	fmt.Fprintf(buf, "\t\tif !ctx.HasError() {\n")
+	fmt.Fprintf(buf, "\t\t\treturn fmt.Errorf(\"expected RefValueFlag for slice field, got %%d\", flag)\n")
+	fmt.Fprintf(buf, "\t\t}\n")
+	fmt.Fprintf(buf, "\t}\n")
+
+	// Call the exported helper function for each primitive type
+	switch basic.Kind() {
+	case types.Bool:
+		fmt.Fprintf(buf, "\t%s = fory.ReadBoolSlice(buf, err)\n", fieldAccess)
+	case types.Int8:
+		fmt.Fprintf(buf, "\t%s = fory.ReadInt8Slice(buf, err)\n", fieldAccess)
+	case types.Uint8:
+		fmt.Fprintf(buf, "\t{\n")
+		fmt.Fprintf(buf, "\t\tsizeBytes := buf.ReadLength(err)\n")
+		fmt.Fprintf(buf, "\t\t%s = make([]uint8, sizeBytes)\n", fieldAccess)
+		fmt.Fprintf(buf, "\t\tif sizeBytes > 0 {\n")
+		fmt.Fprintf(buf, "\t\t\traw := buf.ReadBinary(sizeBytes, err)\n")
+		fmt.Fprintf(buf, "\t\t\tif raw != nil {\n")
+		fmt.Fprintf(buf, "\t\t\t\tcopy(%s, raw)\n", fieldAccess)
+		fmt.Fprintf(buf, "\t\t\t}\n")
+		fmt.Fprintf(buf, "\t\t}\n")
+		fmt.Fprintf(buf, "\t}\n")
+	case types.Int16:
+		fmt.Fprintf(buf, "\t%s = fory.ReadInt16Slice(buf, err)\n", fieldAccess)
+	case types.Int32:
+		fmt.Fprintf(buf, "\t%s = fory.ReadInt32Slice(buf, err)\n", fieldAccess)
+	case types.Int64:
+		fmt.Fprintf(buf, "\t%s = fory.ReadInt64Slice(buf, err)\n", fieldAccess)
+	case types.Float32:
+		fmt.Fprintf(buf, "\t%s = fory.ReadFloat32Slice(buf, err)\n", fieldAccess)
+	case types.Float64:
+		fmt.Fprintf(buf, "\t%s = fory.ReadFloat64Slice(buf, err)\n", fieldAccess)
+	default:
+		return fmt.Errorf("unsupported primitive type for ARRAY protocol read: %s", basic.String())
+	}
 
 	return nil
 }

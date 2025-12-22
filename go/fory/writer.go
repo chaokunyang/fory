@@ -231,7 +231,7 @@ func (c *WriteContext) WriteBoolSlice(value []bool, refMode RefMode, writeTypeIn
 	if writeTypeInfo {
 		c.WriteTypeId(BOOL_ARRAY)
 	}
-	writeBoolSlice(c.buffer, value, c.Err())
+	WriteBoolSlice(c.buffer, value)
 }
 
 // WriteInt8Slice writes []int8 with ref/type info
@@ -242,7 +242,7 @@ func (c *WriteContext) WriteInt8Slice(value []int8, refMode RefMode, writeTypeIn
 	if writeTypeInfo {
 		c.WriteTypeId(INT8_ARRAY)
 	}
-	writeInt8Slice(c.buffer, value, c.Err())
+	WriteInt8Slice(c.buffer, value)
 }
 
 // WriteInt16Slice writes []int16 with ref/type info
@@ -253,7 +253,7 @@ func (c *WriteContext) WriteInt16Slice(value []int16, refMode RefMode, writeType
 	if writeTypeInfo {
 		c.WriteTypeId(INT16_ARRAY)
 	}
-	writeInt16Slice(c.buffer, value, c.Err())
+	WriteInt16Slice(c.buffer, value)
 }
 
 // WriteInt32Slice writes []int32 with ref/type info
@@ -264,7 +264,7 @@ func (c *WriteContext) WriteInt32Slice(value []int32, refMode RefMode, writeType
 	if writeTypeInfo {
 		c.WriteTypeId(INT32_ARRAY)
 	}
-	writeInt32Slice(c.buffer, value, c.Err())
+	WriteInt32Slice(c.buffer, value)
 }
 
 // WriteInt64Slice writes []int64 with ref/type info
@@ -275,7 +275,7 @@ func (c *WriteContext) WriteInt64Slice(value []int64, refMode RefMode, writeType
 	if writeTypeInfo {
 		c.WriteTypeId(INT64_ARRAY)
 	}
-	writeInt64Slice(c.buffer, value, c.Err())
+	WriteInt64Slice(c.buffer, value)
 }
 
 // WriteIntSlice writes []int with ref/type info
@@ -290,7 +290,7 @@ func (c *WriteContext) WriteIntSlice(value []int, refMode RefMode, writeTypeInfo
 			c.WriteTypeId(INT32_ARRAY)
 		}
 	}
-	writeIntSlice(c.buffer, value, c.Err())
+	WriteIntSlice(c.buffer, value)
 }
 
 // WriteFloat32Slice writes []float32 with ref/type info
@@ -301,7 +301,7 @@ func (c *WriteContext) WriteFloat32Slice(value []float32, refMode RefMode, write
 	if writeTypeInfo {
 		c.WriteTypeId(FLOAT32_ARRAY)
 	}
-	writeFloat32Slice(c.buffer, value, c.Err())
+	WriteFloat32Slice(c.buffer, value)
 }
 
 // WriteFloat64Slice writes []float64 with ref/type info
@@ -312,7 +312,7 @@ func (c *WriteContext) WriteFloat64Slice(value []float64, refMode RefMode, write
 	if writeTypeInfo {
 		c.WriteTypeId(FLOAT64_ARRAY)
 	}
-	writeFloat64Slice(c.buffer, value, c.Err())
+	WriteFloat64Slice(c.buffer, value)
 }
 
 // WriteByteSlice writes []byte with ref/type info

@@ -81,27 +81,19 @@ func isPrimitiveStaticId(staticId StaticTypeId) bool {
 	}
 }
 
-// getPrimitiveSliceElemKind returns the element kind if the type is a primitive slice,
-// or reflect.Invalid if not a primitive slice.
-func getPrimitiveSliceElemKind(t reflect.Type) reflect.Kind {
-	if t.Kind() != reflect.Slice {
-		return reflect.Invalid
-	}
-	switch t.Elem().Kind() {
-	case reflect.Int32, reflect.Int64, reflect.Float32, reflect.Float64,
-		reflect.Bool, reflect.Int8, reflect.Uint8, reflect.Int16:
-		return t.Elem().Kind()
-	default:
-		return reflect.Invalid
-	}
-}
-
 // readPrimitiveSliceToField reads a primitive slice directly and sets it at the field offset using unsafe.
 // This bypasses reflect.ValueOf and value.Set overhead.
 // Returns true if handled (success or error), false if not a primitive slice.
+// Note: Primitive slices use ARRAY protocol (size bytes + binary), not LIST protocol.
+// Dispatches to helper functions in slice_primitive.go based on field.StaticId.
 func readPrimitiveSliceToField(ctx *ReadContext, ptr unsafe.Pointer, field *FieldInfo) bool {
-	elemKind := getPrimitiveSliceElemKind(field.Type)
-	if elemKind == reflect.Invalid {
+	// Check if this is a primitive slice type using StaticId
+	switch field.StaticId {
+	case ConcreteTypeBoolSlice, ConcreteTypeInt8Slice, ConcreteTypeByteSlice,
+		ConcreteTypeInt16Slice, ConcreteTypeInt32Slice, ConcreteTypeInt64Slice,
+		ConcreteTypeIntSlice, ConcreteTypeFloat32Slice, ConcreteTypeFloat64Slice:
+		// Valid primitive slice type
+	default:
 		return false
 	}
 
@@ -124,132 +116,28 @@ func readPrimitiveSliceToField(ctx *ReadContext, ptr unsafe.Pointer, field *Fiel
 		return false
 	}
 
-	// Read length
-	length := int(buf.ReadVaruint32(ctxErr))
-	if length == 0 {
-		// Empty slice - set to non-nil empty slice
-		fieldPtr := unsafe.Add(ptr, field.Offset)
-		switch elemKind {
-		case reflect.Int32:
-			*(*[]int32)(fieldPtr) = make([]int32, 0)
-		case reflect.Int64:
-			*(*[]int64)(fieldPtr) = make([]int64, 0)
-		case reflect.Float32:
-			*(*[]float32)(fieldPtr) = make([]float32, 0)
-		case reflect.Float64:
-			*(*[]float64)(fieldPtr) = make([]float64, 0)
-		case reflect.Bool:
-			*(*[]bool)(fieldPtr) = make([]bool, 0)
-		case reflect.Int8:
-			*(*[]int8)(fieldPtr) = make([]int8, 0)
-		case reflect.Uint8:
-			*(*[]uint8)(fieldPtr) = make([]uint8, 0)
-		case reflect.Int16:
-			*(*[]int16)(fieldPtr) = make([]int16, 0)
-		}
-		return true
-	}
-
-	// Read collection flags
-	collectFlag := buf.ReadInt8(ctxErr)
-
-	// Read element type info if present (for non-xlang)
-	if (collectFlag & CollectionIsSameType) != 0 {
-		if (collectFlag & CollectionIsDeclElementType) == 0 {
-			typeID := buf.ReadVaruint32Small7(ctxErr)
-			_, _ = ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID)
-		}
-	}
-
-	// For primitive slices, we should not have ref tracking or nulls
-	trackRefs := (collectFlag & CollectionTrackingRef) != 0
-	hasNull := (collectFlag & CollectionHasNull) != 0
-	if trackRefs || hasNull {
-		// Fall back to slow path
-		return false
-	}
-
 	fieldPtr := unsafe.Add(ptr, field.Offset)
 
-	// Read slice data directly using unsafe
-	switch elemKind {
-	case reflect.Float32:
-		slice := make([]float32, length)
-		if isLittleEndian {
-			raw := buf.ReadBinary(length*4, ctxErr)
-			if raw != nil {
-				copy(unsafe.Slice((*byte)(unsafe.Pointer(&slice[0])), length*4), raw)
-			}
-		} else {
-			for i := 0; i < length; i++ {
-				slice[i] = buf.ReadFloat32(ctxErr)
-			}
-		}
-		*(*[]float32)(fieldPtr) = slice
-	case reflect.Float64:
-		slice := make([]float64, length)
-		if isLittleEndian {
-			raw := buf.ReadBinary(length*8, ctxErr)
-			if raw != nil {
-				copy(unsafe.Slice((*byte)(unsafe.Pointer(&slice[0])), length*8), raw)
-			}
-		} else {
-			for i := 0; i < length; i++ {
-				slice[i] = buf.ReadFloat64(ctxErr)
-			}
-		}
-		*(*[]float64)(fieldPtr) = slice
-	case reflect.Bool:
-		slice := make([]bool, length)
-		raw := buf.ReadBinary(length, ctxErr)
-		if raw != nil {
-			copy(unsafe.Slice((*byte)(unsafe.Pointer(&slice[0])), length), raw)
-		}
-		*(*[]bool)(fieldPtr) = slice
-	case reflect.Int8:
-		slice := make([]int8, length)
-		raw := buf.ReadBinary(length, ctxErr)
-		if raw != nil {
-			copy(unsafe.Slice((*byte)(unsafe.Pointer(&slice[0])), length), raw)
-		}
-		*(*[]int8)(fieldPtr) = slice
-	case reflect.Uint8:
-		slice := make([]uint8, length)
-		raw := buf.ReadBinary(length, ctxErr)
-		if raw != nil {
-			copy(slice, raw)
-		}
-		*(*[]uint8)(fieldPtr) = slice
-	case reflect.Int16:
-		slice := make([]int16, length)
-		for i := 0; i < length; i++ {
-			slice[i] = buf.ReadInt16(ctxErr)
-		}
-		*(*[]int16)(fieldPtr) = slice
-	case reflect.Int32:
-		slice := make([]int32, length)
-		if buf.remaining() >= length*5 {
-			for i := 0; i < length; i++ {
-				slice[i] = buf.UnsafeReadVarint32()
-			}
-		} else {
-			for i := 0; i < length; i++ {
-				slice[i] = buf.ReadVarint32(ctxErr)
-			}
-		}
-		*(*[]int32)(fieldPtr) = slice
-	case reflect.Int64:
-		slice := make([]int64, length)
-		if buf.remaining() >= length*10 {
-			for i := 0; i < length; i++ {
-				slice[i] = buf.UnsafeReadVarint64()
-			}
-		} else {
-			for i := 0; i < length; i++ {
-				slice[i] = buf.ReadVarint64(ctxErr)
-			}
-		}
-		*(*[]int64)(fieldPtr) = slice
+	// Dispatch to helper functions from slice_primitive.go based on StaticId
+	switch field.StaticId {
+	case ConcreteTypeBoolSlice:
+		*(*[]bool)(fieldPtr) = ReadBoolSlice(buf, ctxErr)
+	case ConcreteTypeInt8Slice:
+		*(*[]int8)(fieldPtr) = ReadInt8Slice(buf, ctxErr)
+	case ConcreteTypeByteSlice:
+		*(*[]byte)(fieldPtr) = ReadByteSlice(buf, ctxErr)
+	case ConcreteTypeInt16Slice:
+		*(*[]int16)(fieldPtr) = ReadInt16Slice(buf, ctxErr)
+	case ConcreteTypeInt32Slice:
+		*(*[]int32)(fieldPtr) = ReadInt32Slice(buf, ctxErr)
+	case ConcreteTypeInt64Slice:
+		*(*[]int64)(fieldPtr) = ReadInt64Slice(buf, ctxErr)
+	case ConcreteTypeIntSlice:
+		*(*[]int)(fieldPtr) = ReadIntSlice(buf, ctxErr)
+	case ConcreteTypeFloat32Slice:
+		*(*[]float32)(fieldPtr) = ReadFloat32Slice(buf, ctxErr)
+	case ConcreteTypeFloat64Slice:
+		*(*[]float64)(fieldPtr) = ReadFloat64Slice(buf, ctxErr)
 	default:
 		return false
 	}
@@ -1120,43 +1008,11 @@ func (s *structSerializer) initFieldsFromContext(ctx interface{ TypeResolver() *
 			fieldSerializer, _ = typeResolver.getSerializerByType(fieldType, true)
 		}
 
+		// Use TypeResolver helper methods for arrays and slices
 		if fieldType.Kind() == reflect.Array && fieldType.Elem().Kind() != reflect.Interface {
-			// For fixed-size arrays with primitive elements, use primitive array serializers
-			// to match cross-language format (Python int8_array, int16_array, etc.)
-			elemType := fieldType.Elem()
-			switch elemType.Kind() {
-			case reflect.Bool:
-				fieldSerializer = boolArraySerializer{arrayType: fieldType}
-			case reflect.Int8:
-				fieldSerializer = int8ArraySerializer{arrayType: fieldType}
-			case reflect.Int16:
-				fieldSerializer = int16ArraySerializer{arrayType: fieldType}
-			case reflect.Int32:
-				fieldSerializer = int32ArraySerializer{arrayType: fieldType}
-			case reflect.Int64:
-				fieldSerializer = int64ArraySerializer{arrayType: fieldType}
-			case reflect.Uint8:
-				fieldSerializer = uint8ArraySerializer{arrayType: fieldType}
-			case reflect.Float32:
-				fieldSerializer = float32ArraySerializer{arrayType: fieldType}
-			case reflect.Float64:
-				fieldSerializer = float64ArraySerializer{arrayType: fieldType}
-			case reflect.Int:
-				// Platform-dependent int type
-				if reflect.TypeOf(int(0)).Size() == 8 {
-					fieldSerializer = int64ArraySerializer{arrayType: fieldType}
-				} else {
-					fieldSerializer = int32ArraySerializer{arrayType: fieldType}
-				}
-			default:
-				// For non-primitive arrays, use sliceConcreteValueSerializer with xlang TypeId
-				elemTypeInfo := typeResolver.typesInfo[elemType]
-				fieldSerializer, _ = newSliceConcreteValueSerializerForXlang(fieldType, elemTypeInfo.Serializer)
-			}
+			fieldSerializer, _ = typeResolver.GetArraySerializer(fieldType)
 		} else if fieldType.Kind() == reflect.Slice && fieldType.Elem().Kind() != reflect.Interface {
-			// For struct fields with concrete element types, use sliceConcreteValueSerializer with xlang TypeId
-			elemTypeInfo := typeResolver.typesInfo[fieldType.Elem()]
-			fieldSerializer, _ = newSliceConcreteValueSerializerForXlang(fieldType, elemTypeInfo.Serializer)
+			fieldSerializer, _ = typeResolver.GetSliceSerializer(fieldType)
 		} else if fieldType.Kind() == reflect.Slice && fieldType.Elem().Kind() == reflect.Interface {
 			// For struct fields with interface element types, use sliceDynSerializer
 			fieldSerializer = mustNewSliceDynSerializer(fieldType.Elem())

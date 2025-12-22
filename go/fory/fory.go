@@ -183,6 +183,11 @@ func (f *Fory) MetaContext() *MetaContext {
 	return f.metaContext
 }
 
+// GetTypeResolver returns the type resolver for this Fory instance
+func (f *Fory) GetTypeResolver() *TypeResolver {
+	return f.typeResolver
+}
+
 // NewForyWithOptions is an alias for New for backward compatibility
 func NewForyWithOptions(opts ...Option) *Fory {
 	return New(opts...)
@@ -454,19 +459,19 @@ func Serialize[T any](f *Fory, value T) ([]byte, error) {
 	case []int8:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(INT8_ARRAY)
-		writeInt8Slice(f.writeCtx.buffer, val, f.writeCtx.Err())
+		WriteInt8Slice(f.writeCtx.buffer, val)
 	case []int16:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(INT16_ARRAY)
-		writeInt16Slice(f.writeCtx.buffer, val, f.writeCtx.Err())
+		WriteInt16Slice(f.writeCtx.buffer, val)
 	case []int32:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(INT32_ARRAY)
-		writeInt32Slice(f.writeCtx.buffer, val, f.writeCtx.Err())
+		WriteInt32Slice(f.writeCtx.buffer, val)
 	case []int64:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(INT64_ARRAY)
-		writeInt64Slice(f.writeCtx.buffer, val, f.writeCtx.Err())
+		WriteInt64Slice(f.writeCtx.buffer, val)
 	case []int:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		if strconv.IntSize == 64 {
@@ -474,19 +479,19 @@ func Serialize[T any](f *Fory, value T) ([]byte, error) {
 		} else {
 			f.writeCtx.WriteTypeId(INT32_ARRAY)
 		}
-		writeIntSlice(f.writeCtx.buffer, val, f.writeCtx.Err())
+		WriteIntSlice(f.writeCtx.buffer, val)
 	case []float32:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(FLOAT32_ARRAY)
-		writeFloat32Slice(f.writeCtx.buffer, val, f.writeCtx.Err())
+		WriteFloat32Slice(f.writeCtx.buffer, val)
 	case []float64:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(FLOAT64_ARRAY)
-		writeFloat64Slice(f.writeCtx.buffer, val, f.writeCtx.Err())
+		WriteFloat64Slice(f.writeCtx.buffer, val)
 	case []bool:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(BOOL_ARRAY)
-		writeBoolSlice(f.writeCtx.buffer, val, f.writeCtx.Err())
+		WriteBoolSlice(f.writeCtx.buffer, val)
 	case map[string]string:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(MAP)

@@ -20,7 +20,6 @@ package fory
 import (
 	"fmt"
 	"reflect"
-	"unsafe"
 )
 
 const (
@@ -109,28 +108,18 @@ func isNull(v reflect.Value) bool {
 
 // sliceConcreteValueSerializer serialize a slice whose elem is not an interface or pointer to interface.
 // Use newSliceConcreteValueSerializer to create instances with proper type validation.
+// This serializer uses LIST protocol for non-primitive element types.
 type sliceConcreteValueSerializer struct {
 	type_          reflect.Type
 	elemSerializer Serializer
 	referencable   bool
-	typeId         TypeId // TypeId to use: LIST for xlang, -LIST for internal
 }
 
 // newSliceConcreteValueSerializer creates a sliceConcreteValueSerializer for slices with concrete element types.
-// It returns an error if the element type is an interface or pointer to interface.
-// Uses -LIST typeId for internal Go serialization.
+// It returns an error if the element type is an interface, pointer to interface, or a primitive type.
+// Primitive numeric types (bool, int8, int16, int32, int64, uint8, float32, float64) must use
+// dedicated primitive slice serializers that use ARRAY protocol (binary size + binary).
 func newSliceConcreteValueSerializer(type_ reflect.Type, elemSerializer Serializer) (*sliceConcreteValueSerializer, error) {
-	return newSliceConcreteValueSerializerWithTypeId(type_, elemSerializer, -LIST)
-}
-
-// newSliceConcreteValueSerializerForXlang creates a sliceConcreteValueSerializer for xlang struct fields.
-// Uses LIST typeId for cross-language compatibility.
-func newSliceConcreteValueSerializerForXlang(type_ reflect.Type, elemSerializer Serializer) (*sliceConcreteValueSerializer, error) {
-	return newSliceConcreteValueSerializerWithTypeId(type_, elemSerializer, LIST)
-}
-
-// newSliceConcreteValueSerializerWithTypeId creates a sliceConcreteValueSerializer with a specific TypeId.
-func newSliceConcreteValueSerializerWithTypeId(type_ reflect.Type, elemSerializer Serializer, typeId TypeId) (*sliceConcreteValueSerializer, error) {
 	elem := type_.Elem()
 	if elem.Kind() == reflect.Interface {
 		return nil, fmt.Errorf("sliceConcreteValueSerializer does not support interface element type: %v", type_)
@@ -138,11 +127,16 @@ func newSliceConcreteValueSerializerWithTypeId(type_ reflect.Type, elemSerialize
 	if elem.Kind() == reflect.Ptr && elem.Elem().Kind() == reflect.Interface {
 		return nil, fmt.Errorf("sliceConcreteValueSerializer does not support pointer to interface element type: %v", type_)
 	}
+	// Primitive numeric types must use dedicated primitive slice serializers (ARRAY protocol)
+	switch elem.Kind() {
+	case reflect.Bool, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint8, reflect.Float32, reflect.Float64:
+		return nil, fmt.Errorf("sliceConcreteValueSerializer does not support primitive element type %v: use dedicated primitive slice serializer", type_)
+	}
 	return &sliceConcreteValueSerializer{
 		type_:          type_,
 		elemSerializer: elemSerializer,
 		referencable:   nullable(elem),
-		typeId:         typeId,
 	}, nil
 }
 
@@ -157,13 +151,7 @@ func (s *sliceConcreteValueSerializer) WriteData(ctx *WriteContext, value reflec
 	}
 
 	// Determine collection flags
-	// For xlang (positive typeId): Set CollectionIsDeclElementType since Java knows the type from struct definition
-	// For internal Go serialization (negative typeId): Don't set CollectionIsDeclElementType, write element type info
 	collectFlag := CollectionIsSameType
-	isXlang := s.typeId > 0
-	if isXlang {
-		collectFlag |= CollectionIsDeclElementType
-	}
 	hasNull := false
 	elemType := s.type_.Elem()
 	isPointerElem := elemType.Kind() == reflect.Ptr
@@ -187,14 +175,11 @@ func (s *sliceConcreteValueSerializer) WriteData(ctx *WriteContext, value reflec
 	}
 	buf.WriteInt8(int8(collectFlag))
 
-	// Write element type info for internal Go serialization (not xlang)
-	// so the reader knows what type to deserialize
-	if !isXlang {
-		elemTypeInfo, _ := ctx.TypeResolver().getTypeInfo(reflect.New(elemType).Elem(), false)
-		if err := ctx.TypeResolver().WriteTypeInfo(buf, elemTypeInfo); err != nil {
-			ctx.SetError(FromError(err))
-			return
-		}
+	// Write element type info for deserialization
+	elemTypeInfo, _ := ctx.TypeResolver().getTypeInfo(reflect.New(elemType).Elem(), false)
+	if err := ctx.TypeResolver().WriteTypeInfo(buf, elemTypeInfo); err != nil {
+		ctx.SetError(FromError(err))
+		return
 	}
 
 	// WriteData elements
@@ -204,72 +189,7 @@ func (s *sliceConcreteValueSerializer) WriteData(ctx *WriteContext, value reflec
 		elemRefMode = RefModeTracking
 	}
 
-	// Fast path: direct write for primitive types without ref tracking or nulls
-	// Use unsafe pointer iteration to avoid reflect.Value.Index overhead
-	if !trackRefs && !hasNull {
-		ptr := unsafe.Pointer(value.Pointer())
-		switch elemType.Kind() {
-		case reflect.Float32:
-			if isLittleEndian {
-				// Direct memory copy for floats on little-endian
-				buf.WriteBinary(unsafe.Slice((*byte)(ptr), length*4))
-				return
-			}
-			// Big-endian fallback: iterate using unsafe pointer
-			buf.Reserve(length * 4)
-			slice := unsafe.Slice((*float32)(ptr), length)
-			for _, v := range slice {
-				buf.UnsafeWriteFloat32(v)
-			}
-			return
-		case reflect.Float64:
-			if isLittleEndian {
-				// Direct memory copy for doubles on little-endian
-				buf.WriteBinary(unsafe.Slice((*byte)(ptr), length*8))
-				return
-			}
-			// Big-endian fallback: iterate using unsafe pointer
-			buf.Reserve(length * 8)
-			slice := unsafe.Slice((*float64)(ptr), length)
-			for _, v := range slice {
-				buf.UnsafeWriteFloat64(v)
-			}
-			return
-		case reflect.Int8, reflect.Uint8:
-			buf.WriteBinary(unsafe.Slice((*byte)(ptr), length))
-			return
-		case reflect.Bool:
-			// Bools are 1 byte each, direct copy works on all platforms
-			buf.WriteBinary(unsafe.Slice((*byte)(ptr), length))
-			return
-		case reflect.Int32:
-			// Varint encoding: pre-reserve max space and iterate using unsafe pointer
-			buf.Reserve(length * 5)
-			slice := unsafe.Slice((*int32)(ptr), length)
-			for _, v := range slice {
-				buf.UnsafeWriteVarint32(v)
-			}
-			return
-		case reflect.Int64:
-			// Varint encoding: pre-reserve max space and iterate using unsafe pointer
-			buf.Reserve(length * 10)
-			slice := unsafe.Slice((*int64)(ptr), length)
-			for _, v := range slice {
-				buf.UnsafeWriteVarint64(v)
-			}
-			return
-		case reflect.Int16:
-			// Fixed 2-byte encoding: iterate using unsafe pointer
-			buf.Reserve(length * 2)
-			slice := unsafe.Slice((*int16)(ptr), length)
-			for _, v := range slice {
-				buf.UnsafeWriteInt16(v)
-			}
-			return
-		}
-	}
-
-	// Slow path: general serialization with ref tracking or nulls
+	// Serialize elements with ref tracking or nulls handling
 	for i := 0; i < length; i++ {
 		elem := value.Index(i)
 
@@ -303,7 +223,7 @@ func (s *sliceConcreteValueSerializer) WriteData(ctx *WriteContext, value reflec
 }
 
 func (s *sliceConcreteValueSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
-	done := writeSliceRefAndType(ctx, refMode, writeType, value, s.typeId)
+	done := writeSliceRefAndType(ctx, refMode, writeType, value, LIST)
 	if done || ctx.HasError() {
 		return
 	}
@@ -353,113 +273,7 @@ func (s *sliceConcreteValueSerializer) ReadData(ctx *ReadContext, type_ reflect.
 	hasNull := (collectFlag & CollectionHasNull) != 0
 	elemType := s.type_.Elem()
 
-	// Fast path: direct read for primitive types without ref tracking or nulls
-	// Use make() directly instead of reflect.MakeSlice for better performance
-	if !trackRefs && !hasNull && !isArrayType {
-		switch elemType.Kind() {
-		case reflect.Float32:
-			slice := make([]float32, length)
-			if isLittleEndian {
-				// Direct memory copy for floats on little-endian
-				raw := buf.ReadBinary(length*4, ctxErr)
-				if raw != nil {
-					copy(unsafe.Slice((*byte)(unsafe.Pointer(&slice[0])), length*4), raw)
-				}
-			} else {
-				// Big-endian fallback: iterate
-				for i := 0; i < length; i++ {
-					slice[i] = buf.ReadFloat32(ctxErr)
-				}
-			}
-			value.Set(reflect.ValueOf(slice))
-			ctx.RefResolver().Reference(value)
-			return
-		case reflect.Float64:
-			slice := make([]float64, length)
-			if isLittleEndian {
-				// Direct memory copy for doubles on little-endian
-				raw := buf.ReadBinary(length*8, ctxErr)
-				if raw != nil {
-					copy(unsafe.Slice((*byte)(unsafe.Pointer(&slice[0])), length*8), raw)
-				}
-			} else {
-				// Big-endian fallback: iterate
-				for i := 0; i < length; i++ {
-					slice[i] = buf.ReadFloat64(ctxErr)
-				}
-			}
-			value.Set(reflect.ValueOf(slice))
-			ctx.RefResolver().Reference(value)
-			return
-		case reflect.Int8:
-			slice := make([]int8, length)
-			raw := buf.ReadBinary(length, ctxErr)
-			if raw != nil {
-				copy(unsafe.Slice((*byte)(unsafe.Pointer(&slice[0])), length), raw)
-			}
-			value.Set(reflect.ValueOf(slice))
-			ctx.RefResolver().Reference(value)
-			return
-		case reflect.Uint8:
-			slice := make([]uint8, length)
-			raw := buf.ReadBinary(length, ctxErr)
-			if raw != nil {
-				copy(slice, raw)
-			}
-			value.Set(reflect.ValueOf(slice))
-			ctx.RefResolver().Reference(value)
-			return
-		case reflect.Bool:
-			slice := make([]bool, length)
-			raw := buf.ReadBinary(length, ctxErr)
-			if raw != nil {
-				copy(unsafe.Slice((*byte)(unsafe.Pointer(&slice[0])), length), raw)
-			}
-			value.Set(reflect.ValueOf(slice))
-			ctx.RefResolver().Reference(value)
-			return
-		case reflect.Int32:
-			slice := make([]int32, length)
-			// Use unsafe read if we have enough remaining bytes (5 bytes max per varint32)
-			if buf.remaining() >= length*5 {
-				for i := 0; i < length; i++ {
-					slice[i] = buf.UnsafeReadVarint32()
-				}
-			} else {
-				for i := 0; i < length; i++ {
-					slice[i] = buf.ReadVarint32(ctxErr)
-				}
-			}
-			value.Set(reflect.ValueOf(slice))
-			ctx.RefResolver().Reference(value)
-			return
-		case reflect.Int64:
-			slice := make([]int64, length)
-			// Use unsafe read if we have enough remaining bytes (10 bytes max per varint64)
-			if buf.remaining() >= length*10 {
-				for i := 0; i < length; i++ {
-					slice[i] = buf.UnsafeReadVarint64()
-				}
-			} else {
-				for i := 0; i < length; i++ {
-					slice[i] = buf.ReadVarint64(ctxErr)
-				}
-			}
-			value.Set(reflect.ValueOf(slice))
-			ctx.RefResolver().Reference(value)
-			return
-		case reflect.Int16:
-			slice := make([]int16, length)
-			for i := 0; i < length; i++ {
-				slice[i] = buf.ReadInt16(ctxErr)
-			}
-			value.Set(reflect.ValueOf(slice))
-			ctx.RefResolver().Reference(value)
-			return
-		}
-	}
-
-	// Slow path: Handle slice vs array allocation for non-primitive types
+	// Handle slice vs array allocation
 	if isArrayType {
 		// For arrays, verify the length matches (arrays have fixed size)
 		if value.Len() < length {

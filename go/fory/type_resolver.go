@@ -301,8 +301,9 @@ func (r *TypeResolver) initialize() {
 		// that can hold any element type when deserializing into interface{}
 		{interfaceSliceType, LIST, sliceDynSerializer{}},
 		{interfaceMapType, MAP, mapSerializer{}},
-		// stringSliceType uses sliceConcreteValueSerializer with stringSerializer as element serializer
+		// stringSliceType uses dedicated stringSliceSerializer for optimized serialization
 		// This ensures CollectionIsDeclElementType is set for Java compatibility
+		{stringSliceType, LIST, stringSliceSerializer{}},
 		{byteSliceType, BINARY, byteSliceSerializer{}},
 		// Map basic type slices to slice serializers for xlang compatibility
 		{boolSliceType, BOOL_ARRAY, boolSliceSerializer{}},
@@ -1348,6 +1349,8 @@ func (r *TypeResolver) createSerializer(type_ reflect.Type, mapInStruct bool) (s
 		case reflect.Uint8:
 			// []byte uses byteSliceSerializer
 			return byteSliceSerializer{}, nil
+		case reflect.String:
+			return stringSliceSerializer{}, nil
 		}
 		// For dynamic types, use dynamic slice serializer
 		if isDynamicType(elem) {
@@ -1357,6 +1360,7 @@ func (r *TypeResolver) createSerializer(type_ reflect.Type, mapInStruct bool) (s
 			if err != nil {
 				return nil, err
 			}
+			// Always use xlang mode (LIST typeId) for non-primitive slices
 			return newSliceConcreteValueSerializer(type_, elemSerializer)
 		}
 	case reflect.Array:
@@ -1456,6 +1460,87 @@ func (r *TypeResolver) createSerializer(type_ reflect.Type, mapInStruct bool) (s
 		return serializer, nil
 	}
 	return nil, fmt.Errorf("type %s not supported", type_.String())
+}
+
+// GetSliceSerializer returns the appropriate serializer for a slice type.
+// For primitive element types (bool, int8, int16, int32, int64, uint8, float32, float64),
+// it returns the dedicated primitive slice serializer that uses ARRAY protocol.
+// For non-primitive element types, it returns sliceConcreteValueSerializer (LIST protocol).
+func (r *TypeResolver) GetSliceSerializer(sliceType reflect.Type) (Serializer, error) {
+	if sliceType.Kind() != reflect.Slice {
+		return nil, fmt.Errorf("expected slice type but got %s", sliceType.Kind())
+	}
+	elemType := sliceType.Elem()
+	// For primitive element types, use dedicated primitive slice serializers (ARRAY protocol)
+	switch elemType.Kind() {
+	case reflect.Bool:
+		return boolSliceSerializer{}, nil
+	case reflect.Int8:
+		return int8SliceSerializer{}, nil
+	case reflect.Int16:
+		return int16SliceSerializer{}, nil
+	case reflect.Int32:
+		return int32SliceSerializer{}, nil
+	case reflect.Int64:
+		return int64SliceSerializer{}, nil
+	case reflect.Uint8:
+		return byteSliceSerializer{}, nil
+	case reflect.Float32:
+		return float32SliceSerializer{}, nil
+	case reflect.Float64:
+		return float64SliceSerializer{}, nil
+	case reflect.Int:
+		return intSliceSerializer{}, nil
+	case reflect.Uint:
+		return uintSliceSerializer{}, nil
+	}
+	// For non-primitive element types, use sliceConcreteValueSerializer
+	elemSerializer, err := r.getSerializerByType(elemType, false)
+	if err != nil {
+		return nil, err
+	}
+	return newSliceConcreteValueSerializer(sliceType, elemSerializer)
+}
+
+// GetArraySerializer returns the appropriate serializer for an array type.
+// For primitive element types, it returns the dedicated primitive array serializer (ARRAY protocol).
+// For non-primitive element types, it returns sliceConcreteValueSerializer (LIST protocol).
+func (r *TypeResolver) GetArraySerializer(arrayType reflect.Type) (Serializer, error) {
+	if arrayType.Kind() != reflect.Array {
+		return nil, fmt.Errorf("expected array type but got %s", arrayType.Kind())
+	}
+	elemType := arrayType.Elem()
+	// For primitive element types, use dedicated primitive array serializers (ARRAY protocol)
+	switch elemType.Kind() {
+	case reflect.Bool:
+		return boolArraySerializer{arrayType: arrayType}, nil
+	case reflect.Int8:
+		return int8ArraySerializer{arrayType: arrayType}, nil
+	case reflect.Int16:
+		return int16ArraySerializer{arrayType: arrayType}, nil
+	case reflect.Int32:
+		return int32ArraySerializer{arrayType: arrayType}, nil
+	case reflect.Int64:
+		return int64ArraySerializer{arrayType: arrayType}, nil
+	case reflect.Uint8:
+		return uint8ArraySerializer{arrayType: arrayType}, nil
+	case reflect.Float32:
+		return float32ArraySerializer{arrayType: arrayType}, nil
+	case reflect.Float64:
+		return float64ArraySerializer{arrayType: arrayType}, nil
+	case reflect.Int:
+		// Platform-dependent int type
+		if reflect.TypeOf(int(0)).Size() == 8 {
+			return int64ArraySerializer{arrayType: arrayType}, nil
+		}
+		return int32ArraySerializer{arrayType: arrayType}, nil
+	}
+	// For non-primitive element types, use sliceConcreteValueSerializer
+	elemSerializer, err := r.getSerializerByType(elemType, false)
+	if err != nil {
+		return nil, err
+	}
+	return newSliceConcreteValueSerializer(arrayType, elemSerializer)
 }
 
 func isDynamicType(type_ reflect.Type) bool {

@@ -557,260 +557,326 @@ func (s float64SliceSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMo
 }
 
 // ============================================================================
-// Helper functions for primitive slice serialization
+// Exported helper functions for primitive slice serialization (ARRAY protocol)
+// These functions write: size_bytes + binary_data
+// They are used by struct serializers and generated code
 // ============================================================================
 
-// writeBoolSlice writes []bool to buffer
-func writeBoolSlice(buf *ByteBuffer, value []bool, err *Error) {
-	size := len(value)
-	if size >= MaxInt32 {
-		err.SetIfOk(SerializationErrorf("too long slice: %d", size))
-		return
-	}
-	buf.WriteLength(size)
-	for _, elem := range value {
-		buf.WriteBool(elem)
+// WriteByteSlice writes []byte to buffer using ARRAY protocol
+func WriteByteSlice(buf *ByteBuffer, value []byte) {
+	buf.WriteLength(len(value))
+	if len(value) > 0 {
+		buf.WriteBinary(value)
 	}
 }
 
-// readBoolSlice reads []bool from buffer
-func readBoolSlice(buf *ByteBuffer, err *Error) []bool {
-	length := buf.ReadLength(err)
-	result := make([]bool, length)
-	for i := 0; i < length; i++ {
-		result[i] = buf.ReadBool(err)
-	}
-	return result
-}
-
-// writeInt8Slice writes []int8 to buffer
-func writeInt8Slice(buf *ByteBuffer, value []int8, err *Error) {
-	size := len(value)
-	if size >= MaxInt32 {
-		err.SetIfOk(SerializationErrorf("too long slice: %d", size))
-		return
-	}
-	buf.WriteLength(size)
+// ReadByteSlice reads []byte from buffer using ARRAY protocol
+func ReadByteSlice(buf *ByteBuffer, err *Error) []byte {
+	size := buf.ReadLength(err)
 	if size == 0 {
-		return
+		return make([]byte, 0)
 	}
-	// int8 is byte-sized, direct copy always works
-	buf.WriteBinary(unsafe.Slice((*byte)(unsafe.Pointer(&value[0])), size))
-}
-
-// readInt8Slice reads []int8 from buffer
-func readInt8Slice(buf *ByteBuffer, err *Error) []int8 {
-	length := buf.ReadLength(err)
-	result := make([]int8, length)
-	for i := 0; i < length; i++ {
-		result[i] = buf.ReadInt8(err)
+	result := make([]byte, size)
+	raw := buf.ReadBinary(size, err)
+	if raw != nil {
+		copy(result, raw)
 	}
 	return result
 }
 
-// writeInt16Slice writes []int16 to buffer
-func writeInt16Slice(buf *ByteBuffer, value []int16, err *Error) {
-	size := len(value) * 2
-	if size >= MaxInt32 {
-		err.SetIfOk(SerializationErrorf("too long slice: %d", len(value)))
-		return
-	}
+// WriteBoolSlice writes []bool to buffer using ARRAY protocol
+func WriteBoolSlice(buf *ByteBuffer, value []bool) {
+	size := len(value)
 	buf.WriteLength(size)
-	if len(value) == 0 {
-		return
-	}
-	if isLittleEndian {
-		// Direct memory copy for little-endian systems
+	if size > 0 {
 		buf.WriteBinary(unsafe.Slice((*byte)(unsafe.Pointer(&value[0])), size))
-	} else {
-		for _, elem := range value {
-			buf.WriteInt16(elem)
+	}
+}
+
+// ReadBoolSlice reads []bool from buffer using ARRAY protocol
+func ReadBoolSlice(buf *ByteBuffer, err *Error) []bool {
+	size := buf.ReadLength(err)
+	if size == 0 {
+		return make([]bool, 0)
+	}
+	result := make([]bool, size)
+	raw := buf.ReadBinary(size, err)
+	if raw != nil {
+		copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+	}
+	return result
+}
+
+// WriteInt8Slice writes []int8 to buffer using ARRAY protocol
+func WriteInt8Slice(buf *ByteBuffer, value []int8) {
+	size := len(value)
+	buf.WriteLength(size)
+	if size > 0 {
+		buf.WriteBinary(unsafe.Slice((*byte)(unsafe.Pointer(&value[0])), size))
+	}
+}
+
+// ReadInt8Slice reads []int8 from buffer using ARRAY protocol
+func ReadInt8Slice(buf *ByteBuffer, err *Error) []int8 {
+	size := buf.ReadLength(err)
+	if size == 0 {
+		return make([]int8, 0)
+	}
+	result := make([]int8, size)
+	raw := buf.ReadBinary(size, err)
+	if raw != nil {
+		copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+	}
+	return result
+}
+
+// WriteInt16Slice writes []int16 to buffer using ARRAY protocol
+func WriteInt16Slice(buf *ByteBuffer, value []int16) {
+	size := len(value) * 2
+	buf.WriteLength(size)
+	if len(value) > 0 {
+		if isLittleEndian {
+			buf.WriteBinary(unsafe.Slice((*byte)(unsafe.Pointer(&value[0])), size))
+		} else {
+			for _, elem := range value {
+				buf.WriteInt16(elem)
+			}
 		}
 	}
 }
 
-// readInt16Slice reads []int16 from buffer
-func readInt16Slice(buf *ByteBuffer, err *Error) []int16 {
+// ReadInt16Slice reads []int16 from buffer using ARRAY protocol
+func ReadInt16Slice(buf *ByteBuffer, err *Error) []int16 {
 	size := buf.ReadLength(err)
 	length := size / 2
+	if length == 0 {
+		return make([]int16, 0)
+	}
 	result := make([]int16, length)
-	for i := 0; i < length; i++ {
-		result[i] = buf.ReadInt16(err)
+	if isLittleEndian {
+		raw := buf.ReadBinary(size, err)
+		if raw != nil {
+			copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+		}
+	} else {
+		for i := 0; i < length; i++ {
+			result[i] = buf.ReadInt16(err)
+		}
 	}
 	return result
 }
 
-// writeInt32Slice writes []int32 to buffer
-func writeInt32Slice(buf *ByteBuffer, value []int32, err *Error) {
+// WriteInt32Slice writes []int32 to buffer using ARRAY protocol
+func WriteInt32Slice(buf *ByteBuffer, value []int32) {
 	size := len(value) * 4
-	if size >= MaxInt32 {
-		err.SetIfOk(SerializationErrorf("too long slice: %d", len(value)))
-		return
-	}
 	buf.WriteLength(size)
-	if len(value) == 0 {
-		return
-	}
-	if isLittleEndian {
-		// Direct memory copy for little-endian systems
-		buf.WriteBinary(unsafe.Slice((*byte)(unsafe.Pointer(&value[0])), size))
-	} else {
-		for _, elem := range value {
-			buf.WriteInt32(elem)
+	if len(value) > 0 {
+		if isLittleEndian {
+			buf.WriteBinary(unsafe.Slice((*byte)(unsafe.Pointer(&value[0])), size))
+		} else {
+			for _, elem := range value {
+				buf.WriteInt32(elem)
+			}
 		}
 	}
 }
 
-// readInt32Slice reads []int32 from buffer
-func readInt32Slice(buf *ByteBuffer, err *Error) []int32 {
+// ReadInt32Slice reads []int32 from buffer using ARRAY protocol
+func ReadInt32Slice(buf *ByteBuffer, err *Error) []int32 {
 	size := buf.ReadLength(err)
 	length := size / 4
+	if length == 0 {
+		return make([]int32, 0)
+	}
 	result := make([]int32, length)
-	for i := 0; i < length; i++ {
-		result[i] = buf.ReadInt32(err)
+	if isLittleEndian {
+		raw := buf.ReadBinary(size, err)
+		if raw != nil {
+			copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+		}
+	} else {
+		for i := 0; i < length; i++ {
+			result[i] = buf.ReadInt32(err)
+		}
 	}
 	return result
 }
 
-// writeInt64Slice writes []int64 to buffer
-func writeInt64Slice(buf *ByteBuffer, value []int64, err *Error) {
+// WriteInt64Slice writes []int64 to buffer using ARRAY protocol
+func WriteInt64Slice(buf *ByteBuffer, value []int64) {
 	size := len(value) * 8
-	if size >= MaxInt32 {
-		err.SetIfOk(SerializationErrorf("too long slice: %d", len(value)))
-		return
-	}
 	buf.WriteLength(size)
-	if len(value) == 0 {
-		return
-	}
-	if isLittleEndian {
-		// Direct memory copy for little-endian systems
-		buf.WriteBinary(unsafe.Slice((*byte)(unsafe.Pointer(&value[0])), size))
-	} else {
-		for _, elem := range value {
-			buf.WriteInt64(elem)
+	if len(value) > 0 {
+		if isLittleEndian {
+			buf.WriteBinary(unsafe.Slice((*byte)(unsafe.Pointer(&value[0])), size))
+		} else {
+			for _, elem := range value {
+				buf.WriteInt64(elem)
+			}
 		}
 	}
 }
 
-// readInt64Slice reads []int64 from buffer
-func readInt64Slice(buf *ByteBuffer, err *Error) []int64 {
+// ReadInt64Slice reads []int64 from buffer using ARRAY protocol
+func ReadInt64Slice(buf *ByteBuffer, err *Error) []int64 {
 	size := buf.ReadLength(err)
 	length := size / 8
+	if length == 0 {
+		return make([]int64, 0)
+	}
 	result := make([]int64, length)
-	for i := 0; i < length; i++ {
-		result[i] = buf.ReadInt64(err)
+	if isLittleEndian {
+		raw := buf.ReadBinary(size, err)
+		if raw != nil {
+			copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+		}
+	} else {
+		for i := 0; i < length; i++ {
+			result[i] = buf.ReadInt64(err)
+		}
 	}
 	return result
 }
 
-// writeIntSlice writes []int to buffer
-func writeIntSlice(buf *ByteBuffer, value []int, err *Error) {
+// WriteFloat32Slice writes []float32 to buffer using ARRAY protocol
+func WriteFloat32Slice(buf *ByteBuffer, value []float32) {
+	size := len(value) * 4
+	buf.WriteLength(size)
+	if len(value) > 0 {
+		if isLittleEndian {
+			buf.WriteBinary(unsafe.Slice((*byte)(unsafe.Pointer(&value[0])), size))
+		} else {
+			for _, elem := range value {
+				buf.WriteFloat32(elem)
+			}
+		}
+	}
+}
+
+// ReadFloat32Slice reads []float32 from buffer using ARRAY protocol
+func ReadFloat32Slice(buf *ByteBuffer, err *Error) []float32 {
+	size := buf.ReadLength(err)
+	length := size / 4
+	if length == 0 {
+		return make([]float32, 0)
+	}
+	result := make([]float32, length)
+	if isLittleEndian {
+		raw := buf.ReadBinary(size, err)
+		if raw != nil {
+			copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+		}
+	} else {
+		for i := 0; i < length; i++ {
+			result[i] = buf.ReadFloat32(err)
+		}
+	}
+	return result
+}
+
+// WriteFloat64Slice writes []float64 to buffer using ARRAY protocol
+func WriteFloat64Slice(buf *ByteBuffer, value []float64) {
+	size := len(value) * 8
+	buf.WriteLength(size)
+	if len(value) > 0 {
+		if isLittleEndian {
+			buf.WriteBinary(unsafe.Slice((*byte)(unsafe.Pointer(&value[0])), size))
+		} else {
+			for _, elem := range value {
+				buf.WriteFloat64(elem)
+			}
+		}
+	}
+}
+
+// ReadFloat64Slice reads []float64 from buffer using ARRAY protocol
+func ReadFloat64Slice(buf *ByteBuffer, err *Error) []float64 {
+	size := buf.ReadLength(err)
+	length := size / 8
+	if length == 0 {
+		return make([]float64, 0)
+	}
+	result := make([]float64, length)
+	if isLittleEndian {
+		raw := buf.ReadBinary(size, err)
+		if raw != nil {
+			copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+		}
+	} else {
+		for i := 0; i < length; i++ {
+			result[i] = buf.ReadFloat64(err)
+		}
+	}
+	return result
+}
+
+// WriteIntSlice writes []int to buffer using ARRAY protocol
+func WriteIntSlice(buf *ByteBuffer, value []int) {
 	if strconv.IntSize == 64 {
 		size := len(value) * 8
-		if size >= MaxInt32 {
-			err.SetIfOk(SerializationErrorf("too long slice: %d", len(value)))
-			return
-		}
 		buf.WriteLength(size)
-		for _, elem := range value {
-			buf.WriteInt64(int64(elem))
+		if len(value) > 0 {
+			if isLittleEndian {
+				buf.WriteBinary(unsafe.Slice((*byte)(unsafe.Pointer(&value[0])), size))
+			} else {
+				for _, elem := range value {
+					buf.WriteInt64(int64(elem))
+				}
+			}
 		}
 	} else {
 		size := len(value) * 4
-		if size >= MaxInt32 {
-			err.SetIfOk(SerializationErrorf("too long slice: %d", len(value)))
-			return
-		}
 		buf.WriteLength(size)
-		for _, elem := range value {
-			buf.WriteInt32(int32(elem))
+		if len(value) > 0 {
+			if isLittleEndian {
+				buf.WriteBinary(unsafe.Slice((*byte)(unsafe.Pointer(&value[0])), size))
+			} else {
+				for _, elem := range value {
+					buf.WriteInt32(int32(elem))
+				}
+			}
 		}
 	}
 }
 
-// readIntSlice reads []int from buffer
-func readIntSlice(buf *ByteBuffer, err *Error) []int {
+// ReadIntSlice reads []int from buffer using ARRAY protocol
+func ReadIntSlice(buf *ByteBuffer, err *Error) []int {
 	size := buf.ReadLength(err)
 	if strconv.IntSize == 64 {
 		length := size / 8
+		if length == 0 {
+			return make([]int, 0)
+		}
 		result := make([]int, length)
-		for i := 0; i < length; i++ {
-			result[i] = int(buf.ReadInt64(err))
+		if isLittleEndian {
+			raw := buf.ReadBinary(size, err)
+			if raw != nil {
+				copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+			}
+		} else {
+			for i := 0; i < length; i++ {
+				result[i] = int(buf.ReadInt64(err))
+			}
 		}
 		return result
 	} else {
 		length := size / 4
+		if length == 0 {
+			return make([]int, 0)
+		}
 		result := make([]int, length)
-		for i := 0; i < length; i++ {
-			result[i] = int(buf.ReadInt32(err))
+		if isLittleEndian {
+			raw := buf.ReadBinary(size, err)
+			if raw != nil {
+				copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+			}
+		} else {
+			for i := 0; i < length; i++ {
+				result[i] = int(buf.ReadInt32(err))
+			}
 		}
 		return result
 	}
-}
-
-// writeFloat32Slice writes []float32 to buffer
-func writeFloat32Slice(buf *ByteBuffer, value []float32, err *Error) {
-	size := len(value) * 4
-	if size >= MaxInt32 {
-		err.SetIfOk(SerializationErrorf("too long slice: %d", len(value)))
-		return
-	}
-	buf.WriteLength(size)
-	if len(value) == 0 {
-		return
-	}
-	if isLittleEndian {
-		// Direct memory copy for little-endian systems
-		buf.WriteBinary(unsafe.Slice((*byte)(unsafe.Pointer(&value[0])), size))
-	} else {
-		for _, elem := range value {
-			buf.WriteFloat32(elem)
-		}
-	}
-}
-
-// readFloat32Slice reads []float32 from buffer
-func readFloat32Slice(buf *ByteBuffer, err *Error) []float32 {
-	size := buf.ReadLength(err)
-	length := size / 4
-	result := make([]float32, length)
-	for i := 0; i < length; i++ {
-		result[i] = buf.ReadFloat32(err)
-	}
-	return result
-}
-
-// writeFloat64Slice writes []float64 to buffer
-func writeFloat64Slice(buf *ByteBuffer, value []float64, err *Error) {
-	size := len(value) * 8
-	if size >= MaxInt32 {
-		err.SetIfOk(SerializationErrorf("too long slice: %d", len(value)))
-		return
-	}
-	buf.WriteLength(size)
-	if len(value) == 0 {
-		return
-	}
-	if isLittleEndian {
-		// Direct memory copy for little-endian systems
-		buf.WriteBinary(unsafe.Slice((*byte)(unsafe.Pointer(&value[0])), size))
-	} else {
-		for _, elem := range value {
-			buf.WriteFloat64(elem)
-		}
-	}
-}
-
-// readFloat64Slice reads []float64 from buffer
-func readFloat64Slice(buf *ByteBuffer, err *Error) []float64 {
-	size := buf.ReadLength(err)
-	length := size / 8
-	result := make([]float64, length)
-	for i := 0; i < length; i++ {
-		result[i] = buf.ReadFloat64(err)
-	}
-	return result
 }
 
 type intSliceSerializer struct {
@@ -819,7 +885,7 @@ type intSliceSerializer struct {
 func (s intSliceSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 	buf := ctx.Buffer()
 	v := value.Interface().([]int)
-	writeIntSlice(buf, v, ctx.Err())
+	WriteIntSlice(buf, v)
 }
 
 func (s intSliceSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
@@ -952,41 +1018,84 @@ func (s uintSliceSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, valu
 }
 
 type stringSliceSerializer struct {
-	strSerializer stringSerializer
 }
 
-func (s stringSliceSerializer) Write(ctx *WriteContext, value reflect.Value) {
+func (s stringSliceSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 	buf := ctx.Buffer()
 	v := value.Interface().([]string)
-	ctx.WriteLength(len(v))
-	// Strings don't need reference tracking, but xlang format requires NotNullValueFlag per element
+	length := len(v)
+	buf.WriteVaruint32(uint32(length))
+	if length == 0 {
+		return
+	}
+	// Write collection flags: CollectionIsSameType only
+	// Note: Strings don't need reference tracking per xlang spec (NeedWriteRef(STRING) = false)
+	// We don't set CollectionIsDeclElementType so element type is written for polymorphic deserialization
+	collectFlag := CollectionIsSameType
+	buf.WriteInt8(int8(collectFlag))
+	// Write element type info (STRING)
+	buf.WriteVaruint32Small7(uint32(STRING))
+
+	// Write elements directly (no ref flag for strings)
 	for _, str := range v {
-		buf.WriteInt8(NotNullValueFlag)
 		writeString(buf, str)
 	}
 }
 
-func (s stringSliceSerializer) Read(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
+func (s stringSliceSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, value reflect.Value) {
+	done := writeSliceRefAndType(ctx, refMode, writeType, value, LIST)
+	if done || ctx.HasError() {
+		return
+	}
+	s.WriteData(ctx, value)
+}
+
+func (s stringSliceSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, value reflect.Value) {
+	done := readSliceRefAndType(ctx, refMode, readType, value)
+	if done || ctx.HasError() {
+		return
+	}
+	s.ReadData(ctx, value.Type(), value)
+}
+
+func (s stringSliceSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
+	// typeInfo is already read, don't read it again
+	s.Read(ctx, refMode, false, value)
+}
+
+func (s stringSliceSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
 	buf := ctx.Buffer()
 	ctxErr := ctx.Err()
-	length := ctx.ReadLength()
-	r := reflect.MakeSlice(type_, length, length)
-	elemTyp := type_.Elem()
-
-	// Strings don't need reference tracking, but xlang format has a flag byte per element
-	for i := 0; i < length; i++ {
-		refFlag := buf.ReadInt8(ctxErr)
-		var str string
-		if refFlag == NullFlag {
-			str = ""
-		} else {
-			str = readStringE(buf, ctxErr)
-		}
-		if elemTyp.Kind() == reflect.String {
-			r.Index(i).SetString(str)
-		} else {
-			r.Index(i).Set(reflect.ValueOf(str).Convert(elemTyp))
-		}
+	length := int(buf.ReadVaruint32(ctxErr))
+	if length == 0 {
+		value.Set(reflect.ValueOf(make([]string, 0)))
+		return
 	}
-	value.Set(r)
+
+	// Read collection flags
+	collectFlag := buf.ReadInt8(ctxErr)
+
+	// Read element type info if present (when CollectionIsSameType but not CollectionIsDeclElementType)
+	if (collectFlag&CollectionIsSameType) != 0 && (collectFlag&CollectionIsDeclElementType) == 0 {
+		_ = buf.ReadVaruint32Small7(ctxErr) // Read and discard type ID (we know it's STRING)
+	}
+
+	result := make([]string, length)
+
+	// Check if remote sent with ref tracking (handle both cases for compatibility)
+	trackRefs := (collectFlag & CollectionTrackingRef) != 0
+
+	// Read elements
+	for i := 0; i < length; i++ {
+		if trackRefs {
+			refFlag := buf.ReadInt8(ctxErr)
+			if refFlag == NullFlag {
+				// null string, leave as zero value
+				continue
+			}
+		}
+		result[i] = readString(buf, ctxErr)
+	}
+	value.Set(reflect.ValueOf(result))
+	ctx.RefResolver().Reference(value)
 }

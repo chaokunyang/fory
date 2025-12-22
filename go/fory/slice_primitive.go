@@ -23,12 +23,6 @@ import (
 	"unsafe"
 )
 
-// isLittleEndian is true if the current system is little-endian
-var isLittleEndian = func() bool {
-	var x uint16 = 0x0102
-	return *(*byte)(unsafe.Pointer(&x)) == 0x02
-}()
-
 // isNilSlice checks if a value is a nil slice. Safe to call on any value type.
 // Returns false for arrays and other non-slice types.
 func isNilSlice(v reflect.Value) bool {

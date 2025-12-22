@@ -35,6 +35,8 @@ func NewByteBuffer(data []byte) *ByteBuffer {
 }
 
 // grow ensures there's space for n more bytes. Hot path is inlined.
+//
+//go:inline
 func (b *ByteBuffer) grow(n int) {
 	if b.writerIndex+n <= len(b.data) {
 		return // Fast path - single comparison, easily inlined
@@ -57,6 +59,7 @@ func (b *ByteBuffer) growSlow(n int) {
 	}
 }
 
+//go:inline
 func (b *ByteBuffer) WriteBool(value bool) {
 	b.grow(1)
 	// Branchless: directly convert bool to byte via unsafe
@@ -64,6 +67,7 @@ func (b *ByteBuffer) WriteBool(value bool) {
 	b.writerIndex++
 }
 
+//go:inline
 func (b *ByteBuffer) WriteByte(value byte) error {
 	b.grow(1)
 	b.data[b.writerIndex] = value
@@ -71,30 +75,35 @@ func (b *ByteBuffer) WriteByte(value byte) error {
 	return nil
 }
 
+//go:inline
 func (b *ByteBuffer) WriteByte_(value byte) {
 	b.grow(1)
 	b.data[b.writerIndex] = value
 	b.writerIndex++
 }
 
+//go:inline
 func (b *ByteBuffer) WriteInt8(value int8) {
 	b.grow(1)
 	b.data[b.writerIndex] = byte(value)
 	b.writerIndex++
 }
 
+//go:inline
 func (b *ByteBuffer) WriteUint8(value uint8) {
 	b.grow(1)
 	b.data[b.writerIndex] = value
 	b.writerIndex++
 }
 
+//go:inline
 func (b *ByteBuffer) WriteInt16(value int16) {
 	b.grow(2)
 	binary.LittleEndian.PutUint16(b.data[b.writerIndex:], uint16(value))
 	b.writerIndex += 2
 }
 
+//go:inline
 func (b *ByteBuffer) WriteInt32(value int32) {
 	b.grow(4)
 	binary.LittleEndian.PutUint32(b.data[b.writerIndex:], uint32(value))
@@ -113,18 +122,21 @@ func (b *ByteBuffer) ReadLength(err *Error) int {
 	return int(b.ReadVaruint32(err))
 }
 
+//go:inline
 func (b *ByteBuffer) WriteInt64(value int64) {
 	b.grow(8)
 	binary.LittleEndian.PutUint64(b.data[b.writerIndex:], uint64(value))
 	b.writerIndex += 8
 }
 
+//go:inline
 func (b *ByteBuffer) WriteFloat32(value float32) {
 	b.grow(4)
 	binary.LittleEndian.PutUint32(b.data[b.writerIndex:], Float32bits(value))
 	b.writerIndex += 4
 }
 
+//go:inline
 func (b *ByteBuffer) WriteFloat64(value float64) {
 	b.grow(8)
 	binary.LittleEndian.PutUint64(b.data[b.writerIndex:], Float64bits(value))
@@ -148,6 +160,8 @@ func (b *ByteBuffer) WriteBinary(p []byte) {
 }
 
 // ReadBool reads a bool and sets error on bounds violation
+//
+//go:inline
 func (b *ByteBuffer) ReadBool(err *Error) bool {
 	if b.readerIndex+1 > len(b.data) {
 		*err = BufferOutOfBoundError(b.readerIndex, 1, len(b.data))
@@ -159,6 +173,8 @@ func (b *ByteBuffer) ReadBool(err *Error) bool {
 }
 
 // ReadByte reads a byte and sets error on bounds violation
+//
+//go:inline
 func (b *ByteBuffer) ReadByte(err *Error) byte {
 	if b.readerIndex+1 > len(b.data) {
 		*err = BufferOutOfBoundError(b.readerIndex, 1, len(b.data))
@@ -170,6 +186,8 @@ func (b *ByteBuffer) ReadByte(err *Error) byte {
 }
 
 // ReadInt8 reads an int8 and sets error on bounds violation
+//
+//go:inline
 func (b *ByteBuffer) ReadInt8(err *Error) int8 {
 	if b.readerIndex+1 > len(b.data) {
 		*err = BufferOutOfBoundError(b.readerIndex, 1, len(b.data))
@@ -181,6 +199,8 @@ func (b *ByteBuffer) ReadInt8(err *Error) int8 {
 }
 
 // ReadInt16 reads an int16 and sets error on bounds violation
+//
+//go:inline
 func (b *ByteBuffer) ReadInt16(err *Error) int16 {
 	if b.readerIndex+2 > len(b.data) {
 		*err = BufferOutOfBoundError(b.readerIndex, 2, len(b.data))
@@ -192,6 +212,8 @@ func (b *ByteBuffer) ReadInt16(err *Error) int16 {
 }
 
 // ReadUint32 reads a uint32 and sets error on bounds violation
+//
+//go:inline
 func (b *ByteBuffer) ReadUint32(err *Error) uint32 {
 	if b.readerIndex+4 > len(b.data) {
 		*err = BufferOutOfBoundError(b.readerIndex, 4, len(b.data))
@@ -203,6 +225,8 @@ func (b *ByteBuffer) ReadUint32(err *Error) uint32 {
 }
 
 // ReadUint64 reads a uint64 and sets error on bounds violation
+//
+//go:inline
 func (b *ByteBuffer) ReadUint64(err *Error) uint64 {
 	if b.readerIndex+8 > len(b.data) {
 		*err = BufferOutOfBoundError(b.readerIndex, 8, len(b.data))
@@ -214,21 +238,29 @@ func (b *ByteBuffer) ReadUint64(err *Error) uint64 {
 }
 
 // ReadInt32 reads an int32 and sets error on bounds violation
+//
+//go:inline
 func (b *ByteBuffer) ReadInt32(err *Error) int32 {
 	return int32(b.ReadUint32(err))
 }
 
 // ReadInt64 reads an int64 and sets error on bounds violation
+//
+//go:inline
 func (b *ByteBuffer) ReadInt64(err *Error) int64 {
 	return int64(b.ReadUint64(err))
 }
 
 // ReadFloat32 reads a float32 and sets error on bounds violation
+//
+//go:inline
 func (b *ByteBuffer) ReadFloat32(err *Error) float32 {
 	return Float32frombits(b.ReadUint32(err))
 }
 
 // ReadFloat64 reads a float64 and sets error on bounds violation
+//
+//go:inline
 func (b *ByteBuffer) ReadFloat64(err *Error) float64 {
 	return Float64frombits(b.ReadUint64(err))
 }
@@ -250,10 +282,12 @@ func (b *ByteBuffer) ReadBinary(length int, err *Error) []byte {
 	return v
 }
 
+//go:inline
 func (b *ByteBuffer) GetData() []byte {
 	return b.data
 }
 
+//go:inline
 func (b *ByteBuffer) GetByteSlice(start, end int) []byte {
 	return b.data[start:end]
 }
@@ -262,23 +296,29 @@ func (b *ByteBuffer) Slice(start, length int) *ByteBuffer {
 	return NewByteBuffer(b.data[start : start+length])
 }
 
+//go:inline
 func (b *ByteBuffer) WriterIndex() int {
 	return b.writerIndex
 }
 
 // Bytes returns all written bytes from the buffer (from 0 to writerIndex).
+//
+//go:inline
 func (b *ByteBuffer) Bytes() []byte {
 	return b.GetByteSlice(0, b.writerIndex)
 }
 
+//go:inline
 func (b *ByteBuffer) SetWriterIndex(index int) {
 	b.writerIndex = index
 }
 
+//go:inline
 func (b *ByteBuffer) ReaderIndex() int {
 	return b.readerIndex
 }
 
+//go:inline
 func (b *ByteBuffer) SetReaderIndex(index int) {
 	b.readerIndex = index
 }
@@ -315,6 +355,8 @@ func (b *ByteBuffer) Reserve(n int) {
 
 // UnsafeWriteVarint32 writes a varint32 without grow check.
 // Caller must have called Reserve(5) beforehand.
+//
+//go:inline
 func (b *ByteBuffer) UnsafeWriteVarint32(value int32) int8 {
 	u := uint32((value << 1) ^ (value >> 31))
 	return b.UnsafeWriteVaruint32(u)
@@ -385,12 +427,16 @@ func (b *ByteBuffer) UnsafeWriteVaruint32(value uint32) int8 {
 }
 
 // UnsafeWriteByte writes a single byte without grow check.
+//
+//go:inline
 func (b *ByteBuffer) UnsafeWriteByte(v byte) {
 	b.data[b.writerIndex] = v
 	b.writerIndex++
 }
 
 // UnsafeWriteInt16 writes an int16 without grow check.
+//
+//go:inline
 func (b *ByteBuffer) UnsafeWriteInt16(v int16) {
 	if isLittleEndian {
 		*(*int16)(unsafe.Pointer(&b.data[b.writerIndex])) = v
@@ -401,6 +447,8 @@ func (b *ByteBuffer) UnsafeWriteInt16(v int16) {
 }
 
 // UnsafeWriteInt32 writes an int32 without grow check.
+//
+//go:inline
 func (b *ByteBuffer) UnsafeWriteInt32(v int32) {
 	if isLittleEndian {
 		*(*int32)(unsafe.Pointer(&b.data[b.writerIndex])) = v
@@ -411,6 +459,8 @@ func (b *ByteBuffer) UnsafeWriteInt32(v int32) {
 }
 
 // UnsafeWriteInt64 writes an int64 without grow check.
+//
+//go:inline
 func (b *ByteBuffer) UnsafeWriteInt64(v int64) {
 	if isLittleEndian {
 		*(*int64)(unsafe.Pointer(&b.data[b.writerIndex])) = v
@@ -421,6 +471,8 @@ func (b *ByteBuffer) UnsafeWriteInt64(v int64) {
 }
 
 // UnsafeReadInt32 reads an int32 without bounds check.
+//
+//go:inline
 func (b *ByteBuffer) UnsafeReadInt32() int32 {
 	var v int32
 	if isLittleEndian {
@@ -433,6 +485,8 @@ func (b *ByteBuffer) UnsafeReadInt32() int32 {
 }
 
 // UnsafeReadInt64 reads an int64 without bounds check.
+//
+//go:inline
 func (b *ByteBuffer) UnsafeReadInt64() int64 {
 	var v int64
 	if isLittleEndian {
@@ -445,6 +499,8 @@ func (b *ByteBuffer) UnsafeReadInt64() int64 {
 }
 
 // UnsafeWriteFloat32 writes a float32 without grow check.
+//
+//go:inline
 func (b *ByteBuffer) UnsafeWriteFloat32(v float32) {
 	if isLittleEndian {
 		*(*float32)(unsafe.Pointer(&b.data[b.writerIndex])) = v
@@ -455,6 +511,8 @@ func (b *ByteBuffer) UnsafeWriteFloat32(v float32) {
 }
 
 // UnsafeWriteFloat64 writes a float64 without grow check.
+//
+//go:inline
 func (b *ByteBuffer) UnsafeWriteFloat64(v float64) {
 	if isLittleEndian {
 		*(*float64)(unsafe.Pointer(&b.data[b.writerIndex])) = v
@@ -465,6 +523,8 @@ func (b *ByteBuffer) UnsafeWriteFloat64(v float64) {
 }
 
 // UnsafeWriteBool writes a bool without grow check.
+//
+//go:inline
 func (b *ByteBuffer) UnsafeWriteBool(v bool) {
 	// Branchless: directly convert bool to byte via unsafe
 	b.data[b.writerIndex] = *(*byte)(unsafe.Pointer(&v))
@@ -473,6 +533,8 @@ func (b *ByteBuffer) UnsafeWriteBool(v bool) {
 
 // UnsafeWriteVarint64 writes a varint64 without grow check.
 // Caller must have called Reserve(10) beforehand.
+//
+//go:inline
 func (b *ByteBuffer) UnsafeWriteVarint64(value int64) {
 	u := uint64((value << 1) ^ (value >> 63))
 	b.UnsafeWriteVaruint64(u)
@@ -617,6 +679,8 @@ func (b *ByteBuffer) UnsafeWriteVaruint64(value uint64) {
 // UnsafePutVarInt32 writes a zigzag-encoded varint32 at the given offset without advancing writerIndex.
 // Caller must have called Reserve() to ensure capacity.
 // Returns the number of bytes written (1-5).
+//
+//go:inline
 func (b *ByteBuffer) UnsafePutVarInt32(offset int, value int32) int {
 	u := uint32((value << 1) ^ (value >> 31))
 	return b.UnsafePutVaruint32(offset, u)
@@ -681,6 +745,8 @@ func (b *ByteBuffer) UnsafePutVaruint32(offset int, value uint32) int {
 // UnsafePutVarInt64 writes a zigzag-encoded varint64 at the given offset without advancing writerIndex.
 // Caller must have called Reserve() to ensure capacity.
 // Returns the number of bytes written (1-10).
+//
+//go:inline
 func (b *ByteBuffer) UnsafePutVarInt64(offset int, value int64) int {
 	u := uint64((value << 1) ^ (value >> 63))
 	return b.UnsafePutVaruint64(offset, u)
@@ -812,6 +878,7 @@ func (b *ByteBuffer) UnsafePutVaruint64(offset int, value uint64) int {
 	return 10
 }
 
+//go:inline
 func (b *ByteBuffer) PutInt32(index int, value int32) {
 	b.grow(4)
 	binary.LittleEndian.PutUint32(b.data[index:], uint32(value))
@@ -819,6 +886,8 @@ func (b *ByteBuffer) PutInt32(index int, value int32) {
 
 // WriteVaruint32 writes a 1-5 byte positive int (no zigzag encoding), returns the number of bytes written.
 // Use this for lengths, type IDs, and other non-negative values.
+//
+//go:inline
 func (b *ByteBuffer) WriteVaruint32(value uint32) int8 {
 	b.grow(8) // 8 bytes for bulk uint64 write in worst case
 	return b.UnsafeWriteVaruint32(value)
@@ -831,6 +900,8 @@ type BufferObject interface {
 }
 
 // WriteVarint64 writes the zig-zag encoded varint (compatible with Java's writeVarint64).
+//
+//go:inline
 func (b *ByteBuffer) WriteVarint64(value int64) {
 	u := uint64((value << 1) ^ (value >> 63))
 	b.WriteVaruint64(u)
@@ -890,6 +961,8 @@ func (b *ByteBuffer) WriteVaruint36Small(value uint64) {
 
 // ReadVaruint36Small reads a varint optimized for small values (up to 36 bits)
 // Used for string headers: (length << 2) | encoding
+//
+//go:inline
 func (b *ByteBuffer) ReadVaruint36Small(err *Error) uint64 {
 	if b.remaining() >= 8 {
 		return b.readVaruint36SmallFast()
@@ -897,6 +970,7 @@ func (b *ByteBuffer) ReadVaruint36Small(err *Error) uint64 {
 	return b.readVaruint36SmallSlow(err)
 }
 
+//go:inline
 func (b *ByteBuffer) readVaruint36SmallFast() uint64 {
 	// Single instruction load using unsafe pointer cast (little-endian only)
 	// On big-endian systems, use binary.LittleEndian which the compiler optimizes
@@ -952,6 +1026,8 @@ func (b *ByteBuffer) readVaruint36SmallSlow(err *Error) uint64 {
 }
 
 // ReadVarint64 reads the varint encoded with zig-zag (compatible with Java's readVarint64).
+//
+//go:inline
 func (b *ByteBuffer) ReadVarint64(err *Error) int64 {
 	u := b.ReadVaruint64(err)
 	v := int64(u >> 1)
@@ -962,6 +1038,8 @@ func (b *ByteBuffer) ReadVarint64(err *Error) int64 {
 }
 
 // ReadVaruint64 reads unsigned varint
+//
+//go:inline
 func (b *ByteBuffer) ReadVaruint64(err *Error) uint64 {
 	if b.remaining() >= 9 {
 		return b.readVaruint64Fast()
@@ -970,6 +1048,8 @@ func (b *ByteBuffer) ReadVaruint64(err *Error) uint64 {
 }
 
 // Fast path (when the remaining bytes are sufficient)
+//
+//go:inline
 func (b *ByteBuffer) readVaruint64Fast() uint64 {
 	// Single instruction load using unsafe pointer cast (little-endian only)
 	var bulk uint64
@@ -1044,11 +1124,15 @@ func (b *ByteBuffer) readVaruint64Slow(err *Error) uint64 {
 }
 
 // Auxiliary function
+//
+//go:inline
 func (b *ByteBuffer) remaining() int {
 	return len(b.data) - b.readerIndex
 }
 
 // ReadUint8 reads a uint8 and sets error on bounds violation
+//
+//go:inline
 func (b *ByteBuffer) ReadUint8(err *Error) uint8 {
 	if b.readerIndex >= len(b.data) {
 		*err = BufferOutOfBoundError(b.readerIndex, 1, len(b.data))
@@ -1060,12 +1144,16 @@ func (b *ByteBuffer) ReadUint8(err *Error) uint8 {
 }
 
 // WriteVarint32 writes a signed int32 using zigzag encoding (compatible with Java's writeVarint32).
+//
+//go:inline
 func (b *ByteBuffer) WriteVarint32(value int32) int8 {
 	u := uint32((value << 1) ^ (value >> 31))
 	return b.WriteVaruint32(u)
 }
 
 // ReadVarint32 reads a signed int32 using zigzag decoding (compatible with Java's readVarint32).
+//
+//go:inline
 func (b *ByteBuffer) ReadVarint32(err *Error) int32 {
 	u := b.ReadVaruint32(err)
 	v := int32(u >> 1)
@@ -1077,6 +1165,8 @@ func (b *ByteBuffer) ReadVarint32(err *Error) int32 {
 
 // UnsafeReadVarint32 reads a varint32 without bounds checking.
 // Caller must ensure remaining() >= 5 before calling.
+//
+//go:inline
 func (b *ByteBuffer) UnsafeReadVarint32() int32 {
 	u := b.readVaruint32Fast()
 	v := int32(u >> 1)
@@ -1088,6 +1178,8 @@ func (b *ByteBuffer) UnsafeReadVarint32() int32 {
 
 // UnsafeReadVarint64 reads a varint64 without bounds checking.
 // Caller must ensure remaining() >= 10 before calling.
+//
+//go:inline
 func (b *ByteBuffer) UnsafeReadVarint64() int64 {
 	u := b.readVaruint64Fast()
 	v := int64(u >> 1)
@@ -1098,6 +1190,8 @@ func (b *ByteBuffer) UnsafeReadVarint64() int64 {
 }
 
 // ReadVaruint32 reads a varuint32 and sets error on bounds violation
+//
+//go:inline
 func (b *ByteBuffer) ReadVaruint32(err *Error) uint32 {
 	if b.remaining() >= 8 { // Need 8 bytes for bulk uint64 read in fast path
 		return b.readVaruint32Fast()
@@ -1106,6 +1200,8 @@ func (b *ByteBuffer) ReadVaruint32(err *Error) uint32 {
 }
 
 // Fast path reading (when the remaining bytes are sufficient)
+//
+//go:inline
 func (b *ByteBuffer) readVaruint32Fast() uint32 {
 	// Single instruction load using unsafe pointer cast (little-endian only)
 	// On big-endian systems, use binary.LittleEndian which the compiler optimizes
@@ -1163,6 +1259,7 @@ func (b *ByteBuffer) readVaruint32Slow(err *Error) uint32 {
 	return result
 }
 
+//go:inline
 func (b *ByteBuffer) PutUint8(writerIndex int, value uint8) {
 	b.data[writerIndex] = byte(value)
 }
@@ -1211,10 +1308,12 @@ func (b *ByteBuffer) continuePutVarint36(index int, encoded, value uint64) int {
 	return 5
 }
 
+//go:inline
 func (b *ByteBuffer) unsafePutInt32(index int, v int32) {
 	binary.LittleEndian.PutUint32(b.data[index:], uint32(v))
 }
 
+//go:inline
 func (b *ByteBuffer) unsafePutInt64(index int, v uint64) {
 	binary.LittleEndian.PutUint64(b.data[index:], v)
 }
@@ -1318,11 +1417,15 @@ func (b *ByteBuffer) readVaruint36Slow(err *Error) uint64 {
 }
 
 // unsafeGetInt32 reads little-endian int32 at index
+//
+//go:inline
 func (b *ByteBuffer) unsafeGetInt32(idx int) int {
 	return int(int32(binary.LittleEndian.Uint32(b.data[idx:])))
 }
 
 // IncreaseReaderIndex advances readerIndex
+//
+//go:inline
 func (b *ByteBuffer) IncreaseReaderIndex(n int) {
 	b.readerIndex += n
 }

@@ -19,9 +19,13 @@ package fory
 
 import (
 	"reflect"
+	"unsafe"
 )
 
-// boolArraySerializer handles [N]bool fixed-size arrays
+// ============================================================================
+// boolArraySerializer - optimized [N]bool serialization
+// ============================================================================
+
 type boolArraySerializer struct {
 	arrayType reflect.Type
 }
@@ -30,8 +34,21 @@ func (s boolArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 	buf := ctx.Buffer()
 	length := value.Len()
 	buf.WriteLength(length)
-	for i := 0; i < length; i++ {
-		buf.WriteBool(value.Index(i).Bool())
+	if length > 0 {
+		if value.CanAddr() {
+			// Fast path: direct memory copy - bool is 1 byte in Go
+			ptr := value.Addr().UnsafePointer()
+			buf.WriteBinary(unsafe.Slice((*byte)(ptr), length))
+		} else {
+			// Slow path for non-addressable arrays
+			for i := 0; i < length; i++ {
+				if value.Index(i).Bool() {
+					buf.WriteByte(1)
+				} else {
+					buf.WriteByte(0)
+				}
+			}
+		}
 	}
 }
 
@@ -54,8 +71,11 @@ func (s boolArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, valu
 		ctx.SetError(DeserializationErrorf("array length %d does not match type %v", length, type_))
 		return
 	}
-	for i := 0; i < length; i++ {
-		value.Index(i).SetBool(buf.ReadBool(err))
+	if length > 0 {
+		// Direct memory copy - bool is 1 byte in Go
+		ptr := value.Addr().UnsafePointer()
+		raw := buf.ReadBinary(length, err)
+		copy(unsafe.Slice((*byte)(ptr), length), raw)
 	}
 }
 
@@ -71,7 +91,10 @@ func (s boolArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode,
 	s.Read(ctx, refMode, false, value)
 }
 
-// int8ArraySerializer handles [N]int8 fixed-size arrays
+// ============================================================================
+// int8ArraySerializer - optimized [N]int8 serialization
+// ============================================================================
+
 type int8ArraySerializer struct {
 	arrayType reflect.Type
 }
@@ -80,8 +103,17 @@ func (s int8ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 	buf := ctx.Buffer()
 	length := value.Len()
 	buf.WriteLength(length)
-	for i := 0; i < length; i++ {
-		buf.WriteByte_(byte(value.Index(i).Int()))
+	if length > 0 {
+		if value.CanAddr() {
+			// Fast path: direct memory copy - int8 is 1 byte
+			ptr := value.Addr().UnsafePointer()
+			buf.WriteBinary(unsafe.Slice((*byte)(ptr), length))
+		} else {
+			// Slow path for non-addressable arrays
+			for i := 0; i < length; i++ {
+				buf.WriteInt8(int8(value.Index(i).Int()))
+			}
+		}
 	}
 }
 
@@ -104,8 +136,11 @@ func (s int8ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, valu
 		ctx.SetError(DeserializationErrorf("array length %d does not match type %v", length, type_))
 		return
 	}
-	for i := 0; i < length; i++ {
-		value.Index(i).SetInt(int64(int8(buf.ReadByte(err))))
+	if length > 0 {
+		// Direct memory copy - int8 is 1 byte
+		ptr := value.Addr().UnsafePointer()
+		raw := buf.ReadBinary(length, err)
+		copy(unsafe.Slice((*byte)(ptr), length), raw)
 	}
 }
 
@@ -121,7 +156,10 @@ func (s int8ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode,
 	s.Read(ctx, refMode, false, value)
 }
 
-// int16ArraySerializer handles [N]int16 fixed-size arrays
+// ============================================================================
+// int16ArraySerializer - optimized [N]int16 serialization
+// ============================================================================
+
 type int16ArraySerializer struct {
 	arrayType reflect.Type
 }
@@ -129,9 +167,19 @@ type int16ArraySerializer struct {
 func (s int16ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 	buf := ctx.Buffer()
 	length := value.Len()
-	buf.WriteLength(length * 2)
-	for i := 0; i < length; i++ {
-		buf.WriteInt16(int16(value.Index(i).Int()))
+	size := length * 2
+	buf.WriteLength(size)
+	if length > 0 {
+		if value.CanAddr() && isLittleEndian {
+			// Fast path: direct memory copy - little-endian only
+			ptr := value.Addr().UnsafePointer()
+			buf.WriteBinary(unsafe.Slice((*byte)(ptr), size))
+		} else {
+			// Slow path for non-addressable arrays or big-endian
+			for i := 0; i < length; i++ {
+				buf.WriteInt16(int16(value.Index(i).Int()))
+			}
+		}
 	}
 }
 
@@ -146,7 +194,8 @@ func (s int16ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeTyp
 func (s int16ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
 	buf := ctx.Buffer()
 	err := ctx.Err()
-	length := buf.ReadLength(err) / 2
+	size := buf.ReadLength(err)
+	length := size / 2
 	if ctx.HasError() {
 		return
 	}
@@ -154,8 +203,16 @@ func (s int16ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, val
 		ctx.SetError(DeserializationErrorf("array length %d does not match type %v", length, type_))
 		return
 	}
-	for i := 0; i < length; i++ {
-		value.Index(i).SetInt(int64(buf.ReadInt16(err)))
+	if length > 0 {
+		if isLittleEndian {
+			ptr := value.Addr().UnsafePointer()
+			raw := buf.ReadBinary(size, err)
+			copy(unsafe.Slice((*byte)(ptr), size), raw)
+		} else {
+			for i := 0; i < length; i++ {
+				value.Index(i).SetInt(int64(buf.ReadInt16(err)))
+			}
+		}
 	}
 }
 
@@ -171,7 +228,10 @@ func (s int16ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode
 	s.Read(ctx, refMode, false, value)
 }
 
-// int32ArraySerializer handles [N]int32 fixed-size arrays
+// ============================================================================
+// int32ArraySerializer - optimized [N]int32 serialization
+// ============================================================================
+
 type int32ArraySerializer struct {
 	arrayType reflect.Type
 }
@@ -179,9 +239,19 @@ type int32ArraySerializer struct {
 func (s int32ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 	buf := ctx.Buffer()
 	length := value.Len()
-	buf.WriteLength(length * 4)
-	for i := 0; i < length; i++ {
-		buf.WriteInt32(int32(value.Index(i).Int()))
+	size := length * 4
+	buf.WriteLength(size)
+	if length > 0 {
+		if value.CanAddr() && isLittleEndian {
+			// Fast path: direct memory copy - little-endian only
+			ptr := value.Addr().UnsafePointer()
+			buf.WriteBinary(unsafe.Slice((*byte)(ptr), size))
+		} else {
+			// Slow path for non-addressable arrays or big-endian
+			for i := 0; i < length; i++ {
+				buf.WriteInt32(int32(value.Index(i).Int()))
+			}
+		}
 	}
 }
 
@@ -196,7 +266,8 @@ func (s int32ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeTyp
 func (s int32ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
 	buf := ctx.Buffer()
 	err := ctx.Err()
-	length := buf.ReadLength(err) / 4
+	size := buf.ReadLength(err)
+	length := size / 4
 	if ctx.HasError() {
 		return
 	}
@@ -204,8 +275,16 @@ func (s int32ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, val
 		ctx.SetError(DeserializationErrorf("array length %d does not match type %v", length, type_))
 		return
 	}
-	for i := 0; i < length; i++ {
-		value.Index(i).SetInt(int64(buf.ReadInt32(err)))
+	if length > 0 {
+		if isLittleEndian {
+			ptr := value.Addr().UnsafePointer()
+			raw := buf.ReadBinary(size, err)
+			copy(unsafe.Slice((*byte)(ptr), size), raw)
+		} else {
+			for i := 0; i < length; i++ {
+				value.Index(i).SetInt(int64(buf.ReadInt32(err)))
+			}
+		}
 	}
 }
 
@@ -221,7 +300,10 @@ func (s int32ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode
 	s.Read(ctx, refMode, false, value)
 }
 
-// int64ArraySerializer handles [N]int64 fixed-size arrays
+// ============================================================================
+// int64ArraySerializer - optimized [N]int64 serialization
+// ============================================================================
+
 type int64ArraySerializer struct {
 	arrayType reflect.Type
 }
@@ -229,9 +311,19 @@ type int64ArraySerializer struct {
 func (s int64ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 	buf := ctx.Buffer()
 	length := value.Len()
-	buf.WriteLength(length * 8)
-	for i := 0; i < length; i++ {
-		buf.WriteInt64(value.Index(i).Int())
+	size := length * 8
+	buf.WriteLength(size)
+	if length > 0 {
+		if value.CanAddr() && isLittleEndian {
+			// Fast path: direct memory copy - little-endian only
+			ptr := value.Addr().UnsafePointer()
+			buf.WriteBinary(unsafe.Slice((*byte)(ptr), size))
+		} else {
+			// Slow path for non-addressable arrays or big-endian
+			for i := 0; i < length; i++ {
+				buf.WriteInt64(value.Index(i).Int())
+			}
+		}
 	}
 }
 
@@ -246,7 +338,8 @@ func (s int64ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeTyp
 func (s int64ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
 	buf := ctx.Buffer()
 	err := ctx.Err()
-	length := buf.ReadLength(err) / 8
+	size := buf.ReadLength(err)
+	length := size / 8
 	if ctx.HasError() {
 		return
 	}
@@ -254,8 +347,16 @@ func (s int64ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, val
 		ctx.SetError(DeserializationErrorf("array length %d does not match type %v", length, type_))
 		return
 	}
-	for i := 0; i < length; i++ {
-		value.Index(i).SetInt(buf.ReadInt64(err))
+	if length > 0 {
+		if isLittleEndian {
+			ptr := value.Addr().UnsafePointer()
+			raw := buf.ReadBinary(size, err)
+			copy(unsafe.Slice((*byte)(ptr), size), raw)
+		} else {
+			for i := 0; i < length; i++ {
+				value.Index(i).SetInt(buf.ReadInt64(err))
+			}
+		}
 	}
 }
 
@@ -271,7 +372,10 @@ func (s int64ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode
 	s.Read(ctx, refMode, false, value)
 }
 
-// float32ArraySerializer handles [N]float32 fixed-size arrays
+// ============================================================================
+// float32ArraySerializer - optimized [N]float32 serialization
+// ============================================================================
+
 type float32ArraySerializer struct {
 	arrayType reflect.Type
 }
@@ -279,9 +383,19 @@ type float32ArraySerializer struct {
 func (s float32ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 	buf := ctx.Buffer()
 	length := value.Len()
-	buf.WriteLength(length * 4)
-	for i := 0; i < length; i++ {
-		buf.WriteFloat32(float32(value.Index(i).Float()))
+	size := length * 4
+	buf.WriteLength(size)
+	if length > 0 {
+		if value.CanAddr() && isLittleEndian {
+			// Fast path: direct memory copy - little-endian only
+			ptr := value.Addr().UnsafePointer()
+			buf.WriteBinary(unsafe.Slice((*byte)(ptr), size))
+		} else {
+			// Slow path for non-addressable arrays or big-endian
+			for i := 0; i < length; i++ {
+				buf.WriteFloat32(float32(value.Index(i).Float()))
+			}
+		}
 	}
 }
 
@@ -296,7 +410,8 @@ func (s float32ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeT
 func (s float32ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
 	buf := ctx.Buffer()
 	err := ctx.Err()
-	length := buf.ReadLength(err) / 4
+	size := buf.ReadLength(err)
+	length := size / 4
 	if ctx.HasError() {
 		return
 	}
@@ -304,8 +419,16 @@ func (s float32ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, v
 		ctx.SetError(DeserializationErrorf("array length %d does not match type %v", length, type_))
 		return
 	}
-	for i := 0; i < length; i++ {
-		value.Index(i).SetFloat(float64(buf.ReadFloat32(err)))
+	if length > 0 {
+		if isLittleEndian {
+			ptr := value.Addr().UnsafePointer()
+			raw := buf.ReadBinary(size, err)
+			copy(unsafe.Slice((*byte)(ptr), size), raw)
+		} else {
+			for i := 0; i < length; i++ {
+				value.Index(i).SetFloat(float64(buf.ReadFloat32(err)))
+			}
+		}
 	}
 }
 
@@ -321,7 +444,10 @@ func (s float32ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMo
 	s.Read(ctx, refMode, false, value)
 }
 
-// float64ArraySerializer handles [N]float64 fixed-size arrays
+// ============================================================================
+// float64ArraySerializer - optimized [N]float64 serialization
+// ============================================================================
+
 type float64ArraySerializer struct {
 	arrayType reflect.Type
 }
@@ -329,9 +455,19 @@ type float64ArraySerializer struct {
 func (s float64ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 	buf := ctx.Buffer()
 	length := value.Len()
-	buf.WriteLength(length * 8)
-	for i := 0; i < length; i++ {
-		buf.WriteFloat64(value.Index(i).Float())
+	size := length * 8
+	buf.WriteLength(size)
+	if length > 0 {
+		if value.CanAddr() && isLittleEndian {
+			// Fast path: direct memory copy - little-endian only
+			ptr := value.Addr().UnsafePointer()
+			buf.WriteBinary(unsafe.Slice((*byte)(ptr), size))
+		} else {
+			// Slow path for non-addressable arrays or big-endian
+			for i := 0; i < length; i++ {
+				buf.WriteFloat64(value.Index(i).Float())
+			}
+		}
 	}
 }
 
@@ -346,7 +482,8 @@ func (s float64ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeT
 func (s float64ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
 	buf := ctx.Buffer()
 	err := ctx.Err()
-	length := buf.ReadLength(err) / 8
+	size := buf.ReadLength(err)
+	length := size / 8
 	if ctx.HasError() {
 		return
 	}
@@ -354,8 +491,16 @@ func (s float64ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, v
 		ctx.SetError(DeserializationErrorf("array length %d does not match type %v", length, type_))
 		return
 	}
-	for i := 0; i < length; i++ {
-		value.Index(i).SetFloat(buf.ReadFloat64(err))
+	if length > 0 {
+		if isLittleEndian {
+			ptr := value.Addr().UnsafePointer()
+			raw := buf.ReadBinary(size, err)
+			copy(unsafe.Slice((*byte)(ptr), size), raw)
+		} else {
+			for i := 0; i < length; i++ {
+				value.Index(i).SetFloat(buf.ReadFloat64(err))
+			}
+		}
 	}
 }
 
@@ -371,7 +516,10 @@ func (s float64ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMo
 	s.Read(ctx, refMode, false, value)
 }
 
-// uint8ArraySerializer handles [N]uint8 (byte) fixed-size arrays
+// ============================================================================
+// uint8ArraySerializer - optimized [N]uint8 (byte) serialization
+// ============================================================================
+
 type uint8ArraySerializer struct {
 	arrayType reflect.Type
 }
@@ -380,8 +528,17 @@ func (s uint8ArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) 
 	buf := ctx.Buffer()
 	length := value.Len()
 	buf.WriteLength(length)
-	for i := 0; i < length; i++ {
-		buf.WriteByte_(byte(value.Index(i).Uint()))
+	if length > 0 {
+		if value.CanAddr() {
+			// Fast path: direct memory copy - uint8 is 1 byte
+			ptr := value.Addr().UnsafePointer()
+			buf.WriteBinary(unsafe.Slice((*byte)(ptr), length))
+		} else {
+			// Slow path for non-addressable arrays
+			for i := 0; i < length; i++ {
+				buf.WriteByte(byte(value.Index(i).Uint()))
+			}
+		}
 	}
 }
 
@@ -404,8 +561,11 @@ func (s uint8ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, val
 		ctx.SetError(DeserializationErrorf("array length %d does not match type %v", length, type_))
 		return
 	}
-	for i := 0; i < length; i++ {
-		value.Index(i).SetUint(uint64(buf.ReadByte(err)))
+	if length > 0 {
+		// Direct memory copy - uint8 is 1 byte
+		ptr := value.Addr().UnsafePointer()
+		raw := buf.ReadBinary(length, err)
+		copy(unsafe.Slice((*byte)(ptr), length), raw)
 	}
 }
 

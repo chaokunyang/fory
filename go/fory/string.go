@@ -85,7 +85,7 @@ func readString(buf *ByteBuffer, err *Error) string {
 	case encodingUTF8:
 		return readUTF8(buf, int(size), err)
 	default:
-		err.SetIfOk(fmt.Errorf("invalid string encoding: %d", encoding))
+		err.SetError(fmt.Errorf("invalid string encoding: %d", encoding))
 		return ""
 	}
 }

@@ -98,7 +98,7 @@ func (r *MetaStringResolver) WriteMetaStringBytes(buf *ByteBuffer, m *MetaString
 			// Large strings include full hash
 			binErr := binary.Write(buf, binary.LittleEndian, m.Hashcode)
 			if binErr != nil {
-				err.SetIfOk(binErr)
+				err.SetError(binErr)
 				return
 			}
 		}

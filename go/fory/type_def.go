@@ -244,7 +244,7 @@ func (td *TypeDef) buildTypeInfoWithResolver(resolver *TypeResolver) (TypeInfo, 
 func readTypeDef(fory *Fory, buffer *ByteBuffer, header int64, err *Error) *TypeDef {
 	td, decodeErr := decodeTypeDef(fory, buffer, header)
 	if decodeErr != nil {
-		err.SetIfOk(decodeErr)
+		err.SetError(decodeErr)
 		return nil
 	}
 	return td

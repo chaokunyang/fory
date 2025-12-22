@@ -1169,7 +1169,7 @@ func (r *TypeResolver) writeSharedTypeMeta(buffer *ByteBuffer, typeInfo *TypeInf
 	if actualType.Kind() == reflect.Struct {
 		typeDef, typeDefErr := r.getTypeDef(typeInfo.Type, true)
 		if typeDefErr != nil {
-			err.SetIfOk(typeDefErr)
+			err.SetError(typeDefErr)
 			return
 		}
 		context.writingTypeDefs = append(context.writingTypeDefs, typeDef)
@@ -1201,19 +1201,19 @@ func (r *TypeResolver) getTypeDef(typ reflect.Type, create bool) (*TypeDef, erro
 func (r *TypeResolver) readSharedTypeMeta(buffer *ByteBuffer, err *Error) *TypeInfo {
 	context := r.fory.MetaContext()
 	if context == nil {
-		err.SetIfOk(fmt.Errorf("MetaContext is nil - ensure compatible mode is enabled"))
+		err.SetError(fmt.Errorf("MetaContext is nil - ensure compatible mode is enabled"))
 		return nil
 	}
 	index := int32(buffer.ReadVaruint32(err)) // shared meta index id (unsigned)
 	if index < 0 || index >= int32(len(context.readTypeInfos)) {
-		err.SetIfOk(fmt.Errorf("TypeInfo not found for index %d (have %d type infos)", index, len(context.readTypeInfos)))
+		err.SetError(fmt.Errorf("TypeInfo not found for index %d (have %d type infos)", index, len(context.readTypeInfos)))
 		return nil
 	}
 	info := context.readTypeInfos[index]
 
 	// Validate that we got a valid TypeInfo
 	if info.Serializer == nil {
-		err.SetIfOk(fmt.Errorf("TypeInfo at index %d has nil Serializer (type=%v, typeID=%d)", index, info.Type, info.TypeID))
+		err.SetError(fmt.Errorf("TypeInfo at index %d has nil Serializer (type=%v, typeID=%d)", index, info.Type, info.TypeID))
 		return nil
 	}
 
@@ -1241,7 +1241,7 @@ func (r *TypeResolver) readTypeDefs(buffer *ByteBuffer, err *Error) {
 	}
 	context := r.fory.MetaContext()
 	if context == nil {
-		err.SetIfOk(fmt.Errorf("MetaContext is nil but type definitions are present"))
+		err.SetError(fmt.Errorf("MetaContext is nil but type definitions are present"))
 		return
 	}
 	for i := 0; i < numTypeDefs; i++ {
@@ -1261,7 +1261,7 @@ func (r *TypeResolver) readTypeDefs(buffer *ByteBuffer, err *Error) {
 		}
 		typeInfo, typeInfoErr := td.buildTypeInfoWithResolver(r)
 		if typeInfoErr != nil {
-			err.SetIfOk(typeInfoErr)
+			err.SetError(typeInfoErr)
 			return
 		}
 		context.readTypeInfos = append(context.readTypeInfos, &typeInfo)
@@ -1533,7 +1533,7 @@ func (r *TypeResolver) writeType(buffer *ByteBuffer, type_ reflect.Type, err *Er
 	typeInfo, ok := r.typeToTypeInfo[type_]
 	if !ok {
 		if encodeType, encErr := r.encodeType(type_); encErr != nil {
-			err.SetIfOk(encErr)
+			err.SetError(encErr)
 			return
 		} else {
 			typeInfo = encodeType
@@ -1550,7 +1550,7 @@ func (r *TypeResolver) readType(buffer *ByteBuffer, err *Error) reflect.Type {
 		var decErr error
 		type_, _, decErr = r.decodeType(metaString)
 		if decErr != nil {
-			err.SetIfOk(decErr)
+			err.SetError(decErr)
 			return nil
 		}
 		r.typeInfoToType[metaString] = type_
@@ -1663,7 +1663,7 @@ func (r *TypeResolver) readTypeByReadTag(buffer *ByteBuffer, err *Error) reflect
 			return reflect.PtrTo(structSer.type_)
 		}
 	}
-	err.SetIfOk(fmt.Errorf("failed to extract type from serializer for %s", metaString))
+	err.SetError(fmt.Errorf("failed to extract type from serializer for %s", metaString))
 	return nil
 }
 
@@ -1697,13 +1697,13 @@ func (r *TypeResolver) ReadTypeInfo(buffer *ByteBuffer, err *Error) *TypeInfo {
 		// If not found, decode the bytes to strings and try again
 		ns, decErr := r.namespaceDecoder.Decode(nsBytes.Data, nsBytes.Encoding)
 		if decErr != nil {
-			err.SetIfOk(fmt.Errorf("namespace decode failed: %w", decErr))
+			err.SetError(fmt.Errorf("namespace decode failed: %w", decErr))
 			return nil
 		}
 
 		typeName, decErr := r.typeNameDecoder.Decode(typeBytes.Data, typeBytes.Encoding)
 		if decErr != nil {
-			err.SetIfOk(fmt.Errorf("typename decode failed: %w", decErr))
+			err.SetError(fmt.Errorf("typename decode failed: %w", decErr))
 			return nil
 		}
 
@@ -1717,7 +1717,7 @@ func (r *TypeResolver) ReadTypeInfo(buffer *ByteBuffer, err *Error) *TypeInfo {
 		if ns != "" {
 			fullName = ns + "." + typeName
 		}
-		err.SetIfOk(fmt.Errorf("unregistered type: %s (typeID: %d)", fullName, typeID))
+		err.SetError(fmt.Errorf("unregistered type: %s (typeID: %d)", fullName, typeID))
 		return nil
 
 	case NAMED_COMPATIBLE_STRUCT, COMPATIBLE_STRUCT:
@@ -1849,7 +1849,7 @@ func (r *TypeResolver) ReadTypeInfo(buffer *ByteBuffer, err *Error) *TypeInfo {
 		}
 	}
 
-	err.SetIfOk(fmt.Errorf("unknown type id: %d", typeID))
+	err.SetError(fmt.Errorf("unknown type id: %d", typeID))
 	return nil
 }
 
@@ -1874,13 +1874,13 @@ func (r *TypeResolver) readTypeInfoWithTypeID(buffer *ByteBuffer, typeID uint32,
 		// If not found, decode the bytes to strings and try again
 		ns, nsErr := r.namespaceDecoder.Decode(nsBytes.Data, nsBytes.Encoding)
 		if nsErr != nil {
-			err.SetIfOk(fmt.Errorf("namespace decode failed: %w", nsErr))
+			err.SetError(fmt.Errorf("namespace decode failed: %w", nsErr))
 			return nil
 		}
 
 		typeName, tnErr := r.typeNameDecoder.Decode(typeBytes.Data, typeBytes.Encoding)
 		if tnErr != nil {
-			err.SetIfOk(fmt.Errorf("typename decode failed: %w", tnErr))
+			err.SetError(fmt.Errorf("typename decode failed: %w", tnErr))
 			return nil
 		}
 
@@ -1889,7 +1889,7 @@ func (r *TypeResolver) readTypeInfoWithTypeID(buffer *ByteBuffer, typeID uint32,
 			r.nsTypeToTypeInfo[compositeKey] = typeInfo
 			return typeInfo
 		}
-		err.SetIfOk(fmt.Errorf("namespaced type not found: %s.%s", ns, typeName))
+		err.SetError(fmt.Errorf("namespaced type not found: %s.%s", ns, typeName))
 		return nil
 	}
 
@@ -1957,7 +1957,7 @@ func (r *TypeResolver) readTypeInfoWithTypeID(buffer *ByteBuffer, typeID uint32,
 		}
 	}
 
-	err.SetIfOk(fmt.Errorf("typeInfo of typeID %d not found", typeID))
+	err.SetError(fmt.Errorf("typeInfo of typeID %d not found", typeID))
 	return nil
 }
 
@@ -2033,14 +2033,14 @@ func (r *TypeResolver) writeMetaString(buffer *ByteBuffer, str string, err *Erro
 			// TODO this hash should be unique, since we don't compare data equality for performance
 			h := fnv.New64a()
 			if _, hashErr := h.Write([]byte(str)); hashErr != nil {
-				err.SetIfOk(hashErr)
+				err.SetError(hashErr)
 				return
 			}
 			hash := int64(h.Sum64() & 0xffffffffffffff00)
 			buffer.WriteInt64(hash)
 		}
 		if len(str) > MaxInt16 {
-			err.SetIfOk(fmt.Errorf("too long string: %s", str))
+			err.SetError(fmt.Errorf("too long string: %s", str))
 			return
 		}
 		buffer.WriteBinary(unsafeGetBytes(str))

@@ -77,8 +77,29 @@ func readMapStringString(buf *ByteBuffer, err *Error) map[string]string {
 		keyHasNull := (chunkHeader & KEY_HAS_NULL) != 0
 		valueHasNull := (chunkHeader & VALUE_HAS_NULL) != 0
 
-		if keyHasNull || valueHasNull {
-			// Skip null entries (strings can't be null in Go)
+		if keyHasNull && valueHasNull {
+			// Both null - use empty strings for key and value
+			result[""] = ""
+			size--
+			continue
+		} else if keyHasNull {
+			// Null key with non-null value
+			valueDeclared := (chunkHeader & VALUE_DECL_TYPE) != 0
+			if !valueDeclared {
+				buf.ReadVaruint32Small7(err) // skip value type
+			}
+			v := readString(buf, err)
+			result[""] = v // empty string as null key
+			size--
+			continue
+		} else if valueHasNull {
+			// Non-null key with null value
+			keyDeclared := (chunkHeader & KEY_DECL_TYPE) != 0
+			if !keyDeclared {
+				buf.ReadVaruint32Small7(err) // skip key type
+			}
+			k := readString(buf, err)
+			result[k] = "" // empty string as null value
 			size--
 			continue
 		}

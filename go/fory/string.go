@@ -39,30 +39,8 @@ func writeString(buf *ByteBuffer, value string) {
 
 	// Reserve space for header (max 5 bytes) + data in one call
 	buf.Reserve(5 + dataLen)
-
 	// Write header inline without grow check
-	if header < 0x80 {
-		buf.UnsafeWriteByte(byte(header))
-	} else if header < 0x4000 {
-		buf.UnsafeWriteByte(byte(header&0x7F) | 0x80)
-		buf.UnsafeWriteByte(byte(header >> 7))
-	} else if header < 0x200000 {
-		buf.UnsafeWriteByte(byte(header&0x7F) | 0x80)
-		buf.UnsafeWriteByte(byte((header>>7)&0x7F) | 0x80)
-		buf.UnsafeWriteByte(byte(header >> 14))
-	} else if header < 0x10000000 {
-		buf.UnsafeWriteByte(byte(header&0x7F) | 0x80)
-		buf.UnsafeWriteByte(byte((header>>7)&0x7F) | 0x80)
-		buf.UnsafeWriteByte(byte((header>>14)&0x7F) | 0x80)
-		buf.UnsafeWriteByte(byte(header >> 21))
-	} else {
-		buf.UnsafeWriteByte(byte(header&0x7F) | 0x80)
-		buf.UnsafeWriteByte(byte((header>>7)&0x7F) | 0x80)
-		buf.UnsafeWriteByte(byte((header>>14)&0x7F) | 0x80)
-		buf.UnsafeWriteByte(byte((header>>21)&0x7F) | 0x80)
-		buf.UnsafeWriteByte(byte(header >> 28))
-	}
-
+	buf.UnsafeWriteVaruint64(header)
 	// Write data inline without grow check
 	if dataLen > 0 {
 		copy(buf.data[buf.writerIndex:], data)

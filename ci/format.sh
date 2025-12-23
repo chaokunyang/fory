@@ -176,6 +176,17 @@ format_python() {
     fi
 }
 
+format_go() {
+    echo "$(date)" "gofmt format Go files...."
+    if command -v gofmt >/dev/null; then
+      git ls-files -- '*.go' "${GIT_LS_EXCLUDES[@]}" | xargs -P 5 gofmt -w
+      echo "$(date)" "Go formatting done!"
+    else
+      echo "ERROR: gofmt is not installed! Install Go from https://go.dev/"
+      exit 1
+    fi
+}
+
 # Format all files, and print the diff to stdout for travis.
 format_all() {
     format_all_scripts "${@}"
@@ -277,6 +288,8 @@ elif [ "${1-}" == '--cpp' ]; then
     format_cpp
 elif [ "${1-}" == '--python' ]; then
     format_python
+elif [ "${1-}" == '--go' ]; then
+    format_go
 else
     # Add the origin remote if it doesn't exist
     if ! git remote -v | grep -q origin; then

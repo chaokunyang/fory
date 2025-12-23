@@ -106,13 +106,13 @@ const (
 	// UINT32 Unsigned 32-bit little-endian integer
 	UINT32 = 66
 	// UINT64 Unsigned 64-bit little-endian integer
-	UINT64 = 67
-    VAR_UINT32 = 68
-    VAR_UINT64 = 69
-    SLI_UINT64 = 70
-    UINT16_ARRAY = 71
-    UINT32_ARRAY = 72
-    UINT64_ARRAY = 73
+	UINT64       = 67
+	VAR_UINT32   = 68
+	VAR_UINT64   = 69
+	SLI_UINT64   = 70
+	UINT16_ARRAY = 71
+	UINT32_ARRAY = 72
+	UINT64_ARRAY = 73
 )
 
 // IsNamespacedType checks whether the given type ID is a namespace type
@@ -258,6 +258,7 @@ const (
 	ConcreteTypeBoolSlice
 	ConcreteTypeStringSlice
 	ConcreteTypeStringStringMap
+	ConcreteTypeStringInt32Map
 	ConcreteTypeStringInt64Map
 	ConcreteTypeStringIntMap
 	ConcreteTypeStringFloat64Map

@@ -174,6 +174,75 @@ func readMapStringInt64(buf *ByteBuffer, err *Error) map[string]int64 {
 	return result
 }
 
+// writeMapStringInt32 writes map[string]int32 using chunk protocol
+// Writes type info for generic deserialization compatibility
+func writeMapStringInt32(buf *ByteBuffer, m map[string]int32) {
+	length := len(m)
+	buf.WriteVaruint32(uint32(length))
+	if length == 0 {
+		return
+	}
+
+	remaining := length
+	for remaining > 0 {
+		chunkSize := remaining
+		if chunkSize > MAX_CHUNK_SIZE {
+			chunkSize = MAX_CHUNK_SIZE
+		}
+
+		buf.WriteUint8(0) // no DECL_TYPE flags
+		buf.WriteUint8(uint8(chunkSize))
+		buf.WriteVaruint32Small7(uint32(STRING))    // key type
+		buf.WriteVaruint32Small7(uint32(VAR_INT32)) // value type
+
+		count := 0
+		for k, v := range m {
+			writeString(buf, k)
+			buf.WriteVarint32(v)
+			count++
+			if count >= chunkSize {
+				break
+			}
+		}
+		remaining -= chunkSize
+	}
+}
+
+// readMapStringInt32 reads map[string]int32 using chunk protocol
+func readMapStringInt32(buf *ByteBuffer, err *Error) map[string]int32 {
+	size := int(buf.ReadVaruint32(err))
+	result := make(map[string]int32, size)
+	if size == 0 {
+		return result
+	}
+
+	for size > 0 {
+		chunkHeader := buf.ReadUint8(err)
+		keyHasNull := (chunkHeader & KEY_HAS_NULL) != 0
+		valueHasNull := (chunkHeader & VALUE_HAS_NULL) != 0
+
+		if keyHasNull || valueHasNull {
+			size--
+			continue
+		}
+
+		chunkSize := int(buf.ReadUint8(err))
+		if (chunkHeader & KEY_DECL_TYPE) == 0 {
+			buf.ReadVaruint32Small7(err)
+		}
+		if (chunkHeader & VALUE_DECL_TYPE) == 0 {
+			buf.ReadVaruint32Small7(err)
+		}
+		for i := 0; i < chunkSize && size > 0; i++ {
+			k := readString(buf, err)
+			v := buf.ReadVarint32(err)
+			result[k] = v
+			size--
+		}
+	}
+	return result
+}
+
 // writeMapStringInt writes map[string]int using chunk protocol
 // Writes type info for generic deserialization compatibility
 func writeMapStringInt(buf *ByteBuffer, m map[string]int) {

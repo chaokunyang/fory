@@ -393,7 +393,9 @@ func (c *ReadContext) ReadStringSlice(refMode RefMode, readType bool) []string {
 func (c *ReadContext) ReadStringStringMap(refMode RefMode, readType bool) map[string]string {
 	err := c.Err()
 	if refMode != RefModeNone {
-		_ = c.buffer.ReadInt8(err)
+		if c.buffer.ReadInt8(err) == NullFlag {
+			return nil
+		}
 	}
 	if readType {
 		_ = c.buffer.ReadVaruint32Small7(err)
@@ -405,7 +407,9 @@ func (c *ReadContext) ReadStringStringMap(refMode RefMode, readType bool) map[st
 func (c *ReadContext) ReadStringInt64Map(refMode RefMode, readType bool) map[string]int64 {
 	err := c.Err()
 	if refMode != RefModeNone {
-		_ = c.buffer.ReadInt8(err)
+		if c.buffer.ReadInt8(err) == NullFlag {
+			return nil
+		}
 	}
 	if readType {
 		_ = c.buffer.ReadVaruint32Small7(err)
@@ -413,11 +417,27 @@ func (c *ReadContext) ReadStringInt64Map(refMode RefMode, readType bool) map[str
 	return readMapStringInt64(c.buffer, err)
 }
 
+// ReadStringInt32Map reads map[string]int32 with optional ref/type info
+func (c *ReadContext) ReadStringInt32Map(refMode RefMode, readType bool) map[string]int32 {
+	err := c.Err()
+	if refMode != RefModeNone {
+		if c.buffer.ReadInt8(err) == NullFlag {
+			return nil
+		}
+	}
+	if readType {
+		_ = c.buffer.ReadVaruint32Small7(err)
+	}
+	return readMapStringInt32(c.buffer, err)
+}
+
 // ReadStringIntMap reads map[string]int with optional ref/type info
 func (c *ReadContext) ReadStringIntMap(refMode RefMode, readType bool) map[string]int {
 	err := c.Err()
 	if refMode != RefModeNone {
-		_ = c.buffer.ReadInt8(err)
+		if c.buffer.ReadInt8(err) == NullFlag {
+			return nil
+		}
 	}
 	if readType {
 		_ = c.buffer.ReadVaruint32Small7(err)
@@ -429,7 +449,9 @@ func (c *ReadContext) ReadStringIntMap(refMode RefMode, readType bool) map[strin
 func (c *ReadContext) ReadStringFloat64Map(refMode RefMode, readType bool) map[string]float64 {
 	err := c.Err()
 	if refMode != RefModeNone {
-		_ = c.buffer.ReadInt8(err)
+		if c.buffer.ReadInt8(err) == NullFlag {
+			return nil
+		}
 	}
 	if readType {
 		_ = c.buffer.ReadVaruint32Small7(err)
@@ -441,7 +463,9 @@ func (c *ReadContext) ReadStringFloat64Map(refMode RefMode, readType bool) map[s
 func (c *ReadContext) ReadStringBoolMap(refMode RefMode, readType bool) map[string]bool {
 	err := c.Err()
 	if refMode != RefModeNone {
-		_ = c.buffer.ReadInt8(err)
+		if c.buffer.ReadInt8(err) == NullFlag {
+			return nil
+		}
 	}
 	if readType {
 		_ = c.buffer.ReadVaruint32Small7(err)
@@ -453,7 +477,9 @@ func (c *ReadContext) ReadStringBoolMap(refMode RefMode, readType bool) map[stri
 func (c *ReadContext) ReadInt32Int32Map(refMode RefMode, readType bool) map[int32]int32 {
 	err := c.Err()
 	if refMode != RefModeNone {
-		_ = c.buffer.ReadInt8(err)
+		if c.buffer.ReadInt8(err) == NullFlag {
+			return nil
+		}
 	}
 	if readType {
 		_ = c.buffer.ReadVaruint32Small7(err)
@@ -465,7 +491,9 @@ func (c *ReadContext) ReadInt32Int32Map(refMode RefMode, readType bool) map[int3
 func (c *ReadContext) ReadInt64Int64Map(refMode RefMode, readType bool) map[int64]int64 {
 	err := c.Err()
 	if refMode != RefModeNone {
-		_ = c.buffer.ReadInt8(err)
+		if c.buffer.ReadInt8(err) == NullFlag {
+			return nil
+		}
 	}
 	if readType {
 		_ = c.buffer.ReadVaruint32Small7(err)
@@ -477,7 +505,9 @@ func (c *ReadContext) ReadInt64Int64Map(refMode RefMode, readType bool) map[int6
 func (c *ReadContext) ReadIntIntMap(refMode RefMode, readType bool) map[int]int {
 	err := c.Err()
 	if refMode != RefModeNone {
-		_ = c.buffer.ReadInt8(err)
+		if c.buffer.ReadInt8(err) == NullFlag {
+			return nil
+		}
 	}
 	if readType {
 		_ = c.buffer.ReadVaruint32Small7(err)

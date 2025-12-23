@@ -495,6 +495,10 @@ func Serialize[T any](f *Fory, value T) ([]byte, error) {
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(MAP)
 		writeMapStringInt64(f.writeCtx.buffer, val)
+	case map[string]int32:
+		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
+		f.writeCtx.WriteTypeId(MAP)
+		writeMapStringInt32(f.writeCtx.buffer, val)
 	case map[string]int:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(MAP)
@@ -638,6 +642,9 @@ func Deserialize[T any](f *Fory, data []byte, target *T) error {
 		return nil
 	case *map[string]int64:
 		*t = f.readCtx.ReadStringInt64Map(RefModeNullOnly, true)
+		return nil
+	case *map[string]int32:
+		*t = f.readCtx.ReadStringInt32Map(RefModeNullOnly, true)
 		return nil
 	case *map[string]int:
 		*t = f.readCtx.ReadStringIntMap(RefModeNullOnly, true)

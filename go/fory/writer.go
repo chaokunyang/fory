@@ -402,6 +402,10 @@ func (c *WriteContext) WriteStringSlice(value []string, refMode RefMode, writeTy
 // WriteStringStringMap writes map[string]string with ref/type info
 func (c *WriteContext) WriteStringStringMap(value map[string]string, refMode RefMode, writeTypeInfo bool) {
 	if refMode != RefModeNone {
+		if value == nil {
+			c.buffer.WriteInt8(NullFlag)
+			return
+		}
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {
@@ -413,6 +417,10 @@ func (c *WriteContext) WriteStringStringMap(value map[string]string, refMode Ref
 // WriteStringInt64Map writes map[string]int64 with ref/type info
 func (c *WriteContext) WriteStringInt64Map(value map[string]int64, refMode RefMode, writeTypeInfo bool) {
 	if refMode != RefModeNone {
+		if value == nil {
+			c.buffer.WriteInt8(NullFlag)
+			return
+		}
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {
@@ -421,9 +429,28 @@ func (c *WriteContext) WriteStringInt64Map(value map[string]int64, refMode RefMo
 	writeMapStringInt64(c.buffer, value)
 }
 
+// WriteStringInt32Map writes map[string]int32 with ref/type info
+func (c *WriteContext) WriteStringInt32Map(value map[string]int32, refMode RefMode, writeTypeInfo bool) {
+	if refMode != RefModeNone {
+		if value == nil {
+			c.buffer.WriteInt8(NullFlag)
+			return
+		}
+		c.buffer.WriteInt8(NotNullValueFlag)
+	}
+	if writeTypeInfo {
+		c.WriteTypeId(MAP)
+	}
+	writeMapStringInt32(c.buffer, value)
+}
+
 // WriteStringIntMap writes map[string]int with ref/type info
 func (c *WriteContext) WriteStringIntMap(value map[string]int, refMode RefMode, writeTypeInfo bool) {
 	if refMode != RefModeNone {
+		if value == nil {
+			c.buffer.WriteInt8(NullFlag)
+			return
+		}
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {
@@ -435,6 +462,10 @@ func (c *WriteContext) WriteStringIntMap(value map[string]int, refMode RefMode, 
 // WriteStringFloat64Map writes map[string]float64 with ref/type info
 func (c *WriteContext) WriteStringFloat64Map(value map[string]float64, refMode RefMode, writeTypeInfo bool) {
 	if refMode != RefModeNone {
+		if value == nil {
+			c.buffer.WriteInt8(NullFlag)
+			return
+		}
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {
@@ -446,6 +477,10 @@ func (c *WriteContext) WriteStringFloat64Map(value map[string]float64, refMode R
 // WriteStringBoolMap writes map[string]bool with ref/type info
 func (c *WriteContext) WriteStringBoolMap(value map[string]bool, refMode RefMode, writeTypeInfo bool) {
 	if refMode != RefModeNone {
+		if value == nil {
+			c.buffer.WriteInt8(NullFlag)
+			return
+		}
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {
@@ -457,6 +492,10 @@ func (c *WriteContext) WriteStringBoolMap(value map[string]bool, refMode RefMode
 // WriteInt32Int32Map writes map[int32]int32 with ref/type info
 func (c *WriteContext) WriteInt32Int32Map(value map[int32]int32, refMode RefMode, writeTypeInfo bool) {
 	if refMode != RefModeNone {
+		if value == nil {
+			c.buffer.WriteInt8(NullFlag)
+			return
+		}
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {
@@ -468,6 +507,10 @@ func (c *WriteContext) WriteInt32Int32Map(value map[int32]int32, refMode RefMode
 // WriteInt64Int64Map writes map[int64]int64 with ref/type info
 func (c *WriteContext) WriteInt64Int64Map(value map[int64]int64, refMode RefMode, writeTypeInfo bool) {
 	if refMode != RefModeNone {
+		if value == nil {
+			c.buffer.WriteInt8(NullFlag)
+			return
+		}
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {
@@ -479,6 +522,10 @@ func (c *WriteContext) WriteInt64Int64Map(value map[int64]int64, refMode RefMode
 // WriteIntIntMap writes map[int]int with ref/type info
 func (c *WriteContext) WriteIntIntMap(value map[int]int, refMode RefMode, writeTypeInfo bool) {
 	if refMode != RefModeNone {
+		if value == nil {
+			c.buffer.WriteInt8(NullFlag)
+			return
+		}
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {

@@ -481,6 +481,48 @@ func (s *structSerializer) writeRemainingField(ctx *WriteContext, ptr unsafe.Poi
 			}
 			ctx.WriteFloat64Slice(*(*[]float64)(fieldPtr), RefModeNullOnly, false)
 			return
+		case ConcreteTypeStringStringMap:
+			if field.RefMode == RefModeTracking {
+				break
+			}
+			ctx.WriteStringStringMap(*(*map[string]string)(fieldPtr), RefModeNullOnly, false)
+			return
+		case ConcreteTypeStringInt64Map:
+			if field.RefMode == RefModeTracking {
+				break
+			}
+			ctx.WriteStringInt64Map(*(*map[string]int64)(fieldPtr), RefModeNullOnly, false)
+			return
+		case ConcreteTypeStringInt32Map:
+			if field.RefMode == RefModeTracking {
+				break
+			}
+			ctx.WriteStringInt32Map(*(*map[string]int32)(fieldPtr), RefModeNullOnly, false)
+			return
+		case ConcreteTypeStringIntMap:
+			if field.RefMode == RefModeTracking {
+				break
+			}
+			ctx.WriteStringIntMap(*(*map[string]int)(fieldPtr), RefModeNullOnly, false)
+			return
+		case ConcreteTypeStringFloat64Map:
+			if field.RefMode == RefModeTracking {
+				break
+			}
+			ctx.WriteStringFloat64Map(*(*map[string]float64)(fieldPtr), RefModeNullOnly, false)
+			return
+		case ConcreteTypeStringBoolMap:
+			if field.RefMode == RefModeTracking {
+				break
+			}
+			ctx.WriteStringBoolMap(*(*map[string]bool)(fieldPtr), RefModeNullOnly, false)
+			return
+		case ConcreteTypeIntIntMap:
+			if field.RefMode == RefModeTracking {
+				break
+			}
+			ctx.WriteIntIntMap(*(*map[int]int)(fieldPtr), RefModeNullOnly, false)
+			return
 		}
 	}
 
@@ -753,6 +795,48 @@ func (s *structSerializer) readRemainingField(ctx *ReadContext, ptr unsafe.Point
 				break
 			}
 			*(*[]float64)(fieldPtr) = ctx.ReadFloat64Slice(RefModeNullOnly, false)
+			return
+		case ConcreteTypeStringStringMap:
+			if field.RefMode == RefModeTracking {
+				break
+			}
+			*(*map[string]string)(fieldPtr) = ctx.ReadStringStringMap(RefModeNullOnly, false)
+			return
+		case ConcreteTypeStringInt64Map:
+			if field.RefMode == RefModeTracking {
+				break
+			}
+			*(*map[string]int64)(fieldPtr) = ctx.ReadStringInt64Map(RefModeNullOnly, false)
+			return
+		case ConcreteTypeStringInt32Map:
+			if field.RefMode == RefModeTracking {
+				break
+			}
+			*(*map[string]int32)(fieldPtr) = ctx.ReadStringInt32Map(RefModeNullOnly, false)
+			return
+		case ConcreteTypeStringIntMap:
+			if field.RefMode == RefModeTracking {
+				break
+			}
+			*(*map[string]int)(fieldPtr) = ctx.ReadStringIntMap(RefModeNullOnly, false)
+			return
+		case ConcreteTypeStringFloat64Map:
+			if field.RefMode == RefModeTracking {
+				break
+			}
+			*(*map[string]float64)(fieldPtr) = ctx.ReadStringFloat64Map(RefModeNullOnly, false)
+			return
+		case ConcreteTypeStringBoolMap:
+			if field.RefMode == RefModeTracking {
+				break
+			}
+			*(*map[string]bool)(fieldPtr) = ctx.ReadStringBoolMap(RefModeNullOnly, false)
+			return
+		case ConcreteTypeIntIntMap:
+			if field.RefMode == RefModeTracking {
+				break
+			}
+			*(*map[int]int)(fieldPtr) = ctx.ReadIntIntMap(RefModeNullOnly, false)
 			return
 		}
 	}

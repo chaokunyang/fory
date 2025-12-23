@@ -1390,6 +1390,7 @@ cdef class Fory:
             )
 
         # Read type definitions at the start, similar to Java implementation
+        cdef int32_t end_reader_index = -1
         if self.serialization_context.scoped_meta_share_enabled:
             relative_type_defs_offset = buffer.read_int32()
             if relative_type_defs_offset != -1:
@@ -1399,12 +1400,22 @@ cdef class Fory:
                 buffer.reader_index = current_reader_index + relative_type_defs_offset
                 # Read type definitions
                 self.type_resolver.read_type_defs(buffer)
+                # Save the end position (after type defs) - this is the true end of serialized data
+                end_reader_index = buffer.reader_index
                 # Jump back to continue with object deserialization
                 buffer.reader_index = current_reader_index
 
         if not is_target_x_lang:
-            return self.read_ref(buffer)
-        return self.xread_ref(buffer)
+            obj = self.read_ref(buffer)
+        else:
+            obj = self.xread_ref(buffer)
+
+        # After reading the object, position buffer at the end of serialized data
+        # (which is after the type definitions, not after the object data)
+        if end_reader_index != -1:
+            buffer.reader_index = end_reader_index
+
+        return obj
 
     cpdef inline read_ref(self, Buffer buffer):
         cdef MapRefResolver ref_resolver = self.ref_resolver
@@ -1934,6 +1945,8 @@ cdef class CollectionSerializer(Serializer):
         cdef TypeResolver type_resolver = self.type_resolver
         cdef c_bool is_py = self.is_py
         cdef serializer = type(elem_typeinfo.serializer)
+        cdef c_bool tracking_ref
+        cdef c_bool has_null
         if (collect_flag & COLL_IS_SAME_TYPE) != 0:
             if elem_type is str:
                 self._write_string(buffer, value)
@@ -1949,22 +1962,51 @@ cdef class CollectionSerializer(Serializer):
                 else:
                     self._write_same_type_ref(buffer, value, elem_typeinfo)
         else:
-            for s in value:
-                cls = type(s)
-                if cls is str:
-                    buffer.write_int16(NOT_NULL_STRING_FLAG)
-                    buffer.write_string(s)
-                elif cls is int:
-                    buffer.write_int16(NOT_NULL_INT64_FLAG)
-                    buffer.write_varint64(s)
-                elif cls is bool:
-                    buffer.write_int16(NOT_NULL_BOOL_FLAG)
-                    buffer.write_bool(s)
-                elif cls is float:
-                    buffer.write_int16(NOT_NULL_FLOAT64_FLAG)
-                    buffer.write_double(s)
-                else:
-                    if not ref_resolver.write_ref_or_null(buffer, s):
+            # Check tracking_ref and has_null flags for different types writing
+            tracking_ref = (collect_flag & COLL_TRACKING_REF) != 0
+            has_null = (collect_flag & COLL_HAS_NULL) != 0
+            if tracking_ref:
+                # When ref tracking is enabled, write with ref handling
+                for s in value:
+                    cls = type(s)
+                    if cls is str:
+                        buffer.write_int16(NOT_NULL_STRING_FLAG)
+                        buffer.write_string(s)
+                    elif cls is int:
+                        buffer.write_int16(NOT_NULL_INT64_FLAG)
+                        buffer.write_varint64(s)
+                    elif cls is bool:
+                        buffer.write_int16(NOT_NULL_BOOL_FLAG)
+                        buffer.write_bool(s)
+                    elif cls is float:
+                        buffer.write_int16(NOT_NULL_FLOAT64_FLAG)
+                        buffer.write_double(s)
+                    else:
+                        if not ref_resolver.write_ref_or_null(buffer, s):
+                            typeinfo = type_resolver.get_typeinfo(cls)
+                            type_resolver.write_typeinfo(buffer, typeinfo)
+                            if is_py:
+                                typeinfo.serializer.write(buffer, s)
+                            else:
+                                typeinfo.serializer.xwrite(buffer, s)
+            elif not has_null:
+                # When ref tracking is disabled and no nulls, write type info directly
+                for s in value:
+                    cls = type(s)
+                    typeinfo = type_resolver.get_typeinfo(cls)
+                    type_resolver.write_typeinfo(buffer, typeinfo)
+                    if is_py:
+                        typeinfo.serializer.write(buffer, s)
+                    else:
+                        typeinfo.serializer.xwrite(buffer, s)
+            else:
+                # When ref tracking is disabled but has nulls, write null flag first
+                for s in value:
+                    if s is None:
+                        buffer.write_int8(NULL_FLAG)
+                    else:
+                        buffer.write_int8(NOT_NULL_VALUE_FLAG)
+                        cls = type(s)
                         typeinfo = type_resolver.get_typeinfo(cls)
                         type_resolver.write_typeinfo(buffer, typeinfo)
                         if is_py:
@@ -2091,6 +2133,9 @@ cdef class ListSerializer(CollectionSerializer):
         cdef c_bool is_py = self.is_py
         cdef TypeInfo typeinfo
         cdef int32_t type_id = -1
+        cdef c_bool tracking_ref
+        cdef c_bool has_null
+        cdef int8_t head_flag
         if (collect_flag & COLL_IS_SAME_TYPE) != 0:
             if collect_flag & COLL_IS_DECL_ELEMENT_TYPE == 0:
                 typeinfo = self.type_resolver.read_typeinfo(buffer)
@@ -2116,10 +2161,39 @@ cdef class ListSerializer(CollectionSerializer):
                 self._read_same_type_ref(buffer, len_, list_, typeinfo)
         else:
             self.fory.inc_depth()
-            for i in range(len_):
-                elem = get_next_element(buffer, ref_resolver, type_resolver, is_py)
-                Py_INCREF(elem)
-                PyList_SET_ITEM(list_, i, elem)
+            # Check tracking_ref and has_null flags for different types handling
+            tracking_ref = (collect_flag & COLL_TRACKING_REF) != 0
+            has_null = (collect_flag & COLL_HAS_NULL) != 0
+            if tracking_ref:
+                # When ref tracking is enabled, read with ref handling
+                for i in range(len_):
+                    elem = get_next_element(buffer, ref_resolver, type_resolver, is_py)
+                    Py_INCREF(elem)
+                    PyList_SET_ITEM(list_, i, elem)
+            elif not has_null:
+                # When ref tracking is disabled and no nulls, read type info directly
+                for i in range(len_):
+                    typeinfo = type_resolver.read_typeinfo(buffer)
+                    if is_py:
+                        elem = typeinfo.serializer.read(buffer)
+                    else:
+                        elem = typeinfo.serializer.xread(buffer)
+                    Py_INCREF(elem)
+                    PyList_SET_ITEM(list_, i, elem)
+            else:
+                # When ref tracking is disabled but has nulls, read null flag first
+                for i in range(len_):
+                    head_flag = buffer.read_int8()
+                    if head_flag == NULL_FLAG:
+                        elem = None
+                    else:
+                        typeinfo = type_resolver.read_typeinfo(buffer)
+                        if is_py:
+                            elem = typeinfo.serializer.read(buffer)
+                        else:
+                            elem = typeinfo.serializer.xread(buffer)
+                    Py_INCREF(elem)
+                    PyList_SET_ITEM(list_, i, elem)
             self.fory.dec_depth()
         return list_
 
@@ -2177,6 +2251,9 @@ cdef class TupleSerializer(CollectionSerializer):
         cdef c_bool is_py = self.is_py
         cdef TypeInfo typeinfo
         cdef int32_t type_id = -1
+        cdef c_bool tracking_ref
+        cdef c_bool has_null
+        cdef int8_t head_flag
         if (collect_flag & COLL_IS_SAME_TYPE) != 0:
             if collect_flag & COLL_IS_DECL_ELEMENT_TYPE == 0:
                 typeinfo = self.type_resolver.read_typeinfo(buffer)
@@ -2202,10 +2279,39 @@ cdef class TupleSerializer(CollectionSerializer):
                 self._read_same_type_ref(buffer, len_, tuple_, typeinfo)
         else:
             self.fory.inc_depth()
-            for i in range(len_):
-                elem = get_next_element(buffer, ref_resolver, type_resolver, is_py)
-                Py_INCREF(elem)
-                PyTuple_SET_ITEM(tuple_, i, elem)
+            # Check tracking_ref and has_null flags for different types handling
+            tracking_ref = (collect_flag & COLL_TRACKING_REF) != 0
+            has_null = (collect_flag & COLL_HAS_NULL) != 0
+            if tracking_ref:
+                # When ref tracking is enabled, read with ref handling
+                for i in range(len_):
+                    elem = get_next_element(buffer, ref_resolver, type_resolver, is_py)
+                    Py_INCREF(elem)
+                    PyTuple_SET_ITEM(tuple_, i, elem)
+            elif not has_null:
+                # When ref tracking is disabled and no nulls, read type info directly
+                for i in range(len_):
+                    typeinfo = type_resolver.read_typeinfo(buffer)
+                    if is_py:
+                        elem = typeinfo.serializer.read(buffer)
+                    else:
+                        elem = typeinfo.serializer.xread(buffer)
+                    Py_INCREF(elem)
+                    PyTuple_SET_ITEM(tuple_, i, elem)
+            else:
+                # When ref tracking is disabled but has nulls, read null flag first
+                for i in range(len_):
+                    head_flag = buffer.read_int8()
+                    if head_flag == NULL_FLAG:
+                        elem = None
+                    else:
+                        typeinfo = type_resolver.read_typeinfo(buffer)
+                        if is_py:
+                            elem = typeinfo.serializer.read(buffer)
+                        else:
+                            elem = typeinfo.serializer.xread(buffer)
+                    Py_INCREF(elem)
+                    PyTuple_SET_ITEM(tuple_, i, elem)
             self.fory.dec_depth()
         return tuple_
 
@@ -2238,6 +2344,9 @@ cdef class SetSerializer(CollectionSerializer):
         cdef TypeInfo typeinfo
         cdef int32_t type_id = -1
         cdef c_bool is_py = self.is_py
+        cdef c_bool tracking_ref
+        cdef c_bool has_null
+        cdef int8_t head_flag
         if (collect_flag & COLL_IS_SAME_TYPE) != 0:
             if collect_flag & COLL_IS_DECL_ELEMENT_TYPE == 0:
                 typeinfo = self.type_resolver.read_typeinfo(buffer)
@@ -2263,29 +2372,74 @@ cdef class SetSerializer(CollectionSerializer):
                 self._read_same_type_ref(buffer, len_, instance, typeinfo)
         else:
             self.fory.inc_depth()
-            for i in range(len_):
-                ref_id = ref_resolver.try_preserve_ref_id(buffer)
-                if ref_id < NOT_NULL_VALUE_FLAG:
-                    instance.add(ref_resolver.get_read_object())
-                    continue
-                # indicates that the object is first read.
-                typeinfo = type_resolver.read_typeinfo(buffer)
-                type_id = typeinfo.type_id
-                if type_id == <int32_t>TypeId.STRING:
-                    instance.add(buffer.read_string())
-                elif type_id == <int32_t>TypeId.VAR_INT64:
-                    instance.add(buffer.read_varint64())
-                elif type_id == <int32_t>TypeId.BOOL:
-                    instance.add(buffer.read_bool())
-                elif type_id == <int32_t>TypeId.FLOAT64:
-                    instance.add(buffer.read_double())
-                else:
-                    if is_py:
-                        o = typeinfo.serializer.read(buffer)
+            # Check tracking_ref and has_null flags for different types handling
+            tracking_ref = (collect_flag & COLL_TRACKING_REF) != 0
+            has_null = (collect_flag & COLL_HAS_NULL) != 0
+            if tracking_ref:
+                # When ref tracking is enabled, read with ref handling
+                for i in range(len_):
+                    ref_id = ref_resolver.try_preserve_ref_id(buffer)
+                    if ref_id < NOT_NULL_VALUE_FLAG:
+                        instance.add(ref_resolver.get_read_object())
+                        continue
+                    # indicates that the object is first read.
+                    typeinfo = type_resolver.read_typeinfo(buffer)
+                    type_id = typeinfo.type_id
+                    if type_id == <int32_t>TypeId.STRING:
+                        instance.add(buffer.read_string())
+                    elif type_id == <int32_t>TypeId.VAR_INT64:
+                        instance.add(buffer.read_varint64())
+                    elif type_id == <int32_t>TypeId.BOOL:
+                        instance.add(buffer.read_bool())
+                    elif type_id == <int32_t>TypeId.FLOAT64:
+                        instance.add(buffer.read_double())
                     else:
-                        o = typeinfo.serializer.xread(buffer)
-                    ref_resolver.set_read_object(ref_id, o)
-                    instance.add(o)
+                        if is_py:
+                            o = typeinfo.serializer.read(buffer)
+                        else:
+                            o = typeinfo.serializer.xread(buffer)
+                        ref_resolver.set_read_object(ref_id, o)
+                        instance.add(o)
+            elif not has_null:
+                # When ref tracking is disabled and no nulls, read type info directly
+                for i in range(len_):
+                    typeinfo = type_resolver.read_typeinfo(buffer)
+                    type_id = typeinfo.type_id
+                    if type_id == <int32_t>TypeId.STRING:
+                        instance.add(buffer.read_string())
+                    elif type_id == <int32_t>TypeId.VAR_INT64:
+                        instance.add(buffer.read_varint64())
+                    elif type_id == <int32_t>TypeId.BOOL:
+                        instance.add(buffer.read_bool())
+                    elif type_id == <int32_t>TypeId.FLOAT64:
+                        instance.add(buffer.read_double())
+                    else:
+                        if is_py:
+                            instance.add(typeinfo.serializer.read(buffer))
+                        else:
+                            instance.add(typeinfo.serializer.xread(buffer))
+            else:
+                # When ref tracking is disabled but has nulls, read null flag first
+                for i in range(len_):
+                    head_flag = buffer.read_int8()
+                    if head_flag == NULL_FLAG:
+                        instance.add(None)
+                    else:
+                        typeinfo = type_resolver.read_typeinfo(buffer)
+                        type_id = typeinfo.type_id
+                        if type_id == <int32_t>TypeId.STRING:
+                            instance.add(buffer.read_string())
+                        elif type_id == <int32_t>TypeId.VAR_INT64:
+                            instance.add(buffer.read_varint64())
+                        elif type_id == <int32_t>TypeId.BOOL:
+                            instance.add(buffer.read_bool())
+                        elif type_id == <int32_t>TypeId.FLOAT64:
+                            instance.add(buffer.read_double())
+                        else:
+                            if is_py:
+                                instance.add(typeinfo.serializer.read(buffer))
+                            else:
+                                instance.add(typeinfo.serializer.xread(buffer))
             self.fory.dec_depth()
         return instance
 

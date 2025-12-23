@@ -233,7 +233,9 @@ func (c *ReadContext) ReadString() string {
 func (c *ReadContext) ReadBoolSlice(refMode RefMode, readType bool) []bool {
 	err := c.Err()
 	if refMode != RefModeNone {
-		_ = c.buffer.ReadInt8(err)
+		if c.buffer.ReadInt8(err) == NullFlag {
+			return nil
+		}
 	}
 	if readType {
 		_ = c.buffer.ReadVaruint32Small7(err)
@@ -245,7 +247,9 @@ func (c *ReadContext) ReadBoolSlice(refMode RefMode, readType bool) []bool {
 func (c *ReadContext) ReadInt8Slice(refMode RefMode, readType bool) []int8 {
 	err := c.Err()
 	if refMode != RefModeNone {
-		_ = c.buffer.ReadInt8(err)
+		if c.buffer.ReadInt8(err) == NullFlag {
+			return nil
+		}
 	}
 	if readType {
 		_ = c.buffer.ReadVaruint32Small7(err)
@@ -257,7 +261,9 @@ func (c *ReadContext) ReadInt8Slice(refMode RefMode, readType bool) []int8 {
 func (c *ReadContext) ReadInt16Slice(refMode RefMode, readType bool) []int16 {
 	err := c.Err()
 	if refMode != RefModeNone {
-		_ = c.buffer.ReadInt8(err)
+		if c.buffer.ReadInt8(err) == NullFlag {
+			return nil
+		}
 	}
 	if readType {
 		_ = c.buffer.ReadVaruint32Small7(err)
@@ -269,7 +275,9 @@ func (c *ReadContext) ReadInt16Slice(refMode RefMode, readType bool) []int16 {
 func (c *ReadContext) ReadInt32Slice(refMode RefMode, readType bool) []int32 {
 	err := c.Err()
 	if refMode != RefModeNone {
-		_ = c.buffer.ReadInt8(err)
+		if c.buffer.ReadInt8(err) == NullFlag {
+			return nil
+		}
 	}
 	if readType {
 		_ = c.buffer.ReadVaruint32Small7(err)
@@ -281,7 +289,9 @@ func (c *ReadContext) ReadInt32Slice(refMode RefMode, readType bool) []int32 {
 func (c *ReadContext) ReadInt64Slice(refMode RefMode, readType bool) []int64 {
 	err := c.Err()
 	if refMode != RefModeNone {
-		_ = c.buffer.ReadInt8(err)
+		if c.buffer.ReadInt8(err) == NullFlag {
+			return nil
+		}
 	}
 	if readType {
 		_ = c.buffer.ReadVaruint32Small7(err)
@@ -293,7 +303,9 @@ func (c *ReadContext) ReadInt64Slice(refMode RefMode, readType bool) []int64 {
 func (c *ReadContext) ReadIntSlice(refMode RefMode, readType bool) []int {
 	err := c.Err()
 	if refMode != RefModeNone {
-		_ = c.buffer.ReadInt8(err)
+		if c.buffer.ReadInt8(err) == NullFlag {
+			return nil
+		}
 	}
 	if readType {
 		_ = c.buffer.ReadVaruint32Small7(err)
@@ -305,7 +317,9 @@ func (c *ReadContext) ReadIntSlice(refMode RefMode, readType bool) []int {
 func (c *ReadContext) ReadUintSlice(refMode RefMode, readType bool) []uint {
 	err := c.Err()
 	if refMode != RefModeNone {
-		_ = c.buffer.ReadInt8(err)
+		if c.buffer.ReadInt8(err) == NullFlag {
+			return nil
+		}
 	}
 	if readType {
 		_ = c.buffer.ReadVaruint32Small7(err)
@@ -317,7 +331,9 @@ func (c *ReadContext) ReadUintSlice(refMode RefMode, readType bool) []uint {
 func (c *ReadContext) ReadFloat32Slice(refMode RefMode, readType bool) []float32 {
 	err := c.Err()
 	if refMode != RefModeNone {
-		_ = c.buffer.ReadInt8(err)
+		if c.buffer.ReadInt8(err) == NullFlag {
+			return nil
+		}
 	}
 	if readType {
 		_ = c.buffer.ReadVaruint32Small7(err)
@@ -329,7 +345,9 @@ func (c *ReadContext) ReadFloat32Slice(refMode RefMode, readType bool) []float32
 func (c *ReadContext) ReadFloat64Slice(refMode RefMode, readType bool) []float64 {
 	err := c.Err()
 	if refMode != RefModeNone {
-		_ = c.buffer.ReadInt8(err)
+		if c.buffer.ReadInt8(err) == NullFlag {
+			return nil
+		}
 	}
 	if readType {
 		_ = c.buffer.ReadVaruint32Small7(err)
@@ -341,7 +359,9 @@ func (c *ReadContext) ReadFloat64Slice(refMode RefMode, readType bool) []float64
 func (c *ReadContext) ReadByteSlice(refMode RefMode, readType bool) []byte {
 	err := c.Err()
 	if refMode != RefModeNone {
-		_ = c.buffer.ReadInt8(err)
+		if c.buffer.ReadInt8(err) == NullFlag {
+			return nil
+		}
 	}
 	if readType {
 		_ = c.buffer.ReadVaruint32Small7(err)
@@ -359,7 +379,9 @@ func (c *ReadContext) ReadByteSlice(refMode RefMode, readType bool) []byte {
 func (c *ReadContext) ReadStringSlice(refMode RefMode, readType bool) []string {
 	err := c.Err()
 	if refMode != RefModeNone {
-		_ = c.buffer.ReadInt8(err)
+		if c.buffer.ReadInt8(err) == NullFlag {
+			return nil
+		}
 	}
 	if readType {
 		_ = c.buffer.ReadVaruint32Small7(err)

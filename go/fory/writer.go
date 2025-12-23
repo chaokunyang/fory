@@ -226,6 +226,10 @@ func (c *WriteContext) WriteString(value string) {
 // WriteBoolSlice writes []bool with ref/type info
 func (c *WriteContext) WriteBoolSlice(value []bool, refMode RefMode, writeTypeInfo bool) {
 	if refMode != RefModeNone {
+		if value == nil {
+			c.buffer.WriteInt8(NullFlag)
+			return
+		}
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {
@@ -237,6 +241,10 @@ func (c *WriteContext) WriteBoolSlice(value []bool, refMode RefMode, writeTypeIn
 // WriteInt8Slice writes []int8 with ref/type info
 func (c *WriteContext) WriteInt8Slice(value []int8, refMode RefMode, writeTypeInfo bool) {
 	if refMode != RefModeNone {
+		if value == nil {
+			c.buffer.WriteInt8(NullFlag)
+			return
+		}
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {
@@ -248,6 +256,10 @@ func (c *WriteContext) WriteInt8Slice(value []int8, refMode RefMode, writeTypeIn
 // WriteInt16Slice writes []int16 with ref/type info
 func (c *WriteContext) WriteInt16Slice(value []int16, refMode RefMode, writeTypeInfo bool) {
 	if refMode != RefModeNone {
+		if value == nil {
+			c.buffer.WriteInt8(NullFlag)
+			return
+		}
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {
@@ -259,6 +271,10 @@ func (c *WriteContext) WriteInt16Slice(value []int16, refMode RefMode, writeType
 // WriteInt32Slice writes []int32 with ref/type info
 func (c *WriteContext) WriteInt32Slice(value []int32, refMode RefMode, writeTypeInfo bool) {
 	if refMode != RefModeNone {
+		if value == nil {
+			c.buffer.WriteInt8(NullFlag)
+			return
+		}
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {
@@ -270,6 +286,10 @@ func (c *WriteContext) WriteInt32Slice(value []int32, refMode RefMode, writeType
 // WriteInt64Slice writes []int64 with ref/type info
 func (c *WriteContext) WriteInt64Slice(value []int64, refMode RefMode, writeTypeInfo bool) {
 	if refMode != RefModeNone {
+		if value == nil {
+			c.buffer.WriteInt8(NullFlag)
+			return
+		}
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {
@@ -281,6 +301,10 @@ func (c *WriteContext) WriteInt64Slice(value []int64, refMode RefMode, writeType
 // WriteIntSlice writes []int with ref/type info
 func (c *WriteContext) WriteIntSlice(value []int, refMode RefMode, writeTypeInfo bool) {
 	if refMode != RefModeNone {
+		if value == nil {
+			c.buffer.WriteInt8(NullFlag)
+			return
+		}
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {
@@ -296,6 +320,10 @@ func (c *WriteContext) WriteIntSlice(value []int, refMode RefMode, writeTypeInfo
 // WriteUintSlice writes []uint with ref/type info
 func (c *WriteContext) WriteUintSlice(value []uint, refMode RefMode, writeTypeInfo bool) {
 	if refMode != RefModeNone {
+		if value == nil {
+			c.buffer.WriteInt8(NullFlag)
+			return
+		}
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {
@@ -311,6 +339,10 @@ func (c *WriteContext) WriteUintSlice(value []uint, refMode RefMode, writeTypeIn
 // WriteFloat32Slice writes []float32 with ref/type info
 func (c *WriteContext) WriteFloat32Slice(value []float32, refMode RefMode, writeTypeInfo bool) {
 	if refMode != RefModeNone {
+		if value == nil {
+			c.buffer.WriteInt8(NullFlag)
+			return
+		}
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {
@@ -322,6 +354,10 @@ func (c *WriteContext) WriteFloat32Slice(value []float32, refMode RefMode, write
 // WriteFloat64Slice writes []float64 with ref/type info
 func (c *WriteContext) WriteFloat64Slice(value []float64, refMode RefMode, writeTypeInfo bool) {
 	if refMode != RefModeNone {
+		if value == nil {
+			c.buffer.WriteInt8(NullFlag)
+			return
+		}
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {
@@ -333,6 +369,10 @@ func (c *WriteContext) WriteFloat64Slice(value []float64, refMode RefMode, write
 // WriteByteSlice writes []byte with ref/type info
 func (c *WriteContext) WriteByteSlice(value []byte, refMode RefMode, writeTypeInfo bool) {
 	if refMode != RefModeNone {
+		if value == nil {
+			c.buffer.WriteInt8(NullFlag)
+			return
+		}
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {
@@ -347,6 +387,10 @@ func (c *WriteContext) WriteByteSlice(value []byte, refMode RefMode, writeTypeIn
 // hasGenerics indicates whether element type is known from TypeDef/generics (struct field context).
 func (c *WriteContext) WriteStringSlice(value []string, refMode RefMode, writeTypeInfo bool, hasGenerics bool) {
 	if refMode != RefModeNone {
+		if value == nil {
+			c.buffer.WriteInt8(NullFlag)
+			return
+		}
 		c.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeTypeInfo {

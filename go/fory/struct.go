@@ -419,122 +419,67 @@ func (s *structSerializer) writeRemainingField(ctx *WriteContext, ptr unsafe.Poi
 			if field.RefMode == RefModeTracking {
 				break
 			}
-			v := *(*[]string)(fieldPtr)
-			if v == nil {
-				buf.WriteInt8(NullFlag)
-				return
-			}
-			ctx.WriteStringSlice(v, RefModeNullOnly, false, true)
+			ctx.WriteStringSlice(*(*[]string)(fieldPtr), RefModeNullOnly, false, true)
 			return
 		case ConcreteTypeBoolSlice:
 			if field.RefMode == RefModeTracking {
 				break
 			}
-			v := *(*[]bool)(fieldPtr)
-			if v == nil {
-				buf.WriteInt8(NullFlag)
-				return
-			}
-			ctx.WriteBoolSlice(v, RefModeNullOnly, false)
+			ctx.WriteBoolSlice(*(*[]bool)(fieldPtr), RefModeNullOnly, false)
 			return
 		case ConcreteTypeInt8Slice:
 			if field.RefMode == RefModeTracking {
 				break
 			}
-			v := *(*[]int8)(fieldPtr)
-			if v == nil {
-				buf.WriteInt8(NullFlag)
-				return
-			}
-			ctx.WriteInt8Slice(v, RefModeNullOnly, false)
+			ctx.WriteInt8Slice(*(*[]int8)(fieldPtr), RefModeNullOnly, false)
 			return
 		case ConcreteTypeByteSlice:
 			if field.RefMode == RefModeTracking {
 				break
 			}
-			v := *(*[]byte)(fieldPtr)
-			if v == nil {
-				buf.WriteInt8(NullFlag)
-				return
-			}
-			ctx.WriteByteSlice(v, RefModeNullOnly, false)
+			ctx.WriteByteSlice(*(*[]byte)(fieldPtr), RefModeNullOnly, false)
 			return
 		case ConcreteTypeInt16Slice:
 			if field.RefMode == RefModeTracking {
 				break
 			}
-			v := *(*[]int16)(fieldPtr)
-			if v == nil {
-				buf.WriteInt8(NullFlag)
-				return
-			}
-			ctx.WriteInt16Slice(v, RefModeNullOnly, false)
+			ctx.WriteInt16Slice(*(*[]int16)(fieldPtr), RefModeNullOnly, false)
 			return
 		case ConcreteTypeInt32Slice:
 			if field.RefMode == RefModeTracking {
 				break
 			}
-			v := *(*[]int32)(fieldPtr)
-			if v == nil {
-				buf.WriteInt8(NullFlag)
-				return
-			}
-			ctx.WriteInt32Slice(v, RefModeNullOnly, false)
+			ctx.WriteInt32Slice(*(*[]int32)(fieldPtr), RefModeNullOnly, false)
 			return
 		case ConcreteTypeInt64Slice:
 			if field.RefMode == RefModeTracking {
 				break
 			}
-			v := *(*[]int64)(fieldPtr)
-			if v == nil {
-				buf.WriteInt8(NullFlag)
-				return
-			}
-			ctx.WriteInt64Slice(v, RefModeNullOnly, false)
+			ctx.WriteInt64Slice(*(*[]int64)(fieldPtr), RefModeNullOnly, false)
 			return
 		case ConcreteTypeIntSlice:
 			if field.RefMode == RefModeTracking {
 				break
 			}
-			v := *(*[]int)(fieldPtr)
-			if v == nil {
-				buf.WriteInt8(NullFlag)
-				return
-			}
-			ctx.WriteIntSlice(v, RefModeNullOnly, false)
+			ctx.WriteIntSlice(*(*[]int)(fieldPtr), RefModeNullOnly, false)
 			return
 		case ConcreteTypeUintSlice:
 			if field.RefMode == RefModeTracking {
 				break
 			}
-			v := *(*[]uint)(fieldPtr)
-			if v == nil {
-				buf.WriteInt8(NullFlag)
-				return
-			}
-			ctx.WriteUintSlice(v, RefModeNullOnly, false)
+			ctx.WriteUintSlice(*(*[]uint)(fieldPtr), RefModeNullOnly, false)
 			return
 		case ConcreteTypeFloat32Slice:
 			if field.RefMode == RefModeTracking {
 				break
 			}
-			v := *(*[]float32)(fieldPtr)
-			if v == nil {
-				buf.WriteInt8(NullFlag)
-				return
-			}
-			ctx.WriteFloat32Slice(v, RefModeNullOnly, false)
+			ctx.WriteFloat32Slice(*(*[]float32)(fieldPtr), RefModeNullOnly, false)
 			return
 		case ConcreteTypeFloat64Slice:
 			if field.RefMode == RefModeTracking {
 				break
 			}
-			v := *(*[]float64)(fieldPtr)
-			if v == nil {
-				buf.WriteInt8(NullFlag)
-				return
-			}
-			ctx.WriteFloat64Slice(v, RefModeNullOnly, false)
+			ctx.WriteFloat64Slice(*(*[]float64)(fieldPtr), RefModeNullOnly, false)
 			return
 		}
 	}
@@ -747,111 +692,67 @@ func (s *structSerializer) readRemainingField(ctx *ReadContext, ptr unsafe.Point
 			if field.RefMode == RefModeTracking {
 				break
 			}
-			refFlag := buf.ReadInt8(ctxErr)
-			if refFlag == NullFlag {
-				return // nil slice
-			}
-			*(*[]string)(fieldPtr) = ctx.ReadStringSlice(RefModeNone, false)
+			*(*[]string)(fieldPtr) = ctx.ReadStringSlice(RefModeNullOnly, false)
 			return
 		case ConcreteTypeBoolSlice:
 			if field.RefMode == RefModeTracking {
 				break
 			}
-			refFlag := buf.ReadInt8(ctxErr)
-			if refFlag == NullFlag {
-				return
-			}
-			*(*[]bool)(fieldPtr) = ctx.ReadBoolSlice(RefModeNone, false)
+			*(*[]bool)(fieldPtr) = ctx.ReadBoolSlice(RefModeNullOnly, false)
 			return
 		case ConcreteTypeInt8Slice:
 			if field.RefMode == RefModeTracking {
 				break
 			}
-			refFlag := buf.ReadInt8(ctxErr)
-			if refFlag == NullFlag {
-				return
-			}
-			*(*[]int8)(fieldPtr) = ctx.ReadInt8Slice(RefModeNone, false)
+			*(*[]int8)(fieldPtr) = ctx.ReadInt8Slice(RefModeNullOnly, false)
 			return
 		case ConcreteTypeByteSlice:
 			if field.RefMode == RefModeTracking {
 				break
 			}
-			refFlag := buf.ReadInt8(ctxErr)
-			if refFlag == NullFlag {
-				return
-			}
-			*(*[]byte)(fieldPtr) = ctx.ReadByteSlice(RefModeNone, false)
+			*(*[]byte)(fieldPtr) = ctx.ReadByteSlice(RefModeNullOnly, false)
 			return
 		case ConcreteTypeInt16Slice:
 			if field.RefMode == RefModeTracking {
 				break
 			}
-			refFlag := buf.ReadInt8(ctxErr)
-			if refFlag == NullFlag {
-				return
-			}
-			*(*[]int16)(fieldPtr) = ctx.ReadInt16Slice(RefModeNone, false)
+			*(*[]int16)(fieldPtr) = ctx.ReadInt16Slice(RefModeNullOnly, false)
 			return
 		case ConcreteTypeInt32Slice:
 			if field.RefMode == RefModeTracking {
 				break
 			}
-			refFlag := buf.ReadInt8(ctxErr)
-			if refFlag == NullFlag {
-				return
-			}
-			*(*[]int32)(fieldPtr) = ctx.ReadInt32Slice(RefModeNone, false)
+			*(*[]int32)(fieldPtr) = ctx.ReadInt32Slice(RefModeNullOnly, false)
 			return
 		case ConcreteTypeInt64Slice:
 			if field.RefMode == RefModeTracking {
 				break
 			}
-			refFlag := buf.ReadInt8(ctxErr)
-			if refFlag == NullFlag {
-				return
-			}
-			*(*[]int64)(fieldPtr) = ctx.ReadInt64Slice(RefModeNone, false)
+			*(*[]int64)(fieldPtr) = ctx.ReadInt64Slice(RefModeNullOnly, false)
 			return
 		case ConcreteTypeIntSlice:
 			if field.RefMode == RefModeTracking {
 				break
 			}
-			refFlag := buf.ReadInt8(ctxErr)
-			if refFlag == NullFlag {
-				return
-			}
-			*(*[]int)(fieldPtr) = ctx.ReadIntSlice(RefModeNone, false)
+			*(*[]int)(fieldPtr) = ctx.ReadIntSlice(RefModeNullOnly, false)
 			return
 		case ConcreteTypeUintSlice:
 			if field.RefMode == RefModeTracking {
 				break
 			}
-			refFlag := buf.ReadInt8(ctxErr)
-			if refFlag == NullFlag {
-				return
-			}
-			*(*[]uint)(fieldPtr) = ctx.ReadUintSlice(RefModeNone, false)
+			*(*[]uint)(fieldPtr) = ctx.ReadUintSlice(RefModeNullOnly, false)
 			return
 		case ConcreteTypeFloat32Slice:
 			if field.RefMode == RefModeTracking {
 				break
 			}
-			refFlag := buf.ReadInt8(ctxErr)
-			if refFlag == NullFlag {
-				return
-			}
-			*(*[]float32)(fieldPtr) = ctx.ReadFloat32Slice(RefModeNone, false)
+			*(*[]float32)(fieldPtr) = ctx.ReadFloat32Slice(RefModeNullOnly, false)
 			return
 		case ConcreteTypeFloat64Slice:
 			if field.RefMode == RefModeTracking {
 				break
 			}
-			refFlag := buf.ReadInt8(ctxErr)
-			if refFlag == NullFlag {
-				return
-			}
-			*(*[]float64)(fieldPtr) = ctx.ReadFloat64Slice(RefModeNone, false)
+			*(*[]float64)(fieldPtr) = ctx.ReadFloat64Slice(RefModeNullOnly, false)
 			return
 		}
 	}

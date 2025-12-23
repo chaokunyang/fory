@@ -221,7 +221,11 @@ def compute_struct_meta(type_resolver, field_names, serializers, nullable_map=No
     hash_str = "".join(hash_parts)
     hash_bytes = hash_str.encode("utf-8")
 
-    full_hash = hash_buffer(hash_bytes, seed=47)[0]
+    # Handle empty hash_bytes (no fields or all fields are unknown/dynamic)
+    if len(hash_bytes) == 0:
+        full_hash = 47  # Use seed as default hash for empty structs
+    else:
+        full_hash = hash_buffer(hash_bytes, seed=47)[0]
     type_hash_32 = full_hash & 0xFFFFFFFF
     if full_hash & 0x80000000:
         # If the sign bit is set, it's a negative number in 2's complement

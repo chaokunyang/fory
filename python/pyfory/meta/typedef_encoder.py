@@ -88,7 +88,7 @@ def encode_typedef(type_resolver, cls):
         # Use the actual type_id from the resolver, not a generic one
         type_id = type_resolver.get_registered_id(cls)
     else:
-        assert type_resolver.is_registered_by_id(cls), "Class must be registered by name or id"
+        assert type_resolver.is_registered_by_id(cls=cls), "Class must be registered by name or id"
         type_id = type_resolver.get_registered_id(cls)
         buffer.write_varuint32(type_id)
 

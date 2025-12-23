@@ -634,6 +634,7 @@ class Fory:
             assert buffers is None, "buffers should be null when the serialized stream is produced with buffer_callback null."
 
         # Read type definitions at the start, similar to Java implementation
+        end_reader_index = None
         if self.serialization_context.scoped_meta_share_enabled:
             relative_type_defs_offset = buffer.read_int32()
             if relative_type_defs_offset != -1:
@@ -643,6 +644,8 @@ class Fory:
                 buffer.reader_index = current_reader_index + relative_type_defs_offset
                 # Read type definitions
                 self.type_resolver.read_type_defs(buffer)
+                # Save the end position (after type defs) - this is the true end of serialized data
+                end_reader_index = buffer.reader_index
                 # Jump back to continue with object deserialization
                 buffer.reader_index = current_reader_index
 
@@ -650,6 +653,12 @@ class Fory:
             obj = self.xread_ref(buffer)
         else:
             obj = self.read_ref(buffer)
+
+        # After reading the object, position buffer at the end of serialized data
+        # (which is after the type definitions, not after the object data)
+        if end_reader_index is not None:
+            buffer.reader_index = end_reader_index
+
         return obj
 
     def read_ref(self, buffer):

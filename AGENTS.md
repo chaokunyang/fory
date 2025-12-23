@@ -117,6 +117,18 @@ ENABLE_FORY_CYTHON_SERIALIZATION=0 pytest -v -s .
 ENABLE_FORY_CYTHON_SERIALIZATION=1 pytest -v -s .
 ```
 
+Run Python xlang tests:
+
+```bash
+cd java
+mvn -T16 install -DskipTests
+cd fory-core
+# disable fory cython for faster debugging
+FORY_PYTHON_JAVA_CI=1 ENABLE_FORY_CYTHON_SERIALIZATION=0 mvn -T16 test -Dtest=org.apache.fory.PythonXlangTest
+# enable fory cython
+FORY_PYTHON_JAVA_CI=1 ENABLE_FORY_CYTHON_SERIALIZATION=1 mvn -T16 test -Dtest=org.apache.fory.PythonXlangTest
+```
+
 ### Golang Development
 
 - All commands must be executed within the `go/fory` directory.

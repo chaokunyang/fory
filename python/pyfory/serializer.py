@@ -787,10 +787,13 @@ class DataClassSerializer(Serializer):
             field_value = getattr(value, field_name)
             serializer = self._serializers[index]
             is_nullable = self._nullable_fields.get(field_name, False)
-            if is_nullable and field_value is None:
-                buffer.write_int8(-3)
+            if is_nullable:
+                if field_value is None:
+                    buffer.write_int8(-3)
+                else:
+                    self.fory.xwrite_ref(buffer, field_value, serializer=serializer)
             else:
-                self.fory.xwrite_ref(buffer, field_value, serializer=serializer)
+                serializer.xwrite(buffer, field_value)
 
     def xread(self, buffer):
         """Read dataclass instance from buffer in cross-language format."""
@@ -816,7 +819,7 @@ class DataClassSerializer(Serializer):
                     buffer.reader_index -= 1
                     field_value = self.fory.xread_ref(buffer, serializer=serializer)
             else:
-                field_value = self.fory.xread_ref(buffer, serializer=serializer)
+                field_value = serializer.xread(buffer)
             if field_name in current_class_field_names:
                 setattr(obj, field_name, field_value)
         return obj

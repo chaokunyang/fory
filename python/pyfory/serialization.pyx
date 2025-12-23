@@ -756,6 +756,7 @@ cdef class MetaContext:
         cdef flat_hash_map[uint64_t, int32_t].iterator it = self._c_type_map.find(type_addr)
         if it != self._c_type_map.end():
             buffer.write_varuint32(deref(it).second)
+            return
 
         cdef index = self._c_type_map.size()
         buffer.write_varuint32(index)

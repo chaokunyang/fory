@@ -235,11 +235,23 @@ class TypeId:
     def is_namespaced_type(type_id: int) -> bool:
         return type_id in __NAMESPACED_TYPES__
 
+    @staticmethod
+    def is_type_share_meta(type_id: int) -> bool:
+        return type_id in __TYPE_SHARE_META__
+
 
 __NAMESPACED_TYPES__ = {
     TypeId.NAMED_EXT,
     TypeId.NAMED_ENUM,
     TypeId.NAMED_STRUCT,
+    TypeId.NAMED_COMPATIBLE_STRUCT,
+}
+
+__TYPE_SHARE_META__ = {
+    TypeId.NAMED_ENUM,
+    TypeId.NAMED_STRUCT,
+    TypeId.NAMED_EXT,
+    TypeId.COMPATIBLE_STRUCT,
     TypeId.NAMED_COMPATIBLE_STRUCT,
 }
 int8 = TypeVar("int8", bound=int)
@@ -472,7 +484,13 @@ def infer_field(field_name, type_, visitor: TypeVisitor, types_path=None):
             key_type, value_type = args
             return visitor.visit_dict(field_name, key_type, value_type, types_path=types_path)
         elif origin is typing.Union:
-            # Union types are treated as "other" types and handled by UnionSerializer
+            # For Optional types (Union[X, None]), unwrap to get the inner type
+            # This allows proper type inference for element types in collections
+            unwrapped, is_optional = unwrap_optional(type_)
+            if is_optional and unwrapped is not type_:
+                # Recursively infer the unwrapped type
+                return infer_field(field_name, unwrapped, visitor, types_path)
+            # Non-Optional Union types are treated as "other" types and handled by UnionSerializer
             return visitor.visit_other(field_name, type_, types_path=types_path)
         else:
             raise TypeError(f"Collection types should be {list, dict} instead of {type_}")

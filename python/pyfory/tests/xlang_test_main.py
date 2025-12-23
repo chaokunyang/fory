@@ -201,12 +201,19 @@ def test_simple_struct():
         last=42,
     )
 
+    debug_print(f"Java bytes length: {len(data_bytes)}")
+    debug_print(f"Java bytes (first 50): {data_bytes[:50].hex()}")
+
     obj = fory.deserialize(data_bytes)
     debug_print(f"Deserialized: {obj}")
     assert obj == expected, f"Mismatch: {obj} != {expected}"
 
     new_bytes = fory.serialize(obj)
-    assert fory.deserialize(new_bytes) == expected
+    debug_print(f"Python bytes length: {len(new_bytes)}")
+    debug_print(f"Python bytes (first 50): {new_bytes[:50].hex()}")
+    debug_print(f"Bytes match: {data_bytes == new_bytes}")
+    new_value = fory.deserialize(new_bytes)
+    assert new_value == expected, f"new_value: {new_value},\n expected: {expected}"
 
     with open(data_file, "wb") as f:
         f.write(new_bytes)

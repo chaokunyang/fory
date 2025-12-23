@@ -21,8 +21,10 @@ TypeDef decoder for xlang serialization.
 This module implements the decoding of TypeDef objects according to the xlang serialization specification.
 """
 
-from typing import List
+from dataclasses import make_dataclass
+from typing import List, Any
 from pyfory._util import Buffer
+from pyfory.error import TypeUnregisteredError
 from pyfory.meta.typedef import TypeDef, FieldInfo, FieldType
 from pyfory.meta.typedef import (
     SMALL_NUM_FIELDS_THRESHOLD,
@@ -36,8 +38,13 @@ from pyfory.meta.typedef import (
     NAMESPACE_ENCODINGS,
     TYPE_NAME_ENCODINGS,
 )
-from pyfory.type import TypeId, record_class_factory
+from pyfory.type import TypeId
 from pyfory.meta.metastring import MetaStringDecoder, Encoding
+
+
+MAX_GENERATED_CLASSES = 1000
+MAX_FIELDS_PER_CLASS = 256
+_generated_class_count = 0
 
 
 # Meta string decoders
@@ -70,6 +77,8 @@ def decode_typedef(buffer: Buffer, resolver, header=None) -> TypeDef:
     Returns:
         The decoded TypeDef.
     """
+    global _generated_class_count
+
     # Read global binary header
     if header is None:
         header = buffer.read_int64()
@@ -101,6 +110,12 @@ def decode_typedef(buffer: Buffer, resolver, header=None) -> TypeDef:
     if num_fields == SMALL_NUM_FIELDS_THRESHOLD:
         num_fields += meta_buffer.read_varuint32()
 
+    # Check field count limit
+    if num_fields > MAX_FIELDS_PER_CLASS:
+        raise ValueError(
+            f"Class has {num_fields} fields, exceeding the maximum allowed {MAX_FIELDS_PER_CLASS} fields. This may indicate malicious data."
+        )
+
     # Check if registered by name
     is_registered_by_name = (meta_header & REGISTER_BY_NAME_FLAG) != 0
 
@@ -119,8 +134,8 @@ def decode_typedef(buffer: Buffer, resolver, header=None) -> TypeDef:
             type_id = TypeId.COMPATIBLE_STRUCT
     else:
         type_id = meta_buffer.read_varuint32()
-        type_info = resolver.get_typeinfo_by_id(type_id)
-        if type_info is not None:
+        if resolver.is_registered_by_id(type_id=type_id):
+            type_info = resolver.get_typeinfo_by_id(type_id)
             type_cls = type_info.cls
             namespace = type_info.decode_namespace()
             typename = type_info.decode_typename()
@@ -133,10 +148,22 @@ def decode_typedef(buffer: Buffer, resolver, header=None) -> TypeDef:
     if has_fields_meta:
         field_infos = read_fields_info(meta_buffer, resolver, name, num_fields)
     if type_cls is None:
-        type_cls = record_class_factory(name, [field_info.name for field_info in field_infos])
+        # Check generated class count limit
+        if _generated_class_count >= MAX_GENERATED_CLASSES:
+            raise ValueError(
+                f"Exceeded maximum number of dynamically generated classes ({MAX_GENERATED_CLASSES}). "
+                "This may indicate malicious data causing memory issues."
+            )
+        _generated_class_count += 1
+        # Generate dynamic dataclass from field definitions
+        field_definitions = [(field_info.name, Any) for field_info in field_infos]
+        # Use a valid Python identifier for class name
+        class_name = typename.replace(".", "_").replace("$", "_")
+        type_cls = make_dataclass(class_name, field_definitions)
 
     # Create TypeDef object
-    return TypeDef(namespace, typename, type_cls, type_id, field_infos, meta_data, is_compressed)
+    type_def = TypeDef(namespace, typename, type_cls, type_id, field_infos, meta_data, is_compressed)
+    return type_def
 
 
 def read_namespace(buffer: Buffer) -> str:

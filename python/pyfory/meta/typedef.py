@@ -68,6 +68,16 @@ class TypeDef:
         return [field_info.name for field_info in self.fields]
 
     def create_serializer(self, resolver):
+        if self.type_id & 0xff == TypeId.NAMED_EXT:
+            return resolver.get_typeinfo_by_name(self.namespace, self.typename).serializer
+        if self.type_id & 0xff == TypeId.NAMED_ENUM:
+            try:
+                return resolver.get_typeinfo_by_name(self.namespace, self.typename).serializer
+            except Exception:
+                from pyfory.serializer import NonExistEnumSerializer
+
+                return NonExistEnumSerializer(resolver.fory)
+
         from pyfory.serializer import DataClassSerializer
 
         fory = resolver.fory
@@ -155,22 +165,39 @@ class FieldType:
             return FieldType(xtype_id, is_monomorphic, is_nullable, is_tracking_ref)
 
     def create_serializer(self, resolver, type_):
-        if self.type_id in [TypeId.EXT, TypeId.STRUCT, TypeId.NAMED_STRUCT, TypeId.COMPATIBLE_STRUCT, TypeId.NAMED_COMPATIBLE_STRUCT, TypeId.UNKNOWN]:
-            return None
+        # Handle list wrapper
         if isinstance(type_, list):
             type_ = type_[0]
-        if isinstance(type_, type) and issubclass(type_, enum.Enum):
-            typeinfo = resolver.get_typeinfo(type_, create=False)
-            if typeinfo is not None and typeinfo.serializer is not None:
-                return typeinfo.serializer
-            else:
-                from pyfory.serializer import NonExistEnumSerializer
+        # Types that need to be handled dynamically during deserialization
+        # For these types, we don't know the concrete type at compile time
+        if self.type_id & 0xff in [
+            TypeId.EXT,
+            TypeId.NAMED_EXT,
+            TypeId.STRUCT,
+            TypeId.NAMED_STRUCT,
+            TypeId.COMPATIBLE_STRUCT,
+            TypeId.NAMED_COMPATIBLE_STRUCT,
+            TypeId.UNKNOWN,
+        ]:
+            return None
+        if self.type_id & 0xff in [TypeId.ENUM, TypeId.NAMED_ENUM]:
+            try:
+                if issubclass(type_, enum.Enum):
+                    return resolver.get_typeinfo(cls=type_).serializer
+            except Exception:
+                pass
+            from pyfory.serializer import NonExistEnumSerializer
 
-                return NonExistEnumSerializer(resolver.fory)
-        return resolver.get_typeinfo_by_id(self.type_id).serializer
+            return NonExistEnumSerializer(resolver.fory)
+        typeinfo = resolver.get_typeinfo_by_id(self.type_id)
+        return typeinfo.serializer
 
     def __repr__(self):
-        return f"FieldType(type_id={self.type_id}, is_monomorphic={self.is_monomorphic}, is_nullable={self.is_nullable}, is_tracking_ref={self.is_tracking_ref})"
+        type_id = self.type_id
+        if type_id > 128:
+            type_id = f"{type_id}, fory_id={type_id & 0xff}, user_id={type_id >> 8}"
+        return (f"FieldType(type_id={type_id}, is_monomorphic={self.is_monomorphic}, "
+                f"is_nullable={self.is_nullable}, is_tracking_ref={self.is_tracking_ref})")
 
 
 class CollectionFieldType(FieldType):
@@ -236,6 +263,9 @@ class DynamicFieldType(FieldType):
         super().__init__(type_id, is_monomorphic, is_nullable, is_tracking_ref)
 
     def create_serializer(self, resolver, type_):
+        # For dynamic field types (UNKNOWN, STRUCT, etc.), always return None
+        # This ensures type info is written/read at runtime, which is required
+        # for cross-language compatibility (Java always writes type info for struct fields)
         return None
 
     def __repr__(self):

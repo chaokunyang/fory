@@ -54,8 +54,7 @@ public class PythonXlangTest extends XlangTestBase {
   protected CommandContext buildCommandContext(String caseName, Path dataFile) {
     List<String> command = new ArrayList<>(PYTHON_BASE_COMMAND);
     command.set(PYTHON_TESTCASE_INDEX, caseName);
-    ImmutableMap<String, String> env =
-        envBuilder(dataFile).put("ENABLE_CROSS_LANGUAGE_TESTS", "true").build();
+    ImmutableMap<String, String> env = envBuilder(dataFile).build();
     return new CommandContext(command, env, new File("../../python"));
   }
 
@@ -130,14 +129,66 @@ public class PythonXlangTest extends XlangTestBase {
     throw new SkipException("Skipping: similar test already covered in CrossLanguageTest");
   }
 
-  // All other tests from XlangTestBase are inherited and will run:
-  // - testStringSerializer
-  // - testSimpleStruct
-  // - testSimpleNamedStruct
-  // - testSkipIdCustom
-  // - testSkipNameCustom
-  // - testConsistentNamed
-  // - testStructVersionCheck
-  // - testPolymorphicList
-  // - testPolymorphicMap
+  // ============================================================================
+  // Explicitly re-declare inherited test methods to enable running individual
+  // tests via Maven: mvn test -Dtest=org.apache.fory.PythonXlangTest#testXxx
+  //
+  // Maven Surefire cannot find inherited test methods when using the #methodName
+  // syntax for test selection. By overriding and forwarding to the parent class,
+  // we make each test directly addressable while preserving the shared test logic.
+  // ============================================================================
+
+  @Override
+  @Test
+  public void testStringSerializer() throws Exception {
+    super.testStringSerializer();
+  }
+
+  @Override
+  @Test
+  public void testSimpleStruct() throws IOException {
+    super.testSimpleStruct();
+  }
+
+  @Override
+  @Test
+  public void testSimpleNamedStruct() throws IOException {
+    super.testSimpleNamedStruct();
+  }
+
+  @Override
+  @Test
+  public void testSkipIdCustom() throws IOException {
+    super.testSkipIdCustom();
+  }
+
+  @Override
+  @Test
+  public void testSkipNameCustom() throws IOException {
+    super.testSkipNameCustom();
+  }
+
+  @Override
+  @Test
+  public void testConsistentNamed() throws IOException {
+    super.testConsistentNamed();
+  }
+
+  @Override
+  @Test
+  public void testStructVersionCheck() throws IOException {
+    super.testStructVersionCheck();
+  }
+
+  @Override
+  @Test
+  public void testPolymorphicList() throws IOException {
+    super.testPolymorphicList();
+  }
+
+  @Override
+  @Test
+  public void testPolymorphicMap() throws IOException {
+    super.testPolymorphicMap();
+  }
 }

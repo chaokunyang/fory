@@ -33,28 +33,28 @@ type NumericStruct struct {
 // Sample is a complex struct with various types and arrays
 // Matches the C++ Sample and protobuf Sample message
 type Sample struct {
-	IntValue         int32     `msgpack:"int_value"`
-	LongValue        int64     `msgpack:"long_value"`
-	FloatValue       float32   `msgpack:"float_value"`
-	DoubleValue      float64   `msgpack:"double_value"`
-	ShortValue       int32     `msgpack:"short_value"`
-	CharValue        int32     `msgpack:"char_value"`
-	BooleanValue     bool      `msgpack:"boolean_value"`
-	IntValueBoxed    int32     `msgpack:"int_value_boxed"`
-	LongValueBoxed   int64     `msgpack:"long_value_boxed"`
-	FloatValueBoxed  float32   `msgpack:"float_value_boxed"`
-	DoubleValueBoxed float64   `msgpack:"double_value_boxed"`
-	ShortValueBoxed  int32     `msgpack:"short_value_boxed"`
-	CharValueBoxed   int32     `msgpack:"char_value_boxed"`
-	BooleanValueBoxed bool     `msgpack:"boolean_value_boxed"`
-	IntArray         []int32   `msgpack:"int_array"`
-	LongArray        []int64   `msgpack:"long_array"`
-	FloatArray       []float32 `msgpack:"float_array"`
-	DoubleArray      []float64 `msgpack:"double_array"`
-	ShortArray       []int32   `msgpack:"short_array"`
-	CharArray        []int32   `msgpack:"char_array"`
-	BooleanArray     []bool    `msgpack:"boolean_array"`
-	String           string    `msgpack:"string"`
+	IntValue          int32     `msgpack:"int_value"`
+	LongValue         int64     `msgpack:"long_value"`
+	FloatValue        float32   `msgpack:"float_value"`
+	DoubleValue       float64   `msgpack:"double_value"`
+	ShortValue        int32     `msgpack:"short_value"`
+	CharValue         int32     `msgpack:"char_value"`
+	BooleanValue      bool      `msgpack:"boolean_value"`
+	IntValueBoxed     int32     `msgpack:"int_value_boxed"`
+	LongValueBoxed    int64     `msgpack:"long_value_boxed"`
+	FloatValueBoxed   float32   `msgpack:"float_value_boxed"`
+	DoubleValueBoxed  float64   `msgpack:"double_value_boxed"`
+	ShortValueBoxed   int32     `msgpack:"short_value_boxed"`
+	CharValueBoxed    int32     `msgpack:"char_value_boxed"`
+	BooleanValueBoxed bool      `msgpack:"boolean_value_boxed"`
+	IntArray          []int32   `msgpack:"int_array"`
+	LongArray         []int64   `msgpack:"long_array"`
+	FloatArray        []float32 `msgpack:"float_array"`
+	DoubleArray       []float64 `msgpack:"double_array"`
+	ShortArray        []int32   `msgpack:"short_array"`
+	CharArray         []int32   `msgpack:"char_array"`
+	BooleanArray      []bool    `msgpack:"boolean_array"`
+	String            string    `msgpack:"string"`
 }
 
 // Player enum type
@@ -75,18 +75,18 @@ const (
 
 // Media represents media metadata
 type Media struct {
-	URI       string   `msgpack:"uri"`
-	Title     string   `msgpack:"title"`
-	Width     int32    `msgpack:"width"`
-	Height    int32    `msgpack:"height"`
-	Format    string   `msgpack:"format"`
-	Duration  int64    `msgpack:"duration"`
-	Size      int64    `msgpack:"size"`
-	Bitrate   int32    `msgpack:"bitrate"`
-	HasBitrate bool    `msgpack:"has_bitrate"`
-	Persons   []string `msgpack:"persons"`
-	Player    Player   `msgpack:"player"`
-	Copyright string   `msgpack:"copyright"`
+	URI        string   `msgpack:"uri"`
+	Title      string   `msgpack:"title"`
+	Width      int32    `msgpack:"width"`
+	Height     int32    `msgpack:"height"`
+	Format     string   `msgpack:"format"`
+	Duration   int64    `msgpack:"duration"`
+	Size       int64    `msgpack:"size"`
+	Bitrate    int32    `msgpack:"bitrate"`
+	HasBitrate bool     `msgpack:"has_bitrate"`
+	Persons    []string `msgpack:"persons"`
+	Player     Player   `msgpack:"player"`
+	Copyright  string   `msgpack:"copyright"`
 }
 
 // Image represents image metadata
@@ -150,18 +150,18 @@ func CreateSample() Sample {
 func CreateMediaContent() MediaContent {
 	return MediaContent{
 		Media: Media{
-			URI:       "http://javaone.com/keynote.ogg",
-			Title:     "",
-			Width:     641,
-			Height:    481,
-			Format:    "video/theora\u1234",
-			Duration:  18000001,
-			Size:      58982401,
-			Bitrate:   0,
+			URI:        "http://javaone.com/keynote.ogg",
+			Title:      "",
+			Width:      641,
+			Height:     481,
+			Format:     "video/theora\u1234",
+			Duration:   18000001,
+			Size:       58982401,
+			Bitrate:    0,
 			HasBitrate: false,
-			Persons:   []string{"Bill Gates, Jr.", "Steven Jobs"},
-			Player:    PlayerFlash,
-			Copyright: "Copyright (c) 2009, Scooby Dooby Doo",
+			Persons:    []string{"Bill Gates, Jr.", "Steven Jobs"},
+			Player:     PlayerFlash,
+			Copyright:  "Copyright (c) 2009, Scooby Dooby Doo",
 		},
 		Images: []Image{
 			{

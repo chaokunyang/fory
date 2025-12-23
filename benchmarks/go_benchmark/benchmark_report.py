@@ -32,7 +32,6 @@ from pathlib import Path
 
 try:
     import matplotlib.pyplot as plt
-    import numpy as np
     HAS_MATPLOTLIB = True
 except ImportError:
     HAS_MATPLOTLIB = False
@@ -219,7 +218,6 @@ def generate_markdown_report(results, output_dir):
     """Generate markdown report."""
     datatypes = ['struct', 'sample', 'mediacontent']
     operations = ['serialize', 'deserialize']
-    serializers = ['fory', 'protobuf', 'msgpack']
 
     report = []
     report.append("# Go Serialization Benchmark Report\n")

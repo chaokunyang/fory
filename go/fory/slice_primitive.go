@@ -77,7 +77,6 @@ func (s byteSliceSerializer) ReadData(ctx *ReadContext, _ reflect.Type, value re
 	raw := buf.ReadBinary(length, ctxErr)
 	copy(result, raw)
 	*ptr = result
-	ctx.RefResolver().Reference(value)
 }
 
 type ByteSliceBufferObject struct {
@@ -103,17 +102,7 @@ func (o *ByteSliceBufferObject) ToBuffer() *ByteBuffer {
 type boolSliceSerializer struct{}
 
 func (s boolSliceSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
-	v := value.Interface().([]bool)
-	buf := ctx.Buffer()
-	size := len(v)
-	if size >= MaxInt32 {
-		ctx.SetError(SerializationErrorf("too long slice: %d", size))
-		return
-	}
-	buf.WriteLength(size)
-	if size > 0 {
-		buf.WriteBinary(unsafe.Slice((*byte)(unsafe.Pointer(&v[0])), size))
-	}
+	WriteBoolSlice(ctx.Buffer(), value.Interface().([]bool))
 }
 
 func (s boolSliceSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
@@ -137,19 +126,7 @@ func (s boolSliceSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode,
 }
 
 func (s boolSliceSerializer) ReadData(ctx *ReadContext, _ reflect.Type, value reflect.Value) {
-	buf := ctx.Buffer()
-	ctxErr := ctx.Err()
-	length := buf.ReadLength(ctxErr)
-	ptr := (*[]bool)(value.Addr().UnsafePointer())
-	if length == 0 {
-		*ptr = make([]bool, 0)
-		return
-	}
-	result := make([]bool, length)
-	raw := buf.ReadBinary(length, ctxErr)
-	copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), length), raw)
-	*ptr = result
-	ctx.RefResolver().Reference(value)
+	*(*[]bool)(value.Addr().UnsafePointer()) = ReadBoolSlice(ctx.Buffer(), ctx.Err())
 }
 
 // ============================================================================
@@ -159,17 +136,7 @@ func (s boolSliceSerializer) ReadData(ctx *ReadContext, _ reflect.Type, value re
 type int8SliceSerializer struct{}
 
 func (s int8SliceSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
-	v := value.Interface().([]int8)
-	buf := ctx.Buffer()
-	size := len(v)
-	if size >= MaxInt32 {
-		ctx.SetError(SerializationErrorf("too long slice: %d", size))
-		return
-	}
-	buf.WriteLength(size)
-	if size > 0 {
-		buf.WriteBinary(unsafe.Slice((*byte)(unsafe.Pointer(&v[0])), size))
-	}
+	WriteInt8Slice(ctx.Buffer(), value.Interface().([]int8))
 }
 
 func (s int8SliceSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
@@ -193,19 +160,7 @@ func (s int8SliceSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode,
 }
 
 func (s int8SliceSerializer) ReadData(ctx *ReadContext, _ reflect.Type, value reflect.Value) {
-	buf := ctx.Buffer()
-	ctxErr := ctx.Err()
-	length := buf.ReadLength(ctxErr)
-	ptr := (*[]int8)(value.Addr().UnsafePointer())
-	if length == 0 {
-		*ptr = make([]int8, 0)
-		return
-	}
-	result := make([]int8, length)
-	raw := buf.ReadBinary(length, ctxErr)
-	copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), length), raw)
-	*ptr = result
-	ctx.RefResolver().Reference(value)
+	*(*[]int8)(value.Addr().UnsafePointer()) = ReadInt8Slice(ctx.Buffer(), ctx.Err())
 }
 
 // ============================================================================
@@ -215,23 +170,7 @@ func (s int8SliceSerializer) ReadData(ctx *ReadContext, _ reflect.Type, value re
 type int16SliceSerializer struct{}
 
 func (s int16SliceSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
-	v := value.Interface().([]int16)
-	buf := ctx.Buffer()
-	size := len(v) * 2
-	if size >= MaxInt32 {
-		ctx.SetError(SerializationErrorf("too long slice: %d", len(v)))
-		return
-	}
-	buf.WriteLength(size)
-	if len(v) > 0 {
-		if isLittleEndian {
-			buf.WriteBinary(unsafe.Slice((*byte)(unsafe.Pointer(&v[0])), size))
-		} else {
-			for i := 0; i < len(v); i++ {
-				buf.WriteInt16(v[i])
-			}
-		}
-	}
+	WriteInt16Slice(ctx.Buffer(), value.Interface().([]int16))
 }
 
 func (s int16SliceSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
@@ -255,26 +194,7 @@ func (s int16SliceSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode
 }
 
 func (s int16SliceSerializer) ReadData(ctx *ReadContext, _ reflect.Type, value reflect.Value) {
-	buf := ctx.Buffer()
-	ctxErr := ctx.Err()
-	size := buf.ReadLength(ctxErr)
-	length := size / 2
-	ptr := (*[]int16)(value.Addr().UnsafePointer())
-	if length == 0 {
-		*ptr = make([]int16, 0)
-		return
-	}
-	result := make([]int16, length)
-	if isLittleEndian {
-		raw := buf.ReadBinary(size, ctxErr)
-		copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
-	} else {
-		for i := 0; i < length; i++ {
-			result[i] = buf.ReadInt16(ctxErr)
-		}
-	}
-	*ptr = result
-	ctx.RefResolver().Reference(value)
+	*(*[]int16)(value.Addr().UnsafePointer()) = ReadInt16Slice(ctx.Buffer(), ctx.Err())
 }
 
 // ============================================================================
@@ -284,23 +204,7 @@ func (s int16SliceSerializer) ReadData(ctx *ReadContext, _ reflect.Type, value r
 type int32SliceSerializer struct{}
 
 func (s int32SliceSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
-	v := value.Interface().([]int32)
-	buf := ctx.Buffer()
-	size := len(v) * 4
-	if size >= MaxInt32 {
-		ctx.SetError(SerializationErrorf("too long slice: %d", len(v)))
-		return
-	}
-	buf.WriteLength(size)
-	if len(v) > 0 {
-		if isLittleEndian {
-			buf.WriteBinary(unsafe.Slice((*byte)(unsafe.Pointer(&v[0])), size))
-		} else {
-			for i := 0; i < len(v); i++ {
-				buf.WriteInt32(v[i])
-			}
-		}
-	}
+	WriteInt32Slice(ctx.Buffer(), value.Interface().([]int32))
 }
 
 func (s int32SliceSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
@@ -324,26 +228,7 @@ func (s int32SliceSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode
 }
 
 func (s int32SliceSerializer) ReadData(ctx *ReadContext, _ reflect.Type, value reflect.Value) {
-	buf := ctx.Buffer()
-	ctxErr := ctx.Err()
-	size := buf.ReadLength(ctxErr)
-	length := size / 4
-	ptr := (*[]int32)(value.Addr().UnsafePointer())
-	if length == 0 {
-		*ptr = make([]int32, 0)
-		return
-	}
-	result := make([]int32, length)
-	if isLittleEndian {
-		raw := buf.ReadBinary(size, ctxErr)
-		copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
-	} else {
-		for i := 0; i < length; i++ {
-			result[i] = buf.ReadInt32(ctxErr)
-		}
-	}
-	*ptr = result
-	ctx.RefResolver().Reference(value)
+	*(*[]int32)(value.Addr().UnsafePointer()) = ReadInt32Slice(ctx.Buffer(), ctx.Err())
 }
 
 // ============================================================================
@@ -353,23 +238,7 @@ func (s int32SliceSerializer) ReadData(ctx *ReadContext, _ reflect.Type, value r
 type int64SliceSerializer struct{}
 
 func (s int64SliceSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
-	v := value.Interface().([]int64)
-	buf := ctx.Buffer()
-	size := len(v) * 8
-	if size >= MaxInt32 {
-		ctx.SetError(SerializationErrorf("too long slice: %d", len(v)))
-		return
-	}
-	buf.WriteLength(size)
-	if len(v) > 0 {
-		if isLittleEndian {
-			buf.WriteBinary(unsafe.Slice((*byte)(unsafe.Pointer(&v[0])), size))
-		} else {
-			for i := 0; i < len(v); i++ {
-				buf.WriteInt64(v[i])
-			}
-		}
-	}
+	WriteInt64Slice(ctx.Buffer(), value.Interface().([]int64))
 }
 
 func (s int64SliceSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
@@ -393,26 +262,7 @@ func (s int64SliceSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode
 }
 
 func (s int64SliceSerializer) ReadData(ctx *ReadContext, _ reflect.Type, value reflect.Value) {
-	buf := ctx.Buffer()
-	ctxErr := ctx.Err()
-	size := buf.ReadLength(ctxErr)
-	length := size / 8
-	ptr := (*[]int64)(value.Addr().UnsafePointer())
-	if length == 0 {
-		*ptr = make([]int64, 0)
-		return
-	}
-	result := make([]int64, length)
-	if isLittleEndian {
-		raw := buf.ReadBinary(size, ctxErr)
-		copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
-	} else {
-		for i := 0; i < length; i++ {
-			result[i] = buf.ReadInt64(ctxErr)
-		}
-	}
-	*ptr = result
-	ctx.RefResolver().Reference(value)
+	*(*[]int64)(value.Addr().UnsafePointer()) = ReadInt64Slice(ctx.Buffer(), ctx.Err())
 }
 
 // ============================================================================
@@ -422,23 +272,7 @@ func (s int64SliceSerializer) ReadData(ctx *ReadContext, _ reflect.Type, value r
 type float32SliceSerializer struct{}
 
 func (s float32SliceSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
-	v := value.Interface().([]float32)
-	buf := ctx.Buffer()
-	size := len(v) * 4
-	if size >= MaxInt32 {
-		ctx.SetError(SerializationErrorf("too long slice: %d", len(v)))
-		return
-	}
-	buf.WriteLength(size)
-	if len(v) > 0 {
-		if isLittleEndian {
-			buf.WriteBinary(unsafe.Slice((*byte)(unsafe.Pointer(&v[0])), size))
-		} else {
-			for i := 0; i < len(v); i++ {
-				buf.WriteFloat32(v[i])
-			}
-		}
-	}
+	WriteFloat32Slice(ctx.Buffer(), value.Interface().([]float32))
 }
 
 func (s float32SliceSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
@@ -462,26 +296,7 @@ func (s float32SliceSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMo
 }
 
 func (s float32SliceSerializer) ReadData(ctx *ReadContext, _ reflect.Type, value reflect.Value) {
-	buf := ctx.Buffer()
-	ctxErr := ctx.Err()
-	size := buf.ReadLength(ctxErr)
-	length := size / 4
-	ptr := (*[]float32)(value.Addr().UnsafePointer())
-	if length == 0 {
-		*ptr = make([]float32, 0)
-		return
-	}
-	result := make([]float32, length)
-	if isLittleEndian {
-		raw := buf.ReadBinary(size, ctxErr)
-		copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
-	} else {
-		for i := 0; i < length; i++ {
-			result[i] = buf.ReadFloat32(ctxErr)
-		}
-	}
-	*ptr = result
-	ctx.RefResolver().Reference(value)
+	*(*[]float32)(value.Addr().UnsafePointer()) = ReadFloat32Slice(ctx.Buffer(), ctx.Err())
 }
 
 // ============================================================================
@@ -491,23 +306,7 @@ func (s float32SliceSerializer) ReadData(ctx *ReadContext, _ reflect.Type, value
 type float64SliceSerializer struct{}
 
 func (s float64SliceSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
-	v := value.Interface().([]float64)
-	buf := ctx.Buffer()
-	size := len(v) * 8
-	if size >= MaxInt32 {
-		ctx.SetError(SerializationErrorf("too long slice: %d", len(v)))
-		return
-	}
-	buf.WriteLength(size)
-	if len(v) > 0 {
-		if isLittleEndian {
-			buf.WriteBinary(unsafe.Slice((*byte)(unsafe.Pointer(&v[0])), size))
-		} else {
-			for i := 0; i < len(v); i++ {
-				buf.WriteFloat64(v[i])
-			}
-		}
-	}
+	WriteFloat64Slice(ctx.Buffer(), value.Interface().([]float64))
 }
 
 func (s float64SliceSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
@@ -531,26 +330,7 @@ func (s float64SliceSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMo
 }
 
 func (s float64SliceSerializer) ReadData(ctx *ReadContext, _ reflect.Type, value reflect.Value) {
-	buf := ctx.Buffer()
-	ctxErr := ctx.Err()
-	size := buf.ReadLength(ctxErr)
-	length := size / 8
-	ptr := (*[]float64)(value.Addr().UnsafePointer())
-	if length == 0 {
-		*ptr = make([]float64, 0)
-		return
-	}
-	result := make([]float64, length)
-	if isLittleEndian {
-		raw := buf.ReadBinary(size, ctxErr)
-		copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
-	} else {
-		for i := 0; i < length; i++ {
-			result[i] = buf.ReadFloat64(ctxErr)
-		}
-	}
-	*ptr = result
-	ctx.RefResolver().Reference(value)
+	*(*[]float64)(value.Addr().UnsafePointer()) = ReadFloat64Slice(ctx.Buffer(), ctx.Err())
 }
 
 // ============================================================================
@@ -560,8 +340,7 @@ func (s float64SliceSerializer) ReadData(ctx *ReadContext, _ reflect.Type, value
 type intSliceSerializer struct{}
 
 func (s intSliceSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
-	v := value.Interface().([]int)
-	WriteIntSlice(ctx.Buffer(), v)
+	WriteIntSlice(ctx.Buffer(), value.Interface().([]int))
 }
 
 func (s intSliceSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
@@ -589,9 +368,7 @@ func (s intSliceSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, 
 }
 
 func (s intSliceSerializer) ReadData(ctx *ReadContext, _ reflect.Type, value reflect.Value) {
-	result := ReadIntSlice(ctx.Buffer(), ctx.Err())
-	*(*[]int)(value.Addr().UnsafePointer()) = result
-	ctx.RefResolver().Reference(value)
+	*(*[]int)(value.Addr().UnsafePointer()) = ReadIntSlice(ctx.Buffer(), ctx.Err())
 }
 
 // ============================================================================
@@ -603,41 +380,7 @@ func (s intSliceSerializer) ReadData(ctx *ReadContext, _ reflect.Type, value ref
 type uintSliceSerializer struct{}
 
 func (s uintSliceSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
-	v := value.Interface().([]uint)
-	buf := ctx.Buffer()
-	if strconv.IntSize == 64 {
-		size := len(v) * 8
-		if size >= MaxInt32 {
-			ctx.SetError(SerializationErrorf("too long slice: %d", len(v)))
-			return
-		}
-		buf.WriteLength(size)
-		if len(v) > 0 {
-			if isLittleEndian {
-				buf.WriteBinary(unsafe.Slice((*byte)(unsafe.Pointer(&v[0])), size))
-			} else {
-				for i := 0; i < len(v); i++ {
-					buf.WriteInt64(int64(v[i]))
-				}
-			}
-		}
-	} else {
-		size := len(v) * 4
-		if size >= MaxInt32 {
-			ctx.SetError(SerializationErrorf("too long slice: %d", len(v)))
-			return
-		}
-		buf.WriteLength(size)
-		if len(v) > 0 {
-			if isLittleEndian {
-				buf.WriteBinary(unsafe.Slice((*byte)(unsafe.Pointer(&v[0])), size))
-			} else {
-				for i := 0; i < len(v); i++ {
-					buf.WriteInt32(int32(v[i]))
-				}
-			}
-		}
-	}
+	WriteUintSlice(ctx.Buffer(), value.Interface().([]uint))
 }
 
 func (s uintSliceSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
@@ -665,44 +408,7 @@ func (s uintSliceSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode,
 }
 
 func (s uintSliceSerializer) ReadData(ctx *ReadContext, _ reflect.Type, value reflect.Value) {
-	buf := ctx.Buffer()
-	ctxErr := ctx.Err()
-	size := buf.ReadLength(ctxErr)
-	ptr := (*[]uint)(value.Addr().UnsafePointer())
-	if strconv.IntSize == 64 {
-		length := size / 8
-		if length == 0 {
-			*ptr = make([]uint, 0)
-			return
-		}
-		result := make([]uint, length)
-		if isLittleEndian {
-			raw := buf.ReadBinary(size, ctxErr)
-			copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
-		} else {
-			for i := 0; i < length; i++ {
-				result[i] = uint(buf.ReadInt64(ctxErr))
-			}
-		}
-		*ptr = result
-	} else {
-		length := size / 4
-		if length == 0 {
-			*ptr = make([]uint, 0)
-			return
-		}
-		result := make([]uint, length)
-		if isLittleEndian {
-			raw := buf.ReadBinary(size, ctxErr)
-			copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
-		} else {
-			for i := 0; i < length; i++ {
-				result[i] = uint(buf.ReadInt32(ctxErr))
-			}
-		}
-		*ptr = result
-	}
-	ctx.RefResolver().Reference(value)
+	*(*[]uint)(value.Addr().UnsafePointer()) = ReadUintSlice(ctx.Buffer(), ctx.Err())
 }
 
 // ============================================================================
@@ -794,7 +500,6 @@ func (s stringSliceSerializer) ReadData(ctx *ReadContext, _ reflect.Type, value 
 		result[i] = readString(buf, ctxErr)
 	}
 	*ptr = result
-	ctx.RefResolver().Reference(value)
 }
 
 // ============================================================================
@@ -804,6 +509,7 @@ func (s stringSliceSerializer) ReadData(ctx *ReadContext, _ reflect.Type, value 
 // ============================================================================
 
 // WriteByteSlice writes []byte to buffer using ARRAY protocol
+//go:inline
 func WriteByteSlice(buf *ByteBuffer, value []byte) {
 	buf.WriteLength(len(value))
 	if len(value) > 0 {
@@ -812,6 +518,7 @@ func WriteByteSlice(buf *ByteBuffer, value []byte) {
 }
 
 // ReadByteSlice reads []byte from buffer using ARRAY protocol
+//go:inline
 func ReadByteSlice(buf *ByteBuffer, err *Error) []byte {
 	size := buf.ReadLength(err)
 	if size == 0 {
@@ -824,6 +531,7 @@ func ReadByteSlice(buf *ByteBuffer, err *Error) []byte {
 }
 
 // WriteBoolSlice writes []bool to buffer using ARRAY protocol
+//go:inline
 func WriteBoolSlice(buf *ByteBuffer, value []bool) {
 	size := len(value)
 	buf.WriteLength(size)
@@ -833,6 +541,7 @@ func WriteBoolSlice(buf *ByteBuffer, value []bool) {
 }
 
 // ReadBoolSlice reads []bool from buffer using ARRAY protocol
+//go:inline
 func ReadBoolSlice(buf *ByteBuffer, err *Error) []bool {
 	size := buf.ReadLength(err)
 	if size == 0 {
@@ -845,6 +554,7 @@ func ReadBoolSlice(buf *ByteBuffer, err *Error) []bool {
 }
 
 // WriteInt8Slice writes []int8 to buffer using ARRAY protocol
+//go:inline
 func WriteInt8Slice(buf *ByteBuffer, value []int8) {
 	size := len(value)
 	buf.WriteLength(size)
@@ -854,6 +564,7 @@ func WriteInt8Slice(buf *ByteBuffer, value []int8) {
 }
 
 // ReadInt8Slice reads []int8 from buffer using ARRAY protocol
+//go:inline
 func ReadInt8Slice(buf *ByteBuffer, err *Error) []int8 {
 	size := buf.ReadLength(err)
 	if size == 0 {
@@ -866,6 +577,7 @@ func ReadInt8Slice(buf *ByteBuffer, err *Error) []int8 {
 }
 
 // WriteInt16Slice writes []int16 to buffer using ARRAY protocol
+//go:inline
 func WriteInt16Slice(buf *ByteBuffer, value []int16) {
 	size := len(value) * 2
 	buf.WriteLength(size)
@@ -881,6 +593,7 @@ func WriteInt16Slice(buf *ByteBuffer, value []int16) {
 }
 
 // ReadInt16Slice reads []int16 from buffer using ARRAY protocol
+//go:inline
 func ReadInt16Slice(buf *ByteBuffer, err *Error) []int16 {
 	size := buf.ReadLength(err)
 	length := size / 2
@@ -900,6 +613,7 @@ func ReadInt16Slice(buf *ByteBuffer, err *Error) []int16 {
 }
 
 // WriteInt32Slice writes []int32 to buffer using ARRAY protocol
+//go:inline
 func WriteInt32Slice(buf *ByteBuffer, value []int32) {
 	size := len(value) * 4
 	buf.WriteLength(size)
@@ -915,6 +629,7 @@ func WriteInt32Slice(buf *ByteBuffer, value []int32) {
 }
 
 // ReadInt32Slice reads []int32 from buffer using ARRAY protocol
+//go:inline
 func ReadInt32Slice(buf *ByteBuffer, err *Error) []int32 {
 	size := buf.ReadLength(err)
 	length := size / 4
@@ -934,6 +649,7 @@ func ReadInt32Slice(buf *ByteBuffer, err *Error) []int32 {
 }
 
 // WriteInt64Slice writes []int64 to buffer using ARRAY protocol
+//go:inline
 func WriteInt64Slice(buf *ByteBuffer, value []int64) {
 	size := len(value) * 8
 	buf.WriteLength(size)
@@ -949,6 +665,7 @@ func WriteInt64Slice(buf *ByteBuffer, value []int64) {
 }
 
 // ReadInt64Slice reads []int64 from buffer using ARRAY protocol
+//go:inline
 func ReadInt64Slice(buf *ByteBuffer, err *Error) []int64 {
 	size := buf.ReadLength(err)
 	length := size / 8
@@ -968,6 +685,7 @@ func ReadInt64Slice(buf *ByteBuffer, err *Error) []int64 {
 }
 
 // WriteFloat32Slice writes []float32 to buffer using ARRAY protocol
+//go:inline
 func WriteFloat32Slice(buf *ByteBuffer, value []float32) {
 	size := len(value) * 4
 	buf.WriteLength(size)
@@ -983,6 +701,7 @@ func WriteFloat32Slice(buf *ByteBuffer, value []float32) {
 }
 
 // ReadFloat32Slice reads []float32 from buffer using ARRAY protocol
+//go:inline
 func ReadFloat32Slice(buf *ByteBuffer, err *Error) []float32 {
 	size := buf.ReadLength(err)
 	length := size / 4
@@ -1002,6 +721,7 @@ func ReadFloat32Slice(buf *ByteBuffer, err *Error) []float32 {
 }
 
 // WriteFloat64Slice writes []float64 to buffer using ARRAY protocol
+//go:inline
 func WriteFloat64Slice(buf *ByteBuffer, value []float64) {
 	size := len(value) * 8
 	buf.WriteLength(size)
@@ -1017,6 +737,7 @@ func WriteFloat64Slice(buf *ByteBuffer, value []float64) {
 }
 
 // ReadFloat64Slice reads []float64 from buffer using ARRAY protocol
+//go:inline
 func ReadFloat64Slice(buf *ByteBuffer, err *Error) []float64 {
 	size := buf.ReadLength(err)
 	length := size / 8
@@ -1036,6 +757,7 @@ func ReadFloat64Slice(buf *ByteBuffer, err *Error) []float64 {
 }
 
 // WriteIntSlice writes []int to buffer using ARRAY protocol
+//go:inline
 func WriteIntSlice(buf *ByteBuffer, value []int) {
 	if strconv.IntSize == 64 {
 		size := len(value) * 8
@@ -1065,6 +787,7 @@ func WriteIntSlice(buf *ByteBuffer, value []int) {
 }
 
 // ReadIntSlice reads []int from buffer using ARRAY protocol
+//go:inline
 func ReadIntSlice(buf *ByteBuffer, err *Error) []int {
 	size := buf.ReadLength(err)
 	if strconv.IntSize == 64 {
@@ -1100,9 +823,77 @@ func ReadIntSlice(buf *ByteBuffer, err *Error) []int {
 	}
 }
 
+// WriteUintSlice writes []uint to buffer using ARRAY protocol
+//go:inline
+func WriteUintSlice(buf *ByteBuffer, value []uint) {
+	if strconv.IntSize == 64 {
+		size := len(value) * 8
+		buf.WriteLength(size)
+		if len(value) > 0 {
+			if isLittleEndian {
+				buf.WriteBinary(unsafe.Slice((*byte)(unsafe.Pointer(&value[0])), size))
+			} else {
+				for i := 0; i < len(value); i++ {
+					buf.WriteInt64(int64(value[i]))
+				}
+			}
+		}
+	} else {
+		size := len(value) * 4
+		buf.WriteLength(size)
+		if len(value) > 0 {
+			if isLittleEndian {
+				buf.WriteBinary(unsafe.Slice((*byte)(unsafe.Pointer(&value[0])), size))
+			} else {
+				for i := 0; i < len(value); i++ {
+					buf.WriteInt32(int32(value[i]))
+				}
+			}
+		}
+	}
+}
+
+// ReadUintSlice reads []uint from buffer using ARRAY protocol
+//go:inline
+func ReadUintSlice(buf *ByteBuffer, err *Error) []uint {
+	size := buf.ReadLength(err)
+	if strconv.IntSize == 64 {
+		length := size / 8
+		if length == 0 {
+			return make([]uint, 0)
+		}
+		result := make([]uint, length)
+		if isLittleEndian {
+			raw := buf.ReadBinary(size, err)
+			copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+		} else {
+			for i := 0; i < length; i++ {
+				result[i] = uint(buf.ReadInt64(err))
+			}
+		}
+		return result
+	} else {
+		length := size / 4
+		if length == 0 {
+			return make([]uint, 0)
+		}
+		result := make([]uint, length)
+		if isLittleEndian {
+			raw := buf.ReadBinary(size, err)
+			copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+		} else {
+			for i := 0; i < length; i++ {
+				result[i] = uint(buf.ReadInt32(err))
+			}
+		}
+		return result
+	}
+}
+
 // WriteStringSlice writes []string to buffer using LIST protocol.
 // When hasGenerics is true (element type known from TypeDef/generics), uses IS_DECL_ELEMENT_TYPE
 // and doesn't write element type ID. When false, writes element type ID.
+//go:inline
 func WriteStringSlice(buf *ByteBuffer, value []string, hasGenerics bool) {
 	length := len(value)
 	buf.WriteVaruint32(uint32(length))
@@ -1122,6 +913,7 @@ func WriteStringSlice(buf *ByteBuffer, value []string, hasGenerics bool) {
 }
 
 // ReadStringSlice reads []string from buffer using LIST protocol
+//go:inline
 func ReadStringSlice(buf *ByteBuffer, err *Error) []string {
 	length := int(buf.ReadVaruint32(err))
 	if length == 0 {

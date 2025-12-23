@@ -1042,39 +1042,39 @@ func Serialize[T any](f *Fory, value T) ([]byte, error) {
 	case map[string]string:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(MAP)
-		writeMapStringString(f.writeCtx.buffer, val)
+		writeMapStringString(f.writeCtx.buffer, val, false)
 	case map[string]int64:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(MAP)
-		writeMapStringInt64(f.writeCtx.buffer, val)
+		writeMapStringInt64(f.writeCtx.buffer, val, false)
 	case map[string]int32:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(MAP)
-		writeMapStringInt32(f.writeCtx.buffer, val)
+		writeMapStringInt32(f.writeCtx.buffer, val, false)
 	case map[string]int:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(MAP)
-		writeMapStringInt(f.writeCtx.buffer, val)
+		writeMapStringInt(f.writeCtx.buffer, val, false)
 	case map[string]float64:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(MAP)
-		writeMapStringFloat64(f.writeCtx.buffer, val)
+		writeMapStringFloat64(f.writeCtx.buffer, val, false)
 	case map[string]bool:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(MAP)
-		writeMapStringBool(f.writeCtx.buffer, val)
+		writeMapStringBool(f.writeCtx.buffer, val, false)
 	case map[int32]int32:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(MAP)
-		writeMapInt32Int32(f.writeCtx.buffer, val)
+		writeMapInt32Int32(f.writeCtx.buffer, val, false)
 	case map[int64]int64:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(MAP)
-		writeMapInt64Int64(f.writeCtx.buffer, val)
+		writeMapInt64Int64(f.writeCtx.buffer, val, false)
 	case map[int]int:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(MAP)
-		writeMapIntInt(f.writeCtx.buffer, val)
+		writeMapIntInt(f.writeCtx.buffer, val, false)
 	default:
 		// Fall back to reflection-based serialization
 		return f.serializeReflectValue(reflect.ValueOf(v))

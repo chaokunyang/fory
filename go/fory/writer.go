@@ -411,7 +411,7 @@ func (c *WriteContext) WriteStringStringMap(value map[string]string, refMode Ref
 	if writeTypeInfo {
 		c.WriteTypeId(MAP)
 	}
-	writeMapStringString(c.buffer, value)
+	writeMapStringString(c.buffer, value, false)
 }
 
 // WriteStringInt64Map writes map[string]int64 with ref/type info
@@ -426,7 +426,7 @@ func (c *WriteContext) WriteStringInt64Map(value map[string]int64, refMode RefMo
 	if writeTypeInfo {
 		c.WriteTypeId(MAP)
 	}
-	writeMapStringInt64(c.buffer, value)
+	writeMapStringInt64(c.buffer, value, false)
 }
 
 // WriteStringInt32Map writes map[string]int32 with ref/type info
@@ -441,7 +441,7 @@ func (c *WriteContext) WriteStringInt32Map(value map[string]int32, refMode RefMo
 	if writeTypeInfo {
 		c.WriteTypeId(MAP)
 	}
-	writeMapStringInt32(c.buffer, value)
+	writeMapStringInt32(c.buffer, value, false)
 }
 
 // WriteStringIntMap writes map[string]int with ref/type info
@@ -456,7 +456,7 @@ func (c *WriteContext) WriteStringIntMap(value map[string]int, refMode RefMode, 
 	if writeTypeInfo {
 		c.WriteTypeId(MAP)
 	}
-	writeMapStringInt(c.buffer, value)
+	writeMapStringInt(c.buffer, value, false)
 }
 
 // WriteStringFloat64Map writes map[string]float64 with ref/type info
@@ -471,7 +471,7 @@ func (c *WriteContext) WriteStringFloat64Map(value map[string]float64, refMode R
 	if writeTypeInfo {
 		c.WriteTypeId(MAP)
 	}
-	writeMapStringFloat64(c.buffer, value)
+	writeMapStringFloat64(c.buffer, value, false)
 }
 
 // WriteStringBoolMap writes map[string]bool with ref/type info
@@ -486,7 +486,7 @@ func (c *WriteContext) WriteStringBoolMap(value map[string]bool, refMode RefMode
 	if writeTypeInfo {
 		c.WriteTypeId(MAP)
 	}
-	writeMapStringBool(c.buffer, value)
+	writeMapStringBool(c.buffer, value, false)
 }
 
 // WriteInt32Int32Map writes map[int32]int32 with ref/type info
@@ -501,7 +501,7 @@ func (c *WriteContext) WriteInt32Int32Map(value map[int32]int32, refMode RefMode
 	if writeTypeInfo {
 		c.WriteTypeId(MAP)
 	}
-	writeMapInt32Int32(c.buffer, value)
+	writeMapInt32Int32(c.buffer, value, false)
 }
 
 // WriteInt64Int64Map writes map[int64]int64 with ref/type info
@@ -516,7 +516,7 @@ func (c *WriteContext) WriteInt64Int64Map(value map[int64]int64, refMode RefMode
 	if writeTypeInfo {
 		c.WriteTypeId(MAP)
 	}
-	writeMapInt64Int64(c.buffer, value)
+	writeMapInt64Int64(c.buffer, value, false)
 }
 
 // WriteIntIntMap writes map[int]int with ref/type info
@@ -531,7 +531,7 @@ func (c *WriteContext) WriteIntIntMap(value map[int]int, refMode RefMode, writeT
 	if writeTypeInfo {
 		c.WriteTypeId(MAP)
 	}
-	writeMapIntInt(c.buffer, value)
+	writeMapIntInt(c.buffer, value, false)
 }
 
 // WriteBufferObject writes a buffer object

@@ -32,6 +32,7 @@ from pathlib import Path
 
 try:
     import matplotlib.pyplot as plt
+
     HAS_MATPLOTLIB = True
 except ImportError:
     HAS_MATPLOTLIB = False
@@ -40,9 +41,9 @@ except ImportError:
 
 # Color scheme (matching C++ benchmark)
 COLORS = {
-    'fory': '#FF6f01',      # Orange
-    'protobuf': '#55BCC2',  # Teal
-    'msgpack': '#9B59B6',   # Purple
+    "fory": "#FF6f01",  # Orange
+    "protobuf": "#55BCC2",  # Teal
+    "msgpack": "#9B59B6",  # Purple
 }
 
 
@@ -50,12 +51,12 @@ def parse_benchmark_txt(filepath):
     """Parse Go benchmark text output format."""
     results = defaultdict(lambda: defaultdict(dict))
 
-    with open(filepath, 'r') as f:
+    with open(filepath, "r") as f:
         for line in f:
             # Match lines like: BenchmarkFory_Struct_Serialize-10    1234567    789.0 ns/op
             match = re.match(
-                r'Benchmark(\w+)_(\w+)_(Serialize|Deserialize)-\d+\s+\d+\s+([\d.]+)\s+ns/op',
-                line
+                r"Benchmark(\w+)_(\w+)_(Serialize|Deserialize)-\d+\s+\d+\s+([\d.]+)\s+ns/op",
+                line,
             )
             if match:
                 serializer = match.group(1).lower()
@@ -72,16 +73,18 @@ def parse_benchmark_json(filepath):
     """Parse Go benchmark JSON output format."""
     results = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
 
-    with open(filepath, 'r') as f:
+    with open(filepath, "r") as f:
         for line in f:
             try:
                 data = json.loads(line)
-                if data.get('Action') == 'output' and 'Benchmark' in data.get('Output', ''):
-                    output = data['Output']
+                if data.get("Action") == "output" and "Benchmark" in data.get(
+                    "Output", ""
+                ):
+                    output = data["Output"]
                     # Match benchmark result lines
                     match = re.match(
-                        r'Benchmark(\w+)_(\w+)_(Serialize|Deserialize)-\d+\s+\d+\s+([\d.]+)\s+ns/op',
-                        output
+                        r"Benchmark(\w+)_(\w+)_(Serialize|Deserialize)-\d+\s+\d+\s+([\d.]+)\s+ns/op",
+                        output,
                     )
                     if match:
                         serializer = match.group(1).lower()
@@ -109,16 +112,20 @@ def generate_plots(results, output_dir):
     if not HAS_MATPLOTLIB:
         return
 
-    datatypes = ['struct', 'sample', 'mediacontent']
-    operations = ['serialize', 'deserialize']
-    serializers = ['fory', 'protobuf', 'msgpack']
+    datatypes = ["struct", "sample", "mediacontent"]
+    operations = ["serialize", "deserialize"]
+    serializers = ["fory", "protobuf", "msgpack"]
 
     for datatype in datatypes:
         if datatype not in results:
             continue
 
         fig, axes = plt.subplots(1, 2, figsize=(14, 6))
-        fig.suptitle(f'{datatype.title()} Serialization Benchmark', fontsize=14, fontweight='bold')
+        fig.suptitle(
+            f"{datatype.title()} Serialization Benchmark",
+            fontsize=14,
+            fontweight="bold",
+        )
 
         for idx, op in enumerate(operations):
             ax = axes[idx]
@@ -133,36 +140,53 @@ def generate_plots(results, output_dir):
                 continue
 
             # Convert ns to ops/sec
-            ops_per_sec = [1e9 / data[s] if s in data else 0 for s in available_serializers]
-            colors = [COLORS.get(s, '#888888') for s in available_serializers]
+            ops_per_sec = [
+                1e9 / data[s] if s in data else 0 for s in available_serializers
+            ]
+            colors = [COLORS.get(s, "#888888") for s in available_serializers]
 
             bars = ax.bar(available_serializers, ops_per_sec, color=colors)
-            ax.set_ylabel('Operations/sec')
-            ax.set_title(f'{op.title()}')
+            ax.set_ylabel("Operations/sec")
+            ax.set_title(f"{op.title()}")
 
             # Add value labels on bars
             for bar, val in zip(bars, ops_per_sec):
                 height = bar.get_height()
-                ax.annotate(f'{val/1e6:.2f}M' if val >= 1e6 else f'{val/1e3:.0f}K',
-                           xy=(bar.get_x() + bar.get_width() / 2, height),
-                           xytext=(0, 3),
-                           textcoords="offset points",
-                           ha='center', va='bottom', fontsize=9)
+                ax.annotate(
+                    f"{val / 1e6:.2f}M" if val >= 1e6 else f"{val / 1e3:.0f}K",
+                    xy=(bar.get_x() + bar.get_width() / 2, height),
+                    xytext=(0, 3),
+                    textcoords="offset points",
+                    ha="center",
+                    va="bottom",
+                    fontsize=9,
+                )
 
             # Add speedup annotations
-            if 'fory' in data:
-                fory_val = 1e9 / data['fory']
+            if "fory" in data:
+                fory_val = 1e9 / data["fory"]
                 for s in available_serializers:
-                    if s != 'fory' and s in data:
+                    if s != "fory" and s in data:
                         other_val = 1e9 / data[s]
                         speedup = fory_val / other_val
                         if speedup > 1:
-                            ax.text(0.5, 0.95, f'Fory {speedup:.1f}x faster',
-                                   transform=ax.transAxes, ha='center', fontsize=10,
-                                   color='green', fontweight='bold')
+                            ax.text(
+                                0.5,
+                                0.95,
+                                f"Fory {speedup:.1f}x faster",
+                                transform=ax.transAxes,
+                                ha="center",
+                                fontsize=10,
+                                color="green",
+                                fontweight="bold",
+                            )
 
         plt.tight_layout()
-        plt.savefig(os.path.join(output_dir, f'benchmark_{datatype}.png'), dpi=150, bbox_inches='tight')
+        plt.savefig(
+            os.path.join(output_dir, f"benchmark_{datatype}.png"),
+            dpi=150,
+            bbox_inches="tight",
+        )
         plt.close()
 
 
@@ -171,19 +195,30 @@ def generate_combined_plot(results, output_dir):
     if not HAS_MATPLOTLIB:
         return
 
-    datatypes = ['struct', 'sample', 'mediacontent']
-    operations = ['serialize', 'deserialize']
-    serializers = ['fory', 'protobuf', 'msgpack']
+    datatypes = ["struct", "sample", "mediacontent"]
+    operations = ["serialize", "deserialize"]
+    serializers = ["fory", "protobuf", "msgpack"]
 
     fig, axes = plt.subplots(2, 3, figsize=(15, 10))
-    fig.suptitle('Go Serialization Benchmark: Fory vs Protobuf vs Msgpack', fontsize=14, fontweight='bold')
+    fig.suptitle(
+        "Go Serialization Benchmark: Fory vs Protobuf vs Msgpack",
+        fontsize=14,
+        fontweight="bold",
+    )
 
     for row, op in enumerate(operations):
         for col, datatype in enumerate(datatypes):
             ax = axes[row, col]
 
             if datatype not in results or op not in results[datatype]:
-                ax.text(0.5, 0.5, 'No data', ha='center', va='center', transform=ax.transAxes)
+                ax.text(
+                    0.5,
+                    0.5,
+                    "No data",
+                    ha="center",
+                    va="center",
+                    transform=ax.transAxes,
+                )
                 continue
 
             data = results[datatype][op]
@@ -192,32 +227,40 @@ def generate_combined_plot(results, output_dir):
             if not available_serializers:
                 continue
 
-            ops_per_sec = [1e9 / data[s] if s in data else 0 for s in available_serializers]
-            colors = [COLORS.get(s, '#888888') for s in available_serializers]
+            ops_per_sec = [
+                1e9 / data[s] if s in data else 0 for s in available_serializers
+            ]
+            colors = [COLORS.get(s, "#888888") for s in available_serializers]
 
             bars = ax.bar(available_serializers, ops_per_sec, color=colors)
-            ax.set_title(f'{datatype.title()} - {op.title()}')
-            ax.set_ylabel('ops/sec')
+            ax.set_title(f"{datatype.title()} - {op.title()}")
+            ax.set_ylabel("ops/sec")
 
             # Add value labels
             for bar, val in zip(bars, ops_per_sec):
                 height = bar.get_height()
-                label = f'{val/1e6:.2f}M' if val >= 1e6 else f'{val/1e3:.0f}K'
-                ax.annotate(label,
-                           xy=(bar.get_x() + bar.get_width() / 2, height),
-                           xytext=(0, 3),
-                           textcoords="offset points",
-                           ha='center', va='bottom', fontsize=8)
+                label = f"{val / 1e6:.2f}M" if val >= 1e6 else f"{val / 1e3:.0f}K"
+                ax.annotate(
+                    label,
+                    xy=(bar.get_x() + bar.get_width() / 2, height),
+                    xytext=(0, 3),
+                    textcoords="offset points",
+                    ha="center",
+                    va="bottom",
+                    fontsize=8,
+                )
 
     plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, 'benchmark_combined.png'), dpi=150, bbox_inches='tight')
+    plt.savefig(
+        os.path.join(output_dir, "benchmark_combined.png"), dpi=150, bbox_inches="tight"
+    )
     plt.close()
 
 
 def generate_markdown_report(results, output_dir):
     """Generate markdown report."""
-    datatypes = ['struct', 'sample', 'mediacontent']
-    operations = ['serialize', 'deserialize']
+    datatypes = ["struct", "sample", "mediacontent"]
+    operations = ["serialize", "deserialize"]
 
     report = []
     report.append("# Go Serialization Benchmark Report\n")
@@ -232,8 +275,12 @@ def generate_markdown_report(results, output_dir):
 
     # Summary table
     report.append("## Performance Summary\n")
-    report.append("| Data Type | Operation | Fory (ops/s) | Protobuf (ops/s) | Msgpack (ops/s) | Fory vs PB | Fory vs MP |")
-    report.append("|-----------|-----------|--------------|------------------|-----------------|------------|------------|")
+    report.append(
+        "| Data Type | Operation | Fory (ops/s) | Protobuf (ops/s) | Msgpack (ops/s) | Fory vs PB | Fory vs MP |"
+    )
+    report.append(
+        "|-----------|-----------|--------------|------------------|-----------------|------------|------------|"
+    )
 
     for datatype in datatypes:
         if datatype not in results:
@@ -243,18 +290,26 @@ def generate_markdown_report(results, output_dir):
                 continue
 
             data = results[datatype][op]
-            fory_ops = 1e9 / data.get('fory', float('inf')) if 'fory' in data else 0
-            pb_ops = 1e9 / data.get('protobuf', float('inf')) if 'protobuf' in data else 0
-            mp_ops = 1e9 / data.get('msgpack', float('inf')) if 'msgpack' in data else 0
+            fory_ops = 1e9 / data.get("fory", float("inf")) if "fory" in data else 0
+            pb_ops = (
+                1e9 / data.get("protobuf", float("inf")) if "protobuf" in data else 0
+            )
+            mp_ops = 1e9 / data.get("msgpack", float("inf")) if "msgpack" in data else 0
 
-            fory_str = f"{fory_ops/1e6:.2f}M" if fory_ops >= 1e6 else f"{fory_ops/1e3:.0f}K"
-            pb_str = f"{pb_ops/1e6:.2f}M" if pb_ops >= 1e6 else f"{pb_ops/1e3:.0f}K"
-            mp_str = f"{mp_ops/1e6:.2f}M" if mp_ops >= 1e6 else f"{mp_ops/1e3:.0f}K"
+            fory_str = (
+                f"{fory_ops / 1e6:.2f}M"
+                if fory_ops >= 1e6
+                else f"{fory_ops / 1e3:.0f}K"
+            )
+            pb_str = f"{pb_ops / 1e6:.2f}M" if pb_ops >= 1e6 else f"{pb_ops / 1e3:.0f}K"
+            mp_str = f"{mp_ops / 1e6:.2f}M" if mp_ops >= 1e6 else f"{mp_ops / 1e3:.0f}K"
 
-            fory_vs_pb = f"{fory_ops/pb_ops:.2f}x" if pb_ops > 0 else "N/A"
-            fory_vs_mp = f"{fory_ops/mp_ops:.2f}x" if mp_ops > 0 else "N/A"
+            fory_vs_pb = f"{fory_ops / pb_ops:.2f}x" if pb_ops > 0 else "N/A"
+            fory_vs_mp = f"{fory_ops / mp_ops:.2f}x" if mp_ops > 0 else "N/A"
 
-            report.append(f"| {datatype.title()} | {op.title()} | {fory_str} | {pb_str} | {mp_str} | {fory_vs_pb} | {fory_vs_mp} |")
+            report.append(
+                f"| {datatype.title()} | {op.title()} | {fory_str} | {pb_str} | {mp_str} | {fory_vs_pb} | {fory_vs_mp} |"
+            )
 
     report.append("")
 
@@ -275,7 +330,9 @@ def generate_markdown_report(results, output_dir):
             pb_ns = f"{data.get('protobuf', 0):.1f}"
             mp_ns = f"{data.get('msgpack', 0):.1f}"
 
-            report.append(f"| {datatype.title()} | {op.title()} | {fory_ns} | {pb_ns} | {mp_ns} |")
+            report.append(
+                f"| {datatype.title()} | {op.title()} | {fory_ns} | {pb_ns} | {mp_ns} |"
+            )
 
     report.append("")
 
@@ -287,12 +344,14 @@ def generate_markdown_report(results, output_dir):
         for datatype in datatypes:
             if datatype in results:
                 report.append(f"### {datatype.title()}")
-                report.append(f"![{datatype.title()} Benchmark](benchmark_{datatype}.png)\n")
+                report.append(
+                    f"![{datatype.title()} Benchmark](benchmark_{datatype}.png)\n"
+                )
 
     # Write report
-    report_path = os.path.join(output_dir, 'benchmark_report.md')
-    with open(report_path, 'w') as f:
-        f.write('\n'.join(report))
+    report_path = os.path.join(output_dir, "benchmark_report.md")
+    with open(report_path, "w") as f:
+        f.write("\n".join(report))
 
     print(f"Report generated: {report_path}")
 
@@ -302,11 +361,11 @@ def main():
     if len(sys.argv) > 1:
         output_dir = Path(sys.argv[1])
     else:
-        output_dir = Path(__file__).parent / 'results'
+        output_dir = Path(__file__).parent / "results"
 
     # Try to parse results
-    txt_path = output_dir / 'benchmark_results.txt'
-    json_path = output_dir / 'benchmark_results.json'
+    txt_path = output_dir / "benchmark_results.txt"
+    json_path = output_dir / "benchmark_results.json"
 
     results = None
 
@@ -335,5 +394,5 @@ def main():
     print("Done!")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

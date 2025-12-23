@@ -68,9 +68,9 @@ class TypeDef:
         return [field_info.name for field_info in self.fields]
 
     def create_serializer(self, resolver):
-        if self.type_id & 0xff == TypeId.NAMED_EXT:
+        if self.type_id & 0xFF == TypeId.NAMED_EXT:
             return resolver.get_typeinfo_by_name(self.namespace, self.typename).serializer
-        if self.type_id & 0xff == TypeId.NAMED_ENUM:
+        if self.type_id & 0xFF == TypeId.NAMED_ENUM:
             try:
                 return resolver.get_typeinfo_by_name(self.namespace, self.typename).serializer
             except Exception:
@@ -170,7 +170,7 @@ class FieldType:
             type_ = type_[0]
         # Types that need to be handled dynamically during deserialization
         # For these types, we don't know the concrete type at compile time
-        if self.type_id & 0xff in [
+        if self.type_id & 0xFF in [
             TypeId.EXT,
             TypeId.NAMED_EXT,
             TypeId.STRUCT,
@@ -180,7 +180,7 @@ class FieldType:
             TypeId.UNKNOWN,
         ]:
             return None
-        if self.type_id & 0xff in [TypeId.ENUM, TypeId.NAMED_ENUM]:
+        if self.type_id & 0xFF in [TypeId.ENUM, TypeId.NAMED_ENUM]:
             try:
                 if issubclass(type_, enum.Enum):
                     return resolver.get_typeinfo(cls=type_).serializer
@@ -195,9 +195,11 @@ class FieldType:
     def __repr__(self):
         type_id = self.type_id
         if type_id > 128:
-            type_id = f"{type_id}, fory_id={type_id & 0xff}, user_id={type_id >> 8}"
-        return (f"FieldType(type_id={type_id}, is_monomorphic={self.is_monomorphic}, "
-                f"is_nullable={self.is_nullable}, is_tracking_ref={self.is_tracking_ref})")
+            type_id = f"{type_id}, fory_id={type_id & 0xFF}, user_id={type_id >> 8}"
+        return (
+            f"FieldType(type_id={type_id}, is_monomorphic={self.is_monomorphic}, "
+            f"is_nullable={self.is_nullable}, is_tracking_ref={self.is_tracking_ref})"
+        )
 
 
 class CollectionFieldType(FieldType):

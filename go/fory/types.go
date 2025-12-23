@@ -107,6 +107,12 @@ const (
 	UINT32 = 66
 	// UINT64 Unsigned 64-bit little-endian integer
 	UINT64 = 67
+    VAR_UINT32 = 68
+    VAR_UINT64 = 69
+    SLI_UINT64 = 70
+    UINT16_ARRAY = 71
+    UINT32_ARRAY = 72
+    UINT64_ARRAY = 73
 )
 
 // IsNamespacedType checks whether the given type ID is a namespace type
@@ -246,6 +252,7 @@ const (
 	ConcreteTypeInt32Slice
 	ConcreteTypeInt64Slice
 	ConcreteTypeIntSlice
+	ConcreteTypeUintSlice
 	ConcreteTypeFloat32Slice
 	ConcreteTypeFloat64Slice
 	ConcreteTypeBoolSlice
@@ -297,6 +304,8 @@ func GetStaticTypeId(t reflect.Type) StaticTypeId {
 			return ConcreteTypeInt64Slice
 		case reflect.Int:
 			return ConcreteTypeIntSlice
+		case reflect.Uint:
+			return ConcreteTypeUintSlice
 		case reflect.Float32:
 			return ConcreteTypeFloat32Slice
 		case reflect.Float64:

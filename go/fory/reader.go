@@ -301,6 +301,18 @@ func (c *ReadContext) ReadIntSlice(refMode RefMode, readType bool) []int {
 	return ReadIntSlice(c.buffer, err)
 }
 
+// ReadUintSlice reads []uint with optional ref/type info
+func (c *ReadContext) ReadUintSlice(refMode RefMode, readType bool) []uint {
+	err := c.Err()
+	if refMode != RefModeNone {
+		_ = c.buffer.ReadInt8(err)
+	}
+	if readType {
+		_ = c.buffer.ReadVaruint32Small7(err)
+	}
+	return ReadUintSlice(c.buffer, err)
+}
+
 // ReadFloat32Slice reads []float32 with optional ref/type info
 func (c *ReadContext) ReadFloat32Slice(refMode RefMode, readType bool) []float32 {
 	err := c.Err()

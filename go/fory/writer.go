@@ -293,6 +293,21 @@ func (c *WriteContext) WriteIntSlice(value []int, refMode RefMode, writeTypeInfo
 	WriteIntSlice(c.buffer, value)
 }
 
+// WriteUintSlice writes []uint with ref/type info
+func (c *WriteContext) WriteUintSlice(value []uint, refMode RefMode, writeTypeInfo bool) {
+	if refMode != RefModeNone {
+		c.buffer.WriteInt8(NotNullValueFlag)
+	}
+	if writeTypeInfo {
+		if strconv.IntSize == 64 {
+			c.WriteTypeId(UINT64_ARRAY)
+		} else {
+			c.WriteTypeId(UINT32_ARRAY)
+		}
+	}
+	WriteUintSlice(c.buffer, value)
+}
+
 // WriteFloat32Slice writes []float32 with ref/type info
 func (c *WriteContext) WriteFloat32Slice(value []float32, refMode RefMode, writeTypeInfo bool) {
 	if refMode != RefModeNone {

@@ -503,6 +503,17 @@ func (s *structSerializer) writeRemainingField(ctx *WriteContext, ptr unsafe.Poi
 			}
 			ctx.WriteIntSlice(v, RefModeNullOnly, false)
 			return
+		case ConcreteTypeUintSlice:
+			if field.RefMode == RefModeTracking {
+				break
+			}
+			v := *(*[]uint)(fieldPtr)
+			if v == nil {
+				buf.WriteInt8(NullFlag)
+				return
+			}
+			ctx.WriteUintSlice(v, RefModeNullOnly, false)
+			return
 		case ConcreteTypeFloat32Slice:
 			if field.RefMode == RefModeTracking {
 				break
@@ -811,6 +822,16 @@ func (s *structSerializer) readRemainingField(ctx *ReadContext, ptr unsafe.Point
 				return
 			}
 			*(*[]int)(fieldPtr) = ctx.ReadIntSlice(RefModeNone, false)
+			return
+		case ConcreteTypeUintSlice:
+			if field.RefMode == RefModeTracking {
+				break
+			}
+			refFlag := buf.ReadInt8(ctxErr)
+			if refFlag == NullFlag {
+				return
+			}
+			*(*[]uint)(fieldPtr) = ctx.ReadUintSlice(RefModeNone, false)
 			return
 		case ConcreteTypeFloat32Slice:
 			if field.RefMode == RefModeTracking {

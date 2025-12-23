@@ -57,8 +57,16 @@ func (f *Fory) release(inner *fory.Fory) {
 // Serialize serializes a value using a pooled Fory instance
 func (f *Fory) Serialize(v interface{}) ([]byte, error) {
 	inner := f.acquire()
-	defer f.release(inner)
-	return inner.Marshal(v)
+	data, err := inner.Marshal(v)
+	if err != nil {
+		f.release(inner)
+		return nil, err
+	}
+	// Copy the data before releasing since the buffer will be reused
+	result := make([]byte, len(data))
+	copy(result, data)
+	f.release(inner)
+	return result, nil
 }
 
 // Deserialize deserializes data into the provided value using a pooled Fory instance
@@ -83,8 +91,16 @@ func (f *Fory) RegisterNamedType(type_ interface{}, typeName string) error {
 // Takes pointer to avoid interface heap allocation and struct copy.
 func Serialize[T any](f *Fory, value *T) ([]byte, error) {
 	inner := f.acquire()
-	defer f.release(inner)
-	return fory.Serialize(inner, value)
+	data, err := fory.Serialize(inner, value)
+	if err != nil {
+		f.release(inner)
+		return nil, err
+	}
+	// Copy the data before releasing since the buffer will be reused
+	result := make([]byte, len(data))
+	copy(result, data)
+	f.release(inner)
+	return result, nil
 }
 
 // Deserialize deserializes data directly into the provided target, thread-safe.

@@ -384,6 +384,550 @@ func (f *Fory) Reset() {
 }
 
 // ============================================================================
+// Serialization Method API
+// ============================================================================
+
+// Serialize serializes polymorphic values where concrete type is unknown.
+// Uses runtime type dispatch to find the appropriate serializer.
+//
+// IMPORTANT: The returned byte slice is a zero-copy view of the internal buffer.
+// It will be invalidated on the next Serialize/Marshal call on this Fory instance.
+// If you need to retain the data, clone it:
+//
+//	data, _ := f.Serialize(value)
+//	safeCopy := bytes.Clone(data)
+//
+// For thread-safe usage, use threadsafe.Fory which copies the data internally.
+func (f *Fory) Serialize(value any) ([]byte, error) {
+	defer f.resetWriteState()
+	// Check if value is nil interface OR a nil pointer/slice/map/etc.
+	// In Go, `*int32(nil)` wrapped in `any` is NOT equal to `nil`, but we need to serialize it as null.
+	if isNilValue(value) {
+		// Use Java-compatible null format: 3 bytes (magic + bitmap with isNilFlag)
+		writeNullHeader(f.writeCtx)
+		return f.writeCtx.buffer.GetByteSlice(0, f.writeCtx.buffer.writerIndex), nil
+	}
+	// WriteData protocol header
+	writeHeader(f.writeCtx, f.config)
+
+	// In compatible mode, reserve space for meta offset (matches C++/Java)
+	var metaStartOffset int
+	if f.config.Compatible {
+		metaStartOffset = f.writeCtx.buffer.writerIndex
+		f.writeCtx.buffer.WriteInt32(-1) // Placeholder for meta offset
+	}
+
+	// SerializeWithCallback the value
+	f.writeCtx.WriteValue(reflect.ValueOf(value))
+	if f.writeCtx.HasError() {
+		return nil, f.writeCtx.TakeError()
+	}
+
+	// WriteData collected TypeMetas at the end in compatible mode (matches C++/Java)
+	if f.config.Compatible && f.metaContext != nil && len(f.metaContext.writingTypeDefs) > 0 {
+		// Calculate offset from the position after meta offset field to meta section start
+		currentPos := f.writeCtx.buffer.writerIndex
+		offset := currentPos - metaStartOffset - 4
+		// Update the meta offset field
+		f.writeCtx.buffer.PutInt32(metaStartOffset, int32(offset))
+		// WriteData type definitions
+		f.typeResolver.writeTypeDefs(f.writeCtx.buffer, f.writeCtx.Err())
+	}
+
+	return f.writeCtx.buffer.GetByteSlice(0, f.writeCtx.buffer.writerIndex), nil
+}
+
+// Deserialize deserializes data directly into the provided target value.
+// The target must be a pointer to the value to deserialize into.
+func (f *Fory) Deserialize(data []byte, v interface{}) error {
+	defer f.resetReadState()
+	f.readCtx.SetData(data)
+
+	metaOffset := readHeader(f.readCtx)
+	if f.readCtx.HasError() {
+		return f.readCtx.TakeError()
+	}
+
+	// Check if the serialized object is null
+	if metaOffset == NullObjectMetaOffset {
+		return nil
+	}
+
+	// In compatible mode, load type definitions if meta offset is present
+	var finalPos int
+	if f.config.Compatible && metaOffset > 0 {
+		// Save current position (right after meta offset field, before object data)
+		dataStartPos := f.readCtx.buffer.ReaderIndex()
+
+		// Jump to meta section and read type definitions
+		metaPos := dataStartPos + int(metaOffset)
+		f.readCtx.buffer.SetReaderIndex(metaPos)
+
+		f.typeResolver.readTypeDefs(f.readCtx.buffer, f.readCtx.Err())
+		if f.readCtx.HasError() {
+			return fmt.Errorf("failed to read type definitions: %w", f.readCtx.TakeError())
+		}
+
+		// Save final position (after reading TypeDefs)
+		finalPos = f.readCtx.buffer.ReaderIndex()
+
+		// Return to data start position to deserialize the object
+		f.readCtx.buffer.SetReaderIndex(dataStartPos)
+	}
+
+	// Read directly into target value
+	target := reflect.ValueOf(v).Elem()
+	f.readCtx.ReadValue(target)
+	if f.readCtx.HasError() {
+		return f.readCtx.TakeError()
+	}
+
+	// Restore final position if we loaded type definitions
+	if finalPos > 0 {
+		f.readCtx.buffer.SetReaderIndex(finalPos)
+	}
+
+	return nil
+}
+
+// resetReadState resets read context state without allocation
+func (f *Fory) resetReadState() {
+	f.readCtx.Reset()
+	if f.metaContext != nil {
+		f.metaContext.Reset()
+	}
+}
+
+// resetWriteState resets write context state without allocation
+func (f *Fory) resetWriteState() {
+	f.writeCtx.Reset()
+	if f.metaContext != nil {
+		f.metaContext.Reset()
+	}
+}
+
+// SerializeTo serializes a value and appends the bytes to the provided buffer.
+// This is useful when you need to write multiple serialized values to the same buffer.
+// Returns error if serialization fails.
+func (f *Fory) SerializeTo(buf *ByteBuffer, value interface{}) error {
+	// Handle nil values
+	if isNilValue(value) {
+		// Use Java-compatible null format: 3 bytes (magic + bitmap with isNilFlag)
+		buf.WriteInt16(MAGIC_NUMBER)
+		buf.WriteByte_(IsNilFlag)
+		return nil
+	}
+
+	defer f.resetWriteState()
+
+	// Temporarily swap buffer
+	origBuffer := f.writeCtx.buffer
+	f.writeCtx.buffer = buf
+
+	// Write protocol header
+	writeHeader(f.writeCtx, f.config)
+
+	// In compatible mode, reserve space for meta offset
+	var metaStartOffset int
+	if f.config.Compatible {
+		metaStartOffset = buf.writerIndex
+		buf.WriteInt32(-1) // Placeholder for meta offset
+	}
+
+	// Fast path for pointer-to-struct types (bypasses ptrToValueSerializer wrapper)
+	rv := reflect.ValueOf(value)
+	if rv.Kind() == reflect.Ptr && !rv.IsNil() && rv.Elem().Kind() == reflect.Struct && !f.config.TrackRef {
+		// Get TypeInfo using fast pointer cache
+		elemValue := rv.Elem()
+		typeInfo, err := f.typeResolver.getTypeInfo(rv, true)
+		if err == nil && typeInfo != nil && typeInfo.Serializer != nil {
+			// Write not-null flag and type ID directly
+			buf.WriteInt8(NotNullValueFlag)
+			f.typeResolver.WriteTypeInfo(buf, typeInfo, f.writeCtx.Err())
+			// Call the underlying struct serializer's WriteData directly
+			if ptrSer, ok := typeInfo.Serializer.(*ptrToValueSerializer); ok {
+				ptrSer.valueSerializer.WriteData(f.writeCtx, elemValue)
+			} else {
+				typeInfo.Serializer.WriteData(f.writeCtx, elemValue)
+			}
+			if f.writeCtx.HasError() {
+				f.writeCtx.buffer = origBuffer
+				return f.writeCtx.TakeError()
+			}
+			goto finish
+		}
+	}
+
+	// Standard path
+	f.writeCtx.WriteValue(rv)
+	if f.writeCtx.HasError() {
+		f.writeCtx.buffer = origBuffer
+		return f.writeCtx.TakeError()
+	}
+
+finish:
+
+	// Write collected TypeMetas at the end in compatible mode
+	if f.config.Compatible && f.metaContext != nil && len(f.metaContext.writingTypeDefs) > 0 {
+		// Calculate offset from the position after meta offset field to meta section start
+		currentPos := buf.writerIndex
+		offset := currentPos - metaStartOffset - 4
+
+		// Update the meta offset field
+		buf.PutInt32(metaStartOffset, int32(offset))
+
+		// Write type definitions
+		f.typeResolver.writeTypeDefs(buf, f.writeCtx.Err())
+	}
+
+	// Restore original buffer
+	f.writeCtx.buffer = origBuffer
+	return nil
+}
+
+// DeserializeFrom deserializes data from an existing buffer directly into the provided target value.
+// The buffer's reader index is advanced as data is read.
+// This is useful when reading multiple serialized values from the same buffer.
+func (f *Fory) DeserializeFrom(buf *ByteBuffer, v interface{}) error {
+	// Reset contexts for each independent serialized object
+	defer f.resetReadState()
+
+	// Temporarily swap buffer
+	origBuffer := f.readCtx.buffer
+	f.readCtx.buffer = buf
+
+	metaOffset := readHeader(f.readCtx)
+	if f.readCtx.HasError() {
+		f.readCtx.buffer = origBuffer
+		return f.readCtx.TakeError()
+	}
+
+	// Check if the serialized object is null
+	if metaOffset == NullObjectMetaOffset {
+		f.readCtx.buffer = origBuffer
+		return nil
+	}
+
+	// In compatible mode, load type definitions if meta offset is present
+	var finalPos int
+	if f.config.Compatible && metaOffset > 0 {
+		// Save current position (right after meta offset field, before object data)
+		dataStartPos := buf.ReaderIndex()
+
+		// Jump to meta section and read type definitions
+		metaPos := dataStartPos + int(metaOffset)
+		buf.SetReaderIndex(metaPos)
+
+		f.typeResolver.readTypeDefs(buf, f.readCtx.Err())
+		if f.readCtx.HasError() {
+			f.readCtx.buffer = origBuffer
+			return fmt.Errorf("failed to read type definitions: %w", f.readCtx.TakeError())
+		}
+
+		// Save final position (after reading TypeDefs)
+		finalPos = buf.ReaderIndex()
+
+		// Return to data start position to deserialize the object
+		buf.SetReaderIndex(dataStartPos)
+	}
+
+	// Read directly into target value
+	target := reflect.ValueOf(v).Elem()
+	f.readCtx.ReadValue(target)
+	if f.readCtx.HasError() {
+		f.readCtx.buffer = origBuffer
+		return f.readCtx.TakeError()
+	}
+
+	// Restore final position if we loaded type definitions
+	if finalPos > 0 {
+		buf.SetReaderIndex(finalPos)
+	}
+
+	// Restore original buffer
+	f.readCtx.buffer = origBuffer
+
+	return nil
+}
+
+// Marshal serializes a value to bytes.
+//
+// IMPORTANT: The returned byte slice is a zero-copy view of the internal buffer.
+// It will be invalidated on the next Serialize/Marshal call on this Fory instance.
+// If you need to retain the data, clone it:
+//
+//	data, _ := f.Marshal(value)
+//	safeCopy := bytes.Clone(data)
+//
+// For thread-safe usage, use threadsafe.Fory which copies the data internally.
+func (f *Fory) Marshal(v interface{}) ([]byte, error) {
+	return f.Serialize(v)
+}
+
+// Unmarshal deserializes bytes into the provided value.
+func (f *Fory) Unmarshal(data []byte, v interface{}) error {
+	return f.Deserialize(data, v)
+}
+
+// SerializeWithCallback serializes a value to buffer (for streaming/cross-language use).
+// The third parameter is an optional callback for buffer objects (can be nil).
+// If callback is provided, it will be called for each BufferObject during serialization.
+// Return true from callback to write in-band, false for out-of-band.
+func (f *Fory) SerializeWithCallback(buffer *ByteBuffer, v interface{}, callback func(BufferObject) bool) error {
+	buf := f.writeCtx.buffer
+	defer func() {
+		// Reset internal state but NOT the buffer - caller manages buffer state
+		// This allows streaming multiple values to the same buffer
+		f.writeCtx.ResetState()
+		f.writeCtx.buffer = buf
+		if f.metaContext != nil {
+			f.metaContext.Reset()
+		}
+		// Set up buffer callback for out-of-band serialization
+		if callback != nil {
+			f.writeCtx.bufferCallback = nil
+			f.writeCtx.outOfBand = false
+		}
+	}()
+	f.writeCtx.buffer = buffer
+	if f.metaContext != nil {
+		f.metaContext.Reset()
+	}
+	// Set up buffer callback for out-of-band serialization
+	if callback != nil {
+		f.writeCtx.bufferCallback = callback
+		f.writeCtx.outOfBand = true
+	}
+
+	// WriteData protocol header
+	writeHeader(f.writeCtx, f.config)
+
+	// In compatible mode, reserve space for meta offset (matches C++/Java)
+	var metaStartOffset int
+	if f.config.Compatible {
+		metaStartOffset = buffer.writerIndex
+		buffer.WriteInt32(-1) // Placeholder for meta offset
+	}
+
+	// SerializeWithCallback the value
+	f.writeCtx.WriteValue(reflect.ValueOf(v))
+	if f.writeCtx.HasError() {
+		return f.writeCtx.TakeError()
+	}
+
+	// WriteData collected TypeMetas at the end in compatible mode (matches C++/Java)
+	if f.config.Compatible && f.metaContext != nil && len(f.metaContext.writingTypeDefs) > 0 {
+		// Calculate offset from the position after meta offset field to meta section start
+		currentPos := buffer.writerIndex
+		offset := currentPos - metaStartOffset - 4
+		// Update the meta offset field
+		buffer.PutInt32(metaStartOffset, int32(offset))
+		// WriteData type definitions
+		f.typeResolver.writeTypeDefs(buffer, f.writeCtx.Err())
+	}
+
+	return nil
+}
+
+// DeserializeWithCallbackBuffers deserializes from buffer into the provided value (for streaming/cross-language use).
+// The third parameter is optional external buffers for out-of-band data (can be nil).
+func (f *Fory) DeserializeWithCallbackBuffers(buffer *ByteBuffer, v interface{}, buffers []*ByteBuffer) error {
+	// Reset context and use the provided buffer
+	f.readCtx.buffer = buffer
+	defer func() {
+		f.readCtx.Reset()
+		if f.metaContext != nil {
+			f.metaContext.Reset()
+		}
+		f.readCtx.buffer = nil
+		f.readCtx.outOfBandBuffers = nil
+	}()
+	// Set up out-of-band buffers if provided
+	if buffers != nil {
+		f.readCtx.outOfBandBuffers = buffers
+	}
+
+	// ReadData and validate header, get meta offset if present
+	metaOffset := readHeader(f.readCtx)
+	if f.readCtx.HasError() {
+		return f.readCtx.TakeError()
+	}
+
+	// Check if the serialized object is null
+	if metaOffset == NullObjectMetaOffset {
+		// v must be a pointer so we can set it to nil
+		rv := reflect.ValueOf(v)
+		if rv.Kind() == reflect.Ptr && !rv.IsNil() {
+			rv.Elem().Set(reflect.Zero(rv.Elem().Type()))
+		}
+		return nil
+	}
+
+	// In compatible mode, load type definitions if meta offset is present
+	// This matches C++ deserialize_impl: read type defs BEFORE deserializing object
+	var finalPos int
+	if f.config.Compatible && metaOffset > 0 {
+		// Save current position (right after meta offset field, before object data)
+		dataStartPos := buffer.ReaderIndex()
+
+		// Jump to meta section and read type definitions
+		metaPos := dataStartPos + int(metaOffset)
+		buffer.SetReaderIndex(metaPos)
+
+		f.typeResolver.readTypeDefs(buffer, f.readCtx.Err())
+		if f.readCtx.HasError() {
+			return fmt.Errorf("failed to read type definitions: %w", f.readCtx.TakeError())
+		}
+
+		// Save final position (after reading TypeDefs)
+		finalPos = buffer.ReaderIndex()
+
+		// Return to data start position to deserialize the object
+		buffer.SetReaderIndex(dataStartPos)
+	}
+
+	// v must be a pointer so we can deserialize into it
+	if v == nil {
+		return fmt.Errorf("v cannot be nil")
+	}
+	rv := reflect.ValueOf(v)
+	if rv.Kind() != reflect.Ptr {
+		return fmt.Errorf("v must be a pointer, got %v", rv.Kind())
+	}
+	if rv.IsNil() {
+		return fmt.Errorf("v must be a non-nil pointer")
+	}
+	// DeserializeWithCallbackBuffers directly into v
+	f.readCtx.ReadValue(rv.Elem())
+	if f.readCtx.HasError() {
+		return f.readCtx.TakeError()
+	}
+	// Restore final position if we loaded type definitions
+	if finalPos > 0 {
+		buffer.SetReaderIndex(finalPos)
+	}
+	return nil
+}
+
+// serializeReflectValue serializes a reflect.Value directly, avoiding boxing overhead.
+// This is used by Serialize[T] fallback path to avoid struct copy.
+// For structs, the value must be a pointer to struct, not struct value.
+func (f *Fory) serializeReflectValue(value reflect.Value) ([]byte, error) {
+	// Check that structs are passed as pointers
+	if value.Kind() == reflect.Struct {
+		return nil, fmt.Errorf("cannot serialize struct %s directly, use pointer to struct (*%s) instead", value.Type(), value.Type())
+	}
+
+	// In compatible mode, reserve space for meta offset (matches C++/Java)
+	var metaStartOffset int
+	if f.config.Compatible {
+		metaStartOffset = f.writeCtx.buffer.writerIndex
+		f.writeCtx.buffer.WriteInt32(-1) // Placeholder for meta offset
+	}
+
+	// SerializeWithCallback the value
+	f.writeCtx.WriteValue(value)
+	if f.writeCtx.HasError() {
+		return nil, f.writeCtx.TakeError()
+	}
+
+	// WriteData collected TypeMetas at the end in compatible mode (matches C++/Java)
+	if f.config.Compatible && f.metaContext != nil && len(f.metaContext.writingTypeDefs) > 0 {
+		// Calculate offset from the position after meta offset field to meta section start
+		currentPos := f.writeCtx.buffer.writerIndex
+		offset := currentPos - metaStartOffset - 4
+
+		// Update the meta offset field
+		f.writeCtx.buffer.PutInt32(metaStartOffset, int32(offset))
+
+		// WriteData type definitions
+		f.typeResolver.writeTypeDefs(f.writeCtx.buffer, f.writeCtx.Err())
+	}
+
+	return f.writeCtx.buffer.GetByteSlice(0, f.writeCtx.buffer.writerIndex), nil
+}
+
+// ============================================================================
+// Protocol Header
+// ============================================================================
+
+// writeHeader writes the Fory protocol header
+func writeHeader(ctx *WriteContext, config Config) {
+	ctx.buffer.WriteInt16(MAGIC_NUMBER)
+
+	var bitmap byte = 0
+	if nativeEndian == binary.LittleEndian {
+		bitmap |= LittleEndianFlag
+	}
+	if config.IsXlang {
+		bitmap |= XLangFlag
+	}
+	if ctx.outOfBand {
+		bitmap |= OutOfBandFlag
+	}
+	ctx.buffer.WriteByte_(bitmap)
+	ctx.buffer.WriteByte_(LangGO)
+}
+
+// isNilValue checks if a value is nil, including nil pointers wrapped in interface{}
+// In Go, `*int32(nil)` wrapped in `any` is NOT equal to `nil`, but we need to treat it as null.
+func isNilValue(value any) bool {
+	if value == nil {
+		return true
+	}
+	rv := reflect.ValueOf(value)
+	switch rv.Kind() {
+	case reflect.Ptr, reflect.Slice, reflect.Map, reflect.Chan, reflect.Func, reflect.Interface:
+		return rv.IsNil()
+	}
+	return false
+}
+
+// writeNullHeader writes a null object header (3 bytes: magic + bitmap with isNilFlag)
+// This is compatible with Java's null serialization format
+func writeNullHeader(ctx *WriteContext) {
+	ctx.buffer.WriteInt16(MAGIC_NUMBER)
+	ctx.buffer.WriteByte_(IsNilFlag) // bitmap with only isNilFlag set
+}
+
+// Special return value indicating null object in readHeader
+// Using math.MinInt32 to avoid conflict with -1 which is used for "no meta offset"
+const NullObjectMetaOffset int32 = -0x7FFFFFFF
+
+// readHeader reads and validates the Fory protocol header
+// Returns the meta start offset if present (0 if not present)
+// Returns NullObjectMetaOffset if the serialized object is null
+// Sets error on ctx if header is invalid (use ctx.HasError() to check)
+func readHeader(ctx *ReadContext) int32 {
+	err := ctx.Err()
+	magicNumber := ctx.buffer.ReadInt16(err)
+	if ctx.HasError() {
+		return 0
+	}
+	if magicNumber != MAGIC_NUMBER {
+		ctx.SetError(DeserializationError("invalid magic number"))
+		return 0
+	}
+	bitmap := ctx.buffer.ReadByte(err)
+
+	// Check if this is a null object - only magic number + bitmap with isNilFlag was written
+	if (bitmap & IsNilFlag) != 0 {
+		return NullObjectMetaOffset
+	}
+
+	_ = ctx.buffer.ReadByte(err) // language
+
+	// In compatible mode with meta share, Java writes a 4-byte meta offset
+	// We need to read it but we'll handle type defs later
+	if ctx.compatible {
+		metaOffset := ctx.buffer.ReadInt32(err)
+		return metaOffset
+	}
+
+	return 0
+}
+
+// ============================================================================
 // Generic Serialization API
 // ============================================================================
 
@@ -391,7 +935,15 @@ func (f *Fory) Reset() {
 // The serializer handles its own ref/type info writing internally.
 // Falls back to reflection-based serialization for unregistered types.
 // Note: For structs, T must be a pointer to struct (*MyStruct), not struct value.
-// Note: Fory instance is NOT thread-safe. Use ThreadSafeFory for concurrent use.
+//
+// IMPORTANT: The returned byte slice is a zero-copy view of the internal buffer.
+// It will be invalidated on the next Serialize call on this Fory instance.
+// If you need to retain the data, clone it:
+//
+//	data, _ := fory.Serialize(f, value)
+//	safeCopy := bytes.Clone(data)
+//
+// For thread-safe usage, use threadsafe.Serialize which copies the data internally.
 func Serialize[T any](f *Fory, value T) ([]byte, error) {
 	defer f.resetWriteState()
 	// WriteData protocol header
@@ -679,530 +1231,4 @@ func Deserialize[T any](f *Fory, data []byte, target *T) error {
 		serializer.Read(f.readCtx, RefModeTracking, true, false, targetVal)
 		return f.readCtx.CheckError()
 	}
-}
-
-// ============================================================================
-// Serialization Method API
-// ============================================================================
-
-// Serialize serializes polymorphic values where concrete type is unknown.
-// Uses runtime type dispatch to find the appropriate serializer.
-func (f *Fory) Serialize(value any) ([]byte, error) {
-	defer f.resetWriteState()
-	// Check if value is nil interface OR a nil pointer/slice/map/etc.
-	// In Go, `*int32(nil)` wrapped in `any` is NOT equal to `nil`, but we need to serialize it as null.
-	if isNilValue(value) {
-		// Use Java-compatible null format: 3 bytes (magic + bitmap with isNilFlag)
-		writeNullHeader(f.writeCtx)
-		return f.writeCtx.buffer.GetByteSlice(0, f.writeCtx.buffer.writerIndex), nil
-	}
-	// WriteData protocol header
-	writeHeader(f.writeCtx, f.config)
-
-	// In compatible mode, reserve space for meta offset (matches C++/Java)
-	var metaStartOffset int
-	if f.config.Compatible {
-		metaStartOffset = f.writeCtx.buffer.writerIndex
-		f.writeCtx.buffer.WriteInt32(-1) // Placeholder for meta offset
-	}
-
-	// SerializeWithCallback the value
-	f.writeCtx.WriteValue(reflect.ValueOf(value))
-	if f.writeCtx.HasError() {
-		return nil, f.writeCtx.TakeError()
-	}
-
-	// WriteData collected TypeMetas at the end in compatible mode (matches C++/Java)
-	if f.config.Compatible && f.metaContext != nil && len(f.metaContext.writingTypeDefs) > 0 {
-		// Calculate offset from the position after meta offset field to meta section start
-		currentPos := f.writeCtx.buffer.writerIndex
-		offset := currentPos - metaStartOffset - 4
-		// Update the meta offset field
-		f.writeCtx.buffer.PutInt32(metaStartOffset, int32(offset))
-		// WriteData type definitions
-		f.typeResolver.writeTypeDefs(f.writeCtx.buffer, f.writeCtx.Err())
-	}
-
-	return f.writeCtx.buffer.GetByteSlice(0, f.writeCtx.buffer.writerIndex), nil
-}
-
-// Deserialize deserializes data directly into the provided target value.
-// The target must be a pointer to the value to deserialize into.
-func (f *Fory) Deserialize(data []byte, v interface{}) error {
-	defer f.resetReadState()
-	f.readCtx.SetData(data)
-
-	metaOffset := readHeader(f.readCtx)
-	if f.readCtx.HasError() {
-		return f.readCtx.TakeError()
-	}
-
-	// Check if the serialized object is null
-	if metaOffset == NullObjectMetaOffset {
-		return nil
-	}
-
-	// In compatible mode, load type definitions if meta offset is present
-	var finalPos int
-	if f.config.Compatible && metaOffset > 0 {
-		// Save current position (right after meta offset field, before object data)
-		dataStartPos := f.readCtx.buffer.ReaderIndex()
-
-		// Jump to meta section and read type definitions
-		metaPos := dataStartPos + int(metaOffset)
-		f.readCtx.buffer.SetReaderIndex(metaPos)
-
-		f.typeResolver.readTypeDefs(f.readCtx.buffer, f.readCtx.Err())
-		if f.readCtx.HasError() {
-			return fmt.Errorf("failed to read type definitions: %w", f.readCtx.TakeError())
-		}
-
-		// Save final position (after reading TypeDefs)
-		finalPos = f.readCtx.buffer.ReaderIndex()
-
-		// Return to data start position to deserialize the object
-		f.readCtx.buffer.SetReaderIndex(dataStartPos)
-	}
-
-	// Read directly into target value
-	target := reflect.ValueOf(v).Elem()
-	f.readCtx.ReadValue(target)
-	if f.readCtx.HasError() {
-		return f.readCtx.TakeError()
-	}
-
-	// Restore final position if we loaded type definitions
-	if finalPos > 0 {
-		f.readCtx.buffer.SetReaderIndex(finalPos)
-	}
-
-	return nil
-}
-
-// resetReadState resets read context state without allocation
-func (f *Fory) resetReadState() {
-	f.readCtx.Reset()
-	if f.metaContext != nil {
-		f.metaContext.Reset()
-	}
-}
-
-// resetWriteState resets write context state without allocation
-func (f *Fory) resetWriteState() {
-	f.writeCtx.Reset()
-	if f.metaContext != nil {
-		f.metaContext.Reset()
-	}
-}
-
-// SerializeTo serializes a value and appends the bytes to the provided buffer.
-// This is useful when you need to write multiple serialized values to the same buffer.
-// Returns error if serialization fails.
-func (f *Fory) SerializeTo(buf *ByteBuffer, value interface{}) error {
-	// Handle nil values
-	if isNilValue(value) {
-		// Use Java-compatible null format: 3 bytes (magic + bitmap with isNilFlag)
-		buf.WriteInt16(MAGIC_NUMBER)
-		buf.WriteByte_(IsNilFlag)
-		return nil
-	}
-
-	defer f.resetWriteState()
-
-	// Temporarily swap buffer
-	origBuffer := f.writeCtx.buffer
-	f.writeCtx.buffer = buf
-
-	// Write protocol header
-	writeHeader(f.writeCtx, f.config)
-
-	// In compatible mode, reserve space for meta offset
-	var metaStartOffset int
-	if f.config.Compatible {
-		metaStartOffset = buf.writerIndex
-		buf.WriteInt32(-1) // Placeholder for meta offset
-	}
-
-	// Fast path for pointer-to-struct types (bypasses ptrToValueSerializer wrapper)
-	rv := reflect.ValueOf(value)
-	if rv.Kind() == reflect.Ptr && !rv.IsNil() && rv.Elem().Kind() == reflect.Struct && !f.config.TrackRef {
-		// Get TypeInfo using fast pointer cache
-		elemValue := rv.Elem()
-		typeInfo, err := f.typeResolver.getTypeInfo(rv, true)
-		if err == nil && typeInfo != nil && typeInfo.Serializer != nil {
-			// Write not-null flag and type ID directly
-			buf.WriteInt8(NotNullValueFlag)
-			f.typeResolver.WriteTypeInfo(buf, typeInfo, f.writeCtx.Err())
-			// Call the underlying struct serializer's WriteData directly
-			if ptrSer, ok := typeInfo.Serializer.(*ptrToValueSerializer); ok {
-				ptrSer.valueSerializer.WriteData(f.writeCtx, elemValue)
-			} else {
-				typeInfo.Serializer.WriteData(f.writeCtx, elemValue)
-			}
-			if f.writeCtx.HasError() {
-				f.writeCtx.buffer = origBuffer
-				return f.writeCtx.TakeError()
-			}
-			goto finish
-		}
-	}
-
-	// Standard path
-	f.writeCtx.WriteValue(rv)
-	if f.writeCtx.HasError() {
-		f.writeCtx.buffer = origBuffer
-		return f.writeCtx.TakeError()
-	}
-
-finish:
-
-	// Write collected TypeMetas at the end in compatible mode
-	if f.config.Compatible && f.metaContext != nil && len(f.metaContext.writingTypeDefs) > 0 {
-		// Calculate offset from the position after meta offset field to meta section start
-		currentPos := buf.writerIndex
-		offset := currentPos - metaStartOffset - 4
-
-		// Update the meta offset field
-		buf.PutInt32(metaStartOffset, int32(offset))
-
-		// Write type definitions
-		f.typeResolver.writeTypeDefs(buf, f.writeCtx.Err())
-	}
-
-	// Restore original buffer
-	f.writeCtx.buffer = origBuffer
-	return nil
-}
-
-// DeserializeFrom deserializes data from an existing buffer directly into the provided target value.
-// The buffer's reader index is advanced as data is read.
-// This is useful when reading multiple serialized values from the same buffer.
-func (f *Fory) DeserializeFrom(buf *ByteBuffer, v interface{}) error {
-	// Reset contexts for each independent serialized object
-	defer f.resetReadState()
-
-	// Temporarily swap buffer
-	origBuffer := f.readCtx.buffer
-	f.readCtx.buffer = buf
-
-	metaOffset := readHeader(f.readCtx)
-	if f.readCtx.HasError() {
-		f.readCtx.buffer = origBuffer
-		return f.readCtx.TakeError()
-	}
-
-	// Check if the serialized object is null
-	if metaOffset == NullObjectMetaOffset {
-		f.readCtx.buffer = origBuffer
-		return nil
-	}
-
-	// In compatible mode, load type definitions if meta offset is present
-	var finalPos int
-	if f.config.Compatible && metaOffset > 0 {
-		// Save current position (right after meta offset field, before object data)
-		dataStartPos := buf.ReaderIndex()
-
-		// Jump to meta section and read type definitions
-		metaPos := dataStartPos + int(metaOffset)
-		buf.SetReaderIndex(metaPos)
-
-		f.typeResolver.readTypeDefs(buf, f.readCtx.Err())
-		if f.readCtx.HasError() {
-			f.readCtx.buffer = origBuffer
-			return fmt.Errorf("failed to read type definitions: %w", f.readCtx.TakeError())
-		}
-
-		// Save final position (after reading TypeDefs)
-		finalPos = buf.ReaderIndex()
-
-		// Return to data start position to deserialize the object
-		buf.SetReaderIndex(dataStartPos)
-	}
-
-	// Read directly into target value
-	target := reflect.ValueOf(v).Elem()
-	f.readCtx.ReadValue(target)
-	if f.readCtx.HasError() {
-		f.readCtx.buffer = origBuffer
-		return f.readCtx.TakeError()
-	}
-
-	// Restore final position if we loaded type definitions
-	if finalPos > 0 {
-		buf.SetReaderIndex(finalPos)
-	}
-
-	// Restore original buffer
-	f.readCtx.buffer = origBuffer
-
-	return nil
-}
-
-// Marshal serializes a value to bytes.
-func (f *Fory) Marshal(v interface{}) ([]byte, error) {
-	return f.Serialize(v)
-}
-
-// Unmarshal deserializes bytes into the provided value.
-func (f *Fory) Unmarshal(data []byte, v interface{}) error {
-	return f.Deserialize(data, v)
-}
-
-// SerializeWithCallback serializes a value to buffer (for streaming/cross-language use).
-// The third parameter is an optional callback for buffer objects (can be nil).
-// If callback is provided, it will be called for each BufferObject during serialization.
-// Return true from callback to write in-band, false for out-of-band.
-func (f *Fory) SerializeWithCallback(buffer *ByteBuffer, v interface{}, callback func(BufferObject) bool) error {
-	buf := f.writeCtx.buffer
-	defer func() {
-		// Reset internal state but NOT the buffer - caller manages buffer state
-		// This allows streaming multiple values to the same buffer
-		f.writeCtx.ResetState()
-		f.writeCtx.buffer = buf
-		if f.metaContext != nil {
-			f.metaContext.Reset()
-		}
-		// Set up buffer callback for out-of-band serialization
-		if callback != nil {
-			f.writeCtx.bufferCallback = nil
-			f.writeCtx.outOfBand = false
-		}
-	}()
-	f.writeCtx.buffer = buffer
-	if f.metaContext != nil {
-		f.metaContext.Reset()
-	}
-	// Set up buffer callback for out-of-band serialization
-	if callback != nil {
-		f.writeCtx.bufferCallback = callback
-		f.writeCtx.outOfBand = true
-	}
-
-	// WriteData protocol header
-	writeHeader(f.writeCtx, f.config)
-
-	// In compatible mode, reserve space for meta offset (matches C++/Java)
-	var metaStartOffset int
-	if f.config.Compatible {
-		metaStartOffset = buffer.writerIndex
-		buffer.WriteInt32(-1) // Placeholder for meta offset
-	}
-
-	// SerializeWithCallback the value
-	f.writeCtx.WriteValue(reflect.ValueOf(v))
-	if f.writeCtx.HasError() {
-		return f.writeCtx.TakeError()
-	}
-
-	// WriteData collected TypeMetas at the end in compatible mode (matches C++/Java)
-	if f.config.Compatible && f.metaContext != nil && len(f.metaContext.writingTypeDefs) > 0 {
-		// Calculate offset from the position after meta offset field to meta section start
-		currentPos := buffer.writerIndex
-		offset := currentPos - metaStartOffset - 4
-		// Update the meta offset field
-		buffer.PutInt32(metaStartOffset, int32(offset))
-		// WriteData type definitions
-		f.typeResolver.writeTypeDefs(buffer, f.writeCtx.Err())
-	}
-
-	return nil
-}
-
-// DeserializeWithCallbackBuffers deserializes from buffer into the provided value (for streaming/cross-language use).
-// The third parameter is optional external buffers for out-of-band data (can be nil).
-func (f *Fory) DeserializeWithCallbackBuffers(buffer *ByteBuffer, v interface{}, buffers []*ByteBuffer) error {
-	// Reset context and use the provided buffer
-	f.readCtx.buffer = buffer
-	defer func() {
-		f.readCtx.Reset()
-		if f.metaContext != nil {
-			f.metaContext.Reset()
-		}
-		f.readCtx.buffer = nil
-		f.readCtx.outOfBandBuffers = nil
-	}()
-	// Set up out-of-band buffers if provided
-	if buffers != nil {
-		f.readCtx.outOfBandBuffers = buffers
-	}
-
-	// ReadData and validate header, get meta offset if present
-	metaOffset := readHeader(f.readCtx)
-	if f.readCtx.HasError() {
-		return f.readCtx.TakeError()
-	}
-
-	// Check if the serialized object is null
-	if metaOffset == NullObjectMetaOffset {
-		// v must be a pointer so we can set it to nil
-		rv := reflect.ValueOf(v)
-		if rv.Kind() == reflect.Ptr && !rv.IsNil() {
-			rv.Elem().Set(reflect.Zero(rv.Elem().Type()))
-		}
-		return nil
-	}
-
-	// In compatible mode, load type definitions if meta offset is present
-	// This matches C++ deserialize_impl: read type defs BEFORE deserializing object
-	var finalPos int
-	if f.config.Compatible && metaOffset > 0 {
-		// Save current position (right after meta offset field, before object data)
-		dataStartPos := buffer.ReaderIndex()
-
-		// Jump to meta section and read type definitions
-		metaPos := dataStartPos + int(metaOffset)
-		buffer.SetReaderIndex(metaPos)
-
-		f.typeResolver.readTypeDefs(buffer, f.readCtx.Err())
-		if f.readCtx.HasError() {
-			return fmt.Errorf("failed to read type definitions: %w", f.readCtx.TakeError())
-		}
-
-		// Save final position (after reading TypeDefs)
-		finalPos = buffer.ReaderIndex()
-
-		// Return to data start position to deserialize the object
-		buffer.SetReaderIndex(dataStartPos)
-	}
-
-	// v must be a pointer so we can deserialize into it
-	if v == nil {
-		return fmt.Errorf("v cannot be nil")
-	}
-	rv := reflect.ValueOf(v)
-	if rv.Kind() != reflect.Ptr {
-		return fmt.Errorf("v must be a pointer, got %v", rv.Kind())
-	}
-	if rv.IsNil() {
-		return fmt.Errorf("v must be a non-nil pointer")
-	}
-	// DeserializeWithCallbackBuffers directly into v
-	f.readCtx.ReadValue(rv.Elem())
-	if f.readCtx.HasError() {
-		return f.readCtx.TakeError()
-	}
-	// Restore final position if we loaded type definitions
-	if finalPos > 0 {
-		buffer.SetReaderIndex(finalPos)
-	}
-	return nil
-}
-
-// serializeReflectValue serializes a reflect.Value directly, avoiding boxing overhead.
-// This is used by Serialize[T] fallback path to avoid struct copy.
-// For structs, the value must be a pointer to struct, not struct value.
-func (f *Fory) serializeReflectValue(value reflect.Value) ([]byte, error) {
-	// Check that structs are passed as pointers
-	if value.Kind() == reflect.Struct {
-		return nil, fmt.Errorf("cannot serialize struct %s directly, use pointer to struct (*%s) instead", value.Type(), value.Type())
-	}
-
-	// In compatible mode, reserve space for meta offset (matches C++/Java)
-	var metaStartOffset int
-	if f.config.Compatible {
-		metaStartOffset = f.writeCtx.buffer.writerIndex
-		f.writeCtx.buffer.WriteInt32(-1) // Placeholder for meta offset
-	}
-
-	// SerializeWithCallback the value
-	f.writeCtx.WriteValue(value)
-	if f.writeCtx.HasError() {
-		return nil, f.writeCtx.TakeError()
-	}
-
-	// WriteData collected TypeMetas at the end in compatible mode (matches C++/Java)
-	if f.config.Compatible && f.metaContext != nil && len(f.metaContext.writingTypeDefs) > 0 {
-		// Calculate offset from the position after meta offset field to meta section start
-		currentPos := f.writeCtx.buffer.writerIndex
-		offset := currentPos - metaStartOffset - 4
-
-		// Update the meta offset field
-		f.writeCtx.buffer.PutInt32(metaStartOffset, int32(offset))
-
-		// WriteData type definitions
-		f.typeResolver.writeTypeDefs(f.writeCtx.buffer, f.writeCtx.Err())
-	}
-
-	return f.writeCtx.buffer.GetByteSlice(0, f.writeCtx.buffer.writerIndex), nil
-}
-
-// ============================================================================
-// Protocol Header
-// ============================================================================
-
-// writeHeader writes the Fory protocol header
-func writeHeader(ctx *WriteContext, config Config) {
-	ctx.buffer.WriteInt16(MAGIC_NUMBER)
-
-	var bitmap byte = 0
-	if nativeEndian == binary.LittleEndian {
-		bitmap |= LittleEndianFlag
-	}
-	if config.IsXlang {
-		bitmap |= XLangFlag
-	}
-	if ctx.outOfBand {
-		bitmap |= OutOfBandFlag
-	}
-	ctx.buffer.WriteByte_(bitmap)
-	ctx.buffer.WriteByte_(LangGO)
-}
-
-// isNilValue checks if a value is nil, including nil pointers wrapped in interface{}
-// In Go, `*int32(nil)` wrapped in `any` is NOT equal to `nil`, but we need to treat it as null.
-func isNilValue(value any) bool {
-	if value == nil {
-		return true
-	}
-	rv := reflect.ValueOf(value)
-	switch rv.Kind() {
-	case reflect.Ptr, reflect.Slice, reflect.Map, reflect.Chan, reflect.Func, reflect.Interface:
-		return rv.IsNil()
-	}
-	return false
-}
-
-// writeNullHeader writes a null object header (3 bytes: magic + bitmap with isNilFlag)
-// This is compatible with Java's null serialization format
-func writeNullHeader(ctx *WriteContext) {
-	ctx.buffer.WriteInt16(MAGIC_NUMBER)
-	ctx.buffer.WriteByte_(IsNilFlag) // bitmap with only isNilFlag set
-}
-
-// Special return value indicating null object in readHeader
-// Using math.MinInt32 to avoid conflict with -1 which is used for "no meta offset"
-const NullObjectMetaOffset int32 = -0x7FFFFFFF
-
-// readHeader reads and validates the Fory protocol header
-// Returns the meta start offset if present (0 if not present)
-// Returns NullObjectMetaOffset if the serialized object is null
-// Sets error on ctx if header is invalid (use ctx.HasError() to check)
-func readHeader(ctx *ReadContext) int32 {
-	err := ctx.Err()
-	magicNumber := ctx.buffer.ReadInt16(err)
-	if ctx.HasError() {
-		return 0
-	}
-	if magicNumber != MAGIC_NUMBER {
-		ctx.SetError(DeserializationError("invalid magic number"))
-		return 0
-	}
-	bitmap := ctx.buffer.ReadByte(err)
-
-	// Check if this is a null object - only magic number + bitmap with isNilFlag was written
-	if (bitmap & IsNilFlag) != 0 {
-		return NullObjectMetaOffset
-	}
-
-	_ = ctx.buffer.ReadByte(err) // language
-
-	// In compatible mode with meta share, Java writes a 4-byte meta offset
-	// We need to read it but we'll handle type defs later
-	if ctx.compatible {
-		metaOffset := ctx.buffer.ReadInt32(err)
-		return metaOffset
-	}
-
-	return 0
 }

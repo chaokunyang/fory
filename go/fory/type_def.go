@@ -365,6 +365,7 @@ type FieldDef struct {
 	nullable     bool
 	trackingRef  bool
 	fieldType    FieldType
+	tagID        int // -1 = use field name, >=0 = use tag ID
 }
 
 // String returns a string representation of FieldDef for debugging
@@ -374,6 +375,10 @@ func (fd FieldDef) String() string {
 		fieldTypeStr = fd.fieldType.String()
 	} else {
 		fieldTypeStr = "nil"
+	}
+	if fd.tagID >= 0 {
+		return fmt.Sprintf("FieldDef{tagID=%d, nullable=%v, trackingRef=%v, fieldType=%s}",
+			fd.tagID, fd.nullable, fd.trackingRef, fieldTypeStr)
 	}
 	return fmt.Sprintf("FieldDef{name=%s, nullable=%v, trackingRef=%v, fieldType=%s}",
 		fd.name, fd.nullable, fd.trackingRef, fieldTypeStr)
@@ -405,9 +410,19 @@ func buildFieldDefs(fory *Fory, value reflect.Value) ([]FieldDef, error) {
 	type_ := value.Type()
 	for i := 0; i < type_.NumField(); i++ {
 		field := type_.Field(i)
-		fieldValue := value.Field(i)
 
-		var fieldInfo FieldDef
+		// Skip unexported fields
+		if field.PkgPath != "" {
+			continue
+		}
+
+		// Parse fory struct tag and check for ignore
+		foryTag := ParseForyTag(field)
+		if foryTag.Ignore {
+			continue // skip ignored fields
+		}
+
+		fieldValue := value.Field(i)
 		fieldName := SnakeCase(field.Name)
 
 		nameEncoding := fory.typeResolver.typeNameEncoder.ComputeEncodingWith(fieldName, fieldNameEncodings)
@@ -423,13 +438,24 @@ func buildFieldDefs(fory *Fory, value reflect.Value) ([]FieldDef, error) {
 		if isUserDefinedType(int16(internalId)) || internalId == ENUM || internalId == NAMED_ENUM {
 			nullableFlag = true
 		}
+		// Override nullable flag if explicitly set in fory tag
+		if foryTag.NullableSet {
+			nullableFlag = foryTag.Nullable
+		}
 
-		fieldInfo = FieldDef{
+		// Calculate ref tracking - use tag override if explicitly set
+		trackingRef := fory.config.TrackRef
+		if foryTag.RefSet {
+			trackingRef = foryTag.Ref
+		}
+
+		fieldInfo := FieldDef{
 			name:         fieldName,
 			nameEncoding: nameEncoding,
 			nullable:     nullableFlag,
-			trackingRef:  fory.config.TrackRef,
+			trackingRef:  trackingRef,
 			fieldType:    ft,
+			tagID:        foryTag.ID,
 		}
 		fieldDefs = append(fieldDefs, fieldInfo)
 	}
@@ -895,12 +921,20 @@ const (
 	FieldNameSizeThreshold  = 15
 )
 
-// Encoding `UTF8/ALL_TO_LOWER_SPECIAL/LOWER_UPPER_DIGIT_SPECIAL/TAG_ID` for fieldName
+// Field name encoding flags (2 bits in header)
+const (
+	FieldNameEncodingUTF8              = 0 // UTF-8 encoding
+	FieldNameEncodingAllToLowerSpecial = 1 // ALL_TO_LOWER_SPECIAL encoding
+	FieldNameEncodingLowerUpperDigit   = 2 // LOWER_UPPER_DIGIT_SPECIAL encoding
+	FieldNameEncodingTagID             = 3 // Use tag ID instead of field name
+)
+
+// Encoding `UTF8/ALL_TO_LOWER_SPECIAL/LOWER_UPPER_DIGIT_SPECIAL` for fieldName
+// Note: TAG_ID (0b11) is a special encoding that uses tag ID instead of field name
 var fieldNameEncodings = []meta.Encoding{
 	meta.UTF_8,
 	meta.ALL_TO_LOWER_SPECIAL,
 	meta.LOWER_UPPER_DIGIT_SPECIAL,
-	// todo: add support for TAG_ID encoding
 }
 
 func getFieldNameEncodingIndex(encoding meta.Encoding) int {
@@ -1125,29 +1159,50 @@ func writeFieldDef(typeResolver *TypeResolver, buffer *ByteBuffer, field FieldDe
 	if field.nullable {
 		header |= 0b10
 	}
-	// store index of encoding in the 2 highest bits
-	encodingFlag := byte(getFieldNameEncodingIndex(field.nameEncoding))
-	header |= encodingFlag << 6
-	metaString, err := typeResolver.typeNameEncoder.EncodeWithEncoding(field.name, field.nameEncoding)
-	if err != nil {
-		return err
-	}
-	nameLen := len(metaString.GetEncodedBytes())
-	if nameLen < FieldNameSizeThreshold {
-		header |= uint8((nameLen-1)&0x0F) << 2 // 1-based encoding
+
+	if field.tagID >= 0 {
+		// Use TAG_ID encoding (encoding flag = 3)
+		header |= FieldNameEncodingTagID << 6
+		// For tag ID, we encode the tag ID value in the size bits (4 bits)
+		// If tagID < 15, encode directly in header; otherwise use varint
+		if field.tagID < FieldNameSizeThreshold {
+			header |= uint8(field.tagID&0x0F) << 2
+		} else {
+			header |= 0x0F << 2 // Max value, actual tag ID will follow
+		}
+		buffer.PutUint8(offset, header)
+
+		// Write extra varint for large tag IDs
+		if field.tagID >= FieldNameSizeThreshold {
+			buffer.WriteVaruint32(uint32(field.tagID - FieldNameSizeThreshold))
+		}
+
+		// Write field type
+		field.fieldType.write(buffer)
 	} else {
-		header |= 0x0F << 2 // Max value, actual length will follow
-		buffer.WriteVaruint32(uint32(nameLen - FieldNameSizeThreshold))
-	}
-	buffer.PutUint8(offset, header)
+		// Use field name encoding
+		encodingFlag := byte(getFieldNameEncodingIndex(field.nameEncoding))
+		header |= encodingFlag << 6
+		metaString, err := typeResolver.typeNameEncoder.EncodeWithEncoding(field.name, field.nameEncoding)
+		if err != nil {
+			return err
+		}
+		nameLen := len(metaString.GetEncodedBytes())
+		if nameLen < FieldNameSizeThreshold {
+			header |= uint8((nameLen-1)&0x0F) << 2 // 1-based encoding
+		} else {
+			header |= 0x0F << 2 // Max value, actual length will follow
+			buffer.WriteVaruint32(uint32(nameLen - FieldNameSizeThreshold))
+		}
+		buffer.PutUint8(offset, header)
 
-	// WriteData field type
-	field.fieldType.write(buffer)
+		// Write field type
+		field.fieldType.write(buffer)
 
-	// todo: support tag id
-	// write field name
-	if _, err := buffer.Write(metaString.GetEncodedBytes()); err != nil {
-		return err
+		// Write field name
+		if _, err := buffer.Write(metaString.GetEncodedBytes()); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -1361,24 +1416,51 @@ func readFieldDef(typeResolver *TypeResolver, buffer *ByteBuffer) (FieldDef, err
 	}
 
 	// Resolve the header
-	nameEncodingFlag := (headerByte >> 6) & 0b11
-	nameEncoding := fieldNameEncodings[nameEncodingFlag]
-	nameLen := int((headerByte >> 2) & 0x0F)
+	nameEncodingFlag := int((headerByte >> 6) & 0b11)
+	sizeBits := int((headerByte >> 2) & 0x0F)
 	refTracking := (headerByte & 0b1) != 0
 	isNullable := (headerByte & 0b10) != 0
+
+	// Check if using TAG_ID encoding
+	if nameEncodingFlag == FieldNameEncodingTagID {
+		// Read tag ID
+		tagID := sizeBits
+		if sizeBits == 0x0F {
+			tagID = FieldNameSizeThreshold + int(buffer.ReadVaruint32(&bufErr))
+		}
+
+		// Read field type
+		ft, err := readFieldType(buffer, &bufErr)
+		if err != nil {
+			return FieldDef{}, err
+		}
+
+		return FieldDef{
+			name:         "", // No field name when using tag ID
+			nameEncoding: meta.UTF_8,
+			fieldType:    ft,
+			nullable:     isNullable,
+			trackingRef:  refTracking,
+			tagID:        tagID,
+		}, nil
+	}
+
+	// Use field name encoding
+	nameEncoding := fieldNameEncodings[nameEncodingFlag]
+	nameLen := sizeBits
 	if nameLen == 0x0F {
 		nameLen = FieldNameSizeThreshold + int(buffer.ReadVaruint32(&bufErr))
 	} else {
 		nameLen++ // Adjust for 1-based encoding
 	}
 
-	// reading field type
+	// Read field type
 	ft, err := readFieldType(buffer, &bufErr)
 	if err != nil {
 		return FieldDef{}, err
 	}
 
-	// Reading field name based on encoding
+	// Read field name based on encoding
 	nameBytes := buffer.ReadBinary(nameLen, &bufErr)
 	fieldName, err := typeResolver.typeNameDecoder.Decode(nameBytes, nameEncoding)
 	if err != nil {
@@ -1391,5 +1473,6 @@ func readFieldDef(typeResolver *TypeResolver, buffer *ByteBuffer) (FieldDef, err
 		fieldType:    ft,
 		nullable:     isNullable,
 		trackingRef:  refTracking,
+		tagID:        TagIDUseFieldName, // -1 indicates using field name
 	}, nil
 }

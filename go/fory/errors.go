@@ -44,6 +44,8 @@ const (
 	ErrKindInvalidRefId
 	// ErrKindHashMismatch indicates struct hash mismatch
 	ErrKindHashMismatch
+	// ErrKindInvalidTag indicates invalid fory struct tag configuration
+	ErrKindInvalidTag
 )
 
 // Error is a lightweight error type optimized for hot path performance.
@@ -197,6 +199,22 @@ func InvalidRefIdError(refId int32) Error {
 	return Error{
 		kind:    ErrKindInvalidRefId,
 		message: fmt.Sprintf("invalid reference id: %d", refId),
+	}
+}
+
+// InvalidTagError creates an invalid fory struct tag error
+func InvalidTagError(msg string) Error {
+	return Error{
+		kind:    ErrKindInvalidTag,
+		message: msg,
+	}
+}
+
+// InvalidTagErrorf creates a formatted invalid fory struct tag error
+func InvalidTagErrorf(format string, args ...interface{}) Error {
+	return Error{
+		kind:    ErrKindInvalidTag,
+		message: fmt.Sprintf(format, args...),
 	}
 }
 

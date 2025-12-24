@@ -53,6 +53,10 @@ type FieldInfo struct {
 	RefMode     RefMode // ref mode for serializer.Write/Read
 	WriteType   bool    // whether to write type info (true for struct fields in compatible mode)
 	HasGenerics bool    // whether element types are known from TypeDef (for container fields)
+
+	// Tag-based configuration (from fory struct tags)
+	TagID      int  // -1 = use field name, >=0 = use tag ID
+	HasForyTag bool // Whether field has explicit fory tag
 }
 
 // fieldHasNonPrimitiveSerializer returns true if the field has a serializer with a non-primitive type ID.
@@ -1003,6 +1007,12 @@ func (s *structSerializer) initFieldsFromTypeResolver(typeResolver *TypeResolver
 			continue // skip unexported fields
 		}
 
+		// Parse fory struct tag and check for ignore
+		foryTag := ParseForyTag(field)
+		if foryTag.Ignore {
+			continue // skip ignored fields
+		}
+
 		fieldType := field.Type
 
 		var fieldSerializer Serializer
@@ -1035,9 +1045,20 @@ func (s *structSerializer) initFieldsFromTypeResolver(typeResolver *TypeResolver
 		if isUserDefinedType(int16(internalId)) || internalId == ENUM || internalId == NAMED_ENUM {
 			nullableFlag = true
 		}
-		// Pre-compute RefMode based on trackRef and nullable flag
+		// Override nullable flag if explicitly set in fory tag
+		if foryTag.NullableSet {
+			nullableFlag = foryTag.Nullable
+		}
+
+		// Calculate ref tracking - use tag override if explicitly set
+		trackRef := typeResolver.TrackRef()
+		if foryTag.RefSet {
+			trackRef = foryTag.Ref
+		}
+
+		// Pre-compute RefMode based on (possibly overridden) trackRef and nullable
 		refMode := RefModeNone
-		if typeResolver.TrackRef() && nullableFlag {
+		if trackRef && nullableFlag {
 			refMode = RefModeTracking
 		} else if nullableFlag {
 			refMode = RefModeNullOnly
@@ -1069,6 +1090,8 @@ func (s *structSerializer) initFieldsFromTypeResolver(typeResolver *TypeResolver
 			RefMode:      refMode,
 			WriteType:    writeType,
 			HasGenerics:  isCollectionType(fieldTypeId), // Container fields have declared element types
+			TagID:        foryTag.ID,
+			HasForyTag:   foryTag.HasTag,
 		}
 		fields = append(fields, fieldInfo)
 		fieldNames = append(fieldNames, fieldInfo.Name)
@@ -1195,16 +1218,35 @@ func (s *structSerializer) initFieldsFromDefsWithResolver(typeResolver *TypeReso
 		return nil
 	}
 
-	// Build map from field names to struct field indices
+	// Build maps from field names and tag IDs to struct field indices
 	fieldNameToIndex := make(map[string]int)
 	fieldNameToOffset := make(map[string]uintptr)
 	fieldNameToType := make(map[string]reflect.Type)
+	fieldTagIDToIndex := make(map[int]int)         // tag ID -> struct field index
+	fieldTagIDToOffset := make(map[int]uintptr)    // tag ID -> field offset
+	fieldTagIDToType := make(map[int]reflect.Type) // tag ID -> field type
+	fieldTagIDToName := make(map[int]string)       // tag ID -> snake_case field name
 	for i := 0; i < type_.NumField(); i++ {
 		field := type_.Field(i)
+
+		// Parse fory tag and skip ignored fields
+		foryTag := ParseForyTag(field)
+		if foryTag.Ignore {
+			continue
+		}
+
 		name := SnakeCase(field.Name)
 		fieldNameToIndex[name] = i
 		fieldNameToOffset[name] = field.Offset
 		fieldNameToType[name] = field.Type
+
+		// Also index by tag ID if present
+		if foryTag.ID >= 0 {
+			fieldTagIDToIndex[foryTag.ID] = i
+			fieldTagIDToOffset[foryTag.ID] = field.Offset
+			fieldTagIDToType[foryTag.ID] = field.Type
+			fieldTagIDToName[foryTag.ID] = name
+		}
 	}
 
 	var fields []*FieldInfo
@@ -1237,12 +1279,43 @@ func (s *structSerializer) initFieldsFromDefsWithResolver(typeResolver *TypeReso
 		isStructLikeField := isStructFieldType(def.fieldType)
 
 		// Try to find corresponding local field
+		// First try to match by tag ID (if remote def uses tag ID)
+		// Then fall back to matching by field name
 		fieldIndex := -1
 		var offset uintptr
 		var fieldType reflect.Type
+		var localFieldName string
+		var localType reflect.Type
+		var exists bool
 
-		if idx, exists := fieldNameToIndex[def.name]; exists {
-			localType := fieldNameToType[def.name]
+		if def.tagID >= 0 {
+			// Try to match by tag ID
+			if idx, ok := fieldTagIDToIndex[def.tagID]; ok {
+				exists = true
+				fieldIndex = idx // Will be overwritten if types are compatible
+				localType = fieldTagIDToType[def.tagID]
+				offset = fieldTagIDToOffset[def.tagID]
+				localFieldName = fieldTagIDToName[def.tagID]
+				_ = fieldIndex // Use to avoid compiler warning, will be set properly below
+			}
+		}
+
+		// Fall back to name-based matching if tag ID match failed
+		if !exists && def.name != "" {
+			if idx, ok := fieldNameToIndex[def.name]; ok {
+				exists = true
+				localType = fieldNameToType[def.name]
+				offset = fieldNameToOffset[def.name]
+				localFieldName = def.name
+				_ = idx // Will be set properly below
+			}
+		}
+
+		if exists {
+			idx := fieldNameToIndex[localFieldName]
+			if def.tagID >= 0 {
+				idx = fieldTagIDToIndex[def.tagID]
+			}
 			// Check if types are compatible
 			// For primitive types: skip if types don't match
 			// For struct-like types: allow read even if TypeDef lookup failed,
@@ -1306,7 +1379,7 @@ func (s *structSerializer) initFieldsFromDefsWithResolver(typeResolver *TypeReso
 
 			if shouldRead {
 				fieldIndex = idx
-				offset = fieldNameToOffset[def.name]
+				// offset was already set above when matching by tag ID or field name
 				// For struct-like fields with failed type lookup, get the serializer for the local type
 				if typeLookupFailed && isStructLikeField && fieldSerializer == nil {
 					fieldSerializer, _ = typeResolver.getSerializerByType(localType, true)
@@ -1398,8 +1471,14 @@ func (s *structSerializer) initFieldsFromDefsWithResolver(typeResolver *TypeReso
 			}
 		}
 
+		// Determine field name: use local field name if matched, otherwise use def.name
+		fieldName := def.name
+		if localFieldName != "" {
+			fieldName = localFieldName
+		}
+
 		fieldInfo := &FieldInfo{
-			Name:         def.name,
+			Name:         fieldName,
 			Offset:       offset,
 			Type:         fieldType,
 			StaticId:     staticId,
@@ -1411,6 +1490,8 @@ func (s *structSerializer) initFieldsFromDefsWithResolver(typeResolver *TypeReso
 			RefMode:      refMode,
 			WriteType:    writeType,
 			HasGenerics:  isCollectionType(fieldTypeId), // Container fields have declared element types
+			TagID:        def.tagID,
+			HasForyTag:   def.tagID >= 0,
 		}
 		fields = append(fields, fieldInfo)
 	}

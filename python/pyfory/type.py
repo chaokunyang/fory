@@ -439,7 +439,7 @@ class TypeVisitor(ABC):
 
 def infer_field_types(type_, field_nullable=False):
     type_hints = typing.get_type_hints(type_)
-    from pyfory._struct import StructTypeVisitor
+    from pyfory.struct import StructTypeVisitor
 
     visitor = StructTypeVisitor(type_)
     result = {}

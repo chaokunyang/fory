@@ -78,7 +78,7 @@ class TypeDef:
 
                 return NonExistEnumSerializer(resolver.fory)
 
-        from pyfory.serializer import DataClassSerializer
+        from pyfory.struct import DataClassSerializer
 
         fory = resolver.fory
         nullable_fields = {f.name: f.field_type.is_nullable for f in self.fields}
@@ -276,7 +276,7 @@ class DynamicFieldType(FieldType):
 
 def build_field_infos(type_resolver, cls):
     """Build field information for the class."""
-    from pyfory._struct import _sort_fields, StructTypeIdVisitor, get_field_names
+    from pyfory.struct import _sort_fields, StructTypeIdVisitor, get_field_names
     from pyfory.type import unwrap_optional
 
     field_names = get_field_names(cls)

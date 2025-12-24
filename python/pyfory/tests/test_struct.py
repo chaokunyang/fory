@@ -26,7 +26,7 @@ import typing
 import pyfory
 from pyfory import Fory
 from pyfory.error import TypeUnregisteredError
-from pyfory.serializer import DataClassSerializer
+from pyfory.struct import DataClassSerializer
 
 
 def ser_de(fory, obj):

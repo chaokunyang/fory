@@ -507,7 +507,7 @@ def test_struct_hash(data_file_path):
     fory = pyfory.Fory(xlang=True, ref=True)
     fory.register_type(ComplexObject1, typename="ComplexObject1")
     serializer = fory.type_resolver.get_serializer(ComplexObject1)._replace()
-    from pyfory._struct import compute_struct_meta
+    from pyfory.struct import compute_struct_meta
 
     v = compute_struct_meta(
         fory.type_resolver,

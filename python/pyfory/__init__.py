@@ -56,13 +56,13 @@ from pyfory.serializer import (  # noqa: F401 # pylint: disable=unused-import
     MapSerializer,
     EnumSerializer,
     SliceSerializer,
-    DataClassSerializer,
     FunctionSerializer,
     TypeSerializer,
     MethodSerializer,
     ReduceSerializer,
     StatefulSerializer,
 )
+from pyfory.struct import DataClassSerializer
 from pyfory.type import (  # noqa: F401 # pylint: disable=unused-import
     record_class_factory,
     get_qualified_classname,

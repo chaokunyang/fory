@@ -56,8 +56,6 @@ from pyfory.serializer import (
     NonExistEnum,
     EnumSerializer,
     SliceSerializer,
-    DataClassSerializer,
-    DataClassStubSerializer,
     StatefulSerializer,
     ReduceSerializer,
     FunctionSerializer,
@@ -522,6 +520,8 @@ class TypeResolver:
             elif self._internal_py_serializer_map.get(type(serializer)) is not None:
                 type_id = self._internal_py_serializer_map.get(type(serializer))[1]
             if not self.require_registration:
+                from pyfory.struct import DataClassSerializer
+
                 if isinstance(serializer, DataClassSerializer):
                     type_id = TypeId.NAMED_STRUCT
         if type_id is None:
@@ -537,6 +537,8 @@ class TypeResolver:
     def _set_typeinfo(self, typeinfo):
         type_id = typeinfo.type_id & 0xFF
         if is_struct_type(type_id):
+            from pyfory.struct import DataClassSerializer
+
             if self.meta_share:
                 type_def = encode_typedef(self, typeinfo.cls)
                 if type_def is not None:
@@ -581,6 +583,8 @@ class TypeResolver:
                 serializer = FunctionSerializer(self.fory, cls)
             elif dataclasses.is_dataclass(cls):
                 # lazy create serializer to handle nested struct fields.
+                from pyfory.struct import DataClassStubSerializer
+
                 serializer = DataClassStubSerializer(self.fory, cls, xlang=not self.fory.is_py)
             elif issubclass(cls, enum.Enum):
                 serializer = EnumSerializer(self.fory, cls)

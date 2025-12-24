@@ -131,6 +131,15 @@ cc_test(
     ],
 )
 
+cc_test(
+    name = "field_serializer_test",
+    srcs = ["field_serializer_test.cc"],
+    deps = [
+        ":fory_serialization",
+        "@googletest//:gtest",
+    ],
+)
+
 cc_binary(
     name = "xlang_test_main",
     srcs = ["xlang_test_main.cc"],

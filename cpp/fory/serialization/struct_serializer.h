@@ -568,11 +568,26 @@ template <typename T> struct CompileTimeFieldHelpers {
     }
   }
 
+  template <size_t... Indices>
+  static constexpr std::array<bool, FieldCount>
+  make_requires_ref_metadata_flags(std::index_sequence<Indices...>) {
+    if constexpr (FieldCount == 0) {
+      return {};
+    } else {
+      return {field_requires_ref_metadata<Indices>()...};
+    }
+  }
+
   static inline constexpr std::array<uint32_t, FieldCount> type_ids =
       make_type_ids(std::make_index_sequence<FieldCount>{});
 
   static inline constexpr std::array<bool, FieldCount> nullable_flags =
       make_nullable_flags(std::make_index_sequence<FieldCount>{});
+
+  /// Flags for fields that require ref metadata encoding (smart pointers,
+  /// optional)
+  static inline constexpr std::array<bool, FieldCount> requires_ref_metadata_flags =
+      make_requires_ref_metadata_flags(std::make_index_sequence<FieldCount>{});
 
   static inline constexpr std::array<size_t, FieldCount> snake_case_lengths =
       []() constexpr {
@@ -770,12 +785,15 @@ template <typename T> struct CompileTimeFieldHelpers {
       }();
 
   /// Check if ALL fields are primitives and non-nullable (can use fast path)
+  /// Also excludes fields that require ref metadata (smart pointers, optional)
+  /// since their type_id may be the element type but they need special handling.
   static constexpr bool compute_all_primitives_non_nullable() {
     if constexpr (FieldCount == 0) {
       return true;
     } else {
       for (size_t i = 0; i < FieldCount; ++i) {
-        if (!is_primitive_type_id(type_ids[i]) || nullable_flags[i]) {
+        if (!is_primitive_type_id(type_ids[i]) || nullable_flags[i] ||
+            requires_ref_metadata_flags[i]) {
           return false;
         }
       }
@@ -836,6 +854,7 @@ template <typename T> struct CompileTimeFieldHelpers {
   /// Count leading non-nullable primitive fields in sorted order.
   /// Since fields are sorted with non-nullable primitives first (group 0),
   /// we can fast-write these fields and slow-write the rest.
+  /// Excludes fields that require ref metadata (smart pointers, optional).
   static constexpr size_t compute_primitive_field_count() {
     if constexpr (FieldCount == 0) {
       return 0;
@@ -844,7 +863,8 @@ template <typename T> struct CompileTimeFieldHelpers {
       for (size_t i = 0; i < FieldCount; ++i) {
         size_t original_idx = sorted_indices[i];
         if (is_primitive_type_id(type_ids[original_idx]) &&
-            !nullable_flags[original_idx]) {
+            !nullable_flags[original_idx] &&
+            !requires_ref_metadata_flags[original_idx]) {
           ++count;
         } else {
           break; // Non-nullable primitives are always first in sorted order

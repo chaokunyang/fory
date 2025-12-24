@@ -44,6 +44,7 @@
 
 #include "absl/container/flat_hash_map.h"
 
+#include "fory/meta/field.h"
 #include "fory/meta/field_info.h"
 #include "fory/meta/type_traits.h"
 #include "fory/serialization/config.h"
@@ -484,8 +485,10 @@ template <typename T, size_t Index> struct FieldInfoBuilder {
         typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
     using ActualFieldType =
         std::remove_cv_t<std::remove_reference_t<RawFieldType>>;
+    // Unwrap fory::field<> to get the underlying type for FieldTypeBuilder
+    using UnwrappedFieldType = fory::unwrap_field_t<ActualFieldType>;
 
-    FieldType field_type = FieldTypeBuilder<ActualFieldType>::build(false);
+    FieldType field_type = FieldTypeBuilder<UnwrappedFieldType>::build(false);
     return FieldInfo(std::move(field_name), std::move(field_type));
   }
 };

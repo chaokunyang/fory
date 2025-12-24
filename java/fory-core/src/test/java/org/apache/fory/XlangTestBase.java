@@ -1365,30 +1365,12 @@ public abstract class XlangTestBase extends ForyTestBase {
 
     buffer = MemoryBuffer.newHeapBuffer(64);
     fory1.serialize(buffer, obj1);
-
-    // Debug: print Java output bytes
     byte[] javaBytes = buffer.getBytes(0, buffer.writerIndex());
-    System.out.println("Java OneStringFieldStruct output " + javaBytes.length + " bytes:");
-    for (int i = 0; i < javaBytes.length; i++) {
-      if (i > 0 && i % 16 == 0) System.out.println();
-      System.out.printf("%02x ", javaBytes[i] & 0xFF);
-    }
-    System.out.println();
-
     String caseName2 = "test_schema_evolution_compatible_reverse";
     ExecutionContext ctx2 = prepareExecution(caseName2, javaBytes);
     runPeer(ctx2);
 
     MemoryBuffer buffer3 = readBuffer(ctx2.dataFile());
-    // Debug: print Go output bytes
-    byte[] goBytes = buffer3.getBytes(0, buffer3.size());
-    System.out.println("Go output " + goBytes.length + " bytes:");
-    for (int i = 0; i < goBytes.length; i++) {
-      if (i > 0 && i % 16 == 0) System.out.println();
-      System.out.printf("%02x ", goBytes[i] & 0xFF);
-    }
-    System.out.println();
-
     TwoStringFieldStruct result2 = (TwoStringFieldStruct) fory2.deserialize(buffer3);
     Assert.assertEquals(result2.f1, "only_one");
     // Go uses empty string for missing fields (Go string can't be null)
@@ -1548,13 +1530,6 @@ public abstract class XlangTestBase extends ForyTestBase {
 
     // Debug: print Java output bytes
     byte[] javaBytes = buffer.getBytes(0, buffer.writerIndex());
-    System.out.println("Java OneEnumFieldStruct output " + javaBytes.length + " bytes:");
-    for (int i = 0; i < javaBytes.length; i++) {
-      if (i > 0 && i % 16 == 0) System.out.println();
-      System.out.printf("%02x ", javaBytes[i] & 0xFF);
-    }
-    System.out.println();
-
     String caseName2 = "test_enum_schema_evolution_compatible_reverse";
     ExecutionContext ctx2 = prepareExecution(caseName2, javaBytes);
     runPeer(ctx2);
@@ -1562,13 +1537,6 @@ public abstract class XlangTestBase extends ForyTestBase {
     MemoryBuffer buffer3 = readBuffer(ctx2.dataFile());
     // Debug: print Go output bytes
     byte[] goBytes = buffer3.getBytes(0, buffer3.size());
-    System.out.println("Go output " + goBytes.length + " bytes:");
-    for (int i = 0; i < goBytes.length; i++) {
-      if (i > 0 && i % 16 == 0) System.out.println();
-      System.out.printf("%02x ", goBytes[i] & 0xFF);
-    }
-    System.out.println();
-
     TwoEnumFieldStruct result2 = (TwoEnumFieldStruct) fory2.deserialize(buffer3);
     Assert.assertEquals(result2.f1, TestEnum.VALUE_C);
     // Go uses zero value for missing enum fields (first enum value)

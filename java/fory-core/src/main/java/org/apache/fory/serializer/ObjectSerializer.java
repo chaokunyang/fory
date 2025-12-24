@@ -45,7 +45,6 @@ import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.type.Generics;
 import org.apache.fory.type.Types;
 import org.apache.fory.util.MurmurHash3;
-import org.apache.fory.util.StringUtils;
 import org.apache.fory.util.record.RecordInfo;
 import org.apache.fory.util.record.RecordUtils;
 
@@ -389,8 +388,8 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
    * <p><b>Field Components:</b>
    *
    * <ul>
-   *   <li><b>field_id_or_name</b>: Tag ID as string if configured via {@link ForyField#id()}
-   *       (e.g., "0", "1"), otherwise snake_case field name
+   *   <li><b>field_id_or_name</b>: Tag ID as string if configured via {@link ForyField#id()} (e.g.,
+   *       "0", "1"), otherwise snake_case field name
    *   <li><b>type_id</b>: Fory TypeId as decimal string (e.g., "4" for INT32)
    *   <li><b>ref</b>: "1" if reference tracking enabled, "0" otherwise
    *   <li><b>nullable</b>: "1" if null flag is written, "0" otherwise
@@ -438,7 +437,10 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
         nullable = descriptor.isNullable() ? '1' : '0';
       }
 
-      fieldInfos.add(new String[] {fieldIdentifier, String.valueOf(typeId), String.valueOf(ref), String.valueOf(nullable)});
+      fieldInfos.add(
+          new String[] {
+            fieldIdentifier, String.valueOf(typeId), String.valueOf(ref), String.valueOf(nullable)
+          });
     }
 
     // Sort by field identifier (lexicographically as strings)
@@ -447,10 +449,15 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
     // Build fingerprint string
     StringBuilder builder = new StringBuilder();
     for (String[] info : fieldInfos) {
-      builder.append(info[0]).append(',')
-          .append(info[1]).append(',')
-          .append(info[2]).append(',')
-          .append(info[3]).append(';');
+      builder
+          .append(info[0])
+          .append(',')
+          .append(info[1])
+          .append(',')
+          .append(info[2])
+          .append(',')
+          .append(info[3])
+          .append(';');
     }
     return builder.toString();
   }

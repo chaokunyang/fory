@@ -930,16 +930,19 @@ std::string ToSnakeCase(const std::string &name) {
 
 std::string TypeMeta::compute_struct_fingerprint(
     const std::vector<FieldInfo> &field_infos) {
-  // Computes the fingerprint string for a struct type used in schema versioning.
+  // Computes the fingerprint string for a struct type used in schema
+  // versioning.
   //
   // Fingerprint Format:
   //   Each field contributes: <field_name>,<type_id>,<ref>,<nullable>;
   //   Fields are sorted lexicographically by field name (not by type category).
   //
   // Field Components:
-  //   - field_name: snake_case field name (C++ doesn't support field tag IDs yet)
+  //   - field_name: snake_case field name (C++ doesn't support field tag IDs
+  //   yet)
   //   - type_id: Fory TypeId as decimal string (e.g., "4" for INT32)
-  //   - ref: "1" if reference tracking enabled, "0" otherwise (always "0" in C++)
+  //   - ref: "1" if reference tracking enabled, "0" otherwise (always "0" in
+  //   C++)
   //   - nullable: "1" if null flag is written, "0" otherwise
   //
   // Example fingerprint: "age,4,0,0;name,12,0,1;"

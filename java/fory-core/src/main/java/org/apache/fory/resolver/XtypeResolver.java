@@ -948,8 +948,7 @@ public class XtypeResolver extends TypeResolver {
                 return xtypeId - xtypeId2;
               }
             })
-        .setOtherDescriptorComparator(
-            Comparator.comparing(DescriptorGrouper::getFieldSortKey))
+        .setOtherDescriptorComparator(Comparator.comparing(DescriptorGrouper::getFieldSortKey))
         .sort();
   }
 

@@ -57,6 +57,8 @@ type FieldInfo struct {
 	// Tag-based configuration (from fory struct tags)
 	TagID      int  // -1 = use field name, >=0 = use tag ID
 	HasForyTag bool // Whether field has explicit fory tag
+	TagRefSet  bool // Whether ref was explicitly set via fory tag
+	TagRef     bool // The ref value from fory tag (only valid if TagRefSet is true)
 }
 
 // fieldHasNonPrimitiveSerializer returns true if the field has a serializer with a non-primitive type ID.
@@ -1093,6 +1095,8 @@ func (s *structSerializer) initFieldsFromTypeResolver(typeResolver *TypeResolver
 			HasGenerics:  isCollectionType(fieldTypeId), // Container fields have declared element types
 			TagID:        foryTag.ID,
 			HasForyTag:   foryTag.HasTag,
+			TagRefSet:    foryTag.RefSet,
+			TagRef:       foryTag.Ref,
 		}
 		fields = append(fields, fieldInfo)
 		fieldNames = append(fieldNames, fieldInfo.Name)
@@ -1737,8 +1741,10 @@ func (s *structSerializer) computeHash() int32 {
 			FieldID:   field.TagID,
 			FieldName: SnakeCase(field.Name),
 			TypeID:    typeId,
-			Ref:       field.RefMode == RefModeTracking,
-			Nullable:  nullable,
+			// Ref is based on explicit tag annotation only, NOT runtime ref_tracking config
+			// This allows fingerprint to be computed at compile time for C++/Rust
+			Ref:      field.TagRefSet && field.TagRef,
+			Nullable: nullable,
 		})
 	}
 

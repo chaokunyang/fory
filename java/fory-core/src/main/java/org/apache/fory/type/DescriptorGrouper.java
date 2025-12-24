@@ -72,6 +72,11 @@ public class DescriptorGrouper {
           if (c == 0) {
             // Field name duplicate in super/child classes.
             c = d1.getDeclaringClass().compareTo(d2.getDeclaringClass());
+            if (c == 0) {
+              // Final tie-breaker: use actual field name to distinguish fields with same tag ID.
+              // This ensures TreeSet never treats different fields as duplicates.
+              c = d1.getName().compareTo(d2.getName());
+            }
           }
         }
         return c;
@@ -152,6 +157,11 @@ public class DescriptorGrouper {
           if (c == 0) {
             // Field name duplicate in super/child classes.
             c = d1.getDeclaringClass().compareTo(d2.getDeclaringClass());
+            if (c == 0) {
+              // Final tie-breaker: use actual field name to distinguish fields with same tag ID.
+              // This ensures TreeSet never treats different fields as duplicates.
+              c = d1.getName().compareTo(d2.getName());
+            }
           }
         }
         return c;

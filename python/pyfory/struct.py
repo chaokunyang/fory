@@ -860,12 +860,14 @@ def compute_struct_fingerprint(type_resolver, field_names, serializers, nullable
     Field Components:
         - field_name: snake_case field name (Python doesn't support field tag IDs yet)
         - type_id: Fory TypeId as decimal string (e.g., "4" for INT32)
-        - ref: "1" if reference tracking enabled, "0" otherwise (always "0" in Python)
+        - ref: "1" if field has explicit ref annotation, "0" otherwise
+              (always "0" in Python since field annotations are not supported)
         - nullable: "1" if null flag is written, "0" otherwise
 
     Example fingerprint: "age,4,0,0;name,12,0,1;"
 
     This format is consistent across Go, Java, Rust, C++, and Python implementations.
+    The ref flag is based on compile-time annotations only, NOT runtime ref_tracking config.
     """
     if nullable_map is None:
         nullable_map = {}
@@ -875,20 +877,23 @@ def compute_struct_fingerprint(type_resolver, field_names, serializers, nullable
     for i, field_name in enumerate(field_names):
         serializer = serializers[i]
         if serializer is None:
-            # Skip unknown/dynamic fields in fingerprint
-            continue
-        type_id = type_resolver.get_typeinfo(serializer.type_).type_id & 0xFF
-        is_nullable = nullable_map.get(field_name, False)
-
-        # Determine nullable flag based on type category (matching Java behavior)
-        if is_primitive_type(type_id) and not is_nullable:
-            nullable_flag = "0"
-        elif is_polymorphic_type(type_id) or type_id in {TypeId.ENUM, TypeId.NAMED_ENUM}:
-            # For polymorphic/enum types, use UNKNOWN type_id
+            # For dynamic/polymorphic fields (like Any/Object), use UNKNOWN type_id
+            # These fields are included in fingerprint with type_id=0, nullable=1
             type_id = TypeId.UNKNOWN
             nullable_flag = "1"
         else:
-            nullable_flag = "1"
+            type_id = type_resolver.get_typeinfo(serializer.type_).type_id & 0xFF
+            is_nullable = nullable_map.get(field_name, False)
+
+            # Determine nullable flag based on type category (matching Java behavior)
+            if is_primitive_type(type_id) and not is_nullable:
+                nullable_flag = "0"
+            elif is_polymorphic_type(type_id) or type_id in {TypeId.ENUM, TypeId.NAMED_ENUM}:
+                # For polymorphic/enum types, use UNKNOWN type_id
+                type_id = TypeId.UNKNOWN
+                nullable_flag = "1"
+            else:
+                nullable_flag = "1"
 
         field_infos.append((field_name, type_id, nullable_flag))
 
@@ -900,7 +905,8 @@ def compute_struct_fingerprint(type_resolver, field_names, serializers, nullable
     # Format: <field_name>,<type_id>,<ref>,<nullable>;
     hash_parts = []
     for field_name, type_id, nullable_flag in field_infos:
-        # ref flag: currently always 0 in Python (no ref tracking support yet)
+        # ref flag: always "0" in Python since field annotations are not supported
+        # In Java/Go, ref is "1" only if explicitly annotated with @ForyField(ref=true) or fory:"trackRef"
         ref_flag = "0"
         hash_parts.append(f"{field_name},{type_id},{ref_flag},{nullable_flag};")
 

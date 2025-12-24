@@ -426,8 +426,10 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
         fieldIdentifier = descriptor.getSnakeCaseName();
       }
 
-      // Get ref flag from descriptor (or ForyField annotation)
-      char ref = descriptor.isTrackingRef() ? '1' : '0';
+      // Get ref flag from @ForyField annotation only (compile-time info)
+      // If annotation is absent or ref not explicitly set to true, ref is 0
+      // This allows fingerprint to be computed at compile time for C++/Rust
+      char ref = (foryField != null && foryField.ref()) ? '1' : '0';
 
       // Get nullable flag: primitives are non-nullable, others depend on descriptor
       char nullable;

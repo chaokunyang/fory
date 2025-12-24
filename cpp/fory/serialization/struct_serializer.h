@@ -586,8 +586,9 @@ template <typename T> struct CompileTimeFieldHelpers {
 
   /// Flags for fields that require ref metadata encoding (smart pointers,
   /// optional)
-  static inline constexpr std::array<bool, FieldCount> requires_ref_metadata_flags =
-      make_requires_ref_metadata_flags(std::make_index_sequence<FieldCount>{});
+  static inline constexpr std::array<bool, FieldCount>
+      requires_ref_metadata_flags = make_requires_ref_metadata_flags(
+          std::make_index_sequence<FieldCount>{});
 
   static inline constexpr std::array<size_t, FieldCount> snake_case_lengths =
       []() constexpr {
@@ -786,7 +787,8 @@ template <typename T> struct CompileTimeFieldHelpers {
 
   /// Check if ALL fields are primitives and non-nullable (can use fast path)
   /// Also excludes fields that require ref metadata (smart pointers, optional)
-  /// since their type_id may be the element type but they need special handling.
+  /// since their type_id may be the element type but they need special
+  /// handling.
   static constexpr bool compute_all_primitives_non_nullable() {
     if constexpr (FieldCount == 0) {
       return true;

@@ -20,6 +20,7 @@
 #pragma once
 
 #include "fory/meta/enum_info.h"
+#include "fory/meta/field.h"
 #include "fory/meta/field_info.h"
 #include "fory/meta/preprocessor.h"
 #include "fory/meta/type_traits.h"
@@ -310,17 +311,97 @@ template <typename T> struct CompileTimeFieldHelpers {
       return 0;
     } else {
       using PtrT = std::tuple_element_t<Index, FieldPtrs>;
-      using FieldType = meta::RemoveMemberPointerCVRefT<PtrT>;
+      using RawFieldType = meta::RemoveMemberPointerCVRefT<PtrT>;
+      // Unwrap fory::field<> to get the actual type for serialization
+      using FieldType = unwrap_field_t<RawFieldType>;
       return static_cast<uint32_t>(Serializer<FieldType>::type_id);
     }
   }
 
+  /// Returns true if the field at Index is nullable.
+  /// This checks:
+  /// 1. If the field is a fory::field<>, use its is_nullable metadata
+  /// 2. Otherwise, use legacy behavior: requires_ref_metadata_v (optional,
+  ///    shared_ptr, unique_ptr are all nullable)
   template <size_t Index> static constexpr bool field_nullable() {
     if constexpr (FieldCount == 0) {
       return false;
     } else {
       using PtrT = std::tuple_element_t<Index, FieldPtrs>;
-      using FieldType = meta::RemoveMemberPointerCVRefT<PtrT>;
+      using RawFieldType = meta::RemoveMemberPointerCVRefT<PtrT>;
+
+      // If it's a fory::field<> wrapper, use its metadata
+      if constexpr (is_fory_field_v<RawFieldType>) {
+        return RawFieldType::is_nullable;
+      }
+      // For non-wrapped types, use legacy behavior:
+      // optional, shared_ptr, unique_ptr are all "nullable" in terms of
+      // wire format (they write ref/null flags)
+      else {
+        return requires_ref_metadata_v<RawFieldType>;
+      }
+    }
+  }
+
+  /// Returns the tag ID for the field at Index.
+  /// Returns -1 if no tag ID is defined.
+  template <size_t Index> static constexpr int16_t field_tag_id() {
+    if constexpr (FieldCount == 0) {
+      return -1;
+    } else {
+      using PtrT = std::tuple_element_t<Index, FieldPtrs>;
+      using RawFieldType = meta::RemoveMemberPointerCVRefT<PtrT>;
+
+      // If it's a fory::field<> wrapper, use its tag_id
+      if constexpr (is_fory_field_v<RawFieldType>) {
+        return RawFieldType::tag_id;
+      }
+      // No tag ID defined
+      else {
+        return -1;
+      }
+    }
+  }
+
+  /// Returns true if reference tracking is enabled for the field at Index.
+  /// Only valid for std::shared_ptr fields with fory::ref tag.
+  template <size_t Index> static constexpr bool field_track_ref() {
+    if constexpr (FieldCount == 0) {
+      return false;
+    } else {
+      using PtrT = std::tuple_element_t<Index, FieldPtrs>;
+      using RawFieldType = meta::RemoveMemberPointerCVRefT<PtrT>;
+
+      // If it's a fory::field<> wrapper, use its track_ref metadata
+      if constexpr (is_fory_field_v<RawFieldType>) {
+        return RawFieldType::track_ref;
+      }
+      // Default: no reference tracking
+      else {
+        return false;
+      }
+    }
+  }
+
+  /// Get the underlying field type (unwraps fory::field<> if present)
+  template <size_t Index> struct UnwrappedFieldTypeHelper {
+    using PtrT = std::tuple_element_t<Index, FieldPtrs>;
+    using RawFieldType = meta::RemoveMemberPointerCVRefT<PtrT>;
+    using type = unwrap_field_t<RawFieldType>;
+  };
+  template <size_t Index>
+  using UnwrappedFieldType = typename UnwrappedFieldTypeHelper<Index>::type;
+
+  /// Legacy compatibility: returns true if field requires ref metadata
+  /// in the wire format (i.e., is optional/nullable)
+  template <size_t Index> static constexpr bool field_requires_ref_metadata() {
+    if constexpr (FieldCount == 0) {
+      return false;
+    } else {
+      using PtrT = std::tuple_element_t<Index, FieldPtrs>;
+      using RawFieldType = meta::RemoveMemberPointerCVRefT<PtrT>;
+      using FieldType = unwrap_field_t<RawFieldType>;
+      // Check the unwrapped type
       return requires_ref_metadata_v<FieldType>;
     }
   }
@@ -334,7 +415,8 @@ template <typename T> struct CompileTimeFieldHelpers {
       return false;
     } else {
       using PtrT = std::tuple_element_t<Index, FieldPtrs>;
-      using FieldType = meta::RemoveMemberPointerCVRefT<PtrT>;
+      using RawFieldType = meta::RemoveMemberPointerCVRefT<PtrT>;
+      using FieldType = unwrap_field_t<RawFieldType>;
       return std::is_same_v<FieldType, bool> ||
              std::is_same_v<FieldType, int8_t> ||
              std::is_same_v<FieldType, uint8_t> ||
@@ -356,7 +438,8 @@ template <typename T> struct CompileTimeFieldHelpers {
       return false;
     } else {
       using PtrT = std::tuple_element_t<Index, FieldPtrs>;
-      using FieldType = meta::RemoveMemberPointerCVRefT<PtrT>;
+      using RawFieldType = meta::RemoveMemberPointerCVRefT<PtrT>;
+      using FieldType = unwrap_field_t<RawFieldType>;
       return std::is_same_v<FieldType, int32_t> ||
              std::is_same_v<FieldType, int> ||
              std::is_same_v<FieldType, int64_t> ||
@@ -370,7 +453,8 @@ template <typename T> struct CompileTimeFieldHelpers {
       return 0;
     } else {
       using PtrT = std::tuple_element_t<Index, FieldPtrs>;
-      using FieldType = meta::RemoveMemberPointerCVRefT<PtrT>;
+      using RawFieldType = meta::RemoveMemberPointerCVRefT<PtrT>;
+      using FieldType = unwrap_field_t<RawFieldType>;
       if constexpr (std::is_same_v<FieldType, bool> ||
                     std::is_same_v<FieldType, int8_t> ||
                     std::is_same_v<FieldType, uint8_t>) {
@@ -398,7 +482,8 @@ template <typename T> struct CompileTimeFieldHelpers {
       return 0;
     } else {
       using PtrT = std::tuple_element_t<Index, FieldPtrs>;
-      using FieldType = meta::RemoveMemberPointerCVRefT<PtrT>;
+      using RawFieldType = meta::RemoveMemberPointerCVRefT<PtrT>;
+      using FieldType = unwrap_field_t<RawFieldType>;
       if constexpr (std::is_same_v<FieldType, int32_t> ||
                     std::is_same_v<FieldType, int>) {
         return 5; // int32 varint max
@@ -998,9 +1083,18 @@ FORY_ALWAYS_INLINE void write_single_fixed_field(const T &obj, Buffer &buffer,
       compute_fixed_field_write_offset<T, SortedIdx>();
   const auto field_info = ForyFieldInfo(obj);
   const auto field_ptr = std::get<original_index>(decltype(field_info)::Ptrs);
-  using FieldType =
+  using RawFieldType =
       typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
-  put_fixed_primitive_at<FieldType>(obj.*field_ptr, buffer,
+  using FieldType = unwrap_field_t<RawFieldType>;
+  // Get the actual value (unwrap fory::field<> if needed)
+  const FieldType &field_value = [&]() -> const FieldType & {
+    if constexpr (is_fory_field_v<RawFieldType>) {
+      return (obj.*field_ptr).value;
+    } else {
+      return obj.*field_ptr;
+    }
+  }();
+  put_fixed_primitive_at<FieldType>(field_value, buffer,
                                     base_offset + field_offset);
 }
 
@@ -1030,9 +1124,18 @@ FORY_ALWAYS_INLINE void write_single_varint_field(const T &obj, Buffer &buffer,
   constexpr size_t original_index = Helpers::sorted_indices[SortedPos];
   const auto field_info = ForyFieldInfo(obj);
   const auto field_ptr = std::get<original_index>(decltype(field_info)::Ptrs);
-  using FieldType =
+  using RawFieldType =
       typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
-  offset += put_varint_at<FieldType>(obj.*field_ptr, buffer, offset);
+  using FieldType = unwrap_field_t<RawFieldType>;
+  // Get the actual value (unwrap fory::field<> if needed)
+  const FieldType &field_value = [&]() -> const FieldType & {
+    if constexpr (is_fory_field_v<RawFieldType>) {
+      return (obj.*field_ptr).value;
+    } else {
+      return obj.*field_ptr;
+    }
+  }();
+  offset += put_varint_at<FieldType>(field_value, buffer, offset);
 }
 
 /// Fast write consecutive varint primitive fields (int32, int64).
@@ -1057,9 +1160,18 @@ write_single_remaining_field(const T &obj, Buffer &buffer, uint32_t &offset) {
   constexpr size_t original_index = Helpers::sorted_indices[SortedPos];
   const auto field_info = ForyFieldInfo(obj);
   const auto field_ptr = std::get<original_index>(decltype(field_info)::Ptrs);
-  using FieldType =
+  using RawFieldType =
       typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
-  offset += put_primitive_at<FieldType>(obj.*field_ptr, buffer, offset);
+  using FieldType = unwrap_field_t<RawFieldType>;
+  // Get the actual value (unwrap fory::field<> if needed)
+  const FieldType &field_value = [&]() -> const FieldType & {
+    if constexpr (is_fory_field_v<RawFieldType>) {
+      return (obj.*field_ptr).value;
+    } else {
+      return obj.*field_ptr;
+    }
+  }();
+  offset += put_primitive_at<FieldType>(field_value, buffer, offset);
 }
 
 /// Write remaining primitive fields after fixed and varint phases.
@@ -1125,17 +1237,34 @@ void read_single_field_by_index(T &obj, ReadContext &ctx);
 template <typename T, size_t Index, typename FieldPtrs>
 void write_single_field(const T &obj, WriteContext &ctx,
                         const FieldPtrs &field_ptrs, bool has_generics) {
+  using Helpers = CompileTimeFieldHelpers<T>;
   const auto field_ptr = std::get<Index>(field_ptrs);
-  using FieldType =
+  using RawFieldType =
       typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
-  const auto &field_value = obj.*field_ptr;
+  // Unwrap fory::field<> to get the actual type for serialization
+  using FieldType = unwrap_field_t<RawFieldType>;
+
+  // Get the actual value (unwrap fory::field<> if needed)
+  const auto &raw_field_ref = obj.*field_ptr;
+  const FieldType &field_value = [&]() -> const FieldType & {
+    if constexpr (is_fory_field_v<RawFieldType>) {
+      return raw_field_ref.value;
+    } else {
+      return raw_field_ref;
+    }
+  }();
 
   constexpr TypeId field_type_id = Serializer<FieldType>::type_id;
   constexpr bool is_primitive_field = is_primitive_type_id(field_type_id);
-  constexpr bool field_needs_ref = requires_ref_metadata_v<FieldType>;
+
+  // Get field metadata from fory::field<> or FORY_FIELD_TAGS or defaults
+  constexpr bool is_nullable = Helpers::template field_nullable<Index>();
+  constexpr bool track_ref = Helpers::template field_track_ref<Index>();
+  // For backwards compatibility, also check requires_ref_metadata_v
+  constexpr bool field_requires_ref = requires_ref_metadata_v<FieldType>;
 
   // Per Rust implementation: primitives are written directly without ref/type
-  if constexpr (is_primitive_field && !field_needs_ref) {
+  if constexpr (is_primitive_field && !field_requires_ref) {
     Serializer<FieldType>::write_data(field_value, ctx);
     return;
   }
@@ -1153,8 +1282,9 @@ void write_single_field(const T &obj, WriteContext &ctx,
   }
 
   // For other types, determine write_ref and write_type per Rust logic
-  // write_ref: true for non-primitives (unless field_needs_ref overrides)
-  bool write_ref = field_needs_ref || !is_primitive_field;
+  // write_ref: true for non-primitives OR if field is nullable/trackable
+  // Note: is_nullable controls whether null flag is written for smart pointers
+  bool write_ref = is_nullable || field_requires_ref || !is_primitive_field;
 
   // write_type: determined by field_need_write_type_info logic
   // Enums: false (per Rust util.rs:58-59)
@@ -1309,22 +1439,28 @@ FORY_ALWAYS_INLINE FieldType read_primitive_field_direct(ReadContext &ctx,
 /// Helper to read a single field by index
 template <size_t Index, typename T>
 void read_single_field_by_index(T &obj, ReadContext &ctx) {
+  using Helpers = CompileTimeFieldHelpers<T>;
   const auto field_info = ForyFieldInfo(obj);
   const auto field_ptrs = decltype(field_info)::Ptrs;
   const auto field_ptr = std::get<Index>(field_ptrs);
-  using FieldType =
+  using RawFieldType =
       typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
+  // Unwrap fory::field<> to get the actual type for deserialization
+  using FieldType = unwrap_field_t<RawFieldType>;
 
   // In non-compatible mode, no type info for fields except for polymorphic
   // types (type_id == UNKNOWN), which always need type info. In compatible
   // mode, nested structs carry TypeMeta in the stream so that
   // `Serializer<T>::read` can dispatch to `read_compatible` with the correct
   // remote schema.
-  constexpr bool field_needs_ref = requires_ref_metadata_v<FieldType>;
+  constexpr bool field_requires_ref = requires_ref_metadata_v<FieldType>;
   constexpr bool is_struct_field = is_fory_serializable_v<FieldType>;
   constexpr bool is_polymorphic_field =
       Serializer<FieldType>::type_id == TypeId::UNKNOWN;
   bool read_type = is_polymorphic_field;
+
+  // Get field metadata from fory::field<> or FORY_FIELD_TAGS or defaults
+  constexpr bool is_nullable = Helpers::template field_nullable<Index>();
 
   // In compatible mode, nested struct fields always carry type metadata
   // (xtypeId + meta index). We must read this metadata so that
@@ -1342,16 +1478,18 @@ void read_single_field_by_index(T &obj, ReadContext &ctx) {
   constexpr bool is_primitive_field = is_primitive_type_id(field_type_id);
 
   // Read ref flag if:
-  // 1. Field requires ref metadata (nullable, optional, shared_ptr, etc.)
-  // 2. Field is non-primitive
-  bool read_ref = field_needs_ref || !is_primitive_field;
+  // 1. Field is nullable (per new field metadata)
+  // 2. Field requires ref metadata (legacy: optional, shared_ptr, etc.)
+  // 3. Field is non-primitive
+  bool read_ref = is_nullable || field_requires_ref || !is_primitive_field;
 
 #ifdef FORY_DEBUG
   const auto debug_names = decltype(field_info)::Names;
   std::cerr << "[xlang][field] T=" << typeid(T).name() << ", index=" << Index
             << ", name=" << debug_names[Index]
-            << ", field_needs_ref=" << field_needs_ref
-            << ", read_ref=" << read_ref << ", read_type=" << read_type
+            << ", field_requires_ref=" << field_requires_ref
+            << ", is_nullable=" << is_nullable << ", read_ref=" << read_ref
+            << ", read_type=" << read_type
             << ", reader_index=" << ctx.buffer().reader_index() << std::endl;
 #endif
 
@@ -1359,10 +1497,22 @@ void read_single_field_by_index(T &obj, ReadContext &ctx) {
   // shared_ptr) that don't need ref metadata, bypass Serializer<T>::read
   // and use direct buffer reads with Error&.
   constexpr bool is_raw_prim = is_raw_primitive_v<FieldType>;
-  if constexpr (is_raw_prim && is_primitive_field && !field_needs_ref) {
-    obj.*field_ptr = read_primitive_field_direct<FieldType>(ctx, ctx.error());
+  if constexpr (is_raw_prim && is_primitive_field && !field_requires_ref) {
+    // Assign to field (handle fory::field<> wrapper if needed)
+    if constexpr (is_fory_field_v<RawFieldType>) {
+      (obj.*field_ptr).value =
+          read_primitive_field_direct<FieldType>(ctx, ctx.error());
+    } else {
+      obj.*field_ptr = read_primitive_field_direct<FieldType>(ctx, ctx.error());
+    }
   } else {
-    obj.*field_ptr = Serializer<FieldType>::read(ctx, read_ref, read_type);
+    // Assign to field (handle fory::field<> wrapper if needed)
+    FieldType result = Serializer<FieldType>::read(ctx, read_ref, read_type);
+    if constexpr (is_fory_field_v<RawFieldType>) {
+      (obj.*field_ptr).value = std::move(result);
+    } else {
+      obj.*field_ptr = std::move(result);
+    }
   }
 }
 
@@ -1374,8 +1524,10 @@ void read_single_field_by_index_compatible(T &obj, ReadContext &ctx,
   const auto field_info = ForyFieldInfo(obj);
   const auto field_ptrs = decltype(field_info)::Ptrs;
   const auto field_ptr = std::get<Index>(field_ptrs);
-  using FieldType =
+  using RawFieldType =
       typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
+  // Unwrap fory::field<> to get the actual type for deserialization
+  using FieldType = unwrap_field_t<RawFieldType>;
 
   constexpr bool is_struct_field = is_fory_serializable_v<FieldType>;
   constexpr bool is_polymorphic_field =
@@ -1407,12 +1559,25 @@ void read_single_field_by_index_compatible(T &obj, ReadContext &ctx,
   constexpr bool is_raw_prim = is_raw_primitive_v<FieldType>;
   if constexpr (is_raw_prim && is_primitive_field) {
     if (!read_ref) {
-      obj.*field_ptr = read_primitive_field_direct<FieldType>(ctx, ctx.error());
+      // Assign to field (handle fory::field<> wrapper if needed)
+      if constexpr (is_fory_field_v<RawFieldType>) {
+        (obj.*field_ptr).value =
+            read_primitive_field_direct<FieldType>(ctx, ctx.error());
+      } else {
+        obj.*field_ptr =
+            read_primitive_field_direct<FieldType>(ctx, ctx.error());
+      }
       return;
     }
   }
 
-  obj.*field_ptr = Serializer<FieldType>::read(ctx, read_ref, read_type);
+  // Assign to field (handle fory::field<> wrapper if needed)
+  FieldType result = Serializer<FieldType>::read(ctx, read_ref, read_type);
+  if constexpr (is_fory_field_v<RawFieldType>) {
+    (obj.*field_ptr).value = std::move(result);
+  } else {
+    obj.*field_ptr = std::move(result);
+  }
 }
 
 /// Helper to dispatch field reading by field_id in compatible mode.
@@ -1529,10 +1694,17 @@ FORY_ALWAYS_INLINE void read_single_fixed_field(T &obj, Buffer &buffer,
   constexpr size_t field_offset = compute_fixed_field_offset<T, SortedIdx>();
   const auto field_info = ForyFieldInfo(obj);
   const auto field_ptr = std::get<original_index>(decltype(field_info)::Ptrs);
-  using FieldType =
+  using RawFieldType =
       typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
-  obj.*field_ptr =
+  using FieldType = unwrap_field_t<RawFieldType>;
+  FieldType result =
       read_fixed_primitive_at<FieldType>(buffer, base_offset + field_offset);
+  // Assign to field (handle fory::field<> wrapper if needed)
+  if constexpr (is_fory_field_v<RawFieldType>) {
+    (obj.*field_ptr).value = result;
+  } else {
+    obj.*field_ptr = result;
+  }
 }
 
 /// Fast read leading fixed-size primitive fields using UnsafeGet.
@@ -1586,9 +1758,16 @@ FORY_ALWAYS_INLINE void read_single_varint_field(T &obj, Buffer &buffer,
   constexpr size_t original_index = Helpers::sorted_indices[SortedPos];
   const auto field_info = ForyFieldInfo(obj);
   const auto field_ptr = std::get<original_index>(decltype(field_info)::Ptrs);
-  using FieldType =
+  using RawFieldType =
       typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
-  obj.*field_ptr = read_varint_at<FieldType>(buffer, offset);
+  using FieldType = unwrap_field_t<RawFieldType>;
+  FieldType result = read_varint_at<FieldType>(buffer, offset);
+  // Assign to field (handle fory::field<> wrapper if needed)
+  if constexpr (is_fory_field_v<RawFieldType>) {
+    (obj.*field_ptr).value = result;
+  } else {
+    obj.*field_ptr = result;
+  }
 }
 
 /// Fast read consecutive varint primitive fields (int32, int64).

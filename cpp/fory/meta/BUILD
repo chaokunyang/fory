@@ -56,3 +56,12 @@ cc_test(
         "@googletest//:gtest_main",
     ],
 )
+
+cc_test(
+    name = "field_test",
+    srcs = ["field_test.cc"],
+    deps = [
+        ":fory_meta",
+        "@googletest//:gtest",
+    ],
+)

@@ -1,0 +1,332 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+#pragma once
+
+#include "fory/meta/preprocessor.h"
+#include <array>
+#include <cstdint>
+#include <memory>
+#include <optional>
+#include <string_view>
+#include <tuple>
+#include <type_traits>
+#include <utility>
+
+namespace fory {
+
+// ============================================================================
+// Field Option Tags
+// ============================================================================
+
+/// Tag to mark a shared_ptr/unique_ptr field as nullable.
+/// Only valid for std::shared_ptr and std::unique_ptr types.
+/// For nullable primitives/strings, use std::optional<T> instead.
+struct nullable {};
+
+/// Tag to explicitly mark a pointer field as non-nullable.
+/// Useful for future pointer types (e.g., weak_ptr) that might be nullable by
+/// default. For shared_ptr/unique_ptr, non-nullable is already the default.
+struct not_null {};
+
+/// Tag to enable reference tracking for shared_ptr fields.
+/// Only valid for std::shared_ptr types (requires shared ownership for ref
+/// tracking).
+struct ref {};
+
+namespace detail {
+
+// ============================================================================
+// Type Traits for Smart Pointers and Optional
+// ============================================================================
+
+template <typename T> struct is_shared_ptr : std::false_type {};
+
+template <typename T>
+struct is_shared_ptr<std::shared_ptr<T>> : std::true_type {};
+
+template <typename T>
+inline constexpr bool is_shared_ptr_v = is_shared_ptr<T>::value;
+
+template <typename T> struct is_unique_ptr : std::false_type {};
+
+template <typename T, typename D>
+struct is_unique_ptr<std::unique_ptr<T, D>> : std::true_type {};
+
+template <typename T>
+inline constexpr bool is_unique_ptr_v = is_unique_ptr<T>::value;
+
+template <typename T> struct is_optional : std::false_type {};
+
+template <typename T> struct is_optional<std::optional<T>> : std::true_type {};
+
+template <typename T>
+inline constexpr bool is_optional_v = is_optional<T>::value;
+
+/// Helper to check if type is shared_ptr or unique_ptr
+template <typename T>
+inline constexpr bool is_smart_ptr_v = is_shared_ptr_v<T> || is_unique_ptr_v<T>;
+
+// ============================================================================
+// Option Tag Detection
+// ============================================================================
+
+/// Check if a specific tag type is present in the Options pack
+template <typename Tag, typename... Options>
+inline constexpr bool has_option_v = (std::is_same_v<Tag, Options> || ...);
+
+// ============================================================================
+// Field Tag Entry for FORY_FIELD_TAGS Macro
+// ============================================================================
+
+/// Compile-time field tag metadata entry
+template <int16_t Id, bool Nullable, bool Ref> struct FieldTagEntry {
+  static constexpr int16_t id = Id;
+  static constexpr bool is_nullable = Nullable;
+  static constexpr bool track_ref = Ref;
+};
+
+/// Default: no field tags defined for type T
+template <typename T> struct ForyFieldTagsImpl {
+  static constexpr bool has_tags = false;
+};
+
+template <typename T>
+inline constexpr bool has_field_tags_v = ForyFieldTagsImpl<T>::has_tags;
+
+} // namespace detail
+
+// ============================================================================
+// fory::field<T, Id, Options...> Template
+// ============================================================================
+
+/// Field wrapper template that provides compile-time field metadata.
+///
+/// Usage:
+///   struct Person {
+///     fory::field<std::string, 0> name;                    // non-nullable
+///     fory::field<int32_t, 1> age;                         // non-nullable
+///     fory::field<std::optional<std::string>, 2> nickname; // inherently
+///     nullable fory::field<std::shared_ptr<Person>, 3> parent;        //
+///     non-nullable fory::field<std::shared_ptr<Person>, 4, fory::nullable>
+///     guardian; fory::field<std::shared_ptr<Node>, 5, fory::ref> node;
+///     fory::field<std::shared_ptr<Node>, 6, fory::nullable, fory::ref> link;
+///   };
+///
+/// Template Parameters:
+///   T       - The underlying field type
+///   Id      - The field tag ID (int16_t) for compact serialization
+///   Options - Optional tags: fory::nullable, fory::ref
+///
+/// Type Rules:
+///   - Primitives/strings: No options allowed (use std::optional for nullable)
+///   - std::optional<T>: Inherently nullable, no options needed
+///   - std::shared_ptr<T>: Can use nullable and/or ref
+///   - std::unique_ptr<T>: Can use nullable only (no ref - exclusive
+///   ownership)
+template <typename T, int16_t Id, typename... Options> class field {
+  // Validate: nullable and not_null are mutually exclusive
+  static_assert(!(detail::has_option_v<nullable, Options...> &&
+                  detail::has_option_v<not_null, Options...>),
+                "fory::nullable and fory::not_null are mutually exclusive.");
+
+  // Validate: nullable only for smart pointers
+  static_assert(!detail::has_option_v<nullable, Options...> ||
+                    detail::is_smart_ptr_v<T>,
+                "fory::nullable is only valid for shared_ptr/unique_ptr. "
+                "Use std::optional<T> for nullable primitives/strings.");
+
+  // Validate: not_null only for smart pointers (for now)
+  static_assert(!detail::has_option_v<not_null, Options...> ||
+                    detail::is_smart_ptr_v<T>,
+                "fory::not_null is only valid for pointer types.");
+
+  // Validate: ref only for shared_ptr
+  static_assert(!detail::has_option_v<ref, Options...> ||
+                    detail::is_shared_ptr_v<T>,
+                "fory::ref is only valid for shared_ptr "
+                "(reference tracking requires shared ownership).");
+
+  // Validate: no options for optional (inherently nullable)
+  static_assert(!detail::is_optional_v<T> || sizeof...(Options) == 0,
+                "std::optional<T> is inherently nullable. No options allowed.");
+
+  // Validate: no options for non-smart-pointer types
+  static_assert(detail::is_smart_ptr_v<T> || detail::is_optional_v<T> ||
+                    sizeof...(Options) == 0,
+                "Options are only valid for shared_ptr/unique_ptr fields. "
+                "Use std::optional<T> for nullable primitives/strings.");
+
+public:
+  using value_type = T;
+  static constexpr int16_t tag_id = Id;
+
+  /// Field is nullable if:
+  /// - It's std::optional (inherently nullable), OR
+  /// - It's a smart pointer with fory::nullable option
+  static constexpr bool is_nullable =
+      detail::is_optional_v<T> ||
+      (detail::is_smart_ptr_v<T> && detail::has_option_v<nullable, Options...>);
+
+  /// Reference tracking is enabled if:
+  /// - It's std::shared_ptr with fory::ref option
+  static constexpr bool track_ref =
+      detail::is_shared_ptr_v<T> && detail::has_option_v<ref, Options...>;
+
+  T value{};
+
+  // Default constructor
+  field() = default;
+
+  // Value constructors
+  field(const T &v) : value(v) {}
+  field(T &&v) : value(std::move(v)) {}
+
+  // Copy and move constructors
+  field(const field &) = default;
+  field(field &&) = default;
+
+  // Copy and move assignment
+  field &operator=(const field &) = default;
+  field &operator=(field &&) = default;
+
+  // Value assignment
+  field &operator=(const T &v) {
+    value = v;
+    return *this;
+  }
+  field &operator=(T &&v) {
+    value = std::move(v);
+    return *this;
+  }
+
+  // Implicit conversions to underlying type
+  operator T &() { return value; }
+  operator const T &() const { return value; }
+
+  // Pointer-like access for smart pointers
+  T *operator->() { return &value; }
+  const T *operator->() const { return &value; }
+
+  // Dereference operators
+  T &operator*() { return value; }
+  const T &operator*() const { return value; }
+
+  // Get underlying value
+  T &get() { return value; }
+  const T &get() const { return value; }
+};
+
+// ============================================================================
+// Type Traits for fory::field Detection
+// ============================================================================
+
+/// Check if a type is a fory::field wrapper
+template <typename T> struct is_fory_field : std::false_type {};
+
+template <typename T, int16_t Id, typename... Options>
+struct is_fory_field<field<T, Id, Options...>> : std::true_type {};
+
+template <typename T>
+inline constexpr bool is_fory_field_v = is_fory_field<T>::value;
+
+/// Unwrap fory::field to get the underlying type
+template <typename T> struct unwrap_field {
+  using type = T;
+};
+
+template <typename T, int16_t Id, typename... Options>
+struct unwrap_field<field<T, Id, Options...>> {
+  using type = T;
+};
+
+template <typename T> using unwrap_field_t = typename unwrap_field<T>::type;
+
+/// Get tag ID from field type (returns -1 if not a fory::field)
+template <typename T> struct field_tag_id {
+  static constexpr int16_t value = -1;
+};
+
+template <typename T, int16_t Id, typename... Options>
+struct field_tag_id<field<T, Id, Options...>> {
+  static constexpr int16_t value = Id;
+};
+
+template <typename T>
+inline constexpr int16_t field_tag_id_v = field_tag_id<T>::value;
+
+/// Get is_nullable from field type
+template <typename T> struct field_is_nullable {
+  // For non-field types, check if it's std::optional
+  static constexpr bool value = detail::is_optional_v<T>;
+};
+
+template <typename T, int16_t Id, typename... Options>
+struct field_is_nullable<field<T, Id, Options...>> {
+  static constexpr bool value = field<T, Id, Options...>::is_nullable;
+};
+
+template <typename T>
+inline constexpr bool field_is_nullable_v = field_is_nullable<T>::value;
+
+/// Get track_ref from field type
+template <typename T> struct field_track_ref {
+  static constexpr bool value = false;
+};
+
+template <typename T, int16_t Id, typename... Options>
+struct field_track_ref<field<T, Id, Options...>> {
+  static constexpr bool value = field<T, Id, Options...>::track_ref;
+};
+
+template <typename T>
+inline constexpr bool field_track_ref_v = field_track_ref<T>::value;
+
+// ============================================================================
+// FORY_FIELD_TAGS Macro Support
+// ============================================================================
+
+namespace detail {
+
+// Helper to parse field tag entry from macro arguments
+// Supports: (field, id), (field, id, nullable), (field, id, ref),
+//           (field, id, nullable, ref)
+template <typename FieldType, int16_t Id, typename... Options>
+struct ParseFieldTagEntry {
+  static constexpr bool is_nullable =
+      is_optional_v<FieldType> ||
+      (is_smart_ptr_v<FieldType> && has_option_v<nullable, Options...>);
+
+  static constexpr bool track_ref =
+      is_shared_ptr_v<FieldType> && has_option_v<ref, Options...>;
+
+  // Compile-time validation
+  static_assert(!has_option_v<nullable, Options...> ||
+                    is_smart_ptr_v<FieldType>,
+                "fory::nullable is only valid for shared_ptr/unique_ptr");
+
+  static_assert(!has_option_v<ref, Options...> || is_shared_ptr_v<FieldType>,
+                "fory::ref is only valid for shared_ptr");
+
+  using type = FieldTagEntry<Id, is_nullable, track_ref>;
+};
+
+} // namespace detail
+
+} // namespace fory

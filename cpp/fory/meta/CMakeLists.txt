@@ -21,6 +21,7 @@ set(FORY_META_SOURCES
 
 set(FORY_META_HEADERS
     enum_info.h
+    field.h
     field_info.h
     meta_string.h
     preprocessor.h
@@ -67,4 +68,8 @@ if(FORY_BUILD_TESTS)
     add_executable(fory_meta_string_test meta_string_test.cc)
     target_link_libraries(fory_meta_string_test fory_meta GTest::gtest GTest::gtest_main)
     gtest_discover_tests(fory_meta_string_test)
+
+    add_executable(fory_meta_field_test field_test.cc)
+    target_link_libraries(fory_meta_field_test fory_meta GTest::gtest)
+    gtest_discover_tests(fory_meta_field_test)
 endif()

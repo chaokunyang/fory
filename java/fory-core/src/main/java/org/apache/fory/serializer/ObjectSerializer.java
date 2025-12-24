@@ -20,11 +20,13 @@
 package org.apache.fory.serializer;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.stream.Collectors;
 import org.apache.fory.Fory;
+import org.apache.fory.annotation.ForyField;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.collection.Tuple3;
 import org.apache.fory.exception.ForyException;
@@ -356,23 +358,8 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
   }
 
   public static int computeStructHash(Fory fory, DescriptorGrouper grouper) {
-    StringBuilder builder = new StringBuilder();
     List<Descriptor> sorted = grouper.getSortedDescriptors();
-    for (Descriptor descriptor : sorted) {
-      Class<?> rawType = descriptor.getTypeRef().getRawType();
-      int typeId = getTypeId(fory, rawType);
-      String underscore = StringUtils.lowerCamelToLowerUnderscore(descriptor.getName());
-      char nullable = rawType.isPrimitive() ? '0' : '1';
-      builder
-          .append(underscore)
-          .append(',')
-          .append(typeId)
-          .append(',')
-          .append(nullable)
-          .append(';');
-    }
-
-    String fingerprint = builder.toString();
+    String fingerprint = computeStructFingerprint(fory, sorted);
     byte[] bytes = fingerprint.getBytes(StandardCharsets.UTF_8);
     long hashLong = MurmurHash3.murmurhash3_x64_128(bytes, 0, bytes.length, 47)[0];
     int hash = (int) (hashLong & 0xffffffffL);
@@ -388,6 +375,84 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
               + hash);
     }
     return hash;
+  }
+
+  /**
+   * Computes the fingerprint string for a struct type used in schema versioning.
+   *
+   * <p><b>Fingerprint Format:</b>
+   *
+   * <p>Each field contributes: {@code <field_id_or_name>,<type_id>,<ref>,<nullable>;}
+   *
+   * <p>Fields are sorted by their identifier (field ID or name) lexicographically as strings.
+   *
+   * <p><b>Field Components:</b>
+   *
+   * <ul>
+   *   <li><b>field_id_or_name</b>: Tag ID as string if configured via {@link ForyField#id()}
+   *       (e.g., "0", "1"), otherwise snake_case field name
+   *   <li><b>type_id</b>: Fory TypeId as decimal string (e.g., "4" for INT32)
+   *   <li><b>ref</b>: "1" if reference tracking enabled, "0" otherwise
+   *   <li><b>nullable</b>: "1" if null flag is written, "0" otherwise
+   * </ul>
+   *
+   * <p><b>Example fingerprints:</b>
+   *
+   * <ul>
+   *   <li>With tag IDs: "0,4,0,0;1,4,0,1;2,9,0,1;"
+   *   <li>With field names: "age,4,0,0;name,9,0,1;"
+   * </ul>
+   *
+   * <p>The fingerprint is used to compute a hash for struct schema versioning. Different
+   * nullable/ref settings will produce different fingerprints, ensuring schema compatibility is
+   * properly validated.
+   *
+   * @param fory the Fory instance for type resolution
+   * @param descriptors the sorted list of field descriptors
+   * @return the fingerprint string
+   */
+  public static String computeStructFingerprint(Fory fory, List<Descriptor> descriptors) {
+    // Build fingerprint info for each field
+    List<String[]> fieldInfos = new ArrayList<>(descriptors.size());
+    for (Descriptor descriptor : descriptors) {
+      Class<?> rawType = descriptor.getTypeRef().getRawType();
+      int typeId = getTypeId(fory, rawType);
+
+      // Get field identifier: tag ID if configured, otherwise snake_case name
+      String fieldIdentifier;
+      ForyField foryField = descriptor.getForyField();
+      if (foryField != null && foryField.id() >= 0) {
+        fieldIdentifier = String.valueOf(foryField.id());
+      } else {
+        fieldIdentifier = descriptor.getSnakeCaseName();
+      }
+
+      // Get ref flag from descriptor (or ForyField annotation)
+      char ref = descriptor.isTrackingRef() ? '1' : '0';
+
+      // Get nullable flag: primitives are non-nullable, others depend on descriptor
+      char nullable;
+      if (rawType.isPrimitive()) {
+        nullable = '0';
+      } else {
+        nullable = descriptor.isNullable() ? '1' : '0';
+      }
+
+      fieldInfos.add(new String[] {fieldIdentifier, String.valueOf(typeId), String.valueOf(ref), String.valueOf(nullable)});
+    }
+
+    // Sort by field identifier (lexicographically as strings)
+    fieldInfos.sort((a, b) -> a[0].compareTo(b[0]));
+
+    // Build fingerprint string
+    StringBuilder builder = new StringBuilder();
+    for (String[] info : fieldInfos) {
+      builder.append(info[0]).append(',')
+          .append(info[1]).append(',')
+          .append(info[2]).append(',')
+          .append(info[3]).append(';');
+    }
+    return builder.toString();
   }
 
   private static int getTypeId(Fory fory, Class<?> cls) {

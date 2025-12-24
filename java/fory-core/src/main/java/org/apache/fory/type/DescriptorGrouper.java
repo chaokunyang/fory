@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.TreeSet;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import org.apache.fory.annotation.ForyField;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.record.RecordUtils;
 
@@ -42,13 +43,32 @@ import org.apache.fory.util.record.RecordUtils;
  * <li>other fields
  */
 public class DescriptorGrouper {
+
+  /**
+   * Gets the sort key for a field descriptor.
+   *
+   * <p>If the field has a {@link ForyField} annotation with id >= 0, returns the id as a string.
+   * Otherwise, returns the snake_case field name. This ensures fields are sorted by tag ID when
+   * configured, matching the fingerprint computation order.
+   *
+   * @param descriptor the field descriptor
+   * @return the sort key (tag ID as string or snake_case name)
+   */
+  public static String getFieldSortKey(Descriptor descriptor) {
+    ForyField foryField = descriptor.getForyField();
+    if (foryField != null && foryField.id() >= 0) {
+      return String.valueOf(foryField.id());
+    }
+    return descriptor.getSnakeCaseName();
+  }
+
   static final Comparator<Descriptor> COMPARATOR_BY_PRIMITIVE_TYPE_ID =
       (d1, d2) -> {
         int c =
             Types.getPrimitiveTypeId(TypeUtils.unwrap(d2.getRawType()))
                 - Types.getPrimitiveTypeId(TypeUtils.unwrap(d1.getRawType()));
         if (c == 0) {
-          c = d1.getSnakeCaseName().compareTo(d2.getSnakeCaseName());
+          c = getFieldSortKey(d1).compareTo(getFieldSortKey(d2));
           if (c == 0) {
             // Field name duplicate in super/child classes.
             c = d1.getDeclaringClass().compareTo(d2.getDeclaringClass());
@@ -115,11 +135,11 @@ public class DescriptorGrouper {
     return false;
   }
 
-  /** Comparator based on field type, name and declaring class. */
+  /** Comparator based on field type, name/id and declaring class. */
   public static final Comparator<Descriptor> COMPARATOR_BY_TYPE_AND_NAME =
       (d1, d2) -> {
         // sort by type so that we can hit class info cache more possibly.
-        // sort by field name to fix order if type is same.
+        // sort by field id/name to fix order if type is same.
         int c =
             d1
                 // Use type name instead of generic type so that fields with type ref
@@ -128,7 +148,7 @@ public class DescriptorGrouper {
                 .getTypeName()
                 .compareTo(d2.getTypeName());
         if (c == 0) {
-          c = d1.getName().compareTo(d2.getName());
+          c = getFieldSortKey(d1).compareTo(getFieldSortKey(d2));
           if (c == 0) {
             // Field name duplicate in super/child classes.
             c = d1.getDeclaringClass().compareTo(d2.getDeclaringClass());

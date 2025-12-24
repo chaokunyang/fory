@@ -942,12 +942,14 @@ public class XtypeResolver extends TypeResolver {
               int xtypeId = getXtypeId(o1.getRawType());
               int xtypeId2 = getXtypeId(o2.getRawType());
               if (xtypeId == xtypeId2) {
-                return o1.getSnakeCaseName().compareTo(o2.getSnakeCaseName());
+                return DescriptorGrouper.getFieldSortKey(o1)
+                    .compareTo(DescriptorGrouper.getFieldSortKey(o2));
               } else {
                 return xtypeId - xtypeId2;
               }
             })
-        .setOtherDescriptorComparator(Comparator.comparing(Descriptor::getSnakeCaseName))
+        .setOtherDescriptorComparator(
+            Comparator.comparing(DescriptorGrouper::getFieldSortKey))
         .sort();
   }
 

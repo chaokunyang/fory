@@ -18,14 +18,11 @@
 package codegen
 
 import (
-	"fmt"
 	"go/types"
 	"sort"
-	"strings"
 	"unicode"
 
 	"github.com/apache/fory/go/fory"
-	"github.com/spaolacci/murmur3"
 )
 
 // FieldInfo contains metadata about a struct field
@@ -395,148 +392,6 @@ func getFieldGroup(field *FieldInfo) int {
 
 	// Everything else goes to "other fields"
 	return groupOther
-}
-
-// computeStructHash computes a hash for struct schema compatibility
-// This implementation follows the new xlang serialization spec:
-// 1. Sort fields by fields sort algorithm (already done in s.Fields)
-// 2. Build string: snake_case(field_name),$type_id,$nullable;
-// 3. For "other fields", use TypeId::UNKNOWN
-// 4. Convert to UTF8 bytes
-// 5. Compute murmurhash3_x64_128, use first 32 bits
-func computeStructHash(s *StructInfo) int32 {
-	var hashString strings.Builder
-
-	// Iterate through sorted fields
-	for _, field := range s.Fields {
-		// Append snake_case field name
-		hashString.WriteString(field.SnakeName)
-		hashString.WriteString(",")
-
-		// Append type_id
-		typeID := getTypeIDForHash(field)
-		hashString.WriteString(fmt.Sprintf("%d", typeID))
-		hashString.WriteString(",")
-
-		// Append nullable (1 if nullable, 0 otherwise)
-		// nullable is determined by field type (matching reflection's nullable() function)
-		nullable := 0
-		if isNullableType(field.Type) {
-			nullable = 1
-		}
-		hashString.WriteString(fmt.Sprintf("%d", nullable))
-		hashString.WriteString(";")
-	}
-
-	// Convert to UTF8 bytes
-	hashBytes := []byte(hashString.String())
-
-	// Compute murmurhash3_x64_128 with seed 47, and use first 32 bits
-	// This matches the reflection implementation
-	h1, _ := murmur3.Sum128WithSeed(hashBytes, 47)
-	hash := int32(h1 & 0xFFFFFFFF)
-
-	if hash == 0 {
-		panic(fmt.Errorf("hash for type %v is 0", s.Name))
-	}
-
-	return hash
-}
-
-// isNullableType checks if a type should have nullable=1 in hash computation
-// This matches Java's behavior where primitives have nullable=0 and objects have nullable=1
-func isNullableType(t types.Type) bool {
-	// Check basic types - only primitives return false
-	if basic, ok := t.(*types.Basic); ok {
-		switch basic.Kind() {
-		case types.Bool,
-			types.Int8, types.Int16, types.Int32, types.Int64,
-			types.Uint8, types.Uint16, types.Uint32, types.Uint64,
-			types.Float32, types.Float64,
-			types.Int, types.Uint:
-			// These are primitive types - not nullable
-			return false
-		case types.String:
-			// String is an object type in Java - nullable
-			return true
-		}
-	}
-
-	// All other types (pointers, slices, maps, interfaces, arrays, structs) are nullable
-	return true
-}
-
-// getTypeIDForHash returns the TypeId for hash calculation according to new spec
-// For "other fields" (groupOther), returns UNKNOWN (63)
-func getTypeIDForHash(field *FieldInfo) int16 {
-	// Determine field group
-	group := getFieldGroup(field)
-
-	// For "other fields", use UNKNOWN
-	if group == groupOther {
-		return fory.UNKNOWN
-	}
-
-	// For struct fields declared with concrete slice types,
-	// use typeID = LIST uniformly for hash calculation to align cross-language behavior
-	// This matches the reflection implementation
-	if field.TypeID == "LIST" {
-		return fory.LIST
-	}
-
-	// Map field TypeID string to Fory TypeId value
-	switch field.TypeID {
-	case "BOOL":
-		return fory.BOOL
-	case "INT8":
-		return fory.INT8
-	case "INT16":
-		return fory.INT16
-	case "INT32":
-		return fory.INT32
-	case "INT64":
-		return fory.INT64
-	case "UINT8":
-		return fory.UINT8
-	case "UINT16":
-		return fory.UINT16
-	case "UINT32":
-		return fory.UINT32
-	case "UINT64":
-		return fory.UINT64
-	case "FLOAT32":
-		return fory.FLOAT
-	case "FLOAT64":
-		return fory.DOUBLE
-	case "STRING":
-		return fory.STRING
-	case "TIMESTAMP":
-		return fory.TIMESTAMP
-	case "LOCAL_DATE":
-		return fory.LOCAL_DATE
-	case "NAMED_STRUCT":
-		return fory.NAMED_STRUCT
-	case "STRUCT":
-		return fory.STRUCT
-	case "SET":
-		return fory.SET
-	case "MAP":
-		return fory.MAP
-	case "BINARY":
-		return fory.BINARY
-	case "ENUM":
-		return fory.ENUM
-	case "NAMED_ENUM":
-		return fory.NAMED_ENUM
-	case "EXT":
-		return fory.EXT
-	case "NAMED_EXT":
-		return fory.NAMED_EXT
-	case "INTERFACE":
-		return fory.UNKNOWN // interface{} treated as UNKNOWN
-	default:
-		return fory.UNKNOWN
-	}
 }
 
 // getStructNames extracts struct names from StructInfo slice

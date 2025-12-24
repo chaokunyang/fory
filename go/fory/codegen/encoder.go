@@ -27,15 +27,13 @@ import (
 
 // generateWriteTyped generates the strongly-typed WriteData method
 func generateWriteTyped(buf *bytes.Buffer, s *StructInfo) error {
-	hash := computeStructHash(s)
-
 	fmt.Fprintf(buf, "// WriteTyped provides strongly-typed serialization with no reflection overhead\n")
-	fmt.Fprintf(buf, "func (g %s_ForyGenSerializer) WriteTyped(ctx *fory.WriteContext, v *%s) error {\n", s.Name, s.Name)
+	fmt.Fprintf(buf, "func (g *%s_ForyGenSerializer) WriteTyped(ctx *fory.WriteContext, v *%s) error {\n", s.Name, s.Name)
 	fmt.Fprintf(buf, "\tbuf := ctx.Buffer()\n")
 
 	// WriteData struct hash
-	fmt.Fprintf(buf, "\t// WriteData precomputed struct hash for compatibility checking\n")
-	fmt.Fprintf(buf, "\tbuf.WriteInt32(%d) // hash of %s structure\n\n", hash, s.Name)
+	fmt.Fprintf(buf, "\t// WriteData struct hash for compatibility checking\n")
+	fmt.Fprintf(buf, "\tbuf.WriteInt32(g.structHash)\n\n")
 
 	// WriteData fields in sorted order
 	fmt.Fprintf(buf, "\t// WriteData fields in sorted order\n")
@@ -54,7 +52,8 @@ func generateWriteTyped(buf *bytes.Buffer, s *StructInfo) error {
 func generateWriteInterface(buf *bytes.Buffer, s *StructInfo) error {
 	// Generate WriteData method (reflect.Value-based API)
 	fmt.Fprintf(buf, "// WriteData provides reflect.Value interface compatibility (implements fory.Serializer)\n")
-	fmt.Fprintf(buf, "func (g %s_ForyGenSerializer) WriteData(ctx *fory.WriteContext, value reflect.Value) {\n", s.Name)
+	fmt.Fprintf(buf, "func (g *%s_ForyGenSerializer) WriteData(ctx *fory.WriteContext, value reflect.Value) {\n", s.Name)
+	fmt.Fprintf(buf, "\tg.initHash(ctx.TypeResolver())\n")
 	fmt.Fprintf(buf, "\t// Convert reflect.Value to concrete type and delegate to typed method\n")
 	fmt.Fprintf(buf, "\tvar v *%s\n", s.Name)
 	fmt.Fprintf(buf, "\tif value.Kind() == reflect.Ptr {\n")

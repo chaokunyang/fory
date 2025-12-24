@@ -27,20 +27,18 @@ import (
 
 // generateReadTyped generates the strongly-typed ReadData method
 func generateReadTyped(buf *bytes.Buffer, s *StructInfo) error {
-	hash := computeStructHash(s)
-
 	fmt.Fprintf(buf, "// ReadTyped provides strongly-typed deserialization with no reflection overhead\n")
-	fmt.Fprintf(buf, "func (g %s_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *%s) error {\n", s.Name, s.Name)
+	fmt.Fprintf(buf, "func (g *%s_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *%s) error {\n", s.Name, s.Name)
 	fmt.Fprintf(buf, "\tbuf := ctx.Buffer()\n")
 	fmt.Fprintf(buf, "\terr := ctx.Err() // Get error pointer for deferred error checking\n\n")
 
 	// ReadData and verify struct hash
 	fmt.Fprintf(buf, "\t// ReadData and verify struct hash\n")
-	fmt.Fprintf(buf, "\tif got := buf.ReadInt32(err); got != %d {\n", hash)
+	fmt.Fprintf(buf, "\tif got := buf.ReadInt32(err); got != g.structHash {\n")
 	fmt.Fprintf(buf, "\t\tif ctx.HasError() {\n")
 	fmt.Fprintf(buf, "\t\t\treturn ctx.TakeError()\n")
 	fmt.Fprintf(buf, "\t\t}\n")
-	fmt.Fprintf(buf, "\t\treturn fory.HashMismatchError(got, %d, \"%s\")\n", hash, s.Name)
+	fmt.Fprintf(buf, "\t\treturn fory.HashMismatchError(got, g.structHash, \"%s\")\n", s.Name)
 	fmt.Fprintf(buf, "\t}\n\n")
 
 	// ReadData fields in sorted order
@@ -65,7 +63,8 @@ func generateReadTyped(buf *bytes.Buffer, s *StructInfo) error {
 func generateReadInterface(buf *bytes.Buffer, s *StructInfo) error {
 	// Generate ReadData method (reflect.Value-based API)
 	fmt.Fprintf(buf, "// ReadData provides reflect.Value interface compatibility (implements fory.Serializer)\n")
-	fmt.Fprintf(buf, "func (g %s_ForyGenSerializer) ReadData(ctx *fory.ReadContext, type_ reflect.Type, value reflect.Value) {\n", s.Name)
+	fmt.Fprintf(buf, "func (g *%s_ForyGenSerializer) ReadData(ctx *fory.ReadContext, type_ reflect.Type, value reflect.Value) {\n", s.Name)
+	fmt.Fprintf(buf, "\tg.initHash(ctx.TypeResolver())\n")
 	fmt.Fprintf(buf, "\t// Convert reflect.Value to concrete type and delegate to typed method\n")
 	fmt.Fprintf(buf, "\tvar v *%s\n", s.Name)
 	fmt.Fprintf(buf, "\tif value.Kind() == reflect.Ptr {\n")

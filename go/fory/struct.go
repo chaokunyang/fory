@@ -1726,12 +1726,10 @@ func (s *structSerializer) computeHash() int32 {
 			}
 		}
 
-		// Determine ref and nullable flags
-		ref := field.RefMode == RefModeTracking
+		// Determine nullable flag based on field type
+		// Use the same logic as codegen for consistency
 		nullable := true
-		if field.RefMode == RefModeNone {
-			nullable = false
-		} else if isNonNullablePrimitiveKind(field.Type.Kind()) && !field.Referencable && !isEnumField {
+		if isNonNullablePrimitiveKind(field.Type.Kind()) && !isEnumField {
 			nullable = false
 		}
 
@@ -1739,7 +1737,7 @@ func (s *structSerializer) computeHash() int32 {
 			FieldID:   field.TagID,
 			FieldName: SnakeCase(field.Name),
 			TypeID:    typeId,
-			Ref:       ref,
+			Ref:       field.RefMode == RefModeTracking,
 			Nullable:  nullable,
 		})
 	}
@@ -1757,6 +1755,16 @@ func (s *structSerializer) computeHash() int32 {
 		panic(fmt.Errorf("hash for type %v is 0", s.type_))
 	}
 	return hash
+}
+
+// GetStructHash returns the struct hash for a given type using the provided TypeResolver.
+// This is used by codegen serializers to get the hash at runtime.
+func GetStructHash(type_ reflect.Type, resolver *TypeResolver) int32 {
+	ser := newStructSerializer(type_, "", nil)
+	if err := ser.initialize(resolver); err != nil {
+		panic(fmt.Errorf("failed to initialize struct serializer for hash computation: %v", err))
+	}
+	return ser.structHash
 }
 
 // Field sorting helpers

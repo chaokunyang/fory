@@ -390,12 +390,21 @@ func cleanupGeneratedFiles(opts *GeneratorOptions) error {
 
 // generateStructSerializer generates a complete serializer for a struct
 func generateStructSerializer(buf *bytes.Buffer, s *StructInfo) error {
-	// Generate struct serializer type
-	fmt.Fprintf(buf, "type %s_ForyGenSerializer struct {}\n\n", s.Name)
+	// Generate struct serializer type with lazy hash computation
+	fmt.Fprintf(buf, "type %s_ForyGenSerializer struct {\n", s.Name)
+	fmt.Fprintf(buf, "\tstructHash int32\n")
+	fmt.Fprintf(buf, "}\n\n")
 
 	// Generate factory function
 	fmt.Fprintf(buf, "func NewSerializerFor_%s() fory.Serializer {\n", s.Name)
-	fmt.Fprintf(buf, "\treturn %s_ForyGenSerializer{}\n", s.Name)
+	fmt.Fprintf(buf, "\treturn &%s_ForyGenSerializer{}\n", s.Name)
+	fmt.Fprintf(buf, "}\n\n")
+
+	// Generate hash initialization method
+	fmt.Fprintf(buf, "func (g *%s_ForyGenSerializer) initHash(resolver *fory.TypeResolver) {\n", s.Name)
+	fmt.Fprintf(buf, "\tif g.structHash == 0 {\n")
+	fmt.Fprintf(buf, "\t\tg.structHash = fory.GetStructHash(reflect.TypeOf(%s{}), resolver)\n", s.Name)
+	fmt.Fprintf(buf, "\t}\n")
 	fmt.Fprintf(buf, "}\n\n")
 
 	// Generate Write method (entry point with ref/type handling)
@@ -438,7 +447,8 @@ func generateStructSerializer(buf *bytes.Buffer, s *StructInfo) error {
 // generateWriteMethod generates the Write method that handles ref/type flags
 func generateWriteMethod(buf *bytes.Buffer, s *StructInfo) error {
 	fmt.Fprintf(buf, "// Write is the entry point for serialization with ref/type handling\n")
-	fmt.Fprintf(buf, "func (g %s_ForyGenSerializer) Write(ctx *fory.WriteContext, refMode fory.RefMode, writeType bool, hasGenerics bool, value reflect.Value) {\n", s.Name)
+	fmt.Fprintf(buf, "func (g *%s_ForyGenSerializer) Write(ctx *fory.WriteContext, refMode fory.RefMode, writeType bool, hasGenerics bool, value reflect.Value) {\n", s.Name)
+	fmt.Fprintf(buf, "\tg.initHash(ctx.TypeResolver())\n")
 	fmt.Fprintf(buf, "\t_ = hasGenerics // not used for struct serializers\n")
 	fmt.Fprintf(buf, "\tswitch refMode {\n")
 	fmt.Fprintf(buf, "\tcase fory.RefModeTracking:\n")
@@ -472,7 +482,8 @@ func generateWriteMethod(buf *bytes.Buffer, s *StructInfo) error {
 // generateReadMethod generates the Read method that handles ref/type flags
 func generateReadMethod(buf *bytes.Buffer, s *StructInfo) error {
 	fmt.Fprintf(buf, "// Read is the entry point for deserialization with ref/type handling\n")
-	fmt.Fprintf(buf, "func (g %s_ForyGenSerializer) Read(ctx *fory.ReadContext, refMode fory.RefMode, readType bool, hasGenerics bool, value reflect.Value) {\n", s.Name)
+	fmt.Fprintf(buf, "func (g *%s_ForyGenSerializer) Read(ctx *fory.ReadContext, refMode fory.RefMode, readType bool, hasGenerics bool, value reflect.Value) {\n", s.Name)
+	fmt.Fprintf(buf, "\tg.initHash(ctx.TypeResolver())\n")
 	fmt.Fprintf(buf, "\t_ = hasGenerics // not used for struct serializers\n")
 	fmt.Fprintf(buf, "\terr := ctx.Err() // Get error pointer for deferred error checking\n")
 	fmt.Fprintf(buf, "\tswitch refMode {\n")
@@ -506,7 +517,7 @@ func generateReadMethod(buf *bytes.Buffer, s *StructInfo) error {
 // generateReadWithTypeInfoMethod generates the ReadWithTypeInfo method
 func generateReadWithTypeInfoMethod(buf *bytes.Buffer, s *StructInfo) error {
 	fmt.Fprintf(buf, "// ReadWithTypeInfo deserializes with pre-read type information\n")
-	fmt.Fprintf(buf, "func (g %s_ForyGenSerializer) ReadWithTypeInfo(ctx *fory.ReadContext, refMode fory.RefMode, typeInfo *fory.TypeInfo, value reflect.Value) {\n", s.Name)
+	fmt.Fprintf(buf, "func (g *%s_ForyGenSerializer) ReadWithTypeInfo(ctx *fory.ReadContext, refMode fory.RefMode, typeInfo *fory.TypeInfo, value reflect.Value) {\n", s.Name)
 	fmt.Fprintf(buf, "\tg.Read(ctx, refMode, false, false, value)\n")
 	fmt.Fprintf(buf, "}\n\n")
 	return nil

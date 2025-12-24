@@ -56,6 +56,7 @@ pyx_library(
         "python/pyfory/includes/*.pxd",
         "python/pyfory/_util.pxd",
         "python/pyfory/serialization.pyx",
+        "python/pyfory/*.pxi",
         "python/pyfory/__init__.py",
     ]),
     cc_kwargs = dict(

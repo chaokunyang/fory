@@ -994,7 +994,24 @@ fn to_snake_case(name: &str) -> String {
     result
 }
 
-pub(crate) fn compute_struct_version_hash(fields: &[&Field]) -> i32 {
+/// Computes the fingerprint string for a struct type used in schema versioning.
+///
+/// **Fingerprint Format:**
+///
+/// Each field contributes: `<field_name>,<type_id>,<ref>,<nullable>;`
+///
+/// Fields are sorted by field name (snake_case) lexicographically.
+///
+/// **Field Components:**
+/// - `field_name`: snake_case field name (Rust doesn't support field tag IDs yet)
+/// - `type_id`: Fory TypeId as decimal string (e.g., "4" for INT32)
+/// - `ref`: "1" if reference tracking enabled, "0" otherwise (currently always "0" in Rust)
+/// - `nullable`: "1" if null flag is written, "0" otherwise
+///
+/// **Example fingerprint:** `"age,4,0,0;name,12,0,1;"`
+///
+/// This format is consistent across Go, Java, Rust, and C++ implementations.
+pub(crate) fn compute_struct_fingerprint(fields: &[&Field]) -> String {
     let mut field_info_map: HashMap<String, (u32, bool)> = HashMap::with_capacity(fields.len());
     for field in fields {
         let name = field.ident.as_ref().unwrap().to_string();
@@ -1006,11 +1023,19 @@ pub(crate) fn compute_struct_version_hash(fields: &[&Field]) -> i32 {
         field_info_map.insert(name, (type_id, nullable));
     }
 
+    // Sort field names lexicographically for fingerprint computation
+    // This matches Java/Go behavior where fingerprint fields are sorted by name,
+    // not by the type-category-based ordering used for serialization
+    let mut sorted_names: Vec<String> = field_info_map.keys().cloned().collect();
+    sorted_names.sort();
+
     let mut fingerprint = String::new();
-    for name in get_sorted_field_names(fields).iter() {
+    for name in sorted_names.iter() {
         let (type_id, nullable) = field_info_map
             .get(name)
             .expect("Field metadata missing during struct hash computation");
+        // Format: <field_name>,<type_id>,<ref>,<nullable>;
+        // Since Rust doesn't support field tag IDs yet, use snake_case field name
         fingerprint.push_str(&to_snake_case(name));
         fingerprint.push(',');
         let effective_type_id = if *type_id == TypeId::UNKNOWN as u32 {
@@ -1020,8 +1045,25 @@ pub(crate) fn compute_struct_version_hash(fields: &[&Field]) -> i32 {
         };
         fingerprint.push_str(&effective_type_id.to_string());
         fingerprint.push(',');
+        // ref flag: currently always 0 in Rust (no ref tracking support yet)
+        fingerprint.push('0');
+        fingerprint.push(',');
         fingerprint.push_str(if *nullable { "1;" } else { "0;" });
     }
+
+    fingerprint
+}
+
+/// Computes the struct version hash from field metadata.
+///
+/// Uses `compute_struct_fingerprint` to build the fingerprint string,
+/// then hashes it with MurmurHash3_x64_128 using seed 47, and takes
+/// the low 32 bits as signed i32.
+///
+/// This provides the cross-language struct version ID used by class
+/// version checking, consistent with Go, Java, and C++ implementations.
+pub(crate) fn compute_struct_version_hash(fields: &[&Field]) -> i32 {
+    let fingerprint = compute_struct_fingerprint(fields);
 
     let seed: u64 = 47;
     let (hash, _) = fory_core::meta::murmurhash3_x64_128(fingerprint.as_bytes(), seed);

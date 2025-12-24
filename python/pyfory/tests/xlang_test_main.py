@@ -140,6 +140,39 @@ class EmptyWrapper:
     pass
 
 
+@dataclass
+class EmptyStruct:
+    pass
+
+
+@dataclass
+class OneStringFieldStruct:
+    f1: Optional[str] = None
+
+
+@dataclass
+class TwoStringFieldStruct:
+    f1: Optional[str] = None
+    f2: Optional[str] = None
+
+
+class TestEnum(enum.Enum):
+    VALUE_A = 0
+    VALUE_B = 1
+    VALUE_C = 2
+
+
+@dataclass
+class OneEnumFieldStruct:
+    f1: TestEnum = None
+
+
+@dataclass
+class TwoEnumFieldStruct:
+    f1: TestEnum = None
+    f2: TestEnum = None
+
+
 # ============================================================================
 # Test Functions - Each function handles read -> verify -> write back
 # ============================================================================
@@ -446,6 +479,212 @@ def test_polymorphic_map():
 
     with open(data_file, "wb") as f:
         f.write(new_buffer.get_bytes(0, new_buffer.writer_index))
+
+
+def test_one_string_field_schema():
+    """Test one string field struct with schema consistent mode."""
+    data_file = get_data_file()
+    with open(data_file, "rb") as f:
+        data_bytes = f.read()
+
+    fory = pyfory.Fory(xlang=True, compatible=False)
+    fory.register_type(OneStringFieldStruct, type_id=200)
+
+    expected = OneStringFieldStruct(f1="hello")
+    obj = fory.deserialize(data_bytes)
+    debug_print(f"Deserialized: {obj}")
+    assert obj == expected, f"Mismatch: {obj} != {expected}"
+
+    new_bytes = fory.serialize(obj)
+    with open(data_file, "wb") as f:
+        f.write(new_bytes)
+
+
+def test_one_string_field_compatible():
+    """Test one string field struct with compatible mode."""
+    data_file = get_data_file()
+    with open(data_file, "rb") as f:
+        data_bytes = f.read()
+
+    fory = pyfory.Fory(xlang=True, compatible=True)
+    fory.register_type(OneStringFieldStruct, type_id=200)
+
+    expected = OneStringFieldStruct(f1="hello")
+    obj = fory.deserialize(data_bytes)
+    debug_print(f"Deserialized: {obj}")
+    assert obj == expected, f"Mismatch: {obj} != {expected}"
+
+    new_bytes = fory.serialize(obj)
+    with open(data_file, "wb") as f:
+        f.write(new_bytes)
+
+
+def test_two_string_field_compatible():
+    """Test two string field struct with compatible mode."""
+    data_file = get_data_file()
+    with open(data_file, "rb") as f:
+        data_bytes = f.read()
+
+    fory = pyfory.Fory(xlang=True, compatible=True)
+    fory.register_type(TwoStringFieldStruct, type_id=201)
+
+    expected = TwoStringFieldStruct(f1="first", f2="second")
+    obj = fory.deserialize(data_bytes)
+    debug_print(f"Deserialized: {obj}")
+    assert obj == expected, f"Mismatch: {obj} != {expected}"
+
+    new_bytes = fory.serialize(obj)
+    with open(data_file, "wb") as f:
+        f.write(new_bytes)
+
+
+def test_schema_evolution_compatible():
+    """Test schema evolution: deserialize TwoStringFieldStruct as EmptyStruct."""
+    data_file = get_data_file()
+    with open(data_file, "rb") as f:
+        data_bytes = f.read()
+
+    # Deserialize TwoStringFieldStruct as EmptyStruct (should skip all fields)
+    fory = pyfory.Fory(xlang=True, compatible=True)
+    fory.register_type(EmptyStruct, type_id=200)
+
+    obj = fory.deserialize(data_bytes)
+    debug_print(f"Deserialized as EmptyStruct: {obj}")
+    assert isinstance(obj, EmptyStruct), f"Expected EmptyStruct, got {type(obj)}"
+
+    new_bytes = fory.serialize(obj)
+    with open(data_file, "wb") as f:
+        f.write(new_bytes)
+
+
+def test_schema_evolution_compatible_reverse():
+    """Test schema evolution: deserialize OneStringFieldStruct as TwoStringFieldStruct."""
+    data_file = get_data_file()
+    with open(data_file, "rb") as f:
+        data_bytes = f.read()
+
+    # Deserialize OneStringFieldStruct as TwoStringFieldStruct
+    fory = pyfory.Fory(xlang=True, compatible=True)
+    fory.register_type(TwoStringFieldStruct, type_id=200)
+
+    obj = fory.deserialize(data_bytes)
+    debug_print(f"Deserialized as TwoStringFieldStruct: {obj}")
+    assert isinstance(obj, TwoStringFieldStruct), f"Expected TwoStringFieldStruct, got {type(obj)}"
+    assert obj.f1 == "only_one", f"Expected f1='only_one', got f1='{obj.f1}'"
+    # f2 should be None (missing field)
+    assert obj.f2 is None or obj.f2 == "", f"Expected f2=None or empty, got f2='{obj.f2}'"
+
+    # Set f2 to empty string for serialization (match Go behavior)
+    if obj.f2 is None:
+        obj.f2 = ""
+
+    new_bytes = fory.serialize(obj)
+    with open(data_file, "wb") as f:
+        f.write(new_bytes)
+
+
+def test_one_enum_field_schema():
+    """Test one enum field struct with schema consistent mode."""
+    data_file = get_data_file()
+    with open(data_file, "rb") as f:
+        data_bytes = f.read()
+
+    fory = pyfory.Fory(xlang=True, compatible=False)
+    fory.register_type(TestEnum, type_id=210)
+    fory.register_type(OneEnumFieldStruct, type_id=211)
+
+    expected = OneEnumFieldStruct(f1=TestEnum.VALUE_B)
+    obj = fory.deserialize(data_bytes)
+    debug_print(f"Deserialized: {obj}")
+    assert obj == expected, f"Mismatch: {obj} != {expected}"
+
+    new_bytes = fory.serialize(obj)
+    with open(data_file, "wb") as f:
+        f.write(new_bytes)
+
+
+def test_one_enum_field_compatible():
+    """Test one enum field struct with compatible mode."""
+    data_file = get_data_file()
+    with open(data_file, "rb") as f:
+        data_bytes = f.read()
+
+    fory = pyfory.Fory(xlang=True, compatible=True)
+    fory.register_type(TestEnum, type_id=210)
+    fory.register_type(OneEnumFieldStruct, type_id=211)
+
+    expected = OneEnumFieldStruct(f1=TestEnum.VALUE_A)
+    obj = fory.deserialize(data_bytes)
+    debug_print(f"Deserialized: {obj}")
+    assert obj == expected, f"Mismatch: {obj} != {expected}"
+
+    new_bytes = fory.serialize(obj)
+    with open(data_file, "wb") as f:
+        f.write(new_bytes)
+
+
+def test_two_enum_field_compatible():
+    """Test two enum field struct with compatible mode."""
+    data_file = get_data_file()
+    with open(data_file, "rb") as f:
+        data_bytes = f.read()
+
+    fory = pyfory.Fory(xlang=True, compatible=True)
+    fory.register_type(TestEnum, type_id=210)
+    fory.register_type(TwoEnumFieldStruct, type_id=212)
+
+    expected = TwoEnumFieldStruct(f1=TestEnum.VALUE_A, f2=TestEnum.VALUE_C)
+    obj = fory.deserialize(data_bytes)
+    debug_print(f"Deserialized: {obj}")
+    assert obj == expected, f"Mismatch: {obj} != {expected}"
+
+    new_bytes = fory.serialize(obj)
+    with open(data_file, "wb") as f:
+        f.write(new_bytes)
+
+
+def test_enum_schema_evolution_compatible():
+    """Test enum schema evolution: deserialize TwoEnumFieldStruct as EmptyStruct."""
+    data_file = get_data_file()
+    with open(data_file, "rb") as f:
+        data_bytes = f.read()
+
+    # Deserialize TwoEnumFieldStruct as EmptyStruct (should skip all fields)
+    fory = pyfory.Fory(xlang=True, compatible=True)
+    fory.register_type(TestEnum, type_id=210)
+    fory.register_type(EmptyStruct, type_id=211)
+
+    obj = fory.deserialize(data_bytes)
+    debug_print(f"Deserialized as EmptyStruct: {obj}")
+    assert isinstance(obj, EmptyStruct), f"Expected EmptyStruct, got {type(obj)}"
+
+    new_bytes = fory.serialize(obj)
+    with open(data_file, "wb") as f:
+        f.write(new_bytes)
+
+
+def test_enum_schema_evolution_compatible_reverse():
+    """Test enum schema evolution: deserialize OneEnumFieldStruct as TwoEnumFieldStruct."""
+    data_file = get_data_file()
+    with open(data_file, "rb") as f:
+        data_bytes = f.read()
+
+    # Deserialize OneEnumFieldStruct as TwoEnumFieldStruct
+    fory = pyfory.Fory(xlang=True, compatible=True)
+    fory.register_type(TestEnum, type_id=210)
+    fory.register_type(TwoEnumFieldStruct, type_id=211)
+
+    obj = fory.deserialize(data_bytes)
+    debug_print(f"Deserialized as TwoEnumFieldStruct: {obj}")
+    assert isinstance(obj, TwoEnumFieldStruct), f"Expected TwoEnumFieldStruct, got {type(obj)}"
+    assert obj.f1 == TestEnum.VALUE_C, f"Expected f1=VALUE_C, got f1={obj.f1}"
+    # f2 should be None (missing field due to schema evolution)
+    f2_value = getattr(obj, 'f2', None)
+    assert f2_value is None, f"Expected f2=None, got f2={f2_value}"
+
+    new_bytes = fory.serialize(obj)
+    with open(data_file, "wb") as f:
+        f.write(new_bytes)
 
 
 if __name__ == "__main__":

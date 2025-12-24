@@ -485,11 +485,19 @@ class DataClassSerializer(Serializer):
             serializer_var = f"serializer{index}"
             serializer = self._serializers[index]
             context[serializer_var] = serializer
-            if not self._has_slots:
-                stmts.append(f"{field_value} = {value_dict}['{field_name}']")
-            else:
-                stmts.append(f"{field_value} = {value}.{field_name}")
             is_nullable = self._nullable_fields.get(field_name, False)
+            # For nullable fields, use safe access with None default to handle
+            # schema evolution cases where the field might not exist on the object
+            if not self._has_slots:
+                if is_nullable:
+                    stmts.append(f"{field_value} = {value_dict}.get('{field_name}')")
+                else:
+                    stmts.append(f"{field_value} = {value_dict}['{field_name}']")
+            else:
+                if is_nullable:
+                    stmts.append(f"{field_value} = getattr({value}, '{field_name}', None)")
+                else:
+                    stmts.append(f"{field_value} = {value}.{field_name}")
             if is_nullable:
                 if isinstance(serializer, StringSerializer):
                     stmts.extend(

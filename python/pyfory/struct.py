@@ -841,41 +841,80 @@ def group_fields(type_resolver, field_names, serializers, nullable_map=None):
     return (boxed_types, nullable_boxed_types, internal_types, collection_types, set_types, map_types, other_types)
 
 
+def compute_struct_fingerprint(type_resolver, field_names, serializers, nullable_map=None):
+    """
+    Computes the fingerprint string for a struct type used in schema versioning.
+
+    Fingerprint Format:
+        Each field contributes: <field_name>,<type_id>,<ref>,<nullable>;
+        Fields are sorted lexicographically by field name (not by type category).
+
+    Field Components:
+        - field_name: snake_case field name (Python doesn't support field tag IDs yet)
+        - type_id: Fory TypeId as decimal string (e.g., "4" for INT32)
+        - ref: "1" if reference tracking enabled, "0" otherwise (always "0" in Python)
+        - nullable: "1" if null flag is written, "0" otherwise
+
+    Example fingerprint: "age,4,0,0;name,12,0,1;"
+
+    This format is consistent across Go, Java, Rust, C++, and Python implementations.
+    """
+    if nullable_map is None:
+        nullable_map = {}
+
+    # Build field info list: (field_name, type_id, nullable)
+    field_infos = []
+    for i, field_name in enumerate(field_names):
+        serializer = serializers[i]
+        if serializer is None:
+            # Skip unknown/dynamic fields in fingerprint
+            continue
+        type_id = type_resolver.get_typeinfo(serializer.type_).type_id & 0xFF
+        is_nullable = nullable_map.get(field_name, False)
+
+        # Determine nullable flag based on type category (matching Java behavior)
+        if is_primitive_type(type_id) and not is_nullable:
+            nullable_flag = "0"
+        elif is_polymorphic_type(type_id) or type_id in {TypeId.ENUM, TypeId.NAMED_ENUM}:
+            # For polymorphic/enum types, use UNKNOWN type_id
+            type_id = TypeId.UNKNOWN
+            nullable_flag = "1"
+        else:
+            nullable_flag = "1"
+
+        field_infos.append((field_name, type_id, nullable_flag))
+
+    # Sort fields lexicographically by field name for fingerprint computation
+    # This matches Java/Go/Rust/C++ behavior
+    field_infos.sort(key=lambda x: x[0])
+
+    # Build fingerprint string
+    # Format: <field_name>,<type_id>,<ref>,<nullable>;
+    hash_parts = []
+    for field_name, type_id, nullable_flag in field_infos:
+        # ref flag: currently always 0 in Python (no ref tracking support yet)
+        ref_flag = "0"
+        hash_parts.append(f"{field_name},{type_id},{ref_flag},{nullable_flag};")
+
+    return "".join(hash_parts)
+
+
 def compute_struct_meta(type_resolver, field_names, serializers, nullable_map=None):
+    """
+    Computes struct metadata including version hash, sorted field names, and serializers.
+
+    Uses compute_struct_fingerprint to build the fingerprint string, then hashes it
+    with MurmurHash3 using seed 47, and takes the low 32 bits as signed int32.
+
+    This provides the cross-language struct version ID used by class version checking,
+    consistent with Go, Java, Rust, and C++ implementations.
+    """
     (boxed_types, nullable_boxed_types, internal_types, collection_types, set_types, map_types, other_types) = group_fields(
         type_resolver, field_names, serializers, nullable_map
     )
 
-    # Build hash string
-    hash_parts = []
-
-    # boxed_types => non-nullable
-    for field in boxed_types:
-        type_id = field[0]
-        field_name = field[2]  # already snake_case
-        nullable_flag = "0"
-        hash_parts.append(f"{field_name},{type_id},{nullable_flag};")
-
-    # All other groups => nullable
-    for group in (
-        nullable_boxed_types,
-        internal_types,
-        collection_types,
-        set_types,
-        map_types,
-    ):
-        for field in group:
-            type_id = field[0]
-            field_name = field[2]
-            nullable_flag = "1"
-            hash_parts.append(f"{field_name},{type_id},{nullable_flag};")
-    for field in other_types:
-        type_id = TypeId.UNKNOWN
-        field_name = field[2]
-        nullable_flag = "1"
-        hash_parts.append(f"{field_name},{type_id},{nullable_flag};")
-
-    hash_str = "".join(hash_parts)
+    # Compute fingerprint string using the new format
+    hash_str = compute_struct_fingerprint(type_resolver, field_names, serializers, nullable_map)
     hash_bytes = hash_str.encode("utf-8")
 
     # Handle empty hash_bytes (no fields or all fields are unknown/dynamic)

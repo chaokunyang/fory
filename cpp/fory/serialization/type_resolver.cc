@@ -928,15 +928,34 @@ std::string ToSnakeCase(const std::string &name) {
 
 } // anonymous namespace
 
-int32_t TypeMeta::compute_struct_version(const TypeMeta &meta) {
-  // Build fingerprint string as in Rust's compute_struct_version_hash:
-  //   snake_case(field_name),effective_type_id,nullable; ...
-  std::string fingerprint;
-  const auto &fields = meta.field_infos;
-  // Reserve a rough estimate to avoid reallocations
-  fingerprint.reserve(fields.size() * 24);
+std::string TypeMeta::compute_struct_fingerprint(
+    const std::vector<FieldInfo> &field_infos) {
+  // Computes the fingerprint string for a struct type used in schema versioning.
+  //
+  // Fingerprint Format:
+  //   Each field contributes: <field_name>,<type_id>,<ref>,<nullable>;
+  //   Fields are sorted lexicographically by field name (not by type category).
+  //
+  // Field Components:
+  //   - field_name: snake_case field name (C++ doesn't support field tag IDs yet)
+  //   - type_id: Fory TypeId as decimal string (e.g., "4" for INT32)
+  //   - ref: "1" if reference tracking enabled, "0" otherwise (always "0" in C++)
+  //   - nullable: "1" if null flag is written, "0" otherwise
+  //
+  // Example fingerprint: "age,4,0,0;name,12,0,1;"
 
-  for (const auto &fi : fields) {
+  // Copy fields and sort lexicographically by snake_case name for fingerprint
+  std::vector<FieldInfo> sorted_fields = field_infos;
+  std::sort(sorted_fields.begin(), sorted_fields.end(),
+            [](const FieldInfo &a, const FieldInfo &b) {
+              return ToSnakeCase(a.field_name) < ToSnakeCase(b.field_name);
+            });
+
+  std::string fingerprint;
+  // Reserve a rough estimate to avoid reallocations
+  fingerprint.reserve(sorted_fields.size() * 24);
+
+  for (const auto &fi : sorted_fields) {
     std::string snake = ToSnakeCase(fi.field_name);
     fingerprint.append(snake);
     fingerprint.push_back(',');
@@ -951,14 +970,23 @@ int32_t TypeMeta::compute_struct_version(const TypeMeta &meta) {
     }
     fingerprint.append(std::to_string(effective_type_id));
     fingerprint.push_back(',');
+    // ref flag: currently always 0 in C++ (no ref tracking support yet)
+    fingerprint.push_back('0');
+    fingerprint.push_back(',');
     fingerprint.append(fi.field_type.nullable ? "1;" : "0;");
   }
+
+  return fingerprint;
+}
+
+int32_t TypeMeta::compute_struct_version(const TypeMeta &meta) {
+  std::string fingerprint = compute_struct_fingerprint(meta.field_infos);
 
   int64_t hash_out[2] = {0, 0};
   MurmurHash3_x64_128(reinterpret_cast<const uint8_t *>(fingerprint.data()),
                       static_cast<int>(fingerprint.size()), 47, hash_out);
 
-  // Rust uses the low 64 bits and then keeps low 32 bits as i32.
+  // Use the low 64 bits and then keep low 32 bits as i32.
   uint64_t low = static_cast<uint64_t>(hash_out[0]);
   uint32_t version = static_cast<uint32_t>(low & 0xFFFF'FFFFu);
 #ifdef FORY_DEBUG

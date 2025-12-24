@@ -215,23 +215,32 @@ public:
   const std::string &get_type_name() const { return type_name; }
   const std::string &get_namespace() const { return namespace_str; }
 
+  /// Computes the fingerprint string for a struct type used in schema versioning.
+  ///
+  /// Fingerprint Format:
+  ///   Each field contributes: `<field_name>,<type_id>,<ref>,<nullable>;`
+  ///   Fields are sorted lexicographically by field name (not by type category).
+  ///
+  /// Field Components:
+  ///   - field_name: snake_case field name (C++ doesn't support field tag IDs yet)
+  ///   - type_id: Fory TypeId as decimal string (e.g., "4" for INT32)
+  ///   - ref: "1" if reference tracking enabled, "0" otherwise (always "0" in C++)
+  ///   - nullable: "1" if null flag is written, "0" otherwise
+  ///
+  /// Example fingerprint: "age,4,0,0;name,12,0,1;"
+  ///
+  /// This format is consistent across Go, Java, Rust, and C++ implementations.
+  static std::string compute_struct_fingerprint(
+      const std::vector<FieldInfo> &field_infos);
+
   /// Compute struct version hash from field metadata.
   ///
-  /// This mirrors Rust's
-  /// `compute_struct_version_hash` in
-  /// rust/fory-derive/src/object/util.rs:
+  /// Uses compute_struct_fingerprint to build the fingerprint string,
+  /// then hashes it with MurmurHash3_x64_128 using seed 47, and takes
+  /// the low 32 bits as signed i32.
   ///
-  ///   - Build a fingerprint string using
-  ///     `snake_case(field_name),effective_type_id,nullable;`
-  ///     for each field in the sorted order defined by the
-  ///     xlang spec (primitive, nullable primitive, internal,
-  ///     list, set, map, other).
-  ///   - Hash the fingerprint with MurmurHash3_x64_128 using
-  ///     seed 47, then take the low 32 bits as signed i32.
-  ///
-  /// Java's ObjectSerializer.computeStructHash uses the same
-  /// algorithm, so this function provides the cross-language
-  /// struct version ID used by class version checking.
+  /// This provides the cross-language struct version ID used by class
+  /// version checking, consistent with Go, Java, and Rust implementations.
   static int32_t compute_struct_version(const TypeMeta &meta);
 
 private:

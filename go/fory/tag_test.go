@@ -400,6 +400,70 @@ func TestNumericStructTagIDReducesSize(t *testing.T) {
 	require.Equal(t, *objWithTags.FieldE, *result.FieldE)
 }
 
+// Test structs at package level for consistent naming
+type TestStructNoNull struct {
+	A *int32 `fory:"id=0,nullable=false,ref=false"`
+	B *int32 `fory:"id=1,nullable=false,ref=false"`
+	C *int32 `fory:"id=2,nullable=false,ref=false"`
+	D *int32 `fory:"id=3,nullable=false,ref=false"`
+	E *int32 `fory:"id=4,nullable=false,ref=false"`
+}
+
+type TestStructDefalt struct {
+	A *int32 `fory:"id=0"`
+	B *int32 `fory:"id=1"`
+	C *int32 `fory:"id=2"`
+	D *int32 `fory:"id=3"`
+	E *int32 `fory:"id=4"`
+}
+
+func TestNullableRefFlagsRespected(t *testing.T) {
+	// Debug: verify tag parsing
+	typ1 := reflect.TypeOf(TestStructNoNull{})
+	for i := 0; i < typ1.NumField(); i++ {
+		field := typ1.Field(i)
+		tag := ParseForyTag(field)
+		t.Logf("Field %s: ID=%d, Nullable=%v (set=%v), Ref=%v (set=%v)",
+			field.Name, tag.ID, tag.Nullable, tag.NullableSet, tag.Ref, tag.RefSet)
+	}
+
+	fory1 := NewFory(WithRefTracking(false), WithCompatible(true))
+	err := fory1.RegisterByName(TestStructNoNull{}, "test.TestStructNoNull")
+	require.NoError(t, err)
+
+	fory2 := NewFory(WithRefTracking(false), WithCompatible(true))
+	err = fory2.RegisterByName(TestStructDefalt{}, "test.TestStructDefalt")
+	require.NoError(t, err)
+
+	v1, v2, v3, v4, v5 := int32(1), int32(2), int32(3), int32(4), int32(5)
+
+	objNoFlags := TestStructNoNull{A: &v1, B: &v2, C: &v3, D: &v4, E: &v5}
+	objDefault := TestStructDefalt{A: &v1, B: &v2, C: &v3, D: &v4, E: &v5}
+
+	dataNoFlags, err := fory1.Marshal(objNoFlags)
+	require.NoError(t, err)
+
+	dataDefault, err := fory2.Marshal(objDefault)
+	require.NoError(t, err)
+
+	// With nullable=false, we should save 5 bytes (1 null flag per field)
+	t.Logf("No nullable/ref flags: %d bytes, Default flags: %d bytes, saved: %d bytes",
+		len(dataNoFlags), len(dataDefault), len(dataDefault)-len(dataNoFlags))
+
+	require.Less(t, len(dataNoFlags), len(dataDefault),
+		"nullable=false,ref=false should produce smaller payload by skipping null flags")
+
+	// Verify deserialization works
+	var result TestStructNoNull
+	err = fory1.Unmarshal(dataNoFlags, &result)
+	require.NoError(t, err)
+	require.Equal(t, *objNoFlags.A, *result.A)
+	require.Equal(t, *objNoFlags.B, *result.B)
+	require.Equal(t, *objNoFlags.C, *result.C)
+	require.Equal(t, *objNoFlags.D, *result.D)
+	require.Equal(t, *objNoFlags.E, *result.E)
+}
+
 func TestTypeDefEncodingSizeWithTagIDs(t *testing.T) {
 	fory1 := NewFory(WithRefTracking(false), WithCompatible(true))
 	err := fory1.RegisterByName(NumericStructWithTags{}, "test.NumericStructWithTags")

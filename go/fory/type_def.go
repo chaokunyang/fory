@@ -462,11 +462,12 @@ func buildFieldDefs(fory *Fory, value reflect.Value) ([]FieldDef, error) {
 
 	// Sort field definitions
 	if len(fieldDefs) > 1 {
-		// Extract serializers, names, typeIds and nullable info for sorting
+		// Extract serializers, names, typeIds, nullable info and tagIDs for sorting
 		serializers := make([]Serializer, len(fieldDefs))
 		fieldNames := make([]string, len(fieldDefs))
 		typeIds := make([]TypeId, len(fieldDefs))
 		nullables := make([]bool, len(fieldDefs))
+		tagIDs := make([]int, len(fieldDefs))
 		for i, fieldDef := range fieldDefs {
 			serializer, err := getFieldTypeSerializer(fory, fieldDef.fieldType)
 			if err != nil {
@@ -478,11 +479,12 @@ func buildFieldDefs(fory *Fory, value reflect.Value) ([]FieldDef, error) {
 			fieldNames[i] = fieldDef.name
 			typeIds[i] = fieldDef.fieldType.TypeId()
 			nullables[i] = fieldDef.nullable
+			tagIDs[i] = fieldDef.tagID
 		}
 
 		// Use sortFields to match Java's field ordering
-		// (primitives before boxed/nullable primitives)
-		_, sortedNames := sortFields(fory.typeResolver, fieldNames, serializers, typeIds, nullables)
+		// (primitives before boxed/nullable primitives, sorted by tag ID if available)
+		_, sortedNames := sortFields(fory.typeResolver, fieldNames, serializers, typeIds, nullables, tagIDs)
 
 		// Rebuild fieldInfos in the sorted order
 		nameToFieldInfo := make(map[string]FieldDef)

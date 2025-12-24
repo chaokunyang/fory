@@ -999,6 +999,7 @@ func (s *structSerializer) initFieldsFromTypeResolver(typeResolver *TypeResolver
 	var serializers []Serializer
 	var typeIds []TypeId
 	var nullables []bool
+	var tagIDs []int
 
 	for i := 0; i < type_.NumField(); i++ {
 		field := type_.Field(i)
@@ -1098,10 +1099,11 @@ func (s *structSerializer) initFieldsFromTypeResolver(typeResolver *TypeResolver
 		serializers = append(serializers, fieldSerializer)
 		typeIds = append(typeIds, fieldTypeId)
 		nullables = append(nullables, nullableFlag)
+		tagIDs = append(tagIDs, foryTag.ID)
 	}
 
-	// Sort fields according to specification using nullable info for consistent ordering
-	serializers, fieldNames = sortFields(typeResolver, fieldNames, serializers, typeIds, nullables)
+	// Sort fields according to specification using nullable info and tag IDs for consistent ordering
+	serializers, fieldNames = sortFields(typeResolver, fieldNames, serializers, typeIds, nullables, tagIDs)
 	order := make(map[string]int, len(fieldNames))
 	for idx, name := range fieldNames {
 		order[name] = idx
@@ -1599,13 +1601,91 @@ func isStructFieldType(ft FieldType) bool {
 	return false
 }
 
-func (s *structSerializer) computeHash() int32 {
+// FieldFingerprintInfo contains the information needed to compute a field's fingerprint.
+type FieldFingerprintInfo struct {
+	// FieldID is the tag ID if configured (>= 0), or -1 to use field name
+	FieldID int
+	// FieldName is the snake_case field name (used when FieldID < 0)
+	FieldName string
+	// TypeID is the Fory type ID for the field
+	TypeID TypeId
+	// Ref is true if reference tracking is enabled for this field
+	Ref bool
+	// Nullable is true if null flag is written for this field
+	Nullable bool
+}
+
+// ComputeStructFingerprint computes the fingerprint string for a struct type.
+//
+// Fingerprint Format:
+//
+//	Each field contributes: "<field_id_or_name>,<type_id>,<ref>,<nullable>;"
+//	Fields are sorted by field_id_or_name (lexicographically as strings)
+//
+// Field Components:
+//   - field_id_or_name: Tag ID as string if configured (e.g., "0", "1"), otherwise snake_case field name
+//   - type_id: Fory TypeId as decimal string (e.g., "4" for INT32)
+//   - ref: "1" if reference tracking enabled, "0" otherwise
+//   - nullable: "1" if null flag is written, "0" otherwise
+//
+// Example fingerprints:
+//   - With tag IDs: "0,4,0,0;1,4,0,1;2,9,0,1;"
+//   - With field names: "age,4,0,0;name,9,0,1;"
+//
+// The fingerprint is used to compute a hash for struct schema versioning.
+// Different nullable/ref settings will produce different fingerprints,
+// ensuring schema compatibility is properly validated.
+func ComputeStructFingerprint(fields []FieldFingerprintInfo) string {
+	// Sort fields by their identifier (field ID or name)
+	type fieldWithKey struct {
+		field   FieldFingerprintInfo
+		sortKey string
+	}
+	fieldsWithKeys := make([]fieldWithKey, 0, len(fields))
+	for _, field := range fields {
+		var sortKey string
+		if field.FieldID >= 0 {
+			sortKey = fmt.Sprintf("%d", field.FieldID)
+		} else {
+			sortKey = field.FieldName
+		}
+		fieldsWithKeys = append(fieldsWithKeys, fieldWithKey{field: field, sortKey: sortKey})
+	}
+
+	sort.Slice(fieldsWithKeys, func(i, j int) bool {
+		return fieldsWithKeys[i].sortKey < fieldsWithKeys[j].sortKey
+	})
+
 	var sb strings.Builder
-
-	for _, field := range s.fields {
-		sb.WriteString(SnakeCase(field.Name))
+	for _, fw := range fieldsWithKeys {
+		// Field identifier
+		sb.WriteString(fw.sortKey)
 		sb.WriteString(",")
+		// Type ID
+		sb.WriteString(fmt.Sprintf("%d", fw.field.TypeID))
+		sb.WriteString(",")
+		// Ref flag
+		if fw.field.Ref {
+			sb.WriteString("1")
+		} else {
+			sb.WriteString("0")
+		}
+		sb.WriteString(",")
+		// Nullable flag
+		if fw.field.Nullable {
+			sb.WriteString("1")
+		} else {
+			sb.WriteString("0")
+		}
+		sb.WriteString(";")
+	}
+	return sb.String()
+}
 
+func (s *structSerializer) computeHash() int32 {
+	// Build FieldFingerprintInfo for each field
+	fields := make([]FieldFingerprintInfo, 0, len(s.fields))
+	for _, field := range s.fields {
 		var typeId TypeId
 		isEnumField := false
 		if field.Serializer == nil {
@@ -1615,17 +1695,14 @@ func (s *structSerializer) computeHash() int32 {
 			// Check if this is an enum serializer (directly or wrapped in ptrToValueSerializer)
 			if _, ok := field.Serializer.(*enumSerializer); ok {
 				isEnumField = true
-				// Java uses UNKNOWN (0) for enum types in fingerprint computation
 				typeId = UNKNOWN
 			} else if ptrSer, ok := field.Serializer.(*ptrToValueSerializer); ok {
 				if _, ok := ptrSer.valueSerializer.(*enumSerializer); ok {
 					isEnumField = true
-					// Java uses UNKNOWN (0) for enum types in fingerprint computation
 					typeId = UNKNOWN
 				}
 			}
 			// For fixed-size arrays with primitive elements, use primitive array type IDs
-			// This matches Python's int8_array, int16_array, etc. types
 			if field.Type.Kind() == reflect.Array {
 				elemKind := field.Type.Elem().Kind()
 				switch elemKind {
@@ -1645,26 +1722,29 @@ func (s *structSerializer) computeHash() int32 {
 					typeId = LIST
 				}
 			} else if field.Type.Kind() == reflect.Slice {
-				// Slices use LIST type ID (maps to Python List[T])
 				typeId = LIST
 			}
 		}
-		sb.WriteString(fmt.Sprintf("%d", typeId))
-		sb.WriteString(",")
 
-		// For cross-language hash compatibility, nullable=0 only for primitive non-pointer types
-		// This matches Java's behavior where isPrimitive() returns true only for int, long, boolean, etc.
-		// Go strings and other non-primitive types should have nullable=1
-		// Enum types are always nullable (like Java enums which are objects)
-		nullableFlag := "1"
-		if isNonNullablePrimitiveKind(field.Type.Kind()) && !field.Referencable && !isEnumField {
-			nullableFlag = "0"
+		// Determine ref and nullable flags
+		ref := field.RefMode == RefModeTracking
+		nullable := true
+		if field.RefMode == RefModeNone {
+			nullable = false
+		} else if isNonNullablePrimitiveKind(field.Type.Kind()) && !field.Referencable && !isEnumField {
+			nullable = false
 		}
-		sb.WriteString(nullableFlag)
-		sb.WriteString(";")
+
+		fields = append(fields, FieldFingerprintInfo{
+			FieldID:   field.TagID,
+			FieldName: SnakeCase(field.Name),
+			TypeID:    typeId,
+			Ref:       ref,
+			Nullable:  nullable,
+		})
 	}
 
-	hashString := sb.String()
+	hashString := ComputeStructFingerprint(fields)
 	data := []byte(hashString)
 	h1, _ := murmur3.Sum128WithSeed(data, 47)
 	hash := int32(h1 & 0xFFFFFFFF)
@@ -1686,17 +1766,30 @@ type triple struct {
 	serializer Serializer
 	name       string
 	nullable   bool
+	tagID      int // -1 = use field name, >=0 = use tag ID for sorting
+}
+
+// getFieldSortKey returns the sort key for a field.
+// If tagID >= 0, returns the tag ID as string (for tag-based sorting).
+// Otherwise returns the snake_case field name.
+func (t triple) getSortKey() string {
+	if t.tagID >= 0 {
+		return fmt.Sprintf("%d", t.tagID)
+	}
+	return SnakeCase(t.name)
 }
 
 // sortFields sorts fields with nullable information to match Java's field ordering.
 // Java separates primitive types (int, long) from boxed types (Integer, Long).
 // In Go, this corresponds to non-pointer primitives vs pointer-to-primitive.
+// When tagIDs are provided (>= 0), fields are sorted by tag ID instead of field name.
 func sortFields(
 	typeResolver *TypeResolver,
 	fieldNames []string,
 	serializers []Serializer,
 	typeIds []TypeId,
 	nullables []bool,
+	tagIDs []int,
 ) ([]Serializer, []string) {
 	var (
 		typeTriples []triple
@@ -1706,11 +1799,15 @@ func sortFields(
 
 	for i, name := range fieldNames {
 		ser := serializers[i]
+		tagID := TagIDUseFieldName // default: use field name
+		if tagIDs != nil && i < len(tagIDs) {
+			tagID = tagIDs[i]
+		}
 		if ser == nil {
-			others = append(others, triple{UNKNOWN, nil, name, nullables[i]})
+			others = append(others, triple{UNKNOWN, nil, name, nullables[i], tagID})
 			continue
 		}
-		typeTriples = append(typeTriples, triple{typeIds[i], ser, name, nullables[i]})
+		typeTriples = append(typeTriples, triple{typeIds[i], ser, name, nullables[i], tagID})
 	}
 	// Java orders: primitives, boxed, finals, others, collections, maps
 	// primitives = non-nullable primitive types (int, long, etc.)
@@ -1755,7 +1852,7 @@ func sortFields(
 			if szI != szJ {
 				return szI > szJ
 			}
-			return SnakeCase(ai.name) < SnakeCase(aj.name)
+			return ai.getSortKey() < aj.getSortKey()
 		})
 	}
 	sortPrimitiveSlice(primitives)
@@ -1765,12 +1862,12 @@ func sortFields(
 			if s[i].typeID != s[j].typeID {
 				return s[i].typeID < s[j].typeID
 			}
-			return SnakeCase(s[i].name) < SnakeCase(s[j].name)
+			return s[i].getSortKey() < s[j].getSortKey()
 		})
 	}
 	sortTuple := func(s []triple) {
 		sort.Slice(s, func(i, j int) bool {
-			return SnakeCase(s[i].name) < SnakeCase(s[j].name)
+			return s[i].getSortKey() < s[j].getSortKey()
 		})
 	}
 	sortByTypeIDThenName(otherInternalTypeFields)

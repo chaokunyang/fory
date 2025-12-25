@@ -579,9 +579,9 @@ mod payload_without_field_ids {
 
 #[test]
 fn test_field_id_payload_compatible_mode() {
-    // Test that structs with field IDs work correctly in compatible mode
-    // Note: Field IDs are currently used for schema matching/evolution.
-    // Payload size optimization (encoding IDs instead of names) is a future enhancement.
+    // Test that structs with field IDs produce smaller payloads in compatible mode.
+    // Field IDs are encoded as compact 1-2 byte integers instead of full field names,
+    // following the xlang serialization spec (TAG_ID encoding with 2-bit marker 0b11).
     let mut fory_compact = Fory::default().compatible(true);
     fory_compact
         .register::<payload_with_field_ids::CompactUser>(500)
@@ -627,10 +627,12 @@ fn test_field_id_payload_compatible_mode() {
     assert_eq!(compact_user, deserialized_compact);
     assert_eq!(verbose_user, deserialized_verbose);
 
-    // Verify fingerprints are different (field IDs affect schema hash)
-    // This ensures field IDs are being used in the metadata
-    assert_ne!(
-        compact_bytes, verbose_bytes,
-        "Payloads should differ due to different type metadata"
+    // Verify that field ID encoding produces smaller payloads
+    // Field IDs (1-2 bytes each) are much smaller than field names (variable length strings)
+    assert!(
+        compact_bytes.len() < verbose_bytes.len(),
+        "Compact encoding with field IDs ({} bytes) should be smaller than field names ({} bytes)",
+        compact_bytes.len(),
+        verbose_bytes.len()
     );
 }

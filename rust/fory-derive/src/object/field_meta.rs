@@ -63,7 +63,7 @@ impl ForyFieldMeta {
     /// Returns effective nullable value based on field type classification
     ///
     /// Defaults:
-    /// - Option<T>, RcWeak<T>, ArcWeak<T>: true (can be None/dangling)
+    /// - `Option<T>`, `RcWeak<T>`, `ArcWeak<T>`: true (can be None/dangling)
     /// - All other types: false
     pub fn effective_nullable(&self, type_class: FieldTypeClass) -> bool {
         self.nullable.unwrap_or(matches!(
@@ -75,12 +75,15 @@ impl ForyFieldMeta {
     /// Returns effective ref tracking value based on field type classification
     ///
     /// Defaults:
-    /// - Rc<T>, Arc<T>, RcWeak<T>, ArcWeak<T>: true (shared ownership types)
+    /// - `Rc<T>`, `Arc<T>`, `RcWeak<T>`, `ArcWeak<T>`: true (shared ownership types)
     /// - All other types: false
     pub fn effective_ref_tracking(&self, type_class: FieldTypeClass) -> bool {
         self.ref_tracking.unwrap_or(matches!(
             type_class,
-            FieldTypeClass::Rc | FieldTypeClass::Arc | FieldTypeClass::RcWeak | FieldTypeClass::ArcWeak
+            FieldTypeClass::Rc
+                | FieldTypeClass::Arc
+                | FieldTypeClass::RcWeak
+                | FieldTypeClass::ArcWeak
         ))
     }
 
@@ -168,7 +171,7 @@ pub fn validate_field_metas(fields_with_meta: &[(&Field, ForyFieldMeta)]) -> syn
     Ok(())
 }
 
-/// Extract the outer type name from a type (e.g., "Option" from "Option<String>")
+/// Extract the outer type name from a type (e.g., "Option" from `Option<String>`)
 fn extract_outer_type_name(ty: &Type) -> String {
     match ty {
         Type::Path(type_path) => {
@@ -182,7 +185,7 @@ fn extract_outer_type_name(ty: &Type) -> String {
     }
 }
 
-/// Extract the inner type from Option<T>
+/// Extract the inner type from `Option<T>`
 fn extract_option_inner_type(ty: &Type) -> Option<Type> {
     if let Type::Path(type_path) = ty {
         if let Some(seg) = type_path.path.segments.last() {
@@ -248,7 +251,9 @@ pub fn get_field_flags(field: &Field, meta: &ForyFieldMeta) -> (bool, bool) {
 
 /// Parse field metadata for all fields and validate
 #[allow(dead_code)]
-pub fn parse_and_validate_fields<'a>(fields: &'a [&'a Field]) -> syn::Result<Vec<(&'a Field, ForyFieldMeta)>> {
+pub fn parse_and_validate_fields<'a>(
+    fields: &'a [&'a Field],
+) -> syn::Result<Vec<(&'a Field, ForyFieldMeta)>> {
     let fields_with_meta: Vec<_> = fields
         .iter()
         .map(|f| {

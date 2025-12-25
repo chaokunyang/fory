@@ -300,8 +300,7 @@ impl FieldInfo {
             // Field ID mode: | 0b11:2bits | field_id_low:4bits | nullable:1bit | ref_tracking:1bit |
             // Use max(0, field_id) to handle unmatched fields that have field_id = -1
             let field_id = std::cmp::max(0, self.field_id);
-            let mut header: u8 =
-                (min(SMALL_FIELD_ID_THRESHOLD, field_id) as u8) << 2;
+            let mut header: u8 = (min(SMALL_FIELD_ID_THRESHOLD, field_id) as u8) << 2;
             if ref_tracking {
                 header |= 1;
             }

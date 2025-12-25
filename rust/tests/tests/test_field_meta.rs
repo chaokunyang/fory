@@ -327,14 +327,10 @@ mod compatible_v2 {
 fn test_compatible_mode_v1_to_v2() {
     // Serialize with V1, deserialize with V2 (forward compatibility)
     let mut fory_v1 = Fory::default().compatible(true);
-    fory_v1
-        .register::<compatible_v1::UserV1>(100)
-        .unwrap();
+    fory_v1.register::<compatible_v1::UserV1>(100).unwrap();
 
     let mut fory_v2 = Fory::default().compatible(true);
-    fory_v2
-        .register::<compatible_v2::UserV2>(100)
-        .unwrap();
+    fory_v2.register::<compatible_v2::UserV2>(100).unwrap();
 
     let user_v1 = compatible_v1::UserV1 {
         name: "Alice".to_string(),
@@ -356,14 +352,10 @@ fn test_compatible_mode_v1_to_v2() {
 fn test_compatible_mode_v2_to_v1() {
     // Serialize with V2, deserialize with V1 (backward compatibility)
     let mut fory_v1 = Fory::default().compatible(true);
-    fory_v1
-        .register::<compatible_v1::UserV1>(100)
-        .unwrap();
+    fory_v1.register::<compatible_v1::UserV1>(100).unwrap();
 
     let mut fory_v2 = Fory::default().compatible(true);
-    fory_v2
-        .register::<compatible_v2::UserV2>(100)
-        .unwrap();
+    fory_v2.register::<compatible_v2::UserV2>(100).unwrap();
 
     let user_v2 = compatible_v2::UserV2 {
         name: "Bob".to_string(),

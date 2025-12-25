@@ -398,8 +398,9 @@ struct GetFieldTagEntry<
       ::fory::FORY_FT_GET_OPT1(tuple), ::fory::FORY_FT_GET_OPT2(tuple)>::type
 
 // Main macro: FORY_FIELD_TAGS(Type, (field1, id1), (field2, id2, nullable),...)
+// Note: Uses fory::detail:: instead of ::fory::detail:: for GCC compatibility
 #define FORY_FIELD_TAGS(Type, ...)                                             \
-  template <> struct ::fory::detail::ForyFieldTagsImpl<Type> {                 \
+  template <> struct fory::detail::ForyFieldTagsImpl<Type> {                   \
     static constexpr bool has_tags = true;                                     \
     static constexpr size_t field_count = FORY_PP_NARG(__VA_ARGS__);           \
     using Entries = std::tuple<FORY_FT_ENTRIES(Type, __VA_ARGS__)>;            \

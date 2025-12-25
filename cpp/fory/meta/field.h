@@ -354,6 +354,11 @@ struct GetFieldTagEntry<
 // FORY_FIELD_TAGS Macro Implementation
 // ============================================================================
 
+// Force macro expansion - needed for GCC compatibility
+#define FORY_FT_EXPAND(...) __VA_ARGS__
+#define FORY_FT_DEFER(id) id FORY_FT_EMPTY()
+#define FORY_FT_EMPTY()
+
 // Helper macros to extract parts from (field, id, ...) tuples
 #define FORY_FT_FIELD(tuple) FORY_FT_FIELD_IMPL tuple
 #define FORY_FT_FIELD_IMPL(field, ...) field
@@ -382,7 +387,13 @@ struct GetFieldTagEntry<
 // (field, id, opt1) -> one option
 // (field, id, opt1, opt2) -> two options
 #define FORY_FT_MAKE_ENTRY(Type, tuple)                                        \
-  FORY_PP_CONCAT(FORY_FT_MAKE_ENTRY_, FORY_FT_TUPLE_SIZE(tuple))(Type, tuple)
+  FORY_FT_MAKE_ENTRY_DISPATCH(Type, tuple, FORY_FT_TUPLE_SIZE(tuple))
+
+#define FORY_FT_MAKE_ENTRY_DISPATCH(Type, tuple, size)                         \
+  FORY_FT_MAKE_ENTRY_DISPATCH2(Type, tuple, size)
+
+#define FORY_FT_MAKE_ENTRY_DISPATCH2(Type, tuple, size)                        \
+  FORY_FT_MAKE_ENTRY_##size(Type, tuple)
 
 #define FORY_FT_MAKE_ENTRY_2(Type, tuple)                                      \
   typename ::fory::detail::ParseFieldTagEntry<                                 \
@@ -412,11 +423,18 @@ struct GetFieldTagEntry<
   }
 
 // Helper to generate entries tuple content
+// Uses double indirection to force expansion on GCC
 #define FORY_FT_ENTRIES(Type, ...)                                             \
-  FORY_FT_ENTRIES_IMPL(Type, FORY_PP_NARG(__VA_ARGS__), __VA_ARGS__)
+  FORY_FT_ENTRIES_EXPAND(Type, FORY_PP_NARG(__VA_ARGS__), __VA_ARGS__)
+
+#define FORY_FT_ENTRIES_EXPAND(Type, N, ...)                                   \
+  FORY_FT_ENTRIES_IMPL(Type, N, __VA_ARGS__)
 
 #define FORY_FT_ENTRIES_IMPL(Type, N, ...)                                     \
-  FORY_PP_CONCAT(FORY_FT_ENTRIES_, N)(Type, __VA_ARGS__)
+  FORY_FT_ENTRIES_IMPL2(Type, N, __VA_ARGS__)
+
+#define FORY_FT_ENTRIES_IMPL2(Type, N, ...)                                    \
+  FORY_FT_ENTRIES_##N(Type, __VA_ARGS__)
 
 // Generate entries for 1-32 fields
 #define FORY_FT_ENTRIES_1(T, _1) FORY_FT_MAKE_ENTRY(T, _1)

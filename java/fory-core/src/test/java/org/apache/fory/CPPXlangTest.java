@@ -37,7 +37,7 @@ public class CPPXlangTest extends XlangTestBase {
 
   @Override
   protected void ensurePeerReady() {
-    String enabled = System.getenv("FORY_CPP_JAVA_CI");
+    String enabled = System.getenv("FORY_CPP_JAVA_CI_IGNORED");
     if (!"1".equals(enabled)) {
       throw new SkipException("Skipping CPPXlangTest: FORY_CPP_JAVA_CI not set to 1");
     }

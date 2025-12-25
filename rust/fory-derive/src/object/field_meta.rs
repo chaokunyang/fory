@@ -45,15 +45,15 @@ pub struct ForyFieldMeta {
 pub enum FieldTypeClass {
     /// Primitives: i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize, f32, f64, bool
     Primitive,
-    /// Option<T> - nullable by default
+    /// `Option<T>` - nullable by default
     Option,
-    /// Rc<T> - ref tracking by default, non-nullable
+    /// `Rc<T>` - ref tracking by default, non-nullable
     Rc,
-    /// Arc<T> - ref tracking by default, non-nullable
+    /// `Arc<T>` - ref tracking by default, non-nullable
     Arc,
-    /// RcWeak<T> (fory type) - nullable AND ref tracking by default
+    /// `RcWeak<T>` (fory type) - nullable AND ref tracking by default
     RcWeak,
-    /// ArcWeak<T> (fory type) - nullable AND ref tracking by default
+    /// `ArcWeak<T>` (fory type) - nullable AND ref tracking by default
     ArcWeak,
     /// All other types (String, Vec, HashMap, user structs, etc.)
     Other,

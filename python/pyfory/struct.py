@@ -98,21 +98,28 @@ class FieldInfo:
     unwrapped_type: type  # Type with Optional unwrapped
 
 
-def _default_field_meta(type_hint: type, field_nullable: bool = False) -> ForyFieldMeta:
+def _default_field_meta(type_hint: type, field_nullable: bool = False, xlang: bool = False) -> ForyFieldMeta:
     """Returns default field metadata for fields without pyfory.field().
 
-    A field is considered nullable if:
+    For native mode, a field is considered nullable if:
     1. It's Optional[T], OR
     2. It's a non-primitive type (all reference types can be None), OR
     3. Global field_nullable is True
+
+    For xlang mode, a field is nullable only if:
+    1. It's Optional[T]
 
     For ref, defaults to False to preserve original serialization behavior.
     Non-nullable complex fields use xwrite_no_ref (no ref header in buffer).
     Users can explicitly set ref=True in pyfory.field() to enable ref tracking.
     """
     unwrapped_type, is_optional = unwrap_optional(type_hint)
-    # Non-primitive types (str, list, dict, etc.) are all nullable by default
-    nullable = is_optional or not is_primitive_type(unwrapped_type) or field_nullable
+    if xlang:
+        # For xlang: nullable=False by default, except for Optional[T] types
+        nullable = is_optional
+    else:
+        # For native: Non-primitive types (str, list, dict, etc.) are all nullable by default
+        nullable = is_optional or not is_primitive_type(unwrapped_type) or field_nullable
     # Default ref=False to preserve original serialization behavior where non-nullable
     # fields use xwrite_no_ref. Users can explicitly set ref=True in pyfory.field()
     # to enable per-field ref tracking when fory.ref_tracking is enabled.
@@ -123,6 +130,7 @@ def _extract_field_infos(
     fory,
     clz: type,
     type_hints: dict,
+    xlang: bool = False,
 ) -> tuple[list[FieldInfo], dict[str, ForyFieldMeta]]:
     """
     Extract FieldInfo list from a dataclass.
@@ -133,6 +141,9 @@ def _extract_field_infos(
     - Computing effective nullable based on Optional[T]
     - Computing runtime ref tracking based on global config
     - Inheritance: parent fields first, subclass fields override parent fields
+
+    Args:
+        xlang: If True, use xlang defaults (nullable=False except for Optional[T])
 
     Returns:
         Tuple of (field_infos, field_metas) where field_metas maps field name to ForyFieldMeta
@@ -165,7 +176,7 @@ def _extract_field_infos(
             # Field without pyfory.field() - use defaults
             # Auto-detect Optional[T] for nullable, also respect global field_nullable
             field_type = type_hints.get(field_name, typing.Any)
-            meta = _default_field_meta(field_type, global_field_nullable)
+            meta = _default_field_meta(field_type, global_field_nullable, xlang=xlang)
 
         field_metas[field_name] = meta
 
@@ -185,8 +196,13 @@ def _extract_field_infos(
         type_hint = type_hints.get(field_name, typing.Any)
         unwrapped_type, is_optional = unwrap_optional(type_hint)
 
-        # Compute effective nullable: Optional[T] or non-primitive types are nullable
-        effective_nullable = meta.nullable or is_optional or not is_primitive_type(unwrapped_type)
+        # Compute effective nullable based on mode
+        if xlang:
+            # For xlang: respect explicit annotation or default to is_optional only
+            effective_nullable = meta.nullable or is_optional
+        else:
+            # For native: Optional[T] or non-primitive types are nullable
+            effective_nullable = meta.nullable or is_optional or not is_primitive_type(unwrapped_type)
 
         # Compute runtime ref tracking: field.ref AND global config
         runtime_ref = meta.ref and global_ref_tracking
@@ -255,7 +271,8 @@ class DataClassSerializer(Serializer):
             self._field_metas = {}
         else:
             # Extract field infos using new pyfory.field() metadata
-            self._field_infos, self._field_metas = _extract_field_infos(fory, clz, self._type_hints)
+            # Pass xlang to get correct nullable defaults for the mode
+            self._field_infos, self._field_metas = _extract_field_infos(fory, clz, self._type_hints, xlang=xlang)
 
             if self._field_infos:
                 # Use new field info based approach
@@ -1086,18 +1103,19 @@ def compute_struct_fingerprint(type_resolver, field_names, serializers, nullable
 
         if serializer is None:
             type_id = TypeId.UNKNOWN
-            nullable_flag = "1"
+            # For unknown serializers, use nullable from map (defaults to False for xlang)
+            nullable_flag = "1" if nullable_map.get(field_name, False) else "0"
         else:
             type_id = type_resolver.get_typeinfo(serializer.type_).type_id & 0xFF
             is_nullable = nullable_map.get(field_name, False)
 
-            if is_primitive_type(type_id) and not is_nullable:
-                nullable_flag = "0"
-            elif is_polymorphic_type(type_id) or type_id in {TypeId.ENUM, TypeId.NAMED_ENUM}:
+            # For polymorphic or enum types, set type_id to UNKNOWN but preserve nullable from map
+            if is_polymorphic_type(type_id) or type_id in {TypeId.ENUM, TypeId.NAMED_ENUM}:
                 type_id = TypeId.UNKNOWN
-                nullable_flag = "1"
-            else:
-                nullable_flag = "1"
+
+            # Use nullable from map - for xlang, this is already computed correctly
+            # (False by default except for Optional[T] or explicit annotation)
+            nullable_flag = "1" if is_nullable else "0"
 
         # Determine field identifier for fingerprint
         if tag_id >= 0:

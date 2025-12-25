@@ -115,6 +115,7 @@ import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.EnumSerializer;
 import org.apache.fory.serializer.FinalFieldReplaceResolveSerializer;
 import org.apache.fory.serializer.MetaSharedSerializer;
+import org.apache.fory.annotation.ForyField;
 import org.apache.fory.serializer.ObjectSerializer;
 import org.apache.fory.serializer.PrimitiveSerializers.LongSerializer;
 import org.apache.fory.serializer.ReplaceResolveSerializer;
@@ -255,6 +256,49 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
 
   private boolean needWriteRef(TypeRef<?> type) {
     return typeResolver(r -> r.needToWriteRef(type));
+  }
+
+  /**
+   * Get the nullable flag for a field, respecting xlang mode.
+   *
+   * <p>For xlang mode (SERIALIZATION): use xlang defaults unless @ForyField annotation overrides:
+   *
+   * <ul>
+   *   <li>If @ForyField annotation is present: use its nullable() value
+   *   <li>Otherwise: return true only for Optional types, false for all other non-primitives
+   * </ul>
+   *
+   * <p>For native mode: use descriptor's nullable which defaults to true for non-primitives.
+   *
+   * <p>Important: This ensures the serialization format matches what the TypeDef metadata says.
+   * The TypeDef uses xlang defaults (nullable=false except for Optional types), so the actual
+   * serialization must use the same defaults to ensure consistency across languages.
+   */
+  private boolean getFieldNullable(Descriptor descriptor) {
+    Class<?> rawType = descriptor.getTypeRef().getRawType();
+    if (rawType.isPrimitive()) {
+      return false;
+    }
+    if (fory.isCrossLanguage()) {
+      // For xlang mode: apply xlang defaults
+      // This must match what TypeDefEncoder.buildFieldType uses for TypeDef metadata
+      ForyField foryField = descriptor.getForyField();
+      if (foryField != null) {
+        // Use explicit annotation value
+        return foryField.nullable();
+      }
+      // Default for xlang: false for all non-primitives, except Optional types
+      return isOptionalType(rawType);
+    }
+    // For native mode: use descriptor's nullable (true for non-primitives by default)
+    return descriptor.isNullable();
+  }
+
+  private static boolean isOptionalType(Class<?> type) {
+    return type == java.util.Optional.class
+        || type == java.util.OptionalInt.class
+        || type == java.util.OptionalLong.class
+        || type == java.util.OptionalDouble.class;
   }
 
   @Override
@@ -403,7 +447,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
   protected Expression serializeField(
       Expression fieldValue, Expression buffer, Descriptor descriptor) {
     TypeRef<?> typeRef = descriptor.getTypeRef();
-    boolean nullable = descriptor.isNullable();
+    boolean nullable = getFieldNullable(descriptor);
 
     boolean useRefTracking;
     if (needWriteRef(typeRef)) {
@@ -1773,7 +1817,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
   protected Expression deserializeField(
       Expression buffer, Descriptor descriptor, Function<Expression, Expression> callback) {
     TypeRef<?> typeRef = descriptor.getTypeRef();
-    boolean nullable = descriptor.isNullable();
+    boolean nullable = getFieldNullable(descriptor);
 
     boolean typeNeedsRef = needWriteRef(typeRef);
     boolean useRefTracking;

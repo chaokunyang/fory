@@ -531,19 +531,38 @@ public class ClassDef implements Serializable {
     Descriptor toDescriptor(TypeResolver resolver, Descriptor descriptor) {
       TypeRef<?> declared = descriptor != null ? descriptor.getTypeRef() : null;
       TypeRef<?> typeRef = fieldType.toTypeToken(resolver, declared);
+      // Get nullable and trackingRef from remote FieldType - these are what the remote peer
+      // used when serializing, so we must respect them when deserializing
+      boolean remoteNullable = fieldType.nullable();
+      boolean remoteTrackingRef = fieldType.trackingRef();
+
       if (descriptor != null) {
-        if (typeRef.equals(declared)) {
-          return descriptor;
-        } else {
-          // TODO fix return here
-          descriptor.copyWithTypeName(typeRef.getType().getTypeName());
+        // Local field exists - check if we need to update nullable/trackingRef
+        boolean nullableMismatch = descriptor.isNullable() != remoteNullable;
+        boolean trackingRefMismatch = descriptor.isTrackingRef() != remoteTrackingRef;
+        boolean typeMismatch = !typeRef.equals(declared);
+
+        if (nullableMismatch || trackingRefMismatch || typeMismatch) {
+          // Create a new descriptor with the remote nullable/trackingRef flags
+          // but keep the local field reference for setting values
+          return new DescriptorBuilder(descriptor)
+              .typeRef(typeRef)
+              .typeName(typeRef.getType().getTypeName())
+              .nullable(remoteNullable)
+              .trackingRef(remoteTrackingRef)
+              .build();
         }
+        return descriptor;
       }
       // This field doesn't exist in peer class, so any legal modifier will be OK.
       // Use constant instead of reflection to avoid GraalVM native image issues.
       int stubModifiers = Modifier.PRIVATE | Modifier.FINAL;
-      return new Descriptor(
-          typeRef, fieldName, stubModifiers, definedClass, resolver.needToWriteRef(typeRef));
+      // For new descriptors, create with remote nullable/trackingRef flags
+      Descriptor newDesc =
+          new Descriptor(typeRef, fieldName, stubModifiers, definedClass, remoteTrackingRef);
+      // The Descriptor constructor doesn't set nullable properly for non-field cases,
+      // so we need to use DescriptorBuilder to set it explicitly
+      return new DescriptorBuilder(newDesc).nullable(remoteNullable).build();
     }
 
     @Override
@@ -1218,8 +1237,19 @@ public class ClassDef implements Serializable {
       }
     }
     boolean isMonomorphic = genericType.isMonomorphic();
-    boolean trackingRef = genericType.trackingRef(resolver);
-    boolean nullable = !genericType.getCls().isPrimitive();
+    // For xlang: ref tracking is false by default (no shared ownership like Rust's Rc/Arc)
+    // For native: use the type's default tracking behavior
+    boolean trackingRef = isXlang ? false : genericType.trackingRef(resolver);
+    // For xlang: nullable is false by default (aligned with all languages)
+    // Exception: Optional types are nullable (like Rust's Option<T>)
+    // For native: non-primitive types are nullable by default
+    boolean nullable;
+    if (isXlang) {
+      // Only Optional types are nullable by default in xlang mode
+      nullable = isOptionalType(rawType);
+    } else {
+      nullable = !genericType.getCls().isPrimitive();
+    }
 
     // Apply @ForyField annotation if present
     if (field != null) {
@@ -1297,6 +1327,14 @@ public class ClassDef implements Serializable {
         return new ObjectFieldType(xtypeId, isMonomorphic, nullable, trackingRef);
       }
     }
+  }
+
+  /** Check if a type is an Optional type (Optional, OptionalInt, OptionalLong, OptionalDouble). */
+  private static boolean isOptionalType(Class<?> type) {
+    return type == java.util.Optional.class
+        || type == java.util.OptionalInt.class
+        || type == java.util.OptionalLong.class
+        || type == java.util.OptionalDouble.class;
   }
 
   public static ClassDef buildClassDef(Fory fory, Class<?> cls) {

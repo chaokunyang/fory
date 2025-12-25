@@ -196,8 +196,7 @@ def validate_field_metas(
         if meta.id >= 0:
             if meta.id in tag_ids_seen:
                 raise ValueError(
-                    f"Duplicate tag ID {meta.id} in class {cls.__name__}: "
-                    f"fields '{tag_ids_seen[meta.id]}' and '{field_name}' have the same ID"
+                    f"Duplicate tag ID {meta.id} in class {cls.__name__}: fields '{tag_ids_seen[meta.id]}' and '{field_name}' have the same ID"
                 )
             tag_ids_seen[meta.id] = field_name
 
@@ -208,6 +207,5 @@ def validate_field_metas(
         type_hint = type_hints[field_name]
         if is_optional_type(type_hint) and not meta.nullable:
             raise ValueError(
-                f"Field '{field_name}' in class {cls.__name__} is Optional[T] but nullable=False. "
-                f"Optional fields must have nullable=True."
+                f"Field '{field_name}' in class {cls.__name__} is Optional[T] but nullable=False. Optional fields must have nullable=True."
             )

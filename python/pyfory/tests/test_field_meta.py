@@ -24,13 +24,10 @@ from dataclasses import dataclass, fields
 from typing import Optional, List, Dict
 
 import pyfory
-from pyfory import Fory, int32, int64, float64
+from pyfory import Fory, int32, float64
 from pyfory.field import (
-    field,
     ForyFieldMeta,
-    FORY_FIELD_METADATA_KEY,
     extract_field_meta,
-    validate_field_metas,
 )
 
 
@@ -39,6 +36,7 @@ class TestFieldFunction:
 
     def test_basic_field_creation(self):
         """Test basic field creation with tag ID."""
+
         @dataclass
         class TestClass:
             name: str = pyfory.field(0)
@@ -52,6 +50,7 @@ class TestFieldFunction:
 
     def test_field_with_default_value(self):
         """Test field with default value."""
+
         @dataclass
         class TestClass:
             name: str = pyfory.field(0, default="default_name")
@@ -63,6 +62,7 @@ class TestFieldFunction:
 
     def test_field_with_default_factory(self):
         """Test field with default_factory."""
+
         @dataclass
         class TestClass:
             items: List[int] = pyfory.field(0, default_factory=list)
@@ -74,6 +74,7 @@ class TestFieldFunction:
 
     def test_field_name_encoding(self):
         """Test field with id=-1 uses field name encoding."""
+
         @dataclass
         class TestClass:
             name: str = pyfory.field(-1)
@@ -84,6 +85,7 @@ class TestFieldFunction:
 
     def test_field_tag_id_encoding(self):
         """Test field with id>=0 uses tag ID encoding."""
+
         @dataclass
         class TestClass:
             name: str = pyfory.field(0)
@@ -96,6 +98,7 @@ class TestFieldFunction:
 
     def test_nullable_field(self):
         """Test nullable field."""
+
         @dataclass
         class TestClass:
             optional_name: Optional[str] = pyfory.field(0, nullable=True)
@@ -105,6 +108,7 @@ class TestFieldFunction:
 
     def test_ref_field(self):
         """Test ref tracking field."""
+
         @dataclass
         class TestClass:
             friends: List["TestClass"] = pyfory.field(0, ref=True, default_factory=list)
@@ -114,6 +118,7 @@ class TestFieldFunction:
 
     def test_ignore_field(self):
         """Test ignored field."""
+
         @dataclass
         class TestClass:
             name: str = pyfory.field(0)
@@ -148,6 +153,7 @@ class TestValidation:
 
     def test_duplicate_tag_id_validation(self):
         """Test that duplicate tag IDs raise ValueError at serialization time."""
+
         @dataclass
         class TestClass:
             field1: str = pyfory.field(0)
@@ -162,6 +168,7 @@ class TestValidation:
 
     def test_optional_without_nullable_raises(self):
         """Test that Optional[T] with nullable=False raises ValueError at serialization time."""
+
         @dataclass
         class TestClass:
             # This should raise because Optional requires nullable=True
@@ -190,6 +197,7 @@ class TestSerialization:
 
     def test_basic_serialization(self):
         """Test basic serialization with field metadata."""
+
         @dataclass
         class User:
             id: int32 = pyfory.field(0)
@@ -207,6 +215,7 @@ class TestSerialization:
 
     def test_nullable_serialization(self):
         """Test serialization of nullable fields."""
+
         @dataclass
         class Profile:
             name: str = pyfory.field(0)
@@ -229,6 +238,7 @@ class TestSerialization:
 
     def test_ignore_field_serialization(self):
         """Test that ignored fields are not serialized."""
+
         @dataclass
         class CachedData:
             value: int32 = pyfory.field(0)
@@ -250,6 +260,7 @@ class TestSerialization:
 
     def test_ref_tracking_field(self):
         """Test ref tracking with field-level control."""
+
         # Test ref tracking using a list with shared object references
         @dataclass
         class Container:
@@ -271,6 +282,7 @@ class TestSerialization:
 
     def test_mixed_fields(self):
         """Test mixing fields with and without explicit metadata."""
+
         @dataclass
         class MixedClass:
             # Explicit tag ID
@@ -297,6 +309,7 @@ class TestInheritance:
 
     def test_parent_child_fields(self):
         """Test that parent fields come before child fields."""
+
         @dataclass
         class Parent:
             parent_field: str = pyfory.field(0)
@@ -321,6 +334,7 @@ class TestFingerprint:
 
     def test_fingerprint_includes_tag_id(self):
         """Test that fingerprint changes when tag ID changes."""
+
         @dataclass
         class V1:
             name: str = pyfory.field(0)
@@ -348,6 +362,7 @@ class TestFingerprint:
 
     def test_fingerprint_includes_ref_flag(self):
         """Test that fingerprint includes ref flag."""
+
         @dataclass
         class WithRef:
             items: List[int] = pyfory.field(0, ref=True, default_factory=list)
@@ -379,6 +394,7 @@ class TestTypeDefEncoding:
 
     def test_tag_id_encoding(self):
         """Test that TAG_ID encoding is used for fields with tag_id >= 0."""
+
         @dataclass
         class TestClass:
             field0: int32 = pyfory.field(0)
@@ -398,6 +414,7 @@ class TestTypeDefEncoding:
 
     def test_large_tag_id(self):
         """Test TAG_ID encoding with large tag IDs (>= 15)."""
+
         @dataclass
         class TestClass:
             field: int32 = pyfory.field(100)

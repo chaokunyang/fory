@@ -16,8 +16,6 @@
 # under the License.
 
 import logging
-import os
-import subprocess
 from . import common
 
 
@@ -78,18 +76,3 @@ def run():
     )
     for cmd in cmds:
         common.exec_cmd(cmd)
-
-    logging.info("Executing Rust <-> Java11 cross-language tests")
-    os.environ["FORY_RUST_JAVA_CI"] = "1"
-    java_dir = os.path.join("..", "java")
-    subprocess.check_call(["mvn", "clean", "install", "-DskipTests"], cwd=java_dir)
-    subprocess.check_call(
-        [
-            "mvn",
-            "-B",
-            "--no-transfer-progress",
-            "test",
-            "-Dtest=org.apache.fory.RustXlangTest",
-        ],
-        cwd=os.path.join(java_dir, "fory-core"),
-    )

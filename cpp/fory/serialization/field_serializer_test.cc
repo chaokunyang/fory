@@ -716,6 +716,49 @@ FORY_FIELD_TAGS(TagsTestDocument, (title, 0), // string: non-nullable
                 (data, 3), // shared_ptr: non-nullable (default)
                 (optional_data, 4, nullable)); // shared_ptr: nullable
 
+// Struct for testing FORY_FIELD_TAGS with ref tracking
+struct TagsRefNode {
+  std::string name;
+  int32_t id;
+
+  bool operator==(const TagsRefNode &other) const {
+    return name == other.name && id == other.id;
+  }
+};
+
+FORY_STRUCT(TagsRefNode, name, id);
+FORY_FIELD_TAGS(TagsRefNode, (name, 0), (id, 1));
+
+// Struct with ref tracking via FORY_FIELD_TAGS
+struct TagsRefHolder {
+  std::shared_ptr<TagsRefNode> first;
+  std::shared_ptr<TagsRefNode> second;
+};
+
+FORY_STRUCT(TagsRefHolder, first, second);
+FORY_FIELD_TAGS(TagsRefHolder, (first, 0, ref), (second, 1, ref));
+
+// Struct with nullable + ref via FORY_FIELD_TAGS
+struct TagsNullableRefHolder {
+  std::shared_ptr<TagsRefNode> required_node;
+  std::shared_ptr<TagsRefNode> optional_node;
+};
+
+FORY_STRUCT(TagsNullableRefHolder, required_node, optional_node);
+FORY_FIELD_TAGS(TagsNullableRefHolder, (required_node, 0, ref),
+                (optional_node, 1, nullable, ref));
+
+// Tree-like struct with self-referential nullable ref pointers
+struct TagsTreeNode {
+  std::string value;
+  std::shared_ptr<TagsTreeNode> left;
+  std::shared_ptr<TagsTreeNode> right;
+};
+
+FORY_STRUCT(TagsTreeNode, value, left, right);
+FORY_FIELD_TAGS(TagsTreeNode, (value, 0), (left, 1, nullable, ref),
+                (right, 2, nullable, ref));
+
 namespace fory {
 namespace serialization {
 namespace test {
@@ -829,6 +872,333 @@ TEST(FieldTagsSerializerTest, TagsMetadataCompileTime) {
   static_assert(DataHelpers::template field_nullable<1>() == false);
   static_assert(DataHelpers::template field_tag_id<0>() == 0);
   static_assert(DataHelpers::template field_tag_id<1>() == 1);
+}
+
+// ============================================================================
+// FORY_FIELD_TAGS Reference Tracking Tests
+// ============================================================================
+
+TEST(FieldTagsSerializerTest, TagsRefTrackingSameObject) {
+  auto fory =
+      Fory::builder().xlang(true).track_ref(true).compatible(false).build();
+  fory.register_struct<TagsRefNode>(300);
+  fory.register_struct<TagsRefHolder>(301);
+
+  // Create a shared node that will be referenced by both fields
+  auto shared_node = std::make_shared<TagsRefNode>();
+  shared_node->name = "shared";
+  shared_node->id = 42;
+
+  TagsRefHolder original;
+  original.first = shared_node;
+  original.second = shared_node; // Same object
+
+  auto bytes_result = fory.serialize(original);
+  ASSERT_TRUE(bytes_result.ok()) << bytes_result.error().to_string();
+
+  auto deser_result = fory.deserialize<TagsRefHolder>(bytes_result->data(),
+                                                      bytes_result->size());
+  ASSERT_TRUE(deser_result.ok()) << deser_result.error().to_string();
+
+  auto &result = deser_result.value();
+  ASSERT_TRUE(result.first);
+  ASSERT_TRUE(result.second);
+  EXPECT_EQ(result.first->name, "shared");
+  EXPECT_EQ(result.first->id, 42);
+  EXPECT_EQ(result.second->name, "shared");
+  EXPECT_EQ(result.second->id, 42);
+
+  // Reference tracking should preserve shared_ptr aliasing
+  EXPECT_EQ(result.first, result.second)
+      << "FORY_FIELD_TAGS with ref should preserve shared_ptr aliasing";
+}
+
+TEST(FieldTagsSerializerTest, TagsRefTrackingDifferentObjects) {
+  auto fory =
+      Fory::builder().xlang(true).track_ref(true).compatible(false).build();
+  fory.register_struct<TagsRefNode>(300);
+  fory.register_struct<TagsRefHolder>(301);
+
+  TagsRefHolder original;
+  original.first = std::make_shared<TagsRefNode>();
+  original.first->name = "first";
+  original.first->id = 1;
+  original.second = std::make_shared<TagsRefNode>();
+  original.second->name = "second";
+  original.second->id = 2;
+
+  auto bytes_result = fory.serialize(original);
+  ASSERT_TRUE(bytes_result.ok()) << bytes_result.error().to_string();
+
+  auto deser_result = fory.deserialize<TagsRefHolder>(bytes_result->data(),
+                                                      bytes_result->size());
+  ASSERT_TRUE(deser_result.ok()) << deser_result.error().to_string();
+
+  auto &result = deser_result.value();
+  ASSERT_TRUE(result.first);
+  ASSERT_TRUE(result.second);
+  EXPECT_EQ(result.first->name, "first");
+  EXPECT_EQ(result.first->id, 1);
+  EXPECT_EQ(result.second->name, "second");
+  EXPECT_EQ(result.second->id, 2);
+
+  // Different objects should not share
+  EXPECT_NE(result.first, result.second);
+}
+
+TEST(FieldTagsSerializerTest, TagsNullableRefWithValue) {
+  auto fory =
+      Fory::builder().xlang(true).track_ref(true).compatible(false).build();
+  fory.register_struct<TagsRefNode>(300);
+  fory.register_struct<TagsNullableRefHolder>(302);
+
+  TagsNullableRefHolder original;
+  original.required_node = std::make_shared<TagsRefNode>();
+  original.required_node->name = "required";
+  original.required_node->id = 100;
+  original.optional_node = std::make_shared<TagsRefNode>();
+  original.optional_node->name = "optional";
+  original.optional_node->id = 200;
+
+  auto bytes_result = fory.serialize(original);
+  ASSERT_TRUE(bytes_result.ok()) << bytes_result.error().to_string();
+
+  auto deser_result = fory.deserialize<TagsNullableRefHolder>(
+      bytes_result->data(), bytes_result->size());
+  ASSERT_TRUE(deser_result.ok()) << deser_result.error().to_string();
+
+  auto &result = deser_result.value();
+  ASSERT_TRUE(result.required_node);
+  ASSERT_TRUE(result.optional_node);
+  EXPECT_EQ(result.required_node->name, "required");
+  EXPECT_EQ(result.required_node->id, 100);
+  EXPECT_EQ(result.optional_node->name, "optional");
+  EXPECT_EQ(result.optional_node->id, 200);
+}
+
+TEST(FieldTagsSerializerTest, TagsNullableRefWithNull) {
+  auto fory =
+      Fory::builder().xlang(true).track_ref(true).compatible(false).build();
+  fory.register_struct<TagsRefNode>(300);
+  fory.register_struct<TagsNullableRefHolder>(302);
+
+  TagsNullableRefHolder original;
+  original.required_node = std::make_shared<TagsRefNode>();
+  original.required_node->name = "required";
+  original.required_node->id = 100;
+  original.optional_node = nullptr; // nullable field set to null
+
+  auto bytes_result = fory.serialize(original);
+  ASSERT_TRUE(bytes_result.ok()) << bytes_result.error().to_string();
+
+  auto deser_result = fory.deserialize<TagsNullableRefHolder>(
+      bytes_result->data(), bytes_result->size());
+  ASSERT_TRUE(deser_result.ok()) << deser_result.error().to_string();
+
+  auto &result = deser_result.value();
+  ASSERT_TRUE(result.required_node);
+  EXPECT_EQ(result.required_node->name, "required");
+  EXPECT_EQ(result.required_node->id, 100);
+  EXPECT_EQ(result.optional_node, nullptr);
+}
+
+TEST(FieldTagsSerializerTest, TagsNullableRefSharedObject) {
+  auto fory =
+      Fory::builder().xlang(true).track_ref(true).compatible(false).build();
+  fory.register_struct<TagsRefNode>(300);
+  fory.register_struct<TagsNullableRefHolder>(302);
+
+  // Both fields point to the same object
+  auto shared_node = std::make_shared<TagsRefNode>();
+  shared_node->name = "shared_nullable";
+  shared_node->id = 999;
+
+  TagsNullableRefHolder original;
+  original.required_node = shared_node;
+  original.optional_node = shared_node;
+
+  auto bytes_result = fory.serialize(original);
+  ASSERT_TRUE(bytes_result.ok()) << bytes_result.error().to_string();
+
+  auto deser_result = fory.deserialize<TagsNullableRefHolder>(
+      bytes_result->data(), bytes_result->size());
+  ASSERT_TRUE(deser_result.ok()) << deser_result.error().to_string();
+
+  auto &result = deser_result.value();
+  ASSERT_TRUE(result.required_node);
+  ASSERT_TRUE(result.optional_node);
+  EXPECT_EQ(result.required_node->name, "shared_nullable");
+  EXPECT_EQ(result.required_node->id, 999);
+
+  // Both should point to the same deserialized object
+  EXPECT_EQ(result.required_node, result.optional_node)
+      << "Nullable ref fields should also preserve shared_ptr aliasing";
+}
+
+TEST(FieldTagsSerializerTest, TagsTreeNodeSerialization) {
+  auto fory =
+      Fory::builder().xlang(true).track_ref(true).compatible(false).build();
+  fory.register_struct<TagsTreeNode>(303);
+
+  // Build a simple tree:
+  //        root
+  //       /    \
+  //    left   right
+  //   /    \
+  // ll     lr
+  TagsTreeNode original;
+  original.value = "root";
+  original.left = std::make_shared<TagsTreeNode>();
+  original.left->value = "left";
+  original.left->left = std::make_shared<TagsTreeNode>();
+  original.left->left->value = "ll";
+  original.left->left->left = nullptr;
+  original.left->left->right = nullptr;
+  original.left->right = std::make_shared<TagsTreeNode>();
+  original.left->right->value = "lr";
+  original.left->right->left = nullptr;
+  original.left->right->right = nullptr;
+  original.right = std::make_shared<TagsTreeNode>();
+  original.right->value = "right";
+  original.right->left = nullptr;
+  original.right->right = nullptr;
+
+  auto bytes_result = fory.serialize(original);
+  ASSERT_TRUE(bytes_result.ok()) << bytes_result.error().to_string();
+
+  auto deser_result = fory.deserialize<TagsTreeNode>(bytes_result->data(),
+                                                     bytes_result->size());
+  ASSERT_TRUE(deser_result.ok()) << deser_result.error().to_string();
+
+  auto &result = deser_result.value();
+  EXPECT_EQ(result.value, "root");
+  ASSERT_TRUE(result.left);
+  EXPECT_EQ(result.left->value, "left");
+  ASSERT_TRUE(result.left->left);
+  EXPECT_EQ(result.left->left->value, "ll");
+  EXPECT_EQ(result.left->left->left, nullptr);
+  EXPECT_EQ(result.left->left->right, nullptr);
+  ASSERT_TRUE(result.left->right);
+  EXPECT_EQ(result.left->right->value, "lr");
+  EXPECT_EQ(result.left->right->left, nullptr);
+  EXPECT_EQ(result.left->right->right, nullptr);
+  ASSERT_TRUE(result.right);
+  EXPECT_EQ(result.right->value, "right");
+  EXPECT_EQ(result.right->left, nullptr);
+  EXPECT_EQ(result.right->right, nullptr);
+}
+
+TEST(FieldTagsSerializerTest, TagsTreeNodeWithSharedSubtree) {
+  auto fory =
+      Fory::builder().xlang(true).track_ref(true).compatible(false).build();
+  fory.register_struct<TagsTreeNode>(303);
+
+  // Build a DAG (tree with shared subtree):
+  //        root
+  //       /    \
+  //    left   right
+  //       \   /
+  //       shared
+  auto shared = std::make_shared<TagsTreeNode>();
+  shared->value = "shared_subtree";
+  shared->left = nullptr;
+  shared->right = nullptr;
+
+  TagsTreeNode original;
+  original.value = "root";
+  original.left = std::make_shared<TagsTreeNode>();
+  original.left->value = "left";
+  original.left->left = nullptr;
+  original.left->right = shared; // left's right points to shared
+  original.right = std::make_shared<TagsTreeNode>();
+  original.right->value = "right";
+  original.right->left = shared; // right's left points to same shared
+  original.right->right = nullptr;
+
+  auto bytes_result = fory.serialize(original);
+  ASSERT_TRUE(bytes_result.ok()) << bytes_result.error().to_string();
+
+  auto deser_result = fory.deserialize<TagsTreeNode>(bytes_result->data(),
+                                                     bytes_result->size());
+  ASSERT_TRUE(deser_result.ok()) << deser_result.error().to_string();
+
+  auto &result = deser_result.value();
+  EXPECT_EQ(result.value, "root");
+  ASSERT_TRUE(result.left);
+  ASSERT_TRUE(result.right);
+  ASSERT_TRUE(result.left->right);
+  ASSERT_TRUE(result.right->left);
+
+  // The shared subtree should still be the same object after deserialization
+  EXPECT_EQ(result.left->right, result.right->left)
+      << "Tree nodes with shared subtrees should preserve sharing";
+  EXPECT_EQ(result.left->right->value, "shared_subtree");
+}
+
+TEST(FieldTagsSerializerTest, TagsRefMetadataCompileTime) {
+  // Verify that FORY_FIELD_TAGS with ref option is correctly parsed
+  using RefHolderHelpers = detail::CompileTimeFieldHelpers<TagsRefHolder>;
+  using NullableRefHelpers =
+      detail::CompileTimeFieldHelpers<TagsNullableRefHolder>;
+  using TreeHelpers = detail::CompileTimeFieldHelpers<TagsTreeNode>;
+
+  // TagsRefHolder: (first, 0, ref), (second, 1, ref)
+  static_assert(::fory::detail::GetFieldTagEntry<TagsRefHolder, 0>::id == 0);
+  static_assert(::fory::detail::GetFieldTagEntry<TagsRefHolder, 1>::id == 1);
+  static_assert(
+      ::fory::detail::GetFieldTagEntry<TagsRefHolder, 0>::is_nullable == false);
+  static_assert(
+      ::fory::detail::GetFieldTagEntry<TagsRefHolder, 1>::is_nullable == false);
+  static_assert(::fory::detail::GetFieldTagEntry<TagsRefHolder, 0>::track_ref ==
+                true);
+  static_assert(::fory::detail::GetFieldTagEntry<TagsRefHolder, 1>::track_ref ==
+                true);
+
+  // TagsNullableRefHolder: (required_node, 0, ref), (optional_node, 1,
+  // nullable, ref)
+  static_assert(
+      ::fory::detail::GetFieldTagEntry<TagsNullableRefHolder, 0>::id == 0);
+  static_assert(
+      ::fory::detail::GetFieldTagEntry<TagsNullableRefHolder, 1>::id == 1);
+  static_assert(
+      ::fory::detail::GetFieldTagEntry<TagsNullableRefHolder, 0>::is_nullable ==
+      false);
+  static_assert(
+      ::fory::detail::GetFieldTagEntry<TagsNullableRefHolder, 1>::is_nullable ==
+      true);
+  static_assert(
+      ::fory::detail::GetFieldTagEntry<TagsNullableRefHolder, 0>::track_ref ==
+      true);
+  static_assert(
+      ::fory::detail::GetFieldTagEntry<TagsNullableRefHolder, 1>::track_ref ==
+      true);
+
+  // TagsTreeNode: (value, 0), (left, 1, nullable, ref), (right, 2, nullable,
+  // ref)
+  static_assert(::fory::detail::GetFieldTagEntry<TagsTreeNode, 0>::id == 0);
+  static_assert(::fory::detail::GetFieldTagEntry<TagsTreeNode, 1>::id == 1);
+  static_assert(::fory::detail::GetFieldTagEntry<TagsTreeNode, 2>::id == 2);
+  static_assert(
+      ::fory::detail::GetFieldTagEntry<TagsTreeNode, 0>::is_nullable == false);
+  static_assert(
+      ::fory::detail::GetFieldTagEntry<TagsTreeNode, 1>::is_nullable == true);
+  static_assert(
+      ::fory::detail::GetFieldTagEntry<TagsTreeNode, 2>::is_nullable == true);
+  static_assert(::fory::detail::GetFieldTagEntry<TagsTreeNode, 0>::track_ref ==
+                false);
+  static_assert(::fory::detail::GetFieldTagEntry<TagsTreeNode, 1>::track_ref ==
+                true);
+  static_assert(::fory::detail::GetFieldTagEntry<TagsTreeNode, 2>::track_ref ==
+                true);
+
+  // Verify CompileTimeFieldHelpers uses the tags correctly
+  static_assert(RefHolderHelpers::template field_track_ref<0>() == true);
+  static_assert(RefHolderHelpers::template field_track_ref<1>() == true);
+  static_assert(NullableRefHelpers::template field_track_ref<0>() == true);
+  static_assert(NullableRefHelpers::template field_track_ref<1>() == true);
+  static_assert(TreeHelpers::template field_track_ref<0>() == false);
+  static_assert(TreeHelpers::template field_track_ref<1>() == true);
+  static_assert(TreeHelpers::template field_track_ref<2>() == true);
 }
 
 } // namespace test

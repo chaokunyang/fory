@@ -327,6 +327,142 @@ struct ParseFieldTagEntry {
   using type = FieldTagEntry<Id, is_nullable, track_ref>;
 };
 
+/// Get field tag entry by index from ForyFieldTagsImpl
+template <typename T, size_t Index, typename = void> struct GetFieldTagEntry {
+  static constexpr int16_t id = -1;
+  static constexpr bool is_nullable = false;
+  static constexpr bool track_ref = false;
+};
+
+template <typename T, size_t Index>
+struct GetFieldTagEntry<
+    T, Index,
+    std::enable_if_t<ForyFieldTagsImpl<T>::has_tags &&
+                     (Index < ForyFieldTagsImpl<T>::field_count)>> {
+  using Entry =
+      std::tuple_element_t<Index, typename ForyFieldTagsImpl<T>::Entries>;
+  static constexpr int16_t id = Entry::id;
+  static constexpr bool is_nullable = Entry::is_nullable;
+  static constexpr bool track_ref = Entry::track_ref;
+};
+
 } // namespace detail
 
 } // namespace fory
+
+// ============================================================================
+// FORY_FIELD_TAGS Macro Implementation
+// ============================================================================
+
+// Helper macros to extract parts from (field, id, ...) tuples
+#define FORY_FT_FIELD(tuple) FORY_FT_FIELD_IMPL tuple
+#define FORY_FT_FIELD_IMPL(field, ...) field
+
+#define FORY_FT_ID(tuple) FORY_FT_ID_IMPL tuple
+#define FORY_FT_ID_IMPL(field, id, ...) id
+
+// Count options (0, 1, or 2 options after field and id)
+#define FORY_FT_HAS_OPT3(tuple) FORY_FT_HAS_OPT3_IMPL tuple
+#define FORY_FT_HAS_OPT3_IMPL(f, i, o1, o2, ...) 1
+#define FORY_FT_HAS_OPT2(tuple) FORY_FT_HAS_OPT2_IMPL tuple
+#define FORY_FT_HAS_OPT2_IMPL(f, i, o1, ...) 1
+#define FORY_FT_GET_OPT1(tuple) FORY_FT_GET_OPT1_IMPL tuple
+#define FORY_FT_GET_OPT1_IMPL(f, i, o1, ...) o1
+#define FORY_FT_GET_OPT2(tuple) FORY_FT_GET_OPT2_IMPL tuple
+#define FORY_FT_GET_OPT2_IMPL(f, i, o1, o2, ...) o2
+
+// Detect number of elements in tuple: 2, 3, or 4
+#define FORY_FT_TUPLE_SIZE(tuple) FORY_FT_TUPLE_SIZE_IMPL tuple
+#define FORY_FT_TUPLE_SIZE_IMPL(...)                                           \
+  FORY_FT_TUPLE_SIZE_SELECT(__VA_ARGS__, 4, 3, 2, 1, 0)
+#define FORY_FT_TUPLE_SIZE_SELECT(_1, _2, _3, _4, N, ...) N
+
+// Create FieldTagEntry based on tuple size
+// (field, id) -> no options
+// (field, id, opt1) -> one option
+// (field, id, opt1, opt2) -> two options
+#define FORY_FT_MAKE_ENTRY(Type, tuple)                                        \
+  FORY_PP_CONCAT(FORY_FT_MAKE_ENTRY_, FORY_FT_TUPLE_SIZE(tuple))(Type, tuple)
+
+#define FORY_FT_MAKE_ENTRY_2(Type, tuple)                                      \
+  typename ::fory::detail::ParseFieldTagEntry<                                 \
+      decltype(std::declval<Type>().FORY_FT_FIELD(tuple)),                     \
+      FORY_FT_ID(tuple)>::type
+
+#define FORY_FT_MAKE_ENTRY_3(Type, tuple)                                      \
+  typename ::fory::detail::ParseFieldTagEntry<                                 \
+      decltype(std::declval<Type>().FORY_FT_FIELD(tuple)), FORY_FT_ID(tuple),  \
+      ::fory::FORY_FT_GET_OPT1(tuple)>::type
+
+#define FORY_FT_MAKE_ENTRY_4(Type, tuple)                                      \
+  typename ::fory::detail::ParseFieldTagEntry<                                 \
+      decltype(std::declval<Type>().FORY_FT_FIELD(tuple)), FORY_FT_ID(tuple),  \
+      ::fory::FORY_FT_GET_OPT1(tuple), ::fory::FORY_FT_GET_OPT2(tuple)>::type
+
+// Generate comma-separated list of entries
+#define FORY_FT_ENTRY_WITH_COMMA(Type, tuple) FORY_FT_MAKE_ENTRY(Type, tuple),
+
+// Main macro: FORY_FIELD_TAGS(Type, (field1, id1), (field2, id2, nullable),
+// ...)
+#define FORY_FIELD_TAGS(Type, ...)                                             \
+  template <> struct ::fory::detail::ForyFieldTagsImpl<Type> {                 \
+    static constexpr bool has_tags = true;                                     \
+    static constexpr size_t field_count = FORY_PP_NARG(__VA_ARGS__);           \
+    using Entries = std::tuple<FORY_FT_ENTRIES(Type, __VA_ARGS__)>;            \
+  }
+
+// Helper to generate entries tuple content
+#define FORY_FT_ENTRIES(Type, ...)                                             \
+  FORY_FT_ENTRIES_IMPL(Type, FORY_PP_NARG(__VA_ARGS__), __VA_ARGS__)
+
+#define FORY_FT_ENTRIES_IMPL(Type, N, ...)                                     \
+  FORY_PP_CONCAT(FORY_FT_ENTRIES_, N)(Type, __VA_ARGS__)
+
+// Generate entries for 1-32 fields
+#define FORY_FT_ENTRIES_1(T, _1) FORY_FT_MAKE_ENTRY(T, _1)
+#define FORY_FT_ENTRIES_2(T, _1, _2)                                           \
+  FORY_FT_MAKE_ENTRY(T, _1), FORY_FT_MAKE_ENTRY(T, _2)
+#define FORY_FT_ENTRIES_3(T, _1, _2, _3)                                       \
+  FORY_FT_ENTRIES_2(T, _1, _2), FORY_FT_MAKE_ENTRY(T, _3)
+#define FORY_FT_ENTRIES_4(T, _1, _2, _3, _4)                                   \
+  FORY_FT_ENTRIES_3(T, _1, _2, _3), FORY_FT_MAKE_ENTRY(T, _4)
+#define FORY_FT_ENTRIES_5(T, _1, _2, _3, _4, _5)                               \
+  FORY_FT_ENTRIES_4(T, _1, _2, _3, _4), FORY_FT_MAKE_ENTRY(T, _5)
+#define FORY_FT_ENTRIES_6(T, _1, _2, _3, _4, _5, _6)                           \
+  FORY_FT_ENTRIES_5(T, _1, _2, _3, _4, _5), FORY_FT_MAKE_ENTRY(T, _6)
+#define FORY_FT_ENTRIES_7(T, _1, _2, _3, _4, _5, _6, _7)                       \
+  FORY_FT_ENTRIES_6(T, _1, _2, _3, _4, _5, _6), FORY_FT_MAKE_ENTRY(T, _7)
+#define FORY_FT_ENTRIES_8(T, _1, _2, _3, _4, _5, _6, _7, _8)                   \
+  FORY_FT_ENTRIES_7(T, _1, _2, _3, _4, _5, _6, _7), FORY_FT_MAKE_ENTRY(T, _8)
+#define FORY_FT_ENTRIES_9(T, _1, _2, _3, _4, _5, _6, _7, _8, _9)               \
+  FORY_FT_ENTRIES_8(T, _1, _2, _3, _4, _5, _6, _7, _8),                        \
+      FORY_FT_MAKE_ENTRY(T, _9)
+#define FORY_FT_ENTRIES_10(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10)         \
+  FORY_FT_ENTRIES_9(T, _1, _2, _3, _4, _5, _6, _7, _8, _9),                    \
+      FORY_FT_MAKE_ENTRY(T, _10)
+#define FORY_FT_ENTRIES_11(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11)    \
+  FORY_FT_ENTRIES_10(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10),              \
+      FORY_FT_MAKE_ENTRY(T, _11)
+#define FORY_FT_ENTRIES_12(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11,    \
+                           _12)                                                \
+  FORY_FT_ENTRIES_11(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11),         \
+      FORY_FT_MAKE_ENTRY(T, _12)
+#define FORY_FT_ENTRIES_13(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11,    \
+                           _12, _13)                                           \
+  FORY_FT_ENTRIES_12(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12),    \
+      FORY_FT_MAKE_ENTRY(T, _13)
+#define FORY_FT_ENTRIES_14(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11,    \
+                           _12, _13, _14)                                      \
+  FORY_FT_ENTRIES_13(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12,     \
+                     _13),                                                     \
+      FORY_FT_MAKE_ENTRY(T, _14)
+#define FORY_FT_ENTRIES_15(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11,    \
+                           _12, _13, _14, _15)                                 \
+  FORY_FT_ENTRIES_14(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12,     \
+                     _13, _14),                                                \
+      FORY_FT_MAKE_ENTRY(T, _15)
+#define FORY_FT_ENTRIES_16(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11,    \
+                           _12, _13, _14, _15, _16)                            \
+  FORY_FT_ENTRIES_15(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12,     \
+                     _13, _14, _15),                                           \
+      FORY_FT_MAKE_ENTRY(T, _16)

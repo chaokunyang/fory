@@ -321,7 +321,8 @@ template <typename T> struct CompileTimeFieldHelpers {
   /// Returns true if the field at Index is nullable.
   /// This checks:
   /// 1. If the field is a fory::field<>, use its is_nullable metadata
-  /// 2. Otherwise, use legacy behavior: requires_ref_metadata_v (optional,
+  /// 2. Else if FORY_FIELD_TAGS is defined, use that metadata
+  /// 3. Otherwise, use legacy behavior: requires_ref_metadata_v (optional,
   ///    shared_ptr, unique_ptr are all nullable)
   template <size_t Index> static constexpr bool field_nullable() {
     if constexpr (FieldCount == 0) {
@@ -333,6 +334,10 @@ template <typename T> struct CompileTimeFieldHelpers {
       // If it's a fory::field<> wrapper, use its metadata
       if constexpr (is_fory_field_v<RawFieldType>) {
         return RawFieldType::is_nullable;
+      }
+      // Else if FORY_FIELD_TAGS is defined, use that metadata
+      else if constexpr (::fory::detail::has_field_tags_v<T>) {
+        return ::fory::detail::GetFieldTagEntry<T, Index>::is_nullable;
       }
       // For non-wrapped types, use legacy behavior:
       // optional, shared_ptr, unique_ptr are all "nullable" in terms of
@@ -356,6 +361,10 @@ template <typename T> struct CompileTimeFieldHelpers {
       if constexpr (is_fory_field_v<RawFieldType>) {
         return RawFieldType::tag_id;
       }
+      // Else if FORY_FIELD_TAGS is defined, use that metadata
+      else if constexpr (::fory::detail::has_field_tags_v<T>) {
+        return ::fory::detail::GetFieldTagEntry<T, Index>::id;
+      }
       // No tag ID defined
       else {
         return -1;
@@ -375,6 +384,10 @@ template <typename T> struct CompileTimeFieldHelpers {
       // If it's a fory::field<> wrapper, use its track_ref metadata
       if constexpr (is_fory_field_v<RawFieldType>) {
         return RawFieldType::track_ref;
+      }
+      // Else if FORY_FIELD_TAGS is defined, use that metadata
+      else if constexpr (::fory::detail::has_field_tags_v<T>) {
+        return ::fory::detail::GetFieldTagEntry<T, Index>::track_ref;
       }
       // Default: no reference tracking
       else {

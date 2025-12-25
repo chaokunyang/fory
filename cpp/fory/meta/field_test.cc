@@ -277,6 +277,144 @@ TEST(FieldStruct, FieldInfo) {
 
 } // namespace fory
 
+// ============================================================================
+// FORY_FIELD_TAGS Macro Tests
+// Must be in global namespace to specialize fory::detail::ForyFieldTagsImpl
+// ============================================================================
+
+namespace field_tags_test {
+
+// Test struct with pure C++ types (no fory::field wrappers)
+struct Document {
+  std::string title;
+  int32_t version;
+  std::optional<std::string> description;
+  std::shared_ptr<Document> author;
+  std::shared_ptr<Document> reviewer;
+  std::shared_ptr<Document> parent;
+  std::unique_ptr<std::string> metadata;
+};
+
+// Test struct with nullable + ref combined
+struct Node {
+  std::string name;
+  std::shared_ptr<Node> left;
+  std::shared_ptr<Node> right;
+};
+
+// Test with single field
+struct SingleField {
+  int32_t value;
+};
+
+} // namespace field_tags_test
+
+// FORY_FIELD_INFO and FORY_FIELD_TAGS must be in global namespace
+FORY_FIELD_INFO(field_tags_test::Document, title, version, description, author,
+                reviewer, parent, metadata);
+
+// Define field tags separately (non-invasive)
+FORY_FIELD_TAGS(field_tags_test::Document, (title, 0), // string: non-nullable
+                (version, 1),                          // int: non-nullable
+                (description, 2),         // optional: inherently nullable
+                (author, 3),              // shared_ptr: non-nullable (default)
+                (reviewer, 4, nullable),  // shared_ptr: nullable
+                (parent, 5, ref),         // shared_ptr: non-nullable, with ref
+                (metadata, 6, nullable)); // unique_ptr: nullable
+
+FORY_FIELD_INFO(field_tags_test::Node, name, left, right);
+
+FORY_FIELD_TAGS(field_tags_test::Node, (name, 0), (left, 1, nullable, ref),
+                (right, 2, nullable, ref));
+
+FORY_FIELD_INFO(field_tags_test::SingleField, value);
+FORY_FIELD_TAGS(field_tags_test::SingleField, (value, 0));
+
+namespace fory {
+namespace test {
+
+using field_tags_test::Document;
+using field_tags_test::Node;
+using field_tags_test::SingleField;
+
+TEST(FieldTags, HasTags) {
+  static_assert(detail::has_field_tags_v<Document> == true);
+  static_assert(detail::has_field_tags_v<Person> == false); // Uses fory::field
+  static_assert(detail::has_field_tags_v<int> == false);
+}
+
+TEST(FieldTags, FieldCount) {
+  static_assert(detail::ForyFieldTagsImpl<Document>::field_count == 7);
+}
+
+TEST(FieldTags, TagIds) {
+  // Check tag IDs
+  static_assert(detail::GetFieldTagEntry<Document, 0>::id == 0);
+  static_assert(detail::GetFieldTagEntry<Document, 1>::id == 1);
+  static_assert(detail::GetFieldTagEntry<Document, 2>::id == 2);
+  static_assert(detail::GetFieldTagEntry<Document, 3>::id == 3);
+  static_assert(detail::GetFieldTagEntry<Document, 4>::id == 4);
+  static_assert(detail::GetFieldTagEntry<Document, 5>::id == 5);
+  static_assert(detail::GetFieldTagEntry<Document, 6>::id == 6);
+}
+
+TEST(FieldTags, Nullability) {
+  // title (string): non-nullable
+  static_assert(detail::GetFieldTagEntry<Document, 0>::is_nullable == false);
+  // version (int): non-nullable
+  static_assert(detail::GetFieldTagEntry<Document, 1>::is_nullable == false);
+  // description (optional): inherently nullable
+  static_assert(detail::GetFieldTagEntry<Document, 2>::is_nullable == true);
+  // author (shared_ptr): non-nullable (default)
+  static_assert(detail::GetFieldTagEntry<Document, 3>::is_nullable == false);
+  // reviewer (shared_ptr, nullable): nullable
+  static_assert(detail::GetFieldTagEntry<Document, 4>::is_nullable == true);
+  // parent (shared_ptr, ref): non-nullable
+  static_assert(detail::GetFieldTagEntry<Document, 5>::is_nullable == false);
+  // metadata (unique_ptr, nullable): nullable
+  static_assert(detail::GetFieldTagEntry<Document, 6>::is_nullable == true);
+}
+
+TEST(FieldTags, RefTracking) {
+  // Only parent has ref tracking
+  static_assert(detail::GetFieldTagEntry<Document, 0>::track_ref == false);
+  static_assert(detail::GetFieldTagEntry<Document, 1>::track_ref == false);
+  static_assert(detail::GetFieldTagEntry<Document, 2>::track_ref == false);
+  static_assert(detail::GetFieldTagEntry<Document, 3>::track_ref == false);
+  static_assert(detail::GetFieldTagEntry<Document, 4>::track_ref == false);
+  static_assert(detail::GetFieldTagEntry<Document, 5>::track_ref == true);
+  static_assert(detail::GetFieldTagEntry<Document, 6>::track_ref == false);
+}
+
+TEST(FieldTags, NullableWithRef) {
+  // name: non-nullable, no ref
+  static_assert(detail::GetFieldTagEntry<Node, 0>::id == 0);
+  static_assert(detail::GetFieldTagEntry<Node, 0>::is_nullable == false);
+  static_assert(detail::GetFieldTagEntry<Node, 0>::track_ref == false);
+
+  // left: nullable + ref
+  static_assert(detail::GetFieldTagEntry<Node, 1>::id == 1);
+  static_assert(detail::GetFieldTagEntry<Node, 1>::is_nullable == true);
+  static_assert(detail::GetFieldTagEntry<Node, 1>::track_ref == true);
+
+  // right: nullable + ref
+  static_assert(detail::GetFieldTagEntry<Node, 2>::id == 2);
+  static_assert(detail::GetFieldTagEntry<Node, 2>::is_nullable == true);
+  static_assert(detail::GetFieldTagEntry<Node, 2>::track_ref == true);
+}
+
+TEST(FieldTags, SingleField) {
+  static_assert(detail::has_field_tags_v<SingleField> == true);
+  static_assert(detail::ForyFieldTagsImpl<SingleField>::field_count == 1);
+  static_assert(detail::GetFieldTagEntry<SingleField, 0>::id == 0);
+  static_assert(detail::GetFieldTagEntry<SingleField, 0>::is_nullable == false);
+  static_assert(detail::GetFieldTagEntry<SingleField, 0>::track_ref == false);
+}
+
+} // namespace test
+
+} // namespace fory
+
 int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

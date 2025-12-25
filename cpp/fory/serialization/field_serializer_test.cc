@@ -667,6 +667,174 @@ TEST(FieldSerializerTest, FieldMetadataCompileTime) {
 } // namespace serialization
 } // namespace fory
 
+// ============================================================================
+// FORY_FIELD_TAGS Serialization Tests
+// Structs defined in global namespace to allow template specialization
+// ============================================================================
+
+// Simple helper struct for testing FORY_FIELD_TAGS
+struct TagsTestData {
+  std::string content;
+  int32_t value;
+
+  bool operator==(const TagsTestData &other) const {
+    return content == other.content && value == other.value;
+  }
+};
+
+FORY_STRUCT(TagsTestData, content, value);
+FORY_FIELD_TAGS(TagsTestData, (content, 0), (value, 1));
+
+// Pure C++ struct with FORY_FIELD_TAGS metadata (non-invasive)
+struct TagsTestDocument {
+  std::string title;
+  int32_t version;
+  std::optional<std::string> description;
+  std::shared_ptr<TagsTestData> data;
+  std::shared_ptr<TagsTestData> optional_data;
+
+  bool operator==(const TagsTestDocument &other) const {
+    bool data_eq = static_cast<bool>(data) == static_cast<bool>(other.data);
+    if (data_eq && data && other.data) {
+      data_eq = (*data == *other.data);
+    }
+    bool opt_data_eq = static_cast<bool>(optional_data) ==
+                       static_cast<bool>(other.optional_data);
+    if (opt_data_eq && optional_data && other.optional_data) {
+      opt_data_eq = (*optional_data == *other.optional_data);
+    }
+    return title == other.title && version == other.version &&
+           description == other.description && data_eq && opt_data_eq;
+  }
+};
+
+FORY_STRUCT(TagsTestDocument, title, version, description, data, optional_data);
+
+FORY_FIELD_TAGS(TagsTestDocument, (title, 0), // string: non-nullable
+                (version, 1),                 // int: non-nullable
+                (description, 2),             // optional: inherently nullable
+                (data, 3), // shared_ptr: non-nullable (default)
+                (optional_data, 4, nullable)); // shared_ptr: nullable
+
+namespace fory {
+namespace serialization {
+namespace test {
+
+TEST(FieldTagsSerializerTest, BasicTagsDocument) {
+  auto fory =
+      Fory::builder().xlang(true).track_ref(false).compatible(false).build();
+  fory.register_struct<TagsTestData>(200);
+  fory.register_struct<TagsTestDocument>(201);
+
+  TagsTestDocument original;
+  original.title = "My Document";
+  original.version = 1;
+  original.description = "A test document";
+  original.data = std::make_shared<TagsTestData>();
+  original.data->content = "data content";
+  original.data->value = 42;
+  original.optional_data = nullptr; // nullable
+
+  auto bytes_result = fory.serialize(original);
+  ASSERT_TRUE(bytes_result.ok()) << bytes_result.error().to_string();
+
+  auto deser_result = fory.deserialize<TagsTestDocument>(bytes_result->data(),
+                                                         bytes_result->size());
+  ASSERT_TRUE(deser_result.ok()) << deser_result.error().to_string();
+
+  EXPECT_EQ(original, deser_result.value());
+}
+
+TEST(FieldTagsSerializerTest, TagsDocumentWithNullableSet) {
+  auto fory =
+      Fory::builder().xlang(true).track_ref(false).compatible(false).build();
+  fory.register_struct<TagsTestData>(200);
+  fory.register_struct<TagsTestDocument>(201);
+
+  TagsTestDocument original;
+  original.title = "Doc with optional";
+  original.version = 2;
+  original.description = std::nullopt;
+  original.data = std::make_shared<TagsTestData>();
+  original.data->content = "main data";
+  original.data->value = 100;
+  original.optional_data = std::make_shared<TagsTestData>();
+  original.optional_data->content = "optional data";
+  original.optional_data->value = 999;
+
+  auto bytes_result = fory.serialize(original);
+  ASSERT_TRUE(bytes_result.ok()) << bytes_result.error().to_string();
+
+  auto deser_result = fory.deserialize<TagsTestDocument>(bytes_result->data(),
+                                                         bytes_result->size());
+  ASSERT_TRUE(deser_result.ok()) << deser_result.error().to_string();
+
+  EXPECT_EQ(original, deser_result.value());
+}
+
+TEST(FieldTagsSerializerTest, TagsMetadataCompileTime) {
+  // Verify that FORY_FIELD_TAGS metadata is correctly accessed
+  using DocHelpers = detail::CompileTimeFieldHelpers<TagsTestDocument>;
+  using DataHelpers = detail::CompileTimeFieldHelpers<TagsTestData>;
+
+  // Check tag IDs via GetFieldTagEntry for TagsTestData
+  static_assert(::fory::detail::GetFieldTagEntry<TagsTestData, 0>::id == 0);
+  static_assert(::fory::detail::GetFieldTagEntry<TagsTestData, 1>::id == 1);
+
+  // Check tag IDs via GetFieldTagEntry for TagsTestDocument
+  static_assert(::fory::detail::GetFieldTagEntry<TagsTestDocument, 0>::id == 0);
+  static_assert(::fory::detail::GetFieldTagEntry<TagsTestDocument, 1>::id == 1);
+  static_assert(::fory::detail::GetFieldTagEntry<TagsTestDocument, 2>::id == 2);
+  static_assert(::fory::detail::GetFieldTagEntry<TagsTestDocument, 3>::id == 3);
+  static_assert(::fory::detail::GetFieldTagEntry<TagsTestDocument, 4>::id == 4);
+
+  // Check nullability via GetFieldTagEntry
+  // title (string): non-nullable
+  static_assert(
+      ::fory::detail::GetFieldTagEntry<TagsTestDocument, 0>::is_nullable ==
+      false);
+  // version (int): non-nullable
+  static_assert(
+      ::fory::detail::GetFieldTagEntry<TagsTestDocument, 1>::is_nullable ==
+      false);
+  // description (optional): inherently nullable
+  static_assert(
+      ::fory::detail::GetFieldTagEntry<TagsTestDocument, 2>::is_nullable ==
+      true);
+  // data (shared_ptr): non-nullable (default)
+  static_assert(
+      ::fory::detail::GetFieldTagEntry<TagsTestDocument, 3>::is_nullable ==
+      false);
+  // optional_data (shared_ptr, nullable): nullable
+  static_assert(
+      ::fory::detail::GetFieldTagEntry<TagsTestDocument, 4>::is_nullable ==
+      true);
+
+  // Verify CompileTimeFieldHelpers uses the tags correctly
+  static_assert(DocHelpers::template field_nullable<0>() == false);
+  static_assert(DocHelpers::template field_nullable<1>() == false);
+  static_assert(DocHelpers::template field_nullable<2>() == true);
+  static_assert(DocHelpers::template field_nullable<3>() == false);
+  static_assert(DocHelpers::template field_nullable<4>() == true);
+
+  // Check tag IDs via CompileTimeFieldHelpers
+  static_assert(DocHelpers::template field_tag_id<0>() == 0);
+  static_assert(DocHelpers::template field_tag_id<1>() == 1);
+  static_assert(DocHelpers::template field_tag_id<2>() == 2);
+  static_assert(DocHelpers::template field_tag_id<3>() == 3);
+  static_assert(DocHelpers::template field_tag_id<4>() == 4);
+
+  // Verify TagsTestData helpers
+  static_assert(DataHelpers::template field_nullable<0>() == false);
+  static_assert(DataHelpers::template field_nullable<1>() == false);
+  static_assert(DataHelpers::template field_tag_id<0>() == 0);
+  static_assert(DataHelpers::template field_tag_id<1>() == 1);
+}
+
+} // namespace test
+} // namespace serialization
+} // namespace fory
+
 int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

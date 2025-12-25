@@ -23,7 +23,12 @@ This page explains how to configure field-level metadata for serialization.
 
 ## Overview
 
-Apache Fory™ provides the `fory::field<>` template wrapper for specifying field-level metadata at compile time. This enables:
+Apache Fory™ provides two ways to specify field-level metadata at compile time:
+
+1. **`fory::field<>` template** - Inline metadata in struct definition
+2. **`FORY_FIELD_TAGS` macro** - Non-invasive metadata added separately
+
+These enable:
 
 - **Tag IDs**: Assign compact numeric IDs for schema evolution
 - **Nullability**: Mark pointer fields as nullable
@@ -220,6 +225,64 @@ struct ModernPerson {
 };
 FORY_STRUCT(ModernPerson, name, age);
 ```
+
+## FORY_FIELD_TAGS Macro
+
+The `FORY_FIELD_TAGS` macro provides a non-invasive way to add field metadata without modifying struct definitions. This is useful for:
+
+- **Third-party types**: Add metadata to types you don't own
+- **Clean structs**: Keep struct definitions as pure C++
+- **Isolated dependencies**: Confine Fory headers to serialization config files
+
+### Usage
+
+```cpp
+// user_types.h - NO fory headers needed!
+struct Document {
+  std::string title;
+  int32_t version;
+  std::optional<std::string> description;
+  std::shared_ptr<User> author;
+  std::shared_ptr<User> reviewer;
+  std::shared_ptr<Document> parent;
+  std::unique_ptr<Data> data;
+};
+
+// serialization_config.cpp - fory config isolated here
+#include "fory/serialization/fory.h"
+#include "user_types.h"
+
+FORY_STRUCT(Document, title, version, description, author, reviewer, parent, data)
+
+FORY_FIELD_TAGS(Document,
+  (title, 0),                      // string: non-nullable
+  (version, 1),                    // int: non-nullable
+  (description, 2),                // optional: inherently nullable
+  (author, 3),                     // shared_ptr: non-nullable (default)
+  (reviewer, 4, nullable),         // shared_ptr: nullable
+  (parent, 5, ref),                // shared_ptr: non-nullable, with ref tracking
+  (data, 6, nullable)              // unique_ptr: nullable
+)
+```
+
+### FORY_FIELD_TAGS Options
+
+| Field Type           | Valid Combinations                                                                       |
+| -------------------- | ---------------------------------------------------------------------------------------- |
+| Primitives, strings  | `(field, id)` only                                                                       |
+| `std::optional<T>`   | `(field, id)` only                                                                       |
+| `std::shared_ptr<T>` | `(field, id)`, `(field, id, nullable)`, `(field, id, ref)`, `(field, id, nullable, ref)` |
+| `std::unique_ptr<T>` | `(field, id)`, `(field, id, nullable)`                                                   |
+
+### API Comparison
+
+| Aspect                  | `fory::field<>` Wrapper  | `FORY_FIELD_TAGS` Macro |
+| ----------------------- | ------------------------ | ----------------------- |
+| **Struct definition**   | Modified (wrapped types) | Unchanged (pure C++)    |
+| **IDE support**         | Template noise           | Excellent (clean types) |
+| **Third-party classes** | Not supported            | Supported               |
+| **Header dependencies** | Required everywhere      | Isolated to config      |
+| **Migration effort**    | High (change all fields) | Low (add one macro)     |
 
 ## Related Topics
 

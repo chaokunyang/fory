@@ -42,6 +42,7 @@ from pyfory.type import (
     is_polymorphic_type,
     is_primitive_type,
     is_subclass,
+    unwrap_optional,
 )
 from pyfory.buffer import Buffer
 from pyfory.codegen import (
@@ -51,6 +52,11 @@ from pyfory.codegen import (
 )
 from pyfory.error import TypeNotCompatibleError
 from pyfory.resolver import NULL_FLAG, NOT_NULL_VALUE_FLAG
+from pyfory.field import (
+    ForyFieldMeta,
+    extract_field_meta,
+    validate_field_metas,
+)
 
 from pyfory import (
     Serializer,
@@ -65,6 +71,148 @@ from pyfory import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+@dataclasses.dataclass
+class FieldInfo:
+    """Pre-computed field information for serialization."""
+
+    # Identity
+    name: str  # Field name (snake_case)
+    index: int  # Field index in the serialization order
+    type_hint: type  # Type annotation
+
+    # Fory metadata (from pyfory.field()) - used for hash computation
+    tag_id: int  # -1 = use field name, >=0 = use tag ID
+    nullable: bool  # Effective nullable flag (considers Optional[T])
+    ref: bool  # Field-level ref setting (for hash computation)
+
+    # Runtime flags (combines field metadata with global Fory config)
+    runtime_ref_tracking: bool  # Actual ref tracking: field.ref AND fory.ref_tracking
+
+    # Derived info
+    type_id: int  # Fory TypeId
+    serializer: Serializer  # Field serializer
+    unwrapped_type: type  # Type with Optional unwrapped
+
+
+def _default_field_meta(type_hint: type, field_nullable: bool = False) -> ForyFieldMeta:
+    """Returns default field metadata for fields without pyfory.field().
+
+    A field is considered nullable if:
+    1. It's Optional[T], OR
+    2. It's a non-primitive type (all reference types can be None), OR
+    3. Global field_nullable is True
+
+    For ref, defaults to False to preserve original serialization behavior.
+    Non-nullable complex fields use xwrite_no_ref (no ref header in buffer).
+    Users can explicitly set ref=True in pyfory.field() to enable ref tracking.
+    """
+    unwrapped_type, is_optional = unwrap_optional(type_hint)
+    # Non-primitive types (str, list, dict, etc.) are all nullable by default
+    nullable = is_optional or not is_primitive_type(unwrapped_type) or field_nullable
+    # Default ref=False to preserve original serialization behavior where non-nullable
+    # fields use xwrite_no_ref. Users can explicitly set ref=True in pyfory.field()
+    # to enable per-field ref tracking when fory.ref_tracking is enabled.
+    return ForyFieldMeta(id=-1, nullable=nullable, ref=False, ignore=False)
+
+
+def _extract_field_infos(
+    fory,
+    clz: type,
+    type_hints: dict,
+) -> tuple[list[FieldInfo], dict[str, ForyFieldMeta]]:
+    """
+    Extract FieldInfo list from a dataclass.
+
+    This handles:
+    - Extracting field metadata from pyfory.field() annotations
+    - Filtering out ignored fields
+    - Computing effective nullable based on Optional[T]
+    - Computing runtime ref tracking based on global config
+    - Inheritance: parent fields first, subclass fields override parent fields
+
+    Returns:
+        Tuple of (field_infos, field_metas) where field_metas maps field name to ForyFieldMeta
+    """
+    if not dataclasses.is_dataclass(clz):
+        # For non-dataclass, return empty - will use legacy path
+        return [], {}
+
+    # Collect fields from class hierarchy (parent first, child last)
+    # Child fields override parent fields with same name
+    all_fields: dict[str, dataclasses.Field] = {}
+    for klass in clz.__mro__[::-1]:  # Reverse MRO: base classes first
+        if dataclasses.is_dataclass(klass) and klass is not clz:
+            for f in dataclasses.fields(klass):
+                all_fields[f.name] = f
+    # Add current class fields (override parent)
+    for f in dataclasses.fields(clz):
+        all_fields[f.name] = f
+
+    # Extract field metas and filter ignored fields
+    field_metas: dict[str, ForyFieldMeta] = {}
+    active_fields: list[tuple[str, dataclasses.Field]] = []
+
+    # Check if fory has field_nullable global setting
+    global_field_nullable = getattr(fory, "field_nullable", False)
+
+    for field_name, dc_field in all_fields.items():
+        meta = extract_field_meta(dc_field)
+        if meta is None:
+            # Field without pyfory.field() - use defaults
+            # Auto-detect Optional[T] for nullable, also respect global field_nullable
+            field_type = type_hints.get(field_name, typing.Any)
+            meta = _default_field_meta(field_type, global_field_nullable)
+
+        field_metas[field_name] = meta
+
+        if not meta.ignore:
+            active_fields.append((field_name, dc_field))
+
+    # Validate field metas
+    validate_field_metas(clz, field_metas, type_hints)
+
+    # Build FieldInfo list
+    field_infos: list[FieldInfo] = []
+    visitor = StructFieldSerializerVisitor(fory)
+    global_ref_tracking = fory.ref_tracking
+
+    for index, (field_name, dc_field) in enumerate(active_fields):
+        meta = field_metas[field_name]
+        type_hint = type_hints.get(field_name, typing.Any)
+        unwrapped_type, is_optional = unwrap_optional(type_hint)
+
+        # Compute effective nullable: Optional[T] or non-primitive types are nullable
+        effective_nullable = meta.nullable or is_optional or not is_primitive_type(unwrapped_type)
+
+        # Compute runtime ref tracking: field.ref AND global config
+        runtime_ref = meta.ref and global_ref_tracking
+
+        # Infer serializer
+        serializer = infer_field(field_name, unwrapped_type, visitor, types_path=[])
+
+        # Get type_id from serializer
+        if serializer is not None:
+            type_id = fory.type_resolver.get_typeinfo(serializer.type_).type_id & 0xFF
+        else:
+            type_id = TypeId.UNKNOWN
+
+        field_info = FieldInfo(
+            name=field_name,
+            index=index,
+            type_hint=type_hint,
+            tag_id=meta.id,
+            nullable=effective_nullable,
+            ref=meta.ref,
+            runtime_ref_tracking=runtime_ref,
+            type_id=type_id,
+            serializer=serializer,
+            unwrapped_type=unwrapped_type,
+        )
+        field_infos.append(field_info)
+
+    return field_infos, field_metas
 
 
 _jit_context = locals()
@@ -88,38 +236,63 @@ class DataClassSerializer(Serializer):
     ):
         super().__init__(fory, clz)
         self._xlang = xlang
-        from pyfory.type import unwrap_optional
 
         self._type_hints = typing.get_type_hints(clz)
-        self._field_names = field_names or self._get_field_names(clz)
         self._has_slots = hasattr(clz, "__slots__")
-        self._nullable_fields = nullable_fields or {}
-        field_nullable = fory.field_nullable
-        if self._field_names and not self._nullable_fields:
-            for field_name in self._field_names:
-                if field_name in self._type_hints:
-                    unwrapped_type, is_nullable = unwrap_optional(self._type_hints[field_name], field_nullable=field_nullable)
-                    is_nullable = is_nullable or not is_primitive_type(unwrapped_type)
-                    self._nullable_fields[field_name] = is_nullable
+
+        # When field_names is explicitly passed (from TypeDef.create_serializer during schema evolution),
+        # use those fields instead of extracting from the class. This is critical for schema evolution
+        # where the sender's schema (in TypeDef) differs from the receiver's registered class.
+        if field_names is not None and serializers is not None:
+            # Use the passed-in field_names and serializers from TypeDef
+            self._field_names = field_names
+            self._serializers = serializers
+            self._nullable_fields = nullable_fields or {}
+            self._ref_fields = {}
+            self._field_infos = []
+            self._field_metas = {}
+        else:
+            # Extract field infos using new pyfory.field() metadata
+            self._field_infos, self._field_metas = _extract_field_infos(fory, clz, self._type_hints)
+
+            if self._field_infos:
+                # Use new field info based approach
+                self._field_names = [fi.name for fi in self._field_infos]
+                self._serializers = [fi.serializer for fi in self._field_infos]
+                self._nullable_fields = {fi.name: fi.nullable for fi in self._field_infos}
+                self._ref_fields = {fi.name: fi.runtime_ref_tracking for fi in self._field_infos}
+            else:
+                # Fallback for non-dataclass types
+                self._field_names = field_names or self._get_field_names(clz)
+                self._nullable_fields = nullable_fields or {}
+                self._ref_fields = {}
+
+                if self._field_names and not self._nullable_fields:
+                    for field_name in self._field_names:
+                        if field_name in self._type_hints:
+                            unwrapped_type, is_optional = unwrap_optional(self._type_hints[field_name])
+                            is_nullable = is_optional or not is_primitive_type(unwrapped_type)
+                            self._nullable_fields[field_name] = is_nullable
+
+                self._serializers = serializers or [None] * len(self._field_names)
+                if serializers is None:
+                    visitor = StructFieldSerializerVisitor(fory)
+                    for index, key in enumerate(self._field_names):
+                        unwrapped_type, _ = unwrap_optional(self._type_hints.get(key, typing.Any))
+                        serializer = infer_field(key, unwrapped_type, visitor, types_path=[])
+                        self._serializers[index] = serializer
 
         # Cache unwrapped type hints
         self._unwrapped_hints = self._compute_unwrapped_hints()
 
         if self._xlang:
-            self._serializers = serializers or [None] * len(self._field_names)
-            if serializers is None:
-                visitor = StructFieldSerializerVisitor(fory)
-                for index, key in enumerate(self._field_names):
-                    unwrapped_type, _ = unwrap_optional(self._type_hints[key])
-                    serializer = infer_field(key, unwrapped_type, visitor, types_path=[])
-                    self._serializers[index] = serializer
+            # In xlang mode, always compute struct meta to sort fields consistently
             self._hash, self._field_names, self._serializers = compute_struct_meta(
-                fory.type_resolver, self._field_names, self._serializers, self._nullable_fields
+                fory.type_resolver, self._field_names, self._serializers, self._nullable_fields, self._field_infos
             )
             self._generated_xwrite_method = self._gen_xwrite_method()
             self._generated_xread_method = self._gen_xread_method()
             if _ENABLE_FORY_PYTHON_JIT:
-                # don't use `__slots__`, which will make the instance method read-only
                 self.xwrite = self._generated_xwrite_method
                 self.xread = self._generated_xread_method
             if self.fory.is_py:
@@ -128,25 +301,15 @@ class DataClassSerializer(Serializer):
                     clz,
                 )
         else:
-            # For non-xlang mode, use same infrastructure as xlang mode
-            # Python dataclass serialization follows the same spec as xlang
-            self._serializers = serializers or [None] * len(self._field_names)
-            if serializers is None:
-                visitor = StructFieldSerializerVisitor(fory)
-                for index, key in enumerate(self._field_names):
-                    unwrapped_type, _ = unwrap_optional(self._type_hints[key])
-                    serializer = infer_field(key, unwrapped_type, visitor, types_path=[])
-                    self._serializers[index] = serializer
-            # In compatible mode, maintain stable field ordering (don't sort)
-            # In non-compatible mode, sort fields for consistent serialization
+            # In non-xlang mode, only sort fields in non-compatible mode
+            # In compatible mode, maintain stable field ordering for schema evolution
             if not fory.compatible:
                 self._hash, self._field_names, self._serializers = compute_struct_meta(
-                    fory.type_resolver, self._field_names, self._serializers, self._nullable_fields
+                    fory.type_resolver, self._field_names, self._serializers, self._nullable_fields, self._field_infos
                 )
             self._generated_write_method = self._gen_write_method()
             self._generated_read_method = self._gen_read_method()
             if _ENABLE_FORY_PYTHON_JIT:
-                # don't use `__slots__`, which will make instance method readonly
                 self.write = self._generated_write_method
                 self.read = self._generated_read_method
 
@@ -468,6 +631,13 @@ class DataClassSerializer(Serializer):
         return func
 
     def _gen_xwrite_method(self):
+        """Generate JIT-compiled xwrite method.
+
+        Per xlang spec, struct format is:
+        - Schema consistent mode: |4-byte hash|field values|
+        - Schema evolution mode (compatible): |field values| (no field count prefix!)
+        The field count is in TypeDef meta written at the end, not in object data.
+        """
         context = {}
         counter = itertools.count(0)
         buffer, fory, value, value_dict = "buffer", "fory", "value", "value_dict"
@@ -514,6 +684,7 @@ class DataClassSerializer(Serializer):
             else:
                 stmt = self._get_write_stmt_for_codegen(serializer, buffer, field_value)
                 if stmt is None:
+                    # For non-nullable complex types, use xwrite_no_ref
                     stmt = f"{fory}.xwrite_no_ref({buffer}, {field_value}, serializer={serializer_var})"
                 stmts.append(stmt)
         self._xwrite_method_code, func = compile_function(
@@ -525,6 +696,13 @@ class DataClassSerializer(Serializer):
         return func
 
     def _gen_xread_method(self):
+        """Generate JIT-compiled xread method.
+
+        Per xlang spec, struct format is:
+        - Schema consistent mode: |4-byte hash|field values|
+        - Schema evolution mode (compatible): |field values| (no field count prefix!)
+        The field count is in TypeDef meta written at the end, not in object data.
+        """
         context = dict(_jit_context)
         buffer, fory, obj_class, obj, obj_dict = (
             "buffer",
@@ -570,6 +748,7 @@ class DataClassSerializer(Serializer):
             context[serializer_var] = serializer
             field_value = f"field_value{index}"
             is_nullable = self._nullable_fields.get(field_name, False)
+
             if is_nullable:
                 if isinstance(serializer, StringSerializer):
                     stmts.extend(
@@ -585,15 +764,17 @@ class DataClassSerializer(Serializer):
             else:
                 stmt = self._get_read_stmt_for_codegen(serializer, buffer, field_value)
                 if stmt is None:
+                    # For non-nullable complex types, use xread_no_ref
                     stmt = f"{field_value} = {fory}.xread_no_ref({buffer}, serializer={serializer_var})"
                 stmts.append(stmt)
+
             if field_name not in current_class_field_names:
                 stmts.append(f"# {field_name} is not in {self.type_}")
-                continue
-            if not self._has_slots:
+            elif not self._has_slots:
                 stmts.append(f"{obj_dict}['{field_name}'] = {field_value}")
             else:
                 stmts.append(f"{obj}.{field_name} = {field_value}")
+
         stmts.append(f"return {obj}")
         self._xread_method_code, func = compile_function(
             f"xread_{self.type_.__module__}_{self.type_.__qualname__}".replace(".", "_"),
@@ -643,7 +824,13 @@ class DataClassSerializer(Serializer):
         return obj
 
     def xwrite(self, buffer: Buffer, value):
-        """Write dataclass instance to buffer in cross-language format."""
+        """Write dataclass instance to buffer in cross-language format.
+
+        Per xlang spec, struct format is:
+        - Schema consistent mode: |4-byte hash|field values|
+        - Schema evolution mode (compatible): |field values| (no field count prefix!)
+        The field count is in TypeDef meta written at the end, not in object data.
+        """
         if not self._xlang:
             raise TypeError("xwrite can only be called when DataClassSerializer is in xlang mode")
         if not self.fory.compatible:
@@ -661,7 +848,13 @@ class DataClassSerializer(Serializer):
                 serializer.xwrite(buffer, field_value)
 
     def xread(self, buffer):
-        """Read dataclass instance from buffer in cross-language format."""
+        """Read dataclass instance from buffer in cross-language format.
+
+        Per xlang spec, struct format is:
+        - Schema consistent mode: |4-byte hash|field values|
+        - Schema evolution mode (compatible): |field values| (no field count prefix!)
+        The field count is in TypeDef meta written at the end, not in object data.
+        """
         if not self._xlang:
             raise TypeError("xread can only be called when DataClassSerializer is in xlang mode")
         if not self.fory.compatible:
@@ -849,71 +1042,85 @@ def group_fields(type_resolver, field_names, serializers, nullable_map=None):
     return (boxed_types, nullable_boxed_types, internal_types, collection_types, set_types, map_types, other_types)
 
 
-def compute_struct_fingerprint(type_resolver, field_names, serializers, nullable_map=None):
+def compute_struct_fingerprint(type_resolver, field_names, serializers, nullable_map=None, field_infos_list=None):
     """
     Computes the fingerprint string for a struct type used in schema versioning.
 
     Fingerprint Format:
-        Each field contributes: <field_name>,<type_id>,<ref>,<nullable>;
-        Fields are sorted lexicographically by field name (not by type category).
+        Each field contributes: <field_id_or_name>,<type_id>,<ref>,<nullable>;
+        Fields are sorted by tag ID (if >=0) or field name (if id=-1).
 
     Field Components:
-        - field_name: snake_case field name (Python doesn't support field tag IDs yet)
+        - field_id_or_name: Tag ID as string if id >= 0, otherwise field name
         - type_id: Fory TypeId as decimal string (e.g., "4" for INT32)
-        - ref: "1" if field has explicit ref annotation, "0" otherwise
-              (always "0" in Python since field annotations are not supported)
+        - ref: "1" if field has ref=True in pyfory.field(), "0" otherwise
+              (based on field annotation, NOT runtime config)
         - nullable: "1" if null flag is written, "0" otherwise
 
-    Example fingerprint: "age,4,0,0;name,12,0,1;"
+    Example fingerprints:
+        With tag IDs: "0,4,0,0;1,12,0,1;2,0,0,1;"
+        With field names: "age,4,0,0;email,12,0,1;name,9,0,0;"
 
     This format is consistent across Go, Java, Rust, C++, and Python implementations.
-    The ref flag is based on compile-time annotations only, NOT runtime ref_tracking config.
     """
     if nullable_map is None:
         nullable_map = {}
 
-    # Build field info list: (field_name, type_id, nullable)
-    field_infos = []
+    # Build field info list for fingerprint: (sort_key, field_id_or_name, type_id, ref_flag, nullable_flag)
+    fp_fields = []
+
+    # Build a lookup for field_infos by name if available
+    field_info_map = {}
+    if field_infos_list:
+        field_info_map = {fi.name: fi for fi in field_infos_list}
+
     for i, field_name in enumerate(field_names):
         serializer = serializers[i]
+
+        # Get field metadata if available
+        fi = field_info_map.get(field_name)
+        tag_id = fi.tag_id if fi else -1
+        ref_flag = "1" if (fi and fi.ref) else "0"
+
         if serializer is None:
-            # For dynamic/polymorphic fields (like Any/Object), use UNKNOWN type_id
-            # These fields are included in fingerprint with type_id=0, nullable=1
             type_id = TypeId.UNKNOWN
             nullable_flag = "1"
         else:
             type_id = type_resolver.get_typeinfo(serializer.type_).type_id & 0xFF
             is_nullable = nullable_map.get(field_name, False)
 
-            # Determine nullable flag based on type category (matching Java behavior)
             if is_primitive_type(type_id) and not is_nullable:
                 nullable_flag = "0"
             elif is_polymorphic_type(type_id) or type_id in {TypeId.ENUM, TypeId.NAMED_ENUM}:
-                # For polymorphic/enum types, use UNKNOWN type_id
                 type_id = TypeId.UNKNOWN
                 nullable_flag = "1"
             else:
                 nullable_flag = "1"
 
-        field_infos.append((field_name, type_id, nullable_flag))
+        # Determine field identifier for fingerprint
+        if tag_id >= 0:
+            field_id_or_name = str(tag_id)
+            # Sort by tag ID (numeric) for tag ID fields
+            sort_key = (0, tag_id, "")  # 0 = tag ID fields come first
+        else:
+            field_id_or_name = field_name
+            # Sort by field name (lexicographic) for name-based fields
+            sort_key = (1, 0, field_name)  # 1 = name fields come after
 
-    # Sort fields lexicographically by field name for fingerprint computation
-    # This matches Java/Go/Rust/C++ behavior
-    field_infos.sort(key=lambda x: x[0])
+        fp_fields.append((sort_key, field_id_or_name, type_id, ref_flag, nullable_flag))
+
+    # Sort fields: tag ID fields first (by ID), then name fields (lexicographically)
+    fp_fields.sort(key=lambda x: x[0])
 
     # Build fingerprint string
-    # Format: <field_name>,<type_id>,<ref>,<nullable>;
     hash_parts = []
-    for field_name, type_id, nullable_flag in field_infos:
-        # ref flag: always "0" in Python since field annotations are not supported
-        # In Java/Go, ref is "1" only if explicitly annotated with @ForyField(ref=true) or fory:"trackRef"
-        ref_flag = "0"
-        hash_parts.append(f"{field_name},{type_id},{ref_flag},{nullable_flag};")
+    for _, field_id_or_name, type_id, ref_flag, nullable_flag in fp_fields:
+        hash_parts.append(f"{field_id_or_name},{type_id},{ref_flag},{nullable_flag};")
 
     return "".join(hash_parts)
 
 
-def compute_struct_meta(type_resolver, field_names, serializers, nullable_map=None):
+def compute_struct_meta(type_resolver, field_names, serializers, nullable_map=None, field_infos_list=None):
     """
     Computes struct metadata including version hash, sorted field names, and serializers.
 
@@ -927,8 +1134,8 @@ def compute_struct_meta(type_resolver, field_names, serializers, nullable_map=No
         type_resolver, field_names, serializers, nullable_map
     )
 
-    # Compute fingerprint string using the new format
-    hash_str = compute_struct_fingerprint(type_resolver, field_names, serializers, nullable_map)
+    # Compute fingerprint string using the new format with field infos
+    hash_str = compute_struct_fingerprint(type_resolver, field_names, serializers, nullable_map, field_infos_list)
     hash_bytes = hash_str.encode("utf-8")
 
     # Handle empty hash_bytes (no fields or all fields are unknown/dynamic)

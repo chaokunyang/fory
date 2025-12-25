@@ -36,21 +36,21 @@ def ser_de(fory, obj):
 
 @dataclass
 class SimpleObject:
-    f1: Dict[pyfory.int32, pyfory.float64] = None
+    f1: Optional[Dict[pyfory.int32, pyfory.float64]] = None
 
 
 @dataclass
 class ComplexObject:
-    f1: Any = None
-    f2: Any = None
+    f1: Optional[Any] = None
+    f2: Optional[Any] = None
     f3: pyfory.int8 = 0
     f4: pyfory.int16 = 0
     f5: pyfory.int32 = 0
     f6: pyfory.int64 = 0
     f7: pyfory.float32 = 0
     f8: pyfory.float64 = 0
-    f9: List[pyfory.int16] = None
-    f10: Dict[pyfory.int32, pyfory.float64] = None
+    f9: Optional[List[pyfory.int16]] = None
+    f10: Optional[Dict[pyfory.int32, pyfory.float64]] = None
 
 
 def test_struct():
@@ -87,13 +87,13 @@ def test_struct():
 
 @dataclass
 class SuperClass1:
-    f1: Any = None
+    f1: Optional[Any] = None
     f2: pyfory.int8 = 0
 
 
 @dataclass
 class ChildClass1(SuperClass1):
-    f3: Dict[str, pyfory.float64] = None
+    f3: Optional[Dict[str, pyfory.float64]] = None
 
 
 def test_strict():
@@ -122,7 +122,7 @@ class DataClassObject:
     f_list: List[int]
     f_dict: Dict[str, float]
     f_any: Any
-    f_complex: ComplexObject = None
+    f_complex: Optional[ComplexObject] = None
 
     @classmethod
     def create(cls):
@@ -159,6 +159,17 @@ def test_sort_fields():
 
     fory = Fory(xlang=True, ref=True)
     serializer = DataClassSerializer(fory, TestClass, xlang=True)
+    # Sorting order:
+    # 1. Non-compressed primitives (compress=0) by -size, then name:
+    #    float64(8), float32(4), int8(1) => f13, f5, f11
+    # 2. Compressed primitives (compress=1) by -size, then name:
+    #    int64(8), int32(4) => f12, f1
+    # 3. bool (size 1) => f7
+    # 4. Internal types by type_id, then name: str, datetime, bytes => f4, f15, f6
+    # 5. Collection types by type_id, then name: list => f10, f2
+    # 6. Set types by type_id, then name: set => f14
+    # 7. Map types by type_id, then name: dict => f3, f9
+    # 8. Other types (polymorphic/any) by name: any => f8
     assert serializer._field_names == ["f13", "f5", "f11", "f12", "f1", "f7", "f4", "f15", "f6", "f10", "f2", "f14", "f3", "f9", "f8"]
 
 
@@ -635,8 +646,8 @@ class CompatibleAllTypes:
     f_str: str = ""
     f_float: float = 0.0
     f_bool: bool = False
-    f_list: List[int] = None
-    f_dict: Dict[str, int] = None
+    f_list: Optional[List[int]] = None
+    f_dict: Optional[Dict[str, int]] = None
 
 
 @dataclass
@@ -645,8 +656,8 @@ class CompatibleAllTypesV2:
     f_str: str = ""
     f_float: float = 0.0
     f_bool: bool = False
-    f_list: List[int] = None
-    f_dict: Dict[str, int] = None
+    f_list: Optional[List[int]] = None
+    f_dict: Optional[Dict[str, int]] = None
     f_new: str = "default"
 
 

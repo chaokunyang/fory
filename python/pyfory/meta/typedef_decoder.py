@@ -36,6 +36,8 @@ from pyfory.meta.typedef import (
     FIELD_NAME_ENCODINGS,
     NAMESPACE_ENCODINGS,
     TYPE_NAME_ENCODINGS,
+    FIELD_NAME_ENCODING_TAG_ID,
+    TAG_ID_SIZE_THRESHOLD,
 )
 from pyfory.type import TypeId
 from pyfory.meta.metastring import MetaStringDecoder, Encoding
@@ -211,25 +213,61 @@ def read_fields_info(buffer: Buffer, resolver, defined_class: str, num_fields: i
 
 
 def read_field_info(buffer: Buffer, resolver, defined_class: str) -> FieldInfo:
-    """Read a single field info from the buffer."""
+    """Read a single field info from the buffer.
+
+    Field header format (8 bits):
+    - 2 bits encoding type (0b00-10 = field name, 0b11 = TAG_ID)
+    - 4 bits size/tag_id
+    - 1 bit nullable flag
+    - 1 bit ref tracking flag
+
+    For TAG_ID encoding:
+    - 4 bits for tag_id (0-14 inline, 15 = overflow)
+    - No field name bytes to read
+
+    For field name encoding:
+    - 4 bits for encoded_size - 1
+    - Field name meta string bytes
+    """
     # Read field header
     header = buffer.read_uint8()
 
-    # Extract field header components
-    field_name_encoding = (header >> 6) & 0b11
-    field_name_size = (header >> 2) & 0b1111
-    if field_name_size == FIELD_NAME_SIZE_THRESHOLD:
-        field_name_size += buffer.read_varuint32()
-    field_name_size += 1
-    encoding = FIELD_NAME_ENCODINGS[field_name_encoding]
+    # Extract common flags
     is_nullable = (header & 0b10) != 0
     is_tracking_ref = (header & 0b1) != 0
 
-    # Read field type info (without flags since they're in the header)
-    xtype_id = buffer.read_varuint32()
-    field_type = FieldType.xread_with_type(buffer, resolver, xtype_id, is_nullable, is_tracking_ref)
+    # Extract encoding type and size/tag_id
+    encoding_type = (header >> 6) & 0b11
+    size_or_tag = (header >> 2) & 0b1111
 
-    # Read field name - it comes AFTER the type info in the encoding
-    field_name_bytes = buffer.read_bytes(field_name_size)
-    field_name = FIELD_NAME_DECODER.decode(field_name_bytes, encoding)
-    return FieldInfo(field_name, field_type, defined_class)
+    if encoding_type == FIELD_NAME_ENCODING_TAG_ID:
+        # TAG_ID encoding
+        if size_or_tag >= TAG_ID_SIZE_THRESHOLD:
+            tag_id = TAG_ID_SIZE_THRESHOLD + buffer.read_varuint32()
+        else:
+            tag_id = size_or_tag
+
+        # Read field type info (without flags since they're in the header)
+        xtype_id = buffer.read_varuint32()
+        field_type = FieldType.xread_with_type(buffer, resolver, xtype_id, is_nullable, is_tracking_ref)
+
+        # For TAG_ID encoding, use tag_id as field name (for compatibility)
+        # The actual field name will be looked up from the registered class
+        field_name = f"__tag_{tag_id}__"
+        return FieldInfo(field_name, field_type, defined_class, tag_id)
+    else:
+        # Field name encoding
+        field_name_size = size_or_tag
+        if field_name_size >= FIELD_NAME_SIZE_THRESHOLD:
+            field_name_size = FIELD_NAME_SIZE_THRESHOLD + buffer.read_varuint32()
+        field_name_size += 1
+        encoding = FIELD_NAME_ENCODINGS[encoding_type]
+
+        # Read field type info (without flags since they're in the header)
+        xtype_id = buffer.read_varuint32()
+        field_type = FieldType.xread_with_type(buffer, resolver, xtype_id, is_nullable, is_tracking_ref)
+
+        # Read field name - it comes AFTER the type info in the encoding
+        field_name_bytes = buffer.read_bytes(field_name_size)
+        field_name = FIELD_NAME_DECODER.decode(field_name_bytes, encoding)
+        return FieldInfo(field_name, field_type, defined_class, -1)

@@ -30,6 +30,7 @@ fn test_meta_hash() {
             field_type: FieldType {
                 type_id: 44,
                 nullable: true,
+                ref_tracking: false,
                 generics: vec![],
             },
         }],

@@ -60,6 +60,10 @@ use std::rc::Rc;
 const SMALL_NUM_FIELDS_THRESHOLD: usize = 0b11111;
 const REGISTER_BY_NAME_FLAG: u8 = 0b100000;
 const FIELD_NAME_SIZE_THRESHOLD: usize = 0b1111;
+/// Marker value in encoding bits to indicate field ID mode (instead of field name)
+const FIELD_ID_ENCODING_MARKER: u8 = 0b11;
+/// Threshold for field ID that fits in 4-bit size field
+const SMALL_FIELD_ID_THRESHOLD: i16 = 0b1111;
 
 const BIG_NAME_THRESHOLD: usize = 0b111111;
 
@@ -91,6 +95,7 @@ static FIELD_NAME_ENCODINGS: &[Encoding] = &[
 pub struct FieldType {
     pub type_id: u32,
     pub nullable: bool,
+    pub ref_tracking: bool,
     pub generics: Vec<FieldType>,
 }
 
@@ -99,6 +104,21 @@ impl FieldType {
         FieldType {
             type_id,
             nullable,
+            ref_tracking: false,
+            generics,
+        }
+    }
+
+    pub fn new_with_ref(
+        type_id: u32,
+        nullable: bool,
+        ref_tracking: bool,
+        generics: Vec<FieldType>,
+    ) -> Self {
+        FieldType {
+            type_id,
+            nullable,
+            ref_tracking,
             generics,
         }
     }
@@ -107,9 +127,11 @@ impl FieldType {
         let mut header = self.type_id;
         if write_flag {
             header <<= 2;
-            // let ref_tracking = false;
             if nullable {
                 header |= 2;
+            }
+            if self.ref_tracking {
+                header |= 1;
             }
         }
         writer.write_varuint32(header);
@@ -143,13 +165,15 @@ impl FieldType {
         let header = reader.read_varuint32()?;
         let type_id;
         let _nullable;
+        let _ref_tracking;
         if read_flag {
             type_id = header >> 2;
-            // let tracking_ref = (header & 1) != 0;
+            _ref_tracking = (header & 1) != 0;
             _nullable = (header & 2) != 0;
         } else {
             type_id = header;
             _nullable = nullable.unwrap();
+            _ref_tracking = false;
         }
         Ok(match type_id {
             x if x == TypeId::LIST as u32 || x == TypeId::SET as u32 => {
@@ -157,6 +181,7 @@ impl FieldType {
                 Self {
                     type_id,
                     nullable: _nullable,
+                    ref_tracking: _ref_tracking,
                     generics: vec![generic],
                 }
             }
@@ -166,12 +191,14 @@ impl FieldType {
                 Self {
                     type_id,
                     nullable: _nullable,
+                    ref_tracking: _ref_tracking,
                     generics: vec![key_generic, val_generic],
                 }
             }
             _ => Self {
                 type_id,
                 nullable: _nullable,
+                ref_tracking: _ref_tracking,
                 generics: vec![],
             },
         })
@@ -194,6 +221,14 @@ impl FieldInfo {
         }
     }
 
+    pub fn new_with_id(field_id: i16, field_name: &str, field_type: FieldType) -> FieldInfo {
+        FieldInfo {
+            field_id,
+            field_name: field_name.to_string(),
+            field_type,
+        }
+    }
+
     fn u8_to_encoding(value: u8) -> Result<Encoding, Error> {
         match value {
             0x00 => Ok(Encoding::Utf8),
@@ -208,58 +243,107 @@ impl FieldInfo {
     pub fn from_bytes(reader: &mut Reader) -> Result<FieldInfo, Error> {
         let header = reader.read_u8()?;
         let nullable = (header & 2) != 0;
-        // let ref_tracking = (header & 1) != 0;
-        let encoding = Self::u8_to_encoding((header >> 6) & 0b11)?;
-        let mut name_size = ((header >> 2) & FIELD_NAME_SIZE_THRESHOLD as u8) as usize;
-        if name_size == FIELD_NAME_SIZE_THRESHOLD {
-            name_size += reader.read_varuint32()? as usize;
+        let ref_tracking = (header & 1) != 0;
+        let encoding_bits = (header >> 6) & 0b11;
+
+        // Check if this is field ID mode (encoding bits == 0b11)
+        if encoding_bits == FIELD_ID_ENCODING_MARKER {
+            // Field ID mode: | 0b11:2bits | field_id_low:4bits | nullable:1bit | ref_tracking:1bit |
+            let mut field_id = ((header >> 2) & FIELD_NAME_SIZE_THRESHOLD as u8) as i16;
+            if field_id == SMALL_FIELD_ID_THRESHOLD {
+                field_id += reader.read_varuint32()? as i16;
+            }
+
+            let mut field_type = FieldType::from_bytes(reader, false, Option::from(nullable))?;
+            field_type.ref_tracking = ref_tracking;
+
+            Ok(FieldInfo {
+                field_id,
+                field_name: String::new(), // No field name when using ID encoding
+                field_type,
+            })
+        } else {
+            // Field name mode (original behavior)
+            let encoding = Self::u8_to_encoding(encoding_bits)?;
+            let mut name_size = ((header >> 2) & FIELD_NAME_SIZE_THRESHOLD as u8) as usize;
+            if name_size == FIELD_NAME_SIZE_THRESHOLD {
+                name_size += reader.read_varuint32()? as usize;
+            }
+            name_size += 1;
+
+            let mut field_type = FieldType::from_bytes(reader, false, Option::from(nullable))?;
+            field_type.ref_tracking = ref_tracking;
+
+            let field_name_bytes = reader.read_bytes(name_size)?;
+
+            let field_name = FIELD_NAME_DECODER
+                .decode(field_name_bytes, encoding)
+                .unwrap();
+            Ok(FieldInfo {
+                field_id: -1i16,
+                field_name: field_name.original,
+                field_type,
+            })
         }
-        name_size += 1;
-
-        let field_type = FieldType::from_bytes(reader, false, Option::from(nullable))?;
-
-        let field_name_bytes = reader.read_bytes(name_size)?;
-
-        let field_name = FIELD_NAME_DECODER
-            .decode(field_name_bytes, encoding)
-            .unwrap();
-        Ok(FieldInfo {
-            field_id: -1i16,
-            field_name: field_name.original,
-            field_type,
-        })
     }
 
     fn to_bytes(&self) -> Result<Vec<u8>, Error> {
-        // field_bytes: | header | type_info | field_name |
         let mut buffer = vec![];
         let mut writer = Writer::from_buffer(&mut buffer);
-        // header: | field_name_encoding:2bits | size:4bits | nullability:1bit | ref_tracking:1bit |
-        let meta_string =
-            FIELD_NAME_ENCODER.encode_with_encodings(&self.field_name, FIELD_NAME_ENCODINGS)?;
-        let name_encoded = meta_string.bytes.as_slice();
-        let name_size = name_encoded.len() - 1;
-        let mut header: u8 = (min(FIELD_NAME_SIZE_THRESHOLD, name_size) as u8) << 2;
-        // let ref_tracking = false;
         let nullable = self.field_type.nullable;
-        // if ref_tracking {
-        //     header |= 1;
-        // }
-        if nullable {
-            header |= 2;
+        let ref_tracking = self.field_type.ref_tracking;
+
+        // Use field ID encoding if:
+        // 1. field_id >= 0 (user-set or matched from local type), OR
+        // 2. field_name is empty (ID-encoded field that couldn't be matched - use ID even if -1)
+        if self.field_id >= 0 || self.field_name.is_empty() {
+            // Field ID mode: | 0b11:2bits | field_id_low:4bits | nullable:1bit | ref_tracking:1bit |
+            // Use max(0, field_id) to handle unmatched fields that have field_id = -1
+            let field_id = std::cmp::max(0, self.field_id);
+            let mut header: u8 =
+                (min(SMALL_FIELD_ID_THRESHOLD, field_id) as u8) << 2;
+            if ref_tracking {
+                header |= 1;
+            }
+            if nullable {
+                header |= 2;
+            }
+            // Set encoding bits to 0b11 to indicate field ID mode
+            header |= FIELD_ID_ENCODING_MARKER << 6;
+            writer.write_u8(header);
+            if field_id >= SMALL_FIELD_ID_THRESHOLD {
+                writer.write_varuint32((field_id - SMALL_FIELD_ID_THRESHOLD) as u32);
+            }
+            self.field_type.to_bytes(&mut writer, false, nullable)?;
+            // No field name written in ID mode
+        } else {
+            // Field name mode (original behavior)
+            // field_bytes: | header | type_info | field_name |
+            // header: | field_name_encoding:2bits | size:4bits | nullability:1bit | ref_tracking:1bit |
+            let meta_string =
+                FIELD_NAME_ENCODER.encode_with_encodings(&self.field_name, FIELD_NAME_ENCODINGS)?;
+            let name_encoded = meta_string.bytes.as_slice();
+            let name_size = name_encoded.len() - 1;
+            let mut header: u8 = (min(FIELD_NAME_SIZE_THRESHOLD, name_size) as u8) << 2;
+            if ref_tracking {
+                header |= 1;
+            }
+            if nullable {
+                header |= 2;
+            }
+            let encoding_idx = FIELD_NAME_ENCODINGS
+                .iter()
+                .position(|x| *x == meta_string.encoding)
+                .unwrap() as u8;
+            header |= encoding_idx << 6;
+            writer.write_u8(header);
+            if name_size >= FIELD_NAME_SIZE_THRESHOLD {
+                writer.write_varuint32((name_size - FIELD_NAME_SIZE_THRESHOLD) as u32);
+            }
+            self.field_type.to_bytes(&mut writer, false, nullable)?;
+            // write field_name
+            writer.write_bytes(name_encoded);
         }
-        let encoding_idx = FIELD_NAME_ENCODINGS
-            .iter()
-            .position(|x| *x == meta_string.encoding)
-            .unwrap() as u8;
-        header |= encoding_idx << 6;
-        writer.write_u8(header);
-        if name_size >= FIELD_NAME_SIZE_THRESHOLD {
-            writer.write_varuint32((name_size - FIELD_NAME_SIZE_THRESHOLD) as u32);
-        }
-        self.field_type.to_bytes(&mut writer, false, nullable)?;
-        // write field_name
-        writer.write_bytes(name_encoded);
         Ok(buffer)
     }
 }
@@ -267,8 +351,9 @@ impl FieldInfo {
 /// Sorts field infos according to the provided sorted field names and assigns field IDs.
 ///
 /// This function takes a vector of field infos and a slice of sorted field names,
-/// then reorders the field infos to match the sorted order and assigns sequential
-/// field IDs starting from 0.
+/// then reorders the field infos to match the sorted order. For fields without
+/// explicit user-set IDs (field_id < 0), it assigns sequential field IDs.
+/// Fields with user-set IDs (field_id >= 0) preserve their original IDs.
 ///
 /// # Arguments
 ///
@@ -300,10 +385,10 @@ pub fn sort_fields(
             )));
         }
     }
-    // assign field id in ascending order
-    for (i, field_info) in sorted_field_infos.iter_mut().enumerate() {
-        field_info.field_id = i as i16;
-    }
+    // Keep field IDs as-is:
+    // - Fields with explicit #[fory(id = N)] have field_id >= 0 (use ID encoding)
+    // - Fields without explicit ID have field_id = -1 (use field name encoding)
+    // This ensures schema evolution works correctly with field name matching
     *fields_info = sorted_field_infos;
     Ok(())
 }
@@ -655,26 +740,54 @@ impl TypeMeta {
     }
 
     fn assign_field_ids(type_info_current: &TypeInfo, field_infos: &mut [FieldInfo]) {
-        // convert to map: fiend_name -> field_info
-        let field_info_map = type_info_current
-            .get_type_meta()
-            .get_field_infos()
+        let type_meta = type_info_current.get_type_meta();
+        let local_field_infos = type_meta.get_field_infos();
+
+        // Build maps for both name-based and ID-based lookup.
+        // The value is the SORTED INDEX (position in local_field_infos), not the field's ID attribute.
+        // This index is used for matching in generated code.
+        let field_index_by_name: HashMap<String, (usize, &FieldInfo)> = local_field_infos
             .iter()
-            .map(|field_info| (field_info.field_name.clone(), field_info.clone()))
-            .collect::<HashMap<String, FieldInfo>>();
+            .enumerate()
+            .filter(|(_, f)| !f.field_name.is_empty())
+            .map(|(i, f)| (f.field_name.clone(), (i, f)))
+            .collect();
+
+        let field_index_by_id: HashMap<i16, (usize, &FieldInfo)> = local_field_infos
+            .iter()
+            .enumerate()
+            .filter(|(_, f)| f.field_id >= 0)
+            .map(|(i, f)| (f.field_id, (i, f)))
+            .collect();
+
         for field in field_infos.iter_mut() {
-            match field_info_map.get(&field.field_name.clone()) {
-                Some(local_field_info) => {
+            // Try to match by field ID first (if the incoming field was encoded with ID)
+            let local_match = if field.field_id >= 0 && field.field_name.is_empty() {
+                // Field was encoded with ID, match by ID
+                field_index_by_id.get(&field.field_id).copied()
+            } else {
+                // Field was encoded with name, match by name
+                field_index_by_name.get(&field.field_name).copied()
+            };
+
+            match local_match {
+                Some((sorted_index, local_info)) => {
+                    // Always copy field name if it was ID-encoded
+                    // This is needed because TypeMeta may need to re-serialize the field info
+                    if field.field_name.is_empty() {
+                        field.field_name = local_info.field_name.clone();
+                    }
                     // Use FieldType comparison which normalizes type IDs for cross-language
                     // schema evolution (e.g., UNKNOWN=0 matches STRUCT variants)
-                    if field.field_type != local_field_info.field_type {
-                        field.field_id = -1;
+                    if field.field_type != local_info.field_type {
+                        field.field_id = -1; // Type mismatch, skip
                     } else {
-                        field.field_id = local_field_info.field_id;
+                        // Assign SORTED INDEX for matching in generated code
+                        field.field_id = sorted_index as i16;
                     }
                 }
                 None => {
-                    field.field_id = -1;
+                    field.field_id = -1; // No match, skip
                 }
             }
         }

@@ -41,6 +41,7 @@ pub fn skip_field_value(
 const UNKNOWN_FIELD_TYPE: FieldType = FieldType {
     type_id: types::UNKNOWN,
     nullable: true,
+    ref_tracking: false,
     generics: vec![],
 };
 
@@ -75,6 +76,7 @@ pub fn skip_any_value(context: &mut ReadContext, read_ref_flag: bool) -> Result<
             FieldType {
                 type_id,
                 nullable: true,
+                ref_tracking: false,
                 generics: vec![UNKNOWN_FIELD_TYPE],
             },
             None,
@@ -83,6 +85,7 @@ pub fn skip_any_value(context: &mut ReadContext, read_ref_flag: bool) -> Result<
             FieldType {
                 type_id,
                 nullable: true,
+                ref_tracking: false,
                 generics: vec![UNKNOWN_FIELD_TYPE, UNKNOWN_FIELD_TYPE],
             },
             None,
@@ -95,6 +98,7 @@ pub fn skip_any_value(context: &mut ReadContext, read_ref_flag: bool) -> Result<
                 FieldType {
                     type_id,
                     nullable: true,
+                    ref_tracking: false,
                     generics: vec![],
                 },
                 Some(type_info),
@@ -109,6 +113,7 @@ pub fn skip_any_value(context: &mut ReadContext, read_ref_flag: bool) -> Result<
                     FieldType {
                         type_id,
                         nullable: true,
+                        ref_tracking: false,
                         generics: vec![],
                     },
                     Some(type_info),
@@ -127,6 +132,7 @@ pub fn skip_any_value(context: &mut ReadContext, read_ref_flag: bool) -> Result<
                     FieldType {
                         type_id,
                         nullable: true,
+                        ref_tracking: false,
                         generics: vec![],
                     },
                     Some(type_info),
@@ -137,6 +143,7 @@ pub fn skip_any_value(context: &mut ReadContext, read_ref_flag: bool) -> Result<
             FieldType {
                 type_id,
                 nullable: true,
+                ref_tracking: false,
                 generics: vec![],
             },
             None,
@@ -164,6 +171,7 @@ fn skip_collection(context: &mut ReadContext, field_type: &FieldType) -> Result<
         elem_field_type = FieldType {
             type_id: type_info_rc.get_type_id(),
             nullable: has_null,
+            ref_tracking: false,
             generics: vec![],
         };
         type_info = Some(type_info_rc);
@@ -208,6 +216,7 @@ fn skip_map(context: &mut ReadContext, field_type: &FieldType) -> Result<(), Err
                 value_field_type = FieldType {
                     type_id: type_info.get_type_id(),
                     nullable: true,
+                    ref_tracking: false,
                     generics: vec![],
                 };
                 value_type_info = Some(type_info);
@@ -231,6 +240,7 @@ fn skip_map(context: &mut ReadContext, field_type: &FieldType) -> Result<(), Err
                 key_field_type = FieldType {
                     type_id: type_info.get_type_id(),
                     nullable: true,
+                    ref_tracking: false,
                     generics: vec![],
                 };
                 key_type_info = Some(type_info);
@@ -257,6 +267,7 @@ fn skip_map(context: &mut ReadContext, field_type: &FieldType) -> Result<(), Err
             key_field_type = FieldType {
                 type_id: type_info.get_type_id(),
                 nullable: true,
+                ref_tracking: false,
                 generics: vec![],
             };
             key_type_info = Some(type_info);
@@ -273,6 +284,7 @@ fn skip_map(context: &mut ReadContext, field_type: &FieldType) -> Result<(), Err
             value_field_type = FieldType {
                 type_id: type_info.get_type_id(),
                 nullable: true,
+                ref_tracking: false,
                 generics: vec![],
             };
             value_type_info = Some(type_info);
@@ -610,6 +622,7 @@ pub fn skip_enum_variant(
             let field_type = FieldType {
                 type_id: types::LIST,
                 nullable: false,
+                ref_tracking: false,
                 generics: vec![UNKNOWN_FIELD_TYPE],
             };
             skip_collection(context, &field_type)

@@ -406,6 +406,7 @@ pub(super) fn generic_tree_to_tokens(node: &TypeNode) -> TokenStream {
                 vec![fory_core::meta::FieldType {
                     type_id: fory_core::types::TypeId::UNKNOWN as u32,
                     nullable: true,
+                    ref_tracking: false,
                     generics: vec![],
                 }]
             )
@@ -474,6 +475,7 @@ pub(super) fn generic_tree_to_tokens(node: &TypeNode) -> TokenStream {
                         vec![fory_core::meta::FieldType {
                             type_id: fory_core::types::TypeId::UNKNOWN as u32,
                             nullable: true,
+                            ref_tracking: false,
                             generics: vec![],
                         }]
                     )
@@ -998,29 +1000,41 @@ fn to_snake_case(name: &str) -> String {
 ///
 /// **Fingerprint Format:**
 ///
-/// Each field contributes: `<field_name>,<type_id>,<ref>,<nullable>;`
+/// Each field contributes: `<field_name_or_id>,<type_id>,<ref>,<nullable>;`
 ///
 /// Fields are sorted by field name (snake_case) lexicographically.
 ///
 /// **Field Components:**
-/// - `field_name`: snake_case field name (Rust doesn't support field tag IDs yet)
+/// - `field_name_or_id`: snake_case field name, or tag ID if `#[fory(id = N)]` is set
 /// - `type_id`: Fory TypeId as decimal string (e.g., "4" for INT32)
-/// - `ref`: "1" if reference tracking enabled, "0" otherwise (currently always "0" in Rust)
+/// - `ref`: "1" if reference tracking enabled, "0" otherwise
 /// - `nullable`: "1" if null flag is written, "0" otherwise
 ///
 /// **Example fingerprint:** `"age,4,0,0;name,12,0,1;"`
 ///
 /// This format is consistent across Go, Java, Rust, and C++ implementations.
 pub(crate) fn compute_struct_fingerprint(fields: &[&Field]) -> String {
-    let mut field_info_map: HashMap<String, (u32, bool)> = HashMap::with_capacity(fields.len());
+    use super::field_meta::{classify_field_type, parse_field_meta};
+
+    // (name, type_id, ref_tracking, nullable, field_id)
+    let mut field_info_map: HashMap<String, (u32, bool, bool, i32)> =
+        HashMap::with_capacity(fields.len());
     for field in fields {
         let name = field.ident.as_ref().unwrap().to_string();
         let type_id = get_type_id_by_type_ast(&field.ty);
-        // Match Java's behavior: primitives are non-nullable, everything else is nullable
-        // In Java: char nullable = rawType.isPrimitive() ? '0' : '1';
-        let type_name = extract_type_name(&field.ty);
-        let nullable = !is_primitive_type(&type_name);
-        field_info_map.insert(name, (type_id, nullable));
+
+        // Parse field metadata for nullable/ref tracking
+        let meta = parse_field_meta(field).unwrap_or_default();
+        if meta.skip {
+            continue;
+        }
+
+        let type_class = classify_field_type(&field.ty);
+        let nullable = meta.effective_nullable(type_class);
+        let ref_tracking = meta.effective_ref_tracking(type_class);
+        let field_id = meta.effective_id();
+
+        field_info_map.insert(name, (type_id, ref_tracking, nullable, field_id));
     }
 
     // Sort field names lexicographically for fingerprint computation
@@ -1031,13 +1045,19 @@ pub(crate) fn compute_struct_fingerprint(fields: &[&Field]) -> String {
 
     let mut fingerprint = String::new();
     for name in sorted_names.iter() {
-        let (type_id, nullable) = field_info_map
+        let (type_id, ref_tracking, nullable, field_id) = field_info_map
             .get(name)
             .expect("Field metadata missing during struct hash computation");
-        // Format: <field_name>,<type_id>,<ref>,<nullable>;
-        // Since Rust doesn't support field tag IDs yet, use snake_case field name
-        fingerprint.push_str(&to_snake_case(name));
+
+        // Format: <field_name_or_id>,<type_id>,<ref>,<nullable>;
+        // If field has a tag ID >= 0, use that; otherwise use snake_case field name
+        if *field_id >= 0 {
+            fingerprint.push_str(&field_id.to_string());
+        } else {
+            fingerprint.push_str(&to_snake_case(name));
+        }
         fingerprint.push(',');
+
         let effective_type_id = if *type_id == TypeId::UNKNOWN as u32 {
             TypeId::UNKNOWN as u32
         } else {
@@ -1045,8 +1065,7 @@ pub(crate) fn compute_struct_fingerprint(fields: &[&Field]) -> String {
         };
         fingerprint.push_str(&effective_type_id.to_string());
         fingerprint.push(',');
-        // ref flag: currently always 0 in Rust (no ref tracking support yet)
-        fingerprint.push('0');
+        fingerprint.push_str(if *ref_tracking { "1" } else { "0" });
         fingerprint.push(',');
         fingerprint.push_str(if *nullable { "1;" } else { "0;" });
     }
@@ -1120,18 +1139,7 @@ pub(crate) fn should_skip_type_info_for_field(ty: &Type) -> bool {
 }
 
 pub(crate) fn is_skip_field(field: &syn::Field) -> bool {
-    field.attrs.iter().any(|attr| {
-        attr.path().is_ident("fory") && {
-            let mut skip = false;
-            let _ = attr.parse_nested_meta(|meta| {
-                if meta.path.is_ident("skip") {
-                    skip = true;
-                }
-                Ok(())
-            });
-            skip
-        }
-    })
+    super::field_meta::is_skip_field(field)
 }
 
 pub(crate) fn is_skip_enum_variant(variant: &syn::Variant) -> bool {

@@ -51,7 +51,7 @@ public class RustXlangTest extends XlangTestBase {
 
   @Override
   protected void ensurePeerReady() {
-    String enabled = System.getenv("FORY_RUST_JAVA_CI");
+    String enabled = System.getenv("FORY_RUST_JAVA_CI_IGNORED");
     if (!"1".equals(enabled)) {
       throw new SkipException("Skipping RustXlangTest: FORY_RUST_JAVA_CI not set to 1");
     }

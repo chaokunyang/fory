@@ -675,15 +675,16 @@ class DataClassSerializer(Serializer):
             serializer = self._serializers[index]
             context[serializer_var] = serializer
             is_nullable = self._nullable_fields.get(field_name, False)
-            # For nullable fields, use safe access with None default to handle
-            # schema evolution cases where the field might not exist on the object
+            # For schema evolution: use safe access with None default to handle
+            # cases where the field might not exist on the object (missing from remote schema)
+            # In compatible mode, always use safe access even for non-nullable fields
             if not self._has_slots:
-                if is_nullable:
+                if is_nullable or self.fory.compatible:
                     stmts.append(f"{field_value} = {value_dict}.get('{field_name}')")
                 else:
                     stmts.append(f"{field_value} = {value_dict}['{field_name}']")
             else:
-                if is_nullable:
+                if is_nullable or self.fory.compatible:
                     stmts.append(f"{field_value} = getattr({value}, '{field_name}', None)")
                 else:
                     stmts.append(f"{field_value} = {value}.{field_name}")
@@ -705,7 +706,22 @@ class DataClassSerializer(Serializer):
                 if stmt is None:
                     # For non-nullable complex types, use xwrite_no_ref
                     stmt = f"{fory}.xwrite_no_ref({buffer}, {field_value}, serializer={serializer_var})"
-                stmts.append(stmt)
+                # In compatible mode, handle None for non-nullable fields (schema evolution)
+                # Write zero/default value when field is None due to missing from remote schema
+                if self.fory.compatible:
+                    from pyfory.serializer import EnumSerializer
+                    if isinstance(serializer, EnumSerializer):
+                        # For enums, write ordinal 0 when None
+                        stmts.extend([
+                            f"if {field_value} is None:",
+                            f"    {buffer}.write_varuint32(0)",
+                            "else:",
+                            f"    {stmt}",
+                        ])
+                    else:
+                        stmts.append(stmt)
+                else:
+                    stmts.append(stmt)
         self._xwrite_method_code, func = compile_function(
             f"xwrite_{self.type_.__module__}_{self.type_.__qualname__}".replace(".", "_"),
             [buffer, value],
@@ -793,6 +809,29 @@ class DataClassSerializer(Serializer):
                 stmts.append(f"{obj_dict}['{field_name}'] = {field_value}")
             else:
                 stmts.append(f"{obj}.{field_name} = {field_value}")
+
+        # For schema evolution: initialize missing fields with default values
+        # This handles cases where the sender's schema has fewer fields than the receiver's
+        if self.fory.compatible:
+            read_field_names = set(self._field_names)
+            missing_fields = current_class_field_names - read_field_names
+            if missing_fields and dataclasses.is_dataclass(self.type_):
+                for dc_field in dataclasses.fields(self.type_):
+                    if dc_field.name in missing_fields:
+                        if dc_field.default is not dataclasses.MISSING:
+                            default_val = repr(dc_field.default)
+                            if not self._has_slots:
+                                stmts.append(f"{obj_dict}['{dc_field.name}'] = {default_val}")
+                            else:
+                                stmts.append(f"{obj}.{dc_field.name} = {default_val}")
+                        elif dc_field.default_factory is not dataclasses.MISSING:
+                            factory_var = f"_default_factory_{dc_field.name}"
+                            context[factory_var] = dc_field.default_factory
+                            if not self._has_slots:
+                                stmts.append(f"{obj_dict}['{dc_field.name}'] = {factory_var}()")
+                            else:
+                                stmts.append(f"{obj}.{dc_field.name} = {factory_var}()")
+                        # else: field has no default, leave it unset
 
         stmts.append(f"return {obj}")
         self._xread_method_code, func = compile_function(
@@ -885,6 +924,7 @@ class DataClassSerializer(Serializer):
         obj = self.type_.__new__(self.type_)
         self.fory.ref_resolver.reference(obj)
         current_class_field_names = set(self._get_field_names(self.type_))
+        read_field_names = set()
         for index, field_name in enumerate(self._field_names):
             serializer = self._serializers[index]
             is_nullable = self._nullable_fields.get(field_name, False)
@@ -899,6 +939,19 @@ class DataClassSerializer(Serializer):
                 field_value = serializer.xread(buffer)
             if field_name in current_class_field_names:
                 setattr(obj, field_name, field_value)
+                read_field_names.add(field_name)
+        # For schema evolution: initialize missing fields with default values
+        # This handles cases where the sender's schema has fewer fields than the receiver's
+        if self.fory.compatible:
+            missing_fields = current_class_field_names - read_field_names
+            if missing_fields and dataclasses.is_dataclass(self.type_):
+                for dc_field in dataclasses.fields(self.type_):
+                    if dc_field.name in missing_fields:
+                        if dc_field.default is not dataclasses.MISSING:
+                            setattr(obj, dc_field.name, dc_field.default)
+                        elif dc_field.default_factory is not dataclasses.MISSING:
+                            setattr(obj, dc_field.name, dc_field.default_factory())
+                        # else: field has no default, leave it unset (will be None for nullable)
         return obj
 
 

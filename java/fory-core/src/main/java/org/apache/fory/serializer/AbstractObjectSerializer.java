@@ -44,7 +44,6 @@ import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.RefResolver;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.converter.FieldConverter;
-import org.apache.fory.annotation.ForyField;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.type.FinalObjectTypeStub;
@@ -998,25 +997,9 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       this.qualifiedFieldName = d.getDeclaringClass() + "." + d.getName();
       this.fieldAccessor = d.getField() != null ? FieldAccessor.createAccessor(d.getField()) : null;
       fieldConverter = d.getFieldConverter();
-      // For xlang: nullable defaults to false, except for Optional types
-      // For native: use descriptor's nullable which defaults to true for non-primitives
-      Class<?> rawType = typeRef.getRawType();
-      if (rawType.isPrimitive()) {
-        nullable = false;
-      } else if (fory.isCrossLanguage()) {
-        ForyField foryField = d.getForyField();
-        if (foryField != null) {
-          nullable = foryField.nullable();
-        } else {
-          // Default: only Optional types are nullable in xlang mode
-          nullable = ObjectSerializer.isOptionalType(rawType);
-        }
-      } else {
-        nullable = d.isNullable();
-      }
-      if (fory.trackingRef()) {
-        trackingRef = d.isTrackingRef();
-      }
+      nullable = d.isNullable();
+      // descriptor.isTrackingRef() already includes the needToWriteRef check
+      trackingRef = d.isTrackingRef();
     }
 
     @Override

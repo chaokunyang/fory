@@ -82,6 +82,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import org.apache.fory.Fory;
+import org.apache.fory.annotation.ForyField;
 import org.apache.fory.codegen.Code;
 import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.codegen.CodegenContext;
@@ -400,12 +401,29 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     }
   }
 
+  /**
+   * Calculate the effective nullable flag for a field based on xlang mode.
+   * In xlang mode, fields are non-nullable by default unless explicitly annotated
+   * or the field type is Optional.
+   */
+  protected boolean getEffectiveNullable(Descriptor descriptor) {
+    if (fory.isCrossLanguage()) {
+      ForyField foryField = descriptor.getForyField();
+      if (foryField != null) {
+        return foryField.nullable();
+      }
+      return ObjectSerializer.isOptionalType(descriptor.getTypeRef().getRawType());
+    }
+    return descriptor.isNullable();
+  }
+
   protected Expression serializeField(
       Expression fieldValue, Expression buffer, Descriptor descriptor) {
     TypeRef<?> typeRef = descriptor.getTypeRef();
-    boolean nullable = descriptor.isNullable();
+    boolean nullable = getEffectiveNullable(descriptor);
     // descriptor.isTrackingRef() already includes the needWriteRef check
     boolean useRefTracking = descriptor.isTrackingRef();
+
 
     if (useRefTracking) {
       return new If(
@@ -962,13 +980,17 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     }
     TypeRef<?> elementType = getElementType(typeRef);
     // write collection data.
-    ListExpression actions = new ListExpression();
-    Expression write =
+    Expression ifExpr =
         new If(
             inlineInvoke(serializer, "supportCodegenHook", PRIMITIVE_BOOLEAN_TYPE),
             writeCollectionData(buffer, collection, serializer, elementType),
             new Invoke(serializer, writeMethodName, buffer, collection));
-    actions.add(write);
+    // Wrap collection and ifExpr in a ListExpression to ensure collection is evaluated before the
+    // If. This is necessary because 'collection' is used in both branches of the If expression.
+    // Without this, the code generator would assign collection to a variable inside the
+    // then-branch, and then try to use that variable name in the else-branch where it's out of
+    // scope.
+    ListExpression actions = new ListExpression(collection, ifExpr);
     if (generateNewMethod) {
       return invokeGenerated(
           ctx, ofHashSet(buffer, collection, serializer), actions, "writeCollection", false);
@@ -1273,11 +1295,16 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     } else if (!MapLikeSerializer.class.isAssignableFrom(serializer.type().getRawType())) {
       serializer = cast(serializer, TypeRef.of(MapLikeSerializer.class), "mapSerializer");
     }
-    Expression write =
+    Expression ifExpr =
         new If(
             inlineInvoke(serializer, "supportCodegenHook", PRIMITIVE_BOOLEAN_TYPE),
             jitWriteMap(buffer, map, serializer, typeRef),
             new Invoke(serializer, writeMethodName, buffer, map));
+    // Wrap map and ifExpr in a ListExpression to ensure map is evaluated before the If.
+    // This is necessary because 'map' is used in both branches of the If expression.
+    // Without this, the code generator would assign map to a variable inside the then-branch,
+    // and then try to use that variable name in the else-branch where it's out of scope.
+    Expression write = new ListExpression(map, ifExpr);
     if (generateNewMethod) {
       return invokeGenerated(ctx, ofHashSet(buffer, map, serializer), write, "writeMap", false);
     }
@@ -1768,7 +1795,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
   protected Expression deserializeField(
       Expression buffer, Descriptor descriptor, Function<Expression, Expression> callback) {
     TypeRef<?> typeRef = descriptor.getTypeRef();
-    boolean nullable = descriptor.isNullable();
+    boolean nullable = getEffectiveNullable(descriptor);
     // descriptor.isTrackingRef() already includes the needWriteRef check
     boolean useRefTracking = descriptor.isTrackingRef();
     // Check if type normally needs ref (for preserveRefId when ref tracking is disabled)

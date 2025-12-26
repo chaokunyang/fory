@@ -1272,13 +1272,22 @@ public class ClassResolver extends TypeResolver {
 
           boolean globalRefTracking = fory.trackingRef();
           boolean hasForyField = descriptor.getForyField() != null;
+          boolean isXlang = fory.isCrossLanguage();
           // Compute the final isTrackingRef value:
-          // 1. If global ref tracking is enabled and no @ForyField, use global setting
-          // 2. If @ForyField(ref=true) is set, use that (but can be overridden if global is off)
-          // 3. Additionally, check if the type actually supports ref tracking
-          boolean wantsRefTracking =
-              (globalRefTracking && !hasForyField)
-                  || (hasForyField && descriptor.isTrackingRef() && globalRefTracking);
+          // For xlang mode: "Reference tracking is disabled by default" (xlang spec)
+          //   - Only enable ref tracking if explicitly set via @ForyField(ref=true)
+          // For Java mode:
+          //   - If global ref tracking is enabled and no @ForyField, use global setting
+          //   - If @ForyField(ref=true) is set, use that (but can be overridden if global is off)
+          boolean wantsRefTracking;
+          if (isXlang) {
+            // In xlang mode, only track refs if explicitly annotated with @ForyField(ref=true)
+            wantsRefTracking = hasForyField && descriptor.isTrackingRef() && globalRefTracking;
+          } else {
+            wantsRefTracking =
+                (globalRefTracking && !hasForyField)
+                    || (hasForyField && descriptor.isTrackingRef() && globalRefTracking);
+          }
           // Compute the final tracking: type must support refs AND user/global wants tracking
           boolean finalTrackingRef = wantsRefTracking && needToWriteRef(descriptor.getTypeRef());
           boolean nullable = isFieldNullable(descriptor);

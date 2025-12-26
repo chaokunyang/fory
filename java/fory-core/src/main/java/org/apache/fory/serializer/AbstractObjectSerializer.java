@@ -29,6 +29,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.stream.Collectors;
 import org.apache.fory.Fory;
+import org.apache.fory.annotation.ForyField;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.collection.Tuple3;
 import org.apache.fory.memory.MemoryBuffer;
@@ -274,6 +275,11 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
    */
   static boolean writeBasicObjectFieldValueFailed(
       Fory fory, MemoryBuffer buffer, Object fieldValue, short classId) {
+    if (fieldValue == null) {
+      throw new IllegalArgumentException(
+          "Non-nullable field has null value. In xlang mode, fields are non-nullable by default. "
+              + "Use @ForyField(nullable=true) to allow null values.");
+    }
     if (!fory.isBasicTypesRefIgnored()) {
       return true; // let common path handle this.
     }
@@ -997,7 +1003,21 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       this.qualifiedFieldName = d.getDeclaringClass() + "." + d.getName();
       this.fieldAccessor = d.getField() != null ? FieldAccessor.createAccessor(d.getField()) : null;
       fieldConverter = d.getFieldConverter();
-      nullable = d.isNullable();
+      // For xlang mode, use xlang defaults to match the spec:
+      // "All fields are treated as not-null by default"
+      // "Reference tracking is disabled by default"
+      if (fory.isCrossLanguage()) {
+        ForyField foryField = d.getForyField();
+        if (foryField != null) {
+          // Explicit annotation takes precedence
+          nullable = foryField.nullable();
+        } else {
+          // Default: only Optional types are nullable in xlang mode
+          nullable = ObjectSerializer.isOptionalType(typeRef.getRawType());
+        }
+      } else {
+        nullable = d.isNullable();
+      }
       // descriptor.isTrackingRef() already includes the needToWriteRef check
       trackingRef = d.isTrackingRef();
     }

@@ -1226,8 +1226,8 @@ public class ClassResolver extends TypeResolver {
    *
    * <p>For native mode: use descriptor's nullable which defaults to true for non-primitives.
    *
-   * <p>Important: This ensures the serialization format matches what the TypeDef metadata says.
-   * The TypeDef uses xlang defaults (nullable=false except for Optional types), so the actual
+   * <p>Important: This ensures the serialization format matches what the TypeDef metadata says. The
+   * TypeDef uses xlang defaults (nullable=false except for Optional types), so the actual
    * serialization must use the same defaults to ensure consistency across languages.
    */
   private boolean isFieldNullable(Descriptor descriptor) {
@@ -1291,14 +1291,18 @@ public class ClassResolver extends TypeResolver {
           // Compute the final tracking: type must support refs AND user/global wants tracking
           boolean finalTrackingRef = wantsRefTracking && needToWriteRef(descriptor.getTypeRef());
           boolean nullable = isFieldNullable(descriptor);
-          boolean needsUpdate = finalTrackingRef != descriptor.isTrackingRef() || nullable != descriptor.isNullable();
+          boolean needsUpdate =
+              finalTrackingRef != descriptor.isTrackingRef() || nullable != descriptor.isNullable();
 
           if (needsUpdate) {
             if (newDescriptors[0] == null) {
               newDescriptors[0] = new HashMap<>();
             }
             Descriptor newDescriptor =
-                new DescriptorBuilder(descriptor).trackingRef(finalTrackingRef).nullable(nullable).build();
+                new DescriptorBuilder(descriptor)
+                    .trackingRef(finalTrackingRef)
+                    .nullable(nullable)
+                    .build();
             result.add(newDescriptor);
             newDescriptors[0].put(member, newDescriptor);
           } else {

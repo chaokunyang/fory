@@ -402,9 +402,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
   }
 
   /**
-   * Calculate the effective nullable flag for a field based on xlang mode.
-   * In xlang mode, fields are non-nullable by default unless explicitly annotated
-   * or the field type is Optional.
+   * Calculate the effective nullable flag for a field based on xlang mode. In xlang mode, fields
+   * are non-nullable by default unless explicitly annotated or the field type is Optional.
    */
   protected boolean getEffectiveNullable(Descriptor descriptor) {
     if (fory.isCrossLanguage()) {
@@ -423,7 +422,6 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     boolean nullable = getEffectiveNullable(descriptor);
     // descriptor.isTrackingRef() already includes the needWriteRef check
     boolean useRefTracking = descriptor.isTrackingRef();
-
 
     if (useRefTracking) {
       return new If(

@@ -653,7 +653,8 @@ public class ClassDef implements Serializable {
       int header = buffer.readVarUint32Small7();
       boolean isMonomorphic = (header & 0b10) != 0;
       boolean trackingRef = (header & 0b1) != 0;
-      return read(buffer, resolver, isMonomorphic, trackingRef, header >>> 2);
+      // For nested types (in collections/maps), nullable defaults to true
+      return read(buffer, resolver, isMonomorphic, true, trackingRef, header >>> 2);
     }
 
     /** Read field type info. */
@@ -661,22 +662,22 @@ public class ClassDef implements Serializable {
         MemoryBuffer buffer,
         TypeResolver resolver,
         boolean isFinal,
+        boolean nullable,
         boolean trackingRef,
         int typeId) {
       if (typeId == 0) {
-        return new ObjectFieldType(-1, isFinal, true, trackingRef);
+        return new ObjectFieldType(-1, isFinal, nullable, trackingRef);
       } else if (typeId == 1) {
         return new MapFieldType(
-            -1, isFinal, true, trackingRef, read(buffer, resolver), read(buffer, resolver));
+            -1, isFinal, nullable, trackingRef, read(buffer, resolver), read(buffer, resolver));
       } else if (typeId == 2) {
-        return new CollectionFieldType(-1, isFinal, true, trackingRef, read(buffer, resolver));
+        return new CollectionFieldType(-1, isFinal, nullable, trackingRef, read(buffer, resolver));
       } else if (typeId == 3) {
         int dims = buffer.readVarUint32Small7();
-        return new ArrayFieldType(isFinal, trackingRef, read(buffer, resolver), dims);
+        return new ArrayFieldType(-1, isFinal, nullable, trackingRef, read(buffer, resolver), dims);
       } else if (typeId == 4) {
-        return new EnumFieldType(true, -1);
+        return new EnumFieldType(nullable, -1);
       } else {
-        boolean nullable = ((ClassResolver) resolver).isPrimitive((short) typeId);
         return new RegisteredFieldType(isFinal, nullable, trackingRef, (typeId - 5));
       }
     }

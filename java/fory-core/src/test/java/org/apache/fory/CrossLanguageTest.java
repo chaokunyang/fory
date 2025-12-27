@@ -76,6 +76,7 @@ import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.util.DateTimeUtils;
 import org.apache.fory.util.MurmurHash3;
 import org.testng.Assert;
+import org.testng.SkipException;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
 
@@ -87,7 +88,11 @@ public class CrossLanguageTest extends ForyTestBase {
   private static final String PYTHON_EXECUTABLE = "python";
 
   @BeforeClass
-  public void isPyforyInstalled() {
+  public void ensurePeerReady() {
+    String enabled = System.getenv("FORY_PYTHON_JAVA_CI");
+    if (!"1".equals(enabled)) {
+      throw new SkipException("Skipping CrossLanguageTest: FORY_PYTHON_JAVA_CI not set to 1");
+    }
     TestUtils.verifyPyforyInstalled();
   }
 

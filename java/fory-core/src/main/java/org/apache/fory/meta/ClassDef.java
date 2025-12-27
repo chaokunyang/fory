@@ -507,17 +507,66 @@ public class ClassDef implements Serializable {
         boolean trackingRefMismatch = descriptor.isTrackingRef() != remoteTrackingRef;
         boolean typeMismatch = !typeRef.equals(declared);
 
-        if (nullableMismatch || trackingRefMismatch || typeMismatch) {
-          // Create a new descriptor with the remote nullable/trackingRef flags
-          // but keep the local field reference for setting values
+        // Check for primitive/boxed equivalence - both map to same wire format (e.g., int/Integer)
+        boolean isPrimitiveBoxedPair = false;
+        if (typeMismatch && declared != null) {
+          Class<?> typeRefRaw = typeRef.getRawType();
+          Class<?> declaredRaw = declared.getRawType();
+          if (TypeUtils.isPrimitive(typeRefRaw) || TypeUtils.isPrimitive(declaredRaw)) {
+            if (TypeUtils.unwrap(typeRefRaw) == TypeUtils.unwrap(declaredRaw)) {
+              isPrimitiveBoxedPair = true;
+              typeMismatch = false; // They're equivalent primitive/boxed pair
+            }
+          }
+        }
+
+        if (typeMismatch) {
+          // When types don't match, we need to update typeRef.
+          // The getDescriptors() caller will set up a FieldConverter for type conversion.
           return new DescriptorBuilder(descriptor)
               .typeRef(typeRef)
               .typeName(typeRef.getType().getTypeName())
               .nullable(remoteNullable)
               .trackingRef(remoteTrackingRef)
               .build();
+        } else if (isPrimitiveBoxedPair) {
+          // For primitive/boxed pairs, the treatment depends on the mode:
+          // - Xlang: Type info is lost in xlang classId (both int and Integer map to INT32).
+          //   The type difference is just from nullable unwrap. Use local type for grouping.
+          // - Native Java: ClassDef stores actual Java class ID. If local type is boxed
+          //   but ClassDef type is primitive (or vice versa), writer used different type.
+          //   Use ClassDef type for grouping to match writer's serialization order.
+          boolean isXlang = resolver.getFory().isCrossLanguage();
+          boolean classDefIsPrimitive = TypeUtils.isPrimitive(typeRef.getRawType());
+          boolean localIsPrimitive = TypeUtils.isPrimitive(declared.getRawType());
+
+          if (isXlang || classDefIsPrimitive == localIsPrimitive) {
+            // Either xlang mode (can't distinguish original type) or same primitive/boxed nature.
+            // Use local type for grouping.
+            return new DescriptorBuilder(descriptor)
+                .nullable(remoteNullable)
+                .trackingRef(remoteTrackingRef)
+                .build();
+          } else {
+            // Native Java mode with different primitive/boxed type.
+            // Writer used different type, use ClassDef type for grouping.
+            return new DescriptorBuilder(descriptor)
+                .typeRef(typeRef)
+                .type(typeRef.getRawType())
+                .typeName(typeRef.getType().getTypeName())
+                .nullable(remoteNullable)
+                .trackingRef(remoteTrackingRef)
+                .build();
+          }
+        } else if (nullableMismatch || trackingRefMismatch) {
+          // Type matches but nullable/trackingRef differ - update those flags
+          return new DescriptorBuilder(descriptor)
+              .nullable(remoteNullable)
+              .trackingRef(remoteTrackingRef)
+              .build();
+        } else {
+          return descriptor;
         }
-        return descriptor;
       }
       // This field doesn't exist in peer class, so any legal modifier will be OK.
       // Use constant instead of reflection to avoid GraalVM native image issues.

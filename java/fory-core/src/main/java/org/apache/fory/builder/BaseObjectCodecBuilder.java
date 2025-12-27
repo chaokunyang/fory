@@ -39,6 +39,7 @@ import static org.apache.fory.codegen.ExpressionUtils.list;
 import static org.apache.fory.codegen.ExpressionUtils.neq;
 import static org.apache.fory.codegen.ExpressionUtils.neqNull;
 import static org.apache.fory.codegen.ExpressionUtils.not;
+import static org.apache.fory.codegen.ExpressionUtils.defaultValue;
 import static org.apache.fory.codegen.ExpressionUtils.nullValue;
 import static org.apache.fory.codegen.ExpressionUtils.or;
 import static org.apache.fory.codegen.ExpressionUtils.shift;
@@ -1734,14 +1735,32 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       Function<Expression, Expression> callback,
       Supplier<Expression> deserializeForNotNull,
       boolean nullable) {
+    return readNullable(buffer, typeRef, callback, deserializeForNotNull, nullable, null);
+  }
+
+  private Expression readNullable(
+      Expression buffer,
+      TypeRef<?> typeRef,
+      Function<Expression, Expression> callback,
+      Supplier<Expression> deserializeForNotNull,
+      boolean nullable,
+      Class<?> localFieldType) {
     if (nullable) {
       Expression notNull =
           neq(
               inlineInvoke(buffer, "readByte", PRIMITIVE_BYTE_TYPE),
               Literal.ofByte(Fory.NULL_FLAG));
       Expression value = deserializeForNotNull.get();
+      // When local field is primitive but remote was nullable (boxed), use default value
+      // instead of null. This handles compatibility between boxed/primitive field types.
+      Expression nullExpr;
+      if (localFieldType != null && isPrimitive(localFieldType)) {
+        nullExpr = defaultValue(localFieldType);
+      } else {
+        nullExpr = nullValue(typeRef);
+      }
       // use false to ignore null.
-      return new If(notNull, callback.apply(value), callback.apply(nullValue(typeRef)), false);
+      return new If(notNull, callback.apply(value), callback.apply(nullExpr), false);
     } else {
       Expression value = deserializeForNotNull.get();
       return callback.apply(value);
@@ -1817,13 +1836,17 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
         return new ListExpression(value, callback.apply(value));
       }
 
+      // Get local field type to handle primitive/boxed compatibility
+      java.lang.reflect.Field field = descriptor.getField();
+      Class<?> localFieldType = field != null ? field.getType() : null;
       Expression readNullableExpr =
           readNullable(
               buffer,
               typeRef,
               callback,
               () -> deserializeForNotNullForField(buffer, typeRef, null),
-              true);
+              true,
+              localFieldType);
 
       if (typeNeedsRef) {
         Expression preserveStubRefId =

@@ -29,6 +29,8 @@ import org.apache.fory.collection.Tuple2;
 import org.apache.fory.collection.Tuple3;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.ForyBuilder;
+import org.apache.fory.logging.Logger;
+import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.meta.ClassDef;
@@ -43,6 +45,7 @@ import org.apache.fory.type.Generics;
 import org.apache.fory.util.DefaultValueUtils;
 import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.Preconditions;
+import org.apache.fory.util.Utils;
 import org.apache.fory.util.record.RecordInfo;
 import org.apache.fory.util.record.RecordUtils;
 
@@ -64,6 +67,8 @@ import org.apache.fory.util.record.RecordUtils;
  */
 @SuppressWarnings({"unchecked"})
 public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
+  private static final Logger LOG = LoggerFactory.getLogger(MetaSharedSerializer.class);
+
   private final ObjectSerializer.FinalTypeField[] finalFields;
 
   /**
@@ -89,9 +94,29 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
         "Class version check should be disabled when compatible mode is enabled.");
     Preconditions.checkArgument(
         fory.getConfig().isMetaShareEnabled(), "Meta share must be enabled.");
+    if (Utils.debugOutputEnabled()) {
+      LOG.info("========== MetaSharedSerializer ClassDef for {} ==========", type.getName());
+      LOG.info("ClassDef fieldsInfo count: {}", classDef.getFieldsInfo().size());
+      for (int i = 0; i < classDef.getFieldsInfo().size(); i++) {
+        LOG.info("  [{}] {}", i, classDef.getFieldsInfo().get(i));
+      }
+    }
     Collection<Descriptor> descriptors = consolidateFields(fory._getTypeResolver(), type, classDef);
     DescriptorGrouper descriptorGrouper =
         fory._getTypeResolver().createDescriptorGrouper(descriptors, false);
+    if (Utils.debugOutputEnabled()) {
+      LOG.info(
+          "========== MetaSharedSerializer sorted descriptors for {} ==========", type.getName());
+      for (Descriptor d : descriptorGrouper.getSortedDescriptors()) {
+        LOG.info(
+            "  {} -> {}, ref {}, nullable {}, morphic {}",
+            d.getName(),
+            d.getTypeName(),
+            d.isTrackingRef(),
+            d.isNullable(),
+            d.isFinalField());
+      }
+    }
     // d.getField() may be null if not exists in this class when meta share enabled.
     Tuple3<
             Tuple2<ObjectSerializer.FinalTypeField[], boolean[]>,
@@ -180,8 +205,16 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
       boolean nullable = fieldInfo.nullable;
       if (fieldAccessor != null) {
         short classId = fieldInfo.classId;
-        if (AbstractObjectSerializer.readPrimitiveFieldValueFailed(
-                fory, buffer, obj, fieldAccessor, classId)
+        boolean needRead = true;
+        if (fieldInfo.isPrimitive) {
+          if (nullable) {
+            needRead =
+                readPrimitiveNullableFieldValueFailed(fory, buffer, obj, fieldAccessor, classId);
+          } else {
+            needRead = readPrimitiveFieldValueFailed(fory, buffer, obj, fieldAccessor, classId);
+          }
+        }
+        if (needRead
             && (nullable
                 ? AbstractObjectSerializer.readBasicNullableObjectFieldValueFailed(
                     fory, buffer, obj, fieldAccessor, classId)

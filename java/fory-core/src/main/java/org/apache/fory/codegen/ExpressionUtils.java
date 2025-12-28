@@ -155,7 +155,9 @@ public class ExpressionUtils {
     return new Literal(null, type);
   }
 
-  /** Returns the default value for a type. For primitives returns 0/false, for objects returns null. */
+  /**
+   * Returns the default value for a type. For primitives returns 0/false, for objects returns null.
+   */
   public static Literal defaultValue(Class<?> type) {
     if (type == boolean.class) {
       return Literal.False;

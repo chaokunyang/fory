@@ -21,12 +21,12 @@ package org.apache.fory.reflect;
 
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertFalse;
-import static org.testng.Assert.assertTrue;
 
 import com.google.common.collect.ImmutableList;
 import java.io.Serializable;
 import java.lang.reflect.Constructor;
 import java.util.List;
+import org.apache.fory.TestUtils;
 import org.apache.fory.test.bean.BeanA;
 import org.apache.fory.type.Descriptor;
 import org.testng.Assert;
@@ -55,8 +55,8 @@ public class ReflectionUtilsTest {
   @Test
   public void testObjectEqual() {
     BeanA beanA = BeanA.createBeanA(1);
-    assertTrue(ReflectionUtils.objectFieldsEquals(beanA, beanA));
-    assertTrue(ReflectionUtils.objectCommonFieldsEquals(beanA, beanA));
+    TestUtils.objectFieldsEquals(beanA, beanA, true);
+    TestUtils.objectCommonFieldsEquals(beanA, beanA, true);
   }
 
   static class GetFieldValuesTestClass {

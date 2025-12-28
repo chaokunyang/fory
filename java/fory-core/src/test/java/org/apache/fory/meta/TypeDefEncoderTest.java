@@ -182,7 +182,7 @@ public class TypeDefEncoderTest {
             getField(ClassWithValidTagIds.class, "field2"),
             getField(ClassWithValidTagIds.class, "field3"));
 
-    List<ClassDef.FieldInfo> fieldInfos =
+    List<FieldInfo> fieldInfos =
         TypeDefEncoder.buildFieldsInfo(resolver, ClassWithValidTagIds.class, fields);
 
     Assert.assertEquals(fieldInfos.size(), 3);
@@ -214,7 +214,7 @@ public class TypeDefEncoderTest {
             getField(ClassWithMixedAnnotations.class, "optOutField"),
             getField(ClassWithMixedAnnotations.class, "annotatedField2"));
 
-    List<ClassDef.FieldInfo> fieldInfos =
+    List<FieldInfo> fieldInfos =
         TypeDefEncoder.buildFieldsInfo(resolver, ClassWithMixedAnnotations.class, fields);
 
     Assert.assertEquals(fieldInfos.size(), 4);
@@ -265,7 +265,7 @@ public class TypeDefEncoderTest {
 
     List<Field> fields = Collections.singletonList(getField(ClassWithSingleField.class, "field"));
 
-    List<ClassDef.FieldInfo> fieldInfos =
+    List<FieldInfo> fieldInfos =
         TypeDefEncoder.buildFieldsInfo(resolver, ClassWithSingleField.class, fields);
 
     Assert.assertEquals(fieldInfos.size(), 1);
@@ -286,13 +286,13 @@ public class TypeDefEncoderTest {
             getField(ClassWithNoAnnotations.class, "field2"),
             getField(ClassWithNoAnnotations.class, "field3"));
 
-    List<ClassDef.FieldInfo> fieldInfos =
+    List<FieldInfo> fieldInfos =
         TypeDefEncoder.buildFieldsInfo(resolver, ClassWithNoAnnotations.class, fields);
 
     Assert.assertEquals(fieldInfos.size(), 3);
 
     // All fields should not have tags (use field names)
-    for (ClassDef.FieldInfo fieldInfo : fieldInfos) {
+    for (FieldInfo fieldInfo : fieldInfos) {
       Assert.assertFalse(fieldInfo.hasFieldId());
     }
   }
@@ -309,13 +309,13 @@ public class TypeDefEncoderTest {
             getField(ClassWithAllFieldNames.class, "field2"),
             getField(ClassWithAllFieldNames.class, "field3"));
 
-    List<ClassDef.FieldInfo> fieldInfos =
+    List<FieldInfo> fieldInfos =
         TypeDefEncoder.buildFieldsInfo(resolver, ClassWithAllFieldNames.class, fields);
 
     Assert.assertEquals(fieldInfos.size(), 3);
 
     // All fields with id=-1 should not have tags (use field names)
-    for (ClassDef.FieldInfo fieldInfo : fieldInfos) {
+    for (FieldInfo fieldInfo : fieldInfos) {
       Assert.assertFalse(fieldInfo.hasFieldId());
     }
   }
@@ -331,7 +331,7 @@ public class TypeDefEncoderTest {
             getField(ClassWithLargeTagIds.class, "field1"),
             getField(ClassWithLargeTagIds.class, "field2"));
 
-    List<ClassDef.FieldInfo> fieldInfos =
+    List<FieldInfo> fieldInfos =
         TypeDefEncoder.buildFieldsInfo(resolver, ClassWithLargeTagIds.class, fields);
 
     Assert.assertEquals(fieldInfos.size(), 2);
@@ -351,7 +351,7 @@ public class TypeDefEncoderTest {
 
     List<Field> fields = Collections.emptyList();
 
-    List<ClassDef.FieldInfo> fieldInfos =
+    List<FieldInfo> fieldInfos =
         TypeDefEncoder.buildFieldsInfo(resolver, ClassWithValidTagIds.class, fields);
 
     Assert.assertEquals(fieldInfos.size(), 0);

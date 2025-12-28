@@ -145,13 +145,7 @@ public class DescriptorGrouper {
       (d1, d2) -> {
         // sort by type so that we can hit class info cache more possibly.
         // sort by field id/name to fix order if type is same.
-        int c =
-            d1
-                // Use type name instead of generic type so that fields with type ref
-                // constructed in ClassDef which take pojo as non-final Object type
-                // will have consistent order between processes if the fields doesn't exist in peer.
-                .getTypeName()
-                .compareTo(d2.getTypeName());
+        int c = d1.getTypeName().compareTo(d2.getTypeName());
         if (c == 0) {
           c = getFieldSortKey(d1).compareTo(getFieldSortKey(d2));
           if (c == 0) {
@@ -223,9 +217,17 @@ public class DescriptorGrouper {
     }
     for (Descriptor descriptor : descriptors) {
       if (TypeUtils.isPrimitive(descriptor.getRawType())) {
-        primitiveDescriptors.add(descriptorUpdater.apply(descriptor));
+        if (!descriptor.isNullable()) {
+          primitiveDescriptors.add(descriptorUpdater.apply(descriptor));
+        } else {
+          boxedDescriptors.add(descriptorUpdater.apply(descriptor));
+        }
       } else if (TypeUtils.isBoxed(descriptor.getRawType())) {
-        boxedDescriptors.add(descriptorUpdater.apply(descriptor));
+        if (!descriptor.isNullable()) {
+          primitiveDescriptors.add(descriptorUpdater.apply(descriptor));
+        } else {
+          boxedDescriptors.add(descriptorUpdater.apply(descriptor));
+        }
       } else if (TypeUtils.isCollection(descriptor.getRawType())) {
         collectionDescriptors.add(descriptorUpdater.apply(descriptor));
       } else if (TypeUtils.isMap(descriptor.getRawType())) {

@@ -816,7 +816,9 @@ fn test_item() {
         name: "test_item_2".to_string(),
     };
     // With nullable=false (xlang default), Java sends empty string instead of null
-    let item3 = Item { name: String::new() };
+    let item3 = Item {
+        name: String::new(),
+    };
 
     let remote_item1: Item = fory.deserialize_from(&mut reader).unwrap();
     assert_eq!(remote_item1, item1);
@@ -1018,8 +1020,7 @@ fn test_polymorphic_map() {
     let mut reader = Reader::new(bytes.as_slice());
 
     // Part 1: Read Map<String, Animal> with polymorphic values
-    let animal_map: HashMap<String, Box<dyn Any>> =
-        fory.deserialize_from(&mut reader).unwrap();
+    let animal_map: HashMap<String, Box<dyn Any>> = fory.deserialize_from(&mut reader).unwrap();
     assert_eq!(animal_map.len(), 2);
 
     let dog1 = animal_map
@@ -1149,7 +1150,7 @@ fn test_schema_evolution_compatible_reverse() {
 
     // f1 should be "only_one", f2 should be empty string (default for missing non-nullable String field)
     assert_eq!(value.f1, "only_one".to_string());
-    assert_eq!(value.f2, String::default());  // Empty string for missing non-nullable field
+    assert_eq!(value.f2, String::default()); // Empty string for missing non-nullable field
 
     // Serialize back
     let new_bytes = fory.serialize(&value).unwrap();

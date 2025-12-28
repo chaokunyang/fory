@@ -107,7 +107,8 @@ def _default_field_meta(type_hint: type, field_nullable: bool = False, xlang: bo
     3. Global field_nullable is True
 
     For xlang mode, a field is nullable only if:
-    1. It's Optional[T]
+    1. It's Optional[T], OR
+    2. It's typing.Any (can hold any value including None)
 
     For ref, defaults to False to preserve original serialization behavior.
     Non-nullable complex fields use xwrite_no_ref (no ref header in buffer).
@@ -116,7 +117,8 @@ def _default_field_meta(type_hint: type, field_nullable: bool = False, xlang: bo
     unwrapped_type, is_optional = unwrap_optional(type_hint)
     if xlang:
         # For xlang: nullable=False by default, except for Optional[T] types
-        nullable = is_optional
+        # and Any type (which can hold any value including None)
+        nullable = is_optional or unwrapped_type is typing.Any
     else:
         # For native: Non-primitive types (str, list, dict, etc.) are all nullable by default
         nullable = is_optional or not is_primitive_type(unwrapped_type) or field_nullable
@@ -199,7 +201,8 @@ def _extract_field_infos(
         # Compute effective nullable based on mode
         if xlang:
             # For xlang: respect explicit annotation or default to is_optional only
-            effective_nullable = meta.nullable or is_optional
+            # and Any type (which can hold any value including None)
+            effective_nullable = meta.nullable or is_optional or unwrapped_type is typing.Any
         else:
             # For native: Optional[T] or non-primitive types are nullable
             effective_nullable = meta.nullable or is_optional or not is_primitive_type(unwrapped_type)
@@ -710,14 +713,17 @@ class DataClassSerializer(Serializer):
                 # Write zero/default value when field is None due to missing from remote schema
                 if self.fory.compatible:
                     from pyfory.serializer import EnumSerializer
+
                     if isinstance(serializer, EnumSerializer):
                         # For enums, write ordinal 0 when None
-                        stmts.extend([
-                            f"if {field_value} is None:",
-                            f"    {buffer}.write_varuint32(0)",
-                            "else:",
-                            f"    {stmt}",
-                        ])
+                        stmts.extend(
+                            [
+                                f"if {field_value} is None:",
+                                f"    {buffer}.write_varuint32(0)",
+                                "else:",
+                                f"    {stmt}",
+                            ]
+                        )
                     else:
                         stmts.append(stmt)
                 else:

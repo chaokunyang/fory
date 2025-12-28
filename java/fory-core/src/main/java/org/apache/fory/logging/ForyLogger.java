@@ -19,6 +19,7 @@
 
 package org.apache.fory.logging;
 
+import static org.apache.fory.logging.LogLevel.DEBUG_LEVEL;
 import static org.apache.fory.logging.LogLevel.ERROR_LEVEL;
 import static org.apache.fory.logging.LogLevel.INFO_LEVEL;
 import static org.apache.fory.logging.LogLevel.WARN_LEVEL;
@@ -36,6 +37,34 @@ public class ForyLogger implements Logger {
   }
 
   // The implementation should not forward to other method, otherwise the fileNumber won't be right.
+  @Override
+  public void debug(String msg) {
+    if (LoggerFactory.getLogLevel() >= DEBUG_LEVEL) {
+      log(DEBUG_LEVEL, msg, new Object[0], false);
+    }
+  }
+
+  @Override
+  public void debug(String msg, Object arg) {
+    if (LoggerFactory.getLogLevel() >= DEBUG_LEVEL) {
+      log(DEBUG_LEVEL, msg, new Object[] {arg}, false);
+    }
+  }
+
+  @Override
+  public void debug(String msg, Object arg1, Object arg2) {
+    if (LoggerFactory.getLogLevel() >= DEBUG_LEVEL) {
+      log(DEBUG_LEVEL, msg, new Object[] {arg1, arg2}, false);
+    }
+  }
+
+  @Override
+  public void debug(String msg, Object... args) {
+    if (LoggerFactory.getLogLevel() >= DEBUG_LEVEL) {
+      log(DEBUG_LEVEL, msg, args, false);
+    }
+  }
+
   @Override
   public void info(String msg) {
     if (LoggerFactory.getLogLevel() >= INFO_LEVEL) {

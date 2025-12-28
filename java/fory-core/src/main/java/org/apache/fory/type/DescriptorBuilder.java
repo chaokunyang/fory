@@ -117,6 +117,11 @@ public class DescriptorBuilder {
     return this;
   }
 
+  public DescriptorBuilder fieldConverter(FieldConverter fieldConverter) {
+    this.fieldConverter = fieldConverter;
+    return this;
+  }
+
   public Descriptor build() {
     return new Descriptor(this);
   }

@@ -24,8 +24,13 @@ import com.google.common.collect.ImmutableMap;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.ObjectOutputStream;
-import java.util.ArrayList;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
+import java.util.*;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
+import org.apache.fory.collection.Tuple3;
+import org.apache.fory.memory.Platform;
 import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.util.unsafe._JDKAccess;
@@ -95,5 +100,235 @@ public class TestUtils {
     } catch (IOException e) {
       throw new RuntimeException(e);
     }
+  }
+
+  public static <T> T unsafeCopy(T obj) {
+    @SuppressWarnings("unchecked")
+    T newInstance = (T) Platform.newInstance(obj.getClass());
+    for (Field field : ReflectionUtils.getFields(obj.getClass(), true)) {
+      if (!Modifier.isStatic(field.getModifiers())) {
+        // Don't cache accessors by `obj.getClass()` using WeakHashMap, the `field` will reference
+        // `class`, which cause circular reference.
+        FieldAccessor accessor = FieldAccessor.createAccessor(field);
+        accessor.set(newInstance, accessor.get(obj));
+      }
+    }
+    return newInstance;
+  }
+
+  public static void unsafeCopy(Object from, Object to) {
+    Tuple3<Set<String>, Map<String, Field>, Map<String, Field>> commonFieldsInfo =
+        getCommonFields(from.getClass(), to.getClass());
+    Map<String, Field> fieldMap1 = commonFieldsInfo.f1;
+    Map<String, Field> fieldMap2 = commonFieldsInfo.f2;
+    for (String commonField : commonFieldsInfo.f0) {
+      Field field1 = fieldMap1.get(commonField);
+      Field field2 = fieldMap2.get(commonField);
+      FieldAccessor accessor1 = FieldAccessor.createAccessor(field1);
+      FieldAccessor accessor2 = FieldAccessor.createAccessor(field2);
+      accessor2.set(to, accessor1.get(from));
+    }
+  }
+
+  public static boolean objectFieldsEquals(Object actual, Object expected) {
+    return objectFieldsEquals(actual, expected, false);
+  }
+
+  public static boolean objectFieldsEquals(
+      Object actual, Object expected, boolean throwExceptionWhenUnEqual) {
+    List<Field> actualFields = ReflectionUtils.getFields(actual.getClass(), true);
+    List<Field> expectedFields = ReflectionUtils.getFields(expected.getClass(), true);
+    if (actualFields.size() != expectedFields.size()) {
+      if (throwExceptionWhenUnEqual) {
+        throw new AssertionError(
+            String.format(
+                "Field count mismatch: expected %s to have %d fields, got %s with %d fields",
+                expected.getClass().getName(),
+                expectedFields.size(),
+                actual.getClass().getName(),
+                actualFields.size()));
+      }
+      return false;
+    }
+    Tuple3<Set<String>, Map<String, Field>, Map<String, Field>> commonFieldsInfo =
+        getCommonFields(actual.getClass(), expected.getClass());
+    if (commonFieldsInfo.f1.size() != actualFields.size()) {
+      if (throwExceptionWhenUnEqual) {
+        throw new AssertionError(
+            String.format(
+                "Common fields count mismatch: expected %d, got %d",
+                actualFields.size(), commonFieldsInfo.f1.size()));
+      }
+      return false;
+    }
+    if (commonFieldsInfo.f1.size() != commonFieldsInfo.f2.size()) {
+      if (throwExceptionWhenUnEqual) {
+        throw new AssertionError(
+            String.format(
+                "Field map size mismatch: actual has %d, expected has %d",
+                commonFieldsInfo.f1.size(), commonFieldsInfo.f2.size()));
+      }
+      return false;
+    }
+    return objectCommonFieldsEquals(commonFieldsInfo, actual, expected, throwExceptionWhenUnEqual);
+  }
+
+  public static boolean objectFieldsEquals(
+      Set<String> fields, Object actual, Object expected, boolean throwExceptionWhenUnEqual) {
+    Tuple3<Set<String>, Map<String, Field>, Map<String, Field>> commonFieldsInfo =
+        getCommonFields(actual.getClass(), expected.getClass());
+    Map<String, Field> map1 =
+        commonFieldsInfo.f1.entrySet().stream()
+            .filter(e -> fields.contains(e.getKey()))
+            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    Map<String, Field> map2 =
+        commonFieldsInfo.f2.entrySet().stream()
+            .filter(e -> fields.contains(e.getKey()))
+            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    return objectCommonFieldsEquals(
+        Tuple3.of(fields, map1, map2), actual, expected, throwExceptionWhenUnEqual);
+  }
+
+  public static boolean objectCommonFieldsEquals(Object actual, Object expected) {
+    return objectCommonFieldsEquals(actual, expected, true);
+  }
+
+  public static boolean objectCommonFieldsEquals(
+      Object actual, Object expected, boolean throwExceptionWhenUnEqual) {
+    Tuple3<Set<String>, Map<String, Field>, Map<String, Field>> commonFieldsInfo =
+        getCommonFields(actual.getClass(), expected.getClass());
+    return objectCommonFieldsEquals(commonFieldsInfo, actual, expected, throwExceptionWhenUnEqual);
+  }
+
+  private static boolean objectCommonFieldsEquals(
+      Tuple3<Set<String>, Map<String, Field>, Map<String, Field>> commonFieldsInfo,
+      Object actual,
+      Object expected,
+      boolean throwExceptionWhenUnEqual) {
+
+    for (String commonField : commonFieldsInfo.f0) {
+      Field field1 = Objects.requireNonNull(commonFieldsInfo.f1.get(commonField));
+      Field field2 = Objects.requireNonNull(commonFieldsInfo.f2.get(commonField));
+      FieldAccessor accessor1 = FieldAccessor.createAccessor(field1);
+      FieldAccessor accessor2 = FieldAccessor.createAccessor(field2);
+      Object actualValue = accessor1.get(actual);
+      Object expectedValue = accessor2.get(expected);
+      if (actualValue == null) {
+        if (expectedValue != null) {
+          if (throwExceptionWhenUnEqual) {
+            throw new AssertionError(
+                String.format(
+                    "Field '%s' mismatch: expected '%s' (type: %s), got null",
+                    commonField, expectedValue, expectedValue.getClass().getName()));
+          }
+          return false;
+        }
+      } else {
+        if (field1.getType().isArray()) {
+          boolean arrayEquals = checkArrayEquals(field1.getType(), actualValue, expectedValue);
+          if (!arrayEquals) {
+            if (throwExceptionWhenUnEqual) {
+              throw new AssertionError(
+                  String.format(
+                      "Field '%s' array mismatch: expected '%s' (type: %s), got '%s' (type: %s)",
+                      commonField,
+                      arrayToString(expectedValue),
+                      expectedValue == null ? "null" : expectedValue.getClass().getName(),
+                      arrayToString(actualValue),
+                      actualValue.getClass().getName()));
+            }
+            return false;
+          }
+        } else {
+          if (!actualValue.equals(expectedValue)) {
+            if (throwExceptionWhenUnEqual) {
+              throw new AssertionError(
+                  String.format(
+                      "Field '%s' mismatch: expected '%s' (type: %s), got '%s' (type: %s)",
+                      commonField,
+                      expectedValue,
+                      expectedValue == null ? "null" : expectedValue.getClass().getName(),
+                      actualValue,
+                      actualValue.getClass().getName()));
+            }
+            return false;
+          }
+        }
+      }
+    }
+    return true;
+  }
+
+  private static boolean checkArrayEquals(Class<?> arrayType, Object f1, Object f2) {
+    if (arrayType == boolean[].class) {
+      return Arrays.equals((boolean[]) f1, (boolean[]) f2);
+    } else if (arrayType == byte[].class) {
+      return Arrays.equals((byte[]) f1, (byte[]) f2);
+    } else if (arrayType == short[].class) {
+      return Arrays.equals((short[]) f1, (short[]) f2);
+    } else if (arrayType == char[].class) {
+      return Arrays.equals((char[]) f1, (char[]) f2);
+    } else if (arrayType == int[].class) {
+      return Arrays.equals((int[]) f1, (int[]) f2);
+    } else if (arrayType == long[].class) {
+      return Arrays.equals((long[]) f1, (long[]) f2);
+    } else if (arrayType == float[].class) {
+      return Arrays.equals((float[]) f1, (float[]) f2);
+    } else if (arrayType == double[].class) {
+      return Arrays.equals((double[]) f1, (double[]) f2);
+    } else {
+      return Arrays.deepEquals((Object[]) f1, (Object[]) f2);
+    }
+  }
+
+  private static String arrayToString(Object arr) {
+    if (arr == null) {
+      return "null";
+    }
+    Class<?> arrayType = arr.getClass();
+    if (arrayType == boolean[].class) {
+      return Arrays.toString((boolean[]) arr);
+    } else if (arrayType == byte[].class) {
+      return Arrays.toString((byte[]) arr);
+    } else if (arrayType == short[].class) {
+      return Arrays.toString((short[]) arr);
+    } else if (arrayType == char[].class) {
+      return Arrays.toString((char[]) arr);
+    } else if (arrayType == int[].class) {
+      return Arrays.toString((int[]) arr);
+    } else if (arrayType == long[].class) {
+      return Arrays.toString((long[]) arr);
+    } else if (arrayType == float[].class) {
+      return Arrays.toString((float[]) arr);
+    } else if (arrayType == double[].class) {
+      return Arrays.toString((double[]) arr);
+    } else {
+      return Arrays.deepToString((Object[]) arr);
+    }
+  }
+
+  public static Tuple3<Set<String>, Map<String, Field>, Map<String, Field>> getCommonFields(
+      Class<?> cls1, Class<?> cls2) {
+    List<Field> fields1 = ReflectionUtils.getFields(cls1, true);
+    List<Field> fields2 = ReflectionUtils.getFields(cls2, true);
+    return getCommonFields(fields1, fields2);
+  }
+
+  public static Tuple3<Set<String>, Map<String, Field>, Map<String, Field>> getCommonFields(
+      List<Field> fields1, List<Field> fields2) {
+    Map<String, Field> fieldMap1 =
+        fields1.stream()
+            .collect(
+                Collectors.toMap(
+                    // don't use `getGenericType` since janino doesn't support generics.
+                    f -> f.getDeclaringClass().getSimpleName() + f.getName(),
+                    f -> f));
+    Map<String, Field> fieldMap2 =
+        fields2.stream()
+            .collect(
+                Collectors.toMap(f -> f.getDeclaringClass().getSimpleName() + f.getName(), f -> f));
+    Set<String> commonFields = new HashSet<>(fieldMap1.keySet());
+    commonFields.retainAll(fieldMap2.keySet());
+    return Tuple3.of(commonFields, fieldMap1, fieldMap2);
   }
 }

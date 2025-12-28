@@ -26,9 +26,9 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
+import org.apache.fory.TestUtils;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.ForyBuilder;
-import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.test.bean.Foo;
 import org.testng.Assert;
 import org.testng.annotations.Test;
@@ -48,7 +48,7 @@ public class ScopedMetaShareTest extends ForyTestBase {
     Object foo = Foo.create();
     Class<?> fooClass = Foo.createCompatibleClass1();
     Object newFoo = fooClass.newInstance();
-    ReflectionUtils.unsafeCopy(foo, newFoo);
+    TestUtils.unsafeCopy(foo, newFoo);
     Fory fory = builder.get().build();
     fory.register(Foo.class);
     Fory newFory = builder.get().withClassLoader(fooClass.getClassLoader()).build();
@@ -57,24 +57,24 @@ public class ScopedMetaShareTest extends ForyTestBase {
       byte[] foo1Bytes = newFory.serialize(newFoo);
       Object deserialized = fory.deserialize(foo1Bytes);
       Assert.assertEquals(deserialized.getClass(), Foo.class);
-      Assert.assertTrue(ReflectionUtils.objectCommonFieldsEquals(deserialized, newFoo));
+      Assert.assertTrue(TestUtils.objectCommonFieldsEquals(deserialized, newFoo));
       byte[] fooBytes = fory.serialize(deserialized);
-      Assert.assertTrue(ReflectionUtils.objectFieldsEquals(newFory.deserialize(fooBytes), newFoo));
+      TestUtils.objectFieldsEquals(newFory.deserialize(fooBytes), newFoo, true);
     }
     {
       byte[] bytes1 = fory.serialize(foo);
       Object o1 = newFory.deserialize(bytes1);
-      Assert.assertTrue(ReflectionUtils.objectCommonFieldsEquals(o1, foo));
+      Assert.assertTrue(TestUtils.objectCommonFieldsEquals(o1, foo));
       Object o2 = fory.deserialize(newFory.serialize(o1));
       List<String> fields =
           Arrays.stream(fooClass.getDeclaredFields())
               .map(f -> f.getDeclaringClass().getSimpleName() + f.getName())
               .collect(Collectors.toList());
-      Assert.assertTrue(ReflectionUtils.objectFieldsEquals(new HashSet<>(fields), o2, foo));
+      TestUtils.objectFieldsEquals(new HashSet<>(fields), o2, foo, true);
     }
     {
       Object o3 = fory.deserialize(newFory.serialize(foo));
-      Assert.assertTrue(ReflectionUtils.objectFieldsEquals(o3, foo));
+      TestUtils.objectFieldsEquals(o3, foo, true);
     }
   }
 }

@@ -21,6 +21,7 @@ While working on Fory, please remember:
 - All maven commands must be executed within the `java` directory.
 - All changes to `java` must pass the code style check and tests.
 - Fory java needs JDK `17+` installed.
+- Use '.\*' form of import is not allowed.
 
 ```bash
 # Clean the build

@@ -26,6 +26,7 @@ import static org.apache.fory.type.TypeUtils.STRING_TYPE;
 import java.lang.reflect.Field;
 import java.lang.reflect.Member;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.SortedMap;
 import java.util.concurrent.ConcurrentHashMap;
@@ -37,6 +38,8 @@ import org.apache.fory.codegen.Expression.Literal;
 import org.apache.fory.codegen.Expression.StaticInvoke;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.ForyBuilder;
+import org.apache.fory.logging.Logger;
+import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.ClassDef;
 import org.apache.fory.reflect.TypeRef;
@@ -74,6 +77,8 @@ import org.apache.fory.util.record.RecordUtils;
  * @see MetaSharedSerializer
  */
 public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
+  private static final Logger LOG = LoggerFactory.getLogger(MetaSharedCodecBuilder.class);
+
   private final ClassDef classDef;
   private final String defaultValueLanguage;
   private final DefaultValueUtils.DefaultValueField[] defaultValueFields;
@@ -92,6 +97,19 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
                     beanClass,
                     classDef));
     DescriptorGrouper grouper = typeResolver(r -> r.createDescriptorGrouper(descriptors, false));
+    List<Descriptor> sortedDescriptors = grouper.getSortedDescriptors();
+    if (org.apache.fory.util.Utils.debugOutputEnabled()) {
+      LOG.info("========== sorted descriptors for {} ==========", classDef.getClassName());
+      for (Descriptor d : sortedDescriptors) {
+        LOG.info(
+            "  {} -> {}, ref {}, nullable {}, morphic {}",
+            d.getName(),
+            d.getTypeName(),
+            d.isTrackingRef(),
+            d.isNullable(),
+            d.isFinalField());
+      }
+    }
     objectCodecOptimizer =
         new ObjectCodecOptimizer(beanClass, grouper, !fory.isBasicTypesRefIgnored(), ctx);
 
@@ -102,7 +120,7 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
       // Check if this is a Scala case class and build default value fields
       defaultValueFields =
           DefaultValueUtils.getScalaDefaultValueSupport()
-              .buildDefaultValueFields(fory, beanClass, grouper.getSortedDescriptors());
+              .buildDefaultValueFields(fory, beanClass, sortedDescriptors);
       if (defaultValueFields.length > 0) {
         defaultValueLanguage = "Scala";
       }
@@ -112,8 +130,7 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
           DefaultValueUtils.getKotlinDefaultValueSupport();
       if (kotlinDefaultValueSupport != null) {
         defaultValueFields =
-            kotlinDefaultValueSupport.buildDefaultValueFields(
-                fory, beanClass, grouper.getSortedDescriptors());
+            kotlinDefaultValueSupport.buildDefaultValueFields(fory, beanClass, sortedDescriptors);
         if (defaultValueFields.length > 0) {
           defaultValueLanguage = "Kotlin";
         }

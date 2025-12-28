@@ -42,8 +42,7 @@ import org.apache.fory.annotation.Internal;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
-import org.apache.fory.meta.ClassDef.FieldInfo;
-import org.apache.fory.meta.ClassDef.FieldType;
+import org.apache.fory.meta.FieldTypes.FieldType;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeResolver;
@@ -97,7 +96,7 @@ public class ClassDefEncoder {
     for (Field field : fields) {
       // Check for @ForyField annotation to extract tag ID
       ForyField foryField = field.getAnnotation(ForyField.class);
-      FieldType fieldType = ClassDef.buildFieldType(resolver, field);
+      FieldType fieldType = FieldTypes.buildFieldType(resolver, field);
 
       FieldInfo fieldInfo;
       if (foryField != null) {
@@ -140,7 +139,7 @@ public class ClassDefEncoder {
   static ClassDef buildClassDefWithFieldInfos(
       ClassResolver classResolver,
       Class<?> type,
-      List<ClassDef.FieldInfo> fieldInfos,
+      List<FieldInfo> fieldInfos,
       boolean hasFieldsMeta) {
     Map<String, List<FieldInfo>> classLayers = getClassFields(type, fieldInfos);
     fieldInfos = new ArrayList<>(fieldInfos.size());

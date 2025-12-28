@@ -38,8 +38,7 @@ import org.apache.fory.annotation.ForyField;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.meta.ClassDef.FieldInfo;
-import org.apache.fory.meta.ClassDef.FieldType;
+import org.apache.fory.meta.FieldTypes.FieldType;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.ClassInfo;
 import org.apache.fory.resolver.TypeResolver;
@@ -87,7 +86,7 @@ class TypeDefEncoder {
         .map(
             field -> {
               ForyField foryField = field.getAnnotation(ForyField.class);
-              FieldType fieldType = ClassDef.buildFieldType(resolver, field);
+              FieldType fieldType = FieldTypes.buildFieldType(resolver, field);
               if (foryField != null) {
                 int tagId = foryField.id();
                 if (tagId >= 0) {

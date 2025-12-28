@@ -31,6 +31,7 @@ import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
 import org.apache.fory.config.Language;
 import org.apache.fory.meta.ClassDef;
+import org.apache.fory.meta.FieldInfo;
 import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 
@@ -65,16 +66,16 @@ public class ForyFieldTagIdTest extends ForyTestBase {
     }
 
     ClassDef classDef = ClassDef.buildClassDef(fory, TestClass.class);
-    List<ClassDef.FieldInfo> fieldsInfo = classDef.getFieldsInfo();
+    List<FieldInfo> fieldsInfo = classDef.getFieldsInfo();
 
     // Should have 4 fields
     assertEquals(fieldsInfo.size(), 4);
 
     // Find each field by name and verify tag behavior
-    ClassDef.FieldInfo field0 = findFieldByName(fieldsInfo, "fieldWithTag0");
-    ClassDef.FieldInfo field5 = findFieldByName(fieldsInfo, "fieldWithTag5");
-    ClassDef.FieldInfo fieldOptOut = findFieldByName(fieldsInfo, "fieldOptingOutOfTag");
-    ClassDef.FieldInfo fieldNoAnnotation = findFieldByName(fieldsInfo, "fieldWithoutAnnotation");
+    FieldInfo field0 = findFieldByName(fieldsInfo, "fieldWithTag0");
+    FieldInfo field5 = findFieldByName(fieldsInfo, "fieldWithTag5");
+    FieldInfo fieldOptOut = findFieldByName(fieldsInfo, "fieldOptingOutOfTag");
+    FieldInfo fieldNoAnnotation = findFieldByName(fieldsInfo, "fieldWithoutAnnotation");
 
     // Verify field with id=0 has tag
     assertTrue(field0.hasFieldId(), "Field with id=0 should have tag in " + language + " mode");
@@ -166,8 +167,8 @@ public class ForyFieldTagIdTest extends ForyTestBase {
   }
 
   /** Helper method to find a FieldInfo by field name */
-  private ClassDef.FieldInfo findFieldByName(List<ClassDef.FieldInfo> fieldsInfo, String name) {
-    for (ClassDef.FieldInfo fieldInfo : fieldsInfo) {
+  private FieldInfo findFieldByName(List<FieldInfo> fieldsInfo, String name) {
+    for (FieldInfo fieldInfo : fieldsInfo) {
       if (fieldInfo.getFieldName().equals(name)) {
         return fieldInfo;
       }

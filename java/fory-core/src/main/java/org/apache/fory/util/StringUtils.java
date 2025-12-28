@@ -19,7 +19,10 @@
 
 package org.apache.fory.util;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import org.apache.fory.memory.Platform;
@@ -302,5 +305,38 @@ public class StringUtils {
       }
     }
     return isLatin;
+  }
+
+  /**
+   * Split a string from the right side, similar to Python's rsplit.
+   *
+   * @param str the string to split
+   * @param separator the separator to split on
+   * @param numSplit maximum number of splits (from the right). If 0, returns the original string.
+   * @return array of strings after splitting from right
+   */
+  public static String[] rsplit(String str, String separator, int numSplit) {
+    if (str == null || separator == null || separator.isEmpty()) {
+      return new String[] {str};
+    }
+    if (numSplit <= 0) {
+      return new String[] {str};
+    }
+    List<String> parts = new ArrayList<>();
+    int end = str.length();
+    int splitCount = 0;
+    while (splitCount < numSplit) {
+      int idx = str.lastIndexOf(separator, end - 1);
+      if (idx < 0) {
+        break;
+      }
+      parts.add(str.substring(idx + separator.length(), end));
+      end = idx;
+      splitCount++;
+    }
+    parts.add(str.substring(0, end));
+    // Reverse to get left-to-right order
+    Collections.reverse(parts);
+    return parts.toArray(new String[0]);
   }
 }

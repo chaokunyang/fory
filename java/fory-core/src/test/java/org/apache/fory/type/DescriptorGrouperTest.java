@@ -25,31 +25,50 @@ import com.google.common.primitives.Primitives;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.stream.Collectors;
+import org.apache.fory.Fory;
+import org.apache.fory.ForyTestBase;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.reflect.TypeRef;
+import org.apache.fory.resolver.ClassResolver;
 import org.testng.annotations.Test;
 
-public class DescriptorGrouperTest {
+public class DescriptorGrouperTest extends ForyTestBase {
+
+  private Descriptor createDescriptor(
+      TypeRef<?> typeRef, String name, int modifier, String declaringClass, boolean trackingRef) {
+    return new Descriptor(
+        typeRef,
+        typeRef.getType().getTypeName(),
+        name,
+        modifier,
+        declaringClass,
+        trackingRef,
+        !typeRef.isPrimitive());
+  }
 
   private List<Descriptor> createDescriptors() {
     List<Descriptor> descriptors = new ArrayList<>();
     int index = 0;
     for (Class<?> aClass : Primitives.allPrimitiveTypes()) {
-      descriptors.add(new Descriptor(TypeRef.of(aClass), "f" + index++, -1, "TestClass", false));
+      descriptors.add(createDescriptor(TypeRef.of(aClass), "f" + index++, -1, "TestClass", false));
     }
     for (Class<?> t : Primitives.allWrapperTypes()) {
-      descriptors.add(new Descriptor(TypeRef.of(t), "f" + index++, -1, "TestClass", false));
+      descriptors.add(createDescriptor(TypeRef.of(t), "f" + index++, -1, "TestClass", false));
     }
     descriptors.add(
-        new Descriptor(TypeRef.of(String.class), "f" + index++, -1, "TestClass", false));
+        createDescriptor(TypeRef.of(String.class), "f" + index++, -1, "TestClass", false));
     descriptors.add(
-        new Descriptor(TypeRef.of(Object.class), "f" + index++, -1, "TestClass", false));
+        createDescriptor(TypeRef.of(Object.class), "f" + index++, -1, "TestClass", false));
     Collections.shuffle(descriptors, new Random(17));
     return descriptors;
   }
@@ -90,7 +109,7 @@ public class DescriptorGrouperTest {
     List<Descriptor> descriptors = new ArrayList<>();
     int index = 0;
     for (Class<?> aClass : Primitives.allPrimitiveTypes()) {
-      descriptors.add(new Descriptor(TypeRef.of(aClass), "f" + index++, -1, "TestClass", false));
+      descriptors.add(createDescriptor(TypeRef.of(aClass), "f" + index++, -1, "TestClass", false));
     }
     Collections.shuffle(descriptors, new Random(7));
     descriptors.sort(DescriptorGrouper.getPrimitiveComparator(false, false));
@@ -115,7 +134,7 @@ public class DescriptorGrouperTest {
     List<Descriptor> descriptors = new ArrayList<>();
     int index = 0;
     for (Class<?> aClass : Primitives.allPrimitiveTypes()) {
-      descriptors.add(new Descriptor(TypeRef.of(aClass), "f" + index++, -1, "TestClass", false));
+      descriptors.add(createDescriptor(TypeRef.of(aClass), "f" + index++, -1, "TestClass", false));
     }
     Collections.shuffle(descriptors, new Random(7));
     descriptors.sort(DescriptorGrouper.getPrimitiveComparator(true, true));
@@ -140,21 +159,22 @@ public class DescriptorGrouperTest {
     List<Descriptor> descriptors = createDescriptors();
     int index = 0;
     descriptors.add(
-        new Descriptor(TypeRef.of(Object.class), "c" + index++, -1, "TestClass", false));
-    descriptors.add(new Descriptor(TypeRef.of(Date.class), "c" + index++, -1, "TestClass", false));
+        createDescriptor(TypeRef.of(Object.class), "c" + index++, -1, "TestClass", false));
     descriptors.add(
-        new Descriptor(TypeRef.of(Instant.class), "c" + index++, -1, "TestClass", false));
+        createDescriptor(TypeRef.of(Date.class), "c" + index++, -1, "TestClass", false));
     descriptors.add(
-        new Descriptor(TypeRef.of(Instant.class), "c" + index++, -1, "TestClass", false));
+        createDescriptor(TypeRef.of(Instant.class), "c" + index++, -1, "TestClass", false));
     descriptors.add(
-        new Descriptor(new TypeRef<List<String>>() {}, "c" + index++, -1, "TestClass", false));
+        createDescriptor(TypeRef.of(Instant.class), "c" + index++, -1, "TestClass", false));
     descriptors.add(
-        new Descriptor(new TypeRef<List<Integer>>() {}, "c" + index++, -1, "TestClass", false));
+        createDescriptor(new TypeRef<List<String>>() {}, "c" + index++, -1, "TestClass", false));
     descriptors.add(
-        new Descriptor(
+        createDescriptor(new TypeRef<List<Integer>>() {}, "c" + index++, -1, "TestClass", false));
+    descriptors.add(
+        createDescriptor(
             new TypeRef<Map<String, Integer>>() {}, "c" + index++, -1, "TestClass", false));
     descriptors.add(
-        new Descriptor(
+        createDescriptor(
             new TypeRef<Map<String, String>>() {}, "c" + index++, -1, "TestClass", false));
     DescriptorGrouper grouper =
         DescriptorGrouper.createDescriptorGrouper(
@@ -207,8 +227,9 @@ public class DescriptorGrouperTest {
           grouper.getCollectionDescriptors().stream()
               .map(Descriptor::getTypeRef)
               .collect(Collectors.toList());
+      // Sorted by type name: List<Integer> < List<String> (alphabetically)
       List<TypeRef<?>> expected =
-          Arrays.asList(new TypeRef<List<String>>() {}, new TypeRef<List<Integer>>() {});
+          Arrays.asList(new TypeRef<List<Integer>>() {}, new TypeRef<List<String>>() {});
       assertEquals(types, expected);
     }
     {
@@ -285,5 +306,98 @@ public class DescriptorGrouperTest {
               Integer.class);
       assertEquals(classes, expected);
     }
+  }
+
+  /**
+   * Test that ClassResolver's comparator normalizes Collection/Map subtypes for consistent
+   * ordering. This ensures List/ArrayList/HashSet are all treated as Collection, and
+   * HashMap/TreeMap are all treated as Map.
+   */
+  @Test
+  public void testNormalizedTypeNameComparator() {
+    Fory fory = builder().build();
+    ClassResolver classResolver = fory.getClassResolver();
+    Comparator<Descriptor> comparator = classResolver.createTypeAndNameComparator();
+
+    // Create descriptors with different Collection/Map subtypes
+    List<Descriptor> descriptors = new ArrayList<>();
+    // List type
+    descriptors.add(
+        createDescriptor(new TypeRef<List<String>>() {}, "listField", -1, "TestClass", false));
+    // Set type
+    descriptors.add(
+        createDescriptor(new TypeRef<Set<String>>() {}, "setField", -1, "TestClass", false));
+    // Collection type
+    descriptors.add(
+        createDescriptor(
+            new TypeRef<Collection<String>>() {}, "collField", -1, "TestClass", false));
+    // ArrayList type
+    descriptors.add(
+        createDescriptor(
+            new TypeRef<ArrayList<String>>() {}, "arrayListField", -1, "TestClass", false));
+    // HashMap type
+    descriptors.add(
+        createDescriptor(
+            new TypeRef<HashMap<String, Integer>>() {}, "hashMapField", -1, "TestClass", false));
+    // Map type
+    descriptors.add(
+        createDescriptor(
+            new TypeRef<Map<String, Integer>>() {}, "mapField", -1, "TestClass", false));
+
+    // Sort with the normalized comparator
+    descriptors.sort(comparator);
+
+    // Get field names after sorting
+    List<String> fieldNames =
+        descriptors.stream().map(Descriptor::getName).collect(Collectors.toList());
+
+    // All Collection types should be grouped together (sorted by field name within the group)
+    // All Map types should be grouped together (sorted by field name within the group)
+    // Collection types come before Map types alphabetically ("java.util.Collection" <
+    // "java.util.Map")
+    List<String> expected =
+        Arrays.asList(
+            "arrayListField",
+            "collField",
+            "listField",
+            "setField", // Collection types
+            "hashMapField",
+            "mapField" // Map types
+            );
+    assertEquals(fieldNames, expected);
+  }
+
+  /**
+   * Test that the DescriptorGrouper's static COMPARATOR_BY_TYPE_AND_NAME does NOT normalize
+   * Collection/Map types (it uses the raw type name).
+   */
+  @Test
+  public void testStaticComparatorDoesNotNormalize() {
+    // Create descriptors with different Collection/Map subtypes
+    List<Descriptor> descriptors = new ArrayList<>();
+    descriptors.add(
+        createDescriptor(new TypeRef<List<String>>() {}, "listField", -1, "TestClass", false));
+    descriptors.add(
+        createDescriptor(
+            new TypeRef<Collection<String>>() {}, "collField", -1, "TestClass", false));
+    descriptors.add(
+        createDescriptor(
+            new TypeRef<ArrayList<String>>() {}, "arrayListField", -1, "TestClass", false));
+
+    // Sort with the static comparator
+    descriptors.sort(DescriptorGrouper.COMPARATOR_BY_TYPE_AND_NAME);
+
+    // Get type names after sorting
+    List<String> typeNames =
+        descriptors.stream().map(Descriptor::getTypeName).collect(Collectors.toList());
+
+    // The static comparator should sort by actual type name, not normalized
+    // ArrayList < Collection < List (alphabetically)
+    assertEquals(
+        typeNames,
+        Arrays.asList(
+            "java.util.ArrayList<java.lang.String>",
+            "java.util.Collection<java.lang.String>",
+            "java.util.List<java.lang.String>"));
   }
 }

@@ -20,13 +20,11 @@
 package org.apache.fory.serializer;
 
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.stream.Collectors;
 import org.apache.fory.Fory;
-import org.apache.fory.annotation.ForyField;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.collection.Tuple3;
 import org.apache.fory.exception.ForyException;
@@ -35,16 +33,17 @@ import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.ClassDef;
 import org.apache.fory.reflect.FieldAccessor;
-import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.ClassInfo;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.RefResolver;
 import org.apache.fory.resolver.TypeResolver;
+import org.apache.fory.serializer.struct.Fingerprint;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.type.Generics;
-import org.apache.fory.type.Types;
 import org.apache.fory.util.MurmurHash3;
+import org.apache.fory.util.Preconditions;
+import org.apache.fory.util.Utils;
 import org.apache.fory.util.record.RecordInfo;
 import org.apache.fory.util.record.RecordUtils;
 
@@ -100,12 +99,31 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
     boolean shareMeta = fory.getConfig().isMetaShareEnabled();
     if (shareMeta) {
       ClassDef classDef = typeResolver.getTypeDef(cls, resolveParent);
+      if (Utils.debugOutputEnabled()) {
+        LOG.info("========== ObjectSerializer ClassDef for {} ==========", cls.getName());
+        LOG.info("ClassDef fieldsInfo count: {}", classDef.getFieldsInfo().size());
+        for (int i = 0; i < classDef.getFieldsInfo().size(); i++) {
+          LOG.info("  [{}] {}", i, classDef.getFieldsInfo().get(i));
+        }
+      }
       descriptors = classDef.getDescriptors(typeResolver, cls);
     } else {
       descriptors = typeResolver.getFieldDescriptors(cls, resolveParent);
     }
     DescriptorGrouper grouper = typeResolver.createDescriptorGrouper(descriptors, false);
     descriptors = grouper.getSortedDescriptors();
+    if (Utils.debugOutputEnabled()) {
+      LOG.info("========== ObjectSerializer sorted descriptors for {} ==========", cls.getName());
+      for (Descriptor d : descriptors) {
+        LOG.info(
+            "  {} -> {}, ref {}, nullable {}, morphic {}",
+            d.getName(),
+            d.getTypeName(),
+            d.isTrackingRef(),
+            d.isNullable(),
+            d.isFinalField());
+      }
+    }
     if (isRecord) {
       List<String> fieldNames =
           descriptors.stream().map(Descriptor::getName).collect(Collectors.toList());
@@ -245,6 +263,7 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
       GenericTypeField fieldInfo,
       Object fieldValue) {
     if (fieldValue == null) {
+      Preconditions.checkArgument(fieldInfo.nullable, "fieldValue is null");
       buffer.writeByte(Fory.NULL_FLAG);
     } else if (fieldValue.getClass().isEnum()) {
       // Only write null flag when the field is nullable (for xlang compatibility)
@@ -361,7 +380,7 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
 
   public static int computeStructHash(Fory fory, DescriptorGrouper grouper) {
     List<Descriptor> sorted = grouper.getSortedDescriptors();
-    String fingerprint = computeStructFingerprint(fory, sorted);
+    String fingerprint = Fingerprint.computeStructFingerprint(fory, sorted);
     byte[] bytes = fingerprint.getBytes(StandardCharsets.UTF_8);
     long hashLong = MurmurHash3.murmurhash3_x64_128(bytes, 0, bytes.length, 47)[0];
     int hash = (int) (hashLong & 0xffffffffL);
@@ -377,143 +396,6 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
               + hash);
     }
     return hash;
-  }
-
-  /**
-   * Computes the fingerprint string for a struct type used in schema versioning.
-   *
-   * <p><b>Fingerprint Format:</b>
-   *
-   * <p>Each field contributes: {@code <field_id_or_name>,<type_id>,<ref>,<nullable>;}
-   *
-   * <p>Fields are sorted by their identifier (field ID or name) lexicographically as strings.
-   *
-   * <p><b>Field Components:</b>
-   *
-   * <ul>
-   *   <li><b>field_id_or_name</b>: Tag ID as string if configured via {@link ForyField#id()} (e.g.,
-   *       "0", "1"), otherwise snake_case field name
-   *   <li><b>type_id</b>: Fory TypeId as decimal string (e.g., "4" for INT32)
-   *   <li><b>ref</b>: "1" if reference tracking enabled, "0" otherwise
-   *   <li><b>nullable</b>: "1" if null flag is written, "0" otherwise
-   * </ul>
-   *
-   * <p><b>Example fingerprints:</b>
-   *
-   * <ul>
-   *   <li>With tag IDs: "0,4,0,0;1,4,0,1;2,9,0,1;"
-   *   <li>With field names: "age,4,0,0;name,9,0,1;"
-   * </ul>
-   *
-   * <p>The fingerprint is used to compute a hash for struct schema versioning. Different
-   * nullable/ref settings will produce different fingerprints, ensuring schema compatibility is
-   * properly validated.
-   *
-   * @param fory the Fory instance for type resolution
-   * @param descriptors the sorted list of field descriptors
-   * @return the fingerprint string
-   */
-  public static String computeStructFingerprint(Fory fory, List<Descriptor> descriptors) {
-    // Build fingerprint info for each field
-    List<String[]> fieldInfos = new ArrayList<>(descriptors.size());
-    for (Descriptor descriptor : descriptors) {
-      Class<?> rawType = descriptor.getTypeRef().getRawType();
-      int typeId = getTypeId(fory, rawType);
-
-      // Get field identifier: tag ID if configured, otherwise snake_case name
-      String fieldIdentifier;
-      ForyField foryField = descriptor.getForyField();
-      if (foryField != null && foryField.id() >= 0) {
-        fieldIdentifier = String.valueOf(foryField.id());
-      } else {
-        fieldIdentifier = descriptor.getSnakeCaseName();
-      }
-
-      // Get ref flag from @ForyField annotation only (compile-time info)
-      // If annotation is absent or ref not explicitly set to true, ref is 0
-      // This allows fingerprint to be computed at compile time for C++/Rust
-      char ref = (foryField != null && foryField.ref()) ? '1' : '0';
-
-      // Get nullable flag:
-      // - Primitives are always non-nullable
-      // - For xlang: default is false (except Optional types), can be overridden by @ForyField
-      // - For native: use descriptor.isNullable() which defaults to true for non-primitives
-      char nullable;
-      if (rawType.isPrimitive()) {
-        nullable = '0';
-      } else if (fory.isCrossLanguage()) {
-        // For xlang: nullable defaults to false, except for Optional types
-        // If @ForyField annotation is present, use its nullable value
-        if (foryField != null) {
-          nullable = foryField.nullable() ? '1' : '0';
-        } else {
-          // Default: only Optional types are nullable
-          nullable = isOptionalType(rawType) ? '1' : '0';
-        }
-      } else {
-        nullable = descriptor.isNullable() ? '1' : '0';
-      }
-
-      fieldInfos.add(
-          new String[] {
-            fieldIdentifier, String.valueOf(typeId), String.valueOf(ref), String.valueOf(nullable)
-          });
-    }
-
-    // Sort by field identifier (lexicographically as strings)
-    fieldInfos.sort((a, b) -> a[0].compareTo(b[0]));
-
-    // Build fingerprint string
-    StringBuilder builder = new StringBuilder();
-    for (String[] info : fieldInfos) {
-      builder
-          .append(info[0])
-          .append(',')
-          .append(info[1])
-          .append(',')
-          .append(info[2])
-          .append(',')
-          .append(info[3])
-          .append(';');
-    }
-    return builder.toString();
-  }
-
-  private static int getTypeId(Fory fory, Class<?> cls) {
-    TypeResolver resolver = fory._getTypeResolver();
-    if (resolver.isSet(cls)) {
-      return Types.SET;
-    } else if (resolver.isCollection(cls)) {
-      return Types.LIST;
-    } else if (resolver.isMap(cls)) {
-      return Types.MAP;
-    } else {
-      if (ReflectionUtils.isAbstract(cls) || cls.isInterface() || cls.isEnum()) {
-        return Types.UNKNOWN;
-      }
-      ClassInfo classInfo = resolver.getClassInfo(cls, false);
-      if (classInfo == null) {
-        return Types.UNKNOWN;
-      }
-      int typeId;
-      if (fory.isCrossLanguage()) {
-        typeId = classInfo.getXtypeId();
-        if (Types.isUserDefinedType((byte) typeId)) {
-          return Types.UNKNOWN;
-        }
-      } else {
-        typeId = classInfo.getClassId();
-      }
-      return typeId;
-    }
-  }
-
-  /** Check if a type is an Optional type (Optional, OptionalInt, OptionalLong, OptionalDouble). */
-  public static boolean isOptionalType(Class<?> type) {
-    return type == java.util.Optional.class
-        || type == java.util.OptionalInt.class
-        || type == java.util.OptionalLong.class
-        || type == java.util.OptionalDouble.class;
   }
 
   public static void checkClassVersion(Fory fory, int readHash, int classVersionHash) {

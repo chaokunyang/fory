@@ -20,10 +20,7 @@ use crate::error::Error;
 use crate::resolver::context::{ReadContext, WriteContext};
 use crate::serializer::Serializer;
 use crate::types::TypeId;
-use crate::types::{
-    is_user_type, BOOL, ENUM, FLOAT32, FLOAT64, INT128, INT16, INT32, INT64, INT8, NAMED_ENUM,
-    NONE, U128, U16, U32, U64, U8,
-};
+use crate::types::{is_user_type, ENUM, NAMED_ENUM};
 
 #[inline(always)]
 pub(crate) fn read_basic_type_info<T: Serializer>(context: &mut ReadContext) -> Result<(), Error> {

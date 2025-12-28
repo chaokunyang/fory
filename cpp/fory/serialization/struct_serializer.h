@@ -300,8 +300,8 @@ template <typename T> struct CompileTimeFieldHelpers {
     }
   }
 
-  /// Returns true if the field at Index is nullable for fingerprint computation.
-  /// This checks:
+  /// Returns true if the field at Index is nullable for fingerprint
+  /// computation. This checks:
   /// 1. If the field is a fory::field<>, use its is_nullable metadata
   /// 2. Else if FORY_FIELD_TAGS is defined, use that metadata
   /// 3. Otherwise, use xlang defaults: only std::optional is nullable

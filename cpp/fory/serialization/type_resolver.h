@@ -445,7 +445,8 @@ struct FieldTypeBuilder<T, std::enable_if_t<is_tuple_v<decay_t<T>>>> {
   }
 };
 
-// Specialization for enum types - xlang mode treats enums as non-nullable by default
+// Specialization for enum types - xlang mode treats enums as non-nullable by
+// default
 template <typename T>
 struct FieldTypeBuilder<T, std::enable_if_t<std::is_enum_v<decay_t<T>>>> {
   using Decayed = decay_t<T>;

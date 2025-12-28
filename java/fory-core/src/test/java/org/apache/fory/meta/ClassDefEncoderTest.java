@@ -42,7 +42,7 @@ public class ClassDefEncoderTest {
   public void testBasicClassDef() {
     Fory fory = Fory.builder().withMetaShare(true).build();
     Class<ClassDefTest.TestFieldsOrderClass1> type = ClassDefTest.TestFieldsOrderClass1.class;
-    List<ClassDef.FieldInfo> fieldsInfo = buildFieldsInfo(fory.getClassResolver(), type);
+    List<FieldInfo> fieldsInfo = buildFieldsInfo(fory.getClassResolver(), type);
     MemoryBuffer buffer =
         ClassDefEncoder.encodeClassDef(
             fory.getClassResolver(), type, getClassFields(type, fieldsInfo), true);
@@ -222,12 +222,12 @@ public class ClassDefEncoderTest {
     Fory fory = Fory.builder().withMetaShare(true).build();
 
     // Should not throw any exception
-    List<ClassDef.FieldInfo> fieldsInfo =
+    List<FieldInfo> fieldsInfo =
         buildFieldsInfo(fory.getClassResolver(), ClassWithValidTagIds.class);
 
     Assert.assertEquals(fieldsInfo.size(), 3);
     // Verify all fields have the correct tag IDs
-    for (ClassDef.FieldInfo fieldInfo : fieldsInfo) {
+    for (FieldInfo fieldInfo : fieldsInfo) {
       Assert.assertTrue(fieldInfo.hasFieldId());
     }
   }

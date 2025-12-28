@@ -527,15 +527,9 @@ pub(crate) fn gen_read_compatible_match_arm_body(
                             _field.field_type.type_id,
                             _field.field_type.nullable,
                         );
-                        if read_ref_flag {
-                            #var_name = Some(<#ty as fory_core::Serializer>::fory_read(context, true, read_type_info)?);
-                        } else {
-                            // When nullable=false, still need to read type info for nested structs
-                            if read_type_info {
-                                <#ty as fory_core::Serializer>::fory_read_type_info(context)?;
-                            }
-                            #var_name = Some(<#ty as fory_core::Serializer>::fory_read_data(context)?);
-                        }
+                        // Always use fory_read which handles compatible mode correctly
+                        // for nested struct types with different registered IDs
+                        #var_name = Some(<#ty as fory_core::Serializer>::fory_read(context, read_ref_flag, read_type_info)?);
                     }
                 } else {
                     quote! {
@@ -544,15 +538,9 @@ pub(crate) fn gen_read_compatible_match_arm_body(
                             _field.field_type.type_id,
                             _field.field_type.nullable,
                         );
-                        if read_ref_flag {
-                            #var_name = <#ty as fory_core::Serializer>::fory_read(context, true, read_type_info)?;
-                        } else {
-                            // When nullable=false, still need to read type info for nested structs
-                            if read_type_info {
-                                <#ty as fory_core::Serializer>::fory_read_type_info(context)?;
-                            }
-                            #var_name = <#ty as fory_core::Serializer>::fory_read_data(context)?;
-                        }
+                        // Always use fory_read which handles compatible mode correctly
+                        // for nested struct types with different registered IDs
+                        #var_name = <#ty as fory_core::Serializer>::fory_read(context, read_ref_flag, read_type_info)?;
                     }
                 }
             }

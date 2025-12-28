@@ -29,6 +29,7 @@ import static org.apache.fory.codegen.ExpressionUtils.add;
 import static org.apache.fory.codegen.ExpressionUtils.bitand;
 import static org.apache.fory.codegen.ExpressionUtils.bitor;
 import static org.apache.fory.codegen.ExpressionUtils.cast;
+import static org.apache.fory.codegen.ExpressionUtils.defaultValue;
 import static org.apache.fory.codegen.ExpressionUtils.eq;
 import static org.apache.fory.codegen.ExpressionUtils.eqNull;
 import static org.apache.fory.codegen.ExpressionUtils.gt;
@@ -39,7 +40,6 @@ import static org.apache.fory.codegen.ExpressionUtils.list;
 import static org.apache.fory.codegen.ExpressionUtils.neq;
 import static org.apache.fory.codegen.ExpressionUtils.neqNull;
 import static org.apache.fory.codegen.ExpressionUtils.not;
-import static org.apache.fory.codegen.ExpressionUtils.defaultValue;
 import static org.apache.fory.codegen.ExpressionUtils.nullValue;
 import static org.apache.fory.codegen.ExpressionUtils.or;
 import static org.apache.fory.codegen.ExpressionUtils.shift;
@@ -83,7 +83,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import org.apache.fory.Fory;
-import org.apache.fory.annotation.ForyField;
 import org.apache.fory.codegen.Code;
 import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.codegen.CodegenContext;
@@ -407,13 +406,6 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
    * are non-nullable by default unless explicitly annotated or the field type is Optional.
    */
   protected boolean getEffectiveNullable(Descriptor descriptor) {
-    if (fory.isCrossLanguage()) {
-      ForyField foryField = descriptor.getForyField();
-      if (foryField != null) {
-        return foryField.nullable();
-      }
-      return ObjectSerializer.isOptionalType(descriptor.getTypeRef().getRawType());
-    }
     return descriptor.isNullable();
   }
 

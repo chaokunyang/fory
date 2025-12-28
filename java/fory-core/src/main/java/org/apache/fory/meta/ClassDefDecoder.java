@@ -32,7 +32,7 @@ import java.util.ArrayList;
 import java.util.List;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.meta.ClassDef.FieldType;
+import org.apache.fory.meta.FieldTypes.FieldType;
 import org.apache.fory.meta.MetaString.Encoding;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeResolver;
@@ -73,7 +73,7 @@ class ClassDefDecoder {
     }
     numClasses += 1;
     String className;
-    List<ClassDef.FieldInfo> classFields = new ArrayList<>();
+    List<FieldInfo> classFields = new ArrayList<>();
     ClassSpec classSpec = null;
     for (int i = 0; i < numClasses; i++) {
       // | num fields + register flag | header + package name | header + class name
@@ -102,8 +102,7 @@ class ClassDefDecoder {
           classSpec = new ClassSpec(cls);
         }
       }
-      List<ClassDef.FieldInfo> fieldInfos =
-          readFieldsInfo(classDefBuf, resolver, className, numFields);
+      List<FieldInfo> fieldInfos = readFieldsInfo(classDefBuf, resolver, className, numFields);
       classFields.addAll(fieldInfos);
     }
     Preconditions.checkNotNull(classSpec);
@@ -111,9 +110,9 @@ class ClassDefDecoder {
     return new ClassDef(classSpec, classFields, hasFieldsMeta, id, decoded.f1);
   }
 
-  private static List<ClassDef.FieldInfo> readFieldsInfo(
+  private static List<FieldInfo> readFieldsInfo(
       MemoryBuffer buffer, ClassResolver resolver, String className, int numFields) {
-    List<ClassDef.FieldInfo> fieldInfos = new ArrayList<>(numFields);
+    List<FieldInfo> fieldInfos = new ArrayList<>(numFields);
     for (int i = 0; i < numFields; i++) {
       int header = buffer.readByte() & 0xff;
       //  `3 bits size + 2 bits field name encoding + polymorphism flag + nullability flag + ref
@@ -144,12 +143,12 @@ class ClassDefDecoder {
       boolean trackingRef = (header & 0b001) != 0;
       int typeId = buffer.readVarUint32Small14();
       FieldType fieldType =
-          FieldType.read(buffer, resolver, isMonomorphic, nullable, trackingRef, typeId);
+          FieldTypes.FieldType.read(buffer, resolver, isMonomorphic, nullable, trackingRef, typeId);
 
       if (useTagID) {
-        fieldInfos.add(new ClassDef.FieldInfo(className, fieldName, fieldType, tagId));
+        fieldInfos.add(new FieldInfo(className, fieldName, fieldType, tagId));
       } else {
-        fieldInfos.add(new ClassDef.FieldInfo(className, fieldName, fieldType));
+        fieldInfos.add(new FieldInfo(className, fieldName, fieldType));
       }
     }
     return fieldInfos;

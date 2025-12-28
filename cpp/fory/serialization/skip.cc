@@ -251,7 +251,8 @@ void skip_struct(ReadContext &ctx, const FieldType &field_type) {
     type_info = type_info_res.value();
   } else {
     // Plain STRUCT: look up by type_id, read struct_version if enabled
-    auto type_info_res = ctx.type_resolver().get_type_info_by_id(remote_type_id);
+    auto type_info_res =
+        ctx.type_resolver().get_type_info_by_id(remote_type_id);
     if (FORY_PREDICT_FALSE(!type_info_res.ok())) {
       ctx.set_error(std::move(type_info_res).error());
       return;
@@ -322,7 +323,8 @@ void skip_ext(ReadContext &ctx, const FieldType &field_type) {
     type_info = type_info_res.value();
   } else {
     // ID-based ext: look up by remote type_id we just read
-    auto type_info_res = ctx.type_resolver().get_type_info_by_id(remote_type_id);
+    auto type_info_res =
+        ctx.type_resolver().get_type_info_by_id(remote_type_id);
     if (FORY_PREDICT_FALSE(!type_info_res.ok())) {
       ctx.set_error(std::move(type_info_res).error());
       return;

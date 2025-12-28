@@ -19,6 +19,8 @@
 
 package org.apache.fory.logging;
 
+import org.apache.fory.util.Utils;
+
 /** Defines a series of log levels. */
 public class LogLevel {
   public static final int ERROR_LEVEL = 0;
@@ -26,6 +28,18 @@ public class LogLevel {
   public static final int WARN_LEVEL = 1;
 
   public static final int INFO_LEVEL = 2;
+
+  public static final int DEBUG_LEVEL = 3;
+
+  public static final int DEFAULT_LEVEL;
+
+  static {
+    if (Utils.debugOutputEnabled()) {
+      DEFAULT_LEVEL = DEBUG_LEVEL;
+    } else {
+      DEFAULT_LEVEL = INFO_LEVEL;
+    }
+  }
 
   public static String level2String(int level) {
     switch (level) {
@@ -35,6 +49,8 @@ public class LogLevel {
         return "WARN";
       case INFO_LEVEL:
         return "INFO";
+      case DEBUG_LEVEL:
+        return "DEBUG";
       default:
         return "UNKNOWN";
     }

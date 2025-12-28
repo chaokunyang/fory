@@ -125,9 +125,9 @@ public class ProtocolInteroperabilityTest extends ForyTestBase {
         fory,
         foryJIT,
         new GenericMapBoundTest(
-            new HashMap<>(mapOf(new HashMap<>(mapOf(1, list)), 1)),
-            new HashMap<>(mapOf(new HashMap<>(mapOf(1, list)), 1)),
-            new HashMap<>(mapOf(new HashMap<>(mapOf(1, list)), 1))));
+            new HashMap<>(mapOf(new HashMap<>(mapOf(1, list)), 10)),
+            new HashMap<>(mapOf(new HashMap<>(mapOf(2, list)), 20)),
+            new HashMap<>(mapOf(new HashMap<>(mapOf(3, list)), 30))));
   }
 
   @Data

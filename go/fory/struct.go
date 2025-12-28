@@ -100,11 +100,6 @@ func writeEnumField(ctx *WriteContext, field *FieldInfo, fieldValue reflect.Valu
 	buf := ctx.Buffer()
 	isPointer := fieldValue.Kind() == reflect.Ptr
 
-	if DebugOutputEnabled() {
-		fmt.Printf("[fory-debug] writeEnumField: field=%s RefMode=%v isPointer=%v\n",
-			field.Name, field.RefMode, isPointer)
-	}
-
 	// Write null flag based on RefMode only (not based on whether local type is pointer)
 	if field.RefMode != RefModeNone {
 		if isPointer && fieldValue.IsNil() {
@@ -112,9 +107,6 @@ func writeEnumField(ctx *WriteContext, field *FieldInfo, fieldValue reflect.Valu
 			return
 		}
 		buf.WriteInt8(NotNullValueFlag)
-		if DebugOutputEnabled() {
-			fmt.Printf("[fory-debug] writeEnumField: wrote NotNullValueFlag for field=%s\n", field.Name)
-		}
 	}
 
 	// Get the actual value to serialize
@@ -290,10 +282,6 @@ func (s *structSerializer) Write(ctx *WriteContext, refMode RefMode, writeType b
 }
 
 func (s *structSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
-	if DebugOutputEnabled() {
-		fmt.Printf("[fory-debug] structSerializer.WriteData: type=%v initialized=%v fixedFields=%d varintFields=%d remainingFields=%d\n",
-			s.type_, s.initialized, len(s.fixedFields), len(s.varintFields), len(s.remainingFields))
-	}
 	// Early error check - skip all intermediate checks for normal path performance
 	if ctx.HasError() {
 		return
@@ -438,9 +426,6 @@ func (s *structSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 	// - These require per-field handling (ref flags, type info, serializers)
 	// - No intermediate error checks - trade error path performance for normal path
 	// ==========================================================================
-	if DebugOutputEnabled() {
-		fmt.Printf("[fory-debug] WriteData Phase 3: writing %d remaining fields\n", len(s.remainingFields))
-	}
 	for _, field := range s.remainingFields {
 		s.writeRemainingField(ctx, ptr, field, value)
 	}
@@ -448,9 +433,6 @@ func (s *structSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 
 // writeRemainingField writes a non-primitive field (string, slice, map, struct, enum)
 func (s *structSerializer) writeRemainingField(ctx *WriteContext, ptr unsafe.Pointer, field *FieldInfo, value reflect.Value) {
-	if DebugOutputEnabled() {
-		fmt.Printf("[fory-debug] writeRemainingField: field=%s StaticId=%d ptr=%v\n", field.Name, field.StaticId, ptr != nil)
-	}
 	buf := ctx.Buffer()
 
 	// Fast path dispatch using pre-computed StaticId
@@ -470,9 +452,6 @@ func (s *structSerializer) writeRemainingField(ctx *WriteContext, ptr unsafe.Poi
 			return
 		case ConcreteTypeEnum:
 			// Enums don't track refs - always use fast path
-			if DebugOutputEnabled() {
-				fmt.Printf("[fory-debug] writeRemainingField: enum field=%s RefMode=%v\n", field.Name, field.RefMode)
-			}
 			writeEnumField(ctx, field, value.Field(field.FieldIndex))
 			return
 		case ConcreteTypeStringSlice:
@@ -1099,17 +1078,17 @@ func (s *structSerializer) initFieldsFromTypeResolver(typeResolver *TypeResolver
 			fieldTypeId = typeIdFromKind(fieldType)
 		}
 		// Calculate nullable flag for xlang serialization:
-		// - Default: false for ALL fields (xlang default - aligned with all languages)
-		// - Primitives are always non-nullable
+		// - Pointer types (*T): can hold nil → nullable=true by default
+		// - Primitives (int32, bool, etc.): cannot be nil → nullable=false
+		// - Slices, maps, interfaces: nullable=false by default for xlang compatibility
 		// - Can be overridden by explicit fory tag
-		// Note: Go pointers default to nullable=false to match xlang defaults.
-		// When serializing a nil pointer with nullable=false, a zero/default value is written.
 		// This ensures writer and reader use the same field ordering and ref mode,
 		// and is consistent with computeHash fingerprint calculation.
 		internalId := TypeId(fieldTypeId & 0xFF)
 		isEnum := internalId == ENUM || internalId == NAMED_ENUM
-		// Default to nullable=false for xlang mode
-		nullableFlag := false
+		// Default nullable based on whether Go type is a pointer type
+		// Note: Slices, maps, interfaces default to nullable=false for xlang compatibility
+		nullableFlag := fieldType.Kind() == reflect.Ptr
 		if foryTag.NullableSet {
 			// Override nullable flag if explicitly set in fory tag
 			nullableFlag = foryTag.Nullable
@@ -1126,8 +1105,11 @@ func (s *structSerializer) initFieldsFromTypeResolver(typeResolver *TypeResolver
 		}
 
 		// Pre-compute RefMode based on (possibly overridden) trackRef and nullable
+		// For pointer-to-struct fields, enable ref tracking when trackRef is enabled,
+		// regardless of nullable flag. This is necessary to detect circular references.
 		refMode := RefModeNone
-		if trackRef && nullableFlag {
+		isStructPointer := fieldType.Kind() == reflect.Ptr && fieldType.Elem().Kind() == reflect.Struct
+		if trackRef && (nullableFlag || isStructPointer) {
 			refMode = RefModeTracking
 		} else if nullableFlag {
 			refMode = RefModeNullOnly

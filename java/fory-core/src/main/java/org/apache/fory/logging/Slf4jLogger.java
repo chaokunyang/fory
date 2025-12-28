@@ -19,6 +19,7 @@
 
 package org.apache.fory.logging;
 
+import static org.apache.fory.logging.LogLevel.DEBUG_LEVEL;
 import static org.apache.fory.logging.LogLevel.ERROR_LEVEL;
 import static org.apache.fory.logging.LogLevel.INFO_LEVEL;
 import static org.apache.fory.logging.LogLevel.WARN_LEVEL;
@@ -36,6 +37,34 @@ public class Slf4jLogger implements Logger {
   public Slf4jLogger(Class<?> cls) {
     this.logger = org.slf4j.LoggerFactory.getLogger(cls);
     this.isLocationAwareLogger = logger instanceof LocationAwareLogger;
+  }
+
+  @Override
+  public void debug(String msg) {
+    debug(msg, (Object[]) null);
+  }
+
+  @Override
+  public void debug(String msg, Object arg) {
+    debug(msg, new Object[] {arg});
+  }
+
+  @Override
+  public void debug(String msg, Object arg1, Object arg2) {
+    debug(msg, new Object[] {arg1, arg2});
+  }
+
+  @Override
+  public void debug(String msg, Object... args) {
+    if (LoggerFactory.getLogLevel() < DEBUG_LEVEL) {
+      return;
+    }
+    if (isLocationAwareLogger) {
+      ((LocationAwareLogger) logger)
+          .log(null, FQCN, LocationAwareLogger.DEBUG_INT, msg, args, null);
+    } else {
+      logger.debug(msg, args);
+    }
   }
 
   @Override

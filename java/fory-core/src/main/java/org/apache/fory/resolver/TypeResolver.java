@@ -26,6 +26,7 @@ import com.google.common.collect.HashBiMap;
 import java.lang.reflect.Field;
 import java.lang.reflect.Member;
 import java.lang.reflect.Type;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -36,6 +37,7 @@ import java.util.SortedMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import org.apache.fory.Fory;
+import org.apache.fory.annotation.ForyField;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.builder.CodecUtils;
 import org.apache.fory.builder.Generated.GeneratedMetaSharedSerializer;
@@ -69,6 +71,7 @@ import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.SerializerFactory;
 import org.apache.fory.serializer.Serializers;
 import org.apache.fory.type.Descriptor;
+import org.apache.fory.type.DescriptorBuilder;
 import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.type.GenericType;
 import org.apache.fory.type.ScalaTypes;
@@ -553,7 +556,101 @@ public abstract class TypeResolver {
       boolean descriptorsGroupedOrdered,
       Function<Descriptor, Descriptor> descriptorUpdator);
 
-  public abstract Collection<Descriptor> getFieldDescriptors(Class<?> beanClass, boolean b);
+  public List<Descriptor> getFieldDescriptors(Class<?> clz, boolean searchParent) {
+    SortedMap<Member, Descriptor> allDescriptors = getAllDescriptorsMap(clz, searchParent);
+    List<Descriptor> result = new ArrayList<>(allDescriptors.size());
+
+    Map<Member, Descriptor> newDescriptorMap = new HashMap<>();
+    boolean globalRefTracking = fory.trackingRef();
+    boolean isXlang = fory.isCrossLanguage();
+
+    for (Map.Entry<Member, Descriptor> entry : allDescriptors.entrySet()) {
+      Member member = entry.getKey();
+      Descriptor descriptor = entry.getValue();
+      if (!(member instanceof Field)) {
+        continue;
+      }
+      boolean hasForyField = descriptor.getForyField() != null;
+      // Compute the final isTrackingRef value:
+      // For xlang mode: "Reference tracking is disabled by default" (xlang spec)
+      //   - Only enable ref tracking if explicitly set via @ForyField(ref=true)
+      // For Java mode:
+      //   - If global ref tracking is enabled and no @ForyField, use global setting
+      //   - If @ForyField(ref=true) is set, use that (but can be overridden if global is off)
+      boolean ref = globalRefTracking;
+      if (globalRefTracking) {
+        if (isXlang) {
+          // In xlang mode, only track refs if explicitly annotated with @ForyField(ref=true)
+          ref = hasForyField && descriptor.isTrackingRef();
+        } else {
+          if (hasForyField) {
+            ref = descriptor.isTrackingRef();
+          } else {
+            ref = needToWriteRef(descriptor.getTypeRef());
+          }
+        }
+      }
+      boolean nullable = isFieldNullable(descriptor);
+      boolean needsUpdate =
+          ref != descriptor.isTrackingRef() || nullable != descriptor.isNullable();
+
+      if (needsUpdate) {
+        Descriptor newDescriptor =
+            new DescriptorBuilder(descriptor).trackingRef(ref).nullable(nullable).build();
+        result.add(newDescriptor);
+        newDescriptorMap.put(member, newDescriptor);
+      } else {
+        result.add(descriptor);
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Get the nullable flag for a field, respecting xlang mode.
+   *
+   * <p>For xlang mode (SERIALIZATION): use xlang defaults unless @ForyField annotation overrides:
+   *
+   * <ul>
+   *   <li>If @ForyField annotation is present: use its nullable() value
+   *   <li>Otherwise: return true only for Optional types, false for all other non-primitives
+   * </ul>
+   *
+   * <p>For native mode: use descriptor's nullable which defaults to true for non-primitives.
+   *
+   * <p>Important: This ensures the serialization format matches what the TypeDef metadata says. The
+   * TypeDef uses xlang defaults (nullable=false except for Optional types), so the actual
+   * serialization must use the same defaults to ensure consistency across languages.
+   */
+  private boolean isFieldNullable(Descriptor descriptor) {
+    Class<?> rawType = descriptor.getTypeRef().getRawType();
+    if (rawType.isPrimitive()) {
+      return false;
+    }
+    if (fory.isCrossLanguage()) {
+      // For xlang mode: apply xlang defaults
+      // This must match what TypeDefEncoder.buildFieldType uses for TypeDef metadata
+      ForyField foryField = descriptor.getForyField();
+      if (foryField != null) {
+        // Use explicit annotation value
+        return foryField.nullable();
+      }
+      if (TypeUtils.isBoxed(rawType)) {
+        return true;
+      }
+      // Default for xlang: false for all non-primitives, except Optional types
+      return TypeUtils.isOptionalType(rawType);
+    }
+    // For native mode: use descriptor's nullable (true for non-primitives by default)
+    return descriptor.isNullable();
+  }
+
+  // thread safe
+  private SortedMap<Member, Descriptor> getAllDescriptorsMap(Class<?> clz, boolean searchParent) {
+    // when jit thread query this, it is already built by serialization main thread.
+    return extRegistry.descriptorsCache.computeIfAbsent(
+        Tuple2.of(clz, searchParent), t -> Descriptor.getAllDescriptorsMap(clz, searchParent));
+  }
 
   /**
    * Build a map of nested generic type name to generic type for all fields in the class.

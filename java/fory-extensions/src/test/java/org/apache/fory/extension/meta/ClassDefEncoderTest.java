@@ -27,6 +27,7 @@ import org.apache.fory.Fory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.ClassDef;
 import org.apache.fory.meta.ClassDefEncoder;
+import org.apache.fory.meta.FieldInfo;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
@@ -44,7 +45,7 @@ public class ClassDefEncoderTest {
     Fory fory =
         Fory.builder().withMetaShare(true).withMetaCompressor(new ZstdMetaCompressor()).build();
     Class<TestFieldsOrderClass1> type = TestFieldsOrderClass1.class;
-    List<ClassDef.FieldInfo> fieldsInfo = buildFieldsInfo(fory.getClassResolver(), type);
+    List<FieldInfo> fieldsInfo = buildFieldsInfo(fory.getClassResolver(), type);
     MemoryBuffer buffer =
         ClassDefEncoder.encodeClassDef(
             fory.getClassResolver(), type, getClassFields(type, fieldsInfo), true);

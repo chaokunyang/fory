@@ -431,16 +431,17 @@ func buildFieldDefs(fory *Fory, value reflect.Value) ([]FieldDef, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to build field type for field %s: %w", fieldName, err)
 		}
-		// For xlang serialization: nullable=false by default for ALL fields
-		// This matches the xlang defaults across all languages (Java, Rust, C++, Python)
-		// Note: Go pointers default to nullable=false to match xlang defaults.
-		// When serializing a nil pointer with nullable=false, a zero/default value is written.
+		// Determine nullable based on Go type capability:
+		// - Pointer types (*T): can hold nil → nullable=true by default
+		// - Primitive types (int32, bool, etc.): cannot be nil → nullable=false
+		// - Slices, maps, interfaces: nullable=false by default for xlang compatibility
 		// Can be overridden by explicit fory tag
 		typeId := ft.TypeId()
 		internalId := TypeId(typeId & 0xFF)
 		isEnumField := internalId == ENUM || internalId == NAMED_ENUM
-		// Default to nullable=false for xlang mode
-		nullableFlag := false
+		// Default nullable based on whether Go type is a pointer type
+		// Note: Slices, maps, interfaces default to nullable=false for xlang compatibility
+		nullableFlag := field.Type.Kind() == reflect.Ptr
 		// Override nullable flag if explicitly set in fory tag
 		if foryTag.NullableSet {
 			nullableFlag = foryTag.Nullable

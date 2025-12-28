@@ -34,7 +34,7 @@ import org.apache.fory.collection.Tuple2;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.meta.ClassDef.FieldType;
+import org.apache.fory.meta.FieldTypes.FieldType;
 import org.apache.fory.meta.MetaString.Encoding;
 import org.apache.fory.resolver.ClassInfo;
 import org.apache.fory.resolver.XtypeResolver;
@@ -79,7 +79,7 @@ class TypeDefDecoder {
         classSpec = new ClassSpec(userTypeInfo.getCls(), xtypeId);
       }
     }
-    List<ClassDef.FieldInfo> classFields =
+    List<FieldInfo> classFields =
         readFieldsInfo(buffer, resolver, classSpec.entireClassName, numFields);
     boolean hasFieldsMeta = (id & HAS_FIELDS_META_FLAG) != 0;
     ClassDef classDef = new ClassDef(classSpec, classFields, hasFieldsMeta, id, decoded.f1);
@@ -101,9 +101,9 @@ class TypeDefDecoder {
   }
 
   // | header + type info + field name | ... | header + type info + field name |
-  private static List<ClassDef.FieldInfo> readFieldsInfo(
+  private static List<FieldInfo> readFieldsInfo(
       MemoryBuffer buffer, XtypeResolver resolver, String className, int numFields) {
-    List<ClassDef.FieldInfo> fieldInfos = new ArrayList<>(numFields);
+    List<FieldInfo> fieldInfos = new ArrayList<>(numFields);
     for (int i = 0; i < numFields; i++) {
       // header: 2 bits field name encoding + 4 bits size + nullability flag + ref tracking flag
       byte header = buffer.readByte();
@@ -117,7 +117,8 @@ class TypeDefDecoder {
       boolean nullable = (header & 0b10) != 0;
       boolean trackingRef = (header & 0b1) != 0;
       int typeId = buffer.readVarUint32Small14();
-      FieldType fieldType = FieldType.xread(buffer, resolver, typeId, nullable, trackingRef);
+      FieldType fieldType =
+          FieldTypes.FieldType.xread(buffer, resolver, typeId, nullable, trackingRef);
 
       // read field name or tag ID
       if (useTagID) {
@@ -125,12 +126,12 @@ class TypeDefDecoder {
         short tagId = (short) (fieldNameSize - 1);
         // Use a placeholder field name since tag ID is used for identification
         String fieldName = "$tag" + tagId; // TODO we could use id as String as field name
-        fieldInfos.add(new ClassDef.FieldInfo(className, fieldName, fieldType, tagId));
+        fieldInfos.add(new FieldInfo(className, fieldName, fieldType, tagId));
       } else {
         Encoding encoding = fieldNameEncodings[encodingFlags];
         String fieldName =
             Encoders.FIELD_NAME_DECODER.decode(buffer.readBytes(fieldNameSize), encoding);
-        fieldInfos.add(new ClassDef.FieldInfo(className, fieldName, fieldType));
+        fieldInfos.add(new FieldInfo(className, fieldName, fieldType));
       }
     }
     return fieldInfos;

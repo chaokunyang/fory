@@ -1137,7 +1137,7 @@ void RunTestItem(const std::string &data_file) {
   Item expected2;
   expected2.name = std::string("test_item_2");
   Item expected3;
-  expected3.name = std::string("");  // Empty string for non-nullable field
+  expected3.name = std::string(""); // Empty string for non-nullable field
 
   Item item1 = ReadNext<Item>(fory, buffer);
   if (!(item1 == expected1)) {
@@ -1199,7 +1199,8 @@ void RunTestStructWithList(const std::string &data_file) {
   expected1.items = {std::string("a"), std::string("b"), std::string("c")};
 
   StructWithList expected2;
-  expected2.items = {std::string("x"), std::string(""), std::string("z")};  // Empty string instead of null
+  expected2.items = {std::string("x"), std::string(""),
+                     std::string("z")}; // Empty string instead of null
 
   StructWithList struct1 = ReadNext<StructWithList>(fory, buffer);
   if (!(struct1 == expected1)) {
@@ -1724,7 +1725,8 @@ void RunTestEnumSchemaEvolutionCompatibleReverse(const std::string &data_file) {
   }
   // f2 should be default (VALUE_A = 0, not present in source data)
   if (value.f2 != TestEnum::VALUE_A) {
-    Fail("Enum schema evolution reverse mismatch: expected f2=VALUE_A (default), got " +
+    Fail("Enum schema evolution reverse mismatch: expected f2=VALUE_A "
+         "(default), got " +
          std::to_string(static_cast<int32_t>(value.f2)));
   }
 

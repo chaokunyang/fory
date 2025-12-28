@@ -97,7 +97,8 @@ public class DescriptorTest {
 
   @Test
   public void testDescriptorBuilder() {
-    Descriptor descriptor = new Descriptor(TypeRef.of(A.class), "c", -1, "TestClass", true);
+    Descriptor descriptor =
+        new Descriptor(TypeRef.of(A.class), A.class.getName(), "c", -1, "TestClass", true, true);
     // test copyBuilder
     Descriptor descriptor1 = descriptor.copyBuilder().build();
     Assert.assertEquals(descriptor.getTypeRef(), descriptor1.getTypeRef());

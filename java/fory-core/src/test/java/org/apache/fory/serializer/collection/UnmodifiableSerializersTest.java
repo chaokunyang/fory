@@ -109,20 +109,21 @@ public class UnmodifiableSerializersTest extends ForyTestBase {
     CollectionFields obj = new CollectionFields();
     obj.collection = Collections.unmodifiableCollection(Arrays.asList(1, 2));
     obj.collection2 = Arrays.asList(1, 2);
-    List<String> randomAccessList = Collections.unmodifiableList(Arrays.asList("abc", "def"));
+    List<String> randomAccessList = Collections.unmodifiableList(Arrays.asList("abc1", "def"));
     obj.randomAccessList = randomAccessList;
     obj.randomAccessList2 = randomAccessList;
     obj.randomAccessList3 = randomAccessList;
-    List<String> list = Collections.unmodifiableList(new LinkedList<>(Arrays.asList("abc", "def")));
+    List<String> list =
+        Collections.unmodifiableList(new LinkedList<>(Arrays.asList("abc2", "def")));
     obj.list = list;
     obj.list2 = list;
     obj.list3 = list;
-    Set<String> set = Collections.unmodifiableSet(new HashSet<>(Arrays.asList("abc", "def")));
+    Set<String> set = Collections.unmodifiableSet(new HashSet<>(Arrays.asList("abc3", "def")));
     obj.set = set;
     obj.set2 = set;
     obj.set3 = set;
     SortedSet<String> treeSet =
-        Collections.unmodifiableSortedSet(new TreeSet<>(Arrays.asList("abc", "def")));
+        Collections.unmodifiableSortedSet(new TreeSet<>(Arrays.asList("abc4", "def")));
     obj.sortedSet = treeSet;
     obj.sortedSet2 = treeSet;
     obj.sortedSet3 = treeSet;

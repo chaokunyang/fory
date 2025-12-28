@@ -28,6 +28,14 @@ package org.apache.fory.logging;
  * <p>This logger is used to reduce dependency conflict and reduce jar size.
  */
 public interface Logger {
+  void debug(String msg);
+
+  void debug(String msg, Object arg);
+
+  void debug(String msg, Object arg1, Object arg2);
+
+  void debug(String msg, Object... args);
+
   void info(String msg);
 
   void info(String msg, Object arg);

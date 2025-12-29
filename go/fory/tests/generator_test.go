@@ -204,7 +204,6 @@ func TestMapDemo(t *testing.T) {
 	// Verify map contents
 	assert.EqualValues(t, instance.StringMap, result.StringMap, "StringMap mismatch")
 	assert.EqualValues(t, instance.IntMap, result.IntMap, "IntMap mismatch")
-	// MixedMap was nil, should become empty after deserialization
-	assert.NotNil(t, result.MixedMap, "Expected non-nil MixedMap after deserialization")
-	assert.Empty(t, result.MixedMap, "Expected empty MixedMap since original was nil")
+	// MixedMap was nil, should remain nil after deserialization (nil is preserved)
+	assert.Nil(t, result.MixedMap, "Expected nil MixedMap after deserialization since original was nil")
 }

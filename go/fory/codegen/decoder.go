@@ -156,21 +156,25 @@ func generateFieldReadTyped(buf *bytes.Buffer, field *FieldInfo) error {
 		if iface, ok := elemType.(*types.Interface); ok && iface.Empty() {
 			// For []interface{}, we need to manually implement the deserialization
 			// to match our custom encoding.
-			// In xlang mode, nullable=false is the default, so no null/ref flag is read.
-			// Length=0 means empty slice (nil in Go is treated as empty).
+			// Slices are nullable in Go, so read null flag first.
 			fmt.Fprintf(buf, "\t// Dynamic slice []interface{} handling - manual deserialization\n")
 			fmt.Fprintf(buf, "\t{\n")
-			fmt.Fprintf(buf, "\t\tsliceLen := int(buf.ReadVaruint32(err))\n")
-			fmt.Fprintf(buf, "\t\tif sliceLen == 0 {\n")
+			fmt.Fprintf(buf, "\t\tnullFlag := buf.ReadInt8(err)\n")
+			fmt.Fprintf(buf, "\t\tif nullFlag == -3 {\n") // NullFlag
 			fmt.Fprintf(buf, "\t\t\t%s = nil\n", fieldAccess)
 			fmt.Fprintf(buf, "\t\t} else {\n")
-			fmt.Fprintf(buf, "\t\t\t// ReadData collection flags (ignore for now)\n")
-			fmt.Fprintf(buf, "\t\t\t_ = buf.ReadInt8(err)\n")
-			fmt.Fprintf(buf, "\t\t\t// Create slice with proper capacity\n")
-			fmt.Fprintf(buf, "\t\t\t%s = make([]interface{}, sliceLen)\n", fieldAccess)
-			fmt.Fprintf(buf, "\t\t\t// ReadData each element using ReadValue\n")
-			fmt.Fprintf(buf, "\t\t\tfor i := range %s {\n", fieldAccess)
-			fmt.Fprintf(buf, "\t\t\t\tctx.ReadValue(reflect.ValueOf(&%s[i]).Elem())\n", fieldAccess)
+			fmt.Fprintf(buf, "\t\t\tsliceLen := int(buf.ReadVaruint32(err))\n")
+			fmt.Fprintf(buf, "\t\t\tif sliceLen == 0 {\n")
+			fmt.Fprintf(buf, "\t\t\t\t%s = make([]interface{}, 0)\n", fieldAccess)
+			fmt.Fprintf(buf, "\t\t\t} else {\n")
+			fmt.Fprintf(buf, "\t\t\t\t// ReadData collection flags (ignore for now)\n")
+			fmt.Fprintf(buf, "\t\t\t\t_ = buf.ReadInt8(err)\n")
+			fmt.Fprintf(buf, "\t\t\t\t// Create slice with proper capacity\n")
+			fmt.Fprintf(buf, "\t\t\t\t%s = make([]interface{}, sliceLen)\n", fieldAccess)
+			fmt.Fprintf(buf, "\t\t\t\t// ReadData each element using ReadValue\n")
+			fmt.Fprintf(buf, "\t\t\t\tfor i := range %s {\n", fieldAccess)
+			fmt.Fprintf(buf, "\t\t\t\t\tctx.ReadValue(reflect.ValueOf(&%s[i]).Elem())\n", fieldAccess)
+			fmt.Fprintf(buf, "\t\t\t\t}\n")
 			fmt.Fprintf(buf, "\t\t\t}\n")
 			fmt.Fprintf(buf, "\t\t}\n")
 			fmt.Fprintf(buf, "\t}\n")
@@ -347,64 +351,68 @@ func generateSliceReadInline(buf *bytes.Buffer, sliceType *types.Slice, fieldAcc
 	// Check if element type is referencable (needs ref tracking)
 	elemIsReferencable := isReferencableType(elemType)
 
-	// In xlang mode, nullable=false is the default for struct fields.
-	// With nullable=false, RefMode = RefModeNone, so no ref flag is written/read.
-	// This matches reflection behavior in struct.go.
+	// Slices are nullable in Go (can be nil), so we need to read a null flag.
+	// This matches reflection behavior in struct.go where slices have nullable=true.
 
-	// ReadData slice length - use block scope to avoid variable name conflicts
+	// ReadData slice with null flag - use block scope to avoid variable name conflicts
 	fmt.Fprintf(buf, "\t{\n")
-	fmt.Fprintf(buf, "\t\tsliceLen := int(buf.ReadVaruint32(err))\n")
-	fmt.Fprintf(buf, "\t\tif sliceLen == 0 {\n")
+	fmt.Fprintf(buf, "\t\tnullFlag := buf.ReadInt8(err)\n")
+	fmt.Fprintf(buf, "\t\tif nullFlag == -3 {\n") // NullFlag
 	fmt.Fprintf(buf, "\t\t\t%s = nil\n", fieldAccess)
 	fmt.Fprintf(buf, "\t\t} else {\n")
+	fmt.Fprintf(buf, "\t\t\tsliceLen := int(buf.ReadVaruint32(err))\n")
+	fmt.Fprintf(buf, "\t\t\tif sliceLen == 0 {\n")
+	fmt.Fprintf(buf, "\t\t\t\t%s = make(%s, 0)\n", fieldAccess, sliceType.String())
+	fmt.Fprintf(buf, "\t\t\t} else {\n")
 
 	// ReadData collection header
-	fmt.Fprintf(buf, "\t\t\tcollectFlag := buf.ReadInt8(err)\n")
-	fmt.Fprintf(buf, "\t\t\t// Check if CollectionIsDeclElementType is set (bit 2, value 4)\n")
-	fmt.Fprintf(buf, "\t\t\thasDeclType := (collectFlag & 4) != 0\n")
+	fmt.Fprintf(buf, "\t\t\t\tcollectFlag := buf.ReadInt8(err)\n")
+	fmt.Fprintf(buf, "\t\t\t\t// Check if CollectionIsDeclElementType is set (bit 2, value 4)\n")
+	fmt.Fprintf(buf, "\t\t\t\thasDeclType := (collectFlag & 4) != 0\n")
 	if elemIsReferencable {
-		fmt.Fprintf(buf, "\t\t\t// Check if CollectionTrackingRef is set (bit 0, value 1)\n")
-		fmt.Fprintf(buf, "\t\t\ttrackRefs := (collectFlag & 1) != 0\n")
+		fmt.Fprintf(buf, "\t\t\t\t// Check if CollectionTrackingRef is set (bit 0, value 1)\n")
+		fmt.Fprintf(buf, "\t\t\t\ttrackRefs := (collectFlag & 1) != 0\n")
 	}
 
 	// Create slice
-	fmt.Fprintf(buf, "\t\t\t%s = make(%s, sliceLen)\n", fieldAccess, sliceType.String())
+	fmt.Fprintf(buf, "\t\t\t\t%s = make(%s, sliceLen)\n", fieldAccess, sliceType.String())
 
 	// ReadData elements based on whether CollectionIsDeclElementType is set
-	fmt.Fprintf(buf, "\t\t\tif hasDeclType {\n")
-	fmt.Fprintf(buf, "\t\t\t\t// Elements are written directly without type IDs\n")
-	fmt.Fprintf(buf, "\t\t\t\tfor i := 0; i < sliceLen; i++ {\n")
+	fmt.Fprintf(buf, "\t\t\t\tif hasDeclType {\n")
+	fmt.Fprintf(buf, "\t\t\t\t\t// Elements are written directly without type IDs\n")
+	fmt.Fprintf(buf, "\t\t\t\t\tfor i := 0; i < sliceLen; i++ {\n")
 	if elemIsReferencable {
 		// For referencable elements (like strings), need to read ref flag when tracking
-		fmt.Fprintf(buf, "\t\t\t\t\tif trackRefs {\n")
-		fmt.Fprintf(buf, "\t\t\t\t\t\t_ = buf.ReadInt8(err) // Read ref flag (NotNullValueFlag)\n")
-		fmt.Fprintf(buf, "\t\t\t\t\t}\n")
+		fmt.Fprintf(buf, "\t\t\t\t\t\tif trackRefs {\n")
+		fmt.Fprintf(buf, "\t\t\t\t\t\t\t_ = buf.ReadInt8(err) // Read ref flag (NotNullValueFlag)\n")
+		fmt.Fprintf(buf, "\t\t\t\t\t\t}\n")
 	}
 	if err := generateSliceElementReadDirect(buf, elemType, fmt.Sprintf("%s[i]", fieldAccess)); err != nil {
 		return err
 	}
-	fmt.Fprintf(buf, "\t\t\t\t}\n")
-	fmt.Fprintf(buf, "\t\t\t} else {\n")
-	fmt.Fprintf(buf, "\t\t\t\t// Need to read type ID once if CollectionIsSameType is set\n")
-	fmt.Fprintf(buf, "\t\t\t\tif (collectFlag & 8) != 0 {\n")
-	fmt.Fprintf(buf, "\t\t\t\t\t// ReadData element type ID once for all elements\n")
-	fmt.Fprintf(buf, "\t\t\t\t\t_ = buf.ReadVaruint32(err)\n")
-	fmt.Fprintf(buf, "\t\t\t\t}\n")
-	fmt.Fprintf(buf, "\t\t\t\tfor i := 0; i < sliceLen; i++ {\n")
+	fmt.Fprintf(buf, "\t\t\t\t\t}\n")
+	fmt.Fprintf(buf, "\t\t\t\t} else {\n")
+	fmt.Fprintf(buf, "\t\t\t\t\t// Need to read type ID once if CollectionIsSameType is set\n")
+	fmt.Fprintf(buf, "\t\t\t\t\tif (collectFlag & 8) != 0 {\n")
+	fmt.Fprintf(buf, "\t\t\t\t\t\t// ReadData element type ID once for all elements\n")
+	fmt.Fprintf(buf, "\t\t\t\t\t\t_ = buf.ReadVaruint32(err)\n")
+	fmt.Fprintf(buf, "\t\t\t\t\t}\n")
+	fmt.Fprintf(buf, "\t\t\t\t\tfor i := 0; i < sliceLen; i++ {\n")
 	if elemIsReferencable {
 		// For referencable elements (like strings), need to read ref flag when tracking
-		fmt.Fprintf(buf, "\t\t\t\t\tif trackRefs {\n")
-		fmt.Fprintf(buf, "\t\t\t\t\t\t_ = buf.ReadInt8(err) // Read ref flag (NotNullValueFlag)\n")
-		fmt.Fprintf(buf, "\t\t\t\t\t}\n")
+		fmt.Fprintf(buf, "\t\t\t\t\t\tif trackRefs {\n")
+		fmt.Fprintf(buf, "\t\t\t\t\t\t\t_ = buf.ReadInt8(err) // Read ref flag (NotNullValueFlag)\n")
+		fmt.Fprintf(buf, "\t\t\t\t\t\t}\n")
 	}
 	// For same type without declared type, read elements directly
 	if err := generateSliceElementReadDirect(buf, elemType, fmt.Sprintf("%s[i]", fieldAccess)); err != nil {
 		return err
 	}
+	fmt.Fprintf(buf, "\t\t\t\t\t}\n")
 	fmt.Fprintf(buf, "\t\t\t\t}\n")
-	fmt.Fprintf(buf, "\t\t\t}\n")
-	fmt.Fprintf(buf, "\t\t}\n")
-	fmt.Fprintf(buf, "\t}\n")
+	fmt.Fprintf(buf, "\t\t\t}\n") // end else (sliceLen > 0)
+	fmt.Fprintf(buf, "\t\t}\n")   // end else (not null)
+	fmt.Fprintf(buf, "\t}\n")     // end block scope
 
 	return nil
 }
@@ -414,41 +422,47 @@ func generatePrimitiveSliceReadInline(buf *bytes.Buffer, sliceType *types.Slice,
 	elemType := sliceType.Elem()
 	basic := elemType.Underlying().(*types.Basic)
 
-	// In xlang mode, nullable=false is the default for struct fields.
-	// With nullable=false, RefMode = RefModeNone, so no ref flag is written/read.
-	// This matches reflection behavior in struct.go.
+	// Slices are nullable in Go (can be nil), so we need to read a null flag.
+	// This matches reflection behavior in struct.go where slices have nullable=true.
+
+	// Read null flag first
+	fmt.Fprintf(buf, "\t{\n")
+	fmt.Fprintf(buf, "\t\tnullFlag := buf.ReadInt8(err)\n")
+	fmt.Fprintf(buf, "\t\tif nullFlag == -3 {\n") // NullFlag
+	fmt.Fprintf(buf, "\t\t\t%s = nil\n", fieldAccess)
+	fmt.Fprintf(buf, "\t\t} else {\n")
 
 	// Call the exported helper function for each primitive type
 	switch basic.Kind() {
 	case types.Bool:
-		fmt.Fprintf(buf, "\t%s = fory.ReadBoolSlice(buf, err)\n", fieldAccess)
+		fmt.Fprintf(buf, "\t\t\t%s = fory.ReadBoolSlice(buf, err)\n", fieldAccess)
 	case types.Int8:
-		fmt.Fprintf(buf, "\t%s = fory.ReadInt8Slice(buf, err)\n", fieldAccess)
+		fmt.Fprintf(buf, "\t\t\t%s = fory.ReadInt8Slice(buf, err)\n", fieldAccess)
 	case types.Uint8:
-		fmt.Fprintf(buf, "\t{\n")
-		fmt.Fprintf(buf, "\t\tsizeBytes := buf.ReadLength(err)\n")
-		fmt.Fprintf(buf, "\t\t%s = make([]uint8, sizeBytes)\n", fieldAccess)
-		fmt.Fprintf(buf, "\t\tif sizeBytes > 0 {\n")
-		fmt.Fprintf(buf, "\t\t\traw := buf.ReadBinary(sizeBytes, err)\n")
-		fmt.Fprintf(buf, "\t\t\tif raw != nil {\n")
-		fmt.Fprintf(buf, "\t\t\t\tcopy(%s, raw)\n", fieldAccess)
+		fmt.Fprintf(buf, "\t\t\tsizeBytes := buf.ReadLength(err)\n")
+		fmt.Fprintf(buf, "\t\t\t%s = make([]uint8, sizeBytes)\n", fieldAccess)
+		fmt.Fprintf(buf, "\t\t\tif sizeBytes > 0 {\n")
+		fmt.Fprintf(buf, "\t\t\t\traw := buf.ReadBinary(sizeBytes, err)\n")
+		fmt.Fprintf(buf, "\t\t\t\tif raw != nil {\n")
+		fmt.Fprintf(buf, "\t\t\t\t\tcopy(%s, raw)\n", fieldAccess)
+		fmt.Fprintf(buf, "\t\t\t\t}\n")
 		fmt.Fprintf(buf, "\t\t\t}\n")
-		fmt.Fprintf(buf, "\t\t}\n")
-		fmt.Fprintf(buf, "\t}\n")
 	case types.Int16:
-		fmt.Fprintf(buf, "\t%s = fory.ReadInt16Slice(buf, err)\n", fieldAccess)
+		fmt.Fprintf(buf, "\t\t\t%s = fory.ReadInt16Slice(buf, err)\n", fieldAccess)
 	case types.Int32:
-		fmt.Fprintf(buf, "\t%s = fory.ReadInt32Slice(buf, err)\n", fieldAccess)
+		fmt.Fprintf(buf, "\t\t\t%s = fory.ReadInt32Slice(buf, err)\n", fieldAccess)
 	case types.Int64:
-		fmt.Fprintf(buf, "\t%s = fory.ReadInt64Slice(buf, err)\n", fieldAccess)
+		fmt.Fprintf(buf, "\t\t\t%s = fory.ReadInt64Slice(buf, err)\n", fieldAccess)
 	case types.Float32:
-		fmt.Fprintf(buf, "\t%s = fory.ReadFloat32Slice(buf, err)\n", fieldAccess)
+		fmt.Fprintf(buf, "\t\t\t%s = fory.ReadFloat32Slice(buf, err)\n", fieldAccess)
 	case types.Float64:
-		fmt.Fprintf(buf, "\t%s = fory.ReadFloat64Slice(buf, err)\n", fieldAccess)
+		fmt.Fprintf(buf, "\t\t\t%s = fory.ReadFloat64Slice(buf, err)\n", fieldAccess)
 	default:
 		return fmt.Errorf("unsupported primitive type for ARRAY protocol read: %s", basic.String())
 	}
 
+	fmt.Fprintf(buf, "\t\t}\n") // end else (not null)
+	fmt.Fprintf(buf, "\t}\n")   // end block scope
 	return nil
 }
 
@@ -601,46 +615,49 @@ func generateMapReadInline(buf *bytes.Buffer, mapType *types.Map, fieldAccess st
 		valueIsInterface = true
 	}
 
-	// In xlang mode, nullable=false is the default for struct fields.
-	// With nullable=false, RefMode = RefModeNone, so no ref flag is written/read.
-	// This matches reflection behavior in struct.go.
+	// Maps are nullable in Go (can be nil), so we need to read a null flag.
+	// This matches reflection behavior in struct.go where maps have nullable=true.
 
-	// ReadData map length
+	// ReadData map with null flag
 	fmt.Fprintf(buf, "\t{\n")
-	fmt.Fprintf(buf, "\t\tmapLen := int(buf.ReadVaruint32(err))\n")
-	fmt.Fprintf(buf, "\t\tif mapLen == 0 {\n")
-	fmt.Fprintf(buf, "\t\t\t%s = make(%s)\n", fieldAccess, mapType.String())
+	fmt.Fprintf(buf, "\t\tnullFlag := buf.ReadInt8(err)\n")
+	fmt.Fprintf(buf, "\t\tif nullFlag == -3 {\n") // NullFlag
+	fmt.Fprintf(buf, "\t\t\t%s = nil\n", fieldAccess)
 	fmt.Fprintf(buf, "\t\t} else {\n")
-	fmt.Fprintf(buf, "\t\t\t%s = make(%s, mapLen)\n", fieldAccess, mapType.String())
-	fmt.Fprintf(buf, "\t\t\tmapSize := mapLen\n")
+	fmt.Fprintf(buf, "\t\t\tmapLen := int(buf.ReadVaruint32(err))\n")
+	fmt.Fprintf(buf, "\t\t\tif mapLen == 0 {\n")
+	fmt.Fprintf(buf, "\t\t\t\t%s = make(%s)\n", fieldAccess, mapType.String())
+	fmt.Fprintf(buf, "\t\t\t} else {\n")
+	fmt.Fprintf(buf, "\t\t\t\t%s = make(%s, mapLen)\n", fieldAccess, mapType.String())
+	fmt.Fprintf(buf, "\t\t\t\tmapSize := mapLen\n")
 
 	// ReadData chunks
-	fmt.Fprintf(buf, "\t\t\tfor mapSize > 0 {\n")
-	fmt.Fprintf(buf, "\t\t\t\t// ReadData KV header\n")
-	fmt.Fprintf(buf, "\t\t\t\tkvHeader := buf.ReadByte(err)\n")
-	fmt.Fprintf(buf, "\t\t\t\tchunkSize := int(buf.ReadByte(err))\n")
+	fmt.Fprintf(buf, "\t\t\t\tfor mapSize > 0 {\n")
+	fmt.Fprintf(buf, "\t\t\t\t\t// ReadData KV header\n")
+	fmt.Fprintf(buf, "\t\t\t\t\tkvHeader := buf.ReadByte(err)\n")
+	fmt.Fprintf(buf, "\t\t\t\t\tchunkSize := int(buf.ReadByte(err))\n")
 
 	// Parse header flags
-	fmt.Fprintf(buf, "\t\t\t\ttrackKeyRef := (kvHeader & 0x1) != 0\n")
-	fmt.Fprintf(buf, "\t\t\t\tkeyNotDeclared := (kvHeader & 0x4) != 0\n")
-	fmt.Fprintf(buf, "\t\t\t\ttrackValueRef := (kvHeader & 0x8) != 0\n")
-	fmt.Fprintf(buf, "\t\t\t\tvalueNotDeclared := (kvHeader & 0x20) != 0\n")
-	fmt.Fprintf(buf, "\t\t\t\t_ = trackKeyRef\n")
-	fmt.Fprintf(buf, "\t\t\t\t_ = keyNotDeclared\n")
-	fmt.Fprintf(buf, "\t\t\t\t_ = trackValueRef\n")
-	fmt.Fprintf(buf, "\t\t\t\t_ = valueNotDeclared\n")
+	fmt.Fprintf(buf, "\t\t\t\t\ttrackKeyRef := (kvHeader & 0x1) != 0\n")
+	fmt.Fprintf(buf, "\t\t\t\t\tkeyNotDeclared := (kvHeader & 0x4) != 0\n")
+	fmt.Fprintf(buf, "\t\t\t\t\ttrackValueRef := (kvHeader & 0x8) != 0\n")
+	fmt.Fprintf(buf, "\t\t\t\t\tvalueNotDeclared := (kvHeader & 0x20) != 0\n")
+	fmt.Fprintf(buf, "\t\t\t\t\t_ = trackKeyRef\n")
+	fmt.Fprintf(buf, "\t\t\t\t\t_ = keyNotDeclared\n")
+	fmt.Fprintf(buf, "\t\t\t\t\t_ = trackValueRef\n")
+	fmt.Fprintf(buf, "\t\t\t\t\t_ = valueNotDeclared\n")
 
 	// ReadData key-value pairs in this chunk
-	fmt.Fprintf(buf, "\t\t\t\tfor i := 0; i < chunkSize; i++ {\n")
+	fmt.Fprintf(buf, "\t\t\t\t\tfor i := 0; i < chunkSize; i++ {\n")
 
 	// ReadData key
 	if keyIsInterface {
-		fmt.Fprintf(buf, "\t\t\t\t\tvar mapKey interface{}\n")
-		fmt.Fprintf(buf, "\t\t\t\t\tctx.ReadValue(reflect.ValueOf(&mapKey).Elem())\n")
+		fmt.Fprintf(buf, "\t\t\t\t\t\tvar mapKey interface{}\n")
+		fmt.Fprintf(buf, "\t\t\t\t\t\tctx.ReadValue(reflect.ValueOf(&mapKey).Elem())\n")
 	} else {
 		// Declare key variable with appropriate type
 		keyVarType := getGoTypeString(keyType)
-		fmt.Fprintf(buf, "\t\t\t\t\tvar mapKey %s\n", keyVarType)
+		fmt.Fprintf(buf, "\t\t\t\t\t\tvar mapKey %s\n", keyVarType)
 		if err := generateMapKeyRead(buf, keyType, "mapKey"); err != nil {
 			return err
 		}
@@ -648,26 +665,27 @@ func generateMapReadInline(buf *bytes.Buffer, mapType *types.Map, fieldAccess st
 
 	// ReadData value
 	if valueIsInterface {
-		fmt.Fprintf(buf, "\t\t\t\t\tvar mapValue interface{}\n")
-		fmt.Fprintf(buf, "\t\t\t\t\tctx.ReadValue(reflect.ValueOf(&mapValue).Elem())\n")
+		fmt.Fprintf(buf, "\t\t\t\t\t\tvar mapValue interface{}\n")
+		fmt.Fprintf(buf, "\t\t\t\t\t\tctx.ReadValue(reflect.ValueOf(&mapValue).Elem())\n")
 	} else {
 		// Declare value variable with appropriate type
 		valueVarType := getGoTypeString(valueType)
-		fmt.Fprintf(buf, "\t\t\t\t\tvar mapValue %s\n", valueVarType)
+		fmt.Fprintf(buf, "\t\t\t\t\t\tvar mapValue %s\n", valueVarType)
 		if err := generateMapValueRead(buf, valueType, "mapValue"); err != nil {
 			return err
 		}
 	}
 
 	// Set key-value pair in map
-	fmt.Fprintf(buf, "\t\t\t\t\t%s[mapKey] = mapValue\n", fieldAccess)
+	fmt.Fprintf(buf, "\t\t\t\t\t\t%s[mapKey] = mapValue\n", fieldAccess)
 
-	fmt.Fprintf(buf, "\t\t\t\t}\n") // end chunk loop
-	fmt.Fprintf(buf, "\t\t\t\tmapSize -= chunkSize\n")
-	fmt.Fprintf(buf, "\t\t\t}\n") // end mapSize > 0 loop
+	fmt.Fprintf(buf, "\t\t\t\t\t}\n") // end chunk loop
+	fmt.Fprintf(buf, "\t\t\t\t\tmapSize -= chunkSize\n")
+	fmt.Fprintf(buf, "\t\t\t\t}\n") // end mapSize > 0 loop
 
-	fmt.Fprintf(buf, "\t\t}\n") // end else (mapLen > 0)
-	fmt.Fprintf(buf, "\t}\n")   // end block scope
+	fmt.Fprintf(buf, "\t\t\t}\n") // end else (mapLen > 0)
+	fmt.Fprintf(buf, "\t\t}\n")   // end else (not null)
+	fmt.Fprintf(buf, "\t}\n")     // end block scope
 
 	return nil
 }

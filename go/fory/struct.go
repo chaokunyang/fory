@@ -1077,18 +1077,21 @@ func (s *structSerializer) initFieldsFromTypeResolver(typeResolver *TypeResolver
 		if fieldTypeId == 0 {
 			fieldTypeId = typeIdFromKind(fieldType)
 		}
-		// Calculate nullable flag for xlang serialization:
+		// Calculate nullable flag for serialization:
 		// - Pointer types (*T): can hold nil → nullable=true by default
+		// - Slices, maps, interfaces: can hold nil → nullable=true by default
 		// - Primitives (int32, bool, etc.): cannot be nil → nullable=false
-		// - Slices, maps, interfaces: nullable=false by default for xlang compatibility
 		// - Can be overridden by explicit fory tag
 		// This ensures writer and reader use the same field ordering and ref mode,
 		// and is consistent with computeHash fingerprint calculation.
 		internalId := TypeId(fieldTypeId & 0xFF)
 		isEnum := internalId == ENUM || internalId == NAMED_ENUM
-		// Default nullable based on whether Go type is a pointer type
-		// Note: Slices, maps, interfaces default to nullable=false for xlang compatibility
-		nullableFlag := fieldType.Kind() == reflect.Ptr
+		// Default nullable based on whether Go type can be nil
+		// Pointer types, slices, maps, interfaces can hold nil → nullable=true by default
+		nullableFlag := fieldType.Kind() == reflect.Ptr ||
+			fieldType.Kind() == reflect.Slice ||
+			fieldType.Kind() == reflect.Map ||
+			fieldType.Kind() == reflect.Interface
 		if foryTag.NullableSet {
 			// Override nullable flag if explicitly set in fory tag
 			nullableFlag = foryTag.Nullable

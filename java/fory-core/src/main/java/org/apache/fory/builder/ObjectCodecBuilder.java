@@ -19,6 +19,28 @@
 
 package org.apache.fory.builder;
 
+import static org.apache.fory.codegen.Code.LiteralValue.FalseLiteral;
+import static org.apache.fory.codegen.Expression.Invoke.inlineInvoke;
+import static org.apache.fory.codegen.ExpressionUtils.add;
+import static org.apache.fory.collection.Collections.ofHashSet;
+import static org.apache.fory.type.TypeUtils.OBJECT_ARRAY_TYPE;
+import static org.apache.fory.type.TypeUtils.OBJECT_TYPE;
+import static org.apache.fory.type.TypeUtils.PRIMITIVE_BYTE_ARRAY_TYPE;
+import static org.apache.fory.type.TypeUtils.PRIMITIVE_INT_TYPE;
+import static org.apache.fory.type.TypeUtils.PRIMITIVE_LONG_TYPE;
+import static org.apache.fory.type.TypeUtils.PRIMITIVE_VOID_TYPE;
+import static org.apache.fory.type.TypeUtils.getRawType;
+import static org.apache.fory.type.TypeUtils.getSizeOfPrimitiveType;
+import static org.apache.fory.type.TypeUtils.isPrimitive;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.SortedMap;
+import java.util.TreeMap;
 import org.apache.fory.Fory;
 import org.apache.fory.codegen.Code;
 import org.apache.fory.codegen.CodegenContext;
@@ -46,29 +68,6 @@ import org.apache.fory.type.TypeUtils;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.function.SerializableSupplier;
 import org.apache.fory.util.record.RecordUtils;
-
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.SortedMap;
-import java.util.TreeMap;
-
-import static org.apache.fory.codegen.Code.LiteralValue.FalseLiteral;
-import static org.apache.fory.codegen.Expression.Invoke.inlineInvoke;
-import static org.apache.fory.codegen.ExpressionUtils.add;
-import static org.apache.fory.collection.Collections.ofHashSet;
-import static org.apache.fory.type.TypeUtils.OBJECT_ARRAY_TYPE;
-import static org.apache.fory.type.TypeUtils.OBJECT_TYPE;
-import static org.apache.fory.type.TypeUtils.PRIMITIVE_BYTE_ARRAY_TYPE;
-import static org.apache.fory.type.TypeUtils.PRIMITIVE_INT_TYPE;
-import static org.apache.fory.type.TypeUtils.PRIMITIVE_LONG_TYPE;
-import static org.apache.fory.type.TypeUtils.PRIMITIVE_VOID_TYPE;
-import static org.apache.fory.type.TypeUtils.getRawType;
-import static org.apache.fory.type.TypeUtils.getSizeOfPrimitiveType;
-import static org.apache.fory.type.TypeUtils.isPrimitive;
 
 /**
  * Generate sequential read/write code for java serialization to speed up performance. It also

@@ -433,15 +433,18 @@ func buildFieldDefs(fory *Fory, value reflect.Value) ([]FieldDef, error) {
 		}
 		// Determine nullable based on Go type capability:
 		// - Pointer types (*T): can hold nil → nullable=true by default
+		// - Slices, maps, interfaces: can hold nil → nullable=true by default
 		// - Primitive types (int32, bool, etc.): cannot be nil → nullable=false
-		// - Slices, maps, interfaces: nullable=false by default for xlang compatibility
 		// Can be overridden by explicit fory tag
 		typeId := ft.TypeId()
 		internalId := TypeId(typeId & 0xFF)
 		isEnumField := internalId == ENUM || internalId == NAMED_ENUM
-		// Default nullable based on whether Go type is a pointer type
-		// Note: Slices, maps, interfaces default to nullable=false for xlang compatibility
-		nullableFlag := field.Type.Kind() == reflect.Ptr
+		// Default nullable based on whether Go type can be nil
+		// Pointer types, slices, maps, interfaces can hold nil → nullable=true by default
+		nullableFlag := field.Type.Kind() == reflect.Ptr ||
+			field.Type.Kind() == reflect.Slice ||
+			field.Type.Kind() == reflect.Map ||
+			field.Type.Kind() == reflect.Interface
 		// Override nullable flag if explicitly set in fory tag
 		if foryTag.NullableSet {
 			nullableFlag = foryTag.Nullable

@@ -35,6 +35,7 @@ from typing import List, Dict, Any
 
 
 pa = lazy_import("pyarrow")
+np = lazy_import("numpy")
 
 
 def debug_print(*params):
@@ -330,32 +331,40 @@ def test_cross_language_serializer(data_file_path):
         assert _deserialize_and_append(fory, buffer, objects) == set_
 
         # test primitive arrays
-        import numpy as np
-
-        np.testing.assert_array_equal(
-            _deserialize_and_append(fory, buffer, objects),
-            np.array([True, False], dtype=np.bool_),
-        )
-        np.testing.assert_array_equal(
-            _deserialize_and_append(fory, buffer, objects),
-            np.array([1, 2**15 - 1], dtype=np.int16),
-        )
-        np.testing.assert_array_equal(
-            _deserialize_and_append(fory, buffer, objects),
-            np.array([1, 2**31 - 1], dtype=np.int32),
-        )
-        np.testing.assert_array_equal(
-            _deserialize_and_append(fory, buffer, objects),
-            np.array([1, 2**63 - 1], dtype=np.int64),
-        )
-        np.testing.assert_array_equal(
-            _deserialize_and_append(fory, buffer, objects),
-            np.array([1, 2], dtype=np.float32),
-        )
-        np.testing.assert_array_equal(
-            _deserialize_and_append(fory, buffer, objects),
-            np.array([1, 2], dtype=np.float64),
-        )
+        # Use the lazy-loaded numpy if available, otherwise compare as lists
+        if np is not None:
+            np.testing.assert_array_equal(
+                _deserialize_and_append(fory, buffer, objects),
+                np.array([True, False], dtype=np.bool_),
+            )
+            np.testing.assert_array_equal(
+                _deserialize_and_append(fory, buffer, objects),
+                np.array([1, 2**15 - 1], dtype=np.int16),
+            )
+            np.testing.assert_array_equal(
+                _deserialize_and_append(fory, buffer, objects),
+                np.array([1, 2**31 - 1], dtype=np.int32),
+            )
+            np.testing.assert_array_equal(
+                _deserialize_and_append(fory, buffer, objects),
+                np.array([1, 2**63 - 1], dtype=np.int64),
+            )
+            np.testing.assert_array_equal(
+                _deserialize_and_append(fory, buffer, objects),
+                np.array([1, 2], dtype=np.float32),
+            )
+            np.testing.assert_array_equal(
+                _deserialize_and_append(fory, buffer, objects),
+                np.array([1, 2], dtype=np.float64),
+            )
+        else:
+            # Numpy not available, deserialize and compare as lists
+            assert list(_deserialize_and_append(fory, buffer, objects)) == [True, False]
+            assert list(_deserialize_and_append(fory, buffer, objects)) == [1, 2**15 - 1]
+            assert list(_deserialize_and_append(fory, buffer, objects)) == [1, 2**31 - 1]
+            assert list(_deserialize_and_append(fory, buffer, objects)) == [1, 2**63 - 1]
+            assert list(_deserialize_and_append(fory, buffer, objects)) == [1.0, 2.0]
+            assert list(_deserialize_and_append(fory, buffer, objects)) == [1.0, 2.0]
         new_buf = pyfory.Buffer.allocate(32)
         for obj in objects:
             fory.serialize(obj, buffer=new_buf)

@@ -24,7 +24,11 @@ import os
 import typing
 
 import pyfory
-import pytest
+
+try:
+    import pytest
+except ImportError:
+    pytest = None
 from dataclasses import dataclass
 from pyfory.util import lazy_import
 from typing import List, Dict, Any
@@ -52,10 +56,11 @@ def to_dict(obj):
 
 def cross_language_test(test_func):
     env_key = "ENABLE_CROSS_LANGUAGE_TESTS"
-    test_func = pytest.mark.skipif(
-        env_key not in os.environ,
-        reason=f"Pass {env_key} to enable cross-language tests",
-    )(test_func)
+    if pytest is not None:
+        test_func = pytest.mark.skipif(
+            env_key not in os.environ,
+            reason=f"Pass {env_key} to enable cross-language tests",
+        )(test_func)
     return test_func
 
 

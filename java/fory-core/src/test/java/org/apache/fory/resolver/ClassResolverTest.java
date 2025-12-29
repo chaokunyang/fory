@@ -564,4 +564,106 @@ public class ClassResolverTest extends ForyTestBase {
         fory.getClassResolver().getSerializer(abs2Test.getClass()).getClass(),
         AbstractCustomSerializer.class);
   }
+
+  // Test enum with abstract methods (which makes the enum class abstract)
+  enum AbstractEnum {
+    VALUE1 {
+      @Override
+      public int getValue() {
+        return 1;
+      }
+    },
+    VALUE2 {
+      @Override
+      public int getValue() {
+        return 2;
+      }
+    };
+
+    public abstract int getValue();
+  }
+
+  @Test
+  public void testAbstractEnumIsSerializable() {
+    Fory fory = Fory.builder().withLanguage(Language.JAVA).requireClassRegistration(false).build();
+    ClassResolver classResolver = fory.getClassResolver();
+    // Abstract enums should be serializable
+    Assert.assertTrue(classResolver.isSerializable(AbstractEnum.class));
+    // The concrete enum value classes should also be serializable
+    Assert.assertTrue(classResolver.isSerializable(AbstractEnum.VALUE1.getClass()));
+    Assert.assertTrue(classResolver.isSerializable(AbstractEnum.VALUE2.getClass()));
+  }
+
+  @Test
+  public void testAbstractEnumSerialization() {
+    Fory fory = Fory.builder().withLanguage(Language.JAVA).requireClassRegistration(false).build();
+    // Serialize and deserialize abstract enum values
+    Assert.assertEquals(AbstractEnum.VALUE1, serDe(fory, AbstractEnum.VALUE1));
+    Assert.assertEquals(AbstractEnum.VALUE2, serDe(fory, AbstractEnum.VALUE2));
+    Assert.assertEquals(1, ((AbstractEnum) serDe(fory, AbstractEnum.VALUE1)).getValue());
+    Assert.assertEquals(2, ((AbstractEnum) serDe(fory, AbstractEnum.VALUE2)).getValue());
+  }
+
+  @Test
+  public void testAbstractObjectArraySerialization() {
+    Fory fory = Fory.builder().withLanguage(Language.JAVA).requireClassRegistration(false).build();
+    // Create an array of abstract type with concrete instances
+    AbsTest[] array = new AbsTest[2];
+    SubAbsTest item1 = new SubAbsTest();
+    item1.setF1(10);
+    item1.f2 = 100L;
+    Sub2AbsTest item2 = new Sub2AbsTest();
+    item2.setF1(20);
+    item2.f2 = 200L;
+    item2.f3 = "test";
+    array[0] = item1;
+    array[1] = item2;
+
+    AbsTest[] result = serDe(fory, array);
+    Assert.assertEquals(result.length, 2);
+    Assert.assertEquals(result[0].getF1(), 10);
+    Assert.assertEquals(((SubAbsTest) result[0]).f2, 100L);
+    Assert.assertEquals(result[1].getF1(), 20);
+    Assert.assertEquals(((Sub2AbsTest) result[1]).f2, 200L);
+    Assert.assertEquals(((Sub2AbsTest) result[1]).f3, "test");
+  }
+
+  @Test
+  public void testAbstractObjectArrayWithRegistration() {
+    Fory fory = Fory.builder().withLanguage(Language.JAVA).requireClassRegistration(true).build();
+    // Register the concrete types but not the abstract type
+    fory.register(SubAbsTest.class);
+    fory.register(Sub2AbsTest.class);
+    fory.register(AbsTest[].class);
+
+    AbsTest[] array = new AbsTest[2];
+    SubAbsTest item1 = new SubAbsTest();
+    item1.setF1(10);
+    item1.f2 = 100L;
+    Sub2AbsTest item2 = new Sub2AbsTest();
+    item2.setF1(20);
+    item2.f2 = 200L;
+    item2.f3 = "test";
+    array[0] = item1;
+    array[1] = item2;
+
+    AbsTest[] result = serDe(fory, array);
+    Assert.assertEquals(result.length, 2);
+    Assert.assertEquals(result[0].getF1(), 10);
+    Assert.assertEquals(result[1].getF1(), 20);
+  }
+
+  @Test
+  public void testAbstractEnumArraySerialization() {
+    Fory fory = Fory.builder().withLanguage(Language.JAVA).requireClassRegistration(false).build();
+    // Create an array of abstract enum type
+    AbstractEnum[] array = new AbstractEnum[] {AbstractEnum.VALUE1, AbstractEnum.VALUE2};
+
+    AbstractEnum[] result = serDe(fory, array);
+    Assert.assertEquals(result.length, 2);
+    Assert.assertEquals(result[0], AbstractEnum.VALUE1);
+    Assert.assertEquals(result[1], AbstractEnum.VALUE2);
+    Assert.assertEquals(result[0].getValue(), 1);
+    Assert.assertEquals(result[1].getValue(), 2);
+  }
 }

@@ -1384,6 +1384,15 @@ public class ClassResolver extends TypeResolver {
       }
     }
 
+    // For enum value classes (anonymous inner classes of abstract enums),
+    // reuse the serializer from the declaring enum class
+    if (!cls.isEnum() && Enum.class.isAssignableFrom(cls) && cls != Enum.class) {
+      Class<?> enclosingClass = cls.getEnclosingClass();
+      if (enclosingClass != null && enclosingClass.isEnum()) {
+        return getSerializer(enclosingClass);
+      }
+    }
+
     if (extRegistry.serializerFactory != null) {
       Serializer serializer = extRegistry.serializerFactory.createSerializer(fory, cls);
       if (serializer != null) {
@@ -1469,6 +1478,14 @@ public class ClassResolver extends TypeResolver {
     }
     if (cls.isArray()) {
       return isSecure(TypeUtils.getArrayComponent(cls));
+    }
+    // For enum value classes (anonymous inner classes of abstract enums),
+    // check if the declaring enum class is secure
+    if (!cls.isEnum() && Enum.class.isAssignableFrom(cls) && cls != Enum.class) {
+      Class<?> enclosingClass = cls.getEnclosingClass();
+      if (enclosingClass != null && enclosingClass.isEnum()) {
+        return isSecure(enclosingClass);
+      }
     }
     if (fory.getConfig().requireClassRegistration()) {
       return Functions.isLambda(cls)
@@ -1958,19 +1975,35 @@ public class ClassResolver extends TypeResolver {
                 createSerializer0(cls);
               }
               if (cls.isArray()) {
-                // Also create serializer for the component type
-                createSerializer0(TypeUtils.getArrayComponent(cls));
+                // Also create serializer for the component type if it's serializable
+                Class<?> componentType = TypeUtils.getArrayComponent(cls);
+                if (isSerializable(componentType)) {
+                  createSerializer0(componentType);
+                }
               }
             }
             // Always ensure array class serializers and their component type serializers
             // are registered in GraalVM registry, since ObjectArraySerializer needs
             // the component type serializer at construction time
             if (cls.isArray() && GraalvmSupport.isGraalBuildtime()) {
-              // First ensure component type serializer is registered
+              // First ensure component type serializer is registered if it's serializable
               Class<?> componentType = TypeUtils.getArrayComponent(cls);
-              createSerializer0(componentType);
+              if (isSerializable(componentType)) {
+                createSerializer0(componentType);
+              }
               // Then register the array serializer
               createSerializer0(cls);
+            }
+            // For abstract enums, also create and store serializers for enum value classes
+            // so they are available at GraalVM runtime
+            if (cls.isEnum() && GraalvmSupport.isGraalBuildtime()) {
+              for (Object enumConstant : cls.getEnumConstants()) {
+                Class<?> enumValueClass = enumConstant.getClass();
+                if (enumValueClass != cls) {
+                  // Get serializer for the enum value class (will reuse the enum's serializer)
+                  getSerializer(enumValueClass);
+                }
+              }
             }
           });
       if (GraalvmSupport.isGraalBuildtime()) {

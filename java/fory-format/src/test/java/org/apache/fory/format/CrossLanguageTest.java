@@ -39,6 +39,7 @@ import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.test.TestUtils;
 import org.testng.Assert;
+import org.testng.SkipException;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
 
@@ -51,6 +52,10 @@ public class CrossLanguageTest {
 
   @BeforeClass
   public void isPythonInstalled() {
+    String enabled = System.getenv("FORY_PYTHON_JAVA_CI");
+    if (!"1".equals(enabled)) {
+      throw new SkipException("Skipping CrossLanguageTest: FORY_PYTHON_JAVA_CI not set to 1");
+    }
     TestUtils.verifyPyforyInstalled();
   }
 

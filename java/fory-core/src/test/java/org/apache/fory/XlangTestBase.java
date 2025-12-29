@@ -1558,9 +1558,10 @@ public abstract class XlangTestBase extends ForyTestBase {
     byte[] goBytes = buffer3.getBytes(0, buffer3.size());
     TwoEnumFieldStruct result2 = (TwoEnumFieldStruct) fory2.deserialize(buffer3);
     Assert.assertEquals(result2.f1, TestEnum.VALUE_C);
-    // Pointer types in Go are nullable by default, so nil pointer serializes as null.
-    // f2 should be null since Go's TwoEnumFieldStruct.F2 was nil (missing from source).
-    Assert.assertNull(result2.f2);
+    // With nullable=false (xlang default), peer writes zero value for nil pointers.
+    // So f2 should be VALUE_A (ordinal 0), not null.
+    // Go is an exception: it writes null for nil pointers (nullable=true by default).
+    Assert.assertEquals(result2.f2, TestEnum.VALUE_A);
   }
 
   @SuppressWarnings("unchecked")

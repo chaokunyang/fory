@@ -27,7 +27,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import org.apache.fory.config.CompatibleMode;
+import org.apache.fory.config.Language;
+import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.test.TestUtils;
+import org.testng.Assert;
 import org.testng.SkipException;
 import org.testng.annotations.Test;
 
@@ -230,7 +234,68 @@ public class GoXlangTest extends XlangTestBase {
   }
 
   @Test
+  @Override
   public void testEnumSchemaEvolutionCompatible() throws java.io.IOException {
-    super.testEnumSchemaEvolutionCompatible();
+    // Go-specific override: Go writes null for nil pointers (nullable=true by default)
+    String caseName = "test_enum_schema_evolution_compatible";
+    // Fory for TwoEnumFieldStruct
+    Fory fory2 =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .build();
+    fory2.register(TestEnum.class, 210);
+    fory2.register(TwoEnumFieldStruct.class, 211);
+
+    // Fory for EmptyStruct and OneEnumFieldStruct with same type ID
+    Fory foryEmpty =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .build();
+    foryEmpty.register(TestEnum.class, 210);
+    foryEmpty.register(EmptyStruct.class, 211);
+
+    Fory fory1 =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .build();
+    fory1.register(TestEnum.class, 210);
+    fory1.register(OneEnumFieldStruct.class, 211);
+
+    // Test 1: Serialize TwoEnumFieldStruct, deserialize as Empty
+    TwoEnumFieldStruct obj2 = new TwoEnumFieldStruct();
+    obj2.f1 = TestEnum.VALUE_A;
+    obj2.f2 = TestEnum.VALUE_B;
+
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(128);
+    fory2.serialize(buffer, obj2);
+
+    ExecutionContext ctx = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
+    runPeer(ctx);
+
+    MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
+
+    // Deserialize as EmptyStruct (should skip all fields)
+    EmptyStruct emptyResult = (EmptyStruct) foryEmpty.deserialize(buffer2);
+    Assert.assertNotNull(emptyResult);
+
+    // Test 2: Serialize OneEnumFieldStruct, deserialize as TwoEnumFieldStruct
+    OneEnumFieldStruct obj1 = new OneEnumFieldStruct();
+    obj1.f1 = TestEnum.VALUE_C;
+
+    buffer = MemoryBuffer.newHeapBuffer(64);
+    fory1.serialize(buffer, obj1);
+
+    String caseName2 = "test_enum_schema_evolution_compatible_reverse";
+    ExecutionContext ctx2 = prepareExecution(caseName2, buffer.getBytes(0, buffer.writerIndex()));
+    runPeer(ctx2);
+
+    MemoryBuffer buffer3 = readBuffer(ctx2.dataFile());
+    TwoEnumFieldStruct result2 = (TwoEnumFieldStruct) fory2.deserialize(buffer3);
+    Assert.assertEquals(result2.f1, TestEnum.VALUE_C);
+    // Go writes null for nil pointers (nullable=true by default for pointer types)
+    Assert.assertNull(result2.f2);
   }
 }

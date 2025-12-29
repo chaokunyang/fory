@@ -169,7 +169,7 @@ ScalaSerializers.registerSerializers(fory)
 Add the dependency with sbt:
 
 ```sbt
-libraryDependencies += "org.apache.fory" %% "fory-scala" % "0.14.0"
+libraryDependencies += "org.apache.fory" %% "fory-scala" % "0.14.1"
 ```
 
 ## Building

@@ -219,7 +219,8 @@ class TypeResolver:
         register(type(None), serializer=NoneSerializer)
         register(tuple, serializer=TupleSerializer)
         register(slice, serializer=SliceSerializer)
-        register(np.ndarray, serializer=NDArraySerializer)
+        if np is not None:
+            register(np.ndarray, serializer=NDArraySerializer)
         register(array.array, serializer=DynamicPyArraySerializer)
         register(types.MappingProxyType, serializer=MappingProxySerializer)
         register(pickle.PickleBuffer, serializer=PickleBufferSerializer)
@@ -251,7 +252,8 @@ class TypeResolver:
     def _initialize_xlang(self):
         register = functools.partial(self._register_type, internal=True)
         register(array.array, type_id=DYNAMIC_TYPE_ID, serializer=DynamicPyArraySerializer)
-        register(np.ndarray, type_id=DYNAMIC_TYPE_ID, serializer=NDArraySerializer)
+        if np is not None:
+            register(np.ndarray, type_id=DYNAMIC_TYPE_ID, serializer=NDArraySerializer)
 
     def _initialize_common(self):
         register = functools.partial(self._register_type, internal=True)

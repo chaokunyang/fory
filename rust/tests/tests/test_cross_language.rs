@@ -1253,3 +1253,173 @@ fn test_enum_schema_evolution_compatible_reverse() {
     let new_bytes = fory.serialize(&value).unwrap();
     fs::write(&data_file_path, new_bytes).unwrap();
 }
+
+// ============================================================================
+// Nullable Field Tests - Test nullable fields with #[fory(nullable)]
+// ============================================================================
+
+/// Struct for testing nullable fields in schema consistent mode (compatible=false).
+/// Fields are organized as:
+/// - Base non-nullable fields: numeric (i32, i64, f32, f64), bool, string
+/// - Nullable fields: String with #[fory(nullable = true)]
+#[derive(ForyObject, Debug, PartialEq)]
+struct NullableFieldStruct {
+    // Base non-nullable fields
+    int_field: i32,
+    long_field: i64,
+    float_field: f32,
+    double_field: f64,
+    bool_field: bool,
+    string_field: String,
+
+    // Nullable fields with #[fory(nullable = true)] annotation
+    #[fory(nullable = true)]
+    nullable_string1: Option<String>,
+    #[fory(nullable = true)]
+    nullable_string2: Option<String>,
+}
+
+/// Struct for testing nullable fields in compatible mode.
+/// Fields are organized as:
+/// - Base non-nullable fields: numeric, bool, string
+/// - Nullable fields: String with #[fory(nullable = true)]
+#[derive(ForyObject, Debug, PartialEq)]
+struct NullableFieldStructCompatible {
+    // Base non-nullable fields
+    int_field: i32,
+    long_field: i64,
+    float_field: f32,
+    double_field: f64,
+    bool_field: bool,
+    string_field: String,
+
+    // Nullable fields with #[fory(nullable = true)] annotation
+    #[fory(nullable = true)]
+    nullable_string1: Option<String>,
+    #[fory(nullable = true)]
+    nullable_string2: Option<String>,
+    #[fory(nullable = true)]
+    nullable_string3: Option<String>,
+}
+
+#[test]
+#[ignore]
+fn test_nullable_field_schema_consistent_not_null() {
+    let data_file_path = get_data_file();
+    let bytes = fs::read(&data_file_path).unwrap();
+
+    let mut fory = Fory::default().compatible(false).xlang(true);
+    fory.register::<NullableFieldStruct>(401).unwrap();
+
+    let local_obj = NullableFieldStruct {
+        // Base non-nullable fields
+        int_field: 42,
+        long_field: 123456789,
+        float_field: 3.14,
+        double_field: 2.718281828,
+        bool_field: true,
+        string_field: "hello".to_string(),
+
+        // Nullable fields - all have values
+        nullable_string1: Some("nullable_value1".to_string()),
+        nullable_string2: Some("nullable_value2".to_string()),
+    };
+
+    let remote_obj: NullableFieldStruct = fory.deserialize(&bytes).unwrap();
+    assert_eq!(remote_obj, local_obj);
+
+    let new_bytes = fory.serialize(&remote_obj).unwrap();
+    fs::write(&data_file_path, new_bytes).unwrap();
+}
+
+#[test]
+#[ignore]
+fn test_nullable_field_schema_consistent_null() {
+    let data_file_path = get_data_file();
+    let bytes = fs::read(&data_file_path).unwrap();
+
+    let mut fory = Fory::default().compatible(false).xlang(true);
+    fory.register::<NullableFieldStruct>(401).unwrap();
+
+    let local_obj = NullableFieldStruct {
+        // Base non-nullable fields - must have values
+        int_field: 42,
+        long_field: 123456789,
+        float_field: 3.14,
+        double_field: 2.718281828,
+        bool_field: true,
+        string_field: "hello".to_string(),
+
+        // Nullable fields - all null
+        nullable_string1: None,
+        nullable_string2: None,
+    };
+
+    let remote_obj: NullableFieldStruct = fory.deserialize(&bytes).unwrap();
+    assert_eq!(remote_obj, local_obj);
+
+    let new_bytes = fory.serialize(&remote_obj).unwrap();
+    fs::write(&data_file_path, new_bytes).unwrap();
+}
+
+#[test]
+#[ignore]
+fn test_nullable_field_compatible_not_null() {
+    let data_file_path = get_data_file();
+    let bytes = fs::read(&data_file_path).unwrap();
+
+    let mut fory = Fory::default().compatible(true).xlang(true);
+    fory.register::<NullableFieldStructCompatible>(402).unwrap();
+
+    let local_obj = NullableFieldStructCompatible {
+        // Base non-nullable fields
+        int_field: 42,
+        long_field: 123456789,
+        float_field: 3.14,
+        double_field: 2.718281828,
+        bool_field: true,
+        string_field: "hello".to_string(),
+
+        // Nullable fields - all have values
+        nullable_string1: Some("nullable_value1".to_string()),
+        nullable_string2: Some("nullable_value2".to_string()),
+        nullable_string3: Some("nullable_value3".to_string()),
+    };
+
+    let remote_obj: NullableFieldStructCompatible = fory.deserialize(&bytes).unwrap();
+    assert_eq!(remote_obj, local_obj);
+
+    let new_bytes = fory.serialize(&remote_obj).unwrap();
+    fs::write(&data_file_path, new_bytes).unwrap();
+}
+
+#[test]
+#[ignore]
+fn test_nullable_field_compatible_null() {
+    let data_file_path = get_data_file();
+    let bytes = fs::read(&data_file_path).unwrap();
+
+    let mut fory = Fory::default().compatible(true).xlang(true);
+    fory.register::<NullableFieldStructCompatible>(402).unwrap();
+
+    let local_obj = NullableFieldStructCompatible {
+        // Base non-nullable fields - must have values
+        int_field: 42,
+        long_field: 123456789,
+        float_field: 3.14,
+        double_field: 2.718281828,
+        bool_field: true,
+        string_field: "hello".to_string(),
+
+        // Nullable fields - all null
+        nullable_string1: None,
+        nullable_string2: None,
+        nullable_string3: None,
+    };
+
+    let remote_obj: NullableFieldStructCompatible = fory.deserialize(&bytes).unwrap();
+    assert_eq!(remote_obj, local_obj);
+
+    let new_bytes = fory.serialize(&remote_obj).unwrap();
+    fs::write(&data_file_path, new_bytes).unwrap();
+}

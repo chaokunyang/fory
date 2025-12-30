@@ -36,6 +36,7 @@ import lombok.Data;
 import org.apache.fory.annotation.ForyField;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.Language;
+import org.apache.fory.meta.MetaCompressor;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.serializer.Serializer;
@@ -45,7 +46,61 @@ import org.testng.Assert;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
 
+/**
+ * Base class for cross-language (xlang) serialization tests.
+ *
+ * <p>This class provides common test infrastructure for testing Fory serialization compatibility
+ * between Java and other languages (Python, Go, Rust, C++, JavaScript, etc.).
+ *
+ * <p>Subclasses must:
+ *
+ * <ul>
+ *   <li>Implement {@link #ensurePeerReady()} to set up the peer language environment
+ *   <li>Implement {@link #buildCommandContext(String, Path)} to build the command for executing
+ *       peer tests
+ *   <li>Override test methods with {@code @Test} annotation so they can be discovered when running
+ *       {@code mvn test -Dtest=SubclassName}
+ * </ul>
+ *
+ * @see PythonXlangTest
+ * @see GoXlangTest
+ * @see RustXlangTest
+ * @see CPPXlangTest
+ */
 public abstract class XlangTestBase extends ForyTestBase {
+
+  /**
+   * A no-op MetaCompressor that returns data unchanged. Used to disable meta compression for
+   * cross-language tests since Rust doesn't support decompression yet.
+   */
+  static class NoOpMetaCompressor implements MetaCompressor {
+    @Override
+    public byte[] compress(byte[] data, int offset, int size) {
+      // Return a larger array to ensure compression is never "better"
+      // This effectively disables compression
+      byte[] result = new byte[size + 1];
+      System.arraycopy(data, offset, result, 0, size);
+      return result;
+    }
+
+    @Override
+    public byte[] decompress(byte[] data, int offset, int size) {
+      // Not needed since we never compress
+      byte[] result = new byte[size];
+      System.arraycopy(data, offset, result, 0, size);
+      return result;
+    }
+
+    @Override
+    public int hashCode() {
+      return NoOpMetaCompressor.class.hashCode();
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+      return obj instanceof NoOpMetaCompressor;
+    }
+  }
 
   protected static class CommandContext {
     private final List<String> command;
@@ -895,8 +950,8 @@ public abstract class XlangTestBase extends ForyTestBase {
   @Data
   static class MyWrapper {
     Color color;
-    MyExt my_ext;
-    MyStruct my_struct;
+    MyExt myExt;
+    MyStruct myStruct;
   }
 
   @Data
@@ -907,8 +962,8 @@ public abstract class XlangTestBase extends ForyTestBase {
     wrapper.color = Color.White;
     MyStruct myStruct = new MyStruct(42);
     MyExt myExt = new MyExt(43);
-    wrapper.my_ext = myExt;
-    wrapper.my_struct = myStruct;
+    wrapper.myExt = myExt;
+    wrapper.myStruct = myStruct;
     byte[] serialize = fory1.serialize(wrapper);
     ExecutionContext ctx = prepareExecution(caseName, serialize);
     runPeer(ctx);
@@ -1101,6 +1156,7 @@ public abstract class XlangTestBase extends ForyTestBase {
 
   @Data
   static class AnimalMapHolder {
+    // Using snake_case field name to test fallback lookup in ClassDef.getDescriptors()
     Map<String, Animal> animal_map;
   }
 
@@ -1562,6 +1618,227 @@ public abstract class XlangTestBase extends ForyTestBase {
     // So f2 should be VALUE_A (ordinal 0), not null.
     // Go is an exception: it writes null for nil pointers (nullable=true by default).
     Assert.assertEquals(result2.f2, TestEnum.VALUE_A);
+  }
+
+  // ============================================================================
+  // Nullable Field Tests - Test nullable fields with @ForyField annotation
+  // ============================================================================
+
+  /**
+   * Struct for testing nullable fields in schema consistent mode (compatible=false).
+   *
+   * <p>Fields are organized as:
+   *
+   * <ul>
+   *   <li>Base fields: numeric (int, long, float, double), bool, string
+   *   <li>Nullable fields: String with @ForyField(nullable=true)
+   * </ul>
+   */
+  @Data
+  static class NullableFieldStruct {
+    // Base non-nullable fields
+    int intField;
+    long longField;
+    float floatField;
+    double doubleField;
+    boolean boolField;
+    String stringField;
+
+    // Nullable fields with @ForyField(nullable=true) annotation
+    @ForyField(nullable = true)
+    String nullableString1;
+
+    @ForyField(nullable = true)
+    String nullableString2;
+  }
+
+  @Test
+  public void testNullableFieldSchemaConsistentNotNull() throws java.io.IOException {
+    String caseName = "test_nullable_field_schema_consistent_not_null";
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(CompatibleMode.SCHEMA_CONSISTENT)
+            .withCodegen(false)
+            .build();
+    fory.register(NullableFieldStruct.class, 401);
+
+    NullableFieldStruct obj = new NullableFieldStruct();
+    // Base non-nullable fields
+    obj.intField = 42;
+    obj.longField = 123456789L;
+    obj.floatField = 3.14f;
+    obj.doubleField = 2.718281828;
+    obj.boolField = true;
+    obj.stringField = "hello";
+
+    // Nullable fields - all have values
+    obj.nullableString1 = "nullable_value1";
+    obj.nullableString2 = "nullable_value2";
+
+    // First verify Java serialization works
+    Assert.assertEquals(xserDe(fory, obj), obj);
+
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(256);
+    fory.serialize(buffer, obj);
+
+    ExecutionContext ctx = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
+    runPeer(ctx);
+
+    MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
+    NullableFieldStruct result = (NullableFieldStruct) fory.deserialize(buffer2);
+    Assert.assertEquals(result, obj);
+  }
+
+  @Test
+  public void testNullableFieldSchemaConsistentNull() throws java.io.IOException {
+    String caseName = "test_nullable_field_schema_consistent_null";
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(CompatibleMode.SCHEMA_CONSISTENT)
+            .withCodegen(false)
+            .build();
+    fory.register(NullableFieldStruct.class, 401);
+
+    NullableFieldStruct obj = new NullableFieldStruct();
+    // Base non-nullable fields - must have values
+    obj.intField = 42;
+    obj.longField = 123456789L;
+    obj.floatField = 3.14f;
+    obj.doubleField = 2.718281828;
+    obj.boolField = true;
+    obj.stringField = "hello";
+
+    // Nullable fields - all null
+    obj.nullableString1 = null;
+    obj.nullableString2 = null;
+
+    // First verify Java serialization works
+    Assert.assertEquals(xserDe(fory, obj), obj);
+
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(256);
+    fory.serialize(buffer, obj);
+
+    ExecutionContext ctx = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
+    runPeer(ctx);
+
+    MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
+    NullableFieldStruct result = (NullableFieldStruct) fory.deserialize(buffer2);
+    Assert.assertEquals(result, obj);
+  }
+
+  /**
+   * Struct for testing nullable fields in compatible mode.
+   *
+   * <p>Fields are organized as:
+   *
+   * <ul>
+   *   <li>Base fields: numeric, bool, string
+   *   <li>Nullable fields: String with @ForyField(nullable=true)
+   * </ul>
+   */
+  @Data
+  static class NullableFieldStructCompatible {
+    // Base non-nullable fields
+    int intField;
+    long longField;
+    float floatField;
+    double doubleField;
+    boolean boolField;
+    String stringField;
+
+    // Nullable fields with @ForyField(nullable=true) annotation
+    @ForyField(nullable = true)
+    String nullableString1;
+
+    @ForyField(nullable = true)
+    String nullableString2;
+
+    @ForyField(nullable = true)
+    String nullableString3;
+  }
+
+  @Test
+  public void testNullableFieldCompatibleNotNull() throws java.io.IOException {
+    String caseName = "test_nullable_field_compatible_not_null";
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .withCodegen(false)
+            .withMetaCompressor(new NoOpMetaCompressor())
+            .build();
+    fory.register(NullableFieldStructCompatible.class, 402);
+
+    NullableFieldStructCompatible obj = new NullableFieldStructCompatible();
+    // Base non-nullable fields
+    obj.intField = 42;
+    obj.longField = 123456789L;
+    obj.floatField = 3.14f;
+    obj.doubleField = 2.718281828;
+    obj.boolField = true;
+    obj.stringField = "hello";
+
+    // Nullable fields - all have values
+    obj.nullableString1 = "nullable_value1";
+    obj.nullableString2 = "nullable_value2";
+    obj.nullableString3 = "nullable_value3";
+
+    // First verify Java serialization works
+    Assert.assertEquals(xserDe(fory, obj), obj);
+
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(512);
+    fory.serialize(buffer, obj);
+
+    ExecutionContext ctx = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
+    runPeer(ctx);
+
+    MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
+    NullableFieldStructCompatible result =
+        (NullableFieldStructCompatible) fory.deserialize(buffer2);
+    Assert.assertEquals(result, obj);
+  }
+
+  @Test
+  public void testNullableFieldCompatibleNull() throws java.io.IOException {
+    String caseName = "test_nullable_field_compatible_null";
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .withCodegen(false)
+            .withMetaCompressor(new NoOpMetaCompressor())
+            .build();
+    fory.register(NullableFieldStructCompatible.class, 402);
+
+    NullableFieldStructCompatible obj = new NullableFieldStructCompatible();
+    // Base non-nullable fields - must have values
+    obj.intField = 42;
+    obj.longField = 123456789L;
+    obj.floatField = 3.14f;
+    obj.doubleField = 2.718281828;
+    obj.boolField = true;
+    obj.stringField = "hello";
+
+    // Nullable fields - all null
+    obj.nullableString1 = null;
+    obj.nullableString2 = null;
+    obj.nullableString3 = null;
+
+    // First verify Java serialization works
+    Assert.assertEquals(xserDe(fory, obj), obj);
+
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(512);
+    fory.serialize(buffer, obj);
+
+    ExecutionContext ctx = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
+    runPeer(ctx);
+
+    MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
+    NullableFieldStructCompatible result =
+        (NullableFieldStructCompatible) fory.deserialize(buffer2);
+    Assert.assertEquals(result, obj);
   }
 
   @SuppressWarnings("unchecked")

@@ -39,6 +39,7 @@ import org.apache.fory.meta.MetaString.Encoding;
 import org.apache.fory.resolver.ClassInfo;
 import org.apache.fory.resolver.XtypeResolver;
 import org.apache.fory.serializer.NonexistentClass;
+import org.apache.fory.util.StringUtils;
 import org.apache.fory.util.Utils;
 
 /**
@@ -129,8 +130,10 @@ class TypeDefDecoder {
         fieldInfos.add(new FieldInfo(className, fieldName, fieldType, tagId));
       } else {
         Encoding encoding = fieldNameEncodings[encodingFlags];
-        String fieldName =
+        String wireFieldName =
             Encoders.FIELD_NAME_DECODER.decode(buffer.readBytes(fieldNameSize), encoding);
+        // Convert snake_case field names back to camelCase for Java field matching
+        String fieldName = StringUtils.lowerUnderscoreToLowerCamelCase(wireFieldName);
         fieldInfos.add(new FieldInfo(className, fieldName, fieldType));
       }
     }

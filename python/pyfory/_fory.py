@@ -702,7 +702,10 @@ class Fory:
     def xread_no_ref(self, buffer, serializer=None):
         if serializer is None:
             serializer = self.type_resolver.read_typeinfo(buffer).serializer
-        self.ref_resolver.read_ref_ids.append(-1)
+        # Push -1 to read_ref_ids so reference() can pop it and skip reference tracking
+        # This handles the case where xread_no_ref is called directly without xread_ref
+        if self.ref_tracking:
+            self.ref_resolver.read_ref_ids.append(-1)
         self.inc_depth()
         o = serializer.xread(buffer)
         self.dec_depth()

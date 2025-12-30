@@ -1241,12 +1241,11 @@ func (s *structSerializer) initFieldsFromDefsWithResolver(typeResolver *TypeReso
 			}
 			// Get TypeId from FieldType's TypeId method
 			fieldTypeId := def.fieldType.TypeId()
-			referencable := fieldNeedWriteRef(def.fieldType.TypeId(), def.nullable)
 			// Pre-compute RefMode based on trackRef and FieldDef flags
 			refMode := RefModeNone
 			if def.trackingRef {
 				refMode = RefModeTracking
-			} else if referencable || def.nullable {
+			} else if def.nullable {
 				refMode = RefModeNullOnly
 			}
 			// Pre-compute WriteType: true for struct fields in compatible mode
@@ -1271,7 +1270,7 @@ func (s *structSerializer) initFieldsFromDefsWithResolver(typeResolver *TypeReso
 				StaticId:     staticId,
 				TypeId:       fieldTypeId,
 				Serializer:   fieldSerializer,
-				Referencable: referencable, // Use remote nullable flag
+				Referencable: def.nullable, // Use remote nullable flag
 				FieldIndex:   -1,           // Mark as non-existent field to discard data
 				FieldDef:     def,          // Save original FieldDef for skipping
 				RefMode:      refMode,
@@ -1516,12 +1515,11 @@ func (s *structSerializer) initFieldsFromDefsWithResolver(typeResolver *TypeReso
 
 		// Get TypeId from FieldType's TypeId method
 		fieldTypeId := def.fieldType.TypeId()
-		referencable := fieldNeedWriteRef(def.fieldType.TypeId(), def.nullable)
 		// Pre-compute RefMode based on FieldDef flags (trackingRef and nullable)
 		refMode := RefModeNone
 		if def.trackingRef {
 			refMode = RefModeTracking
-		} else if referencable || def.nullable {
+		} else if def.nullable {
 			refMode = RefModeNullOnly
 		}
 		// Pre-compute WriteType: true for struct fields in compatible mode
@@ -1552,7 +1550,7 @@ func (s *structSerializer) initFieldsFromDefsWithResolver(typeResolver *TypeReso
 			StaticId:     staticId,
 			TypeId:       fieldTypeId,
 			Serializer:   fieldSerializer,
-			Referencable: referencable, // Use remote nullable flag
+			Referencable: def.nullable, // Use remote nullable flag
 			FieldIndex:   fieldIndex,
 			FieldDef:     def, // Save original FieldDef for skipping
 			RefMode:      refMode,

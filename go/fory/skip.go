@@ -671,10 +671,3 @@ func skipValue(ctx *ReadContext, fieldDef FieldDef, readRefFlag bool, isField bo
 		ctx.SetError(DeserializationErrorf("unsupported type for skip: %d", typeIDNum))
 	}
 }
-
-// fieldNeedWriteRef determines if a field needs a ref flag based on its type and nullability
-// For xlang: only nullable fields need ref/null header. Non-nullable fields are written directly.
-// This matches the xlang spec where nullable=false means no null flag is written.
-func fieldNeedWriteRef(typeId TypeId, nullable bool) bool {
-	return nullable
-}

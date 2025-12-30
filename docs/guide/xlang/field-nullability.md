@@ -29,16 +29,24 @@ In xlang mode, **fields are non-nullable by default**. This means:
 - No null flag byte is written for the field
 - Serialization is more compact
 
-Only `Optional<T>` types (or equivalent) are nullable by default, allowing null values to be serialized.
+The following types are nullable by default:
 
-| Field Type                                | Default Nullable | Null Flag Written |
-| ----------------------------------------- | ---------------- | ----------------- |
-| Primitives (`int`, `bool`, `float`, etc.) | No               | No                |
-| `String`                                  | No               | No                |
-| `List<T>`, `Map<K,V>`, `Set<T>`           | No               | No                |
-| Custom structs                            | No               | No                |
-| Enums                                     | No               | No                |
-| `Optional<T>` / nullable wrapper          | Yes              | Yes               |
+- `Optional<T>` (Java, C++)
+- Java boxed types (`Integer`, `Long`, `Double`, etc.)
+- Go pointer types (`*int32`, `*string`, etc.)
+- Rust `Option<T>`
+- Python `Optional[T]`
+
+| Field Type                                 | Default Nullable | Null Flag Written |
+| ------------------------------------------ | ---------------- | ----------------- |
+| Primitives (`int`, `bool`, `float`, etc.)  | No               | No                |
+| `String`                                   | No               | No                |
+| `List<T>`, `Map<K,V>`, `Set<T>`            | No               | No                |
+| Custom structs                             | No               | No                |
+| Enums                                      | No               | No                |
+| Java boxed types (`Integer`, `Long`, etc.) | Yes              | Yes               |
+| Go pointer types (`*int32`, `*string`)     | Yes              | Yes               |
+| `Optional<T>` / `Option<T>`                | Yes              | Yes               |
 
 ## Wire Format
 

@@ -54,7 +54,7 @@ Where `null_flag` is:
 - `-1` (NULL_FLAG): Value is null
 - `-2` (NOT_NULL_VALUE_FLAG): Value is present
 
-For reference tracking behavior, see [Reference Tracking](reference-tracking.md).
+For reference tracking behavior, see [Reference Tracking](field-reference-tracking.md).
 
 ## Language-Specific Examples
 
@@ -214,7 +214,7 @@ Schema B: { name: String (nullable) }
 
 ## See Also
 
-- [Reference Tracking](reference-tracking.md) - Shared and circular reference handling
+- [Reference Tracking](field-reference-tracking.md) - Shared and circular reference handling
 - [Serialization](serialization.md) - Basic cross-language serialization
 - [Type Mapping](https://fory.apache.org/docs/specification/xlang_type_mapping) - Cross-language type mapping reference
 - [Xlang Specification](https://fory.apache.org/docs/specification/fory_xlang_serialization_spec) - Binary protocol details

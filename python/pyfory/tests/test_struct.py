@@ -121,7 +121,7 @@ class DataClassObject:
     f_bool: bool
     f_list: List[int]
     f_dict: Dict[str, float]
-    f_any: Any
+    f_any: Optional[Any]
     f_complex: Optional[ComplexObject] = None
 
     @classmethod

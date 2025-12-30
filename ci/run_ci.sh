@@ -243,7 +243,7 @@ windows_java21_test() {
   echo "Executing fory java tests"
   cd "$ROOT/java"
   set +e
-  mvn -T10 --batch-mode --no-transfer-progress test -Dtest=!org.apache.fory.CrossLanguageTest install -pl '!fory-format,!fory-testsuite'
+  mvn -T10 --batch-mode --no-transfer-progress test install -pl '!fory-format,!fory-testsuite'
   testcode=$?
   if [[ $testcode -ne 0 ]]; then
     exit $testcode

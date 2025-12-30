@@ -1,5 +1,5 @@
 ---
-title: Field Nullability and Reference Tracking
+title: Field Nullability
 sidebar_position: 40
 id: xlang_field_nullability
 license: |
@@ -19,41 +19,42 @@ license: |
   limitations under the License.
 ---
 
-This page explains how Fory handles field nullability and reference tracking in cross-language (xlang) serialization mode.
+This page explains how Fory handles field nullability in cross-language (xlang) serialization mode.
 
 ## Default Behavior
 
 In xlang mode, **fields are non-nullable by default**. This means:
 
 - Values must always be present (non-null)
-- No ref/null flag byte is written for the field
+- No null flag byte is written for the field
 - Serialization is more compact
 
 Only `Optional<T>` types (or equivalent) are nullable by default, allowing null values to be serialized.
 
-| Field Type                                | Default Nullable | Ref Flag Written |
-| ----------------------------------------- | ---------------- | ---------------- |
-| Primitives (`int`, `bool`, `float`, etc.) | No               | No               |
-| `String`                                  | No               | No               |
-| `List<T>`, `Map<K,V>`, `Set<T>`           | No               | No               |
-| Custom structs                            | No               | No               |
-| Enums                                     | No               | No               |
-| `Optional<T>` / nullable wrapper          | Yes              | Yes              |
+| Field Type                                | Default Nullable | Null Flag Written |
+| ----------------------------------------- | ---------------- | ----------------- |
+| Primitives (`int`, `bool`, `float`, etc.) | No               | No                |
+| `String`                                  | No               | No                |
+| `List<T>`, `Map<K,V>`, `Set<T>`           | No               | No                |
+| Custom structs                            | No               | No                |
+| Enums                                     | No               | No                |
+| `Optional<T>` / nullable wrapper          | Yes              | Yes               |
 
 ## Wire Format
 
-The nullable flag controls whether a **ref flag byte** is written before the field value:
+The nullable flag controls whether a **null flag byte** is written before the field value:
 
 ```
 Non-nullable field: [value data]
-Nullable field:     [ref_flag] [value data if not null]
+Nullable field:     [null_flag] [value data if not null]
 ```
 
-Where `ref_flag` is:
+Where `null_flag` is:
 
 - `-1` (NULL_FLAG): Value is null
 - `-2` (NOT_NULL_VALUE_FLAG): Value is present
-- `≥0`: Reference ID (when reference tracking is enabled)
+
+For reference tracking behavior, see [Reference Tracking](reference-tracking.md).
 
 ## Language-Specific Examples
 
@@ -194,23 +195,6 @@ When a non-nullable field receives a null value:
 | Go       | Zero value is used (empty string, 0, etc.)           |
 | C++      | Default-constructed value or undefined behavior      |
 
-## Reference Tracking vs Nullability
-
-These are **independent** concepts:
-
-- **Nullability**: Whether a field can hold null/None values
-- **Reference Tracking**: Whether duplicate object references are deduplicated
-
-The `ref_tracking` / `withRefTracking(true)` option enables reference deduplication for the entire serialization context, but **ref flag bytes are only written for nullable fields**.
-
-```java
-// Reference tracking enabled, but non-nullable fields still skip ref flags
-Fory fory = Fory.builder()
-    .withLanguage(Language.XLANG)
-    .withRefTracking(true)
-    .build();
-```
-
 ## Schema Compatibility
 
 The nullable flag is part of the struct schema fingerprint. Changing a field's nullability is a **breaking change** that will cause schema version mismatch errors.
@@ -230,6 +214,7 @@ Schema B: { name: String (nullable) }
 
 ## See Also
 
+- [Reference Tracking](reference-tracking.md) - Shared and circular reference handling
 - [Serialization](serialization.md) - Basic cross-language serialization
 - [Type Mapping](https://fory.apache.org/docs/specification/xlang_type_mapping) - Cross-language type mapping reference
 - [Xlang Specification](https://fory.apache.org/docs/specification/fory_xlang_serialization_spec) - Binary protocol details

@@ -154,7 +154,8 @@ template <typename T> struct Serializer<std::optional<T>> {
     if constexpr (inner_requires_ref) {
       // Rewind so the inner serializer can consume the reference metadata.
       ctx.buffer().ReaderIndex(flag_pos);
-      T value = Serializer<T>::read(ctx, RefMode::NullOnly, read_type);
+      // Pass ref_mode directly - let inner serializer handle ref tracking
+      T value = Serializer<T>::read(ctx, ref_mode, read_type);
       if (ctx.has_error()) {
         return std::nullopt;
       }
@@ -181,7 +182,8 @@ template <typename T> struct Serializer<std::optional<T>> {
     constexpr bool inner_requires_ref = requires_ref_metadata_v<T>;
 
     if (ref_mode == RefMode::None) {
-      T value = Serializer<T>::read_with_type_info(ctx, false, type_info);
+      T value =
+          Serializer<T>::read_with_type_info(ctx, RefMode::None, type_info);
       if (ctx.has_error()) {
         return std::nullopt;
       }
@@ -201,7 +203,8 @@ template <typename T> struct Serializer<std::optional<T>> {
     if constexpr (inner_requires_ref) {
       // Rewind so the inner serializer can consume the reference metadata.
       ctx.buffer().ReaderIndex(flag_pos);
-      T value = Serializer<T>::read_with_type_info(ctx, true, type_info);
+      // Pass ref_mode directly - let inner serializer handle ref tracking
+      T value = Serializer<T>::read_with_type_info(ctx, ref_mode, type_info);
       if (ctx.has_error()) {
         return std::nullopt;
       }
@@ -215,7 +218,7 @@ template <typename T> struct Serializer<std::optional<T>> {
       return std::nullopt;
     }
 
-    T value = Serializer<T>::read_with_type_info(ctx, false, type_info);
+    T value = Serializer<T>::read_with_type_info(ctx, RefMode::None, type_info);
     if (ctx.has_error()) {
       return std::nullopt;
     }

@@ -175,7 +175,8 @@ inline void write_collection_data_fast(const Container &coll, WriteContext &ctx,
           if (is_elem_declared) {
             Serializer<Inner>::write_data(deref_nullable(elem), ctx);
           } else {
-            Serializer<Inner>::write(deref_nullable(elem), ctx, RefMode::None, false);
+            Serializer<Inner>::write(deref_nullable(elem), ctx, RefMode::None,
+                                     false);
           }
         }
       }
@@ -184,7 +185,8 @@ inline void write_collection_data_fast(const Container &coll, WriteContext &ctx,
         if (is_elem_declared) {
           Serializer<Inner>::write_data(deref_nullable(elem), ctx);
         } else {
-          Serializer<Inner>::write(deref_nullable(elem), ctx, RefMode::None, false);
+          Serializer<Inner>::write(deref_nullable(elem), ctx, RefMode::None,
+                                   false);
         }
       }
     }
@@ -292,7 +294,8 @@ inline void write_collection_data_slow(const Container &coll, WriteContext &ctx,
       if constexpr (elem_is_shared_ref) {
         // Write with ref flag, without type
         for (const auto &elem : coll) {
-          Serializer<T>::write(elem, ctx, RefMode::NullOnly, false, has_generics);
+          Serializer<T>::write(elem, ctx, RefMode::NullOnly, false,
+                               has_generics);
         }
       } else {
         // Write data directly
@@ -320,7 +323,8 @@ inline void write_collection_data_slow(const Container &coll, WriteContext &ctx,
     if (!has_null) {
       if constexpr (elem_is_shared_ref) {
         for (const auto &elem : coll) {
-          Serializer<T>::write(elem, ctx, RefMode::NullOnly, true, has_generics);
+          Serializer<T>::write(elem, ctx, RefMode::NullOnly, true,
+                               has_generics);
         }
       } else {
         for (const auto &elem : coll) {
@@ -412,8 +416,8 @@ inline Container read_collection_data_slow(ReadContext &ctx, uint32_t length) {
           return result;
         }
         if constexpr (elem_is_polymorphic) {
-          auto elem =
-              Serializer<T>::read_with_type_info(ctx, RefMode::NullOnly, *elem_type_info);
+          auto elem = Serializer<T>::read_with_type_info(ctx, RefMode::NullOnly,
+                                                         *elem_type_info);
           collection_insert(result, std::move(elem));
         } else {
           auto elem = Serializer<T>::read(ctx, RefMode::Tracking, false);
@@ -426,8 +430,8 @@ inline Container read_collection_data_slow(ReadContext &ctx, uint32_t length) {
           return result;
         }
         if constexpr (elem_is_polymorphic) {
-          auto elem =
-              Serializer<T>::read_with_type_info(ctx, RefMode::None, *elem_type_info);
+          auto elem = Serializer<T>::read_with_type_info(ctx, RefMode::None,
+                                                         *elem_type_info);
           collection_insert(result, std::move(elem));
         } else {
           auto elem = Serializer<T>::read(ctx, RefMode::None, false);
@@ -448,8 +452,8 @@ inline Container read_collection_data_slow(ReadContext &ctx, uint32_t length) {
           // For sets, skip null elements
         } else {
           if constexpr (elem_is_polymorphic) {
-            auto elem =
-                Serializer<T>::read_with_type_info(ctx, RefMode::None, *elem_type_info);
+            auto elem = Serializer<T>::read_with_type_info(ctx, RefMode::None,
+                                                           *elem_type_info);
             collection_insert(result, std::move(elem));
           } else {
             auto elem = Serializer<T>::read(ctx, RefMode::None, false);
@@ -483,7 +487,8 @@ inline Container read_collection_data_slow(ReadContext &ctx, uint32_t length) {
         if (FORY_PREDICT_FALSE(ctx.has_error())) {
           return result;
         }
-        auto elem = Serializer<T>::read(ctx, track_ref ? RefMode::Tracking : RefMode::None, true);
+        auto elem = Serializer<T>::read(
+            ctx, track_ref ? RefMode::Tracking : RefMode::None, true);
         collection_insert(result, std::move(elem));
       }
     }
@@ -852,8 +857,8 @@ template <typename Alloc> struct Serializer<std::vector<bool, Alloc>> {
     write_data(vec, ctx);
   }
 
-  static inline std::vector<bool, Alloc> read(ReadContext &ctx, RefMode ref_mode,
-                                              bool read_type) {
+  static inline std::vector<bool, Alloc>
+  read(ReadContext &ctx, RefMode ref_mode, bool read_type) {
     bool has_value = read_null_only_flag(ctx, ref_mode);
     if (ctx.has_error() || !has_value) {
       return std::vector<bool, Alloc>();
@@ -1518,8 +1523,8 @@ struct Serializer<std::forward_list<T, Alloc>> {
               if (is_elem_declared) {
                 Serializer<Inner>::write_data(deref_nullable(elem), ctx);
               } else {
-                Serializer<Inner>::write(deref_nullable(elem), ctx, RefMode::None,
-                                         false);
+                Serializer<Inner>::write(deref_nullable(elem), ctx,
+                                         RefMode::None, false);
               }
             }
           }
@@ -1529,7 +1534,8 @@ struct Serializer<std::forward_list<T, Alloc>> {
             if (is_elem_declared) {
               Serializer<Inner>::write_data(deref_nullable(elem), ctx);
             } else {
-              Serializer<Inner>::write(deref_nullable(elem), ctx, RefMode::None, false);
+              Serializer<Inner>::write(deref_nullable(elem), ctx, RefMode::None,
+                                       false);
             }
           }
         }
@@ -1625,8 +1631,8 @@ struct Serializer<std::forward_list<T, Alloc>> {
         if (!has_null) {
           if constexpr (elem_is_shared_ref) {
             for (const auto &elem_ref : temp) {
-              Serializer<T>::write(elem_ref.get(), ctx, RefMode::NullOnly, false,
-                                   has_generics);
+              Serializer<T>::write(elem_ref.get(), ctx, RefMode::NullOnly,
+                                   false, has_generics);
             }
           } else {
             for (const auto &elem_ref : temp) {
@@ -1664,7 +1670,8 @@ struct Serializer<std::forward_list<T, Alloc>> {
           }
         } else {
           for (const auto &elem_ref : temp) {
-            Serializer<T>::write(elem_ref.get(), ctx, RefMode::NullOnly, true, has_generics);
+            Serializer<T>::write(elem_ref.get(), ctx, RefMode::NullOnly, true,
+                                 has_generics);
           }
         }
       }

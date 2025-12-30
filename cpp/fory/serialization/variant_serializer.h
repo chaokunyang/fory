@@ -246,7 +246,8 @@ template <typename... Ts> struct Serializer<std::variant<Ts...>> {
     return read_variant_by_index<VariantType>(ctx, stored_index, read_alt_type);
   }
 
-  static inline VariantType read_with_type_info(ReadContext &ctx, RefMode ref_mode,
+  static inline VariantType read_with_type_info(ReadContext &ctx,
+                                                RefMode ref_mode,
                                                 const TypeInfo &type_info) {
     return read(ctx, ref_mode, false);
   }

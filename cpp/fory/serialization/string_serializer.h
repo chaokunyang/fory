@@ -298,7 +298,8 @@ template <> struct Serializer<std::string> {
     return read_data(ctx);
   }
 
-  static inline std::string read_with_type_info(ReadContext &ctx, RefMode ref_mode,
+  static inline std::string read_with_type_info(ReadContext &ctx,
+                                                RefMode ref_mode,
                                                 const TypeInfo &type_info) {
     return read(ctx, ref_mode, false);
   }

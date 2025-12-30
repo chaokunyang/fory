@@ -1070,8 +1070,7 @@ template <typename T> Harness TypeResolver::make_serializer_harness() {
 
 template <typename T>
 void TypeResolver::harness_write_adapter(const void *value, WriteContext &ctx,
-                                         RefMode ref_mode,
-                                         bool write_type_info,
+                                         RefMode ref_mode, bool write_type_info,
                                          bool has_generics) {
   (void)has_generics;
   const T *ptr = static_cast<const T *>(value);

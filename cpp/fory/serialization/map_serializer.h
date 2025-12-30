@@ -695,8 +695,8 @@ inline MapType read_map_data_slow(ReadContext &ctx, uint32_t length) {
       V value;
       if constexpr (val_is_polymorphic) {
         // For polymorphic types, use read_with_type_info
-        value =
-            Serializer<V>::read_with_type_info(ctx, RefMode::None, *value_type_info);
+        value = Serializer<V>::read_with_type_info(ctx, RefMode::None,
+                                                   *value_type_info);
         if (FORY_PREDICT_FALSE(ctx.has_error())) {
           return MapType{};
         }
@@ -751,7 +751,8 @@ inline MapType read_map_data_slow(ReadContext &ctx, uint32_t length) {
       // Read key data (ref flag already consumed above)
       K key;
       if constexpr (key_is_polymorphic) {
-        key = Serializer<K>::read_with_type_info(ctx, RefMode::None, *key_type_info);
+        key = Serializer<K>::read_with_type_info(ctx, RefMode::None,
+                                                 *key_type_info);
         if (FORY_PREDICT_FALSE(ctx.has_error())) {
           return MapType{};
         }
@@ -821,13 +822,15 @@ inline MapType read_map_data_slow(ReadContext &ctx, uint32_t length) {
       // Read key - use type info if available (polymorphic case)
       K key;
       if constexpr (key_is_polymorphic) {
-        key = Serializer<K>::read_with_type_info(ctx, key_read_ref ? RefMode::NullOnly : RefMode::None,
-                                                 *key_type_info);
+        key = Serializer<K>::read_with_type_info(
+            ctx, key_read_ref ? RefMode::NullOnly : RefMode::None,
+            *key_type_info);
         if (FORY_PREDICT_FALSE(ctx.has_error())) {
           return MapType{};
         }
       } else if (key_read_ref) {
-        key = Serializer<K>::read(ctx, make_ref_mode(false, key_read_ref), false);
+        key =
+            Serializer<K>::read(ctx, make_ref_mode(false, key_read_ref), false);
         if (FORY_PREDICT_FALSE(ctx.has_error())) {
           return MapType{};
         }
@@ -842,13 +845,15 @@ inline MapType read_map_data_slow(ReadContext &ctx, uint32_t length) {
       // Read value - use type info if available (polymorphic case)
       V value;
       if constexpr (val_is_polymorphic) {
-        value = Serializer<V>::read_with_type_info(ctx, val_read_ref ? RefMode::NullOnly : RefMode::None,
-                                                   *value_type_info);
+        value = Serializer<V>::read_with_type_info(
+            ctx, val_read_ref ? RefMode::NullOnly : RefMode::None,
+            *value_type_info);
         if (FORY_PREDICT_FALSE(ctx.has_error())) {
           return MapType{};
         }
       } else if (val_read_ref) {
-        value = Serializer<V>::read(ctx, make_ref_mode(false, val_read_ref), false);
+        value =
+            Serializer<V>::read(ctx, make_ref_mode(false, val_read_ref), false);
         if (FORY_PREDICT_FALSE(ctx.has_error())) {
           return MapType{};
         }
@@ -934,7 +939,8 @@ struct Serializer<std::map<K, V, Args...>> {
     }
   }
 
-  static inline MapType read(ReadContext &ctx, RefMode ref_mode, bool read_type) {
+  static inline MapType read(ReadContext &ctx, RefMode ref_mode,
+                             bool read_type) {
     bool has_value = read_null_only_flag(ctx, ref_mode);
     if (FORY_PREDICT_FALSE(ctx.has_error())) {
       return MapType{};
@@ -1053,7 +1059,8 @@ struct Serializer<std::unordered_map<K, V, Args...>> {
     }
   }
 
-  static inline MapType read(ReadContext &ctx, RefMode ref_mode, bool read_type) {
+  static inline MapType read(ReadContext &ctx, RefMode ref_mode,
+                             bool read_type) {
     bool has_value = read_null_only_flag(ctx, ref_mode);
     if (FORY_PREDICT_FALSE(ctx.has_error())) {
       return MapType{};

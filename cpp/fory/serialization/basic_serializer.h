@@ -147,7 +147,8 @@ template <> struct Serializer<int8_t> {
     write_data(value, ctx);
   }
 
-  static inline int8_t read(ReadContext &ctx, RefMode ref_mode, bool read_type) {
+  static inline int8_t read(ReadContext &ctx, RefMode ref_mode,
+                            bool read_type) {
     bool has_value = read_null_only_flag(ctx, ref_mode);
     if (ctx.has_error() || !has_value) {
       return 0;
@@ -217,7 +218,8 @@ template <> struct Serializer<int16_t> {
     write_data(value, ctx);
   }
 
-  static inline int16_t read(ReadContext &ctx, RefMode ref_mode, bool read_type) {
+  static inline int16_t read(ReadContext &ctx, RefMode ref_mode,
+                             bool read_type) {
     bool has_value = read_null_only_flag(ctx, ref_mode);
     if (ctx.has_error() || !has_value) {
       return 0;
@@ -287,7 +289,8 @@ template <> struct Serializer<int32_t> {
     write_data(value, ctx);
   }
 
-  static inline int32_t read(ReadContext &ctx, RefMode ref_mode, bool read_type) {
+  static inline int32_t read(ReadContext &ctx, RefMode ref_mode,
+                             bool read_type) {
     bool has_value = read_null_only_flag(ctx, ref_mode);
     if (ctx.has_error() || !has_value) {
       return 0;
@@ -357,7 +360,8 @@ template <> struct Serializer<int64_t> {
     write_data(value, ctx);
   }
 
-  static inline int64_t read(ReadContext &ctx, RefMode ref_mode, bool read_type) {
+  static inline int64_t read(ReadContext &ctx, RefMode ref_mode,
+                             bool read_type) {
     bool has_value = read_null_only_flag(ctx, ref_mode);
     if (ctx.has_error() || !has_value) {
       return 0;
@@ -497,7 +501,8 @@ template <> struct Serializer<double> {
     write_data(value, ctx);
   }
 
-  static inline double read(ReadContext &ctx, RefMode ref_mode, bool read_type) {
+  static inline double read(ReadContext &ctx, RefMode ref_mode,
+                            bool read_type) {
     bool has_value = read_null_only_flag(ctx, ref_mode);
     if (ctx.has_error() || !has_value) {
       return 0.0;
@@ -641,7 +646,8 @@ template <> struct Serializer<char16_t> {
     write_data(value, ctx);
   }
 
-  static inline char16_t read(ReadContext &ctx, RefMode ref_mode, bool read_type) {
+  static inline char16_t read(ReadContext &ctx, RefMode ref_mode,
+                              bool read_type) {
     bool has_value = read_null_only_flag(ctx, ref_mode);
     if (ctx.has_error() || !has_value) {
       return u'\0';
@@ -715,7 +721,8 @@ template <> struct Serializer<char32_t> {
     write_data(value, ctx);
   }
 
-  static inline char32_t read(ReadContext &ctx, RefMode ref_mode, bool read_type) {
+  static inline char32_t read(ReadContext &ctx, RefMode ref_mode,
+                              bool read_type) {
     bool has_value = read_null_only_flag(ctx, ref_mode);
     if (ctx.has_error() || !has_value) {
       return U'\0';

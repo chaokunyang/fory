@@ -79,7 +79,8 @@ inline void write_tuple_elements_direct(const Tuple &tuple, WriteContext &ctx,
         // For nullable/shared types, use full write with ref tracking
         if constexpr (is_nullable_v<ElemType> || is_shared_ref_v<ElemType> ||
                       is_polymorphic_v<ElemType>) {
-          Serializer<ElemType>::write(elem, ctx, RefMode::NullOnly, false, false);
+          Serializer<ElemType>::write(elem, ctx, RefMode::NullOnly, false,
+                                      false);
         } else {
           Serializer<ElemType>::write_data(elem, ctx);
         }
@@ -98,8 +99,8 @@ inline void write_tuple_elements_heterogeneous(const Tuple &tuple,
         if (ctx.has_error())
           return;
         using ElemType = std::tuple_element_t<Is, Tuple>;
-        Serializer<ElemType>::write(std::get<Is>(tuple), ctx, RefMode::NullOnly, true,
-                                    false);
+        Serializer<ElemType>::write(std::get<Is>(tuple), ctx, RefMode::NullOnly,
+                                    true, false);
       }(),
       ...);
 }
@@ -135,7 +136,8 @@ inline Tuple read_tuple_elements_direct(ReadContext &ctx,
         // For nullable/shared types, use full read with ref tracking
         if constexpr (is_nullable_v<ElemType> || is_shared_ref_v<ElemType> ||
                       is_polymorphic_v<ElemType>) {
-          std::get<Is>(result) = Serializer<ElemType>::read(ctx, RefMode::NullOnly, false);
+          std::get<Is>(result) =
+              Serializer<ElemType>::read(ctx, RefMode::NullOnly, false);
         } else {
           std::get<Is>(result) = Serializer<ElemType>::read_data(ctx);
         }
@@ -160,7 +162,8 @@ inline Tuple read_tuple_elements_heterogeneous(ReadContext &ctx,
           return;
         using ElemType = std::tuple_element_t<Is, Tuple>;
         if (index < length) {
-          std::get<Is>(result) = Serializer<ElemType>::read(ctx, RefMode::NullOnly, true);
+          std::get<Is>(result) =
+              Serializer<ElemType>::read(ctx, RefMode::NullOnly, true);
           ++index;
         }
         // If index >= length, use default-constructed value
@@ -407,7 +410,8 @@ template <typename... Ts> struct Serializer<std::tuple<Ts...>> {
     }
   }
 
-  static inline TupleType read_with_type_info(ReadContext &ctx, RefMode ref_mode,
+  static inline TupleType read_with_type_info(ReadContext &ctx,
+                                              RefMode ref_mode,
                                               const TypeInfo &type_info) {
     return read(ctx, ref_mode, false);
   }

@@ -94,7 +94,8 @@ template <> struct Serializer<Duration> {
     write_data(duration, ctx);
   }
 
-  static inline Duration read(ReadContext &ctx, RefMode ref_mode, bool read_type) {
+  static inline Duration read(ReadContext &ctx, RefMode ref_mode,
+                              bool read_type) {
     bool has_value = read_null_only_flag(ctx, ref_mode);
     if (ctx.has_error() || !has_value) {
       return Duration(0);
@@ -195,7 +196,8 @@ template <> struct Serializer<Timestamp> {
     return Timestamp(Duration(nanos));
   }
 
-  static inline Timestamp read_with_type_info(ReadContext &ctx, RefMode ref_mode,
+  static inline Timestamp read_with_type_info(ReadContext &ctx,
+                                              RefMode ref_mode,
                                               const TypeInfo &type_info) {
     return read(ctx, ref_mode, false);
   }
@@ -270,7 +272,8 @@ template <> struct Serializer<LocalDate> {
     return date;
   }
 
-  static inline LocalDate read_with_type_info(ReadContext &ctx, RefMode ref_mode,
+  static inline LocalDate read_with_type_info(ReadContext &ctx,
+                                              RefMode ref_mode,
                                               const TypeInfo &type_info) {
     return read(ctx, ref_mode, false);
   }

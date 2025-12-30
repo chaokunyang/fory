@@ -191,4 +191,30 @@ public class PythonXlangTest extends XlangTestBase {
   public void testPolymorphicMap() throws IOException {
     super.testPolymorphicMap();
   }
+
+  @Override
+  @Test
+  public void testNullableFieldSchemaConsistentNotNull() throws IOException {
+    super.testNullableFieldSchemaConsistentNotNull();
+  }
+
+  @Override
+  @Test
+  public void testNullableFieldSchemaConsistentNull() throws IOException {
+    super.testNullableFieldSchemaConsistentNull();
+  }
+
+  @Override
+  @Test
+  public void testNullableFieldCompatibleNotNull() throws IOException {
+    // Python compatible mode meta compression differs from Java's NoOpMetaCompressor
+    throw new SkipException("Skipping: compatible mode nullable field tests not supported for Python");
+  }
+
+  @Override
+  @Test
+  public void testNullableFieldCompatibleNull() throws IOException {
+    // Python compatible mode meta compression differs from Java's NoOpMetaCompressor
+    throw new SkipException("Skipping: compatible mode nullable field tests not supported for Python");
+  }
 }

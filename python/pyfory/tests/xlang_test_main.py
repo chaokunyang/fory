@@ -174,6 +174,36 @@ class TwoEnumFieldStruct:
 
 
 # ============================================================================
+# Nullable Field Test Types
+# ============================================================================
+
+
+@dataclass
+class NullableFieldStruct:
+    int_field: pyfory.int32 = 0
+    long_field: pyfory.int64 = 0
+    float_field: pyfory.float32 = 0.0
+    double_field: pyfory.float64 = 0.0
+    bool_field: bool = False
+    string_field: str = ""
+    nullable_string1: Optional[str] = None
+    nullable_string2: Optional[str] = None
+
+
+@dataclass
+class NullableFieldStructCompatible:
+    int_field: pyfory.int32 = 0
+    long_field: pyfory.int64 = 0
+    float_field: pyfory.float32 = 0.0
+    double_field: pyfory.float64 = 0.0
+    bool_field: bool = False
+    string_field: str = ""
+    nullable_string1: Optional[str] = None
+    nullable_string2: Optional[str] = None
+    nullable_string3: Optional[str] = None
+
+
+# ============================================================================
 # Test Functions - Each function handles read -> verify -> write back
 # ============================================================================
 
@@ -681,6 +711,159 @@ def test_enum_schema_evolution_compatible_reverse():
     # f2 should be None (missing field due to schema evolution)
     f2_value = getattr(obj, "f2", None)
     assert f2_value is None, f"Expected f2=None, got f2={f2_value}"
+
+    new_bytes = fory.serialize(obj)
+    with open(data_file, "wb") as f:
+        f.write(new_bytes)
+
+
+# ============================================================================
+# Nullable Field Tests
+# ============================================================================
+
+
+def test_nullable_field_schema_consistent_not_null():
+    """Test nullable fields with non-null values in schema consistent mode."""
+    data_file = get_data_file()
+    with open(data_file, "rb") as f:
+        data_bytes = f.read()
+
+    fory = pyfory.Fory(xlang=True, compatible=False)
+    fory.register_type(NullableFieldStruct, type_id=401)
+
+    expected = NullableFieldStruct(
+        int_field=42,
+        long_field=123456789,
+        float_field=3.14,
+        double_field=2.718281828,
+        bool_field=True,
+        string_field="hello",
+        nullable_string1="nullable_value1",
+        nullable_string2="nullable_value2",
+    )
+
+    obj = fory.deserialize(data_bytes)
+    debug_print(f"Deserialized: {obj}")
+    assert obj.int_field == expected.int_field, f"int_field: {obj.int_field} != {expected.int_field}"
+    assert obj.long_field == expected.long_field, f"long_field: {obj.long_field} != {expected.long_field}"
+    assert abs(obj.float_field - expected.float_field) < 0.01, f"float_field: {obj.float_field} != {expected.float_field}"
+    assert abs(obj.double_field - expected.double_field) < 0.000001, f"double_field: {obj.double_field} != {expected.double_field}"
+    assert obj.bool_field == expected.bool_field, f"bool_field: {obj.bool_field} != {expected.bool_field}"
+    assert obj.string_field == expected.string_field, f"string_field: {obj.string_field} != {expected.string_field}"
+    assert obj.nullable_string1 == expected.nullable_string1, f"nullable_string1: {obj.nullable_string1} != {expected.nullable_string1}"
+    assert obj.nullable_string2 == expected.nullable_string2, f"nullable_string2: {obj.nullable_string2} != {expected.nullable_string2}"
+
+    new_bytes = fory.serialize(obj)
+    with open(data_file, "wb") as f:
+        f.write(new_bytes)
+
+
+def test_nullable_field_schema_consistent_null():
+    """Test nullable fields with null values in schema consistent mode."""
+    data_file = get_data_file()
+    with open(data_file, "rb") as f:
+        data_bytes = f.read()
+
+    fory = pyfory.Fory(xlang=True, compatible=False)
+    fory.register_type(NullableFieldStruct, type_id=401)
+
+    expected = NullableFieldStruct(
+        int_field=42,
+        long_field=123456789,
+        float_field=3.14,
+        double_field=2.718281828,
+        bool_field=True,
+        string_field="hello",
+        nullable_string1=None,
+        nullable_string2=None,
+    )
+
+    obj = fory.deserialize(data_bytes)
+    debug_print(f"Deserialized: {obj}")
+    assert obj.int_field == expected.int_field, f"int_field: {obj.int_field} != {expected.int_field}"
+    assert obj.long_field == expected.long_field, f"long_field: {obj.long_field} != {expected.long_field}"
+    assert abs(obj.float_field - expected.float_field) < 0.01, f"float_field: {obj.float_field} != {expected.float_field}"
+    assert abs(obj.double_field - expected.double_field) < 0.000001, f"double_field: {obj.double_field} != {expected.double_field}"
+    assert obj.bool_field == expected.bool_field, f"bool_field: {obj.bool_field} != {expected.bool_field}"
+    assert obj.string_field == expected.string_field, f"string_field: {obj.string_field} != {expected.string_field}"
+    assert obj.nullable_string1 is None, f"nullable_string1: {obj.nullable_string1} != None"
+    assert obj.nullable_string2 is None, f"nullable_string2: {obj.nullable_string2} != None"
+
+    new_bytes = fory.serialize(obj)
+    with open(data_file, "wb") as f:
+        f.write(new_bytes)
+
+
+def test_nullable_field_compatible_not_null():
+    """Test nullable fields with non-null values in compatible mode."""
+    data_file = get_data_file()
+    with open(data_file, "rb") as f:
+        data_bytes = f.read()
+
+    fory = pyfory.Fory(xlang=True, compatible=True)
+    fory.register_type(NullableFieldStructCompatible, type_id=402)
+
+    expected = NullableFieldStructCompatible(
+        int_field=42,
+        long_field=123456789,
+        float_field=3.14,
+        double_field=2.718281828,
+        bool_field=True,
+        string_field="hello",
+        nullable_string1="nullable_value1",
+        nullable_string2="nullable_value2",
+        nullable_string3="nullable_value3",
+    )
+
+    obj = fory.deserialize(data_bytes)
+    debug_print(f"Deserialized: {obj}")
+    assert obj.int_field == expected.int_field, f"int_field: {obj.int_field} != {expected.int_field}"
+    assert obj.long_field == expected.long_field, f"long_field: {obj.long_field} != {expected.long_field}"
+    assert abs(obj.float_field - expected.float_field) < 0.01, f"float_field: {obj.float_field} != {expected.float_field}"
+    assert abs(obj.double_field - expected.double_field) < 0.000001, f"double_field: {obj.double_field} != {expected.double_field}"
+    assert obj.bool_field == expected.bool_field, f"bool_field: {obj.bool_field} != {expected.bool_field}"
+    assert obj.string_field == expected.string_field, f"string_field: {obj.string_field} != {expected.string_field}"
+    assert obj.nullable_string1 == expected.nullable_string1, f"nullable_string1: {obj.nullable_string1} != {expected.nullable_string1}"
+    assert obj.nullable_string2 == expected.nullable_string2, f"nullable_string2: {obj.nullable_string2} != {expected.nullable_string2}"
+    assert obj.nullable_string3 == expected.nullable_string3, f"nullable_string3: {obj.nullable_string3} != {expected.nullable_string3}"
+
+    new_bytes = fory.serialize(obj)
+    with open(data_file, "wb") as f:
+        f.write(new_bytes)
+
+
+def test_nullable_field_compatible_null():
+    """Test nullable fields with null values in compatible mode."""
+    data_file = get_data_file()
+    with open(data_file, "rb") as f:
+        data_bytes = f.read()
+
+    fory = pyfory.Fory(xlang=True, compatible=True)
+    fory.register_type(NullableFieldStructCompatible, type_id=402)
+
+    expected = NullableFieldStructCompatible(
+        int_field=42,
+        long_field=123456789,
+        float_field=3.14,
+        double_field=2.718281828,
+        bool_field=True,
+        string_field="hello",
+        nullable_string1=None,
+        nullable_string2=None,
+        nullable_string3=None,
+    )
+
+    obj = fory.deserialize(data_bytes)
+    debug_print(f"Deserialized: {obj}")
+    assert obj.int_field == expected.int_field, f"int_field: {obj.int_field} != {expected.int_field}"
+    assert obj.long_field == expected.long_field, f"long_field: {obj.long_field} != {expected.long_field}"
+    assert abs(obj.float_field - expected.float_field) < 0.01, f"float_field: {obj.float_field} != {expected.float_field}"
+    assert abs(obj.double_field - expected.double_field) < 0.000001, f"double_field: {obj.double_field} != {expected.double_field}"
+    assert obj.bool_field == expected.bool_field, f"bool_field: {obj.bool_field} != {expected.bool_field}"
+    assert obj.string_field == expected.string_field, f"string_field: {obj.string_field} != {expected.string_field}"
+    assert obj.nullable_string1 is None, f"nullable_string1: {obj.nullable_string1} != None"
+    assert obj.nullable_string2 is None, f"nullable_string2: {obj.nullable_string2} != None"
+    assert obj.nullable_string3 is None, f"nullable_string3: {obj.nullable_string3} != None"
 
     new_bytes = fory.serialize(obj)
     with open(data_file, "wb") as f:

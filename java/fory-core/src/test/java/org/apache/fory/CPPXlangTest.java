@@ -268,4 +268,24 @@ public class CPPXlangTest extends XlangTestBase {
   public void testEnumSchemaEvolutionCompatible() throws java.io.IOException {
     super.testEnumSchemaEvolutionCompatible();
   }
+
+  @Test
+  public void testNullableFieldSchemaConsistentNotNull() throws java.io.IOException {
+    super.testNullableFieldSchemaConsistentNotNull();
+  }
+
+  @Test
+  public void testNullableFieldSchemaConsistentNull() throws java.io.IOException {
+    super.testNullableFieldSchemaConsistentNull();
+  }
+
+  @Test
+  public void testNullableFieldCompatibleNotNull() throws java.io.IOException {
+    super.testNullableFieldCompatibleNotNull();
+  }
+
+  @Test
+  public void testNullableFieldCompatibleNull() throws java.io.IOException {
+    super.testNullableFieldCompatibleNull();
+  }
 }

@@ -298,4 +298,24 @@ public class GoXlangTest extends XlangTestBase {
     // Go writes null for nil pointers (nullable=true by default for pointer types)
     Assert.assertNull(result2.f2);
   }
+
+  @Test
+  public void testNullableFieldSchemaConsistentNotNull() throws java.io.IOException {
+    super.testNullableFieldSchemaConsistentNotNull();
+  }
+
+  @Test
+  public void testNullableFieldSchemaConsistentNull() throws java.io.IOException {
+    super.testNullableFieldSchemaConsistentNull();
+  }
+
+  @Test
+  public void testNullableFieldCompatibleNotNull() throws java.io.IOException {
+    super.testNullableFieldCompatibleNotNull();
+  }
+
+  @Test
+  public void testNullableFieldCompatibleNull() throws java.io.IOException {
+    super.testNullableFieldCompatibleNull();
+  }
 }

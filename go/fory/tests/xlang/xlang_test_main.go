@@ -107,6 +107,28 @@ func getTwoEnumFieldStruct(obj interface{}) TwoEnumFieldStruct {
 	}
 }
 
+func getNullableFieldStruct(obj interface{}) NullableFieldStruct {
+	switch v := obj.(type) {
+	case NullableFieldStruct:
+		return v
+	case *NullableFieldStruct:
+		return *v
+	default:
+		panic(fmt.Sprintf("expected NullableFieldStruct, got %T", obj))
+	}
+}
+
+func getNullableFieldStructCompatible(obj interface{}) NullableFieldStructCompatible {
+	switch v := obj.(type) {
+	case NullableFieldStructCompatible:
+		return v
+	case *NullableFieldStructCompatible:
+		return *v
+	default:
+		panic(fmt.Sprintf("expected NullableFieldStructCompatible, got %T", obj))
+	}
+}
+
 func assertEqualFloat32(expected, actual float32, name string) {
 	diff := expected - actual
 	if diff < 0 {
@@ -272,6 +294,33 @@ type AnimalListHolder struct {
 
 type AnimalMapHolder struct {
 	AnimalMap map[string]Animal
+}
+
+// ============================================================================
+// Nullable Field Test Types
+// ============================================================================
+
+type NullableFieldStruct struct {
+	IntField        int32
+	LongField       int64
+	FloatField      float32
+	DoubleField     float64
+	BoolField       bool
+	StringField     string
+	NullableString1 *string `fory:"nullable"`
+	NullableString2 *string `fory:"nullable"`
+}
+
+type NullableFieldStructCompatible struct {
+	IntField        int32
+	LongField       int64
+	FloatField      float32
+	DoubleField     float64
+	BoolField       bool
+	StringField     string
+	NullableString1 *string `fory:"nullable"`
+	NullableString2 *string `fory:"nullable"`
+	NullableString3 *string `fory:"nullable"`
 }
 
 // ============================================================================
@@ -1394,6 +1443,160 @@ func testEnumSchemaEvolutionCompatibleReverse() {
 }
 
 // ============================================================================
+// Nullable Field Tests
+// ============================================================================
+
+func testNullableFieldSchemaConsistentNotNull() {
+	dataFile := getDataFile()
+	data := readFile(dataFile)
+
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(false))
+	f.Register(NullableFieldStruct{}, 401)
+
+	buf := fory.NewByteBuffer(data)
+	var obj interface{}
+	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to deserialize: %v", err))
+	}
+
+	result := getNullableFieldStruct(obj)
+	assertEqual(int32(42), result.IntField, "IntField")
+	assertEqual(int64(123456789), result.LongField, "LongField")
+	assertEqualFloat32(3.14, result.FloatField, "FloatField")
+	assertEqualFloat64(2.718281828, result.DoubleField, "DoubleField")
+	assertEqual(true, result.BoolField, "BoolField")
+	assertEqual("hello", result.StringField, "StringField")
+	if result.NullableString1 == nil || *result.NullableString1 != "nullable_value1" {
+		panic(fmt.Sprintf("NullableString1 mismatch: expected 'nullable_value1', got '%v'", result.NullableString1))
+	}
+	if result.NullableString2 == nil || *result.NullableString2 != "nullable_value2" {
+		panic(fmt.Sprintf("NullableString2 mismatch: expected 'nullable_value2', got '%v'", result.NullableString2))
+	}
+
+	serialized, err := f.Serialize(result)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to serialize: %v", err))
+	}
+
+	writeFile(dataFile, serialized)
+}
+
+func testNullableFieldSchemaConsistentNull() {
+	dataFile := getDataFile()
+	data := readFile(dataFile)
+
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(false))
+	f.Register(NullableFieldStruct{}, 401)
+
+	buf := fory.NewByteBuffer(data)
+	var obj interface{}
+	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to deserialize: %v", err))
+	}
+
+	result := getNullableFieldStruct(obj)
+	assertEqual(int32(42), result.IntField, "IntField")
+	assertEqual(int64(123456789), result.LongField, "LongField")
+	assertEqualFloat32(3.14, result.FloatField, "FloatField")
+	assertEqualFloat64(2.718281828, result.DoubleField, "DoubleField")
+	assertEqual(true, result.BoolField, "BoolField")
+	assertEqual("hello", result.StringField, "StringField")
+	if result.NullableString1 != nil {
+		panic(fmt.Sprintf("NullableString1 mismatch: expected nil, got '%v'", *result.NullableString1))
+	}
+	if result.NullableString2 != nil {
+		panic(fmt.Sprintf("NullableString2 mismatch: expected nil, got '%v'", *result.NullableString2))
+	}
+
+	serialized, err := f.Serialize(result)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to serialize: %v", err))
+	}
+
+	writeFile(dataFile, serialized)
+}
+
+func testNullableFieldCompatibleNotNull() {
+	dataFile := getDataFile()
+	data := readFile(dataFile)
+
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
+	f.Register(NullableFieldStructCompatible{}, 402)
+
+	buf := fory.NewByteBuffer(data)
+	var obj interface{}
+	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to deserialize: %v", err))
+	}
+
+	result := getNullableFieldStructCompatible(obj)
+	assertEqual(int32(42), result.IntField, "IntField")
+	assertEqual(int64(123456789), result.LongField, "LongField")
+	assertEqualFloat32(3.14, result.FloatField, "FloatField")
+	assertEqualFloat64(2.718281828, result.DoubleField, "DoubleField")
+	assertEqual(true, result.BoolField, "BoolField")
+	assertEqual("hello", result.StringField, "StringField")
+	if result.NullableString1 == nil || *result.NullableString1 != "nullable_value1" {
+		panic(fmt.Sprintf("NullableString1 mismatch: expected 'nullable_value1', got '%v'", result.NullableString1))
+	}
+	if result.NullableString2 == nil || *result.NullableString2 != "nullable_value2" {
+		panic(fmt.Sprintf("NullableString2 mismatch: expected 'nullable_value2', got '%v'", result.NullableString2))
+	}
+	if result.NullableString3 == nil || *result.NullableString3 != "nullable_value3" {
+		panic(fmt.Sprintf("NullableString3 mismatch: expected 'nullable_value3', got '%v'", result.NullableString3))
+	}
+
+	serialized, err := f.Serialize(result)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to serialize: %v", err))
+	}
+
+	writeFile(dataFile, serialized)
+}
+
+func testNullableFieldCompatibleNull() {
+	dataFile := getDataFile()
+	data := readFile(dataFile)
+
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
+	f.Register(NullableFieldStructCompatible{}, 402)
+
+	buf := fory.NewByteBuffer(data)
+	var obj interface{}
+	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to deserialize: %v", err))
+	}
+
+	result := getNullableFieldStructCompatible(obj)
+	assertEqual(int32(42), result.IntField, "IntField")
+	assertEqual(int64(123456789), result.LongField, "LongField")
+	assertEqualFloat32(3.14, result.FloatField, "FloatField")
+	assertEqualFloat64(2.718281828, result.DoubleField, "DoubleField")
+	assertEqual(true, result.BoolField, "BoolField")
+	assertEqual("hello", result.StringField, "StringField")
+	if result.NullableString1 != nil {
+		panic(fmt.Sprintf("NullableString1 mismatch: expected nil, got '%v'", *result.NullableString1))
+	}
+	if result.NullableString2 != nil {
+		panic(fmt.Sprintf("NullableString2 mismatch: expected nil, got '%v'", *result.NullableString2))
+	}
+	if result.NullableString3 != nil {
+		panic(fmt.Sprintf("NullableString3 mismatch: expected nil, got '%v'", *result.NullableString3))
+	}
+
+	serialized, err := f.Serialize(result)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to serialize: %v", err))
+	}
+
+	writeFile(dataFile, serialized)
+}
+
+// ============================================================================
 // Main
 // ============================================================================
 
@@ -1480,6 +1683,14 @@ func main() {
 		testEnumSchemaEvolutionCompatible()
 	case "test_enum_schema_evolution_compatible_reverse":
 		testEnumSchemaEvolutionCompatibleReverse()
+	case "test_nullable_field_schema_consistent_not_null":
+		testNullableFieldSchemaConsistentNotNull()
+	case "test_nullable_field_schema_consistent_null":
+		testNullableFieldSchemaConsistentNull()
+	case "test_nullable_field_compatible_not_null":
+		testNullableFieldCompatibleNotNull()
+	case "test_nullable_field_compatible_null":
+		testNullableFieldCompatibleNull()
 	default:
 		panic(fmt.Sprintf("Unknown test case: %s", *caseName))
 	}

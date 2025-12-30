@@ -296,6 +296,54 @@ struct TwoEnumFieldStruct {
 };
 FORY_STRUCT(TwoEnumFieldStruct, f1, f2);
 
+// ============================================================================
+// Nullable Field Test Types
+// ============================================================================
+
+struct NullableFieldStruct {
+  int32_t int_field;
+  int64_t long_field;
+  float float_field;
+  double double_field;
+  bool bool_field;
+  std::string string_field;
+  std::optional<std::string> nullable_string1;
+  std::optional<std::string> nullable_string2;
+  bool operator==(const NullableFieldStruct &other) const {
+    return int_field == other.int_field && long_field == other.long_field &&
+           std::abs(float_field - other.float_field) < 1e-6 &&
+           std::abs(double_field - other.double_field) < 1e-9 &&
+           bool_field == other.bool_field && string_field == other.string_field &&
+           nullable_string1 == other.nullable_string1 &&
+           nullable_string2 == other.nullable_string2;
+  }
+};
+FORY_STRUCT(NullableFieldStruct, int_field, long_field, float_field, double_field,
+            bool_field, string_field, nullable_string1, nullable_string2);
+
+struct NullableFieldStructCompatible {
+  int32_t int_field;
+  int64_t long_field;
+  float float_field;
+  double double_field;
+  bool bool_field;
+  std::string string_field;
+  std::optional<std::string> nullable_string1;
+  std::optional<std::string> nullable_string2;
+  std::optional<std::string> nullable_string3;
+  bool operator==(const NullableFieldStructCompatible &other) const {
+    return int_field == other.int_field && long_field == other.long_field &&
+           std::abs(float_field - other.float_field) < 1e-6 &&
+           std::abs(double_field - other.double_field) < 1e-9 &&
+           bool_field == other.bool_field && string_field == other.string_field &&
+           nullable_string1 == other.nullable_string1 &&
+           nullable_string2 == other.nullable_string2 &&
+           nullable_string3 == other.nullable_string3;
+  }
+};
+FORY_STRUCT(NullableFieldStructCompatible, int_field, long_field, float_field, double_field,
+            bool_field, string_field, nullable_string1, nullable_string2, nullable_string3);
+
 namespace fory {
 namespace serialization {
 
@@ -467,6 +515,10 @@ void RunTestOneEnumFieldCompatible(const std::string &data_file);
 void RunTestTwoEnumFieldCompatible(const std::string &data_file);
 void RunTestEnumSchemaEvolutionCompatible(const std::string &data_file);
 void RunTestEnumSchemaEvolutionCompatibleReverse(const std::string &data_file);
+void RunTestNullableFieldSchemaConsistentNotNull(const std::string &data_file);
+void RunTestNullableFieldSchemaConsistentNull(const std::string &data_file);
+void RunTestNullableFieldCompatibleNotNull(const std::string &data_file);
+void RunTestNullableFieldCompatibleNull(const std::string &data_file);
 } // namespace
 
 int main(int argc, char **argv) {
@@ -550,6 +602,14 @@ int main(int argc, char **argv) {
       RunTestEnumSchemaEvolutionCompatible(data_file);
     } else if (case_name == "test_enum_schema_evolution_compatible_reverse") {
       RunTestEnumSchemaEvolutionCompatibleReverse(data_file);
+    } else if (case_name == "test_nullable_field_schema_consistent_not_null") {
+      RunTestNullableFieldSchemaConsistentNotNull(data_file);
+    } else if (case_name == "test_nullable_field_schema_consistent_null") {
+      RunTestNullableFieldSchemaConsistentNull(data_file);
+    } else if (case_name == "test_nullable_field_compatible_not_null") {
+      RunTestNullableFieldCompatibleNotNull(data_file);
+    } else if (case_name == "test_nullable_field_compatible_null") {
+      RunTestNullableFieldCompatibleNull(data_file);
     } else {
       Fail("Unknown test case: " + case_name);
     }
@@ -1731,6 +1791,122 @@ void RunTestEnumSchemaEvolutionCompatibleReverse(const std::string &data_file) {
   }
 
   // Serialize back
+  std::vector<uint8_t> out;
+  AppendSerialized(fory, value, out);
+  WriteFile(data_file, out);
+}
+
+// ============================================================================
+// Nullable Field Tests
+// ============================================================================
+
+void RunTestNullableFieldSchemaConsistentNotNull(const std::string &data_file) {
+  auto bytes = ReadFile(data_file);
+  // SCHEMA_CONSISTENT mode: compatible=false, xlang=true, check_struct_version=true
+  auto fory = BuildFory(false, true, true);
+  EnsureOk(fory.register_struct<NullableFieldStruct>(401),
+           "register NullableFieldStruct");
+
+  NullableFieldStruct expected;
+  expected.int_field = 42;
+  expected.long_field = 123456789;
+  expected.float_field = 3.14f;
+  expected.double_field = 2.718281828;
+  expected.bool_field = true;
+  expected.string_field = std::string("hello");
+  expected.nullable_string1 = std::string("nullable_value1");
+  expected.nullable_string2 = std::string("nullable_value2");
+
+  Buffer buffer = MakeBuffer(bytes);
+  auto value = ReadNext<NullableFieldStruct>(fory, buffer);
+  if (!(value == expected)) {
+    Fail("NullableFieldStruct schema not null mismatch");
+  }
+
+  std::vector<uint8_t> out;
+  AppendSerialized(fory, value, out);
+  WriteFile(data_file, out);
+}
+
+void RunTestNullableFieldSchemaConsistentNull(const std::string &data_file) {
+  auto bytes = ReadFile(data_file);
+  // SCHEMA_CONSISTENT mode: compatible=false, xlang=true, check_struct_version=true
+  auto fory = BuildFory(false, true, true);
+  EnsureOk(fory.register_struct<NullableFieldStruct>(401),
+           "register NullableFieldStruct");
+
+  NullableFieldStruct expected;
+  expected.int_field = 42;
+  expected.long_field = 123456789;
+  expected.float_field = 3.14f;
+  expected.double_field = 2.718281828;
+  expected.bool_field = true;
+  expected.string_field = std::string("hello");
+  expected.nullable_string1 = std::nullopt;
+  expected.nullable_string2 = std::nullopt;
+
+  Buffer buffer = MakeBuffer(bytes);
+  auto value = ReadNext<NullableFieldStruct>(fory, buffer);
+  if (!(value == expected)) {
+    Fail("NullableFieldStruct schema null mismatch");
+  }
+
+  std::vector<uint8_t> out;
+  AppendSerialized(fory, value, out);
+  WriteFile(data_file, out);
+}
+
+void RunTestNullableFieldCompatibleNotNull(const std::string &data_file) {
+  auto bytes = ReadFile(data_file);
+  auto fory = BuildFory(true, true); // COMPATIBLE mode
+  EnsureOk(fory.register_struct<NullableFieldStructCompatible>(402),
+           "register NullableFieldStructCompatible");
+
+  NullableFieldStructCompatible expected;
+  expected.int_field = 42;
+  expected.long_field = 123456789;
+  expected.float_field = 3.14f;
+  expected.double_field = 2.718281828;
+  expected.bool_field = true;
+  expected.string_field = std::string("hello");
+  expected.nullable_string1 = std::string("nullable_value1");
+  expected.nullable_string2 = std::string("nullable_value2");
+  expected.nullable_string3 = std::string("nullable_value3");
+
+  Buffer buffer = MakeBuffer(bytes);
+  auto value = ReadNext<NullableFieldStructCompatible>(fory, buffer);
+  if (!(value == expected)) {
+    Fail("NullableFieldStructCompatible not null mismatch");
+  }
+
+  std::vector<uint8_t> out;
+  AppendSerialized(fory, value, out);
+  WriteFile(data_file, out);
+}
+
+void RunTestNullableFieldCompatibleNull(const std::string &data_file) {
+  auto bytes = ReadFile(data_file);
+  auto fory = BuildFory(true, true); // COMPATIBLE mode
+  EnsureOk(fory.register_struct<NullableFieldStructCompatible>(402),
+           "register NullableFieldStructCompatible");
+
+  NullableFieldStructCompatible expected;
+  expected.int_field = 42;
+  expected.long_field = 123456789;
+  expected.float_field = 3.14f;
+  expected.double_field = 2.718281828;
+  expected.bool_field = true;
+  expected.string_field = std::string("hello");
+  expected.nullable_string1 = std::nullopt;
+  expected.nullable_string2 = std::nullopt;
+  expected.nullable_string3 = std::nullopt;
+
+  Buffer buffer = MakeBuffer(bytes);
+  auto value = ReadNext<NullableFieldStructCompatible>(fory, buffer);
+  if (!(value == expected)) {
+    Fail("NullableFieldStructCompatible null mismatch");
+  }
+
   std::vector<uint8_t> out;
   AppendSerialized(fory, value, out);
   WriteFile(data_file, out);

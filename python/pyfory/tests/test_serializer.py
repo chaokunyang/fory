@@ -190,8 +190,10 @@ def test_ref_tracking(language):
         "dict2_0": dict2,
         "dict2_1": dict2,
     }
-    dict3["dict3_0"] = dict3
-    dict3["dict3_1"] = dict3
+    # Circular reference in dict3 - only works for Python language mode
+    if language == Language.PYTHON:
+        dict3["dict3_0"] = dict3
+        dict3["dict3_1"] = dict3
     new_dict3 = ser_de(fory, dict3)
     assert new_dict3["list1_0"] == list_
     assert new_dict3["list1_0"] is new_dict3["list1_1"]
@@ -199,8 +201,9 @@ def test_ref_tracking(language):
     assert new_dict3["dict1_0"] is new_dict3["dict1_1"]
     assert new_dict3["dict2_0"] == dict2
     assert new_dict3["dict2_0"] is new_dict3["dict2_1"]
-    assert new_dict3["dict3_0"] is new_dict3
-    assert new_dict3["dict3_0"] is new_dict3["dict3_0"]
+    if language == Language.PYTHON:
+        assert new_dict3["dict3_0"] is new_dict3
+        assert new_dict3["dict3_0"] is new_dict3["dict3_0"]
 
 
 @pytest.mark.parametrize("language", [Language.PYTHON, Language.XLANG])

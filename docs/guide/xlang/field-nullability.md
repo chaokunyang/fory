@@ -54,7 +54,30 @@ Where `null_flag` is:
 - `-1` (NULL_FLAG): Value is null
 - `-2` (NOT_NULL_VALUE_FLAG): Value is present
 
-For reference tracking behavior, see [Reference Tracking](field-reference-tracking.md).
+## Nullable vs Reference Tracking
+
+These are related but distinct concepts:
+
+| Concept                | Purpose                              | Flag Values                                 |
+| ---------------------- | ------------------------------------ | ------------------------------------------- |
+| **Nullable**           | Allow null values for a field        | `-1` (null), `-2` (not null)                |
+| **Reference Tracking** | Deduplicate shared object references | `-1` (null), `-2` (not null), `≥0` (ref ID) |
+
+Key differences:
+
+- **Nullable only**: Writes `-1` or `-2` flag, no reference deduplication
+- **Reference tracking**: Extends nullable semantics with reference IDs (`≥0`) for previously seen objects
+- Both use the same flag byte position—ref tracking is a superset of nullable
+
+When `refTracking=true`, the null flag byte doubles as a ref flag:
+
+```
+ref_flag = -1  → null value
+ref_flag = -2  → new object (first occurrence)
+ref_flag >= 0  → reference to object at index ref_flag
+```
+
+For detailed reference tracking behavior, see [Reference Tracking](field-reference-tracking.md).
 
 ## Language-Specific Examples
 

@@ -400,6 +400,9 @@ case $1 in
       mvn -T10 -B --no-transfer-progress checkstyle:check
       echo "Executing format check succeeds"
     ;;
+    install_pyfory)
+      install_pyfory
+    ;;
     *)
       echo "Execute command $*"
       "$@"

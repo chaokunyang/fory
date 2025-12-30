@@ -305,10 +305,10 @@ namespace serialization {
 template <> struct Serializer<MyExt> {
   static constexpr TypeId type_id = TypeId::EXT;
 
-  static void write(const MyExt &value, WriteContext &ctx, bool write_ref,
+  static void write(const MyExt &value, WriteContext &ctx, RefMode ref_mode,
                     bool write_type, bool has_generics = false) {
     (void)has_generics;
-    write_not_null_ref_flag(ctx, write_ref);
+    write_not_null_ref_flag(ctx, ref_mode);
     if (write_type) {
       // Delegate dynamic typeinfo to WriteContext so that user type
       // ids and named registrations are encoded consistently with
@@ -334,8 +334,8 @@ template <> struct Serializer<MyExt> {
     write_data(value, ctx);
   }
 
-  static MyExt read(ReadContext &ctx, bool read_ref, bool read_type) {
-    bool has_value = consume_ref_flag(ctx, read_ref);
+  static MyExt read(ReadContext &ctx, RefMode ref_mode, bool read_type) {
+    bool has_value = read_null_only_flag(ctx, ref_mode);
     if (ctx.has_error() || !has_value) {
       return MyExt{};
     }
@@ -366,10 +366,10 @@ template <> struct Serializer<MyExt> {
     return read_data(ctx);
   }
 
-  static MyExt read_with_type_info(ReadContext &ctx, bool read_ref,
+  static MyExt read_with_type_info(ReadContext &ctx, RefMode ref_mode,
                                    const TypeInfo &type_info) {
     (void)type_info;
-    return read(ctx, read_ref, false);
+    return read(ctx, ref_mode, false);
   }
 };
 

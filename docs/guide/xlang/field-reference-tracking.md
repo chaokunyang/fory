@@ -107,6 +107,102 @@ Fory fory = Fory.builder()
     .build();
 ```
 
+## Per-Field Reference Tracking
+
+By default, **most fields do not track references** even when global `refTracking=true`. Only specific pointer/smart pointer types track references by default.
+
+### Default Behavior by Language
+
+| Language | Default Ref Tracking | Types That Track Refs by Default |
+| -------- | -------------------- | -------------------------------- |
+| Java     | No                   | None (use annotation to enable)  |
+| Python   | No                   | None (use annotation to enable)  |
+| Go       | No                   | Pointer types (`*T`)             |
+| C++      | No                   | `std::shared_ptr<T>`             |
+| Rust     | No                   | `Rc<T>`, `Arc<T>`, `Weak<T>`     |
+
+### Customizing Per-Field Ref Tracking
+
+#### Java: @ForyField Annotation
+
+```java
+public class Document {
+    // Default: no ref tracking
+    String title;
+
+    // Enable ref tracking for this field
+    @ForyField(trackingRef = true)
+    Author author;
+
+    // Shared across documents, track refs to avoid duplicates
+    @ForyField(trackingRef = true)
+    List<Tag> tags;
+}
+```
+
+#### C++: fory::field Wrapper
+
+```cpp
+struct Document {
+    std::string title;
+
+    // shared_ptr tracks refs by default
+    std::shared_ptr<Author> author;
+
+    // Explicitly enable ref tracking
+    fory::field<std::vector<Tag>, 1, fory::track_ref<true>> tags;
+
+    // Explicitly disable ref tracking
+    fory::field<std::shared_ptr<Data>, 2, fory::track_ref<false>> data;
+};
+FORY_STRUCT(Document, title, author, tags, data);
+```
+
+#### Rust: Field Attributes
+
+```rust
+#[derive(Fory)]
+#[tag("example.Document")]
+struct Document {
+    title: String,
+
+    // Rc/Arc track refs by default
+    author: Rc<Author>,
+
+    // Explicitly enable ref tracking
+    #[track_ref]
+    tags: Vec<Tag>,
+}
+```
+
+#### Go: Struct Tags
+
+```go
+type Document struct {
+    Title string
+
+    // Pointer types track refs by default
+    Author *Author
+
+    // Use struct tag to control ref tracking
+    Tags []Tag `fory:"trackRef"`
+}
+```
+
+### When to Enable Per-Field Ref Tracking
+
+Enable ref tracking for fields that:
+
+- May contain the same object instance multiple times
+- Are part of circular reference chains
+- Hold large objects that might be shared
+
+Disable (or leave default) for fields that:
+
+- Always contain unique values
+- Are primitives or simple value types
+- Don't participate in object sharing
+
 ## Example: Shared References
 
 ```java

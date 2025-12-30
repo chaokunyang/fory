@@ -29,16 +29,16 @@ import java.lang.annotation.Target;
 public @interface ForyField {
 
   /**
-   * Field tag ID for schema evolution mode (REQUIRED).
+   * Field tag ID for schema evolution mode.
    *
    * <ul>
    *   <li>When >= 0: Uses this numeric ID instead of field name string for compact encoding
-   *   <li>When -1: Explicitly opt-out of tag ID, use field name with meta string encoding
+   *   <li>When -1 (default): Uses field name with meta string encoding
    * </ul>
    *
    * <p>Must be unique within the class (except -1) and stable across versions.
    */
-  int id();
+  int id() default -1;
 
   /**
    * Whether this field can be null. When set to false (default), Fory skips writing the null flag

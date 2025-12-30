@@ -105,9 +105,8 @@ public class FieldTypes {
     // For native: non-primitive types are nullable by default
     boolean nullable;
     if (isXlang) {
-      // Only Optional types are nullable by default in xlang mode
-      // Also treat Object (Java equivalent of Python's Any type) as nullable
-      nullable = isOptionalType(rawType) || TypeUtils.isBoxed(rawType) || rawType == Object.class;
+      // Only Optional types and boxed types are nullable by default in xlang mode
+      nullable = isOptionalType(rawType) || TypeUtils.isBoxed(rawType);
     } else {
       // For nested types (field=null), nullable defaults to true to match decoding behavior
       // since the encoding doesn't persist nullable for nested types (see FieldType.read())

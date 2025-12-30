@@ -107,8 +107,7 @@ def _default_field_meta(type_hint: type, field_nullable: bool = False, xlang: bo
     3. Global field_nullable is True
 
     For xlang mode, a field is nullable only if:
-    1. It's Optional[T], OR
-    2. It's typing.Any (can hold any value including None)
+    1. It's Optional[T]
 
     For ref, defaults to False to preserve original serialization behavior.
     Non-nullable complex fields use xwrite_no_ref (no ref header in buffer).
@@ -117,8 +116,7 @@ def _default_field_meta(type_hint: type, field_nullable: bool = False, xlang: bo
     unwrapped_type, is_optional = unwrap_optional(type_hint)
     if xlang:
         # For xlang: nullable=False by default, except for Optional[T] types
-        # and Any type (which can hold any value including None)
-        nullable = is_optional or unwrapped_type is typing.Any
+        nullable = is_optional
     else:
         # For native: Non-primitive types (str, list, dict, etc.) are all nullable by default
         nullable = is_optional or not is_primitive_type(unwrapped_type) or field_nullable
@@ -201,8 +199,7 @@ def _extract_field_infos(
         # Compute effective nullable based on mode
         if xlang:
             # For xlang: respect explicit annotation or default to is_optional only
-            # and Any type (which can hold any value including None)
-            effective_nullable = meta.nullable or is_optional or unwrapped_type is typing.Any
+            effective_nullable = meta.nullable or is_optional
         else:
             # For native: Optional[T] or non-primitive types are nullable
             effective_nullable = meta.nullable or is_optional or not is_primitive_type(unwrapped_type)

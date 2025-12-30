@@ -638,10 +638,6 @@ public abstract class TypeResolver {
       if (TypeUtils.isBoxed(rawType)) {
         return true;
       }
-      // Object type (Java equivalent of Python's Any type) is nullable
-      if (rawType == Object.class) {
-        return true;
-      }
       // Default for xlang: false for all non-primitives, except Optional types
       return TypeUtils.isOptionalType(rawType);
     }

@@ -377,13 +377,13 @@ def build_field_infos(type_resolver, cls):
         if fory_meta is not None:
             is_nullable = fory_meta.nullable
         else:
-            # For xlang mode: only Optional[T] and Any types are nullable by default
+            # For xlang mode: only Optional[T] types are nullable by default
             # For native mode: all reference types are nullable by default
             if type_resolver.fory.is_py:
                 is_nullable = is_optional or not is_primitive_type(unwrapped_type)
             else:
-                # For xlang: Optional[T] and Any types are nullable (matching Java's Object type)
-                is_nullable = is_optional or unwrapped_type is typing.Any
+                # For xlang: only Optional[T] types are nullable
+                is_nullable = is_optional
 
         # Determine ref tracking: field.ref AND global ref_tracking
         # For xlang mode: ref tracking defaults to false unless explicitly annotated

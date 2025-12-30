@@ -157,7 +157,7 @@ pub(crate) fn gen_named_variant_meta_type_impl_with_enum_name(
 
 pub fn gen_write(_data_enum: &DataEnum) -> TokenStream {
     quote! {
-        fory_core::serializer::enum_::write::<Self>(self, context, write_ref_info, write_type_info)
+        fory_core::serializer::enum_::write::<Self>(self, context, ref_mode, write_type_info)
     }
 }
 
@@ -311,7 +311,7 @@ fn rust_compatible_variant_write_branches(
                             context.writer.write_u8(header);
                             use fory_core::serializer::Serializer;
                             #(
-                                #field_idents.fory_write(context, true, true, false)?;
+                                #field_idents.fory_write(context, fory_core::RefMode::NullOnly, true, false)?;
                             )*
                         }
                     }
@@ -395,13 +395,13 @@ pub fn gen_write_type_info() -> TokenStream {
 
 pub fn gen_read(_: &DataEnum) -> TokenStream {
     quote! {
-        fory_core::serializer::enum_::read::<Self>(context, read_ref_info, read_type_info)
+        fory_core::serializer::enum_::read::<Self>(context, ref_mode, read_type_info)
     }
 }
 
 pub fn gen_read_with_type_info(_: &DataEnum) -> TokenStream {
     quote! {
-        fory_core::serializer::enum_::read::<Self>(context, read_ref_info, false)
+        fory_core::serializer::enum_::read::<Self>(context, ref_mode, false)
     }
 }
 
@@ -585,7 +585,7 @@ fn rust_compatible_variant_read_branches(
                             quote! {
                                 let #field_ident = if #i < len {
                                     use fory_core::serializer::Serializer;
-                                    <#field_ty>::fory_read(context, true, true)?
+                                    <#field_ty>::fory_read(context, fory_core::RefMode::NullOnly, true)?
                                 } else {
                                     <#field_ty as fory_core::ForyDefault>::fory_default()
                                 }

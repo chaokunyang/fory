@@ -1222,13 +1222,42 @@ pub(crate) fn compute_struct_version_hash(fields: &[&Field]) -> i32 {
     version
 }
 
-pub(crate) fn skip_ref_flag(ty: &Type) -> bool {
-    // For xlang mode with nullable=false default:
-    // - All non-Option types skip the ref flag (nullable=false)
-    // - Only Option<T> writes a ref flag (nullable=true)
-    // This aligns with Java/Go/Python/C++ xlang behavior
-    let type_name = extract_type_name(ty);
-    type_name != "Option"
+/// Represents the determined RefMode for a field
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FieldRefMode {
+    None,
+    NullOnly,
+    Tracking,
+}
+
+impl ToTokens for FieldRefMode {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        let ts = match self {
+            FieldRefMode::None => quote! { fory_core::RefMode::None },
+            FieldRefMode::NullOnly => quote! { fory_core::RefMode::NullOnly },
+            FieldRefMode::Tracking => quote! { fory_core::RefMode::Tracking },
+        };
+        tokens.extend(ts);
+    }
+}
+
+/// Determine the RefMode for a field based on field meta attributes and type.
+/// This respects `#[fory(ref=false)]` and `#[fory(nullable)]` attributes.
+pub(crate) fn determine_field_ref_mode(field: &syn::Field) -> FieldRefMode {
+    use super::field_meta::{classify_field_type, parse_field_meta};
+
+    let meta = parse_field_meta(field).unwrap_or_default();
+    let type_class = classify_field_type(&field.ty);
+    let nullable = meta.effective_nullable(type_class);
+    let ref_tracking = meta.effective_ref_tracking(type_class);
+
+    if ref_tracking {
+        FieldRefMode::Tracking
+    } else if nullable {
+        FieldRefMode::NullOnly
+    } else {
+        FieldRefMode::None
+    }
 }
 
 /// Determine whether to skip writing type info for a struct field based on its type.

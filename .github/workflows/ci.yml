@@ -525,7 +525,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-maven-
       - name: Install pyfory
-        run: pip install -e python/
+        run: |
+          pip install numpy
+          pip install -e python/
       - name: Run Python Xlang Test
         env:
           FORY_PYTHON_JAVA_CI: "1"

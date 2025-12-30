@@ -27,11 +27,12 @@ Rust (`#[fory(...)]` attributes) and Go (`fory:"..."` struct tags).
 Example:
     @dataclass
     class User:
-        id: int32 = pyfory.field(0)                          # Tag ID 0
-        name: str = pyfory.field(1)                          # Tag ID 1
-        email: Optional[str] = pyfory.field(2, nullable=True) # Tag ID 2, nullable
-        friends: List["User"] = pyfory.field(3, ref=True)    # Tag ID 3, ref tracking
-        _cache: dict = pyfory.field(-1, ignore=True)         # Field name, ignored
+        id: int32 = pyfory.field(id=0)                          # Tag ID 0
+        name: str = pyfory.field(id=1)                          # Tag ID 1
+        email: Optional[str] = pyfory.field(id=2, nullable=True) # Tag ID 2, nullable
+        friends: List["User"] = pyfory.field(id=3, ref=True)    # Tag ID 3, ref tracking
+        nickname: Optional[str] = pyfory.field(nullable=True)   # Use field name, nullable
+        _cache: dict = pyfory.field(ignore=True)                # Use field name, ignored
 """
 
 import dataclasses
@@ -66,7 +67,7 @@ class ForyFieldMeta:
 
 
 def field(
-    id: int,
+    id: int = -1,
     *,
     nullable: bool = False,
     ref: bool = False,
@@ -87,8 +88,8 @@ def field(
     This wraps dataclasses.field() and stores Fory configuration in field.metadata.
 
     Args:
-        id: Field tag ID (required positional parameter).
-            - -1: Use field name with meta string encoding
+        id: Field tag ID (optional, default -1).
+            - -1 (default): Use field name with meta string encoding
             - >=0: Use numeric tag ID (more compact, stable across renames)
             Must be unique within the class (except -1).
 
@@ -119,10 +120,11 @@ def field(
     Example:
         @dataclass
         class User:
-            name: str = pyfory.field(0)
-            email: Optional[str] = pyfory.field(1, nullable=True)
+            name: str = pyfory.field(0)                                    # Tag ID 0
+            email: Optional[str] = pyfory.field(1, nullable=True)          # Tag ID 1
             friends: List["User"] = pyfory.field(2, ref=True, default_factory=list)
-            _cache: dict = pyfory.field(-1, ignore=True, default_factory=dict)
+            nickname: Optional[str] = pyfory.field(nullable=True)          # Use field name
+            _cache: dict = pyfory.field(ignore=True, default_factory=dict) # Use field name
     """
     # Validate id
     if not isinstance(id, int):

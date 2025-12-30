@@ -101,8 +101,7 @@ public class Fingerprint {
           nullable = foryField.nullable() ? '1' : '0';
         } else {
           // Default: Optional types, boxed primitives are nullable
-          nullable =
-              (TypeUtils.isOptionalType(rawType) || TypeUtils.isBoxed(rawType)) ? '1' : '0';
+          nullable = (TypeUtils.isOptionalType(rawType) || TypeUtils.isBoxed(rawType)) ? '1' : '0';
         }
       } else {
         nullable = descriptor.isNullable() ? '1' : '0';

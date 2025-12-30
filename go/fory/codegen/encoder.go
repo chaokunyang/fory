@@ -320,9 +320,9 @@ func generateSliceWriteInline(buf *bytes.Buffer, sliceType *types.Slice, fieldAc
 	}
 
 	fmt.Fprintf(buf, "\t\t\t\t}\n") // end for loop
-	fmt.Fprintf(buf, "\t\t\t}\n") // end if sliceLen > 0
-	fmt.Fprintf(buf, "\t\t}\n") // end else (not nil)
-	fmt.Fprintf(buf, "\t}\n") // end block scope
+	fmt.Fprintf(buf, "\t\t\t}\n")   // end if sliceLen > 0
+	fmt.Fprintf(buf, "\t\t}\n")     // end else (not nil)
+	fmt.Fprintf(buf, "\t}\n")       // end block scope
 
 	return nil
 }

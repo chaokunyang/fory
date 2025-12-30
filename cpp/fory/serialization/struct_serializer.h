@@ -55,27 +55,6 @@ constexpr int8_t FIELD_TYPE_MAP_KEY_FINAL = 2;
 constexpr int8_t FIELD_TYPE_MAP_VALUE_FINAL = 3;
 constexpr int8_t FIELD_TYPE_MAP_KV_FINAL = 4;
 
-/// Check if a field needs reference/null flags in the stream.
-///
-/// This mirrors Rust's `field_need_write_ref_into(type_id, nullable)` in
-/// rust/fory-core/src/serializer/util.rs and determines whether the writer
-/// emits a `RefFlag` byte before the field's value payload.
-///
-/// Aligns with the xlang protocol where:
-/// - Non-optional types (nullable=false) skip the ref flag entirely
-/// - Optional types (nullable=true) write a ref flag to indicate null vs
-/// non-null
-inline bool field_requires_ref_flag(uint32_t type_id, bool nullable) {
-  // Only write ref flag when nullable is true (value can be null).
-  // When nullable=false, the value is always present, no ref flag needed.
-  (void)type_id; // Unused, kept for API compatibility
-  return nullable;
-}
-
-inline bool field_requires_ref_flag(uint32_t type_id) {
-  return field_requires_ref_flag(type_id, false);
-}
-
 /// Serialization metadata for a type.
 ///
 /// This template is populated automatically when `FORY_STRUCT` is used to

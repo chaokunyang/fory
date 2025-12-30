@@ -401,18 +401,10 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     }
   }
 
-  /**
-   * Calculate the effective nullable flag for a field based on xlang mode. In xlang mode, fields
-   * are non-nullable by default unless explicitly annotated or the field type is Optional.
-   */
-  protected boolean getEffectiveNullable(Descriptor descriptor) {
-    return descriptor.isNullable();
-  }
-
   protected Expression serializeField(
       Expression fieldValue, Expression buffer, Descriptor descriptor) {
     TypeRef<?> typeRef = descriptor.getTypeRef();
-    boolean nullable = getEffectiveNullable(descriptor);
+    boolean nullable = descriptor.isNullable();
     // descriptor.isTrackingRef() already includes the needWriteRef check
     boolean useRefTracking = descriptor.isTrackingRef();
 
@@ -1804,7 +1796,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
   protected Expression deserializeField(
       Expression buffer, Descriptor descriptor, Function<Expression, Expression> callback) {
     TypeRef<?> typeRef = descriptor.getTypeRef();
-    boolean nullable = getEffectiveNullable(descriptor);
+    boolean nullable = descriptor.isNullable();
     // descriptor.isTrackingRef() already includes the needWriteRef check
     boolean useRefTracking = descriptor.isTrackingRef();
     // Check if type normally needs ref (for preserveRefId when ref tracking is disabled)

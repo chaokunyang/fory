@@ -271,9 +271,20 @@ struct field_tag_id<field<T, Id, Options...>> {
 template <typename T>
 inline constexpr int16_t field_tag_id_v = field_tag_id<T>::value;
 
-/// Get is_nullable from field type
+/// Determines whether a field is nullable and requires a RefFlag byte.
+///
+/// This mirrors Rust's `field_need_write_ref_into(type_id, nullable)` in
+/// rust/fory-core/src/serializer/util.rs and determines whether the writer
+/// emits a `RefFlag` byte before the field's value payload.
+///
+/// Per the xlang protocol:
+/// - Non-nullable types (nullable=false) skip the ref flag entirely
+/// - Nullable types (nullable=true) write a ref flag to indicate null vs
+///   non-null
+///
+/// For non-field types, std::optional is considered nullable.
+/// For fory::field types, uses the explicit nullable option if provided.
 template <typename T> struct field_is_nullable {
-  // For non-field types, check if it's std::optional
   static constexpr bool value = detail::is_optional_v<T>;
 };
 

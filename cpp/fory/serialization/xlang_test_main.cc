@@ -1934,8 +1934,8 @@ void RunTestNullableFieldSchemaConsistentNotNull(const std::string &data_file) {
   expected.short_field = 2;
   expected.int_field = 42;
   expected.long_field = 123456789;
-  expected.float_field = 3.14f;
-  expected.double_field = 2.718281828;
+  expected.float_field = 1.5f;
+  expected.double_field = 2.5;
   expected.bool_field = true;
 
   // Base non-nullable reference fields
@@ -1986,8 +1986,8 @@ void RunTestNullableFieldSchemaConsistentNull(const std::string &data_file) {
   expected.short_field = 2;
   expected.int_field = 42;
   expected.long_field = 123456789;
-  expected.float_field = 3.14f;
-  expected.double_field = 2.718281828;
+  expected.float_field = 1.5f;
+  expected.double_field = 2.5;
   expected.bool_field = true;
 
   // Base non-nullable reference fields - must have values
@@ -2033,8 +2033,8 @@ void RunTestNullableFieldCompatibleNotNull(const std::string &data_file) {
   expected.short_field = 2;
   expected.int_field = 42;
   expected.long_field = 123456789;
-  expected.float_field = 3.14f;
-  expected.double_field = 2.718281828;
+  expected.float_field = 1.5f;
+  expected.double_field = 2.5;
   expected.bool_field = true;
 
   // Base non-nullable boxed fields
@@ -2090,8 +2090,8 @@ void RunTestNullableFieldCompatibleNull(const std::string &data_file) {
   expected.short_field = 2;
   expected.int_field = 42;
   expected.long_field = 123456789;
-  expected.float_field = 3.14f;
-  expected.double_field = 2.718281828;
+  expected.float_field = 1.5f;
+  expected.double_field = 2.5;
   expected.bool_field = true;
 
   // Base non-nullable boxed fields - must have values

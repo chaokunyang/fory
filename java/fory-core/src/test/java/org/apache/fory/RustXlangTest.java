@@ -53,7 +53,7 @@ public class RustXlangTest extends XlangTestBase {
   protected void ensurePeerReady() {
     String enabled = System.getenv("FORY_RUST_JAVA_CI");
     if (!"1".equals(enabled)) {
-      throw new SkipException("Skipping RustXlangTest: FORY_RUST_JAVA_CI not set to 1");
+//      throw new SkipException("Skipping RustXlangTest: FORY_RUST_JAVA_CI not set to 1");
     }
     boolean rustInstalled = true;
     try {
@@ -244,17 +244,13 @@ public class RustXlangTest extends XlangTestBase {
   @Override
   @Test
   public void testNullableFieldCompatibleNotNull() throws java.io.IOException {
-    // Java Compatible mode has a pre-existing bug (NullPointerException in TypeDefDecoder)
-    throw new SkipException(
-        "Skipping: compatible mode nullable field tests not supported due to Java bug");
+    super.testNullableFieldCompatibleNotNull();
   }
 
   @Override
   @Test
   public void testNullableFieldCompatibleNull() throws java.io.IOException {
-    // Java Compatible mode has a pre-existing bug (NullPointerException in TypeDefDecoder)
-    throw new SkipException(
-        "Skipping: compatible mode nullable field tests not supported due to Java bug");
+    super.testNullableFieldCompatibleNull();
   }
 
   @Test

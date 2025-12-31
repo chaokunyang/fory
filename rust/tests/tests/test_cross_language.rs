@@ -1303,56 +1303,66 @@ struct NullableComprehensiveSchemaConsistent {
     nullable_map: Option<HashMap<String, String>>,
 }
 
-/// Comprehensive struct for testing nullable fields in COMPATIBLE mode.
-/// Fields are organized as:
-/// - Base non-nullable fields: byte, short, int, long, float, double, bool, boxed types, string, list, set, map
-/// - Nullable group 1 (boxed types): Integer, Long, Float, Double, Boolean
-/// - Nullable group 2 (@ForyField): String, List, Set, Map
+/// Cross-language schema evolution test struct for COMPATIBLE mode.
+/// This struct has INVERTED nullability compared to Java:
+/// - Group 1: Nullable in Rust (Option), Non-nullable in Java
+/// - Group 2: Non-nullable in Rust, Nullable in Java (@ForyField(nullable=true))
+///
+/// This tests that compatible mode properly handles schema differences across languages.
 #[derive(ForyObject, Debug, PartialEq)]
 struct NullableComprehensiveCompatible {
-    // Base non-nullable primitive fields
-    byte_field: i8,
-    short_field: i16,
-    int_field: i32,
-    long_field: i64,
-    float_field: f32,
-    double_field: f64,
-    bool_field: bool,
+    // Group 1: Nullable in Rust, Non-nullable in Java
+    // Primitive fields
+    #[fory(nullable = true)]
+    byte_field: Option<i8>,
+    #[fory(nullable = true)]
+    short_field: Option<i16>,
+    #[fory(nullable = true)]
+    int_field: Option<i32>,
+    #[fory(nullable = true)]
+    long_field: Option<i64>,
+    #[fory(nullable = true)]
+    float_field: Option<f32>,
+    #[fory(nullable = true)]
+    double_field: Option<f64>,
+    #[fory(nullable = true)]
+    bool_field: Option<bool>,
 
-    // Base non-nullable boxed fields (not nullable by default in xlang)
-    boxed_int: i32,
-    boxed_long: i64,
-    boxed_float: f32,
-    boxed_double: f64,
-    boxed_bool: bool,
+    // Boxed fields - also nullable in Rust
+    #[fory(nullable = true)]
+    boxed_int: Option<i32>,
+    #[fory(nullable = true)]
+    boxed_long: Option<i64>,
+    #[fory(nullable = true)]
+    boxed_float: Option<f32>,
+    #[fory(nullable = true)]
+    boxed_double: Option<f64>,
+    #[fory(nullable = true)]
+    boxed_bool: Option<bool>,
 
-    // Base non-nullable reference fields
-    string_field: String,
-    list_field: Vec<String>,
-    set_field: HashSet<String>,
-    map_field: HashMap<String, String>,
+    // Reference fields - also nullable in Rust
+    #[fory(nullable = true)]
+    string_field: Option<String>,
+    #[fory(nullable = true)]
+    list_field: Option<Vec<String>>,
+    #[fory(nullable = true)]
+    set_field: Option<HashSet<String>>,
+    #[fory(nullable = true)]
+    map_field: Option<HashMap<String, String>>,
 
-    // Nullable group 1 - boxed types with @ForyField(nullable=true)
-    #[fory(nullable = true)]
-    nullable_int1: Option<i32>,
-    #[fory(nullable = true)]
-    nullable_long1: Option<i64>,
-    #[fory(nullable = true)]
-    nullable_float1: Option<f32>,
-    #[fory(nullable = true)]
-    nullable_double1: Option<f64>,
-    #[fory(nullable = true)]
-    nullable_bool1: Option<bool>,
+    // Group 2: Non-nullable in Rust, Nullable in Java (@ForyField(nullable=true))
+    // Boxed types
+    nullable_int1: i32,
+    nullable_long1: i64,
+    nullable_float1: f32,
+    nullable_double1: f64,
+    nullable_bool1: bool,
 
-    // Nullable group 2 - reference types with @ForyField(nullable=true)
-    #[fory(nullable = true)]
-    nullable_string2: Option<String>,
-    #[fory(nullable = true)]
-    nullable_list2: Option<Vec<String>>,
-    #[fory(nullable = true)]
-    nullable_set2: Option<HashSet<String>>,
-    #[fory(nullable = true)]
-    nullable_map2: Option<HashMap<String, String>>,
+    // Reference types
+    nullable_string2: String,
+    nullable_list2: Vec<String>,
+    nullable_set2: HashSet<String>,
+    nullable_map2: HashMap<String, String>,
 }
 
 #[test]
@@ -1371,8 +1381,8 @@ fn test_nullable_field_schema_consistent_not_null() {
         short_field: 2,
         int_field: 42,
         long_field: 123456789,
-        float_field: 3.14,
-        double_field: 2.718281828,
+        float_field: 1.5,
+        double_field: 2.5,
         bool_field: true,
 
         // Base non-nullable reference fields
@@ -1421,8 +1431,8 @@ fn test_nullable_field_schema_consistent_null() {
         short_field: 2,
         int_field: 42,
         long_field: 123456789,
-        float_field: 3.14,
-        double_field: 2.718281828,
+        float_field: 1.5,
+        double_field: 2.5,
         bool_field: true,
 
         // Base non-nullable reference fields - must have values
@@ -1455,6 +1465,9 @@ fn test_nullable_field_schema_consistent_null() {
     fs::write(&data_file_path, new_bytes).unwrap();
 }
 
+/// Test cross-language schema evolution - all fields have values.
+/// Java sends: Group 1 (non-nullable) + Group 2 (nullable with values)
+/// Rust reads: Group 1 (nullable/Option) + Group 2 (non-nullable)
 #[test]
 #[ignore]
 fn test_nullable_field_compatible_not_null() {
@@ -1466,43 +1479,40 @@ fn test_nullable_field_compatible_not_null() {
         .unwrap();
 
     let local_obj = NullableComprehensiveCompatible {
-        // Base non-nullable primitive fields
-        byte_field: 1,
-        short_field: 2,
-        int_field: 42,
-        long_field: 123456789,
-        float_field: 3.14,
-        double_field: 2.718281828,
-        bool_field: true,
+        // Group 1: Nullable in Rust (read from Java's non-nullable)
+        byte_field: Some(1),
+        short_field: Some(2),
+        int_field: Some(42),
+        long_field: Some(123456789),
+        float_field: Some(1.5),
+        double_field: Some(2.5),
+        bool_field: Some(true),
 
-        // Base non-nullable boxed fields
-        boxed_int: 10,
-        boxed_long: 20,
-        boxed_float: 1.1,
-        boxed_double: 2.2,
-        boxed_bool: true,
+        boxed_int: Some(10),
+        boxed_long: Some(20),
+        boxed_float: Some(1.1),
+        boxed_double: Some(2.2),
+        boxed_bool: Some(true),
 
-        // Base non-nullable reference fields
-        string_field: "hello".to_string(),
-        list_field: vec!["a".to_string(), "b".to_string(), "c".to_string()],
-        set_field: HashSet::from(["x".to_string(), "y".to_string()]),
-        map_field: HashMap::from([
+        string_field: Some("hello".to_string()),
+        list_field: Some(vec!["a".to_string(), "b".to_string(), "c".to_string()]),
+        set_field: Some(HashSet::from(["x".to_string(), "y".to_string()])),
+        map_field: Some(HashMap::from([
             ("key1".to_string(), "value1".to_string()),
             ("key2".to_string(), "value2".to_string()),
-        ]),
+        ])),
 
-        // Nullable group 1 - all have values
-        nullable_int1: Some(100),
-        nullable_long1: Some(200),
-        nullable_float1: Some(1.5),
-        nullable_double1: Some(2.5),
-        nullable_bool1: Some(false),
+        // Group 2: Non-nullable in Rust (read from Java's nullable with values)
+        nullable_int1: 100,
+        nullable_long1: 200,
+        nullable_float1: 1.5,
+        nullable_double1: 2.5,
+        nullable_bool1: false,
 
-        // Nullable group 2 - all have values
-        nullable_string2: Some("nullable_value".to_string()),
-        nullable_list2: Some(vec!["p".to_string(), "q".to_string()]),
-        nullable_set2: Some(HashSet::from(["m".to_string(), "n".to_string()])),
-        nullable_map2: Some(HashMap::from([("nk1".to_string(), "nv1".to_string())])),
+        nullable_string2: "nullable_value".to_string(),
+        nullable_list2: vec!["p".to_string(), "q".to_string()],
+        nullable_set2: HashSet::from(["m".to_string(), "n".to_string()]),
+        nullable_map2: HashMap::from([("nk1".to_string(), "nv1".to_string())]),
     };
 
     let remote_obj: NullableComprehensiveCompatible = fory.deserialize(&bytes).unwrap();
@@ -1512,6 +1522,12 @@ fn test_nullable_field_compatible_not_null() {
     fs::write(&data_file_path, new_bytes).unwrap();
 }
 
+/// Test cross-language schema evolution - nullable fields are null.
+/// Java sends: Group 1 (non-nullable with values) + Group 2 (nullable with null)
+/// Rust reads: Group 1 (nullable/Option) + Group 2 (non-nullable -> defaults)
+///
+/// When Java sends null for Group 2 fields, Rust's non-nullable fields receive
+/// default values (0 for numbers, false for bool, empty for collections/strings).
 #[test]
 #[ignore]
 fn test_nullable_field_compatible_null() {
@@ -1523,43 +1539,40 @@ fn test_nullable_field_compatible_null() {
         .unwrap();
 
     let local_obj = NullableComprehensiveCompatible {
-        // Base non-nullable primitive fields - must have values
-        byte_field: 1,
-        short_field: 2,
-        int_field: 42,
-        long_field: 123456789,
-        float_field: 3.14,
-        double_field: 2.718281828,
-        bool_field: true,
+        // Group 1: Nullable in Rust (read from Java's non-nullable)
+        byte_field: Some(1),
+        short_field: Some(2),
+        int_field: Some(42),
+        long_field: Some(123456789),
+        float_field: Some(1.5),
+        double_field: Some(2.5),
+        bool_field: Some(true),
 
-        // Base non-nullable boxed fields - must have values
-        boxed_int: 10,
-        boxed_long: 20,
-        boxed_float: 1.1,
-        boxed_double: 2.2,
-        boxed_bool: true,
+        boxed_int: Some(10),
+        boxed_long: Some(20),
+        boxed_float: Some(1.1),
+        boxed_double: Some(2.2),
+        boxed_bool: Some(true),
 
-        // Base non-nullable reference fields - must have values
-        string_field: "hello".to_string(),
-        list_field: vec!["a".to_string(), "b".to_string(), "c".to_string()],
-        set_field: HashSet::from(["x".to_string(), "y".to_string()]),
-        map_field: HashMap::from([
+        string_field: Some("hello".to_string()),
+        list_field: Some(vec!["a".to_string(), "b".to_string(), "c".to_string()]),
+        set_field: Some(HashSet::from(["x".to_string(), "y".to_string()])),
+        map_field: Some(HashMap::from([
             ("key1".to_string(), "value1".to_string()),
             ("key2".to_string(), "value2".to_string()),
-        ]),
+        ])),
 
-        // Nullable group 1 - all null
-        nullable_int1: None,
-        nullable_long1: None,
-        nullable_float1: None,
-        nullable_double1: None,
-        nullable_bool1: None,
+        // Group 2: Non-nullable in Rust (Java sent null -> use defaults)
+        nullable_int1: 0,
+        nullable_long1: 0,
+        nullable_float1: 0.0,
+        nullable_double1: 0.0,
+        nullable_bool1: false,
 
-        // Nullable group 2 - all null
-        nullable_string2: None,
-        nullable_list2: None,
-        nullable_set2: None,
-        nullable_map2: None,
+        nullable_string2: String::new(),
+        nullable_list2: Vec::new(),
+        nullable_set2: HashSet::new(),
+        nullable_map2: HashMap::new(),
     };
 
     let remote_obj: NullableComprehensiveCompatible = fory.deserialize(&bytes).unwrap();

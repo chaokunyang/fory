@@ -1749,8 +1749,8 @@ public abstract class XlangTestBase extends ForyTestBase {
     obj.shortField = 2;
     obj.intField = 42;
     obj.longField = 123456789L;
-    obj.floatField = 3.14f;
-    obj.doubleField = 2.718281828;
+    obj.floatField = 1.5f;
+    obj.doubleField = 2.5;
     obj.boolField = true;
 
     // Base non-nullable reference fields
@@ -1807,8 +1807,8 @@ public abstract class XlangTestBase extends ForyTestBase {
     obj.shortField = 2;
     obj.intField = 42;
     obj.longField = 123456789L;
-    obj.floatField = 3.14f;
-    obj.doubleField = 2.718281828;
+    obj.floatField = 1.5f;
+    obj.doubleField = 2.5;
     obj.boolField = true;
 
     // Base non-nullable reference fields - must have values
@@ -1933,8 +1933,8 @@ public abstract class XlangTestBase extends ForyTestBase {
     obj.shortField = 2;
     obj.intField = 42;
     obj.longField = 123456789L;
-    obj.floatField = 3.14f;
-    obj.doubleField = 2.718281828;
+    obj.floatField = 1.5f;
+    obj.doubleField = 2.5;
     obj.boolField = true;
 
     // Base non-nullable boxed fields
@@ -1999,8 +1999,8 @@ public abstract class XlangTestBase extends ForyTestBase {
     obj.shortField = 2;
     obj.intField = 42;
     obj.longField = 123456789L;
-    obj.floatField = 3.14f;
-    obj.doubleField = 2.718281828;
+    obj.floatField = 1.5f;
+    obj.doubleField = 2.5;
     obj.boolField = true;
 
     // Base non-nullable boxed fields - must have values
@@ -2043,7 +2043,41 @@ public abstract class XlangTestBase extends ForyTestBase {
     MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
     NullableComprehensiveCompatible result =
         (NullableComprehensiveCompatible) fory.deserialize(buffer2);
-    Assert.assertEquals(result, obj);
+
+    // Build expected object: when Rust re-serializes, its non-nullable fields
+    // send default values (0, false, empty) instead of null.
+    // Java should receive these default values, not null.
+    NullableComprehensiveCompatible expected = new NullableComprehensiveCompatible();
+    // Base non-nullable fields - unchanged
+    expected.byteField = obj.byteField;
+    expected.shortField = obj.shortField;
+    expected.intField = obj.intField;
+    expected.longField = obj.longField;
+    expected.floatField = obj.floatField;
+    expected.doubleField = obj.doubleField;
+    expected.boolField = obj.boolField;
+    expected.boxedInt = obj.boxedInt;
+    expected.boxedLong = obj.boxedLong;
+    expected.boxedFloat = obj.boxedFloat;
+    expected.boxedDouble = obj.boxedDouble;
+    expected.boxedBool = obj.boxedBool;
+    expected.stringField = obj.stringField;
+    expected.listField = obj.listField;
+    expected.setField = obj.setField;
+    expected.mapField = obj.mapField;
+    // Nullable group 1 - Rust's non-nullable fields send defaults
+    expected.nullableInt1 = 0;
+    expected.nullableLong1 = 0L;
+    expected.nullableFloat1 = 0.0f;
+    expected.nullableDouble1 = 0.0;
+    expected.nullableBool1 = false;
+    // Nullable group 2 - Rust's non-nullable fields send empty values
+    expected.nullableString2 = "";
+    expected.nullableList2 = new ArrayList<>();
+    expected.nullableSet2 = new HashSet<>();
+    expected.nullableMap2 = new HashMap<>();
+
+    Assert.assertEquals(result, expected);
   }
 
   // Keep the old simple structs for backward compatibility with existing tests

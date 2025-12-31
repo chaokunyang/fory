@@ -332,43 +332,48 @@ type NullableComprehensiveSchemaConsistent struct {
 	NullableMap    map[string]string `fory:"nullable"`
 }
 
-// NullableComprehensiveCompatible matches Java's NullableComprehensiveCompatible
-// for COMPATIBLE mode (type id 402)
+// NullableComprehensiveCompatible - Cross-language schema evolution test struct.
+// This struct has INVERTED nullability compared to Java:
+// - Group 1: Nullable (pointer) in Go, Non-nullable in Java
+// - Group 2: Non-nullable in Go, Nullable in Java (@ForyField(nullable=true))
+// Type id 402
 type NullableComprehensiveCompatible struct {
-	// Base non-nullable primitive fields
-	ByteField   int8
-	ShortField  int16
-	IntField    int32
-	LongField   int64
-	FloatField  float32
-	DoubleField float64
-	BoolField   bool
+	// Group 1: Nullable in Go (pointer), Non-nullable in Java
+	// Primitive fields
+	ByteField   *int8    `fory:"nullable"`
+	ShortField  *int16   `fory:"nullable"`
+	IntField    *int32   `fory:"nullable"`
+	LongField   *int64   `fory:"nullable"`
+	FloatField  *float32 `fory:"nullable"`
+	DoubleField *float64 `fory:"nullable"`
+	BoolField   *bool    `fory:"nullable"`
 
-	// Base non-nullable boxed fields (not nullable by default in xlang)
-	BoxedInt    int32
-	BoxedLong   int64
-	BoxedFloat  float32
-	BoxedDouble float64
-	BoxedBool   bool
+	// Boxed fields - also nullable in Go
+	BoxedInt    *int32   `fory:"nullable"`
+	BoxedLong   *int64   `fory:"nullable"`
+	BoxedFloat  *float32 `fory:"nullable"`
+	BoxedDouble *float64 `fory:"nullable"`
+	BoxedBool   *bool    `fory:"nullable"`
 
-	// Base non-nullable reference fields
-	StringField string
-	ListField   []string
-	SetField    map[string]bool
-	MapField    map[string]string
+	// Reference fields - also nullable in Go
+	StringField *string           `fory:"nullable"`
+	ListField   []string          `fory:"nullable"`
+	SetField    map[string]bool   `fory:"nullable"`
+	MapField    map[string]string `fory:"nullable"`
 
-	// Nullable group 1 - boxed types with nullable annotation
-	NullableInt1    *int32   `fory:"nullable"`
-	NullableLong1   *int64   `fory:"nullable"`
-	NullableFloat1  *float32 `fory:"nullable"`
-	NullableDouble1 *float64 `fory:"nullable"`
-	NullableBool1   *bool    `fory:"nullable"`
+	// Group 2: Non-nullable in Go, Nullable in Java (@ForyField(nullable=true))
+	// Boxed types
+	NullableInt1    int32
+	NullableLong1   int64
+	NullableFloat1  float32
+	NullableDouble1 float64
+	NullableBool1   bool
 
-	// Nullable group 2 - reference types with nullable annotation
-	NullableString2 *string           `fory:"nullable"`
-	NullableList2   []string          `fory:"nullable"`
-	NullableSet2    map[string]bool   `fory:"nullable"`
-	NullableMap2    map[string]string `fory:"nullable"`
+	// Reference types
+	NullableString2 string
+	NullableList2   []string
+	NullableSet2    map[string]bool
+	NullableMap2    map[string]string
 }
 
 // ============================================================================
@@ -1515,8 +1520,8 @@ func testNullableFieldSchemaConsistentNotNull() {
 	assertEqual(int16(2), result.ShortField, "ShortField")
 	assertEqual(int32(42), result.IntField, "IntField")
 	assertEqual(int64(123456789), result.LongField, "LongField")
-	assertEqualFloat32(3.14, result.FloatField, "FloatField")
-	assertEqualFloat64(2.718281828, result.DoubleField, "DoubleField")
+	assertEqualFloat32(1.5, result.FloatField, "FloatField")
+	assertEqualFloat64(2.5, result.DoubleField, "DoubleField")
 	assertEqual(true, result.BoolField, "BoolField")
 
 	// Verify base non-nullable reference fields
@@ -1593,8 +1598,8 @@ func testNullableFieldSchemaConsistentNull() {
 	assertEqual(int16(2), result.ShortField, "ShortField")
 	assertEqual(int32(42), result.IntField, "IntField")
 	assertEqual(int64(123456789), result.LongField, "LongField")
-	assertEqualFloat32(3.14, result.FloatField, "FloatField")
-	assertEqualFloat64(2.718281828, result.DoubleField, "DoubleField")
+	assertEqualFloat32(1.5, result.FloatField, "FloatField")
+	assertEqualFloat64(2.5, result.DoubleField, "DoubleField")
 	assertEqual(true, result.BoolField, "BoolField")
 
 	// Verify base non-nullable reference fields
@@ -1648,6 +1653,9 @@ func testNullableFieldSchemaConsistentNull() {
 	writeFile(dataFile, serialized)
 }
 
+// Test cross-language schema evolution - all fields have values.
+// Java sends: Group 1 (non-nullable) + Group 2 (nullable with values)
+// Go reads: Group 1 (nullable/pointer) + Group 2 (non-nullable)
 func testNullableFieldCompatibleNotNull() {
 	dataFile := getDataFile()
 	data := readFile(dataFile)
@@ -1664,24 +1672,54 @@ func testNullableFieldCompatibleNotNull() {
 
 	result := getNullableComprehensiveCompatible(obj)
 
-	// Verify base non-nullable primitive fields
-	assertEqual(int8(1), result.ByteField, "ByteField")
-	assertEqual(int16(2), result.ShortField, "ShortField")
-	assertEqual(int32(42), result.IntField, "IntField")
-	assertEqual(int64(123456789), result.LongField, "LongField")
-	assertEqualFloat32(3.14, result.FloatField, "FloatField")
-	assertEqualFloat64(2.718281828, result.DoubleField, "DoubleField")
-	assertEqual(true, result.BoolField, "BoolField")
+	// Verify Group 1: Nullable in Go (read from Java's non-nullable)
+	if result.ByteField == nil || *result.ByteField != 1 {
+		panic(fmt.Sprintf("ByteField mismatch: expected 1, got %v", result.ByteField))
+	}
+	if result.ShortField == nil || *result.ShortField != 2 {
+		panic(fmt.Sprintf("ShortField mismatch: expected 2, got %v", result.ShortField))
+	}
+	if result.IntField == nil || *result.IntField != 42 {
+		panic(fmt.Sprintf("IntField mismatch: expected 42, got %v", result.IntField))
+	}
+	if result.LongField == nil || *result.LongField != 123456789 {
+		panic(fmt.Sprintf("LongField mismatch: expected 123456789, got %v", result.LongField))
+	}
+	if result.FloatField == nil {
+		panic("FloatField mismatch: expected 1.5, got nil")
+	}
+	assertEqualFloat32(1.5, *result.FloatField, "FloatField")
+	if result.DoubleField == nil {
+		panic("DoubleField mismatch: expected 2.5, got nil")
+	}
+	assertEqualFloat64(2.5, *result.DoubleField, "DoubleField")
+	if result.BoolField == nil || *result.BoolField != true {
+		panic(fmt.Sprintf("BoolField mismatch: expected true, got %v", result.BoolField))
+	}
 
-	// Verify base non-nullable boxed fields
-	assertEqual(int32(10), result.BoxedInt, "BoxedInt")
-	assertEqual(int64(20), result.BoxedLong, "BoxedLong")
-	assertEqualFloat32(1.1, result.BoxedFloat, "BoxedFloat")
-	assertEqualFloat64(2.2, result.BoxedDouble, "BoxedDouble")
-	assertEqual(true, result.BoxedBool, "BoxedBool")
+	// Verify boxed fields (also nullable in Go)
+	if result.BoxedInt == nil || *result.BoxedInt != 10 {
+		panic(fmt.Sprintf("BoxedInt mismatch: expected 10, got %v", result.BoxedInt))
+	}
+	if result.BoxedLong == nil || *result.BoxedLong != 20 {
+		panic(fmt.Sprintf("BoxedLong mismatch: expected 20, got %v", result.BoxedLong))
+	}
+	if result.BoxedFloat == nil {
+		panic("BoxedFloat mismatch: expected 1.1, got nil")
+	}
+	assertEqualFloat32(1.1, *result.BoxedFloat, "BoxedFloat")
+	if result.BoxedDouble == nil {
+		panic("BoxedDouble mismatch: expected 2.2, got nil")
+	}
+	assertEqualFloat64(2.2, *result.BoxedDouble, "BoxedDouble")
+	if result.BoxedBool == nil || *result.BoxedBool != true {
+		panic(fmt.Sprintf("BoxedBool mismatch: expected true, got %v", result.BoxedBool))
+	}
 
-	// Verify base non-nullable reference fields
-	assertEqual("hello", result.StringField, "StringField")
+	// Verify reference fields (also nullable in Go)
+	if result.StringField == nil || *result.StringField != "hello" {
+		panic(fmt.Sprintf("StringField mismatch: expected 'hello', got %v", result.StringField))
+	}
 	if len(result.ListField) != 3 || result.ListField[0] != "a" || result.ListField[1] != "b" || result.ListField[2] != "c" {
 		panic(fmt.Sprintf("ListField mismatch: expected [a, b, c], got %v", result.ListField))
 	}
@@ -1692,29 +1730,14 @@ func testNullableFieldCompatibleNotNull() {
 		panic(fmt.Sprintf("MapField mismatch: expected {key1:value1, key2:value2}, got %v", result.MapField))
 	}
 
-	// Verify nullable group 1 - boxed types
-	if result.NullableInt1 == nil || *result.NullableInt1 != 100 {
-		panic(fmt.Sprintf("NullableInt1 mismatch: expected 100, got %v", result.NullableInt1))
-	}
-	if result.NullableLong1 == nil || *result.NullableLong1 != 200 {
-		panic(fmt.Sprintf("NullableLong1 mismatch: expected 200, got %v", result.NullableLong1))
-	}
-	if result.NullableFloat1 == nil {
-		panic("NullableFloat1 mismatch: expected 1.5, got nil")
-	}
-	assertEqualFloat32(1.5, *result.NullableFloat1, "NullableFloat1")
-	if result.NullableDouble1 == nil {
-		panic("NullableDouble1 mismatch: expected 2.5, got nil")
-	}
-	assertEqualFloat64(2.5, *result.NullableDouble1, "NullableDouble1")
-	if result.NullableBool1 == nil || *result.NullableBool1 != false {
-		panic(fmt.Sprintf("NullableBool1 mismatch: expected false, got %v", result.NullableBool1))
-	}
+	// Verify Group 2: Non-nullable in Go (read from Java's nullable with values)
+	assertEqual(int32(100), result.NullableInt1, "NullableInt1")
+	assertEqual(int64(200), result.NullableLong1, "NullableLong1")
+	assertEqualFloat32(1.5, result.NullableFloat1, "NullableFloat1")
+	assertEqualFloat64(2.5, result.NullableDouble1, "NullableDouble1")
+	assertEqual(false, result.NullableBool1, "NullableBool1")
 
-	// Verify nullable group 2 - reference types
-	if result.NullableString2 == nil || *result.NullableString2 != "nullable_value" {
-		panic(fmt.Sprintf("NullableString2 mismatch: expected 'nullable_value', got %v", result.NullableString2))
-	}
+	assertEqual("nullable_value", result.NullableString2, "NullableString2")
 	if len(result.NullableList2) != 2 || result.NullableList2[0] != "p" || result.NullableList2[1] != "q" {
 		panic(fmt.Sprintf("NullableList2 mismatch: expected [p, q], got %v", result.NullableList2))
 	}
@@ -1733,6 +1756,12 @@ func testNullableFieldCompatibleNotNull() {
 	writeFile(dataFile, serialized)
 }
 
+// Test cross-language schema evolution - nullable fields are null.
+// Java sends: Group 1 (non-nullable with values) + Group 2 (nullable with null)
+// Go reads: Group 1 (nullable/pointer) + Group 2 (non-nullable -> defaults)
+//
+// When Java sends null for Group 2 fields, Go's non-nullable fields receive
+// default values (0 for numbers, false for bool, empty/nil for collections/strings).
 func testNullableFieldCompatibleNull() {
 	dataFile := getDataFile()
 	data := readFile(dataFile)
@@ -1749,24 +1778,54 @@ func testNullableFieldCompatibleNull() {
 
 	result := getNullableComprehensiveCompatible(obj)
 
-	// Verify base non-nullable primitive fields
-	assertEqual(int8(1), result.ByteField, "ByteField")
-	assertEqual(int16(2), result.ShortField, "ShortField")
-	assertEqual(int32(42), result.IntField, "IntField")
-	assertEqual(int64(123456789), result.LongField, "LongField")
-	assertEqualFloat32(3.14, result.FloatField, "FloatField")
-	assertEqualFloat64(2.718281828, result.DoubleField, "DoubleField")
-	assertEqual(true, result.BoolField, "BoolField")
+	// Verify Group 1: Nullable in Go (read from Java's non-nullable)
+	if result.ByteField == nil || *result.ByteField != 1 {
+		panic(fmt.Sprintf("ByteField mismatch: expected 1, got %v", result.ByteField))
+	}
+	if result.ShortField == nil || *result.ShortField != 2 {
+		panic(fmt.Sprintf("ShortField mismatch: expected 2, got %v", result.ShortField))
+	}
+	if result.IntField == nil || *result.IntField != 42 {
+		panic(fmt.Sprintf("IntField mismatch: expected 42, got %v", result.IntField))
+	}
+	if result.LongField == nil || *result.LongField != 123456789 {
+		panic(fmt.Sprintf("LongField mismatch: expected 123456789, got %v", result.LongField))
+	}
+	if result.FloatField == nil {
+		panic("FloatField mismatch: expected 1.5, got nil")
+	}
+	assertEqualFloat32(1.5, *result.FloatField, "FloatField")
+	if result.DoubleField == nil {
+		panic("DoubleField mismatch: expected 2.5, got nil")
+	}
+	assertEqualFloat64(2.5, *result.DoubleField, "DoubleField")
+	if result.BoolField == nil || *result.BoolField != true {
+		panic(fmt.Sprintf("BoolField mismatch: expected true, got %v", result.BoolField))
+	}
 
-	// Verify base non-nullable boxed fields
-	assertEqual(int32(10), result.BoxedInt, "BoxedInt")
-	assertEqual(int64(20), result.BoxedLong, "BoxedLong")
-	assertEqualFloat32(1.1, result.BoxedFloat, "BoxedFloat")
-	assertEqualFloat64(2.2, result.BoxedDouble, "BoxedDouble")
-	assertEqual(true, result.BoxedBool, "BoxedBool")
+	// Verify boxed fields (also nullable in Go)
+	if result.BoxedInt == nil || *result.BoxedInt != 10 {
+		panic(fmt.Sprintf("BoxedInt mismatch: expected 10, got %v", result.BoxedInt))
+	}
+	if result.BoxedLong == nil || *result.BoxedLong != 20 {
+		panic(fmt.Sprintf("BoxedLong mismatch: expected 20, got %v", result.BoxedLong))
+	}
+	if result.BoxedFloat == nil {
+		panic("BoxedFloat mismatch: expected 1.1, got nil")
+	}
+	assertEqualFloat32(1.1, *result.BoxedFloat, "BoxedFloat")
+	if result.BoxedDouble == nil {
+		panic("BoxedDouble mismatch: expected 2.2, got nil")
+	}
+	assertEqualFloat64(2.2, *result.BoxedDouble, "BoxedDouble")
+	if result.BoxedBool == nil || *result.BoxedBool != true {
+		panic(fmt.Sprintf("BoxedBool mismatch: expected true, got %v", result.BoxedBool))
+	}
 
-	// Verify base non-nullable reference fields
-	assertEqual("hello", result.StringField, "StringField")
+	// Verify reference fields (also nullable in Go)
+	if result.StringField == nil || *result.StringField != "hello" {
+		panic(fmt.Sprintf("StringField mismatch: expected 'hello', got %v", result.StringField))
+	}
 	if len(result.ListField) != 3 || result.ListField[0] != "a" || result.ListField[1] != "b" || result.ListField[2] != "c" {
 		panic(fmt.Sprintf("ListField mismatch: expected [a, b, c], got %v", result.ListField))
 	}
@@ -1777,35 +1836,22 @@ func testNullableFieldCompatibleNull() {
 		panic(fmt.Sprintf("MapField mismatch: expected {key1:value1, key2:value2}, got %v", result.MapField))
 	}
 
-	// Verify nullable group 1 - boxed types - all nil
-	if result.NullableInt1 != nil {
-		panic(fmt.Sprintf("NullableInt1 mismatch: expected nil, got %v", *result.NullableInt1))
-	}
-	if result.NullableLong1 != nil {
-		panic(fmt.Sprintf("NullableLong1 mismatch: expected nil, got %v", *result.NullableLong1))
-	}
-	if result.NullableFloat1 != nil {
-		panic(fmt.Sprintf("NullableFloat1 mismatch: expected nil, got %v", *result.NullableFloat1))
-	}
-	if result.NullableDouble1 != nil {
-		panic(fmt.Sprintf("NullableDouble1 mismatch: expected nil, got %v", *result.NullableDouble1))
-	}
-	if result.NullableBool1 != nil {
-		panic(fmt.Sprintf("NullableBool1 mismatch: expected nil, got %v", *result.NullableBool1))
-	}
+	// Verify Group 2: Non-nullable in Go (Java sent null -> use defaults)
+	assertEqual(int32(0), result.NullableInt1, "NullableInt1")
+	assertEqual(int64(0), result.NullableLong1, "NullableLong1")
+	assertEqualFloat32(0.0, result.NullableFloat1, "NullableFloat1")
+	assertEqualFloat64(0.0, result.NullableDouble1, "NullableDouble1")
+	assertEqual(false, result.NullableBool1, "NullableBool1")
 
-	// Verify nullable group 2 - reference types - all nil
-	if result.NullableString2 != nil {
-		panic(fmt.Sprintf("NullableString2 mismatch: expected nil, got %v", *result.NullableString2))
+	assertEqual("", result.NullableString2, "NullableString2")
+	if result.NullableList2 != nil && len(result.NullableList2) != 0 {
+		panic(fmt.Sprintf("NullableList2 mismatch: expected empty/nil, got %v", result.NullableList2))
 	}
-	if result.NullableList2 != nil {
-		panic(fmt.Sprintf("NullableList2 mismatch: expected nil, got %v", result.NullableList2))
+	if result.NullableSet2 != nil && len(result.NullableSet2) != 0 {
+		panic(fmt.Sprintf("NullableSet2 mismatch: expected empty/nil, got %v", result.NullableSet2))
 	}
-	if result.NullableSet2 != nil {
-		panic(fmt.Sprintf("NullableSet2 mismatch: expected nil, got %v", result.NullableSet2))
-	}
-	if result.NullableMap2 != nil {
-		panic(fmt.Sprintf("NullableMap2 mismatch: expected nil, got %v", result.NullableMap2))
+	if result.NullableMap2 != nil && len(result.NullableMap2) != 0 {
+		panic(fmt.Sprintf("NullableMap2 mismatch: expected empty/nil, got %v", result.NullableMap2))
 	}
 
 	serialized, err := f.Serialize(result)

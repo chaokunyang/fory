@@ -56,7 +56,7 @@ class TypeDefDecoder {
     byte header = buffer.readByte();
     int numFields = header & SMALL_NUM_FIELDS_THRESHOLD;
     if (numFields == SMALL_NUM_FIELDS_THRESHOLD) {
-      numFields += buffer.readVarUint32Small7() + SMALL_NUM_FIELDS_THRESHOLD;
+      numFields += buffer.readVarUint32Small7();
     }
     ClassSpec classSpec;
     if ((header & REGISTER_BY_NAME_FLAG) != 0) {

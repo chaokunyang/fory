@@ -22,8 +22,7 @@ use crate::meta::{
     TYPE_NAME_ENCODINGS,
 };
 use crate::serializer::{ForyDefault, Serializer, StructSerializer};
-use crate::types::{is_enum_type_id, RefMode};
-use crate::util::get_ext_actual_type_id;
+use crate::types::{get_ext_actual_type_id, is_enum_type_id, RefMode};
 use crate::TypeId;
 use chrono::{NaiveDate, NaiveDateTime};
 use std::collections::{HashSet, LinkedList};

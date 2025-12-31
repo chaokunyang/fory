@@ -20,6 +20,7 @@ use crate::util::{
     CollectionTraitInfo,
 };
 use fory_core::types::{TypeId, PRIMITIVE_ARRAY_TYPE_MAP};
+use fory_core::util::to_snake_case;
 use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote, ToTokens};
 use std::cell::RefCell;
@@ -1075,47 +1076,6 @@ pub(super) fn get_sort_fields_ts(fields: &[&Field]) -> TokenStream {
     }
 }
 
-fn to_snake_case(name: &str) -> String {
-    if name
-        .chars()
-        .all(|c| c.is_lowercase() || c.is_ascii_digit() || c == '_')
-    {
-        return name.to_string();
-    }
-
-    let mut result = String::with_capacity(name.len() * 2);
-    let mut chars = name.chars().peekable();
-    let mut prev: Option<char> = None;
-
-    while let Some(ch) = chars.next() {
-        if ch == '_' {
-            result.push('_');
-            prev = Some(ch);
-            continue;
-        }
-
-        if ch.is_uppercase() {
-            if let Some(prev_ch) = prev {
-                let need_underscore = (prev_ch.is_lowercase() || prev_ch.is_ascii_digit())
-                    || (prev_ch.is_uppercase()
-                        && chars
-                            .peek()
-                            .map(|next| next.is_lowercase())
-                            .unwrap_or(false));
-                if need_underscore && !result.ends_with('_') {
-                    result.push('_');
-                }
-            }
-            result.push(ch.to_ascii_lowercase());
-        } else {
-            result.push(ch);
-        }
-        prev = Some(ch);
-    }
-
-    result
-}
-
 /// Field metadata for fingerprint computation.
 struct FieldFingerprintInfo {
     /// Field name (snake_case) or field ID as string
@@ -1335,15 +1295,6 @@ pub(crate) fn is_default_value_variant(variant: &syn::Variant) -> bool {
 mod tests {
     use super::*;
     use syn::parse_quote;
-
-    #[test]
-    fn to_snake_case_handles_common_patterns() {
-        assert_eq!(to_snake_case("lowercase"), "lowercase");
-        assert_eq!(to_snake_case("camelCase"), "camel_case");
-        assert_eq!(to_snake_case("HTTPRequest"), "http_request");
-        assert_eq!(to_snake_case("withNumbers123"), "with_numbers123");
-        assert_eq!(to_snake_case("snake_case"), "snake_case");
-    }
 
     #[test]
     fn group_fields_normalizes_names_and_preserves_ordering() {

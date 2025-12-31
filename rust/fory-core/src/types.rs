@@ -588,3 +588,16 @@ pub fn format_type_id(type_id: u32) -> String {
         format!("registered_id={}({})", registered_id, type_name)
     }
 }
+
+/// Computes the actual type ID for extension types.
+///
+/// Extension types combine a user-registered type ID with an internal EXT or NAMED_EXT marker.
+/// The format is: `(type_id << 8) + internal_type_id`.
+pub fn get_ext_actual_type_id(type_id: u32, register_by_name: bool) -> u32 {
+    (type_id << 8)
+        + if register_by_name {
+            TypeId::NAMED_EXT as u32
+        } else {
+            TypeId::EXT as u32
+        }
+}

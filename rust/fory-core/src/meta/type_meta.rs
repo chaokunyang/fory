@@ -26,6 +26,7 @@ use crate::types::{
     TypeId, COMPATIBLE_STRUCT, ENUM, EXT, NAMED_COMPATIBLE_STRUCT, NAMED_ENUM, NAMED_EXT,
     NAMED_STRUCT, PRIMITIVE_TYPES, STRUCT, UNKNOWN,
 };
+use crate::util::to_snake_case;
 
 /// Normalizes a type ID for comparison purposes in cross-language schema evolution.
 /// This treats all struct variants (STRUCT, COMPATIBLE_STRUCT, NAMED_STRUCT,
@@ -738,54 +739,6 @@ impl TypeMeta {
         )
     }
 
-    /// Converts a camelCase or PascalCase string to snake_case.
-    /// Used for cross-language field name matching since Java uses camelCase
-    /// and Rust uses snake_case.
-    fn to_snake_case(name: &str) -> String {
-        let mut result = String::with_capacity(name.len() + 4);
-        let chars: Vec<char> = name.chars().collect();
-
-        for (i, &c) in chars.iter().enumerate() {
-            if c.is_ascii_uppercase() {
-                // Add underscore before uppercase unless:
-                // - It's the first character
-                // - Previous char was uppercase and next is uppercase or doesn't exist
-                //   (e.g., "HTTPRequest" -> "http_request", not "h_t_t_p_request")
-                if i > 0 {
-                    let prev_upper = chars.get(i - 1).is_some_and(|c| c.is_ascii_uppercase());
-                    let next_upper_or_end = chars.get(i + 1).map_or(true, |c| c.is_ascii_uppercase());
-                    if !prev_upper || !next_upper_or_end {
-                        result.push('_');
-                    }
-                }
-                result.push(c.to_ascii_lowercase());
-            } else {
-                result.push(c);
-            }
-        }
-        result
-    }
-
-    /// Converts a snake_case string to lowerCamelCase.
-    /// Used for cross-language field name serialization since Rust uses snake_case
-    /// but other languages (Java, etc.) expect camelCase in the wire format.
-    pub fn to_camel_case(name: &str) -> String {
-        let mut result = String::with_capacity(name.len());
-        let mut capitalize_next = false;
-
-        for c in name.chars() {
-            if c == '_' {
-                capitalize_next = true;
-            } else if capitalize_next {
-                result.push(c.to_ascii_uppercase());
-                capitalize_next = false;
-            } else {
-                result.push(c);
-            }
-        }
-        result
-    }
-
     fn assign_field_ids(type_info_current: &TypeInfo, field_infos: &mut [FieldInfo]) {
         let type_meta = type_info_current.get_type_meta();
         let local_field_infos = type_meta.get_field_infos();
@@ -816,7 +769,7 @@ impl TypeMeta {
                 // Field was encoded with name, match by name
                 // Convert incoming field name to snake_case for cross-language compatibility
                 // (Java uses camelCase, Rust uses snake_case)
-                let snake_case_name = Self::to_snake_case(&field.field_name);
+                let snake_case_name = to_snake_case(&field.field_name);
                 field_index_by_name.get(&snake_case_name).copied()
             };
 

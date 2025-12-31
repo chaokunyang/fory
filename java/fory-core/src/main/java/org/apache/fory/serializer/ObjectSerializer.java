@@ -179,13 +179,13 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       boolean nullable = fieldInfo.nullable;
       short classId = fieldInfo.classId;
-      if (writePrimitiveFieldValueFailed(fory, buffer, value, fieldAccessor, classId)) {
+      if (writePrimitiveFieldValue(fory, buffer, value, fieldAccessor, classId)) {
         Object fieldValue = fieldAccessor.getObject(value);
-        boolean writeBasicObjectResult =
+        boolean needWrite =
             nullable
-                ? writeBasicNullableObjectFieldValueFailed(fory, buffer, fieldValue, classId)
-                : writeBasicObjectFieldValueFailed(fory, buffer, fieldValue, classId);
-        if (writeBasicObjectResult) {
+                ? writeBasicNullableObjectFieldValue(fory, buffer, fieldValue, classId)
+                : writeBasicObjectFieldValue(fory, buffer, fieldValue, classId);
+        if (needWrite) {
           Serializer<Object> serializer = fieldInfo.classInfo.getSerializer();
           if (!metaShareEnabled || isFinal[i]) {
             if (!fieldInfo.trackingRef) {
@@ -354,10 +354,10 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       boolean nullable = fieldInfo.nullable;
       short classId = fieldInfo.classId;
-      if (readPrimitiveFieldValueFailed(fory, buffer, obj, fieldAccessor, classId)
+      if (readPrimitiveFieldValue(fory, buffer, obj, fieldAccessor, classId)
           && (nullable
-              ? readBasicNullableObjectFieldValueFailed(fory, buffer, obj, fieldAccessor, classId)
-              : readBasicObjectFieldValueFailed(fory, buffer, obj, fieldAccessor, classId))) {
+              ? readBasicNullableObjectFieldValue(fory, buffer, obj, fieldAccessor, classId)
+              : readBasicObjectFieldValue(fory, buffer, obj, fieldAccessor, classId))) {
         Object fieldValue =
             readFinalObjectFieldValue(
                 binding, refResolver, typeResolver, fieldInfo, isFinal, buffer);

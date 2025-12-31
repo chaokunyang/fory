@@ -200,6 +200,8 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
                 // consistent with jit serializer.
                 binding.writeRef(buffer, fieldValue, serializer);
                 break;
+              default:
+                throw new IllegalStateException("Unexpected refMode: " + fieldInfo.refMode);
             }
           } else {
             switch (fieldInfo.refMode) {
@@ -223,6 +225,8 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
                   binding.write(buffer, serializer, fieldValue);
                 }
                 break;
+              default:
+                throw new IllegalStateException("Unexpected refMode: " + fieldInfo.refMode);
             }
           }
         }
@@ -280,6 +284,8 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
           generics.popGenericType();
         }
         break;
+      default:
+        throw new IllegalStateException("Unexpected refMode: " + fieldInfo.refMode);
     }
   }
 
@@ -319,6 +325,8 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
       case TRACKING:
         binding.writeRef(buffer, fieldValue, fieldInfo.classInfoHolder);
         break;
+      default:
+        throw new IllegalStateException("Unexpected refMode: " + fieldInfo.refMode);
     }
   }
 

@@ -54,23 +54,6 @@ TYPENAME_DECODER = MetaStringDecoder("$", "_")
 FIELD_NAME_DECODER = MetaStringDecoder("$", "_")
 
 
-def snake_to_camel(s: str) -> str:
-    """Convert snake_case to camelCase.
-
-    This reverses Java's lowerCamelToLowerUnderscore conversion:
-    - new_object -> newObject
-    - old_object -> oldObject
-    - my_field_name -> myFieldName
-
-    If there are no underscores, the string is returned unchanged.
-    """
-    if "_" not in s:
-        return s
-    parts = s.split("_")
-    # First part stays lowercase, rest are capitalized
-    return parts[0] + "".join(part.capitalize() for part in parts[1:])
-
-
 def skip_typedef(buffer: Buffer, header) -> None:
     """
     Skip a TypeDef from the buffer.
@@ -284,9 +267,9 @@ def read_field_info(buffer: Buffer, resolver, defined_class: str) -> FieldInfo:
         field_type = FieldType.xread_with_type(buffer, resolver, xtype_id, is_nullable, is_tracking_ref)
 
         # Read field name meta string
+        # Keep the wire field name as-is; TypeDef._resolve_field_names_from_tag_ids()
+        # will handle matching against the Python class's field names (which may be
+        # snake_case or camelCase depending on Python conventions used)
         field_name_bytes = buffer.read_bytes(field_name_size)
-        wire_field_name = FIELD_NAME_DECODER.decode(field_name_bytes, encoding)
-        # Convert snake_case to camelCase to match Java's xlang field name convention
-        # Java converts camelCase -> snake_case when encoding, so we reverse it here
-        field_name = snake_to_camel(wire_field_name)
+        field_name = FIELD_NAME_DECODER.decode(field_name_bytes, encoding)
         return FieldInfo(field_name, field_type, defined_class, -1)

@@ -1088,20 +1088,13 @@ func (s *structSerializer) initFieldsFromTypeResolver(typeResolver *TypeResolver
 		internalId := TypeId(fieldTypeId & 0xFF)
 		isEnum := internalId == ENUM || internalId == NAMED_ENUM
 
-		// Default nullable based on mode and type
-		var nullableFlag bool
-		if typeResolver.Compatible() {
-			// COMPATIBLE mode: reference types are nullable by default (matches Java's wire format)
-			// Java writes null flags for reference type fields in COMPATIBLE mode
-			nullableFlag = fieldType.Kind() == reflect.Ptr ||
-				fieldType.Kind() == reflect.Slice ||
-				fieldType.Kind() == reflect.Map ||
-				fieldType.Kind() == reflect.Interface
-		} else {
-			// SCHEMA_CONSISTENT mode: reference types are non-nullable by default (matches Java)
-			// Only explicitly tagged fields are nullable
-			nullableFlag = false
-		}
+		// Default nullable based on type (reference types are nullable by default)
+		// Go's codegen always writes null flags for reference types, so reflect must match
+		// This is consistent with Go's existing behavior and codegen
+		nullableFlag := fieldType.Kind() == reflect.Ptr ||
+			fieldType.Kind() == reflect.Slice ||
+			fieldType.Kind() == reflect.Map ||
+			fieldType.Kind() == reflect.Interface
 		if foryTag.NullableSet {
 			// Override nullable flag if explicitly set in fory tag
 			nullableFlag = foryTag.Nullable

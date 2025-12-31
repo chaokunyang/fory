@@ -1087,7 +1087,7 @@ def test_nullable_field_compatible_null():
     assert obj.nullable_long1 == 0, f"nullable_long1: {obj.nullable_long1} != 0"
     assert obj.nullable_float1 == 0.0, f"nullable_float1: {obj.nullable_float1} != 0.0"
     assert obj.nullable_double1 == 0.0, f"nullable_double1: {obj.nullable_double1} != 0.0"
-    assert obj.nullable_bool1 == False, f"nullable_bool1: {obj.nullable_bool1} != False"
+    assert not obj.nullable_bool1, f"nullable_bool1: {obj.nullable_bool1} != False"
 
     # For reference types, check they are empty or None
     assert obj.nullable_string2 == "" or obj.nullable_string2 is None, f"nullable_string2: {obj.nullable_string2} != empty/None"

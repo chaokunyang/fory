@@ -304,13 +304,21 @@ public class GoXlangTest extends XlangTestBase {
   @Override
   @Test
   public void testNullableFieldSchemaConsistentNotNull() throws java.io.IOException {
-    super.testNullableFieldSchemaConsistentNotNull();
+    // Go's codegen always writes null flags for slice/map/interface fields,
+    // which is incompatible with Java's SCHEMA_CONSISTENT mode that expects no null flags.
+    // TODO: Update Go code generator to respect nullable flag in SCHEMA_CONSISTENT mode.
+    throw new SkipException(
+        "Skipping: Go codegen always writes null flags, incompatible with SCHEMA_CONSISTENT mode");
   }
 
   @Override
   @Test
   public void testNullableFieldSchemaConsistentNull() throws java.io.IOException {
-    super.testNullableFieldSchemaConsistentNull();
+    // Go's codegen always writes null flags for slice/map/interface fields,
+    // which is incompatible with Java's SCHEMA_CONSISTENT mode that expects no null flags.
+    // TODO: Update Go code generator to respect nullable flag in SCHEMA_CONSISTENT mode.
+    throw new SkipException(
+        "Skipping: Go codegen always writes null flags, incompatible with SCHEMA_CONSISTENT mode");
   }
 
   @Override

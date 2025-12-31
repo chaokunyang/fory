@@ -195,17 +195,13 @@ public class PythonXlangTest extends XlangTestBase {
   @Override
   @Test
   public void testNullableFieldSchemaConsistentNotNull() throws IOException {
-    // Python nullable field serialization has compatibility issues with Java
-    throw new SkipException(
-        "Skipping: Python nullable field schema consistent tests have compatibility issues");
+    super.testNullableFieldSchemaConsistentNotNull();
   }
 
   @Override
   @Test
   public void testNullableFieldSchemaConsistentNull() throws IOException {
-    // Python nullable field serialization has compatibility issues with Java
-    throw new SkipException(
-        "Skipping: Python nullable field schema consistent tests have compatibility issues");
+    super.testNullableFieldSchemaConsistentNull();
   }
 
   @Override

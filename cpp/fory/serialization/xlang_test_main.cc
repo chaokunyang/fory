@@ -1928,6 +1928,26 @@ void RunTestNullableFieldSchemaConsistentNotNull(const std::string &data_file) {
   EnsureOk(fory.register_struct<NullableComprehensiveSchemaConsistent>(401),
            "register NullableComprehensiveSchemaConsistent");
 
+  // Debug: Print sorted field order
+  {
+    const char *debug_env = std::getenv("ENABLE_FORY_DEBUG_OUTPUT");
+    if (debug_env && std::string(debug_env) == "1") {
+      using Helpers = fory::serialization::detail::CompileTimeFieldHelpers<
+          NullableComprehensiveSchemaConsistent>;
+      std::cerr << "[C++][fory-debug] NullableComprehensiveSchemaConsistent "
+                   "sorted field order:\n";
+      for (size_t i = 0; i < Helpers::FieldCount; ++i) {
+        size_t orig_idx = Helpers::sorted_indices[i];
+        std::cerr << "  [" << i << "] orig_idx=" << orig_idx
+                  << " name=" << Helpers::sorted_field_names[i]
+                  << " type_id=" << Helpers::type_ids[orig_idx]
+                  << " nullable=" << Helpers::nullable_flags[orig_idx]
+                  << " group=" << Helpers::group_rank(orig_idx) << "\n";
+      }
+      std::cerr << std::endl;
+    }
+  }
+
   NullableComprehensiveSchemaConsistent expected;
   // Base non-nullable primitive fields
   expected.byte_field = 1;

@@ -1106,11 +1106,14 @@ def group_fields(type_resolver, field_names, serializers, nullable_map=None):
             TypeId.VAR_INT32,
             TypeId.VAR_INT64,
         }
-        return int(compress), -get_primitive_type_size(id_), item[2]
+        # Sort by: compress flag, -size (largest first), -type_id (higher type ID first), field_name
+        # Java sorts by size (largest first), then by primitive type ID (descending)
+        return int(compress), -get_primitive_type_size(id_), -id_, item[2]
 
     boxed_types = sorted(boxed_types, key=numeric_sorter)
     nullable_boxed_types = sorted(nullable_boxed_types, key=numeric_sorter)
     collection_types = sorted(collection_types, key=sorter)
+    set_types = sorted(set_types, key=sorter)
     internal_types = sorted(internal_types, key=sorter)
     map_types = sorted(map_types, key=sorter)
     other_types = sorted(other_types, key=lambda item: item[2])

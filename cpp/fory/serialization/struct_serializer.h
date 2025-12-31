@@ -713,11 +713,12 @@ template <typename T> struct CompileTimeFieldHelpers {
         if (sa != sb)
           return sa > sb;
         if (a_tid != b_tid)
-          return a_tid < b_tid;
+          return a_tid > b_tid; // type_id descending to match Java
         return snake_case_names[a] < snake_case_names[b];
       }
 
       if (ga == 2) {
+        // Internal types (STRING, etc.): sort by type_id ascending, then name
         if (a_tid != b_tid)
           return a_tid < b_tid;
         return snake_case_names[a] < snake_case_names[b];

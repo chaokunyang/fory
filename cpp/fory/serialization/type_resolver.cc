@@ -639,7 +639,7 @@ bool numeric_sorter(const FieldInfo &a, const FieldInfo &b) {
   int32_t size_b = get_primitive_type_size(b_id);
 
   // Sort by: nullable (false first), compress (false first), size (larger
-  // first), type_id, field_name
+  // first), type_id (descending to match Java), field_name
   if (a_nullable != b_nullable)
     return !a_nullable; // non-nullable first
   if (compress_a != compress_b)
@@ -647,11 +647,12 @@ bool numeric_sorter(const FieldInfo &a, const FieldInfo &b) {
   if (size_a != size_b)
     return size_a > size_b; // larger size first
   if (a_id != b_id)
-    return a_id < b_id; // smaller type id first
+    return a_id > b_id; // type_id descending to match Java
   return a.field_name < b.field_name;
 }
 
-// Type then name sorter (for internal type fields)
+// Type then name sorter (for internal type fields like STRING)
+// Sorts by: type_id (ascending), field_name
 bool type_then_name_sorter(const FieldInfo &a, const FieldInfo &b) {
   if (a.field_type.type_id != b.field_type.type_id) {
     return a.field_type.type_id < b.field_type.type_id;
@@ -660,6 +661,7 @@ bool type_then_name_sorter(const FieldInfo &a, const FieldInfo &b) {
 }
 
 // Name sorter (for list/set/map/other fields)
+// Sorts by: field_name only
 bool name_sorter(const FieldInfo &a, const FieldInfo &b) {
   return a.field_name < b.field_name;
 }

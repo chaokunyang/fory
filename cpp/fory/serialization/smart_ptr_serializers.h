@@ -83,7 +83,6 @@ template <typename T> struct Serializer<std::optional<T>> {
   static inline void write(const std::optional<T> &opt, WriteContext &ctx,
                            RefMode ref_mode, bool write_type,
                            bool has_generics = false) {
-    (void)has_generics;
     constexpr bool inner_requires_ref = requires_ref_metadata_v<T>;
 
     if (ref_mode == RefMode::None) {
@@ -92,7 +91,7 @@ template <typename T> struct Serializer<std::optional<T>> {
                                      "RefMode::None to encode null state"));
         return;
       }
-      Serializer<T>::write(*opt, ctx, RefMode::None, write_type);
+      Serializer<T>::write(*opt, ctx, RefMode::None, write_type, has_generics);
       return;
     }
 
@@ -102,10 +101,10 @@ template <typename T> struct Serializer<std::optional<T>> {
     }
 
     if constexpr (inner_requires_ref) {
-      Serializer<T>::write(*opt, ctx, RefMode::NullOnly, write_type);
+      Serializer<T>::write(*opt, ctx, RefMode::NullOnly, write_type, has_generics);
     } else {
       ctx.write_int8(NOT_NULL_VALUE_FLAG);
-      Serializer<T>::write(*opt, ctx, RefMode::None, write_type);
+      Serializer<T>::write(*opt, ctx, RefMode::None, write_type, has_generics);
     }
   }
 

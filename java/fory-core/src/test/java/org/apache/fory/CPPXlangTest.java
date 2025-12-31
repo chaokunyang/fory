@@ -39,7 +39,7 @@ public class CPPXlangTest extends XlangTestBase {
   protected void ensurePeerReady() {
     String enabled = System.getenv("FORY_CPP_JAVA_CI");
     if (!"1".equals(enabled)) {
-      throw new SkipException("Skipping CPPXlangTest: FORY_CPP_JAVA_CI not set to 1");
+//      throw new SkipException("Skipping CPPXlangTest: FORY_CPP_JAVA_CI not set to 1");
     }
     boolean bazelAvailable = true;
     try {
@@ -272,33 +272,29 @@ public class CPPXlangTest extends XlangTestBase {
   @Override
   @Test
   public void testNullableFieldSchemaConsistentNotNull() throws java.io.IOException {
-    // C++ nullable field serialization has compatibility issues with Java
-    throw new SkipException(
-        "Skipping: C++ nullable field schema consistent tests have compatibility issues");
+    super.testNullableFieldSchemaConsistentNotNull();
   }
 
   @Override
   @Test
   public void testNullableFieldSchemaConsistentNull() throws java.io.IOException {
-    // C++ nullable field serialization has compatibility issues with Java
-    throw new SkipException(
-        "Skipping: C++ nullable field schema consistent tests have compatibility issues");
+    super.testNullableFieldSchemaConsistentNull();
   }
 
   @Override
   @Test
   public void testNullableFieldCompatibleNotNull() throws java.io.IOException {
-    // Java Compatible mode has a pre-existing bug (NullPointerException in TypeDefDecoder)
+    // C++ handles nullable fields differently - needs separate implementation
     throw new SkipException(
-        "Skipping: compatible mode nullable field tests not supported due to Java bug");
+        "Skipping: C++ compatible mode nullable tests need language-specific implementation");
   }
 
   @Override
   @Test
   public void testNullableFieldCompatibleNull() throws java.io.IOException {
-    // Java Compatible mode has a pre-existing bug (NullPointerException in TypeDefDecoder)
+    // C++ handles nullable fields differently - needs separate implementation
     throw new SkipException(
-        "Skipping: compatible mode nullable field tests not supported due to Java bug");
+        "Skipping: C++ compatible mode nullable tests need language-specific implementation");
   }
 
   @Test

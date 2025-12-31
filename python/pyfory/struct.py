@@ -319,7 +319,7 @@ class DataClassSerializer(Serializer):
                 if len(hash_bytes) == 0:
                     self._hash = 47
                 else:
-                    from pyfory.util import hash_buffer
+                    from pyfory.lib.mmh3 import hash_buffer
 
                     full_hash = hash_buffer(hash_bytes, seed=47)[0]
                     type_hash_32 = full_hash & 0xFFFFFFFF

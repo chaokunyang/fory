@@ -101,7 +101,8 @@ template <typename T> struct Serializer<std::optional<T>> {
     }
 
     if constexpr (inner_requires_ref) {
-      Serializer<T>::write(*opt, ctx, RefMode::NullOnly, write_type, has_generics);
+      Serializer<T>::write(*opt, ctx, RefMode::NullOnly, write_type,
+                           has_generics);
     } else {
       ctx.write_int8(NOT_NULL_VALUE_FLAG);
       Serializer<T>::write(*opt, ctx, RefMode::None, write_type, has_generics);

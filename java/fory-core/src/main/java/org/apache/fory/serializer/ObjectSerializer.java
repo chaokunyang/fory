@@ -188,22 +188,41 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
         if (needWrite) {
           Serializer<Object> serializer = fieldInfo.classInfo.getSerializer();
           if (!metaShareEnabled || isFinal[i]) {
-            if (!fieldInfo.trackingRef) {
-              binding.writeNullable(buffer, fieldValue, serializer, nullable);
-            } else {
-              // whether tracking ref is recorded in `fieldInfo.serializer`, so it's still
-              // consistent with jit serializer.
-              binding.writeRef(buffer, fieldValue, serializer);
+            switch (fieldInfo.refMode) {
+              case NONE:
+                binding.write(buffer, serializer, fieldValue);
+                break;
+              case NULL_ONLY:
+                binding.writeNullable(buffer, fieldValue, serializer);
+                break;
+              case TRACKING:
+                // whether tracking ref is recorded in `fieldInfo.serializer`, so it's still
+                // consistent with jit serializer.
+                binding.writeRef(buffer, fieldValue, serializer);
+                break;
             }
           } else {
-            if (fieldInfo.trackingRef && serializer.needToWriteRef()) {
-              if (!refResolver.writeRefOrNull(buffer, fieldValue)) {
+            switch (fieldInfo.refMode) {
+              case NONE:
                 typeResolver.writeClassInfo(buffer, fieldInfo.classInfo);
-                // No generics for field, no need to update `depth`.
                 binding.write(buffer, serializer, fieldValue);
-              }
-            } else {
-              binding.writeNullable(buffer, fieldValue, serializer, nullable);
+                break;
+              case NULL_ONLY:
+                if (fieldValue == null) {
+                  buffer.writeByte(Fory.NULL_FLAG);
+                } else {
+                  buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
+                  typeResolver.writeClassInfo(buffer, fieldInfo.classInfo);
+                  binding.write(buffer, serializer, fieldValue);
+                }
+                break;
+              case TRACKING:
+                if (!refResolver.writeRefOrNull(buffer, fieldValue)) {
+                  typeResolver.writeClassInfo(buffer, fieldInfo.classInfo);
+                  // No generics for field, no need to update `depth`.
+                  binding.write(buffer, serializer, fieldValue);
+                }
+                break;
             }
           }
         }
@@ -230,29 +249,37 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
       GenericTypeField fieldInfo,
       MemoryBuffer buffer,
       Object fieldValue) {
-    if (fieldInfo.trackingRef) {
-      if (!refResolver.writeRefOrNull(buffer, fieldValue)) {
-        ClassInfo classInfo =
-            typeResolver.getClassInfo(fieldValue.getClass(), fieldInfo.classInfoHolder);
+    switch (fieldInfo.refMode) {
+      case NONE:
         generics.pushGenericType(fieldInfo.genericType);
-        binding.writeContainerFieldValue(buffer, fieldValue, classInfo);
+        binding.writeContainerFieldValue(
+            buffer,
+            fieldValue,
+            typeResolver.getClassInfo(fieldValue.getClass(), fieldInfo.classInfoHolder));
         generics.popGenericType();
-      }
-    } else {
-      if (fieldInfo.nullable) {
+        break;
+      case NULL_ONLY:
         if (fieldValue == null) {
           buffer.writeByte(Fory.NULL_FLAG);
-          return;
         } else {
           buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
+          generics.pushGenericType(fieldInfo.genericType);
+          binding.writeContainerFieldValue(
+              buffer,
+              fieldValue,
+              typeResolver.getClassInfo(fieldValue.getClass(), fieldInfo.classInfoHolder));
+          generics.popGenericType();
         }
-      }
-      generics.pushGenericType(fieldInfo.genericType);
-      binding.writeContainerFieldValue(
-          buffer,
-          fieldValue,
-          typeResolver.getClassInfo(fieldValue.getClass(), fieldInfo.classInfoHolder));
-      generics.popGenericType();
+        break;
+      case TRACKING:
+        if (!refResolver.writeRefOrNull(buffer, fieldValue)) {
+          ClassInfo classInfo =
+              typeResolver.getClassInfo(fieldValue.getClass(), fieldInfo.classInfoHolder);
+          generics.pushGenericType(fieldInfo.genericType);
+          binding.writeContainerFieldValue(buffer, fieldValue, classInfo);
+          generics.popGenericType();
+        }
+        break;
     }
   }
 
@@ -262,19 +289,36 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
       MemoryBuffer buffer,
       GenericTypeField fieldInfo,
       Object fieldValue) {
-    if (fieldValue == null) {
-      Preconditions.checkArgument(fieldInfo.nullable, "fieldValue is null");
-      buffer.writeByte(Fory.NULL_FLAG);
-    } else if (fieldValue.getClass().isEnum()) {
-      // Only write null flag when the field is nullable (for xlang compatibility)
-      if (fieldInfo.nullable) {
-        buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
+    // Enum has special handling for xlang compatibility - no ref tracking for enums
+    if (fieldInfo.genericType.getCls().isEnum()) {
+      if (fieldValue == null) {
+        Preconditions.checkArgument(
+            fieldInfo.nullable, "Enum field value is null but not nullable");
+        buffer.writeByte(Fory.NULL_FLAG);
+      } else {
+        // Only write null flag when the field is nullable (for xlang compatibility)
+        if (fieldInfo.nullable) {
+          buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
+        }
+        fieldInfo.genericType.getSerializer(typeResolver).write(buffer, fieldValue);
       }
-      fieldInfo.genericType.getSerializer(typeResolver).write(buffer, fieldValue);
-    } else if (fieldInfo.trackingRef) {
-      binding.writeRef(buffer, fieldValue, fieldInfo.classInfoHolder);
-    } else {
-      binding.writeNullable(buffer, fieldValue, fieldInfo.classInfoHolder, fieldInfo.nullable);
+      return;
+    }
+    switch (fieldInfo.refMode) {
+      case NONE:
+        binding.writeNonRef(buffer, fieldValue, fieldInfo.classInfoHolder);
+        break;
+      case NULL_ONLY:
+        if (fieldValue == null) {
+          buffer.writeByte(Fory.NULL_FLAG);
+        } else {
+          buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
+          binding.writeNonRef(buffer, fieldValue, fieldInfo.classInfoHolder);
+        }
+        break;
+      case TRACKING:
+        binding.writeRef(buffer, fieldValue, fieldInfo.classInfoHolder);
+        break;
     }
   }
 

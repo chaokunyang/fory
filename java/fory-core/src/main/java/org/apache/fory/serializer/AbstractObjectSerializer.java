@@ -88,35 +88,53 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
     Serializer<Object> serializer = fieldInfo.classInfo.getSerializer();
     binding.incReadDepth();
     Object fieldValue;
-    boolean nullable = fieldInfo.nullable;
     if (isFinal) {
-      if (!fieldInfo.trackingRef) {
-        fieldValue = binding.readNullable(buffer, serializer, nullable);
-      } else {
-        // whether tracking ref is recorded in `fieldInfo.serializer`, so it's still
-        // consistent with jit serializer.
-        fieldValue = binding.readRef(buffer, serializer);
+      switch (fieldInfo.refMode) {
+        case NONE:
+          fieldValue = binding.read(buffer, serializer);
+          break;
+        case NULL_ONLY:
+          fieldValue = binding.readNullable(buffer, serializer);
+          break;
+        case TRACKING:
+          // whether tracking ref is recorded in `fieldInfo.serializer`, so it's still
+          // consistent with jit serializer.
+          fieldValue = binding.readRef(buffer, serializer);
+          break;
+        default:
+          throw new IllegalStateException("Unknown refMode: " + fieldInfo.refMode);
       }
     } else {
-      if (serializer.needToWriteRef()) {
-        int nextReadRefId = refResolver.tryPreserveRefId(buffer);
-        if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
+      switch (fieldInfo.refMode) {
+        case NONE:
           typeResolver.readClassInfo(buffer, fieldInfo.classInfo);
           fieldValue = serializer.read(buffer);
-          refResolver.setReadObject(nextReadRefId, fieldValue);
-        } else {
-          fieldValue = refResolver.getReadObject();
-        }
-      } else {
-        if (nullable) {
-          byte headFlag = buffer.readByte();
-          if (headFlag == Fory.NULL_FLAG) {
-            binding.decDepth();
-            return null;
+          break;
+        case NULL_ONLY:
+          {
+            byte headFlag = buffer.readByte();
+            if (headFlag == Fory.NULL_FLAG) {
+              binding.decDepth();
+              return null;
+            }
+            typeResolver.readClassInfo(buffer, fieldInfo.classInfo);
+            fieldValue = serializer.read(buffer);
           }
-        }
-        typeResolver.readClassInfo(buffer, fieldInfo.classInfo);
-        fieldValue = serializer.read(buffer);
+          break;
+        case TRACKING:
+          {
+            int nextReadRefId = refResolver.tryPreserveRefId(buffer);
+            if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
+              typeResolver.readClassInfo(buffer, fieldInfo.classInfo);
+              fieldValue = serializer.read(buffer);
+              refResolver.setReadObject(nextReadRefId, fieldValue);
+            } else {
+              fieldValue = refResolver.getReadObject();
+            }
+          }
+          break;
+        default:
+          throw new IllegalStateException("Unknown refMode: " + fieldInfo.refMode);
       }
     }
     binding.decDepth();
@@ -134,25 +152,35 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
    */
   static Object readOtherFieldValue(
       SerializationBinding binding, GenericTypeField fieldInfo, MemoryBuffer buffer) {
-    Object fieldValue;
-    boolean nullable = fieldInfo.nullable;
+    // Note: Enum has special handling for xlang compatibility - no type info for enum fields
     if (fieldInfo.genericType.getCls().isEnum()) {
       // Only read null flag when the field is nullable (for xlang compatibility)
-      if (nullable && buffer.readByte() == Fory.NULL_FLAG) {
+      if (fieldInfo.nullable && buffer.readByte() == Fory.NULL_FLAG) {
         return null;
       }
       return fieldInfo.genericType.getSerializer(binding.typeResolver).read(buffer);
-    } else if (fieldInfo.trackingRef) {
-      fieldValue = binding.readRef(buffer, fieldInfo);
-    } else {
-      binding.preserveRefId(-1);
-      if (nullable) {
-        byte headFlag = buffer.readByte();
-        if (headFlag == Fory.NULL_FLAG) {
-          return null;
+    }
+    Object fieldValue;
+    switch (fieldInfo.refMode) {
+      case NONE:
+        binding.preserveRefId(-1);
+        fieldValue = binding.readNonRef(buffer, fieldInfo);
+        break;
+      case NULL_ONLY:
+        {
+          binding.preserveRefId(-1);
+          byte headFlag = buffer.readByte();
+          if (headFlag == Fory.NULL_FLAG) {
+            return null;
+          }
+          fieldValue = binding.readNonRef(buffer, fieldInfo);
         }
-      }
-      fieldValue = binding.readNonRef(buffer, fieldInfo);
+        break;
+      case TRACKING:
+        fieldValue = binding.readRef(buffer, fieldInfo);
+        break;
+      default:
+        throw new IllegalStateException("Unknown refMode: " + fieldInfo.refMode);
     }
     return fieldValue;
   }
@@ -173,22 +201,32 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       GenericTypeField fieldInfo,
       MemoryBuffer buffer) {
     Object fieldValue;
-    if (fieldInfo.trackingRef) {
-      generics.pushGenericType(fieldInfo.genericType);
-      fieldValue = binding.readContainerFieldValueRef(buffer, fieldInfo);
-      generics.popGenericType();
-    } else {
-      binding.preserveRefId(-1);
-      boolean nullable = fieldInfo.nullable;
-      if (nullable) {
-        byte headFlag = buffer.readByte();
-        if (headFlag == Fory.NULL_FLAG) {
-          return null;
+    switch (fieldInfo.refMode) {
+      case NONE:
+        binding.preserveRefId(-1);
+        generics.pushGenericType(fieldInfo.genericType);
+        fieldValue = binding.readContainerFieldValue(buffer, fieldInfo);
+        generics.popGenericType();
+        break;
+      case NULL_ONLY:
+        {
+          binding.preserveRefId(-1);
+          byte headFlag = buffer.readByte();
+          if (headFlag == Fory.NULL_FLAG) {
+            return null;
+          }
+          generics.pushGenericType(fieldInfo.genericType);
+          fieldValue = binding.readContainerFieldValue(buffer, fieldInfo);
+          generics.popGenericType();
         }
-      }
-      generics.pushGenericType(fieldInfo.genericType);
-      fieldValue = binding.readContainerFieldValue(buffer, fieldInfo);
-      generics.popGenericType();
+        break;
+      case TRACKING:
+        generics.pushGenericType(fieldInfo.genericType);
+        fieldValue = binding.readContainerFieldValueRef(buffer, fieldInfo);
+        generics.popGenericType();
+        break;
+      default:
+        throw new IllegalStateException("Unknown refMode: " + fieldInfo.refMode);
     }
     return fieldValue;
   }

@@ -256,4 +256,9 @@ public class RustXlangTest extends XlangTestBase {
     throw new SkipException(
         "Skipping: compatible mode nullable field tests not supported due to Java bug");
   }
+
+  @Test
+  public void testUnionXlang() throws java.io.IOException {
+    super.testUnionXlang();
+  }
 }

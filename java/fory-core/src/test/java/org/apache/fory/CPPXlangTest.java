@@ -300,4 +300,11 @@ public class CPPXlangTest extends XlangTestBase {
     throw new SkipException(
         "Skipping: compatible mode nullable field tests not supported due to Java bug");
   }
+
+  @Test
+  @Override
+  public void testUnionXlang() throws java.io.IOException {
+    // Skip: C++ doesn't have Union xlang support yet
+    throw new SkipException("Skipping testUnionXlang: C++ Union xlang support not implemented");
+  }
 }

@@ -223,4 +223,11 @@ public class PythonXlangTest extends XlangTestBase {
     throw new SkipException(
         "Skipping: compatible mode nullable field tests not supported for Python");
   }
+
+  @Override
+  @Test
+  public void testUnionXlang() throws IOException {
+    // Skip: Python doesn't have Union xlang support yet
+    throw new SkipException("Skipping testUnionXlang: Python Union xlang support not implemented");
+  }
 }

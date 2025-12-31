@@ -261,7 +261,9 @@ class DataClassSerializer(Serializer):
         # When field_names is explicitly passed (from TypeDef.create_serializer during schema evolution),
         # use those fields instead of extracting from the class. This is critical for schema evolution
         # where the sender's schema (in TypeDef) differs from the receiver's registered class.
-        if field_names is not None and serializers is not None:
+        # Track whether field order comes from wire (TypeDef) - don't re-sort these
+        self._fields_from_typedef = field_names is not None and serializers is not None
+        if self._fields_from_typedef:
             # Use the passed-in field_names and serializers from TypeDef
             self._field_names = field_names
             self._serializers = serializers
@@ -305,10 +307,30 @@ class DataClassSerializer(Serializer):
         self._unwrapped_hints = self._compute_unwrapped_hints()
 
         if self._xlang:
-            # In xlang mode, always compute struct meta to sort fields consistently
-            self._hash, self._field_names, self._serializers = compute_struct_meta(
-                fory.type_resolver, self._field_names, self._serializers, self._nullable_fields, self._field_infos
-            )
+            # In xlang mode, compute struct meta for hash and field sorting
+            # BUT if fields come from TypeDef (wire data), preserve their order for deserialization
+            if self._fields_from_typedef:
+                # Fields from wire - only compute hash, don't re-sort
+                # The sender already sorted the fields, we must use their order for correct deserialization
+                hash_str = compute_struct_fingerprint(
+                    fory.type_resolver, self._field_names, self._serializers, self._nullable_fields, self._field_infos
+                )
+                hash_bytes = hash_str.encode("utf-8")
+                if len(hash_bytes) == 0:
+                    self._hash = 47
+                else:
+                    from pyfory.util import hash_buffer
+
+                    full_hash = hash_buffer(hash_bytes, seed=47)[0]
+                    type_hash_32 = full_hash & 0xFFFFFFFF
+                    if full_hash & 0x80000000:
+                        type_hash_32 = type_hash_32 - 0x100000000
+                    self._hash = type_hash_32
+            else:
+                # Fields extracted locally - sort them for consistent serialization
+                self._hash, self._field_names, self._serializers = compute_struct_meta(
+                    fory.type_resolver, self._field_names, self._serializers, self._nullable_fields, self._field_infos
+                )
             self._generated_xwrite_method = self._gen_xwrite_method()
             self._generated_xread_method = self._gen_xread_method()
             if _ENABLE_FORY_PYTHON_JIT:

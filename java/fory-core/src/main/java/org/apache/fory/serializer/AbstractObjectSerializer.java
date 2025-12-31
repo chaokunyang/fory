@@ -39,6 +39,7 @@ import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.ClassInfo;
 import org.apache.fory.resolver.ClassInfoHolder;
 import org.apache.fory.resolver.ClassResolver;
+import org.apache.fory.resolver.RefMode;
 import org.apache.fory.resolver.RefResolver;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.converter.FieldConverter;
@@ -1003,8 +1004,9 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
     protected final String qualifiedFieldName;
     protected final FieldAccessor fieldAccessor;
     protected final FieldConverter<?> fieldConverter;
-    protected boolean nullable;
-    protected boolean trackingRef;
+    protected final RefMode refMode;
+    protected final boolean nullable;
+    protected final boolean trackingRef;
     protected final boolean isPrimitive;
 
     private InternalFieldInfo(Fory fory, Descriptor d, short classId) {
@@ -1022,6 +1024,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       nullable = d.isNullable();
       // descriptor.isTrackingRef() already includes the needToWriteRef check
       trackingRef = d.isTrackingRef();
+      refMode = RefMode.of(trackingRef, nullable);
     }
 
     @Override

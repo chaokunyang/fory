@@ -1255,51 +1255,104 @@ fn test_enum_schema_evolution_compatible_reverse() {
 }
 
 // ============================================================================
-// Nullable Field Tests - Test nullable fields with #[fory(nullable)]
+// Nullable Field Tests - Comprehensive nullable field testing
 // ============================================================================
 
-/// Struct for testing nullable fields in schema consistent mode (compatible=false).
+/// Comprehensive struct for testing nullable fields in SCHEMA_CONSISTENT mode (compatible=false).
 /// Fields are organized as:
-/// - Base non-nullable fields: numeric (i32, i64, f32, f64), bool, string
-/// - Nullable fields: String with #[fory(nullable = true)]
+/// - Base non-nullable fields: byte, short, int, long, float, double, bool, string, list, set, map
+/// - Nullable fields (first half - boxed numeric types): Integer, Long, Float
+/// - Nullable fields (second half - @ForyField): Double, Boolean, String, List, Set, Map
 #[derive(ForyObject, Debug, PartialEq)]
-struct NullableFieldStruct {
-    // Base non-nullable fields
+struct NullableComprehensiveSchemaConsistent {
+    // Base non-nullable primitive fields
+    byte_field: i8,
+    short_field: i16,
     int_field: i32,
     long_field: i64,
     float_field: f32,
     double_field: f64,
     bool_field: bool,
-    string_field: String,
 
-    // Nullable fields with #[fory(nullable = true)] annotation
+    // Base non-nullable reference fields
+    string_field: String,
+    list_field: Vec<String>,
+    set_field: HashSet<String>,
+    map_field: HashMap<String, String>,
+
+    // Nullable fields - first half using boxed types
     #[fory(nullable = true)]
-    nullable_string1: Option<String>,
+    nullable_int: Option<i32>,
     #[fory(nullable = true)]
-    nullable_string2: Option<String>,
+    nullable_long: Option<i64>,
+    #[fory(nullable = true)]
+    nullable_float: Option<f32>,
+
+    // Nullable fields - second half using @ForyField annotation
+    #[fory(nullable = true)]
+    nullable_double: Option<f64>,
+    #[fory(nullable = true)]
+    nullable_bool: Option<bool>,
+    #[fory(nullable = true)]
+    nullable_string: Option<String>,
+    #[fory(nullable = true)]
+    nullable_list: Option<Vec<String>>,
+    #[fory(nullable = true)]
+    nullable_set: Option<HashSet<String>>,
+    #[fory(nullable = true)]
+    nullable_map: Option<HashMap<String, String>>,
 }
 
-/// Struct for testing nullable fields in compatible mode.
+/// Comprehensive struct for testing nullable fields in COMPATIBLE mode.
 /// Fields are organized as:
-/// - Base non-nullable fields: numeric, bool, string
-/// - Nullable fields: String with #[fory(nullable = true)]
+/// - Base non-nullable fields: byte, short, int, long, float, double, bool, boxed types, string, list, set, map
+/// - Nullable group 1 (boxed types): Integer, Long, Float, Double, Boolean
+/// - Nullable group 2 (@ForyField): String, List, Set, Map
 #[derive(ForyObject, Debug, PartialEq)]
-struct NullableFieldStructCompatible {
-    // Base non-nullable fields
+struct NullableComprehensiveCompatible {
+    // Base non-nullable primitive fields
+    byte_field: i8,
+    short_field: i16,
     int_field: i32,
     long_field: i64,
     float_field: f32,
     double_field: f64,
     bool_field: bool,
-    string_field: String,
 
-    // Nullable fields with #[fory(nullable = true)] annotation
+    // Base non-nullable boxed fields (not nullable by default in xlang)
+    boxed_int: i32,
+    boxed_long: i64,
+    boxed_float: f32,
+    boxed_double: f64,
+    boxed_bool: bool,
+
+    // Base non-nullable reference fields
+    string_field: String,
+    list_field: Vec<String>,
+    set_field: HashSet<String>,
+    map_field: HashMap<String, String>,
+
+    // Nullable group 1 - boxed types with @ForyField(nullable=true)
     #[fory(nullable = true)]
-    nullable_string1: Option<String>,
+    nullable_int1: Option<i32>,
+    #[fory(nullable = true)]
+    nullable_long1: Option<i64>,
+    #[fory(nullable = true)]
+    nullable_float1: Option<f32>,
+    #[fory(nullable = true)]
+    nullable_double1: Option<f64>,
+    #[fory(nullable = true)]
+    nullable_bool1: Option<bool>,
+
+    // Nullable group 2 - reference types with @ForyField(nullable=true)
     #[fory(nullable = true)]
     nullable_string2: Option<String>,
     #[fory(nullable = true)]
-    nullable_string3: Option<String>,
+    nullable_list2: Option<Vec<String>>,
+    #[fory(nullable = true)]
+    nullable_set2: Option<HashSet<String>>,
+    #[fory(nullable = true)]
+    nullable_map2: Option<HashMap<String, String>>,
 }
 
 #[test]
@@ -1309,23 +1362,43 @@ fn test_nullable_field_schema_consistent_not_null() {
     let bytes = fs::read(&data_file_path).unwrap();
 
     let mut fory = Fory::default().compatible(false).xlang(true);
-    fory.register::<NullableFieldStruct>(401).unwrap();
+    fory.register::<NullableComprehensiveSchemaConsistent>(401)
+        .unwrap();
 
-    let local_obj = NullableFieldStruct {
-        // Base non-nullable fields
+    let local_obj = NullableComprehensiveSchemaConsistent {
+        // Base non-nullable primitive fields
+        byte_field: 1,
+        short_field: 2,
         int_field: 42,
         long_field: 123456789,
         float_field: 3.14,
         double_field: 2.718281828,
         bool_field: true,
-        string_field: "hello".to_string(),
 
-        // Nullable fields - all have values
-        nullable_string1: Some("nullable_value1".to_string()),
-        nullable_string2: Some("nullable_value2".to_string()),
+        // Base non-nullable reference fields
+        string_field: "hello".to_string(),
+        list_field: vec!["a".to_string(), "b".to_string(), "c".to_string()],
+        set_field: HashSet::from(["x".to_string(), "y".to_string()]),
+        map_field: HashMap::from([
+            ("key1".to_string(), "value1".to_string()),
+            ("key2".to_string(), "value2".to_string()),
+        ]),
+
+        // Nullable fields - all have values (first half - boxed)
+        nullable_int: Some(100),
+        nullable_long: Some(200),
+        nullable_float: Some(1.5),
+
+        // Nullable fields - all have values (second half - @ForyField)
+        nullable_double: Some(2.5),
+        nullable_bool: Some(false),
+        nullable_string: Some("nullable_value".to_string()),
+        nullable_list: Some(vec!["p".to_string(), "q".to_string()]),
+        nullable_set: Some(HashSet::from(["m".to_string(), "n".to_string()])),
+        nullable_map: Some(HashMap::from([("nk1".to_string(), "nv1".to_string())])),
     };
 
-    let remote_obj: NullableFieldStruct = fory.deserialize(&bytes).unwrap();
+    let remote_obj: NullableComprehensiveSchemaConsistent = fory.deserialize(&bytes).unwrap();
     assert_eq!(remote_obj, local_obj);
 
     let new_bytes = fory.serialize(&remote_obj).unwrap();
@@ -1339,23 +1412,43 @@ fn test_nullable_field_schema_consistent_null() {
     let bytes = fs::read(&data_file_path).unwrap();
 
     let mut fory = Fory::default().compatible(false).xlang(true);
-    fory.register::<NullableFieldStruct>(401).unwrap();
+    fory.register::<NullableComprehensiveSchemaConsistent>(401)
+        .unwrap();
 
-    let local_obj = NullableFieldStruct {
-        // Base non-nullable fields - must have values
+    let local_obj = NullableComprehensiveSchemaConsistent {
+        // Base non-nullable primitive fields - must have values
+        byte_field: 1,
+        short_field: 2,
         int_field: 42,
         long_field: 123456789,
         float_field: 3.14,
         double_field: 2.718281828,
         bool_field: true,
-        string_field: "hello".to_string(),
 
-        // Nullable fields - all null
-        nullable_string1: None,
-        nullable_string2: None,
+        // Base non-nullable reference fields - must have values
+        string_field: "hello".to_string(),
+        list_field: vec!["a".to_string(), "b".to_string(), "c".to_string()],
+        set_field: HashSet::from(["x".to_string(), "y".to_string()]),
+        map_field: HashMap::from([
+            ("key1".to_string(), "value1".to_string()),
+            ("key2".to_string(), "value2".to_string()),
+        ]),
+
+        // Nullable fields - all null (first half - boxed)
+        nullable_int: None,
+        nullable_long: None,
+        nullable_float: None,
+
+        // Nullable fields - all null (second half - @ForyField)
+        nullable_double: None,
+        nullable_bool: None,
+        nullable_string: None,
+        nullable_list: None,
+        nullable_set: None,
+        nullable_map: None,
     };
 
-    let remote_obj: NullableFieldStruct = fory.deserialize(&bytes).unwrap();
+    let remote_obj: NullableComprehensiveSchemaConsistent = fory.deserialize(&bytes).unwrap();
     assert_eq!(remote_obj, local_obj);
 
     let new_bytes = fory.serialize(&remote_obj).unwrap();
@@ -1369,24 +1462,50 @@ fn test_nullable_field_compatible_not_null() {
     let bytes = fs::read(&data_file_path).unwrap();
 
     let mut fory = Fory::default().compatible(true).xlang(true);
-    fory.register::<NullableFieldStructCompatible>(402).unwrap();
+    fory.register::<NullableComprehensiveCompatible>(402)
+        .unwrap();
 
-    let local_obj = NullableFieldStructCompatible {
-        // Base non-nullable fields
+    let local_obj = NullableComprehensiveCompatible {
+        // Base non-nullable primitive fields
+        byte_field: 1,
+        short_field: 2,
         int_field: 42,
         long_field: 123456789,
         float_field: 3.14,
         double_field: 2.718281828,
         bool_field: true,
-        string_field: "hello".to_string(),
 
-        // Nullable fields - all have values
-        nullable_string1: Some("nullable_value1".to_string()),
-        nullable_string2: Some("nullable_value2".to_string()),
-        nullable_string3: Some("nullable_value3".to_string()),
+        // Base non-nullable boxed fields
+        boxed_int: 10,
+        boxed_long: 20,
+        boxed_float: 1.1,
+        boxed_double: 2.2,
+        boxed_bool: true,
+
+        // Base non-nullable reference fields
+        string_field: "hello".to_string(),
+        list_field: vec!["a".to_string(), "b".to_string(), "c".to_string()],
+        set_field: HashSet::from(["x".to_string(), "y".to_string()]),
+        map_field: HashMap::from([
+            ("key1".to_string(), "value1".to_string()),
+            ("key2".to_string(), "value2".to_string()),
+        ]),
+
+        // Nullable group 1 - all have values
+        nullable_int1: Some(100),
+        nullable_long1: Some(200),
+        nullable_float1: Some(1.5),
+        nullable_double1: Some(2.5),
+        nullable_bool1: Some(false),
+
+        // Nullable group 2 - all have values
+        nullable_string2: Some("nullable_value".to_string()),
+        nullable_list2: Some(vec!["p".to_string(), "q".to_string()]),
+        nullable_set2: Some(HashSet::from(["m".to_string(), "n".to_string()])),
+        nullable_map2: Some(HashMap::from([("nk1".to_string(), "nv1".to_string())])),
     };
 
-    let remote_obj: NullableFieldStructCompatible = fory.deserialize(&bytes).unwrap();
+    let remote_obj: NullableComprehensiveCompatible = fory.deserialize(&bytes).unwrap();
     assert_eq!(remote_obj, local_obj);
 
     let new_bytes = fory.serialize(&remote_obj).unwrap();
@@ -1400,24 +1519,50 @@ fn test_nullable_field_compatible_null() {
     let bytes = fs::read(&data_file_path).unwrap();
 
     let mut fory = Fory::default().compatible(true).xlang(true);
-    fory.register::<NullableFieldStructCompatible>(402).unwrap();
+    fory.register::<NullableComprehensiveCompatible>(402)
+        .unwrap();
 
-    let local_obj = NullableFieldStructCompatible {
-        // Base non-nullable fields - must have values
+    let local_obj = NullableComprehensiveCompatible {
+        // Base non-nullable primitive fields - must have values
+        byte_field: 1,
+        short_field: 2,
         int_field: 42,
         long_field: 123456789,
         float_field: 3.14,
         double_field: 2.718281828,
         bool_field: true,
-        string_field: "hello".to_string(),
 
-        // Nullable fields - all null
-        nullable_string1: None,
+        // Base non-nullable boxed fields - must have values
+        boxed_int: 10,
+        boxed_long: 20,
+        boxed_float: 1.1,
+        boxed_double: 2.2,
+        boxed_bool: true,
+
+        // Base non-nullable reference fields - must have values
+        string_field: "hello".to_string(),
+        list_field: vec!["a".to_string(), "b".to_string(), "c".to_string()],
+        set_field: HashSet::from(["x".to_string(), "y".to_string()]),
+        map_field: HashMap::from([
+            ("key1".to_string(), "value1".to_string()),
+            ("key2".to_string(), "value2".to_string()),
+        ]),
+
+        // Nullable group 1 - all null
+        nullable_int1: None,
+        nullable_long1: None,
+        nullable_float1: None,
+        nullable_double1: None,
+        nullable_bool1: None,
+
+        // Nullable group 2 - all null
         nullable_string2: None,
-        nullable_string3: None,
+        nullable_list2: None,
+        nullable_set2: None,
+        nullable_map2: None,
     };
 
-    let remote_obj: NullableFieldStructCompatible = fory.deserialize(&bytes).unwrap();
+    let remote_obj: NullableComprehensiveCompatible = fory.deserialize(&bytes).unwrap();
     assert_eq!(remote_obj, local_obj);
 
     let new_bytes = fory.serialize(&remote_obj).unwrap();

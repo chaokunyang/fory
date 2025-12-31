@@ -984,7 +984,8 @@ fn group_fields_by_type(fields: &[&Field]) -> FieldGroups {
         compress_a
             .cmp(&compress_b)
             .then_with(|| size_b.cmp(&size_a))
-            .then_with(|| a.2.cmp(&b.2))
+            // Use descending type_id order to match Java's COMPARATOR_BY_PRIMITIVE_TYPE_ID
+            .then_with(|| b.2.cmp(&a.2))
             .then_with(|| a.0.cmp(&b.0))
     }
 

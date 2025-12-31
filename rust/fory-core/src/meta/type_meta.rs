@@ -753,8 +753,7 @@ impl TypeMeta {
                 //   (e.g., "HTTPRequest" -> "http_request", not "h_t_t_p_request")
                 if i > 0 {
                     let prev_upper = chars.get(i - 1).is_some_and(|c| c.is_ascii_uppercase());
-                    let next_upper_or_end =
-                        chars.get(i + 1).is_none_or(|c| c.is_ascii_uppercase());
+                    let next_upper_or_end = chars.get(i + 1).is_none_or(|c| c.is_ascii_uppercase());
                     if !prev_upper || !next_upper_or_end {
                         result.push('_');
                     }

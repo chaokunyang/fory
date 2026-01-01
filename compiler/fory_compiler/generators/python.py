@@ -55,6 +55,17 @@ class PythonGenerator(BaseGenerator):
         PrimitiveKind.TIMESTAMP: "datetime.datetime",
     }
 
+    # Numpy dtype strings for primitive arrays
+    NUMPY_DTYPE_MAP = {
+        PrimitiveKind.BOOL: "np.bool_",
+        PrimitiveKind.INT8: "np.int8",
+        PrimitiveKind.INT16: "np.int16",
+        PrimitiveKind.INT32: "np.int32",
+        PrimitiveKind.INT64: "np.int64",
+        PrimitiveKind.FLOAT32: "np.float32",
+        PrimitiveKind.FLOAT64: "np.float64",
+    }
+
     # Default values for primitive types
     DEFAULT_VALUES = {
         PrimitiveKind.BOOL: "False",
@@ -184,6 +195,10 @@ class PythonGenerator(BaseGenerator):
             return field_type.name
 
         elif isinstance(field_type, ListType):
+            # Use numpy array for numeric primitive types
+            if isinstance(field_type.element_type, PrimitiveType):
+                if field_type.element_type.kind in self.NUMPY_DTYPE_MAP:
+                    return "np.ndarray"
             element_type = self.generate_type(field_type.element_type, False)
             return f"List[{element_type}]"
 
@@ -206,6 +221,11 @@ class PythonGenerator(BaseGenerator):
             return "None"
 
         elif isinstance(field_type, ListType):
+            # Use numpy empty array for numeric types
+            if isinstance(field_type.element_type, PrimitiveType):
+                if field_type.element_type.kind in self.NUMPY_DTYPE_MAP:
+                    dtype = self.NUMPY_DTYPE_MAP[field_type.element_type.kind]
+                    return f"None  # Use np.array([], dtype={dtype}) to initialize"
             return "None"
 
         elif isinstance(field_type, MapType):
@@ -220,6 +240,11 @@ class PythonGenerator(BaseGenerator):
                 imports.add("import datetime")
 
         elif isinstance(field_type, ListType):
+            # Add numpy import for numeric primitive arrays
+            if isinstance(field_type.element_type, PrimitiveType):
+                if field_type.element_type.kind in self.NUMPY_DTYPE_MAP:
+                    imports.add("import numpy as np")
+                    return
             self.collect_imports(field_type.element_type, imports)
 
         elif isinstance(field_type, MapType):

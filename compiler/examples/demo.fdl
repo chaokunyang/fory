@@ -26,6 +26,15 @@ message Cat @104 {
     int32 lives = 5;
 }
 
+// Demonstrates primitive arrays for numeric types
+message SensorData @105 {
+    string sensor_id = 1;
+    repeated int32 readings = 2;
+    repeated float64 temperatures = 3;
+    repeated int64 timestamps = 4;
+    repeated bool flags = 5;
+}
+
 // No type ID - uses name-based registration
 message Config {
     string key = 1;

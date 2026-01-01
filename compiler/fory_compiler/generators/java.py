@@ -66,6 +66,17 @@ class JavaGenerator(BaseGenerator):
         PrimitiveKind.FLOAT64: "Double",
     }
 
+    # Primitive array types for repeated numeric fields
+    PRIMITIVE_ARRAY_MAP = {
+        PrimitiveKind.BOOL: "boolean[]",
+        PrimitiveKind.INT8: "byte[]",
+        PrimitiveKind.INT16: "short[]",
+        PrimitiveKind.INT32: "int[]",
+        PrimitiveKind.INT64: "long[]",
+        PrimitiveKind.FLOAT32: "float[]",
+        PrimitiveKind.FLOAT64: "double[]",
+    }
+
     def generate(self) -> List[GeneratedFile]:
         """Generate Java files for the schema."""
         files = []
@@ -249,6 +260,10 @@ class JavaGenerator(BaseGenerator):
             return field_type.name
 
         elif isinstance(field_type, ListType):
+            # Use primitive arrays for numeric types
+            if isinstance(field_type.element_type, PrimitiveType):
+                if field_type.element_type.kind in self.PRIMITIVE_ARRAY_MAP:
+                    return self.PRIMITIVE_ARRAY_MAP[field_type.element_type.kind]
             element_type = self.generate_type(field_type.element_type, True)
             return f"List<{element_type}>"
 
@@ -268,6 +283,10 @@ class JavaGenerator(BaseGenerator):
                 imports.add("java.time.Instant")
 
         elif isinstance(field_type, ListType):
+            # Primitive arrays don't need List import
+            if isinstance(field_type.element_type, PrimitiveType):
+                if field_type.element_type.kind in self.PRIMITIVE_ARRAY_MAP:
+                    return  # No import needed for primitive arrays
             imports.add("java.util.List")
             self.collect_imports(field_type.element_type, imports)
 
@@ -277,11 +296,24 @@ class JavaGenerator(BaseGenerator):
             self.collect_imports(field_type.value_type, imports)
 
     def has_array_field(self, message: Message) -> bool:
-        """Check if message has any byte[] fields."""
+        """Check if message has any array fields (byte[] or primitive arrays)."""
         for field in message.fields:
             if isinstance(field.field_type, PrimitiveType):
                 if field.field_type.kind == PrimitiveKind.BYTES:
                     return True
+            elif isinstance(field.field_type, ListType):
+                if isinstance(field.field_type.element_type, PrimitiveType):
+                    if field.field_type.element_type.kind in self.PRIMITIVE_ARRAY_MAP:
+                        return True
+        return False
+
+    def is_primitive_array_field(self, field: Field) -> bool:
+        """Check if field is a primitive array type."""
+        if isinstance(field.field_type, PrimitiveType):
+            return field.field_type.kind == PrimitiveKind.BYTES
+        if isinstance(field.field_type, ListType):
+            if isinstance(field.field_type.element_type, PrimitiveType):
+                return field.field_type.element_type.kind in self.PRIMITIVE_ARRAY_MAP
         return False
 
     def generate_equals_method(self, message: Message) -> List[str]:
@@ -299,11 +331,11 @@ class JavaGenerator(BaseGenerator):
             comparisons = []
             for field in message.fields:
                 field_name = self.to_camel_case(field.name)
-                if isinstance(field.field_type, PrimitiveType):
+                if self.is_primitive_array_field(field):
+                    comparisons.append(f"Arrays.equals({field_name}, that.{field_name})")
+                elif isinstance(field.field_type, PrimitiveType):
                     kind = field.field_type.kind
-                    if kind == PrimitiveKind.BYTES:
-                        comparisons.append(f"Arrays.equals({field_name}, that.{field_name})")
-                    elif kind in (PrimitiveKind.FLOAT32,):
+                    if kind in (PrimitiveKind.FLOAT32,):
                         comparisons.append(f"Float.compare({field_name}, that.{field_name}) == 0")
                     elif kind in (PrimitiveKind.FLOAT64,):
                         comparisons.append(f"Double.compare({field_name}, that.{field_name}) == 0")
@@ -342,11 +374,8 @@ class JavaGenerator(BaseGenerator):
             array_fields = []
             for field in message.fields:
                 field_name = self.to_camel_case(field.name)
-                if isinstance(field.field_type, PrimitiveType):
-                    if field.field_type.kind == PrimitiveKind.BYTES:
-                        array_fields.append(field_name)
-                    else:
-                        hash_args.append(field_name)
+                if self.is_primitive_array_field(field):
+                    array_fields.append(field_name)
                 else:
                     hash_args.append(field_name)
 

@@ -1,0 +1,33 @@
+// Demo FDL file for testing the compiler
+
+package demo;
+
+enum Color @101 {
+    GREEN = 0;
+    RED = 1;
+    BLUE = 2;
+    WHITE = 3;
+}
+
+message Item @102 {
+    string name = 1;
+}
+
+message Dog @103 {
+    optional string name = 1;
+    int32 age = 2;
+}
+
+message Cat @104 {
+    ref Dog friend = 1;
+    optional string name = 2;
+    repeated string tags = 3;
+    map<string, int32> scores = 4;
+    int32 lives = 5;
+}
+
+// No type ID - uses name-based registration
+message Config {
+    string key = 1;
+    string value = 2;
+}

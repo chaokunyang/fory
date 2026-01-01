@@ -1638,3 +1638,111 @@ fn test_union_xlang() {
     fory.serialize_to(&mut buf, &struct2).unwrap();
     fs::write(&data_file_path, buf).unwrap();
 }
+
+// ============================================================================
+// Reference Tracking Tests - Cross-language shared reference tests
+// ============================================================================
+
+/// Inner struct for reference tracking test (SCHEMA_CONSISTENT mode)
+/// Matches Java RefInnerSchemaConsistent with type ID 501
+#[derive(ForyObject, Debug, PartialEq, Clone)]
+struct RefInnerSchemaConsistent {
+    id: i32,
+    name: String,
+}
+
+/// Outer struct for reference tracking test (SCHEMA_CONSISTENT mode)
+/// Contains two fields that both point to the same inner object.
+/// Matches Java RefOuterSchemaConsistent with type ID 502
+#[derive(ForyObject, Debug, PartialEq)]
+struct RefOuterSchemaConsistent {
+    #[fory(ref = true, nullable = true)]
+    inner1: Option<RefInnerSchemaConsistent>,
+    #[fory(ref = true, nullable = true)]
+    inner2: Option<RefInnerSchemaConsistent>,
+}
+
+/// Inner struct for reference tracking test (COMPATIBLE mode)
+/// Matches Java RefInnerCompatible with type ID 503
+#[derive(ForyObject, Debug, PartialEq, Clone)]
+struct RefInnerCompatible {
+    id: i32,
+    name: String,
+}
+
+/// Outer struct for reference tracking test (COMPATIBLE mode)
+/// Contains two fields that both point to the same inner object.
+/// Matches Java RefOuterCompatible with type ID 504
+#[derive(ForyObject, Debug, PartialEq)]
+struct RefOuterCompatible {
+    #[fory(ref = true, nullable = true)]
+    inner1: Option<RefInnerCompatible>,
+    #[fory(ref = true, nullable = true)]
+    inner2: Option<RefInnerCompatible>,
+}
+
+/// Test cross-language reference tracking in SCHEMA_CONSISTENT mode (compatible=false).
+///
+/// This test verifies that when Java serializes an object where two fields point to
+/// the same instance, Rust can properly deserialize it and both fields will contain
+/// equal values. When re-serializing, the reference relationship should be preserved.
+#[test]
+#[ignore]
+fn test_ref_schema_consistent() {
+    let data_file_path = get_data_file();
+    let bytes = fs::read(&data_file_path).unwrap();
+
+    let mut fory = Fory::default().compatible(false).xlang(true);
+    fory.register::<RefInnerSchemaConsistent>(501).unwrap();
+    fory.register::<RefOuterSchemaConsistent>(502).unwrap();
+
+    let outer: RefOuterSchemaConsistent = fory.deserialize(&bytes).unwrap();
+
+    // Both inner1 and inner2 should have values
+    assert!(outer.inner1.is_some(), "inner1 should not be None");
+    assert!(outer.inner2.is_some(), "inner2 should not be None");
+
+    // Both should have the same values (they reference the same object in Java)
+    let inner1 = outer.inner1.as_ref().unwrap();
+    let inner2 = outer.inner2.as_ref().unwrap();
+    assert_eq!(inner1.id, 42);
+    assert_eq!(inner1.name, "shared_inner");
+    assert_eq!(inner1, inner2, "inner1 and inner2 should be equal (same reference)");
+
+    // Re-serialize and write back
+    let new_bytes = fory.serialize(&outer).unwrap();
+    fs::write(&data_file_path, new_bytes).unwrap();
+}
+
+/// Test cross-language reference tracking in COMPATIBLE mode (compatible=true).
+///
+/// This test verifies reference tracking works correctly with schema evolution support.
+/// The inner object is shared between two fields, and this relationship should be
+/// preserved through serialization/deserialization.
+#[test]
+#[ignore]
+fn test_ref_compatible() {
+    let data_file_path = get_data_file();
+    let bytes = fs::read(&data_file_path).unwrap();
+
+    let mut fory = Fory::default().compatible(true).xlang(true);
+    fory.register::<RefInnerCompatible>(503).unwrap();
+    fory.register::<RefOuterCompatible>(504).unwrap();
+
+    let outer: RefOuterCompatible = fory.deserialize(&bytes).unwrap();
+
+    // Both inner1 and inner2 should have values
+    assert!(outer.inner1.is_some(), "inner1 should not be None");
+    assert!(outer.inner2.is_some(), "inner2 should not be None");
+
+    // Both should have the same values (they reference the same object in Java)
+    let inner1 = outer.inner1.as_ref().unwrap();
+    let inner2 = outer.inner2.as_ref().unwrap();
+    assert_eq!(inner1.id, 99);
+    assert_eq!(inner1.name, "compatible_shared");
+    assert_eq!(inner1, inner2, "inner1 and inner2 should be equal (same reference)");
+
+    // Re-serialize and write back
+    let new_bytes = fory.serialize(&outer).unwrap();
+    fs::write(&data_file_path, new_bytes).unwrap();
+}

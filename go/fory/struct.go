@@ -642,7 +642,12 @@ func (s *structSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value 
 	// In compatible mode with meta share, struct hash is not written
 	if !ctx.Compatible() {
 		err := ctx.Err()
+		pos := buf.ReaderIndex()
 		structHash := buf.ReadInt32(err)
+		if DebugOutputEnabled() {
+			fmt.Printf("[Go][fory-debug] Reading struct hash for %s at position %d: read=%d, expected=%d\n",
+				s.type_.String(), pos, structHash, s.structHash)
+		}
 		if structHash != s.structHash {
 			ctx.SetError(HashMismatchError(structHash, s.structHash, s.type_.String()))
 			return
@@ -1768,6 +1773,12 @@ func (s *structSerializer) computeHash() int32 {
 					isEnumField = true
 					typeId = UNKNOWN
 				}
+			}
+			// For user-defined types (struct, ext types), use UNKNOWN in fingerprint
+			// This matches Java's behavior where user-defined types return UNKNOWN
+			// to ensure consistent fingerprint computation across languages
+			if isUserDefinedType(int16(typeId)) {
+				typeId = UNKNOWN
 			}
 			// For fixed-size arrays with primitive elements, use primitive array type IDs
 			if field.Type.Kind() == reflect.Array {

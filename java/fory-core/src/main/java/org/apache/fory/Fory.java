@@ -543,15 +543,42 @@ public final class Fory implements BaseFory {
   }
 
   public void xwriteRef(MemoryBuffer buffer, Object obj) {
+    int posBeforeRef = buffer.writerIndex();
     if (!refResolver.writeRefOrNull(buffer, obj)) {
+      int posAfterRef = buffer.writerIndex();
       ClassInfo classInfo = xtypeResolver.writeClassInfo(buffer, obj);
+      int posAfterTypeInfo = buffer.writerIndex();
+      if (config.isForyDebugOutputEnabled()) {
+        LOG.info(
+            "[Java][fory-debug] xwriteRef(root) for {} at pos {}: refFlag pos {}, typeInfo pos {}, calling xwriteData",
+            obj.getClass().getSimpleName(),
+            posBeforeRef,
+            posAfterRef,
+            posAfterTypeInfo);
+      }
       xwriteData(buffer, classInfo, obj);
     }
   }
 
   public <T> void xwriteRef(MemoryBuffer buffer, T obj, Serializer<T> serializer) {
+    if (config.isForyDebugOutputEnabled()) {
+      LOG.info(
+          "[Java][fory-debug] xwriteRef(with-serializer) for {} at pos {}, needToWriteRef={}",
+          obj != null ? obj.getClass().getSimpleName() : "null",
+          buffer.writerIndex(),
+          serializer.needToWriteRef());
+    }
     if (serializer.needToWriteRef()) {
+      int posBeforeRef = buffer.writerIndex();
       if (!refResolver.writeRefOrNull(buffer, obj)) {
+        int posAfterRef = buffer.writerIndex();
+        if (config.isForyDebugOutputEnabled()) {
+          LOG.info(
+              "[Java][fory-debug] xwriteRef(with-serializer) for {} at pos {}: refFlag written, pos now {}, calling xwrite",
+              obj.getClass().getSimpleName(),
+              posBeforeRef,
+              posAfterRef);
+        }
         depth++;
         serializer.xwrite(buffer, obj);
         depth--;

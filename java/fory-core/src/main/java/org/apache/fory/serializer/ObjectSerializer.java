@@ -149,6 +149,13 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
     Fory fory = this.fory;
     RefResolver refResolver = this.refResolver;
     if (fory.checkClassVersion()) {
+      if (fory.getConfig().isForyDebugOutputEnabled()) {
+        LOG.info(
+            "[Java][fory-debug] Writing struct hash for {} at position {}: hash={}",
+            type.getSimpleName(),
+            buffer.writerIndex(),
+            classVersionHash);
+      }
       buffer.writeInt32(classVersionHash);
     }
     // write order: primitive,boxed,final,other,collection,map

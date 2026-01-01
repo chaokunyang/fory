@@ -23,6 +23,8 @@ import static org.apache.fory.Fory.NOT_NULL_VALUE_FLAG;
 import static org.apache.fory.serializer.AbstractObjectSerializer.GenericTypeField;
 
 import org.apache.fory.Fory;
+import org.apache.fory.logging.Logger;
+import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.resolver.ClassInfo;
 import org.apache.fory.resolver.ClassInfoHolder;
@@ -30,6 +32,7 @@ import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.RefResolver;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.resolver.XtypeResolver;
+import org.apache.fory.util.Utils;
 
 // This polymorphic interface has cost, do not expose it as a public class
 // If it's used in other packages in fory, duplicate it in those packages.
@@ -318,6 +321,7 @@ abstract class SerializationBinding {
   }
 
   static final class XlangSerializationBinding extends SerializationBinding {
+    private static final Logger LOG = LoggerFactory.getLogger(XlangSerializationBinding.class);
     private final XtypeResolver xtypeResolver;
 
     XlangSerializationBinding(Fory fory) {
@@ -337,12 +341,27 @@ abstract class SerializationBinding {
 
     @Override
     public void writeRef(MemoryBuffer buffer, Object obj, ClassInfoHolder classInfoHolder) {
-      fory.xwriteRef(buffer, obj);
+      // In COMPATIBLE mode (meta share enabled): write type info for schema evolution
+      // In SCHEMA_CONSISTENT mode: don't write type info, use serializer directly
+      if (fory.getConfig().isMetaShareEnabled()) {
+        fory.xwriteRef(buffer, obj);
+      } else {
+        // SCHEMA_CONSISTENT mode: resolve serializer and write without type info
+        ClassInfo classInfo = xtypeResolver.getClassInfo(obj.getClass(), classInfoHolder);
+        fory.xwriteRef(buffer, obj, classInfo.getSerializer());
+      }
     }
 
     @Override
     public void writeRef(MemoryBuffer buffer, Object obj, ClassInfo classInfo) {
-      fory.xwriteRef(buffer, obj);
+      // In COMPATIBLE mode (meta share enabled): write type info for schema evolution
+      // In SCHEMA_CONSISTENT mode: don't write type info, use serializer directly
+      if (fory.getConfig().isMetaShareEnabled()) {
+        fory.xwriteRef(buffer, obj);
+      } else {
+        // SCHEMA_CONSISTENT mode: use provided classInfo's serializer
+        fory.xwriteRef(buffer, obj, classInfo.getSerializer());
+      }
     }
 
     @Override
@@ -358,13 +377,35 @@ abstract class SerializationBinding {
         fory.getGenerics().popGenericType();
         return o;
       } else {
-        return fory.xreadRef(buffer);
+        // In COMPATIBLE mode (meta share enabled): read type info for schema evolution
+        // In SCHEMA_CONSISTENT mode: don't read type info, use serializer directly
+        if (fory.getConfig().isMetaShareEnabled()) {
+          return fory.xreadRef(buffer);
+        } else {
+          // SCHEMA_CONSISTENT mode: resolve serializer and read without type info
+          ClassInfo classInfo = field.classInfoHolder.classInfo;
+          if (classInfo.getSerializer() == null) {
+            classInfo = xtypeResolver.getClassInfo(classInfo.getCls(), field.classInfoHolder);
+          }
+          return fory.xreadRef(buffer, classInfo.getSerializer());
+        }
       }
     }
 
     @Override
     public Object readRef(MemoryBuffer buffer, ClassInfoHolder classInfoHolder) {
-      return fory.xreadRef(buffer);
+      // In COMPATIBLE mode (meta share enabled): read type info for schema evolution
+      // In SCHEMA_CONSISTENT mode: don't read type info, use serializer directly
+      if (fory.getConfig().isMetaShareEnabled()) {
+        return fory.xreadRef(buffer);
+      } else {
+        // SCHEMA_CONSISTENT mode: resolve serializer and read without type info
+        ClassInfo classInfo = classInfoHolder.classInfo;
+        if (classInfo.getSerializer() == null) {
+          classInfo = xtypeResolver.getClassInfo(classInfo.getCls(), classInfoHolder);
+        }
+        return fory.xreadRef(buffer, classInfo.getSerializer());
+      }
     }
 
     @Override

@@ -2184,6 +2184,165 @@ public abstract class XlangTestBase extends ForyTestBase {
     }
   }
 
+  // ============================================================================
+  // Reference Tracking Tests - Test struct field reference sharing
+  // ============================================================================
+
+  /**
+   * Inner struct for reference tracking tests in SCHEMA_CONSISTENT mode (compatible=false). A
+   * simple struct with id and name fields.
+   */
+  @Data
+  static class RefInnerSchemaConsistent {
+    int id;
+    String name;
+  }
+
+  /**
+   * Outer struct for reference tracking tests in SCHEMA_CONSISTENT mode. Contains two fields that
+   * can point to the same RefInnerSchemaConsistent instance. Both fields have ref tracking enabled.
+   */
+  @Data
+  static class RefOuterSchemaConsistent {
+    @ForyField(ref = true, nullable = true)
+    RefInnerSchemaConsistent inner1;
+
+    @ForyField(ref = true, nullable = true)
+    RefInnerSchemaConsistent inner2;
+  }
+
+  /**
+   * Test reference tracking in SCHEMA_CONSISTENT mode (compatible=false). Creates an outer struct
+   * with two fields pointing to the same inner struct instance. Verifies that after
+   * serialization/deserialization across languages, both fields still reference the same object.
+   */
+  @Test
+  public void testRefSchemaConsistent() throws java.io.IOException {
+    String caseName = "test_ref_schema_consistent";
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(CompatibleMode.SCHEMA_CONSISTENT)
+            .withRefTracking(true)
+            .withCodegen(false)
+            .build();
+    fory.register(RefInnerSchemaConsistent.class, 501);
+    fory.register(RefOuterSchemaConsistent.class, 502);
+
+    // Create inner struct
+    RefInnerSchemaConsistent inner = new RefInnerSchemaConsistent();
+    inner.id = 42;
+    inner.name = "shared_inner";
+
+    // Create outer struct with both fields pointing to the same inner struct
+    RefOuterSchemaConsistent outer = new RefOuterSchemaConsistent();
+    outer.inner1 = inner;
+    outer.inner2 = inner; // Same reference as inner1
+
+    // Verify Java serialization preserves reference identity
+    byte[] javaBytes = fory.serialize(outer);
+    RefOuterSchemaConsistent javaResult = (RefOuterSchemaConsistent) fory.deserialize(javaBytes);
+    Assert.assertSame(
+        javaResult.inner1, javaResult.inner2, "Java: inner1 and inner2 should be same object");
+    Assert.assertEquals(javaResult.inner1.id, 42);
+    Assert.assertEquals(javaResult.inner1.name, "shared_inner");
+
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(256);
+    fory.serialize(buffer, outer);
+
+    ExecutionContext ctx = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
+    runPeer(ctx);
+
+    MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
+    RefOuterSchemaConsistent result = (RefOuterSchemaConsistent) fory.deserialize(buffer2);
+
+    // Verify reference identity is preserved after cross-language round-trip
+    Assert.assertSame(
+        result.inner1,
+        result.inner2,
+        "After xlang round-trip: inner1 and inner2 should be same object");
+    Assert.assertEquals(result.inner1.id, 42);
+    Assert.assertEquals(result.inner1.name, "shared_inner");
+  }
+
+  /**
+   * Inner struct for reference tracking tests in COMPATIBLE mode (compatible=true). A simple struct
+   * with id and name fields.
+   */
+  @Data
+  static class RefInnerCompatible {
+    int id;
+    String name;
+  }
+
+  /**
+   * Outer struct for reference tracking tests in COMPATIBLE mode. Contains two fields that can
+   * point to the same RefInnerCompatible instance. Both fields have ref tracking enabled.
+   */
+  @Data
+  static class RefOuterCompatible {
+    @ForyField(ref = true, nullable = true)
+    RefInnerCompatible inner1;
+
+    @ForyField(ref = true, nullable = true)
+    RefInnerCompatible inner2;
+  }
+
+  /**
+   * Test reference tracking in COMPATIBLE mode (compatible=true). Creates an outer struct with two
+   * fields pointing to the same inner struct instance. Verifies that after
+   * serialization/deserialization across languages, both fields still reference the same object.
+   */
+  @Test
+  public void testRefCompatible() throws java.io.IOException {
+    String caseName = "test_ref_compatible";
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .withRefTracking(true)
+            .withCodegen(false)
+            .withMetaCompressor(new NoOpMetaCompressor())
+            .build();
+    fory.register(RefInnerCompatible.class, 503);
+    fory.register(RefOuterCompatible.class, 504);
+
+    // Create inner struct
+    RefInnerCompatible inner = new RefInnerCompatible();
+    inner.id = 99;
+    inner.name = "compatible_shared";
+
+    // Create outer struct with both fields pointing to the same inner struct
+    RefOuterCompatible outer = new RefOuterCompatible();
+    outer.inner1 = inner;
+    outer.inner2 = inner; // Same reference as inner1
+
+    // Verify Java serialization preserves reference identity
+    byte[] javaBytes = fory.serialize(outer);
+    RefOuterCompatible javaResult = (RefOuterCompatible) fory.deserialize(javaBytes);
+    Assert.assertSame(
+        javaResult.inner1, javaResult.inner2, "Java: inner1 and inner2 should be same object");
+    Assert.assertEquals(javaResult.inner1.id, 99);
+    Assert.assertEquals(javaResult.inner1.name, "compatible_shared");
+
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(256);
+    fory.serialize(buffer, outer);
+
+    ExecutionContext ctx = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
+    runPeer(ctx);
+
+    MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
+    RefOuterCompatible result = (RefOuterCompatible) fory.deserialize(buffer2);
+
+    // Verify reference identity is preserved after cross-language round-trip
+    Assert.assertSame(
+        result.inner1,
+        result.inner2,
+        "After xlang round-trip: inner1 and inner2 should be same object");
+    Assert.assertEquals(result.inner1.id, 99);
+    Assert.assertEquals(result.inner1.name, "compatible_shared");
+  }
+
   /** Normalize null values to empty strings in collections and maps recursively. */
   @SuppressWarnings("unchecked")
   private Object normalizeNulls(Object obj) {

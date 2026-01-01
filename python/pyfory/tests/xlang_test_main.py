@@ -30,6 +30,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Set
 
 import pyfory
+from pyfory.meta.meta_compressor import NoOpMetaCompressor
 
 
 def debug_print(*params):
@@ -222,11 +223,12 @@ class NullableComprehensiveSchemaConsistent:
 class NullableComprehensiveCompatible:
     """
     Cross-language schema evolution test struct for COMPATIBLE mode.
-    This struct has INVERTED nullability compared to Java:
-    - Group 1: Nullable (Optional) in Python, Non-nullable in Java
-    - Group 2: Non-nullable in Python, Nullable in Java (@ForyField(nullable=true))
+    All fields are Optional in Python to properly handle both null and non-null values from Java:
+    - Group 1: Non-nullable in Java (always has values)
+    - Group 2: Nullable in Java (@ForyField(nullable=true)) - can be null
 
-    This tests that compatible mode properly handles schema differences across languages.
+    Python uses Optional for all fields so it can correctly receive and re-serialize
+    values from Java, whether they are null or non-null.
     """
 
     # Group 1: Nullable in Python (Optional), Non-nullable in Java
@@ -252,19 +254,20 @@ class NullableComprehensiveCompatible:
     set_field: Optional[Set[str]] = None
     map_field: Optional[Dict[str, str]] = None
 
-    # Group 2: Non-nullable in Python, Nullable in Java (@ForyField(nullable=true))
-    # Boxed types
-    nullable_int1: pyfory.int32 = 0
-    nullable_long1: pyfory.int64 = 0
-    nullable_float1: pyfory.float32 = 0.0
-    nullable_double1: pyfory.float64 = 0.0
-    nullable_bool1: bool = False
+    # Group 2: Also Nullable in Python (must match Java's nullable annotation)
+    # When Java sends null for these fields, Python must be able to receive and re-serialize None.
+    # Boxed types - use Optional to handle None from Java
+    nullable_int1: Optional[pyfory.int32] = None
+    nullable_long1: Optional[pyfory.int64] = None
+    nullable_float1: Optional[pyfory.float32] = None
+    nullable_double1: Optional[pyfory.float64] = None
+    nullable_bool1: Optional[bool] = None
 
-    # Reference types
-    nullable_string2: str = ""
-    nullable_list2: List[str] = None
-    nullable_set2: Set[str] = None
-    nullable_map2: Dict[str, str] = None
+    # Reference types - also Optional
+    nullable_string2: Optional[str] = None
+    nullable_list2: Optional[List[str]] = None
+    nullable_set2: Optional[Set[str]] = None
+    nullable_map2: Optional[Dict[str, str]] = None
 
 
 # ============================================================================
@@ -940,7 +943,8 @@ def test_nullable_field_compatible_not_null():
     with open(data_file, "rb") as f:
         data_bytes = f.read()
 
-    fory = pyfory.Fory(xlang=True, compatible=True)
+    # Use NoOpMetaCompressor to match Java's test configuration
+    fory = pyfory.Fory(xlang=True, compatible=True, meta_compressor=NoOpMetaCompressor())
     fory.register_type(NullableComprehensiveCompatible, type_id=402)
 
     expected = NullableComprehensiveCompatible(
@@ -1026,7 +1030,8 @@ def test_nullable_field_compatible_null():
     with open(data_file, "rb") as f:
         data_bytes = f.read()
 
-    fory = pyfory.Fory(xlang=True, compatible=True)
+    # Use NoOpMetaCompressor to match Java's test configuration
+    fory = pyfory.Fory(xlang=True, compatible=True, meta_compressor=NoOpMetaCompressor())
     fory.register_type(NullableComprehensiveCompatible, type_id=402)
 
     expected = NullableComprehensiveCompatible(
@@ -1047,16 +1052,17 @@ def test_nullable_field_compatible_null():
         list_field=["a", "b", "c"],
         set_field={"x", "y"},
         map_field={"key1": "value1", "key2": "value2"},
-        # Group 2: Non-nullable in Python (Java sent null -> use defaults)
-        nullable_int1=0,
-        nullable_long1=0,
-        nullable_float1=0.0,
-        nullable_double1=0.0,
-        nullable_bool1=False,
-        nullable_string2="",
-        nullable_list2=None,  # Empty list or None
-        nullable_set2=None,  # Empty set or None
-        nullable_map2=None,  # Empty map or None
+        # Group 2: Java sends null, Python receives null (like C++)
+        # Python properly preserves null values from the wire format
+        nullable_int1=None,
+        nullable_long1=None,
+        nullable_float1=None,
+        nullable_double1=None,
+        nullable_bool1=None,
+        nullable_string2=None,
+        nullable_list2=None,
+        nullable_set2=None,
+        nullable_map2=None,
     )
 
     obj = fory.deserialize(data_bytes)
@@ -1082,18 +1088,16 @@ def test_nullable_field_compatible_null():
     assert obj.set_field == expected.set_field, f"set_field: {obj.set_field} != {expected.set_field}"
     assert obj.map_field == expected.map_field, f"map_field: {obj.map_field} != {expected.map_field}"
 
-    # Verify Group 2: Non-nullable in Python (Java sent null -> use defaults)
-    assert obj.nullable_int1 == 0, f"nullable_int1: {obj.nullable_int1} != 0"
-    assert obj.nullable_long1 == 0, f"nullable_long1: {obj.nullable_long1} != 0"
-    assert obj.nullable_float1 == 0.0, f"nullable_float1: {obj.nullable_float1} != 0.0"
-    assert obj.nullable_double1 == 0.0, f"nullable_double1: {obj.nullable_double1} != 0.0"
-    assert not obj.nullable_bool1, f"nullable_bool1: {obj.nullable_bool1} != False"
-
-    # For reference types, check they are empty or None
-    assert obj.nullable_string2 == "" or obj.nullable_string2 is None, f"nullable_string2: {obj.nullable_string2} != empty/None"
-    assert obj.nullable_list2 is None or len(obj.nullable_list2) == 0, f"nullable_list2: {obj.nullable_list2} != empty/None"
-    assert obj.nullable_set2 is None or len(obj.nullable_set2) == 0, f"nullable_set2: {obj.nullable_set2} != empty/None"
-    assert obj.nullable_map2 is None or len(obj.nullable_map2) == 0, f"nullable_map2: {obj.nullable_map2} != empty/None"
+    # Verify Group 2: Java sent null, Python receives null (like C++ with std::optional)
+    assert obj.nullable_int1 is None, f"nullable_int1: {obj.nullable_int1} != None"
+    assert obj.nullable_long1 is None, f"nullable_long1: {obj.nullable_long1} != None"
+    assert obj.nullable_float1 is None, f"nullable_float1: {obj.nullable_float1} != None"
+    assert obj.nullable_double1 is None, f"nullable_double1: {obj.nullable_double1} != None"
+    assert obj.nullable_bool1 is None, f"nullable_bool1: {obj.nullable_bool1} != None"
+    assert obj.nullable_string2 is None, f"nullable_string2: {obj.nullable_string2} != None"
+    assert obj.nullable_list2 is None, f"nullable_list2: {obj.nullable_list2} != None"
+    assert obj.nullable_set2 is None, f"nullable_set2: {obj.nullable_set2} != None"
+    assert obj.nullable_map2 is None, f"nullable_map2: {obj.nullable_map2} != None"
 
     new_bytes = fory.serialize(obj)
     with open(data_file, "wb") as f:

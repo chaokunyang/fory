@@ -9,6 +9,7 @@ The FDL compiler generates cross-language serialization code from schema definit
 - **Cross-language serialization**: Generated code works seamlessly with Apache Fory
 - **Type ID and namespace support**: Both numeric IDs and name-based type registration
 - **Field modifiers**: Optional fields, reference tracking, repeated fields
+- **File imports**: Modular schemas with import support
 
 ## Documentation
 
@@ -105,6 +106,40 @@ data = fory.serialize(cat)
 
 ```fdl
 package com.example.models;
+```
+
+### Imports
+
+Import types from other FDL files:
+
+```fdl
+import "common/types.fdl";
+import "models/address.fdl";
+```
+
+Imports are resolved relative to the importing file. All types from imported files become available for use in the current file.
+
+**Example:**
+
+```fdl
+// common.fdl
+package common;
+
+message Address @100 {
+    string street = 1;
+    string city = 2;
+}
+```
+
+```fdl
+// user.fdl
+package user;
+import "common.fdl";
+
+message User @101 {
+    string name = 1;
+    Address address = 2;  // Uses imported type
+}
 ```
 
 ### Enum Definition

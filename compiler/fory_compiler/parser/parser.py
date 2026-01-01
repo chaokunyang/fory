@@ -26,6 +26,7 @@ from fory_compiler.parser.ast import (
     Enum,
     Field,
     EnumValue,
+    Import,
     FieldType,
     PrimitiveType,
     NamedType,
@@ -116,6 +117,7 @@ class Parser:
     def parse(self) -> Schema:
         """Parse the entire input and return a Schema."""
         package = None
+        imports = []
         enums = []
         messages = []
 
@@ -124,6 +126,8 @@ class Parser:
                 if package is not None:
                     raise self.error("Duplicate package declaration")
                 package = self.parse_package()
+            elif self.check(TokenType.IMPORT):
+                imports.append(self.parse_import())
             elif self.check(TokenType.ENUM):
                 enums.append(self.parse_enum())
             elif self.check(TokenType.MESSAGE):
@@ -131,7 +135,7 @@ class Parser:
             else:
                 raise self.error(f"Unexpected token: {self.current().value}")
 
-        return Schema(package, enums, messages)
+        return Schema(package, imports, enums, messages)
 
     def parse_package(self) -> str:
         """Parse a package declaration: package foo.bar;"""
@@ -149,6 +153,21 @@ class Parser:
 
         self.consume(TokenType.SEMI, "Expected ';' after package name")
         return ".".join(parts)
+
+    def parse_import(self) -> Import:
+        """Parse an import statement: import "path/to/file.fdl";"""
+        start = self.current()
+        self.consume(TokenType.IMPORT)
+
+        path_token = self.consume(TokenType.STRING, "Expected import path string")
+
+        self.consume(TokenType.SEMI, "Expected ';' after import statement")
+
+        return Import(
+            path=path_token.value,
+            line=start.line,
+            column=start.column,
+        )
 
     def parse_enum(self) -> Enum:
         """Parse an enum: enum Color @101 { ... }"""

@@ -28,11 +28,15 @@ This document provides a complete reference for the Fory Definition Language (FD
 An FDL file consists of:
 
 1. Optional package declaration
-2. Type definitions (enums and messages)
+2. Optional import statements
+3. Type definitions (enums and messages)
 
 ```fdl
 // Optional package declaration
 package com.example.models;
+
+// Import statements
+import "common/types.fdl";
 
 // Type definitions
 enum Color @100 { ... }
@@ -81,6 +85,88 @@ package com.example.models;
 | Go       | Package name (last component)     |
 | Rust     | Module name (dots to underscores) |
 | C++      | Namespace (dots to `::`)          |
+
+## Import Statement
+
+Import statements allow you to use types defined in other FDL files.
+
+### Basic Syntax
+
+```fdl
+import "path/to/file.fdl";
+```
+
+### Multiple Imports
+
+```fdl
+import "common/types.fdl";
+import "common/enums.fdl";
+import "models/address.fdl";
+```
+
+### Path Resolution
+
+Import paths are resolved relative to the importing file:
+
+```
+project/
+├── common/
+│   └── types.fdl
+├── models/
+│   ├── user.fdl      # import "../common/types.fdl"
+│   └── order.fdl     # import "../common/types.fdl"
+└── main.fdl          # import "common/types.fdl"
+```
+
+**Rules:**
+
+- Import paths are quoted strings (double or single quotes)
+- Paths are resolved relative to the importing file's directory
+- Imported types become available as if defined in the current file
+- Circular imports are detected and reported as errors
+- Transitive imports work (if A imports B and B imports C, A has access to C's types)
+
+### Complete Example
+
+**common/types.fdl:**
+
+```fdl
+package common;
+
+enum Status @100 {
+    PENDING = 0;
+    ACTIVE = 1;
+    COMPLETED = 2;
+}
+
+message Address @101 {
+    string street = 1;
+    string city = 2;
+    string country = 3;
+}
+```
+
+**models/user.fdl:**
+
+```fdl
+package models;
+import "../common/types.fdl";
+
+message User @200 {
+    string id = 1;
+    string name = 2;
+    Address home_address = 3;  // Uses imported type
+    Status status = 4;          // Uses imported enum
+}
+```
+
+### Import Errors
+
+The compiler reports errors for:
+
+- **File not found**: The imported file doesn't exist
+- **Circular import**: A imports B which imports A (directly or indirectly)
+- **Parse errors**: Syntax errors in imported files
 
 ## Enum Definition
 
@@ -481,10 +567,12 @@ message ShopConfig {
 ## Grammar Summary
 
 ```
-file         := [package_decl] type_def*
+file         := [package_decl] import_decl* type_def*
 
 package_decl := 'package' package_name ';'
 package_name := IDENTIFIER ('.' IDENTIFIER)*
+
+import_decl  := 'import' STRING ';'
 
 type_def     := enum_def | message_def
 
@@ -505,6 +593,7 @@ map_type     := 'map' '<' field_type ',' field_type '>'
 
 type_id      := '@' INTEGER
 
+STRING       := '"' [^"\n]* '"' | "'" [^'\n]* "'"
 IDENTIFIER   := [a-zA-Z_][a-zA-Z0-9_]*
 INTEGER      := '-'? [0-9]+
 ```

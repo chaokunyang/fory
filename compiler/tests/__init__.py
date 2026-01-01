@@ -15,21 +15,4 @@
 # specific language governing permissions and limitations
 # under the License.
 
-"""FDL (Fory Definition Language) compiler for Apache Fory."""
-
-__version__ = "0.1.0"
-
-from fory_compiler.parser.ast import Schema, Message, Enum, Field, EnumValue, Import
-from fory_compiler.parser.parser import Parser
-from fory_compiler.parser.lexer import Lexer
-
-__all__ = [
-    "Schema",
-    "Message",
-    "Enum",
-    "Field",
-    "EnumValue",
-    "Import",
-    "Parser",
-    "Lexer",
-]
+"""Tests for FDL compiler."""

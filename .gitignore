@@ -11,6 +11,7 @@ python/pyfory/__pycache__/
 python/dist
 python/build
 python/pyfory.egg-info
+**/*.egg-info
 cython_debug
 **/*.prof
 **/*.pyc

@@ -27,6 +27,7 @@ class TokenType(Enum):
 
     # Keywords
     PACKAGE = auto()
+    IMPORT = auto()
     MESSAGE = auto()
     ENUM = auto()
     OPTIONAL = auto()
@@ -37,6 +38,7 @@ class TokenType(Enum):
     # Literals
     IDENT = auto()
     INT = auto()
+    STRING = auto()  # "quoted string"
     TYPE_ID = auto()  # @123
 
     # Punctuation
@@ -79,6 +81,7 @@ class Lexer:
 
     KEYWORDS = {
         "package": TokenType.PACKAGE,
+        "import": TokenType.IMPORT,
         "message": TokenType.MESSAGE,
         "enum": TokenType.ENUM,
         "optional": TokenType.OPTIONAL,
@@ -204,6 +207,40 @@ class Lexer:
             self.advance()
         return self.source[start : self.pos]
 
+    def read_string(self) -> str:
+        """Read a quoted string literal."""
+        quote_char = self.advance()  # consume opening quote
+        start_line = self.line
+        start_col = self.column - 1
+        result = []
+
+        while not self.at_end():
+            ch = self.peek()
+            if ch == quote_char:
+                self.advance()  # consume closing quote
+                return "".join(result)
+            elif ch == "\\":
+                self.advance()  # consume backslash
+                if self.at_end():
+                    raise LexerError("Unterminated string", start_line, start_col)
+                escape_ch = self.advance()
+                if escape_ch == "n":
+                    result.append("\n")
+                elif escape_ch == "t":
+                    result.append("\t")
+                elif escape_ch == "\\":
+                    result.append("\\")
+                elif escape_ch == quote_char:
+                    result.append(quote_char)
+                else:
+                    result.append(escape_ch)
+            elif ch == "\n":
+                raise LexerError("Unterminated string (newline in string)", start_line, start_col)
+            else:
+                result.append(self.advance())
+
+        raise LexerError("Unterminated string", start_line, start_col)
+
     def next_token(self) -> Token:
         """Read the next token."""
         self.skip_whitespace_and_comments()
@@ -214,6 +251,11 @@ class Lexer:
         line = self.line
         column = self.column
         ch = self.peek()
+
+        # String literal
+        if ch == '"' or ch == "'":
+            value = self.read_string()
+            return Token(TokenType.STRING, value, line, column)
 
         # Type ID: @123
         if ch == "@":

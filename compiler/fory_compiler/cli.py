@@ -20,12 +20,97 @@
 import argparse
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional, Set
 
 from fory_compiler.parser.lexer import Lexer, LexerError
 from fory_compiler.parser.parser import Parser, ParseError
+from fory_compiler.parser.ast import Schema
 from fory_compiler.generators.base import GeneratorOptions
 from fory_compiler.generators import GENERATORS
+
+
+class ImportError(Exception):
+    """Error during import resolution."""
+    pass
+
+
+def parse_fdl_file(file_path: Path) -> Schema:
+    """Parse a single FDL file and return its schema."""
+    source = file_path.read_text()
+    lexer = Lexer(source, str(file_path))
+    tokens = lexer.tokenize()
+    parser = Parser(tokens)
+    return parser.parse()
+
+
+def resolve_imports(
+    file_path: Path,
+    visited: Optional[Set[Path]] = None,
+    cache: Optional[Dict[Path, Schema]] = None,
+) -> Schema:
+    """
+    Recursively resolve imports and merge all types into a single schema.
+
+    Args:
+        file_path: Path to the FDL file to parse
+        visited: Set of already visited files (for cycle detection)
+        cache: Cache of already parsed schemas
+
+    Returns:
+        Schema with all imported types merged in
+    """
+    if visited is None:
+        visited = set()
+    if cache is None:
+        cache = {}
+
+    # Normalize path
+    file_path = file_path.resolve()
+
+    # Check for circular imports
+    if file_path in visited:
+        raise ImportError(f"Circular import detected: {file_path}")
+
+    # Return cached schema if available
+    if file_path in cache:
+        return cache[file_path]
+
+    visited.add(file_path)
+
+    # Parse the file
+    schema = parse_fdl_file(file_path)
+
+    # Process imports
+    imported_enums = []
+    imported_messages = []
+
+    for imp in schema.imports:
+        # Resolve import path relative to the importing file
+        import_path = (file_path.parent / imp.path).resolve()
+
+        if not import_path.exists():
+            raise ImportError(
+                f"Import not found: {imp.path} (resolved to {import_path}) "
+                f"at line {imp.line}, column {imp.column}"
+            )
+
+        # Recursively resolve the imported file
+        imported_schema = resolve_imports(import_path, visited.copy(), cache)
+
+        # Collect types from imported schema
+        imported_enums.extend(imported_schema.enums)
+        imported_messages.extend(imported_schema.messages)
+
+    # Create merged schema with imported types first (so they can be referenced)
+    merged_schema = Schema(
+        package=schema.package,
+        imports=schema.imports,
+        enums=imported_enums + schema.enums,
+        messages=imported_messages + schema.messages,
+    )
+
+    cache[file_path] = merged_schema
+    return merged_schema
 
 
 def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
@@ -99,27 +184,27 @@ def compile_file(
     output_dir: Path,
     package_override: Optional[str] = None,
 ) -> bool:
-    """Compile a single FDL file."""
+    """Compile a single FDL file with import resolution."""
     print(f"Compiling {file_path}...")
 
-    # Read source
+    # Parse and resolve imports
     try:
-        source = file_path.read_text()
+        schema = resolve_imports(file_path)
     except OSError as e:
         print(f"Error reading {file_path}: {e}", file=sys.stderr)
         return False
-
-    # Parse
-    try:
-        lexer = Lexer(source, str(file_path))
-        tokens = lexer.tokenize()
-        parser = Parser(tokens)
-        schema = parser.parse()
     except (LexerError, ParseError) as e:
         print(f"Error: {e}", file=sys.stderr)
         return False
+    except ImportError as e:
+        print(f"Import error: {e}", file=sys.stderr)
+        return False
 
-    # Validate schema
+    # Print import info
+    if schema.imports:
+        print(f"  Resolved {len(schema.imports)} import(s)")
+
+    # Validate merged schema
     errors = schema.validate()
     if errors:
         for error in errors:

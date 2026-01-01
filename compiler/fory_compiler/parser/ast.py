@@ -122,6 +122,18 @@ class Field:
 
 
 @dataclass
+class Import:
+    """An import statement."""
+
+    path: str
+    line: int = 0
+    column: int = 0
+
+    def __repr__(self) -> str:
+        return f'Import("{self.path}")'
+
+
+@dataclass
 class EnumValue:
     """A value in an enum."""
 
@@ -169,11 +181,12 @@ class Schema:
     """The root AST node representing a complete FDL file."""
 
     package: Optional[str]
+    imports: List[Import] = field(default_factory=list)
     enums: List[Enum] = field(default_factory=list)
     messages: List[Message] = field(default_factory=list)
 
     def __repr__(self) -> str:
-        return f"Schema(package={self.package}, enums={len(self.enums)}, messages={len(self.messages)})"
+        return f"Schema(package={self.package}, imports={len(self.imports)}, enums={len(self.enums)}, messages={len(self.messages)})"
 
     def get_type(self, name: str) -> Optional[Union[Message, Enum]]:
         """Look up a type by name."""

@@ -133,6 +133,11 @@ class JavaGenerator(BaseGenerator):
             if field.optional or field.ref:
                 imports.add("org.apache.fory.annotation.ForyField")
 
+        # Add imports for equals/hashCode
+        imports.add("java.util.Objects")
+        if self.has_array_field(message):
+            imports.add("java.util.Arrays")
+
         # License header
         lines.append(self.get_license_header())
         lines.append("")
@@ -169,6 +174,14 @@ class JavaGenerator(BaseGenerator):
             getter_setter = self.generate_getter_setter(field)
             for line in getter_setter:
                 lines.append(f"    {line}")
+
+        # equals method
+        for line in self.generate_equals_method(message):
+            lines.append(f"    {line}")
+
+        # hashCode method
+        for line in self.generate_hashcode_method(message):
+            lines.append(f"    {line}")
 
         lines.append("}")
         lines.append("")
@@ -262,6 +275,100 @@ class JavaGenerator(BaseGenerator):
             imports.add("java.util.Map")
             self.collect_imports(field_type.key_type, imports)
             self.collect_imports(field_type.value_type, imports)
+
+    def has_array_field(self, message: Message) -> bool:
+        """Check if message has any byte[] fields."""
+        for field in message.fields:
+            if isinstance(field.field_type, PrimitiveType):
+                if field.field_type.kind == PrimitiveKind.BYTES:
+                    return True
+        return False
+
+    def generate_equals_method(self, message: Message) -> List[str]:
+        """Generate equals() method for a message."""
+        lines = []
+        lines.append("@Override")
+        lines.append("public boolean equals(Object o) {")
+        lines.append("    if (this == o) return true;")
+        lines.append(f"    if (o == null || getClass() != o.getClass()) return false;")
+        lines.append(f"    {message.name} that = ({message.name}) o;")
+
+        if not message.fields:
+            lines.append("    return true;")
+        else:
+            comparisons = []
+            for field in message.fields:
+                field_name = self.to_camel_case(field.name)
+                if isinstance(field.field_type, PrimitiveType):
+                    kind = field.field_type.kind
+                    if kind == PrimitiveKind.BYTES:
+                        comparisons.append(f"Arrays.equals({field_name}, that.{field_name})")
+                    elif kind in (PrimitiveKind.FLOAT32,):
+                        comparisons.append(f"Float.compare({field_name}, that.{field_name}) == 0")
+                    elif kind in (PrimitiveKind.FLOAT64,):
+                        comparisons.append(f"Double.compare({field_name}, that.{field_name}) == 0")
+                    elif kind in (PrimitiveKind.BOOL, PrimitiveKind.INT8, PrimitiveKind.INT16,
+                                  PrimitiveKind.INT32, PrimitiveKind.INT64) and not field.optional:
+                        comparisons.append(f"{field_name} == that.{field_name}")
+                    else:
+                        comparisons.append(f"Objects.equals({field_name}, that.{field_name})")
+                else:
+                    comparisons.append(f"Objects.equals({field_name}, that.{field_name})")
+
+            if len(comparisons) == 1:
+                lines.append(f"    return {comparisons[0]};")
+            else:
+                lines.append(f"    return {comparisons[0]}")
+                for i, comp in enumerate(comparisons[1:], 1):
+                    if i == len(comparisons) - 1:
+                        lines.append(f"        && {comp};")
+                    else:
+                        lines.append(f"        && {comp}")
+
+        lines.append("}")
+        lines.append("")
+        return lines
+
+    def generate_hashcode_method(self, message: Message) -> List[str]:
+        """Generate hashCode() method for a message."""
+        lines = []
+        lines.append("@Override")
+        lines.append("public int hashCode() {")
+
+        if not message.fields:
+            lines.append("    return 0;")
+        else:
+            hash_args = []
+            array_fields = []
+            for field in message.fields:
+                field_name = self.to_camel_case(field.name)
+                if isinstance(field.field_type, PrimitiveType):
+                    if field.field_type.kind == PrimitiveKind.BYTES:
+                        array_fields.append(field_name)
+                    else:
+                        hash_args.append(field_name)
+                else:
+                    hash_args.append(field_name)
+
+            if array_fields and hash_args:
+                lines.append(f"    int result = Objects.hash({', '.join(hash_args)});")
+                for arr in array_fields:
+                    lines.append(f"    result = 31 * result + Arrays.hashCode({arr});")
+                lines.append("    return result;")
+            elif array_fields:
+                if len(array_fields) == 1:
+                    lines.append(f"    return Arrays.hashCode({array_fields[0]});")
+                else:
+                    lines.append(f"    int result = Arrays.hashCode({array_fields[0]});")
+                    for arr in array_fields[1:]:
+                        lines.append(f"    result = 31 * result + Arrays.hashCode({arr});")
+                    lines.append("    return result;")
+            else:
+                lines.append(f"    return Objects.hash({', '.join(hash_args)});")
+
+        lines.append("}")
+        lines.append("")
+        return lines
 
     def generate_registration_file(self) -> GeneratedFile:
         """Generate the Fory registration helper class."""

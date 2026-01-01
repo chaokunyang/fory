@@ -10,6 +10,16 @@ The FDL compiler generates cross-language serialization code from schema definit
 - **Type ID and namespace support**: Both numeric IDs and name-based type registration
 - **Field modifiers**: Optional fields, reference tracking, repeated fields
 
+## Documentation
+
+For comprehensive documentation, see the [FDL Schema Guide](../docs/schema/index.md):
+
+- [FDL Syntax Reference](../docs/schema/fdl-syntax.md) - Complete language syntax and grammar
+- [Type System](../docs/schema/type-system.md) - Primitive types, collections, and language mappings
+- [Compiler Guide](../docs/schema/compiler-guide.md) - CLI options and build integration
+- [Generated Code](../docs/schema/generated-code.md) - Output format for each target language
+- [Protocol Buffers vs FDL](../docs/schema/proto-vs-fdl.md) - Feature comparison and migration guide
+
 ## Installation
 
 ```bash

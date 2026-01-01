@@ -304,21 +304,13 @@ public class GoXlangTest extends XlangTestBase {
   @Override
   @Test
   public void testNullableFieldSchemaConsistentNotNull() throws java.io.IOException {
-    // Go's codegen always writes null flags for slice/map/interface fields,
-    // which is incompatible with Java's SCHEMA_CONSISTENT mode that expects no null flags.
-    // TODO: Update Go code generator to respect nullable flag in SCHEMA_CONSISTENT mode.
-    throw new SkipException(
-        "Skipping: Go codegen always writes null flags, incompatible with SCHEMA_CONSISTENT mode");
+    super.testNullableFieldSchemaConsistentNotNull();
   }
 
   @Override
   @Test
   public void testNullableFieldSchemaConsistentNull() throws java.io.IOException {
-    // Go's codegen always writes null flags for slice/map/interface fields,
-    // which is incompatible with Java's SCHEMA_CONSISTENT mode that expects no null flags.
-    // TODO: Update Go code generator to respect nullable flag in SCHEMA_CONSISTENT mode.
-    throw new SkipException(
-        "Skipping: Go codegen always writes null flags, incompatible with SCHEMA_CONSISTENT mode");
+    super.testNullableFieldSchemaConsistentNull();
   }
 
   @Override
@@ -420,13 +412,14 @@ public class GoXlangTest extends XlangTestBase {
     expected.nullableFloat1 = 0.0f;
     expected.nullableDouble1 = 0.0;
     expected.nullableBool1 = false;
-    // Nullable group 2 - Go's nullable reference fields:
+    // Nullable group 2 - Go's reference fields:
     // - string (not a pointer): defaults to "" (empty string) when nil in Go
-    // - slices/maps: can be nil, so Go sends null
+    // - slices/maps: Go struct doesn't have fory:"nullable" tag, so they're non-nullable
+    //   and are read as empty collections, not nil
     expected.nullableString2 = "";
-    expected.nullableList2 = null;
-    expected.nullableSet2 = null;
-    expected.nullableMap2 = null;
+    expected.nullableList2 = new ArrayList<>();
+    expected.nullableSet2 = new HashSet<>();
+    expected.nullableMap2 = new HashMap<>();
 
     Assert.assertEquals(result, expected);
   }

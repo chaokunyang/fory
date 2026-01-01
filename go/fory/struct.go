@@ -1083,23 +1083,26 @@ func (s *structSerializer) initFieldsFromTypeResolver(typeResolver *TypeResolver
 			fieldTypeId = typeIdFromKind(fieldType)
 		}
 		// Calculate nullable flag for serialization (wire format):
-		// - In COMPATIBLE mode: reference types default to nullable=true to match Java's
-		//   wire format where reference types have null flags
-		// - In SCHEMA_CONSISTENT mode: reference types default to nullable=false to match
-		//   Java's default behavior where reference types are non-nullable unless annotated
-		// - Primitives (int32, bool, etc.) are always non-nullable
-		// - Can be overridden by explicit fory tag
-		// Note: computeHash uses its own nullable calculation for fingerprint matching
+		// - In xlang mode: Per xlang spec, fields are NON-NULLABLE by default.
+		//   Only pointer types are nullable by default.
+		// - In native mode: Go's natural semantics apply - slice/map/interface can be nil,
+		//   so they are nullable by default.
+		// Can be overridden by explicit fory tag `fory:"nullable"`.
 		internalId := TypeId(fieldTypeId & 0xFF)
 		isEnum := internalId == ENUM || internalId == NAMED_ENUM
 
-		// Default nullable based on type (reference types are nullable by default)
-		// Go's codegen always writes null flags for reference types, so reflect must match
-		// This is consistent with Go's existing behavior and codegen
-		nullableFlag := fieldType.Kind() == reflect.Ptr ||
-			fieldType.Kind() == reflect.Slice ||
-			fieldType.Kind() == reflect.Map ||
-			fieldType.Kind() == reflect.Interface
+		// Determine nullable based on mode
+		var nullableFlag bool
+		if typeResolver.fory.config.IsXlang {
+			// xlang mode: only pointer types are nullable by default per xlang spec
+			nullableFlag = fieldType.Kind() == reflect.Ptr
+		} else {
+			// Native mode: Go's natural semantics - all nil-able types are nullable
+			nullableFlag = fieldType.Kind() == reflect.Ptr ||
+				fieldType.Kind() == reflect.Slice ||
+				fieldType.Kind() == reflect.Map ||
+				fieldType.Kind() == reflect.Interface
+		}
 		if foryTag.NullableSet {
 			// Override nullable flag if explicitly set in fory tag
 			nullableFlag = foryTag.Nullable

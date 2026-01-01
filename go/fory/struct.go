@@ -1656,19 +1656,13 @@ func isStructFieldType(ft FieldType) bool {
 	}
 	typeId := ft.TypeId()
 	// Check base type IDs that need type info (struct and ext, NOT enum)
-	switch typeId {
+	// Always check the internal type ID (low byte) to handle composite type IDs
+	// which may be negative when stored as int32 (e.g., -2288 = (short)128784)
+	internalTypeId := TypeId(typeId & 0xFF)
+	switch internalTypeId {
 	case STRUCT, NAMED_STRUCT, COMPATIBLE_STRUCT, NAMED_COMPATIBLE_STRUCT,
 		EXT, NAMED_EXT:
 		return true
-	}
-	// Check for composite type IDs (customId << 8 | baseType)
-	if typeId > 255 {
-		baseType := typeId & 0xff
-		switch TypeId(baseType) {
-		case STRUCT, NAMED_STRUCT, COMPATIBLE_STRUCT, NAMED_COMPATIBLE_STRUCT,
-			EXT, NAMED_EXT:
-			return true
-		}
 	}
 	return false
 }

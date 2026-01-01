@@ -448,12 +448,6 @@ public class GoXlangTest extends XlangTestBase {
   @Override
   @Test
   public void testRefCompatible() throws java.io.IOException {
-    // Skip: Go struct field reference tracking with nested struct types
-    // has compatibility issues with Java in COMPATIBLE mode.
-    // The issue is related to type info indexing when deserializing nested struct fields
-    // with ref tracking enabled.
-    // TODO: Investigate TypeInfo indexing for nested struct types with ref tracking.
-    throw new SkipException(
-        "Skipping: Go TypeInfo indexing issue for nested structs with ref tracking in COMPATIBLE mode");
+    super.testRefCompatible();
   }
 }

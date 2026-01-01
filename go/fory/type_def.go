@@ -592,8 +592,10 @@ func (b *BaseFieldType) getTypeInfoWithResolver(resolver *TypeResolver) (TypeInf
 // This is called for top-level field types where flags are NOT embedded in the type ID
 func readFieldType(buffer *ByteBuffer, err *Error) (FieldType, error) {
 	typeId := buffer.ReadVaruint32Small7(err)
+	// Use internal type ID (low byte) for switch, but store the full typeId
+	internalTypeId := TypeId(typeId & 0xFF)
 
-	switch typeId {
+	switch internalTypeId {
 	case LIST, SET:
 		// For nested types, flags ARE embedded in the type ID
 		elementType, etErr := readFieldTypeWithFlags(buffer, err)
@@ -626,8 +628,10 @@ func readFieldTypeWithFlags(buffer *ByteBuffer, err *Error) (FieldType, error) {
 	// trackingRef := (rawValue & 0b1) != 0  // Not used currently
 	// nullable := (rawValue & 0b10) != 0    // Not used currently
 	typeId := rawValue >> 2
+	// Use internal type ID (low byte) for switch, but store the full typeId
+	internalTypeId := TypeId(typeId & 0xFF)
 
-	switch typeId {
+	switch internalTypeId {
 	case LIST, SET:
 		elementType, etErr := readFieldTypeWithFlags(buffer, err)
 		if etErr != nil {

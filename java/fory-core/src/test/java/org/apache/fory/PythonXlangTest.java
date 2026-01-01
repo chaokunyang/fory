@@ -207,17 +207,19 @@ public class PythonXlangTest extends XlangTestBase {
   @Override
   @Test
   public void testNullableFieldCompatibleNotNull() throws IOException {
-    // Python compatible mode meta compression differs from Java's NoOpMetaCompressor
+    // Python compatible mode TypeDef encoding differs from Java's
+    // TODO: Fix TypeDef encoding for compatible mode to align with Java
     throw new SkipException(
-        "Skipping: compatible mode nullable field tests not supported for Python");
+        "Skipping: Python compatible mode TypeDef encoding needs alignment with Java");
   }
 
   @Override
   @Test
   public void testNullableFieldCompatibleNull() throws IOException {
-    // Python compatible mode meta compression differs from Java's NoOpMetaCompressor
+    // Python compatible mode TypeDef encoding differs from Java's
+    // TODO: Fix TypeDef encoding for compatible mode to align with Java
     throw new SkipException(
-        "Skipping: compatible mode nullable field tests not supported for Python");
+        "Skipping: Python compatible mode TypeDef encoding needs alignment with Java");
   }
 
   @Override

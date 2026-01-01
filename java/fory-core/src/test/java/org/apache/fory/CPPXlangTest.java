@@ -24,8 +24,15 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import org.apache.fory.config.CompatibleMode;
+import org.apache.fory.config.Language;
+import org.apache.fory.memory.MemoryBuffer;
+import org.testng.Assert;
 import org.testng.SkipException;
 import org.testng.annotations.Test;
 
@@ -284,17 +291,75 @@ public class CPPXlangTest extends XlangTestBase {
   @Override
   @Test
   public void testNullableFieldCompatibleNotNull() throws java.io.IOException {
-    // C++ handles nullable fields differently - needs separate implementation
-    throw new SkipException(
-        "Skipping: C++ compatible mode nullable tests need language-specific implementation");
+    super.testNullableFieldCompatibleNotNull();
   }
 
   @Override
   @Test
   public void testNullableFieldCompatibleNull() throws java.io.IOException {
-    // C++ handles nullable fields differently - needs separate implementation
-    throw new SkipException(
-        "Skipping: C++ compatible mode nullable tests need language-specific implementation");
+    // C++ has proper std::optional support and sends actual null values,
+    // unlike Rust which sends default values. Override with C++-specific expectations.
+    String caseName = "test_nullable_field_compatible_null";
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .withCodegen(false)
+            .withMetaCompressor(new NoOpMetaCompressor())
+            .build();
+    fory.register(NullableComprehensiveCompatible.class, 402);
+
+    NullableComprehensiveCompatible obj = new NullableComprehensiveCompatible();
+    // Base non-nullable primitive fields - must have values
+    obj.byteField = 1;
+    obj.shortField = 2;
+    obj.intField = 42;
+    obj.longField = 123456789L;
+    obj.floatField = 1.5f;
+    obj.doubleField = 2.5;
+    obj.boolField = true;
+
+    // Base non-nullable boxed fields - must have values
+    obj.boxedInt = 10;
+    obj.boxedLong = 20L;
+    obj.boxedFloat = 1.1f;
+    obj.boxedDouble = 2.2;
+    obj.boxedBool = true;
+
+    // Base non-nullable reference fields - must have values
+    obj.stringField = "hello";
+    obj.listField = Arrays.asList("a", "b", "c");
+    obj.setField = new HashSet<>(Arrays.asList("x", "y"));
+    obj.mapField = new HashMap<>();
+    obj.mapField.put("key1", "value1");
+    obj.mapField.put("key2", "value2");
+
+    // Nullable group 1 - all null
+    obj.nullableInt1 = null;
+    obj.nullableLong1 = null;
+    obj.nullableFloat1 = null;
+    obj.nullableDouble1 = null;
+    obj.nullableBool1 = null;
+
+    // Nullable group 2 - all null
+    obj.nullableString2 = null;
+    obj.nullableList2 = null;
+    obj.nullableSet2 = null;
+    obj.nullableMap2 = null;
+
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(1024);
+    fory.serialize(buffer, obj);
+
+    ExecutionContext ctx = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
+    runPeer(ctx);
+
+    MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
+    NullableComprehensiveCompatible result =
+        (NullableComprehensiveCompatible) fory.deserialize(buffer2);
+
+    // C++ properly supports std::optional and sends actual null values
+    // (unlike Rust which sends default values)
+    Assert.assertEquals(result, obj);
   }
 
   @Test

@@ -17,7 +17,7 @@
  * under the License.
  */
 
-package org.apache.fory;
+package org.apache.fory.xlang;
 
 import com.google.common.collect.ImmutableMap;
 import java.io.File;

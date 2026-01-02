@@ -17,7 +17,7 @@
  * under the License.
  */
 
-package org.apache.fory;
+package org.apache.fory.xlang;
 
 import com.google.common.collect.ImmutableMap;
 import java.io.File;
@@ -28,6 +28,8 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+
+import org.apache.fory.Fory;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.Language;
 import org.apache.fory.memory.MemoryBuffer;
@@ -137,7 +139,7 @@ public class PythonXlangTest extends XlangTestBase {
 
   // ============================================================================
   // Explicitly re-declare inherited test methods to enable running individual
-  // tests via Maven: mvn test -Dtest=org.apache.fory.PythonXlangTest#testXxx
+  // tests via Maven: mvn test -Dtest=org.apache.fory.xlang.PythonXlangTest#testXxx
   //
   // Maven Surefire cannot find inherited test methods when using the #methodName
   // syntax for test selection. By overriding and forwarding to the parent class,

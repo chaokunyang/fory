@@ -17,7 +17,7 @@
  * under the License.
  */
 
-package org.apache.fory;
+package org.apache.fory.xlang;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.hash.Hashing;
@@ -33,6 +33,8 @@ import java.util.*;
 import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 import lombok.Data;
+import org.apache.fory.Fory;
+import org.apache.fory.ForyTestBase;
 import org.apache.fory.annotation.ForyField;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.Language;

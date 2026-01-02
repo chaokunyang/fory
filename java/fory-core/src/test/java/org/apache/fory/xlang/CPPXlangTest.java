@@ -17,7 +17,7 @@
  * under the License.
  */
 
-package org.apache.fory;
+package org.apache.fory.xlang;
 
 import com.google.common.collect.ImmutableMap;
 import java.io.File;
@@ -29,6 +29,8 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+
+import org.apache.fory.Fory;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.Language;
 import org.apache.fory.memory.MemoryBuffer;
@@ -46,7 +48,7 @@ public class CPPXlangTest extends XlangTestBase {
   protected void ensurePeerReady() {
     String enabled = System.getenv("FORY_CPP_JAVA_CI");
     if (!"1".equals(enabled)) {
-      //      throw new SkipException("Skipping CPPXlangTest: FORY_CPP_JAVA_CI not set to 1");
+            throw new SkipException("Skipping CPPXlangTest: FORY_CPP_JAVA_CI not set to 1");
     }
     boolean bazelAvailable = true;
     try {

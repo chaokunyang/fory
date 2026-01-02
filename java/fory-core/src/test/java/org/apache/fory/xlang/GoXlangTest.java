@@ -17,7 +17,7 @@
  * under the License.
  */
 
-package org.apache.fory;
+package org.apache.fory.xlang;
 
 import com.google.common.collect.ImmutableMap;
 import java.io.File;
@@ -29,6 +29,8 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+
+import org.apache.fory.Fory;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.Language;
 import org.apache.fory.memory.MemoryBuffer;

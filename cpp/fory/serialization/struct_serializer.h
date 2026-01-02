@@ -1947,7 +1947,15 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
 
   static void write(const T &obj, WriteContext &ctx, RefMode ref_mode,
                     bool write_type, bool has_generics = false) {
-    write_not_null_ref_flag(ctx, ref_mode);
+    // Handle ref flag based on mode
+    if (ref_mode == RefMode::Tracking && ctx.track_ref()) {
+      // In Tracking mode, write REF_VALUE_FLAG (0) and reserve a ref_id slot
+      // to keep ref IDs in sync with Java (which tracks all objects)
+      ctx.write_int8(REF_VALUE_FLAG);
+      ctx.ref_writer().reserve_ref_id();
+    } else if (ref_mode != RefMode::None) {
+      ctx.write_int8(NOT_NULL_VALUE_FLAG);
+    }
 
     if (write_type) {
       // Direct lookup using compile-time type_index<T>() - O(1) hash lookup
@@ -2048,6 +2056,13 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
     constexpr int8_t null_flag = static_cast<int8_t>(RefFlag::Null);
 
     if (ref_flag == not_null_value_flag || ref_flag == ref_value_flag) {
+      // When ref_flag is RefValue (0), Java assigned a ref_id to this object.
+      // We must reserve a matching ref_id slot so that nested refs line up.
+      // Structs can't actually be referenced (only shared_ptrs can), but we
+      // need the ref_id numbering to stay in sync with Java.
+      if (ctx.track_ref() && ref_flag == ref_value_flag) {
+        ctx.ref_reader().reserve_ref_id();
+      }
       // In compatible mode: use meta sharing (matches Rust behavior)
       if (ctx.is_compatible()) {
         // In compatible mode: always use remote TypeMeta for schema evolution

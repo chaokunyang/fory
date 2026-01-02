@@ -260,6 +260,34 @@ impl Fory {
         self
     }
 
+    /// Enables or disables reference tracking for shared and circular references.
+    ///
+    /// # Arguments
+    ///
+    /// * `ref_tracking` - If `true`, enables reference tracking which allows
+    ///   preserving shared object references and circular references during
+    ///   serialization/deserialization.
+    ///
+    /// # Returns
+    ///
+    /// Returns `self` for method chaining.
+    ///
+    /// # Default
+    ///
+    /// The default value is `false`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use fory_core::Fory;
+    ///
+    /// let fory = Fory::default().ref_tracking(true);
+    /// ```
+    pub fn ref_tracking(mut self, ref_tracking: bool) -> Self {
+        self.config.ref_tracking = ref_tracking;
+        self
+    }
+
     /// Sets the maximum depth for nested dynamic object serialization.
     ///
     /// # Arguments
@@ -590,8 +618,10 @@ impl Fory {
             if context.is_compatible() {
                 context.writer.write_i32(-1);
             };
-            // Use RefMode::Tracking for shared ref types (Rc, Arc, RcWeak, ArcWeak)
-            let ref_mode = if T::fory_is_shared_ref() {
+            // Use RefMode based on config:
+            // - If ref_tracking is enabled, use RefMode::Tracking for the root object
+            // - Otherwise, use RefMode::NullOnly which writes NOT_NULL_VALUE_FLAG
+            let ref_mode = if self.config.ref_tracking {
                 RefMode::Tracking
             } else {
                 RefMode::NullOnly
@@ -983,8 +1013,10 @@ impl Fory {
                 bytes_to_skip = context.load_type_meta(meta_offset as usize)?;
             }
         }
-        // Use RefMode::Tracking for shared ref types (Rc, Arc, RcWeak, ArcWeak)
-        let ref_mode = if T::fory_is_shared_ref() {
+        // Use RefMode based on config:
+        // - If ref_tracking is enabled, use RefMode::Tracking for the root object
+        // - Otherwise, use RefMode::NullOnly
+        let ref_mode = if self.config.ref_tracking {
             RefMode::Tracking
         } else {
             RefMode::NullOnly

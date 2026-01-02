@@ -290,4 +290,14 @@ public class PythonXlangTest extends XlangTestBase {
     // Skip: Python doesn't have Union xlang support yet
     throw new SkipException("Skipping testUnionXlang: Python Union xlang support not implemented");
   }
+
+  @Test
+  public void testRefSchemaConsistent() throws IOException {
+    super.testRefSchemaConsistent();
+  }
+
+  @Test
+  public void testRefCompatible() throws IOException {
+    super.testRefCompatible();
+  }
 }

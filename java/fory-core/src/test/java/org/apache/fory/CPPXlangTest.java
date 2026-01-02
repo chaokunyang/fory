@@ -368,4 +368,14 @@ public class CPPXlangTest extends XlangTestBase {
     // Skip: C++ doesn't have Union xlang support yet
     throw new SkipException("Skipping testUnionXlang: C++ Union xlang support not implemented");
   }
+
+  @Test
+  public void testRefSchemaConsistent() throws java.io.IOException {
+    super.testRefSchemaConsistent();
+  }
+
+  @Test
+  public void testRefCompatible() throws java.io.IOException {
+    super.testRefCompatible();
+  }
 }

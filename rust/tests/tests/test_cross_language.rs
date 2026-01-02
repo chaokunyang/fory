@@ -1643,6 +1643,8 @@ fn test_union_xlang() {
 // Reference Tracking Tests - Cross-language shared reference tests
 // ============================================================================
 
+use std::rc::Rc;
+
 /// Inner struct for reference tracking test (SCHEMA_CONSISTENT mode)
 /// Matches Java RefInnerSchemaConsistent with type ID 501
 #[derive(ForyObject, Debug, PartialEq, Clone)]
@@ -1654,12 +1656,11 @@ struct RefInnerSchemaConsistent {
 /// Outer struct for reference tracking test (SCHEMA_CONSISTENT mode)
 /// Contains two fields that both point to the same inner object.
 /// Matches Java RefOuterSchemaConsistent with type ID 502
+/// Uses Option<Rc<T>> for nullable reference-tracked fields - Rc enables reference tracking
 #[derive(ForyObject, Debug, PartialEq)]
 struct RefOuterSchemaConsistent {
-    #[fory(ref = true, nullable = true)]
-    inner1: Option<RefInnerSchemaConsistent>,
-    #[fory(ref = true, nullable = true)]
-    inner2: Option<RefInnerSchemaConsistent>,
+    inner1: Option<Rc<RefInnerSchemaConsistent>>,
+    inner2: Option<Rc<RefInnerSchemaConsistent>>,
 }
 
 /// Inner struct for reference tracking test (COMPATIBLE mode)
@@ -1673,12 +1674,11 @@ struct RefInnerCompatible {
 /// Outer struct for reference tracking test (COMPATIBLE mode)
 /// Contains two fields that both point to the same inner object.
 /// Matches Java RefOuterCompatible with type ID 504
+/// Uses Option<Rc<T>> for nullable reference-tracked fields - Rc enables reference tracking
 #[derive(ForyObject, Debug, PartialEq)]
 struct RefOuterCompatible {
-    #[fory(ref = true, nullable = true)]
-    inner1: Option<RefInnerCompatible>,
-    #[fory(ref = true, nullable = true)]
-    inner2: Option<RefInnerCompatible>,
+    inner1: Option<Rc<RefInnerCompatible>>,
+    inner2: Option<Rc<RefInnerCompatible>>,
 }
 
 /// Test cross-language reference tracking in SCHEMA_CONSISTENT mode (compatible=false).
@@ -1692,7 +1692,7 @@ fn test_ref_schema_consistent() {
     let data_file_path = get_data_file();
     let bytes = fs::read(&data_file_path).unwrap();
 
-    let mut fory = Fory::default().compatible(false).xlang(true);
+    let mut fory = Fory::default().compatible(false).xlang(true).ref_tracking(true);
     fory.register::<RefInnerSchemaConsistent>(501).unwrap();
     fory.register::<RefOuterSchemaConsistent>(502).unwrap();
 
@@ -1707,7 +1707,11 @@ fn test_ref_schema_consistent() {
     let inner2 = outer.inner2.as_ref().unwrap();
     assert_eq!(inner1.id, 42);
     assert_eq!(inner1.name, "shared_inner");
-    assert_eq!(inner1, inner2, "inner1 and inner2 should be equal (same reference)");
+    // Compare the values (Rc contents)
+    assert_eq!(inner1.as_ref(), inner2.as_ref(), "inner1 and inner2 should have equal values");
+
+    // With Rc, after deserialization with ref tracking, both fields should point to the same Rc
+    assert!(Rc::ptr_eq(inner1, inner2), "inner1 and inner2 should be the same Rc (reference identity)");
 
     // Re-serialize and write back
     let new_bytes = fory.serialize(&outer).unwrap();
@@ -1725,7 +1729,7 @@ fn test_ref_compatible() {
     let data_file_path = get_data_file();
     let bytes = fs::read(&data_file_path).unwrap();
 
-    let mut fory = Fory::default().compatible(true).xlang(true);
+    let mut fory = Fory::default().compatible(true).xlang(true).ref_tracking(true);
     fory.register::<RefInnerCompatible>(503).unwrap();
     fory.register::<RefOuterCompatible>(504).unwrap();
 
@@ -1740,7 +1744,11 @@ fn test_ref_compatible() {
     let inner2 = outer.inner2.as_ref().unwrap();
     assert_eq!(inner1.id, 99);
     assert_eq!(inner1.name, "compatible_shared");
-    assert_eq!(inner1, inner2, "inner1 and inner2 should be equal (same reference)");
+    // Compare the values (Rc contents)
+    assert_eq!(inner1.as_ref(), inner2.as_ref(), "inner1 and inner2 should have equal values");
+
+    // With Rc, after deserialization with ref tracking, both fields should point to the same Rc
+    assert!(Rc::ptr_eq(inner1, inner2), "inner1 and inner2 should be the same Rc (reference identity)");
 
     // Re-serialize and write back
     let new_bytes = fory.serialize(&outer).unwrap();

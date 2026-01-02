@@ -476,6 +476,9 @@ struct RefInnerSchemaConsistent {
   bool operator==(const RefInnerSchemaConsistent &other) const {
     return id == other.id && name == other.name;
   }
+  bool operator!=(const RefInnerSchemaConsistent &other) const {
+    return !(*this == other);
+  }
 };
 FORY_STRUCT(RefInnerSchemaConsistent, id, name);
 
@@ -497,6 +500,22 @@ struct RefOuterSchemaConsistent {
   }
 };
 FORY_STRUCT(RefOuterSchemaConsistent, inner1, inner2);
+FORY_FIELD_TAGS(RefOuterSchemaConsistent, (inner1, 0, nullable, ref),
+                (inner2, 1, nullable, ref));
+// Verify field tags are correctly parsed
+static_assert(fory::detail::has_field_tags_v<RefOuterSchemaConsistent>,
+              "RefOuterSchemaConsistent should have field tags");
+static_assert(fory::detail::GetFieldTagEntry<RefOuterSchemaConsistent, 0>::id ==
+                  0,
+              "inner1 should have id=0");
+static_assert(
+    fory::detail::GetFieldTagEntry<RefOuterSchemaConsistent, 0>::is_nullable ==
+        true,
+    "inner1 should be nullable");
+static_assert(
+    fory::detail::GetFieldTagEntry<RefOuterSchemaConsistent, 0>::track_ref ==
+        true,
+    "inner1 should have track_ref=true");
 
 // Inner struct for reference tracking test (COMPATIBLE mode)
 // Matches Java RefInnerCompatible with type ID 503
@@ -505,6 +524,9 @@ struct RefInnerCompatible {
   std::string name;
   bool operator==(const RefInnerCompatible &other) const {
     return id == other.id && name == other.name;
+  }
+  bool operator!=(const RefInnerCompatible &other) const {
+    return !(*this == other);
   }
 };
 FORY_STRUCT(RefInnerCompatible, id, name);
@@ -527,6 +549,8 @@ struct RefOuterCompatible {
   }
 };
 FORY_STRUCT(RefOuterCompatible, inner1, inner2);
+FORY_FIELD_TAGS(RefOuterCompatible, (inner1, 0, nullable, ref),
+                (inner2, 1, nullable, ref));
 
 namespace fory {
 namespace serialization {
@@ -653,11 +677,12 @@ void AppendSerialized(Fory &fory, const T &value, std::vector<uint8_t> &out) {
 }
 
 Fory BuildFory(bool compatible = true, bool xlang = true,
-               bool check_struct_version = false) {
+               bool check_struct_version = false, bool track_ref = false) {
   return Fory::builder()
       .compatible(compatible)
       .xlang(xlang)
       .check_struct_version(check_struct_version)
+      .track_ref(track_ref)
       .build();
 }
 
@@ -2228,8 +2253,8 @@ void RunTestNullableFieldCompatibleNull(const std::string &data_file) {
 
 void RunTestRefSchemaConsistent(const std::string &data_file) {
   auto bytes = ReadFile(data_file);
-  // SCHEMA_CONSISTENT mode: compatible=false, xlang=true
-  auto fory = BuildFory(false, true);
+  // SCHEMA_CONSISTENT mode: compatible=false, xlang=true, check_struct_version=true, track_ref=true
+  auto fory = BuildFory(false, true, true, true);
   EnsureOk(fory.register_struct<RefInnerSchemaConsistent>(501),
            "register RefInnerSchemaConsistent");
   EnsureOk(fory.register_struct<RefOuterSchemaConsistent>(502),
@@ -2252,8 +2277,9 @@ void RunTestRefSchemaConsistent(const std::string &data_file) {
          std::to_string(outer.inner1->id));
   }
   if (outer.inner1->name != "shared_inner") {
-    Fail("RefOuterSchemaConsistent: inner1.name should be 'shared_inner', got " +
-         outer.inner1->name);
+    Fail(
+        "RefOuterSchemaConsistent: inner1.name should be 'shared_inner', got " +
+        outer.inner1->name);
   }
   if (*outer.inner1 != *outer.inner2) {
     Fail("RefOuterSchemaConsistent: inner1 and inner2 should be equal (same "
@@ -2272,8 +2298,8 @@ void RunTestRefSchemaConsistent(const std::string &data_file) {
 
 void RunTestRefCompatible(const std::string &data_file) {
   auto bytes = ReadFile(data_file);
-  // COMPATIBLE mode: compatible=true, xlang=true
-  auto fory = BuildFory(true, true);
+  // COMPATIBLE mode: compatible=true, xlang=true, check_struct_version=false, track_ref=true
+  auto fory = BuildFory(true, true, false, true);
   EnsureOk(fory.register_struct<RefInnerCompatible>(503),
            "register RefInnerCompatible");
   EnsureOk(fory.register_struct<RefOuterCompatible>(504),

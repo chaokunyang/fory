@@ -257,4 +257,14 @@ public class RustXlangTest extends XlangTestBase {
   public void testUnionXlang() throws java.io.IOException {
     super.testUnionXlang();
   }
+
+  @Test
+  public void testRefSchemaConsistent() throws java.io.IOException {
+    super.testRefSchemaConsistent();
+  }
+
+  @Test
+  public void testRefCompatible() throws java.io.IOException {
+    super.testRefCompatible();
+  }
 }

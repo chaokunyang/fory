@@ -227,6 +227,7 @@ class NullableComprehensiveSchemaConsistent:
 @dataclass
 class RefInnerSchemaConsistent:
     """Inner struct for reference tracking test (SCHEMA_CONSISTENT mode)."""
+
     id: pyfory.int32 = 0
     name: str = ""
 
@@ -234,13 +235,15 @@ class RefInnerSchemaConsistent:
 @dataclass
 class RefOuterSchemaConsistent:
     """Outer struct with two fields pointing to the same inner object (SCHEMA_CONSISTENT mode)."""
-    inner1: Optional[RefInnerSchemaConsistent] = None
-    inner2: Optional[RefInnerSchemaConsistent] = None
+
+    inner1: Optional[RefInnerSchemaConsistent] = pyfory.field(default=None, ref=True, nullable=True)
+    inner2: Optional[RefInnerSchemaConsistent] = pyfory.field(default=None, ref=True, nullable=True)
 
 
 @dataclass
 class RefInnerCompatible:
     """Inner struct for reference tracking test (COMPATIBLE mode)."""
+
     id: pyfory.int32 = 0
     name: str = ""
 
@@ -248,8 +251,9 @@ class RefInnerCompatible:
 @dataclass
 class RefOuterCompatible:
     """Outer struct with two fields pointing to the same inner object (COMPATIBLE mode)."""
-    inner1: Optional[RefInnerCompatible] = None
-    inner2: Optional[RefInnerCompatible] = None
+
+    inner1: Optional[RefInnerCompatible] = pyfory.field(default=None, ref=True, nullable=True)
+    inner2: Optional[RefInnerCompatible] = pyfory.field(default=None, ref=True, nullable=True)
 
 
 @dataclass
@@ -1154,7 +1158,7 @@ def test_ref_schema_consistent():
     with open(data_file, "rb") as f:
         data_bytes = f.read()
 
-    fory = pyfory.Fory(xlang=True, compatible=False)
+    fory = pyfory.Fory(xlang=True, compatible=False, ref=True)
     fory.register_type(RefInnerSchemaConsistent, type_id=501)
     fory.register_type(RefOuterSchemaConsistent, type_id=502)
 
@@ -1192,7 +1196,7 @@ def test_ref_compatible():
     with open(data_file, "rb") as f:
         data_bytes = f.read()
 
-    fory = pyfory.Fory(xlang=True, compatible=True)
+    fory = pyfory.Fory(xlang=True, compatible=True, ref=True)
     fory.register_type(RefInnerCompatible, type_id=503)
     fory.register_type(RefOuterCompatible, type_id=504)
 

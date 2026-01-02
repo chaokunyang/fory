@@ -323,13 +323,20 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
       return;
     }
 
+    bool is_first_occurrence = false;
     if (ctx.track_ref()) {
       if (ctx.ref_writer().try_write_shared_ref(ctx, ptr)) {
         return;
       }
+      is_first_occurrence = true;
     } else {
       ctx.write_int8(NOT_NULL_VALUE_FLAG);
     }
+
+    // In compatible mode with ref tracking, first occurrence (RefValue)
+    // requires type info to be written after the ref flag.
+    const bool should_write_type =
+        ctx.is_compatible() && is_first_occurrence ? true : write_type;
 
     // For polymorphic types, serialize the concrete type dynamically
     if constexpr (is_polymorphic) {
@@ -345,7 +352,7 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
       const TypeInfo *type_info = type_info_res.value();
 
       // Write type info if requested
-      if (write_type) {
+      if (should_write_type) {
         auto write_res = ctx.write_any_typeinfo(
             static_cast<uint32_t>(TypeId::UNKNOWN), concrete_type_id);
         if (!write_res.ok()) {
@@ -362,7 +369,7 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
       // Non-polymorphic path
       Serializer<T>::write(
           *ptr, ctx, inner_requires_ref ? RefMode::NullOnly : RefMode::None,
-          write_type);
+          should_write_type);
     }
   }
 
@@ -481,7 +488,8 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
     }
 
     uint32_t reserved_ref_id = 0;
-    if (flag == REF_VALUE_FLAG) {
+    const bool is_first_occurrence = flag == REF_VALUE_FLAG;
+    if (is_first_occurrence) {
       if (!tracking_refs) {
         ctx.set_error(Error::invalid_ref(
             "REF_VALUE flag encountered when reference tracking disabled"));
@@ -490,9 +498,15 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
       reserved_ref_id = ctx.ref_reader().reserve_ref_id();
     }
 
+    // In compatible mode with ref tracking, first occurrence (RefValue)
+    // has type info written after the ref flag by Java/Go.
+    // So we must read type info for first occurrence.
+    const bool should_read_type =
+        ctx.is_compatible() && is_first_occurrence ? true : read_type;
+
     // For polymorphic types, read type info AFTER handling ref flags
     if constexpr (is_polymorphic) {
-      if (!read_type) {
+      if (!should_read_type) {
         ctx.set_error(Error::type_error(
             "Cannot deserialize polymorphic std::shared_ptr<T> "
             "without type info (read_type=false)"));
@@ -520,7 +534,7 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
       }
       T *obj_ptr = static_cast<T *>(raw_ptr);
       auto result = std::shared_ptr<T>(obj_ptr);
-      if (flag == REF_VALUE_FLAG) {
+      if (is_first_occurrence) {
         ctx.ref_reader().store_shared_ref_at(reserved_ref_id, result);
       }
       return result;
@@ -528,12 +542,12 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
       // Non-polymorphic path
       T value = Serializer<T>::read(
           ctx, inner_requires_ref ? RefMode::NullOnly : RefMode::None,
-          read_type);
+          should_read_type);
       if (ctx.has_error()) {
         return nullptr;
       }
       auto result = std::make_shared<T>(std::move(value));
-      if (flag == REF_VALUE_FLAG) {
+      if (is_first_occurrence) {
         ctx.ref_reader().store_shared_ref_at(reserved_ref_id, result);
       }
       return result;

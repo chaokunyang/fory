@@ -223,6 +223,21 @@ public abstract class TypeResolver {
 
   public abstract boolean isRegisteredByName(Class<?> cls);
 
+  public boolean isMonomorphic(Descriptor descriptor) {
+    ForyField foryField = descriptor.getForyField();
+    if (foryField != null) {
+      switch (foryField.morphic()) {
+        case POLYMORPHIC:
+          return false;
+        case FINAL:
+          return true;
+        default:
+          return isMonomorphic(descriptor.getRawType());
+      }
+    }
+    return isMonomorphic(descriptor.getRawType());
+  }
+
   public abstract boolean isMonomorphic(Class<?> clz);
 
   public abstract ClassInfo getClassInfo(Class<?> cls);

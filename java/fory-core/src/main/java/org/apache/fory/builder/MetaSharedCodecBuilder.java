@@ -102,12 +102,11 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
       LOG.info("========== sorted descriptors for {} ==========", classDef.getClassName());
       for (Descriptor d : sortedDescriptors) {
         LOG.info(
-            "  {} -> {}, ref {}, nullable {}, morphic {}",
+            "  {} -> {}, ref {}, nullable {}",
             d.getName(),
             d.getTypeName(),
             d.isTrackingRef(),
-            d.isNullable(),
-            d.isFinalField());
+            d.isNullable());
       }
     }
     objectCodecOptimizer =

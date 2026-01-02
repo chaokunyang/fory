@@ -109,12 +109,11 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
           "========== MetaSharedSerializer sorted descriptors for {} ==========", type.getName());
       for (Descriptor d : descriptorGrouper.getSortedDescriptors()) {
         LOG.info(
-            "  {} -> {}, ref {}, nullable {}, morphic {}",
+            "  {} -> {}, ref {}, nullable {}",
             d.getName(),
             d.getTypeName(),
             d.isTrackingRef(),
-            d.isNullable(),
-            d.isFinalField());
+            d.isNullable());
       }
     }
     // d.getField() may be null if not exists in this class when meta share enabled.

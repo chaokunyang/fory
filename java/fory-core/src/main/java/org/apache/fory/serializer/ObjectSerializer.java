@@ -116,12 +116,11 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
       LOG.info("========== ObjectSerializer sorted descriptors for {} ==========", cls.getName());
       for (Descriptor d : descriptors) {
         LOG.info(
-            "  {} -> {}, ref {}, nullable {}, morphic {}",
+            "  {} -> {}, ref {}, nullable {}",
             d.getName(),
             d.getTypeName(),
             d.isTrackingRef(),
-            d.isNullable(),
-            d.isFinalField());
+            d.isNullable());
       }
     }
     if (isRecord) {

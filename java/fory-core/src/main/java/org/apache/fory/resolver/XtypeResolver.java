@@ -920,19 +920,7 @@ public class XtypeResolver extends TypeResolver {
       boolean descriptorsGroupedOrdered,
       Function<Descriptor, Descriptor> descriptorUpdator) {
     return DescriptorGrouper.createDescriptorGrouper(
-            clz -> {
-              ClassInfo classInfo = getClassInfo(clz, false);
-              if (classInfo == null || clz.isEnum()) {
-                return false;
-              }
-              byte foryTypeId = (byte) (classInfo.xtypeId & 0xff);
-              if (foryTypeId == 0
-                  || foryTypeId == Types.UNKNOWN
-                  || Types.isUserDefinedType(foryTypeId)) {
-                return false;
-              }
-              return foryTypeId != Types.LIST && foryTypeId != Types.SET && foryTypeId != Types.MAP;
-            },
+            this::isMonomorphic,
             descriptors,
             descriptorsGroupedOrdered,
             descriptorUpdator,

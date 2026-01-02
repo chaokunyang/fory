@@ -341,27 +341,12 @@ abstract class SerializationBinding {
 
     @Override
     public void writeRef(MemoryBuffer buffer, Object obj, ClassInfoHolder classInfoHolder) {
-      // In COMPATIBLE mode (meta share enabled): write type info for schema evolution
-      // In SCHEMA_CONSISTENT mode: don't write type info, use serializer directly
-      if (fory.getConfig().isMetaShareEnabled()) {
-        fory.xwriteRef(buffer, obj);
-      } else {
-        // SCHEMA_CONSISTENT mode: resolve serializer and write without type info
-        ClassInfo classInfo = xtypeResolver.getClassInfo(obj.getClass(), classInfoHolder);
-        fory.xwriteRef(buffer, obj, classInfo.getSerializer());
-      }
+      fory.xwriteRef(buffer, obj, classInfoHolder);
     }
 
     @Override
     public void writeRef(MemoryBuffer buffer, Object obj, ClassInfo classInfo) {
-      // In COMPATIBLE mode (meta share enabled): write type info for schema evolution
-      // In SCHEMA_CONSISTENT mode: don't write type info, use serializer directly
-      if (fory.getConfig().isMetaShareEnabled()) {
-        fory.xwriteRef(buffer, obj);
-      } else {
-        // SCHEMA_CONSISTENT mode: use provided classInfo's serializer
-        fory.xwriteRef(buffer, obj, classInfo.getSerializer());
-      }
+      fory.xwriteRef(buffer, obj, classInfo);
     }
 
     @Override
@@ -394,18 +379,7 @@ abstract class SerializationBinding {
 
     @Override
     public Object readRef(MemoryBuffer buffer, ClassInfoHolder classInfoHolder) {
-      // In COMPATIBLE mode (meta share enabled): read type info for schema evolution
-      // In SCHEMA_CONSISTENT mode: don't read type info, use serializer directly
-      if (fory.getConfig().isMetaShareEnabled()) {
-        return fory.xreadRef(buffer);
-      } else {
-        // SCHEMA_CONSISTENT mode: resolve serializer and read without type info
-        ClassInfo classInfo = classInfoHolder.classInfo;
-        if (classInfo.getSerializer() == null) {
-          classInfo = xtypeResolver.getClassInfo(classInfo.getCls(), classInfoHolder);
-        }
-        return fory.xreadRef(buffer, classInfo.getSerializer());
-      }
+      return fory.xreadRef(buffer, classInfoHolder);
     }
 
     @Override

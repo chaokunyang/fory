@@ -82,7 +82,7 @@ public class DescriptorGrouper {
         return c;
       };
   private final Collection<Descriptor> descriptors;
-  private final Predicate<Class<?>> isMonomorphic;
+  private final Predicate<Descriptor> isMonomorphic;
   private final Function<Descriptor, Descriptor> descriptorUpdater;
   private final boolean descriptorsGroupedOrdered;
   private boolean sorted = false;
@@ -181,7 +181,7 @@ public class DescriptorGrouper {
    * @param comparator comparator for non-primitive fields.
    */
   private DescriptorGrouper(
-      Predicate<Class<?>> isMonomorphic,
+      Predicate<Descriptor> isMonomorphic,
       Collection<Descriptor> descriptors,
       boolean descriptorsGroupedOrdered,
       Function<Descriptor, Descriptor> descriptorUpdater,
@@ -232,7 +232,7 @@ public class DescriptorGrouper {
         collectionDescriptors.add(descriptorUpdater.apply(descriptor));
       } else if (TypeUtils.isMap(descriptor.getRawType())) {
         mapDescriptors.add(descriptorUpdater.apply(descriptor));
-      } else if (isMonomorphic.test(descriptor.getRawType())) {
+      } else if (isMonomorphic.test(descriptor)) {
         finalDescriptors.add(descriptorUpdater.apply(descriptor));
       } else {
         otherDescriptors.add(descriptorUpdater.apply(descriptor));
@@ -297,7 +297,7 @@ public class DescriptorGrouper {
   }
 
   public static DescriptorGrouper createDescriptorGrouper(
-      Predicate<Class<?>> isMonomorphic,
+      Predicate<Descriptor> isMonomorphic,
       Collection<Descriptor> descriptors,
       boolean descriptorsGroupedOrdered,
       Function<Descriptor, Descriptor> descriptorUpdator,

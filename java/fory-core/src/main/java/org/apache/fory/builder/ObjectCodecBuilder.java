@@ -111,12 +111,11 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
       List<Descriptor> sortedDescriptors = grouper.getSortedDescriptors();
       for (Descriptor d : sortedDescriptors) {
         LOG.info(
-            "  {} -> {}, ref {}, nullable {}, morphic {}",
+            "  {} -> {}, ref {}, nullable {}",
             d.getName(),
             d.getTypeName(),
             d.isTrackingRef(),
-            d.isNullable(),
-            d.isFinalField());
+            d.isNullable());
       }
     }
     classVersionHash =
@@ -153,12 +152,6 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
   protected void addCommonImports() {
     super.addCommonImports();
     ctx.addImport(Generated.GeneratedObjectSerializer.class);
-  }
-
-  /** Mark non-inner registered final types as non-final to write class def for those types. */
-  @Override
-  protected boolean isMonomorphic(Class<?> clz) {
-    return typeResolver(r -> r.isMonomorphic(clz));
   }
 
   /**

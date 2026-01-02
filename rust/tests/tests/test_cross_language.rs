@@ -52,6 +52,7 @@ struct Item {
 }
 
 #[derive(ForyObject, Debug, PartialEq)]
+#[fory(debug)]
 struct SimpleStruct {
     // field_order != sorted_order
     f1: HashMap<i32, f64>,
@@ -527,6 +528,7 @@ fn test_integer() {
     // - Java Integer fields (with nullable=false) -> Rust i32 (no ref flag)
     // All fields use i32 because Java xlang mode defaults to nullable=false for all non-primitives
     #[derive(ForyObject, Debug, PartialEq)]
+    #[fory(debug)]
     struct Item2 {
         f1: i32,
         f2: i32,
@@ -620,6 +622,7 @@ impl ForyDefault for MyExt {
     }
 }
 #[derive(ForyObject, Debug, PartialEq)]
+#[fory(debug)]
 struct MyWrapper {
     color: Color,
     my_struct: MyStruct,
@@ -1264,6 +1267,7 @@ fn test_enum_schema_evolution_compatible_reverse() {
 /// - Nullable fields (first half - boxed numeric types): Integer, Long, Float
 /// - Nullable fields (second half - @ForyField): Double, Boolean, String, List, Set, Map
 #[derive(ForyObject, Debug, PartialEq)]
+#[fory(debug)]
 struct NullableComprehensiveSchemaConsistent {
     // Base non-nullable primitive fields
     byte_field: i8,
@@ -1310,6 +1314,7 @@ struct NullableComprehensiveSchemaConsistent {
 ///
 /// This tests that compatible mode properly handles schema differences across languages.
 #[derive(ForyObject, Debug, PartialEq)]
+#[fory(debug)]
 struct NullableComprehensiveCompatible {
     // Group 1: Nullable in Rust, Non-nullable in Java
     // Primitive fields
@@ -1658,6 +1663,7 @@ struct RefInnerSchemaConsistent {
 /// Matches Java RefOuterSchemaConsistent with type ID 502
 /// Uses Option<Rc<T>> for nullable reference-tracked fields - Rc enables reference tracking
 #[derive(ForyObject, Debug, PartialEq)]
+#[fory(debug)]
 struct RefOuterSchemaConsistent {
     inner1: Option<Rc<RefInnerSchemaConsistent>>,
     inner2: Option<Rc<RefInnerSchemaConsistent>>,
@@ -1666,6 +1672,7 @@ struct RefOuterSchemaConsistent {
 /// Inner struct for reference tracking test (COMPATIBLE mode)
 /// Matches Java RefInnerCompatible with type ID 503
 #[derive(ForyObject, Debug, PartialEq, Clone)]
+#[fory(debug)]
 struct RefInnerCompatible {
     id: i32,
     name: String,
@@ -1676,6 +1683,7 @@ struct RefInnerCompatible {
 /// Matches Java RefOuterCompatible with type ID 504
 /// Uses Option<Rc<T>> for nullable reference-tracked fields - Rc enables reference tracking
 #[derive(ForyObject, Debug, PartialEq)]
+#[fory(debug)]
 struct RefOuterCompatible {
     inner1: Option<Rc<RefInnerCompatible>>,
     inner2: Option<Rc<RefInnerCompatible>>,

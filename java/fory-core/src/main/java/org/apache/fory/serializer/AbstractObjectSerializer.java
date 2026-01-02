@@ -1091,15 +1091,14 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
     for (Descriptor d : boxed) {
       finalFields[cnt++] = new FinalTypeField(fory, d);
     }
-    // TODO(chaokunyang) Support Pojo<T> generics besides Map/Collection subclass
-    //  when it's supported in BaseObjectCodecBuilder.
     for (Descriptor d : finals) {
       finalFields[cnt++] = new FinalTypeField(fory, d);
     }
     boolean[] isFinal = new boolean[finalFields.length];
     for (int i = 0; i < isFinal.length; i++) {
-      ClassInfo classInfo = finalFields[i].classInfo;
-      isFinal[i] = classInfo != null && fory.getClassResolver().isMonomorphic(classInfo.getCls());
+      FinalTypeField finalField = finalFields[i];
+      ClassInfo classInfo = finalField.classInfo;
+      isFinal[i] = classInfo != null && fory.getClassResolver().isMonomorphic(finalField.descriptor);
     }
     cnt = 0;
     GenericTypeField[] otherFields = new GenericTypeField[grouper.getOtherDescriptors().size()];
@@ -1121,6 +1120,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
   }
 
   public static class InternalFieldInfo {
+    protected final Descriptor descriptor;
     protected final TypeRef<?> typeRef;
     protected final short classId;
     protected final String qualifiedFieldName;
@@ -1132,6 +1132,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
     protected final boolean isPrimitive;
 
     private InternalFieldInfo(Fory fory, Descriptor d, short classId) {
+      this.descriptor = d;
       this.typeRef = d.getTypeRef();
       this.classId = classId;
       this.qualifiedFieldName = d.getDeclaringClass() + "." + d.getName();

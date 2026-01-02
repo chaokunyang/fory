@@ -53,6 +53,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import org.apache.fory.Fory;
+import org.apache.fory.annotation.ForyField;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.collection.IdentityObjectIntMap;
 import org.apache.fory.collection.LongMap;
@@ -430,6 +431,24 @@ public class XtypeResolver extends TypeResolver {
         return true;
       default:
         return false;
+    }
+  }
+
+  @Override
+  public boolean isMonomorphic(Descriptor descriptor)  {
+    ForyField foryField = descriptor.getForyField();
+    ForyField.Morphic morphic = foryField != null ? foryField.morphic() : ForyField.Morphic.AUTO;
+    switch (morphic) {
+      case POLYMORPHIC:
+        return false;
+      case FINAL:
+        return true;
+      default:
+        Class<?> rawType = descriptor.getRawType();
+        if (rawType.isEnum()) {
+          return true;
+        }
+        return !ReflectionUtils.isAbstract(rawType);
     }
   }
 

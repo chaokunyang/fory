@@ -47,6 +47,7 @@ import org.apache.fory.util.record.RecordUtils;
 public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
   protected final RefResolver refResolver;
   protected final ClassResolver classResolver;
+  protected final TypeResolver typeResolver;
   protected final boolean isRecord;
   protected final ObjectCreator<T> objectCreator;
   private FieldGroups.SerializationFieldInfo[] fieldInfos;
@@ -60,6 +61,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
     super(fory, type);
     this.refResolver = fory.getRefResolver();
     this.classResolver = fory.getClassResolver();
+    this.typeResolver = fory._getTypeResolver();
     this.isRecord = RecordUtils.isRecord(type);
     this.objectCreator = objectCreator;
   }

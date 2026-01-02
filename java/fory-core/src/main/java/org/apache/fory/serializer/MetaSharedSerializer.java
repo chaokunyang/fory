@@ -150,6 +150,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
   @Override
   public void write(MemoryBuffer buffer, T value) {
     if (serializer == null) {
+      // xlang mode will register class and create serializer in advance, it won't go to here.
       serializer =
           this.classResolver.createSerializerSafe(type, () -> new ObjectSerializer<>(fory, type));
     }
@@ -175,7 +176,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
     T obj = newInstance();
     Fory fory = this.fory;
     RefResolver refResolver = this.refResolver;
-    ClassResolver classResolver = this.classResolver;
+    TypeResolver typeResolver = this.typeResolver;
     SerializationBinding binding = this.binding;
     refResolver.reference(obj);
     // read order: primitive,boxed,final,other,collection,map
@@ -201,7 +202,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
           assert fieldInfo.classInfo != null;
           Object fieldValue =
               AbstractObjectSerializer.readFinalObjectFieldValue(
-                  binding, refResolver, classResolver, fieldInfo, buffer);
+                  binding, refResolver, typeResolver, fieldInfo, buffer);
           fieldAccessor.putObject(obj, fieldValue);
         }
       } else {
@@ -213,7 +214,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
               binding.readRef(buffer, classInfoHolder);
             } else {
               AbstractObjectSerializer.readFinalObjectFieldValue(
-                  binding, refResolver, classResolver, fieldInfo, buffer);
+                  binding, refResolver, typeResolver, fieldInfo, buffer);
             }
           }
         } else {
@@ -276,8 +277,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
     ClassResolver classResolver = this.classResolver;
     SerializationBinding binding = this.binding;
     // read order: primitive,boxed,final,other,collection,map
-    SerializationFieldInfo[] finalFields = this.buildInFields;
-    for (SerializationFieldInfo fieldInfo : finalFields) {
+    for (SerializationFieldInfo fieldInfo : this.buildInFields) {
       if (fieldInfo.fieldAccessor != null) {
         assert fieldInfo.classInfo != null;
         short classId = fieldInfo.classId;

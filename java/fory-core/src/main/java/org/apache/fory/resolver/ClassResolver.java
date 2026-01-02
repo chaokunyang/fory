@@ -78,6 +78,7 @@ import java.util.stream.Collectors;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyCopyable;
 import org.apache.fory.annotation.CodegenInvoke;
+import org.apache.fory.annotation.ForyField;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.builder.JITContext;
 import org.apache.fory.codegen.CodeGenerator;
@@ -685,6 +686,22 @@ public class ClassResolver extends TypeResolver {
       return name;
     }
     return cls.getName();
+  }
+
+  @Override
+  public boolean isMonomorphic(Descriptor descriptor)  {
+    ForyField foryField = descriptor.getForyField();
+    if (foryField != null) {
+      switch (foryField.morphic()) {
+        case POLYMORPHIC:
+          return false;
+        case FINAL:
+          return true;
+        default:
+          return isMonomorphic(descriptor.getRawType());
+      }
+    }
+    return isMonomorphic(descriptor.getRawType());
   }
 
   /**
@@ -1797,15 +1814,6 @@ public class ClassResolver extends TypeResolver {
   public void resetRead() {}
 
   public void resetWrite() {}
-
-  private static final GenericType OBJECT_GENERIC_TYPE = GenericType.build(Object.class);
-
-  @CodegenInvoke
-  public GenericType getGenericTypeInStruct(Class<?> cls, String genericTypeStr) {
-    Map<String, GenericType> map =
-        extRegistry.classGenericTypes.computeIfAbsent(cls, this::buildGenericMap);
-    return map.getOrDefault(genericTypeStr, OBJECT_GENERIC_TYPE);
-  }
 
   @Override
   public GenericType buildGenericType(TypeRef<?> typeRef) {

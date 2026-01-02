@@ -50,13 +50,13 @@ import org.apache.fory.util.Preconditions;
 public final class NonexistentClassSerializers {
 
   private static final class ClassFieldsInfo {
-    private final SerializationFieldInfo[] finalFields;
+    private final SerializationFieldInfo[] buildInFields;
     private final SerializationFieldInfo[] otherFields;
     private final SerializationFieldInfo[] containerFields;
     private final int classVersionHash;
 
     private ClassFieldsInfo(FieldGroups fieldGroups, int classVersionHash) {
-      this.finalFields = fieldGroups.buildInFields;
+      this.buildInFields = fieldGroups.buildInFields;
       this.otherFields = fieldGroups.userTypeFields;
       this.containerFields = fieldGroups.containerFields;
       this.classVersionHash = classVersionHash;
@@ -68,7 +68,6 @@ public final class NonexistentClassSerializers {
     private final ClassInfoHolder classInfoHolder;
     private final LongMap<ClassFieldsInfo> fieldsInfoMap;
     private final SerializationBinding binding;
-    private final TypeResolver typeResolver;
 
     public NonexistentClassSerializer(Fory fory, ClassDef classDef) {
       super(fory, NonexistentClass.NonexistentMetaShared.class);
@@ -76,7 +75,6 @@ public final class NonexistentClassSerializers {
       classInfoHolder = fory.getClassResolver().nilClassInfoHolder();
       fieldsInfoMap = new LongMap<>();
       binding = SerializationBinding.createBinding(fory);
-      typeResolver = fory._getTypeResolver();
       Preconditions.checkArgument(fory.getConfig().isMetaShareEnabled());
     }
 
@@ -116,8 +114,7 @@ public final class NonexistentClassSerializers {
         buffer.writeInt32(fieldsInfo.classVersionHash);
       }
       // write order: primitive,boxed,final,other,collection,map
-      SerializationFieldInfo[] finalFields = fieldsInfo.finalFields;
-      for (SerializationFieldInfo fieldInfo : finalFields) {
+      for (SerializationFieldInfo fieldInfo : fieldsInfo.buildInFields) {
         Object fieldValue = value.get(fieldInfo.qualifiedFieldName);
         ClassInfo classInfo = fieldInfo.classInfo;
         if (classResolver.isPrimitive(fieldInfo.classId)) {
@@ -177,9 +174,7 @@ public final class NonexistentClassSerializers {
       List<MapEntry> entries = new ArrayList<>();
       // read order: primitive,boxed,final,other,collection,map
       ClassFieldsInfo fieldsInfo = getClassFieldsInfo(classDef);
-      SerializationFieldInfo[] finalFields = fieldsInfo.finalFields;
-      for (int i = 0; i < finalFields.length; i++) {
-        SerializationFieldInfo fieldInfo = finalFields[i];
+      for (SerializationFieldInfo fieldInfo : fieldsInfo.buildInFields) {
         Object fieldValue;
         if (fieldInfo.classInfo == null) {
           // TODO(chaokunyang) support registered serializer in peer with ref tracking disabled.

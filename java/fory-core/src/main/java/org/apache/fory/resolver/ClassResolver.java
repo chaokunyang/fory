@@ -689,7 +689,7 @@ public class ClassResolver extends TypeResolver {
   }
 
   @Override
-  public boolean isMonomorphic(Descriptor descriptor)  {
+  public boolean isMonomorphic(Descriptor descriptor) {
     ForyField foryField = descriptor.getForyField();
     if (foryField != null) {
       switch (foryField.morphic()) {

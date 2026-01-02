@@ -29,7 +29,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-
 import org.apache.fory.Fory;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.Language;
@@ -305,13 +304,15 @@ public class GoXlangTest extends XlangTestBase {
 
   @Override
   @Test(dataProvider = "enableCodegen")
-  public void testNullableFieldSchemaConsistentNotNull(boolean enableCodegen) throws java.io.IOException {
+  public void testNullableFieldSchemaConsistentNotNull(boolean enableCodegen)
+      throws java.io.IOException {
     super.testNullableFieldSchemaConsistentNotNull(enableCodegen);
   }
 
   @Override
   @Test(dataProvider = "enableCodegen")
-  public void testNullableFieldSchemaConsistentNull(boolean enableCodegen) throws java.io.IOException {
+  public void testNullableFieldSchemaConsistentNull(boolean enableCodegen)
+      throws java.io.IOException {
     super.testNullableFieldSchemaConsistentNull(enableCodegen);
   }
 

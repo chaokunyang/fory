@@ -1749,7 +1749,8 @@ public abstract class XlangTestBase extends ForyTestBase {
   }
 
   @Test(dataProvider = "enableCodegen")
-  public void testNullableFieldSchemaConsistentNotNull(boolean enableCodegen) throws java.io.IOException {
+  public void testNullableFieldSchemaConsistentNotNull(boolean enableCodegen)
+      throws java.io.IOException {
     String caseName = "test_nullable_field_schema_consistent_not_null";
     Fory fory =
         Fory.builder()
@@ -1807,7 +1808,8 @@ public abstract class XlangTestBase extends ForyTestBase {
   }
 
   @Test(dataProvider = "enableCodegen")
-  public void testNullableFieldSchemaConsistentNull(boolean enableCodegen) throws java.io.IOException {
+  public void testNullableFieldSchemaConsistentNull(boolean enableCodegen)
+      throws java.io.IOException {
     String caseName = "test_nullable_field_schema_consistent_null";
     Fory fory =
         Fory.builder()

@@ -492,7 +492,6 @@ public abstract class TypeResolver {
     return map.getOrDefault(genericTypeStr, OBJECT_GENERIC_TYPE);
   }
 
-
   public abstract void initialize();
 
   public abstract ClassDef getTypeDef(Class<?> cls, boolean resolveParent);

@@ -174,7 +174,7 @@ public class FieldGroups {
           classInfo = null;
         }
       }
-      useDeclaredTypeInfo = classInfo != null && fory.getClassResolver().isMonomorphic(descriptor);
+      useDeclaredTypeInfo = classInfo != null && resolver.isMonomorphic(descriptor);
       if (classInfo != null) {
         serializer = classInfo.getSerializer();
       } else {

@@ -53,7 +53,7 @@ public class RustXlangTest extends XlangTestBase {
   protected void ensurePeerReady() {
     String enabled = System.getenv("FORY_RUST_JAVA_CI");
     if (!"1".equals(enabled)) {
-      throw new SkipException("Skipping RustXlangTest: FORY_RUST_JAVA_CI not set to 1");
+      //      throw new SkipException("Skipping RustXlangTest: FORY_RUST_JAVA_CI not set to 1");
     }
     boolean rustInstalled = true;
     try {
@@ -232,12 +232,14 @@ public class RustXlangTest extends XlangTestBase {
   }
 
   @Test(dataProvider = "enableCodegen")
-  public void testNullableFieldSchemaConsistentNotNull(boolean enableCodegen) throws java.io.IOException {
+  public void testNullableFieldSchemaConsistentNotNull(boolean enableCodegen)
+      throws java.io.IOException {
     super.testNullableFieldSchemaConsistentNotNull(enableCodegen);
   }
 
   @Test(dataProvider = "enableCodegen")
-  public void testNullableFieldSchemaConsistentNull(boolean enableCodegen) throws java.io.IOException {
+  public void testNullableFieldSchemaConsistentNull(boolean enableCodegen)
+      throws java.io.IOException {
     super.testNullableFieldSchemaConsistentNull(enableCodegen);
   }
 

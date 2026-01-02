@@ -435,7 +435,7 @@ public class XtypeResolver extends TypeResolver {
   }
 
   @Override
-  public boolean isMonomorphic(Descriptor descriptor)  {
+  public boolean isMonomorphic(Descriptor descriptor) {
     ForyField foryField = descriptor.getForyField();
     ForyField.Morphic morphic = foryField != null ? foryField.morphic() : ForyField.Morphic.AUTO;
     switch (morphic) {
@@ -448,7 +448,11 @@ public class XtypeResolver extends TypeResolver {
         if (rawType.isEnum()) {
           return true;
         }
-        return !ReflectionUtils.isAbstract(rawType);
+        byte xtypeId = getXtypeId(rawType);
+        if (fory.isCompatible()) {
+          return !Types.isUserDefinedType(xtypeId) && xtypeId != Types.UNKNOWN;
+        }
+        return xtypeId != Types.UNKNOWN;
     }
   }
 
@@ -481,7 +485,7 @@ public class XtypeResolver extends TypeResolver {
   public boolean isBuildIn(Descriptor descriptor) {
     Class<?> rawType = descriptor.getRawType();
     byte xtypeId = getXtypeId(rawType);
-    return !Types.isUserDefinedType(xtypeId);
+    return !Types.isUserDefinedType(xtypeId) && xtypeId != Types.UNKNOWN;
   }
 
   @Override
@@ -965,8 +969,6 @@ public class XtypeResolver extends TypeResolver {
         .sort();
   }
 
-  private static final int UNKNOWN_TYPE_ID = Types.UNKNOWN;
-
   private byte getXtypeId(Class<?> cls) {
     if (isSet(cls)) {
       return Types.SET;
@@ -992,7 +994,7 @@ public class XtypeResolver extends TypeResolver {
       if (ReflectionUtils.isMonomorphic(cls)) {
         throw new UnsupportedOperationException(cls + " is not supported for xlang serialization");
       }
-      return UNKNOWN_TYPE_ID;
+      return Types.UNKNOWN;
     }
   }
 

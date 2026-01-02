@@ -29,7 +29,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
-
 import org.apache.fory.Fory;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.Language;
@@ -48,7 +47,7 @@ public class CPPXlangTest extends XlangTestBase {
   protected void ensurePeerReady() {
     String enabled = System.getenv("FORY_CPP_JAVA_CI");
     if (!"1".equals(enabled)) {
-            throw new SkipException("Skipping CPPXlangTest: FORY_CPP_JAVA_CI not set to 1");
+      throw new SkipException("Skipping CPPXlangTest: FORY_CPP_JAVA_CI not set to 1");
     }
     boolean bazelAvailable = true;
     try {
@@ -280,13 +279,15 @@ public class CPPXlangTest extends XlangTestBase {
 
   @Override
   @Test(dataProvider = "enableCodegen")
-  public void testNullableFieldSchemaConsistentNotNull(boolean enableCodegen) throws java.io.IOException {
+  public void testNullableFieldSchemaConsistentNotNull(boolean enableCodegen)
+      throws java.io.IOException {
     super.testNullableFieldSchemaConsistentNotNull(enableCodegen);
   }
 
   @Override
   @Test(dataProvider = "enableCodegen")
-  public void testNullableFieldSchemaConsistentNull(boolean enableCodegen) throws java.io.IOException {
+  public void testNullableFieldSchemaConsistentNull(boolean enableCodegen)
+      throws java.io.IOException {
     super.testNullableFieldSchemaConsistentNull(enableCodegen);
   }
 

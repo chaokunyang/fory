@@ -496,6 +496,12 @@ public final class Fory implements BaseFory {
     writeData(buffer, classInfo, obj);
   }
 
+  public void writeNonRef(MemoryBuffer buffer, Object obj, Serializer serializer) {
+    depth++;
+    serializer.write(buffer, obj);
+    depth--;
+  }
+
   public void writeNonRef(MemoryBuffer buffer, Object obj, ClassInfo classInfo) {
     classResolver.writeClassInfo(buffer, classInfo);
     Serializer serializer = classInfo.getSerializer();
@@ -553,6 +559,13 @@ public final class Fory implements BaseFory {
   public void xwriteNonRef(MemoryBuffer buffer, Object obj, ClassInfo classInfo) {
     xtypeResolver.writeClassInfo(buffer, classInfo);
     xwriteData(buffer, classInfo, obj);
+  }
+
+  public void xwriteNonRef(MemoryBuffer buffer, Object obj, Serializer serializer) {
+    depth++;
+    serializer.xwrite(buffer, obj);
+    depth--;
+    ;
   }
 
   public void xwriteData(MemoryBuffer buffer, ClassInfo classInfo, Object obj) {
@@ -955,6 +968,10 @@ public final class Fory implements BaseFory {
 
   public Object readNonRef(MemoryBuffer buffer, ClassInfoHolder classInfoHolder) {
     return readDataInternal(buffer, classResolver.readClassInfo(buffer, classInfoHolder));
+  }
+
+  public Object readNonRef(MemoryBuffer buffer, ClassInfo classInfo) {
+    return readDataInternal(buffer, classInfo);
   }
 
   /** Read object class and data without tracking ref. */

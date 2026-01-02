@@ -117,9 +117,9 @@ public class ObjectCodecOptimizer extends ExpressionOptimizer {
                 boxedReadWeight,
                 boxedReadGroups),
             MutableTuple3.of(
-                new ArrayList<>(descriptorGrouper.getFinalDescriptors()), 9, finalWriteGroups),
+                new ArrayList<>(descriptorGrouper.getBuildInDescriptors()), 9, finalWriteGroups),
             MutableTuple3.of(
-                new ArrayList<>(descriptorGrouper.getFinalDescriptors()), 5, finalReadGroups),
+                new ArrayList<>(descriptorGrouper.getBuildInDescriptors()), 5, finalReadGroups),
             MutableTuple3.of(
                 new ArrayList<>(descriptorGrouper.getOtherDescriptors()), 4, otherReadGroups),
             MutableTuple3.of(

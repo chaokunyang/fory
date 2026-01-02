@@ -459,6 +459,12 @@ public class XtypeResolver extends TypeResolver {
     return false;
   }
 
+  public boolean isBuildIn(Descriptor descriptor) {
+    Class<?> rawType = descriptor.getRawType();
+    byte xtypeId = getXtypeId(rawType);
+    return !Types.isUserDefinedType(xtypeId);
+  }
+
   @Override
   public ClassInfo getClassInfo(Class<?> cls) {
     ClassInfo classInfo = classInfoMap.get(cls);
@@ -920,7 +926,7 @@ public class XtypeResolver extends TypeResolver {
       boolean descriptorsGroupedOrdered,
       Function<Descriptor, Descriptor> descriptorUpdator) {
     return DescriptorGrouper.createDescriptorGrouper(
-            this::isMonomorphic,
+            this::isBuildIn,
             descriptors,
             descriptorsGroupedOrdered,
             descriptorUpdator,
@@ -942,7 +948,7 @@ public class XtypeResolver extends TypeResolver {
 
   private static final int UNKNOWN_TYPE_ID = Types.UNKNOWN;
 
-  private int getXtypeId(Class<?> cls) {
+  private byte getXtypeId(Class<?> cls) {
     if (isSet(cls)) {
       return Types.SET;
     }
@@ -955,8 +961,8 @@ public class XtypeResolver extends TypeResolver {
     if (isMap(cls)) {
       return Types.MAP;
     }
-    if (fory.getXtypeResolver().isRegistered(cls)) {
-      return fory.getXtypeResolver().getClassInfo(cls).getXtypeId();
+    if (isRegistered(cls)) {
+      return (byte) (getClassInfo(cls).getXtypeId() & 0xff);
     } else {
       if (cls.isEnum()) {
         return Types.ENUM;

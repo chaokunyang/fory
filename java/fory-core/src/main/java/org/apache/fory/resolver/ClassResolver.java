@@ -717,6 +717,10 @@ public class ClassResolver extends TypeResolver {
     return ReflectionUtils.isMonomorphic(clz);
   }
 
+  public boolean isBuildIn(Descriptor descriptor) {
+    return isMonomorphic(descriptor);
+  }
+
   /** Returns true if <code>cls</code> is fory inner registered class. */
   boolean isInnerClass(Class<?> cls) {
     Short classId = extRegistry.registeredClassIdMap.get(cls);
@@ -1930,7 +1934,7 @@ public class ClassResolver extends TypeResolver {
       boolean descriptorsGroupedOrdered,
       Function<Descriptor, Descriptor> descriptorUpdator) {
     return DescriptorGrouper.createDescriptorGrouper(
-            fory.getClassResolver()::isMonomorphic,
+            this::isBuildIn,
             descriptors,
             descriptorsGroupedOrdered,
             descriptorUpdator,

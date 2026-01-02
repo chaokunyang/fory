@@ -244,7 +244,7 @@ public class DescriptorGrouperTest extends ForyTestBase {
     }
     {
       List<? extends Class<?>> classes =
-          grouper.getFinalDescriptors().stream()
+          grouper.getBuildInDescriptors().stream()
               .map(Descriptor::getRawType)
               .collect(Collectors.toList());
       assertEquals(classes, Arrays.asList(String.class, Instant.class, Instant.class));

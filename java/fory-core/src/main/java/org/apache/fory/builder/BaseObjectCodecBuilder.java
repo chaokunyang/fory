@@ -1811,7 +1811,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     boolean typeNeedsRef = needWriteRef(typeRef);
 
     if (useRefTracking) {
-      return readRef(buffer, callback, () -> deserializeForNotNullForField(buffer, descriptor, null));
+      return readRef(
+          buffer, callback, () -> deserializeForNotNullForField(buffer, descriptor, null));
     } else {
       if (!nullable) {
         Expression value = deserializeForNotNullForField(buffer, descriptor, null);

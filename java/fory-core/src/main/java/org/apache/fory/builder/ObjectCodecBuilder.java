@@ -604,7 +604,7 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
         "checkClassVersion",
         PRIMITIVE_VOID_TYPE,
         false,
-        foryRef,
+        beanClassExpr(),
         inlineInvoke(buffer, readIntFunc(), PRIMITIVE_INT_TYPE),
         Objects.requireNonNull(classVersionHash));
   }

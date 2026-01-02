@@ -223,6 +223,8 @@ public abstract class TypeResolver {
 
   public abstract boolean isRegisteredByName(Class<?> cls);
 
+  public abstract boolean isBuildIn(Descriptor descriptor);
+
   public boolean isMonomorphic(Descriptor descriptor) {
     ForyField foryField = descriptor.getForyField();
     if (foryField != null) {

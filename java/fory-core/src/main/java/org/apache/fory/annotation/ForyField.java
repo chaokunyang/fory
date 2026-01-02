@@ -34,8 +34,9 @@ public @interface ForyField {
      * Auto-detect based on declared type (default):
      *
      * <ul>
-     *   <li>Interface/abstract class: treated as POLYMORPHIC (type info written)
-     *   <li>Concrete class: treated as FINAL (no type info written)
+     *   <li>Xlang mode: only interface/abstract class are treated as POLYMORPHIC, concrete classes
+     *       are treated as FINAL (no type info written)
+     *   <li>Java native mode: all classes without {@code final} modifier are treated as POLYMORPHIC
      * </ul>
      */
     AUTO,

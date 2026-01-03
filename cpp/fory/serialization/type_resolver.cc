@@ -1013,7 +1013,7 @@ int32_t TypeMeta::compute_struct_version(const TypeMeta &meta) {
             << ", fingerprint=\"" << fingerprint
             << "\" version=" << static_cast<int32_t>(version) << std::endl;
 #endif
-            return static_cast<int32_t>(version);
+  return static_cast<int32_t>(version);
 }
 
 // ============================================================================

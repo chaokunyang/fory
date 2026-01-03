@@ -1866,8 +1866,14 @@ public interface Expression {
                   falseEval.value());
         }
         codeBuilder.append(StringUtils.stripBlankLines(ifCode));
-        return new ExprCode(
-            codeBuilder.toString(), Code.isNullVariable(isNull), Code.variable(rawType, value));
+        if (nullable) {
+          return new ExprCode(
+              codeBuilder.toString(), Code.isNullVariable(isNull), Code.variable(rawType, value));
+        } else {
+          // When not nullable, return FalseLiteral instead of a variable that was never declared
+          return new ExprCode(
+              codeBuilder.toString(), FalseLiteral, Code.variable(rawType, value));
+        }
       } else {
         String ifCode;
         if (falseExpr != null) {

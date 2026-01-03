@@ -1871,8 +1871,7 @@ public interface Expression {
               codeBuilder.toString(), Code.isNullVariable(isNull), Code.variable(rawType, value));
         } else {
           // When not nullable, return FalseLiteral instead of a variable that was never declared
-          return new ExprCode(
-              codeBuilder.toString(), FalseLiteral, Code.variable(rawType, value));
+          return new ExprCode(codeBuilder.toString(), FalseLiteral, Code.variable(rawType, value));
         }
       } else {
         String ifCode;
@@ -2789,8 +2788,7 @@ public interface Expression {
     @Override
     public ExprCode doGenCode(CodegenContext ctx) {
       ExprCode targetCode = target.genCode(ctx);
-      String value =
-          String.format("(%s instanceof %s)", targetCode.value(), ctx.type(checkType));
+      String value = String.format("(%s instanceof %s)", targetCode.value(), ctx.type(checkType));
       String code = StringUtils.isBlank(targetCode.code()) ? null : targetCode.code();
       return new ExprCode(code, FalseLiteral, Code.variable(boolean.class, value));
     }

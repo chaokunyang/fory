@@ -441,10 +441,17 @@ func buildFieldDefs(fory *Fory, value reflect.Value) ([]FieldDef, error) {
 		internalId := TypeId(typeId & 0xFF)
 		isEnumField := internalId == ENUM || internalId == NAMED_ENUM
 		// Determine nullable based on mode
+		// In both xlang and native mode, nil-able types (ptr, slice, map, interface) are nullable.
+		// This is necessary for correct null flag handling when serializing/deserializing.
+		// Note: In xlang mode, we don't set nullable for interface{} fields because the
+		// actual type determines nullability; for slices and maps, they can be nil.
 		var nullableFlag bool
 		if fory.config.IsXlang {
-			// xlang mode: only pointer types are nullable by default per xlang spec
-			nullableFlag = field.Type.Kind() == reflect.Ptr
+			// xlang mode: pointers, slices, and maps are nullable
+			// (they can be nil and need null flag handling)
+			nullableFlag = field.Type.Kind() == reflect.Ptr ||
+				field.Type.Kind() == reflect.Slice ||
+				field.Type.Kind() == reflect.Map
 		} else {
 			// Native mode: Go's natural semantics - all nil-able types are nullable
 			nullableFlag = field.Type.Kind() == reflect.Ptr ||

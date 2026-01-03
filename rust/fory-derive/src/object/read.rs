@@ -22,9 +22,8 @@ use syn::Field;
 use super::util::{
     classify_trait_object_field, create_wrapper_types_arc, create_wrapper_types_rc,
     determine_field_ref_mode, extract_type_name, gen_struct_version_hash_ts,
-    get_primitive_reader_method, get_struct_name, is_debug_enabled,
-    is_direct_primitive_type, is_primitive_type, is_skip_field,
-    should_skip_type_info_for_field, FieldRefMode, StructField,
+    get_primitive_reader_method, get_struct_name, is_debug_enabled, is_direct_primitive_type,
+    is_primitive_type, is_skip_field, should_skip_type_info_for_field, FieldRefMode, StructField,
 };
 use crate::util::SourceField;
 
@@ -233,7 +232,8 @@ pub fn gen_read_field(field: &Field, private_ident: &Ident, field_name: &str) ->
                 } else {
                     // Numeric primitives: use direct buffer methods
                     let reader_method = get_primitive_reader_method(&type_name);
-                    let reader_ident = syn::Ident::new(reader_method, proc_macro2::Span::call_site());
+                    let reader_ident =
+                        syn::Ident::new(reader_method, proc_macro2::Span::call_site());
                     quote! {
                         let #private_ident = context.reader.#reader_ident()?;
                     }

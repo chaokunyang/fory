@@ -2253,7 +2253,8 @@ void RunTestNullableFieldCompatibleNull(const std::string &data_file) {
 
 void RunTestRefSchemaConsistent(const std::string &data_file) {
   auto bytes = ReadFile(data_file);
-  // SCHEMA_CONSISTENT mode: compatible=false, xlang=true, check_struct_version=true, track_ref=true
+  // SCHEMA_CONSISTENT mode: compatible=false, xlang=true,
+  // check_struct_version=true, track_ref=true
   auto fory = BuildFory(false, true, true, true);
   EnsureOk(fory.register_struct<RefInnerSchemaConsistent>(501),
            "register RefInnerSchemaConsistent");
@@ -2298,7 +2299,8 @@ void RunTestRefSchemaConsistent(const std::string &data_file) {
 
 void RunTestRefCompatible(const std::string &data_file) {
   auto bytes = ReadFile(data_file);
-  // COMPATIBLE mode: compatible=true, xlang=true, check_struct_version=false, track_ref=true
+  // COMPATIBLE mode: compatible=true, xlang=true, check_struct_version=false,
+  // track_ref=true
   auto fory = BuildFory(true, true, false, true);
   EnsureOk(fory.register_struct<RefInnerCompatible>(503),
            "register RefInnerCompatible");

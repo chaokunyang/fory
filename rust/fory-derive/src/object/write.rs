@@ -19,8 +19,7 @@ use super::util::{
     classify_trait_object_field, create_wrapper_types_arc, create_wrapper_types_rc,
     determine_field_ref_mode, extract_type_name, gen_struct_version_hash_ts, get_field_accessor,
     get_field_name, get_filtered_source_fields_iter, get_primitive_writer_method, get_struct_name,
-    get_type_id_by_type_ast, is_debug_enabled, is_direct_primitive_type, FieldRefMode,
-    StructField,
+    get_type_id_by_type_ast, is_debug_enabled, is_direct_primitive_type, FieldRefMode, StructField,
 };
 use crate::util::SourceField;
 use fory_core::types::TypeId;
@@ -262,7 +261,8 @@ fn gen_write_field_impl(
                 } else {
                     // Numeric primitives: use direct buffer methods
                     let writer_method = get_primitive_writer_method(&type_name);
-                    let writer_ident = syn::Ident::new(writer_method, proc_macro2::Span::call_site());
+                    let writer_ident =
+                        syn::Ident::new(writer_method, proc_macro2::Span::call_site());
                     // For primitives:
                     // - use_self=true: #value_ts is `self.field`, which is T (copy happens automatically)
                     // - use_self=false: #value_ts is `field` from pattern match on &self, which is &T

@@ -152,14 +152,14 @@ public class CPPXlangTest extends XlangTestBase {
     super.testMurmurHash3();
   }
 
-  @Test(dataProvider = "enableCodegen")
-  public void testStringSerializer(boolean enableCodegen) throws Exception {
-    super.testStringSerializer(enableCodegen);
+  @Test
+  public void testStringSerializer() throws Exception {
+    super.testStringSerializer();
   }
 
-  @Test(dataProvider = "enableCodegen")
-  public void testCrossLanguageSerializer(boolean enableCodegen) throws Exception {
-    super.testCrossLanguageSerializer(enableCodegen);
+  @Test
+  public void testCrossLanguageSerializer() throws Exception {
+    super.testCrossLanguageSerializer();
   }
 
   @Test(dataProvider = "enableCodegen")

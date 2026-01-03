@@ -69,7 +69,11 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for Arc<T> 
         }
     }
 
-    fn fory_write_data_generic(&self, context: &mut WriteContext, has_generics: bool) -> Result<(), Error> {
+    fn fory_write_data_generic(
+        &self,
+        context: &mut WriteContext,
+        has_generics: bool,
+    ) -> Result<(), Error> {
         if T::fory_is_shared_ref() {
             return Err(Error::not_allowed(
                 "Arc<T> where T is a shared ref type is not allowed for serialization.",

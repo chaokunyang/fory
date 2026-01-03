@@ -31,7 +31,7 @@ public @interface ForyField {
   /** Controls polymorphism behavior for struct fields in cross-language serialization. */
   enum Morphic {
     /**
-     * Auto-detect based on declared type (default):
+     * Auto-detect based on declared type (default).
      *
      * <ul>
      *   <li>Xlang mode: only interface/abstract class are treated as POLYMORPHIC, concrete classes

@@ -209,6 +209,66 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
   }
 
   /**
+   * Write a primitive field value to buffer using the field accessor.
+   *
+   * @param fory the fory instance for compression settings
+   * @param buffer the buffer to write to
+   * @param targetObject the object containing the field
+   * @param fieldAccessor the accessor to get the field value
+   * @param classId the class ID of the primitive type
+   * @return true if classId is not a primitive type and needs further write handling
+   */
+  static boolean writePrimitiveFieldValue(
+      Fory fory,
+      MemoryBuffer buffer,
+      Object targetObject,
+      FieldAccessor fieldAccessor,
+      short classId) {
+    long fieldOffset = fieldAccessor.getFieldOffset();
+    if (fieldOffset != -1) {
+      return writePrimitiveFieldValue(fory, buffer, targetObject, fieldOffset, classId);
+    }
+    switch (classId) {
+      case ClassResolver.PRIMITIVE_BOOLEAN_CLASS_ID:
+        buffer.writeBoolean((Boolean) fieldAccessor.get(targetObject));
+        return false;
+      case ClassResolver.PRIMITIVE_BYTE_CLASS_ID:
+        buffer.writeByte((Byte) fieldAccessor.get(targetObject));
+        return false;
+      case ClassResolver.PRIMITIVE_CHAR_CLASS_ID:
+        buffer.writeChar((Character) fieldAccessor.get(targetObject));
+        return false;
+      case ClassResolver.PRIMITIVE_SHORT_CLASS_ID:
+        buffer.writeInt16((Short) fieldAccessor.get(targetObject));
+        return false;
+      case ClassResolver.PRIMITIVE_INT_CLASS_ID:
+        {
+          int fieldValue = (Integer) fieldAccessor.get(targetObject);
+          if (fory.compressInt()) {
+            buffer.writeVarInt32(fieldValue);
+          } else {
+            buffer.writeInt32(fieldValue);
+          }
+          return false;
+        }
+      case ClassResolver.PRIMITIVE_FLOAT_CLASS_ID:
+        buffer.writeFloat32((Float) fieldAccessor.get(targetObject));
+        return false;
+      case ClassResolver.PRIMITIVE_LONG_CLASS_ID:
+        {
+          long fieldValue = (long) fieldAccessor.get(targetObject);
+          fory.writeInt64(buffer, fieldValue);
+          return false;
+        }
+      case ClassResolver.PRIMITIVE_DOUBLE_CLASS_ID:
+        buffer.writeFloat64((Double) fieldAccessor.get(targetObject));
+        return false;
+      default:
+        return true;
+    }
+  }
+
+  /**
    * Write field value to buffer. This method handle the situation which all fields are not null.
    *
    * @return true if field value isn't written by this function.
@@ -548,66 +608,6 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
         throw new IllegalStateException("Unknown refMode: " + fieldInfo.refMode);
     }
     return fieldValue;
-  }
-
-  /**
-   * Write a primitive field value to buffer using the field accessor.
-   *
-   * @param fory the fory instance for compression settings
-   * @param buffer the buffer to write to
-   * @param targetObject the object containing the field
-   * @param fieldAccessor the accessor to get the field value
-   * @param classId the class ID of the primitive type
-   * @return true if classId is not a primitive type and needs further write handling
-   */
-  static boolean writePrimitiveFieldValue(
-      Fory fory,
-      MemoryBuffer buffer,
-      Object targetObject,
-      FieldAccessor fieldAccessor,
-      short classId) {
-    long fieldOffset = fieldAccessor.getFieldOffset();
-    if (fieldOffset != -1) {
-      return writePrimitiveFieldValue(fory, buffer, targetObject, fieldOffset, classId);
-    }
-    switch (classId) {
-      case ClassResolver.PRIMITIVE_BOOLEAN_CLASS_ID:
-        buffer.writeBoolean((Boolean) fieldAccessor.get(targetObject));
-        return false;
-      case ClassResolver.PRIMITIVE_BYTE_CLASS_ID:
-        buffer.writeByte((Byte) fieldAccessor.get(targetObject));
-        return false;
-      case ClassResolver.PRIMITIVE_CHAR_CLASS_ID:
-        buffer.writeChar((Character) fieldAccessor.get(targetObject));
-        return false;
-      case ClassResolver.PRIMITIVE_SHORT_CLASS_ID:
-        buffer.writeInt16((Short) fieldAccessor.get(targetObject));
-        return false;
-      case ClassResolver.PRIMITIVE_INT_CLASS_ID:
-        {
-          int fieldValue = (Integer) fieldAccessor.get(targetObject);
-          if (fory.compressInt()) {
-            buffer.writeVarInt32(fieldValue);
-          } else {
-            buffer.writeInt32(fieldValue);
-          }
-          return false;
-        }
-      case ClassResolver.PRIMITIVE_FLOAT_CLASS_ID:
-        buffer.writeFloat32((Float) fieldAccessor.get(targetObject));
-        return false;
-      case ClassResolver.PRIMITIVE_LONG_CLASS_ID:
-        {
-          long fieldValue = (long) fieldAccessor.get(targetObject);
-          fory.writeInt64(buffer, fieldValue);
-          return false;
-        }
-      case ClassResolver.PRIMITIVE_DOUBLE_CLASS_ID:
-        buffer.writeFloat64((Double) fieldAccessor.get(targetObject));
-        return false;
-      default:
-        return true;
-    }
   }
 
   /**

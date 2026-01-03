@@ -1976,22 +1976,27 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
   protected Expression readCollectionCodegen(
       Expression buffer, Expression collection, Expression size, TypeRef<?> elementType) {
     ListExpression builder = new ListExpression();
-    Invoke flags = new Invoke(buffer, "readByte", "flags", PRIMITIVE_INT_TYPE, false);
+    Invoke flags = new Invoke(buffer, "readUnsignedByte", "flags", PRIMITIVE_INT_TYPE, false);
     builder.add(flags);
     Class<?> elemClass = TypeUtils.getRawType(elementType);
     walkPath.add(elementType.toString());
     boolean finalType = isMonomorphic(elemClass);
-    boolean trackingRef = typeResolver(resolver -> resolver.needToWriteRef(elementType));
+    // Read TRACKING_REF flag from bitmap at runtime for xlang compatibility.
+    // This ensures Java correctly reads data serialized by other languages (C++, Go, Rust, etc.)
+    // that may set TRACKING_REF based on element type (e.g., shared_ptr) rather than global config.
+    Literal trackingRefFlag = ofInt(CollectionFlags.TRACKING_REF);
+    Expression trackingRef = eq(new BitAnd(flags, trackingRefFlag), trackingRefFlag, "trackingRef");
+    Literal hasNullFlag = ofInt(CollectionFlags.HAS_NULL);
+    // Don't use flags.inline() - it mutates the flags object to prevent variable generation
+    Expression hasNull = eq(new BitAnd(flags, hasNullFlag), hasNullFlag, "hasNull");
     if (finalType) {
-      if (trackingRef) {
-        builder.add(readContainerElements(elementType, true, null, null, buffer, collection, size));
-      } else {
-        Literal hasNullFlag = ofInt(CollectionFlags.HAS_NULL);
-        Expression hasNull = eq(new BitAnd(flags.inline(), hasNullFlag), hasNullFlag, "hasNull");
-        builder.add(
-            hasNull,
-            readContainerElements(elementType, false, null, hasNull, buffer, collection, size));
-      }
+      builder.add(hasNull);
+      // Use runtime trackingRef flag to determine if ref flags are present
+      Expression trackingRefRead =
+          readContainerElements(elementType, true, null, null, buffer, collection, size);
+      Expression noTrackingRefRead =
+          readContainerElements(elementType, false, null, hasNull, buffer, collection, size);
+      builder.add(new If(trackingRef, trackingRefRead, noTrackingRefRead));
     } else {
       Literal isSameTypeFlag = ofInt(CollectionFlags.IS_SAME_TYPE);
       Expression sameElementClass =
@@ -2016,45 +2021,60 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
         elemSerializer = cast(serializer.inline(), serializerType);
       }
       elemSerializer = uninline(elemSerializer);
-      builder.add(sameElementClass);
-      Expression action;
-      if (trackingRef) {
-        // Same element class read start
-        ListExpression readBuilder = new ListExpression(elemSerializer);
-        readBuilder.add(
-            readContainerElements(
-                elementType, true, elemSerializer, null, buffer, collection, size));
-        // Same element class read end
-        Set<Expression> cutPoint = ofHashSet(buffer, collection, size);
-        Expression differentElemTypeRead =
-            invokeGenerated(
-                ctx,
-                cutPoint,
-                readContainerElements(elementType, true, null, null, buffer, collection, size),
-                "differentTypeElemsRead",
-                false);
-        action = new If(sameElementClass, readBuilder, differentElemTypeRead);
-      } else {
-        Literal hasNullFlag = ofInt(CollectionFlags.HAS_NULL);
-        Expression hasNull = eq(new BitAnd(flags, hasNullFlag), hasNullFlag, "hasNull");
-        builder.add(hasNull);
-        // Same element class read start
-        ListExpression readBuilder = new ListExpression(elemSerializer);
-        readBuilder.add(
-            readContainerElements(
-                elementType, false, elemSerializer, hasNull, buffer, collection, size));
-        // Same element class read end
-        Set<Expression> cutPoint = ofHashSet(buffer, collection, size, hasNull);
-        Expression differentTypeElemsRead =
-            invokeGenerated(
-                ctx,
-                cutPoint,
-                readContainerElements(elementType, false, null, hasNull, buffer, collection, size),
-                "differentTypeElemsRead",
-                false);
-        action = new If(sameElementClass, readBuilder, differentTypeElemsRead);
-      }
-      builder.add(action);
+      // For xlang compatibility, we must read the TRACKING_REF flag from the serialized data
+      // because different languages may set this flag differently (e.g., C++ sets it for
+      // shared_ptr).
+      // The elemSerializer (which contains readClassInfo) must be conditionally evaluated:
+      // - It should only be evaluated when sameElementClass == true
+      // - It should be in scope for both tracking ref branches
+      // Wrap elemSerializer in a conditional that only evaluates when sameElementClass is true
+      Expression elemSerializerInit =
+          new If(sameElementClass, elemSerializer, nullValue(serializerType));
+      builder.add(sameElementClass, hasNull, elemSerializerInit);
+      // Build both tracking and non-tracking paths, then branch at runtime based on flags byte
+      // Tracking ref path - same element class
+      // Pass elemSerializerInit (not elemSerializer) so that we reference the variable
+      // defined by the If expression, not regenerate the readClassInfo call
+      ListExpression trackingRefSameBuilder = new ListExpression();
+      trackingRefSameBuilder.add(
+          readContainerElements(
+              elementType, true, elemSerializerInit, null, buffer, collection, size));
+      // Tracking ref path - different element class
+      Set<Expression> cutPoint1 = ofHashSet(buffer, collection, size);
+      Expression trackingRefDifferent =
+          invokeGenerated(
+              ctx,
+              cutPoint1,
+              readContainerElements(elementType, true, null, null, buffer, collection, size),
+              "differentTypeElemsReadTrackingRef",
+              false);
+      Expression trackingRefAction =
+          new If(sameElementClass, trackingRefSameBuilder, trackingRefDifferent);
+
+      // No tracking ref path - same element class
+      // Pass elemSerializerInit to reference the same variable as the tracking ref path
+      ListExpression noTrackingRefSameBuilder = new ListExpression();
+      noTrackingRefSameBuilder.add(
+          readContainerElements(
+              elementType, false, elemSerializerInit, hasNull, buffer, collection, size));
+      // No tracking ref path - different element class
+      Set<Expression> cutPoint2 = ofHashSet(buffer, collection, size, hasNull);
+      Expression noTrackingRefDifferent =
+          invokeGenerated(
+              ctx,
+              cutPoint2,
+              readContainerElements(elementType, false, null, hasNull, buffer, collection, size),
+              "differentTypeElemsRead",
+              false);
+      Expression noTrackingRefAction =
+          new If(sameElementClass, noTrackingRefSameBuilder, noTrackingRefDifferent);
+
+      // Use neq to check: if (flags & TRACKING_REF) != 0
+      // This is the standard way to check if a bit flag is set
+      Expression trackingRefCheck =
+          neq(new BitAnd(flags, trackingRefFlag), ofInt(0), "isTrackingRef");
+      builder.add(trackingRefCheck);
+      builder.add(new If(trackingRefCheck, trackingRefAction, noTrackingRefAction));
     }
     walkPath.removeLast();
     // place newCollection as last as expr value

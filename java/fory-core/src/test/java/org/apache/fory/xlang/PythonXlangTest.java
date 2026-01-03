@@ -71,20 +71,20 @@ public class PythonXlangTest extends XlangTestBase {
   // ============================================================================
 
   @Override
-  @Test(dataProvider = "enableCodegen")
+  @Test
   public void testBuffer() throws IOException {
     throw new SkipException("Skipping: similar test already covered in CrossLanguageTest");
   }
 
   @Override
-  @Test(dataProvider = "enableCodegen")
+  @Test
   public void testMurmurHash3() throws IOException {
     throw new SkipException("Skipping: similar test already covered in CrossLanguageTest");
   }
 
   @Override
-  @Test(dataProvider = "enableCodegen")
-  public void testCrossLanguageSerializer(boolean enableCodegen) throws Exception {
+  @Test
+  public void testCrossLanguageSerializer() throws Exception {
     throw new SkipException("Skipping: similar test already covered in CrossLanguageTest");
   }
 
@@ -130,7 +130,7 @@ public class PythonXlangTest extends XlangTestBase {
   }
 
   @Override
-  @Test
+  @Test(dataProvider = "enableCodegen")
   public void testInteger(boolean enableCodegen) throws IOException {
     throw new SkipException("Skipping: similar test already covered in CrossLanguageTest");
   }
@@ -145,9 +145,9 @@ public class PythonXlangTest extends XlangTestBase {
   // ============================================================================
 
   @Override
-  @Test(dataProvider = "enableCodegen")
-  public void testStringSerializer(boolean enableCodegen) throws Exception {
-    super.testStringSerializer(enableCodegen);
+  @Test
+  public void testStringSerializer() throws Exception {
+    super.testStringSerializer();
   }
 
   @Override

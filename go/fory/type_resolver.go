@@ -1412,12 +1412,25 @@ func (r *TypeResolver) createSerializer(type_ reflect.Type, mapInStruct bool) (s
 					return nil, err
 				}
 			}
+			// Determine key/value referencability
+			// In xlang mode, strings are value types and should not be reference-tracked
+			keyReferencable := nullable(type_.Key())
+			valueReferencable := nullable(type_.Elem())
+			if r.isXlang {
+				// In xlang mode, strings are value types (not reference-tracked)
+				if type_.Key().Kind() == reflect.String {
+					keyReferencable = false
+				}
+				if type_.Elem().Kind() == reflect.String {
+					valueReferencable = false
+				}
+			}
 			return &mapSerializer{
 				type_:             type_,
 				keySerializer:     keySerializer,
 				valueSerializer:   valueSerializer,
-				keyReferencable:   nullable(type_.Key()),
-				valueReferencable: nullable(type_.Elem()),
+				keyReferencable:   keyReferencable,
+				valueReferencable: valueReferencable,
 				mapInStruct:       mapInStruct,
 			}, nil
 		} else {

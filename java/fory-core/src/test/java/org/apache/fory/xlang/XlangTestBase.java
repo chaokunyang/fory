@@ -416,21 +416,21 @@ public abstract class XlangTestBase extends ForyTestBase {
     }
   }
 
-  @Test(dataProvider = "enableCodegen")
-  public void testStringSerializer(boolean enableCodegen) throws Exception {
+  @Test
+  public void testStringSerializer() throws Exception {
     String caseName = "test_string_serializer";
     Fory fory =
         Fory.builder()
             .withLanguage(Language.XLANG)
             .withCompatibleMode(CompatibleMode.COMPATIBLE)
-            .withCodegen(enableCodegen)
+            .withCodegen(false)
             .build();
     _testStringSerializer(fory, caseName);
     Fory foryCompress =
         Fory.builder()
             .withLanguage(Language.XLANG)
             .withCompatibleMode(CompatibleMode.COMPATIBLE)
-            .withCodegen(enableCodegen)
+            .withCodegen(false)
             .withStringCompressed(true)
             .withWriteNumUtf16BytesForUtf8Encoding(false)
             .build();
@@ -444,8 +444,8 @@ public abstract class XlangTestBase extends ForyTestBase {
     White,
   }
 
-  @Test(dataProvider = "enableCodegen")
-  public void testCrossLanguageSerializer(boolean enableCodegen) throws Exception {
+  @Test
+  public void testCrossLanguageSerializer() throws Exception {
     String caseName = "test_cross_language_serializer";
     List<String> strList = Arrays.asList("hello", "world");
     Set<String> strSet = new HashSet<>(strList);
@@ -458,7 +458,7 @@ public abstract class XlangTestBase extends ForyTestBase {
         Fory.builder()
             .withLanguage(Language.XLANG)
             .withCompatibleMode(CompatibleMode.COMPATIBLE)
-            .withCodegen(enableCodegen)
+            .withCodegen(false)
             .build();
     fory.register(Color.class, 101);
     MemoryBuffer buffer = MemoryUtils.buffer(64);

@@ -54,9 +54,8 @@ public class FieldGroups {
     this.buildInFields = buildInFields;
     this.userTypeFields = userTypeFields;
     this.containerFields = containerFields;
-    SerializationFieldInfo[] fields =
-        new SerializationFieldInfo
-            [buildInFields.length + userTypeFields.length + containerFields.length];
+    int len = buildInFields.length + userTypeFields.length + containerFields.length;
+    SerializationFieldInfo[] fields = new SerializationFieldInfo[len];
     System.arraycopy(buildInFields, 0, fields, 0, buildInFields.length);
     System.arraycopy(containerFields, 0, fields, buildInFields.length, containerFields.length);
     System.arraycopy(

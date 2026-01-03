@@ -1700,7 +1700,10 @@ fn test_ref_schema_consistent() {
     let data_file_path = get_data_file();
     let bytes = fs::read(&data_file_path).unwrap();
 
-    let mut fory = Fory::default().compatible(false).xlang(true).ref_tracking(true);
+    let mut fory = Fory::default()
+        .compatible(false)
+        .xlang(true)
+        .ref_tracking(true);
     fory.register::<RefInnerSchemaConsistent>(501).unwrap();
     fory.register::<RefOuterSchemaConsistent>(502).unwrap();
 
@@ -1716,10 +1719,17 @@ fn test_ref_schema_consistent() {
     assert_eq!(inner1.id, 42);
     assert_eq!(inner1.name, "shared_inner");
     // Compare the values (Rc contents)
-    assert_eq!(inner1.as_ref(), inner2.as_ref(), "inner1 and inner2 should have equal values");
+    assert_eq!(
+        inner1.as_ref(),
+        inner2.as_ref(),
+        "inner1 and inner2 should have equal values"
+    );
 
     // With Rc, after deserialization with ref tracking, both fields should point to the same Rc
-    assert!(Rc::ptr_eq(inner1, inner2), "inner1 and inner2 should be the same Rc (reference identity)");
+    assert!(
+        Rc::ptr_eq(inner1, inner2),
+        "inner1 and inner2 should be the same Rc (reference identity)"
+    );
 
     // Re-serialize and write back
     let new_bytes = fory.serialize(&outer).unwrap();
@@ -1737,7 +1747,10 @@ fn test_ref_compatible() {
     let data_file_path = get_data_file();
     let bytes = fs::read(&data_file_path).unwrap();
 
-    let mut fory = Fory::default().compatible(true).xlang(true).ref_tracking(true);
+    let mut fory = Fory::default()
+        .compatible(true)
+        .xlang(true)
+        .ref_tracking(true);
     fory.register::<RefInnerCompatible>(503).unwrap();
     fory.register::<RefOuterCompatible>(504).unwrap();
 
@@ -1753,10 +1766,17 @@ fn test_ref_compatible() {
     assert_eq!(inner1.id, 99);
     assert_eq!(inner1.name, "compatible_shared");
     // Compare the values (Rc contents)
-    assert_eq!(inner1.as_ref(), inner2.as_ref(), "inner1 and inner2 should have equal values");
+    assert_eq!(
+        inner1.as_ref(),
+        inner2.as_ref(),
+        "inner1 and inner2 should have equal values"
+    );
 
     // With Rc, after deserialization with ref tracking, both fields should point to the same Rc
-    assert!(Rc::ptr_eq(inner1, inner2), "inner1 and inner2 should be the same Rc (reference identity)");
+    assert!(
+        Rc::ptr_eq(inner1, inner2),
+        "inner1 and inner2 should be the same Rc (reference identity)"
+    );
 
     // Re-serialize and write back
     let new_bytes = fory.serialize(&outer).unwrap();

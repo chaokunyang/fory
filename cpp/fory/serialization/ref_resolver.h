@@ -145,6 +145,19 @@ public:
     });
   }
 
+  /// Add a callback that will be invoked when references are resolved.
+  /// The callback receives a const reference to the RefReader and can
+  /// look up references by ID.
+  ///
+  /// This overload is useful for SharedWeak and other types that need
+  /// custom callback logic for forward reference resolution.
+  ///
+  /// @param ref_id The reference ID to wait for (for documentation only).
+  /// @param callback The callback to invoke during resolve_callbacks().
+  void add_update_callback(uint32_t /*ref_id*/, UpdateCallback callback) {
+    callbacks_.emplace_back(std::move(callback));
+  }
+
   void resolve_callbacks() {
     for (const auto &cb : callbacks_) {
       cb(*this);

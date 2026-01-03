@@ -99,7 +99,7 @@ func generateFieldReadTyped(buf *bytes.Buffer, field *FieldInfo) error {
 		case "time.Time", "github.com/apache/fory/go/fory.Date":
 			// These types are "other internal types" in the new spec
 			// They use: | null flag | value data | format
-			fmt.Fprintf(buf, "\tctx.ReadValue(reflect.ValueOf(&%s).Elem())\n", fieldAccess)
+			fmt.Fprintf(buf, "\tctx.ReadValue(reflect.ValueOf(&%s).Elem(), fory.RefModeTracking, true)\n", fieldAccess)
 			return nil
 		}
 	}
@@ -107,7 +107,7 @@ func generateFieldReadTyped(buf *bytes.Buffer, field *FieldInfo) error {
 	// Handle pointer types
 	if _, ok := field.Type.(*types.Pointer); ok {
 		// For pointer types, use ReadValue
-		fmt.Fprintf(buf, "\tctx.ReadValue(reflect.ValueOf(&%s).Elem())\n", fieldAccess)
+		fmt.Fprintf(buf, "\tctx.ReadValue(reflect.ValueOf(&%s).Elem(), fory.RefModeTracking, true)\n", fieldAccess)
 		return nil
 	}
 
@@ -173,7 +173,7 @@ func generateFieldReadTyped(buf *bytes.Buffer, field *FieldInfo) error {
 			fmt.Fprintf(buf, "\t\t\t\t%s = make([]interface{}, sliceLen)\n", fieldAccess)
 			fmt.Fprintf(buf, "\t\t\t\t// ReadData each element using ReadValue\n")
 			fmt.Fprintf(buf, "\t\t\t\tfor i := range %s {\n", fieldAccess)
-			fmt.Fprintf(buf, "\t\t\t\t\tctx.ReadValue(reflect.ValueOf(&%s[i]).Elem())\n", fieldAccess)
+			fmt.Fprintf(buf, "\t\t\t\t\tctx.ReadValue(reflect.ValueOf(&%s[i]).Elem(), fory.RefModeTracking, true)\n", fieldAccess)
 			fmt.Fprintf(buf, "\t\t\t\t}\n")
 			fmt.Fprintf(buf, "\t\t\t}\n")
 			fmt.Fprintf(buf, "\t\t} else {\n")
@@ -192,7 +192,7 @@ func generateFieldReadTyped(buf *bytes.Buffer, field *FieldInfo) error {
 			fmt.Fprintf(buf, "\t\t\t\t\t%s = make([]interface{}, sliceLen)\n", fieldAccess)
 			fmt.Fprintf(buf, "\t\t\t\t\t// ReadData each element using ReadValue\n")
 			fmt.Fprintf(buf, "\t\t\t\t\tfor i := range %s {\n", fieldAccess)
-			fmt.Fprintf(buf, "\t\t\t\t\t\tctx.ReadValue(reflect.ValueOf(&%s[i]).Elem())\n", fieldAccess)
+			fmt.Fprintf(buf, "\t\t\t\t\t\tctx.ReadValue(reflect.ValueOf(&%s[i]).Elem(), fory.RefModeTracking, true)\n", fieldAccess)
 			fmt.Fprintf(buf, "\t\t\t\t\t}\n")
 			fmt.Fprintf(buf, "\t\t\t\t}\n")
 			fmt.Fprintf(buf, "\t\t\t}\n")
@@ -220,14 +220,14 @@ func generateFieldReadTyped(buf *bytes.Buffer, field *FieldInfo) error {
 	if iface, ok := field.Type.(*types.Interface); ok {
 		if iface.Empty() {
 			// For interface{}, use ReadValue for dynamic type handling
-			fmt.Fprintf(buf, "\tctx.ReadValue(reflect.ValueOf(&%s).Elem())\n", fieldAccess)
+			fmt.Fprintf(buf, "\tctx.ReadValue(reflect.ValueOf(&%s).Elem(), fory.RefModeTracking, true)\n", fieldAccess)
 			return nil
 		}
 	}
 
 	// Handle struct types
 	if _, ok := field.Type.Underlying().(*types.Struct); ok {
-		fmt.Fprintf(buf, "\tctx.ReadValue(reflect.ValueOf(&%s).Elem())\n", fieldAccess)
+		fmt.Fprintf(buf, "\tctx.ReadValue(reflect.ValueOf(&%s).Elem(), fory.RefModeTracking, true)\n", fieldAccess)
 		return nil
 	}
 
@@ -343,14 +343,14 @@ func generateSliceElementRead(buf *bytes.Buffer, elemType types.Type, elemAccess
 		}
 		// Check if it's a struct
 		if _, ok := named.Underlying().(*types.Struct); ok {
-			fmt.Fprintf(buf, "\t\t\t\tctx.ReadValue(reflect.ValueOf(&%s).Elem())\n", elemAccess)
+			fmt.Fprintf(buf, "\t\t\t\tctx.ReadValue(reflect.ValueOf(&%s).Elem(), fory.RefModeTracking, true)\n", elemAccess)
 			return nil
 		}
 	}
 
 	// Handle struct types
 	if _, ok := elemType.Underlying().(*types.Struct); ok {
-		fmt.Fprintf(buf, "\t\t\t\tctx.ReadValue(reflect.ValueOf(&%s).Elem())\n", elemAccess)
+		fmt.Fprintf(buf, "\t\t\t\tctx.ReadValue(reflect.ValueOf(&%s).Elem(), fory.RefModeTracking, true)\n", elemAccess)
 		return nil
 	}
 
@@ -611,7 +611,7 @@ func generateSliceElementReadInline(buf *bytes.Buffer, elemType types.Type, elem
 	if iface, ok := elemType.(*types.Interface); ok {
 		if iface.Empty() {
 			// For interface{} elements, use ReadValue for dynamic type handling
-			fmt.Fprintf(buf, "\t\t\t\tctx.ReadValue(reflect.ValueOf(&%s).Elem())\n", elemAccess)
+			fmt.Fprintf(buf, "\t\t\t\tctx.ReadValue(reflect.ValueOf(&%s).Elem(), fory.RefModeTracking, true)\n", elemAccess)
 			return nil
 		}
 	}
@@ -781,7 +781,7 @@ func writeMapReadChunks(buf *bytes.Buffer, mapType *types.Map, fieldAccess strin
 	// ReadData key
 	if keyIsInterface {
 		fmt.Fprintf(buf, "%s\t\tvar mapKey interface{}\n", indent)
-		fmt.Fprintf(buf, "%s\t\tctx.ReadValue(reflect.ValueOf(&mapKey).Elem())\n", indent)
+		fmt.Fprintf(buf, "%s\t\tctx.ReadValue(reflect.ValueOf(&mapKey).Elem(), fory.RefModeTracking, true)\n", indent)
 	} else {
 		keyVarType := getGoTypeString(keyType)
 		fmt.Fprintf(buf, "%s\t\tvar mapKey %s\n", indent, keyVarType)
@@ -793,7 +793,7 @@ func writeMapReadChunks(buf *bytes.Buffer, mapType *types.Map, fieldAccess strin
 	// ReadData value
 	if valueIsInterface {
 		fmt.Fprintf(buf, "%s\t\tvar mapValue interface{}\n", indent)
-		fmt.Fprintf(buf, "%s\t\tctx.ReadValue(reflect.ValueOf(&mapValue).Elem())\n", indent)
+		fmt.Fprintf(buf, "%s\t\tctx.ReadValue(reflect.ValueOf(&mapValue).Elem(), fory.RefModeTracking, true)\n", indent)
 	} else {
 		valueVarType := getGoTypeString(valueType)
 		fmt.Fprintf(buf, "%s\t\tvar mapValue %s\n", indent, valueVarType)
@@ -847,7 +847,7 @@ func generateMapKeyRead(buf *bytes.Buffer, keyType types.Type, varName string) e
 	}
 
 	// For other types, use ReadValue
-	fmt.Fprintf(buf, "\t\t\t\t\tctx.ReadValue(reflect.ValueOf(&%s).Elem())\n", varName)
+	fmt.Fprintf(buf, "\t\t\t\t\tctx.ReadValue(reflect.ValueOf(&%s).Elem(), fory.RefModeTracking, true)\n", varName)
 	return nil
 }
 
@@ -870,7 +870,7 @@ func generateMapValueRead(buf *bytes.Buffer, valueType types.Type, varName strin
 	}
 
 	// For other types, use ReadValue
-	fmt.Fprintf(buf, "\t\t\t\t\tctx.ReadValue(reflect.ValueOf(&%s).Elem())\n", varName)
+	fmt.Fprintf(buf, "\t\t\t\t\tctx.ReadValue(reflect.ValueOf(&%s).Elem(), fory.RefModeTracking, true)\n", varName)
 	return nil
 }
 
@@ -887,7 +887,7 @@ func generateMapKeyReadIndented(buf *bytes.Buffer, keyType types.Type, varName s
 		}
 		return nil
 	}
-	fmt.Fprintf(buf, "%sctx.ReadValue(reflect.ValueOf(&%s).Elem())\n", indent, varName)
+	fmt.Fprintf(buf, "%sctx.ReadValue(reflect.ValueOf(&%s).Elem(), fory.RefModeTracking, true)\n", indent, varName)
 	return nil
 }
 
@@ -904,6 +904,6 @@ func generateMapValueReadIndented(buf *bytes.Buffer, valueType types.Type, varNa
 		}
 		return nil
 	}
-	fmt.Fprintf(buf, "%sctx.ReadValue(reflect.ValueOf(&%s).Elem())\n", indent, varName)
+	fmt.Fprintf(buf, "%sctx.ReadValue(reflect.ValueOf(&%s).Elem(), fory.RefModeTracking, true)\n", indent, varName)
 	return nil
 }

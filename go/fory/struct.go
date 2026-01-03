@@ -570,7 +570,7 @@ func (s *structSerializer) writeRemainingField(ctx *WriteContext, ptr unsafe.Poi
 	if field.Serializer != nil {
 		field.Serializer.Write(ctx, field.RefMode, field.WriteType, field.HasGenerics, fieldValue)
 	} else {
-		ctx.WriteValue(fieldValue)
+		ctx.WriteValue(fieldValue, RefModeTracking, true)
 	}
 }
 
@@ -894,7 +894,7 @@ func (s *structSerializer) readRemainingField(ctx *ReadContext, ptr unsafe.Point
 	if field.Serializer != nil {
 		field.Serializer.Read(ctx, field.RefMode, field.WriteType, field.HasGenerics, fieldValue)
 	} else {
-		ctx.ReadValue(fieldValue)
+		ctx.ReadValue(fieldValue, RefModeTracking, true)
 	}
 }
 
@@ -992,7 +992,7 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 			// Use pre-computed RefMode and WriteType from field initialization
 			field.Serializer.Read(ctx, field.RefMode, field.WriteType, field.HasGenerics, fieldValue)
 		} else {
-			ctx.ReadValue(fieldValue)
+			ctx.ReadValue(fieldValue, RefModeTracking, true)
 		}
 	}
 }
@@ -1018,7 +1018,7 @@ func (s *structSerializer) skipField(ctx *ReadContext, field *FieldInfo) {
 		}
 		field.Serializer.Read(ctx, refMode, readType, false, tempValue)
 	} else {
-		ctx.ReadValue(tempValue)
+		ctx.ReadValue(tempValue, RefModeTracking, true)
 	}
 }
 

@@ -85,7 +85,7 @@ func (g *DynamicSliceDemo_ForyGenSerializer) WriteTyped(ctx *fory.WriteContext, 
 				buf.WriteInt8(1) // CollectionTrackingRef only
 				// WriteData each element using WriteValue
 				for _, elem := range v.DynamicSlice {
-					ctx.WriteValue(reflect.ValueOf(elem))
+					ctx.WriteValue(reflect.ValueOf(elem), fory.RefModeTracking, true)
 				}
 			}
 		} else {
@@ -102,7 +102,7 @@ func (g *DynamicSliceDemo_ForyGenSerializer) WriteTyped(ctx *fory.WriteContext, 
 					buf.WriteInt8(1) // CollectionTrackingRef only
 					// WriteData each element using WriteValue
 					for _, elem := range v.DynamicSlice {
-						ctx.WriteValue(reflect.ValueOf(elem))
+						ctx.WriteValue(reflect.ValueOf(elem), fory.RefModeTracking, true)
 					}
 				}
 			}
@@ -190,7 +190,7 @@ func (g *DynamicSliceDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v 
 				v.DynamicSlice = make([]interface{}, sliceLen)
 				// ReadData each element using ReadValue
 				for i := range v.DynamicSlice {
-					ctx.ReadValue(reflect.ValueOf(&v.DynamicSlice[i]).Elem())
+					ctx.ReadValue(reflect.ValueOf(&v.DynamicSlice[i]).Elem(), fory.RefModeTracking, true)
 				}
 			}
 		} else {
@@ -209,7 +209,7 @@ func (g *DynamicSliceDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v 
 					v.DynamicSlice = make([]interface{}, sliceLen)
 					// ReadData each element using ReadValue
 					for i := range v.DynamicSlice {
-						ctx.ReadValue(reflect.ValueOf(&v.DynamicSlice[i]).Elem())
+						ctx.ReadValue(reflect.ValueOf(&v.DynamicSlice[i]).Elem(), fory.RefModeTracking, true)
 					}
 				}
 			}

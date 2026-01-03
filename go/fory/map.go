@@ -165,8 +165,27 @@ func (s mapSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 						}
 					}
 				} else {
-					buf.WriteInt8(VALUE_HAS_NULL | TRACKING_KEY_REF)
-					ctx.WriteValue(entryKey)
+					// Polymorphic key with null value
+					keyTypeInfo, typeErr := getActualTypeInfo(entryKey, typeResolver)
+					if typeErr != nil {
+						ctx.SetError(FromError(typeErr))
+						return
+					}
+					// Only set TRACKING_KEY_REF if ref tracking is enabled AND type needs it
+					chunkHeader := int8(VALUE_HAS_NULL)
+					trackKeyRef := ctx.TrackRef() && keyTypeInfo.NeedWriteRef
+					if trackKeyRef {
+						chunkHeader |= TRACKING_KEY_REF
+					}
+					buf.WriteInt8(chunkHeader)
+					// Write type info
+					typeResolver.WriteTypeInfo(buf, keyTypeInfo, ctx.Err())
+					// Write value with appropriate ref mode
+					keyRefMode := RefModeNone
+					if trackKeyRef {
+						keyRefMode = RefModeTracking
+					}
+					keyTypeInfo.Serializer.Write(ctx, keyRefMode, false, false, entryKey)
 					if ctx.HasError() {
 						return
 					}
@@ -189,8 +208,27 @@ func (s mapSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 							}
 						}
 					} else {
-						buf.WriteInt8(KEY_HAS_NULL | TRACKING_VALUE_REF)
-						ctx.WriteValue(entryVal)
+						// Polymorphic value with null key
+						valueTypeInfo, typeErr := getActualTypeInfo(entryVal, typeResolver)
+						if typeErr != nil {
+							ctx.SetError(FromError(typeErr))
+							return
+						}
+						// Only set TRACKING_VALUE_REF if ref tracking is enabled AND type needs it
+						chunkHeader := int8(KEY_HAS_NULL)
+						trackValueRef := ctx.TrackRef() && valueTypeInfo.NeedWriteRef
+						if trackValueRef {
+							chunkHeader |= TRACKING_VALUE_REF
+						}
+						buf.WriteInt8(chunkHeader)
+						// Write type info
+						typeResolver.WriteTypeInfo(buf, valueTypeInfo, ctx.Err())
+						// Write value with appropriate ref mode
+						valueRefMode := RefModeNone
+						if trackValueRef {
+							valueRefMode = RefModeTracking
+						}
+						valueTypeInfo.Serializer.Write(ctx, valueRefMode, false, false, entryVal)
 						if ctx.HasError() {
 							return
 						}
@@ -241,20 +279,22 @@ func (s mapSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 			valueWriteRef = valueTypeInfo.NeedWriteRef
 		}
 
-		if keyWriteRef {
+		// Only set TRACKING_KEY_REF/TRACKING_VALUE_REF if ref tracking is enabled
+		trackRef := ctx.TrackRef()
+		if keyWriteRef && trackRef {
 			chunkHeader |= TRACKING_KEY_REF
 		}
-		if valueWriteRef {
+		if valueWriteRef && trackRef {
 			chunkHeader |= TRACKING_VALUE_REF
 		}
 		buf.PutUint8(chunkSizeOffset-2, uint8(chunkHeader))
 		chunkSize := 0
 		keyRefMode := RefModeNone
-		if keyWriteRef {
+		if keyWriteRef && trackRef {
 			keyRefMode = RefModeTracking
 		}
 		valueRefMode := RefModeNone
-		if valueWriteRef {
+		if valueWriteRef && trackRef {
 			valueRefMode = RefModeTracking
 		}
 		for chunkSize < MAX_CHUNK_SIZE {

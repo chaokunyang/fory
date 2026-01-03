@@ -85,7 +85,7 @@ func generateFieldWriteTyped(buf *bytes.Buffer, field *FieldInfo) error {
 		case "time.Time", "github.com/apache/fory/go/fory.Date":
 			// These types are "other internal types" in the new spec
 			// They use: | null flag | value data | format
-			fmt.Fprintf(buf, "\tctx.WriteValue(reflect.ValueOf(%s))\n", fieldAccess)
+			fmt.Fprintf(buf, "\tctx.WriteValue(reflect.ValueOf(%s), fory.RefModeTracking, true)\n", fieldAccess)
 			return nil
 		}
 	}
@@ -93,7 +93,7 @@ func generateFieldWriteTyped(buf *bytes.Buffer, field *FieldInfo) error {
 	// Handle pointer types
 	if _, ok := field.Type.(*types.Pointer); ok {
 		// For all pointer types, use WriteValue
-		fmt.Fprintf(buf, "\tctx.WriteValue(reflect.ValueOf(%s))\n", fieldAccess)
+		fmt.Fprintf(buf, "\tctx.WriteValue(reflect.ValueOf(%s), fory.RefModeTracking, true)\n", fieldAccess)
 		return nil
 	}
 
@@ -161,7 +161,7 @@ func generateFieldWriteTyped(buf *bytes.Buffer, field *FieldInfo) error {
 			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteInt8(1) // CollectionTrackingRef only\n")
 			fmt.Fprintf(buf, "\t\t\t\t// WriteData each element using WriteValue\n")
 			fmt.Fprintf(buf, "\t\t\t\tfor _, elem := range %s {\n", fieldAccess)
-			fmt.Fprintf(buf, "\t\t\t\t\tctx.WriteValue(reflect.ValueOf(elem))\n")
+			fmt.Fprintf(buf, "\t\t\t\t\tctx.WriteValue(reflect.ValueOf(elem), fory.RefModeTracking, true)\n")
 			fmt.Fprintf(buf, "\t\t\t\t}\n")
 			fmt.Fprintf(buf, "\t\t\t}\n")
 			fmt.Fprintf(buf, "\t\t} else {\n")
@@ -178,7 +178,7 @@ func generateFieldWriteTyped(buf *bytes.Buffer, field *FieldInfo) error {
 			fmt.Fprintf(buf, "\t\t\t\t\tbuf.WriteInt8(1) // CollectionTrackingRef only\n")
 			fmt.Fprintf(buf, "\t\t\t\t\t// WriteData each element using WriteValue\n")
 			fmt.Fprintf(buf, "\t\t\t\t\tfor _, elem := range %s {\n", fieldAccess)
-			fmt.Fprintf(buf, "\t\t\t\t\t\tctx.WriteValue(reflect.ValueOf(elem))\n")
+			fmt.Fprintf(buf, "\t\t\t\t\t\tctx.WriteValue(reflect.ValueOf(elem), fory.RefModeTracking, true)\n")
 			fmt.Fprintf(buf, "\t\t\t\t\t}\n")
 			fmt.Fprintf(buf, "\t\t\t\t}\n")
 			fmt.Fprintf(buf, "\t\t\t}\n")
@@ -206,14 +206,14 @@ func generateFieldWriteTyped(buf *bytes.Buffer, field *FieldInfo) error {
 	if iface, ok := field.Type.(*types.Interface); ok {
 		if iface.Empty() {
 			// For interface{}, use WriteValue for dynamic type handling
-			fmt.Fprintf(buf, "\tctx.WriteValue(reflect.ValueOf(%s))\n", fieldAccess)
+			fmt.Fprintf(buf, "\tctx.WriteValue(reflect.ValueOf(%s), fory.RefModeTracking, true)\n", fieldAccess)
 			return nil
 		}
 	}
 
 	// Handle struct types
 	if _, ok := field.Type.Underlying().(*types.Struct); ok {
-		fmt.Fprintf(buf, "\tctx.WriteValue(reflect.ValueOf(%s))\n", fieldAccess)
+		fmt.Fprintf(buf, "\tctx.WriteValue(reflect.ValueOf(%s), fory.RefModeTracking, true)\n", fieldAccess)
 		return nil
 	}
 
@@ -556,7 +556,7 @@ func writeMapChunksCode(buf *bytes.Buffer, keyType, valueType types.Type, fieldA
 
 	// WriteData key
 	if keyIsInterface {
-		fmt.Fprintf(buf, "%s\t\tctx.WriteValue(reflect.ValueOf(mapKey))\n", indent)
+		fmt.Fprintf(buf, "%s\t\tctx.WriteValue(reflect.ValueOf(mapKey), fory.RefModeTracking, true)\n", indent)
 	} else {
 		if err := generateMapKeyWriteIndented(buf, keyType, "mapKey", indent+"\t\t"); err != nil {
 			return err
@@ -565,7 +565,7 @@ func writeMapChunksCode(buf *bytes.Buffer, keyType, valueType types.Type, fieldA
 
 	// WriteData value
 	if valueIsInterface {
-		fmt.Fprintf(buf, "%s\t\tctx.WriteValue(reflect.ValueOf(mapValue))\n", indent)
+		fmt.Fprintf(buf, "%s\t\tctx.WriteValue(reflect.ValueOf(mapValue), fory.RefModeTracking, true)\n", indent)
 	} else {
 		if err := generateMapValueWriteIndented(buf, valueType, "mapValue", indent+"\t\t"); err != nil {
 			return err
@@ -641,7 +641,7 @@ func generateMapKeyWrite(buf *bytes.Buffer, keyType types.Type, varName string) 
 	}
 
 	// For other types, use WriteValue
-	fmt.Fprintf(buf, "\t\t\t\tctx.WriteValue(reflect.ValueOf(%s))\n", varName)
+	fmt.Fprintf(buf, "\t\t\t\tctx.WriteValue(reflect.ValueOf(%s), fory.RefModeTracking, true)\n", varName)
 	return nil
 }
 
@@ -663,7 +663,7 @@ func generateMapValueWrite(buf *bytes.Buffer, valueType types.Type, varName stri
 	}
 
 	// For other types, use WriteValue
-	fmt.Fprintf(buf, "\t\t\t\tctx.WriteValue(reflect.ValueOf(%s))\n", varName)
+	fmt.Fprintf(buf, "\t\t\t\tctx.WriteValue(reflect.ValueOf(%s), fory.RefModeTracking, true)\n", varName)
 	return nil
 }
 
@@ -685,7 +685,7 @@ func generateMapKeyWriteIndented(buf *bytes.Buffer, keyType types.Type, varName 
 	}
 
 	// For other types, use WriteValue
-	fmt.Fprintf(buf, "%sctx.WriteValue(reflect.ValueOf(%s))\n", indent, varName)
+	fmt.Fprintf(buf, "%sctx.WriteValue(reflect.ValueOf(%s), fory.RefModeTracking, true)\n", indent, varName)
 	return nil
 }
 
@@ -707,7 +707,7 @@ func generateMapValueWriteIndented(buf *bytes.Buffer, valueType types.Type, varN
 	}
 
 	// For other types, use WriteValue
-	fmt.Fprintf(buf, "%sctx.WriteValue(reflect.ValueOf(%s))\n", indent, varName)
+	fmt.Fprintf(buf, "%sctx.WriteValue(reflect.ValueOf(%s), fory.RefModeTracking, true)\n", indent, varName)
 	return nil
 }
 
@@ -787,7 +787,7 @@ func generateSliceElementWriteInline(buf *bytes.Buffer, elemType types.Type, ele
 	if iface, ok := elemType.(*types.Interface); ok {
 		if iface.Empty() {
 			// For interface{} elements, use WriteValue for dynamic type handling
-			fmt.Fprintf(buf, "\t\t\t\tctx.WriteValue(reflect.ValueOf(%s))\n", elemAccess)
+			fmt.Fprintf(buf, "\t\t\t\tctx.WriteValue(reflect.ValueOf(%s), fory.RefModeTracking, true)\n", elemAccess)
 			return nil
 		}
 	}
@@ -834,7 +834,7 @@ func generateSliceElementWriteInlineIndented(buf *bytes.Buffer, elemType types.T
 	if iface, ok := elemType.(*types.Interface); ok {
 		if iface.Empty() {
 			// For interface{} elements, use WriteValue for dynamic type handling
-			fmt.Fprintf(buf, "%sctx.WriteValue(reflect.ValueOf(%s))\n", indent, elemAccess)
+			fmt.Fprintf(buf, "%sctx.WriteValue(reflect.ValueOf(%s), fory.RefModeTracking, true)\n", indent, elemAccess)
 			return nil
 		}
 	}

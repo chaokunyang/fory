@@ -418,7 +418,7 @@ func (f *Fory) Serialize(value any) ([]byte, error) {
 	}
 
 	// SerializeWithCallback the value
-	f.writeCtx.WriteValue(reflect.ValueOf(value))
+	f.writeCtx.WriteValue(reflect.ValueOf(value), RefModeTracking, true)
 	if f.writeCtx.HasError() {
 		return nil, f.writeCtx.TakeError()
 	}
@@ -477,7 +477,7 @@ func (f *Fory) Deserialize(data []byte, v interface{}) error {
 
 	// Read directly into target value
 	target := reflect.ValueOf(v).Elem()
-	f.readCtx.ReadValue(target)
+	f.readCtx.ReadValue(target, RefModeTracking, true)
 	if f.readCtx.HasError() {
 		return f.readCtx.TakeError()
 	}
@@ -559,7 +559,7 @@ func (f *Fory) SerializeTo(buf *ByteBuffer, value interface{}) error {
 	}
 
 	// Standard path
-	f.writeCtx.WriteValue(rv)
+	f.writeCtx.WriteValue(rv, RefModeTracking, true)
 	if f.writeCtx.HasError() {
 		f.writeCtx.buffer = origBuffer
 		return f.writeCtx.TakeError()
@@ -633,7 +633,7 @@ func (f *Fory) DeserializeFrom(buf *ByteBuffer, v interface{}) error {
 
 	// Read directly into target value
 	target := reflect.ValueOf(v).Elem()
-	f.readCtx.ReadValue(target)
+	f.readCtx.ReadValue(target, RefModeTracking, true)
 	if f.readCtx.HasError() {
 		f.readCtx.buffer = origBuffer
 		return f.readCtx.TakeError()
@@ -710,7 +710,7 @@ func (f *Fory) SerializeWithCallback(buffer *ByteBuffer, v interface{}, callback
 	}
 
 	// SerializeWithCallback the value
-	f.writeCtx.WriteValue(reflect.ValueOf(v))
+	f.writeCtx.WriteValue(reflect.ValueOf(v), RefModeTracking, true)
 	if f.writeCtx.HasError() {
 		return f.writeCtx.TakeError()
 	}
@@ -798,7 +798,7 @@ func (f *Fory) DeserializeWithCallbackBuffers(buffer *ByteBuffer, v interface{},
 		return fmt.Errorf("v must be a non-nil pointer")
 	}
 	// DeserializeWithCallbackBuffers directly into v
-	f.readCtx.ReadValue(rv.Elem())
+	f.readCtx.ReadValue(rv.Elem(), RefModeTracking, true)
 	if f.readCtx.HasError() {
 		return f.readCtx.TakeError()
 	}
@@ -826,7 +826,7 @@ func (f *Fory) serializeReflectValue(value reflect.Value) ([]byte, error) {
 	}
 
 	// SerializeWithCallback the value
-	f.writeCtx.WriteValue(value)
+	f.writeCtx.WriteValue(value, RefModeTracking, true)
 	if f.writeCtx.HasError() {
 		return nil, f.writeCtx.TakeError()
 	}

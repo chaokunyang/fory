@@ -291,11 +291,19 @@ inline void write_collection_data_slow(const Container &coll, WriteContext &ctx,
     }
   }
 
+  // Determine if we're actually tracking refs for this collection
+  const bool tracking_refs = (bitmap & COLL_TRACKING_REF) != 0;
+
   // Write elements
   if (is_same_type) {
     // All elements have same type - type info written once above
-    if (!has_null) {
-      // No nulls - write data directly without null flag
+    if (tracking_refs) {
+      // Track refs - write ref flag per element per xlang spec
+      for (const auto &elem : coll) {
+        Serializer<T>::write(elem, ctx, RefMode::Tracking, false, has_generics);
+      }
+    } else if (!has_null) {
+      // No nulls, no ref tracking - write data directly without null flag
       for (const auto &elem : coll) {
         if constexpr (is_nullable_v<T>) {
           using Inner = nullable_element_t<T>;
@@ -319,7 +327,12 @@ inline void write_collection_data_slow(const Container &coll, WriteContext &ctx,
     }
   } else {
     // Heterogeneous types - write type info per element
-    if (!has_null) {
+    if (tracking_refs) {
+      // Track refs - write ref flag + type info per element
+      for (const auto &elem : coll) {
+        Serializer<T>::write(elem, ctx, RefMode::Tracking, true, has_generics);
+      }
+    } else if (!has_null) {
       // No nulls - write without null flag (RefMode::None)
       for (const auto &elem : coll) {
         Serializer<T>::write(elem, ctx, RefMode::None, true, has_generics);
@@ -409,7 +422,8 @@ inline Container read_collection_data_slow(ReadContext &ctx, uint32_t length) {
           return result;
         }
         if constexpr (elem_is_polymorphic) {
-          auto elem = Serializer<T>::read_with_type_info(ctx, RefMode::NullOnly,
+          // Use RefMode::Tracking to read ref flag per element
+          auto elem = Serializer<T>::read_with_type_info(ctx, RefMode::Tracking,
                                                          *elem_type_info);
           collection_insert(result, std::move(elem));
         } else {

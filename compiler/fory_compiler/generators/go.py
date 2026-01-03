@@ -134,10 +134,13 @@ class GoGenerator(BaseGenerator):
         lines.append(f"type {enum.name} int32")
         lines.append("")
 
-        # Constants
+        # Constants (strip prefix first, then add enum name back for Go's unscoped style)
         lines.append("const (")
         for value in enum.values:
-            const_name = f"{enum.name}{self.to_pascal_case(value.name)}"
+            # Strip the proto-style prefix (e.g., DEVICE_TIER_UNKNOWN -> UNKNOWN)
+            stripped_name = self.strip_enum_prefix(enum.name, value.name)
+            # Add enum name prefix for Go (e.g., DeviceTierUnknown)
+            const_name = f"{enum.name}{self.to_pascal_case(stripped_name)}"
             lines.append(f"\t{const_name} {enum.name} = {value.value}")
         lines.append(")")
 

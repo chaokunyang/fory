@@ -184,7 +184,11 @@ class Parser:
 
         values = []
         while not self.check(TokenType.RBRACE):
-            values.append(self.parse_enum_value())
+            # Check for option statements
+            if self.check(TokenType.OPTION):
+                self.parse_enum_option(name)
+            else:
+                values.append(self.parse_enum_value())
 
         self.consume(TokenType.RBRACE, "Expected '}' after enum values")
 
@@ -195,6 +199,43 @@ class Parser:
             line=start.line,
             column=start.column,
         )
+
+    def parse_enum_option(self, enum_name: str):
+        """Parse and validate an enum option statement.
+
+        Forbidden options:
+        - allow_alias = true: Enum aliases are not supported
+        """
+        option_token = self.consume(TokenType.OPTION)
+        option_name = self.consume(TokenType.IDENT, "Expected option name").value
+        self.consume(TokenType.EQUALS, "Expected '=' after option name")
+
+        # Get the option value
+        if self.check(TokenType.TRUE):
+            self.advance()
+            option_value = True
+        elif self.check(TokenType.FALSE):
+            self.advance()
+            option_value = False
+        elif self.check(TokenType.IDENT):
+            option_value = self.advance().value
+        elif self.check(TokenType.INT):
+            option_value = int(self.advance().value)
+        elif self.check(TokenType.STRING):
+            option_value = self.advance().value
+        else:
+            raise self.error(f"Expected option value, got {self.current().type.name}")
+
+        self.consume(TokenType.SEMI, "Expected ';' after option statement")
+
+        # Validate forbidden options
+        if option_name == "allow_alias" and option_value is True:
+            raise ParseError(
+                f"'option allow_alias = true' is forbidden in enum '{enum_name}'. "
+                "Enum aliases (multiple names for the same value) are not supported.",
+                option_token.line,
+                option_token.column,
+            )
 
     def parse_enum_value(self) -> EnumValue:
         """Parse an enum value: NAME = 0;"""

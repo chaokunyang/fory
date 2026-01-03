@@ -147,8 +147,10 @@ class PythonGenerator(BaseGenerator):
         lines = []
         lines.append(f"class {enum.name}(IntEnum):")
 
+        # Enum values (strip prefix for scoped enums)
         for value in enum.values:
-            lines.append(f"    {value.name} = {value.value}")
+            stripped_name = self.strip_enum_prefix(enum.name, value.name)
+            lines.append(f"    {stripped_name} = {value.value}")
 
         return lines
 

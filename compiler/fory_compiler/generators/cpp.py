@@ -153,12 +153,16 @@ class CppGenerator(BaseGenerator):
         lines = []
 
         lines.append(f"enum class {enum.name} : int32_t {{")
+        # Enum values (strip prefix for scoped enums)
+        stripped_names = []
         for value in enum.values:
-            lines.append(f"    {value.name} = {value.value},")
+            stripped_name = self.strip_enum_prefix(enum.name, value.name)
+            stripped_names.append(stripped_name)
+            lines.append(f"    {stripped_name} = {value.value},")
         lines.append("};")
 
         # FORY_ENUM macro
-        value_names = ", ".join(v.name for v in enum.values)
+        value_names = ", ".join(stripped_names)
         lines.append(f"FORY_ENUM({enum.name}, {value_names});")
 
         return lines

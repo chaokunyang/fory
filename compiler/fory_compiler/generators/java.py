@@ -116,10 +116,11 @@ class JavaGenerator(BaseGenerator):
         # Enum declaration
         lines.append(f"public enum {enum.name} {{")
 
-        # Enum values
+        # Enum values (strip prefix for scoped enums)
         for i, value in enumerate(enum.values):
             comma = "," if i < len(enum.values) - 1 else ";"
-            lines.append(f"    {value.name}{comma}")
+            stripped_name = self.strip_enum_prefix(enum.name, value.name)
+            lines.append(f"    {stripped_name}{comma}")
 
         lines.append("}")
         lines.append("")

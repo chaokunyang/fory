@@ -75,12 +75,25 @@ class BaseGenerator(ABC):
         return "\n".join(prefix + line if line else line for line in lines)
 
     def to_pascal_case(self, name: str) -> str:
-        """Convert name to PascalCase."""
+        """Convert name to PascalCase.
+
+        Handles various input formats:
+        - snake_case -> PascalCase (device_tier -> DeviceTier)
+        - UPPER_SNAKE_CASE -> PascalCase (DEVICE_TIER -> DeviceTier)
+        - camelCase -> PascalCase (deviceTier -> DeviceTier)
+        - ALLCAPS -> Allcaps (UNKNOWN -> Unknown)
+        """
         if not name:
             return name
-        # Handle snake_case
+
+        # Handle snake_case and UPPER_SNAKE_CASE
         if "_" in name:
-            return "".join(word.capitalize() for word in name.split("_"))
+            return "".join(word.capitalize() for word in name.lower().split("_"))
+
+        # Handle all uppercase single word (e.g., UNKNOWN -> Unknown)
+        if name.isupper():
+            return name.capitalize()
+
         # Handle already PascalCase or camelCase
         return name[0].upper() + name[1:]
 
@@ -92,12 +105,31 @@ class BaseGenerator(ABC):
         return pascal[0].lower() + pascal[1:]
 
     def to_snake_case(self, name: str) -> str:
-        """Convert name to snake_case."""
+        """Convert name to snake_case.
+
+        Handles acronyms properly:
+        - DeviceTier -> device_tier
+        - HTTPStatus -> http_status
+        - XMLParser -> xml_parser
+        - HTMLToText -> html_to_text
+        """
+        if not name:
+            return name
         result = []
         for i, char in enumerate(name):
-            if char.isupper() and i > 0:
-                result.append("_")
-            result.append(char.lower())
+            if char.isupper():
+                # Add underscore before uppercase if:
+                # 1. Not at the start
+                # 2. Previous char is lowercase, OR
+                # 3. Next char exists and is lowercase (handles acronyms like HTTP->Status)
+                if i > 0:
+                    prev_lower = name[i - 1].islower()
+                    next_lower = (i + 1 < len(name)) and name[i + 1].islower()
+                    if prev_lower or next_lower:
+                        result.append("_")
+                result.append(char.lower())
+            else:
+                result.append(char)
         return "".join(result)
 
     def to_upper_snake_case(self, name: str) -> str:
@@ -110,6 +142,43 @@ class BaseGenerator(ABC):
             path = self.options.output_dir / file.path
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(file.content)
+
+    def strip_enum_prefix(self, enum_name: str, value_name: str) -> str:
+        """Strip the enum name prefix from an enum value name.
+
+        For protobuf-style enums where values are prefixed with the enum name
+        in UPPER_SNAKE_CASE, strip the prefix to get cleaner scoped enum values.
+
+        Example:
+            enum_name="DeviceTier", value_name="DEVICE_TIER_UNKNOWN" -> "UNKNOWN"
+            enum_name="DeviceTier", value_name="DEVICE_TIER_TIER1" -> "TIER1"
+            enum_name="DeviceTier", value_name="DEVICE_TIER_1" -> "DEVICE_TIER_1" (keeps original, "1" is invalid)
+
+        The prefix is only stripped if the remainder is a valid identifier
+        (starts with a letter).
+
+        Args:
+            enum_name: The enum type name (e.g., "DeviceTier")
+            value_name: The enum value name (e.g., "DEVICE_TIER_UNKNOWN")
+
+        Returns:
+            The stripped value name, or original if stripping would yield an invalid name
+        """
+        # Convert enum name to UPPER_SNAKE_CASE prefix
+        prefix = self.to_upper_snake_case(enum_name) + "_"
+
+        # Check if value_name starts with the prefix
+        if not value_name.startswith(prefix):
+            return value_name
+
+        # Get the remainder after stripping prefix
+        remainder = value_name[len(prefix):]
+
+        # Check if remainder is a valid identifier (starts with letter)
+        if not remainder or not remainder[0].isalpha():
+            return value_name
+
+        return remainder
 
     def get_license_header(self, comment_prefix: str = "//") -> str:
         """Get the Apache license header."""

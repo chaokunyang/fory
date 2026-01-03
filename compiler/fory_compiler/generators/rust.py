@@ -124,10 +124,12 @@ class RustGenerator(BaseGenerator):
 
         lines.append(f"pub enum {enum.name} {{")
 
+        # Enum values (strip prefix for scoped enums)
         for i, value in enumerate(enum.values):
             if i == 0:
                 lines.append("    #[default]")
-            lines.append(f"    {self.to_pascal_case(value.name)} = {value.value},")
+            stripped_name = self.strip_enum_prefix(enum.name, value.name)
+            lines.append(f"    {self.to_pascal_case(stripped_name)} = {value.value},")
 
         lines.append("}")
 

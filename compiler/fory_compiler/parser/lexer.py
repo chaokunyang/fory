@@ -34,6 +34,9 @@ class TokenType(Enum):
     REF = auto()
     REPEATED = auto()
     MAP = auto()
+    OPTION = auto()
+    TRUE = auto()
+    FALSE = auto()
 
     # Literals
     IDENT = auto()
@@ -88,6 +91,9 @@ class Lexer:
         "ref": TokenType.REF,
         "repeated": TokenType.REPEATED,
         "map": TokenType.MAP,
+        "option": TokenType.OPTION,
+        "true": TokenType.TRUE,
+        "false": TokenType.FALSE,
     }
 
     PUNCTUATION = {

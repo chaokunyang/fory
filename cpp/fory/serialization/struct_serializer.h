@@ -1456,9 +1456,16 @@ void read_single_field_by_index(T &obj, ReadContext &ctx) {
   // `Serializer<T>::read` can dispatch to `read_compatible` with the correct
   // remote schema.
   constexpr bool field_requires_ref = requires_ref_metadata_v<FieldType>;
-  constexpr bool is_struct_field = is_fory_serializable_v<FieldType>;
-  constexpr bool is_polymorphic_field =
-      Serializer<FieldType>::type_id == TypeId::UNKNOWN;
+  constexpr TypeId field_type_id = Serializer<FieldType>::type_id;
+  // Check if field is a struct type - use type_id to handle shared_ptr<Struct>
+  constexpr bool is_struct_field =
+      field_type_id == TypeId::STRUCT ||
+      field_type_id == TypeId::COMPATIBLE_STRUCT ||
+      field_type_id == TypeId::NAMED_STRUCT ||
+      field_type_id == TypeId::NAMED_COMPATIBLE_STRUCT;
+  constexpr bool is_ext_field =
+      field_type_id == TypeId::EXT || field_type_id == TypeId::NAMED_EXT;
+  constexpr bool is_polymorphic_field = field_type_id == TypeId::UNKNOWN;
   bool read_type = is_polymorphic_field;
 
   // Get field metadata from fory::field<> or FORY_FIELD_TAGS or defaults
@@ -1470,14 +1477,14 @@ void read_single_field_by_index(T &obj, ReadContext &ctx) {
   // `Serializer<T>::read` can dispatch to `read_compatible` with the correct
   // remote TypeMeta instead of treating the bytes as part of the first field
   // value.
-  if (!is_polymorphic_field && is_struct_field && ctx.is_compatible()) {
+  if (!is_polymorphic_field && (is_struct_field || is_ext_field) &&
+      ctx.is_compatible()) {
     read_type = true;
   }
 
   // Per xlang spec, all non-primitive fields have ref flags.
   // Primitive types: bool, int8-64, var_int32/64, sli_int64, float16/32/64
   // Non-primitives include: string, list, set, map, struct, enum, etc.
-  constexpr TypeId field_type_id = Serializer<FieldType>::type_id;
   constexpr bool is_primitive_field = is_primitive_type_id(field_type_id);
 
   // Compute RefMode based on field metadata
@@ -1534,10 +1541,16 @@ void read_single_field_by_index_compatible(T &obj, ReadContext &ctx,
   // Unwrap fory::field<> to get the actual type for deserialization
   using FieldType = unwrap_field_t<RawFieldType>;
 
-  constexpr bool is_struct_field = is_fory_serializable_v<FieldType>;
-  constexpr bool is_polymorphic_field =
-      Serializer<FieldType>::type_id == TypeId::UNKNOWN;
   constexpr TypeId field_type_id = Serializer<FieldType>::type_id;
+  // Check if field is a struct type - use type_id to handle shared_ptr<Struct>
+  constexpr bool is_struct_field =
+      field_type_id == TypeId::STRUCT ||
+      field_type_id == TypeId::COMPATIBLE_STRUCT ||
+      field_type_id == TypeId::NAMED_STRUCT ||
+      field_type_id == TypeId::NAMED_COMPATIBLE_STRUCT;
+  constexpr bool is_ext_field =
+      field_type_id == TypeId::EXT || field_type_id == TypeId::NAMED_EXT;
+  constexpr bool is_polymorphic_field = field_type_id == TypeId::UNKNOWN;
   constexpr bool is_primitive_field = is_primitive_type_id(field_type_id);
 
   bool read_type = is_polymorphic_field;
@@ -1547,7 +1560,8 @@ void read_single_field_by_index_compatible(T &obj, ReadContext &ctx,
   // `Serializer<T>::read` can dispatch to `read_compatible` with the correct
   // remote TypeMeta instead of treating the bytes as part of the first field
   // value.
-  if (!is_polymorphic_field && is_struct_field && ctx.is_compatible()) {
+  if (!is_polymorphic_field && (is_struct_field || is_ext_field) &&
+      ctx.is_compatible()) {
     read_type = true;
   }
 

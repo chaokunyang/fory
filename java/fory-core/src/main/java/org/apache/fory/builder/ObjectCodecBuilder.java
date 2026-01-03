@@ -173,7 +173,7 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
     addGroupExpressions(
         objectCodecOptimizer.boxedWriteGroups, numGroups, expressions, bean, buffer);
     addGroupExpressions(
-        objectCodecOptimizer.finalWriteGroups, numGroups, expressions, bean, buffer);
+        objectCodecOptimizer.buildInWriteGroups, numGroups, expressions, bean, buffer);
     for (Descriptor descriptor :
         objectCodecOptimizer.descriptorGrouper.getCollectionDescriptors()) {
       expressions.add(serializeGroup(Collections.singletonList(descriptor), bean, buffer, false));
@@ -203,7 +203,7 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
 
   private int getNumGroups(ObjectCodecOptimizer objectCodecOptimizer) {
     return objectCodecOptimizer.boxedWriteGroups.size()
-        + objectCodecOptimizer.finalWriteGroups.size()
+        + objectCodecOptimizer.buildInWriteGroups.size()
         + objectCodecOptimizer.otherWriteGroups.size()
         + objectCodecOptimizer.descriptorGrouper.getCollectionDescriptors().size()
         + objectCodecOptimizer.descriptorGrouper.getMapDescriptors().size();
@@ -466,7 +466,7 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
     deserializeReadGroup(
         objectCodecOptimizer.boxedReadGroups, numGroups, expressions, bean, buffer);
     deserializeReadGroup(
-        objectCodecOptimizer.finalReadGroups, numGroups, expressions, bean, buffer);
+        objectCodecOptimizer.buildInReadGroups, numGroups, expressions, bean, buffer);
     for (Descriptor d : objectCodecOptimizer.descriptorGrouper.getCollectionDescriptors()) {
       expressions.add(deserializeGroup(Collections.singletonList(d), bean, buffer, false));
     }

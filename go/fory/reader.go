@@ -32,6 +32,7 @@ type ReadContext struct {
 	buffer           *ByteBuffer
 	refReader        *RefReader
 	trackRef         bool          // Cached flag to avoid indirection
+	xlang            bool          // Cross-language serialization mode
 	compatible       bool          // Schema evolution compatibility mode
 	typeResolver     *TypeResolver // For complex type deserialization
 	refResolver      *RefResolver  // For reference tracking (legacy)
@@ -40,6 +41,11 @@ type ReadContext struct {
 	depth            int           // Current nesting depth for cycle detection
 	maxDepth         int           // Maximum allowed nesting depth
 	err              Error         // Accumulated error state for deferred checking
+}
+
+// IsXlang returns whether cross-language serialization mode is enabled
+func (c *ReadContext) IsXlang() bool {
+	return c.xlang
 }
 
 // NewReadContext creates a new read context
@@ -560,7 +566,7 @@ func (c *ReadContext) ReadValue(value reflect.Value, refMode RefMode, readType b
 
 	// Handle array targets (arrays are serialized as slices)
 	if value.Type().Kind() == reflect.Array {
-		c.readArrayValueWithMode(value, refMode, readType)
+		c.ReadArrayValue(value, refMode, readType)
 		return
 	}
 
@@ -780,14 +786,9 @@ func (c *ReadContext) ReadInto(value reflect.Value, serializer Serializer, refMo
 	serializer.Read(c, refMode, readTypeInfo, false, value)
 }
 
-// readArrayValue handles array targets when stream contains slice data
-// Arrays are serialized as slices in xlang protocol
-func (c *ReadContext) readArrayValue(target reflect.Value) {
-	c.readArrayValueWithMode(target, RefModeTracking, true)
-}
-
-// readArrayValueWithMode handles array targets with configurable ref mode and type reading
-func (c *ReadContext) readArrayValueWithMode(target reflect.Value, refMode RefMode, readType bool) {
+// ReadArrayValue handles array targets with configurable ref mode and type reading.
+// Arrays are serialized as slices in xlang protocol.
+func (c *ReadContext) ReadArrayValue(target reflect.Value, refMode RefMode, readType bool) {
 	var refID int32 = int32(NotNullValueFlag)
 
 	// Handle ref tracking based on refMode

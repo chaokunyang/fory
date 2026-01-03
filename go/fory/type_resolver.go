@@ -970,7 +970,7 @@ func (r *TypeResolver) getTypeInfo(value reflect.Value, create bool) (*TypeInfo,
 				serializer = &arrayConcreteValueSerializer{
 					type_:          type_,
 					elemSerializer: elemSerializer,
-					referencable:   nullable(type_.Elem()),
+					referencable:   isRefType(type_.Elem(), r.isXlang),
 				}
 			}
 		}
@@ -1353,7 +1353,7 @@ func (r *TypeResolver) createSerializer(type_ reflect.Type, mapInStruct bool) (s
 				return nil, err
 			}
 			// Always use xlang mode (LIST typeId) for non-primitive slices
-			return newSliceConcreteValueSerializer(type_, elemSerializer)
+			return newSliceConcreteValueSerializer(type_, elemSerializer, r.isXlang)
 		}
 	case reflect.Array:
 		elem := type_.Elem()
@@ -1393,7 +1393,7 @@ func (r *TypeResolver) createSerializer(type_ reflect.Type, mapInStruct bool) (s
 			return &arrayConcreteValueSerializer{
 				type_:          type_,
 				elemSerializer: elemSerializer,
-				referencable:   nullable(type_.Elem()),
+				referencable:   isRefType(type_.Elem(), r.isXlang),
 			}, nil
 		}
 	case reflect.Map:
@@ -1417,19 +1417,9 @@ func (r *TypeResolver) createSerializer(type_ reflect.Type, mapInStruct bool) (s
 					return nil, err
 				}
 			}
-			// Determine key/value referencability
-			// In xlang mode, strings are value types and should not be reference-tracked
-			keyReferencable := nullable(type_.Key())
-			valueReferencable := nullable(type_.Elem())
-			if r.isXlang {
-				// In xlang mode, strings are value types (not reference-tracked)
-				if type_.Key().Kind() == reflect.String {
-					keyReferencable = false
-				}
-				if type_.Elem().Kind() == reflect.String {
-					valueReferencable = false
-				}
-			}
+			// Determine key/value referencability using isRefType which handles xlang mode
+			keyReferencable := isRefType(type_.Key(), r.isXlang)
+			valueReferencable := isRefType(type_.Elem(), r.isXlang)
 			return &mapSerializer{
 				type_:             type_,
 				keySerializer:     keySerializer,
@@ -1504,7 +1494,7 @@ func (r *TypeResolver) GetSliceSerializer(sliceType reflect.Type) (Serializer, e
 	if err != nil {
 		return nil, err
 	}
-	return newSliceConcreteValueSerializer(sliceType, elemSerializer)
+	return newSliceConcreteValueSerializer(sliceType, elemSerializer, r.isXlang)
 }
 
 // GetSetSerializer returns the setSerializer for a map[T]bool type (used to represent sets in Go).
@@ -1556,7 +1546,7 @@ func (r *TypeResolver) GetArraySerializer(arrayType reflect.Type) (Serializer, e
 	if err != nil {
 		return nil, err
 	}
-	return newSliceConcreteValueSerializer(arrayType, elemSerializer)
+	return newSliceConcreteValueSerializer(arrayType, elemSerializer, r.isXlang)
 }
 
 func isDynamicType(type_ reflect.Type) bool {

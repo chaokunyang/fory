@@ -119,7 +119,7 @@ type sliceConcreteValueSerializer struct {
 // It returns an error if the element type is an interface, pointer to interface, or a primitive type.
 // Primitive numeric types (bool, int8, int16, int32, int64, uint8, float32, float64) must use
 // dedicated primitive slice serializers that use ARRAY protocol (binary size + binary).
-func newSliceConcreteValueSerializer(type_ reflect.Type, elemSerializer Serializer) (*sliceConcreteValueSerializer, error) {
+func newSliceConcreteValueSerializer(type_ reflect.Type, elemSerializer Serializer, xlang bool) (*sliceConcreteValueSerializer, error) {
 	elem := type_.Elem()
 	if elem.Kind() == reflect.Interface {
 		return nil, fmt.Errorf("sliceConcreteValueSerializer does not support interface element type: %v", type_)
@@ -136,7 +136,7 @@ func newSliceConcreteValueSerializer(type_ reflect.Type, elemSerializer Serializ
 	return &sliceConcreteValueSerializer{
 		type_:          type_,
 		elemSerializer: elemSerializer,
-		referencable:   nullable(elem),
+		referencable:   isRefType(elem, xlang),
 	}, nil
 }
 

@@ -169,11 +169,13 @@ func New(opts ...Option) *Fory {
 	f.writeCtx.typeResolver = f.typeResolver
 	f.writeCtx.refResolver = f.refResolver
 	f.writeCtx.compatible = f.config.Compatible
+	f.writeCtx.xlang = f.config.IsXlang
 
 	f.readCtx = NewReadContext(f.config.TrackRef)
 	f.readCtx.typeResolver = f.typeResolver
 	f.readCtx.refResolver = f.refResolver
 	f.readCtx.compatible = f.config.Compatible
+	f.readCtx.xlang = f.config.IsXlang
 
 	return f
 }

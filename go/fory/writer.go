@@ -33,6 +33,7 @@ type WriteContext struct {
 	buffer         *ByteBuffer
 	refWriter      *RefWriter
 	trackRef       bool // Cached flag to avoid indirection
+	xlang          bool // Cross-language serialization mode
 	compatible     bool // Schema evolution compatibility mode
 	depth          int
 	maxDepth       int
@@ -41,6 +42,11 @@ type WriteContext struct {
 	bufferCallback func(BufferObject) bool // Callback for out-of-band buffers
 	outOfBand      bool                    // Whether out-of-band serialization is enabled
 	err            Error                   // Accumulated error state for deferred checking
+}
+
+// IsXlang returns whether cross-language serialization mode is enabled
+func (c *WriteContext) IsXlang() bool {
+	return c.xlang
 }
 
 // NewWriteContext creates a new write context

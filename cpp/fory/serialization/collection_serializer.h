@@ -269,8 +269,12 @@ inline void write_collection_data_slow(const Container &coll, WriteContext &ctx,
   if (is_same_type) {
     bitmap |= COLL_IS_SAME_TYPE;
   }
+  // Only set TRACKING_REF if element is shared ref AND global ref tracking is
+  // enabled
   if constexpr (elem_is_shared_ref) {
-    bitmap |= COLL_TRACKING_REF;
+    if (ctx.track_ref()) {
+      bitmap |= COLL_TRACKING_REF;
+    }
   }
 
   // Write header
@@ -291,29 +295,24 @@ inline void write_collection_data_slow(const Container &coll, WriteContext &ctx,
   if (is_same_type) {
     // All elements have same type - type info written once above
     if (!has_null) {
-      if constexpr (elem_is_shared_ref) {
-        // Write with ref flag, without type
-        for (const auto &elem : coll) {
-          Serializer<T>::write(elem, ctx, RefMode::NullOnly, false,
-                               has_generics);
-        }
-      } else {
-        // Write data directly
-        for (const auto &elem : coll) {
-          if constexpr (is_nullable_v<T>) {
-            using Inner = nullable_element_t<T>;
-            Serializer<Inner>::write_data(deref_nullable(elem), ctx);
+      // No nulls - write data directly without null flag
+      for (const auto &elem : coll) {
+        if constexpr (is_nullable_v<T>) {
+          using Inner = nullable_element_t<T>;
+          Serializer<Inner>::write_data(deref_nullable(elem), ctx);
+        } else if constexpr (elem_is_shared_ref) {
+          // For shared_ptr, use write_data which handles polymorphic types
+          Serializer<T>::write_data(elem, ctx);
+        } else {
+          if constexpr (is_generic_type_v<T>) {
+            Serializer<T>::write_data_generic(elem, ctx, has_generics);
           } else {
-            if constexpr (is_generic_type_v<T>) {
-              Serializer<T>::write_data_generic(elem, ctx, has_generics);
-            } else {
-              Serializer<T>::write_data(elem, ctx);
-            }
+            Serializer<T>::write_data(elem, ctx);
           }
         }
       }
     } else {
-      // Has null elements - write with ref flag for null tracking
+      // Has null elements - write with null flag
       for (const auto &elem : coll) {
         Serializer<T>::write(elem, ctx, RefMode::NullOnly, false, has_generics);
       }
@@ -321,18 +320,12 @@ inline void write_collection_data_slow(const Container &coll, WriteContext &ctx,
   } else {
     // Heterogeneous types - write type info per element
     if (!has_null) {
-      if constexpr (elem_is_shared_ref) {
-        for (const auto &elem : coll) {
-          Serializer<T>::write(elem, ctx, RefMode::NullOnly, true,
-                               has_generics);
-        }
-      } else {
-        for (const auto &elem : coll) {
-          Serializer<T>::write(elem, ctx, RefMode::None, true, has_generics);
-        }
+      // No nulls - write without null flag (RefMode::None)
+      for (const auto &elem : coll) {
+        Serializer<T>::write(elem, ctx, RefMode::None, true, has_generics);
       }
     } else {
-      // Has null elements
+      // Has null elements - write with null flag (RefMode::NullOnly)
       for (const auto &elem : coll) {
         Serializer<T>::write(elem, ctx, RefMode::NullOnly, true, has_generics);
       }
@@ -1609,8 +1602,12 @@ struct Serializer<std::forward_list<T, Alloc>> {
       if (is_same_type) {
         bitmap |= COLL_IS_SAME_TYPE;
       }
+      // Only set TRACKING_REF if element is shared ref AND global ref tracking
+      // is enabled
       if constexpr (elem_is_shared_ref) {
-        bitmap |= COLL_TRACKING_REF;
+        if (ctx.track_ref()) {
+          bitmap |= COLL_TRACKING_REF;
+        }
       }
 
       // Write header

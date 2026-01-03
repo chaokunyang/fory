@@ -323,12 +323,10 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
       return;
     }
 
-    bool is_first_occurrence = false;
     if (ctx.track_ref()) {
       if (ctx.ref_writer().try_write_shared_ref(ctx, ptr)) {
         return;
       }
-      is_first_occurrence = true;
     } else {
       ctx.write_int8(NOT_NULL_VALUE_FLAG);
     }

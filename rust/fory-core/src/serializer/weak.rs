@@ -330,6 +330,10 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for RcWeak<T> {
                 .ref_writer
                 .try_write_rc_ref(&mut context.writer, &rc)
             {
+                // Target not previously registered - serialize its data.
+                // Note: For circular references, ref_tracking should be enabled
+                // on the Fory instance to ensure proper reference resolution.
+                // Use `Fory::default().ref_tracking(true)` for circular references.
                 if write_type_info {
                     T::fory_write_type_info(context)?;
                 }
@@ -490,6 +494,10 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for ArcWeak
                 .ref_writer
                 .try_write_arc_ref(&mut context.writer, &arc)
             {
+                // Target not previously registered - serialize its data.
+                // Note: For circular references with Mutex/RwLock, this may cause deadlock
+                // if ref_tracking is not enabled on the Fory instance.
+                // Use `Fory::default().ref_tracking(true)` for circular references.
                 if write_type_info {
                     T::fory_write_type_info(context)?;
                 }

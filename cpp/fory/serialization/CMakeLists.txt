@@ -30,6 +30,7 @@ set(FORY_SERIALIZATION_HEADERS
     enum_serializer.h
     fory.h
     map_serializer.h
+    ref_mode.h
     ref_resolver.h
     serializer.h
     serializer_traits.h
@@ -43,6 +44,7 @@ set(FORY_SERIALIZATION_HEADERS
     type_resolver.h
     unsigned_serializer.h
     variant_serializer.h
+    weak_ptr_serializer.h
 )
 
 add_library(fory_serialization ${FORY_SERIALIZATION_SOURCES})
@@ -97,6 +99,10 @@ if(FORY_BUILD_TESTS)
     add_executable(fory_serialization_field_test field_serializer_test.cc)
     target_link_libraries(fory_serialization_field_test fory_serialization GTest::gtest)
     gtest_discover_tests(fory_serialization_field_test)
+
+    add_executable(fory_serialization_weak_ptr_test weak_ptr_serializer_test.cc)
+    target_link_libraries(fory_serialization_weak_ptr_test fory_serialization GTest::gtest GTest::gtest_main)
+    gtest_discover_tests(fory_serialization_weak_ptr_test)
 endif()
 
 # xlang test binary

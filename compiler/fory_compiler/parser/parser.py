@@ -187,6 +187,9 @@ class Parser:
             # Check for option statements
             if self.check(TokenType.OPTION):
                 self.parse_enum_option(name)
+            # Check for reserved statements
+            elif self.check(TokenType.RESERVED):
+                self.parse_reserved()
             else:
                 values.append(self.parse_enum_value())
 
@@ -237,6 +240,70 @@ class Parser:
                 option_token.column,
             )
 
+    def parse_message_option(self):
+        """Parse a message-level option statement.
+
+        Currently just parses and ignores the option.
+        """
+        self.consume(TokenType.OPTION)
+        self.consume(TokenType.IDENT, "Expected option name")
+        self.consume(TokenType.EQUALS, "Expected '=' after option name")
+
+        # Get the option value (can be various types)
+        if self.check(TokenType.TRUE) or self.check(TokenType.FALSE):
+            self.advance()
+        elif self.check(TokenType.IDENT):
+            self.advance()
+        elif self.check(TokenType.INT):
+            self.advance()
+        elif self.check(TokenType.STRING):
+            self.advance()
+        else:
+            raise self.error(f"Expected option value, got {self.current().type.name}")
+
+        self.consume(TokenType.SEMI, "Expected ';' after option statement")
+
+    def parse_reserved(self):
+        """Parse a reserved statement.
+
+        Supports:
+        - reserved 2, 15, 9 to 11, 40 to max;  (numbers and ranges)
+        - reserved "FOO", "BAR";  (field/value names)
+        """
+        self.consume(TokenType.RESERVED)
+
+        # Parse comma-separated list of reserved items
+        while True:
+            if self.check(TokenType.STRING):
+                # Reserved name: "FOO"
+                self.advance()
+            elif self.check(TokenType.INT):
+                # Reserved number or range start: 2 or 9 to 11
+                self.advance()
+                # Check for range: N to M or N to max
+                if self.check(TokenType.TO):
+                    self.advance()
+                    if self.check(TokenType.MAX):
+                        self.advance()
+                    elif self.check(TokenType.INT):
+                        self.advance()
+                    else:
+                        raise self.error("Expected integer or 'max' after 'to'")
+            else:
+                raise self.error(
+                    f"Expected reserved number or string, got {self.current().type.name}"
+                )
+
+            # Check for comma (more items) or semicolon (end)
+            if self.check(TokenType.COMMA):
+                self.advance()
+            elif self.check(TokenType.SEMI):
+                break
+            else:
+                raise self.error("Expected ',' or ';' in reserved statement")
+
+        self.consume(TokenType.SEMI, "Expected ';' after reserved statement")
+
     def parse_enum_value(self) -> EnumValue:
         """Parse an enum value: NAME = 0;"""
         start = self.current()
@@ -268,7 +335,14 @@ class Parser:
 
         fields = []
         while not self.check(TokenType.RBRACE):
-            fields.append(self.parse_field())
+            # Check for reserved statements
+            if self.check(TokenType.RESERVED):
+                self.parse_reserved()
+            # Check for option statements (message-level options)
+            elif self.check(TokenType.OPTION):
+                self.parse_message_option()
+            else:
+                fields.append(self.parse_field())
 
         self.consume(TokenType.RBRACE, "Expected '}' after message fields")
 

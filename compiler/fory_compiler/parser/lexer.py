@@ -37,6 +37,9 @@ class TokenType(Enum):
     OPTION = auto()
     TRUE = auto()
     FALSE = auto()
+    RESERVED = auto()
+    TO = auto()
+    MAX = auto()
 
     # Literals
     IDENT = auto()
@@ -94,6 +97,9 @@ class Lexer:
         "option": TokenType.OPTION,
         "true": TokenType.TRUE,
         "false": TokenType.FALSE,
+        "reserved": TokenType.RESERVED,
+        "to": TokenType.TO,
+        "max": TokenType.MAX,
     }
 
     PUNCTUATION = {

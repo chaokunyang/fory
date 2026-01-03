@@ -1317,12 +1317,8 @@ void write_single_field(const T &obj, WriteContext &ctx,
   // Enums: false (per Rust util.rs:58-59)
   // Structs/EXT: true ONLY in compatible mode (per C++ read logic)
   // Others: false
-  constexpr bool is_struct = field_type_id == TypeId::STRUCT ||
-                             field_type_id == TypeId::COMPATIBLE_STRUCT ||
-                             field_type_id == TypeId::NAMED_STRUCT ||
-                             field_type_id == TypeId::NAMED_COMPATIBLE_STRUCT;
-  constexpr bool is_ext =
-      field_type_id == TypeId::EXT || field_type_id == TypeId::NAMED_EXT;
+  constexpr bool is_struct = is_struct_type(field_type_id);
+  constexpr bool is_ext = is_ext_type(field_type_id);
   constexpr bool is_polymorphic = field_type_id == TypeId::UNKNOWN;
 
   // Check if field is marked as monomorphic (skip dynamic type dispatch)
@@ -1486,13 +1482,8 @@ void read_single_field_by_index(T &obj, ReadContext &ctx) {
   constexpr bool field_requires_ref = requires_ref_metadata_v<FieldType>;
   constexpr TypeId field_type_id = Serializer<FieldType>::type_id;
   // Check if field is a struct type - use type_id to handle shared_ptr<Struct>
-  constexpr bool is_struct_field =
-      field_type_id == TypeId::STRUCT ||
-      field_type_id == TypeId::COMPATIBLE_STRUCT ||
-      field_type_id == TypeId::NAMED_STRUCT ||
-      field_type_id == TypeId::NAMED_COMPATIBLE_STRUCT;
-  constexpr bool is_ext_field =
-      field_type_id == TypeId::EXT || field_type_id == TypeId::NAMED_EXT;
+  constexpr bool is_struct_field = is_struct_type(field_type_id);
+  constexpr bool is_ext_field = is_ext_type(field_type_id);
   constexpr bool is_polymorphic_field = field_type_id == TypeId::UNKNOWN;
 
   // Check if field is marked as monomorphic (skip dynamic type dispatch)
@@ -1577,13 +1568,8 @@ void read_single_field_by_index_compatible(T &obj, ReadContext &ctx,
 
   constexpr TypeId field_type_id = Serializer<FieldType>::type_id;
   // Check if field is a struct type - use type_id to handle shared_ptr<Struct>
-  constexpr bool is_struct_field =
-      field_type_id == TypeId::STRUCT ||
-      field_type_id == TypeId::COMPATIBLE_STRUCT ||
-      field_type_id == TypeId::NAMED_STRUCT ||
-      field_type_id == TypeId::NAMED_COMPATIBLE_STRUCT;
-  constexpr bool is_ext_field =
-      field_type_id == TypeId::EXT || field_type_id == TypeId::NAMED_EXT;
+  constexpr bool is_struct_field = is_struct_type(field_type_id);
+  constexpr bool is_ext_field = is_ext_type(field_type_id);
   constexpr bool is_polymorphic_field = field_type_id == TypeId::UNKNOWN;
   constexpr bool is_primitive_field = is_primitive_type_id(field_type_id);
 

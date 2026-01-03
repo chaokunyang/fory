@@ -289,15 +289,9 @@ func (s *structSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 
 	// Lazy initialization
 	if !s.initialized {
-		if DebugOutputEnabled() {
-			fmt.Printf("[fory-debug] structSerializer.WriteData: calling initialize for type=%v\n", s.type_)
-		}
 		if err := s.initialize(ctx.TypeResolver()); err != nil {
 			ctx.SetError(FromError(err))
 			return
-		}
-		if DebugOutputEnabled() {
-			fmt.Printf("[fory-debug] structSerializer.WriteData: after initialize, remainingFields=%d\n", len(s.remainingFields))
 		}
 	}
 
@@ -642,12 +636,7 @@ func (s *structSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value 
 	// In compatible mode with meta share, struct hash is not written
 	if !ctx.Compatible() {
 		err := ctx.Err()
-		pos := buf.ReaderIndex()
 		structHash := buf.ReadInt32(err)
-		if DebugOutputEnabled() {
-			fmt.Printf("[Go][fory-debug] Reading struct hash for %s at position %d: read=%d, expected=%d\n",
-				s.type_.String(), pos, structHash, s.structHash)
-		}
 		if structHash != s.structHash {
 			ctx.SetError(HashMismatchError(structHash, s.structHash, s.type_.String()))
 			return

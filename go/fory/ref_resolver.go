@@ -230,22 +230,15 @@ func (r *RefResolver) PreserveRefId() (int32, error) {
 
 func (r *RefResolver) TryPreserveRefId(buffer *ByteBuffer) (int32, error) {
 	var ctxErr Error
-	pos := buffer.ReaderIndex()
 	headFlag := buffer.ReadInt8(&ctxErr)
 	if ctxErr.HasError() {
 		return 0, ctxErr
-	}
-	if DebugOutputEnabled() {
-		fmt.Printf("[Go][fory-debug] TryPreserveRefId at position %d: headFlag=%d\n", pos, headFlag)
 	}
 	if headFlag == RefFlag {
 		// read ref id and get object from ref resolver
 		refId := buffer.ReadVaruint32(&ctxErr)
 		if ctxErr.HasError() {
 			return 0, ctxErr
-		}
-		if DebugOutputEnabled() {
-			fmt.Printf("[Go][fory-debug] TryPreserveRefId: REF_FLAG, refId=%d\n", refId)
 		}
 		r.readObject = r.GetReadObject(int32(refId))
 	} else {

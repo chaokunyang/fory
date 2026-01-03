@@ -808,6 +808,7 @@ func (m *MapFieldType) getTypeInfo(f *Fory) (TypeInfo, error) {
 	mapSerializer := &mapSerializer{
 		keySerializer:   keyInfo.Serializer,
 		valueSerializer: valueInfo.Serializer,
+		hasGenerics:     true,
 	}
 	return TypeInfo{Type: mapType, Serializer: mapSerializer}, nil
 }
@@ -828,6 +829,7 @@ func (m *MapFieldType) getTypeInfoWithResolver(resolver *TypeResolver) (TypeInfo
 	mapSerializer := &mapSerializer{
 		keySerializer:   keyInfo.Serializer,
 		valueSerializer: valueInfo.Serializer,
+		hasGenerics:     true,
 	}
 	return TypeInfo{Type: mapType, Serializer: mapSerializer}, nil
 }

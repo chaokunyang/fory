@@ -427,20 +427,30 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
     // Handle ref_mode == RefMode::None case (similar to Rust)
     if (ref_mode == RefMode::None) {
       if constexpr (is_polymorphic) {
-        // For polymorphic types, we must read type info when read_type=true
-        if (!read_type) {
-          ctx.set_error(Error::type_error(
-              "Cannot deserialize polymorphic std::shared_ptr<T> "
-              "without type info (read_type=false)"));
-          return nullptr;
+        if (read_type) {
+          // Polymorphic path: read type info from stream to get concrete type
+          const TypeInfo *type_info = ctx.read_any_typeinfo(ctx.error());
+          if (ctx.has_error()) {
+            return nullptr;
+          }
+          // Now use read_with_type_info with the concrete type info
+          return read_with_type_info(ctx, ref_mode, *type_info);
+        } else {
+          // Monomorphic path: read_type=false means field is marked monomorphic
+          // Use Serializer<T>::read directly without dynamic type dispatch
+          // Note: abstract types cannot use monomorphic path
+          if constexpr (std::is_abstract_v<T>) {
+            ctx.set_error(Error::unsupported(
+                "Cannot use monomorphic deserialization for abstract type"));
+            return nullptr;
+          } else {
+            T value = Serializer<T>::read(ctx, RefMode::None, false);
+            if (ctx.has_error()) {
+              return nullptr;
+            }
+            return std::make_shared<T>(std::move(value));
+          }
         }
-        // Read type info from stream to get the concrete type
-        const TypeInfo *type_info = ctx.read_any_typeinfo(ctx.error());
-        if (ctx.has_error()) {
-          return nullptr;
-        }
-        // Now use read_with_type_info with the concrete type info
-        return read_with_type_info(ctx, ref_mode, *type_info);
       } else {
         // T is guaranteed to be a value type (not pointer or nullable wrapper)
         // by static_assert, so no inner ref metadata needed.
@@ -498,38 +508,53 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
 
     // For polymorphic types, read type info AFTER handling ref flags
     if constexpr (is_polymorphic) {
-      if (!read_type) {
-        ctx.set_error(Error::type_error(
-            "Cannot deserialize polymorphic std::shared_ptr<T> "
-            "without type info (read_type=false)"));
-        return nullptr;
-      }
+      if (read_type) {
+        // Polymorphic path: read type info and use harness for deserialization
+        // Check and increase dynamic depth for polymorphic deserialization
+        auto depth_res = ctx.increase_dyn_depth();
+        if (!depth_res.ok()) {
+          ctx.set_error(std::move(depth_res).error());
+          return nullptr;
+        }
+        DynDepthGuard dyn_depth_guard(ctx);
 
-      // Check and increase dynamic depth for polymorphic deserialization
-      auto depth_res = ctx.increase_dyn_depth();
-      if (!depth_res.ok()) {
-        ctx.set_error(std::move(depth_res).error());
-        return nullptr;
-      }
-      DynDepthGuard dyn_depth_guard(ctx);
+        // Read type info from stream to get the concrete type
+        const TypeInfo *type_info = ctx.read_any_typeinfo(ctx.error());
+        if (ctx.has_error()) {
+          return nullptr;
+        }
 
-      // Read type info from stream to get the concrete type
-      const TypeInfo *type_info = ctx.read_any_typeinfo(ctx.error());
-      if (ctx.has_error()) {
-        return nullptr;
+        // Use the harness to deserialize the concrete type
+        void *raw_ptr = read_polymorphic_harness_data(ctx, type_info);
+        if (FORY_PREDICT_FALSE(ctx.has_error())) {
+          return nullptr;
+        }
+        T *obj_ptr = static_cast<T *>(raw_ptr);
+        auto result = std::shared_ptr<T>(obj_ptr);
+        if (is_first_occurrence) {
+          ctx.ref_reader().store_shared_ref_at(reserved_ref_id, result);
+        }
+        return result;
+      } else {
+        // Monomorphic path: read_type=false means field is marked monomorphic
+        // Use Serializer<T>::read directly without dynamic type dispatch
+        // Note: abstract types cannot use monomorphic path
+        if constexpr (std::is_abstract_v<T>) {
+          ctx.set_error(Error::unsupported(
+              "Cannot use monomorphic deserialization for abstract type"));
+          return nullptr;
+        } else {
+          T value = Serializer<T>::read(ctx, RefMode::None, false);
+          if (ctx.has_error()) {
+            return nullptr;
+          }
+          auto result = std::make_shared<T>(std::move(value));
+          if (is_first_occurrence) {
+            ctx.ref_reader().store_shared_ref_at(reserved_ref_id, result);
+          }
+          return result;
+        }
       }
-
-      // Use the harness to deserialize the concrete type
-      void *raw_ptr = read_polymorphic_harness_data(ctx, type_info);
-      if (FORY_PREDICT_FALSE(ctx.has_error())) {
-        return nullptr;
-      }
-      T *obj_ptr = static_cast<T *>(raw_ptr);
-      auto result = std::shared_ptr<T>(obj_ptr);
-      if (is_first_occurrence) {
-        ctx.ref_reader().store_shared_ref_at(reserved_ref_id, result);
-      }
-      return result;
     } else {
       // Non-polymorphic path: T is guaranteed to be a value type (not pointer
       // or nullable wrapper) by static_assert, so no inner ref metadata needed.
@@ -818,20 +843,30 @@ template <typename T> struct Serializer<std::unique_ptr<T>> {
     // Handle ref_mode == RefMode::None case (similar to Rust)
     if (ref_mode == RefMode::None) {
       if constexpr (is_polymorphic) {
-        // For polymorphic types, we must read type info when read_type=true
-        if (!read_type) {
-          ctx.set_error(Error::type_error(
-              "Cannot deserialize polymorphic std::unique_ptr<T> "
-              "without type info (read_type=false)"));
-          return nullptr;
+        if (read_type) {
+          // Polymorphic path: read type info from stream to get concrete type
+          const TypeInfo *type_info = ctx.read_any_typeinfo(ctx.error());
+          if (ctx.has_error()) {
+            return nullptr;
+          }
+          // Now use read_with_type_info with the concrete type info
+          return read_with_type_info(ctx, ref_mode, *type_info);
+        } else {
+          // Monomorphic path: read_type=false means field is marked monomorphic
+          // Use Serializer<T>::read directly without dynamic type dispatch
+          // Note: abstract types cannot use monomorphic path
+          if constexpr (std::is_abstract_v<T>) {
+            ctx.set_error(Error::unsupported(
+                "Cannot use monomorphic deserialization for abstract type"));
+            return nullptr;
+          } else {
+            T value = Serializer<T>::read(ctx, RefMode::None, false);
+            if (ctx.has_error()) {
+              return nullptr;
+            }
+            return std::make_unique<T>(std::move(value));
+          }
         }
-        // Read type info from stream to get the concrete type
-        const TypeInfo *type_info = ctx.read_any_typeinfo(ctx.error());
-        if (ctx.has_error()) {
-          return nullptr;
-        }
-        // Now use read_with_type_info with the concrete type info
-        return read_with_type_info(ctx, ref_mode, *type_info);
       } else {
         // T is guaranteed to be a value type by static_assert.
         T value = Serializer<T>::read(ctx, RefMode::None, read_type);
@@ -859,34 +894,45 @@ template <typename T> struct Serializer<std::unique_ptr<T>> {
 
     // For polymorphic types, read type info AFTER handling ref flags
     if constexpr (is_polymorphic) {
-      if (!read_type) {
-        ctx.set_error(Error::type_error(
-            "Cannot deserialize polymorphic std::unique_ptr<T> "
-            "without type info (read_type=false)"));
-        return nullptr;
-      }
+      if (read_type) {
+        // Polymorphic path: read type info and use harness for deserialization
+        // Check and increase dynamic depth for polymorphic deserialization
+        auto depth_res = ctx.increase_dyn_depth();
+        if (!depth_res.ok()) {
+          ctx.set_error(std::move(depth_res).error());
+          return nullptr;
+        }
+        DynDepthGuard dyn_depth_guard(ctx);
 
-      // Check and increase dynamic depth for polymorphic deserialization
-      auto depth_res = ctx.increase_dyn_depth();
-      if (!depth_res.ok()) {
-        ctx.set_error(std::move(depth_res).error());
-        return nullptr;
-      }
-      DynDepthGuard dyn_depth_guard(ctx);
+        // Read type info from stream to get the concrete type
+        const TypeInfo *type_info = ctx.read_any_typeinfo(ctx.error());
+        if (ctx.has_error()) {
+          return nullptr;
+        }
 
-      // Read type info from stream to get the concrete type
-      const TypeInfo *type_info = ctx.read_any_typeinfo(ctx.error());
-      if (ctx.has_error()) {
-        return nullptr;
+        // Use the harness to deserialize the concrete type
+        void *raw_ptr = read_polymorphic_harness_data(ctx, type_info);
+        if (FORY_PREDICT_FALSE(ctx.has_error())) {
+          return nullptr;
+        }
+        T *obj_ptr = static_cast<T *>(raw_ptr);
+        return std::unique_ptr<T>(obj_ptr);
+      } else {
+        // Monomorphic path: read_type=false means field is marked monomorphic
+        // Use Serializer<T>::read directly without dynamic type dispatch
+        // Note: abstract types cannot use monomorphic path
+        if constexpr (std::is_abstract_v<T>) {
+          ctx.set_error(Error::unsupported(
+              "Cannot use monomorphic deserialization for abstract type"));
+          return nullptr;
+        } else {
+          T value = Serializer<T>::read(ctx, RefMode::None, false);
+          if (ctx.has_error()) {
+            return nullptr;
+          }
+          return std::make_unique<T>(std::move(value));
+        }
       }
-
-      // Use the harness to deserialize the concrete type
-      void *raw_ptr = read_polymorphic_harness_data(ctx, type_info);
-      if (FORY_PREDICT_FALSE(ctx.has_error())) {
-        return nullptr;
-      }
-      T *obj_ptr = static_cast<T *>(raw_ptr);
-      return std::unique_ptr<T>(obj_ptr);
     } else {
       // T is guaranteed to be a value type by static_assert.
       T value = Serializer<T>::read(ctx, RefMode::None, read_type);

@@ -300,4 +300,14 @@ public class PythonXlangTest extends XlangTestBase {
   public void testRefCompatible(boolean enableCodegen) throws IOException {
     super.testRefCompatible(enableCodegen);
   }
+
+  @Test(dataProvider = "enableCodegen")
+  public void testCircularRefSchemaConsistent(boolean enableCodegen) throws IOException {
+    super.testCircularRefSchemaConsistent(enableCodegen);
+  }
+
+  @Test(dataProvider = "enableCodegen")
+  public void testCircularRefCompatible(boolean enableCodegen) throws IOException {
+    super.testCircularRefCompatible(enableCodegen);
+  }
 }

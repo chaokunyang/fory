@@ -381,4 +381,20 @@ public class CPPXlangTest extends XlangTestBase {
   public void testRefCompatible(boolean enableCodegen) throws java.io.IOException {
     super.testRefCompatible(enableCodegen);
   }
+
+  @Override
+  @Test(dataProvider = "enableCodegen")
+  public void testCircularRefSchemaConsistent(boolean enableCodegen) throws java.io.IOException {
+    // Skip: C++ doesn't have circular reference support yet
+    throw new SkipException(
+        "Skipping testCircularRefSchemaConsistent: C++ circular reference not implemented");
+  }
+
+  @Override
+  @Test(dataProvider = "enableCodegen")
+  public void testCircularRefCompatible(boolean enableCodegen) throws java.io.IOException {
+    // Skip: C++ doesn't have circular reference support yet
+    throw new SkipException(
+        "Skipping testCircularRefCompatible: C++ circular reference not implemented");
+  }
 }

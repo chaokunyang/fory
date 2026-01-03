@@ -1107,7 +1107,7 @@ struct FieldFingerprintInfo {
     ref_tracking: bool,
     /// The type ID (UNKNOWN for user-defined types including enums/unions)
     type_id: u32,
-    /// Whether the field type is Option<T>
+    /// Whether the field type is `Option<T>`
     is_option_type: bool,
 }
 

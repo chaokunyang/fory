@@ -539,7 +539,12 @@ class TypeResolver:
     def _set_typeinfo(self, typeinfo):
         type_id = typeinfo.type_id & 0xFF
         if is_struct_type(type_id):
-            from pyfory.struct import DataClassSerializer
+            from pyfory.struct import DataClassSerializer, DataClassStubSerializer
+
+            # Set a stub serializer FIRST to break recursion for self-referencing types.
+            # get_typeinfo() only calls _set_typeinfo when serializer is None,
+            # so setting stub first prevents re-entry for circular type references.
+            typeinfo.serializer = DataClassStubSerializer(self.fory, typeinfo.cls, xlang=not self.fory.is_py)
 
             if self.meta_share:
                 type_def = encode_typedef(self, typeinfo.cls)
@@ -547,7 +552,6 @@ class TypeResolver:
                     typeinfo.serializer = type_def.create_serializer(self)
                     typeinfo.type_def = type_def
                 else:
-                    # Fallback to regular serializer
                     typeinfo.serializer = DataClassSerializer(self.fory, typeinfo.cls, xlang=not self.fory.is_py)
             else:
                 typeinfo.serializer = DataClassSerializer(self.fory, typeinfo.cls, xlang=not self.fory.is_py)

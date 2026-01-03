@@ -1222,6 +1222,92 @@ def test_ref_compatible():
         f.write(new_bytes)
 
 
+# ============================================================================
+# Circular Reference Test Types
+# ============================================================================
+
+
+@dataclass
+class CircularRefStruct:
+    """
+    Struct for circular reference tests.
+    Contains a self-referencing field and a name field.
+    The 'self_ref' field points back to the same object, creating a circular reference.
+    Matches Java CircularRefStruct (type id 601 for schema consistent, 602 for compatible)
+    """
+
+    name: str = ""
+    self_ref: Optional["CircularRefStruct"] = pyfory.field(default=None, ref=True, nullable=True)
+
+
+# ============================================================================
+# Circular Reference Tests
+# ============================================================================
+
+
+def test_circular_ref_schema_consistent():
+    """
+    Test circular reference in SCHEMA_CONSISTENT mode (compatible=false).
+
+    Creates a struct where the 'self_ref' field points back to the same object.
+    Verifies that after serialization/deserialization across languages,
+    the circular reference is preserved.
+    """
+    data_file = get_data_file()
+    with open(data_file, "rb") as f:
+        data_bytes = f.read()
+
+    fory = pyfory.Fory(xlang=True, compatible=False, ref=True)
+    fory.register_type(CircularRefStruct, type_id=601)
+
+    obj = fory.deserialize(data_bytes)
+    debug_print(f"Deserialized: {obj}")
+
+    # Verify the struct has the expected name
+    assert obj.name == "circular_test", f"name should be 'circular_test', got {obj.name}"
+
+    # Verify circular reference is preserved (self_ref points to itself)
+    assert obj.self_ref is not None, "self_ref should not be None"
+    assert obj.self_ref is obj, "self_ref should point to the same object (circular reference)"
+    debug_print("Circular reference verified: obj.self_ref is obj")
+
+    # Re-serialize and write back
+    new_bytes = fory.serialize(obj)
+    with open(data_file, "wb") as f:
+        f.write(new_bytes)
+
+
+def test_circular_ref_compatible():
+    """
+    Test circular reference in COMPATIBLE mode (compatible=true).
+
+    Creates a struct where the 'self_ref' field points back to the same object.
+    Verifies that circular references work with schema evolution support.
+    """
+    data_file = get_data_file()
+    with open(data_file, "rb") as f:
+        data_bytes = f.read()
+
+    fory = pyfory.Fory(xlang=True, compatible=True, ref=True)
+    fory.register_type(CircularRefStruct, type_id=602)
+
+    obj = fory.deserialize(data_bytes)
+    debug_print(f"Deserialized: {obj}")
+
+    # Verify the struct has the expected name
+    assert obj.name == "compatible_circular", f"name should be 'compatible_circular', got {obj.name}"
+
+    # Verify circular reference is preserved (self_ref points to itself)
+    assert obj.self_ref is not None, "self_ref should not be None"
+    assert obj.self_ref is obj, "self_ref should point to the same object (circular reference)"
+    debug_print("Circular reference verified: obj.self_ref is obj")
+
+    # Re-serialize and write back
+    new_bytes = fory.serialize(obj)
+    with open(data_file, "wb") as f:
+        f.write(new_bytes)
+
+
 if __name__ == "__main__":
     """
     This file is executed by PythonXlangTest.java and other cross-language tests.

@@ -2324,6 +2324,110 @@ public abstract class XlangTestBase extends ForyTestBase {
     Assert.assertEquals(result.inner1.name, "compatible_shared");
   }
 
+  // ============================================================================
+  // Circular Reference Tests - Test self-referencing struct serialization
+  // ============================================================================
+
+  /**
+   * Struct for circular reference tests. Contains a self-referencing field and a string field. The
+   * 'selfRef' field points back to the same object, creating a circular reference. Note: Using
+   * 'selfRef' instead of 'self' because 'self' is a reserved keyword in Rust.
+   */
+  @Data
+  static class CircularRefStruct {
+    String name;
+
+    @ForyField(ref = true, nullable = true)
+    CircularRefStruct selfRef;
+  }
+
+  /**
+   * Test circular reference in SCHEMA_CONSISTENT mode (compatible=false). Creates a struct where
+   * the 'selfRef' field points back to the same object. Verifies that after
+   * serialization/deserialization across languages, the circular reference is preserved.
+   */
+  @Test(dataProvider = "enableCodegen")
+  public void testCircularRefSchemaConsistent(boolean enableCodegen) throws java.io.IOException {
+    String caseName = "test_circular_ref_schema_consistent";
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(CompatibleMode.SCHEMA_CONSISTENT)
+            .withRefTracking(true)
+            .withCodegen(enableCodegen)
+            .build();
+    fory.register(CircularRefStruct.class, 601);
+
+    // Create struct with circular reference (selfRef points to itself)
+    CircularRefStruct obj = new CircularRefStruct();
+    obj.name = "circular_test";
+    obj.selfRef = obj; // Circular reference
+
+    // Verify Java serialization preserves circular reference
+    byte[] javaBytes = fory.serialize(obj);
+    CircularRefStruct javaResult = (CircularRefStruct) fory.deserialize(javaBytes);
+    Assert.assertSame(javaResult, javaResult.selfRef, "Java: selfRef should point to same object");
+    Assert.assertEquals(javaResult.name, "circular_test");
+
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(256);
+    fory.serialize(buffer, obj);
+
+    ExecutionContext ctx = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
+    runPeer(ctx);
+
+    MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
+    CircularRefStruct result = (CircularRefStruct) fory.deserialize(buffer2);
+
+    // Verify circular reference is preserved after cross-language round-trip
+    Assert.assertSame(
+        result, result.selfRef, "After xlang round-trip: selfRef should point to same object");
+    Assert.assertEquals(result.name, "circular_test");
+  }
+
+  /**
+   * Test circular reference in COMPATIBLE mode (compatible=true). Creates a struct where the
+   * 'selfRef' field points back to the same object. Verifies that circular references work with
+   * schema evolution support.
+   */
+  @Test(dataProvider = "enableCodegen")
+  public void testCircularRefCompatible(boolean enableCodegen) throws java.io.IOException {
+    String caseName = "test_circular_ref_compatible";
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .withRefTracking(true)
+            .withCodegen(enableCodegen)
+            .withMetaCompressor(new NoOpMetaCompressor())
+            .build();
+    fory.register(CircularRefStruct.class, 602);
+
+    // Create struct with circular reference (selfRef points to itself)
+    CircularRefStruct obj = new CircularRefStruct();
+    obj.name = "compatible_circular";
+    obj.selfRef = obj; // Circular reference
+
+    // Verify Java serialization preserves circular reference
+    byte[] javaBytes = fory.serialize(obj);
+    CircularRefStruct javaResult = (CircularRefStruct) fory.deserialize(javaBytes);
+    Assert.assertSame(javaResult, javaResult.selfRef, "Java: selfRef should point to same object");
+    Assert.assertEquals(javaResult.name, "compatible_circular");
+
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(256);
+    fory.serialize(buffer, obj);
+
+    ExecutionContext ctx = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
+    runPeer(ctx);
+
+    MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
+    CircularRefStruct result = (CircularRefStruct) fory.deserialize(buffer2);
+
+    // Verify circular reference is preserved after cross-language round-trip
+    Assert.assertSame(
+        result, result.selfRef, "After xlang round-trip: selfRef should point to same object");
+    Assert.assertEquals(result.name, "compatible_circular");
+  }
+
   /** Normalize null values to empty strings in collections and maps recursively. */
   private Object normalizeNulls(Object obj) {
     if (obj == null) {

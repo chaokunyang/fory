@@ -1648,6 +1648,7 @@ fn test_union_xlang() {
 // Reference Tracking Tests - Cross-language shared reference tests
 // ============================================================================
 
+use fory_core::RcWeak;
 use std::rc::Rc;
 
 /// Inner struct for reference tracking test (SCHEMA_CONSISTENT mode)
@@ -1777,5 +1778,108 @@ fn test_ref_compatible() {
 
     // Re-serialize and write back
     let new_bytes = fory.serialize(&outer).unwrap();
+    fs::write(&data_file_path, new_bytes).unwrap();
+}
+
+// ============================================================================
+// Circular Reference Tests - Test self-referencing struct serialization
+// ============================================================================
+
+/// Struct for circular reference tests.
+/// Contains a self-referencing field and a name field.
+/// The 'self_ref' field points back to the same object, creating a circular reference.
+/// Uses RcWeak for the self-reference to support forward reference resolution during deserialization.
+/// This is the proper Rust pattern for circular references - RcWeak supports callbacks that
+/// resolve when the strong Rc becomes available.
+/// Matches Java CircularRefStruct with type ID 601 (schema consistent) or 602 (compatible)
+#[derive(ForyObject, Debug, Clone)]
+struct CircularRefStruct {
+    name: String,
+    #[fory(ref = true, nullable = true)]
+    self_ref: RcWeak<CircularRefStruct>,
+}
+
+/// Test circular reference in SCHEMA_CONSISTENT mode (compatible=false).
+/// Creates a struct where the 'self_ref' field points back to the same object.
+/// Verifies that after serialization/deserialization across languages,
+/// the circular reference is preserved.
+#[test]
+#[ignore]
+fn test_circular_ref_schema_consistent() {
+    let data_file_path = get_data_file();
+    let bytes = fs::read(&data_file_path).unwrap();
+
+    let mut fory = Fory::default()
+        .compatible(false)
+        .xlang(true)
+        .track_ref(true);
+    fory.register::<CircularRefStruct>(601).unwrap();
+
+    // Deserialize as Rc<CircularRefStruct> since the whole struct needs ref tracking
+    let obj: Rc<CircularRefStruct> = fory.deserialize(&bytes).unwrap();
+
+    // Verify the struct has the expected name
+    assert_eq!(obj.name, "circular_test");
+
+    // Verify circular reference is preserved (self_ref points back to the same object)
+    // RcWeak.upgrade() returns Option<Rc<T>> - should be Some if the strong ref exists
+    let upgraded = obj.self_ref.upgrade();
+    assert!(
+        upgraded.is_some(),
+        "self_ref.upgrade() should return Some (circular reference)"
+    );
+
+    let self_ref = upgraded.unwrap();
+    assert_eq!(self_ref.name, "circular_test");
+
+    // Verify it's actually pointing to the same object (circular)
+    assert!(
+        Rc::ptr_eq(&obj, &self_ref),
+        "self_ref should point to the same object as obj (circular reference)"
+    );
+
+    // Re-serialize and write back - serialize the Rc, not the dereferenced value
+    // This ensures the Rc is registered before the RcWeak self-reference tries to reference it
+    let new_bytes = fory.serialize(&obj).unwrap();
+    fs::write(&data_file_path, new_bytes).unwrap();
+}
+
+/// Test circular reference in COMPATIBLE mode (compatible=true).
+/// Creates a struct where the 'self_ref' field points back to the same object.
+/// Verifies that circular references work with schema evolution support.
+#[test]
+#[ignore]
+fn test_circular_ref_compatible() {
+    let data_file_path = get_data_file();
+    let bytes = fs::read(&data_file_path).unwrap();
+
+    let mut fory = Fory::default().compatible(true).xlang(true).track_ref(true);
+    fory.register::<CircularRefStruct>(602).unwrap();
+
+    // Deserialize as Rc<CircularRefStruct> since the whole struct needs ref tracking
+    let obj: Rc<CircularRefStruct> = fory.deserialize(&bytes).unwrap();
+
+    // Verify the struct has the expected name
+    assert_eq!(obj.name, "compatible_circular");
+
+    // Verify circular reference is preserved (self_ref points back to the same object)
+    let upgraded = obj.self_ref.upgrade();
+    assert!(
+        upgraded.is_some(),
+        "self_ref.upgrade() should return Some (circular reference)"
+    );
+
+    let self_ref = upgraded.unwrap();
+    assert_eq!(self_ref.name, "compatible_circular");
+
+    // Verify it's actually pointing to the same object (circular)
+    assert!(
+        Rc::ptr_eq(&obj, &self_ref),
+        "self_ref should point to the same object as obj (circular reference)"
+    );
+
+    // Re-serialize and write back - serialize the Rc, not the dereferenced value
+    // This ensures the Rc is registered before the RcWeak self-reference tries to reference it
+    let new_bytes = fory.serialize(&obj).unwrap();
     fs::write(&data_file_path, new_bytes).unwrap();
 }

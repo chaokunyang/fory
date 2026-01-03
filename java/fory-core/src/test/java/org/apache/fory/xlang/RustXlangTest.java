@@ -269,4 +269,14 @@ public class RustXlangTest extends XlangTestBase {
   public void testRefCompatible(boolean enableCodegen) throws java.io.IOException {
     super.testRefCompatible(enableCodegen);
   }
+
+  @Test(dataProvider = "enableCodegen")
+  public void testCircularRefSchemaConsistent(boolean enableCodegen) throws java.io.IOException {
+    super.testCircularRefSchemaConsistent(enableCodegen);
+  }
+
+  @Test(dataProvider = "enableCodegen")
+  public void testCircularRefCompatible(boolean enableCodegen) throws java.io.IOException {
+    super.testCircularRefCompatible(enableCodegen);
+  }
 }

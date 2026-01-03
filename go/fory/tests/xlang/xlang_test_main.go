@@ -1919,6 +1919,30 @@ func getRefOuterCompatible(obj interface{}) RefOuterCompatible {
 }
 
 // ============================================================================
+// Circular Reference Test Types
+// ============================================================================
+
+// CircularRefStruct - Struct for circular reference tests
+// Contains a self-referencing field and a name field
+// The 'SelfRef' field points back to the same object, creating a circular reference
+// Matches Java's CircularRefStruct (type id 601 for schema consistent, 602 for compatible)
+type CircularRefStruct struct {
+	Name    string
+	SelfRef *CircularRefStruct `fory:"ref,nullable"`
+}
+
+func getCircularRefStruct(obj interface{}) *CircularRefStruct {
+	switch v := obj.(type) {
+	case CircularRefStruct:
+		return &v
+	case *CircularRefStruct:
+		return v
+	default:
+		panic(fmt.Sprintf("expected CircularRefStruct, got %T", obj))
+	}
+}
+
+// ============================================================================
 // Reference Tracking Tests
 // ============================================================================
 
@@ -2011,6 +2035,84 @@ func testRefCompatible() {
 		Inner2: result.Inner1, // Use same reference
 	}
 	serialized, err := f.Serialize(outer)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to serialize: %v", err))
+	}
+
+	writeFile(dataFile, serialized)
+}
+
+// ============================================================================
+// Circular Reference Tests
+// ============================================================================
+
+func testCircularRefSchemaConsistent() {
+	dataFile := getDataFile()
+	data := readFile(dataFile)
+
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(false), fory.WithRefTracking(true))
+	f.Register(CircularRefStruct{}, 601)
+
+	buf := fory.NewByteBuffer(data)
+	var obj interface{}
+	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to deserialize: %v", err))
+	}
+
+	result := getCircularRefStruct(obj)
+
+	// Verify the struct has the expected name
+	assertEqual("circular_test", result.Name, "Name")
+
+	// Verify circular reference is preserved (selfRef points to itself)
+	if result.SelfRef == nil {
+		panic("SelfRef is nil - circular reference not preserved")
+	}
+	if result.SelfRef != result {
+		panic("Circular reference failed: SelfRef should point to the same object")
+	}
+	fmt.Println("Circular reference verified: result.SelfRef == result")
+
+	// Re-serialize with circular reference
+	serialized, err := f.Serialize(result)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to serialize: %v", err))
+	}
+
+	writeFile(dataFile, serialized)
+}
+
+func testCircularRefCompatible() {
+	dataFile := getDataFile()
+	data := readFile(dataFile)
+
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true), fory.WithRefTracking(true))
+	f.Register(CircularRefStruct{}, 602)
+
+	buf := fory.NewByteBuffer(data)
+	var obj interface{}
+	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to deserialize: %v", err))
+	}
+
+	result := getCircularRefStruct(obj)
+
+	// Verify the struct has the expected name
+	assertEqual("compatible_circular", result.Name, "Name")
+
+	// Verify circular reference is preserved (selfRef points to itself)
+	if result.SelfRef == nil {
+		panic("SelfRef is nil - circular reference not preserved")
+	}
+	if result.SelfRef != result {
+		panic("Circular reference failed: SelfRef should point to the same object")
+	}
+	fmt.Println("Circular reference verified: result.SelfRef == result")
+
+	// Re-serialize with circular reference
+	serialized, err := f.Serialize(result)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to serialize: %v", err))
 	}
@@ -2117,6 +2219,10 @@ func main() {
 		testRefSchemaConsistent()
 	case "test_ref_compatible":
 		testRefCompatible()
+	case "test_circular_ref_schema_consistent":
+		testCircularRefSchemaConsistent()
+	case "test_circular_ref_compatible":
+		testCircularRefCompatible()
 	default:
 		panic(fmt.Sprintf("Unknown test case: %s", *caseName))
 	}

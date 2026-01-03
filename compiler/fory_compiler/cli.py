@@ -43,8 +43,43 @@ def parse_fdl_file(file_path: Path) -> Schema:
     return parser.parse()
 
 
+def resolve_import_path(
+    import_stmt: str,
+    importing_file: Path,
+    import_paths: List[Path],
+) -> Optional[Path]:
+    """
+    Resolve an import path by searching in multiple directories.
+
+    Search order:
+    1. Relative to the importing file's directory
+    2. Each import path in order (from -I / --proto_path / --import_path)
+
+    Args:
+        import_stmt: The import path string from the import statement
+        importing_file: The file containing the import statement
+        import_paths: List of additional search directories
+
+    Returns:
+        Resolved Path if found, None otherwise
+    """
+    # First, try relative to the importing file
+    relative_path = (importing_file.parent / import_stmt).resolve()
+    if relative_path.exists():
+        return relative_path
+
+    # Then try each import path
+    for search_path in import_paths:
+        candidate = (search_path / import_stmt).resolve()
+        if candidate.exists():
+            return candidate
+
+    return None
+
+
 def resolve_imports(
     file_path: Path,
+    import_paths: Optional[List[Path]] = None,
     visited: Optional[Set[Path]] = None,
     cache: Optional[Dict[Path, Schema]] = None,
 ) -> Schema:
@@ -53,12 +88,15 @@ def resolve_imports(
 
     Args:
         file_path: Path to the FDL file to parse
+        import_paths: List of directories to search for imports
         visited: Set of already visited files (for cycle detection)
         cache: Cache of already parsed schemas
 
     Returns:
         Schema with all imported types merged in
     """
+    if import_paths is None:
+        import_paths = []
     if visited is None:
         visited = set()
     if cache is None:
@@ -85,17 +123,21 @@ def resolve_imports(
     imported_messages = []
 
     for imp in schema.imports:
-        # Resolve import path relative to the importing file
-        import_path = (file_path.parent / imp.path).resolve()
+        # Resolve import path using search paths
+        import_path = resolve_import_path(imp.path, file_path, import_paths)
 
-        if not import_path.exists():
+        if import_path is None:
+            # Build helpful error message with search locations
+            searched = [str(file_path.parent)]
+            searched.extend(str(p) for p in import_paths)
             raise ImportError(
-                f"Import not found: {imp.path} (resolved to {import_path}) "
-                f"at line {imp.line}, column {imp.column}"
+                f"Import not found: {imp.path}\n"
+                f"  at line {imp.line}, column {imp.column}\n"
+                f"  Searched in: {', '.join(searched)}"
             )
 
         # Recursively resolve the imported file
-        imported_schema = resolve_imports(import_path, visited.copy(), cache)
+        imported_schema = resolve_imports(import_path, import_paths, visited.copy(), cache)
 
         # Collect types from imported schema
         imported_enums.extend(imported_schema.enums)
@@ -158,6 +200,18 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         help="Override package name from FDL file",
     )
 
+    compile_parser.add_argument(
+        "-I",
+        "--proto_path",
+        "--import_path",
+        dest="import_paths",
+        action="append",
+        type=Path,
+        default=[],
+        metavar="PATH",
+        help="Add a directory to the import search path. Can be specified multiple times.",
+    )
+
     return parser.parse_args(args)
 
 
@@ -183,13 +237,14 @@ def compile_file(
     languages: List[str],
     output_dir: Path,
     package_override: Optional[str] = None,
+    import_paths: Optional[List[Path]] = None,
 ) -> bool:
     """Compile a single FDL file with import resolution."""
     print(f"Compiling {file_path}...")
 
     # Parse and resolve imports
     try:
-        schema = resolve_imports(file_path)
+        schema = resolve_imports(file_path, import_paths)
     except OSError as e:
         print(f"Error reading {file_path}: {e}", file=sys.stderr)
         return False
@@ -234,6 +289,19 @@ def cmd_compile(args: argparse.Namespace) -> int:
     """Handle the compile command."""
     languages = get_languages(args.lang)
 
+    # Resolve and validate import paths (support comma-separated paths)
+    import_paths = []
+    for p in args.import_paths:
+        # Split by comma to support multiple paths in one option
+        for part in str(p).split(","):
+            part = part.strip()
+            if not part:
+                continue
+            resolved = Path(part).resolve()
+            if not resolved.is_dir():
+                print(f"Warning: Import path is not a directory: {part}", file=sys.stderr)
+            import_paths.append(resolved)
+
     # Create output directory
     args.output.mkdir(parents=True, exist_ok=True)
 
@@ -244,7 +312,7 @@ def cmd_compile(args: argparse.Namespace) -> int:
             success = False
             continue
 
-        if not compile_file(file_path, languages, args.output, args.package):
+        if not compile_file(file_path, languages, args.output, args.package, import_paths):
             success = False
 
     return 0 if success else 1

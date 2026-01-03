@@ -552,6 +552,34 @@ FORY_STRUCT(RefOuterCompatible, inner1, inner2);
 FORY_FIELD_TAGS(RefOuterCompatible, (inner1, 0, nullable, ref),
                 (inner2, 1, nullable, ref));
 
+// ============================================================================
+// Circular Reference Test Types - Self-referencing struct tests
+// ============================================================================
+
+// Struct for circular reference tests.
+// Contains a self-referencing field and a string field.
+// The 'selfRef' field points back to the same object, creating a circular
+// reference. Note: Using 'selfRef' instead of 'self' because 'self' is a
+// reserved keyword in Rust.
+// Matches Java CircularRefStruct with type ID 601 (schema consistent)
+// and 602 (compatible)
+struct CircularRefStruct {
+  std::string name;
+  std::shared_ptr<CircularRefStruct> selfRef;
+
+  bool operator==(const CircularRefStruct &other) const {
+    if (name != other.name)
+      return false;
+    // Compare selfRef by checking if both are null or both point to same
+    // object (for circular refs, we just check if both have values)
+    bool self_eq = (selfRef == nullptr && other.selfRef == nullptr) ||
+                   (selfRef != nullptr && other.selfRef != nullptr);
+    return self_eq;
+  }
+};
+FORY_STRUCT(CircularRefStruct, name, selfRef);
+FORY_FIELD_TAGS(CircularRefStruct, (name, 0), (selfRef, 1, nullable, ref));
+
 namespace fory {
 namespace serialization {
 
@@ -730,6 +758,8 @@ void RunTestNullableFieldCompatibleNotNull(const std::string &data_file);
 void RunTestNullableFieldCompatibleNull(const std::string &data_file);
 void RunTestRefSchemaConsistent(const std::string &data_file);
 void RunTestRefCompatible(const std::string &data_file);
+void RunTestCircularRefSchemaConsistent(const std::string &data_file);
+void RunTestCircularRefCompatible(const std::string &data_file);
 } // namespace
 
 int main(int argc, char **argv) {
@@ -825,6 +855,10 @@ int main(int argc, char **argv) {
       RunTestRefSchemaConsistent(data_file);
     } else if (case_name == "test_ref_compatible") {
       RunTestRefCompatible(data_file);
+    } else if (case_name == "test_circular_ref_schema_consistent") {
+      RunTestCircularRefSchemaConsistent(data_file);
+    } else if (case_name == "test_circular_ref_compatible") {
+      RunTestCircularRefCompatible(data_file);
     } else {
       Fail("Unknown test case: " + case_name);
     }
@@ -2335,6 +2369,87 @@ void RunTestRefCompatible(const std::string &data_file) {
   // Re-serialize and write back
   std::vector<uint8_t> out;
   AppendSerialized(fory, outer, out);
+  WriteFile(data_file, out);
+}
+
+// ============================================================================
+// Circular Reference Tests - Self-referencing struct tests
+// ============================================================================
+
+void RunTestCircularRefSchemaConsistent(const std::string &data_file) {
+  auto bytes = ReadFile(data_file);
+  // SCHEMA_CONSISTENT mode: compatible=false, xlang=true,
+  // check_struct_version=true, track_ref=true
+  auto fory = BuildFory(false, true, true, true);
+  EnsureOk(fory.register_struct<CircularRefStruct>(601),
+           "register CircularRefStruct");
+
+  Buffer buffer = MakeBuffer(bytes);
+  auto obj = ReadNext<std::shared_ptr<CircularRefStruct>>(fory, buffer);
+
+  // The object should not be null
+  if (obj == nullptr) {
+    Fail("CircularRefStruct: obj should not be null");
+  }
+
+  // Verify the name field
+  if (obj->name != "circular_test") {
+    Fail("CircularRefStruct: name should be 'circular_test', got " + obj->name);
+  }
+
+  // selfRef should point to the same object (circular reference)
+  if (obj->selfRef == nullptr) {
+    Fail("CircularRefStruct: selfRef should not be null");
+  }
+
+  // The key test: selfRef should point back to the same object
+  if (obj->selfRef.get() != obj.get()) {
+    Fail("CircularRefStruct: selfRef should point to same object (circular "
+         "reference)");
+  }
+
+  // Re-serialize and write back
+  std::vector<uint8_t> out;
+  AppendSerialized(fory, obj, out);
+  WriteFile(data_file, out);
+}
+
+void RunTestCircularRefCompatible(const std::string &data_file) {
+  auto bytes = ReadFile(data_file);
+  // COMPATIBLE mode: compatible=true, xlang=true, check_struct_version=false,
+  // track_ref=true
+  auto fory = BuildFory(true, true, false, true);
+  EnsureOk(fory.register_struct<CircularRefStruct>(602),
+           "register CircularRefStruct");
+
+  Buffer buffer = MakeBuffer(bytes);
+  auto obj = ReadNext<std::shared_ptr<CircularRefStruct>>(fory, buffer);
+
+  // The object should not be null
+  if (obj == nullptr) {
+    Fail("CircularRefStruct: obj should not be null");
+  }
+
+  // Verify the name field
+  if (obj->name != "compatible_circular") {
+    Fail("CircularRefStruct: name should be 'compatible_circular', got " +
+         obj->name);
+  }
+
+  // selfRef should point to the same object (circular reference)
+  if (obj->selfRef == nullptr) {
+    Fail("CircularRefStruct: selfRef should not be null");
+  }
+
+  // The key test: selfRef should point back to the same object
+  if (obj->selfRef.get() != obj.get()) {
+    Fail("CircularRefStruct: selfRef should point to same object (circular "
+         "reference)");
+  }
+
+  // Re-serialize and write back
+  std::vector<uint8_t> out;
+  AppendSerialized(fory, obj, out);
   WriteFile(data_file, out);
 }
 

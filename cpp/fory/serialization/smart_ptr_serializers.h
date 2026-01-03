@@ -544,29 +544,52 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
               "Cannot use monomorphic deserialization for abstract type"));
           return nullptr;
         } else {
-          T value = Serializer<T>::read(ctx, RefMode::None, false);
-          if (ctx.has_error()) {
-            return nullptr;
-          }
-          auto result = std::make_shared<T>(std::move(value));
+          // For circular references: pre-allocate and store BEFORE reading
           if (is_first_occurrence) {
+            auto result = std::make_shared<T>();
             ctx.ref_reader().store_shared_ref_at(reserved_ref_id, result);
+            T value = Serializer<T>::read(ctx, RefMode::None, false);
+            if (ctx.has_error()) {
+              return nullptr;
+            }
+            *result = std::move(value);
+            return result;
+          } else {
+            T value = Serializer<T>::read(ctx, RefMode::None, false);
+            if (ctx.has_error()) {
+              return nullptr;
+            }
+            return std::make_shared<T>(std::move(value));
           }
-          return result;
         }
       }
     } else {
       // Non-polymorphic path: T is guaranteed to be a value type (not pointer
       // or nullable wrapper) by static_assert, so no inner ref metadata needed.
-      T value = Serializer<T>::read(ctx, RefMode::None, read_type);
-      if (ctx.has_error()) {
-        return nullptr;
-      }
-      auto result = std::make_shared<T>(std::move(value));
+      //
+      // For circular references: we need to pre-allocate the shared_ptr and
+      // store it BEFORE reading the struct fields. This allows forward
+      // references (like selfRef pointing back to the parent) to resolve.
       if (is_first_occurrence) {
+        // Pre-allocate with default construction and store immediately
+        auto result = std::make_shared<T>();
         ctx.ref_reader().store_shared_ref_at(reserved_ref_id, result);
+        // Read struct data - forward refs can now find this object
+        T value = Serializer<T>::read(ctx, RefMode::None, read_type);
+        if (ctx.has_error()) {
+          return nullptr;
+        }
+        // Move-assign the read value into the pre-allocated object
+        *result = std::move(value);
+        return result;
+      } else {
+        // Not first occurrence, just read and wrap
+        T value = Serializer<T>::read(ctx, RefMode::None, read_type);
+        if (ctx.has_error()) {
+          return nullptr;
+        }
+        return std::make_shared<T>(std::move(value));
       }
-      return result;
     }
   }
 
@@ -663,16 +686,26 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
       return result;
     } else {
       // T is guaranteed to be a value type by static_assert.
-      T value =
-          Serializer<T>::read_with_type_info(ctx, RefMode::None, type_info);
-      if (ctx.has_error()) {
-        return nullptr;
-      }
-      auto result = std::make_shared<T>(std::move(value));
-      if (flag == REF_VALUE_FLAG) {
+      // For circular references: pre-allocate and store BEFORE reading
+      const bool is_first_occurrence = flag == REF_VALUE_FLAG;
+      if (is_first_occurrence) {
+        auto result = std::make_shared<T>();
         ctx.ref_reader().store_shared_ref_at(reserved_ref_id, result);
+        T value =
+            Serializer<T>::read_with_type_info(ctx, RefMode::None, type_info);
+        if (ctx.has_error()) {
+          return nullptr;
+        }
+        *result = std::move(value);
+        return result;
+      } else {
+        T value =
+            Serializer<T>::read_with_type_info(ctx, RefMode::None, type_info);
+        if (ctx.has_error()) {
+          return nullptr;
+        }
+        return std::make_shared<T>(std::move(value));
       }
-      return result;
     }
   }
 

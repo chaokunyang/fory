@@ -299,6 +299,11 @@ func (r *TypeResolver) Compatible() bool {
 	return r.fory.config.Compatible
 }
 
+// IsXlang returns whether xlang (cross-language) mode is enabled
+func (r *TypeResolver) IsXlang() bool {
+	return r.isXlang
+}
+
 func (r *TypeResolver) initialize() {
 	serializers := []struct {
 		reflect.Type

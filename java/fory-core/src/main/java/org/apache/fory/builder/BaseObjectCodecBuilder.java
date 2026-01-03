@@ -94,6 +94,7 @@ import org.apache.fory.codegen.Expression.Cast;
 import org.apache.fory.codegen.Expression.ForEach;
 import org.apache.fory.codegen.Expression.ForLoop;
 import org.apache.fory.codegen.Expression.If;
+import org.apache.fory.codegen.Expression.InstanceOf;
 import org.apache.fory.codegen.Expression.Invoke;
 import org.apache.fory.codegen.Expression.ListExpression;
 import org.apache.fory.codegen.Expression.Literal;
@@ -1781,9 +1782,31 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       }
       Expression obj;
       if (useCollectionSerialization(typeRef)) {
-        obj = deserializeForCollection(buffer, typeRef, serializer, invokeHint);
+        // When serializer is passed and its compile-time type is generic Serializer (not
+        // CollectionLikeSerializer), the runtime serializer could be different (e.g.,
+        // JdkProxySerializer for proxy objects). We need a runtime instanceof check.
+        if (serializer != null && !COLLECTION_SERIALIZER_TYPE.isSupertypeOf(serializer.type())) {
+          Expression isCollectionSerializer =
+              new InstanceOf(serializer, COLLECTION_SERIALIZER_TYPE);
+          Expression collectionSerializer = cast(serializer, COLLECTION_SERIALIZER_TYPE);
+          Expression collectionPath =
+              deserializeForCollection(buffer, typeRef, collectionSerializer, invokeHint);
+          Expression genericPath = read(serializer, buffer, OBJECT_TYPE);
+          obj = new If(isCollectionSerializer, collectionPath, genericPath);
+        } else {
+          obj = deserializeForCollection(buffer, typeRef, serializer, invokeHint);
+        }
       } else if (useMapSerialization(typeRef)) {
-        obj = deserializeForMap(buffer, typeRef, serializer, invokeHint);
+        // Same logic as collection: check at runtime if serializer is actually a MapLikeSerializer
+        if (serializer != null && !MAP_SERIALIZER_TYPE.isSupertypeOf(serializer.type())) {
+          Expression isMapSerializer = new InstanceOf(serializer, MAP_SERIALIZER_TYPE);
+          Expression mapSerializer = cast(serializer, MAP_SERIALIZER_TYPE);
+          Expression mapPath = deserializeForMap(buffer, typeRef, mapSerializer, invokeHint);
+          Expression genericPath = read(serializer, buffer, OBJECT_TYPE);
+          obj = new If(isMapSerializer, mapPath, genericPath);
+        } else {
+          obj = deserializeForMap(buffer, typeRef, serializer, invokeHint);
+        }
       } else {
         if (serializer != null) {
           return read(serializer, buffer, OBJECT_TYPE);
@@ -1862,9 +1885,31 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       }
       Expression obj;
       if (useCollectionSerialization(typeRef)) {
-        obj = deserializeForCollection(buffer, typeRef, serializer, null);
+        // When serializer is passed and its compile-time type is generic Serializer (not
+        // CollectionLikeSerializer), the runtime serializer could be different (e.g.,
+        // JdkProxySerializer for proxy objects). We need a runtime instanceof check.
+        if (serializer != null && !COLLECTION_SERIALIZER_TYPE.isSupertypeOf(serializer.type())) {
+          Expression isCollectionSerializer =
+              new InstanceOf(serializer, COLLECTION_SERIALIZER_TYPE);
+          Expression collectionSerializer = cast(serializer, COLLECTION_SERIALIZER_TYPE);
+          Expression collectionPath =
+              deserializeForCollection(buffer, typeRef, collectionSerializer, null);
+          Expression genericPath = read(serializer, buffer, OBJECT_TYPE);
+          obj = new If(isCollectionSerializer, collectionPath, genericPath);
+        } else {
+          obj = deserializeForCollection(buffer, typeRef, serializer, null);
+        }
       } else if (useMapSerialization(typeRef)) {
-        obj = deserializeForMap(buffer, typeRef, serializer, null);
+        // Same logic as collection: check at runtime if serializer is actually a MapLikeSerializer
+        if (serializer != null && !MAP_SERIALIZER_TYPE.isSupertypeOf(serializer.type())) {
+          Expression isMapSerializer = new InstanceOf(serializer, MAP_SERIALIZER_TYPE);
+          Expression mapSerializer = cast(serializer, MAP_SERIALIZER_TYPE);
+          Expression mapPath = deserializeForMap(buffer, typeRef, mapSerializer, null);
+          Expression genericPath = read(serializer, buffer, OBJECT_TYPE);
+          obj = new If(isMapSerializer, mapPath, genericPath);
+        } else {
+          obj = deserializeForMap(buffer, typeRef, serializer, null);
+        }
       } else {
         if (serializer != null) {
           return read(serializer, buffer, OBJECT_TYPE);
@@ -2006,17 +2051,24 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       Expression isDeclType = eq(new BitAnd(flags, isDeclTypeFlag), isDeclTypeFlag);
       Invoke serializer =
           inlineInvoke(readClassInfo(elemClass, buffer), "getSerializer", SERIALIZER_TYPE);
-      TypeRef<?> serializerType = getSerializerType(elementType);
+      // For non-final collection/map element types, the runtime serializer could be different
+      // (e.g., JdkProxySerializer for proxy objects). Use generic SERIALIZER_TYPE to allow
+      // runtime instanceof check in deserializeForNotNull.
+      boolean elemIsCollectionOrMap =
+          useCollectionSerialization(elementType) || useMapSerialization(elementType);
+      TypeRef<?> serializerType =
+          elemIsCollectionOrMap ? SERIALIZER_TYPE : getSerializerType(elementType);
       Expression elemSerializer; // make it in scope of `if(sameElementClass)`
       boolean maybeDecl = typeResolver(r -> r.isSerializable(elemClass));
       if (maybeDecl) {
+        TypeRef<?> declSerializerType = getSerializerType(elementType);
         elemSerializer =
             new If(
                 isDeclType,
-                cast(getOrCreateSerializer(elemClass), serializerType),
+                cast(getOrCreateSerializer(elemClass), declSerializerType),
                 cast(serializer.inline(), serializerType),
                 false,
-                serializerType);
+                SERIALIZER_TYPE);
       } else {
         elemSerializer = cast(serializer.inline(), serializerType);
       }

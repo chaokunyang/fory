@@ -1092,17 +1092,14 @@ func (s *structSerializer) initFieldsFromTypeResolver(typeResolver *TypeResolver
 		isEnum := internalId == ENUM || internalId == NAMED_ENUM
 
 		// Determine nullable based on mode
-		// In both xlang and native mode, nil-able types (ptr, slice, map, interface) are nullable.
-		// This is necessary for correct null flag handling when serializing/deserializing.
-		// Note: In xlang mode, we don't set nullable for interface{} fields because the
-		// actual type determines nullability; for slices and maps, they can be nil.
+		// In xlang mode: only pointer types are nullable by default (per xlang spec)
+		// In native mode: Go's natural semantics - all nil-able types are nullable
+		// This ensures proper interoperability with Java/other languages in xlang mode.
 		var nullableFlag bool
 		if typeResolver.fory.config.IsXlang {
-			// xlang mode: pointers, slices, and maps are nullable
-			// (they can be nil and need null flag handling)
-			nullableFlag = fieldType.Kind() == reflect.Ptr ||
-				fieldType.Kind() == reflect.Slice ||
-				fieldType.Kind() == reflect.Map
+			// xlang mode: only pointer types are nullable by default per xlang spec
+			// Slices and maps are NOT nullable - they serialize as empty when nil
+			nullableFlag = fieldType.Kind() == reflect.Ptr
 		} else {
 			// Native mode: Go's natural semantics - all nil-able types are nullable
 			nullableFlag = fieldType.Kind() == reflect.Ptr ||

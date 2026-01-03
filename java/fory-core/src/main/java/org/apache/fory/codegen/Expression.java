@@ -2768,4 +2768,41 @@ public interface Expression {
       return String.format("%s = %s", from, to);
     }
   }
+
+  /** Expression for Java instanceof check. */
+  class InstanceOf extends ValueExpression {
+    private Expression target;
+    private final TypeRef<?> checkType;
+
+    public InstanceOf(Expression target, TypeRef<?> checkType) {
+      super(new Expression[] {target});
+      this.target = target;
+      this.checkType = checkType;
+      this.inlineCall = true;
+    }
+
+    @Override
+    public TypeRef<?> type() {
+      return PRIMITIVE_BOOLEAN_TYPE;
+    }
+
+    @Override
+    public ExprCode doGenCode(CodegenContext ctx) {
+      ExprCode targetCode = target.genCode(ctx);
+      String value =
+          String.format("(%s instanceof %s)", targetCode.value(), ctx.type(checkType));
+      String code = StringUtils.isBlank(targetCode.code()) ? null : targetCode.code();
+      return new ExprCode(code, FalseLiteral, Code.variable(boolean.class, value));
+    }
+
+    @Override
+    public boolean nullable() {
+      return false;
+    }
+
+    @Override
+    public String toString() {
+      return String.format("%s instanceof %s", target, checkType);
+    }
+  }
 }

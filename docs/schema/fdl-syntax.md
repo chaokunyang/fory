@@ -160,6 +160,20 @@ message User @200 {
 }
 ```
 
+### Unsupported Import Syntax
+
+The following protobuf import modifiers are **not supported**:
+
+```fdl
+// NOT SUPPORTED - will produce an error
+import public "other.fdl";
+import weak "other.fdl";
+```
+
+**`import public`**: FDL uses a simpler import model. All imported types are available to the importing file only. Re-exporting is not supported. Import each file directly where needed.
+
+**`import weak`**: FDL requires all imports to be present at compile time. Optional dependencies are not supported.
+
 ### Import Errors
 
 The compiler reports errors for:
@@ -167,6 +181,7 @@ The compiler reports errors for:
 - **File not found**: The imported file doesn't exist
 - **Circular import**: A imports B which imports A (directly or indirectly)
 - **Parse errors**: Syntax errors in imported files
+- **Unsupported syntax**: `import public` or `import weak`
 
 ## Enum Definition
 
@@ -192,12 +207,69 @@ enum Status @100 {
 }
 ```
 
+### Reserved Values
+
+Reserve field numbers or names to prevent reuse:
+
+```fdl
+enum Status {
+    reserved 2, 15, 9 to 11, 40 to max;  // Reserved numbers
+    reserved "OLD_STATUS", "DEPRECATED"; // Reserved names
+    PENDING = 0;
+    ACTIVE = 1;
+    COMPLETED = 3;
+}
+```
+
+### Enum Options
+
+Options can be specified within enums:
+
+```fdl
+enum Status {
+    option deprecated = true;  // Allowed
+    PENDING = 0;
+    ACTIVE = 1;
+}
+```
+
+**Forbidden Options:**
+
+- `option allow_alias = true` is **not supported**. Each enum value must have a unique integer.
+
+### Enum Prefix Stripping
+
+When enum values use a protobuf-style prefix (enum name in UPPER_SNAKE_CASE), the compiler automatically strips the prefix for languages with scoped enums:
+
+```fdl
+// Input with prefix
+enum DeviceTier {
+    DEVICE_TIER_UNKNOWN = 0;
+    DEVICE_TIER_TIER1 = 1;
+    DEVICE_TIER_TIER2 = 2;
+}
+```
+
+**Generated code:**
+
+| Language | Output                                    | Style          |
+| -------- | ----------------------------------------- | -------------- |
+| Java     | `UNKNOWN, TIER1, TIER2`                   | Scoped enum    |
+| Rust     | `Unknown, Tier1, Tier2`                   | Scoped enum    |
+| C++      | `UNKNOWN, TIER1, TIER2`                   | Scoped enum    |
+| Python   | `UNKNOWN, TIER1, TIER2`                   | Scoped IntEnum |
+| Go       | `DeviceTierUnknown, DeviceTierTier1, ...` | Unscoped const |
+
+**Note:** The prefix is only stripped if the remainder is a valid identifier. For example, `DEVICE_TIER_1` is kept unchanged because `1` is not a valid identifier name.
+
 **Grammar:**
 
 ```
-enum_def     := 'enum' IDENTIFIER [type_id] '{' enum_values '}'
+enum_def     := 'enum' IDENTIFIER [type_id] '{' enum_body '}'
 type_id      := '@' INTEGER
-enum_values  := enum_value*
+enum_body    := (option_stmt | reserved_stmt | enum_value)*
+option_stmt  := 'option' IDENTIFIER '=' option_value ';'
+reserved_stmt := 'reserved' reserved_items ';'
 enum_value   := IDENTIFIER '=' INTEGER ';'
 ```
 
@@ -205,7 +277,7 @@ enum_value   := IDENTIFIER '=' INTEGER ';'
 
 - Enum names must be unique within the file
 - Enum values must have explicit integer assignments
-- Value integers must be unique within the enum
+- Value integers must be unique within the enum (no aliases)
 - Type ID (`@100`) is optional but recommended for cross-language use
 
 **Example with All Features:**
@@ -213,6 +285,8 @@ enum_value   := IDENTIFIER '=' INTEGER ';'
 ```fdl
 // HTTP status code categories
 enum HttpCategory @200 {
+    reserved 10 to 20;           // Reserved for future use
+    reserved "UNKNOWN";          // Reserved name
     INFORMATIONAL = 1;
     SUCCESS = 2;
     REDIRECTION = 3;
@@ -243,13 +317,129 @@ message Person @101 {
 }
 ```
 
+### Reserved Fields
+
+Reserve field numbers or names to prevent reuse after removing fields:
+
+```fdl
+message User {
+    reserved 2, 15, 9 to 11;       // Reserved field numbers
+    reserved "old_field", "temp";  // Reserved field names
+    string id = 1;
+    string name = 3;
+}
+```
+
+### Message Options
+
+Options can be specified within messages:
+
+```fdl
+message User {
+    option deprecated = true;
+    string id = 1;
+    string name = 2;
+}
+```
+
 **Grammar:**
 
 ```
-message_def  := 'message' IDENTIFIER [type_id] '{' field_defs '}'
+message_def  := 'message' IDENTIFIER [type_id] '{' message_body '}'
 type_id      := '@' INTEGER
-field_defs   := field_def*
+message_body := (option_stmt | reserved_stmt | nested_type | field_def)*
+nested_type  := enum_def | message_def
 ```
+
+## Nested Types
+
+Messages can contain nested message and enum definitions. This is useful for defining types that are closely related to their parent message.
+
+### Nested Messages
+
+```fdl
+message SearchResponse {
+    message Result {
+        string url = 1;
+        string title = 2;
+        repeated string snippets = 3;
+    }
+    repeated Result results = 1;
+}
+```
+
+### Nested Enums
+
+```fdl
+message Container {
+    enum Status {
+        STATUS_UNKNOWN = 0;
+        STATUS_ACTIVE = 1;
+        STATUS_INACTIVE = 2;
+    }
+    Status status = 1;
+}
+```
+
+### Qualified Type Names
+
+Nested types can be referenced from other messages using qualified names (Parent.Child):
+
+```fdl
+message SearchResponse {
+    message Result {
+        string url = 1;
+        string title = 2;
+    }
+}
+
+message SearchResultCache {
+    // Reference nested type with qualified name
+    SearchResponse.Result cached_result = 1;
+    repeated SearchResponse.Result all_results = 2;
+}
+```
+
+### Deeply Nested Types
+
+Nesting can be multiple levels deep:
+
+```fdl
+message Outer {
+    message Middle {
+        message Inner {
+            string value = 1;
+        }
+        Inner inner = 1;
+    }
+    Middle middle = 1;
+}
+
+message OtherMessage {
+    // Reference deeply nested type
+    Outer.Middle.Inner deep_ref = 1;
+}
+```
+
+### Language-Specific Generation
+
+| Language | Nested Type Generation                                 |
+| -------- | ------------------------------------------------------ |
+| Java     | Static inner classes (`SearchResponse.Result`)         |
+| Python   | Nested classes within dataclass                        |
+| Go       | Flat structs with underscore (`SearchResponse_Result`) |
+| Rust     | Flat structs with underscore (`SearchResponse_Result`) |
+| C++      | Flat structs with underscore (`SearchResponse_Result`) |
+
+**Note:** For Go, Rust, and C++, nested types are flattened to top-level types with qualified names using underscores because these languages don't have true nested type support or it's not idiomatic.
+
+### Nested Type Rules
+
+- Nested type names must be unique within their parent message
+- Nested types can have their own type IDs
+- Type IDs must be globally unique (including nested types)
+- Within a message, you can reference nested types by simple name
+- From outside, use the qualified name (Parent.Child)
 
 ## Field Definition
 
@@ -576,11 +766,20 @@ import_decl  := 'import' STRING ';'
 
 type_def     := enum_def | message_def
 
-enum_def     := 'enum' IDENTIFIER [type_id] '{' enum_value* '}'
+enum_def     := 'enum' IDENTIFIER [type_id] '{' enum_body '}'
+enum_body    := (option_stmt | reserved_stmt | enum_value)*
 enum_value   := IDENTIFIER '=' INTEGER ';'
 
-message_def  := 'message' IDENTIFIER [type_id] '{' field_def* '}'
+message_def  := 'message' IDENTIFIER [type_id] '{' message_body '}'
+message_body := (option_stmt | reserved_stmt | field_def)*
 field_def    := [modifiers] field_type IDENTIFIER '=' INTEGER ';'
+
+option_stmt  := 'option' IDENTIFIER '=' option_value ';'
+option_value := 'true' | 'false' | IDENTIFIER | INTEGER | STRING
+
+reserved_stmt := 'reserved' reserved_items ';'
+reserved_items := reserved_item (',' reserved_item)*
+reserved_item := INTEGER | INTEGER 'to' INTEGER | INTEGER 'to' 'max' | STRING
 
 modifiers    := ['optional'] ['ref'] ['repeated']
 
@@ -588,7 +787,8 @@ field_type   := primitive_type | named_type | map_type
 primitive_type := 'bool' | 'int8' | 'int16' | 'int32' | 'int64'
                | 'float32' | 'float64' | 'string' | 'bytes'
                | 'date' | 'timestamp'
-named_type   := IDENTIFIER
+named_type   := qualified_name
+qualified_name := IDENTIFIER ('.' IDENTIFIER)*   // e.g., Parent.Child
 map_type     := 'map' '<' field_type ',' field_type '>'
 
 type_id      := '@' INTEGER

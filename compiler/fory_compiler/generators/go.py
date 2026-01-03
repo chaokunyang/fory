@@ -84,12 +84,11 @@ class GoGenerator(BaseGenerator):
         lines = []
         imports: Set[str] = set()
 
-        # Collect imports
+        # Collect imports (including from nested types)
         imports.add('fory "github.com/apache/fory/go/fory"')
 
         for message in self.schema.messages:
-            for field in message.fields:
-                self.collect_imports(field.field_type, imports)
+            self.collect_message_imports(message, imports)
 
         # License header
         lines.append(self.get_license_header("//"))
@@ -107,15 +106,14 @@ class GoGenerator(BaseGenerator):
             lines.append(")")
             lines.append("")
 
-        # Generate enums
+        # Generate enums (top-level)
         for enum in self.schema.enums:
-            lines.extend(self.generate_enum(enum))
+            lines.extend(self.generate_enum(enum, ""))
             lines.append("")
 
-        # Generate messages
+        # Generate messages (including nested as flat types with qualified names)
         for message in self.schema.messages:
-            lines.extend(self.generate_message(message))
-            lines.append("")
+            lines.extend(self.generate_message_with_nested(message, ""))
 
         # Generate registration function
         lines.extend(self.generate_registration())
@@ -126,12 +124,22 @@ class GoGenerator(BaseGenerator):
             content="\n".join(lines),
         )
 
-    def generate_enum(self, enum: Enum) -> List[str]:
+    def collect_message_imports(self, message: Message, imports: Set[str]):
+        """Collect imports for a message and its nested types recursively."""
+        for field in message.fields:
+            self.collect_imports(field.field_type, imports)
+        for nested_msg in message.nested_messages:
+            self.collect_message_imports(nested_msg, imports)
+
+    def generate_enum(self, enum: Enum, parent_name: str = "") -> List[str]:
         """Generate a Go enum (using type alias and constants)."""
         lines = []
 
+        # For nested enums, use Parent_Child naming
+        type_name = f"{parent_name}_{enum.name}" if parent_name else enum.name
+
         # Type definition
-        lines.append(f"type {enum.name} int32")
+        lines.append(f"type {type_name} int32")
         lines.append("")
 
         # Constants (strip prefix first, then add enum name back for Go's unscoped style)
@@ -140,21 +148,24 @@ class GoGenerator(BaseGenerator):
             # Strip the proto-style prefix (e.g., DEVICE_TIER_UNKNOWN -> UNKNOWN)
             stripped_name = self.strip_enum_prefix(enum.name, value.name)
             # Add enum name prefix for Go (e.g., DeviceTierUnknown)
-            const_name = f"{enum.name}{self.to_pascal_case(stripped_name)}"
-            lines.append(f"\t{const_name} {enum.name} = {value.value}")
+            const_name = f"{type_name}{self.to_pascal_case(stripped_name)}"
+            lines.append(f"\t{const_name} {type_name} = {value.value}")
         lines.append(")")
 
         return lines
 
-    def generate_message(self, message: Message) -> List[str]:
+    def generate_message(self, message: Message, parent_name: str = "") -> List[str]:
         """Generate a Go struct."""
         lines = []
 
-        lines.append(f"type {message.name} struct {{")
+        # For nested messages, use Parent_Child naming
+        type_name = f"{parent_name}_{message.name}" if parent_name else message.name
+
+        lines.append(f"type {type_name} struct {{")
 
         # Fields
         for field in message.fields:
-            field_lines = self.generate_field(field)
+            field_lines = self.generate_field(field, parent_name)
             for line in field_lines:
                 lines.append(f"\t{line}")
 
@@ -162,11 +173,33 @@ class GoGenerator(BaseGenerator):
 
         return lines
 
-    def generate_field(self, field: Field) -> List[str]:
+    def generate_message_with_nested(self, message: Message, parent_name: str = "") -> List[str]:
+        """Generate a Go struct and all its nested types (flattened)."""
+        lines = []
+
+        # Current message's type name
+        type_name = f"{parent_name}_{message.name}" if parent_name else message.name
+
+        # First, generate all nested enums
+        for nested_enum in message.nested_enums:
+            lines.extend(self.generate_enum(nested_enum, type_name))
+            lines.append("")
+
+        # Then, generate all nested messages (recursively)
+        for nested_msg in message.nested_messages:
+            lines.extend(self.generate_message_with_nested(nested_msg, type_name))
+
+        # Finally, generate this message
+        lines.extend(self.generate_message(message, parent_name))
+        lines.append("")
+
+        return lines
+
+    def generate_field(self, field: Field, parent_name: str = "") -> List[str]:
         """Generate a struct field."""
         lines = []
 
-        go_type = self.generate_type(field.field_type, field.optional, field.ref)
+        go_type = self.generate_type(field.field_type, field.optional, field.ref, parent_name)
         field_name = self.to_pascal_case(field.name)  # Go uses PascalCase for exported fields
 
         # Build fory tag
@@ -184,7 +217,7 @@ class GoGenerator(BaseGenerator):
 
         return lines
 
-    def generate_type(self, field_type: FieldType, nullable: bool = False, ref: bool = False) -> str:
+    def generate_type(self, field_type: FieldType, nullable: bool = False, ref: bool = False, parent_name: str = "") -> str:
         """Generate Go type string."""
         if isinstance(field_type, PrimitiveType):
             base_type = self.PRIMITIVE_MAP[field_type.kind]
@@ -193,17 +226,24 @@ class GoGenerator(BaseGenerator):
             return base_type
 
         elif isinstance(field_type, NamedType):
+            # Convert qualified names (Parent.Child) to Go-style (Parent_Child)
+            type_name = field_type.name.replace(".", "_")
+            # If it's a simple name and we have a parent context, it might be a nested type
+            # that needs the parent prefix
+            if "." not in field_type.name and parent_name:
+                # Check if this could be a sibling nested type
+                type_name = f"{parent_name}_{type_name}"
             if nullable or ref:
-                return f"*{field_type.name}"
-            return field_type.name
+                return f"*{type_name}"
+            return type_name
 
         elif isinstance(field_type, ListType):
-            element_type = self.generate_type(field_type.element_type, False, False)
+            element_type = self.generate_type(field_type.element_type, False, False, parent_name)
             return f"[]{element_type}"
 
         elif isinstance(field_type, MapType):
-            key_type = self.generate_type(field_type.key_type, False, False)
-            value_type = self.generate_type(field_type.value_type, False, False)
+            key_type = self.generate_type(field_type.key_type, False, False, parent_name)
+            value_type = self.generate_type(field_type.value_type, False, False, parent_name)
             return f"map[{key_type}]{value_type}"
 
         return "interface{}"
@@ -227,31 +267,52 @@ class GoGenerator(BaseGenerator):
 
         lines.append("func RegisterTypes(f *fory.Fory) error {")
 
-        # Register enums
+        # Register enums (top-level)
         for enum in self.schema.enums:
-            if enum.type_id is not None:
-                lines.append(f"\tif err := f.RegisterEnum({enum.name}(0), {enum.type_id}); err != nil {{")
-                lines.append("\t\treturn err")
-                lines.append("\t}")
-            else:
-                ns = self.package or "default"
-                lines.append(f'\tif err := f.RegisterTagType("{ns}.{enum.name}", {enum.name}(0)); err != nil {{')
-                lines.append("\t\treturn err")
-                lines.append("\t}")
+            self.generate_enum_registration(lines, enum, "")
 
-        # Register messages
+        # Register messages (including nested types)
         for message in self.schema.messages:
-            if message.type_id is not None:
-                lines.append(f"\tif err := f.Register({message.name}{{}}, {message.type_id}); err != nil {{")
-                lines.append("\t\treturn err")
-                lines.append("\t}")
-            else:
-                ns = self.package or "default"
-                lines.append(f'\tif err := f.RegisterTagType("{ns}.{message.name}", {message.name}{{}}); err != nil {{')
-                lines.append("\t\treturn err")
-                lines.append("\t}")
+            self.generate_message_registration(lines, message, "")
 
         lines.append("\treturn nil")
         lines.append("}")
 
         return lines
+
+    def generate_enum_registration(self, lines: List[str], enum: Enum, parent_name: str):
+        """Generate registration code for an enum."""
+        type_name = f"{parent_name}_{enum.name}" if parent_name else enum.name
+
+        if enum.type_id is not None:
+            lines.append(f"\tif err := f.RegisterEnum({type_name}(0), {enum.type_id}); err != nil {{")
+            lines.append("\t\treturn err")
+            lines.append("\t}")
+        else:
+            ns = self.package or "default"
+            lines.append(f'\tif err := f.RegisterTagType("{ns}.{type_name}", {type_name}(0)); err != nil {{')
+            lines.append("\t\treturn err")
+            lines.append("\t}")
+
+    def generate_message_registration(self, lines: List[str], message: Message, parent_name: str):
+        """Generate registration code for a message and its nested types."""
+        type_name = f"{parent_name}_{message.name}" if parent_name else message.name
+
+        # Register nested enums first
+        for nested_enum in message.nested_enums:
+            self.generate_enum_registration(lines, nested_enum, type_name)
+
+        # Register nested messages recursively
+        for nested_msg in message.nested_messages:
+            self.generate_message_registration(lines, nested_msg, type_name)
+
+        # Register this message
+        if message.type_id is not None:
+            lines.append(f"\tif err := f.Register({type_name}{{}}, {message.type_id}); err != nil {{")
+            lines.append("\t\treturn err")
+            lines.append("\t}")
+        else:
+            ns = self.package or "default"
+            lines.append(f'\tif err := f.RegisterTagType("{ns}.{type_name}", {type_name}{{}}); err != nil {{')
+            lines.append("\t\treturn err")
+            lines.append("\t}")

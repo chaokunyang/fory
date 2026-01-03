@@ -81,11 +81,11 @@ class JavaGenerator(BaseGenerator):
         """Generate Java files for the schema."""
         files = []
 
-        # Generate enum files
+        # Generate enum files (top-level only, nested enums go inside message files)
         for enum in self.schema.enums:
             files.append(self.generate_enum_file(enum))
 
-        # Generate message files
+        # Generate message files (includes nested types as inner classes)
         for message in self.schema.messages:
             files.append(self.generate_message_file(message))
 
@@ -139,16 +139,8 @@ class JavaGenerator(BaseGenerator):
         lines = []
         imports: Set[str] = set()
 
-        # Collect imports
-        for field in message.fields:
-            self.collect_imports(field.field_type, imports)
-            if field.optional or field.ref:
-                imports.add("org.apache.fory.annotation.ForyField")
-
-        # Add imports for equals/hashCode
-        imports.add("java.util.Objects")
-        if self.has_array_field(message):
-            imports.add("java.util.Arrays")
+        # Collect imports (including from nested types)
+        self.collect_message_imports(message, imports)
 
         # License header
         lines.append(self.get_license_header())
@@ -167,6 +159,16 @@ class JavaGenerator(BaseGenerator):
 
         # Class declaration
         lines.append(f"public class {message.name} {{")
+
+        # Generate nested enums as static inner classes
+        for nested_enum in message.nested_enums:
+            for line in self.generate_nested_enum(nested_enum):
+                lines.append(f"    {line}")
+
+        # Generate nested messages as static inner classes
+        for nested_msg in message.nested_messages:
+            for line in self.generate_nested_message(nested_msg, indent=1):
+                lines.append(f"    {line}")
 
         # Fields
         for field in message.fields:
@@ -206,6 +208,95 @@ class JavaGenerator(BaseGenerator):
             path = f"{message.name}.java"
 
         return GeneratedFile(path=path, content="\n".join(lines))
+
+    def collect_message_imports(self, message: Message, imports: Set[str]):
+        """Collect imports for a message and all its nested types recursively."""
+        for field in message.fields:
+            self.collect_imports(field.field_type, imports)
+            if field.optional or field.ref:
+                imports.add("org.apache.fory.annotation.ForyField")
+
+        # Add imports for equals/hashCode
+        imports.add("java.util.Objects")
+        if self.has_array_field_recursive(message):
+            imports.add("java.util.Arrays")
+
+        # Collect imports from nested messages
+        for nested_msg in message.nested_messages:
+            self.collect_message_imports(nested_msg, imports)
+
+    def has_array_field_recursive(self, message: Message) -> bool:
+        """Check if message or any nested message has array fields."""
+        if self.has_array_field(message):
+            return True
+        for nested_msg in message.nested_messages:
+            if self.has_array_field_recursive(nested_msg):
+                return True
+        return False
+
+    def generate_nested_enum(self, enum: Enum) -> List[str]:
+        """Generate a nested enum as a static inner class."""
+        lines = []
+        lines.append(f"public static enum {enum.name} {{")
+
+        # Enum values (strip prefix for scoped enums)
+        for i, value in enumerate(enum.values):
+            comma = "," if i < len(enum.values) - 1 else ";"
+            stripped_name = self.strip_enum_prefix(enum.name, value.name)
+            lines.append(f"    {stripped_name}{comma}")
+
+        lines.append("}")
+        lines.append("")
+        return lines
+
+    def generate_nested_message(self, message: Message, indent: int = 1) -> List[str]:
+        """Generate a nested message as a static inner class."""
+        lines = []
+        ind = "    " * indent
+
+        # Class declaration
+        lines.append(f"public static class {message.name} {{")
+
+        # Generate nested enums
+        for nested_enum in message.nested_enums:
+            for line in self.generate_nested_enum(nested_enum):
+                lines.append(f"    {line}")
+
+        # Generate nested messages (recursively)
+        for nested_msg in message.nested_messages:
+            for line in self.generate_nested_message(nested_msg, indent=1):
+                lines.append(f"    {line}")
+
+        # Fields
+        for field in message.fields:
+            field_lines = self.generate_field(field)
+            for line in field_lines:
+                lines.append(f"    {line}")
+
+        lines.append("")
+
+        # Default constructor
+        lines.append(f"    public {message.name}() {{")
+        lines.append("    }")
+        lines.append("")
+
+        # Getters and setters
+        for field in message.fields:
+            getter_setter = self.generate_getter_setter(field)
+            for line in getter_setter:
+                lines.append(f"    {line}")
+
+        # equals method
+        for line in self.generate_equals_method(message):
+            lines.append(f"    {line}")
+
+        # hashCode method
+        for line in self.generate_hashcode_method(message):
+            lines.append(f"    {line}")
+
+        lines.append("}")
+        lines.append("")
+        return lines
 
     def generate_field(self, field: Field) -> List[str]:
         """Generate field declaration with annotations."""
@@ -429,21 +520,13 @@ class JavaGenerator(BaseGenerator):
         lines.append("")
         lines.append("    public static void register(Fory fory) {")
 
-        # Register enums
+        # Register enums (top-level)
         for enum in self.schema.enums:
-            if enum.type_id is not None:
-                lines.append(f"        fory.register({enum.name}.class, {enum.type_id});")
-            else:
-                ns = self.package or "default"
-                lines.append(f'        fory.register({enum.name}.class, "{ns}", "{enum.name}");')
+            self.generate_enum_registration(lines, enum, "")
 
-        # Register messages
+        # Register messages (top-level and nested)
         for message in self.schema.messages:
-            if message.type_id is not None:
-                lines.append(f"        fory.register({message.name}.class, {message.type_id});")
-            else:
-                ns = self.package or "default"
-                lines.append(f'        fory.register({message.name}.class, "{ns}", "{message.name}");')
+            self.generate_message_registration(lines, message, "")
 
         lines.append("    }")
         lines.append("}")
@@ -457,3 +540,35 @@ class JavaGenerator(BaseGenerator):
             path = f"{class_name}.java"
 
         return GeneratedFile(path=path, content="\n".join(lines))
+
+    def generate_enum_registration(self, lines: List[str], enum: Enum, parent_path: str):
+        """Generate registration code for an enum."""
+        # In Java, nested class references use OuterClass.InnerClass
+        class_ref = f"{parent_path}.{enum.name}" if parent_path else enum.name
+        type_name = class_ref.replace(".", "_") if parent_path else enum.name
+
+        if enum.type_id is not None:
+            lines.append(f"        fory.register({class_ref}.class, {enum.type_id});")
+        else:
+            ns = self.package or "default"
+            lines.append(f'        fory.register({class_ref}.class, "{ns}", "{type_name}");')
+
+    def generate_message_registration(self, lines: List[str], message: Message, parent_path: str):
+        """Generate registration code for a message and its nested types."""
+        # In Java, nested class references use OuterClass.InnerClass
+        class_ref = f"{parent_path}.{message.name}" if parent_path else message.name
+        type_name = class_ref.replace(".", "_") if parent_path else message.name
+
+        if message.type_id is not None:
+            lines.append(f"        fory.register({class_ref}.class, {message.type_id});")
+        else:
+            ns = self.package or "default"
+            lines.append(f'        fory.register({class_ref}.class, "{ns}", "{type_name}");')
+
+        # Register nested enums
+        for nested_enum in message.nested_enums:
+            self.generate_enum_registration(lines, nested_enum, class_ref)
+
+        # Register nested messages
+        for nested_msg in message.nested_messages:
+            self.generate_message_registration(lines, nested_msg, class_ref)

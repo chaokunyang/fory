@@ -75,12 +75,11 @@ class RustGenerator(BaseGenerator):
         lines = []
         uses: Set[str] = set()
 
-        # Collect uses
+        # Collect uses (including from nested types)
         uses.add("use fory::{Fory, ForyObject}")
 
         for message in self.schema.messages:
-            for field in message.fields:
-                self.collect_uses_for_field(field, uses)
+            self.collect_message_uses(message, uses)
 
         # License header
         lines.append(self.get_license_header("//"))
@@ -91,15 +90,14 @@ class RustGenerator(BaseGenerator):
             lines.append(f"{use};")
         lines.append("")
 
-        # Generate enums
+        # Generate enums (top-level)
         for enum in self.schema.enums:
-            lines.extend(self.generate_enum(enum))
+            lines.extend(self.generate_enum(enum, ""))
             lines.append("")
 
-        # Generate messages
+        # Generate messages (including nested as flat types with qualified names)
         for message in self.schema.messages:
-            lines.extend(self.generate_message(message))
-            lines.append("")
+            lines.extend(self.generate_message_with_nested(message, ""))
 
         # Generate registration function
         lines.extend(self.generate_registration())
@@ -110,9 +108,19 @@ class RustGenerator(BaseGenerator):
             content="\n".join(lines),
         )
 
-    def generate_enum(self, enum: Enum) -> List[str]:
+    def collect_message_uses(self, message: Message, uses: Set[str]):
+        """Collect uses for a message and its nested types recursively."""
+        for field in message.fields:
+            self.collect_uses_for_field(field, uses)
+        for nested_msg in message.nested_messages:
+            self.collect_message_uses(nested_msg, uses)
+
+    def generate_enum(self, enum: Enum, parent_name: str = "") -> List[str]:
         """Generate a Rust enum."""
         lines = []
+
+        # For nested enums, use Parent_Child naming
+        type_name = f"{parent_name}_{enum.name}" if parent_name else enum.name
 
         # Derive macros
         lines.append("#[derive(ForyObject, Debug, Clone, PartialEq, Default)]")
@@ -120,9 +128,9 @@ class RustGenerator(BaseGenerator):
 
         # Tag for name-based registration
         if enum.type_id is None and self.package:
-            lines.append(f'#[tag("{self.package}.{enum.name}")]')
+            lines.append(f'#[tag("{self.package}.{type_name}")]')
 
-        lines.append(f"pub enum {enum.name} {{")
+        lines.append(f"pub enum {type_name} {{")
 
         # Enum values (strip prefix for scoped enums)
         for i, value in enumerate(enum.values):
@@ -135,22 +143,25 @@ class RustGenerator(BaseGenerator):
 
         return lines
 
-    def generate_message(self, message: Message) -> List[str]:
+    def generate_message(self, message: Message, parent_name: str = "") -> List[str]:
         """Generate a Rust struct."""
         lines = []
+
+        # For nested messages, use Parent_Child naming
+        type_name = f"{parent_name}_{message.name}" if parent_name else message.name
 
         # Derive macros
         lines.append("#[derive(ForyObject, Debug, Clone, PartialEq, Default)]")
 
         # Tag for name-based registration
         if message.type_id is None and self.package:
-            lines.append(f'#[tag("{self.package}.{message.name}")]')
+            lines.append(f'#[tag("{self.package}.{type_name}")]')
 
-        lines.append(f"pub struct {message.name} {{")
+        lines.append(f"pub struct {type_name} {{")
 
         # Fields
         for field in message.fields:
-            field_lines = self.generate_field(field)
+            field_lines = self.generate_field(field, parent_name)
             for line in field_lines:
                 lines.append(f"    {line}")
 
@@ -158,7 +169,29 @@ class RustGenerator(BaseGenerator):
 
         return lines
 
-    def generate_field(self, field: Field) -> List[str]:
+    def generate_message_with_nested(self, message: Message, parent_name: str = "") -> List[str]:
+        """Generate a Rust struct and all its nested types (flattened)."""
+        lines = []
+
+        # Current message's type name
+        type_name = f"{parent_name}_{message.name}" if parent_name else message.name
+
+        # First, generate all nested enums
+        for nested_enum in message.nested_enums:
+            lines.extend(self.generate_enum(nested_enum, type_name))
+            lines.append("")
+
+        # Then, generate all nested messages (recursively)
+        for nested_msg in message.nested_messages:
+            lines.extend(self.generate_message_with_nested(nested_msg, type_name))
+
+        # Finally, generate this message
+        lines.extend(self.generate_message(message, parent_name))
+        lines.append("")
+
+        return lines
+
+    def generate_field(self, field: Field, parent_name: str = "") -> List[str]:
         """Generate a struct field."""
         lines = []
 
@@ -166,14 +199,14 @@ class RustGenerator(BaseGenerator):
         if field.optional:
             lines.append("#[fory(nullable = true)]")
 
-        rust_type = self.generate_type(field.field_type, field.optional, field.ref)
+        rust_type = self.generate_type(field.field_type, field.optional, field.ref, parent_name)
         field_name = self.to_snake_case(field.name)
 
         lines.append(f"pub {field_name}: {rust_type},")
 
         return lines
 
-    def generate_type(self, field_type: FieldType, nullable: bool = False, ref: bool = False) -> str:
+    def generate_type(self, field_type: FieldType, nullable: bool = False, ref: bool = False, parent_name: str = "") -> str:
         """Generate Rust type string."""
         if isinstance(field_type, PrimitiveType):
             base_type = self.PRIMITIVE_MAP[field_type.kind]
@@ -182,19 +215,24 @@ class RustGenerator(BaseGenerator):
             return base_type
 
         elif isinstance(field_type, NamedType):
+            # Convert qualified names (Parent.Child) to Rust-style (Parent_Child)
+            type_name = field_type.name.replace(".", "_")
+            # If it's a simple name and we have a parent context, it might be a nested type
+            if "." not in field_type.name and parent_name:
+                type_name = f"{parent_name}_{type_name}"
             if ref:
-                return f"Rc<{field_type.name}>"
+                return f"Rc<{type_name}>"
             if nullable:
-                return f"Option<{field_type.name}>"
-            return field_type.name
+                return f"Option<{type_name}>"
+            return type_name
 
         elif isinstance(field_type, ListType):
-            element_type = self.generate_type(field_type.element_type, False, False)
+            element_type = self.generate_type(field_type.element_type, False, False, parent_name)
             return f"Vec<{element_type}>"
 
         elif isinstance(field_type, MapType):
-            key_type = self.generate_type(field_type.key_type, False, False)
-            value_type = self.generate_type(field_type.value_type, False, False)
+            key_type = self.generate_type(field_type.key_type, False, False, parent_name)
+            value_type = self.generate_type(field_type.value_type, False, False, parent_name)
             return f"HashMap<{key_type}, {value_type}>"
 
         return "()"
@@ -228,23 +266,44 @@ class RustGenerator(BaseGenerator):
 
         lines.append("pub fn register_types(fory: &mut Fory) -> Result<(), fory::Error> {")
 
-        # Register enums
+        # Register enums (top-level)
         for enum in self.schema.enums:
-            if enum.type_id is not None:
-                lines.append(f"    fory.register::<{enum.name}>({enum.type_id})?;")
-            else:
-                ns = self.package or "default"
-                lines.append(f'    fory.register_by_namespace::<{enum.name}>("{ns}", "{enum.name}")?;')
+            self.generate_enum_registration(lines, enum, "")
 
-        # Register messages
+        # Register messages (including nested types)
         for message in self.schema.messages:
-            if message.type_id is not None:
-                lines.append(f"    fory.register::<{message.name}>({message.type_id})?;")
-            else:
-                ns = self.package or "default"
-                lines.append(f'    fory.register_by_namespace::<{message.name}>("{ns}", "{message.name}")?;')
+            self.generate_message_registration(lines, message, "")
 
         lines.append("    Ok(())")
         lines.append("}")
 
         return lines
+
+    def generate_enum_registration(self, lines: List[str], enum: Enum, parent_name: str):
+        """Generate registration code for an enum."""
+        type_name = f"{parent_name}_{enum.name}" if parent_name else enum.name
+
+        if enum.type_id is not None:
+            lines.append(f"    fory.register::<{type_name}>({enum.type_id})?;")
+        else:
+            ns = self.package or "default"
+            lines.append(f'    fory.register_by_namespace::<{type_name}>("{ns}", "{type_name}")?;')
+
+    def generate_message_registration(self, lines: List[str], message: Message, parent_name: str):
+        """Generate registration code for a message and its nested types."""
+        type_name = f"{parent_name}_{message.name}" if parent_name else message.name
+
+        # Register nested enums first
+        for nested_enum in message.nested_enums:
+            self.generate_enum_registration(lines, nested_enum, type_name)
+
+        # Register nested messages recursively
+        for nested_msg in message.nested_messages:
+            self.generate_message_registration(lines, nested_msg, type_name)
+
+        # Register this message
+        if message.type_id is not None:
+            lines.append(f"    fory.register::<{type_name}>({message.type_id})?;")
+        else:
+            ns = self.package or "default"
+            lines.append(f'    fory.register_by_namespace::<{type_name}>("{ns}", "{type_name}")?;')

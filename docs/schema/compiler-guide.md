@@ -48,11 +48,12 @@ fory compile [OPTIONS] FILES...
 
 ### Options
 
-| Option           | Description                         | Default       |
-| ---------------- | ----------------------------------- | ------------- |
-| `--lang`         | Comma-separated target languages    | `all`         |
-| `--output`, `-o` | Output directory                    | `./generated` |
-| `--package`      | Override package name from FDL file | (from file)   |
+| Option                                | Description                                           | Default       |
+| ------------------------------------- | ----------------------------------------------------- | ------------- |
+| `--lang`                              | Comma-separated target languages                      | `all`         |
+| `--output`, `-o`                      | Output directory                                      | `./generated` |
+| `--package`                           | Override package name from FDL file                   | (from file)   |
+| `-I`, `--proto_path`, `--import_path` | Add directory to import search path (can be repeated) | (none)        |
 
 ### Examples
 
@@ -84,6 +85,70 @@ fory compile schema.fdl --package com.myapp.models
 
 ```bash
 fory compile user.fdl order.fdl product.fdl --output ./generated
+```
+
+**Use import search paths:**
+
+```bash
+# Add a single import path
+fory compile src/main.fdl -I libs/common
+
+# Add multiple import paths (repeated option)
+fory compile src/main.fdl -I libs/common -I libs/types
+
+# Add multiple import paths (comma-separated)
+fory compile src/main.fdl -I libs/common,libs/types,third_party/
+
+# Using --proto_path (protoc-compatible alias)
+fory compile src/main.fdl --proto_path=libs/common
+
+# Mix all styles
+fory compile src/main.fdl -I libs/common,libs/types --proto_path third_party/
+```
+
+## Import Path Resolution
+
+When compiling FDL files with imports, the compiler searches for imported files in this order:
+
+1. **Relative to the importing file (default)** - The directory containing the file with the import statement is always searched first, automatically. No `-I` flag needed for same-directory imports.
+2. **Each `-I` path in order** - Additional search paths specified on the command line
+
+**Same-directory imports work automatically:**
+
+```fdl
+// main.fdl
+import "common.fdl";  // Found if common.fdl is in the same directory
+```
+
+```bash
+# No -I needed for same-directory imports
+fory compile main.fdl
+```
+
+**Example project structure:**
+
+```
+project/
+├── src/
+│   └── main.fdl          # import "common.fdl";
+└── libs/
+    └── common.fdl
+```
+
+**Without `-I` (fails):**
+
+```bash
+$ fory compile src/main.fdl
+Import error: Import not found: common.fdl
+  Searched in: /project/src
+```
+
+**With `-I` (succeeds):**
+
+```bash
+$ fory compile src/main.fdl -I libs/
+Compiling src/main.fdl...
+  Resolved 1 import(s)
 ```
 
 ## Supported Languages

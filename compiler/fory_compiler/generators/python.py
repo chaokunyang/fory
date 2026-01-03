@@ -108,8 +108,7 @@ class PythonGenerator(BaseGenerator):
         imports.add("import pyfory")
 
         for message in self.schema.messages:
-            for field in message.fields:
-                self.collect_imports(field.field_type, imports)
+            self.collect_message_imports(message, imports)
 
         # License header
         lines.append(self.get_license_header("#"))
@@ -121,15 +120,15 @@ class PythonGenerator(BaseGenerator):
         lines.append("")
         lines.append("")
 
-        # Generate enums
+        # Generate enums (top-level only)
         for enum in self.schema.enums:
             lines.extend(self.generate_enum(enum))
             lines.append("")
             lines.append("")
 
-        # Generate messages
+        # Generate messages (including nested types)
         for message in self.schema.messages:
-            lines.extend(self.generate_message(message))
+            lines.extend(self.generate_message(message, indent=0))
             lines.append("")
             lines.append("")
 
@@ -142,32 +141,59 @@ class PythonGenerator(BaseGenerator):
             content="\n".join(lines),
         )
 
-    def generate_enum(self, enum: Enum) -> List[str]:
+    def collect_message_imports(self, message: Message, imports: Set[str]):
+        """Collect imports for a message and its nested types recursively."""
+        for field in message.fields:
+            self.collect_imports(field.field_type, imports)
+        for nested_msg in message.nested_messages:
+            self.collect_message_imports(nested_msg, imports)
+
+    def generate_enum(self, enum: Enum, indent: int = 0) -> List[str]:
         """Generate a Python IntEnum."""
         lines = []
-        lines.append(f"class {enum.name}(IntEnum):")
+        ind = "    " * indent
+        lines.append(f"{ind}class {enum.name}(IntEnum):")
 
         # Enum values (strip prefix for scoped enums)
         for value in enum.values:
             stripped_name = self.strip_enum_prefix(enum.name, value.name)
-            lines.append(f"    {stripped_name} = {value.value}")
+            lines.append(f"{ind}    {stripped_name} = {value.value}")
 
         return lines
 
-    def generate_message(self, message: Message) -> List[str]:
-        """Generate a Python dataclass."""
+    def generate_message(self, message: Message, indent: int = 0) -> List[str]:
+        """Generate a Python dataclass with nested types."""
         lines = []
-        lines.append("@dataclass")
-        lines.append(f"class {message.name}:")
+        ind = "    " * indent
 
-        if not message.fields:
-            lines.append("    pass")
+        lines.append(f"{ind}@dataclass")
+        lines.append(f"{ind}class {message.name}:")
+
+        # Generate nested enums first (they need to be defined before fields reference them)
+        for nested_enum in message.nested_enums:
+            for line in self.generate_enum(nested_enum, indent=indent + 1):
+                lines.append(line)
+            lines.append("")
+
+        # Generate nested messages
+        for nested_msg in message.nested_messages:
+            for line in self.generate_message(nested_msg, indent=indent + 1):
+                lines.append(line)
+            lines.append("")
+
+        # Generate fields
+        if not message.fields and not message.nested_enums and not message.nested_messages:
+            lines.append(f"{ind}    pass")
             return lines
 
         for field in message.fields:
             field_lines = self.generate_field(field)
             for line in field_lines:
-                lines.append(f"    {line}")
+                lines.append(f"{ind}    {line}")
+
+        # If there are nested types but no fields, add pass to avoid empty class body issues
+        if not message.fields and (message.nested_enums or message.nested_messages):
+            lines.append(f"{ind}    pass")
 
         return lines
 
@@ -264,20 +290,44 @@ class PythonGenerator(BaseGenerator):
             lines.append("    pass")
             return lines
 
-        # Register enums
+        # Register enums (top-level)
         for enum in self.schema.enums:
-            if enum.type_id is not None:
-                lines.append(f"    fory.register_type({enum.name}, type_id={enum.type_id})")
-            else:
-                ns = self.package or "default"
-                lines.append(f'    fory.register_type({enum.name}, namespace="{ns}", typename="{enum.name}")')
+            self.generate_enum_registration(lines, enum, "")
 
-        # Register messages
+        # Register messages (including nested types)
         for message in self.schema.messages:
-            if message.type_id is not None:
-                lines.append(f"    fory.register_type({message.name}, type_id={message.type_id})")
-            else:
-                ns = self.package or "default"
-                lines.append(f'    fory.register_type({message.name}, namespace="{ns}", typename="{message.name}")')
+            self.generate_message_registration(lines, message, "")
 
         return lines
+
+    def generate_enum_registration(self, lines: List[str], enum: Enum, parent_path: str):
+        """Generate registration code for an enum."""
+        # In Python, nested class references use Outer.Inner syntax
+        class_ref = f"{parent_path}.{enum.name}" if parent_path else enum.name
+        type_name = class_ref.replace(".", "_") if parent_path else enum.name
+
+        if enum.type_id is not None:
+            lines.append(f"    fory.register_type({class_ref}, type_id={enum.type_id})")
+        else:
+            ns = self.package or "default"
+            lines.append(f'    fory.register_type({class_ref}, namespace="{ns}", typename="{type_name}")')
+
+    def generate_message_registration(self, lines: List[str], message: Message, parent_path: str):
+        """Generate registration code for a message and its nested types."""
+        # In Python, nested class references use Outer.Inner syntax
+        class_ref = f"{parent_path}.{message.name}" if parent_path else message.name
+        type_name = class_ref.replace(".", "_") if parent_path else message.name
+
+        if message.type_id is not None:
+            lines.append(f"    fory.register_type({class_ref}, type_id={message.type_id})")
+        else:
+            ns = self.package or "default"
+            lines.append(f'    fory.register_type({class_ref}, namespace="{ns}", typename="{type_name}")')
+
+        # Register nested enums
+        for nested_enum in message.nested_enums:
+            self.generate_enum_registration(lines, nested_enum, class_ref)
+
+        # Register nested messages
+        for nested_msg in message.nested_messages:
+            self.generate_message_registration(lines, nested_msg, class_ref)

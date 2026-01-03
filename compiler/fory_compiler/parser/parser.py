@@ -159,6 +159,28 @@ class Parser:
         start = self.current()
         self.consume(TokenType.IMPORT)
 
+        # Check for forbidden import modifiers (protobuf syntax)
+        if self.check(TokenType.PUBLIC):
+            raise ParseError(
+                "'import public' is not supported in FDL.\n"
+                "  Reason: FDL uses a simpler import model where all imported types\n"
+                "  are available to the importing file. Re-exporting imports is not\n"
+                "  supported. Simply use 'import \"path/to/file.fdl\";' instead.\n"
+                "  If you need types from multiple files, import each file directly.",
+                start.line,
+                start.column,
+            )
+
+        if self.check(TokenType.WEAK):
+            raise ParseError(
+                "'import weak' is not supported in FDL.\n"
+                "  Reason: Weak imports are a protobuf-specific feature for optional\n"
+                "  dependencies. FDL requires all imports to be present at compile time.\n"
+                "  Use 'import \"path/to/file.fdl\";' instead.",
+                start.line,
+                start.column,
+            )
+
         path_token = self.consume(TokenType.STRING, "Expected import path string")
 
         self.consume(TokenType.SEMI, "Expected ';' after import statement")
@@ -321,7 +343,15 @@ class Parser:
         )
 
     def parse_message(self) -> Message:
-        """Parse a message: message Dog @102 { ... }"""
+        """Parse a message: message Dog @102 { ... }
+
+        Supports nested messages and enums:
+            message Outer {
+                message Inner { ... }
+                enum Status { ... }
+                Inner inner = 1;
+            }
+        """
         start = self.current()
         self.consume(TokenType.MESSAGE)
         name = self.consume(TokenType.IDENT, "Expected message name").value
@@ -334,6 +364,9 @@ class Parser:
         self.consume(TokenType.LBRACE, "Expected '{' after message name")
 
         fields = []
+        nested_messages = []
+        nested_enums = []
+
         while not self.check(TokenType.RBRACE):
             # Check for reserved statements
             if self.check(TokenType.RESERVED):
@@ -341,6 +374,12 @@ class Parser:
             # Check for option statements (message-level options)
             elif self.check(TokenType.OPTION):
                 self.parse_message_option()
+            # Check for nested message
+            elif self.check(TokenType.MESSAGE):
+                nested_messages.append(self.parse_message())
+            # Check for nested enum
+            elif self.check(TokenType.ENUM):
+                nested_enums.append(self.parse_enum())
             else:
                 fields.append(self.parse_field())
 
@@ -350,6 +389,8 @@ class Parser:
             name=name,
             type_id=type_id,
             fields=fields,
+            nested_messages=nested_messages,
+            nested_enums=nested_enums,
             line=start.line,
             column=start.column,
         )
@@ -391,7 +432,7 @@ class Parser:
         )
 
     def parse_type(self) -> FieldType:
-        """Parse a type: int32, string, map<K, V>, or a named type."""
+        """Parse a type: int32, string, map<K, V>, Parent.Child, or a named type."""
         if self.check(TokenType.MAP):
             return self.parse_map_type()
 
@@ -404,7 +445,14 @@ class Parser:
         if type_name in PRIMITIVE_TYPES:
             return PrimitiveType(PRIMITIVE_TYPES[type_name])
 
-        # Otherwise it's a named type (reference to message or enum)
+        # Check for qualified name (e.g., Parent.Child or Outer.Middle.Inner)
+        while self.check(TokenType.DOT):
+            self.advance()  # consume the dot
+            if not self.check(TokenType.IDENT):
+                raise self.error("Expected identifier after '.'")
+            type_name += "." + self.consume(TokenType.IDENT).value
+
+        # It's a named type (reference to message or enum)
         return NamedType(type_name)
 
     def parse_map_type(self) -> MapType:

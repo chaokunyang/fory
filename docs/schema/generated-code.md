@@ -52,6 +52,129 @@ message Order @102 {
 }
 ```
 
+## Enum Prefix Stripping
+
+When enum values use a protobuf-style prefix (enum name in UPPER_SNAKE_CASE), the compiler automatically strips the prefix for languages with scoped enums. This produces cleaner, more idiomatic code.
+
+**Input FDL:**
+
+```fdl
+enum DeviceTier {
+    DEVICE_TIER_UNKNOWN = 0;
+    DEVICE_TIER_TIER1 = 1;
+    DEVICE_TIER_TIER2 = 2;
+}
+```
+
+**Generated output by language:**
+
+| Language | Generated Values                          | Notes                     |
+| -------- | ----------------------------------------- | ------------------------- |
+| Java     | `UNKNOWN, TIER1, TIER2`                   | Scoped enum               |
+| Rust     | `Unknown, Tier1, Tier2`                   | PascalCase variants       |
+| C++      | `UNKNOWN, TIER1, TIER2`                   | Scoped `enum class`       |
+| Python   | `UNKNOWN, TIER1, TIER2`                   | Scoped `IntEnum`          |
+| Go       | `DeviceTierUnknown, DeviceTierTier1, ...` | Unscoped, prefix re-added |
+
+**Note:** Go uses unscoped constants, so the enum name prefix is added back to avoid naming collisions.
+
+## Nested Types
+
+When using nested message and enum definitions, the generated code varies by language.
+
+**Input FDL:**
+
+```fdl
+message SearchResponse {
+    message Result {
+        string url = 1;
+        string title = 2;
+    }
+    repeated Result results = 1;
+}
+```
+
+### Java - Inner Classes
+
+```java
+public class SearchResponse {
+    public static class Result {
+        private String url;
+        private String title;
+        // getters, setters...
+    }
+
+    private List<Result> results;
+    // getters, setters...
+}
+```
+
+### Python - Nested Classes
+
+```python
+@dataclass
+class SearchResponse:
+    @dataclass
+    class Result:
+        url: str = ""
+        title: str = ""
+
+    results: List[Result] = None
+```
+
+### Go - Flattened with Underscore
+
+```go
+type SearchResponse_Result struct {
+    Url   string
+    Title string
+}
+
+type SearchResponse struct {
+    Results []SearchResponse_Result
+}
+```
+
+### Rust - Flattened with Underscore
+
+```rust
+#[derive(ForyObject)]
+pub struct SearchResponse_Result {
+    pub url: String,
+    pub title: String,
+}
+
+#[derive(ForyObject)]
+pub struct SearchResponse {
+    pub results: Vec<SearchResponse_Result>,
+}
+```
+
+### C++ - Flattened with Underscore
+
+```cpp
+struct SearchResponse_Result {
+    std::string url;
+    std::string title;
+};
+FORY_STRUCT(SearchResponse_Result, url, title);
+
+struct SearchResponse {
+    std::vector<SearchResponse_Result> results;
+};
+FORY_STRUCT(SearchResponse, results);
+```
+
+**Summary:**
+
+| Language | Approach                  | Syntax Example          |
+| -------- | ------------------------- | ----------------------- |
+| Java     | Static inner classes      | `SearchResponse.Result` |
+| Python   | Nested dataclasses        | `SearchResponse.Result` |
+| Go       | Flattened with underscore | `SearchResponse_Result` |
+| Rust     | Flattened with underscore | `SearchResponse_Result` |
+| C++      | Flattened with underscore | `SearchResponse_Result` |
+
 ## Java
 
 ### Enum Generation

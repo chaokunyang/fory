@@ -28,6 +28,8 @@ class TokenType(Enum):
     # Keywords
     PACKAGE = auto()
     IMPORT = auto()
+    PUBLIC = auto()
+    WEAK = auto()
     MESSAGE = auto()
     ENUM = auto()
     OPTIONAL = auto()
@@ -55,6 +57,7 @@ class TokenType(Enum):
     SEMI = auto()  # ;
     COMMA = auto()  # ,
     EQUALS = auto()  # =
+    DOT = auto()  # .
 
     EOF = auto()
 
@@ -88,6 +91,8 @@ class Lexer:
     KEYWORDS = {
         "package": TokenType.PACKAGE,
         "import": TokenType.IMPORT,
+        "public": TokenType.PUBLIC,
+        "weak": TokenType.WEAK,
         "message": TokenType.MESSAGE,
         "enum": TokenType.ENUM,
         "optional": TokenType.OPTIONAL,
@@ -110,6 +115,7 @@ class Lexer:
         ";": TokenType.SEMI,
         ",": TokenType.COMMA,
         "=": TokenType.EQUALS,
+        ".": TokenType.DOT,
     }
 
     def __init__(self, source: str, filename: str = "<input>"):

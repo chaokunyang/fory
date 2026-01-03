@@ -153,12 +153,27 @@ class Message:
     name: str
     type_id: Optional[int]
     fields: List[Field] = field(default_factory=list)
+    nested_messages: List["Message"] = field(default_factory=list)
+    nested_enums: List["Enum"] = field(default_factory=list)
     line: int = 0
     column: int = 0
 
     def __repr__(self) -> str:
         id_str = f" @{self.type_id}" if self.type_id is not None else ""
-        return f"Message({self.name}{id_str}, fields={self.fields})"
+        nested_str = ""
+        if self.nested_messages or self.nested_enums:
+            nested_str = f", nested={len(self.nested_messages)}msg+{len(self.nested_enums)}enum"
+        return f"Message({self.name}{id_str}, fields={self.fields}{nested_str})"
+
+    def get_nested_type(self, name: str) -> Optional[Union["Message", "Enum"]]:
+        """Look up a nested type by name."""
+        for msg in self.nested_messages:
+            if msg.name == name:
+                return msg
+        for enum in self.nested_enums:
+            if enum.name == name:
+                return enum
+        return None
 
 
 @dataclass
@@ -189,7 +204,29 @@ class Schema:
         return f"Schema(package={self.package}, imports={len(self.imports)}, enums={len(self.enums)}, messages={len(self.messages)})"
 
     def get_type(self, name: str) -> Optional[Union[Message, Enum]]:
-        """Look up a type by name."""
+        """Look up a type by name, supporting qualified names like Parent.Child."""
+        # Handle qualified names (e.g., SearchResponse.Result)
+        if "." in name:
+            parts = name.split(".")
+            # Find the top-level type
+            current = self._get_top_level_type(parts[0])
+            if current is None:
+                return None
+            # Navigate through nested types
+            for part in parts[1:]:
+                if isinstance(current, Message):
+                    current = current.get_nested_type(part)
+                    if current is None:
+                        return None
+                else:
+                    # Enums don't have nested types
+                    return None
+            return current
+        else:
+            return self._get_top_level_type(name)
+
+    def _get_top_level_type(self, name: str) -> Optional[Union[Message, Enum]]:
+        """Look up a top-level type by simple name."""
         for enum in self.enums:
             if enum.name == name:
                 return enum
@@ -198,11 +235,27 @@ class Schema:
                 return message
         return None
 
+    def get_all_types(self) -> List[Union[Message, Enum]]:
+        """Get all types including nested types (flattened)."""
+        result: List[Union[Message, Enum]] = []
+        result.extend(self.enums)
+        for message in self.messages:
+            self._collect_types(message, result)
+        return result
+
+    def _collect_types(self, message: Message, result: List[Union[Message, Enum]]):
+        """Recursively collect all types from a message and its nested types."""
+        result.append(message)
+        for nested_enum in message.nested_enums:
+            result.append(nested_enum)
+        for nested_msg in message.nested_messages:
+            self._collect_types(nested_msg, result)
+
     def validate(self) -> List[str]:
         """Validate the schema and return a list of errors."""
         errors = []
 
-        # Check for duplicate type names
+        # Check for duplicate type names at top level
         names = set()
         for enum in self.enums:
             if enum.name in names:
@@ -213,72 +266,113 @@ class Schema:
                 errors.append(f"Duplicate type name: {message.name}")
             names.add(message.name)
 
-        # Check for duplicate type IDs
+        # Check for duplicate type IDs (including nested types)
         type_ids = {}
-        for enum in self.enums:
-            if enum.type_id is not None:
-                if enum.type_id in type_ids:
+        all_types = self.get_all_types()
+        for t in all_types:
+            if t.type_id is not None:
+                if t.type_id in type_ids:
                     errors.append(
-                        f"Duplicate type ID @{enum.type_id}: "
-                        f"{enum.name} and {type_ids[enum.type_id]}"
+                        f"Duplicate type ID @{t.type_id}: "
+                        f"{t.name} and {type_ids[t.type_id]}"
                     )
-                type_ids[enum.type_id] = enum.name
-        for message in self.messages:
-            if message.type_id is not None:
-                if message.type_id in type_ids:
-                    errors.append(
-                        f"Duplicate type ID @{message.type_id}: "
-                        f"{message.name} and {type_ids[message.type_id]}"
-                    )
-                type_ids[message.type_id] = message.name
+                type_ids[t.type_id] = t.name
 
-        # Check for duplicate field numbers within messages
-        for message in self.messages:
+        # Validate messages recursively (including nested)
+        def validate_message(message: Message, parent_path: str = ""):
+            full_name = f"{parent_path}.{message.name}" if parent_path else message.name
+
+            # Check for duplicate nested type names
+            nested_names = set()
+            for nested_enum in message.nested_enums:
+                if nested_enum.name in nested_names:
+                    errors.append(f"Duplicate nested type name in {full_name}: {nested_enum.name}")
+                nested_names.add(nested_enum.name)
+            for nested_msg in message.nested_messages:
+                if nested_msg.name in nested_names:
+                    errors.append(f"Duplicate nested type name in {full_name}: {nested_msg.name}")
+                nested_names.add(nested_msg.name)
+
+            # Check for duplicate field numbers and names
             field_numbers = {}
             field_names = set()
             for f in message.fields:
                 if f.number in field_numbers:
                     errors.append(
-                        f"Duplicate field number {f.number} in {message.name}: "
+                        f"Duplicate field number {f.number} in {full_name}: "
                         f"{f.name} and {field_numbers[f.number]}"
                     )
                 field_numbers[f.number] = f.name
                 if f.name in field_names:
                     errors.append(
-                        f"Duplicate field name in {message.name}: {f.name}"
+                        f"Duplicate field name in {full_name}: {f.name}"
                     )
                 field_names.add(f.name)
 
-        # Check for duplicate enum values
-        for enum in self.enums:
+            # Validate nested enums
+            for nested_enum in message.nested_enums:
+                validate_enum(nested_enum, full_name)
+
+            # Recursively validate nested messages
+            for nested_msg in message.nested_messages:
+                validate_message(nested_msg, full_name)
+
+        def validate_enum(enum: Enum, parent_path: str = ""):
+            full_name = f"{parent_path}.{enum.name}" if parent_path else enum.name
             value_numbers = {}
             value_names = set()
             for v in enum.values:
                 if v.value in value_numbers:
                     errors.append(
-                        f"Duplicate enum value {v.value} in {enum.name}: "
+                        f"Duplicate enum value {v.value} in {full_name}: "
                         f"{v.name} and {value_numbers[v.value]}"
                     )
                 value_numbers[v.value] = v.name
                 if v.name in value_names:
                     errors.append(
-                        f"Duplicate enum value name in {enum.name}: {v.name}"
+                        f"Duplicate enum value name in {full_name}: {v.name}"
                     )
                 value_names.add(v.name)
 
-        # Check that referenced types exist
-        def check_type_ref(field_type: FieldType, context: str):
+        # Validate all top-level enums
+        for enum in self.enums:
+            validate_enum(enum)
+
+        # Validate all top-level messages (and their nested types)
+        for message in self.messages:
+            validate_message(message)
+
+        # Check that referenced types exist (supports qualified names and nested type lookup)
+        def check_type_ref(field_type: FieldType, context: str, enclosing_message: Optional[Message] = None):
             if isinstance(field_type, NamedType):
-                if self.get_type(field_type.name) is None:
-                    errors.append(f"Unknown type '{field_type.name}' in {context}")
+                type_name = field_type.name
+                found = False
+
+                # First, try to find as a nested type in the enclosing message
+                if enclosing_message is not None and "." not in type_name:
+                    if enclosing_message.get_nested_type(type_name) is not None:
+                        found = True
+
+                # Then, try to find as a top-level or qualified type
+                if not found and self.get_type(type_name) is not None:
+                    found = True
+
+                if not found:
+                    errors.append(f"Unknown type '{type_name}' in {context}")
             elif isinstance(field_type, ListType):
-                check_type_ref(field_type.element_type, context)
+                check_type_ref(field_type.element_type, context, enclosing_message)
             elif isinstance(field_type, MapType):
-                check_type_ref(field_type.key_type, context)
-                check_type_ref(field_type.value_type, context)
+                check_type_ref(field_type.key_type, context, enclosing_message)
+                check_type_ref(field_type.value_type, context, enclosing_message)
+
+        def check_message_refs(message: Message, parent_path: str = ""):
+            full_name = f"{parent_path}.{message.name}" if parent_path else message.name
+            for f in message.fields:
+                check_type_ref(f.field_type, f"{full_name}.{f.name}", message)
+            for nested_msg in message.nested_messages:
+                check_message_refs(nested_msg, full_name)
 
         for message in self.messages:
-            for f in message.fields:
-                check_type_ref(f.field_type, f"{message.name}.{f.name}")
+            check_message_refs(message)
 
         return errors

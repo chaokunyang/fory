@@ -333,11 +333,6 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
       ctx.write_int8(NOT_NULL_VALUE_FLAG);
     }
 
-    // In compatible mode with ref tracking, first occurrence (RefValue)
-    // requires type info to be written after the ref flag.
-    const bool should_write_type =
-        ctx.is_compatible() && is_first_occurrence ? true : write_type;
-
     // For polymorphic types, serialize the concrete type dynamically
     if constexpr (is_polymorphic) {
       // Get the concrete type_index from the actual object
@@ -352,7 +347,7 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
       const TypeInfo *type_info = type_info_res.value();
 
       // Write type info if requested
-      if (should_write_type) {
+      if (write_type) {
         auto write_res = ctx.write_any_typeinfo(
             static_cast<uint32_t>(TypeId::UNKNOWN), concrete_type_id);
         if (!write_res.ok()) {
@@ -369,7 +364,7 @@ template <typename T> struct Serializer<std::shared_ptr<T>> {
       // Non-polymorphic path
       Serializer<T>::write(
           *ptr, ctx, inner_requires_ref ? RefMode::NullOnly : RefMode::None,
-          should_write_type);
+          write_type);
     }
   }
 

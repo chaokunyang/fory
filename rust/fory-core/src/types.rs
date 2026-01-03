@@ -65,10 +65,10 @@ pub enum RefMode {
 }
 
 impl RefMode {
-    /// Create RefMode from nullable and ref_tracking flags.
+    /// Create RefMode from nullable and track_ref flags.
     #[inline]
-    pub const fn from_flags(nullable: bool, ref_tracking: bool) -> Self {
-        match (nullable, ref_tracking) {
+    pub const fn from_flags(nullable: bool, track_ref: bool) -> Self {
+        match (nullable, track_ref) {
             (false, false) => RefMode::None,
             (true, false) => RefMode::NullOnly,
             (_, true) => RefMode::Tracking,

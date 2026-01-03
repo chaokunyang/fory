@@ -37,7 +37,7 @@ pub struct Config {
     /// Whether reference tracking is enabled.
     /// When enabled, shared references and circular references are tracked
     /// and preserved during serialization/deserialization.
-    pub ref_tracking: bool,
+    pub track_ref: bool,
 }
 
 impl Default for Config {
@@ -49,7 +49,7 @@ impl Default for Config {
             compress_string: false,
             max_dyn_depth: 5,
             check_struct_version: false,
-            ref_tracking: false,
+            track_ref: false,
         }
     }
 }
@@ -98,7 +98,7 @@ impl Config {
 
     /// Check if reference tracking is enabled.
     #[inline(always)]
-    pub fn is_ref_tracking(&self) -> bool {
-        self.ref_tracking
+    pub fn is_track_ref(&self) -> bool {
+        self.track_ref
     }
 }

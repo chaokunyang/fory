@@ -264,7 +264,7 @@ impl Fory {
     ///
     /// # Arguments
     ///
-    /// * `ref_tracking` - If `true`, enables reference tracking which allows
+    /// * `track_ref` - If `true`, enables reference tracking which allows
     ///   preserving shared object references and circular references during
     ///   serialization/deserialization.
     ///
@@ -281,10 +281,10 @@ impl Fory {
     /// ```rust
     /// use fory_core::Fory;
     ///
-    /// let fory = Fory::default().ref_tracking(true);
+    /// let fory = Fory::default().track_ref(true);
     /// ```
-    pub fn ref_tracking(mut self, ref_tracking: bool) -> Self {
-        self.config.ref_tracking = ref_tracking;
+    pub fn track_ref(mut self, track_ref: bool) -> Self {
+        self.config.track_ref = track_ref;
         self
     }
 
@@ -619,9 +619,9 @@ impl Fory {
                 context.writer.write_i32(-1);
             };
             // Use RefMode based on config:
-            // - If ref_tracking is enabled, use RefMode::Tracking for the root object
+            // - If track_ref is enabled, use RefMode::Tracking for the root object
             // - Otherwise, use RefMode::NullOnly which writes NOT_NULL_VALUE_FLAG
-            let ref_mode = if self.config.ref_tracking {
+            let ref_mode = if self.config.track_ref {
                 RefMode::Tracking
             } else {
                 RefMode::NullOnly
@@ -1014,9 +1014,9 @@ impl Fory {
             }
         }
         // Use RefMode based on config:
-        // - If ref_tracking is enabled, use RefMode::Tracking for the root object
+        // - If track_ref is enabled, use RefMode::Tracking for the root object
         // - Otherwise, use RefMode::NullOnly
-        let ref_mode = if self.config.ref_tracking {
+        let ref_mode = if self.config.track_ref {
             RefMode::Tracking
         } else {
             RefMode::NullOnly

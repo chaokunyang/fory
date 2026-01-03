@@ -1703,7 +1703,7 @@ fn test_ref_schema_consistent() {
     let mut fory = Fory::default()
         .compatible(false)
         .xlang(true)
-        .ref_tracking(true);
+        .track_ref(true);
     fory.register::<RefInnerSchemaConsistent>(501).unwrap();
     fory.register::<RefOuterSchemaConsistent>(502).unwrap();
 
@@ -1747,10 +1747,7 @@ fn test_ref_compatible() {
     let data_file_path = get_data_file();
     let bytes = fs::read(&data_file_path).unwrap();
 
-    let mut fory = Fory::default()
-        .compatible(true)
-        .xlang(true)
-        .ref_tracking(true);
+    let mut fory = Fory::default().compatible(true).xlang(true).track_ref(true);
     fory.register::<RefInnerCompatible>(503).unwrap();
     fory.register::<RefOuterCompatible>(504).unwrap();
 

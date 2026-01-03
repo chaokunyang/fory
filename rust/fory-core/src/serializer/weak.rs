@@ -319,6 +319,12 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for RcWeak<T> {
         write_type_info: bool,
         has_generics: bool,
     ) -> Result<(), Error> {
+        // Weak pointers require track_ref to be enabled on the Fory instance
+        if !context.is_track_ref() {
+            return Err(Error::invalid_ref(
+                "RcWeak requires track_ref to be enabled. Use Fory::default().track_ref(true)",
+            ));
+        }
         // Weak MUST use ref tracking - otherwise read value will be lost
         if ref_mode != RefMode::Tracking {
             return Err(Error::invalid_ref(
@@ -330,10 +336,6 @@ impl<T: Serializer + ForyDefault + 'static> Serializer for RcWeak<T> {
                 .ref_writer
                 .try_write_rc_ref(&mut context.writer, &rc)
             {
-                // Target not previously registered - serialize its data.
-                // Note: For circular references, ref_tracking should be enabled
-                // on the Fory instance to ensure proper reference resolution.
-                // Use `Fory::default().ref_tracking(true)` for circular references.
                 if write_type_info {
                     T::fory_write_type_info(context)?;
                 }
@@ -483,6 +485,12 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for ArcWeak
         write_type_info: bool,
         has_generics: bool,
     ) -> Result<(), Error> {
+        // Weak pointers require track_ref to be enabled on the Fory instance
+        if !context.is_track_ref() {
+            return Err(Error::invalid_ref(
+                "ArcWeak requires track_ref to be enabled. Use Fory::default().track_ref(true)",
+            ));
+        }
         // Weak MUST use ref tracking - otherwise read value will be lost
         if ref_mode != RefMode::Tracking {
             return Err(Error::invalid_ref(
@@ -494,10 +502,6 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for ArcWeak
                 .ref_writer
                 .try_write_arc_ref(&mut context.writer, &arc)
             {
-                // Target not previously registered - serialize its data.
-                // Note: For circular references with Mutex/RwLock, this may cause deadlock
-                // if ref_tracking is not enabled on the Fory instance.
-                // Use `Fory::default().ref_tracking(true)` for circular references.
                 if write_type_info {
                     T::fory_write_type_info(context)?;
                 }

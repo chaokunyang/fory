@@ -202,13 +202,25 @@ public class Types {
   public static final int BOUND = 64;
 
   // Deprecated aliases for backward compatibility
-  /** @deprecated Use {@link #VAR32} instead */
+  /**
+   * Deprecated alias for VAR32.
+   *
+   * @deprecated Use {@link #VAR32} instead
+   */
   @Deprecated public static final int VAR_INT32 = VAR32;
 
-  /** @deprecated Use {@link #VAR64} instead */
+  /**
+   * Deprecated alias for VAR64.
+   *
+   * @deprecated Use {@link #VAR64} instead
+   */
   @Deprecated public static final int VAR_INT64 = VAR64;
 
-  /** @deprecated Use {@link #H64} instead */
+  /**
+   * Deprecated alias for H64.
+   *
+   * @deprecated Use {@link #H64} instead
+   */
   @Deprecated public static final int SLI_INT64 = H64;
 
   // Helper methods

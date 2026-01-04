@@ -68,7 +68,7 @@ KNOWN_TYPE_OPTIONS: Set[str] = {
 # Known Fory message-level options (option statements inside message body)
 KNOWN_FORY_MESSAGE_OPTIONS: Set[str] = {
     "id",
-    "compatible",
+    "evolving",
     "use_record_for_java",
     "deprecated",
     "namespace",

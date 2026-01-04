@@ -236,7 +236,7 @@ option (fory).polymorphism = true;
 ```fdl
 message MyMessage {
     option (fory).id = 100;
-    option (fory).compatible = true;
+    option (fory).evolving = false;
     option (fory).use_record_for_java = true;
     string name = 1;
 }

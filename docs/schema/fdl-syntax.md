@@ -1010,7 +1010,7 @@ Options can be specified inside the message body:
 ```fdl
 message MyMessage {
     option (fory).id = 100;
-    option (fory).compatible = true;
+    option (fory).evolving = false;
     option (fory).use_record_for_java = true;
     string name = 1;
 }
@@ -1019,7 +1019,7 @@ message MyMessage {
 | Option                | Type   | Description                                |
 | --------------------- | ------ | ------------------------------------------ |
 | `id`                  | int    | Type ID for serialization (sets type_id)   |
-| `compatible`          | bool   | Enable schema compatibility mode           |
+| `evolving`            | bool   | Schema evolution support (default: true). When false, schema is fixed like a struct |
 | `use_record_for_java` | bool   | Generate Java record for this message      |
 | `deprecated`          | bool   | Mark this message as deprecated            |
 | `namespace`           | string | Custom namespace for type registration     |
@@ -1069,7 +1069,7 @@ You can combine standard options with Fory extension options:
 ```fdl
 message User {
     option deprecated = true;        // Standard option
-    option (fory).compatible = true; // Fory extension option
+    option (fory).evolving = false; // Fory extension option
 
     string name = 1;
     MyType data = 2 [deprecated = true, (fory).ref = true];
@@ -1098,7 +1098,7 @@ extend google.protobuf.MessageOptions {
 
 message ForyMessageOptions {
     optional int32 id = 1;
-    optional bool compatible = 2;
+    optional bool evolving = 2;
     optional bool use_record_for_java = 3;
     optional bool deprecated = 4;
     optional string namespace = 5;

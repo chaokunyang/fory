@@ -1105,7 +1105,7 @@ class TestForyExtensionOptions:
         package myapp;
         message User {
             option (fory).id = 100;
-            option (fory).compatible = true;
+            option (fory).evolving = false;
             string name = 1;
         }
         '''
@@ -1116,7 +1116,7 @@ class TestForyExtensionOptions:
         user = schema.messages[0]
         assert user.type_id == 100  # fory.id should set type_id
         assert user.options.get("fory.id") == 100
-        assert user.options.get("fory.compatible") is True
+        assert user.options.get("fory.evolving") is False
 
     def test_message_fory_id_sets_type_id(self):
         """Test that option (fory).id sets message type_id."""
@@ -1315,11 +1315,11 @@ class TestForyExtensionOptions:
             assert "ignoring unknown extension 'custom'" in str(w[0].message)
 
     def test_inline_and_body_options_merge(self):
-        """Test that inline [id=100] and body option (fory).compatible merge."""
+        """Test that inline [id=100] and body option (fory).evolving merge."""
         source = '''
         package myapp;
         message User [id=100] {
-            option (fory).compatible = true;
+            option (fory).evolving = false;
             string name = 1;
         }
         '''
@@ -1330,7 +1330,7 @@ class TestForyExtensionOptions:
         user = schema.messages[0]
         assert user.type_id == 100  # From inline option
         assert user.options.get("id") == 100  # Stored in options
-        assert user.options.get("fory.compatible") is True  # From body option
+        assert user.options.get("fory.evolving") is False  # From body option
 
     def test_body_option_overrides_inline_id(self):
         """Test that body option (fory).id overrides inline [id=...]."""

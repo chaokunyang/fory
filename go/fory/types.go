@@ -32,87 +32,107 @@ const (
 	INT16 = 3
 	// INT32 Signed 32-bit little-endian integer
 	INT32 = 4
-	// VAR_INT32 a 32-bit signed integer which uses fory var_int32 encoding
-	VAR_INT32 = 5
+	// VAR32 a 32-bit signed integer which uses fory var_int32 encoding
+	VAR32 = 5
 	// INT64 Signed 64-bit little-endian integer
 	INT64 = 6
-	// VAR_INT64 a 64-bit signed integer which uses fory PVL encoding
-	VAR_INT64 = 7
-	// SLI_INT64 a 64-bit signed integer which uses fory SLI encoding
-	SLI_INT64 = 8
-	// HALF_FLOAT 2-byte floating point value
-	HALF_FLOAT = 9
-	// FLOAT 4-byte floating point value
-	FLOAT = 10
-	// DOUBLE 8-byte floating point value
-	DOUBLE = 11
-	// STRING UTF8 variable-length string as List<Char>
-	STRING = 12
-	// ENUM a data type consisting of a set of named values
-	ENUM = 13
-	// NAMED_ENUM an enum whose value will be serialized as the registered name
-	NAMED_ENUM = 14
-	// STRUCT a morphic(final) type serialized by Fory Struct serializer
-	STRUCT = 15
-	// COMPATIBLE_STRUCT a morphic(final) type serialized by Fory compatible Struct serializer
-	COMPATIBLE_STRUCT = 16
-	// NAMED_STRUCT a struct whose type mapping will be encoded as a name
-	NAMED_STRUCT = 17
-	// NAMED_COMPATIBLE_STRUCT a compatible_struct whose type mapping will be encoded as a name
-	NAMED_COMPATIBLE_STRUCT = 18
-	// EXT a type which will be serialized by a customized serializer
-	EXT = 19
-	// NAMED_EXT an ext type whose type mapping will be encoded as a name
-	NAMED_EXT = 20
-	// LIST A list of some logical data type
-	LIST = 21
-	// SET an unordered set of unique elements
-	SET = 22
-	// MAP Map a repeated struct logical type
-	MAP = 23
-	// DURATION Measure of elapsed time in either seconds milliseconds microseconds
-	DURATION = 24
-	// TIMESTAMP Exact timestamp encoded with int64 since UNIX epoch
-	TIMESTAMP = 25
-	// LOCAL_DATE a naive date without timezone
-	LOCAL_DATE = 26
-	// DECIMAL128 Precision- and scale-based decimal type with 128 bits.
-	DECIMAL128 = 27
-	// BINARY Variable-length bytes (no guarantee of UTF8-ness)
-	BINARY = 28
-	// ARRAY a multidimensional array which every sub-array can have different sizes but all have the same type
-	ARRAY = 29
-	// BOOL_ARRAY one dimensional bool array
-	BOOL_ARRAY = 30
-	// INT8_ARRAY one dimensional int8 array
-	INT8_ARRAY = 31
-	// INT16_ARRAY one dimensional int16 array
-	INT16_ARRAY = 32
-	// INT32_ARRAY one dimensional int32 array
-	INT32_ARRAY = 33
-	// INT64_ARRAY one dimensional int64 array
-	INT64_ARRAY = 34
-	// FLOAT16_ARRAY one dimensional half_float_16 array
-	FLOAT16_ARRAY = 35
-	// FLOAT32_ARRAY one dimensional float32 array
-	FLOAT32_ARRAY = 36
-	// FLOAT64_ARRAY one dimensional float64 array
-	FLOAT64_ARRAY = 37
-
+	// VAR64 a 64-bit signed integer which uses fory PVL encoding
+	VAR64 = 7
+	// H64 a 64-bit signed integer which uses fory hybrid encoding
+	H64 = 8
 	// UINT8 Unsigned 8-bit little-endian integer
-	UINT8 = 64
+	UINT8 = 9
 	// UINT16 Unsigned 16-bit little-endian integer
-	UINT16 = 65
+	UINT16 = 10
 	// UINT32 Unsigned 32-bit little-endian integer
-	UINT32 = 66
+	UINT32 = 11
+	// VARU32 a 32-bit unsigned integer which uses fory var_uint32 encoding
+	VARU32 = 12
 	// UINT64 Unsigned 64-bit little-endian integer
-	UINT64       = 67
-	VAR_UINT32   = 68
-	VAR_UINT64   = 69
-	SLI_UINT64   = 70
-	UINT16_ARRAY = 71
-	UINT32_ARRAY = 72
-	UINT64_ARRAY = 73
+	UINT64 = 13
+	// VARU64 a 64-bit unsigned integer which uses fory var_uint64 encoding
+	VARU64 = 14
+	// HU64 a 64-bit unsigned integer which uses fory hybrid encoding
+	HU64 = 15
+	// FLOAT16 2-byte floating point value
+	FLOAT16 = 16
+	// FLOAT32 4-byte floating point value
+	FLOAT32 = 17
+	// FLOAT64 8-byte floating point value
+	FLOAT64 = 18
+	// STRING UTF8 variable-length string as List<Char>
+	STRING = 19
+	// ENUM a data type consisting of a set of named values
+	ENUM = 20
+	// NAMED_ENUM an enum whose value will be serialized as the registered name
+	NAMED_ENUM = 21
+	// STRUCT a morphic(final) type serialized by Fory Struct serializer
+	STRUCT = 22
+	// COMPATIBLE_STRUCT a morphic(final) type serialized by Fory compatible Struct serializer
+	COMPATIBLE_STRUCT = 23
+	// NAMED_STRUCT a struct whose type mapping will be encoded as a name
+	NAMED_STRUCT = 24
+	// NAMED_COMPATIBLE_STRUCT a compatible_struct whose type mapping will be encoded as a name
+	NAMED_COMPATIBLE_STRUCT = 25
+	// EXT a type which will be serialized by a customized serializer
+	EXT = 26
+	// NAMED_EXT an ext type whose type mapping will be encoded as a name
+	NAMED_EXT = 27
+	// LIST A list of some logical data type
+	LIST = 28
+	// SET an unordered set of unique elements
+	SET = 29
+	// MAP Map a repeated struct logical type
+	MAP = 30
+	// DURATION Measure of elapsed time in either seconds milliseconds microseconds
+	DURATION = 31
+	// TIMESTAMP Exact timestamp encoded with int64 since UNIX epoch
+	TIMESTAMP = 32
+	// LOCAL_DATE a naive date without timezone
+	LOCAL_DATE = 33
+	// DECIMAL Precision- and scale-based decimal type
+	DECIMAL = 34
+	// BINARY Variable-length bytes (no guarantee of UTF8-ness)
+	BINARY = 35
+	// ARRAY a multidimensional array which every sub-array can have different sizes but all have the same type
+	ARRAY = 36
+	// BOOL_ARRAY one dimensional bool array
+	BOOL_ARRAY = 37
+	// INT8_ARRAY one dimensional int8 array
+	INT8_ARRAY = 38
+	// INT16_ARRAY one dimensional int16 array
+	INT16_ARRAY = 39
+	// INT32_ARRAY one dimensional int32 array
+	INT32_ARRAY = 40
+	// INT64_ARRAY one dimensional int64 array
+	INT64_ARRAY = 41
+	// UINT8_ARRAY one dimensional uint8 array
+	UINT8_ARRAY = 42
+	// UINT16_ARRAY one dimensional uint16 array
+	UINT16_ARRAY = 43
+	// UINT32_ARRAY one dimensional uint32 array
+	UINT32_ARRAY = 44
+	// UINT64_ARRAY one dimensional uint64 array
+	UINT64_ARRAY = 45
+	// FLOAT16_ARRAY one dimensional float16 array
+	FLOAT16_ARRAY = 46
+	// FLOAT32_ARRAY one dimensional float32 array
+	FLOAT32_ARRAY = 47
+	// FLOAT64_ARRAY one dimensional float64 array
+	FLOAT64_ARRAY = 48
+	// UNION an union type that can hold different types of values
+	UNION = 49
+	// NONE a null value with no data
+	NONE = 50
+
+	// Deprecated aliases for backward compatibility
+	VAR_INT32  = VAR32
+	VAR_INT64  = VAR64
+	SLI_INT64  = H64
+	HALF_FLOAT = FLOAT16
+	FLOAT      = FLOAT32
+	DOUBLE     = FLOAT64
+	DECIMAL128 = DECIMAL
 )
 
 // IsNamespacedType checks whether the given type ID is a namespace type

@@ -611,11 +611,11 @@ int32_t get_primitive_type_size(uint32_t type_id) {
   case TypeId::FLOAT16:
     return 2;
   case TypeId::INT32:
-  case TypeId::VAR_INT32:
+  case TypeId::VAR32:
   case TypeId::FLOAT32:
     return 4;
   case TypeId::INT64:
-  case TypeId::VAR_INT64:
+  case TypeId::VAR64:
   case TypeId::FLOAT64:
     return 8;
   default:
@@ -626,8 +626,8 @@ int32_t get_primitive_type_size(uint32_t type_id) {
 bool is_compress(uint32_t type_id) {
   return type_id == static_cast<uint32_t>(TypeId::INT32) ||
          type_id == static_cast<uint32_t>(TypeId::INT64) ||
-         type_id == static_cast<uint32_t>(TypeId::VAR_INT32) ||
-         type_id == static_cast<uint32_t>(TypeId::VAR_INT64);
+         type_id == static_cast<uint32_t>(TypeId::VAR32) ||
+         type_id == static_cast<uint32_t>(TypeId::VAR64);
 }
 
 // Numeric field sorter (for primitive fields)

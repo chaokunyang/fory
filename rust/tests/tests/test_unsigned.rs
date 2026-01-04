@@ -46,10 +46,12 @@ fn test_unsigned_arrays() {
 #[test]
 fn test_unsigned_arrays_when_xlang() {
     let fory = Fory::default().xlang(true);
+    // u8, u16, u32, u64 arrays are now supported in xlang mode
     assert!(fory.serialize(&vec![u8::MAX]).is_ok());
-    assert!(fory.serialize(&vec![u16::MAX]).is_err());
-    assert!(fory.serialize(&vec![u32::MAX]).is_err());
-    assert!(fory.serialize(&vec![u64::MAX]).is_err());
+    assert!(fory.serialize(&vec![u16::MAX]).is_ok());
+    assert!(fory.serialize(&vec![u32::MAX]).is_ok());
+    assert!(fory.serialize(&vec![u64::MAX]).is_ok());
+    // usize and u128 are Rust-specific and not supported in xlang mode
     assert!(fory.serialize(&vec![usize::MAX]).is_err());
     assert!(fory.serialize(&vec![u128::MAX]).is_err());
 }

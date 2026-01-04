@@ -290,26 +290,29 @@ fn test_unregistered_type_error_message() {
 #[test]
 fn test_type_mismatch_error_shows_registered_id() {
     use fory_core::error::Error;
-    use fory_core::types::format_type_id;
+    use fory_core::types::{format_type_id, TypeId};
 
     // Test internal type (BOOL = 1), no registered_id
-    let formatted = format_type_id(1);
+    let formatted = format_type_id(TypeId::BOOL as u32);
     assert_eq!(formatted, "BOOL");
 
-    // Test user registered struct with id=3: (3 << 8) + 15(STRUCT) = 783
-    let formatted = format_type_id(783);
+    // Test user registered struct with id=3: (3 << 8) + STRUCT
+    let struct_type_id = (3 << 8) + TypeId::STRUCT as u32;
+    let formatted = format_type_id(struct_type_id);
     assert_eq!(formatted, "registered_id=3(STRUCT)");
 
-    // Test user registered enum with id=1: (1 << 8) + 13(ENUM) = 269
-    let formatted = format_type_id(269);
+    // Test user registered enum with id=1: (1 << 8) + ENUM
+    let enum_type_id = (1 << 8) + TypeId::ENUM as u32;
+    let formatted = format_type_id(enum_type_id);
     assert_eq!(formatted, "registered_id=1(ENUM)");
 
-    // Test user registered EXT with id=3: (3 << 8) + 19(EXT) = 787
-    let formatted = format_type_id(787);
+    // Test user registered EXT with id=3: (3 << 8) + EXT
+    let ext_type_id = (3 << 8) + TypeId::EXT as u32;
+    let formatted = format_type_id(ext_type_id);
     assert_eq!(formatted, "registered_id=3(EXT)");
 
     // Test error message format
-    let err = Error::type_mismatch(783, 269);
+    let err = Error::type_mismatch(struct_type_id, enum_type_id);
     let err_str = format!("{}", err);
     assert!(
         err_str.contains("registered_id=3(STRUCT)"),

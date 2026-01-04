@@ -525,28 +525,28 @@ fn skip_value(
         types::FLOAT64_ARRAY => {
             <Vec<f64> as Serializer>::fory_read_data(context)?;
         }
-        types::U8 => {
+        types::UINT8 => {
             <u8 as Serializer>::fory_read_data(context)?;
         }
-        types::U16 => {
+        types::UINT16 => {
             <u16 as Serializer>::fory_read_data(context)?;
         }
-        types::U32 => {
+        types::UINT32 => {
             <u32 as Serializer>::fory_read_data(context)?;
         }
-        types::U64 => {
+        types::UINT64 => {
             <u64 as Serializer>::fory_read_data(context)?;
         }
         types::U128 => {
             <u128 as Serializer>::fory_read_data(context)?;
         }
-        types::U16_ARRAY => {
+        types::UINT16_ARRAY => {
             <Vec<u16> as Serializer>::fory_read_data(context)?;
         }
-        types::U32_ARRAY => {
+        types::UINT32_ARRAY => {
             <Vec<u32> as Serializer>::fory_read_data(context)?;
         }
-        types::U64_ARRAY => {
+        types::UINT64_ARRAY => {
             <Vec<u64> as Serializer>::fory_read_data(context)?;
         }
         types::U128_ARRAY => {

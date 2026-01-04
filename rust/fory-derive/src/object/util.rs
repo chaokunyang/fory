@@ -534,10 +534,10 @@ pub(super) fn generic_tree_to_tokens(node: &TypeNode) -> TokenStream {
                     "i128" => quote! { fory_core::types::TypeId::INT128_ARRAY as u32 },
                     "f32" => quote! { fory_core::types::TypeId::FLOAT32_ARRAY as u32 },
                     "f64" => quote! { fory_core::types::TypeId::FLOAT64_ARRAY as u32 },
-                    "u8" => quote! { fory_core::types::TypeId::U8 as u32 },
-                    "u16" => quote! { fory_core::types::TypeId::U16_ARRAY as u32 },
-                    "u32" => quote! { fory_core::types::TypeId::U32_ARRAY as u32 },
-                    "u64" => quote! { fory_core::types::TypeId::U64_ARRAY as u32 },
+                    "u8" => quote! { fory_core::types::TypeId::BINARY as u32 },
+                    "u16" => quote! { fory_core::types::TypeId::UINT16_ARRAY as u32 },
+                    "u32" => quote! { fory_core::types::TypeId::UINT32_ARRAY as u32 },
+                    "u64" => quote! { fory_core::types::TypeId::UINT64_ARRAY as u32 },
                     "u128" => quote! { fory_core::types::TypeId::U128_ARRAY as u32 },
                     _ => quote! { fory_core::types::TypeId::LIST as u32 },
                 };
@@ -693,10 +693,10 @@ fn get_primitive_type_id(ty: &str) -> u32 {
         "i64" => TypeId::INT64 as u32,
         "f32" => TypeId::FLOAT32 as u32,
         "f64" => TypeId::FLOAT64 as u32,
-        "u8" => TypeId::U8 as u32,
-        "u16" => TypeId::U16 as u32,
-        "u32" => TypeId::U32 as u32,
-        "u64" => TypeId::U64 as u32,
+        "u8" => TypeId::UINT8 as u32,
+        "u16" => TypeId::UINT16 as u32,
+        "u32" => TypeId::UINT32 as u32,
+        "u64" => TypeId::UINT64 as u32,
         "u128" => TypeId::U128 as u32,
         "i128" => TypeId::INT128 as u32,
         _ => unreachable!("Unknown primitive type: {}", ty),
@@ -810,9 +810,9 @@ pub(crate) fn get_type_id_by_name(ty: &str) -> u32 {
         "Vec<f16>" => return TypeId::FLOAT16_ARRAY as u32,
         "Vec<f32>" => return TypeId::FLOAT32_ARRAY as u32,
         "Vec<f64>" => return TypeId::FLOAT64_ARRAY as u32,
-        "Vec<u16>" => return TypeId::U16_ARRAY as u32,
-        "Vec<u32>" => return TypeId::U32_ARRAY as u32,
-        "Vec<u64>" => return TypeId::U64_ARRAY as u32,
+        "Vec<u16>" => return TypeId::UINT16_ARRAY as u32,
+        "Vec<u32>" => return TypeId::UINT32_ARRAY as u32,
+        "Vec<u64>" => return TypeId::UINT64_ARRAY as u32,
         "Vec<u128>" => return TypeId::U128_ARRAY as u32,
         _ => {}
     }
@@ -832,9 +832,9 @@ pub(crate) fn get_type_id_by_name(ty: &str) -> u32 {
                 "f16" => return TypeId::FLOAT16_ARRAY as u32,
                 "f32" => return TypeId::FLOAT32_ARRAY as u32,
                 "f64" => return TypeId::FLOAT64_ARRAY as u32,
-                "u16" => return TypeId::U16_ARRAY as u32,
-                "u32" => return TypeId::U32_ARRAY as u32,
-                "u64" => return TypeId::U64_ARRAY as u32,
+                "u16" => return TypeId::UINT16_ARRAY as u32,
+                "u32" => return TypeId::UINT32_ARRAY as u32,
+                "u64" => return TypeId::UINT64_ARRAY as u32,
                 "u128" => return TypeId::U128_ARRAY as u32,
                 _ => {
                     // Non-primitive array elements, treat as LIST
@@ -877,28 +877,37 @@ fn get_primitive_type_size(type_id_num: u32) -> i32 {
         TypeId::INT8 => 1,
         TypeId::INT16 => 2,
         TypeId::INT32 => 4,
-        TypeId::VAR_INT32 => 4,
+        TypeId::VAR32 => 4,
         TypeId::INT64 => 8,
-        TypeId::VAR_INT64 => 8,
+        TypeId::VAR64 => 8,
+        TypeId::H64 => 8,
         TypeId::FLOAT16 => 2,
         TypeId::FLOAT32 => 4,
         TypeId::FLOAT64 => 8,
         TypeId::INT128 => 16,
-        TypeId::U8 => 1,
-        TypeId::U16 => 2,
-        TypeId::U32 => 4,
-        TypeId::U64 => 8,
+        TypeId::UINT8 => 1,
+        TypeId::UINT16 => 2,
+        TypeId::UINT32 => 4,
+        TypeId::VARU32 => 4,
+        TypeId::UINT64 => 8,
+        TypeId::VARU64 => 8,
+        TypeId::HU64 => 8,
         TypeId::U128 => 16,
+        TypeId::USIZE => std::mem::size_of::<usize>() as i32,
+        TypeId::ISIZE => std::mem::size_of::<isize>() as i32,
         _ => unreachable!(),
     }
 }
 
 fn is_compress(type_id: u32) -> bool {
+    // Only signed integer types are marked as compressible
+    // to maintain backward compatibility with field ordering
     [
         TypeId::INT32 as u32,
         TypeId::INT64 as u32,
-        TypeId::VAR_INT32 as u32,
-        TypeId::VAR_INT64 as u32,
+        TypeId::VAR32 as u32,
+        TypeId::VAR64 as u32,
+        TypeId::H64 as u32,
     ]
     .contains(&type_id)
 }
@@ -920,9 +929,9 @@ fn is_internal_type_id(type_id: u32) -> bool {
         TypeId::FLOAT16_ARRAY as u32,
         TypeId::FLOAT32_ARRAY as u32,
         TypeId::FLOAT64_ARRAY as u32,
-        TypeId::U16_ARRAY as u32,
-        TypeId::U32_ARRAY as u32,
-        TypeId::U64_ARRAY as u32,
+        TypeId::UINT16_ARRAY as u32,
+        TypeId::UINT32_ARRAY as u32,
+        TypeId::UINT64_ARRAY as u32,
         TypeId::U128_ARRAY as u32,
     ]
     .contains(&type_id)

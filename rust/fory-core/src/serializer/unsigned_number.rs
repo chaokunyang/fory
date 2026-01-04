@@ -24,15 +24,77 @@ use crate::serializer::util::read_basic_type_info;
 use crate::serializer::{ForyDefault, Serializer};
 use crate::types::TypeId;
 
-macro_rules! impl_unsigned_num_serializer {
+// Macro for xlang-compatible unsigned types (u8, u16, u32, u64)
+macro_rules! impl_xlang_unsigned_num_serializer {
+    ($ty:ty, $writer:expr, $reader:expr, $field_type:expr) => {
+        impl Serializer for $ty {
+            #[inline(always)]
+            fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error> {
+                $writer(&mut context.writer, *self);
+                Ok(())
+            }
+
+            #[inline(always)]
+            fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
+                $reader(&mut context.reader)
+            }
+
+            #[inline(always)]
+            fn fory_reserved_space() -> usize {
+                std::mem::size_of::<$ty>()
+            }
+
+            #[inline(always)]
+            fn fory_get_type_id(_: &TypeResolver) -> Result<u32, Error> {
+                Ok($field_type as u32)
+            }
+
+            #[inline(always)]
+            fn fory_type_id_dyn(&self, _: &TypeResolver) -> Result<u32, Error> {
+                Ok($field_type as u32)
+            }
+
+            #[inline(always)]
+            fn fory_static_type_id() -> TypeId {
+                $field_type
+            }
+
+            #[inline(always)]
+            fn as_any(&self) -> &dyn std::any::Any {
+                self
+            }
+
+            #[inline(always)]
+            fn fory_write_type_info(context: &mut WriteContext) -> Result<(), Error> {
+                context.writer.write_varuint32($field_type as u32);
+                Ok(())
+            }
+
+            #[inline(always)]
+            fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error> {
+                read_basic_type_info::<Self>(context)
+            }
+        }
+        impl ForyDefault for $ty {
+            #[inline(always)]
+            fn fory_default() -> Self {
+                0 as $ty
+            }
+        }
+    };
+}
+
+// Macro for Rust-specific unsigned types (u128, usize) - not supported in xlang mode
+macro_rules! impl_rust_unsigned_num_serializer {
     ($ty:ty, $writer:expr, $reader:expr, $field_type:expr) => {
         impl Serializer for $ty {
             #[inline(always)]
             fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error> {
                 if context.is_xlang() {
-                    return Err(Error::not_allowed(
-                        "Unsigned types are not supported in cross-language mode",
-                    ));
+                    return Err(Error::not_allowed(concat!(
+                        stringify!($ty),
+                        " is not supported in cross-language mode"
+                    )));
                 }
                 $writer(&mut context.writer, *self);
                 Ok(())
@@ -88,12 +150,15 @@ macro_rules! impl_unsigned_num_serializer {
     };
 }
 
-impl_unsigned_num_serializer!(u8, Writer::write_u8, Reader::read_u8, TypeId::U8);
-impl_unsigned_num_serializer!(u16, Writer::write_u16, Reader::read_u16, TypeId::U16);
-impl_unsigned_num_serializer!(u32, Writer::write_u32, Reader::read_u32, TypeId::U32);
-impl_unsigned_num_serializer!(u64, Writer::write_u64, Reader::read_u64, TypeId::U64);
-impl_unsigned_num_serializer!(u128, Writer::write_u128, Reader::read_u128, TypeId::U128);
-impl_unsigned_num_serializer!(
+// xlang-compatible unsigned types
+impl_xlang_unsigned_num_serializer!(u8, Writer::write_u8, Reader::read_u8, TypeId::UINT8);
+impl_xlang_unsigned_num_serializer!(u16, Writer::write_u16, Reader::read_u16, TypeId::UINT16);
+impl_xlang_unsigned_num_serializer!(u32, Writer::write_u32, Reader::read_u32, TypeId::UINT32);
+impl_xlang_unsigned_num_serializer!(u64, Writer::write_u64, Reader::read_u64, TypeId::UINT64);
+
+// Rust-specific unsigned types (not supported in xlang mode)
+impl_rust_unsigned_num_serializer!(u128, Writer::write_u128, Reader::read_u128, TypeId::U128);
+impl_rust_unsigned_num_serializer!(
     usize,
     Writer::write_usize,
     Reader::read_usize,

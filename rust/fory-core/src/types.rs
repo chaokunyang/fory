@@ -104,80 +104,88 @@ pub enum TypeId {
     INT8 = 2,
     INT16 = 3,
     INT32 = 4,
-    VAR_INT32 = 5,
+    VAR32 = 5,
     INT64 = 6,
-    VAR_INT64 = 7,
-    SLI_INT64 = 8,
-    FLOAT16 = 9,
-    FLOAT32 = 10,
-    FLOAT64 = 11,
-    STRING = 12,
-    ENUM = 13,
-    NAMED_ENUM = 14,
-    STRUCT = 15,
-    COMPATIBLE_STRUCT = 16,
-    NAMED_STRUCT = 17,
-    NAMED_COMPATIBLE_STRUCT = 18,
-    EXT = 19,
-    NAMED_EXT = 20,
-    LIST = 21,
-    SET = 22,
-    MAP = 23,
-    DURATION = 24,
-    TIMESTAMP = 25,
-    LOCAL_DATE = 26,
-    DECIMAL = 27,
-    BINARY = 28,
-    ARRAY = 29,
-    BOOL_ARRAY = 30,
-    INT8_ARRAY = 31,
-    INT16_ARRAY = 32,
-    INT32_ARRAY = 33,
-    INT64_ARRAY = 34,
-    FLOAT16_ARRAY = 35,
-    FLOAT32_ARRAY = 36,
-    FLOAT64_ARRAY = 37,
+    VAR64 = 7,
+    H64 = 8,
+    UINT8 = 9,
+    UINT16 = 10,
+    UINT32 = 11,
+    VARU32 = 12,
+    UINT64 = 13,
+    VARU64 = 14,
+    HU64 = 15,
+    FLOAT16 = 16,
+    FLOAT32 = 17,
+    FLOAT64 = 18,
+    STRING = 19,
+    ENUM = 20,
+    NAMED_ENUM = 21,
+    STRUCT = 22,
+    COMPATIBLE_STRUCT = 23,
+    NAMED_STRUCT = 24,
+    NAMED_COMPATIBLE_STRUCT = 25,
+    EXT = 26,
+    NAMED_EXT = 27,
+    LIST = 28,
+    SET = 29,
+    MAP = 30,
+    DURATION = 31,
+    TIMESTAMP = 32,
+    LOCAL_DATE = 33,
+    DECIMAL = 34,
+    BINARY = 35,
+    ARRAY = 36,
+    BOOL_ARRAY = 37,
+    INT8_ARRAY = 38,
+    INT16_ARRAY = 39,
+    INT32_ARRAY = 40,
+    INT64_ARRAY = 41,
+    UINT8_ARRAY = 42,
+    UINT16_ARRAY = 43,
+    UINT32_ARRAY = 44,
+    UINT64_ARRAY = 45,
+    FLOAT16_ARRAY = 46,
+    FLOAT32_ARRAY = 47,
+    FLOAT64_ARRAY = 48,
     // A tagged union type that can hold one of several alternative types.
-    UNION = 38,
+    UNION = 49,
     // Represents an empty/unit value with no data.
-    NONE = 39,
-    U8 = 64,
-    U16 = 65,
-    U32 = 66,
-    VAR_U32 = 67,
-    U64 = 68,
-    VAR_U64 = 69,
-    SLI_U64 = 70,
-    U128 = 71,
-    INT128 = 72,
+    NONE = 50,
+    // Rust-specific types (not part of xlang spec, for internal use)
+    U128 = 64,
+    INT128 = 65,
     // USIZE/ISIZE must have their own TypeId.
     // Although usize and u64 have the same size on 64-bit systems, they are
     // different Rust types.
     // When deserializing `Box<dyn Any>`, we need to create the exact type.
-    // If we used U64's TypeId for usize, deserialization would create a u64 value,
+    // If we used UINT64's TypeId for usize, deserialization would create a u64 value,
     // and `result.downcast_ref::<usize>()` would return None.
-    USIZE = 73,
-    ISIZE = 74,
-    U16_ARRAY = 75,
-    U32_ARRAY = 76,
-    U64_ARRAY = 77,
-    U128_ARRAY = 78,
-    INT128_ARRAY = 79,
-    USIZE_ARRAY = 80,
-    ISIZE_ARRAY = 81,
+    USIZE = 66,
+    ISIZE = 67,
+    U128_ARRAY = 68,
+    INT128_ARRAY = 69,
+    USIZE_ARRAY = 70,
+    ISIZE_ARRAY = 71,
     // Bound value for range checks (types with id >= BOUND are not internal types).
-    BOUND = 82,
+    BOUND = 72,
 }
 
 pub const BOOL: u32 = TypeId::BOOL as u32;
 pub const INT8: u32 = TypeId::INT8 as u32;
 pub const INT16: u32 = TypeId::INT16 as u32;
 pub const INT32: u32 = TypeId::INT32 as u32;
-pub const VAR_INT32: u32 = TypeId::VAR_INT32 as u32;
+pub const VAR32: u32 = TypeId::VAR32 as u32;
 pub const INT64: u32 = TypeId::INT64 as u32;
-pub const VAR_INT64: u32 = TypeId::VAR_INT64 as u32;
-pub const SLI_INT64: u32 = TypeId::SLI_INT64 as u32;
-pub const INT128: u32 = TypeId::INT128 as u32;
+pub const VAR64: u32 = TypeId::VAR64 as u32;
+pub const H64: u32 = TypeId::H64 as u32;
+pub const UINT8: u32 = TypeId::UINT8 as u32;
+pub const UINT16: u32 = TypeId::UINT16 as u32;
+pub const UINT32: u32 = TypeId::UINT32 as u32;
+pub const VARU32: u32 = TypeId::VARU32 as u32;
+pub const UINT64: u32 = TypeId::UINT64 as u32;
+pub const VARU64: u32 = TypeId::VARU64 as u32;
+pub const HU64: u32 = TypeId::HU64 as u32;
 pub const FLOAT16: u32 = TypeId::FLOAT16 as u32;
 pub const FLOAT32: u32 = TypeId::FLOAT32 as u32;
 pub const FLOAT64: u32 = TypeId::FLOAT64 as u32;
@@ -204,26 +212,22 @@ pub const INT8_ARRAY: u32 = TypeId::INT8_ARRAY as u32;
 pub const INT16_ARRAY: u32 = TypeId::INT16_ARRAY as u32;
 pub const INT32_ARRAY: u32 = TypeId::INT32_ARRAY as u32;
 pub const INT64_ARRAY: u32 = TypeId::INT64_ARRAY as u32;
+pub const UINT8_ARRAY: u32 = TypeId::UINT8_ARRAY as u32;
+pub const UINT16_ARRAY: u32 = TypeId::UINT16_ARRAY as u32;
+pub const UINT32_ARRAY: u32 = TypeId::UINT32_ARRAY as u32;
+pub const UINT64_ARRAY: u32 = TypeId::UINT64_ARRAY as u32;
 pub const FLOAT16_ARRAY: u32 = TypeId::FLOAT16_ARRAY as u32;
 pub const FLOAT32_ARRAY: u32 = TypeId::FLOAT32_ARRAY as u32;
 pub const FLOAT64_ARRAY: u32 = TypeId::FLOAT64_ARRAY as u32;
 pub const UNION: u32 = TypeId::UNION as u32;
 pub const NONE: u32 = TypeId::NONE as u32;
-pub const U8: u32 = TypeId::U8 as u32;
-pub const U16: u32 = TypeId::U16 as u32;
-pub const U32: u32 = TypeId::U32 as u32;
-pub const U64: u32 = TypeId::U64 as u32;
+// Rust-specific types
 pub const U128: u32 = TypeId::U128 as u32;
-pub const VAR_U32: u32 = TypeId::VAR_U32 as u32;
-pub const VAR_U64: u32 = TypeId::VAR_U64 as u32;
-pub const SLI_U64: u32 = TypeId::SLI_U64 as u32;
-pub const U16_ARRAY: u32 = TypeId::U16_ARRAY as u32;
-pub const U32_ARRAY: u32 = TypeId::U32_ARRAY as u32;
-pub const U64_ARRAY: u32 = TypeId::U64_ARRAY as u32;
-pub const U128_ARRAY: u32 = TypeId::U128_ARRAY as u32;
-pub const INT128_ARRAY: u32 = TypeId::INT128_ARRAY as u32;
+pub const INT128: u32 = TypeId::INT128 as u32;
 pub const USIZE: u32 = TypeId::USIZE as u32;
 pub const ISIZE: u32 = TypeId::ISIZE as u32;
+pub const U128_ARRAY: u32 = TypeId::U128_ARRAY as u32;
+pub const INT128_ARRAY: u32 = TypeId::INT128_ARRAY as u32;
 pub const USIZE_ARRAY: u32 = TypeId::USIZE_ARRAY as u32;
 pub const ISIZE_ARRAY: u32 = TypeId::ISIZE_ARRAY as u32;
 pub const UNKNOWN: u32 = TypeId::UNKNOWN as u32;
@@ -257,12 +261,16 @@ pub fn compute_string_hash(s: &str) -> u32 {
     hash as u32
 }
 
-pub static BASIC_TYPES: [TypeId; 29] = [
+pub static BASIC_TYPES: [TypeId; 33] = [
     TypeId::BOOL,
     TypeId::INT8,
     TypeId::INT16,
     TypeId::INT32,
     TypeId::INT64,
+    TypeId::UINT8,
+    TypeId::UINT16,
+    TypeId::UINT32,
+    TypeId::UINT64,
     TypeId::FLOAT32,
     TypeId::FLOAT64,
     TypeId::STRING,
@@ -274,50 +282,57 @@ pub static BASIC_TYPES: [TypeId; 29] = [
     TypeId::INT16_ARRAY,
     TypeId::INT32_ARRAY,
     TypeId::INT64_ARRAY,
+    TypeId::UINT8_ARRAY,
+    TypeId::UINT16_ARRAY,
+    TypeId::UINT32_ARRAY,
+    TypeId::UINT64_ARRAY,
     TypeId::FLOAT32_ARRAY,
     TypeId::FLOAT64_ARRAY,
-    TypeId::U8,
-    TypeId::U16,
-    TypeId::U32,
-    TypeId::U64,
+    // Rust-specific types
     TypeId::U128,
-    TypeId::U16_ARRAY,
-    TypeId::U32_ARRAY,
-    TypeId::U64_ARRAY,
-    TypeId::U128_ARRAY,
     TypeId::INT128,
+    TypeId::U128_ARRAY,
     TypeId::INT128_ARRAY,
+    TypeId::USIZE,
+    TypeId::ISIZE,
+    TypeId::USIZE_ARRAY,
 ];
 
-pub static PRIMITIVE_TYPES: [u32; 12] = [
+pub static PRIMITIVE_TYPES: [u32; 14] = [
     TypeId::BOOL as u32,
     TypeId::INT8 as u32,
     TypeId::INT16 as u32,
     TypeId::INT32 as u32,
     TypeId::INT64 as u32,
+    TypeId::UINT8 as u32,
+    TypeId::UINT16 as u32,
+    TypeId::UINT32 as u32,
+    TypeId::UINT64 as u32,
     TypeId::FLOAT32 as u32,
     TypeId::FLOAT64 as u32,
-    TypeId::U8 as u32,
-    TypeId::U16 as u32,
-    TypeId::U32 as u32,
-    TypeId::U64 as u32,
+    // Rust-specific
     TypeId::U128 as u32,
+    TypeId::INT128 as u32,
+    TypeId::USIZE as u32,
 ];
 
-pub static PRIMITIVE_ARRAY_TYPES: [u32; 13] = [
+pub static PRIMITIVE_ARRAY_TYPES: [u32; 15] = [
     TypeId::BOOL_ARRAY as u32,
     TypeId::BINARY as u32,
     TypeId::INT8_ARRAY as u32,
     TypeId::INT16_ARRAY as u32,
     TypeId::INT32_ARRAY as u32,
     TypeId::INT64_ARRAY as u32,
+    TypeId::UINT8_ARRAY as u32,
+    TypeId::UINT16_ARRAY as u32,
+    TypeId::UINT32_ARRAY as u32,
+    TypeId::UINT64_ARRAY as u32,
     TypeId::FLOAT32_ARRAY as u32,
     TypeId::FLOAT64_ARRAY as u32,
-    TypeId::U16_ARRAY as u32,
-    TypeId::U32_ARRAY as u32,
-    TypeId::U64_ARRAY as u32,
+    // Rust-specific
     TypeId::U128_ARRAY as u32,
     TypeId::INT128_ARRAY as u32,
+    TypeId::USIZE_ARRAY as u32,
 ];
 
 pub static BASIC_TYPE_NAMES: [&str; 18] = [
@@ -352,12 +367,13 @@ pub static PRIMITIVE_ARRAY_TYPE_MAP: &[(&str, u32, &str)] = &[
     ("i16", TypeId::INT16_ARRAY as u32, "Vec<i16>"),
     ("i32", TypeId::INT32_ARRAY as u32, "Vec<i32>"),
     ("i64", TypeId::INT64_ARRAY as u32, "Vec<i64>"),
-    ("i128", TypeId::INT128_ARRAY as u32, "Vec<i128>"),
+    ("u16", TypeId::UINT16_ARRAY as u32, "Vec<u16>"),
+    ("u32", TypeId::UINT32_ARRAY as u32, "Vec<u32>"),
+    ("u64", TypeId::UINT64_ARRAY as u32, "Vec<u64>"),
     ("f32", TypeId::FLOAT32_ARRAY as u32, "Vec<f32>"),
     ("f64", TypeId::FLOAT64_ARRAY as u32, "Vec<f64>"),
-    ("u16", TypeId::U16_ARRAY as u32, "Vec<u16>"),
-    ("u32", TypeId::U32_ARRAY as u32, "Vec<u32>"),
-    ("u64", TypeId::U64_ARRAY as u32, "Vec<u64>"),
+    // Rust-specific
+    ("i128", TypeId::INT128_ARRAY as u32, "Vec<i128>"),
     ("u128", TypeId::U128_ARRAY as u32, "Vec<u128>"),
     ("usize", TypeId::USIZE_ARRAY as u32, "Vec<usize>"),
     ("isize", TypeId::ISIZE_ARRAY as u32, "Vec<isize>"),
@@ -373,14 +389,15 @@ pub const fn is_primitive_type_id(type_id: TypeId) -> bool {
             | TypeId::INT16
             | TypeId::INT32
             | TypeId::INT64
-            | TypeId::INT128
+            | TypeId::UINT8
+            | TypeId::UINT16
+            | TypeId::UINT32
+            | TypeId::UINT64
             | TypeId::FLOAT32
             | TypeId::FLOAT64
-            | TypeId::U8
-            | TypeId::U16
-            | TypeId::U32
-            | TypeId::U64
+            // Rust-specific
             | TypeId::U128
+            | TypeId::INT128
             | TypeId::USIZE
             | TypeId::ISIZE
     )
@@ -514,8 +531,8 @@ pub const MAGIC_NUMBER: u16 = 0x62d4;
 /// // Internal type (e.g., BOOL = 1)
 /// assert_eq!(format_type_id(1), "BOOL");
 ///
-/// // User registered struct with id=3: (3 << 8) + 15 = 783
-/// assert_eq!(format_type_id(783), "registered_id=3(STRUCT)");
+/// // User registered struct with id=3: (3 << 8) + 22 = 790
+/// assert_eq!(format_type_id(790), "registered_id=3(STRUCT)");
 /// ```
 pub fn format_type_id(type_id: u32) -> String {
     let internal_type_id = type_id & 0xff;
@@ -527,59 +544,61 @@ pub fn format_type_id(type_id: u32) -> String {
         2 => "INT8",
         3 => "INT16",
         4 => "INT32",
-        5 => "VAR_INT32",
+        5 => "VAR32",
         6 => "INT64",
-        7 => "VAR_INT64",
-        8 => "SLI_INT64",
-        9 => "FLOAT16",
-        10 => "FLOAT32",
-        11 => "FLOAT64",
-        12 => "STRING",
-        13 => "ENUM",
-        14 => "NAMED_ENUM",
-        15 => "STRUCT",
-        16 => "COMPATIBLE_STRUCT",
-        17 => "NAMED_STRUCT",
-        18 => "NAMED_COMPATIBLE_STRUCT",
-        19 => "EXT",
-        20 => "NAMED_EXT",
-        21 => "LIST",
-        22 => "SET",
-        23 => "MAP",
-        24 => "DURATION",
-        25 => "TIMESTAMP",
-        26 => "LOCAL_DATE",
-        27 => "DECIMAL",
-        28 => "BINARY",
-        29 => "ARRAY",
-        30 => "BOOL_ARRAY",
-        31 => "INT8_ARRAY",
-        32 => "INT16_ARRAY",
-        33 => "INT32_ARRAY",
-        34 => "INT64_ARRAY",
-        35 => "FLOAT16_ARRAY",
-        36 => "FLOAT32_ARRAY",
-        37 => "FLOAT64_ARRAY",
-        38 => "UNION",
-        39 => "NONE",
-        64 => "U8",
-        65 => "U16",
-        66 => "U32",
-        67 => "VAR_U32",
-        68 => "U64",
-        69 => "VAR_U64",
-        70 => "SLI_U64",
-        71 => "U128",
-        72 => "INT128",
-        73 => "USIZE",
-        74 => "ISIZE",
-        75 => "U16_ARRAY",
-        76 => "U32_ARRAY",
-        77 => "U64_ARRAY",
-        78 => "U128_ARRAY",
-        79 => "INT128_ARRAY",
-        80 => "USIZE_ARRAY",
-        81 => "ISIZE_ARRAY",
+        7 => "VAR64",
+        8 => "H64",
+        9 => "UINT8",
+        10 => "UINT16",
+        11 => "UINT32",
+        12 => "VARU32",
+        13 => "UINT64",
+        14 => "VARU64",
+        15 => "HU64",
+        16 => "FLOAT16",
+        17 => "FLOAT32",
+        18 => "FLOAT64",
+        19 => "STRING",
+        20 => "ENUM",
+        21 => "NAMED_ENUM",
+        22 => "STRUCT",
+        23 => "COMPATIBLE_STRUCT",
+        24 => "NAMED_STRUCT",
+        25 => "NAMED_COMPATIBLE_STRUCT",
+        26 => "EXT",
+        27 => "NAMED_EXT",
+        28 => "LIST",
+        29 => "SET",
+        30 => "MAP",
+        31 => "DURATION",
+        32 => "TIMESTAMP",
+        33 => "LOCAL_DATE",
+        34 => "DECIMAL",
+        35 => "BINARY",
+        36 => "ARRAY",
+        37 => "BOOL_ARRAY",
+        38 => "INT8_ARRAY",
+        39 => "INT16_ARRAY",
+        40 => "INT32_ARRAY",
+        41 => "INT64_ARRAY",
+        42 => "UINT8_ARRAY",
+        43 => "UINT16_ARRAY",
+        44 => "UINT32_ARRAY",
+        45 => "UINT64_ARRAY",
+        46 => "FLOAT16_ARRAY",
+        47 => "FLOAT32_ARRAY",
+        48 => "FLOAT64_ARRAY",
+        49 => "UNION",
+        50 => "NONE",
+        // Rust-specific types
+        64 => "U128",
+        65 => "INT128",
+        66 => "USIZE",
+        67 => "ISIZE",
+        68 => "U128_ARRAY",
+        69 => "INT128_ARRAY",
+        70 => "USIZE_ARRAY",
+        71 => "ISIZE_ARRAY",
         _ => "UNKNOWN_TYPE",
     };
 

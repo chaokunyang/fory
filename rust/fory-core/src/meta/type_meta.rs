@@ -622,27 +622,36 @@ impl TypeMeta {
                 TypeId::INT8 => 1,
                 TypeId::INT16 => 2,
                 TypeId::INT32 => 4,
-                TypeId::VAR_INT32 => 4,
+                TypeId::VAR32 => 4,
                 TypeId::INT64 => 8,
-                TypeId::VAR_INT64 => 8,
+                TypeId::VAR64 => 8,
+                TypeId::H64 => 8,
+                TypeId::UINT8 => 1,
+                TypeId::UINT16 => 2,
+                TypeId::UINT32 => 4,
+                TypeId::VARU32 => 4,
+                TypeId::UINT64 => 8,
+                TypeId::VARU64 => 8,
+                TypeId::HU64 => 8,
                 TypeId::FLOAT16 => 2,
                 TypeId::FLOAT32 => 4,
                 TypeId::FLOAT64 => 8,
-                TypeId::U8 => 1,
-                TypeId::U16 => 2,
-                TypeId::U32 => 4,
-                TypeId::U64 => 8,
                 TypeId::U128 => 16,
                 TypeId::INT128 => 16,
+                TypeId::USIZE => std::mem::size_of::<usize>() as i32,
+                TypeId::ISIZE => std::mem::size_of::<isize>() as i32,
                 _ => unreachable!(),
             }
         }
         fn is_compress(type_id: u32) -> bool {
+            // Only signed integer types are marked as compressible
+            // to maintain backward compatibility with field ordering
             [
                 TypeId::INT32 as u32,
                 TypeId::INT64 as u32,
-                TypeId::VAR_INT32 as u32,
-                TypeId::VAR_INT64 as u32,
+                TypeId::VAR32 as u32,
+                TypeId::VAR64 as u32,
+                TypeId::H64 as u32,
             ]
             .contains(&type_id)
         }

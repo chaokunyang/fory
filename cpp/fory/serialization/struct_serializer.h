@@ -902,11 +902,11 @@ template <typename T> struct CompileTimeFieldHelpers {
   /// VAR32/VAR64/H64 also use varint encoding
   static constexpr bool is_varint_primitive(uint32_t tid) {
     switch (static_cast<TypeId>(tid)) {
-    case TypeId::INT32:  // int32_t uses zigzag varint per basic_serializer.h
-    case TypeId::INT64:  // int64_t uses zigzag varint per basic_serializer.h
-    case TypeId::VAR32:  // explicit varint type
-    case TypeId::VAR64:  // explicit varint type
-    case TypeId::H64:    // hybrid int64 encoding
+    case TypeId::INT32: // int32_t uses zigzag varint per basic_serializer.h
+    case TypeId::INT64: // int64_t uses zigzag varint per basic_serializer.h
+    case TypeId::VAR32: // explicit varint type
+    case TypeId::VAR64: // explicit varint type
+    case TypeId::H64:   // hybrid int64 encoding
       return true;
     default:
       return false;
@@ -916,11 +916,11 @@ template <typename T> struct CompileTimeFieldHelpers {
   /// Get the max varint size in bytes for a type_id (0 if not varint)
   static constexpr size_t max_varint_bytes(uint32_t tid) {
     switch (static_cast<TypeId>(tid)) {
-    case TypeId::INT32:  // int32_t uses zigzag varint
-    case TypeId::VAR32:  // explicit varint
-      return 5;          // int32 varint max
-    case TypeId::INT64:  // int64_t uses zigzag varint
-    case TypeId::VAR64:  // explicit varint
+    case TypeId::INT32: // int32_t uses zigzag varint
+    case TypeId::VAR32: // explicit varint
+      return 5;         // int32 varint max
+    case TypeId::INT64: // int64_t uses zigzag varint
+    case TypeId::VAR64: // explicit varint
     case TypeId::H64:
       return 10; // int64 varint max
     default:

@@ -246,7 +246,8 @@ TEST(UnsignedSerializerTest, BoundaryValues) {
 // ============================================================================
 
 TEST(UnsignedSerializerTest, UnsignedTypeIdsAreDistinct) {
-  // Verify that unsigned types use distinct TypeIds (UINT8, UINT16, UINT32, UINT64)
+  // Verify that unsigned types use distinct TypeIds (UINT8, UINT16, UINT32,
+  // UINT64)
   EXPECT_EQ(static_cast<uint32_t>(Serializer<uint8_t>::type_id),
             static_cast<uint32_t>(TypeId::UINT8));
   EXPECT_EQ(static_cast<uint32_t>(Serializer<uint16_t>::type_id),

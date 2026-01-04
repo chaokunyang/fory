@@ -1130,8 +1130,8 @@ def group_fields(type_resolver, field_names, serializers, nullable_map=None):
         compress = id_ in {
             TypeId.INT32,
             TypeId.INT64,
-            TypeId.VAR_INT32,
-            TypeId.VAR_INT64,
+            TypeId.VAR32,
+            TypeId.VAR64,
         }
         # Sort by: compress flag, -size (largest first), -type_id (higher type ID first), field_name
         # Java sorts by size (largest first), then by primitive type ID (descending)

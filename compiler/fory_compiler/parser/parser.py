@@ -120,6 +120,7 @@ class Parser:
         imports = []
         enums = []
         messages = []
+        options = {}
 
         while not self.at_end():
             if self.check(TokenType.PACKAGE):
@@ -128,6 +129,10 @@ class Parser:
                 package = self.parse_package()
             elif self.check(TokenType.IMPORT):
                 imports.append(self.parse_import())
+            elif self.check(TokenType.OPTION):
+                # File-level option
+                name, value = self.parse_file_option()
+                options[name] = value
             elif self.check(TokenType.ENUM):
                 enums.append(self.parse_enum())
             elif self.check(TokenType.MESSAGE):
@@ -135,7 +140,7 @@ class Parser:
             else:
                 raise self.error(f"Unexpected token: {self.current().value}")
 
-        return Schema(package, imports, enums, messages)
+        return Schema(package, imports, enums, messages, options)
 
     def parse_package(self) -> str:
         """Parse a package declaration: package foo.bar;"""
@@ -143,16 +148,40 @@ class Parser:
 
         # Package name can be dotted: foo.bar.baz
         parts = [self.consume(TokenType.IDENT).value]
-        while self.current().type == TokenType.IDENT or (
-            self.current().type == TokenType.IDENT
-        ):
-            # Check for dot by looking at the raw character
-            # Since we don't have a DOT token, we need to handle this differently
-            # For now, just take a single identifier
-            break
+        while self.check(TokenType.DOT):
+            self.advance()  # consume the dot
+            parts.append(self.consume(TokenType.IDENT, "Expected identifier after '.'").value)
 
         self.consume(TokenType.SEMI, "Expected ';' after package name")
         return ".".join(parts)
+
+    def parse_file_option(self) -> tuple:
+        """Parse a file-level option: option java_package = "com.example";
+
+        Returns a tuple of (option_name, option_value).
+        """
+        self.consume(TokenType.OPTION)
+        option_name = self.consume(TokenType.IDENT, "Expected option name").value
+        self.consume(TokenType.EQUALS, "Expected '=' after option name")
+
+        # Get the option value (can be string, bool, int, or identifier)
+        if self.check(TokenType.STRING):
+            option_value = self.advance().value
+        elif self.check(TokenType.TRUE):
+            self.advance()
+            option_value = True
+        elif self.check(TokenType.FALSE):
+            self.advance()
+            option_value = False
+        elif self.check(TokenType.INT):
+            option_value = int(self.advance().value)
+        elif self.check(TokenType.IDENT):
+            option_value = self.advance().value
+        else:
+            raise self.error(f"Expected option value, got {self.current().type.name}")
+
+        self.consume(TokenType.SEMI, "Expected ';' after option statement")
+        return (option_name, option_value)
 
     def parse_import(self) -> Import:
         """Parse an import statement: import "path/to/file.fdl";"""

@@ -17,7 +17,7 @@
 
 """Java code generator."""
 
-from typing import List, Set
+from typing import List, Optional, Set
 
 from fory_compiler.generators.base import BaseGenerator, GeneratedFile
 from fory_compiler.parser.ast import (
@@ -39,6 +39,21 @@ class JavaGenerator(BaseGenerator):
 
     language_name = "java"
     file_extension = ".java"
+
+    def get_java_package(self) -> Optional[str]:
+        """Get the Java package name.
+
+        Priority:
+        1. Command-line override (options.package_override)
+        2. java_package option from FDL file
+        3. FDL package declaration
+        """
+        if self.options.package_override:
+            return self.options.package_override
+        java_package = self.schema.get_option("java_package")
+        if java_package:
+            return java_package
+        return self.schema.package
 
     # Mapping from FDL primitive types to Java types
     PRIMITIVE_MAP = {
@@ -96,21 +111,23 @@ class JavaGenerator(BaseGenerator):
 
     def get_java_package_path(self) -> str:
         """Get the Java package as a path."""
-        if self.package:
-            return self.package.replace(".", "/")
+        java_package = self.get_java_package()
+        if java_package:
+            return java_package.replace(".", "/")
         return ""
 
     def generate_enum_file(self, enum: Enum) -> GeneratedFile:
         """Generate a Java enum file."""
         lines = []
+        java_package = self.get_java_package()
 
         # License header
         lines.append(self.get_license_header())
         lines.append("")
 
         # Package
-        if self.package:
-            lines.append(f"package {self.package};")
+        if java_package:
+            lines.append(f"package {java_package};")
             lines.append("")
 
         # Enum declaration
@@ -138,6 +155,7 @@ class JavaGenerator(BaseGenerator):
         """Generate a Java class file for a message."""
         lines = []
         imports: Set[str] = set()
+        java_package = self.get_java_package()
 
         # Collect imports (including from nested types)
         self.collect_message_imports(message, imports)
@@ -147,8 +165,8 @@ class JavaGenerator(BaseGenerator):
         lines.append("")
 
         # Package
-        if self.package:
-            lines.append(f"package {self.package};")
+        if java_package:
+            lines.append(f"package {java_package};")
             lines.append("")
 
         # Imports
@@ -494,10 +512,11 @@ class JavaGenerator(BaseGenerator):
     def generate_registration_file(self) -> GeneratedFile:
         """Generate the Fory registration helper class."""
         lines = []
+        java_package = self.get_java_package()
 
         # Determine class name
-        if self.package:
-            parts = self.package.split(".")
+        if java_package:
+            parts = java_package.split(".")
             class_name = self.to_pascal_case(parts[-1]) + "ForyRegistration"
         else:
             class_name = "ForyRegistration"
@@ -507,8 +526,8 @@ class JavaGenerator(BaseGenerator):
         lines.append("")
 
         # Package
-        if self.package:
-            lines.append(f"package {self.package};")
+        if java_package:
+            lines.append(f"package {java_package};")
             lines.append("")
 
         # Imports
@@ -550,7 +569,8 @@ class JavaGenerator(BaseGenerator):
         if enum.type_id is not None:
             lines.append(f"        fory.register({class_ref}.class, {enum.type_id});")
         else:
-            ns = self.package or "default"
+            # Use FDL package for namespace (consistent across languages)
+            ns = self.schema.package or "default"
             lines.append(f'        fory.register({class_ref}.class, "{ns}", "{type_name}");')
 
     def generate_message_registration(self, lines: List[str], message: Message, parent_path: str):
@@ -562,7 +582,8 @@ class JavaGenerator(BaseGenerator):
         if message.type_id is not None:
             lines.append(f"        fory.register({class_ref}.class, {message.type_id});")
         else:
-            ns = self.package or "default"
+            # Use FDL package for namespace (consistent across languages)
+            ns = self.schema.package or "default"
             lines.append(f'        fory.register({class_ref}.class, "{ns}", "{type_name}");')
 
         # Register nested enums

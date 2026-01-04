@@ -86,6 +86,112 @@ package com.example.models;
 | Rust     | Module name (dots to underscores) |
 | C++      | Namespace (dots to `::`)          |
 
+## File-Level Options
+
+Options can be specified at file level to control language-specific code generation.
+
+### Syntax
+
+```fdl
+option option_name = value;
+```
+
+### Java Package Option
+
+Override the Java package for generated code:
+
+```fdl
+package payment;
+option java_package = "com.mycorp.payment.v1";
+
+message Payment {
+    string id = 1;
+}
+```
+
+**Effect:**
+
+- Generated Java files will be in `com/mycorp/payment/v1/` directory
+- Java package declaration will be `package com.mycorp.payment.v1;`
+- Type registration still uses the FDL package (`payment`) for cross-language compatibility
+
+### Go Package Option
+
+Specify the Go import path and package name:
+
+```fdl
+package payment;
+option go_package = "github.com/mycorp/apis/gen/payment/v1;paymentv1";
+
+message Payment {
+    string id = 1;
+}
+```
+
+**Format:** `"import/path;package_name"` or just `"import/path"` (last segment used as package name)
+
+**Effect:**
+
+- Generated Go files will have `package paymentv1`
+- The import path can be used in other Go code
+- Type registration still uses the FDL package (`payment`) for cross-language compatibility
+
+### Multiple Options
+
+Multiple options can be specified:
+
+```fdl
+package payment;
+option java_package = "com.mycorp.payment.v1";
+option go_package = "github.com/mycorp/apis/gen/payment/v1;paymentv1";
+option deprecated = true;
+
+message Payment {
+    string id = 1;
+}
+```
+
+### Option Priority
+
+For language-specific packages:
+
+1. Command-line package override (highest priority)
+2. Language-specific option (`java_package`, `go_package`)
+3. FDL package declaration (fallback)
+
+**Example:**
+
+```fdl
+package myapp.models;
+option java_package = "com.example.generated";
+```
+
+| Scenario                  | Java Package Used         |
+| ------------------------- | ------------------------- |
+| No override               | `com.example.generated`   |
+| CLI: `--package=override` | `override`                |
+| No java_package option    | `myapp.models` (fallback) |
+
+### Cross-Language Type Registration
+
+Language-specific options only affect where code is generated, not the type namespace used for serialization. This ensures cross-language compatibility:
+
+```fdl
+package myapp.models;
+option java_package = "com.mycorp.generated";
+option go_package = "github.com/mycorp/gen;genmodels";
+
+message User {
+    string name = 1;
+}
+```
+
+All languages will register `User` with namespace `myapp.models`, enabling:
+
+- Java serialized data → Go deserialization
+- Go serialized data → Java deserialization
+- Any language combination works seamlessly
+
 ## Import Statement
 
 Import statements allow you to use types defined in other FDL files.
@@ -757,10 +863,12 @@ message ShopConfig {
 ## Grammar Summary
 
 ```
-file         := [package_decl] import_decl* type_def*
+file         := [package_decl] file_option* import_decl* type_def*
 
 package_decl := 'package' package_name ';'
 package_name := IDENTIFIER ('.' IDENTIFIER)*
+
+file_option  := 'option' IDENTIFIER '=' option_value ';'
 
 import_decl  := 'import' STRING ';'
 

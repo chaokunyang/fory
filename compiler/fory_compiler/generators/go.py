@@ -17,7 +17,7 @@
 
 """Go code generator."""
 
-from typing import List, Set
+from typing import List, Optional, Set, Tuple
 
 from fory_compiler.generators.base import BaseGenerator, GeneratedFile
 from fory_compiler.parser.ast import (
@@ -40,6 +40,35 @@ class GoGenerator(BaseGenerator):
     language_name = "go"
     file_extension = ".go"
     indent_str = "\t"  # Go uses tabs
+
+    def get_go_package_info(self) -> Tuple[Optional[str], str]:
+        """Parse go_package option and return (import_path, package_name).
+
+        Supports format: "github.com/mycorp/apis/gen/payment/v1;paymentv1"
+        - Part before ';' is the import path
+        - Part after ';' is the package name
+        - If no ';', the last element of the import path is used as package name
+        - If no go_package option, falls back to FDL package
+
+        Returns:
+            Tuple of (import_path, package_name). import_path may be None.
+        """
+        go_package = self.schema.get_option("go_package")
+        if go_package:
+            if ";" in go_package:
+                import_path, package_name = go_package.split(";", 1)
+                return (import_path, package_name)
+            else:
+                # Use last element of path as package name
+                parts = go_package.rstrip("/").split("/")
+                return (go_package, parts[-1])
+
+        # Fall back to FDL package
+        if self.schema.package:
+            parts = self.schema.package.split(".")
+            return (None, parts[-1])
+
+        return (None, "generated")
 
     # Mapping from FDL primitive types to Go types
     PRIMITIVE_MAP = {
@@ -67,11 +96,8 @@ class GoGenerator(BaseGenerator):
 
     def get_package_name(self) -> str:
         """Get the Go package name."""
-        if self.package:
-            # Use last part of package as Go package name
-            parts = self.package.split(".")
-            return parts[-1]
-        return "generated"
+        _, package_name = self.get_go_package_info()
+        return package_name
 
     def get_file_name(self) -> str:
         """Get the Go file name."""
@@ -289,7 +315,8 @@ class GoGenerator(BaseGenerator):
             lines.append("\t\treturn err")
             lines.append("\t}")
         else:
-            ns = self.package or "default"
+            # Use FDL package for namespace (consistent across languages)
+            ns = self.schema.package or "default"
             lines.append(f'\tif err := f.RegisterTagType("{ns}.{type_name}", {type_name}(0)); err != nil {{')
             lines.append("\t\treturn err")
             lines.append("\t}")
@@ -312,7 +339,8 @@ class GoGenerator(BaseGenerator):
             lines.append("\t\treturn err")
             lines.append("\t}")
         else:
-            ns = self.package or "default"
+            # Use FDL package for namespace (consistent across languages)
+            ns = self.schema.package or "default"
             lines.append(f'\tif err := f.RegisterTagType("{ns}.{type_name}", {type_name}{{}}); err != nil {{')
             lines.append("\t\treturn err")
             lines.append("\t}")

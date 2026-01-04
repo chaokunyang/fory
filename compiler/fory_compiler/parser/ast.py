@@ -199,9 +199,15 @@ class Schema:
     imports: List[Import] = field(default_factory=list)
     enums: List[Enum] = field(default_factory=list)
     messages: List[Message] = field(default_factory=list)
+    options: dict = field(default_factory=dict)  # File-level options (java_package, go_package, etc.)
 
     def __repr__(self) -> str:
-        return f"Schema(package={self.package}, imports={len(self.imports)}, enums={len(self.enums)}, messages={len(self.messages)})"
+        opts = f", options={len(self.options)}" if self.options else ""
+        return f"Schema(package={self.package}, imports={len(self.imports)}, enums={len(self.enums)}, messages={len(self.messages)}{opts})"
+
+    def get_option(self, name: str, default: Optional[str] = None) -> Optional[str]:
+        """Get a file-level option value."""
+        return self.options.get(name, default)
 
     def get_type(self, name: str) -> Optional[Union[Message, Enum]]:
         """Look up a type by name, supporting qualified names like Parent.Child."""

@@ -30,6 +30,21 @@ KNOWN_FILE_OPTIONS: Set[str] = {
     "go_package",
     "deprecated",
 }
+
+# Known field-level options
+KNOWN_FIELD_OPTIONS: Set[str] = {
+    "deprecated",
+    "json_name",
+    "packed",
+    "lazy",
+    "unverified_lazy",
+    "weak",
+    "debug_redact",
+    "retention",
+    "targets",
+    "edition_defaults",
+    "features",
+}
 from fory_compiler.parser.ast import (
     Schema,
     Message,
@@ -445,7 +460,7 @@ class Parser:
         )
 
     def parse_field(self) -> Field:
-        """Parse a field: optional ref repeated Type name = 1;"""
+        """Parse a field: optional ref repeated Type name = 1 [options];"""
         start = self.current()
 
         # Parse modifiers
@@ -468,6 +483,10 @@ class Parser:
         number_token = self.consume(TokenType.INT, "Expected field number")
         number = int(number_token.value)
 
+        # Parse optional field options: [deprecated = true, json_name = "foo"]
+        if self.check(TokenType.LBRACKET):
+            self.parse_field_options(name)
+
         self.consume(TokenType.SEMI, "Expected ';' after field declaration")
 
         return Field(
@@ -479,6 +498,51 @@ class Parser:
             line=start.line,
             column=start.column,
         )
+
+    def parse_field_options(self, field_name: str):
+        """Parse field options: [deprecated = true, json_name = "foo"]
+
+        Parses and warns about unknown options, then ignores all options.
+        """
+        self.consume(TokenType.LBRACKET)
+
+        while True:
+            # Parse option name
+            name_token = self.consume(TokenType.IDENT, "Expected option name")
+            option_name = name_token.value
+
+            self.consume(TokenType.EQUALS, "Expected '=' after option name")
+
+            # Parse option value (can be string, bool, int, or identifier)
+            if self.check(TokenType.STRING):
+                self.advance()
+            elif self.check(TokenType.TRUE):
+                self.advance()
+            elif self.check(TokenType.FALSE):
+                self.advance()
+            elif self.check(TokenType.INT):
+                self.advance()
+            elif self.check(TokenType.IDENT):
+                self.advance()
+            else:
+                raise self.error(f"Expected option value, got {self.current().type.name}")
+
+            # Warn about unknown field options
+            if option_name not in KNOWN_FIELD_OPTIONS:
+                warnings.warn(
+                    f"Line {name_token.line}: ignoring unknown field option '{option_name}' on field '{field_name}'",
+                    stacklevel=2
+                )
+
+            # Check for comma (more options) or closing bracket (end)
+            if self.check(TokenType.COMMA):
+                self.advance()
+            elif self.check(TokenType.RBRACKET):
+                break
+            else:
+                raise self.error("Expected ',' or ']' in field options")
+
+        self.consume(TokenType.RBRACKET, "Expected ']' after field options")
 
     def parse_type(self) -> FieldType:
         """Parse a type: int32, string, map<K, V>, Parent.Child, or a named type."""

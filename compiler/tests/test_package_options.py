@@ -727,5 +727,208 @@ class TestJavaMultipleFiles:
         assert "package com.example.generated;" in user_file.content
 
 
+class TestFieldOptions:
+    """Tests for field-level option parsing."""
+
+    def test_field_with_deprecated_option(self):
+        """Test parsing a field with deprecated option."""
+        source = '''
+        package myapp;
+        message User {
+            string name = 1;
+            int32 old_field = 2 [deprecated = true];
+        }
+        '''
+        lexer = Lexer(source)
+        parser = Parser(lexer.tokenize())
+        schema = parser.parse()
+
+        assert len(schema.messages) == 1
+        user = schema.messages[0]
+        assert len(user.fields) == 2
+        assert user.fields[0].name == "name"
+        assert user.fields[1].name == "old_field"
+
+    def test_field_with_json_name_option(self):
+        """Test parsing a field with json_name option."""
+        source = '''
+        package myapp;
+        message User {
+            string first_name = 1 [json_name = "firstName"];
+        }
+        '''
+        lexer = Lexer(source)
+        parser = Parser(lexer.tokenize())
+        schema = parser.parse()
+
+        assert len(schema.messages) == 1
+        user = schema.messages[0]
+        assert len(user.fields) == 1
+        assert user.fields[0].name == "first_name"
+
+    def test_field_with_multiple_options(self):
+        """Test parsing a field with multiple options."""
+        source = '''
+        package myapp;
+        message User {
+            string old_name = 1 [deprecated = true, json_name = "oldName"];
+        }
+        '''
+        lexer = Lexer(source)
+        parser = Parser(lexer.tokenize())
+        schema = parser.parse()
+
+        assert len(schema.messages) == 1
+        user = schema.messages[0]
+        assert len(user.fields) == 1
+        assert user.fields[0].name == "old_name"
+
+    def test_field_with_integer_option_value(self):
+        """Test parsing a field with integer option value."""
+        source = '''
+        package myapp;
+        message User {
+            int32 version = 1 [packed = 1];
+        }
+        '''
+        lexer = Lexer(source)
+        parser = Parser(lexer.tokenize())
+        schema = parser.parse()
+
+        assert len(schema.messages) == 1
+        user = schema.messages[0]
+        assert len(user.fields) == 1
+
+    def test_field_with_false_option_value(self):
+        """Test parsing a field with false option value."""
+        source = '''
+        package myapp;
+        message User {
+            string name = 1 [deprecated = false];
+        }
+        '''
+        lexer = Lexer(source)
+        parser = Parser(lexer.tokenize())
+        schema = parser.parse()
+
+        assert len(schema.messages) == 1
+        user = schema.messages[0]
+        assert len(user.fields) == 1
+
+    def test_unknown_field_option_warns(self):
+        """Test that unknown field options produce a warning."""
+        source = '''
+        package myapp;
+        message User {
+            string name = 1 [unknown_option = true];
+        }
+        '''
+        lexer = Lexer(source)
+        parser = Parser(lexer.tokenize())
+
+        import warnings
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            schema = parser.parse()
+
+            # Should have one warning
+            assert len(w) == 1
+            assert "ignoring unknown field option 'unknown_option'" in str(w[0].message)
+            assert "field 'name'" in str(w[0].message)
+
+    def test_known_field_option_no_warning(self):
+        """Test that known field options don't produce warnings."""
+        source = '''
+        package myapp;
+        message User {
+            string name = 1 [deprecated = true];
+            string email = 2 [json_name = "emailAddress"];
+        }
+        '''
+        lexer = Lexer(source)
+        parser = Parser(lexer.tokenize())
+
+        import warnings
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            schema = parser.parse()
+
+            # Should have no warnings
+            assert len(w) == 0
+
+    def test_multiple_unknown_field_options_warn(self):
+        """Test that multiple unknown field options each produce a warning."""
+        source = '''
+        package myapp;
+        message User {
+            string name = 1 [foo = "bar", baz = 123];
+        }
+        '''
+        lexer = Lexer(source)
+        parser = Parser(lexer.tokenize())
+
+        import warnings
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            schema = parser.parse()
+
+            # Should have two warnings
+            assert len(w) == 2
+            assert "foo" in str(w[0].message)
+            assert "baz" in str(w[1].message)
+
+    def test_field_options_on_repeated_field(self):
+        """Test parsing field options on a repeated field."""
+        source = '''
+        package myapp;
+        message User {
+            repeated string tags = 1 [packed = true];
+        }
+        '''
+        lexer = Lexer(source)
+        parser = Parser(lexer.tokenize())
+        schema = parser.parse()
+
+        assert len(schema.messages) == 1
+        user = schema.messages[0]
+        assert len(user.fields) == 1
+        assert user.fields[0].name == "tags"
+
+    def test_field_options_on_optional_field(self):
+        """Test parsing field options on an optional field."""
+        source = '''
+        package myapp;
+        message User {
+            optional string nickname = 1 [deprecated = true];
+        }
+        '''
+        lexer = Lexer(source)
+        parser = Parser(lexer.tokenize())
+        schema = parser.parse()
+
+        assert len(schema.messages) == 1
+        user = schema.messages[0]
+        assert len(user.fields) == 1
+        assert user.fields[0].name == "nickname"
+        assert user.fields[0].optional is True
+
+    def test_field_options_on_map_field(self):
+        """Test parsing field options on a map field."""
+        source = '''
+        package myapp;
+        message User {
+            map<string, int32> scores = 1 [deprecated = true];
+        }
+        '''
+        lexer = Lexer(source)
+        parser = Parser(lexer.tokenize())
+        schema = parser.parse()
+
+        assert len(schema.messages) == 1
+        user = schema.messages[0]
+        assert len(user.fields) == 1
+        assert user.fields[0].name == "scores"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -52,6 +52,8 @@ class TokenType(Enum):
     # Punctuation
     LBRACE = auto()  # {
     RBRACE = auto()  # }
+    LBRACKET = auto()  # [
+    RBRACKET = auto()  # ]
     LANGLE = auto()  # <
     RANGLE = auto()  # >
     SEMI = auto()  # ;
@@ -110,6 +112,8 @@ class Lexer:
     PUNCTUATION = {
         "{": TokenType.LBRACE,
         "}": TokenType.RBRACE,
+        "[": TokenType.LBRACKET,
+        "]": TokenType.RBRACKET,
         "<": TokenType.LANGLE,
         ">": TokenType.RANGLE,
         ";": TokenType.SEMI,

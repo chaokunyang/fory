@@ -501,5 +501,159 @@ class TestJavaOuterClassname:
         assert "MyappForyRegistration.java" in file_names
 
 
+class TestJavaMultipleFiles:
+    """Tests for java_multiple_files option."""
+
+    def test_multiple_files_true_generates_separate_files(self):
+        """Test that java_multiple_files = true generates separate files."""
+        source = '''
+        package myapp;
+        option java_multiple_files = true;
+
+        enum Status {
+            UNKNOWN = 0;
+            ACTIVE = 1;
+        }
+
+        message User {
+            string name = 1;
+        }
+
+        message Order {
+            string id = 1;
+        }
+        '''
+        lexer = Lexer(source)
+        parser = Parser(lexer.tokenize())
+        schema = parser.parse()
+
+        options = GeneratorOptions(output_dir=Path("/tmp"))
+        generator = JavaGenerator(schema, options)
+
+        files = generator.generate()
+
+        # Should generate separate files for each type
+        file_names = [f.path.split("/")[-1] for f in files]
+        assert "Status.java" in file_names
+        assert "User.java" in file_names
+        assert "Order.java" in file_names
+        assert "MyappForyRegistration.java" in file_names
+
+    def test_multiple_files_false_with_outer_class_generates_single_file(self):
+        """Test that java_multiple_files = false with outer class generates single file."""
+        source = '''
+        package myapp;
+        option java_outer_classname = "MyProtos";
+        option java_multiple_files = false;
+
+        enum Status {
+            UNKNOWN = 0;
+        }
+
+        message User {
+            string name = 1;
+        }
+        '''
+        lexer = Lexer(source)
+        parser = Parser(lexer.tokenize())
+        schema = parser.parse()
+
+        options = GeneratorOptions(output_dir=Path("/tmp"))
+        generator = JavaGenerator(schema, options)
+
+        files = generator.generate()
+
+        # Should generate only 2 files: outer class and registration
+        assert len(files) == 2
+
+        file_names = [f.path.split("/")[-1] for f in files]
+        assert "MyProtos.java" in file_names
+        assert "MyappForyRegistration.java" in file_names
+
+    def test_multiple_files_true_overrides_outer_classname(self):
+        """Test that java_multiple_files = true overrides java_outer_classname."""
+        source = '''
+        package myapp;
+        option java_outer_classname = "MyProtos";
+        option java_multiple_files = true;
+
+        enum Status {
+            UNKNOWN = 0;
+        }
+
+        message User {
+            string name = 1;
+        }
+        '''
+        lexer = Lexer(source)
+        parser = Parser(lexer.tokenize())
+        schema = parser.parse()
+
+        options = GeneratorOptions(output_dir=Path("/tmp"))
+        generator = JavaGenerator(schema, options)
+
+        files = generator.generate()
+
+        # Should generate separate files even though outer_classname is set
+        file_names = [f.path.split("/")[-1] for f in files]
+        assert "Status.java" in file_names
+        assert "User.java" in file_names
+        # MyProtos.java should NOT be generated
+        assert "MyProtos.java" not in file_names
+
+    def test_multiple_files_default_is_false(self):
+        """Test that java_multiple_files defaults to false when outer_classname is set."""
+        source = '''
+        package myapp;
+        option java_outer_classname = "MyProtos";
+
+        message User {
+            string name = 1;
+        }
+        '''
+        lexer = Lexer(source)
+        parser = Parser(lexer.tokenize())
+        schema = parser.parse()
+
+        options = GeneratorOptions(output_dir=Path("/tmp"))
+        generator = JavaGenerator(schema, options)
+
+        files = generator.generate()
+
+        # Should generate single outer class file (default behavior)
+        file_names = [f.path.split("/")[-1] for f in files]
+        assert "MyProtos.java" in file_names
+        assert "User.java" not in file_names
+
+    def test_multiple_files_with_java_package(self):
+        """Test java_multiple_files combined with java_package."""
+        source = '''
+        package myapp;
+        option java_package = "com.example.generated";
+        option java_multiple_files = true;
+
+        message User {
+            string name = 1;
+        }
+
+        message Order {
+            string id = 1;
+        }
+        '''
+        lexer = Lexer(source)
+        parser = Parser(lexer.tokenize())
+        schema = parser.parse()
+
+        options = GeneratorOptions(output_dir=Path("/tmp"))
+        generator = JavaGenerator(schema, options)
+
+        files = generator.generate()
+
+        # Should use java_package for paths
+        user_file = next(f for f in files if "User.java" in f.path)
+        assert "com/example/generated/User.java" == user_file.path
+        assert "package com.example.generated;" in user_file.content
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

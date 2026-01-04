@@ -195,6 +195,53 @@ message Payment {
 
 This generates `com/example/proto/PaymentProtos.java` with all types as inner classes.
 
+### Java Multiple Files Option
+
+Control whether types are generated in separate files or as inner classes:
+
+```fdl
+package payment;
+option java_outer_classname = "PaymentProtos";
+option java_multiple_files = true;
+
+message Payment {
+    string id = 1;
+}
+
+message Receipt {
+    string id = 1;
+}
+```
+
+**Behavior:**
+
+| `java_outer_classname` | `java_multiple_files` | Result                                      |
+| ---------------------- | --------------------- | ------------------------------------------- |
+| Not set                | Any                   | Separate files (one per type)               |
+| Set                    | `false` (default)     | Single file with all types as inner classes |
+| Set                    | `true`                | Separate files (overrides outer class)      |
+
+**Effect of `java_multiple_files = true`:**
+
+- Each top-level enum and message gets its own `.java` file
+- Overrides `java_outer_classname` behavior
+- Useful when you want separate files but still specify an outer class name for other purposes
+
+**Example without java_multiple_files (default):**
+
+```fdl
+option java_outer_classname = "PaymentProtos";
+// Generates: PaymentProtos.java containing Payment and Receipt as inner classes
+```
+
+**Example with java_multiple_files = true:**
+
+```fdl
+option java_outer_classname = "PaymentProtos";
+option java_multiple_files = true;
+// Generates: Payment.java, Receipt.java (separate files)
+```
+
 ### Multiple Options
 
 Multiple options can be specified:

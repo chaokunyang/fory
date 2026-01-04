@@ -59,9 +59,18 @@ class JavaGenerator(BaseGenerator):
         """Get the Java outer classname if specified.
 
         When set, all types are generated as inner classes of this outer class
-        in a single file.
+        in a single file (unless java_multiple_files is true).
         """
         return self.schema.get_option("java_outer_classname")
+
+    def get_java_multiple_files(self) -> bool:
+        """Check if java_multiple_files option is set to true.
+
+        When true, each top-level type gets its own file, even if
+        java_outer_classname is set.
+        """
+        value = self.schema.get_option("java_multiple_files")
+        return value is True
 
     # Mapping from FDL primitive types to Java types
     PRIMITIVE_MAP = {
@@ -101,11 +110,19 @@ class JavaGenerator(BaseGenerator):
     }
 
     def generate(self) -> List[GeneratedFile]:
-        """Generate Java files for the schema."""
+        """Generate Java files for the schema.
+
+        Generation mode depends on options:
+        - java_multiple_files = true: Separate file per type (default behavior)
+        - java_outer_classname set + java_multiple_files = false: Single file with outer class
+        - Neither set: Separate file per type
+        """
         files = []
 
         outer_classname = self.get_java_outer_classname()
-        if outer_classname:
+        multiple_files = self.get_java_multiple_files()
+
+        if outer_classname and not multiple_files:
             # Generate all types in a single outer class file
             files.append(self.generate_outer_class_file(outer_classname))
             # Generate registration helper (with outer class prefix)

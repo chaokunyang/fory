@@ -22,7 +22,7 @@ package user;
 import "common.fdl";
 
 // User profile using imported types
-message User @200 {
+message User [id=200] {
     string id = 1;
     string name = 2;
     optional Address home_address = 3;
@@ -32,7 +32,7 @@ message User @200 {
 }
 
 // User preferences
-message UserPreferences @201 {
+message UserPreferences [id=201] {
     ref User user = 1;
     string language = 2;
     string timezone = 3;

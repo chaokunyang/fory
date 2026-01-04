@@ -30,20 +30,20 @@ FDL provides a simple, intuitive syntax for defining cross-language data structu
 ```fdl
 package example;
 
-enum Status @100 {
+enum Status [id=100] {
     PENDING = 0;
     ACTIVE = 1;
     COMPLETED = 2;
 }
 
-message User @101 {
+message User [id=101] {
     string name = 1;
     int32 age = 2;
     optional string email = 3;
     repeated string tags = 4;
 }
 
-message Order @102 {
+message Order [id=102] {
     ref User customer = 1;
     repeated Item items = 2;
     Status status = 3;
@@ -97,7 +97,7 @@ Create `example.fdl`:
 ```fdl
 package example;
 
-message Person @100 {
+message Person [id=100] {
     string name = 1;
     int32 age = 2;
     optional string email = 3;
@@ -160,7 +160,7 @@ FDL supports two registration modes:
 **Numeric Type IDs** - Fast and compact:
 
 ```fdl
-message User @100 { ... }  // Registered with ID 100
+message User [id=100] { ... }  // Registered with ID 100
 ```
 
 **Namespace-based** - Flexible and readable:

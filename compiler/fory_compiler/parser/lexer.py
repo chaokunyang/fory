@@ -47,7 +47,6 @@ class TokenType(Enum):
     IDENT = auto()
     INT = auto()
     STRING = auto()  # "quoted string"
-    TYPE_ID = auto()  # @123
 
     # Punctuation
     LBRACE = auto()  # {
@@ -215,20 +214,6 @@ class Lexer:
             self.advance()
         return self.source[start : self.pos]
 
-    def read_type_id(self) -> str:
-        """Read a type ID (@123)."""
-        self.advance()  # consume @
-        if not self.peek().isdigit():
-            raise LexerError(
-                f"Expected digit after '@', got '{self.peek()}'",
-                self.line,
-                self.column,
-            )
-        start = self.pos
-        while not self.at_end() and self.peek().isdigit():
-            self.advance()
-        return self.source[start : self.pos]
-
     def read_string(self) -> str:
         """Read a quoted string literal."""
         quote_char = self.advance()  # consume opening quote
@@ -278,11 +263,6 @@ class Lexer:
         if ch == '"' or ch == "'":
             value = self.read_string()
             return Token(TokenType.STRING, value, line, column)
-
-        # Type ID: @123
-        if ch == "@":
-            value = self.read_type_id()
-            return Token(TokenType.TYPE_ID, value, line, column)
 
         # Punctuation
         if ch in self.PUNCTUATION:

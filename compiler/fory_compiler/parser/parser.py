@@ -45,6 +45,12 @@ KNOWN_FIELD_OPTIONS: Set[str] = {
     "edition_defaults",
     "features",
 }
+
+# Known type-level options (for messages and enums)
+KNOWN_TYPE_OPTIONS: Set[str] = {
+    "id",
+    "deprecated",
+}
 from fory_compiler.parser.ast import (
     Schema,
     Message,
@@ -256,15 +262,17 @@ class Parser:
         )
 
     def parse_enum(self) -> Enum:
-        """Parse an enum: enum Color @101 { ... }"""
+        """Parse an enum: enum Color [id=101] { ... }"""
         start = self.current()
         self.consume(TokenType.ENUM)
         name = self.consume(TokenType.IDENT, "Expected enum name").value
 
-        # Optional type ID: @101
+        # Optional type options: [id=101, deprecated=true]
         type_id = None
-        if self.match(TokenType.TYPE_ID):
-            type_id = int(self.previous().value)
+        if self.check(TokenType.LBRACKET):
+            options = self.parse_type_options(name)
+            if "id" in options:
+                type_id = options["id"]
 
         self.consume(TokenType.LBRACE, "Expected '{' after enum name")
 
@@ -407,7 +415,7 @@ class Parser:
         )
 
     def parse_message(self) -> Message:
-        """Parse a message: message Dog @102 { ... }
+        """Parse a message: message Dog [id=102] { ... }
 
         Supports nested messages and enums:
             message Outer {
@@ -420,10 +428,12 @@ class Parser:
         self.consume(TokenType.MESSAGE)
         name = self.consume(TokenType.IDENT, "Expected message name").value
 
-        # Optional type ID: @102
+        # Optional type options: [id=102, deprecated=true]
         type_id = None
-        if self.match(TokenType.TYPE_ID):
-            type_id = int(self.previous().value)
+        if self.check(TokenType.LBRACKET):
+            options = self.parse_type_options(name)
+            if "id" in options:
+                type_id = options["id"]
 
         self.consume(TokenType.LBRACE, "Expected '{' after message name")
 
@@ -543,6 +553,65 @@ class Parser:
                 raise self.error("Expected ',' or ']' in field options")
 
         self.consume(TokenType.RBRACKET, "Expected ']' after field options")
+
+    def parse_type_options(self, type_name: str) -> dict:
+        """Parse type options: [id=100, deprecated=true]
+
+        Returns a dict of option names to values.
+        Warns about unknown options.
+        """
+        self.consume(TokenType.LBRACKET)
+        options = {}
+
+        while True:
+            # Parse option name
+            name_token = self.consume(TokenType.IDENT, "Expected option name")
+            option_name = name_token.value
+
+            self.consume(TokenType.EQUALS, "Expected '=' after option name")
+
+            # Parse option value (can be string, bool, int, or identifier)
+            if self.check(TokenType.STRING):
+                option_value = self.advance().value
+            elif self.check(TokenType.TRUE):
+                self.advance()
+                option_value = True
+            elif self.check(TokenType.FALSE):
+                self.advance()
+                option_value = False
+            elif self.check(TokenType.INT):
+                option_value = int(self.advance().value)
+            elif self.check(TokenType.IDENT):
+                option_value = self.advance().value
+            else:
+                raise self.error(f"Expected option value, got {self.current().type.name}")
+
+            # Validate 'id' option must be a positive integer
+            if option_name == "id":
+                if not isinstance(option_value, int):
+                    raise self.error(f"Type option 'id' must be an integer, got {type(option_value).__name__}")
+                if option_value <= 0:
+                    raise self.error(f"Type option 'id' must be a positive integer, got {option_value}")
+
+            # Warn about unknown type options
+            if option_name not in KNOWN_TYPE_OPTIONS:
+                warnings.warn(
+                    f"Line {name_token.line}: ignoring unknown type option '{option_name}' on type '{type_name}'",
+                    stacklevel=2
+                )
+
+            options[option_name] = option_value
+
+            # Check for comma (more options) or closing bracket (end)
+            if self.check(TokenType.COMMA):
+                self.advance()
+            elif self.check(TokenType.RBRACKET):
+                break
+            else:
+                raise self.error("Expected ',' or ']' in type options")
+
+        self.consume(TokenType.RBRACKET, "Expected ']' after type options")
+        return options
 
     def parse_type(self) -> FieldType:
         """Parse a type: int32, string, map<K, V>, Parent.Child, or a named type."""

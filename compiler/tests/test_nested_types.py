@@ -235,8 +235,8 @@ class TestNestedTypeValidation:
     def test_duplicate_type_ids_in_nested(self):
         """Test that duplicate type IDs in nested types are detected."""
         source = '''
-        message Outer @100 {
-            message Inner @100 {
+        message Outer [id=100] {
+            message Inner [id=100] {
                 string value = 1;
             }
         }

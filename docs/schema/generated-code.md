@@ -30,20 +30,20 @@ The examples in this document use this FDL schema:
 ```fdl
 package demo;
 
-enum Status @100 {
+enum Status [id=100] {
     PENDING = 0;
     ACTIVE = 1;
     COMPLETED = 2;
 }
 
-message User @101 {
+message User [id=101] {
     string id = 1;
     string name = 2;
     optional string email = 3;
     int32 age = 4;
 }
 
-message Order @102 {
+message Order [id=102] {
     string id = 1;
     ref User customer = 2;
     repeated string items = 3;

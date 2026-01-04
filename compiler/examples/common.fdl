@@ -19,7 +19,7 @@
 package common;
 
 // Status enum used across multiple domains
-enum Status @100 {
+enum Status [id=100] {
     PENDING = 0;
     ACTIVE = 1;
     COMPLETED = 2;
@@ -27,7 +27,7 @@ enum Status @100 {
 }
 
 // Address type for shared use
-message Address @101 {
+message Address [id=101] {
     string street = 1;
     string city = 2;
     string state = 3;
@@ -36,7 +36,7 @@ message Address @101 {
 }
 
 // Contact information
-message Contact @102 {
+message Contact [id=102] {
     optional string email = 1;
     optional string phone = 2;
 }

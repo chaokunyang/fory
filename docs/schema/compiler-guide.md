@@ -443,7 +443,7 @@ Fix: Ensure each enum and message has a unique name within the file.
 ### Duplicate Type IDs
 
 ```
-Error: Duplicate type ID @100: User and Order
+Error: Duplicate type ID 100: User and Order
 ```
 
 Fix: Assign unique type IDs to each type.
@@ -519,7 +519,7 @@ When modifying schemas:
 4. **Use `optional`** - For backward compatibility
 
 ```fdl
-message User @100 {
+message User [id=100] {
     string id = 1;
     string name = 2;
     // Field 3 was removed, don't reuse

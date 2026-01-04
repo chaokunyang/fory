@@ -37,18 +37,18 @@ Create a `.fdl` file:
 ```fdl
 package demo;
 
-enum Color @101 {
+enum Color [id=101] {
     GREEN = 0;
     RED = 1;
     BLUE = 2;
 }
 
-message Dog @102 {
+message Dog [id=102] {
     optional string name = 1;
     int32 age = 2;
 }
 
-message Cat @103 {
+message Cat [id=103] {
     ref Dog friend = 1;
     optional string name = 2;
     repeated string tags = 3;
@@ -125,7 +125,7 @@ Imports are resolved relative to the importing file. All types from imported fil
 // common.fdl
 package common;
 
-message Address @100 {
+message Address [id=100] {
     string street = 1;
     string city = 2;
 }
@@ -136,7 +136,7 @@ message Address @100 {
 package user;
 import "common.fdl";
 
-message User @101 {
+message User [id=101] {
     string name = 1;
     Address address = 2;  // Uses imported type
 }
@@ -145,7 +145,7 @@ message User @101 {
 ### Enum Definition
 
 ```fdl
-enum Status @100 {
+enum Status [id=100] {
     PENDING = 0;
     ACTIVE = 1;
     INACTIVE = 2;
@@ -155,22 +155,23 @@ enum Status @100 {
 ### Message Definition
 
 ```fdl
-message User @101 {
+message User [id=101] {
     string name = 1;
     int32 age = 2;
     optional string email = 3;
 }
 ```
 
-### Type ID vs Name-based Registration
+### Type Options
 
-Types with `@<id>` use numeric type IDs for efficient serialization:
+Types can have options specified in brackets after the name:
 
 ```fdl
-message User @101 { ... }  // Registered with type ID 101
+message User [id=101] { ... }              // Registered with type ID 101
+message User [id=101, deprecated=true] { ... }  // Multiple options
 ```
 
-Types without `@<id>` use namespace-based registration:
+Types without `[id=...]` use namespace-based registration:
 
 ```fdl
 message Config { ... }  // Registered as "package.Config"

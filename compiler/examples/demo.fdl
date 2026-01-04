@@ -2,23 +2,23 @@
 
 package demo;
 
-enum Color @101 {
+enum Color [id=101] {
     GREEN = 0;
     RED = 1;
     BLUE = 2;
     WHITE = 3;
 }
 
-message Item @102 {
+message Item [id=102] {
     string name = 1;
 }
 
-message Dog @103 {
+message Dog [id=103] {
     optional string name = 1;
     int32 age = 2;
 }
 
-message Cat @104 {
+message Cat [id=104] {
     ref Dog friend = 1;
     optional string name = 2;
     repeated string tags = 3;
@@ -27,7 +27,7 @@ message Cat @104 {
 }
 
 // Demonstrates primitive arrays for numeric types
-message SensorData @105 {
+message SensorData [id=105] {
     string sensor_id = 1;
     repeated int32 readings = 2;
     repeated float64 temperatures = 3;

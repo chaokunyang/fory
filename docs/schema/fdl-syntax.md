@@ -39,9 +39,9 @@ package com.example.models;
 import "common/types.fdl";
 
 // Type definitions
-enum Color @100 { ... }
-message User @101 { ... }
-message Order @102 { ... }
+enum Color [id=100] { ... }
+message User [id=101] { ... }
+message Order [id=102] { ... }
 ```
 
 ## Comments
@@ -345,13 +345,13 @@ project/
 ```fdl
 package common;
 
-enum Status @100 {
+enum Status [id=100] {
     PENDING = 0;
     ACTIVE = 1;
     COMPLETED = 2;
 }
 
-message Address @101 {
+message Address [id=101] {
     string street = 1;
     string city = 2;
     string country = 3;
@@ -364,7 +364,7 @@ message Address @101 {
 package models;
 import "../common/types.fdl";
 
-message User @200 {
+message User [id=200] {
     string id = 1;
     string name = 2;
     Address home_address = 3;  // Uses imported type
@@ -412,7 +412,7 @@ enum Status {
 ### With Type ID
 
 ```fdl
-enum Status @100 {
+enum Status [id=100] {
     PENDING = 0;
     ACTIVE = 1;
     COMPLETED = 2;
@@ -477,8 +477,9 @@ enum DeviceTier {
 **Grammar:**
 
 ```
-enum_def     := 'enum' IDENTIFIER [type_id] '{' enum_body '}'
-type_id      := '@' INTEGER
+enum_def     := 'enum' IDENTIFIER [type_options] '{' enum_body '}'
+type_options := '[' type_option (',' type_option)* ']'
+type_option  := IDENTIFIER '=' option_value
 enum_body    := (option_stmt | reserved_stmt | enum_value)*
 option_stmt  := 'option' IDENTIFIER '=' option_value ';'
 reserved_stmt := 'reserved' reserved_items ';'
@@ -490,13 +491,13 @@ enum_value   := IDENTIFIER '=' INTEGER ';'
 - Enum names must be unique within the file
 - Enum values must have explicit integer assignments
 - Value integers must be unique within the enum (no aliases)
-- Type ID (`@100`) is optional but recommended for cross-language use
+- Type ID (`[id=100]`) is optional but recommended for cross-language use
 
 **Example with All Features:**
 
 ```fdl
 // HTTP status code categories
-enum HttpCategory @200 {
+enum HttpCategory [id=200] {
     reserved 10 to 20;           // Reserved for future use
     reserved "UNKNOWN";          // Reserved name
     INFORMATIONAL = 1;
@@ -523,7 +524,7 @@ message Person {
 ### With Type ID
 
 ```fdl
-message Person @101 {
+message Person [id=101] {
     string name = 1;
     int32 age = 2;
 }
@@ -557,8 +558,9 @@ message User {
 **Grammar:**
 
 ```
-message_def  := 'message' IDENTIFIER [type_id] '{' message_body '}'
-type_id      := '@' INTEGER
+message_def  := 'message' IDENTIFIER [type_options] '{' message_body '}'
+type_options := '[' type_option (',' type_option)* ']'
+type_option  := IDENTIFIER '=' option_value
 message_body := (option_stmt | reserved_stmt | nested_type | field_def)*
 nested_type  := enum_def | message_def
 ```
@@ -846,15 +848,16 @@ message Example {
 Type IDs enable efficient cross-language serialization:
 
 ```fdl
-enum Color @100 { ... }
-message User @101 { ... }
-message Order @102 { ... }
+enum Color [id=100] { ... }
+message User [id=101] { ... }
+message Order [id=102] { ... }
 ```
 
 ### With Type ID (Recommended)
 
 ```fdl
-message User @101 { ... }
+message User [id=101] { ... }
+message User [id=101, deprecated=true] { ... }  // Multiple options
 ```
 
 - Serialized as compact integer
@@ -877,16 +880,16 @@ message Config { ... }
 
 ```fdl
 // Enums: 100-199
-enum Status @100 { ... }
-enum Priority @101 { ... }
+enum Status [id=100] { ... }
+enum Priority [id=101] { ... }
 
 // User domain: 200-299
-message User @200 { ... }
-message UserProfile @201 { ... }
+message User [id=200] { ... }
+message UserProfile [id=201] { ... }
 
 // Order domain: 300-399
-message Order @300 { ... }
-message OrderItem @301 { ... }
+message Order [id=300] { ... }
+message OrderItem [id=301] { ... }
 ```
 
 ## Complete Example
@@ -896,7 +899,7 @@ message OrderItem @301 { ... }
 package com.shop.models;
 
 // Enums with type IDs
-enum OrderStatus @100 {
+enum OrderStatus [id=100] {
     PENDING = 0;
     CONFIRMED = 1;
     SHIPPED = 2;
@@ -904,7 +907,7 @@ enum OrderStatus @100 {
     CANCELLED = 4;
 }
 
-enum PaymentMethod @101 {
+enum PaymentMethod [id=101] {
     CREDIT_CARD = 0;
     DEBIT_CARD = 1;
     PAYPAL = 2;
@@ -912,7 +915,7 @@ enum PaymentMethod @101 {
 }
 
 // Messages with type IDs
-message Address @200 {
+message Address [id=200] {
     string street = 1;
     string city = 2;
     string state = 3;
@@ -920,7 +923,7 @@ message Address @200 {
     string postal_code = 5;
 }
 
-message Customer @201 {
+message Customer [id=201] {
     string id = 1;
     string name = 2;
     optional string email = 3;
@@ -929,7 +932,7 @@ message Customer @201 {
     optional Address shipping_address = 6;
 }
 
-message Product @202 {
+message Product [id=202] {
     string sku = 1;
     string name = 2;
     string description = 3;
@@ -939,13 +942,13 @@ message Product @202 {
     map<string, string> attributes = 7;
 }
 
-message OrderItem @203 {
+message OrderItem [id=203] {
     ref Product product = 1;  // Track reference to avoid duplication
     int32 quantity = 2;
     float64 unit_price = 3;
 }
 
-message Order @204 {
+message Order [id=204] {
     string id = 1;
     ref Customer customer = 2;
     repeated OrderItem items = 3;
@@ -980,13 +983,13 @@ import_decl  := 'import' STRING ';'
 
 type_def     := enum_def | message_def
 
-enum_def     := 'enum' IDENTIFIER [type_id] '{' enum_body '}'
+enum_def     := 'enum' IDENTIFIER [type_options] '{' enum_body '}'
 enum_body    := (option_stmt | reserved_stmt | enum_value)*
 enum_value   := IDENTIFIER '=' INTEGER ';'
 
-message_def  := 'message' IDENTIFIER [type_id] '{' message_body '}'
+message_def  := 'message' IDENTIFIER [type_options] '{' message_body '}'
 message_body := (option_stmt | reserved_stmt | field_def)*
-field_def    := [modifiers] field_type IDENTIFIER '=' INTEGER ';'
+field_def    := [modifiers] field_type IDENTIFIER '=' INTEGER [field_options] ';'
 
 option_stmt  := 'option' IDENTIFIER '=' option_value ';'
 option_value := 'true' | 'false' | IDENTIFIER | INTEGER | STRING
@@ -1005,7 +1008,10 @@ named_type   := qualified_name
 qualified_name := IDENTIFIER ('.' IDENTIFIER)*   // e.g., Parent.Child
 map_type     := 'map' '<' field_type ',' field_type '>'
 
-type_id      := '@' INTEGER
+type_options := '[' type_option (',' type_option)* ']'
+type_option  := IDENTIFIER '=' option_value         // e.g., id=100, deprecated=true
+field_options := '[' field_option (',' field_option)* ']'
+field_option := IDENTIFIER '=' option_value         // e.g., deprecated=true, json_name="foo"
 
 STRING       := '"' [^"\n]* '"' | "'" [^'\n]* "'"
 IDENTIFIER   := [a-zA-Z_][a-zA-Z0-9_]*

@@ -71,7 +71,7 @@ enum Status {
 **FDL:**
 
 ```fdl
-enum Status @100 {
+enum Status [id=100] {
     PENDING = 0;
     ACTIVE = 1;
     COMPLETED = 2;
@@ -80,7 +80,7 @@ enum Status @100 {
 
 Key differences:
 
-- FDL supports optional type IDs (`@100`) for efficient serialization
+- FDL supports optional type IDs (`[id=100]`) for efficient serialization
 - Protobuf requires `_UNSPECIFIED = 0` by convention; FDL uses explicit values
 - FDL enum values don't require prefixes
 
@@ -102,7 +102,7 @@ message User {
 **FDL:**
 
 ```fdl
-message User @101 {
+message User [id=101] {
     string id = 1;
     string name = 2;
     optional string email = 3;
@@ -114,7 +114,7 @@ message User @101 {
 
 Syntax is nearly identical, but FDL adds:
 
-- Type IDs (`@101`) for cross-language registration
+- Type IDs (`[id=101]`) for cross-language registration
 - `ref` modifier for reference tracking
 
 ### Nested Types
@@ -134,12 +134,12 @@ message Order {
 **FDL:**
 
 ```fdl
-message OrderItem @200 {
+message OrderItem [id=200] {
     string product_id = 1;
     int32 quantity = 2;
 }
 
-message Order @201 {
+message Order [id=201] {
     repeated OrderItem items = 1;
 }
 ```
@@ -168,13 +168,13 @@ FDL's killer feature is first-class reference tracking:
 **FDL:**
 
 ```fdl
-message TreeNode @300 {
+message TreeNode [id=300] {
     string value = 1;
     ref TreeNode parent = 2;
     repeated ref TreeNode children = 3;
 }
 
-message Graph @301 {
+message Graph [id=301] {
     repeated ref Node nodes = 1;  // Shared references preserved
 }
 ```
@@ -334,12 +334,12 @@ message Address {
 ```fdl
 package myapp;
 
-message Address @100 {
+message Address [id=100] {
     string street = 1;
     string city = 2;
 }
 
-message Person @101 {
+message Person [id=101] {
     string name = 1;
     int32 age = 2;
     repeated string emails = 3;
@@ -363,7 +363,7 @@ message Result {
 
 ```fdl
 // FDL - Use separate optional fields
-message Result @102 {
+message Result [id=102] {
     optional Success success = 1;
     optional Error error = 2;
 }
@@ -382,7 +382,7 @@ message Event {
 
 ```fdl
 // FDL
-message Event @103 {
+message Event [id=103] {
     timestamp created_at = 1;
 }
 ```
@@ -397,9 +397,9 @@ Assign unique type IDs for cross-language compatibility:
 // 200-299: User domain
 // 300-399: Order domain
 
-message Address @100 { ... }
-message Person @200 { ... }
-message Order @300 { ... }
+message Address [id=100] { ... }
+message Person [id=200] { ... }
+message Order [id=300] { ... }
 ```
 
 #### Step 4: Update Build Configuration

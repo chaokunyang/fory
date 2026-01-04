@@ -727,6 +727,140 @@ class TestJavaMultipleFiles:
         assert "package com.example.generated;" in user_file.content
 
 
+class TestTypeOptions:
+    """Tests for type-level option parsing [id=100, deprecated=true]."""
+
+    def test_message_with_id_option(self):
+        """Test parsing a message with id option."""
+        source = '''
+        package myapp;
+        message User [id=100] {
+            string name = 1;
+        }
+        '''
+        lexer = Lexer(source)
+        parser = Parser(lexer.tokenize())
+        schema = parser.parse()
+
+        assert len(schema.messages) == 1
+        user = schema.messages[0]
+        assert user.name == "User"
+        assert user.type_id == 100
+
+    def test_enum_with_id_option(self):
+        """Test parsing an enum with id option."""
+        source = '''
+        package myapp;
+        enum Status [id=200] {
+            UNKNOWN = 0;
+            ACTIVE = 1;
+        }
+        '''
+        lexer = Lexer(source)
+        parser = Parser(lexer.tokenize())
+        schema = parser.parse()
+
+        assert len(schema.enums) == 1
+        status = schema.enums[0]
+        assert status.name == "Status"
+        assert status.type_id == 200
+
+    def test_type_with_multiple_options(self):
+        """Test parsing a type with multiple options."""
+        source = '''
+        package myapp;
+        message User [id=100, deprecated=true] {
+            string name = 1;
+        }
+        '''
+        lexer = Lexer(source)
+        parser = Parser(lexer.tokenize())
+        schema = parser.parse()
+
+        assert len(schema.messages) == 1
+        user = schema.messages[0]
+        assert user.type_id == 100
+
+    def test_type_without_options(self):
+        """Test parsing a type without options (namespace-based)."""
+        source = '''
+        package myapp;
+        message Config {
+            string key = 1;
+        }
+        '''
+        lexer = Lexer(source)
+        parser = Parser(lexer.tokenize())
+        schema = parser.parse()
+
+        assert len(schema.messages) == 1
+        config = schema.messages[0]
+        assert config.type_id is None
+
+    def test_unknown_type_option_warns(self):
+        """Test that unknown type options produce a warning."""
+        source = '''
+        package myapp;
+        message User [id=100, unknown_opt=true] {
+            string name = 1;
+        }
+        '''
+        lexer = Lexer(source)
+        parser = Parser(lexer.tokenize())
+
+        import warnings
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            schema = parser.parse()
+
+            # Should have one warning
+            assert len(w) == 1
+            assert "ignoring unknown type option 'unknown_opt'" in str(w[0].message)
+            assert "type 'User'" in str(w[0].message)
+
+        # id should still be parsed
+        assert schema.messages[0].type_id == 100
+
+    def test_known_type_options_no_warning(self):
+        """Test that known type options don't produce warnings."""
+        source = '''
+        package myapp;
+        message User [id=100, deprecated=true] {
+            string name = 1;
+        }
+        '''
+        lexer = Lexer(source)
+        parser = Parser(lexer.tokenize())
+
+        import warnings
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            schema = parser.parse()
+
+            # Should have no warnings
+            assert len(w) == 0
+
+    def test_nested_type_with_id(self):
+        """Test parsing nested types with id options."""
+        source = '''
+        package myapp;
+        message Outer [id=100] {
+            message Inner [id=101] {
+                string value = 1;
+            }
+            Inner item = 1;
+        }
+        '''
+        lexer = Lexer(source)
+        parser = Parser(lexer.tokenize())
+        schema = parser.parse()
+
+        outer = schema.messages[0]
+        assert outer.type_id == 100
+        inner = outer.nested_messages[0]
+        assert inner.type_id == 101
+
+
 class TestFieldOptions:
     """Tests for field-level option parsing."""
 

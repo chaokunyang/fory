@@ -190,7 +190,7 @@ timestamp created_at = 1;
 Enums define named integer constants:
 
 ```fdl
-enum Priority @100 {
+enum Priority [id=100] {
     LOW = 0;
     MEDIUM = 1;
     HIGH = 2;
@@ -273,7 +273,7 @@ FORY_ENUM(Priority, LOW, MEDIUM, HIGH, CRITICAL);
 Messages are structured types composed of fields:
 
 ```fdl
-message User @101 {
+message User [id=101] {
     string id = 1;
     string name = 2;
     int32 age = 3;

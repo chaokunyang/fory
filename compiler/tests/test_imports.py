@@ -144,7 +144,7 @@ class TestImportResolution:
             common_fdl.write_text('''
             package common;
 
-            message Address @100 {
+            message Address [id=100] {
                 string street = 1;
                 string city = 2;
             }
@@ -156,7 +156,7 @@ class TestImportResolution:
             package main;
             import "common.fdl";
 
-            message User @101 {
+            message User [id=101] {
                 string name = 1;
                 Address address = 2;
             }
@@ -181,7 +181,7 @@ class TestImportResolution:
             base_fdl.write_text('''
             package base;
 
-            enum Status @100 {
+            enum Status [id=100] {
                 ACTIVE = 0;
                 INACTIVE = 1;
             }
@@ -193,7 +193,7 @@ class TestImportResolution:
             package common;
             import "base.fdl";
 
-            message BaseEntity @101 {
+            message BaseEntity [id=101] {
                 Status status = 1;
             }
             ''')
@@ -204,7 +204,7 @@ class TestImportResolution:
             package main;
             import "common.fdl";
 
-            message User @102 {
+            message User [id=102] {
                 string name = 1;
                 Status status = 2;
             }
@@ -232,7 +232,7 @@ class TestImportResolution:
             address_fdl.write_text('''
             package types;
 
-            message Address @100 {
+            message Address [id=100] {
                 string street = 1;
             }
             ''')
@@ -243,7 +243,7 @@ class TestImportResolution:
             package main;
             import "types/address.fdl";
 
-            message User @101 {
+            message User [id=101] {
                 Address home = 1;
             }
             ''')
@@ -267,7 +267,7 @@ class TestImportResolution:
             package a;
             import "b.fdl";
 
-            message A @100 {
+            message A [id=100] {
                 string name = 1;
             }
             ''')
@@ -278,7 +278,7 @@ class TestImportResolution:
             package b;
             import "a.fdl";
 
-            message B @101 {
+            message B [id=101] {
                 string name = 1;
             }
             ''')
@@ -300,7 +300,7 @@ class TestImportResolution:
             package main;
             import "nonexistent.fdl";
 
-            message User @100 {
+            message User [id=100] {
                 string name = 1;
             }
             ''')
@@ -321,7 +321,7 @@ class TestImportResolution:
             d_fdl.write_text('''
             package d;
 
-            message Base @100 {
+            message Base [id=100] {
                 string id = 1;
             }
             ''')
@@ -332,7 +332,7 @@ class TestImportResolution:
             package b;
             import "d.fdl";
 
-            message B @101 {
+            message B [id=101] {
                 Base base = 1;
             }
             ''')
@@ -343,7 +343,7 @@ class TestImportResolution:
             package c;
             import "d.fdl";
 
-            message C @102 {
+            message C [id=102] {
                 Base base = 1;
             }
             ''')
@@ -355,7 +355,7 @@ class TestImportResolution:
             import "b.fdl";
             import "c.fdl";
 
-            message A @103 {
+            message A [id=103] {
                 B b = 1;
                 C c = 2;
             }
@@ -386,7 +386,7 @@ class TestImportResolution:
             types_fdl.write_text('''
             package common;
 
-            message CommonType @100 {
+            message CommonType [id=100] {
                 string value = 1;
             }
             ''')
@@ -397,7 +397,7 @@ class TestImportResolution:
             package src;
             import "../common/types.fdl";
 
-            message User @101 {
+            message User [id=101] {
                 CommonType data = 1;
             }
             ''')
@@ -424,7 +424,7 @@ class TestValidationWithImports:
             common_fdl.write_text('''
             package common;
 
-            message Address @100 {
+            message Address [id=100] {
                 string street = 1;
             }
             ''')
@@ -435,7 +435,7 @@ class TestValidationWithImports:
             package main;
             import "common.fdl";
 
-            message User @101 {
+            message User [id=101] {
                 string name = 1;
                 Address address = 2;
             }
@@ -452,7 +452,7 @@ class TestValidationWithImports:
         source = '''
         package main;
 
-        message User @100 {
+        message User [id=100] {
             string name = 1;
             Address address = 2;
         }

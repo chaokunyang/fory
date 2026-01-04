@@ -345,5 +345,161 @@ class TestNamespaceConsistency:
         assert '"myapp.models.User"' in go_file.content
 
 
+class TestJavaOuterClassname:
+    """Tests for java_outer_classname option."""
+
+    def test_outer_classname_generates_single_file(self):
+        """Test that java_outer_classname generates all types in a single file."""
+        source = '''
+        package myapp;
+        option java_outer_classname = "DescriptorProtos";
+
+        enum Status {
+            UNKNOWN = 0;
+            ACTIVE = 1;
+        }
+
+        message User {
+            string name = 1;
+            Status status = 2;
+        }
+
+        message Order {
+            string id = 1;
+            User customer = 2;
+        }
+        '''
+        lexer = Lexer(source)
+        parser = Parser(lexer.tokenize())
+        schema = parser.parse()
+
+        options = GeneratorOptions(output_dir=Path("/tmp"))
+        generator = JavaGenerator(schema, options)
+
+        files = generator.generate()
+
+        # Should generate only 2 files: outer class and registration
+        assert len(files) == 2
+
+        # Find the outer class file
+        outer_file = next(f for f in files if "DescriptorProtos.java" in f.path)
+        assert outer_file is not None
+        assert "myapp/DescriptorProtos.java" == outer_file.path
+
+        # Check content
+        assert "public final class DescriptorProtos" in outer_file.content
+        assert "private DescriptorProtos()" in outer_file.content
+        assert "public static enum Status" in outer_file.content
+        assert "public static class User" in outer_file.content
+        assert "public static class Order" in outer_file.content
+
+    def test_outer_classname_registration_uses_prefix(self):
+        """Test that registration uses outer class as prefix."""
+        source = '''
+        package myapp;
+        option java_outer_classname = "DescriptorProtos";
+
+        message User {
+            string name = 1;
+        }
+        '''
+        lexer = Lexer(source)
+        parser = Parser(lexer.tokenize())
+        schema = parser.parse()
+
+        options = GeneratorOptions(output_dir=Path("/tmp"))
+        generator = JavaGenerator(schema, options)
+
+        files = generator.generate()
+
+        registration_file = next(f for f in files if "Registration" in f.path)
+
+        # Should reference types with outer class prefix
+        assert "DescriptorProtos.User.class" in registration_file.content
+
+    def test_outer_classname_with_nested_types(self):
+        """Test java_outer_classname with nested types."""
+        source = '''
+        package myapp;
+        option java_outer_classname = "Protos";
+
+        message Container {
+            message Inner {
+                string value = 1;
+            }
+            Inner item = 1;
+        }
+        '''
+        lexer = Lexer(source)
+        parser = Parser(lexer.tokenize())
+        schema = parser.parse()
+
+        options = GeneratorOptions(output_dir=Path("/tmp"))
+        generator = JavaGenerator(schema, options)
+
+        files = generator.generate()
+
+        outer_file = next(f for f in files if "Protos.java" in f.path)
+
+        # Should have nested types inside the outer class
+        assert "public static class Container" in outer_file.content
+        assert "public static class Inner" in outer_file.content
+
+    def test_outer_classname_with_java_package(self):
+        """Test java_outer_classname combined with java_package."""
+        source = '''
+        package myapp;
+        option java_package = "com.example.proto";
+        option java_outer_classname = "MyProtos";
+
+        message User {
+            string name = 1;
+        }
+        '''
+        lexer = Lexer(source)
+        parser = Parser(lexer.tokenize())
+        schema = parser.parse()
+
+        options = GeneratorOptions(output_dir=Path("/tmp"))
+        generator = JavaGenerator(schema, options)
+
+        files = generator.generate()
+
+        outer_file = next(f for f in files if "MyProtos.java" in f.path)
+
+        # Should use java_package for file path and package declaration
+        assert "com/example/proto/MyProtos.java" == outer_file.path
+        assert "package com.example.proto;" in outer_file.content
+        assert "public final class MyProtos" in outer_file.content
+
+    def test_without_outer_classname_generates_separate_files(self):
+        """Test that without java_outer_classname, separate files are generated."""
+        source = '''
+        package myapp;
+
+        enum Status {
+            UNKNOWN = 0;
+        }
+
+        message User {
+            string name = 1;
+        }
+        '''
+        lexer = Lexer(source)
+        parser = Parser(lexer.tokenize())
+        schema = parser.parse()
+
+        options = GeneratorOptions(output_dir=Path("/tmp"))
+        generator = JavaGenerator(schema, options)
+
+        files = generator.generate()
+
+        # Should generate separate files: Status.java, User.java, Registration.java
+        file_names = [f.path.split("/")[-1] for f in files]
+        assert "Status.java" in file_names
+        assert "User.java" in file_names
+        assert "MyappForyRegistration.java" in file_names
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

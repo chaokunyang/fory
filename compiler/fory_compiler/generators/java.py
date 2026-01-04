@@ -55,6 +55,14 @@ class JavaGenerator(BaseGenerator):
             return java_package
         return self.schema.package
 
+    def get_java_outer_classname(self) -> Optional[str]:
+        """Get the Java outer classname if specified.
+
+        When set, all types are generated as inner classes of this outer class
+        in a single file.
+        """
+        return self.schema.get_option("java_outer_classname")
+
     # Mapping from FDL primitive types to Java types
     PRIMITIVE_MAP = {
         PrimitiveKind.BOOL: "boolean",
@@ -96,16 +104,24 @@ class JavaGenerator(BaseGenerator):
         """Generate Java files for the schema."""
         files = []
 
-        # Generate enum files (top-level only, nested enums go inside message files)
-        for enum in self.schema.enums:
-            files.append(self.generate_enum_file(enum))
+        outer_classname = self.get_java_outer_classname()
+        if outer_classname:
+            # Generate all types in a single outer class file
+            files.append(self.generate_outer_class_file(outer_classname))
+            # Generate registration helper (with outer class prefix)
+            files.append(self.generate_registration_file(outer_classname))
+        else:
+            # Generate separate files for each type
+            # Generate enum files (top-level only, nested enums go inside message files)
+            for enum in self.schema.enums:
+                files.append(self.generate_enum_file(enum))
 
-        # Generate message files (includes nested types as inner classes)
-        for message in self.schema.messages:
-            files.append(self.generate_message_file(message))
+            # Generate message files (includes nested types as inner classes)
+            for message in self.schema.messages:
+                files.append(self.generate_message_file(message))
 
-        # Generate registration helper
-        files.append(self.generate_registration_file())
+            # Generate registration helper
+            files.append(self.generate_registration_file())
 
         return files
 
@@ -224,6 +240,66 @@ class JavaGenerator(BaseGenerator):
             path = f"{path}/{message.name}.java"
         else:
             path = f"{message.name}.java"
+
+        return GeneratedFile(path=path, content="\n".join(lines))
+
+    def generate_outer_class_file(self, outer_classname: str) -> GeneratedFile:
+        """Generate a single Java file with all types as inner classes of an outer class.
+
+        This is used when java_outer_classname option is set.
+        """
+        lines = []
+        imports: Set[str] = set()
+        java_package = self.get_java_package()
+
+        # Collect imports from all types
+        for message in self.schema.messages:
+            self.collect_message_imports(message, imports)
+        for enum in self.schema.enums:
+            pass  # Enums don't need special imports
+
+        # License header
+        lines.append(self.get_license_header())
+        lines.append("")
+
+        # Package
+        if java_package:
+            lines.append(f"package {java_package};")
+            lines.append("")
+
+        # Imports
+        if imports:
+            for imp in sorted(imports):
+                lines.append(f"import {imp};")
+            lines.append("")
+
+        # Outer class declaration
+        lines.append(f"public final class {outer_classname} {{")
+        lines.append("")
+        lines.append(f"    private {outer_classname}() {{")
+        lines.append("        // Prevent instantiation")
+        lines.append("    }")
+        lines.append("")
+
+        # Generate all top-level enums as static inner classes
+        for enum in self.schema.enums:
+            for line in self.generate_nested_enum(enum):
+                lines.append(f"    {line}")
+
+        # Generate all top-level messages as static inner classes
+        for message in self.schema.messages:
+            for line in self.generate_nested_message(message, indent=1):
+                lines.append(f"    {line}")
+
+        lines.append("}")
+        lines.append("")
+
+        # Build file path
+        path = self.get_java_package_path()
+        if path:
+            path = f"{path}/{outer_classname}.java"
+        else:
+            path = f"{outer_classname}.java"
 
         return GeneratedFile(path=path, content="\n".join(lines))
 
@@ -509,8 +585,12 @@ class JavaGenerator(BaseGenerator):
         lines.append("")
         return lines
 
-    def generate_registration_file(self) -> GeneratedFile:
-        """Generate the Fory registration helper class."""
+    def generate_registration_file(self, outer_classname: Optional[str] = None) -> GeneratedFile:
+        """Generate the Fory registration helper class.
+
+        Args:
+            outer_classname: If set, all type references will be prefixed with this outer class.
+        """
         lines = []
         java_package = self.get_java_package()
 
@@ -539,13 +619,16 @@ class JavaGenerator(BaseGenerator):
         lines.append("")
         lines.append("    public static void register(Fory fory) {")
 
+        # When outer_classname is set, all top-level types become inner classes
+        type_prefix = outer_classname if outer_classname else ""
+
         # Register enums (top-level)
         for enum in self.schema.enums:
-            self.generate_enum_registration(lines, enum, "")
+            self.generate_enum_registration(lines, enum, type_prefix)
 
         # Register messages (top-level and nested)
         for message in self.schema.messages:
-            self.generate_message_registration(lines, message, "")
+            self.generate_message_registration(lines, message, type_prefix)
 
         lines.append("    }")
         lines.append("}")

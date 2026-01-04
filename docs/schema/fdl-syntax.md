@@ -136,6 +136,65 @@ message Payment {
 - The import path can be used in other Go code
 - Type registration still uses the FDL package (`payment`) for cross-language compatibility
 
+### Java Outer Classname Option
+
+Generate all types as inner classes of a single outer wrapper class:
+
+```fdl
+package payment;
+option java_outer_classname = "DescriptorProtos";
+
+enum Status {
+    UNKNOWN = 0;
+    ACTIVE = 1;
+}
+
+message Payment {
+    string id = 1;
+    Status status = 2;
+}
+```
+
+**Effect:**
+
+- Generates a single file `DescriptorProtos.java` instead of separate files
+- All enums and messages become `public static` inner classes
+- The outer class is `public final` with a private constructor
+- Useful for grouping related types together
+
+**Generated structure:**
+
+```java
+public final class DescriptorProtos {
+    private DescriptorProtos() {}
+
+    public static enum Status {
+        UNKNOWN,
+        ACTIVE;
+    }
+
+    public static class Payment {
+        private String id;
+        private Status status;
+        // ...
+    }
+}
+```
+
+**Combined with java_package:**
+
+```fdl
+package payment;
+option java_package = "com.example.proto";
+option java_outer_classname = "PaymentProtos";
+
+message Payment {
+    string id = 1;
+}
+```
+
+This generates `com/example/proto/PaymentProtos.java` with all types as inner classes.
+
 ### Multiple Options
 
 Multiple options can be specified:

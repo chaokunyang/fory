@@ -54,6 +54,11 @@ fory compile [OPTIONS] FILES...
 | `--output`, `-o`                      | Output directory                                      | `./generated` |
 | `--package`                           | Override package name from FDL file                   | (from file)   |
 | `-I`, `--proto_path`, `--import_path` | Add directory to import search path (can be repeated) | (none)        |
+| `--java_out=DST_DIR`                  | Generate Java code in DST_DIR                         | (none)        |
+| `--python_out=DST_DIR`                | Generate Python code in DST_DIR                       | (none)        |
+| `--cpp_out=DST_DIR`                   | Generate C++ code in DST_DIR                          | (none)        |
+| `--go_out=DST_DIR`                    | Generate Go code in DST_DIR                           | (none)        |
+| `--rust_out=DST_DIR`                  | Generate Rust code in DST_DIR                         | (none)        |
 
 ### Examples
 
@@ -105,6 +110,24 @@ fory compile src/main.fdl --proto_path=libs/common
 # Mix all styles
 fory compile src/main.fdl -I libs/common,libs/types --proto_path third_party/
 ```
+
+**Language-specific output directories (protoc-style):**
+
+```bash
+# Generate only Java code to a specific directory
+fory compile schema.fdl --java_out=./src/main/java
+
+# Generate multiple languages to different directories
+fory compile schema.fdl --java_out=./java/gen --python_out=./python/src --go_out=./go/gen
+
+# Combine with import paths
+fory compile schema.fdl --java_out=./gen/java -I proto/ -I common/
+```
+
+When using `--{lang}_out` options:
+- Only the specified languages are generated (not all languages)
+- Files are placed directly in the specified directory (not in a `{lang}/` subdirectory)
+- This is compatible with protoc-style workflows
 
 ## Import Path Resolution
 

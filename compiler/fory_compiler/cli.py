@@ -212,6 +212,47 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         help="Add a directory to the import search path. Can be specified multiple times.",
     )
 
+    # Language-specific output directories (protoc-style)
+    compile_parser.add_argument(
+        "--java_out",
+        type=Path,
+        default=None,
+        metavar="DST_DIR",
+        help="Generate Java code in DST_DIR",
+    )
+
+    compile_parser.add_argument(
+        "--python_out",
+        type=Path,
+        default=None,
+        metavar="DST_DIR",
+        help="Generate Python code in DST_DIR",
+    )
+
+    compile_parser.add_argument(
+        "--cpp_out",
+        type=Path,
+        default=None,
+        metavar="DST_DIR",
+        help="Generate C++ code in DST_DIR",
+    )
+
+    compile_parser.add_argument(
+        "--go_out",
+        type=Path,
+        default=None,
+        metavar="DST_DIR",
+        help="Generate Go code in DST_DIR",
+    )
+
+    compile_parser.add_argument(
+        "--rust_out",
+        type=Path,
+        default=None,
+        metavar="DST_DIR",
+        help="Generate Rust code in DST_DIR",
+    )
+
     return parser.parse_args(args)
 
 
@@ -234,12 +275,18 @@ def get_languages(lang_arg: str) -> List[str]:
 
 def compile_file(
     file_path: Path,
-    languages: List[str],
-    output_dir: Path,
+    lang_output_dirs: Dict[str, Path],
     package_override: Optional[str] = None,
     import_paths: Optional[List[Path]] = None,
 ) -> bool:
-    """Compile a single FDL file with import resolution."""
+    """Compile a single FDL file with import resolution.
+
+    Args:
+        file_path: Path to the FDL file
+        lang_output_dirs: Dictionary mapping language name to output directory
+        package_override: Optional package name override
+        import_paths: List of import search paths
+    """
     print(f"Compiling {file_path}...")
 
     # Parse and resolve imports
@@ -267,8 +314,7 @@ def compile_file(
         return False
 
     # Generate code for each language
-    for lang in languages:
-        lang_output = output_dir / lang
+    for lang, lang_output in lang_output_dirs.items():
         options = GeneratorOptions(
             output_dir=lang_output,
             package_override=package_override,
@@ -287,7 +333,44 @@ def compile_file(
 
 def cmd_compile(args: argparse.Namespace) -> int:
     """Handle the compile command."""
-    languages = get_languages(args.lang)
+    # Build language -> output directory mapping
+    # Language-specific --{lang}_out options take precedence
+    lang_specific_outputs = {
+        "java": args.java_out,
+        "python": args.python_out,
+        "cpp": args.cpp_out,
+        "go": args.go_out,
+        "rust": args.rust_out,
+    }
+
+    # Determine which languages to generate
+    lang_output_dirs: Dict[str, Path] = {}
+
+    # First, add languages specified via --{lang}_out (these use direct paths)
+    for lang, out_dir in lang_specific_outputs.items():
+        if out_dir is not None:
+            lang_output_dirs[lang] = out_dir
+
+    # Then, add languages from --lang that don't have specific output dirs
+    # These use output_dir/lang pattern
+    if args.lang != "all" or not lang_output_dirs:
+        # Only use --lang if no language-specific outputs are set, or if --lang is explicit
+        languages_from_arg = get_languages(args.lang)
+        for lang in languages_from_arg:
+            if lang not in lang_output_dirs:
+                lang_output_dirs[lang] = args.output / lang
+
+    if not lang_output_dirs:
+        print("Error: No target languages specified.", file=sys.stderr)
+        print("Use --lang or --{lang}_out options.", file=sys.stderr)
+        return 1
+
+    # Validate that all languages are supported
+    invalid = [l for l in lang_output_dirs.keys() if l not in GENERATORS]
+    if invalid:
+        print(f"Error: Unknown language(s): {', '.join(invalid)}", file=sys.stderr)
+        print(f"Available: {', '.join(GENERATORS.keys())}", file=sys.stderr)
+        return 1
 
     # Resolve and validate import paths (support comma-separated paths)
     import_paths = []
@@ -302,8 +385,9 @@ def cmd_compile(args: argparse.Namespace) -> int:
                 print(f"Warning: Import path is not a directory: {part}", file=sys.stderr)
             import_paths.append(resolved)
 
-    # Create output directory
-    args.output.mkdir(parents=True, exist_ok=True)
+    # Create output directories
+    for out_dir in lang_output_dirs.values():
+        out_dir.mkdir(parents=True, exist_ok=True)
 
     success = True
     for file_path in args.files:
@@ -312,7 +396,7 @@ def cmd_compile(args: argparse.Namespace) -> int:
             success = False
             continue
 
-        if not compile_file(file_path, languages, args.output, args.package, import_paths):
+        if not compile_file(file_path, lang_output_dirs, args.package, import_paths):
             success = False
 
     return 0 if success else 1

@@ -68,6 +68,12 @@ fory compile schema.fdl --lang java,python --output ./generated
 
 # Override package name
 fory compile schema.fdl --package myapp.models --output ./generated
+
+# Language-specific output directories (protoc-style)
+fory compile schema.fdl --java_out=./src/main/java --python_out=./python/src
+
+# Combine with other options
+fory compile schema.fdl --java_out=./gen --go_out=./gen/go -I ./proto
 ```
 
 ### 3. Use Generated Code

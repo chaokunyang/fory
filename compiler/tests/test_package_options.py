@@ -73,6 +73,78 @@ class TestDottedPackageName:
         assert schema.package == "com.example.payment.v1"
 
 
+class TestUnknownOptionWarning:
+    """Tests for unknown option warnings."""
+
+    def test_unknown_option_warns(self):
+        """Test that unknown options produce a warning."""
+        source = '''
+        package myapp;
+        option unknown_option = "value";
+        message User {
+            string name = 1;
+        }
+        '''
+        lexer = Lexer(source)
+        parser = Parser(lexer.tokenize())
+
+        import warnings
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            schema = parser.parse()
+
+            # Should have one warning
+            assert len(w) == 1
+            assert "ignoring unknown option 'unknown_option'" in str(w[0].message)
+
+        # Option should still be stored
+        assert schema.get_option("unknown_option") == "value"
+
+    def test_known_option_no_warning(self):
+        """Test that known options don't produce warnings."""
+        source = '''
+        package myapp;
+        option java_package = "com.example";
+        option go_package = "github.com/example";
+        message User {
+            string name = 1;
+        }
+        '''
+        lexer = Lexer(source)
+        parser = Parser(lexer.tokenize())
+
+        import warnings
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            schema = parser.parse()
+
+            # Should have no warnings
+            assert len(w) == 0
+
+    def test_multiple_unknown_options_warn(self):
+        """Test that multiple unknown options each produce a warning."""
+        source = '''
+        package myapp;
+        option foo = "bar";
+        option baz = 123;
+        message User {
+            string name = 1;
+        }
+        '''
+        lexer = Lexer(source)
+        parser = Parser(lexer.tokenize())
+
+        import warnings
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            schema = parser.parse()
+
+            # Should have two warnings
+            assert len(w) == 2
+            assert "foo" in str(w[0].message)
+            assert "baz" in str(w[1].message)
+
+
 class TestFileOptions:
     """Tests for file-level option parsing."""
 

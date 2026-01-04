@@ -17,9 +17,19 @@
 
 """Recursive descent parser for FDL."""
 
-from typing import List, Optional
+import warnings
+from typing import List, Optional, Set
 
 from fory_compiler.parser.lexer import Lexer, Token, TokenType
+
+# Known file-level options
+KNOWN_FILE_OPTIONS: Set[str] = {
+    "java_package",
+    "java_outer_classname",
+    "java_multiple_files",
+    "go_package",
+    "deprecated",
+}
 from fory_compiler.parser.ast import (
     Schema,
     Message,
@@ -159,9 +169,11 @@ class Parser:
         """Parse a file-level option: option java_package = "com.example";
 
         Returns a tuple of (option_name, option_value).
+        Warns if the option name is not recognized.
         """
-        self.consume(TokenType.OPTION)
-        option_name = self.consume(TokenType.IDENT, "Expected option name").value
+        option_token = self.consume(TokenType.OPTION)
+        name_token = self.consume(TokenType.IDENT, "Expected option name")
+        option_name = name_token.value
         self.consume(TokenType.EQUALS, "Expected '=' after option name")
 
         # Get the option value (can be string, bool, int, or identifier)
@@ -181,6 +193,14 @@ class Parser:
             raise self.error(f"Expected option value, got {self.current().type.name}")
 
         self.consume(TokenType.SEMI, "Expected ';' after option statement")
+
+        # Warn about unknown options
+        if option_name not in KNOWN_FILE_OPTIONS:
+            warnings.warn(
+                f"Line {name_token.line}: ignoring unknown option '{option_name}'",
+                stacklevel=2
+            )
+
         return (option_name, option_value)
 
     def parse_import(self) -> Import:

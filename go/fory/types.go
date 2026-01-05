@@ -126,6 +126,16 @@ const (
 	FLOAT64_ARRAY = 50
 )
 
+// Backward-compatible aliases for internal types
+const (
+	VAR_INT32  = VAR32
+	VAR_INT64  = VAR64
+	SLI_INT64  = H64
+	HALF_FLOAT = FLOAT16
+	FLOAT      = FLOAT32
+	DOUBLE     = FLOAT64
+)
+
 // IsNamespacedType checks whether the given type ID is a namespace type
 func IsNamespacedType(typeID TypeId) bool {
 	switch typeID & 0xFF {

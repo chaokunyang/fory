@@ -123,6 +123,11 @@ export const TypeId = {
   // one dimensional float64 array.
   FLOAT64_ARRAY: 50,
 
+  // Backward-compatible aliases
+  VAR_INT32: 5, // Alias for VAR32
+  VAR_INT64: 7, // Alias for VAR64
+  SLI_INT64: 8, // Alias for H64
+
   // BOUND id remains at 64
   BOUND: 64,
 

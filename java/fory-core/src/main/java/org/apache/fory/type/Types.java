@@ -53,6 +53,11 @@ public class Types {
   /** h64: a 64-bit signed integer which uses fory hybrid encoding. */
   public static final int H64 = 8;
 
+  // Backward-compatible aliases for internal varint/hybrid types
+  public static final int VAR_INT32 = VAR32;
+  public static final int VAR_INT64 = VAR64;
+  public static final int SLI_INT64 = H64;
+
   /** uint8: an 8-bit unsigned integer. */
   public static final int UINT8 = 9;
 

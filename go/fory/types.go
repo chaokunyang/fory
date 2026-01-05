@@ -84,55 +84,46 @@ const (
 	SET = 29
 	// MAP Map a repeated struct logical type
 	MAP = 30
-	// DURATION Measure of elapsed time in either seconds milliseconds microseconds
-	DURATION = 31
-	// TIMESTAMP Exact timestamp encoded with int64 since UNIX epoch
-	TIMESTAMP = 32
-	// LOCAL_DATE a naive date without timezone
-	LOCAL_DATE = 33
-	// DECIMAL Precision- and scale-based decimal type
-	DECIMAL = 34
-	// BINARY Variable-length bytes (no guarantee of UTF8-ness)
-	BINARY = 35
-	// ARRAY a multidimensional array which every sub-array can have different sizes but all have the same type
-	ARRAY = 36
-	// BOOL_ARRAY one dimensional bool array
-	BOOL_ARRAY = 37
-	// INT8_ARRAY one dimensional int8 array
-	INT8_ARRAY = 38
-	// INT16_ARRAY one dimensional int16 array
-	INT16_ARRAY = 39
-	// INT32_ARRAY one dimensional int32 array
-	INT32_ARRAY = 40
-	// INT64_ARRAY one dimensional int64 array
-	INT64_ARRAY = 41
-	// UINT8_ARRAY one dimensional uint8 array
-	UINT8_ARRAY = 42
-	// UINT16_ARRAY one dimensional uint16 array
-	UINT16_ARRAY = 43
-	// UINT32_ARRAY one dimensional uint32 array
-	UINT32_ARRAY = 44
-	// UINT64_ARRAY one dimensional uint64 array
-	UINT64_ARRAY = 45
-	// FLOAT16_ARRAY one dimensional float16 array
-	FLOAT16_ARRAY = 46
-	// FLOAT32_ARRAY one dimensional float32 array
-	FLOAT32_ARRAY = 47
-	// FLOAT64_ARRAY one dimensional float64 array
-	FLOAT64_ARRAY = 48
 	// UNION an union type that can hold different types of values
-	UNION = 49
+	UNION = 31
 	// NONE a null value with no data
-	NONE = 50
-
-	// Deprecated aliases for backward compatibility
-	VAR_INT32  = VAR32
-	VAR_INT64  = VAR64
-	SLI_INT64  = H64
-	HALF_FLOAT = FLOAT16
-	FLOAT      = FLOAT32
-	DOUBLE     = FLOAT64
-	DECIMAL128 = DECIMAL
+	NONE = 32
+	// DURATION Measure of elapsed time in either seconds milliseconds microseconds
+	DURATION = 33
+	// TIMESTAMP Exact timestamp encoded with int64 since UNIX epoch
+	TIMESTAMP = 34
+	// LOCAL_DATE a naive date without timezone
+	LOCAL_DATE = 35
+	// DECIMAL Precision- and scale-based decimal type
+	DECIMAL = 36
+	// BINARY Variable-length bytes (no guarantee of UTF8-ness)
+	BINARY = 37
+	// ARRAY a multidimensional array which every sub-array can have different sizes but all have the same type
+	ARRAY = 38
+	// BOOL_ARRAY one dimensional bool array
+	BOOL_ARRAY = 39
+	// INT8_ARRAY one dimensional int8 array
+	INT8_ARRAY = 40
+	// INT16_ARRAY one dimensional int16 array
+	INT16_ARRAY = 41
+	// INT32_ARRAY one dimensional int32 array
+	INT32_ARRAY = 42
+	// INT64_ARRAY one dimensional int64 array
+	INT64_ARRAY = 43
+	// UINT8_ARRAY one dimensional uint8 array
+	UINT8_ARRAY = 44
+	// UINT16_ARRAY one dimensional uint16 array
+	UINT16_ARRAY = 45
+	// UINT32_ARRAY one dimensional uint32 array
+	UINT32_ARRAY = 46
+	// UINT64_ARRAY one dimensional uint64 array
+	UINT64_ARRAY = 47
+	// FLOAT16_ARRAY one dimensional float16 array
+	FLOAT16_ARRAY = 48
+	// FLOAT32_ARRAY one dimensional float32 array
+	FLOAT32_ARRAY = 49
+	// FLOAT64_ARRAY one dimensional float64 array
+	FLOAT64_ARRAY = 50
 )
 
 // IsNamespacedType checks whether the given type ID is a namespace type

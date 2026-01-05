@@ -85,50 +85,50 @@ enum class TypeId : int32_t {
   SET = 29,
   // a map of key-value pairs.
   MAP = 30,
+  // an union type that can hold different types of values.
+  UNION = 31,
+  // a null value with no data.
+  NONE = 32,
   // an absolute length of time, independent of any calendar/timezone,
   // as a count of nanoseconds.
-  DURATION = 31,
+  DURATION = 33,
   // a point in time, independent of any calendar/timezone, as a count
   // of nanoseconds.
-  TIMESTAMP = 32,
+  TIMESTAMP = 34,
   // a naive date without timezone. The count is days relative to an
   // epoch at UTC midnight on Jan 1, 1970.
-  LOCAL_DATE = 33,
+  LOCAL_DATE = 35,
   // exact decimal value represented as an integer value in two's
   // complement.
-  DECIMAL = 34,
+  DECIMAL = 36,
   // a variable-length array of bytes.
-  BINARY = 35,
+  BINARY = 37,
   // a multidimensional array with varying sub-array sizes but same type.
-  ARRAY = 36,
+  ARRAY = 38,
   // one-dimensional boolean array.
-  BOOL_ARRAY = 37,
+  BOOL_ARRAY = 39,
   // one-dimensional int8 array.
-  INT8_ARRAY = 38,
+  INT8_ARRAY = 40,
   // one-dimensional int16 array.
-  INT16_ARRAY = 39,
+  INT16_ARRAY = 41,
   // one-dimensional int32 array.
-  INT32_ARRAY = 40,
+  INT32_ARRAY = 42,
   // one-dimensional int64 array.
-  INT64_ARRAY = 41,
+  INT64_ARRAY = 43,
   // one-dimensional uint8 array.
-  UINT8_ARRAY = 42,
+  UINT8_ARRAY = 44,
   // one-dimensional uint16 array.
-  UINT16_ARRAY = 43,
+  UINT16_ARRAY = 45,
   // one-dimensional uint32 array.
-  UINT32_ARRAY = 44,
+  UINT32_ARRAY = 46,
   // one-dimensional uint64 array.
-  UINT64_ARRAY = 45,
+  UINT64_ARRAY = 47,
   // one-dimensional float16 array.
-  FLOAT16_ARRAY = 46,
+  FLOAT16_ARRAY = 48,
   // one-dimensional float32 array.
-  FLOAT32_ARRAY = 47,
+  FLOAT32_ARRAY = 49,
   // one-dimensional float64 array.
-  FLOAT64_ARRAY = 48,
-  // an union type that can hold different types of values.
-  UNION = 49,
-  // a null value with no data.
-  NONE = 50,
+  FLOAT64_ARRAY = 50,
   // C++ specific types (not part of xlang spec)
   // 8-bits character.
   CHAR = 64,

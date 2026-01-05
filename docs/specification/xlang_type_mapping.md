@@ -59,26 +59,26 @@ Note:
 | list                    | 28           | List/Collection | list/tuple                        | array          | vector                         | slice            | Vec               |
 | set                     | 29           | Set             | set                               | /              | set                            | fory.Set         | Set               |
 | map                     | 30           | Map             | dict                              | Map            | unordered_map                  | map              | HashMap           |
-| duration                | 31           | Duration        | timedelta                         | Number         | duration                       | Duration         | Duration          |
-| timestamp               | 32           | Instant         | datetime                          | Number         | std::chrono::nanoseconds       | Time             | DateTime          |
-| local_date              | 33           | Date            | datetime                          | Number         | std::chrono::nanoseconds       | Time             | DateTime          |
-| decimal                 | 34           | BigDecimal      | Decimal                           | bigint         | /                              | /                | /                 |
-| binary                  | 35           | byte[]          | bytes                             | /              | `uint8_t[n]/vector<T>`         | `[n]uint8/[]T`   | `Vec<uint8_t>`    |
-| array                   | 36           | array           | np.ndarray                        | /              | /                              | array/slice      | Vec               |
-| bool_array              | 37           | bool[]          | ndarray(np.bool\_)                | /              | `bool[n]`                      | `[n]bool/[]T`    | `Vec<bool>`       |
-| int8_array              | 38           | byte[]          | ndarray(int8)                     | /              | `int8_t[n]/vector<T>`          | `[n]int8/[]T`    | `Vec<i8>`         |
-| int16_array             | 39           | short[]         | ndarray(int16)                    | /              | `int16_t[n]/vector<T>`         | `[n]int16/[]T`   | `Vec<i16>`        |
-| int32_array             | 40           | int[]           | ndarray(int32)                    | /              | `int32_t[n]/vector<T>`         | `[n]int32/[]T`   | `Vec<i32>`        |
-| int64_array             | 41           | long[]          | ndarray(int64)                    | /              | `int64_t[n]/vector<T>`         | `[n]int64/[]T`   | `Vec<i64>`        |
-| uint8_array             | 42           | short[]         | ndarray(uint8)                    | /              | `uint8_t[n]/vector<T>`         | `[n]uint8/[]T`   | `Vec<u8>`         |
-| uint16_array            | 43           | int[]           | ndarray(uint16)                   | /              | `uint16_t[n]/vector<T>`        | `[n]uint16/[]T`  | `Vec<u16>`        |
-| uint32_array            | 44           | long[]          | ndarray(uint32)                   | /              | `uint32_t[n]/vector<T>`        | `[n]uint32/[]T`  | `Vec<u32>`        |
-| uint64_array            | 45           | long[]          | ndarray(uint64)                   | /              | `uint64_t[n]/vector<T>`        | `[n]uint64/[]T`  | `Vec<u64>`        |
-| float16_array           | 46           | float[]         | ndarray(float16)                  | /              | `fory::float16_t[n]/vector<T>` | `[n]float16/[]T` | `Vec<fory::f16>`  |
-| float32_array           | 47           | float[]         | ndarray(float32)                  | /              | `float[n]/vector<T>`           | `[n]float32/[]T` | `Vec<f32>`        |
-| float64_array           | 48           | double[]        | ndarray(float64)                  | /              | `double[n]/vector<T>`          | `[n]float64/[]T` | `Vec<f64>`        |
-| union                   | 49           | Union           | typing.Union                      | /              | `std::variant<Ts...>`          | /                | tagged union enum |
-| none                    | 50           | null            | None                              | null           | `std::monostate`               | nil              | `()`              |
+| union                   | 31           | Union           | typing.Union                      | /              | `std::variant<Ts...>`          | /                | tagged union enum |
+| none                    | 32           | null            | None                              | null           | `std::monostate`               | nil              | `()`              |
+| duration                | 33           | Duration        | timedelta                         | Number         | duration                       | Duration         | Duration          |
+| timestamp               | 34           | Instant         | datetime                          | Number         | std::chrono::nanoseconds       | Time             | DateTime          |
+| local_date              | 35           | Date            | datetime                          | Number         | std::chrono::nanoseconds       | Time             | DateTime          |
+| decimal                 | 36           | BigDecimal      | Decimal                           | bigint         | /                              | /                | /                 |
+| binary                  | 37           | byte[]          | bytes                             | /              | `uint8_t[n]/vector<T>`         | `[n]uint8/[]T`   | `Vec<uint8_t>`    |
+| array                   | 38           | array           | np.ndarray                        | /              | /                              | array/slice      | Vec               |
+| bool_array              | 39           | bool[]          | ndarray(np.bool\_)                | /              | `bool[n]`                      | `[n]bool/[]T`    | `Vec<bool>`       |
+| int8_array              | 40           | byte[]          | ndarray(int8)                     | /              | `int8_t[n]/vector<T>`          | `[n]int8/[]T`    | `Vec<i8>`         |
+| int16_array             | 41           | short[]         | ndarray(int16)                    | /              | `int16_t[n]/vector<T>`         | `[n]int16/[]T`   | `Vec<i16>`        |
+| int32_array             | 42           | int[]           | ndarray(int32)                    | /              | `int32_t[n]/vector<T>`         | `[n]int32/[]T`   | `Vec<i32>`        |
+| int64_array             | 43           | long[]          | ndarray(int64)                    | /              | `int64_t[n]/vector<T>`         | `[n]int64/[]T`   | `Vec<i64>`        |
+| uint8_array             | 44           | short[]         | ndarray(uint8)                    | /              | `uint8_t[n]/vector<T>`         | `[n]uint8/[]T`   | `Vec<u8>`         |
+| uint16_array            | 45           | int[]           | ndarray(uint16)                   | /              | `uint16_t[n]/vector<T>`        | `[n]uint16/[]T`  | `Vec<u16>`        |
+| uint32_array            | 46           | long[]          | ndarray(uint32)                   | /              | `uint32_t[n]/vector<T>`        | `[n]uint32/[]T`  | `Vec<u32>`        |
+| uint64_array            | 47           | long[]          | ndarray(uint64)                   | /              | `uint64_t[n]/vector<T>`        | `[n]uint64/[]T`  | `Vec<u64>`        |
+| float16_array           | 48           | float[]         | ndarray(float16)                  | /              | `fory::float16_t[n]/vector<T>` | `[n]float16/[]T` | `Vec<fory::f16>`  |
+| float32_array           | 49           | float[]         | ndarray(float32)                  | /              | `float[n]/vector<T>`           | `[n]float32/[]T` | `Vec<f32>`        |
+| float64_array           | 50           | double[]        | ndarray(float64)                  | /              | `double[n]/vector<T>`          | `[n]float64/[]T` | `Vec<f64>`        |
 
 ## Type info(not implemented currently)
 

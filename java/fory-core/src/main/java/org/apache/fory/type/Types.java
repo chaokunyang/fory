@@ -126,102 +126,80 @@ public class Types {
    */
   public static final int MAP = 30;
 
+  /** A tagged union type that can hold one of several alternative types. */
+  public static final int UNION = 31;
+
+  /** Represents an empty/unit value with no data (e.g., for empty union alternatives). */
+  public static final int NONE = 32;
+
   /**
    * An absolute length of time, independent of any calendar/timezone, as a count of nanoseconds.
    */
-  public static final int DURATION = 31;
+  public static final int DURATION = 33;
 
   /**
    * A point in time, independent of any calendar/timezone, as a count of nanoseconds. The count is
    * relative to an epoch at UTC midnight on January 1, 1970.
    */
-  public static final int TIMESTAMP = 32;
+  public static final int TIMESTAMP = 34;
 
   /**
    * A naive date without timezone. The count is days relative to an epoch at UTC midnight on Jan 1,
    * 1970.
    */
-  public static final int LOCAL_DATE = 33;
+  public static final int LOCAL_DATE = 35;
 
   /** Exact decimal value represented as an integer value in two's complement. */
-  public static final int DECIMAL = 34;
+  public static final int DECIMAL = 36;
 
   /** A variable-length array of bytes. */
-  public static final int BINARY = 35;
+  public static final int BINARY = 37;
 
   /**
    * A multidimensional array where every sub-array can have different sizes but all have the same
    * type. Only numeric components allowed. Other arrays will be taken as List. The implementation
    * should support interoperability between array and list.
    */
-  public static final int ARRAY = 36;
+  public static final int ARRAY = 38;
 
   /** One dimensional bool array. */
-  public static final int BOOL_ARRAY = 37;
+  public static final int BOOL_ARRAY = 39;
 
   /** One dimensional int8 array. */
-  public static final int INT8_ARRAY = 38;
+  public static final int INT8_ARRAY = 40;
 
   /** One dimensional int16 array. */
-  public static final int INT16_ARRAY = 39;
+  public static final int INT16_ARRAY = 41;
 
   /** One dimensional int32 array. */
-  public static final int INT32_ARRAY = 40;
+  public static final int INT32_ARRAY = 42;
 
   /** One dimensional int64 array. */
-  public static final int INT64_ARRAY = 41;
+  public static final int INT64_ARRAY = 43;
 
   /** One dimensional uint8 array. */
-  public static final int UINT8_ARRAY = 42;
+  public static final int UINT8_ARRAY = 44;
 
   /** One dimensional uint16 array. */
-  public static final int UINT16_ARRAY = 43;
+  public static final int UINT16_ARRAY = 45;
 
   /** One dimensional uint32 array. */
-  public static final int UINT32_ARRAY = 44;
+  public static final int UINT32_ARRAY = 46;
 
   /** One dimensional uint64 array. */
-  public static final int UINT64_ARRAY = 45;
+  public static final int UINT64_ARRAY = 47;
 
   /** One dimensional float16 array. */
-  public static final int FLOAT16_ARRAY = 46;
+  public static final int FLOAT16_ARRAY = 48;
 
   /** One dimensional float32 array. */
-  public static final int FLOAT32_ARRAY = 47;
+  public static final int FLOAT32_ARRAY = 49;
 
   /** One dimensional float64 array. */
-  public static final int FLOAT64_ARRAY = 48;
-
-  /** A tagged union type that can hold one of several alternative types. */
-  public static final int UNION = 49;
-
-  /** Represents an empty/unit value with no data (e.g., for empty union alternatives). */
-  public static final int NONE = 50;
+  public static final int FLOAT64_ARRAY = 50;
 
   /** Bound value for range checks (types with id >= BOUND are not internal types). */
   public static final int BOUND = 64;
-
-  // Deprecated aliases for backward compatibility
-  /**
-   * Deprecated alias for VAR32.
-   *
-   * @deprecated Use {@link #VAR32} instead
-   */
-  @Deprecated public static final int VAR_INT32 = VAR32;
-
-  /**
-   * Deprecated alias for VAR64.
-   *
-   * @deprecated Use {@link #VAR64} instead
-   */
-  @Deprecated public static final int VAR_INT64 = VAR64;
-
-  /**
-   * Deprecated alias for H64.
-   *
-   * @deprecated Use {@link #H64} instead
-   */
-  @Deprecated public static final int SLI_INT64 = H64;
 
   // Helper methods
   public static boolean isNamedType(int value) {

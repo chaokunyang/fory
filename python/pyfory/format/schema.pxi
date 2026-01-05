@@ -63,11 +63,13 @@ class TypeId:
     LIST = 28
     SET = 29
     MAP = 30
-    DURATION = 31
-    TIMESTAMP = 32
-    LOCAL_DATE = 33
-    DECIMAL = 34
-    BINARY = 35
+    UNION = 31
+    NONE = 32
+    DURATION = 33
+    TIMESTAMP = 34
+    LOCAL_DATE = 35
+    DECIMAL = 36
+    BINARY = 37
 
 
 cdef class DataType:

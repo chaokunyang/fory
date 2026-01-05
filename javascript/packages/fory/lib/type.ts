@@ -31,80 +31,97 @@ export const TypeId = {
   // a 32-bit signed integer.
   INT32: 4,
   // a 32-bit signed integer which uses fory var_int32 encoding.
-  VAR_INT32: 5,
+  VAR32: 5,
   // a 64-bit signed integer.
   INT64: 6,
   // a 64-bit signed integer which uses fory PVL encoding.
-  VAR_INT64: 7,
-  // a 64-bit signed integer which uses fory SLI encoding.
-  SLI_INT64: 8,
+  VAR64: 7,
+  // a 64-bit signed integer which uses fory hybrid encoding.
+  H64: 8,
+  // an 8-bit unsigned integer.
+  UINT8: 9,
+  // a 16-bit unsigned integer.
+  UINT16: 10,
+  // a 32-bit unsigned integer.
+  UINT32: 11,
+  // a 32-bit unsigned integer which uses fory var_uint32 encoding.
+  VARU32: 12,
+  // a 64-bit unsigned integer.
+  UINT64: 13,
+  // a 64-bit unsigned integer which uses fory var_uint64 encoding.
+  VARU64: 14,
+  // a 64-bit unsigned integer which uses fory hybrid encoding.
+  HU64: 15,
   // a 16-bit floating point number.
-  FLOAT16: 9,
+  FLOAT16: 16,
   // a 32-bit floating point number.
-  FLOAT32: 10,
+  FLOAT32: 17,
   // a 64-bit floating point number including NaN and Infinity.
-  FLOAT64: 11,
+  FLOAT64: 18,
   // a text string encoded using Latin1/UTF16/UTF-8 encoding.
-  STRING: 12,
-  // a data type consisting of a set of named values. Rust enum with non-predefined field values are not supported as
-  // an enum.
-  ENUM: 13,
+  STRING: 19,
+  // a data type consisting of a set of named values.
+  ENUM: 20,
   // an enum whose value will be serialized as the registered name.
-  NAMED_ENUM: 14,
-  // a morphic(final) type serialized by Fory Struct serializer. i.e., it doesn't have subclasses. Suppose we're
-  // deserializing `List[SomeClass]`, we can save dynamic serializer dispatch since `SomeClass` is morphic(final).
-  STRUCT: 15,
+  NAMED_ENUM: 21,
+  // a morphic(final) type serialized by Fory Struct serializer.
+  STRUCT: 22,
   // a morphic(final) type serialized by Fory compatible Struct serializer.
-  COMPATIBLE_STRUCT: 16,
+  COMPATIBLE_STRUCT: 23,
   // a `struct` whose type mapping will be encoded as a name.
-  NAMED_STRUCT: 17,
+  NAMED_STRUCT: 24,
   // a `compatible_struct` whose type mapping will be encoded as a name.
-  NAMED_COMPATIBLE_STRUCT: 18,
+  NAMED_COMPATIBLE_STRUCT: 25,
   // a type which will be serialized by a customized serializer.
-  EXT: 19,
+  EXT: 26,
   // an `ext` type whose type mapping will be encoded as a name.
-  NAMED_EXT: 20,
+  NAMED_EXT: 27,
   // a sequence of objects.
-  LIST: 21,
+  LIST: 28,
   // an unordered set of unique elements.
-  SET: 22,
-  // a map of key-value pairs. Mutable types such as `list/map/set/array/tensor/arrow` are not allowed as key of map.
-  MAP: 23,
+  SET: 29,
+  // a map of key-value pairs.
+  MAP: 30,
+  // a tagged union type that can hold one of several alternative types.
+  UNION: 31,
+  // represents an empty/unit value with no data.
+  NONE: 32,
   // an absolute length of time, independent of any calendar/timezone, as a count of nanoseconds.
-  DURATION: 24,
-  // a point in time, independent of any calendar/timezone, as a count of nanoseconds. The count is relative
-  // to an epoch at UTC midnight on January 1, 1970.
-  TIMESTAMP: 25,
-  // a naive date without timezone. The count is days relative to an epoch at UTC midnight on Jan 1, 1970.
-  LOCAL_DATE: 26,
+  DURATION: 33,
+  // a point in time, independent of any calendar/timezone, as a count of nanoseconds.
+  TIMESTAMP: 34,
+  // a naive date without timezone.
+  LOCAL_DATE: 35,
   // exact decimal value represented as an integer value in two's complement.
-  DECIMAL: 27,
+  DECIMAL: 36,
   // a variable-length array of bytes.
-  BINARY: 28,
+  BINARY: 37,
   // a multidimensional array which every sub-array can have different sizes but all have the same type.
-  // only allow numeric components. Other arrays will be taken as List. The implementation should support the
-  // interoperability between array and list.
-  ARRAY: 29,
+  ARRAY: 38,
   // one dimensional bool array.
-  BOOL_ARRAY: 30,
+  BOOL_ARRAY: 39,
   // one dimensional int8 array.
-  INT8_ARRAY: 31,
+  INT8_ARRAY: 40,
   // one dimensional int16 array.
-  INT16_ARRAY: 32,
+  INT16_ARRAY: 41,
   // one dimensional int32 array.
-  INT32_ARRAY: 33,
+  INT32_ARRAY: 42,
   // one dimensional int64 array.
-  INT64_ARRAY: 34,
-  // one dimensional half_float_16 array.
-  FLOAT16_ARRAY: 35,
+  INT64_ARRAY: 43,
+  // one dimensional uint8 array.
+  UINT8_ARRAY: 44,
+  // one dimensional uint16 array.
+  UINT16_ARRAY: 45,
+  // one dimensional uint32 array.
+  UINT32_ARRAY: 46,
+  // one dimensional uint64 array.
+  UINT64_ARRAY: 47,
+  // one dimensional float16 array.
+  FLOAT16_ARRAY: 48,
   // one dimensional float32 array.
-  FLOAT32_ARRAY: 36,
+  FLOAT32_ARRAY: 49,
   // one dimensional float64 array.
-  FLOAT64_ARRAY: 37,
-  // an arrow [record batch](https://arrow.apache.org/docs/cpp/tables.html#record-batches) object.
-  ARROW_RECORD_BATCH: 38,
-  // an arrow [table](https://arrow.apache.org/docs/cpp/tables.html#tables) object.
-  ARROW_TABLE: 39,
+  FLOAT64_ARRAY: 50,
 
   // BOUND id remains at 64
   BOUND: 64,

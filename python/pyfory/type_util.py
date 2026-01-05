@@ -42,7 +42,7 @@ def record_class_factory(cls_name, field_names):
     >>> rex
     Dog(name='Rex', weight=32, owner='Bob')
     >>> Dog.__mro__
-    (<class '_util.Dog'>, <class 'object'>)
+    (<class 'utils.Dog'>, <class 'object'>)
 
     The factory also accepts a list or tuple of identifiers:
 

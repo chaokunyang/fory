@@ -19,7 +19,7 @@ import enum
 import typing
 from typing import List
 from pyfory.types import TypeId, is_primitive_type, is_polymorphic_type
-from pyfory._util import Buffer
+from pyfory.buffer import Buffer
 from pyfory.type_util import infer_field
 from pyfory.meta.metastring import Encoding
 from pyfory.type_util import infer_field_types

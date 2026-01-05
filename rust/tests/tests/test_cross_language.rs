@@ -74,7 +74,7 @@ fn test_buffer() {
     let data_file_path = get_data_file();
     let bytes = fs::read(&data_file_path).unwrap();
     let mut reader = Reader::new(bytes.as_slice());
-    assert_eq!(reader.read_u8().unwrap(), 1);
+    assert!(reader.read_bool().unwrap());
     assert_eq!(reader.read_i8().unwrap(), i8::MAX);
     assert_eq!(reader.read_i16().unwrap(), i16::MAX);
     assert_eq!(reader.read_i32().unwrap(), i32::MAX);
@@ -88,7 +88,7 @@ fn test_buffer() {
 
     let mut buffer = vec![];
     let mut writer = Writer::from_buffer(&mut buffer);
-    writer.write_u8(1);
+    writer.write_bool(true);
     writer.write_i8(i8::MAX);
     writer.write_i16(i16::MAX);
     writer.write_i32(i32::MAX);

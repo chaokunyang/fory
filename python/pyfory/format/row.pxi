@@ -23,7 +23,7 @@ from pyfory.includes.libformat cimport (
     CGetter, CArrayData, CMapData, CRow, CTypeId,
     CSchema, CListType, CMapType, fory_schema
 )
-from pyfory._util cimport Buffer
+from pyfory.buffer cimport Buffer
 from libcpp.memory cimport shared_ptr
 from libcpp.vector cimport vector
 from datetime import datetime, date

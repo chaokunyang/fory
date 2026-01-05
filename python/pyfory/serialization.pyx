@@ -27,7 +27,7 @@ import time
 import warnings
 from typing import TypeVar, Union, Iterable
 
-from pyfory._util import get_bit, set_bit, clear_bit
+from pyfory.buffer import get_bit, set_bit, clear_bit
 from pyfory import _fory as fmod
 from pyfory._fory import Language
 from pyfory._fory import _ENABLE_TYPE_REGISTRATION_FORCIBLY
@@ -50,7 +50,7 @@ from cpython.tuple cimport PyTuple_New, PyTuple_SET_ITEM
 from libcpp cimport bool as c_bool
 from libcpp.utility cimport pair
 from cython.operator cimport dereference as deref
-from pyfory._util cimport Buffer
+from pyfory.buffer cimport Buffer
 from pyfory.includes.libabsl cimport flat_hash_map
 from pyfory.meta.metastring import MetaStringDecoder
 

@@ -450,7 +450,7 @@ Code structure:
 - `python/pyfory/includes`: Cython headers for `c++` functions and classes.
 - `python/pyfory/resolver.py`: resolving shared/circular references when ref tracking is enabled in pure python mode
 - `python/pyfory/format`: Fory row format encoding and decoding, arrow columnar format interoperation
-- `python/pyfory/_util.pyx`: Buffer for reading/writing data, string utilities. Used by `serialization.pyx` and `python/pyfory/format` at the same time.
+- `python/pyfory/buffer.pyx`: Buffer for reading/writing data, string utilities. Used by `serialization.pyx` and `python/pyfory/format` at the same time.
 
 #### Go
 

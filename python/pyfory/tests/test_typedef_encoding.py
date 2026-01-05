@@ -21,7 +21,7 @@ Tests for xlang TypeDef implementation.
 
 from dataclasses import dataclass
 from typing import List, Dict
-from pyfory._util import Buffer
+from pyfory.buffer import Buffer
 from pyfory.meta.typedef import (
     TypeDef,
     FieldInfo,

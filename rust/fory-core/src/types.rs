@@ -531,8 +531,8 @@ pub const MAGIC_NUMBER: u16 = 0x62d4;
 /// // Internal type (e.g., BOOL = 1)
 /// assert_eq!(format_type_id(1), "BOOL");
 ///
-/// // User registered struct with id=3: (3 << 8) + 22 = 790
-/// assert_eq!(format_type_id(790), "registered_id=3(STRUCT)");
+/// // User registered struct with id=3: (3 << 8) + 25 = 793
+/// assert_eq!(format_type_id(793), "registered_id=3(STRUCT)");
 /// ```
 pub fn format_type_id(type_id: u32) -> String {
     let internal_type_id = type_id & 0xff;

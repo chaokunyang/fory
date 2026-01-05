@@ -43,7 +43,14 @@ This specification defines the Fory xlang binary format. The format is dynamic r
 - var32: a 32-bit signed integer which use fory variable-length encoding.
 - int64: a 64-bit signed integer.
 - var64: a 64-bit signed integer which use fory PVL encoding.
-- h64: a 64-bit signed integer which use fory Hybrid encoding.
+- hybrid64: a 64-bit signed integer which use fory Hybrid encoding.
+- uint8: an 8-bit unsigned integer.
+- uint16: a 16-bit unsigned integer.
+- uint32: a 32-bit unsigned integer.
+- varu32: a 32-bit unsigned integer which use fory variable-length encoding.
+- uint64: a 64-bit unsigned integer.
+- varu64: a 64-bit unsigned integer which use fory PVL encoding.
+- hybridu64: a 64-bit unsigned integer which use fory Hybrid encoding.
 - float16: a 16-bit floating point number.
 - float32: a 32-bit floating point number.
 - float64: a 64-bit floating point number including NaN and Infinity.
@@ -82,7 +89,7 @@ This specification defines the Fory xlang binary format. The format is dynamic r
 
 Note:
 
-- Unsigned int/long are not added here, since not every language support those types.
+- Unsigned integer types use the same byte sizes as their signed counterparts; the difference is in value interpretation. See [Type mapping](xlang_type_mapping.md) for language-specific type mappings.
 
 ### Polymorphisms
 

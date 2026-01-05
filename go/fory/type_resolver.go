@@ -347,8 +347,8 @@ func (r *TypeResolver) initialize() {
 		{int32Type, INT32, int32Serializer{}},
 		{int64Type, INT64, int64Serializer{}},
 		{intType, INT64, intSerializer{}}, // int maps to int64 for xlang
-		{float32Type, FLOAT, float32Serializer{}},
-		{float64Type, DOUBLE, float64Serializer{}},
+		{float32Type, FLOAT32, float32Serializer{}},
+		{float64Type, FLOAT64, float64Serializer{}},
 		{dateType, LOCAL_DATE, dateSerializer{}},
 		{timestampType, TIMESTAMP, timeSerializer{}},
 		{genericSetType, SET, setSerializer{}},
@@ -1810,7 +1810,7 @@ func (r *TypeResolver) ReadTypeInfo(buffer *ByteBuffer, err *Error) *TypeInfo {
 			Serializer: r.typeToSerializers[reflect.TypeOf(uint16(0))],
 			StaticId:   ConcreteTypeInt16, // Use Int16 static ID for uint16
 		}
-	case INT32, VAR_INT32:
+	case INT32, VAR32:
 		return &TypeInfo{
 			Type:       reflect.TypeOf(int32(0)),
 			TypeID:     typeID,
@@ -1824,7 +1824,7 @@ func (r *TypeResolver) ReadTypeInfo(buffer *ByteBuffer, err *Error) *TypeInfo {
 			Serializer: r.typeToSerializers[reflect.TypeOf(uint32(0))],
 			StaticId:   ConcreteTypeInt32, // Use Int32 static ID for uint32
 		}
-	case INT64, VAR_INT64, SLI_INT64:
+	case INT64, VAR64, H64:
 		return &TypeInfo{
 			Type:       reflect.TypeOf(int64(0)),
 			TypeID:     typeID,
@@ -1838,14 +1838,14 @@ func (r *TypeResolver) ReadTypeInfo(buffer *ByteBuffer, err *Error) *TypeInfo {
 			Serializer: r.typeToSerializers[reflect.TypeOf(uint64(0))],
 			StaticId:   ConcreteTypeInt64, // Use Int64 static ID for uint64
 		}
-	case FLOAT:
+	case FLOAT32:
 		return &TypeInfo{
 			Type:       reflect.TypeOf(float32(0)),
 			TypeID:     typeID,
 			Serializer: r.typeToSerializers[reflect.TypeOf(float32(0))],
 			StaticId:   ConcreteTypeFloat32,
 		}
-	case DOUBLE:
+	case FLOAT64:
 		return &TypeInfo{
 			Type:       reflect.TypeOf(float64(0)),
 			TypeID:     typeID,
@@ -1953,13 +1953,13 @@ func (r *TypeResolver) readTypeInfoWithTypeID(buffer *ByteBuffer, typeID uint32,
 		return &TypeInfo{Type: int8Type, TypeID: typeID, Serializer: r.typeToSerializers[int8Type], StaticId: ConcreteTypeInt8}
 	case INT16:
 		return &TypeInfo{Type: int16Type, TypeID: typeID, Serializer: r.typeToSerializers[int16Type], StaticId: ConcreteTypeInt16}
-	case INT32, VAR_INT32:
+	case INT32, VAR32:
 		return &TypeInfo{Type: int32Type, TypeID: typeID, Serializer: r.typeToSerializers[int32Type], StaticId: ConcreteTypeInt32}
-	case INT64, VAR_INT64, SLI_INT64:
+	case INT64, VAR64, H64:
 		return &TypeInfo{Type: int64Type, TypeID: typeID, Serializer: r.typeToSerializers[int64Type], StaticId: ConcreteTypeInt64}
-	case FLOAT:
+	case FLOAT32:
 		return &TypeInfo{Type: float32Type, TypeID: typeID, Serializer: r.typeToSerializers[float32Type], StaticId: ConcreteTypeFloat32}
-	case DOUBLE:
+	case FLOAT64:
 		return &TypeInfo{Type: float64Type, TypeID: typeID, Serializer: r.typeToSerializers[float64Type], StaticId: ConcreteTypeFloat64}
 	case STRING:
 		return &TypeInfo{Type: stringType, TypeID: typeID, Serializer: r.typeToSerializers[stringType], StaticId: ConcreteTypeString}

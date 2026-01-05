@@ -352,7 +352,7 @@ func (s float32Serializer) Write(ctx *WriteContext, refMode RefMode, writeType b
 		ctx.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeType {
-		ctx.buffer.WriteVaruint32Small7(uint32(FLOAT))
+		ctx.buffer.WriteVaruint32Small7(uint32(FLOAT32))
 	}
 	s.WriteData(ctx, value)
 }
@@ -396,7 +396,7 @@ func (s float64Serializer) Write(ctx *WriteContext, refMode RefMode, writeType b
 		ctx.buffer.WriteInt8(NotNullValueFlag)
 	}
 	if writeType {
-		ctx.buffer.WriteVaruint32Small7(uint32(DOUBLE))
+		ctx.buffer.WriteVaruint32Small7(uint32(FLOAT64))
 	}
 	s.WriteData(ctx, value)
 }

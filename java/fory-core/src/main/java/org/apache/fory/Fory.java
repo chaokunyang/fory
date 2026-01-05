@@ -580,12 +580,12 @@ public final class Fory implements BaseFory {
         buffer.writeInt16((Short) obj);
         break;
       case Types.INT32:
-      case Types.VAR_INT32:
+      case Types.VAR32:
         buffer.writeVarInt32((Integer) obj);
         break;
       case Types.INT64:
-      case Types.VAR_INT64:
-      case Types.SLI_INT64:
+      case Types.VAR64:
+      case Types.H64:
         buffer.writeVarInt64((Long) obj);
         break;
       case Types.FLOAT32:
@@ -1110,13 +1110,13 @@ public final class Fory implements BaseFory {
       case Types.INT16:
         return buffer.readInt16();
       case Types.INT32:
-      case Types.VAR_INT32:
+      case Types.VAR32:
         // TODO(chaokunyang) support other encoding
         return buffer.readVarInt32();
       case Types.INT64:
-      case Types.VAR_INT64:
+      case Types.VAR64:
         // TODO(chaokunyang) support other encoding
-      case Types.SLI_INT64:
+      case Types.H64:
         return buffer.readVarInt64();
       case Types.FLOAT32:
         return buffer.readFloat32();

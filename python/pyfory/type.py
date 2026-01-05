@@ -253,11 +253,6 @@ class TypeId:
     # Bound value for range checks (types with id >= BOUND are not internal types).
     BOUND = 64
 
-    # Deprecated aliases for backward compatibility
-    VAR_INT32 = VAR32
-    VAR_INT64 = VAR64
-    SLI_INT64 = H64
-
     @staticmethod
     def is_namespaced_type(type_id: int) -> bool:
         return type_id in __NAMESPACED_TYPES__

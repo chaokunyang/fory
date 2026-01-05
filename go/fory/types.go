@@ -126,16 +126,6 @@ const (
 	FLOAT64_ARRAY = 50
 )
 
-// Backward-compatible aliases for internal types
-const (
-	VAR_INT32  = VAR32
-	VAR_INT64  = VAR64
-	SLI_INT64  = H64
-	HALF_FLOAT = FLOAT16
-	FLOAT      = FLOAT32
-	DOUBLE     = FLOAT64
-)
-
 // IsNamespacedType checks whether the given type ID is a namespace type
 func IsNamespacedType(typeID TypeId) bool {
 	switch typeID & 0xFF {
@@ -165,8 +155,8 @@ func isPrimitiveType(typeID int16) bool {
 		INT16,
 		INT32,
 		INT64,
-		FLOAT,
-		DOUBLE:
+		FLOAT32,
+		FLOAT64:
 		return true
 	default:
 		return false
@@ -178,8 +168,8 @@ func isPrimitiveType(typeID int16) bool {
 // Collections, structs, and other complex types need reference tracking.
 func NeedWriteRef(typeID TypeId) bool {
 	switch typeID {
-	case BOOL, INT8, INT16, INT32, INT64, VAR_INT32, VAR_INT64, SLI_INT64,
-		FLOAT, DOUBLE, HALF_FLOAT,
+	case BOOL, INT8, INT16, INT32, INT64, VAR32, VAR64, H64,
+		FLOAT32, FLOAT64, FLOAT16,
 		STRING, TIMESTAMP, LOCAL_DATE, DURATION:
 		return false
 	default:
@@ -219,15 +209,15 @@ func isPrimitiveArrayType(typeID int16) bool {
 }
 
 var primitiveTypeSizes = map[int16]int{
-	BOOL:      1,
-	INT8:      1,
-	INT16:     2,
-	INT32:     4,
-	VAR_INT32: 4,
-	INT64:     8,
-	VAR_INT64: 8,
-	FLOAT:     4,
-	DOUBLE:    8,
+	BOOL:    1,
+	INT8:    1,
+	INT16:   2,
+	INT32:   4,
+	VAR32:   4,
+	INT64:   8,
+	VAR64:   8,
+	FLOAT32: 4,
+	FLOAT64: 8,
 }
 
 func getPrimitiveTypeSize(typeID int16) int {
@@ -380,9 +370,9 @@ func GetConcreteTypeIdAndTypeId(t reflect.Type) (StaticTypeId, TypeId) {
 	case reflect.Int64:
 		return ConcreteTypeInt64, INT64
 	case reflect.Float32:
-		return ConcreteTypeFloat32, FLOAT
+		return ConcreteTypeFloat32, FLOAT32
 	case reflect.Float64:
-		return ConcreteTypeFloat64, DOUBLE
+		return ConcreteTypeFloat64, FLOAT64
 	case reflect.String:
 		return ConcreteTypeString, STRING
 	default:
@@ -393,7 +383,7 @@ func GetConcreteTypeIdAndTypeId(t reflect.Type) (StaticTypeId, TypeId) {
 // IsPrimitiveTypeId checks if a type ID is a primitive type
 func IsPrimitiveTypeId(typeId TypeId) bool {
 	switch typeId {
-	case BOOL, INT8, INT16, INT32, INT64, FLOAT, DOUBLE, STRING:
+	case BOOL, INT8, INT16, INT32, INT64, FLOAT32, FLOAT64, STRING:
 		return true
 	default:
 		return false

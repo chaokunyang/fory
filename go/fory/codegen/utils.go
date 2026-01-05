@@ -251,9 +251,9 @@ func getTypeIDValue(typeID string) int {
 	case "UINT64":
 		return int(fory.UINT64) // 103
 	case "FLOAT32":
-		return int(fory.FLOAT) // 10
+		return int(fory.FLOAT32)
 	case "FLOAT64":
-		return int(fory.DOUBLE) // 11
+		return int(fory.FLOAT64)
 	case "STRING":
 		return int(fory.STRING) // 12
 	case "TIMESTAMP":
@@ -293,11 +293,11 @@ func sortFields(fields []*FieldInfo) {
 			// When same size, sort by type id
 			// When same size and type id, sort by snake case field name
 
-			// Handle compression types (INT32/INT64/VAR_INT32/VAR_INT64)
+			// Handle compression types (INT32/INT64/VAR32/VAR64)
 			compressI := f1.TypeID == "INT32" || f1.TypeID == "INT64" ||
-				f1.TypeID == "VAR_INT32" || f1.TypeID == "VAR_INT64"
+				f1.TypeID == "VAR32" || f1.TypeID == "VAR64"
 			compressJ := f2.TypeID == "INT32" || f2.TypeID == "INT64" ||
-				f2.TypeID == "VAR_INT32" || f2.TypeID == "VAR_INT64"
+				f2.TypeID == "VAR32" || f2.TypeID == "VAR64"
 
 			if compressI != compressJ {
 				return !compressI && compressJ // non-compress comes first

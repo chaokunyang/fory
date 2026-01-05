@@ -123,11 +123,6 @@ export const TypeId = {
   // one dimensional float64 array.
   FLOAT64_ARRAY: 50,
 
-  // Backward-compatible aliases
-  VAR_INT32: 5, // Alias for VAR32
-  VAR_INT64: 7, // Alias for VAR64
-  SLI_INT64: 8, // Alias for H64
-
   // BOUND id remains at 64
   BOUND: 64,
 
@@ -143,10 +138,10 @@ export enum InternalSerializerType {
   INT8,
   INT16,
   INT32,
-  VAR_INT32,
+  VAR32,
   INT64,
-  VAR_INT64,
-  SLI_INT64,
+  VAR64,
+  H64,
   FLOAT16,
   FLOAT32,
   FLOAT64,

@@ -245,9 +245,9 @@ func generateElementTypeIDWrite(buf *bytes.Buffer, elemType types.Type) error {
 		case types.Uint, types.Uint64:
 			fmt.Fprintf(buf, "\t\tbuf.WriteVaruint32(%d) // UINT64\n", fory.UINT64)
 		case types.Float32:
-			fmt.Fprintf(buf, "\t\tbuf.WriteVaruint32(%d) // FLOAT\n", fory.FLOAT)
+			fmt.Fprintf(buf, "\t\tbuf.WriteVaruint32(%d) // FLOAT32\n", fory.FLOAT32)
 		case types.Float64:
-			fmt.Fprintf(buf, "\t\tbuf.WriteVaruint32(%d) // DOUBLE\n", fory.DOUBLE)
+			fmt.Fprintf(buf, "\t\tbuf.WriteVaruint32(%d) // FLOAT64\n", fory.FLOAT64)
 		case types.String:
 			fmt.Fprintf(buf, "\t\tbuf.WriteVaruint32(%d) // STRING\n", fory.STRING)
 		default:
@@ -735,9 +735,9 @@ func generateElementTypeIDWriteInline(buf *bytes.Buffer, elemType types.Type) er
 		case types.Uint, types.Uint64:
 			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVaruint32(%d) // UINT64\n", fory.UINT64)
 		case types.Float32:
-			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVaruint32(%d) // FLOAT\n", fory.FLOAT)
+			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVaruint32(%d) // FLOAT32\n", fory.FLOAT32)
 		case types.Float64:
-			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVaruint32(%d) // DOUBLE\n", fory.DOUBLE)
+			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVaruint32(%d) // FLOAT64\n", fory.FLOAT64)
 		case types.String:
 			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVaruint32(%d) // STRING\n", fory.STRING)
 		default:

@@ -986,11 +986,11 @@ func Serialize[T any](f *Fory, value T) ([]byte, error) {
 		}
 	case float32:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
-		f.writeCtx.WriteTypeId(FLOAT)
+		f.writeCtx.WriteTypeId(FLOAT32)
 		f.writeCtx.buffer.WriteFloat32(val)
 	case float64:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
-		f.writeCtx.WriteTypeId(DOUBLE)
+		f.writeCtx.WriteTypeId(FLOAT64)
 		f.writeCtx.buffer.WriteFloat64(val)
 	case string:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)

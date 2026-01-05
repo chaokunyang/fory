@@ -1935,9 +1935,9 @@ func sortFields(
 		sort.Slice(s, func(i, j int) bool {
 			ai, aj := s[i], s[j]
 			compressI := ai.typeID == INT32 || ai.typeID == INT64 ||
-				ai.typeID == VAR_INT32 || ai.typeID == VAR_INT64
+				ai.typeID == VAR32 || ai.typeID == VAR64
 			compressJ := aj.typeID == INT32 || aj.typeID == INT64 ||
-				aj.typeID == VAR_INT32 || aj.typeID == VAR_INT64
+				aj.typeID == VAR32 || aj.typeID == VAR64
 			if compressI != compressJ {
 				return !compressI && compressJ
 			}
@@ -2067,9 +2067,9 @@ func typeIdFromKind(type_ reflect.Type) TypeId {
 	case reflect.Uint64, reflect.Uint:
 		return UINT64
 	case reflect.Float32:
-		return FLOAT
+		return FLOAT32
 	case reflect.Float64:
-		return DOUBLE
+		return FLOAT64
 	case reflect.String:
 		return STRING
 	case reflect.Slice:

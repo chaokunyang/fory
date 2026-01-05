@@ -44,6 +44,9 @@ MODULE.bazel.lock
 .vscode/
 go/fory/.gocache
 go/fory/tests/xlang_test_main
+go/fory/tests/xlang/xlang_test_main
+go/fory/xlang_test_main
+go/fory/xlang
 
 # Build directories for all languages
 # Java
@@ -94,3 +97,4 @@ examples/cpp/cmake_example/build
 **/benchmark_report.md
 **/benchmark_*.png
 **/results/
+benchmarks/**/report/

@@ -86,45 +86,45 @@ public class Types {
   /** string: a text string encoded using Latin1/UTF16/UTF-8 encoding. */
   public static final int STRING = 19;
 
+  /** A sequence of objects. */
+  public static final int LIST = 20;
+
+  /** An unordered set of unique elements. */
+  public static final int SET = 21;
+
+  /**
+   * A map of key-value pairs. Mutable types such as `list/map/set/array/tensor/arrow` are not
+   * allowed as key of map.
+   */
+  public static final int MAP = 22;
+
   /** enum: a data type consisting of a set of named values. */
-  public static final int ENUM = 20;
+  public static final int ENUM = 23;
 
   /** named_enum: an enum whose value will be serialized as the registered name. */
-  public static final int NAMED_ENUM = 21;
+  public static final int NAMED_ENUM = 24;
 
   /**
    * A morphic(final) type serialized by Fory Struct serializer. i.e. it doesn't have subclasses.
    * Suppose we're deserializing {@code List<SomeClass>}, we can save dynamic serializer dispatch
    * since `SomeClass` is morphic(final).
    */
-  public static final int STRUCT = 22;
+  public static final int STRUCT = 25;
 
   /** A morphic(final) type serialized by Fory compatible Struct serializer. */
-  public static final int COMPATIBLE_STRUCT = 23;
+  public static final int COMPATIBLE_STRUCT = 26;
 
   /** A `struct` whose type mapping will be encoded as a name. */
-  public static final int NAMED_STRUCT = 24;
+  public static final int NAMED_STRUCT = 27;
 
   /** A `compatible_struct` whose type mapping will be encoded as a name. */
-  public static final int NAMED_COMPATIBLE_STRUCT = 25;
+  public static final int NAMED_COMPATIBLE_STRUCT = 28;
 
   /** A type which will be serialized by a customized serializer. */
-  public static final int EXT = 26;
+  public static final int EXT = 29;
 
   /** An `ext` type whose type mapping will be encoded as a name. */
-  public static final int NAMED_EXT = 27;
-
-  /** A sequence of objects. */
-  public static final int LIST = 28;
-
-  /** An unordered set of unique elements. */
-  public static final int SET = 29;
-
-  /**
-   * A map of key-value pairs. Mutable types such as `list/map/set/array/tensor/arrow` are not
-   * allowed as key of map.
-   */
-  public static final int MAP = 30;
+  public static final int NAMED_EXT = 30;
 
   /** A tagged union type that can hold one of several alternative types. */
   public static final int UNION = 31;

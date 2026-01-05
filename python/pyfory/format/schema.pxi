@@ -59,10 +59,10 @@ class TypeId:
     FLOAT32 = 17
     FLOAT64 = 18
     STRING = 19
-    STRUCT = 22
-    LIST = 28
-    SET = 29
-    MAP = 30
+    LIST = 20
+    SET = 21
+    MAP = 22
+    STRUCT = 25
     UNION = 31
     NONE = 32
     DURATION = 33

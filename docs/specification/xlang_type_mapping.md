@@ -48,17 +48,17 @@ Note:
 | float32                 | 17           | float/Float     | float/pyfory.Float32              | Type.float32() | float                          | float32          | f32               |
 | float64                 | 18           | double/Double   | float/pyfory.Float64              | Type.float64() | double                         | float64          | f64               |
 | string                  | 19           | String          | str                               | String         | string                         | string           | String/str        |
-| enum                    | 20           | Enum subclasses | enum subclasses                   | /              | enum                           | /                | enum              |
-| named_enum              | 21           | Enum subclasses | enum subclasses                   | /              | enum                           | /                | enum              |
-| struct                  | 22           | pojo/record     | data class / type with type hints | object         | struct/class                   | struct           | struct            |
-| compatible_struct       | 23           | pojo/record     | data class / type with type hints | object         | struct/class                   | struct           | struct            |
-| named_struct            | 24           | pojo/record     | data class / type with type hints | object         | struct/class                   | struct           | struct            |
-| named_compatible_struct | 25           | pojo/record     | data class / type with type hints | object         | struct/class                   | struct           | struct            |
-| ext                     | 26           | pojo/record     | data class / type with type hints | object         | struct/class                   | struct           | struct            |
-| named_ext               | 27           | pojo/record     | data class / type with type hints | object         | struct/class                   | struct           | struct            |
-| list                    | 28           | List/Collection | list/tuple                        | array          | vector                         | slice            | Vec               |
-| set                     | 29           | Set             | set                               | /              | set                            | fory.Set         | Set               |
-| map                     | 30           | Map             | dict                              | Map            | unordered_map                  | map              | HashMap           |
+| list                    | 20           | List/Collection | list/tuple                        | array          | vector                         | slice            | Vec               |
+| set                     | 21           | Set             | set                               | /              | set                            | fory.Set         | Set               |
+| map                     | 22           | Map             | dict                              | Map            | unordered_map                  | map              | HashMap           |
+| enum                    | 23           | Enum subclasses | enum subclasses                   | /              | enum                           | /                | enum              |
+| named_enum              | 24           | Enum subclasses | enum subclasses                   | /              | enum                           | /                | enum              |
+| struct                  | 25           | pojo/record     | data class / type with type hints | object         | struct/class                   | struct           | struct            |
+| compatible_struct       | 26           | pojo/record     | data class / type with type hints | object         | struct/class                   | struct           | struct            |
+| named_struct            | 27           | pojo/record     | data class / type with type hints | object         | struct/class                   | struct           | struct            |
+| named_compatible_struct | 28           | pojo/record     | data class / type with type hints | object         | struct/class                   | struct           | struct            |
+| ext                     | 29           | pojo/record     | data class / type with type hints | object         | struct/class                   | struct           | struct            |
+| named_ext               | 30           | pojo/record     | data class / type with type hints | object         | struct/class                   | struct           | struct            |
 | union                   | 31           | Union           | typing.Union                      | /              | `std::variant<Ts...>`          | /                | tagged union enum |
 | none                    | 32           | null            | None                              | null           | `std::monostate`               | nil              | `()`              |
 | duration                | 33           | Duration        | timedelta                         | Number         | duration                       | Duration         | Duration          |

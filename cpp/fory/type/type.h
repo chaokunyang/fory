@@ -63,28 +63,28 @@ enum class TypeId : int32_t {
   FLOAT64 = 18,
   // a text string encoded using Latin1/UTF16/UTF-8 encoding.
   STRING = 19,
-  // a data type consisting of a set of named values.
-  ENUM = 20,
-  // an enum whose value will be serialized as the registered name.
-  NAMED_ENUM = 21,
-  // a morphic(final) type serialized by Fory Struct serializer.
-  STRUCT = 22,
-  // a morphic(final) type serialized by Fory compatible Struct serializer.
-  COMPATIBLE_STRUCT = 23,
-  // a `struct` whose type mapping will be encoded as a name.
-  NAMED_STRUCT = 24,
-  // a `compatible_struct` whose type mapping will be encoded as a name.
-  NAMED_COMPATIBLE_STRUCT = 25,
-  // a type which will be serialized by a customized serializer.
-  EXT = 26,
-  // an `ext` type whose type mapping will be encoded as a name.
-  NAMED_EXT = 27,
   // a sequence of objects.
-  LIST = 28,
+  LIST = 20,
   // an unordered set of unique elements.
-  SET = 29,
+  SET = 21,
   // a map of key-value pairs.
-  MAP = 30,
+  MAP = 22,
+  // a data type consisting of a set of named values.
+  ENUM = 23,
+  // an enum whose value will be serialized as the registered name.
+  NAMED_ENUM = 24,
+  // a morphic(final) type serialized by Fory Struct serializer.
+  STRUCT = 25,
+  // a morphic(final) type serialized by Fory compatible Struct serializer.
+  COMPATIBLE_STRUCT = 26,
+  // a `struct` whose type mapping will be encoded as a name.
+  NAMED_STRUCT = 27,
+  // a `compatible_struct` whose type mapping will be encoded as a name.
+  NAMED_COMPATIBLE_STRUCT = 28,
+  // a type which will be serialized by a customized serializer.
+  EXT = 29,
+  // an `ext` type whose type mapping will be encoded as a name.
+  NAMED_EXT = 30,
   // an union type that can hold different types of values.
   UNION = 31,
   // a null value with no data.

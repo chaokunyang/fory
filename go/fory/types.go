@@ -62,28 +62,28 @@ const (
 	FLOAT64 = 18
 	// STRING UTF8 variable-length string as List<Char>
 	STRING = 19
-	// ENUM a data type consisting of a set of named values
-	ENUM = 20
-	// NAMED_ENUM an enum whose value will be serialized as the registered name
-	NAMED_ENUM = 21
-	// STRUCT a morphic(final) type serialized by Fory Struct serializer
-	STRUCT = 22
-	// COMPATIBLE_STRUCT a morphic(final) type serialized by Fory compatible Struct serializer
-	COMPATIBLE_STRUCT = 23
-	// NAMED_STRUCT a struct whose type mapping will be encoded as a name
-	NAMED_STRUCT = 24
-	// NAMED_COMPATIBLE_STRUCT a compatible_struct whose type mapping will be encoded as a name
-	NAMED_COMPATIBLE_STRUCT = 25
-	// EXT a type which will be serialized by a customized serializer
-	EXT = 26
-	// NAMED_EXT an ext type whose type mapping will be encoded as a name
-	NAMED_EXT = 27
 	// LIST A list of some logical data type
-	LIST = 28
+	LIST = 20
 	// SET an unordered set of unique elements
-	SET = 29
+	SET = 21
 	// MAP Map a repeated struct logical type
-	MAP = 30
+	MAP = 22
+	// ENUM a data type consisting of a set of named values
+	ENUM = 23
+	// NAMED_ENUM an enum whose value will be serialized as the registered name
+	NAMED_ENUM = 24
+	// STRUCT a morphic(final) type serialized by Fory Struct serializer
+	STRUCT = 25
+	// COMPATIBLE_STRUCT a morphic(final) type serialized by Fory compatible Struct serializer
+	COMPATIBLE_STRUCT = 26
+	// NAMED_STRUCT a struct whose type mapping will be encoded as a name
+	NAMED_STRUCT = 27
+	// NAMED_COMPATIBLE_STRUCT a compatible_struct whose type mapping will be encoded as a name
+	NAMED_COMPATIBLE_STRUCT = 28
+	// EXT a type which will be serialized by a customized serializer
+	EXT = 29
+	// NAMED_EXT an ext type whose type mapping will be encoded as a name
+	NAMED_EXT = 30
 	// UNION an union type that can hold different types of values
 	UNION = 31
 	// NONE a null value with no data

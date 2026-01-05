@@ -64,9 +64,7 @@ from pyfory.serializer import (  # noqa: F401 # pylint: disable=unused-import
 )
 from pyfory.struct import DataClassSerializer
 from pyfory.field import field  # noqa: F401 # pylint: disable=unused-import
-from pyfory.type import (  # noqa: F401 # pylint: disable=unused-import
-    record_class_factory,
-    get_qualified_classname,
+from pyfory.types import (  # noqa: F401 # pylint: disable=unused-import
     TypeId,
     int8,
     int16,
@@ -80,6 +78,10 @@ from pyfory.type import (  # noqa: F401 # pylint: disable=unused-import
     int64_array,
     float32_array,
     float64_array,
+)
+from pyfory.type_util import (  # noqa: F401 # pylint: disable=unused-import
+    record_class_factory,
+    get_qualified_classname,
     dataslots,
 )
 from pyfory.policy import DeserializationPolicy  # noqa: F401 # pylint: disable=unused-import

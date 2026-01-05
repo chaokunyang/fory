@@ -39,7 +39,7 @@ from pyfory.meta.typedef import (
     FIELD_NAME_ENCODING_TAG_ID,
     TAG_ID_SIZE_THRESHOLD,
 )
-from pyfory.type import TypeId
+from pyfory.types import TypeId
 from pyfory.meta.metastring import MetaStringDecoder, Encoding
 
 

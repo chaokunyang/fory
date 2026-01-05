@@ -71,7 +71,7 @@ from pyfory.serializer import (
 )
 from pyfory.meta.metastring import MetaStringEncoder, MetaStringDecoder
 from pyfory.meta.meta_compressor import DeflaterMetaCompressor
-from pyfory.type import (
+from pyfory.types import (
     TypeId,
     int8,
     int16,
@@ -79,8 +79,10 @@ from pyfory.type import (
     int64,
     float32,
     float64,
-    load_class,
     is_struct_type,
+)
+from pyfory.type_util import (
+    load_class,
     record_class_factory,
 )
 from pyfory._fory import (

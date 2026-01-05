@@ -32,7 +32,7 @@ from pyfory.meta.typedef import (
 )
 from pyfory.meta.typedef_encoder import encode_typedef
 from pyfory.meta.typedef_decoder import decode_typedef
-from pyfory.type import TypeId
+from pyfory.types import TypeId
 from pyfory import Fory
 
 

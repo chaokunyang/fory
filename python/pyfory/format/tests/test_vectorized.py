@@ -18,7 +18,7 @@
 import pyfory as fory
 
 from pyfory.tests.core import require_pyarrow
-from pyfory.util import lazy_import
+from pyfory.utils import lazy_import
 from pyfory.format import (
     schema,
     field,

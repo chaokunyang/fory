@@ -93,7 +93,7 @@ else:
         MapSerializer,
     )
 
-from pyfory.type import (
+from pyfory.types import (
     int16_array,
     int32_array,
     int64_array,
@@ -106,7 +106,6 @@ from pyfory.type import (
     Float32NDArrayType,
     Float64NDArrayType,
     TypeId,
-    # Added infer_field
 )
 
 

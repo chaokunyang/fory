@@ -23,7 +23,7 @@ from abc import ABC
 
 from pyfory._fory import NOT_NULL_INT64_FLAG
 from pyfory.resolver import NOT_NULL_VALUE_FLAG, NULL_FLAG
-from pyfory.type import is_primitive_type
+from pyfory.types import is_primitive_type
 
 try:
     import numpy as np

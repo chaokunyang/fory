@@ -18,11 +18,11 @@
 import enum
 import typing
 from typing import List
-from pyfory.type import TypeId, is_primitive_type
+from pyfory.types import TypeId, is_primitive_type, is_polymorphic_type
 from pyfory._util import Buffer
-from pyfory.type import infer_field, is_polymorphic_type
+from pyfory.type_util import infer_field
 from pyfory.meta.metastring import Encoding
-from pyfory.type import infer_field_types
+from pyfory.type_util import infer_field_types
 
 
 # Constants from the specification
@@ -254,8 +254,6 @@ class FieldType:
             return DynamicFieldType(xtype_id, False, is_nullable, is_tracking_ref)
         else:
             # For primitive types, determine if they are monomorphic based on the type
-            from pyfory.type import is_polymorphic_type
-
             is_monomorphic = not is_polymorphic_type(xtype_id)
             return FieldType(xtype_id, is_monomorphic, is_nullable, is_tracking_ref)
 
@@ -376,7 +374,7 @@ def build_field_infos(type_resolver, cls):
     nullable, and ref settings.
     """
     from pyfory.struct import _sort_fields, StructTypeIdVisitor, get_field_names
-    from pyfory.type import unwrap_optional
+    from pyfory.type_util import unwrap_optional
     from pyfory.field import extract_field_meta
     import dataclasses
 

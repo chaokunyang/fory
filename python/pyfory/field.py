@@ -192,7 +192,7 @@ def validate_field_metas(
     Raises:
         ValueError: If validation fails.
     """
-    from pyfory.type import is_optional_type
+    from pyfory.type_util import is_optional_type
 
     # Check tag ID uniqueness
     tag_ids_seen: dict[int, str] = {}

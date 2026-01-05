@@ -33,9 +33,9 @@ from pyfory._fory import Language
 from pyfory._fory import _ENABLE_TYPE_REGISTRATION_FORCIBLY
 from pyfory.lib import mmh3
 from pyfory.meta.metastring import Encoding
-from pyfory.type import is_primitive_type
+from pyfory.types import is_primitive_type
 from pyfory.policy import DeserializationPolicy, DEFAULT_POLICY
-from pyfory.util import is_little_endian
+from pyfory.utils import is_little_endian
 from pyfory.includes.libserialization cimport \
     (TypeId, IsNamespacedType, IsTypeShareMeta, Fory_PyBooleanSequenceWriteToBuffer, Fory_PyFloatSequenceWriteToBuffer)
 

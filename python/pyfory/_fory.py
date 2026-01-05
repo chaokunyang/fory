@@ -28,8 +28,8 @@ from pyfory.resolver import (
     NULL_FLAG,
     NOT_NULL_VALUE_FLAG,
 )
-from pyfory.util import is_little_endian, set_bit, get_bit, clear_bit
-from pyfory.type import TypeId
+from pyfory.utils import is_little_endian, set_bit, get_bit, clear_bit
+from pyfory.types import TypeId
 from pyfory.policy import DeserializationPolicy, DEFAULT_POLICY
 
 try:

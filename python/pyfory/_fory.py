@@ -242,7 +242,7 @@ class Fory:
         self.compatible = compatible
         self.field_nullable = field_nullable if self.is_py else False
         from pyfory.serialization import MetaStringResolver, SerializationContext
-        from pyfory._registry import TypeResolver
+        from pyfory.registry import TypeResolver
 
         self.metastring_resolver = MetaStringResolver()
         self.type_resolver = TypeResolver(self, meta_share=compatible, meta_compressor=meta_compressor)

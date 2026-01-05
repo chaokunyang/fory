@@ -514,7 +514,7 @@ cdef class TypeResolver:
         self.fory = fory
         self.metastring_resolver = fory.metastring_resolver
         self.meta_share = meta_share
-        from pyfory._registry import TypeResolver
+        from pyfory.registry import TypeResolver
         self._resolver = TypeResolver(fory, meta_share=meta_share, meta_compressor=meta_compressor)
 
     def initialize(self):

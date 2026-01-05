@@ -30,7 +30,7 @@ try:
 except ImportError:
     ENABLE_FORY_CYTHON_SERIALIZATION = False
 
-from pyfory._registry import TypeInfo
+from pyfory.registry import TypeInfo
 
 if ENABLE_FORY_CYTHON_SERIALIZATION:
     from pyfory.serialization import Fory, TypeInfo  # noqa: F401,F811

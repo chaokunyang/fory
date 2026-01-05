@@ -199,9 +199,9 @@ public class PrimitiveSerializers {
       switch (longEncoding) {
         case LE_RAW_BYTES:
           return new Invoke(buffer, "writeInt64", v);
-        case SLI:
-          return new Invoke(buffer, ensureBounds ? "writeSliInt64" : "_unsafeWriteSliInt64", v);
-        case PVL:
+        case HYBRID:
+          return new Invoke(buffer, ensureBounds ? "writeHybridInt64" : "_unsafeWriteHybridInt64", v);
+        case VARINT64:
           return new Invoke(buffer, ensureBounds ? "writeVarInt64" : "_unsafeWriteVarInt64", v);
         default:
           throw new UnsupportedOperationException("Unsupported long encoding " + longEncoding);
@@ -209,8 +209,8 @@ public class PrimitiveSerializers {
     }
 
     public static void writeInt64(MemoryBuffer buffer, long value, LongEncoding longEncoding) {
-      if (longEncoding == LongEncoding.SLI) {
-        buffer.writeSliInt64(value);
+      if (longEncoding == LongEncoding.HYBRID) {
+        buffer.writeHybridInt64(value);
       } else if (longEncoding == LongEncoding.LE_RAW_BYTES) {
         buffer.writeInt64(value);
       } else {
@@ -219,8 +219,8 @@ public class PrimitiveSerializers {
     }
 
     public static long readInt64(MemoryBuffer buffer, LongEncoding longEncoding) {
-      if (longEncoding == LongEncoding.SLI) {
-        return buffer.readSliInt64();
+      if (longEncoding == LongEncoding.HYBRID) {
+        return buffer.readHybridInt64();
       } else if (longEncoding == LongEncoding.LE_RAW_BYTES) {
         return buffer.readInt64();
       } else {
@@ -236,9 +236,9 @@ public class PrimitiveSerializers {
       switch (longEncoding) {
         case LE_RAW_BYTES:
           return Platform.IS_LITTLE_ENDIAN ? "_readInt64OnLE" : "_readInt64OnBE";
-        case SLI:
-          return Platform.IS_LITTLE_ENDIAN ? "_readSliInt64OnLE" : "_readSliInt64OnBE";
-        case PVL:
+        case HYBRID:
+          return Platform.IS_LITTLE_ENDIAN ? "_readHybridInt64OnLE" : "_readHybridInt64OnBE";
+        case VARINT64:
           return Platform.IS_LITTLE_ENDIAN ? "_readVarInt64OnLE" : "_readVarInt64OnBE";
         default:
           throw new UnsupportedOperationException("Unsupported long encoding " + longEncoding);

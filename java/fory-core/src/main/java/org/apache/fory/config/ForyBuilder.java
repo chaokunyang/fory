@@ -67,7 +67,7 @@ public final class ForyBuilder {
   boolean timeRefIgnored = true;
   ClassLoader classLoader;
   boolean compressInt = true;
-  public LongEncoding longEncoding = LongEncoding.SLI;
+  public LongEncoding longEncoding = LongEncoding.HYBRID;
   boolean compressIntArray = false;
   boolean compressLongArray = false;
   boolean compressString = false;
@@ -183,11 +183,11 @@ public final class ForyBuilder {
   }
 
   /**
-   * Use variable length encoding for long. Enabled by default, use {@link LongEncoding#SLI} (Small
+   * Use variable length encoding for long. Enabled by default, use {@link LongEncoding#HYBRID} (Small
    * long as int) for long encoding.
    */
   public ForyBuilder withLongCompressed(boolean longCompressed) {
-    return withLongCompressed(longCompressed ? LongEncoding.SLI : LongEncoding.LE_RAW_BYTES);
+    return withLongCompressed(longCompressed ? LongEncoding.HYBRID : LongEncoding.LE_RAW_BYTES);
   }
 
   /** Use variable length encoding for long. */
@@ -429,7 +429,7 @@ public final class ForyBuilder {
     }
     if (language != Language.JAVA) {
       stringRefIgnored = true;
-      longEncoding = LongEncoding.PVL;
+      longEncoding = LongEncoding.VARINT64;
       compressInt = true;
       compressString = true;
     }

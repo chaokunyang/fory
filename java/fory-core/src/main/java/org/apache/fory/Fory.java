@@ -692,7 +692,7 @@ public final class Fory implements BaseFory {
       int size;
       // TODO(chaokunyang) Remove branch when other languages support aligned varint.
       if (!crossLanguage) {
-        size = buffer.readAlignedVarUint();
+        size = buffer.readAlignedVarUint32();
       } else {
         size = buffer.readVarUint32();
       }

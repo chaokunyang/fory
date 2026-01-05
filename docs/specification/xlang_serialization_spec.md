@@ -169,37 +169,37 @@ custom types (struct/ext/enum). User type IDs are in a separate namespace and co
 | 17      | FLOAT32                 | 32-bit floating point (single precision)            |
 | 18      | FLOAT64                 | 64-bit floating point (double precision)            |
 | 19      | STRING                  | UTF-8/UTF-16/Latin1 encoded string                  |
-| 20      | ENUM                    | Enum registered by numeric ID                       |
-| 21      | NAMED_ENUM              | Enum registered by namespace + type name            |
-| 22      | STRUCT                  | Struct registered by numeric ID (schema consistent) |
-| 23      | COMPATIBLE_STRUCT       | Struct with schema evolution support (by ID)        |
-| 24      | NAMED_STRUCT            | Struct registered by namespace + type name          |
-| 25      | NAMED_COMPATIBLE_STRUCT | Struct with schema evolution (by name)              |
-| 26      | EXT                     | Extension type registered by numeric ID             |
-| 27      | NAMED_EXT               | Extension type registered by namespace + type name  |
-| 28      | LIST                    | Ordered collection (List, Array, Vector)            |
-| 29      | SET                     | Unordered collection of unique elements             |
-| 30      | MAP                     | Key-value mapping                                   |
-| 31      | DURATION                | Time duration (seconds + nanoseconds)               |
-| 32      | TIMESTAMP               | Point in time (nanoseconds since epoch)             |
-| 33      | LOCAL_DATE              | Date without timezone (days since epoch)            |
-| 34      | DECIMAL                 | Arbitrary precision decimal                         |
-| 35      | BINARY                  | Raw binary data                                     |
-| 36      | ARRAY                   | Generic array type                                  |
-| 37      | BOOL_ARRAY              | 1D boolean array                                    |
-| 38      | INT8_ARRAY              | 1D int8 array                                       |
-| 39      | INT16_ARRAY             | 1D int16 array                                      |
-| 40      | INT32_ARRAY             | 1D int32 array                                      |
-| 41      | INT64_ARRAY             | 1D int64 array                                      |
-| 42      | UINT8_ARRAY             | 1D uint8 array                                      |
-| 43      | UINT16_ARRAY            | 1D uint16 array                                     |
-| 44      | UINT32_ARRAY            | 1D uint32 array                                     |
-| 45      | UINT64_ARRAY            | 1D uint64 array                                     |
-| 46      | FLOAT16_ARRAY           | 1D float16 array                                    |
-| 47      | FLOAT32_ARRAY           | 1D float32 array                                    |
-| 48      | FLOAT64_ARRAY           | 1D float64 array                                    |
-| 49      | UNION                   | Tagged union type (one of several alternatives)     |
-| 50      | NONE                    | Empty/unit type (no data)                           |
+| 20      | LIST                    | Ordered collection (List, Array, Vector)            |
+| 21      | SET                     | Unordered collection of unique elements             |
+| 22      | MAP                     | Key-value mapping                                   |
+| 23      | ENUM                    | Enum registered by numeric ID                       |
+| 24      | NAMED_ENUM              | Enum registered by namespace + type name            |
+| 25      | STRUCT                  | Struct registered by numeric ID (schema consistent) |
+| 26      | COMPATIBLE_STRUCT       | Struct with schema evolution support (by ID)        |
+| 27      | NAMED_STRUCT            | Struct registered by namespace + type name          |
+| 28      | NAMED_COMPATIBLE_STRUCT | Struct with schema evolution (by name)              |
+| 29      | EXT                     | Extension type registered by numeric ID             |
+| 30      | NAMED_EXT               | Extension type registered by namespace + type name  |
+| 31      | UNION                   | Tagged union type (one of several alternatives)     |
+| 32      | NONE                    | Empty/unit type (no data)                           |
+| 33      | DURATION                | Time duration (seconds + nanoseconds)               |
+| 34      | TIMESTAMP               | Point in time (nanoseconds since epoch)             |
+| 35      | LOCAL_DATE              | Date without timezone (days since epoch)            |
+| 36      | DECIMAL                 | Arbitrary precision decimal                         |
+| 37      | BINARY                  | Raw binary data                                     |
+| 38      | ARRAY                   | Generic array type                                  |
+| 39      | BOOL_ARRAY              | 1D boolean array                                    |
+| 40      | INT8_ARRAY              | 1D int8 array                                       |
+| 41      | INT16_ARRAY             | 1D int16 array                                      |
+| 42      | INT32_ARRAY             | 1D int32 array                                      |
+| 43      | INT64_ARRAY             | 1D int64 array                                      |
+| 44      | UINT8_ARRAY             | 1D uint8 array                                      |
+| 45      | UINT16_ARRAY            | 1D uint16 array                                     |
+| 46      | UINT32_ARRAY            | 1D uint32 array                                     |
+| 47      | UINT64_ARRAY            | 1D uint64 array                                     |
+| 48      | FLOAT16_ARRAY           | 1D float16 array                                    |
+| 49      | FLOAT32_ARRAY           | 1D float32 array                                    |
+| 50      | FLOAT64_ARRAY           | 1D float64 array                                    |
 
 #### Type ID Encoding for User Types
 
@@ -213,11 +213,11 @@ Full Type ID = (user_type_id << 8) | internal_type_id
 
 | User ID | Type              | Internal ID | Full Type ID     | Decimal |
 | ------- | ----------------- | ----------- | ---------------- | ------- |
-| 0       | STRUCT            | 15          | `(0 << 8) \| 15` | 15      |
-| 0       | ENUM              | 13          | `(0 << 8) \| 13` | 13      |
-| 1       | STRUCT            | 15          | `(1 << 8) \| 15` | 271     |
-| 1       | COMPATIBLE_STRUCT | 16          | `(1 << 8) \| 16` | 272     |
-| 2       | NAMED_STRUCT      | 17          | `(2 << 8) \| 17` | 529     |
+| 0       | STRUCT            | 25          | `(0 << 8) \| 25` | 25      |
+| 0       | ENUM              | 23          | `(0 << 8) \| 23` | 23      |
+| 1       | STRUCT            | 25          | `(1 << 8) \| 25` | 281     |
+| 1       | COMPATIBLE_STRUCT | 26          | `(1 << 8) \| 26` | 282     |
+| 2       | NAMED_STRUCT      | 27          | `(2 << 8) \| 27` | 539     |
 
 When reading type IDs:
 

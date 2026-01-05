@@ -16,7 +16,6 @@
 # under the License.
 
 import pyfory
-import pyfory.type
 
 
 class Encoder:

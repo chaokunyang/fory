@@ -115,13 +115,6 @@ Here is en example:
 
   ```python
   class Foo:
-      f1: Int32Type(varint=True)
-      f2: List[Int32Type(varint=True)]
+      f1: pyfory.var32
+      f2: List[pyfory.var32]
   ```
-
-## Type wrapper
-
-If the type is not a field of a class, the user must wrap this type with a Fory type to pass the extra type info.
-
-For example, suppose Fory Java provide a `VarInt64` type, when a user invoke `fory.serialize(long_value)`, he need to
-invoke like `fory.serialize(new VarInt64(long_value))`.

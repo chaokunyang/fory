@@ -37,8 +37,10 @@ import org.apache.fory.resolver.ClassInfo;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.RefResolver;
 import org.apache.fory.resolver.TypeResolver;
+import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
+import org.apache.fory.type.DispatchId;
 import org.apache.fory.type.Generics;
 import org.apache.fory.util.record.RecordComponent;
 import org.apache.fory.util.record.RecordInfo;
@@ -50,7 +52,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
   protected final TypeResolver typeResolver;
   protected final boolean isRecord;
   protected final ObjectCreator<T> objectCreator;
-  private FieldGroups.SerializationFieldInfo[] fieldInfos;
+  private SerializationFieldInfo[] fieldInfos;
   private RecordInfo copyRecordInfo;
 
   public AbstractObjectSerializer(Fory fory, Class<T> type) {
@@ -69,7 +71,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
   static void writeOtherFieldValue(
       SerializationBinding binding,
       MemoryBuffer buffer,
-      FieldGroups.SerializationFieldInfo fieldInfo,
+      SerializationFieldInfo fieldInfo,
       Object fieldValue) {
     if (fieldInfo.useDeclaredTypeInfo) {
       switch (fieldInfo.refMode) {
@@ -117,7 +119,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       RefResolver refResolver,
       TypeResolver typeResolver,
       Generics generics,
-      FieldGroups.SerializationFieldInfo fieldInfo,
+      SerializationFieldInfo fieldInfo,
       MemoryBuffer buffer,
       Object fieldValue) {
     switch (fieldInfo.refMode) {
@@ -159,48 +161,59 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
   /**
    * Write a primitive field value to buffer using direct memory offset access.
    *
-   * @param fory the fory instance for compression settings
    * @param buffer the buffer to write to
    * @param targetObject the object containing the field
    * @param fieldOffset the memory offset of the field
-   * @param classId the class ID of the primitive type
-   * @return true if classId is not a primitive type and needs further write handling
+   * @param dispatchId the class ID of the primitive type
+   * @return true if dispatchId is not a primitive type and needs further write handling
    */
   static boolean writePrimitiveFieldValue(
-      Fory fory, MemoryBuffer buffer, Object targetObject, long fieldOffset, short classId) {
-    switch (classId) {
-      case ClassResolver.PRIMITIVE_BOOLEAN_CLASS_ID:
+      MemoryBuffer buffer, Object targetObject, long fieldOffset, int dispatchId) {
+    switch (dispatchId) {
+      case DispatchId.PRIMITIVE_BOOL:
         buffer.writeBoolean(Platform.getBoolean(targetObject, fieldOffset));
         return false;
-      case ClassResolver.PRIMITIVE_BYTE_CLASS_ID:
+      case DispatchId.PRIMITIVE_INT8:
+      case DispatchId.PRIMITIVE_UINT8:
         buffer.writeByte(Platform.getByte(targetObject, fieldOffset));
         return false;
-      case ClassResolver.PRIMITIVE_CHAR_CLASS_ID:
+      case DispatchId.PRIMITIVE_CHAR:
         buffer.writeChar(Platform.getChar(targetObject, fieldOffset));
         return false;
-      case ClassResolver.PRIMITIVE_SHORT_CLASS_ID:
+      case DispatchId.PRIMITIVE_INT16:
+      case DispatchId.PRIMITIVE_UINT16:
         buffer.writeInt16(Platform.getShort(targetObject, fieldOffset));
         return false;
-      case ClassResolver.PRIMITIVE_INT_CLASS_ID:
-        {
-          int fieldValue = Platform.getInt(targetObject, fieldOffset);
-          if (fory.compressInt()) {
-            buffer.writeVarInt32(fieldValue);
-          } else {
-            buffer.writeInt32(fieldValue);
-          }
-          return false;
-        }
-      case ClassResolver.PRIMITIVE_FLOAT_CLASS_ID:
+      case DispatchId.PRIMITIVE_INT32:
+      case DispatchId.PRIMITIVE_UINT32:
+        buffer.writeInt32(Platform.getInt(targetObject, fieldOffset));
+        return false;
+      case DispatchId.PRIMITIVE_VARINT32:
+        buffer.writeVarInt32(Platform.getInt(targetObject, fieldOffset));
+        return false;
+      case DispatchId.PRIMITIVE_VAR_UINT32:
+        buffer.writeVarUint32(Platform.getInt(targetObject, fieldOffset));
+        return false;
+      case DispatchId.PRIMITIVE_FLOAT32:
         buffer.writeFloat32(Platform.getFloat(targetObject, fieldOffset));
         return false;
-      case ClassResolver.PRIMITIVE_LONG_CLASS_ID:
-        {
-          long fieldValue = Platform.getLong(targetObject, fieldOffset);
-          fory.writeInt64(buffer, fieldValue);
-          return false;
-        }
-      case ClassResolver.PRIMITIVE_DOUBLE_CLASS_ID:
+      case DispatchId.PRIMITIVE_INT64:
+      case DispatchId.PRIMITIVE_UINT64:
+        buffer.writeInt64(Platform.getLong(targetObject, fieldOffset));
+        return false;
+      case DispatchId.PRIMITIVE_VARINT64:
+        buffer.writeVarInt64(Platform.getLong(targetObject, fieldOffset));
+        return false;
+      case DispatchId.PRIMITIVE_TAGGED_INT64:
+        buffer.writeTaggedInt64(Platform.getLong(targetObject, fieldOffset));
+        return false;
+      case DispatchId.PRIMITIVE_VAR_UINT64:
+        buffer.writeVarUint64(Platform.getLong(targetObject, fieldOffset));
+        return false;
+      case DispatchId.PRIMITIVE_TAGGED_UINT64:
+        buffer.writeTaggedUint64(Platform.getLong(targetObject, fieldOffset));
+        return false;
+      case DispatchId.PRIMITIVE_FLOAT64:
         buffer.writeFloat64(Platform.getDouble(targetObject, fieldOffset));
         return false;
       default:
@@ -211,56 +224,66 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
   /**
    * Write a primitive field value to buffer using the field accessor.
    *
-   * @param fory the fory instance for compression settings
    * @param buffer the buffer to write to
    * @param targetObject the object containing the field
    * @param fieldAccessor the accessor to get the field value
-   * @param classId the class ID of the primitive type
-   * @return true if classId is not a primitive type and needs further write handling
+   * @param dispatchId the class ID of the primitive type
+   * @return true if dispatchId is not a primitive type and needs further write handling
    */
   static boolean writePrimitiveFieldValue(
-      Fory fory,
       MemoryBuffer buffer,
       Object targetObject,
       FieldAccessor fieldAccessor,
-      short classId) {
+      int dispatchId) {
     long fieldOffset = fieldAccessor.getFieldOffset();
     if (fieldOffset != -1) {
-      return writePrimitiveFieldValue(fory, buffer, targetObject, fieldOffset, classId);
+      return writePrimitiveFieldValue(buffer, targetObject, fieldOffset, dispatchId);
     }
-    switch (classId) {
-      case ClassResolver.PRIMITIVE_BOOLEAN_CLASS_ID:
+    switch (dispatchId) {
+      case DispatchId.PRIMITIVE_BOOL:
         buffer.writeBoolean((Boolean) fieldAccessor.get(targetObject));
         return false;
-      case ClassResolver.PRIMITIVE_BYTE_CLASS_ID:
+      case DispatchId.PRIMITIVE_INT8:
+      case DispatchId.PRIMITIVE_UINT8:
         buffer.writeByte((Byte) fieldAccessor.get(targetObject));
         return false;
-      case ClassResolver.PRIMITIVE_CHAR_CLASS_ID:
+      case DispatchId.PRIMITIVE_CHAR:
         buffer.writeChar((Character) fieldAccessor.get(targetObject));
         return false;
-      case ClassResolver.PRIMITIVE_SHORT_CLASS_ID:
+      case DispatchId.PRIMITIVE_INT16:
+      case DispatchId.PRIMITIVE_UINT16:
         buffer.writeInt16((Short) fieldAccessor.get(targetObject));
         return false;
-      case ClassResolver.PRIMITIVE_INT_CLASS_ID:
-        {
-          int fieldValue = (Integer) fieldAccessor.get(targetObject);
-          if (fory.compressInt()) {
-            buffer.writeVarInt32(fieldValue);
-          } else {
-            buffer.writeInt32(fieldValue);
-          }
-          return false;
-        }
-      case ClassResolver.PRIMITIVE_FLOAT_CLASS_ID:
+      case DispatchId.PRIMITIVE_INT32:
+      case DispatchId.PRIMITIVE_UINT32:
+        buffer.writeInt32((Integer) fieldAccessor.get(targetObject));
+        return false;
+      case DispatchId.PRIMITIVE_VARINT32:
+        buffer.writeVarInt32((Integer) fieldAccessor.get(targetObject));
+        return false;
+      case DispatchId.PRIMITIVE_VAR_UINT32:
+        buffer.writeVarUint32((Integer) fieldAccessor.get(targetObject));
+        return false;
+      case DispatchId.PRIMITIVE_FLOAT32:
         buffer.writeFloat32((Float) fieldAccessor.get(targetObject));
         return false;
-      case ClassResolver.PRIMITIVE_LONG_CLASS_ID:
-        {
-          long fieldValue = (long) fieldAccessor.get(targetObject);
-          fory.writeInt64(buffer, fieldValue);
-          return false;
-        }
-      case ClassResolver.PRIMITIVE_DOUBLE_CLASS_ID:
+      case DispatchId.PRIMITIVE_INT64:
+      case DispatchId.PRIMITIVE_UINT64:
+        buffer.writeInt64((Long) fieldAccessor.get(targetObject));
+        return false;
+      case DispatchId.PRIMITIVE_VARINT64:
+        buffer.writeVarInt64((Long) fieldAccessor.get(targetObject));
+        return false;
+      case DispatchId.PRIMITIVE_TAGGED_INT64:
+        buffer.writeTaggedInt64((Long) fieldAccessor.get(targetObject));
+        return false;
+      case DispatchId.PRIMITIVE_VAR_UINT64:
+        buffer.writeVarUint64((Long) fieldAccessor.get(targetObject));
+        return false;
+      case DispatchId.PRIMITIVE_TAGGED_UINT64:
+        buffer.writeTaggedUint64((Long) fieldAccessor.get(targetObject));
+        return false;
+      case DispatchId.PRIMITIVE_FLOAT64:
         buffer.writeFloat64((Double) fieldAccessor.get(targetObject));
         return false;
       default:
@@ -274,7 +297,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
    * @return true if field value isn't written by this function.
    */
   static boolean writeBasicObjectFieldValue(
-      Fory fory, MemoryBuffer buffer, Object fieldValue, short classId) {
+      Fory fory, MemoryBuffer buffer, Object fieldValue, int dispatchId) {
     if (fieldValue == null) {
       throw new IllegalArgumentException(
           "Non-nullable field has null value. In xlang mode, fields are non-nullable by default. "
@@ -284,8 +307,8 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       return true; // let common path handle this.
     }
     // add time types serialization here.
-    switch (classId) {
-      case ClassResolver.STRING_CLASS_ID: // fastpath for string.
+    switch (dispatchId) {
+      case DispatchId.STRING: // fastpath for string.
         String stringValue = (String) (fieldValue);
         if (fory.getStringSerializer().needToWriteRef()) {
           fory.writeJavaStringRef(buffer, stringValue);
@@ -293,50 +316,52 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
           fory.writeString(buffer, stringValue);
         }
         return false;
-      case ClassResolver.BOOLEAN_CLASS_ID:
-        {
-          buffer.writeBoolean((Boolean) fieldValue);
-          return false;
-        }
-      case ClassResolver.BYTE_CLASS_ID:
-        {
-          buffer.writeByte((Byte) fieldValue);
-          return false;
-        }
-      case ClassResolver.CHAR_CLASS_ID:
-        {
-          buffer.writeChar((Character) fieldValue);
-          return false;
-        }
-      case ClassResolver.SHORT_CLASS_ID:
-        {
-          buffer.writeInt16((Short) fieldValue);
-          return false;
-        }
-      case ClassResolver.INTEGER_CLASS_ID:
-        {
-          if (fory.compressInt()) {
-            buffer.writeVarInt32((Integer) fieldValue);
-          } else {
-            buffer.writeInt32((Integer) fieldValue);
-          }
-          return false;
-        }
-      case ClassResolver.FLOAT_CLASS_ID:
-        {
-          buffer.writeFloat32((Float) fieldValue);
-          return false;
-        }
-      case ClassResolver.LONG_CLASS_ID:
-        {
-          fory.writeInt64(buffer, (Long) fieldValue);
-          return false;
-        }
-      case ClassResolver.DOUBLE_CLASS_ID:
-        {
-          buffer.writeFloat64((Double) fieldValue);
-          return false;
-        }
+      case DispatchId.BOOL:
+        buffer.writeBoolean((Boolean) fieldValue);
+        return false;
+      case DispatchId.INT8:
+      case DispatchId.UINT8:
+        buffer.writeByte((Byte) fieldValue);
+        return false;
+      case DispatchId.CHAR:
+        buffer.writeChar((Character) fieldValue);
+        return false;
+      case DispatchId.INT16:
+      case DispatchId.UINT16:
+        buffer.writeInt16((Short) fieldValue);
+        return false;
+      case DispatchId.INT32:
+      case DispatchId.UINT32:
+        buffer.writeInt32((Integer) fieldValue);
+        return false;
+      case DispatchId.VARINT32:
+        buffer.writeVarInt32((Integer) fieldValue);
+        return false;
+      case DispatchId.VAR_UINT32:
+        buffer.writeVarUint32((Integer) fieldValue);
+        return false;
+      case DispatchId.INT64:
+      case DispatchId.UINT64:
+        buffer.writeInt64((Long) fieldValue);
+        return false;
+      case DispatchId.VARINT64:
+        buffer.writeVarInt64((Long) fieldValue);
+        return false;
+      case DispatchId.TAGGED_INT64:
+        buffer.writeTaggedInt64((Long) fieldValue);
+        return false;
+      case DispatchId.VAR_UINT64:
+        buffer.writeVarUint64((Long) fieldValue);
+        return false;
+      case DispatchId.TAGGED_UINT64:
+        buffer.writeTaggedUint64((Long) fieldValue);
+        return false;
+      case DispatchId.FLOAT32:
+        buffer.writeFloat32((Float) fieldValue);
+        return false;
+      case DispatchId.FLOAT64:
+        buffer.writeFloat64((Double) fieldValue);
+        return false;
       default:
         return true;
     }
@@ -349,104 +374,136 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
    * @param fory the fory instance for compression and ref tracking settings
    * @param buffer the buffer to write to
    * @param fieldValue the field value to write (may be null)
-   * @param classId the class ID of the boxed type
-   * @return true if classId is not a basic type or ref tracking is enabled, needing further write
+   * @param dispatchId the class ID of the boxed type
+   * @return true if dispatchId is not a basic type or ref tracking is enabled, needing further write
    *     handling
    */
   static boolean writeBasicNullableObjectFieldValue(
-      Fory fory, MemoryBuffer buffer, Object fieldValue, short classId) {
+      Fory fory, MemoryBuffer buffer, Object fieldValue, int dispatchId) {
     if (!fory.isBasicTypesRefIgnored()) {
       return true; // let common path handle this.
     }
     // add time types serialization here.
-    switch (classId) {
-      case ClassResolver.STRING_CLASS_ID: // fastpath for string.
+    switch (dispatchId) {
+      case DispatchId.STRING: // fastpath for string.
         fory.writeJavaStringRef(buffer, (String) (fieldValue));
         return false;
-      case ClassResolver.BOOLEAN_CLASS_ID:
-        {
-          if (fieldValue == null) {
-            buffer.writeByte(Fory.NULL_FLAG);
-          } else {
-            buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
-            buffer.writeBoolean((Boolean) (fieldValue));
-          }
-          return false;
+      case DispatchId.BOOL:
+        if (fieldValue == null) {
+          buffer.writeByte(Fory.NULL_FLAG);
+        } else {
+          buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
+          buffer.writeBoolean((Boolean) (fieldValue));
         }
-      case ClassResolver.BYTE_CLASS_ID:
-        {
-          if (fieldValue == null) {
-            buffer.writeByte(Fory.NULL_FLAG);
-          } else {
-            buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
-            buffer.writeByte((Byte) (fieldValue));
-          }
-          return false;
+        return false;
+      case DispatchId.INT8:
+      case DispatchId.UINT8:
+        if (fieldValue == null) {
+          buffer.writeByte(Fory.NULL_FLAG);
+        } else {
+          buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
+          buffer.writeByte((Byte) (fieldValue));
         }
-      case ClassResolver.CHAR_CLASS_ID:
-        {
-          if (fieldValue == null) {
-            buffer.writeByte(Fory.NULL_FLAG);
-          } else {
-            buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
-            buffer.writeChar((Character) (fieldValue));
-          }
-          return false;
+        return false;
+      case DispatchId.CHAR:
+        if (fieldValue == null) {
+          buffer.writeByte(Fory.NULL_FLAG);
+        } else {
+          buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
+          buffer.writeChar((Character) (fieldValue));
         }
-      case ClassResolver.SHORT_CLASS_ID:
-        {
-          if (fieldValue == null) {
-            buffer.writeByte(Fory.NULL_FLAG);
-          } else {
-            buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
-            buffer.writeInt16((Short) (fieldValue));
-          }
-          return false;
+        return false;
+      case DispatchId.INT16:
+      case DispatchId.UINT16:
+        if (fieldValue == null) {
+          buffer.writeByte(Fory.NULL_FLAG);
+        } else {
+          buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
+          buffer.writeInt16((Short) (fieldValue));
         }
-      case ClassResolver.INTEGER_CLASS_ID:
-        {
-          if (fieldValue == null) {
-            buffer.writeByte(Fory.NULL_FLAG);
-          } else {
-            buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
-            if (fory.compressInt()) {
-              buffer.writeVarInt32((Integer) (fieldValue));
-            } else {
-              buffer.writeInt32((Integer) (fieldValue));
-            }
-          }
-          return false;
+        return false;
+      case DispatchId.INT32:
+      case DispatchId.UINT32:
+        if (fieldValue == null) {
+          buffer.writeByte(Fory.NULL_FLAG);
+        } else {
+          buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
+          buffer.writeInt32((Integer) (fieldValue));
         }
-      case ClassResolver.FLOAT_CLASS_ID:
-        {
-          if (fieldValue == null) {
-            buffer.writeByte(Fory.NULL_FLAG);
-          } else {
-            buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
-            buffer.writeFloat32((Float) (fieldValue));
-          }
-          return false;
+        return false;
+      case DispatchId.VARINT32:
+        if (fieldValue == null) {
+          buffer.writeByte(Fory.NULL_FLAG);
+        } else {
+          buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
+          buffer.writeVarInt32((Integer) (fieldValue));
         }
-      case ClassResolver.LONG_CLASS_ID:
-        {
-          if (fieldValue == null) {
-            buffer.writeByte(Fory.NULL_FLAG);
-          } else {
-            buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
-            fory.writeInt64(buffer, (Long) fieldValue);
-          }
-          return false;
+        return false;
+      case DispatchId.VAR_UINT32:
+        if (fieldValue == null) {
+          buffer.writeByte(Fory.NULL_FLAG);
+        } else {
+          buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
+          buffer.writeVarUint32((Integer) (fieldValue));
         }
-      case ClassResolver.DOUBLE_CLASS_ID:
-        {
-          if (fieldValue == null) {
-            buffer.writeByte(Fory.NULL_FLAG);
-          } else {
-            buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
-            buffer.writeFloat64((Double) (fieldValue));
-          }
-          return false;
+        return false;
+      case DispatchId.FLOAT32:
+        if (fieldValue == null) {
+          buffer.writeByte(Fory.NULL_FLAG);
+        } else {
+          buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
+          buffer.writeFloat32((Float) (fieldValue));
         }
+        return false;
+      case DispatchId.INT64:
+      case DispatchId.UINT64:
+        if (fieldValue == null) {
+          buffer.writeByte(Fory.NULL_FLAG);
+        } else {
+          buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
+          buffer.writeInt64((Long) fieldValue);
+        }
+        return false;
+      case DispatchId.VARINT64:
+        if (fieldValue == null) {
+          buffer.writeByte(Fory.NULL_FLAG);
+        } else {
+          buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
+          buffer.writeVarInt64((Long) fieldValue);
+        }
+        return false;
+      case DispatchId.TAGGED_INT64:
+        if (fieldValue == null) {
+          buffer.writeByte(Fory.NULL_FLAG);
+        } else {
+          buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
+          buffer.writeTaggedInt64((Long) fieldValue);
+        }
+        return false;
+      case DispatchId.VAR_UINT64:
+        if (fieldValue == null) {
+          buffer.writeByte(Fory.NULL_FLAG);
+        } else {
+          buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
+          buffer.writeVarUint64((Long) fieldValue);
+        }
+        return false;
+      case DispatchId.TAGGED_UINT64:
+        if (fieldValue == null) {
+          buffer.writeByte(Fory.NULL_FLAG);
+        } else {
+          buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
+          buffer.writeTaggedUint64((Long) fieldValue);
+        }
+        return false;
+      case DispatchId.FLOAT64:
+        if (fieldValue == null) {
+          buffer.writeByte(Fory.NULL_FLAG);
+        } else {
+          buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
+          buffer.writeFloat64((Double) (fieldValue));
+        }
+        return false;
       default:
         return true;
     }
@@ -460,7 +517,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       SerializationBinding binding,
       RefResolver refResolver,
       TypeResolver typeResolver,
-      FieldGroups.SerializationFieldInfo fieldInfo,
+      SerializationFieldInfo fieldInfo,
       MemoryBuffer buffer) {
     Serializer<Object> serializer = fieldInfo.classInfo.getSerializer();
     binding.incReadDepth();
@@ -529,7 +586,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
    */
   static Object readOtherFieldValue(
       SerializationBinding binding,
-      FieldGroups.SerializationFieldInfo fieldInfo,
+      SerializationFieldInfo fieldInfo,
       MemoryBuffer buffer) {
     // Note: Enum has special handling for xlang compatibility - no type info for enum fields
     if (fieldInfo.genericType.getCls().isEnum()) {
@@ -577,7 +634,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
   static Object readContainerFieldValue(
       SerializationBinding binding,
       Generics generics,
-      FieldGroups.SerializationFieldInfo fieldInfo,
+      SerializationFieldInfo fieldInfo,
       MemoryBuffer buffer) {
     Object fieldValue;
     switch (fieldInfo.refMode) {
@@ -617,42 +674,59 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
    * @return true if <code>classId</code> is not a primitive type id.
    */
   static boolean readPrimitiveFieldValue(
-      Fory fory,
       MemoryBuffer buffer,
       Object targetObject,
       FieldAccessor fieldAccessor,
-      short classId) {
+      int dispatchId) {
     long fieldOffset = fieldAccessor.getFieldOffset();
     if (fieldOffset != -1) {
-      return readPrimitiveFieldValue(fory, buffer, targetObject, fieldOffset, classId);
+      return readPrimitiveFieldValue(buffer, targetObject, fieldOffset, dispatchId);
     }
-    switch (classId) {
-      case ClassResolver.PRIMITIVE_BOOLEAN_CLASS_ID:
+    switch (dispatchId) {
+      case DispatchId.PRIMITIVE_BOOL:
         fieldAccessor.set(targetObject, buffer.readBoolean());
         return false;
-      case ClassResolver.PRIMITIVE_BYTE_CLASS_ID:
+      case DispatchId.PRIMITIVE_INT8:
+      case DispatchId.PRIMITIVE_UINT8:
         fieldAccessor.set(targetObject, buffer.readByte());
         return false;
-      case ClassResolver.PRIMITIVE_CHAR_CLASS_ID:
+      case DispatchId.PRIMITIVE_CHAR:
         fieldAccessor.set(targetObject, buffer.readChar());
         return false;
-      case ClassResolver.PRIMITIVE_SHORT_CLASS_ID:
+      case DispatchId.PRIMITIVE_INT16:
+      case DispatchId.PRIMITIVE_UINT16:
         fieldAccessor.set(targetObject, buffer.readInt16());
         return false;
-      case ClassResolver.PRIMITIVE_INT_CLASS_ID:
-        if (fory.compressInt()) {
-          fieldAccessor.set(targetObject, buffer.readVarInt32());
-        } else {
-          fieldAccessor.set(targetObject, buffer.readInt32());
-        }
+      case DispatchId.PRIMITIVE_INT32:
+      case DispatchId.PRIMITIVE_UINT32:
+        fieldAccessor.set(targetObject, buffer.readInt32());
         return false;
-      case ClassResolver.PRIMITIVE_FLOAT_CLASS_ID:
+      case DispatchId.PRIMITIVE_VARINT32:
+        fieldAccessor.set(targetObject, buffer.readVarInt32());
+        return false;
+      case DispatchId.PRIMITIVE_VAR_UINT32:
+        fieldAccessor.set(targetObject, buffer.readVarUint32());
+        return false;
+      case DispatchId.PRIMITIVE_FLOAT32:
         fieldAccessor.set(targetObject, buffer.readFloat32());
         return false;
-      case ClassResolver.PRIMITIVE_LONG_CLASS_ID:
-        fieldAccessor.set(targetObject, fory.readInt64(buffer));
+      case DispatchId.PRIMITIVE_INT64:
+      case DispatchId.PRIMITIVE_UINT64:
+        fieldAccessor.set(targetObject, buffer.readInt64());
         return false;
-      case ClassResolver.PRIMITIVE_DOUBLE_CLASS_ID:
+      case DispatchId.PRIMITIVE_VARINT64:
+        fieldAccessor.set(targetObject, buffer.readVarInt64());
+        return false;
+      case DispatchId.PRIMITIVE_TAGGED_INT64:
+        fieldAccessor.set(targetObject, buffer.readTaggedInt64());
+        return false;
+      case DispatchId.PRIMITIVE_VAR_UINT64:
+        fieldAccessor.set(targetObject, buffer.readVarUint64());
+        return false;
+      case DispatchId.PRIMITIVE_TAGGED_UINT64:
+        fieldAccessor.set(targetObject, buffer.readTaggedUint64());
+        return false;
+      case DispatchId.PRIMITIVE_FLOAT64:
         fieldAccessor.set(targetObject, buffer.readFloat64());
         return false;
       default:
@@ -663,42 +737,59 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
   /**
    * Read a primitive field value from buffer and set it using direct memory offset access.
    *
-   * @param fory the fory instance for compression settings
    * @param buffer the buffer to read from
    * @param targetObject the object to set the field value on
    * @param fieldOffset the memory offset of the field
-   * @param classId the class ID of the primitive type
+   * @param dispatchId the dispatch ID of the primitive type
    * @return true if classId is not a primitive type and needs further read handling
    */
   private static boolean readPrimitiveFieldValue(
-      Fory fory, MemoryBuffer buffer, Object targetObject, long fieldOffset, short classId) {
-    switch (classId) {
-      case ClassResolver.PRIMITIVE_BOOLEAN_CLASS_ID:
+      MemoryBuffer buffer, Object targetObject, long fieldOffset, int dispatchId) {
+    switch (dispatchId) {
+      case DispatchId.PRIMITIVE_BOOL:
         Platform.putBoolean(targetObject, fieldOffset, buffer.readBoolean());
         return false;
-      case ClassResolver.PRIMITIVE_BYTE_CLASS_ID:
+      case DispatchId.PRIMITIVE_INT8:
+      case DispatchId.PRIMITIVE_UINT8:
         Platform.putByte(targetObject, fieldOffset, buffer.readByte());
         return false;
-      case ClassResolver.PRIMITIVE_CHAR_CLASS_ID:
+      case DispatchId.PRIMITIVE_CHAR:
         Platform.putChar(targetObject, fieldOffset, buffer.readChar());
         return false;
-      case ClassResolver.PRIMITIVE_SHORT_CLASS_ID:
+      case DispatchId.PRIMITIVE_INT16:
+      case DispatchId.PRIMITIVE_UINT16:
         Platform.putShort(targetObject, fieldOffset, buffer.readInt16());
         return false;
-      case ClassResolver.PRIMITIVE_INT_CLASS_ID:
-        if (fory.compressInt()) {
-          Platform.putInt(targetObject, fieldOffset, buffer.readVarInt32());
-        } else {
-          Platform.putInt(targetObject, fieldOffset, buffer.readInt32());
-        }
+      case DispatchId.PRIMITIVE_INT32:
+      case DispatchId.PRIMITIVE_UINT32:
+        Platform.putInt(targetObject, fieldOffset, buffer.readInt32());
         return false;
-      case ClassResolver.PRIMITIVE_FLOAT_CLASS_ID:
+      case DispatchId.PRIMITIVE_VARINT32:
+        Platform.putInt(targetObject, fieldOffset, buffer.readVarInt32());
+        return false;
+      case DispatchId.PRIMITIVE_VAR_UINT32:
+        Platform.putInt(targetObject, fieldOffset, buffer.readVarUint32());
+        return false;
+      case DispatchId.PRIMITIVE_FLOAT32:
         Platform.putFloat(targetObject, fieldOffset, buffer.readFloat32());
         return false;
-      case ClassResolver.PRIMITIVE_LONG_CLASS_ID:
-        Platform.putLong(targetObject, fieldOffset, fory.readInt64(buffer));
+      case DispatchId.PRIMITIVE_INT64:
+      case DispatchId.PRIMITIVE_UINT64:
+        Platform.putLong(targetObject, fieldOffset, buffer.readInt64());
         return false;
-      case ClassResolver.PRIMITIVE_DOUBLE_CLASS_ID:
+      case DispatchId.PRIMITIVE_VARINT64:
+        Platform.putLong(targetObject, fieldOffset, buffer.readVarInt64());
+        return false;
+      case DispatchId.PRIMITIVE_TAGGED_INT64:
+        Platform.putLong(targetObject, fieldOffset, buffer.readTaggedInt64());
+        return false;
+      case DispatchId.PRIMITIVE_VAR_UINT64:
+        Platform.putLong(targetObject, fieldOffset, buffer.readVarUint64());
+        return false;
+      case DispatchId.PRIMITIVE_TAGGED_UINT64:
+        Platform.putLong(targetObject, fieldOffset, buffer.readTaggedUint64());
+        return false;
+      case DispatchId.PRIMITIVE_FLOAT64:
         Platform.putDouble(targetObject, fieldOffset, buffer.readFloat64());
         return false;
       default:
@@ -710,24 +801,22 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
    * Read a nullable primitive field value from buffer. Reads the null flag first and returns early
    * if null.
    *
-   * @param fory the fory instance for compression settings
    * @param buffer the buffer to read from
    * @param targetObject the object to set the field value on
    * @param fieldAccessor the accessor to set the field value
-   * @param classId the class ID of the primitive type
-   * @return true if classId is not a primitive type and needs further read handling; false if value
+   * @param dispatchId the class ID of the primitive type
+   * @return true if dispatchId is not a primitive type and needs further read handling; false if value
    *     was null or successfully read
    */
   static boolean readPrimitiveNullableFieldValue(
-      Fory fory,
       MemoryBuffer buffer,
       Object targetObject,
       FieldAccessor fieldAccessor,
-      short classId) {
+      int dispatchId) {
     if (buffer.readByte() == Fory.NULL_FLAG) {
       return false;
     }
-    return readPrimitiveFieldValue(fory, buffer, targetObject, fieldAccessor, classId);
+    return readPrimitiveFieldValue(buffer, targetObject, fieldAccessor, dispatchId);
   }
 
   /**
@@ -740,63 +829,65 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       MemoryBuffer buffer,
       Object targetObject,
       FieldAccessor fieldAccessor,
-      short classId) {
+      int dispatchId) {
     if (!fory.isBasicTypesRefIgnored()) {
       return true; // let common path handle this.
     }
     // add time types serialization here.
-    switch (classId) {
-      case ClassResolver.STRING_CLASS_ID: // fastpath for string.
+    switch (dispatchId) {
+      case DispatchId.STRING: // fastpath for string.
         if (fory.getStringSerializer().needToWriteRef()) {
           fieldAccessor.putObject(targetObject, fory.readJavaStringRef(buffer));
         } else {
           fieldAccessor.putObject(targetObject, fory.readString(buffer));
         }
         return false;
-      case ClassResolver.BOOLEAN_CLASS_ID:
-        {
-          fieldAccessor.putObject(targetObject, buffer.readBoolean());
-          return false;
-        }
-      case ClassResolver.BYTE_CLASS_ID:
-        {
-          fieldAccessor.putObject(targetObject, buffer.readByte());
-          return false;
-        }
-      case ClassResolver.CHAR_CLASS_ID:
-        {
-          fieldAccessor.putObject(targetObject, buffer.readChar());
-          return false;
-        }
-      case ClassResolver.SHORT_CLASS_ID:
-        {
-          fieldAccessor.putObject(targetObject, buffer.readInt16());
-          return false;
-        }
-      case ClassResolver.INTEGER_CLASS_ID:
-        {
-          if (fory.compressInt()) {
-            fieldAccessor.putObject(targetObject, buffer.readVarInt32());
-          } else {
-            fieldAccessor.putObject(targetObject, buffer.readInt32());
-          }
-          return false;
-        }
-      case ClassResolver.FLOAT_CLASS_ID:
-        {
-          fieldAccessor.putObject(targetObject, buffer.readFloat32());
-          return false;
-        }
-      case ClassResolver.LONG_CLASS_ID:
-        {
-          fieldAccessor.putObject(targetObject, fory.readInt64(buffer));
-          return false;
-        }
-      case ClassResolver.DOUBLE_CLASS_ID:
-        {
-          fieldAccessor.putObject(targetObject, buffer.readFloat64());
-          return false;
-        }
+      case DispatchId.BOOL:
+        fieldAccessor.putObject(targetObject, buffer.readBoolean());
+        return false;
+      case DispatchId.INT8:
+      case DispatchId.UINT8:
+        fieldAccessor.putObject(targetObject, buffer.readByte());
+        return false;
+      case DispatchId.CHAR:
+        fieldAccessor.putObject(targetObject, buffer.readChar());
+        return false;
+      case DispatchId.INT16:
+      case DispatchId.UINT16:
+        fieldAccessor.putObject(targetObject, buffer.readInt16());
+        return false;
+      case DispatchId.INT32:
+      case DispatchId.UINT32:
+        fieldAccessor.putObject(targetObject, buffer.readInt32());
+        return false;
+      case DispatchId.VARINT32:
+        fieldAccessor.putObject(targetObject, buffer.readVarInt32());
+        return false;
+      case DispatchId.VAR_UINT32:
+        fieldAccessor.putObject(targetObject, buffer.readVarUint32());
+        return false;
+      case DispatchId.INT64:
+      case DispatchId.UINT64:
+        fieldAccessor.putObject(targetObject, buffer.readInt64());
+        return false;
+      case DispatchId.VARINT64:
+        fieldAccessor.putObject(targetObject, buffer.readVarInt64());
+        return false;
+      case DispatchId.TAGGED_INT64:
+        fieldAccessor.putObject(targetObject, buffer.readTaggedInt64());
+        return false;
+      case DispatchId.VAR_UINT64:
+        fieldAccessor.putObject(targetObject, buffer.readVarUint64());
+        return false;
+      case DispatchId.TAGGED_UINT64:
+        fieldAccessor.putObject(targetObject, buffer.readTaggedUint64());
+        return false;
+      case DispatchId.FLOAT32:
+        fieldAccessor.putObject(targetObject, buffer.readFloat32());
+        return false;
+      case DispatchId.FLOAT64:
+        fieldAccessor.putObject(targetObject, buffer.readFloat64());
+        return false;
       default:
         return true;
     }
@@ -810,8 +901,8 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
    * @param buffer the buffer to read from
    * @param targetObject the object to set the field value on
    * @param fieldAccessor the accessor to set the field value
-   * @param classId the class ID of the boxed type
-   * @return true if classId is not a basic type or ref tracking is enabled, needing further read
+   * @param dispatchId the class ID of the boxed type
+   * @return true if dispatchId is not a basic type or ref tracking is enabled, needing further read
    *     handling
    */
   static boolean readBasicNullableObjectFieldValue(
@@ -819,91 +910,117 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       MemoryBuffer buffer,
       Object targetObject,
       FieldAccessor fieldAccessor,
-      short classId) {
+      int dispatchId) {
     if (!fory.isBasicTypesRefIgnored()) {
       return true; // let common path handle this.
     }
     // add time types serialization here.
-    switch (classId) {
-      case ClassResolver.STRING_CLASS_ID: // fastpath for string.
+    switch (dispatchId) {
+      case DispatchId.STRING: // fastpath for string.
         fieldAccessor.putObject(targetObject, fory.readJavaStringRef(buffer));
         return false;
-      case ClassResolver.BOOLEAN_CLASS_ID:
-        {
-          if (buffer.readByte() == Fory.NULL_FLAG) {
-            fieldAccessor.putObject(targetObject, null);
-          } else {
-            fieldAccessor.putObject(targetObject, buffer.readBoolean());
-          }
-          return false;
+      case DispatchId.BOOL:
+        if (buffer.readByte() == Fory.NULL_FLAG) {
+          fieldAccessor.putObject(targetObject, null);
+        } else {
+          fieldAccessor.putObject(targetObject, buffer.readBoolean());
         }
-      case ClassResolver.BYTE_CLASS_ID:
-        {
-          if (buffer.readByte() == Fory.NULL_FLAG) {
-            fieldAccessor.putObject(targetObject, null);
-          } else {
-            fieldAccessor.putObject(targetObject, buffer.readByte());
-          }
-          return false;
+        return false;
+      case DispatchId.INT8:
+      case DispatchId.UINT8:
+        if (buffer.readByte() == Fory.NULL_FLAG) {
+          fieldAccessor.putObject(targetObject, null);
+        } else {
+          fieldAccessor.putObject(targetObject, buffer.readByte());
         }
-      case ClassResolver.CHAR_CLASS_ID:
-        {
-          if (buffer.readByte() == Fory.NULL_FLAG) {
-            fieldAccessor.putObject(targetObject, null);
-          } else {
-            fieldAccessor.putObject(targetObject, buffer.readChar());
-          }
-          return false;
+        return false;
+      case DispatchId.CHAR:
+        if (buffer.readByte() == Fory.NULL_FLAG) {
+          fieldAccessor.putObject(targetObject, null);
+        } else {
+          fieldAccessor.putObject(targetObject, buffer.readChar());
         }
-      case ClassResolver.SHORT_CLASS_ID:
-        {
-          if (buffer.readByte() == Fory.NULL_FLAG) {
-            fieldAccessor.putObject(targetObject, null);
-          } else {
-            fieldAccessor.putObject(targetObject, buffer.readInt16());
-          }
-          return false;
+        return false;
+      case DispatchId.INT16:
+      case DispatchId.UINT16:
+        if (buffer.readByte() == Fory.NULL_FLAG) {
+          fieldAccessor.putObject(targetObject, null);
+        } else {
+          fieldAccessor.putObject(targetObject, buffer.readInt16());
         }
-      case ClassResolver.INTEGER_CLASS_ID:
-        {
-          if (buffer.readByte() == Fory.NULL_FLAG) {
-            fieldAccessor.putObject(targetObject, null);
-          } else {
-            if (fory.compressInt()) {
-              fieldAccessor.putObject(targetObject, buffer.readVarInt32());
-            } else {
-              fieldAccessor.putObject(targetObject, buffer.readInt32());
-            }
-          }
-          return false;
+        return false;
+      case DispatchId.INT32:
+      case DispatchId.UINT32:
+        if (buffer.readByte() == Fory.NULL_FLAG) {
+          fieldAccessor.putObject(targetObject, null);
+        } else {
+          fieldAccessor.putObject(targetObject, buffer.readInt32());
         }
-      case ClassResolver.FLOAT_CLASS_ID:
-        {
-          if (buffer.readByte() == Fory.NULL_FLAG) {
-            fieldAccessor.putObject(targetObject, null);
-          } else {
-            fieldAccessor.putObject(targetObject, buffer.readFloat32());
-          }
-          return false;
+        return false;
+      case DispatchId.VARINT32:
+        if (buffer.readByte() == Fory.NULL_FLAG) {
+          fieldAccessor.putObject(targetObject, null);
+        } else {
+          fieldAccessor.putObject(targetObject, buffer.readVarInt32());
         }
-      case ClassResolver.LONG_CLASS_ID:
-        {
-          if (buffer.readByte() == Fory.NULL_FLAG) {
-            fieldAccessor.putObject(targetObject, null);
-          } else {
-            fieldAccessor.putObject(targetObject, fory.readInt64(buffer));
-          }
-          return false;
+        return false;
+      case DispatchId.VAR_UINT32:
+        if (buffer.readByte() == Fory.NULL_FLAG) {
+          fieldAccessor.putObject(targetObject, null);
+        } else {
+          fieldAccessor.putObject(targetObject, buffer.readVarUint32());
         }
-      case ClassResolver.DOUBLE_CLASS_ID:
-        {
-          if (buffer.readByte() == Fory.NULL_FLAG) {
-            fieldAccessor.putObject(targetObject, null);
-          } else {
-            fieldAccessor.putObject(targetObject, buffer.readFloat64());
-          }
-          return false;
+        return false;
+      case DispatchId.INT64:
+      case DispatchId.UINT64:
+        if (buffer.readByte() == Fory.NULL_FLAG) {
+          fieldAccessor.putObject(targetObject, null);
+        } else {
+          fieldAccessor.putObject(targetObject, buffer.readInt64());
         }
+        return false;
+      case DispatchId.VARINT64:
+        if (buffer.readByte() == Fory.NULL_FLAG) {
+          fieldAccessor.putObject(targetObject, null);
+        } else {
+          fieldAccessor.putObject(targetObject, buffer.readVarInt64());
+        }
+        return false;
+      case DispatchId.TAGGED_INT64:
+        if (buffer.readByte() == Fory.NULL_FLAG) {
+          fieldAccessor.putObject(targetObject, null);
+        } else {
+          fieldAccessor.putObject(targetObject, buffer.readTaggedInt64());
+        }
+        return false;
+      case DispatchId.VAR_UINT64:
+        if (buffer.readByte() == Fory.NULL_FLAG) {
+          fieldAccessor.putObject(targetObject, null);
+        } else {
+          fieldAccessor.putObject(targetObject, buffer.readVarUint64());
+        }
+        return false;
+      case DispatchId.TAGGED_UINT64:
+        if (buffer.readByte() == Fory.NULL_FLAG) {
+          fieldAccessor.putObject(targetObject, null);
+        } else {
+          fieldAccessor.putObject(targetObject, buffer.readTaggedUint64());
+        }
+        return false;
+      case DispatchId.FLOAT32:
+        if (buffer.readByte() == Fory.NULL_FLAG) {
+          fieldAccessor.putObject(targetObject, null);
+        } else {
+          fieldAccessor.putObject(targetObject, buffer.readFloat32());
+        }
+        return false;
+      case DispatchId.FLOAT64:
+        if (buffer.readByte() == Fory.NULL_FLAG) {
+          fieldAccessor.putObject(targetObject, null);
+        } else {
+          fieldAccessor.putObject(targetObject, buffer.readFloat64());
+        }
+        return false;
       default:
         return true;
     }
@@ -939,70 +1056,94 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
   }
 
   private Object[] copyFields(T originObj) {
-    FieldGroups.SerializationFieldInfo[] fieldInfos = this.fieldInfos;
+    SerializationFieldInfo[] fieldInfos = this.fieldInfos;
     if (fieldInfos == null) {
       fieldInfos = buildFieldsInfo();
     }
     Object[] fieldValues = new Object[fieldInfos.length];
     for (int i = 0; i < fieldInfos.length; i++) {
-      FieldGroups.SerializationFieldInfo fieldInfo = fieldInfos[i];
+      SerializationFieldInfo fieldInfo = fieldInfos[i];
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       long fieldOffset = fieldAccessor.getFieldOffset();
       if (fieldOffset != -1) {
-        fieldValues[i] = copyField(originObj, fieldOffset, fieldInfo.classId);
+        fieldValues[i] = copyField(originObj, fieldOffset, fieldInfo.dispatchId);
       } else {
         // field in record class has offset -1
         Object fieldValue = fieldAccessor.get(originObj);
-        fieldValues[i] = fory.copyObject(fieldValue, fieldInfo.classId);
+        fieldValues[i] = fory.copyObject(fieldValue, fieldInfo.dispatchId);
       }
     }
     return RecordUtils.remapping(copyRecordInfo, fieldValues);
   }
 
   private void copyFields(T originObj, T newObj) {
-    FieldGroups.SerializationFieldInfo[] fieldInfos = this.fieldInfos;
+    SerializationFieldInfo[] fieldInfos = this.fieldInfos;
     if (fieldInfos == null) {
       fieldInfos = buildFieldsInfo();
     }
-    for (FieldGroups.SerializationFieldInfo fieldInfo : fieldInfos) {
+    copyFields(fory, fieldInfos, originObj, newObj);
+  }
+
+  public static void copyFields(Fory fory, SerializationFieldInfo[] fieldInfos, Object originObj, Object newObj) {
+    for (SerializationFieldInfo fieldInfo : fieldInfos) {
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       long fieldOffset = fieldAccessor.getFieldOffset();
       // record class won't go to this path;
       assert fieldOffset != -1;
-      switch (fieldInfo.classId) {
-        case ClassResolver.PRIMITIVE_BYTE_CLASS_ID:
-          Platform.putByte(newObj, fieldOffset, Platform.getByte(originObj, fieldOffset));
-          break;
-        case ClassResolver.PRIMITIVE_CHAR_CLASS_ID:
-          Platform.putChar(newObj, fieldOffset, Platform.getChar(originObj, fieldOffset));
-          break;
-        case ClassResolver.PRIMITIVE_SHORT_CLASS_ID:
-          Platform.putShort(newObj, fieldOffset, Platform.getShort(originObj, fieldOffset));
-          break;
-        case ClassResolver.PRIMITIVE_INT_CLASS_ID:
-          Platform.putInt(newObj, fieldOffset, Platform.getInt(originObj, fieldOffset));
-          break;
-        case ClassResolver.PRIMITIVE_LONG_CLASS_ID:
-          Platform.putLong(newObj, fieldOffset, Platform.getLong(originObj, fieldOffset));
-          break;
-        case ClassResolver.PRIMITIVE_FLOAT_CLASS_ID:
-          Platform.putFloat(newObj, fieldOffset, Platform.getFloat(originObj, fieldOffset));
-          break;
-        case ClassResolver.PRIMITIVE_DOUBLE_CLASS_ID:
-          Platform.putDouble(newObj, fieldOffset, Platform.getDouble(originObj, fieldOffset));
-          break;
-        case ClassResolver.PRIMITIVE_BOOLEAN_CLASS_ID:
+      switch (fieldInfo.dispatchId) {
+        case DispatchId.PRIMITIVE_BOOL:
           Platform.putBoolean(newObj, fieldOffset, Platform.getBoolean(originObj, fieldOffset));
           break;
-        case ClassResolver.BOOLEAN_CLASS_ID:
-        case ClassResolver.BYTE_CLASS_ID:
-        case ClassResolver.CHAR_CLASS_ID:
-        case ClassResolver.SHORT_CLASS_ID:
-        case ClassResolver.INTEGER_CLASS_ID:
-        case ClassResolver.FLOAT_CLASS_ID:
-        case ClassResolver.LONG_CLASS_ID:
-        case ClassResolver.DOUBLE_CLASS_ID:
-        case ClassResolver.STRING_CLASS_ID:
+        case DispatchId.PRIMITIVE_INT8:
+        case DispatchId.PRIMITIVE_UINT8:
+          Platform.putByte(newObj, fieldOffset, Platform.getByte(originObj, fieldOffset));
+          break;
+        case DispatchId.PRIMITIVE_CHAR:
+          Platform.putChar(newObj, fieldOffset, Platform.getChar(originObj, fieldOffset));
+          break;
+        case DispatchId.PRIMITIVE_INT16:
+        case DispatchId.PRIMITIVE_UINT16:
+          Platform.putShort(newObj, fieldOffset, Platform.getShort(originObj, fieldOffset));
+          break;
+        case DispatchId.PRIMITIVE_INT32:
+        case DispatchId.PRIMITIVE_VARINT32:
+        case DispatchId.PRIMITIVE_UINT32:
+        case DispatchId.PRIMITIVE_VAR_UINT32:
+          Platform.putInt(newObj, fieldOffset, Platform.getInt(originObj, fieldOffset));
+          break;
+        case DispatchId.PRIMITIVE_INT64:
+        case DispatchId.PRIMITIVE_VARINT64:
+        case DispatchId.PRIMITIVE_TAGGED_INT64:
+        case DispatchId.PRIMITIVE_UINT64:
+        case DispatchId.PRIMITIVE_VAR_UINT64:
+        case DispatchId.PRIMITIVE_TAGGED_UINT64:
+          Platform.putLong(newObj, fieldOffset, Platform.getLong(originObj, fieldOffset));
+          break;
+        case DispatchId.PRIMITIVE_FLOAT32:
+          Platform.putFloat(newObj, fieldOffset, Platform.getFloat(originObj, fieldOffset));
+          break;
+        case DispatchId.PRIMITIVE_FLOAT64:
+          Platform.putDouble(newObj, fieldOffset, Platform.getDouble(originObj, fieldOffset));
+          break;
+        case DispatchId.BOOL:
+        case DispatchId.INT8:
+        case DispatchId.UINT8:
+        case DispatchId.CHAR:
+        case DispatchId.INT16:
+        case DispatchId.UINT16:
+        case DispatchId.INT32:
+        case DispatchId.VARINT32:
+        case DispatchId.UINT32:
+        case DispatchId.VAR_UINT32:
+        case DispatchId.INT64:
+        case DispatchId.VARINT64:
+        case DispatchId.TAGGED_INT64:
+        case DispatchId.UINT64:
+        case DispatchId.VAR_UINT64:
+        case DispatchId.TAGGED_UINT64:
+        case DispatchId.FLOAT32:
+        case DispatchId.FLOAT64:
+        case DispatchId.STRING:
           Platform.putObject(newObj, fieldOffset, Platform.getObject(originObj, fieldOffset));
           break;
         default:
@@ -1012,90 +1153,60 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
     }
   }
 
-  public static void copyFields(
-      Fory fory, FieldGroups.SerializationFieldInfo[] fieldInfos, Object originObj, Object newObj) {
-    for (FieldGroups.SerializationFieldInfo fieldInfo : fieldInfos) {
-      FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
-      long fieldOffset = fieldAccessor.getFieldOffset();
-      // record class won't go to this path;
-      assert fieldOffset != -1;
-      switch (fieldInfo.classId) {
-        case ClassResolver.PRIMITIVE_BYTE_CLASS_ID:
-          Platform.putByte(newObj, fieldOffset, Platform.getByte(originObj, fieldOffset));
-          break;
-        case ClassResolver.PRIMITIVE_CHAR_CLASS_ID:
-          Platform.putChar(newObj, fieldOffset, Platform.getChar(originObj, fieldOffset));
-          break;
-        case ClassResolver.PRIMITIVE_SHORT_CLASS_ID:
-          Platform.putShort(newObj, fieldOffset, Platform.getShort(originObj, fieldOffset));
-          break;
-        case ClassResolver.PRIMITIVE_INT_CLASS_ID:
-          Platform.putInt(newObj, fieldOffset, Platform.getInt(originObj, fieldOffset));
-          break;
-        case ClassResolver.PRIMITIVE_LONG_CLASS_ID:
-          Platform.putLong(newObj, fieldOffset, Platform.getLong(originObj, fieldOffset));
-          break;
-        case ClassResolver.PRIMITIVE_FLOAT_CLASS_ID:
-          Platform.putFloat(newObj, fieldOffset, Platform.getFloat(originObj, fieldOffset));
-          break;
-        case ClassResolver.PRIMITIVE_DOUBLE_CLASS_ID:
-          Platform.putDouble(newObj, fieldOffset, Platform.getDouble(originObj, fieldOffset));
-          break;
-        case ClassResolver.PRIMITIVE_BOOLEAN_CLASS_ID:
-          Platform.putBoolean(newObj, fieldOffset, Platform.getBoolean(originObj, fieldOffset));
-          break;
-        case ClassResolver.BOOLEAN_CLASS_ID:
-        case ClassResolver.BYTE_CLASS_ID:
-        case ClassResolver.CHAR_CLASS_ID:
-        case ClassResolver.SHORT_CLASS_ID:
-        case ClassResolver.INTEGER_CLASS_ID:
-        case ClassResolver.FLOAT_CLASS_ID:
-        case ClassResolver.LONG_CLASS_ID:
-        case ClassResolver.DOUBLE_CLASS_ID:
-        case ClassResolver.STRING_CLASS_ID:
-          Platform.putObject(newObj, fieldOffset, Platform.getObject(originObj, fieldOffset));
-          break;
-        default:
-          Platform.putObject(
-              newObj, fieldOffset, fory.copyObject(Platform.getObject(originObj, fieldOffset)));
-      }
-    }
-  }
-
-  private Object copyField(Object targetObject, long fieldOffset, short classId) {
-    switch (classId) {
-      case ClassResolver.PRIMITIVE_BOOLEAN_CLASS_ID:
+  private Object copyField(Object targetObject, long fieldOffset, int typeId) {
+    switch (typeId) {
+      case DispatchId.PRIMITIVE_BOOL:
         return Platform.getBoolean(targetObject, fieldOffset);
-      case ClassResolver.PRIMITIVE_BYTE_CLASS_ID:
+      case DispatchId.PRIMITIVE_INT8:
+      case DispatchId.PRIMITIVE_UINT8:
         return Platform.getByte(targetObject, fieldOffset);
-      case ClassResolver.PRIMITIVE_CHAR_CLASS_ID:
+      case DispatchId.PRIMITIVE_CHAR:
         return Platform.getChar(targetObject, fieldOffset);
-      case ClassResolver.PRIMITIVE_SHORT_CLASS_ID:
+      case DispatchId.PRIMITIVE_INT16:
+      case DispatchId.PRIMITIVE_UINT16:
         return Platform.getShort(targetObject, fieldOffset);
-      case ClassResolver.PRIMITIVE_INT_CLASS_ID:
+      case DispatchId.PRIMITIVE_INT32:
+      case DispatchId.PRIMITIVE_VARINT32:
+      case DispatchId.PRIMITIVE_UINT32:
+      case DispatchId.PRIMITIVE_VAR_UINT32:
         return Platform.getInt(targetObject, fieldOffset);
-      case ClassResolver.PRIMITIVE_FLOAT_CLASS_ID:
+      case DispatchId.PRIMITIVE_FLOAT32:
         return Platform.getFloat(targetObject, fieldOffset);
-      case ClassResolver.PRIMITIVE_LONG_CLASS_ID:
+      case DispatchId.PRIMITIVE_INT64:
+      case DispatchId.PRIMITIVE_VARINT64:
+      case DispatchId.PRIMITIVE_TAGGED_INT64:
+      case DispatchId.PRIMITIVE_UINT64:
+      case DispatchId.PRIMITIVE_VAR_UINT64:
+      case DispatchId.PRIMITIVE_TAGGED_UINT64:
         return Platform.getLong(targetObject, fieldOffset);
-      case ClassResolver.PRIMITIVE_DOUBLE_CLASS_ID:
+      case DispatchId.PRIMITIVE_FLOAT64:
         return Platform.getDouble(targetObject, fieldOffset);
-      case ClassResolver.BOOLEAN_CLASS_ID:
-      case ClassResolver.BYTE_CLASS_ID:
-      case ClassResolver.CHAR_CLASS_ID:
-      case ClassResolver.SHORT_CLASS_ID:
-      case ClassResolver.INTEGER_CLASS_ID:
-      case ClassResolver.FLOAT_CLASS_ID:
-      case ClassResolver.LONG_CLASS_ID:
-      case ClassResolver.DOUBLE_CLASS_ID:
-      case ClassResolver.STRING_CLASS_ID:
+      case DispatchId.BOOL:
+      case DispatchId.INT8:
+      case DispatchId.UINT8:
+      case DispatchId.CHAR:
+      case DispatchId.INT16:
+      case DispatchId.UINT16:
+      case DispatchId.INT32:
+      case DispatchId.VARINT32:
+      case DispatchId.UINT32:
+      case DispatchId.VAR_UINT32:
+      case DispatchId.FLOAT32:
+      case DispatchId.INT64:
+      case DispatchId.VARINT64:
+      case DispatchId.TAGGED_INT64:
+      case DispatchId.UINT64:
+      case DispatchId.VAR_UINT64:
+      case DispatchId.TAGGED_UINT64:
+      case DispatchId.FLOAT64:
+      case DispatchId.STRING:
         return Platform.getObject(targetObject, fieldOffset);
       default:
         return fory.copyObject(Platform.getObject(targetObject, fieldOffset));
     }
   }
 
-  private FieldGroups.SerializationFieldInfo[] buildFieldsInfo() {
+  private SerializationFieldInfo[] buildFieldsInfo() {
     List<Descriptor> descriptors = new ArrayList<>();
     if (RecordUtils.isRecord(type)) {
       RecordComponent[] components = RecordUtils.getRecordComponents(type);

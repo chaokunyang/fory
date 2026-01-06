@@ -115,11 +115,10 @@ class ClassDefDecoder {
     List<FieldInfo> fieldInfos = new ArrayList<>(numFields);
     for (int i = 0; i < numFields; i++) {
       int header = buffer.readByte() & 0xff;
-      //  `3 bits size + 2 bits field name encoding + polymorphism flag + nullability flag + ref
-      // tracking flag`
-      int encodingFlags = (header >>> 3) & 0b11;
+      //  `3 bits size + 2 bits field name encoding + nullability flag + ref tracking flag`
+      int encodingFlags = (header >>> 2) & 0b11;
       boolean useTagID = encodingFlags == 3;
-      int size = header >>> 5;
+      int size = header >>> 4;
       if (size == 7) {
         size += buffer.readVarUint32Small7();
       }
@@ -138,12 +137,11 @@ class ClassDefDecoder {
         fieldName = Encoders.FIELD_NAME_DECODER.decode(buffer.readBytes(size), encoding);
       }
 
-      boolean isMonomorphic = (header & 0b100) != 0;
       boolean nullable = (header & 0b010) != 0;
       boolean trackingRef = (header & 0b001) != 0;
       int typeId = buffer.readVarUint32Small14();
       FieldType fieldType =
-          FieldTypes.FieldType.read(buffer, resolver, isMonomorphic, nullable, trackingRef, typeId);
+          FieldTypes.FieldType.read(buffer, resolver, nullable, trackingRef, typeId);
 
       if (useTagID) {
         fieldInfos.add(new FieldInfo(className, fieldName, fieldType, tagId));

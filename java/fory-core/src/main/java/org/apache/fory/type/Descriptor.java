@@ -19,10 +19,13 @@
 
 package org.apache.fory.type;
 
+import static org.apache.fory.collection.Collections.ofHashSet;
 import static org.apache.fory.util.Preconditions.checkArgument;
 
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
+
+import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
 import java.lang.reflect.Member;
 import java.lang.reflect.Method;
@@ -31,6 +34,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -42,14 +46,22 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.atomic.AtomicBoolean;
+
 import org.apache.fory.annotation.Expose;
 import org.apache.fory.annotation.ForyField;
 import org.apache.fory.annotation.Ignore;
+import org.apache.fory.annotation.Int32Type;
+import org.apache.fory.annotation.Int64Type;
 import org.apache.fory.annotation.Internal;
+import org.apache.fory.annotation.Uint16Type;
+import org.apache.fory.annotation.Uint32Type;
+import org.apache.fory.annotation.Uint64Type;
+import org.apache.fory.annotation.Uint8Type;
 import org.apache.fory.collection.Collections;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.reflect.TypeRef;
+import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.serializer.converter.FieldConverter;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.StringUtils;
@@ -63,7 +75,7 @@ import org.apache.fory.util.record.RecordUtils;
  */
 public class Descriptor {
   private static Cache<
-          Class<?>, Tuple2<SortedMap<Member, Descriptor>, SortedMap<Member, Descriptor>>>
+      Class<?>, Tuple2<SortedMap<Member, Descriptor>, SortedMap<Member, Descriptor>>>
       descCache = CacheBuilder.newBuilder().weakKeys().softValues().concurrencyLevel(64).build();
   private static final Map<Class<?>, AtomicBoolean> flags = Collections.newClassKeyCacheMap();
 
@@ -88,6 +100,7 @@ public class Descriptor {
   private final Method readMethod;
   private final Method writeMethod;
   private final ForyField foryField;
+  private final Annotation typeAnnotation;
   private boolean nullable;
   // trackingRef should only be true if explicitly set to true via @ForyField(ref=true)
   // If no annotation or ref not specified, trackingRef stays false and type-based tracking applies
@@ -107,6 +120,7 @@ public class Descriptor {
     this.writeMethod = writeMethod;
     this.typeRef = typeRef;
     this.foryField = this.field.getAnnotation(ForyField.class);
+    typeAnnotation = getTypeAnnotation(field);
     if (!typeRef.isPrimitive()) {
       this.nullable = foryField == null || foryField.nullable();
     }
@@ -130,6 +144,7 @@ public class Descriptor {
     this.readMethod = null;
     this.writeMethod = null;
     this.foryField = null;
+    typeAnnotation = null;
     this.nullable = nullable;
     this.trackingRef = trackingRef;
   }
@@ -147,6 +162,7 @@ public class Descriptor {
     this.readMethod = readMethod;
     this.writeMethod = null;
     this.foryField = this.field.getAnnotation(ForyField.class);
+    typeAnnotation = getTypeAnnotation(field);
     if (!field.getType().isPrimitive()) {
       this.nullable = foryField == null || foryField.nullable();
     }
@@ -165,6 +181,7 @@ public class Descriptor {
     this.readMethod = readMethod;
     this.writeMethod = null;
     this.foryField = readMethod.getAnnotation(ForyField.class);
+    typeAnnotation = getTypeAnnotation(readMethod);
     if (!readMethod.getReturnType().isPrimitive()) {
       this.nullable = foryField == null || foryField.nullable();
     }
@@ -182,6 +199,7 @@ public class Descriptor {
     this.writeMethod = builder.writeMethod;
     this.trackingRef = builder.trackingRef;
     this.foryField = this.field == null ? null : this.field.getAnnotation(ForyField.class);
+    typeAnnotation = getTypeAnnotation(field);
     // Use builder.nullable directly - this is set by DescriptorBuilder.nullable()
     // and should be respected, especially for xlang compatible mode where remote
     // TypeDef's nullable flag may differ from local field's nullable
@@ -273,7 +291,13 @@ public class Descriptor {
     return ForyField.Morphic.AUTO;
   }
 
-  /** Try not use {@link TypeRef#getRawType()} since it's expensive. */
+  public Annotation getTypeAnnotation() {
+    return typeAnnotation;
+  }
+
+  /**
+   * Try not use {@link TypeRef#getRawType()} since it's expensive.
+   */
   public Class<?> getRawType() {
     Class<?> type = this.type;
     if (type == null) {
@@ -340,7 +364,7 @@ public class Descriptor {
   public static SortedMap<String, Descriptor> getDescriptorsMap(Class<?> clz) {
     SortedMap<Member, Descriptor> allDescriptorsMap = getAllDescriptorsMap(clz);
     Map<String, List<Member>> duplicateNameFields = getDuplicateNames(allDescriptorsMap);
-    Preconditions.checkArgument(
+    checkArgument(
         duplicateNameFields.isEmpty(), "%s has duplicate fields %s", clz, duplicateNameFields);
     TreeMap<String, Descriptor> map = new TreeMap<>();
     allDescriptorsMap.forEach((k, v) -> map.put(k.getName(), v));
@@ -450,7 +474,7 @@ public class Descriptor {
   }
 
   private static Tuple2<SortedMap<Member, Descriptor>, SortedMap<Member, Descriptor>>
-      createAllDescriptorsMap(Class<?> clz) {
+  createAllDescriptorsMap(Class<?> clz) {
     // use TreeMap to sort to fix field order
     TreeMap<Member, Descriptor> descriptorMap = new TreeMap<>(memberComparator);
     TreeMap<Member, Descriptor> currentDescriptorMap = new TreeMap<>(memberComparator);
@@ -633,9 +657,9 @@ public class Descriptor {
       if (getter != null) {
         if (getter.getParameterCount() != 0
             || !getter
-                .getGenericReturnType()
-                .getTypeName()
-                .equals(field.getGenericType().getTypeName())) {
+            .getGenericReturnType()
+            .getTypeName()
+            .equals(field.getGenericType().getTypeName())) {
           getter = null;
         }
       }
@@ -643,9 +667,9 @@ public class Descriptor {
       if (setter != null) {
         if (setter.getParameterCount() != 1
             || !setter
-                .getGenericParameterTypes()[0]
-                .getTypeName()
-                .equals(field.getGenericType().getTypeName())) {
+            .getGenericParameterTypes()[0]
+            .getTypeName()
+            .equals(field.getGenericType().getTypeName())) {
           setter = null;
         }
       }
@@ -655,5 +679,45 @@ public class Descriptor {
     // Don't cache descriptors using a static `WeakHashMap<Class<?>, SortedMap<Field, Descriptor>>`，
     // otherwise classes can't be gc.
     return descriptorMap;
+  }
+
+  private static final Set<Class<?>> typeAnnotationsTypes = new HashSet<>();
+
+  static {
+    typeAnnotationsTypes.add(Int32Type.class);
+    typeAnnotationsTypes.add(Int64Type.class);
+    typeAnnotationsTypes.add(Uint8Type.class);
+    typeAnnotationsTypes.add(Uint16Type.class);
+    typeAnnotationsTypes.add(Uint32Type.class);
+    typeAnnotationsTypes.add(Uint64Type.class);
+  }
+
+  private static Annotation getTypeAnnotation(Field field) {
+    if (field == null) {
+      return null;
+    }
+    return getAnnotation(field.getDeclaredAnnotations(), field.getName());
+  }
+
+  private static Annotation getTypeAnnotation(Method method) {
+    if (method == null) {
+      return null;
+    }
+    return getAnnotation(method.getDeclaredAnnotations(), method.getName());
+  }
+
+  private static Annotation getAnnotation(Annotation[] declaredAnnotations, String name) {
+    Annotation typeAnnotation = null;
+    for (Annotation annotation : declaredAnnotations) {
+      if (typeAnnotationsTypes.contains(annotation.annotationType())) {
+        if (typeAnnotation != null) {
+          throw new IllegalStateException(String.format(
+              "Multiple type annotation %s and %s found for %s!",
+              typeAnnotation, annotation.annotationType(), name));
+        }
+        typeAnnotation = annotation;
+      }
+    }
+    return typeAnnotation;
   }
 }

@@ -83,7 +83,7 @@ import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.function.Functions;
 
 // Internal type dispatcher.
-// Do not use this interface outside of fory package
+// Do not use this interface outside fory package
 @Internal
 @SuppressWarnings({"rawtypes", "unchecked"})
 public abstract class TypeResolver {
@@ -183,9 +183,8 @@ public abstract class TypeResolver {
    * ignored too.
    */
   public final boolean needToWriteRef(TypeRef<?> typeRef) {
-    Object extInfo = typeRef.getExtInfo();
-    if (extInfo instanceof TypeExtMeta) {
-      TypeExtMeta meta = (TypeExtMeta) extInfo;
+    TypeExtMeta meta = typeRef.getTypeExtMeta();
+    if (meta != null) {
       return meta.trackingRef();
     }
     Class<?> cls = typeRef.getRawType();

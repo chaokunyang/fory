@@ -69,6 +69,7 @@ import java.util.WeakHashMap;
 import java.util.stream.Collectors;
 import org.apache.fory.collection.IdentityMap;
 import org.apache.fory.collection.Tuple2;
+import org.apache.fory.meta.TypeExtMeta;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.reflect.TypeParameter;
 import org.apache.fory.reflect.TypeRef;
@@ -552,12 +553,12 @@ public class TypeUtils {
     return new TypeRef<Collection<E>>() {}.where(new TypeParameter<E>() {}, elemType);
   }
 
-  public static <E> TypeRef<Collection<E>> collectionOf(TypeRef<E> elemType, Object extMeta) {
+  public static <E> TypeRef<Collection<E>> collectionOf(TypeRef<E> elemType, TypeExtMeta extMeta) {
     return new TypeRef<Collection<E>>(extMeta) {}.where(new TypeParameter<E>() {}, elemType);
   }
 
   public static <E> TypeRef<? extends Collection<E>> collectionOf(
-      Class<?> collectionType, TypeRef<E> elemType, Object extMeta) {
+      Class<?> collectionType, TypeRef<E> elemType, TypeExtMeta extMeta) {
     return new TypeRef<Collection<E>>(extMeta) {}.where(new TypeParameter<E>() {}, elemType)
         .getSubtype(collectionType);
   }
@@ -572,13 +573,13 @@ public class TypeUtils {
   }
 
   public static <K, V> TypeRef<Map<K, V>> mapOf(
-      TypeRef<K> keyType, TypeRef<V> valueType, Object extMeta) {
+      TypeRef<K> keyType, TypeRef<V> valueType, TypeExtMeta extMeta) {
     return new TypeRef<Map<K, V>>(extMeta) {}.where(new TypeParameter<K>() {}, keyType)
         .where(new TypeParameter<V>() {}, valueType);
   }
 
   public static <K, V> TypeRef<? extends Map<K, V>> mapOf(
-      Class<?> mapType, TypeRef<K> keyType, TypeRef<V> valueType, Object extMeta) {
+      Class<?> mapType, TypeRef<K> keyType, TypeRef<V> valueType, TypeExtMeta extMeta) {
     TypeRef<Map<K, V>> mapTypeRef =
         new TypeRef<Map<K, V>>(extMeta) {}.where(new TypeParameter<K>() {}, keyType)
             .where(new TypeParameter<V>() {}, valueType);

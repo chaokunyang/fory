@@ -70,9 +70,9 @@ public class StreamTest extends ForyTestBase {
       buffer0.writeVarUint64(i);
       buffer0.writeVarUint64(Long.MIN_VALUE);
       buffer0.writeVarUint64(Long.MAX_VALUE);
-      buffer0.writeHybridInt64(i);
-      buffer0.writeHybridInt64(Long.MIN_VALUE);
-      buffer0.writeHybridInt64(Long.MAX_VALUE);
+      buffer0.writeTaggedInt64(i);
+      buffer0.writeTaggedInt64(Long.MIN_VALUE);
+      buffer0.writeTaggedInt64(Long.MAX_VALUE);
     }
     byte[] bytes = buffer0.getBytes(0, buffer0.writerIndex());
     ForyInputStream stream =
@@ -105,9 +105,9 @@ public class StreamTest extends ForyTestBase {
       assertEquals(buffer.readVarUint64(), i);
       assertEquals(buffer.readVarUint64(), Long.MIN_VALUE);
       assertEquals(buffer.readVarUint64(), Long.MAX_VALUE);
-      assertEquals(buffer.readHybridInt64(), i);
-      assertEquals(buffer.readHybridInt64(), Long.MIN_VALUE);
-      assertEquals(buffer.readHybridInt64(), Long.MAX_VALUE);
+      assertEquals(buffer.readTaggedInt64(), i);
+      assertEquals(buffer.readTaggedInt64(), Long.MIN_VALUE);
+      assertEquals(buffer.readTaggedInt64(), Long.MAX_VALUE);
     }
   }
 

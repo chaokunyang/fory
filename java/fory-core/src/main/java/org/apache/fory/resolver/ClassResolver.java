@@ -147,6 +147,7 @@ import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.type.GenericType;
 import org.apache.fory.type.TypeUtils;
+import org.apache.fory.type.Types;
 import org.apache.fory.type.union.Union;
 import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.Preconditions;
@@ -192,52 +193,43 @@ public class ClassResolver extends TypeResolver {
   /** Flag value indicating no class ID has been assigned. */
   public static final short NO_CLASS_ID = TypeResolver.NO_CLASS_ID;
 
-  public static final short LAMBDA_STUB_ID = 1;
-  public static final short JDK_PROXY_STUB_ID = 2;
-  public static final short REPLACE_STUB_ID = 3;
-
   /**
-   * Base offset for user-registered class IDs. User IDs are internally stored as (userId + {@value
-   * #USER_ID_BASE}). The first {@value #USER_ID_BASE} IDs (0 to {@value #USER_ID_BASE} - 1) are
-   * reserved for Fory's internal types.
+   * Base offset for user-registered class IDs. User IDs are internally stored as `userId + USER_ID_BASE`.
+   * 0 to `USER_ID_BASE` are reserved for Fory's internal types.
    */
   public static final short USER_ID_BASE = 256;
 
+  public static final int NATIVE_START_ID = Types.STRING + 1;
+  public static final int VOID_ID = NATIVE_START_ID;
+  public static final int CHAR_ID = NATIVE_START_ID + 1;
   // Note: following pre-defined class id should be continuous, since they may be used based range.
-  public static final short PRIMITIVE_VOID_CLASS_ID = (short) (REPLACE_STUB_ID + 1);
-  public static final short PRIMITIVE_BOOLEAN_CLASS_ID = (short) (PRIMITIVE_VOID_CLASS_ID + 1);
-  public static final short PRIMITIVE_BYTE_CLASS_ID = (short) (PRIMITIVE_VOID_CLASS_ID + 2);
-  public static final short PRIMITIVE_CHAR_CLASS_ID = (short) (PRIMITIVE_VOID_CLASS_ID + 3);
-  public static final short PRIMITIVE_SHORT_CLASS_ID = (short) (PRIMITIVE_VOID_CLASS_ID + 4);
-  public static final short PRIMITIVE_INT_CLASS_ID = (short) (PRIMITIVE_VOID_CLASS_ID + 5);
-  public static final short PRIMITIVE_FLOAT_CLASS_ID = (short) (PRIMITIVE_VOID_CLASS_ID + 6);
-  public static final short PRIMITIVE_LONG_CLASS_ID = (short) (PRIMITIVE_VOID_CLASS_ID + 7);
-  public static final short PRIMITIVE_DOUBLE_CLASS_ID = (short) (PRIMITIVE_VOID_CLASS_ID + 8);
-  public static final short VOID_CLASS_ID = (short) (PRIMITIVE_DOUBLE_CLASS_ID + 1);
-  public static final short BOOLEAN_CLASS_ID = (short) (VOID_CLASS_ID + 1);
-  public static final short BYTE_CLASS_ID = (short) (VOID_CLASS_ID + 2);
-  public static final short CHAR_CLASS_ID = (short) (VOID_CLASS_ID + 3);
-  public static final short SHORT_CLASS_ID = (short) (VOID_CLASS_ID + 4);
-  public static final short INTEGER_CLASS_ID = (short) (VOID_CLASS_ID + 5);
-  public static final short FLOAT_CLASS_ID = (short) (VOID_CLASS_ID + 6);
-  public static final short LONG_CLASS_ID = (short) (VOID_CLASS_ID + 7);
-  public static final short DOUBLE_CLASS_ID = (short) (VOID_CLASS_ID + 8);
-  public static final short STRING_CLASS_ID = (short) (VOID_CLASS_ID + 9);
-  public static final short PRIMITIVE_BOOLEAN_ARRAY_CLASS_ID = (short) (STRING_CLASS_ID + 1);
-  public static final short PRIMITIVE_BYTE_ARRAY_CLASS_ID = (short) (STRING_CLASS_ID + 2);
-  public static final short PRIMITIVE_CHAR_ARRAY_CLASS_ID = (short) (STRING_CLASS_ID + 3);
-  public static final short PRIMITIVE_SHORT_ARRAY_CLASS_ID = (short) (STRING_CLASS_ID + 4);
-  public static final short PRIMITIVE_INT_ARRAY_CLASS_ID = (short) (STRING_CLASS_ID + 5);
-  public static final short PRIMITIVE_FLOAT_ARRAY_CLASS_ID = (short) (STRING_CLASS_ID + 6);
-  public static final short PRIMITIVE_LONG_ARRAY_CLASS_ID = (short) (STRING_CLASS_ID + 7);
-  public static final short PRIMITIVE_DOUBLE_ARRAY_CLASS_ID = (short) (STRING_CLASS_ID + 8);
-  public static final short STRING_ARRAY_CLASS_ID = (short) (PRIMITIVE_DOUBLE_ARRAY_CLASS_ID + 1);
-  public static final short OBJECT_ARRAY_CLASS_ID = (short) (PRIMITIVE_DOUBLE_ARRAY_CLASS_ID + 2);
-  public static final short ARRAYLIST_CLASS_ID = (short) (PRIMITIVE_DOUBLE_ARRAY_CLASS_ID + 3);
-  public static final short HASHMAP_CLASS_ID = (short) (PRIMITIVE_DOUBLE_ARRAY_CLASS_ID + 4);
-  public static final short HASHSET_CLASS_ID = (short) (PRIMITIVE_DOUBLE_ARRAY_CLASS_ID + 5);
-  public static final short CLASS_CLASS_ID = (short) (PRIMITIVE_DOUBLE_ARRAY_CLASS_ID + 6);
-  public static final short EMPTY_OBJECT_ID = (short) (PRIMITIVE_DOUBLE_ARRAY_CLASS_ID + 7);
+  public static final int PRIMITIVE_VOID_ID = NATIVE_START_ID + 2;
+  public static final int PRIMITIVE_BOOL_ID = NATIVE_START_ID + 3;
+  public static final int PRIMITIVE_INT8_ID = NATIVE_START_ID + 4;
+  public static final int PRIMITIVE_CHAR_ID = NATIVE_START_ID + 5;
+  public static final int PRIMITIVE_INT16_ID = NATIVE_START_ID + 6;
+  public static final int PRIMITIVE_INT32_ID = NATIVE_START_ID + 7;
+  public static final int PRIMITIVE_FLOAT32_ID = NATIVE_START_ID + 8;
+  public static final int PRIMITIVE_INT64_ID = NATIVE_START_ID + 9;
+  public static final int PRIMITIVE_FLOAT64_ID = NATIVE_START_ID + 10;
+  public static final int PRIMITIVE_BOOLEAN_ARRAY_ID = NATIVE_START_ID + 11;
+  public static final int PRIMITIVE_BYTE_ARRAY_ID = NATIVE_START_ID + 12;
+  public static final int PRIMITIVE_CHAR_ARRAY_ID = NATIVE_START_ID + 13;
+  public static final int PRIMITIVE_SHORT_ARRAY_ID = NATIVE_START_ID + 14;
+  public static final int PRIMITIVE_INT_ARRAY_ID = NATIVE_START_ID + 15;
+  public static final int PRIMITIVE_FLOAT_ARRAY_ID = NATIVE_START_ID + 16;
+  public static final int PRIMITIVE_LONG_ARRAY_ID = NATIVE_START_ID + 17;
+  public static final int PRIMITIVE_DOUBLE_ARRAY_ID = NATIVE_START_ID + 18;
+  public static final int STRING_ARRAY_ID = NATIVE_START_ID + 19;
+  public static final int OBJECT_ARRAY_ID = NATIVE_START_ID + 20;
+  public static final int ARRAYLIST_ID = NATIVE_START_ID + 21;
+  public static final int HASHMAP_ID = NATIVE_START_ID + 22;
+  public static final int HASHSET_ID = NATIVE_START_ID + 23;
+  public static final int CLASS_ID = NATIVE_START_ID + 24;
+  public static final int EMPTY_OBJECT_ID = NATIVE_START_ID + 25;
+  public static final short LAMBDA_STUB_ID = NATIVE_START_ID + 26;
+  public static final short JDK_PROXY_STUB_ID = NATIVE_START_ID + 27;
+  public static final short REPLACE_STUB_ID = NATIVE_START_ID + 28;
 
   private final Fory fory;
   XtypeResolver xtypeResolver;
@@ -266,39 +258,39 @@ public class ClassResolver extends TypeResolver {
     registerInternal(LambdaSerializer.ReplaceStub.class, LAMBDA_STUB_ID);
     registerInternal(JdkProxySerializer.ReplaceStub.class, JDK_PROXY_STUB_ID);
     registerInternal(ReplaceResolveSerializer.ReplaceStub.class, REPLACE_STUB_ID);
-    registerInternal(void.class, PRIMITIVE_VOID_CLASS_ID);
-    registerInternal(boolean.class, PRIMITIVE_BOOLEAN_CLASS_ID);
-    registerInternal(byte.class, PRIMITIVE_BYTE_CLASS_ID);
-    registerInternal(char.class, PRIMITIVE_CHAR_CLASS_ID);
-    registerInternal(short.class, PRIMITIVE_SHORT_CLASS_ID);
-    registerInternal(int.class, PRIMITIVE_INT_CLASS_ID);
-    registerInternal(float.class, PRIMITIVE_FLOAT_CLASS_ID);
-    registerInternal(long.class, PRIMITIVE_LONG_CLASS_ID);
-    registerInternal(double.class, PRIMITIVE_DOUBLE_CLASS_ID);
-    registerInternal(Void.class, VOID_CLASS_ID);
-    registerInternal(Boolean.class, BOOLEAN_CLASS_ID);
-    registerInternal(Byte.class, BYTE_CLASS_ID);
-    registerInternal(Character.class, CHAR_CLASS_ID);
-    registerInternal(Short.class, SHORT_CLASS_ID);
-    registerInternal(Integer.class, INTEGER_CLASS_ID);
-    registerInternal(Float.class, FLOAT_CLASS_ID);
-    registerInternal(Long.class, LONG_CLASS_ID);
-    registerInternal(Double.class, DOUBLE_CLASS_ID);
-    registerInternal(String.class, STRING_CLASS_ID);
-    registerInternal(boolean[].class, PRIMITIVE_BOOLEAN_ARRAY_CLASS_ID);
-    registerInternal(byte[].class, PRIMITIVE_BYTE_ARRAY_CLASS_ID);
-    registerInternal(char[].class, PRIMITIVE_CHAR_ARRAY_CLASS_ID);
-    registerInternal(short[].class, PRIMITIVE_SHORT_ARRAY_CLASS_ID);
-    registerInternal(int[].class, PRIMITIVE_INT_ARRAY_CLASS_ID);
-    registerInternal(float[].class, PRIMITIVE_FLOAT_ARRAY_CLASS_ID);
-    registerInternal(long[].class, PRIMITIVE_LONG_ARRAY_CLASS_ID);
-    registerInternal(double[].class, PRIMITIVE_DOUBLE_ARRAY_CLASS_ID);
-    registerInternal(String[].class, STRING_ARRAY_CLASS_ID);
-    registerInternal(Object[].class, OBJECT_ARRAY_CLASS_ID);
-    registerInternal(ArrayList.class, ARRAYLIST_CLASS_ID);
-    registerInternal(HashMap.class, HASHMAP_CLASS_ID);
-    registerInternal(HashSet.class, HASHSET_CLASS_ID);
-    registerInternal(Class.class, CLASS_CLASS_ID);
+    registerInternal(void.class, PRIMITIVE_VOID_ID);
+    registerInternal(boolean.class, PRIMITIVE_BOOL_ID);
+    registerInternal(byte.class, PRIMITIVE_INT8_ID);
+    registerInternal(char.class, PRIMITIVE_CHAR_ID);
+    registerInternal(short.class, PRIMITIVE_INT16_ID);
+    registerInternal(int.class, PRIMITIVE_INT32_ID);
+    registerInternal(float.class, PRIMITIVE_FLOAT32_ID);
+    registerInternal(long.class, PRIMITIVE_INT64_ID);
+    registerInternal(double.class, PRIMITIVE_FLOAT64_ID);
+    registerInternal(Void.class, VOID_ID);
+    registerInternal(Boolean.class, Types.BOOL);
+    registerInternal(Byte.class, Types.INT8);
+    registerInternal(Character.class, CHAR_ID);
+    registerInternal(Short.class, Types.INT16);
+    registerInternal(Integer.class, Types.INT32);
+    registerInternal(Float.class, Types.FLOAT32);
+    registerInternal(Long.class, Types.INT64);
+    registerInternal(Double.class, Types.FLOAT64);
+    registerInternal(String.class, Types.STRING);
+    registerInternal(boolean[].class, PRIMITIVE_BOOLEAN_ARRAY_ID);
+    registerInternal(byte[].class, PRIMITIVE_BYTE_ARRAY_ID);
+    registerInternal(char[].class, PRIMITIVE_CHAR_ARRAY_ID);
+    registerInternal(short[].class, PRIMITIVE_SHORT_ARRAY_ID);
+    registerInternal(int[].class, PRIMITIVE_INT_ARRAY_ID);
+    registerInternal(float[].class, PRIMITIVE_FLOAT_ARRAY_ID);
+    registerInternal(long[].class, PRIMITIVE_LONG_ARRAY_ID);
+    registerInternal(double[].class, PRIMITIVE_DOUBLE_ARRAY_ID);
+    registerInternal(String[].class, STRING_ARRAY_ID);
+    registerInternal(Object[].class, OBJECT_ARRAY_ID);
+    registerInternal(ArrayList.class, ARRAYLIST_ID);
+    registerInternal(HashMap.class, HASHMAP_ID);
+    registerInternal(HashSet.class, HASHSET_ID);
+    registerInternal(Class.class, CLASS_ID);
     registerInternal(Object.class, EMPTY_OBJECT_ID);
     registerCommonUsedClasses();
     registerDefaultClasses();
@@ -1476,9 +1468,9 @@ public class ClassResolver extends TypeResolver {
   public void writeClassAndUpdateCache(MemoryBuffer buffer, Class<?> cls) {
     // fast path for common type
     if (cls == Integer.class) {
-      buffer.writeVarUint32Small7(INTEGER_CLASS_ID << 1);
+      buffer.writeVarUint32Small7(Types.INT32 << 1);
     } else if (cls == Long.class) {
-      buffer.writeVarUint32Small7(LONG_CLASS_ID << 1);
+      buffer.writeVarUint32Small7(Types.INT64 << 1);
     } else {
       writeClassInfo(buffer, getOrUpdateClassInfo(cls));
     }
@@ -1872,7 +1864,7 @@ public class ClassResolver extends TypeResolver {
   }
 
   public boolean isPrimitive(short classId) {
-    return classId >= PRIMITIVE_VOID_CLASS_ID && classId <= PRIMITIVE_DOUBLE_CLASS_ID;
+    return classId >= PRIMITIVE_VOID_ID && classId <= PRIMITIVE_FLOAT64_ID;
   }
 
   public CodeGenerator getCodeGenerator(ClassLoader... loaders) {

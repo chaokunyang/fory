@@ -561,7 +561,7 @@ public class MemoryBufferTest {
   }
 
   @Test
-  public void testWriteHybridInt64() {
+  public void testWriteTaggedInt64() {
     MemoryBuffer buf = MemoryUtils.buffer(8);
     checkHybridInt64(buf, -1, 4);
     for (int i = 0; i < 10; i++) {
@@ -592,12 +592,12 @@ public class MemoryBufferTest {
   private void checkHybridInt64(MemoryBuffer buf, long value, int bytesWritten) {
     int readerIndex = buf.readerIndex();
     assertEquals(buf.writerIndex(), readerIndex);
-    int actualBytesWritten = buf.writeHybridInt64(value);
+    int actualBytesWritten = buf.writeTaggedInt64(value);
     assertEquals(actualBytesWritten, bytesWritten);
-    long varLong = buf.readHybridInt64();
+    long varLong = buf.readTaggedInt64();
     assertEquals(buf.writerIndex(), buf.readerIndex());
     assertEquals(value, varLong);
-    assertEquals(buf.slice(readerIndex, buf.readerIndex() - readerIndex).readHybridInt64(), value);
+    assertEquals(buf.slice(readerIndex, buf.readerIndex() - readerIndex).readTaggedInt64(), value);
   }
 
   @Test
@@ -633,13 +633,13 @@ public class MemoryBufferTest {
   private void checkHybridUint64(MemoryBuffer buf, long value, int bytesWritten) {
     int readerIndex = buf.readerIndex();
     assertEquals(buf.writerIndex(), readerIndex);
-    int actualBytesWritten = buf.writeHybridUint64(value);
+    int actualBytesWritten = buf.writeTaggedUint64(value);
     assertEquals(actualBytesWritten, bytesWritten);
-    long varLong = buf.readHybridUint64();
+    long varLong = buf.readTaggedUint64();
     assertEquals(buf.writerIndex(), buf.readerIndex());
     assertEquals(value, varLong);
     assertEquals(
-        buf.slice(readerIndex, buf.readerIndex() - readerIndex).readHybridUint64(), value);
+        buf.slice(readerIndex, buf.readerIndex() - readerIndex).readTaggedUint64(), value);
   }
 
   @Test

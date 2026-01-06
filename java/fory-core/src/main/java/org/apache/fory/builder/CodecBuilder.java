@@ -63,7 +63,6 @@ import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.ClassInfo;
 import org.apache.fory.resolver.ClassInfoHolder;
 import org.apache.fory.type.Descriptor;
-import org.apache.fory.type.FinalObjectTypeStub;
 import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.StringUtils;
@@ -154,10 +153,6 @@ public abstract class CodecBuilder {
   protected Expression tryCastIfPublic(
       Expression expression, TypeRef<?> targetType, boolean inline) {
     Class<?> rawType = getRawType(targetType);
-    if (rawType == FinalObjectTypeStub.class) {
-      // final field doesn't exist in this class, skip cast.
-      return expression;
-    }
     if (inline) {
       if (sourcePublicAccessible(rawType)) {
         return new Cast(expression, targetType);
@@ -309,7 +304,7 @@ public abstract class CodecBuilder {
     return new Cast(getObj, descriptor.getTypeRef(), descriptor.getName());
   }
 
-  /** Returns an expression that get field value> from <code>bean</code> using {@link Unsafe}. */
+  /** Returns an expression that get field value> from <code>bean</code> using `Unsafe`. */
   private Expression unsafeAccessField(
       Expression inputObject, Class<?> cls, Descriptor descriptor) {
     String fieldName = descriptor.getName();
@@ -418,8 +413,7 @@ public abstract class CodecBuilder {
   }
 
   /**
-   * Returns an expression that set field <code>value</code> to <code>bean</code> using {@link
-   * Unsafe}.
+   * Returns an expression that set field <code>value</code> to <code>bean</code> using `Unsafe`.
    */
   private Expression unsafeSetField(Expression bean, Descriptor descriptor, Expression value) {
     TypeRef<?> fieldType = descriptor.getTypeRef();

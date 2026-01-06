@@ -40,6 +40,7 @@ import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.test.bean.Foo;
 import org.apache.fory.type.Descriptor;
+import org.apache.fory.type.Types;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
@@ -188,8 +189,10 @@ public class ClassDefTest extends ForyTestBase {
   public void testTypeExtInfo() {
     Fory fory = Fory.builder().withMetaShare(true).build();
     ClassResolver classResolver = fory.getClassResolver();
-    assertTrue(classResolver.needToWriteRef(TypeRef.of(Foo.class, new TypeExtMeta(true, true))));
-    assertFalse(classResolver.needToWriteRef(TypeRef.of(Foo.class, new TypeExtMeta(true, false))));
+    assertTrue(classResolver.needToWriteRef(TypeRef.of(Foo.class,
+        new TypeExtMeta(Types.STRUCT, true, true))));
+    assertFalse(classResolver.needToWriteRef(
+        TypeRef.of(Foo.class, new TypeExtMeta(Types.STRUCT, true, false))));
   }
 
   // Test classes for duplicate tag ID validation

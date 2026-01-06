@@ -20,12 +20,18 @@
 package org.apache.fory.meta;
 
 public class TypeExtMeta {
+  private final int typeId;
   private final boolean nullable;
   private final boolean trackingRef;
 
-  TypeExtMeta(boolean nullable, boolean trackingRef) {
+  TypeExtMeta(int typeId, boolean nullable, boolean trackingRef) {
+    this.typeId = typeId;
     this.nullable = nullable;
     this.trackingRef = trackingRef;
+  }
+
+  public int typeId() {
+    return typeId;
   }
 
   public boolean nullable() {
@@ -38,6 +44,10 @@ public class TypeExtMeta {
 
   @Override
   public String toString() {
-    return "TypeExtMeta{" + "nullable=" + nullable + ", trackingRef=" + trackingRef + '}';
+    return "TypeExtMeta{" +
+        "typeId=" + typeId +
+        ", nullable=" + nullable +
+        ", trackingRef=" + trackingRef +
+        '}';
   }
 }

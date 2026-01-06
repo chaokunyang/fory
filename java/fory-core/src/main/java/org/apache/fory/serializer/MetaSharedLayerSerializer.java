@@ -36,6 +36,7 @@ import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
+import org.apache.fory.type.DispatchId;
 import org.apache.fory.type.Generics;
 
 /**
@@ -125,16 +126,16 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
     for (SerializationFieldInfo fieldInfo : buildInFields) {
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       boolean nullable = fieldInfo.nullable;
-      short classId = fieldInfo.classId;
+      int dispatchId = fieldInfo.dispatchId;
       if (AbstractObjectSerializer.writePrimitiveFieldValue(
-          fory, buffer, value, fieldAccessor, classId)) {
+          buffer, value, fieldAccessor, dispatchId)) {
         Object fieldValue = fieldAccessor.getObject(value);
         boolean writeBasicObjectResult =
             nullable
                 ? AbstractObjectSerializer.writeBasicNullableObjectFieldValue(
-                    fory, buffer, fieldValue, classId)
+                    fory, buffer, fieldValue, dispatchId)
                 : AbstractObjectSerializer.writeBasicObjectFieldValue(
-                    fory, buffer, fieldValue, classId);
+                    fory, buffer, fieldValue, dispatchId);
         if (writeBasicObjectResult) {
           Serializer<Object> serializer = fieldInfo.classInfo.getSerializer();
           if (!metaShareEnabled || fieldInfo.useDeclaredTypeInfo) {
@@ -232,14 +233,14 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       if (fieldAccessor != null) {
         boolean nullable = fieldInfo.nullable;
-        short classId = fieldInfo.classId;
+        int dispatchId = fieldInfo.dispatchId;
         if (AbstractObjectSerializer.readPrimitiveFieldValue(
-                fory, buffer, obj, fieldAccessor, classId)
+            buffer, obj, fieldAccessor, dispatchId)
             && (nullable
                 ? AbstractObjectSerializer.readBasicNullableObjectFieldValue(
-                    fory, buffer, obj, fieldAccessor, classId)
+                    fory, buffer, obj, fieldAccessor, dispatchId)
                 : AbstractObjectSerializer.readBasicObjectFieldValue(
-                    fory, buffer, obj, fieldAccessor, classId))) {
+                    fory, buffer, obj, fieldAccessor, dispatchId))) {
           Object fieldValue =
               AbstractObjectSerializer.readFinalObjectFieldValue(
                   binding, refResolver, classResolver, fieldInfo, buffer);
@@ -247,7 +248,7 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
         }
       } else {
         // Field doesn't exist in current class - skip the value
-        if (MetaSharedSerializer.skipPrimitiveFieldValueFailed(fory, fieldInfo.classId, buffer)) {
+        if (MetaSharedSerializer.skipPrimitiveFieldValueFailed(fory, fieldInfo.dispatchId, buffer)) {
           if (fieldInfo.classInfo == null) {
             fory.readRef(buffer, classInfoHolder);
           } else {
@@ -340,37 +341,59 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
 
   private void writeFieldValueFromArray(
       MemoryBuffer buffer, SerializationFieldInfo fieldInfo, Object fieldValue) {
-    short classId = fieldInfo.classId;
+    int dispatchId = fieldInfo.dispatchId;
     boolean nullable = fieldInfo.nullable;
 
     // Handle primitives first
-    switch (classId) {
-      case ClassResolver.PRIMITIVE_BOOLEAN_CLASS_ID:
+    switch (dispatchId) {
+      case DispatchId.PRIMITIVE_BOOL:
         buffer.writeBoolean((Boolean) fieldValue);
         return;
-      case ClassResolver.PRIMITIVE_BYTE_CLASS_ID:
+      case DispatchId.PRIMITIVE_INT8:
+      case DispatchId.PRIMITIVE_UINT8:
         buffer.writeByte((Byte) fieldValue);
         return;
-      case ClassResolver.PRIMITIVE_CHAR_CLASS_ID:
+      case DispatchId.PRIMITIVE_CHAR:
         buffer.writeChar((Character) fieldValue);
         return;
-      case ClassResolver.PRIMITIVE_SHORT_CLASS_ID:
+      case DispatchId.PRIMITIVE_INT16:
+      case DispatchId.PRIMITIVE_UINT16:
         buffer.writeInt16((Short) fieldValue);
         return;
-      case ClassResolver.PRIMITIVE_INT_CLASS_ID:
-        if (fory.compressInt()) {
-          buffer.writeVarInt32((Integer) fieldValue);
-        } else {
-          buffer.writeInt32((Integer) fieldValue);
-        }
+      case DispatchId.PRIMITIVE_INT32:
+        buffer.writeInt32((Integer) fieldValue);
         return;
-      case ClassResolver.PRIMITIVE_FLOAT_CLASS_ID:
+      case DispatchId.PRIMITIVE_VARINT32:
+        buffer.writeVarInt32((Integer) fieldValue);
+        return;
+      case DispatchId.PRIMITIVE_UINT32:
+        buffer.writeInt32((Integer) fieldValue);
+        return;
+      case DispatchId.PRIMITIVE_VAR_UINT32:
+        buffer.writeVarUint32((Integer) fieldValue);
+        return;
+      case DispatchId.PRIMITIVE_INT64:
+        buffer.writeInt64((Long) fieldValue);
+        return;
+      case DispatchId.PRIMITIVE_VARINT64:
+        buffer.writeVarInt64((Long) fieldValue);
+        return;
+      case DispatchId.PRIMITIVE_TAGGED_INT64:
+        buffer.writeTaggedInt64((Long) fieldValue);
+        return;
+      case DispatchId.PRIMITIVE_UINT64:
+        buffer.writeInt64((Long) fieldValue);
+        return;
+      case DispatchId.PRIMITIVE_VAR_UINT64:
+        buffer.writeVarUint64((Long) fieldValue);
+        return;
+      case DispatchId.PRIMITIVE_TAGGED_UINT64:
+        buffer.writeTaggedUint64((Long) fieldValue);
+        return;
+      case DispatchId.PRIMITIVE_FLOAT32:
         buffer.writeFloat32((Float) fieldValue);
         return;
-      case ClassResolver.PRIMITIVE_LONG_CLASS_ID:
-        fory.writeInt64(buffer, (Long) fieldValue);
-        return;
-      case ClassResolver.PRIMITIVE_DOUBLE_CLASS_ID:
+      case DispatchId.PRIMITIVE_FLOAT64:
         buffer.writeFloat64((Double) fieldValue);
         return;
       default:
@@ -428,14 +451,11 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
   }
 
   private Object readFieldValueToArray(MemoryBuffer buffer, SerializationFieldInfo fieldInfo) {
-    short classId = fieldInfo.classId;
-
+    int dispatchId = fieldInfo.dispatchId;
     // Handle primitives
-    if (classId >= ClassResolver.PRIMITIVE_BOOLEAN_CLASS_ID
-        && classId <= ClassResolver.PRIMITIVE_DOUBLE_CLASS_ID) {
-      return Serializers.readPrimitiveValue(fory, buffer, classId);
+    if (DispatchId.isPrimitive(dispatchId)) {
+      return Serializers.readPrimitiveValue(fory, buffer, dispatchId);
     }
-
     // Handle objects
     return AbstractObjectSerializer.readFinalObjectFieldValue(
         binding, refResolver, classResolver, fieldInfo, buffer);

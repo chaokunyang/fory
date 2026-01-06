@@ -1137,28 +1137,28 @@ public final class MemoryBuffer {
   }
 
   /**
-   * Write signed long using fory Hybrid(Small long as int) encoding. If long is in [0xc0000000, 0x3fffffff],
+   * Write signed long using fory Tagged(Small long as int) encoding. If long is in [0xc0000000, 0x3fffffff],
    * encode as 4 bytes int: | little-endian: ((int) value) << 1 |; Otherwise write as 9 bytes: | 0b1
    * | little-endian 8bytes long |
    */
-  public int writeHybridInt64(long value) {
+  public int writeTaggedInt64(long value) {
     ensure(writerIndex + 9);
-    return _unsafeWriteHybridInt64(value);
+    return _unsafeWriteTaggedInt64(value);
   }
 
   /**
-   * Write unsigned long using fory Hybrid(Small long as int) encoding. If long is in [0,
+   * Write unsigned long using fory Tagged(Small long as int) encoding. If long is in [0,
    * 0x7fffffff], encode as 4 bytes int: | little-endian: ((int) value) << 1 |; Otherwise write as 9
    * bytes: | 0b1 | little-endian 8bytes long |
    */
-  public int writeHybridUint64(long value) {
+  public int writeTaggedUint64(long value) {
     ensure(writerIndex + 9);
-    return _unsafeWriteHybridUint64(value);
+    return _unsafeWriteTaggedUint64(value);
   }
 
-  /** Write unsigned long using fory Hybrid(Small Long as Int) encoding. */
+  /** Write unsigned long using fory Tagged(Small Long as Int) encoding. */
   // CHECKSTYLE.OFF:MethodName
-  public int _unsafeWriteHybridUint64(long value) {
+  public int _unsafeWriteTaggedUint64(long value) {
     // CHECKSTYLE.ON:MethodName
     final int writerIndex = this.writerIndex;
     final long pos = address + writerIndex;
@@ -1186,9 +1186,9 @@ public final class MemoryBuffer {
   private static final long HALF_MIN_INT_VALUE = Integer.MIN_VALUE / 2;
   private static final byte BIG_LONG_FLAG = 0b1; // bit 0 set, means big long.
 
-  /** Write long using fory Hybrid(Small Long as Int) encoding. */
+  /** Write long using fory Tagged(Small Long as Int) encoding. */
   // CHECKSTYLE.OFF:MethodName
-  public int _unsafeWriteHybridInt64(long value) {
+  public int _unsafeWriteTaggedInt64(long value) {
     // CHECKSTYLE.ON:MethodName
     final int writerIndex = this.writerIndex;
     final long pos = address + writerIndex;
@@ -1523,27 +1523,27 @@ public final class MemoryBuffer {
     return Long.reverseBytes(UNSAFE.getLong(heapMemory, address + readerIdx));
   }
 
-  /** Read signed fory Hybrid(Small Long as Int) encoded long. */
-  public long readHybridInt64() {
+  /** Read signed fory Tagged(Small Long as Int) encoded long. */
+  public long readTaggedInt64() {
     if (LITTLE_ENDIAN) {
-      return _readHybridInt64OnLE();
+      return _readTaggedInt64OnLE();
     } else {
-      return _readHybridInt64OnBE();
+      return _readTaggedInt64OnBE();
     }
   }
 
-  /** Read unsigned fory Hybrid(Small Long as Int) encoded long. */
-  public long readHybridUint64() {
+  /** Read unsigned fory Tagged(Small Long as Int) encoded long. */
+  public long readTaggedUint64() {
     if (LITTLE_ENDIAN) {
-      return _readHybridUint64OnLE();
+      return _readTaggedUint64OnLE();
     } else {
-      return _readHybridUint64OnBE();
+      return _readTaggedUint64OnBE();
     }
   }
 
   @CodegenInvoke
   // CHECKSTYLE.OFF:MethodName
-  public long _readHybridUint64OnLE() {
+  public long _readTaggedUint64OnLE() {
     // CHECKSTYLE.ON:MethodName
     final int readIdx = readerIndex;
     int diff = size - readIdx;
@@ -1565,7 +1565,7 @@ public final class MemoryBuffer {
 
   @CodegenInvoke
   // CHECKSTYLE.OFF:MethodName
-  public long _readHybridUint64OnBE() {
+  public long _readTaggedUint64OnBE() {
     // CHECKSTYLE.ON:MethodName
     final int readIdx = readerIndex;
     int diff = size - readIdx;
@@ -1587,7 +1587,7 @@ public final class MemoryBuffer {
 
   @CodegenInvoke
   // CHECKSTYLE.OFF:MethodName
-  public long _readHybridInt64OnLE() {
+  public long _readTaggedInt64OnLE() {
     // CHECKSTYLE.ON:MethodName
     // Duplicate and manual inline for performance.
     // noinspection Duplicates
@@ -1611,7 +1611,7 @@ public final class MemoryBuffer {
 
   @CodegenInvoke
   // CHECKSTYLE.OFF:MethodName
-  public long _readHybridInt64OnBE() {
+  public long _readTaggedInt64OnBE() {
     // CHECKSTYLE.ON:MethodName
     // noinspection Duplicates
     final int readIdx = readerIndex;

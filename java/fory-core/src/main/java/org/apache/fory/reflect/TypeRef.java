@@ -34,13 +34,15 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import javax.annotation.CheckForNull;
+
+import org.apache.fory.meta.TypeExtMeta;
 import org.apache.fory.type.TypeUtils;
 
 // Mostly derived from Guava 32.1.2 com.google.common.reflect.TypeToken
 // https://github.com/google/guava/blob/9f6a3840/guava/src/com/google/common/reflect/TypeToken.java
 public class TypeRef<T> {
   private final Type type;
-  private final Object extInfo;
+  private final TypeExtMeta typeExtMeta;
   private transient Class<? super T> rawType;
   private transient Map<TypeVariableKey, Type> typeMappings;
 
@@ -58,27 +60,27 @@ public class TypeRef<T> {
    */
   protected TypeRef() {
     this.type = capture();
-    this.extInfo = null;
+    this.typeExtMeta = null;
   }
 
-  protected TypeRef(Object extInfo) {
+  protected TypeRef(TypeExtMeta typeExtMeta) {
     this.type = capture();
-    this.extInfo = extInfo;
+    this.typeExtMeta = typeExtMeta;
   }
 
   private TypeRef(Class<T> declaringClass) {
     this.type = declaringClass;
-    this.extInfo = null;
+    this.typeExtMeta = null;
   }
 
-  private TypeRef(Class<T> declaringClass, Object extInfo) {
+  private TypeRef(Class<T> declaringClass, TypeExtMeta typeExtMeta) {
     this.type = declaringClass;
-    this.extInfo = extInfo;
+    this.typeExtMeta = typeExtMeta;
   }
 
   private TypeRef(Type type) {
     this.type = type;
-    this.extInfo = null;
+    this.typeExtMeta = null;
   }
 
   /** Returns an instance of type token that wraps {@code type}. */
@@ -86,7 +88,7 @@ public class TypeRef<T> {
     return new TypeRef<>(clazz);
   }
 
-  public static <T> TypeRef<T> of(Class<T> clazz, Object extInfo) {
+  public static <T> TypeRef<T> of(Class<T> clazz, TypeExtMeta extInfo) {
     return new TypeRef<>(clazz, extInfo);
   }
 
@@ -158,8 +160,8 @@ public class TypeRef<T> {
             });
   }
 
-  public Object getExtInfo() {
-    return extInfo;
+  public TypeExtMeta getTypeExtMeta() {
+    return typeExtMeta;
   }
 
   /** Returns true if this type is one of the primitive types (including {@code void}). */

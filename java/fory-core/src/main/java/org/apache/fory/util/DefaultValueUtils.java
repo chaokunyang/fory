@@ -34,7 +34,7 @@ import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.reflect.FieldAccessor;
-import org.apache.fory.resolver.ClassResolver;
+import org.apache.fory.type.DispatchId;
 import org.apache.fory.type.ScalaTypes;
 import org.apache.fory.type.TypeUtils;
 import org.apache.fory.util.unsafe._JDKAccess;
@@ -137,7 +137,7 @@ public class DefaultValueUtils {
                       fieldName,
                       defaultValue,
                       fieldAccessor,
-                      classId != null ? classId : ClassResolver.NO_CLASS_ID));
+                      classId != null ? classId : DispatchId.UNKNOWN));
             }
           }
         }
@@ -373,36 +373,56 @@ public class DefaultValueUtils {
         short classId = defaultField.getClassId();
         long fieldOffset = fieldAccessor.getFieldOffset();
         switch (classId) {
-          case ClassResolver.PRIMITIVE_BOOLEAN_CLASS_ID:
-          case ClassResolver.BOOLEAN_CLASS_ID:
+          case DispatchId.PRIMITIVE_BOOL:
+          case DispatchId.BOOL:
             Platform.putBoolean(obj, fieldOffset, (Boolean) defaultValue);
             break;
-          case ClassResolver.PRIMITIVE_BYTE_CLASS_ID:
-          case ClassResolver.BYTE_CLASS_ID:
+          case DispatchId.PRIMITIVE_INT8:
+          case DispatchId.INT8:
+          case DispatchId.PRIMITIVE_UINT8:
+          case DispatchId.UINT8:
             Platform.putByte(obj, fieldOffset, (Byte) defaultValue);
             break;
-          case ClassResolver.PRIMITIVE_CHAR_CLASS_ID:
-          case ClassResolver.CHAR_CLASS_ID:
+          case DispatchId.PRIMITIVE_CHAR:
+          case DispatchId.CHAR:
             Platform.putChar(obj, fieldOffset, (Character) defaultValue);
             break;
-          case ClassResolver.PRIMITIVE_SHORT_CLASS_ID:
-          case ClassResolver.SHORT_CLASS_ID:
+          case DispatchId.PRIMITIVE_INT16:
+          case DispatchId.INT16:
+          case DispatchId.PRIMITIVE_UINT16:
+          case DispatchId.UINT16:
             Platform.putShort(obj, fieldOffset, (Short) defaultValue);
             break;
-          case ClassResolver.PRIMITIVE_INT_CLASS_ID:
-          case ClassResolver.INTEGER_CLASS_ID:
+          case DispatchId.PRIMITIVE_INT32:
+          case DispatchId.INT32:
+          case DispatchId.PRIMITIVE_VARINT32:
+          case DispatchId.VARINT32:
+          case DispatchId.PRIMITIVE_UINT32:
+          case DispatchId.UINT32:
+          case DispatchId.PRIMITIVE_VAR_UINT32:
+          case DispatchId.VAR_UINT32:
             Platform.putInt(obj, fieldOffset, (Integer) defaultValue);
             break;
-          case ClassResolver.PRIMITIVE_LONG_CLASS_ID:
-          case ClassResolver.LONG_CLASS_ID:
+          case DispatchId.PRIMITIVE_INT64:
+          case DispatchId.INT64:
+          case DispatchId.PRIMITIVE_VARINT64:
+          case DispatchId.VARINT64:
+          case DispatchId.PRIMITIVE_TAGGED_INT64:
+          case DispatchId.TAGGED_INT64:
+          case DispatchId.PRIMITIVE_UINT64:
+          case DispatchId.UINT64:
+          case DispatchId.PRIMITIVE_VAR_UINT64:
+          case DispatchId.VAR_UINT64:
+          case DispatchId.PRIMITIVE_TAGGED_UINT64:
+          case DispatchId.TAGGED_UINT64:
             Platform.putLong(obj, fieldOffset, (Long) defaultValue);
             break;
-          case ClassResolver.PRIMITIVE_FLOAT_CLASS_ID:
-          case ClassResolver.FLOAT_CLASS_ID:
+          case DispatchId.PRIMITIVE_FLOAT32:
+          case DispatchId.FLOAT32:
             Platform.putFloat(obj, fieldOffset, (Float) defaultValue);
             break;
-          case ClassResolver.PRIMITIVE_DOUBLE_CLASS_ID:
-          case ClassResolver.DOUBLE_CLASS_ID:
+          case DispatchId.PRIMITIVE_FLOAT64:
+          case DispatchId.FLOAT64:
             Platform.putDouble(obj, fieldOffset, (Double) defaultValue);
             break;
           default:

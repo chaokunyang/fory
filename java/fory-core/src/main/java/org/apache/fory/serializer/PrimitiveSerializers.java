@@ -197,10 +197,11 @@ public class PrimitiveSerializers {
     public static Expression writeInt64(
         Expression buffer, Expression v, LongEncoding longEncoding, boolean ensureBounds) {
       switch (longEncoding) {
-        case LE_RAW_BYTES:
+        case FIXED_INT64:
           return new Invoke(buffer, "writeInt64", v);
-        case HYBRID:
-          return new Invoke(buffer, ensureBounds ? "writeHybridInt64" : "_unsafeWriteHybridInt64", v);
+        case TAGGED_INT64:
+          return new Invoke(
+              buffer, ensureBounds ? "writeHybridInt64" : "_unsafeWriteHybridInt64", v);
         case VARINT64:
           return new Invoke(buffer, ensureBounds ? "writeVarInt64" : "_unsafeWriteVarInt64", v);
         default:
@@ -209,9 +210,9 @@ public class PrimitiveSerializers {
     }
 
     public static void writeInt64(MemoryBuffer buffer, long value, LongEncoding longEncoding) {
-      if (longEncoding == LongEncoding.HYBRID) {
-        buffer.writeHybridInt64(value);
-      } else if (longEncoding == LongEncoding.LE_RAW_BYTES) {
+      if (longEncoding == LongEncoding.TAGGED_INT64) {
+        buffer.writeTaggedInt64(value);
+      } else if (longEncoding == LongEncoding.FIXED_INT64) {
         buffer.writeInt64(value);
       } else {
         buffer.writeVarInt64(value);
@@ -219,9 +220,9 @@ public class PrimitiveSerializers {
     }
 
     public static long readInt64(MemoryBuffer buffer, LongEncoding longEncoding) {
-      if (longEncoding == LongEncoding.HYBRID) {
-        return buffer.readHybridInt64();
-      } else if (longEncoding == LongEncoding.LE_RAW_BYTES) {
+      if (longEncoding == LongEncoding.TAGGED_INT64) {
+        return buffer.readTaggedInt64();
+      } else if (longEncoding == LongEncoding.FIXED_INT64) {
         return buffer.readInt64();
       } else {
         return buffer.readVarInt64();
@@ -234,9 +235,9 @@ public class PrimitiveSerializers {
 
     public static String readLongFunc(LongEncoding longEncoding) {
       switch (longEncoding) {
-        case LE_RAW_BYTES:
+        case FIXED_INT64:
           return Platform.IS_LITTLE_ENDIAN ? "_readInt64OnLE" : "_readInt64OnBE";
-        case HYBRID:
+        case TAGGED_INT64:
           return Platform.IS_LITTLE_ENDIAN ? "_readHybridInt64OnLE" : "_readHybridInt64OnBE";
         case VARINT64:
           return Platform.IS_LITTLE_ENDIAN ? "_readVarInt64OnLE" : "_readVarInt64OnBE";

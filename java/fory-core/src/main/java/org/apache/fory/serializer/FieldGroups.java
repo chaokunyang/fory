@@ -30,15 +30,13 @@ import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.ClassInfo;
 import org.apache.fory.resolver.ClassInfoHolder;
-import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.RefMode;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.converter.FieldConverter;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
-import org.apache.fory.type.FinalObjectTypeStub;
+import org.apache.fory.type.DispatchId;
 import org.apache.fory.type.GenericType;
-import org.apache.fory.type.TypeUtils;
 import org.apache.fory.util.StringUtils;
 
 public class FieldGroups {
@@ -118,20 +116,10 @@ public class FieldGroups {
     return new FieldGroups(allBuildIn, containerFields, otherFields);
   }
 
-  static short getRegisteredClassId(Fory fory, Descriptor d) {
-    Field field = d.getField();
-    Class<?> cls = d.getTypeRef().getRawType();
-    if (TypeUtils.unwrap(cls).isPrimitive() && field != null) {
-      return fory.getClassResolver().getRegisteredClassId(field.getType());
-    }
-    Short classId = fory.getClassResolver().getRegisteredClassId(cls);
-    return classId == null ? ClassResolver.NO_CLASS_ID : classId;
-  }
-
   public static final class SerializationFieldInfo {
     public final Descriptor descriptor;
     public final TypeRef<?> typeRef;
-    public final short classId;
+    public final int dispatchId;
     public final ClassInfo classInfo;
     public final Serializer serializer;
     public final String qualifiedFieldName;
@@ -152,26 +140,19 @@ public class FieldGroups {
     SerializationFieldInfo(Fory fory, Descriptor d) {
       this.descriptor = d;
       this.typeRef = d.getTypeRef();
-      this.classId = getRegisteredClassId(fory, d);
+      this.dispatchId = DispatchId.getDispatchId(fory, d);
       TypeResolver resolver = fory._getTypeResolver();
       // invoke `copy` to avoid ObjectSerializer construct clear serializer by `clearSerializer`.
-      if (typeRef.getRawType() == FinalObjectTypeStub.class) {
-        // `FinalObjectTypeStub` has no fields, using its `classInfo`
-        // will make deserialization failed.
-        classInfo = null;
-      } else {
-        if (resolver.isMonomorphic(descriptor)) {
-          classInfo = SerializationUtils.getClassInfo(fory, typeRef.getRawType());
-          if (!fory.isShareMeta()
-              && !fory.isCompatible()
-              && classInfo.getSerializer() instanceof ReplaceResolveSerializer) {
-            // overwrite replace resolve serializer for final field
-            classInfo.setSerializer(
-                new FinalFieldReplaceResolveSerializer(fory, classInfo.getCls()));
-          }
-        } else {
-          classInfo = null;
+      if (resolver.isMonomorphic(descriptor)) {
+        classInfo = SerializationUtils.getClassInfo(fory, typeRef.getRawType());
+        if (!fory.isShareMeta()
+            && !fory.isCompatible()
+            && classInfo.getSerializer() instanceof ReplaceResolveSerializer) {
+          // overwrite replace resolve serializer for final field
+          classInfo.setSerializer(new FinalFieldReplaceResolveSerializer(fory, classInfo.getCls()));
         }
+      } else {
+        classInfo = null;
       }
       useDeclaredTypeInfo = classInfo != null && resolver.isMonomorphic(descriptor);
       if (classInfo != null) {
@@ -226,7 +207,7 @@ public class FieldGroups {
           + ", typeRef="
           + typeRef
           + ", classId="
-          + classId
+          + dispatchId
           + ", fieldAccessor="
           + fieldAccessor
           + ", nullable="

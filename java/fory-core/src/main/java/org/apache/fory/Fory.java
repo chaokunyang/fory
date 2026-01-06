@@ -580,12 +580,12 @@ public final class Fory implements BaseFory {
         buffer.writeInt16((Short) obj);
         break;
       case Types.INT32:
-      case Types.VAR32:
+      case Types.VARINT32:
         buffer.writeVarInt32((Integer) obj);
         break;
       case Types.INT64:
-      case Types.VAR64:
-      case Types.H64:
+      case Types.VARINT64:
+      case Types.TAGGED_INT64:
         buffer.writeVarInt64((Long) obj);
         break;
       case Types.FLOAT32:
@@ -605,35 +605,35 @@ public final class Fory implements BaseFory {
   /** Write not null data to buffer. */
   private void writeData(MemoryBuffer buffer, ClassInfo classInfo, Object obj) {
     switch (classInfo.getClassId()) {
-      case ClassResolver.BOOLEAN_CLASS_ID:
+      case Types.BOOL:
         buffer.writeBoolean((Boolean) obj);
         break;
-      case ClassResolver.BYTE_CLASS_ID:
+      case Types.INT8:
         buffer.writeByte((Byte) obj);
         break;
-      case ClassResolver.CHAR_CLASS_ID:
+      case ClassResolver.CHAR_ID:
         buffer.writeChar((Character) obj);
         break;
-      case ClassResolver.SHORT_CLASS_ID:
+      case Types.INT16:
         buffer.writeInt16((Short) obj);
         break;
-      case ClassResolver.INTEGER_CLASS_ID:
+      case Types.INT32:
         if (compressInt) {
           buffer.writeVarInt32((Integer) obj);
         } else {
           buffer.writeInt32((Integer) obj);
         }
         break;
-      case ClassResolver.FLOAT_CLASS_ID:
+      case Types.FLOAT32:
         buffer.writeFloat32((Float) obj);
         break;
-      case ClassResolver.LONG_CLASS_ID:
+      case Types.INT64:
         LongSerializer.writeInt64(buffer, (Long) obj, longEncoding);
         break;
-      case ClassResolver.DOUBLE_CLASS_ID:
+      case Types.FLOAT64:
         buffer.writeFloat64((Double) obj);
         break;
-      case ClassResolver.STRING_CLASS_ID:
+      case Types.STRING:
         stringSerializer.writeJavaString(buffer, (String) obj);
         break;
       default:
@@ -1013,27 +1013,27 @@ public final class Fory implements BaseFory {
 
   private Object readDataInternal(MemoryBuffer buffer, ClassInfo classInfo) {
     switch (classInfo.getClassId()) {
-      case ClassResolver.BOOLEAN_CLASS_ID:
+      case Types.BOOL:
         return buffer.readBoolean();
-      case ClassResolver.BYTE_CLASS_ID:
+      case Types.INT8:
         return buffer.readByte();
-      case ClassResolver.CHAR_CLASS_ID:
+      case ClassResolver.CHAR_ID:
         return buffer.readChar();
-      case ClassResolver.SHORT_CLASS_ID:
+      case Types.INT16:
         return buffer.readInt16();
-      case ClassResolver.INTEGER_CLASS_ID:
+      case Types.INT32:
         if (compressInt) {
           return buffer.readVarInt32();
         } else {
           return buffer.readInt32();
         }
-      case ClassResolver.FLOAT_CLASS_ID:
+      case Types.FLOAT32:
         return buffer.readFloat32();
-      case ClassResolver.LONG_CLASS_ID:
+      case Types.INT64:
         return LongSerializer.readInt64(buffer, longEncoding);
-      case ClassResolver.DOUBLE_CLASS_ID:
+      case Types.FLOAT64:
         return buffer.readFloat64();
-      case ClassResolver.STRING_CLASS_ID:
+      case Types.STRING:
         return stringSerializer.readJavaString(buffer);
       default:
         incReadDepth();
@@ -1110,13 +1110,13 @@ public final class Fory implements BaseFory {
       case Types.INT16:
         return buffer.readInt16();
       case Types.INT32:
-      case Types.VAR32:
+      case Types.VARINT32:
         // TODO(chaokunyang) support other encoding
         return buffer.readVarInt32();
       case Types.INT64:
-      case Types.VAR64:
+      case Types.VARINT64:
         // TODO(chaokunyang) support other encoding
-      case Types.H64:
+      case Types.TAGGED_INT64:
         return buffer.readVarInt64();
       case Types.FLOAT32:
         return buffer.readFloat32();
@@ -1399,55 +1399,47 @@ public final class Fory implements BaseFory {
     Object copy;
     ClassInfo classInfo = classResolver.getOrUpdateClassInfo(obj.getClass());
     switch (classInfo.getClassId()) {
-      case ClassResolver.PRIMITIVE_BOOLEAN_CLASS_ID:
-      case ClassResolver.PRIMITIVE_BYTE_CLASS_ID:
-      case ClassResolver.PRIMITIVE_CHAR_CLASS_ID:
-      case ClassResolver.PRIMITIVE_SHORT_CLASS_ID:
-      case ClassResolver.PRIMITIVE_INT_CLASS_ID:
-      case ClassResolver.PRIMITIVE_FLOAT_CLASS_ID:
-      case ClassResolver.PRIMITIVE_LONG_CLASS_ID:
-      case ClassResolver.PRIMITIVE_DOUBLE_CLASS_ID:
-      case ClassResolver.BOOLEAN_CLASS_ID:
-      case ClassResolver.BYTE_CLASS_ID:
-      case ClassResolver.CHAR_CLASS_ID:
-      case ClassResolver.SHORT_CLASS_ID:
-      case ClassResolver.INTEGER_CLASS_ID:
-      case ClassResolver.FLOAT_CLASS_ID:
-      case ClassResolver.LONG_CLASS_ID:
-      case ClassResolver.DOUBLE_CLASS_ID:
-      case ClassResolver.STRING_CLASS_ID:
+      case Types.BOOL:
+      case Types.INT8:
+      case ClassResolver.CHAR_ID:
+      case Types.INT16:
+      case Types.INT32:
+      case Types.FLOAT32:
+      case Types.INT64:
+      case Types.FLOAT64:
+      case Types.STRING:
         return obj;
-      case ClassResolver.PRIMITIVE_BOOLEAN_ARRAY_CLASS_ID:
+      case ClassResolver.PRIMITIVE_BOOLEAN_ARRAY_ID:
         boolean[] boolArr = (boolean[]) obj;
         return (T) Arrays.copyOf(boolArr, boolArr.length);
-      case ClassResolver.PRIMITIVE_BYTE_ARRAY_CLASS_ID:
+      case ClassResolver.PRIMITIVE_BYTE_ARRAY_ID:
         byte[] byteArr = (byte[]) obj;
         return (T) Arrays.copyOf(byteArr, byteArr.length);
-      case ClassResolver.PRIMITIVE_CHAR_ARRAY_CLASS_ID:
+      case ClassResolver.PRIMITIVE_CHAR_ARRAY_ID:
         char[] charArr = (char[]) obj;
         return (T) Arrays.copyOf(charArr, charArr.length);
-      case ClassResolver.PRIMITIVE_SHORT_ARRAY_CLASS_ID:
+      case ClassResolver.PRIMITIVE_SHORT_ARRAY_ID:
         short[] shortArr = (short[]) obj;
         return (T) Arrays.copyOf(shortArr, shortArr.length);
-      case ClassResolver.PRIMITIVE_INT_ARRAY_CLASS_ID:
+      case ClassResolver.PRIMITIVE_INT_ARRAY_ID:
         int[] intArr = (int[]) obj;
         return (T) Arrays.copyOf(intArr, intArr.length);
-      case ClassResolver.PRIMITIVE_FLOAT_ARRAY_CLASS_ID:
+      case ClassResolver.PRIMITIVE_FLOAT_ARRAY_ID:
         float[] floatArr = (float[]) obj;
         return (T) Arrays.copyOf(floatArr, floatArr.length);
-      case ClassResolver.PRIMITIVE_LONG_ARRAY_CLASS_ID:
+      case ClassResolver.PRIMITIVE_LONG_ARRAY_ID:
         long[] longArr = (long[]) obj;
         return (T) Arrays.copyOf(longArr, longArr.length);
-      case ClassResolver.PRIMITIVE_DOUBLE_ARRAY_CLASS_ID:
+      case ClassResolver.PRIMITIVE_DOUBLE_ARRAY_ID:
         double[] doubleArr = (double[]) obj;
         return (T) Arrays.copyOf(doubleArr, doubleArr.length);
-      case ClassResolver.STRING_ARRAY_CLASS_ID:
+      case ClassResolver.STRING_ARRAY_ID:
         String[] stringArr = (String[]) obj;
         return (T) Arrays.copyOf(stringArr, stringArr.length);
-      case ClassResolver.ARRAYLIST_CLASS_ID:
+      case ClassResolver.ARRAYLIST_ID:
         copy = arrayListSerializer.copy((ArrayList) obj);
         break;
-      case ClassResolver.HASHMAP_CLASS_ID:
+      case ClassResolver.HASHMAP_ID:
         copy = hashMapSerializer.copy((HashMap) obj);
         break;
         // todo: add fastpath for other types.
@@ -1463,23 +1455,23 @@ public final class Fory implements BaseFory {
     }
     // Fast path to avoid cost of query class map.
     switch (classId) {
-      case ClassResolver.PRIMITIVE_BOOLEAN_CLASS_ID:
-      case ClassResolver.PRIMITIVE_BYTE_CLASS_ID:
-      case ClassResolver.PRIMITIVE_CHAR_CLASS_ID:
-      case ClassResolver.PRIMITIVE_SHORT_CLASS_ID:
-      case ClassResolver.PRIMITIVE_INT_CLASS_ID:
-      case ClassResolver.PRIMITIVE_FLOAT_CLASS_ID:
-      case ClassResolver.PRIMITIVE_LONG_CLASS_ID:
-      case ClassResolver.PRIMITIVE_DOUBLE_CLASS_ID:
-      case ClassResolver.BOOLEAN_CLASS_ID:
-      case ClassResolver.BYTE_CLASS_ID:
-      case ClassResolver.CHAR_CLASS_ID:
-      case ClassResolver.SHORT_CLASS_ID:
-      case ClassResolver.INTEGER_CLASS_ID:
-      case ClassResolver.FLOAT_CLASS_ID:
-      case ClassResolver.LONG_CLASS_ID:
-      case ClassResolver.DOUBLE_CLASS_ID:
-      case ClassResolver.STRING_CLASS_ID:
+      case ClassResolver.PRIMITIVE_BOOL_ID:
+      case ClassResolver.PRIMITIVE_INT8_ID:
+      case ClassResolver.PRIMITIVE_CHAR_ID:
+      case ClassResolver.PRIMITIVE_INT16_ID:
+      case ClassResolver.PRIMITIVE_INT32_ID:
+      case ClassResolver.PRIMITIVE_FLOAT32_ID:
+      case ClassResolver.PRIMITIVE_INT64_ID:
+      case ClassResolver.PRIMITIVE_FLOAT64_ID:
+      case Types.BOOL:
+      case Types.INT8:
+      case ClassResolver.CHAR_ID:
+      case Types.INT16:
+      case Types.INT32:
+      case Types.FLOAT32:
+      case Types.INT64:
+      case Types.FLOAT64:
+      case Types.STRING:
         return obj;
       default:
         return copyObject(obj, classResolver.getOrUpdateClassInfo(obj.getClass()).getSerializer());

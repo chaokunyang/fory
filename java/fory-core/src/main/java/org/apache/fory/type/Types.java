@@ -21,7 +21,14 @@ package org.apache.fory.type;
 
 import static org.apache.fory.collection.Collections.ofHashMap;
 
+import java.lang.annotation.Annotation;
+import java.lang.reflect.Field;
 import java.util.Map;
+import org.apache.fory.Fory;
+import org.apache.fory.meta.TypeExtMeta;
+import org.apache.fory.reflect.TypeRef;
+import org.apache.fory.resolver.ClassInfo;
+import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.util.Preconditions;
 
 public class Types {
@@ -42,16 +49,16 @@ public class Types {
   public static final int INT32 = 4;
 
   /** var32: a 32-bit signed integer which uses fory var_int32 encoding. */
-  public static final int VAR32 = 5;
+  public static final int VARINT32 = 5;
 
   /** int64: a 64-bit signed integer. */
   public static final int INT64 = 6;
 
   /** var64: a 64-bit signed integer which uses fory PVL encoding. */
-  public static final int VAR64 = 7;
+  public static final int VARINT64 = 7;
 
-  /** h64: a 64-bit signed integer which uses fory hybrid encoding. */
-  public static final int H64 = 8;
+  /** tagged_int64: a 64-bit signed integer which uses fory hybrid encoding. */
+  public static final int TAGGED_INT64 = 8;
 
   /** uint8: an 8-bit unsigned integer. */
   public static final int UINT8 = 9;
@@ -62,17 +69,17 @@ public class Types {
   /** uint32: a 32-bit unsigned integer. */
   public static final int UINT32 = 11;
 
-  /** varu32: a 32-bit unsigned integer which uses fory var_uint32 encoding. */
-  public static final int VARU32 = 12;
+  /** var_uint32: a 32-bit unsigned integer which uses fory var_uint32 encoding. */
+  public static final int VAR_UINT32 = 12;
 
   /** uint64: a 64-bit unsigned integer. */
   public static final int UINT64 = 13;
 
-  /** varu64: a 64-bit unsigned integer which uses fory var_uint64 encoding. */
-  public static final int VARU64 = 14;
+  /** var_uint64: a 64-bit unsigned integer which uses fory var_uint64 encoding. */
+  public static final int VAR_UINT64 = 14;
 
-  /** hu64: a 64-bit unsigned integer which uses fory hybrid encoding. */
-  public static final int HU64 = 15;
+  /** tagged_uint64: a 64-bit unsigned integer which uses fory tagged int64 encoding. */
+  public static final int TAGGED_UINT64 = 15;
 
   /** float16: a 16-bit floating point number. */
   public static final int FLOAT16 = 16;
@@ -253,19 +260,7 @@ public class Types {
   }
 
   public static boolean isPrimitiveType(int typeId) {
-    // noinspection Duplicates
-    switch (typeId) {
-      case BOOL:
-      case INT8:
-      case INT16:
-      case INT32:
-      case INT64:
-      case FLOAT32:
-      case FLOAT64:
-        return true;
-      default:
-        return false;
-    }
+    return typeId >= BOOL && typeId <= FLOAT64;
   }
 
   public static boolean isPrimitiveArray(int typeId) {
@@ -318,6 +313,120 @@ public class Types {
       default:
         throw new IllegalArgumentException(
             String.format("Type id %d is not a primitive id", typeId));
+    }
+  }
+
+  public static int getPrimitiveTypeId(Fory fory, Class<?> rawType) {
+    Class<?> unwrapped = TypeUtils.unwrap(rawType);
+    if (unwrapped == char.class) {
+      Preconditions.checkArgument(!fory.isCrossLanguage(), "Char is not support for xlang");
+      return rawType.isPrimitive() ? ClassResolver.PRIMITIVE_CHAR_ID : ClassResolver.CHAR_ID;
+    }
+    if (unwrapped == boolean.class) {
+      return Types.BOOL;
+    } else if (unwrapped == byte.class) {
+      return Types.INT8;
+    } else if (unwrapped == short.class) {
+      return Types.INT16;
+    } else if (unwrapped == int.class) {
+      return fory.compressInt() ? Types.VARINT32 : Types.INT32;
+    } else if (unwrapped == long.class) {
+      return fory.compressLong() ? Types.VARINT64 : Types.INT64;
+    } else if (unwrapped == float.class) {
+      return Types.FLOAT32;
+    } else if (unwrapped == double.class) {
+      return Types.FLOAT64;
+    }
+    return Types.UNKNOWN;
+  }
+
+  public static int getDescriptorTypeId(Fory fory, Field field) {
+    Annotation annotation = Descriptor.getAnnotation(field);
+    if (annotation != null) {
+      return TypeAnnotationUtils.getTypeId(annotation);
+    } else {
+      Class<?> rawType = field.getType();
+      return getTypeId(fory, rawType);
+    }
+  }
+
+  public static int getDescriptorTypeId(Fory fory, Descriptor d) {
+    TypeRef<?> typeRef = d.getTypeRef();
+    TypeExtMeta extMeta = typeRef.getTypeExtMeta();
+    if (extMeta != null) {
+      return extMeta.typeId();
+    } else {
+      Annotation typeAnnotation = d.getTypeAnnotation();
+      if (typeAnnotation != null) {
+        return TypeAnnotationUtils.getTypeId(typeAnnotation);
+      } else {
+        Class<?> rawType = typeRef.getRawType();
+        return getTypeId(fory, rawType);
+      }
+    }
+  }
+
+  public static int getTypeId(Fory fory, Class<?> clz) {
+    Class<?> unwrapped = TypeUtils.unwrap(clz);
+    if (unwrapped == char.class) {
+      Preconditions.checkArgument(!fory.isCrossLanguage(), "Char is not support for xlang");
+      return clz.isPrimitive() ? ClassResolver.PRIMITIVE_CHAR_ID : ClassResolver.CHAR_ID;
+    }
+    if (unwrapped.isPrimitive()) {
+      if (unwrapped == boolean.class) {
+        return Types.BOOL;
+      } else if (unwrapped == byte.class) {
+        return Types.INT8;
+      } else if (unwrapped == short.class) {
+        return Types.INT16;
+      } else if (unwrapped == int.class) {
+        return fory.compressInt() ? Types.VARINT32 : Types.INT32;
+      } else if (unwrapped == long.class) {
+        return fory.compressLong() ? Types.VARINT64 : Types.INT64;
+      } else if (unwrapped == float.class) {
+        return Types.FLOAT32;
+      } else if (unwrapped == double.class) {
+        return Types.FLOAT64;
+      }
+    }
+    ClassInfo classInfo = fory._getTypeResolver().getClassInfo(clz, false);
+    if (classInfo != null) {
+      return fory.isCrossLanguage() ? classInfo.getXtypeId() : classInfo.getClassId();
+    }
+    return Types.UNKNOWN;
+  }
+
+  public static Class<?> getClassForTypeId(int typeId) {
+    switch (typeId) {
+      case BOOL:
+        return Boolean.class;
+      case INT8:
+      case UINT8:
+        return Byte.class;
+      case INT16:
+      case UINT16:
+        return Short.class;
+      case INT32:
+      case VARINT32:
+      case UINT32:
+      case VAR_UINT32:
+        return Integer.class;
+      case INT64:
+      case VARINT64:
+      case TAGGED_INT64:
+      case UINT64:
+      case VAR_UINT64:
+      case TAGGED_UINT64:
+        return Long.class;
+      case FLOAT16:
+      case FLOAT32:
+        return Float.class;
+      case FLOAT64:
+        return Double.class;
+      case STRING:
+        return String.class;
+      default:
+        return null;
     }
   }
 }

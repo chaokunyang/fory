@@ -67,7 +67,7 @@ public final class ForyBuilder {
   boolean timeRefIgnored = true;
   ClassLoader classLoader;
   boolean compressInt = true;
-  public LongEncoding longEncoding = LongEncoding.HYBRID;
+  public LongEncoding longEncoding = LongEncoding.TAGGED_INT64;
   boolean compressIntArray = false;
   boolean compressLongArray = false;
   boolean compressString = false;
@@ -183,11 +183,12 @@ public final class ForyBuilder {
   }
 
   /**
-   * Use variable length encoding for long. Enabled by default, use {@link LongEncoding#HYBRID} (Small
-   * long as int) for long encoding.
+   * Use variable length encoding for long. Enabled by default, use {@link
+   * LongEncoding#TAGGED_INT64} (Small long as int) for long encoding.
    */
   public ForyBuilder withLongCompressed(boolean longCompressed) {
-    return withLongCompressed(longCompressed ? LongEncoding.HYBRID : LongEncoding.LE_RAW_BYTES);
+    return withLongCompressed(
+        longCompressed ? LongEncoding.TAGGED_INT64 : LongEncoding.FIXED_INT64);
   }
 
   /** Use variable length encoding for long. */

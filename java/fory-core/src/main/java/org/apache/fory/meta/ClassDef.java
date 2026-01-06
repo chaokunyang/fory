@@ -374,6 +374,9 @@ public class ClassDef implements Serializable {
           }
         }
         Descriptor newDesc = fieldInfo.toDescriptor(resolver, descriptor);
+        if (newDesc.getField() == null) {
+          System.out.println();
+        }
         descriptors.add(newDesc);
       }
     }

@@ -20,19 +20,20 @@
 package org.apache.fory.config;
 
 /**
- * Encoding option for long. Default encoding is fory SLI(Small long as int) encoding: {@link #HYBRID}.
+ * Encoding option for long. Default encoding is fory SLI(Small long as int) encoding: {@link
+ * #TAGGED_INT64}.
  */
 public enum LongEncoding {
   /**
-   * Fory HYBRID(Small long as int) Encoding:
+   * Fory Tagged int64 Encoding:
    * <li>If long is in [0xc0000000, 0x3fffffff], encode as 4 bytes int: `| little-endian: ((int)
    *     value) << 1 |`
    * <li>Otherwise write as 9 bytes: `| 0b1 | little-endian 8bytes long |`.
    *
-   *     <p>Faster than {@link #VARINT64}, but compression is not good as {@link #VARINT64} such as for ints
-   *     in short range.
+   *     <p>Faster than {@link #VARINT64}, but compression is not good as {@link #VARINT64} such as
+   *     for ints in short range.
    */
-  HYBRID,
+  TAGGED_INT64,
   /**
    * Fory Progressive Variable-length Long Encoding:
    * <li>positive long format: first bit in every byte indicate whether has next byte, then next
@@ -42,5 +43,5 @@ public enum LongEncoding {
    */
   VARINT64,
   /** Write long as little endian 8bytes, no compression. */
-  LE_RAW_BYTES,
+  FIXED_INT64,
 }

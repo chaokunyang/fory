@@ -19,6 +19,12 @@
 
 package org.apache.fory.builder;
 
+import static org.apache.fory.builder.CodecBuilder.readFloat32Func;
+import static org.apache.fory.builder.CodecBuilder.readFloat64Func;
+import static org.apache.fory.builder.CodecBuilder.readInt16Func;
+import static org.apache.fory.builder.CodecBuilder.readIntFunc;
+import static org.apache.fory.builder.CodecBuilder.readLongFunc;
+import static org.apache.fory.builder.CodecBuilder.readVarInt32Func;
 import static org.apache.fory.codegen.CodeGenerator.getPackage;
 import static org.apache.fory.codegen.Expression.Invoke.inlineInvoke;
 import static org.apache.fory.codegen.Expression.Literal.ofInt;
@@ -52,10 +58,17 @@ import static org.apache.fory.serializer.collection.MapFlags.TRACKING_KEY_REF;
 import static org.apache.fory.serializer.collection.MapFlags.TRACKING_VALUE_REF;
 import static org.apache.fory.serializer.collection.MapFlags.VALUE_DECL_TYPE;
 import static org.apache.fory.serializer.collection.MapLikeSerializer.MAX_CHUNK_SIZE;
+import static org.apache.fory.type.TypeUtils.BOOLEAN_TYPE;
+import static org.apache.fory.type.TypeUtils.BYTE_TYPE;
+import static org.apache.fory.type.TypeUtils.CHAR_TYPE;
 import static org.apache.fory.type.TypeUtils.CLASS_TYPE;
 import static org.apache.fory.type.TypeUtils.COLLECTION_TYPE;
+import static org.apache.fory.type.TypeUtils.DOUBLE_TYPE;
+import static org.apache.fory.type.TypeUtils.FLOAT_TYPE;
+import static org.apache.fory.type.TypeUtils.INT_TYPE;
 import static org.apache.fory.type.TypeUtils.ITERATOR_TYPE;
 import static org.apache.fory.type.TypeUtils.LIST_TYPE;
+import static org.apache.fory.type.TypeUtils.LONG_TYPE;
 import static org.apache.fory.type.TypeUtils.MAP_ENTRY_TYPE;
 import static org.apache.fory.type.TypeUtils.MAP_TYPE;
 import static org.apache.fory.type.TypeUtils.OBJECT_TYPE;
@@ -65,6 +78,7 @@ import static org.apache.fory.type.TypeUtils.PRIMITIVE_INT_TYPE;
 import static org.apache.fory.type.TypeUtils.PRIMITIVE_LONG_TYPE;
 import static org.apache.fory.type.TypeUtils.PRIMITIVE_VOID_TYPE;
 import static org.apache.fory.type.TypeUtils.SET_TYPE;
+import static org.apache.fory.type.TypeUtils.SHORT_TYPE;
 import static org.apache.fory.type.TypeUtils.getRawType;
 import static org.apache.fory.type.TypeUtils.isBoxed;
 import static org.apache.fory.type.TypeUtils.isPrimitive;
@@ -125,6 +139,7 @@ import org.apache.fory.serializer.collection.CollectionFlags;
 import org.apache.fory.serializer.collection.CollectionLikeSerializer;
 import org.apache.fory.serializer.collection.MapLikeSerializer;
 import org.apache.fory.type.Descriptor;
+import org.apache.fory.type.DispatchId;
 import org.apache.fory.type.GenericType;
 import org.apache.fory.type.TypeUtils;
 import org.apache.fory.util.GraalvmSupport;
@@ -164,6 +179,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
   protected LinkedList<String> walkPath = new LinkedList<>();
   protected final String writeMethodName;
   protected final String readMethodName;
+  private final Map<Descriptor, Integer> descriptorDispatchId;
 
   public BaseObjectCodecBuilder(TypeRef<?> beanType, Fory fory, Class<?> parentSerializerClass) {
     super(new CodegenContext(), beanType);
@@ -202,6 +218,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
         STRING_SERIALIZER_NAME,
         inlineInvoke(foryRef, "getStringSerializer", typeResolverType));
     jitCallbackUpdateFields = new HashMap<>();
+    descriptorDispatchId = new HashMap<>();
   }
 
   // Must be static to be shared across the whole process life.
@@ -378,8 +395,6 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       TypeRef<?> typeRef,
       Expression serializer,
       boolean generateNewMethod) {
-    // access rawType without jit lock to reduce lock competition.
-    Class<?> rawType = getRawType(typeRef);
     if (needWriteRef(typeRef)) {
       return new If(
           not(writeRefOrNull(buffer, inputObject)),
@@ -411,51 +426,105 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     if (useRefTracking) {
       return new If(
           not(writeRefOrNull(buffer, fieldValue)),
-          serializeForNotNullForField(fieldValue, buffer, descriptor, null, false));
+          serializeForNotNullForField(fieldValue, buffer, descriptor, null));
     } else {
       // if typeToken is not final, ref tracking of subclass will be ignored too.
       if (typeRef.isPrimitive()) {
-        return serializeForNotNullForField(fieldValue, buffer, descriptor, null, false);
+        return serializeForNotNullForField(fieldValue, buffer, descriptor, null);
       }
       if (nullable) {
         Expression action =
             new ListExpression(
                 new Invoke(buffer, "writeByte", Literal.ofByte(Fory.NOT_NULL_VALUE_FLAG)),
-                serializeForNotNullForField(fieldValue, buffer, descriptor, null, false));
+                serializeForNotNullForField(fieldValue, buffer, descriptor, null));
         return new If(
             eqNull(fieldValue),
             new Invoke(buffer, "writeByte", Literal.ofByte(Fory.NULL_FLAG)),
             action);
       } else {
-        return serializeForNotNullForField(fieldValue, buffer, descriptor, null, false);
+        return serializeForNotNullForField(fieldValue, buffer, descriptor, null);
       }
     }
   }
 
   private Expression serializeForNotNullForField(
-      Expression inputObject,
-      Expression buffer,
-      Descriptor descriptor,
-      Expression serializer,
-      boolean generateNewMethod) {
+      Expression inputObject, Expression buffer, Descriptor descriptor, Expression serializer) {
     TypeRef<?> typeRef = descriptor.getTypeRef();
     Class<?> clz = getRawType(typeRef);
     if (isPrimitive(clz) || isBoxed(clz)) {
-      return serializePrimitive(inputObject, buffer, clz);
+      return serializePrimitiveField(inputObject, buffer, descriptor);
     } else {
       if (clz == String.class) {
         return fory.getStringSerializer().writeStringExpr(stringSerializerRef, buffer, inputObject);
       }
       Expression action;
       if (useCollectionSerialization(typeRef)) {
-        action =
-            serializeForCollection(buffer, inputObject, typeRef, serializer, generateNewMethod);
+        action = serializeForCollection(buffer, inputObject, typeRef, serializer, false);
       } else if (useMapSerialization(typeRef)) {
-        action = serializeForMap(buffer, inputObject, typeRef, serializer, generateNewMethod);
+        action = serializeForMap(buffer, inputObject, typeRef, serializer, false);
       } else {
         action = serializeForNotNullObjectForField(inputObject, buffer, descriptor, serializer);
       }
       return action;
+    }
+  }
+
+  private Expression serializePrimitiveField(
+      Expression inputObject, Expression buffer, Descriptor descriptor) {
+    int dispatchId = getNumericDescriptorDispatchId(descriptor);
+    switch (dispatchId) {
+      case DispatchId.PRIMITIVE_BOOL:
+      case DispatchId.BOOL:
+        return new Invoke(buffer, "writeBoolean", inputObject);
+      case DispatchId.PRIMITIVE_INT8:
+      case DispatchId.PRIMITIVE_UINT8:
+      case DispatchId.INT8:
+      case DispatchId.UINT8:
+        return new Invoke(buffer, "writeByte", inputObject);
+      case DispatchId.PRIMITIVE_CHAR:
+      case DispatchId.CHAR:
+        return new Invoke(buffer, "writeChar", inputObject);
+      case DispatchId.PRIMITIVE_INT16:
+      case DispatchId.PRIMITIVE_UINT16:
+      case DispatchId.INT16:
+      case DispatchId.UINT16:
+        return new Invoke(buffer, "writeInt16", inputObject);
+      case DispatchId.PRIMITIVE_INT32:
+      case DispatchId.PRIMITIVE_UINT32:
+      case DispatchId.INT32:
+      case DispatchId.UINT32:
+        return new Invoke(buffer, "writeInt32", inputObject);
+      case DispatchId.PRIMITIVE_VARINT32:
+      case DispatchId.VARINT32:
+        return new Invoke(buffer, "writeVarInt32", inputObject);
+      case DispatchId.PRIMITIVE_VAR_UINT32:
+      case DispatchId.VAR_UINT32:
+        return new Invoke(buffer, "writeVarUint32", inputObject);
+      case DispatchId.PRIMITIVE_INT64:
+      case DispatchId.PRIMITIVE_UINT64:
+      case DispatchId.INT64:
+      case DispatchId.UINT64:
+        return new Invoke(buffer, "writeInt64", inputObject);
+      case DispatchId.PRIMITIVE_VARINT64:
+      case DispatchId.VARINT64:
+        return new Invoke(buffer, "writeVarInt64", inputObject);
+      case DispatchId.PRIMITIVE_TAGGED_INT64:
+      case DispatchId.TAGGED_INT64:
+        return new Invoke(buffer, "writeTaggedInt64", inputObject);
+      case DispatchId.PRIMITIVE_VAR_UINT64:
+      case DispatchId.VAR_UINT64:
+        return new Invoke(buffer, "writeVarUint64", inputObject);
+      case DispatchId.PRIMITIVE_TAGGED_UINT64:
+      case DispatchId.TAGGED_UINT64:
+        return new Invoke(buffer, "writeTaggedUint64", inputObject);
+      case DispatchId.PRIMITIVE_FLOAT32:
+      case DispatchId.FLOAT32:
+        return new Invoke(buffer, "writeFloat32", inputObject);
+      case DispatchId.PRIMITIVE_FLOAT64:
+      case DispatchId.FLOAT64:
+        return new Invoke(buffer, "writeFloat64", inputObject);
+      default:
+        throw new IllegalStateException("Unsupported dispatchId: " + dispatchId);
     }
   }
 
@@ -608,6 +677,12 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
 
   protected boolean useMapSerialization(Class<?> type) {
     return typeResolver(r -> r.isMap(type));
+  }
+
+  protected int getNumericDescriptorDispatchId(Descriptor descriptor) {
+    Class<?> rawType = descriptor.getRawType();
+    Preconditions.checkArgument(TypeUtils.unwrap(rawType).isPrimitive());
+    return descriptorDispatchId.computeIfAbsent(descriptor, d -> DispatchId.getDispatchId(fory, d));
   }
 
   /**
@@ -1855,7 +1930,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     TypeRef<?> typeRef = descriptor.getTypeRef();
     Class<?> cls = getRawType(typeRef);
     if (isPrimitive(cls) || isBoxed(cls)) {
-      return deserializePrimitive(buffer, cls);
+      return deserializePrimitiveField(buffer, descriptor);
     } else {
       if (cls == String.class) {
         return fory.getStringSerializer().readStringExpr(stringSerializerRef, buffer);
@@ -1880,6 +1955,78 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
         }
       }
       return obj;
+    }
+  }
+
+  private Expression deserializePrimitiveField(Expression buffer, Descriptor descriptor) {
+    int dispatchId = getNumericDescriptorDispatchId(descriptor);
+    switch (dispatchId) {
+      case DispatchId.PRIMITIVE_BOOL:
+        return new Invoke(buffer, "readBoolean", PRIMITIVE_BOOLEAN_TYPE);
+      case DispatchId.BOOL:
+        return new Invoke(buffer, "readBoolean", BOOLEAN_TYPE);
+      case DispatchId.PRIMITIVE_INT8:
+      case DispatchId.PRIMITIVE_UINT8:
+        return new Invoke(buffer, "readByte", PRIMITIVE_BYTE_TYPE);
+      case DispatchId.INT8:
+      case DispatchId.UINT8:
+        return new Invoke(buffer, "readByte", BYTE_TYPE);
+      case DispatchId.PRIMITIVE_CHAR:
+        return readChar(buffer);
+      case DispatchId.CHAR:
+        return new Invoke(buffer, "readChar", CHAR_TYPE);
+      case DispatchId.PRIMITIVE_INT16:
+      case DispatchId.PRIMITIVE_UINT16:
+        return readInt16(buffer);
+      case DispatchId.INT16:
+      case DispatchId.UINT16:
+        return new Invoke(buffer, readInt16Func(), SHORT_TYPE);
+      case DispatchId.PRIMITIVE_INT32:
+      case DispatchId.PRIMITIVE_UINT32:
+        return readInt32(buffer);
+      case DispatchId.INT32:
+      case DispatchId.UINT32:
+        return new Invoke(buffer, readIntFunc(), INT_TYPE);
+      case DispatchId.PRIMITIVE_VARINT32:
+        return readVarInt32(buffer);
+      case DispatchId.VARINT32:
+        return new Invoke(buffer, readVarInt32Func(), INT_TYPE);
+      case DispatchId.PRIMITIVE_VAR_UINT32:
+        return new Invoke(buffer, "readVarUint32", PRIMITIVE_INT_TYPE);
+      case DispatchId.VAR_UINT32:
+        return new Invoke(buffer, "readVarUint32", INT_TYPE);
+      case DispatchId.PRIMITIVE_INT64:
+      case DispatchId.PRIMITIVE_UINT64:
+        return readInt64(buffer);
+      case DispatchId.INT64:
+      case DispatchId.UINT64:
+        return new Invoke(buffer, readLongFunc(), LONG_TYPE);
+      case DispatchId.PRIMITIVE_VARINT64:
+        return new Invoke(buffer, "readVarInt64", PRIMITIVE_LONG_TYPE);
+      case DispatchId.VARINT64:
+        return new Invoke(buffer, "readVarInt64", LONG_TYPE);
+      case DispatchId.PRIMITIVE_TAGGED_INT64:
+        return new Invoke(buffer, "readTaggedInt64", PRIMITIVE_LONG_TYPE);
+      case DispatchId.TAGGED_INT64:
+        return new Invoke(buffer, "readTaggedInt64", LONG_TYPE);
+      case DispatchId.PRIMITIVE_VAR_UINT64:
+        return new Invoke(buffer, "readVarUint64", PRIMITIVE_LONG_TYPE);
+      case DispatchId.VAR_UINT64:
+        return new Invoke(buffer, "readVarUint64", LONG_TYPE);
+      case DispatchId.PRIMITIVE_TAGGED_UINT64:
+        return new Invoke(buffer, "readTaggedUint64", PRIMITIVE_LONG_TYPE);
+      case DispatchId.TAGGED_UINT64:
+        return new Invoke(buffer, "readTaggedUint64", LONG_TYPE);
+      case DispatchId.PRIMITIVE_FLOAT32:
+        return readFloat32(buffer);
+      case DispatchId.FLOAT32:
+        return new Invoke(buffer, readFloat32Func(), FLOAT_TYPE);
+      case DispatchId.PRIMITIVE_FLOAT64:
+        return readFloat64(buffer);
+      case DispatchId.FLOAT64:
+        return new Invoke(buffer, readFloat64Func(), DOUBLE_TYPE);
+      default:
+        throw new IllegalStateException("Unsupported dispatchId: " + dispatchId);
     }
   }
 

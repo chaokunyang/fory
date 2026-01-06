@@ -106,9 +106,11 @@ public class PrimitiveSerializersTest extends ForyTestBase {
               .withCodegen(codegen)
               .requireClassRegistration(false);
       serDeCheck(
-          builder.withNumberCompressed(true).withLongCompressed(LongEncoding.VARINT64).build(), struct);
+          builder.withNumberCompressed(true).withLongCompressed(LongEncoding.VARINT64).build(),
+          struct);
       serDeCheck(
-          builder.withNumberCompressed(true).withLongCompressed(LongEncoding.HYBRID).build(), struct);
+          builder.withNumberCompressed(true).withLongCompressed(LongEncoding.TAGGED_INT64).build(),
+          struct);
     } else {
       Fory fory =
           Fory.builder()

@@ -31,13 +31,13 @@ import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.ClassDef;
 import org.apache.fory.reflect.FieldAccessor;
-import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.RefResolver;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
 import org.apache.fory.serializer.struct.Fingerprint;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
+import org.apache.fory.type.DispatchId;
 import org.apache.fory.type.Generics;
 import org.apache.fory.util.MurmurHash3;
 import org.apache.fory.util.Utils;
@@ -169,13 +169,13 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
     for (SerializationFieldInfo fieldInfo : this.buildInFields) {
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       boolean nullable = fieldInfo.nullable;
-      short classId = fieldInfo.classId;
-      if (writePrimitiveFieldValue(fory, buffer, value, fieldAccessor, classId)) {
+      int dispatchId = fieldInfo.dispatchId;
+      if (writePrimitiveFieldValue(buffer, value, fieldAccessor, dispatchId)) {
         Object fieldValue = fieldAccessor.getObject(value);
         boolean needWrite =
             nullable
-                ? writeBasicNullableObjectFieldValue(fory, buffer, fieldValue, classId)
-                : writeBasicObjectFieldValue(fory, buffer, fieldValue, classId);
+                ? writeBasicNullableObjectFieldValue(fory, buffer, fieldValue, dispatchId)
+                : writeBasicObjectFieldValue(fory, buffer, fieldValue, dispatchId);
         if (needWrite) {
           Serializer<Object> serializer = fieldInfo.classInfo.getSerializer();
           if (!metaShareEnabled || fieldInfo.useDeclaredTypeInfo) {
@@ -268,10 +268,9 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
     int counter = 0;
     // read order: primitive,boxed,final,other,collection,map
     for (SerializationFieldInfo fieldInfo : this.buildInFields) {
-      short classId = fieldInfo.classId;
-      if (classId >= ClassResolver.PRIMITIVE_BOOLEAN_CLASS_ID
-          && classId <= ClassResolver.PRIMITIVE_DOUBLE_CLASS_ID) {
-        fieldValues[counter++] = Serializers.readPrimitiveValue(fory, buffer, classId);
+      int dispatchId = fieldInfo.dispatchId;
+      if (DispatchId.isPrimitive(dispatchId)) {
+        fieldValues[counter++] = Serializers.readPrimitiveValue(fory, buffer, dispatchId);
       } else {
         Object fieldValue =
             readFinalObjectFieldValue(binding, refResolver, typeResolver, fieldInfo, buffer);
@@ -302,11 +301,11 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
     for (SerializationFieldInfo fieldInfo : this.buildInFields) {
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       boolean nullable = fieldInfo.nullable;
-      short classId = fieldInfo.classId;
-      if (readPrimitiveFieldValue(fory, buffer, obj, fieldAccessor, classId)
+      int dispatchId = fieldInfo.dispatchId;
+      if (readPrimitiveFieldValue(buffer, obj, fieldAccessor, dispatchId)
           && (nullable
-              ? readBasicNullableObjectFieldValue(fory, buffer, obj, fieldAccessor, classId)
-              : readBasicObjectFieldValue(fory, buffer, obj, fieldAccessor, classId))) {
+              ? readBasicNullableObjectFieldValue(fory, buffer, obj, fieldAccessor, dispatchId)
+              : readBasicObjectFieldValue(fory, buffer, obj, fieldAccessor, dispatchId))) {
         Object fieldValue =
             readFinalObjectFieldValue(binding, refResolver, typeResolver, fieldInfo, buffer);
         fieldAccessor.putObject(obj, fieldValue);

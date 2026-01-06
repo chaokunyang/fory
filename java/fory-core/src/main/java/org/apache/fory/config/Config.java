@@ -83,7 +83,7 @@ public class Config implements Serializable {
     writeNumUtf16BytesForUtf8Encoding = builder.writeNumUtf16BytesForUtf8Encoding;
     compressInt = builder.compressInt;
     longEncoding = builder.longEncoding;
-    compressLong = longEncoding != LongEncoding.LE_RAW_BYTES;
+    compressLong = longEncoding != LongEncoding.FIXED_INT64;
     compressIntArray = builder.compressIntArray;
     compressLongArray = builder.compressLongArray;
     requireClassRegistration = builder.requireClassRegistration;

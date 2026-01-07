@@ -2121,6 +2121,197 @@ func testCircularRefCompatible() {
 }
 
 // ============================================================================
+// Unsigned Number Test Types
+// ============================================================================
+
+// UnsignedSchemaConsistent - Test struct for unsigned numbers in SCHEMA_CONSISTENT mode.
+// All fields use the same nullability as Java.
+// Note: Go currently only supports uint8, uint16, uint32 (VAR_UINT32), uint64 (VAR_UINT64).
+// Fixed and tagged encodings require fory encoding tags (TODO).
+// Matches Java's UnsignedSchemaConsistent (type id 501)
+type UnsignedSchemaConsistent struct {
+	// Primitive unsigned fields (non-nullable)
+	U8        uint8  // UINT8 - fixed 8-bit
+	U16       uint16 // UINT16 - fixed 16-bit
+	U32Var    uint32 // VAR_UINT32 - variable-length
+	U32Fixed  uint32 // Should be UINT32 (fixed) - TODO: add encoding tag
+	U64Var    uint64 // VAR_UINT64 - variable-length
+	U64Fixed  uint64 // Should be UINT64 (fixed) - TODO: add encoding tag
+	U64Tagged uint64 // Should be TAGGED_UINT64 - TODO: add encoding tag
+
+	// Nullable unsigned fields (pointers)
+	U8Nullable        *uint8  `fory:"nullable"`
+	U16Nullable       *uint16 `fory:"nullable"`
+	U32VarNullable    *uint32 `fory:"nullable"`
+	U32FixedNullable  *uint32 `fory:"nullable"`
+	U64VarNullable    *uint64 `fory:"nullable"`
+	U64FixedNullable  *uint64 `fory:"nullable"`
+	U64TaggedNullable *uint64 `fory:"nullable"`
+}
+
+// UnsignedSchemaCompatible - Test struct for unsigned numbers in COMPATIBLE mode.
+// Group 1: Pointer types (nullable in Go, non-nullable in Java)
+// Group 2: Non-pointer types with Field2 suffix (non-nullable in Go, nullable in Java)
+// Matches Java's UnsignedSchemaCompatible (type id 502)
+type UnsignedSchemaCompatible struct {
+	// Group 1: Nullable in Go (pointers), non-nullable in Java
+	U8        *uint8  `fory:"nullable"`
+	U16       *uint16 `fory:"nullable"`
+	U32Var    *uint32 `fory:"nullable"`
+	U32Fixed  *uint32 `fory:"nullable"`
+	U64Var    *uint64 `fory:"nullable"`
+	U64Fixed  *uint64 `fory:"nullable"`
+	U64Tagged *uint64 `fory:"nullable"`
+
+	// Group 2: Non-nullable in Go, nullable in Java
+	U8Field2        uint8
+	U16Field2       uint16
+	U32VarField2    uint32
+	U32FixedField2  uint32
+	U64VarField2    uint64
+	U64FixedField2  uint64
+	U64TaggedField2 uint64
+}
+
+func getUnsignedSchemaConsistent(obj interface{}) UnsignedSchemaConsistent {
+	switch v := obj.(type) {
+	case UnsignedSchemaConsistent:
+		return v
+	case *UnsignedSchemaConsistent:
+		return *v
+	default:
+		panic(fmt.Sprintf("expected UnsignedSchemaConsistent, got %T", obj))
+	}
+}
+
+func getUnsignedSchemaCompatible(obj interface{}) UnsignedSchemaCompatible {
+	switch v := obj.(type) {
+	case UnsignedSchemaCompatible:
+		return v
+	case *UnsignedSchemaCompatible:
+		return *v
+	default:
+		panic(fmt.Sprintf("expected UnsignedSchemaCompatible, got %T", obj))
+	}
+}
+
+// ============================================================================
+// Unsigned Number Tests
+// ============================================================================
+
+func testUnsignedSchemaConsistent() {
+	dataFile := getDataFile()
+	data := readFile(dataFile)
+
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(false))
+	f.Register(UnsignedSchemaConsistent{}, 501)
+
+	buf := fory.NewByteBuffer(data)
+	var obj interface{}
+	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to deserialize: %v", err))
+	}
+
+	result := getUnsignedSchemaConsistent(obj)
+
+	// Verify primitive unsigned fields
+	assertEqual(uint8(200), result.U8, "U8")
+	assertEqual(uint16(60000), result.U16, "U16")
+	assertEqual(uint32(3000000000), result.U32Var, "U32Var")
+	assertEqual(uint32(4000000000), result.U32Fixed, "U32Fixed")
+	assertEqual(uint64(10000000000), result.U64Var, "U64Var")
+	assertEqual(uint64(15000000000), result.U64Fixed, "U64Fixed")
+	assertEqual(uint64(1000000000), result.U64Tagged, "U64Tagged")
+
+	// Verify nullable unsigned fields
+	if result.U8Nullable == nil || *result.U8Nullable != 128 {
+		panic(fmt.Sprintf("U8Nullable mismatch: expected 128, got %v", result.U8Nullable))
+	}
+	if result.U16Nullable == nil || *result.U16Nullable != 40000 {
+		panic(fmt.Sprintf("U16Nullable mismatch: expected 40000, got %v", result.U16Nullable))
+	}
+	if result.U32VarNullable == nil || *result.U32VarNullable != 2500000000 {
+		panic(fmt.Sprintf("U32VarNullable mismatch: expected 2500000000, got %v", result.U32VarNullable))
+	}
+	if result.U32FixedNullable == nil || *result.U32FixedNullable != 3500000000 {
+		panic(fmt.Sprintf("U32FixedNullable mismatch: expected 3500000000, got %v", result.U32FixedNullable))
+	}
+	if result.U64VarNullable == nil || *result.U64VarNullable != 8000000000 {
+		panic(fmt.Sprintf("U64VarNullable mismatch: expected 8000000000, got %v", result.U64VarNullable))
+	}
+	if result.U64FixedNullable == nil || *result.U64FixedNullable != 12000000000 {
+		panic(fmt.Sprintf("U64FixedNullable mismatch: expected 12000000000, got %v", result.U64FixedNullable))
+	}
+	if result.U64TaggedNullable == nil || *result.U64TaggedNullable != 500000000 {
+		panic(fmt.Sprintf("U64TaggedNullable mismatch: expected 500000000, got %v", result.U64TaggedNullable))
+	}
+
+	serialized, err := f.Serialize(result)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to serialize: %v", err))
+	}
+
+	writeFile(dataFile, serialized)
+}
+
+func testUnsignedSchemaCompatible() {
+	dataFile := getDataFile()
+	data := readFile(dataFile)
+
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
+	f.Register(UnsignedSchemaCompatible{}, 502)
+
+	buf := fory.NewByteBuffer(data)
+	var obj interface{}
+	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to deserialize: %v", err))
+	}
+
+	result := getUnsignedSchemaCompatible(obj)
+
+	// Verify Group 1: Nullable fields (values from Java's non-nullable fields)
+	if result.U8 == nil || *result.U8 != 200 {
+		panic(fmt.Sprintf("U8 mismatch: expected 200, got %v", result.U8))
+	}
+	if result.U16 == nil || *result.U16 != 60000 {
+		panic(fmt.Sprintf("U16 mismatch: expected 60000, got %v", result.U16))
+	}
+	if result.U32Var == nil || *result.U32Var != 3000000000 {
+		panic(fmt.Sprintf("U32Var mismatch: expected 3000000000, got %v", result.U32Var))
+	}
+	if result.U32Fixed == nil || *result.U32Fixed != 4000000000 {
+		panic(fmt.Sprintf("U32Fixed mismatch: expected 4000000000, got %v", result.U32Fixed))
+	}
+	if result.U64Var == nil || *result.U64Var != 10000000000 {
+		panic(fmt.Sprintf("U64Var mismatch: expected 10000000000, got %v", result.U64Var))
+	}
+	if result.U64Fixed == nil || *result.U64Fixed != 15000000000 {
+		panic(fmt.Sprintf("U64Fixed mismatch: expected 15000000000, got %v", result.U64Fixed))
+	}
+	if result.U64Tagged == nil || *result.U64Tagged != 1000000000 {
+		panic(fmt.Sprintf("U64Tagged mismatch: expected 1000000000, got %v", result.U64Tagged))
+	}
+
+	// Verify Group 2: Non-nullable fields (values from Java's nullable fields)
+	assertEqual(uint8(128), result.U8Field2, "U8Field2")
+	assertEqual(uint16(40000), result.U16Field2, "U16Field2")
+	assertEqual(uint32(2500000000), result.U32VarField2, "U32VarField2")
+	assertEqual(uint32(3500000000), result.U32FixedField2, "U32FixedField2")
+	assertEqual(uint64(8000000000), result.U64VarField2, "U64VarField2")
+	assertEqual(uint64(12000000000), result.U64FixedField2, "U64FixedField2")
+	assertEqual(uint64(500000000), result.U64TaggedField2, "U64TaggedField2")
+
+	serialized, err := f.Serialize(result)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to serialize: %v", err))
+	}
+
+	writeFile(dataFile, serialized)
+}
+
+// ============================================================================
 // Main
 // ============================================================================
 
@@ -2223,6 +2414,10 @@ func main() {
 		testCircularRefSchemaConsistent()
 	case "test_circular_ref_compatible":
 		testCircularRefCompatible()
+	case "test_unsigned_schema_consistent":
+		testUnsignedSchemaConsistent()
+	case "test_unsigned_schema_compatible":
+		testUnsignedSchemaCompatible()
 	default:
 		panic(fmt.Sprintf("Unknown test case: %s", *caseName))
 	}

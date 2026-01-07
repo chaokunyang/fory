@@ -1037,6 +1037,109 @@ func (b *ByteBuffer) ReadVarint64(err *Error) int64 {
 	return v
 }
 
+// WriteTaggedInt64 writes int64 using tagged encoding.
+// If value is in [-1073741824, 1073741823], encode as 4 bytes: ((value as i32) << 1).
+// Otherwise write as 9 bytes: 0b1 | little-endian 8 bytes i64.
+func (b *ByteBuffer) WriteTaggedInt64(value int64) {
+	const halfMinIntValue int64 = -1073741824 // INT32_MIN / 2
+	const halfMaxIntValue int64 = 1073741823  // INT32_MAX / 2
+	if value >= halfMinIntValue && value <= halfMaxIntValue {
+		b.WriteInt32(int32(value) << 1)
+	} else {
+		b.grow(9)
+		b.data[b.writerIndex] = 0b1
+		if isLittleEndian {
+			*(*int64)(unsafe.Pointer(&b.data[b.writerIndex+1])) = value
+		} else {
+			binary.LittleEndian.PutUint64(b.data[b.writerIndex+1:], uint64(value))
+		}
+		b.writerIndex += 9
+	}
+}
+
+// ReadTaggedInt64 reads int64 using tagged encoding.
+// If bit 0 is 0, return value >> 1 (arithmetic shift).
+// Otherwise, skip flag byte and read 8 bytes as int64.
+func (b *ByteBuffer) ReadTaggedInt64(err *Error) int64 {
+	if b.readerIndex+4 > len(b.data) {
+		*err = BufferOutOfBoundError(b.readerIndex, 4, len(b.data))
+		return 0
+	}
+	var i int32
+	if isLittleEndian {
+		i = *(*int32)(unsafe.Pointer(&b.data[b.readerIndex]))
+	} else {
+		i = int32(binary.LittleEndian.Uint32(b.data[b.readerIndex:]))
+	}
+	if (i & 0b1) != 0b1 {
+		b.readerIndex += 4
+		return int64(i >> 1) // arithmetic right shift
+	}
+	if b.readerIndex+9 > len(b.data) {
+		*err = BufferOutOfBoundError(b.readerIndex, 9, len(b.data))
+		return 0
+	}
+	var value int64
+	if isLittleEndian {
+		value = *(*int64)(unsafe.Pointer(&b.data[b.readerIndex+1]))
+	} else {
+		value = int64(binary.LittleEndian.Uint64(b.data[b.readerIndex+1:]))
+	}
+	b.readerIndex += 9
+	return value
+}
+
+// WriteTaggedUint64 writes uint64 using tagged encoding.
+// If value is in [0, 0x7fffffff], encode as 4 bytes: ((value as u32) << 1).
+// Otherwise write as 9 bytes: 0b1 | little-endian 8 bytes u64.
+func (b *ByteBuffer) WriteTaggedUint64(value uint64) {
+	const maxSmallValue uint64 = 0x7fffffff // INT32_MAX as u64
+	if value <= maxSmallValue {
+		b.WriteInt32(int32(value) << 1)
+	} else {
+		b.grow(9)
+		b.data[b.writerIndex] = 0b1
+		if isLittleEndian {
+			*(*uint64)(unsafe.Pointer(&b.data[b.writerIndex+1])) = value
+		} else {
+			binary.LittleEndian.PutUint64(b.data[b.writerIndex+1:], value)
+		}
+		b.writerIndex += 9
+	}
+}
+
+// ReadTaggedUint64 reads uint64 using tagged encoding.
+// If bit 0 is 0, return value >> 1.
+// Otherwise, skip flag byte and read 8 bytes as uint64.
+func (b *ByteBuffer) ReadTaggedUint64(err *Error) uint64 {
+	if b.readerIndex+4 > len(b.data) {
+		*err = BufferOutOfBoundError(b.readerIndex, 4, len(b.data))
+		return 0
+	}
+	var i uint32
+	if isLittleEndian {
+		i = *(*uint32)(unsafe.Pointer(&b.data[b.readerIndex]))
+	} else {
+		i = binary.LittleEndian.Uint32(b.data[b.readerIndex:])
+	}
+	if (i & 0b1) != 0b1 {
+		b.readerIndex += 4
+		return uint64(i >> 1)
+	}
+	if b.readerIndex+9 > len(b.data) {
+		*err = BufferOutOfBoundError(b.readerIndex, 9, len(b.data))
+		return 0
+	}
+	var value uint64
+	if isLittleEndian {
+		value = *(*uint64)(unsafe.Pointer(&b.data[b.readerIndex+1]))
+	} else {
+		value = binary.LittleEndian.Uint64(b.data[b.readerIndex+1:])
+	}
+	b.readerIndex += 9
+	return value
+}
+
 // ReadVaruint64 reads unsigned varint
 //
 //go:inline

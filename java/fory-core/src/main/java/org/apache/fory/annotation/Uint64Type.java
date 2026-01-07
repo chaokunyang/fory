@@ -36,7 +36,8 @@ import org.apache.fory.config.LongEncoding;
  * <ul>
  *   <li>{@link LongEncoding#VARINT64} (default): Variable-length encoding (VAR_UINT64, type_id=14),
  *       compact for small values
- *   <li>{@link LongEncoding#INT64}: Fixed 8-byte encoding (UINT64, type_id=13), consistent size
+ *   <li>{@link LongEncoding#FIXED_INT64}: Fixed 8-byte encoding (UINT64, type_id=13), consistent
+ *       size
  *   <li>{@link LongEncoding#TAGGED_INT64}: Tagged encoding (TAGGED_UINT64, type_id=15) that uses 4
  *       bytes for values in range [0, 2147483647], otherwise 9 bytes
  * </ul>
@@ -58,7 +59,7 @@ import org.apache.fory.config.LongEncoding;
  *   @Uint64Type(encoding = LongEncoding.VARINT64)  // Variable-length (default)
  *   long compactId;
  *
- *   @Uint64Type(encoding = LongEncoding.INT64)     // Fixed 8-byte
+ *   @Uint64Type(encoding = LongEncoding.FIXED_INT64)     // Fixed 8-byte
  *   long fixedTimestamp;
  *
  *   @Uint64Type(encoding = LongEncoding.TAGGED_INT64) // Tagged encoding

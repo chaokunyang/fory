@@ -36,8 +36,13 @@ import lombok.Data;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
 import org.apache.fory.annotation.ForyField;
+import org.apache.fory.annotation.Uint16Type;
+import org.apache.fory.annotation.Uint32Type;
+import org.apache.fory.annotation.Uint64Type;
+import org.apache.fory.annotation.Uint8Type;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.Language;
+import org.apache.fory.config.LongEncoding;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.meta.MetaCompressor;
@@ -2464,5 +2469,209 @@ public abstract class XlangTestBase extends ForyTestBase {
     }
     // For other objects, return as-is
     return obj;
+  }
+
+  // ==================== Unsigned Number Tests ====================
+
+  /**
+   * Test struct for unsigned number schema consistent tests. Contains all unsigned numeric types
+   * with different encoding options.
+   */
+  @Data
+  static class UnsignedSchemaConsistent {
+    // Primitive unsigned fields
+    @Uint8Type short u8;
+
+    @Uint16Type int u16;
+
+    @Uint32Type(compress = true)
+    long u32Var;
+
+    @Uint32Type(compress = false)
+    long u32Fixed;
+
+    @Uint64Type(encoding = LongEncoding.VARINT64)
+    long u64Var;
+
+    @Uint64Type(encoding = LongEncoding.FIXED_INT64)
+    long u64Fixed;
+
+    @Uint64Type(encoding = LongEncoding.TAGGED_INT64)
+    long u64Tagged;
+
+    // Boxed nullable unsigned fields
+    @ForyField(nullable = true)
+    @Uint8Type
+    Short u8Nullable;
+
+    @ForyField(nullable = true)
+    @Uint16Type
+    Integer u16Nullable;
+
+    @ForyField(nullable = true)
+    @Uint32Type(compress = true)
+    Long u32VarNullable;
+
+    @ForyField(nullable = true)
+    @Uint32Type(compress = false)
+    Long u32FixedNullable;
+
+    @ForyField(nullable = true)
+    @Uint64Type(encoding = LongEncoding.VARINT64)
+    Long u64VarNullable;
+
+    @ForyField(nullable = true)
+    @Uint64Type(encoding = LongEncoding.FIXED_INT64)
+    Long u64FixedNullable;
+
+    @ForyField(nullable = true)
+    @Uint64Type(encoding = LongEncoding.TAGGED_INT64)
+    Long u64TaggedNullable;
+  }
+
+  @Test(dataProvider = "enableCodegen")
+  public void testUnsignedSchemaConsistent(boolean enableCodegen) throws java.io.IOException {
+    String caseName = "test_unsigned_schema_consistent";
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(CompatibleMode.SCHEMA_CONSISTENT)
+            .withCodegen(enableCodegen)
+            .build();
+    fory.register(UnsignedSchemaConsistent.class, 501);
+
+    UnsignedSchemaConsistent obj = new UnsignedSchemaConsistent();
+    // Primitive fields
+    obj.u8 = 200; // Max uint8 range testing
+    obj.u16 = 60000; // Max uint16 range testing
+    obj.u32Var = 3000000000L; // > INT_MAX to test unsigned
+    obj.u32Fixed = 4000000000L;
+    obj.u64Var = 10000000000L;
+    obj.u64Fixed = 15000000000L;
+    obj.u64Tagged = 1000000000L; // Within tagged range
+
+    // Nullable boxed fields with values
+    obj.u8Nullable = (short) 128;
+    obj.u16Nullable = 40000;
+    obj.u32VarNullable = 2500000000L;
+    obj.u32FixedNullable = 3500000000L;
+    obj.u64VarNullable = 8000000000L;
+    obj.u64FixedNullable = 12000000000L;
+    obj.u64TaggedNullable = 500000000L;
+
+    // First verify Java serialization works
+    Assert.assertEquals(xserDe(fory, obj), obj);
+
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(512);
+    fory.serialize(buffer, obj);
+
+    ExecutionContext ctx = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
+    runPeer(ctx);
+
+    MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
+    UnsignedSchemaConsistent result = (UnsignedSchemaConsistent) fory.deserialize(buffer2);
+    Assert.assertEquals(result, obj);
+  }
+
+  /**
+   * Test struct for unsigned number schema compatible tests (Java side). Group 1: non-nullable
+   * primitive fields. Group 2: nullable boxed fields with "2" suffix. Other languages flip
+   * nullability: Group 1 is Optional, Group 2 is non-Optional.
+   */
+  @Data
+  static class UnsignedSchemaCompatible {
+    // Group 1: Primitive unsigned fields (non-nullable in Java, Optional in other languages)
+    @Uint8Type short u8;
+
+    @Uint16Type int u16;
+
+    @Uint32Type(compress = true)
+    long u32Var;
+
+    @Uint32Type(compress = false)
+    long u32Fixed;
+
+    @Uint64Type(encoding = LongEncoding.VARINT64)
+    long u64Var;
+
+    @Uint64Type(encoding = LongEncoding.FIXED_INT64)
+    long u64Fixed;
+
+    @Uint64Type(encoding = LongEncoding.TAGGED_INT64)
+    long u64Tagged;
+
+    // Group 2: Nullable boxed fields (nullable in Java, non-Optional in other languages)
+    @ForyField(nullable = true)
+    @Uint8Type
+    Short u8Field2;
+
+    @ForyField(nullable = true)
+    @Uint16Type
+    Integer u16Field2;
+
+    @ForyField(nullable = true)
+    @Uint32Type(compress = true)
+    Long u32VarField2;
+
+    @ForyField(nullable = true)
+    @Uint32Type(compress = false)
+    Long u32FixedField2;
+
+    @ForyField(nullable = true)
+    @Uint64Type(encoding = LongEncoding.VARINT64)
+    Long u64VarField2;
+
+    @ForyField(nullable = true)
+    @Uint64Type(encoding = LongEncoding.FIXED_INT64)
+    Long u64FixedField2;
+
+    @ForyField(nullable = true)
+    @Uint64Type(encoding = LongEncoding.TAGGED_INT64)
+    Long u64TaggedField2;
+  }
+
+  @Test(dataProvider = "enableCodegen")
+  public void testUnsignedSchemaCompatible(boolean enableCodegen) throws java.io.IOException {
+    String caseName = "test_unsigned_schema_compatible";
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .withCodegen(enableCodegen)
+            .withMetaCompressor(new NoOpMetaCompressor())
+            .build();
+    fory.register(UnsignedSchemaCompatible.class, 502);
+
+    UnsignedSchemaCompatible obj = new UnsignedSchemaCompatible();
+    // Primitive fields
+    obj.u8 = 200;
+    obj.u16 = 60000;
+    obj.u32Var = 3000000000L;
+    obj.u32Fixed = 4000000000L;
+    obj.u64Var = 10000000000L;
+    obj.u64Fixed = 15000000000L;
+    obj.u64Tagged = 1000000000L;
+
+    // Group 2 fields with values
+    obj.u8Field2 = (short) 128;
+    obj.u16Field2 = 40000;
+    obj.u32VarField2 = 2500000000L;
+    obj.u32FixedField2 = 3500000000L;
+    obj.u64VarField2 = 8000000000L;
+    obj.u64FixedField2 = 12000000000L;
+    obj.u64TaggedField2 = 500000000L;
+
+    // First verify Java serialization works
+    Assert.assertEquals(xserDe(fory, obj), obj);
+
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(1024);
+    fory.serialize(buffer, obj);
+
+    ExecutionContext ctx = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
+    runPeer(ctx);
+
+    MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
+    UnsignedSchemaCompatible result = (UnsignedSchemaCompatible) fory.deserialize(buffer2);
+    Assert.assertEquals(result, obj);
   }
 }

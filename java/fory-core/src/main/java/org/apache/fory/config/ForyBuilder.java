@@ -102,6 +102,11 @@ public final class ForyBuilder {
     return this;
   }
 
+  public ForyBuilder withXlang(boolean xlang) {
+    this.language = xlang ? Language.XLANG : Language.JAVA;
+    return this;
+  }
+
   /** Whether track shared or circular references. */
   public ForyBuilder withRefTracking(boolean trackingRef) {
     this.trackingRef = trackingRef;
@@ -258,6 +263,11 @@ public final class ForyBuilder {
   public ForyBuilder withCompatibleMode(CompatibleMode compatibleMode) {
     this.compatibleMode = compatibleMode;
     return this;
+  }
+
+  public ForyBuilder withCompatible(boolean compatible) {
+    return withCompatibleMode(
+        compatible ? CompatibleMode.COMPATIBLE : CompatibleMode.SCHEMA_CONSISTENT);
   }
 
   /**

@@ -24,7 +24,6 @@ import static org.apache.fory.meta.ClassDefEncoder.buildFields;
 import java.io.ObjectStreamClass;
 import java.io.Serializable;
 import java.lang.reflect.Field;
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;

@@ -369,7 +369,8 @@ public class FieldTypes {
         default:
           {
             if (Types.isPrimitiveType(xtypeId)) {
-              // unsigned types share same class with signed numeric types, so unsigned types are not registered.
+              // unsigned types share same class with signed numeric types, so unsigned types are
+              // not registered.
               return new RegisteredFieldType(nullable, trackingRef, xtypeId);
             }
             if (!Types.isUserDefinedType((byte) xtypeId)) {
@@ -423,7 +424,7 @@ public class FieldTypes {
           if (TypeUtils.unwrap(declared.getRawType()) == TypeUtils.unwrap(cls)) {
             // we still need correct type, the `read/write` should use `nullable` of `Descriptor`
             // for serialization
-            cls =  declared.getRawType();
+            cls = declared.getRawType();
           }
         }
         return TypeRef.of(cls, new TypeExtMeta(classId, nullable, trackingRef));

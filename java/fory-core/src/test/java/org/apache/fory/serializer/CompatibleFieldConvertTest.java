@@ -20,6 +20,8 @@
 package org.apache.fory.serializer;
 
 import com.google.common.collect.ImmutableSet;
+import java.lang.reflect.Field;
+import java.util.List;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
 import org.apache.fory.config.CompatibleMode;
@@ -29,9 +31,6 @@ import org.apache.fory.serializer.converter.FieldConverter;
 import org.apache.fory.serializer.converter.FieldConverters;
 import org.testng.Assert;
 import org.testng.annotations.Test;
-
-import java.lang.reflect.Field;
-import java.util.List;
 
 public class CompatibleFieldConvertTest extends ForyTestBase {
   public static final class CompatibleFieldConvert1 {
@@ -49,7 +48,10 @@ public class CompatibleFieldConvertTest extends ForyTestBase {
     public Float f12;
     public double f13;
     public Double f14;
-    public String toString() {return "" + ftrue + ffalse + f3 + f4 + f5 + f6 + f7 + f8 + f9 + f10 + f11 + f12 + f13 + f14;}
+
+    public String toString() {
+      return "" + ftrue + ffalse + f3 + f4 + f5 + f6 + f7 + f8 + f9 + f10 + f11 + f12 + f13 + f14;
+    }
   }
 
   public static final class CompatibleFieldConvert2 {
@@ -67,7 +69,10 @@ public class CompatibleFieldConvertTest extends ForyTestBase {
     public float f12;
     public Double f13;
     public double f14;
-    public String toString() {return "" + ftrue + ffalse + f3 + f4 + f5 + f6 + f7 + f8 + f9 + f10 + f11 + f12 + f13 + f14;}
+
+    public String toString() {
+      return "" + ftrue + ffalse + f3 + f4 + f5 + f6 + f7 + f8 + f9 + f10 + f11 + f12 + f13 + f14;
+    }
   }
 
   public static final class CompatibleFieldConvert3 {
@@ -85,7 +90,10 @@ public class CompatibleFieldConvertTest extends ForyTestBase {
     public String f12;
     public String f13;
     public String f14;
-    public String toString() {return ftrue + ffalse + f3 + f4 + f5 + f6 + f7 + f8 + f9 + f10 + f11 + f12 + f13 + f14;}
+
+    public String toString() {
+      return ftrue + ffalse + f3 + f4 + f5 + f6 + f7 + f8 + f9 + f10 + f11 + f12 + f13 + f14;
+    }
   }
 
   @Test(dataProvider = "language")
@@ -105,10 +113,7 @@ public class CompatibleFieldConvertTest extends ForyTestBase {
         field.set(o1, converted);
       }
       Fory fory =
-          builder()
-              .withLanguage(language)
-              .withCompatibleMode(CompatibleMode.COMPATIBLE)
-              .build();
+          builder().withLanguage(language).withCompatibleMode(CompatibleMode.COMPATIBLE).build();
       fory.register(cls);
       bytes = fory.serialize(o1);
     }
@@ -116,10 +121,7 @@ public class CompatibleFieldConvertTest extends ForyTestBase {
       Class<?> cls = CompatibleFieldConvert2.class;
       Assert.assertNotEquals(o1.getClass(), cls);
       Fory fory =
-          builder()
-              .withLanguage(language)
-              .withCompatibleMode(CompatibleMode.COMPATIBLE)
-              .build();
+          builder().withLanguage(language).withCompatibleMode(CompatibleMode.COMPATIBLE).build();
       fory.register(cls);
       Object o = fory.deserialize(bytes);
       Assert.assertEquals(o.getClass(), cls);
@@ -138,10 +140,7 @@ public class CompatibleFieldConvertTest extends ForyTestBase {
     }
     {
       Fory fory =
-          builder()
-              .withLanguage(language)
-              .withCompatibleMode(CompatibleMode.COMPATIBLE)
-              .build();
+          builder().withLanguage(language).withCompatibleMode(CompatibleMode.COMPATIBLE).build();
       Class<?> cls = CompatibleFieldConvert3.class;
       Assert.assertNotEquals(o1.getClass(), cls);
       fory.register(cls);

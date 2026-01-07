@@ -42,8 +42,6 @@ import org.apache.fory.meta.ClassDefEncoderTest;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.MetaContext;
 import org.apache.fory.serializer.collection.UnmodifiableSerializersTest;
-import org.apache.fory.serializer.converter.FieldConverter;
-import org.apache.fory.serializer.converter.FieldConverters;
 import org.apache.fory.test.bean.BeanA;
 import org.apache.fory.test.bean.BeanB;
 import org.apache.fory.test.bean.CollectionFields;

@@ -183,7 +183,7 @@ public abstract class ForyTestBase {
 
   @DataProvider
   public static Object[][] language() {
-    return new Object[][] { {Language.XLANG}};
+    return new Object[][] {{Language.JAVA}, {Language.XLANG}};
   }
 
   @DataProvider(name = "javaFory")
@@ -197,7 +197,34 @@ public abstract class ForyTestBase {
             .requireClassRegistration(false)
             .suppressClassRegistrationWarnings(true)
             .build()
-      }
+      },
+      {
+        Fory.builder()
+            .withLanguage(Language.JAVA)
+            .withRefTracking(false)
+            .withCodegen(false)
+            .requireClassRegistration(false)
+            .suppressClassRegistrationWarnings(true)
+            .build()
+      },
+      {
+        Fory.builder()
+            .withLanguage(Language.JAVA)
+            .withRefTracking(true)
+            .withCodegen(true)
+            .requireClassRegistration(false)
+            .suppressClassRegistrationWarnings(true)
+            .build()
+      },
+      {
+        Fory.builder()
+            .withLanguage(Language.JAVA)
+            .withRefTracking(false)
+            .withCodegen(true)
+            .requireClassRegistration(false)
+            .suppressClassRegistrationWarnings(true)
+            .build()
+      },
     };
   }
 

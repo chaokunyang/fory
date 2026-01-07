@@ -22,7 +22,7 @@ Host-side wrapper for building Python wheels in manylinux containers.
 
 Usage:
   ./build_linux_wheels.py --arch X86 --python cp38-cp38
-  ./build_linux_wheels.py --arch AARCTAGGED_INT64 --python cp313-cp313 --release
+  ./build_linux_wheels.py --arch AARCH64 --python cp313-cp313 --release
 
 Environment:
   - GITHUB_WORKSPACE (optional; defaults to cwd)
@@ -44,7 +44,7 @@ DEFAULT_X86_IMAGES = [
     "quay.io/pypa/manylinux2014_x86_64:latest",
 ]
 
-DEFAULT_AARCTAGGED_INT64_IMAGES = [
+DEFAULT_AARCH64_IMAGES = [
     "quay.io/pypa/manylinux2014_aarch64:latest",
 ]
 
@@ -55,14 +55,14 @@ ARCH_ALIASES = {
     "AMD64": "x86",
     "ARM": "arm64",
     "ARM64": "arm64",
-    "AARCTAGGED_INT64": "arm64",
+    "AARCH64": "arm64",
 }
 
 
 def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument(
-        "--arch", required=True, help="Architecture (e.g. X86, X64, AARCTAGGED_INT64)"
+        "--arch", required=True, help="Architecture (e.g. X86, X64, AARCH64)"
     )
     p.add_argument(
         "--python", required=True, help="Python version (e.g. cp38-cp38, cp313-cp313)"
@@ -83,7 +83,7 @@ def get_image_for_arch(arch_normalized: str) -> str:
     if arch_normalized == "x86":
         return DEFAULT_X86_IMAGES[0]
     elif arch_normalized == "arm64":
-        return DEFAULT_AARCTAGGED_INT64_IMAGES[0]
+        return DEFAULT_AARCH64_IMAGES[0]
     else:
         raise SystemExit(f"Unsupported arch: {arch_normalized!r}")
 

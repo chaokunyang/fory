@@ -122,9 +122,11 @@ inline constexpr bool is_primitive_type_id(TypeId type_id) {
          type_id == TypeId::VARINT64 || type_id == TypeId::TAGGED_INT64 ||
          type_id == TypeId::FLOAT16 || type_id == TypeId::FLOAT32 ||
          type_id == TypeId::FLOAT64 ||
-         // Unsigned types for native mode (xlang=false)
+         // Unsigned types
          type_id == TypeId::UINT8 || type_id == TypeId::UINT16 ||
-         type_id == TypeId::UINT32 || type_id == TypeId::UINT64;
+         type_id == TypeId::UINT32 || type_id == TypeId::VAR_UINT32 ||
+         type_id == TypeId::UINT64 || type_id == TypeId::VAR_UINT64 ||
+         type_id == TypeId::TAGGED_UINT64;
 }
 
 /// Write a primitive value to buffer at given offset WITHOUT updating
@@ -653,16 +655,24 @@ template <typename T> struct CompileTimeFieldHelpers {
     switch (static_cast<TypeId>(tid)) {
     case TypeId::BOOL:
     case TypeId::INT8:
+    case TypeId::UINT8:
       return 1;
     case TypeId::INT16:
+    case TypeId::UINT16:
     case TypeId::FLOAT16:
       return 2;
     case TypeId::INT32:
     case TypeId::VARINT32:
+    case TypeId::UINT32:
+    case TypeId::VAR_UINT32:
     case TypeId::FLOAT32:
       return 4;
     case TypeId::INT64:
     case TypeId::VARINT64:
+    case TypeId::TAGGED_INT64:
+    case TypeId::UINT64:
+    case TypeId::VAR_UINT64:
+    case TypeId::TAGGED_UINT64:
     case TypeId::FLOAT64:
       return 8;
     default:
@@ -674,7 +684,13 @@ template <typename T> struct CompileTimeFieldHelpers {
     return tid == static_cast<uint32_t>(TypeId::INT32) ||
            tid == static_cast<uint32_t>(TypeId::INT64) ||
            tid == static_cast<uint32_t>(TypeId::VARINT32) ||
-           tid == static_cast<uint32_t>(TypeId::VARINT64);
+           tid == static_cast<uint32_t>(TypeId::VARINT64) ||
+           tid == static_cast<uint32_t>(TypeId::TAGGED_INT64) ||
+           tid == static_cast<uint32_t>(TypeId::UINT32) ||
+           tid == static_cast<uint32_t>(TypeId::UINT64) ||
+           tid == static_cast<uint32_t>(TypeId::VAR_UINT32) ||
+           tid == static_cast<uint32_t>(TypeId::VAR_UINT64) ||
+           tid == static_cast<uint32_t>(TypeId::TAGGED_UINT64);
   }
 
   /// Check if a type ID is an internal (built-in, final) type for group 2.
@@ -902,11 +918,11 @@ template <typename T> struct CompileTimeFieldHelpers {
   /// VARINT32/VARINT64/TAGGED_INT64 also use varint encoding
   static constexpr bool is_varint_primitive(uint32_t tid) {
     switch (static_cast<TypeId>(tid)) {
-    case TypeId::INT32: // int32_t uses zigzag varint per basic_serializer.h
-    case TypeId::INT64: // int64_t uses zigzag varint per basic_serializer.h
+    case TypeId::INT32:    // int32_t uses zigzag varint per basic_serializer.h
+    case TypeId::INT64:    // int64_t uses zigzag varint per basic_serializer.h
     case TypeId::VARINT32: // explicit varint type
     case TypeId::VARINT64: // explicit varint type
-    case TypeId::TAGGED_INT64:   // hybrid int64 encoding
+    case TypeId::TAGGED_INT64: // hybrid int64 encoding
       return true;
     default:
       return false;
@@ -916,10 +932,10 @@ template <typename T> struct CompileTimeFieldHelpers {
   /// Get the max varint size in bytes for a type_id (0 if not varint)
   static constexpr size_t max_varint_bytes(uint32_t tid) {
     switch (static_cast<TypeId>(tid)) {
-    case TypeId::INT32: // int32_t uses zigzag varint
+    case TypeId::INT32:    // int32_t uses zigzag varint
     case TypeId::VARINT32: // explicit varint
-      return 5;         // int32 varint max
-    case TypeId::INT64: // int64_t uses zigzag varint
+      return 5;            // int32 varint max
+    case TypeId::INT64:    // int64_t uses zigzag varint
     case TypeId::VARINT64: // explicit varint
     case TypeId::TAGGED_INT64:
       return 10; // int64 varint max

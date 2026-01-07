@@ -165,9 +165,9 @@ template <> struct Serializer<uint16_t> {
   }
 };
 
-/// uint32_t serializer (native mode only)
+/// uint32_t serializer - uses VAR_UINT32 to match Rust xlang mode
 template <> struct Serializer<uint32_t> {
-  static constexpr TypeId type_id = TypeId::UINT32;
+  static constexpr TypeId type_id = TypeId::VAR_UINT32;
 
   static inline void write_type_info(WriteContext &ctx) {
     ctx.write_varuint32(static_cast<uint32_t>(type_id));
@@ -230,9 +230,9 @@ template <> struct Serializer<uint32_t> {
   }
 };
 
-/// uint64_t serializer (native mode only)
+/// uint64_t serializer - uses VAR_UINT64 to match Rust xlang mode
 template <> struct Serializer<uint64_t> {
-  static constexpr TypeId type_id = TypeId::UINT64;
+  static constexpr TypeId type_id = TypeId::VAR_UINT64;
 
   static inline void write_type_info(WriteContext &ctx) {
     ctx.write_varuint32(static_cast<uint32_t>(type_id));

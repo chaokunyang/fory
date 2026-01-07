@@ -444,11 +444,11 @@ template <> struct TypeIndex<int16_t> {
 };
 
 template <> struct TypeIndex<int32_t> {
-  static constexpr uint64_t value = static_cast<uint64_t>(TypeId::INT32);
+  static constexpr uint64_t value = static_cast<uint64_t>(TypeId::VARINT32);
 };
 
 template <> struct TypeIndex<int64_t> {
-  static constexpr uint64_t value = static_cast<uint64_t>(TypeId::INT64);
+  static constexpr uint64_t value = static_cast<uint64_t>(TypeId::VARINT64);
 };
 
 // Note: Unsigned types (uint8_t, uint16_t, uint32_t, uint64_t) use the fallback

@@ -180,31 +180,31 @@ func (c *ReadContext) ReadTypeId() TypeId {
 	return TypeId(c.buffer.ReadVaruint32Small7(c.Err()))
 }
 
-// readFast reads a value using fast path based on StaticTypeId
-func (c *ReadContext) readFast(ptr unsafe.Pointer, ct StaticTypeId) {
+// readFast reads a value using fast path based on DispatchId
+func (c *ReadContext) readFast(ptr unsafe.Pointer, ct DispatchId) {
 	err := c.Err()
 	switch ct {
-	case ConcreteTypeBool:
+	case BoolDispatchId:
 		*(*bool)(ptr) = c.buffer.ReadBool(err)
-	case ConcreteTypeInt8:
+	case Int8DispatchId:
 		*(*int8)(ptr) = int8(c.buffer.ReadByte(err))
-	case ConcreteTypeInt16:
+	case Int16DispatchId:
 		*(*int16)(ptr) = c.buffer.ReadInt16(err)
-	case ConcreteTypeInt32:
+	case Int32DispatchId:
 		*(*int32)(ptr) = c.buffer.ReadVarint32(err)
-	case ConcreteTypeInt:
+	case IntDispatchId:
 		if strconv.IntSize == 64 {
 			*(*int)(ptr) = int(c.buffer.ReadVarint64(err))
 		} else {
 			*(*int)(ptr) = int(c.buffer.ReadVarint32(err))
 		}
-	case ConcreteTypeInt64:
+	case Int64DispatchId:
 		*(*int64)(ptr) = c.buffer.ReadVarint64(err)
-	case ConcreteTypeFloat32:
+	case Float32DispatchId:
 		*(*float32)(ptr) = c.buffer.ReadFloat32(err)
-	case ConcreteTypeFloat64:
+	case Float64DispatchId:
 		*(*float64)(ptr) = c.buffer.ReadFloat64(err)
-	case ConcreteTypeString:
+	case StringDispatchId:
 		*(*string)(ptr) = readString(c.buffer, err)
 	}
 }

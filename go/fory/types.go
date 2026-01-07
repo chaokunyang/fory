@@ -154,7 +154,18 @@ func isPrimitiveType(typeID int16) bool {
 		INT8,
 		INT16,
 		INT32,
+		VARINT32,
 		INT64,
+		VARINT64,
+		TAGGED_INT64,
+		UINT8,
+		UINT16,
+		UINT32,
+		VAR_UINT32,
+		UINT64,
+		VAR_UINT64,
+		TAGGED_UINT64,
+		FLOAT16,
 		FLOAT32,
 		FLOAT64:
 		return true
@@ -209,15 +220,24 @@ func isPrimitiveArrayType(typeID int16) bool {
 }
 
 var primitiveTypeSizes = map[int16]int{
-	BOOL:    1,
-	INT8:    1,
-	INT16:   2,
-	INT32:   4,
-	VARINT32:   4,
-	INT64:   8,
-	VARINT64:   8,
-	FLOAT32: 4,
-	FLOAT64: 8,
+	BOOL:          1,
+	INT8:          1,
+	UINT8:         1,
+	INT16:         2,
+	UINT16:        2,
+	FLOAT16:       2,
+	INT32:         4,
+	VARINT32:      4,
+	UINT32:        4,
+	VAR_UINT32:    4,
+	FLOAT32:       4,
+	INT64:         8,
+	VARINT64:      8,
+	TAGGED_INT64:  8,
+	UINT64:        8,
+	VAR_UINT64:    8,
+	TAGGED_UINT64: 8,
+	FLOAT64:       8,
 }
 
 func getPrimitiveTypeSize(typeID int16) int {
@@ -240,150 +260,143 @@ func isUserDefinedType(typeID int16) bool {
 }
 
 // ============================================================================
-// StaticTypeId for switch-based fast path (avoids interface virtual method cost)
+// DispatchId for switch-based fast path (avoids interface virtual method cost)
 // ============================================================================
 
-// StaticTypeId identifies concrete Go types for optimized serialization dispatch
-type StaticTypeId uint8
+// DispatchId identifies concrete Go types for optimized serialization dispatch
+type DispatchId uint8
 
 const (
-	ConcreteTypeOther StaticTypeId = iota
-	ConcreteTypeBool
-	ConcreteTypeInt8
-	ConcreteTypeInt16
-	ConcreteTypeInt32
-	ConcreteTypeInt64
-	ConcreteTypeInt
-	ConcreteTypeFloat32
-	ConcreteTypeFloat64
-	ConcreteTypeString
-	ConcreteTypeByteSlice
-	ConcreteTypeInt8Slice
-	ConcreteTypeInt16Slice
-	ConcreteTypeInt32Slice
-	ConcreteTypeInt64Slice
-	ConcreteTypeIntSlice
-	ConcreteTypeUintSlice
-	ConcreteTypeFloat32Slice
-	ConcreteTypeFloat64Slice
-	ConcreteTypeBoolSlice
-	ConcreteTypeStringSlice
-	ConcreteTypeStringStringMap
-	ConcreteTypeStringInt32Map
-	ConcreteTypeStringInt64Map
-	ConcreteTypeStringIntMap
-	ConcreteTypeStringFloat64Map
-	ConcreteTypeStringBoolMap
-	ConcreteTypeInt32Int32Map
-	ConcreteTypeInt64Int64Map
-	ConcreteTypeIntIntMap
-	ConcreteTypeEnum // Enum types (both ENUM and NAMED_ENUM)
+	UnknowDispatchId DispatchId = iota
+	BoolDispatchId
+	Int8DispatchId
+	Int16DispatchId
+	Int32DispatchId
+	Int64DispatchId
+	IntDispatchId
+	Uint8DispatchId
+	Uint16DispatchId
+	Uint32DispatchId
+	Uint64DispatchId
+	UintDispatchId
+	Float32DispatchId
+	Float64DispatchId
+	StringDispatchId
+	ByteSliceDispatchId
+	Int8SliceDispatchId
+	Int16SliceDispatchId
+	Int32SliceDispatchId
+	Int64SliceDispatchId
+	IntSliceDispatchId
+	UintSliceDispatchId
+	Float32SliceDispatchId
+	Float64SliceDispatchId
+	BoolSliceDispatchId
+	StringSliceDispatchId
+	StringStringMapDispatchId
+	StringInt32MapDispatchId
+	StringInt64MapDispatchId
+	StringIntMapDispatchId
+	StringFloat64MapDispatchId
+	StringBoolMapDispatchId
+	Int32Int32MapDispatchId
+	Int64Int64MapDispatchId
+	IntIntMapDispatchId
+	EnumDispatchId // Enum types (both ENUM and NAMED_ENUM)
 )
 
-// GetStaticTypeId returns the StaticTypeId for a reflect.Type
-func GetStaticTypeId(t reflect.Type) StaticTypeId {
+// GetDispatchId returns the DispatchId for a reflect.Type
+func GetDispatchId(t reflect.Type) DispatchId {
 	switch t.Kind() {
 	case reflect.Bool:
-		return ConcreteTypeBool
+		return BoolDispatchId
 	case reflect.Int8:
-		return ConcreteTypeInt8
+		return Int8DispatchId
 	case reflect.Int16:
-		return ConcreteTypeInt16
+		return Int16DispatchId
 	case reflect.Int32:
-		return ConcreteTypeInt32
+		return Int32DispatchId
 	case reflect.Int64:
-		return ConcreteTypeInt64
+		return Int64DispatchId
 	case reflect.Int:
-		return ConcreteTypeInt
+		return IntDispatchId
+	case reflect.Uint8:
+		return Uint8DispatchId
+	case reflect.Uint16:
+		return Uint16DispatchId
+	case reflect.Uint32:
+		return Uint32DispatchId
+	case reflect.Uint64:
+		return Uint64DispatchId
+	case reflect.Uint:
+		return UintDispatchId
 	case reflect.Float32:
-		return ConcreteTypeFloat32
+		return Float32DispatchId
 	case reflect.Float64:
-		return ConcreteTypeFloat64
+		return Float64DispatchId
 	case reflect.String:
-		return ConcreteTypeString
+		return StringDispatchId
 	case reflect.Slice:
 		// Check for specific slice types
 		switch t.Elem().Kind() {
 		case reflect.Uint8:
-			return ConcreteTypeByteSlice
+			return ByteSliceDispatchId
 		case reflect.Int8:
-			return ConcreteTypeInt8Slice
+			return Int8SliceDispatchId
 		case reflect.Int16:
-			return ConcreteTypeInt16Slice
+			return Int16SliceDispatchId
 		case reflect.Int32:
-			return ConcreteTypeInt32Slice
+			return Int32SliceDispatchId
 		case reflect.Int64:
-			return ConcreteTypeInt64Slice
+			return Int64SliceDispatchId
 		case reflect.Int:
-			return ConcreteTypeIntSlice
+			return IntSliceDispatchId
 		case reflect.Uint:
-			return ConcreteTypeUintSlice
+			return UintSliceDispatchId
 		case reflect.Float32:
-			return ConcreteTypeFloat32Slice
+			return Float32SliceDispatchId
 		case reflect.Float64:
-			return ConcreteTypeFloat64Slice
+			return Float64SliceDispatchId
 		case reflect.Bool:
-			return ConcreteTypeBoolSlice
+			return BoolSliceDispatchId
 		case reflect.String:
-			return ConcreteTypeStringSlice
+			return StringSliceDispatchId
 		}
-		return ConcreteTypeOther
+		return UnknowDispatchId
 	case reflect.Map:
 		// Check for specific common map types
 		if t.Key().Kind() == reflect.String {
 			switch t.Elem().Kind() {
 			case reflect.String:
-				return ConcreteTypeStringStringMap
+				return StringStringMapDispatchId
 			case reflect.Int64:
-				return ConcreteTypeStringInt64Map
+				return StringInt64MapDispatchId
 			case reflect.Int:
-				return ConcreteTypeStringIntMap
+				return StringIntMapDispatchId
 			case reflect.Float64:
-				return ConcreteTypeStringFloat64Map
+				return StringFloat64MapDispatchId
 			case reflect.Bool:
-				return ConcreteTypeStringBoolMap
+				return StringBoolMapDispatchId
 			}
 		} else if t.Key().Kind() == reflect.Int32 && t.Elem().Kind() == reflect.Int32 {
-			return ConcreteTypeInt32Int32Map
+			return Int32Int32MapDispatchId
 		} else if t.Key().Kind() == reflect.Int64 && t.Elem().Kind() == reflect.Int64 {
-			return ConcreteTypeInt64Int64Map
+			return Int64Int64MapDispatchId
 		} else if t.Key().Kind() == reflect.Int && t.Elem().Kind() == reflect.Int {
-			return ConcreteTypeIntIntMap
+			return IntIntMapDispatchId
 		}
-		return ConcreteTypeOther
+		return UnknowDispatchId
 	default:
-		return ConcreteTypeOther
-	}
-}
-
-// GetConcreteTypeIdAndTypeId returns both StaticTypeId and TypeId for a reflect.Type
-func GetConcreteTypeIdAndTypeId(t reflect.Type) (StaticTypeId, TypeId) {
-	switch t.Kind() {
-	case reflect.Bool:
-		return ConcreteTypeBool, BOOL
-	case reflect.Int8:
-		return ConcreteTypeInt8, INT8
-	case reflect.Int16:
-		return ConcreteTypeInt16, INT16
-	case reflect.Int32:
-		return ConcreteTypeInt32, INT32
-	case reflect.Int64:
-		return ConcreteTypeInt64, INT64
-	case reflect.Float32:
-		return ConcreteTypeFloat32, FLOAT32
-	case reflect.Float64:
-		return ConcreteTypeFloat64, FLOAT64
-	case reflect.String:
-		return ConcreteTypeString, STRING
-	default:
-		return ConcreteTypeOther, 0
+		return UnknowDispatchId
 	}
 }
 
 // IsPrimitiveTypeId checks if a type ID is a primitive type
 func IsPrimitiveTypeId(typeId TypeId) bool {
 	switch typeId {
-	case BOOL, INT8, INT16, INT32, INT64, FLOAT32, FLOAT64, STRING:
+	case BOOL, INT8, INT16, INT32, VARINT32, INT64, VARINT64, TAGGED_INT64,
+		UINT8, UINT16, UINT32, VAR_UINT32, UINT64, VAR_UINT64, TAGGED_UINT64,
+		FLOAT16, FLOAT32, FLOAT64, STRING:
 		return true
 	default:
 		return false
@@ -391,13 +404,13 @@ func IsPrimitiveTypeId(typeId TypeId) bool {
 }
 
 // isFixedSizePrimitive returns true for non-nullable fixed-size primitives
-func isFixedSizePrimitive(staticId StaticTypeId, referencable bool) bool {
+func isFixedSizePrimitive(staticId DispatchId, referencable bool) bool {
 	if referencable {
 		return false
 	}
 	switch staticId {
-	case ConcreteTypeBool, ConcreteTypeInt8, ConcreteTypeInt16,
-		ConcreteTypeFloat32, ConcreteTypeFloat64:
+	case BoolDispatchId, Int8DispatchId, Uint8DispatchId, Int16DispatchId, Uint16DispatchId,
+		Float32DispatchId, Float64DispatchId:
 		return true
 	default:
 		return false
@@ -405,12 +418,13 @@ func isFixedSizePrimitive(staticId StaticTypeId, referencable bool) bool {
 }
 
 // isVarintPrimitive returns true for non-nullable varint primitives
-func isVarintPrimitive(staticId StaticTypeId, referencable bool) bool {
+func isVarintPrimitive(staticId DispatchId, referencable bool) bool {
 	if referencable {
 		return false
 	}
 	switch staticId {
-	case ConcreteTypeInt32, ConcreteTypeInt64, ConcreteTypeInt:
+	case Int32DispatchId, Int64DispatchId, IntDispatchId,
+		Uint32DispatchId, Uint64DispatchId, UintDispatchId:
 		return true
 	default:
 		return false
@@ -418,10 +432,12 @@ func isVarintPrimitive(staticId StaticTypeId, referencable bool) bool {
 }
 
 // isPrimitiveStaticId returns true if the staticId represents a primitive type
-func isPrimitiveStaticId(staticId StaticTypeId) bool {
+func isPrimitiveStaticId(staticId DispatchId) bool {
 	switch staticId {
-	case ConcreteTypeBool, ConcreteTypeInt8, ConcreteTypeInt16, ConcreteTypeInt32,
-		ConcreteTypeInt64, ConcreteTypeInt, ConcreteTypeFloat32, ConcreteTypeFloat64:
+	case BoolDispatchId, Int8DispatchId, Int16DispatchId, Int32DispatchId,
+		Int64DispatchId, IntDispatchId, Uint8DispatchId, Uint16DispatchId,
+		Uint32DispatchId, Uint64DispatchId, UintDispatchId,
+		Float32DispatchId, Float64DispatchId:
 		return true
 	default:
 		return false
@@ -439,28 +455,28 @@ func isNumericKind(kind reflect.Kind) bool {
 	}
 }
 
-// getFixedSizeByStaticId returns byte size for fixed primitives (0 if not fixed)
-func getFixedSizeByStaticId(staticId StaticTypeId) int {
+// getFixedSizeByDispatchId returns byte size for fixed primitives (0 if not fixed)
+func getFixedSizeByDispatchId(staticId DispatchId) int {
 	switch staticId {
-	case ConcreteTypeBool, ConcreteTypeInt8:
+	case BoolDispatchId, Int8DispatchId, Uint8DispatchId:
 		return 1
-	case ConcreteTypeInt16:
+	case Int16DispatchId, Uint16DispatchId:
 		return 2
-	case ConcreteTypeFloat32:
+	case Float32DispatchId:
 		return 4
-	case ConcreteTypeFloat64:
+	case Float64DispatchId:
 		return 8
 	default:
 		return 0
 	}
 }
 
-// getVarintMaxSizeByStaticId returns max byte size for varint primitives (0 if not varint)
-func getVarintMaxSizeByStaticId(staticId StaticTypeId) int {
+// getVarintMaxSizeByDispatchId returns max byte size for varint primitives (0 if not varint)
+func getVarintMaxSizeByDispatchId(staticId DispatchId) int {
 	switch staticId {
-	case ConcreteTypeInt32:
+	case Int32DispatchId, Uint32DispatchId:
 		return 5
-	case ConcreteTypeInt64, ConcreteTypeInt:
+	case Int64DispatchId, IntDispatchId, Uint64DispatchId, UintDispatchId:
 		return 10
 	default:
 		return 0

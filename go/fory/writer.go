@@ -180,30 +180,30 @@ func (c *WriteContext) WriteTypeId(id TypeId) {
 	c.buffer.WriteVaruint32Small7(uint32(id))
 }
 
-// writeFast writes a value using fast path based on StaticTypeId
-func (c *WriteContext) writeFast(ptr unsafe.Pointer, ct StaticTypeId) {
+// writeFast writes a value using fast path based on DispatchId
+func (c *WriteContext) writeFast(ptr unsafe.Pointer, ct DispatchId) {
 	switch ct {
-	case ConcreteTypeBool:
+	case BoolDispatchId:
 		c.buffer.WriteBool(*(*bool)(ptr))
-	case ConcreteTypeInt8:
+	case Int8DispatchId:
 		c.buffer.WriteByte_(*(*byte)(ptr))
-	case ConcreteTypeInt16:
+	case Int16DispatchId:
 		c.buffer.WriteInt16(*(*int16)(ptr))
-	case ConcreteTypeInt32:
+	case Int32DispatchId:
 		c.buffer.WriteVarint32(*(*int32)(ptr))
-	case ConcreteTypeInt:
+	case IntDispatchId:
 		if strconv.IntSize == 64 {
 			c.buffer.WriteVarint64(int64(*(*int)(ptr)))
 		} else {
 			c.buffer.WriteVarint32(int32(*(*int)(ptr)))
 		}
-	case ConcreteTypeInt64:
+	case Int64DispatchId:
 		c.buffer.WriteVarint64(*(*int64)(ptr))
-	case ConcreteTypeFloat32:
+	case Float32DispatchId:
 		c.buffer.WriteFloat32(*(*float32)(ptr))
-	case ConcreteTypeFloat64:
+	case Float64DispatchId:
 		c.buffer.WriteFloat64(*(*float64)(ptr))
-	case ConcreteTypeString:
+	case StringDispatchId:
 		writeString(c.buffer, *(*string)(ptr))
 	}
 }

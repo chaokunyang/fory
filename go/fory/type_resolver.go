@@ -120,7 +120,7 @@ type TypeInfo struct {
 	NameBytes     *MetaStringBytes
 	IsDynamic     bool
 	TypeID        uint32
-	StaticId      StaticTypeId
+	StaticId      DispatchId
 	Serializer    Serializer
 	NeedWriteDef  bool
 	NeedWriteRef  bool // Whether this type needs reference tracking
@@ -344,9 +344,9 @@ func (r *TypeResolver) initialize() {
 		{byteType, UINT8, byteSerializer{}},
 		{int8Type, INT8, int8Serializer{}},
 		{int16Type, INT16, int16Serializer{}},
-		{int32Type, INT32, int32Serializer{}},
-		{int64Type, INT64, int64Serializer{}},
-		{intType, INT64, intSerializer{}}, // int maps to int64 for xlang
+		{int32Type, VARINT32, int32Serializer{}},
+		{int64Type, VARINT64, int64Serializer{}},
+		{intType, VARINT64, intSerializer{}}, // int maps to int64 for xlang
 		{float32Type, FLOAT32, float32Serializer{}},
 		{float64Type, FLOAT64, float64Serializer{}},
 		{dateType, LOCAL_DATE, dateSerializer{}},
@@ -461,7 +461,7 @@ func (r *TypeResolver) RegisterEnumByID(type_ reflect.Type, fullTypeID uint32) e
 		TypeID:     fullTypeID,
 		Serializer: serializer,
 		IsDynamic:  isDynamicType(type_),
-		StaticId:   GetStaticTypeId(type_),
+		StaticId:   GetDispatchId(type_),
 		hashValue:  calcTypeHash(type_),
 	}
 	r.typeIDToTypeInfo[fullTypeID] = typeInfo
@@ -1066,8 +1066,8 @@ func (r *TypeResolver) registerType(
 		PkgPathBytes: nsBytes,   // Encoded namespace bytes
 		NameBytes:    typeBytes, // Encoded type name bytes
 		IsDynamic:    isDynamicType(type_),
-		StaticId:     GetStaticTypeId(type_), // Static type ID for fast path
-		hashValue:    calcTypeHash(type_),    // Precomputed hash for fast lookups
+		StaticId:     GetDispatchId(type_), // Static type ID for fast path
+		hashValue:    calcTypeHash(type_),  // Precomputed hash for fast lookups
 		NeedWriteRef: NeedWriteRef(TypeId(typeID)),
 	}
 	// Update resolver caches:
@@ -1759,112 +1759,112 @@ func (r *TypeResolver) ReadTypeInfo(buffer *ByteBuffer, err *Error) *TypeInfo {
 			Type:       interfaceSliceType,
 			TypeID:     typeID,
 			Serializer: r.typeToSerializers[interfaceSliceType],
-			StaticId:   ConcreteTypeOther,
+			StaticId:   UnknowDispatchId,
 		}
 	case SET, -SET:
 		return &TypeInfo{
 			Type:       genericSetType,
 			TypeID:     typeID,
 			Serializer: r.typeToSerializers[genericSetType],
-			StaticId:   ConcreteTypeOther,
+			StaticId:   UnknowDispatchId,
 		}
 	case MAP, -MAP:
 		return &TypeInfo{
 			Type:       interfaceMapType,
 			TypeID:     typeID,
 			Serializer: r.typeToSerializers[interfaceMapType],
-			StaticId:   ConcreteTypeOther,
+			StaticId:   UnknowDispatchId,
 		}
 	case BOOL:
 		return &TypeInfo{
 			Type:       reflect.TypeOf(false),
 			TypeID:     typeID,
 			Serializer: r.typeToSerializers[reflect.TypeOf(false)],
-			StaticId:   ConcreteTypeBool,
+			StaticId:   BoolDispatchId,
 		}
 	case INT8:
 		return &TypeInfo{
 			Type:       reflect.TypeOf(int8(0)),
 			TypeID:     typeID,
 			Serializer: r.typeToSerializers[reflect.TypeOf(int8(0))],
-			StaticId:   ConcreteTypeInt8,
+			StaticId:   Int8DispatchId,
 		}
 	case UINT8:
 		return &TypeInfo{
 			Type:       reflect.TypeOf(uint8(0)),
 			TypeID:     typeID,
 			Serializer: r.typeToSerializers[reflect.TypeOf(uint8(0))],
-			StaticId:   ConcreteTypeInt8, // Use Int8 static ID for uint8
+			StaticId:   Int8DispatchId, // Use Int8 static ID for uint8
 		}
 	case INT16:
 		return &TypeInfo{
 			Type:       reflect.TypeOf(int16(0)),
 			TypeID:     typeID,
 			Serializer: r.typeToSerializers[reflect.TypeOf(int16(0))],
-			StaticId:   ConcreteTypeInt16,
+			StaticId:   Int16DispatchId,
 		}
 	case UINT16:
 		return &TypeInfo{
 			Type:       reflect.TypeOf(uint16(0)),
 			TypeID:     typeID,
 			Serializer: r.typeToSerializers[reflect.TypeOf(uint16(0))],
-			StaticId:   ConcreteTypeInt16, // Use Int16 static ID for uint16
+			StaticId:   Int16DispatchId, // Use Int16 static ID for uint16
 		}
 	case INT32, VARINT32:
 		return &TypeInfo{
 			Type:       reflect.TypeOf(int32(0)),
 			TypeID:     typeID,
 			Serializer: r.typeToSerializers[reflect.TypeOf(int32(0))],
-			StaticId:   ConcreteTypeInt32,
+			StaticId:   Int32DispatchId,
 		}
 	case UINT32:
 		return &TypeInfo{
 			Type:       reflect.TypeOf(uint32(0)),
 			TypeID:     typeID,
 			Serializer: r.typeToSerializers[reflect.TypeOf(uint32(0))],
-			StaticId:   ConcreteTypeInt32, // Use Int32 static ID for uint32
+			StaticId:   Int32DispatchId, // Use Int32 static ID for uint32
 		}
 	case INT64, VARINT64, TAGGED_INT64:
 		return &TypeInfo{
 			Type:       reflect.TypeOf(int64(0)),
 			TypeID:     typeID,
 			Serializer: r.typeToSerializers[reflect.TypeOf(int64(0))],
-			StaticId:   ConcreteTypeInt64,
+			StaticId:   Int64DispatchId,
 		}
 	case UINT64:
 		return &TypeInfo{
 			Type:       reflect.TypeOf(uint64(0)),
 			TypeID:     typeID,
 			Serializer: r.typeToSerializers[reflect.TypeOf(uint64(0))],
-			StaticId:   ConcreteTypeInt64, // Use Int64 static ID for uint64
+			StaticId:   Int64DispatchId, // Use Int64 static ID for uint64
 		}
 	case FLOAT32:
 		return &TypeInfo{
 			Type:       reflect.TypeOf(float32(0)),
 			TypeID:     typeID,
 			Serializer: r.typeToSerializers[reflect.TypeOf(float32(0))],
-			StaticId:   ConcreteTypeFloat32,
+			StaticId:   Float32DispatchId,
 		}
 	case FLOAT64:
 		return &TypeInfo{
 			Type:       reflect.TypeOf(float64(0)),
 			TypeID:     typeID,
 			Serializer: r.typeToSerializers[reflect.TypeOf(float64(0))],
-			StaticId:   ConcreteTypeFloat64,
+			StaticId:   Float64DispatchId,
 		}
 	case STRING:
 		return &TypeInfo{
 			Type:       reflect.TypeOf(""),
 			TypeID:     typeID,
 			Serializer: r.typeToSerializers[reflect.TypeOf("")],
-			StaticId:   ConcreteTypeString,
+			StaticId:   StringDispatchId,
 		}
 	case BINARY:
 		return &TypeInfo{
 			Type:       reflect.TypeOf([]byte(nil)),
 			TypeID:     typeID,
 			Serializer: r.typeToSerializers[reflect.TypeOf([]byte(nil))],
-			StaticId:   ConcreteTypeOther,
+			StaticId:   UnknowDispatchId,
 		}
 	}
 
@@ -1930,41 +1930,41 @@ func (r *TypeResolver) readTypeInfoWithTypeID(buffer *ByteBuffer, typeID uint32,
 			Type:       interfaceSliceType,
 			TypeID:     typeID,
 			Serializer: r.typeToSerializers[interfaceSliceType],
-			StaticId:   ConcreteTypeOther,
+			StaticId:   UnknowDispatchId,
 		}
 	case SET:
 		return &TypeInfo{
 			Type:       genericSetType,
 			TypeID:     typeID,
 			Serializer: r.typeToSerializers[genericSetType],
-			StaticId:   ConcreteTypeOther,
+			StaticId:   UnknowDispatchId,
 		}
 	case MAP:
 		return &TypeInfo{
 			Type:       interfaceMapType,
 			TypeID:     typeID,
 			Serializer: r.typeToSerializers[interfaceMapType],
-			StaticId:   ConcreteTypeOther,
+			StaticId:   UnknowDispatchId,
 		}
 	// Handle primitive types that may not be explicitly registered
 	case BOOL:
-		return &TypeInfo{Type: boolType, TypeID: typeID, Serializer: r.typeToSerializers[boolType], StaticId: ConcreteTypeBool}
+		return &TypeInfo{Type: boolType, TypeID: typeID, Serializer: r.typeToSerializers[boolType], StaticId: BoolDispatchId}
 	case INT8:
-		return &TypeInfo{Type: int8Type, TypeID: typeID, Serializer: r.typeToSerializers[int8Type], StaticId: ConcreteTypeInt8}
+		return &TypeInfo{Type: int8Type, TypeID: typeID, Serializer: r.typeToSerializers[int8Type], StaticId: Int8DispatchId}
 	case INT16:
-		return &TypeInfo{Type: int16Type, TypeID: typeID, Serializer: r.typeToSerializers[int16Type], StaticId: ConcreteTypeInt16}
+		return &TypeInfo{Type: int16Type, TypeID: typeID, Serializer: r.typeToSerializers[int16Type], StaticId: Int16DispatchId}
 	case INT32, VARINT32:
-		return &TypeInfo{Type: int32Type, TypeID: typeID, Serializer: r.typeToSerializers[int32Type], StaticId: ConcreteTypeInt32}
+		return &TypeInfo{Type: int32Type, TypeID: typeID, Serializer: r.typeToSerializers[int32Type], StaticId: Int32DispatchId}
 	case INT64, VARINT64, TAGGED_INT64:
-		return &TypeInfo{Type: int64Type, TypeID: typeID, Serializer: r.typeToSerializers[int64Type], StaticId: ConcreteTypeInt64}
+		return &TypeInfo{Type: int64Type, TypeID: typeID, Serializer: r.typeToSerializers[int64Type], StaticId: Int64DispatchId}
 	case FLOAT32:
-		return &TypeInfo{Type: float32Type, TypeID: typeID, Serializer: r.typeToSerializers[float32Type], StaticId: ConcreteTypeFloat32}
+		return &TypeInfo{Type: float32Type, TypeID: typeID, Serializer: r.typeToSerializers[float32Type], StaticId: Float32DispatchId}
 	case FLOAT64:
-		return &TypeInfo{Type: float64Type, TypeID: typeID, Serializer: r.typeToSerializers[float64Type], StaticId: ConcreteTypeFloat64}
+		return &TypeInfo{Type: float64Type, TypeID: typeID, Serializer: r.typeToSerializers[float64Type], StaticId: Float64DispatchId}
 	case STRING:
-		return &TypeInfo{Type: stringType, TypeID: typeID, Serializer: r.typeToSerializers[stringType], StaticId: ConcreteTypeString}
+		return &TypeInfo{Type: stringType, TypeID: typeID, Serializer: r.typeToSerializers[stringType], StaticId: StringDispatchId}
 	case BINARY:
-		return &TypeInfo{Type: byteSliceType, TypeID: typeID, Serializer: r.typeToSerializers[byteSliceType], StaticId: ConcreteTypeByteSlice}
+		return &TypeInfo{Type: byteSliceType, TypeID: typeID, Serializer: r.typeToSerializers[byteSliceType], StaticId: ByteSliceDispatchId}
 	}
 
 	// Handle UNKNOWN type (0) - used for polymorphic types
@@ -1972,7 +1972,7 @@ func (r *TypeResolver) readTypeInfoWithTypeID(buffer *ByteBuffer, typeID uint32,
 		return &TypeInfo{
 			Type:     interfaceType,
 			TypeID:   typeID,
-			StaticId: ConcreteTypeOther,
+			StaticId: UnknowDispatchId,
 		}
 	}
 

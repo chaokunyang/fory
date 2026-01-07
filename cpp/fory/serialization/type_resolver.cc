@@ -606,16 +606,24 @@ int32_t get_primitive_type_size(uint32_t type_id) {
   switch (static_cast<TypeId>(type_id)) {
   case TypeId::BOOL:
   case TypeId::INT8:
+  case TypeId::UINT8:
     return 1;
   case TypeId::INT16:
+  case TypeId::UINT16:
   case TypeId::FLOAT16:
     return 2;
   case TypeId::INT32:
   case TypeId::VARINT32:
+  case TypeId::UINT32:
+  case TypeId::VAR_UINT32:
   case TypeId::FLOAT32:
     return 4;
   case TypeId::INT64:
   case TypeId::VARINT64:
+  case TypeId::TAGGED_INT64:
+  case TypeId::UINT64:
+  case TypeId::VAR_UINT64:
+  case TypeId::TAGGED_UINT64:
   case TypeId::FLOAT64:
     return 8;
   default:
@@ -627,7 +635,13 @@ bool is_compress(uint32_t type_id) {
   return type_id == static_cast<uint32_t>(TypeId::INT32) ||
          type_id == static_cast<uint32_t>(TypeId::INT64) ||
          type_id == static_cast<uint32_t>(TypeId::VARINT32) ||
-         type_id == static_cast<uint32_t>(TypeId::VARINT64);
+         type_id == static_cast<uint32_t>(TypeId::VARINT64) ||
+         type_id == static_cast<uint32_t>(TypeId::TAGGED_INT64) ||
+         type_id == static_cast<uint32_t>(TypeId::UINT32) ||
+         type_id == static_cast<uint32_t>(TypeId::UINT64) ||
+         type_id == static_cast<uint32_t>(TypeId::VAR_UINT32) ||
+         type_id == static_cast<uint32_t>(TypeId::VAR_UINT64) ||
+         type_id == static_cast<uint32_t>(TypeId::TAGGED_UINT64);
 }
 
 // Numeric field sorter (for primitive fields)

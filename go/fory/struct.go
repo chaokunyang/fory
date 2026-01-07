@@ -38,7 +38,7 @@ type FieldInfo struct {
 	Name         string
 	Offset       uintptr
 	Type         reflect.Type
-	StaticId     StaticTypeId
+	StaticId     DispatchId
 	TypeId       TypeId // Fory type ID for the serializer
 	Serializer   Serializer
 	Referencable bool
@@ -332,27 +332,27 @@ func (s *structSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 			fieldPtr := unsafe.Add(ptr, field.Offset)
 			bufOffset := baseOffset + field.WriteOffset
 			switch field.StaticId {
-			case ConcreteTypeBool:
+			case BoolDispatchId:
 				if *(*bool)(fieldPtr) {
 					data[bufOffset] = 1
 				} else {
 					data[bufOffset] = 0
 				}
-			case ConcreteTypeInt8:
+			case Int8DispatchId:
 				data[bufOffset] = *(*byte)(fieldPtr)
-			case ConcreteTypeInt16:
+			case Int16DispatchId:
 				if isLittleEndian {
 					*(*int16)(unsafe.Pointer(&data[bufOffset])) = *(*int16)(fieldPtr)
 				} else {
 					binary.LittleEndian.PutUint16(data[bufOffset:], uint16(*(*int16)(fieldPtr)))
 				}
-			case ConcreteTypeFloat32:
+			case Float32DispatchId:
 				if isLittleEndian {
 					*(*float32)(unsafe.Pointer(&data[bufOffset])) = *(*float32)(fieldPtr)
 				} else {
 					binary.LittleEndian.PutUint32(data[bufOffset:], math.Float32bits(*(*float32)(fieldPtr)))
 				}
-			case ConcreteTypeFloat64:
+			case Float64DispatchId:
 				if isLittleEndian {
 					*(*float64)(unsafe.Pointer(&data[bufOffset])) = *(*float64)(fieldPtr)
 				} else {
@@ -367,15 +367,15 @@ func (s *structSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 		for _, field := range s.fixedFields {
 			fieldValue := value.Field(field.FieldIndex)
 			switch field.StaticId {
-			case ConcreteTypeBool:
+			case BoolDispatchId:
 				buf.WriteBool(fieldValue.Bool())
-			case ConcreteTypeInt8:
+			case Int8DispatchId:
 				buf.WriteByte_(byte(fieldValue.Int()))
-			case ConcreteTypeInt16:
+			case Int16DispatchId:
 				buf.WriteInt16(int16(fieldValue.Int()))
-			case ConcreteTypeFloat32:
+			case Float32DispatchId:
 				buf.WriteFloat32(float32(fieldValue.Float()))
-			case ConcreteTypeFloat64:
+			case Float64DispatchId:
 				buf.WriteFloat64(fieldValue.Float())
 			}
 		}
@@ -392,11 +392,11 @@ func (s *structSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 		for _, field := range s.varintFields {
 			fieldPtr := unsafe.Add(ptr, field.Offset)
 			switch field.StaticId {
-			case ConcreteTypeInt32:
+			case Int32DispatchId:
 				offset += buf.UnsafePutVarInt32(offset, *(*int32)(fieldPtr))
-			case ConcreteTypeInt64:
+			case Int64DispatchId:
 				offset += buf.UnsafePutVarInt64(offset, *(*int64)(fieldPtr))
-			case ConcreteTypeInt:
+			case IntDispatchId:
 				offset += buf.UnsafePutVarInt64(offset, int64(*(*int)(fieldPtr)))
 			}
 		}
@@ -407,9 +407,9 @@ func (s *structSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 		for _, field := range s.varintFields {
 			fieldValue := value.Field(field.FieldIndex)
 			switch field.StaticId {
-			case ConcreteTypeInt32:
+			case Int32DispatchId:
 				buf.WriteVarint32(int32(fieldValue.Int()))
-			case ConcreteTypeInt64, ConcreteTypeInt:
+			case Int64DispatchId, IntDispatchId:
 				buf.WriteVarint64(fieldValue.Int())
 			}
 		}
@@ -434,7 +434,7 @@ func (s *structSerializer) writeRemainingField(ctx *WriteContext, ptr unsafe.Poi
 	if ptr != nil {
 		fieldPtr := unsafe.Add(ptr, field.Offset)
 		switch field.StaticId {
-		case ConcreteTypeString:
+		case StringDispatchId:
 			if field.RefMode == RefModeTracking {
 				break // Fall through to slow path
 			}
@@ -444,113 +444,113 @@ func (s *structSerializer) writeRemainingField(ctx *WriteContext, ptr unsafe.Poi
 			}
 			ctx.WriteString(*(*string)(fieldPtr))
 			return
-		case ConcreteTypeEnum:
+		case EnumDispatchId:
 			// Enums don't track refs - always use fast path
 			writeEnumField(ctx, field, value.Field(field.FieldIndex))
 			return
-		case ConcreteTypeStringSlice:
+		case StringSliceDispatchId:
 			if field.RefMode == RefModeTracking {
 				break
 			}
 			ctx.WriteStringSlice(*(*[]string)(fieldPtr), field.RefMode, false, true)
 			return
-		case ConcreteTypeBoolSlice:
+		case BoolSliceDispatchId:
 			if field.RefMode == RefModeTracking {
 				break
 			}
 			ctx.WriteBoolSlice(*(*[]bool)(fieldPtr), field.RefMode, false)
 			return
-		case ConcreteTypeInt8Slice:
+		case Int8SliceDispatchId:
 			if field.RefMode == RefModeTracking {
 				break
 			}
 			ctx.WriteInt8Slice(*(*[]int8)(fieldPtr), field.RefMode, false)
 			return
-		case ConcreteTypeByteSlice:
+		case ByteSliceDispatchId:
 			if field.RefMode == RefModeTracking {
 				break
 			}
 			ctx.WriteByteSlice(*(*[]byte)(fieldPtr), field.RefMode, false)
 			return
-		case ConcreteTypeInt16Slice:
+		case Int16SliceDispatchId:
 			if field.RefMode == RefModeTracking {
 				break
 			}
 			ctx.WriteInt16Slice(*(*[]int16)(fieldPtr), field.RefMode, false)
 			return
-		case ConcreteTypeInt32Slice:
+		case Int32SliceDispatchId:
 			if field.RefMode == RefModeTracking {
 				break
 			}
 			ctx.WriteInt32Slice(*(*[]int32)(fieldPtr), field.RefMode, false)
 			return
-		case ConcreteTypeInt64Slice:
+		case Int64SliceDispatchId:
 			if field.RefMode == RefModeTracking {
 				break
 			}
 			ctx.WriteInt64Slice(*(*[]int64)(fieldPtr), field.RefMode, false)
 			return
-		case ConcreteTypeIntSlice:
+		case IntSliceDispatchId:
 			if field.RefMode == RefModeTracking {
 				break
 			}
 			ctx.WriteIntSlice(*(*[]int)(fieldPtr), field.RefMode, false)
 			return
-		case ConcreteTypeUintSlice:
+		case UintSliceDispatchId:
 			if field.RefMode == RefModeTracking {
 				break
 			}
 			ctx.WriteUintSlice(*(*[]uint)(fieldPtr), field.RefMode, false)
 			return
-		case ConcreteTypeFloat32Slice:
+		case Float32SliceDispatchId:
 			if field.RefMode == RefModeTracking {
 				break
 			}
 			ctx.WriteFloat32Slice(*(*[]float32)(fieldPtr), field.RefMode, false)
 			return
-		case ConcreteTypeFloat64Slice:
+		case Float64SliceDispatchId:
 			if field.RefMode == RefModeTracking {
 				break
 			}
 			ctx.WriteFloat64Slice(*(*[]float64)(fieldPtr), field.RefMode, false)
 			return
-		case ConcreteTypeStringStringMap:
+		case StringStringMapDispatchId:
 			if field.RefMode == RefModeTracking {
 				break
 			}
 			ctx.WriteStringStringMap(*(*map[string]string)(fieldPtr), field.RefMode, false)
 			return
-		case ConcreteTypeStringInt64Map:
+		case StringInt64MapDispatchId:
 			if field.RefMode == RefModeTracking {
 				break
 			}
 			ctx.WriteStringInt64Map(*(*map[string]int64)(fieldPtr), field.RefMode, false)
 			return
-		case ConcreteTypeStringInt32Map:
+		case StringInt32MapDispatchId:
 			if field.RefMode == RefModeTracking {
 				break
 			}
 			ctx.WriteStringInt32Map(*(*map[string]int32)(fieldPtr), field.RefMode, false)
 			return
-		case ConcreteTypeStringIntMap:
+		case StringIntMapDispatchId:
 			if field.RefMode == RefModeTracking {
 				break
 			}
 			ctx.WriteStringIntMap(*(*map[string]int)(fieldPtr), field.RefMode, false)
 			return
-		case ConcreteTypeStringFloat64Map:
+		case StringFloat64MapDispatchId:
 			if field.RefMode == RefModeTracking {
 				break
 			}
 			ctx.WriteStringFloat64Map(*(*map[string]float64)(fieldPtr), field.RefMode, false)
 			return
-		case ConcreteTypeStringBoolMap:
+		case StringBoolMapDispatchId:
 			// NOTE: map[string]bool is used to represent SETs in Go xlang mode.
 			// We CANNOT use the fast path here because it writes MAP format,
 			// but the data should be written in SET format. Fall through to slow path
 			// which uses setSerializer to correctly write the SET format.
 			break
-		case ConcreteTypeIntIntMap:
+		case IntIntMapDispatchId:
 			if field.RefMode == RefModeTracking {
 				break
 			}
@@ -672,23 +672,23 @@ func (s *structSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value 
 			fieldPtr := unsafe.Add(ptr, field.Offset)
 			bufOffset := baseOffset + field.WriteOffset
 			switch field.StaticId {
-			case ConcreteTypeBool:
+			case BoolDispatchId:
 				*(*bool)(fieldPtr) = data[bufOffset] != 0
-			case ConcreteTypeInt8:
+			case Int8DispatchId:
 				*(*int8)(fieldPtr) = int8(data[bufOffset])
-			case ConcreteTypeInt16:
+			case Int16DispatchId:
 				if isLittleEndian {
 					*(*int16)(fieldPtr) = *(*int16)(unsafe.Pointer(&data[bufOffset]))
 				} else {
 					*(*int16)(fieldPtr) = int16(binary.LittleEndian.Uint16(data[bufOffset:]))
 				}
-			case ConcreteTypeFloat32:
+			case Float32DispatchId:
 				if isLittleEndian {
 					*(*float32)(fieldPtr) = *(*float32)(unsafe.Pointer(&data[bufOffset]))
 				} else {
 					*(*float32)(fieldPtr) = math.Float32frombits(binary.LittleEndian.Uint32(data[bufOffset:]))
 				}
-			case ConcreteTypeFloat64:
+			case Float64DispatchId:
 				if isLittleEndian {
 					*(*float64)(fieldPtr) = *(*float64)(unsafe.Pointer(&data[bufOffset]))
 				} else {
@@ -706,11 +706,11 @@ func (s *structSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value 
 		for _, field := range s.varintFields {
 			fieldPtr := unsafe.Add(ptr, field.Offset)
 			switch field.StaticId {
-			case ConcreteTypeInt32:
+			case Int32DispatchId:
 				*(*int32)(fieldPtr) = buf.UnsafeReadVarint32()
-			case ConcreteTypeInt64:
+			case Int64DispatchId:
 				*(*int64)(fieldPtr) = buf.UnsafeReadVarint64()
-			case ConcreteTypeInt:
+			case IntDispatchId:
 				*(*int)(fieldPtr) = int(buf.UnsafeReadVarint64())
 			}
 		}
@@ -720,11 +720,11 @@ func (s *structSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value 
 		for _, field := range s.varintFields {
 			fieldPtr := unsafe.Add(ptr, field.Offset)
 			switch field.StaticId {
-			case ConcreteTypeInt32:
+			case Int32DispatchId:
 				*(*int32)(fieldPtr) = buf.ReadVarint32(err)
-			case ConcreteTypeInt64:
+			case Int64DispatchId:
 				*(*int64)(fieldPtr) = buf.ReadVarint64(err)
-			case ConcreteTypeInt:
+			case IntDispatchId:
 				*(*int)(fieldPtr) = int(buf.ReadVarint64(err))
 			}
 		}
@@ -747,7 +747,7 @@ func (s *structSerializer) readRemainingField(ctx *ReadContext, ptr unsafe.Point
 	if ptr != nil {
 		fieldPtr := unsafe.Add(ptr, field.Offset)
 		switch field.StaticId {
-		case ConcreteTypeString:
+		case StringDispatchId:
 			if field.RefMode == RefModeTracking {
 				break // Fall through to slow path for ref tracking
 			}
@@ -761,114 +761,114 @@ func (s *structSerializer) readRemainingField(ctx *ReadContext, ptr unsafe.Point
 			}
 			*(*string)(fieldPtr) = ctx.ReadString()
 			return
-		case ConcreteTypeEnum:
+		case EnumDispatchId:
 			// Enums don't track refs - always use fast path
 			fieldValue := value.Field(field.FieldIndex)
 			readEnumField(ctx, field, fieldValue)
 			return
-		case ConcreteTypeStringSlice:
+		case StringSliceDispatchId:
 			if field.RefMode == RefModeTracking {
 				break
 			}
 			*(*[]string)(fieldPtr) = ctx.ReadStringSlice(field.RefMode, false)
 			return
-		case ConcreteTypeBoolSlice:
+		case BoolSliceDispatchId:
 			if field.RefMode == RefModeTracking {
 				break
 			}
 			*(*[]bool)(fieldPtr) = ctx.ReadBoolSlice(field.RefMode, false)
 			return
-		case ConcreteTypeInt8Slice:
+		case Int8SliceDispatchId:
 			if field.RefMode == RefModeTracking {
 				break
 			}
 			*(*[]int8)(fieldPtr) = ctx.ReadInt8Slice(field.RefMode, false)
 			return
-		case ConcreteTypeByteSlice:
+		case ByteSliceDispatchId:
 			if field.RefMode == RefModeTracking {
 				break
 			}
 			*(*[]byte)(fieldPtr) = ctx.ReadByteSlice(field.RefMode, false)
 			return
-		case ConcreteTypeInt16Slice:
+		case Int16SliceDispatchId:
 			if field.RefMode == RefModeTracking {
 				break
 			}
 			*(*[]int16)(fieldPtr) = ctx.ReadInt16Slice(field.RefMode, false)
 			return
-		case ConcreteTypeInt32Slice:
+		case Int32SliceDispatchId:
 			if field.RefMode == RefModeTracking {
 				break
 			}
 			*(*[]int32)(fieldPtr) = ctx.ReadInt32Slice(field.RefMode, false)
 			return
-		case ConcreteTypeInt64Slice:
+		case Int64SliceDispatchId:
 			if field.RefMode == RefModeTracking {
 				break
 			}
 			*(*[]int64)(fieldPtr) = ctx.ReadInt64Slice(field.RefMode, false)
 			return
-		case ConcreteTypeIntSlice:
+		case IntSliceDispatchId:
 			if field.RefMode == RefModeTracking {
 				break
 			}
 			*(*[]int)(fieldPtr) = ctx.ReadIntSlice(field.RefMode, false)
 			return
-		case ConcreteTypeUintSlice:
+		case UintSliceDispatchId:
 			if field.RefMode == RefModeTracking {
 				break
 			}
 			*(*[]uint)(fieldPtr) = ctx.ReadUintSlice(field.RefMode, false)
 			return
-		case ConcreteTypeFloat32Slice:
+		case Float32SliceDispatchId:
 			if field.RefMode == RefModeTracking {
 				break
 			}
 			*(*[]float32)(fieldPtr) = ctx.ReadFloat32Slice(field.RefMode, false)
 			return
-		case ConcreteTypeFloat64Slice:
+		case Float64SliceDispatchId:
 			if field.RefMode == RefModeTracking {
 				break
 			}
 			*(*[]float64)(fieldPtr) = ctx.ReadFloat64Slice(field.RefMode, false)
 			return
-		case ConcreteTypeStringStringMap:
+		case StringStringMapDispatchId:
 			if field.RefMode == RefModeTracking {
 				break
 			}
 			*(*map[string]string)(fieldPtr) = ctx.ReadStringStringMap(field.RefMode, false)
 			return
-		case ConcreteTypeStringInt64Map:
+		case StringInt64MapDispatchId:
 			if field.RefMode == RefModeTracking {
 				break
 			}
 			*(*map[string]int64)(fieldPtr) = ctx.ReadStringInt64Map(field.RefMode, false)
 			return
-		case ConcreteTypeStringInt32Map:
+		case StringInt32MapDispatchId:
 			if field.RefMode == RefModeTracking {
 				break
 			}
 			*(*map[string]int32)(fieldPtr) = ctx.ReadStringInt32Map(field.RefMode, false)
 			return
-		case ConcreteTypeStringIntMap:
+		case StringIntMapDispatchId:
 			if field.RefMode == RefModeTracking {
 				break
 			}
 			*(*map[string]int)(fieldPtr) = ctx.ReadStringIntMap(field.RefMode, false)
 			return
-		case ConcreteTypeStringFloat64Map:
+		case StringFloat64MapDispatchId:
 			if field.RefMode == RefModeTracking {
 				break
 			}
 			*(*map[string]float64)(fieldPtr) = ctx.ReadStringFloat64Map(field.RefMode, false)
 			return
-		case ConcreteTypeStringBoolMap:
+		case StringBoolMapDispatchId:
 			// NOTE: map[string]bool is used to represent SETs in Go xlang mode.
 			// We CANNOT use the fast path here because it reads MAP format,
 			// but the data is actually in SET format. Fall through to slow path
 			// which uses setSerializer to correctly read the SET format.
 			break
-		case ConcreteTypeIntIntMap:
+		case IntIntMapDispatchId:
 			if field.RefMode == RefModeTracking {
 				break
 			}
@@ -912,15 +912,15 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 		if canUseUnsafe && isFixedSizePrimitive(field.StaticId, field.Referencable) {
 			fieldPtr := unsafe.Add(ptr, field.Offset)
 			switch field.StaticId {
-			case ConcreteTypeBool:
+			case BoolDispatchId:
 				*(*bool)(fieldPtr) = buf.ReadBool(err)
-			case ConcreteTypeInt8:
+			case Int8DispatchId:
 				*(*int8)(fieldPtr) = buf.ReadInt8(err)
-			case ConcreteTypeInt16:
+			case Int16DispatchId:
 				*(*int16)(fieldPtr) = buf.ReadInt16(err)
-			case ConcreteTypeFloat32:
+			case Float32DispatchId:
 				*(*float32)(fieldPtr) = buf.ReadFloat32(err)
-			case ConcreteTypeFloat64:
+			case Float64DispatchId:
 				*(*float64)(fieldPtr) = buf.ReadFloat64(err)
 			}
 			continue
@@ -931,11 +931,11 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 		if canUseUnsafe && isVarintPrimitive(field.StaticId, field.Referencable) && !fieldHasNonPrimitiveSerializer(field) {
 			fieldPtr := unsafe.Add(ptr, field.Offset)
 			switch field.StaticId {
-			case ConcreteTypeInt32:
+			case Int32DispatchId:
 				*(*int32)(fieldPtr) = buf.ReadVarint32(err)
-			case ConcreteTypeInt64:
+			case Int64DispatchId:
 				*(*int64)(fieldPtr) = buf.ReadVarint64(err)
-			case ConcreteTypeInt:
+			case IntDispatchId:
 				*(*int)(fieldPtr) = int(buf.ReadVarint64(err))
 			}
 			continue
@@ -947,15 +947,15 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 		// Slow path for primitives when not addressable
 		if !canUseUnsafe && isFixedSizePrimitive(field.StaticId, field.Referencable) {
 			switch field.StaticId {
-			case ConcreteTypeBool:
+			case BoolDispatchId:
 				fieldValue.SetBool(buf.ReadBool(err))
-			case ConcreteTypeInt8:
+			case Int8DispatchId:
 				fieldValue.SetInt(int64(buf.ReadInt8(err)))
-			case ConcreteTypeInt16:
+			case Int16DispatchId:
 				fieldValue.SetInt(int64(buf.ReadInt16(err)))
-			case ConcreteTypeFloat32:
+			case Float32DispatchId:
 				fieldValue.SetFloat(float64(buf.ReadFloat32(err)))
-			case ConcreteTypeFloat64:
+			case Float64DispatchId:
 				fieldValue.SetFloat(buf.ReadFloat64(err))
 			}
 			continue
@@ -963,9 +963,9 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 
 		if !canUseUnsafe && isVarintPrimitive(field.StaticId, field.Referencable) && !fieldHasNonPrimitiveSerializer(field) {
 			switch field.StaticId {
-			case ConcreteTypeInt32:
+			case Int32DispatchId:
 				fieldValue.SetInt(int64(buf.ReadVarint32(err)))
-			case ConcreteTypeInt64, ConcreteTypeInt:
+			case Int64DispatchId, IntDispatchId:
 				fieldValue.SetInt(buf.ReadVarint64(err))
 			}
 			continue
@@ -1125,13 +1125,13 @@ func (s *structSerializer) initFieldsFromTypeResolver(typeResolver *TypeResolver
 		writeType := typeResolver.Compatible() && isStructField(fieldType)
 
 		// Pre-compute StaticId, with special handling for enum fields
-		staticId := GetStaticTypeId(fieldType)
+		staticId := GetDispatchId(fieldType)
 		if fieldSerializer != nil {
 			if _, ok := fieldSerializer.(*enumSerializer); ok {
-				staticId = ConcreteTypeEnum
+				staticId = EnumDispatchId
 			} else if ptrSer, ok := fieldSerializer.(*ptrToValueSerializer); ok {
 				if _, ok := ptrSer.valueSerializer.(*enumSerializer); ok {
-					staticId = ConcreteTypeEnum
+					staticId = EnumDispatchId
 				}
 			}
 		}
@@ -1215,12 +1215,12 @@ func (s *structSerializer) groupFields() {
 			s.remainingFields = append(s.remainingFields, field)
 		} else if isFixedSizePrimitive(field.StaticId, field.Referencable) {
 			// Compute FixedSize and WriteOffset for this field
-			field.FixedSize = getFixedSizeByStaticId(field.StaticId)
+			field.FixedSize = getFixedSizeByDispatchId(field.StaticId)
 			field.WriteOffset = s.fixedSize
 			s.fixedSize += field.FixedSize
 			s.fixedFields = append(s.fixedFields, field)
 		} else if isVarintPrimitive(field.StaticId, field.Referencable) {
-			s.maxVarintSize += getVarintMaxSizeByStaticId(field.StaticId)
+			s.maxVarintSize += getVarintMaxSizeByDispatchId(field.StaticId)
 			s.varintFields = append(s.varintFields, field)
 		} else {
 			s.remainingFields = append(s.remainingFields, field)
@@ -1256,13 +1256,13 @@ func (s *structSerializer) initFieldsFromDefsWithResolver(typeResolver *TypeReso
 			writeType := typeResolver.Compatible() && isStructField(remoteType)
 
 			// Pre-compute StaticId, with special handling for enum fields
-			staticId := GetStaticTypeId(remoteType)
+			staticId := GetDispatchId(remoteType)
 			if fieldSerializer != nil {
 				if _, ok := fieldSerializer.(*enumSerializer); ok {
-					staticId = ConcreteTypeEnum
+					staticId = EnumDispatchId
 				} else if ptrSer, ok := fieldSerializer.(*ptrToValueSerializer); ok {
 					if _, ok := ptrSer.valueSerializer.(*enumSerializer); ok {
-						staticId = ConcreteTypeEnum
+						staticId = EnumDispatchId
 					}
 				}
 			}
@@ -1530,13 +1530,13 @@ func (s *structSerializer) initFieldsFromDefsWithResolver(typeResolver *TypeReso
 		writeType := typeResolver.Compatible() && isStructField(fieldType)
 
 		// Pre-compute StaticId, with special handling for enum fields
-		staticId := GetStaticTypeId(fieldType)
+		staticId := GetDispatchId(fieldType)
 		if fieldSerializer != nil {
 			if _, ok := fieldSerializer.(*enumSerializer); ok {
-				staticId = ConcreteTypeEnum
+				staticId = EnumDispatchId
 			} else if ptrSer, ok := fieldSerializer.(*ptrToValueSerializer); ok {
 				if _, ok := ptrSer.valueSerializer.(*enumSerializer); ok {
-					staticId = ConcreteTypeEnum
+					staticId = EnumDispatchId
 				}
 			}
 		}
@@ -2046,6 +2046,7 @@ func elementTypesCompatible(actual, expected reflect.Type) bool {
 
 // typeIdFromKind derives a TypeId from a reflect.Type's kind
 // This is used when the type is not registered in typesInfo
+// Note: Uses VARINT32/VARINT64/VAR_UINT32/VAR_UINT64 to match Java xlang mode and Rust
 func typeIdFromKind(type_ reflect.Type) TypeId {
 	switch type_.Kind() {
 	case reflect.Bool:
@@ -2055,17 +2056,17 @@ func typeIdFromKind(type_ reflect.Type) TypeId {
 	case reflect.Int16:
 		return INT16
 	case reflect.Int32:
-		return INT32
+		return VARINT32
 	case reflect.Int64, reflect.Int:
-		return INT64
+		return VARINT64
 	case reflect.Uint8:
 		return UINT8
 	case reflect.Uint16:
 		return UINT16
 	case reflect.Uint32:
-		return UINT32
+		return VAR_UINT32
 	case reflect.Uint64, reflect.Uint:
-		return UINT64
+		return VAR_UINT64
 	case reflect.Float32:
 		return FLOAT32
 	case reflect.Float64:

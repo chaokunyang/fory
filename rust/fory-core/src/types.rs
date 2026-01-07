@@ -298,22 +298,30 @@ pub static BASIC_TYPES: [TypeId; 33] = [
     TypeId::USIZE_ARRAY,
 ];
 
-pub static PRIMITIVE_TYPES: [u32; 14] = [
+pub static PRIMITIVE_TYPES: [u32; 22] = [
     TypeId::BOOL as u32,
     TypeId::INT8 as u32,
     TypeId::INT16 as u32,
     TypeId::INT32 as u32,
+    TypeId::VARINT32 as u32,
     TypeId::INT64 as u32,
+    TypeId::VARINT64 as u32,
+    TypeId::TAGGED_INT64 as u32,
     TypeId::UINT8 as u32,
     TypeId::UINT16 as u32,
     TypeId::UINT32 as u32,
+    TypeId::VAR_UINT32 as u32,
     TypeId::UINT64 as u32,
+    TypeId::VAR_UINT64 as u32,
+    TypeId::TAGGED_UINT64 as u32,
+    TypeId::FLOAT16 as u32,
     TypeId::FLOAT32 as u32,
     TypeId::FLOAT64 as u32,
     // Rust-specific
     TypeId::U128 as u32,
     TypeId::INT128 as u32,
     TypeId::USIZE as u32,
+    TypeId::ISIZE as u32,
 ];
 
 pub static PRIMITIVE_ARRAY_TYPES: [u32; 15] = [

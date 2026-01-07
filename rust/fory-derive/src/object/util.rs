@@ -689,14 +689,18 @@ fn get_primitive_type_id(ty: &str) -> u32 {
         "bool" => TypeId::BOOL as u32,
         "i8" => TypeId::INT8 as u32,
         "i16" => TypeId::INT16 as u32,
-        "i32" => TypeId::INT32 as u32,
-        "i64" => TypeId::INT64 as u32,
+        // Use VARINT32 for i32 to match Java xlang mode and Rust type resolver registration
+        "i32" => TypeId::VARINT32 as u32,
+        // Use VARINT64 for i64 to match Java xlang mode and Rust type resolver registration
+        "i64" => TypeId::VARINT64 as u32,
         "f32" => TypeId::FLOAT32 as u32,
         "f64" => TypeId::FLOAT64 as u32,
         "u8" => TypeId::UINT8 as u32,
         "u16" => TypeId::UINT16 as u32,
-        "u32" => TypeId::UINT32 as u32,
-        "u64" => TypeId::UINT64 as u32,
+        // Use VAR_UINT32 for u32 to match Rust type resolver registration
+        "u32" => TypeId::VAR_UINT32 as u32,
+        // Use VAR_UINT64 for u64 to match Rust type resolver registration
+        "u64" => TypeId::VAR_UINT64 as u32,
         "u128" => TypeId::U128 as u32,
         "i128" => TypeId::INT128 as u32,
         _ => unreachable!("Unknown primitive type: {}", ty),
@@ -1214,7 +1218,7 @@ pub(crate) fn gen_struct_version_hash_ts(fields: &[&Field]) -> TokenStream {
             const VERSION_HASH: i32 = #version_hash;
             if fory_core::util::ENABLE_FORY_DEBUG_OUTPUT {
                 println!(
-                    "[fory-debug] struct {} version fingerprint=\"{}\" hash={}",
+                    "[rust][fory-debug] struct {} version fingerprint=\"{}\" hash={}",
                     std::any::type_name::<Self>(),
                     #fingerprint,
                     VERSION_HASH

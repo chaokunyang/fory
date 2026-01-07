@@ -126,7 +126,7 @@ cd java
 mvn -T16 install -DskipTests
 cd fory-core
 # disable fory cython for faster debugging
-FORY_PYTHON_JAVA_CI=1 ENABLE_FORY_CYTHON_SERIALIZATION=0 mvn -T16 test -Dtest=org.apache.fory.xlang.PythonXlangTest
+FORY_PYTHON_JAVA_CI=1 ENABLE_FORY_CYTHON_SERIALIZATION=0 ENABLE_FORY_DEBUG_OUTPUT=1 mvn -T16 test -Dtest=org.apache.fory.xlang.PythonXlangTest
 # enable fory cython
 FORY_PYTHON_JAVA_CI=1 ENABLE_FORY_CYTHON_SERIALIZATION=1 ENABLE_FORY_DEBUG_OUTPUT=1 mvn -T16 test -Dtest=org.apache.fory.xlang.PythonXlangTest
 ```

@@ -107,6 +107,12 @@ cdef class Buffer:
 
     cpdef inline write_int64(self, int64_t value)
 
+    cpdef inline write_uint16(self, uint16_t value)
+
+    cpdef inline write_uint32(self, uint32_t value)
+
+    cpdef inline write_uint64(self, uint64_t value)
+
     cpdef inline write_float(self, float value)
 
     cpdef inline write_float32(self, float value)
@@ -131,6 +137,12 @@ cdef class Buffer:
 
     cpdef inline int64_t read_int64(self)
 
+    cpdef inline uint16_t read_uint16(self)
+
+    cpdef inline uint32_t read_uint32(self)
+
+    cpdef inline uint64_t read_uint64(self)
+
     cpdef inline float read_float(self)
 
     cpdef inline float read_float32(self)
@@ -154,6 +166,14 @@ cdef class Buffer:
     cpdef inline int32_t read_varint32(self)
 
     cpdef inline int32_t read_varuint32(self)
+
+    cpdef inline write_tagged_int64(self, int64_t value)
+
+    cpdef inline int64_t read_tagged_int64(self)
+
+    cpdef inline write_tagged_uint64(self, uint64_t value)
+
+    cpdef inline uint64_t read_tagged_uint64(self)
 
     cpdef put_buffer(self, uint32_t offset, v, int32_t src_index, int32_t length)
 

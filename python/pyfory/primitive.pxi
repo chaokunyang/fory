@@ -67,6 +67,126 @@ cdef class Int64Serializer(XlangCompatibleSerializer):
 
 
 @cython.final
+cdef class FixedInt32Serializer(XlangCompatibleSerializer):
+    """Serializer for fixed-width 32-bit signed integer (INT32 type_id=4)."""
+    cpdef inline write(self, Buffer buffer, value):
+        buffer.write_int32(value)
+
+    cpdef inline read(self, Buffer buffer):
+        return buffer.read_int32()
+
+
+@cython.final
+cdef class FixedInt64Serializer(XlangCompatibleSerializer):
+    """Serializer for fixed-width 64-bit signed integer (INT64 type_id=6)."""
+    cpdef inline write(self, Buffer buffer, value):
+        buffer.write_int64(value)
+
+    cpdef inline read(self, Buffer buffer):
+        return buffer.read_int64()
+
+
+@cython.final
+cdef class Varint32Serializer(XlangCompatibleSerializer):
+    """Serializer for VARINT32 type - variable-length encoded signed 32-bit integer."""
+    cpdef inline write(self, Buffer buffer, value):
+        buffer.write_varint32(value)
+
+    cpdef inline read(self, Buffer buffer):
+        return buffer.read_varint32()
+
+
+@cython.final
+cdef class Varint64Serializer(XlangCompatibleSerializer):
+    """Serializer for VARINT64 type - variable-length encoded signed 64-bit integer."""
+    cpdef inline write(self, Buffer buffer, value):
+        buffer.write_varint64(value)
+
+    cpdef inline read(self, Buffer buffer):
+        return buffer.read_varint64()
+
+
+@cython.final
+cdef class TaggedInt64Serializer(XlangCompatibleSerializer):
+    """Serializer for TAGGED_INT64 type - tagged encoding for signed 64-bit integer."""
+    cpdef inline write(self, Buffer buffer, value):
+        buffer.write_tagged_int64(value)
+
+    cpdef inline read(self, Buffer buffer):
+        return buffer.read_tagged_int64()
+
+
+@cython.final
+cdef class Uint8Serializer(XlangCompatibleSerializer):
+    """Serializer for UINT8 type - unsigned 8-bit integer."""
+    cpdef inline write(self, Buffer buffer, value):
+        buffer.write_uint8(value)
+
+    cpdef inline read(self, Buffer buffer):
+        return buffer.read_uint8()
+
+
+@cython.final
+cdef class Uint16Serializer(XlangCompatibleSerializer):
+    """Serializer for UINT16 type - unsigned 16-bit integer."""
+    cpdef inline write(self, Buffer buffer, value):
+        buffer.write_uint16(value)
+
+    cpdef inline read(self, Buffer buffer):
+        return buffer.read_uint16()
+
+
+@cython.final
+cdef class Uint32Serializer(XlangCompatibleSerializer):
+    """Serializer for UINT32 type - fixed-size unsigned 32-bit integer."""
+    cpdef inline write(self, Buffer buffer, value):
+        buffer.write_uint32(value)
+
+    cpdef inline read(self, Buffer buffer):
+        return buffer.read_uint32()
+
+
+@cython.final
+cdef class VarUint32Serializer(XlangCompatibleSerializer):
+    """Serializer for VAR_UINT32 type - variable-length encoded unsigned 32-bit integer."""
+    cpdef inline write(self, Buffer buffer, value):
+        buffer.write_varuint32(value)
+
+    cpdef inline read(self, Buffer buffer):
+        return buffer.read_varuint32()
+
+
+@cython.final
+cdef class Uint64Serializer(XlangCompatibleSerializer):
+    """Serializer for UINT64 type - fixed-size unsigned 64-bit integer."""
+    cpdef inline write(self, Buffer buffer, value):
+        buffer.write_uint64(value)
+
+    cpdef inline read(self, Buffer buffer):
+        return buffer.read_uint64()
+
+
+@cython.final
+cdef class VarUint64Serializer(XlangCompatibleSerializer):
+    """Serializer for VAR_UINT64 type - variable-length encoded unsigned 64-bit integer."""
+    cpdef inline write(self, Buffer buffer, value):
+        buffer.write_varuint64(value)
+
+    cpdef inline read(self, Buffer buffer):
+        return buffer.read_varuint64()
+
+
+@cython.final
+cdef class TaggedUint64Serializer(XlangCompatibleSerializer):
+    """Serializer for TAGGED_UINT64 type - tagged encoding for unsigned 64-bit integer."""
+    cpdef inline write(self, Buffer buffer, value):
+        buffer.write_tagged_uint64(value)
+
+    cpdef inline read(self, Buffer buffer):
+        return buffer.read_tagged_uint64()
+
+
+@cython.final
 cdef class Float32Serializer(XlangCompatibleSerializer):
     cpdef inline write(self, Buffer buffer, value):
         buffer.write_float(value)

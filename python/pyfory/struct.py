@@ -33,6 +33,16 @@ from pyfory.types import (
     int16,
     int32,
     int64,
+    fixed_int32,
+    fixed_int64,
+    tagged_int64,
+    uint8,
+    uint16,
+    uint32,
+    fixed_uint32,
+    uint64,
+    fixed_uint64,
+    tagged_uint64,
     float32,
     float64,
     is_py_array_type,
@@ -1007,12 +1017,26 @@ class DataClassStubSerializer(DataClassSerializer):
 
 basic_types = {
     bool,
+    # Signed integers
     int8,
     int16,
     int32,
+    fixed_int32,
     int64,
+    fixed_int64,
+    tagged_int64,
+    # Unsigned integers
+    uint8,
+    uint16,
+    uint32,
+    fixed_uint32,
+    uint64,
+    fixed_uint64,
+    tagged_uint64,
+    # Floats
     float32,
     float64,
+    # Python native types
     int,
     float,
     str,
@@ -1130,10 +1154,16 @@ def group_fields(type_resolver, field_names, serializers, nullable_map=None):
     def numeric_sorter(item):
         id_ = item[0]
         compress = id_ in {
+            # Signed compressed types
             TypeId.INT32,
             TypeId.INT64,
             TypeId.VARINT32,
             TypeId.VARINT64,
+            TypeId.TAGGED_INT64,
+            # Unsigned compressed types
+            TypeId.VAR_UINT32,
+            TypeId.VAR_UINT64,
+            TypeId.TAGGED_UINT64,
         }
         # Sort by: compress flag, -size (largest first), -type_id (higher type ID first), field_name
         # Java sorts by size (largest first), then by primitive type ID (descending)

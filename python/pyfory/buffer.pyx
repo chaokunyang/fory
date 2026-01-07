@@ -205,6 +205,21 @@ cdef class Buffer:
         self.c_buffer_ptr.UnsafePut(self.writer_index, value)
         self.writer_index += <int32_t>8
 
+    cpdef inline write_uint16(self, uint16_t value):
+        self.grow(<int32_t>2)
+        self.c_buffer_ptr.UnsafePut(self.writer_index, <int16_t>value)
+        self.writer_index += <int32_t>2
+
+    cpdef inline write_uint32(self, uint32_t value):
+        self.grow(<int32_t>4)
+        self.c_buffer_ptr.UnsafePut(self.writer_index, <int32_t>value)
+        self.writer_index += <int32_t>4
+
+    cpdef inline write_uint64(self, uint64_t value):
+        self.grow(<int32_t>8)
+        self.c_buffer_ptr.UnsafePut(self.writer_index, <int64_t>value)
+        self.writer_index += <int32_t>8
+
     cpdef inline write_float(self, float value):
         self.grow(<int32_t>4)
         self.c_buffer_ptr.UnsafePut(self.writer_index, value)
@@ -359,6 +374,24 @@ cdef class Buffer:
         value = self.get_int64(self.reader_index)
         self.reader_index += <int32_t>8
         return value
+
+    cpdef inline uint16_t read_uint16(self):
+        cdef int32_t offset = self.reader_index
+        self.check_bound(offset, <int32_t>2)
+        self.reader_index = offset + <int32_t>2
+        return <uint16_t>self.c_buffer_ptr.GetInt16(offset)
+
+    cpdef inline uint32_t read_uint32(self):
+        cdef int32_t offset = self.reader_index
+        self.check_bound(offset, <int32_t>4)
+        self.reader_index = offset + <int32_t>4
+        return <uint32_t>self.c_buffer_ptr.GetInt32(offset)
+
+    cpdef inline uint64_t read_uint64(self):
+        cdef int32_t offset = self.reader_index
+        self.check_bound(offset, <int32_t>8)
+        self.reader_index = offset + <int32_t>8
+        return <uint64_t>self.c_buffer_ptr.GetInt64(offset)
 
     cpdef inline float read_float(self):
         value = self.get_float(self.reader_index)
@@ -567,6 +600,90 @@ cdef class Buffer:
                                             # highest bit in last byte is symbols bit
                                             result |= b << 56
             return result
+
+    cpdef inline write_tagged_int64(self, int64_t value):
+        """Write signed int64 using fory Tagged(Small long as int) encoding.
+
+        If value is in [-1073741824, 1073741823] (fits in 31 bits with sign),
+        encode as 4 bytes: ((value as i32) << 1).
+        Otherwise write as 9 bytes: 0b1 | little-endian 8 bytes i64.
+        """
+        cdef int64_t HALF_MIN_INT_VALUE = -1073741824  # i32::MIN / 2
+        cdef int64_t HALF_MAX_INT_VALUE = 1073741823   # i32::MAX / 2
+        if HALF_MIN_INT_VALUE <= value <= HALF_MAX_INT_VALUE:
+            # Fits in 31 bits (with sign), encode as 4 bytes with bit 0 = 0
+            self.write_int32((<int32_t>value) << 1)
+        else:
+            # Write flag byte (0b1) followed by 8-byte i64
+            self.grow(<int32_t>9)
+            (<uint8_t *>(self._c_address + self.writer_index))[0] = 0b1
+            self.writer_index += <int32_t>1
+            self.c_buffer_ptr.UnsafePut(self.writer_index, value)
+            self.writer_index += <int32_t>8
+
+    cpdef inline int64_t read_tagged_int64(self):
+        """Read signed fory Tagged(Small long as int) encoded int64.
+
+        If bit 0 of the first 4 bytes is 0, return the value >> 1 (arithmetic shift).
+        Otherwise, skip the flag byte and read 8 bytes as int64.
+        """
+        cdef int32_t offset = self.reader_index
+        cdef int32_t i
+        cdef int64_t value
+        self.check_bound(offset, <int32_t>4)
+        i = self.c_buffer_ptr.GetInt32(offset)
+        if (i & 0b1) != 0b1:
+            # Bit 0 is 0, small value encoded in 4 bytes
+            self.reader_index = offset + <int32_t>4
+            return <int64_t>(i >> 1)  # arithmetic right shift preserves sign
+        else:
+            # Bit 0 is 1, big value: skip flag byte and read 8 bytes
+            self.check_bound(offset, <int32_t>9)
+            self.reader_index = offset + <int32_t>1
+            value = self.c_buffer_ptr.GetInt64(self.reader_index)
+            self.reader_index += <int32_t>8
+            return value
+
+    cpdef inline write_tagged_uint64(self, uint64_t value):
+        """Write unsigned uint64 using fory Tagged(Small long as int) encoding.
+
+        If value is in [0, 0x7fffffff], encode as 4 bytes: ((value as u32) << 1).
+        Otherwise write as 9 bytes: 0b1 | little-endian 8 bytes u64.
+        """
+        cdef uint64_t MAX_SMALL_VALUE = 0x7fffffff  # i32::MAX as u64
+        if value <= MAX_SMALL_VALUE:
+            # Fits in 31 bits, encode as 4 bytes with bit 0 = 0
+            self.write_int32((<int32_t>value) << 1)
+        else:
+            # Write flag byte (0b1) followed by 8-byte u64
+            self.grow(<int32_t>9)
+            (<uint8_t *>(self._c_address + self.writer_index))[0] = 0b1
+            self.writer_index += <int32_t>1
+            self.c_buffer_ptr.UnsafePut(self.writer_index, <int64_t>value)
+            self.writer_index += <int32_t>8
+
+    cpdef inline uint64_t read_tagged_uint64(self):
+        """Read unsigned fory Tagged(Small long as int) encoded uint64.
+
+        If bit 0 of the first 4 bytes is 0, return the value >> 1.
+        Otherwise, skip the flag byte and read 8 bytes as uint64.
+        """
+        cdef int32_t offset = self.reader_index
+        cdef uint32_t i
+        cdef uint64_t value
+        self.check_bound(offset, <int32_t>4)
+        i = <uint32_t>self.c_buffer_ptr.GetInt32(offset)
+        if (i & 0b1) != 0b1:
+            # Bit 0 is 0, small value encoded in 4 bytes
+            self.reader_index = offset + <int32_t>4
+            return <uint64_t>(i >> 1)
+        else:
+            # Bit 0 is 1, big value: skip flag byte and read 8 bytes
+            self.check_bound(offset, <int32_t>9)
+            self.reader_index = offset + <int32_t>1
+            value = <uint64_t>self.c_buffer_ptr.GetInt64(self.reader_index)
+            self.reader_index += <int32_t>8
+            return value
 
     cdef inline write_c_buffer(self, const uint8_t* value, int32_t length):
         self.write_varuint32(length)

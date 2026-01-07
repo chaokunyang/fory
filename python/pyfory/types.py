@@ -169,9 +169,19 @@ __TYPE_SHARE_META__ = {
     TypeId.NAMED_COMPATIBLE_STRUCT,
 }
 int8 = TypeVar("int8", bound=int)
+uint8 = TypeVar("uint8", bound=int)
 int16 = TypeVar("int16", bound=int)
+uint16 = TypeVar("uint16", bound=int)
 int32 = TypeVar("int32", bound=int)
+uint32 = TypeVar("uint32", bound=int)
+fixed_int32 = TypeVar("fixed_int32", bound=int)
+fixed_uint32 = TypeVar("fixed_uint32", bound=int)
 int64 = TypeVar("int64", bound=int)
+uint64 = TypeVar("uint64", bound=int)
+fixed_int64 = TypeVar("fixed_int64", bound=int)
+tagged_int64 = TypeVar("tagged_int64", bound=int)
+fixed_uint64 = TypeVar("fixed_uint64", bound=int)
+tagged_uint64 = TypeVar("tagged_uint64", bound=int)
 float32 = TypeVar("float32", bound=float)
 float64 = TypeVar("float64", bound=float)
 
@@ -188,10 +198,23 @@ _primitive_types = {
 
 _primitive_types_ids = {
     TypeId.BOOL,
+    # Signed integers
     TypeId.INT8,
     TypeId.INT16,
     TypeId.INT32,
+    TypeId.VARINT32,
     TypeId.INT64,
+    TypeId.VARINT64,
+    TypeId.TAGGED_INT64,
+    # Unsigned integers
+    TypeId.UINT8,
+    TypeId.UINT16,
+    TypeId.UINT32,
+    TypeId.VAR_UINT32,
+    TypeId.UINT64,
+    TypeId.VAR_UINT64,
+    TypeId.TAGGED_UINT64,
+    # Floats
     TypeId.FLOAT16,
     TypeId.FLOAT32,
     TypeId.FLOAT64,
@@ -209,12 +232,23 @@ def is_primitive_type(type_) -> bool:
 
 _primitive_type_sizes = {
     TypeId.BOOL: 1,
+    # Signed integers
     TypeId.INT8: 1,
     TypeId.INT16: 2,
     TypeId.INT32: 4,
     TypeId.VARINT32: 4,
     TypeId.INT64: 8,
     TypeId.VARINT64: 8,
+    TypeId.TAGGED_INT64: 8,
+    # Unsigned integers
+    TypeId.UINT8: 1,
+    TypeId.UINT16: 2,
+    TypeId.UINT32: 4,
+    TypeId.VAR_UINT32: 4,
+    TypeId.UINT64: 8,
+    TypeId.VAR_UINT64: 8,
+    TypeId.TAGGED_UINT64: 8,
+    # Floats
     TypeId.FLOAT16: 2,
     TypeId.FLOAT32: 4,
     TypeId.FLOAT64: 8,

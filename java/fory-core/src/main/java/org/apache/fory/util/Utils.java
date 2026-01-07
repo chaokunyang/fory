@@ -24,7 +24,7 @@ public class Utils {
   private static final boolean DEBUG_OUTPUT_ENABLED;
 
   static {
-    DEBUG_OUTPUT_ENABLED = "1".equals(System.getenv("ENABLE_FORY_DEBUG_OUTPUT"));
+    DEBUG_OUTPUT_ENABLED = true;
   }
 
   /** Checks if ENABLE_FORY_DEBUG_OUTPUT env var is set to "1". */

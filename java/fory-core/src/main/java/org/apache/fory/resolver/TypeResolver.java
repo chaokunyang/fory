@@ -20,6 +20,7 @@
 package org.apache.fory.resolver;
 
 import static org.apache.fory.Fory.NOT_SUPPORT_XLANG;
+import static org.apache.fory.type.TypeUtils.getSizeOfPrimitiveType;
 
 import com.google.common.collect.BiMap;
 import com.google.common.collect.HashBiMap;
@@ -28,6 +29,7 @@ import java.lang.reflect.Member;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -77,6 +79,7 @@ import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.type.GenericType;
 import org.apache.fory.type.ScalaTypes;
 import org.apache.fory.type.TypeUtils;
+import org.apache.fory.type.Types;
 import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.GraalvmSupport.GraalvmSerializerHolder;
 import org.apache.fory.util.Preconditions;
@@ -620,6 +623,68 @@ public abstract class TypeResolver {
       }
     }
     return result;
+  }
+
+  /**
+   * Gets the sort key for a field descriptor.
+   *
+   * <p>If the field has a {@link ForyField} annotation with id >= 0, returns the id as a string.
+   * Otherwise, returns the snake_case field name. This ensures fields are sorted by tag ID when
+   * configured, matching the fingerprint computation order.
+   *
+   * @param descriptor the field descriptor
+   * @return the sort key (tag ID as string or snake_case name)
+   */
+  protected static String getFieldSortKey(Descriptor descriptor) {
+    ForyField foryField = descriptor.getForyField();
+    if (foryField != null && foryField.id() >= 0) {
+      return String.valueOf(foryField.id());
+    }
+    return descriptor.getSnakeCaseName();
+  }
+
+  /**
+   * When compress disabled, sort primitive descriptors from largest to smallest, if size is the
+   * same, sort by field name to fix order.
+   *
+   * <p>When compress enabled, sort primitive descriptors from largest to smallest but let compress
+   * fields ends in tail. if size is the same, sort by field name to fix order.
+   */
+  public Comparator<Descriptor> getPrimitiveComparator() {
+    return (d1, d2) -> {
+      Class<?> t1 = TypeUtils.unwrap(d1.getRawType());
+      Class<?> t2 = TypeUtils.unwrap(d2.getRawType());
+      int typeId1 = Types.getDescriptorTypeId(fory, d1);
+      int typeId2 = Types.getDescriptorTypeId(fory, d2);
+      boolean t1Compress = Types.isCompressedType(typeId1);
+      boolean t2Compress = Types.isCompressedType(typeId2);
+      if ((t1Compress && t2Compress) || (!t1Compress && !t2Compress)) {
+        int c = getSizeOfPrimitiveType(t2) - getSizeOfPrimitiveType(t1);
+        if (c == 0) {
+          c = typeId2 - typeId1;
+          // noinspection Duplicates
+          if (c == 0) {
+            c = getFieldSortKey(d1).compareTo(getFieldSortKey(d2));
+            if (c == 0) {
+              // Field name duplicate in super/child classes.
+              c = d1.getDeclaringClass().compareTo(d2.getDeclaringClass());
+              if (c == 0) {
+                // Final tie-breaker: use actual field name to distinguish fields with same tag ID.
+                // This ensures Comparator contract is satisfied (returns 0 only for same object).
+                c = d1.getName().compareTo(d2.getName());
+              }
+            }
+          }
+          return c;
+        }
+        return c;
+      }
+      if (t1Compress) {
+        return 1;
+      }
+      // t2 compress
+      return -1;
+    };
   }
 
   /**

@@ -342,10 +342,10 @@ public class Types {
 
   public static int getDescriptorTypeId(Fory fory, Field field) {
     Annotation annotation = Descriptor.getAnnotation(field);
+    Class<?> rawType = field.getType();
     if (annotation != null) {
-      return TypeAnnotationUtils.getTypeId(annotation);
+      return TypeAnnotationUtils.getTypeId(annotation, rawType);
     } else {
-      Class<?> rawType = field.getType();
       return getTypeId(fory, rawType);
     }
   }
@@ -356,11 +356,11 @@ public class Types {
     if (extMeta != null) {
       return extMeta.typeId();
     } else {
+      Class<?> rawType = typeRef.getRawType();
       Annotation typeAnnotation = d.getTypeAnnotation();
       if (typeAnnotation != null) {
-        return TypeAnnotationUtils.getTypeId(typeAnnotation);
+        return TypeAnnotationUtils.getTypeId(typeAnnotation, rawType);
       } else {
-        Class<?> rawType = typeRef.getRawType();
         return getTypeId(fory, rawType);
       }
     }
@@ -428,5 +428,18 @@ public class Types {
       default:
         return null;
     }
+  }
+
+  public static boolean isCompressedType(int typeId) {
+    switch (typeId) {
+      case VARINT32:
+      case VAR_UINT32:
+      case VARINT64:
+      case VAR_UINT64:
+      case TAGGED_INT64:
+      case TAGGED_UINT64:
+        return true;
+    }
+    return false;
   }
 }

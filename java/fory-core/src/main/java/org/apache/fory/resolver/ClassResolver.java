@@ -1913,8 +1913,9 @@ public class ClassResolver extends TypeResolver {
       // Use normalized type name so that Collection/Map subtypes have consistent order
       // between processes even if the field doesn't exist in peer (e.g., List vs Collection).
       int c = getNormalizedTypeName(d1).compareTo(getNormalizedTypeName(d2));
+      // noinspection Duplicates
       if (c == 0) {
-        c = DescriptorGrouper.getFieldSortKey(d1).compareTo(DescriptorGrouper.getFieldSortKey(d2));
+        c = getFieldSortKey(d1).compareTo(getFieldSortKey(d2));
         if (c == 0) {
           // Field name duplicate in super/child classes.
           c = d1.getDeclaringClass().compareTo(d2.getDeclaringClass());
@@ -1939,8 +1940,7 @@ public class ClassResolver extends TypeResolver {
             descriptors,
             descriptorsGroupedOrdered,
             descriptorUpdator,
-            fory.compressInt(),
-            fory.compressLong(),
+            getPrimitiveComparator(),
             createTypeAndNameComparator())
         .sort();
   }

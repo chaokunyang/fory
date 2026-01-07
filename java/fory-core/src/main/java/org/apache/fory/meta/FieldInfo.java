@@ -112,6 +112,7 @@ public final class FieldInfo implements Serializable {
             .typeName(typeName)
             .trackingRef(remoteTrackingRef)
             .nullable(remoteNullable)
+            .typeRef(typeRef)
             .build();
       }
       DescriptorBuilder builder =

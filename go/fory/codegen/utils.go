@@ -180,17 +180,17 @@ func getTypeID(t types.Type) string {
 		case types.Int16:
 			return "INT16"
 		case types.Int32:
-			return "INT32"
+			return "VARINT32"
 		case types.Int, types.Int64:
-			return "INT64"
+			return "VARINT64"
 		case types.Uint8:
 			return "UINT8"
 		case types.Uint16:
 			return "UINT16"
 		case types.Uint32:
-			return "UINT32"
+			return "VAR_UINT32"
 		case types.Uint, types.Uint64:
-			return "UINT64"
+			return "VAR_UINT64"
 		case types.Float32:
 			return "FLOAT32"
 		case types.Float64:
@@ -240,16 +240,24 @@ func getTypeIDValue(typeID string) int {
 		return int(fory.INT16) // 3
 	case "INT32":
 		return int(fory.INT32) // 4
+	case "VARINT32":
+		return int(fory.VARINT32) // 5
 	case "INT64":
 		return int(fory.INT64) // 6
+	case "VARINT64":
+		return int(fory.VARINT64) // 7
 	case "UINT8":
-		return int(fory.UINT8) // 100
+		return int(fory.UINT8) // 9
 	case "UINT16":
-		return int(fory.UINT16) // 101
+		return int(fory.UINT16) // 10
 	case "UINT32":
-		return int(fory.UINT32) // 102
+		return int(fory.UINT32) // 11
+	case "VAR_UINT32":
+		return int(fory.VAR_UINT32) // 12
 	case "UINT64":
-		return int(fory.UINT64) // 103
+		return int(fory.UINT64) // 13
+	case "VAR_UINT64":
+		return int(fory.VAR_UINT64) // 14
 	case "FLOAT32":
 		return int(fory.FLOAT32)
 	case "FLOAT64":
@@ -293,11 +301,15 @@ func sortFields(fields []*FieldInfo) {
 			// When same size, sort by type id
 			// When same size and type id, sort by snake case field name
 
-			// Handle compression types (INT32/INT64/VARINT32/VARINT64)
+			// Handle compression types (INT32/INT64/VARINT32/VARINT64 and unsigned variants)
 			compressI := f1.TypeID == "INT32" || f1.TypeID == "INT64" ||
-				f1.TypeID == "VARINT32" || f1.TypeID == "VARINT64"
+				f1.TypeID == "VARINT32" || f1.TypeID == "VARINT64" ||
+				f1.TypeID == "UINT32" || f1.TypeID == "UINT64" ||
+				f1.TypeID == "VAR_UINT32" || f1.TypeID == "VAR_UINT64"
 			compressJ := f2.TypeID == "INT32" || f2.TypeID == "INT64" ||
-				f2.TypeID == "VARINT32" || f2.TypeID == "VARINT64"
+				f2.TypeID == "VARINT32" || f2.TypeID == "VARINT64" ||
+				f2.TypeID == "UINT32" || f2.TypeID == "UINT64" ||
+				f2.TypeID == "VAR_UINT32" || f2.TypeID == "VAR_UINT64"
 
 			if compressI != compressJ {
 				return !compressI && compressJ // non-compress comes first

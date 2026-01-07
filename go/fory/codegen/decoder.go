@@ -541,17 +541,17 @@ func generateElementTypeIDReadInline(buf *bytes.Buffer, elemType types.Type) err
 		case types.Int16:
 			expectedTypeID = int(fory.INT16)
 		case types.Int32:
-			expectedTypeID = int(fory.INT32)
+			expectedTypeID = int(fory.VARINT32)
 		case types.Int, types.Int64:
-			expectedTypeID = int(fory.INT64)
+			expectedTypeID = int(fory.VARINT64)
 		case types.Uint8:
 			expectedTypeID = int(fory.UINT8)
 		case types.Uint16:
 			expectedTypeID = int(fory.UINT16)
 		case types.Uint32:
-			expectedTypeID = int(fory.UINT32)
+			expectedTypeID = int(fory.VAR_UINT32)
 		case types.Uint, types.Uint64:
-			expectedTypeID = int(fory.UINT64)
+			expectedTypeID = int(fory.VAR_UINT64)
 		case types.Float32:
 			expectedTypeID = int(fory.FLOAT32)
 		case types.Float64:

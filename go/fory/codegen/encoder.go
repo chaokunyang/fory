@@ -233,17 +233,17 @@ func generateElementTypeIDWrite(buf *bytes.Buffer, elemType types.Type) error {
 		case types.Int16:
 			fmt.Fprintf(buf, "\t\tbuf.WriteVaruint32(%d) // INT16\n", fory.INT16)
 		case types.Int32:
-			fmt.Fprintf(buf, "\t\tbuf.WriteVaruint32(%d) // INT32\n", fory.INT32)
+			fmt.Fprintf(buf, "\t\tbuf.WriteVaruint32(%d) // VARINT32\n", fory.VARINT32)
 		case types.Int, types.Int64:
-			fmt.Fprintf(buf, "\t\tbuf.WriteVaruint32(%d) // INT64\n", fory.INT64)
+			fmt.Fprintf(buf, "\t\tbuf.WriteVaruint32(%d) // VARINT64\n", fory.VARINT64)
 		case types.Uint8:
 			fmt.Fprintf(buf, "\t\tbuf.WriteVaruint32(%d) // UINT8\n", fory.UINT8)
 		case types.Uint16:
 			fmt.Fprintf(buf, "\t\tbuf.WriteVaruint32(%d) // UINT16\n", fory.UINT16)
 		case types.Uint32:
-			fmt.Fprintf(buf, "\t\tbuf.WriteVaruint32(%d) // UINT32\n", fory.UINT32)
+			fmt.Fprintf(buf, "\t\tbuf.WriteVaruint32(%d) // VAR_UINT32\n", fory.VAR_UINT32)
 		case types.Uint, types.Uint64:
-			fmt.Fprintf(buf, "\t\tbuf.WriteVaruint32(%d) // UINT64\n", fory.UINT64)
+			fmt.Fprintf(buf, "\t\tbuf.WriteVaruint32(%d) // VAR_UINT64\n", fory.VAR_UINT64)
 		case types.Float32:
 			fmt.Fprintf(buf, "\t\tbuf.WriteVaruint32(%d) // FLOAT32\n", fory.FLOAT32)
 		case types.Float64:
@@ -723,17 +723,17 @@ func generateElementTypeIDWriteInline(buf *bytes.Buffer, elemType types.Type) er
 		case types.Int16:
 			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVaruint32(%d) // INT16\n", fory.INT16)
 		case types.Int32:
-			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVaruint32(%d) // INT32\n", fory.INT32)
+			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVaruint32(%d) // VARINT32\n", fory.VARINT32)
 		case types.Int, types.Int64:
-			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVaruint32(%d) // INT64\n", fory.INT64)
+			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVaruint32(%d) // VARINT64\n", fory.VARINT64)
 		case types.Uint8:
 			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVaruint32(%d) // UINT8\n", fory.UINT8)
 		case types.Uint16:
 			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVaruint32(%d) // UINT16\n", fory.UINT16)
 		case types.Uint32:
-			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVaruint32(%d) // UINT32\n", fory.UINT32)
+			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVaruint32(%d) // VAR_UINT32\n", fory.VAR_UINT32)
 		case types.Uint, types.Uint64:
-			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVaruint32(%d) // UINT64\n", fory.UINT64)
+			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVaruint32(%d) // VAR_UINT64\n", fory.VAR_UINT64)
 		case types.Float32:
 			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVaruint32(%d) // FLOAT32\n", fory.FLOAT32)
 		case types.Float64:

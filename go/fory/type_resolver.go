@@ -1810,7 +1810,7 @@ func (r *TypeResolver) ReadTypeInfo(buffer *ByteBuffer, err *Error) *TypeInfo {
 			Serializer: r.typeToSerializers[reflect.TypeOf(uint16(0))],
 			StaticId:   ConcreteTypeInt16, // Use Int16 static ID for uint16
 		}
-	case INT32, VAR32:
+	case INT32, VARINT32:
 		return &TypeInfo{
 			Type:       reflect.TypeOf(int32(0)),
 			TypeID:     typeID,
@@ -1824,7 +1824,7 @@ func (r *TypeResolver) ReadTypeInfo(buffer *ByteBuffer, err *Error) *TypeInfo {
 			Serializer: r.typeToSerializers[reflect.TypeOf(uint32(0))],
 			StaticId:   ConcreteTypeInt32, // Use Int32 static ID for uint32
 		}
-	case INT64, VAR64, H64:
+	case INT64, VARINT64, TAGGED_INT64:
 		return &TypeInfo{
 			Type:       reflect.TypeOf(int64(0)),
 			TypeID:     typeID,
@@ -1953,9 +1953,9 @@ func (r *TypeResolver) readTypeInfoWithTypeID(buffer *ByteBuffer, typeID uint32,
 		return &TypeInfo{Type: int8Type, TypeID: typeID, Serializer: r.typeToSerializers[int8Type], StaticId: ConcreteTypeInt8}
 	case INT16:
 		return &TypeInfo{Type: int16Type, TypeID: typeID, Serializer: r.typeToSerializers[int16Type], StaticId: ConcreteTypeInt16}
-	case INT32, VAR32:
+	case INT32, VARINT32:
 		return &TypeInfo{Type: int32Type, TypeID: typeID, Serializer: r.typeToSerializers[int32Type], StaticId: ConcreteTypeInt32}
-	case INT64, VAR64, H64:
+	case INT64, VARINT64, TAGGED_INT64:
 		return &TypeInfo{Type: int64Type, TypeID: typeID, Serializer: r.typeToSerializers[int64Type], StaticId: ConcreteTypeInt64}
 	case FLOAT32:
 		return &TypeInfo{Type: float32Type, TypeID: typeID, Serializer: r.typeToSerializers[float32Type], StaticId: ConcreteTypeFloat32}

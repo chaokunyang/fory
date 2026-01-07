@@ -618,10 +618,19 @@ public class XtypeResolver extends TypeResolver {
 
   private void registerDefaultTypes() {
     registerDefaultTypes(Types.BOOL, Boolean.class, boolean.class, AtomicBoolean.class);
-    registerDefaultTypes(Types.INT8, Byte.class, byte.class);
-    registerDefaultTypes(Types.INT16, Short.class, short.class);
+    registerDefaultTypes(Types.UINT8, Byte.class, byte.class);
+    registerDefaultTypes(Types.UINT16, Short.class, short.class);
+    registerDefaultTypes(Types.UINT32, Integer.class, int.class, AtomicInteger.class);
+    registerDefaultTypes(Types.UINT64, Long.class, long.class, AtomicLong.class);
+    registerDefaultTypes(Types.TAGGED_UINT64, Long.class, long.class, AtomicLong.class);
     registerDefaultTypes(Types.INT32, Integer.class, int.class, AtomicInteger.class);
     registerDefaultTypes(Types.INT64, Long.class, long.class, AtomicLong.class);
+    registerDefaultTypes(Types.TAGGED_INT64, Long.class, long.class, AtomicLong.class);
+
+    registerDefaultTypes(Types.INT8, Byte.class, byte.class);
+    registerDefaultTypes(Types.INT16, Short.class, short.class);
+    registerDefaultTypes(Types.VARINT32, Integer.class, int.class, AtomicInteger.class);
+    registerDefaultTypes(Types.VARINT64, Long.class, long.class, AtomicLong.class);
     registerDefaultTypes(Types.FLOAT32, Float.class, float.class);
     registerDefaultTypes(Types.FLOAT64, Double.class, double.class);
     registerDefaultTypes(Types.STRING, String.class, StringBuilder.class, StringBuffer.class);

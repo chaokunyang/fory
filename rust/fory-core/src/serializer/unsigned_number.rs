@@ -153,8 +153,18 @@ macro_rules! impl_rust_unsigned_num_serializer {
 // xlang-compatible unsigned types
 impl_xlang_unsigned_num_serializer!(u8, Writer::write_u8, Reader::read_u8, TypeId::UINT8);
 impl_xlang_unsigned_num_serializer!(u16, Writer::write_u16, Reader::read_u16, TypeId::UINT16);
-impl_xlang_unsigned_num_serializer!(u32, Writer::write_u32, Reader::read_u32, TypeId::UINT32);
-impl_xlang_unsigned_num_serializer!(u64, Writer::write_u64, Reader::read_u64, TypeId::UINT64);
+impl_xlang_unsigned_num_serializer!(
+    u32,
+    Writer::write_varuint32,
+    Reader::read_varuint32,
+    TypeId::VAR_UINT32
+);
+impl_xlang_unsigned_num_serializer!(
+    u64,
+    Writer::write_varuint64,
+    Reader::read_varuint64,
+    TypeId::VAR_UINT64
+);
 
 // Rust-specific unsigned types (not supported in xlang mode)
 impl_rust_unsigned_num_serializer!(u128, Writer::write_u128, Reader::read_u128, TypeId::U128);

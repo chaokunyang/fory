@@ -293,11 +293,11 @@ func sortFields(fields []*FieldInfo) {
 			// When same size, sort by type id
 			// When same size and type id, sort by snake case field name
 
-			// Handle compression types (INT32/INT64/VAR32/VAR64)
+			// Handle compression types (INT32/INT64/VARINT32/VARINT64)
 			compressI := f1.TypeID == "INT32" || f1.TypeID == "INT64" ||
-				f1.TypeID == "VAR32" || f1.TypeID == "VAR64"
+				f1.TypeID == "VARINT32" || f1.TypeID == "VARINT64"
 			compressJ := f2.TypeID == "INT32" || f2.TypeID == "INT64" ||
-				f2.TypeID == "VAR32" || f2.TypeID == "VAR64"
+				f2.TypeID == "VARINT32" || f2.TypeID == "VARINT64"
 
 			if compressI != compressJ {
 				return !compressI && compressJ // non-compress comes first

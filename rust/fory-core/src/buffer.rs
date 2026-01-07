@@ -28,6 +28,8 @@ pub struct Writer<'a> {
     pub(crate) bf: &'a mut Vec<u8>,
 }
 impl<'a> Writer<'a> {
+    // ============ Utility methods ============
+
     #[inline(always)]
     pub fn from_buffer(bf: &'a mut Vec<u8>) -> Writer<'a> {
         Writer { bf }
@@ -79,20 +81,86 @@ impl<'a> Writer<'a> {
         v.len()
     }
 
+    // ============ BOOL (TypeId = 1) ============
+
     #[inline(always)]
     pub fn write_bool(&mut self, value: bool) {
         self.bf.push(if value { 1 } else { 0 });
     }
+
+    // ============ INT8 (TypeId = 2) ============
+
+    #[inline(always)]
+    pub fn write_i8(&mut self, value: i8) {
+        self.bf.push(value as u8);
+    }
+
+    // ============ INT16 (TypeId = 3) ============
+
+    #[inline(always)]
+    pub fn write_i16(&mut self, value: i16) {
+        self.write_u16(value as u16);
+    }
+
+    // ============ INT32 (TypeId = 4) ============
+
+    #[inline(always)]
+    pub fn write_i32(&mut self, value: i32) {
+        self.write_u32(value as u32);
+    }
+
+    // ============ VARINT32 (TypeId = 5) ============
+
+    #[inline(always)]
+    pub fn write_varint32(&mut self, value: i32) {
+        let zigzag = ((value as i64) << 1) ^ ((value as i64) >> 31);
+        self._write_varuint32(zigzag as u32)
+    }
+
+    // ============ INT64 (TypeId = 6) ============
+
+    #[inline(always)]
+    pub fn write_i64(&mut self, value: i64) {
+        self.write_u64(value as u64);
+    }
+
+    // ============ VARINT64 (TypeId = 7) ============
+
+    #[inline(always)]
+    pub fn write_varint64(&mut self, value: i64) {
+        let zigzag = ((value << 1) ^ (value >> 63)) as u64;
+        self._write_varuint64(zigzag);
+    }
+
+    // ============ TAGGED_INT64 (TypeId = 8) ============
+
+    /// Write signed long using fory Tagged(Small long as int) encoding.
+    /// If value is in [0xc0000000, 0x3fffffff] (i.e., [-1073741824, 1073741823]),
+    /// encode as 4 bytes: `((value as i32) << 1)`.
+    /// Otherwise write as 9 bytes: `0b1 | little-endian 8 bytes i64`.
+    #[inline(always)]
+    pub fn write_tagged_i64(&mut self, value: i64) {
+        const HALF_MIN_INT_VALUE: i64 = i32::MIN as i64 / 2; // -1073741824
+        const HALF_MAX_INT_VALUE: i64 = i32::MAX as i64 / 2; // 1073741823
+        if value >= HALF_MIN_INT_VALUE && value <= HALF_MAX_INT_VALUE {
+            // Fits in 31 bits (with sign), encode as 4 bytes with bit 0 = 0
+            let v = (value as i32) << 1;
+            self.write_i32(v);
+        } else {
+            // Write flag byte (0b1) followed by 8-byte i64
+            self.bf.push(0b1);
+            self.write_i64(value);
+        }
+    }
+
+    // ============ UINT8 (TypeId = 9) ============
 
     #[inline(always)]
     pub fn write_u8(&mut self, value: u8) {
         self.bf.push(value);
     }
 
-    #[inline(always)]
-    pub fn write_i8(&mut self, value: i8) {
-        self.bf.push(value as u8);
-    }
+    // ============ UINT16 (TypeId = 10) ============
 
     #[inline(always)]
     pub fn write_u16(&mut self, value: u16) {
@@ -107,10 +175,7 @@ impl<'a> Writer<'a> {
         }
     }
 
-    #[inline(always)]
-    pub fn write_i16(&mut self, value: i16) {
-        self.write_u16(value as u16);
-    }
+    // ============ UINT32 (TypeId = 11) ============
 
     #[inline(always)]
     pub fn write_u32(&mut self, value: u32) {
@@ -125,100 +190,7 @@ impl<'a> Writer<'a> {
         }
     }
 
-    #[inline(always)]
-    pub fn write_i32(&mut self, value: i32) {
-        self.write_u32(value as u32);
-    }
-
-    #[inline(always)]
-    pub fn write_f32(&mut self, value: f32) {
-        #[cfg(target_endian = "little")]
-        {
-            let bytes = unsafe { &*(&value as *const f32 as *const [u8; 4]) };
-            self.bf.extend_from_slice(bytes);
-        }
-        #[cfg(target_endian = "big")]
-        {
-            self.bf.extend_from_slice(&value.to_bits().to_le_bytes());
-        }
-    }
-
-    #[inline(always)]
-    pub fn write_i64(&mut self, value: i64) {
-        self.write_u64(value as u64);
-    }
-
-    #[inline(always)]
-    pub fn write_f64(&mut self, value: f64) {
-        #[cfg(target_endian = "little")]
-        {
-            let bytes = unsafe { &*(&value as *const f64 as *const [u8; 8]) };
-            self.bf.extend_from_slice(bytes);
-        }
-        #[cfg(target_endian = "big")]
-        {
-            self.bf.extend_from_slice(&value.to_bits().to_le_bytes());
-        }
-    }
-
-    #[inline(always)]
-    pub fn write_u64(&mut self, value: u64) {
-        #[cfg(target_endian = "little")]
-        {
-            let bytes = unsafe { &*(&value as *const u64 as *const [u8; 8]) };
-            self.bf.extend_from_slice(bytes);
-        }
-        #[cfg(target_endian = "big")]
-        {
-            self.bf.extend_from_slice(&value.to_le_bytes());
-        }
-    }
-
-    #[inline(always)]
-    pub fn write_usize(&mut self, value: usize) {
-        const SIZE: usize = std::mem::size_of::<usize>();
-        match SIZE {
-            2 => self.write_u16(value as u16),
-            4 => self.write_varuint32(value as u32),
-            8 => self.write_varuint64(value as u64),
-            _ => unreachable!("unsupported usize size"),
-        }
-    }
-
-    #[inline(always)]
-    pub fn write_u128(&mut self, value: u128) {
-        #[cfg(target_endian = "little")]
-        {
-            let bytes = unsafe { &*(&value as *const u128 as *const [u8; 16]) };
-            self.bf.extend_from_slice(bytes);
-        }
-        #[cfg(target_endian = "big")]
-        {
-            self.bf.extend_from_slice(&value.to_le_bytes());
-        }
-    }
-
-    #[inline(always)]
-    pub fn write_i128(&mut self, value: i128) {
-        self.write_u128(value as u128);
-    }
-
-    #[inline(always)]
-    pub fn write_isize(&mut self, value: isize) {
-        const SIZE: usize = std::mem::size_of::<isize>();
-        match SIZE {
-            2 => self.write_i16(value as i16),
-            4 => self.write_varint32(value as i32),
-            8 => self.write_varint64(value as i64),
-            _ => unreachable!("unsupported isize size"),
-        }
-    }
-
-    #[inline(always)]
-    pub fn write_varint32(&mut self, value: i32) {
-        let zigzag = ((value as i64) << 1) ^ ((value as i64) >> 31);
-        self._write_varuint32(zigzag as u32)
-    }
+    // ============ VAR_UINT32 (TypeId = 12) ============
 
     #[inline(always)]
     pub fn write_varuint32(&mut self, value: u32) {
@@ -264,11 +236,22 @@ impl<'a> Writer<'a> {
         }
     }
 
+    // ============ UINT64 (TypeId = 13) ============
+
     #[inline(always)]
-    pub fn write_varint64(&mut self, value: i64) {
-        let zigzag = ((value << 1) ^ (value >> 63)) as u64;
-        self._write_varuint64(zigzag);
+    pub fn write_u64(&mut self, value: u64) {
+        #[cfg(target_endian = "little")]
+        {
+            let bytes = unsafe { &*(&value as *const u64 as *const [u8; 8]) };
+            self.bf.extend_from_slice(bytes);
+        }
+        #[cfg(target_endian = "big")]
+        {
+            self.bf.extend_from_slice(&value.to_le_bytes());
+        }
     }
+
+    // ============ VAR_UINT64 (TypeId = 14) ============
 
     #[inline(always)]
     pub fn write_varuint64(&mut self, value: u64) {
@@ -374,6 +357,108 @@ impl<'a> Writer<'a> {
         }
     }
 
+    // ============ TAGGED_UINT64 (TypeId = 15) ============
+
+    /// Write unsigned long using fory Tagged(Small long as int) encoding.
+    /// If value is in [0, 0x7fffffff], encode as 4 bytes: `((value as u32) << 1)`.
+    /// Otherwise write as 9 bytes: `0b1 | little-endian 8 bytes u64`.
+    #[inline(always)]
+    pub fn write_tagged_u64(&mut self, value: u64) {
+        if value <= i32::MAX as u64 {
+            // Fits in 31 bits, encode as 4 bytes with bit 0 = 0
+            let v = (value as u32) << 1;
+            self.write_u32(v);
+        } else {
+            // Write flag byte (0b1) followed by 8-byte u64
+            self.bf.push(0b1);
+            self.write_u64(value);
+        }
+    }
+
+    // ============ FLOAT32 (TypeId = 17) ============
+
+    #[inline(always)]
+    pub fn write_f32(&mut self, value: f32) {
+        #[cfg(target_endian = "little")]
+        {
+            let bytes = unsafe { &*(&value as *const f32 as *const [u8; 4]) };
+            self.bf.extend_from_slice(bytes);
+        }
+        #[cfg(target_endian = "big")]
+        {
+            self.bf.extend_from_slice(&value.to_bits().to_le_bytes());
+        }
+    }
+
+    // ============ FLOAT64 (TypeId = 18) ============
+
+    #[inline(always)]
+    pub fn write_f64(&mut self, value: f64) {
+        #[cfg(target_endian = "little")]
+        {
+            let bytes = unsafe { &*(&value as *const f64 as *const [u8; 8]) };
+            self.bf.extend_from_slice(bytes);
+        }
+        #[cfg(target_endian = "big")]
+        {
+            self.bf.extend_from_slice(&value.to_bits().to_le_bytes());
+        }
+    }
+
+    // ============ STRING (TypeId = 19) ============
+
+    #[inline(always)]
+    pub fn write_utf8_string(&mut self, s: &str) {
+        let bytes = s.as_bytes();
+        let len = bytes.len();
+        self.bf.reserve(len);
+        self.bf.extend_from_slice(bytes);
+    }
+
+    // ============ Rust-specific types (i128, u128, isize, usize) ============
+
+    #[inline(always)]
+    pub fn write_i128(&mut self, value: i128) {
+        self.write_u128(value as u128);
+    }
+
+    #[inline(always)]
+    pub fn write_u128(&mut self, value: u128) {
+        #[cfg(target_endian = "little")]
+        {
+            let bytes = unsafe { &*(&value as *const u128 as *const [u8; 16]) };
+            self.bf.extend_from_slice(bytes);
+        }
+        #[cfg(target_endian = "big")]
+        {
+            self.bf.extend_from_slice(&value.to_le_bytes());
+        }
+    }
+
+    #[inline(always)]
+    pub fn write_isize(&mut self, value: isize) {
+        const SIZE: usize = std::mem::size_of::<isize>();
+        match SIZE {
+            2 => self.write_i16(value as i16),
+            4 => self.write_varint32(value as i32),
+            8 => self.write_varint64(value as i64),
+            _ => unreachable!("unsupported isize size"),
+        }
+    }
+
+    #[inline(always)]
+    pub fn write_usize(&mut self, value: usize) {
+        const SIZE: usize = std::mem::size_of::<usize>();
+        match SIZE {
+            2 => self.write_u16(value as u16),
+            4 => self.write_varuint32(value as u32),
+            8 => self.write_varuint64(value as u64),
+            _ => unreachable!("unsupported usize size"),
+        }
+    }
+
+    // ============ Other helper methods ============
+
     #[inline(always)]
     pub fn write_varuint36_small(&mut self, value: u64) {
         assert!(value < (1u64 << 36), "value too large for 36-bit varint");
@@ -407,14 +492,6 @@ impl<'a> Writer<'a> {
             self.write_u64(combined);
         }
     }
-
-    #[inline(always)]
-    pub fn write_utf8_string(&mut self, s: &str) {
-        let bytes = s.as_bytes();
-        let len = bytes.len();
-        self.bf.reserve(len);
-        self.bf.extend_from_slice(bytes);
-    }
 }
 
 #[derive(Default)]
@@ -426,6 +503,8 @@ pub struct Reader<'a> {
 
 #[allow(clippy::needless_lifetimes)]
 impl<'a> Reader<'a> {
+    // ============ Utility methods ============
+
     #[inline(always)]
     pub fn new(bf: &[u8]) -> Reader<'_> {
         Reader { bf, cursor: 0 }
@@ -478,10 +557,6 @@ impl<'a> Reader<'a> {
 
     #[inline(always)]
     fn check_bound(&self, n: usize) -> Result<(), Error> {
-        // The upper layer guarantees it is non-null
-        // if self.bf.is_null() {
-        //     return Err(Error::invalid_data("buffer pointer is null"));
-        // }
         if self.cursor + n > self.bf.len() {
             Err(Error::buffer_out_of_bound(self.cursor, n, self.bf.len()))
         } else {
@@ -490,16 +565,114 @@ impl<'a> Reader<'a> {
     }
 
     #[inline(always)]
-    pub fn read_bool(&mut self) -> Result<bool, Error> {
-        Ok(self.read_u8()? != 0)
-    }
-
-    #[inline(always)]
     fn read_u8_uncheck(&mut self) -> u8 {
         let result = unsafe { self.bf.get_unchecked(self.cursor) };
         self.move_next(1);
         *result
     }
+
+    #[inline(always)]
+    pub fn skip(&mut self, len: usize) -> Result<(), Error> {
+        self.check_bound(len)?;
+        self.move_next(len);
+        Ok(())
+    }
+
+    #[inline(always)]
+    pub fn read_bytes(&mut self, len: usize) -> Result<&[u8], Error> {
+        self.check_bound(len)?;
+        let result = &self.bf[self.cursor..self.cursor + len];
+        self.move_next(len);
+        Ok(result)
+    }
+
+    #[inline(always)]
+    pub fn reset_cursor_to_here(&self) -> impl FnOnce(&mut Self) {
+        let raw_cursor = self.cursor;
+        move |this: &mut Self| {
+            this.cursor = raw_cursor;
+        }
+    }
+
+    pub fn set_cursor(&mut self, cursor: usize) {
+        self.cursor = cursor;
+    }
+
+    // ============ BOOL (TypeId = 1) ============
+
+    #[inline(always)]
+    pub fn read_bool(&mut self) -> Result<bool, Error> {
+        Ok(self.read_u8()? != 0)
+    }
+
+    // ============ INT8 (TypeId = 2) ============
+
+    #[inline(always)]
+    pub fn read_i8(&mut self) -> Result<i8, Error> {
+        Ok(self.read_u8()? as i8)
+    }
+
+    // ============ INT16 (TypeId = 3) ============
+
+    #[inline(always)]
+    pub fn read_i16(&mut self) -> Result<i16, Error> {
+        Ok(self.read_u16()? as i16)
+    }
+
+    // ============ INT32 (TypeId = 4) ============
+
+    #[inline(always)]
+    pub fn read_i32(&mut self) -> Result<i32, Error> {
+        Ok(self.read_u32()? as i32)
+    }
+
+    // ============ VARINT32 (TypeId = 5) ============
+
+    #[inline(always)]
+    pub fn read_varint32(&mut self) -> Result<i32, Error> {
+        let encoded = self.read_varuint32()?;
+        Ok(((encoded >> 1) as i32) ^ -((encoded & 1) as i32))
+    }
+
+    // ============ INT64 (TypeId = 6) ============
+
+    #[inline(always)]
+    pub fn read_i64(&mut self) -> Result<i64, Error> {
+        Ok(self.read_u64()? as i64)
+    }
+
+    // ============ VARINT64 (TypeId = 7) ============
+
+    #[inline(always)]
+    pub fn read_varint64(&mut self) -> Result<i64, Error> {
+        let encoded = self.read_varuint64()?;
+        Ok(((encoded >> 1) as i64) ^ -((encoded & 1) as i64))
+    }
+
+    // ============ TAGGED_INT64 (TypeId = 8) ============
+
+    /// Read signed fory Tagged(Small long as int) encoded i64.
+    /// If bit 0 of the first 4 bytes is 0, return the value >> 1 (arithmetic shift).
+    /// Otherwise, skip the flag byte and read 8 bytes as i64.
+    #[inline(always)]
+    pub fn read_tagged_i64(&mut self) -> Result<i64, Error> {
+        self.check_bound(4)?;
+        let i = LittleEndian::read_i32(&self.bf[self.cursor..]);
+        if (i & 0b1) != 0b1 {
+            // Bit 0 is 0, small value encoded in 4 bytes
+            self.cursor += 4;
+            Ok((i >> 1) as i64) // arithmetic right shift preserves sign
+        } else {
+            // Bit 0 is 1, big value: skip flag byte and read 8 bytes
+            self.check_bound(9)?;
+            self.cursor += 1;
+            let value = LittleEndian::read_i64(&self.bf[self.cursor..]);
+            self.cursor += 8;
+            Ok(value)
+        }
+    }
+
+    // ============ UINT8 (TypeId = 9) ============
 
     #[inline(always)]
     pub fn peek_u8(&mut self) -> Result<u8, Error> {
@@ -514,10 +687,7 @@ impl<'a> Reader<'a> {
         Ok(result)
     }
 
-    #[inline(always)]
-    pub fn read_i8(&mut self) -> Result<i8, Error> {
-        Ok(self.read_u8()? as i8)
-    }
+    // ============ UINT16 (TypeId = 10) ============
 
     #[inline(always)]
     pub fn read_u16(&mut self) -> Result<u16, Error> {
@@ -527,10 +697,7 @@ impl<'a> Reader<'a> {
         Ok(result)
     }
 
-    #[inline(always)]
-    pub fn read_i16(&mut self) -> Result<i16, Error> {
-        Ok(self.read_u16()? as i16)
-    }
+    // ============ UINT32 (TypeId = 11) ============
 
     #[inline(always)]
     pub fn read_u32(&mut self) -> Result<u32, Error> {
@@ -540,74 +707,7 @@ impl<'a> Reader<'a> {
         Ok(result)
     }
 
-    #[inline(always)]
-    pub fn read_i32(&mut self) -> Result<i32, Error> {
-        Ok(self.read_u32()? as i32)
-    }
-
-    #[inline(always)]
-    pub fn read_u64(&mut self) -> Result<u64, Error> {
-        let slice = self.slice_after_cursor();
-        let result = LittleEndian::read_u64(slice);
-        self.cursor += 8;
-        Ok(result)
-    }
-
-    #[inline(always)]
-    pub fn read_usize(&mut self) -> Result<usize, Error> {
-        const SIZE: usize = std::mem::size_of::<usize>();
-        match SIZE {
-            2 => Ok(self.read_u16()? as usize),
-            4 => Ok(self.read_varuint32()? as usize),
-            8 => Ok(self.read_varuint64()? as usize),
-            _ => unreachable!("unsupported usize size"),
-        }
-    }
-
-    #[inline(always)]
-    pub fn read_u128(&mut self) -> Result<u128, Error> {
-        let slice = self.slice_after_cursor();
-        let result = LittleEndian::read_u128(slice);
-        self.cursor += 16;
-        Ok(result)
-    }
-
-    #[inline(always)]
-    pub fn read_i128(&mut self) -> Result<i128, Error> {
-        Ok(self.read_u128()? as i128)
-    }
-
-    #[inline(always)]
-    pub fn read_isize(&mut self) -> Result<isize, Error> {
-        const SIZE: usize = std::mem::size_of::<isize>();
-        match SIZE {
-            2 => Ok(self.read_i16()? as isize),
-            4 => Ok(self.read_varint32()? as isize),
-            8 => Ok(self.read_varint64()? as isize),
-            _ => unreachable!("unsupported isize size"),
-        }
-    }
-
-    #[inline(always)]
-    pub fn read_i64(&mut self) -> Result<i64, Error> {
-        Ok(self.read_u64()? as i64)
-    }
-
-    #[inline(always)]
-    pub fn read_f32(&mut self) -> Result<f32, Error> {
-        let slice = self.slice_after_cursor();
-        let result = LittleEndian::read_f32(slice);
-        self.cursor += 4;
-        Ok(result)
-    }
-
-    #[inline(always)]
-    pub fn read_f64(&mut self) -> Result<f64, Error> {
-        let slice = self.slice_after_cursor();
-        let result = LittleEndian::read_f64(slice);
-        self.cursor += 8;
-        Ok(result)
-    }
+    // ============ VAR_UINT32 (TypeId = 12) ============
 
     #[inline(always)]
     pub fn read_varuint32(&mut self) -> Result<u32, Error> {
@@ -644,11 +744,17 @@ impl<'a> Reader<'a> {
         Ok(encoded)
     }
 
+    // ============ UINT64 (TypeId = 13) ============
+
     #[inline(always)]
-    pub fn read_varint32(&mut self) -> Result<i32, Error> {
-        let encoded = self.read_varuint32()?;
-        Ok(((encoded >> 1) as i32) ^ -((encoded & 1) as i32))
+    pub fn read_u64(&mut self) -> Result<u64, Error> {
+        let slice = self.slice_after_cursor();
+        let result = LittleEndian::read_u64(slice);
+        self.cursor += 8;
+        Ok(result)
     }
+
+    // ============ VAR_UINT64 (TypeId = 14) ============
 
     #[inline(always)]
     pub fn read_varuint64(&mut self) -> Result<u64, Error> {
@@ -713,11 +819,50 @@ impl<'a> Reader<'a> {
         Ok(var64)
     }
 
+    // ============ TAGGED_UINT64 (TypeId = 15) ============
+
+    /// Read unsigned fory Tagged(Small long as int) encoded u64.
+    /// If bit 0 of the first 4 bytes is 0, return the value >> 1.
+    /// Otherwise, skip the flag byte and read 8 bytes as u64.
     #[inline(always)]
-    pub fn read_varint64(&mut self) -> Result<i64, Error> {
-        let encoded = self.read_varuint64()?;
-        Ok(((encoded >> 1) as i64) ^ -((encoded & 1) as i64))
+    pub fn read_tagged_u64(&mut self) -> Result<u64, Error> {
+        self.check_bound(4)?;
+        let i = LittleEndian::read_u32(&self.bf[self.cursor..]);
+        if (i & 0b1) != 0b1 {
+            // Bit 0 is 0, small value encoded in 4 bytes
+            self.cursor += 4;
+            Ok((i >> 1) as u64)
+        } else {
+            // Bit 0 is 1, big value: skip flag byte and read 8 bytes
+            self.check_bound(9)?;
+            self.cursor += 1;
+            let value = LittleEndian::read_u64(&self.bf[self.cursor..]);
+            self.cursor += 8;
+            Ok(value)
+        }
     }
+
+    // ============ FLOAT32 (TypeId = 17) ============
+
+    #[inline(always)]
+    pub fn read_f32(&mut self) -> Result<f32, Error> {
+        let slice = self.slice_after_cursor();
+        let result = LittleEndian::read_f32(slice);
+        self.cursor += 4;
+        Ok(result)
+    }
+
+    // ============ FLOAT64 (TypeId = 18) ============
+
+    #[inline(always)]
+    pub fn read_f64(&mut self) -> Result<f64, Error> {
+        let slice = self.slice_after_cursor();
+        let result = LittleEndian::read_f64(slice);
+        self.cursor += 8;
+        Ok(result)
+    }
+
+    // ============ STRING (TypeId = 19) ============
 
     #[inline(always)]
     pub fn read_latin1_string(&mut self, len: usize) -> Result<String, Error> {
@@ -796,6 +941,45 @@ impl<'a> Reader<'a> {
         Ok(String::from_utf16_lossy(&units))
     }
 
+    // ============ Rust-specific types (i128, u128, isize, usize) ============
+
+    #[inline(always)]
+    pub fn read_i128(&mut self) -> Result<i128, Error> {
+        Ok(self.read_u128()? as i128)
+    }
+
+    #[inline(always)]
+    pub fn read_u128(&mut self) -> Result<u128, Error> {
+        let slice = self.slice_after_cursor();
+        let result = LittleEndian::read_u128(slice);
+        self.cursor += 16;
+        Ok(result)
+    }
+
+    #[inline(always)]
+    pub fn read_isize(&mut self) -> Result<isize, Error> {
+        const SIZE: usize = std::mem::size_of::<isize>();
+        match SIZE {
+            2 => Ok(self.read_i16()? as isize),
+            4 => Ok(self.read_varint32()? as isize),
+            8 => Ok(self.read_varint64()? as isize),
+            _ => unreachable!("unsupported isize size"),
+        }
+    }
+
+    #[inline(always)]
+    pub fn read_usize(&mut self) -> Result<usize, Error> {
+        const SIZE: usize = std::mem::size_of::<usize>();
+        match SIZE {
+            2 => Ok(self.read_u16()? as usize),
+            4 => Ok(self.read_varuint32()? as usize),
+            8 => Ok(self.read_varuint64()? as usize),
+            _ => unreachable!("unsupported usize size"),
+        }
+    }
+
+    // ============ Other helper methods ============
+
     #[inline(always)]
     pub fn read_varuint36small(&mut self) -> Result<u64, Error> {
         let start = self.cursor;
@@ -841,33 +1025,6 @@ impl<'a> Reader<'a> {
             }
         }
         Ok(result)
-    }
-
-    #[inline(always)]
-    pub fn skip(&mut self, len: usize) -> Result<(), Error> {
-        self.check_bound(len)?;
-        self.move_next(len);
-        Ok(())
-    }
-
-    #[inline(always)]
-    pub fn read_bytes(&mut self, len: usize) -> Result<&[u8], Error> {
-        self.check_bound(len)?;
-        let result = &self.bf[self.cursor..self.cursor + len];
-        self.move_next(len);
-        Ok(result)
-    }
-
-    #[inline(always)]
-    pub fn reset_cursor_to_here(&self) -> impl FnOnce(&mut Self) {
-        let raw_cursor = self.cursor;
-        move |this: &mut Self| {
-            this.cursor = raw_cursor;
-        }
-    }
-
-    pub fn set_cursor(&mut self, cursor: usize) {
-        self.cursor = cursor;
     }
 }
 

@@ -72,7 +72,7 @@ CodegenRegistry.register(InternalSerializerType.INT32,
   )
 );
 
-CodegenRegistry.register(InternalSerializerType.VAR32,
+CodegenRegistry.register(InternalSerializerType.VARINT32,
   buildNumberSerializer(
     (builder, accessor) => builder.writer.varInt32(accessor),
     builder => builder.reader.varInt32()
@@ -86,7 +86,7 @@ CodegenRegistry.register(InternalSerializerType.INT64,
   )
 );
 
-CodegenRegistry.register(InternalSerializerType.H64,
+CodegenRegistry.register(InternalSerializerType.TAGGED_INT64,
   buildNumberSerializer(
     (builder, accessor) => builder.writer.sliInt64(accessor),
     builder => builder.reader.sliInt64()

@@ -582,9 +582,9 @@ func skipValue(ctx *ReadContext, fieldDef FieldDef, readRefFlag bool, isField bo
 		_ = ctx.buffer.ReadInt16(err)
 	case INT32:
 		_ = ctx.buffer.ReadVaruint32Small7(err)
-	case VAR32:
+	case VARINT32:
 		_ = ctx.buffer.ReadVaruint32Small7(err)
-	case INT64, VAR64, H64:
+	case INT64, VARINT64, TAGGED_INT64:
 		_ = ctx.buffer.ReadVarint64(err)
 
 	// Floating point types

@@ -32,28 +32,28 @@ const (
 	INT16 = 3
 	// INT32 Signed 32-bit little-endian integer
 	INT32 = 4
-	// VAR32 a 32-bit signed integer which uses fory var_int32 encoding
-	VAR32 = 5
+	// VARINT32 a 32-bit signed integer which uses fory var_int32 encoding
+	VARINT32 = 5
 	// INT64 Signed 64-bit little-endian integer
 	INT64 = 6
-	// VAR64 a 64-bit signed integer which uses fory PVL encoding
-	VAR64 = 7
-	// H64 a 64-bit signed integer which uses fory hybrid encoding
-	H64 = 8
+	// VARINT64 a 64-bit signed integer which uses fory PVL encoding
+	VARINT64 = 7
+	// TAGGED_INT64 a 64-bit signed integer which uses fory hybrid encoding
+	TAGGED_INT64 = 8
 	// UINT8 Unsigned 8-bit little-endian integer
 	UINT8 = 9
 	// UINT16 Unsigned 16-bit little-endian integer
 	UINT16 = 10
 	// UINT32 Unsigned 32-bit little-endian integer
 	UINT32 = 11
-	// VARU32 a 32-bit unsigned integer which uses fory var_uint32 encoding
-	VARU32 = 12
+	// VAR_UINT32 a 32-bit unsigned integer which uses fory var_uint32 encoding
+	VAR_UINT32 = 12
 	// UINT64 Unsigned 64-bit little-endian integer
 	UINT64 = 13
-	// VARU64 a 64-bit unsigned integer which uses fory var_uint64 encoding
-	VARU64 = 14
-	// HU64 a 64-bit unsigned integer which uses fory hybrid encoding
-	HU64 = 15
+	// VAR_UINT64 a 64-bit unsigned integer which uses fory var_uint64 encoding
+	VAR_UINT64 = 14
+	// TAGGED_UINT64 a 64-bit unsigned integer which uses fory hybrid encoding
+	TAGGED_UINT64 = 15
 	// FLOAT16 2-byte floating point value
 	FLOAT16 = 16
 	// FLOAT32 4-byte floating point value
@@ -168,7 +168,7 @@ func isPrimitiveType(typeID int16) bool {
 // Collections, structs, and other complex types need reference tracking.
 func NeedWriteRef(typeID TypeId) bool {
 	switch typeID {
-	case BOOL, INT8, INT16, INT32, INT64, VAR32, VAR64, H64,
+	case BOOL, INT8, INT16, INT32, INT64, VARINT32, VARINT64, TAGGED_INT64,
 		FLOAT32, FLOAT64, FLOAT16,
 		STRING, TIMESTAMP, LOCAL_DATE, DURATION:
 		return false
@@ -213,9 +213,9 @@ var primitiveTypeSizes = map[int16]int{
 	INT8:    1,
 	INT16:   2,
 	INT32:   4,
-	VAR32:   4,
+	VARINT32:   4,
 	INT64:   8,
-	VAR64:   8,
+	VARINT64:   8,
 	FLOAT32: 4,
 	FLOAT64: 8,
 }

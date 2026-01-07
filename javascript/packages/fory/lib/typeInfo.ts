@@ -337,7 +337,7 @@ export type HintInput<T> = T extends unknown ? any : T extends {
           | InternalSerializerType.INT8
           | InternalSerializerType.INT16
           | InternalSerializerType.INT32
-          | InternalSerializerType.VAR32
+          | InternalSerializerType.VARINT32
           | InternalSerializerType.FLOAT16
           | InternalSerializerType.FLOAT32
           | InternalSerializerType.FLOAT64;
@@ -345,8 +345,8 @@ export type HintInput<T> = T extends unknown ? any : T extends {
         ? number
 
         : T extends {
-          type: InternalSerializerType.VAR64
-            | InternalSerializerType.H64
+          type: InternalSerializerType.VARINT64
+            | InternalSerializerType.TAGGED_INT64
             | InternalSerializerType.INT64;
         }
           ? bigint
@@ -407,7 +407,7 @@ export type HintResult<T> = T extends never ? any : T extends {
           | InternalSerializerType.INT8
           | InternalSerializerType.INT16
           | InternalSerializerType.INT32
-          | InternalSerializerType.VAR32
+          | InternalSerializerType.VARINT32
           | InternalSerializerType.FLOAT16
           | InternalSerializerType.FLOAT32
           | InternalSerializerType.FLOAT64;
@@ -415,7 +415,7 @@ export type HintResult<T> = T extends never ? any : T extends {
         ? number
 
         : T extends {
-          type: InternalSerializerType.H64
+          type: InternalSerializerType.TAGGED_INT64
             | InternalSerializerType.INT64;
         }
           ? bigint
@@ -553,8 +553,8 @@ export const Type = {
   },
   varInt32() {
     return TypeInfo.fromNonParam(
-      InternalSerializerType.VAR32 as const,
-      (TypeId.VAR32),
+      InternalSerializerType.VARINT32 as const,
+      (TypeId.VARINT32),
 
     );
   },
@@ -567,8 +567,8 @@ export const Type = {
   },
   sliInt64() {
     return TypeInfo.fromNonParam(
-      InternalSerializerType.H64 as const,
-      (TypeId.H64),
+      InternalSerializerType.TAGGED_INT64 as const,
+      (TypeId.TAGGED_INT64),
 
     );
   },

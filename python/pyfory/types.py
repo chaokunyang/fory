@@ -45,13 +45,13 @@ class TypeId:
     # a 32-bit signed integer.
     INT32 = 4
     # a 32-bit signed integer which uses fory var_int32 encoding.
-    VAR32 = 5
+    VARINT32 = 5
     # a 64-bit signed integer.
     INT64 = 6
     # a 64-bit signed integer which uses fory PVL encoding.
-    VAR64 = 7
+    VARINT64 = 7
     # a 64-bit signed integer which uses fory hybrid encoding.
-    H64 = 8
+    TAGGED_INT64 = 8
     # an 8-bit unsigned integer.
     UINT8 = 9
     # a 16-bit unsigned integer.
@@ -59,13 +59,13 @@ class TypeId:
     # a 32-bit unsigned integer.
     UINT32 = 11
     # a 32-bit unsigned integer which uses fory var_uint32 encoding.
-    VARU32 = 12
+    VAR_UINT32 = 12
     # a 64-bit unsigned integer.
     UINT64 = 13
     # a 64-bit unsigned integer which uses fory var_uint64 encoding.
-    VARU64 = 14
+    VAR_UINT64 = 14
     # a 64-bit unsigned integer which uses fory hybrid encoding.
-    HU64 = 15
+    TAGGED_UINT64 = 15
     # a 16-bit floating point number.
     FLOAT16 = 16
     # a 32-bit floating point number.
@@ -212,9 +212,9 @@ _primitive_type_sizes = {
     TypeId.INT8: 1,
     TypeId.INT16: 2,
     TypeId.INT32: 4,
-    TypeId.VAR32: 4,
+    TypeId.VARINT32: 4,
     TypeId.INT64: 8,
-    TypeId.VAR64: 8,
+    TypeId.VARINT64: 8,
     TypeId.FLOAT16: 2,
     TypeId.FLOAT32: 4,
     TypeId.FLOAT64: 8,

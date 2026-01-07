@@ -1935,9 +1935,9 @@ func sortFields(
 		sort.Slice(s, func(i, j int) bool {
 			ai, aj := s[i], s[j]
 			compressI := ai.typeID == INT32 || ai.typeID == INT64 ||
-				ai.typeID == VAR32 || ai.typeID == VAR64
+				ai.typeID == VARINT32 || ai.typeID == VARINT64
 			compressJ := aj.typeID == INT32 || aj.typeID == INT64 ||
-				aj.typeID == VAR32 || aj.typeID == VAR64
+				aj.typeID == VARINT32 || aj.typeID == VARINT64
 			if compressI != compressJ {
 				return !compressI && compressJ
 			}

@@ -218,6 +218,59 @@ public class Serializers {
     }
   }
 
+  public static void writePrimitiveValue(MemoryBuffer buffer, Object value, int dispatchId) {
+    switch (dispatchId) {
+      case DispatchId.PRIMITIVE_BOOL:
+        buffer.writeBoolean((Boolean) value);
+        break;
+      case DispatchId.PRIMITIVE_INT8:
+      case DispatchId.PRIMITIVE_UINT8:
+        buffer.writeByte((Byte) value);
+        break;
+      case DispatchId.PRIMITIVE_CHAR:
+        buffer.writeChar((Character) value);
+        break;
+      case DispatchId.PRIMITIVE_INT16:
+      case DispatchId.PRIMITIVE_UINT16:
+        buffer.writeInt16((Short) value);
+        break;
+      case DispatchId.PRIMITIVE_INT32:
+      case DispatchId.PRIMITIVE_UINT32:
+        buffer.writeInt32((Integer) value);
+        break;
+      case DispatchId.PRIMITIVE_VARINT32:
+        buffer.writeVarInt32((Integer) value);
+        break;
+      case DispatchId.PRIMITIVE_VAR_UINT32:
+        buffer.writeVarUint32((Integer) value);
+        break;
+      case DispatchId.PRIMITIVE_INT64:
+      case DispatchId.PRIMITIVE_UINT64:
+        buffer.writeInt64((Long) value);
+        break;
+      case DispatchId.PRIMITIVE_VARINT64:
+        buffer.writeVarInt64((Long) value);
+        break;
+      case DispatchId.PRIMITIVE_TAGGED_INT64:
+        buffer.writeTaggedInt64((Long) value);
+        break;
+      case DispatchId.PRIMITIVE_VAR_UINT64:
+        buffer.writeVarUint64((Long) value);
+        break;
+      case DispatchId.PRIMITIVE_TAGGED_UINT64:
+        buffer.writeTaggedUint64((Long) value);
+        break;
+      case DispatchId.PRIMITIVE_FLOAT32:
+        buffer.writeFloat32((Float) value);
+        break;
+      case DispatchId.PRIMITIVE_FLOAT64:
+        buffer.writeFloat64((Double) value);
+        break;
+      default:
+        throw new IllegalStateException("unreachable dispatchId: " + dispatchId);
+    }
+  }
+
   public abstract static class CrossLanguageCompatibleSerializer<T> extends Serializer<T> {
 
     public CrossLanguageCompatibleSerializer(Fory fory, Class<T> cls) {

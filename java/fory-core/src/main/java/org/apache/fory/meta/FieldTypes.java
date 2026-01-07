@@ -87,8 +87,12 @@ public class FieldTypes {
     // Get type ID for both xlang and native mode
     // This supports unsigned types and field-configurable compression in both modes
     int xtypeId;
-    if (field != null && TypeUtils.unwrap(rawType).isPrimitive()) {
-      xtypeId = Types.getDescriptorTypeId(resolver.getFory(), field);
+    if (TypeUtils.unwrap(rawType).isPrimitive()) {
+      if (field != null) {
+        xtypeId = Types.getDescriptorTypeId(resolver.getFory(), field);
+      } else {
+        xtypeId = Types.getTypeId(resolver.getFory(), rawType);
+      }
     } else {
       ClassInfo info = resolver.getClassInfo(genericType.getCls(), false);
       if (info != null) {
@@ -108,9 +112,9 @@ public class FieldTypes {
       // Only Optional types and boxed types are nullable by default in xlang mode
       nullable = isOptionalType(rawType) || TypeUtils.isBoxed(rawType);
     } else {
-      // For nested types (field=null), nullable defaults to true to match decoding behavior
-      // since the encoding doesn't persist nullable for nested types (see FieldType.read())
-      nullable = field == null || !genericType.getCls().isPrimitive();
+      // Primitives are never nullable, non-primitives are nullable by default
+      // This applies to both top-level fields and nested types (in arrays, collections, maps)
+      nullable = !genericType.getCls().isPrimitive();
     }
 
     // Apply @ForyField annotation if present
@@ -154,7 +158,9 @@ public class FieldTypes {
       // unified basic types for xlang and native mode
       return new RegisteredFieldType(nullable, trackingRef, xtypeId);
     } else {
-      if (isXlang
+      if (rawType.isEnum()) {
+        return new EnumFieldType(nullable, xtypeId);
+      } else if (isXlang
           && !Types.isUserDefinedType((byte) xtypeId)
           && resolver.isRegisteredById(rawType)) {
         return new RegisteredFieldType(nullable, trackingRef, xtypeId);
@@ -162,9 +168,6 @@ public class FieldTypes {
         Short classId = ((ClassResolver) resolver).getRegisteredClassId(rawType);
         return new RegisteredFieldType(nullable, trackingRef, classId);
       } else {
-        if (rawType.isEnum()) {
-          return new EnumFieldType(nullable, xtypeId);
-        }
         if (rawType.isArray()) {
           Class<?> elemType = rawType.getComponentType();
           while (elemType.isArray()) {
@@ -235,24 +238,27 @@ public class FieldTypes {
 
     /** Write field type info. */
     public void write(MemoryBuffer buffer, boolean writeHeader) {
-      // header of nested generic fields in collection/map will be written independently
-      byte header = (byte) (trackingRef ? 1 : 0);
+      // Header format for nested types (writeHeader=true):
+      // - bit 0: trackingRef
+      // - bit 1: nullable
+      // - bits 2+: typeId
+      byte header = (byte) ((nullable ? 0b10 : 0) | (trackingRef ? 0b1 : 0));
       if (this instanceof RegisteredFieldType) {
         short classId = ((RegisteredFieldType) this).getClassId();
-        buffer.writeVarUint32Small7(writeHeader ? ((5 + classId) << 1) | header : 5 + classId);
+        buffer.writeVarUint32Small7(writeHeader ? ((5 + classId) << 2) | header : 5 + classId);
       } else if (this instanceof EnumFieldType) {
-        buffer.writeVarUint32Small7(writeHeader ? ((4) << 1) | header : 4);
+        buffer.writeVarUint32Small7(writeHeader ? ((4) << 2) | header : 4);
       } else if (this instanceof ArrayFieldType) {
         ArrayFieldType arrayFieldType = (ArrayFieldType) this;
-        buffer.writeVarUint32Small7(writeHeader ? ((3) << 1) | header : 3);
+        buffer.writeVarUint32Small7(writeHeader ? ((3) << 2) | header : 3);
         buffer.writeVarUint32Small7(arrayFieldType.getDimensions());
         (arrayFieldType).getComponentType().write(buffer);
       } else if (this instanceof CollectionFieldType) {
-        buffer.writeVarUint32Small7(writeHeader ? ((2) << 1) | header : 2);
+        buffer.writeVarUint32Small7(writeHeader ? ((2) << 2) | header : 2);
         // TODO remove it when new collection deserialization jit finished.
         ((CollectionFieldType) this).getElementType().write(buffer);
       } else if (this instanceof MapFieldType) {
-        buffer.writeVarUint32Small7(writeHeader ? ((1) << 1) | header : 1);
+        buffer.writeVarUint32Small7(writeHeader ? ((1) << 2) | header : 1);
         // TODO remove it when new map deserialization jit finished.
         MapFieldType mapFieldType = (MapFieldType) this;
         mapFieldType.getKeyType().write(buffer);
@@ -268,10 +274,15 @@ public class FieldTypes {
     }
 
     public static FieldType read(MemoryBuffer buffer, TypeResolver resolver) {
+      // Header format for nested types:
+      // - bit 0: trackingRef
+      // - bit 1: nullable
+      // - bits 2+: typeId
       int header = buffer.readVarUint32Small7();
       boolean trackingRef = (header & 0b1) != 0;
-      // For nested types (in collections/maps), nullable defaults to true
-      return read(buffer, resolver, true, trackingRef, header >>> 1);
+      boolean nullable = (header & 0b10) != 0;
+      int typeId = header >>> 2;
+      return read(buffer, resolver, nullable, trackingRef, typeId);
     }
 
     /** Read field type info. */
@@ -357,6 +368,10 @@ public class FieldTypes {
           return new ObjectFieldType(xtypeId, nullable, trackingRef);
         default:
           {
+            if (Types.isPrimitiveType(xtypeId)) {
+              // unsigned types share same class with signed numeric types, so unsigned types are not registered.
+              return new RegisteredFieldType(nullable, trackingRef, xtypeId);
+            }
             if (!Types.isUserDefinedType((byte) xtypeId)) {
               ClassInfo classInfo = resolver.getXtypeInfo(xtypeId);
               if (classInfo == null) {
@@ -381,6 +396,7 @@ public class FieldTypes {
 
     public RegisteredFieldType(boolean nullable, boolean trackingRef, int classId) {
       super(classId, nullable, trackingRef);
+      Preconditions.checkArgument(classId > 0);
       this.classId = (short) classId;
     }
 
@@ -391,39 +407,33 @@ public class FieldTypes {
     @Override
     public TypeRef<?> toTypeToken(TypeResolver resolver, TypeRef<?> declared) {
       Class<?> cls;
-      if (resolver instanceof XtypeResolver) {
-        cls = ((XtypeResolver) resolver).getXtypeInfo(classId).getCls();
-        if (Types.isPrimitiveType(classId)) {
-          if (declared == null) {
-            // For primitive types, ensure we use the correct primitive/boxed form
-            // based on the nullable flag, not the declared type
-            if (!nullable) {
-              // nullable=false means the source was primitive, use primitive type
-              cls = TypeUtils.unwrap(cls);
-            } else {
-              // nullable=true means the source was boxed, use boxed type
-              cls = TypeUtils.wrap(cls);
-            }
+      if (Types.isPrimitiveType(classId)) {
+        cls = Types.getClassForTypeId(classId);
+        if (declared == null) {
+          // For primitive types, ensure we use the correct primitive/boxed form
+          // based on the nullable flag, not the declared type
+          if (!nullable) {
+            // nullable=false means the source was primitive, use primitive type
+            cls = TypeUtils.unwrap(cls);
           } else {
-            if (TypeUtils.unwrap(declared.getRawType()) == TypeUtils.unwrap(cls)) {
-              // we still need correct type, the `read/write` should use `nullable` of `Descriptor`
-              // for serialization
-              return declared;
-            }
-          }
-        }
-      } else {
-        if (Types.isPrimitiveType(classId)) {
-          cls = Types.getClassForTypeId(classId);
-          if (declared != null
-              && TypeUtils.unwrap(declared.getRawType()) == TypeUtils.unwrap(cls)) {
-            // we still need correct type, the `read/write` should use `nullable` of `Descriptor`
-            // for serialization
-            return declared;
+            // nullable=true means the source was boxed, use boxed type
+            cls = TypeUtils.wrap(cls);
           }
         } else {
-          cls = ((ClassResolver) resolver).getRegisteredClass(classId);
+          if (TypeUtils.unwrap(declared.getRawType()) == TypeUtils.unwrap(cls)) {
+            // we still need correct type, the `read/write` should use `nullable` of `Descriptor`
+            // for serialization
+            cls =  declared.getRawType();
+          }
         }
+        return TypeRef.of(cls, new TypeExtMeta(classId, nullable, trackingRef));
+      }
+      if (resolver instanceof XtypeResolver) {
+        ClassInfo xtypeInfo = ((XtypeResolver) resolver).getXtypeInfo(classId);
+        Preconditions.checkNotNull(xtypeInfo);
+        cls = xtypeInfo.getCls();
+      } else {
+        cls = ((ClassResolver) resolver).getRegisteredClass(classId);
       }
       if (cls == null) {
         LOG.warn("Class {} not registered, take it as Struct type for deserialization.", classId);

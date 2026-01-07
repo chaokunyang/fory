@@ -22,6 +22,7 @@ package org.apache.fory.meta;
 import java.io.Serializable;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
+import java.math.BigDecimal;
 import java.util.Objects;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.TypeResolver;

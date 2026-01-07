@@ -248,6 +248,7 @@ public class ClassResolver extends TypeResolver {
     super(fory);
     this.fory = fory;
     classInfoCache = NIL_CLASS_INFO;
+    extRegistry.classIdGenerator = REPLACE_STUB_ID + 1;
     shimDispatcher = new ShimDispatcher(fory);
     _addGraalvmClassRegistry(fory.getConfig().getConfigHash(), this);
   }

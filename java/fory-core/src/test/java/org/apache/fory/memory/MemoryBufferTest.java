@@ -563,33 +563,33 @@ public class MemoryBufferTest {
   @Test
   public void testWriteTaggedInt64() {
     MemoryBuffer buf = MemoryUtils.buffer(8);
-    checkHybridInt64(buf, -1, 4);
+    checkTaggedInt64(buf, -1, 4);
     for (int i = 0; i < 10; i++) {
       for (int j = 0; j < i; j++) {
-        checkHybridInt64(buf(i), -1, 4);
-        checkHybridInt64(buf(i), 1, 4);
-        checkHybridInt64(buf(i), 1L << 6, 4);
-        checkHybridInt64(buf(i), 1L << 7, 4);
-        checkHybridInt64(buf(i), -(2 << 5), 4);
-        checkHybridInt64(buf(i), -(2 << 6), 4);
-        checkHybridInt64(buf(i), 1L << 28, 4);
-        checkHybridInt64(buf(i), Integer.MAX_VALUE / 2, 4);
-        checkHybridInt64(buf(i), Integer.MIN_VALUE / 2, 4);
-        checkHybridInt64(buf(i), -1L << 30, 4);
-        checkHybridInt64(buf(i), 1L << 30, 9);
-        checkHybridInt64(buf(i), Integer.MAX_VALUE, 9);
-        checkHybridInt64(buf(i), Integer.MIN_VALUE, 9);
-        checkHybridInt64(buf(i), -1L << 31, 9);
-        checkHybridInt64(buf(i), 1L << 31, 9);
-        checkHybridInt64(buf(i), -1L << 32, 9);
-        checkHybridInt64(buf(i), 1L << 32, 9);
-        checkHybridInt64(buf(i), Long.MAX_VALUE, 9);
-        checkHybridInt64(buf(i), Long.MIN_VALUE, 9);
+        checkTaggedInt64(buf(i), -1, 4);
+        checkTaggedInt64(buf(i), 1, 4);
+        checkTaggedInt64(buf(i), 1L << 6, 4);
+        checkTaggedInt64(buf(i), 1L << 7, 4);
+        checkTaggedInt64(buf(i), -(2 << 5), 4);
+        checkTaggedInt64(buf(i), -(2 << 6), 4);
+        checkTaggedInt64(buf(i), 1L << 28, 4);
+        checkTaggedInt64(buf(i), Integer.MAX_VALUE / 2, 4);
+        checkTaggedInt64(buf(i), Integer.MIN_VALUE / 2, 4);
+        checkTaggedInt64(buf(i), -1L << 30, 4);
+        checkTaggedInt64(buf(i), 1L << 30, 9);
+        checkTaggedInt64(buf(i), Integer.MAX_VALUE, 9);
+        checkTaggedInt64(buf(i), Integer.MIN_VALUE, 9);
+        checkTaggedInt64(buf(i), -1L << 31, 9);
+        checkTaggedInt64(buf(i), 1L << 31, 9);
+        checkTaggedInt64(buf(i), -1L << 32, 9);
+        checkTaggedInt64(buf(i), 1L << 32, 9);
+        checkTaggedInt64(buf(i), Long.MAX_VALUE, 9);
+        checkTaggedInt64(buf(i), Long.MIN_VALUE, 9);
       }
     }
   }
 
-  private void checkHybridInt64(MemoryBuffer buf, long value, int bytesWritten) {
+  private void checkTaggedInt64(MemoryBuffer buf, long value, int bytesWritten) {
     int readerIndex = buf.readerIndex();
     assertEquals(buf.writerIndex(), readerIndex);
     int actualBytesWritten = buf.writeTaggedInt64(value);
@@ -601,36 +601,36 @@ public class MemoryBufferTest {
   }
 
   @Test
-  public void testWriteHybridUint64() {
+  public void testWriteTaggedUint64() {
     MemoryBuffer buf = MemoryUtils.buffer(8);
-    checkHybridUint64(buf, 0, 4);
-    checkHybridUint64(buf, 1, 4);
+    checkTaggedUint64(buf, 0, 4);
+    checkTaggedUint64(buf, 1, 4);
     for (int i = 0; i < 10; i++) {
       for (int j = 0; j < i; j++) {
         // Values in [0, Integer.MAX_VALUE] should use 4 bytes
-        checkHybridUint64(buf(i), 0, 4);
-        checkHybridUint64(buf(i), 1, 4);
-        checkHybridUint64(buf(i), 1L << 6, 4);
-        checkHybridUint64(buf(i), 1L << 7, 4);
-        checkHybridUint64(buf(i), 1L << 28, 4);
-        checkHybridUint64(buf(i), 1L << 30, 4);
-        checkHybridUint64(buf(i), Integer.MAX_VALUE, 4);
+        checkTaggedUint64(buf(i), 0, 4);
+        checkTaggedUint64(buf(i), 1, 4);
+        checkTaggedUint64(buf(i), 1L << 6, 4);
+        checkTaggedUint64(buf(i), 1L << 7, 4);
+        checkTaggedUint64(buf(i), 1L << 28, 4);
+        checkTaggedUint64(buf(i), 1L << 30, 4);
+        checkTaggedUint64(buf(i), Integer.MAX_VALUE, 4);
         // Values > Integer.MAX_VALUE should use 9 bytes
-        checkHybridUint64(buf(i), (long) Integer.MAX_VALUE + 1, 9);
-        checkHybridUint64(buf(i), 1L << 31, 9);
-        checkHybridUint64(buf(i), 1L << 32, 9);
-        checkHybridUint64(buf(i), 1L << 62, 9);
-        checkHybridUint64(buf(i), Long.MAX_VALUE, 9);
+        checkTaggedUint64(buf(i), (long) Integer.MAX_VALUE + 1, 9);
+        checkTaggedUint64(buf(i), 1L << 31, 9);
+        checkTaggedUint64(buf(i), 1L << 32, 9);
+        checkTaggedUint64(buf(i), 1L << 62, 9);
+        checkTaggedUint64(buf(i), Long.MAX_VALUE, 9);
         // Negative values (large unsigned) should use 9 bytes
-        checkHybridUint64(buf(i), -1, 9);
-        checkHybridUint64(buf(i), -1L << 30, 9);
-        checkHybridUint64(buf(i), Integer.MIN_VALUE, 9);
-        checkHybridUint64(buf(i), Long.MIN_VALUE, 9);
+        checkTaggedUint64(buf(i), -1, 9);
+        checkTaggedUint64(buf(i), -1L << 30, 9);
+        checkTaggedUint64(buf(i), Integer.MIN_VALUE, 9);
+        checkTaggedUint64(buf(i), Long.MIN_VALUE, 9);
       }
     }
   }
 
-  private void checkHybridUint64(MemoryBuffer buf, long value, int bytesWritten) {
+  private void checkTaggedUint64(MemoryBuffer buf, long value, int bytesWritten) {
     int readerIndex = buf.readerIndex();
     assertEquals(buf.writerIndex(), readerIndex);
     int actualBytesWritten = buf.writeTaggedUint64(value);

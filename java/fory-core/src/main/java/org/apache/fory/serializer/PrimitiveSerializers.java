@@ -201,7 +201,7 @@ public class PrimitiveSerializers {
           return new Invoke(buffer, "writeInt64", v);
         case TAGGED_INT64:
           return new Invoke(
-              buffer, ensureBounds ? "writeHybridInt64" : "_unsafeWriteHybridInt64", v);
+              buffer, ensureBounds ? "writeTaggedInt64" : "_unsafeWriteTaggedInt64", v);
         case VARINT64:
           return new Invoke(buffer, ensureBounds ? "writeVarInt64" : "_unsafeWriteVarInt64", v);
         default:
@@ -238,7 +238,7 @@ public class PrimitiveSerializers {
         case FIXED_INT64:
           return Platform.IS_LITTLE_ENDIAN ? "_readInt64OnLE" : "_readInt64OnBE";
         case TAGGED_INT64:
-          return Platform.IS_LITTLE_ENDIAN ? "_readHybridInt64OnLE" : "_readHybridInt64OnBE";
+          return Platform.IS_LITTLE_ENDIAN ? "_readTaggedInt64OnLE" : "_readTaggedInt64OnBE";
         case VARINT64:
           return Platform.IS_LITTLE_ENDIAN ? "_readVarInt64OnLE" : "_readVarInt64OnBE";
         default:

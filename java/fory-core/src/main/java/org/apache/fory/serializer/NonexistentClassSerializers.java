@@ -45,10 +45,13 @@ import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.type.DispatchId;
 import org.apache.fory.type.Generics;
+import org.apache.fory.logging.Logger;
+import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.util.Preconditions;
 
 @SuppressWarnings({"rawtypes", "unchecked"})
 public final class NonexistentClassSerializers {
+  private static final Logger LOG = LoggerFactory.getLogger(NonexistentClassSerializers.class);
 
   private static final class ClassFieldsInfo {
     private final SerializationFieldInfo[] buildInFields;
@@ -118,8 +121,18 @@ public final class NonexistentClassSerializers {
       for (SerializationFieldInfo fieldInfo : fieldsInfo.buildInFields) {
         Object fieldValue = value.get(fieldInfo.qualifiedFieldName);
         ClassInfo classInfo = fieldInfo.classInfo;
+        if (fory.getConfig().isForyDebugOutputEnabled()) {
+          LOG.info(
+              "NonexistentClassSerializer.write: field={}, dispatchId={}, isPrimitive={}, value={}, serializer={}",
+              fieldInfo.qualifiedFieldName,
+              fieldInfo.dispatchId,
+              DispatchId.isPrimitive(fieldInfo.dispatchId),
+              fieldValue,
+              classInfo != null ? classInfo.getSerializer() : null);
+        }
         if (DispatchId.isPrimitive(fieldInfo.dispatchId)) {
-          classInfo.getSerializer().write(buffer, fieldValue);
+          // Use dispatch-based write to ensure correct encoding (e.g., VARINT64 vs FIXED_INT64)
+          Serializers.writePrimitiveValue(buffer, fieldValue, fieldInfo.dispatchId);
         } else {
           if (fieldInfo.useDeclaredTypeInfo) {
             // whether tracking ref is recorded in `fieldInfo.serializer`, so it's still
@@ -182,7 +195,8 @@ public final class NonexistentClassSerializers {
           fieldValue = fory.readRef(buffer, classInfoHolder);
         } else {
           if (DispatchId.isPrimitive(fieldInfo.dispatchId)) {
-            fieldValue = fieldInfo.classInfo.getSerializer().read(buffer);
+            // Use dispatch-based read to ensure correct encoding (e.g., VARINT64 vs FIXED_INT64)
+            fieldValue = Serializers.readPrimitiveValue(fory, buffer, fieldInfo.dispatchId);
           } else {
             fieldValue =
                 AbstractObjectSerializer.readFinalObjectFieldValue(

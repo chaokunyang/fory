@@ -57,7 +57,6 @@ public class DispatchId {
                 && typeExtMeta != null
                 && !typeExtMeta.nullable());
     if (fory.isCrossLanguage()) {
-
       return xlangTypeIdToDispatchId(typeId, isPrimitive);
     } else {
       return nativeIdToDispatchId(typeId, d, isPrimitive);

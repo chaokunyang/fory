@@ -164,6 +164,144 @@ func (s byteSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, type
 	s.Read(ctx, refMode, false, false, value)
 }
 
+// uint16Serializer handles uint16 type
+type uint16Serializer struct{}
+
+var globalUint16Serializer = uint16Serializer{}
+
+func (s uint16Serializer) WriteData(ctx *WriteContext, value reflect.Value) {
+	ctx.buffer.WriteUint16(uint16(value.Uint()))
+}
+
+func (s uint16Serializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
+	_ = hasGenerics
+	if refMode != RefModeNone {
+		ctx.buffer.WriteInt8(NotNullValueFlag)
+	}
+	if writeType {
+		ctx.buffer.WriteVaruint32Small7(uint32(UINT16))
+	}
+	s.WriteData(ctx, value)
+}
+
+func (s uint16Serializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
+	err := ctx.Err()
+	value.SetUint(uint64(ctx.buffer.ReadUint16(err)))
+}
+
+func (s uint16Serializer) Read(ctx *ReadContext, refMode RefMode, readType bool, hasGenerics bool, value reflect.Value) {
+	_ = hasGenerics
+	err := ctx.Err()
+	if refMode != RefModeNone {
+		if ctx.buffer.ReadInt8(err) == NullFlag {
+			return
+		}
+	}
+	if readType {
+		_ = ctx.buffer.ReadVaruint32Small7(err)
+	}
+	if ctx.HasError() {
+		return
+	}
+	s.ReadData(ctx, value.Type(), value)
+}
+
+func (s uint16Serializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
+	s.Read(ctx, refMode, false, false, value)
+}
+
+// uint32Serializer handles uint32 type with variable-length encoding (VAR_UINT32)
+type uint32Serializer struct{}
+
+var globalUint32Serializer = uint32Serializer{}
+
+func (s uint32Serializer) WriteData(ctx *WriteContext, value reflect.Value) {
+	ctx.buffer.WriteVaruint32(uint32(value.Uint()))
+}
+
+func (s uint32Serializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
+	_ = hasGenerics
+	if refMode != RefModeNone {
+		ctx.buffer.WriteInt8(NotNullValueFlag)
+	}
+	if writeType {
+		ctx.buffer.WriteVaruint32Small7(uint32(VAR_UINT32))
+	}
+	s.WriteData(ctx, value)
+}
+
+func (s uint32Serializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
+	err := ctx.Err()
+	value.SetUint(uint64(ctx.buffer.ReadVaruint32(err)))
+}
+
+func (s uint32Serializer) Read(ctx *ReadContext, refMode RefMode, readType bool, hasGenerics bool, value reflect.Value) {
+	_ = hasGenerics
+	err := ctx.Err()
+	if refMode != RefModeNone {
+		if ctx.buffer.ReadInt8(err) == NullFlag {
+			return
+		}
+	}
+	if readType {
+		_ = ctx.buffer.ReadVaruint32Small7(err)
+	}
+	if ctx.HasError() {
+		return
+	}
+	s.ReadData(ctx, value.Type(), value)
+}
+
+func (s uint32Serializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
+	s.Read(ctx, refMode, false, false, value)
+}
+
+// uint64Serializer handles uint64 type with variable-length encoding (VAR_UINT64)
+type uint64Serializer struct{}
+
+var globalUint64Serializer = uint64Serializer{}
+
+func (s uint64Serializer) WriteData(ctx *WriteContext, value reflect.Value) {
+	ctx.buffer.WriteVaruint64(value.Uint())
+}
+
+func (s uint64Serializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
+	_ = hasGenerics
+	if refMode != RefModeNone {
+		ctx.buffer.WriteInt8(NotNullValueFlag)
+	}
+	if writeType {
+		ctx.buffer.WriteVaruint32Small7(uint32(VAR_UINT64))
+	}
+	s.WriteData(ctx, value)
+}
+
+func (s uint64Serializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
+	err := ctx.Err()
+	value.SetUint(ctx.buffer.ReadVaruint64(err))
+}
+
+func (s uint64Serializer) Read(ctx *ReadContext, refMode RefMode, readType bool, hasGenerics bool, value reflect.Value) {
+	_ = hasGenerics
+	err := ctx.Err()
+	if refMode != RefModeNone {
+		if ctx.buffer.ReadInt8(err) == NullFlag {
+			return
+		}
+	}
+	if readType {
+		_ = ctx.buffer.ReadVaruint32Small7(err)
+	}
+	if ctx.HasError() {
+		return
+	}
+	s.ReadData(ctx, value.Type(), value)
+}
+
+func (s uint64Serializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
+	s.Read(ctx, refMode, false, false, value)
+}
+
 // int16Serializer handles int16 type
 type int16Serializer struct{}
 

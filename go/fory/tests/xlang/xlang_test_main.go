@@ -129,6 +129,39 @@ func getNullableComprehensiveCompatible(obj interface{}) NullableComprehensiveCo
 	}
 }
 
+func getUnsignedSchemaConsistent(obj interface{}) UnsignedSchemaConsistent {
+	switch v := obj.(type) {
+	case UnsignedSchemaConsistent:
+		return v
+	case *UnsignedSchemaConsistent:
+		return *v
+	default:
+		panic(fmt.Sprintf("expected UnsignedSchemaConsistent, got %T", obj))
+	}
+}
+
+func getUnsignedSchemaCompatible(obj interface{}) UnsignedSchemaCompatible {
+	switch v := obj.(type) {
+	case UnsignedSchemaCompatible:
+		return v
+	case *UnsignedSchemaCompatible:
+		return *v
+	default:
+		panic(fmt.Sprintf("expected UnsignedSchemaCompatible, got %T", obj))
+	}
+}
+
+func getUnsignedSchemaConsistentSimple(obj interface{}) UnsignedSchemaConsistentSimple {
+	switch v := obj.(type) {
+	case UnsignedSchemaConsistentSimple:
+		return v
+	case *UnsignedSchemaConsistentSimple:
+		return *v
+	default:
+		panic(fmt.Sprintf("expected UnsignedSchemaConsistentSimple, got %T", obj))
+	}
+}
+
 func assertEqualFloat32(expected, actual float32, name string) {
 	diff := expected - actual
 	if diff < 0 {
@@ -2129,24 +2162,31 @@ func testCircularRefCompatible() {
 // Note: Go currently only supports uint8, uint16, uint32 (VAR_UINT32), uint64 (VAR_UINT64).
 // Fixed and tagged encodings require fory encoding tags (TODO).
 // Matches Java's UnsignedSchemaConsistent (type id 501)
+// UnsignedSchemaConsistentSimple - Simple test struct for unsigned numbers.
+// Matches Java's UnsignedSchemaConsistentSimple (type id 1)
+type UnsignedSchemaConsistentSimple struct {
+	U64Tagged         uint64  `fory:"encoding=tagged"`          // TAGGED_UINT64 - tagged encoding
+	U64TaggedNullable *uint64 `fory:"nullable,encoding=tagged"` // Nullable TAGGED_UINT64
+}
+
 type UnsignedSchemaConsistent struct {
 	// Primitive unsigned fields (non-nullable)
 	U8        uint8  // UINT8 - fixed 8-bit
 	U16       uint16 // UINT16 - fixed 16-bit
-	U32Var    uint32 // VAR_UINT32 - variable-length
-	U32Fixed  uint32 // Should be UINT32 (fixed) - TODO: add encoding tag
-	U64Var    uint64 // VAR_UINT64 - variable-length
-	U64Fixed  uint64 // Should be UINT64 (fixed) - TODO: add encoding tag
-	U64Tagged uint64 // Should be TAGGED_UINT64 - TODO: add encoding tag
+	U32Var    uint32 `fory:"compress=true"`   // VAR_UINT32 - variable-length
+	U32Fixed  uint32 `fory:"compress=false"`  // UINT32 - fixed 4-byte
+	U64Var    uint64 `fory:"encoding=varint"` // VAR_UINT64 - variable-length
+	U64Fixed  uint64 `fory:"encoding=fixed"`  // UINT64 - fixed 8-byte
+	U64Tagged uint64 `fory:"encoding=tagged"` // TAGGED_UINT64 - tagged encoding
 
 	// Nullable unsigned fields (pointers)
 	U8Nullable        *uint8  `fory:"nullable"`
 	U16Nullable       *uint16 `fory:"nullable"`
-	U32VarNullable    *uint32 `fory:"nullable"`
-	U32FixedNullable  *uint32 `fory:"nullable"`
-	U64VarNullable    *uint64 `fory:"nullable"`
-	U64FixedNullable  *uint64 `fory:"nullable"`
-	U64TaggedNullable *uint64 `fory:"nullable"`
+	U32VarNullable    *uint32 `fory:"nullable,compress=true"`
+	U32FixedNullable  *uint32 `fory:"nullable,compress=false"`
+	U64VarNullable    *uint64 `fory:"nullable,encoding=varint"`
+	U64FixedNullable  *uint64 `fory:"nullable,encoding=fixed"`
+	U64TaggedNullable *uint64 `fory:"nullable,encoding=tagged"`
 }
 
 // UnsignedSchemaCompatible - Test struct for unsigned numbers in COMPATIBLE mode.
@@ -2157,58 +2197,67 @@ type UnsignedSchemaCompatible struct {
 	// Group 1: Nullable in Go (pointers), non-nullable in Java
 	U8        *uint8  `fory:"nullable"`
 	U16       *uint16 `fory:"nullable"`
-	U32Var    *uint32 `fory:"nullable"`
-	U32Fixed  *uint32 `fory:"nullable"`
-	U64Var    *uint64 `fory:"nullable"`
-	U64Fixed  *uint64 `fory:"nullable"`
-	U64Tagged *uint64 `fory:"nullable"`
+	U32Var    *uint32 `fory:"nullable,compress=true"`
+	U32Fixed  *uint32 `fory:"nullable,compress=false"`
+	U64Var    *uint64 `fory:"nullable,encoding=varint"`
+	U64Fixed  *uint64 `fory:"nullable,encoding=fixed"`
+	U64Tagged *uint64 `fory:"nullable,encoding=tagged"`
 
 	// Group 2: Non-nullable in Go, nullable in Java
 	U8Field2        uint8
 	U16Field2       uint16
-	U32VarField2    uint32
-	U32FixedField2  uint32
-	U64VarField2    uint64
-	U64FixedField2  uint64
-	U64TaggedField2 uint64
-}
-
-func getUnsignedSchemaConsistent(obj interface{}) UnsignedSchemaConsistent {
-	switch v := obj.(type) {
-	case UnsignedSchemaConsistent:
-		return v
-	case *UnsignedSchemaConsistent:
-		return *v
-	default:
-		panic(fmt.Sprintf("expected UnsignedSchemaConsistent, got %T", obj))
-	}
-}
-
-func getUnsignedSchemaCompatible(obj interface{}) UnsignedSchemaCompatible {
-	switch v := obj.(type) {
-	case UnsignedSchemaCompatible:
-		return v
-	case *UnsignedSchemaCompatible:
-		return *v
-	default:
-		panic(fmt.Sprintf("expected UnsignedSchemaCompatible, got %T", obj))
-	}
+	U32VarField2    uint32 `fory:"compress=true"`
+	U32FixedField2  uint32 `fory:"compress=false"`
+	U64VarField2    uint64 `fory:"encoding=varint"`
+	U64FixedField2  uint64 `fory:"encoding=fixed"`
+	U64TaggedField2 uint64 `fory:"encoding=tagged"`
 }
 
 // ============================================================================
 // Unsigned Number Tests
 // ============================================================================
 
-func testUnsignedSchemaConsistent() {
+func testUnsignedSchemaConsistentSimple() {
 	dataFile := getDataFile()
 	data := readFile(dataFile)
 
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(false))
+	f.Register(UnsignedSchemaConsistentSimple{}, 1)
+
+	var obj interface{}
+	err := f.Deserialize(data, &obj)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to deserialize: %v", err))
+	}
+
+	result := getUnsignedSchemaConsistentSimple(obj)
+
+	// Verify fields
+	assertEqual(uint64(1000000000), result.U64Tagged, "U64Tagged")
+	if result.U64TaggedNullable == nil || *result.U64TaggedNullable != 500000000 {
+		panic(fmt.Sprintf("U64TaggedNullable mismatch: expected 500000000, got %v", result.U64TaggedNullable))
+	}
+
+	serialized, err := f.Serialize(result)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to serialize: %v", err))
+	}
+
+	writeFile(dataFile, serialized)
+}
+
+func testUnsignedSchemaConsistent() {
+	dataFile := getDataFile()
+	data := readFile(dataFile)
+
+	fmt.Printf("Input size: %d bytes\n", len(data))
+	fmt.Printf("Input hex: %x\n", data)
+
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(false))
 	f.Register(UnsignedSchemaConsistent{}, 501)
 
-	buf := fory.NewByteBuffer(data)
 	var obj interface{}
-	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
+	err := f.Deserialize(data, &obj)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
 	}
@@ -2252,6 +2301,9 @@ func testUnsignedSchemaConsistent() {
 		panic(fmt.Sprintf("Failed to serialize: %v", err))
 	}
 
+	fmt.Printf("Output size: %d bytes\n", len(serialized))
+	fmt.Printf("Output hex: %x\n", serialized)
+
 	writeFile(dataFile, serialized)
 }
 
@@ -2262,9 +2314,8 @@ func testUnsignedSchemaCompatible() {
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 	f.Register(UnsignedSchemaCompatible{}, 502)
 
-	buf := fory.NewByteBuffer(data)
 	var obj interface{}
-	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
+	err := f.Deserialize(data, &obj)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
 	}
@@ -2307,6 +2358,9 @@ func testUnsignedSchemaCompatible() {
 	if err != nil {
 		panic(fmt.Sprintf("Failed to serialize: %v", err))
 	}
+
+	fmt.Printf("[Go] Serialized output size: %d bytes\n", len(serialized))
+	fmt.Printf("[Go] Serialized output hex: %x\n", serialized)
 
 	writeFile(dataFile, serialized)
 }
@@ -2414,6 +2468,8 @@ func main() {
 		testCircularRefSchemaConsistent()
 	case "test_circular_ref_compatible":
 		testCircularRefCompatible()
+	case "test_unsigned_schema_consistent_simple":
+		testUnsignedSchemaConsistentSimple()
 	case "test_unsigned_schema_consistent":
 		testUnsignedSchemaConsistent()
 	case "test_unsigned_schema_compatible":

@@ -184,25 +184,25 @@ func (c *ReadContext) ReadTypeId() TypeId {
 func (c *ReadContext) readFast(ptr unsafe.Pointer, ct DispatchId) {
 	err := c.Err()
 	switch ct {
-	case BoolDispatchId:
+	case PrimitiveBoolDispatchId:
 		*(*bool)(ptr) = c.buffer.ReadBool(err)
-	case Int8DispatchId:
+	case PrimitiveInt8DispatchId:
 		*(*int8)(ptr) = int8(c.buffer.ReadByte(err))
-	case Int16DispatchId:
+	case PrimitiveInt16DispatchId:
 		*(*int16)(ptr) = c.buffer.ReadInt16(err)
-	case Int32DispatchId:
+	case PrimitiveInt32DispatchId:
 		*(*int32)(ptr) = c.buffer.ReadVarint32(err)
-	case IntDispatchId:
+	case PrimitiveIntDispatchId:
 		if strconv.IntSize == 64 {
 			*(*int)(ptr) = int(c.buffer.ReadVarint64(err))
 		} else {
 			*(*int)(ptr) = int(c.buffer.ReadVarint32(err))
 		}
-	case Int64DispatchId:
+	case PrimitiveInt64DispatchId:
 		*(*int64)(ptr) = c.buffer.ReadVarint64(err)
-	case Float32DispatchId:
+	case PrimitiveFloat32DispatchId:
 		*(*float32)(ptr) = c.buffer.ReadFloat32(err)
-	case Float64DispatchId:
+	case PrimitiveFloat64DispatchId:
 		*(*float64)(ptr) = c.buffer.ReadFloat64(err)
 	case StringDispatchId:
 		*(*string)(ptr) = readString(c.buffer, err)

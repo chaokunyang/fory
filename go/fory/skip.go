@@ -650,11 +650,22 @@ func skipValue(ctx *ReadContext, fieldDef FieldDef, readRefFlag bool, isField bo
 	case UINT8:
 		_ = ctx.buffer.ReadByte(err)
 	case UINT16:
-		_ = ctx.buffer.ReadInt16(err) // No ReadUint16, but same binary representation
+		_ = ctx.buffer.ReadUint16(err)
 	case UINT32:
+		_ = ctx.buffer.ReadUint32(err)
+	case VAR_UINT32:
 		_ = ctx.buffer.ReadVaruint32(err)
 	case UINT64:
+		_ = ctx.buffer.ReadUint64(err)
+	case VAR_UINT64:
 		_ = ctx.buffer.ReadVaruint64(err)
+	case TAGGED_UINT64:
+		firstInt32 := ctx.buffer.ReadInt32(err)
+		if (firstInt32 & 1) != 0 {
+			// 9-byte encoding
+			_ = ctx.buffer.ReadUint64(err)
+		}
+		// Otherwise it's 4-byte encoding, already read
 
 	// Unknown (polymorphic) type - read type info and skip dynamically
 	case UNKNOWN:

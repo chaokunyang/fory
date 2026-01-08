@@ -431,6 +431,67 @@ func buildFieldDefs(fory *Fory, value reflect.Value) ([]FieldDef, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to build field type for field %s: %w", fieldName, err)
 		}
+
+		// Apply encoding override from struct tags if set
+		// This works for both direct types and pointer-wrapped types
+		baseKind := field.Type.Kind()
+		// Handle pointer types - get the element kind
+		if baseKind == reflect.Ptr {
+			baseKind = field.Type.Elem().Kind()
+		}
+
+		// Check if we need to override the TypeID based on compress/encoding tags
+		var overrideTypeId TypeId = 0
+		switch baseKind {
+		case reflect.Uint32:
+			if foryTag.CompressSet {
+				if foryTag.Compress {
+					overrideTypeId = VAR_UINT32
+				} else {
+					overrideTypeId = UINT32
+				}
+			}
+		case reflect.Int32:
+			if foryTag.CompressSet {
+				if foryTag.Compress {
+					overrideTypeId = VARINT32
+				} else {
+					overrideTypeId = INT32
+				}
+			}
+		case reflect.Uint64:
+			if foryTag.EncodingSet {
+				switch foryTag.Encoding {
+				case "fixed":
+					overrideTypeId = UINT64
+				case "varint":
+					overrideTypeId = VAR_UINT64
+				case "tagged":
+					overrideTypeId = TAGGED_UINT64
+				default:
+					return nil, fmt.Errorf("field %s: invalid encoding value %q for uint64, must be 'fixed', 'varint', or 'tagged'", fieldName, foryTag.Encoding)
+				}
+			}
+		case reflect.Int64:
+			if foryTag.EncodingSet {
+				switch foryTag.Encoding {
+				case "fixed":
+					overrideTypeId = INT64
+				case "varint":
+					overrideTypeId = VARINT64
+				case "tagged":
+					overrideTypeId = TAGGED_INT64
+				default:
+					return nil, fmt.Errorf("field %s: invalid encoding value %q for int64, must be 'fixed', 'varint', or 'tagged'", fieldName, foryTag.Encoding)
+				}
+			}
+		}
+
+		// Apply the override if one was determined
+		if overrideTypeId != 0 {
+			ft = NewSimpleFieldType(overrideTypeId)
+		}
+
 		// Determine nullable based on mode:
 		// - In xlang mode: Per xlang spec, fields are NON-NULLABLE by default.
 		//   Only pointer types are nullable by default.

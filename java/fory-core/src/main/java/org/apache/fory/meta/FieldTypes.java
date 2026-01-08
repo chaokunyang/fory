@@ -50,6 +50,7 @@ import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.GenericType;
 import org.apache.fory.type.TypeUtils;
 import org.apache.fory.type.Types;
+import org.apache.fory.type.union.Union;
 import org.apache.fory.util.Preconditions;
 
 public class FieldTypes {
@@ -154,6 +155,8 @@ public class FieldTypes {
               genericType.getTypeParameter1() == null
                   ? GenericType.build(Object.class)
                   : genericType.getTypeParameter1()));
+    } else if (Union.class.isAssignableFrom(rawType)) {
+      return new UnionFieldType(nullable, trackingRef);
     } else if (TypeUtils.unwrap(rawType).isPrimitive()) {
       // unified basic types for xlang and native mode
       return new RegisteredFieldType(nullable, trackingRef, xtypeId);
@@ -218,6 +221,10 @@ public class FieldTypes {
      * from class id or class stub.
      */
     public abstract TypeRef<?> toTypeToken(TypeResolver classResolver, TypeRef<?> declared);
+
+    public String  getTypeName(TypeResolver resolver, TypeRef<?> typeRef) {
+      return typeRef.getType().getTypeName();
+    }
 
     @Override
     public boolean equals(Object o) {
@@ -441,6 +448,24 @@ public class FieldTypes {
         cls = NonexistentClass.NonexistentMetaShared.class;
       }
       return TypeRef.of(cls, new TypeExtMeta(classId, nullable, trackingRef));
+    }
+
+    @Override
+    public String getTypeName(TypeResolver resolver, TypeRef<?> typeRef) {
+      // Some registered class may not be registered on peer class, we always use
+      // registered id to keep consistent order.
+      // Note that this is only used for fields sort in native mode.
+      // For xlang mode, we always sort fields by type id in
+      if (resolver instanceof ClassResolver) {
+        ClassResolver classResolver = (ClassResolver) resolver;
+        // Peer class may not register this class id, which will introduce inconsistent field order
+        if (classResolver.isInternalRegistered(classId)) {
+          return String.valueOf(classId);
+        } else {
+          return "Registered";
+        }
+      }
+      return String.valueOf(classId);
     }
 
     @Override
@@ -689,6 +714,11 @@ public class FieldTypes {
     }
 
     @Override
+    public String getTypeName(TypeResolver resolver, TypeRef<?> typeRef) {
+      return "Enum";
+    }
+
+    @Override
     public String toString() {
       return "EnumFieldType{" + "xtypeId=" + xtypeId + ", nullable=" + nullable + '}';
     }
@@ -697,10 +727,6 @@ public class FieldTypes {
   public static class ArrayFieldType extends FieldType {
     private final FieldType componentType;
     private final int dimensions;
-
-    public ArrayFieldType(boolean trackingRef, FieldType componentType, int dimensions) {
-      this(-1, true, trackingRef, componentType, dimensions);
-    }
 
     public ArrayFieldType(
         int xtypeId,
@@ -730,6 +756,14 @@ public class FieldTypes {
             Array.newInstance(componentRawType, new int[dimensions]).getClass(),
             new TypeExtMeta(xtypeId, nullable, trackingRef));
       }
+    }
+
+    @Override
+    public String getTypeName(TypeResolver resolver, TypeRef<?> typeRef) {
+      // For native mode, this return same `Array` type to ensure consistent order even some array type
+      // is not exist on current deserialization process.
+      // For primitive/registered array, it goes to RegisteredFieldType.
+      return "Array";
     }
 
     public int getDimensions() {
@@ -784,7 +818,15 @@ public class FieldTypes {
 
     @Override
     public TypeRef<?> toTypeToken(TypeResolver classResolver, TypeRef<?> declared) {
-      return TypeRef.of(Object.class, new TypeExtMeta(xtypeId, nullable, trackingRef));
+      Class<?> clz = declared == null ? Object.class : declared.getRawType();
+      return TypeRef.of(clz, new TypeExtMeta(xtypeId, nullable, trackingRef));
+    }
+
+    @Override
+    public String getTypeName(TypeResolver resolver, TypeRef<?> typeRef) {
+      // When fields not exist on deserializing struct, we can't know its actual field type,
+      // sort based on actual type name will incur inconsistent fields order
+      return "Object";
     }
 
     @Override

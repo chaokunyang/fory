@@ -70,7 +70,7 @@ public class Fingerprint {
     List<String[]> fieldInfos = new ArrayList<>(descriptors.size());
     for (Descriptor descriptor : descriptors) {
       Class<?> rawType = descriptor.getTypeRef().getRawType();
-      int typeId = getTypeId(fory, rawType);
+      int typeId = getTypeId(fory, descriptor);
 
       // Get field identifier: tag ID if configured, otherwise snake_case name
       String fieldIdentifier;
@@ -132,7 +132,8 @@ public class Fingerprint {
     return builder.toString();
   }
 
-  private static int getTypeId(Fory fory, Class<?> cls) {
+  private static int getTypeId(Fory fory, Descriptor descriptor) {
+    Class<?> cls = descriptor.getTypeRef().getRawType();
     TypeResolver resolver = fory._getTypeResolver();
     if (resolver.isSet(cls)) {
       return Types.SET;
@@ -148,14 +149,9 @@ public class Fingerprint {
       if (classInfo == null) {
         return Types.UNKNOWN;
       }
-      int typeId;
-      if (fory.isCrossLanguage()) {
-        typeId = classInfo.getXtypeId();
-        if (Types.isUserDefinedType((byte) typeId)) {
-          return Types.UNKNOWN;
-        }
-      } else {
-        typeId = classInfo.getClassId();
+      int typeId = Types.getDescriptorTypeId(fory, descriptor);
+      if (Types.isUserDefinedType((byte) (typeId & 0xff))) {
+        return Types.UNKNOWN;
       }
       return typeId;
     }

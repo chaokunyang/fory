@@ -183,25 +183,25 @@ func (c *WriteContext) WriteTypeId(id TypeId) {
 // writeFast writes a value using fast path based on DispatchId
 func (c *WriteContext) writeFast(ptr unsafe.Pointer, ct DispatchId) {
 	switch ct {
-	case BoolDispatchId:
+	case PrimitiveBoolDispatchId:
 		c.buffer.WriteBool(*(*bool)(ptr))
-	case Int8DispatchId:
+	case PrimitiveInt8DispatchId:
 		c.buffer.WriteByte_(*(*byte)(ptr))
-	case Int16DispatchId:
+	case PrimitiveInt16DispatchId:
 		c.buffer.WriteInt16(*(*int16)(ptr))
-	case Int32DispatchId:
+	case PrimitiveInt32DispatchId:
 		c.buffer.WriteVarint32(*(*int32)(ptr))
-	case IntDispatchId:
+	case PrimitiveIntDispatchId:
 		if strconv.IntSize == 64 {
 			c.buffer.WriteVarint64(int64(*(*int)(ptr)))
 		} else {
 			c.buffer.WriteVarint32(int32(*(*int)(ptr)))
 		}
-	case Int64DispatchId:
+	case PrimitiveInt64DispatchId:
 		c.buffer.WriteVarint64(*(*int64)(ptr))
-	case Float32DispatchId:
+	case PrimitiveFloat32DispatchId:
 		c.buffer.WriteFloat32(*(*float32)(ptr))
-	case Float64DispatchId:
+	case PrimitiveFloat64DispatchId:
 		c.buffer.WriteFloat64(*(*float64)(ptr))
 	case StringDispatchId:
 		writeString(c.buffer, *(*string)(ptr))

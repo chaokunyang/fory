@@ -722,7 +722,7 @@ public class ClassResolver extends TypeResolver {
       if (Union.class.isAssignableFrom(clz)) {
         return true;
       }
-      return (isInnerClass(clz) || clz.isEnum());
+      return (isInternalRegistered(clz) || clz.isEnum());
     }
     return ReflectionUtils.isMonomorphic(clz);
   }
@@ -731,8 +731,13 @@ public class ClassResolver extends TypeResolver {
     return isMonomorphic(descriptor);
   }
 
+  public boolean isInternalRegistered(int classId) {
+    return classId != NO_CLASS_ID && classId < innerEndClassId;
+  }
+
+
   /** Returns true if <code>cls</code> is fory inner registered class. */
-  boolean isInnerClass(Class<?> cls) {
+  public boolean isInternalRegistered(Class<?> cls) {
     Short classId = extRegistry.registeredClassIdMap.get(cls);
     if (classId == null) {
       ClassInfo classInfo = getClassInfo(cls, false);

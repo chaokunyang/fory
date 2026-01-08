@@ -373,15 +373,21 @@ public abstract class CodecBuilder {
     if (!d.isFinalField()
         && Modifier.isPublic(d.getModifiers())
         && Modifier.isPublic(d.getRawType().getModifiers())) {
+      if (!d.getRawType().isAssignableFrom(value.type().getRawType())) {
+        value = tryInlineCast(value, d.getTypeRef());
+      }
       return new Expression.SetField(bean, fieldName, value);
     } else if (d.getWriteMethod() != null && Modifier.isPublic(d.getWriteMethod().getModifiers())) {
+      if (!d.getRawType().isAssignableFrom(value.type().getRawType())) {
+        value = tryInlineCast(value, d.getTypeRef());
+      }
       return new Invoke(bean, d.getWriteMethod().getName(), value);
     } else {
       if (!d.isFinalField() && !Modifier.isPrivate(d.getModifiers())) {
         if (AccessorHelper.defineSetter(d.getField())) {
           Class<?> accessorClass = AccessorHelper.getAccessorClass(d.getField());
-          if (!value.type().equals(d.getTypeRef())) {
-            value = new Cast(value, d.getTypeRef());
+          if (!d.getRawType().isAssignableFrom(value.type().getRawType())) {
+            value = tryInlineCast(value, d.getTypeRef());
           }
           return new StaticInvoke(
               accessorClass, d.getName(), PRIMITIVE_VOID_TYPE, false, bean, value);
@@ -390,8 +396,8 @@ public abstract class CodecBuilder {
       if (d.getWriteMethod() != null && !Modifier.isPrivate(d.getWriteMethod().getModifiers())) {
         if (AccessorHelper.defineSetter(d.getWriteMethod())) {
           Class<?> accessorClass = AccessorHelper.getAccessorClass(d.getWriteMethod());
-          if (!value.type().equals(d.getTypeRef())) {
-            value = new Cast(value, d.getTypeRef());
+          if (!d.getRawType().isAssignableFrom(value.type().getRawType())) {
+            value = tryInlineCast(value, d.getTypeRef());
           }
           return new StaticInvoke(
               accessorClass, d.getWriteMethod().getName(), PRIMITIVE_VOID_TYPE, false, bean, value);
@@ -473,6 +479,7 @@ public abstract class CodecBuilder {
       boolean isStatic, Class<?> type, String fieldName, Supplier<Expression> value) {
     Reference fieldRef = fieldMap.get(fieldName);
     if (fieldRef == null) {
+      fieldName = ctx.newName(fieldName);
       ctx.addField(isStatic, true, ctx.type(type), fieldName, value.get());
       fieldRef = new Reference(fieldName, TypeRef.of(type));
       fieldMap.put(fieldName, fieldRef);

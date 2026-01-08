@@ -42,6 +42,7 @@ import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.type.DispatchId;
 import org.apache.fory.type.Generics;
+import org.apache.fory.type.Types;
 import org.apache.fory.util.DefaultValueUtils;
 import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.Preconditions;
@@ -100,11 +101,12 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
           "========== MetaSharedSerializer sorted descriptors for {} ==========", type.getName());
       for (Descriptor d : descriptorGrouper.getSortedDescriptors()) {
         LOG.info(
-            "  {} -> {}, ref {}, nullable {}",
+            "  {} -> {}, ref {}, nullable {}, type id {}",
             d.getName(),
             d.getTypeName(),
             d.isTrackingRef(),
-            d.isNullable());
+            d.isNullable(),
+            Types.getDescriptorTypeId(fory, d));
       }
     }
     // d.getField() may be null if not exists in this class when meta share enabled.
@@ -165,6 +167,18 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
 
   @Override
   public T read(MemoryBuffer buffer) {
+    if (Utils.debugOutputEnabled()) {
+      LOG.info(
+          "========== MetaSharedSerializer.read() for {} ==========", type.getName());
+      LOG.info("Buffer readerIndex at start: {}", buffer.readerIndex());
+      LOG.info("buildInFields count: {}", buildInFields.length);
+      for (int i = 0; i < buildInFields.length; i++) {
+        SerializationFieldInfo fi = buildInFields[i];
+        LOG.info(
+            "  buildInField[{}]: name={}, dispatchId={}, nullable={}, isPrimitive={}, hasAccessor={}",
+            i, fi.qualifiedFieldName, fi.dispatchId, fi.nullable, fi.isPrimitive, fi.fieldAccessor != null);
+      }
+    }
     if (isRecord) {
       Object[] fieldValues =
           new Object[buildInFields.length + otherFields.length + containerFields.length];
@@ -184,6 +198,25 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
     for (SerializationFieldInfo fieldInfo : this.buildInFields) {
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       boolean nullable = fieldInfo.nullable;
+      if (Utils.debugOutputEnabled()) {
+        LOG.info(
+            "[Java] About to read field: name={}, dispatchId={}, nullable={}, isPrimitive={}, bufferPos={}",
+            fieldInfo.qualifiedFieldName, fieldInfo.dispatchId, nullable, fieldInfo.isPrimitive, buffer.readerIndex());
+        // Print next 16 bytes from buffer for debugging
+        int pos = buffer.readerIndex();
+        int remaining = Math.min(16, buffer.size() - pos);
+        if (remaining > 0) {
+          byte[] peek = new byte[remaining];
+          for (int i = 0; i < remaining; i++) {
+            peek[i] = buffer.getByte(pos + i);
+          }
+          StringBuilder hex = new StringBuilder();
+          for (byte b : peek) {
+            hex.append(String.format("%02x", b));
+          }
+          LOG.info("[Java] Next {} bytes at pos {}: {}", remaining, pos, hex.toString());
+        }
+      }
       if (fieldAccessor != null) {
         int dispatchId = fieldInfo.dispatchId;
         boolean needRead = true;

@@ -774,7 +774,10 @@ public final class MemoryBuffer {
     // generated code is smaller. Otherwise, `MapRefResolver.writeRefOrNull`
     // may be `callee is too large`/`already compiled into a big method`
     ensure(writerIndex + 8);
-    int varintBytes = _unsafePutVarUint36Small(writerIndex, v);
+    // Use Integer.toUnsignedLong to handle values > INT32_MAX correctly
+    // Without this, negative int values would be sign-extended to long,
+    // causing incorrect varint encoding (9+ bytes instead of 5)
+    int varintBytes = _unsafePutVarUint36Small(writerIndex, Integer.toUnsignedLong(v));
     writerIndex += varintBytes;
     return varintBytes;
   }
@@ -786,7 +789,8 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public int _unsafeWriteVarUint32(int v) {
     // CHECKSTYLE.ON:MethodName
-    int varintBytes = _unsafePutVarUint36Small(writerIndex, v);
+    // Use Integer.toUnsignedLong to handle values > INT32_MAX correctly
+    int varintBytes = _unsafePutVarUint36Small(writerIndex, Integer.toUnsignedLong(v));
     writerIndex += varintBytes;
     return varintBytes;
   }
@@ -820,6 +824,7 @@ public final class MemoryBuffer {
 
   /**
    * Caller must ensure there must be at least 8 bytes for writing, otherwise the crash may occur.
+   * Don't pass int value to avoid sign extension.
    */
   // CHECKSTYLE.OFF:MethodName
   public int _unsafePutVarUint36Small(int index, long value) {

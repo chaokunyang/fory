@@ -97,10 +97,24 @@ func (b *ByteBuffer) WriteUint8(value uint8) {
 }
 
 //go:inline
+func (b *ByteBuffer) WriteUint16(value uint16) {
+	b.grow(2)
+	binary.LittleEndian.PutUint16(b.data[b.writerIndex:], value)
+	b.writerIndex += 2
+}
+
+//go:inline
 func (b *ByteBuffer) WriteInt16(value int16) {
 	b.grow(2)
 	binary.LittleEndian.PutUint16(b.data[b.writerIndex:], uint16(value))
 	b.writerIndex += 2
+}
+
+//go:inline
+func (b *ByteBuffer) WriteUint32(value uint32) {
+	b.grow(4)
+	binary.LittleEndian.PutUint32(b.data[b.writerIndex:], value)
+	b.writerIndex += 4
 }
 
 //go:inline
@@ -120,6 +134,13 @@ func (b *ByteBuffer) WriteLength(value int) {
 
 func (b *ByteBuffer) ReadLength(err *Error) int {
 	return int(b.ReadVaruint32(err))
+}
+
+//go:inline
+func (b *ByteBuffer) WriteUint64(value uint64) {
+	b.grow(8)
+	binary.LittleEndian.PutUint64(b.data[b.writerIndex:], value)
+	b.writerIndex += 8
 }
 
 //go:inline
@@ -207,6 +228,19 @@ func (b *ByteBuffer) ReadInt16(err *Error) int16 {
 		return 0
 	}
 	v := int16(binary.LittleEndian.Uint16(b.data[b.readerIndex:]))
+	b.readerIndex += 2
+	return v
+}
+
+// ReadUint16 reads a uint16 and sets error on bounds violation
+//
+//go:inline
+func (b *ByteBuffer) ReadUint16(err *Error) uint16 {
+	if b.readerIndex+2 > len(b.data) {
+		*err = BufferOutOfBoundError(b.readerIndex, 2, len(b.data))
+		return 0
+	}
+	v := binary.LittleEndian.Uint16(b.data[b.readerIndex:])
 	b.readerIndex += 2
 	return v
 }
@@ -493,6 +527,34 @@ func (b *ByteBuffer) UnsafeReadInt64() int64 {
 		v = *(*int64)(unsafe.Pointer(&b.data[b.readerIndex]))
 	} else {
 		v = int64(binary.LittleEndian.Uint64(b.data[b.readerIndex:]))
+	}
+	b.readerIndex += 8
+	return v
+}
+
+// UnsafeReadUint32 reads a uint32 without bounds check.
+//
+//go:inline
+func (b *ByteBuffer) UnsafeReadUint32() uint32 {
+	var v uint32
+	if isLittleEndian {
+		v = *(*uint32)(unsafe.Pointer(&b.data[b.readerIndex]))
+	} else {
+		v = binary.LittleEndian.Uint32(b.data[b.readerIndex:])
+	}
+	b.readerIndex += 4
+	return v
+}
+
+// UnsafeReadUint64 reads a uint64 without bounds check.
+//
+//go:inline
+func (b *ByteBuffer) UnsafeReadUint64() uint64 {
+	var v uint64
+	if isLittleEndian {
+		v = *(*uint64)(unsafe.Pointer(&b.data[b.readerIndex]))
+	} else {
+		v = binary.LittleEndian.Uint64(b.data[b.readerIndex:])
 	}
 	b.readerIndex += 8
 	return v
@@ -1292,6 +1354,22 @@ func (b *ByteBuffer) UnsafeReadVarint64() int64 {
 	return v
 }
 
+// UnsafeReadVaruint32 reads a varuint32 without bounds checking.
+// Caller must ensure remaining() >= 5 before calling.
+//
+//go:inline
+func (b *ByteBuffer) UnsafeReadVaruint32() uint32 {
+	return b.readVaruint32Fast()
+}
+
+// UnsafeReadVaruint64 reads a varuint64 without bounds checking.
+// Caller must ensure remaining() >= 10 before calling.
+//
+//go:inline
+func (b *ByteBuffer) UnsafeReadVaruint64() uint64 {
+	return b.readVaruint64Fast()
+}
+
 // ReadVaruint32 reads a varuint32 and sets error on bounds violation
 //
 //go:inline
@@ -1419,6 +1497,46 @@ func (b *ByteBuffer) unsafePutInt32(index int, v int32) {
 //go:inline
 func (b *ByteBuffer) unsafePutInt64(index int, v uint64) {
 	binary.LittleEndian.PutUint64(b.data[index:], v)
+}
+
+// UnsafePutUint32 writes a uint32 at the given offset without advancing writerIndex.
+// Caller must have called Reserve() to ensure capacity.
+// Returns the number of bytes written (4).
+//
+//go:inline
+func (b *ByteBuffer) UnsafePutUint32(offset int, value uint32) int {
+	binary.LittleEndian.PutUint32(b.data[offset:], value)
+	return 4
+}
+
+// UnsafePutUint64 writes a uint64 at the given offset without advancing writerIndex.
+// Caller must have called Reserve() to ensure capacity.
+// Returns the number of bytes written (8).
+//
+//go:inline
+func (b *ByteBuffer) UnsafePutUint64(offset int, value uint64) int {
+	binary.LittleEndian.PutUint64(b.data[offset:], value)
+	return 8
+}
+
+// UnsafePutInt8 writes 1 byte at the given offset without bound checking.
+// Caller must have ensured capacity.
+// Returns the number of bytes written (1).
+//
+//go:inline
+func (b *ByteBuffer) UnsafePutInt8(offset int, value int8) int {
+	b.data[offset] = byte(value)
+	return 1
+}
+
+// UnsafePutInt64 writes an int64 in little-endian format at the given offset without bound checking.
+// Caller must have ensured capacity.
+// Returns the number of bytes written (8).
+//
+//go:inline
+func (b *ByteBuffer) UnsafePutInt64(offset int, value int64) int {
+	binary.LittleEndian.PutUint64(b.data[offset:], uint64(value))
+	return 8
 }
 
 // ReadVaruint32Small7 reads a varuint32 in small-7 format with error checking

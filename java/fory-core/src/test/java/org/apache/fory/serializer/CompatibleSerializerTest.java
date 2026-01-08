@@ -160,14 +160,15 @@ public class CompatibleSerializerTest extends ForyTestBase {
     Assert.assertEquals(o1, o2);
   }
 
-  @Test
-  public void testWriteCompatibleContainer() throws Exception {
+  @Test(dataProvider = "enableCodegen")
+  public void testWriteCompatibleContainer(boolean enableCodegen) throws Exception {
     Fory fory =
         Fory.builder()
             .withLanguage(Language.JAVA)
             .withRefTracking(true)
             .withCompatibleMode(CompatibleMode.COMPATIBLE)
             .requireClassRegistration(false)
+            .withCodegen(enableCodegen)
             .build();
     BeanA beanA = BeanA.createBeanA(2);
     Class<?> cls = ClassUtils.createCompatibleClass1();

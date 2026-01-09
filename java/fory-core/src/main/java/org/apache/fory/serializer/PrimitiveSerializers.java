@@ -197,12 +197,12 @@ public class PrimitiveSerializers {
     public static Expression writeInt64(
         Expression buffer, Expression v, LongEncoding longEncoding, boolean ensureBounds) {
       switch (longEncoding) {
-        case FIXED_INT64:
+        case FIXED:
           return new Invoke(buffer, "writeInt64", v);
-        case TAGGED_INT64:
+        case TAGGED:
           return new Invoke(
               buffer, ensureBounds ? "writeTaggedInt64" : "_unsafeWriteTaggedInt64", v);
-        case VARINT64:
+        case VARINT:
           return new Invoke(buffer, ensureBounds ? "writeVarInt64" : "_unsafeWriteVarInt64", v);
         default:
           throw new UnsupportedOperationException("Unsupported long encoding " + longEncoding);
@@ -210,9 +210,9 @@ public class PrimitiveSerializers {
     }
 
     public static void writeInt64(MemoryBuffer buffer, long value, LongEncoding longEncoding) {
-      if (longEncoding == LongEncoding.TAGGED_INT64) {
+      if (longEncoding == LongEncoding.TAGGED) {
         buffer.writeTaggedInt64(value);
-      } else if (longEncoding == LongEncoding.FIXED_INT64) {
+      } else if (longEncoding == LongEncoding.FIXED) {
         buffer.writeInt64(value);
       } else {
         buffer.writeVarInt64(value);
@@ -220,9 +220,9 @@ public class PrimitiveSerializers {
     }
 
     public static long readInt64(MemoryBuffer buffer, LongEncoding longEncoding) {
-      if (longEncoding == LongEncoding.TAGGED_INT64) {
+      if (longEncoding == LongEncoding.TAGGED) {
         return buffer.readTaggedInt64();
-      } else if (longEncoding == LongEncoding.FIXED_INT64) {
+      } else if (longEncoding == LongEncoding.FIXED) {
         return buffer.readInt64();
       } else {
         return buffer.readVarInt64();
@@ -235,11 +235,11 @@ public class PrimitiveSerializers {
 
     public static String readLongFunc(LongEncoding longEncoding) {
       switch (longEncoding) {
-        case FIXED_INT64:
+        case FIXED:
           return Platform.IS_LITTLE_ENDIAN ? "_readInt64OnLE" : "_readInt64OnBE";
-        case TAGGED_INT64:
+        case TAGGED:
           return Platform.IS_LITTLE_ENDIAN ? "_readTaggedInt64OnLE" : "_readTaggedInt64OnBE";
-        case VARINT64:
+        case VARINT:
           return Platform.IS_LITTLE_ENDIAN ? "_readVarInt64OnLE" : "_readVarInt64OnBE";
         default:
           throw new UnsupportedOperationException("Unsupported long encoding " + longEncoding);

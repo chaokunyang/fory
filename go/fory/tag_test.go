@@ -43,7 +43,7 @@ func TestParseForyTag(t *testing.T) {
 	typ := reflect.TypeOf(TestStruct{})
 
 	// Test Field1: id=0
-	tag1 := ParseForyTag(typ.Field(0))
+	tag1 := parseForyTag(typ.Field(0))
 	require.True(t, tag1.HasTag)
 	require.Equal(t, 0, tag1.ID)
 	require.False(t, tag1.Nullable)
@@ -54,7 +54,7 @@ func TestParseForyTag(t *testing.T) {
 	require.False(t, tag1.IgnoreSet)
 
 	// Test Field2: all explicit false values
-	tag2 := ParseForyTag(typ.Field(1))
+	tag2 := parseForyTag(typ.Field(1))
 	require.Equal(t, 1, tag2.ID)
 	require.False(t, tag2.Nullable)
 	require.False(t, tag2.Ref)
@@ -64,14 +64,14 @@ func TestParseForyTag(t *testing.T) {
 	require.True(t, tag2.IgnoreSet)
 
 	// Test Field3: explicit true values
-	tag3 := ParseForyTag(typ.Field(2))
+	tag3 := parseForyTag(typ.Field(2))
 	require.Equal(t, 2, tag3.ID)
 	require.True(t, tag3.Nullable)
 	require.True(t, tag3.Ref)
 	require.False(t, tag3.Ignore)
 
 	// Test Field4: standalone flags (presence = true)
-	tag4 := ParseForyTag(typ.Field(3))
+	tag4 := parseForyTag(typ.Field(3))
 	require.Equal(t, TagIDUseFieldName, tag4.ID)
 	require.True(t, tag4.Nullable)
 	require.True(t, tag4.Ref)
@@ -79,44 +79,44 @@ func TestParseForyTag(t *testing.T) {
 	require.True(t, tag4.RefSet)
 
 	// Test Field5: standalone ignore
-	tag5 := ParseForyTag(typ.Field(4))
+	tag5 := parseForyTag(typ.Field(4))
 	require.True(t, tag5.Ignore)
 	require.True(t, tag5.IgnoreSet)
 
 	// Test Field6: explicit ignore=true
-	tag6 := ParseForyTag(typ.Field(5))
+	tag6 := parseForyTag(typ.Field(5))
 	require.True(t, tag6.Ignore)
 	require.True(t, tag6.IgnoreSet)
 
 	// Test Field7: explicit ignore=false
-	tag7 := ParseForyTag(typ.Field(6))
+	tag7 := parseForyTag(typ.Field(6))
 	require.False(t, tag7.Ignore)
 	require.True(t, tag7.IgnoreSet)
 
 	// Test Field8: "-" shorthand
-	tag8 := ParseForyTag(typ.Field(7))
+	tag8 := parseForyTag(typ.Field(7))
 	require.True(t, tag8.Ignore)
 	require.True(t, tag8.IgnoreSet)
 
 	// Test Field9: no tag
-	tag9 := ParseForyTag(typ.Field(8))
+	tag9 := parseForyTag(typ.Field(8))
 	require.False(t, tag9.HasTag)
 	require.False(t, tag9.Ignore)
 	require.Equal(t, TagIDUseFieldName, tag9.ID)
 
 	// Test Field10: has ID but not ignored
-	tag10 := ParseForyTag(typ.Field(9))
+	tag10 := parseForyTag(typ.Field(9))
 	require.Equal(t, 3, tag10.ID)
 	require.False(t, tag10.Ignore)
 	require.True(t, tag10.IgnoreSet)
 
 	// Test Field11: explicit id=-1 (use field name)
-	tag11 := ParseForyTag(typ.Field(10))
+	tag11 := parseForyTag(typ.Field(10))
 	require.Equal(t, TagIDUseFieldName, tag11.ID)
 	require.True(t, tag11.HasTag)
 
 	// Test Field12: nullable=true,ref=false
-	tag12 := ParseForyTag(typ.Field(11))
+	tag12 := parseForyTag(typ.Field(11))
 	require.True(t, tag12.Nullable)
 	require.False(t, tag12.Ref)
 	require.True(t, tag12.NullableSet)
@@ -135,12 +135,12 @@ func TestShouldIncludeField(t *testing.T) {
 
 	typ := reflect.TypeOf(TestStruct{})
 
-	require.True(t, ShouldIncludeField(typ.Field(0)))  // Included1
-	require.True(t, ShouldIncludeField(typ.Field(1)))  // Included2 (ignore=false)
-	require.False(t, ShouldIncludeField(typ.Field(2))) // Ignored1
-	require.False(t, ShouldIncludeField(typ.Field(3))) // Ignored2
-	require.False(t, ShouldIncludeField(typ.Field(4))) // Ignored3
-	require.True(t, ShouldIncludeField(typ.Field(5)))  // NoTag (default: include)
+	require.True(t, shouldIncludeField(typ.Field(0)))  // Included1
+	require.True(t, shouldIncludeField(typ.Field(1)))  // Included2 (ignore=false)
+	require.False(t, shouldIncludeField(typ.Field(2))) // Ignored1
+	require.False(t, shouldIncludeField(typ.Field(3))) // Ignored2
+	require.False(t, shouldIncludeField(typ.Field(4))) // Ignored3
+	require.True(t, shouldIncludeField(typ.Field(5)))  // NoTag (default: include)
 }
 
 func TestValidateForyTags(t *testing.T) {
@@ -151,7 +151,7 @@ func TestValidateForyTags(t *testing.T) {
 		Field3 string `fory:"id=-1"`
 		Field4 string // No tag
 	}
-	err := ValidateForyTags(reflect.TypeOf(ValidStruct{}))
+	err := validateForyTags(reflect.TypeOf(ValidStruct{}))
 	require.NoError(t, err)
 
 	// Test duplicate tag IDs
@@ -159,7 +159,7 @@ func TestValidateForyTags(t *testing.T) {
 		Field1 string `fory:"id=0"`
 		Field2 string `fory:"id=0"`
 	}
-	err = ValidateForyTags(reflect.TypeOf(DuplicateIDs{}))
+	err = validateForyTags(reflect.TypeOf(DuplicateIDs{}))
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "duplicate")
 	foryErr, ok := err.(Error)
@@ -170,7 +170,7 @@ func TestValidateForyTags(t *testing.T) {
 	type InvalidID struct {
 		Field1 string `fory:"id=-2"`
 	}
-	err = ValidateForyTags(reflect.TypeOf(InvalidID{}))
+	err = validateForyTags(reflect.TypeOf(InvalidID{}))
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "invalid")
 	foryErr, ok = err.(Error)
@@ -183,7 +183,7 @@ func TestValidateForyTags(t *testing.T) {
 		Field2 string `fory:"id=0,ignore"` // Same ID but ignored
 		Field3 string `fory:"id=1"`
 	}
-	err = ValidateForyTags(reflect.TypeOf(IgnoredFields{}))
+	err = validateForyTags(reflect.TypeOf(IgnoredFields{}))
 	require.NoError(t, err)
 }
 
@@ -193,7 +193,7 @@ func TestParseForyTagEdgeCases(t *testing.T) {
 		Field1 string `fory:" id = 0 , nullable = true "`
 	}
 	typ := reflect.TypeOf(WhitespaceStruct{})
-	tag := ParseForyTag(typ.Field(0))
+	tag := parseForyTag(typ.Field(0))
 	require.Equal(t, 0, tag.ID)
 	require.True(t, tag.Nullable)
 
@@ -202,7 +202,7 @@ func TestParseForyTagEdgeCases(t *testing.T) {
 		Field1 string `fory:""`
 	}
 	typ2 := reflect.TypeOf(EmptyTagStruct{})
-	tag2 := ParseForyTag(typ2.Field(0))
+	tag2 := parseForyTag(typ2.Field(0))
 	require.True(t, tag2.HasTag)
 	require.Equal(t, TagIDUseFieldName, tag2.ID)
 
@@ -215,16 +215,16 @@ func TestParseForyTagEdgeCases(t *testing.T) {
 	}
 	typ3 := reflect.TypeOf(BoolValuesStruct{})
 
-	tag3 := ParseForyTag(typ3.Field(0))
+	tag3 := parseForyTag(typ3.Field(0))
 	require.True(t, tag3.Nullable) // "1" -> true
 
-	tag4 := ParseForyTag(typ3.Field(1))
+	tag4 := parseForyTag(typ3.Field(1))
 	require.True(t, tag4.Nullable) // "yes" -> true
 
-	tag5 := ParseForyTag(typ3.Field(2))
+	tag5 := parseForyTag(typ3.Field(2))
 	require.True(t, tag5.Nullable) // "TRUE" -> true
 
-	tag6 := ParseForyTag(typ3.Field(3))
+	tag6 := parseForyTag(typ3.Field(3))
 	require.False(t, tag6.Nullable) // "no" -> false
 }
 
@@ -422,7 +422,7 @@ func TestNullableRefFlagsRespected(t *testing.T) {
 	typ1 := reflect.TypeOf(TestStructNoNull{})
 	for i := 0; i < typ1.NumField(); i++ {
 		field := typ1.Field(i)
-		tag := ParseForyTag(field)
+		tag := parseForyTag(field)
 		t.Logf("Field %s: ID=%d, Nullable=%v (set=%v), Ref=%v (set=%v)",
 			field.Name, tag.ID, tag.Nullable, tag.NullableSet, tag.Ref, tag.RefSet)
 	}
@@ -610,4 +610,66 @@ func TestNestedStructWithTags(t *testing.T) {
 	require.Equal(t, obj.Inner.Value, result.Inner.Value)
 	require.Equal(t, obj.Inner.Count, result.Inner.Count)
 	require.Equal(t, obj.Items, result.Items)
+}
+
+func TestParseTypeIDTag(t *testing.T) {
+	type TestStruct struct {
+		U32Var    uint32 `fory:"compress=true"`
+		U32Fixed  uint32 `fory:"compress=false"`
+		U64Var    uint64 `fory:"encoding=varint"`
+		U64Fixed  uint64 `fory:"encoding=fixed"`
+		U64Tagged uint64 `fory:"encoding=tagged"`
+	}
+
+	typ := reflect.TypeOf(TestStruct{})
+
+	// Test U32Var
+	field := typ.Field(0)
+	tag := parseForyTag(field)
+	if !tag.CompressSet {
+		t.Errorf("U32Var: CompressSet should be true")
+	}
+	if !tag.Compress {
+		t.Errorf("U32Var: Compress should be true")
+	}
+
+	// Test U32Fixed
+	field = typ.Field(1)
+	tag = parseForyTag(field)
+	if !tag.CompressSet {
+		t.Errorf("U32Fixed: CompressSet should be true")
+	}
+	if tag.Compress {
+		t.Errorf("U32Fixed: Compress should be false")
+	}
+
+	// Test U64Var
+	field = typ.Field(2)
+	tag = parseForyTag(field)
+	if !tag.EncodingSet {
+		t.Errorf("U64Var: EncodingSet should be true")
+	}
+	if tag.Encoding != "varint" {
+		t.Errorf("U64Var: expected encoding 'varint', got %s", tag.Encoding)
+	}
+
+	// Test U64Fixed
+	field = typ.Field(3)
+	tag = parseForyTag(field)
+	if !tag.EncodingSet {
+		t.Errorf("U64Fixed: EncodingSet should be true")
+	}
+	if tag.Encoding != "fixed" {
+		t.Errorf("U64Fixed: expected encoding 'fixed', got %s", tag.Encoding)
+	}
+
+	// Test U64Tagged
+	field = typ.Field(4)
+	tag = parseForyTag(field)
+	if !tag.EncodingSet {
+		t.Errorf("U64Tagged: EncodingSet should be true")
+	}
+	if tag.Encoding != "tagged" {
+		t.Errorf("U64Tagged: expected encoding 'tagged', got %s", tag.Encoding)
+	}
 }

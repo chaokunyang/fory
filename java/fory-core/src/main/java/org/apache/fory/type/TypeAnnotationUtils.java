@@ -55,11 +55,11 @@ public class TypeAnnotationUtils {
       checkFieldType(fieldType, "@Uint64Type", long.class, Long.class);
       Uint64Type uint64Type = (Uint64Type) typeAnnotation;
       switch (uint64Type.encoding()) {
-        case VARINT64:
+        case VARINT:
           return Types.VAR_UINT64;
-        case FIXED_INT64:
+        case FIXED:
           return Types.UINT64;
-        case TAGGED_INT64:
+        case TAGGED:
           return Types.TAGGED_UINT64;
         default:
           throw new IllegalArgumentException("Unsupported encoding: " + uint64Type.encoding());
@@ -72,11 +72,11 @@ public class TypeAnnotationUtils {
       checkFieldType(fieldType, "@Int64Type", long.class, Long.class);
       Int64Type int64Type = (Int64Type) typeAnnotation;
       switch (int64Type.encoding()) {
-        case VARINT64:
+        case VARINT:
           return Types.VARINT64;
-        case FIXED_INT64:
+        case FIXED:
           return Types.INT64;
-        case TAGGED_INT64:
+        case TAGGED:
           return Types.TAGGED_INT64;
         default:
           throw new IllegalArgumentException("Unsupported encoding: " + int64Type.encoding());

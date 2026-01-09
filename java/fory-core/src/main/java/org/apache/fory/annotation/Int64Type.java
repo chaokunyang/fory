@@ -32,10 +32,10 @@ import org.apache.fory.config.LongEncoding;
  * value is serialized using different encoding strategies:
  *
  * <ul>
- *   <li>{@link LongEncoding#VARINT64} (default): Variable-length encoding, compact for small values
+ *   <li>{@link LongEncoding#VARINT} (default): Variable-length encoding, compact for small values
  *       (type_id=7)
- *   <li>{@link LongEncoding#FIXED_INT64}: Fixed 8-byte encoding, consistent size (type_id=6)
- *   <li>{@link LongEncoding#TAGGED_INT64}: Tagged encoding that uses 4 bytes for values in range
+ *   <li>{@link LongEncoding#FIXED}: Fixed 8-byte encoding, consistent size (type_id=6)
+ *   <li>{@link LongEncoding#TAGGED}: Tagged encoding that uses 4 bytes for values in range
  *       [-1073741824, 1073741823], otherwise 9 bytes (type_id=8)
  * </ul>
  *
@@ -62,5 +62,5 @@ public @interface Int64Type {
    *
    * @return the encoding type for serialization
    */
-  LongEncoding encoding() default LongEncoding.VARINT64;
+  LongEncoding encoding() default LongEncoding.VARINT;
 }

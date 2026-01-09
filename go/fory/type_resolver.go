@@ -428,7 +428,7 @@ func (r *TypeResolver) RegisterByID(type_ reflect.Type, fullTypeID uint32) error
 
 		// Create struct serializer
 		tag := type_.Name()
-		serializer := newStructSerializer(type_, tag, nil)
+		serializer := newStructSerializer(type_, tag)
 		r.typeToSerializers[type_] = serializer
 		r.typeToTypeInfo[type_] = "@" + tag
 		r.typeInfoToType["@"+tag] = type_
@@ -579,7 +579,7 @@ func (r *TypeResolver) RegisterNamedType(
 	} else {
 		tag = namespace + "." + typeName
 	}
-	serializer := newStructSerializer(type_, tag, nil)
+	serializer := newStructSerializer(type_, tag)
 	r.typeToSerializers[type_] = serializer
 	// multiple struct with same name defined inside function will have same `type_.String()`, but they are
 	// different types. so we use tag to encode type info.

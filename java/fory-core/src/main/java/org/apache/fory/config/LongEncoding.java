@@ -21,7 +21,7 @@ package org.apache.fory.config;
 
 /**
  * Encoding option for long. Default encoding is fory SLI(Small long as int) encoding: {@link
- * #TAGGED_INT64}.
+ * #TAGGED}.
  */
 public enum LongEncoding {
   /**
@@ -30,10 +30,10 @@ public enum LongEncoding {
    *     value) << 1 |`
    * <li>Otherwise write as 9 bytes: `| 0b1 | little-endian 8bytes long |`.
    *
-   *     <p>Faster than {@link #VARINT64}, but compression is not good as {@link #VARINT64} such as
+   *     <p>Faster than {@link #VARINT}, but compression is not good as {@link #VARINT} such as
    *     for ints in short range.
    */
-  TAGGED_INT64,
+  TAGGED,
   /**
    * Fory Progressive Variable-length Long Encoding:
    * <li>positive long format: first bit in every byte indicate whether has next byte, then next
@@ -41,7 +41,7 @@ public enum LongEncoding {
    * <li>Negative number will be converted to positive number by ` (v << 1) ^ (v >> 63)` to reduce
    *     cost of small negative numbers.
    */
-  VARINT64,
+  VARINT,
   /** Write long as little endian 8bytes, no compression. */
-  FIXED_INT64,
+  FIXED,
 }

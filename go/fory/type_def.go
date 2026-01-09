@@ -218,7 +218,7 @@ func (td *TypeDef) buildTypeInfoWithResolver(resolver *TypeResolver) (TypeInfo, 
 			}
 		} else {
 			// Known struct type - use structSerializer with fieldDefs
-			structSer := newStructSerializer(type_, "", td.fieldDefs)
+			structSer := newStructSerializerFromTypeDef(type_, "", td.fieldDefs)
 			// Eagerly initialize the struct serializer with pre-computed field metadata
 			if resolver != nil {
 				if err := structSer.initialize(resolver); err != nil {
@@ -417,7 +417,7 @@ func buildFieldDefs(fory *Fory, value reflect.Value) ([]FieldDef, error) {
 		}
 
 		// Parse fory struct tag and check for ignore
-		foryTag := ParseForyTag(field)
+		foryTag := parseForyTag(field)
 		if foryTag.Ignore {
 			continue // skip ignored fields
 		}
@@ -971,31 +971,32 @@ func buildFieldType(fory *Fory, fieldValue reflect.Value) (FieldType, error) {
 	}
 
 	// Handle slice and array types BEFORE getTypeInfo to avoid anonymous type errors
-	// For fixed-size arrays with primitive elements, use primitive array type IDs (INT16_ARRAY, etc.)
-	// For slices and arrays with non-primitive elements, use collection format
+	// For primitive element types, use primitive array type IDs (INT16_ARRAY, etc.)
+	// For non-primitive elements, use collection format (LIST with element type)
 	if fieldType.Kind() == reflect.Slice || fieldType.Kind() == reflect.Array {
 		elemType := fieldType.Elem()
 
 		// Check if element is a primitive type that maps to a primitive array type ID
-		// Only fixed-size arrays use primitive array format; slices always use LIST
-		if fieldType.Kind() == reflect.Array {
-			switch elemType.Kind() {
-			case reflect.Int8:
-				return NewSimpleFieldType(INT8_ARRAY), nil
-			case reflect.Int16:
-				return NewSimpleFieldType(INT16_ARRAY), nil
-			case reflect.Int32:
-				return NewSimpleFieldType(INT32_ARRAY), nil
-			case reflect.Int64:
-				return NewSimpleFieldType(INT64_ARRAY), nil
-			case reflect.Float32:
-				return NewSimpleFieldType(FLOAT32_ARRAY), nil
-			case reflect.Float64:
-				return NewSimpleFieldType(FLOAT64_ARRAY), nil
-			}
+		// Both slices and fixed-size arrays with primitive elements use primitive array format
+		// This matches typeIdFromKind in field_info.go for consistent field sorting
+		switch elemType.Kind() {
+		case reflect.Bool:
+			return NewSimpleFieldType(BOOL_ARRAY), nil
+		case reflect.Int8:
+			return NewSimpleFieldType(INT8_ARRAY), nil
+		case reflect.Int16:
+			return NewSimpleFieldType(INT16_ARRAY), nil
+		case reflect.Int32:
+			return NewSimpleFieldType(INT32_ARRAY), nil
+		case reflect.Int64, reflect.Int:
+			return NewSimpleFieldType(INT64_ARRAY), nil
+		case reflect.Float32:
+			return NewSimpleFieldType(FLOAT32_ARRAY), nil
+		case reflect.Float64:
+			return NewSimpleFieldType(FLOAT64_ARRAY), nil
 		}
 
-		// For slices and non-primitive arrays, use collection format
+		// For non-primitive elements, use collection format (LIST with element type)
 		elemValue := reflect.Zero(elemType)
 		elementFieldType, err := buildFieldType(fory, elemValue)
 		if err != nil {

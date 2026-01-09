@@ -34,19 +34,19 @@ import org.apache.fory.config.LongEncoding;
  * <p>Different encoding strategies are available:
  *
  * <ul>
- *   <li>{@link LongEncoding#VARINT64} (default): Variable-length encoding (VAR_UINT64, type_id=14),
+ *   <li>{@link LongEncoding#VARINT} (default): Variable-length encoding (VAR_UINT64, type_id=14),
  *       compact for small values
- *   <li>{@link LongEncoding#FIXED_INT64}: Fixed 8-byte encoding (UINT64, type_id=13), consistent
+ *   <li>{@link LongEncoding#FIXED}: Fixed 8-byte encoding (UINT64, type_id=13), consistent
  *       size
- *   <li>{@link LongEncoding#TAGGED_INT64}: Tagged encoding (TAGGED_UINT64, type_id=15) that uses 4
+ *   <li>{@link LongEncoding#TAGGED}: Tagged encoding (TAGGED_UINT64, type_id=15) that uses 4
  *       bytes for values in range [0, 2147483647], otherwise 9 bytes
  * </ul>
  *
  * <p>Benefits:
  *
  * <ul>
- *   <li>With {@link LongEncoding#VARINT64}: skips zigzag encoding overhead for non-negative values
- *   <li>With {@link LongEncoding#TAGGED_INT64}: uses unsigned range [0, 2147483647] for 4-byte
+ *   <li>With {@link LongEncoding#VARINT}: skips zigzag encoding overhead for non-negative values
+ *   <li>With {@link LongEncoding#TAGGED}: uses unsigned range [0, 2147483647] for 4-byte
  *       encoding instead of signed range [-1073741824, 1073741823]
  *   <li>Compatible with languages that have native unsigned integer types (e.g., Rust's u64, Go's
  *       uint64, C++'s uint64_t)
@@ -75,5 +75,5 @@ public @interface Uint64Type {
    *
    * @return the encoding type for serialization
    */
-  LongEncoding encoding() default LongEncoding.VARINT64;
+  LongEncoding encoding() default LongEncoding.VARINT;
 }

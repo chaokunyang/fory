@@ -2490,13 +2490,13 @@ public abstract class XlangTestBase extends ForyTestBase {
     @Uint32Type(compress = false)
     int u32Fixed;
 
-    @Uint64Type(encoding = LongEncoding.VARINT64)
+    @Uint64Type(encoding = LongEncoding.VARINT)
     long u64Var;
 
-    @Uint64Type(encoding = LongEncoding.FIXED_INT64)
+    @Uint64Type(encoding = LongEncoding.FIXED)
     long u64Fixed;
 
-    @Uint64Type(encoding = LongEncoding.TAGGED_INT64)
+    @Uint64Type(encoding = LongEncoding.TAGGED)
     long u64Tagged;
 
     // Boxed nullable unsigned fields
@@ -2517,24 +2517,24 @@ public abstract class XlangTestBase extends ForyTestBase {
     Integer u32FixedNullable;
 
     @ForyField(nullable = true)
-    @Uint64Type(encoding = LongEncoding.VARINT64)
+    @Uint64Type(encoding = LongEncoding.VARINT)
     Long u64VarNullable;
 
     @ForyField(nullable = true)
-    @Uint64Type(encoding = LongEncoding.FIXED_INT64)
+    @Uint64Type(encoding = LongEncoding.FIXED)
     Long u64FixedNullable;
 
     @ForyField(nullable = true)
-    @Uint64Type(encoding = LongEncoding.TAGGED_INT64)
+    @Uint64Type(encoding = LongEncoding.TAGGED)
     Long u64TaggedNullable;
   }
 
   @Data
   static class UnsignedSchemaConsistentSimple {
-    @Uint64Type(encoding = LongEncoding.TAGGED_INT64)
+    @Uint64Type(encoding = LongEncoding.TAGGED)
     long u64Tagged;
     @ForyField(nullable = true)
-    @Uint64Type(encoding = LongEncoding.TAGGED_INT64)
+    @Uint64Type(encoding = LongEncoding.TAGGED)
     Long u64TaggedNullable;
   }
 
@@ -2641,13 +2641,13 @@ public abstract class XlangTestBase extends ForyTestBase {
     @Uint32Type(compress = false)
     int u32Fixed;
 
-    @Uint64Type(encoding = LongEncoding.VARINT64)
+    @Uint64Type(encoding = LongEncoding.VARINT)
     long u64Var;
 
-    @Uint64Type(encoding = LongEncoding.FIXED_INT64)
+    @Uint64Type(encoding = LongEncoding.FIXED)
     long u64Fixed;
 
-    @Uint64Type(encoding = LongEncoding.TAGGED_INT64)
+    @Uint64Type(encoding = LongEncoding.TAGGED)
     long u64Tagged;
 
     // Group 2: Nullable boxed fields (nullable in Java, non-Optional in other languages)
@@ -2668,15 +2668,15 @@ public abstract class XlangTestBase extends ForyTestBase {
     Integer u32FixedField2;
 
     @ForyField(nullable = true)
-    @Uint64Type(encoding = LongEncoding.VARINT64)
+    @Uint64Type(encoding = LongEncoding.VARINT)
     Long u64VarField2;
 
     @ForyField(nullable = true)
-    @Uint64Type(encoding = LongEncoding.FIXED_INT64)
+    @Uint64Type(encoding = LongEncoding.FIXED)
     Long u64FixedField2;
 
     @ForyField(nullable = true)
-    @Uint64Type(encoding = LongEncoding.TAGGED_INT64)
+    @Uint64Type(encoding = LongEncoding.TAGGED)
     Long u64TaggedField2;
   }
 

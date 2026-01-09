@@ -74,13 +74,13 @@ public class UnsignedTest extends ForyTestBase {
     @Uint32Type(compress = false)
     int u32Fixed;
 
-    @Uint64Type(encoding = LongEncoding.VARINT64)
+    @Uint64Type(encoding = LongEncoding.VARINT)
     long u64Var;
 
-    @Uint64Type(encoding = LongEncoding.FIXED_INT64)
+    @Uint64Type(encoding = LongEncoding.FIXED)
     long u64Fixed;
 
-    @Uint64Type(encoding = LongEncoding.TAGGED_INT64)
+    @Uint64Type(encoding = LongEncoding.TAGGED)
     long u64Tagged;
 
     @ForyField(nullable = true)
@@ -100,15 +100,15 @@ public class UnsignedTest extends ForyTestBase {
     Integer u32FixedNullable;
 
     @ForyField(nullable = true)
-    @Uint64Type(encoding = LongEncoding.VARINT64)
+    @Uint64Type(encoding = LongEncoding.VARINT)
     Long u64VarNullable;
 
     @ForyField(nullable = true)
-    @Uint64Type(encoding = LongEncoding.FIXED_INT64)
+    @Uint64Type(encoding = LongEncoding.FIXED)
     Long u64FixedNullable;
 
     @ForyField(nullable = true)
-    @Uint64Type(encoding = LongEncoding.TAGGED_INT64)
+    @Uint64Type(encoding = LongEncoding.TAGGED)
     Long u64TaggedNullable;
   }
 
@@ -123,13 +123,13 @@ public class UnsignedTest extends ForyTestBase {
     @Uint32Type(compress = false)
     int u32Fixed;
 
-    @Uint64Type(encoding = LongEncoding.VARINT64)
+    @Uint64Type(encoding = LongEncoding.VARINT)
     long u64Var;
 
-    @Uint64Type(encoding = LongEncoding.FIXED_INT64)
+    @Uint64Type(encoding = LongEncoding.FIXED)
     long u64Fixed;
 
-    @Uint64Type(encoding = LongEncoding.TAGGED_INT64)
+    @Uint64Type(encoding = LongEncoding.TAGGED)
     long u64Tagged;
 
     @ForyField(nullable = true)
@@ -149,15 +149,15 @@ public class UnsignedTest extends ForyTestBase {
     Integer u32FixedField2;
 
     @ForyField(nullable = true)
-    @Uint64Type(encoding = LongEncoding.VARINT64)
+    @Uint64Type(encoding = LongEncoding.VARINT)
     Long u64VarField2;
 
     @ForyField(nullable = true)
-    @Uint64Type(encoding = LongEncoding.FIXED_INT64)
+    @Uint64Type(encoding = LongEncoding.FIXED)
     Long u64FixedField2;
 
     @ForyField(nullable = true)
-    @Uint64Type(encoding = LongEncoding.TAGGED_INT64)
+    @Uint64Type(encoding = LongEncoding.TAGGED)
     Long u64TaggedField2;
 
     @Override
@@ -691,25 +691,25 @@ public class UnsignedTest extends ForyTestBase {
   }
 
   public static class Uint64OnlyStruct {
-    @Uint64Type(encoding = LongEncoding.VARINT64)
+    @Uint64Type(encoding = LongEncoding.VARINT)
     long varValue;
 
-    @Uint64Type(encoding = LongEncoding.FIXED_INT64)
+    @Uint64Type(encoding = LongEncoding.FIXED)
     long fixedValue;
 
-    @Uint64Type(encoding = LongEncoding.TAGGED_INT64)
+    @Uint64Type(encoding = LongEncoding.TAGGED)
     long taggedValue;
 
     @ForyField(nullable = true)
-    @Uint64Type(encoding = LongEncoding.VARINT64)
+    @Uint64Type(encoding = LongEncoding.VARINT)
     Long varNullableValue;
 
     @ForyField(nullable = true)
-    @Uint64Type(encoding = LongEncoding.FIXED_INT64)
+    @Uint64Type(encoding = LongEncoding.FIXED)
     Long fixedNullableValue;
 
     @ForyField(nullable = true)
-    @Uint64Type(encoding = LongEncoding.TAGGED_INT64)
+    @Uint64Type(encoding = LongEncoding.TAGGED)
     Long taggedNullableValue;
 
     @Override

@@ -39,8 +39,8 @@ const (
 //   - ignore: Whether to skip this field during serialization. Default false
 //   - compress: For int32/uint32 fields: true=varint encoding (default), false=fixed encoding
 //   - encoding: For numeric fields:
-//     - int32/uint32: "varint" (default) or "fixed"
-//     - int64/uint64: "varint" (default), "fixed", or "tagged"
+//   - int32/uint32: "varint" (default) or "fixed"
+//   - int64/uint64: "varint" (default), "fixed", or "tagged"
 //
 // Note: For int32/uint32, use either `compress` or `encoding`, not both.
 //

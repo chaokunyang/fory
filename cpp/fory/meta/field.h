@@ -121,6 +121,175 @@ inline constexpr bool has_field_tags_v = ForyFieldTagsImpl<T>::has_tags;
 } // namespace detail
 
 // ============================================================================
+// Field Encoding Types for Unsigned Integers
+// ============================================================================
+
+/// Encoding strategies for integer fields
+enum class Encoding {
+  Default = 0, // Use type's default encoding
+  Varint = 1,  // Variable-length encoding (smaller values use fewer bytes)
+  Fixed = 2,   // Fixed-size encoding (always uses full type width)
+  Tagged = 3   // Tagged encoding (uses tag byte + value)
+};
+
+// ============================================================================
+// FieldMeta - Compile-time Field Configuration with Builder Pattern
+// ============================================================================
+
+/// Compile-time field metadata with fluent builder API.
+/// Supports both:
+///   - Simple: F(0) - just field ID
+///   - Full:   F(0).nullable().varint().compress(false)
+struct FieldMeta {
+  int16_t id_ = -1;
+  bool nullable_ = false;
+  bool ref_ = false;
+  bool monomorphic_ = false;
+  Encoding encoding_ = Encoding::Default;
+  bool compress_ = true;
+
+  // Builder methods - each returns a modified copy
+  constexpr FieldMeta id(int16_t v) const {
+    auto c = *this;
+    c.id_ = v;
+    return c;
+  }
+  constexpr FieldMeta nullable(bool v = true) const {
+    auto c = *this;
+    c.nullable_ = v;
+    return c;
+  }
+  constexpr FieldMeta ref(bool v = true) const {
+    auto c = *this;
+    c.ref_ = v;
+    return c;
+  }
+  constexpr FieldMeta monomorphic(bool v = true) const {
+    auto c = *this;
+    c.monomorphic_ = v;
+    return c;
+  }
+  constexpr FieldMeta encoding(Encoding v) const {
+    auto c = *this;
+    c.encoding_ = v;
+    return c;
+  }
+  constexpr FieldMeta compress(bool v) const {
+    auto c = *this;
+    c.compress_ = v;
+    return c;
+  }
+
+  // Convenience shortcuts for common encodings
+  constexpr FieldMeta varint() const { return encoding(Encoding::Varint); }
+  constexpr FieldMeta fixed() const { return encoding(Encoding::Fixed); }
+  constexpr FieldMeta tagged() const { return encoding(Encoding::Tagged); }
+};
+
+/// Short factory function for FieldMeta - use F(id) in macros for brevity
+constexpr FieldMeta F(int16_t id) { return FieldMeta{}.id(id); }
+
+namespace detail {
+
+// ============================================================================
+// Config Normalization - Handle both integer IDs and FieldMeta
+// ============================================================================
+
+/// Normalize configuration: convert integer to FieldMeta, pass FieldMeta
+/// through
+template <typename T> constexpr auto normalize_config(T &&v) {
+  if constexpr (std::is_integral_v<std::decay_t<T>>) {
+    // Old syntax: just an integer ID
+    return FieldMeta{}.id(static_cast<int16_t>(v));
+  } else if constexpr (std::is_same_v<std::decay_t<T>, FieldMeta>) {
+    // New syntax: already a FieldMeta
+    return v;
+  } else {
+    static_assert(
+        std::is_integral_v<std::decay_t<T>> ||
+            std::is_same_v<std::decay_t<T>, FieldMeta>,
+        "Field config must be an integer ID or FieldMeta (use F(id)...)");
+    return FieldMeta{};
+  }
+}
+
+/// Apply old-style tag to FieldMeta (for backward compatibility)
+constexpr FieldMeta apply_tag(FieldMeta m, nullable) { return m.nullable(); }
+constexpr FieldMeta apply_tag(FieldMeta m, not_null) {
+  return m.nullable(false);
+}
+constexpr FieldMeta apply_tag(FieldMeta m, ref) { return m.ref(); }
+constexpr FieldMeta apply_tag(FieldMeta m, monomorphic) {
+  return m.monomorphic();
+}
+
+/// Fold multiple tags onto a base config
+template <typename... Tags>
+constexpr FieldMeta apply_tags(FieldMeta base, Tags... tags) {
+  ((base = apply_tag(base, tags)), ...);
+  return base;
+}
+
+// ============================================================================
+// FieldEntry - Binds Member Pointer to Config for Compile-Time Verification
+// ============================================================================
+
+/// Field entry that stores member pointer (for verification) + configuration
+template <typename T, typename M> struct FieldEntry {
+  M T::*ptr;        // Member pointer - compile-time field verification
+  const char *name; // Field name for debugging
+  FieldMeta meta;   // Field configuration
+
+  constexpr FieldEntry(M T::*p, const char *n, FieldMeta m)
+      : ptr(p), name(n), meta(m) {}
+};
+
+/// Create a FieldEntry with automatic type deduction
+template <typename T, typename M>
+constexpr auto make_field_entry(M T::*ptr, const char *name, FieldMeta meta) {
+  return FieldEntry<T, M>{ptr, name, meta};
+}
+
+/// Default: no field config defined for type T
+template <typename T> struct ForyFieldConfigImpl {
+  static constexpr bool has_config = false;
+};
+
+template <typename T>
+inline constexpr bool has_field_config_v = ForyFieldConfigImpl<T>::has_config;
+
+/// Helper to get field encoding from ForyFieldConfigImpl
+template <typename T, size_t Index, typename = void> struct GetFieldConfigEntry {
+  static constexpr Encoding encoding = Encoding::Default;
+  static constexpr int16_t id = -1;
+  static constexpr bool nullable = false;
+  static constexpr bool ref = false;
+  static constexpr bool monomorphic = false;
+  static constexpr bool compress = true;
+};
+
+template <typename T, size_t Index>
+struct GetFieldConfigEntry<
+    T, Index,
+    std::enable_if_t<ForyFieldConfigImpl<T>::has_config &&
+                     (Index < ForyFieldConfigImpl<T>::field_count)>> {
+private:
+  static constexpr auto get_entry() {
+    return std::get<Index>(ForyFieldConfigImpl<T>::entries);
+  }
+
+public:
+  static constexpr Encoding encoding = get_entry().meta.encoding_;
+  static constexpr int16_t id = get_entry().meta.id_;
+  static constexpr bool nullable = get_entry().meta.nullable_;
+  static constexpr bool ref = get_entry().meta.ref_;
+  static constexpr bool monomorphic = get_entry().meta.monomorphic_;
+  static constexpr bool compress = get_entry().meta.compress_;
+};
+
+} // namespace detail
+
+// ============================================================================
 // fory::field<T, Id, Options...> Template
 // ============================================================================
 
@@ -522,3 +691,108 @@ struct GetFieldTagEntry<
   FORY_FT_ENTRIES_15(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12,     \
                      _13, _14, _15),                                           \
       FORY_FT_MAKE_ENTRY(T, _16)
+
+// ============================================================================
+// FORY_FIELD_CONFIG Macro - New Syntax with Member Pointer Verification
+// ============================================================================
+//
+// Usage:
+//   FORY_FIELD_CONFIG(MyStruct,
+//       (field1, F(0)),                        // Simple: just ID
+//       (field2, F(1).nullable()),             // With nullable
+//       (field3, F(2).varint()),               // With encoding
+//       (field4, F(3).nullable().ref()),       // Multiple options
+//       (field5, 4)                            // Backward compatible: integer
+//       ID
+//   );
+//
+// This macro:
+// 1. Verifies field names exist at compile time via member pointers
+// 2. Supports both integer IDs (old) and F(id).xxx() builder (new)
+// 3. Stores configuration in a constexpr tuple for efficient access
+
+// Helper to stringify field name
+#define FORY_FC_STRINGIFY(x) FORY_FC_STRINGIFY_I(x)
+#define FORY_FC_STRINGIFY_I(x) #x
+
+// Extract field name (first element of tuple)
+#define FORY_FC_NAME(tuple) FORY_FC_NAME_IMPL tuple
+#define FORY_FC_NAME_IMPL(name, ...) name
+
+// Extract config (second element of tuple)
+#define FORY_FC_CONFIG(tuple) FORY_FC_CONFIG_IMPL tuple
+#define FORY_FC_CONFIG_IMPL(name, config, ...) config
+
+// Create a FieldEntry with member pointer verification
+#define FORY_FC_MAKE_ENTRY(Type, tuple)                                        \
+  ::fory::detail::make_field_entry(                                            \
+      &Type::FORY_FC_NAME(tuple), FORY_FC_STRINGIFY(FORY_FC_NAME(tuple)),      \
+      ::fory::detail::normalize_config(FORY_FC_CONFIG(tuple)))
+
+// Generate entries using indirect expansion
+#define FORY_FC_ENTRIES(Type, ...)                                             \
+  FORY_FC_ENTRIES_I(Type, FORY_PP_NARG(__VA_ARGS__), __VA_ARGS__)
+#define FORY_FC_ENTRIES_I(Type, N, ...) FORY_FC_ENTRIES_II(Type, N, __VA_ARGS__)
+#define FORY_FC_ENTRIES_II(Type, N, ...) FORY_FC_ENTRIES_##N(Type, __VA_ARGS__)
+
+// Generate entries for 1-32 fields
+#define FORY_FC_ENTRIES_1(T, _1) FORY_FC_MAKE_ENTRY(T, _1)
+#define FORY_FC_ENTRIES_2(T, _1, _2)                                           \
+  FORY_FC_MAKE_ENTRY(T, _1), FORY_FC_MAKE_ENTRY(T, _2)
+#define FORY_FC_ENTRIES_3(T, _1, _2, _3)                                       \
+  FORY_FC_ENTRIES_2(T, _1, _2), FORY_FC_MAKE_ENTRY(T, _3)
+#define FORY_FC_ENTRIES_4(T, _1, _2, _3, _4)                                   \
+  FORY_FC_ENTRIES_3(T, _1, _2, _3), FORY_FC_MAKE_ENTRY(T, _4)
+#define FORY_FC_ENTRIES_5(T, _1, _2, _3, _4, _5)                               \
+  FORY_FC_ENTRIES_4(T, _1, _2, _3, _4), FORY_FC_MAKE_ENTRY(T, _5)
+#define FORY_FC_ENTRIES_6(T, _1, _2, _3, _4, _5, _6)                           \
+  FORY_FC_ENTRIES_5(T, _1, _2, _3, _4, _5), FORY_FC_MAKE_ENTRY(T, _6)
+#define FORY_FC_ENTRIES_7(T, _1, _2, _3, _4, _5, _6, _7)                       \
+  FORY_FC_ENTRIES_6(T, _1, _2, _3, _4, _5, _6), FORY_FC_MAKE_ENTRY(T, _7)
+#define FORY_FC_ENTRIES_8(T, _1, _2, _3, _4, _5, _6, _7, _8)                   \
+  FORY_FC_ENTRIES_7(T, _1, _2, _3, _4, _5, _6, _7), FORY_FC_MAKE_ENTRY(T, _8)
+#define FORY_FC_ENTRIES_9(T, _1, _2, _3, _4, _5, _6, _7, _8, _9)               \
+  FORY_FC_ENTRIES_8(T, _1, _2, _3, _4, _5, _6, _7, _8),                        \
+      FORY_FC_MAKE_ENTRY(T, _9)
+#define FORY_FC_ENTRIES_10(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10)         \
+  FORY_FC_ENTRIES_9(T, _1, _2, _3, _4, _5, _6, _7, _8, _9),                    \
+      FORY_FC_MAKE_ENTRY(T, _10)
+#define FORY_FC_ENTRIES_11(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11)    \
+  FORY_FC_ENTRIES_10(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10),              \
+      FORY_FC_MAKE_ENTRY(T, _11)
+#define FORY_FC_ENTRIES_12(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11,    \
+                           _12)                                                \
+  FORY_FC_ENTRIES_11(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11),         \
+      FORY_FC_MAKE_ENTRY(T, _12)
+#define FORY_FC_ENTRIES_13(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11,    \
+                           _12, _13)                                           \
+  FORY_FC_ENTRIES_12(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12),    \
+      FORY_FC_MAKE_ENTRY(T, _13)
+#define FORY_FC_ENTRIES_14(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11,    \
+                           _12, _13, _14)                                      \
+  FORY_FC_ENTRIES_13(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12,     \
+                     _13),                                                     \
+      FORY_FC_MAKE_ENTRY(T, _14)
+#define FORY_FC_ENTRIES_15(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11,    \
+                           _12, _13, _14, _15)                                 \
+  FORY_FC_ENTRIES_14(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12,     \
+                     _13, _14),                                                \
+      FORY_FC_MAKE_ENTRY(T, _15)
+#define FORY_FC_ENTRIES_16(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11,    \
+                           _12, _13, _14, _15, _16)                            \
+  FORY_FC_ENTRIES_15(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12,     \
+                     _13, _14, _15),                                           \
+      FORY_FC_MAKE_ENTRY(T, _16)
+
+// Main FORY_FIELD_CONFIG macro
+// Creates a constexpr tuple of FieldEntry objects with member pointer
+// verification
+#define FORY_FIELD_CONFIG(Type, ...)                                           \
+  inline constexpr auto _fory_field_entries_##Type =                           \
+      std::make_tuple(FORY_FC_ENTRIES(Type, __VA_ARGS__));                     \
+  template <> struct fory::detail::ForyFieldConfigImpl<Type> {                 \
+    static constexpr bool has_config = true;                                   \
+    static constexpr auto &entries = _fory_field_entries_##Type;               \
+    static constexpr size_t field_count =                                      \
+        std::tuple_size_v<std::decay_t<decltype(entries)>>;                    \
+  }

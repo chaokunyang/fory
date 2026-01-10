@@ -441,6 +441,70 @@ public:
     return result;
   }
 
+  /// Read uint64_t using tagged encoding at given offset.
+  /// Similar to GetVarUint64 but for tagged encoding:
+  /// - If bit 0 is 0: read 4 bytes, return value >> 1
+  /// - If bit 0 is 1: read 1 byte flag + 8 bytes uint64
+  FORY_ALWAYS_INLINE uint64_t GetTaggedUint64(uint32_t offset,
+                                              uint32_t *readBytesLength) {
+    uint32_t i = *reinterpret_cast<const uint32_t *>(data_ + offset);
+    if ((i & 0b1) != 0b1) {
+      *readBytesLength = 4;
+      return static_cast<uint64_t>(i >> 1);
+    } else {
+      *readBytesLength = 9;
+      return *reinterpret_cast<const uint64_t *>(data_ + offset + 1);
+    }
+  }
+
+  /// Read int64_t using tagged encoding at given offset.
+  /// - If bit 0 is 0: read 4 bytes as signed int, return value >> 1 (arithmetic)
+  /// - If bit 0 is 1: read 1 byte flag + 8 bytes int64
+  FORY_ALWAYS_INLINE int64_t GetTaggedInt64(uint32_t offset,
+                                            uint32_t *readBytesLength) {
+    int32_t i = *reinterpret_cast<const int32_t *>(data_ + offset);
+    if ((i & 0b1) != 0b1) {
+      *readBytesLength = 4;
+      return static_cast<int64_t>(i >> 1); // Arithmetic shift for signed
+    } else {
+      *readBytesLength = 9;
+      return *reinterpret_cast<const int64_t *>(data_ + offset + 1);
+    }
+  }
+
+  /// Write uint64_t using tagged encoding at given offset. Returns bytes written.
+  /// - If value is in [0, 0x7fffffff]: write 4 bytes (value << 1), return 4
+  /// - Otherwise: write 1 byte flag + 8 bytes uint64, return 9
+  FORY_ALWAYS_INLINE uint32_t PutTaggedUint64(uint32_t offset, uint64_t value) {
+    constexpr uint64_t MAX_SMALL_VALUE = 0x7fffffff; // INT32_MAX as u64
+    if (value <= MAX_SMALL_VALUE) {
+      *reinterpret_cast<int32_t *>(data_ + offset) =
+          static_cast<int32_t>(value) << 1;
+      return 4;
+    } else {
+      data_[offset] = 0b1;
+      *reinterpret_cast<uint64_t *>(data_ + offset + 1) = value;
+      return 9;
+    }
+  }
+
+  /// Write int64_t using tagged encoding at given offset. Returns bytes written.
+  /// - If value is in [-1073741824, 1073741823]: write 4 bytes (value << 1), return 4
+  /// - Otherwise: write 1 byte flag + 8 bytes int64, return 9
+  FORY_ALWAYS_INLINE uint32_t PutTaggedInt64(uint32_t offset, int64_t value) {
+    constexpr int64_t MIN_SMALL_VALUE = -1073741824; // -2^30
+    constexpr int64_t MAX_SMALL_VALUE = 1073741823;  // 2^30 - 1
+    if (value >= MIN_SMALL_VALUE && value <= MAX_SMALL_VALUE) {
+      *reinterpret_cast<int32_t *>(data_ + offset) =
+          static_cast<int32_t>(value) << 1;
+      return 4;
+    } else {
+      data_[offset] = 0b1;
+      *reinterpret_cast<int64_t *>(data_ + offset + 1) = value;
+      return 9;
+    }
+  }
+
   /// Write uint8_t value to buffer at current writer index.
   /// Automatically grows buffer and advances writer index.
   FORY_ALWAYS_INLINE void WriteUint8(uint8_t value) {

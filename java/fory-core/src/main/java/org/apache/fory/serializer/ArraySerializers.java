@@ -23,6 +23,8 @@ import java.lang.reflect.Array;
 import java.util.Arrays;
 import org.apache.fory.Fory;
 import org.apache.fory.config.CompatibleMode;
+import org.apache.fory.config.Config;
+import org.apache.fory.config.LongEncoding;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.resolver.ClassInfo;
@@ -495,6 +497,10 @@ public class ArraySerializers {
     @Override
     public void write(MemoryBuffer buffer, long[] value) {
       if (fory.getBufferCallback() == null) {
+        if (compressArray(fory.getConfig())) {
+          writeInt64s(buffer, value, fory.getConfig().longEncoding());
+          return;
+        }
         int size = Math.multiplyExact(value.length, 8);
         buffer.writePrimitiveArrayWithSize(value, Platform.LONG_ARRAY_OFFSET, size);
       } else {
@@ -521,12 +527,49 @@ public class ArraySerializers {
         }
         return values;
       }
-
+      if (compressArray(fory.getConfig())) {
+        return readInt64s(buffer, fory.getConfig().longEncoding());
+      }
       int size = buffer.readVarUint32Small7();
       int numElements = size / 8;
       long[] values = new long[numElements];
       if (size > 0) {
         buffer.readToUnsafe(values, Platform.LONG_ARRAY_OFFSET, size);
+      }
+      return values;
+    }
+
+    private boolean compressArray(Config config) {
+      return config.compressLongArray() && config.longEncoding() != LongEncoding.LE_RAW_BYTES;
+    }
+
+    private void writeInt64s(MemoryBuffer buffer, long[] value, LongEncoding longEncoding) {
+      int length = value.length;
+      buffer.writeVarUint32Small7(length);
+
+      if (longEncoding == LongEncoding.SLI) {
+        for (int i = 0; i < length; i++) {
+          buffer.writeSliInt64(value[i]);
+        }
+        return;
+      }
+      for (int i = 0; i < length; i++) {
+        buffer.writeVarInt64(value[i]);
+      }
+    }
+
+    public long[] readInt64s(MemoryBuffer buffer, LongEncoding longEncoding) {
+      int numElements = buffer.readVarUint32Small7();
+      long[] values = new long[numElements];
+
+      if (longEncoding == LongEncoding.SLI) {
+        for (int i = 0; i < numElements; i++) {
+          values[i] = buffer.readSliInt64();
+        }
+      } else {
+        for (int i = 0; i < numElements; i++) {
+          values[i] = buffer.readVarInt64();
+        }
       }
       return values;
     }

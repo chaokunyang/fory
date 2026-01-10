@@ -2170,23 +2170,23 @@ type UnsignedSchemaConsistentSimple struct {
 }
 
 type UnsignedSchemaConsistent struct {
-	// Primitive unsigned fields (non-nullable)
-	U8        uint8  // UINT8 - fixed 8-bit
-	U16       uint16 // UINT16 - fixed 16-bit
-	U32Var    uint32 `fory:"compress=true"`   // VAR_UINT32 - variable-length
-	U32Fixed  uint32 `fory:"compress=false"`  // UINT32 - fixed 4-byte
-	U64Var    uint64 `fory:"encoding=varint"` // VAR_UINT64 - variable-length
-	U64Fixed  uint64 `fory:"encoding=fixed"`  // UINT64 - fixed 8-byte
-	U64Tagged uint64 `fory:"encoding=tagged"` // TAGGED_UINT64 - tagged encoding
+	// Primitive unsigned fields (non-nullable, use Field suffix to avoid reserved keywords)
+	U8Field  uint8  // UINT8 - fixed 8-bit
+	U16Field uint16 // UINT16 - fixed 16-bit
+	U32VarField    uint32 `fory:"compress=true"`   // VAR_UINT32 - variable-length
+	U32FixedField  uint32 `fory:"compress=false"`  // UINT32 - fixed 4-byte
+	U64VarField    uint64 `fory:"encoding=varint"` // VAR_UINT64 - variable-length
+	U64FixedField  uint64 `fory:"encoding=fixed"`  // UINT64 - fixed 8-byte
+	U64TaggedField uint64 `fory:"encoding=tagged"` // TAGGED_UINT64 - tagged encoding
 
 	// Nullable unsigned fields (pointers)
-	U8Nullable        *uint8  `fory:"nullable"`
-	U16Nullable       *uint16 `fory:"nullable"`
-	U32VarNullable    *uint32 `fory:"nullable,compress=true"`
-	U32FixedNullable  *uint32 `fory:"nullable,compress=false"`
-	U64VarNullable    *uint64 `fory:"nullable,encoding=varint"`
-	U64FixedNullable  *uint64 `fory:"nullable,encoding=fixed"`
-	U64TaggedNullable *uint64 `fory:"nullable,encoding=tagged"`
+	U8NullableField  *uint8  `fory:"nullable"`
+	U16NullableField *uint16 `fory:"nullable"`
+	U32VarNullableField    *uint32 `fory:"nullable,compress=true"`
+	U32FixedNullableField  *uint32 `fory:"nullable,compress=false"`
+	U64VarNullableField    *uint64 `fory:"nullable,encoding=varint"`
+	U64FixedNullableField  *uint64 `fory:"nullable,encoding=fixed"`
+	U64TaggedNullableField *uint64 `fory:"nullable,encoding=tagged"`
 }
 
 // UnsignedSchemaCompatible - Test struct for unsigned numbers in COMPATIBLE mode.
@@ -2195,17 +2195,17 @@ type UnsignedSchemaConsistent struct {
 // Matches Java's UnsignedSchemaCompatible (type id 502)
 type UnsignedSchemaCompatible struct {
 	// Group 1: Nullable in Go (pointers), non-nullable in Java
-	U8        *uint8  `fory:"nullable"`
-	U16       *uint16 `fory:"nullable"`
-	U32Var    *uint32 `fory:"nullable,compress=true"`
-	U32Fixed  *uint32 `fory:"nullable,compress=false"`
-	U64Var    *uint64 `fory:"nullable,encoding=varint"`
-	U64Fixed  *uint64 `fory:"nullable,encoding=fixed"`
-	U64Tagged *uint64 `fory:"nullable,encoding=tagged"`
+	U8Field1  *uint8  `fory:"nullable"`
+	U16Field1 *uint16 `fory:"nullable"`
+	U32VarField1    *uint32 `fory:"nullable,compress=true"`
+	U32FixedField1  *uint32 `fory:"nullable,compress=false"`
+	U64VarField1    *uint64 `fory:"nullable,encoding=varint"`
+	U64FixedField1  *uint64 `fory:"nullable,encoding=fixed"`
+	U64TaggedField1 *uint64 `fory:"nullable,encoding=tagged"`
 
 	// Group 2: Non-nullable in Go, nullable in Java
-	U8Field2        uint8
-	U16Field2       uint16
+	U8Field2  uint8
+	U16Field2 uint16
 	U32VarField2    uint32 `fory:"compress=true"`
 	U32FixedField2  uint32 `fory:"compress=false"`
 	U64VarField2    uint64 `fory:"encoding=varint"`
@@ -2265,35 +2265,35 @@ func testUnsignedSchemaConsistent() {
 	result := getUnsignedSchemaConsistent(obj)
 
 	// Verify primitive unsigned fields
-	assertEqual(uint8(200), result.U8, "U8")
-	assertEqual(uint16(60000), result.U16, "U16")
-	assertEqual(uint32(3000000000), result.U32Var, "U32Var")
-	assertEqual(uint32(4000000000), result.U32Fixed, "U32Fixed")
-	assertEqual(uint64(10000000000), result.U64Var, "U64Var")
-	assertEqual(uint64(15000000000), result.U64Fixed, "U64Fixed")
-	assertEqual(uint64(1000000000), result.U64Tagged, "U64Tagged")
+	assertEqual(uint8(200), result.U8Field, "U8Field")
+	assertEqual(uint16(60000), result.U16Field, "U16Field")
+	assertEqual(uint32(3000000000), result.U32VarField, "U32VarField")
+	assertEqual(uint32(4000000000), result.U32FixedField, "U32FixedField")
+	assertEqual(uint64(10000000000), result.U64VarField, "U64VarField")
+	assertEqual(uint64(15000000000), result.U64FixedField, "U64FixedField")
+	assertEqual(uint64(1000000000), result.U64TaggedField, "U64TaggedField")
 
 	// Verify nullable unsigned fields
-	if result.U8Nullable == nil || *result.U8Nullable != 128 {
-		panic(fmt.Sprintf("U8Nullable mismatch: expected 128, got %v", result.U8Nullable))
+	if result.U8NullableField == nil || *result.U8NullableField != 128 {
+		panic(fmt.Sprintf("U8NullableField mismatch: expected 128, got %v", result.U8NullableField))
 	}
-	if result.U16Nullable == nil || *result.U16Nullable != 40000 {
-		panic(fmt.Sprintf("U16Nullable mismatch: expected 40000, got %v", result.U16Nullable))
+	if result.U16NullableField == nil || *result.U16NullableField != 40000 {
+		panic(fmt.Sprintf("U16NullableField mismatch: expected 40000, got %v", result.U16NullableField))
 	}
-	if result.U32VarNullable == nil || *result.U32VarNullable != 2500000000 {
-		panic(fmt.Sprintf("U32VarNullable mismatch: expected 2500000000, got %v", result.U32VarNullable))
+	if result.U32VarNullableField == nil || *result.U32VarNullableField != 2500000000 {
+		panic(fmt.Sprintf("U32VarNullableField mismatch: expected 2500000000, got %v", result.U32VarNullableField))
 	}
-	if result.U32FixedNullable == nil || *result.U32FixedNullable != 3500000000 {
-		panic(fmt.Sprintf("U32FixedNullable mismatch: expected 3500000000, got %v", result.U32FixedNullable))
+	if result.U32FixedNullableField == nil || *result.U32FixedNullableField != 3500000000 {
+		panic(fmt.Sprintf("U32FixedNullableField mismatch: expected 3500000000, got %v", result.U32FixedNullableField))
 	}
-	if result.U64VarNullable == nil || *result.U64VarNullable != 8000000000 {
-		panic(fmt.Sprintf("U64VarNullable mismatch: expected 8000000000, got %v", result.U64VarNullable))
+	if result.U64VarNullableField == nil || *result.U64VarNullableField != 8000000000 {
+		panic(fmt.Sprintf("U64VarNullableField mismatch: expected 8000000000, got %v", result.U64VarNullableField))
 	}
-	if result.U64FixedNullable == nil || *result.U64FixedNullable != 12000000000 {
-		panic(fmt.Sprintf("U64FixedNullable mismatch: expected 12000000000, got %v", result.U64FixedNullable))
+	if result.U64FixedNullableField == nil || *result.U64FixedNullableField != 12000000000 {
+		panic(fmt.Sprintf("U64FixedNullableField mismatch: expected 12000000000, got %v", result.U64FixedNullableField))
 	}
-	if result.U64TaggedNullable == nil || *result.U64TaggedNullable != 500000000 {
-		panic(fmt.Sprintf("U64TaggedNullable mismatch: expected 500000000, got %v", result.U64TaggedNullable))
+	if result.U64TaggedNullableField == nil || *result.U64TaggedNullableField != 500000000 {
+		panic(fmt.Sprintf("U64TaggedNullableField mismatch: expected 500000000, got %v", result.U64TaggedNullableField))
 	}
 
 	serialized, err := f.Serialize(result)
@@ -2323,26 +2323,26 @@ func testUnsignedSchemaCompatible() {
 	result := getUnsignedSchemaCompatible(obj)
 
 	// Verify Group 1: Nullable fields (values from Java's non-nullable fields)
-	if result.U8 == nil || *result.U8 != 200 {
-		panic(fmt.Sprintf("U8 mismatch: expected 200, got %v", result.U8))
+	if result.U8Field1 == nil || *result.U8Field1 != 200 {
+		panic(fmt.Sprintf("U8Field1 mismatch: expected 200, got %v", result.U8Field1))
 	}
-	if result.U16 == nil || *result.U16 != 60000 {
-		panic(fmt.Sprintf("U16 mismatch: expected 60000, got %v", result.U16))
+	if result.U16Field1 == nil || *result.U16Field1 != 60000 {
+		panic(fmt.Sprintf("U16Field1 mismatch: expected 60000, got %v", result.U16Field1))
 	}
-	if result.U32Var == nil || *result.U32Var != 3000000000 {
-		panic(fmt.Sprintf("U32Var mismatch: expected 3000000000, got %v", result.U32Var))
+	if result.U32VarField1 == nil || *result.U32VarField1 != 3000000000 {
+		panic(fmt.Sprintf("U32VarField1 mismatch: expected 3000000000, got %v", result.U32VarField1))
 	}
-	if result.U32Fixed == nil || *result.U32Fixed != 4000000000 {
-		panic(fmt.Sprintf("U32Fixed mismatch: expected 4000000000, got %v", result.U32Fixed))
+	if result.U32FixedField1 == nil || *result.U32FixedField1 != 4000000000 {
+		panic(fmt.Sprintf("U32FixedField1 mismatch: expected 4000000000, got %v", result.U32FixedField1))
 	}
-	if result.U64Var == nil || *result.U64Var != 10000000000 {
-		panic(fmt.Sprintf("U64Var mismatch: expected 10000000000, got %v", result.U64Var))
+	if result.U64VarField1 == nil || *result.U64VarField1 != 10000000000 {
+		panic(fmt.Sprintf("U64VarField1 mismatch: expected 10000000000, got %v", result.U64VarField1))
 	}
-	if result.U64Fixed == nil || *result.U64Fixed != 15000000000 {
-		panic(fmt.Sprintf("U64Fixed mismatch: expected 15000000000, got %v", result.U64Fixed))
+	if result.U64FixedField1 == nil || *result.U64FixedField1 != 15000000000 {
+		panic(fmt.Sprintf("U64FixedField1 mismatch: expected 15000000000, got %v", result.U64FixedField1))
 	}
-	if result.U64Tagged == nil || *result.U64Tagged != 1000000000 {
-		panic(fmt.Sprintf("U64Tagged mismatch: expected 1000000000, got %v", result.U64Tagged))
+	if result.U64TaggedField1 == nil || *result.U64TaggedField1 != 1000000000 {
+		panic(fmt.Sprintf("U64TaggedField1 mismatch: expected 1000000000, got %v", result.U64TaggedField1))
 	}
 
 	// Verify Group 2: Non-nullable fields (values from Java's nullable fields)

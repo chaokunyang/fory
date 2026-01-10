@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 // Fory models
-#[derive(ForyObject, Debug, Clone, PartialEq)]
+#[derive(ForyObject, Debug, Clone, PartialEq, Default)]
 pub struct ForyAddress {
     pub street: String,
     pub city: String,

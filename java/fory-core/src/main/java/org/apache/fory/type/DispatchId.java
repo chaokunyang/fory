@@ -75,9 +75,7 @@ public class DispatchId {
     // but serialized without null checks.
     boolean isPrimitive =
         typeRef.isPrimitive()
-            || (rawType.isPrimitive()
-                && typeExtMeta != null
-                && !typeExtMeta.nullable());
+            || (rawType.isPrimitive() && typeExtMeta != null && !typeExtMeta.nullable());
     if (fory.isCrossLanguage()) {
       return xlangTypeIdToDispatchId(typeId, isPrimitive);
     } else {

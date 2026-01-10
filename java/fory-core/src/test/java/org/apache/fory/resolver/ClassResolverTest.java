@@ -24,7 +24,6 @@ import static org.testng.Assert.assertNull;
 import static org.testng.Assert.assertSame;
 import static org.testng.Assert.assertTrue;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.primitives.Primitives;
 import java.nio.charset.StandardCharsets;
@@ -82,7 +81,8 @@ public class ClassResolverTest extends ForyTestBase {
           classResolver.getRegisteredClassId(primitiveClasses.get(i + 1)).shortValue());
       assertTrue(classResolver.getRegisteredClassId(primitiveClasses.get(i)) > 0);
     }
-    assertTrue(classResolver.getRegisteredClassId(primitiveClasses.get(primitiveClasses.size() - 1)) > 0);
+    assertTrue(
+        classResolver.getRegisteredClassId(primitiveClasses.get(primitiveClasses.size() - 1)) > 0);
     // Test that boxed types all have valid positive IDs
     // Note: boxed types are no longer consecutive due to unsigned type IDs being added
     List<Class<?>> boxedClasses = TypeUtils.getSortedBoxedClasses();

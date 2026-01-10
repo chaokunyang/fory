@@ -417,7 +417,8 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
             || dispatchId == DispatchId.UINT64) {
           groupExpressions.add(unsafePutLong(base, getWriterPos(writerAddr, acc), fieldValue));
           acc += 8;
-        } else if (dispatchId == DispatchId.PRIMITIVE_VARINT32 || dispatchId == DispatchId.VARINT32) {
+        } else if (dispatchId == DispatchId.PRIMITIVE_VARINT32
+            || dispatchId == DispatchId.VARINT32) {
           if (!compressStarted) {
             addIncWriterIndexExpr(groupExpressions, buffer, acc);
             compressStarted = true;
@@ -430,7 +431,8 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
             compressStarted = true;
           }
           groupExpressions.add(new Invoke(buffer, "_unsafeWriteVarUint32", fieldValue));
-        } else if (dispatchId == DispatchId.PRIMITIVE_VARINT64 || dispatchId == DispatchId.VARINT64) {
+        } else if (dispatchId == DispatchId.PRIMITIVE_VARINT64
+            || dispatchId == DispatchId.VARINT64) {
           if (!compressStarted) {
             addIncWriterIndexExpr(groupExpressions, buffer, acc);
             compressStarted = true;

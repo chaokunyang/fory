@@ -30,28 +30,34 @@ const (
 
 // ForyTag represents parsed fory struct tag options.
 //
-// Tag format: `fory:"id=N,nullable=bool,ref=bool,ignore=bool,type=TypeID"` or `fory:"-"`
+// Tag format: `fory:"id=N,nullable=bool,ref=bool,ignore=bool,compress=bool,encoding=value"` or `fory:"-"`
 //
 // Options:
 //   - id: Field tag ID. -1 (default) uses field name, >=0 uses numeric tag ID for compact encoding
 //   - nullable: Whether to write null flag. Default false (skip null flag for non-nullable fields)
 //   - ref: Whether to enable reference tracking. Default false (skip ref tracking overhead)
 //   - ignore: Whether to skip this field during serialization. Default false
-//   - type: Override type ID for unsigned types. Allows specifying encoding for uint32/uint64.
-//     Valid values: UINT16, UINT32, VAR_UINT32, UINT64, VAR_UINT64, TAGGED_UINT64
+//   - compress: For int32/uint32 fields: true=varint encoding (default), false=fixed encoding
+//   - encoding: For numeric fields:
+//     - int32/uint32: "varint" (default) or "fixed"
+//     - int64/uint64: "varint" (default), "fixed", or "tagged"
+//
+// Note: For int32/uint32, use either `compress` or `encoding`, not both.
 //
 // Examples:
 //
 //	type Example struct {
-//	    Name      string  `fory:"id=0"`                           // Use tag ID 0
-//	    Age       int     `fory:"id=1,nullable=false"`            // Explicit nullable=false
-//	    Email     *string `fory:"id=2,nullable=true,ref=false"`   // Nullable pointer, no ref tracking
-//	    Parent    *Node   `fory:"id=3,ref=true,nullable=true"`    // With reference tracking
-//	    U32Fixed  uint32  `fory:"type=UINT32"`                    // Use fixed 4-byte encoding
-//	    U32Var    uint32  `fory:"type=VAR_UINT32"`                // Use variable-length encoding
-//	    U64Tagged uint64  `fory:"type=TAGGED_UINT64"`             // Use tagged encoding
-//	    Secret    string  `fory:"ignore"`                         // Skip this field
-//	    Hidden    string  `fory:"-"`                              // Skip this field (shorthand)
+//	    Name       string  `fory:"id=0"`                           // Use tag ID 0
+//	    Age        int     `fory:"id=1,nullable=false"`            // Explicit nullable=false
+//	    Email      *string `fory:"id=2,nullable=true,ref=false"`   // Nullable pointer, no ref tracking
+//	    Parent     *Node   `fory:"id=3,ref=true,nullable=true"`    // With reference tracking
+//	    FixedI32   int32   `fory:"compress=false"`                 // Use fixed 4-byte INT32
+//	    VarI32     int32   `fory:"encoding=varint"`                // Use VARINT32 (default)
+//	    FixedU32   uint32  `fory:"encoding=fixed"`                 // Use fixed 4-byte UINT32
+//	    TaggedI64  int64   `fory:"encoding=tagged"`                // Use TAGGED_INT64
+//	    VarU64     uint64  `fory:"encoding=varint"`                // Use VAR_UINT64 (default)
+//	    Secret     string  `fory:"ignore"`                         // Skip this field
+//	    Hidden     string  `fory:"-"`                              // Skip this field (shorthand)
 //	}
 type ForyTag struct {
 	ID       int    // Field tag ID (-1 = use field name, >=0 = use tag ID)
@@ -163,30 +169,6 @@ func parseForyTag(field reflect.StructField) ForyTag {
 func parseBool(s string) bool {
 	s = strings.ToLower(strings.TrimSpace(s))
 	return s == "true" || s == "1" || s == "yes"
-}
-
-// parseTypeID parses a TypeId from string name.
-// Returns 0 if the type name is not recognized.
-func parseTypeID(s string) TypeId {
-	s = strings.ToUpper(strings.TrimSpace(s))
-	switch s {
-	case "UINT8":
-		return UINT8
-	case "UINT16":
-		return UINT16
-	case "UINT32":
-		return UINT32
-	case "VAR_UINT32":
-		return VAR_UINT32
-	case "UINT64":
-		return UINT64
-	case "VAR_UINT64":
-		return VAR_UINT64
-	case "TAGGED_UINT64":
-		return TAGGED_UINT64
-	default:
-		return 0
-	}
 }
 
 // validateForyTags validates all fory tags in a struct type.

@@ -168,7 +168,7 @@ jobs:
           X86_DIR=$(ls -d unpacked/x86_64/pyfory-*)
           UNIVERSAL_DIR="unpacked/pyfory-universal2"
           cp -R "$ARM_DIR" "$UNIVERSAL_DIR"
-          for so in pyfory/buffer.go pyfory/serialization.so pyfory/format/_format.so pyfory/lib/mmh3/mmh3.so; do
+          for so in pyfory/buffer.so pyfory/serialization.so pyfory/format/_format.so pyfory/lib/mmh3/mmh3.so; do
             lipo -create "$ARM_DIR/$so" "$X86_DIR/$so" -output "$UNIVERSAL_DIR/$so"
           done
           WHEEL_FILE=$(ls "$UNIVERSAL_DIR"/pyfory-*.dist-info/WHEEL)
@@ -187,7 +187,7 @@ jobs:
           VERIFY_DIR=$(ls -d verify/pyfory-*)
           WHEEL_FILE=$(ls "$VERIFY_DIR"/pyfory-*.dist-info/WHEEL)
           grep -q "macosx_11_0_universal2" "$WHEEL_FILE"
-          for so in pyfory/buffer.go pyfory/serialization.so pyfory/format/_format.so pyfory/lib/mmh3/mmh3.so; do
+          for so in pyfory/buffer.so pyfory/serialization.so pyfory/format/_format.so pyfory/lib/mmh3/mmh3.so; do
             echo "$so: $(lipo -archs "$VERIFY_DIR/$so")"
           done
       - name: Upload universal2 wheel

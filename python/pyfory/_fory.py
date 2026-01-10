@@ -48,7 +48,7 @@ USE_TYPE_NAME = 0
 USE_TYPE_ID = 1
 # preserve 0 as flag for type id not set in TypeInfo`
 NO_TYPE_ID = 0
-INT64_TYPE_ID = TypeId.INT64
+INT64_TYPE_ID = TypeId.VARINT64
 FLOAT64_TYPE_ID = TypeId.FLOAT64
 BOOL_TYPE_ID = TypeId.BOOL
 STRING_TYPE_ID = TypeId.STRING

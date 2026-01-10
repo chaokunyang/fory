@@ -142,7 +142,7 @@ impl<'a> Writer<'a> {
     pub fn write_tagged_i64(&mut self, value: i64) {
         const HALF_MIN_INT_VALUE: i64 = i32::MIN as i64 / 2; // -1073741824
         const HALF_MAX_INT_VALUE: i64 = i32::MAX as i64 / 2; // 1073741823
-        if value >= HALF_MIN_INT_VALUE && value <= HALF_MAX_INT_VALUE {
+        if (HALF_MIN_INT_VALUE..=HALF_MAX_INT_VALUE).contains(&value) {
             // Fits in 31 bits (with sign), encode as 4 bytes with bit 0 = 0
             let v = (value as i32) << 1;
             self.write_i32(v);

@@ -246,16 +246,18 @@ TEST(UnsignedSerializerTest, BoundaryValues) {
 // ============================================================================
 
 TEST(UnsignedSerializerTest, UnsignedTypeIdsAreDistinct) {
-  // Verify that unsigned types use distinct TypeIds (UINT8, UINT16, UINT32,
-  // UINT64)
+  // Verify that unsigned types use distinct TypeIds
+  // uint8_t and uint16_t use fixed encoding (UINT8, UINT16)
+  // uint32_t and uint64_t use variable encoding (VAR_UINT32, VAR_UINT64) to
+  // match Rust xlang mode
   EXPECT_EQ(static_cast<uint32_t>(Serializer<uint8_t>::type_id),
             static_cast<uint32_t>(TypeId::UINT8));
   EXPECT_EQ(static_cast<uint32_t>(Serializer<uint16_t>::type_id),
             static_cast<uint32_t>(TypeId::UINT16));
   EXPECT_EQ(static_cast<uint32_t>(Serializer<uint32_t>::type_id),
-            static_cast<uint32_t>(TypeId::UINT32));
+            static_cast<uint32_t>(TypeId::VAR_UINT32));
   EXPECT_EQ(static_cast<uint32_t>(Serializer<uint64_t>::type_id),
-            static_cast<uint32_t>(TypeId::UINT64));
+            static_cast<uint32_t>(TypeId::VAR_UINT64));
 }
 
 TEST(UnsignedSerializerTest, UnsignedArrayTypeIdsAreDistinct) {

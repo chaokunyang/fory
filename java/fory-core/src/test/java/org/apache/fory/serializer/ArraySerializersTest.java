@@ -376,7 +376,7 @@ public class ArraySerializersTest extends ForyTestBase {
         Fory.builder()
             .requireClassRegistration(false)
             .withLongArrayCompressed(true)
-            .withLongCompressed(LongEncoding.PVL)
+            .withLongCompressed(LongEncoding.VARINT)
             .build();
 
     // Test empty array
@@ -429,7 +429,7 @@ public class ArraySerializersTest extends ForyTestBase {
         Fory.builder()
             .requireClassRegistration(false)
             .withLongArrayCompressed(true)
-            .withLongCompressed(LongEncoding.PVL)
+            .withLongCompressed(LongEncoding.VARINT)
             .build();
 
     // Create an array with many small values (0-127, which can be encoded in 1-2 bytes with varint)

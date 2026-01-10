@@ -2533,6 +2533,7 @@ public abstract class XlangTestBase extends ForyTestBase {
   static class UnsignedSchemaConsistentSimple {
     @Uint64Type(encoding = LongEncoding.TAGGED)
     long u64Tagged;
+
     @ForyField(nullable = true)
     @Uint64Type(encoding = LongEncoding.TAGGED)
     Long u64TaggedNullable;
@@ -2559,7 +2560,8 @@ public abstract class XlangTestBase extends ForyTestBase {
     ExecutionContext ctx = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
     runPeer(ctx);
     MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
-    UnsignedSchemaConsistentSimple result = (UnsignedSchemaConsistentSimple) fory.deserialize(buffer2);
+    UnsignedSchemaConsistentSimple result =
+        (UnsignedSchemaConsistentSimple) fory.deserialize(buffer2);
     Assert.assertEquals(result, obj);
   }
 

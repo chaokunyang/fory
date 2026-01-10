@@ -735,7 +735,6 @@ public class ClassResolver extends TypeResolver {
     return classId != NO_CLASS_ID && classId < innerEndClassId;
   }
 
-
   /** Returns true if <code>cls</code> is fory inner registered class. */
   public boolean isInternalRegistered(Class<?> cls) {
     Short classId = extRegistry.registeredClassIdMap.get(cls);

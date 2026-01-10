@@ -222,7 +222,7 @@ public class FieldTypes {
      */
     public abstract TypeRef<?> toTypeToken(TypeResolver classResolver, TypeRef<?> declared);
 
-    public String  getTypeName(TypeResolver resolver, TypeRef<?> typeRef) {
+    public String getTypeName(TypeResolver resolver, TypeRef<?> typeRef) {
       return typeRef.getType().getTypeName();
     }
 
@@ -760,7 +760,8 @@ public class FieldTypes {
 
     @Override
     public String getTypeName(TypeResolver resolver, TypeRef<?> typeRef) {
-      // For native mode, this return same `Array` type to ensure consistent order even some array type
+      // For native mode, this return same `Array` type to ensure consistent order even some array
+      // type
       // is not exist on current deserialization process.
       // For primitive/registered array, it goes to RegisteredFieldType.
       return "Array";

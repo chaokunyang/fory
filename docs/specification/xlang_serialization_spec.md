@@ -161,17 +161,17 @@ custom types (struct/ext/enum). User type IDs are in a separate namespace and co
 | 2       | INT8                    | 8-bit signed integer                                |
 | 3       | INT16                   | 16-bit signed integer                               |
 | 4       | INT32                   | 32-bit signed integer                               |
-| 5       | VARINT32                   | Variable-length encoded 32-bit signed integer       |
+| 5       | VARINT32                | Variable-length encoded 32-bit signed integer       |
 | 6       | INT64                   | 64-bit signed integer                               |
-| 7       | VARINT64                   | Variable-length encoded 64-bit signed integer       |
-| 8       | TAGGED_INT64                     | Hybrid encoded 64-bit signed integer                |
+| 7       | VARINT64                | Variable-length encoded 64-bit signed integer       |
+| 8       | TAGGED_INT64            | Hybrid encoded 64-bit signed integer                |
 | 9       | UINT8                   | 8-bit unsigned integer                              |
 | 10      | UINT16                  | 16-bit unsigned integer                             |
 | 11      | UINT32                  | 32-bit unsigned integer                             |
-| 12      | VAR_UINT32                  | Variable-length encoded 32-bit unsigned integer     |
+| 12      | VAR_UINT32              | Variable-length encoded 32-bit unsigned integer     |
 | 13      | UINT64                  | 64-bit unsigned integer                             |
-| 14      | VAR_UINT64                  | Variable-length encoded 64-bit unsigned integer     |
-| 15      | TAGGED_UINT64                    | Hybrid encoded 64-bit unsigned integer              |
+| 14      | VAR_UINT64              | Variable-length encoded 64-bit unsigned integer     |
+| 15      | TAGGED_UINT64           | Hybrid encoded 64-bit unsigned integer              |
 | 16      | FLOAT16                 | 16-bit floating point (half precision)              |
 | 17      | FLOAT32                 | 32-bit floating point (single precision)            |
 | 18      | FLOAT64                 | 64-bit floating point (double precision)            |

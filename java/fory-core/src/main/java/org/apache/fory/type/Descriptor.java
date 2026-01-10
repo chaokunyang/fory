@@ -115,7 +115,7 @@ public class Descriptor {
     this.writeMethod = writeMethod;
     this.typeRef = typeRef;
     this.foryField = this.field.getAnnotation(ForyField.class);
-    typeAnnotation = getTypeAnnotation(field);
+    typeAnnotation = getAnnotation(field);
     if (!typeRef.isPrimitive()) {
       this.nullable = foryField == null || foryField.nullable();
     }
@@ -157,7 +157,7 @@ public class Descriptor {
     this.readMethod = readMethod;
     this.writeMethod = null;
     this.foryField = this.field.getAnnotation(ForyField.class);
-    typeAnnotation = getTypeAnnotation(field);
+    typeAnnotation = getAnnotation(field);
     if (!field.getType().isPrimitive()) {
       this.nullable = foryField == null || foryField.nullable();
     }
@@ -176,7 +176,7 @@ public class Descriptor {
     this.readMethod = readMethod;
     this.writeMethod = null;
     this.foryField = readMethod.getAnnotation(ForyField.class);
-    typeAnnotation = getTypeAnnotation(readMethod);
+    typeAnnotation = getAnnotation(readMethod.getDeclaredAnnotations(), readMethod.getName());
     if (!readMethod.getReturnType().isPrimitive()) {
       this.nullable = foryField == null || foryField.nullable();
     }
@@ -194,7 +194,7 @@ public class Descriptor {
     this.writeMethod = builder.writeMethod;
     this.trackingRef = builder.trackingRef;
     this.foryField = this.field == null ? null : this.field.getAnnotation(ForyField.class);
-    typeAnnotation = getTypeAnnotation(field);
+    typeAnnotation = field == null ? null : getAnnotation(field);
     // Use builder.nullable directly - this is set by DescriptorBuilder.nullable()
     // and should be respected, especially for xlang compatible mode where remote
     // TypeDef's nullable flag may differ from local field's nullable
@@ -683,20 +683,6 @@ public class Descriptor {
     typeAnnotationsTypes.add(Uint16Type.class);
     typeAnnotationsTypes.add(Uint32Type.class);
     typeAnnotationsTypes.add(Uint64Type.class);
-  }
-
-  private static Annotation getTypeAnnotation(Field field) {
-    if (field == null) {
-      return null;
-    }
-    return getAnnotation(field);
-  }
-
-  private static Annotation getTypeAnnotation(Method method) {
-    if (method == null) {
-      return null;
-    }
-    return getAnnotation(method.getDeclaredAnnotations(), method.getName());
   }
 
   public static Annotation getAnnotation(Field field) {

@@ -569,7 +569,8 @@ template <typename T, size_t Index> struct FieldInfoBuilder {
     const auto field_names = decltype(meta)::Names;
     const auto field_ptrs = decltype(meta)::Ptrs;
 
-    // Convert camelCase field name to snake_case for cross-language compatibility
+    // Convert camelCase field name to snake_case for cross-language
+    // compatibility
     std::string_view original_name = field_names[Index];
     constexpr size_t max_snake_len = 128; // Reasonable max for field names
     auto [snake_buffer, snake_len] =
@@ -592,7 +593,8 @@ template <typename T, size_t Index> struct FieldInfoBuilder {
 
     FieldType field_type = FieldTypeBuilder<UnwrappedFieldType>::build(false);
 
-    // Override type_id for unsigned types based on encoding from FORY_FIELD_CONFIG
+    // Override type_id for unsigned types based on encoding from
+    // FORY_FIELD_CONFIG
     using InnerType = unwrap_optional_inner_t<UnwrappedFieldType>;
     constexpr uint32_t unsigned_tid =
         compute_unsigned_type_id<UnwrappedFieldType, T, Index>();
@@ -1046,7 +1048,8 @@ TypeResolver::build_struct_type_info(uint32_t type_id, std::string ns,
 
   entry->name_to_index.reserve(field_count);
   for (size_t i = 0; i < field_count; ++i) {
-    // Convert camelCase field name to snake_case for cross-language compatibility
+    // Convert camelCase field name to snake_case for cross-language
+    // compatibility
     constexpr size_t max_snake_len = 128;
     auto [snake_buffer, snake_len] =
         ::fory::to_snake_case<max_snake_len>(field_names[i]);

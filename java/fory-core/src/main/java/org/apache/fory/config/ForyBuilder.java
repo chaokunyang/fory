@@ -188,12 +188,11 @@ public final class ForyBuilder {
   }
 
   /**
-   * Use variable length encoding for long. Enabled by default, use {@link
-   * LongEncoding#TAGGED} (Small long as int) for long encoding.
+   * Use variable length encoding for long. Enabled by default, use {@link LongEncoding#TAGGED}
+   * (Small long as int) for long encoding.
    */
   public ForyBuilder withLongCompressed(boolean longCompressed) {
-    return withLongCompressed(
-        longCompressed ? LongEncoding.TAGGED : LongEncoding.FIXED);
+    return withLongCompressed(longCompressed ? LongEncoding.TAGGED : LongEncoding.FIXED);
   }
 
   /** Use variable length encoding for long. */

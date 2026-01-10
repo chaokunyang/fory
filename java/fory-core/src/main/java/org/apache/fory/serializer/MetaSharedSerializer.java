@@ -168,15 +168,19 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
   @Override
   public T read(MemoryBuffer buffer) {
     if (Utils.debugOutputEnabled()) {
-      LOG.info(
-          "========== MetaSharedSerializer.read() for {} ==========", type.getName());
+      LOG.info("========== MetaSharedSerializer.read() for {} ==========", type.getName());
       LOG.info("Buffer readerIndex at start: {}", buffer.readerIndex());
       LOG.info("buildInFields count: {}", buildInFields.length);
       for (int i = 0; i < buildInFields.length; i++) {
         SerializationFieldInfo fi = buildInFields[i];
         LOG.info(
             "  buildInField[{}]: name={}, dispatchId={}, nullable={}, isPrimitive={}, hasAccessor={}",
-            i, fi.qualifiedFieldName, fi.dispatchId, fi.nullable, fi.isPrimitive, fi.fieldAccessor != null);
+            i,
+            fi.qualifiedFieldName,
+            fi.dispatchId,
+            fi.nullable,
+            fi.isPrimitive,
+            fi.fieldAccessor != null);
       }
     }
     if (isRecord) {
@@ -201,7 +205,11 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
       if (Utils.debugOutputEnabled()) {
         LOG.info(
             "[Java] About to read field: name={}, dispatchId={}, nullable={}, isPrimitive={}, bufferPos={}",
-            fieldInfo.qualifiedFieldName, fieldInfo.dispatchId, nullable, fieldInfo.isPrimitive, buffer.readerIndex());
+            fieldInfo.qualifiedFieldName,
+            fieldInfo.dispatchId,
+            nullable,
+            fieldInfo.isPrimitive,
+            buffer.readerIndex());
         // Print next 16 bytes from buffer for debugging
         int pos = buffer.readerIndex();
         int remaining = Math.min(16, buffer.size() - pos);

@@ -1403,9 +1403,7 @@ def test_unsigned_schema_consistent_simple():
     obj = fory.deserialize(data_bytes)
     debug_print(f"Deserialized: {obj}")
 
-    assert obj.u64_tagged == expected.u64_tagged, (
-        f"u64_tagged: {obj.u64_tagged} != {expected.u64_tagged}"
-    )
+    assert obj.u64_tagged == expected.u64_tagged, f"u64_tagged: {obj.u64_tagged} != {expected.u64_tagged}"
     assert obj.u64_tagged_nullable == expected.u64_tagged_nullable, (
         f"u64_tagged_nullable: {obj.u64_tagged_nullable} != {expected.u64_tagged_nullable}"
     )
@@ -1458,11 +1456,21 @@ def test_unsigned_schema_consistent():
     # Verify nullable boxed fields
     assert obj.u8_nullable_field == expected.u8_nullable_field, f"u8_nullable_field: {obj.u8_nullable_field} != {expected.u8_nullable_field}"
     assert obj.u16_nullable_field == expected.u16_nullable_field, f"u16_nullable_field: {obj.u16_nullable_field} != {expected.u16_nullable_field}"
-    assert obj.u32_var_nullable_field == expected.u32_var_nullable_field, f"u32_var_nullable_field: {obj.u32_var_nullable_field} != {expected.u32_var_nullable_field}"
-    assert obj.u32_fixed_nullable_field == expected.u32_fixed_nullable_field, f"u32_fixed_nullable_field: {obj.u32_fixed_nullable_field} != {expected.u32_fixed_nullable_field}"
-    assert obj.u64_var_nullable_field == expected.u64_var_nullable_field, f"u64_var_nullable_field: {obj.u64_var_nullable_field} != {expected.u64_var_nullable_field}"
-    assert obj.u64_fixed_nullable_field == expected.u64_fixed_nullable_field, f"u64_fixed_nullable_field: {obj.u64_fixed_nullable_field} != {expected.u64_fixed_nullable_field}"
-    assert obj.u64_tagged_nullable_field == expected.u64_tagged_nullable_field, f"u64_tagged_nullable_field: {obj.u64_tagged_nullable_field} != {expected.u64_tagged_nullable_field}"
+    assert obj.u32_var_nullable_field == expected.u32_var_nullable_field, (
+        f"u32_var_nullable_field: {obj.u32_var_nullable_field} != {expected.u32_var_nullable_field}"
+    )
+    assert obj.u32_fixed_nullable_field == expected.u32_fixed_nullable_field, (
+        f"u32_fixed_nullable_field: {obj.u32_fixed_nullable_field} != {expected.u32_fixed_nullable_field}"
+    )
+    assert obj.u64_var_nullable_field == expected.u64_var_nullable_field, (
+        f"u64_var_nullable_field: {obj.u64_var_nullable_field} != {expected.u64_var_nullable_field}"
+    )
+    assert obj.u64_fixed_nullable_field == expected.u64_fixed_nullable_field, (
+        f"u64_fixed_nullable_field: {obj.u64_fixed_nullable_field} != {expected.u64_fixed_nullable_field}"
+    )
+    assert obj.u64_tagged_nullable_field == expected.u64_tagged_nullable_field, (
+        f"u64_tagged_nullable_field: {obj.u64_tagged_nullable_field} != {expected.u64_tagged_nullable_field}"
+    )
 
     new_bytes = fory.serialize(obj)
     with open(data_file, "wb") as f:

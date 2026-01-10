@@ -231,7 +231,8 @@ FORY_ALWAYS_INLINE uint32_t put_varint_at(T value, Buffer &buffer,
     return buffer.PutVarUint32(offset, static_cast<uint32_t>(value));
   } else if constexpr (std::is_same_v<T, uint64_t> ||
                        std::is_same_v<T, unsigned long long>) {
-    // Unsigned 64-bit varint (no zigzag) - used for VAR_UINT64 and TAGGED_UINT64
+    // Unsigned 64-bit varint (no zigzag) - used for VAR_UINT64 and
+    // TAGGED_UINT64
     return buffer.PutVarUint64(offset, static_cast<uint64_t>(value));
   } else {
     static_assert(sizeof(T) == 0, "Unsupported varint type");
@@ -1624,8 +1625,8 @@ inline constexpr bool is_raw_primitive_v = is_raw_primitive<T>::value;
 /// The caller must convert to the correct local type.
 template <typename TargetType>
 FORY_ALWAYS_INLINE TargetType read_primitive_by_type_id(ReadContext &ctx,
-                                                         uint32_t type_id,
-                                                         Error &error) {
+                                                        uint32_t type_id,
+                                                        Error &error) {
   // Read based on remote type_id encoding, then convert to TargetType
   switch (static_cast<TypeId>(type_id)) {
   case TypeId::BOOL:
@@ -1637,7 +1638,8 @@ FORY_ALWAYS_INLINE TargetType read_primitive_by_type_id(ReadContext &ctx,
   case TypeId::INT16:
     return static_cast<TargetType>(ctx.read_int16(error));
   case TypeId::UINT16:
-    return static_cast<TargetType>(static_cast<uint16_t>(ctx.read_int16(error)));
+    return static_cast<TargetType>(
+        static_cast<uint16_t>(ctx.read_int16(error)));
   case TypeId::INT32:
     // INT32 uses fixed encoding
     return static_cast<TargetType>(ctx.read_int32(error));
@@ -1646,7 +1648,8 @@ FORY_ALWAYS_INLINE TargetType read_primitive_by_type_id(ReadContext &ctx,
     return static_cast<TargetType>(ctx.read_varint32(error));
   case TypeId::UINT32:
     // UINT32 uses fixed 4-byte encoding
-    return static_cast<TargetType>(static_cast<uint32_t>(ctx.read_int32(error)));
+    return static_cast<TargetType>(
+        static_cast<uint32_t>(ctx.read_int32(error)));
   case TypeId::VAR_UINT32:
     // VAR_UINT32 uses varint encoding
     return static_cast<TargetType>(ctx.read_varuint32(error));
@@ -1661,7 +1664,8 @@ FORY_ALWAYS_INLINE TargetType read_primitive_by_type_id(ReadContext &ctx,
     return static_cast<TargetType>(ctx.read_tagged_int64(error));
   case TypeId::UINT64:
     // UINT64 uses fixed 8-byte encoding
-    return static_cast<TargetType>(static_cast<uint64_t>(ctx.read_int64(error)));
+    return static_cast<TargetType>(
+        static_cast<uint64_t>(ctx.read_int64(error)));
   case TypeId::VAR_UINT64:
     // VAR_UINT64 uses varint encoding
     return static_cast<TargetType>(ctx.read_varuint64(error));
@@ -1842,7 +1846,8 @@ void read_single_field_by_index(T &obj, ReadContext &ctx) {
       obj.*field_ptr = read_value();
     }
   } else {
-    // Special handling for std::optional<uint32_t/uint64_t> with encoding config
+    // Special handling for std::optional<uint32_t/uint64_t> with encoding
+    // config
     constexpr bool is_encoded_optional_uint =
         ::fory::detail::has_field_config_v<T> &&
         (std::is_same_v<FieldType, std::optional<uint32_t>> ||
@@ -1854,13 +1859,15 @@ void read_single_field_by_index(T &obj, ReadContext &ctx) {
 #ifdef ENABLE_FORY_DEBUG_OUTPUT
       std::cerr << "[DEBUG] is_encoded_optional_uint: Index=" << Index
                 << ", enc=" << static_cast<int>(enc)
-                << ", reader_index=" << ctx.buffer().reader_index() << std::endl;
+                << ", reader_index=" << ctx.buffer().reader_index()
+                << std::endl;
 #endif
       // Read nullable flag
       int8_t flag = ctx.read_int8(ctx.error());
 #ifdef ENABLE_FORY_DEBUG_OUTPUT
       std::cerr << "[DEBUG] After read flag: flag=" << static_cast<int>(flag)
-                << ", reader_index=" << ctx.buffer().reader_index() << std::endl;
+                << ", reader_index=" << ctx.buffer().reader_index()
+                << std::endl;
 #endif
       if (FORY_PREDICT_FALSE(ctx.has_error())) {
         return;
@@ -1874,8 +1881,7 @@ void read_single_field_by_index(T &obj, ReadContext &ctx) {
         return;
       }
       // Read the value with encoding-aware reading
-      using InnerType =
-          typename std::remove_reference_t<FieldType>::value_type;
+      using InnerType = typename std::remove_reference_t<FieldType>::value_type;
       InnerType value;
       if constexpr (std::is_same_v<InnerType, uint32_t>) {
         if constexpr (enc == Encoding::Varint) {
@@ -1971,24 +1977,24 @@ void read_single_field_by_index_compatible(T &obj, ReadContext &ctx,
             << ", buffer pos=" << ctx.buffer().reader_index() << std::endl;
 #endif
 
-  // In compatible mode, handle primitive fields specially to use remote encoding.
-  // This is critical for schema evolution where encoding differs between sender/receiver.
+  // In compatible mode, handle primitive fields specially to use remote
+  // encoding. This is critical for schema evolution where encoding differs
+  // between sender/receiver.
   constexpr bool is_raw_prim = is_raw_primitive_v<FieldType>;
   constexpr bool is_local_optional = is_optional_v<FieldType>;
 
   // Case 1: Local raw primitive, any remote ref mode
-  // For primitives, we must use remote_type_id encoding regardless of nullability
+  // For primitives, we must use remote_type_id encoding regardless of
+  // nullability
   if constexpr (is_raw_prim && is_primitive_field) {
     if (remote_ref_mode == RefMode::None) {
       // Remote is non-nullable, no ref flag
       if constexpr (is_fory_field_v<RawFieldType>) {
-        (obj.*field_ptr).value =
-            read_primitive_by_type_id<FieldType>(ctx, remote_type_id,
-                                                 ctx.error());
+        (obj.*field_ptr).value = read_primitive_by_type_id<FieldType>(
+            ctx, remote_type_id, ctx.error());
       } else {
-        obj.*field_ptr =
-            read_primitive_by_type_id<FieldType>(ctx, remote_type_id,
-                                                 ctx.error());
+        obj.*field_ptr = read_primitive_by_type_id<FieldType>(
+            ctx, remote_type_id, ctx.error());
       }
       return;
     } else {
@@ -2005,13 +2011,11 @@ void read_single_field_by_index_compatible(T &obj, ReadContext &ctx,
       }
       // NOT_NULL_VALUE_FLAG or REF_VALUE_FLAG - read the value
       if constexpr (is_fory_field_v<RawFieldType>) {
-        (obj.*field_ptr).value =
-            read_primitive_by_type_id<FieldType>(ctx, remote_type_id,
-                                                 ctx.error());
+        (obj.*field_ptr).value = read_primitive_by_type_id<FieldType>(
+            ctx, remote_type_id, ctx.error());
       } else {
-        obj.*field_ptr =
-            read_primitive_by_type_id<FieldType>(ctx, remote_type_id,
-                                                 ctx.error());
+        obj.*field_ptr = read_primitive_by_type_id<FieldType>(
+            ctx, remote_type_id, ctx.error());
       }
       return;
     }
@@ -2083,11 +2087,9 @@ void read_single_field_by_index_compatible(T &obj, ReadContext &ctx,
 /// Sets handled=true if field was matched.
 /// @param remote_type_id The type_id from the remote schema (for encoding)
 template <typename T, size_t... Indices>
-FORY_ALWAYS_INLINE void
-dispatch_compatible_field_read_impl(T &obj, ReadContext &ctx, int16_t field_id,
-                                    RefMode remote_ref_mode,
-                                    uint32_t remote_type_id, bool &handled,
-                                    std::index_sequence<Indices...>) {
+FORY_ALWAYS_INLINE void dispatch_compatible_field_read_impl(
+    T &obj, ReadContext &ctx, int16_t field_id, RefMode remote_ref_mode,
+    uint32_t remote_type_id, bool &handled, std::index_sequence<Indices...>) {
   using Helpers = CompileTimeFieldHelpers<T>;
 
   // Short-circuit fold: stops at first match
@@ -2252,7 +2254,8 @@ FORY_ALWAYS_INLINE T read_varint_at(Buffer &buffer, uint32_t &offset) {
     return raw;
   } else if constexpr (std::is_same_v<T, uint64_t> ||
                        std::is_same_v<T, unsigned long long>) {
-    // Unsigned 64-bit varint (no zigzag) - used for VAR_UINT64 and TAGGED_UINT64
+    // Unsigned 64-bit varint (no zigzag) - used for VAR_UINT64 and
+    // TAGGED_UINT64
     uint64_t raw = buffer.GetVarUint64(offset, &bytes_read);
     offset += bytes_read;
     return raw;
@@ -2445,10 +2448,9 @@ void read_struct_fields_compatible(T &obj, ReadContext &ctx,
     // Uses fold expression with short-circuit - no lambda overhead
     // Pass remote type_id for correct encoding in compatible mode
     bool handled = false;
-    dispatch_compatible_field_read_impl<T>(obj, ctx, field_id, remote_ref_mode,
-                                           remote_field.field_type.type_id,
-                                           handled,
-                                           std::index_sequence<Indices...>{});
+    dispatch_compatible_field_read_impl<T>(
+        obj, ctx, field_id, remote_ref_mode, remote_field.field_type.type_id,
+        handled, std::index_sequence<Indices...>{});
 
     if (!handled) {
       // Shouldn't happen if TypeMeta::assign_field_ids worked correctly

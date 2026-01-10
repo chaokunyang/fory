@@ -458,7 +458,8 @@ public:
   }
 
   /// Read int64_t using tagged encoding at given offset.
-  /// - If bit 0 is 0: read 4 bytes as signed int, return value >> 1 (arithmetic)
+  /// - If bit 0 is 0: read 4 bytes as signed int, return value >> 1
+  /// (arithmetic)
   /// - If bit 0 is 1: read 1 byte flag + 8 bytes int64
   FORY_ALWAYS_INLINE int64_t GetTaggedInt64(uint32_t offset,
                                             uint32_t *readBytesLength) {
@@ -472,14 +473,15 @@ public:
     }
   }
 
-  /// Write uint64_t using tagged encoding at given offset. Returns bytes written.
+  /// Write uint64_t using tagged encoding at given offset. Returns bytes
+  /// written.
   /// - If value is in [0, 0x7fffffff]: write 4 bytes (value << 1), return 4
   /// - Otherwise: write 1 byte flag + 8 bytes uint64, return 9
   FORY_ALWAYS_INLINE uint32_t PutTaggedUint64(uint32_t offset, uint64_t value) {
     constexpr uint64_t MAX_SMALL_VALUE = 0x7fffffff; // INT32_MAX as u64
     if (value <= MAX_SMALL_VALUE) {
-      *reinterpret_cast<int32_t *>(data_ + offset) =
-          static_cast<int32_t>(value) << 1;
+      *reinterpret_cast<int32_t *>(data_ + offset) = static_cast<int32_t>(value)
+                                                     << 1;
       return 4;
     } else {
       data_[offset] = 0b1;
@@ -488,15 +490,17 @@ public:
     }
   }
 
-  /// Write int64_t using tagged encoding at given offset. Returns bytes written.
-  /// - If value is in [-1073741824, 1073741823]: write 4 bytes (value << 1), return 4
+  /// Write int64_t using tagged encoding at given offset. Returns bytes
+  /// written.
+  /// - If value is in [-1073741824, 1073741823]: write 4 bytes (value << 1),
+  /// return 4
   /// - Otherwise: write 1 byte flag + 8 bytes int64, return 9
   FORY_ALWAYS_INLINE uint32_t PutTaggedInt64(uint32_t offset, int64_t value) {
     constexpr int64_t MIN_SMALL_VALUE = -1073741824; // -2^30
     constexpr int64_t MAX_SMALL_VALUE = 1073741823;  // 2^30 - 1
     if (value >= MIN_SMALL_VALUE && value <= MAX_SMALL_VALUE) {
-      *reinterpret_cast<int32_t *>(data_ + offset) =
-          static_cast<int32_t>(value) << 1;
+      *reinterpret_cast<int32_t *>(data_ + offset) = static_cast<int32_t>(value)
+                                                     << 1;
       return 4;
     } else {
       data_[offset] = 0b1;

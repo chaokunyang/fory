@@ -19,11 +19,8 @@
 
 package org.apache.fory.type;
 
-import static org.apache.fory.collection.Collections.ofHashMap;
-
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
-import java.util.Map;
 import org.apache.fory.Fory;
 import org.apache.fory.meta.TypeExtMeta;
 import org.apache.fory.reflect.TypeRef;
@@ -244,21 +241,6 @@ public class Types {
     return isStructType(typeId) || isExtType(typeId) || isEnumType(typeId);
   }
 
-  private static final Map<Class, Integer> PRIMITIVE_TYPE_ID_MAP =
-      ofHashMap(
-          boolean.class, BOOL,
-          byte.class, INT8,
-          short.class, INT16,
-          int.class, INT32,
-          long.class, INT64,
-          float.class, FLOAT32,
-          double.class, FLOAT64);
-
-  public static int getPrimitiveTypeId(Class<?> cls) {
-    Preconditions.checkArgument(cls.isPrimitive(), "Class %s is not primitive", cls);
-    return PRIMITIVE_TYPE_ID_MAP.getOrDefault(cls, -1);
-  }
-
   public static boolean isPrimitiveType(int typeId) {
     return typeId >= BOOL && typeId <= FLOAT64;
   }
@@ -314,30 +296,6 @@ public class Types {
         throw new IllegalArgumentException(
             String.format("Type id %d is not a primitive id", typeId));
     }
-  }
-
-  public static int getPrimitiveTypeId(Fory fory, Class<?> rawType) {
-    Class<?> unwrapped = TypeUtils.unwrap(rawType);
-    if (unwrapped == char.class) {
-      Preconditions.checkArgument(!fory.isCrossLanguage(), "Char is not support for xlang");
-      return rawType.isPrimitive() ? ClassResolver.PRIMITIVE_CHAR_ID : ClassResolver.CHAR_ID;
-    }
-    if (unwrapped == boolean.class) {
-      return Types.BOOL;
-    } else if (unwrapped == byte.class) {
-      return Types.INT8;
-    } else if (unwrapped == short.class) {
-      return Types.INT16;
-    } else if (unwrapped == int.class) {
-      return fory.compressInt() ? Types.VARINT32 : Types.INT32;
-    } else if (unwrapped == long.class) {
-      return fory.compressLong() ? Types.VARINT64 : Types.INT64;
-    } else if (unwrapped == float.class) {
-      return Types.FLOAT32;
-    } else if (unwrapped == double.class) {
-      return Types.FLOAT64;
-    }
-    return Types.UNKNOWN;
   }
 
   public static int getDescriptorTypeId(Fory fory, Field field) {
@@ -439,7 +397,8 @@ public class Types {
       case TAGGED_INT64:
       case TAGGED_UINT64:
         return true;
+      default:
+        return false;
     }
-    return false;
   }
 }

@@ -30,8 +30,8 @@ public enum LongEncoding {
    *     value) << 1 |`
    * <li>Otherwise write as 9 bytes: `| 0b1 | little-endian 8bytes long |`.
    *
-   *     <p>Faster than {@link #VARINT}, but compression is not good as {@link #VARINT} such as
-   *     for ints in short range.
+   *     <p>Faster than {@link #VARINT}, but compression is not good as {@link #VARINT} such as for
+   *     ints in short range.
    */
   TAGGED,
   /**

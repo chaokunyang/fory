@@ -259,7 +259,8 @@ template <typename T>
 inline constexpr bool has_field_config_v = ForyFieldConfigImpl<T>::has_config;
 
 /// Helper to get field encoding from ForyFieldConfigImpl
-template <typename T, size_t Index, typename = void> struct GetFieldConfigEntry {
+template <typename T, size_t Index, typename = void>
+struct GetFieldConfigEntry {
   static constexpr Encoding encoding = Encoding::Default;
   static constexpr int16_t id = -1;
   static constexpr bool nullable = false;

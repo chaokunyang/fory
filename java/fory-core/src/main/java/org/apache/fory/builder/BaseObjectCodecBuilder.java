@@ -1882,8 +1882,12 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     boolean nullable = descriptor.isNullable();
     // descriptor.isTrackingRef() already includes the needWriteRef check
     boolean useRefTracking = descriptor.isTrackingRef();
-    // Check if type normally needs ref (for preserveRefId when ref tracking is disabled)
-    boolean typeNeedsRef = needWriteRef(typeRef);
+    // Check if the TYPE normally needs ref tracking, ignoring field-level metadata.
+    // When global ref tracking is enabled, serializers call reference() at the end.
+    // If field has trackingRef=false but the type's serializer calls reference(),
+    // we need to push a stub -1 so reference() can pop it and skip setReadObject.
+    // Use raw type without metadata to check type-level ref tracking.
+    boolean serializerCallsReference = needWriteRef(TypeRef.of(typeRef.getRawType()));
 
     if (useRefTracking) {
       return readRef(
@@ -1892,10 +1896,10 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       if (!nullable) {
         Expression value = deserializeForNotNullForField(buffer, descriptor, null);
 
-        if (typeNeedsRef) {
+        if (serializerCallsReference) {
           // When a field explicitly disables ref tracking (@ForyField(trackingRef=false))
-          // but the type normally needs ref tracking (e.g., collections),
-          // we need to preserve a -1 id so that when the deserializer calls reference(),
+          // but global ref tracking is enabled, the serializer will call reference().
+          // We need to preserve a -1 id so that when the deserializer calls reference(),
           // it will pop this -1 and skip the setReadObject call.
           Expression preserveStubRefId =
               new Invoke(refResolverRef, "preserveRefId", new Literal(-1, PRIMITIVE_INT_TYPE));
@@ -1916,7 +1920,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
               true,
               localFieldType);
 
-      if (typeNeedsRef) {
+      if (serializerCallsReference) {
         Expression preserveStubRefId =
             new Invoke(refResolverRef, "preserveRefId", new Literal(-1, PRIMITIVE_INT_TYPE));
         return new ListExpression(preserveStubRefId, readNullableExpr);

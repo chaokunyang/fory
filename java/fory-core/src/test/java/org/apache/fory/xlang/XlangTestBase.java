@@ -2479,54 +2479,54 @@ public abstract class XlangTestBase extends ForyTestBase {
    */
   @Data
   static class UnsignedSchemaConsistent {
-    // Primitive unsigned fields
-    @Uint8Type byte u8;
+    // Primitive unsigned fields (use Field suffix to avoid reserved keywords in Rust/Go)
+    @Uint8Type byte u8Field;
 
-    @Uint16Type short u16;
+    @Uint16Type short u16Field;
 
     @Uint32Type(compress = true)
-    int u32Var;
+    int u32VarField;
 
     @Uint32Type(compress = false)
-    int u32Fixed;
+    int u32FixedField;
 
     @Uint64Type(encoding = LongEncoding.VARINT)
-    long u64Var;
+    long u64VarField;
 
     @Uint64Type(encoding = LongEncoding.FIXED)
-    long u64Fixed;
+    long u64FixedField;
 
     @Uint64Type(encoding = LongEncoding.TAGGED)
-    long u64Tagged;
+    long u64TaggedField;
 
     // Boxed nullable unsigned fields
     @ForyField(nullable = true)
     @Uint8Type
-    Byte u8Nullable;
+    Byte u8NullableField;
 
     @ForyField(nullable = true)
     @Uint16Type
-    Short u16Nullable;
+    Short u16NullableField;
 
     @ForyField(nullable = true)
     @Uint32Type(compress = true)
-    Integer u32VarNullable;
+    Integer u32VarNullableField;
 
     @ForyField(nullable = true)
     @Uint32Type(compress = false)
-    Integer u32FixedNullable;
+    Integer u32FixedNullableField;
 
     @ForyField(nullable = true)
     @Uint64Type(encoding = LongEncoding.VARINT)
-    Long u64VarNullable;
+    Long u64VarNullableField;
 
     @ForyField(nullable = true)
     @Uint64Type(encoding = LongEncoding.FIXED)
-    Long u64FixedNullable;
+    Long u64FixedNullableField;
 
     @ForyField(nullable = true)
     @Uint64Type(encoding = LongEncoding.TAGGED)
-    Long u64TaggedNullable;
+    Long u64TaggedNullableField;
   }
 
   @Data
@@ -2576,22 +2576,22 @@ public abstract class XlangTestBase extends ForyTestBase {
 
     UnsignedSchemaConsistent obj = new UnsignedSchemaConsistent();
     // Primitive fields
-    obj.u8 = (byte) 200; // Max uint8 range testing
-    obj.u16 = (short) 60000; // Max uint16 range testing
-    obj.u32Var = (int) 3000000000L; // > INT_MAX to test unsigned
-    obj.u32Fixed = (int) 4000000000L;
-    obj.u64Var = 10000000000L;
-    obj.u64Fixed = 15000000000L;
-    obj.u64Tagged = 1000000000L; // Within tagged range
+    obj.u8Field = (byte) 200; // Max uint8 range testing
+    obj.u16Field = (short) 60000; // Max uint16 range testing
+    obj.u32VarField = (int) 3000000000L; // > INT_MAX to test unsigned
+    obj.u32FixedField = (int) 4000000000L;
+    obj.u64VarField = 10000000000L;
+    obj.u64FixedField = 15000000000L;
+    obj.u64TaggedField = 1000000000L; // Within tagged range
 
     // Nullable boxed fields with values
-    obj.u8Nullable = (byte) 128;
-    obj.u16Nullable = (short) 40000;
-    obj.u32VarNullable = (int) 2500000000L;
-    obj.u32FixedNullable = (int) 3500000000L;
-    obj.u64VarNullable = 8000000000L;
-    obj.u64FixedNullable = 12000000000L;
-    obj.u64TaggedNullable = 500000000L;
+    obj.u8NullableField = (byte) 128;
+    obj.u16NullableField = (short) 40000;
+    obj.u32VarNullableField = (int) 2500000000L;
+    obj.u32FixedNullableField = (int) 3500000000L;
+    obj.u64VarNullableField = 8000000000L;
+    obj.u64FixedNullableField = 12000000000L;
+    obj.u64TaggedNullableField = 500000000L;
 
     // First verify Java serialization works
     Assert.assertEquals(xserDe(fory, obj), obj);
@@ -2631,24 +2631,24 @@ public abstract class XlangTestBase extends ForyTestBase {
   @Data
   static class UnsignedSchemaCompatible {
     // Group 1: Primitive unsigned fields (non-nullable in Java, Optional in other languages)
-    @Uint8Type byte u8;
+    @Uint8Type byte u8Field1;
 
-    @Uint16Type short u16;
+    @Uint16Type short u16Field1;
 
     @Uint32Type(compress = true)
-    int u32Var;
+    int u32VarField1;
 
     @Uint32Type(compress = false)
-    int u32Fixed;
+    int u32FixedField1;
 
     @Uint64Type(encoding = LongEncoding.VARINT)
-    long u64Var;
+    long u64VarField1;
 
     @Uint64Type(encoding = LongEncoding.FIXED)
-    long u64Fixed;
+    long u64FixedField1;
 
     @Uint64Type(encoding = LongEncoding.TAGGED)
-    long u64Tagged;
+    long u64TaggedField1;
 
     // Group 2: Nullable boxed fields (nullable in Java, non-Optional in other languages)
     @ForyField(nullable = true)
@@ -2693,16 +2693,16 @@ public abstract class XlangTestBase extends ForyTestBase {
     fory.register(UnsignedSchemaCompatible.class, 502);
 
     UnsignedSchemaCompatible obj = new UnsignedSchemaCompatible();
-    // Primitive fields
-    obj.u8 = (byte) 200;
-    obj.u16 = (short) 60000;
-    obj.u32Var = (int) 3000000000L;
-    obj.u32Fixed = (int) 4000000000L;
-    obj.u64Var = 10000000000L;
-    obj.u64Fixed = 15000000000L;
-    obj.u64Tagged = 1000000000L;
+    // Group 1: Primitive fields
+    obj.u8Field1 = (byte) 200;
+    obj.u16Field1 = (short) 60000;
+    obj.u32VarField1 = (int) 3000000000L;
+    obj.u32FixedField1 = (int) 4000000000L;
+    obj.u64VarField1 = 10000000000L;
+    obj.u64FixedField1 = 15000000000L;
+    obj.u64TaggedField1 = 1000000000L;
 
-    // Group 2 fields with values
+    // Group 2: Nullable boxed fields with values
     obj.u8Field2 = (byte) 128;
     obj.u16Field2 = (short) 40000;
     obj.u32VarField2 = (int) 2500000000L;

@@ -49,7 +49,7 @@ public class GoXlangTest extends XlangTestBase {
   protected void ensurePeerReady() {
     String enabled = System.getenv("FORY_GO_JAVA_CI");
     if (!"1".equals(enabled)) {
-//      throw new SkipException("Skipping GoXlangTest: FORY_GO_JAVA_CI not set to 1");
+      throw new SkipException("Skipping GoXlangTest: FORY_GO_JAVA_CI not set to 1");
     }
     boolean goInstalled = true;
     try {

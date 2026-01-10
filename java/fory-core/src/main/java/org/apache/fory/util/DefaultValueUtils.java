@@ -381,7 +381,7 @@ public class DefaultValueUtils {
           case DispatchId.INT8:
           case DispatchId.PRIMITIVE_UINT8:
           case DispatchId.UINT8:
-            Platform.putByte(obj, fieldOffset, (Byte) defaultValue);
+            Platform.putByte(obj, fieldOffset, ((Number) defaultValue).byteValue());
             break;
           case DispatchId.PRIMITIVE_CHAR:
           case DispatchId.CHAR:
@@ -391,7 +391,7 @@ public class DefaultValueUtils {
           case DispatchId.INT16:
           case DispatchId.PRIMITIVE_UINT16:
           case DispatchId.UINT16:
-            Platform.putShort(obj, fieldOffset, (Short) defaultValue);
+            Platform.putShort(obj, fieldOffset, ((Number) defaultValue).shortValue());
             break;
           case DispatchId.PRIMITIVE_INT32:
           case DispatchId.INT32:
@@ -401,7 +401,7 @@ public class DefaultValueUtils {
           case DispatchId.UINT32:
           case DispatchId.PRIMITIVE_VAR_UINT32:
           case DispatchId.VAR_UINT32:
-            Platform.putInt(obj, fieldOffset, (Integer) defaultValue);
+            Platform.putInt(obj, fieldOffset, ((Number) defaultValue).intValue());
             break;
           case DispatchId.PRIMITIVE_INT64:
           case DispatchId.INT64:
@@ -415,7 +415,7 @@ public class DefaultValueUtils {
           case DispatchId.VAR_UINT64:
           case DispatchId.PRIMITIVE_TAGGED_UINT64:
           case DispatchId.TAGGED_UINT64:
-            Platform.putLong(obj, fieldOffset, (Long) defaultValue);
+            Platform.putLong(obj, fieldOffset, ((Number) defaultValue).longValue());
             break;
           case DispatchId.PRIMITIVE_FLOAT32:
           case DispatchId.FLOAT32:

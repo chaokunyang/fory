@@ -578,22 +578,17 @@ func buildFieldDefs(fory *Fory, value reflect.Value) ([]FieldDef, error) {
 
 		// Use sortFields to match Java's field ordering
 		// (primitives before boxed/nullable primitives, sorted by tag ID if available)
-		_, sortedKeys := sortFields(fory.typeResolver, fieldNames, serializers, typeIds, nullables, tagIDs)
+		_, sortedNames := sortFields(fory.typeResolver, fieldNames, serializers, typeIds, nullables, tagIDs)
 
 		// Rebuild fieldInfos in the sorted order
-		// Key by sort key: tag ID as string if tagID >= 0, otherwise snake_case field name
-		keyToFieldInfo := make(map[string]FieldDef)
+		nameToFieldInfo := make(map[string]FieldDef)
 		for _, fieldInfo := range fieldDefs {
-			key := fieldInfo.name
-			if fieldInfo.tagID >= 0 {
-				key = fmt.Sprintf("%d", fieldInfo.tagID)
-			}
-			keyToFieldInfo[key] = fieldInfo
+			nameToFieldInfo[fieldInfo.name] = fieldInfo
 		}
 
 		sortedFieldInfos := make([]FieldDef, len(fieldDefs))
-		for i, key := range sortedKeys {
-			sortedFieldInfos[i] = keyToFieldInfo[key]
+		for i, name := range sortedNames {
+			sortedFieldInfos[i] = nameToFieldInfo[name]
 		}
 
 		fieldDefs = sortedFieldInfos

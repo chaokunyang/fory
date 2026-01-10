@@ -760,6 +760,46 @@ pub(super) fn get_primitive_writer_method(type_name: &str) -> &'static str {
         .unwrap_or_else(|| panic!("type_name '{}' must be a primitive type", type_name))
 }
 
+/// Get the writer method name for a primitive numeric type, considering encoding attributes.
+///
+/// For u32 fields:
+/// - compress=true (default): write_varuint32
+/// - compress=false: write_u32 (fixed 4-byte)
+///
+/// For u64 fields:
+/// - encoding="varint" (default): write_varuint64
+/// - encoding="fixed": write_u64 (fixed 8-byte)
+/// - encoding="tagged": write_tagged_varuint64
+pub(super) fn get_primitive_writer_method_with_encoding(
+    type_name: &str,
+    meta: &super::field_meta::ForyFieldMeta,
+) -> &'static str {
+    use super::field_meta::U64Encoding;
+
+    // Handle u32 with compress attribute
+    if type_name == "u32" {
+        if let Some(false) = meta.compress {
+            return "write_u32"; // Fixed 4-byte encoding
+        }
+        return "write_varuint32"; // Variable-length (default)
+    }
+
+    // Handle u64 with encoding attribute
+    if type_name == "u64" {
+        if let Some(encoding) = meta.encoding {
+            return match encoding {
+                U64Encoding::Varint => "write_varuint64",
+                U64Encoding::Fixed => "write_u64",
+                U64Encoding::Tagged => "write_tagged_u64",
+            };
+        }
+        return "write_varuint64"; // Variable-length (default)
+    }
+
+    // For other types, use the default method from PRIMITIVE_IO_METHODS
+    get_primitive_writer_method(type_name)
+}
+
 /// Get the reader method name for a primitive numeric type
 /// Panics if type_name is not a primitive type
 pub(super) fn get_primitive_reader_method(type_name: &str) -> &'static str {
@@ -768,6 +808,92 @@ pub(super) fn get_primitive_reader_method(type_name: &str) -> &'static str {
         .find(|(name, _, _)| *name == type_name)
         .map(|(_, _, reader)| *reader)
         .unwrap_or_else(|| panic!("type_name '{}' must be a primitive type", type_name))
+}
+
+/// Get the reader method name for a primitive numeric type, considering encoding attributes.
+///
+/// For u32 fields:
+/// - compress=true (default): read_varuint32
+/// - compress=false: read_u32 (fixed 4-byte)
+///
+/// For u64 fields:
+/// - encoding="varint" (default): read_varuint64
+/// - encoding="fixed": read_u64 (fixed 8-byte)
+/// - encoding="tagged": read_tagged_varuint64
+pub(super) fn get_primitive_reader_method_with_encoding(
+    type_name: &str,
+    meta: &super::field_meta::ForyFieldMeta,
+) -> &'static str {
+    use super::field_meta::U64Encoding;
+
+    // Handle u32 with compress attribute
+    if type_name == "u32" {
+        if let Some(false) = meta.compress {
+            return "read_u32"; // Fixed 4-byte encoding
+        }
+        return "read_varuint32"; // Variable-length (default)
+    }
+
+    // Handle u64 with encoding attribute
+    if type_name == "u64" {
+        if let Some(encoding) = meta.encoding {
+            return match encoding {
+                U64Encoding::Varint => "read_varuint64",
+                U64Encoding::Fixed => "read_u64",
+                U64Encoding::Tagged => "read_tagged_u64",
+            };
+        }
+        return "read_varuint64"; // Variable-length (default)
+    }
+
+    // For other types, use the default method from PRIMITIVE_IO_METHODS
+    get_primitive_reader_method(type_name)
+}
+
+/// Check if a type is Option<u32> or Option<u64> that needs encoding-aware handling
+/// based on the field metadata (compress or encoding attributes).
+pub(super) fn is_option_encoding_primitive(
+    ty: &Type,
+    meta: &super::field_meta::ForyFieldMeta,
+) -> bool {
+    if let Some(inner_name) = get_option_inner_primitive_name(ty) {
+        // For u32, check compress attribute
+        if inner_name == "u32" && meta.compress.is_some() {
+            return true;
+        }
+        // For u64, check encoding attribute
+        if inner_name == "u64" && meta.encoding.is_some() {
+            return true;
+        }
+    }
+    false
+}
+
+/// Get the inner primitive name if the type is Option<primitive>
+/// Returns Some("u32"), Some("u64"), etc. for Option<u32>, Option<u64>, etc.
+pub(super) fn get_option_inner_primitive_name(ty: &Type) -> Option<&'static str> {
+    use syn::PathArguments;
+    if let Type::Path(type_path) = ty {
+        if let Some(seg) = type_path.path.segments.last() {
+            if seg.ident == "Option" {
+                if let PathArguments::AngleBracketed(args) = &seg.arguments {
+                    if let Some(syn::GenericArgument::Type(Type::Path(inner_path))) =
+                        args.args.first()
+                    {
+                        if let Some(inner_seg) = inner_path.path.segments.last() {
+                            let inner_name = inner_seg.ident.to_string();
+                            // Return static string for known primitives
+                            return PRIMITIVE_IO_METHODS
+                                .iter()
+                                .find(|(name, _, _)| *name == inner_name.as_str())
+                                .map(|(name, _, _)| *name);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
 }
 
 pub(crate) fn get_type_id_by_type_ast(ty: &Type) -> u32 {
@@ -904,14 +1030,17 @@ fn get_primitive_type_size(type_id_num: u32) -> i32 {
 }
 
 fn is_compress(type_id: u32) -> bool {
-    // Only signed integer types are marked as compressible
-    // to maintain backward compatibility with field ordering
+    // Variable-length and tagged types are marked as compressible
+    // This must match Java's Types.isCompressedType() for xlang compatibility
     [
-        TypeId::INT32 as u32,
-        TypeId::INT64 as u32,
+        // Signed compressed types
         TypeId::VARINT32 as u32,
         TypeId::VARINT64 as u32,
         TypeId::TAGGED_INT64 as u32,
+        // Unsigned compressed types
+        TypeId::VAR_UINT32 as u32,
+        TypeId::VAR_UINT64 as u32,
+        TypeId::TAGGED_UINT64 as u32,
     ]
     .contains(&type_id)
 }
@@ -944,6 +1073,8 @@ fn is_internal_type_id(type_id: u32) -> bool {
 /// Group fields into serialization categories while normalizing field names to snake_case.
 /// The returned groups preserve the ordering rules required by the serialization layout.
 fn group_fields_by_type(fields: &[&Field]) -> FieldGroups {
+    use super::field_meta::parse_field_meta;
+
     let mut primitive_fields = Vec::new();
     let mut nullable_primitive_fields = Vec::new();
     let mut internal_type_fields = Vec::new();
@@ -961,25 +1092,6 @@ fn group_fields_by_type(fields: &[&Field]) -> FieldGroups {
         }
     }
 
-    let mut group_field = |ident: String, ty: &str| {
-        let type_id = get_type_id_by_name(ty);
-        // Categorize based on type_id
-        if PRIMITIVE_TYPE_NAMES.contains(&ty) {
-            primitive_fields.push((ident, ty.to_string(), type_id));
-        } else if is_internal_type_id(type_id) {
-            internal_type_fields.push((ident, ty.to_string(), type_id));
-        } else if type_id == TypeId::LIST as u32 {
-            list_fields.push((ident, ty.to_string(), type_id));
-        } else if type_id == TypeId::SET as u32 {
-            set_fields.push((ident, ty.to_string(), type_id));
-        } else if type_id == TypeId::MAP as u32 {
-            map_fields.push((ident, ty.to_string(), type_id));
-        } else {
-            // User-defined type
-            other_fields.push((ident, ty.to_string(), type_id));
-        }
-    };
-
     for (idx, field) in fields.iter().enumerate() {
         let raw_ident = get_field_name(field, idx);
         let ident = to_snake_case(&raw_ident);
@@ -989,6 +1101,9 @@ fn group_fields_by_type(fields: &[&Field]) -> FieldGroups {
             continue;
         }
 
+        // Parse field metadata to get encoding attributes
+        let meta = parse_field_meta(field).unwrap_or_default();
+
         let ty: String = field
             .ty
             .to_token_stream()
@@ -996,16 +1111,44 @@ fn group_fields_by_type(fields: &[&Field]) -> FieldGroups {
             .chars()
             .filter(|c| !c.is_whitespace())
             .collect::<String>();
+
+        // Closure to group non-option fields, considering encoding attributes
+        let mut group_field = |ident: String, ty_str: &str, is_primitive: bool| {
+            let base_type_id = get_type_id_by_name(ty_str);
+            // Adjust type ID based on encoding attributes for u32/u64 fields
+            let type_id = adjust_type_id_for_encoding(base_type_id, &meta);
+
+            // Categorize based on type_id
+            if is_primitive {
+                primitive_fields.push((ident, ty_str.to_string(), type_id));
+            } else if is_internal_type_id(type_id) {
+                internal_type_fields.push((ident, ty_str.to_string(), type_id));
+            } else if type_id == TypeId::LIST as u32 {
+                list_fields.push((ident, ty_str.to_string(), type_id));
+            } else if type_id == TypeId::SET as u32 {
+                set_fields.push((ident, ty_str.to_string(), type_id));
+            } else if type_id == TypeId::MAP as u32 {
+                map_fields.push((ident, ty_str.to_string(), type_id));
+            } else {
+                // User-defined type
+                other_fields.push((ident, ty_str.to_string(), type_id));
+            }
+        };
+
         // handle Option<Primitive> specially
         if let Some(inner) = extract_option_inner(&ty) {
             if PRIMITIVE_TYPE_NAMES.contains(&inner) {
-                let type_id = get_primitive_type_id(inner);
+                // Get base type ID and adjust for encoding attributes
+                let base_type_id = get_primitive_type_id(inner);
+                let type_id = adjust_type_id_for_encoding(base_type_id, &meta);
                 nullable_primitive_fields.push((ident, ty.to_string(), type_id));
             } else {
-                group_field(ident, inner);
+                group_field(ident, inner, false);
             }
+        } else if PRIMITIVE_TYPE_NAMES.contains(&ty.as_str()) {
+            group_field(ident, &ty, true);
         } else {
-            group_field(ident, &ty);
+            group_field(ident, &ty, false);
         }
     }
 
@@ -1124,6 +1267,47 @@ struct FieldFingerprintInfo {
     is_option_type: bool,
 }
 
+/// Adjusts type ID based on encoding attributes for u32/u64 fields.
+///
+/// For u32 fields:
+/// - compress=true (default): VAR_UINT32 (12)
+/// - compress=false: UINT32 (11, fixed)
+///
+/// For u64 fields:
+/// - encoding="varint" (default): VAR_UINT64 (14)
+/// - encoding="fixed": UINT64 (13, fixed 8-byte)
+/// - encoding="tagged": TAGGED_UINT64 (15)
+fn adjust_type_id_for_encoding(
+    base_type_id: u32,
+    meta: &super::field_meta::ForyFieldMeta,
+) -> u32 {
+    use super::field_meta::U64Encoding;
+
+    // Handle u32 fields with compress attribute
+    if base_type_id == TypeId::VAR_UINT32 as u32 {
+        if let Some(compress) = meta.compress {
+            if !compress {
+                return TypeId::UINT32 as u32; // Fixed 4-byte encoding
+            }
+        }
+        return base_type_id; // VAR_UINT32 (default)
+    }
+
+    // Handle u64 fields with encoding attribute
+    if base_type_id == TypeId::VAR_UINT64 as u32 {
+        if let Some(encoding) = meta.encoding {
+            return match encoding {
+                U64Encoding::Varint => TypeId::VAR_UINT64 as u32,
+                U64Encoding::Fixed => TypeId::UINT64 as u32,
+                U64Encoding::Tagged => TypeId::TAGGED_UINT64 as u32,
+            };
+        }
+        return base_type_id; // VAR_UINT64 (default)
+    }
+
+    base_type_id
+}
+
 /// Computes struct fingerprint string at compile time (during proc-macro execution).
 ///
 /// **Fingerprint Format:** `<field_name_or_id>,<type_id>,<ref>,<nullable>;`
@@ -1151,8 +1335,9 @@ fn compute_struct_fingerprint(fields: &[&Field]) -> String {
         let ref_tracking = meta.effective_ref_tracking(type_class);
         let explicit_nullable = meta.nullable;
 
-        // Get compile-time TypeId (UNKNOWN for user-defined types including enums/unions)
-        let type_id = get_type_id_by_type_ast(&field.ty);
+        // Get compile-time TypeId, considering encoding attributes for u32/u64 fields
+        let base_type_id = get_type_id_by_type_ast(&field.ty);
+        let type_id = adjust_type_id_for_encoding(base_type_id, &meta);
 
         // Check if field type is Option<T>
         let ty_str: String = field

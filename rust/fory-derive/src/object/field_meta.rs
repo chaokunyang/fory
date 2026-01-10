@@ -22,10 +22,24 @@
 //! - `nullable`: Whether the field can be null (default: false, except Option/RcWeak/ArcWeak)
 //! - `ref`: Whether to enable reference tracking (default: false, except Rc/Arc/RcWeak/ArcWeak)
 //! - `skip`: Skip this field during serialization
+//! - `compress`: For u32 fields: true (VAR_UINT32, default) or false (UINT32 fixed)
+//! - `encoding`: For u64 fields: "varint" (default), "fixed", or "tagged"
 
 use quote::ToTokens;
 use std::collections::HashMap;
 use syn::{Field, GenericArgument, PathArguments, Type};
+
+/// Encoding type for u64 fields
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum U64Encoding {
+    /// Variable-length encoding (VAR_UINT64, type id 14) - default
+    #[default]
+    Varint,
+    /// Fixed 8-byte encoding (UINT64, type id 13)
+    Fixed,
+    /// Tagged variable-length encoding (TAGGED_UINT64, type id 15)
+    Tagged,
+}
 
 /// Represents parsed `#[fory(...)]` field attributes
 #[derive(Debug, Clone, Default)]
@@ -38,6 +52,10 @@ pub struct ForyFieldMeta {
     pub ref_tracking: Option<bool>,
     /// Whether to skip this field entirely
     pub skip: bool,
+    /// For u32 fields: true = VAR_UINT32 (default), false = UINT32 (fixed)
+    pub compress: Option<bool>,
+    /// For u64 fields: encoding type (varint/fixed/tagged)
+    pub encoding: Option<U64Encoding>,
 }
 
 /// Type classification for determining default nullable/ref behavior
@@ -125,6 +143,24 @@ pub fn parse_field_meta(field: &Field) -> syn::Result<ForyFieldMeta> {
                 meta.ref_tracking = Some(value);
             } else if nested.path.is_ident("skip") {
                 meta.skip = true;
+            } else if nested.path.is_ident("compress") {
+                let value = parse_bool_or_flag(&nested)?;
+                meta.compress = Some(value);
+            } else if nested.path.is_ident("encoding") {
+                let lit: syn::LitStr = nested.value()?.parse()?;
+                let encoding_str = lit.value();
+                let encoding = match encoding_str.as_str() {
+                    "varint" => U64Encoding::Varint,
+                    "fixed" => U64Encoding::Fixed,
+                    "tagged" => U64Encoding::Tagged,
+                    _ => {
+                        return Err(syn::Error::new(
+                            lit.span(),
+                            "encoding must be \"varint\", \"fixed\", or \"tagged\"",
+                        ));
+                    }
+                };
+                meta.encoding = Some(encoding);
             }
             Ok(())
         })?;
@@ -188,7 +224,7 @@ fn extract_outer_type_name(ty: &Type) -> String {
 }
 
 /// Extract the inner type from `Option<T>`
-fn extract_option_inner_type(ty: &Type) -> Option<Type> {
+pub fn extract_option_inner_type(ty: &Type) -> Option<Type> {
     if let Type::Path(type_path) = ty {
         if let Some(seg) = type_path.path.segments.last() {
             if seg.ident == "Option" {
@@ -456,6 +492,8 @@ mod tests {
             nullable: Some(true),
             ref_tracking: None,
             skip: false,
+            compress: None,
+            encoding: None,
         };
         assert!(meta.effective_nullable(FieldTypeClass::Primitive)); // Would be false by default
 
@@ -465,7 +503,77 @@ mod tests {
             nullable: None,
             ref_tracking: Some(false),
             skip: false,
+            compress: None,
+            encoding: None,
         };
         assert!(!meta.effective_ref_tracking(FieldTypeClass::Rc)); // Would be true by default
+    }
+
+    #[test]
+    fn test_parse_compress_attribute() {
+        let field: Field = parse_quote! {
+            #[fory(compress = false)]
+            value: u32
+        };
+        let meta = parse_field_meta(&field).unwrap();
+        assert_eq!(meta.compress, Some(false));
+
+        let field: Field = parse_quote! {
+            #[fory(compress = true)]
+            value: u32
+        };
+        let meta = parse_field_meta(&field).unwrap();
+        assert_eq!(meta.compress, Some(true));
+
+        // Standalone compress flag should be true
+        let field: Field = parse_quote! {
+            #[fory(compress)]
+            value: u32
+        };
+        let meta = parse_field_meta(&field).unwrap();
+        assert_eq!(meta.compress, Some(true));
+    }
+
+    #[test]
+    fn test_parse_encoding_attribute() {
+        let field: Field = parse_quote! {
+            #[fory(encoding = "varint")]
+            value: u64
+        };
+        let meta = parse_field_meta(&field).unwrap();
+        assert_eq!(meta.encoding, Some(U64Encoding::Varint));
+
+        let field: Field = parse_quote! {
+            #[fory(encoding = "fixed")]
+            value: u64
+        };
+        let meta = parse_field_meta(&field).unwrap();
+        assert_eq!(meta.encoding, Some(U64Encoding::Fixed));
+
+        let field: Field = parse_quote! {
+            #[fory(encoding = "tagged")]
+            value: u64
+        };
+        let meta = parse_field_meta(&field).unwrap();
+        assert_eq!(meta.encoding, Some(U64Encoding::Tagged));
+    }
+
+    #[test]
+    fn test_parse_combined_attributes() {
+        let field: Field = parse_quote! {
+            #[fory(nullable, compress = false)]
+            value: Option<u32>
+        };
+        let meta = parse_field_meta(&field).unwrap();
+        assert_eq!(meta.nullable, Some(true));
+        assert_eq!(meta.compress, Some(false));
+
+        let field: Field = parse_quote! {
+            #[fory(nullable, encoding = "tagged")]
+            value: Option<u64>
+        };
+        let meta = parse_field_meta(&field).unwrap();
+        assert_eq!(meta.nullable, Some(true));
+        assert_eq!(meta.encoding, Some(U64Encoding::Tagged));
     }
 }

@@ -19,13 +19,142 @@ use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
 use syn::Field;
 
+use super::field_meta::{extract_option_inner_type, parse_field_meta};
 use super::util::{
     classify_trait_object_field, create_wrapper_types_arc, create_wrapper_types_rc,
     determine_field_ref_mode, extract_type_name, gen_struct_version_hash_ts,
-    get_primitive_reader_method, get_struct_name, is_debug_enabled, is_direct_primitive_type,
-    is_primitive_type, is_skip_field, should_skip_type_info_for_field, FieldRefMode, StructField,
+    get_option_inner_primitive_name, get_primitive_reader_method_with_encoding, get_struct_name,
+    is_debug_enabled, is_direct_primitive_type, is_option_encoding_primitive, is_primitive_type,
+    is_skip_field, should_skip_type_info_for_field, FieldRefMode, StructField,
 };
 use crate::util::SourceField;
+
+/// Check if a type is a primitive type that needs special compatible mode handling
+/// Returns the type name if it's u8, u16, u32, or u64 (or Option<u8/u16/u32/u64>)
+fn is_compatible_primitive_type(ty: &syn::Type) -> Option<&'static str> {
+    let inner_ty = extract_option_inner_type(ty).unwrap_or_else(|| ty.clone());
+    let inner_ty_str = quote::ToTokens::to_token_stream(&inner_ty)
+        .to_string()
+        .replace(' ', "");
+    match inner_ty_str.as_str() {
+        "u8" => Some("u8"),
+        "u16" => Some("u16"),
+        "u32" => Some("u32"),
+        "u64" => Some("u64"),
+        _ => None,
+    }
+}
+
+/// Check if a type is u32 or u64 (for encoding-aware reading)
+fn is_unsigned_encoding_type(ty: &syn::Type) -> Option<&'static str> {
+    let inner_ty = extract_option_inner_type(ty).unwrap_or_else(|| ty.clone());
+    let inner_ty_str = quote::ToTokens::to_token_stream(&inner_ty)
+        .to_string()
+        .replace(' ', "");
+    match inner_ty_str.as_str() {
+        "u32" => Some("u32"),
+        "u64" => Some("u64"),
+        _ => None,
+    }
+}
+
+/// Generate compatible mode read code for u32/u64 fields based on remote type_id
+fn gen_compatible_unsigned_read(
+    unsigned_type: &str,
+    var_name: &Ident,
+    is_option: bool,
+) -> TokenStream {
+    let read_value = if unsigned_type == "u32" {
+        quote! {
+            // Read u32 based on remote type_id
+            match _field.field_type.type_id {
+                fory_core::types::UINT32 => context.reader.read_u32()?,
+                fory_core::types::VAR_UINT32 => context.reader.read_varuint32()?,
+                _ => context.reader.read_varuint32()?, // Default to varint
+            }
+        }
+    } else {
+        // u64
+        quote! {
+            // Read u64 based on remote type_id
+            match _field.field_type.type_id {
+                fory_core::types::UINT64 => context.reader.read_u64()?,
+                fory_core::types::VAR_UINT64 => context.reader.read_varuint64()?,
+                fory_core::types::TAGGED_UINT64 => context.reader.read_tagged_u64()?,
+                _ => context.reader.read_varuint64()?, // Default to varint
+            }
+        }
+    };
+
+    if is_option {
+        quote! {
+            let read_ref_flag = fory_core::serializer::util::field_need_write_ref_into(
+                _field.field_type.type_id,
+                _field.field_type.nullable,
+            );
+            if read_ref_flag {
+                let ref_flag = context.reader.read_i8()?;
+                if ref_flag == fory_core::RefFlag::Null as i8 {
+                    #var_name = Some(None);
+                } else {
+                    #var_name = Some(Some(#read_value));
+                }
+            } else {
+                #var_name = Some(Some(#read_value));
+            }
+        }
+    } else {
+        quote! {
+            let read_ref_flag = fory_core::serializer::util::field_need_write_ref_into(
+                _field.field_type.type_id,
+                _field.field_type.nullable,
+            );
+            if read_ref_flag {
+                let ref_flag = context.reader.read_i8()?;
+                if ref_flag == fory_core::RefFlag::Null as i8 {
+                    // Remote sent null but local field is non-nullable, use default
+                    #var_name = 0;
+                } else {
+                    #var_name = #read_value;
+                }
+            } else {
+                #var_name = #read_value;
+            }
+        }
+    }
+}
+
+/// Generate compatible mode read code for u8/u16 Option fields
+/// These need special handling because when remote field is non-nullable,
+/// Java sends just the raw bytes without a ref flag
+fn gen_compatible_primitive_option_read(
+    prim_type: &str,
+    var_name: &Ident,
+) -> TokenStream {
+    let read_value = match prim_type {
+        "u8" => quote! { context.reader.read_u8()? },
+        "u16" => quote! { context.reader.read_u16()? },
+        _ => unreachable!("Only u8/u16 should use this function"),
+    };
+
+    quote! {
+        let read_ref_flag = fory_core::serializer::util::field_need_write_ref_into(
+            _field.field_type.type_id,
+            _field.field_type.nullable,
+        );
+        if read_ref_flag {
+            let ref_flag = context.reader.read_i8()?;
+            if ref_flag == fory_core::RefFlag::Null as i8 {
+                #var_name = Some(None);
+            } else {
+                #var_name = Some(Some(#read_value));
+            }
+        } else {
+            // Remote field is non-nullable, read raw value directly
+            #var_name = Some(Some(#read_value));
+        }
+    }
+}
 
 /// Create a private variable name for a field during deserialization.
 /// For named fields: `_field_name`
@@ -219,10 +348,28 @@ pub fn gen_read_field(field: &Field, private_ident: &Ident, field_name: &str) ->
         }
         _ => {
             let skip_type_info = should_skip_type_info_for_field(ty);
+            let meta = parse_field_meta(field).unwrap_or_default();
 
+            // Check if this is Option<u32> or Option<u64> with encoding attributes
+            // These need special inline handling because the generic Option<T> serializer
+            // doesn't know about field-level encoding attributes.
+            if is_option_encoding_primitive(ty, &meta) {
+                let inner_name = get_option_inner_primitive_name(ty).unwrap();
+                let reader_method = get_primitive_reader_method_with_encoding(inner_name, &meta);
+                let reader_ident = syn::Ident::new(reader_method, proc_macro2::Span::call_site());
+                // For Option<primitive>, read null flag first, then value if not null
+                quote! {
+                    let ref_flag = context.reader.read_i8()?;
+                    let #private_ident = if ref_flag == fory_core::RefFlag::Null as i8 {
+                        None
+                    } else {
+                        Some(context.reader.#reader_ident()?)
+                    };
+                }
+            }
             // Check if this is a direct primitive type that can use direct reader calls
             // Only apply when ref_mode is None (no ref tracking needed)
-            if ref_mode == FieldRefMode::None && is_direct_primitive_type(ty) {
+            else if ref_mode == FieldRefMode::None && is_direct_primitive_type(ty) {
                 let type_name = extract_type_name(ty);
                 if type_name == "String" {
                     // String: call fory_read_data directly
@@ -231,7 +378,8 @@ pub fn gen_read_field(field: &Field, private_ident: &Ident, field_name: &str) ->
                     }
                 } else {
                     // Numeric primitives: use direct buffer methods
-                    let reader_method = get_primitive_reader_method(&type_name);
+                    // For u32/u64, consider encoding attributes
+                    let reader_method = get_primitive_reader_method_with_encoding(&type_name, &meta);
                     let reader_ident =
                         syn::Ident::new(reader_method, proc_macro2::Span::call_site());
                     quote! {
@@ -540,7 +688,64 @@ pub(crate) fn gen_read_compatible_match_arm_body(
             StructField::None => {
                 let skip_type_info = should_skip_type_info_for_field(ty);
                 let dec_by_option = need_declared_by_option(field);
-                if skip_type_info {
+                let is_option_type = extract_option_inner_type(ty).is_some();
+
+                // Check if this is a u32/u64 field that needs encoding-aware reading
+                if let Some(unsigned_type) = is_unsigned_encoding_type(ty) {
+                    gen_compatible_unsigned_read(unsigned_type, var_name, is_option_type || dec_by_option)
+                } else if is_option_type {
+                    // Check if it's Option<u8> or Option<u16> which need special handling
+                    if let Some(prim_type) = is_compatible_primitive_type(ty) {
+                        if prim_type == "u8" || prim_type == "u16" {
+                            gen_compatible_primitive_option_read(prim_type, var_name)
+                        } else {
+                            // u32/u64 handled above
+                            unreachable!()
+                        }
+                    } else if skip_type_info {
+                        // Non-primitive Option type with skip_type_info
+                        quote! {
+                            let read_ref_flag = fory_core::serializer::util::field_need_write_ref_into(
+                                _field.field_type.type_id,
+                                _field.field_type.nullable,
+                            );
+                            // Use RefMode::Tracking if remote field has ref_tracking enabled
+                            let ref_mode = if _field.field_type.ref_tracking {
+                                fory_core::RefMode::Tracking
+                            } else if read_ref_flag {
+                                fory_core::RefMode::NullOnly
+                            } else {
+                                fory_core::RefMode::None
+                            };
+                            if read_ref_flag || _field.field_type.ref_tracking {
+                                #var_name = Some(<#ty as fory_core::Serializer>::fory_read(context, ref_mode, false)?);
+                            } else {
+                                #var_name = Some(<#ty as fory_core::Serializer>::fory_read_data(context)?);
+                            }
+                        }
+                    } else {
+                        // Non-primitive Option type without skip_type_info
+                        quote! {
+                            let read_ref_flag = fory_core::serializer::util::field_need_write_ref_into(
+                                _field.field_type.type_id,
+                                _field.field_type.nullable,
+                            );
+                            // Use RefMode::Tracking if remote field has ref_tracking enabled
+                            let ref_mode = if _field.field_type.ref_tracking {
+                                fory_core::RefMode::Tracking
+                            } else if read_ref_flag {
+                                fory_core::RefMode::NullOnly
+                            } else {
+                                fory_core::RefMode::None
+                            };
+                            // For ref-tracked struct types, Java writes type info after RefValue flag
+                            let read_type_info = fory_core::types::need_to_write_type_for_field(
+                                <#ty as fory_core::Serializer>::fory_static_type_id()
+                            );
+                            #var_name = Some(<#ty as fory_core::Serializer>::fory_read(context, ref_mode, read_type_info)?);
+                        }
+                    }
+                } else if skip_type_info {
                     if dec_by_option {
                         quote! {
                             let read_ref_flag = fory_core::serializer::util::field_need_write_ref_into(

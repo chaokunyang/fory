@@ -1896,30 +1896,33 @@ fn test_circular_ref_compatible() {
 #[derive(ForyObject, Debug, PartialEq)]
 #[fory(debug)]
 struct UnsignedSchemaConsistent {
-    // Primitive unsigned fields (non-nullable)
-    u8_field: u8,               // UINT8 - fixed 8-bit
-    u16_field: u16,             // UINT16 - fixed 16-bit
-    u32_var: u32,               // VAR_UINT32 - variable-length
-    u32_fixed: u32,             // UINT32 - fixed 4-byte (TODO: add encoding tag)
-    u64_var: u64,               // VAR_UINT64 - variable-length
-    u64_fixed: u64,             // UINT64 - fixed 8-byte (TODO: add encoding tag)
-    u64_tagged: u64,            // TAGGED_UINT64 (TODO: add encoding tag)
+    // Primitive unsigned fields (non-nullable, use Field suffix to avoid reserved keywords)
+    u8_field: u8,    // UINT8 - fixed 8-bit
+    u16_field: u16,  // UINT16 - fixed 16-bit
+    u32_var_field: u32,    // VAR_UINT32 - variable-length (default)
+    #[fory(compress = false)]
+    u32_fixed_field: u32,  // UINT32 - fixed 4-byte
+    u64_var_field: u64,    // VAR_UINT64 - variable-length (default)
+    #[fory(encoding = "fixed")]
+    u64_fixed_field: u64,  // UINT64 - fixed 8-byte
+    #[fory(encoding = "tagged")]
+    u64_tagged_field: u64, // TAGGED_UINT64
 
     // Nullable unsigned fields (using Option)
     #[fory(nullable = true)]
-    u8_nullable: Option<u8>,
+    u8_nullable_field: Option<u8>,
     #[fory(nullable = true)]
-    u16_nullable: Option<u16>,
+    u16_nullable_field: Option<u16>,
     #[fory(nullable = true)]
-    u32_var_nullable: Option<u32>,
+    u32_var_nullable_field: Option<u32>,
+    #[fory(nullable = true, compress = false)]
+    u32_fixed_nullable_field: Option<u32>,
     #[fory(nullable = true)]
-    u32_fixed_nullable: Option<u32>,
-    #[fory(nullable = true)]
-    u64_var_nullable: Option<u64>,
-    #[fory(nullable = true)]
-    u64_fixed_nullable: Option<u64>,
-    #[fory(nullable = true)]
-    u64_tagged_nullable: Option<u64>,
+    u64_var_nullable_field: Option<u64>,
+    #[fory(nullable = true, encoding = "fixed")]
+    u64_fixed_nullable_field: Option<u64>,
+    #[fory(nullable = true, encoding = "tagged")]
+    u64_tagged_nullable_field: Option<u64>,
 }
 
 /// Test struct for unsigned numbers in COMPATIBLE mode.
@@ -1931,27 +1934,30 @@ struct UnsignedSchemaConsistent {
 struct UnsignedSchemaCompatible {
     // Group 1: Nullable in Rust (Option), non-nullable in Java
     #[fory(nullable = true)]
-    u8_field: Option<u8>,
+    u8_field1: Option<u8>,
     #[fory(nullable = true)]
-    u16_field: Option<u16>,
+    u16_field1: Option<u16>,
     #[fory(nullable = true)]
-    u32_var: Option<u32>,
+    u32_var_field1: Option<u32>,
+    #[fory(nullable = true, compress = false)]
+    u32_fixed_field1: Option<u32>,
     #[fory(nullable = true)]
-    u32_fixed: Option<u32>,
-    #[fory(nullable = true)]
-    u64_var: Option<u64>,
-    #[fory(nullable = true)]
-    u64_fixed: Option<u64>,
-    #[fory(nullable = true)]
-    u64_tagged: Option<u64>,
+    u64_var_field1: Option<u64>,
+    #[fory(nullable = true, encoding = "fixed")]
+    u64_fixed_field1: Option<u64>,
+    #[fory(nullable = true, encoding = "tagged")]
+    u64_tagged_field1: Option<u64>,
 
     // Group 2: Non-nullable in Rust, nullable in Java
     u8_field2: u8,
     u16_field2: u16,
     u32_var_field2: u32,
+    #[fory(compress = false)]
     u32_fixed_field2: u32,
     u64_var_field2: u64,
+    #[fory(encoding = "fixed")]
     u64_fixed_field2: u64,
+    #[fory(encoding = "tagged")]
     u64_tagged_field2: u64,
 }
 
@@ -1969,20 +1975,20 @@ fn test_unsigned_schema_consistent() {
         // Primitive unsigned fields
         u8_field: 200,
         u16_field: 60000,
-        u32_var: 3000000000,
-        u32_fixed: 4000000000,
-        u64_var: 10000000000,
-        u64_fixed: 15000000000,
-        u64_tagged: 1000000000,
+        u32_var_field: 3000000000,
+        u32_fixed_field: 4000000000,
+        u64_var_field: 10000000000,
+        u64_fixed_field: 15000000000,
+        u64_tagged_field: 1000000000,
 
         // Nullable unsigned fields with values
-        u8_nullable: Some(128),
-        u16_nullable: Some(40000),
-        u32_var_nullable: Some(2500000000),
-        u32_fixed_nullable: Some(3500000000),
-        u64_var_nullable: Some(8000000000),
-        u64_fixed_nullable: Some(12000000000),
-        u64_tagged_nullable: Some(500000000),
+        u8_nullable_field: Some(128),
+        u16_nullable_field: Some(40000),
+        u32_var_nullable_field: Some(2500000000),
+        u32_fixed_nullable_field: Some(3500000000),
+        u64_var_nullable_field: Some(8000000000),
+        u64_fixed_nullable_field: Some(12000000000),
+        u64_tagged_nullable_field: Some(500000000),
     };
 
     let remote_obj: UnsignedSchemaConsistent = fory.deserialize(&bytes).unwrap();
@@ -2004,13 +2010,13 @@ fn test_unsigned_schema_compatible() {
 
     let local_obj = UnsignedSchemaCompatible {
         // Group 1: Option fields (values from Java's non-nullable fields)
-        u8_field: Some(200),
-        u16_field: Some(60000),
-        u32_var: Some(3000000000),
-        u32_fixed: Some(4000000000),
-        u64_var: Some(10000000000),
-        u64_fixed: Some(15000000000),
-        u64_tagged: Some(1000000000),
+        u8_field1: Some(200),
+        u16_field1: Some(60000),
+        u32_var_field1: Some(3000000000),
+        u32_fixed_field1: Some(4000000000),
+        u64_var_field1: Some(10000000000),
+        u64_fixed_field1: Some(15000000000),
+        u64_tagged_field1: Some(1000000000),
 
         // Group 2: Non-nullable fields (values from Java's nullable fields)
         u8_field2: 128,

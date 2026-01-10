@@ -644,14 +644,15 @@ impl TypeMeta {
             }
         }
         fn is_compress(type_id: u32) -> bool {
-            // Only signed integer types are marked as compressible
-            // to maintain backward compatibility with field ordering
+            // Variable-size integer types (both signed and unsigned)
+            // These are sorted after fixed-size types in field ordering
             [
-                TypeId::INT32 as u32,
-                TypeId::INT64 as u32,
                 TypeId::VARINT32 as u32,
                 TypeId::VARINT64 as u32,
                 TypeId::TAGGED_INT64 as u32,
+                TypeId::VAR_UINT32 as u32,
+                TypeId::VAR_UINT64 as u32,
+                TypeId::TAGGED_UINT64 as u32,
             ]
             .contains(&type_id)
         }
@@ -669,7 +670,7 @@ impl TypeMeta {
                 .cmp(&b_nullable) // non-nullable first
                 .then_with(|| compress_a.cmp(&compress_b)) // fixed-size (false) first, then variable-size (true) last
                 .then_with(|| size_b.cmp(&size_a)) // when same compress status: larger size first
-                .then_with(|| a_id.cmp(&b_id)) // when same size: smaller type id first
+                .then_with(|| b_id.cmp(&a_id)) // when same size: larger type id first
                 .then_with(|| a_field_name.cmp(b_field_name)) // when same id: lexicographic name
         }
         fn type_then_name_sorter(a: &FieldInfo, b: &FieldInfo) -> std::cmp::Ordering {

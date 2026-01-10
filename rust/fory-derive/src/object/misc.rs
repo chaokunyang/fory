@@ -20,7 +20,9 @@ use quote::quote;
 use std::sync::atomic::{AtomicU32, Ordering};
 use syn::Field;
 
-use super::field_meta::{classify_field_type, is_option_type, parse_field_meta};
+use super::field_meta::{
+    classify_field_type, extract_option_inner_type, is_option_type, parse_field_meta, U64Encoding,
+};
 use super::util::{
     classify_trait_object_field, generic_tree_to_tokens, get_filtered_source_fields_iter,
     get_sort_fields_ts, parse_generic_tree, StructField,
@@ -98,19 +100,64 @@ pub fn gen_field_fields_info(source_fields: &[SourceField<'_>]) -> TokenStream {
 
         match classify_trait_object_field(ty) {
             StructField::None => {
-                let generic_tree = parse_generic_tree(ty);
-                let generic_token = generic_tree_to_tokens(&generic_tree);
-                quote! {
-                    fory_core::meta::FieldInfo::new_with_id(
-                        #field_id,
-                        #name,
-                        {
-                            let mut ft = #generic_token;
-                            ft.nullable = #nullable;
-                            ft.ref_tracking = #ref_tracking;
-                            ft
+                // Check if this is a u32/u64 field (or Option<u32>/Option<u64>) with encoding attributes
+                // In this case, we need to generate the FieldType with the correct type ID directly
+                let inner_ty = extract_option_inner_type(ty).unwrap_or_else(|| ty.clone());
+                let inner_ty_str = quote::ToTokens::to_token_stream(&inner_ty)
+                    .to_string()
+                    .replace(' ', "");
+
+                let is_u32_with_encoding = inner_ty_str == "u32" && meta.compress.is_some();
+                let is_u64_with_encoding = inner_ty_str == "u64" && meta.encoding.is_some();
+
+                if is_u32_with_encoding || is_u64_with_encoding {
+                    // Generate FieldType directly with the correct type ID
+                    let type_id_ts = if is_u32_with_encoding {
+                        if meta.compress == Some(false) {
+                            quote! { fory_core::types::TypeId::UINT32 as u32 }
+                        } else {
+                            quote! { fory_core::types::TypeId::VAR_UINT32 as u32 }
                         }
-                    )
+                    } else {
+                        // u64 with encoding attribute
+                        match meta.encoding {
+                            Some(U64Encoding::Fixed) => {
+                                quote! { fory_core::types::TypeId::UINT64 as u32 }
+                            }
+                            Some(U64Encoding::Tagged) => {
+                                quote! { fory_core::types::TypeId::TAGGED_UINT64 as u32 }
+                            }
+                            _ => quote! { fory_core::types::TypeId::VAR_UINT64 as u32 },
+                        }
+                    };
+
+                    quote! {
+                        fory_core::meta::FieldInfo::new_with_id(
+                            #field_id,
+                            #name,
+                            fory_core::meta::FieldType {
+                                type_id: #type_id_ts,
+                                nullable: #nullable,
+                                ref_tracking: #ref_tracking,
+                                generics: Vec::new()
+                            }
+                        )
+                    }
+                } else {
+                    let generic_tree = parse_generic_tree(ty);
+                    let generic_token = generic_tree_to_tokens(&generic_tree);
+                    quote! {
+                        fory_core::meta::FieldInfo::new_with_id(
+                            #field_id,
+                            #name,
+                            {
+                                let mut ft = #generic_token;
+                                ft.nullable = #nullable;
+                                ft.ref_tracking = #ref_tracking;
+                                ft
+                            }
+                        )
+                    }
                 }
             }
             StructField::VecBox(_) | StructField::VecRc(_) | StructField::VecArc(_) => {

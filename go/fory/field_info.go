@@ -190,15 +190,15 @@ func GroupFields(fields []FieldInfo) FieldGroup {
 			return comparePrimitiveFields(fi, fj)
 		}
 		// Within other internal types category (STRING, BINARY, LIST, SET, MAP),
-		// sort by typeId then by name only. Java does NOT sort by nullable flag here.
+		// sort by typeId then by sort key (tagID if available, otherwise name).
 		if catI == 1 {
 			if fi.TypeId != fj.TypeId {
 				return fi.TypeId < fj.TypeId
 			}
-			return fi.Name < fj.Name
+			return getFieldSortKey(fi) < getFieldSortKey(fj)
 		}
-		// Other categories (struct, enum, etc.): sort by name only
-		return fi.Name < fj.Name
+		// Other categories (struct, enum, etc.): sort by sort key (tagID if available, otherwise name)
+		return getFieldSortKey(fi) < getFieldSortKey(fj)
 	})
 
 	return g
@@ -518,7 +518,7 @@ type triple struct {
 	tagID      int // -1 = use field name, >=0 = use tag ID for sorting
 }
 
-// getFieldSortKey returns the sort key for a field.
+// getSortKey returns the sort key for a triple.
 // If tagID >= 0, returns the tag ID as string (for tag-based sorting).
 // Otherwise returns the snake_case field name.
 func (t triple) getSortKey() string {
@@ -526,6 +526,16 @@ func (t triple) getSortKey() string {
 		return fmt.Sprintf("%d", t.tagID)
 	}
 	return SnakeCase(t.name)
+}
+
+// getFieldSortKey returns the sort key for a FieldInfo.
+// If TagID >= 0, returns the tag ID as string (for tag-based sorting).
+// Otherwise returns the field name (which is already snake_case).
+func getFieldSortKey(f *FieldInfo) string {
+	if f.TagID >= 0 {
+		return fmt.Sprintf("%d", f.TagID)
+	}
+	return f.Name
 }
 
 // sortFields sorts fields with nullable information to match Java's field ordering.

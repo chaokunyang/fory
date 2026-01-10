@@ -2171,8 +2171,8 @@ type UnsignedSchemaConsistentSimple struct {
 
 type UnsignedSchemaConsistent struct {
 	// Primitive unsigned fields (non-nullable, use Field suffix to avoid reserved keywords)
-	U8Field  uint8  // UINT8 - fixed 8-bit
-	U16Field uint16 // UINT16 - fixed 16-bit
+	U8Field        uint8  // UINT8 - fixed 8-bit
+	U16Field       uint16 // UINT16 - fixed 16-bit
 	U32VarField    uint32 `fory:"compress=true"`   // VAR_UINT32 - variable-length
 	U32FixedField  uint32 `fory:"compress=false"`  // UINT32 - fixed 4-byte
 	U64VarField    uint64 `fory:"encoding=varint"` // VAR_UINT64 - variable-length
@@ -2180,8 +2180,8 @@ type UnsignedSchemaConsistent struct {
 	U64TaggedField uint64 `fory:"encoding=tagged"` // TAGGED_UINT64 - tagged encoding
 
 	// Nullable unsigned fields (pointers)
-	U8NullableField  *uint8  `fory:"nullable"`
-	U16NullableField *uint16 `fory:"nullable"`
+	U8NullableField        *uint8  `fory:"nullable"`
+	U16NullableField       *uint16 `fory:"nullable"`
 	U32VarNullableField    *uint32 `fory:"nullable,compress=true"`
 	U32FixedNullableField  *uint32 `fory:"nullable,compress=false"`
 	U64VarNullableField    *uint64 `fory:"nullable,encoding=varint"`
@@ -2195,8 +2195,8 @@ type UnsignedSchemaConsistent struct {
 // Matches Java's UnsignedSchemaCompatible (type id 502)
 type UnsignedSchemaCompatible struct {
 	// Group 1: Nullable in Go (pointers), non-nullable in Java
-	U8Field1  *uint8  `fory:"nullable"`
-	U16Field1 *uint16 `fory:"nullable"`
+	U8Field1        *uint8  `fory:"nullable"`
+	U16Field1       *uint16 `fory:"nullable"`
 	U32VarField1    *uint32 `fory:"nullable,compress=true"`
 	U32FixedField1  *uint32 `fory:"nullable,compress=false"`
 	U64VarField1    *uint64 `fory:"nullable,encoding=varint"`
@@ -2204,8 +2204,8 @@ type UnsignedSchemaCompatible struct {
 	U64TaggedField1 *uint64 `fory:"nullable,encoding=tagged"`
 
 	// Group 2: Non-nullable in Go, nullable in Java
-	U8Field2  uint8
-	U16Field2 uint16
+	U8Field2        uint8
+	U16Field2       uint16
 	U32VarField2    uint32 `fory:"compress=true"`
 	U32FixedField2  uint32 `fory:"compress=false"`
 	U64VarField2    uint64 `fory:"encoding=varint"`

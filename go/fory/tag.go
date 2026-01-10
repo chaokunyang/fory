@@ -18,14 +18,14 @@
 package fory
 
 import (
-    "reflect"
-    "strconv"
-    "strings"
+	"reflect"
+	"strconv"
+	"strings"
 )
 
 const (
-    // TagIDUseFieldName indicates field name should be used instead of tag ID
-    TagIDUseFieldName = -1
+	// TagIDUseFieldName indicates field name should be used instead of tag ID
+	TagIDUseFieldName = -1
 )
 
 // ForyTag represents parsed fory struct tag options.
@@ -54,20 +54,20 @@ const (
 //	    Hidden    string  `fory:"-"`                              // Skip this field (shorthand)
 //	}
 type ForyTag struct {
-    ID       int    // Field tag ID (-1 = use field name, >=0 = use tag ID)
-    Nullable bool   // Whether to write null flag (default: false)
-    Ref      bool   // Whether to enable reference tracking (default: false)
-    Ignore   bool   // Whether to ignore this field during serialization (default: false)
-    HasTag   bool   // Whether field has fory tag at all
-    Compress bool   // For int32/uint32: true=varint, false=fixed (default: true)
-    Encoding string // For int64/uint64: "fixed", "varint", "tagged" (default: "varint")
+	ID       int    // Field tag ID (-1 = use field name, >=0 = use tag ID)
+	Nullable bool   // Whether to write null flag (default: false)
+	Ref      bool   // Whether to enable reference tracking (default: false)
+	Ignore   bool   // Whether to ignore this field during serialization (default: false)
+	HasTag   bool   // Whether field has fory tag at all
+	Compress bool   // For int32/uint32: true=varint, false=fixed (default: true)
+	Encoding string // For int64/uint64: "fixed", "varint", "tagged" (default: "varint")
 
-    // Track which options were explicitly set (for override logic)
-    NullableSet bool
-    RefSet      bool
-    IgnoreSet   bool
-    CompressSet bool
-    EncodingSet bool
+	// Track which options were explicitly set (for override logic)
+	NullableSet bool
+	RefSet      bool
+	IgnoreSet   bool
+	CompressSet bool
+	EncodingSet bool
 }
 
 // parseForyTag parses a fory struct tag from reflect.StructField.Tag.
@@ -81,112 +81,112 @@ type ForyTag struct {
 //   - Standalone flags: `nullable`, `ref`, `ignore` (equivalent to =true)
 //   - Shorthand: `-` (equivalent to `ignore=true`)
 func parseForyTag(field reflect.StructField) ForyTag {
-    tag := ForyTag{
-        ID:       TagIDUseFieldName,
-        Nullable: false,
-        Ref:      false,
-        Ignore:   false,
-        HasTag:   false,
-        Compress: true,     // default: varint encoding
-        Encoding: "varint", // default: varint encoding
-    }
+	tag := ForyTag{
+		ID:       TagIDUseFieldName,
+		Nullable: false,
+		Ref:      false,
+		Ignore:   false,
+		HasTag:   false,
+		Compress: true,     // default: varint encoding
+		Encoding: "varint", // default: varint encoding
+	}
 
-    tagValue, ok := field.Tag.Lookup("fory")
-    if !ok {
-        return tag
-    }
+	tagValue, ok := field.Tag.Lookup("fory")
+	if !ok {
+		return tag
+	}
 
-    tag.HasTag = true
+	tag.HasTag = true
 
-    // Handle "-" shorthand for ignore
-    if tagValue == "-" {
-        tag.Ignore = true
-        tag.IgnoreSet = true
-        return tag
-    }
+	// Handle "-" shorthand for ignore
+	if tagValue == "-" {
+		tag.Ignore = true
+		tag.IgnoreSet = true
+		return tag
+	}
 
-    // Parse comma-separated options
-    parts := strings.Split(tagValue, ",")
-    for _, part := range parts {
-        part = strings.TrimSpace(part)
-        if part == "" {
-            continue
-        }
+	// Parse comma-separated options
+	parts := strings.Split(tagValue, ",")
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
 
-        // Handle key=value pairs and standalone flags
-        if idx := strings.Index(part, "="); idx >= 0 {
-            key := strings.TrimSpace(part[:idx])
-            value := strings.TrimSpace(part[idx+1:])
+		// Handle key=value pairs and standalone flags
+		if idx := strings.Index(part, "="); idx >= 0 {
+			key := strings.TrimSpace(part[:idx])
+			value := strings.TrimSpace(part[idx+1:])
 
-            switch key {
-            case "id":
-                if id, err := strconv.Atoi(value); err == nil {
-                    tag.ID = id
-                }
-            case "nullable":
-                tag.Nullable = parseBool(value)
-                tag.NullableSet = true
-            case "ref":
-                tag.Ref = parseBool(value)
-                tag.RefSet = true
-            case "ignore":
-                tag.Ignore = parseBool(value)
-                tag.IgnoreSet = true
-            case "compress":
-                tag.Compress = parseBool(value)
-                tag.CompressSet = true
-            case "encoding":
-                tag.Encoding = strings.ToLower(strings.TrimSpace(value))
-                tag.EncodingSet = true
-            }
-        } else {
-            // Handle standalone flags (presence means true)
-            switch part {
-            case "nullable":
-                tag.Nullable = true
-                tag.NullableSet = true
-            case "ref":
-                tag.Ref = true
-                tag.RefSet = true
-            case "ignore":
-                tag.Ignore = true
-                tag.IgnoreSet = true
-            }
-        }
-    }
+			switch key {
+			case "id":
+				if id, err := strconv.Atoi(value); err == nil {
+					tag.ID = id
+				}
+			case "nullable":
+				tag.Nullable = parseBool(value)
+				tag.NullableSet = true
+			case "ref":
+				tag.Ref = parseBool(value)
+				tag.RefSet = true
+			case "ignore":
+				tag.Ignore = parseBool(value)
+				tag.IgnoreSet = true
+			case "compress":
+				tag.Compress = parseBool(value)
+				tag.CompressSet = true
+			case "encoding":
+				tag.Encoding = strings.ToLower(strings.TrimSpace(value))
+				tag.EncodingSet = true
+			}
+		} else {
+			// Handle standalone flags (presence means true)
+			switch part {
+			case "nullable":
+				tag.Nullable = true
+				tag.NullableSet = true
+			case "ref":
+				tag.Ref = true
+				tag.RefSet = true
+			case "ignore":
+				tag.Ignore = true
+				tag.IgnoreSet = true
+			}
+		}
+	}
 
-    return tag
+	return tag
 }
 
 // parseBool parses a boolean value from string.
 // Accepts: "true", "1", "yes" as true; everything else as false.
 func parseBool(s string) bool {
-    s = strings.ToLower(strings.TrimSpace(s))
-    return s == "true" || s == "1" || s == "yes"
+	s = strings.ToLower(strings.TrimSpace(s))
+	return s == "true" || s == "1" || s == "yes"
 }
 
 // parseTypeID parses a TypeId from string name.
 // Returns 0 if the type name is not recognized.
 func parseTypeID(s string) TypeId {
-    s = strings.ToUpper(strings.TrimSpace(s))
-    switch s {
-    case "UINT8":
-        return UINT8
-    case "UINT16":
-        return UINT16
-    case "UINT32":
-        return UINT32
-    case "VAR_UINT32":
-        return VAR_UINT32
-    case "UINT64":
-        return UINT64
-    case "VAR_UINT64":
-        return VAR_UINT64
-    case "TAGGED_UINT64":
-        return TAGGED_UINT64
-    default:
-        return 0
-    }
+	s = strings.ToUpper(strings.TrimSpace(s))
+	switch s {
+	case "UINT8":
+		return UINT8
+	case "UINT16":
+		return UINT16
+	case "UINT32":
+		return UINT32
+	case "VAR_UINT32":
+		return VAR_UINT32
+	case "UINT64":
+		return UINT64
+	case "VAR_UINT64":
+		return VAR_UINT64
+	case "TAGGED_UINT64":
+		return TAGGED_UINT64
+	default:
+		return 0
+	}
 }
 
 // validateForyTags validates all fory tags in a struct type.
@@ -197,41 +197,41 @@ func parseTypeID(s string) TypeId {
 //   - Tag IDs must be unique within a struct (except -1)
 //   - Ignored fields are not validated for ID uniqueness
 func validateForyTags(t reflect.Type) error {
-    if t.Kind() == reflect.Ptr {
-        t = t.Elem()
-    }
-    if t.Kind() != reflect.Struct {
-        return nil
-    }
+	if t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+	if t.Kind() != reflect.Struct {
+		return nil
+	}
 
-    tagIDs := make(map[int]string) // id -> field name
+	tagIDs := make(map[int]string) // id -> field name
 
-    for i := 0; i < t.NumField(); i++ {
-        field := t.Field(i)
-        tag := parseForyTag(field)
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		tag := parseForyTag(field)
 
-        // Skip ignored fields for ID uniqueness validation
-        if tag.Ignore {
-            continue
-        }
+		// Skip ignored fields for ID uniqueness validation
+		if tag.Ignore {
+			continue
+		}
 
-        // Validate tag ID range
-        if tag.ID < TagIDUseFieldName {
-            return InvalidTagErrorf("invalid fory tag id=%d on field %s: id must be >= -1",
-                tag.ID, field.Name)
-        }
+		// Validate tag ID range
+		if tag.ID < TagIDUseFieldName {
+			return InvalidTagErrorf("invalid fory tag id=%d on field %s: id must be >= -1",
+				tag.ID, field.Name)
+		}
 
-        // Check for duplicate tag IDs (except -1 which means use field name)
-        if tag.ID >= 0 {
-            if existing, ok := tagIDs[tag.ID]; ok {
-                return InvalidTagErrorf("duplicate fory tag id=%d on fields %s and %s",
-                    tag.ID, existing, field.Name)
-            }
-            tagIDs[tag.ID] = field.Name
-        }
-    }
+		// Check for duplicate tag IDs (except -1 which means use field name)
+		if tag.ID >= 0 {
+			if existing, ok := tagIDs[tag.ID]; ok {
+				return InvalidTagErrorf("duplicate fory tag id=%d on fields %s and %s",
+					tag.ID, existing, field.Name)
+			}
+			tagIDs[tag.ID] = field.Name
+		}
+	}
 
-    return nil
+	return nil
 }
 
 // shouldIncludeField returns true if the field should be serialized.
@@ -240,12 +240,12 @@ func validateForyTags(t reflect.Type) error {
 //   - It has `fory:"-"` tag
 //   - It has `fory:"ignore"` or `fory:"ignore=true"` tag
 func shouldIncludeField(field reflect.StructField) bool {
-    // Skip unexported fields
-    if field.PkgPath != "" {
-        return false
-    }
+	// Skip unexported fields
+	if field.PkgPath != "" {
+		return false
+	}
 
-    // Check for ignore tag
-    tag := parseForyTag(field)
-    return !tag.Ignore
+	// Check for ignore tag
+	tag := parseForyTag(field)
+	return !tag.Ignore
 }

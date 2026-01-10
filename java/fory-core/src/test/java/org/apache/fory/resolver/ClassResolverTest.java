@@ -74,19 +74,20 @@ public class ClassResolverTest extends ForyTestBase {
   public void testPrimitivesClassId() {
     Fory fory = Fory.builder().withLanguage(Language.JAVA).requireClassRegistration(false).build();
     ClassResolver classResolver = fory.getClassResolver();
-    for (List<Class<?>> classes :
-        ImmutableList.of(
-            TypeUtils.getSortedPrimitiveClasses(), TypeUtils.getSortedBoxedClasses())) {
-      for (int i = 0; i < classes.size() - 1; i++) {
-        assertEquals(
-            classResolver.getRegisteredClassId(classes.get(i)) + 1,
-            classResolver.getRegisteredClassId(classes.get(i + 1)).shortValue());
-        assertTrue(classResolver.getRegisteredClassId(classes.get(i)) > 0);
-      }
+    // Test that primitive types have consecutive IDs
+    List<Class<?>> primitiveClasses = TypeUtils.getSortedPrimitiveClasses();
+    for (int i = 0; i < primitiveClasses.size() - 1; i++) {
       assertEquals(
-          classResolver.getRegisteredClassId(classes.get(classes.size() - 2)) + 1,
-          classResolver.getRegisteredClassId(classes.get(classes.size() - 1)).shortValue());
-      assertTrue(classResolver.getRegisteredClassId(classes.get(classes.size() - 1)) > 0);
+          classResolver.getRegisteredClassId(primitiveClasses.get(i)) + 1,
+          classResolver.getRegisteredClassId(primitiveClasses.get(i + 1)).shortValue());
+      assertTrue(classResolver.getRegisteredClassId(primitiveClasses.get(i)) > 0);
+    }
+    assertTrue(classResolver.getRegisteredClassId(primitiveClasses.get(primitiveClasses.size() - 1)) > 0);
+    // Test that boxed types all have valid positive IDs
+    // Note: boxed types are no longer consecutive due to unsigned type IDs being added
+    List<Class<?>> boxedClasses = TypeUtils.getSortedBoxedClasses();
+    for (Class<?> boxedClass : boxedClasses) {
+      assertTrue(classResolver.getRegisteredClassId(boxedClass) > 0);
     }
   }
 

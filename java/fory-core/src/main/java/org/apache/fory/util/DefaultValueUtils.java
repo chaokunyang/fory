@@ -34,9 +34,9 @@ import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.reflect.FieldAccessor;
-import org.apache.fory.type.DispatchId;
 import org.apache.fory.type.ScalaTypes;
 import org.apache.fory.type.TypeUtils;
+import org.apache.fory.type.Types;
 import org.apache.fory.util.unsafe._JDKAccess;
 
 /**
@@ -61,14 +61,14 @@ public class DefaultValueUtils {
     private final Object defaultValue;
     private final String fieldName;
     private final FieldAccessor fieldAccessor;
-    private final short classId;
+    private final int dispatchId;
 
     private DefaultValueField(
-        String fieldName, Object defaultValue, FieldAccessor fieldAccessor, short classId) {
+        String fieldName, Object defaultValue, FieldAccessor fieldAccessor, int dispatchId) {
       this.fieldName = fieldName;
       this.defaultValue = defaultValue;
       this.fieldAccessor = fieldAccessor;
-      this.classId = classId;
+      this.dispatchId = dispatchId;
     }
 
     public Object getDefaultValue() {
@@ -83,8 +83,8 @@ public class DefaultValueUtils {
       return fieldAccessor;
     }
 
-    public short getClassId() {
-      return classId;
+    public int getDispatchId() {
+      return dispatchId;
     }
   }
 
@@ -131,13 +131,11 @@ public class DefaultValueUtils {
             if (defaultValue != null
                 && TypeUtils.wrap(field.getType()).isAssignableFrom(defaultValue.getClass())) {
               FieldAccessor fieldAccessor = FieldAccessor.createAccessor(field);
-              Short classId = fory.getClassResolver().getRegisteredClassId(field.getType());
+              int dispatchId = Types.getTypeId(fory, field.getType());
+              // Convert value to correct type once during initialization
+              Object convertedValue = convertToType(defaultValue, dispatchId);
               defaultFields.add(
-                  new DefaultValueField(
-                      fieldName,
-                      defaultValue,
-                      fieldAccessor,
-                      classId != null ? classId : DispatchId.UNKNOWN));
+                  new DefaultValueField(fieldName, convertedValue, fieldAccessor, dispatchId));
             }
           }
         }
@@ -359,6 +357,31 @@ public class DefaultValueUtils {
     }
   }
 
+  /** Convert value to correct type based on dispatchId. */
+  private static Object convertToType(Object value, int dispatchId) {
+    switch (dispatchId) {
+      case Types.BOOL:
+        return (Boolean) value;
+      case Types.INT8:
+        return ((Number) value).byteValue();
+      case Types.INT16:
+        return ((Number) value).shortValue();
+      case Types.INT32:
+      case Types.VARINT32:
+        return ((Number) value).intValue();
+      case Types.INT64:
+      case Types.VARINT64:
+      case Types.TAGGED_INT64:
+        return ((Number) value).longValue();
+      case Types.FLOAT32:
+        return ((Number) value).floatValue();
+      case Types.FLOAT64:
+        return ((Number) value).doubleValue();
+      default:
+        return value;
+    }
+  }
+
   /**
    * Sets default values for missing fields in a Scala/Kotlin class.
    *
@@ -370,63 +393,34 @@ public class DefaultValueUtils {
       FieldAccessor fieldAccessor = defaultField.getFieldAccessor();
       if (fieldAccessor != null) {
         Object defaultValue = defaultField.getDefaultValue();
-        short classId = defaultField.getClassId();
         long fieldOffset = fieldAccessor.getFieldOffset();
-        switch (classId) {
-          case DispatchId.PRIMITIVE_BOOL:
-          case DispatchId.BOOL:
+        switch (defaultField.dispatchId) {
+          case Types.BOOL:
             Platform.putBoolean(obj, fieldOffset, (Boolean) defaultValue);
             break;
-          case DispatchId.PRIMITIVE_INT8:
-          case DispatchId.INT8:
-          case DispatchId.PRIMITIVE_UINT8:
-          case DispatchId.UINT8:
-            Platform.putByte(obj, fieldOffset, ((Number) defaultValue).byteValue());
+          case Types.INT8:
+            Platform.putByte(obj, fieldOffset, (Byte) defaultValue);
             break;
-          case DispatchId.PRIMITIVE_CHAR:
-          case DispatchId.CHAR:
-            Platform.putChar(obj, fieldOffset, (Character) defaultValue);
+          case Types.INT16:
+            Platform.putShort(obj, fieldOffset, (Short) defaultValue);
             break;
-          case DispatchId.PRIMITIVE_INT16:
-          case DispatchId.INT16:
-          case DispatchId.PRIMITIVE_UINT16:
-          case DispatchId.UINT16:
-            Platform.putShort(obj, fieldOffset, ((Number) defaultValue).shortValue());
+          case Types.INT32:
+          case Types.VARINT32:
+            Platform.putInt(obj, fieldOffset, (Integer) defaultValue);
             break;
-          case DispatchId.PRIMITIVE_INT32:
-          case DispatchId.INT32:
-          case DispatchId.PRIMITIVE_VARINT32:
-          case DispatchId.VARINT32:
-          case DispatchId.PRIMITIVE_UINT32:
-          case DispatchId.UINT32:
-          case DispatchId.PRIMITIVE_VAR_UINT32:
-          case DispatchId.VAR_UINT32:
-            Platform.putInt(obj, fieldOffset, ((Number) defaultValue).intValue());
+          case Types.INT64:
+          case Types.VARINT64:
+          case Types.TAGGED_INT64:
+            Platform.putLong(obj, fieldOffset, (Long) defaultValue);
             break;
-          case DispatchId.PRIMITIVE_INT64:
-          case DispatchId.INT64:
-          case DispatchId.PRIMITIVE_VARINT64:
-          case DispatchId.VARINT64:
-          case DispatchId.PRIMITIVE_TAGGED_INT64:
-          case DispatchId.TAGGED_INT64:
-          case DispatchId.PRIMITIVE_UINT64:
-          case DispatchId.UINT64:
-          case DispatchId.PRIMITIVE_VAR_UINT64:
-          case DispatchId.VAR_UINT64:
-          case DispatchId.PRIMITIVE_TAGGED_UINT64:
-          case DispatchId.TAGGED_UINT64:
-            Platform.putLong(obj, fieldOffset, ((Number) defaultValue).longValue());
-            break;
-          case DispatchId.PRIMITIVE_FLOAT32:
-          case DispatchId.FLOAT32:
+          case Types.FLOAT32:
             Platform.putFloat(obj, fieldOffset, (Float) defaultValue);
             break;
-          case DispatchId.PRIMITIVE_FLOAT64:
-          case DispatchId.FLOAT64:
+          case Types.FLOAT64:
             Platform.putDouble(obj, fieldOffset, (Double) defaultValue);
             break;
           default:
-            // Object type
+            // Object type (including String, char, boxed types not covered above)
             fieldAccessor.putObject(obj, defaultValue);
         }
       }

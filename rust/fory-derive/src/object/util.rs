@@ -762,36 +762,52 @@ pub(super) fn get_primitive_writer_method(type_name: &str) -> &'static str {
 
 /// Get the writer method name for a primitive numeric type, considering encoding attributes.
 ///
+/// For i32 fields:
+/// - type_id=VARINT32 (default): write_varint32
+/// - type_id=INT32: write_i32 (fixed 4-byte)
+///
 /// For u32 fields:
-/// - compress=true (default): write_varuint32
-/// - compress=false: write_u32 (fixed 4-byte)
+/// - type_id=VARINT32/VAR_UINT32 (default): write_varuint32
+/// - type_id=INT32/UINT32: write_u32 (fixed 4-byte)
 ///
 /// For u64 fields:
-/// - encoding="varint" (default): write_varuint64
-/// - encoding="fixed": write_u64 (fixed 8-byte)
-/// - encoding="tagged": write_tagged_varuint64
+/// - type_id=VARINT32/VAR_UINT64 (default): write_varuint64
+/// - type_id=INT32/UINT64: write_u64 (fixed 8-byte)
+/// - type_id=TAGGED_UINT64: write_tagged_u64
 pub(super) fn get_primitive_writer_method_with_encoding(
     type_name: &str,
     meta: &super::field_meta::ForyFieldMeta,
 ) -> &'static str {
-    use super::field_meta::U64Encoding;
+    use fory_core::types::TypeId;
 
-    // Handle u32 with compress attribute
+    // Handle i32 with type_id
+    if type_name == "i32" {
+        if let Some(type_id) = meta.type_id {
+            if type_id == TypeId::INT32 as i16 {
+                return "write_i32"; // Fixed 4-byte encoding
+            }
+        }
+        return "write_varint32"; // Variable-length (default)
+    }
+
+    // Handle u32 with type_id
     if type_name == "u32" {
-        if let Some(false) = meta.compress {
-            return "write_u32"; // Fixed 4-byte encoding
+        if let Some(type_id) = meta.type_id {
+            if type_id == TypeId::INT32 as i16 || type_id == TypeId::UINT32 as i16 {
+                return "write_u32"; // Fixed 4-byte encoding
+            }
         }
         return "write_varuint32"; // Variable-length (default)
     }
 
-    // Handle u64 with encoding attribute
+    // Handle u64 with type_id
     if type_name == "u64" {
-        if let Some(encoding) = meta.encoding {
-            return match encoding {
-                U64Encoding::Varint => "write_varuint64",
-                U64Encoding::Fixed => "write_u64",
-                U64Encoding::Tagged => "write_tagged_u64",
-            };
+        if let Some(type_id) = meta.type_id {
+            if type_id == TypeId::INT32 as i16 || type_id == TypeId::UINT64 as i16 {
+                return "write_u64"; // Fixed 8-byte encoding
+            } else if type_id == TypeId::TAGGED_UINT64 as i16 {
+                return "write_tagged_u64"; // Tagged variable-length
+            }
         }
         return "write_varuint64"; // Variable-length (default)
     }
@@ -812,36 +828,52 @@ pub(super) fn get_primitive_reader_method(type_name: &str) -> &'static str {
 
 /// Get the reader method name for a primitive numeric type, considering encoding attributes.
 ///
+/// For i32 fields:
+/// - type_id=VARINT32 (default): read_varint32
+/// - type_id=INT32: read_i32 (fixed 4-byte)
+///
 /// For u32 fields:
-/// - compress=true (default): read_varuint32
-/// - compress=false: read_u32 (fixed 4-byte)
+/// - type_id=VARINT32/VAR_UINT32 (default): read_varuint32
+/// - type_id=INT32/UINT32: read_u32 (fixed 4-byte)
 ///
 /// For u64 fields:
-/// - encoding="varint" (default): read_varuint64
-/// - encoding="fixed": read_u64 (fixed 8-byte)
-/// - encoding="tagged": read_tagged_varuint64
+/// - type_id=VARINT32/VAR_UINT64 (default): read_varuint64
+/// - type_id=INT32/UINT64: read_u64 (fixed 8-byte)
+/// - type_id=TAGGED_UINT64: read_tagged_u64
 pub(super) fn get_primitive_reader_method_with_encoding(
     type_name: &str,
     meta: &super::field_meta::ForyFieldMeta,
 ) -> &'static str {
-    use super::field_meta::U64Encoding;
+    use fory_core::types::TypeId;
 
-    // Handle u32 with compress attribute
+    // Handle i32 with type_id
+    if type_name == "i32" {
+        if let Some(type_id) = meta.type_id {
+            if type_id == TypeId::INT32 as i16 {
+                return "read_i32"; // Fixed 4-byte encoding
+            }
+        }
+        return "read_varint32"; // Variable-length (default)
+    }
+
+    // Handle u32 with type_id
     if type_name == "u32" {
-        if let Some(false) = meta.compress {
-            return "read_u32"; // Fixed 4-byte encoding
+        if let Some(type_id) = meta.type_id {
+            if type_id == TypeId::INT32 as i16 || type_id == TypeId::UINT32 as i16 {
+                return "read_u32"; // Fixed 4-byte encoding
+            }
         }
         return "read_varuint32"; // Variable-length (default)
     }
 
-    // Handle u64 with encoding attribute
+    // Handle u64 with type_id
     if type_name == "u64" {
-        if let Some(encoding) = meta.encoding {
-            return match encoding {
-                U64Encoding::Varint => "read_varuint64",
-                U64Encoding::Fixed => "read_u64",
-                U64Encoding::Tagged => "read_tagged_u64",
-            };
+        if let Some(type_id) = meta.type_id {
+            if type_id == TypeId::INT32 as i16 || type_id == TypeId::UINT64 as i16 {
+                return "read_u64"; // Fixed 8-byte encoding
+            } else if type_id == TypeId::TAGGED_UINT64 as i16 {
+                return "read_tagged_u64"; // Tagged variable-length
+            }
         }
         return "read_varuint64"; // Variable-length (default)
     }
@@ -850,19 +882,17 @@ pub(super) fn get_primitive_reader_method_with_encoding(
     get_primitive_reader_method(type_name)
 }
 
-/// Check if a type is Option<u32> or Option<u64> that needs encoding-aware handling
-/// based on the field metadata (compress or encoding attributes).
+/// Check if a type is Option<i32>, Option<u32>, or Option<u64> that needs encoding-aware handling
+/// based on the field metadata (type_id attribute).
 pub(super) fn is_option_encoding_primitive(
     ty: &Type,
     meta: &super::field_meta::ForyFieldMeta,
 ) -> bool {
     if let Some(inner_name) = get_option_inner_primitive_name(ty) {
-        // For u32, check compress attribute
-        if inner_name == "u32" && meta.compress.is_some() {
-            return true;
-        }
-        // For u64, check encoding attribute
-        if inner_name == "u64" && meta.encoding.is_some() {
+        // For i32/u32/u64, check if type_id is set
+        if (inner_name == "i32" || inner_name == "u32" || inner_name == "u64")
+            && meta.type_id.is_some()
+        {
             return true;
         }
     }
@@ -1267,40 +1297,40 @@ struct FieldFingerprintInfo {
     is_option_type: bool,
 }
 
-/// Adjusts type ID based on encoding attributes for u32/u64 fields.
+/// Adjusts type ID based on encoding attributes for i32/u32/u64 fields.
 ///
-/// For u32 fields:
-/// - compress=true (default): VAR_UINT32 (12)
-/// - compress=false: UINT32 (11, fixed)
-///
-/// For u64 fields:
-/// - encoding="varint" (default): VAR_UINT64 (14)
-/// - encoding="fixed": UINT64 (13, fixed 8-byte)
-/// - encoding="tagged": TAGGED_UINT64 (15)
-fn adjust_type_id_for_encoding(
-    base_type_id: u32,
-    meta: &super::field_meta::ForyFieldMeta,
-) -> u32 {
-    use super::field_meta::U64Encoding;
+/// The type_id in meta represents the desired encoding:
+/// - VARINT32: variable-length for i32/u32
+/// - INT32: fixed 4-byte for i32, u32
+/// - TAGGED_UINT64: tagged variable-length for u64
+fn adjust_type_id_for_encoding(base_type_id: u32, meta: &super::field_meta::ForyFieldMeta) -> u32 {
+    // If no explicit type_id is set, use the base type_id
+    let Some(explicit_type_id) = meta.type_id else {
+        return base_type_id;
+    };
 
-    // Handle u32 fields with compress attribute
+    // Handle i32 fields
+    if base_type_id == TypeId::VARINT32 as u32 {
+        if explicit_type_id == TypeId::INT32 as i16 {
+            return TypeId::INT32 as u32; // Fixed 4-byte encoding
+        }
+        return base_type_id; // VARINT32 (default)
+    }
+
+    // Handle u32 fields
     if base_type_id == TypeId::VAR_UINT32 as u32 {
-        if let Some(compress) = meta.compress {
-            if !compress {
-                return TypeId::UINT32 as u32; // Fixed 4-byte encoding
-            }
+        if explicit_type_id == TypeId::INT32 as i16 {
+            return TypeId::UINT32 as u32; // Fixed 4-byte encoding
         }
         return base_type_id; // VAR_UINT32 (default)
     }
 
-    // Handle u64 fields with encoding attribute
+    // Handle u64 fields
     if base_type_id == TypeId::VAR_UINT64 as u32 {
-        if let Some(encoding) = meta.encoding {
-            return match encoding {
-                U64Encoding::Varint => TypeId::VAR_UINT64 as u32,
-                U64Encoding::Fixed => TypeId::UINT64 as u32,
-                U64Encoding::Tagged => TypeId::TAGGED_UINT64 as u32,
-            };
+        if explicit_type_id == TypeId::INT32 as i16 {
+            return TypeId::UINT64 as u32; // Fixed 8-byte encoding
+        } else if explicit_type_id == TypeId::TAGGED_UINT64 as i16 {
+            return TypeId::TAGGED_UINT64 as u32; // Tagged variable-length
         }
         return base_type_id; // VAR_UINT64 (default)
     }
@@ -1332,7 +1362,7 @@ fn compute_struct_fingerprint(fields: &[&Field]) -> String {
         };
 
         let type_class = classify_field_type(&field.ty);
-        let ref_tracking = meta.effective_ref_tracking(type_class);
+        let ref_tracking = meta.effective_ref(type_class);
         let explicit_nullable = meta.nullable;
 
         // Get compile-time TypeId, considering encoding attributes for u32/u64 fields
@@ -1441,7 +1471,7 @@ pub(crate) fn determine_field_ref_mode(field: &syn::Field) -> FieldRefMode {
     let meta = parse_field_meta(field).unwrap_or_default();
     let type_class = classify_field_type(&field.ty);
     let nullable = meta.effective_nullable(type_class);
-    let ref_tracking = meta.effective_ref_tracking(type_class);
+    let ref_tracking = meta.effective_ref(type_class);
 
     if ref_tracking {
         FieldRefMode::Tracking

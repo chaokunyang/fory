@@ -751,18 +751,25 @@ impl TypeMeta {
 
     fn assign_field_ids(type_info_current: &TypeInfo, field_infos: &mut [FieldInfo]) {
         if crate::util::ENABLE_FORY_DEBUG_OUTPUT {
-            eprintln!("[fory-debug] assign_field_ids called for type: {:?}", type_info_current.get_type_name());
+            eprintln!(
+                "[fory-debug] assign_field_ids called for type: {:?}",
+                type_info_current.get_type_name()
+            );
             for f in field_infos.iter() {
-                eprintln!("[fory-debug]   remote field before assign: name={}, field_id={}, type={:?}",
-                    f.field_name, f.field_id, f.field_type);
+                eprintln!(
+                    "[fory-debug]   remote field before assign: name={}, field_id={}, type={:?}",
+                    f.field_name, f.field_id, f.field_type
+                );
             }
         }
         let type_meta = type_info_current.get_type_meta();
         let local_field_infos = type_meta.get_field_infos();
         if crate::util::ENABLE_FORY_DEBUG_OUTPUT {
             for f in local_field_infos.iter() {
-                eprintln!("[fory-debug]   local field: name={}, field_id={}, type={:?}",
-                    f.field_name, f.field_id, f.field_type);
+                eprintln!(
+                    "[fory-debug]   local field: name={}, field_id={}, type={:?}",
+                    f.field_name, f.field_id, f.field_type
+                );
             }
         }
 
@@ -817,8 +824,10 @@ impl TypeMeta {
                         // Assign SORTED INDEX for matching in generated code
                         field.field_id = sorted_index as i16;
                         if crate::util::ENABLE_FORY_DEBUG_OUTPUT {
-                            eprintln!("[fory-debug]   matched field: name={}, assigned_field_id={}",
-                                field.field_name, field.field_id);
+                            eprintln!(
+                                "[fory-debug]   matched field: name={}, assigned_field_id={}",
+                                field.field_name, field.field_id
+                            );
                         }
                     }
                 }

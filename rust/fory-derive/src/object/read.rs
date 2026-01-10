@@ -127,10 +127,7 @@ fn gen_compatible_unsigned_read(
 /// Generate compatible mode read code for u8/u16 Option fields
 /// These need special handling because when remote field is non-nullable,
 /// Java sends just the raw bytes without a ref flag
-fn gen_compatible_primitive_option_read(
-    prim_type: &str,
-    var_name: &Ident,
-) -> TokenStream {
+fn gen_compatible_primitive_option_read(prim_type: &str, var_name: &Ident) -> TokenStream {
     let read_value = match prim_type {
         "u8" => quote! { context.reader.read_u8()? },
         "u16" => quote! { context.reader.read_u16()? },
@@ -379,7 +376,8 @@ pub fn gen_read_field(field: &Field, private_ident: &Ident, field_name: &str) ->
                 } else {
                     // Numeric primitives: use direct buffer methods
                     // For u32/u64, consider encoding attributes
-                    let reader_method = get_primitive_reader_method_with_encoding(&type_name, &meta);
+                    let reader_method =
+                        get_primitive_reader_method_with_encoding(&type_name, &meta);
                     let reader_ident =
                         syn::Ident::new(reader_method, proc_macro2::Span::call_site());
                     quote! {
@@ -692,7 +690,11 @@ pub(crate) fn gen_read_compatible_match_arm_body(
 
                 // Check if this is a u32/u64 field that needs encoding-aware reading
                 if let Some(unsigned_type) = is_unsigned_encoding_type(ty) {
-                    gen_compatible_unsigned_read(unsigned_type, var_name, is_option_type || dec_by_option)
+                    gen_compatible_unsigned_read(
+                        unsigned_type,
+                        var_name,
+                        is_option_type || dec_by_option,
+                    )
                 } else if is_option_type {
                     // Check if it's Option<u8> or Option<u16> which need special handling
                     if let Some(prim_type) = is_compatible_primitive_type(ty) {

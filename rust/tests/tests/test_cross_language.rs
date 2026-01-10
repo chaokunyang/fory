@@ -1897,14 +1897,14 @@ fn test_circular_ref_compatible() {
 #[fory(debug)]
 struct UnsignedSchemaConsistent {
     // Primitive unsigned fields (non-nullable, use Field suffix to avoid reserved keywords)
-    u8_field: u8,    // UINT8 - fixed 8-bit
-    u16_field: u16,  // UINT16 - fixed 16-bit
-    u32_var_field: u32,    // VAR_UINT32 - variable-length (default)
+    u8_field: u8,       // UINT8 - fixed 8-bit
+    u16_field: u16,     // UINT16 - fixed 16-bit
+    u32_var_field: u32, // VAR_UINT32 - variable-length (default)
     #[fory(compress = false)]
-    u32_fixed_field: u32,  // UINT32 - fixed 4-byte
-    u64_var_field: u64,    // VAR_UINT64 - variable-length (default)
+    u32_fixed_field: u32, // UINT32 - fixed 4-byte
+    u64_var_field: u64, // VAR_UINT64 - variable-length (default)
     #[fory(encoding = "fixed")]
-    u64_fixed_field: u64,  // UINT64 - fixed 8-byte
+    u64_fixed_field: u64, // UINT64 - fixed 8-byte
     #[fory(encoding = "tagged")]
     u64_tagged_field: u64, // TAGGED_UINT64
 

@@ -282,7 +282,8 @@ fn gen_write_field_impl(
                 } else {
                     // Numeric primitives: use direct buffer methods
                     // For u32/u64, consider encoding attributes
-                    let writer_method = get_primitive_writer_method_with_encoding(&type_name, &meta);
+                    let writer_method =
+                        get_primitive_writer_method_with_encoding(&type_name, &meta);
                     let writer_ident =
                         syn::Ident::new(writer_method, proc_macro2::Span::call_site());
                     // For primitives:

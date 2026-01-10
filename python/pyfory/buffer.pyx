@@ -432,7 +432,7 @@ cdef class Buffer:
     cpdef inline write_varint32(self, int32_t value):
         return self.write_varuint32((value << 1) ^ (value >> 31))
 
-    cpdef inline write_varuint32(self, int32_t value):
+    cpdef inline write_varuint32(self, uint32_t value):
         # Need 8 bytes for safe bulk write (PutVarUint32 writes uint64_t for 5-byte varints)
         self.grow(<int8_t>8)
         cdef int32_t actual_bytes_written = self.c_buffer_ptr.PutVarUint32(self.writer_index, value)
@@ -443,11 +443,11 @@ cdef class Buffer:
         cdef uint32_t v = self.read_varuint32()
         return (v >> 1) ^ -(v & 1)
 
-    cpdef inline int32_t read_varuint32(self):
+    cpdef inline uint32_t read_varuint32(self):
         cdef:
             uint32_t read_length = 0
             int8_t b
-            int32_t result
+            uint32_t result
         if self._c_size - self.reader_index > 5:
             result = self.c_buffer_ptr.GetVarUint32(self.reader_index, &read_length)
             self.reader_index += read_length

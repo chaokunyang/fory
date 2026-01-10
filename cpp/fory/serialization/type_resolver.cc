@@ -1266,7 +1266,18 @@ void TypeResolver::register_builtin_types() {
   register_type_id_only(TypeId::INT8);
   register_type_id_only(TypeId::INT16);
   register_type_id_only(TypeId::INT32);
+  register_type_id_only(TypeId::VARINT32);
   register_type_id_only(TypeId::INT64);
+  register_type_id_only(TypeId::VARINT64);
+  register_type_id_only(TypeId::TAGGED_INT64);
+  register_type_id_only(TypeId::UINT8);
+  register_type_id_only(TypeId::UINT16);
+  register_type_id_only(TypeId::UINT32);
+  register_type_id_only(TypeId::VAR_UINT32);
+  register_type_id_only(TypeId::UINT64);
+  register_type_id_only(TypeId::VAR_UINT64);
+  register_type_id_only(TypeId::TAGGED_UINT64);
+  register_type_id_only(TypeId::FLOAT16);
   register_type_id_only(TypeId::FLOAT32);
   register_type_id_only(TypeId::FLOAT64);
   register_type_id_only(TypeId::STRING);
@@ -1277,6 +1288,10 @@ void TypeResolver::register_builtin_types() {
   register_type_id_only(TypeId::INT16_ARRAY);
   register_type_id_only(TypeId::INT32_ARRAY);
   register_type_id_only(TypeId::INT64_ARRAY);
+  register_type_id_only(TypeId::UINT8_ARRAY);
+  register_type_id_only(TypeId::UINT16_ARRAY);
+  register_type_id_only(TypeId::UINT32_ARRAY);
+  register_type_id_only(TypeId::UINT64_ARRAY);
   register_type_id_only(TypeId::FLOAT16_ARRAY);
   register_type_id_only(TypeId::FLOAT32_ARRAY);
   register_type_id_only(TypeId::FLOAT64_ARRAY);
@@ -1293,6 +1308,8 @@ void TypeResolver::register_builtin_types() {
   register_type_id_only(TypeId::EXT);
 
   // Other internal types
+  register_type_id_only(TypeId::UNION);
+  register_type_id_only(TypeId::NONE);
   register_type_id_only(TypeId::DURATION);
   register_type_id_only(TypeId::TIMESTAMP);
   register_type_id_only(TypeId::LOCAL_DATE);

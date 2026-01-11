@@ -150,9 +150,9 @@ func TestRefTrackingLargeCount(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			f := New(WithRefTracking(true))
 
-			err := f.RegisterByName(&Inner{}, fmt.Sprintf("RefTest_Inner_%d", tt.count))
+			err := f.RegisterNamedStruct(&Inner{}, fmt.Sprintf("RefTest_Inner_%d", tt.count))
 			require.NoError(t, err)
-			err = f.RegisterByName(&Outer{}, fmt.Sprintf("RefTest_Outer_%d", tt.count))
+			err = f.RegisterNamedStruct(&Outer{}, fmt.Sprintf("RefTest_Outer_%d", tt.count))
 			require.NoError(t, err)
 
 			original := make([]Outer, tt.count)

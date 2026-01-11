@@ -29,7 +29,7 @@ func main() {
     f := fory.New()
 
     // Register struct for cross-language serialization
-    if err := f.RegisterByName(User{}, "example.User"); err != nil {
+    if err := f.RegisterNamedStruct(User{}, "example.User"); err != nil {
         panic(err)
     }
 
@@ -101,7 +101,7 @@ Fory Go enables seamless data exchange with Java, Python, C++, Rust, and JavaScr
 ```go
 // Go
 f := fory.New()
-f.RegisterByName(User{}, "example.User")
+f.RegisterNamedStruct(User{}, "example.User")
 data, _ := f.Serialize(&User{ID: 1, Name: "Alice"})
 // 'data' can be deserialized by Java, Python, etc.
 ```

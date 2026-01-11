@@ -31,7 +31,7 @@ func TestUnsignedTypeSerialization(t *testing.T) {
 	}
 
 	f := New(WithXlang(true), WithCompatible(false))
-	f.Register(TestStruct{}, 9999)
+	f.RegisterStruct(TestStruct{}, 9999)
 
 	obj := TestStruct{
 		U32Var:    3000000000,

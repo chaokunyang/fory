@@ -141,7 +141,7 @@ type User struct {
 }
 
 f := fory.New()
-f.RegisterByName(User{}, "example.User")
+f.RegisterNamedStruct(User{}, "example.User")
 
 user := &User{ID: 1, Name: "Alice", password: "secret"}
 data, _ := f.Serialize(user)
@@ -165,8 +165,8 @@ type Person struct {
 }
 
 f := fory.New()
-f.RegisterByName(Address{}, "example.Address")
-f.RegisterByName(Person{}, "example.Person")
+f.RegisterNamedStruct(Address{}, "example.Address")
+f.RegisterNamedStruct(Person{}, "example.Person")
 
 person := &Person{
     Name: "Alice",
@@ -189,7 +189,7 @@ type Node struct {
 }
 
 f := fory.New(fory.WithTrackRef(true))
-f.RegisterByName(Node{}, "example.Node")
+f.RegisterNamedStruct(Node{}, "example.Node")
 
 root := &Node{
     Value: 1,
@@ -359,8 +359,8 @@ type Item struct {
 
 func main() {
     f := fory.New()
-    f.RegisterByName(Order{}, "example.Order")
-    f.RegisterByName(Item{}, "example.Item")
+    f.RegisterNamedStruct(Order{}, "example.Order")
+    f.RegisterNamedStruct(Item{}, "example.Item")
 
     order := &Order{
         ID:       12345,

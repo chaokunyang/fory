@@ -108,7 +108,7 @@ func TestTypeDefEncodingDecoding(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			fory := NewFory(WithRefTracking(false))
 
-			if err := fory.RegisterByName(tt.testStruct, tt.tagName); err != nil {
+			if err := fory.RegisterNamedStruct(tt.testStruct, tt.tagName); err != nil {
 				t.Fatalf("Failed to register tag type: %v", err)
 			}
 
@@ -129,7 +129,7 @@ func TestTypeDefEncodingDecoding(t *testing.T) {
 
 			// basic checks
 			assert.True(t, decodedTypeDef.typeId == originalTypeDef.typeId || decodedTypeDef.typeId == -originalTypeDef.typeId, "TypeId mismatch")
-			assert.Equal(t, originalTypeDef.registerByName, decodedTypeDef.registerByName, "RegisterByName mismatch")
+			assert.Equal(t, originalTypeDef.registerByName, decodedTypeDef.registerByName, "RegisterNamedStruct mismatch")
 			assert.Equal(t, originalTypeDef.compressed, decodedTypeDef.compressed, "Compressed flag mismatch")
 			assert.Equal(t, len(originalTypeDef.fieldDefs), len(decodedTypeDef.fieldDefs), "Field count mismatch")
 
@@ -196,7 +196,7 @@ func TestTypeDefNullableFields(t *testing.T) {
 	fory := NewFory(WithRefTracking(false))
 
 	// Register the type
-	if err := fory.RegisterByName(Item1{}, "test.Item1"); err != nil {
+	if err := fory.RegisterNamedStruct(Item1{}, "test.Item1"); err != nil {
 		t.Fatalf("Failed to register type: %v", err)
 	}
 

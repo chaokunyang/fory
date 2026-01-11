@@ -227,7 +227,7 @@ func TestSerializeStructSimple(t *testing.T) {
 		type A struct {
 			F1 []string
 		}
-		require.Nil(t, fory.RegisterByName(A{}, "example.A"))
+		require.Nil(t, fory.RegisterNamedStruct(A{}, "example.A"))
 		serde(t, fory, A{})
 		serde(t, fory, &A{})
 		serde(t, fory, A{F1: []string{"str1", "", "str2"}})
@@ -237,7 +237,7 @@ func TestSerializeStructSimple(t *testing.T) {
 			F1 []string
 			F2 map[string]int32
 		}
-		require.Nil(t, fory.RegisterByName(SimpleB{}, "example.SimpleB"))
+		require.Nil(t, fory.RegisterNamedStruct(SimpleB{}, "example.SimpleB"))
 		serde(t, fory, SimpleB{})
 		serde(t, fory, SimpleB{
 			F1: []string{"str1", "", "str2"},
@@ -254,7 +254,7 @@ func TestRegisterById(t *testing.T) {
 	type simple struct {
 		Field string
 	}
-	require.NoError(t, fory.RegisterByName(simple{}, "simple"))
+	require.NoError(t, fory.RegisterNamedStruct(simple{}, "simple"))
 	serde(t, fory, simple{Field: "value"})
 }
 
@@ -306,7 +306,7 @@ func newFoo() Foo {
 func TestSerializeStruct(t *testing.T) {
 	for _, referenceTracking := range []bool{false, true} {
 		fory := NewFory(WithRefTracking(referenceTracking))
-		require.Nil(t, fory.RegisterByName(Bar{}, "example.Bar"))
+		require.Nil(t, fory.RegisterNamedStruct(Bar{}, "example.Bar"))
 		serde(t, fory, &Bar{})
 		bar := Bar{F1: 1, F2: "str"}
 		serde(t, fory, bar)
@@ -316,14 +316,14 @@ func TestSerializeStruct(t *testing.T) {
 			F1 Bar
 			F2 interface{}
 		}
-		require.Nil(t, fory.RegisterByName(A{}, "example.A"))
+		require.Nil(t, fory.RegisterNamedStruct(A{}, "example.A"))
 		serde(t, fory, A{})
 		serde(t, fory, &A{})
 		// Use int64 for interface{} fields since xlang deserializes integers to int64
 		serde(t, fory, A{F1: Bar{F1: 1, F2: "str"}, F2: int64(-1)})
 		serde(t, fory, &A{F1: Bar{F1: 1, F2: "str"}, F2: int64(-1)})
 
-		require.Nil(t, fory.RegisterByName(Foo{}, "example.Foo"))
+		require.Nil(t, fory.RegisterNamedStruct(Foo{}, "example.Foo"))
 		foo := newFoo()
 		serde(t, fory, foo)
 		serde(t, fory, &foo)
@@ -336,7 +336,7 @@ func TestSerializeCircularReference(t *testing.T) {
 		type A struct {
 			A1 *A
 		}
-		require.Nil(t, fory.RegisterByName(A{}, "example.A"))
+		require.Nil(t, fory.RegisterNamedStruct(A{}, "example.A"))
 		// If use `A{}` instead of `&A{}` and pass `a` instead of `&a`, there will be serialization data duplication
 		// and can't be deserialized by other languages too.
 		// TODO(chaokunyang) If pass by value(have a copy) and there are some inner value reference, return a readable
@@ -356,7 +356,7 @@ func TestSerializeCircularReference(t *testing.T) {
 			F2 *CircularRefB
 			F3 *CircularRefB
 		}
-		require.Nil(t, fory.RegisterByName(CircularRefB{}, "example.CircularRefB"))
+		require.Nil(t, fory.RegisterNamedStruct(CircularRefB{}, "example.CircularRefB"))
 		b := &CircularRefB{F1: "str"}
 		b.F2 = b
 		b.F3 = b
@@ -384,8 +384,8 @@ func TestSerializeComplexReference(t *testing.T) {
 		F3 *A
 		F4 *B
 	}
-	require.Nil(t, fory.RegisterByName(A{}, "example.ComplexRefA"))
-	require.Nil(t, fory.RegisterByName(B{}, "example.ComplexRefB"))
+	require.Nil(t, fory.RegisterNamedStruct(A{}, "example.ComplexRefA"))
+	require.Nil(t, fory.RegisterNamedStruct(B{}, "example.ComplexRefB"))
 
 	a := &A{F1: "str"}
 	a.F2 = a
@@ -504,8 +504,8 @@ func serde(t *testing.T, fory *Fory, value interface{}) {
 
 func BenchmarkMarshal(b *testing.B) {
 	fory := NewFory(WithRefTracking(true))
-	require.Nil(b, fory.RegisterByName(Foo{}, "example.Foo"))
-	require.Nil(b, fory.RegisterByName(Bar{}, "example.Bar"))
+	require.Nil(b, fory.RegisterNamedStruct(Foo{}, "example.Foo"))
+	require.Nil(b, fory.RegisterNamedStruct(Bar{}, "example.Bar"))
 	value := benchData()
 	for i := 0; i < b.N; i++ {
 		_, err := fory.Marshal(value)
@@ -517,8 +517,8 @@ func BenchmarkMarshal(b *testing.B) {
 
 func BenchmarkUnmarshal(b *testing.B) {
 	fory := NewFory(WithRefTracking(true))
-	require.Nil(b, fory.RegisterByName(Foo{}, "example.Foo"))
-	require.Nil(b, fory.RegisterByName(Bar{}, "example.Bar"))
+	require.Nil(b, fory.RegisterNamedStruct(Foo{}, "example.Foo"))
+	require.Nil(b, fory.RegisterNamedStruct(Bar{}, "example.Bar"))
 	value := benchData()
 	data, err := fory.Marshal(value)
 	if err != nil {
@@ -636,10 +636,10 @@ func TestStructWithNestedSlice(t *testing.T) {
 	}
 
 	fory := NewFory(WithRefTracking(true))
-	if err := fory.RegisterByName(Example{}, "Example"); err != nil {
+	if err := fory.RegisterNamedStruct(Example{}, "Example"); err != nil {
 		panic(err)
 	}
-	if err := fory.RegisterByName(Item{}, "Item"); err != nil {
+	if err := fory.RegisterNamedStruct(Item{}, "Item"); err != nil {
 		panic(err)
 	}
 

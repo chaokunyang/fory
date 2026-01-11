@@ -120,8 +120,8 @@ Type registration should be done before concurrent use:
 f := threadsafe.New()
 
 // Register types BEFORE concurrent access
-f.RegisterByName(User{}, "example.User")
-f.RegisterByName(Order{}, "example.Order")
+f.RegisterNamedStruct(User{}, "example.User")
+f.RegisterNamedStruct(Order{}, "example.Order")
 
 // Now safe to use concurrently
 go func() {
@@ -136,7 +136,7 @@ The thread-safe wrapper handles registration safely:
 ```go
 // Safe: Registration is synchronized
 f := threadsafe.New()
-f.RegisterByName(User{}, "example.User")  // Thread-safe
+f.RegisterNamedStruct(User{}, "example.User")  // Thread-safe
 ```
 
 However, for best performance, register all types at startup before concurrent use.
@@ -185,7 +185,7 @@ This is safer but has allocation overhead.
 ```go
 func BenchmarkNonThreadSafe(b *testing.B) {
     f := fory.New()
-    f.RegisterByName(User{}, "example.User")
+    f.RegisterNamedStruct(User{}, "example.User")
     user := &User{ID: 1, Name: "Alice"}
 
     for i := 0; i < b.N; i++ {
@@ -196,7 +196,7 @@ func BenchmarkNonThreadSafe(b *testing.B) {
 
 func BenchmarkThreadSafe(b *testing.B) {
     f := threadsafe.New()
-    f.RegisterByName(User{}, "example.User")
+    f.RegisterNamedStruct(User{}, "example.User")
     user := &User{ID: 1, Name: "Alice"}
 
     for i := 0; i < b.N; i++ {
@@ -216,7 +216,7 @@ For maximum performance with known goroutine count:
 func worker(id int) {
     // Each worker has its own Fory instance
     f := fory.New()
-    f.RegisterByName(User{}, "example.User")
+    f.RegisterNamedStruct(User{}, "example.User")
 
     for task := range tasks {
         data, _ := f.Serialize(task)
@@ -239,7 +239,7 @@ For dynamic goroutine count or simplicity:
 var f = threadsafe.New()
 
 func init() {
-    f.RegisterByName(User{}, "example.User")
+    f.RegisterNamedStruct(User{}, "example.User")
 }
 
 func handleRequest(user *User) []byte {
@@ -255,7 +255,7 @@ func handleRequest(user *User) []byte {
 var fory = threadsafe.New()
 
 func init() {
-    fory.RegisterByName(Response{}, "api.Response")
+    fory.RegisterNamedStruct(Response{}, "api.Response")
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
@@ -285,7 +285,7 @@ type SerializerPool struct {
 
 func NewSerializerPool() *SerializerPool {
     f := threadsafe.New()
-    f.RegisterByName(Message{}, "example.Message")
+    f.RegisterNamedStruct(Message{}, "example.Message")
     return &SerializerPool{fory: f}
 }
 
@@ -348,7 +348,7 @@ data, _ := f.Serialize(value1)  // Already copied
 ```go
 // RISKY: Concurrent registration
 go func() {
-    f.RegisterByName(TypeA{}, "example.TypeA")
+    f.RegisterNamedStruct(TypeA{}, "example.TypeA")
 }()
 go func() {
     f.Serialize(value)  // May not see TypeA

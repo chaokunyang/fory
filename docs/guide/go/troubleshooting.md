@@ -66,7 +66,7 @@ func (e Error) Error() string   { return e.message }
 f := fory.New()
 
 // Register type before use
-f.RegisterByName(User{}, "example.User")
+f.RegisterNamedStruct(User{}, "example.User")
 
 // Now serialization works
 data, _ := f.Serialize(&User{ID: 1})
@@ -97,11 +97,11 @@ f.Deserialize(userData, &user)
 ```go
 // Serializer
 f1 := fory.New()
-f1.RegisterByName(User{}, "example.User")
+f1.RegisterNamedStruct(User{}, "example.User")
 
 // Deserializer - must use same name
 f2 := fory.New()
-f2.RegisterByName(User{}, "example.User")  // Same name!
+f2.RegisterNamedStruct(User{}, "example.User")  // Same name!
 ```
 
 ### ErrKindHashMismatch
@@ -260,7 +260,7 @@ type Data struct {
 
 ```go
 // Go
-f.RegisterByName(User{}, "example.User")
+f.RegisterNamedStruct(User{}, "example.User")
 
 // Java - must match exactly
 fory.register(User.class, "example.User");
@@ -344,7 +344,7 @@ fmt.Printf("Header: %x\n", data[:4])  // Magic + flags
 ```go
 // Verify type is registered
 f := fory.New()
-err := f.RegisterByName(User{}, "example.User")
+err := f.RegisterNamedStruct(User{}, "example.User")
 if err != nil {
     fmt.Printf("Registration failed: %v\n", err)
 }
@@ -370,7 +370,7 @@ for i := 0; i < t.NumField(); i++ {
 ```go
 func TestRoundTrip(t *testing.T) {
     f := fory.New()
-    f.RegisterByName(User{}, "example.User")
+    f.RegisterNamedStruct(User{}, "example.User")
 
     original := &User{ID: 1, Name: "Alice"}
 
@@ -398,12 +398,12 @@ FORY_GO_JAVA_CI=1 mvn test -Dtest=org.apache.fory.xlang.GoXlangTest
 ```go
 func TestSchemaEvolution(t *testing.T) {
     f1 := fory.New(fory.WithCompatible(true))
-    f1.RegisterByName(UserV1{}, "example.User")
+    f1.RegisterNamedStruct(UserV1{}, "example.User")
 
     data, _ := f1.Serialize(&UserV1{ID: 1, Name: "Alice"})
 
     f2 := fory.New(fory.WithCompatible(true))
-    f2.RegisterByName(UserV2{}, "example.User")
+    f2.RegisterNamedStruct(UserV2{}, "example.User")
 
     var result UserV2
     err := f2.Deserialize(data, &result)

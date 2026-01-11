@@ -83,7 +83,7 @@ type Node struct {
 }
 
 f := fory.New(fory.WithTrackRef(true))
-f.RegisterByName(Node{}, "example.Node")
+f.RegisterNamedStruct(Node{}, "example.Node")
 
 // Create circular list
 n1 := &Node{Value: 1}
@@ -111,7 +111,7 @@ type TreeNode struct {
 }
 
 f := fory.New(fory.WithTrackRef(true))
-f.RegisterByName(TreeNode{}, "example.TreeNode")
+f.RegisterNamedStruct(TreeNode{}, "example.TreeNode")
 
 root := &TreeNode{Value: "root"}
 child1 := &TreeNode{Value: "child1", Parent: root}
@@ -134,7 +134,7 @@ type GraphNode struct {
 }
 
 f := fory.New(fory.WithTrackRef(true))
-f.RegisterByName(GraphNode{}, "example.GraphNode")
+f.RegisterNamedStruct(GraphNode{}, "example.GraphNode")
 
 // Create a graph
 a := &GraphNode{ID: 1}
@@ -290,7 +290,7 @@ type Person struct {
 
 func main() {
     f := fory.New(fory.WithTrackRef(true))
-    f.RegisterByName(Person{}, "example.Person")
+    f.RegisterNamedStruct(Person{}, "example.Person")
 
     // Create people with mutual friendships
     alice := &Person{Name: "Alice"}

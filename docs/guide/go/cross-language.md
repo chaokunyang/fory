@@ -45,7 +45,7 @@ type User struct {
 }
 
 f := fory.New()
-f.RegisterByName(User{}, "example.User")
+f.RegisterNamedStruct(User{}, "example.User")
 
 data, _ := f.Serialize(&User{ID: 1, Name: "Alice"})
 ```
@@ -233,7 +233,7 @@ type Order struct {
 }
 
 f := fory.New()
-f.RegisterByName(Order{}, "example.Order")
+f.RegisterNamedStruct(Order{}, "example.Order")
 
 order := &Order{
     ID:       12345,
@@ -294,7 +294,7 @@ type Message struct {
 }
 
 f := fory.New()
-f.RegisterByName(Message{}, "example.Message")
+f.RegisterNamedStruct(Message{}, "example.Message")
 
 var msg Message
 f.Deserialize(data, &msg)
@@ -320,8 +320,8 @@ type Company struct {
 }
 
 f := fory.New()
-f.RegisterByName(Address{}, "example.Address")
-f.RegisterByName(Company{}, "example.Company")
+f.RegisterNamedStruct(Address{}, "example.Address")
+f.RegisterNamedStruct(Company{}, "example.Company")
 ```
 
 **Java**:

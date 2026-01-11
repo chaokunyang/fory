@@ -187,7 +187,7 @@ type User struct {
 }
 
 f := fory.New()
-f.RegisterByName(User{}, "example.User")
+f.RegisterNamedStruct(User{}, "example.User")
 
 user := &User{ID: 1, Name: "Alice", Age: 30, password: "secret"}
 data, _ := f.Serialize(user)
@@ -209,8 +209,8 @@ type Company struct {
 }
 
 f := fory.New()
-f.RegisterByName(Address{}, "example.Address")
-f.RegisterByName(Company{}, "example.Company")
+f.RegisterNamedStruct(Address{}, "example.Address")
+f.RegisterNamedStruct(Company{}, "example.Company")
 ```
 
 ## Pointer Types
@@ -229,7 +229,7 @@ type Node struct {
     Right *Node
 }
 
-f.RegisterByName(Node{}, "example.Node")
+f.RegisterNamedStruct(Node{}, "example.Node")
 
 root := &Node{
     Value: 1,
@@ -285,7 +285,7 @@ func (c Circle) Area() float64 {
 }
 
 f := fory.New()
-f.RegisterByName(Circle{}, "example.Circle")
+f.RegisterNamedStruct(Circle{}, "example.Circle")
 
 var shape Shape = Circle{Radius: 5.0}
 data, _ := f.Serialize(shape)
@@ -321,7 +321,7 @@ const (
 )
 
 f := fory.New()
-f.RegisterEnumByName(Status(0), "example.Status")
+f.RegisterNamedEnum(Status(0), "example.Status")
 
 status := StatusActive
 data, _ := f.Serialize(status)

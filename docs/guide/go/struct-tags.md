@@ -206,7 +206,7 @@ type BadStruct struct {
 }
 
 f := fory.New()
-err := f.RegisterByName(BadStruct{}, "example.Bad")
+err := f.RegisterNamedStruct(BadStruct{}, "example.Bad")
 // Error: ErrKindInvalidTag
 ```
 

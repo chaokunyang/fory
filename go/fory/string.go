@@ -122,7 +122,7 @@ func (s stringSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bo
 	s.WriteData(ctx, value)
 }
 
-func (s stringSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
+func (s stringSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	err := ctx.Err()
 	str := readString(ctx.buffer, err)
 	if ctx.HasError() {
@@ -147,7 +147,7 @@ func (s stringSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool,
 	if ctx.HasError() {
 		return
 	}
-	s.ReadData(ctx, value.Type(), value)
+	s.ReadData(ctx, value)
 }
 
 func (s stringSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
@@ -189,10 +189,10 @@ func (s ptrToStringSerializer) Read(ctx *ReadContext, refMode RefMode, readType 
 	if ctx.HasError() {
 		return
 	}
-	s.ReadData(ctx, value.Type(), value)
+	s.ReadData(ctx, value)
 }
 
-func (s ptrToStringSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
+func (s ptrToStringSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	err := ctx.Err()
 	str := readString(ctx.buffer, err)
 	if ctx.HasError() {

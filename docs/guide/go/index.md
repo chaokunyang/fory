@@ -23,7 +23,7 @@ Apache Fory Go is a high-performance, cross-language serialization library for G
 
 ## Why Fory Go?
 
-- **High Performance**: Optimized serialization with zero-copy buffer management and inline hot paths
+- **High Performance**: Fast serialization and optimized binary protocols
 - **Cross-Language**: Seamless data exchange with Java, Python, C++, Rust, and JavaScript
 - **Automatic Serialization**: No IDL definitions or schema compilation required
 - **Reference Tracking**: Built-in support for circular references and shared objects
@@ -59,8 +59,8 @@ func main() {
     // Create a Fory instance
     f := fory.New()
 
-    // Register struct for cross-language serialization
-    if err := f.RegisterNamedStruct(User{}, "example.User"); err != nil {
+    // Register struct with a type ID
+    if err := f.RegisterStruct(User{}, 1); err != nil {
         panic(err)
     }
 
@@ -88,7 +88,7 @@ Fory Go provides two serialization paths:
 
 ### Reflection-Based (Default)
 
-The default path uses Go's reflection to inspect types at runtime. This works out-of-the-box with any struct:
+The default path uses Go's reflection to inspect types at runtime. This works out-of-the-box with any struct. Although this mode uses reflection, it is highly optimized with type caching, inlined hot paths, delivering excellent performance for most use cases:
 
 ```go
 f := fory.New()
@@ -107,7 +107,7 @@ Fory Go uses a functional options pattern for configuration:
 f := fory.New(
     fory.WithTrackRef(true),      // Enable reference tracking
     fory.WithCompatible(true),    // Enable schema evolution
-    fory.WithMaxDepth(200),       // Set max nesting depth
+    fory.WithMaxDepth(20),       // Set max nesting depth
 )
 ```
 
@@ -132,7 +132,7 @@ Fory Go is fully compatible with other Fory implementations. Data serialized in 
 ```go
 // Go serialization
 f := fory.New()
-f.RegisterNamedStruct(User{}, "example.User")
+f.RegisterStruct(User{}, 1)
 data, _ := f.Serialize(&User{ID: 1, Name: "Alice"})
 // 'data' can be deserialized by Java, Python, etc.
 ```
@@ -157,6 +157,6 @@ See [Cross-Language Serialization](cross-language) for type mapping and compatib
 
 ## Related Resources
 
-- [Xlang Serialization Specification](/docs/specification/xlang_serialization_spec)
-- [Cross-Language Type Mapping](/docs/specification/xlang_type_mapping)
+- [Xlang Serialization Specification](https://fory.apache.org/docs/specification/fory_xlang_serialization_spec)
+- [Cross-Language Type Mapping](https://fory.apache.org/docs/specification/xlang_type_mapping)
 - [GitHub Repository](https://github.com/apache/fory)

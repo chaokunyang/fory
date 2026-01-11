@@ -79,8 +79,8 @@ type Config struct {
 func defaultConfig() Config {
 	return Config{
 		TrackRef: false, // Match Java's default: reference tracking disabled
-		MaxDepth: 100,
-		IsXlang:  true,
+		MaxDepth: 20,
+		IsXlang:  false,
 	}
 }
 

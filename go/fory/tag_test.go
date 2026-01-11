@@ -244,7 +244,7 @@ type PersonWithoutTags struct {
 }
 
 func TestSerializationWithTags(t *testing.T) {
-	fory := NewFory(WithRefTracking(false), WithCompatible(true))
+	fory := NewFory(WithXlang(true), WithRefTracking(false), WithCompatible(true))
 	err := fory.RegisterNamedStruct(PersonWithTags{}, "test.PersonWithTags")
 	require.NoError(t, err)
 
@@ -271,7 +271,7 @@ func TestSerializationWithTags(t *testing.T) {
 }
 
 func TestSerializationWithoutTags(t *testing.T) {
-	fory := NewFory(WithRefTracking(false), WithCompatible(true))
+	fory := NewFory(WithXlang(true), WithRefTracking(false), WithCompatible(true))
 	err := fory.RegisterNamedStruct(PersonWithoutTags{}, "test.PersonWithoutTags")
 	require.NoError(t, err)
 
@@ -296,11 +296,11 @@ func TestSerializationWithoutTags(t *testing.T) {
 }
 
 func TestTagIDReducesPayloadSize(t *testing.T) {
-	fory1 := NewFory(WithRefTracking(false), WithCompatible(true))
+	fory1 := NewFory(WithXlang(true), WithRefTracking(false), WithCompatible(true))
 	err := fory1.RegisterNamedStruct(PersonWithTags{}, "test.PersonWithTags")
 	require.NoError(t, err)
 
-	fory2 := NewFory(WithRefTracking(false), WithCompatible(true))
+	fory2 := NewFory(WithXlang(true), WithRefTracking(false), WithCompatible(true))
 	err = fory2.RegisterNamedStruct(PersonWithoutTags{}, "test.PersonWithoutTags")
 	require.NoError(t, err)
 
@@ -348,11 +348,11 @@ type NumericStructWithoutTags struct {
 }
 
 func TestNumericStructTagIDReducesSize(t *testing.T) {
-	fory1 := NewFory(WithRefTracking(false), WithCompatible(true))
+	fory1 := NewFory(WithXlang(true), WithRefTracking(false), WithCompatible(true))
 	err := fory1.RegisterNamedStruct(NumericStructWithTags{}, "test.NumericStructWithTags")
 	require.NoError(t, err)
 
-	fory2 := NewFory(WithRefTracking(false), WithCompatible(true))
+	fory2 := NewFory(WithXlang(true), WithRefTracking(false), WithCompatible(true))
 	err = fory2.RegisterNamedStruct(NumericStructWithoutTags{}, "test.NumericStructWithoutTags")
 	require.NoError(t, err)
 
@@ -427,11 +427,11 @@ func TestNullableRefFlagsRespected(t *testing.T) {
 			field.Name, tag.ID, tag.Nullable, tag.NullableSet, tag.Ref, tag.RefSet)
 	}
 
-	fory1 := NewFory(WithRefTracking(false), WithCompatible(true))
+	fory1 := NewFory(WithXlang(true), WithRefTracking(false), WithCompatible(true))
 	err := fory1.RegisterNamedStruct(TestStructNoNull{}, "test.TestStructNoNull")
 	require.NoError(t, err)
 
-	fory2 := NewFory(WithRefTracking(false), WithCompatible(true))
+	fory2 := NewFory(WithXlang(true), WithRefTracking(false), WithCompatible(true))
 	err = fory2.RegisterNamedStruct(TestStructDefalt{}, "test.TestStructDefalt")
 	require.NoError(t, err)
 
@@ -465,11 +465,11 @@ func TestNullableRefFlagsRespected(t *testing.T) {
 }
 
 func TestTypeDefEncodingSizeWithTagIDs(t *testing.T) {
-	fory1 := NewFory(WithRefTracking(false), WithCompatible(true))
+	fory1 := NewFory(WithXlang(true), WithRefTracking(false), WithCompatible(true))
 	err := fory1.RegisterNamedStruct(NumericStructWithTags{}, "test.NumericStructWithTags")
 	require.NoError(t, err)
 
-	fory2 := NewFory(WithRefTracking(false), WithCompatible(true))
+	fory2 := NewFory(WithXlang(true), WithRefTracking(false), WithCompatible(true))
 	err = fory2.RegisterNamedStruct(NumericStructWithoutTags{}, "test.NumericStructWithoutTags")
 	require.NoError(t, err)
 
@@ -511,7 +511,7 @@ type StructWithLargeTagIDs struct {
 }
 
 func TestLargeTagIDs(t *testing.T) {
-	fory := NewFory(WithRefTracking(false), WithCompatible(true))
+	fory := NewFory(WithXlang(true), WithRefTracking(false), WithCompatible(true))
 	err := fory.RegisterNamedStruct(StructWithLargeTagIDs{}, "test.StructWithLargeTagIDs")
 	require.NoError(t, err)
 
@@ -545,7 +545,7 @@ type MixedTagStruct struct {
 }
 
 func TestMixedTagFields(t *testing.T) {
-	fory := NewFory(WithRefTracking(false), WithCompatible(true))
+	fory := NewFory(WithXlang(true), WithRefTracking(false), WithCompatible(true))
 	err := fory.RegisterNamedStruct(MixedTagStruct{}, "test.MixedTagStruct")
 	require.NoError(t, err)
 
@@ -582,7 +582,7 @@ type OuterWithTags struct {
 }
 
 func TestNestedStructWithTags(t *testing.T) {
-	fory := NewFory(WithRefTracking(false), WithCompatible(true))
+	fory := NewFory(WithXlang(true), WithRefTracking(false), WithCompatible(true))
 	err := fory.RegisterNamedStruct(InnerWithTags{}, "test.InnerWithTags")
 	require.NoError(t, err)
 	err = fory.RegisterNamedStruct(OuterWithTags{}, "test.OuterWithTags")

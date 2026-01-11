@@ -612,7 +612,7 @@ func (c *ReadContext) ReadValue(value reflect.Value, refMode RefMode, readType b
 		if actualType == nil {
 			// Unknown type - skip the data using the serializer (skipStructSerializer)
 			if typeInfo.Serializer != nil {
-				typeInfo.Serializer.ReadData(c, nil, reflect.Value{})
+				typeInfo.Serializer.ReadData(c, reflect.Value{})
 			}
 			// Leave interface value as nil for unknown types
 			return
@@ -659,7 +659,7 @@ func (c *ReadContext) ReadValue(value reflect.Value, refMode RefMode, readType b
 			readTarget = newValue
 		}
 
-		typeInfo.Serializer.ReadData(c, actualType, readTarget)
+		typeInfo.Serializer.ReadData(c, readTarget)
 		if c.HasError() {
 			return
 		}
@@ -769,7 +769,7 @@ func (c *ReadContext) ReadStruct(value reflect.Value) {
 	}
 
 	// Read struct data directly
-	serializer.ReadData(c, structType, readTarget)
+	serializer.ReadData(c, readTarget)
 }
 
 // ReadInto reads a value using a specific serializer with optional ref/type info
@@ -833,7 +833,7 @@ func (c *ReadContext) ReadArrayValue(target reflect.Value, refMode RefMode, read
 	tempSlice.Set(reflect.MakeSlice(sliceType, target.Len(), target.Len()))
 
 	// Use ReadData to read slice data (ref/type already handled)
-	serializer.ReadData(c, sliceType, tempSlice)
+	serializer.ReadData(c, tempSlice)
 	if c.HasError() {
 		return
 	}

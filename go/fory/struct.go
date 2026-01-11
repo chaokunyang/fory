@@ -1725,12 +1725,12 @@ func (s *structSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool
 			typeInfo := ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID, ctxErr)
 			// Use the serializer from TypeInfo which has the remote field definitions
 			if structSer, ok := typeInfo.Serializer.(*structSerializer); ok && len(structSer.fieldDefs) > 0 {
-				structSer.ReadData(ctx, value.Type(), value)
+				structSer.ReadData(ctx, value)
 				return
 			}
 		}
 	}
-	s.ReadData(ctx, value.Type(), value)
+	s.ReadData(ctx, value)
 }
 
 func (s *structSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
@@ -1738,7 +1738,7 @@ func (s *structSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, t
 	s.Read(ctx, refMode, false, false, value)
 }
 
-func (s *structSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
+func (s *structSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	// Early error check - skip all intermediate checks for normal path performance
 	if ctx.HasError() {
 		return
@@ -1755,10 +1755,9 @@ func (s *structSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value 
 	buf := ctx.Buffer()
 	if value.Kind() == reflect.Ptr {
 		if value.IsNil() {
-			value.Set(reflect.New(type_.Elem()))
+			value.Set(reflect.New(value.Type().Elem()))
 		}
 		value = value.Elem()
-		type_ = type_.Elem()
 	}
 
 	// In compatible mode with meta share, struct hash is not written
@@ -2758,9 +2757,9 @@ func readEnumField(ctx *ReadContext, field *FieldInfo, fieldValue reflect.Value)
 	// For pointer enum fields, the serializer is ptrToValueSerializer wrapping enumSerializer.
 	// We need to call the inner enumSerializer directly with the dereferenced value.
 	if ptrSer, ok := field.Serializer.(*ptrToValueSerializer); ok {
-		ptrSer.valueSerializer.ReadData(ctx, field.Type.Elem(), targetValue)
+		ptrSer.valueSerializer.ReadData(ctx, targetValue)
 	} else {
-		field.Serializer.ReadData(ctx, field.Type, targetValue)
+		field.Serializer.ReadData(ctx, targetValue)
 	}
 }
 
@@ -2778,7 +2777,7 @@ func (s *skipStructSerializer) Write(ctx *WriteContext, refMode RefMode, writeTy
 	ctx.SetError(SerializationError("skipStructSerializer does not support Write - unknown struct type"))
 }
 
-func (s *skipStructSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
+func (s *skipStructSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	// Skip all fields based on fieldDefs from remote TypeDef
 	for _, fieldDef := range s.fieldDefs {
 		isStructType := isStructFieldType(fieldDef.fieldType)
@@ -2813,7 +2812,7 @@ func (s *skipStructSerializer) Read(ctx *ReadContext, refMode RefMode, readType 
 	if ctx.HasError() {
 		return
 	}
-	s.ReadData(ctx, nil, value)
+	s.ReadData(ctx, value)
 }
 
 func (s *skipStructSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {

@@ -78,6 +78,7 @@ var (
 	int32Int32MapType    = reflect.TypeOf((*map[int32]int32)(nil)).Elem()
 	int64Int64MapType    = reflect.TypeOf((*map[int64]int64)(nil)).Elem()
 	intIntMapType        = reflect.TypeOf((*map[int]int)(nil)).Elem()
+	emptyStructType      = reflect.TypeOf((*struct{})(nil)).Elem()
 	boolType             = reflect.TypeOf((*bool)(nil)).Elem()
 	byteType             = reflect.TypeOf((*byte)(nil)).Elem()
 	uint8Type            = reflect.TypeOf((*uint8)(nil)).Elem()
@@ -93,7 +94,7 @@ var (
 	float64Type          = reflect.TypeOf((*float64)(nil)).Elem()
 	dateType             = reflect.TypeOf((*Date)(nil)).Elem()
 	timestampType        = reflect.TypeOf((*time.Time)(nil)).Elem()
-	genericSetType       = reflect.TypeOf((*GenericSet)(nil)).Elem()
+	genericSetType       = reflect.TypeOf((*Set[any])(nil)).Elem()
 )
 
 // Global registry for generated serializer factories
@@ -241,7 +242,7 @@ func newTypeResolver(fory *Fory) *TypeResolver {
 		dateType,
 		timestampType,
 		interfaceType,
-		genericSetType, // FIXME set should be a generic type
+		genericSetType,
 	} {
 		r.typeInfoToType[t.String()] = t
 		r.typeToTypeInfo[t] = t.String()
@@ -338,7 +339,7 @@ func (r *TypeResolver) initialize() {
 		{stringInt64MapType, MAP, stringInt64MapSerializer{}},
 		{stringIntMapType, MAP, stringIntMapSerializer{}},
 		{stringFloat64MapType, MAP, stringFloat64MapSerializer{}},
-		{stringBoolMapType, SET, setSerializer{}}, // map[T]bool represents a Set in Go
+		{stringBoolMapType, MAP, stringBoolMapSerializer{}}, // map[string]bool is a regular map
 		{int32Int32MapType, MAP, int32Int32MapSerializer{}},
 		{int64Int64MapType, MAP, int64Int64MapSerializer{}},
 		{intIntMapType, MAP, intIntMapSerializer{}},
@@ -1422,6 +1423,11 @@ func (r *TypeResolver) createSerializer(type_ reflect.Type, mapInStruct bool) (s
 			}, nil
 		}
 	case reflect.Map:
+		// Check if this is a Set[T] type (named type with struct{} value)
+		// Users must use fory.Set[T], not raw map[T]struct{}
+		if type_.Elem() == emptyStructType && strings.HasPrefix(type_.Name(), "Set[") {
+			return setSerializer{}, nil
+		}
 		hasKeySerializer, hasValueSerializer := !isDynamicType(type_.Key()), !isDynamicType(type_.Elem())
 		if hasKeySerializer || hasValueSerializer {
 			var keySerializer, valueSerializer Serializer
@@ -1522,13 +1528,14 @@ func (r *TypeResolver) GetSliceSerializer(sliceType reflect.Type) (Serializer, e
 	return newSliceSerializer(sliceType, elemSerializer, r.isXlang)
 }
 
-// GetSetSerializer returns the setSerializer for a map[T]bool type (used to represent sets in Go).
+// GetSetSerializer returns the setSerializer for a Set[T] type.
+// Users must use fory.Set[T], not raw map[T]struct{}.
 func (r *TypeResolver) GetSetSerializer(setType reflect.Type) (Serializer, error) {
 	if setType.Kind() != reflect.Map {
 		return nil, fmt.Errorf("expected map type but got %s", setType.Kind())
 	}
-	if setType.Elem().Kind() != reflect.Bool {
-		return nil, fmt.Errorf("expected map[T]bool for set but got map[%s]%s", setType.Key(), setType.Elem())
+	if setType.Elem() != emptyStructType || !strings.HasPrefix(setType.Name(), "Set[") {
+		return nil, fmt.Errorf("expected fory.Set[T] but got %s", setType)
 	}
 	return setSerializer{}, nil
 }

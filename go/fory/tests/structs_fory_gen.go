@@ -157,7 +157,7 @@ func (g *DynamicSliceDemo_ForyGenSerializer) Read(ctx *fory.ReadContext, refMode
 	if readType {
 		ctx.TypeResolver().ReadTypeInfo(ctx.Buffer(), err)
 	}
-	g.ReadData(ctx, value.Type(), value)
+	g.ReadData(ctx, value)
 }
 
 // ReadTyped provides strongly-typed deserialization with no reflection overhead
@@ -224,14 +224,14 @@ func (g *DynamicSliceDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v 
 }
 
 // ReadData provides reflect.Value interface compatibility (implements fory.Serializer)
-func (g *DynamicSliceDemo_ForyGenSerializer) ReadData(ctx *fory.ReadContext, type_ reflect.Type, value reflect.Value) {
+func (g *DynamicSliceDemo_ForyGenSerializer) ReadData(ctx *fory.ReadContext, value reflect.Value) {
 	g.initHash(ctx.TypeResolver())
 	// Convert reflect.Value to concrete type and delegate to typed method
 	var v *DynamicSliceDemo
 	if value.Kind() == reflect.Ptr {
 		if value.IsNil() {
 			// For pointer types, allocate using type_.Elem()
-			value.Set(reflect.New(type_.Elem()))
+			value.Set(reflect.New(value.Type().Elem()))
 		}
 		v = value.Interface().(*DynamicSliceDemo)
 	} else {
@@ -611,7 +611,7 @@ func (g *MapDemo_ForyGenSerializer) Read(ctx *fory.ReadContext, refMode fory.Ref
 	if readType {
 		ctx.TypeResolver().ReadTypeInfo(ctx.Buffer(), err)
 	}
-	g.ReadData(ctx, value.Type(), value)
+	g.ReadData(ctx, value)
 }
 
 // ReadTyped provides strongly-typed deserialization with no reflection overhead
@@ -847,14 +847,14 @@ func (g *MapDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *MapDemo)
 }
 
 // ReadData provides reflect.Value interface compatibility (implements fory.Serializer)
-func (g *MapDemo_ForyGenSerializer) ReadData(ctx *fory.ReadContext, type_ reflect.Type, value reflect.Value) {
+func (g *MapDemo_ForyGenSerializer) ReadData(ctx *fory.ReadContext, value reflect.Value) {
 	g.initHash(ctx.TypeResolver())
 	// Convert reflect.Value to concrete type and delegate to typed method
 	var v *MapDemo
 	if value.Kind() == reflect.Ptr {
 		if value.IsNil() {
 			// For pointer types, allocate using type_.Elem()
-			value.Set(reflect.New(type_.Elem()))
+			value.Set(reflect.New(value.Type().Elem()))
 		}
 		v = value.Interface().(*MapDemo)
 	} else {
@@ -1068,7 +1068,7 @@ func (g *SliceDemo_ForyGenSerializer) Read(ctx *fory.ReadContext, refMode fory.R
 	if readType {
 		ctx.TypeResolver().ReadTypeInfo(ctx.Buffer(), err)
 	}
-	g.ReadData(ctx, value.Type(), value)
+	g.ReadData(ctx, value)
 }
 
 // ReadTyped provides strongly-typed deserialization with no reflection overhead
@@ -1220,14 +1220,14 @@ func (g *SliceDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *SliceD
 }
 
 // ReadData provides reflect.Value interface compatibility (implements fory.Serializer)
-func (g *SliceDemo_ForyGenSerializer) ReadData(ctx *fory.ReadContext, type_ reflect.Type, value reflect.Value) {
+func (g *SliceDemo_ForyGenSerializer) ReadData(ctx *fory.ReadContext, value reflect.Value) {
 	g.initHash(ctx.TypeResolver())
 	// Convert reflect.Value to concrete type and delegate to typed method
 	var v *SliceDemo
 	if value.Kind() == reflect.Ptr {
 		if value.IsNil() {
 			// For pointer types, allocate using type_.Elem()
-			value.Set(reflect.New(type_.Elem()))
+			value.Set(reflect.New(value.Type().Elem()))
 		}
 		v = value.Interface().(*SliceDemo)
 	} else {
@@ -1356,7 +1356,7 @@ func (g *ValidationDemo_ForyGenSerializer) Read(ctx *fory.ReadContext, refMode f
 	if readType {
 		ctx.TypeResolver().ReadTypeInfo(ctx.Buffer(), err)
 	}
-	g.ReadData(ctx, value.Type(), value)
+	g.ReadData(ctx, value)
 }
 
 // ReadTyped provides strongly-typed deserialization with no reflection overhead
@@ -1392,14 +1392,14 @@ func (g *ValidationDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v *V
 }
 
 // ReadData provides reflect.Value interface compatibility (implements fory.Serializer)
-func (g *ValidationDemo_ForyGenSerializer) ReadData(ctx *fory.ReadContext, type_ reflect.Type, value reflect.Value) {
+func (g *ValidationDemo_ForyGenSerializer) ReadData(ctx *fory.ReadContext, value reflect.Value) {
 	g.initHash(ctx.TypeResolver())
 	// Convert reflect.Value to concrete type and delegate to typed method
 	var v *ValidationDemo
 	if value.Kind() == reflect.Ptr {
 		if value.IsNil() {
 			// For pointer types, allocate using type_.Elem()
-			value.Set(reflect.New(type_.Elem()))
+			value.Set(reflect.New(value.Type().Elem()))
 		}
 		v = value.Interface().(*ValidationDemo)
 	} else {

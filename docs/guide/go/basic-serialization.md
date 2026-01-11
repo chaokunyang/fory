@@ -21,6 +21,30 @@ license: |
 
 This guide covers the core serialization APIs in Fory Go.
 
+## Creating a Fory Instance
+
+Create a Fory instance and register your types before serialization:
+
+```go
+import "github.com/apache/fory/go/fory"
+
+f := fory.New()
+
+// Register struct with a type ID
+f.RegisterStruct(User{}, 1)
+f.RegisterStruct(Order{}, 2)
+
+// Or register with a name (more flexible, less prone to ID conflicts, but higher serialization cost)
+f.RegisterNamedStruct(User{}, "example.User")
+
+// Register enum types
+f.RegisterEnum(Color(0), 3)
+```
+
+**Important**: The Fory instance should be reused across serialization calls. Creating a new instance involves allocating internal buffers, type caches, and resolvers, which is expensive. The default Fory instance is not thread-safe; for concurrent usage, use the thread-safe wrapper (see [Thread Safety](thread-safety)).
+
+See [Type Registration](type-registration) for more details.
+
 ## Core API
 
 ### Serialize and Deserialize
@@ -28,10 +52,6 @@ This guide covers the core serialization APIs in Fory Go.
 The primary API for serialization:
 
 ```go
-import "github.com/apache/fory/go/fory"
-
-f := fory.New()
-
 // Serialize any value
 data, err := f.Serialize(value)
 if err != nil {
@@ -58,8 +78,6 @@ err = f.Unmarshal(data, &result)
 ## Serializing Primitives
 
 ```go
-f := fory.New()
-
 // Integers
 data, _ := f.Serialize(int64(42))
 var i int64
@@ -86,8 +104,6 @@ f.Deserialize(data, &b)  // b = true
 ### Slices
 
 ```go
-f := fory.New()
-
 // String slice
 strs := []string{"a", "b", "c"}
 data, _ := f.Serialize(strs)
@@ -108,8 +124,6 @@ f.Deserialize(data, &intResult)
 ### Maps
 
 ```go
-f := fory.New()
-
 // String to string map
 m := map[string]string{"key": "value"}
 data, _ := f.Serialize(m)
@@ -140,8 +154,7 @@ type User struct {
     password string  // NOT serialized (unexported)
 }
 
-f := fory.New()
-f.RegisterNamedStruct(User{}, "example.User")
+f.RegisterStruct(User{}, 1)
 
 user := &User{ID: 1, Name: "Alice", password: "secret"}
 data, _ := f.Serialize(user)
@@ -164,9 +177,8 @@ type Person struct {
     Address Address
 }
 
-f := fory.New()
-f.RegisterNamedStruct(Address{}, "example.Address")
-f.RegisterNamedStruct(Person{}, "example.Person")
+f.RegisterStruct(Address{}, 1)
+f.RegisterStruct(Person{}, 2)
 
 person := &Person{
     Name: "Alice",
@@ -188,8 +200,9 @@ type Node struct {
     Child *Node
 }
 
+// Use WithTrackRef for pointer fields
 f := fory.New(fory.WithTrackRef(true))
-f.RegisterNamedStruct(Node{}, "example.Node")
+f.RegisterStruct(Node{}, 1)
 
 root := &Node{
     Value: 1,
@@ -212,7 +225,6 @@ For scenarios where you want to control the buffer:
 Serialize to an existing buffer:
 
 ```go
-f := fory.New()
 buf := fory.NewByteBuffer(nil)
 
 // Serialize multiple values to same buffer
@@ -247,8 +259,6 @@ type User struct {
     Name string
 }
 
-f := fory.New()
-
 // Type-safe serialization
 user := &User{ID: 1, Name: "Alice"}
 data, err := fory.Serialize(f, user)
@@ -269,8 +279,6 @@ The generic API:
 Always check errors from serialization operations:
 
 ```go
-f := fory.New()
-
 data, err := f.Serialize(value)
 if err != nil {
     switch e := err.(type) {
@@ -303,8 +311,6 @@ See [Troubleshooting](troubleshooting) for error resolution.
 ### Nil Pointers
 
 ```go
-f := fory.New()
-
 var ptr *User = nil
 data, _ := f.Serialize(ptr)
 
@@ -316,8 +322,6 @@ f.Deserialize(data, &result)
 ### Empty Collections
 
 ```go
-f := fory.New()
-
 // Nil slice
 var slice []string = nil
 data, _ := f.Serialize(slice)
@@ -359,8 +363,8 @@ type Item struct {
 
 func main() {
     f := fory.New()
-    f.RegisterNamedStruct(Order{}, "example.Order")
-    f.RegisterNamedStruct(Item{}, "example.Item")
+    f.RegisterStruct(Order{}, 1)
+    f.RegisterStruct(Item{}, 2)
 
     order := &Order{
         ID:       12345,

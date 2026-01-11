@@ -28,8 +28,8 @@ func main() {
     // Create a Fory instance
     f := fory.New()
 
-    // Register struct for cross-language serialization
-    if err := f.RegisterNamedStruct(User{}, "example.User"); err != nil {
+    // Register struct with a type ID
+    if err := f.RegisterStruct(User{}, 1); err != nil {
         panic(err)
     }
 
@@ -85,7 +85,7 @@ f := fory.New(fory.WithTrackRef(true))
 f := fory.New(fory.WithCompatible(true))
 
 // Set maximum nesting depth
-f := fory.New(fory.WithMaxDepth(200))
+f := fory.New(fory.WithMaxDepth(20))
 
 // Combine multiple options
 f := fory.New(

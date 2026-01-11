@@ -32,14 +32,12 @@ Fory Go provides optional ahead-of-time (AOT) code generation for performance-cr
 | Setup       | Zero configuration | Requires `go generate` |
 | Performance | Good               | Better (no reflection) |
 | Type Safety | Runtime            | Compile-time           |
-| GC Pressure | Higher             | Lower                  |
 | Maintenance | Automatic          | Requires regeneration  |
 
 **Use code generation when**:
 
 - Maximum performance is required
 - Compile-time type safety is important
-- GC pressure must be minimized
 - Hot paths are performance-critical
 
 **Use reflection when**:

@@ -73,8 +73,8 @@ data, _ := f.Serialize(i64)  // Uses varint encoding
 | `[]float32`     | FLOAT32_ARRAY | Optimized encoding    |
 | `[]float64`     | FLOAT64_ARRAY | Optimized encoding    |
 | `[]string`      | LIST          | Generic list encoding |
-| `[]T` (any)     | LIST (20)     | Generic list encoding |
-| `[]interface{}` | LIST          | Dynamic element types |
+| `[]T` (any)     | LIST (20)     | Any serializable type |
+| `[]I` (any/any) | LIST          | Any interface type    |
 
 ```go
 f := fory.New()
@@ -92,25 +92,25 @@ users := []User{{ID: 1}, {ID: 2}}
 data, _ = f.Serialize(users)
 
 // Dynamic slices
-dynamic := []interface{}{1, "hello", true}
+dynamic := []any{1, "hello", true}
 data, _ = f.Serialize(dynamic)
 ```
 
 ### Maps
 
-| Go Type                       | Fory TypeId | Notes                   |
-| ----------------------------- | ----------- | ----------------------- |
-| `map[string]string`           | MAP (22)    | Optimized               |
-| `map[string]int64`            | MAP         | Optimized               |
-| `map[string]int32`            | MAP         | Optimized               |
-| `map[string]int`              | MAP         | Optimized               |
-| `map[string]float64`          | MAP         | Optimized               |
-| `map[string]bool`             | MAP         | Optimized               |
-| `map[int32]int32`             | MAP         | Optimized               |
-| `map[int64]int64`             | MAP         | Optimized               |
-| `map[int]int`                 | MAP         | Optimized               |
-| `map[string]interface{}`      | MAP         | Dynamic values          |
-| `map[interface{}]interface{}` | MAP         | Dynamic keys and values |
+| Go Type              | Fory TypeId | Notes                   |
+| -------------------- | ----------- | ----------------------- |
+| `map[string]string`  | MAP (22)    | Optimized               |
+| `map[string]int64`   | MAP         | Optimized               |
+| `map[string]int32`   | MAP         | Optimized               |
+| `map[string]int`     | MAP         | Optimized               |
+| `map[string]float64` | MAP         | Optimized               |
+| `map[string]bool`    | MAP         | Optimized               |
+| `map[int32]int32`    | MAP         | Optimized               |
+| `map[int64]int64`    | MAP         | Optimized               |
+| `map[int]int`        | MAP         | Optimized               |
+| `map[string]any`     | MAP         | Dynamic values          |
+| `map[any]any`        | MAP         | Dynamic keys and values |
 
 ```go
 f := fory.New()
@@ -123,23 +123,28 @@ m2 := map[string]int64{"count": 42}
 m3 := map[int32]int32{1: 100, 2: 200}
 
 // Dynamic maps
-m4 := map[string]interface{}{
+m4 := map[string]any{
     "name": "Alice",
     "age":  int64(30),
 }
 ```
 
-**Note**: Not all map type combinations have optimized paths. Use the supported combinations above for best performance.
-
 ### Sets
 
-Fory supports sets via `GenericSet`:
+Fory provides a generic `Set[T]` type (uses `map[T]struct{}` for zero memory overhead):
 
 ```go
-// Sets are represented as maps with empty struct values
-type StringSet map[string]struct{}
+// Create a set of strings
+s := fory.NewSet[string]()
+s.Add("a", "b", "c")
 
-// Or use the Fory GenericSet type
+// Check membership
+if s.Contains("a") {
+    fmt.Println("found")
+}
+
+// Serialize
+data, _ := f.Serialize(s)
 ```
 
 ## Time Types
@@ -165,12 +170,12 @@ data, _ = f.Serialize(d)
 
 ## Struct Types
 
-| Category                | Fory TypeId                  | Notes                       |
-| ----------------------- | ---------------------------- | --------------------------- |
-| Struct                  | STRUCT (25)                  | Default mode                |
-| Compatible Struct       | COMPATIBLE_STRUCT (26)       | With schema evolution       |
-| Named Struct            | NAMED_STRUCT (27)            | Registered by name          |
-| Named Compatible Struct | NAMED_COMPATIBLE_STRUCT (28) | Named with schema evolution |
+| Category                | Fory TypeId                  | Notes                            |
+| ----------------------- | ---------------------------- | -------------------------------- |
+| Struct                  | STRUCT (25)                  | Registered by ID, no evolution   |
+| Compatible Struct       | COMPATIBLE_STRUCT (26)       | With schema evolution            |
+| Named Struct            | NAMED_STRUCT (27)            | Registered by name, no evolution |
+| Named Compatible Struct | NAMED_COMPATIBLE_STRUCT (28) | Named with schema evolution      |
 
 ### Struct Requirements
 
@@ -187,7 +192,7 @@ type User struct {
 }
 
 f := fory.New()
-f.RegisterNamedStruct(User{}, "example.User")
+f.RegisterStruct(User{}, 1)
 
 user := &User{ID: 1, Name: "Alice", Age: 30, password: "secret"}
 data, _ := f.Serialize(user)
@@ -209,8 +214,8 @@ type Company struct {
 }
 
 f := fory.New()
-f.RegisterNamedStruct(Address{}, "example.Address")
-f.RegisterNamedStruct(Company{}, "example.Company")
+f.RegisterStruct(Address{}, 1)
+f.RegisterStruct(Company{}, 2)
 ```
 
 ## Pointer Types
@@ -229,7 +234,7 @@ type Node struct {
     Right *Node
 }
 
-f.RegisterNamedStruct(Node{}, "example.Node")
+f.RegisterStruct(Node{}, 1)
 
 root := &Node{
     Value: 1,
@@ -253,18 +258,18 @@ f.Deserialize(data, &result)
 
 ## Interface Types
 
-| Go Type       | Fory TypeId | Notes              |
-| ------------- | ----------- | ------------------ |
-| `interface{}` | UNION (31)  | Polymorphic values |
+| Go Type | Fory TypeId | Notes              |
+| ------- | ----------- | ------------------ |
+| `any`   | UNION (31)  | Polymorphic values |
 
 ```go
 f := fory.New()
 
-// Serialize interface{}
-var value interface{} = "hello"
+// Serialize any
+var value any = "hello"
 data, _ := f.Serialize(value)
 
-var result interface{}
+var result any
 f.Deserialize(data, &result)
 // result = "hello" (string)
 ```
@@ -285,7 +290,7 @@ func (c Circle) Area() float64 {
 }
 
 f := fory.New()
-f.RegisterNamedStruct(Circle{}, "example.Circle")
+f.RegisterStruct(Circle{}, 1)
 
 var shape Shape = Circle{Radius: 5.0}
 data, _ := f.Serialize(shape)
@@ -321,7 +326,7 @@ const (
 )
 
 f := fory.New()
-f.RegisterNamedEnum(Status(0), "example.Status")
+f.RegisterEnum(Status(0), 1)
 
 status := StatusActive
 data, _ := f.Serialize(status)

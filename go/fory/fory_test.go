@@ -121,7 +121,7 @@ func commonArray() []interface{} {
 
 func TestSerializePrimitives(t *testing.T) {
 	for _, referenceTracking := range []bool{false, true} {
-		fory := NewFory(WithRefTracking(referenceTracking))
+		fory := NewFory(WithXlang(true), WithRefTracking(referenceTracking))
 		for _, value := range primitiveData() {
 			serde(t, fory, value)
 		}
@@ -130,7 +130,7 @@ func TestSerializePrimitives(t *testing.T) {
 
 func TestSerializeInterface(t *testing.T) {
 	for _, referenceTracking := range []bool{false, true} {
-		fory := NewFory(WithRefTracking(referenceTracking))
+		fory := NewFory(WithXlang(true), WithRefTracking(referenceTracking))
 		var a interface{}
 		a = -1
 		serde(t, fory, a)
@@ -148,7 +148,7 @@ func TestSerializeInterface(t *testing.T) {
 
 func TestSerializePtr(t *testing.T) {
 	for _, referenceTracking := range []bool{false, true} {
-		fory := NewFory(WithRefTracking(referenceTracking))
+		fory := NewFory(WithXlang(true), WithRefTracking(referenceTracking))
 		a := -100
 		b := &a
 		serde(t, fory, b)
@@ -164,7 +164,7 @@ func TestSerializePtr(t *testing.T) {
 
 func TestSerializeSlice(t *testing.T) {
 	for _, referenceTracking := range []bool{false, true} {
-		fory := NewFory(WithRefTracking(referenceTracking))
+		fory := NewFory(WithXlang(true), WithRefTracking(referenceTracking))
 		serde(t, fory, []byte{0, 1, MaxUint8})
 		// serde(t, fory, []int8{MinInt8, -1, 0, 1, MaxInt8})
 		serde(t, fory, []int16{MinInt16, -1, 0, 1, MaxInt16})
@@ -184,7 +184,7 @@ func TestSerializeSlice(t *testing.T) {
 
 func TestSerializeMap(t *testing.T) {
 	for _, referenceTracking := range []bool{false, true} {
-		fory := NewFory(WithRefTracking(referenceTracking))
+		fory := NewFory(WithXlang(true), WithRefTracking(referenceTracking))
 		// "str1" is deserialized by interface type, which will be set to map key whose type is string.
 		// so we need to save interface dynamic value type instead of interface value in reference resolver.
 		{
@@ -210,9 +210,55 @@ func TestSerializeMap(t *testing.T) {
 	}
 }
 
+func TestSerializeSet(t *testing.T) {
+	for _, referenceTracking := range []bool{false, true} {
+		fory := NewFory(WithXlang(true), WithRefTracking(referenceTracking))
+
+		// Test Set[string]
+		{
+			s := NewSet[string]()
+			s.Add("a", "b", "c")
+			data, err := fory.Marshal(s)
+			require.NoError(t, err)
+			var result Set[string]
+			err = fory.Unmarshal(data, &result)
+			require.NoError(t, err)
+			require.Equal(t, 3, result.Len())
+			require.True(t, result.Contains("a"))
+			require.True(t, result.Contains("b"))
+			require.True(t, result.Contains("c"))
+		}
+
+		// Test Set[int32]
+		{
+			s := NewSet[int32]()
+			s.Add(1, 2, 3, 100)
+			data, err := fory.Marshal(s)
+			require.NoError(t, err)
+			var result Set[int32]
+			err = fory.Unmarshal(data, &result)
+			require.NoError(t, err)
+			require.Equal(t, 4, result.Len())
+			require.True(t, result.Contains(1))
+			require.True(t, result.Contains(100))
+		}
+
+		// Test empty set
+		{
+			s := NewSet[string]()
+			data, err := fory.Marshal(s)
+			require.NoError(t, err)
+			var result Set[string]
+			err = fory.Unmarshal(data, &result)
+			require.NoError(t, err)
+			require.Equal(t, 0, result.Len())
+		}
+	}
+}
+
 func TestSerializeArray(t *testing.T) {
 	for _, referenceTracking := range []bool{false, true} {
-		fory := NewFory(WithRefTracking(referenceTracking))
+		fory := NewFory(WithXlang(true), WithRefTracking(referenceTracking))
 		for _, data := range commonArray() {
 			serde(t, fory, data)
 		}
@@ -250,7 +296,7 @@ func TestSerializeStructSimple(t *testing.T) {
 }
 
 func TestRegisterById(t *testing.T) {
-	fory := NewFory(WithRefTracking(false))
+	fory := NewFory(WithXlang(true), WithRefTracking(false))
 	type simple struct {
 		Field string
 	}
@@ -260,7 +306,7 @@ func TestRegisterById(t *testing.T) {
 
 func TestSerializeBeginWithMagicNumber(t *testing.T) {
 	strSlice := []string{"str1", "str1", "", "", "str2"}
-	fory := NewFory(WithRefTracking(true))
+	fory := NewFory(WithXlang(true), WithRefTracking(true))
 	bytes, err := fory.Marshal(strSlice)
 	require.Nil(t, err, fmt.Sprintf("serialize value %s with type %s failed: %s",
 		reflect.ValueOf(strSlice), reflect.TypeOf(strSlice), err))
@@ -305,7 +351,7 @@ func newFoo() Foo {
 
 func TestSerializeStruct(t *testing.T) {
 	for _, referenceTracking := range []bool{false, true} {
-		fory := NewFory(WithRefTracking(referenceTracking))
+		fory := NewFory(WithXlang(true), WithRefTracking(referenceTracking))
 		require.Nil(t, fory.RegisterNamedStruct(Bar{}, "example.Bar"))
 		serde(t, fory, &Bar{})
 		bar := Bar{F1: 1, F2: "str"}
@@ -331,7 +377,7 @@ func TestSerializeStruct(t *testing.T) {
 }
 
 func TestSerializeCircularReference(t *testing.T) {
-	fory := NewFory(WithRefTracking(true))
+	fory := NewFory(WithXlang(true), WithRefTracking(true))
 	{
 		type A struct {
 			A1 *A
@@ -372,7 +418,7 @@ func TestSerializeCircularReference(t *testing.T) {
 }
 
 func TestSerializeComplexReference(t *testing.T) {
-	fory := NewFory(WithRefTracking(true))
+	fory := NewFory(WithXlang(true), WithRefTracking(true))
 	type A struct {
 		F1 string
 		F2 *A
@@ -412,7 +458,7 @@ func TestSerializeComplexReference(t *testing.T) {
 }
 
 func TestSerializeCommonReference(t *testing.T) {
-	fory := NewFory(WithRefTracking(true))
+	fory := NewFory(WithXlang(true), WithRefTracking(true))
 	var values []interface{}
 	values = append(values, commonSlice()...)
 	values = append(values, commonMap()...)
@@ -432,7 +478,7 @@ func TestSerializeCommonReference(t *testing.T) {
 // TODO: Re-enable when zero-copy serialization API is updated
 /*
 func TestSerializeZeroCopy(t *testing.T) {
-	fory := NewFory(WithRefTracking(true))
+	fory := NewFory(WithXlang(true), WithRefTracking(true))
 	list := []interface{}{"str", make([]byte, 1000)}
 	buf := NewByteBuffer(nil)
 	var bufferObjects []BufferObject
@@ -503,7 +549,7 @@ func serde(t *testing.T, fory *Fory, value interface{}) {
 //  go tool pprof -text -nodecount=10 ./fory.test mem.out
 
 func BenchmarkMarshal(b *testing.B) {
-	fory := NewFory(WithRefTracking(true))
+	fory := NewFory(WithXlang(true), WithRefTracking(true))
 	require.Nil(b, fory.RegisterNamedStruct(Foo{}, "example.Foo"))
 	require.Nil(b, fory.RegisterNamedStruct(Bar{}, "example.Bar"))
 	value := benchData()
@@ -516,7 +562,7 @@ func BenchmarkMarshal(b *testing.B) {
 }
 
 func BenchmarkUnmarshal(b *testing.B) {
-	fory := NewFory(WithRefTracking(true))
+	fory := NewFory(WithXlang(true), WithRefTracking(true))
 	require.Nil(b, fory.RegisterNamedStruct(Foo{}, "example.Foo"))
 	require.Nil(b, fory.RegisterNamedStruct(Bar{}, "example.Bar"))
 	value := benchData()
@@ -543,7 +589,7 @@ func benchData() interface{} {
 }
 
 func ExampleFory_Serialize() {
-	f := New()
+	f := New(WithXlang(true))
 	list := []interface{}{true, false, "str", -1.1, 1, make([]int32, 5), make([]float64, 5)}
 	bytes, err := f.Serialize(list)
 	if err != nil {
@@ -582,7 +628,7 @@ specifying concrete map, slice,
 or array types for deserialization.
 */
 func TestMapEachIndividually(t *testing.T) {
-	fory := NewFory(WithRefTracking(true))
+	fory := NewFory(WithXlang(true), WithRefTracking(true))
 	for _, srcAny := range commonMap() {
 		srcType := reflect.TypeOf(srcAny)
 		endPtr := reflect.New(srcType)
@@ -597,7 +643,7 @@ func TestMapEachIndividually(t *testing.T) {
 }
 
 func TestArrayEachIndividually(t *testing.T) {
-	fory := NewFory(WithRefTracking(true))
+	fory := NewFory(WithXlang(true), WithRefTracking(true))
 	for _, srcAny := range commonArray() {
 		srcType := reflect.TypeOf(srcAny)
 		t.Logf("Testing type: %v", srcType)
@@ -613,7 +659,7 @@ func TestArrayEachIndividually(t *testing.T) {
 }
 
 func TestSliceEachIndividually(t *testing.T) {
-	fory := NewFory(WithRefTracking(true))
+	fory := NewFory(WithXlang(true), WithRefTracking(true))
 	for _, srcAny := range commonSlice() {
 		srcType := reflect.TypeOf(srcAny)
 		endPtr := reflect.New(srcType)
@@ -635,7 +681,7 @@ func TestStructWithNestedSlice(t *testing.T) {
 		Items []Item
 	}
 
-	fory := NewFory(WithRefTracking(true))
+	fory := NewFory(WithXlang(true), WithRefTracking(true))
 	if err := fory.RegisterNamedStruct(Example{}, "Example"); err != nil {
 		panic(err)
 	}

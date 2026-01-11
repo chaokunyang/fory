@@ -21,6 +21,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"reflect"
 	"runtime"
 
 	"github.com/apache/fory/go/fory"
@@ -415,21 +416,16 @@ type NullableComprehensiveCompatible struct {
 
 type MyExtSerializer struct{}
 
-func (s *MyExtSerializer) Write(buf *fory.ByteBuffer, value interface{}) error {
-	myExt := value.(MyExt)
+func (s *MyExtSerializer) WriteData(ctx *fory.WriteContext, value reflect.Value) {
+	myExt := value.Interface().(MyExt)
 	// WriteVarint32 uses zigzag encoding (compatible with Java's writeVarint32)
-	buf.WriteVarint32(myExt.Id)
-	return nil
+	ctx.Buffer().WriteVarint32(myExt.Id)
 }
 
-func (s *MyExtSerializer) Read(buf *fory.ByteBuffer) (interface{}, error) {
-	var bufErr fory.Error
+func (s *MyExtSerializer) ReadData(ctx *fory.ReadContext, value reflect.Value) {
 	// ReadVarint32 uses zigzag decoding (compatible with Java's readVarint32)
-	id := buf.ReadVarint32(&bufErr)
-	if bufErr.HasError() {
-		return nil, bufErr.CheckError()
-	}
-	return MyExt{Id: id}, nil
+	id := ctx.Buffer().ReadVarint32(ctx.Err())
+	value.Set(reflect.ValueOf(MyExt{Id: id}))
 }
 
 // ============================================================================

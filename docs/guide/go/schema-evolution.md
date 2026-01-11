@@ -64,7 +64,7 @@ type UserV2 struct {
 }
 
 f := fory.New(fory.WithCompatible(true))
-f.RegisterNamedStruct(UserV1{}, "example.User")
+f.RegisterStruct(UserV1{}, 1)
 
 // Serialize with V1
 userV1 := &UserV1{ID: 1, Name: "Alice"}
@@ -72,7 +72,7 @@ data, _ := f.Serialize(userV1)
 
 // Deserialize with V2
 f2 := fory.New(fory.WithCompatible(true))
-f2.RegisterNamedStruct(UserV2{}, "example.User")
+f2.RegisterStruct(UserV2{}, 1)
 
 var userV2 UserV2
 f2.Deserialize(data, &userV2)
@@ -101,7 +101,7 @@ type ConfigV2 struct {
 }
 
 f := fory.New(fory.WithCompatible(true))
-f.RegisterNamedStruct(ConfigV1{}, "example.Config")
+f.RegisterStruct(ConfigV1{}, 1)
 
 // Serialize with V1
 config := &ConfigV1{Host: "localhost", Port: 8080, Timeout: 30, Debug: true}
@@ -109,7 +109,7 @@ data, _ := f.Serialize(config)
 
 // Deserialize with V2
 f2 := fory.New(fory.WithCompatible(true))
-f2.RegisterNamedStruct(ConfigV2{}, "example.Config")
+f2.RegisterStruct(ConfigV2{}, 1)
 
 var configV2 ConfigV2
 f2.Deserialize(data, &configV2)
@@ -137,36 +137,6 @@ type PersonV2 struct {
 ```
 
 Compatible mode handles this automatically by matching fields by name.
-
-## Data Format
-
-In compatible mode, Fory writes additional metadata:
-
-```
-[Header]
-[Meta Offset: 4 bytes]  // Points to type definitions
-[Object Data...]
-[Type Definitions]      // Field names, types, order
-```
-
-This adds overhead but enables schema flexibility.
-
-## Hash-Based Version Checking
-
-Even in compatible mode, Fory tracks schema versions:
-
-```go
-type FieldInfo struct {
-    name       string
-    fieldType  reflect.Type
-    // ... other metadata
-}
-
-// Hash computed from field names and types
-hash := murmur3(fieldInfos)
-```
-
-The hash helps detect incompatible changes.
 
 ## Incompatible Changes
 
@@ -209,17 +179,7 @@ This is treated as removing `UserName` and adding `Username`, resulting in data 
 f := fory.New(fory.WithCompatible(true))
 ```
 
-### 2. Add Fields as Nullable
-
-```go
-type UserV2 struct {
-    ID    int64
-    Name  string
-    Email *string  // Pointer allows nil for old data
-}
-```
-
-### 3. Provide Default Values
+### 2. Provide Default Values
 
 ```go
 type ConfigV2 struct {
@@ -241,44 +201,6 @@ if config.Retries == 0 {
 }
 ```
 
-### 4. Version Your Types
-
-```go
-type User struct {
-    Version int32  // Schema version field
-    ID      int64
-    Name    string
-    Email   string
-}
-
-// Check version after deserialize
-if user.Version < 2 {
-    user.Email = "unknown@example.com"
-}
-```
-
-### 5. Test Migration Paths
-
-```go
-func TestSchemaEvolution(t *testing.T) {
-    // Serialize with old schema
-    f1 := fory.New(fory.WithCompatible(true))
-    f1.RegisterNamedStruct(UserV1{}, "example.User")
-    data, _ := f1.Serialize(&UserV1{ID: 1, Name: "Alice"})
-
-    // Deserialize with new schema
-    f2 := fory.New(fory.WithCompatible(true))
-    f2.RegisterNamedStruct(UserV2{}, "example.User")
-    var user UserV2
-    err := f2.Deserialize(data, &user)
-
-    assert.NoError(t, err)
-    assert.Equal(t, int64(1), user.ID)
-    assert.Equal(t, "Alice", user.Name)
-    assert.Equal(t, "", user.Email)  // Zero value for new field
-}
-```
-
 ## Cross-Language Schema Evolution
 
 Schema evolution works across languages:
@@ -292,7 +214,7 @@ type MessageV1 struct {
 }
 
 f := fory.New(fory.WithCompatible(true))
-f.RegisterNamedStruct(MessageV1{}, "example.Message")
+f.RegisterStruct(MessageV1{}, 1)
 data, _ := f.Serialize(&MessageV1{ID: 1, Content: "Hello"})
 ```
 
@@ -306,24 +228,25 @@ public class Message {
 }
 
 Fory fory = Fory.builder()
-    .withLanguage(Language.XLANG)
+    .withXlang(true)
     .withCompatibleMode(true)
     .build();
-fory.register(Message.class, "example.Message");
+fory.register(Message.class, 1);
 Message msg = fory.deserialize(data, Message.class);
 // msg.author will be null
 ```
 
 ## Performance Considerations
 
-Compatible mode has overhead:
+Compatible mode mainly affects serialized size:
 
-| Aspect                | Schema Consistent | Compatible Mode            |
-| --------------------- | ----------------- | -------------------------- |
-| Serialized Size       | Smaller           | Larger (includes metadata) |
-| Serialization Speed   | Faster            | Slower (metadata writing)  |
-| Deserialization Speed | Faster            | Slower (field matching)    |
-| Schema Flexibility    | None              | Full                       |
+| Aspect             | Schema Consistent | Compatible Mode                                          |
+| ------------------ | ----------------- | -------------------------------------------------------- |
+| Serialized Size    | Smaller           | Larger (includes metadata, especially without field IDs) |
+| Speed              | Fast              | Similar (metadata is just memcpy)                        |
+| Schema Flexibility | None              | Full                                                     |
+
+**Note**: Using field IDs (`fory:"id=N"`) reduces metadata size in compatible mode.
 
 **Recommendation**: Use compatible mode for:
 
@@ -335,7 +258,7 @@ Use schema consistent mode for:
 
 - In-memory operations
 - Same-version communication
-- Maximum performance
+- Minimum serialized size
 
 ## Error Handling
 
@@ -387,7 +310,7 @@ type ProductV2 struct {
 func main() {
     // Serialize with V1
     f1 := fory.New(fory.WithCompatible(true))
-    f1.RegisterNamedStruct(ProductV1{}, "example.Product")
+    f1.RegisterStruct(ProductV1{}, 1)
 
     product := &ProductV1{ID: 1, Name: "Widget", Price: 9.99}
     data, _ := f1.Serialize(product)
@@ -395,7 +318,7 @@ func main() {
 
     // Deserialize with V2
     f2 := fory.New(fory.WithCompatible(true))
-    f2.RegisterNamedStruct(ProductV2{}, "example.Product")
+    f2.RegisterStruct(ProductV2{}, 1)
 
     var productV2 ProductV2
     if err := f2.Deserialize(data, &productV2); err != nil {

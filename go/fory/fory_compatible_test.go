@@ -120,7 +120,7 @@ type NestedOuterIncompatible struct {
 }
 
 func TestMetaShareEnabled(t *testing.T) {
-	fory := NewForyWithOptions(WithCompatible(true))
+	fory := NewForyWithOptions(WithXlang(true), WithCompatible(true))
 
 	assert.True(t, fory.config.Compatible, "Expected compatible mode to be enabled")
 	assert.NotNil(t, fory.metaContext, "Expected metaContext to be initialized when compatible=true")
@@ -128,7 +128,7 @@ func TestMetaShareEnabled(t *testing.T) {
 }
 
 func TestMetaShareDisabled(t *testing.T) {
-	fory := NewForyWithOptions(WithCompatible(false))
+	fory := NewForyWithOptions(WithXlang(true), WithCompatible(false))
 
 	assert.False(t, fory.config.Compatible, "Expected compatible mode to be disabled")
 	assert.Nil(t, fory.metaContext, "Expected metaContext to be nil when compatible=false")
@@ -501,7 +501,7 @@ type compatibilityCase struct {
 func runCompatibilityCase(t *testing.T, tc compatibilityCase) {
 	t.Helper()
 
-	writer := NewForyWithOptions(WithCompatible(true))
+	writer := NewForyWithOptions(WithXlang(true), WithCompatible(true))
 	if tc.writerSetup != nil {
 		err := tc.writerSetup(writer)
 		assert.NoError(t, err)
@@ -512,7 +512,7 @@ func runCompatibilityCase(t *testing.T, tc compatibilityCase) {
 	data, err := writer.Marshal(tc.input)
 	assert.NoError(t, err)
 
-	reader := NewForyWithOptions(WithCompatible(true))
+	reader := NewForyWithOptions(WithXlang(true), WithCompatible(true))
 	if tc.readerSetup != nil {
 		err = tc.readerSetup(reader)
 		assert.NoError(t, err)

@@ -59,7 +59,7 @@ func (s *enumSerializer) Write(ctx *WriteContext, refMode RefMode, writeType boo
 	s.WriteData(ctx, value)
 }
 
-func (s *enumSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
+func (s *enumSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	err := ctx.Err()
 	ordinal := ctx.buffer.ReadVaruint32Small7(err)
 	if ctx.HasError() {
@@ -90,7 +90,7 @@ func (s *enumSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, 
 	if ctx.HasError() {
 		return
 	}
-	s.ReadData(ctx, value.Type(), value)
+	s.ReadData(ctx, value)
 }
 
 func (s *enumSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {

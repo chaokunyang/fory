@@ -21,13 +21,51 @@ import (
 	"reflect"
 )
 
-// GenericSet type.
-// TODO use golang generics; support more concrete key types
-type GenericSet map[interface{}]bool
+// Set is a generic set type using Go generics.
+// Uses struct{} as value type for zero memory overhead.
+type Set[T comparable] map[T]struct{}
 
-func (s GenericSet) Add(values ...interface{}) {
+// NewSet creates a new empty Set.
+func NewSet[T comparable]() Set[T] {
+	return make(Set[T])
+}
+
+// Add adds one or more elements to the set.
+func (s Set[T]) Add(values ...T) {
 	for _, v := range values {
-		s[v] = true
+		s[v] = struct{}{}
+	}
+}
+
+// Remove removes an element from the set.
+func (s Set[T]) Remove(value T) {
+	delete(s, value)
+}
+
+// Contains checks if an element is in the set.
+func (s Set[T]) Contains(value T) bool {
+	_, ok := s[value]
+	return ok
+}
+
+// Len returns the number of elements in the set.
+func (s Set[T]) Len() int {
+	return len(s)
+}
+
+// Values returns all elements as a slice.
+func (s Set[T]) Values() []T {
+	result := make([]T, 0, len(s))
+	for v := range s {
+		result = append(result, v)
+	}
+	return result
+}
+
+// Clear removes all elements from the set.
+func (s Set[T]) Clear() {
+	for k := range s {
+		delete(s, k)
 	}
 }
 
@@ -255,9 +293,10 @@ func (s setSerializer) writeDifferentTypes(ctx *WriteContext, buf *ByteBuffer, k
 }
 
 // Read deserializes a set from the buffer into the provided reflect.Value
-func (s setSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
+func (s setSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	buf := ctx.Buffer()
 	err := ctx.Err()
+	type_ := value.Type()
 	// ReadData collection length from buffer
 	length := int(buf.ReadVaruint32(err))
 	if length == 0 {
@@ -311,14 +350,14 @@ func (s setSerializer) readSameType(ctx *ReadContext, buf *ByteBuffer, value ref
 			if refID < int32(NotNullValueFlag) {
 				// Use existing reference if available
 				elem := ctx.RefResolver().GetReadObject(refID)
-				value.SetMapIndex(reflect.ValueOf(elem), reflect.ValueOf(true))
+				value.SetMapIndex(reflect.ValueOf(elem), reflect.ValueOf(struct{}{}))
 				continue
 			}
 		}
 
 		// Create new element and deserialize from buffer
 		elem := reflect.New(typeInfo.Type).Elem()
-		serializer.ReadData(ctx, elem.Type(), elem)
+		serializer.ReadData(ctx, elem)
 		if ctx.HasError() {
 			return
 		}
@@ -327,7 +366,7 @@ func (s setSerializer) readSameType(ctx *ReadContext, buf *ByteBuffer, value ref
 			ctx.RefResolver().SetReadObject(refID, elem)
 		}
 		// Add element to set
-		value.SetMapIndex(elem, reflect.ValueOf(true))
+		value.SetMapIndex(elem, reflect.ValueOf(struct{}{}))
 	}
 }
 
@@ -353,7 +392,7 @@ func (s setSerializer) readDifferentTypes(ctx *ReadContext, buf *ByteBuffer, val
 			if refID < int32(NotNullValueFlag) {
 				// Use existing reference if available
 				elem := ctx.RefResolver().GetReadObject(refID)
-				value.SetMapIndex(elem, reflect.ValueOf(true))
+				value.SetMapIndex(elem, reflect.ValueOf(struct{}{}))
 				continue
 			}
 			// Read type info (handles namespaced types, meta sharing, etc.)
@@ -363,7 +402,7 @@ func (s setSerializer) readDifferentTypes(ctx *ReadContext, buf *ByteBuffer, val
 			}
 			// Create new element and deserialize from buffer
 			elem := reflect.New(typeInfo.Type).Elem()
-			typeInfo.Serializer.ReadData(ctx, elem.Type(), elem)
+			typeInfo.Serializer.ReadData(ctx, elem)
 			if ctx.HasError() {
 				return
 			}
@@ -382,7 +421,7 @@ func (s setSerializer) readDifferentTypes(ctx *ReadContext, buf *ByteBuffer, val
 				return
 			}
 			elem := reflect.New(typeInfo.Type).Elem()
-			typeInfo.Serializer.ReadData(ctx, elem.Type(), elem)
+			typeInfo.Serializer.ReadData(ctx, elem)
 			if ctx.HasError() {
 				return
 			}
@@ -394,7 +433,7 @@ func (s setSerializer) readDifferentTypes(ctx *ReadContext, buf *ByteBuffer, val
 				return
 			}
 			elem := reflect.New(typeInfo.Type).Elem()
-			typeInfo.Serializer.ReadData(ctx, elem.Type(), elem)
+			typeInfo.Serializer.ReadData(ctx, elem)
 			if ctx.HasError() {
 				return
 			}
@@ -409,15 +448,15 @@ func setMapKey(mapValue, key reflect.Value, keyType reflect.Type) {
 	if keyType.Kind() == reflect.Interface {
 		// Check if key is directly assignable to the interface
 		if key.Type().AssignableTo(keyType) {
-			mapValue.SetMapIndex(key, reflect.ValueOf(true))
+			mapValue.SetMapIndex(key, reflect.ValueOf(struct{}{}))
 		} else {
 			// Try pointer - common case where interface has pointer receivers
 			ptr := reflect.New(key.Type())
 			ptr.Elem().Set(key)
-			mapValue.SetMapIndex(ptr, reflect.ValueOf(true))
+			mapValue.SetMapIndex(ptr, reflect.ValueOf(struct{}{}))
 		}
 	} else {
-		mapValue.SetMapIndex(key, reflect.ValueOf(true))
+		mapValue.SetMapIndex(key, reflect.ValueOf(struct{}{}))
 	}
 }
 
@@ -446,7 +485,7 @@ func (s setSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, ha
 			ctx.TypeResolver().readTypeInfoWithTypeID(buf, typeID, ctxErr)
 		}
 	}
-	s.ReadData(ctx, value.Type(), value)
+	s.ReadData(ctx, value)
 }
 
 func (s setSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {

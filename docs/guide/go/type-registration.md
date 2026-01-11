@@ -19,116 +19,97 @@ license: |
   limitations under the License.
 ---
 
-Type registration tells Fory how to identify and serialize your custom types. This is essential for cross-language serialization and polymorphic deserialization.
+Type registration tells Fory how to identify and serialize your custom types. Registration is required for struct, enum, and extension types.
 
 ## Why Register Types?
 
-1. **Cross-Language Compatibility**: Other languages need to know how to deserialize your types
-2. **Polymorphism**: Fory needs to identify the actual type when deserializing interfaces
-3. **Type Safety**: Registration ensures consistent type handling across serialization boundaries
+1. **Type Identification**: Fory needs to identify the actual type during deserialization
+2. **Polymorphism**: When deserializing interface types, Fory must know which concrete type to create
+3. **Cross-Language Compatibility**: Other languages need to recognize and deserialize your types
 
-## Registration Methods
+## Struct Registration
 
-### Register by Name
+### Register by ID
 
-Register a type with a fully-qualified name string:
+Register a struct with a numeric type ID for compact serialization:
 
 ```go
-f := fory.New()
-
 type User struct {
     ID   int64
     Name string
 }
 
-// Register with a name
+f := fory.New()
+err := f.RegisterStruct(User{}, 1)
+if err != nil {
+    panic(err)
+}
+```
+
+**ID Guidelines**:
+
+- IDs must be unique within your application
+- IDs must be consistent across all languages for cross-language serialization
+- Use the same ID for the same type in serializer and deserializer
+
+### Register by Name
+
+Register a struct with a type name string. This is more flexible but has higher serialization cost:
+
+```go
+f := fory.New()
 err := f.RegisterNamedStruct(User{}, "example.User")
 if err != nil {
     panic(err)
 }
 ```
 
-The name should be unique and consistent across all languages. Convention: `namespace.TypeName`
+**Name Guidelines**:
 
-### Register by Namespace
-
-Register with separate namespace and type name:
-
-```go
-err := f.RegisterNamedStructspace(User{}, "example", "User")
-```
-
-This is equivalent to `RegisterNamedStruct(User{}, "example.User")`.
-
-### Register by ID
-
-Register with a numeric type ID:
-
-```go
-// Register with numeric ID
-err := f.RegisterStruct(User{}, 101)
-```
-
-Numeric IDs are more compact but require coordination across languages.
-
-**ID Guidelines**:
-
-- Use IDs 0-8192 for user types
-- IDs must be consistent across all languages
-- IDs 0-63 are reserved for internal types
+- Use fully-qualified names following `namespace.TypeName` convention
+- Names must be unique and consistent across all languages
+- Names are case-sensitive
 
 ## Enum Registration
 
-Go doesn't have native enums, but you can use integer types:
+Go doesn't have native enums, but you can register integer types as enums:
+
+### Register by ID
 
 ```go
-type Color int32
+type Status int32
 
 const (
-    Red   Color = 0
-    Green Color = 1
-    Blue  Color = 2
+    StatusPending  Status = 0
+    StatusActive   Status = 1
+    StatusComplete Status = 2
 )
 
 f := fory.New()
+err := f.RegisterEnum(Status(0), 1)
+```
 
-// Register enum by name
-err := f.RegisterNamedEnum(Color(0), "example.Color")
+### Register by Name
 
-// Or register by ID
-err = f.RegisterEnum(Color(0), 102)
+```go
+err := f.RegisterNamedEnum(Status(0), "example.Status")
 ```
 
 ## Extension Types
 
-For custom serialization logic, register extension types with a custom serializer:
+For types requiring custom serialization logic, register as extension types with a custom serializer:
 
 ```go
-type CustomType struct {
-    Data []byte
-}
-
-type CustomSerializer struct{}
-
-func (s *CustomSerializer) Write(ctx *fory.WriteContext, value reflect.Value) {
-    data := value.Interface().(CustomType).Data
-    ctx.Buffer().WriteLength(len(data))
-    ctx.Buffer().WriteBinary(data)
-}
-
-func (s *CustomSerializer) Read(ctx *fory.ReadContext, value reflect.Value) {
-    length := ctx.Buffer().ReadLength(nil)
-    data := ctx.Buffer().ReadBinary(length, nil)
-    value.Set(reflect.ValueOf(CustomType{Data: data}))
-}
-
-// Register extension type
 f := fory.New()
-err := f.RegisterNamedExtension(CustomType{}, "example.Custom", &CustomSerializer{})
 
-// Or with numeric ID
-err = f.RegisterExtension(CustomType{}, 103, &CustomSerializer{})
+// Register by ID
+err := f.RegisterExtension(CustomType{}, 1, &CustomSerializer{})
+
+// Or register by name
+err = f.RegisterNamedExtension(CustomType{}, "example.Custom", &CustomSerializer{})
 ```
+
+See [Custom Serializers](custom-serializers) for details on implementing the `ExtensionSerializer` interface.
 
 ## Registration Scope
 
@@ -139,32 +120,30 @@ f1 := fory.New()
 f2 := fory.New()
 
 // Types registered on f1 are NOT available on f2
-f1.RegisterNamedStruct(User{}, "example.User")
+f1.RegisterStruct(User{}, 1)
 
 // f2 cannot deserialize User unless also registered
-f2.RegisterNamedStruct(User{}, "example.User")
+f2.RegisterStruct(User{}, 1)
 ```
 
 ## Registration Timing
 
-Register types before serialization/deserialization:
+Register types after creating a Fory instance and before any serialize/deserialize calls:
 
 ```go
 f := fory.New()
 
-// Good: Register before use
-f.RegisterNamedStruct(User{}, "example.User")
-data, _ := f.Serialize(&User{ID: 1})
+// Register before use
+f.RegisterStruct(User{}, 1)
+f.RegisterStruct(Order{}, 2)
 
-// Bad: Type not registered
-f2 := fory.New()
-data2, err := f2.Serialize(&User{ID: 1})
-// May fail or produce incompatible data
+// Now serialize/deserialize
+data, _ := f.Serialize(&User{ID: 1, Name: "Alice"})
 ```
 
 ## Nested Type Registration
 
-Register all types in a hierarchy:
+Register all struct types in the object graph, including nested types:
 
 ```go
 type Address struct {
@@ -179,76 +158,79 @@ type Person struct {
 
 f := fory.New()
 
-// Register ALL types used in the object graph
-f.RegisterNamedStruct(Address{}, "example.Address")
-f.RegisterNamedStruct(Person{}, "example.Person")
+// Register ALL struct types used in the object graph
+f.RegisterStruct(Address{}, 1)
+f.RegisterStruct(Person{}, 2)
 ```
 
 ## Cross-Language Registration
 
-For cross-language serialization, use consistent names or IDs:
+For cross-language serialization, types must be registered consistently across all languages.
 
-### Go
+### Using IDs
+
+All languages use the same numeric ID:
+
+**Go**:
 
 ```go
-f := fory.New()
+f.RegisterStruct(User{}, 1)
+```
+
+**Java**:
+
+```java
+fory.register(User.class, 1);
+```
+
+**Python**:
+
+```python
+fory.register(User, type_id=1)
+```
+
+### Using Names
+
+All languages use the same type name:
+
+**Go**:
+
+```go
 f.RegisterNamedStruct(User{}, "example.User")
 ```
 
-### Java
+**Java**:
 
 ```java
-Fory fory = Fory.builder().withLanguage(Language.XLANG).build();
 fory.register(User.class, "example.User");
 ```
 
-### Python
+**Python**:
 
 ```python
-fory = pyfory.Fory()
-fory.register_type(User, typename="example.User")
+fory.register(User, typename="example.User")
 ```
 
-### Rust
+**Rust**:
 
 ```rust
 #[derive(Fory)]
-#[tag("example.User")]
 struct User {
     id: i64,
     name: String,
 }
+
+let mut fory = Fory::default();
+fory.register_by_name::<User>("example.User")?;
 ```
-
-### C++
-
-```cpp
-auto fory = fory::Fory::create();
-fory.register_struct<User>("example.User");
-```
-
-## Type ID Encoding
-
-When using numeric IDs, Fory encodes them with the base type:
-
-```
-Full Type ID = (user_type_id << 8) | internal_type_id
-```
-
-For example:
-
-- User ID: 1, Struct base type: 25
-- Full ID: (1 << 8) | 25 = 281
-
-This allows Fory to identify both the user type and its base serialization format.
 
 ## Best Practices
 
-1. **Use meaningful names**: Follow `namespace.TypeName` convention
-2. **Be consistent**: Use the same name/ID across all languages
-3. **Register early**: Register all types before first serialization
-4. **Register everything**: Include nested types, not just top-level types
-5. **Document IDs**: If using numeric IDs, document the mapping
+1. **Register early**: Register all types at application startup before any serialization
+2. **Be consistent**: Use the same ID or name across all languages and all instances
+3. **Register all types**: Include nested struct types, not just top-level types
+4. **Prefer IDs for performance**: Numeric IDs have lower serialization overhead than names
+5. **Use names for flexibility**: Names are easier to manage and less prone to conflicts
 
 ## Common Errors
 
@@ -258,22 +240,23 @@ This allows Fory to identify both the user type and its base serialization forma
 error: unknown type encountered
 ```
 
-Solution: Register the type before serialization.
+**Solution**: Register the type before serialization/deserialization.
 
-### Name Mismatch
+### ID/Name Mismatch
 
-Data serialized with name `example.User` cannot be deserialized if registered as `app.User`.
+Data serialized with one ID or name cannot be deserialized if registered with a different ID or name.
 
-Solution: Use consistent names across all serializers.
+**Solution**: Use consistent IDs or names across serializer and deserializer.
 
-### ID Conflict
+### Duplicate Registration
 
 Two types registered with the same ID will conflict.
 
-Solution: Ensure unique IDs for each type.
+**Solution**: Ensure unique IDs for each type.
 
 ## Related Topics
 
+- [Basic Serialization](basic-serialization)
 - [Cross-Language Serialization](cross-language)
 - [Supported Types](supported-types)
 - [Troubleshooting](troubleshooting)

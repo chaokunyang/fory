@@ -246,7 +246,7 @@ func (s *sliceSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool,
 	if done || ctx.HasError() {
 		return
 	}
-	s.ReadData(ctx, value.Type(), value)
+	s.ReadData(ctx, value)
 }
 
 func (s *sliceSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
@@ -254,11 +254,11 @@ func (s *sliceSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, ty
 	s.Read(ctx, refMode, false, false, value)
 }
 
-func (s *sliceSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
+func (s *sliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	buf := ctx.Buffer()
 	ctxErr := ctx.Err()
 	length := int(buf.ReadVaruint32(ctxErr))
-	isArrayType := type_.Kind() == reflect.Array
+	isArrayType := value.Type().Kind() == reflect.Array
 
 	if length == 0 {
 		if !isArrayType {
@@ -282,7 +282,6 @@ func (s *sliceSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value r
 
 	trackRefs := (collectFlag & CollectionTrackingRef) != 0
 	hasNull := (collectFlag & CollectionHasNull) != 0
-	elemType := s.type_.Elem()
 
 	// Handle slice vs array allocation
 	if isArrayType {
@@ -324,10 +323,10 @@ func (s *sliceSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value r
 				continue
 			}
 			// refFlag should be NotNullValueFlag, now read the actual data
-			s.elemSerializer.ReadData(ctx, elemType, elem)
+			s.elemSerializer.ReadData(ctx, elem)
 		} else {
 			// No ref tracking and no nulls: directly read data
-			s.elemSerializer.ReadData(ctx, elemType, elem)
+			s.elemSerializer.ReadData(ctx, elem)
 		}
 		if ctx.HasError() {
 			return

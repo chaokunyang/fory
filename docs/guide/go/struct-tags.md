@@ -27,13 +27,37 @@ The general syntax for Fory struct tags:
 
 ```go
 type MyStruct struct {
-    Field Type `fory:"option1;option2=value"`
+    Field Type `fory:"option1,option2=value"`
 }
 ```
 
-Multiple options are separated by semicolons (`;`).
+Multiple options are separated by commas (`,`).
 
 ## Available Tags
+
+### Field ID
+
+Use `id=N` to assign a numeric ID to a field for compact encoding:
+
+```go
+type User struct {
+    ID   int64  `fory:"id=0"`
+    Name string `fory:"id=1"`
+    Age  int32  `fory:"id=2"`
+}
+```
+
+**Benefits**:
+
+- Smaller serialized size (numeric IDs vs field names)
+- Faster serialization/deserialization
+- Required for optimal cross-language compatibility
+
+**Notes**:
+
+- IDs must be unique within a struct
+- IDs must be >= 0
+- If not specified, field name is used (larger payload)
 
 ### Ignoring Fields
 
@@ -49,9 +73,29 @@ type User struct {
 
 The `Password` field will not be included in serialized output and will remain at its zero value after deserialization.
 
+### Nullable
+
+Use `nullable` to control whether null flags are written for pointer fields:
+
+```go
+type Record struct {
+    // Write null flag for this field (allows nil values)
+    OptionalData *Data `fory:"nullable"`
+
+    // Skip null flag (field must not be nil)
+    RequiredData *Data `fory:"nullable=false"`
+}
+```
+
+**Notes**:
+
+- Only applies to pointer, slice, and map fields
+- When `nullable=false`, serializing a nil value will cause an error
+- Default is `false` (no null flag written)
+
 ### Reference Tracking
 
-Control per-field reference tracking:
+Control per-field reference tracking for slices, maps, or pointer to struct fields:
 
 ```go
 type Container struct {
@@ -63,35 +107,71 @@ type Container struct {
 }
 ```
 
-This overrides the global `WithTrackRef` setting for specific fields.
+**Notes**:
+
+- Applies to slices, maps, and pointer to struct fields
+- Pointer to primitive types (e.g., `*int`, `*string`) cannot use this tag
+- Default is `ref=false` (no reference tracking)
+- When global `WithTrackRef(false)` is set, field ref tags are ignored
+- When global `WithTrackRef(true)` is set, use `ref=false` to disable for specific fields
 
 **Use cases**:
 
 - Enable for fields that may be circular or shared
 - Disable for fields that are always unique (optimization)
 
-### Field Name
+### Encoding
 
-Customize the serialized field name:
+Use `encoding` to control how numeric fields are encoded:
 
 ```go
-type User struct {
-    ID   int64  `fory:"user_id"`
-    Name string `fory:"user_name"`
+type Metrics struct {
+    // Variable-length encoding (default, smaller for small values)
+    Count int64 `fory:"encoding=varint"`
+
+    // Fixed-length encoding (consistent size)
+    Timestamp int64 `fory:"encoding=fixed"`
+
+    // Tagged encoding (includes type tag)
+    Value int64 `fory:"encoding=tagged"`
 }
 ```
 
-This affects cross-language serialization where field names must match.
+**Supported encodings**:
+
+| Type     | Options                     | Default  |
+| -------- | --------------------------- | -------- |
+| `int32`  | `varint`, `fixed`           | `varint` |
+| `uint32` | `varint`, `fixed`           | `varint` |
+| `int64`  | `varint`, `fixed`, `tagged` | `varint` |
+| `uint64` | `varint`, `fixed`, `tagged` | `varint` |
+
+**When to use**:
+
+- `varint`: Best for values that are often small (default)
+- `fixed`: Best for values that use full range (e.g., timestamps, hashes)
+- `tagged`: When type information needs to be preserved
+
+**Shorthand for int32/uint32**:
+
+Use `compress` as a convenience tag for int32/uint32 fields:
+
+```go
+type Data struct {
+    SmallValue int32  `fory:"compress"`        // Same as encoding=varint (default)
+    FixedValue uint32 `fory:"compress=false"`  // Same as encoding=fixed
+}
+```
 
 ## Combining Tags
 
-Multiple tags can be combined:
+Multiple tags can be combined using comma separator:
 
 ```go
 type Document struct {
-    ID      int64  `fory:"doc_id;ref=false"`
-    Content string
-    Author  *User  `fory:"ref"`
+    ID      int64  `fory:"id=0,encoding=fixed"`
+    Content string `fory:"id=1"`
+    Author  *User  `fory:"id=2,ref"`
 }
 ```
 
@@ -101,8 +181,8 @@ Fory tags coexist with other struct tags:
 
 ```go
 type User struct {
-    ID       int64  `json:"id" fory:"user_id"`
-    Name     string `json:"name,omitempty"`
+    ID       int64  `json:"id" fory:"id=0"`
+    Name     string `json:"name,omitempty" fory:"id=1"`
     Password string `json:"-" fory:"-"`
 }
 ```
@@ -132,14 +212,6 @@ Fields are serialized in a consistent order based on:
 
 This ensures cross-language compatibility where field order matters.
 
-```go
-type Example struct {
-    Zebra  string  // Serialized last (alphabetically)
-    Alpha  int32   // Serialized first
-    Middle float64 // Serialized in middle
-}
-```
-
 ## Struct Hash
 
 Fory computes a hash of struct fields for version checking:
@@ -148,16 +220,16 @@ Fory computes a hash of struct fields for version checking:
 - Hash is written to serialized data
 - Mismatch triggers `ErrKindHashMismatch`
 
-Tags that change field names affect the hash:
+Struct field changes affect the hash:
 
 ```go
 // These produce different hashes
 type V1 struct {
-    UserID int64 `fory:"id"`
+    UserID int64
 }
 
 type V2 struct {
-    UserID int64 `fory:"user_id"`  // Different name = different hash
+    UserId int64  // Different field name = different hash
 }
 ```
 
@@ -167,9 +239,9 @@ type V2 struct {
 
 ```go
 type APIResponse struct {
-    Status    int32  `json:"status" fory:"status"`
-    Message   string `json:"message" fory:"msg"`
-    Data      any    `json:"data" fory:"ref"`
+    Status    int32  `json:"status" fory:"id=0"`
+    Message   string `json:"message" fory:"id=1"`
+    Data      any    `json:"data" fory:"id=2"`
     Internal  string `json:"-" fory:"-"`  // Ignored in both JSON and Fory
 }
 ```
@@ -206,7 +278,7 @@ type BadStruct struct {
 }
 
 f := fory.New()
-err := f.RegisterNamedStruct(BadStruct{}, "example.Bad")
+err := f.RegisterStruct(BadStruct{}, 1)
 // Error: ErrKindInvalidTag
 ```
 

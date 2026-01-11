@@ -251,10 +251,10 @@ func (s sliceDynSerializer) Read(ctx *ReadContext, refMode RefMode, readType boo
 	if done || ctx.HasError() {
 		return
 	}
-	s.ReadData(ctx, value.Type(), value)
+	s.ReadData(ctx, value)
 }
 
-func (s sliceDynSerializer) ReadData(ctx *ReadContext, _ reflect.Type, value reflect.Value) {
+func (s sliceDynSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	buf := ctx.Buffer()
 	ctxErr := ctx.Err()
 	length := int(buf.ReadVaruint32(ctxErr))
@@ -339,10 +339,10 @@ func (s sliceDynSerializer) readSameType(ctx *ReadContext, buf *ByteBuffer, valu
 				// Register reference BEFORE reading data for circular ref support
 				ctx.RefResolver().SetReadObject(refID, elem)
 				// Read into the struct element
-				serializer.ReadData(ctx, elemType, elem.Elem())
+				serializer.ReadData(ctx, elem.Elem())
 			} else {
 				elem = reflect.New(elemType).Elem()
-				serializer.ReadData(ctx, elemType, elem)
+				serializer.ReadData(ctx, elem)
 				ctx.RefResolver().Reference(elem)
 			}
 			value.Index(i).Set(elem)
@@ -352,11 +352,11 @@ func (s sliceDynSerializer) readSameType(ctx *ReadContext, buf *ByteBuffer, valu
 				continue
 			}
 			elem := reflect.New(elemType).Elem()
-			serializer.ReadData(ctx, elemType, elem)
+			serializer.ReadData(ctx, elem)
 			value.Index(i).Set(elem)
 		} else {
 			elem := reflect.New(elemType).Elem()
-			serializer.ReadData(ctx, elemType, elem)
+			serializer.ReadData(ctx, elem)
 			value.Index(i).Set(elem)
 		}
 		if ctx.HasError() {
@@ -396,7 +396,7 @@ func (s sliceDynSerializer) readDifferentTypes(
 			}
 			elemType, serializer := s.wrapSerializerIfNeeded(typeInfo.Type, typeInfo.Serializer)
 			elem := reflect.New(elemType).Elem()
-			serializer.ReadData(ctx, elemType, elem)
+			serializer.ReadData(ctx, elem)
 			ctx.RefResolver().SetReadObject(refID, elem)
 			value.Index(i).Set(elem)
 		} else {
@@ -412,7 +412,7 @@ func (s sliceDynSerializer) readDifferentTypes(
 			}
 			elemType, serializer := s.wrapSerializerIfNeeded(typeInfo.Type, typeInfo.Serializer)
 			elem := reflect.New(elemType).Elem()
-			serializer.ReadData(ctx, elemType, elem)
+			serializer.ReadData(ctx, elem)
 			value.Index(i).Set(elem)
 		}
 		if ctx.HasError() {

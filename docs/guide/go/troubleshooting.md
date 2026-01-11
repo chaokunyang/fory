@@ -66,7 +66,7 @@ func (e Error) Error() string   { return e.message }
 f := fory.New()
 
 // Register type before use
-f.RegisterNamedStruct(User{}, "example.User")
+f.RegisterStruct(User{}, 1)
 
 // Now serialization works
 data, _ := f.Serialize(&User{ID: 1})
@@ -97,16 +97,16 @@ f.Deserialize(userData, &user)
 ```go
 // Serializer
 f1 := fory.New()
-f1.RegisterNamedStruct(User{}, "example.User")
+f1.RegisterStruct(User{}, 1)
 
-// Deserializer - must use same name
+// Deserializer - must use same ID
 f2 := fory.New()
-f2.RegisterNamedStruct(User{}, "example.User")  // Same name!
+f2.RegisterStruct(User{}, 1)  // Same ID!
 ```
 
 ### ErrKindHashMismatch
 
-**Error**: `struct hash mismatch: expected X, got Y for type Z`
+**Error**: `hash X is not consistent with Y for type Z`
 
 **Cause**: Struct definition changed between serialization and deserialization.
 
@@ -140,12 +140,18 @@ go generate ./...
 
 **Cause**: Data nesting exceeds maximum depth limit.
 
+**Possible causes**:
+
+- Deeply nested data structures exceeding the default limit (20)
+- Unintended circular references without reference tracking enabled
+- **Malicious data**: Attackers may craft deeply nested payloads to cause resource exhaustion
+
 **Solutions**:
 
-1. **Increase max depth**:
+1. **Increase max depth** (default is 20):
 
 ```go
-f := fory.New(fory.WithMaxDepth(500))
+f := fory.New(fory.WithMaxDepth(50))
 ```
 
 2. **Enable reference tracking** (for circular data):
@@ -155,6 +161,8 @@ f := fory.New(fory.WithTrackRef(true))
 ```
 
 3. **Check for unintended circular references** in your data.
+
+4. **Validate untrusted data**: When deserializing data from untrusted sources, do not blindly increase max depth. Consider validating input size and structure before deserialization.
 
 ### ErrKindBufferOutOfBound
 
@@ -199,19 +207,37 @@ f2 := fory.New(fory.WithTrackRef(true))  // Must match!
 
 **Error**: `invalid fory struct tag`
 
-**Cause**: Malformed struct tag syntax.
+**Cause**: Invalid struct tag configuration.
 
-**Solution**:
+**Common causes**:
+
+1. **Invalid tag ID**: ID must be >= -1
 
 ```go
-// Wrong
+// Wrong: negative ID (other than -1)
 type Bad struct {
-    Field int `fory:"invalid=option=format"`
+    Field int `fory:"id=-5"`
 }
 
 // Correct
 type Good struct {
-    Field int `fory:"option=value"`
+    Field int `fory:"id=0"`
+}
+```
+
+2. **Duplicate tag IDs**: Each field must have a unique ID within the struct
+
+```go
+// Wrong: duplicate IDs
+type Bad struct {
+    Field1 int `fory:"id=0"`
+    Field2 int `fory:"id=0"`  // Duplicate!
+}
+
+// Correct
+type Good struct {
+    Field1 int `fory:"id=0"`
+    Field2 int `fory:"id=1"`
 }
 ```
 
@@ -221,36 +247,30 @@ type Good struct {
 
 **Symptom**: Data deserializes but fields have wrong values.
 
-**Cause**: Different field ordering between languages.
+**Cause**: Different field ordering between languages. In non-compatible mode, fields are sorted by their snake_case names. CamelCase field names (e.g., `FirstName`) are converted to snake_case (e.g., `first_name`) for sorting.
 
-**Solution**: Ensure consistent field naming (snake_case):
+**Solutions**:
+
+1. **Ensure converted snake_case names are consistent**: Field names across languages must produce the same snake_case ordering:
 
 ```go
 type User struct {
     FirstName string  // Go: FirstName -> first_name
-    LastName  string  // Sorted alphabetically by snake_case
+    LastName  string  // Go: LastName -> last_name
+    // Sorted alphabetically by snake_case: first_name, last_name
 }
 ```
 
-### Type Mapping Errors
-
-**Symptom**: Overflow or precision loss.
-
-**Cause**: Type not supported in target language.
-
-**Examples**:
-
-- `uint64` max value → Java `long` (overflow)
-- `float32` precision → Python `float` (64-bit)
-
-**Solution**: Use compatible types:
+2. **Use field IDs for consistent ordering**: Field IDs (non-negative integers) act as aliases for field names, used for both sorting and field matching during deserialization:
 
 ```go
-// Instead of uint64 with large values
-type Data struct {
-    Count int64  // Use signed for Java compatibility
+type User struct {
+    FirstName string `fory:"id=0"`
+    LastName  string `fory:"id=1"`
 }
 ```
+
+Ensure the same field IDs are used across all languages for corresponding fields.
 
 ### Name Registration Mismatch
 
@@ -266,7 +286,7 @@ f.RegisterNamedStruct(User{}, "example.User")
 fory.register(User.class, "example.User");
 
 // Python
-fory.register_type(User, typename="example.User")
+fory.register(User, typename="example.User")
 ```
 
 ## Performance Issues
@@ -344,7 +364,7 @@ fmt.Printf("Header: %x\n", data[:4])  // Magic + flags
 ```go
 // Verify type is registered
 f := fory.New()
-err := f.RegisterNamedStruct(User{}, "example.User")
+err := f.RegisterStruct(User{}, 1)
 if err != nil {
     fmt.Printf("Registration failed: %v\n", err)
 }
@@ -370,7 +390,7 @@ for i := 0; i < t.NumField(); i++ {
 ```go
 func TestRoundTrip(t *testing.T) {
     f := fory.New()
-    f.RegisterNamedStruct(User{}, "example.User")
+    f.RegisterStruct(User{}, 1)
 
     original := &User{ID: 1, Name: "Alice"}
 
@@ -398,12 +418,12 @@ FORY_GO_JAVA_CI=1 mvn test -Dtest=org.apache.fory.xlang.GoXlangTest
 ```go
 func TestSchemaEvolution(t *testing.T) {
     f1 := fory.New(fory.WithCompatible(true))
-    f1.RegisterNamedStruct(UserV1{}, "example.User")
+    f1.RegisterStruct(UserV1{}, 1)
 
     data, _ := f1.Serialize(&UserV1{ID: 1, Name: "Alice"})
 
     f2 := fory.New(fory.WithCompatible(true))
-    f2.RegisterNamedStruct(UserV2{}, "example.User")
+    f2.RegisterStruct(UserV2{}, 1)
 
     var result UserV2
     err := f2.Deserialize(data, &result)

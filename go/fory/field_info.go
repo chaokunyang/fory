@@ -24,27 +24,31 @@ import (
 	"strings"
 )
 
-// FieldInfo stores field metadata computed ENTIRELY at init time.
-// All flags and decisions are pre-computed to eliminate runtime checks.
-type FieldInfo struct {
+// PrimitiveFieldInfo contains only the fields needed for hot primitive serialization loops.
+// This minimal struct improves cache efficiency during iteration.
+// Size: 16 bytes (vs full FieldInfo)
+type PrimitiveFieldInfo struct {
+	Offset      uintptr    // Field offset for unsafe access
+	DispatchId  DispatchId // Type dispatch ID
+	WriteOffset uint8      // Offset within fixed-fields buffer (0-255, sufficient for fixed primitives)
+}
+
+// FieldMeta contains cold/rarely-accessed field metadata.
+// Accessed via pointer from FieldInfo to keep FieldInfo small for cache efficiency.
+type FieldMeta struct {
 	Name       string
-	Offset     uintptr
 	Type       reflect.Type
-	DispatchId DispatchId
 	TypeId     TypeId // Fory type ID for the serializer
-	Serializer Serializer
 	Nullable   bool
 	FieldIndex int      // -1 if field doesn't exist in current struct (for compatible mode)
 	FieldDef   FieldDef // original FieldDef from remote TypeDef (for compatible mode skip)
 
-	// Pre-computed sizes and offsets (for fixed primitives)
-	FixedSize   int // 0 if not fixed-size, else 1/2/4/8
-	WriteOffset int // Offset within fixed-fields buffer region (sum of preceding field sizes)
+	// Pre-computed sizes (for fixed primitives)
+	FixedSize int // 0 if not fixed-size, else 1/2/4/8
 
 	// Pre-computed flags for serialization (computed at init time)
-	RefMode     RefMode // ref mode for serializer.Write/Read
-	WriteType   bool    // whether to write type info (true for struct fields in compatible mode)
-	HasGenerics bool    // whether element types are known from TypeDef (for container fields)
+	WriteType   bool // whether to write type info (true for struct fields in compatible mode)
+	HasGenerics bool // whether element types are known from TypeDef (for container fields)
 
 	// Tag-based configuration (from fory struct tags)
 	TagID          int  // -1 = use field name, >=0 = use tag ID
@@ -53,9 +57,21 @@ type FieldInfo struct {
 	TagRef         bool // The ref value from fory tag (only valid if TagRefSet is true)
 	TagNullableSet bool // Whether nullable was explicitly set via fory tag
 	TagNullable    bool // The nullable value from fory tag (only valid if TagNullableSet is true)
+}
 
-	// Pre-computed type flags (computed at init time to avoid runtime reflection)
-	IsPtr bool // True if field.Type.Kind() == reflect.Ptr
+// FieldInfo stores field metadata computed ENTIRELY at init time.
+// Hot fields are kept inline for cache efficiency, cold fields accessed via Meta pointer.
+type FieldInfo struct {
+	// Hot fields - accessed frequently during serialization
+	Offset      uintptr    // Field offset for unsafe access
+	DispatchId  DispatchId // Type dispatch ID
+	WriteOffset int        // Offset within fixed-fields buffer region (sum of preceding field sizes)
+	RefMode     RefMode    // ref mode for serializer.Write/Read
+	IsPtr       bool       // True if field.Type.Kind() == reflect.Ptr
+	Serializer  Serializer // Serializer for this field
+
+	// Cold fields - accessed less frequently
+	Meta *FieldMeta
 }
 
 // FieldGroup holds categorized and sorted fields for optimized serialization.
@@ -65,6 +81,11 @@ type FieldInfo struct {
 // - VarintFields: non-nullable varint primitives (varint32/64, var_uint32/64, tagged_int64/uint64)
 // - RemainingFields: all other fields (nullable primitives, strings, collections, structs, etc.)
 type FieldGroup struct {
+	// Primitive field slices - minimal data for fast iteration in hot loops
+	PrimitiveFixedFields  []PrimitiveFieldInfo // Minimal fixed field info for hot loop
+	PrimitiveVarintFields []PrimitiveFieldInfo // Minimal varint field info for hot loop
+
+	// Full field info for remaining fields and fallback paths
 	FixedFields     []FieldInfo // Non-nullable fixed-size primitives
 	VarintFields    []FieldInfo // Non-nullable varint primitives
 	RemainingFields []FieldInfo // All other fields
@@ -100,19 +121,19 @@ func (g *FieldGroup) DebugPrint(typeName string) {
 	for i := range g.FixedFields {
 		f := &g.FixedFields[i]
 		fmt.Printf("[Go]   [%d] %s -> dispatchId=%d, typeId=%d, size=%d, nullable=%v\n",
-			i, f.Name, f.DispatchId, f.TypeId, f.FixedSize, f.Nullable)
+			i, f.Meta.Name, f.DispatchId, f.Meta.TypeId, f.Meta.FixedSize, f.Meta.Nullable)
 	}
 	fmt.Printf("[Go] Go sorted varintFields (%d):\n", len(g.VarintFields))
 	for i := range g.VarintFields {
 		f := &g.VarintFields[i]
 		fmt.Printf("[Go]   [%d] %s -> dispatchId=%d, typeId=%d, nullable=%v\n",
-			i, f.Name, f.DispatchId, f.TypeId, f.Nullable)
+			i, f.Meta.Name, f.DispatchId, f.Meta.TypeId, f.Meta.Nullable)
 	}
 	fmt.Printf("[Go] Go sorted remainingFields (%d):\n", len(g.RemainingFields))
 	for i := range g.RemainingFields {
 		f := &g.RemainingFields[i]
 		fmt.Printf("[Go]   [%d] %s -> dispatchId=%d, typeId=%d, nullable=%v\n",
-			i, f.Name, f.DispatchId, f.TypeId, f.Nullable)
+			i, f.Meta.Name, f.DispatchId, f.Meta.TypeId, f.Meta.Nullable)
 	}
 	fmt.Printf("[Go] ===========================================\n")
 }
@@ -126,11 +147,11 @@ func GroupFields(fields []FieldInfo) FieldGroup {
 	// Categorize fields
 	for i := range fields {
 		field := &fields[i]
-		if isFixedSizePrimitive(field.DispatchId, field.Nullable) {
+		if isFixedSizePrimitive(field.DispatchId, field.Meta.Nullable) {
 			// Non-nullable fixed-size primitives only
-			field.FixedSize = getFixedSizeByDispatchId(field.DispatchId)
+			field.Meta.FixedSize = getFixedSizeByDispatchId(field.DispatchId)
 			g.FixedFields = append(g.FixedFields, *field)
-		} else if isVarintPrimitive(field.DispatchId, field.Nullable) {
+		} else if isVarintPrimitive(field.DispatchId, field.Meta.Nullable) {
 			// Non-nullable varint primitives only
 			g.VarintFields = append(g.VarintFields, *field)
 		} else {
@@ -142,19 +163,25 @@ func GroupFields(fields []FieldInfo) FieldGroup {
 	// Sort fixedFields: size desc, typeId desc, name asc
 	sort.SliceStable(g.FixedFields, func(i, j int) bool {
 		fi, fj := &g.FixedFields[i], &g.FixedFields[j]
-		if fi.FixedSize != fj.FixedSize {
-			return fi.FixedSize > fj.FixedSize // size descending
+		if fi.Meta.FixedSize != fj.Meta.FixedSize {
+			return fi.Meta.FixedSize > fj.Meta.FixedSize // size descending
 		}
-		if fi.TypeId != fj.TypeId {
-			return fi.TypeId > fj.TypeId // typeId descending
+		if fi.Meta.TypeId != fj.Meta.TypeId {
+			return fi.Meta.TypeId > fj.Meta.TypeId // typeId descending
 		}
-		return fi.Name < fj.Name // name ascending
+		return fi.Meta.Name < fj.Meta.Name // name ascending
 	})
 
-	// Compute WriteOffset after sorting
+	// Compute WriteOffset after sorting and build primitive field slice
+	g.PrimitiveFixedFields = make([]PrimitiveFieldInfo, len(g.FixedFields))
 	for i := range g.FixedFields {
 		g.FixedFields[i].WriteOffset = g.FixedSize
-		g.FixedSize += g.FixedFields[i].FixedSize
+		g.PrimitiveFixedFields[i] = PrimitiveFieldInfo{
+			Offset:      g.FixedFields[i].Offset,
+			DispatchId:  g.FixedFields[i].DispatchId,
+			WriteOffset: uint8(g.FixedSize),
+		}
+		g.FixedSize += g.FixedFields[i].Meta.FixedSize
 	}
 
 	// Sort varintFields: underlying type size desc, typeId desc, name asc
@@ -166,15 +193,21 @@ func GroupFields(fields []FieldInfo) FieldGroup {
 		if sizeI != sizeJ {
 			return sizeI > sizeJ // size descending
 		}
-		if fi.TypeId != fj.TypeId {
-			return fi.TypeId > fj.TypeId // typeId descending
+		if fi.Meta.TypeId != fj.Meta.TypeId {
+			return fi.Meta.TypeId > fj.Meta.TypeId // typeId descending
 		}
-		return fi.Name < fj.Name // name ascending
+		return fi.Meta.Name < fj.Meta.Name // name ascending
 	})
 
-	// Compute maxVarintSize
+	// Compute maxVarintSize and build primitive varint field slice
+	g.PrimitiveVarintFields = make([]PrimitiveFieldInfo, len(g.VarintFields))
 	for i := range g.VarintFields {
 		g.MaxVarintSize += getVarintMaxSizeByDispatchId(g.VarintFields[i].DispatchId)
+		g.PrimitiveVarintFields[i] = PrimitiveFieldInfo{
+			Offset:     g.VarintFields[i].Offset,
+			DispatchId: g.VarintFields[i].DispatchId,
+			// WriteOffset not used for varint fields (variable length)
+		}
 	}
 
 	// Sort remainingFields: nullable primitives first (by primitiveComparator),
@@ -192,8 +225,8 @@ func GroupFields(fields []FieldInfo) FieldGroup {
 		// Within other internal types category (STRING, BINARY, LIST, SET, MAP),
 		// sort by typeId then by sort key (tagID if available, otherwise name).
 		if catI == 1 {
-			if fi.TypeId != fj.TypeId {
-				return fi.TypeId < fj.TypeId
+			if fi.Meta.TypeId != fj.Meta.TypeId {
+				return fi.Meta.TypeId < fj.Meta.TypeId
 			}
 			return getFieldSortKey(fi) < getFieldSortKey(fj)
 		}
@@ -215,7 +248,7 @@ func fieldHasNonPrimitiveSerializer(field *FieldInfo) bool {
 	// all require special serialization and should not use the primitive fast path
 	// Note: ENUM uses unsigned Varuint32Small7 for ordinals, not signed zigzag varint
 	// Use internal type ID (low 8 bits) since registered types have composite TypeIds like (userID << 8) | internalID
-	internalTypeId := TypeId(field.TypeId & 0xFF)
+	internalTypeId := TypeId(field.Meta.TypeId & 0xFF)
 	switch internalTypeId {
 	case ENUM, NAMED_ENUM, NAMED_STRUCT, NAMED_COMPATIBLE_STRUCT, NAMED_EXT:
 		return true
@@ -229,7 +262,7 @@ func isEnumField(field *FieldInfo) bool {
 	if field.Serializer == nil {
 		return false
 	}
-	internalTypeId := field.TypeId & 0xFF
+	internalTypeId := field.Meta.TypeId & 0xFF
 	return internalTypeId == ENUM || internalTypeId == NAMED_ENUM
 }
 
@@ -241,7 +274,7 @@ func getFieldCategory(field *FieldInfo) int {
 	if isNullableFixedSizePrimitive(field.DispatchId) || isNullableVarintPrimitive(field.DispatchId) {
 		return 0
 	}
-	internalId := field.TypeId & 0xFF
+	internalId := field.Meta.TypeId & 0xFF
 	switch TypeId(internalId) {
 	case STRING, BINARY, LIST, SET, MAP:
 		// Internal types: sorted by typeId, then name
@@ -267,10 +300,10 @@ func comparePrimitiveFields(fi, fj *FieldInfo) bool {
 	if sizeI != sizeJ {
 		return sizeI > sizeJ // size descending
 	}
-	if fi.TypeId != fj.TypeId {
-		return fi.TypeId > fj.TypeId // typeId descending
+	if fi.Meta.TypeId != fj.Meta.TypeId {
+		return fi.Meta.TypeId > fj.Meta.TypeId // typeId descending
 	}
-	return fi.Name < fj.Name // name ascending
+	return fi.Meta.Name < fj.Meta.Name // name ascending
 }
 
 // getNullableFixedSize returns the fixed size for nullable fixed primitives
@@ -532,10 +565,10 @@ func (t triple) getSortKey() string {
 // If TagID >= 0, returns the tag ID as string (for tag-based sorting).
 // Otherwise returns the field name (which is already snake_case).
 func getFieldSortKey(f *FieldInfo) string {
-	if f.TagID >= 0 {
-		return fmt.Sprintf("%d", f.TagID)
+	if f.Meta.TagID >= 0 {
+		return fmt.Sprintf("%d", f.Meta.TagID)
 	}
-	return f.Name
+	return f.Meta.Name
 }
 
 // sortFields sorts fields with nullable information to match Java's field ordering.

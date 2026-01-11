@@ -1539,6 +1539,47 @@ func (b *ByteBuffer) UnsafePutInt64(offset int, value int64) int {
 	return 8
 }
 
+// UnsafePutTaggedInt64 writes int64 using tagged encoding at the given offset.
+// Caller must have ensured capacity (9 bytes max).
+// Returns the number of bytes written (4 or 9).
+//
+//go:inline
+func (b *ByteBuffer) UnsafePutTaggedInt64(offset int, value int64) int {
+	const halfMinIntValue int64 = -1073741824 // INT32_MIN / 2
+	const halfMaxIntValue int64 = 1073741823  // INT32_MAX / 2
+	if value >= halfMinIntValue && value <= halfMaxIntValue {
+		binary.LittleEndian.PutUint32(b.data[offset:], uint32(int32(value)<<1))
+		return 4
+	}
+	b.data[offset] = 0b1
+	if isLittleEndian {
+		*(*int64)(unsafe.Pointer(&b.data[offset+1])) = value
+	} else {
+		binary.LittleEndian.PutUint64(b.data[offset+1:], uint64(value))
+	}
+	return 9
+}
+
+// UnsafePutTaggedUint64 writes uint64 using tagged encoding at the given offset.
+// Caller must have ensured capacity (9 bytes max).
+// Returns the number of bytes written (4 or 9).
+//
+//go:inline
+func (b *ByteBuffer) UnsafePutTaggedUint64(offset int, value uint64) int {
+	const maxSmallValue uint64 = 0x7fffffff // INT32_MAX as u64
+	if value <= maxSmallValue {
+		binary.LittleEndian.PutUint32(b.data[offset:], uint32(value)<<1)
+		return 4
+	}
+	b.data[offset] = 0b1
+	if isLittleEndian {
+		*(*uint64)(unsafe.Pointer(&b.data[offset+1])) = value
+	} else {
+		binary.LittleEndian.PutUint64(b.data[offset+1:], value)
+	}
+	return 9
+}
+
 // ReadVaruint32Small7 reads a varuint32 in small-7 format with error checking
 func (b *ByteBuffer) ReadVaruint32Small7(err *Error) uint32 {
 	if b.readerIndex >= len(b.data) {

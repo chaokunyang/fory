@@ -279,28 +279,32 @@ type DispatchId uint8
 const (
 	UnknownDispatchId DispatchId = iota
 
-	// Primitive (non-nullable) dispatch IDs - match Java's PRIMITIVE_* constants
-	PrimitiveBoolDispatchId
-	PrimitiveInt8DispatchId
-	PrimitiveInt16DispatchId
-	PrimitiveInt32DispatchId
-	PrimitiveVarint32DispatchId
-	PrimitiveInt64DispatchId
-	PrimitiveVarint64DispatchId
-	PrimitiveTaggedInt64DispatchId
-	PrimitiveFloat32DispatchId
-	PrimitiveFloat64DispatchId
-	PrimitiveUint8DispatchId
-	PrimitiveUint16DispatchId
-	PrimitiveUint32DispatchId
-	PrimitiveVarUint32DispatchId
-	PrimitiveUint64DispatchId
-	PrimitiveVarUint64DispatchId
-	PrimitiveTaggedUint64DispatchId
-	PrimitiveIntDispatchId  // Go-specific: native int
-	PrimitiveUintDispatchId // Go-specific: native uint
+	// ========== VARINT PRIMITIVES (contiguous for efficient jump table) ==========
+	// These are used in the hot varint serialization loop
+	PrimitiveVarint32DispatchId     // 1 - int32 with varint encoding (most common)
+	PrimitiveVarint64DispatchId     // 2 - int64 with varint encoding
+	PrimitiveIntDispatchId          // 3 - Go-specific: native int
+	PrimitiveVarUint32DispatchId    // 4 - uint32 with varint encoding
+	PrimitiveVarUint64DispatchId    // 5 - uint64 with varint encoding
+	PrimitiveUintDispatchId         // 6 - Go-specific: native uint
+	PrimitiveTaggedInt64DispatchId  // 7 - int64 with tagged encoding
+	PrimitiveTaggedUint64DispatchId // 8 - uint64 with tagged encoding
 
-	// Nullable dispatch IDs - match Java's non-PRIMITIVE_* constants
+	// ========== FIXED-SIZE PRIMITIVES (contiguous for efficient jump table) ==========
+	// These are used in the hot fixed-size serialization loop
+	PrimitiveBoolDispatchId    // 9
+	PrimitiveInt8DispatchId    // 10
+	PrimitiveUint8DispatchId   // 11
+	PrimitiveInt16DispatchId   // 12
+	PrimitiveUint16DispatchId  // 13
+	PrimitiveInt32DispatchId   // 14 - int32 with fixed encoding
+	PrimitiveUint32DispatchId  // 15 - uint32 with fixed encoding
+	PrimitiveInt64DispatchId   // 16 - int64 with fixed encoding
+	PrimitiveUint64DispatchId  // 17 - uint64 with fixed encoding
+	PrimitiveFloat32DispatchId // 18
+	PrimitiveFloat64DispatchId // 19
+
+	// ========== NULLABLE DISPATCH IDs ==========
 	NullableBoolDispatchId
 	NullableInt8DispatchId
 	NullableInt16DispatchId
@@ -321,8 +325,8 @@ const (
 	NullableIntDispatchId  // Go-specific: *int
 	NullableUintDispatchId // Go-specific: *uint
 
-	// Notnull pointer dispatch IDs - pointer types with nullable=false
-	// Write without null flag; on read, create default value if remote sends null
+	// ========== NOTNULL POINTER DISPATCH IDs ==========
+	// Pointer types with nullable=false - write without null flag
 	NotnullBoolPtrDispatchId
 	NotnullInt8PtrDispatchId
 	NotnullInt16PtrDispatchId

@@ -185,7 +185,6 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     super(new CodegenContext(), beanType);
     this.fory = fory;
     typeResolver = fory._getTypeResolver();
-    TypeRef<?> typeResolverType = TypeRef.of(typeResolver.getClass());
     this.parentSerializerClass = parentSerializerClass;
     if (fory.isCrossLanguage()) {
       writeMethodName = "xwrite";
@@ -206,6 +205,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
         ctx.type(refResolverTypeRef),
         REF_RESOLVER_NAME,
         new Cast(refResolverExpr, refResolverTypeRef));
+    // use concrete type to avoid virtual methods call in generated code
+    TypeRef<?> typeResolverType = TypeRef.of(typeResolver.getClass());
     typeResolverRef = fieldRef(TYPE_RESOLVER_NAME, typeResolverType);
     Expression typeResolverExpr =
         cast(
